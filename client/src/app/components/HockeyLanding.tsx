@@ -694,9 +694,8 @@ export function HockeyLanding() {
         return prev.map((g) => {
           const ev = events.find(
             (e) =>
-              !e.homeTeam ||
-              e.homeTeam.toLowerCase().includes(g.team1.abbr.toLowerCase()) ||
-              e.awayTeam.toLowerCase().includes(g.team2.abbr.toLowerCase())
+              e.homeTeam?.toLowerCase().includes(g.team1.abbr.toLowerCase()) ||
+              e.awayTeam?.toLowerCase().includes(g.team2.abbr.toLowerCase())
           );
           if (!ev) return g;
           const odds = extractH2HOdds(ev);
@@ -713,7 +712,7 @@ export function HockeyLanding() {
         prev.map((p) => {
           // Find matching event by team abbr
         
-          const ev = events.find((e) => e.homeTeam.toLowerCase().includes(p.team.toLowerCase()));
+          const ev = events.find((e) => e.homeTeam?.toLowerCase().includes(p.team.toLowerCase()));
           if (!ev) return p;
           const odds = extractH2HOdds(ev);
           if (!odds) return p;

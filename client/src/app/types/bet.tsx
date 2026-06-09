@@ -133,7 +133,11 @@ export type BetMarketType =
   | "blocked_shots_ou"
   | "time_on_ice_ou"
   | "faceoff_wins_ou"
-  | "hits_ou";
+  | "hits_ou"
+  // Tennis markets
+  | "tennis_match_winner"
+  | "tennis_total_sets"
+  | "tennis_first_set";
 
 export interface PredictionRequest {
   marketType: BetMarketType;

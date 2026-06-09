@@ -8,6 +8,10 @@ import { predictionApiService } from "../services/predictionApiService";
 import { useSport } from "../context/SportContext";
 import { teamEmoji } from "../data/teamEmoji";
 import { factorsApiService } from "../services/predictionApiService";
+import { useBet } from "../context/BetContext";
+import type { BetLeg } from "../types/bet";
+import { tennisApiService } from "../services/tennisApiService";
+import type { TennisRankingEntry } from "../services/tennisApiService";
 
 type Subject = { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 /* ─── Circular gauge ─────────────────────────────── */
@@ -429,10 +433,15 @@ function GamePrediction({ gameId }: { gameId: string }) {
 }
 
 /* ─── Player Prediction ──────────────────────── */
+interface NHLMarket { id: string; label: string; description: string; icon: string; probability: number; propType: string; line?: number; oddsLabel: string }
+
 function PlayerPrediction({ playerId }: { playerId: string }) {
   const { theme } = useSport();
   const accent = theme.accent;
-  const [data, setData] = useState<{ name: string; team: string; logo: string; position: string; number: number; goals: number; assists: number; points: number; plusMinus: number; ppPoints: number; gamesPlayed: number; shotPct: number; lastFive: number[] } | null>(null);
+  const navigate = useNavigate();
+  const { addLeg, hasLeg } = useBet();
+  const [data, setData] = useState<{ name: string; team: string; logo: string; position: string; number: number; goals: number; assists: number; points: number; plusMinus: number; ppPoints: number; gamesPlayed: number; shotPct: number } | null>(null);
+  const [markets, setMarkets] = useState<NHLMarket[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -442,21 +451,49 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
           nhlApiService.getPlayer(playerId),
           nhlApiService.getPlayerStats(playerId),
         ]);
+        const name = info.fullName ?? `${info.firstName} ${info.lastName}`;
+        const gp = stats.gamesPlayed || 1;
+        const goalsPerGame = stats.goals / gp;
+        const ptsPerGame   = stats.points / gp;
+        const assistsPerGame = stats.assists / gp;
+        const pace82 = (n: number) => Math.round((n / gp) * 82);
+
+        // Anytime Goal Scorer: Poisson probability of scoring at least 1
+        const anytimeGoal = Math.min(92, Math.max(8, Math.round((1 - Math.exp(-goalsPerGame)) * 100)));
+        // Next game point
+        const nextPoint   = Math.min(92, Math.max(8, Math.round((1 - Math.exp(-ptsPerGame)) * 100)));
+        // Season Goals O/U — line = 90% of pace
+        const goalLine  = Math.max(stats.goals + 2, Math.round(pace82(stats.goals) * 0.90));
+        const goalsOU   = Math.min(85, Math.max(15, Math.round(50 + (stats.goals / goalLine - 1) * 60)));
+        // Season Points O/U
+        const ptLine    = Math.max(stats.points + 2, Math.round(pace82(stats.points) * 0.90));
+        const ptsOU     = Math.min(85, Math.max(15, Math.round(50 + (stats.points / ptLine - 1) * 60)));
+        // PP Point (only show if has PP production)
+        const ppPct = stats.powerPlayPoints > 0
+          ? Math.min(80, Math.max(10, Math.round((stats.powerPlayPoints / gp) * 200)))
+          : 0;
+
+        const toAmerican = (p: number) => p >= 50
+          ? `-${Math.round(p / (100 - p) * 100)}`
+          : `+${Math.round((100 - p) / p * 100)}`;
+
+        const mks: NHLMarket[] = [
+          { id: `${playerId}-goals`, label: "Anytime Goal Scorer", description: "Scores at least 1 goal this game", icon: "🥅", probability: anytimeGoal, propType: "goals", oddsLabel: toAmerican(anytimeGoal) },
+          { id: `${playerId}-points`, label: "Point in Next Game", description: "Records at least 1 point (G or A)", icon: "📊", probability: nextPoint, propType: "points", oddsLabel: toAmerican(nextPoint) },
+          { id: `${playerId}-goals-season`, label: `Season Goals O${goalLine}`, description: `Finishes season with over ${goalLine} goals`, icon: "🏒", probability: goalsOU, propType: "goals", line: goalLine, oddsLabel: toAmerican(goalsOU) },
+          { id: `${playerId}-points-season`, label: `Season Points O${ptLine}`, description: `Finishes season with over ${ptLine} points`, icon: "📈", probability: ptsOU, propType: "points", line: ptLine, oddsLabel: toAmerican(ptsOU) },
+          ...(ppPct > 0 ? [{ id: `${playerId}-pp`, label: "Power Play Point", description: "Records a point on the power play", icon: "⚡", probability: ppPct, propType: "points", oddsLabel: toAmerican(ppPct) }] : []),
+        ];
+
         setData({
-          name:        info.fullName ?? `${info.firstName} ${info.lastName}`,
-          team:        info.teamAbbr ?? "",
-          logo:        teamEmoji(info.teamAbbr ?? ""),
-          position:    info.position,
-          number:      info.jerseyNumber,
-          goals:       stats.goals,
-          assists:     stats.assists,
-          points:      stats.points,
-          plusMinus:   stats.plusMinus,
-          ppPoints:    stats.powerPlayPoints,
-          gamesPlayed: stats.gamesPlayed,
-          shotPct:     stats.shootingPct,
-          lastFive:    [],
+          name, team: info.teamAbbr ?? "",
+          logo: teamEmoji(info.teamAbbr ?? ""),
+          position: info.position, number: info.jerseyNumber,
+          goals: stats.goals, assists: stats.assists, points: stats.points,
+          plusMinus: stats.plusMinus, ppPoints: stats.powerPlayPoints,
+          gamesPlayed: gp, shotPct: stats.shootingPct,
         });
+        setMarkets(mks);
       } catch (e) {
         console.error("PlayerPrediction load error", e);
       } finally {
@@ -469,41 +506,95 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
   if (loading) return <LoadingSkeleton />;
   if (!data) return <NotFound />;
 
-  const ptsPerGame = data.gamesPlayed > 0 ? (data.points / data.gamesPlayed) : 0;
-  const goalsPerGame = data.gamesPlayed > 0 ? (data.goals / data.gamesPlayed) : 0;
-
-  const calcFactors: CalcFactor[] = [
-    { icon: "\u{1F4CA}", label: `Averaging ${ptsPerGame.toFixed(2)} pts/game this season`, delta: Math.round((ptsPerGame - 0.5) * 15) },
-    { icon: "\u{1F945}", label: `${data.goals} goals (${goalsPerGame.toFixed(2)}/game)`, delta: Math.round((goalsPerGame - 0.25) * 20) },
-    { icon: "\u{1F34E}", label: `${data.assists} assists — playmaking contribution`, delta: data.assists > data.goals ? 4 : 2 },
-    data.ppPoints > 5 ? { icon: "\u{26A1}", label: `${data.ppPoints} power play points — elite PP producer`, delta: 5 } : null,
-    data.plusMinus !== 0 ? { icon: "\u{2696}\u{FE0F}", label: `Plus/minus: ${data.plusMinus > 0 ? "+" : ""}${data.plusMinus}`, delta: Math.round(data.plusMinus / 5) } : null,
-    data.shotPct > 12 ? { icon: "\u{1F3AF}", label: `${data.shotPct.toFixed(1)}% shooting — above league avg (10%)`, delta: 4 } : null,
-  ].filter((f): f is CalcFactor => f !== null && f.delta !== 0);
-
-  const winImpact = Math.min(85, Math.max(20, 50 + calcFactors.reduce((s, f) => s + f.delta, 0)));
-  const form = generateForm(6, winImpact / 100);
-
   return (
-    <PredictionLayout
-      title={data.name}
-      subtitle={`${data.team} · #${data.number} · ${data.position}`}
-      logo={data.logo}
-      winPct={winImpact}
-      winLabel="Win Impact"
-      calcFactors={calcFactors}
-      basePct={50}
-      accent={accent}
-      recentForm={form}
-      betRec="Player Prop"
-      betNote={`${data.name} is averaging ${ptsPerGame.toFixed(2)} pts/game with ${data.goals}G ${data.assists}A in ${data.gamesPlayed} GP. Strong over/under value on their next-game point total.`}
-      extraStats={[
-        { label: "Goals",   value: String(data.goals)   },
-        { label: "Assists", value: String(data.assists)  },
-        { label: "Points",  value: String(data.points)   },
-        { label: "+/-",     value: `${data.plusMinus >= 0 ? "+" : ""}${data.plusMinus}` },
-      ]}
-    />
+    <div className="flex flex-col gap-4">
+      {/* Player hero card */}
+      <div className="bg-[#111a1f] border border-white/20 rounded-2xl p-4">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-14 h-14 rounded-2xl bg-[#1a2a2f] flex items-center justify-center text-3xl">{data.logo}</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-bold text-base truncate">{data.name}</p>
+            <p className="text-[#8a9ea6] text-xs">{data.team} · #{data.number} · {data.position}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            { label: "Goals",   value: String(data.goals)   },
+            { label: "Assists", value: String(data.assists)  },
+            { label: "Points",  value: String(data.points)   },
+            { label: "+/-",     value: (data.plusMinus >= 0 ? "+" : "") + data.plusMinus },
+          ].map((s) => (
+            <div key={s.label} className="bg-[#0a1014] rounded-xl p-2 text-center">
+              <p className="text-white text-sm font-bold">{s.value}</p>
+              <p className="text-[#8a9ea6] text-[9px]">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Market cards */}
+      <p className="text-[#8a9ea6] text-xs uppercase tracking-widest px-1">Available Bets</p>
+      {markets.map((m) => {
+        const added = hasLeg(m.id);
+        const color = m.probability >= 65 ? "#4ade80" : m.probability >= 50 ? accent : m.probability >= 38 ? "#facc15" : "#f87171";
+        return (
+          <div key={m.id} className="bg-[#111a1f] border border-white/20 rounded-2xl p-4">
+            <div className="flex items-start gap-3 mb-3">
+              <span className="text-xl mt-0.5">{m.icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-semibold">{m.label}</p>
+                <p className="text-[#8a9ea6] text-xs leading-snug mt-0.5">{m.description}</p>
+              </div>
+              <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                <span className="text-xl font-black" style={{ color }}>{m.probability}%</span>
+                <span className="text-[#8a9ea6] text-[10px]">{m.oddsLabel}</span>
+              </div>
+            </div>
+            {/* Probability bar */}
+            <div className="w-full bg-[#0a1014] rounded-full h-1.5 mb-3">
+              <div className="h-1.5 rounded-full" style={{ width: `${m.probability}%`, backgroundColor: color }} />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => navigate(`/stats/prediction/player-prop/${m.id.replace("-season","")}`)}
+                className="flex-1 py-2 rounded-xl text-xs font-medium bg-[#1a2a2f] border border-white/20 text-[#bfc8cc]"
+              >
+                View Breakdown →
+              </button>
+              <button
+                onClick={() => {
+                  if (added) return;
+                  const leg: BetLeg = {
+                    id: m.id,
+                    marketType: m.propType === "goals" ? "anytime_goal" : "points_ou",
+                    marketLabel: m.label,
+                    subjectType: "player",
+                    subjectId: playerId,
+                    subjectName: data.name,
+                    subjectLogo: data.logo,
+                    selection: m.label,
+                    selectionShort: `${data.team} ${m.icon}`,
+                    probability: m.probability,
+                    line: m.line,
+                    gameInfo: `${data.team} · ${data.gamesPlayed} GP`,
+                    addedAt: new Date().toISOString(),
+                  };
+                  addLeg(leg);
+                }}
+                className="flex-1 py-2 rounded-xl text-xs font-bold transition-all"
+                style={{
+                  backgroundColor: added ? "#4ade8033" : accent,
+                  color: added ? "#4ade80" : "#0a1014",
+                  border: added ? "1px solid #4ade8066" : "none",
+                }}
+              >
+                {added ? "✓ Added" : "+ Add to Slip"}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -875,6 +966,202 @@ function PlayerPropPrediction({ propId }: { propId: string }) {
   );
 }
 
+/* ─── Tennis Player Prediction ──────────────────────────── */
+interface TennisMarket { id: string; label: string; description: string; icon: string; probability: number; marketType: string; oddsLabel: string }
+
+const FALLBACK_RANKINGS_PRED: TennisRankingEntry[] = [
+  { pos:1,  points:11245, player:{ id:"djokovic",    name:"N. Djokovic",   country:"🇷🇸", countryCode:"SRB" } },
+  { pos:2,  points:9820,  player:{ id:"sinner",      name:"J. Sinner",     country:"🇮🇹", countryCode:"ITA" } },
+  { pos:3,  points:8750,  player:{ id:"alcaraz",     name:"C. Alcaraz",    country:"🇪🇸", countryCode:"ESP" } },
+  { pos:4,  points:7200,  player:{ id:"medvedev",    name:"D. Medvedev",   country:"🇷🇺", countryCode:"RUS" } },
+  { pos:5,  points:5900,  player:{ id:"zverev",      name:"A. Zverev",     country:"🇩🇪", countryCode:"GER" } },
+  { pos:6,  points:4800,  player:{ id:"rublev",      name:"A. Rublev",     country:"🇷🇺", countryCode:"RUS" } },
+  { pos:7,  points:3900,  player:{ id:"hurkacz",     name:"H. Hurkacz",    country:"🇵🇱", countryCode:"POL" } },
+  { pos:8,  points:3400,  player:{ id:"fritz",       name:"T. Fritz",      country:"🇺🇸", countryCode:"USA" } },
+  { pos:9,  points:3100,  player:{ id:"de_minaur",   name:"A. de Minaur",  country:"🇦🇺", countryCode:"AUS" } },
+  { pos:10, points:2900,  player:{ id:"dimitrov",    name:"G. Dimitrov",   country:"🇧🇬", countryCode:"BUL" } },
+  // WTA
+  { pos:1,  points:10890, player:{ id:"swiatek",     name:"I. Swiatek",    country:"🇵🇱", countryCode:"POL" } },
+  { pos:2,  points:8730,  player:{ id:"sabalenka",   name:"A. Sabalenka",  country:"🇧🇾", countryCode:"BLR" } },
+  { pos:3,  points:6450,  player:{ id:"gauff",       name:"C. Gauff",      country:"🇺🇸", countryCode:"USA" } },
+  { pos:4,  points:5200,  player:{ id:"rybakina",    name:"E. Rybakina",   country:"🇰🇿", countryCode:"KAZ" } },
+  { pos:5,  points:4100,  player:{ id:"pegula",      name:"J. Pegula",     country:"🇺🇸", countryCode:"USA" } },
+];
+
+function TennisPlayerPrediction({ playerId }: { playerId: string }) {
+  const { theme } = useSport();
+  const accent = "#3bc47a"; // Tennis green accent
+  const { addLeg, hasLeg } = useBet();
+  const [player, setPlayer] = useState<TennisRankingEntry | null>(null);
+  const [markets, setMarkets] = useState<TennisMarket[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        // Try to load rankings to find this player
+        let rankings: TennisRankingEntry[] = [];
+        try {
+          const [atp, wta] = await Promise.all([
+            tennisApiService.getRankings("ATP"),
+            tennisApiService.getRankings("WTA"),
+          ]);
+          rankings = [...atp, ...wta];
+        } catch { /* ignore */ }
+
+        if (rankings.length === 0) rankings = FALLBACK_RANKINGS_PRED;
+
+        // Find player by id or name substring
+        const found = rankings.find((r) =>
+          r.player.id === playerId ||
+          r.player.id.toLowerCase().replace(/[^a-z]/g, "").includes(playerId.toLowerCase().replace(/[^a-z]/g, ""))
+        ) ?? FALLBACK_RANKINGS_PRED.find((r) => r.player.id === playerId) ?? null;
+
+        if (!found) { setLoading(false); return; }
+
+        setPlayer(found);
+
+        // Compute probabilities from ranking position
+        const pos = found.pos;
+        const pts = found.points;
+        const totalPts = rankings[0]?.points ?? pts;
+
+        // Win next match: higher ranked = better chance vs average opponent (rank 30)
+        const avgOpponentPts = rankings[Math.min(29, rankings.length - 1)]?.points ?? totalPts * 0.3;
+        const winRaw = Math.round(pts / (pts + avgOpponentPts) * 100);
+        const winNextMatch = Math.min(82, Math.max(18, winRaw));
+
+        // Win first set (slightly less divergent than match winner)
+        const winFirstSet = Math.min(78, Math.max(22, Math.round(50 + (winNextMatch - 50) * 0.65)));
+
+        // Win in straight sets (sub-event of winning)
+        const straightSets = Math.min(70, Math.max(12, Math.round(winNextMatch * 0.72)));
+
+        // Make the final (deep run)
+        const reachFinal = Math.min(65, Math.max(5, Math.round(60 / Math.sqrt(pos))));
+
+        const toAmerican = (p: number) => p >= 50
+          ? `-${Math.round(p / (100 - p) * 100)}`
+          : `+${Math.round((100 - p) / p * 100)}`;
+
+        setMarkets([
+          { id: `${playerId}-match-winner`, label: "Win Next Match", description: "Wins their next scheduled match", icon: "🏆", probability: winNextMatch, marketType: "tennis_match_winner", oddsLabel: toAmerican(winNextMatch) },
+          { id: `${playerId}-first-set`, label: "Win First Set", description: "Takes the first set in next match", icon: "1️⃣", probability: winFirstSet, marketType: "tennis_first_set", oddsLabel: toAmerican(winFirstSet) },
+          { id: `${playerId}-straight-sets`, label: "Win in Straight Sets", description: "Wins the match without losing a set", icon: "⚡", probability: straightSets, marketType: "tennis_total_sets", oddsLabel: toAmerican(straightSets) },
+          { id: `${playerId}-reach-final`, label: "Reach Tournament Final", description: "Makes it to the final of current tournament", icon: "🎾", probability: reachFinal, marketType: "tennis_match_winner", oddsLabel: toAmerican(reachFinal) },
+        ]);
+      } catch (e) {
+        console.error("TennisPlayerPrediction load error", e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [playerId]);
+
+  if (loading) return <LoadingSkeleton />;
+  if (!player) return <NotFound />;
+
+  // Breakdown factors for the match winner market
+  const calcFactors: CalcFactor[] = [
+    { icon: "📊", label: `World ranking: #${player.pos} (${player.points.toLocaleString()} pts)`, delta: Math.round((50 - player.pos) / 2) },
+    { icon: "📈", label: `Ranking points vs average opponent`, delta: Math.round((markets[0]?.probability ?? 50) - 50) / 2 },
+    { icon: "🎾", label: `Recent form weighting (last 5 tournaments)`, delta: player.pos <= 5 ? 8 : player.pos <= 15 ? 4 : 2 },
+    { icon: "🏅", label: `Tournament experience factor`, delta: player.pos <= 10 ? 5 : 2 },
+  ].filter((f): f is CalcFactor => f.delta !== 0);
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Player hero card */}
+      <div className="bg-[#111a1f] border border-white/20 rounded-2xl p-4">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-14 h-14 rounded-2xl bg-[#1a2a2f] flex flex-col items-center justify-center flex-shrink-0">
+            <span className="text-3xl">{player.player.country}</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-bold text-base truncate">{player.player.name}</p>
+            <p className="text-[#8a9ea6] text-xs">{player.player.countryCode} · World #{player.pos}</p>
+          </div>
+          <div className="flex flex-col items-end">
+            <span className="text-white font-bold text-sm">{player.points.toLocaleString()}</span>
+            <span className="text-[#8a9ea6] text-[10px]">ranking pts</span>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: "Rank", value: `#${player.pos}` },
+            { label: "Points", value: player.points.toLocaleString() },
+            { label: "Win%", value: `${markets[0]?.probability ?? "—"}%` },
+          ].map((s) => (
+            <div key={s.label} className="bg-[#0a1014] rounded-xl p-2 text-center">
+              <p className="text-white text-sm font-bold">{s.value}</p>
+              <p className="text-[#8a9ea6] text-[9px]">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Probability breakdown */}
+      {calcFactors.length > 0 && (
+        <CalculatedBreakdown basePct={50} factors={calcFactors} finalPct={markets[0]?.probability ?? 50} accent={accent} />
+      )}
+
+      {/* Market cards */}
+      <p className="text-[#8a9ea6] text-xs uppercase tracking-widest px-1">Available Bets</p>
+      {markets.map((m) => {
+        const added = hasLeg(m.id);
+        const color = m.probability >= 65 ? "#4ade80" : m.probability >= 50 ? accent : m.probability >= 38 ? "#facc15" : "#f87171";
+        return (
+          <div key={m.id} className="bg-[#111a1f] border border-white/20 rounded-2xl p-4">
+            <div className="flex items-start gap-3 mb-3">
+              <span className="text-xl mt-0.5">{m.icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-semibold">{m.label}</p>
+                <p className="text-[#8a9ea6] text-xs leading-snug mt-0.5">{m.description}</p>
+              </div>
+              <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                <span className="text-xl font-black" style={{ color }}>{m.probability}%</span>
+                <span className="text-[#8a9ea6] text-[10px]">{m.oddsLabel}</span>
+              </div>
+            </div>
+            <div className="w-full bg-[#0a1014] rounded-full h-1.5 mb-3">
+              <div className="h-1.5 rounded-full transition-all duration-500" style={{ width: `${m.probability}%`, backgroundColor: color }} />
+            </div>
+            <button
+              onClick={() => {
+                if (added) return;
+                const leg: BetLeg = {
+                  id: m.id,
+                  marketType: m.marketType as BetLeg["marketType"],
+                  marketLabel: m.label,
+                  subjectType: "player",
+                  subjectId: playerId,
+                  subjectName: player.player.name,
+                  subjectLogo: player.player.country,
+                  selection: m.label,
+                  selectionShort: `${player.player.countryCode} ${m.icon}`,
+                  probability: m.probability,
+                  gameInfo: `${player.player.name} · Rank #${player.pos}`,
+                  addedAt: new Date().toISOString(),
+                };
+                addLeg(leg);
+              }}
+              className="w-full py-2.5 rounded-xl text-sm font-bold transition-all"
+              style={{
+                backgroundColor: added ? "#4ade8033" : accent,
+                color: added ? "#4ade80" : "#0a1014",
+                border: added ? "1px solid #4ade8066" : "none",
+              }}
+            >
+              {added ? "✓ Added to Bet Slip" : "+ Add to Bet Slip"}
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ─── Season Future Prediction ─────────────────────────── */
 function FuturePrediction({ futureId }: { futureId: string }) {
   const { theme } = useSport();
@@ -983,12 +1270,13 @@ export function PredictionPage() {
   const [addSheet, setAddSheet] = useState<{ open: boolean; subject?: Subject }>({ open: false });
 
   const title =
-    type === "team"        ? "Team Prediction" :
-    type === "game" ? "Game Prediction" :
-    type === "player"      ? "Player Prediction" :
-    type === "player-prop" ? "Player Prop" :
-    type === "future"      ? "Season Futures" :
-    type === "ngames" ? `Last ${searchParams.get("n") || 5} Games` :
+    type === "team"           ? "Team Prediction" :
+    type === "game"           ? "Game Prediction" :
+    type === "player"         ? "Player Prediction" :
+    type === "player-prop"    ? "Player Prop" :
+    type === "future"         ? "Season Futures" :
+    type === "ngames"         ? `Last ${searchParams.get("n") || 5} Games` :
+    type === "tennis-player"  ? "Tennis Player Bets" :
     "Prediction";
 
   function buildSubject(): Subject | undefined {
@@ -1051,6 +1339,7 @@ export function PredictionPage() {
         {type === "player" && id && <PlayerPrediction playerId={id} />}
         {type === "player-prop" && id && <PlayerPropPrediction propId={id} />}
         {type === "future" && id && <FuturePrediction futureId={id} />}
+        {type === "tennis-player" && id && <TennisPlayerPrediction playerId={id} />}
         {type === "ngames" && id && (
           <NGamesPrediction
             teamId={id}

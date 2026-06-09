@@ -35,11 +35,43 @@ async function rapidGet<T>(path: string, ttlMs = 60_000): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
+    console.warn(`[Tennis] RapidAPI ${res.status} on ${path}: ${body}`);
+    // 403 = endpoint not in plan, 429 = rate limited — return empty gracefully
+    if (res.status === 403 || res.status === 429) {
+      return { results: [] } as unknown as T;
+    }
     throw new Error(`Tennis RapidAPI ${res.status}: ${body}`);
   }
   const data = (await res.json()) as T;
   setCached(path, data, ttlMs);
   return data;
+}
+
+// --- Normalized ranking type -------------------------------------------------
+
+export interface TennisRankingEntry {
+  pos:    number;
+  points: number;
+  player: {
+    id:          string;
+    name:        string;
+    country:     string;      // flag emoji
+    countryCode: string;
+  };
+}
+
+// --- Normalized tournament type ----------------------------------------------
+
+export interface TennisTournamentInfo {
+  id:      string;
+  name:    string;
+  surface: string;
+  surfaceIcon: string;
+  location?: string;
+  prize?:    string;
+  startDate?: string;
+  endDate?:   string;
+  season?: number;
 }
 
 // --- Country code → flag emoji -----------------------------------------------
@@ -178,6 +210,43 @@ function normalizeMatch(m: RawMatch): TennisApiMatch {
 
 // --- Public API functions ----------------------------------------------------
 
+// --- Raw ranking types -------------------------------------------------------
+
+interface RawRankingEntry {
+  pos?:    number;
+  rank?:   number;
+  mvt?:    number;
+  pts?:    number;
+  points?: number;
+  player?: { id?: number; name?: string; country?: string; flag?: string };
+  // some APIs flatten the fields
+  id?:     number;
+  name?:   string;
+  country?: string;
+  flag?:   string;
+}
+
+interface RawRankingResponse { results?: RawRankingEntry[] }
+
+// --- Raw tournament types ----------------------------------------------------
+
+interface RawTournamentEntry {
+  id?:       number;
+  name?:     string;
+  surface?:  string;
+  location?: string;
+  prize_money?: string;
+  prize?:    string;
+  start_date?: string;
+  end_date?:   string;
+  season?:   number;
+  year?:     number;
+}
+
+interface RawTournamentResponse { results?: RawTournamentEntry[] }
+
+// --- Public API functions -----------------------------------------------------
+
 /** Currently live matches. Cached 30 s. */
 export async function fetchLiveMatches(): Promise<TennisApiMatch[]> {
   const data = await rapidGet<RawResponse>("/matches/live", 30_000);
@@ -191,7 +260,47 @@ export async function fetchFixtures(date?: Date): Promise<TennisApiMatch[]> {
   const month = d.getMonth() + 1;
   const year = d.getFullYear();
   const data = await rapidGet<RawResponse>(`/fixtures/${day}/${month}/${year}`, 5 * 60_000);
+  // Return all non-live matches (notstarted), gracefully handle missing status
   return (data.results ?? [])
-    .filter((m) => m.status?.type === "notstarted")
+    .filter((m) => !m.status || m.status.type === "notstarted")
     .map(normalizeMatch);
+}
+
+/** ATP or WTA rankings. Cached 1 hour. */
+export async function fetchRankings(tour: "ATP" | "WTA"): Promise<TennisRankingEntry[]> {
+  // API requires lowercase tour key
+  const data = await rapidGet<RawRankingResponse>(`/rankings/${tour.toLowerCase()}`, 60 * 60_000);
+  return (data.results ?? []).slice(0, 50).map((e, i) => {
+    // Some API versions nest player, others flatten it
+    const name    = e.player?.name    ?? e.name    ?? "Unknown";
+    const flag    = e.player?.flag    ?? e.flag    ?? e.player?.country ?? e.country ?? "";
+    const playerId = String(e.player?.id ?? e.id ?? i);
+    return {
+      pos:    e.pos ?? e.rank ?? (i + 1),
+      points: e.pts ?? e.points ?? 0,
+      player: {
+        id:          playerId,
+        name,
+        country:     toFlag(flag),
+        countryCode: flag,
+      },
+    };
+  });
+}
+
+/** Tournaments for a given season year. Cached 6 hours. */
+export async function fetchTournaments(year?: number): Promise<TennisTournamentInfo[]> {
+  const y = year ?? new Date().getFullYear();
+  const data = await rapidGet<RawTournamentResponse>(`/tournaments/${y}`, 6 * 60 * 60_000);
+  return (data.results ?? []).map((t) => ({
+    id:          String(t.id ?? Math.random()),
+    name:        t.name ?? "Unknown Tournament",
+    surface:     t.surface ?? "Hard",
+    surfaceIcon: SURFACE_ICONS[t.surface ?? ""] ?? "🎾",
+    location:    t.location,
+    prize:       t.prize_money ?? t.prize,
+    startDate:   t.start_date,
+    endDate:     t.end_date,
+    season:      t.season ?? t.year ?? y,
+  }));
 }
