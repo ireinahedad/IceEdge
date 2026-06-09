@@ -98,8 +98,8 @@ function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
             onClick={() => setFilter(f.key)}
             className={`flex-1 py-1.5 rounded-xl text-[10px] font-medium border transition-all ${
               filter === f.key
-                ? "bg-[#86d1ea] text-[#0f1416] border-[#86d1ea] font-bold"
-                : "text-[#bfc8cc] border-[#1e2d32] bg-[#141c1f]"
+                ? "bg-[#86d1ea] text-[#0a1014] border-[#86d1ea] font-bold"
+                : "text-[#bfc8cc] border-white/20 bg-[#111a1f]"
             }`}
           >
             {f.label}
@@ -115,8 +115,8 @@ function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
             onClick={() => setTierFilter(t.key)}
             className={`flex-shrink-0 px-2.5 py-1 rounded-full text-[9px] border transition-all ${
               tierFilter === t.key
-                ? "bg-[#1e2d32] text-white border-[#86d1ea]"
-                : "text-[#bfc8cc] border-[#1e2d32]"
+                ? "bg-[#1a2a2f] text-white border-[#86d1ea]"
+                : "text-[#bfc8cc] border-white/20"
             }`}
           >
             {t.label}
@@ -126,7 +126,7 @@ function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
 
       {/* Podium — only show when sorted by score and no tier filter */}
       {filter === "score" && tierFilter === "all" && podium.length >= 3 && (
-        <div className="bg-[#141c1f] border border-[#1e2d32] rounded-2xl p-4">
+        <div className="bg-[#111a1f] border border-white/20 rounded-2xl p-4">
           <p className="text-[#bfc8cc] text-[10px] uppercase tracking-widest text-center mb-4">This Season's Podium</p>
           <div className="flex items-end justify-center gap-3">
             {/* 2nd */}
@@ -136,7 +136,7 @@ function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
                 <p className="text-white text-[10px] font-bold">{podium[1].displayName}</p>
                 <p className="text-[#86d1ea] text-[10px]">{podium[1].performanceScore}</p>
               </div>
-              <div className="w-16 bg-[#1e2d32] rounded-t-lg flex items-center justify-center" style={{ height: 40 }}>
+              <div className="w-16 bg-[#1a2a2f] rounded-t-lg flex items-center justify-center" style={{ height: 40 }}>
                 <span className="text-lg">🥈</span>
               </div>
             </div>
@@ -147,7 +147,7 @@ function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
                 <p className="text-white text-xs font-bold">{podium[0].displayName}</p>
                 <p className="text-yellow-400 text-[10px] font-bold">{podium[0].performanceScore}</p>
               </div>
-              <div className="w-16 bg-[#1e2d32] rounded-t-lg flex items-center justify-center" style={{ height: 56 }}>
+              <div className="w-16 bg-[#1a2a2f] rounded-t-lg flex items-center justify-center" style={{ height: 56 }}>
                 <span className="text-xl">🥇</span>
               </div>
             </div>
@@ -158,7 +158,7 @@ function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
                 <p className="text-white text-[10px] font-bold">{podium[2].displayName}</p>
                 <p className="text-amber-600 text-[10px]">{podium[2].performanceScore}</p>
               </div>
-              <div className="w-16 bg-[#1e2d32] rounded-t-lg flex items-center justify-center" style={{ height: 30 }}>
+              <div className="w-16 bg-[#1a2a2f] rounded-t-lg flex items-center justify-center" style={{ height: 30 }}>
                 <span className="text-lg">🥉</span>
               </div>
             </div>
@@ -167,9 +167,9 @@ function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
       )}
 
       {/* Full list */}
-      <div className="bg-[#141c1f] border border-[#1e2d32] rounded-2xl overflow-hidden">
+      <div className="bg-[#111a1f] border border-white/20 rounded-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center px-4 py-2 border-b border-[#1e2d32]">
+        <div className="flex items-center px-4 py-2 border-b border-white/20">
           <span className="text-[#bfc8cc] text-[9px] uppercase tracking-wider w-8">#</span>
           <span className="text-[#bfc8cc] text-[9px] uppercase tracking-wider flex-1">Player</span>
           <span className="text-[#bfc8cc] text-[9px] uppercase tracking-wider w-12 text-right">
@@ -264,7 +264,7 @@ function MessageBubble({
     <div className={`flex gap-2 ${isOwn ? "flex-row-reverse" : ""}`}>
       {/* Avatar */}
       <div className="flex-shrink-0 flex flex-col items-center gap-0.5">
-        <div className="w-7 h-7 rounded-full bg-[#1e2d32] flex items-center justify-center text-sm">
+        <div className="w-7 h-7 rounded-full bg-[#1a2a2f] flex items-center justify-center text-sm">
           {msg.avatar}
         </div>
       </div>
@@ -287,7 +287,7 @@ function MessageBubble({
 
         {/* Reply preview */}
         {msg.replyTo && (
-          <div className="bg-[#1e2d32] rounded-lg px-2 py-1 border-l-2 border-[#86d1ea]">
+          <div className="bg-[#1a2a2f] rounded-lg px-2 py-1 border-l-2 border-[#86d1ea]">
             <p className="text-[#86d1ea] text-[9px] font-medium">@{msg.replyTo.username}</p>
             <p className="text-[#bfc8cc] text-[9px] truncate">{msg.replyTo.text}</p>
           </div>
@@ -296,8 +296,8 @@ function MessageBubble({
         {/* Text */}
         <div className={`rounded-2xl px-3 py-2 ${
           isOwn
-            ? "bg-[#86d1ea] text-[#0f1416]"
-            : "bg-[#141c1f] border border-[#1e2d32] text-white"
+            ? "bg-[#86d1ea] text-[#0a1014]"
+            : "bg-[#111a1f] border border-white/20 text-white"
         }`}>
           <p className="text-xs leading-relaxed">{msg.text}</p>
         </div>
@@ -312,7 +312,7 @@ function MessageBubble({
                 className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full border text-[9px] transition-all ${
                   r.reacted
                     ? "bg-[#86d1ea]/20 border-[#86d1ea]/50 text-[#86d1ea]"
-                    : "bg-[#1e2d32] border-[#1e2d32] text-[#bfc8cc]"
+                    : "bg-[#1a2a2f] border-white/20 text-[#bfc8cc]"
                 }`}
               >
                 <span>{r.emoji}</span>
@@ -405,8 +405,8 @@ function ChatTab() {
             onClick={() => setChannel(key)}
             className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-medium transition-all ${
               channel === key
-                ? "bg-[#86d1ea] text-[#0f1416] border-[#86d1ea] font-bold"
-                : "bg-[#141c1f] text-[#bfc8cc] border-[#1e2d32]"
+                ? "bg-[#86d1ea] text-[#0a1014] border-[#86d1ea] font-bold"
+                : "bg-[#111a1f] text-[#bfc8cc] border-white/20"
             }`}
           >
             <span>{cfg.icon}</span>
@@ -438,7 +438,7 @@ function ChatTab() {
 
       {/* Reply preview */}
       {replyTo && (
-        <div className="flex items-center gap-2 bg-[#1e2d32] rounded-xl px-3 py-2 mb-2 flex-shrink-0">
+        <div className="flex items-center gap-2 bg-[#1a2a2f] rounded-xl px-3 py-2 mb-2 flex-shrink-0">
           <div className="flex-1 min-w-0">
             <p className="text-[#86d1ea] text-[9px] font-medium">Replying to @{replyTo.username}</p>
             <p className="text-[#bfc8cc] text-[9px] truncate">{replyTo.text}</p>
@@ -458,7 +458,7 @@ function ChatTab() {
               className={`px-2 py-1 rounded-full text-[9px] border transition-all ${
                 tag === t
                   ? TAG_STYLE[t]
-                  : "text-[#bfc8cc] border-[#1e2d32]"
+                  : "text-[#bfc8cc] border-white/20"
               }`}
             >
               {TAG_LABEL[t]}
@@ -470,7 +470,7 @@ function ChatTab() {
         </div>
 
         {/* Input row */}
-        <div className="flex items-center gap-2 bg-[#141c1f] border border-[#1e2d32] rounded-2xl px-3 py-2">
+        <div className="flex items-center gap-2 bg-[#111a1f] border border-white/20 rounded-2xl px-3 py-2">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -483,8 +483,8 @@ function ChatTab() {
             disabled={!input.trim()}
             className={`w-7 h-7 rounded-xl flex items-center justify-center text-sm transition-all flex-shrink-0 ${
               input.trim()
-                ? "bg-[#86d1ea] text-[#0f1416]"
-                : "bg-[#1e2d32] text-[#bfc8cc]"
+                ? "bg-[#86d1ea] text-[#0a1014]"
+                : "bg-[#1a2a2f] text-[#bfc8cc]"
             }`}
           >
             ↑
@@ -517,12 +517,12 @@ export function LeaguePage() {
   ];
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0f1416] text-white max-w-[430px] mx-auto">
+    <div className="flex flex-col min-h-screen bg-[#0a1014] text-white max-w-[430px] mx-auto">
       {/* Header */}
-      <header className="px-4 pt-12 pb-3 bg-[#0f1416] sticky top-0 z-40 border-b border-[#1e2d32]">
+      <header className="px-4 pt-12 pb-3 bg-[#0a1014] sticky top-0 z-40 border-b border-white/20">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h1 className="text-white text-xl font-bold">League</h1>
+            <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>League</h1>
             <p className="text-[#bfc8cc] text-xs">Rankings & community</p>
           </div>
           {tab === "chat" && (
@@ -534,14 +534,14 @@ export function LeaguePage() {
         </div>
 
         {/* Tab switcher */}
-        <div className="flex gap-1 bg-[#141c1f] rounded-xl p-1">
+        <div className="flex gap-1 bg-[#111a1f] rounded-xl p-1">
           {tabs.map((t) => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-medium transition-all ${
                 tab === t.key
-                  ? "bg-[#86d1ea] text-[#0f1416] font-bold"
+                  ? "bg-[#86d1ea] text-[#0a1014] font-bold"
                   : "text-[#bfc8cc]"
               }`}
             >
@@ -557,7 +557,7 @@ export function LeaguePage() {
           loading ? (
             <div className="flex flex-col gap-3">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-14 bg-[#141c1f] rounded-2xl animate-pulse" />
+                <div key={i} className="h-14 bg-[#111a1f] rounded-2xl animate-pulse" />
               ))}
             </div>
           ) : (

@@ -202,6 +202,7 @@ export async function fetchGamesByDate(date: string): Promise<any[]> {
   const games = dayEntry.games.map((g: any) => formatGame(g, date));
   const ttl   = games.some((g: any) => g.status === 'live') ? 30_000 : 5 * 60_000;
   setCached(key, games, ttl);
+  
   return games;
 }
 
@@ -215,6 +216,7 @@ export async function fetchLiveGames(): Promise<any[]> {
     .map((g: any) => formatGame(g));
 
   setCached('live', games, 30_000);
+  console.log(`[nhlApi] Fetched ${games.length} live games`);
   return games;
 }
 

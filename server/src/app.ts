@@ -9,7 +9,9 @@ import nhlRoutes           from './routes/nhl.route';
 import oddsRoutes          from './routes/odds.route';
 import opportunitiesRoutes from './routes/opportunities.routes';
 import mlRoutes            from './routes/ml.routes';
+import tennisRoutes        from './routes/tennis.route';
 import chatRoutes          from './routes/chat.routes';
+import slipRoutes          from './routes/slip.routes';
 import { getLeaderboard }  from './services/profile.service';
 import { seedAll }         from './db/seed';
 
@@ -38,12 +40,18 @@ app.get('/api/leaderboard', async (_req, res) => {
 // Chat
 app.use('/api/chat',          chatRoutes);
 
+// Bet slips (auth-gated)
+app.use('/api/slips',         slipRoutes);
+
 // Odds & opportunities
 app.use('/api/odds',          oddsRoutes);
 app.use('/api/opportunities', opportunitiesRoutes);
 
 // ML / prediction
 app.use('/api/predict',       mlRoutes);
+
+// Tennis live data
+app.use('/api/tennis',        tennisRoutes);
 
 // Dev-only seed endpoint
 if (process.env.NODE_ENV !== 'production') {

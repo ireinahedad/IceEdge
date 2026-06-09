@@ -19,7 +19,7 @@ type Tab = "overview" | "history";
 
 function Skeleton({ className }: { className: string }) {
   return (
-    <div className={`bg-white/5 backdrop-blur-md border border-white/10 rounded-xl animate-pulse ${className}`} />
+    <div className={`bg-white/5 backdrop-blur-md border border-white/20 rounded-xl animate-pulse ${className}`} />
   );
 }
 
@@ -33,7 +33,6 @@ function StreakBadge({ streak }: { streak: number }) {
         ? "bg-green-500/15 border-green-500/30 text-green-400"
         : "bg-red-500/15 border-red-500/30 text-red-400"
     }`}>
-      <span>{isWin ? "🔥" : "🧊"}</span>
       <span>{abs} {isWin ? "W" : "L"} streak</span>
     </div>
   );
@@ -46,12 +45,12 @@ function UserAvatar({ avatarUrl, avatar, size = "lg" }: { avatarUrl?: string | n
       <img
         src={avatarUrl}
         alt="avatar"
-        className={`${dim} rounded-2xl object-cover border border-white/10`}
+        className={`${dim} rounded-2xl object-cover border border-white/20`}
       />
     );
   }
   return (
-    <div className={`${dim} rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center`}>
+    <div className={`${dim} rounded-2xl bg-white/5 backdrop-blur-md border border-white/20 flex items-center justify-center`}>
       {avatar ?? "👤"}
     </div>
   );
@@ -60,12 +59,12 @@ function UserAvatar({ avatarUrl, avatar, size = "lg" }: { avatarUrl?: string | n
 function ProfileHeader({ profile, stats, avatarUrl }: { profile: UserProfile; stats: UserBettingStats; avatarUrl?: string | null }) {
   const tc = TIER_CONFIG[profile.tier];
   return (
-    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-5">
+    <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-5">
       <div className="flex items-center gap-4 mb-4">
         <div className="relative">
           <UserAvatar avatarUrl={avatarUrl} avatar={profile.avatar} size="lg" />
           {profile.favoriteTeam && (
-            <div className="absolute -bottom-1.5 -right-1.5 bg-[#86d1ea] text-[#0f1416] text-[8px] font-bold px-1.5 py-0.5 rounded-full">
+            <div className="absolute -bottom-1.5 -right-1.5 bg-[#86d1ea] text-[#0a1014] text-[8px] font-bold px-1.5 py-0.5 rounded-full">
               {profile.favoriteTeam}
             </div>
           )}
@@ -89,7 +88,7 @@ function ProfileHeader({ profile, stats, avatarUrl }: { profile: UserProfile; st
       </div>
 
       {profile.bio && (
-        <p className="text-white/70 text-[10px] leading-relaxed mb-4 border-t border-white/10 pt-3">
+        <p className="text-white/70 text-[10px] leading-relaxed mb-4 border-t border-white/20 pt-3">
           {profile.bio}
         </p>
       )}
@@ -108,7 +107,7 @@ function OverviewTab({ profile, stats }: { profile: UserProfile; stats: UserBett
   const total = stats.parlayRecord.wins + stats.parlayRecord.losses;
   return (
     <div className="flex flex-col gap-3">
-      <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4">
+      <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
         <p className="text-white text-xs font-medium mb-3">Parlay Record</p>
         <div className="flex items-center gap-4">
           <div className="flex-1 text-center">
@@ -149,8 +148,8 @@ function NotLoggedIn() {
   const navigate = useNavigate();
   return (
     <div className="flex flex-col items-center justify-center flex-1 px-6 text-center gap-6">
-      <div className="w-20 h-20 rounded-3xl bg-[#86d1ea]/10 border border-[#86d1ea]/20 flex items-center justify-center text-4xl">
-        👤
+      <div className="w-20 h-20 rounded-3xl bg-[#86d1ea]/10 border border-[#86d1ea]/20 flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full bg-[#86d1ea]/30 border border-[#86d1ea]/50" />
       </div>
       <div>
         <h2 className="text-white text-lg font-bold mb-1">Sign in to IceEdge</h2>
@@ -160,7 +159,7 @@ function NotLoggedIn() {
       </div>
       <button
         onClick={() => navigate("/login")}
-        className="w-full max-w-xs py-3 rounded-xl bg-[#86d1ea] text-[#0f1416] text-sm font-bold hover:bg-[#86d1ea]/90 active:scale-[0.98] transition-all"
+        className="w-full max-w-xs py-3 rounded-xl bg-[#86d1ea] text-[#0a1014] text-sm font-bold hover:bg-[#86d1ea]/90 active:scale-[0.98] transition-all"
       >
         Sign In / Create Account
       </button>
@@ -198,17 +197,17 @@ export function ProfilePage() {
     navigate("/", { replace: true });
   }
 
-  const tabs: { key: Tab; label: string; icon: string }[] = [
-    { key: "overview", label: "Overview", icon: "📊" },
-    { key: "history",  label: "History",  icon: "📋" },
+  const tabs: { key: Tab; label: string }[] = [
+    { key: "overview", label: "Overview" },
+    { key: "history",  label: "History"  },
   ];
 
   return (
     <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] mx-auto">
-      <header className="px-4 pt-12 pb-3 bg-transparent sticky top-0 z-40 border-b border-white/10 backdrop-blur-sm">
+      <header className="px-4 pt-12 pb-3 bg-[#0a1014]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-white text-xl font-bold">Profile</h1>
+            <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>Profile</h1>
             <p className="text-white/70 text-xs">
               {user ? `@${profile?.username ?? user.email}` : "Sign in to get started"}
             </p>
@@ -217,7 +216,7 @@ export function ProfilePage() {
           {user && (
             <button
               onClick={handleLogout}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-white/60 text-[10px] hover:text-red-400 hover:border-red-500/30 transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/20 text-white/60 text-[10px] hover:text-red-400 hover:border-red-500/30 transition-all"
             >
               <span>Sign out</span>
             </button>
@@ -225,18 +224,17 @@ export function ProfilePage() {
         </div>
 
         {user && (
-          <div className="flex gap-1 mt-3 bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-1">
+          <div className="flex gap-1 mt-3 bg-white/5 backdrop-blur-md border border-white/20 rounded-xl p-1">
             {tabs.map((t) => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-medium transition-all ${
                   tab === t.key
-                    ? "bg-[#86d1ea] text-[#0f1416] font-bold"
+                    ? "bg-[#86d1ea] text-[#0a1014] font-bold"
                     : "text-white/70"
                 }`}
               >
-                <span>{t.icon}</span>
                 <span>{t.label}</span>
               </button>
             ))}

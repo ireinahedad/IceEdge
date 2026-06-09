@@ -12,14 +12,6 @@ import type {
   NHLStandings,
 } from '../types/bet';
 
-declare global {
-  interface ImportMetaEnv {
-    readonly VITE_NHL_API_URL: string;
-    readonly VITE_PROFILE_API_URL: string;
-    readonly VITE_PREDICTION_API_URL: string;
-  }
-}
-
 const BASE_URL = import.meta.env.VITE_NHL_API_URL || '';
 
 async function get<T>(path: string): Promise<T> {

@@ -72,7 +72,7 @@ export function StatPill({
   color?: string;
 }) {
   return (
-    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-3 flex flex-col items-center gap-0.5">
+    <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-3 flex flex-col items-center gap-0.5">
       <span className="text-white text-base font-bold" style={{ color }}>
         {value}
       </span>
@@ -176,7 +176,7 @@ export function HitRateChart({
   const line = `M${pts.join(" L")}`;
 
   return (
-    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4">
+    <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
       <div className="flex items-center justify-between mb-3">
         <p className="text-white text-xs font-medium">
           Hit Rate Trend
@@ -255,7 +255,7 @@ export function MarketBreakdown({
   stats: UserBettingStats;
 }) {
   return (
-    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4">
+    <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
       <p className="text-white text-xs font-medium mb-3">
         Performance by Market
       </p>
@@ -310,7 +310,7 @@ export function BadgeGrid({
     useState<UserBadge | null>(null);
 
   return (
-    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4">
+    <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
       <div className="flex items-center justify-between mb-3">
         <p className="text-white text-xs font-medium">
           Badges
@@ -441,7 +441,7 @@ export function BetHistoryList({
   ];
 
   return (
-    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4">
+    <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
       <div className="flex items-center justify-between mb-3">
         <p className="text-white text-xs font-medium">
           Bet History
@@ -454,8 +454,8 @@ export function BetHistoryList({
               onClick={() => setFilter(f.key)}
               className={`text-[9px] px-2 py-1 rounded-full border transition-colors ${
                 filter === f.key
-                  ? "bg-[#86d1ea] text-[#0f1416] border-[#86d1ea] font-bold"
-                  : "text-white/70 border-white/10"
+                  ? "bg-[#86d1ea] text-[#0a1014] border-[#86d1ea] font-bold"
+                  : "text-white/70 border-white/20"
               }`}
             >
               {f.label}
@@ -477,7 +477,7 @@ export function BetHistoryList({
           return (
             <div
               key={bet.id}
-              className="flex items-center gap-3 py-2 border-b border-white/10 last:border-0"
+              className="flex items-center gap-3 py-2 border-b border-white/20 last:border-0"
             >
               <div className="relative flex-shrink-0">
                 <span className="text-xl">
@@ -550,7 +550,7 @@ export function CalibrationCard({
       : "Your selections often diverge from model predictions. Try sticking to higher-confidence picks.";
 
   return (
-    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4">
+    <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
       <div className="flex items-center justify-between mb-2">
         <p className="text-white text-xs font-medium">
           Model Calibration
@@ -574,7 +574,7 @@ export function CalibrationCard({
         {desc}
       </p>
 
-      <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/10">
+      <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/20">
         <div className="text-center">
           <p className="text-white text-xs font-bold">
             {stats.avgProbability}%

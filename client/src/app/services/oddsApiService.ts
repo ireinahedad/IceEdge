@@ -1,0 +1,117 @@
+// services/oddsApiService.ts
+// Fetches live Bet365 odds from The Odds API (https://the-odds-api.com)
+// Falls back to empty array when API key is not configured.
+
+
+
+const API_KEY = import.meta.env.VITE_ODDS_API_KEY as string | undefined;
+const BASE_URL = "https://api.the-odds-api.com/v4";
+
+// Sport keys used by The Odds API
+export const ODDS_SPORT_KEYS = {
+  hockey: "icehockey_nhl",
+  tennis: "tennis_atp_french_open", // swap per tournament
+} as const;
+
+export interface OddsOutcome {
+  name: string;
+  price: number; // decimal odds e.g. 1.85
+}
+
+export interface OddsMarket {
+  key: string;      // e.g. "h2h", "spreads", "totals"
+  lastUpdate: string;
+  outcomes: OddsOutcome[];
+}
+
+export interface OddsEvent {
+  id: string;
+  sportKey: string;
+  commenceTime: string; // ISO 8601
+  homeTeam: string;
+  awayTeam: string;
+  bookmakers: Array<{
+    key: string;
+    title: string;
+    lastUpdate: string;
+    markets: OddsMarket[];
+  }>;
+}
+
+/**
+ * Fetch odds for a sport, filtered to Bet365.
+ * Returns [] if no API key is set or the request fails.
+ */
+export async function fetchBet365Odds(
+  sportKey: string,
+  markets: string[] = ["h2h"]
+): Promise<OddsEvent[]> {
+  if (!API_KEY) {
+    console.warn("[oddsApi] VITE_ODDS_API_KEY not set — using mock data");
+    return [];
+  }
+
+  try {
+    const params = new URLSearchParams({
+      apiKey: API_KEY,
+      regions: "eu",
+      bookmakers: "bet365",
+      markets: markets.join(","),
+      oddsFormat: "decimal",
+    });
+
+    const res = await fetch(`${BASE_URL}/sports/${sportKey}/odds?${params}`);
+    if (!res.ok) {
+      console.error("[oddsApi] HTTP", res.status, await res.text());
+      return [];
+    }
+    return (await res.json()) as OddsEvent[];
+  } catch (err) {
+    console.error("[oddsApi] fetch error", err);
+    return [];
+  }
+}
+
+/**
+ * Extract the Bet365 h2h (match winner) prices for a single event.
+ * Returns null if Bet365 data isn't present.
+ */
+export function extractH2HOdds(
+  event: OddsEvent
+): { home: number; away: number } | null {
+  const bet365 = event.bookmakers.find((b) => b.key === "bet365");
+  if (!bet365) return null;
+
+  const h2h = bet365.markets.find((m) => m.key === "h2h");
+  if (!h2h || h2h.outcomes.length < 2) return null;
+
+  const home = h2h.outcomes.find((o) => o.name === event.homeTeam);
+  const away = h2h.outcomes.find((o) => o.name === event.awayTeam);
+  if (!home || !away) return null;
+
+  return { home: home.price, away: away.price };
+}
+
+/**
+ * Convert decimal odds to implied win probability (%).
+ */
+export function decimalToWinPct(decimal: number): number {
+  return Math.round((1 / decimal) * 100);
+}
+
+/**
+ * Fetch available sports/tournaments (useful for finding correct sport keys).
+ */
+export async function fetchAvailableSports(): Promise<
+  Array<{ key: string; title: string; active: boolean }>
+> {
+  if (!API_KEY) return [];
+  try {
+    const res = await fetch(`${BASE_URL}/sports?apiKey=${API_KEY}`);
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+

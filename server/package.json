@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "seed": "ts-node src/db/seed.ts",
-    "db:migrate": "psql %DATABASE_URL% -f src/db/schema.sql"
+    "db:migrate": "psql postgresql://postgres:mike1970@localhost:5432/IceedgeDB -f src/db/schema.sql",
+    "db:migrate:slips": "ts-node src/db/migrate-slips.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

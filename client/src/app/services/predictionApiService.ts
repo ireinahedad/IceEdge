@@ -133,6 +133,167 @@ export const predictionApiService = {
   },
 };
 
+
+// ─── Factor / Waterfall types ─────────────────────────────────────────────────
+
+export interface CalcFactor {
+  icon: string;
+  label: string;
+  delta: number;
+}
+
+export interface FactorsResponse {
+  basePct: number;
+  factors: CalcFactor[];
+  finalPct: number;
+}
+
+export interface PlayerPropRequest {
+  playerId: string;
+  playerName: string;
+  propType: "goals" | "points" | "assists" | "award";
+  line: number;
+  season: string;
+  currentGoals?: number;
+  currentPoints?: number;
+  currentAssists?: number;
+  gamesPlayed?: number;
+}
+
+export interface PlayerPropResponse {
+  probability: number;
+  oddsLabel: string;
+  factors: CalcFactor[];
+  betNote: string;
+}
+
+export interface FuturesRequest {
+  teamId: string;
+  teamName: string;
+  propType: "cup" | "conf";
+  wins?: number;
+  losses?: number;
+  seriesContext?: string;
+}
+
+export interface FuturesResponse {
+  probability: number;
+  oddsLabel: string;
+  factors: CalcFactor[];
+  betNote: string;
+}
+
+// ─── Extended prediction service ──────────────────────────────────────────────
+
+const PRED_BASE = () => import.meta.env.VITE_PREDICTION_API_URL || "";
+
+async function tryPost<T>(path: string, body: unknown): Promise<T | null> {
+  const base = PRED_BASE();
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) return res.json() as Promise<T>;
+  } catch { /* fall through */ }
+  return null;
+}
+
+export const factorsApiService = {
+  /**
+   * Waterfall breakdown explaining a prediction.
+   * LLM endpoint: POST /api/predict/factors
+   * Body:   { type, id, context }
+   * Return: { basePct, factors: [{icon,label,delta}], finalPct }
+   * Falls back to empty factors — caller builds from raw stats.
+   */
+  getFactors: async (
+    type: "team" | "player" | "game" | "player-prop" | "future",
+    id: string,
+    context: Record<string, unknown> = {}
+  ): Promise<FactorsResponse> => {
+    const result = await tryPost<FactorsResponse>("/predict/factors", { type, id, context });
+    return result ?? { basePct: 50, factors: [], finalPct: (context.fallbackPct as number) ?? 50 };
+  },
+
+  /**
+   * Season prop probability for a player.
+   * LLM endpoint: POST /api/predict/player-prop
+   * Body:   { playerId, playerName, propType, line, season, currentGoals, gamesPlayed, … }
+   * Return: { probability, oddsLabel, factors, betNote }
+   */
+  getPlayerProp: async (req: PlayerPropRequest): Promise<PlayerPropResponse> => {
+    const result = await tryPost<PlayerPropResponse>("/predict/player-prop", req);
+    return result ?? buildMockPlayerProp(req);
+  },
+
+  /**
+   * Stanley Cup / conference futures probability.
+   * LLM endpoint: POST /api/predict/futures
+   * Body:   { teamId, teamName, propType, wins, losses, seriesContext }
+   * Return: { probability, oddsLabel, factors, betNote }
+   */
+  getFutures: async (req: FuturesRequest): Promise<FuturesResponse> => {
+    const result = await tryPost<FuturesResponse>("/predict/futures", req);
+    return result ?? buildMockFutures(req);
+  },
+};
+
+function probToOddsLabel(pct: number): string {
+  const p = Math.max(5, Math.min(95, pct)) / 100;
+  if (p >= 0.5) return `-${Math.round((p / (1 - p)) * 100)}`;
+  return `+${Math.round(((1 - p) / p) * 100)}`;
+}
+
+function buildMockPlayerProp(req: PlayerPropRequest): PlayerPropResponse {
+  const gp = req.gamesPlayed ?? 60;
+  const remaining = Math.max(0, 82 - gp);
+  const current =
+    req.propType === "goals"   ? (req.currentGoals   ?? 0) :
+    req.propType === "points"  ? (req.currentPoints  ?? 0) :
+    req.propType === "assists" ? (req.currentAssists ?? 0) : 0;
+
+  const pace = gp > 0 ? (current / gp) * 82 : current;
+  const needed = req.line - current;
+  const rateNeeded = remaining > 0 ? needed / remaining : Infinity;
+  const currentRate = gp > 0 ? current / gp : 0;
+
+  const probability =
+    needed <= 0               ? 95 :
+    rateNeeded <= currentRate * 0.85 ? 75 :
+    rateNeeded <= currentRate        ? 62 :
+    rateNeeded <= currentRate * 1.15 ? 45 : 28;
+
+  const factors: CalcFactor[] = [
+    { icon: "\u{1F4CA}", label: `Season pace: ${pace.toFixed(0)} (line: ${req.line})`, delta: pace >= req.line ? 12 : -8 },
+    { icon: "\u{1F4C5}", label: `${remaining} games remaining, needs ${needed} more`, delta: remaining >= 20 ? 5 : remaining >= 10 ? 2 : -3 },
+    { icon: "\u{1F4C8}", label: `Averaging ${currentRate.toFixed(2)} per game this season`, delta: currentRate >= rateNeeded ? 6 : -4 },
+  ].filter(f => f.delta !== 0);
+
+  const pct = Math.max(5, Math.min(95, probability));
+  return {
+    probability: pct,
+    oddsLabel: probToOddsLabel(pct),
+    factors,
+    betNote: `${req.playerName} needs ${needed} more ${req.propType} in ${remaining} games (current pace: ${pace.toFixed(0)}). Connect POST /api/predict/player-prop for LLM-powered analysis.`,
+  };
+}
+
+function buildMockFutures(req: FuturesRequest): FuturesResponse {
+  const pct = req.propType === "cup" ? 33 : 50;
+  return {
+    probability: pct,
+    oddsLabel: probToOddsLabel(pct),
+    factors: [
+      { icon: "\u{1F4CA}", label: `${req.wins ?? "?"} wins in current playoff run`, delta: 8 },
+    ],
+    betNote: `${req.teamName} futures. Connect POST /api/predict/futures for LLM-powered analysis.`,
+  };
+}
+
+
 // ─── Mock Prediction Logic (fallback when API not connected) ──────────────────
 
 function buildMockPrediction(req: PredictionRequest): PredictionResponse {
