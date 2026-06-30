@@ -1,0 +1,132 @@
+{
+  "game_model": {
+    "model": "XGBoost binary:logistic",
+    "best_iteration": 69,
+    "n_train": 2940,
+    "n_test": 736,
+    "accuracy": 0.587,
+    "brier_score": 0.2376,
+    "log_loss": 0.668,
+    "skill_score": 0.0447,
+    "home_win_rate": 0.5313,
+    "feature_importances": [
+      {
+        "name": "win_pct_diff",
+        "importance": 0.1623
+      },
+      {
+        "name": "ga_diff",
+        "importance": 0.0974
+      },
+      {
+        "name": "gf_diff",
+        "importance": 0.0888
+      },
+      {
+        "name": "home_goals_for_pg",
+        "importance": 0.0811
+      },
+      {
+        "name": "away_win_pct",
+        "importance": 0.0795
+      },
+      {
+        "name": "home_goals_against_pg",
+        "importance": 0.0758
+      },
+      {
+        "name": "away_last10_win_pct",
+        "importance": 0.0736
+      },
+      {
+        "name": "away_goals_for_pg",
+        "importance": 0.0729
+      },
+      {
+        "name": "away_goals_against_pg",
+        "importance": 0.0715
+      },
+      {
+        "name": "form_diff",
+        "importance": 0.0699
+      },
+      {
+        "name": "home_win_pct",
+        "importance": 0.0697
+      },
+      {
+        "name": "home_last10_win_pct",
+        "importance": 0.0574
+      }
+    ]
+  },
+  "totals_model": {
+    "model": "XGBoost reg:squarederror",
+    "best_iteration": 12,
+    "n_train": 2940,
+    "n_test": 736,
+    "mae_goals": 1.8665,
+    "rmse_goals": 2.3306,
+    "mean_total": 6.3241,
+    "feature_importances": [
+      {
+        "name": "home_goals_against_pg",
+        "importance": 0.1826
+      },
+      {
+        "name": "ga_diff",
+        "importance": 0.1767
+      },
+      {
+        "name": "away_goals_for_pg",
+        "importance": 0.1705
+      },
+      {
+        "name": "away_goals_against_pg",
+        "importance": 0.1692
+      },
+      {
+        "name": "gf_diff",
+        "importance": 0.1591
+      },
+      {
+        "name": "home_goals_for_pg",
+        "importance": 0.1418
+      }
+    ]
+  },
+  "features": {
+    "game": [
+      "home_win_pct",
+      "away_win_pct",
+      "home_goals_for_pg",
+      "away_goals_for_pg",
+      "home_goals_against_pg",
+      "away_goals_against_pg",
+      "home_pp_pct",
+      "away_pp_pct",
+      "home_pk_pct",
+      "away_pk_pct",
+      "home_last10_win_pct",
+      "away_last10_win_pct",
+      "win_pct_diff",
+      "gf_diff",
+      "ga_diff",
+      "pp_diff",
+      "pk_diff",
+      "form_diff"
+    ],
+    "totals": [
+      "home_goals_for_pg",
+      "away_goals_for_pg",
+      "home_goals_against_pg",
+      "away_goals_against_pg",
+      "home_pp_pct",
+      "away_pp_pct",
+      "home_pk_pct",
+      "away_pk_pct",
+      "gf_diff",
+      "ga_diff"
+    ]
+  }
+}

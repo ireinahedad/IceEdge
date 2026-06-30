@@ -331,3 +331,62 @@ export async function searchPlayers(q: string): Promise<any[]> {
     );
   }
 }
+
+/** Fetch the full roster for a team (abbr like "EDM") with current-season stats */
+export async function fetchTeamRoster(abbr: string): Promise<any[]> {
+  const upper = abbr.toUpperCase();
+  const cacheKey = `roster_${upper}`;
+  const cached = getCached<any[]>(cacheKey);
+  if (cached) return cached;
+
+  const season = currentSeason();
+
+  // Roster list
+  const rosterData = await fetchNHL<any>(`v1/roster/${upper}/${season}`);
+  const allPlayers: any[] = [
+    ...(rosterData.forwards  ?? []),
+    ...(rosterData.defensemen ?? []),
+    ...(rosterData.goalies   ?? []),
+  ];
+
+  // Fetch stats for every player in parallel (capped to avoid hammering API)
+  const statsResults = await Promise.allSettled(
+    allPlayers.map(p => fetchNHL<any>(`v1/player/${p.id}/landing`))
+  );
+
+  const out: any[] = [];
+  for (let i = 0; i < allPlayers.length; i++) {
+    const roster = allPlayers[i];
+    const res    = statsResults[i];
+    if (res.status === 'rejected') continue;
+    const data   = res.value as any;
+    const seasons = (data.seasonTotals ?? []).filter(
+      (s: any) => s.leagueAbbrev === 'NHL' && s.gameTypeId === 2
+    );
+    const cur  = seasons[seasons.length - 1] ?? {};
+    const pts  = cur.points ?? 0;
+    const gp   = Math.max(cur.gamesPlayed ?? 1, 1);
+    out.push({
+      id:          String(roster.id),
+      name:        [roster.firstName?.default, roster.lastName?.default].filter(Boolean).join(' '),
+      teamId:      upper.toLowerCase(),
+      teamAbbr:    upper,
+      position:    roster.positionCode ?? 'F',
+      number:      roster.sweaterNumber ?? 0,
+      goals:       cur.goals    ?? 0,
+      assists:     cur.assists  ?? 0,
+      points:      pts,
+      plusMinus:   cur.plusMinus ?? 0,
+      shots:       cur.shots    ?? 0,
+      shotPct:     cur.shootingPctg != null ? Math.round(cur.shootingPctg * 1000) / 10 : 0,
+      ppPoints:    cur.powerPlayPoints ?? 0,
+      gamesPlayed: gp,
+      lastFive:    [] as number[],
+      winImpact:   Math.min(99, Math.round((pts / gp) * 100)),
+    });
+  }
+
+  out.sort((a, b) => b.points - a.points);
+  setCached(cacheKey, out, 30 * 60_000); // cache 30 min
+  return out;
+}

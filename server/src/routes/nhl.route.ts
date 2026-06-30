@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { NHLService } from '../services/nhl.service';
+import { buildGameMarkets, buildTeamMarkets, buildPlayerMarkets } from '../services/nhlPredictions';
 
 const router = Router();
 const nhl    = new NHLService();
@@ -47,6 +48,11 @@ router.get('/players', async (_req, res) => {
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
+router.get('/teams/:abbr/roster', async (req, res) => {
+  try { res.json(await nhl.getTeamRoster(req.params.abbr)); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
 router.get('/players/:id', async (req, res) => {
   try { res.json(await nhl.getPlayer(req.params.id)); }
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
@@ -54,6 +60,22 @@ router.get('/players/:id', async (req, res) => {
 
 router.get('/players/:id/stats', async (req, res) => {
   try { res.json(await nhl.getPlayerStats(req.params.id)); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// Predictions
+router.get('/predictions/game/:gameId', async (req, res) => {
+  try { res.json(await buildGameMarkets(req.params.gameId)); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+router.get('/predictions/team/:abbr', async (req, res) => {
+  try { res.json(await buildTeamMarkets(req.params.abbr)); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+router.get('/predictions/player/:playerId', async (req, res) => {
+  try { res.json(await buildPlayerMarkets(req.params.playerId)); }
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 

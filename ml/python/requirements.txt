@@ -1,0 +1,15 @@
+# ICEEDGE ML Service dependencies
+# pip install -r requirements.txt
+#
+# Versions non épinglées → pip choisit les wheels compatibles Python 3.14
+
+# API service
+fastapi
+uvicorn[standard]
+pydantic
+
+# ML
+xgboost
+numpy
+pandas
+requests

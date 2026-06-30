@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MessageBubble } from "./MessageBubble";
 import { profileApiService } from "../../../services/userService";
+import { useChatSocket } from "../../../hooks/useChatSocket";
 import type { ChatRoom, ChatMessage } from "../../../types/user";
 
 // ─── Tag styles ───────────────────────────────────────────────────────────────
@@ -209,7 +210,8 @@ function RoomChat({ room, onBack, onUpdate }: {
   onBack: () => void;
   onUpdate: (updated: ChatRoom) => void;
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>(room.messages);
+  const { messages, onlineCount, connected, initMessages, appendOptimistic, confirmMessage } =
+    useChatSocket(room.id);
   const [input, setInput] = useState("");
   const [tag, setTag] = useState<"pick" | "analysis" | undefined>();
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
@@ -217,15 +219,16 @@ function RoomChat({ room, onBack, onUpdate }: {
   const bottomRef = useRef<HTMLDivElement>(null);
   const CURRENT_USER_ID = "u1";
 
-  // Fetch full message history from service on mount
+  // Load HTTP history on mount, seed into socket hook
   useEffect(() => {
     setLoadingMessages(true);
     profileApiService.getRoomMessages(room.id).then((msgs) => {
-      setMessages(msgs);
+      initMessages(msgs);
       setLoadingMessages(false);
     });
   }, [room.id]);
 
+  // Auto-scroll on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
@@ -235,61 +238,43 @@ function RoomChat({ room, onBack, onUpdate }: {
     if (!text) return;
 
     setInput("");
+    const tempId = `optimistic_${Date.now()}`;
 
-    // Optimistic update first for instant feedback
+    // Optimistic: show immediately
     const optimistic: ChatMessage = {
-      id: `optimistic_${Date.now()}`,
+      id: tempId,
       userId: CURRENT_USER_ID,
-      username: "jdupont",
-      displayName: "Jean Dupont",
+      username: "me",
+      displayName: "You",
       avatar: "🏒",
-      tier: "sharp",
+      tier: "rookie",
       text,
       sentAt: new Date().toISOString(),
       reactions: [],
       tag,
       replyTo: replyTo ? { username: replyTo.username, text: replyTo.text } : undefined,
     };
-
-    setMessages((prev) => [...prev, optimistic]);
+    appendOptimistic(optimistic);
     setTag(undefined);
     setReplyTo(null);
 
-    // Replace optimistic message with server response
+    // Confirm with server — socket will broadcast to others, we replace the optimistic copy
     const confirmed = await profileApiService.sendMessage(room.id, {
       text,
       tag,
       replyTo: replyTo ? { username: replyTo.username, text: replyTo.text } : undefined,
     });
+    confirmMessage(tempId, confirmed);
 
-    setMessages((prev) =>
-      prev.map((m) => (m.id === optimistic.id ? confirmed : m))
-    );
-
-    onUpdate({
-      ...room,
-      lastMessage: text,
-      lastMessageAt: confirmed.sentAt,
-      unread: 0,
-    });
+    onUpdate({ ...room, lastMessage: text, lastMessageAt: confirmed.sentAt, unread: 0 });
   }
 
   async function handleReact(msgId: string, emoji: string) {
-    // Optimistic toggle
-    setMessages((prev) =>
-      prev.map((m) => {
-        if (m.id !== msgId) return m;
-        const reactions = (m.reactions ?? []).map((r) =>
-          r.emoji === emoji
-            ? { ...r, count: r.reacted ? r.count - 1 : r.count + 1, reacted: !r.reacted }
-            : r
-        );
-        return { ...m, reactions };
-      })
-    );
-    // Fire and forget — server reconciles
+    // Optimistic toggle handled inside MessageBubble via local state
     await profileApiService.toggleReaction(room.id, msgId, emoji);
   }
+
+  const displayOnline = onlineCount > 0 ? onlineCount : room.memberCount;
 
   return (
     <div className="flex flex-col h-full">
@@ -309,7 +294,13 @@ function RoomChat({ room, onBack, onUpdate }: {
             <p className="text-white text-sm font-bold">{room.name}</p>
             {room.isLive && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
           </div>
-          <p className="text-white/50 text-[9px]">{room.memberCount} members · {room.description}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-white/50 text-[9px]">{room.description}</p>
+            <div className="flex items-center gap-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-green-400 animate-pulse" : "bg-white/20"}`} />
+              <span className="text-[9px] text-white/40">{displayOnline} online</span>
+            </div>
+          </div>
         </div>
       </div>
 

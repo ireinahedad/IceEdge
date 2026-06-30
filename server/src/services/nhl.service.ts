@@ -82,6 +82,10 @@ export class NHLService {
     return nhlApi.fetchTopPlayers();
   }
 
+  async getTeamRoster(abbr: string) {
+    return nhlApi.fetchTeamRoster(abbr);
+  }
+
   async getPlayer(id: string) {
     return nhlApi.fetchPlayerById(id);
   }

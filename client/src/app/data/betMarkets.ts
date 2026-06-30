@@ -1,4 +1,4 @@
-import type { BetMarketType } from "../services/types";
+import type { BetMarketType } from "../types/bet";
 
 export interface MarketDefinition {
   type: BetMarketType;
@@ -92,7 +92,45 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
       { label: "Away wins by 2+", value: "away_2plus" },
     ],
   },
-
+  // ── Nouveaux marchés NHL bet365 ────────────────────────────────────────────
+  {
+    type: "double_chance",
+    label: "Double Chance",
+    shortLabel: "Double Chance",
+    category: "match",
+    description: "Home/Draw or Away/Draw — insures against one outcome",
+    requiresLine: false,
+    requiresSelection: true,
+    selectionOptions: [
+      { label: "Home or Draw", value: "home_draw" },
+      { label: "Away or Draw", value: "away_draw" },
+      { label: "Home or Away", value: "home_away" },
+    ],
+  },
+  {
+    type: "alt_puck_line",
+    label: "Alternate Puck Line",
+    shortLabel: "Alt Puck Line",
+    category: "match",
+    description: "Alternative puck line spreads (-2.5, +2.5, etc.)",
+    requiresLine: true,
+    requiresSelection: true,
+    lineOptions: [-2.5, -1.5, 1.5, 2.5],
+    lineUnit: "goals",
+    selectionOptions: [
+      { label: "Home", value: "home" },
+      { label: "Away", value: "away" },
+    ],
+  },
+  {
+    type: "ot_winner",
+    label: "Overtime Winner",
+    shortLabel: "OT Winner",
+    category: "special",
+    description: "Who wins if the game goes to overtime/shootout",
+    requiresLine: false,
+    requiresSelection: true,
+  },
   // ── Period ────────────────────────────────────────────────────────────────
   {
     type: "period1_winner",
@@ -135,7 +173,51 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
       { label: "3rd Period", value: "P3" },
     ],
   },
-
+  {
+    type: "period1_total_goals",
+    label: "1st Period Total Goals (O/U)",
+    shortLabel: "P1 Total",
+    category: "period",
+    description: "Goals scored in the 1st period over or under the line",
+    requiresLine: true,
+    requiresSelection: true,
+    lineOptions: [0.5, 1.5, 2.5],
+    lineUnit: "goals",
+    selectionOptions: [
+      { label: "Over", value: "over" },
+      { label: "Under", value: "under" },
+    ],
+  },
+  {
+    type: "period2_total_goals",
+    label: "2nd Period Total Goals (O/U)",
+    shortLabel: "P2 Total",
+    category: "period",
+    description: "Goals scored in the 2nd period over or under the line",
+    requiresLine: true,
+    requiresSelection: true,
+    lineOptions: [0.5, 1.5, 2.5],
+    lineUnit: "goals",
+    selectionOptions: [
+      { label: "Over", value: "over" },
+      { label: "Under", value: "under" },
+    ],
+  },
+  {
+    type: "period3_total_goals",
+    label: "3rd Period Total Goals (O/U)",
+    shortLabel: "P3 Total",
+    category: "period",
+    description: "Goals scored in the 3rd period over or under the line",
+    requiresLine: true,
+    requiresSelection: true,
+    lineOptions: [0.5, 1.5, 2.5],
+    lineUnit: "goals",
+    selectionOptions: [
+      { label: "Over", value: "over" },
+      { label: "Under", value: "under" },
+    ],
+  },
   // ── Team Props ────────────────────────────────────────────────────────────
   {
     type: "first_team_score",
@@ -143,6 +225,15 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
     shortLabel: "First Goal",
     category: "team",
     description: "Which team scores the game's first goal",
+    requiresLine: false,
+    requiresSelection: true,
+  },
+  {
+    type: "last_team_score",
+    label: "Last Team to Score",
+    shortLabel: "Last Goal",
+    category: "team",
+    description: "Which team scores the game's final goal",
     requiresLine: false,
     requiresSelection: true,
   },
@@ -176,7 +267,39 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
       { label: "Under", value: "under" },
     ],
   },
-
+  {
+    type: "clean_sheet",
+    label: "Clean Sheet",
+    shortLabel: "Clean Sheet",
+    category: "team",
+    description: "Team does not concede a single goal",
+    requiresLine: false,
+    requiresSelection: true,
+  },
+  {
+    type: "team_score_every_period",
+    label: "Team Scores in Every Period",
+    shortLabel: "Every Period",
+    category: "team",
+    description: "Team scores at least one goal in each of the three periods",
+    requiresLine: false,
+    requiresSelection: true,
+  },
+  {
+    type: "total_penalties",
+    label: "Total Penalty Minutes (O/U)",
+    shortLabel: "Total PIM",
+    category: "special",
+    description: "Combined penalty minutes in the game over or under the line",
+    requiresLine: true,
+    requiresSelection: true,
+    lineOptions: [8.5, 10.5, 12.5, 14.5, 16.5],
+    lineUnit: "PIM",
+    selectionOptions: [
+      { label: "Over", value: "over" },
+      { label: "Under", value: "under" },
+    ],
+  },
   // ── Player Props ──────────────────────────────────────────────────────────
   {
     type: "anytime_goal",
@@ -193,6 +316,15 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
     shortLabel: "First G",
     category: "player",
     description: "Player scores the first goal of the game",
+    requiresLine: false,
+    requiresSelection: false,
+  },
+  {
+    type: "last_goal_scorer",
+    label: "Last Goal Scorer",
+    shortLabel: "Last G",
+    category: "player",
+    description: "Player scores the last goal of the game",
     requiresLine: false,
     requiresSelection: false,
   },
@@ -341,6 +473,173 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
     ],
   },
 ];
+
+// ── Tennis Market Definitions ─────────────────────────────────────────────────
+
+export interface TennisMarketDefinition {
+  type: BetMarketType;
+  label: string;
+  shortLabel: string;
+  category: "match" | "set" | "game" | "player" | "special";
+  description: string;
+  requiresLine: boolean;
+  requiresSelection: boolean;
+  selectionOptions?: { label: string; value: string }[];
+  lineOptions?: number[];
+  lineUnit?: string;
+}
+
+export const TENNIS_MARKET_DEFINITIONS: TennisMarketDefinition[] = [
+  // ── Match ─────────────────────────────────────────────────────────────────
+  {
+    type: "tennis_match_winner",
+    label: "Match Winner",
+    shortLabel: "Winner",
+    category: "match",
+    description: "Pick the player who wins the match",
+    requiresLine: false,
+    requiresSelection: true,
+  },
+  {
+    type: "tennis_total_sets",
+    label: "Total Sets (O/U)",
+    shortLabel: "Total Sets",
+    category: "match",
+    description: "Total number of sets played over or under the line",
+    requiresLine: true,
+    requiresSelection: true,
+    lineOptions: [2.5, 3.5],
+    lineUnit: "sets",
+    selectionOptions: [
+      { label: "Over", value: "over" },
+      { label: "Under", value: "under" },
+    ],
+  },
+  {
+    type: "tennis_correct_score",
+    label: "Correct Score (Sets)",
+    shortLabel: "Correct Score",
+    category: "match",
+    description: "Exact set score for the match (e.g. 2-0, 2-1)",
+    requiresLine: false,
+    requiresSelection: true,
+    selectionOptions: [
+      { label: "2-0 (P1)", value: "2-0" },
+      { label: "2-1 (P1)", value: "2-1" },
+      { label: "0-2 (P2)", value: "0-2" },
+      { label: "1-2 (P2)", value: "1-2" },
+    ],
+  },
+  {
+    type: "tennis_to_win_set",
+    label: "To Win a Set",
+    shortLabel: "Win a Set",
+    category: "match",
+    description: "Player wins at least one set during the match",
+    requiresLine: false,
+    requiresSelection: true,
+  },
+  {
+    type: "tennis_tiebreak",
+    label: "Tiebreak in Match",
+    shortLabel: "Tiebreak",
+    category: "special",
+    description: "Will any tiebreak be played during the match?",
+    requiresLine: false,
+    requiresSelection: false,
+  },
+  // ── Set markets ───────────────────────────────────────────────────────────
+  {
+    type: "tennis_first_set",
+    label: "First Set Winner",
+    shortLabel: "1st Set",
+    category: "set",
+    description: "Who wins the opening set",
+    requiresLine: false,
+    requiresSelection: true,
+  },
+  {
+    type: "tennis_set_handicap",
+    label: "Set Handicap",
+    shortLabel: "Set HCP",
+    category: "set",
+    description: "Set handicap applied to match (e.g. Player A -1.5 sets)",
+    requiresLine: true,
+    requiresSelection: true,
+    lineOptions: [-1.5, 1.5],
+    lineUnit: "sets",
+    selectionOptions: [
+      { label: "Player 1", value: "p1" },
+      { label: "Player 2", value: "p2" },
+    ],
+  },
+  {
+    type: "tennis_first_set_games",
+    label: "1st Set Total Games (O/U)",
+    shortLabel: "1st Set Games",
+    category: "set",
+    description: "Total games played in the first set over or under",
+    requiresLine: true,
+    requiresSelection: true,
+    lineOptions: [8.5, 9.5, 10.5, 11.5],
+    lineUnit: "games",
+    selectionOptions: [
+      { label: "Over", value: "over" },
+      { label: "Under", value: "under" },
+    ],
+  },
+  // ── Game markets ──────────────────────────────────────────────────────────
+  {
+    type: "tennis_total_games",
+    label: "Total Games (O/U)",
+    shortLabel: "Total Games",
+    category: "game",
+    description: "Total games played in the entire match over or under",
+    requiresLine: true,
+    requiresSelection: true,
+    lineOptions: [18.5, 20.5, 22.5, 24.5, 26.5],
+    lineUnit: "games",
+    selectionOptions: [
+      { label: "Over", value: "over" },
+      { label: "Under", value: "under" },
+    ],
+  },
+  {
+    type: "tennis_game_handicap",
+    label: "Game Handicap",
+    shortLabel: "Game HCP",
+    category: "game",
+    description: "Game handicap applied across the full match",
+    requiresLine: true,
+    requiresSelection: true,
+    lineOptions: [-5.5, -3.5, -1.5, 1.5, 3.5, 5.5],
+    lineUnit: "games",
+    selectionOptions: [
+      { label: "Player 1", value: "p1" },
+      { label: "Player 2", value: "p2" },
+    ],
+  },
+];
+
+export const TENNIS_CATEGORY_LABELS: Record<TennisMarketDefinition["category"], string> = {
+  match: "Match Result",
+  set: "Set Betting",
+  game: "Game Betting",
+  player: "Player Props",
+  special: "Specials",
+};
+
+export const TENNIS_CATEGORY_ICONS: Record<TennisMarketDefinition["category"], string> = {
+  match: "🎾",
+  set: "📋",
+  game: "🏓",
+  player: "⭐",
+  special: "✨",
+};
+
+export function getTennisMarketsByCategory(category: TennisMarketDefinition["category"]) {
+  return TENNIS_MARKET_DEFINITIONS.filter((m) => m.category === category);
+}
 
 export const CATEGORY_LABELS: Record<MarketDefinition["category"], string> = {
   match: "Match Result",

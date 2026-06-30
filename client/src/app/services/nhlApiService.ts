@@ -47,6 +47,9 @@ export const nhlApiService = {
   getTeamLastNGamesStats: (teamId: string, n: number): Promise<NHLTeamStats> =>
     get<NHLTeamStats>(`/teams/${teamId}/last/${n}`),
 
+  getTeamRoster: (abbr: string): Promise<NHLPlayerInfo[]> =>
+    get<NHLPlayerInfo[]>(`/teams/${abbr}/roster`),
+
   searchPlayers: (query: string): Promise<NHLPlayerInfo[]> =>
     get<NHLPlayerInfo[]>(`/players/search?q=${encodeURIComponent(query)}`),
 
@@ -61,4 +64,9 @@ export const nhlApiService = {
 
   getStandings: (): Promise<NHLStandings[]> =>
     get<NHLStandings[]>('/standings'),
+
+  // ── Predictions (rule-based market groups from backend) ──────────────────
+  getGamePredictions:   (gameId: string)   => get<any[]>(`/predictions/game/${gameId}`),
+  getTeamPredictions:   (teamAbbr: string) => get<any[]>(`/predictions/team/${teamAbbr}`),
+  getPlayerPredictions: (playerId: string) => get<any[]>(`/predictions/player/${playerId}`),
 };

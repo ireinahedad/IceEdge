@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { chatService } from '../services/chat.service';
+import { io } from '../socket';
 
 const router = Router();
 
@@ -38,6 +39,8 @@ router.post('/rooms/:roomId/messages', async (req: Request, res: Response) => {
       replyTo,
     });
     res.status(201).json(msg);
+    // Broadcast to all clients in the room (real-time)
+    try { io?.to(req.params.roomId).emit('new_message', msg); } catch { /* io not yet initialised */ }
   } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 

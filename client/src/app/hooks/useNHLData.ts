@@ -1,7 +1,9 @@
 /**
  * useNHLData
- * Fetches teams, games (today) and players from the API and normalises
+ * Fetches teams, games and players from the API and normalises
  * them into the flat shape that the existing components expect.
+ *
+ * Game-date fallback: today → tomorrow → next 7 days
  */
 
 import { useState, useEffect } from 'react';
@@ -111,7 +113,7 @@ function toUIPlayer(p: any): UIPlayer {
   return {
     id:          String(p.id),
     name:        p.name ?? p.fullName,
-    teamId:      p.teamId ?? p.teamAbbr?.toLowerCase() ?? '',
+    teamId:      p.teamAbbr?.toLowerCase() ?? (p.teamId ? String(p.teamId) : ''),
     position:    p.position,
     number:      p.number ?? p.jerseyNumber ?? 0,
     goals:       p.goals ?? 0,
@@ -127,26 +129,35 @@ function toUIPlayer(p: any): UIPlayer {
   };
 }
 
+/** Shift a YYYY-MM-DD string by `days` days. */
+function shiftDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 interface NHLData {
-  teams:   UITeam[];
-  games:   UIGame[];
-  players: UIPlayer[];
-  loading: boolean;
-  error:   string | null;
-  /** Lookup helpers built from the fetched data */
+  teams:       UITeam[];
+  games:       UIGame[];
+  players:     UIPlayer[];
+  /** Human-readable label: "Aujourd'hui" | "Demain" | "Cette semaine" */
+  gamesLabel:  string;
+  loading:     boolean;
+  error:       string | null;
   getTeamById:   (id: string) => UITeam | undefined;
   getGameById:   (id: string) => UIGame | undefined;
   getPlayerById: (id: string) => UIPlayer | undefined;
 }
 
 export function useNHLData(): NHLData {
-  const [teams,   setTeams]   = useState<UITeam[]>([]);
-  const [games,   setGames]   = useState<UIGame[]>([]);
-  const [players, setPlayers] = useState<UIPlayer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
+  const [teams,      setTeams]      = useState<UITeam[]>([]);
+  const [games,      setGames]      = useState<UIGame[]>([]);
+  const [gamesLabel, setGamesLabel] = useState<string>("Aujourd'hui");
+  const [players,    setPlayers]    = useState<UIPlayer[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -154,15 +165,43 @@ export function useNHLData(): NHLData {
 
     const today = new Date().toISOString().split('T')[0];
 
+    async function fetchGamesWithFallback(): Promise<{ games: UIGame[]; label: string }> {
+      // 1 — Today
+      try {
+        const raw = await nhlApiService.getGamesByDate(today);
+        if (raw.length > 0) return { games: raw.map(toUIGame), label: "Aujourd'hui" };
+      } catch { /* fall through */ }
+
+      // 2 — Tomorrow
+      try {
+        const raw = await nhlApiService.getGamesByDate(shiftDate(today, 1));
+        if (raw.length > 0) return { games: raw.map(toUIGame), label: "Demain" };
+      } catch { /* fall through */ }
+
+      // 3 — Next 7 days (days +2 to +7)
+      try {
+        const weekRaw = await Promise.all(
+          [2, 3, 4, 5, 6, 7].map(n =>
+            nhlApiService.getGamesByDate(shiftDate(today, n)).catch(() => [] as any[])
+          )
+        );
+        const combined = weekRaw.flat().map(toUIGame);
+        if (combined.length > 0) return { games: combined, label: "Cette semaine" };
+      } catch { /* fall through */ }
+
+      return { games: [], label: "Aucun match" };
+    }
+
     Promise.all([
       nhlApiService.getAllTeams(),
-      nhlApiService.getGamesByDate(today),
+      fetchGamesWithFallback(),
       nhlApiService.getAllPlayers(),
     ])
-      .then(([rawTeams, rawGames, rawPlayers]) => {
+      .then(([rawTeams, { games: uiGames, label }, rawPlayers]) => {
         if (!alive) return;
         setTeams(rawTeams.map(toUITeam));
-        setGames(rawGames.map(toUIGame));
+        setGames(uiGames);
+        setGamesLabel(label);
         setPlayers(rawPlayers.map(toUIPlayer));
         setError(null);
       })
@@ -181,5 +220,5 @@ export function useNHLData(): NHLData {
   const getGameById   = (id: string) => games.find(g => g.id === id);
   const getPlayerById = (id: string) => players.find(p => p.id === id);
 
-  return { teams, games, players, loading, error, getTeamById, getGameById, getPlayerById };
+  return { teams, games, gamesLabel, players, loading, error, getTeamById, getGameById, getPlayerById };
 }

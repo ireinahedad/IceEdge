@@ -7,7 +7,6 @@ import userRoutes          from './routes/user.routes';
 import profileRoutes       from './routes/profile.routes';
 import nhlRoutes           from './routes/nhl.route';
 import oddsRoutes          from './routes/odds.route';
-import opportunitiesRoutes from './routes/opportunities.routes';
 import mlRoutes            from './routes/ml.routes';
 import tennisRoutes        from './routes/tennis.route';
 import chatRoutes          from './routes/chat.routes';
@@ -43,9 +42,8 @@ app.use('/api/chat',          chatRoutes);
 // Bet slips (auth-gated)
 app.use('/api/slips',         slipRoutes);
 
-// Odds & opportunities
+// Odds
 app.use('/api/odds',          oddsRoutes);
-app.use('/api/opportunities', opportunitiesRoutes);
 
 // ML / prediction
 app.use('/api/predict',       mlRoutes);

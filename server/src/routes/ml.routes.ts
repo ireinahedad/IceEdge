@@ -13,6 +13,12 @@ import {
   predictFutures,
   buildRealFactors,
 } from "../services/predictionEngine";
+import { mlApiClient } from "../services/mlApiClient";
+import {
+  buildGameFeatures,
+  buildPlayerPropFeatures,
+  buildTeamFuturesFeatures,
+} from "../services/featureEngineering";
 
 const router = Router();
 
@@ -304,6 +310,58 @@ router.post("/futures", async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("[predict/futures]", err.message);
     res.status(500).json({ error: err.message ?? "Futures failed" });
+  }
+});
+
+// ── ML service proxy ──────────────────────────────────────────────────────────
+//
+// POST /api/predict/ml
+// Builds feature vector from NHL API data, POSTs it to the Python ML service,
+// and returns the ML response. Falls back to null (frontend handles gracefully).
+//
+// Body: { type, subjectId, opponentId?, propType?, line?, selection? }
+
+router.post('/ml', async (req: Request, res: Response) => {
+  try {
+    const { type, subjectId, opponentId, propType, line, selection } = req.body as {
+      type:        'game' | 'player' | 'team';
+      subjectId:   string;
+      opponentId?: string;
+      propType?:   string;
+      line?:       number;
+      selection?:  string;
+    };
+
+    if (!type || !subjectId) {
+      return res.status(400).json({ error: 'type and subjectId are required' });
+    }
+
+    let result;
+
+    if (type === 'game') {
+      const marketType = propType ?? 'moneyline';
+      const features = await buildGameFeatures(subjectId, opponentId ?? subjectId, marketType, line);
+      result = await mlApiClient.predictGame(features);
+    } else if (type === 'player') {
+      const features = await buildPlayerPropFeatures(
+        subjectId,
+        propType ?? 'goals',
+        line    ?? 0.5,
+        selection ?? 'over'
+      );
+      result = await mlApiClient.predictPlayer(features);
+    } else if (type === 'team') {
+      const features = await buildTeamFuturesFeatures(subjectId, propType ?? 'moneyline');
+      result = await mlApiClient.predictTeam(features);
+    } else {
+      return res.status(400).json({ error: `Unknown type: ${type}` });
+    }
+
+    res.json(result);
+  } catch (err: any) {
+    // ML service may be down — return 503 so frontend can silently hide the section
+    console.warn('[predict/ml] ML service unavailable:', err.message);
+    res.status(503).json({ error: 'ML service unavailable', detail: err.message });
   }
 });
 

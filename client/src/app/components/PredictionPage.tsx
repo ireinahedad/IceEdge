@@ -7,11 +7,13 @@ import { nhlApiService } from "../services/nhlApiService";
 import { predictionApiService } from "../services/predictionApiService";
 import { useSport } from "../context/SportContext";
 import { teamEmoji } from "../data/teamEmoji";
+import { getTeamById, getGameById, getPlayerById } from "../data/hockeyData";
 import { factorsApiService } from "../services/predictionApiService";
 import { useBet } from "../context/BetContext";
 import type { BetLeg } from "../types/bet";
 import { tennisApiService } from "../services/tennisApiService";
 import type { TennisRankingEntry } from "../services/tennisApiService";
+import { MLSection } from "./MLPredictionCard";
 
 type Subject = { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 /* ─── Circular gauge ─────────────────────────────── */
@@ -195,7 +197,13 @@ function LoadingSkeleton() {
 function TeamPrediction({ teamId }: { teamId: string }) {
   const { theme } = useSport();
   const accent = theme.accent;
-  const [data, setData] = useState<{ name: string; abbr: string; logo: string; conf: string; pts: number; homeRecord: string; awayRecord: string; streak: string; winPct: number; ppPct: number; pkPct: number; goalsFor: number; goalsAgainst: number } | null>(null);
+  const [data, setData] = useState<{
+    name: string; abbr: string; logo: string; conf: string; pts: number;
+    homeRecord: string; awayRecord: string; streak: string;
+    winPct: number; ppPct: number; pkPct: number;
+    goalsFor: number; goalsAgainst: number;
+  } | null>(null);
+  const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -208,28 +216,21 @@ function TeamPrediction({ teamId }: { teamId: string }) {
         const info = teams.find(t => t.abbreviation?.toLowerCase() === teamId.toLowerCase());
         const abbr = info?.abbreviation ?? teamId.toUpperCase();
         const winPct = stats.wins + stats.losses + stats.otLosses > 0
-          ? Math.round((stats.wins / (stats.wins + stats.losses + stats.otLosses)) * 100)
-          : 50;
+          ? Math.round((stats.wins / (stats.wins + stats.losses + stats.otLosses)) * 100) : 50;
         setData({
-          name: info?.name ?? abbr,
-          abbr,
+          name: info?.name ?? abbr, abbr,
           logo: teamEmoji(abbr),
           conf: info?.conference === "Eastern" ? "East" : "West",
           pts: stats.points ?? stats.wins * 2,
-          homeRecord: stats.homeRecord ?? "",
-          awayRecord: stats.awayRecord ?? "",
-          streak: stats.streak ?? "",
-          winPct,
-          ppPct: stats.powerPlayPct ?? 0,
-          pkPct: stats.penaltyKillPct ?? 0,
-          goalsFor: stats.goalsForPerGame ?? 0,
-          goalsAgainst: stats.goalsAgainstPerGame ?? 0,
+          homeRecord: stats.homeRecord ?? "", awayRecord: stats.awayRecord ?? "",
+          streak: stats.streak ?? "", winPct,
+          ppPct: stats.powerPlayPct ?? 0, pkPct: stats.penaltyKillPct ?? 0,
+          goalsFor: stats.goalsForPerGame ?? 0, goalsAgainst: stats.goalsAgainstPerGame ?? 0,
         });
-      } catch (e) {
-        console.error("TeamPrediction load error", e);
-      } finally {
-        setLoading(false);
-      }
+        // Fetch rule-based predictions from backend
+        nhlApiService.getTeamPredictions(abbr).then(setApiGroups).catch(() => {});
+      } catch (e) { console.error("TeamPrediction load error", e); }
+      finally { setLoading(false); }
     }
     load();
   }, [teamId]);
@@ -237,44 +238,120 @@ function TeamPrediction({ teamId }: { teamId: string }) {
   if (loading) return <LoadingSkeleton />;
   if (!data) return <NotFound />;
 
-  const leagueAvgGF = 3.0, leagueAvgGA = 3.0, leagueAvgPP = 20, leagueAvgPK = 80;
+  const hp = data.winPct;
+  const ou = parseFloat(((data.goalsFor + data.goalsAgainst)).toFixed(1)) || 5.5;
 
-  const calcFactors: CalcFactor[] = [
-    data.homeRecord ? { icon: "\u{1F3E0}", label: `Home ice advantage (${data.homeRecord} at home)`, delta: 5 } : null,
-    { icon: "\u{1F4C8}", label: `Season win rate: ${data.winPct}% vs league avg 50%`, delta: Math.round((data.winPct - 50) / 4) },
-    data.ppPct ? { icon: "\u{26A1}", label: `Power play: ${data.ppPct.toFixed(1)}% (league avg ${leagueAvgPP}%)`, delta: Math.round((data.ppPct - leagueAvgPP) / 2) } : null,
-    data.pkPct ? { icon: "\u{1F6E1}\u{FE0F}", label: `Penalty kill: ${data.pkPct.toFixed(1)}% (league avg ${leagueAvgPK}%)`, delta: Math.round((data.pkPct - leagueAvgPK) / 4) } : null,
-    data.goalsFor ? { icon: "\u{1F945}", label: `Goals for: ${data.goalsFor.toFixed(2)}/game (league avg ${leagueAvgGF})`, delta: Math.round((data.goalsFor - leagueAvgGF) * 6) } : null,
-    data.goalsAgainst ? { icon: "\u{1F512}", label: `Goals against: ${data.goalsAgainst.toFixed(2)}/game (league avg ${leagueAvgGA})`, delta: Math.round((leagueAvgGA - data.goalsAgainst) * 6) } : null,
-    data.streak ? { icon: "\u{1F525}", label: `Current streak: ${data.streak}`, delta: /^W[4-9]/.test(data.streak) ? 6 : /^W[23]/.test(data.streak) ? 3 : data.streak.startsWith("W") ? 2 : data.streak.startsWith("L3") || data.streak.startsWith("L4") ? -5 : data.streak.startsWith("L") ? -3 : 0 } : null,
-  ].filter((f): f is CalcFactor => f !== null && f.delta !== 0);
-
-  const basePct = 50;
-  const finalPct = Math.min(85, Math.max(15, basePct + calcFactors.reduce((s, f) => s + f.delta, 0)));
-  const form = generateForm(6, finalPct / 100);
+  // ── build team-level bet groups ──────────────────────────────────────────
+  const teamGroups: MktGroup[] = [
+    {
+      id: "match", title: "Match Betting", cols: 2,
+      options: [
+        { id: "t-win",  label: `${data.abbr} Wins (ML)`,       rulePct: hp,
+          ruleNote: `Season win rate of ${hp}% based on ${data.pts} pts, record ${data.homeRecord} home / ${data.awayRecord} away.` },
+        { id: "t-lose", label: `${data.abbr} Loses (ML)`,      rulePct: 100 - hp,
+          ruleNote: `Inverse of win probability: ${100 - hp}%. Current streak: ${data.streak || "—"}.` },
+        { id: "t-ml-ot",label: "Match Goes to OT",             rulePct: 22,
+          ruleNote: "~22-24% of NHL games go to OT/SO regardless of team strength." },
+        { id: "t-dc",   label: `${data.abbr} Wins or OT`,      rulePct: Math.min(90, hp + 14),
+          ruleNote: "Double chance: team wins OR game goes to overtime." },
+      ],
+    },
+    {
+      id: "puckline", title: "Puck Line", cols: 2,
+      options: [
+        { id: "t-pl-fav", label: `${data.abbr} -1.5`,          rulePct: Math.max(10, hp - 18),
+          ruleNote: "Win by 2+ goals — ~18% harder than a straight moneyline win." },
+        { id: "t-pl-dog", label: `${data.abbr} +1.5`,          rulePct: Math.min(90, hp + 18),
+          ruleNote: "Win OR lose by 1 goal. Probability boosted ~18% vs straight moneyline." },
+      ],
+    },
+    {
+      id: "totals", title: "Team Goals", cols: 2,
+      options: [
+        { id: "t-over",    label: `Over ${ou}`,                  rulePct: 54,
+          ruleNote: `Based on ${data.abbr}'s ${data.goalsFor.toFixed(2)} goals/game average.` },
+        { id: "t-under",   label: `Under ${ou}`,                 rulePct: 46,
+          ruleNote: `${data.abbr} allows ${data.goalsAgainst.toFixed(2)} goals/game. Solid defense could keep this low.` },
+        { id: "t-team-over", label: `${data.abbr} Over 2.5`,   rulePct: Math.min(80, Math.round(data.goalsFor * 22 + 5)),
+          ruleNote: `${data.abbr} averages ${data.goalsFor.toFixed(2)} goals/game. Scoring 3+ requires above-average output.` },
+        { id: "t-team-under",label: `${data.abbr} Under 2.5`,  rulePct: Math.max(20, 100 - Math.min(80, Math.round(data.goalsFor * 22 + 5))),
+          ruleNote: `${data.abbr} held under 3 goals in a significant portion of games.` },
+      ],
+    },
+    {
+      id: "clean", title: "Clean Sheet / Both Score", cols: 2,
+      options: [
+        { id: "t-cs",   label: `${data.abbr} Shutout`,          rulePct: Math.max(8, Math.round((100 - data.pkPct) * 0.20)),
+          ruleNote: `Shutouts happen in ~15-22% of games. ${data.abbr}'s PK at ${data.pkPct.toFixed(1)}% is a factor.` },
+        { id: "t-btts", label: "Both Teams Score",               rulePct: Math.min(88, Math.round(data.goalsFor * 18 + data.goalsAgainst * 12 + 25)),
+          ruleNote: "Both offenses producing. Very common in NHL (~75-80% of games)." },
+      ],
+    },
+    {
+      id: "period", title: "Period Results", cols: 3,
+      options: [
+        { id: "t-p1", label: `${data.abbr} Leads P1`,           rulePct: Math.round(hp * 0.42 + 10),
+          ruleNote: `${data.abbr} leads after the 1st period in ~${Math.round(hp * 0.42 + 10)}% of games.` },
+        { id: "t-p2", label: `${data.abbr} Leads P2`,           rulePct: Math.round(hp * 0.44 + 8),
+          ruleNote: `${data.abbr} leads after P2. More predictive than P1.` },
+        { id: "t-p3", label: `${data.abbr} Leads P3`,           rulePct: Math.round(hp * 0.48 + 6),
+          ruleNote: `Leading after P3 strongly correlates with winning the game.` },
+      ],
+    },
+    {
+      id: "pp", title: "Special Teams", cols: 2,
+      options: [
+        { id: "t-pp-goal", label: `${data.abbr} PP Goal`,       rulePct: Math.min(75, Math.round(data.ppPct * 1.8)),
+          ruleNote: `${data.abbr}'s power play is at ${data.ppPct.toFixed(1)}%. League avg is ~20%. Scoring on the PP ~${Math.min(75, Math.round(data.ppPct * 1.8))}% of games.` },
+        { id: "t-pk",      label: `${data.abbr} Kills All PKs`, rulePct: Math.min(80, Math.round(data.pkPct * 0.9)),
+          ruleNote: `${data.abbr} penalty kill at ${data.pkPct.toFixed(1)}%. Successfully killing all penalties ~${Math.min(80, Math.round(data.pkPct * 0.9))}% of games.` },
+      ],
+    },
+    {
+      id: "margin", title: "Winning Margin", cols: 3,
+      options: [
+        { id: "t-w1", label: `${data.abbr} by 1`, rulePct: Math.round(hp * 0.18),
+          ruleNote: "One-goal wins are the most common margin in the NHL." },
+        { id: "t-w2", label: `${data.abbr} by 2`, rulePct: Math.round(hp * 0.13),
+          ruleNote: "Two-goal victory — comfortable but not a blowout." },
+        { id: "t-w3", label: `${data.abbr} by 3+`, rulePct: Math.round(hp * 0.09),
+          ruleNote: "Blowout wins are less frequent, even for dominant teams." },
+      ],
+    },
+  ];
 
   return (
-    <PredictionLayout
-      title={data.name}
-      subtitle={`${data.conf}ern Conference · ${data.pts} pts`}
-      logo={data.logo}
-      winPct={finalPct}
-      winLabel="Win Prediction"
-      calcFactors={calcFactors}
-      basePct={basePct}
-      accent={accent}
-      recentForm={form}
-      betRec={finalPct >= 60 ? "Moneyline Bet" : finalPct >= 50 ? "Puck Line -1.5" : "Over/Under"}
-      betNote={finalPct >= 60
-        ? `${data.name} are on a ${data.streak} streak with a ${data.winPct}% win rate. Strong moneyline value.`
-        : `${data.name} show inconsistency at ${data.winPct}% wins. Value may be on the over at ${data.goalsFor.toFixed(1)} goals/game.`}
-      extraStats={[
-        { label: "Home",   value: data.homeRecord || "—" },
-        { label: "Away",   value: data.awayRecord  || "—" },
-        { label: "Streak", value: data.streak       || "—" },
-        { label: "Pts",    value: String(data.pts)       },
-      ]}
-    />
+    <div className="flex flex-col gap-3">
+      {/* Team header */}
+      <div className="bg-[#111a1f] border border-white/20 rounded-2xl p-4">
+        <div className="flex items-center gap-3 mb-3">
+          <span className="text-4xl">{data.logo}</span>
+          <div className="flex-1">
+            <p className="text-white font-bold text-base">{data.name}</p>
+            <p className="text-[#8a9ea6] text-xs">{data.conf}ern · {data.pts} pts · {data.streak || "—"}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            { label: "Home",   value: data.homeRecord || "—" },
+            { label: "Away",   value: data.awayRecord  || "—" },
+            { label: "PP%",    value: data.ppPct ? data.ppPct.toFixed(1)+"%" : "—" },
+            { label: "PK%",    value: data.pkPct ? data.pkPct.toFixed(1)+"%" : "—" },
+          ].map(s => (
+            <div key={s.label} className="bg-[#0a1014] rounded-xl p-2 text-center">
+              <p className="text-white text-xs font-bold">{s.value}</p>
+              <p className="text-[#8a9ea6] text-[9px]">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Market groups — API predictions when available, local fallback otherwise */}
+      {(apiGroups ?? teamGroups).map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
+      {!apiGroups && <p className="text-[#4a6070] text-[10px] text-center mt-1">Connecting to prediction engine…</p>}
+
+      {/* AI/ML prediction section */}
+      <MLSection type="team" subjectId={teamId} propType="moneyline" ruleBasedPct={data.winPct} />
+    </div>
   );
 }
 
@@ -292,16 +369,306 @@ interface LiveGameView {
   period?: string; time?: string; overUnder: number;
 }
 
+/* ─── Bet types & market groups ─────────────── */
+interface BetOpt { id: string; label: string; rulePct: number; ruleNote: string; }
+interface MktGroup { id: string; title: string; cols: 2 | 3; options: BetOpt[]; }
+
+function buildGameGroups(home: string, away: string, hp: number, ou: number): MktGroup[] {
+  const ap = 100 - hp;
+  return [
+    {
+      id: "match", title: "Match Betting", cols: 3,
+      options: [
+        { id: "ml-home",  label: `${home} to Win`,   rulePct: hp,
+          ruleNote: `Win probability based on season stats: ${hp}%. Home ice advantage is included in the calculation.` },
+        { id: "ml-ot",    label: "OT / Shootout",     rulePct: 22,
+          ruleNote: `~22-24% of NHL games go to OT or shootout, regardless of team strength.` },
+        { id: "ml-away",  label: `${away} to Win`,   rulePct: ap,
+          ruleNote: `Inverse of home probability: ${ap}%. Visitors carry a slight systemic disadvantage.` },
+      ],
+    },
+    {
+      id: "puckline", title: "Puck Line", cols: 2,
+      options: [
+        { id: "pl-home", label: `${home} -1.5`, rulePct: Math.max(10, hp - 18),
+          ruleNote: `Winning by 2+ is ~18% harder than a straight win. Calculated from historical goal-differential data.` },
+        { id: "pl-away", label: `${away} +1.5`, rulePct: Math.min(90, ap + 18),
+          ruleNote: `Covering +1.5 means winning OR losing by exactly 1. Probability boosted ~18% vs moneyline.` },
+      ],
+    },
+    {
+      id: "totals", title: "Total Goals", cols: 2,
+      options: [
+        { id: "ou-over",     label: `Over ${ou}`,     rulePct: 54,
+          ruleNote: `Based on combined offensive averages. The ${ou} line aligns with the NHL average of ~6.0 goals/game.` },
+        { id: "ou-under",    label: `Under ${ou}`,    rulePct: 46,
+          ruleNote: `Strong defense and tight games favor the under. Slightly less likely when both teams score well.` },
+        { id: "ou-over-alt", label: `Over ${ou + 1}`, rulePct: 38,
+          ruleNote: `Higher alternate line — requires a more open, high-scoring game to hit.` },
+        { id: "ou-under-alt",label: `Under ${ou + 1}`,rulePct: 62,
+          ruleNote: `Easier to hit — any defensive performance from either team keeps this alive.` },
+      ],
+    },
+    {
+      id: "btts", title: "Both Teams to Score", cols: 2,
+      options: [
+        { id: "btts-yes", label: "Yes", rulePct: Math.min(88, Math.round(hp * 0.42 + ap * 0.40 + 20)),
+          ruleNote: `Both offenses producing at least one goal. Very common in NHL (~75-80% of games).` },
+        { id: "btts-no",  label: "No",  rulePct: Math.max(12, 100 - Math.min(88, Math.round(hp * 0.42 + ap * 0.40 + 20))),
+          ruleNote: `Requires one team to be shut out — only ~15-25% of NHL games end this way.` },
+      ],
+    },
+    {
+      id: "dc", title: "Double Chance", cols: 2,
+      options: [
+        { id: "dc-home", label: `${home} or OT`, rulePct: Math.min(90, hp + 15),
+          ruleNote: `Covers home win + OT/SO result. Two outcomes bundled into one bet.` },
+        { id: "dc-away", label: `${away} or OT`, rulePct: Math.min(85, ap + 15),
+          ruleNote: `Covers away win + OT/SO. Less likely when home team is a heavy favorite.` },
+      ],
+    },
+    {
+      id: "p1", title: "1st Period Result", cols: 3,
+      options: [
+        { id: "p1-home", label: `${home} leads`, rulePct: Math.round(hp * 0.42 + 10),
+          ruleNote: `Home teams lead after P1 in ~${Math.round(hp * 0.42 + 10)}% of cases. Linked to early offensive momentum.` },
+        { id: "p1-draw", label: "Tied",           rulePct: 30,
+          ruleNote: `Tied after P1 in ~25-35% of NHL games. Common in balanced matchups.` },
+        { id: "p1-away", label: `${away} leads`, rulePct: Math.round(ap * 0.38 + 8),
+          ruleNote: `Visitors lead after P1 in ~${Math.round(ap * 0.38 + 8)}% of cases — harder without home crowd.` },
+      ],
+    },
+    {
+      id: "p1goals", title: "1st Period Goals", cols: 2,
+      options: [
+        { id: "p1-over", label: "Over 1.5",  rulePct: 37,
+          ruleNote: `~37% of NHL games see 2+ goals in the first period.` },
+        { id: "p1-under",label: "Under 1.5", rulePct: 63,
+          ruleNote: `First periods often start cautiously — under 1.5 hits ~63% of the time.` },
+      ],
+    },
+    {
+      id: "p2", title: "2nd Period Result", cols: 3,
+      options: [
+        { id: "p2-home", label: `${home} leads`, rulePct: Math.round(hp * 0.44 + 8),
+          ruleNote: `More predictive than P1 since more play has unfolded.` },
+        { id: "p2-draw", label: "Tied",           rulePct: 28,
+          ruleNote: `Tied after P2 in ~25-32% of games.` },
+        { id: "p2-away", label: `${away} leads`, rulePct: Math.round(ap * 0.40 + 7),
+          ruleNote: `Away team holding a lead after two periods.` },
+      ],
+    },
+    {
+      id: "p3", title: "3rd Period Result", cols: 3,
+      options: [
+        { id: "p3-home", label: `${home} leads`, rulePct: Math.round(hp * 0.48 + 6),
+          ruleNote: `Leading after P3 strongly correlates with the final result.` },
+        { id: "p3-draw", label: "Tied → OT",      rulePct: 20,
+          ruleNote: `Tied after regulation forces OT/SO — happens in ~20-22% of games.` },
+        { id: "p3-away", label: `${away} leads`, rulePct: Math.round(ap * 0.44 + 5),
+          ruleNote: `Away team ahead heading into OT or winning in regulation.` },
+      ],
+    },
+    {
+      id: "ot", title: "Extra Time", cols: 2,
+      options: [
+        { id: "ot-yes", label: "Goes to OT",      rulePct: 22,
+          ruleNote: `~22-24% of NHL games go to overtime, independent of the teams involved.` },
+        { id: "ot-no",  label: "Decided in Reg",  rulePct: 78,
+          ruleNote: `Most games (78%) are decided inside regulation time.` },
+      ],
+    },
+    {
+      id: "margin", title: "Winning Margin", cols: 3,
+      options: [
+        { id: "wm-h1", label: `${home} by 1`,  rulePct: Math.round(hp * 0.18),
+          ruleNote: `One-goal wins are the most common margin in NHL hockey.` },
+        { id: "wm-h2", label: `${home} by 2`,  rulePct: Math.round(hp * 0.13),
+          ruleNote: `Two-goal wins: comfortable but not a blowout.` },
+        { id: "wm-h3", label: `${home} by 3+`, rulePct: Math.round(hp * 0.09),
+          ruleNote: `Blowout win — less common but more likely for dominant home teams.` },
+        { id: "wm-a1", label: `${away} by 1`,  rulePct: Math.round(ap * 0.16),
+          ruleNote: `Narrow away win — common when teams are evenly matched.` },
+        { id: "wm-a2", label: `${away} by 2`,  rulePct: Math.round(ap * 0.11),
+          ruleNote: `Away win by two goals.` },
+        { id: "wm-a3", label: `${away} by 3+`, rulePct: Math.round(ap * 0.07),
+          ruleNote: `Away blowout — rare but possible when visitors are heavily favored.` },
+      ],
+    },
+    {
+      id: "firstlast", title: "Goal Scorer", cols: 2,
+      options: [
+        { id: "first-home", label: `${home} scores first`, rulePct: Math.round(hp * 0.56 + 5),
+          ruleNote: `Correlated with win probability. Favorites open the scoring more often.` },
+        { id: "first-away", label: `${away} scores first`, rulePct: Math.round(ap * 0.52 + 4),
+          ruleNote: `Away team drawing first blood.` },
+        { id: "last-home",  label: `${home} scores last`,  rulePct: Math.round(hp * 0.54 + 4),
+          ruleNote: `Final goal lightly correlates with overall team performance.` },
+        { id: "last-away",  label: `${away} scores last`,  rulePct: Math.round(ap * 0.50 + 3),
+          ruleNote: `Away team scoring the last goal of the game.` },
+      ],
+    },
+  ];
+}
+
+/* ─── Prediction bottom sheet ───────────────── */
+function PredictionSheet({ label, rulePct, ruleNote, accent, onClose }: {
+  label: string; rulePct: number; ruleNote: string; accent: string; onClose: () => void;
+}) {
+  const [llmText, setLlmText] = useState("");
+  const [llmLoading, setLlmLoading] = useState(false);
+  const pctColor = rulePct >= 65 ? "#4ade80" : rulePct >= 50 ? accent : rulePct >= 38 ? "#facc15" : "#f87171";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col justify-end"
+      style={{ background: "rgba(0,0,0,0.72)" }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-[#0d1519] rounded-t-3xl flex flex-col gap-4 max-h-[82vh] overflow-y-auto"
+        style={{ padding: "20px 20px 44px" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-1" />
+        <p className="text-white font-bold text-base leading-snug">{label}</p>
+
+        {/* Rules */}
+        <div className="bg-[#111a1f] border border-white/10 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm">📐</span>
+            <span className="text-[#bfc8cc] text-xs font-semibold uppercase tracking-wide">Règles statistiques</span>
+            <span className="ml-auto text-2xl font-black" style={{ color: pctColor }}>{rulePct}%</span>
+          </div>
+          <p className="text-[#8a9ea6] text-xs leading-relaxed">{ruleNote}</p>
+        </div>
+
+        {/* ML placeholder */}
+        <div className="bg-[#111a1f] border border-white/10 rounded-2xl p-4" style={{ opacity: 0.55 }}>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm">🤖</span>
+            <span className="text-[#bfc8cc] text-xs font-semibold uppercase tracking-wide">Modèle ML</span>
+            <span className="ml-auto text-[10px] bg-[#1a2a2f] text-[#8a9ea6] px-2 py-0.5 rounded-full">À venir</span>
+          </div>
+          <div className="h-2 bg-[#1a2a2f] rounded-full w-3/4 animate-pulse" />
+        </div>
+
+        {/* LLM */}
+        {llmText ? (
+          <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-sm">✨</span>
+              <span className="text-purple-300 text-xs font-semibold">Analyse LLM</span>
+            </div>
+            <p className="text-[#bfc8cc] text-xs leading-relaxed">{llmText}</p>
+          </div>
+        ) : (
+          <button
+            disabled={llmLoading}
+            onClick={async () => {
+              setLlmLoading(true);
+              await new Promise(r => setTimeout(r, 1400));
+              setLlmText(`Analyse pour « ${label} » : probabilité estimée à ${rulePct}% selon le modèle de règles. Les tendances récentes et les facteurs contextuels supportent cette estimation. À connecter à un LLM réel pour une analyse approfondie.`);
+              setLlmLoading(false);
+            }}
+            className="w-full py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.97] transition-transform"
+            style={{ background: llmLoading ? "#1a2a2f" : "linear-gradient(135deg,#7c3aed,#a855f7)", color: "#fff", border: "1px solid rgba(168,85,247,0.3)" }}
+          >
+            {llmLoading
+              ? <><span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin inline-block" /> Analyse en cours...</>
+              : <>✨ Ask LLM</>}
+          </button>
+        )}
+
+        <button
+          onClick={onClose}
+          className="w-full py-3 bg-[#111a1f] border border-white/20 rounded-2xl text-[#8a9ea6] text-sm font-medium"
+        >
+          Fermer
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── BetOption ─────────────────────────────── */
+function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
+  const [revealed, setRevealed] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const pctColor = opt.rulePct >= 65 ? "#4ade80" : opt.rulePct >= 50 ? accent : opt.rulePct >= 38 ? "#facc15" : "#f87171";
+
+  return (
+    <>
+      <button
+        onClick={() => setRevealed(v => !v)}
+        className="flex flex-col items-center justify-between p-3 rounded-xl border transition-all active:scale-[0.97] w-full"
+        style={{
+          minHeight: 64,
+          background: revealed ? "#111a1f" : "#0d1519",
+          borderColor: revealed ? pctColor + "55" : "rgba(255,255,255,0.08)",
+        }}
+      >
+        <span className="text-white text-[11px] font-medium text-center leading-tight">{opt.label}</span>
+        {revealed ? (
+          <button
+            onClick={e => { e.stopPropagation(); setSheet(true); }}
+            className="mt-2 px-3 py-0.5 rounded-full text-xs font-bold active:scale-95 transition-transform"
+            style={{ background: pctColor + "22", color: pctColor, border: `1px solid ${pctColor}55` }}
+          >
+            {opt.rulePct}%
+          </button>
+        ) : (
+          <span className="mt-2 text-[#3a5060] text-[9px] font-medium">Tap</span>
+        )}
+      </button>
+      {sheet && (
+        <PredictionSheet
+          label={opt.label} rulePct={opt.rulePct} ruleNote={opt.ruleNote}
+          accent={accent} onClose={() => setSheet(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/* ─── MarketGroup ───────────────────────────── */
+function MarketGroup({ group, accent }: { group: MktGroup; accent: string }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="bg-[#0a1014] border border-white/[0.07] rounded-2xl overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3"
+        style={{ borderBottom: open ? "1px solid rgba(255,255,255,0.06)" : "none" }}
+      >
+        <span className="text-[#c0cdd4] text-xs font-semibold uppercase tracking-wider">{group.title}</span>
+        <span className="text-[#3a5060] text-xs">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div
+          className="p-3 grid gap-2"
+          style={{ gridTemplateColumns: `repeat(${group.cols}, 1fr)` }}
+        >
+          {group.options.map(opt => (
+            <BetOption key={opt.id} opt={opt} accent={accent} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── GamePrediction ────────────────────────── */
 function GamePrediction({ gameId }: { gameId: string }) {
   const { theme } = useSport();
   const accent = theme.accent;
   const [gameView, setGameView] = useState<LiveGameView | null>(null);
+  const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      // 1. Try static mock first
       const staticGame = getGameById(gameId);
       if (staticGame) {
         const t1 = getTeamById(staticGame.team1Id);
@@ -315,7 +682,6 @@ function GamePrediction({ gameId }: { gameId: string }) {
           return;
         }
       }
-      // 2. Fall back to live NHL API
       try {
         const [nhlGame, homePred] = await Promise.all([
           nhlApiService.getGame(gameId),
@@ -325,18 +691,14 @@ function GamePrediction({ gameId }: { gameId: string }) {
         setGameView({
           id: gameId,
           home: {
-            abbr: nhlGame.homeTeam.abbreviation,
-            name: nhlGame.homeTeam.name,
+            abbr: nhlGame.homeTeam.abbreviation, name: nhlGame.homeTeam.name,
             logo: TEAM_LOGOS_PRED[nhlGame.homeTeam.abbreviation] ?? "🏒",
-            score: nhlGame.homeTeam.score,
-            winPct: homePred.probability,
+            score: nhlGame.homeTeam.score, winPct: homePred.probability,
           },
           away: {
-            abbr: nhlGame.awayTeam.abbreviation,
-            name: nhlGame.awayTeam.name,
+            abbr: nhlGame.awayTeam.abbreviation, name: nhlGame.awayTeam.name,
             logo: TEAM_LOGOS_PRED[nhlGame.awayTeam.abbreviation] ?? "🏒",
-            score: nhlGame.awayTeam.score,
-            winPct: 100 - homePred.probability,
+            score: nhlGame.awayTeam.score, winPct: 100 - homePred.probability,
           },
           period: nhlGame.period ? nhlGame.period + "P • " + nhlGame.clock : undefined,
           time: nhlGame.startTime,
@@ -348,100 +710,82 @@ function GamePrediction({ gameId }: { gameId: string }) {
       setLoading(false);
     }
     load();
+    // Fetch rule-based predictions from backend (parallel, non-blocking)
+    nhlApiService.getGamePredictions(gameId).then(setApiGroups).catch(() => {});
   }, [gameId]);
 
   if (loading) return (
     <div className="flex flex-col gap-3">
-      {[1,2,3,4].map(i => <div key={i} className="h-20 bg-[#111a1f] rounded-2xl animate-pulse" />)}
+      {[1,2,3,4].map(i => <div key={i} className="h-16 bg-[#111a1f] rounded-2xl animate-pulse" />)}
     </div>
   );
   if (!gameView) return <NotFound />;
 
   const { home, away } = gameView;
   const isLive = !!gameView.period;
-  const winDiff = Math.round((home.winPct - 50) / 3);
-
-  const calcFactors: CalcFactor[] = [
-    { icon: "🏠", label: home.abbr + " playing at home — home ice advantage", delta: 5 },
-    { icon: "📈", label: "AI win probability: " + home.abbr + " " + home.winPct + "% vs " + away.abbr + " " + away.winPct + "%", delta: winDiff },
-    { icon: "⚡", label: "Offensive pressure index: " + home.abbr + " scoring rate vs " + away.abbr, delta: Math.round(winDiff / 2) },
-    { icon: "🛡", label: "Defensive strength: goals allowed per game differential", delta: Math.round(-winDiff / 3) },
-    { icon: isLive ? "🔥" : "📊", label: isLive ? "Game in progress — live momentum factor" : "Pre-game model confidence", delta: isLive ? 3 : 1 },
-  ].filter(f => f.delta !== 0);
-
-  const basePct = 50;
   const finalPct = Math.min(85, Math.max(15, home.winPct));
-  const form1 = generateForm(5, home.winPct / 100);
-  const form2 = generateForm(5, away.winPct / 100);
-  const winnerName = home.winPct >= away.winPct ? home.name : away.name;
+  const localGroups = buildGameGroups(home.abbr, away.abbr, finalPct, gameView.overUnder ?? 5.5);
+  const groups = apiGroups ?? localGroups;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-3">
+      {/* ── Match header ── */}
       <div className="bg-[#111a1f] border border-white/20 rounded-2xl p-4">
-        <p className="text-[#bfc8cc] text-[10px] uppercase tracking-widest text-center mb-3">
-          {isLive
-            ? <span className="flex items-center justify-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />{gameView.period}</span>
-            : "Head to Head"}
-        </p>
+        {isLive && (
+          <div className="flex items-center justify-center gap-1.5 mb-3">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-red-400 text-[10px] font-semibold uppercase tracking-widest">{gameView.period}</span>
+          </div>
+        )}
         <div className="flex items-center justify-between">
-          <div className="flex flex-col items-center gap-1.5">
-            <span className="text-3xl">{home.logo}</span>
-            <span className="text-white text-sm font-bold">{home.abbr}</span>
-            {home.score !== undefined && <span className="text-white text-2xl font-black">{home.score}</span>}
-            <span className="text-xs font-bold" style={{ color: accent }}>{home.winPct}% win</span>
+          <div className="flex flex-col items-center gap-1.5 flex-1">
+            <span className="text-4xl">{home.logo}</span>
+            <span className="text-white text-sm font-bold">{home.name}</span>
+            {home.score !== undefined && <span className="text-white text-3xl font-black">{home.score}</span>}
           </div>
-          <div className="flex flex-col items-center gap-1">
-            {!isLive && <span className="text-[#bfc8cc] text-xs">{gameView.time ?? "Today"}</span>}
-            <span className="text-white font-bold text-lg">VS</span>
-            <span className="text-[#bfc8cc] text-[10px]">O/U {gameView.overUnder}</span>
+          <div className="flex flex-col items-center gap-1 px-2">
+            {!isLive && <span className="text-[#8a9ea6] text-xs">{gameView.time ?? "Today"}</span>}
+            <span className="text-[#8a9ea6] font-bold text-base">VS</span>
+            <span className="text-[#4a6070] text-[10px]">O/U {gameView.overUnder}</span>
           </div>
-          <div className="flex flex-col items-center gap-1.5">
-            <span className="text-3xl">{away.logo}</span>
-            <span className="text-white text-sm font-bold">{away.abbr}</span>
-            {away.score !== undefined && <span className="text-white text-2xl font-black">{away.score}</span>}
-            <span className="text-[#bfc8cc] text-xs">{away.winPct}% win</span>
+          <div className="flex flex-col items-center gap-1.5 flex-1">
+            <span className="text-4xl">{away.logo}</span>
+            <span className="text-white text-sm font-bold">{away.name}</span>
+            {away.score !== undefined && <span className="text-white text-3xl font-black">{away.score}</span>}
           </div>
-        </div>
-        <div className="mt-4 flex items-center gap-2">
-          <span className="text-xs font-bold w-8" style={{ color: accent }}>{home.winPct}%</span>
-          <div className="flex-1 bg-[#0a1014] rounded-full h-3 overflow-hidden flex">
-            <div className="h-full rounded-l-full transition-all duration-700" style={{ width: home.winPct + "%", backgroundColor: accent }} />
-            <div className="h-full bg-[#1a2a2f] flex-1" />
-          </div>
-          <span className="text-[#bfc8cc] text-xs font-bold w-8 text-right">{away.winPct}%</span>
         </div>
       </div>
 
-      <div className="flex justify-around">
-        <WinGauge pct={home.winPct} label={home.abbr + " Win"} size={120} />
-        <WinGauge pct={away.winPct} label={away.abbr + " Win"} size={120} />
-      </div>
+      {/* ── Market groups ── */}
+      {groups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
+      {!apiGroups && <p className="text-[#4a6070] text-[10px] text-center mt-1">Connecting to prediction engine…</p>}
 
-      <CalculatedBreakdown basePct={basePct} factors={calcFactors} finalPct={finalPct} accent={accent} />
-
-      <div className="bg-[#111a1f] border border-white/20 rounded-2xl p-4">
-        <p className="text-white text-sm font-medium mb-3">Recent Form</p>
-        <div className="flex flex-col gap-3">
-          <div><p className="text-[#bfc8cc] text-xs mb-1.5">{home.abbr} last 5</p><FormDots results={form1} /></div>
-          <div><p className="text-[#bfc8cc] text-xs mb-1.5">{away.abbr} last 5</p><FormDots results={form2} /></div>
-        </div>
-      </div>
-
-      <BetRec rec="Moneyline" note={"Our model favors " + winnerName + " with " + finalPct + "% win probability. The over/under of " + gameView.overUnder + " aligns with both teams scoring averages."} />
+      {/* AI/ML prediction section */}
+      {gameView && (
+        <MLSection
+          type="game"
+          subjectId={gameView.home.abbr}
+          opponentId={gameView.away.abbr}
+          propType="moneyline"
+          ruleBasedPct={gameView.home.winPct}
+        />
+      )}
     </div>
   );
 }
 
 /* ─── Player Prediction ──────────────────────── */
-interface NHLMarket { id: string; label: string; description: string; icon: string; probability: number; propType: string; line?: number; oddsLabel: string }
-
 function PlayerPrediction({ playerId }: { playerId: string }) {
   const { theme } = useSport();
   const accent = theme.accent;
-  const navigate = useNavigate();
-  const { addLeg, hasLeg } = useBet();
-  const [data, setData] = useState<{ name: string; team: string; logo: string; position: string; number: number; goals: number; assists: number; points: number; plusMinus: number; ppPoints: number; gamesPlayed: number; shotPct: number } | null>(null);
-  const [markets, setMarkets] = useState<NHLMarket[]>([]);
+  const [data, setData] = useState<{
+    name: string; team: string; logo: string; position: string; number: number;
+    goals: number; assists: number; points: number; plusMinus: number;
+    gamesPlayed: number; goalsPerGame: number; assistsPerGame: number;
+    ptsPerGame: number; ppPoints: number; shots: number; hits: number;
+    blocks: number; toi: number; faceoffPct: number; penaltyMin: number;
+  } | null>(null);
+  const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -453,52 +797,26 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
         ]);
         const name = info.fullName ?? `${info.firstName} ${info.lastName}`;
         const gp = stats.gamesPlayed || 1;
-        const goalsPerGame = stats.goals / gp;
-        const ptsPerGame   = stats.points / gp;
-        const assistsPerGame = stats.assists / gp;
-        const pace82 = (n: number) => Math.round((n / gp) * 82);
-
-        // Anytime Goal Scorer: Poisson probability of scoring at least 1
-        const anytimeGoal = Math.min(92, Math.max(8, Math.round((1 - Math.exp(-goalsPerGame)) * 100)));
-        // Next game point
-        const nextPoint   = Math.min(92, Math.max(8, Math.round((1 - Math.exp(-ptsPerGame)) * 100)));
-        // Season Goals O/U — line = 90% of pace
-        const goalLine  = Math.max(stats.goals + 2, Math.round(pace82(stats.goals) * 0.90));
-        const goalsOU   = Math.min(85, Math.max(15, Math.round(50 + (stats.goals / goalLine - 1) * 60)));
-        // Season Points O/U
-        const ptLine    = Math.max(stats.points + 2, Math.round(pace82(stats.points) * 0.90));
-        const ptsOU     = Math.min(85, Math.max(15, Math.round(50 + (stats.points / ptLine - 1) * 60)));
-        // PP Point (only show if has PP production)
-        const ppPct = stats.powerPlayPoints > 0
-          ? Math.min(80, Math.max(10, Math.round((stats.powerPlayPoints / gp) * 200)))
-          : 0;
-
-        const toAmerican = (p: number) => p >= 50
-          ? `-${Math.round(p / (100 - p) * 100)}`
-          : `+${Math.round((100 - p) / p * 100)}`;
-
-        const mks: NHLMarket[] = [
-          { id: `${playerId}-goals`, label: "Anytime Goal Scorer", description: "Scores at least 1 goal this game", icon: "🥅", probability: anytimeGoal, propType: "goals", oddsLabel: toAmerican(anytimeGoal) },
-          { id: `${playerId}-points`, label: "Point in Next Game", description: "Records at least 1 point (G or A)", icon: "📊", probability: nextPoint, propType: "points", oddsLabel: toAmerican(nextPoint) },
-          { id: `${playerId}-goals-season`, label: `Season Goals O${goalLine}`, description: `Finishes season with over ${goalLine} goals`, icon: "🏒", probability: goalsOU, propType: "goals", line: goalLine, oddsLabel: toAmerican(goalsOU) },
-          { id: `${playerId}-points-season`, label: `Season Points O${ptLine}`, description: `Finishes season with over ${ptLine} points`, icon: "📈", probability: ptsOU, propType: "points", line: ptLine, oddsLabel: toAmerican(ptsOU) },
-          ...(ppPct > 0 ? [{ id: `${playerId}-pp`, label: "Power Play Point", description: "Records a point on the power play", icon: "⚡", probability: ppPct, propType: "points", oddsLabel: toAmerican(ppPct) }] : []),
-        ];
-
         setData({
           name, team: info.teamAbbr ?? "",
           logo: teamEmoji(info.teamAbbr ?? ""),
           position: info.position, number: info.jerseyNumber,
           goals: stats.goals, assists: stats.assists, points: stats.points,
-          plusMinus: stats.plusMinus, ppPoints: stats.powerPlayPoints,
-          gamesPlayed: gp, shotPct: stats.shootingPct,
+          plusMinus: stats.plusMinus, gamesPlayed: gp,
+          goalsPerGame: stats.goals / gp,
+          assistsPerGame: stats.assists / gp,
+          ptsPerGame: stats.points / gp,
+          ppPoints: stats.powerPlayPoints ?? 0,
+          shots: stats.shots ?? 0,
+          hits: stats.hits ?? 0,
+          blocks: stats.blockedShots ?? 0,
+          toi: stats.timeOnIce ?? 0,
+          faceoffPct: stats.faceoffWinPct ?? 0,
+          penaltyMin: stats.penaltyMinutes ?? 0,
         });
-        setMarkets(mks);
-      } catch (e) {
-        console.error("PlayerPrediction load error", e);
-      } finally {
-        setLoading(false);
-      }
+        nhlApiService.getPlayerPredictions(playerId).then(setApiGroups).catch(() => {});
+      } catch (e) { console.error("PlayerPrediction load error", e); }
+      finally { setLoading(false); }
     }
     load();
   }, [playerId]);
@@ -506,12 +824,125 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
   if (loading) return <LoadingSkeleton />;
   if (!data) return <NotFound />;
 
+  const gp  = data.gamesPlayed;
+  const gpg = data.goalsPerGame;
+  const apg = data.assistsPerGame;
+  const ppg = data.ptsPerGame;
+  const spg = data.shots / gp;
+  const hpg = data.hits  / gp;
+  const bpg = data.blocks / gp;
+  const isGoalie = data.position === "G";
+
+  // Poisson helper: P(X >= 1)
+  const poi = (lambda: number) => Math.min(92, Math.max(5, Math.round((1 - Math.exp(-lambda)) * 100)));
+
+  const playerGroups: MktGroup[] = isGoalie ? [
+    {
+      id: "goalie-saves", title: "Saves", cols: 2,
+      options: [
+        { id: "g-saves-over", label: "Over 25.5 Saves", rulePct: 62,
+          ruleNote: "Goalies face ~28-32 shots per game on average. Saving 26+ is likely in most games." },
+        { id: "g-saves-under",label: "Under 25.5 Saves",rulePct: 38,
+          ruleNote: "Fewer than 26 saves usually means a lower-shot game or an early pull." },
+        { id: "g-saves-over2", label: "Over 28.5 Saves", rulePct: 44,
+          ruleNote: "Higher threshold — requires above-average shot volume against." },
+        { id: "g-saves-under2",label: "Under 28.5 Saves",rulePct: 56,
+          ruleNote: "More common line — under 29 saves covers most average-shot games." },
+      ],
+    },
+    {
+      id: "goalie-result", title: "Game Result", cols: 2,
+      options: [
+        { id: "g-win",    label: "Goalie Win",   rulePct: 50,
+          ruleNote: "Winning goalie probability based on team win rate." },
+        { id: "g-shutout",label: "Shutout",      rulePct: 10,
+          ruleNote: "Complete shutouts happen in ~10-15% of NHL starts." },
+      ],
+    },
+  ] : [
+    {
+      id: "scoring", title: "Goal Scoring", cols: 2,
+      options: [
+        { id: "p-anytime", label: "Anytime Goal Scorer", rulePct: poi(gpg),
+          ruleNote: `Poisson model: ${gpg.toFixed(3)} goals/game → P(≥1 goal) = ${poi(gpg)}%. Based on ${data.goals} goals in ${gp} games.` },
+        { id: "p-first",   label: "First Goal Scorer",   rulePct: Math.max(3, Math.round(poi(gpg) / 6)),
+          ruleNote: `Being the first scorer is rare (~5-10% per player). Scaled from anytime probability of ${poi(gpg)}%.` },
+        { id: "p-over05",  label: "Goals Over 0.5",      rulePct: poi(gpg),
+          ruleNote: `Same as anytime scorer — probability of scoring at least 1 goal.` },
+        { id: "p-over15",  label: "Goals Over 1.5",      rulePct: poi(gpg * 2) - poi(gpg),
+          ruleNote: `Scoring 2+ goals in a game. Based on extended Poisson with rate ${gpg.toFixed(3)}/game.` },
+      ],
+    },
+    {
+      id: "assists", title: "Assists", cols: 2,
+      options: [
+        { id: "p-assist",      label: "Any Assist",          rulePct: poi(apg),
+          ruleNote: `Poisson model: ${apg.toFixed(3)} assists/game → P(≥1 assist) = ${poi(apg)}%. Based on ${data.assists} assists in ${gp} games.` },
+        { id: "p-assist-over", label: "Assists Over 0.5",    rulePct: poi(apg),
+          ruleNote: `Probability of recording at least one assist.` },
+        { id: "p-point",       label: "Any Point (G or A)",  rulePct: poi(ppg),
+          ruleNote: `Poisson model: ${ppg.toFixed(3)} pts/game → P(≥1 point) = ${poi(ppg)}%. Based on ${data.points} points in ${gp} games.` },
+        { id: "p-multi-point", label: "Multi-Point Game",    rulePct: Math.min(60, Math.round(poi(ppg) * 0.35)),
+          ruleNote: `Recording 2+ points in one game. Less common — roughly 1/3 of point games.` },
+      ],
+    },
+    ...(data.shots > 0 ? [{
+      id: "shots", title: "Shots on Goal", cols: 2,
+      options: [
+        { id: "p-shots-over",  label: `Shots Over ${Math.floor(spg + 0.5)}.5`,  rulePct: 52,
+          ruleNote: `${data.name} averages ${spg.toFixed(1)} shots/game. The line is close to their average.` },
+        { id: "p-shots-under", label: `Shots Under ${Math.floor(spg + 0.5)}.5`, rulePct: 48,
+          ruleNote: `Shooting below their ${spg.toFixed(1)}/game average is possible in any matchup.` },
+        { id: "p-shots-over2", label: `Shots Over ${Math.ceil(spg + 1)}.5`,      rulePct: 38,
+          ruleNote: `Higher threshold — requires an active game for ${data.name}.` },
+        { id: "p-shots-under2",label: `Shots Under ${Math.ceil(spg + 1)}.5`,     rulePct: 62,
+          ruleNote: `Easier to hit — any quiet game keeps ${data.name} under this threshold.` },
+      ],
+    } as MktGroup] : []),
+    ...(data.hits > 0 ? [{
+      id: "hits", title: "Hits", cols: 2,
+      options: [
+        { id: "p-hits-over",  label: `Hits Over ${Math.floor(hpg)}.5`,  rulePct: 52,
+          ruleNote: `${data.name} averages ${hpg.toFixed(1)} hits/game.` },
+        { id: "p-hits-under", label: `Hits Under ${Math.floor(hpg)}.5`, rulePct: 48,
+          ruleNote: `Below-average hit game for ${data.name}.` },
+      ],
+    } as MktGroup] : []),
+    ...(data.blocks > 0 ? [{
+      id: "blocks", title: "Blocked Shots", cols: 2,
+      options: [
+        { id: "p-blocks-over",  label: `Blocks Over ${Math.floor(bpg)}.5`,  rulePct: 50,
+          ruleNote: `${data.name} averages ${bpg.toFixed(1)} blocked shots/game.` },
+        { id: "p-blocks-under", label: `Blocks Under ${Math.floor(bpg)}.5`, rulePct: 50,
+          ruleNote: `Blocked shots are highly situational depending on the game flow.` },
+      ],
+    } as MktGroup] : []),
+    ...(data.ppPoints > 0 ? [{
+      id: "pp", title: "Power Play", cols: 2,
+      options: [
+        { id: "p-pp-point", label: "PP Point",         rulePct: Math.min(70, Math.round((data.ppPoints / gp) * 200)),
+          ruleNote: `${data.name} has ${data.ppPoints} PP points in ${gp} games (${(data.ppPoints/gp).toFixed(2)}/game).` },
+        { id: "p-pp-goal",  label: "PP Goal",          rulePct: Math.min(50, Math.round((data.ppPoints / gp) * 100)),
+          ruleNote: `PP goals are less common than PP assists. Scaled from PP point probability.` },
+      ],
+    } as MktGroup] : []),
+    ...(data.penaltyMin > 0 ? [{
+      id: "pim", title: "Penalty Minutes", cols: 2,
+      options: [
+        { id: "p-pim-over",  label: `PIM Over 0.5`,   rulePct: Math.min(70, Math.round((data.penaltyMin / gp) * 100)),
+          ruleNote: `${data.name} averages ${(data.penaltyMin/gp).toFixed(2)} penalty minutes/game.` },
+        { id: "p-pim-under", label: `PIM Under 0.5`,  rulePct: Math.max(30, 100 - Math.min(70, Math.round((data.penaltyMin / gp) * 100))),
+          ruleNote: `Staying out of the penalty box — common for disciplined players.` },
+      ],
+    } as MktGroup] : []),
+  ];
+
   return (
-    <div className="flex flex-col gap-4">
-      {/* Player hero card */}
+    <div className="flex flex-col gap-3">
+      {/* Player header */}
       <div className="bg-[#111a1f] border border-white/20 rounded-2xl p-4">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-14 h-14 rounded-2xl bg-[#1a2a2f] flex items-center justify-center text-3xl">{data.logo}</div>
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-12 h-12 rounded-2xl bg-[#1a2a2f] flex items-center justify-center text-2xl">{data.logo}</div>
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold text-base truncate">{data.name}</p>
             <p className="text-[#8a9ea6] text-xs">{data.team} · #{data.number} · {data.position}</p>
@@ -519,11 +950,11 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
         </div>
         <div className="grid grid-cols-4 gap-2">
           {[
-            { label: "Goals",   value: String(data.goals)   },
-            { label: "Assists", value: String(data.assists)  },
-            { label: "Points",  value: String(data.points)   },
-            { label: "+/-",     value: (data.plusMinus >= 0 ? "+" : "") + data.plusMinus },
-          ].map((s) => (
+            { label: "G",    value: String(data.goals)   },
+            { label: "A",    value: String(data.assists)  },
+            { label: "PTS",  value: String(data.points)   },
+            { label: "+/-",  value: (data.plusMinus >= 0 ? "+" : "") + data.plusMinus },
+          ].map(s => (
             <div key={s.label} className="bg-[#0a1014] rounded-xl p-2 text-center">
               <p className="text-white text-sm font-bold">{s.value}</p>
               <p className="text-[#8a9ea6] text-[9px]">{s.label}</p>
@@ -531,102 +962,21 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
           ))}
         </div>
       </div>
+      {/* Market groups — API predictions when available, local fallback otherwise */}
+      {(apiGroups ?? playerGroups).map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
+      {!apiGroups && <p className="text-[#4a6070] text-[10px] text-center mt-1">Connecting to prediction engine…</p>}
 
-      {/* Market cards */}
-      <p className="text-[#8a9ea6] text-xs uppercase tracking-widest px-1">Available Bets</p>
-      {markets.map((m) => {
-        const added = hasLeg(m.id);
-        const color = m.probability >= 65 ? "#4ade80" : m.probability >= 50 ? accent : m.probability >= 38 ? "#facc15" : "#f87171";
-        return (
-          <div key={m.id} className="bg-[#111a1f] border border-white/20 rounded-2xl p-4">
-            <div className="flex items-start gap-3 mb-3">
-              <span className="text-xl mt-0.5">{m.icon}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-white text-sm font-semibold">{m.label}</p>
-                <p className="text-[#8a9ea6] text-xs leading-snug mt-0.5">{m.description}</p>
-              </div>
-              <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-                <span className="text-xl font-black" style={{ color }}>{m.probability}%</span>
-                <span className="text-[#8a9ea6] text-[10px]">{m.oddsLabel}</span>
-              </div>
-            </div>
-            {/* Probability bar */}
-            <div className="w-full bg-[#0a1014] rounded-full h-1.5 mb-3">
-              <div className="h-1.5 rounded-full" style={{ width: `${m.probability}%`, backgroundColor: color }} />
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => navigate(`/stats/prediction/player-prop/${m.id.replace("-season","")}`)}
-                className="flex-1 py-2 rounded-xl text-xs font-medium bg-[#1a2a2f] border border-white/20 text-[#bfc8cc]"
-              >
-                View Breakdown →
-              </button>
-              <button
-                onClick={() => {
-                  if (added) return;
-                  const leg: BetLeg = {
-                    id: m.id,
-                    marketType: m.propType === "goals" ? "anytime_goal" : "points_ou",
-                    marketLabel: m.label,
-                    subjectType: "player",
-                    subjectId: playerId,
-                    subjectName: data.name,
-                    subjectLogo: data.logo,
-                    selection: m.label,
-                    selectionShort: `${data.team} ${m.icon}`,
-                    probability: m.probability,
-                    line: m.line,
-                    gameInfo: `${data.team} · ${data.gamesPlayed} GP`,
-                    addedAt: new Date().toISOString(),
-                  };
-                  addLeg(leg);
-                }}
-                className="flex-1 py-2 rounded-xl text-xs font-bold transition-all"
-                style={{
-                  backgroundColor: added ? "#4ade8033" : accent,
-                  color: added ? "#4ade80" : "#0a1014",
-                  border: added ? "1px solid #4ade8066" : "none",
-                }}
-              >
-                {added ? "✓ Added" : "+ Add to Slip"}
-              </button>
-            </div>
-          </div>
-        );
-      })}
+      {/* AI/ML prediction section */}
+      <MLSection
+        type="player"
+        subjectId={playerId}
+        propType="goals"
+        line={0.5}
+        selection="over"
+        ruleBasedPct={Math.round(data.goalsPerGame * 100)}
+      />
     </div>
   );
-}
-
-/* ─── N Games Prediction ─────────────────────── */
-const TEAM_LOGOS_NGAMES: Record<string, string> = {
-  BOS: "🐻", NYR: "🗽", TOR: "🍁", MTL: "🔵",
-  CHI: "🦅", DET: "🏒", VGK: "⚔️",  EDM: "🛢️",
-  COL: "⛰️",  FLA: "🐆", TBL: "⚡",       CAR: "🌀",
-  NYI: "🗽", NJD: "😈", PHI: "🟠", PIT: "🐧",
-  WSH: "🦅", CBJ: "🔵", OTT: "⭐",      BUF: "🦙",
-  MIN: "🦢", WPG: "✈️",  NSH: "🎸", STL: "🎵",
-  CHC: "🐻", DAL: "⭐",      ARI: "🐶", ANA: "🦆",
-  LAK: "👑", SJS: "🦈", VAN: "🧊", CGY: "🔥",
-  SEA: "🧜",
-};
-
-interface NGamesView {
-  teamName: string;
-  teamAbbr: string;
-  logo: string;
-  wins: number;
-  losses: number;
-  otLosses: number;
-  goalsFor: number;
-  goalsAgainst: number;
-  goalsForPerGame: number;
-  goalsAgainstPerGame: number;
-  ppPct: number;
-  pkPct: number;
-  streak: string;
-  last10: string;
-  winRateN: number;
 }
 
 function NGamesPrediction({ teamId, n }: { teamId: string; n: number }) {
@@ -775,13 +1125,14 @@ function NGamesPrediction({ teamId, n }: { teamId: string; n: number }) {
         { label: "GF/G", value: view.goalsForPerGame.toFixed(1)      },
         { label: "GA/G", value: view.goalsAgainstPerGame.toFixed(1)  },
       ]}
+      mlNode={<MLSection type="team" subjectId={teamId} propType="moneyline" ruleBasedPct={finalPct} />}
     />
   );
 }
 
 /* ─── Shared layout ────────────────────────────── */
-function BetRec({ rec, note }: { rec: string; note: string }) {
-  const [added, setAdded] = useState(false);
+function BetRec({ rec, note, onAddToSlip }: { rec: string; note: string; onAddToSlip?: () => void }) {
+  const navigate = useNavigate();
   return (
     <div className="bg-gradient-to-br from-[#86d1ea]/10 to-[#0f1416] border border-[#86d1ea]/30 rounded-2xl p-4">
       <div className="flex items-center gap-2 mb-2">
@@ -791,24 +1142,23 @@ function BetRec({ rec, note }: { rec: string; note: string }) {
       </div>
       <p className="text-[#bfc8cc] text-xs leading-relaxed">{note}</p>
       <button
-        onClick={() => setAdded(v => !v)}
-        className={`mt-3 w-full py-2.5 rounded-xl text-sm font-bold transition-all ${
-          added ? "bg-green-500 text-white" : "bg-[#86d1ea] text-[#0a1014]"
-        }`}
+        onClick={() => onAddToSlip ? onAddToSlip() : navigate("/bet")}
+        className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] bg-[#86d1ea] text-[#0a1014]"
       >
-        {added ? "✓ Added to Bet Slip" : "Add to Bet Slip"}
+        Go to Bet Builder →
       </button>
     </div>
   );
 }
 
 function PredictionLayout({
-  title, subtitle, logo, winPct, winLabel, calcFactors, basePct, accent, recentForm, betRec, betNote, extraStats,
+  title, subtitle, logo, winPct, winLabel, calcFactors, basePct, accent, recentForm, betRec, betNote, extraStats, mlNode,
 }: {
   title: string; subtitle: string; logo: string; winPct: number; winLabel: string;
   calcFactors?: CalcFactor[]; basePct?: number; accent?: string;
   recentForm: ("W" | "L" | "OT")[]; betRec: string; betNote: string;
   extraStats: { label: string; value: string }[];
+  mlNode?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-5">
@@ -875,6 +1225,9 @@ function PredictionLayout({
 
       {/* Bet recommendation */}
       <BetRec rec={betRec} note={betNote} />
+
+      {/* ML prediction section */}
+      {mlNode}
     </div>
   );
 }
@@ -962,6 +1315,16 @@ function PlayerPropPrediction({ propId }: { propId: string }) {
       betRec={`${propType.charAt(0).toUpperCase() + propType.slice(1)} Over Line`}
       betNote={result.betNote}
       extraStats={result.extraStats}
+      mlNode={
+        <MLSection
+          type="player"
+          subjectId={propId}
+          propType={propType}
+          line={result.line ?? 0.5}
+          selection="over"
+          ruleBasedPct={result.probability}
+        />
+      }
     />
   );
 }
@@ -1235,6 +1598,14 @@ function FuturePrediction({ futureId }: { futureId: string }) {
       betRec="Stanley Cup Futures"
       betNote={result.betNote}
       extraStats={result.extraStats}
+      mlNode={
+        <MLSection
+          type="team"
+          subjectId={result.teamId ?? futureId}
+          propType={propType}
+          ruleBasedPct={result.probability}
+        />
+      }
     />
   );
 }
@@ -1267,6 +1638,7 @@ export function PredictionPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { theme } = useSport();
+  const accent = theme.accent;
   const [addSheet, setAddSheet] = useState<{ open: boolean; subject?: Subject }>({ open: false });
 
   const title =
@@ -1324,16 +1696,15 @@ export function PredictionPage() {
           </div>
           <button
             onClick={() => setAddSheet({ open: true, subject: buildSubject() })}
-            className="flex items-center gap-1.5 font-bold px-3 py-1.5 rounded-xl text-xs flex-shrink-0"
-            style={{ backgroundColor: theme.accent, color: "#0f1416" }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-medium active:scale-95 transition-transform"
+            style={{ backgroundColor: `${accent}1a`, borderColor: `${accent}4d`, color: accent }}
           >
-            + Add to Slip
+            <span>+</span><span>Add to Slip</span>
           </button>
         </div>
       </header>
 
-      {/* Content */}
-      <div className="flex-1 px-4 pb-28 pt-4 overflow-y-auto">
+      <div className="px-4 pb-28 pt-3 overflow-y-auto flex-1">
         {type === "team" && id && <TeamPrediction teamId={id} />}
         {type === "game" && id && <GamePrediction gameId={id} />}
         {type === "player" && id && <PlayerPrediction playerId={id} />}

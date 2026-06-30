@@ -1,0 +1,50 @@
+[
+  {
+    "name": "win_pct_diff",
+    "importance": 0.1623
+  },
+  {
+    "name": "ga_diff",
+    "importance": 0.0974
+  },
+  {
+    "name": "gf_diff",
+    "importance": 0.0888
+  },
+  {
+    "name": "home_goals_for_pg",
+    "importance": 0.0811
+  },
+  {
+    "name": "away_win_pct",
+    "importance": 0.0795
+  },
+  {
+    "name": "home_goals_against_pg",
+    "importance": 0.0758
+  },
+  {
+    "name": "away_last10_win_pct",
+    "importance": 0.0736
+  },
+  {
+    "name": "away_goals_for_pg",
+    "importance": 0.0729
+  },
+  {
+    "name": "away_goals_against_pg",
+    "importance": 0.0715
+  },
+  {
+    "name": "form_diff",
+    "importance": 0.0699
+  },
+  {
+    "name": "home_win_pct",
+    "importance": 0.0697
+  },
+  {
+    "name": "home_last10_win_pct",
+    "importance": 0.0574
+  }
+]

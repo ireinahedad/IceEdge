@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useLocation } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { getGoogleLoginUrl } from "../services/authService";
 
@@ -7,6 +7,8 @@ type Mode = "login" | "register";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = new URLSearchParams(location.search).get("returnTo") ?? "/";
   const { login, register } = useAuth();
 
   const [mode, setMode] = useState<Mode>("login");
@@ -27,7 +29,7 @@ export function LoginPage() {
       } else {
         await register(email, username, password, firstName || undefined);
       }
-      navigate("/profile", { replace: true });
+      navigate(returnTo, { replace: true });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {

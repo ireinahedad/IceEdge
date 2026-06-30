@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { TrendingUp, Plus, X, Lightbulb, Lock, Share2, ChevronRight, CheckCircle, Clock, History, Trophy, AlertCircle, RefreshCw } from "lucide-react";
+import { useNavigate } from "react-router";
+import { TrendingUp, Plus, X, Lightbulb, Lock, Share2, ChevronRight, CheckCircle, Clock, History, Trophy, AlertCircle, RefreshCw, Trash2 } from "lucide-react";
 import { useBet } from "../context/BetContext";
 import { useAuth } from "../context/AuthContext";
 import { MarketSelectorSheet } from "./MarketSelectorSheet";
@@ -8,6 +9,15 @@ import type { BetLeg } from "../types/bet";
 import { submitSlip, getMySlips, resolveSlip } from "../services/slipApiService";
 import type { BetSlip } from "../services/slipApiService";
 import { useSport } from "../context/SportContext";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function toOddsLabel(pct: number): string {
+  const p = Math.max(5, Math.min(95, pct)) / 100;
+  return p >= 0.5
+    ? `-${Math.round((p / (1 - p)) * 100)}`
+    : `+${Math.round(((1 - p) / p) * 100)}`;
+}
 
 // ─── Probability gauge ────────────────────────────────────────────────────────
 
@@ -98,6 +108,7 @@ function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; onRemov
                 style={{ width: `${leg.probability}%`, backgroundColor: barColor }} />
             </div>
             <span className="text-xs font-bold flex-shrink-0" style={{ color: barColor }}>{leg.probability}%</span>
+            <span className="text-[10px] text-[#4a6068] flex-shrink-0 font-mono">{toOddsLabel(leg.probability)}</span>
           </div>
         </div>
         <button onClick={onRemove}
@@ -494,11 +505,13 @@ export function BetBuilderPage() {
   const { legs, removeLeg, clearSlip, combinedProbability } = useBet();
   const { user } = useAuth();
   const { sport } = useSport();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<PageTab>("build");
   const [showSheet, setShowSheet] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ slipId: string } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Switch to My Slips after successful lock
   function handleSuccessDone() {
@@ -508,17 +521,12 @@ export function BetBuilderPage() {
 
   async function handleLock() {
     if (!user) {
-      setSubmitError("Sign in to submit your slip.");
-      setTimeout(() => setSubmitError(null), 3000);
+      navigate("/login?returnTo=/bet");
       return;
     }
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      const toOdds = (p: number) => {
-        const c = Math.max(5, Math.min(95, p)) / 100;
-        return c >= 0.5 ? `-${Math.round((c / (1 - c)) * 100)}` : `+${Math.round(((1 - c) / c) * 100)}`;
-      };
       const slipLegs = legs.map((l) => ({
         marketType:  l.marketType,
         subjectId:   l.subjectId,
@@ -527,7 +535,7 @@ export function BetBuilderPage() {
         selection:   l.selection,
         line:        l.line,
         probability: l.probability,
-        oddsLabel:   toOdds(l.probability),
+        oddsLabel:   toOddsLabel(l.probability),
       }));
       const { slipId } = await submitSlip(slipLegs, sport, combinedProbability);
       setSubmitResult({ slipId });
@@ -556,9 +564,9 @@ export function BetBuilderPage() {
             </p>
           </div>
           {tab === "build" && legs.length > 0 && (
-            <button onClick={clearSlip}
-              className="text-red-400 text-xs border border-red-400/30 rounded-xl px-3 py-1.5 active:bg-red-500/10 transition-colors">
-              Clear All
+            <button onClick={() => setShowClearConfirm(true)}
+              className="flex items-center gap-1.5 text-red-400 text-xs border border-red-400/30 rounded-xl px-3 py-1.5 active:bg-red-500/10 transition-colors">
+              <Trash2 size={11} /> Clear
             </button>
           )}
         </div>
@@ -585,12 +593,24 @@ export function BetBuilderPage() {
           <div className="flex flex-col items-center py-6">
             <ProbabilityGauge pct={combinedProbability} size={180} />
             {legs.length > 1 && (
-              <p className="text-[#4a6068] text-[10px] text-center mt-2 max-w-[240px]">
-                Combined probability all {legs.length} predictions hit
-              </p>
+              <>
+                <p className="text-[#4a6068] text-[10px] text-center mt-2 max-w-[240px]">
+                  Combined probability all {legs.length} predictions hit
+                </p>
+                <div className="mt-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10">
+                  <span className="text-white font-bold text-sm font-mono">{toOddsLabel(combinedProbability)}</span>
+                  <span className="text-[#4a6068] text-[10px] ml-1.5">implied odds</span>
+                </div>
+              </>
             )}
             {legs.length === 1 && (
-              <p className="text-[#4a6068] text-[10px] text-center mt-2">Individual prediction probability</p>
+              <>
+                <p className="text-[#4a6068] text-[10px] text-center mt-2">Individual prediction probability</p>
+                <div className="mt-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10">
+                  <span className="text-white font-bold text-sm font-mono">{toOddsLabel(combinedProbability)}</span>
+                  <span className="text-[#4a6068] text-[10px] ml-1.5">implied odds</span>
+                </div>
+              </>
             )}
           </div>
 
@@ -683,6 +703,43 @@ export function BetBuilderPage() {
               <X size={10} className="text-red-400" />
             </div>
             <p className="text-white text-xs">{submitError}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Clear confirmation */}
+      {showClearConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center px-4 pb-8 bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowClearConfirm(false)}
+        >
+          <div
+            className="bg-[#111a1f] border border-white/20 rounded-3xl p-6 w-full max-w-[380px] flex flex-col gap-5 shadow-2xl shadow-black/60"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center">
+              <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-3">
+                <Trash2 size={20} className="text-red-400" />
+              </div>
+              <p className="text-white font-bold text-base" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>Clear slip?</p>
+              <p className="text-[#8a9ea6] text-xs mt-1">
+                Remove all {legs.length} leg{legs.length > 1 ? "s" : ""} from your slip. This can't be undone.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="flex-1 py-3 rounded-xl border border-white/20 text-white text-sm font-medium active:scale-95 transition-transform"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { clearSlip(); setShowClearConfirm(false); }}
+                className="flex-1 py-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-sm font-bold active:scale-95 transition-transform"
+              >
+                Clear All
+              </button>
+            </div>
           </div>
         </div>
       )}
