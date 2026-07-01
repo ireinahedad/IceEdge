@@ -37,9 +37,11 @@ export function MessageBubble({
       {/* Avatar */}
       <button
         onClick={() => onReply?.(msg)}
-        className="w-7 h-7 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center flex-shrink-0 self-end active:scale-95 transition-transform"
+        className="w-7 h-7 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center flex-shrink-0 self-end active:scale-95 transition-transform overflow-hidden"
       >
-        {msg.avatar}
+        {msg.avatarUrl
+          ? <img src={msg.avatarUrl} alt="" className="w-full h-full object-cover rounded-full" />
+          : msg.avatar}
       </button>
 
       <div className={`max-w-[78%] flex flex-col gap-1 ${isOwn ? "items-end" : "items-start"}`}>

@@ -93,6 +93,7 @@ async function getBadgesForUser(userId: string) {
 }
 
 export async function updateProfile(userId: string, updates: {
+  username?: string;
   displayName?: string;
   bio?: string;
   favoriteTeam?: string;
@@ -100,6 +101,39 @@ export async function updateProfile(userId: string, updates: {
   avatarUrl?: string | null;
   openaiApiKey?: string | null;
 }) {
+  // Username lives on the users table — handle it separately, with a uniqueness check
+  if (updates.username !== undefined) {
+    const username = String(updates.username).trim().toLowerCase();
+
+    if (!/^[a-z0-9_]{3,20}$/.test(username)) {
+      throw Object.assign(
+        new Error('Username must be 3-20 characters: lowercase letters, numbers or underscores'),
+        { status: 400 },
+      );
+    }
+
+    const taken = await pool.query(
+      'SELECT id FROM users WHERE LOWER(username) = $1 AND id <> $2',
+      [username, userId],
+    );
+    if (taken.rowCount && taken.rowCount > 0) {
+      throw Object.assign(new Error('Username already taken'), { status: 409 });
+    }
+
+    try {
+      await pool.query(
+        'UPDATE users SET username = $1, updated_at = NOW() WHERE id = $2',
+        [username, userId],
+      );
+    } catch (e: any) {
+      // Race-condition safety net: UNIQUE constraint violation
+      if (e.code === '23505') {
+        throw Object.assign(new Error('Username already taken'), { status: 409 });
+      }
+      throw e;
+    }
+  }
+
   const fields: string[] = [];
   const values: unknown[] = [];
   let i = 1;
@@ -111,13 +145,17 @@ export async function updateProfile(userId: string, updates: {
   if (updates.avatarUrl     !== undefined) { fields.push(`avatar_url = $${i++}`);       values.push(updates.avatarUrl); }
   if (updates.openaiApiKey  !== undefined) { fields.push(`openai_api_key = $${i++}`);   values.push(updates.openaiApiKey); }
 
-  if (fields.length === 0) throw Object.assign(new Error('Nothing to update'), { status: 400 });
+  if (fields.length === 0 && updates.username === undefined) {
+    throw Object.assign(new Error('Nothing to update'), { status: 400 });
+  }
 
-  values.push(userId);
-  await pool.query(
-    `UPDATE user_profiles SET ${fields.join(', ')} WHERE user_id = $${i}`,
-    values
-  );
+  if (fields.length > 0) {
+    values.push(userId);
+    await pool.query(
+      `UPDATE user_profiles SET ${fields.join(', ')} WHERE user_id = $${i}`,
+      values
+    );
+  }
   return getProfileById(userId);
 }
 
@@ -221,7 +259,8 @@ export async function getLeaderboard() {
   const { rows } = await pool.query(
     `SELECT u.id AS "userId", u.username,
             up.display_name AS "displayName", up.avatar, up.tier,
-            up.performance_score AS "performanceScore"
+            up.performance_score AS "performanceScore",
+            COALESCE(up.avatar_url, u.avatar_url) AS "avatarUrl"
      FROM users u
      JOIN user_profiles up ON up.user_id = u.id
      ORDER BY up.performance_score DESC
@@ -244,6 +283,7 @@ export async function getLeaderboard() {
       username:         r.username,
       displayName:      r.displayName,
       avatar:           r.avatar,
+      avatarUrl:        r.avatarUrl ?? null,
       tier:             r.tier,
       performanceScore: r.performanceScore,
       hitRate,

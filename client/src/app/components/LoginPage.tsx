@@ -57,7 +57,7 @@ export function LoginPage() {
       className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-16 pb-10"
       style={{ background: "#0A0E0C" }}
     >
-      {/* ── Brand hero ── */}
+      {/* Brand hero */}
       <div className="flex flex-col items-center mb-12">
         <IceedgeLogo size={72} wordmark={false} className="mb-5" />
         <h1
@@ -72,7 +72,7 @@ export function LoginPage() {
         <div className="mt-4 w-12 h-0.5 rounded-full" style={{ background: ACCENT, opacity: 0.5 }} />
       </div>
 
-      {/* ── Mode toggle ── */}
+      {/* Mode toggle */}
       <div className="flex gap-1 rounded-xl p-1 mb-6" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
         {(["login", "register"] as Mode[]).map((m) => (
           <button
@@ -88,7 +88,7 @@ export function LoginPage() {
         ))}
       </div>
 
-      {/* ── Google SSO ── */}
+      {/* Google SSO */}
       <button
         onClick={handleGoogleLogin}
         className="w-full flex items-center justify-center gap-3 py-3 rounded-xl text-sm font-medium active:scale-[0.98] transition-all mb-4"
@@ -103,14 +103,14 @@ export function LoginPage() {
         Continue with Google
       </button>
 
-      {/* ── Divider ── */}
+      {/* Divider */}
       <div className="flex items-center gap-3 mb-4">
         <div className="flex-1 h-px" style={{ background: BORDER }} />
         <span className="text-[10px] uppercase tracking-widest" style={{ color: "#92A08A" }}>or</span>
         <div className="flex-1 h-px" style={{ background: BORDER }} />
       </div>
 
-      {/* ── Form ── */}
+      {/* Form */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)}
           required className={inputCls} style={inputStyle}
@@ -144,7 +144,7 @@ export function LoginPage() {
         <button type="submit" disabled={loading}
           className="w-full py-3.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50"
           style={{ background: ACCENT, color: "#0A0E0C" }}>
-          {loading ? "…" : mode === "login" ? "Sign In" : "Create Account"}
+          {loading ? "..." : mode === "login" ? "Sign In" : "Create Account"}
         </button>
       </form>
 

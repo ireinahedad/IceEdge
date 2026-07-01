@@ -23,8 +23,10 @@ function UserProfileModal({ entry, onClose }: {
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
 
         <div className="flex items-center gap-4 mb-5">
-          <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-3xl">
-            {entry.avatar}
+          <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-3xl overflow-hidden">
+            {entry.avatarUrl
+              ? <img src={entry.avatarUrl} alt="" className="w-full h-full object-cover" />
+              : entry.avatar}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold text-base">{entry.displayName}</p>
@@ -153,7 +155,9 @@ export function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
                 onClick={() => setSelectedUser(podium[1])}
                 className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
               >
-                <span className="text-2xl">{podium[1].avatar}</span>
+                {podium[1].avatarUrl
+                  ? <img src={podium[1].avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-white/20" />
+                  : <span className="text-2xl">{podium[1].avatar}</span>}
                 <div className="text-center">
                   <p className="text-white text-[10px] font-bold">{podium[1].displayName}</p>
                   <p className="text-[#86d1ea] text-[10px]">{podium[1].performanceScore}</p>
@@ -168,7 +172,9 @@ export function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
                 onClick={() => setSelectedUser(podium[0])}
                 className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
               >
-                <span className="text-3xl">{podium[0].avatar}</span>
+                {podium[0].avatarUrl
+                  ? <img src={podium[0].avatarUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-white/20" />
+                  : <span className="text-3xl">{podium[0].avatar}</span>}
                 <div className="text-center">
                   <p className="text-white text-xs font-bold">{podium[0].displayName}</p>
                   <p className="text-yellow-400 text-[10px] font-bold">{podium[0].performanceScore}</p>
@@ -183,7 +189,9 @@ export function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
                 onClick={() => setSelectedUser(podium[2])}
                 className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
               >
-                <span className="text-2xl">{podium[2].avatar}</span>
+                {podium[2].avatarUrl
+                  ? <img src={podium[2].avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-white/20" />
+                  : <span className="text-2xl">{podium[2].avatar}</span>}
                 <div className="text-center">
                   <p className="text-white text-[10px] font-bold">{podium[2].displayName}</p>
                   <p className="text-amber-600 text-[10px]">{podium[2].performanceScore}</p>
@@ -233,7 +241,9 @@ export function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
                   }
                 </div>
 
-                <span className="text-lg flex-shrink-0">{entry.avatar}</span>
+                {entry.avatarUrl
+                  ? <img src={entry.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover border border-white/20 flex-shrink-0" />
+                  : <span className="text-lg flex-shrink-0">{entry.avatar}</span>}
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">

@@ -1,54 +1,127 @@
 import { Router, Request, Response } from 'express';
 import { chatService } from '../services/chat.service';
+import { authenticate } from '../middleware/auth.middleware';
 import { io } from '../socket';
 
 const router = Router();
 
-router.get('/rooms', async (_req: Request, res: Response) => {
-  try { res.json(await chatService.getRooms()); }
+// Every chat route requires a valid JWT — identity comes from req.user.sub
+router.use(authenticate);
+
+function uid(req: Request): string {
+  const id = (req as any).user?.sub;
+  if (!id) throw Object.assign(new Error('Unauthorized'), { status: 401 });
+  return id;
+}
+
+// GET /api/chat/rooms — public rooms + my private rooms (pinned first)
+router.get('/rooms', async (req: Request, res: Response) => {
+  try { res.json(await chatService.getRoomsForUser(uid(req))); }
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
+// POST /api/chat/rooms — create (creator becomes admin)
 router.post('/rooms', async (req: Request, res: Response) => {
   try {
-    const { name, icon, description } = req.body;
+    const { name, icon, description, isPrivate } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
-    res.status(201).json(await chatService.createRoom({ name, icon: icon ?? '💬', description: description ?? '' }));
+    res.status(201).json(await chatService.createRoom(uid(req), {
+      name, icon: icon ?? '💬', description: description ?? '', isPrivate: !!isPrivate,
+    }));
   } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
-router.get('/rooms/:roomId/messages', async (req: Request, res: Response) => {
-  try { res.json(await chatService.getRoomMessages(req.params.roomId)); }
+// GET /api/chat/rooms/lookup?code=ABC123 — search a room by join code
+router.get('/rooms/lookup', async (req: Request, res: Response) => {
+  try {
+    const code = String(req.query.code ?? '');
+    if (!code) return res.status(400).json({ error: 'code is required' });
+    res.json(await chatService.findRoomByCode(code, uid(req)));
+  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// POST /api/chat/rooms/join — join by code (public or private)
+router.post('/rooms/join', async (req: Request, res: Response) => {
+  try {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: 'code is required' });
+    res.json(await chatService.joinRoom(uid(req), { code }));
+  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// POST /api/chat/rooms/:roomId/join — join a public room directly
+router.post('/rooms/:roomId/join', async (req: Request, res: Response) => {
+  try { res.json(await chatService.joinRoom(uid(req), { roomId: req.params.roomId })); }
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
+// POST /api/chat/rooms/:roomId/leave
+router.post('/rooms/:roomId/leave', async (req: Request, res: Response) => {
+  try { await chatService.leaveRoom(req.params.roomId, uid(req)); res.status(204).send(); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// POST /api/chat/rooms/:roomId/pin  { pinned: boolean }
+router.post('/rooms/:roomId/pin', async (req: Request, res: Response) => {
+  try { res.json(await chatService.setPinned(req.params.roomId, uid(req), !!req.body.pinned)); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// GET /api/chat/rooms/:roomId/members
+router.get('/rooms/:roomId/members', async (req: Request, res: Response) => {
+  try { res.json(await chatService.getMembers(req.params.roomId, uid(req))); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// DELETE /api/chat/rooms/:roomId/members/:userId — admin kick
+router.delete('/rooms/:roomId/members/:userId', async (req: Request, res: Response) => {
+  try {
+    await chatService.kickMember(req.params.roomId, uid(req), req.params.userId);
+    res.status(204).send();
+  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// POST /api/chat/rooms/:roomId/members/:userId/role  { role: 'admin' | 'member' }
+router.post('/rooms/:roomId/members/:userId/role', async (req: Request, res: Response) => {
+  try {
+    await chatService.setRole(req.params.roomId, uid(req), req.params.userId, req.body.role);
+    res.status(204).send();
+  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// DELETE /api/chat/rooms/:roomId — admin only
+router.delete('/rooms/:roomId', async (req: Request, res: Response) => {
+  try {
+    await chatService.deleteRoom(req.params.roomId, uid(req));
+    res.status(204).send();
+  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// GET /api/chat/rooms/:roomId/messages — members (or public rooms)
+router.get('/rooms/:roomId/messages', async (req: Request, res: Response) => {
+  try { res.json(await chatService.getRoomMessages(req.params.roomId, uid(req))); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// POST /api/chat/rooms/:roomId/messages — identity derived server-side
 router.post('/rooms/:roomId/messages', async (req: Request, res: Response) => {
   try {
     const { text, tag, replyTo } = req.body;
     if (!text) return res.status(400).json({ error: 'text is required' });
 
-    const user = (req as any).user;
-    const msg = await chatService.sendMessage(req.params.roomId, {
-      userId:      user?.sub,
-      username:    user?.username    ?? 'anonymous',
-      displayName: user?.displayName ?? 'Anonymous',
-      avatar:      '💬',
-      tier:        user?.role === 'admin' ? 'legend' : 'rookie',
-      text,
-      tag,
-      replyTo,
-    });
+    const msg = await chatService.sendMessage(req.params.roomId, uid(req), { text, tag, replyTo });
     res.status(201).json(msg);
     // Broadcast to all clients in the room (real-time)
     try { io?.to(req.params.roomId).emit('new_message', msg); } catch { /* io not yet initialised */ }
   } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
+// POST /api/chat/rooms/:roomId/messages/:messageId/reactions
 router.post('/rooms/:roomId/messages/:messageId/reactions', async (req: Request, res: Response) => {
   try {
     const { emoji } = req.body;
     if (!emoji) return res.status(400).json({ error: 'emoji is required' });
-    await chatService.toggleReaction(req.params.messageId, emoji);
+    await chatService.toggleReaction(req.params.roomId, req.params.messageId, uid(req), emoji);
     res.status(204).send();
   } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });

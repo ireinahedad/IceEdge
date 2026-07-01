@@ -7,8 +7,12 @@
 
 import { Router, Request, Response } from 'express';
 import { pool } from '../db/connection';
+import { authenticate } from '../middleware/auth.middleware';
 
 const router = Router();
+
+// All LLM routes require a valid JWT
+router.use(authenticate);
 
 router.post('/', async (req: Request, res: Response) => {
   const userId = (req as any).user?.sub;
@@ -23,10 +27,24 @@ router.post('/', async (req: Request, res: Response) => {
   if (!prompt?.trim()) return res.status(400).json({ error: 'prompt is required' });
 
   // Fetch the user's stored OpenAI API key
-  const { rows } = await pool.query(
-    `SELECT openai_api_key AS "openaiApiKey" FROM user_profiles WHERE user_id = $1`,
-    [userId]
-  );
+  let rows: any[];
+  try {
+    const result = await pool.query(
+      `SELECT openai_api_key AS "openaiApiKey" FROM user_profiles WHERE user_id = $1`,
+      [userId]
+    );
+    rows = result.rows;
+  } catch (err: any) {
+    // Column missing = migration 005 not yet applied
+    if (err.code === '42703') {
+      return res.status(500).json({
+        error: 'db_schema',
+        message: 'Database migration 005 not applied. Run: psql -d IceedgeDB -f src/db/migrations/005_openai_key.sql',
+      });
+    }
+    throw err;
+  }
+
   const apiKey: string | null = rows[0]?.openaiApiKey ?? null;
 
   if (!apiKey) {

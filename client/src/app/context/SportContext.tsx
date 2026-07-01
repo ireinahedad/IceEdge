@@ -16,7 +16,7 @@ export const SPORT_THEMES: Record<Sport, SportTheme> = {
     accent: "#86d1ea",
     gradientGlow: "rgba(134,209,234,0.07)",
     sportIcon: "H",
-    sportLabel: "Ice Hockey",
+    sportLabel: "Hockey",
   },
   tennis: {
     bg: "#0a1209",

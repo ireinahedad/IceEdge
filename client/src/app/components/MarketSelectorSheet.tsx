@@ -57,7 +57,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
         id: p.id,
         type: "player" as const,
         name: p.name,
-        logo: team?.logo ?? "🏒",
+        logo: team?.logo ?? "",
         subtitle: `${team?.abbr ?? ""} · #${p.number} · ${p.position}`,
       };
     }),
@@ -68,7 +68,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
         id: g.id,
         type: "game" as const,
         name: t1 && t2 ? `${t1.abbr} vs ${t2.abbr}` : g.id,
-        logo: "🏒",
+        logo: "",
         subtitle: `${g.date} · ${g.time}`,
       };
     }),
@@ -116,8 +116,8 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
       const t2 = getTeamById(game.team2Id);
       if (!t1 || !t2) return [];
       return [
-        { label: `${t1.name} (${t1.logo})`, value: t1.id },
-        { label: `${t2.name} (${t2.logo})`, value: t2.id },
+        { label: `${t1.name} (${t1.abbr})`, value: t1.id },
+        { label: `${t2.name} (${t2.abbr})`, value: t2.id },
         ...(market.type === "regulation_result"
           ? [{ label: "Draw after 60 min", value: "draw" }]
           : []),
@@ -302,7 +302,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                           }}
                           className="flex items-center gap-3 bg-[#131A12] border border-white/20 rounded-xl px-3 py-2.5 text-left active:bg-[#1B2419]"
                         >
-                          <span className="text-xl flex-shrink-0">{subject.logo}</span>
+                          {subject.logo ? <img src={subject.logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" /> : <span className="text-xl flex-shrink-0">🏒</span>}
                           <div className="flex-1 min-w-0">
                             <p className="text-white text-xs font-medium truncate">{subject.name}</p>
                             <p className="text-[#bfc8cc] text-[10px]">{subject.subtitle}</p>
@@ -324,7 +324,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
             {/* Subject pill */}
             <div className="px-4 pt-2 pb-2">
               <div className="flex items-center gap-2 bg-[#86d1ea]/10 border border-[#86d1ea]/30 rounded-xl px-3 py-2">
-                <span className="text-lg">{selectedSubject.logo}</span>
+                {selectedSubject.logo ? <img src={selectedSubject.logo} alt="" className="w-6 h-6 object-contain" /> : <span>🏒</span>}
                 <div>
                   <p className="text-white text-xs font-medium">{selectedSubject.name}</p>
                   <p className="text-[#bfc8cc] text-[10px]">{selectedSubject.subtitle}</p>
@@ -493,7 +493,7 @@ function TeamSelectionsForGame({ gameId, selected, onSelect, getTeamById, getGam
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors active:bg-white/5"
           style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
         >
-          <span className="text-xl">{t.logo}</span>
+          {t.logo ? <img src={t.logo} alt={t.name} className="w-7 h-7 object-contain" /> : <span className="text-xl">🏒</span>}
           <span className="text-white text-sm font-medium">{t.name}</span>
         </button>
       ))}

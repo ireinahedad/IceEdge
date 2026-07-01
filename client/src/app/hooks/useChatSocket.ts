@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io as socketIO, Socket } from 'socket.io-client';
 import type { ChatMessage } from '../types/user';
+import { getAccessToken } from '../services/authService';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
@@ -28,6 +29,7 @@ export function useChatSocket(roomId: string | null) {
     const socket = socketIO(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       path: '/socket.io',
+      auth: { token: getAccessToken() ?? '' },
     });
     socketRef.current = socket;
 

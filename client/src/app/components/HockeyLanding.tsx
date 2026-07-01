@@ -17,14 +17,11 @@ import {
   ODDS_SPORT_KEYS,
 } from "../services/oddsApiService";
 import { openBet365, bet365TennisUrl, bet365HockeyUrl } from "../services/affiliateService";
+import { nhlLogoUrl } from "../data/teamEmoji";
 
 // ─── Hockey helpers ────────────────────────────────────────────────────────────
 
-const TEAM_LOGOS: Record<string, string> = {
-  BOS: "🐻", NYR: "🗽", TOR: "🍁", MTL: "🔵",
-  CHI: "🦅", DET: "🏒", VGK: "⚔", EDM: "🛢",
-  COL: "⛰", FLA: "🐆",
-};
+
 
 interface DisplayGame {
   id: string;
@@ -50,8 +47,8 @@ async function toDisplayGame(game: NHLGame): Promise<DisplayGame> {
     time: game.startTime,
     overUnder: 5.5,
     totalPct: totalPred.probability,
-    team1: { id: game.homeTeam.abbreviation.toLowerCase(), abbr: game.homeTeam.abbreviation, name: game.homeTeam.name, score: game.homeTeam.score, logo: TEAM_LOGOS[game.homeTeam.abbreviation] ?? "🏒", winPct: homePred.probability },
-    team2: { id: game.awayTeam.abbreviation.toLowerCase(), abbr: game.awayTeam.abbreviation, name: game.awayTeam.name, score: game.awayTeam.score, logo: TEAM_LOGOS[game.awayTeam.abbreviation] ?? "🏒", winPct: 100 - homePred.probability },
+    team1: { id: game.homeTeam.abbreviation.toLowerCase(), abbr: game.homeTeam.abbreviation, name: game.homeTeam.name, score: game.homeTeam.score, logo: nhlLogoUrl(game.homeTeam.abbreviation), winPct: homePred.probability },
+    team2: { id: game.awayTeam.abbreviation.toLowerCase(), abbr: game.awayTeam.abbreviation, name: game.awayTeam.name, score: game.awayTeam.score, logo: nhlLogoUrl(game.awayTeam.abbreviation), winPct: 100 - homePred.probability },
   };
 }
 
@@ -190,7 +187,9 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
 
   return (
     <div className="flex items-center gap-3 bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl px-3.5 py-3">
-      <span className="text-xl flex-shrink-0">{bet.logo}</span>
+      {bet.logo?.startsWith("http")
+        ? <img src={bet.logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
+        : <span className="text-xl flex-shrink-0">{bet.logo}</span>}
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 mb-0.5">
@@ -547,7 +546,7 @@ function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: (
       {/* Teams + score */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex flex-col items-center gap-1">
-          <span className="text-2xl">{game.team1.logo}</span>
+          <img src={game.team1.logo} alt={game.team1.abbr} className="w-8 h-8 object-contain" />
           <span className="text-white text-xs font-bold">{game.team1.abbr}</span>
         </div>
         <div className="flex flex-col items-center gap-0.5">
@@ -559,7 +558,7 @@ function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: (
           {game.overUnder && <span className="text-[#bfc8cc] text-[9px]">O/U {game.overUnder}</span>}
         </div>
         <div className="flex flex-col items-center gap-1">
-          <span className="text-2xl">{game.team2.logo}</span>
+          <img src={game.team2.logo} alt={game.team2.abbr} className="w-8 h-8 object-contain" />
           <span className="text-white text-xs font-bold">{game.team2.abbr}</span>
         </div>
       </div>
@@ -642,7 +641,7 @@ function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet
         <div className="flex-1 min-w-0">
           {/* Team 1 */}
           <div className="flex items-center gap-1.5 mb-1.5">
-            <span className="text-base flex-shrink-0">{game.team1.logo}</span>
+            <img src={game.team1.logo} alt={game.team1.abbr} className="w-5 h-5 object-contain flex-shrink-0" />
             <span className="text-white text-xs font-medium flex-1 truncate">{game.team1.abbr}</span>
             <span className="text-[10px] font-bold tabular-nums" style={{ color: accent }}>{game.team1.winPct}%</span>
             {game.bet365Home && (
@@ -651,7 +650,7 @@ function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet
           </div>
           {/* Team 2 */}
           <div className="flex items-center gap-1.5">
-            <span className="text-base flex-shrink-0">{game.team2.logo}</span>
+            <img src={game.team2.logo} alt={game.team2.abbr} className="w-5 h-5 object-contain flex-shrink-0" />
             <span className="text-white text-xs font-medium flex-1 truncate">{game.team2.abbr}</span>
             <span className="text-[#bfc8cc] text-[10px] font-bold tabular-nums">{game.team2.winPct}%</span>
             {game.bet365Away && (
@@ -1183,7 +1182,7 @@ export function HockeyLanding() {
                   id: addSheet.gameId,
                   type: "game",
                   name: liveGames.concat(upcomingGames).find((g) => g.id === addSheet.gameId)?.team1.abbr ?? "Game",
-                  logo: "🏒",
+                  logo: "",
                   subtitle: "NHL Game",
                 }
               : undefined

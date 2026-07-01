@@ -6,14 +6,14 @@ import { BottomNav } from "./BottomNav";
 import { MarketSelectorSheet } from "./MarketSelectorSheet";
 import { nhlApiService } from "../services/nhlApiService";
 import { useSport } from "../context/SportContext";
-import { teamEmoji, probToOdds } from "../data/teamEmoji";
+import { nhlLogoUrl, probToOdds } from "../data/teamEmoji";
 import { TennisStatsContent } from "./TennisStatsPage";
 import { PlayersTab } from "./PlayersTab";
 import { LastNGamesSection } from "./LastNGamesSection";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-const filterTabs = ["By Team", "By Game", "By Player", "By Form"];
+const filterTabs = ["By Team", "By Game", "By Player"];
 
 type Subject = { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 interface AddSheetState { open: boolean; subject?: Subject }
@@ -43,9 +43,7 @@ function TeamCard({ team, onClick, onAdd, accent }: { team: UITeam; onClick: () 
       onClick={onClick}
       className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-transform text-left"
     >
-      <div className="w-11 h-11 rounded-xl bg-[#1B2419] flex items-center justify-center text-2xl flex-shrink-0">
-        {team.logo}
-      </div>
+      <img src={team.logo} alt={team.name} className="w-11 h-11 object-contain flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-white text-sm font-medium truncate">{team.name}</p>
         <p className="text-[#bfc8cc] text-xs">{team.record} · {team.pts} pts</p>
@@ -80,7 +78,7 @@ function GameCard({ game, getTeamById, onClick, onAdd, accent }: { game: UIGame;
       </div>
       <div className="flex items-center gap-2 mb-3">
         <div className="flex-1 flex items-center gap-2">
-          <span className="text-xl">{team1.logo}</span>
+          <img src={team1.logo} alt={team1.abbr} className="w-7 h-7 object-contain" />
           <div>
             <p className="text-white text-sm font-medium">{team1.abbr}</p>
             <p className="text-[10px] text-[#8a9ea6]">{team1.record}</p>
@@ -95,7 +93,7 @@ function GameCard({ game, getTeamById, onClick, onAdd, accent }: { game: UIGame;
             <p className="text-white text-sm font-medium">{team2.abbr}</p>
             <p className="text-[10px] text-[#8a9ea6]">{team2.record}</p>
           </div>
-          <span className="text-xl">{team2.logo}</span>
+          <img src={team2.logo} alt={team2.abbr} className="w-7 h-7 object-contain" />
         </div>
       </div>
       <div className="flex items-center justify-between">
@@ -114,9 +112,7 @@ function SeasonFutureCard({ future, accent, onNavigate }: { future: LocalFuture;
       className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 active:scale-[0.98] transition-transform text-left"
     >
       <div className="flex items-center gap-3 mb-2">
-        <div className="w-10 h-10 rounded-xl bg-[#1B2419] flex items-center justify-center text-xl flex-shrink-0">
-          {future.logo}
-        </div>
+        <img src={future.logo} alt={future.team} className="w-10 h-10 object-contain flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-0.5">
             <span className="text-[9px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">
@@ -175,7 +171,7 @@ export function StatsPage() {
           return {
             id: `${abbr.toLowerCase()}-cup`,
             team: entry.team.name,
-            logo: teamEmoji(abbr),
+            logo: nhlLogoUrl(abbr),
             propLabel: "Win Stanley Cup 2026",
             propType: "cup",
             probability: Math.max(5, Math.min(60, prob)),
@@ -203,11 +199,7 @@ export function StatsPage() {
           <div className="flex items-center justify-between mb-3">
             <div>
               <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>Statistics</h1>
-              <p className="text-[#bfc8cc] text-xs">Tennis · Live Data</p>
-            </div>
-            <div className="border rounded-xl px-3 py-1.5 flex items-center gap-1.5" style={{ backgroundColor: `${accent}1a`, borderColor: `${accent}4d` }}>
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: accent }} />
-              <span className="text-xs font-medium" style={{ color: accent }}>Live Data</span>
+              <p className="text-[#bfc8cc] text-xs">Tennis</p>
             </div>
           </div>
         </header>
@@ -244,10 +236,6 @@ export function StatsPage() {
             <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>Statistics</h1>
             <p className="text-[#bfc8cc] text-xs">AI-powered predictions</p>
           </div>
-          <div className="border rounded-xl px-3 py-1.5 flex items-center gap-1.5" style={{ backgroundColor: `${accent}1a`, borderColor: `${accent}4d` }}>
-            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: accent }} />
-            <span className="text-xs font-medium" style={{ color: accent }}>Live Data</span>
-          </div>
         </div>
         <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2.5 mb-3">
           <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
@@ -276,7 +264,6 @@ export function StatsPage() {
               </span>
             )}
             {activeFilter === 2 && "Players"}
-          {activeFilter === 3 && "Team form"}
           </span>
           {activeFilter < 2 && (
             <span className="text-xs" style={{ color: accent }}>Tap + to add to slip</span>
@@ -307,22 +294,6 @@ export function StatsPage() {
         {/* ── By Game ── */}
         {activeFilter === 1 && (
           <div className="flex flex-col gap-3">
-            {/* All Markets shortcut */}
-            <button
-              onClick={() => navigate("/predictions/nhl")}
-              className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border transition-all active:scale-[0.98]"
-              style={{ backgroundColor: `${accent}10`, borderColor: `${accent}30` }}
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-lg">🏒</span>
-                <div className="text-left">
-                  <p className="text-white text-xs font-semibold">All Markets Explorer</p>
-                  <p className="text-[#8a9ea6] text-[10px]">Pick a game → explore every bet market</p>
-                </div>
-              </div>
-              <span className="text-sm font-bold" style={{ color: accent }}>→</span>
-            </button>
-
             {filteredGames.length > 0 ? (
               <div className="flex flex-col gap-2">
                 {filteredGames.map((game) => {
@@ -330,7 +301,7 @@ export function StatsPage() {
                   if (!t1 || !t2) return null;
                   return <GameCard key={game.id} game={game} accent={accent} getTeamById={getTeamById}
                     onClick={() => navigate(`/stats/prediction/game/${game.id}`)}
-                    onAdd={() => openAdd({ id: game.id, type: "game", name: `${t1.abbr} vs ${t2.abbr}`, logo: "🏒", subtitle: `${game.date} · ${game.time}` })} />;
+                    onAdd={() => openAdd({ id: game.id, type: "game", name: `${t1.abbr} vs ${t2.abbr}`, logo: "", subtitle: `${game.date} · ${game.time}` })} />;
                 })}
               </div>
             ) : (
@@ -366,10 +337,6 @@ export function StatsPage() {
           <PlayersTab teams={teams} accent={accent} />
         )}
 
-        {/* ── By Form ── */}
-        {activeFilter === 3 && (
-          <LastNGamesSection teams={teams} accent={accent} />
-        )}
       </div>
 
       <BottomNav />

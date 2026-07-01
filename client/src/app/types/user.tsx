@@ -94,6 +94,7 @@ export interface LeaderboardEntry {
   username: string;
   displayName: string;
   avatar: string;
+  avatarUrl?: string | null;
   tier: UserProfile["tier"];
   performanceScore: number;
   hitRate: number;
@@ -109,6 +110,7 @@ export interface ChatMessage {
   username: string;
   displayName: string;
   avatar: string;
+  avatarUrl?: string | null;
   tier: UserProfile["tier"];
   text: string;
   sentAt: string;
@@ -123,7 +125,29 @@ export interface ChatRoom {
   icon: string;
   description: string;
   isLive?: boolean;
+  /** Pinned by the current user (per-user, not global) */
   isPinned?: boolean;
+  /** Private rooms are only visible/joinable via their join code */
+  isPrivate?: boolean;
+  /** Join code — only returned to members */
+  joinCode?: string | null;
+  /** Whether the current user is a member */
+  isMember?: boolean;
+  /** Current user's role in the room */
+  role?: "admin" | "member" | null;
   memberCount: number;
-  lastMessage?: string;
-  lastMessag
+  lastMessage?: string | null;
+  lastMessageAt?: string | null;
+  unread?: number;
+  messages?: ChatMessage[];
+}
+
+export interface ChatRoomMember {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatar: string;
+  avatarUrl?: string | null;
+  role: "admin" | "member";
+  joinedAt: string;
+}

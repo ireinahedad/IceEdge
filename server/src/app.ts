@@ -20,7 +20,8 @@ const app = express();
 
 app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
-app.use(express.json());
+// 5 MB: allows base64 avatar uploads (~2 MB binary → ~2.8 MB base64) with margin
+app.use(express.json({ limit: '5mb' }));
 
 // Auth
 app.use('/api/auth',          authRoutes);

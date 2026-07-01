@@ -8,6 +8,7 @@
 
 import { useState, useEffect } from 'react';
 import { nhlApiService } from '../services/nhlApiService';
+import { nhlLogoUrl } from '../data/teamEmoji';
 
 // ─── Normalised shapes (what the UI components consume) ───────────────────────
 
@@ -15,7 +16,7 @@ export interface UITeam {
   id: string;       // abbreviation lowercase, e.g. "bos"
   name: string;
   abbr: string;
-  logo: string;     // emoji
+  logo: string;     // official NHL logo URL (SVG)
   conf: string;     // "East" | "West"
   record: string;   // "48-22-8"
   pts: number;
@@ -76,7 +77,7 @@ function toUITeam(t: any): UITeam {
     id:           t.abbreviation?.toLowerCase() ?? String(t.id),
     name:         t.name,
     abbr:         t.abbreviation,
-    logo:         t.emoji ?? '🏒',
+    logo:         t.abbreviation ? nhlLogoUrl(t.abbreviation) : '🏒',
     conf:         t.conference === 'Eastern' ? 'East' : 'West',
     record:       `${t.wins ?? 0}-${t.losses ?? 0}-${t.otLosses ?? 0}`,
     pts:          t.points ?? 0,

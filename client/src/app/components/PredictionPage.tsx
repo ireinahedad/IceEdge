@@ -6,7 +6,7 @@ import { PredictionResponse } from "../types/bet";
 import { nhlApiService } from "../services/nhlApiService";
 import { predictionApiService } from "../services/predictionApiService";
 import { useSport } from "../context/SportContext";
-import { teamEmoji } from "../data/teamEmoji";
+import { nhlLogoUrl } from "../data/teamEmoji";
 import { getTeamById, getGameById, getPlayerById } from "../data/hockeyData";
 import { factorsApiService } from "../services/predictionApiService";
 import { useBet } from "../context/BetContext";
@@ -224,7 +224,7 @@ function TeamPrediction({ teamId }: { teamId: string }) {
           ? Math.round((stats.wins / (stats.wins + stats.losses + stats.otLosses)) * 100) : 50;
         setData({
           name: info?.name ?? abbr, abbr,
-          logo: teamEmoji(abbr),
+          logo: nhlLogoUrl(abbr),
           conf: info?.conference === "Eastern" ? "East" : "West",
           pts: stats.points ?? stats.wins * 2,
           homeRecord: stats.homeRecord ?? "", awayRecord: stats.awayRecord ?? "",
@@ -353,7 +353,7 @@ function TeamPrediction({ teamId }: { teamId: string }) {
       {/* Team header */}
       <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
         <div className="flex items-center gap-3 mb-3">
-          <span className="text-4xl">{data.logo}</span>
+          <img src={data.logo} alt={data.name} className="w-12 h-12 object-contain" />
           <div className="flex-1">
             <p className="text-white font-bold text-base">{data.name}</p>
             <p className="text-[#8a9ea6] text-xs">{data.conf}ern · {data.pts} pts · {data.streak || "—"}</p>
@@ -384,11 +384,7 @@ function TeamPrediction({ teamId }: { teamId: string }) {
 }
 
 /* ─── Game Prediction ──────────────── */
-const TEAM_LOGOS_PRED: Record<string, string> = {
-  BOS: "🐻", NYR: "🗽", TOR: "🍁", MTL: "🔵",
-  CHI: "🦅", DET: "🏒", VGK: "⚔", EDM: "🛢",
-  COL: "⛰", FLA: "🐆",
-};
+
 
 interface LiveGameView {
   id: string;
@@ -566,7 +562,7 @@ function PredictionSheet({ label, rulePct, ruleNote, accent, mlProps, onClose }:
       subjectType: mlProps?.type === "player" ? "player" : mlProps?.type === "team" ? "team" : "game",
       subjectId: mlProps?.subjectId ?? legId,
       subjectName: mlProps?.subjectId ?? label,
-      subjectLogo: mlProps?.subjectId ? teamEmoji(mlProps.subjectId) || "🏒" : "🏒",
+      subjectLogo: mlProps?.subjectId ? nhlLogoUrl(mlProps.subjectId) : "",
       selection: label,
       selectionShort: label.slice(0, 14),
       probability: rulePct,
@@ -814,12 +810,12 @@ function GamePrediction({ gameId }: { gameId: string }) {
           id: gameId,
           home: {
             abbr: nhlGame.homeTeam.abbreviation, name: nhlGame.homeTeam.name,
-            logo: TEAM_LOGOS_PRED[nhlGame.homeTeam.abbreviation] ?? "🏒",
+            logo: nhlLogoUrl(nhlGame.homeTeam.abbreviation),
             score: nhlGame.homeTeam.score, winPct: homePred.probability,
           },
           away: {
             abbr: nhlGame.awayTeam.abbreviation, name: nhlGame.awayTeam.name,
-            logo: TEAM_LOGOS_PRED[nhlGame.awayTeam.abbreviation] ?? "🏒",
+            logo: nhlLogoUrl(nhlGame.awayTeam.abbreviation),
             score: nhlGame.awayTeam.score, winPct: 100 - homePred.probability,
           },
           period: nhlGame.period ? nhlGame.period + "P • " + nhlGame.clock : undefined,
@@ -871,7 +867,7 @@ function GamePrediction({ gameId }: { gameId: string }) {
         )}
         <div className="flex items-center justify-between">
           <div className="flex flex-col items-center gap-1.5 flex-1">
-            <span className="text-4xl">{home.logo}</span>
+            <img src={home.logo} alt={home.name} className="w-12 h-12 object-contain" />
             <span className="text-white text-sm font-bold">{home.name}</span>
             {home.score !== undefined && <span className="text-white text-3xl font-black">{home.score}</span>}
           </div>
@@ -881,7 +877,7 @@ function GamePrediction({ gameId }: { gameId: string }) {
             <span className="text-[#4a6070] text-[10px]">O/U {gameView.overUnder}</span>
           </div>
           <div className="flex flex-col items-center gap-1.5 flex-1">
-            <span className="text-4xl">{away.logo}</span>
+            <img src={away.logo} alt={away.name} className="w-12 h-12 object-contain" />
             <span className="text-white text-sm font-bold">{away.name}</span>
             {away.score !== undefined && <span className="text-white text-3xl font-black">{away.score}</span>}
           </div>
@@ -924,7 +920,7 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
         const gp = stats.gamesPlayed || 1;
         setData({
           name, team: info.teamAbbr ?? "",
-          logo: teamEmoji(info.teamAbbr ?? ""),
+          logo: nhlLogoUrl(info.teamAbbr ?? ""),
           position: info.position, number: info.jerseyNumber,
           goals: stats.goals, assists: stats.assists, points: stats.points,
           plusMinus: stats.plusMinus, gamesPlayed: gp,
@@ -1093,7 +1089,7 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
       {/* Player header */}
       <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-12 h-12 rounded-2xl bg-[#1B2419] flex items-center justify-center text-2xl">{data.logo}</div>
+          <img src={data.logo} alt={data.team} className="w-12 h-12 object-contain" />
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold text-base truncate">{data.name}</p>
             <p className="text-[#8a9ea6] text-xs">{data.team} · #{data.number} · {data.position}</p>
@@ -1155,7 +1151,7 @@ function NGamesPrediction({ teamId, n }: { teamId: string; n: number }) {
         setView({
           teamName:        teamInfo?.name ?? abbr,
           teamAbbr:        abbr,
-          logo:            TEAM_LOGOS_NGAMES[abbr] ?? "🏒",
+          logo:            nhlLogoUrl(abbr),
           wins:            stats.wins,
           losses:          stats.losses,
           otLosses:        stats.otLosses ?? 0,
@@ -1175,7 +1171,7 @@ function NGamesPrediction({ teamId, n }: { teamId: string; n: number }) {
         if (alive) {
           setView({
             teamName: teamId.toUpperCase(), teamAbbr: teamId.toUpperCase(),
-            logo: TEAM_LOGOS_NGAMES[teamId.toUpperCase()] ?? "🏒",
+            logo: nhlLogoUrl(teamId.toUpperCase()),
             wins: Math.round(n * 0.55), losses: Math.round(n * 0.35),
             otLosses: Math.round(n * 0.10),
             goalsFor: +(n * 3.1).toFixed(1), goalsAgainst: +(n * 2.8).toFixed(1),
@@ -1307,7 +1303,7 @@ function PredictionLayout({
       {/* Hero card */}
       <div className="bg-[#131A12] border border-white/20 rounded-2xl p-5">
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-12 h-12 rounded-xl bg-[#1B2419] flex items-center justify-center text-2xl">{logo}</div>
+          <img src={logo} alt={title} className="w-12 h-12 object-contain" />
           <div>
             <p className="text-white font-bold">{title}</p>
             <p className="text-[#bfc8cc] text-xs">{subtitle}</p>
@@ -1391,7 +1387,7 @@ function PlayerPropPrediction({ propId }: { propId: string }) {
           nhlApiService.getPlayerStats(playerId),
         ]);
         const name = info.fullName ?? `${info.firstName} ${info.lastName}`;
-        const logo = teamEmoji(info.teamAbbr ?? "");
+        const logo = nhlLogoUrl(info.teamAbbr ?? "");
         const season = stats.season ?? "2025-26";
 
         // Calculate prop line from real stats pace

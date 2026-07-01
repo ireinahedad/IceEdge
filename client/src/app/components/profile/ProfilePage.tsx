@@ -195,6 +195,7 @@ function SettingsTab({
   onAvatarClick: () => void;
   avatarUploading: boolean;
 }) {
+  const [username, setUsername] = useState(profile.username);
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [bio, setBio] = useState(profile.bio ?? "");
   const [favoriteTeam, setFavoriteTeam] = useState(profile.favoriteTeam ?? "");
@@ -208,7 +209,9 @@ function SettingsTab({
     setSaving(true);
     setSaveMsg(null);
     try {
+      const newUsername = username.trim().toLowerCase();
       const updated = await profileApiService.updateProfile({
+        ...(newUsername !== profile.username ? { username: newUsername } : {}),
         displayName: displayName.trim() || undefined,
         bio: bio.trim() || undefined,
         favoriteTeam: favoriteTeam.trim() || undefined,
@@ -249,7 +252,7 @@ function SettingsTab({
             >
               {avatarUploading ? "Uploading…" : "Change photo"}
             </button>
-            <p className="text-white/40 text-[9px] mt-1.5 text-center">JPG, PNG or WebP · max 2 MB</p>
+            <p className="text-white/40 text-[9px] mt-1.5 text-center">JPG, PNG or WebP · large images are compressed automatically</p>
           </div>
         </div>
       </div>
@@ -257,6 +260,20 @@ function SettingsTab({
       {/* Profile info */}
       <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex flex-col gap-3">
         <p className="text-white text-xs font-medium">Profile Info</p>
+
+        <div>
+          <label className="text-white/50 text-[9px] uppercase tracking-wider mb-1 block">Username</label>
+          <input
+            className={inputCls}
+            value={username}
+            onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+            placeholder="your_username"
+            maxLength={20}
+          />
+          <p className="text-white/30 text-[9px] mt-1">
+            3–20 characters · lowercase letters, numbers, underscores · must be unique
+          </p>
+        </div>
 
         <div>
           <label className="text-white/50 text-[9px] uppercase tracking-wider mb-1 block">Display Name</label>

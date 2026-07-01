@@ -52,7 +52,7 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
           <div className="flex items-center gap-2">
             {selectedTeamData ? (
               <>
-                <span className="text-xl">{selectedTeamData.logo}</span>
+                <img src={selectedTeamData.logo} alt={selectedTeamData.name} className="w-6 h-6 object-contain" />
                 <span className="text-white text-sm">{selectedTeamData.name}</span>
               </>
             ) : (
@@ -78,7 +78,7 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
                 onClick={() => { setSelectedTeam(team.id); setShowPicker(false); setSearch(""); }}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#1B2419] transition-colors ${i < filteredTeams.length - 1 ? "border-b border-[#1B2419]" : ""}`}
               >
-                <span className="text-lg">{team.logo}</span>
+                <img src={team.logo} alt={team.name} className="w-6 h-6 object-contain" />
                 <span className="text-white text-sm flex-1 text-left">{team.name}</span>
                 <span className="text-[#bfc8cc] text-xs">{team.record}</span>
               </button>

@@ -484,9 +484,9 @@ export function BetHistoryList({
               className="flex items-center gap-3 py-2 border-b border-white/20 last:border-0"
             >
               <div className="relative flex-shrink-0">
-                <span className="text-xl">
-                  {bet.subjectLogo}
-                </span>
+                {bet.subjectLogo?.startsWith("http")
+                  ? <img src={bet.subjectLogo} alt="" className="w-6 h-6 object-contain" />
+                  : <span className="text-xl">{bet.subjectLogo}</span>}
                 <span
                   className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ${os.dot}`}
                 />

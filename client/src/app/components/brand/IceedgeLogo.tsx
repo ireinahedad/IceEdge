@@ -1,6 +1,7 @@
 /**
  * IceedgeLogo — inline SVG brand mark.
- * Blue diagonal stripes + bold italic "E" wordmark.
+ * 4 diagonal speed-stripes (blue→cyan gradient, full opacity) + bold E.
+ * Transparent background.
  */
 
 interface IceedgeLogoProps {
@@ -10,45 +11,51 @@ interface IceedgeLogoProps {
 }
 
 export function IceedgeLogo({ size = 40, wordmark = true, className = "" }: IceedgeLogoProps) {
-  const s = size;
   return (
     <div className={`flex items-center gap-2.5 ${className}`} style={{ lineHeight: 1 }}>
-      {/* Mark */}
-      <svg width={s} height={s} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="40" height="40" rx="10" fill="#0A1628" />
-        {/* Blue diagonal stripes */}
-        <clipPath id="mark-clip">
-          <rect width="40" height="40" rx="10" />
-        </clipPath>
-        <g clipPath="url(#mark-clip)">
-          <rect x="-4" y="26" width="48" height="5" rx="2.5" fill="#1A8AFF" opacity="0.25" transform="rotate(-35 20 20)" />
-          <rect x="-4" y="18" width="48" height="5" rx="2.5" fill="#1A8AFF" opacity="0.45" transform="rotate(-35 20 20)" />
-          <rect x="-4" y="10" width="48" height="5" rx="2.5" fill="#1A8AFF" opacity="0.7"  transform="rotate(-35 20 20)" />
-          <rect x="-4" y="2"  width="48" height="5" rx="2.5" fill="#1A8AFF"                transform="rotate(-35 20 20)" />
-        </g>
-        {/* Bold italic E */}
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 100 100"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          <linearGradient id="ie-sg" x1="8" y1="0" x2="58" y2="0" gradientUnits="userSpaceOnUse">
+            <stop offset="0%"   stopColor="#0A2BAA" />
+            <stop offset="50%"  stopColor="#1A8AFF" />
+            <stop offset="100%" stopColor="#30E0FF" />
+          </linearGradient>
+        </defs>
+
+        {/* 4 parallelogram stripes — same height as E (y=27→85) */}
+        <polygon points="19,18 22,18 11,76 8,76"  fill="url(#ie-sg)" />
+        <polygon points="26,18 31,18 20,76 15,76" fill="url(#ie-sg)" />
+        <polygon points="34,18 41,18 30,76 23,76" fill="url(#ie-sg)" />
+        <polygon points="44,18 54,18 43,76 33,76" fill="url(#ie-sg)" />
+
+        {/* Bold E — right-anchored, skewX for italic lean */}
         <text
-          x="20" y="27"
-          textAnchor="middle"
-          fontSize="22"
+          x="103"
+          y="76"
+          textAnchor="end"
+          fontSize="70"
           fontWeight="900"
-          fontStyle="italic"
-          fontFamily="Arial Black, Arial, sans-serif"
+          fontFamily="Impact, 'Arial Black', Arial, sans-serif"
           fill="white"
-          letterSpacing="-1"
+          transform="skewX(-12)"
         >E</text>
       </svg>
 
-      {/* Wordmark */}
       {wordmark && (
         <span
           style={{
             fontFamily: "'Oswald', 'Arial Narrow', sans-serif",
             fontWeight: 700,
-            fontSize: s * 0.4,
+            fontSize: size * 0.4,
             letterSpacing: "0.12em",
             color: "white",
-            textTransform: "uppercase",
+            textTransform: "uppercase" as const,
           }}
         >
           ICEEDGE

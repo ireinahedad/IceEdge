@@ -28,3 +28,8 @@ export function probToOdds(pct: number): string {
     return `+${odds}`;
   }
 }
+
+/** Returns the official NHL team logo URL (light/white version) for the given abbreviation. */
+export function nhlLogoUrl(abbr: string): string {
+  return `https://assets.nhle.com/logos/nhl/svg/${abbr.toUpperCase()}_light.svg`;
+}

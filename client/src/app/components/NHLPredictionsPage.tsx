@@ -10,7 +10,7 @@ import { BottomNav } from "./BottomNav";
 import { useSport } from "../context/SportContext";
 import { useNHLData } from "../hooks/useNHLData";
 import { nhlApiService } from "../services/nhlApiService";
-import { teamEmoji } from "../data/teamEmoji";
+import { nhlLogoUrl } from "../data/teamEmoji";
 import {
   MARKET_DEFINITIONS,
   CATEGORY_LABELS,
@@ -339,11 +339,11 @@ function GamePills({
               ? { backgroundColor: accent + "22", borderColor: accent, color: "#fff" }
               : { backgroundColor: "#131A12", borderColor: "rgba(255,255,255,0.1)", color: "#8a9ea6" }}
           >
-            <span>{g.homeLogo}</span>
+            <img src={g.homeLogo} alt={g.homeAbbr} className="w-4 h-4 object-contain" />
             <span className="font-bold">{g.homeAbbr}</span>
             <span className="opacity-50">vs</span>
             <span className="font-bold">{g.awayAbbr}</span>
-            <span>{g.awayLogo}</span>
+            <img src={g.awayLogo} alt={g.awayAbbr} className="w-4 h-4 object-contain" />
           </button>
         );
       })}
@@ -415,8 +415,8 @@ export function NHLPredictionsPage() {
           label: `${t1.abbr} vs ${t2.abbr}`,
           homeAbbr: t1.abbr,
           awayAbbr: t2.abbr,
-          homeLogo: t1.logo || teamEmoji(t1.abbr),
-          awayLogo: t2.logo || teamEmoji(t2.abbr),
+          homeLogo: t1.logo || nhlLogoUrl(t1.abbr),
+          awayLogo: t2.logo || nhlLogoUrl(t2.abbr),
           time: g.time || "Aujourd'hui",
           homeWinPct: hw,
           awayWinPct: aw,
@@ -539,20 +539,16 @@ export function NHLPredictionsPage() {
             {/* Résumé du match */}
             <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4 mb-4 flex items-center">
               <div className="flex-1 flex flex-col items-center gap-1">
-                <span className="text-3xl">{selectedGame.homeLogo}</span>
+                <img src={selectedGame.homeLogo} alt={selectedGame.homeAbbr} className="w-12 h-12 object-contain" />
                 <span className="text-white text-sm font-bold">{selectedGame.homeAbbr}</span>
                 <span className="text-xs font-bold" style={{ color: accent }}>{selectedGame.homeWinPct}%</span>
               </div>
               <div className="flex flex-col items-center gap-1 px-4">
                 <span className="text-[#4a6068] text-xs">{selectedGame.time}</span>
                 <span className="text-white font-bold">VS</span>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: accent }} />
-                  <span className="text-[11px] font-medium" style={{ color: accent }}>Live Data</span>
-                </div>
               </div>
               <div className="flex-1 flex flex-col items-center gap-1">
-                <span className="text-3xl">{selectedGame.awayLogo}</span>
+                <img src={selectedGame.awayLogo} alt={selectedGame.awayAbbr} className="w-12 h-12 object-contain" />
                 <span className="text-white text-sm font-bold">{selectedGame.awayAbbr}</span>
                 <span className="text-[#8a9ea6] text-xs">{selectedGame.awayWinPct}%</span>
               </div>

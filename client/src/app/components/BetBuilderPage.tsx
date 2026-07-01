@@ -95,7 +95,9 @@ function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; onRemov
           <div className="w-7 h-7 rounded-full bg-[#86d1ea]/10 border border-[#86d1ea]/25 flex items-center justify-center text-[10px] font-bold text-[#86d1ea]">
             {index + 1}
           </div>
-          <span className="text-base">{leg.subjectLogo}</span>
+          {leg.subjectLogo?.startsWith("http")
+            ? <img src={leg.subjectLogo} alt="" className="w-6 h-6 object-contain" />
+            : <span className="text-base">{leg.subjectLogo}</span>}
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-white text-xs font-bold">{leg.subjectName}</p>
@@ -307,7 +309,9 @@ function SlipCard({
       <div className="px-4 pb-3 flex flex-col gap-1.5">
         {(slip.legs as any[]).map((leg, i) => (
           <div key={i} className="flex items-center gap-2 py-1.5 border-t border-white/[0.05] first:border-0">
-            <span className="text-sm flex-shrink-0">{leg.subjectLogo}</span>
+            {leg.subjectLogo?.startsWith("http")
+              ? <img src={leg.subjectLogo} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
+              : <span className="text-sm flex-shrink-0">{leg.subjectLogo}</span>}
             <div className="flex-1 min-w-0">
               <p className="text-white text-[11px] font-medium truncate">{leg.subjectName}</p>
               <p className="text-[#8a9ea6] text-[9px] truncate">{leg.selection ?? leg.marketType}</p>

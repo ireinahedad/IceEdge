@@ -27,7 +27,7 @@ export function buildBet365Url(path = ""): string {
 
 // ─── Sport-specific deep links ─────────────────────────────────────────────
 
-/** NHL / Ice Hockey section on Bet365 */
+/** NHL / Hockey section on Bet365 */
 export function bet365HockeyUrl(): string {
   return buildBet365Url("/#/IP/B18");
 }
