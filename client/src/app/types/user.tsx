@@ -38,12 +38,14 @@ export interface UserProfile {
   username: string;
   displayName: string;
   avatar: string;
+  avatarUrl?: string | null;
   joinedAt: string;
   favoriteTeam?: string;
   bio?: string;
   isPublic: boolean;
   tier: "rookie" | "analyst" | "sharp" | "legend";
   performanceScore: number;
+  openaiApiKey?: string | null;
   badges: UserBadge[];
 }
 
@@ -124,7 +126,4 @@ export interface ChatRoom {
   isPinned?: boolean;
   memberCount: number;
   lastMessage?: string;
-  lastMessageAt?: string;
-  unread?: number;
-  messages: ChatMessage[];
-}
+  lastMessag

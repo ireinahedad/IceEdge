@@ -231,23 +231,209 @@ def _game_moneyline(f: GameFeatures) -> tuple[float, float]:
     return prob, confidence
 
 
+def _apply_market(
+    market: str,
+    base_prob: float,
+    f: GameFeatures,
+    win_diff: float,
+    lam_home: float,
+    lam_away: float,
+    model_label: str,
+) -> "tuple[float, float, str]":
+    """
+    Derive market-specific probability from the base home-win probability.
+    Returns (probability 0-1, confidence_multiplier 0-1, explanation string).
+    base_prob = P(home team wins) from XGBoost or logistic regression.
+    """
+    total_lam = lam_home + lam_away
+    line = f.line if f.line is not None else 5.5
+    bp = int(base_prob * 100)
+
+    if market == "moneyline":
+        prob = base_prob
+        conf = 1.00
+        expl = f"{model_label}: équipe domicile à {int(prob*100)}%."
+
+    elif market == "puck_line":
+        prob = clamp(base_prob * 0.60 if base_prob > 0.5 else base_prob * 1.40, 0.05, 0.80)
+        conf = 0.90
+        expl = f"Home win {bp}% → gagne par ≥2 buts: {int(prob*100)}%."
+
+    elif market == "alt_puck_line":
+        prob = clamp(base_prob * 0.38 if base_prob > 0.5 else base_prob * 1.62, 0.05, 0.55)
+        conf = 0.82
+        expl = f"Ligne alternative ±2.5 buts (home {bp}%): {int(prob*100)}%."
+
+    elif market in ("total_goals", "total_goals_over"):
+        prob = clamp(poisson_over(line, total_lam), 0.05, 0.95)
+        conf = 0.85
+        expl = f"Poisson λ={total_lam:.1f} buts → OVER {line}: {int(prob*100)}%."
+
+    elif market == "total_goals_under":
+        prob = clamp(1.0 - poisson_over(line, total_lam), 0.05, 0.95)
+        conf = 0.85
+        expl = f"Poisson λ={total_lam:.1f} buts → UNDER {line}: {int(prob*100)}%."
+
+    elif market == "team_total_goals":
+        home_line = f.line if f.line is not None else 2.5
+        prob = clamp(poisson_over(home_line, lam_home), 0.05, 0.95)
+        conf = 0.80
+        expl = f"Poisson λ={lam_home:.1f} buts/match domicile → OVER {home_line}: {int(prob*100)}%."
+
+    elif market == "regulation_result":
+        # ~85% of wins happen in regulation (15% go to OT/SO)
+        prob = clamp(base_prob * 0.85, 0.05, 0.88)
+        conf = 0.88
+        expl = f"Victoire en 60 min: {int(prob*100)}% (home {bp}% × 0.85 car ~15% finissent en OT/SO)."
+
+    elif market == "game_to_ot":
+        # NHL OT rate ≈ 24%. Closer the matchup, higher the OT probability.
+        closeness = max(0.0, 0.25 - abs(win_diff))
+        prob = clamp(0.20 + closeness * 0.88, 0.08, 0.40)
+        conf = 0.68
+        expl = f"Écart win% = {win_diff:+.2f} → P(OT/SO) = {int(prob*100)}%. Moyenne NHL: ~24%."
+
+    elif market == "ot_winner":
+        # In OT: slight home advantage (52% base) + win% signal
+        prob = clamp(0.52 + win_diff * 0.28, 0.28, 0.72)
+        conf = 0.62
+        expl = f"En OT: avantage domicile 52% + force relative → {int(prob*100)}%."
+
+    elif market == "both_teams_score":
+        # P(both score) = 1 − P(home shutout) − P(away shutout) + P(double shutout)
+        p_home_shutout = math.exp(-lam_away)  # away team scores 0
+        p_away_shutout = math.exp(-lam_home)  # home team scores 0
+        prob = clamp(
+            1.0 - p_home_shutout - p_away_shutout + p_home_shutout * p_away_shutout,
+            0.40, 0.95
+        )
+        conf = 0.88
+        expl = f"Poisson: λdom={lam_home:.1f}, λext={lam_away:.1f} → {int(prob*100)}% que les deux marquent."
+
+    elif market == "first_team_score":
+        # Who scores first: proportional to scoring rate
+        prob = clamp(lam_home / (lam_home + lam_away + 0.001), 0.35, 0.65)
+        conf = 0.78
+        expl = f"Taux de marquage: dom {lam_home:.1f} vs ext {lam_away:.1f} → {int(prob*100)}% premier but domicile."
+
+    elif market == "last_team_score":
+        # Leading team tends to score last
+        prob = clamp(0.50 + (base_prob - 0.50) * 0.65, 0.30, 0.70)
+        conf = 0.72
+        expl = f"L'équipe qui mène tend à marquer en dernier → {int(prob*100)}%."
+
+    elif market == "period1_winner":
+        prob = clamp(0.50 + (base_prob - 0.50) * 0.62, 0.22, 0.78)
+        conf = 0.76
+        expl = f"Win% P1 (signal atténué depuis moneyline) → {int(prob*100)}%."
+
+    elif market == "period2_winner":
+        prob = clamp(0.50 + (base_prob - 0.50) * 0.70, 0.22, 0.78)
+        conf = 0.78
+        expl = f"Win% P2 → {int(prob*100)}%."
+
+    elif market == "period3_winner":
+        prob = clamp(0.50 + (base_prob - 0.50) * 0.78, 0.22, 0.78)
+        conf = 0.82
+        expl = f"Win% P3 (plus corrélé avec résultat final) → {int(prob*100)}%."
+
+    elif market == "highest_scoring_period":
+        # P2 is NHL's highest-scoring period on average (~38%)
+        prob = clamp(0.38 + (total_lam - 6.0) * 0.025, 0.26, 0.50)
+        conf = 0.65
+        expl = f"P2 est la plus productive en NHL (38% avg) → {int(prob*100)}%."
+
+    elif market == "period1_total_goals":
+        p1_line = f.line if f.line is not None else 1.5
+        p1_lam = total_lam / 3.0 * 0.95
+        prob = clamp(poisson_over(p1_line, p1_lam), 0.05, 0.95)
+        conf = 0.74
+        expl = f"Poisson P1 λ={p1_lam:.2f} → OVER {p1_line}: {int(prob*100)}%."
+
+    elif market == "period2_total_goals":
+        p2_line = f.line if f.line is not None else 1.5
+        p2_lam = total_lam / 3.0 * 1.10   # P2 slightly higher scoring
+        prob = clamp(poisson_over(p2_line, p2_lam), 0.05, 0.95)
+        conf = 0.74
+        expl = f"Poisson P2 λ={p2_lam:.2f} (+10% vs avg) → OVER {p2_line}: {int(prob*100)}%."
+
+    elif market == "period3_total_goals":
+        p3_line = f.line if f.line is not None else 1.5
+        p3_lam = total_lam / 3.0 * 0.95
+        prob = clamp(poisson_over(p3_line, p3_lam), 0.05, 0.95)
+        conf = 0.72
+        expl = f"Poisson P3 λ={p3_lam:.2f} → OVER {p3_line}: {int(prob*100)}%."
+
+    elif market == "winning_margin":
+        # P(home wins by exact margin): rough composite
+        prob = clamp(base_prob * 0.40, 0.04, 0.48)
+        conf = 0.58
+        expl = f"Marge exacte difficile à prédire → ~{int(prob*100)}%."
+
+    elif market == "double_chance":
+        # Home wins in reg OR goes to OT and home wins OT
+        ot_rate = clamp(0.20 + max(0.0, 0.25 - abs(win_diff)) * 0.88, 0.08, 0.40)
+        ot_home = clamp(0.52 + win_diff * 0.28, 0.28, 0.72)
+        prob = clamp(base_prob * 0.85 + ot_rate * ot_home, 0.35, 0.92)
+        conf = 0.88
+        expl = f"Double chance (gagne reg + OT): {int(prob*100)}%."
+
+    elif market == "team_pp_goals":
+        prob = clamp(0.40 + (f.home_pp_pct - 20.0) * 0.007, 0.18, 0.72)
+        conf = 0.70
+        expl = f"PP% domicile = {f.home_pp_pct:.1f}% → {int(prob*100)}% de marquer en avantage numérique."
+
+    elif market == "clean_sheet":
+        # P(away team scores 0) = Poisson CDF at k=0
+        prob = clamp(math.exp(-lam_away), 0.03, 0.45)
+        conf = 0.80
+        expl = f"Poisson P(ext marque 0 | λ={lam_away:.1f}) = {int(prob*100)}%."
+
+    elif market == "team_score_every_period":
+        # P(score in all 3 periods) = P(score P1) × P(score P2) × P(score P3)
+        p_per_period = 1.0 - math.exp(-lam_home / 3.0)
+        prob = clamp(p_per_period ** 3, 0.04, 0.55)
+        conf = 0.75
+        expl = f"P(marquer en P1∩P2∩P3) = {p_per_period:.2f}³ = {int(prob*100)}%."
+
+    elif market == "total_penalties":
+        prob = 0.52
+        conf = 0.52
+        expl = "Pénalités difficiles à modéliser → ~52% (proche du hasard)."
+
+    else:
+        # Unknown market: fall back to base moneyline
+        prob = base_prob
+        conf = 0.68
+        expl = f"{model_label}: {int(prob*100)}% (marché '{market}' → signal moneyline)."
+
+    return clamp(prob, 0.05, 0.95), conf, expl
+
+
 @app.post("/predict/game", response_model=MLResponse)
 def predict_game(f: GameFeatures) -> MLResponse:
-    # Corriger les valeurs manquantes (0 = pas de données NHL API)
+    # 1. Corriger les valeurs manquantes (0 = pas de données NHL API)
     if f.home_pk_pct < 50: f.home_pk_pct = 80.0
     if f.away_pk_pct < 50: f.away_pk_pct = 80.0
     if f.home_pp_pct == 0: f.home_pp_pct = 20.0
     if f.away_pp_pct == 0: f.away_pp_pct = 20.0
 
+    # 2. Features dérivées
     win_diff  = f.home_win_pct - f.away_win_pct
     gf_diff   = f.home_goals_for_pg - f.away_goals_for_pg
     ga_diff   = f.away_goals_against_pg - f.home_goals_against_pg
     form_diff = f.home_last10_win_pct - f.away_last10_win_pct
     pp_diff   = f.home_pp_pct - f.away_pp_pct
     pk_diff   = f.home_pk_pct - f.away_pk_pct
+    lam_home  = f.home_goals_for_pg
+    lam_away  = f.away_goals_for_pg
 
-    # ── Branche XGBoost moneyline (modèle entraîné) ───────────────────────────
-    if _xgb_game is not None and f.market_type not in ("total_goals_over", "total_goals_under"):
+    # 3. Obtenir base_prob (P(home wins)) depuis XGBoost ou LR
+    fi_list: list[FeatureImportance] = []
+    model_type    = "Logistic Regression (fallback)"
+    model_version = "lr-nhl-v1.1"
+
+    if _xgb_game is not None:
         row = np.array([[
             f.home_win_pct, f.away_win_pct,
             f.home_goals_for_pg, f.away_goals_for_pg,
@@ -258,40 +444,33 @@ def predict_game(f: GameFeatures) -> MLResponse:
             win_diff, gf_diff, ga_diff, pp_diff, pk_diff, form_diff,
         ]], dtype=np.float32)
         dmat = xgb.DMatrix(row, feature_names=_GAME_FEAT_NAMES)
-        base_prob = float(_xgb_game.predict(dmat)[0])
-
-        if f.market_type == "puck_line":
-            prob = clamp(base_prob * 0.62 if base_prob > 0.5 else base_prob * 1.38, 0.05, 0.95)
-        else:
-            prob = clamp(base_prob, 0.05, 0.95)
-
-        fi_list = []
+        base_prob     = float(_xgb_game.predict(dmat)[0])
+        model_type    = "XGBoost (trained)"
+        model_version = "xgb-nhl-v1.0"
         for fi in (_game_importances[:6] if _game_importances else []):
             name = fi["name"]
-            direction = "positive"
             if "win" in name or "form" in name:
                 direction = "positive" if win_diff > 0 else "negative"
             elif "gf" in name or "goals_for" in name:
                 direction = "positive" if gf_diff > 0 else "negative"
             elif "ga" in name or "goals_against" in name:
                 direction = "positive" if ga_diff > 0 else "negative"
+            else:
+                direction = "positive"
             fi_list.append(FeatureImportance(name=name, importance=fi["importance"], direction=direction))
+    else:
+        base_prob, _ = _game_moneyline(f)
+        fi_list = sorted([
+            FeatureImportance(name="Win% difference",    importance=round(abs(win_diff  * GAME_WEIGHTS["win_pct_diff"]), 3), direction="positive" if win_diff  > 0 else "negative"),
+            FeatureImportance(name="Recent form (L10)",  importance=round(abs(form_diff * GAME_WEIGHTS["form_diff"]),    3), direction="positive" if form_diff > 0 else "negative"),
+            FeatureImportance(name="Goals for/game",     importance=round(abs(gf_diff   * GAME_WEIGHTS["gf_diff"]),      3), direction="positive" if gf_diff   > 0 else "negative"),
+            FeatureImportance(name="Goals against/game", importance=round(abs(ga_diff   * GAME_WEIGHTS["ga_diff"]),      3), direction="positive" if ga_diff   > 0 else "negative"),
+            FeatureImportance(name="Power play %",       importance=round(abs(pp_diff   * GAME_WEIGHTS["pp_diff"]),      3), direction="positive" if pp_diff   > 0 else "negative"),
+            FeatureImportance(name="Home ice",           importance=round(GAME_WEIGHTS["intercept"],                     3), direction="positive"),
+        ], key=lambda x: x.importance, reverse=True)
 
-        magnitude  = abs(win_diff) * 2 + abs(gf_diff) / 3 + abs(form_diff)
-        confidence = clamp(0.55 + magnitude * 0.25, 0.45, 0.92)
-        direction  = "home team" if prob >= 0.5 else "away team"
-
-        return MLResponse(
-            probability=int(prob * 100),
-            confidence=int(confidence * 100),
-            feature_importances=fi_list[:5],
-            model_version="xgb-nhl-v1.0",
-            model_type="XGBoost (trained)",
-            explanation=f"XGBoost (3 saisons NHL) favours {direction} at {int(prob*100)}%.",
-        )
-
-    # ── Branche XGBoost totaux ────────────────────────────────────────────────
-    if _xgb_totals is not None and f.market_type in ("total_goals_over", "total_goals_under"):
+    # 4. Branche XGBoost totaux (si modèle entraîné disponible)
+    if _xgb_totals is not None and f.market_type in ("total_goals", "total_goals_over", "total_goals_under"):
         row_tot = np.array([[
             f.home_goals_for_pg, f.away_goals_for_pg,
             f.home_goals_against_pg, f.away_goals_against_pg,
@@ -300,60 +479,39 @@ def predict_game(f: GameFeatures) -> MLResponse:
             gf_diff, ga_diff,
         ]], dtype=np.float32)
         dmat_tot = xgb.DMatrix(row_tot, feature_names=_TOTALS_FEAT_NAMES)
-        lam  = float(_xgb_totals.predict(dmat_tot)[0])
-        line = f.line if f.line is not None else 5.5
-        raw_over = poisson_over(line, lam)
-        prob = clamp(raw_over if f.market_type == "total_goals_over" else 1.0 - raw_over, 0.05, 0.95)
-
-        fi_list = [
-            FeatureImportance(name=fi["name"], importance=fi["importance"], direction="positive")
-            for fi in (_totals_importances[:5] if _totals_importances else [])
-        ]
-        ou_label = "OVER" if f.market_type == "total_goals_over" else "UNDER"
+        lam_xgb = float(_xgb_totals.predict(dmat_tot)[0])
+        line    = f.line if f.line is not None else 5.5
+        raw_ov  = poisson_over(line, lam_xgb)
+        prob    = clamp(raw_ov if f.market_type != "total_goals_under" else 1.0 - raw_ov, 0.05, 0.95)
+        fi_tot  = [FeatureImportance(name=fi["name"], importance=fi["importance"], direction="positive")
+                   for fi in (_totals_importances[:5] if _totals_importances else [])]
+        ou      = "OVER" if f.market_type != "total_goals_under" else "UNDER"
         return MLResponse(
             probability=int(prob * 100),
             confidence=65,
-            feature_importances=fi_list,
+            feature_importances=fi_tot,
             model_version="xgb-totals-v1.0",
             model_type="XGBoost + Poisson (trained)",
-            explanation=f"XGBoost prédit λ={lam:.2f} buts → {ou_label} {line}: {int(prob*100)}%.",
+            explanation=f"XGBoost prédit λ={lam_xgb:.2f} buts → {ou} {line}: {int(prob*100)}%.",
         )
 
-    # ── Fallback : poids manuels ──────────────────────────────────────────────
-    base_prob, confidence = _game_moneyline(f)
+    # 5. Appliquer la transformation propre au marché
+    prob, conf_mult, explanation = _apply_market(
+        f.market_type, base_prob, f, win_diff, lam_home, lam_away, model_type
+    )
 
-    if f.market_type == "puck_line":
-        prob = clamp(base_prob * 0.62 if base_prob > 0.5 else base_prob * 1.38, 0.05, 0.95)
-    elif f.market_type == "total_goals_over":
-        lam  = f.home_goals_for_pg + f.away_goals_for_pg
-        line = f.line if f.line is not None else 5.5
-        prob = clamp(poisson_over(line, lam), 0.05, 0.95)
-        confidence = 0.65
-    elif f.market_type == "total_goals_under":
-        lam  = f.home_goals_for_pg + f.away_goals_for_pg
-        line = f.line if f.line is not None else 5.5
-        prob = clamp(1.0 - poisson_over(line, lam), 0.05, 0.95)
-        confidence = 0.65
-    else:
-        prob = clamp(base_prob, 0.05, 0.95)
+    # 6. Confidence = signal des features × multiplicateur du marché
+    magnitude  = abs(win_diff) * 2 + abs(gf_diff) / 3 + abs(form_diff)
+    base_conf  = clamp(0.55 + magnitude * 0.25, 0.45, 0.92)
+    confidence = int(clamp(base_conf * conf_mult, 0.38, 0.90) * 100)
 
-    importances = sorted([
-        FeatureImportance(name="Win% difference",    importance=round(abs(win_diff  * GAME_WEIGHTS["win_pct_diff"]), 3), direction="positive" if win_diff  > 0 else "negative"),
-        FeatureImportance(name="Recent form (L10)",  importance=round(abs(form_diff * GAME_WEIGHTS["form_diff"]),    3), direction="positive" if form_diff > 0 else "negative"),
-        FeatureImportance(name="Goals for/game",     importance=round(abs(gf_diff   * GAME_WEIGHTS["gf_diff"]),      3), direction="positive" if gf_diff   > 0 else "negative"),
-        FeatureImportance(name="Goals against/game", importance=round(abs(ga_diff   * GAME_WEIGHTS["ga_diff"]),      3), direction="positive" if ga_diff   > 0 else "negative"),
-        FeatureImportance(name="Power play %",       importance=round(abs(pp_diff   * GAME_WEIGHTS["pp_diff"]),      3), direction="positive" if pp_diff   > 0 else "negative"),
-        FeatureImportance(name="Home ice",           importance=round(abs(GAME_WEIGHTS["intercept"]),                3), direction="positive"),
-    ], key=lambda x: x.importance, reverse=True)
-
-    direction = "home team" if prob >= 0.5 else "away team"
     return MLResponse(
         probability=int(prob * 100),
-        confidence=int(confidence * 100),
-        feature_importances=importances[:5],
-        model_version="lr-nhl-v1.1",
-        model_type="Logistic Regression (fallback)",
-        explanation=f"Fallback — lance train.py pour activer XGBoost. Favours {direction}.",
+        confidence=confidence,
+        feature_importances=fi_list[:5],
+        model_version=model_version,
+        model_type=model_type,
+        explanation=explanation,
     )
 
 # ── Player prop model ─────────────────────────────────────────────────────────
@@ -366,6 +524,13 @@ def predict_player(f: PlayerPropFeatures) -> MLResponse:
         "points":   f.points_per_game,
         "shots":    f.shots_per_game,
         "pp_point": f.goals_per_game * 0.35,   # rough PP-point proxy
+        # Physical / goalie props — rate injected via shots_per_game by Node.js
+        "hits":     f.shots_per_game,
+        "blocks":   f.shots_per_game,
+        "pim":      f.shots_per_game,
+        "saves":    f.shots_per_game,
+        "wins":     f.shots_per_game,
+        "shutouts": f.shots_per_game,
     }
     rate = rate_map.get(f.prop_type, f.goals_per_game)
 

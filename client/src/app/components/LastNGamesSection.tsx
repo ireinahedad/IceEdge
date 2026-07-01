@@ -47,7 +47,7 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
         <p className="text-[#bfc8cc] text-xs mb-2 uppercase tracking-wider">Select a team</p>
         <button
           onClick={() => setShowPicker(!showPicker)}
-          className="w-full bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 flex items-center justify-between"
+          className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 flex items-center justify-between"
         >
           <div className="flex items-center gap-2">
             {selectedTeamData ? (
@@ -63,7 +63,7 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
         </button>
 
         {showPicker && (
-          <div className="mt-1 bg-[#111a1f] border border-white/20 rounded-2xl overflow-hidden">
+          <div className="mt-1 bg-[#131A12] border border-white/20 rounded-2xl overflow-hidden">
             <div className="px-3 py-2 border-b border-white/20">
               <input
                 className="w-full bg-transparent text-white text-xs outline-none placeholder:text-[#bfc8cc]"
@@ -76,7 +76,7 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
               <button
                 key={team.id}
                 onClick={() => { setSelectedTeam(team.id); setShowPicker(false); setSearch(""); }}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#1a2a2f] transition-colors ${i < filteredTeams.length - 1 ? "border-b border-[#1a2225]" : ""}`}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#1B2419] transition-colors ${i < filteredTeams.length - 1 ? "border-b border-[#1B2419]" : ""}`}
               >
                 <span className="text-lg">{team.logo}</span>
                 <span className="text-white text-sm flex-1 text-left">{team.name}</span>
@@ -101,7 +101,7 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
                 <button
                   key={n}
                   onClick={() => navigate(`/stats/prediction/ngames/${selectedTeam}?n=${n}`)}
-                  className="w-full bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex flex-col items-center gap-1 active:scale-[0.98] transition-transform"
+                  className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex flex-col items-center gap-1 active:scale-[0.98] transition-transform"
                 >
                   <span className="text-white text-2xl font-bold">{n}</span>
                   <span className="text-[#bfc8cc] text-xs">Last {n} Games</span>

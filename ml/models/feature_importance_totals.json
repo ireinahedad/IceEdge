@@ -1,26 +1,26 @@
 [
   {
-    "name": "home_goals_against_pg",
-    "importance": 0.1826
-  },
-  {
-    "name": "ga_diff",
-    "importance": 0.1767
+    "name": "away_goals_against_pg",
+    "importance": 0.1891
   },
   {
     "name": "away_goals_for_pg",
-    "importance": 0.1705
-  },
-  {
-    "name": "away_goals_against_pg",
-    "importance": 0.1692
-  },
-  {
-    "name": "gf_diff",
-    "importance": 0.1591
+    "importance": 0.1698
   },
   {
     "name": "home_goals_for_pg",
-    "importance": 0.1418
+    "importance": 0.1646
+  },
+  {
+    "name": "home_goals_against_pg",
+    "importance": 0.162
+  },
+  {
+    "name": "gf_diff",
+    "importance": 0.1616
+  },
+  {
+    "name": "ga_diff",
+    "importance": 0.153
   }
 ]

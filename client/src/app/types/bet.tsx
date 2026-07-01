@@ -216,10 +216,4 @@ export interface BetLeg {
   subjectId: string;
   subjectName: string;
   subjectLogo: string;
-  selection: string; // Human readable: "Boston Bruins to win", "Over 3.5 shots"
-  selectionShort: string; // Short version: "BOS ML", "O 3.5 SOG"
-  probability: number; // 0-100
-  line?: number;
-  gameInfo?: string; // "BOS vs NYR - Apr 27"
-  addedAt: string;
-}
+  selection: string; // Human readable: "Bost

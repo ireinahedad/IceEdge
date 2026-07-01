@@ -77,27 +77,43 @@ export const profileApiService = {
     get<LeaderboardEntry[]>('/leaderboard'),
 
   updateProfile: (
-    updates: Partial<Pick<UserProfile, 'displayName' | 'bio' | 'favoriteTeam' | 'isPublic'>>
+    updates: Partial<Pick<UserProfile, 'displayName' | 'bio' | 'favoriteTeam' | 'isPublic' | 'openaiApiKey'>>
   ): Promise<UserProfile> =>
     patch<UserProfile>('/users/me', updates),
 
-  // ---- Chat -----------------------------------------------------------------
+  uploadAvatar: async (file: File): Promise<string> => {
+    // Convert file to base64 data URI
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    const res = await authedFetch('/users/me/avatar', {
+      method: 'POST',
+      body: JSON.stringify({ avatarDataUrl: dataUrl }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
+    }
+    const { avatarUrl } = await res.json() as { avatarUrl: string };
+    return avatarUrl;
+  },
 
+  // ---- Chat -----------------------------------------------
   getChatRooms: (): Promise<ChatRoom[]> =>
     get<ChatRoom[]>('/chat/rooms'),
 
-  getRoomMessages: (roomId: string): Promise<ChatMessage[]> =>
-    get<ChatMessage[]>(`/chat/rooms/${roomId}/messages`),
+  getChatMessages: (roomId: string): Promise<import('../types/user').ChatMessage[]> =>
+    get<import('../types/user').ChatMessage[]>(`/chat/rooms/${roomId}/messages`),
 
-  sendMessage: (
-    roomId: string,
-    payload: { text: string; tag?: 'pick' | 'analysis' | 'hot'; replyTo?: { username: string; text: string } }
-  ): Promise<ChatMessage> =>
-    post<ChatMessage>(`/chat/rooms/${roomId}/messages`, payload),
+  sendChatMessage: (roomId: string, text: string, replyTo?: { username: string; text: string }): Promise<import('../types/user').ChatMessage> =>
+    post<import('../types/user').ChatMessage>(`/chat/rooms/${roomId}/messages`, { text, replyTo }),
 
-  createRoom: (payload: { name: string; icon: string; description: string }): Promise<ChatRoom> =>
-    post<ChatRoom>('/chat/rooms', payload),
+  createRoom: (name: string, icon: string, description: string): Promise<ChatRoom> =>
+    post<ChatRoom>('/chat/rooms', { name, icon, description }),
 
-  toggleReaction: (roomId: string, messageId: string, emoji: string): Promise<void> =>
-    post(`/chat/rooms/${roomId}/messages/${messageId}/reactions`, { emoji }),
+  addReaction: (roomId: string, messageId: string, emoji: string): Promise<void> =>
+    post<void>(`/chat/rooms/${roomId}/messages/${messageId}/reactions`, { emoji }),
 };

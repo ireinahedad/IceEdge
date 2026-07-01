@@ -642,25 +642,17 @@ export function getTennisMarketsByCategory(category: TennisMarketDefinition["cat
 }
 
 export const CATEGORY_LABELS: Record<MarketDefinition["category"], string> = {
-  match: "Match Result",
-  team: "Team Props",
-  player: "Player Props",
-  period: "Period Betting",
+  game:    "Game Lines",
+  team:    "Team Props",
+  player:  "Player Props",
+  period:  "Period Betting",
   special: "Specials",
 };
 
 export const CATEGORY_ICONS: Record<MarketDefinition["category"], string> = {
-  match: "🏒",
-  team: "🛡️",
-  player: "⭐",
-  period: "⏱️",
-  special: "✨",
+  game:    "🏒",
+  team:    "🛡",
+  player:  "⛸",
+  period:  "⏱",
+  special: "⚡",
 };
-
-export function getMarketsByCategory(category: MarketDefinition["category"]) {
-  return MARKET_DEFINITIONS.filter((m) => m.category === category);
-}
-
-export function getMarketByType(type: BetMarketType) {
-  return MARKET_DEFINITIONS.find((m) => m.type === type);
-}

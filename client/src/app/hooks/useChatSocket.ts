@@ -66,10 +66,13 @@ export function useChatSocket(roomId: string | null) {
     setMessages((prev) => [...prev, msg]);
   }, []);
 
-  /** Replace a temp optimistic message with the confirmed server version */
+  /** Replace the optimistic message with the confirmed server version.
+   *  Also removes any socket-delivered copy that may have arrived first
+   *  (race: socket fires before the HTTP await resolves → double message). */
   const confirmMessage = useCallback((tempId: string, confirmed: ChatMessage) => {
     setMessages((prev) =>
-      prev.map((m) => (m.id === tempId ? confirmed : m))
+      prev
+        .filter((m) => m.id !== confirmed.id && m.id !== tempId).concat(confirmed)
     );
   }, []);
 

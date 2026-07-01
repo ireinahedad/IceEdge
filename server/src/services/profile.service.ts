@@ -5,6 +5,7 @@ import { pool } from '../db/connection';
 export async function getProfileByUsername(username: string) {
   const { rows } = await pool.query(
     `SELECT u.id, u.username, up.display_name AS "displayName", up.avatar,
+            up.avatar_url AS "avatarUrl",
             up.favorite_team AS "favoriteTeam", up.bio, up.is_public AS "isPublic",
             up.tier, up.performance_score AS "performanceScore",
             up.joined_at AS "joinedAt"
@@ -25,6 +26,7 @@ export async function getProfileByUsername(username: string) {
     username:         profile.username,
     displayName:      profile.displayName,
     avatar:           profile.avatar,
+    avatarUrl:        profile.avatarUrl,
     joinedAt:         profile.joinedAt,
     favoriteTeam:     profile.favoriteTeam,
     bio:              profile.bio,
@@ -47,9 +49,11 @@ export async function getProfileById(userId: string) {
 
   const { rows } = await pool.query(
     `SELECT u.id, u.username, up.display_name AS "displayName", up.avatar,
+            up.avatar_url AS "avatarUrl",
             up.favorite_team AS "favoriteTeam", up.bio, up.is_public AS "isPublic",
             up.tier, up.performance_score AS "performanceScore",
-            up.joined_at AS "joinedAt"
+            up.joined_at AS "joinedAt",
+            up.openai_api_key AS "openaiApiKey"
      FROM users u
      JOIN user_profiles up ON up.user_id = u.id
      WHERE u.id = $1`,
@@ -65,12 +69,14 @@ export async function getProfileById(userId: string) {
     username:         profile.username,
     displayName:      profile.displayName,
     avatar:           profile.avatar,
+    avatarUrl:        profile.avatarUrl,
     joinedAt:         profile.joinedAt,
     favoriteTeam:     profile.favoriteTeam,
     bio:              profile.bio,
     isPublic:         profile.isPublic,
     tier:             profile.tier,
     performanceScore: profile.performanceScore,
+    openaiApiKey:     profile.openaiApiKey ?? null,
     badges,
   };
 }
@@ -91,6 +97,8 @@ export async function updateProfile(userId: string, updates: {
   bio?: string;
   favoriteTeam?: string;
   isPublic?: boolean;
+  avatarUrl?: string | null;
+  openaiApiKey?: string | null;
 }) {
   const fields: string[] = [];
   const values: unknown[] = [];
@@ -100,6 +108,8 @@ export async function updateProfile(userId: string, updates: {
   if (updates.bio           !== undefined) { fields.push(`bio = $${i++}`);             values.push(updates.bio); }
   if (updates.favoriteTeam  !== undefined) { fields.push(`favorite_team = $${i++}`);   values.push(updates.favoriteTeam); }
   if (updates.isPublic      !== undefined) { fields.push(`is_public = $${i++}`);       values.push(updates.isPublic); }
+  if (updates.avatarUrl     !== undefined) { fields.push(`avatar_url = $${i++}`);       values.push(updates.avatarUrl); }
+  if (updates.openaiApiKey  !== undefined) { fields.push(`openai_api_key = $${i++}`);   values.push(updates.openaiApiKey); }
 
   if (fields.length === 0) throw Object.assign(new Error('Nothing to update'), { status: 400 });
 

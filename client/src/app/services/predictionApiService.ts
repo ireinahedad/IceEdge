@@ -419,13 +419,13 @@ function buildMockFactors(
 
 const GAME_MARKET_TYPES: BetMarketType[] = [
   "moneyline", "puck_line", "total_goals", "regulation_result",
-  "period1_winner", "period2_winner", "period3_winner",
-  "game_to_ot", "both_teams_score", "winning_margin",
-  "first_team_score", "team_total_goals", "highest_scoring_period",
-];
-
-const PLAYER_MARKET_TYPES: BetMarketType[] = [
-  "anytime_goal", "first_goal_scorer", "shots_ou", "assists_ou",
-  "points_ou", "pp_point", "goalie_saves_ou", "penalty_minutes_ou",
+  "game_to_ot", "both_teams_score", "winning_margin", "double_chance",
+  "alt_puck_line", "ot_winner",
+  "period1_winner", "period2_winner", "period3_winner", "highest_scoring_period",
+  "period1_total_goals", "period2_total_goals", "period3_total_goals",
+  "first_team_score", "last_team_score", "team_total_goals", "team_pp_goals",
+  "team_penalty_kill", "clean_sheet", "team_score_every_period", "total_penalties",
+  "anytime_goal", "first_goal_scorer", "last_goal_scorer", "shots_ou",
+  "assists_ou", "points_ou", "pp_point", "goalie_saves_ou", "penalty_minutes_ou",
   "blocked_shots_ou", "time_on_ice_ou", "faceoff_wins_ou", "hits_ou",
 ];

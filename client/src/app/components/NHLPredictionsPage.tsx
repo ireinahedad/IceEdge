@@ -18,7 +18,7 @@ import {
   MarketDefinition,
 } from "../data/betMarkets";
 import type { BetMarketType } from "../types/bet";
-import { MLSection } from "./MLPredictionCard";
+// MLSection used only in PredictionSheet (per-bet click), not here
 
 // ─── Types locaux ──────────────────────────────────────────────────────────────
 
@@ -239,7 +239,7 @@ function BetPredictionCard({
   const ruleColor = pctColor(prediction.rulePct);
 
   return (
-    <div className="bg-[#111a1f] border border-white/[0.08] rounded-2xl overflow-hidden">
+    <div className="bg-[#131A12] border border-white/[0.08] rounded-2xl overflow-hidden">
       {/* En-tête cliquable */}
       <button
         onClick={() => setExpanded((v) => !v)}
@@ -248,37 +248,29 @@ function BetPredictionCard({
         <MiniGauge pct={prediction.rulePct} color={ruleColor} />
         <div className="flex-1 min-w-0">
           <p className="text-white text-sm font-semibold leading-tight">{market.label}</p>
-          <p className="text-[#8a9ea6] text-[11px] mt-0.5 leading-snug">{market.description}</p>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <p className="text-[#8a9ea6] text-[11px] leading-snug truncate">{market.description}</p>
+            <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#a78bfa]/10 text-[#a78bfa] border border-[#a78bfa]/20">🤖 ML</span>
+          </div>
         </div>
         <span className="text-[#4a6068] text-xs flex-shrink-0">{expanded ? "▲" : "▼"}</span>
       </button>
 
       {expanded && (
         <div className="px-4 pb-4 flex flex-col gap-3 border-t border-white/[0.05] pt-3">
-          {/* ── Prédiction par règles ── */}
+          {/* ── Règles statistiques — avec explication ── */}
           <div className="bg-[#0d1518] rounded-xl p-3">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-base">📐</span>
-              <span className="text-white text-xs font-semibold">Prédiction par règles</span>
+              <span className="text-white text-xs font-semibold">Règles statistiques</span>
               <span className="ml-auto text-xs font-black" style={{ color: ruleColor }}>{prediction.rulePct}%</span>
             </div>
-            <div className="w-full bg-[#0a1014] rounded-full h-2 mb-2">
-              <div
-                className="h-2 rounded-full transition-all duration-700"
-                style={{ width: `${prediction.rulePct}%`, backgroundColor: ruleColor }}
-              />
+            <div className="w-full bg-[#0A0E0C] rounded-full h-2 mb-2">
+              <div className="h-2 rounded-full transition-all duration-700"
+                style={{ width: `${prediction.rulePct}%`, backgroundColor: ruleColor }} />
             </div>
             <p className="text-[#8a9ea6] text-[11px] leading-snug">{prediction.ruleNote}</p>
           </div>
-
-          {/* ── ML Prediction ── */}
-          <MLSection
-            type="game"
-            subjectId={homeAbbr}
-            opponentId={awayAbbr}
-            propType={market.type}
-            ruleBasedPct={prediction.rulePct}
-          />
 
           {/* ── Ask LLM ── */}
           <div>
@@ -345,7 +337,7 @@ function GamePills({
             className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border"
             style={isActive
               ? { backgroundColor: accent + "22", borderColor: accent, color: "#fff" }
-              : { backgroundColor: "#111a1f", borderColor: "rgba(255,255,255,0.1)", color: "#8a9ea6" }}
+              : { backgroundColor: "#131A12", borderColor: "rgba(255,255,255,0.1)", color: "#8a9ea6" }}
           >
             <span>{g.homeLogo}</span>
             <span className="font-bold">{g.homeAbbr}</span>
@@ -484,11 +476,11 @@ export function NHLPredictionsPage() {
   return (
     <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] mx-auto">
       {/* ── Header ── */}
-      <header className="px-4 pt-12 pb-3 bg-[#0a1014]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
+      <header className="px-4 pt-12 pb-3 bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
         <div className="flex items-center gap-3 mb-3">
           <button
             onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-xl bg-[#111a1f] border border-white/20 flex items-center justify-center flex-shrink-0"
+            className="w-9 h-9 rounded-xl bg-[#131A12] border border-white/20 flex items-center justify-center flex-shrink-0"
             style={{ color: accent }}
           >
             ←
@@ -503,7 +495,7 @@ export function NHLPredictionsPage() {
         {loadingGames ? (
           <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="flex-shrink-0 h-8 w-32 bg-[#111a1f] rounded-full animate-pulse" />
+              <div key={i} className="flex-shrink-0 h-8 w-32 bg-[#131A12] rounded-full animate-pulse" />
             ))}
           </div>
         ) : (
@@ -521,7 +513,7 @@ export function NHLPredictionsPage() {
                 className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1"
                 style={activeCategory === cat
                   ? { backgroundColor: accent, color: "#0f1416", fontWeight: 700 }
-                  : { backgroundColor: "#1a2a2f", color: "#bfc8cc" }}
+                  : { backgroundColor: "#1B2419", color: "#bfc8cc" }}
               >
                 {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}
                 <span className="text-[9px] opacity-70">({count})</span>
@@ -537,7 +529,7 @@ export function NHLPredictionsPage() {
         {loadingGames && (
           <div className="flex flex-col gap-3">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="bg-[#111a1f] rounded-2xl h-16 animate-pulse" />
+              <div key={i} className="bg-[#131A12] rounded-2xl h-16 animate-pulse" />
             ))}
           </div>
         )}
@@ -545,7 +537,7 @@ export function NHLPredictionsPage() {
         {!loadingGames && selectedGame && (
           <>
             {/* Résumé du match */}
-            <div className="bg-[#111a1f] border border-white/20 rounded-2xl p-4 mb-4 flex items-center">
+            <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4 mb-4 flex items-center">
               <div className="flex-1 flex flex-col items-center gap-1">
                 <span className="text-3xl">{selectedGame.homeLogo}</span>
                 <span className="text-white text-sm font-bold">{selectedGame.homeAbbr}</span>

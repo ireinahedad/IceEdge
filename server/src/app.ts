@@ -11,6 +11,8 @@ import mlRoutes            from './routes/ml.routes';
 import tennisRoutes        from './routes/tennis.route';
 import chatRoutes          from './routes/chat.routes';
 import slipRoutes          from './routes/slip.routes';
+import devRoutes           from './routes/dev.routes';
+import llmRoutes           from './routes/llm.routes';
 import { getLeaderboard }  from './services/profile.service';
 import { seedAll }         from './db/seed';
 
@@ -50,6 +52,12 @@ app.use('/api/predict',       mlRoutes);
 
 // Tennis live data
 app.use('/api/tennis',        tennisRoutes);
+
+// LLM proxy (uses user's own OpenAI key)
+app.use('/api/llm',           llmRoutes);
+
+// Dev ML dashboard (admin-only)
+app.use('/api/dev',           devRoutes);
 
 // Dev-only seed endpoint
 if (process.env.NODE_ENV !== 'production') {

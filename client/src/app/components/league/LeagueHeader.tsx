@@ -22,7 +22,7 @@ export function LeagueHeader({
   ];
 
   return (
-    <header className="px-4 pt-12 pb-3 bg-[#0a1014]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
+    <header className="px-4 pt-12 pb-3 bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
       <div className="flex items-center justify-between mb-3">
         <div>
           <div className="flex items-center gap-2">

@@ -2,22 +2,29 @@ import { useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { getGoogleLoginUrl } from "../services/authService";
+import { IceedgeLogo } from "./brand/IceedgeLogo";
 
 type Mode = "login" | "register";
 
+const ACCENT        = "#9BF019";
+const ACCENT_BG     = "rgba(155,240,25,0.12)";
+const ACCENT_BORDER = "rgba(155,240,25,0.3)";
+const SURFACE       = "#131A12";
+const BORDER        = "#283323";
+
 export function LoginPage() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const returnTo = new URLSearchParams(location.search).get("returnTo") ?? "/";
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const returnTo  = new URLSearchParams(location.search).get("returnTo") ?? "/";
   const { login, register } = useAuth();
 
-  const [mode, setMode] = useState<Mode>("login");
-  const [email, setEmail] = useState("");
-  const [username, setUsername] = useState("");
+  const [mode,      setMode]      = useState<Mode>("login");
+  const [email,     setEmail]     = useState("");
+  const [username,  setUsername]  = useState("");
   const [firstName, setFirstName] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [password,  setPassword]  = useState("");
+  const [error,     setError]     = useState<string | null>(null);
+  const [loading,   setLoading]   = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,39 +48,51 @@ export function LoginPage() {
     window.location.href = getGoogleLoginUrl();
   }
 
-  return (
-    <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] mx-auto px-5 pt-20 pb-10">
+  const inputCls = `w-full px-4 py-3 rounded-xl text-white text-sm placeholder-[#92A08A] focus:outline-none transition-all`;
+  const inputStyle = { background: SURFACE, border: `1px solid ${BORDER}` };
+  const inputFocusStyle = { borderColor: `${ACCENT}80`, background: ACCENT_BG };
 
-      {/* Logo / brand */}
-      <div className="flex flex-col items-center mb-10">
-        <div className="w-16 h-16 rounded-2xl bg-[#86d1ea]/15 border border-[#86d1ea]/30 flex items-center justify-center text-3xl mb-4">
-          🏒
-        </div>
-        <h1 className="text-white text-2xl font-bold tracking-tight">IceEdge</h1>
-        <p className="text-white/50 text-xs mt-1">NHL betting intelligence</p>
+  return (
+    <div
+      className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-16 pb-10"
+      style={{ background: "#0A0E0C" }}
+    >
+      {/* ── Brand hero ── */}
+      <div className="flex flex-col items-center mb-12">
+        <IceedgeLogo size={72} wordmark={false} className="mb-5" />
+        <h1
+          className="text-white text-2xl tracking-[0.16em] uppercase mb-1"
+          style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif", fontWeight: 600 }}
+        >
+          ICEEDGE
+        </h1>
+        <p className="text-[11px] tracking-widest uppercase" style={{ color: ACCENT, opacity: 0.8 }}>
+          Your Betting Edge
+        </p>
+        <div className="mt-4 w-12 h-0.5 rounded-full" style={{ background: ACCENT, opacity: 0.5 }} />
       </div>
 
-      {/* Mode toggle */}
-      <div className="flex gap-1 bg-white/5 border border-white/10 rounded-xl p-1 mb-6">
+      {/* ── Mode toggle ── */}
+      <div className="flex gap-1 rounded-xl p-1 mb-6" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
         {(["login", "register"] as Mode[]).map((m) => (
           <button
             key={m}
             onClick={() => { setMode(m); setError(null); }}
-            className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${
-              mode === m
-                ? "bg-[#86d1ea] text-[#0f1416]"
-                : "text-white/60"
-            }`}
+            className="flex-1 py-2.5 rounded-lg text-xs font-semibold transition-all"
+            style={mode === m
+              ? { background: ACCENT, color: "#0A0E0C" }
+              : { color: "#92A08A" }}
           >
             {m === "login" ? "Sign In" : "Create Account"}
           </button>
         ))}
       </div>
 
-      {/* Google SSO */}
+      {/* ── Google SSO ── */}
       <button
         onClick={handleGoogleLogin}
-        className="w-full flex items-center justify-center gap-3 py-3 rounded-xl bg-white/5 border border-white/15 text-white text-sm font-medium hover:bg-white/10 active:scale-[0.98] transition-all mb-4"
+        className="w-full flex items-center justify-center gap-3 py-3 rounded-xl text-sm font-medium active:scale-[0.98] transition-all mb-4"
+        style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: "#F3F7F0" }}
       >
         <svg width="18" height="18" viewBox="0 0 48 48" fill="none">
           <path d="M47.5 24.5c0-1.6-.1-3.2-.4-4.7H24v8.9h13.2c-.6 3-2.3 5.5-4.9 7.2v6h7.9c4.6-4.3 7.3-10.6 7.3-17.4z" fill="#4285F4"/>
@@ -84,77 +103,53 @@ export function LoginPage() {
         Continue with Google
       </button>
 
-      {/* Divider */}
+      {/* ── Divider ── */}
       <div className="flex items-center gap-3 mb-4">
-        <div className="flex-1 h-px bg-white/10" />
-        <span className="text-white/30 text-[10px] uppercase tracking-widest">or</span>
-        <div className="flex-1 h-px bg-white/10" />
+        <div className="flex-1 h-px" style={{ background: BORDER }} />
+        <span className="text-[10px] uppercase tracking-widest" style={{ color: "#92A08A" }}>or</span>
+        <div className="flex-1 h-px" style={{ background: BORDER }} />
       </div>
 
-      {/* Form */}
+      {/* ── Form ── */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-[#86d1ea]/50 focus:bg-white/8 transition-all"
-        />
+        <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)}
+          required className={inputCls} style={inputStyle}
+          onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
+          onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
 
         {mode === "register" && (
           <>
-            <input
-              type="text"
-              placeholder="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              minLength={3}
-              className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-[#86d1ea]/50 focus:bg-white/8 transition-all"
-            />
-            <input
-              type="text"
-              placeholder="First name (optional)"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-[#86d1ea]/50 focus:bg-white/8 transition-all"
-            />
+            <input type="text" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)}
+              required minLength={3} className={inputCls} style={inputStyle}
+              onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
+              onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
+            <input type="text" placeholder="First name (optional)" value={firstName} onChange={(e) => setFirstName(e.target.value)}
+              className={inputCls} style={inputStyle}
+              onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
+              onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
           </>
         )}
 
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          minLength={8}
-          className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-[#86d1ea]/50 focus:bg-white/8 transition-all"
-        />
+        <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)}
+          required minLength={6} className={inputCls} style={inputStyle}
+          onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
+          onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
 
         {error && (
-          <div className="px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+          <div className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20">
             {error}
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-3 rounded-xl bg-[#86d1ea] text-[#0f1416] text-sm font-bold hover:bg-[#86d1ea]/90 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-1"
-        >
-          {loading
-            ? (mode === "login" ? "Signing in…" : "Creating account…")
-            : (mode === "login" ? "Sign In" : "Create Account")}
+        <button type="submit" disabled={loading}
+          className="w-full py-3.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50"
+          style={{ background: ACCENT, color: "#0A0E0C" }}>
+          {loading ? "…" : mode === "login" ? "Sign In" : "Create Account"}
         </button>
       </form>
 
-      {/* Footer hint */}
-      <p className="text-center text-white/30 text-[10px] mt-8">
-        {mode === "login"
-          ? "No account? Switch to Create Account above."
-          : "Already have an account? Switch to Sign In above."}
+      <p className="text-center text-[10px] tracking-wide mt-8" style={{ color: "#92A08A", opacity: 0.5 }}>
+        18+ · Gamble Responsibly · Not available in all jurisdictions
       </p>
     </div>
   );

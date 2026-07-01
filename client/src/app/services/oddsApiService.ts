@@ -114,4 +114,3 @@ export async function fetchAvailableSports(): Promise<
     return [];
   }
 }
-

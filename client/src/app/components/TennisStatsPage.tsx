@@ -108,8 +108,8 @@ function calcTennisProbs(
 
 function TennisRankingCard({ entry, tour, accent, onPress }: { entry: TennisRankingEntry; tour: "ATP" | "WTA"; accent: string; onPress?: () => void }) {
   return (
-    <div onClick={onPress} className="w-full bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex items-center gap-3 cursor-pointer active:opacity-70">
-      <div className="w-11 h-11 rounded-xl bg-[#1a2a2f] flex flex-col items-center justify-center flex-shrink-0">
+    <div onClick={onPress} className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex items-center gap-3 cursor-pointer active:opacity-70">
+      <div className="w-11 h-11 rounded-xl bg-[#1B2419] flex flex-col items-center justify-center flex-shrink-0">
         <span className="text-[9px] text-[#bfc8cc] uppercase tracking-wider">{tour}</span>
         <span className="text-white text-lg font-bold leading-none">#{entry.pos}</span>
       </div>
@@ -128,9 +128,9 @@ function TennisRankingCard({ entry, tour, accent, onPress }: { entry: TennisRank
 function TennisTournamentCard({ t, accent }: { t: TennisTournamentInfo; accent: string }) {
   const dateRange = fmtDateRange(t.startDate, t.endDate);
   return (
-    <div className="w-full bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4">
+    <div className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4">
       <div className="flex items-start gap-3">
-        <div className="w-11 h-11 rounded-xl bg-[#1a2a2f] flex items-center justify-center text-2xl flex-shrink-0">🏆</div>
+        <div className="w-11 h-11 rounded-xl bg-[#1B2419] flex items-center justify-center text-2xl flex-shrink-0">🏆</div>
         <div className="flex-1 min-w-0">
           <p className="text-white text-sm font-medium">{t.name}</p>
           {(t.location || dateRange) && (
@@ -148,7 +148,7 @@ function TennisTournamentCard({ t, accent }: { t: TennisTournamentInfo; accent: 
 
 function TennisSurfaceCard({ s, accent }: { s: TennisSurface; accent: string }) {
   return (
-    <div className="w-full bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4">
+    <div className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4">
       <div className="flex items-center gap-3 mb-3">
         <span className="text-3xl">{s.icon}</span>
         <div className="flex-1">
@@ -161,7 +161,7 @@ function TennisSurfaceCard({ s, accent }: { s: TennisSurface; accent: string }) 
         <span className="text-[#bfc8cc] text-xs">Top performer</span>
         <span className="text-white text-xs font-medium">{s.topPlayer}</span>
       </div>
-      <div className="w-full bg-[#0a1014] rounded-full h-1.5 mt-2">
+      <div className="w-full bg-[#0A0E0C] rounded-full h-1.5 mt-2">
         <div className="h-1.5 rounded-full" style={{ width: `${s.avgWinPct}%`, backgroundColor: accent }} />
       </div>
     </div>
@@ -252,7 +252,7 @@ function TennisBetMatchCard({
   ];
 
   return (
-    <div className="w-full bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl overflow-hidden">
+    <div className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl overflow-hidden">
       <div className="px-4 pt-3 pb-2.5 flex items-center justify-between border-b border-white/[0.06]">
         <div className="flex items-center gap-2 min-w-0">
           {m.isLive
@@ -292,7 +292,7 @@ function TennisBetMatchCard({
 
       <div className="px-4 pb-3 flex items-center gap-2">
         <span className="text-[10px] font-bold w-8 flex-shrink-0" style={{ color: accent }}>{probs.p1Win}%</span>
-        <div className="flex-1 bg-[#0a1014] rounded-full h-1.5 overflow-hidden flex">
+        <div className="flex-1 bg-[#0A0E0C] rounded-full h-1.5 overflow-hidden flex">
           <div className="h-full rounded-l-full transition-all" style={{ width: `${probs.p1Win}%`, backgroundColor: accent }} />
         </div>
         <span className="text-[#8a9ea6] text-[10px] font-bold w-8 text-right flex-shrink-0">{probs.p2Win}%</span>
@@ -448,7 +448,7 @@ export function TennisStatsContent({ accent }: { accent: string }) {
   function LoadingDot() {
     return (
       <div className="flex flex-col items-center justify-center py-12 gap-3">
-        <div className="w-10 h-10 rounded-full bg-[#111a1f] border border-white/20 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-full bg-[#131A12] border border-white/20 flex items-center justify-center">
           <div className="w-4 h-4 rounded-full bg-[#86d1ea]/20 border border-[#86d1ea]/40 animate-pulse" />
         </div>
         <p className="text-[#bfc8cc] text-sm">Loading...</p>
@@ -470,7 +470,7 @@ export function TennisStatsContent({ accent }: { accent: string }) {
 
   return (
     <>
-      <div className="bg-[#111a1f] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2.5 mb-3">
+      <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2.5 mb-3">
         <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
         <input className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#bfc8cc]"
           placeholder="Search player, tournament..." value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -479,7 +479,7 @@ export function TennisStatsContent({ accent }: { accent: string }) {
       <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-0.5 mb-3">
         {TENNIS_FILTER_TABS.map((tab, i) => (
           <button key={tab} onClick={() => setActiveFilter(i)} className="flex-shrink-0 px-4 py-2 rounded-full text-xs font-medium transition-all"
-            style={activeFilter === i ? { backgroundColor: accent, color: "#0f1416", fontWeight: 700 } : { backgroundColor: "#1a2a2f", color: "#bfc8cc" }}>
+            style={activeFilter === i ? { backgroundColor: accent, color: "#0f1416", fontWeight: 700 } : { backgroundColor: "#1B2419", color: "#bfc8cc" }}>
             {tab}
           </button>
         ))}

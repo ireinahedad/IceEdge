@@ -386,24 +386,25 @@ function RoomChat({ room, onBack, onUpdate }: {
   );
 }
 
-// ─── Chat tab root ────────────────────────────────────────────────────────────
 
-export function ChatTab() {
-  const [rooms, setRooms] = useState<ChatRoom[]>([]);
+// ─── ChatTab export ───────────────────────────────────────────────────────────
+
+export function ChatTab({ onUnreadChange }: { onUnreadChange?: (n: number) => void }) {
+  const [rooms, setRooms] = useState<(ChatRoom & { unread?: number })[]>([]);
   const [activeRoom, setActiveRoom] = useState<ChatRoom | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    profileApiService.getChatRooms().then((data) => {
-      setRooms(data);
+    profileApiService.getChatRooms().then((r) => {
+      setRooms(r);
+    }).catch(() => {}).finally(() => {
       setLoading(false);
     });
   }, []);
 
   function handleSelectRoom(room: ChatRoom) {
     setActiveRoom(room);
-    // Clear unread badge
     setRooms((prev) => prev.map((r) => r.id === room.id ? { ...r, unread: 0 } : r));
   }
 
@@ -429,10 +430,8 @@ export function ChatTab() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header row: back button OR create button */}
       <div className="flex items-center justify-between mb-3 flex-shrink-0">
         {activeRoom ? (
-          // Room header is rendered inside RoomChat — nothing here
           <div />
         ) : (
           <>
@@ -447,21 +446,19 @@ export function ChatTab() {
         )}
       </div>
 
-      <div className="flex-1 min-h-0">
-        {!activeRoom ? (
-          <RoomList
-            rooms={rooms}
-            onSelect={handleSelectRoom}
-            onCreateNew={() => setShowCreate(true)}
-          />
-        ) : (
-          <RoomChat
-            room={activeRoom}
-            onBack={() => setActiveRoom(null)}
-            onUpdate={handleUpdateRoom}
-          />
-        )}
-      </div>
+      {activeRoom ? (
+        <RoomChat
+          room={activeRoom}
+          onBack={() => setActiveRoom(null)}
+          onUpdate={handleUpdateRoom}
+        />
+      ) : (
+        <RoomList
+          rooms={rooms}
+          onSelect={handleSelectRoom}
+          onCreateNew={() => setShowCreate(true)}
+        />
+      )}
 
       {showCreate && (
         <CreateRoomModal

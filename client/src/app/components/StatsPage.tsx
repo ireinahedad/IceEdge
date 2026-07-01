@@ -41,9 +41,9 @@ function TeamCard({ team, onClick, onAdd, accent }: { team: UITeam; onClick: () 
   return (
     <button
       onClick={onClick}
-      className="w-full bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-transform text-left"
+      className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-transform text-left"
     >
-      <div className="w-11 h-11 rounded-xl bg-[#1a2a2f] flex items-center justify-center text-2xl flex-shrink-0">
+      <div className="w-11 h-11 rounded-xl bg-[#1B2419] flex items-center justify-center text-2xl flex-shrink-0">
         {team.logo}
       </div>
       <div className="flex-1 min-w-0">
@@ -69,12 +69,12 @@ function GameCard({ game, getTeamById, onClick, onAdd, accent }: { game: UIGame;
   return (
     <button
       onClick={onClick}
-      className="w-full bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 active:scale-[0.98] transition-transform text-left"
+      className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 active:scale-[0.98] transition-transform text-left"
     >
       <div className="flex items-center justify-between mb-3">
         <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: accent }}>{game.date} · {game.time}</span>
         <div className="flex items-center gap-2">
-          <span className="text-[#bfc8cc] text-[10px] bg-[#1a2a2f] px-2 py-0.5 rounded-full">NHL</span>
+          <span className="text-[#bfc8cc] text-[10px] bg-[#1B2419] px-2 py-0.5 rounded-full">NHL</span>
           <AddButton onPress={onAdd} accent={accent} />
         </div>
       </div>
@@ -111,10 +111,10 @@ function SeasonFutureCard({ future, accent, onNavigate }: { future: LocalFuture;
   return (
     <button
       onClick={onNavigate}
-      className="w-full bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 active:scale-[0.98] transition-transform text-left"
+      className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 active:scale-[0.98] transition-transform text-left"
     >
       <div className="flex items-center gap-3 mb-2">
-        <div className="w-10 h-10 rounded-xl bg-[#1a2a2f] flex items-center justify-center text-xl flex-shrink-0">
+        <div className="w-10 h-10 rounded-xl bg-[#1B2419] flex items-center justify-center text-xl flex-shrink-0">
           {future.logo}
         </div>
         <div className="flex-1 min-w-0">
@@ -134,7 +134,7 @@ function SeasonFutureCard({ future, accent, onNavigate }: { future: LocalFuture;
           <span className="text-[#bfc8cc] text-[10px]">{future.oddsLabel}</span>
         </div>
       </div>
-      <div className="w-full bg-[#0a1014] rounded-full h-1.5">
+      <div className="w-full bg-[#0A0E0C] rounded-full h-1.5">
         <div className="h-1.5 rounded-full" style={{ width: `${future.probability}%`, backgroundColor: accent }} />
       </div>
     </button>
@@ -199,7 +199,7 @@ export function StatsPage() {
   if (sport === "tennis") {
     return (
       <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] mx-auto relative z-10">
-        <header className="px-4 pt-12 pb-3 bg-[#0a1014]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
+        <header className="px-4 pt-12 pb-3 bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
           <div className="flex items-center justify-between mb-3">
             <div>
               <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>Statistics</h1>
@@ -221,7 +221,7 @@ export function StatsPage() {
 
   if (loading) return (
     <div className="flex flex-col min-h-screen bg-transparent text-white items-center justify-center max-w-[430px] mx-auto relative z-10">
-      <div className="w-12 h-12 rounded-full bg-[#111a1f] border border-white/20 flex items-center justify-center">
+      <div className="w-12 h-12 rounded-full bg-[#131A12] border border-white/20 flex items-center justify-center">
         <div className="w-5 h-5 rounded-full bg-[#86d1ea]/20 border border-[#86d1ea]/40 animate-pulse" />
       </div>
       <p className="text-[#bfc8cc] text-sm mt-3">Loading NHL data...</p>
@@ -238,7 +238,7 @@ export function StatsPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] mx-auto relative z-10">
-      <header className="px-4 pt-12 pb-3 bg-[#0a1014]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
+      <header className="px-4 pt-12 pb-3 bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>Statistics</h1>
@@ -249,7 +249,7 @@ export function StatsPage() {
             <span className="text-xs font-medium" style={{ color: accent }}>Live Data</span>
           </div>
         </div>
-        <div className="bg-[#111a1f] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2.5 mb-3">
+        <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2.5 mb-3">
           <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
           <input className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#bfc8cc]"
             placeholder="Search team, player, game..." value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -258,7 +258,7 @@ export function StatsPage() {
         <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-0.5">
           {filterTabs.map((tab, i) => (
             <button key={tab} onClick={() => setActiveFilter(i)} className="flex-shrink-0 px-4 py-2 rounded-full text-xs font-medium transition-all"
-              style={activeFilter === i ? { backgroundColor: accent, color: "#0f1416", fontWeight: 700 } : { backgroundColor: "#1a2a2f", color: "#bfc8cc" }}>
+              style={activeFilter === i ? { backgroundColor: accent, color: "#0f1416", fontWeight: 700 } : { backgroundColor: "#1B2419", color: "#bfc8cc" }}>
               {tab}
             </button>
           ))}
@@ -272,7 +272,7 @@ export function StatsPage() {
             {activeFilter === 1 && (
               <span className="flex items-center gap-2">
                 <span>{filteredGames.length} matches</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1a2a2f] text-[#bfc8cc]">{gamesLabel}</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1B2419] text-[#bfc8cc]">{gamesLabel}</span>
               </span>
             )}
             {activeFilter === 2 && "Players"}
@@ -294,7 +294,7 @@ export function StatsPage() {
               ))
             ) : (
               <div className="flex flex-col items-center justify-center py-12 gap-3">
-                <div className="w-12 h-12 rounded-full bg-[#111a1f] border border-white/20 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-full bg-[#131A12] border border-white/20 flex items-center justify-center">
                   <div className="w-5 h-5 rounded-full bg-[#86d1ea]/20 border border-[#86d1ea]/40 animate-pulse" />
                 </div>
                 <p className="text-white text-sm font-medium">Loading team data...</p>
@@ -335,7 +335,7 @@ export function StatsPage() {
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2 py-5">
-                <div className="w-10 h-10 rounded-full bg-[#111a1f] border border-white/20 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full bg-[#131A12] border border-white/20 flex items-center justify-center">
                   <div className="w-4 h-4 rounded-full bg-[#86d1ea]/20 border border-[#86d1ea]/40" />
                 </div>
                 <p className="text-white text-sm font-medium">No games scheduled today</p>

@@ -69,5 +69,5 @@ export async function resolveSlip(
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error ?? `Resolve failed (${res.status})`);
   }
-  return res.json();
+  return res.json() as Promise<ResolveResult>;
 }

@@ -47,6 +47,5 @@ export function bet365MatchUrl(sport: "hockey" | "tennis", _eventId?: string): s
 }
 
 /** Open account / sign-up page — most valuable affiliate conversion */
-export function bet365SignupUrl(): string {
-  return buildBet365Url("/olp/open-account");
+export function bet365SignupUrl(): string {  return buildBet365Url("/#/OA/E/");
 }

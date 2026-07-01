@@ -34,8 +34,8 @@ export function PlayersTab({ teams, accent }: { teams: UITeam[]; accent: string 
               onClick={() => setSelectedTeamId(team.id === selectedTeamId ? null : team.id)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-medium transition-all"
               style={team.id === selectedTeamId
-                ? { backgroundColor: accent, color: "#0a1014", borderColor: accent }
-                : { backgroundColor: "#111a1f", color: "#bfc8cc", borderColor: "rgba(255,255,255,0.1)" }}
+                ? { backgroundColor: accent, color: "#0A0E0C", borderColor: accent }
+                : { backgroundColor: "#131A12", color: "#bfc8cc", borderColor: "rgba(255,255,255,0.1)" }}
             >
               <span>{team.logo}</span>
               <span>{team.abbr}</span>
@@ -51,7 +51,7 @@ export function PlayersTab({ teams, accent }: { teams: UITeam[]; accent: string 
             {selectedTeam.name} · {loading ? "loading…" : `${teamPlayers.length} players`}
           </p>
           {loading ? (
-            [1,2,3,4,5].map(i => <div key={i} className="h-16 bg-[#111a1f] rounded-2xl animate-pulse" />)
+            [1,2,3,4,5].map(i => <div key={i} className="h-16 bg-[#131A12] rounded-2xl animate-pulse" />)
           ) : teamPlayers.length === 0 ? (
             <p className="text-[#8a9ea6] text-sm text-center py-8">No players found for {selectedTeam.abbr}</p>
           ) : (
@@ -64,9 +64,9 @@ export function PlayersTab({ teams, accent }: { teams: UITeam[]; accent: string 
                 <button
                   key={id}
                   onClick={() => navigate(`/stats/prediction/player/${id}`)}
-                  className="w-full bg-[#111a1f]/70 border border-white/20 rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-transform text-left"
+                  className="w-full bg-[#131A12]/70 border border-white/20 rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-transform text-left"
                 >
-                  <div className="w-11 h-11 rounded-xl bg-[#1a2a2f] flex items-center justify-center text-2xl flex-shrink-0">
+                  <div className="w-11 h-11 rounded-xl bg-[#1B2419] flex items-center justify-center text-2xl flex-shrink-0">
                     {logo}
                   </div>
                   <div className="flex-1 min-w-0">

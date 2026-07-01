@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Search, TrendingUp, ChevronRight, Plus, Goal, Star, Timer, Zap } from "lucide-react";
+import { IceedgeLogo } from "./brand/IceedgeLogo";
 import { BottomNav } from "./BottomNav";
 import { MarketSelectorSheet } from "./MarketSelectorSheet";
 import { nhlApiService } from "../services/nhlApiService";
@@ -153,6 +154,259 @@ interface AddSheetState {
   subject?: { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 }
 
+// ─── Best Bets ─────────────────────────────────────────────────────────────────
+
+const BB_BASE = import.meta.env.VITE_PREDICTION_API_URL || "";
+
+interface BestBet {
+  id: string;
+  label: string;
+  context: string;
+  logo: string;
+  rulePct: number;
+  mlPct: number | null;
+  mlLoading: boolean;
+  leg: BetLeg;
+  gameId?: string;
+  teamId?: string;
+}
+
+type SortSource = "rules" | "ml";
+type SortDir    = "safe"  | "risky";
+
+function riskLabel(pct: number): { label: string; color: string } {
+  if (pct >= 70) return { label: "Safe",      color: "#4ade80" };
+  if (pct >= 55) return { label: "Moderate",  color: "#86d1ea" };
+  if (pct >= 40) return { label: "Risky",     color: "#facc15" };
+  return              { label: "High risk",  color: "#f87171" };
+}
+
+function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource }) {
+  const { addLeg, removeLeg, hasLeg } = useBet();
+  const inSlip = hasLeg(bet.id);
+  const displayPct = sortSource === "ml" ? (bet.mlPct ?? bet.rulePct) : bet.rulePct;
+  const risk = riskLabel(displayPct);
+  const isML = sortSource === "ml" && bet.mlPct != null;
+
+  return (
+    <div className="flex items-center gap-3 bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl px-3.5 py-3">
+      <span className="text-xl flex-shrink-0">{bet.logo}</span>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <span className="text-white text-xs font-medium truncate">{bet.label}</span>
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full flex-shrink-0 font-medium"
+            style={{ color: risk.color, backgroundColor: `${risk.color}18`, border: `1px solid ${risk.color}44` }}>
+            {risk.label}
+          </span>
+        </div>
+        <span className="text-[#bfc8cc] text-[10px]">{bet.context}</span>
+        <div className="flex items-center gap-2 mt-1.5">
+          <div className="flex-1 bg-[#0A0E0C] rounded-full h-1.5 overflow-hidden">
+            <div className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${displayPct}%`, backgroundColor: isML ? "#a78bfa" : risk.color }} />
+          </div>
+          <span className="text-[10px] font-bold flex-shrink-0"
+            style={{ color: isML ? "#a78bfa" : risk.color }}>
+            {sortSource === "ml" && bet.mlLoading ? "…" : `${displayPct}%`}
+          </span>
+          {isML && <span className="text-[9px] text-[#a78bfa] flex-shrink-0 font-medium">ML</span>}
+          {sortSource === "ml" && !bet.mlLoading && bet.mlPct == null &&
+            <span className="text-[9px] text-[#bfc8cc] flex-shrink-0">rules</span>}
+        </div>
+      </div>
+
+      <button
+        onClick={() => inSlip ? removeLeg(bet.id) : addLeg({ ...bet.leg, probability: displayPct })}
+        className={`w-8 h-8 rounded-xl border flex items-center justify-center text-sm flex-shrink-0 transition-colors ${
+          inSlip
+            ? "bg-green-500/15 border-green-500/30 text-green-400"
+            : "bg-[#86d1ea]/10 border-[#86d1ea]/30 text-[#86d1ea] active:bg-[#86d1ea]/20"
+        }`}
+      >
+        {inSlip ? "✓" : "+"}
+      </button>
+    </div>
+  );
+}
+
+function BestBetsSection({
+  games,
+  tennisLive,
+  tennisUpcoming,
+  sport,
+  accent,
+  isLoading,
+}: {
+  games: DisplayGame[];
+  tennisLive: TennisMatch[];
+  tennisUpcoming: TennisMatch[];
+  sport: "hockey" | "tennis";
+  accent: string;
+  isLoading: boolean;
+}) {
+  const [sortSource, setSortSource] = useState<SortSource>("rules");
+  const [sortDir,    setSortDir]    = useState<SortDir>("safe");
+  const [bets, setBets]             = useState<BestBet[]>([]);
+  const [mlFetched,  setMlFetched]  = useState(false);
+
+  // When hockey has no games (e.g. off-season), fall back to tennis matches
+  const usingTennisFallback = sport === "hockey" && games.length === 0 && (tennisLive.length > 0 || tennisUpcoming.length > 0);
+
+  // Build raw bets list from game data
+  useEffect(() => {
+    const raw: BestBet[] = [];
+
+    if (sport === "hockey" && games.length > 0) {
+      for (const g of games) {
+        const ctx1 = `vs ${g.team2.abbr} · ${g.period ?? g.time ?? ""}`.trim().replace(/·\s*$/, "");
+        const ctx2 = `vs ${g.team1.abbr} · ${g.period ?? g.time ?? ""}`.trim().replace(/·\s*$/, "");
+
+        raw.push({
+          id: `bb-${g.id}-ml1`, label: `${g.team1.abbr} to win`, context: ctx1,
+          logo: g.team1.logo, rulePct: g.team1.winPct, mlPct: null, mlLoading: false,
+          gameId: g.id, teamId: g.team1.id,
+          leg: { id: `bb-${g.id}-ml1`, marketType: "moneyline", marketLabel: "Moneyline",
+            subjectType: "game", subjectId: g.id, subjectName: `${g.team1.abbr} vs ${g.team2.abbr}`,
+            subjectLogo: g.team1.logo, selection: `${g.team1.abbr} to win`,
+            selectionShort: `${g.team1.abbr} ML`, probability: g.team1.winPct,
+            gameInfo: `${g.team1.abbr} vs ${g.team2.abbr}`, addedAt: new Date().toISOString() },
+        });
+        raw.push({
+          id: `bb-${g.id}-ml2`, label: `${g.team2.abbr} to win`, context: ctx2,
+          logo: g.team2.logo, rulePct: g.team2.winPct, mlPct: null, mlLoading: false,
+          gameId: g.id, teamId: g.team2.id,
+          leg: { id: `bb-${g.id}-ml2`, marketType: "moneyline", marketLabel: "Moneyline",
+            subjectType: "game", subjectId: g.id, subjectName: `${g.team1.abbr} vs ${g.team2.abbr}`,
+            subjectLogo: g.team2.logo, selection: `${g.team2.abbr} to win`,
+            selectionShort: `${g.team2.abbr} ML`, probability: g.team2.winPct,
+            gameInfo: `${g.team1.abbr} vs ${g.team2.abbr}`, addedAt: new Date().toISOString() },
+        });
+        if (g.totalPct != null) {
+          const line = g.overUnder ?? 5.5;
+          raw.push({
+            id: `bb-${g.id}-over`, label: `Over ${line} goals`,
+            context: `${g.team1.abbr} vs ${g.team2.abbr}`,
+            logo: "📈", rulePct: g.totalPct, mlPct: null, mlLoading: false, gameId: g.id,
+            leg: { id: `bb-${g.id}-over`, marketType: "total_goals", marketLabel: "Total Goals O/U",
+              subjectType: "game", subjectId: g.id, subjectName: `${g.team1.abbr} vs ${g.team2.abbr}`,
+              subjectLogo: "📈", selection: `Over ${line}`, selectionShort: `O${line}`,
+              probability: g.totalPct, line, gameInfo: `${g.team1.abbr} vs ${g.team2.abbr}`,
+              addedAt: new Date().toISOString() },
+          });
+          const underPct = 100 - g.totalPct;
+          raw.push({
+            id: `bb-${g.id}-under`, label: `Under ${line} goals`,
+            context: `${g.team1.abbr} vs ${g.team2.abbr}`,
+            logo: "📉", rulePct: underPct, mlPct: null, mlLoading: false, gameId: g.id,
+            leg: { id: `bb-${g.id}-under`, marketType: "total_goals", marketLabel: "Total Goals O/U",
+              subjectType: "game", subjectId: g.id, subjectName: `${g.team1.abbr} vs ${g.team2.abbr}`,
+              subjectLogo: "📉", selection: `Under ${line}`, selectionShort: `U${line}`,
+              probability: underPct, line, gameInfo: `${g.team1.abbr} vs ${g.team2.abbr}`,
+              addedAt: new Date().toISOString() },
+          });
+        }
+      }
+    } else {
+      // Tennis (or hockey off-season fallback showing tennis)
+      for (const m of [...tennisLive, ...tennisUpcoming]) {
+        const ctx = `${m.tournament} · ${m.isLive ? "Live" : m.time}`;
+        raw.push({
+          id: `bb-tennis-${m.id}-p1`, label: `${m.player1.name} to win`, context: ctx,
+          logo: m.player1.country, rulePct: m.player1.winPct, mlPct: null, mlLoading: false,
+          leg: { id: `bb-tennis-${m.id}-p1`, marketType: "tennis_match_winner", marketLabel: "Match Winner",
+            subjectType: "player", subjectId: m.id, subjectName: m.player1.name,
+            subjectLogo: m.player1.country, selection: `${m.player1.name} to win`,
+            selectionShort: `${m.player1.name.split(" ").pop()} W`,
+            probability: m.player1.winPct, gameInfo: ctx, addedAt: new Date().toISOString() },
+        });
+        raw.push({
+          id: `bb-tennis-${m.id}-p2`, label: `${m.player2.name} to win`, context: ctx,
+          logo: m.player2.country, rulePct: m.player2.winPct, mlPct: null, mlLoading: false,
+          leg: { id: `bb-tennis-${m.id}-p2`, marketType: "tennis_match_winner", marketLabel: "Match Winner",
+            subjectType: "player", subjectId: m.id, subjectName: m.player2.name,
+            subjectLogo: m.player2.country, selection: `${m.player2.name} to win`,
+            selectionShort: `${m.player2.name.split(" ").pop()} W`,
+            probability: m.player2.winPct, gameInfo: ctx, addedAt: new Date().toISOString() },
+        });
+      }
+    }
+
+    setBets(raw);
+    setMlFetched(false);
+  }, [games, tennisLive, tennisUpcoming, sport]);
+
+  // Lazy ML fetch when ML tab selected
+  useEffect(() => {
+    if (sortSource !== "ml" || mlFetched || bets.length === 0 || !BB_BASE) return;
+    setMlFetched(true);
+    setBets(prev => prev.map(b => ({ ...b, mlLoading: true })));
+
+    bets.slice(0, 20).forEach(async (bet) => {
+      try {
+        const body: Record<string, unknown> = { type: sport === "hockey" ? "game" : "tennis", subjectId: bet.teamId ?? bet.gameId ?? bet.id };
+        if (bet.teamId) body.opponentId = bet.gameId;
+        const res = await fetch(`${BB_BASE}/predict/ml`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (res.ok) {
+          const data = await res.json() as { probability?: number };
+          setBets(prev => prev.map(b => b.id === bet.id ? { ...b, mlPct: Math.round(data.probability ?? bet.rulePct), mlLoading: false } : b));
+        } else {
+          setBets(prev => prev.map(b => b.id === bet.id ? { ...b, mlLoading: false } : b));
+        }
+      } catch {
+        setBets(prev => prev.map(b => b.id === bet.id ? { ...b, mlLoading: false } : b));
+      }
+    });
+  }, [sortSource, mlFetched, bets, sport]);
+
+  const sorted = useMemo(() => {
+    const src = (b: BestBet) => sortSource === "ml" ? (b.mlPct ?? b.rulePct) : b.rulePct;
+    return [...bets].sort((a, b) => sortDir === "safe" ? src(b) - src(a) : src(a) - src(b)).slice(0, 15);
+  }, [bets, sortSource, sortDir]);
+
+  return (
+    <section className="px-4 mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Star size={13} style={{ color: accent }} />
+          <span className="text-white text-sm font-medium">Best Bets</span>
+          {!isLoading && <span className="text-[10px] text-[#bfc8cc] bg-white/5 px-1.5 py-0.5 rounded-full">Top {sorted.length}</span>}
+          {usingTennisFallback && <span className="text-[10px] text-[#facc15] bg-[#facc15]/10 border border-[#facc15]/20 px-1.5 py-0.5 rounded-full">Tennis · NHL off-season</span>}
+        </div>
+        <div className="flex items-center gap-1.5">
+          {/* Source toggle */}
+          <div className="flex bg-white/5 border border-white/10 rounded-full p-0.5 gap-0.5">
+            {(["rules", "ml"] as SortSource[]).map((s) => (
+              <button key={s} onClick={() => setSortSource(s)}
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium transition-all ${sortSource === s ? "text-[#0A0E0C] font-bold" : "text-[#8a9ea6]"}`}
+                style={sortSource === s ? { backgroundColor: s === "ml" ? "#a78bfa" : accent } : {}}>
+                {s === "ml" ? "ML" : "Rules"}
+              </button>
+            ))}
+          </div>
+          {/* Direction toggle */}
+          <button onClick={() => setSortDir(d => d === "safe" ? "risky" : "safe")}
+            className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] text-[#8a9ea6] hover:text-white transition-all">
+            {sortDir === "safe" ? "↓ Safe" : "↑ Risky"}
+          </button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex flex-col gap-2">
+          {[1,2,3,4,5].map(i => <div key={i} className="h-16 bg-[#131A12] rounded-2xl animate-pulse" />)}
+        </div>
+      ) : sorted.length === 0 ? (
+        <div className="py-8 text-center text-[#bfc8cc] text-xs">No bets available right now</div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {sorted.map(bet => <BestBetRow key={bet.id} bet={bet} sortSource={sortSource} />)}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ─── Sport Selector ────────────────────────────────────────────────────────────
 
 function SportSelector() {
@@ -166,30 +420,25 @@ function SportSelector() {
   }, []);
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen(!open)} className="flex items-center gap-3 select-none">
-        {/* Circle logo */}
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{
-            background: `${theme.accent}18`,
-            border: `3px solid white`,
-            boxShadow: `0 0 0 1px ${theme.accent}40`,
-          }}
-        >
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: theme.accent }} />
-        </div>
-        {/* Brand name */}
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-2.5 select-none">
+        {/* ICEEDGE logo mark */}
+        <IceedgeLogo size={38} wordmark={false} />
+        {/* Brand name + sport label */}
         <div className="flex flex-col leading-none gap-0.5">
-          <div style={{ fontFamily: "'Merriweather', Georgia, serif" }}>
-            <span className="text-white tracking-[0.18em] uppercase text-sm font-bold">ICE</span>
-            <span className="tracking-[0.18em] uppercase text-sm font-bold" style={{ color: theme.accent }}>EDGE</span>
-          </div>
-          <span className="text-xs tracking-wider" style={{ color: theme.accent, opacity: 0.75 }}>{theme.sportLabel}</span>
+          <span
+            className="tracking-[0.14em] uppercase text-sm font-bold text-white"
+            style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif", letterSpacing: "0.12em" }}
+          >
+            ICEEDGE
+          </span>
+          <span className="text-[10px] tracking-wider" style={{ color: theme.accent, opacity: 0.85 }}>
+            {theme.sportLabel}
+          </span>
         </div>
         <span className="text-xs" style={{ color: theme.accent }}>▾</span>
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-2 bg-[#111a1f] border border-white/20 rounded-2xl overflow-hidden z-50 min-w-[168px] shadow-xl shadow-black/50 backdrop-blur-sm">
+        <div className="absolute top-full left-0 mt-2 bg-[#131A12] border border-white/20 rounded-2xl overflow-hidden z-50 min-w-[168px] shadow-xl shadow-black/50 backdrop-blur-sm">
           {(Object.keys(SPORT_THEMES) as Sport[]).map((s) => {
             const t = SPORT_THEMES[s]; const active = sport === s;
             return (
@@ -267,7 +516,7 @@ function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: (
   }
 
   return (
-    <div className="min-w-[280px] bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex-shrink-0">
+    <div className="min-w-[280px] bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex-shrink-0">
 
       {/* Header: live badge + edge + buttons */}
       <div className="flex items-center justify-between mb-3 gap-2">
@@ -318,9 +567,9 @@ function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: (
       {/* Model probability bar */}
       <div className="flex items-center gap-2 mb-2">
         <span className="text-[10px] font-bold w-7 flex-shrink-0" style={{ color: accent }}>{game.team1.winPct}%</span>
-        <div className="flex-1 bg-[#0a1014] rounded-full h-2 overflow-hidden flex">
+        <div className="flex-1 bg-[#0A0E0C] rounded-full h-2 overflow-hidden flex">
           <div className="h-full rounded-l-full transition-all duration-500" style={{ width: `${game.team1.winPct}%`, backgroundColor: accent }} />
-          <div className="h-full bg-[#1a2a2f] flex-1" />
+          <div className="h-full bg-[#1B2419] flex-1" />
         </div>
         <span className="text-[#bfc8cc] text-[10px] font-bold w-7 text-right flex-shrink-0">{game.team2.winPct}%</span>
       </div>
@@ -380,7 +629,7 @@ function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet
   }
 
   return (
-    <div className="bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl p-3.5">
+    <div className="bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-3.5">
       <div className="flex items-center gap-3">
 
         {/* Time column */}
@@ -449,6 +698,7 @@ function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet
 // ─── Tennis live card ─────────────────────────────────────────────────────────
 
 function TennisLiveCard({ match, accent }: { match: TennisMatch; accent: string }) {
+  const navigate = useNavigate();
   const { addLeg, hasLeg } = useBet();
   const legId = `tennis-${match.id}-p1`;
   const isAdded = hasLeg(legId);
@@ -475,7 +725,10 @@ function TennisLiveCard({ match, accent }: { match: TennisMatch; accent: string 
   }
 
   return (
-    <div className="min-w-[280px] bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex-shrink-0">
+    <div
+      className="min-w-[280px] bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex-shrink-0 cursor-pointer active:scale-[0.98] transition-transform"
+      onClick={() => navigate(`/predictions/tennis?id=${match.id}`)}
+    >
 
       {/* Header */}
       <div className="flex items-center justify-between mb-3 gap-2">
@@ -513,16 +766,16 @@ function TennisLiveCard({ match, accent }: { match: TennisMatch; accent: string 
       {/* Probability bar */}
       <div className="flex items-center gap-2 mb-2">
         <span className="text-[10px] font-bold w-7" style={{ color: accent }}>{match.player1.winPct}%</span>
-        <div className="flex-1 bg-[#0a1014] rounded-full h-2 overflow-hidden flex">
+        <div className="flex-1 bg-[#0A0E0C] rounded-full h-2 overflow-hidden flex">
           <div className="h-full rounded-l-full" style={{ width: `${match.player1.winPct}%`, backgroundColor: accent }} />
-          <div className="h-full bg-[#1a2a2f] flex-1" />
+          <div className="h-full bg-[#1B2419] flex-1" />
         </div>
         <span className="text-[#bfc8cc] text-[10px] font-bold w-7 text-right">{match.player2.winPct}%</span>
       </div>
 
-      {/* Quick add */}
+      {/* Quick add — stops propagation so card click doesn't also fire */}
       <button
-        onClick={quickAdd}
+        onClick={(e) => { e.stopPropagation(); quickAdd(e); }}
         className={`w-full mt-1 py-1.5 rounded-xl text-xs font-bold transition-colors ${
           isAdded
             ? "bg-green-500/15 border border-green-500/30 text-green-400"
@@ -538,6 +791,7 @@ function TennisLiveCard({ match, accent }: { match: TennisMatch; accent: string 
 // ─── Tennis upcoming row ──────────────────────────────────────────────────────
 
 function TennisMatchRow({ match, accent }: { match: TennisMatch; accent: string }) {
+  const navigate = useNavigate();
   const { addLeg, hasLeg } = useBet();
   const legId = `tennis-${match.id}-p1`;
   const isAdded = hasLeg(legId);
@@ -564,7 +818,10 @@ function TennisMatchRow({ match, accent }: { match: TennisMatch; accent: string 
   }
 
   return (
-    <div className="bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl p-3.5">
+    <div
+      className="bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-3.5 cursor-pointer active:scale-[0.98] transition-transform"
+      onClick={() => navigate(`/predictions/tennis?id=${match.id}`)}
+    >
       <div className="flex items-center gap-3">
 
         {/* Time */}
@@ -592,7 +849,7 @@ function TennisMatchRow({ match, accent }: { match: TennisMatch; accent: string 
           <div className="flex items-center gap-1.5">
             {edge >= 8 && <EdgeBadge edge={edge} />}
             <button
-              onClick={quickAdd}
+              onClick={(e) => { e.stopPropagation(); quickAdd(e); }}
               className={`w-8 h-8 rounded-xl border flex items-center justify-center text-sm font-bold transition-colors ${
                 isAdded
                   ? "bg-green-500/15 border-green-500/30 text-green-400"
@@ -805,259 +1062,136 @@ export function HockeyLanding() {
     });
   }, [sport]);
 
-  function openGameSheet(gameId: string, gameName: string, time: string) {
-    setAddSheet({ open: true, subject: { id: gameId, type: "game", name: gameName, logo: "🏒", subtitle: `Today · ${time}` } });
+  function openGameSheet(gameId: string) {
+    setAddSheet({ open: true, gameId });
   }
 
-  const sharedHeader = (
-    <header className="flex items-center justify-between px-4 pt-12 pb-3 bg-[#0a1014]/80 backdrop-blur-md border-b border-white/[0.04] sticky top-0 z-40">
-      <SportSelector />
-      <div className="flex items-center gap-2.5">
-        <button onClick={() => navigate("/stats")} className="bg-[#111a1f]/80 border border-white/20 rounded-xl px-3 py-1.5 flex items-center gap-1.5 hover:border-white/35 active:scale-95 transition-all">
-          <Search size={12} style={{ color: accent }} />
-          <span className="text-[#bfc8cc] text-xs">Search</span>
-        </button>
-        <button className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: accent }}>
-          <span className="text-[#0a1014] text-[11px] font-bold">JD</span>
-        </button>
-      </div>
-    </header>
-  );
-
-  // ── Tennis view ──────────────────────────────────────────────────────────────
-  if (sport === "tennis") {
-    return (
-      <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] mx-auto relative z-10">
-        {sharedHeader}
-        <div className="flex-1 pb-28 overflow-y-auto relative z-10">
-
-          {/* Top Predictions */}
-          <div className="px-4 mb-5 mt-4">
-            <div className="bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <TrendingUp size={14} className="text-[#86d1ea]" />
-                  <span className="text-white text-sm font-medium">Today's Top Predictions</span>
-                </div>
-                <button onClick={() => navigate("/stats")} className="text-xs" style={{ color: accent }}>All →</button>
-              </div>
-              {tennisLoading ? (
-                <div className="flex flex-col gap-2">{[1,2,3].map((i) => <div key={i} className="h-8 bg-[#1a2a2f] rounded-xl animate-pulse" />)}</div>
-              ) : (
-              <div className="flex flex-col gap-2.5">
-                {tennisTopPreds.map((pred, i) => (
-                  <button key={i} onClick={() => navigate("/stats")} className="flex items-center gap-3">
-                    <span className="text-xl flex-shrink-0">{pred.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-white text-xs">{pred.name} · {pred.label}</span>
-                        <div className="flex items-center gap-2">
-                          {pred.edge >= 8 && (
-                            <span className="text-[9px] text-green-400 bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 rounded-full">
-                              +{pred.edge}%
-                            </span>
-                          )}
-                          <span className="text-xs font-bold" style={{ color: accent }}>{pred.pct}%</span>
-                        </div>
-                      </div>
-                      <div className="w-full bg-[#0a1014] rounded-full h-1.5">
-                        <div className="h-1.5 rounded-full" style={{ width: `${pred.pct}%`, backgroundColor: accent }} />
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-              )}
-            </div>
-          </div>
-
-          {/* Live Matches */}
-          <section className="px-4 mb-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse inline-block" />
-                <span className="text-white text-sm font-medium">Live Now</span>
-              </div>
-              <button className="text-xs" style={{ color: accent }}>See all →</button>
-            </div>
-            <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
-              {tennisLoading ? (
-                <div className="min-w-[280px] h-[160px] bg-[#111a1f] rounded-2xl animate-pulse" />
-              ) : tennisLive.length === 0 ? (
-                <div className="w-full py-6 text-center text-[#bfc8cc] text-xs">No live matches right now</div>
-              ) : (
-                tennisLive.map((match) => <TennisLiveCard key={match.id} match={match} accent={accent} />)
-              )}
-            </div>
-          </section>
-
-          {/* Today's Matches */}
-          <section className="px-4 mb-5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-white text-sm font-medium">Today's Matches</span>
-              <button onClick={() => navigate("/stats")} className="text-xs" style={{ color: accent }}>Full stats →</button>
-            </div>
-            <div className="flex flex-col gap-2">
-              {tennisLoading
-                ? [1,2,3].map((i) => <div key={i} className="h-20 bg-[#111a1f] rounded-2xl animate-pulse" />)
-                : tennisUpcoming.length === 0
-                  ? <div className="py-8 text-center text-[#bfc8cc] text-xs">No matches scheduled — check back soon</div>
-                  : tennisUpcoming.map((match) => <TennisMatchRow key={match.id} match={match} accent={accent} />)
-              }
-            </div>
-          </section>
-
-          {/* Browse by Category */}
-          <section className="px-4 mb-5">
-            <p className="text-white text-sm font-medium mb-3">Browse by Category</p>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { icon: "🎾", label: "Match Winner",  desc: "Moneyline & outright",  path: "/stats" },
-                { icon: "📋", label: "Set Betting",   desc: "Correct score by sets", path: "/stats" },
-                { icon: "⚡", label: "Game Handicap", desc: "Spread across games",   path: "/stats" },
-                { icon: "✨", label: "Specials",      desc: "Aces, breaks & more",   path: "/stats" },
-              ].map((cat, i) => (
-                <button key={i} onClick={() => navigate(cat.path)}
-                  className="bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl p-3.5 text-left active:bg-[#1a2a2f] transition-colors">
-                  <div className="w-8 h-8 rounded-lg bg-[#86d1ea]/10 border border-[#86d1ea]/20 flex items-center justify-center mb-2"><div className="w-3 h-3 rounded-full bg-[#86d1ea]/60" /></div>
-                  <p className="text-white text-xs font-medium mt-2">{cat.label}</p>
-                  <p className="text-[#bfc8cc] text-[10px]">{cat.desc}</p>
-                </button>
-              ))}
-            </div>
-          </section>
-
-        </div>
-        <BottomNav />
-        {addSheet.open && <MarketSelectorSheet onClose={() => setAddSheet({ open: false })} preselectedSubject={addSheet.subject} />}
-      </div>
-    );
-  }
-
-  // ── Hockey view ──────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] mx-auto relative z-10">
-      {sharedHeader}
-      <div className="flex-1 pb-28 overflow-y-auto relative z-10">
-
-        {/* Top Predictions Banner */}
-        <div className="px-4 mb-5 mt-4">
-          <div className="bg-[#111a1f]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <TrendingUp size={14} className="text-[#86d1ea]" />
-                <span className="text-white text-sm font-medium">Today's Top Predictions</span>
-              </div>
-              <button onClick={() => navigate("/stats")} className="text-[#86d1ea] text-xs">All →</button>
-            </div>
-            {loading ? (
-              <div className="flex flex-col gap-2">{[1,2,3].map((i) => <div key={i} className="h-8 bg-[#1a2a2f] rounded-xl animate-pulse" />)}</div>
-            ) : (
-              <div className="flex flex-col gap-2.5">
-                {topPredictions.map((pred, i) => (
-                  <button key={i} onClick={() => navigate("/stats")} className="flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-lg bg-[#1a2a2f] border border-white/20 flex items-center justify-center text-[9px] font-bold text-[#86d1ea] flex-shrink-0">{pred.team.slice(0,3)}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-white text-xs">{pred.team} · {pred.label}</span>
-                        <div className="flex items-center gap-2">
-                          {pred.edge >= 8 && (
-                            <span className="text-[9px] text-green-400 bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 rounded-full">
-                              +{pred.edge}%
-                            </span>
-                          )}
-                          <span className="text-green-400 text-[10px]">{pred.trend}</span>
-                          <span className="text-[#86d1ea] text-xs font-bold">{pred.pct}%</span>
-                        </div>
-                      </div>
-                      <div className="w-full bg-[#0a1014] rounded-full h-1.5">
-                        <div className="h-1.5 rounded-full bg-[#86d1ea]" style={{ width: `${pred.pct}%` }} />
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Live Games */}
-        <section className="px-4 mb-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse inline-block" />
-              <span className="text-white text-sm font-medium">Live Now</span>
-            </div>
-            <button className="text-[#86d1ea] text-xs">See all →</button>
-          </div>
-          <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
-            {loading ? (
-              <div className="min-w-[280px] h-[160px] bg-[#111a1f] rounded-2xl animate-pulse" />
-            ) : liveGames.length === 0 ? (
-              <div className="w-full py-6 text-center text-[#bfc8cc] text-xs">No live games right now</div>
-            ) : liveGames.map((game) => (
-              <LiveGameCard
-                key={game.id}
-                game={game}
-                onOpenSheet={() => openGameSheet(game.id, `${game.team1.abbr} vs ${game.team2.abbr}`, "Live")}
-              />
-            ))}
-          </div>
-        </section>
-
-        {/* Upcoming Games */}
-        <section className="px-4 mb-5">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-white text-sm font-medium">{upcomingLabel}</span>
-            <button onClick={() => navigate("/stats")} className="text-[#86d1ea] text-xs">Full stats →</button>
-          </div>
-          <div className="flex flex-col gap-2">
-            {loading
-              ? [1,2,3].map((i) => <div key={i} className="h-20 bg-[#111a1f] rounded-2xl animate-pulse" />)
-              : upcomingGames.length === 0
-                ? <div className="py-8 text-center text-[#bfc8cc] text-xs">No games scheduled — check back soon</div>
-                : upcomingGames.map((game) => (
-                    <UpcomingGameRow
-                      key={game.id}
-                      game={game}
-                      onOpenSheet={() => openGameSheet(game.id, `${game.team1.abbr} vs ${game.team2.abbr}`, game.time ?? "")}
-                    />
-                  ))
-            }
-          </div>
-        </section>
-
-        {/* Browse by Category */}
-        <section className="px-4 mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-white text-sm font-medium">Browse by Category</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { label: "Game Lines",    icon: "🏒", path: "/stats" },
-              { label: "Player Props",  icon: "👤", path: "/stats" },
-              { label: "Futures",       icon: "🏆", path: "/stats" },
-              { label: "Live Betting",  icon: "⚡", path: "/stats" },
-            ].map((cat, i) => (
-              <button key={i} onClick={() => navigate(cat.path)}
-                className="bg-[#111a1f]/80 backdrop-blur-sm border border-white/20 rounded-2xl p-3.5 text-left hover:border-white/35 active:scale-[0.97] transition-all group">
-                <div className="w-8 h-8 rounded-lg bg-[#86d1ea]/10 border border-[#86d1ea]/20 flex items-center justify-center mb-2"><div className="w-3 h-3 rounded-full bg-[#86d1ea]/60" /></div>
-                <p className="text-white text-xs font-medium mt-2">{cat.label}</p>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <div className="h-24" />
-        <BottomNav />
+    <div className="flex flex-col min-h-screen pb-24" style={{ background: "#0A0E0C" }}>
+      {/* Header */}
+      <div className="sticky top-0 z-40 px-4 pt-12 pb-3"
+        style={{ background: "rgba(10,14,12,0.88)", backdropFilter: "blur(16px)", borderBottom: "1px solid #283323" }}>
+        <SportSelector />
       </div>
 
+      <div className="flex-1 overflow-y-auto">
+        {sport === "hockey" ? (
+          <div className="px-4 py-4 flex flex-col gap-6">
+            {/* Best Bets */}
+            <BestBetsSection
+              games={[...liveGames, ...upcomingGames]}
+              tennisLive={[]}
+              tennisUpcoming={[]}
+              sport="hockey"
+              accent={accent}
+              isLoading={loading}
+            />
+
+            {/* Live Games */}
+            {liveGames.length > 0 && (
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <h2 className="text-white text-sm font-bold uppercase tracking-wider">Live Now</h2>
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
+                  {liveGames.map((g) => (
+                    <LiveGameCard key={g.id} game={g} onOpenSheet={() => openGameSheet(g.id)} accent={accent} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Upcoming Games */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-white text-sm font-bold uppercase tracking-wider">{upcomingLabel}</h2>
+                {loading && <div className="w-16 h-3 bg-white/5 rounded animate-pulse" />}
+              </div>
+              {loading ? (
+                <div className="flex flex-col gap-2">
+                  {[1, 2, 3].map((i) => <div key={i} className="h-20 bg-white/5 rounded-2xl animate-pulse" />)}
+                </div>
+              ) : upcomingGames.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  {upcomingGames.map((g) => (
+                    <UpcomingGameRow key={g.id} game={g} onOpenSheet={() => openGameSheet(g.id)} />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-[#4a6068] text-sm">No games scheduled</p>
+                </div>
+              )}
+            </section>
+          </div>
+        ) : (
+          /* Tennis */
+          <div className="px-4 py-4 flex flex-col gap-6">
+            <BestBetsSection
+              games={[]}
+              tennisLive={tennisLive}
+              tennisUpcoming={tennisUpcoming}
+              sport="tennis"
+              accent={accent}
+              isLoading={tennisLoading}
+            />
+
+            {tennisLive.length > 0 && (
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <h2 className="text-white text-sm font-bold uppercase tracking-wider">Live Now</h2>
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
+                  {tennisLive.map((m) => (
+                    <TennisLiveCard key={m.id} match={m} accent={accent} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <section>
+              <h2 className="text-white text-sm font-bold uppercase tracking-wider mb-3">Upcoming Matches</h2>
+              {tennisLoading ? (
+                <div className="flex flex-col gap-2">
+                  {[1, 2, 3].map((i) => <div key={i} className="h-20 bg-white/5 rounded-2xl animate-pulse" />)}
+                </div>
+              ) : tennisUpcoming.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  {tennisUpcoming.map((m) => (
+                    <TennisMatchRow key={m.id} match={m} accent={accent} />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-[#4a6068] text-sm">No matches scheduled</p>
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+      </div>
+
+      {/* Market selector sheet */}
       {addSheet.open && (
         <MarketSelectorSheet
           onClose={() => setAddSheet({ open: false })}
-          preselectedSubject={addSheet.subject}
+          preselectedSubject={
+            addSheet.gameId
+              ? {
+                  id: addSheet.gameId,
+                  type: "game",
+                  name: liveGames.concat(upcomingGames).find((g) => g.id === addSheet.gameId)?.team1.abbr ?? "Game",
+                  logo: "🏒",
+                  subtitle: "NHL Game",
+                }
+              : undefined
+          }
         />
       )}
+
+      <BottomNav />
     </div>
   );
 }

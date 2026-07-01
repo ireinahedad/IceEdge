@@ -220,5 +220,5 @@ export function useNHLData(): NHLData {
   const getGameById   = (id: string) => games.find(g => g.id === id);
   const getPlayerById = (id: string) => players.find(p => p.id === id);
 
-  return { teams, games, gamesLabel, players, loading, error, getTeamById, getGameById, getPlayerById };
+  return { teams, games, players, gamesLabel, loading, error, getTeamById, getGameById, getPlayerById };
 }

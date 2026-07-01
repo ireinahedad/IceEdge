@@ -322,7 +322,7 @@ export function BadgeGrid({
 
       <div className="grid grid-cols-4 gap-2">
         {badges.map((badge) => {
-          const tc = BADGE_TIER_COLOR[badge.tier];
+          const tc = BADGE_TIER_COLOR[badge.tier as keyof typeof BADGE_TIER_COLOR] ?? BADGE_TIER_COLOR.bronze;
 
           return (
             <button
@@ -454,7 +454,7 @@ export function BetHistoryList({
               onClick={() => setFilter(f.key)}
               className={`text-[9px] px-2 py-1 rounded-full border transition-colors ${
                 filter === f.key
-                  ? "bg-[#86d1ea] text-[#0a1014] border-[#86d1ea] font-bold"
+                  ? "bg-[#86d1ea] text-[#0A0E0C] border-[#86d1ea] font-bold"
                   : "text-white/70 border-white/20"
               }`}
             >
@@ -472,7 +472,11 @@ export function BetHistoryList({
         )}
 
         {filtered.map((bet) => {
-          const os = outcomeStyle[bet.outcome];
+          const os = outcomeStyle[bet.outcome as keyof typeof outcomeStyle] ?? {
+            dot: "bg-gray-500",
+            badge: "bg-gray-500/15 text-gray-400 border-gray-500/30",
+            label: (bet.outcome ?? "—").toUpperCase(),
+          };
 
           return (
             <div
@@ -575,35 +579,8 @@ export function CalibrationCard({
       </p>
 
       <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/20">
-        <div className="text-center">
-          <p className="text-white text-xs font-bold">
-            {stats.avgProbability}%
-          </p>
-          <p className="text-white/70 text-[9px]">
-            Avg model prob
-          </p>
-        </div>
-
-        <div className="text-center">
-          <p className="text-white text-xs font-bold">
-            {stats.hitRate}%
-          </p>
-          <p className="text-white/70 text-[9px]">
-            Actual hit rate
-          </p>
-        </div>
-
-        <div className="text-center">
-          <p className="text-white text-xs font-bold">
-            {Math.abs(
-              stats.hitRate - stats.avgProbability
-            ).toFixed(1)}
-            %
-          </p>
-          <p className="text-white/70 text-[9px]">
-            Delta
-          </p>
-        </div>
+             <span className="text-white/40 text-[9px]">Calibration</span>
+        <span className="text-xs font-bold" style={{ color }}>{score}/100</span>
       </div>
     </div>
   );

@@ -1,16 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ICEEDGE — Your Betting Edge</title>
+    <meta name="description" content="Statistical edge for smarter sports bets. NHL & Tennis predictions powered by ML." />
+    <meta name="theme-color" content="#0A0E0C" />
 
-  <!DOCTYPE html>
-  <html lang="en">
-    <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>Hockey Betting App Landing Page</title>
-      <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
-    </head>
+    <!-- Fonts: Oswald (display/numbers) + Inter (body) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
 
-    <body>
-      <div id="root"></div>
-      <script type="module" src="/src/main.tsx"></script>
-    </body>
-  </html>
-  
+    <style>
+      /* ── Design tokens ── */
+      :root {
+        --color-base:       #0A0E0C;
+        --color-surface:    #131A12;
+        --color-surface2:   #1B2419;
+        --color-border:     #283323;
+        --color-text:       #F3F7F0;
+        --color-text-muted: #92A08A;
+        --color-accent:     #9BF019;
+        --color-accent2:    #008200;
+        --color-edge-high:  #D2FF28;
+        --color-edge-mid:   #4BD200;
+        --color-edge-low:   #3A4339;
+        --color-success:    #4BD200;
+        --color-danger:     #E5564D;
+        --color-logo-blue:  #1A8AFF;
+      }
+
+      html, body {
+        height: 100%;
+        margin: 0;
+        background-color: var(--color-base);
+        color: var(--color-text);
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      #root { height: 100%; }
+      ::-webkit-scrollbar { width: 0; }
+      .font-display { font-family: 'Oswald', sans-serif; }
+    </style>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

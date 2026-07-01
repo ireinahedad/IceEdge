@@ -36,9 +36,11 @@ CREATE TABLE IF NOT EXISTS users (
   id            UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
   email         VARCHAR(255)  NOT NULL UNIQUE,
   username      VARCHAR(100)  NOT NULL UNIQUE,
-  password_hash TEXT          NOT NULL,
+  password_hash TEXT,
   first_name    VARCHAR(100),
   last_name     VARCHAR(100),
+  google_id     TEXT          UNIQUE,
+  avatar_url    TEXT,
   role          user_role     NOT NULL DEFAULT 'user',
   is_active     BOOLEAN       NOT NULL DEFAULT TRUE,
   created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
@@ -169,11 +171,13 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   user_id           UUID         PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   display_name      VARCHAR(100),
   avatar            VARCHAR(20),
+  avatar_url        TEXT,
   favorite_team     VARCHAR(5),
   bio               TEXT,
   is_public         BOOLEAN      DEFAULT TRUE,
   tier              user_tier    DEFAULT 'rookie',
   performance_score INT          DEFAULT 0,
+  xp                INT          NOT NULL DEFAULT 0,
   joined_at         DATE         DEFAULT CURRENT_DATE
 );
 

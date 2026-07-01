@@ -228,12 +228,12 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
         onClick={onClose}
       />
       <div
-        className="relative bg-[#0a1014] rounded-t-3xl border-t border-white/20 max-h-[90vh] flex flex-col max-w-[430px] w-full mx-auto"
+        className="relative bg-[#0A0E0C] rounded-t-3xl border-t border-white/20 max-h-[90vh] flex flex-col max-w-[430px] w-full mx-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Handle */}
         <div className="flex justify-center pt-3 pb-1">
-          <div className="w-10 h-1 rounded-full bg-[#1a2a2f]" />
+          <div className="w-10 h-1 rounded-full bg-[#1B2419]" />
         </div>
 
         {/* Header */}
@@ -259,7 +259,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[#1a2a2f] flex items-center justify-center text-[#bfc8cc]"
+            className="w-8 h-8 rounded-full bg-[#1B2419] flex items-center justify-center text-[#bfc8cc]"
           >✕</button>
         </div>
 
@@ -267,7 +267,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
         {step === "subject" && (
           <div className="flex flex-col flex-1 overflow-hidden">
             <div className="px-4 pt-3 pb-2">
-              <div className="bg-[#111a1f] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2.5">
+              <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2.5">
                 <span className="text-[#bfc8cc]">🔍</span>
                 <input
                   className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#bfc8cc]"
@@ -300,7 +300,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                             setActiveCategory(type === "player" ? "player" : "match");
                             setStep("market");
                           }}
-                          className="flex items-center gap-3 bg-[#111a1f] border border-white/20 rounded-xl px-3 py-2.5 text-left active:bg-[#1a2a2f]"
+                          className="flex items-center gap-3 bg-[#131A12] border border-white/20 rounded-xl px-3 py-2.5 text-left active:bg-[#1B2419]"
                         >
                           <span className="text-xl flex-shrink-0">{subject.logo}</span>
                           <div className="flex-1 min-w-0">
@@ -340,8 +340,8 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                   onClick={() => setActiveCategory(cat)}
                   className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-[10px] font-medium transition-all ${
                     activeCategory === cat
-                      ? "bg-[#86d1ea] text-[#0a1014]"
-                      : "bg-[#111a1f] text-[#bfc8cc] border border-white/20"
+                      ? "bg-[#86d1ea] text-[#0A0E0C]"
+                      : "bg-[#131A12] text-[#bfc8cc] border border-white/20"
                   }`}
                 >
                   <span>{CATEGORY_ICONS[cat]}</span>
@@ -370,7 +370,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                         setStep("configure");
                       }
                     }}
-                    className="bg-[#111a1f] border border-white/20 rounded-2xl px-4 py-3 text-left flex items-center gap-3 active:bg-[#1a2a2f]"
+                    className="bg-[#131A12] border border-white/20 rounded-2xl px-4 py-3 text-left flex items-center gap-3 active:bg-[#1B2419]"
                   >
                     <span className="text-xl">{CATEGORY_ICONS[market.category]}</span>
                     <div className="flex-1">
@@ -397,7 +397,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
             </button>
 
             {/* Market info */}
-            <div className="bg-[#111a1f] border border-white/20 rounded-2xl p-4 mb-4">
+            <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4 mb-4">
               <p className="text-white font-bold text-sm mb-1">{selectedMarket.label}</p>
               <p className="text-[#bfc8cc] text-xs">{selectedMarket.description}</p>
             </div>
@@ -415,8 +415,8 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                       onClick={() => setSelectedLine(line)}
                       className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                         selectedLine === line
-                          ? "bg-[#86d1ea] text-[#0a1014]"
-                          : "bg-[#111a1f] border border-white/20 text-[#bfc8cc]"
+                          ? "bg-[#86d1ea] text-[#0A0E0C]"
+                          : "bg-[#131A12] border border-white/20 text-[#bfc8cc]"
                       }`}
                     >
                       {line}
@@ -437,8 +437,8 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                       onClick={() => setSelectedSelection(opt.value)}
                       className={`px-4 py-3 rounded-xl text-sm text-left transition-all ${
                         selectedSelection === opt.value
-                          ? "bg-[#86d1ea] text-[#0a1014] font-medium"
-                          : "bg-[#111a1f] border border-white/20 text-white"
+                          ? "bg-[#86d1ea] text-[#0A0E0C] font-medium"
+                          : "bg-[#131A12] border border-white/20 text-white"
                       }`}
                     >
                       {opt.label}
@@ -459,8 +459,8 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                 added
                   ? "bg-green-500 text-white"
                   : canAdd
-                  ? "bg-[#86d1ea] text-[#0a1014]"
-                  : "bg-[#1a2a2f] text-[#bfc8cc] cursor-not-allowed"
+                  ? "bg-[#86d1ea] text-[#0A0E0C]"
+                  : "bg-[#1B2419] text-[#bfc8cc] cursor-not-allowed"
               }`}
             >
               {added ? "✓ Added to Slip!" : adding ? "Adding…" : "Add to Prediction Slip"}
@@ -489,18 +489,14 @@ function TeamSelectionsForGame({ gameId, selected, onSelect, getTeamById, getGam
       {[t1, t2].map((t) => (
         <button
           key={t.id}
-          onClick={() => onSelect(t.id)}
-          className={`flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
-            selected === t.id
-              ? "bg-[#86d1ea] text-[#0a1014] font-medium"
-              : "bg-[#111a1f] border border-white/20 text-white"
-          }`}
+          onClick={() => onSelect(t.id, t.name, t.logo)}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors active:bg-white/5"
+          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
         >
           <span className="text-xl">{t.logo}</span>
-          <span className="text-sm">{t.name}</span>
+          <span className="text-white text-sm font-medium">{t.name}</span>
         </button>
       ))}
     </>
   );
 }
-

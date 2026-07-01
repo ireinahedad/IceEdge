@@ -8,5 +8,4 @@
  *   - Futures odds  → POST /api/predict/futures       (LLM endpoint)
  *   - Waterfall      → POST /api/predict/factors       (LLM endpoint)
  *
- * See predictionApiService.ts → factorsApiService for the API contracts.
- */
+ * See predictionApiService.ts → factorsApiService for the API contr

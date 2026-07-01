@@ -12,7 +12,7 @@ export interface SportTheme {
 
 export const SPORT_THEMES: Record<Sport, SportTheme> = {
   hockey: {
-    bg: "#0a1014",
+    bg: "#0A0E0C",
     accent: "#86d1ea",
     gradientGlow: "rgba(134,209,234,0.07)",
     sportIcon: "H",

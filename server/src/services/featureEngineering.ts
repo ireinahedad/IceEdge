@@ -103,11 +103,24 @@ export async function buildPlayerPropFeatures(
   const player = await fetchPlayerById(playerId);
   const gp = Math.max(player.gamesPlayed ?? 1, 1);
 
+  // For prop types not covered by the main stats (hits, blocks, pim, saves, wins, shutouts),
+  // inject a sensible per-game rate via shots_per_game so the Python Poisson model
+  // can use it via its extended rate_map.
+  const SPECIAL_RATES: Record<string, number> = {
+    hits:     2.1,   // skater average across positions
+    blocks:   0.5,   // average blocked shots/game
+    pim:      0.50,  // average penalty min/game
+    saves:    27.0,  // league-avg goalie saves per start
+    wins:     0.50,  // goalie wins ~50% of starts
+    shutouts: 0.10,  // shutout ~10% of starts
+  };
+  const specialRate = SPECIAL_RATES[propType];
+
   return {
     goals_per_game:   (player.goals   ?? 0) / gp,
     assists_per_game: (player.assists  ?? 0) / gp,
     points_per_game:  (player.points   ?? 0) / gp,
-    shots_per_game:   (player.shots    ?? 0) / gp,
+    shots_per_game:   specialRate != null ? specialRate : (player.shots ?? 0) / gp,
     games_played:     gp,
     line,
     prop_type: propType,
