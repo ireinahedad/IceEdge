@@ -66,9 +66,7 @@ export function LoginPage() {
         >
           ICEEDGE
         </h1>
-        <p className="text-[11px] tracking-widest uppercase" style={{ color: ACCENT, opacity: 0.8 }}>
-          Your Betting Edge
-        </p>
+     
         <div className="mt-4 w-12 h-0.5 rounded-full" style={{ background: ACCENT, opacity: 0.5 }} />
       </div>
 

@@ -6,9 +6,10 @@ import { useAuth } from "../context/AuthContext";
 import { MarketSelectorSheet } from "./MarketSelectorSheet";
 import { BottomNav } from "./BottomNav";
 import type { BetLeg } from "../types/bet";
-import { submitSlip, getMySlips, resolveSlip } from "../services/slipApiService";
+import { submitSlip, getMySlips, settleMySlips } from "../services/slipApiService";
 import type { BetSlip } from "../services/slipApiService";
 import { useSport } from "../context/SportContext";
+import { openBet365 } from "../services/affiliateService";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -83,6 +84,7 @@ function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: number }) {
 // ─── Single leg card (builder) ────────────────────────────────────────────────
 
 function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; onRemove: () => void }) {
+  const { sport } = useSport();
   const barColor =
     leg.probability >= 65 ? "#4ade80" :
     leg.probability >= 50 ? "#86d1ea" :
@@ -112,6 +114,14 @@ function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; onRemov
             <span className="text-xs font-bold flex-shrink-0" style={{ color: barColor }}>{leg.probability}%</span>
             <span className="text-[10px] text-[#4a6068] flex-shrink-0 font-mono">{toOddsLabel(leg.probability)}</span>
           </div>
+          <button
+            onClick={() => openBet365(sport === "tennis" ? "/#/IP/B13" : "/#/IP/B18")}
+            className="mt-2 inline-flex items-center gap-1.5 bg-[#126e51] hover:bg-[#0f5c44] text-[#ffd700] text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-colors"
+            title="Open Bet365 to place this bet"
+          >
+            <span className="bg-[#ffd700] text-[#126e51] rounded px-1 py-0.5 text-[8px] font-black leading-none">b365</span>
+            Place on Bet365 ↗
+          </button>
         </div>
         <button onClick={onRemove}
           className="w-7 h-7 rounded-full bg-[#1B2419] border border-white/20 flex items-center justify-center text-[#8a9ea6] flex-shrink-0 active:bg-red-500/20 active:text-red-400 active:border-red-400/30 transition-colors">
@@ -250,13 +260,7 @@ function LockSlipCTA({
 
 // ─── Slip card (My Slips) ─────────────────────────────────────────────────────
 
-function SlipCard({
-  slip, onResolve, resolving,
-}: {
-  slip: BetSlip;
-  onResolve: (id: string, outcome: "win" | "loss") => void;
-  resolving: string | null;
-}) {
+function SlipCard({ slip }: { slip: BetSlip }) {
   const isPending = slip.outcome === "pending";
   const isWin = slip.outcome === "win";
   const date = new Date(slip.placedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -271,8 +275,6 @@ function SlipCard({
     (slip.combinedProbability ?? 0) >= 65 ? "#4ade80" :
     (slip.combinedProbability ?? 0) >= 45 ? "#86d1ea" :
     (slip.combinedProbability ?? 0) >= 25 ? "#facc15" : "#f87171";
-
-  const isThisResolving = resolving === slip.id;
 
   return (
     <div className={`bg-[#131A12] border rounded-2xl overflow-hidden transition-all ${
@@ -323,33 +325,27 @@ function SlipCard({
         ))}
       </div>
 
-      {/* XP awarded */}
+      {/* XP awarded / deducted */}
       {slip.xpAwarded > 0 && (
         <div className="mx-4 mb-3 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
           <Trophy size={11} className="text-yellow-400" />
           <span className="text-yellow-400 text-[10px] font-bold">+{slip.xpAwarded} XP earned</span>
         </div>
       )}
+      {slip.xpAwarded < 0 && (
+        <div className="mx-4 mb-3 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/20">
+          <AlertCircle size={11} className="text-red-400" />
+          <span className="text-red-400 text-[10px] font-bold">{slip.xpAwarded} XP</span>
+        </div>
+      )}
 
-      {/* Resolve buttons (pending only) */}
+      {/* Pending: results are settled automatically */}
       {isPending && (
-        <div className="flex gap-2 px-4 pb-3">
-          <button
-            onClick={() => onResolve(slip.id, "win")}
-            disabled={isThisResolving}
-            className="flex-1 py-2 rounded-xl bg-green-500/15 border border-green-500/25 text-green-400 text-[11px] font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-50"
-          >
-            {isThisResolving ? <div className="w-3 h-3 rounded-full border border-green-400/40 border-t-green-400 animate-spin" /> : <CheckCircle size={11} />}
-            Mark Won
-          </button>
-          <button
-            onClick={() => onResolve(slip.id, "loss")}
-            disabled={isThisResolving}
-            className="flex-1 py-2 rounded-xl bg-red-500/15 border border-red-500/25 text-red-400 text-[11px] font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-50"
-          >
-            {isThisResolving ? <div className="w-3 h-3 rounded-full border border-red-400/40 border-t-red-400 animate-spin" /> : <X size={11} />}
-            Mark Lost
-          </button>
+        <div className="mx-4 mb-3 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
+          <Clock size={11} className="text-[#8a9ea6]" />
+          <span className="text-[#8a9ea6] text-[10px]">
+            Settled automatically when games finish — riskier bets earn more XP
+          </span>
         </div>
       )}
     </div>
@@ -380,26 +376,21 @@ function MySlipsTab({ user }: { user: any }) {
 
   useEffect(() => { load(); }, [load]);
 
-  async function handleResolve(slipId: string, outcome: "win" | "loss") {
-    setResolving(slipId);
+  // Ask the server to settle pending slips against real NHL results
+  async function handleCheckResults() {
+    setResolving("all");
     try {
-      const result = await resolveSlip(slipId, outcome);
-      // Update slip in-place
-      setSlips((prev) =>
-        prev.map((s) =>
-          s.id === slipId
-            ? { ...s, outcome, xpAwarded: result.xpAwarded, resolvedAt: new Date().toISOString() }
-            : s
-        )
-      );
-      if (result.tieredUp) {
-        setError(null);
-        // Briefly show tier-up message as a success banner (reuse error state with prefix)
-        setError(`TIER_UP:Congrats! You reached ${result.newTier} tier (+${result.xpAwarded} XP)`);
+      const summary = await settleMySlips();
+      if (summary.settled > 0) {
+        setError(`TIER_UP:${summary.settled} slip${summary.settled > 1 ? "s" : ""} settled — ${summary.wins} won, ${summary.losses} lost`);
         setTimeout(() => setError(null), 4000);
+        await load();
+      } else {
+        setError("TIER_UP:No finished games yet — check back later");
+        setTimeout(() => setError(null), 3000);
       }
     } catch (err: any) {
-      setError(err.message ?? "Failed to resolve slip");
+      setError(err.message ?? "Failed to check results");
       setTimeout(() => setError(null), 3000);
     } finally {
       setResolving(null);
@@ -469,13 +460,18 @@ function MySlipsTab({ user }: { user: any }) {
                   <div className="w-1.5 h-1.5 rounded-full bg-[#86d1ea] animate-pulse" />
                   <p className="text-[#8a9ea6] text-[10px] uppercase tracking-wider font-medium">Active · {pending.length}</p>
                 </div>
-                <button onClick={load} className="text-[#4a6068] active:text-[#86d1ea] transition-colors">
-                  <RefreshCw size={12} />
+                <button
+                  onClick={handleCheckResults}
+                  disabled={resolving === "all"}
+                  className="flex items-center gap-1.5 text-[#86d1ea] text-[10px] font-bold border border-[#86d1ea]/30 bg-[#86d1ea]/10 px-2.5 py-1 rounded-lg active:scale-95 transition-all disabled:opacity-50"
+                >
+                  <RefreshCw size={11} className={resolving === "all" ? "animate-spin" : ""} />
+                  Check results
                 </button>
               </div>
               <div className="flex flex-col gap-3">
                 {pending.map((s) => (
-                  <SlipCard key={s.id} slip={s} onResolve={handleResolve} resolving={resolving} />
+                  <SlipCard key={s.id} slip={s} />
                 ))}
               </div>
             </div>
@@ -490,7 +486,7 @@ function MySlipsTab({ user }: { user: any }) {
               </div>
               <div className="flex flex-col gap-3">
                 {resolved.map((s) => (
-                  <SlipCard key={s.id} slip={s} onResolve={handleResolve} resolving={resolving} />
+                  <SlipCard key={s.id} slip={s} />
                 ))}
               </div>
             </div>

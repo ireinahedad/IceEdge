@@ -57,6 +57,26 @@ export async function getMySlips(limit = 50): Promise<BetSlip[]> {
   return res.json();
 }
 
+export interface SettlementSummary {
+  checked: number;
+  settled: number;
+  wins:    number;
+  losses:  number;
+}
+
+/** Ask the server to check pending slips against real NHL results. */
+export async function settleMySlips(): Promise<SettlementSummary> {
+  const res = await authedFetch('/slips/settle', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? `Settle failed (${res.status})`);
+  }
+  return res.json() as Promise<SettlementSummary>;
+}
+
 export async function resolveSlip(
   slipId:  string,
   outcome: 'win' | 'loss',

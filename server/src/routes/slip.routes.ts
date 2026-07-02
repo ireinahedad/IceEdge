@@ -1,11 +1,26 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
 import * as SlipService from '../services/slip.service';
+import { settlePendingSlips } from '../services/settlement.service';
 
 const router = Router();
 
 // All slip routes require a valid JWT
 router.use(authenticate);
+
+// ─── POST /api/slips/settle ───────────────────────────────────────────────────
+// Check the caller's pending slips against real NHL results and settle them.
+router.post('/settle', async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.sub;
+    if (!userId) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const summary = await settlePendingSlips(userId, 50);
+    res.json(summary);
+  } catch (err: any) {
+    console.error('[POST /api/slips/settle]', err.message);
+    res.status(err.status ?? 500).json({ error: err.message });
+  }
+});
 
 // ─── POST /api/slips ──────────────────────────────────────────────────────────
 // Submit a new prediction slip
@@ -65,11 +80,17 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // ─── PATCH /api/slips/:id/resolve ─────────────────────────────────────────────
-// Resolve a slip (win or loss) — also awards XP
+// Manual resolution — ADMIN ONLY. Regular users cannot self-report results
+// (settlement is automatic via the NHL API); this stays as an admin override
+// for markets that cannot be auto-settled (player props, etc.).
 router.patch('/:id/resolve', async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.sub;
     if (!userId) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    if ((req as any).user?.role !== 'admin') {
+      res.status(403).json({ error: 'Results are settled automatically — manual resolution is admin-only' });
+      return;
+    }
 
     const { outcome } = req.body as { outcome: 'win' | 'loss' };
     if (outcome !== 'win' && outcome !== 'loss') {

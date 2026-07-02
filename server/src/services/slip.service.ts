@@ -2,10 +2,6 @@ import { pool } from '../db/connection';
 
 // ─── XP & Tier config ─────────────────────────────────────────────────────────
 
-const XP_SINGLE_WIN  = 50;
-const XP_PARLAY_2_3  = 100;
-const XP_PARLAY_4UP  = 250;
-
 // Tier thresholds (minimum XP required)
 const TIER_THRESHOLDS: Record<string, number> = {
   rookie:  0,
@@ -25,6 +21,72 @@ function tierForXp(xp: number): Tier {
   return 'rookie';
 }
 
+/**
+ * Risk-based XP.
+ * Win : the riskier the bet (low probability), the more XP.
+ *   P=80% → +40 XP · P=50% → +100 XP · P=15% → +170 XP
+ * Loss : the safer the bet was, the more XP is lost.
+ *   P=80% → −40 XP · P=50% → −25 XP · P=15% → −8 XP
+ */
+export function xpForOutcome(outcome: 'win' | 'loss', combinedProbability: number | null): number {
+  const P = Math.max(1, Math.min(99, combinedProbability ?? 50));
+  return outcome === 'win'
+    ? Math.max(10, Math.round((100 - P) * 2))
+    : -Math.max(5, Math.round(P / 2));
+}
+
+/**
+ * Apply an XP delta (positive or negative) to a user.
+ * XP is floored at 0. The tier is recomputed in both directions,
+ * and a tier badge is awarded when the user moves up.
+ */
+export async function applyXpDelta(
+  userId: string,
+  delta: number,
+): Promise<{ newXp: number; newTier: Tier; tieredUp: boolean }> {
+  await pool.query(
+    `INSERT INTO user_profiles (user_id, xp, tier, performance_score)
+     SELECT id, 0, 'rookie', 0 FROM users WHERE id = $1
+     ON CONFLICT (user_id) DO NOTHING`,
+    [userId],
+  );
+
+  const { rows: profileRows } = await pool.query<{ xp: number; tier: string }>(
+    `SELECT xp, tier FROM user_profiles WHERE user_id = $1`,
+    [userId],
+  );
+  const profile  = profileRows[0] ?? { xp: 0, tier: 'rookie' };
+  const prevTier = (profile.tier ?? 'rookie') as Tier;
+  const newXp    = Math.max(0, (profile.xp ?? 0) + delta);
+  const newTier  = tierForXp(newXp);
+  const tieredUp = TIER_ORDER.indexOf(newTier) > TIER_ORDER.indexOf(prevTier);
+
+  await pool.query(
+    `UPDATE user_profiles
+     SET xp = $1, tier = $2, performance_score = $1
+     WHERE user_id = $3`,
+    [newXp, newTier, userId],
+  );
+
+  if (tieredUp) {
+    const TIER_BADGES: Record<Tier, { label: string; icon: string; description: string }> = {
+      analyst: { label: 'Analyst',      icon: '📊', description: 'Reached Analyst tier' },
+      sharp:   { label: 'Sharp Bettor', icon: '🎯', description: 'Reached Sharp tier'   },
+      legend:  { label: 'Legend',       icon: '👑', description: 'Reached Legend tier'  },
+      rookie:  { label: 'Rookie',       icon: '🌱', description: 'Welcome!'             },
+    };
+    const badge = TIER_BADGES[newTier];
+    await pool.query(
+      `INSERT INTO user_badges (user_id, badge_id, label, description, icon, earned_at, tier)
+       VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6)
+       ON CONFLICT (user_id, badge_id) DO NOTHING`,
+      [userId, `tier_${newTier}`, badge.label, badge.description, badge.icon, newTier],
+    );
+  }
+
+  return { newXp, newTier, tieredUp };
+}
+
 // ─── Submit slip ──────────────────────────────────────────────────────────────
 
 export interface SlipLeg {
@@ -36,6 +98,10 @@ export interface SlipLeg {
   line?:        number;
   probability:  number;
   oddsLabel:    string;
+  /** NHL game id — required for automatic settlement */
+  gameId?:      string;
+  /** Machine-readable selection (team id, 'over', 'under'…) */
+  selectionValue?: string;
 }
 
 export async function submitSlip(
@@ -89,7 +155,8 @@ export async function resolveSlip(
 ): Promise<{ xpAwarded: number; newXp: number; newTier: Tier; tieredUp: boolean }> {
   // Load the slip
   const { rows: slipRows } = await pool.query(
-    `SELECT id, user_id, is_parlay, leg_count, outcome
+    `SELECT id, user_id, is_parlay, leg_count, outcome,
+            combined_probability AS "combinedProbability"
      FROM bet_slips
      WHERE id = $1`,
     [slipId],
@@ -99,68 +166,20 @@ export async function resolveSlip(
   if (slip.user_id !== userId) throw Object.assign(new Error('Forbidden'), { status: 403 });
   if (slip.outcome !== 'pending') throw Object.assign(new Error('Slip already resolved'), { status: 400 });
 
-  // Calculate XP
-  let xpAwarded = 0;
-  if (outcome === 'win') {
-    if (!slip.is_parlay) {
-      xpAwarded = XP_SINGLE_WIN;
-    } else if (slip.leg_count <= 3) {
-      xpAwarded = XP_PARLAY_2_3;
-    } else {
-      xpAwarded = XP_PARLAY_4UP;
-    }
-  }
+  // Risk-based XP: wins earn more when the bet was risky,
+  // losses cost more when the bet was "safe".
+  const xpAwarded = xpForOutcome(outcome, slip.combinedProbability);
 
-  // Update slip
-  await pool.query(
+  // Update slip (guard: only if still pending — avoids double-award races)
+  const upd = await pool.query(
     `UPDATE bet_slips
      SET outcome = $1, resolved_at = NOW(), xp_awarded = $2
-     WHERE id = $3`,
+     WHERE id = $3 AND outcome = 'pending'`,
     [outcome, xpAwarded, slipId],
   );
+  if (!upd.rowCount) throw Object.assign(new Error('Slip already resolved'), { status: 400 });
 
-  // Get current XP + tier
-  await pool.query(
-    `INSERT INTO user_profiles (user_id, xp, tier, performance_score)
-     SELECT id, 0, 'rookie', 0 FROM users WHERE id = $1
-     ON CONFLICT (user_id) DO NOTHING`,
-    [userId],
-  );
-
-  const { rows: profileRows } = await pool.query<{ xp: number; tier: string }>(
-    `SELECT xp, tier FROM user_profiles WHERE user_id = $1`,
-    [userId],
-  );
-  const profile = profileRows[0] ?? { xp: 0, tier: 'rookie' };
-  const prevTier = profile.tier as Tier;
-  const newXp    = (profile.xp ?? 0) + xpAwarded;
-  const newTier  = tierForXp(newXp);
-  const tieredUp = TIER_ORDER.indexOf(newTier) > TIER_ORDER.indexOf(prevTier);
-
-  // Update XP + tier + performance_score
-  await pool.query(
-    `UPDATE user_profiles
-     SET xp = $1, tier = $2, performance_score = $1
-     WHERE user_id = $3`,
-    [newXp, newTier, userId],
-  );
-
-  // Award tier badge if tiered up
-  if (tieredUp) {
-    const TIER_BADGES: Record<Tier, { label: string; icon: string; description: string }> = {
-      analyst: { label: 'Analyst',      icon: '📊', description: 'Reached Analyst tier' },
-      sharp:   { label: 'Sharp Bettor', icon: '🎯', description: 'Reached Sharp tier'   },
-      legend:  { label: 'Legend',       icon: '👑', description: 'Reached Legend tier'  },
-      rookie:  { label: 'Rookie',       icon: '🌱', description: 'Welcome!'             },
-    };
-    const badge = TIER_BADGES[newTier];
-    await pool.query(
-      `INSERT INTO user_badges (user_id, badge_id, label, description, icon, earned_at, tier)
-       VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6)
-       ON CONFLICT (user_id, badge_id) DO NOTHING`,
-      [userId, `tier_${newTier}`, badge.label, badge.description, badge.icon, newTier],
-    );
-  }
+  const { newXp, newTier, tieredUp } = await applyXpDelta(userId, xpAwarded);
 
   return { xpAwarded, newXp, newTier, tieredUp };
 }

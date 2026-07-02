@@ -216,7 +216,6 @@ export async function fetchLiveGames(): Promise<any[]> {
     .map((g: any) => formatGame(g));
 
   setCached('live', games, 30_000);
-  console.log(`[nhlApi] Fetched ${games.length} live games`);
   return games;
 }
 

@@ -165,7 +165,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
       lineValue
     );
 
-    const leg: BetLeg = {
+    const leg = {
       id: legId,
       marketType: selectedMarket.type as BetMarketType,
       marketLabel: selectedMarket.label,
@@ -179,7 +179,10 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
       line: lineValue,
       gameInfo: selectedSubject.subtitle,
       addedAt: new Date().toISOString(),
-    };
+      // Machine-readable fields for automatic settlement
+      gameId: selectedSubject.type === "game" ? selectedSubject.id : undefined,
+      selectionValue: selectionValue != null ? String(selectionValue) : undefined,
+    } as BetLeg;
 
     addLeg(leg);
     setAdded(true);
