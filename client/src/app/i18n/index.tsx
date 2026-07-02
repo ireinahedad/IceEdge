@@ -76,6 +76,10 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "profile.calWell":      { en: "Well Calibrated", fr: "Bien calibré" },
   "profile.calDecent":    { en: "Decent",         fr: "Correct" },
   "profile.calNeedsWork": { en: "Needs Work",     fr: "À améliorer" },
+  "profile.modelCalibration": { en: "Model Calibration", fr: "Calibrage du modèle" },
+  "profile.calDescHigh":  { en: "Your picks align closely with model probabilities — a sign of sharp judgment.", fr: "Tes choix collent de près aux probabilités du modèle — signe d'un bon jugement." },
+  "profile.calDescMid":   { en: "Your hit rate roughly matches model predictions with some variance.", fr: "Ton taux de réussite correspond globalement aux prédictions du modèle, avec quelques écarts." },
+  "profile.calDescLow":   { en: "Your selections often diverge from model predictions. Try sticking to higher-confidence picks.", fr: "Tes sélections s'écartent souvent des prédictions du modèle. Essaie de privilégier les choix à forte confiance." },
 
   // ── League / leaderboard ──
   "league.rankings":   { en: "Rankings",             fr: "Classement" },
@@ -157,6 +161,21 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.signinHint":   { en: "Your locked slips and history will appear here", fr: "Tes coupons verrouillés et ton historique apparaîtront ici" },
   "slip.placeBet365":  { en: "Place on Bet365 ↗", fr: "Parier sur Bet365 ↗" },
   "slip.xpEarned":     { en: "XP earned",       fr: "XP gagnés" },
+  "slip.addToSee":     { en: "Add predictions to see probability", fr: "Ajoute des prédictions pour voir la probabilité" },
+  "slip.gaugeAddLegs": { en: "Add legs",        fr: "Ajoute des paris" },
+  "slip.gaugeStrong":  { en: "Strong",          fr: "Fort" },
+  "slip.gaugeModerate":{ en: "Moderate",        fr: "Modéré" },
+  "slip.gaugeRisky":   { en: "Risky",           fr: "Risqué" },
+  "slip.gaugeLongShot":{ en: "Long Shot",       fr: "Peu probable" },
+  "slip.signinRequired":{ en: "Sign in required to submit", fr: "Connexion requise pour soumettre" },
+  "slip.legsReady":    { en: "{n} legs ready to lock", fr: "{n} paris prêts à verrouiller" },
+  "slip.combined":     { en: "Combined",        fr: "Combiné" },
+  "slip.addLeg":       { en: "Add Leg",         fr: "Ajouter un pari" },
+  "slip.submitting":   { en: "Submitting...",   fr: "Envoi..." },
+  "slip.lockSlip":     { en: "Lock Slip",       fr: "Verrouiller le coupon" },
+  "slip.individualProb":{ en: "Individual prediction probability", fr: "Probabilité de prédiction individuelle" },
+  "slip.howProbTitle": { en: "How probability works", fr: "Comment fonctionne la probabilité" },
+  "slip.howProbBody":  { en: "Combined probability assumes each leg is independent. More legs means a lower combined chance but higher potential reward.", fr: "La probabilité combinée suppose que chaque pari est indépendant. Plus il y a de paris, plus la chance combinée est faible, mais plus la récompense potentielle est élevée." },
 
   // ── Stats ──
   "stats.title":       { en: "Statistics",      fr: "Statistiques" },

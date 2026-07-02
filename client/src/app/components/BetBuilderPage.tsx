@@ -24,6 +24,7 @@ function toOddsLabel(pct: number): string {
 // ─── Probability gauge ────────────────────────────────────────────────────────
 
 function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: number }) {
+  const { t } = useI18n();
   const [displayed, setDisplayed] = useState(0);
   const radius = (size - 24) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -48,10 +49,10 @@ function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: number }) {
   }, [pct]);
 
   const label =
-    pct === 0 ? "Add legs" :
-    pct >= 65 ? "Strong" :
-    pct >= 45 ? "Moderate" :
-    pct >= 25 ? "Risky" : "Long Shot";
+    pct === 0 ? t("slip.gaugeAddLegs") :
+    pct >= 65 ? t("slip.gaugeStrong") :
+    pct >= 45 ? t("slip.gaugeModerate") :
+    pct >= 25 ? t("slip.gaugeRisky") : t("slip.gaugeLongShot");
 
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
@@ -74,7 +75,7 @@ function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: number }) {
         ) : (
           <>
             <span className="text-[#1B2419] text-4xl font-bold">--</span>
-            <span className="text-[#4a6068] text-[10px] mt-1 text-center px-4 leading-snug">Add predictions to see probability</span>
+            <span className="text-[#4a6068] text-[10px] mt-1 text-center px-4 leading-snug">{t("slip.addToSee")}</span>
           </>
         )}
       </div>
@@ -209,6 +210,7 @@ function LockSlipCTA({
   legs: BetLeg[]; combinedProbability: number;
   onAdd: () => void; onLock: () => void; isSubmitting: boolean;
 }) {
+  const { t } = useI18n();
   if (legs.length === 0) return null;
   const color =
     combinedProbability >= 65 ? "#4ade80" :
@@ -225,19 +227,19 @@ function LockSlipCTA({
               <Lock size={13} style={{ color }} />
             </div>
             <div>
-              <p className="text-white text-xs font-bold">{legs.length} leg{legs.length > 1 ? "s" : ""} ready to lock</p>
-              <p className="text-[#4a6068] text-[10px]">Sign in required to submit</p>
+              <p className="text-white text-xs font-bold">{t("slip.legsReady", { n: legs.length })}</p>
+              <p className="text-[#4a6068] text-[10px]">{t("slip.signinRequired")}</p>
             </div>
           </div>
           <div className="text-right">
-            <p className="text-[10px] text-[#8a9ea6]">Combined</p>
+            <p className="text-[10px] text-[#8a9ea6]">{t("slip.combined")}</p>
             <p className="text-lg font-black" style={{ color }}>{combinedProbability}%</p>
           </div>
         </div>
         <div className="flex gap-2">
           <button onClick={onAdd} disabled={isSubmitting}
             className="flex items-center justify-center gap-1.5 flex-1 py-3 rounded-xl bg-[#1B2419] border border-white/20 text-[#86d1ea] text-xs font-bold active:scale-[0.97] transition-transform disabled:opacity-40">
-            <Plus size={13} /> Add Leg
+            <Plus size={13} /> {t("slip.addLeg")}
           </button>
           <button onClick={onLock} disabled={isSubmitting}
             className="flex items-center justify-center gap-2 flex-[2] py-3 rounded-xl text-[#0A0E0C] text-sm font-bold active:scale-[0.97] transition-transform disabled:opacity-60"
@@ -245,12 +247,12 @@ function LockSlipCTA({
             {isSubmitting ? (
               <>
                 <div className="w-4 h-4 rounded-full border-2 border-[#0A0E0C]/40 border-t-[#0A0E0C] animate-spin" />
-                Submitting...
+                {t("slip.submitting")}
               </>
             ) : (
               <>
                 <Share2 size={14} />
-                Lock Slip
+                {t("slip.lockSlip")}
                 <ChevronRight size={14} className="ml-auto" />
               </>
             )}
@@ -609,7 +611,7 @@ export function BetBuilderPage() {
             )}
             {legs.length === 1 && (
               <>
-                <p className="text-[#4a6068] text-[10px] text-center mt-2">Individual prediction probability</p>
+                <p className="text-[#4a6068] text-[10px] text-center mt-2">{t("slip.individualProb")}</p>
                 <div className="mt-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10">
                   <span className="text-white font-bold text-sm font-mono">{toOddsLabel(combinedProbability)}</span>
                   <span className="text-[#4a6068] text-[10px] ml-1.5">implied odds</span>
@@ -648,9 +650,9 @@ export function BetBuilderPage() {
                   <Lightbulb size={13} className="text-[#86d1ea]" />
                 </div>
                 <div>
-                  <p className="text-white text-xs font-medium mb-1">How probability works</p>
+                  <p className="text-white text-xs font-medium mb-1">{t("slip.howProbTitle")}</p>
                   <p className="text-[#8a9ea6] text-[10px] leading-relaxed">
-                    Combined probability assumes each leg is independent. More legs means a lower combined chance but higher potential reward.
+                    {t("slip.howProbBody")}
                   </p>
                 </div>
               </div>
@@ -693,6 +695,11 @@ export function BetBuilderPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Market selector sheet */}
+      {showSheet && (
+        <MarketSelectorSheet onClose={() => setShowSheet(false)} />
       )}
 
       <BottomNav />

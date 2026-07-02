@@ -407,6 +407,7 @@ export function BetHistoryList({
 }: {
   bets: BetRecord[];
 }) {
+  const { t } = useI18n();
   const [filter, setFilter] =
     useState<FilterType>("all");
 
@@ -437,17 +438,17 @@ export function BetHistoryList({
   };
 
   const filters: { key: FilterType; label: string }[] = [
-    { key: "all", label: "All" },
-    { key: "win", label: "Wins" },
-    { key: "loss", label: "Losses" },
-    { key: "pending", label: "Live" },
+    { key: "all", label: t("profile.filterAll") },
+    { key: "win", label: t("profile.filterWins") },
+    { key: "loss", label: t("profile.filterLosses") },
+    { key: "pending", label: t("profile.filterLive") },
   ];
 
   return (
     <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
       <div className="flex items-center justify-between mb-3">
         <p className="text-white text-xs font-medium">
-          Bet History
+          {t("profile.betHistory")}
         </p>
 
         <div className="flex gap-1">
@@ -534,6 +535,7 @@ export function CalibrationCard({
 }: {
   stats: UserBettingStats;
 }) {
+  const { t } = useI18n();
   const score = stats.calibrationScore;
   const color =
     score >= 80
@@ -544,23 +546,23 @@ export function CalibrationCard({
 
   const label =
     score >= 80
-      ? "Well Calibrated"
+      ? t("profile.calWell")
       : score >= 65
-      ? "Decent"
-      : "Needs Work";
+      ? t("profile.calDecent")
+      : t("profile.calNeedsWork");
 
   const desc =
     score >= 80
-      ? "Your picks align closely with model probabilities — a sign of sharp judgment."
+      ? t("profile.calDescHigh")
       : score >= 65
-      ? "Your hit rate roughly matches model predictions with some variance."
-      : "Your selections often diverge from model predictions. Try sticking to higher-confidence picks.";
+      ? t("profile.calDescMid")
+      : t("profile.calDescLow");
 
   return (
     <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
       <div className="flex items-center justify-between mb-2">
         <p className="text-white text-xs font-medium">
-          Model Calibration
+          {t("profile.modelCalibration")}
         </p>
         <span className="text-xs font-bold" style={{ color }}>
           {score}/100 · {label}
@@ -582,7 +584,7 @@ export function CalibrationCard({
       </p>
 
       <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/20">
-             <span className="text-white/40 text-[9px]">Calibration</span>
+             <span className="text-white/40 text-[9px]">{t("profile.calibration")}</span>
         <span className="text-xs font-bold" style={{ color }}>{score}/100</span>
       </div>
     </div>
