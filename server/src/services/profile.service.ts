@@ -51,6 +51,7 @@ export async function getProfileById(userId: string) {
     `SELECT u.id, u.username, up.display_name AS "displayName", up.avatar,
             up.avatar_url AS "avatarUrl",
             up.favorite_team AS "favoriteTeam", up.bio, up.is_public AS "isPublic",
+            up.show_slips AS "showSlips",
             up.tier, up.performance_score AS "performanceScore",
             up.joined_at AS "joinedAt",
             up.openai_api_key AS "openaiApiKey"
@@ -74,6 +75,7 @@ export async function getProfileById(userId: string) {
     favoriteTeam:     profile.favoriteTeam,
     bio:              profile.bio,
     isPublic:         profile.isPublic,
+    showSlips:        profile.showSlips ?? false,
     tier:             profile.tier,
     performanceScore: profile.performanceScore,
     openaiApiKey:     profile.openaiApiKey ?? null,
@@ -98,6 +100,8 @@ export async function updateProfile(userId: string, updates: {
   bio?: string;
   favoriteTeam?: string;
   isPublic?: boolean;
+  showSlips?: boolean;
+  avatar?: string;
   avatarUrl?: string | null;
   openaiApiKey?: string | null;
 }) {
@@ -142,6 +146,8 @@ export async function updateProfile(userId: string, updates: {
   if (updates.bio           !== undefined) { fields.push(`bio = $${i++}`);             values.push(updates.bio); }
   if (updates.favoriteTeam  !== undefined) { fields.push(`favorite_team = $${i++}`);   values.push(updates.favoriteTeam); }
   if (updates.isPublic      !== undefined) { fields.push(`is_public = $${i++}`);       values.push(updates.isPublic); }
+  if (updates.showSlips     !== undefined) { fields.push(`show_slips = $${i++}`);      values.push(!!updates.showSlips); }
+  if (updates.avatar        !== undefined) { fields.push(`avatar = $${i++}`);           values.push(String(updates.avatar).slice(0, 20)); }
   if (updates.avatarUrl     !== undefined) { fields.push(`avatar_url = $${i++}`);       values.push(updates.avatarUrl); }
   if (updates.openaiApiKey  !== undefined) { fields.push(`openai_api_key = $${i++}`);   values.push(updates.openaiApiKey); }
 
@@ -251,6 +257,80 @@ export async function getBettingStats(userId: string) {
     monthlyStats,
     marketBreakdown,
   };
+}
+
+// ─── Player search ────────────────────────────────────────────────────────────
+
+/** Search public players by username or display name. */
+export async function searchUsers(q: string, limit = 20) {
+  const query = String(q).trim();
+  if (query.length < 2) return [];
+  const like = `%${query.replace(/[%_]/g, '')}%`;
+
+  const { rows } = await pool.query(
+    `SELECT u.id AS "userId", u.username,
+            COALESCE(up.display_name, u.username) AS "displayName",
+            COALESCE(up.avatar, '👤') AS avatar,
+            COALESCE(up.avatar_url, u.avatar_url) AS "avatarUrl",
+            up.tier, up.performance_score AS "performanceScore",
+            up.show_slips AS "showSlips"
+     FROM users u
+     JOIN user_profiles up ON up.user_id = u.id
+     WHERE u.is_active = TRUE AND up.is_public = TRUE
+       AND (u.username ILIKE $1 OR up.display_name ILIKE $1)
+     ORDER BY up.performance_score DESC
+     LIMIT $2`,
+    [like, Math.min(limit, 50)],
+  );
+
+  return Promise.all(rows.map(async (r) => {
+    const { rows: betRows } = await pool.query(
+      `SELECT outcome FROM user_bets WHERE user_id = $1`, [r.userId],
+    );
+    const decided = betRows.filter(b => b.outcome !== 'pending');
+    const wins    = decided.filter(b => b.outcome === 'win').length;
+    return {
+      rank:             0,
+      userId:           r.userId,
+      username:         r.username,
+      displayName:      r.displayName,
+      avatar:           r.avatar,
+      avatarUrl:        r.avatarUrl ?? null,
+      tier:             r.tier,
+      performanceScore: r.performanceScore ?? 0,
+      hitRate:          decided.length > 0 ? Math.round((wins / decided.length) * 1000) / 10 : 0,
+      totalBets:        betRows.length,
+      showSlips:        r.showSlips ?? false,
+    };
+  }));
+}
+
+// ─── Public slips ─────────────────────────────────────────────────────────────
+
+/** A player's slips — visible to others only if they opted in (show_slips). */
+export async function getPublicSlips(targetUserId: string, viewerId: string, limit = 25) {
+  if (targetUserId !== viewerId) {
+    const { rows } = await pool.query(
+      `SELECT up.show_slips AS "showSlips", up.is_public AS "isPublic"
+       FROM user_profiles up WHERE up.user_id = $1`,
+      [targetUserId],
+    );
+    if (!rows[0]) throw Object.assign(new Error('Player not found'), { status: 404 });
+    if (!rows[0].isPublic || !rows[0].showSlips) {
+      throw Object.assign(new Error('This player keeps their slips private'), { status: 403 });
+    }
+  }
+  const { rows } = await pool.query(
+    `SELECT id, placed_at AS "placedAt", sport, legs, leg_count AS "legCount",
+            is_parlay AS "isParlay", combined_probability AS "combinedProbability",
+            outcome, resolved_at AS "resolvedAt", xp_awarded AS "xpAwarded"
+     FROM bet_slips
+     WHERE user_id = $1
+     ORDER BY placed_at DESC
+     LIMIT $2`,
+    [targetUserId, limit],
+  );
+  return rows;
 }
 
 // ─── Leaderboard ─────────────────────────────────────────────────────────────

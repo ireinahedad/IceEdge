@@ -1,6 +1,7 @@
 // components/league/LeagueHeader.tsx
 
 import { useSport } from "../../context/SportContext";
+import { useI18n } from "../../i18n";
 
 type Tab = "leaderboard" | "chat";
 
@@ -14,11 +15,12 @@ export function LeagueHeader({
   totalUnread?: number;
 }) {
   const { theme } = useSport();
+  const { t, lang } = useI18n();
   const accent = theme.accent;
 
   const tabs = [
-    { key: "leaderboard", label: "Rankings" },
-    { key: "chat",        label: "Community" },
+    { key: "leaderboard", label: t("league.rankings") },
+    { key: "chat",        label: lang === "fr" ? "Communauté" : "Community" },
   ];
 
   return (
@@ -26,7 +28,7 @@ export function LeagueHeader({
       <div className="flex items-center justify-between mb-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>League</h1>
+            <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>{lang === "fr" ? "Ligue" : "League"}</h1>
             {/* Sport badge */}
             <span
               className="text-[10px] px-2 py-0.5 rounded-full font-medium"
@@ -35,15 +37,8 @@ export function LeagueHeader({
               {theme.sportIcon} {theme.sportLabel}
             </span>
           </div>
-          <p className="text-white/50 text-xs">Rankings &amp; community</p>
+          <p className="text-white/50 text-xs">{lang === "fr" ? "Classement et communauté" : "Rankings & community"}</p>
         </div>
-
-        {tab === "chat" && (
-          <div className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 rounded-full px-2.5 py-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-green-400 text-[9px] font-medium">24 online</span>
-          </div>
-        )}
       </div>
 
       <div className="flex gap-1 bg-white/5 backdrop-blur-md rounded-xl p-1 border border-white/20">

@@ -5,14 +5,93 @@ import { useAuth } from "../../context/AuthContext";
 import { profileApiService } from "./../../services/userService";
 import type { UserProfile, UserBettingStats, BetRecord } from "./../../types/user";
 import {
-  StatPill,
   ScoreRing,
   HitRateChart,
   MarketBreakdown,
-  BadgeGrid,
   CalibrationCard,
-  TIER_CONFIG,
 } from "./ProfileComponents";
+import { FrozenName } from "../brand/FrozenName";
+import { useI18n } from "../../i18n";
+import "./profile-settings.css";
+
+// ── Uiverse-styled settings helpers ────────────────────────────────────────
+
+/** Toggle switch (Uiverse .switch/.slider) */
+function ToggleSwitch({
+  checked,
+  onChange,
+  fontSize,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  fontSize?: number;
+}) {
+  return (
+    <label className="switch flex-shrink-0" style={fontSize ? { fontSize } : undefined}>
+      <input type="checkbox" checked={checked} onChange={onChange} />
+      <span className="slider" />
+    </label>
+  );
+}
+
+/** Floating-label input (Uiverse .inputbox) */
+function InputBox({
+  label,
+  value,
+  onChange,
+  placeholder,
+  maxLength,
+  type = "text",
+  textarea = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  maxLength?: number;
+  type?: string;
+  textarea?: boolean;
+}) {
+  const fieldCls =
+    "w-full bg-black/20 border border-white/15 rounded-lg px-2.5 py-2 text-[#86d1ea] text-[11px] font-semibold placeholder-white/25 outline-none focus:border-[#86d1ea]/60 transition-colors";
+  return (
+    <div>
+      <label className="block text-white/50 text-[9px] uppercase tracking-wider mb-1">{label}</label>
+      {textarea ? (
+        <textarea
+          className={`${fieldCls} resize-none h-14`}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          maxLength={maxLength}
+          placeholder={placeholder}
+        />
+      ) : (
+        <input
+          className={fieldCls}
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          maxLength={maxLength}
+          placeholder={placeholder}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Animated loader (Uiverse .loader) */
+function DotLoader() {
+  return (
+    <div className="loader">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div className="circle" key={i}>
+          <div className="dot" />
+          <div className="outline" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 type Tab = "overview" | "settings";
 
@@ -80,6 +159,16 @@ function UserAvatar({
   );
 }
 
+/** Compact stat square used beside the name */
+function MiniStat({ label, value, color = "#86d1ea" }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="bg-white/5 border border-white/15 rounded-lg px-2 py-1.5 flex flex-col items-center justify-center min-w-[52px]">
+      <span className="text-sm font-bold leading-none" style={{ color }}>{value}</span>
+      <span className="text-white/60 text-[8px] uppercase tracking-wide mt-1 text-center leading-none">{label}</span>
+    </div>
+  );
+}
+
 function ProfileHeader({
   profile,
   stats,
@@ -91,9 +180,8 @@ function ProfileHeader({
   onAvatarClick?: () => void;
   avatarUploading?: boolean;
 }) {
-  const tc = TIER_CONFIG[profile.tier as keyof typeof TIER_CONFIG] ?? TIER_CONFIG.rookie;
   return (
-    <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-5">
+    <div className="backdrop-blur-md border border-white/20 rounded-2xl p-5" style={{ background: "#1d3355" }}>
       <div className="flex items-center gap-4 mb-4">
         <div className="relative">
           <UserAvatar
@@ -111,15 +199,15 @@ function ProfileHeader({
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="text-white font-bold text-base leading-tight">{profile.displayName}</p>
-          <p className="text-white/70 text-xs">@{profile.username}</p>
+          <FrozenName name={profile.displayName} score={profile.performanceScore} size={16} />
           <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-            <span
-              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${tc.bg}`}
-              style={{ color: tc.color }}
-            >
-              {tc.icon} {tc.label}
-            </span>
+            <p className="text-white/70 text-xs">@{profile.username}</p>
+            <MiniStat label="Hit Rate" value={`${stats.hitRate}%`} color={stats.hitRate >= 65 ? "#4ade80" : "#86d1ea"} />
+            <MiniStat label="Bets" value={`${stats.totalBets}`} color="#86d1ea" />
+            <MiniStat label="W - L" value={`${stats.wins}-${stats.losses}`} color="#bfc8cc" />
+            <MiniStat label="Best" value={`${stats.longestWinStreak}W`} color="#facc15" />
+          </div>
+          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
             <StreakBadge streak={stats.currentStreak} />
           </div>
         </div>
@@ -128,54 +216,33 @@ function ProfileHeader({
       </div>
 
       {profile.bio && (
-        <p className="text-white/70 text-[10px] leading-relaxed mb-4 border-t border-white/20 pt-3">
+        <p className="text-white/70 text-[10px] leading-relaxed border-t border-white/20 pt-3">
           {profile.bio}
         </p>
       )}
-
-      <div className="grid grid-cols-4 gap-2">
-        <StatPill label="Hit Rate" value={`${stats.hitRate}%`} color={stats.hitRate >= 65 ? "#4ade80" : "#86d1ea"} />
-        <StatPill label="Bets" value={`${stats.totalBets}`} color="#86d1ea" />
-        <StatPill label="W - L" value={`${stats.wins}-${stats.losses}`} color="#bfc8cc" />
-        <StatPill label="Best Streak" value={`${stats.longestWinStreak}W`} color="#facc15" />
-      </div>
     </div>
   );
 }
 
 function OverviewTab({ profile, stats }: { profile: UserProfile; stats: UserBettingStats }) {
+  const { t, lang } = useI18n();
   const total = stats.parlayRecord.wins + stats.parlayRecord.losses;
   return (
     <div className="flex flex-col gap-3">
-      <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
-        <p className="text-white text-xs font-medium mb-3">Parlay Record</p>
-        <div className="flex items-center gap-4">
-          <div className="flex-1 text-center">
-            <p className="text-green-400 text-xl font-bold">{stats.parlayRecord.wins}</p>
-            <p className="text-white/70 text-[9px]">Parlay Wins</p>
-          </div>
-          <div className="w-px h-10 bg-white/10" />
-          <div className="flex-1 text-center">
-            <p className="text-red-400 text-xl font-bold">{stats.parlayRecord.losses}</p>
-            <p className="text-white/70 text-[9px]">Parlay Losses</p>
-          </div>
-          <div className="w-px h-10 bg-white/10" />
-          <div className="flex-1 text-center">
-            <p className="text-[#86d1ea] text-xl font-bold">
-              {total > 0 ? Math.round((stats.parlayRecord.wins / total) * 100) : 0}%
-            </p>
-            <p className="text-white/70 text-[9px]">Parlay Rate</p>
-          </div>
+      <div className="self-start bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-3">
+        <p className="text-white text-[10px] font-medium mb-2">{t("profile.parlayRecord")}</p>
+        <div className="flex gap-1.5">
+          <MiniStat label={t("profile.parlayWins")} value={`${stats.parlayRecord.wins}`} color="#4ade80" />
+          <MiniStat label={t("profile.parlayLosses")} value={`${stats.parlayRecord.losses}`} color="#f87171" />
+          <MiniStat label={t("profile.parlayRate")} value={`${total > 0 ? Math.round((stats.parlayRecord.wins / total) * 100) : 0}%`} color="#86d1ea" />
         </div>
       </div>
       <HitRateChart stats={stats} />
       <CalibrationCard stats={stats} />
       <MarketBreakdown stats={stats} />
-      <BadgeGrid badges={profile.badges} />
       <div className="flex items-center justify-center gap-2 py-2">
         <span className="text-white/70 text-[10px]">
-          IceEdge member since{" "}
-          {new Date(profile.joinedAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+          {t("profile.memberSince", { date: new Date(profile.joinedAt).toLocaleDateString(lang === "fr" ? "fr-CA" : "en-US", { month: "long", year: "numeric" }) })}
         </span>
       </div>
     </div>
@@ -195,11 +262,14 @@ function SettingsTab({
   onAvatarClick: () => void;
   avatarUploading: boolean;
 }) {
+  const { t, lang, setLang } = useI18n();
   const [username, setUsername] = useState(profile.username);
   const [displayName, setDisplayName] = useState(profile.displayName);
+  const [pickingEmoji, setPickingEmoji] = useState(false);
   const [bio, setBio] = useState(profile.bio ?? "");
   const [favoriteTeam, setFavoriteTeam] = useState(profile.favoriteTeam ?? "");
   const [isPublic, setIsPublic] = useState(profile.isPublic);
+  const [showSlips, setShowSlips] = useState(profile.showSlips ?? false);
   const [openaiKey, setOpenaiKey] = useState(profile.openaiApiKey ?? "");
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -216,6 +286,7 @@ function SettingsTab({
         bio: bio.trim() || undefined,
         favoriteTeam: favoriteTeam.trim() || undefined,
         isPublic,
+        showSlips,
         openaiApiKey: openaiKey.trim() || null,
       });
       onSaved(updated);
@@ -228,14 +299,42 @@ function SettingsTab({
     }
   }
 
-  const inputCls =
-    "w-full bg-white/5 border border-white/20 rounded-xl px-3 py-2.5 text-white text-xs placeholder-white/30 focus:outline-none focus:border-[#86d1ea]/50 transition-all";
+  // Ice & hockey themed avatars users can pick instead of a photo
+  const ICE_AVATARS = [
+    "🥅", "🏒", "⛸️", "🥌", "🪖", "🧤",
+    "❄️", "🧊", "🏔️", "⛰️", "🌨️", "💧",
+    "🛡️", "💎", "🪨", "⚔️", "🔥", "☀️",
+  ];
+
+  async function handlePickEmoji(emoji: string) {
+    setPickingEmoji(true);
+    setSaveMsg(null);
+    try {
+      // Setting an emoji avatar clears the photo
+      const updated = await profileApiService.updateProfile({ avatar: emoji, avatarUrl: null });
+      onSaved(updated);
+      setSaveMsg("Saved!");
+    } catch (err: any) {
+      setSaveMsg(err.message ?? "Failed to save");
+    } finally {
+      setPickingEmoji(false);
+      setTimeout(() => setSaveMsg(null), 2500);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Language */}
+      <div className="self-start inline-flex items-center gap-2 bg-white/5 backdrop-blur-md border border-white/20 rounded-lg px-2.5 py-1.5">
+        <span className="text-[11px]">🌐</span>
+        <span className={`text-[10px] font-bold transition-colors ${lang === "en" ? "text-[#86d1ea]" : "text-white/40"}`}>EN</span>
+        <ToggleSwitch checked={lang === "fr"} onChange={() => setLang(lang === "fr" ? "en" : "fr")} fontSize={11} />
+        <span className={`text-[10px] font-bold transition-colors ${lang === "fr" ? "text-[#86d1ea]" : "text-white/40"}`}>FR</span>
+      </div>
+
       {/* Avatar */}
       <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
-        <p className="text-white text-xs font-medium mb-3">Profile Photo</p>
+        <p className="text-white text-xs font-medium mb-3">{t("profile.photo")}</p>
         <div className="flex items-center gap-4">
           <UserAvatar
             avatarUrl={profile.avatarUrl}
@@ -248,108 +347,122 @@ function SettingsTab({
             <button
               onClick={onAvatarClick}
               disabled={avatarUploading}
-              className="w-full py-2 rounded-xl bg-[#86d1ea]/10 border border-[#86d1ea]/30 text-[#86d1ea] text-xs font-medium hover:bg-[#86d1ea]/20 transition-all disabled:opacity-50"
+              className="self-start px-3 py-1.5 rounded-lg bg-[#86d1ea]/10 border border-[#86d1ea]/30 text-[#86d1ea] text-[10px] font-medium hover:bg-[#86d1ea]/20 transition-all disabled:opacity-50"
             >
-              {avatarUploading ? "Uploading…" : "Change photo"}
+              {avatarUploading ? t("profile.uploading") : t("profile.changePhoto")}
             </button>
-            <p className="text-white/40 text-[9px] mt-1.5 text-center">JPG, PNG or WebP · large images are compressed automatically</p>
+            <p className="text-white/40 text-[9px] mt-1.5 text-center">{t("profile.photoHint")}</p>
           </div>
+        </div>
+
+        {/* Or pick an ice avatar */}
+        <p className="text-white/50 text-[9px] uppercase tracking-wider mt-4 mb-2">{t("profile.iceAvatar")}</p>
+        <div className="grid grid-cols-12 gap-1">
+          {ICE_AVATARS.map((e) => {
+            const active = !profile.avatarUrl && profile.avatar === e;
+            return (
+              <button
+                key={e}
+                onClick={() => handlePickEmoji(e)}
+                disabled={pickingEmoji}
+                className={`aspect-square rounded-md flex items-center justify-center text-[11px] border transition-all active:scale-95 disabled:opacity-50 ${
+                  active
+                    ? "border-[#86d1ea] bg-[#86d1ea]/15"
+                    : "border-white/10 bg-white/5 hover:bg-white/10"
+                }`}
+              >
+                {e}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Profile info */}
       <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex flex-col gap-3">
-        <p className="text-white text-xs font-medium">Profile Info</p>
+        <p className="text-white text-xs font-medium">{t("profile.info")}</p>
 
-        <div>
-          <label className="text-white/50 text-[9px] uppercase tracking-wider mb-1 block">Username</label>
-          <input
-            className={inputCls}
-            value={username}
-            onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
-            placeholder="your_username"
-            maxLength={20}
-          />
-          <p className="text-white/30 text-[9px] mt-1">
-            3–20 characters · lowercase letters, numbers, underscores · must be unique
-          </p>
-        </div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+          <div>
+            <InputBox
+              label={t("profile.username")}
+              placeholder={t("profile.username")}
+              value={username}
+              onChange={(v) => setUsername(v.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+              maxLength={20}
+            />
+            <p className="text-white/30 text-[9px] mt-1">{t("profile.usernameHint")}</p>
+          </div>
 
-        <div>
-          <label className="text-white/50 text-[9px] uppercase tracking-wider mb-1 block">Display Name</label>
-          <input
-            className={inputCls}
+          <InputBox
+            label={t("profile.displayName")}
+            placeholder={t("profile.displayName")}
             value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="Your display name"
+            onChange={setDisplayName}
             maxLength={40}
           />
+
+          <InputBox
+            label={t("profile.favTeam")}
+            placeholder={t("profile.favTeam")}
+            value={favoriteTeam}
+            onChange={setFavoriteTeam}
+            maxLength={20}
+          />
         </div>
 
         <div>
-          <label className="text-white/50 text-[9px] uppercase tracking-wider mb-1 block">Bio</label>
-          <textarea
-            className={`${inputCls} resize-none h-20`}
+          <InputBox
+            label={t("profile.bio")}
+            placeholder={t("profile.bio")}
             value={bio}
-            onChange={(e) => setBio(e.target.value)}
-            placeholder="Tell others about your betting style…"
+            onChange={setBio}
             maxLength={200}
+            textarea
           />
           <p className="text-white/30 text-[9px] text-right">{bio.length}/200</p>
         </div>
 
-        <div>
-          <label className="text-white/50 text-[9px] uppercase tracking-wider mb-1 block">Favorite Team</label>
-          <input
-            className={inputCls}
-            value={favoriteTeam}
-            onChange={(e) => setFavoriteTeam(e.target.value)}
-            placeholder="e.g. MTL, TOR, BOS"
-            maxLength={20}
-          />
+        <div className="flex items-center gap-3 py-1">
+          <label className="text-white/70 text-xs">{t("profile.public")}</label>
+          <ToggleSwitch checked={isPublic} onChange={() => setIsPublic((v) => !v)} fontSize={12} />
         </div>
 
-        <div className="flex items-center justify-between py-1">
-          <label className="text-white/70 text-xs">Public Profile</label>
-          <button
-            onClick={() => setIsPublic((v) => !v)}
-            className={`relative w-10 h-5.5 rounded-full transition-colors ${isPublic ? "bg-[#86d1ea]" : "bg-white/10"}`}
-            style={{ height: 22, width: 40 }}
-          >
-            <span
-              className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all"
-              style={{ left: isPublic ? "calc(100% - 18px)" : 2 }}
-            />
-          </button>
+        <div className="flex items-center gap-3 py-1">
+          <div>
+            <label className="text-white/70 text-xs">{t("profile.showSlips")}</label>
+            <p className="text-white/40 text-[9px] mt-0.5">{t("profile.showSlipsHint")}</p>
+          </div>
+          <ToggleSwitch checked={showSlips} onChange={() => setShowSlips((v) => !v)} fontSize={12} />
         </div>
       </div>
 
       {/* AI Settings */}
       <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex flex-col gap-3">
-        <p className="text-white text-xs font-medium">AI Settings</p>
+        <p className="text-white text-xs font-medium">{t("profile.aiSettings")}</p>
         <p className="text-white/50 text-[10px]">
-          Enter your OpenAI API key to use the Ask LLM feature. Your key is stored securely and used only for your requests.{" "}
+          {t("profile.aiSettingsDesc")}{" "}
           <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-[#86d1ea] underline">
-            Get a key →
+            {t("profile.getKey")}
           </a>
         </p>
 
         <div>
-          <label className="text-white/50 text-[9px] uppercase tracking-wider mb-1 block">OpenAI API Key</label>
+          <label className="block text-white/50 text-[9px] uppercase tracking-wider mb-1">{t("profile.openaiKey")}</label>
           <div className="relative">
             <input
-              className={inputCls}
               type={showKey ? "text" : "password"}
               value={openaiKey}
               onChange={(e) => setOpenaiKey(e.target.value)}
               placeholder="sk-proj-..."
+              className="w-full bg-black/20 border border-white/15 rounded-lg pl-2.5 pr-12 py-2 text-[#86d1ea] text-[11px] font-semibold placeholder-white/25 outline-none focus:border-[#86d1ea]/60 transition-colors"
             />
             <button
               type="button"
               onClick={() => setShowKey((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 text-[10px]"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#86d1ea] text-[10px]"
             >
-              {showKey ? "Hide" : "Show"}
+              {showKey ? t("profile.hide") : t("profile.show")}
             </button>
           </div>
         </div>
@@ -359,20 +472,25 @@ function SettingsTab({
             onClick={() => setOpenaiKey("")}
             className="text-red-400 text-[10px] self-start hover:text-red-300"
           >
-            Remove key
+            {t("profile.removeKey")}
           </button>
         )}
       </div>
 
       {/* Save */}
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="w-full py-3 rounded-2xl font-bold text-sm transition-all disabled:opacity-50"
-        style={{ background: "#86d1ea", color: "#0A0E0C" }}
-      >
-        {saving ? "Saving…" : "Save Changes"}
-      </button>
+      {saving ? (
+        <div className="w-full flex items-center justify-center py-3">
+          <DotLoader />
+        </div>
+      ) : (
+        <button
+          onClick={handleSave}
+          className="self-center px-8 py-2 rounded-xl font-bold text-xs transition-all"
+          style={{ background: "#86d1ea", color: "#0A0E0C" }}
+        >
+          {t("common.save")}
+        </button>
+      )}
 
       {saveMsg && (
         <p className={`text-center text-xs font-medium ${saveMsg === "Saved!" ? "text-green-400" : "text-red-400"}`}>
@@ -388,6 +506,7 @@ function SettingsTab({
 export function ProfilePage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { t } = useI18n();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<UserBettingStats | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
@@ -438,20 +557,20 @@ export function ProfilePage() {
       <div className="sticky top-0 z-40 px-4 pt-12 pb-3"
         style={{ background: "rgba(10,14,12,0.92)", backdropFilter: "blur(16px)", borderBottom: "1px solid #283323" }}>
         <div className="flex items-center justify-between">
-          <h1 className="text-white text-lg font-bold">Profile</h1>
-          <button onClick={logout} className="text-white/40 text-xs border border-white/10 px-3 py-1.5 rounded-xl">Sign Out</button>
+          <h1 className="text-white text-lg font-bold">{t("profile.title")}</h1>
+          <button onClick={logout} className="text-white/40 text-xs border border-white/10 px-3 py-1.5 rounded-xl">{t("profile.signout")}</button>
         </div>
 
         {!loading && profile && (
           <div className="flex gap-1 mt-3 bg-white/5 rounded-xl p-1">
-            {(["overview", "settings"] as Tab[]).map((t) => (
+            {(["overview", "settings"] as Tab[]).map((tabKey) => (
               <button
-                key={t}
-                onClick={() => setTab(t)}
+                key={tabKey}
+                onClick={() => setTab(tabKey)}
                 className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all"
-                style={tab === t ? { background: "#86d1ea", color: "#0A0E0C" } : { color: "#92A08A" }}
+                style={tab === tabKey ? { background: "#86d1ea", color: "#0A0E0C" } : { color: "#92A08A" }}
               >
-                {t === "overview" ? "Overview" : "Settings"}
+                {tabKey === "overview" ? t("profile.overview") : t("profile.settings")}
               </button>
             ))}
           </div>

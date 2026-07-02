@@ -43,6 +43,8 @@ export interface UserProfile {
   favoriteTeam?: string;
   bio?: string;
   isPublic: boolean;
+  /** Let other players see my bet slips */
+  showSlips?: boolean;
   tier: "rookie" | "analyst" | "sharp" | "legend";
   performanceScore: number;
   openaiApiKey?: string | null;

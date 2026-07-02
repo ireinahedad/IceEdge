@@ -9,6 +9,7 @@ import {
 } from "../services/tennisApiService";
 import { useBet } from "../context/BetContext";
 import type { BetLeg } from "../types/bet";
+import { useI18n } from "../i18n";
 
 // ─── Types & constants ────────────────────────────────────────────────────────
 
@@ -16,7 +17,7 @@ interface TennisSurface {
   name: string; icon: string; topPlayer: string; avgWinPct: number; desc: string;
 }
 
-const TENNIS_FILTER_TABS = ["By Player", "By Match", "By Surface", "By Tournament"];
+const TENNIS_FILTER_TAB_KEYS = ["tennis.byPlayer", "tennis.byMatch", "tennis.bySurface", "tennis.byTournament"];
 
 const TENNIS_SURFACES: TennisSurface[] = [
   { name: "Clay",  icon: "🟫", topPlayer: "I. Swiatek",  avgWinPct: 72, desc: "Slower bounces, long rallies" },
@@ -147,18 +148,19 @@ function TennisTournamentCard({ t, accent }: { t: TennisTournamentInfo; accent: 
 }
 
 function TennisSurfaceCard({ s, accent }: { s: TennisSurface; accent: string }) {
+  const { t } = useI18n();
   return (
     <div className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4">
       <div className="flex items-center gap-3 mb-3">
         <span className="text-3xl">{s.icon}</span>
         <div className="flex-1">
-          <p className="text-white text-sm font-medium">{s.name} Court</p>
+          <p className="text-white text-sm font-medium">{t("tennis.surfaceCourt", { name: s.name })}</p>
           <p className="text-[#bfc8cc] text-xs">{s.desc}</p>
         </div>
         <div className="px-2.5 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: `${accent}20`, color: accent }}>{s.avgWinPct}%</div>
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-[#bfc8cc] text-xs">Top performer</span>
+        <span className="text-[#bfc8cc] text-xs">{t("tennis.topPerformer")}</span>
         <span className="text-white text-xs font-medium">{s.topPlayer}</span>
       </div>
       <div className="w-full bg-[#0A0E0C] rounded-full h-1.5 mt-2">
@@ -176,7 +178,8 @@ function TennisBetMatchCard({
   allRankings: (TennisRankingEntry & { tour: "ATP" | "WTA" })[];
 }) {
   const { addLeg, hasLeg } = useBet();
-  const timeLabel = m.isLive ? (m.liveSet ?? "Live") : fmtMatchTime(m.scheduledIso);
+  const { t } = useI18n();
+  const timeLabel = m.isLive ? (m.liveSet ?? t("home.live")) : fmtMatchTime(m.scheduledIso);
   const probs = calcTennisProbs(m.player1.name, m.player2.name, allRankings);
   const shortName = (n: string) => n.split(/[.\s]/).filter(Boolean).pop() ?? n;
 
@@ -320,7 +323,7 @@ function TennisBetMatchCard({
                     <span className="text-base mb-0.5">{btn.flag}</span>
                     <span className="text-white text-[11px] font-semibold">{btn.name}</span>
                     <span className="text-[12px] font-bold mt-0.5" style={{ color: accent }}>{btn.prob}%</span>
-                    {added && <span className="text-[9px] mt-0.5" style={{ color: accent }}>Added ✓</span>}
+                    {added && <span className="text-[9px] mt-0.5" style={{ color: accent }}>{t("tennis.added")}</span>}
                   </button>
                 );
               })}
@@ -335,6 +338,7 @@ function TennisBetMatchCard({
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export function TennisStatsContent({ accent }: { accent: string }) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState(0);
   const [search, setSearch] = useState("");
@@ -408,7 +412,7 @@ export function TennisStatsContent({ accent }: { accent: string }) {
       setFixtures(fix);
       setMatchLoading(false);
     }).catch((err) => {
-      setMatchError(err.message ?? "Failed to load matches");
+      setMatchError(err.message ?? t("tennis.loadFail"));
       setMatchLoading(false);
     });
   }, [activeFilter]);
@@ -451,7 +455,7 @@ export function TennisStatsContent({ accent }: { accent: string }) {
         <div className="w-10 h-10 rounded-full bg-[#131A12] border border-white/20 flex items-center justify-center">
           <div className="w-4 h-4 rounded-full bg-[#86d1ea]/20 border border-[#86d1ea]/40 animate-pulse" />
         </div>
-        <p className="text-[#bfc8cc] text-sm">Loading...</p>
+        <p className="text-[#bfc8cc] text-sm">{t("tennis.loading")}</p>
       </div>
     );
   }
@@ -462,7 +466,7 @@ export function TennisStatsContent({ accent }: { accent: string }) {
         <p className="text-red-400 text-sm text-center">{msg}</p>
         <button onClick={onRetry} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full"
           style={{ backgroundColor: `${accent}20`, color: accent }}>
-          <RefreshCw size={12} /> Retry
+          <RefreshCw size={12} /> {t("tennis.retry")}
         </button>
       </div>
     );
@@ -473,14 +477,14 @@ export function TennisStatsContent({ accent }: { accent: string }) {
       <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2.5 mb-3">
         <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
         <input className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#bfc8cc]"
-          placeholder="Search player, tournament..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          placeholder={t("tennis.searchPlaceholder")} value={search} onChange={(e) => setSearch(e.target.value)} />
         {search && <button onClick={() => setSearch("")} className="text-[#bfc8cc] text-xs">×</button>}
       </div>
       <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-0.5 mb-3">
-        {TENNIS_FILTER_TABS.map((tab, i) => (
-          <button key={tab} onClick={() => setActiveFilter(i)} className="flex-shrink-0 px-4 py-2 rounded-full text-xs font-medium transition-all"
+        {TENNIS_FILTER_TAB_KEYS.map((tabKey, i) => (
+          <button key={tabKey} onClick={() => setActiveFilter(i)} className="flex-shrink-0 px-4 py-2 rounded-full text-xs font-medium transition-all"
             style={activeFilter === i ? { backgroundColor: accent, color: "#0f1416", fontWeight: 700 } : { backgroundColor: "#1B2419", color: "#bfc8cc" }}>
-            {tab}
+            {t(tabKey)}
           </button>
         ))}
       </div>
@@ -495,7 +499,7 @@ export function TennisStatsContent({ accent }: { accent: string }) {
                 {t}
               </button>
             ))}
-            {!rankLoading && <span className="ml-auto text-[#bfc8cc] text-xs">{filteredRankings.length} players</span>}
+            {!rankLoading && <span className="ml-auto text-[#bfc8cc] text-xs">{t("tennis.players", { n: filteredRankings.length })}</span>}
           </div>
           {rankLoading && <LoadingDot />}
           {rankError && (
@@ -527,7 +531,7 @@ export function TennisStatsContent({ accent }: { accent: string }) {
                 <div className="mb-1">
                   <span className="text-[10px] text-red-400 font-medium uppercase tracking-wide flex items-center gap-1 mb-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-                    {liveMatches.length} Live Now
+                    {t("tennis.liveNowCount", { n: liveMatches.length })}
                   </span>
                   {liveMatches
                     .filter((m) => !search || m.player1.name.toLowerCase().includes(search.toLowerCase()) || m.player2.name.toLowerCase().includes(search.toLowerCase()))
@@ -536,14 +540,14 @@ export function TennisStatsContent({ accent }: { accent: string }) {
               )}
               {fixtures.length > 0 && (
                 <div>
-                  <span className="text-[10px] text-[#bfc8cc] font-medium uppercase tracking-wide block mb-2">Upcoming Today</span>
+                  <span className="text-[10px] text-[#bfc8cc] font-medium uppercase tracking-wide block mb-2">{t("tennis.upcomingToday")}</span>
                   {filteredMatches.filter((m) => !m.isLive).map((m) => <TennisBetMatchCard key={m.id} m={m} accent={accent} allRankings={allRankings} />)}
                 </div>
               )}
               {allMatches.length === 0 && (
                 <div className="flex flex-col items-center gap-2 py-10">
-                  <p className="text-white text-sm font-medium">No matches today</p>
-                  <p className="text-[#bfc8cc] text-xs text-center">Check back on match days</p>
+                  <p className="text-white text-sm font-medium">{t("tennis.noMatches")}</p>
+                  <p className="text-[#bfc8cc] text-xs text-center">{t("tennis.checkBack")}</p>
                 </div>
               )}
             </>
@@ -554,7 +558,7 @@ export function TennisStatsContent({ accent }: { accent: string }) {
       {/* ── By Surface ── */}
       {activeFilter === 2 && (
         <div className="flex flex-col gap-3">
-          <p className="text-[#bfc8cc] text-xs">Win prediction accuracy varies by court surface</p>
+          <p className="text-[#bfc8cc] text-xs">{t("tennis.surfaceAccuracy")}</p>
           {TENNIS_SURFACES.map((s) => <TennisSurfaceCard key={s.name} s={s} accent={accent} />)}
         </div>
       )}
@@ -564,7 +568,7 @@ export function TennisStatsContent({ accent }: { accent: string }) {
         <div className="flex flex-col gap-3">
           {tourLoading && <LoadingDot />}
           {!tourLoading && tournaments.length === 0 && (
-            <p className="text-[#bfc8cc] text-xs text-center py-4">No tournament data available</p>
+            <p className="text-[#bfc8cc] text-xs text-center py-4">{t("tennis.noTournData")}</p>
           )}
           {!tourLoading && tournaments.map((t) => <TennisTournamentCard key={t.id} t={t} accent={accent} />)}
         </div>

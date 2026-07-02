@@ -3,6 +3,7 @@ import { router } from "./routes";
 import { BetProvider } from "./context/BetContext";
 import { AuthProvider } from "./context/AuthContext";
 import { SportProvider, useSport } from "./context/SportContext";
+import { LanguageProvider } from "./i18n";
 
 function AppShell() {
   const { theme } = useSport();
@@ -28,12 +29,14 @@ function AppShell() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BetProvider>
-        <SportProvider>
-          <AppShell />
-        </SportProvider>
-      </BetProvider>
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
+        <BetProvider>
+          <SportProvider>
+            <AppShell />
+          </SportProvider>
+        </BetProvider>
+      </AuthProvider>
+    </LanguageProvider>
   );
 }

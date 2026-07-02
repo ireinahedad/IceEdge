@@ -18,7 +18,10 @@ import {
   MarketDefinition,
 } from "../data/betMarkets";
 import type { BetMarketType } from "../types/bet";
+import { useI18n } from "../i18n";
 // MLSection used only in PredictionSheet (per-bet click), not here
+
+type TFn = (key: string, params?: Record<string, string | number>) => string;
 
 // ─── Types locaux ──────────────────────────────────────────────────────────────
 
@@ -49,138 +52,139 @@ interface BetPrediction {
 
 function computeRulePrediction(
   market: MarketDefinition,
-  game: GameOption
+  game: GameOption,
+  t: TFn
 ): { pct: number; note: string } {
   const { homeWinPct: hw, awayWinPct: aw, homeGoalsPerGame: hgf, awayGoalsPerGame: agf } = game;
   const avgGoals = hgf + agf;
 
   switch (market.type) {
     case "moneyline":
-      return { pct: hw, note: `${game.homeAbbr} domicile · win% historique vs adversaire` };
+      return { pct: hw, note: t("nhl.note.moneyline", { abbr: game.homeAbbr }) };
 
     case "puck_line":
       // prob de gagner par 2+ buts ≈ winPct × 0.55
-      return { pct: Math.round(hw * 0.55), note: `${game.homeAbbr} gagne par ≥2 buts` };
+      return { pct: Math.round(hw * 0.55), note: t("nhl.note.puck_line", { abbr: game.homeAbbr }) };
 
     case "total_goals": {
       const line = 5.5;
       const overPct = Math.min(80, Math.max(20, Math.round(50 + (avgGoals - line) * 25)));
-      return { pct: overPct, note: `Moy. ${avgGoals.toFixed(1)} buts/match · ligne ${line}` };
+      return { pct: overPct, note: t("nhl.note.total_goals", { goals: avgGoals.toFixed(1), line }) };
     }
 
     case "regulation_result":
-      return { pct: Math.round(hw * 0.85), note: `Victoire en 60 min (sans OT/SO)` };
+      return { pct: Math.round(hw * 0.85), note: t("nhl.note.regulation") };
 
     case "game_to_ot":
-      return { pct: Math.round((100 - Math.abs(hw - aw)) * 0.35), note: `Matchs serrés → OT` };
+      return { pct: Math.round((100 - Math.abs(hw - aw)) * 0.35), note: t("nhl.note.game_to_ot") };
 
     case "both_teams_score":
       return {
         pct: Math.min(85, Math.round((hgf * agf) / (hgf * agf + 0.8) * 100)),
-        note: `GF/G domicile ${hgf.toFixed(1)} · ext ${agf.toFixed(1)}`,
+        note: t("nhl.note.btts", { h: hgf.toFixed(1), a: agf.toFixed(1) }),
       };
 
     case "winning_margin":
-      return { pct: Math.round(hw * 0.4), note: `Marge de victoire exacte` };
+      return { pct: Math.round(hw * 0.4), note: t("nhl.note.winning_margin") };
 
     case "double_chance":
-      return { pct: Math.round(hw * 1.3 + 5), note: `Double chance — protège contre nul` };
+      return { pct: Math.round(hw * 1.3 + 5), note: t("nhl.note.double_chance") };
 
     case "alt_puck_line":
-      return { pct: Math.round(hw * 0.38), note: `Ligne alternative ±2.5 buts` };
+      return { pct: Math.round(hw * 0.38), note: t("nhl.note.alt_puck_line") };
 
     case "ot_winner":
-      return { pct: Math.round(hw * 0.45 + 5), note: `Favori en OT si prolongation` };
+      return { pct: Math.round(hw * 0.45 + 5), note: t("nhl.note.ot_winner") };
 
     case "period1_winner":
-      return { pct: Math.round(hw * 0.75), note: `Win% en 1ère période` };
+      return { pct: Math.round(hw * 0.75), note: t("nhl.note.p1_winner") };
 
     case "period2_winner":
-      return { pct: Math.round(hw * 0.78), note: `Win% en 2e période` };
+      return { pct: Math.round(hw * 0.78), note: t("nhl.note.p2_winner") };
 
     case "period3_winner":
-      return { pct: Math.round(hw * 0.80), note: `Win% en 3e période` };
+      return { pct: Math.round(hw * 0.80), note: t("nhl.note.p3_winner") };
 
     case "highest_scoring_period":
-      return { pct: 38, note: `2e période souvent la + productive (NHL avg)` };
+      return { pct: 38, note: t("nhl.note.high_period") };
 
     case "period1_total_goals": {
       const p1avg = avgGoals / 3;
-      return { pct: Math.round(50 + (p1avg - 1.5) * 30), note: `Moy. ${p1avg.toFixed(1)} buts/P1` };
+      return { pct: Math.round(50 + (p1avg - 1.5) * 30), note: t("nhl.note.p1_total", { n: p1avg.toFixed(1) }) };
     }
     case "period2_total_goals": {
       const p2avg = avgGoals / 3 * 1.1;
-      return { pct: Math.round(50 + (p2avg - 1.5) * 30), note: `Moy. ${p2avg.toFixed(1)} buts/P2` };
+      return { pct: Math.round(50 + (p2avg - 1.5) * 30), note: t("nhl.note.p2_total", { n: p2avg.toFixed(1) }) };
     }
     case "period3_total_goals": {
       const p3avg = avgGoals / 3 * 0.95;
-      return { pct: Math.round(50 + (p3avg - 1.5) * 30), note: `Moy. ${p3avg.toFixed(1)} buts/P3` };
+      return { pct: Math.round(50 + (p3avg - 1.5) * 30), note: t("nhl.note.p3_total", { n: p3avg.toFixed(1) }) };
     }
 
     case "first_team_score":
-      return { pct: hw, note: `Premier à marquer = avantage domicile` };
+      return { pct: hw, note: t("nhl.note.first_score") };
 
     case "last_team_score":
-      return { pct: Math.round(hw * 0.85 + 7), note: `Dernier but → souvent l'équipe qui mène` };
+      return { pct: Math.round(hw * 0.85 + 7), note: t("nhl.note.last_score") };
 
     case "team_total_goals": {
       const line = 2.5;
-      return { pct: Math.round(50 + (hgf - line) * 30), note: `${game.homeAbbr} avg ${hgf.toFixed(1)} buts/match` };
+      return { pct: Math.round(50 + (hgf - line) * 30), note: t("nhl.note.team_total", { abbr: game.homeAbbr, n: hgf.toFixed(1) }) };
     }
 
     case "team_pp_goals":
-      return { pct: 42, note: `Power play goals · moyenne ~0.8/match` };
+      return { pct: 42, note: t("nhl.note.team_pp") };
 
     case "clean_sheet":
-      return { pct: Math.round((100 - agf * 25)), note: `${game.homeAbbr} concède 0 but` };
+      return { pct: Math.round((100 - agf * 25)), note: t("nhl.note.clean_sheet", { abbr: game.homeAbbr }) };
 
     case "team_score_every_period":
-      return { pct: Math.round(hgf * 12), note: `Marquer dans les 3 périodes` };
+      return { pct: Math.round(hgf * 12), note: t("nhl.note.every_period") };
 
     case "total_penalties":
-      return { pct: 52, note: `Total PIM · ligne 12.5 min · NHL avg` };
+      return { pct: 52, note: t("nhl.note.total_pim") };
 
     case "anytime_goal":
-      return { pct: 30, note: `Buteur en tout temps — top scorer ~30%` };
+      return { pct: 30, note: t("nhl.note.anytime_goal") };
 
     case "first_goal_scorer":
-      return { pct: 12, note: `1er buteur — top scorer ~12% de chance` };
+      return { pct: 12, note: t("nhl.note.first_scorer") };
 
     case "last_goal_scorer":
-      return { pct: 10, note: `Dernier buteur — probabilité similaire` };
+      return { pct: 10, note: t("nhl.note.last_scorer") };
 
     case "shots_ou":
-      return { pct: 55, note: `Tirs sur but · moyenne attaquant élite ~3/match` };
+      return { pct: 55, note: t("nhl.note.shots") };
 
     case "assists_ou":
-      return { pct: 48, note: `Passes décisives · ligne 0.5` };
+      return { pct: 48, note: t("nhl.note.assists") };
 
     case "points_ou":
-      return { pct: 52, note: `Points (B+P) · top players ~0.8 pts/match` };
+      return { pct: 52, note: t("nhl.note.points") };
 
     case "pp_point":
-      return { pct: 25, note: `Point en avantage numérique` };
+      return { pct: 25, note: t("nhl.note.pp_point") };
 
     case "goalie_saves_ou":
-      return { pct: 54, note: `Arrêts · moyenne gardien élite ~28/match` };
+      return { pct: 54, note: t("nhl.note.saves") };
 
     case "penalty_minutes_ou":
-      return { pct: 45, note: `Minutes de pénalité joueur · ligne 0.5` };
+      return { pct: 45, note: t("nhl.note.pim_player") };
 
     case "blocked_shots_ou":
-      return { pct: 50, note: `Tirs bloqués · défenseur avg ~1.8/match` };
+      return { pct: 50, note: t("nhl.note.blocks") };
 
     case "time_on_ice_ou":
-      return { pct: 53, note: `Temps sur glace · ligne 18.5 min` };
+      return { pct: 53, note: t("nhl.note.toi") };
 
     case "faceoff_wins_ou":
-      return { pct: 51, note: `Mises en jeu gagnées · ligne 9.5` };
+      return { pct: 51, note: t("nhl.note.faceoffs") };
 
     case "hits_ou":
-      return { pct: 48, note: `Mises en échec · ligne 1.5` };
+      return { pct: 48, note: t("nhl.note.hits") };
 
     default:
-      return { pct: 50, note: "Prédiction basée sur les données saisonnières" };
+      return { pct: 50, note: t("nhl.note.default") };
   }
 }
 
@@ -236,6 +240,7 @@ function BetPredictionCard({
   awayAbbr: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { t } = useI18n();
   const ruleColor = pctColor(prediction.rulePct);
 
   return (
@@ -262,7 +267,7 @@ function BetPredictionCard({
           <div className="bg-[#0d1518] rounded-xl p-3">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-base">📐</span>
-              <span className="text-white text-xs font-semibold">Règles statistiques</span>
+              <span className="text-white text-xs font-semibold">{t("nhl.ruleStats")}</span>
               <span className="ml-auto text-xs font-black" style={{ color: ruleColor }}>{prediction.rulePct}%</span>
             </div>
             <div className="w-full bg-[#0A0E0C] rounded-full h-2 mb-2">
@@ -278,7 +283,7 @@ function BetPredictionCard({
               <div className="bg-purple-900/20 border border-purple-500/25 rounded-xl p-3">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-base">✨</span>
-                  <span className="text-purple-300 text-xs font-semibold">Avis du LLM</span>
+                  <span className="text-purple-300 text-xs font-semibold">{t("nhl.llmOpinion")}</span>
                 </div>
                 <p className="text-[#d8c8f0] text-xs leading-relaxed">{prediction.llmResponse}</p>
               </div>
@@ -298,10 +303,10 @@ function BetPredictionCard({
                 {prediction.llmLoading ? (
                   <>
                     <span className="w-3 h-3 rounded-full border-2 border-purple-400/40 border-t-purple-400 animate-spin" />
-                    Analyse en cours...
+                    {t("nhl.analyzing")}
                   </>
                 ) : (
-                  <>✨ Ask LLM</>
+                  <>{t("nhl.askLLM")}</>
                 )}
               </button>
             )}
@@ -356,18 +361,19 @@ function GamePills({
 async function askLLMForMarket(
   market: MarketDefinition,
   game: GameOption,
-  rulePct: number
+  rulePct: number,
+  t: TFn
 ): Promise<string> {
   // Placeholder — remplacer par un vrai appel API LLM
   await new Promise((r) => setTimeout(r, 1200));
-  return (
-    `Analyse ${market.label} pour ${game.homeAbbr} vs ${game.awayAbbr} : ` +
-    `les règles statistiques donnent ${rulePct}%. ` +
-    `En tenant compte du contexte (domicile, forme récente, confrontations directes), ` +
-    `ce marché présente ${rulePct >= 55 ? "une bonne valeur" : "une valeur modérée"}. ` +
-    `Confidence: ${rulePct >= 60 ? "élevée" : "moyenne"}. ` +
-    `[Connectez votre modèle LLM via /api/chat pour une analyse plus détaillée]`
-  );
+  return t("nhl.llm.body", {
+    market: market.label,
+    home: game.homeAbbr,
+    away: game.awayAbbr,
+    pct: rulePct,
+    value: rulePct >= 55 ? t("nhl.llm.goodValue") : t("nhl.llm.modValue"),
+    conf: rulePct >= 60 ? t("nhl.llm.high") : t("nhl.llm.medium"),
+  });
 }
 
 // ─── Page principale ──────────────────────────────────────────────────────────
@@ -377,6 +383,7 @@ const NHL_CATEGORIES: MarketDefinition["category"][] = ["match", "period", "team
 export function NHLPredictionsPage() {
   const navigate = useNavigate();
   const { theme } = useSport();
+  const { t, lang } = useI18n();
   const accent = theme.accent;
   const { games, getTeamById } = useNHLData();
 
@@ -417,7 +424,7 @@ export function NHLPredictionsPage() {
           awayAbbr: t2.abbr,
           homeLogo: t1.logo || nhlLogoUrl(t1.abbr),
           awayLogo: t2.logo || nhlLogoUrl(t2.abbr),
-          time: g.time || "Aujourd'hui",
+          time: g.time || t("nhl.today"),
           homeWinPct: hw,
           awayWinPct: aw,
           homeGoalsPerGame: hgf,
@@ -430,14 +437,14 @@ export function NHLPredictionsPage() {
       if (valid.length > 0) setSelectedGame(valid[0]);
       setLoadingGames(false);
     });
-  }, [games, getTeamById]);
+  }, [games, getTeamById, lang]);
 
   // ── Calculer les prédictions quand le match change ─────────────────────────
   useEffect(() => {
     if (!selectedGame) return;
     const preds: Record<string, BetPrediction> = {};
     for (const market of MARKET_DEFINITIONS) {
-      const { pct, note } = computeRulePrediction(market, selectedGame);
+      const { pct, note } = computeRulePrediction(market, selectedGame, t);
       preds[market.type] = {
         marketType: market.type,
         rulePct: Math.min(92, Math.max(8, pct)),
@@ -448,7 +455,7 @@ export function NHLPredictionsPage() {
       };
     }
     setPredictions(preds);
-  }, [selectedGame]);
+  }, [selectedGame, lang]);
 
   // ── Ask LLM handler ────────────────────────────────────────────────────────
   const handleAskLLM = useCallback(async (market: MarketDefinition) => {
@@ -458,7 +465,7 @@ export function NHLPredictionsPage() {
       [market.type]: { ...prev[market.type], llmLoading: true },
     }));
     try {
-      const response = await askLLMForMarket(market, selectedGame, predictions[market.type]?.rulePct ?? 50);
+      const response = await askLLMForMarket(market, selectedGame, predictions[market.type]?.rulePct ?? 50, t);
       setPredictions((prev) => ({
         ...prev,
         [market.type]: { ...prev[market.type], llmLoading: false, llmResponse: response },
@@ -486,8 +493,8 @@ export function NHLPredictionsPage() {
             ←
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-white font-bold text-base leading-tight">🏒 Prédictions NHL</h1>
-            <p className="text-[#8a9ea6] text-[11px]">Tous les marchés bet365 · Règles + ML + LLM</p>
+            <h1 className="text-white font-bold text-base leading-tight">{t("nhl.title")}</h1>
+            <p className="text-[#8a9ea6] text-[11px]">{t("nhl.subtitle")}</p>
           </div>
         </div>
 
@@ -557,7 +564,7 @@ export function NHLPredictionsPage() {
             {/* Liste des marchés */}
             <div className="flex flex-col gap-2">
               <p className="text-[#bfc8cc] text-xs uppercase tracking-widest mb-1">
-                {CATEGORY_ICONS[activeCategory]} {CATEGORY_LABELS[activeCategory]} — {categoryMarkets.length} marchés
+                {CATEGORY_ICONS[activeCategory]} {CATEGORY_LABELS[activeCategory]} — {t("nhl.marketsCount", { n: categoryMarkets.length })}
               </p>
               {categoryMarkets.map((market) => {
                 const pred = predictions[market.type];

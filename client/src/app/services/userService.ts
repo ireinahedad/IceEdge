@@ -124,8 +124,14 @@ export const profileApiService = {
   getLeaderboard: (): Promise<LeaderboardEntry[]> =>
     get<LeaderboardEntry[]>('/leaderboard'),
 
+  searchUsers: (q: string): Promise<LeaderboardEntry[]> =>
+    get<LeaderboardEntry[]>(`/users/search?q=${encodeURIComponent(q)}`),
+
+  getUserSlips: (userId: string): Promise<unknown[]> =>
+    get<unknown[]>(`/users/${userId}/slips`),
+
   updateProfile: (
-    updates: Partial<Pick<UserProfile, 'username' | 'displayName' | 'bio' | 'favoriteTeam' | 'isPublic' | 'openaiApiKey'>>
+    updates: Partial<Pick<UserProfile, 'username' | 'displayName' | 'bio' | 'favoriteTeam' | 'isPublic' | 'showSlips' | 'openaiApiKey' | 'avatar' | 'avatarUrl'>>
   ): Promise<UserProfile> =>
     patch<UserProfile>('/users/me', updates),
 

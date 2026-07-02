@@ -7,6 +7,28 @@ const router = Router();
 // All /me routes require a valid JWT
 router.use('/me', authenticate);
 
+// GET /api/users/search?q=  — find public players by name (authenticated)
+router.get('/search', authenticate, async (req: Request, res: Response) => {
+  try {
+    const q = String(req.query.q ?? '');
+    if (q.trim().length < 2) return res.json([]);
+    res.json(await ProfileService.searchUsers(q));
+  } catch (err: any) {
+    res.status(err.status ?? 500).json({ error: err.message });
+  }
+});
+
+// GET /api/users/:userId/slips — a player's slips, if they opted in (authenticated)
+router.get('/:userId/slips', authenticate, async (req: Request, res: Response) => {
+  try {
+    const viewerId = (req as any).user?.sub;
+    if (!viewerId) return res.status(401).json({ error: 'Unauthorized' });
+    res.json(await ProfileService.getPublicSlips(req.params.userId, viewerId));
+  } catch (err: any) {
+    res.status(err.status ?? 500).json({ error: err.message });
+  }
+});
+
 // GET /api/users/me
 router.get('/me', async (req: Request, res: Response) => {
   try {

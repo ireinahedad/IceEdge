@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { UITeam } from "../hooks/useNHLData";
 import { nhlApiService } from "../services/nhlApiService";
+import { useI18n } from "../i18n";
 
 const LAST_N_OPTIONS = [5, 10, 20, 30];
 
 export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: string }) {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [search, setSearch] = useState("");
@@ -44,7 +46,7 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
     <div className="flex flex-col gap-4">
       {/* Team selector */}
       <div>
-        <p className="text-[#bfc8cc] text-xs mb-2 uppercase tracking-wider">Select a team</p>
+        <p className="text-[#bfc8cc] text-xs mb-2 uppercase tracking-wider">{t("lastn.selectTeam")}</p>
         <button
           onClick={() => setShowPicker(!showPicker)}
           className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 flex items-center justify-between"
@@ -56,7 +58,7 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
                 <span className="text-white text-sm">{selectedTeamData.name}</span>
               </>
             ) : (
-              <span className="text-[#bfc8cc] text-sm">Choose a team…</span>
+              <span className="text-[#bfc8cc] text-sm">{t("lastn.chooseTeam")}</span>
             )}
           </div>
           <span style={{ color: accent }}>{showPicker ? "▲" : "▼"}</span>
@@ -67,7 +69,7 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
             <div className="px-3 py-2 border-b border-white/20">
               <input
                 className="w-full bg-transparent text-white text-xs outline-none placeholder:text-[#bfc8cc]"
-                placeholder="Search team…"
+                placeholder={t("lastn.searchTeam")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -90,7 +92,7 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
       {/* Game span cards */}
       {selectedTeamData && (
         <div>
-          <p className="text-[#bfc8cc] text-xs mb-2 uppercase tracking-wider">Select span</p>
+          <p className="text-[#bfc8cc] text-xs mb-2 uppercase tracking-wider">{t("lastn.selectSpan")}</p>
           <div className="grid grid-cols-2 gap-2">
             {LAST_N_OPTIONS.map((n) => {
               const stats = nGamesStats[n];
@@ -104,7 +106,7 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
                   className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex flex-col items-center gap-1 active:scale-[0.98] transition-transform"
                 >
                   <span className="text-white text-2xl font-bold">{n}</span>
-                  <span className="text-[#bfc8cc] text-xs">Last {n} Games</span>
+                  <span className="text-[#bfc8cc] text-xs">{t("lastn.lastGames", { n })}</span>
                   <div className="flex items-center gap-1 mt-1 flex-wrap justify-center">
                     {Array.from({ length: Math.min(n, 10) }).map((_, i) => (
                       <div
@@ -115,7 +117,7 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
                     ))}
                   </div>
                   <span className="text-[10px] mt-0.5" style={{ color: accent }}>
-                    {loadingStats ? "Loading…" : `${wins}W – ${losses}L · ${pct}%`}
+                    {loadingStats ? t("lastn.loading") : `${wins}W – ${losses}L · ${pct}%`}
                   </span>
                 </button>
               );
@@ -127,7 +129,7 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
       {!selectedTeamData && (
         <div className="flex flex-col items-center justify-center py-12 gap-3">
           <span className="text-5xl">🏒</span>
-          <p className="text-[#bfc8cc] text-sm text-center">Select a team above to explore their recent form</p>
+          <p className="text-[#bfc8cc] text-sm text-center">{t("lastn.explore")}</p>
         </div>
       )}
     </div>

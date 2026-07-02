@@ -17,6 +17,7 @@ import { tennisApiService, TennisApiMatch, TennisRankingEntry } from "../service
 import { useBet } from "../context/BetContext";
 import type { BetLeg } from "../types/bet";
 import { askLLM } from "../services/llmService";
+import { useI18n } from "../i18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -286,6 +287,7 @@ function TennisPredictionSheet({
   accent: string;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [llmText, setLlmText]   = useState("");
   const [llmLoading, setLlmLoading] = useState(false);
   const { addLeg, removeLeg, hasLeg } = useBet();
@@ -337,7 +339,7 @@ function TennisPredictionSheet({
               ? { background: "#4ade8033", color: "#4ade80", border: "1px solid #4ade8055" }
               : { background: accent + "22", color: accent, border: `1px solid ${accent}55` }}
           >
-            {inSlip ? "✓ Slip" : "+ Slip"}
+            {inSlip ? t("pred.slipShort") : t("pred.slipAddShort")}
           </button>
         </div>
 
@@ -371,7 +373,7 @@ function TennisPredictionSheet({
         <div className="bg-[#0d1519] border border-white/[0.07] rounded-2xl overflow-hidden">
           <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/[0.05]">
             <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-sm flex-shrink-0">📐</div>
-            <span className="text-white text-sm font-bold flex-1">Rules</span>
+            <span className="text-white text-sm font-bold flex-1">{t("pred.rules")}</span>
             <span className="text-xl font-black flex-shrink-0" style={{ color: pctColor }}>{opt.rulePct}%</span>
           </div>
           <div className="px-4 py-3">
@@ -388,7 +390,7 @@ function TennisPredictionSheet({
           <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-sm">✨</span>
-              <span className="text-purple-300 text-xs font-semibold">LLM Analysis</span>
+              <span className="text-purple-300 text-xs font-semibold">{t("pred.llmAnalysis")}</span>
             </div>
             <p className="text-[#bfc8cc] text-xs leading-relaxed">{llmText}</p>
           </div>
@@ -429,8 +431,8 @@ function TennisPredictionSheet({
             }}
           >
             {llmLoading
-              ? <><span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin inline-block" /> Analysing...</>
-              : <>✨ Ask LLM</>}
+              ? <><span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin inline-block" /> {t("nhl.analyzing")}</>
+              : <>{t("nhl.askLLM")}</>}
           </button>
         )}
 
@@ -438,7 +440,7 @@ function TennisPredictionSheet({
           onClick={onClose}
           className="w-full py-3 bg-[#131A12] border border-white/10 rounded-2xl text-[#8a9ea6] text-sm font-medium"
         >
-          Close
+          {t("common.close")}
         </button>
       </div>
     </div>
@@ -448,6 +450,7 @@ function TennisPredictionSheet({
 // ─── BetOption ────────────────────────────────────────────────────────────────
 
 function TennisBetOption({ opt, match, accent }: { opt: TennisBetOpt; match: MatchOption; accent: string }) {
+  const { t } = useI18n();
   const revealAll = useContext(RevealAllCtx);
   const [revealed, setRevealed] = useState(false);
   const [sheet, setSheet] = useState(false);
@@ -475,7 +478,7 @@ function TennisBetOption({ opt, match, accent }: { opt: TennisBetOpt; match: Mat
             {opt.rulePct}%
           </button>
         ) : (
-          <span className="mt-2 text-[#3a5060] text-[9px] font-medium">Tap</span>
+          <span className="mt-2 text-[#3a5060] text-[9px] font-medium">{t("pred.tap")}</span>
         )}
       </button>
       {sheet && (
@@ -513,9 +516,10 @@ function TennisMarketGroup({ group, match, accent }: { group: TennisMktGroup; ma
 // ─── Reveal-all bar ───────────────────────────────────────────────────────────
 
 function RevealBar({ revealAll, onToggle, accent }: { revealAll: boolean; onToggle: () => void; accent: string }) {
+  const { t } = useI18n();
   return (
     <div className="flex items-center justify-between px-1">
-      <span className="text-[#4a6070] text-[10px] font-semibold uppercase tracking-wider">Markets</span>
+      <span className="text-[#4a6070] text-[10px] font-semibold uppercase tracking-wider">{t("pred.markets")}</span>
       <button
         onClick={onToggle}
         className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-semibold transition-all active:scale-95"
@@ -523,7 +527,7 @@ function RevealBar({ revealAll, onToggle, accent }: { revealAll: boolean; onTogg
           ? { background: accent + "22", color: accent, border: `1px solid ${accent}44` }
           : { background: "rgba(255,255,255,0.05)", color: "#8a9ea6", border: "1px solid rgba(255,255,255,0.08)" }}
       >
-        {revealAll ? "👁 Hide all" : "👁 Reveal all"}
+        {revealAll ? t("pred.hideAll") : t("pred.revealAll")}
       </button>
     </div>
   );
@@ -539,10 +543,11 @@ function MatchSelector({
   onSelect: (m: MatchOption) => void;
   accent: string;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   if (matches.length === 0) return (
     <div className="bg-[#131A12] border border-white/20 rounded-2xl px-4 py-3 text-center">
-      <p className="text-[#bfc8cc] text-sm">No matches today</p>
+      <p className="text-[#bfc8cc] text-sm">{t("tennis.noMatches")}</p>
     </div>
   );
 
@@ -562,12 +567,12 @@ function MatchSelector({
             {selected.isLive && (
               <span className="text-[10px] text-red-400 flex items-center gap-1 flex-shrink-0">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-                Live
+                {t("home.live")}
               </span>
             )}
           </>
         ) : (
-              <span className="text-[#4a6068] text-sm flex-1 text-left">Select a match…</span>
+              <span className="text-[#4a6068] text-sm flex-1 text-left">{t("tennis.selectMatch")}</span>
         )}
         <span className="text-[#3a5060] text-xs ml-auto">{open ? "▲" : "▼"}</span>
       </button>
@@ -598,6 +603,7 @@ export function TennisPredictionsPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { theme } = useSport();
+  const { t } = useI18n();
   const accent = "#3bc47a";
   const [matches, setMatches] = useState<MatchOption[]>([]);
   const [selected, setSelected] = useState<MatchOption | null>(null);
@@ -656,7 +662,7 @@ export function TennisPredictionsPage() {
           style={{ background: "rgba(10,14,12,0.92)", backdropFilter: "blur(16px)", borderBottom: "1px solid #283323" }}>
           <div className="flex items-center gap-3 mb-3">
             <button onClick={() => navigate(-1)} className="text-[#3a5060] text-lg">←</button>
-            <h1 className="text-white text-base font-bold flex-1">Tennis Predictions</h1>
+            <h1 className="text-white text-base font-bold flex-1">{t("tennis.title")}</h1>
           </div>
           <MatchSelector matches={matches} selected={selected} onSelect={setSelected} accent={accent} />
         </div>
@@ -698,7 +704,7 @@ export function TennisPredictionsPage() {
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-20">
-              <p className="text-[#4a6068] text-sm">No matches available today</p>
+              <p className="text-[#4a6068] text-sm">{t("tennis.noMatchesAvail")}</p>
             </div>
           )}
         </div>

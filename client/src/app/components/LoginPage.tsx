@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { getGoogleLoginUrl } from "../services/authService";
 import { IceedgeLogo } from "./brand/IceedgeLogo";
+import { useI18n } from "../i18n";
 
 type Mode = "login" | "register";
 
@@ -17,6 +18,7 @@ export function LoginPage() {
   const location  = useLocation();
   const returnTo  = new URLSearchParams(location.search).get("returnTo") ?? "/";
   const { login, register } = useAuth();
+  const { t } = useI18n();
 
   const [mode,      setMode]      = useState<Mode>("login");
   const [email,     setEmail]     = useState("");
@@ -38,7 +40,7 @@ export function LoginPage() {
       }
       navigate(returnTo, { replace: true });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(err instanceof Error ? err.message : t("login.error"));
     } finally {
       setLoading(false);
     }
@@ -81,7 +83,7 @@ export function LoginPage() {
               ? { background: ACCENT, color: "#0A0E0C" }
               : { color: "#92A08A" }}
           >
-            {m === "login" ? "Sign In" : "Create Account"}
+            {m === "login" ? t("login.signin") : t("login.signup")}
           </button>
         ))}
       </div>
@@ -98,37 +100,37 @@ export function LoginPage() {
           <path d="M10.6 28.6A14.3 14.3 0 0 1 10 24c0-1.6.3-3.1.6-4.6v-6.2H2.4A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.4 10.8l8.2-6.2z" fill="#FBBC05"/>
           <path d="M24 9.5c3.5 0 6.6 1.2 9.1 3.5l6.8-6.8C35.9 2.1 30.5 0 24 0 14.6 0 6.4 5.4 2.4 13.2l8.2 6.2C12.5 13.7 17.8 9.5 24 9.5z" fill="#EA4335"/>
         </svg>
-        Continue with Google
+        {t("login.google")}
       </button>
 
       {/* Divider */}
       <div className="flex items-center gap-3 mb-4">
         <div className="flex-1 h-px" style={{ background: BORDER }} />
-        <span className="text-[10px] uppercase tracking-widest" style={{ color: "#92A08A" }}>or</span>
+        <span className="text-[10px] uppercase tracking-widest" style={{ color: "#92A08A" }}>{t("login.or")}</span>
         <div className="flex-1 h-px" style={{ background: BORDER }} />
       </div>
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)}
+        <input type="email" placeholder={t("login.email")} value={email} onChange={(e) => setEmail(e.target.value)}
           required className={inputCls} style={inputStyle}
           onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
           onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
 
         {mode === "register" && (
           <>
-            <input type="text" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)}
+            <input type="text" placeholder={t("login.username")} value={username} onChange={(e) => setUsername(e.target.value)}
               required minLength={3} className={inputCls} style={inputStyle}
               onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
               onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
-            <input type="text" placeholder="First name (optional)" value={firstName} onChange={(e) => setFirstName(e.target.value)}
+            <input type="text" placeholder={t("login.firstName")} value={firstName} onChange={(e) => setFirstName(e.target.value)}
               className={inputCls} style={inputStyle}
               onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
               onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
           </>
         )}
 
-        <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)}
+        <input type="password" placeholder={t("login.password")} value={password} onChange={(e) => setPassword(e.target.value)}
           required minLength={6} className={inputCls} style={inputStyle}
           onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
           onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
@@ -142,12 +144,12 @@ export function LoginPage() {
         <button type="submit" disabled={loading}
           className="w-full py-3.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50"
           style={{ background: ACCENT, color: "#0A0E0C" }}>
-          {loading ? "..." : mode === "login" ? "Sign In" : "Create Account"}
+          {loading ? "..." : mode === "login" ? t("login.signin") : t("login.signup")}
         </button>
       </form>
 
       <p className="text-center text-[10px] tracking-wide mt-8" style={{ color: "#92A08A", opacity: 0.5 }}>
-        18+ · Gamble Responsibly · Not available in all jurisdictions
+        {t("login.disclaimer")}
       </p>
     </div>
   );

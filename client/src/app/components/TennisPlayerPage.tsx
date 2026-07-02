@@ -12,6 +12,7 @@ import { tennisApiService, TennisRankingEntry, TennisApiMatch } from "../service
 import { useBet } from "../context/BetContext";
 import type { BetLeg } from "../types/bet";
 import { askLLM } from "../services/llmService";
+import { useI18n } from "../i18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -148,6 +149,7 @@ export function TennisPlayerPage() {
   const location  = useLocation();
   const { id }    = useParams<{ id: string }>();
   const { addLeg, hasLeg } = useBet();
+  const { t } = useI18n();
 
   const accent = "#3bc47a";
 
@@ -275,8 +277,8 @@ export function TennisPlayerPage() {
     return (
       <div className="flex flex-col min-h-screen bg-transparent max-w-[430px] mx-auto items-center justify-center gap-4">
         <span className="text-4xl">🎾</span>
-        <p className="text-white font-bold">Player not found</p>
-        <button onClick={() => navigate(-1)} className="px-4 py-2 rounded-xl text-sm" style={{ backgroundColor: `${accent}22`, color: accent }}>Go back</button>
+        <p className="text-white font-bold">{t("tp.notFound")}</p>
+        <button onClick={() => navigate(-1)} className="px-4 py-2 rounded-xl text-sm" style={{ backgroundColor: `${accent}22`, color: accent }}>{t("tp.goBack")}</button>
       </div>
     );
   }
@@ -316,16 +318,16 @@ export function TennisPlayerPage() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-white font-bold text-lg leading-tight">{player.player.name}</p>
-              <p className="text-[#8a9ea6] text-xs mt-0.5">{player.player.countryCode} · {tour} Tour</p>
+              <p className="text-[#8a9ea6] text-xs mt-0.5">{player.player.countryCode} · {t("tp.tour", { tour })}</p>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: `${accent}22`, color: accent }}>
-                  #{player.pos} World
+                  {t("tp.world", { pos: player.pos })}
                 </span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#ffffff0d] text-[#bfc8cc]">
                   {player.points.toLocaleString()} pts
                 </span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: `${accent}15`, color: "#facc15" }}>
-                  {winPct}% win rate
+                  {t("tp.winRate", { pct: winPct })}
                 </span>
               </div>
             </div>
@@ -334,7 +336,7 @@ export function TennisPlayerPage() {
           {/* Overall win rate bar */}
           <div className="mt-4">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[#8a9ea6] text-[11px]">Overall win probability</span>
+              <span className="text-[#8a9ea6] text-[11px]">{t("tp.overallWin")}</span>
               <span className="text-sm font-bold" style={{ color: accent }}>{winPct}%</span>
             </div>
             <div className="w-full bg-[#0A0E0C] rounded-full h-2 overflow-hidden">
@@ -344,7 +346,7 @@ export function TennisPlayerPage() {
         </div>
 
         {/* ── Surface breakdown ── */}
-        <SectionHeader title="Performance by Surface" />
+        <SectionHeader title={t("tp.perfSurface")} />
         <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4 flex flex-col gap-4">
           {surfaceStats.map(s => (
             <div key={s.surface}>
@@ -353,7 +355,7 @@ export function TennisPlayerPage() {
                 <span className="text-white text-xs font-semibold">{s.surface}</span>
                 <span className="text-[#8a9ea6] text-[10px] ml-1">{s.desc}</span>
               </div>
-              <StatBar label="Win rate" value={s.winPct} accent={accent} />
+              <StatBar label={t("tp.winRateLabel")} value={s.winPct} accent={accent} />
             </div>
           ))}
         </div>
@@ -361,13 +363,13 @@ export function TennisPlayerPage() {
         {/* ── Serve stats ── */}
         {serveStats && (
           <>
-            <SectionHeader title="Serve Stats" />
+            <SectionHeader title={t("tp.serveStats")} />
             <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4 flex flex-col gap-3">
-              <StatBar label="1st Serve In"        value={serveStats.firstServePct}  accent={accent} />
-              <StatBar label="Ace Rate (per game)"  value={serveStats.aceRate} max={15} accent={accent} />
-              <StatBar label="Win on 1st Serve"    value={serveStats.firstWinPct}    accent={accent} />
-              <StatBar label="Win on 2nd Serve"    value={serveStats.secondWinPct}   accent={accent} />
-              <StatBar label="Hold %"              value={serveStats.holdPct}         accent={accent} />
+              <StatBar label={t("tp.firstServeIn")}   value={serveStats.firstServePct}  accent={accent} />
+              <StatBar label={t("tp.aceRate")}         value={serveStats.aceRate} max={15} accent={accent} />
+              <StatBar label={t("tp.winFirstServe")}   value={serveStats.firstWinPct}    accent={accent} />
+              <StatBar label={t("tp.winSecondServe")}  value={serveStats.secondWinPct}   accent={accent} />
+              <StatBar label={t("tp.holdPct")}         value={serveStats.holdPct}         accent={accent} />
             </div>
           </>
         )}
@@ -375,11 +377,11 @@ export function TennisPlayerPage() {
         {/* ── Return stats ── */}
         {returnStats && (
           <>
-            <SectionHeader title="Return Stats" />
+            <SectionHeader title={t("tp.returnStats")} />
             <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4 flex flex-col gap-3">
-              <StatBar label="Return Rating"       value={returnStats.returnRating}  accent={accent} />
-              <StatBar label="Break %"             value={returnStats.breakPct}       accent={accent} />
-              <StatBar label="Win on Return"       value={returnStats.returnWinPct}   accent={accent} />
+              <StatBar label={t("tp.returnRating")}   value={returnStats.returnRating}  accent={accent} />
+              <StatBar label={t("tp.breakPct")}       value={returnStats.breakPct}       accent={accent} />
+              <StatBar label={t("tp.winReturn")}      value={returnStats.returnWinPct}   accent={accent} />
             </div>
           </>
         )}
@@ -387,7 +389,7 @@ export function TennisPlayerPage() {
         {/* ── Head-to-head ── */}
         {h2h.length > 0 && (
           <>
-            <SectionHeader title="Head-to-Head vs Top Rivals" />
+            <SectionHeader title={t("tp.h2h")} />
             <div className="bg-[#131A12] border border-white/20 rounded-2xl overflow-hidden">
               {h2h.map((record, i) => {
                 const total = record.wins + record.losses;
@@ -415,7 +417,7 @@ export function TennisPlayerPage() {
         {/* ── Recent results ── */}
         {recentResults.length > 0 && (
           <>
-            <SectionHeader title="Recent Form" />
+            <SectionHeader title={t("tp.recentForm")} />
             <div className="bg-[#131A12] border border-white/20 rounded-2xl overflow-hidden">
               {recentResults.map((r, i) => (
                 <div key={i} className={`px-4 py-3 flex items-center gap-3 ${i > 0 ? "border-t border-white/[0.05]" : ""}`}>
@@ -444,7 +446,7 @@ export function TennisPlayerPage() {
         {/* ── Upcoming matches / bet options ── */}
         {playerMatches.length > 0 && (
           <>
-            <SectionHeader title="Upcoming Matches — Bet Options" />
+            <SectionHeader title={t("tp.upcomingBets")} />
             {playerMatches.map(match => {
               const playerIsP1 = match.player1.name.toLowerCase().includes(
                 player.player.name.split(/[.\s]/).pop()?.toLowerCase() ?? ""
@@ -465,7 +467,7 @@ export function TennisPlayerPage() {
                   <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       {match.isLive
-                        ? <span className="text-[10px] text-red-400 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />Live</span>
+                        ? <span className="text-[10px] text-red-400 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />{t("home.live")}</span>
                         : <span className="text-[11px] font-semibold" style={{ color: accent }}>
                             {match.scheduledIso ? new Date(match.scheduledIso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "TBD"}
                           </span>}
@@ -512,7 +514,7 @@ export function TennisPlayerPage() {
                         ? { background: "#4ade8022", color: "#4ade80", border: "1px solid #4ade8044" }
                         : { background: `${accent}22`, color: accent, border: `1px solid ${accent}44` }}
                     >
-                      {inSlip ? "✓ Added to Slip" : `+ ${player.player.name} to win — ${myWin}%`}
+                      {inSlip ? t("tp.addedSlip") : t("tp.addToWin", { name: player.player.name, pct: myWin })}
                     </button>
                   </div>
                 </div>
@@ -522,12 +524,12 @@ export function TennisPlayerPage() {
         )}
 
         {/* ── Ask LLM ── */}
-        <SectionHeader title="AI Analysis" />
+        <SectionHeader title={t("tp.aiAnalysis")} />
         {llmText ? (
           <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-sm">✨</span>
-              <span className="text-purple-300 text-xs font-semibold">LLM Player Analysis</span>
+              <span className="text-purple-300 text-xs font-semibold">{t("tp.llmPlayer")}</span>
             </div>
             <p className="text-[#bfc8cc] text-xs leading-relaxed">{llmText}</p>
           </div>
@@ -569,8 +571,8 @@ export function TennisPlayerPage() {
             }}
           >
             {llmLoading
-              ? <><span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin inline-block" /> Analysing {player.player.name}...</>
-              : <>✨ Ask LLM about {player.player.name}</>}
+              ? <><span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin inline-block" /> {t("tp.analysing", { name: player.player.name })}</>
+              : <>{t("tp.askLLMAbout", { name: player.player.name })}</>}
           </button>
         )}
 

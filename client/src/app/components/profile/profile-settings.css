@@ -1,0 +1,187 @@
+/* ─────────────────────────────────────────────────────────────
+   Profile Settings — Uiverse-based styles
+   Buttons, toggles, boxes, inputs, loader
+   ───────────────────────────────────────────────────────────── */
+
+/* ── TOGGLE / SWITCH ──────────────────────────────────────────── */
+.switch {
+  font-size: 17px;
+  position: relative;
+  display: inline-block;
+  width: 3.5em;
+  height: 2em;
+}
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #eee;
+  box-shadow: inset 2px 5px 10px rgba(0, 0, 0, 0.1);
+  transition: 0.4s;
+  border-radius: 5px;
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 1.4em;
+  width: 0.1em;
+  border-radius: 0px;
+  left: 0.3em;
+  bottom: 0.3em;
+  background-color: white;
+  transition: 0.4s;
+}
+.switch input:checked + .slider {
+  background-color: #85b1cf;
+  box-shadow: inset 2px 1px 10px rgb(0, 0, 0);
+}
+.switch input:checked + .slider:before {
+  transform: translateX(2.8em) rotate(360deg);
+}
+
+/* ── INPUT (from Uiverse by VijinV) ───────────────────────────── */
+.inputbox {
+  position: relative;
+  width: 100%;
+}
+.inputbox input,
+.inputbox textarea {
+  position: relative;
+  width: 100%;
+  padding: 16px 6px 5px;
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+  border: none;
+  color: #86d1ea;
+  font-weight: 600;
+  font-size: 0.8em;
+  letter-spacing: 0.05em;
+  transition: 0.5s;
+  z-index: 10;
+}
+.inputbox textarea {
+  resize: none;
+  min-height: 56px;
+}
+.inputbox span {
+  position: absolute;
+  left: 0;
+  padding: 16px 6px 5px;
+  font-size: 0.8em;
+  color: #9cabb6;
+  letter-spacing: 0.05em;
+  transition: 0.5s;
+  pointer-events: none;
+}
+.inputbox input:valid ~ span,
+.inputbox input:focus ~ span,
+.inputbox textarea:valid ~ span,
+.inputbox textarea:focus ~ span {
+  color: #2596be;
+  transform: translateX(-6px) translateY(-15px);
+  font-size: 0.72em;
+}
+.inputbox i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  background: #2596be;
+  border-radius: 4px;
+  transition: 0.5s;
+  pointer-events: none;
+  z-index: 9;
+}
+.inputbox input:valid ~ i,
+.inputbox input:focus ~ i,
+.inputbox textarea:valid ~ i,
+.inputbox textarea:focus ~ i {
+  height: 30px;
+}
+
+/* ── LOADER (from Uiverse by Li-Deheng) ───────────────────────── */
+.loader {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  --color: hsl(194, 60%, 63%);
+  --animation: 2s ease-in-out infinite;
+}
+.loader .circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border: solid 2px var(--color);
+  border-radius: 50%;
+  margin: 0 10px;
+  background-color: transparent;
+  animation: circle-keys var(--animation);
+}
+.loader .circle .dot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: var(--color);
+  animation: dot-keys var(--animation);
+}
+.loader .circle .outline {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  animation: outline-keys var(--animation);
+}
+.loader .circle:nth-child(2) { animation-delay: 0.3s; }
+.loader .circle:nth-child(3) { animation-delay: 0.6s; }
+.loader .circle:nth-child(4) { animation-delay: 0.9s; }
+.loader .circle:nth-child(5) { animation-delay: 1.2s; }
+.loader .circle:nth-child(2) .dot { animation-delay: 0.3s; }
+.loader .circle:nth-child(3) .dot { animation-delay: 0.6s; }
+.loader .circle:nth-child(4) .dot { animation-delay: 0.9s; }
+.loader .circle:nth-child(5) .dot { animation-delay: 1.2s; }
+.loader .circle:nth-child(1) .outline { animation-delay: 0.9s; }
+.loader .circle:nth-child(2) .outline { animation-delay: 1.2s; }
+.loader .circle:nth-child(3) .outline { animation-delay: 1.5s; }
+.loader .circle:nth-child(4) .outline { animation-delay: 1.8s; }
+.loader .circle:nth-child(5) .outline { animation-delay: 2.1s; }
+
+@keyframes circle-keys {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes dot-keys {
+  0% { transform: scale(1); }
+  50% { transform: scale(0); }
+  100% { transform: scale(1); }
+}
+@keyframes outline-keys {
+  0% {
+    transform: scale(0);
+    outline: solid 20px var(--color);
+    outline-offset: 0;
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    outline: solid 0 transparent;
+    outline-offset: 20px;
+    opacity: 0;
+  }
+}

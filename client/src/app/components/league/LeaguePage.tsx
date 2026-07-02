@@ -30,7 +30,7 @@ export function LeaguePage() {
   const totalUnread = rooms.reduce((acc, r) => acc + (r.unread ?? 0), 0);
 
   return (
-    <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] mx-auto">
+    <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] md:max-w-5xl mx-auto w-full">
       <LeagueHeader tab={tab} setTab={setTab} totalUnread={totalUnread} />
 
       <div

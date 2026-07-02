@@ -9,6 +9,9 @@
  * (the parent MLSection component receives null and returns null).
  */
 import { useEffect, useState } from "react";
+import { useI18n } from "../i18n";
+
+type TFn = (key: string, params?: Record<string, string | number>) => string;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -108,11 +111,11 @@ function ImportanceBar({ fi, maxImp }: { fi: MLFeatureImportance; maxImp: number
 
 // ── Verdict label ─────────────────────────────────────────────────────────────
 
-function verdictLabel(pct: number): { text: string; color: string; bg: string } {
-  if (pct >= 70) return { text: "Fort signal ▲",  color: "#4ade80", bg: "rgba(74,222,128,0.12)" };
-  if (pct >= 58) return { text: "Signal positif",  color: "#a78bfa", bg: "rgba(167,139,250,0.12)" };
-  if (pct >= 45) return { text: "Signal neutre",   color: "#facc15", bg: "rgba(250,204,21,0.10)" };
-  return           { text: "Signal faible ▼",      color: "#f87171", bg: "rgba(248,113,113,0.10)" };
+function verdictLabel(pct: number, t: TFn): { text: string; color: string; bg: string } {
+  if (pct >= 70) return { text: t("ml.verdictStrong"),  color: "#4ade80", bg: "rgba(74,222,128,0.12)" };
+  if (pct >= 58) return { text: t("ml.verdictPos"),     color: "#a78bfa", bg: "rgba(167,139,250,0.12)" };
+  if (pct >= 45) return { text: t("ml.verdictNeutral"), color: "#facc15", bg: "rgba(250,204,21,0.10)" };
+  return           { text: t("ml.verdictWeak"),         color: "#f87171", bg: "rgba(248,113,113,0.10)" };
 }
 
 // ── Animated big gauge (hero) ─────────────────────────────────────────────────
@@ -157,6 +160,7 @@ function MLGaugeLarge({ pct, color }: { pct: number; color: string }) {
 // ── Simple card (PredictionSheet) ────────────────────────────────────────────
 
 function MLSimpleCard({ result, ruleBasedPct }: { result: MLPredictionResult; ruleBasedPct?: number }) {
+  const { t } = useI18n();
   const { probability, confidence, explanation } = result;
   const [barWidth, setBarWidth] = useState(0);
 
@@ -174,7 +178,7 @@ function MLSimpleCard({ result, ruleBasedPct }: { result: MLPredictionResult; ru
     confidence >= 75 ? "#4ade80" :
     confidence >= 55 ? "#a78bfa" : "#facc15";
 
-  const verdict = verdictLabel(probability);
+  const verdict = verdictLabel(probability, t);
   const delta   = ruleBasedPct !== undefined ? probability - ruleBasedPct : null;
 
   return (
@@ -186,7 +190,7 @@ function MLSimpleCard({ result, ruleBasedPct }: { result: MLPredictionResult; ru
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-full"
           style={{ background: confColor + "18", border: `1px solid ${confColor}40` }}>
           <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: confColor }} />
-          <span className="text-[10px] font-semibold" style={{ color: confColor }}>{confidence}% conf.</span>
+          <span className="text-[10px] font-semibold" style={{ color: confColor }}>{t("ml.conf", { n: confidence })}</span>
         </div>
       </div>
       {/* Body */}
@@ -201,7 +205,7 @@ function MLSimpleCard({ result, ruleBasedPct }: { result: MLPredictionResult; ru
           {delta !== null && Math.abs(delta) >= 3 && (
             <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0"
               style={{ backgroundColor: (delta > 0 ? "#a78bfa" : "#f87171") + "22", color: delta > 0 ? "#a78bfa" : "#f87171" }}>
-              {delta > 0 ? "+" : ""}{delta}% vs règles
+              {t("ml.vsRules", { d: `${delta > 0 ? "+" : ""}${delta}` })}
             </span>
           )}
         </div>
@@ -227,6 +231,7 @@ interface MLPredictionCardProps {
 }
 
 export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero = false, simple = false, label }: MLPredictionCardProps) {
+  const { t } = useI18n();
   const { probability, confidence, feature_importances, model_type, model_version, explanation } = result;
 
   const probColor =
@@ -251,7 +256,7 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
 
   const maxImp = Math.max(...feature_importances.map((f) => f.importance), 0.001);
   const delta = ruleBasedPct !== undefined ? probability - ruleBasedPct : null;
-  const verdict = verdictLabel(probability);
+  const verdict = verdictLabel(probability, t);
 
   // ── Simple layout (PredictionSheet — barre + % + explication) ────────────
   if (simple) {
@@ -267,7 +272,7 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
         <div className="px-4 py-3 flex items-center gap-2 border-b border-[#a78bfa]/10">
           <div className="w-8 h-8 rounded-xl bg-[#a78bfa]/15 border border-[#a78bfa]/30 flex items-center justify-center text-base">🤖</div>
           <div className="flex-1 min-w-0">
-            <p className="text-white text-sm font-bold">Prédiction ML</p>
+            <p className="text-white text-sm font-bold">{t("ml.title")}</p>
             {label
               ? <p className="text-[#a78bfa] text-[10px] font-semibold truncate">↳ {label}</p>
               : <p className="text-[#6b5a8a] text-[10px] truncate">{model_type} · {model_version}</p>
@@ -275,7 +280,7 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
           </div>
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: confColor + "18", border: `1px solid ${confColor}40` }}>
             <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: confColor }} />
-            <span className="text-[10px] font-semibold" style={{ color: confColor }}>{confidence}% conf.</span>
+            <span className="text-[10px] font-semibold" style={{ color: confColor }}>{t("ml.conf", { n: confidence })}</span>
           </div>
         </div>
 
@@ -297,7 +302,7 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
               {/* Delta vs rules */}
               {delta !== null && (
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[10px] text-[#4a4060]">Règles</span>
+                  <span className="text-[10px] text-[#4a4060]">{t("ml.rules")}</span>
                   <span className="text-[10px] font-bold text-[#86d1ea]">{ruleBasedPct}%</span>
                   <span className="text-[10px] text-[#4a4060]">→ ML</span>
                   {Math.abs(delta) >= 3 ? (
@@ -309,7 +314,7 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
                       {delta > 0 ? "+" : ""}{delta}%
                     </span>
                   ) : (
-                    <span className="text-[10px] text-[#4a4060]">≈ même signal</span>
+                    <span className="text-[10px] text-[#4a4060]">{t("ml.sameSignal")}</span>
                   )}
                 </div>
               )}
@@ -323,7 +328,7 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
         {/* ── Facteurs clés ── */}
         {feature_importances.length > 0 && (
           <div className="px-4 pb-5 border-t border-[#a78bfa]/08 pt-3">
-            <p className="text-[#5a4a7a] text-[9px] uppercase tracking-widest mb-3 font-semibold">Facteurs clés du modèle</p>
+            <p className="text-[#5a4a7a] text-[9px] uppercase tracking-widest mb-3 font-semibold">{t("ml.keyFactors")}</p>
             <div className="flex flex-col gap-2.5">
               {feature_importances.map((fi, i) => (
                 <ImportanceBar key={i} fi={fi} maxImp={maxImp} />
@@ -341,12 +346,12 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[#a78bfa]/10">
         <div className="w-7 h-7 rounded-lg bg-[#a78bfa]/15 border border-[#a78bfa]/30 flex items-center justify-center text-sm">🤖</div>
         <div className="flex-1">
-          <p className="text-white text-xs font-bold">AI Prediction</p>
+          <p className="text-white text-xs font-bold">{t("ml.aiPrediction")}</p>
           <p className="text-[#6b5a8a] text-[9px]">{model_type} · {model_version}</p>
         </div>
         <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/5 border border-white/10">
           <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: confColor }} />
-          <span className="text-[9px]" style={{ color: confColor }}>{confidence}% confidence</span>
+          <span className="text-[9px]" style={{ color: confColor }}>{t("ml.confidence", { n: confidence })}</span>
         </div>
       </div>
       <div className="p-4">
@@ -355,12 +360,12 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
           <div className="flex-1 min-w-0">
             <p className="text-white text-sm font-black mb-1">
               {probability}%
-              <span className="text-[#6b5a8a] text-[10px] font-normal ml-1.5">probability</span>
+              <span className="text-[#6b5a8a] text-[10px] font-normal ml-1.5">{t("ml.probability")}</span>
             </p>
             <p className="text-[#8a7aaa] text-[10px] leading-relaxed">{explanation}</p>
             {ruleBasedPct !== undefined && delta !== null && (
               <div className="mt-2 flex items-center gap-2 flex-wrap">
-                <span className="text-[9px] text-[#4a4060]">Règles: <span className="text-[#86d1ea] font-bold">{ruleBasedPct}%</span></span>
+                <span className="text-[9px] text-[#4a4060]">{t("ml.rulesColon")} <span className="text-[#86d1ea] font-bold">{ruleBasedPct}%</span></span>
                 <span className="text-[9px] text-[#4a4060]">→ ML: <span style={{ color: probColor }} className="font-bold">{probability}%</span></span>
                 {Math.abs(delta) >= 5 && (
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full"
@@ -374,7 +379,7 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
         </div>
         {feature_importances.length > 0 && (
           <div>
-            <p className="text-[#8a9ea6] text-[11px] uppercase tracking-wider mb-2 font-semibold">Top Factors</p>
+            <p className="text-[#8a9ea6] text-[11px] uppercase tracking-wider mb-2 font-semibold">{t("ml.topFactors")}</p>
             <div className="flex flex-col gap-1.5">
               {feature_importances.slice(0, 5).map((f, i) => (
                 <div key={i} className="flex items-center gap-2">
@@ -413,7 +418,7 @@ interface MLSectionProps {
 }
 
 /** Normalise any server response shape into the MLPredictionResult the card expects. */
-function normalizeMLResponse(data: Record<string, unknown>): MLPredictionResult {
+function normalizeMLResponse(data: Record<string, unknown>, t: TFn): MLPredictionResult {
   if (typeof data.probability === "number" && Array.isArray(data.feature_importances)) {
     const p = data.probability as number;
     const c = data.confidence as number ?? 0.7;
@@ -436,12 +441,12 @@ function normalizeMLResponse(data: Record<string, unknown>): MLPredictionResult 
     feature_importances: [],
     model_type:          "Random Forest",
     model_version:       "1.0.0",
-    explanation:         `Le modèle estime ${pct}% de probabilité basé sur les statistiques et confrontations.`,
+    explanation:         t("ml.explainNorm", { pct }),
   };
 }
 
 /** Build a fallback result when the ML server is offline, derived from rule-based pct. */
-function fallbackResult(ruleBasedPct?: number, propType?: string): MLPredictionResult {
+function fallbackResult(ruleBasedPct: number | undefined, propType: string | undefined, t: TFn): MLPredictionResult {
   const pct = ruleBasedPct ?? 50;
   // Add a small ML-style variance so it looks distinct from the rule pct
   const mlPct = Math.min(95, Math.max(5, pct + (pct > 50 ? 3 : -3)));
@@ -451,17 +456,18 @@ function fallbackResult(ruleBasedPct?: number, propType?: string): MLPredictionR
     feature_importances: [],
     model_type:          "Random Forest",
     model_version:       "1.0.0",
-    explanation:         `Estimation ML basée sur les statistiques de saison, confrontations directes et tendances récentes pour ${propType ?? "ce marché"}.`,
+    explanation:         t("ml.explainFallback", { market: propType ?? t("ml.thisMarket") }),
   };
 }
 
 export function MLSection({ type, subjectId, opponentId, propType, line, ruleBasedPct, label, simple, hero }: MLSectionProps) {
+  const { t, lang } = useI18n();
   const [result, setResult] = useState<MLPredictionResult | null>(null);
 
   useEffect(() => {
     let alive = true;
     // Show fallback immediately so the card is always visible
-    setResult(fallbackResult(ruleBasedPct, propType));
+    setResult(fallbackResult(ruleBasedPct, propType, t));
 
     fetch(`${ML_BASE}/predict`, {
       method: "POST",
@@ -471,12 +477,13 @@ export function MLSection({ type, subjectId, opponentId, propType, line, ruleBas
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (alive && data && typeof data === "object") {
-          setResult(normalizeMLResponse(data as Record<string, unknown>));
+          setResult(normalizeMLResponse(data as Record<string, unknown>, t));
         }
       })
       .catch(() => { /* server offline — keep fallback */ });
     return () => { alive = false; };
-  }, [type, subjectId, opponentId, propType, line, ruleBasedPct]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type, subjectId, opponentId, propType, line, ruleBasedPct, lang]);
 
   if (!result) return null;
   return (

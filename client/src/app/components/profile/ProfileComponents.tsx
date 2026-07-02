@@ -5,6 +5,7 @@ import type {
   UserBadge,
   UserProfile,
 } from "./../../types/user";
+import { useI18n } from "../../i18n";
 
 // ─── Tier config ──────────────────────────────────────────────────────────────
 
@@ -98,7 +99,7 @@ export function ScoreRing({
   const radius = (size - 16) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - pct / 100);
-  const { color, label } = TIER_CONFIG[tier];
+  const { color } = TIER_CONFIG[tier];
 
   return (
     <div
@@ -141,7 +142,7 @@ export function ScoreRing({
           className="text-[8px] uppercase tracking-widest"
           style={{ color }}
         >
-          {label}
+          XP
         </span>
       </div>
     </div>
@@ -155,6 +156,7 @@ export function HitRateChart({
 }: {
   stats: UserBettingStats;
 }) {
+  const { t } = useI18n();
   const months = stats.monthlyStats;
   const max = Math.max(...months.map((m) => m.hitRate));
   const min = Math.min(...months.map((m) => m.hitRate)) - 5;
@@ -179,7 +181,7 @@ export function HitRateChart({
     <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
       <div className="flex items-center justify-between mb-3">
         <p className="text-white text-xs font-medium">
-          Hit Rate Trend
+          {t("profile.hitRateTrend")}
         </p>
         <span className="text-[#86d1ea] text-xs font-bold">
           {stats.hitRate}% season avg
@@ -254,10 +256,11 @@ export function MarketBreakdown({
 }: {
   stats: UserBettingStats;
 }) {
+  const { t } = useI18n();
   return (
     <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
       <p className="text-white text-xs font-medium mb-3">
-        Performance by Market
+        {t("profile.perfByMarket")}
       </p>
 
       <div className="flex flex-col gap-2.5">

@@ -1,6 +1,5 @@
 // components/league/chat/MessageBubble.tsx
 
-import { TIER_CONFIG } from "../../profile/ProfileComponents";
 import type { ChatMessage } from "../../../types/user";
 
 const TAG_STYLE = {
@@ -26,7 +25,6 @@ export function MessageBubble({
   onReact?: (msgId: string, emoji: string) => void;
   onReply?: (msg: ChatMessage) => void;
 }) {
-  const tc = TIER_CONFIG[msg.tier as keyof typeof TIER_CONFIG];
   const time = new Date(msg.sentAt).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
@@ -45,15 +43,9 @@ export function MessageBubble({
       </button>
 
       <div className={`max-w-[78%] flex flex-col gap-1 ${isOwn ? "items-end" : "items-start"}`}>
-        {/* Name + tier + tag + time */}
+        {/* Name + tag + time */}
         <div className={`flex items-center gap-1.5 flex-wrap ${isOwn ? "flex-row-reverse" : ""}`}>
           <span className="text-white text-[10px] font-bold">{msg.displayName}</span>
-          <span
-            className={`text-[8px] px-1 py-0.5 rounded-full border ${tc.bg}`}
-            style={{ color: tc.color }}
-          >
-            {tc.icon}
-          </span>
           {msg.tag && (
             <span className={`text-[8px] px-1.5 py-0.5 rounded-full border ${TAG_STYLE[msg.tag]}`}>
               {TAG_LABEL[msg.tag]}

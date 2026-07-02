@@ -11,6 +11,7 @@ import type { TennisApiMatch } from "../services/tennisApiService";
 import type { NHLGame, BetLeg } from "../types/bet";
 import { useSport, SPORT_THEMES, type Sport } from "../context/SportContext";
 import { useBet } from "../context/BetContext";
+import { useI18n } from "../i18n";
 import {
   fetchBet365Odds,
   extractH2HOdds,
@@ -171,15 +172,16 @@ interface BestBet {
 type SortSource = "rules" | "ml";
 type SortDir    = "safe"  | "risky";
 
-function riskLabel(pct: number): { label: string; color: string } {
-  if (pct >= 70) return { label: "Safe",      color: "#4ade80" };
-  if (pct >= 55) return { label: "Moderate",  color: "#86d1ea" };
-  if (pct >= 40) return { label: "Risky",     color: "#facc15" };
-  return              { label: "High risk",  color: "#f87171" };
+function riskLabel(pct: number): { key: string; color: string } {
+  if (pct >= 70) return { key: "risk.safe",     color: "#4ade80" };
+  if (pct >= 55) return { key: "risk.moderate", color: "#86d1ea" };
+  if (pct >= 40) return { key: "risk.risky",    color: "#facc15" };
+  return              { key: "risk.high",      color: "#f87171" };
 }
 
 function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource }) {
   const { addLeg, removeLeg, hasLeg } = useBet();
+  const { t } = useI18n();
   const inSlip = hasLeg(bet.id);
   const displayPct = sortSource === "ml" ? (bet.mlPct ?? bet.rulePct) : bet.rulePct;
   const risk = riskLabel(displayPct);
@@ -196,7 +198,7 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
           <span className="text-white text-xs font-medium truncate">{bet.label}</span>
           <span className="text-[9px] px-1.5 py-0.5 rounded-full flex-shrink-0 font-medium"
             style={{ color: risk.color, backgroundColor: `${risk.color}18`, border: `1px solid ${risk.color}44` }}>
-            {risk.label}
+            {t(risk.key)}
           </span>
         </div>
         <span className="text-[#bfc8cc] text-[10px]">{bet.context}</span>
@@ -211,7 +213,7 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
           </span>
           {isML && <span className="text-[9px] text-[#a78bfa] flex-shrink-0 font-medium">ML</span>}
           {sortSource === "ml" && !bet.mlLoading && bet.mlPct == null &&
-            <span className="text-[9px] text-[#bfc8cc] flex-shrink-0">rules</span>}
+            <span className="text-[9px] text-[#bfc8cc] flex-shrink-0">{t("home.rules")}</span>}
         </div>
       </div>
 
@@ -244,6 +246,7 @@ function BestBetsSection({
   accent: string;
   isLoading: boolean;
 }) {
+  const { t, lang } = useI18n();
   const [sortSource, setSortSource] = useState<SortSource>("rules");
   const [sortDir,    setSortDir]    = useState<SortDir>("safe");
   const [bets, setBets]             = useState<BestBet[]>([]);
@@ -258,11 +261,12 @@ function BestBetsSection({
 
     if (sport === "hockey" && games.length > 0) {
       for (const g of games) {
-        const ctx1 = `vs ${g.team2.abbr} · ${g.period ?? g.time ?? ""}`.trim().replace(/·\s*$/, "");
-        const ctx2 = `vs ${g.team1.abbr} · ${g.period ?? g.time ?? ""}`.trim().replace(/·\s*$/, "");
+        const when = g.period ?? g.time ?? "";
+        const ctx1 = `${t("bb.vs", { opp: g.team2.abbr })}${when ? ` · ${when}` : ""}`;
+        const ctx2 = `${t("bb.vs", { opp: g.team1.abbr })}${when ? ` · ${when}` : ""}`;
 
         raw.push({
-          id: `bb-${g.id}-ml1`, label: `${g.team1.abbr} to win`, context: ctx1,
+          id: `bb-${g.id}-ml1`, label: t("bb.teamWin", { abbr: g.team1.abbr }), context: ctx1,
           logo: g.team1.logo, rulePct: g.team1.winPct, mlPct: null, mlLoading: false,
           gameId: g.id, teamId: g.team1.id,
           leg: { id: `bb-${g.id}-ml1`, marketType: "moneyline", marketLabel: "Moneyline",
@@ -272,7 +276,7 @@ function BestBetsSection({
             gameInfo: `${g.team1.abbr} vs ${g.team2.abbr}`, addedAt: new Date().toISOString() },
         });
         raw.push({
-          id: `bb-${g.id}-ml2`, label: `${g.team2.abbr} to win`, context: ctx2,
+          id: `bb-${g.id}-ml2`, label: t("bb.teamWin", { abbr: g.team2.abbr }), context: ctx2,
           logo: g.team2.logo, rulePct: g.team2.winPct, mlPct: null, mlLoading: false,
           gameId: g.id, teamId: g.team2.id,
           leg: { id: `bb-${g.id}-ml2`, marketType: "moneyline", marketLabel: "Moneyline",
@@ -284,7 +288,7 @@ function BestBetsSection({
         if (g.totalPct != null) {
           const line = g.overUnder ?? 5.5;
           raw.push({
-            id: `bb-${g.id}-over`, label: `Over ${line} goals`,
+            id: `bb-${g.id}-over`, label: t("bb.over", { line }),
             context: `${g.team1.abbr} vs ${g.team2.abbr}`,
             logo: "📈", rulePct: g.totalPct, mlPct: null, mlLoading: false, gameId: g.id,
             leg: { id: `bb-${g.id}-over`, marketType: "total_goals", marketLabel: "Total Goals O/U",
@@ -295,7 +299,7 @@ function BestBetsSection({
           });
           const underPct = 100 - g.totalPct;
           raw.push({
-            id: `bb-${g.id}-under`, label: `Under ${line} goals`,
+            id: `bb-${g.id}-under`, label: t("bb.under", { line }),
             context: `${g.team1.abbr} vs ${g.team2.abbr}`,
             logo: "📉", rulePct: underPct, mlPct: null, mlLoading: false, gameId: g.id,
             leg: { id: `bb-${g.id}-under`, marketType: "total_goals", marketLabel: "Total Goals O/U",
@@ -309,9 +313,9 @@ function BestBetsSection({
     } else {
       // Tennis (or hockey off-season fallback showing tennis)
       for (const m of [...tennisLive, ...tennisUpcoming]) {
-        const ctx = `${m.tournament} · ${m.isLive ? "Live" : m.time}`;
+        const ctx = `${m.tournament} · ${m.isLive ? t("home.live") : m.time}`;
         raw.push({
-          id: `bb-tennis-${m.id}-p1`, label: `${m.player1.name} to win`, context: ctx,
+          id: `bb-tennis-${m.id}-p1`, label: t("bb.playerWin", { name: m.player1.name }), context: ctx,
           logo: m.player1.country, rulePct: m.player1.winPct, mlPct: null, mlLoading: false,
           leg: { id: `bb-tennis-${m.id}-p1`, marketType: "tennis_match_winner", marketLabel: "Match Winner",
             subjectType: "player", subjectId: m.id, subjectName: m.player1.name,
@@ -320,7 +324,7 @@ function BestBetsSection({
             probability: m.player1.winPct, gameInfo: ctx, addedAt: new Date().toISOString() },
         });
         raw.push({
-          id: `bb-tennis-${m.id}-p2`, label: `${m.player2.name} to win`, context: ctx,
+          id: `bb-tennis-${m.id}-p2`, label: t("bb.playerWin", { name: m.player2.name }), context: ctx,
           logo: m.player2.country, rulePct: m.player2.winPct, mlPct: null, mlLoading: false,
           leg: { id: `bb-tennis-${m.id}-p2`, marketType: "tennis_match_winner", marketLabel: "Match Winner",
             subjectType: "player", subjectId: m.id, subjectName: m.player2.name,
@@ -333,7 +337,7 @@ function BestBetsSection({
 
     setBets(raw);
     setMlFetched(false);
-  }, [games, tennisLive, tennisUpcoming, sport]);
+  }, [games, tennisLive, tennisUpcoming, sport, lang]);
 
   // Lazy ML fetch when ML tab selected
   useEffect(() => {
@@ -368,9 +372,9 @@ function BestBetsSection({
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Star size={13} style={{ color: accent }} />
-          <span className="text-white text-sm font-medium">Best Bets</span>
-          {!isLoading && <span className="text-[10px] text-[#bfc8cc] bg-white/5 px-1.5 py-0.5 rounded-full">Top {sorted.length}</span>}
-          {usingTennisFallback && <span className="text-[10px] text-[#facc15] bg-[#facc15]/10 border border-[#facc15]/20 px-1.5 py-0.5 rounded-full">Tennis · NHL off-season</span>}
+          <span className="text-white text-sm font-medium">{t("home.bestBets")}</span>
+          {!isLoading && <span className="text-[10px] text-[#bfc8cc] bg-white/5 px-1.5 py-0.5 rounded-full">{t("home.top", { n: sorted.length })}</span>}
+          {usingTennisFallback && <span className="text-[10px] text-[#facc15] bg-[#facc15]/10 border border-[#facc15]/20 px-1.5 py-0.5 rounded-full">{t("home.tennisOffseason")}</span>}
         </div>
         <div className="flex items-center gap-1.5">
           {/* Source toggle */}
@@ -379,14 +383,14 @@ function BestBetsSection({
               <button key={s} onClick={() => setSortSource(s)}
                 className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium transition-all ${sortSource === s ? "text-[#0A0E0C] font-bold" : "text-[#8a9ea6]"}`}
                 style={sortSource === s ? { backgroundColor: s === "ml" ? "#a78bfa" : accent } : {}}>
-                {s === "ml" ? "ML" : "Rules"}
+                {s === "ml" ? "ML" : t("home.rules")}
               </button>
             ))}
           </div>
           {/* Direction toggle */}
           <button onClick={() => setSortDir(d => d === "safe" ? "risky" : "safe")}
             className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] text-[#8a9ea6] hover:text-white transition-all">
-            {sortDir === "safe" ? "↓ Safe" : "↑ Risky"}
+            {sortDir === "safe" ? t("home.safe") : t("home.risky")}
           </button>
         </div>
       </div>
@@ -396,7 +400,7 @@ function BestBetsSection({
           {[1,2,3,4,5].map(i => <div key={i} className="h-16 bg-[#131A12] rounded-2xl animate-pulse" />)}
         </div>
       ) : sorted.length === 0 ? (
-        <div className="py-8 text-center text-[#bfc8cc] text-xs">No bets available right now</div>
+        <div className="py-8 text-center text-[#bfc8cc] text-xs">{t("home.noBets")}</div>
       ) : (
         <div className="flex flex-col gap-2">
           {sorted.map(bet => <BestBetRow key={bet.id} bet={bet} sortSource={sortSource} />)}
@@ -474,10 +478,11 @@ function OddsPill({ decimal, onBet }: { decimal: number; onBet: () => void }) {
 // ─── Edge badge ────────────────────────────────────────────────────────────────
 
 function EdgeBadge({ edge }: { edge: number }) {
+  const { t } = useI18n();
   if (edge < 8) return null;
   return (
     <span className="text-[9px] px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/25 text-green-400 font-medium flex-shrink-0">
-      +{edge}% edge
+      {t("home.edge", { edge })}
     </span>
   );
 }
@@ -488,6 +493,7 @@ function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: (
   const { theme } = useSport();
   const accent = theme.accent;
   const { addLeg, hasLeg } = useBet();
+  const { t } = useI18n();
 
   const legId = `${game.id}-moneyline-${game.team1.id}`;
   const isAdded = hasLeg(legId);
@@ -532,13 +538,13 @@ function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: (
                 : "bg-[#86d1ea]/10 border-[#86d1ea]/30 text-[#86d1ea] active:bg-[#86d1ea]/20"
             }`}
           >
-            {isAdded ? "✓ Added" : "+ Add"}
+            {isAdded ? t("home.added") : t("home.add")}
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onOpenSheet(); }}
             className="text-[10px] text-[#bfc8cc] border border-white/20 px-2 py-0.5 rounded-full flex-shrink-0 active:bg-white/5"
           >
-            More
+            {t("home.more")}
           </button>
         </div>
       </div>
@@ -579,6 +585,7 @@ function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: (
           <OddsPill decimal={game.bet365Home} onBet={() => openBet365(bet365HockeyUrl())} />
           <span className="text-[9px] text-[#bfc8cc]">Moneyline</span>
           <OddsPill decimal={game.bet365Away} onBet={() => openBet365(bet365HockeyUrl())} />
+          {/* Moneyline is a universal betting term, kept as-is */}
         </div>
       ) : (
         /* No API key — show a subtle link to bet365 instead */
@@ -587,7 +594,7 @@ function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: (
             onClick={() => openBet365(bet365HockeyUrl())}
             className="text-[9px] text-green-400 border border-green-500/20 bg-green-500/8 px-2 py-1 rounded-full"
           >
-            Bet on bet365 →
+            {t("home.betOn")}
           </button>
         </div>
       )}
@@ -601,6 +608,7 @@ function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet
   const { theme } = useSport();
   const accent = theme.accent;
   const { addLeg, hasLeg } = useBet();
+  const { t } = useI18n();
 
   const legId = `${game.id}-moneyline-${game.team1.id}`;
   const isAdded = hasLeg(legId);
@@ -670,7 +678,7 @@ function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet
                   ? "bg-green-500/15 border-green-500/30 text-green-400"
                   : "bg-[#86d1ea]/10 border-[#86d1ea]/30 text-[#86d1ea] active:bg-[#86d1ea]/20"
               }`}
-              title={isAdded ? "Already in slip" : "Add to slip"}
+              title={isAdded ? t("home.addedSlip") : t("home.addToSlip", { name: game.team1.abbr })}
             >
               {isAdded ? "✓" : "+"}
             </button>
@@ -686,7 +694,7 @@ function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet
             onClick={(e) => { e.stopPropagation(); onOpenSheet(); }}
             className="text-[9px] text-[#bfc8cc] underline underline-offset-2"
           >
-            More bets
+            {t("home.moreBets")}
           </button>
         </div>
       </div>
@@ -699,6 +707,7 @@ function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet
 function TennisLiveCard({ match, accent }: { match: TennisMatch; accent: string }) {
   const navigate = useNavigate();
   const { addLeg, hasLeg } = useBet();
+  const { t } = useI18n();
   const legId = `tennis-${match.id}-p1`;
   const isAdded = hasLeg(legId);
 
@@ -781,7 +790,7 @@ function TennisLiveCard({ match, accent }: { match: TennisMatch; accent: string 
             : "bg-[#86d1ea]/10 border border-[#86d1ea]/25 text-[#86d1ea] active:bg-[#86d1ea]/20"
         }`}
       >
-        {isAdded ? "✓ Added to slip" : `+ Add ${match.player1.name.split(" ").pop()} to slip`}
+        {isAdded ? t("home.addedSlip") : t("home.addToSlip", { name: match.player1.name.split(" ").pop() ?? "" })}
       </button>
     </div>
   );
@@ -872,13 +881,14 @@ function TennisMatchRow({ match, accent }: { match: TennisMatch; accent: string 
 export function HockeyLanding() {
   const navigate = useNavigate();
   const { sport, theme } = useSport();
+  const { t, lang } = useI18n();
   const accent = theme.accent;
   const [addSheet, setAddSheet] = useState<AddSheetState>({ open: false });
   const [liveGames, setLiveGames] = useState<DisplayGame[]>([]);
   const [upcomingGames, setUpcomingGames] = useState<DisplayGame[]>([]);
   const [topPredictions, setTopPredictions] = useState<{ teamLogo: string; team: string; label: string; pct: number; trend: string; edge: number }[]>([]);
   const [loading, setLoading] = useState(true);
-  const [upcomingLabel, setUpcomingLabel] = useState("Tonight's Games");
+  const [upcomingLabel, setUpcomingLabel] = useState(() => t("home.tonightGames"));
 
   // Tennis state
   const [tennisLive, setTennisLive] = useState<TennisMatch[]>([]);
@@ -894,7 +904,8 @@ export function HockeyLanding() {
       try {
         const live = await nhlApiService.getLiveGames();
         let scheduled: typeof live = [];
-        let label = "Tonight's Games";
+        let label = t("home.tonightGames");
+        const locale = lang === "fr" ? "fr-CA" : "en-US";
         for (let offset = 0; offset <= 7; offset++) {
           const d = new Date();
           d.setDate(d.getDate() + offset);
@@ -902,8 +913,8 @@ export function HockeyLanding() {
           const all = await nhlApiService.getGamesByDate(dateStr);
           scheduled = all.filter((g) => ["scheduled", "live", "preview"].includes(g.status));
           if (scheduled.length > 0) {
-            if (offset === 1) label = "Tomorrow's Games";
-            else if (offset > 1) label = d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }) + " Games";
+            if (offset === 1) label = t("home.tomorrowGames");
+            else if (offset > 1) label = t("home.gamesOn", { date: d.toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" }) });
             break;
           }
         }
@@ -938,7 +949,7 @@ export function HockeyLanding() {
       }
     }
     load();
-  }, [sport]);
+  }, [sport, lang]);
 
   // Overlay real Bet365 odds — stored separately, does NOT overwrite model winPct
   useEffect(() => {
@@ -1091,7 +1102,7 @@ export function HockeyLanding() {
               <section>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <h2 className="text-white text-sm font-bold uppercase tracking-wider">Live Now</h2>
+                  <h2 className="text-white text-sm font-bold uppercase tracking-wider">{t("home.liveNow")}</h2>
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
                   {liveGames.map((g) => (
@@ -1119,7 +1130,7 @@ export function HockeyLanding() {
                 </div>
               ) : (
                 <div className="text-center py-12">
-                  <p className="text-[#4a6068] text-sm">No games scheduled</p>
+                  <p className="text-[#4a6068] text-sm">{t("home.noGames")}</p>
                 </div>
               )}
             </section>
@@ -1140,7 +1151,7 @@ export function HockeyLanding() {
               <section>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <h2 className="text-white text-sm font-bold uppercase tracking-wider">Live Now</h2>
+                  <h2 className="text-white text-sm font-bold uppercase tracking-wider">{t("home.liveNow")}</h2>
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
                   {tennisLive.map((m) => (
@@ -1151,7 +1162,7 @@ export function HockeyLanding() {
             )}
 
             <section>
-              <h2 className="text-white text-sm font-bold uppercase tracking-wider mb-3">Upcoming Matches</h2>
+              <h2 className="text-white text-sm font-bold uppercase tracking-wider mb-3">{t("home.upcomingMatches")}</h2>
               {tennisLoading ? (
                 <div className="flex flex-col gap-2">
                   {[1, 2, 3].map((i) => <div key={i} className="h-20 bg-white/5 rounded-2xl animate-pulse" />)}
@@ -1164,7 +1175,7 @@ export function HockeyLanding() {
                 </div>
               ) : (
                 <div className="text-center py-12">
-                  <p className="text-[#4a6068] text-sm">No matches scheduled</p>
+                  <p className="text-[#4a6068] text-sm">{t("home.noMatches")}</p>
                 </div>
               )}
             </section>
@@ -1181,9 +1192,9 @@ export function HockeyLanding() {
               ? {
                   id: addSheet.gameId,
                   type: "game",
-                  name: liveGames.concat(upcomingGames).find((g) => g.id === addSheet.gameId)?.team1.abbr ?? "Game",
+                  name: liveGames.concat(upcomingGames).find((g) => g.id === addSheet.gameId)?.team1.abbr ?? t("home.game"),
                   logo: "",
-                  subtitle: "NHL Game",
+                  subtitle: t("home.nhlGame"),
                 }
               : undefined
           }

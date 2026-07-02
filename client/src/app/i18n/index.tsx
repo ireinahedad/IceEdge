@@ -1,0 +1,507 @@
+/**
+ * i18n — lightweight English/French translation layer.
+ *
+ * Usage:
+ *   const { t, lang, setLang } = useI18n();
+ *   <span>{t("nav.home")}</span>
+ *
+ * The language is persisted in localStorage and applied app-wide.
+ * Unknown keys fall back to English, then to the key itself.
+ */
+
+import { createContext, useContext, useState } from "react";
+import type { ReactNode } from "react";
+
+export type Lang = "en" | "fr";
+const STORAGE_KEY = "iceedge_lang";
+
+const DICT: Record<string, { en: string; fr: string }> = {
+  // ── Navigation ──
+  "nav.home":    { en: "Home",    fr: "Accueil" },
+  "nav.stats":   { en: "Stats",   fr: "Stats" },
+  "nav.slip":    { en: "Slip",    fr: "Coupon" },
+  "nav.league":  { en: "League",  fr: "Ligue" },
+  "nav.profile": { en: "Profile", fr: "Profil" },
+
+  // ── Common ──
+  "common.save":    { en: "Save Changes", fr: "Enregistrer" },
+  "common.saving":  { en: "Saving…",      fr: "Enregistrement…" },
+  "common.saved":   { en: "Saved!",       fr: "Enregistré !" },
+  "common.cancel":  { en: "Cancel",       fr: "Annuler" },
+  "common.close":   { en: "Close",        fr: "Fermer" },
+  "common.loading": { en: "Loading…",     fr: "Chargement…" },
+  "common.members": { en: "members",      fr: "membres" },
+  "common.online":  { en: "online",       fr: "en ligne" },
+
+  // ── Profile ──
+  "profile.title":        { en: "Profile",       fr: "Profil" },
+  "profile.overview":     { en: "Overview",      fr: "Aperçu" },
+  "profile.settings":     { en: "Settings",      fr: "Paramètres" },
+  "profile.signout":      { en: "Sign Out",      fr: "Déconnexion" },
+  "profile.photo":        { en: "Profile Photo", fr: "Photo de profil" },
+  "profile.changePhoto":  { en: "Change photo",  fr: "Changer la photo" },
+  "profile.uploading":    { en: "Uploading…",    fr: "Envoi…" },
+  "profile.photoHint":    { en: "JPG, PNG or WebP · large images are compressed automatically", fr: "JPG, PNG ou WebP · les grandes images sont compressées automatiquement" },
+  "profile.iceAvatar":    { en: "Or pick an ice avatar", fr: "Ou choisis un avatar glacé" },
+  "profile.info":         { en: "Profile Info",  fr: "Infos du profil" },
+  "profile.username":     { en: "Username",      fr: "Nom d'utilisateur" },
+  "profile.usernameHint": { en: "3–20 characters · lowercase letters, numbers, underscores · must be unique", fr: "3–20 caractères · minuscules, chiffres, tirets bas · doit être unique" },
+  "profile.displayName":  { en: "Display Name",  fr: "Nom affiché" },
+  "profile.bio":          { en: "Bio",           fr: "Bio" },
+  "profile.favTeam":      { en: "Favorite Team", fr: "Équipe favorite" },
+  "profile.public":       { en: "Public Profile", fr: "Profil public" },
+  "profile.showSlips":    { en: "Show my slips to others", fr: "Montrer mes coupons aux autres" },
+  "profile.showSlipsHint":{ en: "Players who find you can see your bet slips", fr: "Les joueurs qui te trouvent peuvent voir tes coupons" },
+  "profile.language":     { en: "Language",      fr: "Langue" },
+  "profile.aiSettings":   { en: "AI Settings",   fr: "Paramètres IA" },
+  "profile.parlayRecord": { en: "Parlay Record", fr: "Bilan des combinés" },
+  "profile.parlayWins":   { en: "Parlay Wins",   fr: "Combinés gagnés" },
+  "profile.parlayLosses": { en: "Parlay Losses", fr: "Combinés perdus" },
+  "profile.parlayRate":   { en: "Parlay Rate",   fr: "Taux de combinés" },
+  "profile.memberSince":  { en: "IceEdge member since {date}", fr: "Membre IceEdge depuis {date}" },
+  "profile.aiSettingsDesc":{ en: "Enter your OpenAI API key to use the Ask LLM feature. Your key is stored securely and used only for your requests.", fr: "Entre ta clé API OpenAI pour utiliser la fonction Ask LLM. Ta clé est stockée en toute sécurité et utilisée uniquement pour tes requêtes." },
+  "profile.getKey":       { en: "Get a key →",   fr: "Obtenir une clé →" },
+  "profile.openaiKey":    { en: "OpenAI API Key", fr: "Clé API OpenAI" },
+  "profile.show":         { en: "Show",          fr: "Afficher" },
+  "profile.hide":         { en: "Hide",          fr: "Masquer" },
+  "profile.removeKey":    { en: "Remove key",    fr: "Supprimer la clé" },
+  "profile.calibration":  { en: "Calibration",   fr: "Calibrage" },
+  "profile.hitRateTrend": { en: "Hit Rate Trend", fr: "Tendance du taux de réussite" },
+  "profile.perfByMarket": { en: "Performance by Market", fr: "Performance par marché" },
+  "profile.betHistory":   { en: "Bet History",    fr: "Historique des paris" },
+  "profile.filterAll":    { en: "All",            fr: "Tous" },
+  "profile.filterWins":   { en: "Wins",           fr: "Gagnés" },
+  "profile.filterLosses": { en: "Losses",         fr: "Perdus" },
+  "profile.filterLive":   { en: "Live",           fr: "En direct" },
+  "profile.calWell":      { en: "Well Calibrated", fr: "Bien calibré" },
+  "profile.calDecent":    { en: "Decent",         fr: "Correct" },
+  "profile.calNeedsWork": { en: "Needs Work",     fr: "À améliorer" },
+
+  // ── League / leaderboard ──
+  "league.rankings":   { en: "Rankings",             fr: "Classement" },
+  "league.chat":       { en: "Chat",                 fr: "Chat" },
+  "league.podium":     { en: "This Season's Podium", fr: "Podium de la saison" },
+  "league.podiumTap":  { en: "Tap a player to view their profile", fr: "Touche un joueur pour voir son profil" },
+  "league.searchPlayer": { en: "Search a player…",   fr: "Rechercher un joueur…" },
+  "league.score":      { en: "Score",                fr: "Score" },
+  "league.hitRate":    { en: "Hit Rate",             fr: "Réussite" },
+  "league.volume":     { en: "Volume",               fr: "Volume" },
+  "league.player":     { en: "Player",               fr: "Joueur" },
+  "league.recentSlips":{ en: "Recent slips",         fr: "Coupons récents" },
+  "league.slipsPrivate": { en: "🔒 This player keeps their slips private", fr: "🔒 Ce joueur garde ses coupons privés" },
+  "league.noSlips":    { en: "No slips yet",         fr: "Aucun coupon pour l'instant" },
+  "league.you":        { en: "you",                  fr: "toi" },
+  "league.bets":       { en: "Bets",                 fr: "Paris" },
+  "chat.noRoomsYet":   { en: "No rooms yet",         fr: "Aucun salon" },
+  "chat.noRoomsHint":  { en: "Join a public room from Discover, enter a join code above, or create your own.", fr: "Rejoins un salon public depuis Découvrir, entre un code d'accès ci-dessus, ou crée le tien." },
+  "chat.nothingDiscover": { en: "Nothing to discover", fr: "Rien à découvrir" },
+  "chat.noPublicRooms":{ en: "No public rooms to join right now.", fr: "Aucun salon public à rejoindre pour le moment." },
+
+  // ── Chat ──
+  "chat.myRooms":      { en: "My Rooms",             fr: "Mes salons" },
+  "chat.discover":     { en: "Discover",             fr: "Découvrir" },
+  "chat.newRoom":      { en: "+ New Room",           fr: "+ Nouveau salon" },
+  "chat.createRoom":   { en: "Create a new room",    fr: "Créer un nouveau salon" },
+  "chat.createTitle":  { en: "New Chat Room",        fr: "Nouveau salon" },
+  "chat.roomName":     { en: "Room Name",            fr: "Nom du salon" },
+  "chat.description":  { en: "Description",          fr: "Description" },
+  "chat.icon":         { en: "Icon",                 fr: "Icône" },
+  "chat.create":       { en: "Create Room",          fr: "Créer le salon" },
+  "chat.creating":     { en: "Creating…",            fr: "Création…" },
+  "chat.private":      { en: "🔒 Private room",      fr: "🔒 Salon privé" },
+  "chat.publicRoom":   { en: "🌐 Public room",       fr: "🌐 Salon public" },
+  "chat.privateHint":  { en: "Only people with the join code can enter", fr: "Seules les personnes avec le code peuvent entrer" },
+  "chat.publicHint":   { en: "Anyone can find and join this room", fr: "Tout le monde peut trouver et rejoindre ce salon" },
+  "chat.searchRooms":  { en: "Search rooms or enter a join code…", fr: "Cherche un salon ou entre un code…" },
+  "chat.join":         { en: "Join",                 fr: "Rejoindre" },
+  "chat.joining":      { en: "Joining…",             fr: "Connexion…" },
+  "chat.open":         { en: "Open",                 fr: "Ouvrir" },
+  "chat.hide":         { en: "Hide ✕",               fr: "Masquer ✕" },
+  "chat.pinned":       { en: "Pinned",               fr: "Épinglés" },
+  "chat.rooms":        { en: "Rooms",                fr: "Salons" },
+  "chat.otherRooms":   { en: "Other Rooms",          fr: "Autres salons" },
+  "chat.joinCode":     { en: "Join code",            fr: "Code d'accès" },
+  "chat.pinRoom":      { en: "Pin room",             fr: "Épingler le salon" },
+  "chat.unpinRoom":    { en: "Unpin room",           fr: "Désépingler le salon" },
+  "chat.membersMenu":  { en: "Members",              fr: "Membres" },
+  "chat.leaveRoom":    { en: "Leave room",           fr: "Quitter le salon" },
+  "chat.deleteRoom":   { en: "Delete room (admin)",  fr: "Supprimer le salon (admin)" },
+  "chat.noCode":       { en: "No room found for this code", fr: "Aucun salon trouvé pour ce code" },
+  "chat.copyCode":     { en: "Copy code",            fr: "Copier le code" },
+  "chat.openRoom":     { en: "Open room",            fr: "Ouvrir le salon" },
+  "chat.shareCode":    { en: "Share this code so others can join:", fr: "Partage ce code pour inviter d'autres joueurs :" },
+  "chat.privateCreated": { en: "🔒 Private room created", fr: "🔒 Salon privé créé" },
+  "chat.roomsAvailable": { en: "rooms available",    fr: "salons disponibles" },
+  "chat.beFirst":      { en: "Be the first to say something!", fr: "Sois le premier à écrire !" },
+  "chat.replyingTo":   { en: "Replying to",          fr: "Réponse à" },
+  "chat.message":      { en: "Message",              fr: "Message" },
+
+  // ── Slips / builder ──
+  "slip.build":        { en: "Build",           fr: "Créer" },
+  "slip.mySlips":      { en: "My Slips",        fr: "Mes coupons" },
+  "slip.predictions":  { en: "Your Predictions", fr: "Tes prédictions" },
+  "slip.add":          { en: "Add",             fr: "Ajouter" },
+  "slip.active":       { en: "Active",          fr: "Actifs" },
+  "slip.history":      { en: "History",         fr: "Historique" },
+  "slip.checkResults": { en: "Check results",   fr: "Vérifier les résultats" },
+  "slip.pending":      { en: "Pending",         fr: "En attente" },
+  "slip.won":          { en: "Won",             fr: "Gagné" },
+  "slip.lost":         { en: "Lost",            fr: "Perdu" },
+  "slip.autoSettle":   { en: "Settled automatically when games finish — riskier bets earn more XP", fr: "Réglé automatiquement à la fin des matchs — plus le pari est risqué, plus il rapporte d'XP" },
+  "slip.noSlips":      { en: "No slips yet",    fr: "Aucun coupon" },
+  "slip.noSlipsHint":  { en: "Lock your first prediction to see it here", fr: "Verrouille ta première prédiction pour la voir ici" },
+  "slip.empty":        { en: "No predictions yet", fr: "Aucune prédiction" },
+  "slip.emptyHint":    { en: "Add predictions from the Stats page or tap below to browse all markets", fr: "Ajoute des prédictions depuis la page Stats ou explore les marchés ci-dessous" },
+  "slip.browse":       { en: "Browse Markets",  fr: "Explorer les marchés" },
+  "slip.signin":       { en: "Sign in to see your slips", fr: "Connecte-toi pour voir tes coupons" },
+  "slip.signinHint":   { en: "Your locked slips and history will appear here", fr: "Tes coupons verrouillés et ton historique apparaîtront ici" },
+  "slip.placeBet365":  { en: "Place on Bet365 ↗", fr: "Parier sur Bet365 ↗" },
+  "slip.xpEarned":     { en: "XP earned",       fr: "XP gagnés" },
+
+  // ── Stats ──
+  "stats.title":       { en: "Statistics",      fr: "Statistiques" },
+  "stats.subtitle":    { en: "AI-powered predictions", fr: "Prédictions par IA" },
+  "stats.search":      { en: "Search team, player, game...", fr: "Cherche une équipe, un joueur, un match..." },
+  "stats.teams":       { en: "teams",           fr: "équipes" },
+  "stats.futures":     { en: "Season Futures",  fr: "Paris de saison" },
+  "stats.loadingTeams":{ en: "Loading team data...", fr: "Chargement des équipes..." },
+  "stats.noGames":     { en: "No games scheduled today", fr: "Aucun match aujourd'hui" },
+  "stats.byTeam":      { en: "By Team",   fr: "Par équipe" },
+  "stats.byGame":      { en: "By Game",   fr: "Par match" },
+  "stats.byPlayer":    { en: "By Player", fr: "Par joueur" },
+  "stats.tennis":      { en: "Tennis",    fr: "Tennis" },
+  "stats.loadingNHL":  { en: "Loading NHL data...", fr: "Chargement des données LNH..." },
+  "stats.matches":     { en: "{n} matches", fr: "{n} matchs" },
+  "stats.players":     { en: "Players",   fr: "Joueurs" },
+  "stats.tapToAdd":    { en: "Tap + to add to slip", fr: "Touche + pour ajouter au coupon" },
+  "stats.loadingTeamsHint": { en: "Make sure the backend is running at localhost:3001", fr: "Assure-toi que le serveur tourne sur localhost:3001" },
+  "stats.noGamesHint": { en: "Check back on game nights, or explore season futures below", fr: "Reviens les soirs de match, ou explore les paris de saison ci-dessous" },
+  "stats.loadingStandings": { en: "Loading standings data...", fr: "Chargement du classement..." },
+  "stats.viewBets":    { en: "View bets ›", fr: "Voir les paris ›" },
+  "stats.stanleyCup":  { en: "Stanley Cup", fr: "Coupe Stanley" },
+  "stats.conference":  { en: "Conference", fr: "Conférence" },
+  "stats.futuresTag":  { en: "Futures",    fr: "Paris de saison" },
+  "stats.winCup":      { en: "Win Stanley Cup 2026", fr: "Gagner la Coupe Stanley 2026" },
+
+  // ── Home / landing ──
+  "home.bestBets":       { en: "Best Bets",         fr: "Meilleurs paris" },
+  "home.top":            { en: "Top {n}",           fr: "Top {n}" },
+  "home.tennisOffseason":{ en: "Tennis · NHL off-season", fr: "Tennis · hors-saison LNH" },
+  "home.rules":          { en: "Rules",             fr: "Règles" },
+  "home.safe":           { en: "↓ Safe",            fr: "↓ Sûrs" },
+  "home.risky":          { en: "↑ Risky",           fr: "↑ Risqués" },
+  "home.noBets":         { en: "No bets available right now", fr: "Aucun pari disponible pour le moment" },
+  "home.liveNow":        { en: "Live Now",          fr: "En direct" },
+  "home.live":           { en: "Live",              fr: "En direct" },
+  "home.noGames":        { en: "No games scheduled", fr: "Aucun match prévu" },
+  "home.upcomingMatches":{ en: "Upcoming Matches",  fr: "Matchs à venir" },
+  "home.noMatches":      { en: "No matches scheduled", fr: "Aucun match prévu" },
+  "home.tonightGames":   { en: "Tonight's Games",   fr: "Matchs de ce soir" },
+  "home.tomorrowGames":  { en: "Tomorrow's Games",  fr: "Matchs de demain" },
+  "home.gamesOn":        { en: "{date} Games",      fr: "Matchs du {date}" },
+  "home.added":          { en: "✓ Added",           fr: "✓ Ajouté" },
+  "home.add":            { en: "+ Add",             fr: "+ Ajouter" },
+  "home.more":           { en: "More",              fr: "Plus" },
+  "home.moreBets":       { en: "More bets",         fr: "Plus de paris" },
+  "home.betOn":          { en: "Bet on bet365 →",   fr: "Parier sur bet365 →" },
+  "home.addedSlip":      { en: "✓ Added to slip",   fr: "✓ Ajouté au coupon" },
+  "home.addToSlip":      { en: "+ Add {name} to slip", fr: "+ Ajouter {name} au coupon" },
+  "home.edge":           { en: "+{edge}% edge",     fr: "+{edge}% avantage" },
+  "home.game":           { en: "Game",              fr: "Match" },
+  "home.nhlGame":        { en: "NHL Game",          fr: "Match LNH" },
+
+  // ── Risk labels ──
+  "risk.safe":     { en: "Safe",      fr: "Sûr" },
+  "risk.moderate": { en: "Moderate",  fr: "Modéré" },
+  "risk.risky":    { en: "Risky",     fr: "Risqué" },
+  "risk.high":     { en: "High risk", fr: "Risque élevé" },
+
+  // ── Best bets labels ──
+  "bb.teamWin":   { en: "{abbr} to win",    fr: "Victoire de {abbr}" },
+  "bb.playerWin": { en: "{name} to win",    fr: "Victoire de {name}" },
+  "bb.over":      { en: "Over {line} goals", fr: "Plus de {line} buts" },
+  "bb.under":     { en: "Under {line} goals", fr: "Moins de {line} buts" },
+  "bb.vs":        { en: "vs {opp}",         fr: "contre {opp}" },
+
+  // ── NHL predictions page ──
+  "nhl.title":         { en: "🏒 NHL Predictions", fr: "🏒 Prédictions NHL" },
+  "nhl.subtitle":      { en: "All bet365 markets · Rules + ML + LLM", fr: "Tous les marchés bet365 · Règles + ML + LLM" },
+  "nhl.ruleStats":     { en: "Statistical rules",  fr: "Règles statistiques" },
+  "nhl.llmOpinion":    { en: "LLM opinion",        fr: "Avis du LLM" },
+  "nhl.analyzing":     { en: "Analyzing…",         fr: "Analyse en cours..." },
+  "nhl.askLLM":        { en: "✨ Ask LLM",          fr: "✨ Demander au LLM" },
+  "nhl.today":         { en: "Today",              fr: "Aujourd'hui" },
+  "nhl.marketsCount":  { en: "{n} markets",        fr: "{n} marchés" },
+
+  // NHL rule notes
+  "nhl.note.moneyline":       { en: "{abbr} home · historical win% vs opponent", fr: "{abbr} domicile · win% historique vs adversaire" },
+  "nhl.note.puck_line":       { en: "{abbr} wins by ≥2 goals", fr: "{abbr} gagne par ≥2 buts" },
+  "nhl.note.total_goals":     { en: "Avg {goals} goals/game · line {line}", fr: "Moy. {goals} buts/match · ligne {line}" },
+  "nhl.note.regulation":      { en: "Win in 60 min (no OT/SO)", fr: "Victoire en 60 min (sans OT/SO)" },
+  "nhl.note.game_to_ot":      { en: "Close games → OT", fr: "Matchs serrés → OT" },
+  "nhl.note.btts":            { en: "GF/G home {h} · away {a}", fr: "GF/G domicile {h} · ext {a}" },
+  "nhl.note.winning_margin":  { en: "Exact winning margin", fr: "Marge de victoire exacte" },
+  "nhl.note.double_chance":   { en: "Double chance — insures against a draw", fr: "Double chance — protège contre nul" },
+  "nhl.note.alt_puck_line":   { en: "Alternate line ±2.5 goals", fr: "Ligne alternative ±2.5 buts" },
+  "nhl.note.ot_winner":       { en: "Favorite in OT if game goes to overtime", fr: "Favori en OT si prolongation" },
+  "nhl.note.p1_winner":       { en: "Win% in 1st period", fr: "Win% en 1ère période" },
+  "nhl.note.p2_winner":       { en: "Win% in 2nd period", fr: "Win% en 2e période" },
+  "nhl.note.p3_winner":       { en: "Win% in 3rd period", fr: "Win% en 3e période" },
+  "nhl.note.high_period":     { en: "2nd period often the most productive (NHL avg)", fr: "2e période souvent la + productive (NHL avg)" },
+  "nhl.note.p1_total":        { en: "Avg {n} goals/P1", fr: "Moy. {n} buts/P1" },
+  "nhl.note.p2_total":        { en: "Avg {n} goals/P2", fr: "Moy. {n} buts/P2" },
+  "nhl.note.p3_total":        { en: "Avg {n} goals/P3", fr: "Moy. {n} buts/P3" },
+  "nhl.note.first_score":     { en: "First to score = home advantage", fr: "Premier à marquer = avantage domicile" },
+  "nhl.note.last_score":      { en: "Last goal → often the leading team", fr: "Dernier but → souvent l'équipe qui mène" },
+  "nhl.note.team_total":      { en: "{abbr} avg {n} goals/game", fr: "{abbr} avg {n} buts/match" },
+  "nhl.note.team_pp":         { en: "Power play goals · avg ~0.8/game", fr: "Power play goals · moyenne ~0.8/match" },
+  "nhl.note.clean_sheet":     { en: "{abbr} concedes 0 goals", fr: "{abbr} concède 0 but" },
+  "nhl.note.every_period":    { en: "Score in all 3 periods", fr: "Marquer dans les 3 périodes" },
+  "nhl.note.total_pim":       { en: "Total PIM · line 12.5 min · NHL avg", fr: "Total PIM · ligne 12.5 min · NHL avg" },
+  "nhl.note.anytime_goal":    { en: "Anytime scorer — top scorer ~30%", fr: "Buteur en tout temps — top scorer ~30%" },
+  "nhl.note.first_scorer":    { en: "First scorer — top scorer ~12% chance", fr: "1er buteur — top scorer ~12% de chance" },
+  "nhl.note.last_scorer":     { en: "Last scorer — similar probability", fr: "Dernier buteur — probabilité similaire" },
+  "nhl.note.shots":           { en: "Shots on goal · elite forward avg ~3/game", fr: "Tirs sur but · moyenne attaquant élite ~3/match" },
+  "nhl.note.assists":         { en: "Assists · line 0.5", fr: "Passes décisives · ligne 0.5" },
+  "nhl.note.points":          { en: "Points (G+A) · top players ~0.8 pts/game", fr: "Points (B+P) · top players ~0.8 pts/match" },
+  "nhl.note.pp_point":        { en: "Power play point", fr: "Point en avantage numérique" },
+  "nhl.note.saves":           { en: "Saves · elite goalie avg ~28/game", fr: "Arrêts · moyenne gardien élite ~28/match" },
+  "nhl.note.pim_player":      { en: "Player penalty minutes · line 0.5", fr: "Minutes de pénalité joueur · ligne 0.5" },
+  "nhl.note.blocks":          { en: "Blocked shots · defenseman avg ~1.8/game", fr: "Tirs bloqués · défenseur avg ~1.8/match" },
+  "nhl.note.toi":             { en: "Time on ice · line 18.5 min", fr: "Temps sur glace · ligne 18.5 min" },
+  "nhl.note.faceoffs":        { en: "Faceoff wins · line 9.5", fr: "Mises en jeu gagnées · ligne 9.5" },
+  "nhl.note.hits":            { en: "Hits · line 1.5", fr: "Mises en échec · ligne 1.5" },
+  "nhl.note.default":         { en: "Prediction based on season data", fr: "Prédiction basée sur les données saisonnières" },
+
+  // NHL mock LLM response
+  "nhl.llm.body": {
+    en: "Analysis of {market} for {home} vs {away}: statistical rules give {pct}%. Taking context into account (home ice, recent form, head-to-head), this market offers {value}. Confidence: {conf}. [Connect your LLM model via /api/chat for a more detailed analysis]",
+    fr: "Analyse {market} pour {home} vs {away} : les règles statistiques donnent {pct}%. En tenant compte du contexte (domicile, forme récente, confrontations directes), ce marché présente {value}. Confidence: {conf}. [Connectez votre modèle LLM via /api/chat pour une analyse plus détaillée]",
+  },
+  "nhl.llm.goodValue":  { en: "good value",     fr: "une bonne valeur" },
+  "nhl.llm.modValue":   { en: "moderate value", fr: "une valeur modérée" },
+  "nhl.llm.high":       { en: "high",           fr: "élevée" },
+  "nhl.llm.medium":     { en: "medium",         fr: "moyenne" },
+
+  // ── Prediction page ──
+  "pred.title":          { en: "Prediction",            fr: "Prédiction" },
+  "pred.calcPredictions":{ en: "Calculated Predictions", fr: "Prédictions calculées" },
+  "pred.base":           { en: "Base: {n}%",            fr: "Base : {n} %" },
+  "pred.aiPrediction":   { en: "AI Prediction",         fr: "Prédiction IA" },
+  "pred.liveModel":      { en: "Live Model",            fr: "Modèle en direct" },
+  "pred.rules":          { en: "Rules",                 fr: "Règles" },
+  "pred.llmAnalysis":    { en: "LLM Analysis",          fr: "Analyse LLM" },
+  "pred.markets":        { en: "Markets",               fr: "Marchés" },
+  "pred.hideAll":        { en: "👁 Hide all",           fr: "👁 Masquer tout" },
+  "pred.revealAll":      { en: "👁 Reveal all",         fr: "👁 Révéler tout" },
+  "pred.tap":            { en: "Tap",                   fr: "Toucher" },
+  "pred.today":          { en: "Today",                 fr: "Aujourd'hui" },
+  "pred.recommendedBet": { en: "Recommended Bet",       fr: "Pari recommandé" },
+  "pred.goToBuilder":    { en: "Go to Bet Builder →",   fr: "Aller au créateur de coupon →" },
+  "pred.recentForm":     { en: "Recent Form",           fr: "Forme récente" },
+  "pred.win":            { en: "Win",                   fr: "Victoire" },
+  "pred.loss":           { en: "Loss",                  fr: "Défaite" },
+  "pred.ranking":        { en: "Ranking",               fr: "Classement" },
+  "pred.points":         { en: "Points",                fr: "Points" },
+  "pred.predFactors":    { en: "Prediction Factors",    fr: "Facteurs de prédiction" },
+  "pred.notFound":       { en: "Not Found",             fr: "Introuvable" },
+  "pred.notExist":       { en: "This prediction doesn't exist.", fr: "Cette prédiction n'existe pas." },
+  "pred.goBack":         { en: "Go Back",               fr: "Retour" },
+  "pred.slipShort":      { en: "✓ Slip",                fr: "✓ Coupon" },
+  "pred.slipAddShort":   { en: "+ Slip",                fr: "+ Coupon" },
+  "pred.addToSlip":      { en: "+ Add to slip",         fr: "+ Ajouter au coupon" },
+  "pred.addedToSlip":    { en: "✓ Added to slip",       fr: "✓ Ajouté au coupon" },
+  "pred.lastN":          { en: "Last {n}",              fr: "{n} derniers" },
+  "pred.formOverLast":   { en: "Form over last {n} games · {wl}", fr: "Forme sur les {n} derniers matchs · {wl}" },
+  "pred.winRateL":       { en: "Win Rate (L{n})",       fr: "Taux de victoire (L{n})" },
+  "pred.confHigh":       { en: "High Confidence",       fr: "Confiance élevée" },
+  "pred.confModerate":   { en: "Moderate",              fr: "Modérée" },
+  "pred.confEven":       { en: "Even Match",            fr: "Match serré" },
+  "pred.confUnderdog":   { en: "Underdog Pick",         fr: "Choix outsider" },
+  // Tennis player prop markets
+  "pred.t.winNext":      { en: "Win Next Match",        fr: "Gagne le prochain match" },
+  "pred.t.winNextDesc":  { en: "Wins their next scheduled match", fr: "Remporte son prochain match programmé" },
+  "pred.t.firstSet":     { en: "Win First Set",         fr: "Gagne la première manche" },
+  "pred.t.firstSetDesc": { en: "Takes the first set in next match", fr: "Remporte la première manche du prochain match" },
+  "pred.t.straight":     { en: "Win in Straight Sets",  fr: "Gagne en manches sèches" },
+  "pred.t.straightDesc": { en: "Wins the match without losing a set", fr: "Gagne le match sans perdre une manche" },
+  "pred.t.final":        { en: "Reach Tournament Final", fr: "Atteint la finale du tournoi" },
+  "pred.t.finalDesc":    { en: "Makes it to the final of current tournament", fr: "Se qualifie pour la finale du tournoi en cours" },
+
+  // ── Tennis stats page ──
+  "tennis.byPlayer":       { en: "By Player",     fr: "Par joueur" },
+  "tennis.byMatch":        { en: "By Match",      fr: "Par match" },
+  "tennis.bySurface":      { en: "By Surface",    fr: "Par surface" },
+  "tennis.byTournament":   { en: "By Tournament", fr: "Par tournoi" },
+  "tennis.players":        { en: "{n} players",   fr: "{n} joueurs" },
+  "tennis.liveNowCount":   { en: "{n} Live Now",  fr: "{n} en direct" },
+  "tennis.upcomingToday":  { en: "Upcoming Today", fr: "À venir aujourd'hui" },
+  "tennis.checkBack":      { en: "Check back on match days", fr: "Reviens les jours de match" },
+  "tennis.surfaceAccuracy":{ en: "Win prediction accuracy varies by court surface", fr: "La précision des prédictions varie selon la surface" },
+  "tennis.noTournData":    { en: "No tournament data available", fr: "Aucune donnée de tournoi disponible" },
+  "tennis.topPerformer":   { en: "Top performer", fr: "Meilleur joueur" },
+  "tennis.surfaceCourt":   { en: "{name} Court",  fr: "Surface {name}" },
+  "tennis.loading":        { en: "Loading...",    fr: "Chargement..." },
+  "tennis.retry":          { en: "Retry",         fr: "Réessayer" },
+  "tennis.searchPlaceholder":{ en: "Search player, tournament...", fr: "Cherche un joueur, un tournoi..." },
+  "tennis.added":          { en: "Added ✓",       fr: "Ajouté ✓" },
+  "tennis.loadFail":       { en: "Failed to load matches", fr: "Échec du chargement des matchs" },
+
+  // ── Tennis player page ──
+  "tp.notFound":      { en: "Player not found", fr: "Joueur introuvable" },
+  "tp.goBack":        { en: "Go back",          fr: "Retour" },
+  "tp.tour":          { en: "{tour} Tour",      fr: "Circuit {tour}" },
+  "tp.world":         { en: "#{pos} World",     fr: "#{pos} mondial" },
+  "tp.winRate":       { en: "{pct}% win rate",  fr: "{pct} % de victoires" },
+  "tp.overallWin":    { en: "Overall win probability", fr: "Probabilité de victoire globale" },
+  "tp.perfSurface":   { en: "Performance by Surface", fr: "Performance par surface" },
+  "tp.winRateLabel":  { en: "Win rate",         fr: "Taux de victoire" },
+  "tp.serveStats":    { en: "Serve Stats",      fr: "Statistiques au service" },
+  "tp.firstServeIn":  { en: "1st Serve In",     fr: "1er service réussi" },
+  "tp.aceRate":       { en: "Ace Rate (per game)", fr: "Aces (par jeu)" },
+  "tp.winFirstServe": { en: "Win on 1st Serve", fr: "Points gagnés au 1er service" },
+  "tp.winSecondServe":{ en: "Win on 2nd Serve", fr: "Points gagnés au 2e service" },
+  "tp.holdPct":       { en: "Hold %",           fr: "% de jeux de service gagnés" },
+  "tp.returnStats":   { en: "Return Stats",     fr: "Statistiques au retour" },
+  "tp.returnRating":  { en: "Return Rating",    fr: "Note de retour" },
+  "tp.breakPct":      { en: "Break %",          fr: "% de breaks" },
+  "tp.winReturn":     { en: "Win on Return",    fr: "Points gagnés au retour" },
+  "tp.h2h":           { en: "Head-to-Head vs Top Rivals", fr: "Confrontations vs meilleurs rivaux" },
+  "tp.recentForm":    { en: "Recent Form",      fr: "Forme récente" },
+  "tp.upcomingBets":  { en: "Upcoming Matches — Bet Options", fr: "Matchs à venir — Options de pari" },
+  "tp.aiAnalysis":    { en: "AI Analysis",      fr: "Analyse IA" },
+  "tp.llmPlayer":     { en: "LLM Player Analysis", fr: "Analyse du joueur par LLM" },
+  "tp.addedSlip":     { en: "✓ Added to Slip",  fr: "✓ Ajouté au coupon" },
+  "tp.addToWin":      { en: "+ {name} to win — {pct}%", fr: "+ Victoire de {name} — {pct} %" },
+  "tp.analysing":     { en: "Analysing {name}...", fr: "Analyse de {name}..." },
+  "tp.askLLMAbout":   { en: "✨ Ask LLM about {name}", fr: "✨ Demander au LLM sur {name}" },
+
+  // ── Tennis predictions page ──
+  "tennis.title":          { en: "Tennis Predictions", fr: "Prédictions tennis" },
+  "tennis.noMatches":      { en: "No matches today",   fr: "Aucun match aujourd'hui" },
+  "tennis.noMatchesAvail": { en: "No matches available today", fr: "Aucun match disponible aujourd'hui" },
+  "tennis.selectMatch":    { en: "Select a match…",    fr: "Choisis un match…" },
+
+  // ── Market selector sheet ──
+  "mkt.addPrediction": { en: "Add Prediction",   fr: "Ajouter une prédiction" },
+  "mkt.selectMarket":  { en: "Select Market",    fr: "Choisir un marché" },
+  "mkt.configure":     { en: "Configure",        fr: "Configurer" },
+  "mkt.search":        { en: "Search team, player, or game…", fr: "Cherche une équipe, un joueur ou un match…" },
+  "mkt.games":         { en: "🏒 Games",         fr: "🏒 Matchs" },
+  "mkt.teams":         { en: "🛡️ Teams",         fr: "🛡️ Équipes" },
+  "mkt.players":       { en: "⭐ Players",        fr: "⭐ Joueurs" },
+  "mkt.backToMarkets": { en: "← Back to markets", fr: "← Retour aux marchés" },
+  "mkt.line":          { en: "Line ({unit})",    fr: "Ligne ({unit})" },
+  "mkt.selection":     { en: "Selection",        fr: "Sélection" },
+  "mkt.draw60":        { en: "Draw after 60 min", fr: "Nul après 60 min" },
+  "mkt.addedSlip":     { en: "✓ Added to Slip!", fr: "✓ Ajouté au coupon !" },
+  "mkt.adding":        { en: "Adding…",          fr: "Ajout…" },
+  "mkt.addToSlip":     { en: "Add to Prediction Slip", fr: "Ajouter au coupon de prédiction" },
+
+  // ── ML prediction card ──
+  "ml.title":        { en: "ML Prediction",   fr: "Prédiction ML" },
+  "ml.aiPrediction": { en: "AI Prediction",   fr: "Prédiction IA" },
+  "ml.conf":         { en: "{n}% conf.",      fr: "{n} % conf." },
+  "ml.confidence":   { en: "{n}% confidence", fr: "{n} % de confiance" },
+  "ml.probability":  { en: "probability",     fr: "probabilité" },
+  "ml.vsRules":      { en: "{d}% vs rules",   fr: "{d} % vs règles" },
+  "ml.rules":        { en: "Rules",           fr: "Règles" },
+  "ml.rulesColon":   { en: "Rules:",          fr: "Règles :" },
+  "ml.sameSignal":   { en: "≈ same signal",   fr: "≈ même signal" },
+  "ml.keyFactors":   { en: "Key model factors", fr: "Facteurs clés du modèle" },
+  "ml.topFactors":   { en: "Top Factors",     fr: "Facteurs principaux" },
+  "ml.verdictStrong":{ en: "Strong signal ▲", fr: "Fort signal ▲" },
+  "ml.verdictPos":   { en: "Positive signal", fr: "Signal positif" },
+  "ml.verdictNeutral":{ en: "Neutral signal", fr: "Signal neutre" },
+  "ml.verdictWeak":  { en: "Weak signal ▼",   fr: "Signal faible ▼" },
+  "ml.explainNorm":  { en: "The model estimates a {pct}% probability based on stats and head-to-head records.", fr: "Le modèle estime {pct} % de probabilité basé sur les statistiques et confrontations." },
+  "ml.explainFallback": { en: "ML estimate based on season stats, head-to-head records and recent trends for {market}.", fr: "Estimation ML basée sur les statistiques de saison, confrontations directes et tendances récentes pour {market}." },
+  "ml.thisMarket":   { en: "this market",     fr: "ce marché" },
+
+  // ── Last N games section ──
+  "lastn.selectTeam":  { en: "Select a team",     fr: "Choisis une équipe" },
+  "lastn.chooseTeam":  { en: "Choose a team…",    fr: "Choisis une équipe…" },
+  "lastn.searchTeam":  { en: "Search team…",      fr: "Cherche une équipe…" },
+  "lastn.selectSpan":  { en: "Select span",       fr: "Choisis une période" },
+  "lastn.lastGames":   { en: "Last {n} Games",    fr: "{n} derniers matchs" },
+  "lastn.loading":     { en: "Loading…",          fr: "Chargement…" },
+  "lastn.explore":     { en: "Select a team above to explore their recent form", fr: "Choisis une équipe ci-dessus pour explorer sa forme récente" },
+
+  // ── Players tab ──
+  "players.selectTeam":  { en: "Select a team",     fr: "Choisis une équipe" },
+  "players.loading":     { en: "loading…",          fr: "chargement…" },
+  "players.count":       { en: "{n} players",       fr: "{n} joueurs" },
+  "players.none":        { en: "No players found for {abbr}", fr: "Aucun joueur trouvé pour {abbr}" },
+  "players.pickHint":    { en: "← Pick a team to see its players", fr: "← Choisis une équipe pour voir ses joueurs" },
+
+  // ── Share page ──
+  "share.title":      { en: "Shared Slip",        fr: "Coupon partagé" },
+  "share.heading":    { en: "Shared Prediction",  fr: "Prédiction partagée" },
+  "share.slipId":     { en: "Slip ID: {id}",      fr: "ID du coupon : {id}" },
+  "share.soon":       { en: "Shared slips coming soon.", fr: "Les coupons partagés arrivent bientôt." },
+  "share.goHome":     { en: "Go to Home",         fr: "Aller à l'accueil" },
+
+  // ── Login ──
+  "login.title":     { en: "Welcome back",     fr: "Bon retour" },
+  "login.email":     { en: "Email",            fr: "Courriel" },
+  "login.password":  { en: "Password",         fr: "Mot de passe" },
+  "login.signin":    { en: "Sign In",          fr: "Se connecter" },
+  "login.signup":    { en: "Create Account",   fr: "Créer un compte" },
+  "login.google":    { en: "Continue with Google", fr: "Continuer avec Google" },
+  "login.username":  { en: "Username",         fr: "Nom d'utilisateur" },
+  "login.firstName": { en: "First name (optional)", fr: "Prénom (facultatif)" },
+  "login.or":        { en: "or",               fr: "ou" },
+  "login.error":     { en: "Something went wrong", fr: "Une erreur est survenue" },
+  "login.disclaimer":{ en: "18+ · Gamble Responsibly · Not available in all jurisdictions", fr: "18+ · Jouez de manière responsable · Non disponible dans toutes les juridictions" },
+};
+
+type TParams = Record<string, string | number>;
+
+function translate(key: string, lang: Lang, params?: TParams): string {
+  const entry = DICT[key];
+  let str = entry ? (entry[lang] ?? entry.en) : key;
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      str = str.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
+    }
+  }
+  return str;
+}
+
+interface I18nValue {
+  lang: Lang;
+  setLang: (l: Lang) => void;
+  t: (key: string, params?: TParams) => string;
+}
+
+const I18nContext = createContext<I18nValue>({
+  lang: "en",
+  setLang: () => {},
+  t: (k, p) => translate(k, "en", p),
+});
+
+export function LanguageProvider({ children }: { children: ReactNode }) {
+  const [lang, setLangState] = useState<Lang>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      return stored === "fr" || stored === "en" ? stored : "en";
+    } catch {
+      return "en";
+    }
+  });
+
+  const setLang = (l: Lang) => {
+    setLangState(l);
+    try { localStorage.setItem(STORAGE_KEY, l); } catch { /* ignore */ }
+  };
+
+  return (
+    <I18nContext.Provider value={{ lang, setLang, t: (k, p) => translate(k, lang, p) }}>
+      {children}
+    </I18nContext.Provider>
+  );
+}
+
+export function useI18n(): I18nValue {
+  return useContext(I18nContext);
+}

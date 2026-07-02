@@ -2,13 +2,14 @@ import { useNavigate, useLocation } from "react-router";
 import { Home, BarChart2, Target, Trophy, User } from "lucide-react";
 import { useBet } from "../context/BetContext";
 import { useAuth } from "../context/AuthContext";
+import { useI18n } from "../i18n";
 
 const navItems = [
-  { Icon: Home,      label: "Home",    path: "/" },
-  { Icon: BarChart2, label: "Stats",   path: "/stats" },
-  { Icon: Target,    label: "Slip",    path: "/bet" },
-  { Icon: Trophy,    label: "League",  path: "/league" },
-  { Icon: User,      label: "Profile", path: "/profile" },
+  { Icon: Home,      key: "nav.home",    path: "/" },
+  { Icon: BarChart2, key: "nav.stats",   path: "/stats" },
+  { Icon: Target,    key: "nav.slip",    path: "/bet" },
+  { Icon: Trophy,    key: "nav.league",  path: "/league" },
+  { Icon: User,      key: "nav.profile", path: "/profile" },
 ];
 
 const ACCENT = "#9BF019"; // acid green — design system
@@ -18,6 +19,7 @@ export function BottomNav() {
   const location = useLocation();
   const { legs } = useBet();
   const { user } = useAuth();
+  const { t } = useI18n();
 
   const isActive = (path: string) => {
     if (path === "/") return location.pathname === "/";
@@ -34,14 +36,15 @@ export function BottomNav() {
         borderTop: "1px solid #283323",
       }}
     >
-      {navItems.map(({ Icon, label, path }) => {
+      {navItems.map(({ Icon, key, path }) => {
         const active    = isActive(path);
         const showBadge = path === "/bet" && legs.length > 0;
         const isProfile = path === "/profile";
+        const label     = t(key);
 
         return (
           <button
-            key={label}
+            key={key}
             onClick={() => navigate(path)}
             className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all relative"
             style={{ opacity: active ? 1 : 0.45 }}

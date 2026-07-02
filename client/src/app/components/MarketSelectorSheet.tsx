@@ -3,6 +3,7 @@ import { MARKET_DEFINITIONS, CATEGORY_LABELS, CATEGORY_ICONS } from "../data/bet
 import { predictionApiService } from "../services/predictionApiService";
 import { useBet } from "../context/BetContext";
 import { useNHLData } from "../hooks/useNHLData";
+import { useI18n } from "../i18n";
 import type { BetLeg, BetMarketType } from "../types/bet";
 import type { MarketDefinition } from "../data/betMarkets";
 
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
+  const { t } = useI18n();
   const { addLeg, hasLeg } = useBet();
   const { teams, players, games, getTeamById, getGameById } = useNHLData();
 
@@ -119,7 +121,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
         { label: `${t1.name} (${t1.abbr})`, value: t1.id },
         { label: `${t2.name} (${t2.abbr})`, value: t2.id },
         ...(market.type === "regulation_result"
-          ? [{ label: "Draw after 60 min", value: "draw" }]
+          ? [{ label: t("mkt.draw60"), value: "draw" }]
           : []),
       ];
     }
@@ -255,9 +257,9 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
               >←</button>
             )}
             <p className="text-white font-bold">
-              {step === "subject" && "Add Prediction"}
-              {step === "market" && (selectedSubject?.name || "Select Market")}
-              {step === "configure" && (selectedMarket?.label || "Configure")}
+              {step === "subject" && t("mkt.addPrediction")}
+              {step === "market" && (selectedSubject?.name || t("mkt.selectMarket"))}
+              {step === "configure" && (selectedMarket?.label || t("mkt.configure"))}
             </p>
           </div>
           <button
@@ -274,7 +276,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                 <span className="text-[#bfc8cc]">🔍</span>
                 <input
                   className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#bfc8cc]"
-                  placeholder="Search team, player, or game…"
+                  placeholder={t("mkt.search")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   autoFocus
@@ -290,7 +292,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
               {["game", "team", "player"].map((type) => {
                 const items = filteredSubjects.filter((s) => s.type === type);
                 if (items.length === 0) return null;
-                const label = type === "game" ? "🏒 Games" : type === "team" ? "🛡️ Teams" : "⭐ Players";
+                const label = type === "game" ? t("mkt.games") : type === "team" ? t("mkt.teams") : t("mkt.players");
                 return (
                   <div key={type} className="mb-4">
                     <p className="text-[#bfc8cc] text-[10px] uppercase tracking-wider mb-2">{label}</p>
@@ -396,7 +398,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
               onClick={() => { setStep("market"); setSelectedMarket(null); }}
               className="flex items-center gap-1 text-[#86d1ea] text-xs mb-4 mt-2"
             >
-              ← Back to markets
+              {t("mkt.backToMarkets")}
             </button>
 
             {/* Market info */}
@@ -409,7 +411,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
             {selectedMarket.requiresLine && selectedMarket.lineOptions && (
               <div className="mb-4">
                 <p className="text-[#bfc8cc] text-xs uppercase tracking-wider mb-2">
-                  Line ({selectedMarket.lineUnit})
+                  {t("mkt.line", { unit: selectedMarket.lineUnit ?? "" })}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {selectedMarket.lineOptions.map((line) => (
@@ -432,7 +434,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
             {/* Selection picker */}
             {(selectedMarket.requiresSelection || selectedMarket.selectionOptions) && (
               <div className="mb-6">
-                <p className="text-[#bfc8cc] text-xs uppercase tracking-wider mb-2">Selection</p>
+                <p className="text-[#bfc8cc] text-xs uppercase tracking-wider mb-2">{t("mkt.selection")}</p>
                 <div className="flex flex-col gap-2">
                   {(selectedMarket.selectionOptions || getSelectionOptions(selectedMarket)).map((opt) => (
                     <button
@@ -466,7 +468,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                   : "bg-[#1B2419] text-[#bfc8cc] cursor-not-allowed"
               }`}
             >
-              {added ? "✓ Added to Slip!" : adding ? "Adding…" : "Add to Prediction Slip"}
+              {added ? t("mkt.addedSlip") : adding ? t("mkt.adding") : t("mkt.addToSlip")}
             </button>
           </div>
         )}

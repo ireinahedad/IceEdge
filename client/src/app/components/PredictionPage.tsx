@@ -6,6 +6,7 @@ import { PredictionResponse } from "../types/bet";
 import { nhlApiService } from "../services/nhlApiService";
 import { predictionApiService } from "../services/predictionApiService";
 import { useSport } from "../context/SportContext";
+import { useI18n } from "../i18n";
 import { nhlLogoUrl } from "../data/teamEmoji";
 import { getTeamById, getGameById, getPlayerById } from "../data/hockeyData";
 import { factorsApiService } from "../services/predictionApiService";
@@ -104,6 +105,7 @@ function CalculatedBreakdown({ basePct, factors, finalPct, accent }: {
   finalPct: number;
   accent: string;
 }) {
+  const { t } = useI18n();
   const [revealed, setRevealed] = useState(0);
 
   useEffect(() => {
@@ -121,8 +123,8 @@ function CalculatedBreakdown({ basePct, factors, finalPct, accent }: {
   return (
     <div className="bg-[#131A12] border border-white/20 rounded-2xl overflow-hidden">
       <div className="px-4 py-3 border-b border-white/20 flex items-center justify-between">
-        <span className="text-white text-sm font-semibold">Calculated Predictions</span>
-        <span className="text-[10px] text-[#bfc8cc] bg-[#0A0E0C] px-2 py-0.5 rounded-full">Base: {basePct}%</span>
+        <span className="text-white text-sm font-semibold">{t("pred.calcPredictions")}</span>
+        <span className="text-[10px] text-[#bfc8cc] bg-[#0A0E0C] px-2 py-0.5 rounded-full">{t("pred.base", { n: basePct })}</span>
       </div>
       <div className="divide-y divide-[#1e2d32]">
         {factors.map((f, i) => {
@@ -145,13 +147,13 @@ function CalculatedBreakdown({ basePct, factors, finalPct, accent }: {
       </div>
       <div className="px-4 py-4 flex items-center justify-between border-t-2" style={{ borderColor: accent }}>
         <div>
-          <p className="text-[#bfc8cc] text-[10px] uppercase tracking-widest">AI Prediction</p>
+          <p className="text-[#bfc8cc] text-[10px] uppercase tracking-widest">{t("pred.aiPrediction")}</p>
           <p className="text-white text-2xl font-black mt-0.5">{finalPct}<span className="text-sm font-medium text-[#bfc8cc]">%</span></p>
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium"
           style={{ color: accent, borderColor: `${accent}40`, backgroundColor: `${accent}15` }}>
           <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: accent }} />
-          Live Model
+          {t("pred.liveModel")}
         </div>
       </div>
     </div>
@@ -160,7 +162,8 @@ function CalculatedBreakdown({ basePct, factors, finalPct, accent }: {
 
 /* ─── Confidence badge ──────────────────────────── */
 function ConfidenceBadge({ pct }: { pct: number }) {
-  const label = pct >= 70 ? "High Confidence" : pct >= 55 ? "Moderate" : pct >= 45 ? "Even Match" : "Underdog Pick";
+  const { t } = useI18n();
+  const label = pct >= 70 ? t("pred.confHigh") : pct >= 55 ? t("pred.confModerate") : pct >= 45 ? t("pred.confEven") : t("pred.confUnderdog");
   const cls = pct >= 70 ? "bg-green-500/20 text-green-400 border-green-500/30" :
     pct >= 55 ? "bg-[#86d1ea]/20 text-[#86d1ea] border-[#86d1ea]/30" :
     pct >= 45 ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" :
@@ -543,6 +546,7 @@ function PredictionSheet({ label, rulePct, ruleNote, accent, mlProps, onClose }:
   label: string; rulePct: number; ruleNote: string; accent: string;
   mlProps?: MLProps; onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [llmText, setLlmText]     = useState("");
   const [llmLoading, setLlmLoading] = useState(false);
   const pctColor = rulePct >= 65 ? "#4ade80" : rulePct >= 50 ? accent : rulePct >= 38 ? "#facc15" : "#f87171";
@@ -596,7 +600,7 @@ function PredictionSheet({ label, rulePct, ruleNote, accent, mlProps, onClose }:
               ? { background: "#4ade8033", color: "#4ade80", border: "1px solid #4ade8055" }
               : { background: accent + "22", color: accent, border: `1px solid ${accent}55` }}
           >
-            {inSlip ? "✓ Slip" : "+ Slip"}
+            {inSlip ? t("pred.slipShort") : t("pred.slipAddShort")}
           </button>
         </div>
 
@@ -618,7 +622,7 @@ function PredictionSheet({ label, rulePct, ruleNote, accent, mlProps, onClose }:
         <div className="bg-[#0d1519] border border-white/[0.07] rounded-2xl overflow-hidden">
           <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/[0.05]">
             <div className="w-7 h-7 rounded-lg bg-white/05 border border-white/10 flex items-center justify-center text-sm flex-shrink-0">📐</div>
-            <span className="text-white text-sm font-bold flex-1">Règles</span>
+            <span className="text-white text-sm font-bold flex-1">{t("pred.rules")}</span>
             <span className="text-xl font-black flex-shrink-0" style={{ color: pctColor }}>{rulePct}%</span>
           </div>
           <div className="px-4 py-3">
@@ -635,7 +639,7 @@ function PredictionSheet({ label, rulePct, ruleNote, accent, mlProps, onClose }:
           <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-sm">✨</span>
-              <span className="text-purple-300 text-xs font-semibold">Analyse LLM</span>
+              <span className="text-purple-300 text-xs font-semibold">{t("pred.llmAnalysis")}</span>
             </div>
             <p className="text-[#bfc8cc] text-xs leading-relaxed">{llmText}</p>
           </div>
@@ -672,8 +676,8 @@ function PredictionSheet({ label, rulePct, ruleNote, accent, mlProps, onClose }:
             style={{ background: llmLoading ? "#1B2419" : "linear-gradient(135deg,#7c3aed,#a855f7)", color: "#fff", border: "1px solid rgba(168,85,247,0.3)" }}
           >
             {llmLoading
-              ? <><span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin inline-block" /> Analyse en cours...</>
-              : <>✨ Ask LLM</>}
+              ? <><span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin inline-block" /> {t("nhl.analyzing")}</>
+              : <>{t("nhl.askLLM")}</>}
           </button>
         )}
 
@@ -681,7 +685,7 @@ function PredictionSheet({ label, rulePct, ruleNote, accent, mlProps, onClose }:
           onClick={onClose}
           className="w-full py-3 bg-[#131A12] border border-white/10 rounded-2xl text-[#8a9ea6] text-sm font-medium"
         >
-          Fermer
+          {t("common.close")}
         </button>
       </div>
     </div>
@@ -690,9 +694,10 @@ function PredictionSheet({ label, rulePct, ruleNote, accent, mlProps, onClose }:
 
 /* ─── Reveal-all toggle bar ────────────────────── */
 function PredictionsRevealBar({ revealAll, onToggle }: { revealAll: boolean; onToggle: () => void }) {
+  const { t } = useI18n();
   return (
     <div className="flex items-center justify-between px-1">
-      <span className="text-[#4a6070] text-[10px] font-semibold uppercase tracking-wider">Marchés</span>
+      <span className="text-[#4a6070] text-[10px] font-semibold uppercase tracking-wider">{t("pred.markets")}</span>
       <button
         onClick={onToggle}
         className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-semibold transition-all active:scale-95"
@@ -700,7 +705,7 @@ function PredictionsRevealBar({ revealAll, onToggle }: { revealAll: boolean; onT
           ? { background: "#a78bfa22", color: "#a78bfa", border: "1px solid #a78bfa44" }
           : { background: "rgba(255,255,255,0.05)", color: "#8a9ea6", border: "1px solid rgba(255,255,255,0.08)" }}
       >
-        {revealAll ? "👁 Masquer tout" : "👁 Révéler tout"}
+        {revealAll ? t("pred.hideAll") : t("pred.revealAll")}
       </button>
     </div>
   );
@@ -708,6 +713,7 @@ function PredictionsRevealBar({ revealAll, onToggle }: { revealAll: boolean; onT
 
 /* ─── BetOption ─────────────────────────────── */
 function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
+  const { t } = useI18n();
   const revealAll = useContext(RevealAllCtx);
   const [revealed, setRevealed] = useState(false);
   const [sheet, setSheet] = useState(false);
@@ -735,7 +741,7 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
             {opt.rulePct}%
           </button>
         ) : (
-          <span className="mt-2 text-[#3a5060] text-[9px] font-medium">Tap</span>
+          <span className="mt-2 text-[#3a5060] text-[9px] font-medium">{t("pred.tap")}</span>
         )}
       </button>
       {sheet && (
@@ -778,6 +784,7 @@ function MarketGroup({ group, accent }: { group: MktGroup; accent: string }) {
 /* ─── GamePrediction ────────────────────────── */
 function GamePrediction({ gameId }: { gameId: string }) {
   const { theme } = useSport();
+  const { t } = useI18n();
   const accent = theme.accent;
   const [gameView, setGameView] = useState<LiveGameView | null>(null);
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
@@ -872,7 +879,7 @@ function GamePrediction({ gameId }: { gameId: string }) {
             {home.score !== undefined && <span className="text-white text-3xl font-black">{home.score}</span>}
           </div>
           <div className="flex flex-col items-center gap-1 px-2">
-            {!isLive && <span className="text-[#8a9ea6] text-xs">{gameView.time ?? "Today"}</span>}
+            {!isLive && <span className="text-[#8a9ea6] text-xs">{gameView.time ?? t("pred.today")}</span>}
             <span className="text-[#8a9ea6] font-bold text-base">VS</span>
             <span className="text-[#4a6070] text-[10px]">O/U {gameView.overUnder}</span>
           </div>
@@ -1121,6 +1128,7 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
 
 function NGamesPrediction({ teamId, n }: { teamId: string; n: number }) {
   const { theme } = useSport();
+  const { t } = useI18n();
   const accent = theme.accent;
   const [view, setView] = useState<NGamesView | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1248,11 +1256,11 @@ function NGamesPrediction({ teamId, n }: { teamId: string; n: number }) {
 
   return (
     <PredictionLayout
-      title={`${view.teamName} — Last ${n}`}
-      subtitle={`Form over last ${n} games · ${wl}`}
+      title={`${view.teamName} — ${t("pred.lastN", { n })}`}
+      subtitle={t("pred.formOverLast", { n, wl })}
       logo={view.logo}
       winPct={finalPct}
-      winLabel={`Win Rate (L${n})`}
+      winLabel={t("pred.winRateL", { n })}
       calcFactors={calcFactors}
       basePct={50}
       accent={accent}
@@ -1272,11 +1280,12 @@ function NGamesPrediction({ teamId, n }: { teamId: string; n: number }) {
 /* ─── Shared layout ────────────────────────────── */
 function BetRec({ rec, note, onAddToSlip }: { rec: string; note: string; onAddToSlip?: () => void }) {
   const navigate = useNavigate();
+  const { t } = useI18n();
   return (
     <div className="bg-gradient-to-br from-[#86d1ea]/10 to-[#0f1416] border border-[#86d1ea]/30 rounded-2xl p-4">
       <div className="flex items-center gap-2 mb-2">
         <span className="text-lg">💡</span>
-        <p className="text-white text-sm font-medium">Recommended Bet</p>
+        <p className="text-white text-sm font-medium">{t("pred.recommendedBet")}</p>
         <span className="ml-auto bg-[#86d1ea]/20 text-[#86d1ea] text-[10px] px-2 py-0.5 rounded-full font-medium">{rec}</span>
       </div>
       <p className="text-[#bfc8cc] text-xs leading-relaxed">{note}</p>
@@ -1284,7 +1293,7 @@ function BetRec({ rec, note, onAddToSlip }: { rec: string; note: string; onAddTo
         onClick={() => onAddToSlip ? onAddToSlip() : navigate("/bet")}
         className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] bg-[#86d1ea] text-[#0A0E0C]"
       >
-        Go to Bet Builder →
+        {t("pred.goToBuilder")}
       </button>
     </div>
   );
@@ -1298,6 +1307,7 @@ function PredictionLayout({
   recentForm: ("W" | "L" | "OT")[]; betRec: string; betNote: string;
   extraStats: { label: string; value: string }[];
 }) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col gap-5">
       {/* Hero card */}
@@ -1343,12 +1353,12 @@ function PredictionLayout({
 
       {/* Recent form */}
       <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
-        <p className="text-white text-sm font-medium mb-3">Recent Form</p>
+        <p className="text-white text-sm font-medium mb-3">{t("pred.recentForm")}</p>
         <FormDots results={recentForm} />
         <div className="flex items-center gap-4 mt-3">
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded-full bg-green-500/40 border border-green-500/60" />
-            <span className="text-[#bfc8cc] text-[10px]">Win</span>
+            <span className="text-[#bfc8cc] text-[10px]">{t("pred.win")}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded-full bg-yellow-500/40 border border-yellow-500/60" />
@@ -1356,7 +1366,7 @@ function PredictionLayout({
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded-full bg-red-500/40 border border-red-500/60" />
-            <span className="text-[#bfc8cc] text-[10px]">Loss</span>
+            <span className="text-[#bfc8cc] text-[10px]">{t("pred.loss")}</span>
           </div>
         </div>
       </div>
@@ -1478,6 +1488,7 @@ const FALLBACK_RANKINGS_PRED: TennisRankingEntry[] = [
 
 function TennisPlayerPrediction({ playerId }: { playerId: string }) {
   const { theme } = useSport();
+  const { t, lang } = useI18n();
   const accent = "#3bc47a"; // Tennis green accent
   const { addLeg, hasLeg } = useBet();
   const [player, setPlayer] = useState<TennisRankingEntry | null>(null);
@@ -1533,10 +1544,10 @@ function TennisPlayerPrediction({ playerId }: { playerId: string }) {
           : `+${Math.round((100 - p) / p * 100)}`;
 
         setMarkets([
-          { id: `${playerId}-match-winner`, label: "Win Next Match", description: "Wins their next scheduled match", icon: "🏆", probability: winNextMatch, marketType: "tennis_match_winner", oddsLabel: toAmerican(winNextMatch) },
-          { id: `${playerId}-first-set`, label: "Win First Set", description: "Takes the first set in next match", icon: "1️⃣", probability: winFirstSet, marketType: "tennis_first_set", oddsLabel: toAmerican(winFirstSet) },
-          { id: `${playerId}-straight-sets`, label: "Win in Straight Sets", description: "Wins the match without losing a set", icon: "⚡", probability: straightSets, marketType: "tennis_total_sets", oddsLabel: toAmerican(straightSets) },
-          { id: `${playerId}-reach-final`, label: "Reach Tournament Final", description: "Makes it to the final of current tournament", icon: "🎾", probability: reachFinal, marketType: "tennis_match_winner", oddsLabel: toAmerican(reachFinal) },
+          { id: `${playerId}-match-winner`, label: t("pred.t.winNext"), description: t("pred.t.winNextDesc"), icon: "🏆", probability: winNextMatch, marketType: "tennis_match_winner", oddsLabel: toAmerican(winNextMatch) },
+          { id: `${playerId}-first-set`, label: t("pred.t.firstSet"), description: t("pred.t.firstSetDesc"), icon: "1️⃣", probability: winFirstSet, marketType: "tennis_first_set", oddsLabel: toAmerican(winFirstSet) },
+          { id: `${playerId}-straight-sets`, label: t("pred.t.straight"), description: t("pred.t.straightDesc"), icon: "⚡", probability: straightSets, marketType: "tennis_total_sets", oddsLabel: toAmerican(straightSets) },
+          { id: `${playerId}-reach-final`, label: t("pred.t.final"), description: t("pred.t.finalDesc"), icon: "🎾", probability: reachFinal, marketType: "tennis_match_winner", oddsLabel: toAmerican(reachFinal) },
         ]);
       } catch (e) {
         console.error("TennisPlayerPrediction load error", e);
@@ -1545,7 +1556,7 @@ function TennisPlayerPrediction({ playerId }: { playerId: string }) {
       }
     }
     load();
-  }, [playerId]);
+  }, [playerId, lang]);
 
   if (loading) return <LoadingSkeleton />;
   if (!player) return <NotFound />;
@@ -1573,11 +1584,11 @@ function TennisPlayerPrediction({ playerId }: { playerId: string }) {
           <div className="flex gap-4 mt-2">
             <div className="flex-1 text-center bg-[#1B2419] rounded-xl py-2">
               <p className="text-white text-sm font-bold">#{player.pos}</p>
-              <p className="text-[#4a6068] text-[9px]">Ranking</p>
+              <p className="text-[#4a6068] text-[9px]">{t("pred.ranking")}</p>
             </div>
             <div className="flex-1 text-center bg-[#1B2419] rounded-xl py-2">
               <p className="text-white text-sm font-bold">{player.points.toLocaleString()}</p>
-              <p className="text-[#4a6068] text-[9px]">Points</p>
+              <p className="text-[#4a6068] text-[9px]">{t("pred.points")}</p>
             </div>
           </div>
         </div>
@@ -1603,7 +1614,7 @@ function TennisPlayerPrediction({ playerId }: { playerId: string }) {
                   onClick={() => inSlip ? null : addLeg({ id: m.id, marketType: m.marketType as any, marketLabel: m.label, subjectType: "player", subjectId: player.player.id, subjectName: player.player.name, subjectLogo: player.player.country, selection: m.label, selectionShort: m.label.slice(0, 8), probability: m.probability, oddsLabel: m.oddsLabel, addedAt: new Date().toISOString() })}
                   className={`w-full py-1.5 rounded-xl text-xs font-bold transition-colors ${inSlip ? "bg-green-500/15 border border-green-500/30 text-green-400" : "bg-[#3bc47a]/10 border border-[#3bc47a]/30 text-[#3bc47a]"}`}
                 >
-                  {inSlip ? "✓ Added to slip" : "+ Add to slip"}
+                  {inSlip ? t("pred.addedToSlip") : t("pred.addToSlip")}
                 </button>
               </div>
             );
@@ -1613,7 +1624,7 @@ function TennisPlayerPrediction({ playerId }: { playerId: string }) {
         {/* Factors */}
         {calcFactors.length > 0 && (
           <div className="bg-[#131A12] border border-white/10 rounded-2xl p-4">
-            <p className="text-white text-xs font-semibold mb-3">Prediction Factors</p>
+            <p className="text-white text-xs font-semibold mb-3">{t("pred.predFactors")}</p>
             {calcFactors.map((f, i) => (
               <div key={i} className="flex items-center gap-2 mb-2 last:mb-0">
                 <span className="text-base">{f.icon}</span>
@@ -1634,12 +1645,13 @@ function TennisPlayerPrediction({ playerId }: { playerId: string }) {
 
 function NotFound() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   return (
     <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
       <p className="text-4xl mb-4">🏒</p>
-      <p className="text-white font-bold text-lg mb-2">Not Found</p>
-      <p className="text-[#8a9ea6] text-sm mb-6">This prediction doesn't exist.</p>
-      <button onClick={() => navigate(-1)} className="px-6 py-2 rounded-xl bg-[#86d1ea]/10 border border-[#86d1ea]/30 text-[#86d1ea] text-sm">Go Back</button>
+      <p className="text-white font-bold text-lg mb-2">{t("pred.notFound")}</p>
+      <p className="text-[#8a9ea6] text-sm mb-6">{t("pred.notExist")}</p>
+      <button onClick={() => navigate(-1)} className="px-6 py-2 rounded-xl bg-[#86d1ea]/10 border border-[#86d1ea]/30 text-[#86d1ea] text-sm">{t("pred.goBack")}</button>
     </div>
   );
 }
@@ -1648,6 +1660,7 @@ export function PredictionPage() {
   const { type, id } = useParams<{ type: string; id: string }>();
   const navigate = useNavigate();
   const { theme } = useSport();
+  const { t } = useI18n();
   const accent = theme.accent;
 
   const renderContent = () => {
@@ -1669,7 +1682,7 @@ export function PredictionPage() {
           style={{ background: "rgba(10,14,12,0.92)", backdropFilter: "blur(16px)", borderBottom: "1px solid #283323" }}>
           <div className="flex items-center gap-3">
             <button onClick={() => navigate(-1)} className="text-[#3a5060] text-lg">←</button>
-            <h1 className="text-white text-base font-bold flex-1">Prediction</h1>
+            <h1 className="text-white text-base font-bold flex-1">{t("pred.title")}</h1>
           </div>
         </div>
 

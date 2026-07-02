@@ -5,6 +5,7 @@ import { MessageBubble } from "./MessageBubble";
 import { profileApiService } from "../../../services/userService";
 import { useChatSocket } from "../../../hooks/useChatSocket";
 import { useAuth } from "../../../context/AuthContext";
+import { useI18n } from "../../../i18n";
 import type { ChatRoom, ChatMessage, ChatRoomMember, UserProfile } from "../../../types/user";
 
 // ─── Tag styles ───────────────────────────────────────────────────────────────
@@ -31,6 +32,7 @@ function CreateRoomModal({ onClose, onCreate }: {
   onClose: () => void;
   onCreate: (room: ChatRoom) => void;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [icon, setIcon] = useState("💬");
@@ -69,12 +71,12 @@ function CreateRoomModal({ onClose, onCreate }: {
       <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => { onCreate(createdRoom); onClose(); }}>
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
         <div
-          className="relative w-full max-w-[430px] bg-[#0f1416]/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl p-6 pb-10"
+          className="relative w-full max-w-[430px] md:max-w-lg bg-[#0f1416]/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl p-6 pb-10"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
-          <p className="text-white font-bold text-base mb-1">🔒 Private room created</p>
-          <p className="text-white/50 text-xs mb-4">Share this code so others can join:</p>
+          <p className="text-white font-bold text-base mb-1">{t("chat.privateCreated")}</p>
+          <p className="text-white/50 text-xs mb-4">{t("chat.shareCode")}</p>
           <div className="bg-white/5 border border-[#86d1ea]/40 rounded-2xl py-4 text-center mb-4">
             <p className="text-[#86d1ea] text-2xl font-bold tracking-[0.3em]">{createdRoom.joinCode}</p>
           </div>
@@ -82,13 +84,13 @@ function CreateRoomModal({ onClose, onCreate }: {
             onClick={() => { navigator.clipboard?.writeText(createdRoom.joinCode ?? ""); }}
             className="w-full py-3 rounded-2xl border border-white/10 text-white/70 text-sm mb-2"
           >
-            Copy code
+            {t("chat.copyCode")}
           </button>
           <button
             onClick={() => { onCreate(createdRoom); onClose(); }}
             className="w-full py-3 rounded-2xl bg-[#86d1ea] text-[#0f1416] text-sm font-bold"
           >
-            Open room
+            {t("chat.openRoom")}
           </button>
         </div>
       </div>
@@ -99,13 +101,13 @@ function CreateRoomModal({ onClose, onCreate }: {
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative w-full max-w-[430px] bg-[#0f1416]/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl p-6 pb-10"
+        className="relative w-full max-w-[430px] md:max-w-lg bg-[#0f1416]/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl p-6 pb-10"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
-        <p className="text-white font-bold text-base mb-4">New Chat Room</p>
+        <p className="text-white font-bold text-base mb-4">{t("chat.createTitle")}</p>
 
-        <p className="text-white/60 text-[10px] uppercase tracking-wider mb-2">Icon</p>
+        <p className="text-white/60 text-[10px] uppercase tracking-wider mb-2">{t("chat.icon")}</p>
         <div className="flex flex-wrap gap-2 mb-4">
           {ROOM_ICONS.map((ic) => (
             <button
@@ -122,7 +124,7 @@ function CreateRoomModal({ onClose, onCreate }: {
           ))}
         </div>
 
-        <p className="text-white/60 text-[10px] uppercase tracking-wider mb-1.5">Room Name</p>
+        <p className="text-white/60 text-[10px] uppercase tracking-wider mb-1.5">{t("chat.roomName")}</p>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -131,7 +133,7 @@ function CreateRoomModal({ onClose, onCreate }: {
           className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm outline-none placeholder-white/30 mb-3 focus:border-[#86d1ea]/50 transition-colors"
         />
 
-        <p className="text-white/60 text-[10px] uppercase tracking-wider mb-1.5">Description</p>
+        <p className="text-white/60 text-[10px] uppercase tracking-wider mb-1.5">{t("chat.description")}</p>
         <input
           value={desc}
           onChange={(e) => setDesc(e.target.value)}
@@ -143,11 +145,9 @@ function CreateRoomModal({ onClose, onCreate }: {
         {/* Public / private toggle */}
         <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl px-3 py-3 mb-4">
           <div>
-            <p className="text-white text-xs font-medium">{isPrivate ? "🔒 Private room" : "🌐 Public room"}</p>
+            <p className="text-white text-xs font-medium">{isPrivate ? t("chat.private") : t("chat.publicRoom")}</p>
             <p className="text-white/40 text-[9px] mt-0.5">
-              {isPrivate
-                ? "Only people with the join code can enter"
-                : "Anyone can find and join this room"}
+              {isPrivate ? t("chat.privateHint") : t("chat.publicHint")}
             </p>
           </div>
           <button
@@ -169,7 +169,7 @@ function CreateRoomModal({ onClose, onCreate }: {
             onClick={onClose}
             className="flex-1 py-3 rounded-2xl border border-white/10 text-white/70 text-sm"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             onClick={handleCreate}
@@ -180,7 +180,7 @@ function CreateRoomModal({ onClose, onCreate }: {
                 : "bg-white/10 text-white/40"
             }`}
           >
-            {loading ? "Creating…" : "Create Room"}
+            {loading ? t("chat.creating") : t("chat.create")}
           </button>
         </div>
       </div>
@@ -195,6 +195,7 @@ function MembersModal({ room, currentUserId, onClose }: {
   currentUserId: string;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [members, setMembers] = useState<ChatRoomMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -223,11 +224,11 @@ function MembersModal({ room, currentUserId, onClose }: {
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative w-full max-w-[430px] max-h-[70vh] overflow-y-auto bg-[#0f1416]/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl p-6 pb-10"
+        className="relative w-full max-w-[430px] md:max-w-lg max-h-[70vh] overflow-y-auto bg-[#0f1416]/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl p-6 pb-10"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
-        <p className="text-white font-bold text-base mb-4">Members · {members.length}</p>
+        <p className="text-white font-bold text-base mb-4">{t("chat.membersMenu")} · {members.length}</p>
 
         {error && <p className="text-red-400 text-xs mb-3">{error}</p>}
         {loading ? (
@@ -250,7 +251,7 @@ function MembersModal({ room, currentUserId, onClose }: {
                       <span className="text-[8px] text-[#86d1ea] border border-[#86d1ea]/40 rounded-full px-1.5 py-0.5 flex-shrink-0">admin</span>
                     )}
                     {m.userId === currentUserId && (
-                      <span className="text-[8px] text-white/40 border border-white/20 rounded-full px-1.5 py-0.5 flex-shrink-0">you</span>
+                      <span className="text-[8px] text-white/40 border border-white/20 rounded-full px-1.5 py-0.5 flex-shrink-0">{t("league.you")}</span>
                     )}
                   </div>
                   <p className="text-white/40 text-[9px]">@{m.username}</p>
@@ -291,6 +292,7 @@ function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
   onPinToggle: (room: ChatRoom) => void;
   onJoined: (room: ChatRoom) => void;
 }) {
+  const { t } = useI18n();
   const [tab, setTab] = useState<"mine" | "discover">("mine");
   const [search, setSearch] = useState("");
   const [codeResult, setCodeResult] = useState<ChatRoom | null>(null);
@@ -414,14 +416,13 @@ function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
               onClick={(e) => { e.stopPropagation(); handleJoinPublic(room); }}
               className="bg-[#86d1ea] text-[#0f1416] text-[10px] font-bold px-2.5 py-1 rounded-lg"
             >
-              Join
+              {t("chat.join")}
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); hideRoom(room.id); }}
               className="text-white/40 text-[9px] hover:text-white/70"
-              title="Hide this room"
             >
-              Hide ✕
+              {t("chat.hide")}
             </button>
           </div>
         )}
@@ -437,7 +438,7 @@ function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search rooms or enter a join code…"
+          placeholder={t("chat.searchRooms")}
           className="flex-1 bg-transparent text-white text-xs outline-none placeholder-white/30"
         />
         {search && <button onClick={() => setSearch("")} className="text-white/50 text-xs">✕</button>}
@@ -461,7 +462,7 @@ function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
             disabled={joining}
             className="bg-[#86d1ea] text-[#0f1416] text-xs font-bold px-3 py-1.5 rounded-xl flex-shrink-0 disabled:opacity-50"
           >
-            {joining ? "Joining…" : codeResult.isMember ? "Open" : "Join"}
+            {joining ? t("chat.joining") : codeResult.isMember ? t("chat.open") : t("chat.join")}
           </button>
         </div>
       )}
@@ -476,14 +477,14 @@ function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
           className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all"
           style={tab === "mine" ? { background: "#86d1ea", color: "#0f1416" } : { color: "#92A08A" }}
         >
-          My Rooms ({myRooms.length})
+          {t("chat.myRooms")} ({myRooms.length})
         </button>
         <button
           onClick={() => setTab("discover")}
           className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all"
           style={tab === "discover" ? { background: "#86d1ea", color: "#0f1416" } : { color: "#92A08A" }}
         >
-          Discover ({discover.length})
+          {t("chat.discover")} ({discover.length})
         </button>
       </div>
 
@@ -491,8 +492,8 @@ function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
         <>
           {pinned.length > 0 && (
             <div>
-              <p className="text-white/40 text-[9px] uppercase tracking-widest mb-2 px-1">Pinned</p>
-              <div className="flex flex-col gap-2">
+              <p className="text-white/40 text-[9px] uppercase tracking-widest mb-2 px-1">{t("chat.pinned")}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {pinned.map((r) => <RoomRow key={r.id} room={r} mode="mine" />)}
               </div>
             </div>
@@ -500,9 +501,9 @@ function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
           {others.length > 0 && (
             <div>
               <p className="text-white/40 text-[9px] uppercase tracking-widest mb-2 px-1">
-                {pinned.length > 0 ? "Other Rooms" : "Rooms"}
+                {pinned.length > 0 ? t("chat.otherRooms") : t("chat.rooms")}
               </p>
-              <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {others.map((r) => <RoomRow key={r.id} room={r} mode="mine" />)}
               </div>
             </div>
@@ -510,9 +511,9 @@ function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
           {myRooms.length === 0 && !codeResult && (
             <div className="flex flex-col items-center py-8 gap-2">
               <span className="text-2xl">💬</span>
-              <p className="text-white/60 text-xs font-medium">No rooms yet</p>
+              <p className="text-white/60 text-xs font-medium">{t("chat.noRoomsYet")}</p>
               <p className="text-white/40 text-[10px] text-center">
-                Join a public room from Discover,<br />enter a join code above, or create your own.
+                {t("chat.noRoomsHint")}
               </p>
             </div>
           )}
@@ -522,15 +523,15 @@ function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
       {tab === "discover" && (
         <>
           {discover.length > 0 ? (
-            <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {discover.map((r) => <RoomRow key={r.id} room={r} mode="discover" />)}
             </div>
           ) : (
             !codeResult && (
               <div className="flex flex-col items-center py-8 gap-2">
                 <span className="text-2xl">🌐</span>
-                <p className="text-white/60 text-xs font-medium">Nothing to discover</p>
-                <p className="text-white/40 text-[10px] text-center">No public rooms to join right now.</p>
+                <p className="text-white/60 text-xs font-medium">{t("chat.nothingDiscover")}</p>
+                <p className="text-white/40 text-[10px] text-center">{t("chat.noPublicRooms")}</p>
               </div>
             )
           )}
@@ -550,7 +551,7 @@ function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
         className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-white/15 text-white/50 text-xs active:bg-white/5 transition-colors"
       >
         <span className="text-lg">+</span>
-        <span>Create a new room</span>
+        <span>{t("chat.createRoom")}</span>
       </button>
     </div>
   );
@@ -568,6 +569,7 @@ function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, onDeleted
   onDeleted: (roomId: string) => void;
   onPinToggle: (room: ChatRoom) => void;
 }) {
+  const { t } = useI18n();
   const { messages, onlineCount, connected, initMessages, appendOptimistic, confirmMessage } =
     useChatSocket(room.id);
   const [input, setInput] = useState("");
@@ -663,7 +665,7 @@ function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, onDeleted
   const displayOnline = connected ? onlineCount : 0;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full w-full md:max-w-3xl md:mx-auto">
       {/* Room header */}
       <div className="flex items-center gap-3 mb-3 flex-shrink-0">
         <button
@@ -687,7 +689,7 @@ function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, onDeleted
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1">
               <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-green-400 animate-pulse" : "bg-white/20"}`} />
-              <span className="text-[9px] text-white/40">{displayOnline} online</span>
+              <span className="text-[9px] text-white/40">{displayOnline} {t("common.online")}</span>
             </div>
           </div>
         </div>
@@ -707,7 +709,7 @@ function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, onDeleted
               onClick={() => { navigator.clipboard?.writeText(room.joinCode ?? ""); setMenuOpen(false); }}
               className="w-full flex items-center justify-between px-4 py-3 text-left border-b border-white/5 active:bg-white/5"
             >
-              <span className="text-white/80 text-xs">Join code</span>
+              <span className="text-white/80 text-xs">{t("chat.joinCode")}</span>
               <span className="text-[#86d1ea] text-xs font-bold tracking-[0.2em]">{room.joinCode} 📋</span>
             </button>
           )}
@@ -715,21 +717,21 @@ function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, onDeleted
             onClick={() => { onPinToggle(room); setMenuOpen(false); }}
             className="w-full flex items-center justify-between px-4 py-3 text-left border-b border-white/5 active:bg-white/5"
           >
-            <span className="text-white/80 text-xs">{room.isPinned ? "Unpin room" : "Pin room"}</span>
+            <span className="text-white/80 text-xs">{room.isPinned ? t("chat.unpinRoom") : t("chat.pinRoom")}</span>
             <span className="text-xs">📌</span>
           </button>
           <button
             onClick={() => { setShowMembers(true); setMenuOpen(false); }}
             className="w-full flex items-center justify-between px-4 py-3 text-left border-b border-white/5 active:bg-white/5"
           >
-            <span className="text-white/80 text-xs">Members</span>
+            <span className="text-white/80 text-xs">{t("chat.membersMenu")}</span>
             <span className="text-white/40 text-xs">{room.memberCount} 👥</span>
           </button>
           <button
             onClick={handleLeave}
             className="w-full flex items-center justify-between px-4 py-3 text-left border-b border-white/5 active:bg-white/5"
           >
-            <span className="text-orange-400 text-xs">Leave room</span>
+            <span className="text-orange-400 text-xs">{t("chat.leaveRoom")}</span>
             <span className="text-xs">🚪</span>
           </button>
           {isAdmin && (
@@ -737,7 +739,7 @@ function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, onDeleted
               onClick={handleDelete}
               className="w-full flex items-center justify-between px-4 py-3 text-left active:bg-white/5"
             >
-              <span className="text-red-400 text-xs">Delete room (admin)</span>
+              <span className="text-red-400 text-xs">{t("chat.deleteRoom")}</span>
               <span className="text-xs">🗑️</span>
             </button>
           )}
@@ -766,7 +768,7 @@ function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, onDeleted
               <div className="flex flex-col items-center justify-center py-10 gap-2">
                 <span className="text-3xl">{room.icon}</span>
                 <p className="text-white text-xs font-medium">{room.name}</p>
-                <p className="text-white/50 text-[10px] text-center">{room.description}<br />Be the first to say something!</p>
+                <p className="text-white/50 text-[10px] text-center">{room.description}<br />{t("chat.beFirst")}</p>
               </div>
             )}
             {messages.map((msg) => (
@@ -787,7 +789,7 @@ function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, onDeleted
       {replyTo && (
         <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2 mb-2 flex-shrink-0">
           <div className="flex-1 min-w-0">
-            <p className="text-[#86d1ea] text-[9px] font-medium">Replying to @{replyTo.username}</p>
+            <p className="text-[#86d1ea] text-[9px] font-medium">{t("chat.replyingTo")} @{replyTo.username}</p>
             <p className="text-white/50 text-[9px] truncate">{replyTo.text}</p>
           </div>
           <button onClick={() => setReplyTo(null)} className="text-white/50 text-xs">✕</button>
@@ -815,7 +817,7 @@ function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, onDeleted
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
-            placeholder={`Message ${room.name}…`}
+            placeholder={`${t("chat.message")} ${room.name}…`}
             className="flex-1 bg-transparent text-white text-xs outline-none placeholder-white/30"
           />
           <button
@@ -841,6 +843,7 @@ function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, onDeleted
 // ─── ChatTab export ───────────────────────────────────────────────────────────
 
 export function ChatTab({ onUnreadChange }: { onUnreadChange?: (n: number) => void }) {
+  const { t } = useI18n();
   const { user } = useAuth();
   const currentUserId = user?.id ?? "";
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
@@ -924,12 +927,12 @@ export function ChatTab({ onUnreadChange }: { onUnreadChange?: (n: number) => vo
           <div />
         ) : (
           <>
-            <p className="text-white/60 text-xs">{rooms.length} rooms available</p>
+            <p className="text-white/60 text-xs">{rooms.length} {t("chat.roomsAvailable")}</p>
             <button
               onClick={() => setShowCreate(true)}
               className="flex items-center gap-1 bg-[#86d1ea] text-[#0f1416] text-xs font-bold px-3 py-1.5 rounded-xl"
             >
-              + New Room
+              {t("chat.newRoom")}
             </button>
           </>
         )}

@@ -10,10 +10,11 @@ import { nhlLogoUrl, probToOdds } from "../data/teamEmoji";
 import { TennisStatsContent } from "./TennisStatsPage";
 import { PlayersTab } from "./PlayersTab";
 import { LastNGamesSection } from "./LastNGamesSection";
+import { useI18n } from "../i18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-const filterTabs = ["By Team", "By Game", "By Player"];
+const filterTabKeys = ["stats.byTeam", "stats.byGame", "stats.byPlayer"];
 
 type Subject = { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 interface AddSheetState { open: boolean; subject?: Subject }
@@ -61,6 +62,7 @@ function TeamCard({ team, onClick, onAdd, accent }: { team: UITeam; onClick: () 
 }
 
 function GameCard({ game, getTeamById, onClick, onAdd, accent }: { game: UIGame; getTeamById: (id: string) => UITeam | undefined; onClick: () => void; onAdd: (e: React.MouseEvent) => void; accent: string }) {
+  const { t } = useI18n();
   const team1 = getTeamById(game.team1Id);
   const team2 = getTeamById(game.team2Id);
   if (!team1 || !team2) return null;
@@ -98,13 +100,14 @@ function GameCard({ game, getTeamById, onClick, onAdd, accent }: { game: UIGame;
       </div>
       <div className="flex items-center justify-between">
         <span className="text-[#8a9ea6] text-[10px]">{game.venue ?? ""}</span>
-        <span className="text-[#bfc8cc] text-[10px]" style={{ color: accent }}>View bets ›</span>
+        <span className="text-[#bfc8cc] text-[10px]" style={{ color: accent }}>{t("stats.viewBets")}</span>
       </div>
     </button>
   );
 }
 
 function SeasonFutureCard({ future, accent, onNavigate }: { future: LocalFuture; accent: string; onNavigate: () => void }) {
+  const { t } = useI18n();
   const isHigh = future.probability >= 20;
   return (
     <button
@@ -116,7 +119,7 @@ function SeasonFutureCard({ future, accent, onNavigate }: { future: LocalFuture;
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-0.5">
             <span className="text-[9px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">
-              {future.propType === "cup" ? "Stanley Cup" : future.propType === "conf" ? "Conference" : "Futures"}
+              {future.propType === "cup" ? t("stats.stanleyCup") : future.propType === "conf" ? t("stats.conference") : t("stats.futuresTag")}
             </span>
           </div>
           <p className="text-white text-sm font-medium truncate">{future.team}</p>
@@ -141,6 +144,7 @@ function SeasonFutureCard({ future, accent, onNavigate }: { future: LocalFuture;
 
 export function StatsPage() {
   const { sport, theme } = useSport();
+  const { t } = useI18n();
   const accent = theme.accent;
   const [activeFilter, setActiveFilter] = useState(0);
   const [search, setSearch] = useState("");
@@ -172,7 +176,7 @@ export function StatsPage() {
             id: `${abbr.toLowerCase()}-cup`,
             team: entry.team.name,
             logo: nhlLogoUrl(abbr),
-            propLabel: "Win Stanley Cup 2026",
+            propLabel: t("stats.winCup"),
             propType: "cup",
             probability: Math.max(5, Math.min(60, prob)),
             oddsLabel: probToOdds(Math.max(5, Math.min(60, prob))),
@@ -180,7 +184,8 @@ export function StatsPage() {
         }));
       })
       .catch(() => { setFutures([]); });
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t]);
 
   const filteredTeams = teams.filter((t) =>
     !search || t.name.toLowerCase().includes(search.toLowerCase()) || t.abbr.toLowerCase().includes(search.toLowerCase())
@@ -194,12 +199,12 @@ export function StatsPage() {
 
   if (sport === "tennis") {
     return (
-      <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] mx-auto relative z-10">
+      <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] md:max-w-5xl mx-auto relative z-10 w-full">
         <header className="px-4 pt-12 pb-3 bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>Statistics</h1>
-              <p className="text-[#bfc8cc] text-xs">Tennis</p>
+              <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>{t("stats.title")}</h1>
+              <p className="text-[#bfc8cc] text-xs">{t("stats.tennis")}</p>
             </div>
           </div>
         </header>
@@ -212,42 +217,42 @@ export function StatsPage() {
   }
 
   if (loading) return (
-    <div className="flex flex-col min-h-screen bg-transparent text-white items-center justify-center max-w-[430px] mx-auto relative z-10">
+    <div className="flex flex-col min-h-screen bg-transparent text-white items-center justify-center max-w-[430px] md:max-w-5xl mx-auto relative z-10 w-full">
       <div className="w-12 h-12 rounded-full bg-[#131A12] border border-white/20 flex items-center justify-center">
         <div className="w-5 h-5 rounded-full bg-[#86d1ea]/20 border border-[#86d1ea]/40 animate-pulse" />
       </div>
-      <p className="text-[#bfc8cc] text-sm mt-3">Loading NHL data...</p>
+      <p className="text-[#bfc8cc] text-sm mt-3">{t("stats.loadingNHL")}</p>
       <BottomNav />
     </div>
   );
 
   if (error) return (
-    <div className="flex flex-col min-h-screen bg-transparent text-white items-center justify-center max-w-[430px] mx-auto relative z-10">
+    <div className="flex flex-col min-h-screen bg-transparent text-white items-center justify-center max-w-[430px] md:max-w-5xl mx-auto relative z-10 w-full">
       <p className="text-red-400 text-sm">{error}</p>
       <BottomNav />
     </div>
   );
 
   return (
-    <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] mx-auto relative z-10">
+    <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] md:max-w-5xl mx-auto relative z-10 w-full">
       <header className="px-4 pt-12 pb-3 bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>Statistics</h1>
-            <p className="text-[#bfc8cc] text-xs">AI-powered predictions</p>
+            <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>{t("stats.title")}</h1>
+            <p className="text-[#bfc8cc] text-xs">{t("stats.subtitle")}</p>
           </div>
         </div>
         <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2.5 mb-3">
           <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
           <input className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#bfc8cc]"
-            placeholder="Search team, player, game..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            placeholder={t("stats.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
           {search && <button onClick={() => setSearch("")} className="text-[#bfc8cc] text-xs">×</button>}
         </div>
         <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-0.5">
-          {filterTabs.map((tab, i) => (
-            <button key={tab} onClick={() => setActiveFilter(i)} className="flex-shrink-0 px-4 py-2 rounded-full text-xs font-medium transition-all"
+          {filterTabKeys.map((tabKey, i) => (
+            <button key={tabKey} onClick={() => setActiveFilter(i)} className="flex-shrink-0 px-4 py-2 rounded-full text-xs font-medium transition-all"
               style={activeFilter === i ? { backgroundColor: accent, color: "#0f1416", fontWeight: 700 } : { backgroundColor: "#1B2419", color: "#bfc8cc" }}>
-              {tab}
+              {t(tabKey)}
             </button>
           ))}
         </div>
@@ -256,23 +261,23 @@ export function StatsPage() {
       <div className="flex-1 px-4 pb-28 pt-3 overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
           <span className="text-[#bfc8cc] text-xs">
-            {activeFilter === 0 && `${filteredTeams.length} teams`}
+            {activeFilter === 0 && `${filteredTeams.length} ${t("stats.teams")}`}
             {activeFilter === 1 && (
               <span className="flex items-center gap-2">
-                <span>{filteredGames.length} matches</span>
+                <span>{t("stats.matches", { n: filteredGames.length })}</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1B2419] text-[#bfc8cc]">{gamesLabel}</span>
               </span>
             )}
-            {activeFilter === 2 && "Players"}
+            {activeFilter === 2 && t("stats.players")}
           </span>
           {activeFilter < 2 && (
-            <span className="text-xs" style={{ color: accent }}>Tap + to add to slip</span>
+            <span className="text-xs" style={{ color: accent }}>{t("stats.tapToAdd")}</span>
           )}
         </div>
 
         {/* ── By Team ── */}
         {activeFilter === 0 && (
-          <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
             {filteredTeams.length > 0 ? (
               filteredTeams.map((team) => (
                 <TeamCard key={team.id} team={team} accent={accent}
@@ -280,12 +285,12 @@ export function StatsPage() {
                   onAdd={() => openAdd({ id: team.id, type: "team", name: team.name, logo: team.logo, subtitle: team.record })} />
               ))
             ) : (
-              <div className="flex flex-col items-center justify-center py-12 gap-3">
+              <div className="col-span-full flex flex-col items-center justify-center py-12 gap-3">
                 <div className="w-12 h-12 rounded-full bg-[#131A12] border border-white/20 flex items-center justify-center">
                   <div className="w-5 h-5 rounded-full bg-[#86d1ea]/20 border border-[#86d1ea]/40 animate-pulse" />
                 </div>
-                <p className="text-white text-sm font-medium">Loading team data...</p>
-                <p className="text-[#bfc8cc] text-xs text-center">Make sure the backend is running at localhost:3001</p>
+                <p className="text-white text-sm font-medium">{t("stats.loadingTeams")}</p>
+                <p className="text-[#bfc8cc] text-xs text-center">{t("stats.loadingTeamsHint")}</p>
               </div>
             )}
           </div>
@@ -295,7 +300,7 @@ export function StatsPage() {
         {activeFilter === 1 && (
           <div className="flex flex-col gap-3">
             {filteredGames.length > 0 ? (
-              <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {filteredGames.map((game) => {
                   const t1 = getTeamById(game.team1Id); const t2 = getTeamById(game.team2Id);
                   if (!t1 || !t2) return null;
@@ -309,14 +314,14 @@ export function StatsPage() {
                 <div className="w-10 h-10 rounded-full bg-[#131A12] border border-white/20 flex items-center justify-center">
                   <div className="w-4 h-4 rounded-full bg-[#86d1ea]/20 border border-[#86d1ea]/40" />
                 </div>
-                <p className="text-white text-sm font-medium">No games scheduled today</p>
-                <p className="text-[#bfc8cc] text-xs text-center">Check back on game nights, or explore season futures below</p>
+                <p className="text-white text-sm font-medium">{t("stats.noGames")}</p>
+                <p className="text-[#bfc8cc] text-xs text-center">{t("stats.noGamesHint")}</p>
               </div>
             )}
 
             <div>
-              <p className="text-[#bfc8cc] text-xs mb-2 uppercase tracking-wider font-medium">Season Futures</p>
-              <div className="flex flex-col gap-2">
+              <p className="text-[#bfc8cc] text-xs mb-2 uppercase tracking-wider font-medium">{t("stats.futures")}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
                 {futures.length > 0 ? (
                   [...futures]
                     .sort((a, b) => b.probability - a.probability)
@@ -325,7 +330,7 @@ export function StatsPage() {
                         onNavigate={() => navigate(`/stats/prediction/future/${future.id}`)} />
                     ))
                 ) : (
-                  <p className="text-[#bfc8cc] text-xs text-center py-4">Loading standings data...</p>
+                  <p className="text-[#bfc8cc] text-xs text-center py-4">{t("stats.loadingStandings")}</p>
                 )}
               </div>
             </div>

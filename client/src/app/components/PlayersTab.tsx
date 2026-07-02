@@ -3,9 +3,11 @@ import { useNavigate } from "react-router";
 import { UITeam } from "../hooks/useNHLData";
 import { nhlApiService } from "../services/nhlApiService";
 import { nhlLogoUrl } from "../data/teamEmoji";
+import { useI18n } from "../i18n";
 
 export function PlayersTab({ teams, accent }: { teams: UITeam[]; accent: string }) {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [teamPlayers, setTeamPlayers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -26,7 +28,7 @@ export function PlayersTab({ teams, accent }: { teams: UITeam[]; accent: string 
     <div className="flex flex-col gap-4">
       {/* Team picker */}
       <div className="flex flex-col gap-2">
-        <p className="text-[#8a9ea6] text-xs uppercase tracking-wider font-medium">Select a team</p>
+        <p className="text-[#8a9ea6] text-xs uppercase tracking-wider font-medium">{t("players.selectTeam")}</p>
         <div className="flex gap-2 flex-wrap">
           {teams.map(team => (
             <button
@@ -48,12 +50,12 @@ export function PlayersTab({ teams, accent }: { teams: UITeam[]; accent: string 
       {selectedTeam && (
         <div className="flex flex-col gap-2">
           <p className="text-[#8a9ea6] text-xs uppercase tracking-wider font-medium">
-            {selectedTeam.name} · {loading ? "loading…" : `${teamPlayers.length} players`}
+            {selectedTeam.name} · {loading ? t("players.loading") : t("players.count", { n: teamPlayers.length })}
           </p>
           {loading ? (
             [1,2,3,4,5].map(i => <div key={i} className="h-16 bg-[#131A12] rounded-2xl animate-pulse" />)
           ) : teamPlayers.length === 0 ? (
-            <p className="text-[#8a9ea6] text-sm text-center py-8">No players found for {selectedTeam.abbr}</p>
+            <p className="text-[#8a9ea6] text-sm text-center py-8">{t("players.none", { abbr: selectedTeam.abbr })}</p>
           ) : (
             teamPlayers.map((p: any) => {
               const id = String(p.id);
@@ -85,7 +87,7 @@ export function PlayersTab({ teams, accent }: { teams: UITeam[]; accent: string 
       )}
 
       {!selectedTeam && !loading && (
-        <p className="text-[#4a6070] text-sm text-center py-12">← Pick a team to see its players</p>
+        <p className="text-[#4a6070] text-sm text-center py-12">{t("players.pickHint")}</p>
       )}
     </div>
   );
