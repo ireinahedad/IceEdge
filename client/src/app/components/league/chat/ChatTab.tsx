@@ -5,7 +5,7 @@ import { MessageBubble } from "./MessageBubble";
 import { profileApiService } from "../../../services/userService";
 import { useChatSocket } from "../../../hooks/useChatSocket";
 import { useAuth } from "../../../context/AuthContext";
-import type { ChatRoom, ChatMessage, ChatRoomMember } from "../../../types/user";
+import type { ChatRoom, ChatMessage, ChatRoomMember, UserProfile } from "../../../types/user";
 
 // ─── Tag styles ───────────────────────────────────────────────────────────────
 
@@ -282,6 +282,8 @@ function MembersModal({ room, currentUserId, onClose }: {
 
 // ─── Room list ────────────────────────────────────────────────────────────────
 
+const HIDDEN_ROOMS_KEY = "iceedge_hidden_rooms";
+
 function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
   rooms: ChatRoom[];
   onSelect: (room: ChatRoom) => void;
@@ -289,19 +291,46 @@ function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
   onPinToggle: (room: ChatRoom) => void;
   onJoined: (room: ChatRoom) => void;
 }) {
+  const [tab, setTab] = useState<"mine" | "discover">("mine");
   const [search, setSearch] = useState("");
   const [codeResult, setCodeResult] = useState<ChatRoom | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
+  const [hiddenIds, setHiddenIds] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(HIDDEN_ROOMS_KEY) ?? "[]"); } catch { return []; }
+  });
+
+  function hideRoom(id: string) {
+    const next = [...hiddenIds, id];
+    setHiddenIds(next);
+    try { localStorage.setItem(HIDDEN_ROOMS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  }
+  function resetHidden() {
+    setHiddenIds([]);
+    try { localStorage.setItem(HIDDEN_ROOMS_KEY, "[]"); } catch { /* ignore */ }
+  }
 
   const q = search.trim().toLowerCase();
-  const filtered = rooms.filter((r) => !q || r.name.toLowerCase().includes(q) || (r.description ?? "").toLowerCase().includes(q));
-  const pinned = filtered.filter((r) => r.isPinned);
-  const others = filtered.filter((r) => !r.isPinned);
+  const matches = (r: ChatRoom) => !q || r.name.toLowerCase().includes(q) || (r.description ?? "").toLowerCase().includes(q);
+
+  // My Rooms = rooms I'm a member of · Discover = public rooms I haven't joined
+  const myRooms  = rooms.filter((r) => r.isMember && matches(r));
+  const discover = rooms.filter((r) => !r.isMember && !hiddenIds.includes(r.id) && matches(r));
+  const hiddenCount = rooms.filter((r) => !r.isMember && hiddenIds.includes(r.id)).length;
+
+  const pinned = myRooms.filter((r) => r.isPinned);
+  const others = myRooms.filter((r) => !r.isPinned);
 
   // If the search looks like a join code (4-10 alphanumerics, no spaces) and
   // matches no visible room, offer a code lookup.
-  const looksLikeCode = /^[a-zA-Z0-9]{4,10}$/.test(search.trim()) && filtered.length === 0;
+  const looksLikeCode = /^[a-zA-Z0-9]{4,10}$/.test(search.trim()) && myRooms.length === 0 && discover.length === 0;
+
+  async function handleJoinPublic(room: ChatRoom) {
+    try {
+      const joined = await profileApiService.joinRoom(room.id);
+      onJoined(joined);
+    } catch { /* non-blocking */ }
+  }
 
   useEffect(() => {
     setCodeResult(null);
@@ -339,7 +368,7 @@ function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
     return `${Math.round(diff / 1440)}d`;
   }
 
-  function RoomRow({ room }: { room: ChatRoom }) {
+  function RoomRow({ room, mode }: { room: ChatRoom; mode: "mine" | "discover" }) {
     return (
       <div className="w-full flex items-center gap-3 px-4 py-3 bg-white/5 backdrop-blur-sm border border-white/8 rounded-2xl active:bg-white/10 transition-all">
         <button onClick={() => onSelect(room)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
@@ -368,16 +397,34 @@ function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
           </div>
         </button>
 
-        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-          <span className="text-white/40 text-[9px]">{timeAgo(room.lastMessageAt)}</span>
-          <button
-            onClick={(e) => { e.stopPropagation(); onPinToggle(room); }}
-            className={`text-sm transition-opacity ${room.isPinned ? "opacity-100" : "opacity-30"}`}
-            title={room.isPinned ? "Unpin" : "Pin"}
-          >
-            📌
-          </button>
-        </div>
+        {mode === "mine" ? (
+          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+            <span className="text-white/40 text-[9px]">{timeAgo(room.lastMessageAt)}</span>
+            <button
+              onClick={(e) => { e.stopPropagation(); onPinToggle(room); }}
+              className={`text-sm transition-opacity ${room.isPinned ? "opacity-100" : "opacity-30"}`}
+              title={room.isPinned ? "Unpin" : "Pin"}
+            >
+              📌
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); handleJoinPublic(room); }}
+              className="bg-[#86d1ea] text-[#0f1416] text-[10px] font-bold px-2.5 py-1 rounded-lg"
+            >
+              Join
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); hideRoom(room.id); }}
+              className="text-white/40 text-[9px] hover:text-white/70"
+              title="Hide this room"
+            >
+              Hide ✕
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -422,24 +469,82 @@ function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
         <p className="text-white/40 text-[10px] text-center">{codeError}</p>
       )}
 
-      {pinned.length > 0 && (
-        <div>
-          <p className="text-white/40 text-[9px] uppercase tracking-widest mb-2 px-1">Pinned</p>
-          <div className="flex flex-col gap-2">
-            {pinned.map((r) => <RoomRow key={r.id} room={r} />)}
-          </div>
-        </div>
+      {/* Tabs: My Rooms / Discover */}
+      <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+        <button
+          onClick={() => setTab("mine")}
+          className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all"
+          style={tab === "mine" ? { background: "#86d1ea", color: "#0f1416" } : { color: "#92A08A" }}
+        >
+          My Rooms ({myRooms.length})
+        </button>
+        <button
+          onClick={() => setTab("discover")}
+          className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all"
+          style={tab === "discover" ? { background: "#86d1ea", color: "#0f1416" } : { color: "#92A08A" }}
+        >
+          Discover ({discover.length})
+        </button>
+      </div>
+
+      {tab === "mine" && (
+        <>
+          {pinned.length > 0 && (
+            <div>
+              <p className="text-white/40 text-[9px] uppercase tracking-widest mb-2 px-1">Pinned</p>
+              <div className="flex flex-col gap-2">
+                {pinned.map((r) => <RoomRow key={r.id} room={r} mode="mine" />)}
+              </div>
+            </div>
+          )}
+          {others.length > 0 && (
+            <div>
+              <p className="text-white/40 text-[9px] uppercase tracking-widest mb-2 px-1">
+                {pinned.length > 0 ? "Other Rooms" : "Rooms"}
+              </p>
+              <div className="flex flex-col gap-2">
+                {others.map((r) => <RoomRow key={r.id} room={r} mode="mine" />)}
+              </div>
+            </div>
+          )}
+          {myRooms.length === 0 && !codeResult && (
+            <div className="flex flex-col items-center py-8 gap-2">
+              <span className="text-2xl">💬</span>
+              <p className="text-white/60 text-xs font-medium">No rooms yet</p>
+              <p className="text-white/40 text-[10px] text-center">
+                Join a public room from Discover,<br />enter a join code above, or create your own.
+              </p>
+            </div>
+          )}
+        </>
       )}
-      {others.length > 0 && (
-        <div>
-          <p className="text-white/40 text-[9px] uppercase tracking-widest mb-2 px-1">
-            {pinned.length > 0 ? "Other Rooms" : "Rooms"}
-          </p>
-          <div className="flex flex-col gap-2">
-            {others.map((r) => <RoomRow key={r.id} room={r} />)}
-          </div>
-        </div>
+
+      {tab === "discover" && (
+        <>
+          {discover.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {discover.map((r) => <RoomRow key={r.id} room={r} mode="discover" />)}
+            </div>
+          ) : (
+            !codeResult && (
+              <div className="flex flex-col items-center py-8 gap-2">
+                <span className="text-2xl">🌐</span>
+                <p className="text-white/60 text-xs font-medium">Nothing to discover</p>
+                <p className="text-white/40 text-[10px] text-center">No public rooms to join right now.</p>
+              </div>
+            )
+          )}
+          {hiddenCount > 0 && (
+            <button
+              onClick={resetHidden}
+              className="text-white/40 text-[10px] underline self-center"
+            >
+              Show {hiddenCount} hidden room{hiddenCount > 1 ? "s" : ""}
+            </button>
+          )}
+        </>
       )}
+
       <button
         onClick={onCreateNew}
         className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-white/15 text-white/50 text-xs active:bg-white/5 transition-colors"
@@ -453,9 +558,10 @@ function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }: {
 
 // ─── Active room chat ─────────────────────────────────────────────────────────
 
-function RoomChat({ room, currentUserId, onBack, onUpdate, onLeft, onDeleted, onPinToggle }: {
+function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, onDeleted, onPinToggle }: {
   room: ChatRoom;
   currentUserId: string;
+  me: UserProfile | null;
   onBack: () => void;
   onUpdate: (updated: ChatRoom) => void;
   onLeft: (roomId: string) => void;
@@ -495,14 +601,15 @@ function RoomChat({ room, currentUserId, onBack, onUpdate, onLeft, onDeleted, on
     setInput("");
     const tempId = `optimistic_${Date.now()}`;
 
-    // Optimistic: show immediately
+    // Optimistic: show immediately using the user's REAL profile
     const optimistic: ChatMessage = {
       id: tempId,
       userId: currentUserId,
-      username: "me",
-      displayName: "You",
-      avatar: "👤",
-      tier: "rookie",
+      username: me?.username ?? "",
+      displayName: me?.displayName ?? me?.username ?? "",
+      avatar: me?.avatar ?? "👤",
+      avatarUrl: me?.avatarUrl ?? null,
+      tier: me?.tier ?? "rookie",
       text,
       sentAt: new Date().toISOString(),
       reactions: [],
@@ -552,7 +659,8 @@ function RoomChat({ room, currentUserId, onBack, onUpdate, onLeft, onDeleted, on
     }
   }
 
-  const displayOnline = onlineCount > 0 ? onlineCount : room.memberCount;
+  // Real-time count from the socket only — no fabricated fallback
+  const displayOnline = connected ? onlineCount : 0;
 
   return (
     <div className="flex flex-col h-full">
@@ -739,6 +847,7 @@ export function ChatTab({ onUnreadChange }: { onUnreadChange?: (n: number) => vo
   const [activeRoom, setActiveRoom] = useState<ChatRoom | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [me, setMe] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     profileApiService.getChatRooms().then((r) => {
@@ -746,6 +855,8 @@ export function ChatTab({ onUnreadChange }: { onUnreadChange?: (n: number) => vo
     }).catch(() => {}).finally(() => {
       setLoading(false);
     });
+    // Load the real profile once — used for optimistic message rendering
+    profileApiService.getProfile().then(setMe).catch(() => {});
   }, []);
 
   function handleSelectRoom(room: ChatRoom) {
@@ -828,6 +939,7 @@ export function ChatTab({ onUnreadChange }: { onUnreadChange?: (n: number) => vo
         <RoomChat
           room={activeRoom}
           currentUserId={currentUserId}
+          me={me}
           onBack={() => setActiveRoom(null)}
           onUpdate={handleUpdateRoom}
           onLeft={handleLeft}

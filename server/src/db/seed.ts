@@ -20,8 +20,7 @@ export async function seedAll(): Promise<void> {
     await seedNHLPlayerStats(client);
     await seedUserProfiles(client);
     await seedUserBets(client);
-    await seedChatRooms(client);
-    await seedChatMessages(client);
+    // Chat is NOT seeded: rooms, messages and members are real user data only.
 
     await client.query('COMMIT');
     console.log('[Seed] ✓ All data seeded successfully');
@@ -339,96 +338,6 @@ async function seedUserBets(client: any): Promise<void> {
     );
   }
   console.log('[Seed] ✓ User Bets');
-}
-
-// ============================================================
-//  CHAT ROOMS
-// ============================================================
-
-async function seedChatRooms(client: any): Promise<void> {
-  const rooms = [
-    { id: 'general',  name: 'General',        icon: '💬', desc: 'General hockey talk & banter',          isLive: false, isPinned: true,  memberCount: 312 },
-    { id: 'picks',    name: 'Daily Picks',     icon: '🎯', desc: 'Share your best picks of the day',      isLive: false, isPinned: true,  memberCount: 187 },
-    { id: 'analysis', name: 'Deep Analysis',   icon: '📊', desc: 'Stats, models & deep dives only',       isLive: false, isPinned: true,  memberCount: 94 },
-    { id: 'live',     name: 'Live Reactions',  icon: '🔴', desc: 'In-game reactions & live updates',      isLive: true,  isPinned: true,  memberCount: 228 },
-    { id: 'playoffs', name: 'Playoff Watch',   icon: '🏆', desc: 'Playoff bracket & series predictions',  isLive: false, isPinned: false, memberCount: 156 },
-    { id: 'props',    name: 'Player Props',    icon: '⭐', desc: 'Player prop bets & anytime scorers',    isLive: false, isPinned: false, memberCount: 141 },
-  ];
-
-  for (const r of rooms) {
-    await client.query(
-      `INSERT INTO chat_rooms (id, name, icon, description, is_live, is_pinned, member_count)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT (id) DO NOTHING`,
-      [r.id, r.name, r.icon, r.desc, r.isLive, r.isPinned, r.memberCount]
-    );
-  }
-  console.log('[Seed] ✓ Chat Rooms');
-}
-
-// ============================================================
-//  CHAT MESSAGES
-// ============================================================
-
-async function seedChatMessages(client: any): Promise<void> {
-  const msgs = [
-    // general
-    { id: 'm1', room: 'general',  username: 'hockey_oracle',  display: 'The Oracle',   avatar: '🔮', tier: 'legend', text: 'Good slate tonight. BOS at home is an obvious lean but the line is juicy.',              sentAt: '2026-04-27T18:42:00Z', tag: null,       replyUser: null,       replyText: null },
-    { id: 'm2', room: 'general',  username: 'icepick_pro',    display: 'IcePick Pro',  avatar: '🏆', tier: 'legend', text: 'VGK home ice is real. Their 5v5 numbers at T-Mobile this season are elite.',             sentAt: '2026-04-27T18:45:00Z', tag: null,       replyUser: null,       replyText: null },
-    { id: 'm3', room: 'general',  username: 'jdupont',        display: 'Jean Dupont',  avatar: '🏒', tier: 'sharp',  text: 'Anyone on the MTL moneyline? Model says 46% but they\'ve been sneaky good on the road.', sentAt: '2026-04-27T18:48:00Z', tag: null,       replyUser: null,       replyText: null },
-    { id: 'm4', room: 'general',  username: 'slapshot_stats', display: 'Slapshot',     avatar: '🎯', tier: 'sharp',  text: 'Pastrnak shots over is always worth looking at when BOS plays NYR.',                    sentAt: '2026-04-27T18:51:00Z', tag: null,       replyUser: 'jdupont',  replyText: 'Anyone on the MTL moneyline?' },
-    // picks
-    { id: 'p1', room: 'picks',    username: 'hockey_oracle',  display: 'The Oracle',   avatar: '🔮', tier: 'legend', text: '🎯 LOCK: BOS ML (-140) — Home, rested, NYR missing two D-men.',                         sentAt: '2026-04-27T17:30:00Z', tag: 'pick',     replyUser: null,       replyText: null },
-    { id: 'p2', room: 'picks',    username: 'icepick_pro',    display: 'IcePick Pro',  avatar: '🏆', tier: 'legend', text: 'VGK -1.5 (+115). Golden Knights are 18-6 ATS as home favorites.',                      sentAt: '2026-04-27T17:45:00Z', tag: 'pick',     replyUser: null,       replyText: null },
-    // analysis
-    { id: 'a1', room: 'analysis', username: 'faceoff_king',   display: 'Faceoff King', avatar: '👑', tier: 'analyst',text: 'Deep dive BOS vs NYR: Boston 12-3 in last 15 home games. NYR PK is 28th in league.',    sentAt: '2026-04-27T16:00:00Z', tag: 'analysis', replyUser: null,       replyText: null },
-    // live
-    { id: 'l1', room: 'live',     username: 'hockey_oracle',  display: 'The Oracle',   avatar: '🔮', tier: 'legend', text: 'BOS 3-2 in the 3rd. My ML is alive.',                                                  sentAt: '2026-04-27T21:10:00Z', tag: 'hot',      replyUser: null,       replyText: null },
-    { id: 'l2', room: 'live',     username: 'jdupont',        display: 'Jean Dupont',  avatar: '🏒', tier: 'sharp',  text: 'GOAL! McDavid scores on the PP! Anytime goal cash 💰',                                  sentAt: '2026-04-27T21:18:00Z', tag: 'hot',      replyUser: null,       replyText: null },
-    // playoffs
-    { id: 'pl1',room: 'playoffs', username: 'puckwizard',     display: 'Puck Wizard',  avatar: '🧙', tier: 'sharp',  text: 'COL in 6 is my bracket pick. Their depth scoring has been elite all season.',           sentAt: '2026-04-26T22:00:00Z', tag: null,       replyUser: null,       replyText: null },
-    // props
-    { id: 'pp1',room: 'props',    username: 'faceoff_king',   display: 'Faceoff King', avatar: '👑', tier: 'analyst',text: 'McDavid anytime goal is always value when EDM plays a weaker goalie.',                  sentAt: '2026-04-26T20:30:00Z', tag: 'pick',     replyUser: null,       replyText: null },
-  ];
-
-  for (const m of msgs) {
-    const userRow = await client.query('SELECT id FROM users WHERE username = $1', [m.username]);
-    const userId = userRow.rows[0]?.id ?? null;
-
-    await client.query(
-      `INSERT INTO chat_messages
-        (id, room_id, user_id, username, display_name, avatar, tier, text, sent_at, tag, reply_to_username, reply_to_text)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       ON CONFLICT (id) DO NOTHING`,
-      [m.id, m.room, userId, m.username, m.display, m.avatar, m.tier,
-       m.text, m.sentAt, m.tag, m.replyUser, m.replyText]
-    );
-  }
-
-  // Reactions
-  const reactions = [
-    { msgId: 'm1', emoji: '🔥', count: 8 }, { msgId: 'm1', emoji: '✅', count: 3 },
-    { msgId: 'm2', emoji: '💯', count: 5 },
-    { msgId: 'm3', emoji: '👀', count: 4 },
-    { msgId: 'm4', emoji: '🎯', count: 6 },
-    { msgId: 'p1', emoji: '🔒', count: 14 },
-    { msgId: 'p2', emoji: '💰', count: 7 },
-    { msgId: 'a1', emoji: '📊', count: 12 },
-    { msgId: 'l1', emoji: '😅', count: 6 },
-    { msgId: 'l2', emoji: '🎉', count: 14 },
-    { msgId: 'pl1',emoji: '🏔️', count: 4 },
-    { msgId: 'pp1',emoji: '✅', count: 7 },
-  ];
-
-  for (const r of reactions) {
-    await client.query(
-      `INSERT INTO chat_reactions (message_id, emoji, count)
-       VALUES ($1,$2,$3)
-       ON CONFLICT (message_id, emoji) DO NOTHING`,
-      [r.msgId, r.emoji, r.count]
-    );
-  }
-  console.log('[Seed] ✓ Chat Messages + Reactions');
 }
 
 // ============================================================

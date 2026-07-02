@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { chatService } from '../services/chat.service';
 import { authenticate } from '../middleware/auth.middleware';
 import { io } from '../socket';
@@ -14,14 +14,43 @@ function uid(req: Request): string {
   return id;
 }
 
+// ─── Per-user rate limiting (in-memory sliding window) ───────────────────────
+// Protects against message spam and join-code brute force.
+
+const rateBuckets = new Map<string, number[]>();
+
+function rateLimit(action: string, max: number, windowMs: number) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const key = `${action}:${(req as any).user?.sub ?? req.ip}`;
+    const now = Date.now();
+    const hits = (rateBuckets.get(key) ?? []).filter((t) => now - t < windowMs);
+    if (hits.length >= max) {
+      return res.status(429).json({ error: 'Too many requests — slow down' });
+    }
+    hits.push(now);
+    rateBuckets.set(key, hits);
+    next();
+  };
+}
+
+// Prune stale buckets every 10 min so memory stays bounded
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, hits] of rateBuckets) {
+    const alive = hits.filter((t) => now - t < 10 * 60_000);
+    if (alive.length === 0) rateBuckets.delete(key);
+    else rateBuckets.set(key, alive);
+  }
+}, 10 * 60_000).unref();
+
 // GET /api/chat/rooms — public rooms + my private rooms (pinned first)
 router.get('/rooms', async (req: Request, res: Response) => {
   try { res.json(await chatService.getRoomsForUser(uid(req))); }
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
-// POST /api/chat/rooms — create (creator becomes admin)
-router.post('/rooms', async (req: Request, res: Response) => {
+// POST /api/chat/rooms — create (creator becomes admin) · max 5/5min
+router.post('/rooms', rateLimit('create', 5, 5 * 60_000), async (req: Request, res: Response) => {
   try {
     const { name, icon, description, isPrivate } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
@@ -31,8 +60,8 @@ router.post('/rooms', async (req: Request, res: Response) => {
   } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
-// GET /api/chat/rooms/lookup?code=ABC123 — search a room by join code
-router.get('/rooms/lookup', async (req: Request, res: Response) => {
+// GET /api/chat/rooms/lookup?code=ABC123 — search a room by join code · max 10/min (anti brute-force)
+router.get('/rooms/lookup', rateLimit('code', 10, 60_000), async (req: Request, res: Response) => {
   try {
     const code = String(req.query.code ?? '');
     if (!code) return res.status(400).json({ error: 'code is required' });
@@ -40,8 +69,8 @@ router.get('/rooms/lookup', async (req: Request, res: Response) => {
   } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
-// POST /api/chat/rooms/join — join by code (public or private)
-router.post('/rooms/join', async (req: Request, res: Response) => {
+// POST /api/chat/rooms/join — join by code (public or private) · max 10/min (anti brute-force)
+router.post('/rooms/join', rateLimit('code', 10, 60_000), async (req: Request, res: Response) => {
   try {
     const { code } = req.body;
     if (!code) return res.status(400).json({ error: 'code is required' });
@@ -103,8 +132,8 @@ router.get('/rooms/:roomId/messages', async (req: Request, res: Response) => {
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
-// POST /api/chat/rooms/:roomId/messages — identity derived server-side
-router.post('/rooms/:roomId/messages', async (req: Request, res: Response) => {
+// POST /api/chat/rooms/:roomId/messages — identity derived server-side · max 10/10s
+router.post('/rooms/:roomId/messages', rateLimit('msg', 10, 10_000), async (req: Request, res: Response) => {
   try {
     const { text, tag, replyTo } = req.body;
     if (!text) return res.status(400).json({ error: 'text is required' });
@@ -116,8 +145,8 @@ router.post('/rooms/:roomId/messages', async (req: Request, res: Response) => {
   } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
-// POST /api/chat/rooms/:roomId/messages/:messageId/reactions
-router.post('/rooms/:roomId/messages/:messageId/reactions', async (req: Request, res: Response) => {
+// POST /api/chat/rooms/:roomId/messages/:messageId/reactions · max 20/10s
+router.post('/rooms/:roomId/messages/:messageId/reactions', rateLimit('react', 20, 10_000), async (req: Request, res: Response) => {
   try {
     const { emoji } = req.body;
     if (!emoji) return res.status(400).json({ error: 'emoji is required' });
