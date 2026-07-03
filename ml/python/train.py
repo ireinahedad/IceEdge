@@ -45,6 +45,21 @@ GAME_FEATURES = [
     "away_pk_pct",
     "home_last10_win_pct",
     "away_last10_win_pct",
+    # Nouvelles features (fetch_data.py v2)
+    "home_home_win_pct",       # record à domicile de l'équipe locale
+    "away_road_win_pct",       # record à l'extérieur des visiteurs
+    "home_streak",             # série signée (+3 = 3 victoires, -2 = 2 défaites)
+    "away_streak",
+    "home_shots_for_pg",
+    "away_shots_for_pg",
+    "home_shots_against_pg",
+    "away_shots_against_pg",
+    "home_faceoff_pct",
+    "away_faceoff_pct",
+    "home_rest_days",
+    "away_rest_days",
+    "home_b2b",                # back-to-back (2e match en 2 soirs)
+    "away_b2b",
 ]
 
 DIFF_FEATURES = [
@@ -54,6 +69,11 @@ DIFF_FEATURES = [
     "pp_diff",
     "pk_diff",
     "form_diff",
+    # Nouveaux diffs
+    "shots_diff",              # volume de tirs net
+    "faceoff_diff",
+    "rest_diff",               # avantage repos
+    "streak_diff",
 ]
 
 ALL_GAME_FEATURES = GAME_FEATURES + DIFF_FEATURES
@@ -69,6 +89,13 @@ TOTALS_FEATURES = [
     "away_pk_pct",
     "gf_diff",
     "ga_diff",
+    # Nouvelles features totaux
+    "home_shots_for_pg",
+    "away_shots_for_pg",
+    "home_shots_against_pg",
+    "away_shots_against_pg",
+    "home_rest_days",
+    "away_rest_days",
 ]
 
 # ── Helpers sans scikit-learn ─────────────────────────────────────────────────
@@ -111,22 +138,45 @@ def add_diff_features(df: pd.DataFrame) -> pd.DataFrame:
     df["pp_diff"]      = df["home_pp_pct"]           - df["away_pp_pct"]
     df["pk_diff"]      = df["home_pk_pct"]           - df["away_pk_pct"]
     df["form_diff"]    = df["home_last10_win_pct"]   - df["away_last10_win_pct"]
+    # Nouveaux diffs (colonnes présentes seulement avec fetch_data.py v2)
+    if "home_shots_for_pg" in df.columns:
+        df["shots_diff"]   = (df["home_shots_for_pg"] - df["home_shots_against_pg"]) \
+                           - (df["away_shots_for_pg"] - df["away_shots_against_pg"])
+    if "home_faceoff_pct" in df.columns:
+        df["faceoff_diff"] = df["home_faceoff_pct"] - df["away_faceoff_pct"]
+    if "home_rest_days" in df.columns:
+        df["rest_diff"]    = df["home_rest_days"]   - df["away_rest_days"]
+    if "home_streak" in df.columns:
+        df["streak_diff"]  = df["home_streak"]      - df["away_streak"]
     return df
+
+
+def filter_available(features: list[str], df: pd.DataFrame, label: str) -> list[str]:
+    """Rétro-compatibilité : n'utilise que les features présentes dans le CSV."""
+    available = [f for f in features if f in df.columns]
+    missing   = [f for f in features if f not in df.columns]
+    if missing:
+        print(f"⚠️  [{label}] {len(missing)} features absentes du CSV "
+              f"(ancien fetch_data.py ?) : {missing}")
+        print(f"   → Relance 'python fetch_data.py' pour le dataset complet.")
+    return available
 
 
 # ── Modèle moneyline ──────────────────────────────────────────────────────────
 
-def train_game_model(train_df: pd.DataFrame, test_df: pd.DataFrame) -> tuple:
+def train_game_model(train_df: pd.DataFrame, test_df: pd.DataFrame,
+                     features: list[str]) -> tuple:
     print("\n🏒 Modèle moneyline (qui gagne ?)")
     print(f"   Train : {len(train_df)} matchs  |  Test : {len(test_df)} matchs")
+    print(f"   Features : {len(features)}")
 
-    X_train = train_df[ALL_GAME_FEATURES].values.astype(np.float32)
+    X_train = train_df[features].values.astype(np.float32)
     y_train = train_df["home_win"].values.astype(np.float32)
-    X_test  = test_df[ALL_GAME_FEATURES].values.astype(np.float32)
+    X_test  = test_df[features].values.astype(np.float32)
     y_test  = test_df["home_win"].values.astype(np.float32)
 
-    dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=ALL_GAME_FEATURES)
-    dtest  = xgb.DMatrix(X_test,  label=y_test,  feature_names=ALL_GAME_FEATURES)
+    dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=features)
+    dtest  = xgb.DMatrix(X_test,  label=y_test,  feature_names=features)
 
     params = {
         "objective":        "binary:logistic",
@@ -196,16 +246,18 @@ def train_game_model(train_df: pd.DataFrame, test_df: pd.DataFrame) -> tuple:
 
 # ── Modèle totaux de buts ─────────────────────────────────────────────────────
 
-def train_totals_model(train_df: pd.DataFrame, test_df: pd.DataFrame) -> tuple:
+def train_totals_model(train_df: pd.DataFrame, test_df: pd.DataFrame,
+                       features: list[str]) -> tuple:
     print("\n🎯 Modèle total de buts")
+    print(f"   Features : {len(features)}")
 
-    X_train = train_df[TOTALS_FEATURES].values.astype(np.float32)
+    X_train = train_df[features].values.astype(np.float32)
     y_train = train_df["total_goals"].values.astype(np.float32)
-    X_test  = test_df[TOTALS_FEATURES].values.astype(np.float32)
+    X_test  = test_df[features].values.astype(np.float32)
     y_test  = test_df["total_goals"].values.astype(np.float32)
 
-    dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=TOTALS_FEATURES)
-    dtest  = xgb.DMatrix(X_test,  label=y_test,  feature_names=TOTALS_FEATURES)
+    dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=features)
+    dtest  = xgb.DMatrix(X_test,  label=y_test,  feature_names=features)
 
     params = {
         "objective":        "reg:squarederror",
@@ -268,7 +320,8 @@ def train_totals_model(train_df: pd.DataFrame, test_df: pd.DataFrame) -> tuple:
 # ── Sauvegarde ────────────────────────────────────────────────────────────────
 
 def save_artifacts(game_model, game_report, game_fi,
-                   totals_model, totals_report, totals_fi):
+                   totals_model, totals_report, totals_fi,
+                   game_features, totals_features):
     os.makedirs(MODELS_DIR, exist_ok=True)
 
     # Format JSON natif XGBoost (pas de joblib/pickle — compatibilité Python 3.14)
@@ -285,8 +338,8 @@ def save_artifacts(game_model, game_report, game_fi,
         "game_model":   game_report,
         "totals_model": totals_report,
         "features": {
-            "game":   ALL_GAME_FEATURES,
-            "totals": TOTALS_FEATURES,
+            "game":   game_features,
+            "totals": totals_features,
         },
     }
     with open(f"{MODELS_DIR}/training_report.json", "w") as f:
@@ -310,8 +363,11 @@ def main():
     df = pd.read_csv(DATA_PATH)
     print(f"   {len(df)} matchs chargés")
 
+    # Rétro-compatibilité : ne garder que les features réellement présentes
+    base_available = [f for f in GAME_FEATURES if f in df.columns]
+
     # Nettoyer les NaN
-    required = GAME_FEATURES + ["home_win", "total_goals", "date"]
+    required = base_available + ["home_win", "total_goals", "date"]
     before = len(df)
     df = df.dropna(subset=required)
     if len(df) < before:
@@ -320,20 +376,31 @@ def main():
     if len(df) < 200:
         print(f"⚠️  Seulement {len(df)} matchs — résultats peu fiables.")
 
+    # Sanity check anti-features mortes (bug PP/PK historique)
+    dead = [f for f in base_available if df[f].std() < 1e-9]
+    if dead:
+        print(f"⚠️  Features à variance nulle (exclues) : {dead}")
+
     # Features différentielles
     df = add_diff_features(df)
+
+    game_features   = [f for f in filter_available(ALL_GAME_FEATURES, df, "game")
+                       if f not in dead]
+    totals_features = [f for f in filter_available(TOTALS_FEATURES,   df, "totals")
+                       if f not in dead]
 
     # Split temporel (pas aléatoire — évite le data leakage)
     train_df, test_df = train_test_split_df(df, test_size=0.2)
     print(f"   Split : {len(train_df)} train / {len(test_df)} test (par date)")
 
     # Entraînement
-    game_model,   game_report,   game_fi   = train_game_model(train_df, test_df)
-    totals_model, totals_report, totals_fi = train_totals_model(train_df, test_df)
+    game_model,   game_report,   game_fi   = train_game_model(train_df, test_df, game_features)
+    totals_model, totals_report, totals_fi = train_totals_model(train_df, test_df, totals_features)
 
     # Sauvegarde
     save_artifacts(game_model, game_report, game_fi,
-                   totals_model, totals_report, totals_fi)
+                   totals_model, totals_report, totals_fi,
+                   game_features, totals_features)
 
     print("\n🚀 Relance ml_service.py — il chargera les .json automatiquement")
 

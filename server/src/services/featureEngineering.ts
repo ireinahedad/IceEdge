@@ -3,7 +3,12 @@
  * Converts raw NHL API data into structured feature vectors
  * ready to POST to the Python ML service.
  */
-import { fetchTeams, fetchPlayerById } from './nhlApiClient';
+import {
+  fetchTeams,
+  fetchPlayerById,
+  fetchTeamSummaryStats,
+  fetchTeamRestInfo,
+} from './nhlApiClient';
 
 // ── Feature types (mirror Python Pydantic models) ─────────────────────────────
 
@@ -20,6 +25,21 @@ export interface GameFeatures {
   away_pk_pct:         number;
   home_last10_win_pct: number;   // 0–1 (from streak/last10 if available)
   away_last10_win_pct: number;
+  // ── Nouvelles features (v2) — miroir de ml_service.py GameFeatures
+  home_home_win_pct:     number; // record à domicile (0–1)
+  away_road_win_pct:     number; // record à l'extérieur (0–1)
+  home_streak:           number; // série signée (+3 = 3 victoires)
+  away_streak:           number;
+  home_shots_for_pg:     number;
+  away_shots_for_pg:     number;
+  home_shots_against_pg: number;
+  away_shots_against_pg: number;
+  home_faceoff_pct:      number; // %
+  away_faceoff_pct:      number;
+  home_rest_days:        number; // 0–7
+  away_rest_days:        number;
+  home_b2b:              0 | 1;  // back-to-back
+  away_b2b:              0 | 1;
   market_type:         string;   // "moneyline" | "puck_line" | "total_goals_over" | "total_goals_under"
   line?:               number;   // for total goals markets
 }
@@ -76,6 +96,24 @@ export async function buildGameFeatures(
 ): Promise<GameFeatures> {
   const [home, away] = await Promise.all([getTeam(homeId), getTeam(awayId)]);
 
+  // Stats spéciales + tirs (PP/PK réels — absents des standings) et repos.
+  // Tolérance aux pannes : chaque source a un fallback neutre.
+  const homeAbbr = home?.abbreviation ?? homeId;
+  const awayAbbr = away?.abbreviation ?? awayId;
+
+  const [summaryRes, homeRestRes, awayRestRes] = await Promise.allSettled([
+    fetchTeamSummaryStats(),
+    fetchTeamRestInfo(homeAbbr),
+    fetchTeamRestInfo(awayAbbr),
+  ]);
+
+  const summary  = summaryRes.status  === 'fulfilled' ? summaryRes.value  : {};
+  const homeRest = homeRestRes.status === 'fulfilled' ? homeRestRes.value : { restDays: 2, b2b: 0 as const };
+  const awayRest = awayRestRes.status === 'fulfilled' ? awayRestRes.value : { restDays: 2, b2b: 0 as const };
+
+  const homeSum = summary[homeAbbr.toUpperCase()];
+  const awaySum = summary[awayAbbr.toUpperCase()];
+
   return {
     home_win_pct:          ((home?.winPct          || 50) / 100),
     away_win_pct:          ((away?.winPct          || 50) / 100),
@@ -83,12 +121,28 @@ export async function buildGameFeatures(
     away_goals_for_pg:     away?.goalsForPerGame  || 3.0,
     home_goals_against_pg: home?.goalsAgainstPerGame || 3.0,
     away_goals_against_pg: away?.goalsAgainstPerGame || 3.0,
-    home_pp_pct:           home?.ppPct || 20,
-    away_pp_pct:           away?.ppPct || 20,
-    home_pk_pct:           home?.pkPct || 80,
-    away_pk_pct:           away?.pkPct || 80,
+    // PP/PK depuis l'API stats (source fiable), fallback standings puis neutre
+    home_pp_pct:           homeSum?.ppPct ?? home?.ppPct ?? 20,
+    away_pp_pct:           awaySum?.ppPct ?? away?.ppPct ?? 20,
+    home_pk_pct:           homeSum?.pkPct ?? home?.pkPct ?? 80,
+    away_pk_pct:           awaySum?.pkPct ?? away?.pkPct ?? 80,
     home_last10_win_pct:   parseLastTen(home?.last10),
     away_last10_win_pct:   parseLastTen(away?.last10),
+    // ── Nouvelles features (v2)
+    home_home_win_pct:     home?.homeWinPct ?? 0.54,
+    away_road_win_pct:     away?.roadWinPct ?? 0.46,
+    home_streak:           home?.streakSigned ?? 0,
+    away_streak:           away?.streakSigned ?? 0,
+    home_shots_for_pg:     homeSum?.shotsForPg     ?? 30,
+    away_shots_for_pg:     awaySum?.shotsForPg     ?? 30,
+    home_shots_against_pg: homeSum?.shotsAgainstPg ?? 30,
+    away_shots_against_pg: awaySum?.shotsAgainstPg ?? 30,
+    home_faceoff_pct:      homeSum?.faceoffPct ?? 50,
+    away_faceoff_pct:      awaySum?.faceoffPct ?? 50,
+    home_rest_days:        homeRest.restDays,
+    away_rest_days:        awayRest.restDays,
+    home_b2b:              homeRest.b2b,
+    away_b2b:              awayRest.b2b,
     market_type:           marketType,
     line,
   };

@@ -1,26 +1,62 @@
 [
   {
-    "name": "away_goals_against_pg",
-    "importance": 0.1891
-  },
-  {
-    "name": "away_goals_for_pg",
-    "importance": 0.1698
-  },
-  {
-    "name": "home_goals_for_pg",
-    "importance": 0.1646
-  },
-  {
     "name": "home_goals_against_pg",
-    "importance": 0.162
+    "importance": 0.0904
   },
   {
-    "name": "gf_diff",
-    "importance": 0.1616
+    "name": "away_shots_against_pg",
+    "importance": 0.0737
   },
   {
     "name": "ga_diff",
-    "importance": 0.153
+    "importance": 0.0716
+  },
+  {
+    "name": "away_goals_against_pg",
+    "importance": 0.0711
+  },
+  {
+    "name": "home_goals_for_pg",
+    "importance": 0.0705
+  },
+  {
+    "name": "home_shots_against_pg",
+    "importance": 0.0705
+  },
+  {
+    "name": "home_shots_for_pg",
+    "importance": 0.07
+  },
+  {
+    "name": "away_goals_for_pg",
+    "importance": 0.0684
+  },
+  {
+    "name": "away_shots_for_pg",
+    "importance": 0.065
+  },
+  {
+    "name": "gf_diff",
+    "importance": 0.0648
+  },
+  {
+    "name": "home_pp_pct",
+    "importance": 0.0618
+  },
+  {
+    "name": "home_rest_days",
+    "importance": 0.0575
+  },
+  {
+    "name": "away_pk_pct",
+    "importance": 0.057
+  },
+  {
+    "name": "home_pk_pct",
+    "importance": 0.0542
+  },
+  {
+    "name": "away_pp_pct",
+    "importance": 0.0536
   }
 ]

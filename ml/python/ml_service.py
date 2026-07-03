@@ -52,7 +52,9 @@ _xgb_totals: xgb.Booster | None = None
 _game_importances:   list[dict] = []
 _totals_importances: list[dict] = []
 
-# Features attendues par chaque modèle (ordre identique à train.py)
+# Features attendues par chaque modèle.
+# Fallback statique (ancien modèle 18 features) — écrasé au chargement par
+# training_report.json["features"], la source de vérité écrite par train.py.
 _GAME_FEAT_NAMES = [
     "home_win_pct", "away_win_pct",
     "home_goals_for_pg", "away_goals_for_pg",
@@ -73,11 +75,28 @@ _TOTALS_FEAT_NAMES = [
 
 def _try_load_models():
     global _xgb_game, _xgb_totals, _game_importances, _totals_importances
+    global _GAME_FEAT_NAMES, _TOTALS_FEAT_NAMES
 
     game_path   = os.path.join(MODELS_DIR, "game_model.json")
     totals_path = os.path.join(MODELS_DIR, "totals_model.json")
     gi_path     = os.path.join(MODELS_DIR, "feature_importance_game.json")
     ti_path     = os.path.join(MODELS_DIR, "feature_importance_totals.json")
+    report_path = os.path.join(MODELS_DIR, "training_report.json")
+
+    # Noms de features depuis le rapport d'entraînement (source de vérité)
+    if os.path.exists(report_path):
+        try:
+            with open(report_path) as f:
+                report = json.load(f)
+            feats = report.get("features", {})
+            if feats.get("game"):
+                _GAME_FEAT_NAMES = feats["game"]
+            if feats.get("totals"):
+                _TOTALS_FEAT_NAMES = feats["totals"]
+            print(f"[ML] ✅ Features chargées depuis training_report.json "
+                  f"(game: {len(_GAME_FEAT_NAMES)}, totals: {len(_TOTALS_FEAT_NAMES)})")
+        except Exception as e:
+            print(f"[ML] ⚠️  training_report.json : {e} — fallback listes statiques")
 
     if os.path.exists(game_path):
         try:
@@ -164,6 +183,21 @@ class GameFeatures(BaseModel):
     away_pk_pct: float = Field(80.0, ge=0, le=100)
     home_last10_win_pct: float = Field(0.5, ge=0, le=1)
     away_last10_win_pct: float = Field(0.5, ge=0, le=1)
+    # ── Nouvelles features (v2) — défauts neutres si le backend ne les envoie pas
+    home_home_win_pct:     float = Field(0.54, ge=0, le=1)   # record à domicile
+    away_road_win_pct:     float = Field(0.46, ge=0, le=1)   # record à l'extérieur
+    home_streak:           float = Field(0.0,  ge=-20, le=20)  # série signée
+    away_streak:           float = Field(0.0,  ge=-20, le=20)
+    home_shots_for_pg:     float = Field(30.0, ge=0)
+    away_shots_for_pg:     float = Field(30.0, ge=0)
+    home_shots_against_pg: float = Field(30.0, ge=0)
+    away_shots_against_pg: float = Field(30.0, ge=0)
+    home_faceoff_pct:      float = Field(50.0, ge=0, le=100)
+    away_faceoff_pct:      float = Field(50.0, ge=0, le=100)
+    home_rest_days:        float = Field(2.0,  ge=0, le=7)
+    away_rest_days:        float = Field(2.0,  ge=0, le=7)
+    home_b2b:              int   = Field(0,    ge=0, le=1)   # back-to-back
+    away_b2b:              int   = Field(0,    ge=0, le=1)
     market_type: str = Field("moneyline")    # "moneyline"|"puck_line"|"total_goals_over"|"total_goals_under"
     line: Optional[float] = None             # for total goals
 
@@ -428,25 +462,35 @@ def predict_game(f: GameFeatures) -> MLResponse:
     lam_home  = f.home_goals_for_pg
     lam_away  = f.away_goals_for_pg
 
+    # Dict nom → valeur : les vecteurs sont construits d'après les noms de
+    # features du modèle chargé (training_report.json) → jamais de désalignement
+    feat_values = {
+        **f.model_dump(exclude={"market_type", "line"}),
+        "win_pct_diff": win_diff,
+        "gf_diff":      gf_diff,
+        "ga_diff":      ga_diff,
+        "pp_diff":      pp_diff,
+        "pk_diff":      pk_diff,
+        "form_diff":    form_diff,
+        "shots_diff":   (f.home_shots_for_pg - f.home_shots_against_pg)
+                      - (f.away_shots_for_pg - f.away_shots_against_pg),
+        "faceoff_diff": f.home_faceoff_pct - f.away_faceoff_pct,
+        "rest_diff":    f.home_rest_days   - f.away_rest_days,
+        "streak_diff":  f.home_streak      - f.away_streak,
+    }
+
     # 3. Obtenir base_prob (P(home wins)) depuis XGBoost ou LR
     fi_list: list[FeatureImportance] = []
     model_type    = "Logistic Regression (fallback)"
     model_version = "lr-nhl-v1.1"
 
     if _xgb_game is not None:
-        row = np.array([[
-            f.home_win_pct, f.away_win_pct,
-            f.home_goals_for_pg, f.away_goals_for_pg,
-            f.home_goals_against_pg, f.away_goals_against_pg,
-            f.home_pp_pct, f.away_pp_pct,
-            f.home_pk_pct, f.away_pk_pct,
-            f.home_last10_win_pct, f.away_last10_win_pct,
-            win_diff, gf_diff, ga_diff, pp_diff, pk_diff, form_diff,
-        ]], dtype=np.float32)
+        row = np.array([[float(feat_values.get(n, 0.0)) for n in _GAME_FEAT_NAMES]],
+                       dtype=np.float32)
         dmat = xgb.DMatrix(row, feature_names=_GAME_FEAT_NAMES)
         base_prob     = float(_xgb_game.predict(dmat)[0])
         model_type    = "XGBoost (trained)"
-        model_version = "xgb-nhl-v1.0"
+        model_version = "xgb-nhl-v2.0"
         for fi in (_game_importances[:6] if _game_importances else []):
             name = fi["name"]
             if "win" in name or "form" in name:
@@ -471,13 +515,8 @@ def predict_game(f: GameFeatures) -> MLResponse:
 
     # 4. Branche XGBoost totaux (si modèle entraîné disponible)
     if _xgb_totals is not None and f.market_type in ("total_goals", "total_goals_over", "total_goals_under"):
-        row_tot = np.array([[
-            f.home_goals_for_pg, f.away_goals_for_pg,
-            f.home_goals_against_pg, f.away_goals_against_pg,
-            f.home_pp_pct, f.away_pp_pct,
-            f.home_pk_pct, f.away_pk_pct,
-            gf_diff, ga_diff,
-        ]], dtype=np.float32)
+        row_tot = np.array([[float(feat_values.get(n, 0.0)) for n in _TOTALS_FEAT_NAMES]],
+                           dtype=np.float32)
         dmat_tot = xgb.DMatrix(row_tot, feature_names=_TOTALS_FEAT_NAMES)
         lam_xgb = float(_xgb_totals.predict(dmat_tot)[0])
         line    = f.line if f.line is not None else 5.5

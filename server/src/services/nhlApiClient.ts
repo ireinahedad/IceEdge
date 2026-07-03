@@ -85,6 +85,11 @@ function currentSeason(): string {
 
 // --- Teams / Standings ----------------------------------------------------
 
+function _splitPct(wins?: number, losses?: number, otLosses?: number): number {
+  const gp = (wins ?? 0) + (losses ?? 0) + (otLosses ?? 0);
+  return gp > 0 ? +((wins ?? 0) / gp).toFixed(4) : 0.5;
+}
+
 export async function fetchTeams(): Promise<any[]> {
   const cached = getCached<any[]>('teams');
   if (cached) return cached;
@@ -116,8 +121,17 @@ export async function fetchTeams(): Promise<any[]> {
       goalsAgainst:        s.goalAgainst ?? 0,
       goalsForPerGame:     +((s.goalFor     ?? 0) / gp).toFixed(2),
       goalsAgainstPerGame: +((s.goalAgainst ?? 0) / gp).toFixed(2),
+      // NOTE: powerPlayPctg/penaltyKillPctg n'existent PAS dans standings —
+      // les vrais PP/PK viennent de fetchTeamSummaryStats() (api.nhle.com/stats/rest)
       ppPct: s.powerPlayPctg   != null ? Math.round(s.powerPlayPctg   * 1000) / 10 : 0,
       pkPct: s.penaltyKillPctg != null ? Math.round(s.penaltyKillPctg * 1000) / 10 : 0,
+      // Forme récente L10 (ex: "7-2-1") — consommé par parseLastTen()
+      last10: `${s.l10Wins ?? 5}-${s.l10Losses ?? 4}-${s.l10OtLosses ?? 1}`,
+      // Splits domicile / extérieur (win% simple)
+      homeWinPct: _splitPct(s.homeWins, s.homeLosses, s.homeOtLosses),
+      roadWinPct: _splitPct(s.roadWins, s.roadLosses, s.roadOtLosses),
+      // Série signée : W3 → +3, L2 → -2
+      streakSigned: (s.streakCode === 'W' ? 1 : -1) * (s.streakCount ?? 0),
     };
   });
 
@@ -388,4 +402,118 @@ export async function fetchTeamRoster(abbr: string): Promise<any[]> {
   out.sort((a, b) => b.points - a.points);
   setCached(cacheKey, out, 30 * 60_000); // cache 30 min
   return out;
+}
+
+// --- Team summary stats (PP/PK réels, tirs, mises au jeu) -------------------
+// api.nhle.com/stats/rest — l'endpoint standings n'a PAS ces champs.
+
+const STATS_BASE = 'https://api.nhle.com/stats/rest/en';
+
+const TEAM_NAME_TO_ABBR: Record<string, string> = {
+  'Anaheim Ducks': 'ANA',         'Arizona Coyotes': 'ARI',
+  'Boston Bruins': 'BOS',         'Buffalo Sabres': 'BUF',
+  'Calgary Flames': 'CGY',        'Carolina Hurricanes': 'CAR',
+  'Chicago Blackhawks': 'CHI',    'Colorado Avalanche': 'COL',
+  'Columbus Blue Jackets': 'CBJ', 'Dallas Stars': 'DAL',
+  'Detroit Red Wings': 'DET',     'Edmonton Oilers': 'EDM',
+  'Florida Panthers': 'FLA',      'Los Angeles Kings': 'LAK',
+  'Minnesota Wild': 'MIN',        'Montréal Canadiens': 'MTL',
+  'Montreal Canadiens': 'MTL',    'Nashville Predators': 'NSH',
+  'New Jersey Devils': 'NJD',     'New York Islanders': 'NYI',
+  'New York Rangers': 'NYR',      'Ottawa Senators': 'OTT',
+  'Philadelphia Flyers': 'PHI',   'Pittsburgh Penguins': 'PIT',
+  'San Jose Sharks': 'SJS',       'Seattle Kraken': 'SEA',
+  'St. Louis Blues': 'STL',       'Tampa Bay Lightning': 'TBL',
+  'Toronto Maple Leafs': 'TOR',   'Utah Hockey Club': 'UTA',
+  'Utah Mammoth': 'UTA',          'Vancouver Canucks': 'VAN',
+  'Vegas Golden Knights': 'VGK',  'Washington Capitals': 'WSH',
+  'Winnipeg Jets': 'WPG',
+};
+
+export interface TeamSummaryStats {
+  ppPct:           number;  // 0–100
+  pkPct:           number;  // 0–100
+  shotsForPg:      number;
+  shotsAgainstPg:  number;
+  faceoffPct:      number;  // 0–100
+}
+
+/** PP%, PK%, tirs/match et mises au jeu de la saison en cours, par abréviation. */
+export async function fetchTeamSummaryStats(): Promise<Record<string, TeamSummaryStats>> {
+  const cached = getCached<Record<string, TeamSummaryStats>>('teamSummary');
+  if (cached) return cached;
+
+  const cayenne = encodeURIComponent(
+    `seasonId=${currentSeason()} and gameTypeId=2`
+  );
+  const res = await fetch(
+    `${STATS_BASE}/team/summary?limit=-1&cayenneExp=${cayenne}`,
+    { headers: { 'User-Agent': 'IceEdge/1.0', Accept: 'application/json' } }
+  );
+  if (!res.ok) throw new Error(`NHL stats API ${res.status} for team/summary`);
+  const data = (await res.json()) as any;
+
+  const out: Record<string, TeamSummaryStats> = {};
+  for (const t of data.data ?? []) {
+    const abbr = TEAM_NAME_TO_ABBR[t.teamFullName ?? ''];
+    if (!abbr) continue;
+    out[abbr] = {
+      ppPct:          Math.round((t.powerPlayPct   ?? 0.20) * 1000) / 10,
+      pkPct:          Math.round((t.penaltyKillPct ?? 0.80) * 1000) / 10,
+      shotsForPg:     +(t.shotsForPerGame     ?? 30).toFixed(2),
+      shotsAgainstPg: +(t.shotsAgainstPerGame ?? 30).toFixed(2),
+      faceoffPct:     Math.round((t.faceoffWinPct  ?? 0.50) * 1000) / 10,
+    };
+  }
+
+  setCached('teamSummary', out, 10 * 60_000);
+  return out;
+}
+
+// --- Repos / back-to-back ---------------------------------------------------
+
+export interface TeamRestInfo {
+  restDays: number;   // jours depuis le dernier match (cap 7)
+  b2b:      0 | 1;    // back-to-back (a joué hier)
+}
+
+/** Date du jour en heure de l'Est (les gameDate NHL sont en ET). */
+function todayET(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+}
+
+/** Jours de repos depuis le dernier match joué (via le calendrier de saison). */
+export async function fetchTeamRestInfo(abbr: string): Promise<TeamRestInfo> {
+  const upper = abbr.toUpperCase();
+  const key   = `rest:${upper}:${todayET()}`;
+  const cached = getCached<TeamRestInfo>(key);
+  if (cached) return cached;
+
+  const fallback: TeamRestInfo = { restDays: 2, b2b: 0 };
+  try {
+    const data  = await fetchNHL<any>(`v1/club-schedule-season/${upper}/now`);
+    const today = todayET();
+    const played = (data.games ?? [])
+      .filter((g: any) =>
+        g.gameType === 2 &&
+        ['OFF', 'FINAL', 'OVER'].includes(g.gameState) &&
+        (g.gameDate ?? '') < today
+      )
+      .map((g: any) => g.gameDate as string)
+      .sort();
+
+    if (!played.length) return fallback;
+
+    const lastDate = new Date(played[played.length - 1] + 'T12:00:00');
+    const now      = new Date(today + 'T12:00:00');
+    const days     = Math.round((now.getTime() - lastDate.getTime()) / 86_400_000);
+    const info: TeamRestInfo = {
+      restDays: Math.min(Math.max(days, 0), 7),
+      b2b:      days === 1 ? 1 : 0,
+    };
+    setCached(key, info, 6 * 60 * 60_000);   // cache 6 h
+    return info;
+  } catch {
+    return fallback;
+  }
 }
