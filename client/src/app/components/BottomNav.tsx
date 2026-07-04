@@ -12,7 +12,7 @@ const navItems = [
   { Icon: User,      key: "nav.profile", path: "/profile" },
 ];
 
-const ACCENT = "#9BF019"; // acid green — design system
+const ACCENT = "#22ff00"; // acid green — design system accent
 
 export function BottomNav() {
   const navigate = useNavigate();
@@ -28,12 +28,15 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] flex items-center justify-around px-2 py-2 z-50"
+      className="fixed bottom-3 left-1/2 -translate-x-1/2 w-[94%] max-w-[420px] flex items-center justify-around px-2 py-2 z-50 rounded-[22px]"
       style={{
-        background: "rgba(10,14,12,0.95)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
-        borderTop: "1px solid #283323",
+        background:
+          "linear-gradient(160deg, rgba(220,245,255,0.22), rgba(150,205,240,0.12) 45%, rgba(235,250,255,0.20))",
+        backdropFilter: "blur(18px)",
+        WebkitBackdropFilter: "blur(18px)",
+        border: "1px solid rgba(255,255,255,0.45)",
+        boxShadow:
+          "inset 0 0 16px rgba(255,255,255,0.18), inset 0 -6px 14px rgba(140,200,235,0.14), 0 6px 20px rgba(0,0,0,0.18)",
       }}
     >
       {navItems.map(({ Icon, key, path }) => {

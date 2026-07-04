@@ -1,11 +1,43 @@
 import { Router, Request, Response } from 'express';
 import * as AuthService from '../services/auth.service';
 import { authenticate } from '../middleware/auth.middleware';
-import { RegisterBody, LoginBody, RefreshBody } from '../types/user.type';
+import {
+  RegisterBody, LoginBody, RefreshBody, AuthTokens,
+  VerifyEmailBody, ResendVerificationBody,
+  ForgotPasswordBody, ResetPasswordBody,
+} from '../types/user.type';
 
 const router = Router();
 
-// POST /auth/register
+// ── Refresh-token cookie ──────────────────────────────────────────────────────
+// The refresh token lives in an httpOnly cookie (inaccessible to JS → XSS-safe).
+// Scoped to /api/auth so it's only sent on auth endpoints.
+
+const REFRESH_COOKIE = 'ice_refresh';
+const REFRESH_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // must match REFRESH_TOKEN_TTL
+
+function setRefreshCookie(res: Response, token: string): void {
+  res.cookie(REFRESH_COOKIE, token, {
+    httpOnly: true,
+    secure:   process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path:     '/api/auth',
+    maxAge:   REFRESH_MAX_AGE,
+  });
+}
+
+function clearRefreshCookie(res: Response): void {
+  res.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
+}
+
+/** Strip the refresh token from the JSON body — it travels via cookie only. */
+function publicTokens(tokens: AuthTokens): Omit<AuthTokens, 'refresh_token'> {
+  const { refresh_token: _rt, ...rest } = tokens;
+  return rest;
+}
+
+// POST /auth/register — creates an unverified account and emails a 6-digit code.
+// No tokens are returned; the client must call /auth/verify-email next.
 router.post('/register', async (req: Request<{}, {}, RegisterBody>, res: Response) => {
   try {
     const { email, username, password, first_name, last_name } = req.body;
@@ -14,7 +46,52 @@ router.post('/register', async (req: Request<{}, {}, RegisterBody>, res: Respons
     if (password.length < 8)
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     const result = await AuthService.register({ email, username, password, first_name, last_name });
-    return res.status(201).json(result);
+    return res.status(201).json(result); // { pending: true, email }
+  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// POST /auth/verify-email — confirms the code, then logs the user in.
+router.post('/verify-email', async (req: Request<{}, {}, VerifyEmailBody>, res: Response) => {
+  try {
+    const { email, code } = req.body;
+    if (!email || !code)
+      return res.status(400).json({ error: 'email and code are required' });
+    const result = await AuthService.verifyEmail(email, code);
+    setRefreshCookie(res, result.tokens.refresh_token);
+    return res.status(200).json({ user: result.user, tokens: publicTokens(result.tokens) });
+  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// POST /auth/resend-verification — sends a fresh code (always 200 to avoid enumeration).
+router.post('/resend-verification', async (req: Request<{}, {}, ResendVerificationBody>, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'email is required' });
+    await AuthService.resendVerification(email);
+    return res.status(200).json({ ok: true });
+  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// POST /auth/forgot-password — emails a reset code (always 200 to avoid enumeration).
+router.post('/forgot-password', async (req: Request<{}, {}, ForgotPasswordBody>, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'email is required' });
+    await AuthService.forgotPassword(email);
+    return res.status(200).json({ ok: true });
+  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// POST /auth/reset-password — validates the code and sets a new password.
+router.post('/reset-password', async (req: Request<{}, {}, ResetPasswordBody>, res: Response) => {
+  try {
+    const { email, code, new_password } = req.body;
+    if (!email || !code || !new_password)
+      return res.status(400).json({ error: 'email, code and new_password are required' });
+    if (new_password.length < 8)
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    await AuthService.resetPassword(email, code, new_password);
+    return res.status(200).json({ ok: true });
   } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
@@ -25,26 +102,37 @@ router.post('/login', async (req: Request<{}, {}, LoginBody>, res: Response) => 
     if (!email || !password)
       return res.status(400).json({ error: 'email and password are required' });
     const result = await AuthService.login({ email, password });
-    return res.status(200).json(result);
-  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+    setRefreshCookie(res, result.tokens.refresh_token);
+    return res.status(200).json({ user: result.user, tokens: publicTokens(result.tokens) });
+  } catch (err: any) {
+    // Surface the "not verified" case so the client can prompt for the code.
+    if (err.code === 'EMAIL_NOT_VERIFIED') {
+      return res.status(403).json({ error: err.message, code: err.code, email: err.email });
+    }
+    return res.status(err.status ?? 500).json({ error: err.message });
+  }
 });
 
-// POST /auth/refresh
+// POST /auth/refresh — reads the httpOnly cookie (body fallback for legacy clients)
 router.post('/refresh', async (req: Request<{}, {}, RefreshBody>, res: Response) => {
   try {
-    const { refresh_token } = req.body;
-    if (!refresh_token) return res.status(400).json({ error: 'refresh_token is required' });
-    const tokens = await AuthService.refreshTokens(refresh_token);
-    return res.status(200).json(tokens);
-  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+    const raw = req.cookies?.[REFRESH_COOKIE] || req.body?.refresh_token;
+    if (!raw) return res.status(400).json({ error: 'refresh token is required' });
+    const tokens = await AuthService.refreshTokens(raw); // rotates: old token revoked
+    setRefreshCookie(res, tokens.refresh_token);
+    return res.status(200).json(publicTokens(tokens));
+  } catch (err: any) {
+    clearRefreshCookie(res);
+    return res.status(err.status ?? 500).json({ error: err.message });
+  }
 });
 
 // POST /auth/logout
 router.post('/logout', authenticate, async (req: Request<{}, {}, RefreshBody>, res: Response) => {
   try {
-    const { refresh_token } = req.body;
-    if (!refresh_token) return res.status(400).json({ error: 'refresh_token is required' });
-    await AuthService.logout(refresh_token);
+    const raw = req.cookies?.[REFRESH_COOKIE] || req.body?.refresh_token;
+    if (raw) await AuthService.logout(raw); // revoke in DB
+    clearRefreshCookie(res);
     return res.status(204).send();
   } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
 });
@@ -92,10 +180,10 @@ router.get('/google/callback', async (req: Request, res: Response) => {
     const googleUser = await AuthService.exchangeGoogleCode(code, redirectUri);
     const { tokens } = await AuthService.loginWithGoogle(googleUser);
 
-    const params = new URLSearchParams({
-      access_token:  tokens.access_token,
-      refresh_token: tokens.refresh_token,
-    });
+    // Refresh token → httpOnly cookie; only the short-lived access token
+    // transits in the redirect URL.
+    setRefreshCookie(res, tokens.refresh_token);
+    const params = new URLSearchParams({ access_token: tokens.access_token });
 
     return res.redirect(`${clientUrl}/auth/callback?${params}`);
   } catch (err: any) {

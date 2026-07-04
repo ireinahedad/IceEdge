@@ -4,7 +4,7 @@ import type { ChatMessage } from "../../../types/user";
 
 const TAG_STYLE = {
   pick:     "bg-green-500/15 text-green-400 border-green-500/30",
-  analysis: "bg-[#86d1ea]/15 text-[#86d1ea] border-[#86d1ea]/30",
+  analysis: "bg-[#90C9F0]/15 text-[#90C9F0] border-[#90C9F0]/30",
   hot:      "bg-red-500/15 text-red-400 border-red-500/30",
 } as const;
 
@@ -56,18 +56,18 @@ export function MessageBubble({
 
         {/* Reply preview */}
         {msg.replyTo && (
-          <div className="bg-white/5 rounded-lg px-2 py-1 border-l-2 border-[#86d1ea]">
-            <p className="text-[#86d1ea] text-[9px] font-medium">@{msg.replyTo.username}</p>
+          <div className="bg-white/5 rounded-lg px-2 py-1 border-l-2 border-[#90C9F0]">
+            <p className="text-[#90C9F0] text-[9px] font-medium">@{msg.replyTo.username}</p>
             <p className="text-white/50 text-[9px] truncate">{msg.replyTo.text}</p>
           </div>
         )}
 
         {/* Bubble */}
         <div
-          className={`rounded-2xl px-3 py-2 border backdrop-blur-md ${
+          className={`rounded-2xl px-3 py-2 ${
             isOwn
-              ? "bg-[#86d1ea] text-[#0f1416] border-[#86d1ea]"
-              : "bg-white/8 border-white/10 text-white"
+              ? "bg-[#90C9F0] text-[#072E49] border border-[#90C9F0] backdrop-blur-md"
+              : "icy-tile text-white"
           }`}
         >
           <p className="text-xs leading-relaxed">{msg.text}</p>
@@ -82,7 +82,7 @@ export function MessageBubble({
                 onClick={() => onReact?.(msg.id, r.emoji)}
                 className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full border text-[9px] transition-all ${
                   r.reacted
-                    ? "bg-[#86d1ea]/20 border-[#86d1ea]/50 text-[#86d1ea]"
+                    ? "bg-[#90C9F0]/20 border-[#90C9F0]/50 text-[#90C9F0]"
                     : "bg-white/5 border-white/10 text-white/50"
                 }`}
               >

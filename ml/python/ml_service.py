@@ -52,6 +52,15 @@ _xgb_totals: xgb.Booster | None = None
 _game_importances:   list[dict] = []
 _totals_importances: list[dict] = []
 
+# ELO (écrit par train.py) — ratings par équipe pour l'inférence
+_elo_ratings:  dict[str, float] = {}
+_elo_base     = 1500.0
+_elo_home_adv = 50.0
+
+# Calibration de Platt (écrite par train.py dans training_report.json)
+_platt_a: float | None = None
+_platt_b: float | None = None
+
 # Features attendues par chaque modèle.
 # Fallback statique (ancien modèle 18 features) — écrasé au chargement par
 # training_report.json["features"], la source de vérité écrite par train.py.
@@ -76,12 +85,14 @@ _TOTALS_FEAT_NAMES = [
 def _try_load_models():
     global _xgb_game, _xgb_totals, _game_importances, _totals_importances
     global _GAME_FEAT_NAMES, _TOTALS_FEAT_NAMES
+    global _elo_ratings, _elo_base, _elo_home_adv, _platt_a, _platt_b
 
     game_path   = os.path.join(MODELS_DIR, "game_model.json")
     totals_path = os.path.join(MODELS_DIR, "totals_model.json")
     gi_path     = os.path.join(MODELS_DIR, "feature_importance_game.json")
     ti_path     = os.path.join(MODELS_DIR, "feature_importance_totals.json")
     report_path = os.path.join(MODELS_DIR, "training_report.json")
+    elo_path    = os.path.join(MODELS_DIR, "elo_ratings.json")
 
     # Noms de features depuis le rapport d'entraînement (source de vérité)
     if os.path.exists(report_path):
@@ -93,10 +104,27 @@ def _try_load_models():
                 _GAME_FEAT_NAMES = feats["game"]
             if feats.get("totals"):
                 _TOTALS_FEAT_NAMES = feats["totals"]
+            cal = (report.get("game_model") or {}).get("calibration") or {}
+            if cal.get("method") == "platt":
+                _platt_a, _platt_b = float(cal["a"]), float(cal["b"])
+                print(f"[ML] ✅ Calibration Platt chargée (a={_platt_a:.3f}, b={_platt_b:.3f})")
             print(f"[ML] ✅ Features chargées depuis training_report.json "
                   f"(game: {len(_GAME_FEAT_NAMES)}, totals: {len(_TOTALS_FEAT_NAMES)})")
         except Exception as e:
             print(f"[ML] ⚠️  training_report.json : {e} — fallback listes statiques")
+
+    # Ratings ELO (pour les features elo_* à l'inférence)
+    if os.path.exists(elo_path):
+        try:
+            with open(elo_path) as f:
+                elo = json.load(f)
+            _elo_ratings  = {k.upper(): float(v) for k, v in (elo.get("ratings") or {}).items()}
+            _elo_base     = float(elo.get("base", 1500.0))
+            _elo_home_adv = float(elo.get("home_adv", 50.0))
+            print(f"[ML] ✅ elo_ratings.json chargé ({len(_elo_ratings)} équipes, "
+                  f"as of {elo.get('as_of_date', '?')})")
+        except Exception as e:
+            print(f"[ML] ⚠️  elo_ratings.json : {e}")
 
     if os.path.exists(game_path):
         try:
@@ -198,6 +226,12 @@ class GameFeatures(BaseModel):
     away_rest_days:        float = Field(2.0,  ge=0, le=7)
     home_b2b:              int   = Field(0,    ge=0, le=1)   # back-to-back
     away_b2b:              int   = Field(0,    ge=0, le=1)
+    # ── ELO (v3) — abréviations d'équipes pour lookup dans elo_ratings.json.
+    #    Le backend Node envoie home_team/away_team; le service résout les ratings.
+    home_team: Optional[str] = None          # abréviation, ex. "TOR"
+    away_team: Optional[str] = None
+    home_elo:  Optional[float] = None        # override explicite (sinon lookup)
+    away_elo:  Optional[float] = None
     market_type: str = Field("moneyline")    # "moneyline"|"puck_line"|"total_goals_over"|"total_goals_under"
     line: Optional[float] = None             # for total goals
 
@@ -462,10 +496,27 @@ def predict_game(f: GameFeatures) -> MLResponse:
     lam_home  = f.home_goals_for_pg
     lam_away  = f.away_goals_for_pg
 
+    # ELO : override explicite > lookup par abréviation > rating neutre
+    def _resolve_elo(explicit: float | None, team: str | None) -> float:
+        if explicit is not None:
+            return explicit
+        if team and team.upper() in _elo_ratings:
+            return _elo_ratings[team.upper()]
+        return _elo_base
+
+    home_elo = _resolve_elo(f.home_elo, f.home_team)
+    away_elo = _resolve_elo(f.away_elo, f.away_team)
+    elo_expected = 1.0 / (1.0 + 10 ** (-((home_elo + _elo_home_adv) - away_elo) / 400.0))
+
     # Dict nom → valeur : les vecteurs sont construits d'après les noms de
     # features du modèle chargé (training_report.json) → jamais de désalignement
     feat_values = {
-        **f.model_dump(exclude={"market_type", "line"}),
+        **f.model_dump(exclude={"market_type", "line", "home_team", "away_team",
+                                "home_elo", "away_elo"}),
+        "home_elo":     home_elo,
+        "away_elo":     away_elo,
+        "elo_diff":     home_elo - away_elo,
+        "elo_expected": elo_expected,
         "win_pct_diff": win_diff,
         "gf_diff":      gf_diff,
         "ga_diff":      ga_diff,
@@ -489,8 +540,14 @@ def predict_game(f: GameFeatures) -> MLResponse:
                        dtype=np.float32)
         dmat = xgb.DMatrix(row, feature_names=_GAME_FEAT_NAMES)
         base_prob     = float(_xgb_game.predict(dmat)[0])
+        # Calibration de Platt (rend les probabilités fiables pour l'EV)
+        if _platt_a is not None and _platt_b is not None:
+            eps = 1e-7
+            p = min(max(base_prob, eps), 1 - eps)
+            z = math.log(p / (1 - p))
+            base_prob = 1.0 / (1.0 + math.exp(-(_platt_a * z + _platt_b)))
         model_type    = "XGBoost (trained)"
-        model_version = "xgb-nhl-v2.0"
+        model_version = "xgb-nhl-v3.0"
         for fi in (_game_importances[:6] if _game_importances else []):
             name = fi["name"]
             if "win" in name or "form" in name:
@@ -656,6 +713,8 @@ def health():
             "game_model":   _xgb_game   is not None,
             "totals_model": _xgb_totals is not None,
         },
+        "elo_teams_loaded": len(_elo_ratings),
+        "calibrated":       _platt_a is not None,
         "tip": "Lance fetch_data.py puis train.py pour activer XGBoost (models/*.json).",
     }
 

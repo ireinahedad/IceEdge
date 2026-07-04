@@ -19,6 +19,7 @@ import {
 } from "../services/oddsApiService";
 import { openBet365, bet365TennisUrl, bet365HockeyUrl } from "../services/affiliateService";
 import { nhlLogoUrl } from "../data/teamEmoji";
+import "./home-theme.css";
 
 // ─── Hockey helpers ────────────────────────────────────────────────────────────
 
@@ -173,8 +174,8 @@ type SortSource = "rules" | "ml";
 type SortDir    = "safe"  | "risky";
 
 function riskLabel(pct: number): { key: string; color: string } {
-  if (pct >= 70) return { key: "risk.safe",     color: "#4ade80" };
-  if (pct >= 55) return { key: "risk.moderate", color: "#86d1ea" };
+  if (pct >= 70) return { key: "risk.safe",     color: "#22ff00" };
+  if (pct >= 55) return { key: "risk.moderate", color: "#90C9F0" };
   if (pct >= 40) return { key: "risk.risky",    color: "#facc15" };
   return              { key: "risk.high",      color: "#f87171" };
 }
@@ -188,41 +189,41 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
   const isML = sortSource === "ml" && bet.mlPct != null;
 
   return (
-    <div className="flex items-center gap-3 bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl px-3.5 py-3">
+    <div className="flex items-center gap-2.5 icy-card rounded-xl px-2.5 py-1.5">
       {bet.logo?.startsWith("http")
-        ? <img src={bet.logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
-        : <span className="text-xl flex-shrink-0">{bet.logo}</span>}
+        ? <img src={bet.logo} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
+        : <span className="text-base flex-shrink-0">{bet.logo}</span>}
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 mb-0.5">
-          <span className="text-white text-xs font-medium truncate">{bet.label}</span>
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full flex-shrink-0 font-medium"
+        <div className="flex items-center gap-1.5">
+          <span className="text-white text-[11px] font-medium truncate">{bet.label}</span>
+          <span className="text-[8px] px-1 py-px rounded-full flex-shrink-0 font-medium"
             style={{ color: risk.color, backgroundColor: `${risk.color}18`, border: `1px solid ${risk.color}44` }}>
             {t(risk.key)}
           </span>
+          <span className="text-[#8a9ea6] text-[9px] truncate">· {bet.context}</span>
         </div>
-        <span className="text-[#bfc8cc] text-[10px]">{bet.context}</span>
-        <div className="flex items-center gap-2 mt-1.5">
-          <div className="flex-1 bg-[#0A0E0C] rounded-full h-1.5 overflow-hidden">
+        <div className="flex items-center gap-2 mt-1">
+          <div className="flex-1 bg-[#0A0E0C] rounded-full h-1 overflow-hidden">
             <div className="h-full rounded-full transition-all duration-500"
               style={{ width: `${displayPct}%`, backgroundColor: isML ? "#a78bfa" : risk.color }} />
           </div>
-          <span className="text-[10px] font-bold flex-shrink-0"
+          <span className="text-[10px] font-bold flex-shrink-0 tabular-nums"
             style={{ color: isML ? "#a78bfa" : risk.color }}>
             {sortSource === "ml" && bet.mlLoading ? "…" : `${displayPct}%`}
           </span>
-          {isML && <span className="text-[9px] text-[#a78bfa] flex-shrink-0 font-medium">ML</span>}
+          {isML && <span className="text-[8px] text-[#a78bfa] flex-shrink-0 font-medium">ML</span>}
           {sortSource === "ml" && !bet.mlLoading && bet.mlPct == null &&
-            <span className="text-[9px] text-[#bfc8cc] flex-shrink-0">{t("home.rules")}</span>}
+            <span className="text-[8px] text-[#bfc8cc] flex-shrink-0">{t("home.rules")}</span>}
         </div>
       </div>
 
       <button
         onClick={() => inSlip ? removeLeg(bet.id) : addLeg({ ...bet.leg, probability: displayPct })}
-        className={`w-8 h-8 rounded-xl border flex items-center justify-center text-sm flex-shrink-0 transition-colors ${
+        className={`w-7 h-7 rounded-lg border flex items-center justify-center text-sm flex-shrink-0 transition-colors ${
           inSlip
             ? "bg-green-500/15 border-green-500/30 text-green-400"
-            : "bg-[#86d1ea]/10 border-[#86d1ea]/30 text-[#86d1ea] active:bg-[#86d1ea]/20"
+            : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
         }`}
       >
         {inSlip ? "✓" : "+"}
@@ -247,71 +248,34 @@ function BestBetsSection({
   isLoading: boolean;
 }) {
   const { t, lang } = useI18n();
-  const [sortSource, setSortSource] = useState<SortSource>("rules");
+  const [sortSource, setSortSource] = useState<SortSource>("ml");
   const [sortDir,    setSortDir]    = useState<SortDir>("safe");
   const [bets, setBets]             = useState<BestBet[]>([]);
   const [mlFetched,  setMlFetched]  = useState(false);
+  const [collapsed,  setCollapsed]  = useState<boolean>(() => {
+    try { return localStorage.getItem("iceedge_bestbets_collapsed") === "1"; }
+    catch { return false; }
+  });
+  const toggleCollapsed = () => setCollapsed(c => {
+    const next = !c;
+    try { localStorage.setItem("iceedge_bestbets_collapsed", next ? "1" : "0"); }
+    catch { /* ignore */ }
+    return next;
+  });
 
   // When hockey has no games (e.g. off-season), fall back to tennis matches
   const usingTennisFallback = sport === "hockey" && games.length === 0 && (tennisLive.length > 0 || tennisUpcoming.length > 0);
 
-  // Build raw bets list from game data
+  // Build the bets list.
+  //  · Hockey → fetch the pre-ranked, all-markets best bets from the backend
+  //    (team + player props, scored by rules + ML, sorted by prediction score).
+  //  · Tennis / hockey off-season fallback → build from match data client-side.
   useEffect(() => {
-    const raw: BestBet[] = [];
+    let cancelled = false;
 
-    if (sport === "hockey" && games.length > 0) {
-      for (const g of games) {
-        const when = g.period ?? g.time ?? "";
-        const ctx1 = `${t("bb.vs", { opp: g.team2.abbr })}${when ? ` · ${when}` : ""}`;
-        const ctx2 = `${t("bb.vs", { opp: g.team1.abbr })}${when ? ` · ${when}` : ""}`;
-
-        raw.push({
-          id: `bb-${g.id}-ml1`, label: t("bb.teamWin", { abbr: g.team1.abbr }), context: ctx1,
-          logo: g.team1.logo, rulePct: g.team1.winPct, mlPct: null, mlLoading: false,
-          gameId: g.id, teamId: g.team1.id,
-          leg: { id: `bb-${g.id}-ml1`, marketType: "moneyline", marketLabel: "Moneyline",
-            subjectType: "game", subjectId: g.id, subjectName: `${g.team1.abbr} vs ${g.team2.abbr}`,
-            subjectLogo: g.team1.logo, selection: `${g.team1.abbr} to win`,
-            selectionShort: `${g.team1.abbr} ML`, probability: g.team1.winPct,
-            gameInfo: `${g.team1.abbr} vs ${g.team2.abbr}`, addedAt: new Date().toISOString() },
-        });
-        raw.push({
-          id: `bb-${g.id}-ml2`, label: t("bb.teamWin", { abbr: g.team2.abbr }), context: ctx2,
-          logo: g.team2.logo, rulePct: g.team2.winPct, mlPct: null, mlLoading: false,
-          gameId: g.id, teamId: g.team2.id,
-          leg: { id: `bb-${g.id}-ml2`, marketType: "moneyline", marketLabel: "Moneyline",
-            subjectType: "game", subjectId: g.id, subjectName: `${g.team1.abbr} vs ${g.team2.abbr}`,
-            subjectLogo: g.team2.logo, selection: `${g.team2.abbr} to win`,
-            selectionShort: `${g.team2.abbr} ML`, probability: g.team2.winPct,
-            gameInfo: `${g.team1.abbr} vs ${g.team2.abbr}`, addedAt: new Date().toISOString() },
-        });
-        if (g.totalPct != null) {
-          const line = g.overUnder ?? 5.5;
-          raw.push({
-            id: `bb-${g.id}-over`, label: t("bb.over", { line }),
-            context: `${g.team1.abbr} vs ${g.team2.abbr}`,
-            logo: "📈", rulePct: g.totalPct, mlPct: null, mlLoading: false, gameId: g.id,
-            leg: { id: `bb-${g.id}-over`, marketType: "total_goals", marketLabel: "Total Goals O/U",
-              subjectType: "game", subjectId: g.id, subjectName: `${g.team1.abbr} vs ${g.team2.abbr}`,
-              subjectLogo: "📈", selection: `Over ${line}`, selectionShort: `O${line}`,
-              probability: g.totalPct, line, gameInfo: `${g.team1.abbr} vs ${g.team2.abbr}`,
-              addedAt: new Date().toISOString() },
-          });
-          const underPct = 100 - g.totalPct;
-          raw.push({
-            id: `bb-${g.id}-under`, label: t("bb.under", { line }),
-            context: `${g.team1.abbr} vs ${g.team2.abbr}`,
-            logo: "📉", rulePct: underPct, mlPct: null, mlLoading: false, gameId: g.id,
-            leg: { id: `bb-${g.id}-under`, marketType: "total_goals", marketLabel: "Total Goals O/U",
-              subjectType: "game", subjectId: g.id, subjectName: `${g.team1.abbr} vs ${g.team2.abbr}`,
-              subjectLogo: "📉", selection: `Under ${line}`, selectionShort: `U${line}`,
-              probability: underPct, line, gameInfo: `${g.team1.abbr} vs ${g.team2.abbr}`,
-              addedAt: new Date().toISOString() },
-          });
-        }
-      }
-    } else {
-      // Tennis (or hockey off-season fallback showing tennis)
+    // Tennis (or hockey off-season fallback showing tennis)
+    if (sport === "tennis" || usingTennisFallback) {
+      const raw: BestBet[] = [];
       for (const m of [...tennisLive, ...tennisUpcoming]) {
         const ctx = `${m.tournament} · ${m.isLive ? t("home.live") : m.time}`;
         raw.push({
@@ -333,11 +297,42 @@ function BestBetsSection({
             probability: m.player2.winPct, gameInfo: ctx, addedAt: new Date().toISOString() },
         });
       }
+      setBets(raw);
+      setMlFetched(false); // tennis still uses the lazy per-bet ML fetch
+      return;
     }
 
-    setBets(raw);
-    setMlFetched(false);
-  }, [games, tennisLive, tennisUpcoming, sport, lang]);
+    // Hockey → backend best-bets endpoint (all markets, rules + ML, pre-sorted)
+    (async () => {
+      try {
+        // Fetch a larger pool (both rule + ML scores) so the Rules/ML toggle
+        // re-ranks honestly client-side; the list itself still shows the top 15.
+        const { bets: apiBets } = await predictionApiService.getBestBets({ limit: 30, source: "ml" });
+        if (cancelled) return;
+        const mapped: BestBet[] = apiBets.map((b) => {
+          const logo = b.teamAbbr ? nhlLogoUrl(b.teamAbbr) : b.subjectLogo;
+          return {
+            id: b.id, label: b.label, context: b.context, logo,
+            rulePct: b.rulePct, mlPct: b.mlPct, mlLoading: false,
+            gameId: b.gameId ?? undefined, teamId: b.teamId ?? undefined,
+            leg: {
+              id: b.id, marketType: b.marketType, marketLabel: b.marketLabel,
+              subjectType: b.subjectType, subjectId: b.subjectId, subjectName: b.subjectName,
+              subjectLogo: logo, selection: b.selection, selectionShort: b.selectionShort,
+              probability: b.score, line: b.line ?? undefined,
+              gameInfo: b.context, addedAt: new Date().toISOString(),
+            },
+          };
+        });
+        setBets(mapped);
+        setMlFetched(true); // scores already include ML — skip the lazy per-bet fetch
+      } catch {
+        if (!cancelled) { setBets([]); setMlFetched(true); }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [games, tennisLive, tennisUpcoming, sport, lang, usingTennisFallback]);
 
   // Lazy ML fetch when ML tab selected
   useEffect(() => {
@@ -370,42 +365,54 @@ function BestBetsSection({
   return (
     <section className="px-4 mb-6">
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
+        <button
+          onClick={toggleCollapsed}
+          className="flex items-center gap-2 select-none"
+          aria-expanded={!collapsed}
+          title={collapsed ? t("home.show") : t("home.hide")}
+        >
+          <ChevronRight
+            size={14}
+            className="text-[#8a9ea6] transition-transform"
+            style={{ transform: collapsed ? "rotate(0deg)" : "rotate(90deg)" }}
+          />
           <Star size={13} style={{ color: accent }} />
           <span className="text-white text-sm font-medium">{t("home.bestBets")}</span>
-          {!isLoading && <span className="text-[10px] text-[#bfc8cc] bg-white/5 px-1.5 py-0.5 rounded-full">{t("home.top", { n: sorted.length })}</span>}
+          {!isLoading && <span className="text-[10px] text-[#bfc8cc] icy-tile px-1.5 py-0.5 rounded-full">{t("home.top", { n: sorted.length })}</span>}
           {usingTennisFallback && <span className="text-[10px] text-[#facc15] bg-[#facc15]/10 border border-[#facc15]/20 px-1.5 py-0.5 rounded-full">{t("home.tennisOffseason")}</span>}
-        </div>
+        </button>
+        {!collapsed && (
         <div className="flex items-center gap-1.5">
           {/* Source toggle */}
-          <div className="flex bg-white/5 border border-white/10 rounded-full p-0.5 gap-0.5">
+          <div className="flex icy-tile rounded-full p-0.5 gap-0.5">
             {(["rules", "ml"] as SortSource[]).map((s) => (
               <button key={s} onClick={() => setSortSource(s)}
-                className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium transition-all ${sortSource === s ? "text-[#0A0E0C] font-bold" : "text-[#8a9ea6]"}`}
-                style={sortSource === s ? { backgroundColor: s === "ml" ? "#a78bfa" : accent } : {}}>
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium transition-all ${sortSource === s ? "text-[#072E49] font-bold" : "text-[#8a9ea6]"}`}
+                style={sortSource === s ? { backgroundColor: s === "ml" ? "#a78bfa" : "#22ff00" } : {}}>
                 {s === "ml" ? "ML" : t("home.rules")}
               </button>
             ))}
           </div>
           {/* Direction toggle */}
           <button onClick={() => setSortDir(d => d === "safe" ? "risky" : "safe")}
-            className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] text-[#8a9ea6] hover:text-white transition-all">
+            className="px-2.5 py-1 rounded-full icy-tile text-[10px] text-[#8a9ea6] hover:text-white transition-all">
             {sortDir === "safe" ? t("home.safe") : t("home.risky")}
           </button>
         </div>
+        )}
       </div>
 
-      {isLoading ? (
-        <div className="flex flex-col gap-2">
-          {[1,2,3,4,5].map(i => <div key={i} className="h-16 bg-[#131A12] rounded-2xl animate-pulse" />)}
+      {!collapsed && (isLoading ? (
+        <div className="flex flex-col gap-1.5">
+          {[1,2,3,4,5].map(i => <div key={i} className="h-12 icy-tile rounded-xl animate-pulse" />)}
         </div>
       ) : sorted.length === 0 ? (
         <div className="py-8 text-center text-[#bfc8cc] text-xs">{t("home.noBets")}</div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
           {sorted.map(bet => <BestBetRow key={bet.id} bet={bet} sortSource={sortSource} />)}
         </div>
-      )}
+      ))}
     </section>
   );
 }
@@ -441,7 +448,7 @@ function SportSelector() {
         <span className="text-xs" style={{ color: theme.accent }}>▾</span>
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-2 bg-[#131A12] border border-white/20 rounded-2xl overflow-hidden z-50 min-w-[168px] shadow-xl shadow-black/50 backdrop-blur-sm">
+        <div className="absolute top-full left-0 mt-2 icy-card rounded-2xl overflow-hidden z-50 min-w-[168px] shadow-xl shadow-black/50">
           {(Object.keys(SPORT_THEMES) as Sport[]).map((s) => {
             const t = SPORT_THEMES[s]; const active = sport === s;
             return (
@@ -521,7 +528,7 @@ function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: (
   }
 
   return (
-    <div className="min-w-[280px] bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex-shrink-0">
+    <div className="min-w-[280px] icy-card rounded-2xl p-4 flex-shrink-0">
 
       {/* Header: live badge + edge + buttons */}
       <div className="flex items-center justify-between mb-3 gap-2">
@@ -535,7 +542,7 @@ function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: (
             className={`text-[10px] px-2.5 py-0.5 rounded-full border font-medium flex-shrink-0 transition-colors ${
               isAdded
                 ? "bg-green-500/15 border-green-500/30 text-green-400"
-                : "bg-[#86d1ea]/10 border-[#86d1ea]/30 text-[#86d1ea] active:bg-[#86d1ea]/20"
+                : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
             }`}
           >
             {isAdded ? t("home.added") : t("home.add")}
@@ -636,7 +643,7 @@ function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet
   }
 
   return (
-    <div className="bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-3.5">
+    <div className="icy-card rounded-2xl p-3.5">
       <div className="flex items-center gap-3">
 
         {/* Time column */}
@@ -676,7 +683,7 @@ function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet
               className={`w-8 h-8 rounded-xl border flex items-center justify-center text-sm font-bold transition-colors ${
                 isAdded
                   ? "bg-green-500/15 border-green-500/30 text-green-400"
-                  : "bg-[#86d1ea]/10 border-[#86d1ea]/30 text-[#86d1ea] active:bg-[#86d1ea]/20"
+                  : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
               }`}
               title={isAdded ? t("home.addedSlip") : t("home.addToSlip", { name: game.team1.abbr })}
             >
@@ -687,7 +694,7 @@ function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet
           {game.overUnder && (
             <div className="text-right">
               <span className="text-[9px] text-[#bfc8cc]">O/U {game.overUnder}</span>
-              {game.totalPct && <span className="text-[9px] text-[#86d1ea] ml-1">{game.totalPct}%</span>}
+              {game.totalPct && <span className="text-[9px] text-[#90C9F0] ml-1">{game.totalPct}%</span>}
             </div>
           )}
           <button
@@ -734,7 +741,7 @@ function TennisLiveCard({ match, accent }: { match: TennisMatch; accent: string 
 
   return (
     <div
-      className="min-w-[280px] bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex-shrink-0 cursor-pointer active:scale-[0.98] transition-transform"
+      className="min-w-[280px] icy-card rounded-2xl p-4 flex-shrink-0 cursor-pointer active:scale-[0.98] transition-transform"
       onClick={() => navigate(`/predictions/tennis?id=${match.id}`)}
     >
 
@@ -787,7 +794,7 @@ function TennisLiveCard({ match, accent }: { match: TennisMatch; accent: string 
         className={`w-full mt-1 py-1.5 rounded-xl text-xs font-bold transition-colors ${
           isAdded
             ? "bg-green-500/15 border border-green-500/30 text-green-400"
-            : "bg-[#86d1ea]/10 border border-[#86d1ea]/25 text-[#86d1ea] active:bg-[#86d1ea]/20"
+            : "bg-[#90C9F0]/10 border border-[#90C9F0]/25 text-[#90C9F0] active:bg-[#90C9F0]/20"
         }`}
       >
         {isAdded ? t("home.addedSlip") : t("home.addToSlip", { name: match.player1.name.split(" ").pop() ?? "" })}
@@ -827,7 +834,7 @@ function TennisMatchRow({ match, accent }: { match: TennisMatch; accent: string 
 
   return (
     <div
-      className="bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-3.5 cursor-pointer active:scale-[0.98] transition-transform"
+      className="icy-card rounded-2xl p-3.5 cursor-pointer active:scale-[0.98] transition-transform"
       onClick={() => navigate(`/predictions/tennis?id=${match.id}`)}
     >
       <div className="flex items-center gap-3">
@@ -861,7 +868,7 @@ function TennisMatchRow({ match, accent }: { match: TennisMatch; accent: string 
               className={`w-8 h-8 rounded-xl border flex items-center justify-center text-sm font-bold transition-colors ${
                 isAdded
                   ? "bg-green-500/15 border-green-500/30 text-green-400"
-                  : "bg-[#86d1ea]/10 border-[#86d1ea]/30 text-[#86d1ea] active:bg-[#86d1ea]/20"
+                  : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
               }`}
             >
               {isAdded ? "✓" : "+"}
@@ -1120,7 +1127,7 @@ export function HockeyLanding() {
               </div>
               {loading ? (
                 <div className="flex flex-col gap-2">
-                  {[1, 2, 3].map((i) => <div key={i} className="h-20 bg-white/5 rounded-2xl animate-pulse" />)}
+                  {[1, 2, 3].map((i) => <div key={i} className="h-20 icy-tile rounded-2xl animate-pulse" />)}
                 </div>
               ) : upcomingGames.length > 0 ? (
                 <div className="flex flex-col gap-2">
@@ -1165,7 +1172,7 @@ export function HockeyLanding() {
               <h2 className="text-white text-sm font-bold uppercase tracking-wider mb-3">{t("home.upcomingMatches")}</h2>
               {tennisLoading ? (
                 <div className="flex flex-col gap-2">
-                  {[1, 2, 3].map((i) => <div key={i} className="h-20 bg-white/5 rounded-2xl animate-pulse" />)}
+                  {[1, 2, 3].map((i) => <div key={i} className="h-20 icy-tile rounded-2xl animate-pulse" />)}
                 </div>
               ) : tennisUpcoming.length > 0 ? (
                 <div className="flex flex-col gap-2">

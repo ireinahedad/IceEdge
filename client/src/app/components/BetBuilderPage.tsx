@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { TrendingUp, Plus, X, Lightbulb, Lock, Share2, ChevronRight, CheckCircle, Clock, History, Trophy, AlertCircle, RefreshCw, Trash2 } from "lucide-react";
 import { useBet } from "../context/BetContext";
 import { useAuth } from "../context/AuthContext";
@@ -11,6 +11,7 @@ import type { BetSlip } from "../services/slipApiService";
 import { useSport } from "../context/SportContext";
 import { openBet365 } from "../services/affiliateService";
 import { useI18n } from "../i18n";
+import "./bet-theme.css";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -31,8 +32,8 @@ function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: number }) {
   const offset = circumference * (1 - displayed / 100);
 
   const color =
-    pct >= 65 ? "#4ade80" :
-    pct >= 45 ? "#86d1ea" :
+    pct >= 65 ? "#22ff00" :
+    pct >= 45 ? "#90C9F0" :
     pct >= 25 ? "#facc15" : "#f87171";
 
   useEffect(() => {
@@ -89,15 +90,15 @@ function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; onRemov
   const { sport } = useSport();
   const { t } = useI18n();
   const barColor =
-    leg.probability >= 65 ? "#4ade80" :
-    leg.probability >= 50 ? "#86d1ea" :
+    leg.probability >= 65 ? "#22ff00" :
+    leg.probability >= 50 ? "#90C9F0" :
     leg.probability >= 35 ? "#facc15" : "#f87171";
 
   return (
-    <div className="bg-[#131A12]/90 border border-white/20 rounded-2xl p-4 backdrop-blur-sm">
+    <div className="icy-card rounded-2xl p-4">
       <div className="flex items-start gap-3">
         <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
-          <div className="w-7 h-7 rounded-full bg-[#86d1ea]/10 border border-[#86d1ea]/25 flex items-center justify-center text-[10px] font-bold text-[#86d1ea]">
+          <div className="w-7 h-7 rounded-full bg-[#90C9F0]/10 border border-[#90C9F0]/25 flex items-center justify-center text-[10px] font-bold text-[#90C9F0]">
             {index + 1}
           </div>
           {leg.subjectLogo?.startsWith("http")
@@ -106,7 +107,7 @@ function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; onRemov
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-white text-xs font-bold">{leg.subjectName}</p>
-          <p className="text-[#86d1ea] text-[10px] font-medium">{leg.marketLabel}</p>
+          <p className="text-[#90C9F0] text-[10px] font-medium">{leg.marketLabel}</p>
           <p className="text-[#8a9ea6] text-[10px] mt-0.5 leading-relaxed">{leg.selection}</p>
           {leg.gameInfo && <p className="text-[#4a6068] text-[9px] mt-0.5">{leg.gameInfo}</p>}
           <div className="mt-2 flex items-center gap-2">
@@ -127,7 +128,7 @@ function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; onRemov
           </button>
         </div>
         <button onClick={onRemove}
-          className="w-7 h-7 rounded-full bg-[#1B2419] border border-white/20 flex items-center justify-center text-[#8a9ea6] flex-shrink-0 active:bg-red-500/20 active:text-red-400 active:border-red-400/30 transition-colors">
+          className="w-7 h-7 rounded-full icy-tile flex items-center justify-center text-[#8a9ea6] flex-shrink-0 active:bg-red-500/20 active:text-red-400 active:border-red-400/30 transition-colors">
           <X size={10} />
         </button>
       </div>
@@ -141,9 +142,9 @@ function EmptySlip({ onAdd }: { onAdd: () => void }) {
   const { t } = useI18n();
   return (
     <div className="flex flex-col items-center justify-center py-10 gap-4">
-      <div className="w-20 h-20 rounded-full bg-[#131A12]/90 border border-white/20 flex items-center justify-center backdrop-blur-sm">
-        <div className="w-8 h-8 rounded-full bg-[#86d1ea]/15 border border-[#86d1ea]/30 flex items-center justify-center">
-          <div className="w-3 h-3 rounded-full bg-[#86d1ea]/60" />
+      <div className="w-20 h-20 rounded-full icy-card flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full bg-[#90C9F0]/15 border border-[#90C9F0]/30 flex items-center justify-center">
+          <div className="w-3 h-3 rounded-full bg-[#90C9F0]/60" />
         </div>
       </div>
       <div className="text-center">
@@ -155,7 +156,7 @@ function EmptySlip({ onAdd }: { onAdd: () => void }) {
         </p>
       </div>
       <button onClick={onAdd}
-        className="bg-[#86d1ea] text-[#0A0E0C] font-bold px-6 py-3 rounded-2xl text-sm flex items-center gap-2 active:scale-95 transition-transform">
+        className="bg-[#22ff00] text-[#072E49] font-bold px-6 py-3 rounded-2xl text-sm flex items-center gap-2 active:scale-95 transition-transform">
         <Plus size={14} /> {t("slip.browse")}
       </button>
     </div>
@@ -167,9 +168,9 @@ function EmptySlip({ onAdd }: { onAdd: () => void }) {
 function CombinedBreakdown({ legs }: { legs: BetLeg[] }) {
   if (legs.length <= 1) return null;
   return (
-    <div className="bg-[#131A12]/90 border border-white/20 rounded-2xl p-4 backdrop-blur-sm">
+    <div className="icy-card rounded-2xl p-4">
       <div className="flex items-center gap-2 mb-3">
-        <TrendingUp size={12} className="text-[#86d1ea]" />
+        <TrendingUp size={12} className="text-[#90C9F0]" />
         <p className="text-[#8a9ea6] text-[10px] uppercase tracking-wider">Probability Breakdown</p>
       </div>
       <div className="flex flex-col gap-2">
@@ -186,11 +187,11 @@ function CombinedBreakdown({ legs }: { legs: BetLeg[] }) {
                   </span>
                   <div className="flex items-center gap-2">
                     <span className="text-[#8a9ea6] text-[10px]">{leg.probability}%</span>
-                    <span className="text-[#86d1ea] text-[10px] font-bold">to {runningPct}%</span>
+                    <span className="text-[#90C9F0] text-[10px] font-bold">to {runningPct}%</span>
                   </div>
                 </div>
                 <div className="w-full bg-[#0A0E0C] rounded-full h-1">
-                  <div className="h-1 rounded-full bg-[#86d1ea]"
+                  <div className="h-1 rounded-full bg-[#90C9F0]"
                     style={{ width: `${runningPct}%`, transition: "width 0.5s ease" }} />
                 </div>
               </div>
@@ -213,13 +214,13 @@ function LockSlipCTA({
   const { t } = useI18n();
   if (legs.length === 0) return null;
   const color =
-    combinedProbability >= 65 ? "#4ade80" :
-    combinedProbability >= 45 ? "#86d1ea" :
+    combinedProbability >= 65 ? "#22ff00" :
+    combinedProbability >= 45 ? "#90C9F0" :
     combinedProbability >= 25 ? "#facc15" : "#f87171";
 
   return (
     <div className="fixed bottom-[68px] left-1/2 -translate-x-1/2 max-w-[430px] md:max-w-5xl w-full px-4 z-40">
-      <div className="bg-[#131A12]/95 border border-white/20 rounded-2xl p-3 backdrop-blur-md shadow-xl shadow-black/40">
+      <div className="icy-card bet-ink-black rounded-2xl p-3 shadow-xl shadow-black/40">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl flex items-center justify-center"
@@ -238,11 +239,11 @@ function LockSlipCTA({
         </div>
         <div className="flex gap-2">
           <button onClick={onAdd} disabled={isSubmitting}
-            className="flex items-center justify-center gap-1.5 flex-1 py-3 rounded-xl bg-[#1B2419] border border-white/20 text-[#86d1ea] text-xs font-bold active:scale-[0.97] transition-transform disabled:opacity-40">
+            className="flex items-center justify-center gap-1.5 flex-1 py-3 rounded-xl icy-tile text-[#90C9F0] text-xs font-bold active:scale-[0.97] transition-transform disabled:opacity-40">
             <Plus size={13} /> {t("slip.addLeg")}
           </button>
           <button onClick={onLock} disabled={isSubmitting}
-            className="flex items-center justify-center gap-2 flex-[2] py-3 rounded-xl text-[#0A0E0C] text-sm font-bold active:scale-[0.97] transition-transform disabled:opacity-60"
+            className="flex items-center justify-center gap-2 flex-[2] py-3 rounded-xl text-[#072E49] text-sm font-bold active:scale-[0.97] transition-transform disabled:opacity-60"
             style={{ backgroundColor: color }}>
             {isSubmitting ? (
               <>
@@ -272,19 +273,19 @@ function SlipCard({ slip }: { slip: BetSlip }) {
   const date = new Date(slip.placedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   const time = new Date(slip.placedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
-  const outcomeColor = isPending ? "#8a9ea6" : isWin ? "#4ade80" : "#f87171";
+  const outcomeColor = isPending ? "#8a9ea6" : isWin ? "#22ff00" : "#f87171";
   const outcomeBg    = isPending ? "bg-white/5 border-white/10" : isWin ? "bg-green-500/10 border-green-500/20" : "bg-red-500/10 border-red-500/20";
   const outcomeLabel = isPending ? t("slip.pending") : isWin ? t("slip.won") : t("slip.lost");
   const OutcomeIcon  = isPending ? Clock : isWin ? Trophy : AlertCircle;
 
   const combinedColor =
-    (slip.combinedProbability ?? 0) >= 65 ? "#4ade80" :
-    (slip.combinedProbability ?? 0) >= 45 ? "#86d1ea" :
+    (slip.combinedProbability ?? 0) >= 65 ? "#22ff00" :
+    (slip.combinedProbability ?? 0) >= 45 ? "#90C9F0" :
     (slip.combinedProbability ?? 0) >= 25 ? "#facc15" : "#f87171";
 
   return (
-    <div className={`bg-[#131A12] border rounded-2xl overflow-hidden transition-all ${
-      isPending ? "border-white/20" : isWin ? "border-green-500/20" : "border-red-500/20"
+    <div className={`icy-card rounded-2xl overflow-hidden transition-all ${
+      isPending ? "" : isWin ? "ring-1 ring-green-500/40" : "ring-1 ring-red-500/40"
     }`}>
       {/* Header row */}
       <div className="flex items-center justify-between px-4 pt-3 pb-2">
@@ -295,7 +296,7 @@ function SlipCard({ slip }: { slip: BetSlip }) {
             {outcomeLabel}
           </div>
           {slip.isParlay && (
-            <span className="text-[9px] font-medium px-2 py-0.5 rounded-full bg-[#86d1ea]/10 text-[#86d1ea] border border-[#86d1ea]/20">
+            <span className="text-[9px] font-medium px-2 py-0.5 rounded-full bg-[#90C9F0]/10 text-[#90C9F0] border border-[#90C9F0]/20">
               {slip.legCount}-leg parlay
             </span>
           )}
@@ -347,7 +348,7 @@ function SlipCard({ slip }: { slip: BetSlip }) {
 
       {/* Pending: results are settled automatically */}
       {isPending && (
-        <div className="mx-4 mb-3 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
+        <div className="mx-4 mb-3 flex items-center gap-1.5 px-3 py-1.5 rounded-xl icy-tile">
           <Clock size={11} className="text-[#8a9ea6]" />
           <span className="text-[#8a9ea6] text-[10px]">{t("slip.autoSettle")}</span>
         </div>
@@ -405,8 +406,8 @@ function MySlipsTab({ user }: { user: any }) {
   if (!user) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-4 px-6 text-center">
-        <div className="w-16 h-16 rounded-full bg-[#86d1ea]/10 border border-[#86d1ea]/20 flex items-center justify-center">
-          <Lock size={22} className="text-[#86d1ea]" />
+        <div className="w-16 h-16 rounded-full bg-[#90C9F0]/10 border border-[#90C9F0]/20 flex items-center justify-center">
+          <Lock size={22} className="text-[#90C9F0]" />
         </div>
         <div>
           <p className="text-white font-bold text-sm" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>{t("slip.signin")}</p>
@@ -442,12 +443,12 @@ function MySlipsTab({ user }: { user: any }) {
       {loading ? (
         <div className="flex flex-col gap-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-28 bg-[#131A12] border border-white/10 rounded-2xl animate-pulse" />
+            <div key={i} className="h-28 icy-tile rounded-2xl animate-pulse" />
           ))}
         </div>
       ) : slips.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-          <div className="w-16 h-16 rounded-full bg-[#131A12] border border-white/20 flex items-center justify-center">
+          <div className="w-16 h-16 rounded-full icy-card flex items-center justify-center">
             <History size={22} className="text-[#4a6068]" />
           </div>
           <div>
@@ -462,13 +463,13 @@ function MySlipsTab({ user }: { user: any }) {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#86d1ea] animate-pulse" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#90C9F0] animate-pulse" />
                   <p className="text-[#8a9ea6] text-[10px] uppercase tracking-wider font-medium">{t("slip.active")} · {pending.length}</p>
                 </div>
                 <button
                   onClick={handleCheckResults}
                   disabled={resolving === "all"}
-                  className="flex items-center gap-1.5 text-[#86d1ea] text-[10px] font-bold border border-[#86d1ea]/30 bg-[#86d1ea]/10 px-2.5 py-1 rounded-lg active:scale-95 transition-all disabled:opacity-50"
+                  className="flex items-center gap-1.5 text-[#90C9F0] text-[10px] font-bold border border-[#90C9F0]/30 bg-[#90C9F0]/10 px-2.5 py-1 rounded-lg active:scale-95 transition-all disabled:opacity-50"
                 >
                   <RefreshCw size={11} className={resolving === "all" ? "animate-spin" : ""} />
                   {t("slip.checkResults")}
@@ -512,7 +513,13 @@ export function BetBuilderPage() {
   const { sport } = useSport();
   const { t } = useI18n();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<PageTab>("build");
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<PageTab>(searchParams.get("tab") === "slips" ? "slips" : "build");
+  // Dark / light appearance — shared, persisted setting (set from the profile page)
+  const [mode] = useState<"dark" | "light">(() => {
+    try { return localStorage.getItem("iceedge_mode") === "light" ? "light" : "dark"; }
+    catch { return "dark"; }
+  });
   const [showSheet, setShowSheet] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ slipId: string } | null>(null);
@@ -554,10 +561,20 @@ export function BetBuilderPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0A0E0C] text-white max-w-[430px] md:max-w-5xl mx-auto w-full">
+    <div
+      className="flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full"
+      style={{ background: mode === "light" ? "#D4FFEE" : "#2A507B" }}
+    >
 
       {/* Header */}
-      <header className="px-4 pt-12 pb-3 bg-[#0A0E0C]/80 backdrop-blur-md border-b border-white/[0.04] sticky top-0 z-40">
+      <header
+        className="px-4 pt-12 pb-3 backdrop-blur-md sticky top-0 z-40 bet-ink-black"
+        style={{
+          background: "linear-gradient(160deg, rgba(220,245,255,0.22), rgba(150,205,240,0.12) 45%, rgba(235,250,255,0.20))",
+          WebkitBackdropFilter: "blur(16px)",
+          borderBottom: "1px solid rgba(255,255,255,0.4)",
+        }}
+      >
         <div className="flex items-center justify-between mb-3">
           <div>
             <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>
@@ -582,7 +599,7 @@ export function BetBuilderPage() {
           {([["build", t("slip.build")], ["slips", t("slip.mySlips")]] as [PageTab, string][]).map(([key, label]) => (
             <button key={key} onClick={() => setTab(key)}
               className={`flex-1 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
-                tab === key ? "bg-[#86d1ea] text-[#0A0E0C] font-bold" : "text-white/60"
+                tab === key ? "bg-[#22ff00] text-[#072E49] font-bold" : "text-white/60"
               }`}>
               {label}
               {key === "slips" && user && tab !== "slips" && legs.length === 0 && (
@@ -595,7 +612,8 @@ export function BetBuilderPage() {
 
       {/* Build tab */}
       {tab === "build" && (
-        <div className="flex-1 px-4 overflow-y-auto" style={{ paddingBottom: legs.length > 0 ? "160px" : "112px" }}>
+        <div className={`flex-1 px-4 overflow-y-auto bet-ink-black ${mode === "light" ? "bet-light" : "bet-dark"}`} style={{ paddingBottom: legs.length > 0 ? "160px" : "112px" }}>
+          {legs.length > 0 && (
           <div className="flex flex-col items-center py-6">
             <ProbabilityGauge pct={combinedProbability} size={180} />
             {legs.length > 1 && (
@@ -603,7 +621,7 @@ export function BetBuilderPage() {
                 <p className="text-[#4a6068] text-[10px] text-center mt-2 max-w-[240px]">
                   Combined probability all {legs.length} predictions hit
                 </p>
-                <div className="mt-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10">
+                <div className="mt-2 px-4 py-1.5 rounded-full icy-tile">
                   <span className="text-white font-bold text-sm font-mono">{toOddsLabel(combinedProbability)}</span>
                   <span className="text-[#4a6068] text-[10px] ml-1.5">implied odds</span>
                 </div>
@@ -612,13 +630,14 @@ export function BetBuilderPage() {
             {legs.length === 1 && (
               <>
                 <p className="text-[#4a6068] text-[10px] text-center mt-2">{t("slip.individualProb")}</p>
-                <div className="mt-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10">
+                <div className="mt-2 px-4 py-1.5 rounded-full icy-tile">
                   <span className="text-white font-bold text-sm font-mono">{toOddsLabel(combinedProbability)}</span>
                   <span className="text-[#4a6068] text-[10px] ml-1.5">implied odds</span>
                 </div>
               </>
             )}
           </div>
+          )}
 
           {legs.length > 1 && (
             <div className="mb-4"><CombinedBreakdown legs={legs} /></div>
@@ -631,7 +650,7 @@ export function BetBuilderPage() {
               <div className="flex items-center justify-between mb-3">
                 <p className="text-white text-sm font-medium">{t("slip.predictions")}</p>
                 <button onClick={() => setShowSheet(true)}
-                  className="flex items-center gap-1 text-[#86d1ea] text-xs bg-[#86d1ea]/10 border border-[#86d1ea]/25 rounded-full px-3 py-1.5 active:scale-95 transition-transform">
+                  className="flex items-center gap-1 text-[#90C9F0] text-xs bg-[#90C9F0]/10 border border-[#90C9F0]/25 rounded-full px-3 py-1.5 active:scale-95 transition-transform">
                   <Plus size={10} /> {t("slip.add")}
                 </button>
               </div>
@@ -644,10 +663,10 @@ export function BetBuilderPage() {
           )}
 
           {legs.length > 0 && (
-            <div className="bg-[#131A12]/90 border border-white/20 rounded-2xl p-4 backdrop-blur-sm">
+            <div className="icy-card rounded-2xl p-4">
               <div className="flex items-start gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-[#86d1ea]/10 border border-[#86d1ea]/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Lightbulb size={13} className="text-[#86d1ea]" />
+                <div className="w-7 h-7 rounded-lg bg-[#90C9F0]/10 border border-[#90C9F0]/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Lightbulb size={13} className="text-[#90C9F0]" />
                 </div>
                 <div>
                   <p className="text-white text-xs font-medium mb-1">{t("slip.howProbTitle")}</p>
@@ -663,7 +682,7 @@ export function BetBuilderPage() {
 
       {/* My Slips tab */}
       {tab === "slips" && (
-        <div className="flex-1 px-4 overflow-y-auto">
+        <div className={`flex-1 px-4 overflow-y-auto bet-ink-black ${mode === "light" ? "bet-light" : "bet-dark"}`}>
           <MySlipsTab user={user} />
         </div>
       )}
@@ -682,14 +701,14 @@ export function BetBuilderPage() {
       {/* Success overlay */}
       {submitResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-6 bg-black/80">
-          <div className="bg-[#131A12] border border-[#86d1ea]/30 rounded-3xl p-8 text-center max-w-[300px] w-full">
+          <div className="icy-card bet-ink-black rounded-3xl p-8 text-center max-w-[300px] w-full">
             <div className="text-5xl mb-4">✅</div>
             <p className="text-white font-bold text-lg mb-2">Slip Locked!</p>
             <p className="text-[#92A08A] text-sm mb-6">{submitResult.message}</p>
             <button
               onClick={() => { clearLegs(); navigate("/"); }}
               className="w-full py-3 rounded-2xl font-bold text-sm"
-              style={{ background: "#86d1ea", color: "#0A0E0C" }}
+              style={{ background: "#22ff00", color: "#072E49" }}
             >
               Back to Home
             </button>

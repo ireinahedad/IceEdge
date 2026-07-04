@@ -18,6 +18,8 @@ export interface UserRow {
   last_name: string | null;
   role: UserRole;
   is_active: boolean;
+  email_verified: boolean;
+  google_id?: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -31,6 +33,7 @@ export interface UserPublic {
   last_name: string | null;
   role: UserRole;
   is_active: boolean;
+  email_verified: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -61,6 +64,31 @@ export interface AuthTokens {
 export interface AuthResponse {
   user: UserPublic;
   tokens: AuthTokens;
+}
+
+/** Returned by /register — account created but not yet verified (no tokens). */
+export interface PendingVerificationResponse {
+  pending: true;
+  email: string;
+}
+
+export interface VerifyEmailBody {
+  email: string;
+  code: string;
+}
+
+export interface ResendVerificationBody {
+  email: string;
+}
+
+export interface ForgotPasswordBody {
+  email: string;
+}
+
+export interface ResetPasswordBody {
+  email: string;
+  code: string;
+  new_password: string;
 }
 
 export interface RefreshBody {

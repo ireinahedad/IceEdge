@@ -4,6 +4,16 @@
  * Results are cached in memory with per-endpoint TTLs.
  */
 
+import {
+  MOCK_TEAMS_FULL,
+  MOCK_GAMES_FULL,
+  MOCK_TOP_PLAYERS,
+  MOCK_PLAYER_BY_ID,
+} from '../data/mockNhl';
+
+/** When NHL_USE_MOCK=true, serve rich local mock data instead of the live NHL API. */
+const USE_MOCK = process.env.NHL_USE_MOCK === 'true';
+
 const BASE = 'https://api-web.nhle.com/';
 
 // --- Simple in-memory TTL cache -------------------------------------------
@@ -91,6 +101,7 @@ function _splitPct(wins?: number, losses?: number, otLosses?: number): number {
 }
 
 export async function fetchTeams(): Promise<any[]> {
+  if (USE_MOCK) return MOCK_TEAMS_FULL as any[];
   const cached = getCached<any[]>('teams');
   if (cached) return cached;
 
@@ -205,6 +216,7 @@ function formatGame(g: any, date?: string): any {
 }
 
 export async function fetchGamesByDate(date: string): Promise<any[]> {
+  if (USE_MOCK) return MOCK_GAMES_FULL as any[];
   const key    = `schedule:${date}`;
   const cached = getCached<any[]>(key);
   if (cached) return cached;
@@ -221,6 +233,7 @@ export async function fetchGamesByDate(date: string): Promise<any[]> {
 }
 
 export async function fetchLiveGames(): Promise<any[]> {
+  if (USE_MOCK) return (MOCK_GAMES_FULL as any[]).filter((g) => g.status === 'live');
   const cached = getCached<any[]>('live');
   if (cached) return cached;
 
@@ -245,6 +258,7 @@ export async function fetchGameById(gameId: string): Promise<any> {
 // --- Players --------------------------------------------------------------
 
 export async function fetchTopPlayers(): Promise<any[]> {
+  if (USE_MOCK) return MOCK_TOP_PLAYERS as any[];
   const cached = getCached<any[]>('players');
   if (cached) return cached;
 
@@ -290,6 +304,10 @@ export async function fetchTopPlayers(): Promise<any[]> {
 }
 
 export async function fetchPlayerById(playerId: string): Promise<any> {
+  if (USE_MOCK) {
+    const mp = MOCK_PLAYER_BY_ID[String(playerId)];
+    if (mp) return mp;
+  }
   const data    = await fetchNHL<any>(`v1/player/${playerId}/landing`);
   const seasons = (data.seasonTotals ?? []).filter(
     (s: any) => s.leagueAbbrev === 'NHL' && s.gameTypeId === 2

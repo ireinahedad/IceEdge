@@ -1,18 +1,19 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
-  AuthUser, AuthResult,
+  AuthUser, AuthResult, PendingVerification,
   getAccessToken, storeTokens, clearTokens,
-  apiLogin, apiRegister, apiLogout,
+  apiLogin, apiRegister, apiLogout, apiVerifyEmail,
 } from '../services/authService';
 
 interface AuthContextValue {
-  user:       AuthUser | null;
-  token:      string   | null;
-  loading:    boolean;
-  login:      (email: string, password: string) => Promise<void>;
-  register:   (email: string, username: string, password: string, firstName?: string) => Promise<void>;
-  logout:     () => Promise<void>;
-  setSession: (result: AuthResult) => void;   // used by AuthCallback after Google OAuth
+  user:        AuthUser | null;
+  token:       string   | null;
+  loading:     boolean;
+  login:       (email: string, password: string) => Promise<void>;
+  register:    (email: string, username: string, password: string, firstName?: string) => Promise<PendingVerification>;
+  verifyEmail: (email: string, code: string) => Promise<void>;
+  logout:      () => Promise<void>;
+  setSession:  (result: AuthResult) => void;   // used by AuthCallback after Google OAuth
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -40,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setSession = useCallback((result: AuthResult) => {
-    storeTokens(result.tokens.access_token, result.tokens.refresh_token);
+    storeTokens(result.tokens.access_token); // refresh token lives in an httpOnly cookie
     setToken(result.tokens.access_token);
     setUser(result.user);
   }, []);
@@ -50,8 +51,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(result);
   }, [setSession]);
 
+  // Register no longer logs in — it returns a pending state; the user must
+  // confirm the emailed code via verifyEmail() before a session is created.
   const register = useCallback(async (email: string, username: string, password: string, firstName?: string) => {
-    const result = await apiRegister(email, username, password, firstName);
+    return apiRegister(email, username, password, firstName);
+  }, []);
+
+  const verifyEmail = useCallback(async (email: string, code: string) => {
+    const result = await apiVerifyEmail(email, code);
     setSession(result);
   }, [setSession]);
 
@@ -62,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, setSession }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, verifyEmail, logout, setSession }}>
       {children}
     </AuthContext.Provider>
   );

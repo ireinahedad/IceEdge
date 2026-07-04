@@ -1,6 +1,11 @@
 /**
  * authService.ts
  * Wraps /api/auth/* endpoints and manages token storage.
+ *
+ * Access token  → localStorage (short-lived, 15 min).
+ * Refresh token → httpOnly cookie set by the server (never visible to JS).
+ *   All /auth calls therefore use `credentials: 'include'` so the cookie
+ *   flows between the client origin and the API origin.
  */
 
 const BASE = import.meta.env.VITE_PROFILE_API_URL || '';
@@ -8,19 +13,18 @@ const BASE = import.meta.env.VITE_PROFILE_API_URL || '';
 // --- Token storage ----------------------------------------------------------
 
 const ACCESS_KEY  = 'ice_access';
-const REFRESH_KEY = 'ice_refresh';
+const LEGACY_REFRESH_KEY = 'ice_refresh'; // pre-cookie era — cleaned up on load
 
 export function getAccessToken(): string | null  { return localStorage.getItem(ACCESS_KEY); }
-export function getRefreshToken(): string | null { return localStorage.getItem(REFRESH_KEY); }
 
-export function storeTokens(access: string, refresh: string) {
-  localStorage.setItem(ACCESS_KEY,  access);
-  localStorage.setItem(REFRESH_KEY, refresh);
+export function storeTokens(access: string) {
+  localStorage.setItem(ACCESS_KEY, access);
+  localStorage.removeItem(LEGACY_REFRESH_KEY);
 }
 
 export function clearTokens() {
   localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+  localStorage.removeItem(LEGACY_REFRESH_KEY);
 }
 
 // --- Authed fetch helper ----------------------------------------------------
@@ -37,7 +41,7 @@ export async function authedFetch(path: string, init: RequestInit = {}): Promise
     },
   });
 
-  // If 401 and we have a refresh token, try to refresh once
+  // If 401, try a cookie-based refresh once, then replay the request
   if (res.status === 401) {
     const refreshed = await tryRefresh();
     if (refreshed) {
@@ -57,17 +61,15 @@ export async function authedFetch(path: string, init: RequestInit = {}): Promise
 }
 
 async function tryRefresh(): Promise<boolean> {
-  const refresh_token = getRefreshToken();
-  if (!refresh_token) return false;
   try {
     const res = await fetch(`${BASE}/auth/refresh`, {
       method: 'POST',
+      credentials: 'include', // sends the httpOnly refresh cookie
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token }),
     });
     if (!res.ok) { clearTokens(); return false; }
     const data = await res.json();
-    storeTokens(data.access_token, data.refresh_token);
+    storeTokens(data.access_token);
     return true;
   } catch {
     clearTokens();
@@ -89,7 +91,23 @@ export interface AuthUser {
 
 export interface AuthResult {
   user: AuthUser;
-  tokens: { access_token: string; refresh_token: string; expires_in: number };
+  tokens: { access_token: string; expires_in: number };
+}
+
+/** /register no longer logs in immediately — it returns a pending state. */
+export interface PendingVerification {
+  pending: true;
+  email: string;
+}
+
+/** Error thrown when login is blocked because the email isn't verified yet. */
+export class EmailNotVerifiedError extends Error {
+  email: string;
+  constructor(email: string) {
+    super('Email not verified');
+    this.name = 'EmailNotVerifiedError';
+    this.email = email;
+  }
 }
 
 export async function apiRegister(
@@ -97,9 +115,10 @@ export async function apiRegister(
   username: string,
   password: string,
   first_name?: string
-): Promise<AuthResult> {
+): Promise<PendingVerification> {
   const res = await fetch(`${BASE}/auth/register`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, username, password, first_name }),
   });
@@ -110,25 +129,78 @@ export async function apiRegister(
   return res.json();
 }
 
+/** Confirms the 6-digit code; on success the user is logged in. */
+export async function apiVerifyEmail(email: string, code: string): Promise<AuthResult> {
+  const res = await fetch(`${BASE}/auth/verify-email`, {
+    method: 'POST',
+    credentials: 'include', // receive the refresh cookie
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? 'Verification failed');
+  }
+  return res.json();
+}
+
+export async function apiResendVerification(email: string): Promise<void> {
+  await fetch(`${BASE}/auth/resend-verification`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  }).catch(() => {});
+}
+
+/** Requests a password-reset code by email. Always resolves (no enumeration). */
+export async function apiForgotPassword(email: string): Promise<void> {
+  await fetch(`${BASE}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  }).catch(() => {});
+}
+
+/** Sets a new password using the emailed reset code. */
+export async function apiResetPassword(email: string, code: string, newPassword: string): Promise<void> {
+  const res = await fetch(`${BASE}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code, new_password: newPassword }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? 'Reset failed');
+  }
+}
+
 export async function apiLogin(email: string, password: string): Promise<AuthResult> {
   const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
+    credentials: 'include', // receive the refresh cookie
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
+    if (res.status === 403 && err.code === 'EMAIL_NOT_VERIFIED') {
+      throw new EmailNotVerifiedError(err.email ?? email);
+    }
     throw new Error(err.error ?? 'Login failed');
   }
   return res.json();
 }
 
 export async function apiLogout(): Promise<void> {
-  const refresh_token = getRefreshToken();
-  if (!refresh_token) return;
-  await authedFetch('/auth/logout', {
+  const token = getAccessToken();
+  await fetch(`${BASE}/auth/logout`, {
     method: 'POST',
-    body: JSON.stringify({ refresh_token }),
+    credentials: 'include', // server reads + revokes the cookie
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
   }).catch(() => {});
   clearTokens();
 }

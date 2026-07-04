@@ -5,8 +5,9 @@ import { useAuth } from "../context/AuthContext";
 /**
  * AuthCallback
  * Landed here after server redirects from Google OAuth:
- *   /auth/callback?access_token=...&refresh_token=...
- * Reads the tokens, calls setSession, then sends user to /profile.
+ *   /auth/callback?access_token=...
+ * (The refresh token was set as an httpOnly cookie by the server.)
+ * Reads the access token, calls setSession, then sends user to /profile.
  */
 export function AuthCallback() {
   const navigate = useNavigate();
@@ -18,10 +19,9 @@ export function AuthCallback() {
     ran.current = true;
 
     const params = new URLSearchParams(window.location.search);
-    const access_token  = params.get("access_token");
-    const refresh_token = params.get("refresh_token");
+    const access_token = params.get("access_token");
 
-    if (!access_token || !refresh_token) {
+    if (!access_token) {
       navigate("/login", { replace: true });
       return;
     }
@@ -30,7 +30,7 @@ export function AuthCallback() {
       // Decode user payload from JWT (no verification needed on client)
       const payload = JSON.parse(atob(access_token.split(".")[1]));
       setSession({
-        tokens: { access_token, refresh_token, expires_in: 900 },
+        tokens: { access_token, expires_in: 900 },
         user: {
           id:         payload.sub,
           email:      payload.email,

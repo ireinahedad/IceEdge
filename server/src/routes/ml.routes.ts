@@ -19,8 +19,29 @@ import {
   buildPlayerPropFeatures,
   buildTeamFuturesFeatures,
 } from "../services/featureEngineering";
+import { getBestBets } from "../services/bestBets.service";
 
 const router = Router();
+
+// GET /api/predict/best-bets
+// Top individual bets across all markets (team + player props),
+// ranked by prediction score. ML-first with rule fallback.
+// Query: ?limit=15&source=ml|rules&days=3&players=15
+router.get("/best-bets", async (req: Request, res: Response) => {
+  try {
+    const source = req.query.source === "rules" ? "rules" : "ml";
+    const result = await getBestBets({
+      limit:      req.query.limit   ? parseInt(String(req.query.limit), 10)   : undefined,
+      days:       req.query.days    ? parseInt(String(req.query.days), 10)    : undefined,
+      maxPlayers: req.query.players ? parseInt(String(req.query.players), 10) : undefined,
+      source,
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.error("[predict/best-bets]", err.message);
+    res.status(500).json({ error: err.message ?? "Best bets failed" });
+  }
+});
 
 // --- Types ---
 

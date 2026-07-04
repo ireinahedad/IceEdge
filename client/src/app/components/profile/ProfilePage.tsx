@@ -101,21 +101,6 @@ function Skeleton({ className }: { className: string }) {
   );
 }
 
-function StreakBadge({ streak }: { streak: number }) {
-  if (streak === 0) return null;
-  const isWin = streak > 0;
-  const abs = Math.abs(streak);
-  return (
-    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold ${
-      isWin
-        ? "bg-green-500/15 border-green-500/30 text-green-400"
-        : "bg-red-500/15 border-red-500/30 text-red-400"
-    }`}>
-      <span>{abs} {isWin ? "W" : "L"} streak</span>
-    </div>
-  );
-}
-
 function UserAvatar({
   avatarUrl,
   avatar,
@@ -160,13 +145,17 @@ function UserAvatar({
 }
 
 /** Compact stat square used beside the name */
-function MiniStat({ label, value, color = "#86d1ea" }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="bg-white/5 border border-white/15 rounded-lg px-2 py-1.5 flex flex-col items-center justify-center min-w-[52px]">
-      <span className="text-sm font-bold leading-none" style={{ color }}>{value}</span>
+function MiniStat({ label, value, color, className, onClick }: { label: string; value: string; color?: string; className?: string; onClick?: () => void }) {
+  const cls = `icy-tile rounded-lg px-2 py-1.5 flex flex-col items-center justify-center min-w-[52px] ${className ?? ""} ${onClick ? "cursor-pointer active:scale-95 transition-transform" : ""}`;
+  const inner = (
+    <>
+      <span className={`text-sm font-bold leading-none ${color ? "" : "text-white"}`} style={color ? { color } : undefined}>{value}</span>
       <span className="text-white/60 text-[8px] uppercase tracking-wide mt-1 text-center leading-none">{label}</span>
-    </div>
+    </>
   );
+  return onClick
+    ? <button type="button" onClick={onClick} className={cls}>{inner}</button>
+    : <div className={cls}>{inner}</div>;
 }
 
 function ProfileHeader({
@@ -174,16 +163,19 @@ function ProfileHeader({
   stats,
   onAvatarClick,
   avatarUploading,
+  onBetsClick,
 }: {
   profile: UserProfile;
   stats: UserBettingStats;
   onAvatarClick?: () => void;
   avatarUploading?: boolean;
+  onBetsClick?: () => void;
 }) {
   return (
-    <div className="backdrop-blur-md border border-white/20 rounded-2xl p-5" style={{ background: "#1d3355" }}>
+    <div className="icy-card rounded-2xl p-5">
+      {/* Identity row — the logo/avatar always stays in the same column as the name */}
       <div className="flex items-center gap-4 mb-4">
-        <div className="relative">
+        <div className="relative flex-shrink-0">
           <UserAvatar
             avatarUrl={profile.avatarUrl}
             avatar={profile.avatar}
@@ -192,7 +184,7 @@ function ProfileHeader({
             uploading={avatarUploading}
           />
           {profile.favoriteTeam && (
-            <div className="absolute -bottom-1.5 -right-1.5 bg-[#86d1ea] text-[#0A0E0C] text-[8px] font-bold px-1.5 py-0.5 rounded-full pointer-events-none">
+            <div className="absolute -bottom-1.5 -right-1.5 bg-[#90C9F0] text-[#072E49] text-[8px] font-bold px-1.5 py-0.5 rounded-full pointer-events-none">
               {profile.favoriteTeam}
             </div>
           )}
@@ -200,23 +192,22 @@ function ProfileHeader({
 
         <div className="flex-1 min-w-0">
           <FrozenName name={profile.displayName} score={profile.performanceScore} size={16} />
-          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-            <p className="text-white/70 text-xs">@{profile.username}</p>
-            <MiniStat label="Hit Rate" value={`${stats.hitRate}%`} color={stats.hitRate >= 65 ? "#4ade80" : "#86d1ea"} />
-            <MiniStat label="Bets" value={`${stats.totalBets}`} color="#86d1ea" />
-            <MiniStat label="W - L" value={`${stats.wins}-${stats.losses}`} color="#bfc8cc" />
-            <MiniStat label="Best" value={`${stats.longestWinStreak}W`} color="#facc15" />
-          </div>
-          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-            <StreakBadge streak={stats.currentStreak} />
-          </div>
+          <p className="text-white/70 text-xs mt-1.5">@{profile.username}</p>
         </div>
 
         <ScoreRing score={profile.performanceScore} tier={profile.tier} />
       </div>
 
+      {/* Stats — always laid out horizontally, whatever the viewport */}
+      <div className="flex items-stretch gap-2">
+        <MiniStat className="flex-1" label="Hit Rate" value={`${stats.hitRate}%`} />
+        <MiniStat className="flex-1" label="Bets ›" value={`${stats.totalBets}`} onClick={onBetsClick} />
+        <MiniStat className="flex-1" label="W - L" value={`${stats.wins}-${stats.losses}`} color={stats.wins > stats.losses ? "#22ff00" : undefined} />
+        <MiniStat className="flex-1" label="Best" value={`${stats.longestWinStreak}W`} />
+      </div>
+
       {profile.bio && (
-        <p className="text-white/70 text-[10px] leading-relaxed border-t border-white/20 pt-3">
+        <p className="text-white/70 text-[10px] leading-relaxed border-t border-white/20 pt-3 mt-4">
           {profile.bio}
         </p>
       )}
@@ -229,12 +220,12 @@ function OverviewTab({ profile, stats }: { profile: UserProfile; stats: UserBett
   const total = stats.parlayRecord.wins + stats.parlayRecord.losses;
   return (
     <div className="flex flex-col gap-3">
-      <div className="self-start bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-3">
+      <div className="self-start icy-card rounded-2xl p-3">
         <p className="text-white text-[10px] font-medium mb-2">{t("profile.parlayRecord")}</p>
         <div className="flex gap-1.5">
-          <MiniStat label={t("profile.parlayWins")} value={`${stats.parlayRecord.wins}`} color="#4ade80" />
+          <MiniStat label={t("profile.parlayWins")} value={`${stats.parlayRecord.wins}`} color="#22ff00" />
           <MiniStat label={t("profile.parlayLosses")} value={`${stats.parlayRecord.losses}`} color="#f87171" />
-          <MiniStat label={t("profile.parlayRate")} value={`${total > 0 ? Math.round((stats.parlayRecord.wins / total) * 100) : 0}%`} color="#86d1ea" />
+          <MiniStat label={t("profile.parlayRate")} value={`${total > 0 ? Math.round((stats.parlayRecord.wins / total) * 100) : 0}%`} color="#90C9F0" />
         </div>
       </div>
       <HitRateChart stats={stats} />
@@ -256,11 +247,15 @@ function SettingsTab({
   onSaved,
   onAvatarClick,
   avatarUploading,
+  mode,
+  setMode,
 }: {
   profile: UserProfile;
   onSaved: (updated: UserProfile) => void;
   onAvatarClick: () => void;
   avatarUploading: boolean;
+  mode: "dark" | "light";
+  setMode: (m: "dark" | "light") => void;
 }) {
   const { t, lang, setLang } = useI18n();
   const [username, setUsername] = useState(profile.username);
@@ -274,6 +269,8 @@ function SettingsTab({
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [showEmojis, setShowEmojis] = useState(false);
+  const [showFlags, setShowFlags] = useState(false);
 
   async function handleSave() {
     setSaving(true);
@@ -306,6 +303,31 @@ function SettingsTab({
     "🛡️", "💎", "🪨", "⚔️", "🔥", "☀️",
   ];
 
+  // Country flags a user can display next to their name in podium / chat.
+  // Rendered as real images (Windows doesn't render flag emoji), stored as avatarUrl.
+  const FLAG_CODES = [
+    "ca", "us", "se", "fi", "ru", "cz",
+    "sk", "ch", "de", "fr", "gb", "es",
+    "it", "no", "dk", "at", "lv", "rs",
+    "pl", "au", "jp", "nl", "be", "kz",
+  ];
+  const flagUrl = (code: string) => `https://flagcdn.com/w80/${code}.png`;
+
+  async function handlePickFlag(code: string) {
+    setPickingEmoji(true);
+    setSaveMsg(null);
+    try {
+      const updated = await profileApiService.updateProfile({ avatarUrl: flagUrl(code) });
+      onSaved(updated);
+      setSaveMsg("Saved!");
+    } catch (err: any) {
+      setSaveMsg(err.message ?? "Failed to save");
+    } finally {
+      setPickingEmoji(false);
+      setTimeout(() => setSaveMsg(null), 2500);
+    }
+  }
+
   async function handlePickEmoji(emoji: string) {
     setPickingEmoji(true);
     setSaveMsg(null);
@@ -324,62 +346,120 @@ function SettingsTab({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Language */}
-      <div className="self-start inline-flex items-center gap-2 bg-white/5 backdrop-blur-md border border-white/20 rounded-lg px-2.5 py-1.5">
-        <span className="text-[11px]">🌐</span>
-        <span className={`text-[10px] font-bold transition-colors ${lang === "en" ? "text-[#86d1ea]" : "text-white/40"}`}>EN</span>
-        <ToggleSwitch checked={lang === "fr"} onChange={() => setLang(lang === "fr" ? "en" : "fr")} fontSize={11} />
-        <span className={`text-[10px] font-bold transition-colors ${lang === "fr" ? "text-[#86d1ea]" : "text-white/40"}`}>FR</span>
+      {/* Language + appearance */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex items-center gap-2 icy-card rounded-lg px-2.5 py-1.5">
+          <span className="text-[11px]">🌐</span>
+          <span className={`text-[10px] font-bold transition-colors ${lang === "en" ? "text-[#90C9F0]" : "text-white/40"}`}>EN</span>
+          <ToggleSwitch checked={lang === "fr"} onChange={() => setLang(lang === "fr" ? "en" : "fr")} fontSize={11} />
+          <span className={`text-[10px] font-bold transition-colors ${lang === "fr" ? "text-[#90C9F0]" : "text-white/40"}`}>FR</span>
+        </div>
+        <div className="inline-flex items-center gap-2 icy-card rounded-lg px-2.5 py-1.5">
+          <span className={`text-[10px] font-bold transition-colors ${mode === "dark" ? "text-[#90C9F0]" : "text-white/40"}`}>🌙 {t("profile.dark")}</span>
+          <ToggleSwitch checked={mode === "light"} onChange={() => setMode(mode === "light" ? "dark" : "light")} fontSize={11} />
+          <span className={`text-[10px] font-bold transition-colors ${mode === "light" ? "text-[#90C9F0]" : "text-white/40"}`}>{t("profile.light")} ☀️</span>
+        </div>
       </div>
 
       {/* Avatar */}
-      <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
-        <p className="text-white text-xs font-medium mb-3">{t("profile.photo")}</p>
-        <div className="flex items-center gap-4">
-          <UserAvatar
-            avatarUrl={profile.avatarUrl}
-            avatar={profile.avatar}
-            size="lg"
-            onClick={onAvatarClick}
-            uploading={avatarUploading}
-          />
-          <div className="flex-1">
-            <button
+      <div className="icy-card rounded-2xl p-4 flex flex-col gap-4">
+        <p className="text-white text-xs font-medium">{t("profile.photo")}</p>
+
+        {/* ── 1. Profile photo ── */}
+        <div>
+          <p className="text-white/50 text-[9px] uppercase tracking-wider mb-2">{t("profile.choosePhoto")}</p>
+          <div className="flex items-center gap-4">
+            <UserAvatar
+              avatarUrl={profile.avatarUrl}
+              avatar={profile.avatar}
+              size="lg"
               onClick={onAvatarClick}
-              disabled={avatarUploading}
-              className="self-start px-3 py-1.5 rounded-lg bg-[#86d1ea]/10 border border-[#86d1ea]/30 text-[#86d1ea] text-[10px] font-medium hover:bg-[#86d1ea]/20 transition-all disabled:opacity-50"
-            >
-              {avatarUploading ? t("profile.uploading") : t("profile.changePhoto")}
-            </button>
-            <p className="text-white/40 text-[9px] mt-1.5 text-center">{t("profile.photoHint")}</p>
+              uploading={avatarUploading}
+            />
+            <div className="flex-1 min-w-0">
+              <button
+                onClick={onAvatarClick}
+                disabled={avatarUploading}
+                className="px-3 py-1.5 rounded-lg bg-[#90C9F0]/10 border border-[#90C9F0]/30 text-[#90C9F0] text-[10px] font-medium hover:bg-[#90C9F0]/20 transition-all disabled:opacity-50"
+              >
+                {avatarUploading ? t("profile.uploading") : t("profile.changePhoto")}
+              </button>
+              <p className="text-white/40 text-[9px] mt-1.5">{t("profile.photoHint")}</p>
+            </div>
           </div>
         </div>
 
-        {/* Or pick an ice avatar */}
-        <p className="text-white/50 text-[9px] uppercase tracking-wider mt-4 mb-2">{t("profile.iceAvatar")}</p>
-        <div className="grid grid-cols-12 gap-1">
-          {ICE_AVATARS.map((e) => {
-            const active = !profile.avatarUrl && profile.avatar === e;
-            return (
-              <button
-                key={e}
-                onClick={() => handlePickEmoji(e)}
-                disabled={pickingEmoji}
-                className={`aspect-square rounded-md flex items-center justify-center text-[11px] border transition-all active:scale-95 disabled:opacity-50 ${
-                  active
-                    ? "border-[#86d1ea] bg-[#86d1ea]/15"
-                    : "border-white/10 bg-white/5 hover:bg-white/10"
-                }`}
-              >
-                {e}
-              </button>
-            );
-          })}
+        {/* ── 2. Emojis (collapsible) ── */}
+        <div className="border-t border-white/20 pt-3">
+          <button
+            onClick={() => setShowEmojis((v) => !v)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <span className="text-white/50 text-[9px] uppercase tracking-wider">{t("profile.chooseEmoji")}</span>
+            <span className="text-[#90C9F0] text-[10px]">{showEmojis ? "▲" : "▼"}</span>
+          </button>
+          {showEmojis && (
+            <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-9 gap-2 mt-3">
+              {ICE_AVATARS.map((e) => {
+                const active = !profile.avatarUrl && profile.avatar === e;
+                return (
+                  <button
+                    key={e}
+                    onClick={() => handlePickEmoji(e)}
+                    disabled={pickingEmoji}
+                    className={`aspect-square rounded-lg flex items-center justify-center text-2xl border transition-all active:scale-95 disabled:opacity-50 ${
+                      active
+                        ? "border-[#90C9F0] bg-[#90C9F0]/15"
+                        : "border-white/40 bg-white/5 hover:bg-white/10"
+                    }`}
+                  >
+                    {e}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ── 3. Flags (collapsible) ── */}
+        <div className="border-t border-white/20 pt-3">
+          <button
+            onClick={() => setShowFlags((v) => !v)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <span className="text-white/50 text-[9px] uppercase tracking-wider">{t("profile.chooseFlag")}</span>
+            <span className="text-[#90C9F0] text-[10px]">{showFlags ? "▲" : "▼"}</span>
+          </button>
+          {showFlags && (
+            <>
+              <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-9 gap-2 mt-3">
+                {FLAG_CODES.map((code) => {
+                  const url = flagUrl(code);
+                  const active = profile.avatarUrl === url;
+                  return (
+                    <button
+                      key={code}
+                      onClick={() => handlePickFlag(code)}
+                      disabled={pickingEmoji}
+                      className={`aspect-[4/3] rounded-lg overflow-hidden flex items-center justify-center border transition-all active:scale-95 disabled:opacity-50 ${
+                        active
+                          ? "border-[#90C9F0] ring-2 ring-[#90C9F0]/40"
+                          : "border-white/40 bg-white/5 hover:bg-white/10"
+                      }`}
+                    >
+                      <img src={url} alt={code} loading="lazy" className="w-full h-full object-contain" />
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-white/40 text-[9px] mt-2">{t("profile.flagHint")}</p>
+            </>
+          )}
         </div>
       </div>
 
       {/* Profile info */}
-      <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex flex-col gap-3">
+      <div className="icy-card rounded-2xl p-4 flex flex-col gap-3">
         <p className="text-white text-xs font-medium">{t("profile.info")}</p>
 
         <div className="grid grid-cols-2 gap-x-3 gap-y-1">
@@ -438,11 +518,11 @@ function SettingsTab({
       </div>
 
       {/* AI Settings */}
-      <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex flex-col gap-3">
+      <div className="icy-card rounded-2xl p-4 flex flex-col gap-3">
         <p className="text-white text-xs font-medium">{t("profile.aiSettings")}</p>
         <p className="text-white/50 text-[10px]">
           {t("profile.aiSettingsDesc")}{" "}
-          <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-[#86d1ea] underline">
+          <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-[#90C9F0] underline">
             {t("profile.getKey")}
           </a>
         </p>
@@ -455,12 +535,12 @@ function SettingsTab({
               value={openaiKey}
               onChange={(e) => setOpenaiKey(e.target.value)}
               placeholder="sk-proj-..."
-              className="w-full bg-black/20 border border-white/15 rounded-lg pl-2.5 pr-12 py-2 text-[#86d1ea] text-[11px] font-semibold placeholder-white/25 outline-none focus:border-[#86d1ea]/60 transition-colors"
+              className={`w-full bg-black/20 border border-white/40 rounded-lg pl-2.5 pr-12 py-2 text-[11px] font-semibold placeholder-white/25 outline-none focus:border-[#90C9F0]/60 transition-colors ${mode === "light" ? "text-[#072E49]" : "text-[#90C9F0]"}`}
             />
             <button
               type="button"
               onClick={() => setShowKey((v) => !v)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#86d1ea] text-[10px]"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#90C9F0] text-[10px]"
             >
               {showKey ? t("profile.hide") : t("profile.show")}
             </button>
@@ -486,7 +566,7 @@ function SettingsTab({
         <button
           onClick={handleSave}
           className="self-center px-8 py-2 rounded-xl font-bold text-xs transition-all"
-          style={{ background: "#86d1ea", color: "#0A0E0C" }}
+          style={{ background: "#22ff00", color: "#072E49" }}
         >
           {t("common.save")}
         </button>
@@ -514,6 +594,16 @@ export function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Dark / light appearance chosen by the user (persisted)
+  const [mode, setModeState] = useState<"dark" | "light">(() => {
+    try { return localStorage.getItem("iceedge_mode") === "light" ? "light" : "dark"; }
+    catch { return "dark"; }
+  });
+  const setMode = (m: "dark" | "light") => {
+    setModeState(m);
+    try { localStorage.setItem("iceedge_mode", m); } catch { /* ignore */ }
+  };
 
   useEffect(() => {
     if (!user) { navigate("/login?returnTo=/profile", { replace: true }); return; }
@@ -550,12 +640,17 @@ export function ProfilePage() {
   if (!user) return null;
 
   return (
-    <div className="flex flex-col min-h-screen pb-24" style={{ background: "#0A0E0C" }}>
+    <div className="flex flex-col min-h-screen pb-24 max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: mode === "light" ? "#D4FFEE" : "#2A507B" }}>
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
 
       {/* Header */}
-      <div className="sticky top-0 z-40 px-4 pt-12 pb-3"
-        style={{ background: "rgba(10,14,12,0.92)", backdropFilter: "blur(16px)", borderBottom: "1px solid #283323" }}>
+      <div className="sticky top-0 z-40 px-4 pt-12 pb-3 profile-ink-black"
+        style={{
+          background: "linear-gradient(160deg, rgba(220,245,255,0.22), rgba(150,205,240,0.12) 45%, rgba(235,250,255,0.20))",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          borderBottom: "1px solid rgba(255,255,255,0.4)",
+        }}>
         <div className="flex items-center justify-between">
           <h1 className="text-white text-lg font-bold">{t("profile.title")}</h1>
           <button onClick={logout} className="text-white/40 text-xs border border-white/10 px-3 py-1.5 rounded-xl">{t("profile.signout")}</button>
@@ -568,7 +663,7 @@ export function ProfilePage() {
                 key={tabKey}
                 onClick={() => setTab(tabKey)}
                 className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all"
-                style={tab === tabKey ? { background: "#86d1ea", color: "#0A0E0C" } : { color: "#92A08A" }}
+                style={tab === tabKey ? { background: "#90C9F0", color: "#072E49" } : { color: "#92A08A" }}
               >
                 {tabKey === "overview" ? t("profile.overview") : t("profile.settings")}
               </button>
@@ -577,22 +672,23 @@ export function ProfilePage() {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className={`flex-1 overflow-y-auto px-4 py-4 profile-ink-black ${mode === "light" ? "profile-light" : "profile-dark"}`}>
         {loading ? (
           <div className="flex flex-col gap-3">
             {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24" />)}
           </div>
+
         ) : error ? (
           <div className="text-center py-16">
             <p className="text-red-400 text-sm">{error}</p>
           </div>
         ) : profile && stats ? (
           <div className="flex flex-col gap-4">
-            <ProfileHeader profile={profile} stats={stats} onAvatarClick={handleAvatarClick} avatarUploading={avatarUploading} />
+            <ProfileHeader profile={profile} stats={stats} onAvatarClick={handleAvatarClick} avatarUploading={avatarUploading} onBetsClick={() => navigate("/bet?tab=slips")} />
             {tab === "overview" ? (
               <OverviewTab profile={profile} stats={stats} />
             ) : (
-              <SettingsTab profile={profile} onSaved={setProfile} onAvatarClick={handleAvatarClick} avatarUploading={avatarUploading} />
+              <SettingsTab profile={profile} onSaved={setProfile} onAvatarClick={handleAvatarClick} avatarUploading={avatarUploading} mode={mode} setMode={setMode} />
             )}
           </div>
         ) : null}

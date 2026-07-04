@@ -63,7 +63,54 @@ async function get<T>(path: string): Promise<T> {
 
 // ─── Prediction Service ───────────────────────────────────────────────────────
 
+// ─── Best Bets ─────────────────────────────────────────────────────────────────
+
+export interface ApiBestBet {
+  id:             string;
+  subjectType:    "game" | "player";
+  marketType:     BetMarketType;
+  marketLabel:    string;
+  subjectId:      string;
+  subjectName:    string;
+  subjectLogo:    string;
+  teamAbbr:       string | null;
+  label:          string;
+  selection:      string;
+  selectionShort: string;
+  context:        string;
+  line:           number | null;
+  gameId:         string | null;
+  teamId:         string | null;
+  playerId:       string | null;
+  rulePct:        number;
+  mlPct:          number | null;
+  score:          number;
+  source:         "ml" | "rules";
+  confidence:     "very_high" | "high" | "medium" | "low" | "very_low";
+}
+
+export interface BestBetsResponse {
+  bets: ApiBestBet[];
+  meta: { generatedAt: string; source: string; mlAvailable: boolean; scanned: number };
+}
+
 export const predictionApiService = {
+  /**
+   * Top individual bets across all markets, ranked by prediction score.
+   * ML-first with rule fallback. Server does the scanning + scoring + sorting.
+   */
+  getBestBets: async (
+    opts: { limit?: number; source?: "ml" | "rules"; days?: number; players?: number } = {}
+  ): Promise<BestBetsResponse> => {
+    const qs = new URLSearchParams();
+    if (opts.limit   != null) qs.set("limit",   String(opts.limit));
+    if (opts.source  != null) qs.set("source",  opts.source);
+    if (opts.days    != null) qs.set("days",    String(opts.days));
+    if (opts.players != null) qs.set("players", String(opts.players));
+    const q = qs.toString();
+    return get<BestBetsResponse>(`/predict/best-bets${q ? `?${q}` : ""}`);
+  },
+
   /**
    * Get win/hit probability for a single bet market.
    * Falls back to local estimation when API is not configured.

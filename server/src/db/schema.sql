@@ -43,9 +43,25 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_url    TEXT,
   role          user_role     NOT NULL DEFAULT 'user',
   is_active     BOOLEAN       NOT NULL DEFAULT TRUE,
+  email_verified BOOLEAN      NOT NULL DEFAULT FALSE,
   created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS email_verification_codes (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash   TEXT        NOT NULL,
+  purpose     TEXT        NOT NULL DEFAULT 'email_verify',  -- 'email_verify' | 'password_reset'
+  expires_at  TIMESTAMPTZ NOT NULL,
+  consumed    BOOLEAN     NOT NULL DEFAULT FALSE,
+  attempts    INT         NOT NULL DEFAULT 0,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_evc_user_active
+  ON email_verification_codes (user_id)
+  WHERE consumed = FALSE;
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

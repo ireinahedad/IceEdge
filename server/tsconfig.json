@@ -21,6 +21,7 @@
     "src/app.controller.ts",
     "src/app.controller.spec.ts",
     "src/app.module.ts",
-    "src/app.service.ts"
+    "src/app.service.ts",
+    "src/main.ts"
   ]
 }

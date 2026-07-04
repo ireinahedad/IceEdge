@@ -162,19 +162,81 @@ export async function settlePendingSlips(userId?: string, max = 100): Promise<Se
   return summary;
 }
 
-/** Background job — call once at server startup. */
-export function startSettlementJob(intervalMs = 15 * 60_000): void {
-  const run = async () => {
+// ── Event-driven background job ──────────────────────────────────────────────
+//
+// Instead of blindly re-settling every N minutes, the job watches the games
+// actually referenced by pending slips and settles as soon as one turns FINAL:
+//   1. cheap SQL: collect distinct gameIds from pending slips (no API call
+//      when there is nothing pending)
+//   2. poll only those games' status
+//   3. when a game newly becomes final → run settlePendingSlips
+// A slow fallback pass still runs hourly as a safety net (e.g. games that
+// finished while the check was failing, or player-prop slips).
+
+/** Distinct gameIds referenced by pending slips. */
+async function pendingGameIds(): Promise<string[]> {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT leg->>'gameId' AS "gameId"
+     FROM bet_slips, jsonb_array_elements(legs) AS leg
+     WHERE outcome = 'pending' AND leg->>'gameId' IS NOT NULL`,
+  );
+  return rows.map((r: any) => String(r.gameId));
+}
+
+// Games we already know are final — no need to re-poll or re-trigger for them.
+const knownFinal = new Set<string>();
+
+async function checkFinishedGames(): Promise<void> {
+  const gameIds = await pendingGameIds();
+  if (gameIds.length === 0) return; // nothing pending → zero API calls
+
+  let newlyFinal = false;
+  for (const id of gameIds) {
+    if (knownFinal.has(id)) { newlyFinal = true; continue; } // final but slip still pending → retry settle
+    try {
+      const g = await fetchGameById(id);
+      if (g?.status === 'final') {
+        knownFinal.add(id);
+        newlyFinal = true;
+      }
+    } catch { /* API down / game not found — retry next tick */ }
+  }
+
+  if (newlyFinal) {
+    const s = await settlePendingSlips(undefined, 200);
+    if (s.settled > 0) {
+      console.log(`[Settlement] ${s.settled}/${s.checked} slips settled (${s.wins}W/${s.losses}L)`);
+    }
+  }
+
+  // Don't let the set grow forever across a long-running process
+  if (knownFinal.size > 2000) knownFinal.clear();
+}
+
+/**
+ * Background job — call once at server startup.
+ * @param checkMs    how often to poll the status of games with pending slips (default 2 min)
+ * @param fallbackMs full settlement pass as a safety net (default 60 min)
+ */
+export function startSettlementJob(checkMs = 2 * 60_000, fallbackMs = 60 * 60_000): void {
+  const check = async () => {
+    try { await checkFinishedGames(); }
+    catch (err: any) { console.warn('[Settlement] check failed:', err.message); }
+  };
+  const fallback = async () => {
     try {
       const s = await settlePendingSlips(undefined, 200);
       if (s.settled > 0) {
-        console.log(`[Settlement] ${s.settled}/${s.checked} slips settled (${s.wins}W/${s.losses}L)`);
+        console.log(`[Settlement] (fallback) ${s.settled}/${s.checked} slips settled (${s.wins}W/${s.losses}L)`);
       }
     } catch (err: any) {
-      console.warn('[Settlement] job failed:', err.message);
+      console.warn('[Settlement] fallback failed:', err.message);
     }
   };
-  // First pass shortly after boot, then on an interval
-  setTimeout(run, 30_000).unref();
-  setInterval(run, intervalMs).unref();
+
+  // Catch-up pass shortly after boot (games may have finished while the
+  // server was down), then event-driven checks + hourly fallback.
+  setTimeout(fallback, 30_000).unref();
+  setInterval(check, checkMs).unref();
+  setInterval(fallback, fallbackMs).unref();
 }

@@ -7,6 +7,7 @@ import { FullLeaderboard } from "./FullLeaderBoard";
 import { ChatTab } from "../league/chat/ChatTab";
 import { profileApiService } from "../../services/userService";
 import type { LeaderboardEntry, ChatRoom } from "../../types/user";
+import "./league-theme.css";
 
 type Tab = "leaderboard" | "chat";
 

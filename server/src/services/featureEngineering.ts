@@ -8,6 +8,8 @@ import {
   fetchPlayerById,
   fetchTeamSummaryStats,
   fetchTeamRestInfo,
+  TeamSummaryStats,
+  TeamRestInfo,
 } from './nhlApiClient';
 
 // ── Feature types (mirror Python Pydantic models) ─────────────────────────────
@@ -40,6 +42,9 @@ export interface GameFeatures {
   away_rest_days:        number;
   home_b2b:              0 | 1;  // back-to-back
   away_b2b:              0 | 1;
+  // ── ELO (v3) — le service Python résout les ratings via elo_ratings.json
+  home_team?:            string; // abréviation, ex. "TOR"
+  away_team?:            string;
   market_type:         string;   // "moneyline" | "puck_line" | "total_goals_over" | "total_goals_under"
   line?:               number;   // for total goals markets
 }
@@ -107,9 +112,12 @@ export async function buildGameFeatures(
     fetchTeamRestInfo(awayAbbr),
   ]);
 
-  const summary  = summaryRes.status  === 'fulfilled' ? summaryRes.value  : {};
-  const homeRest = homeRestRes.status === 'fulfilled' ? homeRestRes.value : { restDays: 2, b2b: 0 as const };
-  const awayRest = awayRestRes.status === 'fulfilled' ? awayRestRes.value : { restDays: 2, b2b: 0 as const };
+  const summary: Record<string, TeamSummaryStats> =
+    summaryRes.status === 'fulfilled' ? summaryRes.value : {};
+  const homeRest: TeamRestInfo =
+    homeRestRes.status === 'fulfilled' ? homeRestRes.value : { restDays: 2, b2b: 0 };
+  const awayRest: TeamRestInfo =
+    awayRestRes.status === 'fulfilled' ? awayRestRes.value : { restDays: 2, b2b: 0 };
 
   const homeSum = summary[homeAbbr.toUpperCase()];
   const awaySum = summary[awayAbbr.toUpperCase()];
@@ -143,6 +151,8 @@ export async function buildGameFeatures(
     away_rest_days:        awayRest.restDays,
     home_b2b:              homeRest.b2b,
     away_b2b:              awayRest.b2b,
+    home_team:             homeAbbr.toUpperCase(),
+    away_team:             awayAbbr.toUpperCase(),
     market_type:           marketType,
     line,
   };

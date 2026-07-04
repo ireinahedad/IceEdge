@@ -65,7 +65,7 @@ export function StatPill({
   label,
   value,
   sub,
-  color = "#86d1ea",
+  color = "#90C9F0",
 }: {
   label: string;
   value: string;
@@ -73,7 +73,7 @@ export function StatPill({
   color?: string;
 }) {
   return (
-    <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-3 flex flex-col items-center gap-0.5">
+    <div className="icy-card rounded-2xl p-3 flex flex-col items-center gap-0.5">
       <span className="text-white text-base font-bold" style={{ color }}>
         {value}
       </span>
@@ -99,7 +99,6 @@ export function ScoreRing({
   const radius = (size - 16) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - pct / 100);
-  const { color } = TIER_CONFIG[tier];
 
   return (
     <div
@@ -125,7 +124,7 @@ export function ScoreRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke={color}
+          stroke="#22ff00"
           strokeWidth={8}
           strokeLinecap="round"
           strokeDasharray={circumference}
@@ -135,12 +134,12 @@ export function ScoreRing({
       </svg>
 
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-white text-2xl font-bold">
+        <span className="text-2xl font-bold" style={{ color: "#22ff00" }}>
           {score}
         </span>
         <span
           className="text-[8px] uppercase tracking-widest"
-          style={{ color }}
+          style={{ color: "#22ff00" }}
         >
           XP
         </span>
@@ -178,12 +177,12 @@ export function HitRateChart({
   const line = `M${pts.join(" L")}`;
 
   return (
-    <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
+    <div className="icy-card rounded-2xl p-4">
       <div className="flex items-center justify-between mb-3">
         <p className="text-white text-xs font-medium">
           {t("profile.hitRateTrend")}
         </p>
-        <span className="text-[#86d1ea] text-xs font-bold">
+        <span className="text-[#90C9F0] text-xs font-bold">
           {stats.hitRate}% season avg
         </span>
       </div>
@@ -203,12 +202,12 @@ export function HitRateChart({
           >
             <stop
               offset="0%"
-              stopColor="#86d1ea"
+              stopColor="#90C9F0"
               stopOpacity="0.3"
             />
             <stop
               offset="100%"
-              stopColor="#86d1ea"
+              stopColor="#90C9F0"
               stopOpacity="0"
             />
           </linearGradient>
@@ -218,7 +217,7 @@ export function HitRateChart({
         <path
           d={line}
           fill="none"
-          stroke="#86d1ea"
+          stroke="#90C9F0"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -233,7 +232,7 @@ export function HitRateChart({
               ((m.hitRate - min) / (max - min)) * H
             }
             r="3"
-            fill="#86d1ea"
+            fill="#90C9F0"
           />
         ))}
       </svg>
@@ -258,7 +257,7 @@ export function MarketBreakdown({
 }) {
   const { t } = useI18n();
   return (
-    <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
+    <div className="icy-card rounded-2xl p-4">
       <p className="text-white text-xs font-medium mb-3">
         {t("profile.perfByMarket")}
       </p>
@@ -288,9 +287,9 @@ export function MarketBreakdown({
                   width: `${m.hitRate}%`,
                   backgroundColor:
                     m.hitRate >= 70
-                      ? "#4ade80"
+                      ? "#22ff00"
                       : m.hitRate >= 60
-                      ? "#86d1ea"
+                      ? "#90C9F0"
                       : "#facc15",
                 }}
               />
@@ -539,9 +538,9 @@ export function CalibrationCard({
   const score = stats.calibrationScore;
   const color =
     score >= 80
-      ? "#4ade80"
+      ? "#22ff00"
       : score >= 65
-      ? "#86d1ea"
+      ? "#90C9F0"
       : "#facc15";
 
   const label =
@@ -559,7 +558,7 @@ export function CalibrationCard({
       : t("profile.calDescLow");
 
   return (
-    <div className="bg-white/5 backdrop-blur-md border border-white/20 rounded-2xl p-4">
+    <div className="icy-card rounded-2xl p-4">
       <div className="flex items-center justify-between mb-2">
         <p className="text-white text-xs font-medium">
           {t("profile.modelCalibration")}

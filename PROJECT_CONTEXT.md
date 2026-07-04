@@ -14,7 +14,14 @@ When continuing this project:
 - Keep code clean, modular, and production-ready.
 - At the end of each session, update PROJECT_CONTEXT.md.
 
-Last updated: 2026-06-30
+Last updated: 2026-07-04
+
+## Session 2026-07-04 — P1 terminés
+
+1. **Règlement auto des slips** (`settlement.service.ts`) : job événementiel — toutes les 2 min, SQL léger sur les gameIds des slips pending, poll du statut de CES matchs seulement, règlement dès qu'un match passe FINAL. Fallback complet toutes les 60 min + passe de rattrapage 30 s après boot. Aucune requête API quand rien n'est en attente.
+2. **Refresh tokens → cookie httpOnly** : cookie `ice_refresh` (httpOnly, sameSite=lax, path=/api/auth, 7 j, secure en prod). Rotation à chaque refresh (déjà en DB). Le refresh token ne transite plus ni dans le JSON, ni dans localStorage, ni dans l'URL du callback Google. Ajouts : `cookie-parser` (package.json), CORS `credentials:true`, client en `credentials:'include'` (authService, AuthContext, AuthCallback). **⚠️ `npm install` requis dans server/.**
+3. **ML v3** : features ELO (base 1500, K=6, avantage glace 50, régression 30 % inter-saisons, multiplicateur marge) calculées dans `train.py` sans leakage + `elo_ratings.json` pour l'inférence ; split temporel 3 voies (train/val/test) — early stopping et calibration de Platt sur val, test vierge ; baselines honnêtes dans `training_report.json`. `ml_service.py` charge ELO + calibration, `featureEngineering.ts` envoie `home_team`/`away_team`. **⚠️ Relancer `fetch_data.py` (CSV local incomplet : 726 matchs) puis `train.py`.**
+4. Fixes : `seed.ts` (6701 octets NUL supprimés → tsc OK), `main.ts` exclu du tsconfig (vestige NestJS, import inexistant), cast `openAiRes` dans `llm.routes.ts`. `tsc --noEmit` passe.
 
 ---
 

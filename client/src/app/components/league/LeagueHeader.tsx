@@ -41,7 +41,7 @@ export function LeagueHeader({
         </div>
       </div>
 
-      <div className="flex gap-1 bg-white/5 backdrop-blur-md rounded-xl p-1 border border-white/20">
+      <div className="flex gap-1 bg-[#072E49] backdrop-blur-md rounded-xl p-1 border border-white/60">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -49,7 +49,7 @@ export function LeagueHeader({
             className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-medium transition-all relative"
             style={
               tab === t.key
-                ? { backgroundColor: accent, color: "#0f1416", fontWeight: 700 }
+                ? { backgroundColor: "#22ff00", color: "#072E49", fontWeight: 700 }
                 : { color: "rgba(255,255,255,0.7)" }
             }
           >

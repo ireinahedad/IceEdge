@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 
 import authRoutes          from './routes/auth.routes';
 import userRoutes          from './routes/user.routes';
@@ -15,16 +16,31 @@ import devRoutes           from './routes/dev.routes';
 import llmRoutes           from './routes/llm.routes';
 import { getLeaderboard }  from './services/profile.service';
 import { seedAll }         from './db/seed';
+import { apiLimiter, authLimiter, writeLimiter } from './middleware/rateLimit.middleware';
 
 const app = express();
 
+// Behind a proxy in prod (Railway/Render/Fly) → trust the first hop so
+// express-rate-limit keys on the real client IP, not the proxy's.
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
+
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+// credentials:true is required so the httpOnly refresh-token cookie flows
+// between the client (5173) and the API (3001). '*' is not allowed with
+// credentials, hence the explicit default origin.
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || process.env.CLIENT_URL || 'http://localhost:5173',
+  credentials: true,
+}));
+app.use(cookieParser());
 // 5 MB: allows base64 avatar uploads (~2 MB binary → ~2.8 MB base64) with margin
 app.use(express.json({ limit: '5mb' }));
 
-// Auth
-app.use('/api/auth',          authRoutes);
+// Broad rate-limit on the whole API (health check stays outside /api).
+app.use('/api', apiLimiter);
+
+// Auth — strict limiter first (brute-force protection), then routes.
+app.use('/api/auth',          authLimiter, authRoutes);
 
 // Users: profile /me routes first (no auth), then admin CRUD (require JWT)
 app.use('/api/users',         profileRoutes);
@@ -39,11 +55,11 @@ app.get('/api/leaderboard', async (_req, res) => {
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
-// Chat
-app.use('/api/chat',          chatRoutes);
+// Chat (writes are limited to blunt spam)
+app.use('/api/chat',          writeLimiter, chatRoutes);
 
-// Bet slips (auth-gated)
-app.use('/api/slips',         slipRoutes);
+// Bet slips (auth-gated; writes limited)
+app.use('/api/slips',         writeLimiter, slipRoutes);
 
 // Odds
 app.use('/api/odds',          oddsRoutes);

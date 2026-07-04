@@ -59,7 +59,8 @@ router.post('/', async (req: Request, res: Response) => {
   if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
   messages.push({ role: 'user', content: prompt });
 
-  let openAiRes: Response;
+  // Réponse fetch (API Fetch de Node 18+), pas express.Response — d'où `any`
+  let openAiRes: any;
   try {
     openAiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
