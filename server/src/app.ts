@@ -14,6 +14,8 @@ import chatRoutes          from './routes/chat.routes';
 import slipRoutes          from './routes/slip.routes';
 import devRoutes           from './routes/dev.routes';
 import llmRoutes           from './routes/llm.routes';
+import subscriptionRoutes  from './routes/subscription.routes';
+import pushRoutes          from './routes/push.routes';
 import { getLeaderboard }  from './services/profile.service';
 import { seedAll }         from './db/seed';
 import { apiLimiter, authLimiter, writeLimiter } from './middleware/rateLimit.middleware';
@@ -72,6 +74,12 @@ app.use('/api/tennis',        tennisRoutes);
 
 // LLM proxy (uses user's own OpenAI key)
 app.use('/api/llm',           llmRoutes);
+
+// Subscriptions (Free / Pro)
+app.use('/api/subscription',  subscriptionRoutes);
+
+// Web Push (value-bet notifications)
+app.use('/api/push',          pushRoutes);
 
 // Dev ML dashboard (admin-only)
 app.use('/api/dev',           devRoutes);

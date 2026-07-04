@@ -45,6 +45,8 @@ export interface UserProfile {
   isPublic: boolean;
   /** Let other players see my bet slips */
   showSlips?: boolean;
+  /** Receive value-bet (+EV) notifications — Pro only */
+  notifyValueBets?: boolean;
   tier: "rookie" | "analyst" | "sharp" | "legend";
   performanceScore: number;
   openaiApiKey?: string | null;

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '../services/auth.service';
+import { isPro } from '../services/subscription.service';
 import { UserRole } from '../types/user.type';
 
 // -------------------------------------------------------
@@ -39,6 +40,28 @@ export function requireRole(...roles: UserRole[]) {
     }
     next();
   };
+}
+
+// -------------------------------------------------------
+//  Require an active Pro subscription (admins always pass)
+// -------------------------------------------------------
+//  Use after `authenticate`. Checks the DB so a downgrade takes effect
+//  immediately rather than waiting for the 15-min access token to expire.
+
+export async function requirePro(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+  try {
+    if (req.user.role === 'admin' || (await isPro(req.user.sub))) {
+      next();
+      return;
+    }
+    res.status(402).json({ error: 'Pro subscription required', code: 'PRO_REQUIRED' });
+  } catch (err: any) {
+    res.status(err.status ?? 500).json({ error: err.message });
+  }
 }
 
 // -------------------------------------------------------

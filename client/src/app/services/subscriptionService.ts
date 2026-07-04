@@ -1,0 +1,50 @@
+/**
+ * subscriptionService.ts
+ * Wraps /api/subscription/* endpoints (auth required).
+ */
+import { authedFetch } from './authService';
+
+export interface SubscriptionStatus {
+  plan: 'free' | 'pro';
+  status: string;
+  isPro: boolean;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  trialUsed: boolean;
+}
+
+export interface CheckoutResult {
+  url?: string;              // Stripe Checkout URL (when wired)
+  devActivated?: boolean;    // dev/no-payment activation
+  status?: SubscriptionStatus;
+}
+
+export async function apiGetSubscription(): Promise<SubscriptionStatus> {
+  const res = await authedFetch('/subscription/me');
+  if (!res.ok) throw new Error('Failed to load subscription');
+  return res.json();
+}
+
+export async function apiStartCheckout(): Promise<CheckoutResult> {
+  const res = await authedFetch('/subscription/checkout', { method: 'POST' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? 'Checkout failed');
+  }
+  return res.json();
+}
+
+export async function apiStartTrial(): Promise<SubscriptionStatus> {
+  const res = await authedFetch('/subscription/trial', { method: 'POST' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? 'Trial failed');
+  }
+  return res.json();
+}
+
+export async function apiCancelSubscription(): Promise<SubscriptionStatus> {
+  const res = await authedFetch('/subscription/cancel', { method: 'POST' });
+  if (!res.ok) throw new Error('Cancel failed');
+  return res.json();
+}

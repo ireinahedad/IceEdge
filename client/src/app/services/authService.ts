@@ -110,12 +110,14 @@ export class EmailNotVerifiedError extends Error {
   }
 }
 
+// Register returns a pending state normally, OR a full session when email
+// verification is disabled on the server (dev bypass).
 export async function apiRegister(
   email: string,
   username: string,
   password: string,
   first_name?: string
-): Promise<PendingVerification> {
+): Promise<PendingVerification | AuthResult> {
   const res = await fetch(`${BASE}/auth/register`, {
     method: 'POST',
     credentials: 'include',

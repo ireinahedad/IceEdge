@@ -10,7 +10,7 @@ interface AuthContextValue {
   token:       string   | null;
   loading:     boolean;
   login:       (email: string, password: string) => Promise<void>;
-  register:    (email: string, username: string, password: string, firstName?: string) => Promise<PendingVerification>;
+  register:    (email: string, username: string, password: string, firstName?: string) => Promise<PendingVerification | AuthResult>;
   verifyEmail: (email: string, code: string) => Promise<void>;
   logout:      () => Promise<void>;
   setSession:  (result: AuthResult) => void;   // used by AuthCallback after Google OAuth
@@ -54,8 +54,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Register no longer logs in — it returns a pending state; the user must
   // confirm the emailed code via verifyEmail() before a session is created.
   const register = useCallback(async (email: string, username: string, password: string, firstName?: string) => {
-    return apiRegister(email, username, password, firstName);
-  }, []);
+    const result = await apiRegister(email, username, password, firstName);
+    // If the server bypassed verification, it returns a full session → log in.
+    if ('tokens' in result) setSession(result);
+    return result;
+  }, [setSession]);
 
   const verifyEmail = useCallback(async (email: string, code: string) => {
     const result = await apiVerifyEmail(email, code);

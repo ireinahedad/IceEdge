@@ -4,6 +4,7 @@ import app from './app';
 import { connectDB } from './db/connection';
 import { initSocket } from './socket';
 import { startSettlementJob } from './services/settlement.service';
+import { startValueBetScan } from './services/valueBetScan.service';
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -12,6 +13,8 @@ const PORT = Number(process.env.PORT) || 3001;
     await connectDB();
     // Auto-settle pending bets against real NHL results every 15 min
     startSettlementJob();
+    // Scan for value bets and push to opted-in Pro users
+    startValueBetScan();
   } catch (err: any) {
     console.warn(`[Server] PostgreSQL unavailable - DB features disabled. (${err.message})`);
   }

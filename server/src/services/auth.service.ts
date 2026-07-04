@@ -16,6 +16,9 @@ const REFRESH_TOKEN_TTL = 60 * 60 * 24 * 7;
 // Email verification
 const CODE_TTL_MS      = 15 * 60 * 1000; // 15 minutes
 const MAX_CODE_ATTEMPTS = 5;
+// Dev escape hatch: when true, accounts are created already-verified and login
+// is never blocked (no email needed). Keep this FALSE in production.
+const VERIFICATION_DISABLED = process.env.EMAIL_VERIFICATION_DISABLED === 'true';
 
 const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret) throw new Error('JWT_SECRET env variable is required');
@@ -122,7 +125,7 @@ async function issueVerificationCode(user: UserRow): Promise<void> {
 
 // ---- Register --------------------------------------------------------------
 
-export async function register(body: RegisterBody): Promise<PendingVerificationResponse> {
+export async function register(body: RegisterBody): Promise<PendingVerificationResponse | AuthResponse> {
   const { email, username, password, first_name = null, last_name = null } = body;
 
   const existing = await pool.query(
@@ -143,6 +146,16 @@ export async function register(body: RegisterBody): Promise<PendingVerificationR
   const user = rows[0];
   const displayName = first_name ? first_name : username;
   await ensureUserProfile(user.id, displayName);
+
+  // Dev bypass: mark verified and log in immediately (no email required).
+  if (VERIFICATION_DISABLED) {
+    const { rows: verified } = await pool.query<UserRow>(
+      'UPDATE users SET email_verified = TRUE WHERE id = $1 RETURNING *',
+      [user.id],
+    );
+    const tokens = await issueTokens(verified[0]);
+    return { user: toPublicUser(verified[0]), tokens };
+  }
 
   // Send the confirmation code — no tokens issued until the email is verified.
   await issueVerificationCode(user);
@@ -248,8 +261,8 @@ export async function login(body: LoginBody): Promise<AuthResponse> {
     throw Object.assign(new Error('Invalid credentials'), { status: 401 });
   }
 
-  // Block login until the email address has been confirmed.
-  if (!user.email_verified) {
+  // Block login until the email address has been confirmed (unless bypassed).
+  if (!user.email_verified && !VERIFICATION_DISABLED) {
     // Re-issue a fresh code so the user can complete verification.
     await issueVerificationCode(user);
     throw Object.assign(

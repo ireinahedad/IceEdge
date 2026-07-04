@@ -42,10 +42,15 @@ export function LoginPage() {
         await login(email, password);
         navigate(returnTo, { replace: true });
       } else {
-        await register(email, username, password, firstName || undefined);
-        // Account created — a confirmation code was emailed. Move to the code step.
-        setStep("verify");
-        setNotice(t("login.codeSent"));
+        const result = await register(email, username, password, firstName || undefined);
+        if ('tokens' in result) {
+          // Verification disabled on the server → logged in right away.
+          navigate(returnTo, { replace: true });
+        } else {
+          // Account created — a confirmation code was emailed. Move to the code step.
+          setStep("verify");
+          setNotice(t("login.codeSent"));
+        }
       }
     } catch (err: unknown) {
       // Login on an unverified account: server re-sent a code → go verify.

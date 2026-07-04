@@ -46,7 +46,12 @@ router.post('/register', async (req: Request<{}, {}, RegisterBody>, res: Respons
     if (password.length < 8)
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     const result = await AuthService.register({ email, username, password, first_name, last_name });
-    return res.status(201).json(result); // { pending: true, email }
+    if ('pending' in result) {
+      return res.status(201).json(result); // { pending: true, email } — must verify
+    }
+    // Verification bypassed → logged in immediately.
+    setRefreshCookie(res, result.tokens.refresh_token);
+    return res.status(201).json({ user: result.user, tokens: publicTokens(result.tokens) });
   } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
 });
 

@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { FrozenName } from "../brand/FrozenName";
+import { ProLock } from "../ProLock";
 import { profileApiService } from "../../services/userService";
+import { useSubscription } from "../../context/SubscriptionContext";
+import { useAuth } from "../../context/AuthContext";
 import { useI18n } from "../../i18n";
 import type { LeaderboardEntry } from "../../types/user";
 
@@ -23,15 +26,20 @@ function UserProfileModal({ entry, onClose }: {
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  const { isPro } = useSubscription();
+  const { user } = useAuth();
+  const isSelf = user?.id === entry.userId;
+  const canViewBets = isPro || isSelf;   // viewing others' bets is Pro-only
   const medal = entry.rank === 1 ? "🥇" : entry.rank === 2 ? "🥈" : entry.rank === 3 ? "🥉" : null;
   const [slips, setSlips] = useState<PublicSlip[] | "private" | "loading">("loading");
 
   useEffect(() => {
+    if (!canViewBets) return;            // don't fetch — Pro lock is shown instead
     setSlips("loading");
     profileApiService.getUserSlips(entry.userId)
       .then((s) => setSlips(s as PublicSlip[]))
       .catch(() => setSlips("private"));
-  }, [entry.userId]);
+  }, [entry.userId, canViewBets]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
@@ -75,9 +83,25 @@ function UserProfileModal({ entry, onClose }: {
           </div>
         </div>
 
-        {/* Recent slips (only if the player opted in) */}
+        {/* Recent slips — viewing another player's bets is a Pro feature */}
         <div className="mb-4">
           <p className="text-white/40 text-[9px] uppercase tracking-widest mb-2">{t("league.recentSlips")}</p>
+          {!canViewBets ? (
+            <ProLock locked title={t("league.othersProTitle")} description={t("league.othersProDesc")}>
+              <div className="flex flex-col gap-2">
+                {[1, 2].map((i) => (
+                  <div key={i} className="flex items-center gap-2.5 icy-tile rounded-xl px-3 py-2.5">
+                    <span className="w-2 h-2 rounded-full bg-white/30" />
+                    <div className="flex-1">
+                      <div className="h-2.5 w-24 bg-white/20 rounded mb-1.5" />
+                      <div className="h-2 w-16 bg-white/10 rounded" />
+                    </div>
+                    <span className="text-[10px] font-bold text-white/30">••</span>
+                  </div>
+                ))}
+              </div>
+            </ProLock>
+          ) : (<>
           {slips === "loading" && (
             <div className="flex flex-col gap-2">
               {[1, 2].map((i) => <div key={i} className="h-12 bg-white/5 rounded-xl animate-pulse" />)}
@@ -117,6 +141,7 @@ function UserProfileModal({ entry, onClose }: {
               })}
             </div>
           )}
+          </>)}
         </div>
 
         <button

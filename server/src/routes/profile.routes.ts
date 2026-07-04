@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import * as ProfileService from '../services/profile.service';
-import { authenticate } from '../middleware/auth.middleware';
+import { authenticate, requirePro } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -18,8 +18,14 @@ router.get('/search', authenticate, async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/users/:userId/slips — a player's slips, if they opted in (authenticated)
-router.get('/:userId/slips', authenticate, async (req: Request, res: Response) => {
+// GET /api/users/:userId/slips — another player's bets/slips.
+// Viewing OTHER players' bets is a Pro feature; own slips are fetched via /me routes.
+router.get('/:userId/slips', authenticate, async (req: Request, res: Response, next) => {
+  // Your own slips are always allowed; someone else's require Pro.
+  const viewerId = (req as any).user?.sub;
+  if (viewerId && viewerId === req.params.userId) return next();
+  return requirePro(req, res, next);
+}, async (req: Request, res: Response) => {
   try {
     const viewerId = (req as any).user?.sub;
     if (!viewerId) return res.status(401).json({ error: 'Unauthorized' });

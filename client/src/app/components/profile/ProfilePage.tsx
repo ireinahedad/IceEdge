@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { BottomNav } from "../BottomNav";
 import { useAuth } from "../../context/AuthContext";
+import { useSubscription } from "../../context/SubscriptionContext";
 import { profileApiService } from "./../../services/userService";
+import { enableValueBetPush, disableValueBetPush } from "./../../services/pushService";
 import type { UserProfile, UserBettingStats, BetRecord } from "./../../types/user";
 import {
   ScoreRing,
@@ -258,6 +260,8 @@ function SettingsTab({
   setMode: (m: "dark" | "light") => void;
 }) {
   const { t, lang, setLang } = useI18n();
+  const { isPro } = useSubscription();
+  const navigate = useNavigate();
   const [username, setUsername] = useState(profile.username);
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [pickingEmoji, setPickingEmoji] = useState(false);
@@ -265,12 +269,27 @@ function SettingsTab({
   const [favoriteTeam, setFavoriteTeam] = useState(profile.favoriteTeam ?? "");
   const [isPublic, setIsPublic] = useState(profile.isPublic);
   const [showSlips, setShowSlips] = useState(profile.showSlips ?? false);
+  const [notifyValueBets, setNotifyValueBets] = useState(profile.notifyValueBets ?? false);
   const [openaiKey, setOpenaiKey] = useState(profile.openaiApiKey ?? "");
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [showEmojis, setShowEmojis] = useState(false);
   const [showFlags, setShowFlags] = useState(false);
+
+  // Enabling requests notification permission + a push subscription; on success
+  // the preference is persisted immediately.
+  async function handleToggleNotify() {
+    const next = !notifyValueBets;
+    if (next) {
+      const ok = await enableValueBetPush();
+      if (!ok) { setSaveMsg(t("profile.notifyDenied")); setTimeout(() => setSaveMsg(null), 3000); return; }
+    } else {
+      await disableValueBetPush();
+    }
+    setNotifyValueBets(next);
+    try { await profileApiService.updateProfile({ notifyValueBets: next }); } catch { /* keep UI state */ }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -284,6 +303,7 @@ function SettingsTab({
         favoriteTeam: favoriteTeam.trim() || undefined,
         isPublic,
         showSlips,
+        notifyValueBets: isPro ? notifyValueBets : false,
         openaiApiKey: openaiKey.trim() || null,
       });
       onSaved(updated);
@@ -514,6 +534,29 @@ function SettingsTab({
             <p className="text-white/40 text-[9px] mt-0.5">{t("profile.showSlipsHint")}</p>
           </div>
           <ToggleSwitch checked={showSlips} onChange={() => setShowSlips((v) => !v)} fontSize={12} />
+        </div>
+      </div>
+
+      {/* Notifications — value bets (Pro only) */}
+      <div className="icy-card rounded-2xl p-4 flex flex-col gap-3">
+        <p className="text-white text-xs font-medium">{t("profile.notifications")}</p>
+
+        <div className="flex items-center gap-3 py-1">
+          <div className="flex-1">
+            <label className={`text-xs ${isPro ? "text-white/70" : "text-white/40"}`}>{t("profile.notifyValueBets")}</label>
+            <p className="text-white/40 text-[9px] mt-0.5">{t("profile.notifyValueBetsHint")}</p>
+          </div>
+          {isPro ? (
+            <ToggleSwitch checked={notifyValueBets} onChange={handleToggleNotify} fontSize={12} />
+          ) : (
+            <button
+              onClick={() => navigate("/pro")}
+              className="px-3 py-1.5 rounded-lg text-[10px] font-bold flex-shrink-0"
+              style={{ background: "#9BF019", color: "#0A0E0C" }}
+            >
+              {t("pro.unlock")}
+            </button>
+          )}
         </div>
       </div>
 

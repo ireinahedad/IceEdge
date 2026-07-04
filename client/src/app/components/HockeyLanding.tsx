@@ -11,6 +11,8 @@ import type { TennisApiMatch } from "../services/tennisApiService";
 import type { NHLGame, BetLeg } from "../types/bet";
 import { useSport, SPORT_THEMES, type Sport } from "../context/SportContext";
 import { useBet } from "../context/BetContext";
+import { useSubscription } from "../context/SubscriptionContext";
+import { ProLock } from "./ProLock";
 import { useI18n } from "../i18n";
 import {
   fetchBet365Odds,
@@ -153,6 +155,74 @@ interface AddSheetState {
   subject?: { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 }
 
+// ─── Value Bets (EV) — Pro only ─────────────────────────────────────────────
+
+interface EvItem {
+  id: string;
+  logo: string;
+  label: string;
+  context: string;
+  pct: number;   // model probability
+  edge: number;  // model% − implied%
+}
+
+// Static, realistic-looking rows shown (blurred) to non-Pro users so they can
+// see what the feature looks like without exposing real value bets.
+const EV_SAMPLE: EvItem[] = [
+  { id: "ev-s1", logo: "🏒", label: "TOR ML vs MTL",       context: "Value spot", pct: 58, edge: 11 },
+  { id: "ev-s2", logo: "🏒", label: "Over 5.5 · BOS–FLA",  context: "Value spot", pct: 63, edge: 9 },
+  { id: "ev-s3", logo: "🎾", label: "Sinner to win",       context: "Value spot", pct: 71, edge: 8 },
+];
+
+function EvRow({ item }: { item: EvItem }) {
+  return (
+    <div className="flex items-center gap-2.5 icy-card rounded-xl px-2.5 py-2">
+      {item.logo?.startsWith("http")
+        ? <img src={item.logo} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
+        : <span className="text-base flex-shrink-0">{item.logo}</span>}
+      <div className="flex-1 min-w-0">
+        <div className="text-white text-[11px] font-medium truncate">{item.label}</div>
+        <div className="text-[#8a9ea6] text-[9px] truncate">{item.context}</div>
+      </div>
+      <div className="text-right flex-shrink-0">
+        <div className="text-green-400 text-[11px] font-bold tabular-nums">+{item.edge}% EV</div>
+        <div className="text-[#bfc8cc] text-[9px] tabular-nums">{item.pct}% {"" /* model */}</div>
+      </div>
+    </div>
+  );
+}
+
+function EvSection({ isPro, items, isLoading, accent }: {
+  isPro: boolean; items: EvItem[]; isLoading: boolean; accent: string;
+}) {
+  const { t } = useI18n();
+
+  const list = (rows: EvItem[]) => (
+    <div className="flex flex-col gap-1.5">{rows.map((i) => <EvRow key={i.id} item={i} />)}</div>
+  );
+
+  return (
+    <section className="px-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Zap size={13} style={{ color: accent }} />
+        <span className="text-white text-sm font-medium">{t("home.evTitle")}</span>
+      </div>
+
+      {isPro ? (
+        isLoading ? (
+          <div className="flex flex-col gap-1.5">{[1, 2, 3].map((i) => <div key={i} className="h-11 icy-tile rounded-xl animate-pulse" />)}</div>
+        ) : items.length === 0 ? (
+          <div className="py-6 text-center text-[#bfc8cc] text-xs">{t("home.evEmpty")}</div>
+        ) : list(items)
+      ) : (
+        <ProLock locked title={t("home.evTitle")} description={t("home.evLockDesc")}>
+          {list(EV_SAMPLE)}
+        </ProLock>
+      )}
+    </section>
+  );
+}
+
 // ─── Best Bets ─────────────────────────────────────────────────────────────────
 
 const BB_BASE = import.meta.env.VITE_PREDICTION_API_URL || "";
@@ -239,6 +309,7 @@ function BestBetsSection({
   sport,
   accent,
   isLoading,
+  locked = false,
 }: {
   games: DisplayGame[];
   tennisLive: TennisMatch[];
@@ -246,6 +317,7 @@ function BestBetsSection({
   sport: "hockey" | "tennis";
   accent: string;
   isLoading: boolean;
+  locked?: boolean;
 }) {
   const { t, lang } = useI18n();
   const [sortSource, setSortSource] = useState<SortSource>("ml");
@@ -271,6 +343,7 @@ function BestBetsSection({
   //    (team + player props, scored by rules + ML, sorted by prediction score).
   //  · Tennis / hockey off-season fallback → build from match data client-side.
   useEffect(() => {
+    if (locked) return;             // don't fetch Pro-only data for free users
     let cancelled = false;
 
     // Tennis (or hockey off-season fallback showing tennis)
@@ -332,11 +405,11 @@ function BestBetsSection({
     })();
 
     return () => { cancelled = true; };
-  }, [games, tennisLive, tennisUpcoming, sport, lang, usingTennisFallback]);
+  }, [games, tennisLive, tennisUpcoming, sport, lang, usingTennisFallback, locked]);
 
   // Lazy ML fetch when ML tab selected
   useEffect(() => {
-    if (sortSource !== "ml" || mlFetched || bets.length === 0 || !BB_BASE) return;
+    if (locked || sortSource !== "ml" || mlFetched || bets.length === 0 || !BB_BASE) return;
     setMlFetched(true);
     setBets(prev => prev.map(b => ({ ...b, mlLoading: true })));
 
@@ -361,6 +434,32 @@ function BestBetsSection({
     const src = (b: BestBet) => sortSource === "ml" ? (b.mlPct ?? b.rulePct) : b.rulePct;
     return [...bets].sort((a, b) => sortDir === "safe" ? src(b) - src(a) : src(a) - src(b)).slice(0, 15);
   }, [bets, sortSource, sortDir]);
+
+  // Pro-only: free users see the section title but the picks are locked/blurred.
+  if (locked) {
+    return (
+      <section className="px-4 mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Star size={13} style={{ color: accent }} />
+          <span className="text-white text-sm font-medium">{t("home.bestBets")}</span>
+        </div>
+        <ProLock locked title={t("home.bestBets")} description={t("home.bestBetsLockDesc")}>
+          <div className="flex flex-col gap-1.5">
+            {["TOR ML", "Over 5.5", "McDavid 2+ pts", "BOS ML", "Under 6.5"].map((label, i) => (
+              <div key={i} className="flex items-center gap-2.5 icy-card rounded-xl px-2.5 py-2">
+                <span className="text-base flex-shrink-0">🏒</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-white text-[11px] font-medium">{label}</div>
+                  <div className="h-1 mt-1 rounded-full" style={{ width: `${70 - i * 6}%`, background: accent, opacity: 0.6 }} />
+                </div>
+                <span className="text-[10px] font-bold" style={{ color: accent }}>{72 - i * 5}%</span>
+              </div>
+            ))}
+          </div>
+        </ProLock>
+      </section>
+    );
+  }
 
   return (
     <section className="px-4 mb-6">
@@ -889,6 +988,7 @@ export function HockeyLanding() {
   const navigate = useNavigate();
   const { sport, theme } = useSport();
   const { t, lang } = useI18n();
+  const { isPro } = useSubscription();
   const accent = theme.accent;
   const [addSheet, setAddSheet] = useState<AddSheetState>({ open: false });
   const [liveGames, setLiveGames] = useState<DisplayGame[]>([]);
@@ -902,6 +1002,36 @@ export function HockeyLanding() {
   const [tennisUpcoming, setTennisUpcoming] = useState<TennisMatch[]>([]);
   const [tennisTopPreds, setTennisTopPreds] = useState<Array<{ icon: string; name: string; label: string; pct: number; trend: string; edge: number }>>([]);
   const [tennisLoading, setTennisLoading] = useState(false);
+
+  // Value bets (+EV): model probability beats the bookmaker's implied probability.
+  // Only meaningful when real bet365 odds are present (VITE_ODDS_API_KEY set).
+  const evItems: EvItem[] = useMemo(() => {
+    const out: EvItem[] = [];
+    if (sport === "hockey") {
+      for (const g of [...liveGames, ...upcomingGames]) {
+        if (g.bet365Home) {
+          const edge = calcEdge(g.team1.winPct, g.bet365Home);
+          if (edge >= 5) out.push({ id: `ev-${g.id}-h`, logo: g.team1.logo, label: `${g.team1.abbr} ML vs ${g.team2.abbr}`, context: t("home.evSpot"), pct: g.team1.winPct, edge });
+        }
+        if (g.bet365Away) {
+          const edge = calcEdge(g.team2.winPct, g.bet365Away);
+          if (edge >= 5) out.push({ id: `ev-${g.id}-a`, logo: g.team2.logo, label: `${g.team2.abbr} ML vs ${g.team1.abbr}`, context: t("home.evSpot"), pct: g.team2.winPct, edge });
+        }
+      }
+    } else {
+      for (const m of [...tennisLive, ...tennisUpcoming]) {
+        if (m.player1.bet365Odds) {
+          const edge = calcEdge(m.player1.winPct, m.player1.bet365Odds);
+          if (edge >= 5) out.push({ id: `ev-${m.id}-1`, logo: m.player1.country, label: `${m.player1.name} to win`, context: t("home.evSpot"), pct: m.player1.winPct, edge });
+        }
+        if (m.player2.bet365Odds) {
+          const edge = calcEdge(m.player2.winPct, m.player2.bet365Odds);
+          if (edge >= 5) out.push({ id: `ev-${m.id}-2`, logo: m.player2.country, label: `${m.player2.name} to win`, context: t("home.evSpot"), pct: m.player2.winPct, edge });
+        }
+      }
+    }
+    return out.sort((a, b) => b.edge - a.edge).slice(0, 6);
+  }, [sport, liveGames, upcomingGames, tennisLive, tennisUpcoming, t]);
 
   // Load NHL games + model predictions
   useEffect(() => {
@@ -1094,16 +1224,6 @@ export function HockeyLanding() {
       <div className="flex-1 overflow-y-auto">
         {sport === "hockey" ? (
           <div className="px-4 py-4 flex flex-col gap-6">
-            {/* Best Bets */}
-            <BestBetsSection
-              games={[...liveGames, ...upcomingGames]}
-              tennisLive={[]}
-              tennisUpcoming={[]}
-              sport="hockey"
-              accent={accent}
-              isLoading={loading}
-            />
-
             {/* Live Games */}
             {liveGames.length > 0 && (
               <section>
@@ -1141,18 +1261,24 @@ export function HockeyLanding() {
                 </div>
               )}
             </section>
+
+            {/* Value Bets (EV) — Pro only */}
+            <EvSection isPro={isPro} items={evItems} isLoading={loading} accent={accent} />
+
+            {/* Best Bets — Pro only */}
+            <BestBetsSection
+              games={[...liveGames, ...upcomingGames]}
+              tennisLive={[]}
+              tennisUpcoming={[]}
+              sport="hockey"
+              accent={accent}
+              isLoading={loading}
+              locked={!isPro}
+            />
           </div>
         ) : (
           /* Tennis */
           <div className="px-4 py-4 flex flex-col gap-6">
-            <BestBetsSection
-              games={[]}
-              tennisLive={tennisLive}
-              tennisUpcoming={tennisUpcoming}
-              sport="tennis"
-              accent={accent}
-              isLoading={tennisLoading}
-            />
 
             {tennisLive.length > 0 && (
               <section>
@@ -1186,6 +1312,19 @@ export function HockeyLanding() {
                 </div>
               )}
             </section>
+
+            {/* Value Bets (EV) — Pro only */}
+            <EvSection isPro={isPro} items={evItems} isLoading={tennisLoading} accent={accent} />
+
+            <BestBetsSection
+              games={[]}
+              tennisLive={tennisLive}
+              tennisUpcoming={tennisUpcoming}
+              sport="tennis"
+              accent={accent}
+              isLoading={tennisLoading}
+              locked={!isPro}
+            />
           </div>
         )}
       </div>

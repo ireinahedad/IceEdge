@@ -52,6 +52,7 @@ export async function getProfileById(userId: string) {
             up.avatar_url AS "avatarUrl",
             up.favorite_team AS "favoriteTeam", up.bio, up.is_public AS "isPublic",
             up.show_slips AS "showSlips",
+            up.notify_value_bets AS "notifyValueBets",
             up.tier, up.performance_score AS "performanceScore",
             up.joined_at AS "joinedAt",
             up.openai_api_key AS "openaiApiKey"
@@ -76,6 +77,7 @@ export async function getProfileById(userId: string) {
     bio:              profile.bio,
     isPublic:         profile.isPublic,
     showSlips:        profile.showSlips ?? false,
+    notifyValueBets:  profile.notifyValueBets ?? false,
     tier:             profile.tier,
     performanceScore: profile.performanceScore,
     openaiApiKey:     profile.openaiApiKey ?? null,
@@ -101,6 +103,7 @@ export async function updateProfile(userId: string, updates: {
   favoriteTeam?: string;
   isPublic?: boolean;
   showSlips?: boolean;
+  notifyValueBets?: boolean;
   avatar?: string;
   avatarUrl?: string | null;
   openaiApiKey?: string | null;
@@ -147,6 +150,7 @@ export async function updateProfile(userId: string, updates: {
   if (updates.favoriteTeam  !== undefined) { fields.push(`favorite_team = $${i++}`);   values.push(updates.favoriteTeam); }
   if (updates.isPublic      !== undefined) { fields.push(`is_public = $${i++}`);       values.push(updates.isPublic); }
   if (updates.showSlips     !== undefined) { fields.push(`show_slips = $${i++}`);      values.push(!!updates.showSlips); }
+  if (updates.notifyValueBets !== undefined) { fields.push(`notify_value_bets = $${i++}`); values.push(!!updates.notifyValueBets); }
   if (updates.avatar        !== undefined) { fields.push(`avatar = $${i++}`);           values.push(String(updates.avatar).slice(0, 20)); }
   if (updates.avatarUrl     !== undefined) { fields.push(`avatar_url = $${i++}`);       values.push(updates.avatarUrl); }
   if (updates.openaiApiKey  !== undefined) { fields.push(`openai_api_key = $${i++}`);   values.push(updates.openaiApiKey); }

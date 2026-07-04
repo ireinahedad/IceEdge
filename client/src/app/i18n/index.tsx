@@ -491,6 +491,57 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "login.newPassword":{ en: "New password",       fr: "Nouveau mot de passe" },
   "login.resetBtn":   { en: "Reset password",     fr: "Réinitialiser le mot de passe" },
   "login.resetDone":  { en: "Password updated — you can now sign in.", fr: "Mot de passe mis à jour — vous pouvez vous connecter." },
+
+  // ── Pro / subscription ──
+  "pro.title":        { en: "Go IceEdge Pro",  fr: "Passe à IceEdge Pro" },
+  "pro.subtitle":     { en: "Unlock the full edge: every prediction, the value-bet finder, and unlimited AI analysis.", fr: "Débloque l'avantage complet : toutes les prédictions, le détecteur de value bets et l'analyse IA illimitée." },
+  "pro.included":     { en: "Included in Pro", fr: "Inclus dans Pro" },
+  "pro.badge":        { en: "Pro",             fr: "Pro" },
+  "pro.unlock":       { en: "Unlock with Pro", fr: "Débloquer avec Pro" },
+  "pro.perMonth":     { en: "/mo",             fr: "/mois" },
+  "pro.annualNote":   { en: "or $99/yr (2 months free)", fr: "ou 99 $/an (2 mois offerts)" },
+  "pro.cta":          { en: "Upgrade to Pro",  fr: "Passer à Pro" },
+  "pro.startTrial":   { en: "Start 7-day free trial", fr: "Commencer l'essai gratuit 7 jours" },
+  "pro.trialNote":    { en: "Start with 7 days free, then billed monthly.", fr: "7 jours gratuits, puis facturé mensuellement." },
+  "pro.trialActive":  { en: "Free trial active 🎉", fr: "Essai gratuit actif 🎉" },
+  "pro.trialEnds":    { en: "Trial ends on",   fr: "Essai se termine le" },
+  "pro.loginPrompt":  { en: "Sign in to subscribe", fr: "Connecte-toi pour t'abonner" },
+  "pro.cancel":       { en: "Cancel subscription", fr: "Annuler l'abonnement" },
+  "pro.isProTitle":   { en: "You're Pro 🎉",   fr: "Tu es Pro 🎉" },
+  "pro.isProBody":    { en: "Thanks! You have access to everything.", fr: "Merci ! Tu as accès à toutes les fonctionnalités." },
+  "pro.renews":       { en: "Renews on",       fr: "Renouvellement le" },
+  "pro.cancelScheduled": { en: "Your Pro access ends on", fr: "Ton accès Pro se termine le" },
+  "pro.devNote":      { en: "Demo mode: Stripe payment isn't wired yet — the subscription activates immediately so you can test.", fr: "Mode démo : le paiement Stripe n'est pas encore branché — l'abonnement s'active immédiatement pour tester." },
+  // Pro-exclusive benefits (title + description)
+  "pro.b.bestbets.t": { en: "Daily Best Bets",           fr: "Best Bets du jour" },
+  "pro.b.bestbets.d": { en: "The day's top picks, selected and rated by the model.", fr: "Les meilleurs paris du jour, sélectionnés et notés par le modèle." },
+  "pro.b.ev.t":       { en: "Value-bet finder (EV)",     fr: "Détecteur de value bets (EV)" },
+  "pro.b.ev.d":       { en: "Automatically flags positive-EV bets where your edge beats the odds.", fr: "Repère automatiquement les paris à valeur positive (+EV) où ton edge dépasse la cote." },
+  "pro.b.alerts.t":   { en: "Value-bet notifications",   fr: "Notifications value bets" },
+  "pro.b.alerts.d":   { en: "Get alerted the moment a new +EV appears, before the odds move.", fr: "Reçois une alerte dès qu'un nouveau +EV apparaît, avant que la cote bouge." },
+  "pro.b.llm.t":      { en: "Unlimited AI analysis",     fr: "Analyse IA illimitée" },
+  "pro.b.llm.d":      { en: "The LLM's take on every game, with no daily limit.", fr: "L'avis du LLM sur tous les matchs, sans limite quotidienne." },
+  "pro.b.markets.t":  { en: "All markets & full slate",  fr: "Tous les marchés & calendrier complet" },
+  "pro.b.markets.d":  { en: "Beyond today's games: the full schedule and every bet365 market.", fr: "Au-delà des matchs du jour : tout le calendrier et chaque marché bet365." },
+  "pro.b.others.t":   { en: "Other players' stats & bets", fr: "Stats & bets des autres joueurs" },
+  "pro.b.others.d":   { en: "Compare yourself to the leaderboard and see their picks.", fr: "Compare-toi aux meilleurs du classement et vois leurs paris." },
+
+  // ── Home: value bets (EV) + locked sections ──
+  "home.evTitle":     { en: "Value Bets (EV)",  fr: "Value Bets (EV)" },
+  "home.evSpot":      { en: "Value spot · model edge", fr: "Opportunité · edge du modèle" },
+  "home.evEmpty":     { en: "No value bets right now — check back soon.", fr: "Aucun value bet pour l'instant — reviens bientôt." },
+  "home.evLockDesc":  { en: "The detector flags bets where our model's probability beats the bookmaker's odds (+EV). Pro only.", fr: "Le détecteur repère les paris où la probabilité de notre modèle dépasse la cote (+EV). Réservé aux Pro." },
+  "home.bestBetsLockDesc": { en: "The day's top picks, selected and rated by the model. Upgrade to Pro to see them.", fr: "Les meilleurs paris du jour, sélectionnés et notés par le modèle. Passe à Pro pour les voir." },
+
+  // ── Profile: notifications (Pro) ──
+  "profile.notifications":      { en: "Notifications",         fr: "Notifications" },
+  "profile.notifyValueBets":    { en: "Value-bet alerts",      fr: "Alertes value bets" },
+  "profile.notifyValueBetsHint":{ en: "Get notified when a new +EV opportunity appears.", fr: "Sois averti dès qu'un nouveau +EV apparaît." },
+  "profile.notifyDenied":       { en: "Notifications blocked — allow them in your browser.", fr: "Notifications bloquées — autorise-les dans ton navigateur." },
+
+  // ── League: Pro lock on other players' bets ──
+  "league.othersProTitle": { en: "See their bets with Pro", fr: "Vois leurs paris avec Pro" },
+  "league.othersProDesc":  { en: "Viewing other players' bet slips is a Pro feature.", fr: "Voir les coupons des autres joueurs est réservé aux Pro." },
 };
 
 type TParams = Record<string, string | number>;

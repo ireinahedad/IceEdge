@@ -28,6 +28,16 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
+DO $$ BEGIN
+  CREATE TYPE billing_plan AS ENUM ('free', 'pro');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE sub_status AS ENUM ('active', 'trialing', 'past_due', 'canceled', 'incomplete');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
 -- ============================================================
 --  AUTH TABLES
 -- ============================================================
@@ -194,8 +204,36 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   tier              user_tier    DEFAULT 'rookie',
   performance_score INT          DEFAULT 0,
   xp                INT          NOT NULL DEFAULT 0,
+  notify_value_bets BOOLEAN      NOT NULL DEFAULT FALSE,
   joined_at         DATE         DEFAULT CURRENT_DATE
 );
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+  user_id                UUID          PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  plan                   billing_plan  NOT NULL DEFAULT 'free',
+  status                 sub_status    NOT NULL DEFAULT 'active',
+  stripe_customer_id     TEXT,
+  stripe_subscription_id TEXT,
+  current_period_end     TIMESTAMPTZ,
+  cancel_at_period_end   BOOLEAN       NOT NULL DEFAULT FALSE,
+  trial_used             BOOLEAN       NOT NULL DEFAULT FALSE,
+  created_at             TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  updated_at             TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer
+  ON subscriptions (stripe_customer_id);
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint    TEXT        NOT NULL UNIQUE,
+  p256dh      TEXT        NOT NULL,
+  auth        TEXT        NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions (user_id);
 
 CREATE TABLE IF NOT EXISTS user_badges (
   id          SERIAL      PRIMARY KEY,

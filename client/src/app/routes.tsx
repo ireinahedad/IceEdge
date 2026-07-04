@@ -12,6 +12,7 @@ import { TennisPredictionsPage } from "./components/TennisPredictionsPage";
 import { SharePage }             from "./components/SharePage";
 import { DevMLDashboard }        from "./components/DevMLDashboard";
 import { TennisPlayerPage }      from "./components/TennisPlayerPage";
+import { ProPage }               from "./components/ProPage";
 
 export const router = createBrowserRouter([
   { path: "/",                                       Component: HockeyLanding        },
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
   { path: "/league",                                 Component: LeaguePage           },
   { path: "/profile",                                Component: ProfilePage          },
   { path: "/login",                                  Component: LoginPage            },
+  { path: "/pro",                                    Component: ProPage              },
   { path: "/auth/callback",                          Component: AuthCallback         },
   { path: "/nhl-predictions",                        Component: NHLPredictionsPage   },
   { path: "/predictions/tennis",                     Component: TennisPredictionsPage},
