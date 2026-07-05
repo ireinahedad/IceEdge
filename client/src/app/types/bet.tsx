@@ -57,14 +57,19 @@ export interface NHLGame {
 
 export interface NHLPlayerInfo {
   id: number;
-  firstName: string;
-  lastName: string;
-  fullName: string;
+  /** Full display name as returned by the API (e.g. "Connor McDavid"). */
+  name: string;
+  /** Sweater number as returned by the API. */
+  number: number;
   teamId: number;
   teamAbbr: string;
   position: string;
-  jerseyNumber: number;
   imageUrl?: string;
+  // Legacy/alternate field names kept optional for backward compatibility.
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+  jerseyNumber?: number;
 }
 
 export interface NHLPlayerStats {

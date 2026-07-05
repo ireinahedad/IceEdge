@@ -20,9 +20,16 @@
     0 4px 18px rgba(0, 0, 0, 0.15);
 }
 
-/* ── Dark-mode ink: black text over the frosted icy cards ─────── */
-.profile-ink-black [class*="text-white"] {
+/* ── Ink text over the frosted icy cards, by mode ─────────────── */
+/* Light mode: black text over the light frosted background.        */
+.profile-light .profile-ink-black [class*="text-white"],
+.profile-light.profile-ink-black [class*="text-white"] {
   color: #000 !important;
+}
+/* Dark mode: keep text white over the dark background.             */
+.profile-dark .profile-ink-black [class*="text-white"],
+.profile-dark.profile-ink-black [class*="text-white"] {
+  color: #fff !important;
 }
 
 /* ── Inner "card in card" — stronger, more visible frost ──────── */

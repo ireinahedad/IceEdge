@@ -247,6 +247,11 @@ export async function fetchLiveGames(): Promise<any[]> {
 }
 
 export async function fetchGameById(gameId: string): Promise<any> {
+  if (USE_MOCK) {
+    const g = (MOCK_GAMES_FULL as any[]).find((x) => x.id === gameId);
+    if (g) return g;
+    throw Object.assign(new Error('Game not found'), { status: 404 });
+  }
   try {
     const data = await fetchNHL<any>(`v1/gamecenter/${gameId}/landing`);
     return formatGame(data);

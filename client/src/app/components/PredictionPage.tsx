@@ -1,5 +1,5 @@
 import { useParams, useNavigate, useSearchParams } from "react-router";
-import { useEffect, useState, createContext, useContext } from "react";
+import { useEffect, useState, createContext, useContext, useMemo } from "react";
 import { BottomNav } from "./BottomNav";
 import { MarketSelectorSheet } from "./MarketSelectorSheet";
 import { PredictionResponse } from "../types/bet";
@@ -10,6 +10,7 @@ import { useI18n } from "../i18n";
 import { nhlLogoUrl } from "../data/teamEmoji";
 import { getTeamById, getGameById, getPlayerById } from "../data/hockeyData";
 import { factorsApiService } from "../services/predictionApiService";
+import type { CalcFactor } from "../services/predictionApiService";
 import { useBet } from "../context/BetContext";
 import type { BetLeg } from "../types/bet";
 import { tennisApiService } from "../services/tennisApiService";
@@ -191,6 +192,90 @@ function FormDots({ results }: { results: ("W" | "L" | "OT")[] }) {
 
 
 
+/* ─── Recent form card (reusable) ─────────────── */
+function FormLegend() {
+  const { t } = useI18n();
+  return (
+    <div className="flex items-center gap-4 mt-3">
+      <div className="flex items-center gap-1.5">
+        <div className="w-3 h-3 rounded-full bg-green-500/40 border border-green-500/60" />
+        <span className="text-[#bfc8cc] text-[10px]">{t("pred.win")}</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <div className="w-3 h-3 rounded-full bg-yellow-500/40 border border-yellow-500/60" />
+        <span className="text-[#bfc8cc] text-[10px]">OT</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <div className="w-3 h-3 rounded-full bg-red-500/40 border border-red-500/60" />
+        <span className="text-[#bfc8cc] text-[10px]">{t("pred.loss")}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Single-subject recent form card (used for player & team). */
+function RecentFormCard({ title, results }: { title?: string; results: ("W" | "L" | "OT")[] }) {
+  const { t } = useI18n();
+  return (
+    <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
+      <p className="text-white text-sm font-medium mb-3">{title ?? t("pred.recentForm")}</p>
+      <FormDots results={results} />
+      <FormLegend />
+    </div>
+  );
+}
+
+/** Two-team recent form card (used for a game — one row per team). */
+function GameRecentForm({ home, away, homeForm, awayForm }: {
+  home: { abbr: string; logo: string }; away: { abbr: string; logo: string };
+  homeForm: ("W" | "L" | "OT")[]; awayForm: ("W" | "L" | "OT")[];
+}) {
+  const { t } = useI18n();
+  const Row = ({ team, form }: { team: { abbr: string; logo: string }; form: ("W" | "L" | "OT")[] }) => (
+    <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 w-16 flex-shrink-0">
+        <img src={team.logo} alt={team.abbr} className="w-6 h-6 object-contain" />
+        <span className="text-white text-xs font-bold">{team.abbr}</span>
+      </div>
+      <FormDots results={form} />
+    </div>
+  );
+  return (
+    <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
+      <p className="text-white text-sm font-medium mb-3">{t("pred.recentForm")}</p>
+      <div className="flex flex-col gap-3">
+        <Row team={home} form={homeForm} />
+        <Row team={away} form={awayForm} />
+      </div>
+      <FormLegend />
+    </div>
+  );
+}
+
+/* --- Recent-form generator --- */
+/** Deterministic-ish recent form: `count` results biased by win probability `prob` (0..1). */
+function generateForm(count: number, prob: number): ("W" | "L" | "OT")[] {
+  const p = Math.min(0.95, Math.max(0.05, prob));
+  const out: ("W" | "L" | "OT")[] = [];
+  for (let i = 0; i < count; i++) {
+    const r = Math.random();
+    if (r < p)                 out.push("W");
+    else if (r < p + 0.12)     out.push("OT");
+    else                       out.push("L");
+  }
+  return out;
+}
+
+/* --- Last-N games view model --- */
+interface NGamesView {
+  teamName: string; teamAbbr: string; logo: string;
+  wins: number; losses: number; otLosses: number;
+  goalsFor: number; goalsAgainst: number;
+  goalsForPerGame: number; goalsAgainstPerGame: number;
+  ppPct: number; pkPct: number;
+  streak: string; last10: string; winRateN: number;
+}
+
 /* --- Loading skeleton --- */
 function LoadingSkeleton() {
   return (
@@ -213,6 +298,10 @@ function TeamPrediction({ teamId }: { teamId: string }) {
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [revealAll, setRevealAll] = useState(false);
+  const recentForm = useMemo<("W" | "L" | "OT")[]>(
+    () => (data ? generateForm(8, data.winPct / 100) : []),
+    [data?.winPct],
+  );
 
   useEffect(() => {
     async function load() {
@@ -376,6 +465,9 @@ function TeamPrediction({ teamId }: { teamId: string }) {
           ))}
         </div>
       </div>
+      {/* Recent form — shown above the markets */}
+      <RecentFormCard results={recentForm} />
+
       {/* Market groups — reveal-all toggle */}
       <PredictionsRevealBar revealAll={revealAll} onToggle={() => setRevealAll(v => !v)} />
       <RevealAllCtx.Provider value={revealAll}>
@@ -541,14 +633,81 @@ function buildGameGroups(home: string, away: string, hp: number, ou: number): Mk
   ];
 }
 
+/* ─── LLM data context ───────────────────────────────────────────────────────
+ * Fetches the real stats the app already has for this bet's subject (team, game,
+ * or player) and formats them as a compact facts block to feed the LLM, so it
+ * reasons over actual numbers instead of asking the user to verify them.
+ */
+function fmtNum(n: number | undefined | null, digits: number, fr: boolean): string {
+  if (n == null || Number.isNaN(Number(n))) return "?";
+  const s = Number(n).toFixed(digits);
+  return fr ? s.replace(".", ",") : s;
+}
+
+async function buildLLMDataContext(mlProps: MLProps | undefined, fr: boolean): Promise<string> {
+  if (!mlProps) return "";
+  try {
+    // ── Player bet: subjectId is a player id ──────────────────────────────
+    if (mlProps.type === "player") {
+      const [info, st] = await Promise.all([
+        nhlApiService.getPlayer(mlProps.subjectId).catch(() => null),
+        nhlApiService.getPlayerStats(mlProps.subjectId).catch(() => null),
+      ]);
+      if (!st) return "";
+      const name = info?.name ?? info?.fullName ?? mlProps.subjectId;
+      const pos = info?.position ?? "";
+      const team = info?.teamAbbr ?? "";
+      const gp = st.gamesPlayed || 0;
+      if (pos === "G" || st.savePct != null) {
+        return fr
+          ? `Données de l'application — gardien (${name}, ${team}) : ${gp} MJ, % arrêts ${fmtNum(st.savePct, 3, fr)}, moy. buts alloués ${fmtNum(st.goalsAgainstAvg, 2, fr)}.`
+          : `App data — goalie (${name}, ${team}): ${gp} GP, SV% ${fmtNum(st.savePct, 3, fr)}, GAA ${fmtNum(st.goalsAgainstAvg, 2, fr)}.`;
+      }
+      const ppg = gp ? st.points / gp : 0;
+      const pm = `${st.plusMinus >= 0 ? "+" : ""}${st.plusMinus}`;
+      return fr
+        ? `Données de l'application — joueur (${name}, ${pos}, ${team}) : ${gp} MJ, ${st.goals} B ${st.assists} A ${st.points} PTS (${fmtNum(ppg, 2, fr)} pts/match), tirs ${fmtNum(st.shootingPct, 1, fr)} %, ${fmtNum(st.timeOnIce, 1, fr)} min/match, ${pm}.`
+        : `App data — player (${name}, ${pos}, ${team}): ${gp} GP, ${st.goals}G ${st.assists}A ${st.points}P (${fmtNum(ppg, 2, fr)} P/GP), ${fmtNum(st.shootingPct, 1, fr)}% shooting, ${fmtNum(st.timeOnIce, 1, fr)} min TOI, ${pm}.`;
+    }
+
+    // ── Team or game bet: subjectId (and opponentId) are team abbrs ────────
+    const abbrs = mlProps.type === "game" && mlProps.opponentId
+      ? [mlProps.subjectId, mlProps.opponentId]
+      : [mlProps.subjectId];
+
+    const results = await Promise.all(
+      abbrs.map(async (a) => {
+        try { return { a, s: await nhlApiService.getTeamStats(a) }; }
+        catch { return null; }
+      })
+    );
+
+    const lines = results
+      .filter((x): x is { a: string; s: Awaited<ReturnType<typeof nhlApiService.getTeamStats>> } => x != null)
+      .map(({ a, s }) => {
+        const rec = `${s.wins}-${s.losses}-${s.otLosses}`;
+        return fr
+          ? `${a} : fiche ${rec}, 10 derniers ${s.last10 ?? "?"}, séquence ${s.streak ?? "?"}, buts ${fmtNum(s.goalsForPerGame, 1, fr)}/${fmtNum(s.goalsAgainstPerGame, 1, fr)} pour/contre, AN ${fmtNum(s.powerPlayPct, 1, fr)} % DN ${fmtNum(s.penaltyKillPct, 1, fr)} %, dom. ${s.homeRecord ?? "?"} ext. ${s.awayRecord ?? "?"}`
+          : `${a}: record ${rec}, last 10 ${s.last10 ?? "?"}, streak ${s.streak ?? "?"}, goals ${fmtNum(s.goalsForPerGame, 1, fr)}/${fmtNum(s.goalsAgainstPerGame, 1, fr)} for/against, PP ${fmtNum(s.powerPlayPct, 1, fr)}% PK ${fmtNum(s.penaltyKillPct, 1, fr)}%, home ${s.homeRecord ?? "?"} away ${s.awayRecord ?? "?"}`;
+      });
+
+    if (!lines.length) return "";
+    const header = fr ? "Données de l'application" : "App data";
+    return `${header}:\n${lines.join("\n")}`;
+  } catch {
+    return "";
+  }
+}
+
 /* ─── Prediction bottom sheet ───────────────── */
 function PredictionSheet({ label, rulePct, ruleNote, accent, mlProps, onClose }: {
   label: string; rulePct: number; ruleNote: string; accent: string;
   mlProps?: MLProps; onClose: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [llmText, setLlmText]     = useState("");
   const [llmLoading, setLlmLoading] = useState(false);
+  const [copied, setCopied]       = useState(false);
   const pctColor = rulePct >= 65 ? "#4ade80" : rulePct >= 50 ? accent : rulePct >= 38 ? "#facc15" : "#f87171";
 
   const { addLeg, removeLeg, hasLeg } = useBet();
@@ -639,9 +798,21 @@ function PredictionSheet({ label, rulePct, ruleNote, accent, mlProps, onClose }:
           <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-sm">✨</span>
-              <span className="text-purple-300 text-xs font-semibold">{t("pred.llmAnalysis")}</span>
+              <span className="text-purple-300 text-xs font-semibold flex-1">{t("pred.llmAnalysis")}</span>
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(llmText);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                  } catch { /* clipboard unavailable */ }
+                }}
+                className="text-[10px] font-semibold px-2 py-1 rounded-md bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 transition-colors"
+              >
+                {copied ? (lang === "fr" ? "Copié ✓" : "Copied ✓") : (lang === "fr" ? "Copier" : "Copy")}
+              </button>
             </div>
-            <p className="text-[#bfc8cc] text-xs leading-relaxed">{llmText}</p>
+            <p className="text-[#bfc8cc] text-xs leading-relaxed whitespace-pre-line">{llmText}</p>
           </div>
         ) : (
           <button
@@ -651,30 +822,77 @@ function PredictionSheet({ label, rulePct, ruleNote, accent, mlProps, onClose }:
               setLlmText("");
               try {
                 const subject = mlProps?.subjectId ?? label;
-                const text = await askLLM(
-                  `The app already computed a stats-based probability for this bet. ` +
-                  `Add the context the numbers DON'T capture.\n\n` +
-                  `Bet: "${label}"\n` +
-                  `Model probability: ${rulePct}%\n` +
-                  `Model rationale: ${ruleNote}\n` +
-                  (mlProps ? `Market: ${mlProps.propType ?? "moneyline"} · Subject: ${subject}\n` : "") +
-                  `\nWhat off-the-stat-sheet factors could move this? (injuries/absences, ` +
-                  `starting goalie, back-to-back or 3-in-4 fatigue, travel, recent form, ` +
-                  `style matchup, motivation). Flag anything I must verify before betting.`,
-                  {
-                    systemPrompt:
-                      "You are a sharp NHL betting analyst whose value is the context a stats model misses. " +
-                      "Surface off-the-sheet factors: injuries/absences, confirmed-vs-likely starting goalie, " +
-                      "back-to-back or 3-in-4 fatigue, travel, recent form, head-to-head style matchups, coaching " +
-                      "tendencies, and motivation (playoff race, tanking). " +
-                      "CRITICAL: you have NO live data and your knowledge has a cutoff — never state a current injury, " +
-                      "lineup, or goalie start as fact. For anything time-sensitive, write it as 'Verify: ...' and tell " +
-                      "the user exactly what to check. Separate durable tendencies (you know these) from tonight-specific " +
-                      "facts (must be checked). " +
-                      "Output 3-5 sentences, then two lines: 'Verify before betting: ...' and " +
-                      "'Verdict: BET / LEAN / PASS (confidence 1-5)'. No disclaimers, no filler.",
-                  }
-                );
+                const isFr = lang === "fr";
+
+                // Pull the real stats the app has for this bet's subject.
+                const dataContext = await buildLLMDataContext(mlProps, isFr);
+                const dataBlock = dataContext ? `\n${dataContext}\n` : "";
+
+                const userPrompt = isFr
+                  ? `L'application a déjà calculé une probabilité statistique pour ce pari. ` +
+                    `Donne le contexte que les chiffres ne captent pas.\n\n` +
+                    `Pari : "${label}"\n` +
+                    `Probabilité du modèle : ${rulePct}%\n` +
+                    `Raisonnement du modèle : ${ruleNote}\n` +
+                    (mlProps ? `Marché : ${mlProps.propType ?? "vainqueur"} · Sujet : ${subject}\n` : "") +
+                    dataBlock +
+                    `\nUtilise les « Données de l'application » ci-dessus comme des faits. ` +
+                    `Énumère les facteurs clés hors statistiques et signale seulement ce que je dois vérifier avant de parier.`
+                  : `The app already computed a stats-based probability for this bet. ` +
+                    `Add the context the numbers DON'T capture.\n\n` +
+                    `Bet: "${label}"\n` +
+                    `Model probability: ${rulePct}%\n` +
+                    `Model rationale: ${ruleNote}\n` +
+                    (mlProps ? `Market: ${mlProps.propType ?? "moneyline"} · Subject: ${subject}\n` : "") +
+                    dataBlock +
+                    `\nTreat the "App data" above as facts. ` +
+                    `List the key off-the-stat-sheet factors and flag only what I must verify before betting.`;
+
+                const systemPrompt = isFr
+                  ? "Tu es un analyste de paris LNH pointu dont la valeur est le contexte qu'un modèle statistique manque. " +
+                    "Tu n'as AUCUNE donnée en temps réel et ta connaissance a une date limite — n'affirme jamais une blessure, " +
+                    "un alignement ou un gardien actuel comme un fait. " +
+                    "Quand des « Données de l'application » sont fournies, considère-les comme la vérité et fonde ton « Analyse » dessus. " +
+                    "Réponds EXACTEMENT dans ce format, sans introduction ni paragraphe :\n" +
+                    "Analyse :\n" +
+                    "- 2 à 5 points clés courts (≤ 12 mots), facteurs hors statistiques : forme, fatigue (matchs consécutifs), " +
+                    "voyage, style d'affrontement, motivation (course aux séries, tanking). " +
+                    "N'inclus QUE des points appuyés par les données ou tes connaissances; si une information est inconnue " +
+                    "ou non fournie, OMETS le point — n'écris JAMAIS « inconnu », « non précisé », « N/D » ni « non spécifié ». " +
+                    "Mieux vaut 2 bons points que 5 avec du remplissage.\n" +
+                    "\n" +
+                    "À vérifier :\n" +
+                    "- REGROUPE ICI UNIQUEMENT les éléments externes en temps réel que l'application n'a pas : " +
+                    "blessures/absences, gardien partant confirmé, changements d'alignement de dernière minute. " +
+                    "N'inclus JAMAIS l'historique OT, le voyage/calendrier, la forme récente ni la fatigue — " +
+                    "l'application fournit déjà ces données, sers-t'en dans « Analyse » au lieu de demander de les vérifier. " +
+                    "Un élément par point, ≤ 10 mots, formulé comme une chose vérifiable (ex. « Gardien partant de MTL confirmé ? »).\n" +
+                    "\n" +
+                    "Verdict : Bon pari / Avantage léger / À éviter — Confiance : faible, moyenne ou élevée " +
+                    "(choisis UN mot pour le verdict et UN pour la confiance)"
+                  : "You are a sharp NHL betting analyst whose value is the context a stats model misses. " +
+                    "You have NO live data and your knowledge has a cutoff — never state a current injury, lineup, or goalie " +
+                    "start as fact. " +
+                    "When 'App data' is provided, treat it as ground truth and base your 'Analysis' on it. " +
+                    "Reply in EXACTLY this format, with no intro and no paragraphs:\n" +
+                    "Analysis:\n" +
+                    "- 2-5 short key points (≤12 words), off-the-sheet factors: form, fatigue (back-to-back), travel, " +
+                    "style matchup, motivation (playoff race, tanking). " +
+                    "Include ONLY points backed by the data or your knowledge; if something is unknown or not provided, " +
+                    "OMIT that point — never write 'unknown', 'not specified', 'unclear' or 'N/A'. " +
+                    "Two solid points beat five with filler.\n" +
+                    "\n" +
+                    "To verify:\n" +
+                    "- GROUP HERE ONLY external live items the app does NOT have: " +
+                    "injuries/absences, confirmed starting goalie, last-minute lineup changes. " +
+                    "NEVER include OT history, travel/schedule, recent form or fatigue — the app already provides these, " +
+                    "so use them in 'Analysis' instead of asking to verify them. " +
+                    "One item per bullet, ≤10 words, phrased as a checkable question (e.g. 'MTL starting goalie confirmed?').\n" +
+                    "\n" +
+                    "Verdict: Good bet / Slight edge / Avoid — Confidence: low, medium or high " +
+                    "(pick ONE word for the verdict and ONE for the confidence)";
+
+                const text = await askLLM(userPrompt, { systemPrompt });
                 setLlmText(text);
               } catch (err: any) {
                 const type = (err as any).type;
@@ -805,6 +1023,14 @@ function GamePrediction({ gameId }: { gameId: string }) {
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [revealAll, setRevealAll] = useState(false);
+  const homeForm = useMemo<("W" | "L" | "OT")[]>(
+    () => (gameView ? generateForm(8, gameView.home.winPct / 100) : []),
+    [gameView?.home.winPct],
+  );
+  const awayForm = useMemo<("W" | "L" | "OT")[]>(
+    () => (gameView ? generateForm(8, gameView.away.winPct / 100) : []),
+    [gameView?.away.winPct],
+  );
 
   useEffect(() => {
     async function load() {
@@ -906,6 +1132,14 @@ function GamePrediction({ gameId }: { gameId: string }) {
         </div>
       </div>
 
+      {/* Recent form — both teams, shown above the markets */}
+      <GameRecentForm
+        home={{ abbr: home.abbr, logo: home.logo }}
+        away={{ abbr: away.abbr, logo: away.logo }}
+        homeForm={homeForm}
+        awayForm={awayForm}
+      />
+
       {/* ── Market groups ── */}
       <PredictionsRevealBar revealAll={revealAll} onToggle={() => setRevealAll(v => !v)} />
       <RevealAllCtx.Provider value={revealAll}>
@@ -930,6 +1164,11 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [revealAll, setRevealAll] = useState(false);
+  const recentForm = useMemo<("W" | "L" | "OT")[]>(
+    // Form biased by the player's scoring pace (points/game).
+    () => (data ? generateForm(8, Math.min(0.8, Math.max(0.3, 0.35 + data.ptsPerGame * 0.3))) : []),
+    [data?.ptsPerGame],
+  );
 
   useEffect(() => {
     async function load() {
@@ -938,12 +1177,12 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
           nhlApiService.getPlayer(playerId),
           nhlApiService.getPlayerStats(playerId),
         ]);
-        const name = info.fullName ?? `${info.firstName} ${info.lastName}`;
+        const name = info.name ?? info.fullName ?? `${info.firstName ?? ""} ${info.lastName ?? ""}`.trim();
         const gp = stats.gamesPlayed || 1;
         setData({
           name, team: info.teamAbbr ?? "",
           logo: nhlLogoUrl(info.teamAbbr ?? ""),
-          position: info.position, number: info.jerseyNumber,
+          position: info.position, number: info.number ?? info.jerseyNumber ?? 0,
           goals: stats.goals, assists: stats.assists, points: stats.points,
           plusMinus: stats.plusMinus, gamesPlayed: gp,
           goalsPerGame: stats.goals / gp,
@@ -1131,6 +1370,9 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
           ))}
         </div>
       </div>
+      {/* Recent form — shown above the markets */}
+      <RecentFormCard results={recentForm} />
+
       {/* Market groups — local groups always used (they carry mlProps) */}
       <PredictionsRevealBar revealAll={revealAll} onToggle={() => setRevealAll(v => !v)} />
       <RevealAllCtx.Provider value={revealAll}>
@@ -1411,7 +1653,7 @@ function PlayerPropPrediction({ propId }: { propId: string }) {
           nhlApiService.getPlayer(playerId),
           nhlApiService.getPlayerStats(playerId),
         ]);
-        const name = info.fullName ?? `${info.firstName} ${info.lastName}`;
+        const name = info.name ?? info.fullName ?? `${info.firstName ?? ""} ${info.lastName ?? ""}`.trim();
         const logo = nhlLogoUrl(info.teamAbbr ?? "");
         const season = stats.season ?? "2025-26";
 
@@ -1683,7 +1925,7 @@ export function PredictionPage() {
     switch (type) {
       case "game":    return <GamePrediction gameId={id} />;
       case "team":    return <TeamPrediction teamId={id} />;
-      case "player":  return <PlayerPropPrediction propId={id} />;
+      case "player":  return <PlayerPrediction playerId={id} />;
       case "tennis":  return <TennisPlayerPrediction playerId={id} />;
       default:        return <NotFound />;
     }

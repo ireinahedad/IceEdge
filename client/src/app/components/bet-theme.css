@@ -37,9 +37,16 @@
     inset 0 -4px 10px rgba(140, 200, 235, 0.2);
 }
 
-/* ── Ink: black text over the frosted icy cards (both modes) ──── */
-.bet-ink-black [class*="text-white"] {
+/* ── Ink text over the frosted icy cards, by mode ─────────────── */
+/* Light mode: black text over the light frosted background.        */
+.bet-light .bet-ink-black [class*="text-white"],
+.bet-light.bet-ink-black [class*="text-white"] {
   color: #000 !important;
+}
+/* Dark mode: keep text white over the dark background.             */
+.bet-dark .bet-ink-black [class*="text-white"],
+.bet-dark.bet-ink-black [class*="text-white"] {
+  color: #fff !important;
 }
 
 /* ── Light theme: darker text inside inputs ───────────────────── */

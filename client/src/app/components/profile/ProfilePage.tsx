@@ -274,7 +274,6 @@ function SettingsTab({
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
-  const [showEmojis, setShowEmojis] = useState(false);
   const [showFlags, setShowFlags] = useState(false);
 
   // Enabling requests notification permission + a push subscription; on success
@@ -316,13 +315,6 @@ function SettingsTab({
     }
   }
 
-  // Ice & hockey themed avatars users can pick instead of a photo
-  const ICE_AVATARS = [
-    "🥅", "🏒", "⛸️", "🥌", "🪖", "🧤",
-    "❄️", "🧊", "🏔️", "⛰️", "🌨️", "💧",
-    "🛡️", "💎", "🪨", "⚔️", "🔥", "☀️",
-  ];
-
   // Country flags a user can display next to their name in podium / chat.
   // Rendered as real images (Windows doesn't render flag emoji), stored as avatarUrl.
   const FLAG_CODES = [
@@ -338,22 +330,6 @@ function SettingsTab({
     setSaveMsg(null);
     try {
       const updated = await profileApiService.updateProfile({ avatarUrl: flagUrl(code) });
-      onSaved(updated);
-      setSaveMsg("Saved!");
-    } catch (err: any) {
-      setSaveMsg(err.message ?? "Failed to save");
-    } finally {
-      setPickingEmoji(false);
-      setTimeout(() => setSaveMsg(null), 2500);
-    }
-  }
-
-  async function handlePickEmoji(emoji: string) {
-    setPickingEmoji(true);
-    setSaveMsg(null);
-    try {
-      // Setting an emoji avatar clears the photo
-      const updated = await profileApiService.updateProfile({ avatar: emoji, avatarUrl: null });
       onSaved(updated);
       setSaveMsg("Saved!");
     } catch (err: any) {
@@ -409,39 +385,7 @@ function SettingsTab({
           </div>
         </div>
 
-        {/* ── 2. Emojis (collapsible) ── */}
-        <div className="border-t border-white/20 pt-3">
-          <button
-            onClick={() => setShowEmojis((v) => !v)}
-            className="w-full flex items-center justify-between text-left"
-          >
-            <span className="text-white/50 text-[9px] uppercase tracking-wider">{t("profile.chooseEmoji")}</span>
-            <span className="text-[#90C9F0] text-[10px]">{showEmojis ? "▲" : "▼"}</span>
-          </button>
-          {showEmojis && (
-            <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-9 gap-2 mt-3">
-              {ICE_AVATARS.map((e) => {
-                const active = !profile.avatarUrl && profile.avatar === e;
-                return (
-                  <button
-                    key={e}
-                    onClick={() => handlePickEmoji(e)}
-                    disabled={pickingEmoji}
-                    className={`aspect-square rounded-lg flex items-center justify-center text-2xl border transition-all active:scale-95 disabled:opacity-50 ${
-                      active
-                        ? "border-[#90C9F0] bg-[#90C9F0]/15"
-                        : "border-white/40 bg-white/5 hover:bg-white/10"
-                    }`}
-                  >
-                    {e}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* ── 3. Flags (collapsible) ── */}
+        {/* ── 2. Flags (collapsible) ── */}
         <div className="border-t border-white/20 pt-3">
           <button
             onClick={() => setShowFlags((v) => !v)}
@@ -683,7 +627,7 @@ export function ProfilePage() {
   if (!user) return null;
 
   return (
-    <div className="flex flex-col min-h-screen pb-24 max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: mode === "light" ? "#D4FFEE" : "#2A507B" }}>
+    <div className={`flex flex-col min-h-screen pb-24 max-w-[430px] md:max-w-5xl mx-auto w-full ${mode === "light" ? "profile-light" : "profile-dark"}`} style={{ background: mode === "light" ? "#D4FFEE" : "#0A0E0C" }}>
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
 
       {/* Header */}

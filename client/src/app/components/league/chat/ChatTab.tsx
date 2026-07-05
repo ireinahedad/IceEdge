@@ -22,10 +22,6 @@ const TAG_LABEL = {
   hot: "🔴 Live",
 } as const;
 
-// ─── Room icon picker options ─────────────────────────────────────────────────
-
-const ROOM_ICONS = ["💬", "🎯", "📊", "🔥", "🏒", "⭐", "🧊", "🏆", "💰", "🎰", "🧠", "📈"];
-
 // ─── Create room modal ────────────────────────────────────────────────────────
 
 function CreateRoomModal({ onClose, onCreate }: {
@@ -35,7 +31,6 @@ function CreateRoomModal({ onClose, onCreate }: {
   const { t } = useI18n();
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
-  const [icon, setIcon] = useState("💬");
   const [isPrivate, setIsPrivate] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +43,7 @@ function CreateRoomModal({ onClose, onCreate }: {
     try {
       const room = await profileApiService.createRoom({
         name: name.trim(),
-        icon,
+        icon: name.trim().charAt(0).toUpperCase() || "#",
         description: desc.trim() || "Community chat",
         isPrivate,
       });
@@ -106,23 +101,6 @@ function CreateRoomModal({ onClose, onCreate }: {
       >
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
         <p className="text-white font-bold text-base mb-4">{t("chat.createTitle")}</p>
-
-        <p className="text-white/60 text-[10px] uppercase tracking-wider mb-2">{t("chat.icon")}</p>
-        <div className="flex flex-wrap gap-2 mb-4">
-          {ROOM_ICONS.map((ic) => (
-            <button
-              key={ic}
-              onClick={() => setIcon(ic)}
-              className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg border transition-all ${
-                icon === ic
-                  ? "border-[#90C9F0] bg-[#90C9F0]/15"
-                  : "icy-tile"
-              }`}
-            >
-              {ic}
-            </button>
-          ))}
-        </div>
 
         <p className="text-white/60 text-[10px] uppercase tracking-wider mb-1.5">{t("chat.roomName")}</p>
         <input

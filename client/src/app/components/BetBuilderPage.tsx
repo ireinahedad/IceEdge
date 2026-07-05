@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { TrendingUp, Plus, X, Lightbulb, Lock, Share2, ChevronRight, CheckCircle, Clock, History, Trophy, AlertCircle, RefreshCw, Trash2 } from "lucide-react";
+import { Plus, X, Lightbulb, Lock, Share2, ChevronRight, CheckCircle, Clock, History, Trophy, AlertCircle, RefreshCw, Trash2 } from "lucide-react";
 import { useBet } from "../context/BetContext";
 import { useAuth } from "../context/AuthContext";
 import { MarketSelectorSheet } from "./MarketSelectorSheet";
@@ -160,46 +160,6 @@ function EmptySlip({ onAdd }: { onAdd: () => void }) {
         className="bg-[#22ff00] text-[#072E49] font-bold px-6 py-3 rounded-2xl text-sm flex items-center gap-2 active:scale-95 transition-transform">
         <Plus size={14} /> {t("slip.browse")}
       </button>
-    </div>
-  );
-}
-
-// ─── Combined probability waterfall ──────────────────────────────────────────
-
-function CombinedBreakdown({ legs }: { legs: BetLeg[] }) {
-  if (legs.length <= 1) return null;
-  return (
-    <div className="icy-card rounded-2xl p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <TrendingUp size={12} className="text-[#90C9F0]" />
-        <p className="text-[#8a9ea6] text-[10px] uppercase tracking-wider">Probability Breakdown</p>
-      </div>
-      <div className="flex flex-col gap-2">
-        {legs.map((leg, i) => {
-          const runningPct =
-            Math.round(legs.slice(0, i + 1).reduce((acc, l) => acc * (l.probability / 100), 1) * 1000) / 10;
-          return (
-            <div key={leg.id} className="flex items-center gap-3">
-              <span className="text-[#4a6068] text-[10px] w-4 flex-shrink-0">{i + 1}</span>
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-0.5">
-                  <span className="text-white text-[10px] truncate max-w-[150px]">
-                    {leg.selectionShort || leg.selection.slice(0, 22)}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[#8a9ea6] text-[10px]">{leg.probability}%</span>
-                    <span className="text-[#90C9F0] text-[10px] font-bold">to {runningPct}%</span>
-                  </div>
-                </div>
-                <div className="w-full bg-[#0A0E0C] rounded-full h-1">
-                  <div className="h-1 rounded-full bg-[#90C9F0]"
-                    style={{ width: `${runningPct}%`, transition: "width 0.5s ease" }} />
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -596,8 +556,8 @@ export function BetBuilderPage() {
 
   return (
     <div
-      className="flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full"
-      style={{ background: mode === "light" ? "#D4FFEE" : "#2A507B" }}
+      className={`flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full ${mode === "light" ? "bet-light" : "bet-dark"}`}
+      style={{ background: mode === "light" ? "#D4FFEE" : "#0A0E0C" }}
     >
 
       {/* Header */}
@@ -671,10 +631,6 @@ export function BetBuilderPage() {
               </>
             )}
           </div>
-          )}
-
-          {legs.length > 1 && (
-            <div className="mb-4"><CombinedBreakdown legs={legs} /></div>
           )}
 
           {legs.length === 0 ? (

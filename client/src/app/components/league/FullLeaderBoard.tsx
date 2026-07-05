@@ -9,6 +9,14 @@ import { useAuth } from "../../context/AuthContext";
 import { useI18n } from "../../i18n";
 import type { LeaderboardEntry } from "../../types/user";
 
+// Initials fallback shown when a user has no photo avatar (no emoji avatars).
+function initials(name: string): string {
+  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 // ─── User profile modal ───────────────────────────────────────────────────────
 
 type PublicSlip = {
@@ -51,10 +59,10 @@ function UserProfileModal({ entry, onClose }: {
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
 
         <div className="flex items-center gap-4 mb-5">
-          <div className="w-16 h-16 rounded-2xl icy-tile flex items-center justify-center text-3xl overflow-hidden">
+          <div className="w-16 h-16 rounded-2xl icy-tile flex items-center justify-center text-xl font-bold text-white/80 overflow-hidden">
             {entry.avatarUrl
               ? <img src={entry.avatarUrl} alt="" className="w-full h-full object-cover" />
-              : entry.avatar}
+              : initials(entry.displayName)}
           </div>
           <div className="flex-1 min-w-0">
             <FrozenName name={entry.displayName} score={entry.performanceScore} size={15} />
@@ -261,7 +269,7 @@ export function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
               >
                 {podium[1].avatarUrl
                   ? <img src={podium[1].avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-white/20" />
-                  : <span className="text-2xl">{podium[1].avatar}</span>}
+                  : <span className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[11px] font-bold text-white/80">{initials(podium[1].displayName)}</span>}
                 <div className="text-center">
                   <FrozenName name={podium[1].displayName} score={podium[1].performanceScore} size={11} />
                   <p className="text-[#90C9F0] text-[10px] mt-2">{podium[1].performanceScore}</p>
@@ -279,7 +287,7 @@ export function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
                 <span className="text-xl leading-none -mb-1">👑</span>
                 {podium[0].avatarUrl
                   ? <img src={podium[0].avatarUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-white/20" />
-                  : <span className="text-3xl">{podium[0].avatar}</span>}
+                  : <span className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-sm font-bold text-white/80">{initials(podium[0].displayName)}</span>}
                 <div className="text-center">
                   <FrozenName name={podium[0].displayName} score={podium[0].performanceScore} size={13} />
                   <p className="text-yellow-400 text-[10px] font-bold mt-2">{podium[0].performanceScore}</p>
@@ -296,7 +304,7 @@ export function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
               >
                 {podium[2].avatarUrl
                   ? <img src={podium[2].avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-white/20" />
-                  : <span className="text-2xl">{podium[2].avatar}</span>}
+                  : <span className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[11px] font-bold text-white/80">{initials(podium[2].displayName)}</span>}
                 <div className="text-center">
                   <FrozenName name={podium[2].displayName} score={podium[2].performanceScore} size={11} />
                   <p className="text-amber-600 text-[10px] mt-2">{podium[2].performanceScore}</p>
@@ -343,7 +351,7 @@ export function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
 
                 {entry.avatarUrl
                   ? <img src={entry.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover border border-white/20 flex-shrink-0" />
-                  : <span className="text-lg flex-shrink-0">{entry.avatar}</span>}
+                  : <span className="w-7 h-7 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/80 flex-shrink-0">{initials(entry.displayName)}</span>}
 
                 <div className="flex-1 min-w-0 py-1">
                   <div className="flex items-center gap-1.5">

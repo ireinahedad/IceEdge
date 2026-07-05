@@ -600,6 +600,7 @@ function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: (
   const accent = theme.accent;
   const { addLeg, hasLeg } = useBet();
   const { t } = useI18n();
+  const navigate = useNavigate();
 
   const legId = `${game.id}-moneyline-${game.team1.id}`;
   const isAdded = hasLeg(legId);
@@ -627,7 +628,10 @@ function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: (
   }
 
   return (
-    <div className="min-w-[280px] icy-card rounded-2xl p-4 flex-shrink-0">
+    <div
+      onClick={() => navigate(`/stats/prediction/game/${game.id}`)}
+      className="min-w-[280px] icy-card rounded-2xl p-4 flex-shrink-0 cursor-pointer active:scale-[0.99] transition-transform"
+    >
 
       {/* Header: live badge + edge + buttons */}
       <div className="flex items-center justify-between mb-3 gap-2">
@@ -697,7 +701,7 @@ function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: (
         /* No API key — show a subtle link to bet365 instead */
         <div className="flex items-center justify-end mt-1">
           <button
-            onClick={() => openBet365(bet365HockeyUrl())}
+            onClick={(e) => { e.stopPropagation(); openBet365(bet365HockeyUrl()); }}
             className="text-[9px] text-green-400 border border-green-500/20 bg-green-500/8 px-2 py-1 rounded-full"
           >
             {t("home.betOn")}
@@ -715,6 +719,7 @@ function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet
   const accent = theme.accent;
   const { addLeg, hasLeg } = useBet();
   const { t } = useI18n();
+  const navigate = useNavigate();
 
   const legId = `${game.id}-moneyline-${game.team1.id}`;
   const isAdded = hasLeg(legId);
@@ -742,7 +747,10 @@ function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet
   }
 
   return (
-    <div className="icy-card rounded-2xl p-3.5">
+    <div
+      onClick={() => navigate(`/stats/prediction/game/${game.id}`)}
+      className="icy-card rounded-2xl p-3.5 cursor-pointer active:scale-[0.99] transition-transform"
+    >
       <div className="flex items-center gap-3">
 
         {/* Time column */}
