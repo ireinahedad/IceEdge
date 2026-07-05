@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { TrendingUp, Plus, X, Lightbulb, Lock, Share2, ChevronRight, CheckCircle, Clock, History, Trophy, AlertCircle, RefreshCw, Trash2 } from "lucide-react";
 import { useBet } from "../context/BetContext";
@@ -8,6 +8,7 @@ import { BottomNav } from "./BottomNav";
 import type { BetLeg } from "../types/bet";
 import { submitSlip, getMySlips, settleMySlips } from "../services/slipApiService";
 import type { BetSlip } from "../services/slipApiService";
+import { shareNodeAsImage } from "../services/shareImage";
 import { useSport } from "../context/SportContext";
 import { openBet365 } from "../services/affiliateService";
 import { useI18n } from "../i18n";
@@ -268,6 +269,21 @@ function LockSlipCTA({
 
 function SlipCard({ slip }: { slip: BetSlip }) {
   const { t } = useI18n();
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [sharing, setSharing] = useState(false);
+
+  async function handleShare() {
+    if (!cardRef.current) return;
+    setSharing(true);
+    try {
+      await shareNodeAsImage(cardRef.current, `iceedge-slip-${slip.id}.png`, "IceEdge");
+    } catch (err) {
+      console.warn("[Share] failed:", err);
+    } finally {
+      setSharing(false);
+    }
+  }
+
   const isPending = slip.outcome === "pending";
   const isWin = slip.outcome === "win";
   const date = new Date(slip.placedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -284,9 +300,9 @@ function SlipCard({ slip }: { slip: BetSlip }) {
     (slip.combinedProbability ?? 0) >= 25 ? "#facc15" : "#f87171";
 
   return (
-    <div className={`icy-card rounded-2xl overflow-hidden transition-all ${
+    <div ref={cardRef} className={`icy-card rounded-2xl overflow-hidden transition-all ${
       isPending ? "" : isWin ? "ring-1 ring-green-500/40" : "ring-1 ring-red-500/40"
-    }`}>
+    }`} style={{ background: "#131A12" }}>
       {/* Header row */}
       <div className="flex items-center justify-between px-4 pt-3 pb-2">
         <div className="flex items-center gap-2">
@@ -353,6 +369,24 @@ function SlipCard({ slip }: { slip: BetSlip }) {
           <span className="text-[#8a9ea6] text-[10px]">{t("slip.autoSettle")}</span>
         </div>
       )}
+
+      {/* Footer: IceEdge branding (kept in the shared image) + share button (excluded) */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/[0.06]">
+        <span className="text-[11px] font-bold tracking-[0.14em]"
+          style={{ fontFamily: "'Oswald','Arial Narrow',sans-serif", color: "#9BF019" }}>
+          ICEEDGE
+        </span>
+        <button
+          data-noshot
+          onClick={handleShare}
+          disabled={sharing}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold disabled:opacity-50 active:scale-95 transition-transform"
+          style={{ background: "rgba(155,240,25,0.12)", color: "#9BF019", border: "1px solid rgba(155,240,25,0.3)" }}
+        >
+          <Share2 size={11} />
+          {sharing ? "…" : t("slip.sharePhoto")}
+        </button>
+      </div>
     </div>
   );
 }

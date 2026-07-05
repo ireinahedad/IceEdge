@@ -652,13 +652,28 @@ function PredictionSheet({ label, rulePct, ruleNote, accent, mlProps, onClose }:
               try {
                 const subject = mlProps?.subjectId ?? label;
                 const text = await askLLM(
-                  `You are an NHL hockey betting analyst. Analyse this bet:\n` +
+                  `The app already computed a stats-based probability for this bet. ` +
+                  `Add the context the numbers DON'T capture.\n\n` +
                   `Bet: "${label}"\n` +
-                  `Rules-based probability: ${rulePct}%\n` +
-                  `Rule rationale: ${ruleNote}\n` +
+                  `Model probability: ${rulePct}%\n` +
+                  `Model rationale: ${ruleNote}\n` +
                   (mlProps ? `Market: ${mlProps.propType ?? "moneyline"} · Subject: ${subject}\n` : "") +
-                  `\nProvide a concise 3-4 sentence analysis: key factors, value assessment, recommendation. Be direct and actionable.`,
-                  { systemPrompt: "You are a sharp NHL hockey betting analyst. Be concise, data-driven, and direct. No disclaimers." }
+                  `\nWhat off-the-stat-sheet factors could move this? (injuries/absences, ` +
+                  `starting goalie, back-to-back or 3-in-4 fatigue, travel, recent form, ` +
+                  `style matchup, motivation). Flag anything I must verify before betting.`,
+                  {
+                    systemPrompt:
+                      "You are a sharp NHL betting analyst whose value is the context a stats model misses. " +
+                      "Surface off-the-sheet factors: injuries/absences, confirmed-vs-likely starting goalie, " +
+                      "back-to-back or 3-in-4 fatigue, travel, recent form, head-to-head style matchups, coaching " +
+                      "tendencies, and motivation (playoff race, tanking). " +
+                      "CRITICAL: you have NO live data and your knowledge has a cutoff — never state a current injury, " +
+                      "lineup, or goalie start as fact. For anything time-sensitive, write it as 'Verify: ...' and tell " +
+                      "the user exactly what to check. Separate durable tendencies (you know these) from tonight-specific " +
+                      "facts (must be checked). " +
+                      "Output 3-5 sentences, then two lines: 'Verify before betting: ...' and " +
+                      "'Verdict: BET / LEAN / PASS (confidence 1-5)'. No disclaimers, no filler.",
+                  }
                 );
                 setLlmText(text);
               } catch (err: any) {

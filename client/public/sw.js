@@ -1,4 +1,13 @@
-/* IceEdge service worker — handles Web Push notifications. */
+/* IceEdge service worker — PWA + Web Push notifications. */
+
+// Take control ASAP so the app is controlled on first load.
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+
+// Network-passthrough fetch handler (required for installability). No caching
+// so the app is never served stale; swap for a cache strategy if you want
+// offline support.
+self.addEventListener("fetch", () => { /* let the browser handle it */ });
 
 self.addEventListener("push", (event) => {
   let data = {};

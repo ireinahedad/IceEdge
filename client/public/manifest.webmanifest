@@ -1,0 +1,19 @@
+{
+  "name": "IceEdge — NHL & Tennis Predictions",
+  "short_name": "IceEdge",
+  "description": "Statistical edge for smarter sports bets. NHL & Tennis predictions powered by ML.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0A0E0C",
+  "theme_color": "#0A0E0C",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -167,6 +167,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.signinHint":   { en: "Your locked slips and history will appear here", fr: "Tes coupons verrouillés et ton historique apparaîtront ici" },
   "slip.placeBet365":  { en: "Place on Bet365 ↗", fr: "Parier sur Bet365 ↗" },
   "slip.xpEarned":     { en: "XP earned",       fr: "XP gagnés" },
+  "slip.sharePhoto":   { en: "Share",           fr: "Partager" },
   "slip.addToSee":     { en: "Add predictions to see probability", fr: "Ajoute des prédictions pour voir la probabilité" },
   "slip.gaugeAddLegs": { en: "Add legs",        fr: "Ajoute des paris" },
   "slip.gaugeStrong":  { en: "Strong",          fr: "Fort" },

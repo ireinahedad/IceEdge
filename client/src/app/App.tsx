@@ -5,6 +5,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { SubscriptionProvider } from "./context/SubscriptionContext";
 import { SportProvider, useSport } from "./context/SportContext";
 import { LanguageProvider } from "./i18n";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 function AppShell() {
   const { theme } = useSport();
@@ -22,7 +23,9 @@ function AppShell() {
       />
       {/* Content */}
       <div className="relative z-10 w-full h-full overflow-y-auto">
-        <RouterProvider router={router} />
+        <ErrorBoundary>
+          <RouterProvider router={router} />
+        </ErrorBoundary>
       </div>
     </div>
   );
