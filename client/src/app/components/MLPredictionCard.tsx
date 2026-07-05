@@ -401,9 +401,9 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
   );
 }
 
-// ─── MLSection — fetches from /api/ml/predict and renders MLPredictionCard ───
+// ─── MLSection — fetches from /api/predict/ml and renders MLPredictionCard ───
 
-const ML_BASE = `${(import.meta.env.VITE_NHL_API_URL as string | undefined)?.replace("/api/nhl", "") ?? "http://localhost:3001"}/api/ml`;
+const ML_BASE = `${(import.meta.env.VITE_NHL_API_URL as string | undefined)?.replace("/api/nhl", "") ?? "http://localhost:3001"}/api/predict`;
 
 interface MLSectionProps {
   type:         "game" | "player" | "team";
@@ -469,7 +469,7 @@ export function MLSection({ type, subjectId, opponentId, propType, line, ruleBas
     // Show fallback immediately so the card is always visible
     setResult(fallbackResult(ruleBasedPct, propType, t));
 
-    fetch(`${ML_BASE}/predict`, {
+    fetch(`${ML_BASE}/ml`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type, subjectId, opponentId, propType, line }),

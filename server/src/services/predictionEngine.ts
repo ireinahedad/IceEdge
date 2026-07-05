@@ -240,6 +240,127 @@ export async function predictPositionBasedProp(
   );
 }
 
+// ── Additional game / team markets ────────────────────────────────────────────
+
+/** Double chance (Win or OT/Draw): moneyline lifted, since OT covers extra outcomes. */
+export async function predictDoubleChance(
+  teamId: string,
+  opponentId?: string,
+  isHome = true
+): Promise<number> {
+  const ml = await predictMoneyline(teamId, opponentId, isHome);
+  return Math.min(92, ml + 14);
+}
+
+/** Alternate puck line (+1.5 underdog covers): moneyline boosted ~18pts. */
+export async function predictAltPuckLine(
+  teamId: string,
+  opponentId?: string,
+  isHome = true
+): Promise<number> {
+  const ml = await predictMoneyline(teamId, opponentId, isHome);
+  return Math.min(95, ml + 18);
+}
+
+/** Regulation result (win in 60): moneyline haircut for the OT possibility. */
+export async function predictRegulationResult(
+  teamId: string,
+  opponentId?: string,
+  isHome = true
+): Promise<number> {
+  const ml = await predictMoneyline(teamId, opponentId, isHome);
+  return Math.max(5, Math.round(ml * 0.87));
+}
+
+/** First / last team to score: correlated with overall win probability. */
+export async function predictTeamToScore(
+  teamId: string,
+  opponentId?: string,
+  isHome = true
+): Promise<number> {
+  const ml = await predictMoneyline(teamId, opponentId, isHome);
+  // Scoring first tracks winning but is closer to a coin-flip; compress toward 50.
+  return Math.round(50 + (ml - 50) * 0.6);
+}
+
+/** Both teams score: P(each side nets ≥1) using per-side Poisson. */
+export async function predictBothTeamsScore(
+  teamId?: string,
+  opponentId?: string
+): Promise<number> {
+  const [team, opp] = await Promise.all([
+    teamId     ? getTeam(teamId)     : null,
+    opponentId ? getTeam(opponentId) : null,
+  ]);
+  const la = team?.goalsForPerGame ?? 3.0;
+  const lb = opp?.goalsForPerGame  ?? 3.0;
+  const p  = (1 - Math.exp(-la)) * (1 - Math.exp(-lb));
+  return pct(p);
+}
+
+/** Clean sheet: P(opponent scores 0). Uses opponent GF or, if unknown, team GA. */
+export async function predictCleanSheet(
+  teamId?: string,
+  opponentId?: string
+): Promise<number> {
+  const [team, opp] = await Promise.all([
+    teamId     ? getTeam(teamId)     : null,
+    opponentId ? getTeam(opponentId) : null,
+  ]);
+  const lambdaConceded =
+    opp?.goalsForPerGame ?? team?.goalsAgainstPerGame ?? 3.0;
+  return pct(Math.exp(-lambdaConceded));
+}
+
+/** Team power-play goal (≥1 PP goal in the game), from season PP%. */
+export async function predictTeamPPGoal(teamId?: string): Promise<number> {
+  const team = teamId ? await getTeam(teamId) : null;
+  const ppPct = team?.ppPct ?? 20;
+  return Math.round(Math.min(75, Math.max(8, ppPct * 1.8)));
+}
+
+/** Team kills all penalties, from season PK%. */
+export async function predictPenaltyKill(teamId?: string): Promise<number> {
+  const team = teamId ? await getTeam(teamId) : null;
+  const pkPct = team?.pkPct ?? 80;
+  return Math.round(Math.min(80, Math.max(10, pkPct * 0.9)));
+}
+
+/** Winning margin exact bucket — inherently low probability. */
+export function predictWinningMargin(): number {
+  return 12;
+}
+
+/** Period winner: dampened moneyline (single period is noisier than full game). */
+export async function predictPeriodWinner(
+  teamId: string,
+  opponentId?: string,
+  isHome = true
+): Promise<number> {
+  const ml = await predictMoneyline(teamId, opponentId, isHome);
+  return Math.max(20, Math.round(50 + (ml - 50) * 0.55));
+}
+
+/** O/U goals within a single period (~1/3 of full-game scoring). */
+export async function predictPeriodTotalGoals(
+  line: number,
+  selection: string,
+  teamId?: string,
+  opponentId?: string
+): Promise<number> {
+  const [team, opp] = await Promise.all([
+    teamId     ? getTeam(teamId)     : null,
+    opponentId ? getTeam(opponentId) : null,
+  ]);
+  const combined = (team?.goalsForPerGame ?? 3.0) + (opp?.goalsForPerGame ?? 3.0);
+  const lambda   = combined / 3;
+  return pct(
+    selection === 'under'
+      ? poissonUnder(lambda, line)
+      : poissonOver(lambda, line)
+  );
+}
+
 // ── Futures ───────────────────────────────────────────────────────────────────
 
 /**

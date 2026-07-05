@@ -167,6 +167,8 @@ export interface PredictionRequest {
   marketType: BetMarketType;
   gameId?: string;
   teamId?: string;
+  opponentId?: string;
+  isHome?: boolean;
   playerId?: string;
   line?: number; // For O/U markets (e.g. 3.5 shots)
   selection?: string; // "over" | "under" | "home" | "away" | team abbr

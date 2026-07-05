@@ -11,9 +11,21 @@ import {
   predictPPPoint,
   predictPositionBasedProp,
   predictFutures,
+  predictDoubleChance,
+  predictAltPuckLine,
+  predictRegulationResult,
+  predictTeamToScore,
+  predictBothTeamsScore,
+  predictCleanSheet,
+  predictTeamPPGoal,
+  predictPenaltyKill,
+  predictWinningMargin,
+  predictPeriodWinner,
+  predictPeriodTotalGoals,
   buildRealFactors,
 } from "../services/predictionEngine";
 import { mlApiClient } from "../services/mlApiClient";
+import { fetchGameById } from "../services/nhlApiClient";
 import {
   buildGameFeatures,
   buildPlayerPropFeatures,
@@ -48,8 +60,14 @@ router.get("/best-bets", async (req: Request, res: Response) => {
 type BetMarketType =
   | "moneyline" | "puck_line" | "total_goals" | "regulation_result"
   | "period1_winner" | "period2_winner" | "period3_winner"
+  | "period1_total_goals" | "period2_total_goals" | "period3_total_goals"
   | "game_to_ot" | "both_teams_score" | "winning_margin"
-  | "first_team_score" | "team_total_goals" | "highest_scoring_period"
+  | "double_chance" | "alt_puck_line" | "ot_winner"
+  | "first_team_score" | "last_team_score" | "team_total_goals"
+  | "team_pp_goals" | "team_penalty_kill" | "clean_sheet"
+  | "highest_scoring_period"
+  // ML-vocab aliases sent by the stats page (mapped to canonical markets)
+  | "total_goals_over" | "total_goals_under" | "pp_goal" | "penalty_kill"
   | "anytime_goal" | "first_goal_scorer" | "shots_ou" | "assists_ou"
   | "points_ou" | "pp_point" | "goalie_saves_ou" | "penalty_minutes_ou"
   | "blocked_shots_ou" | "time_on_ice_ou" | "faceoff_wins_ou" | "hits_ou";
@@ -90,72 +108,146 @@ const PLAYER_MARKET_TYPES: BetMarketType[] = [
 
 // --- Core prediction dispatcher ---
 
-async function computeProbability(body: PredictionRequest): Promise<number> {
-  const {
-    marketType,
-    teamId,
-    opponentId,
-    playerId,
-    selection = "over",
-    line = 0.5,
-    isHome = true,
-  } = body;
+/**
+ * Normalise ML-vocabulary aliases (sent by the stats page) into the canonical
+ * { marketType, selection } used by the prediction engine. This is what keeps
+ * the coupon and the stats page in sync: both funnel into the same markets.
+ */
+function normalizeMarket(
+  marketType: string,
+  selection: string
+): { market: string; selection: string } {
+  switch (marketType) {
+    case "total_goals_over":  return { market: "total_goals", selection: "over" };
+    case "total_goals_under": return { market: "total_goals", selection: "under" };
+    case "pp_goal":           return { market: "team_pp_goals", selection };
+    case "penalty_kill":      return { market: "team_penalty_kill", selection };
+    default:                  return { market: marketType, selection };
+  }
+}
 
-  // Team / game markets
-  if (marketType === "moneyline" || marketType === "first_team_score") {
+/**
+ * Resolve a game-based request into concrete team/opponent/home-ice values.
+ * The coupon sends { gameId, selection: <teamAbbr> } with no teamId; the stats
+ * page sends { teamId, opponentId, isHome } directly. Both must end up equal.
+ */
+async function resolveSubjects(body: PredictionRequest): Promise<{
+  teamId?: string;
+  opponentId?: string;
+  isHome: boolean;
+  selection: string;
+}> {
+  let teamId     = body.teamId;
+  let opponentId = body.opponentId;
+  let isHome     = body.isHome ?? true;
+  let selection  = body.selection ?? "over";
+
+  if (body.gameId) {
+    try {
+      const game = await fetchGameById(body.gameId);
+      const home = game?.homeTeam?.id ?? game?.homeTeam?.abbreviation;
+      const away = game?.awayTeam?.id ?? game?.awayTeam?.abbreviation;
+      const sel  = selection?.toLowerCase();
+      // selection is a team abbreviation → that team is the subject
+      if (sel && (sel === String(home).toLowerCase() || sel === String(away).toLowerCase())) {
+        const selIsHome = sel === String(home).toLowerCase();
+        teamId     = selIsHome ? home : away;
+        opponentId = selIsHome ? away : home;
+        isHome     = selIsHome;
+      } else if (!teamId) {
+        // over/under & game-level markets: default to the home side as anchor
+        teamId     = home;
+        opponentId = away;
+        isHome     = true;
+      }
+    } catch {
+      /* fall back to whatever the body provided */
+    }
+  }
+
+  return { teamId, opponentId, isHome, selection };
+}
+
+async function computeProbability(body: PredictionRequest): Promise<number> {
+  const { market } = normalizeMarket(body.marketType, body.selection ?? "over");
+  const line = body.line ?? 0.5;
+  const { teamId, opponentId, isHome, selection } = await resolveSubjects({
+    ...body,
+    selection: normalizeMarket(body.marketType, body.selection ?? "over").selection,
+  });
+  const playerId = body.playerId;
+
+  // ── Game / team markets ──────────────────────────────────────────────────
+  if (market === "moneyline") {
     if (!teamId) return 50;
     return predictMoneyline(teamId, opponentId, isHome);
   }
-
-  if (marketType === "puck_line") {
+  if (market === "first_team_score" || market === "last_team_score") {
+    if (!teamId) return 50;
+    return predictTeamToScore(teamId, opponentId, isHome);
+  }
+  if (market === "puck_line") {
     if (!teamId) return 28;
     return predictPuckLine(teamId, opponentId, isHome);
   }
-
-  if (marketType === "regulation_result") {
-    if (!teamId) return 40;
-    const ml = await predictMoneyline(teamId, opponentId, isHome);
-    return Math.max(5, Math.round(ml * 0.87));
+  if (market === "alt_puck_line") {
+    if (!teamId) return 50;
+    return predictAltPuckLine(teamId, opponentId, isHome);
   }
-
-  if (marketType === "total_goals" || marketType === "team_total_goals") {
+  if (market === "double_chance" || market === "ot_winner") {
+    if (!teamId) return 50;
+    return predictDoubleChance(teamId, opponentId, isHome);
+  }
+  if (market === "regulation_result") {
+    if (!teamId) return 40;
+    return predictRegulationResult(teamId, opponentId, isHome);
+  }
+  if (market === "total_goals" || market === "team_total_goals") {
     return predictTotalGoals(line, selection, teamId, opponentId);
   }
-
   if (
-    marketType === "period1_winner" ||
-    marketType === "period2_winner" ||
-    marketType === "period3_winner"
+    market === "period1_total_goals" ||
+    market === "period2_total_goals" ||
+    market === "period3_total_goals"
+  ) {
+    return predictPeriodTotalGoals(line, selection, teamId, opponentId);
+  }
+  if (
+    market === "period1_winner" ||
+    market === "period2_winner" ||
+    market === "period3_winner"
   ) {
     if (!teamId) return 38;
-    const ml = await predictMoneyline(teamId, opponentId, isHome);
-    return Math.max(20, Math.round(50 + (ml - 50) * 0.55));
+    return predictPeriodWinner(teamId, opponentId, isHome);
   }
+  if (market === "both_teams_score")   return predictBothTeamsScore(teamId, opponentId);
+  if (market === "clean_sheet")        return predictCleanSheet(teamId, opponentId);
+  if (market === "team_pp_goals")      return predictTeamPPGoal(teamId);
+  if (market === "team_penalty_kill")  return predictPenaltyKill(teamId);
+  if (market === "winning_margin")     return predictWinningMargin();
+  if (market === "game_to_ot")         return 24;
+  if (market === "highest_scoring_period") return 38;
 
-  if (marketType === "game_to_ot")          return 24;
-  if (marketType === "both_teams_score")    return 85;
-  if (marketType === "winning_margin")      return 12;
-  if (marketType === "highest_scoring_period") return 38;
-
-  // Player markets
+  // ── Player markets ─────────────────────────────────────────────────────────
   if (!playerId) return 50;
 
-  if (marketType === "anytime_goal")     return predictAnytimeGoal(playerId);
-  if (marketType === "first_goal_scorer") return predictFirstGoalScorer(playerId);
-  if (marketType === "shots_ou")         return predictShotsOU(playerId, line, selection);
-  if (marketType === "assists_ou")       return predictAssistsOU(playerId, line, selection);
-  if (marketType === "points_ou")        return predictPointsOU(playerId, line, selection);
-  if (marketType === "pp_point")         return predictPPPoint(playerId);
+  if (market === "anytime_goal")     return predictAnytimeGoal(playerId);
+  if (market === "first_goal_scorer") return predictFirstGoalScorer(playerId);
+  if (market === "last_goal_scorer")  return predictFirstGoalScorer(playerId);
+  if (market === "shots_ou")         return predictShotsOU(playerId, line, selection);
+  if (market === "assists_ou")       return predictAssistsOU(playerId, line, selection);
+  if (market === "points_ou")        return predictPointsOU(playerId, line, selection);
+  if (market === "pp_point")         return predictPPPoint(playerId);
 
   if (
-    marketType === "hits_ou" ||
-    marketType === "blocked_shots_ou" ||
-    marketType === "time_on_ice_ou" ||
-    marketType === "faceoff_wins_ou" ||
-    marketType === "penalty_minutes_ou" ||
-    marketType === "goalie_saves_ou"
+    market === "hits_ou" ||
+    market === "blocked_shots_ou" ||
+    market === "time_on_ice_ou" ||
+    market === "faceoff_wins_ou" ||
+    market === "penalty_minutes_ou" ||
+    market === "goalie_saves_ou"
   ) {
-    return predictPositionBasedProp(playerId, marketType, line, selection);
+    return predictPositionBasedProp(playerId, market, line, selection);
   }
 
   return 50;

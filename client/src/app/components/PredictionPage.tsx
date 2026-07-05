@@ -5,6 +5,7 @@ import { MarketSelectorSheet } from "./MarketSelectorSheet";
 import { PredictionResponse } from "../types/bet";
 import { nhlApiService } from "../services/nhlApiService";
 import { predictionApiService } from "../services/predictionApiService";
+import { requestFromMLProps } from "../services/predictionRequest";
 import { useSport } from "../context/SportContext";
 import { useI18n } from "../i18n";
 import { nhlLogoUrl } from "../data/teamEmoji";
@@ -489,14 +490,14 @@ interface LiveGameView {
 }
 
 /* ─── Bet types & market groups ─────────────── */
-interface MLProps { type: "game" | "player" | "team"; subjectId: string; opponentId?: string; propType?: string; line?: number; }
+interface MLProps { type: "game" | "player" | "team"; subjectId: string; opponentId?: string; propType?: string; line?: number; isHome?: boolean; selection?: string; }
 interface BetOpt { id: string; label: string; rulePct: number; ruleNote: string; mlProps?: MLProps; }
 interface MktGroup { id: string; title: string; cols: 2 | 3; options: BetOpt[]; }
 
 function buildGameGroups(home: string, away: string, hp: number, ou: number): MktGroup[] {
   const ap = 100 - hp;
-  const gml  = (propType: string, line?: number): MLProps => ({ type: "game", subjectId: home, opponentId: away, propType, line });
-  const gmla = (propType: string, line?: number): MLProps => ({ type: "game", subjectId: away, opponentId: home, propType, line });
+  const gml  = (propType: string, line?: number): MLProps => ({ type: "game", subjectId: home, opponentId: away, propType, line, isHome: true });
+  const gmla = (propType: string, line?: number): MLProps => ({ type: "game", subjectId: away, opponentId: home, propType, line, isHome: false });
   return [
     {
       id: "match", title: "Match Betting", cols: 3,
@@ -700,8 +701,8 @@ async function buildLLMDataContext(mlProps: MLProps | undefined, fr: boolean): P
 }
 
 /* ─── Prediction bottom sheet ───────────────── */
-function PredictionSheet({ label, rulePct, ruleNote, accent, mlProps, onClose }: {
-  label: string; rulePct: number; ruleNote: string; accent: string;
+function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, onClose }: {
+  label: string; rulePct: number; serverPct?: number; ruleNote: string; accent: string;
   mlProps?: MLProps; onClose: () => void;
 }) {
   const { t, lang } = useI18n();
@@ -709,6 +710,22 @@ function PredictionSheet({ label, rulePct, ruleNote, accent, mlProps, onClose }:
   const [llmLoading, setLlmLoading] = useState(false);
   const [copied, setCopied]       = useState(false);
   const pctColor = rulePct >= 65 ? "#4ade80" : rulePct >= 50 ? accent : rulePct >= 38 ? "#facc15" : "#f87171";
+
+  // Fall back to fetching the server prediction if the parent hasn't yet.
+  const [ownServerPct, setOwnServerPct] = useState<number | undefined>(serverPct);
+  useEffect(() => {
+    if (serverPct !== undefined) { setOwnServerPct(serverPct); return; }
+    if (!mlProps) return;
+    let alive = true;
+    predictionApiService
+      .getSinglePrediction(requestFromMLProps(mlProps))
+      .then(r => { if (alive) setOwnServerPct(r.probability); })
+      .catch(() => { /* keep undefined → falls back to rulePct */ });
+    return () => { alive = false; };
+  }, [serverPct, mlProps]);
+
+  // The probability stored in the coupon — identical to what the stats grid shows.
+  const legPct = ownServerPct ?? rulePct;
 
   const { addLeg, removeLeg, hasLeg } = useBet();
   const legId = mlProps
@@ -728,7 +745,7 @@ function PredictionSheet({ label, rulePct, ruleNote, accent, mlProps, onClose }:
       subjectLogo: mlProps?.subjectId ? nhlLogoUrl(mlProps.subjectId) : "",
       selection: label,
       selectionShort: label.slice(0, 14),
-      probability: rulePct,
+      probability: legPct,
       line: mlProps?.line,
       addedAt: new Date().toISOString(),
     };
@@ -951,7 +968,22 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
   const [revealed, setRevealed] = useState(false);
   const [sheet, setSheet] = useState(false);
   const isRevealed = revealAll || revealed;
-  const pctColor = opt.rulePct >= 65 ? "#4ade80" : opt.rulePct >= 50 ? accent : opt.rulePct >= 38 ? "#facc15" : "#f87171";
+
+  // Single source of truth: the server prediction (same value the coupon stores).
+  // rulePct is only a placeholder shown until the server responds.
+  const [serverPct, setServerPct] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isRevealed || !opt.mlProps || serverPct !== null) return;
+    let alive = true;
+    predictionApiService
+      .getSinglePrediction(requestFromMLProps(opt.mlProps))
+      .then(r => { if (alive) setServerPct(r.probability); })
+      .catch(() => { /* keep placeholder */ });
+    return () => { alive = false; };
+  }, [isRevealed, opt.mlProps, serverPct]);
+
+  const shownPct = serverPct ?? opt.rulePct;
+  const pctColor = shownPct >= 65 ? "#4ade80" : shownPct >= 50 ? accent : shownPct >= 38 ? "#facc15" : "#f87171";
 
   return (
     <>
@@ -971,7 +1003,7 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
             className="mt-2 px-3 py-0.5 rounded-full text-xs font-bold active:scale-95 transition-transform"
             style={{ background: pctColor + "22", color: pctColor, border: `1px solid ${pctColor}55` }}
           >
-            {opt.rulePct}%
+            {serverPct === null && opt.mlProps ? "…" : `${shownPct}%`}
           </button>
         ) : (
           <span className="mt-2 text-[#3a5060] text-[9px] font-medium">{t("pred.tap")}</span>
@@ -979,7 +1011,7 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
       </button>
       {sheet && (
         <PredictionSheet
-          label={opt.label} rulePct={opt.rulePct} ruleNote={opt.ruleNote}
+          label={opt.label} rulePct={opt.rulePct} serverPct={serverPct ?? undefined} ruleNote={opt.ruleNote}
           accent={accent} mlProps={opt.mlProps} onClose={() => setSheet(false)}
         />
       )}
