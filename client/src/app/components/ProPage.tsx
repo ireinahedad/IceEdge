@@ -99,7 +99,7 @@ export function ProPage() {
         <IceedgeLogo size={56} wordmark={false} className="mb-4" />
         <div className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-3"
           style={{ background: ACCENT_BG, color: ACCENT, border: `1px solid ${ACCENT_BORDER}` }}>
-          IceEdge Pro
+          ArakIce Pro
         </div>
         <h1 className="text-2xl font-bold mb-2" style={{ fontFamily: "'Oswald','Arial Narrow',sans-serif" }}>
           {t("pro.title")}

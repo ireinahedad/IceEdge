@@ -288,7 +288,7 @@ async function seedUserProfiles(client: any): Promise<void> {
       { badgeId: 'sharp_shooter',   label: 'Sharp Shooter',   desc: 'Maintained 70%+ hit rate over 20 bets',   icon: '🎯', earnedAt: '2025-11-15', tier: 'gold' },
       { badgeId: 'ice_analyst',     label: 'Ice Analyst',     desc: 'Placed 50+ predictions',                  icon: '📊', earnedAt: '2026-01-03', tier: 'silver' },
       { badgeId: 'underdog_hunter', label: 'Underdog Hunter', desc: 'Won 3+ picks under 40% probability',       icon: '🦁', earnedAt: '2026-02-20', tier: 'silver' },
-      { badgeId: 'early_adopter',   label: 'Early Adopter',   desc: 'Joined IceEdge in its first month',        icon: '⭐', earnedAt: '2025-10-01', tier: 'platinum' },
+      { badgeId: 'early_adopter',   label: 'Early Adopter',   desc: 'Joined ArakIce in its first month',        icon: '⭐', earnedAt: '2025-10-01', tier: 'platinum' },
     ];
     for (const b of badges) {
       await client.query(

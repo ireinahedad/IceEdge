@@ -1,4 +1,4 @@
-# ICEEDGE ML Service dependencies
+# ArakIce ML Service dependencies
 # pip install -r requirements.txt
 #
 # Versions non épinglées → pip choisit les wheels compatibles Python 3.14

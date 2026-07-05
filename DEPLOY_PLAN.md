@@ -1,4 +1,4 @@
-# ICEEDGE — Plan de déploiement (économique, ~5-10 $/mois)
+# ARAKICE — Plan de déploiement (économique, ~5-10 $/mois)
 
 _Adapté à tes choix : petit serveur toujours allumé, données NHL en direct (pas stockées), ML reporté._
 
@@ -62,7 +62,7 @@ Dernière mise à jour : 2026-07-04
    GOOGLE_REDIRECT_URI=https://<ton-backend>.up.railway.app/api/auth/google/callback
    CLIENT_URL=https://<ton-app>.vercel.app
    ```
-3. Railway te donne une URL publique (ex. `iceedge-server.up.railway.app`).
+3. Railway te donne une URL publique (ex. `arakice-server.up.railway.app`).
 
 ### 3. Frontend — Vercel
 1. Importer le repo → « Root Directory » = `client/`.

@@ -402,7 +402,7 @@ npm run seed              # (optionnel) données de test
 # Next Session Prompt
 
 ```
-Contexte : Application ICEEDGE (mobile-first NHL prediction app).
+Contexte : Application ARAKICE (mobile-first NHL prediction app).
 Lire PROJECT_CONTEXT.md pour l'état complet du projet.
 
 Objectif actuel :

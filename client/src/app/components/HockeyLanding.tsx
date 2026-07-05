@@ -530,7 +530,7 @@ function SportSelector() {
   return (
     <div ref={ref} className="relative">
       <button onClick={() => setOpen(!open)} className="flex items-center gap-2.5 select-none">
-        {/* ICEEDGE logo mark */}
+        {/* ARAKICE logo mark */}
         <IceedgeLogo size={38} wordmark={false} />
         {/* Brand name + sport label */}
         <div className="flex flex-col leading-none gap-0.5">
@@ -538,7 +538,7 @@ function SportSelector() {
             className="tracking-[0.14em] uppercase text-sm font-bold text-white"
             style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif", letterSpacing: "0.12em" }}
           >
-            ICEEDGE
+            ARAKICE
           </span>
           <span className="text-[10px] tracking-wider" style={{ color: theme.accent, opacity: 0.85 }}>
             {theme.sportLabel}

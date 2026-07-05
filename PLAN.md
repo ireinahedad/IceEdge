@@ -1,4 +1,4 @@
-# ICEEDGE — App Plan
+# ARAKICE — App Plan
 
 > Mobile-first sports prediction app (430px max-width)
 > Stack: React + Vite + TypeScript + Tailwind (frontend) · Node/Express + PostgreSQL (backend)

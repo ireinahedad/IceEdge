@@ -1,7 +1,7 @@
 {
-  "name": "IceEdge — NHL & Tennis Predictions",
-  "short_name": "IceEdge",
-  "description": "Statistical edge for smarter sports bets. NHL & Tennis predictions powered by ML.",
+  "name": "ArakIce — NHL & Tennis Predictions",
+  "short_name": "ArakIce",
+  "description": "Statistical edge for smarter sports bets. NHL predictions powered by ML.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

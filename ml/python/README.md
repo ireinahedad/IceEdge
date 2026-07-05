@@ -1,4 +1,4 @@
-# ICEEDGE ML Service
+# ArakIce ML Service
 
 Standalone FastAPI service. Node.js calls it; it replies with ML-generated probabilities.
 

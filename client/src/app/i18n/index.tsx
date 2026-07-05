@@ -64,7 +64,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "profile.parlayWins":   { en: "Parlay Wins",   fr: "Combinés gagnés" },
   "profile.parlayLosses": { en: "Parlay Losses", fr: "Combinés perdus" },
   "profile.parlayRate":   { en: "Parlay Rate",   fr: "Taux de combinés" },
-  "profile.memberSince":  { en: "IceEdge member since {date}", fr: "Membre IceEdge depuis {date}" },
+  "profile.memberSince":  { en: "ArakIce member since {date}", fr: "Membre ArakIce depuis {date}" },
   "profile.aiSettingsDesc":{ en: "Enter your OpenAI API key to use the Ask LLM feature. Your key is stored securely and used only for your requests.", fr: "Entre ta clé API OpenAI pour utiliser la fonction Ask LLM. Ta clé est stockée en toute sécurité et utilisée uniquement pour tes requêtes." },
   "profile.getKey":       { en: "Get a key →",   fr: "Obtenir une clé →" },
   "profile.openaiKey":    { en: "OpenAI API Key", fr: "Clé API OpenAI" },
@@ -494,7 +494,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "login.resetDone":  { en: "Password updated — you can now sign in.", fr: "Mot de passe mis à jour — vous pouvez vous connecter." },
 
   // ── Pro / subscription ──
-  "pro.title":        { en: "Go IceEdge Pro",  fr: "Passe à IceEdge Pro" },
+  "pro.title":        { en: "Go ArakIce Pro",  fr: "Passe à ArakIce Pro" },
   "pro.subtitle":     { en: "Unlock the full edge: every prediction, the value-bet finder, and unlimited AI analysis.", fr: "Débloque l'avantage complet : toutes les prédictions, le détecteur de value bets et l'analyse IA illimitée." },
   "pro.included":     { en: "Included in Pro", fr: "Inclus dans Pro" },
   "pro.badge":        { en: "Pro",             fr: "Pro" },

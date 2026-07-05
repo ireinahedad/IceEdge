@@ -333,7 +333,7 @@ def main():
     args = parser.parse_args()
 
     n = max(1, min(args.seasons, len(SEASONS)))
-    print(f"🏒 ICEEDGE — collecte de {n} saison(s) de données NHL")
+    print(f"🏒 ArakIce — collecte de {n} saison(s) de données NHL")
     print(f"   APIs : {BASE} + {STATS_BASE}")
     print(f"   Sortie : {args.output}")
 

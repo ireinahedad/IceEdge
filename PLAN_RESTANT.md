@@ -1,4 +1,4 @@
-# ICEEDGE — Plan de finalisation
+# ARAKICE — Plan de finalisation
 
 _Analyse d'écart : ce qui manque pour que l'app tourne, et ce qui reste à implémenter pour la rendre pleinement fonctionnelle._
 

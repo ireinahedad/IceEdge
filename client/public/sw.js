@@ -1,4 +1,4 @@
-/* IceEdge service worker — PWA + Web Push notifications. */
+/* ArakIce service worker — PWA + Web Push notifications. */
 
 // Take control ASAP so the app is controlled on first load.
 self.addEventListener("install", () => self.skipWaiting());

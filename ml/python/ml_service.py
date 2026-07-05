@@ -1,5 +1,5 @@
 """
-ICEEDGE ML Service
+ArakIce ML Service
 ==================
 Standalone FastAPI service providing probabilistic predictions for NHL betting markets.
 Node.js backend calls this via POST /predict/* and forwards results to the frontend.
@@ -30,7 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
 
-app = FastAPI(title="ICEEDGE ML Service", version="2.0.0")
+app = FastAPI(title="ArakIce ML Service", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,

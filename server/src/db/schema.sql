@@ -1,5 +1,5 @@
 -- ============================================================
---  IceEdge — Full PostgreSQL Schema
+--  ArakIce — Full PostgreSQL Schema
 --  Compatible with PostgreSQL 10+
 -- ============================================================
 

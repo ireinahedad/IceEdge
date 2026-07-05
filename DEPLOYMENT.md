@@ -1,4 +1,4 @@
-# ICEEDGE — Guide de déploiement
+# ARAKICE — Guide de déploiement
 
 Architecture : **Vercel** (frontend) + **Railway** (Node.js + Python) + **Supabase** (PostgreSQL)
 

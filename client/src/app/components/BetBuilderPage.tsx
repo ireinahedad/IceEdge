@@ -330,11 +330,11 @@ function SlipCard({ slip }: { slip: BetSlip }) {
         </div>
       )}
 
-      {/* Footer: IceEdge branding (kept in the shared image) + share button (excluded) */}
+      {/* Footer: ArakIce branding (kept in the shared image) + share button (excluded) */}
       <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/[0.06]">
         <span className="text-[11px] font-bold tracking-[0.14em]"
           style={{ fontFamily: "'Oswald','Arial Narrow',sans-serif", color: "#9BF019" }}>
-          ICEEDGE
+          ARAKICE
         </span>
         <button
           data-noshot
