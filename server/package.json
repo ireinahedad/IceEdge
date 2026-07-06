@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "seed": "ts-node src/db/seed.ts",
     "db:migrate": "psql \"$DATABASE_URL\" -f src/db/schema.sql",
+    "db:migrate:all": "ts-node src/db/migrate-all.ts",
     "db:migrate:slips": "ts-node src/db/migrate-slips.ts"
   },
   "dependencies": {

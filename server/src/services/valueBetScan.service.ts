@@ -73,7 +73,3 @@ export function startValueBetScan(): void {
   // Kick off one scan shortly after boot.
   setTimeout(runScan, 15_000);
 }
-
-export function stopValueBetScan(): void {
-  if (timer) clearInterval(timer);
-}

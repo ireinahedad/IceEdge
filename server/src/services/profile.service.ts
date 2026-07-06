@@ -2,41 +2,6 @@ import { pool } from '../db/connection';
 
 // ─── Profile ─────────────────────────────────────────────────────────────────
 
-export async function getProfileByUsername(username: string) {
-  const { rows } = await pool.query(
-    `SELECT u.id, u.username, up.display_name AS "displayName", up.avatar,
-            up.avatar_url AS "avatarUrl",
-            up.favorite_team AS "favoriteTeam", up.bio, up.is_public AS "isPublic",
-            up.tier, up.performance_score AS "performanceScore",
-            up.joined_at AS "joinedAt"
-     FROM users u
-     JOIN user_profiles up ON up.user_id = u.id
-     WHERE u.username = $1`,
-    [username]
-  );
-  if (!rows[0]) throw Object.assign(new Error('Profile not found'), { status: 404 });
-
-  const profile = rows[0];
-
-  // Badges
-  const badges = await getBadgesForUser(profile.id);
-
-  return {
-    id:               profile.id,
-    username:         profile.username,
-    displayName:      profile.displayName,
-    avatar:           profile.avatar,
-    avatarUrl:        profile.avatarUrl,
-    joinedAt:         profile.joinedAt,
-    favoriteTeam:     profile.favoriteTeam,
-    bio:              profile.bio,
-    isPublic:         profile.isPublic,
-    tier:             profile.tier,
-    performanceScore: profile.performanceScore,
-    badges,
-  };
-}
-
 export async function getProfileById(userId: string) {
   // Auto-create a profile row if one doesn't exist yet (e.g. for new registrations)
   await pool.query(
