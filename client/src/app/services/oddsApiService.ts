@@ -1,11 +1,13 @@
 // services/oddsApiService.ts
-// Fetches live Bet365 odds from The Odds API (https://the-odds-api.com)
-// Falls back to empty array when API key is not configured.
+// Fetches live Bet365 odds via the backend proxy (/api/odds/*).
+// The Odds API key now lives server-side only — it is never shipped to the client.
+// Falls back to empty array when the backend/upstream is unavailable.
 
-
-
-const API_KEY = import.meta.env.VITE_ODDS_API_KEY as string | undefined;
-const BASE_URL = "https://api.the-odds-api.com/v4";
+// Backend base, e.g. https://<railway>/api  (defaults to local dev API)
+const API_BASE =
+  (import.meta.env.VITE_PROFILE_API_URL as string | undefined) ||
+  (import.meta.env.VITE_PREDICTION_API_URL as string | undefined) ||
+  "http://localhost:3001/api";
 
 // Sport keys used by The Odds API
 export const ODDS_SPORT_KEYS = {
@@ -46,23 +48,13 @@ export async function fetchBet365Odds(
   sportKey: string,
   markets: string[] = ["h2h"]
 ): Promise<OddsEvent[]> {
-  if (!API_KEY) {
-    console.warn("[oddsApi] VITE_ODDS_API_KEY not set — using mock data");
-    return [];
-  }
-
   try {
-    const params = new URLSearchParams({
-      apiKey: API_KEY,
-      regions: "eu",
-      bookmakers: "bet365",
-      markets: markets.join(","),
-      oddsFormat: "decimal",
-    });
-
-    const res = await fetch(`${BASE_URL}/sports/${sportKey}/odds?${params}`);
+    const params = new URLSearchParams({ markets: markets.join(",") });
+    const res = await fetch(
+      `${API_BASE}/odds/bet365/${encodeURIComponent(sportKey)}?${params}`
+    );
     if (!res.ok) {
-      console.error("[oddsApi] HTTP", res.status, await res.text());
+      console.error("[oddsApi] HTTP", res.status);
       return [];
     }
     return (await res.json()) as OddsEvent[];
@@ -105,9 +97,8 @@ export function decimalToWinPct(decimal: number): number {
 export async function fetchAvailableSports(): Promise<
   Array<{ key: string; title: string; active: boolean }>
 > {
-  if (!API_KEY) return [];
   try {
-    const res = await fetch(`${BASE_URL}/sports?apiKey=${API_KEY}`);
+    const res = await fetch(`${API_BASE}/odds/sports`);
     if (!res.ok) return [];
     return res.json();
   } catch {

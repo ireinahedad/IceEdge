@@ -15,19 +15,33 @@ const router = Router();
 
 const REFRESH_COOKIE = 'ice_refresh';
 const REFRESH_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // must match REFRESH_TOKEN_TTL
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+// Cross-site deployment (front on Vercel, API on Railway → different sites):
+// the refresh cookie must be SameSite=None so it is sent on cross-site fetches.
+// SameSite=None requires Secure. In local dev (same-site localhost) Lax + no
+// Secure keeps things working over http.
+const COOKIE_SAMESITE: 'none' | 'lax' = IS_PROD ? 'none' : 'lax';
 
 function setRefreshCookie(res: Response, token: string): void {
   res.cookie(REFRESH_COOKIE, token, {
     httpOnly: true,
-    secure:   process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure:   IS_PROD,
+    sameSite: COOKIE_SAMESITE,
     path:     '/api/auth',
     maxAge:   REFRESH_MAX_AGE,
   });
 }
 
 function clearRefreshCookie(res: Response): void {
-  res.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
+  // Options (secure/sameSite/path) must match setRefreshCookie or the browser
+  // won't clear the cookie.
+  res.clearCookie(REFRESH_COOKIE, {
+    httpOnly: true,
+    secure:   IS_PROD,
+    sameSite: COOKIE_SAMESITE,
+    path:     '/api/auth',
+  });
 }
 
 /** Strip the refresh token from the JSON body — it travels via cookie only. */

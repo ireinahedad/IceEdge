@@ -513,6 +513,9 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pro.renews":       { en: "Renews on",       fr: "Renouvellement le" },
   "pro.cancelScheduled": { en: "Your Pro access ends on", fr: "Ton accès Pro se termine le" },
   "pro.devNote":      { en: "Demo mode: Stripe payment isn't wired yet — the subscription activates immediately so you can test.", fr: "Mode démo : le paiement Stripe n'est pas encore branché — l'abonnement s'active immédiatement pour tester." },
+  "pro.promo.label":       { en: "Have a promo code?", fr: "Tu as un code promo ?" },
+  "pro.promo.placeholder": { en: "Enter code",         fr: "Entre ton code" },
+  "pro.promo.apply":       { en: "Apply",              fr: "Appliquer" },
   // Pro-exclusive benefits (title + description)
   "pro.b.bestbets.t": { en: "Daily Best Bets",           fr: "Best Bets du jour" },
   "pro.b.bestbets.d": { en: "The day's top picks, selected and rated by the model.", fr: "Les meilleurs paris du jour, sélectionnés et notés par le modèle." },

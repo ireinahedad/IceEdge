@@ -1,9 +1,10 @@
-import { Search } from "lucide-react";
+import { Search, HelpCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useNHLData, UITeam, UIGame } from "../hooks/useNHLData";
 import { BottomNav } from "./BottomNav";
 import { MarketSelectorSheet } from "./MarketSelectorSheet";
+import { HowItWorksSheet } from "./HowItWorksSheet";
 import { nhlApiService } from "../services/nhlApiService";
 import { useSport } from "../context/SportContext";
 import { nhlLogoUrl, probToOdds } from "../data/teamEmoji";
@@ -25,6 +26,20 @@ interface LocalFuture {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function HowItWorksButton({ onClick, accent }: { onClick: () => void; accent: string }) {
+  const { lang } = useI18n();
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold flex-shrink-0 transition-all active:scale-95"
+      style={{ color: accent, borderColor: `${accent}4d`, backgroundColor: `${accent}1a`, border: `1px solid ${accent}4d` }}
+    >
+      <HelpCircle size={13} />
+      {lang === "fr" ? "Comment ça marche" : "How it works"}
+    </button>
+  );
+}
 
 function AddButton({ onPress, accent }: { onPress: (e: React.MouseEvent) => void; accent: string }) {
   return (
@@ -149,6 +164,7 @@ export function StatsPage() {
   const [activeFilter, setActiveFilter] = useState(0);
   const [search, setSearch] = useState("");
   const [addSheet, setAddSheet] = useState<AddSheetState>({ open: false });
+  const [howItWorks, setHowItWorks] = useState(false);
   const navigate = useNavigate();
 
   function openAdd(subject: Subject) { setAddSheet({ open: true, subject }); }
@@ -206,11 +222,13 @@ export function StatsPage() {
               <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>{t("stats.title")}</h1>
               <p className="text-[#bfc8cc] text-xs">{t("stats.tennis")}</p>
             </div>
+            <HowItWorksButton accent={accent} onClick={() => setHowItWorks(true)} />
           </div>
         </header>
         <div className="flex-1 px-4 pb-28 pt-3 overflow-y-auto">
           <TennisStatsContent accent={accent} />
         </div>
+        {howItWorks && <HowItWorksSheet onClose={() => setHowItWorks(false)} />}
         <BottomNav />
       </div>
     );
@@ -241,6 +259,7 @@ export function StatsPage() {
             <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>{t("stats.title")}</h1>
             <p className="text-[#bfc8cc] text-xs">{t("stats.subtitle")}</p>
           </div>
+          <HowItWorksButton accent={accent} onClick={() => setHowItWorks(true)} />
         </div>
         <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2.5 mb-3">
           <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
@@ -349,6 +368,8 @@ export function StatsPage() {
       {addSheet.open && (
         <MarketSelectorSheet onClose={() => setAddSheet({ open: false })} preselectedSubject={addSheet.subject} />
       )}
+
+      {howItWorks && <HowItWorksSheet onClose={() => setHowItWorks(false)} />}
     </div>
   );
 }

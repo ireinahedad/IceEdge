@@ -33,6 +33,14 @@ router.post('/checkout', authenticate, async (req: Request, res: Response) => {
   } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
+// POST /subscription/redeem — activate Pro with a promo code (no payment).
+router.post('/redeem', authenticate, async (req: Request, res: Response) => {
+  try {
+    const status = await Subscriptions.redeemPromo(req.user!.sub, req.body?.code);
+    return res.json({ redeemed: true, status });
+  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
 // POST /subscription/trial — start the one-time 7-day free trial.
 router.post('/trial', authenticate, async (req: Request, res: Response) => {
   try {

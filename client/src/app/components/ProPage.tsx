@@ -5,7 +5,7 @@ import { useI18n } from "../i18n";
 import { IceedgeLogo } from "./brand/IceedgeLogo";
 import {
   apiGetSubscription, apiStartCheckout, apiStartTrial, apiCancelSubscription,
-  SubscriptionStatus,
+  apiRedeemPromo, SubscriptionStatus,
 } from "../services/subscriptionService";
 
 const ACCENT        = "#9BF019";
@@ -44,6 +44,9 @@ export function ProPage() {
   const [sub,     setSub]     = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
+  const [promo,      setPromo]      = useState("");
+  const [promoBusy,  setPromoBusy]  = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -75,6 +78,22 @@ export function ProPage() {
     try { setSub(await apiStartTrial()); }
     catch (err: unknown) { setError(err instanceof Error ? err.message : "Error"); }
     finally { setLoading(false); }
+  }
+
+  async function handleRedeem() {
+    if (!user) { navigate("/login?returnTo=/pro"); return; }
+    if (!promo.trim()) return;
+    setPromoError(null);
+    setPromoBusy(true);
+    try {
+      const status = await apiRedeemPromo(promo.trim());
+      setSub(status);
+      setPromo("");
+    } catch (err: unknown) {
+      setPromoError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setPromoBusy(false);
+    }
   }
 
   async function handleCancel() {
@@ -194,6 +213,38 @@ export function ProPage() {
           style={{ background: ACCENT, color: "#0A0E0C" }}>
           {loading ? "..." : user ? t("pro.cta") : t("pro.loginPrompt")}
         </button>
+      )}
+
+      {/* Promo code — activate Pro without payment */}
+      {!isPro && (
+        <div className="mt-6">
+          <div className="text-[11px] uppercase tracking-wider mb-2" style={{ color: MUTED }}>
+            {t("pro.promo.label")}
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={promo}
+              onChange={(e) => { setPromo(e.target.value); setPromoError(null); }}
+              onKeyDown={(e) => { if (e.key === "Enter") handleRedeem(); }}
+              placeholder={t("pro.promo.placeholder")}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              className="flex-1 py-3 px-3 rounded-xl text-sm outline-none uppercase tracking-wide"
+              style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: "#F3F7F0" }}
+            />
+            <button
+              onClick={handleRedeem}
+              disabled={promoBusy || !promo.trim()}
+              className="px-4 rounded-xl text-sm font-bold disabled:opacity-50"
+              style={{ background: ACCENT_BG, color: ACCENT, border: `1px solid ${ACCENT_BORDER}` }}>
+              {promoBusy ? "..." : t("pro.promo.apply")}
+            </button>
+          </div>
+          {promoError && (
+            <div className="text-red-400 text-xs mt-2">{promoError}</div>
+          )}
+        </div>
       )}
 
       <p className="text-center text-[10px] mt-4" style={{ color: MUTED, opacity: 0.6 }}>

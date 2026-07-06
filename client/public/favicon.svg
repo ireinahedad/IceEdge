@@ -1,23 +1,26 @@
 <svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="ie-sg" x1="8" y1="0" x2="58" y2="0" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#0A2BAA"/>
-      <stop offset="50%" stop-color="#1A8AFF"/>
+    <linearGradient id="ai-stripes" x1="6" y1="82" x2="46" y2="18" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1E4BFF"/>
       <stop offset="100%" stop-color="#30E0FF"/>
+    </linearGradient>
+    <linearGradient id="ai-letter" x1="40" y1="0" x2="99" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1A8AFF"/>
+      <stop offset="55%" stop-color="#8FCBFF"/>
+      <stop offset="100%" stop-color="#FFFFFF"/>
     </linearGradient>
   </defs>
 
   <!-- Dark rounded background so the mark reads on any tab colour -->
   <rect width="100" height="100" rx="22" fill="#0A0E0C"/>
 
-  <!-- 4 parallelogram speed-stripes -->
-  <polygon points="22,22 25,22 15,78 12,78" fill="url(#ie-sg)"/>
-  <polygon points="29,22 33,22 23,78 19,78" fill="url(#ie-sg)"/>
-  <polygon points="37,22 43,22 33,78 27,78" fill="url(#ie-sg)"/>
-  <polygon points="46,22 55,22 45,78 36,78" fill="url(#ie-sg)"/>
+  <!-- 3 parallelogram speed-stripes -->
+  <polygon points="22,24 28,24 16,78 10,78" fill="url(#ai-stripes)"/>
+  <polygon points="31,24 37,24 25,78 19,78" fill="url(#ai-stripes)"/>
+  <polygon points="40,24 47,24 35,78 28,78" fill="url(#ai-stripes)"/>
 
-  <!-- Bold italic E -->
-  <text x="98" y="78" text-anchor="end" font-size="64" font-weight="900"
-    font-family="Impact, 'Arial Black', Arial, sans-serif" fill="white"
-    transform="skewX(-12)">E</text>
+  <!-- Bold italic A -->
+  <text x="96" y="80" text-anchor="end" font-size="74" font-weight="900"
+    font-family="Impact, 'Arial Black', Arial, sans-serif" fill="url(#ai-letter)"
+    transform="skewX(-10)">A</text>
 </svg>

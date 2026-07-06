@@ -30,8 +30,23 @@ app.use(helmet());
 // credentials:true is required so the httpOnly refresh-token cookie flows
 // between the client (5173) and the API (3001). '*' is not allowed with
 // credentials, hence the explicit default origin.
+// Allowed origins: the configured client(s) (CORS_ORIGIN may be a comma-
+// separated list) plus any Vercel preview deployment of this project.
+const allowedOrigins = (process.env.CORS_ORIGIN || process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+// Preview URLs look like https://ice-edge-<hash>-ireina-hedad-s-projects.vercel.app
+const vercelPreview = /^https:\/\/ice-edge[a-z0-9-]*\.vercel\.app$/i;
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || process.env.CLIENT_URL || 'http://localhost:5173',
+  origin(origin, cb) {
+    // Non-browser clients (curl, health checks) send no Origin — allow them.
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.includes(origin) || vercelPreview.test(origin)) return cb(null, true);
+    return cb(new Error(`Not allowed by CORS: ${origin}`));
+  },
   credentials: true,
 }));
 app.use(cookieParser());
@@ -101,7 +116,14 @@ app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 // Global error handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[Error]', err);
-  res.status(err.status ?? 500).json({ error: err.message ?? 'Internal server error' });
+  const status = err.status ?? 500;
+  // Don't leak internal error details for unexpected 5xx in production.
+  const isClientError = status >= 400 && status < 500;
+  const message =
+    isClientError || process.env.NODE_ENV !== 'production'
+      ? err.message ?? 'Internal server error'
+      : 'Internal server error';
+  res.status(status).json({ error: message });
 });
 
 export default app;

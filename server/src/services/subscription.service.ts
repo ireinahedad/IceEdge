@@ -123,6 +123,36 @@ export async function activateProDev(userId: string, days = 30): Promise<Subscri
   return upsert(userId, { plan: 'pro', status: 'active', currentPeriodEnd: end });
 }
 
+/** Valid promo codes and how many days of Pro they grant.
+ *  Configure via env PRO_PROMO_CODES as `CODE:DAYS` pairs (comma-separated),
+ *  e.g. "ICEEDGE2026:365,VIP:30". A pair without days defaults to 365.
+ *  If the env var is unset, a built-in default code is used. */
+function promoCatalog(): Record<string, number> {
+  const raw = process.env.PRO_PROMO_CODES?.trim();
+  const catalog: Record<string, number> = {};
+  if (raw) {
+    for (const part of raw.split(',')) {
+      const [code, days] = part.split(':').map((s) => s.trim());
+      if (code) catalog[code.toUpperCase()] = Number(days) > 0 ? Number(days) : 365;
+    }
+  } else {
+    catalog['ICEEDGEPRO'] = 365; // default demo code
+  }
+  return catalog;
+}
+
+/** Redeems a promo code and grants Pro without payment. Throws 400 if invalid. */
+export async function redeemPromo(userId: string, code: string): Promise<SubscriptionStatus> {
+  const key = (code ?? '').trim().toUpperCase();
+  if (!key) throw Object.assign(new Error('Code required'), { status: 400 });
+
+  const days = promoCatalog()[key];
+  if (!days) throw Object.assign(new Error('Invalid promo code'), { status: 400 });
+
+  const end = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  return upsert(userId, { plan: 'pro', status: 'active', currentPeriodEnd: end });
+}
+
 /** Marks the subscription to end at the period boundary (keeps Pro until then). */
 export async function cancel(userId: string): Promise<SubscriptionStatus> {
   const { rows } = await pool.query<SubscriptionRow>(

@@ -43,6 +43,20 @@ export async function apiStartTrial(): Promise<SubscriptionStatus> {
   return res.json();
 }
 
+export async function apiRedeemPromo(code: string): Promise<SubscriptionStatus> {
+  const res = await authedFetch('/subscription/redeem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? 'Invalid promo code');
+  }
+  const data = await res.json();
+  return data.status;
+}
+
 export async function apiCancelSubscription(): Promise<SubscriptionStatus> {
   const res = await authedFetch('/subscription/cancel', { method: 'POST' });
   if (!res.ok) throw new Error('Cancel failed');

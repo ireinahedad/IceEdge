@@ -1,7 +1,7 @@
 /**
- * IceedgeLogo — inline SVG brand mark.
- * 4 diagonal speed-stripes (blue→cyan gradient, full opacity) + bold E.
- * Transparent background.
+ * IceedgeLogo — inline SVG brand mark for ArakIce.
+ * 3 diagonal speed-stripes (blue→cyan) + bold italic "A"
+ * with a blue→white gradient. Transparent background.
  */
 
 interface IceedgeLogoProps {
@@ -21,30 +21,35 @@ export function IceedgeLogo({ size = 40, wordmark = true, className = "" }: Icee
         xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
-          <linearGradient id="ie-sg" x1="8" y1="0" x2="58" y2="0" gradientUnits="userSpaceOnUse">
-            <stop offset="0%"   stopColor="#0A2BAA" />
-            <stop offset="50%"  stopColor="#1A8AFF" />
+          {/* Stripes: deep blue → cyan, along the diagonal */}
+          <linearGradient id="ai-stripes" x1="6" y1="82" x2="46" y2="18" gradientUnits="userSpaceOnUse">
+            <stop offset="0%"   stopColor="#1E4BFF" />
             <stop offset="100%" stopColor="#30E0FF" />
+          </linearGradient>
+          {/* Letter: blue (left) → white (right), matching the brand mark */}
+          <linearGradient id="ai-letter" x1="40" y1="0" x2="99" y2="0" gradientUnits="userSpaceOnUse">
+            <stop offset="0%"   stopColor="#1A8AFF" />
+            <stop offset="55%"  stopColor="#8FCBFF" />
+            <stop offset="100%" stopColor="#FFFFFF" />
           </linearGradient>
         </defs>
 
-        {/* 4 parallelogram stripes — same height as E (y=27→85) */}
-        <polygon points="19,18 22,18 11,76 8,76"  fill="url(#ie-sg)" />
-        <polygon points="26,18 31,18 20,76 15,76" fill="url(#ie-sg)" />
-        <polygon points="34,18 41,18 30,76 23,76" fill="url(#ie-sg)" />
-        <polygon points="44,18 54,18 43,76 33,76" fill="url(#ie-sg)" />
+        {/* 3 parallelogram speed-stripes, parallel to the A's left leg */}
+        <polygon points="18,20 24,20 12,80 6,80"  fill="url(#ai-stripes)" />
+        <polygon points="27,20 33,20 21,80 15,80" fill="url(#ai-stripes)" />
+        <polygon points="36,20 43,20 31,80 24,80" fill="url(#ai-stripes)" />
 
-        {/* Bold E — right-anchored, skewX for italic lean */}
+        {/* Bold italic A — right-anchored, skewX for the forward lean */}
         <text
-          x="103"
-          y="76"
+          x="100"
+          y="80"
           textAnchor="end"
-          fontSize="70"
+          fontSize="80"
           fontWeight="900"
           fontFamily="Impact, 'Arial Black', Arial, sans-serif"
-          fill="white"
-          transform="skewX(-12)"
-        >E</text>
+          fill="url(#ai-letter)"
+          transform="skewX(-10)"
+        >A</text>
       </svg>
 
       {wordmark && (
@@ -58,7 +63,7 @@ export function IceedgeLogo({ size = 40, wordmark = true, className = "" }: Icee
             textTransform: "uppercase" as const,
           }}
         >
-          ICEEDGE
+          ARAKICE
         </span>
       )}
     </div>
