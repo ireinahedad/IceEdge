@@ -150,4 +150,42 @@ export function GamePrediction({ gameId }: { gameId: string }) {
         {isLive && (
           <div className="flex items-center justify-center gap-1.5 mb-3">
             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-red-400 text-[10px] font-semibold uppercase tracking-widest">{gameView.period}</
+            <span className="text-red-400 text-[10px] font-semibold uppercase tracking-widest">{gameView.period}</span>
+          </div>
+        )}
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col items-center gap-1.5 flex-1">
+            <img src={home.logo} alt={home.name} className="w-12 h-12 object-contain" />
+            <span className="text-white text-sm font-bold">{home.name}</span>
+            {home.score !== undefined && <span className="text-white text-3xl font-black">{home.score}</span>}
+          </div>
+          <div className="flex flex-col items-center gap-1 px-2">
+            {!isLive && <span className="text-[#8a9ea6] text-xs">{gameView.time ?? t("pred.today")}</span>}
+            <span className="text-[#8a9ea6] font-bold text-base">VS</span>
+            <span className="text-[#4a6070] text-[10px]">O/U {gameView.overUnder}</span>
+          </div>
+          <div className="flex flex-col items-center gap-1.5 flex-1">
+            <img src={away.logo} alt={away.name} className="w-12 h-12 object-contain" />
+            <span className="text-white text-sm font-bold">{away.name}</span>
+            {away.score !== undefined && <span className="text-white text-3xl font-black">{away.score}</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Recent form — both teams, shown above the markets */}
+      <GameRecentForm
+        home={{ abbr: home.abbr, logo: home.logo }}
+        away={{ abbr: away.abbr, logo: away.logo }}
+        homeForm={homeForm}
+        awayForm={awayForm}
+      />
+
+      {/* ── Market groups ── */}
+      <PredictionsRevealBar revealAll={revealAll} onToggle={() => setRevealAll(v => !v)} />
+      <RevealAllCtx.Provider value={revealAll}>
+        {groups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
+      </RevealAllCtx.Provider>
+
+    </div>
+  );
+}
