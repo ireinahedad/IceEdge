@@ -48,6 +48,10 @@ export function useChatSocket(roomId: string | null) {
       });
     });
 
+    socket.on('message_deleted', ({ messageId }: { messageId: string }) => {
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    });
+
     socket.on('room_users', (count: number) => setOnlineCount(count));
 
     return () => {
@@ -78,5 +82,10 @@ export function useChatSocket(roomId: string | null) {
     );
   }, []);
 
-  return { messages, onlineCount, connected, initMessages, appendOptimistic, confirmMessage };
+  /** Remove a message locally (optimistic delete before/without the socket event). */
+  const removeMessage = useCallback((messageId: string) => {
+    setMessages((prev) => prev.filter((m) => m.id !== messageId));
+  }, []);
+
+  return { messages, onlineCount, connected, initMessages, appendOptimistic, confirmMessage, removeMessage };
 }

@@ -277,6 +277,7 @@ CREATE TABLE IF NOT EXISTS chat_rooms (
   is_live       BOOLEAN      DEFAULT FALSE,
   is_pinned     BOOLEAN      DEFAULT FALSE,
   member_count  INT          DEFAULT 0,
+  color         VARCHAR(9),
   created_at    TIMESTAMPTZ  DEFAULT NOW()
 );
 

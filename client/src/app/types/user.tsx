@@ -128,6 +128,8 @@ export interface ChatRoom {
   name: string;
   icon: string;
   description: string;
+  /** Accent color chosen by the creator (#RRGGBB), or null for the default */
+  color?: string | null;
   isLive?: boolean;
   /** Pinned by the current user (per-user, not global) */
   isPinned?: boolean;

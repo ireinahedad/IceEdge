@@ -52,10 +52,10 @@ router.get('/rooms', async (req: Request, res: Response) => {
 // POST /api/chat/rooms — create (creator becomes admin) · max 5/5min
 router.post('/rooms', rateLimit('create', 5, 5 * 60_000), async (req: Request, res: Response) => {
   try {
-    const { name, icon, description, isPrivate } = req.body;
+    const { name, icon, description, isPrivate, color } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
     res.status(201).json(await chatService.createRoom(uid(req), {
-      name, icon: icon ?? '💬', description: description ?? '', isPrivate: !!isPrivate,
+      name, icon: icon ?? '💬', description: description ?? '', isPrivate: !!isPrivate, color,
     }));
   } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
@@ -142,6 +142,16 @@ router.post('/rooms/:roomId/messages', rateLimit('msg', 10, 10_000), async (req:
     res.status(201).json(msg);
     // Broadcast to all clients in the room (real-time)
     try { io?.to(req.params.roomId).emit('new_message', msg); } catch { /* io not yet initialised */ }
+  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// DELETE /api/chat/rooms/:roomId/messages/:messageId — own messages only
+router.delete('/rooms/:roomId/messages/:messageId', async (req: Request, res: Response) => {
+  try {
+    await chatService.deleteMessage(req.params.roomId, req.params.messageId, uid(req));
+    res.status(204).send();
+    // Tell everyone in the room to drop the message in real time
+    try { io?.to(req.params.roomId).emit('message_deleted', { messageId: req.params.messageId }); } catch { /* io not ready */ }
   } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 

@@ -19,11 +19,13 @@ export function MessageBubble({
   isOwn,
   onReact,
   onReply,
+  onDelete,
 }: {
   msg: ChatMessage;
   isOwn: boolean;
   onReact?: (msgId: string, emoji: string) => void;
   onReply?: (msg: ChatMessage) => void;
+  onDelete?: (msgId: string) => void;
 }) {
   const time = new Date(msg.sentAt).toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -63,14 +65,25 @@ export function MessageBubble({
         )}
 
         {/* Bubble */}
-        <div
-          className={`rounded-2xl px-3 py-2 ${
-            isOwn
-              ? "bg-[#90C9F0] text-[#072E49] border border-[#90C9F0] backdrop-blur-md"
-              : "icy-tile text-white"
-          }`}
-        >
-          <p className="text-xs leading-relaxed">{msg.text}</p>
+        <div className={`group flex items-end gap-1.5 ${isOwn ? "flex-row-reverse" : ""}`}>
+          <div
+            className={`rounded-2xl px-3 py-2 ${
+              isOwn
+                ? "bg-[#90C9F0] text-[#072E49] border border-[#90C9F0]"
+                : "chat-tile text-white"
+            }`}
+          >
+            <p className="text-xs leading-relaxed">{msg.text}</p>
+          </div>
+          {isOwn && onDelete && (
+            <button
+              onClick={() => onDelete(msg.id)}
+              className="text-white/30 hover:text-red-400 text-[11px] opacity-40 hover:opacity-100 transition-opacity self-center flex-shrink-0"
+              title="Delete"
+            >
+              🗑️
+            </button>
+          )}
         </div>
 
         {/* Reactions */}

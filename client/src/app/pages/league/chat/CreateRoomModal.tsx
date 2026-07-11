@@ -5,6 +5,9 @@ import type { ChatRoom } from "../../../types/user";
 
 // ─── Create room modal ────────────────────────────────────────────────────────
 
+// Preset accent colors the creator can pick for their salon.
+const ROOM_COLORS = ["#90c9f0", "#22ff00", "#f2994a", "#eb5757", "#bb6bd9", "#f2c94c", "#2d9cdb", "#6fcf97"];
+
 export function CreateRoomModal({ onClose, onCreate }: {
   onClose: () => void;
   onCreate: (room: ChatRoom) => void;
@@ -13,6 +16,7 @@ export function CreateRoomModal({ onClose, onCreate }: {
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
+  const [color, setColor] = useState(ROOM_COLORS[0]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdRoom, setCreatedRoom] = useState<ChatRoom | null>(null);
@@ -27,6 +31,7 @@ export function CreateRoomModal({ onClose, onCreate }: {
         icon: name.trim().charAt(0).toUpperCase() || "#",
         description: desc.trim() || "Community chat",
         isPrivate,
+        color,
       });
       if (room.isPrivate && room.joinCode) {
         // Show the join code before closing so the creator can share it
@@ -100,6 +105,20 @@ export function CreateRoomModal({ onClose, onCreate }: {
           maxLength={64}
           className="w-full icy-tile rounded-xl px-3 py-2.5 text-white text-sm outline-none placeholder-white/30 mb-4 focus:border-[#90C9F0]/50 transition-colors"
         />
+
+        {/* Color picker */}
+        <p className="text-white/60 text-[10px] uppercase tracking-wider mb-1.5">{t("chat.roomColor")}</p>
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          {ROOM_COLORS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setColor(c)}
+              aria-label={c}
+              className={`w-7 h-7 rounded-full transition-all ${color === c ? "ring-2 ring-white ring-offset-2 ring-offset-[#0A0E0C] scale-110" : "opacity-80"}`}
+              style={{ background: c }}
+            />
+          ))}
+        </div>
 
         {/* Public / private toggle */}
         <div className="flex items-center justify-between icy-tile rounded-xl px-3 py-3 mb-4">

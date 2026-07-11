@@ -589,12 +589,11 @@ export function BetBuilderPage() {
         </div>
 
         {/* Tab switcher */}
-        <div className="flex gap-1 bg-white/5 rounded-xl p-1 border border-white/20">
+        <div className="flex gap-1 bg-white/5 rounded-xl p-1">
           {([["build", t("slip.build")], ["slips", t("slip.mySlips")]] as [PageTab, string][]).map(([key, label]) => (
             <button key={key} onClick={() => setTab(key)}
-              className={`flex-1 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
-                tab === key ? "bg-[#22ff00] text-[#072E49] font-bold" : "text-white/60"
-              }`}>
+              className="flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all"
+              style={tab === key ? { background: "#90C9F0", color: "#072E49" } : { color: "#92A08A" }}>
               {label}
               {key === "slips" && user && tab !== "slips" && legs.length === 0 && (
                 <span className="ml-1 text-[9px] opacity-60">history</span>

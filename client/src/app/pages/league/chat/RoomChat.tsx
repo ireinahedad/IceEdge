@@ -33,7 +33,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   onPinToggle: (room: ChatRoom) => void;
 }) {
   const { t } = useI18n();
-  const { messages, onlineCount, connected, initMessages, appendOptimistic, confirmMessage } =
+  const { messages, onlineCount, connected, initMessages, appendOptimistic, confirmMessage, removeMessage } =
     useChatSocket(room.id);
   const [input, setInput] = useState("");
   const [tag, setTag] = useState<"pick" | "analysis" | undefined>();
@@ -104,6 +104,16 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
     try { await profileApiService.toggleReaction(room.id, msgId, emoji); } catch { /* non-blocking */ }
   }
 
+  async function handleDeleteMessage(msgId: string) {
+    if (!confirm(t("chat.deleteMessageConfirm"))) return;
+    removeMessage(msgId); // optimistic
+    try {
+      await profileApiService.deleteMessage(room.id, msgId);
+    } catch (e: any) {
+      setErrorMsg(e.message ?? "Could not delete message");
+    }
+  }
+
   async function handleLeave() {
     if (!confirm(`Leave ${room.name}?`)) return;
     try {
@@ -133,11 +143,14 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
       <div className="flex items-center gap-3 mb-3 flex-shrink-0">
         <button
           onClick={onBack}
-          className="w-8 h-8 rounded-xl icy-tile flex items-center justify-center text-[#90C9F0] flex-shrink-0"
+          className="w-8 h-8 rounded-xl chat-tile flex items-center justify-center text-[#90C9F0] flex-shrink-0"
         >
           ←
         </button>
-        <div className="w-8 h-8 rounded-xl icy-tile flex items-center justify-center text-base flex-shrink-0">
+        <div
+          className="w-8 h-8 rounded-xl chat-tile flex items-center justify-center text-base flex-shrink-0"
+          style={room.color ? { background: room.color } : undefined}
+        >
           {room.icon}
         </div>
         <div className="flex-1 min-w-0">
@@ -158,7 +171,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
         </div>
         <button
           onClick={() => setMenuOpen((v) => !v)}
-          className="w-8 h-8 rounded-xl icy-tile flex items-center justify-center text-white/60 flex-shrink-0"
+          className="w-8 h-8 rounded-xl chat-tile flex items-center justify-center text-white/60 flex-shrink-0"
         >
           ⋯
         </button>
@@ -166,7 +179,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
 
       {/* Room menu */}
       {menuOpen && (
-        <div className="icy-card rounded-2xl mb-3 overflow-hidden flex-shrink-0">
+        <div className="chat-tile rounded-2xl mb-3 overflow-hidden flex-shrink-0">
           {room.joinCode && (
             <button
               onClick={() => { navigator.clipboard?.writeText(room.joinCode ?? ""); setMenuOpen(false); }}
@@ -241,6 +254,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
                 isOwn={msg.userId === currentUserId}
                 onReact={handleReact}
                 onReply={setReplyTo}
+                onDelete={msg.userId === currentUserId ? handleDeleteMessage : undefined}
               />
             ))}
           </>
@@ -250,7 +264,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
 
       {/* Reply preview */}
       {replyTo && (
-        <div className="flex items-center gap-2 icy-tile rounded-xl px-3 py-2 mb-2 flex-shrink-0">
+        <div className="flex items-center gap-2 chat-tile rounded-xl px-3 py-2 mb-2 flex-shrink-0">
           <div className="flex-1 min-w-0">
             <p className="text-[#90C9F0] text-[9px] font-medium">{t("chat.replyingTo")} @{replyTo.username}</p>
             <p className="text-white/50 text-[9px] truncate">{replyTo.text}</p>
@@ -275,7 +289,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
           ))}
           {tag && <span className="text-white/40 text-[9px] self-center">tagged</span>}
         </div>
-        <div className="flex items-center gap-2 icy-tile rounded-2xl px-3 py-2">
+        <div className="flex items-center gap-2 chat-tile rounded-2xl px-3 py-2">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}

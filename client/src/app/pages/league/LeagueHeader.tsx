@@ -19,8 +19,8 @@ export function LeagueHeader({
   const accent = theme.accent;
 
   const tabs = [
-    { key: "leaderboard", label: t("league.rankings") },
     { key: "chat",        label: lang === "fr" ? "Chat" : "Chat" },
+    { key: "leaderboard", label: t("league.rankings") },
   ];
 
   return (
@@ -43,16 +43,16 @@ export function LeagueHeader({
         </div>
       </div>
 
-      <div className="flex gap-1 bg-[#072E49] backdrop-blur-md rounded-xl p-1 border border-white/60">
+      <div className="flex gap-1 bg-white/5 rounded-xl p-1">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key as Tab)}
-            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-medium transition-all relative"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all relative"
             style={
               tab === t.key
-                ? { backgroundColor: "#22ff00", color: "#072E49", fontWeight: 700 }
-                : { color: "rgba(255,255,255,0.7)" }
+                ? { background: "#90C9F0", color: "#072E49" }
+                : { color: "#92A08A" }
             }
           >
             <span>{t.label}</span>

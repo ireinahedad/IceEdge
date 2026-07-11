@@ -22,6 +22,17 @@ function httpError(message: string, status: number) {
   return Object.assign(new Error(message), { status });
 }
 
+/** Accepts #RGB or #RRGGBB, returns a normalized #RRGGBB or null. */
+function sanitizeColor(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const v = raw.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(v)) return v.toLowerCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(v)) {
+    return ('#' + v.slice(1).split('').map((c) => c + c).join('')).toLowerCase();
+  }
+  return null;
+}
+
 function generateJoinCode(): string {
   // 6 chars, unambiguous alphabet (no 0/O/1/I)
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -72,7 +83,7 @@ async function getMembership(roomId: string, userId: string) {
 
 async function getRoomRow(roomId: string) {
   const { rows } = await pool.query(
-    `SELECT id, name, icon, description, is_live AS "isLive", is_pinned AS "isPinned",
+    `SELECT id, name, icon, description, color, is_live AS "isLive", is_pinned AS "isPinned",
             is_private AS "isPrivate", join_code AS "joinCode", created_by AS "createdBy",
             created_at AS "createdAt"
      FROM chat_rooms WHERE id = $1`,
@@ -117,6 +128,7 @@ async function viewRoom(room: any, userId: string) {
     name:          room.name,
     icon:          room.icon,
     description:   room.description,
+    color:         room.color ?? null,
     isLive:        room.isLive,
     isPrivate:     room.isPrivate,
     joinCode:      member ? room.joinCode : null,
@@ -180,7 +192,7 @@ export const chatService = {
   /** All public rooms + private rooms the user belongs to. Pinned first. */
   async getRoomsForUser(userId: string) {
     const { rows } = await pool.query(
-      `SELECT r.id, r.name, r.icon, r.description, r.is_live AS "isLive",
+      `SELECT r.id, r.name, r.icon, r.description, r.color, r.is_live AS "isLive",
               r.is_private AS "isPrivate", r.join_code AS "joinCode"
        FROM chat_rooms r
        LEFT JOIN chat_room_members m ON m.room_id = r.id AND m.user_id = $1
@@ -196,7 +208,7 @@ export const chatService = {
     const normalized = String(code).trim().toUpperCase();
     if (!/^[A-Z0-9]{4,10}$/.test(normalized)) throw httpError('Invalid code format', 400);
     const { rows } = await pool.query(
-      `SELECT id, name, icon, description, is_live AS "isLive",
+      `SELECT id, name, icon, description, color, is_live AS "isLive",
               is_private AS "isPrivate", join_code AS "joinCode"
        FROM chat_rooms WHERE join_code = $1`,
       [normalized],
@@ -211,7 +223,7 @@ export const chatService = {
     if (opts.code) {
       const normalized = String(opts.code).trim().toUpperCase();
       const { rows } = await pool.query(
-        `SELECT id, name, icon, description, is_live AS "isLive",
+        `SELECT id, name, icon, description, color, is_live AS "isLive",
                 is_private AS "isPrivate", join_code AS "joinCode"
          FROM chat_rooms WHERE join_code = $1`,
         [normalized],
@@ -399,13 +411,14 @@ export const chatService = {
 
   /** Create a room — creator becomes admin; every room gets a join code. */
   async createRoom(userId: string, payload: {
-    name: string; icon: string; description: string; isPrivate?: boolean;
+    name: string; icon: string; description: string; isPrivate?: boolean; color?: string;
   }) {
     const name = String(payload.name).trim().slice(0, 100);
     if (!name) throw httpError('Room name is required', 400);
     const icon = String(payload.icon ?? '💬').slice(0, 20);
     const description = String(payload.description ?? '').trim().slice(0, 300);
     const isPrivate = !!payload.isPrivate;
+    const color = sanitizeColor(payload.color);
 
     const id = `room_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 
@@ -414,9 +427,9 @@ export const chatService = {
     for (let attempt = 0; attempt < 5 && !created; attempt++) {
       try {
         await pool.query(
-          `INSERT INTO chat_rooms (id, name, icon, description, is_private, join_code, created_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [id, name, icon, description, isPrivate, generateJoinCode(), userId],
+          `INSERT INTO chat_rooms (id, name, icon, description, color, is_private, join_code, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [id, name, icon, description, color, isPrivate, generateJoinCode(), userId],
         );
         created = true;
       } catch (e: any) {
@@ -453,6 +466,19 @@ export const chatService = {
        DO UPDATE SET count = chat_reactions.count + 1`,
       [messageId, cleanEmoji],
     );
+  },
+
+  /** Delete a message. A user may only delete their OWN messages. */
+  async deleteMessage(roomId: string, messageId: string, userId: string) {
+    const { rows } = await pool.query(
+      'SELECT room_id, user_id FROM chat_messages WHERE id = $1',
+      [messageId],
+    );
+    const msg = rows[0];
+    if (!msg || msg.room_id !== roomId) throw httpError('Message not found in this room', 404);
+    if (msg.user_id !== userId) throw httpError('You can only delete your own messages', 403);
+    // Reactions cascade via ON DELETE CASCADE.
+    await pool.query('DELETE FROM chat_messages WHERE id = $1', [messageId]);
   },
 
   /** Used by the socket layer to authorise joining a room channel. */

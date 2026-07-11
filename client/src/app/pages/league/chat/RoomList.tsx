@@ -4,6 +4,8 @@ import { useI18n } from "../../../i18n";
 import type { ChatRoom } from "../../../types/user";
 
 // ─── Room list ────────────────────────────────────────────────────────────────
+// Single page (no tabs): a "Public" section (all public rooms) and a "Private"
+// section (private rooms the user belongs to). Each section is collapsible.
 
 const HIDDEN_ROOMS_KEY = "iceedge_hidden_rooms";
 
@@ -15,8 +17,9 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
   onJoined: (room: ChatRoom) => void;
 }) {
   const { t } = useI18n();
-  const [tab, setTab] = useState<"mine" | "discover">("mine");
   const [search, setSearch] = useState("");
+  const [openPublic, setOpenPublic] = useState(true);
+  const [openPrivate, setOpenPrivate] = useState(true);
   const [codeResult, setCodeResult] = useState<ChatRoom | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
@@ -37,17 +40,15 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
   const q = search.trim().toLowerCase();
   const matches = (r: ChatRoom) => !q || r.name.toLowerCase().includes(q) || (r.description ?? "").toLowerCase().includes(q);
 
-  // My Rooms = rooms I'm a member of · Discover = public rooms I haven't joined
-  const myRooms  = rooms.filter((r) => r.isMember && matches(r));
-  const discover = rooms.filter((r) => !r.isMember && !hiddenIds.includes(r.id) && matches(r));
-  const hiddenCount = rooms.filter((r) => !r.isMember && hiddenIds.includes(r.id)).length;
+  // Public = every public room · Private = private rooms I belong to.
+  // Pinned rooms float to the top of their section.
+  const byPinned = (a: ChatRoom, b: ChatRoom) => Number(!!b.isPinned) - Number(!!a.isPinned);
+  const publicRooms  = rooms.filter((r) => !r.isPrivate && !hiddenIds.includes(r.id) && matches(r)).sort(byPinned);
+  const privateRooms = rooms.filter((r) => r.isPrivate && r.isMember && matches(r)).sort(byPinned);
+  const hiddenCount  = rooms.filter((r) => !r.isPrivate && hiddenIds.includes(r.id)).length;
 
-  const pinned = myRooms.filter((r) => r.isPinned);
-  const others = myRooms.filter((r) => !r.isPinned);
-
-  // If the search looks like a join code (4-10 alphanumerics, no spaces) and
-  // matches no visible room, offer a code lookup.
-  const looksLikeCode = /^[a-zA-Z0-9]{4,10}$/.test(search.trim()) && myRooms.length === 0 && discover.length === 0;
+  // If the search looks like a join code and matches no visible room, offer a lookup.
+  const looksLikeCode = /^[a-zA-Z0-9]{4,10}$/.test(search.trim()) && publicRooms.length === 0 && privateRooms.length === 0;
 
   async function handleJoinPublic(room: ChatRoom) {
     try {
@@ -60,12 +61,12 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
     setCodeResult(null);
     setCodeError(null);
     if (!looksLikeCode) return;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       profileApiService.lookupRoomByCode(search.trim())
         .then(setCodeResult)
         .catch(() => setCodeError("No room found for this code"));
     }, 400);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [search]);
 
   async function handleJoinByCode() {
@@ -92,12 +93,18 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
     return `${Math.round(diff / 1440)}d`;
   }
 
-  function RoomRow({ room, mode }: { room: ChatRoom; mode: "mine" | "discover" }) {
+  function RoomRow({ room }: { room: ChatRoom }) {
+    const isMine = !!room.isMember;
+    // Glossy frost is reserved for pinned rooms; everything else is flat.
+    const tileClass = room.isPinned ? "icy-tile" : "chat-tile";
     return (
-      <div className="w-full flex items-center gap-3 px-4 py-3 icy-tile rounded-2xl active:bg-white/10 transition-all">
+      <div className={`w-full flex items-center gap-3 px-4 py-3 ${tileClass} rounded-2xl active:bg-white/10 transition-all`}>
         <button onClick={() => onSelect(room)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
           <div className="relative flex-shrink-0">
-            <div className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center text-xl">
+            <div
+              className="w-11 h-11 rounded-xl flex items-center justify-center text-xl"
+              style={{ background: room.color ?? "rgba(255,255,255,0.10)" }}
+            >
               {room.icon}
             </div>
             {room.isLive && (
@@ -121,7 +128,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
           </div>
         </button>
 
-        {mode === "mine" ? (
+        {isMine ? (
           <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
             <span className="text-white/40 text-[9px]">{timeAgo(room.lastMessageAt)}</span>
             <button
@@ -152,10 +159,26 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
     );
   }
 
+  function SectionHeader({ title, count, open, onToggle }: {
+    title: string; count: number; open: boolean; onToggle: () => void;
+  }) {
+    return (
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-1 py-1 text-left"
+      >
+        <span className="text-white/60 text-[11px] uppercase tracking-widest font-semibold">
+          {title} <span className="text-white/30">({count})</span>
+        </span>
+        <span className={`text-white/40 text-xs transition-transform ${open ? "rotate-0" : "-rotate-90"}`}>▾</span>
+      </button>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4 overflow-y-auto">
-      {/* Search / join by code */}
-      <div className="icy-tile rounded-2xl flex items-center gap-2 px-3 py-2.5">
+      {/* Search / join by code (no clear button — keeps the keyboard-free view calm) */}
+      <div className="chat-tile rounded-2xl flex items-center gap-2 px-3 py-2.5">
         <span className="text-white/40 text-sm">🔎</span>
         <input
           value={search}
@@ -163,7 +186,6 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
           placeholder={t("chat.searchRooms")}
           className="flex-1 bg-transparent text-white text-xs outline-none placeholder-white/30"
         />
-        {search && <button onClick={() => setSearch("")} className="text-white/50 text-xs">✕</button>}
       </div>
 
       {/* Code lookup result */}
@@ -192,81 +214,41 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
         <p className="text-white/40 text-[10px] text-center">{codeError}</p>
       )}
 
-      {/* Tabs: My Rooms / Discover */}
-      <div className="flex gap-1 icy-tile rounded-xl p-1">
-        <button
-          onClick={() => setTab("mine")}
-          className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all"
-          style={tab === "mine" ? { background: "#22ff00", color: "#072E49", fontWeight: 700 } : { color: "#92A08A" }}
-        >
-          {t("chat.myRooms")} ({myRooms.length})
-        </button>
-        <button
-          onClick={() => setTab("discover")}
-          className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all"
-          style={tab === "discover" ? { background: "#22ff00", color: "#072E49", fontWeight: 700 } : { color: "#92A08A" }}
-        >
-          {t("chat.discover")} ({discover.length})
-        </button>
-      </div>
-
-      {tab === "mine" && (
-        <>
-          {pinned.length > 0 && (
-            <div>
-              <p className="text-white/40 text-[9px] uppercase tracking-widest mb-2 px-1">{t("chat.pinned")}</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {pinned.map((r) => <RoomRow key={r.id} room={r} mode="mine" />)}
-              </div>
-            </div>
-          )}
-          {others.length > 0 && (
-            <div>
-              <p className="text-white/40 text-[9px] uppercase tracking-widest mb-2 px-1">
-                {pinned.length > 0 ? t("chat.otherRooms") : t("chat.rooms")}
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {others.map((r) => <RoomRow key={r.id} room={r} mode="mine" />)}
-              </div>
-            </div>
-          )}
-          {myRooms.length === 0 && !codeResult && (
-            <div className="flex flex-col items-center py-8 gap-2">
-              <span className="text-2xl">💬</span>
-              <p className="text-white/60 text-xs font-medium">{t("chat.noRoomsYet")}</p>
-              <p className="text-white/40 text-[10px] text-center">
-                {t("chat.noRoomsHint")}
-              </p>
-            </div>
-          )}
-        </>
-      )}
-
-      {tab === "discover" && (
-        <>
-          {discover.length > 0 ? (
+      {/* Private section */}
+      <div className="flex flex-col gap-2">
+        <SectionHeader title={t("chat.sectionPrivate")} count={privateRooms.length} open={openPrivate} onToggle={() => setOpenPrivate((v) => !v)} />
+        {openPrivate && (
+          privateRooms.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {discover.map((r) => <RoomRow key={r.id} room={r} mode="discover" />)}
+              {privateRooms.map((r) => <RoomRow key={r.id} room={r} />)}
             </div>
           ) : (
-            !codeResult && (
-              <div className="flex flex-col items-center py-8 gap-2">
-                <span className="text-2xl">🌐</span>
-                <p className="text-white/60 text-xs font-medium">{t("chat.nothingDiscover")}</p>
-                <p className="text-white/40 text-[10px] text-center">{t("chat.noPublicRooms")}</p>
-              </div>
-            )
-          )}
-          {hiddenCount > 0 && (
-            <button
-              onClick={resetHidden}
-              className="text-white/40 text-[10px] underline self-center"
-            >
-              Show {hiddenCount} hidden room{hiddenCount > 1 ? "s" : ""}
-            </button>
-          )}
-        </>
-      )}
+            <p className="text-white/40 text-[10px] px-1 py-2">{t("chat.noPrivateRooms")}</p>
+          )
+        )}
+      </div>
+
+      {/* Public section */}
+      <div className="flex flex-col gap-2">
+        <SectionHeader title={t("chat.sectionPublic")} count={publicRooms.length} open={openPublic} onToggle={() => setOpenPublic((v) => !v)} />
+        {openPublic && (
+          publicRooms.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {publicRooms.map((r) => <RoomRow key={r.id} room={r} />)}
+            </div>
+          ) : (
+            !codeResult && <p className="text-white/40 text-[10px] px-1 py-2">{t("chat.noPublicRooms")}</p>
+          )
+        )}
+        {openPublic && hiddenCount > 0 && (
+          <button
+            onClick={resetHidden}
+            className="text-white/40 text-[10px] underline self-center"
+          >
+            Show {hiddenCount} hidden room{hiddenCount > 1 ? "s" : ""}
+          </button>
+        )}
+      </div>
 
       <button
         onClick={onCreateNew}

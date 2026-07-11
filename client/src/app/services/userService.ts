@@ -175,7 +175,7 @@ export const profileApiService = {
   ): Promise<ChatMessage> =>
     post<ChatMessage>(`/chat/rooms/${roomId}/messages`, payload),
 
-  createRoom: (payload: { name: string; icon: string; description: string; isPrivate?: boolean }): Promise<ChatRoom> =>
+  createRoom: (payload: { name: string; icon: string; description: string; isPrivate?: boolean; color?: string }): Promise<ChatRoom> =>
     post<ChatRoom>('/chat/rooms', payload),
 
   lookupRoomByCode: (code: string): Promise<ChatRoom> =>
@@ -222,4 +222,12 @@ export const profileApiService = {
 
   toggleReaction: (roomId: string, messageId: string, emoji: string): Promise<unknown> =>
     post(`/chat/rooms/${roomId}/messages/${messageId}/reactions`, { emoji }),
+
+  deleteMessage: async (roomId: string, messageId: string): Promise<void> => {
+    const res = await authedFetch(`/chat/rooms/${roomId}/messages/${messageId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
+    }
+  },
 };

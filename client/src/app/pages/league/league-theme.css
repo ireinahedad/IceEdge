@@ -37,6 +37,16 @@
     inset 0 -4px 10px rgba(140, 200, 235, 0.2);
 }
 
+/* ── Flat chat tile — the glossy icy frost is reserved for pinned
+      rooms, so regular chat surfaces (room rows, bubbles, inputs,
+      header buttons) use this quieter, non-glossy background. ───── */
+.chat-tile {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
 /* ── Ink: black text over the frosted icy cards (both modes) ──── */
 .league-ink-black [class*="text-white"] {
   color: #000 !important;

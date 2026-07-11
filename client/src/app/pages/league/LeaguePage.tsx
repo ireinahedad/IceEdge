@@ -12,7 +12,7 @@ import "./league-theme.css";
 type Tab = "leaderboard" | "chat";
 
 export function LeaguePage() {
-  const [tab, setTab] = useState<Tab>("leaderboard");
+  const [tab, setTab] = useState<Tab>("chat");
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,13 +34,20 @@ export function LeaguePage() {
     <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] md:max-w-5xl mx-auto w-full">
       <LeagueHeader tab={tab} setTab={setTab} totalUnread={totalUnread} />
 
-      <div
-        className={`flex-1 px-4 pb-28 pt-4 ${
-          tab === "chat" ? "overflow-hidden flex flex-col" : "overflow-y-auto"
-        }`}
-      >
-        {tab === "leaderboard" &&
-          (loading ? (
+      {/* Single pane driven by the tab bar (Chat is the default), on all sizes. */}
+      <div className="flex-1 flex flex-col px-4 pb-28 pt-4 overflow-hidden min-h-0">
+        {/* Chat */}
+        <div
+          className={`${tab === "chat" ? "flex" : "hidden"} flex-col flex-1 min-h-0 overflow-hidden`}
+        >
+          <ChatTab />
+        </div>
+
+        {/* Podium */}
+        <div
+          className={`${tab === "leaderboard" ? "flex" : "hidden"} flex-col flex-1 min-h-0 overflow-y-auto`}
+        >
+          {loading ? (
             <div className="flex flex-col gap-3">
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />
@@ -48,9 +55,8 @@ export function LeaguePage() {
             </div>
           ) : (
             <FullLeaderboard entries={leaderboard} />
-          ))}
-
-        {tab === "chat" && <ChatTab />}
+          )}
+        </div>
       </div>
 
       <BottomNav />

@@ -114,6 +114,11 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // ── Chat ──
   "chat.myRooms":      { en: "My Rooms",             fr: "Mes salons" },
   "chat.discover":     { en: "Discover",             fr: "Découvrir" },
+  "chat.sectionPublic":  { en: "Public",             fr: "Public" },
+  "chat.sectionPrivate": { en: "Private",            fr: "Privé" },
+  "chat.noPrivateRooms": { en: "No private rooms yet — join one with a code.", fr: "Aucun salon privé — rejoins-en un avec un code." },
+  "chat.roomColor":    { en: "Room Color",           fr: "Couleur du salon" },
+  "chat.deleteMessageConfirm": { en: "Delete this message?", fr: "Supprimer ce message ?" },
   "chat.newRoom":      { en: "+ New Room",           fr: "+ Nouveau salon" },
   "chat.createRoom":   { en: "Create a new room",    fr: "Créer un nouveau salon" },
   "chat.createTitle":  { en: "New Chat Room",        fr: "Nouveau salon" },

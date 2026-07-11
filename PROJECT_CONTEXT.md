@@ -16,6 +16,14 @@ When continuing this project:
 
 Last updated: 2026-07-11
 
+## Session 2026-07-11 (2) — Refonte UI du chat (Ligue)
+
+1. **Disposition** : onglets Chat / Podium sur toutes tailles (desktop inclus), avec **Chat en premier et par défaut** (`LeaguePage`, `LeagueHeader`).
+2. **Liste des salons** (`RoomList`) : plus de 2 boutons Mes salons/Découvrir — une seule page avec deux sections repliables **« Public »** (tous les salons publics) et **« Privé »** (salons privés dont je suis membre). Barre de recherche **sans bouton d'effacement**. Le lookup par code est conservé.
+3. **Couleur de salon** : le créateur choisit une couleur (palette de pastilles) dans `CreateRoomModal` → colonne `color` (`chat_rooms`), migration `016_chat_room_color.sql`, validée (`#RGB`/`#RRGGBB`) côté serveur, propagée dans toutes les requêtes/`viewRoom`. Utilisée comme fond de l'icône du salon. **⚠️ `npm run db:migrate:all` requis.**
+4. **Suppression de message** : un utilisateur peut supprimer **ses propres** messages. `chatService.deleteMessage` (403 si pas l'auteur), `DELETE /api/chat/rooms/:roomId/messages/:messageId`, event socket `message_deleted` (retrait temps réel via `useChatSocket`), bouton 🗑️ sur ses bulles.
+5. **Effet « icy »** : retiré des surfaces de chat (nouvelle classe plate `.chat-tile`) ; le frost glossy `.icy-tile` est **réservé aux salons épinglés**.
+
 ## Session 2026-07-11 — Persistance de session
 
 1. **« Rester connecté » (Remember me)** : nouvelle colonne `remember` sur `refresh_tokens` (migration `015_refresh_remember.sql` + `schema.sql`). Le refresh token dure **7 j** par défaut, **30 j** si l'utilisateur coche « Rester connecté » à la connexion (TTL surchargeables via `REFRESH_TOKEN_TTL` / `REFRESH_TOKEN_TTL_REMEMBER`). Le flag est conservé lors de la rotation du token ; la connexion Google est persistante par défaut. Le `maxAge` du cookie `ice_refresh` suit désormais le TTL réel du token. Câblage : `AuthTokens.refresh_expires_in`, `LoginBody.remember` → `authService.apiLogin(email, pwd, remember)` → `AuthContext.login` → case à cocher (cochée par défaut) dans `LoginPage`. **⚠️ `npm run db:migrate:all` requis dans server/.**
@@ -260,9 +268,12 @@ Erreurs déjà corrigées :
 ### Chat / Social
 | Route | Description |
 |-------|-------------|
-| `GET /chat/rooms` | Liste des rooms |
+| `GET /chat/rooms` | Salons publics + mes salons privés |
+| `POST /chat/rooms` | Créer un salon (nom, icône, description, isPrivate, **color**) |
 | `GET /chat/rooms/:id/messages` | Historique messages |
-| `POST /chat/rooms/:id/messages` | Envoyer + emit Socket.io |
+| `POST /chat/rooms/:id/messages` | Envoyer + emit Socket.io `new_message` |
+| `DELETE /chat/rooms/:id/messages/:msgId` | Supprimer **son** message + emit `message_deleted` |
+| `POST /chat/rooms/:id/join` · `/join` (code) · `/leave` · `/pin` | Adhésion / épinglage |
 | `GET /users/leaderboard` | Classement XP |
 
 ### Slips
@@ -294,8 +305,9 @@ refresh_tokens     -- id, user_id, token, expires_at, revoked, remember, created
 user_profiles      -- user_id, display_name, avatar_url, xp, tier, streak
 user_badges        -- user_id, badge_type, earned_at
 user_bets          -- id, user_id, market_type, legs (JSON), probability, outcome, xp_earned
-chat_rooms         -- id, name, sport, description, member_count
-chat_messages      -- id, room_id, user_id, content, created_at
+chat_rooms         -- id, name, icon, description, color, is_private, join_code, created_by, member_count
+chat_messages      -- id, room_id, user_id, username, display_name, avatar, tier, text, tag, reply_to_*, sent_at
+chat_room_members  -- room_id, user_id, role (admin|member), pinned, joined_at
 chat_reactions     -- id, message_id, user_id, emoji
 nhl_teams          -- id, abbreviation, name, conference, division, ...
 nhl_team_stats     -- team_id, season, wins, losses, goals_for, goals_against, ...
