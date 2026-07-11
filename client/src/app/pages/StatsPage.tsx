@@ -2,15 +2,15 @@ import { Search, HelpCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useNHLData, UITeam, UIGame } from "../hooks/useNHLData";
-import { BottomNav } from "./BottomNav";
-import { MarketSelectorSheet } from "./MarketSelectorSheet";
-import { HowItWorksSheet } from "./HowItWorksSheet";
+import { BottomNav } from "../components/BottomNav";
+import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
+import { HowItWorksSheet } from "../components/HowItWorksSheet";
 import { nhlApiService } from "../services/nhlApiService";
 import { useSport } from "../context/SportContext";
 import { nhlLogoUrl, probToOdds } from "../data/teamEmoji";
 import { TennisStatsContent } from "./TennisStatsPage";
-import { PlayersTab } from "./PlayersTab";
-import { LastNGamesSection } from "./LastNGamesSection";
+import { PlayersTab } from "../components/PlayersTab";
+import { LastNGamesSection } from "../components/LastNGamesSection";
 import { useI18n } from "../i18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────

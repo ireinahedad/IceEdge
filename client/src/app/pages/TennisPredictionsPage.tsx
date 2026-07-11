@@ -10,9 +10,9 @@
 
 import { useEffect, useState, useCallback, createContext, useContext } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { BottomNav } from "./BottomNav";
+import { BottomNav } from "../components/BottomNav";
 import { useSport } from "../context/SportContext";
-import { MLSection } from "./MLPredictionCard";
+import { MLSection } from "../components/MLPredictionCard";
 import { tennisApiService, TennisApiMatch, TennisRankingEntry } from "../services/tennisApiService";
 import { useBet } from "../context/BetContext";
 import type { BetLeg } from "../types/bet";

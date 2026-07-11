@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router";
-import { BottomNav } from "./BottomNav";
+import { BottomNav } from "../components/BottomNav";
 import { useI18n } from "../i18n";
 
 export function SharePage() {

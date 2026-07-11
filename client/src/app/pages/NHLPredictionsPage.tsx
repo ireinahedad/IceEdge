@@ -6,7 +6,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router";
-import { BottomNav } from "./BottomNav";
+import { BottomNav } from "../components/BottomNav";
 import { useSport } from "../context/SportContext";
 import { useNHLData } from "../hooks/useNHLData";
 import { nhlApiService } from "../services/nhlApiService";

@@ -1,7 +1,7 @@
 import { useParams, useNavigate, useSearchParams } from "react-router";
 import { useEffect, useState, createContext, useContext, useMemo } from "react";
-import { BottomNav } from "./BottomNav";
-import { MarketSelectorSheet } from "./MarketSelectorSheet";
+import { BottomNav } from "../components/BottomNav";
+import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { PredictionResponse } from "../types/bet";
 import { nhlApiService } from "../services/nhlApiService";
 import { predictionApiService } from "../services/predictionApiService";
@@ -17,7 +17,7 @@ import type { BetLeg } from "../types/bet";
 import { tennisApiService } from "../services/tennisApiService";
 import type { TennisRankingEntry } from "../services/tennisApiService";
 import { askLLM } from "../services/llmService";
-import { MLSection } from "./MLPredictionCard";
+import { MLSection } from "../components/MLPredictionCard";
 
 type Subject = { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 

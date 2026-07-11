@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { getGoogleLoginUrl, apiResendVerification, apiForgotPassword, apiResetPassword, EmailNotVerifiedError } from "../services/authService";
-import { IceedgeLogo } from "./brand/IceedgeLogo";
+import { IceedgeLogo } from "../components/brand/IceedgeLogo";
 import { useI18n } from "../i18n";
 
 type Mode = "login" | "register";

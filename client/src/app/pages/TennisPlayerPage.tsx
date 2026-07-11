@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router";
-import { BottomNav } from "./BottomNav";
+import { BottomNav } from "../components/BottomNav";
 import { tennisApiService, TennisRankingEntry, TennisApiMatch } from "../services/tennisApiService";
 import { useBet } from "../context/BetContext";
 import type { BetLeg } from "../types/bet";

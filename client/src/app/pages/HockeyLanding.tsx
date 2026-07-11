@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Search, TrendingUp, ChevronRight, Plus, Goal, Star, Timer, Zap } from "lucide-react";
-import { IceedgeLogo } from "./brand/IceedgeLogo";
-import { BottomNav } from "./BottomNav";
-import { MarketSelectorSheet } from "./MarketSelectorSheet";
+import { IceedgeLogo } from "../components/brand/IceedgeLogo";
+import { BottomNav } from "../components/BottomNav";
+import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { nhlApiService } from "../services/nhlApiService";
 import { predictionApiService } from "../services/predictionApiService";
 import { tennisApiService } from "../services/tennisApiService";
@@ -12,7 +12,7 @@ import type { NHLGame, BetLeg } from "../types/bet";
 import { useSport, SPORT_THEMES, type Sport } from "../context/SportContext";
 import { useBet } from "../context/BetContext";
 import { useSubscription } from "../context/SubscriptionContext";
-import { ProLock } from "./ProLock";
+import { ProLock } from "../components/ProLock";
 import { useI18n } from "../i18n";
 import {
   fetchBet365Odds,
@@ -21,7 +21,7 @@ import {
 } from "../services/oddsApiService";
 import { openBet365, bet365TennisUrl, bet365HockeyUrl } from "../services/affiliateService";
 import { nhlLogoUrl } from "../data/teamEmoji";
-import "./home-theme.css";
+import "../components/home-theme.css";
 
 // ─── Hockey helpers ────────────────────────────────────────────────────────────
 
