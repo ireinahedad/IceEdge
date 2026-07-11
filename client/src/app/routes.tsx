@@ -1,18 +1,18 @@
 import { createBrowserRouter } from "react-router";
-import { HockeyLanding }         from "./components/HockeyLanding";
-import { LeaguePage }            from "./components/league/LeaguePage";
-import { ProfilePage }           from "./components/profile/ProfilePage";
-import { StatsPage }             from "./components/StatsPage";
-import { PredictionPage }        from "./components/PredictionPage";
-import { BetBuilderPage }        from "./components/BetBuilderPage";
-import { LoginPage }             from "./components/LoginPage";
-import { AuthCallback }          from "./components/AuthCallback";
-import { NHLPredictionsPage }    from "./components/NHLPredictionsPage";
-import { TennisPredictionsPage } from "./components/TennisPredictionsPage";
-import { SharePage }             from "./components/SharePage";
-import { DevMLDashboard }        from "./components/DevMLDashboard";
-import { TennisPlayerPage }      from "./components/TennisPlayerPage";
-import { ProPage }               from "./components/ProPage";
+import { HockeyLanding }         from "./pages/HockeyLanding";
+import { LeaguePage }            from "./pages/league/LeaguePage";
+import { ProfilePage }           from "./pages/profile/ProfilePage";
+import { StatsPage }             from "./pages/StatsPage";
+import { PredictionPage }        from "./pages/PredictionPage";
+import { BetBuilderPage }        from "./pages/BetBuilderPage";
+import { LoginPage }             from "./pages/LoginPage";
+import { AuthCallback }          from "./pages/AuthCallback";
+import { NHLPredictionsPage }    from "./pages/NHLPredictionsPage";
+import { TennisPredictionsPage } from "./pages/TennisPredictionsPage";
+import { SharePage }             from "./pages/SharePage";
+import { DevMLDashboard }        from "./pages/DevMLDashboard";
+import { TennisPlayerPage }      from "./pages/TennisPlayerPage";
+import { ProPage }               from "./pages/ProPage";
 
 export const router = createBrowserRouter([
   { path: "/",                                       Component: HockeyLanding        },
