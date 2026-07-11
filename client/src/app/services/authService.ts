@@ -177,12 +177,12 @@ export async function apiResetPassword(email: string, code: string, newPassword:
   }
 }
 
-export async function apiLogin(email: string, password: string): Promise<AuthResult> {
+export async function apiLogin(email: string, password: string, remember = false): Promise<AuthResult> {
   const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
     credentials: 'include', // receive the refresh cookie
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, remember }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
@@ -199,6 +199,20 @@ export async function apiLogout(): Promise<void> {
   await fetch(`${BASE}/auth/logout`, {
     method: 'POST',
     credentials: 'include', // server reads + revokes the cookie
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  }).catch(() => {});
+  clearTokens();
+}
+
+/** Sign out from every device by revoking all of the user's refresh tokens. */
+export async function apiLogoutAll(): Promise<void> {
+  const token = getAccessToken();
+  await fetch(`${BASE}/auth/logout-all`, {
+    method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),

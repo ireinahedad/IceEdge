@@ -261,7 +261,20 @@ function SettingsTab({
 }) {
   const { t, lang, setLang } = useI18n();
   const { isPro } = useSubscription();
+  const { logoutAll } = useAuth();
   const navigate = useNavigate();
+  const [signingOutAll, setSigningOutAll] = useState(false);
+
+  async function handleLogoutAll() {
+    if (!window.confirm(t("profile.signoutAllConfirm"))) return;
+    setSigningOutAll(true);
+    try {
+      await logoutAll();
+      navigate("/login", { replace: true });
+    } finally {
+      setSigningOutAll(false);
+    }
+  }
   const [username, setUsername] = useState(profile.username);
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [pickingEmoji, setPickingEmoji] = useState(false);
@@ -564,6 +577,19 @@ function SettingsTab({
           {saveMsg}
         </p>
       )}
+
+      {/* Security */}
+      <div className="icy-card rounded-2xl p-4 flex flex-col gap-2">
+        <p className="text-white text-xs font-medium">{t("profile.security")}</p>
+        <p className="text-white/50 text-[10px]">{t("profile.signoutAllDesc")}</p>
+        <button
+          onClick={handleLogoutAll}
+          disabled={signingOutAll}
+          className="self-start mt-1 text-red-400 text-[11px] font-semibold border border-red-400/30 rounded-lg px-3 py-1.5 hover:text-red-300 hover:border-red-300/50 transition-colors disabled:opacity-50"
+        >
+          {signingOutAll ? "..." : t("profile.signoutAll")}
+        </button>
+      </div>
     </div>
   );
 }

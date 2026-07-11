@@ -227,22 +227,17 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col justify-end" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4" onClick={onClose}>
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
       <div
-        className="relative bg-[#0A0E0C] rounded-t-3xl border-t border-white/20 max-h-[90vh] flex flex-col max-w-[430px] w-full mx-auto"
+        className="relative bg-[#0A0E0C] rounded-3xl border border-white/20 max-h-[85vh] flex flex-col max-w-[430px] w-full mx-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Handle */}
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="w-10 h-1 rounded-full bg-[#1B2419]" />
-        </div>
-
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-white/20">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/20 rounded-t-3xl">
           <div className="flex items-center gap-2">
             {step !== "subject" && !preselectedSubject && (
               <button
@@ -279,7 +274,6 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                   placeholder={t("mkt.search")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  autoFocus
                 />
                 {searchQuery && (
                   <button onClick={() => setSearchQuery("")} className="text-[#bfc8cc] text-xs">✕</button>

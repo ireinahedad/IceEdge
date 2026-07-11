@@ -11,7 +11,10 @@ import {
 
 const SALT_ROUNDS       = 12;
 const ACCESS_TOKEN_TTL  = '15m';
-const REFRESH_TOKEN_TTL = 60 * 60 * 24 * 7;
+// Short session (no "remember me"): 7 days. Persistent session: 30 days.
+// Both overridable via env (seconds).
+const REFRESH_TOKEN_TTL          = Number(process.env.REFRESH_TOKEN_TTL)          || 60 * 60 * 24 * 7;
+const REFRESH_TOKEN_TTL_REMEMBER = Number(process.env.REFRESH_TOKEN_TTL_REMEMBER) || 60 * 60 * 24 * 30;
 
 // Email verification
 const CODE_TTL_MS      = 15 * 60 * 1000; // 15 minutes
@@ -34,20 +37,21 @@ function signAccessToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): string {
   return jwt.sign(payload, jwtSecret!, { expiresIn: ACCESS_TOKEN_TTL });
 }
 
-async function createRefreshToken(userId: string): Promise<string> {
+async function createRefreshToken(userId: string, remember: boolean): Promise<{ token: string; ttl: number }> {
+  const ttl       = remember ? REFRESH_TOKEN_TTL_REMEMBER : REFRESH_TOKEN_TTL;
   const token     = crypto.randomBytes(64).toString('hex');
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL * 1000);
+  const expiresAt = new Date(Date.now() + ttl * 1000);
   await pool.query(
-    'INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
-    [userId, token, expiresAt],
+    'INSERT INTO refresh_tokens (user_id, token, expires_at, remember) VALUES ($1, $2, $3, $4)',
+    [userId, token, expiresAt, remember],
   );
-  return token;
+  return { token, ttl };
 }
 
-async function issueTokens(user: UserRow): Promise<AuthTokens> {
+async function issueTokens(user: UserRow, remember = false): Promise<AuthTokens> {
   const access_token  = signAccessToken({ sub: user.id, email: user.email, role: user.role });
-  const refresh_token = await createRefreshToken(user.id);
-  return { access_token, refresh_token, expires_in: 15 * 60 };
+  const { token: refresh_token, ttl } = await createRefreshToken(user.id, remember);
+  return { access_token, refresh_token, expires_in: 15 * 60, refresh_expires_in: ttl };
 }
 
 // Creates a user_profiles row if one doesn't already exist for this user.
@@ -245,7 +249,7 @@ export async function resetPassword(email: string, code: string, newPassword: st
 // ---- Login -----------------------------------------------------------------
 
 export async function login(body: LoginBody): Promise<AuthResponse> {
-  const { email, password } = body;
+  const { email, password, remember = false } = body;
 
   const { rows } = await pool.query<UserRow>(
     'SELECT * FROM users WHERE email = $1 AND is_active = TRUE',
@@ -274,7 +278,7 @@ export async function login(body: LoginBody): Promise<AuthResponse> {
   // Ensure profile row exists (safety net for old accounts created before this fix)
   await ensureUserProfile(user.id, user.first_name ?? user.username);
 
-  const tokens = await issueTokens(user);
+  const tokens = await issueTokens(user, remember);
   return { user: toPublicUser(user), tokens };
 }
 
@@ -363,7 +367,8 @@ export async function loginWithGoogle(googleUser: GoogleUserInfo): Promise<AuthR
   const displayName = googleUser.given_name ?? googleUser.name ?? user.username;
   await ensureUserProfile(user.id, displayName, googleUser.picture);
 
-  const tokens = await issueTokens(user);
+  // Google sign-in is treated as a persistent session by default.
+  const tokens = await issueTokens(user, true);
   return { user: toPublicUser(user), tokens };
 }
 
@@ -386,13 +391,23 @@ export async function refreshTokens(rawToken: string): Promise<AuthTokens> {
   const user = userRows[0];
   if (!user) throw Object.assign(new Error('User not found or inactive'), { status: 401 });
 
-  return issueTokens(user);
+  // Preserve the persistence choice across rotation.
+  return issueTokens(user, stored.remember);
 }
 
 // ---- Logout ----------------------------------------------------------------
 
 export async function logout(rawToken: string): Promise<void> {
   await pool.query('UPDATE refresh_tokens SET revoked=TRUE WHERE token=$1', [rawToken]);
+}
+
+/** Revoke every active refresh token for a user → signs them out on all
+ *  devices. The 15-min access tokens still on other devices expire naturally. */
+export async function logoutAll(userId: string): Promise<void> {
+  await pool.query(
+    'UPDATE refresh_tokens SET revoked=TRUE WHERE user_id=$1 AND revoked=FALSE',
+    [userId],
+  );
 }
 
 // ---- Verify token ----------------------------------------------------------

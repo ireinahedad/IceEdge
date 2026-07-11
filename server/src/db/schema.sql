@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   token       TEXT        NOT NULL UNIQUE,
   expires_at  TIMESTAMPTZ NOT NULL,
   revoked     BOOLEAN     NOT NULL DEFAULT FALSE,
+  remember    BOOLEAN     NOT NULL DEFAULT FALSE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

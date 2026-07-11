@@ -14,7 +14,6 @@ const router = Router();
 // Scoped to /api/auth so it's only sent on auth endpoints.
 
 const REFRESH_COOKIE = 'ice_refresh';
-const REFRESH_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // must match REFRESH_TOKEN_TTL
 const IS_PROD = process.env.NODE_ENV === 'production';
 
 // Cross-site deployment (front on Vercel, API on Railway → different sites):
@@ -23,13 +22,15 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 // Secure keeps things working over http.
 const COOKIE_SAMESITE: 'none' | 'lax' = IS_PROD ? 'none' : 'lax';
 
-function setRefreshCookie(res: Response, token: string): void {
+// maxAgeSeconds must match the refresh token's TTL so the browser drops the
+// cookie exactly when the token expires (7d normal, 30d "remember me").
+function setRefreshCookie(res: Response, token: string, maxAgeSeconds: number): void {
   res.cookie(REFRESH_COOKIE, token, {
     httpOnly: true,
     secure:   IS_PROD,
     sameSite: COOKIE_SAMESITE,
     path:     '/api/auth',
-    maxAge:   REFRESH_MAX_AGE,
+    maxAge:   maxAgeSeconds * 1000,
   });
 }
 
@@ -44,9 +45,10 @@ function clearRefreshCookie(res: Response): void {
   });
 }
 
-/** Strip the refresh token from the JSON body — it travels via cookie only. */
-function publicTokens(tokens: AuthTokens): Omit<AuthTokens, 'refresh_token'> {
-  const { refresh_token: _rt, ...rest } = tokens;
+/** Strip the refresh token (+ its TTL) from the JSON body — it travels via
+ *  the httpOnly cookie only. */
+function publicTokens(tokens: AuthTokens): Omit<AuthTokens, 'refresh_token' | 'refresh_expires_in'> {
+  const { refresh_token: _rt, refresh_expires_in: _re, ...rest } = tokens;
   return rest;
 }
 
@@ -64,7 +66,7 @@ router.post('/register', async (req: Request<{}, {}, RegisterBody>, res: Respons
       return res.status(201).json(result); // { pending: true, email } — must verify
     }
     // Verification bypassed → logged in immediately.
-    setRefreshCookie(res, result.tokens.refresh_token);
+    setRefreshCookie(res, result.tokens.refresh_token, result.tokens.refresh_expires_in);
     return res.status(201).json({ user: result.user, tokens: publicTokens(result.tokens) });
   } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
 });
@@ -76,7 +78,7 @@ router.post('/verify-email', async (req: Request<{}, {}, VerifyEmailBody>, res: 
     if (!email || !code)
       return res.status(400).json({ error: 'email and code are required' });
     const result = await AuthService.verifyEmail(email, code);
-    setRefreshCookie(res, result.tokens.refresh_token);
+    setRefreshCookie(res, result.tokens.refresh_token, result.tokens.refresh_expires_in);
     return res.status(200).json({ user: result.user, tokens: publicTokens(result.tokens) });
   } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
 });
@@ -117,11 +119,11 @@ router.post('/reset-password', async (req: Request<{}, {}, ResetPasswordBody>, r
 // POST /auth/login
 router.post('/login', async (req: Request<{}, {}, LoginBody>, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, remember } = req.body;
     if (!email || !password)
       return res.status(400).json({ error: 'email and password are required' });
-    const result = await AuthService.login({ email, password });
-    setRefreshCookie(res, result.tokens.refresh_token);
+    const result = await AuthService.login({ email, password, remember });
+    setRefreshCookie(res, result.tokens.refresh_token, result.tokens.refresh_expires_in);
     return res.status(200).json({ user: result.user, tokens: publicTokens(result.tokens) });
   } catch (err: any) {
     // Surface the "not verified" case so the client can prompt for the code.
@@ -138,7 +140,7 @@ router.post('/refresh', async (req: Request<{}, {}, RefreshBody>, res: Response)
     const raw = req.cookies?.[REFRESH_COOKIE] || req.body?.refresh_token;
     if (!raw) return res.status(400).json({ error: 'refresh token is required' });
     const tokens = await AuthService.refreshTokens(raw); // rotates: old token revoked
-    setRefreshCookie(res, tokens.refresh_token);
+    setRefreshCookie(res, tokens.refresh_token, tokens.refresh_expires_in);
     return res.status(200).json(publicTokens(tokens));
   } catch (err: any) {
     clearRefreshCookie(res);
@@ -152,6 +154,16 @@ router.post('/logout', authenticate, async (req: Request<{}, {}, RefreshBody>, r
     const raw = req.cookies?.[REFRESH_COOKIE] || req.body?.refresh_token;
     if (raw) await AuthService.logout(raw); // revoke in DB
     clearRefreshCookie(res);
+    return res.status(204).send();
+  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// POST /auth/logout-all — revoke every refresh token for the current user
+// (sign out from all devices).
+router.post('/logout-all', authenticate, async (req: Request, res: Response) => {
+  try {
+    await AuthService.logoutAll(req.user!.sub);
+    clearRefreshCookie(res); // also drop this device's cookie
     return res.status(204).send();
   } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
 });
@@ -201,7 +213,7 @@ router.get('/google/callback', async (req: Request, res: Response) => {
 
     // Refresh token → httpOnly cookie; only the short-lived access token
     // transits in the redirect URL.
-    setRefreshCookie(res, tokens.refresh_token);
+    setRefreshCookie(res, tokens.refresh_token, tokens.refresh_expires_in);
     const params = new URLSearchParams({ access_token: tokens.access_token });
 
     return res.redirect(`${clientUrl}/auth/callback?${params}`);

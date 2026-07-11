@@ -53,12 +53,14 @@ export interface RegisterBody {
 export interface LoginBody {
   email: string;
   password: string;
+  remember?: boolean; // keep the session alive for the long TTL (30d)
 }
 
 export interface AuthTokens {
   access_token: string;
   refresh_token: string;
-  expires_in: number; // seconds
+  expires_in: number;         // access-token lifetime, seconds
+  refresh_expires_in: number; // refresh-token lifetime, seconds → cookie maxAge
 }
 
 export interface AuthResponse {
@@ -134,6 +136,7 @@ export interface RefreshTokenRow {
   token: string;
   expires_at: Date;
   revoked: boolean;
+  remember: boolean;
   created_at: Date;
 }
 

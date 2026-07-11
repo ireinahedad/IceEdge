@@ -4,7 +4,6 @@ import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getGoogleLoginUrl, apiResendVerification, apiForgotPassword, apiResetPassword, EmailNotVerifiedError } from "../services/authService";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
-import { BottomNav } from "../components/BottomNav";
 import { useI18n } from "../i18n";
 
 type Mode = "login" | "register";
@@ -30,6 +29,7 @@ export function LoginPage() {
   const [password,    setPassword]    = useState("");
   const [confirmPwd,  setConfirmPwd]  = useState("");
   const [showPwd,     setShowPwd]     = useState(false);
+  const [remember,    setRemember]    = useState(true);
   const [newPassword, setNewPassword] = useState("");
   const [code,        setCode]        = useState("");
   const [error,       setError]       = useState<string | null>(null);
@@ -43,7 +43,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       if (mode === "login") {
-        await login(email, password);
+        await login(email, password, remember);
         navigate(returnTo, { replace: true });
       } else {
         if (password !== confirmPwd) {
@@ -253,6 +253,14 @@ export function LoginPage() {
             onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
         )}
 
+        {mode === "login" && (
+          <label className="flex items-center gap-2 text-xs cursor-pointer select-none" style={{ color: "#92A08A" }}>
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}
+              className="h-4 w-4 rounded" style={{ accentColor: ACCENT }} />
+            {t("login.remember")}
+          </label>
+        )}
+
         {notice && (
           <div className="text-xs text-center py-2 px-3 rounded-xl" style={{ color: ACCENT, background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>
             {notice}
@@ -425,9 +433,6 @@ export function LoginPage() {
       <p className="text-center text-[10px] tracking-wide mt-8" style={{ color: "#92A08A", opacity: 0.5 }}>
         {t("login.disclaimer")}
       </p>
-
-      {/* Navigation bar stays visible on the connection page */}
-      <BottomNav />
     </div>
   );
 }

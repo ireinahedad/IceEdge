@@ -2,17 +2,18 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import {
   AuthUser, AuthResult, PendingVerification,
   getAccessToken, storeTokens, clearTokens,
-  apiLogin, apiRegister, apiLogout, apiVerifyEmail,
+  apiLogin, apiRegister, apiLogout, apiLogoutAll, apiVerifyEmail,
 } from '../services/authService';
 
 interface AuthContextValue {
   user:        AuthUser | null;
   token:       string   | null;
   loading:     boolean;
-  login:       (email: string, password: string) => Promise<void>;
+  login:       (email: string, password: string, remember?: boolean) => Promise<void>;
   register:    (email: string, username: string, password: string, firstName?: string) => Promise<PendingVerification | AuthResult>;
   verifyEmail: (email: string, code: string) => Promise<void>;
   logout:      () => Promise<void>;
+  logoutAll:   () => Promise<void>;            // revoke every device's session
   setSession:  (result: AuthResult) => void;   // used by AuthCallback after Google OAuth
 }
 
@@ -46,8 +47,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(result.user);
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const result = await apiLogin(email, password);
+  const login = useCallback(async (email: string, password: string, remember = false) => {
+    const result = await apiLogin(email, password, remember);
     setSession(result);
   }, [setSession]);
 
@@ -71,8 +72,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null);
   }, []);
 
+  const logoutAll = useCallback(async () => {
+    await apiLogoutAll();
+    setUser(null);
+    setToken(null);
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, verifyEmail, logout, setSession }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, verifyEmail, logout, logoutAll, setSession }}>
       {children}
     </AuthContext.Provider>
   );

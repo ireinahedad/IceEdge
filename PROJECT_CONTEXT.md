@@ -14,7 +14,12 @@ When continuing this project:
 - Keep code clean, modular, and production-ready.
 - At the end of each session, update PROJECT_CONTEXT.md.
 
-Last updated: 2026-07-04
+Last updated: 2026-07-11
+
+## Session 2026-07-11 — Persistance de session
+
+1. **« Rester connecté » (Remember me)** : nouvelle colonne `remember` sur `refresh_tokens` (migration `015_refresh_remember.sql` + `schema.sql`). Le refresh token dure **7 j** par défaut, **30 j** si l'utilisateur coche « Rester connecté » à la connexion (TTL surchargeables via `REFRESH_TOKEN_TTL` / `REFRESH_TOKEN_TTL_REMEMBER`). Le flag est conservé lors de la rotation du token ; la connexion Google est persistante par défaut. Le `maxAge` du cookie `ice_refresh` suit désormais le TTL réel du token. Câblage : `AuthTokens.refresh_expires_in`, `LoginBody.remember` → `authService.apiLogin(email, pwd, remember)` → `AuthContext.login` → case à cocher (cochée par défaut) dans `LoginPage`. **⚠️ `npm run db:migrate:all` requis dans server/.**
+2. **« Se déconnecter de tous les appareils »** : `AuthService.logoutAll(userId)` révoque tous les refresh tokens de l'utilisateur ; endpoint `POST /auth/logout-all` (authentifié). Client : `apiLogoutAll` + `AuthContext.logoutAll` + bouton dans l'onglet **Paramètres** du profil (carte « Sécurité », `ProfilePage.tsx` → `SettingsTab`), avec confirmation, puis redirection vers `/login`.
 
 ## Session 2026-07-04 — P1 terminés
 
@@ -165,7 +170,7 @@ ICEEDGE/
 ## ✅ Complétées
 
 - **App shell** — React Router 11 routes, SportContext, AuthContext, BetContext, BottomNav
-- **Auth** — Email/password + Google OAuth, JWT localStorage, `returnTo` param
+- **Auth** — Email/password + Google OAuth, access token (15 min) en localStorage + refresh token en cookie httpOnly, `returnTo` param, « Rester connecté » (30 j), « Se déconnecter de tous les appareils »
 - **Home** — HockeyLanding avec matchs en direct, odds Bet365, switcher hockey/tennis
 - **Stats Hockey** — By Team, By Game, By Player, By Form (LastNGames)
 - **Stats Tennis** — By Player, By Match, By Surface, By Tournament
@@ -223,10 +228,13 @@ Erreurs déjà corrigées :
 ### Auth
 | Route | Description |
 |-------|-------------|
-| `POST /auth/login` | Email + password → JWT |
-| `POST /auth/register` | Créer un compte |
+| `POST /auth/login` | Email + password (+ `remember`) → access token + cookie refresh |
+| `POST /auth/register` | Créer un compte (vérif. email) |
+| `POST /auth/refresh` | Rotation via cookie httpOnly `ice_refresh` |
+| `POST /auth/logout` | Révoque le refresh token courant |
+| `POST /auth/logout-all` | Révoque tous les refresh tokens de l'utilisateur (auth requise) |
 | `GET /auth/google` | Redirect OAuth Google |
-| `GET /auth/google/callback` | Callback OAuth → JWT |
+| `GET /auth/google/callback` | Callback OAuth → access token + cookie refresh |
 
 ### NHL
 | Route | Description |
@@ -282,7 +290,7 @@ Erreurs déjà corrigées :
 
 ```sql
 users              -- id, email, password_hash, google_id, created_at
-refresh_tokens     -- id, user_id, token, expires_at
+refresh_tokens     -- id, user_id, token, expires_at, revoked, remember, created_at
 user_profiles      -- user_id, display_name, avatar_url, xp, tier, streak
 user_badges        -- user_id, badge_type, earned_at
 user_bets          -- id, user_id, market_type, legs (JSON), probability, outcome, xp_earned
@@ -327,7 +335,7 @@ ML_SERVICE_URL=http://localhost:8000
 
 # Décisions architecturales
 
-- **JWT dans localStorage** (pas de cookie httpOnly) — simplifie l'auth mobile PWA
+- **Access token (15 min) en localStorage + refresh token en cookie httpOnly** (`ice_refresh`, path `/api/auth`, rotation à chaque refresh) — le refresh token ne transite jamais par JS/localStorage/URL (XSS-safe). Durée 7 j, ou 30 j avec « Rester connecté »
 - **Socket.io** pour le chat — évite le polling, messages instantanés
 - **Python séparé pour le ML** (FastAPI :8000) — découplage, permet de déployer le ML indépendamment
 - **Fallback systématique** — si API/ML down, le frontend ne casse pas (mock data, null components)
@@ -376,6 +384,11 @@ npm run seed              # (optionnel) données de test
 ---
 
 # Recent Changes
+
+## 2026-07-11
+- Ajouté « Rester connecté » (refresh token 30 j) : migration `015_refresh_remember.sql`, colonne `remember`, `issueTokens/createRefreshToken` paramétrés, cookie `maxAge` aligné, case à cocher dans `LoginPage`
+- Ajouté « Se déconnecter de tous les appareils » : `AuthService.logoutAll`, `POST /auth/logout-all`, `apiLogoutAll`, `AuthContext.logoutAll`, bouton dans l'onglet Paramètres (carte Sécurité de `ProfilePage`)
+- Mis à jour ce fichier (routes auth, schéma `refresh_tokens`, décision archi httpOnly corrigée)
 
 ## 2026-06-30
 - Créé `ml/python/fetch_data.py` — collecte NHL API historique (3 saisons, ~3600 matchs)
