@@ -1,4 +1,6 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Navigate, useLocation } from "react-router";
+import type { ReactNode } from "react";
+import { useAuth } from "./context/AuthContext";
 import { HockeyLanding }         from "./pages/HockeyLanding";
 import { LeaguePage }            from "./pages/league/LeaguePage";
 import { ProfilePage }           from "./pages/profile/ProfilePage";
@@ -14,19 +16,38 @@ import { DevMLDashboard }        from "./pages/DevMLDashboard";
 import { TennisPlayerPage }      from "./pages/TennisPlayerPage";
 import { ProPage }               from "./pages/ProPage";
 
+/**
+ * Route guard: nothing in the app is visible without an account.
+ * Unauthenticated users are redirected to /login (which shows the app
+ * presentation and keeps the navigation bar visible).
+ */
+function Protected({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) return null; // wait for session rehydration before deciding
+  if (!user) {
+    const returnTo = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/login?returnTo=${returnTo}`} replace />;
+  }
+  return <>{children}</>;
+}
+
 export const router = createBrowserRouter([
-  { path: "/",                                       Component: HockeyLanding        },
-  { path: "/stats",                                  Component: StatsPage            },
-  { path: "/stats/prediction/:type/:id",             Component: PredictionPage       },
-  { path: "/stats/prediction/tennis-player/:id",     Component: TennisPlayerPage     },
-  { path: "/bet",                                    Component: BetBuilderPage       },
-  { path: "/league",                                 Component: LeaguePage           },
-  { path: "/profile",                                Component: ProfilePage          },
+  // Public
   { path: "/login",                                  Component: LoginPage            },
-  { path: "/pro",                                    Component: ProPage              },
   { path: "/auth/callback",                          Component: AuthCallback         },
-  { path: "/nhl-predictions",                        Component: NHLPredictionsPage   },
-  { path: "/predictions/tennis",                     Component: TennisPredictionsPage},
-  { path: "/share/:id",                              Component: SharePage            },
-  { path: "/dev/ml",                                 Component: DevMLDashboard       },
+
+  // Protected — require a signed-in account
+  { path: "/",                                   element: <Protected><HockeyLanding /></Protected>        },
+  { path: "/stats",                              element: <Protected><StatsPage /></Protected>            },
+  { path: "/stats/prediction/:type/:id",         element: <Protected><PredictionPage /></Protected>       },
+  { path: "/stats/prediction/tennis-player/:id", element: <Protected><TennisPlayerPage /></Protected>     },
+  { path: "/bet",                                element: <Protected><BetBuilderPage /></Protected>       },
+  { path: "/league",                             element: <Protected><LeaguePage /></Protected>           },
+  { path: "/profile",                            element: <Protected><ProfilePage /></Protected>          },
+  { path: "/pro",                                element: <Protected><ProPage /></Protected>              },
+  { path: "/nhl-predictions",                    element: <Protected><NHLPredictionsPage /></Protected>   },
+  { path: "/predictions/tennis",                 element: <Protected><TennisPredictionsPage /></Protected>},
+  { path: "/share/:id",                          element: <Protected><SharePage /></Protected>            },
+  { path: "/dev/ml",                             element: <Protected><DevMLDashboard /></Protected>       },
 ]);

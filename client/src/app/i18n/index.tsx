@@ -346,6 +346,9 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pred.confModerate":   { en: "Moderate",              fr: "Modérée" },
   "pred.confEven":       { en: "Even Match",            fr: "Match serré" },
   "pred.confUnderdog":   { en: "Underdog Pick",         fr: "Choix outsider" },
+  "pred.chooseTeam":     { en: "Which team are you betting on?", fr: "Sur quelle équipe pariez-vous ?" },
+  "pred.bettingOn":      { en: "Betting on",            fr: "Pari sur" },
+  "pred.change":         { en: "Change",                fr: "Changer" },
   // Tennis player prop markets
   "pred.t.winNext":      { en: "Win Next Match",        fr: "Gagne le prochain match" },
   "pred.t.winNextDesc":  { en: "Wins their next scheduled match", fr: "Remporte son prochain match programmé" },
@@ -492,6 +495,16 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "login.newPassword":{ en: "New password",       fr: "Nouveau mot de passe" },
   "login.resetBtn":   { en: "Reset password",     fr: "Réinitialiser le mot de passe" },
   "login.resetDone":  { en: "Password updated — you can now sign in.", fr: "Mot de passe mis à jour — vous pouvez vous connecter." },
+  "login.confirmPassword": { en: "Confirm password", fr: "Confirmez le mot de passe" },
+  "login.pwdMismatch": { en: "Passwords do not match.", fr: "Les mots de passe ne correspondent pas." },
+  "login.introTitle": { en: "Smarter bets, backed by data", fr: "Des paris plus malins, basés sur les données" },
+  "login.introSubtitle": { en: "Sign in to unlock the full experience.", fr: "Connectez-vous pour débloquer toute l'expérience." },
+  "login.feat1Title": { en: "AI predictions", fr: "Prédictions IA" },
+  "login.feat1Body": { en: "Model-driven win probabilities on every market.", fr: "Probabilités de victoire par modèle sur chaque marché." },
+  "login.feat2Title": { en: "Best bets & edges", fr: "Meilleurs paris & edges" },
+  "login.feat2Body": { en: "Pre-ranked value picks across live and upcoming games.", fr: "Sélections de valeur classées pour les matchs en direct et à venir." },
+  "login.feat3Title": { en: "Build & track slips", fr: "Créez & suivez vos coupons" },
+  "login.feat3Body": { en: "Combine legs, lock slips and follow your results.", fr: "Combinez vos sélections, verrouillez et suivez vos résultats." },
 
   // ── Pro / subscription ──
   "pro.title":        { en: "Go ArakIce Pro",  fr: "Passe à ArakIce Pro" },

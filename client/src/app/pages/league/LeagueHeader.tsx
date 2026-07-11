@@ -20,7 +20,7 @@ export function LeagueHeader({
 
   const tabs = [
     { key: "leaderboard", label: t("league.rankings") },
-    { key: "chat",        label: lang === "fr" ? "Communauté" : "Community" },
+    { key: "chat",        label: lang === "fr" ? "Chat" : "Chat" },
   ];
 
   return (
@@ -30,14 +30,16 @@ export function LeagueHeader({
           <div className="flex items-center gap-2">
             <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>{lang === "fr" ? "Ligue" : "League"}</h1>
             {/* Sport badge */}
-            <span
-              className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-              style={{ backgroundColor: `${accent}1a`, color: accent }}
-            >
-              {theme.sportIcon} {theme.sportLabel}
-            </span>
+            {[theme.sportIcon, theme.sportLabel].filter(Boolean).length > 0 && (
+              <span
+                className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                style={{ backgroundColor: `${accent}1a`, color: accent }}
+              >
+                {[theme.sportIcon, theme.sportLabel].filter(Boolean).join(" ")}
+              </span>
+            )}
           </div>
-          <p className="text-white/50 text-xs">{lang === "fr" ? "Classement et communauté" : "Rankings & community"}</p>
+          <p className="text-white/50 text-xs">{lang === "fr" ? "Classement et chat" : "Rankings & community"}</p>
         </div>
       </div>
 

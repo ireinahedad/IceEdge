@@ -696,7 +696,7 @@ export function BetBuilderPage() {
             <p className="text-white font-bold text-lg mb-2">Slip Locked!</p>
             <p className="text-[#92A08A] text-sm mb-6">{submitResult.message}</p>
             <button
-              onClick={() => { clearLegs(); navigate("/"); }}
+              onClick={() => { clearSlip(); navigate("/"); }}
               className="w-full py-3 rounded-2xl font-bold text-sm"
               style={{ background: "#22ff00", color: "#072E49" }}
             >

@@ -27,7 +27,7 @@ export const apiLimiter = rateLimit({
 /** Strict — login / register. Blunts credential brute-force. */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,       // 15 minutes
-  limit:    isProd ? 10 : 100,    // 10 attempts / 15 min / IP in prod
+  limit:    isProd ? 15 : 100,    // 15 attempts / 15 min / IP in prod
   standardHeaders: 'draft-7',
   legacyHeaders:   false,
   skipSuccessfulRequests: true,   // only count failed attempts

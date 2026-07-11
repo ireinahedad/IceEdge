@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router";
+import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getGoogleLoginUrl, apiResendVerification, apiForgotPassword, apiResetPassword, EmailNotVerifiedError } from "../services/authService";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
+import { BottomNav } from "../components/BottomNav";
 import { useI18n } from "../i18n";
 
 type Mode = "login" | "register";
@@ -26,6 +28,8 @@ export function LoginPage() {
   const [username,    setUsername]    = useState("");
   const [firstName,   setFirstName]   = useState("");
   const [password,    setPassword]    = useState("");
+  const [confirmPwd,  setConfirmPwd]  = useState("");
+  const [showPwd,     setShowPwd]     = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [code,        setCode]        = useState("");
   const [error,       setError]       = useState<string | null>(null);
@@ -42,6 +46,11 @@ export function LoginPage() {
         await login(email, password);
         navigate(returnTo, { replace: true });
       } else {
+        if (password !== confirmPwd) {
+          setError(t("login.pwdMismatch"));
+          setLoading(false);
+          return;
+        }
         const result = await register(email, username, password, firstName || undefined);
         if ('tokens' in result) {
           // Verification disabled on the server → logged in right away.
@@ -149,7 +158,7 @@ export function LoginPage() {
 
   return (
     <div
-      className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-16 pb-10"
+      className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-16 pb-28"
       style={{ background: "#0A0E0C" }}
     >
       {/* Brand hero */}
@@ -161,7 +170,7 @@ export function LoginPage() {
         >
           ICEEDGE
         </h1>
-     
+
         <div className="mt-4 w-12 h-0.5 rounded-full" style={{ background: ACCENT, opacity: 0.5 }} />
       </div>
 
@@ -225,10 +234,24 @@ export function LoginPage() {
           </>
         )}
 
-        <input type="password" placeholder={t("login.password")} value={password} onChange={(e) => setPassword(e.target.value)}
-          required minLength={6} className={inputCls} style={inputStyle}
-          onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
-          onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
+        <div className="relative">
+          <input type={showPwd ? "text" : "password"} placeholder={t("login.password")} value={password} onChange={(e) => setPassword(e.target.value)}
+            required minLength={6} className={`${inputCls} pr-11`} style={inputStyle}
+            onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
+            onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
+          <button type="button" onClick={() => setShowPwd(v => !v)}
+            aria-label={showPwd ? "Hide password" : "Show password"}
+            className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "#92A08A" }}>
+            {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        </div>
+
+        {mode === "register" && (
+          <input type={showPwd ? "text" : "password"} placeholder={t("login.confirmPassword")} value={confirmPwd} onChange={(e) => setConfirmPwd(e.target.value)}
+            required minLength={6} className={inputCls} style={inputStyle}
+            onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
+            onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
+        )}
 
         {notice && (
           <div className="text-xs text-center py-2 px-3 rounded-xl" style={{ color: ACCENT, background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>
@@ -254,6 +277,29 @@ export function LoginPage() {
           </button>
         )}
       </form>
+
+      {/* App presentation for non-users */}
+      <div className="mt-10">
+        <p className="text-center text-white text-sm font-bold mb-1" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>
+          {t("login.introTitle")}
+        </p>
+        <p className="text-center text-[#92A08A] text-xs mb-5">{t("login.introSubtitle")}</p>
+        <div className="flex flex-col gap-2.5">
+          {[
+            { title: t("login.feat1Title"), body: t("login.feat1Body") },
+            { title: t("login.feat2Title"), body: t("login.feat2Body") },
+            { title: t("login.feat3Title"), body: t("login.feat3Body") },
+          ].map((f, i) => (
+            <div key={i} className="flex items-start gap-3 rounded-xl px-3 py-2.5" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+              <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: ACCENT }} />
+              <div>
+                <p className="text-white text-xs font-semibold">{f.title}</p>
+                <p className="text-[#92A08A] text-[11px] leading-relaxed">{f.body}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
       </>
       ) : step === "verify" ? (
       /* ── Email verification step ─────────────────────────────── */
@@ -379,6 +425,9 @@ export function LoginPage() {
       <p className="text-center text-[10px] tracking-wide mt-8" style={{ color: "#92A08A", opacity: 0.5 }}>
         {t("login.disclaimer")}
       </p>
+
+      {/* Navigation bar stays visible on the connection page */}
+      <BottomNav />
     </div>
   );
 }
