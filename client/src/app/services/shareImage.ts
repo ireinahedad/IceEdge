@@ -12,7 +12,7 @@ const filter = (node: HTMLElement) =>
 export async function shareNodeAsImage(
   node: HTMLElement,
   filename: string,
-  title = 'IceEdge',
+  title = 'ArakIce',
 ): Promise<void> {
   const dataUrl = await toPng(node, {
     filter,

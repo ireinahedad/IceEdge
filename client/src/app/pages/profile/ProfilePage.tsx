@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { BottomNav } from "../../components/BottomNav";
 import { useAuth } from "../../context/AuthContext";
 import { useSubscription } from "../../context/SubscriptionContext";
+import { apiCancelSubscription } from "../../services/subscriptionService";
 import { profileApiService } from "./../../services/userService";
 import { enableValueBetPush, disableValueBetPush } from "./../../services/pushService";
 import type { UserProfile, UserBettingStats, BetRecord } from "./../../types/user";
@@ -260,10 +261,22 @@ function SettingsTab({
   setMode: (m: "dark" | "light") => void;
 }) {
   const { t, lang, setLang } = useI18n();
-  const { isPro } = useSubscription();
+  const { isPro, status: subStatus, refresh: refreshSub } = useSubscription();
   const { logoutAll } = useAuth();
   const navigate = useNavigate();
   const [signingOutAll, setSigningOutAll] = useState(false);
+  const [cancelingSub, setCancelingSub] = useState(false);
+
+  async function handleCancelSub() {
+    if (!window.confirm(t("pro.settingsCancel") + " ?")) return;
+    setCancelingSub(true);
+    try {
+      await apiCancelSubscription();
+      await refreshSub();
+    } finally {
+      setCancelingSub(false);
+    }
+  }
 
   async function handleLogoutAll() {
     if (!window.confirm(t("profile.signoutAllConfirm"))) return;
@@ -577,6 +590,42 @@ function SettingsTab({
           {saveMsg}
         </p>
       )}
+
+      {/* Subscription */}
+      <div className="icy-card rounded-2xl p-4 flex flex-col gap-2">
+        <p className="text-white text-xs font-medium">{t("pro.subscription")}</p>
+        {isPro ? (
+          <>
+            <p className="text-white/50 text-[10px]">
+              {subStatus?.cancelAtPeriodEnd
+                ? `${t("pro.cancelScheduled")} ${subStatus.currentPeriodEnd ? new Date(subStatus.currentPeriodEnd).toLocaleDateString() : ""}`
+                : subStatus?.currentPeriodEnd
+                  ? `${t("pro.renews")} ${new Date(subStatus.currentPeriodEnd).toLocaleDateString()}`
+                  : t("pro.isProBody")}
+            </p>
+            {!subStatus?.cancelAtPeriodEnd && (
+              <button
+                onClick={handleCancelSub}
+                disabled={cancelingSub}
+                className="self-start mt-1 text-red-400 text-[11px] font-semibold border border-red-400/30 rounded-lg px-3 py-1.5 hover:text-red-300 hover:border-red-300/50 transition-colors disabled:opacity-50"
+              >
+                {cancelingSub ? t("pro.canceling") : t("pro.settingsCancel")}
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="text-white/50 text-[10px]">{t("pro.subtitle")}</p>
+            <button
+              onClick={() => navigate("/pro")}
+              className="self-start mt-1 text-[11px] font-bold rounded-lg px-3 py-1.5 transition-all"
+              style={{ background: "#9BF019", color: "#0A0E0C" }}
+            >
+              {t("pro.getPro")}
+            </button>
+          </>
+        )}
+      </div>
 
       {/* Security */}
       <div className="icy-card rounded-2xl p-4 flex flex-col gap-2">

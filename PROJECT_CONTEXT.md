@@ -16,6 +16,13 @@ When continuing this project:
 
 Last updated: 2026-07-11
 
+## Session 2026-07-11 (3) — Branding ArakIce, Pro, navigation équipe
+
+1. **Marque ArakIce** : textes visibles restants passés de « IceEdge/ICEEDGE » à « ArakIce » (`index.html` `<title>` + apple title, `LoginPage`, `HowItWorksSheet`, `shareImage`, `BetBuilderPage`). Favicon + apple-touch-icon + icône du manifeste pointent maintenant sur `public/arakice-logo.jpg` (l'onglet navigateur montrait encore l'ancien nom/logo). NB : le composant `IceedgeLogo` (nom de fichier inchangé) rendait déjà la marque ArakIce.
+2. **Page de retour Pro** : nouvelle route `/pro/success` (`ProSuccessPage`) « Bienvenue dans ArakIce Pro » + bouton retour accueil. `ProPage` y redirige après activation (upgrade dev / trial / promo réussis).
+3. **Abonnement dans les Paramètres** : carte « Abonnement » dans `ProfilePage` → `SettingsTab`. Free → bouton « Passer à ArakIce Pro » (vers `/pro`). Pro → statut (renouvellement / fin) + bouton « Annuler l'abonnement » (`apiCancelSubscription` + `refresh` du contexte).
+4. **Navigation équipe depuis un match** : dans la prédiction d'un match (`GamePrediction`), les deux équipes (logo + nom) sont cliquables → `/stats/prediction/team/:abbr`.
+
 ## Session 2026-07-11 (2) — Refonte UI du chat (Ligue)
 
 1. **Disposition** : onglets Chat / Podium sur toutes tailles (desktop inclus), avec **Chat en premier et par défaut** (`LeaguePage`, `LeagueHeader`).

@@ -15,6 +15,7 @@ import { SharePage }             from "./pages/SharePage";
 import { DevMLDashboard }        from "./pages/DevMLDashboard";
 import { TennisPlayerPage }      from "./pages/TennisPlayerPage";
 import { ProPage }               from "./pages/ProPage";
+import { ProSuccessPage }        from "./pages/ProSuccessPage";
 
 /**
  * Route guard: nothing in the app is visible without an account.
@@ -46,6 +47,7 @@ export const router = createBrowserRouter([
   { path: "/league",                             element: <Protected><LeaguePage /></Protected>           },
   { path: "/profile",                            element: <Protected><ProfilePage /></Protected>          },
   { path: "/pro",                                element: <Protected><ProPage /></Protected>              },
+  { path: "/pro/success",                        element: <Protected><ProSuccessPage /></Protected>       },
   { path: "/nhl-predictions",                    element: <Protected><NHLPredictionsPage /></Protected>   },
   { path: "/predictions/tennis",                 element: <Protected><TennisPredictionsPage /></Protected>},
   { path: "/share/:id",                          element: <Protected><SharePage /></Protected>            },

@@ -168,7 +168,7 @@ export function LoginPage() {
           className="text-white text-2xl tracking-[0.16em] uppercase mb-1"
           style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif", fontWeight: 600 }}
         >
-          ICEEDGE
+          ArakIce
         </h1>
 
         <div className="mt-4 w-12 h-0.5 rounded-full" style={{ background: ACCENT, opacity: 0.5 }} />

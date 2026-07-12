@@ -1050,7 +1050,9 @@ function MarketGroup({ group, accent }: { group: MktGroup; accent: string }) {
 function GamePrediction({ gameId }: { gameId: string }) {
   const { theme } = useSport();
   const { t } = useI18n();
+  const navigate = useNavigate();
   const accent = theme.accent;
+  const openTeam = (abbr: string) => navigate(`/stats/prediction/team/${abbr.toLowerCase()}`);
   const [gameView, setGameView] = useState<LiveGameView | null>(null);
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1146,21 +1148,29 @@ function GamePrediction({ gameId }: { gameId: string }) {
           </div>
         )}
         <div className="flex items-center justify-between">
-          <div className="flex flex-col items-center gap-1.5 flex-1">
+          <button
+            onClick={() => openTeam(home.abbr)}
+            className="flex flex-col items-center gap-1.5 flex-1 active:scale-95 transition-transform"
+            title={home.name}
+          >
             <img src={home.logo} alt={home.name} className="w-12 h-12 object-contain" />
-            <span className="text-white text-sm font-bold">{home.name}</span>
+            <span className="text-white text-sm font-bold underline decoration-white/20 underline-offset-4">{home.name}</span>
             {home.score !== undefined && <span className="text-white text-3xl font-black">{home.score}</span>}
-          </div>
+          </button>
           <div className="flex flex-col items-center gap-1 px-2">
             {!isLive && <span className="text-[#8a9ea6] text-xs">{gameView.time ?? t("pred.today")}</span>}
             <span className="text-[#8a9ea6] font-bold text-base">VS</span>
             <span className="text-[#4a6070] text-[10px]">O/U {gameView.overUnder}</span>
           </div>
-          <div className="flex flex-col items-center gap-1.5 flex-1">
+          <button
+            onClick={() => openTeam(away.abbr)}
+            className="flex flex-col items-center gap-1.5 flex-1 active:scale-95 transition-transform"
+            title={away.name}
+          >
             <img src={away.logo} alt={away.name} className="w-12 h-12 object-contain" />
-            <span className="text-white text-sm font-bold">{away.name}</span>
+            <span className="text-white text-sm font-bold underline decoration-white/20 underline-offset-4">{away.name}</span>
             {away.score !== undefined && <span className="text-white text-3xl font-black">{away.score}</span>}
-          </div>
+          </button>
         </div>
       </div>
 

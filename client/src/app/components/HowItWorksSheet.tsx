@@ -17,8 +17,8 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
   const fr = lang === "fr";
 
   const intro = fr
-    ? "IceEdge estime la probabilité de chaque pari à partir de trois moteurs complémentaires. La même probabilité est affichée dans les stats et enregistrée dans ton coupon — elle vient toujours de la même source, donc les chiffres concordent partout."
-    : "IceEdge estimates the probability of each bet from three complementary engines. The same probability is shown in the stats and stored in your coupon — it always comes from the same source, so the numbers match everywhere.";
+    ? "ArakIce estime la probabilité de chaque pari à partir de trois moteurs complémentaires. La même probabilité est affichée dans les stats et enregistrée dans ton coupon — elle vient toujours de la même source, donc les chiffres concordent partout."
+    : "ArakIce estimates the probability of each bet from three complementary engines. The same probability is shown in the stats and stored in your coupon — it always comes from the same source, so the numbers match everywhere.";
 
   const sections: Section[] = [
     {
@@ -95,7 +95,7 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
               {fr ? "Comment ça marche" : "How it works"}
             </h2>
             <p className="text-[#8a9ea6] text-xs mt-0.5">
-              {fr ? "Le guide des prédictions IceEdge" : "The IceEdge prediction guide"}
+              {fr ? "Le guide des prédictions ArakIce" : "The ArakIce prediction guide"}
             </p>
           </div>
           <button

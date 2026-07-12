@@ -63,6 +63,7 @@ export function ProPage() {
         window.location.href = result.url;         // Stripe Checkout
       } else if (result.status) {
         setSub(result.status);                     // dev activation
+        if (result.status.isPro) navigate("/pro/success");
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error");
@@ -75,7 +76,11 @@ export function ProPage() {
     if (!user) { navigate("/login?returnTo=/pro"); return; }
     setError(null);
     setLoading(true);
-    try { setSub(await apiStartTrial()); }
+    try {
+      const status = await apiStartTrial();
+      setSub(status);
+      if (status.isPro) navigate("/pro/success");
+    }
     catch (err: unknown) { setError(err instanceof Error ? err.message : "Error"); }
     finally { setLoading(false); }
   }
@@ -89,6 +94,7 @@ export function ProPage() {
       const status = await apiRedeemPromo(promo.trim());
       setSub(status);
       setPromo("");
+      if (status.isPro) navigate("/pro/success");
     } catch (err: unknown) {
       setPromoError(err instanceof Error ? err.message : "Error");
     } finally {

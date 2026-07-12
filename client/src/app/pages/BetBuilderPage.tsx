@@ -236,7 +236,7 @@ function SlipCard({ slip }: { slip: BetSlip }) {
     if (!cardRef.current) return;
     setSharing(true);
     try {
-      await shareNodeAsImage(cardRef.current, `iceedge-slip-${slip.id}.png`, "IceEdge");
+      await shareNodeAsImage(cardRef.current, `arakice-slip-${slip.id}.png`, "ArakIce");
     } catch (err) {
       console.warn("[Share] failed:", err);
     } finally {
