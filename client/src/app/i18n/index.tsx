@@ -146,6 +146,10 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "chat.leaveRoom":    { en: "Leave room",           fr: "Quitter le salon" },
   "chat.deleteRoom":   { en: "Delete room (admin)",  fr: "Supprimer le salon (admin)" },
   "chat.noCode":       { en: "No room found for this code", fr: "Aucun salon trouvé pour ce code" },
+  "chat.joinFailed":   { en: "Could not join the room",    fr: "Impossible de rejoindre le salon" },
+  "chat.roomNameRequired": { en: "Room name is required",  fr: "Le nom du salon est requis" },
+  "chat.createFailed": { en: "Could not create room",      fr: "Impossible de créer le salon" },
+  "chat.showHidden":   { en: "Show {n} hidden room(s)",    fr: "Afficher {n} salon(s) masqué(s)" },
   "chat.copyCode":     { en: "Copy code",            fr: "Copier le code" },
   "chat.openRoom":     { en: "Open room",            fr: "Ouvrir le salon" },
   "chat.shareCode":    { en: "Share this code so others can join:", fr: "Partage ce code pour inviter d'autres joueurs :" },
@@ -246,6 +250,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "home.edge":           { en: "+{edge}% edge",     fr: "+{edge}% avantage" },
   "home.game":           { en: "Game",              fr: "Match" },
   "home.nhlGame":        { en: "NHL Game",          fr: "Match LNH" },
+  "home.oddsApprox":     { en: "≈{odds}",           fr: "≈{odds}" },
 
   // ── Risk labels ──
   "risk.safe":     { en: "Safe",      fr: "Sûr" },
@@ -358,6 +363,9 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pred.chooseTeam":     { en: "Which team are you betting on?", fr: "Sur quelle équipe pariez-vous ?" },
   "pred.bettingOn":      { en: "Betting on",            fr: "Pari sur" },
   "pred.change":         { en: "Change",                fr: "Changer" },
+  "pred.odds":           { en: "Odds",                  fr: "Cote" },
+  "pred.viewPlayers":    { en: "👥 View players",       fr: "👥 Voir les joueurs" },
+  "pro.back":            { en: "Back",                  fr: "Retour" },
   // Tennis player prop markets
   "pred.t.winNext":      { en: "Win Next Match",        fr: "Gagne le prochain match" },
   "pred.t.winNextDesc":  { en: "Wins their next scheduled match", fr: "Remporte son prochain match programmé" },
@@ -573,6 +581,15 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "profile.notifyValueBets":    { en: "Value-bet alerts",      fr: "Alertes value bets" },
   "profile.notifyValueBetsHint":{ en: "Get notified when a new +EV opportunity appears.", fr: "Sois averti dès qu'un nouveau +EV apparaît." },
   "profile.notifyDenied":       { en: "Notifications blocked — allow them in your browser.", fr: "Notifications bloquées — autorise-les dans ton navigateur." },
+
+  // ── Legal / support ──
+  "legal.terms":   { en: "Terms",         fr: "CGU" },
+  "legal.privacy": { en: "Privacy",       fr: "Confidentialité" },
+  "legal.support": { en: "Support",       fr: "Support" },
+
+  // ── 404 ──
+  "notFound.title": { en: "Page not found", fr: "Page introuvable" },
+  "notFound.body":  { en: "This page doesn't exist or has moved.", fr: "Cette page n'existe pas ou a été déplacée." },
 
   // ── League: Pro lock on other players' bets ──
   "league.othersProTitle": { en: "See their bets with Pro", fr: "Vois leurs paris avec Pro" },

@@ -16,6 +16,10 @@ import { DevMLDashboard }        from "./pages/DevMLDashboard";
 import { TennisPlayerPage }      from "./pages/TennisPlayerPage";
 import { ProPage }               from "./pages/ProPage";
 import { ProSuccessPage }        from "./pages/ProSuccessPage";
+import { TermsPage }             from "./pages/TermsPage";
+import { PrivacyPage }           from "./pages/PrivacyPage";
+import { SupportPage }           from "./pages/SupportPage";
+import { NotFoundPage }          from "./pages/NotFoundPage";
 
 /**
  * Route guard: nothing in the app is visible without an account.
@@ -34,9 +38,12 @@ function Protected({ children }: { children: ReactNode }) {
 }
 
 export const router = createBrowserRouter([
-  // Public
+  // Public — accessible without an account
   { path: "/login",                                  Component: LoginPage            },
   { path: "/auth/callback",                          Component: AuthCallback         },
+  { path: "/terms",                                  Component: TermsPage            },
+  { path: "/privacy",                                Component: PrivacyPage          },
+  { path: "/support",                                Component: SupportPage          },
 
   // Protected — require a signed-in account
   { path: "/",                                   element: <Protected><HockeyLanding /></Protected>        },
@@ -52,4 +59,8 @@ export const router = createBrowserRouter([
   { path: "/predictions/tennis",                 element: <Protected><TennisPredictionsPage /></Protected>},
   { path: "/share/:id",                          element: <Protected><SharePage /></Protected>            },
   { path: "/dev/ml",                             element: <Protected><DevMLDashboard /></Protected>       },
+
+  // Catch-all — any unmatched URL lands on a friendly 404 instead of the
+  // raw React Router error screen (e.g. broken/shared links).
+  { path: "*",                                   Component: NotFoundPage                                   },
 ]);

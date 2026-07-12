@@ -28,7 +28,7 @@ export function LeagueHeader({
       <div className="flex items-center justify-between mb-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>{lang === "fr" ? "Ligue" : "League"}</h1>
+            <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>{t("nav.league")}</h1>
             {/* Sport badge */}
             {[theme.sportIcon, theme.sportLabel].filter(Boolean).length > 0 && (
               <span

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { useI18n } from "../i18n";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
+import { AppButton } from "../components/AppButton";
 import {
   apiGetSubscription, apiStartCheckout, apiStartTrial, apiCancelSubscription,
   apiRedeemPromo, SubscriptionStatus,
@@ -119,9 +120,20 @@ export function ProPage() {
     <div className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-14 pb-12"
       style={{ background: "#0A0E0C" }}>
 
+      {/* Explicit back button — this page has no BottomNav, so it must never be a dead end */}
+      <button
+        onClick={() => navigate(-1)}
+        className="flex items-center gap-1.5 text-[#bfc8cc] text-sm mb-4 self-start active:opacity-70"
+        aria-label={t("pro.back") || "Retour"}
+      >
+        ← {t("pro.back") || "Retour"}
+      </button>
+
       {/* Hero */}
       <div className="flex flex-col items-center text-center mb-8">
-        <IceedgeLogo size={56} wordmark={false} className="mb-4" />
+        <button onClick={() => navigate("/")} aria-label="Accueil ArakIce">
+          <IceedgeLogo size={56} wordmark={false} className="mb-4" />
+        </button>
         <div className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-3"
           style={{ background: ACCENT_BG, color: ACCENT, border: `1px solid ${ACCENT_BORDER}` }}>
           ArakIce Pro
@@ -193,32 +205,24 @@ export function ProPage() {
       {/* CTA */}
       {isPro ? (
         !sub?.cancelAtPeriodEnd && (
-          <button onClick={handleCancel} disabled={loading}
-            className="w-full py-3 rounded-xl text-sm font-medium disabled:opacity-50"
-            style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: MUTED }}>
+          <AppButton variant="ghost" onClick={handleCancel} disabled={loading} loading={loading} fullWidth>
             {t("pro.cancel")}
-          </button>
+          </AppButton>
         )
       ) : trialAvailable ? (
         <div className="flex flex-col gap-2">
           {/* Free trial is the primary CTA when still available */}
-          <button onClick={handleTrial} disabled={loading}
-            className="w-full py-4 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50"
-            style={{ background: ACCENT, color: "#0A0E0C" }}>
-            {loading ? "..." : user ? t("pro.startTrial") : t("pro.loginPrompt")}
-          </button>
-          <button onClick={handleUpgrade} disabled={loading}
-            className="w-full py-3 rounded-xl text-sm font-medium disabled:opacity-50"
-            style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: "#F3F7F0" }}>
+          <AppButton onClick={handleTrial} disabled={loading} loading={loading} fullWidth size="lg">
+            {user ? t("pro.startTrial") : t("pro.loginPrompt")}
+          </AppButton>
+          <AppButton variant="ghost" onClick={handleUpgrade} disabled={loading} loading={loading} fullWidth>
             {t("pro.cta")}
-          </button>
+          </AppButton>
         </div>
       ) : (
-        <button onClick={handleUpgrade} disabled={loading}
-          className="w-full py-4 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50"
-          style={{ background: ACCENT, color: "#0A0E0C" }}>
-          {loading ? "..." : user ? t("pro.cta") : t("pro.loginPrompt")}
-        </button>
+        <AppButton onClick={handleUpgrade} disabled={loading} loading={loading} fullWidth size="lg">
+          {user ? t("pro.cta") : t("pro.loginPrompt")}
+        </AppButton>
       )}
 
       {/* Promo code — activate Pro without payment */}
@@ -239,13 +243,14 @@ export function ProPage() {
               className="flex-1 py-3 px-3 rounded-xl text-sm outline-none uppercase tracking-wide"
               style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: "#F3F7F0" }}
             />
-            <button
+            <AppButton
+              variant="secondary"
               onClick={handleRedeem}
               disabled={promoBusy || !promo.trim()}
-              className="px-4 rounded-xl text-sm font-bold disabled:opacity-50"
-              style={{ background: ACCENT_BG, color: ACCENT, border: `1px solid ${ACCENT_BORDER}` }}>
-              {promoBusy ? "..." : t("pro.promo.apply")}
-            </button>
+              loading={promoBusy}
+            >
+              {t("pro.promo.apply")}
+            </AppButton>
           </div>
           {promoError && (
             <div className="text-red-400 text-xs mt-2">{promoError}</div>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { profileApiService } from "../../../services/userService";
 import { useI18n } from "../../../i18n";
+import { AppButton } from "../../../components/AppButton";
 import type { ChatRoom } from "../../../types/user";
 
 // ─── Room list ────────────────────────────────────────────────────────────────
@@ -54,7 +56,9 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
     try {
       const joined = await profileApiService.joinRoom(room.id);
       onJoined(joined);
-    } catch { /* non-blocking */ }
+    } catch (e: any) {
+      toast.error(e?.message ?? t("chat.joinFailed"));
+    }
   }
 
   useEffect(() => {
@@ -64,7 +68,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
     const timer = setTimeout(() => {
       profileApiService.lookupRoomByCode(search.trim())
         .then(setCodeResult)
-        .catch(() => setCodeError("No room found for this code"));
+        .catch(() => setCodeError(t("chat.noCode")));
     }, 400);
     return () => clearTimeout(timer);
   }, [search]);
@@ -78,7 +82,9 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
       setCodeResult(null);
       onJoined(room);
     } catch (e: any) {
-      setCodeError(e.message ?? "Could not join");
+      const message = e?.message ?? t("chat.joinFailed");
+      setCodeError(message);
+      toast.error(message);
     } finally {
       setJoining(false);
     }
@@ -124,7 +130,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
               )}
             </div>
             <p className="text-white/50 text-[10px] truncate">{room.lastMessage || room.description}</p>
-            <p className="text-white/40 text-[9px] mt-0.5">{room.memberCount} members</p>
+            <p className="text-white/40 text-[9px] mt-0.5">{room.memberCount} {t("common.members")}</p>
           </div>
         </button>
 
@@ -134,19 +140,20 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
             <button
               onClick={(e) => { e.stopPropagation(); onPinToggle(room); }}
               className={`text-sm transition-opacity ${room.isPinned ? "opacity-100" : "opacity-30"}`}
-              title={room.isPinned ? "Unpin" : "Pin"}
+              title={room.isPinned ? t("chat.unpinRoom") : t("chat.pinRoom")}
             >
               📌
             </button>
           </div>
         ) : (
           <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-            <button
+            <AppButton
+              variant="secondary"
+              size="sm"
               onClick={(e) => { e.stopPropagation(); handleJoinPublic(room); }}
-              className="bg-[#22ff00] text-[#072E49] text-[10px] font-bold px-2.5 py-1 rounded-lg"
             >
               {t("chat.join")}
-            </button>
+            </AppButton>
             <button
               onClick={(e) => { e.stopPropagation(); hideRoom(room.id); }}
               className="text-white/40 text-[9px] hover:text-white/70"
@@ -199,15 +206,18 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
               <span className="text-white text-xs font-bold truncate">{codeResult.name}</span>
               {codeResult.isPrivate && <span className="text-[9px]">🔒</span>}
             </div>
-            <p className="text-white/50 text-[10px]">{codeResult.memberCount} members</p>
+            <p className="text-white/50 text-[10px]">{codeResult.memberCount} {t("common.members")}</p>
           </div>
-          <button
+          <AppButton
+            variant="secondary"
+            size="sm"
             onClick={handleJoinByCode}
             disabled={joining}
-            className="bg-[#22ff00] text-[#072E49] text-xs font-bold px-3 py-1.5 rounded-xl flex-shrink-0 disabled:opacity-50"
+            loading={joining}
+            className="flex-shrink-0"
           >
-            {joining ? t("chat.joining") : codeResult.isMember ? t("chat.open") : t("chat.join")}
-          </button>
+            {codeResult.isMember ? t("chat.open") : t("chat.join")}
+          </AppButton>
         </div>
       )}
       {codeError && looksLikeCode && (
@@ -219,7 +229,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
         <SectionHeader title={t("chat.sectionPrivate")} count={privateRooms.length} open={openPrivate} onToggle={() => setOpenPrivate((v) => !v)} />
         {openPrivate && (
           privateRooms.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2">
               {privateRooms.map((r) => <RoomRow key={r.id} room={r} />)}
             </div>
           ) : (
@@ -233,7 +243,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
         <SectionHeader title={t("chat.sectionPublic")} count={publicRooms.length} open={openPublic} onToggle={() => setOpenPublic((v) => !v)} />
         {openPublic && (
           publicRooms.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2">
               {publicRooms.map((r) => <RoomRow key={r.id} room={r} />)}
             </div>
           ) : (
@@ -245,7 +255,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
             onClick={resetHidden}
             className="text-white/40 text-[10px] underline self-center"
           >
-            Show {hiddenCount} hidden room{hiddenCount > 1 ? "s" : ""}
+            {t("chat.showHidden", { n: hiddenCount })}
           </button>
         )}
       </div>

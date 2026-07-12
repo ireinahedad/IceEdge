@@ -138,7 +138,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   const displayOnline = connected ? onlineCount : 0;
 
   return (
-    <div className="flex flex-col h-full w-full md:max-w-3xl md:mx-auto">
+    <div className="flex flex-col h-full w-full">
       {/* Room header */}
       <div className="flex items-center gap-3 mb-3 flex-shrink-0">
         <button

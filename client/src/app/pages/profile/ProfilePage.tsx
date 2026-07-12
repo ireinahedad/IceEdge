@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
+import { toast } from "sonner";
 import { BottomNav } from "../../components/BottomNav";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useAuth } from "../../context/AuthContext";
 import { useSubscription } from "../../context/SubscriptionContext";
 import { apiCancelSubscription } from "../../services/subscriptionService";
@@ -266,24 +268,31 @@ function SettingsTab({
   const navigate = useNavigate();
   const [signingOutAll, setSigningOutAll] = useState(false);
   const [cancelingSub, setCancelingSub] = useState(false);
+  const [confirmCancelSub, setConfirmCancelSub] = useState(false);
+  const [confirmLogoutAll, setConfirmLogoutAll] = useState(false);
 
   async function handleCancelSub() {
-    if (!window.confirm(t("pro.settingsCancel") + " ?")) return;
+    setConfirmCancelSub(false);
     setCancelingSub(true);
     try {
       await apiCancelSubscription();
       await refreshSub();
+      toast.success(t("pro.settingsCancel"));
+    } catch (e: any) {
+      toast.error(e?.message ?? t("login.error"));
     } finally {
       setCancelingSub(false);
     }
   }
 
   async function handleLogoutAll() {
-    if (!window.confirm(t("profile.signoutAllConfirm"))) return;
+    setConfirmLogoutAll(false);
     setSigningOutAll(true);
     try {
       await logoutAll();
       navigate("/login", { replace: true });
+    } catch (e: any) {
+      toast.error(e?.message ?? t("login.error"));
     } finally {
       setSigningOutAll(false);
     }
@@ -605,7 +614,7 @@ function SettingsTab({
             </p>
             {!subStatus?.cancelAtPeriodEnd && (
               <button
-                onClick={handleCancelSub}
+                onClick={() => setConfirmCancelSub(true)}
                 disabled={cancelingSub}
                 className="self-start mt-1 text-red-400 text-[11px] font-semibold border border-red-400/30 rounded-lg px-3 py-1.5 hover:text-red-300 hover:border-red-300/50 transition-colors disabled:opacity-50"
               >
@@ -632,13 +641,27 @@ function SettingsTab({
         <p className="text-white text-xs font-medium">{t("profile.security")}</p>
         <p className="text-white/50 text-[10px]">{t("profile.signoutAllDesc")}</p>
         <button
-          onClick={handleLogoutAll}
+          onClick={() => setConfirmLogoutAll(true)}
           disabled={signingOutAll}
           className="self-start mt-1 text-red-400 text-[11px] font-semibold border border-red-400/30 rounded-lg px-3 py-1.5 hover:text-red-300 hover:border-red-300/50 transition-colors disabled:opacity-50"
         >
           {signingOutAll ? "..." : t("profile.signoutAll")}
         </button>
       </div>
+
+      <ConfirmDialog
+        open={confirmCancelSub}
+        title={`${t("pro.settingsCancel")} ?`}
+        onConfirm={handleCancelSub}
+        onCancel={() => setConfirmCancelSub(false)}
+      />
+      <ConfirmDialog
+        open={confirmLogoutAll}
+        title={t("profile.signoutAllConfirm")}
+        description={t("profile.signoutAllDesc")}
+        onConfirm={handleLogoutAll}
+        onCancel={() => setConfirmLogoutAll(false)}
+      />
     </div>
   );
 }

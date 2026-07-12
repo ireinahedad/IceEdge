@@ -1,4 +1,5 @@
 import { RouterProvider } from "react-router";
+import { Toaster } from "sonner";
 import { router } from "./routes";
 import { BetProvider } from "./context/BetContext";
 import { AuthProvider } from "./context/AuthContext";
@@ -27,6 +28,20 @@ function AppShell() {
           <RouterProvider router={router} />
         </ErrorBoundary>
       </div>
+
+      {/* Global toast notifications — success/error feedback across the app */}
+      <Toaster
+        theme="dark"
+        richColors
+        position="top-center"
+        toastOptions={{
+          style: {
+            background: "#131A12",
+            border: "1px solid #283323",
+            color: "white",
+          },
+        }}
+      />
     </div>
   );
 }

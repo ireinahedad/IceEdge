@@ -4,6 +4,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getGoogleLoginUrl, apiResendVerification, apiForgotPassword, apiResetPassword, EmailNotVerifiedError } from "../services/authService";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
+import { AppButton } from "../components/AppButton";
 import { useI18n } from "../i18n";
 
 type Mode = "login" | "register";
@@ -163,7 +164,9 @@ export function LoginPage() {
     >
       {/* Brand hero */}
       <div className="flex flex-col items-center mb-12">
-        <IceedgeLogo size={72} wordmark={false} className="mb-5" />
+        <button onClick={() => navigate("/")} aria-label="Accueil ArakIce">
+          <IceedgeLogo size={72} wordmark={false} className="mb-5" />
+        </button>
         <h1
           className="text-white text-2xl tracking-[0.16em] uppercase mb-1"
           style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif", fontWeight: 600 }}
@@ -236,7 +239,7 @@ export function LoginPage() {
 
         <div className="relative">
           <input type={showPwd ? "text" : "password"} placeholder={t("login.password")} value={password} onChange={(e) => setPassword(e.target.value)}
-            required minLength={6} className={`${inputCls} pr-11`} style={inputStyle}
+            required minLength={8} className={`${inputCls} pr-11`} style={inputStyle}
             onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
             onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
           <button type="button" onClick={() => setShowPwd(v => !v)}
@@ -248,7 +251,7 @@ export function LoginPage() {
 
         {mode === "register" && (
           <input type={showPwd ? "text" : "password"} placeholder={t("login.confirmPassword")} value={confirmPwd} onChange={(e) => setConfirmPwd(e.target.value)}
-            required minLength={6} className={inputCls} style={inputStyle}
+            required minLength={8} className={inputCls} style={inputStyle}
             onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
             onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
         )}
@@ -272,11 +275,9 @@ export function LoginPage() {
           </div>
         )}
 
-        <button type="submit" disabled={loading}
-          className="w-full py-3.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50"
-          style={{ background: ACCENT, color: "#0A0E0C" }}>
-          {loading ? "..." : mode === "login" ? t("login.signin") : t("login.signup")}
-        </button>
+        <AppButton type="submit" disabled={loading} loading={loading} fullWidth size="lg">
+          {mode === "login" ? t("login.signin") : t("login.signup")}
+        </AppButton>
 
         {mode === "login" && (
           <button type="button" onClick={() => { setStep("forgot"); setError(null); setNotice(null); }}
@@ -338,11 +339,9 @@ export function LoginPage() {
           </div>
         )}
 
-        <button type="submit" disabled={loading || code.length < 6}
-          className="w-full py-3.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50"
-          style={{ background: ACCENT, color: "#0A0E0C" }}>
-          {loading ? "..." : t("login.verifyBtn")}
-        </button>
+        <AppButton type="submit" disabled={loading || code.length < 6} loading={loading} fullWidth size="lg">
+          {t("login.verifyBtn")}
+        </AppButton>
 
         <div className="flex items-center justify-between text-xs mt-1">
           <button type="button" onClick={backToForm} style={{ color: "#92A08A" }}>
@@ -370,11 +369,9 @@ export function LoginPage() {
           </div>
         )}
 
-        <button type="submit" disabled={loading}
-          className="w-full py-3.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50"
-          style={{ background: ACCENT, color: "#0A0E0C" }}>
-          {loading ? "..." : t("login.sendCode")}
-        </button>
+        <AppButton type="submit" disabled={loading} loading={loading} fullWidth size="lg">
+          {t("login.sendCode")}
+        </AppButton>
         <button type="button" onClick={backToForm} className="text-xs mt-1" style={{ color: "#92A08A" }}>
           {t("login.back")}
         </button>
@@ -413,11 +410,9 @@ export function LoginPage() {
           </div>
         )}
 
-        <button type="submit" disabled={loading || code.length < 6 || newPassword.length < 8}
-          className="w-full py-3.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50"
-          style={{ background: ACCENT, color: "#0A0E0C" }}>
-          {loading ? "..." : t("login.resetBtn")}
-        </button>
+        <AppButton type="submit" disabled={loading || code.length < 6 || newPassword.length < 8} loading={loading} fullWidth size="lg">
+          {t("login.resetBtn")}
+        </AppButton>
 
         <div className="flex items-center justify-between text-xs mt-1">
           <button type="button" onClick={backToForm} style={{ color: "#92A08A" }}>
@@ -433,6 +428,13 @@ export function LoginPage() {
       <p className="text-center text-[10px] tracking-wide mt-8" style={{ color: "#92A08A", opacity: 0.5 }}>
         {t("login.disclaimer")}
       </p>
+      <div className="flex items-center justify-center gap-3 mt-3 text-[10px]" style={{ color: "#92A08A", opacity: 0.6 }}>
+        <button onClick={() => navigate("/terms")} className="underline underline-offset-2">{t("legal.terms")}</button>
+        <span>·</span>
+        <button onClick={() => navigate("/privacy")} className="underline underline-offset-2">{t("legal.privacy")}</button>
+        <span>·</span>
+        <button onClick={() => navigate("/support")} className="underline underline-offset-2">{t("legal.support")}</button>
+      </div>
     </div>
   );
 }

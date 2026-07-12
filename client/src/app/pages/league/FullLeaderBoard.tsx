@@ -53,7 +53,7 @@ function UserProfileModal({ entry, onClose }: {
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative w-full max-w-[430px] md:max-w-lg max-h-[80vh] overflow-y-auto icy-card rounded-t-3xl p-6 pb-10"
+        className="relative w-full max-w-[430px] max-h-[80vh] overflow-y-auto icy-card rounded-t-3xl p-6 pb-10"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
@@ -224,7 +224,7 @@ export function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
 
   return (
     <>
-      <div className="flex flex-col gap-3 w-full md:max-w-3xl md:mx-auto">
+      <div className="flex flex-col gap-3 w-full">
         {/* Sort filters */}
         <div className="flex gap-1">
           {filterButtons.map((f) => (

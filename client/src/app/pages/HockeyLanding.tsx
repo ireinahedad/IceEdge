@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Search, TrendingUp, ChevronRight, Plus, Goal, Star, Timer, Zap } from "lucide-react";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
@@ -9,7 +9,7 @@ import { predictionApiService } from "../services/predictionApiService";
 import { tennisApiService } from "../services/tennisApiService";
 import type { TennisApiMatch } from "../services/tennisApiService";
 import type { NHLGame, BetLeg } from "../types/bet";
-import { useSport, SPORT_THEMES, type Sport } from "../context/SportContext";
+import { useSport } from "../context/SportContext";
 import { useBet } from "../context/BetContext";
 import { useSubscription } from "../context/SubscriptionContext";
 import { ProLock } from "../components/ProLock";
@@ -241,13 +241,29 @@ interface BestBet {
 }
 
 type SortSource = "rules" | "ml";
-type SortDir    = "safe"  | "risky";
+type RiskTier   = "safe" | "moderate" | "risky" | "high";
+type SortOrder  = "safest" | "riskiest";
 
-function riskLabel(pct: number): { key: string; color: string } {
-  if (pct >= 70) return { key: "risk.safe",     color: "#22ff00" };
-  if (pct >= 55) return { key: "risk.moderate", color: "#90C9F0" };
-  if (pct >= 40) return { key: "risk.risky",    color: "#facc15" };
-  return              { key: "risk.high",      color: "#f87171" };
+const RISK_TIERS: { tier: RiskTier; key: string; color: string }[] = [
+  { tier: "safe",     key: "risk.safe",     color: "#22ff00" },
+  { tier: "moderate", key: "risk.moderate", color: "#90C9F0" },
+  { tier: "risky",    key: "risk.risky",    color: "#facc15" },
+  { tier: "high",     key: "risk.high",     color: "#f87171" },
+];
+
+function riskLabel(pct: number): { tier: RiskTier; key: string; color: string } {
+  if (pct >= 70) return RISK_TIERS[0];
+  if (pct >= 55) return RISK_TIERS[1];
+  if (pct >= 40) return RISK_TIERS[2];
+  return RISK_TIERS[3];
+}
+
+/** Implied decimal odds from a win probability — a proxy "cote" so users can
+ * gauge potential payout even when no real bookmaker price is attached
+ * (best bets span team, game and player markets bet365 doesn't all cover). */
+function impliedOdds(pct: number): number | null {
+  if (pct <= 0 || pct >= 100) return null;
+  return Math.round((100 / pct) * 100) / 100;
 }
 
 function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource }) {
@@ -256,6 +272,7 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
   const inSlip = hasLeg(bet.id);
   const displayPct = sortSource === "ml" ? (bet.mlPct ?? bet.rulePct) : bet.rulePct;
   const risk = riskLabel(displayPct);
+  const odds = impliedOdds(displayPct);
   const isML = sortSource === "ml" && bet.mlPct != null;
 
   return (
@@ -282,6 +299,11 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
             style={{ color: isML ? "#a78bfa" : risk.color }}>
             {sortSource === "ml" && bet.mlLoading ? "…" : `${displayPct}%`}
           </span>
+          {odds != null && (
+            <span className="text-[9px] font-semibold flex-shrink-0 tabular-nums text-[#bfc8cc] bg-white/5 px-1.5 py-px rounded-full">
+              {t("home.oddsApprox", { odds: odds.toFixed(2) })}
+            </span>
+          )}
           {isML && <span className="text-[8px] text-[#a78bfa] flex-shrink-0 font-medium">ML</span>}
           {sortSource === "ml" && !bet.mlLoading && bet.mlPct == null &&
             <span className="text-[8px] text-[#bfc8cc] flex-shrink-0">{t("home.rules")}</span>}
@@ -321,7 +343,16 @@ function BestBetsSection({
 }) {
   const { t, lang } = useI18n();
   const [sortSource, setSortSource] = useState<SortSource>("ml");
-  const [sortDir,    setSortDir]    = useState<SortDir>("safe");
+  const [sortOrder,  setSortOrder]  = useState<SortOrder>("safest");
+  // Risk-tier filters are combinable (multi-select) instead of an exclusive
+  // toggle, so users can view e.g. "risky" and "high" payout picks together,
+  // or leave everything selected to see safe and risky bets side by side.
+  const [riskFilter, setRiskFilter] = useState<Set<RiskTier>>(new Set(["safe", "moderate", "risky", "high"]));
+  const toggleRisk = (tier: RiskTier) => setRiskFilter(prev => {
+    const next = new Set(prev);
+    if (next.has(tier)) next.delete(tier); else next.add(tier);
+    return next;
+  });
   const [bets, setBets]             = useState<BestBet[]>([]);
   const [mlFetched,  setMlFetched]  = useState(false);
   const [collapsed,  setCollapsed]  = useState<boolean>(() => {
@@ -432,8 +463,15 @@ function BestBetsSection({
 
   const sorted = useMemo(() => {
     const src = (b: BestBet) => sortSource === "ml" ? (b.mlPct ?? b.rulePct) : b.rulePct;
-    return [...bets].sort((a, b) => sortDir === "safe" ? src(b) - src(a) : src(a) - src(b)).slice(0, 15);
-  }, [bets, sortSource, sortDir]);
+    // Empty selection = no filter applied (show every risk tier), so users
+    // can never accidentally hide the whole list by deselecting every chip.
+    const filtered = riskFilter.size === 0
+      ? bets
+      : bets.filter(b => riskFilter.has(riskLabel(src(b)).tier));
+    return [...filtered]
+      .sort((a, b) => sortOrder === "safest" ? src(b) - src(a) : src(a) - src(b))
+      .slice(0, 15);
+  }, [bets, sortSource, sortOrder, riskFilter]);
 
   // Pro-only: free users see the section title but the picks are locked/blurred.
   if (locked) {
@@ -482,7 +520,7 @@ function BestBetsSection({
         </button>
         {!collapsed && (
         <div className="flex items-center gap-1.5">
-          {/* Source toggle */}
+          {/* Source toggle — which score (rules vs ML) drives display + filtering */}
           <div className="flex icy-tile rounded-full p-0.5 gap-0.5">
             {(["rules", "ml"] as SortSource[]).map((s) => (
               <button key={s} onClick={() => setSortSource(s)}
@@ -492,14 +530,36 @@ function BestBetsSection({
               </button>
             ))}
           </div>
-          {/* Direction toggle */}
-          <button onClick={() => setSortDir(d => d === "safe" ? "risky" : "safe")}
-            className="px-2.5 py-1 rounded-full icy-tile text-[10px] text-[#8a9ea6] hover:text-white transition-all">
-            {sortDir === "safe" ? t("home.safe") : t("home.risky")}
+          {/* Sort order — only reorders the (already-filtered) list, never hides anything */}
+          <button onClick={() => setSortOrder(o => o === "safest" ? "riskiest" : "safest")}
+            className="px-2.5 py-1 rounded-full icy-tile text-[10px] text-[#8a9ea6] hover:text-white transition-all whitespace-nowrap">
+            {sortOrder === "safest" ? t("home.safe") : t("home.risky")}
           </button>
         </div>
         )}
       </div>
+
+      {/* Risk-tier filters — combinable checkboxes, not exclusive tabs, so
+          safe and risky (higher-payout) bets can be viewed together. */}
+      {!collapsed && (
+        <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+          {RISK_TIERS.map(({ tier, key, color }) => {
+            const active = riskFilter.size === 0 || riskFilter.has(tier);
+            return (
+              <button
+                key={tier}
+                onClick={() => toggleRisk(tier)}
+                className="px-2 py-1 rounded-full text-[9px] font-semibold transition-all border"
+                style={active
+                  ? { color, backgroundColor: `${color}1a`, borderColor: `${color}55` }
+                  : { color: "#5a6660", backgroundColor: "transparent", borderColor: "rgba(255,255,255,0.08)" }}
+              >
+                {t(key)}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {!collapsed && (isLoading ? (
         <div className="flex flex-col gap-1.5">
@@ -516,54 +576,32 @@ function BestBetsSection({
   );
 }
 
-// ─── Sport Selector ────────────────────────────────────────────────────────────
+// ─── Brand header (logo always returns home) ───────────────────────────────────
 
 function SportSelector() {
-  const { sport, setSport, theme } = useSport();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    function handleClick(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+  const { theme } = useSport();
+  const navigate = useNavigate();
   return (
-    <div ref={ref} className="relative">
-      <button onClick={() => setOpen(!open)} className="flex items-center gap-2.5 select-none">
-        {/* ARAKICE logo mark */}
-        <IceedgeLogo size={38} wordmark={false} />
-        {/* Brand name + sport label */}
-        <div className="flex flex-col leading-none gap-0.5">
-          <span
-            className="tracking-[0.14em] uppercase text-sm font-bold text-white"
-            style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif", letterSpacing: "0.12em" }}
-          >
-            ARAKICE
-          </span>
-          <span className="text-[10px] tracking-wider" style={{ color: theme.accent, opacity: 0.85 }}>
-            {theme.sportLabel}
-          </span>
-        </div>
-        <span className="text-xs" style={{ color: theme.accent }}>▾</span>
-      </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-2 icy-card rounded-2xl overflow-hidden z-50 min-w-[168px] shadow-xl shadow-black/50">
-          {(Object.keys(SPORT_THEMES) as Sport[]).map((s) => {
-            const t = SPORT_THEMES[s]; const active = sport === s;
-            return (
-              <button key={s} onClick={() => { setSport(s); setOpen(false); }}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${active ? "bg-white/5" : "hover:bg-white/5"}`}>
-                <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${t.accent}20`, border: `1.5px solid ${t.accent}50` }}>
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.accent }} />
-                </div>
-                <span className="text-white text-sm flex-1">{t.sportLabel}</span>
-                {active && <span className="text-xs font-bold" style={{ color: t.accent }}>✓</span>}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
+    <button
+      onClick={() => navigate("/")}
+      className="flex items-center gap-2.5 select-none"
+      aria-label="Accueil ArakIce"
+    >
+      {/* ARAKICE logo mark — always returns to the home page */}
+      <IceedgeLogo size={38} wordmark={false} />
+      {/* Brand name + sport label */}
+      <div className="flex flex-col leading-none gap-0.5">
+        <span
+          className="tracking-[0.14em] uppercase text-sm font-bold text-white"
+          style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif", letterSpacing: "0.12em" }}
+        >
+          ARAKICE
+        </span>
+        <span className="text-[10px] tracking-wider" style={{ color: theme.accent, opacity: 0.85 }}>
+          {theme.sportLabel}
+        </span>
+      </div>
+    </button>
   );
 }
 

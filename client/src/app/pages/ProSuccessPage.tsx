@@ -23,7 +23,9 @@ export function ProSuccessPage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen text-white max-w-[430px] mx-auto px-6 text-center"
       style={{ background: "#0A0E0C" }}>
-      <IceedgeLogo size={64} wordmark={false} className="mb-5" />
+      <button onClick={() => navigate("/", { replace: true })} aria-label="Accueil ArakIce">
+        <IceedgeLogo size={64} wordmark={false} className="mb-5" />
+      </button>
 
       <div className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4"
         style={{ background: ACCENT_BG, color: ACCENT, border: `1px solid ${ACCENT_BORDER}` }}>

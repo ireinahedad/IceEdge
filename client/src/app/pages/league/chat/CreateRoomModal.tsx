@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import { profileApiService } from "../../../services/userService";
 import { useI18n } from "../../../i18n";
+import { AppButton } from "../../../components/AppButton";
 import type { ChatRoom } from "../../../types/user";
 
 // ─── Create room modal ────────────────────────────────────────────────────────
@@ -22,7 +24,10 @@ export function CreateRoomModal({ onClose, onCreate }: {
   const [createdRoom, setCreatedRoom] = useState<ChatRoom | null>(null);
 
   async function handleCreate() {
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      setError(t("chat.roomNameRequired"));
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -41,7 +46,9 @@ export function CreateRoomModal({ onClose, onCreate }: {
         onClose();
       }
     } catch (e: any) {
-      setError(e.message ?? "Could not create room");
+      const message = e?.message ?? t("chat.createFailed");
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -52,7 +59,7 @@ export function CreateRoomModal({ onClose, onCreate }: {
       <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => { onCreate(createdRoom); onClose(); }}>
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
         <div
-          className="relative w-full max-w-[430px] md:max-w-lg icy-card rounded-t-3xl p-6 pb-10"
+          className="relative w-full max-w-[430px] icy-card rounded-t-3xl p-6 pb-10"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
@@ -61,18 +68,21 @@ export function CreateRoomModal({ onClose, onCreate }: {
           <div className="icy-tile border-[#90C9F0]/40 rounded-2xl py-4 text-center mb-4">
             <p className="text-[#90C9F0] text-2xl font-bold tracking-[0.3em]">{createdRoom.joinCode}</p>
           </div>
-          <button
+          <AppButton
+            variant="ghost"
             onClick={() => { navigator.clipboard?.writeText(createdRoom.joinCode ?? ""); }}
-            className="w-full py-3 rounded-2xl border border-white/10 text-white/70 text-sm mb-2"
+            fullWidth
+            className="mb-2"
           >
             {t("chat.copyCode")}
-          </button>
-          <button
+          </AppButton>
+          <AppButton
+            variant="secondary"
             onClick={() => { onCreate(createdRoom); onClose(); }}
-            className="w-full py-3 rounded-2xl bg-[#22ff00] text-[#072E49] text-sm font-bold"
+            fullWidth
           >
             {t("chat.openRoom")}
-          </button>
+          </AppButton>
         </div>
       </div>
     );
@@ -88,13 +98,19 @@ export function CreateRoomModal({ onClose, onCreate }: {
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
         <p className="text-white font-bold text-base mb-4">{t("chat.createTitle")}</p>
 
-        <p className="text-white/60 text-[10px] uppercase tracking-wider mb-1.5">{t("chat.roomName")}</p>
+        <p className="text-white/60 text-[10px] uppercase tracking-wider mb-1.5">
+          {t("chat.roomName")} <span className="text-red-400">*</span>
+        </p>
         <input
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => { setName(e.target.value); if (error) setError(null); }}
           placeholder="e.g. Western Conference"
           maxLength={32}
-          className="w-full icy-tile rounded-xl px-3 py-2.5 text-white text-sm outline-none placeholder-white/30 mb-3 focus:border-[#90C9F0]/50 transition-colors"
+          required
+          aria-required="true"
+          className={`w-full icy-tile rounded-xl px-3 py-2.5 text-white text-sm outline-none placeholder-white/30 mb-3 transition-colors ${
+            error && !name.trim() ? "border border-red-400/60" : "focus:border-[#90C9F0]/50"
+          }`}
         />
 
         <p className="text-white/60 text-[10px] uppercase tracking-wider mb-1.5">{t("chat.description")}</p>
@@ -143,23 +159,18 @@ export function CreateRoomModal({ onClose, onCreate }: {
         {error && <p className="text-red-400 text-xs mb-3">{error}</p>}
 
         <div className="flex gap-2">
-          <button
-            onClick={onClose}
-            className="flex-1 py-3 rounded-2xl border border-white/10 text-white/70 text-sm"
-          >
+          <AppButton variant="ghost" onClick={onClose} className="flex-1">
             {t("common.cancel")}
-          </button>
-          <button
+          </AppButton>
+          <AppButton
+            variant="secondary"
             onClick={handleCreate}
             disabled={!name.trim() || loading}
-            className={`flex-1 py-3 rounded-2xl text-sm font-bold transition-all ${
-              name.trim() && !loading
-                ? "bg-[#22ff00] text-[#072E49]"
-                : "bg-white/10 text-white/40"
-            }`}
+            loading={loading}
+            className="flex-1"
           >
-            {loading ? t("chat.creating") : t("chat.create")}
-          </button>
+            {t("chat.create")}
+          </AppButton>
         </div>
       </div>
     </div>
