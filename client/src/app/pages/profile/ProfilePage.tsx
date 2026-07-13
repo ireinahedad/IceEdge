@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { BottomNav } from "../../components/BottomNav";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -16,6 +16,8 @@ import {
   CalibrationCard,
 } from "./ProfileComponents";
 import { FrozenName } from "../../components/brand/FrozenName";
+import { RulesWeightsCard } from "../../components/RulesWeightsCard";
+import { InjuriesAdminCard } from "../../components/InjuriesAdminCard";
 import { useI18n } from "../../i18n";
 import "./profile-settings.css";
 
@@ -579,6 +581,10 @@ function SettingsTab({
         )}
       </div>
 
+      {/* Pondération des règles + saisie admin des blessures/alignement */}
+      <RulesWeightsCard serverWeights={profile.ruleWeights ?? null} />
+      <InjuriesAdminCard />
+
       {/* Save */}
       {saving ? (
         <div className="w-full flex items-center justify-center py-3">
@@ -670,15 +676,26 @@ function SettingsTab({
 
 export function ProfilePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, logout } = useAuth();
   const { t } = useI18n();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<UserBettingStats | null>(null);
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>(searchParams.get("tab") === "settings" ? "settings" : "overview");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Scroll vers la section pondération quand on arrive depuis le bouton des règles.
+  useEffect(() => {
+    if (searchParams.get("focus") === "weights") {
+      const t = setTimeout(() => {
+        document.getElementById("rules-weights")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 300);
+      return () => clearTimeout(t);
+    }
+  }, [searchParams]);
 
   // Dark / light appearance chosen by the user (persisted)
   const [mode, setModeState] = useState<"dark" | "light">(() => {

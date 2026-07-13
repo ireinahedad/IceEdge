@@ -12,6 +12,8 @@ import type {
   NHLStandings,
 } from '../types/bet';
 
+import { weightsQuery } from './ruleWeightsService';
+
 const BASE_URL = import.meta.env.VITE_NHL_API_URL || '';
 
 async function get<T>(path: string): Promise<T> {
@@ -66,7 +68,7 @@ export const nhlApiService = {
     get<NHLStandings[]>('/standings'),
 
   // ── Predictions (rule-based market groups from backend) ──────────────────
-  getGamePredictions:   (gameId: string)   => get<any[]>(`/predictions/game/${gameId}`),
+  getGamePredictions:   (gameId: string)   => get<any[]>(`/predictions/game/${gameId}${weightsQuery()}`),
   getTeamPredictions:   (teamAbbr: string) => get<any[]>(`/predictions/team/${teamAbbr}`),
   getPlayerPredictions: (playerId: string) => get<any[]>(`/predictions/player/${playerId}`),
 };

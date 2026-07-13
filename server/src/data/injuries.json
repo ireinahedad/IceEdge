@@ -1,0 +1,12 @@
+{
+  "_comment": "Saisie manuelle par match. Clé = 'AWAY@HOME' (abréviations). 'home'/'away' listent les joueurs blessés/absents avec un 'impact' 0-1 = désavantage infligé à SON équipe (gardien partant ≈ 0.10-0.15, joueur clé ≈ 0.05, role player ≈ 0.03). 'lineupAdj' optionnel = ajustement direct -0.10..+0.10 favorisant la maison (nouvel alignement, trios remaniés, etc.). Supprime l'entrée après le match.",
+  "_example": {
+    "TOR@BOS": {
+      "home": [{ "player": "Jeremy Swayman", "role": "G", "status": "out", "impact": 0.12 }],
+      "away": [{ "player": "Auston Matthews", "role": "C", "status": "out", "impact": 0.06 }],
+      "lineupAdj": 0.03,
+      "lineupNote": "trios remaniés côté maison"
+    }
+  },
+  "games": {}
+}

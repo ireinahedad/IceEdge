@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { NHLService } from '../services/nhl.service';
 import { buildGameMarkets, buildTeamMarkets, buildPlayerMarkets } from '../services/nhlPredictions';
+import { FactorWeights } from '../services/predictionFactors';
 
 const router = Router();
 const nhl    = new NHLService();
@@ -63,9 +64,25 @@ router.get('/players/:id/stats', async (req, res) => {
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
+// Parse les poids personnalisés depuis la query (?wQuality=&wHomeIce=&...).
+// Retourne undefined si aucun n'est fourni → le moteur utilise les poids par défaut.
+function parseWeights(q: any): FactorWeights | undefined {
+  const keys: Array<[keyof FactorWeights, string]> = [
+    ['quality', 'wQuality'], ['homeIce', 'wHomeIce'], ['fatigue', 'wFatigue'],
+    ['odds', 'wOdds'], ['injuries', 'wInjuries'], ['lineup', 'wLineup'],
+  ];
+  if (!keys.some(([, qk]) => q[qk] != null)) return undefined;
+  const w: any = {};
+  for (const [k, qk] of keys) {
+    const v = Number(q[qk]);
+    w[k] = Number.isFinite(v) && v >= 0 ? v : 0;
+  }
+  return w as FactorWeights;
+}
+
 // Predictions
 router.get('/predictions/game/:gameId', async (req, res) => {
-  try { res.json(await buildGameMarkets(req.params.gameId)); }
+  try { res.json(await buildGameMarkets(req.params.gameId, parseWeights(req.query))); }
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 

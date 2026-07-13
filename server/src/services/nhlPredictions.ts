@@ -7,7 +7,21 @@
  * Player markets → Poisson on per-game rates
  */
 
-import { fetchGameById, fetchTeams, fetchTeamByAbbr, fetchPlayerById } from './nhlApiClient';
+import {
+  fetchGameById,
+  fetchTeams,
+  fetchTeamByAbbr,
+  fetchPlayerById,
+  fetchTeamSummaryStats,
+  fetchTeamRestInfo,
+  TeamSummaryStats,
+  TeamRestInfo,
+} from './nhlApiClient';
+import { fetchOddsImplied } from './oddsClient';
+import { getManualFactors } from './injuryStore';
+import {
+  blendHomeProb, formatBreakdown, homeIceFactor, fatigueFactor, ManualFactor, FactorWeights,
+} from './predictionFactors';
 
 // ─── Shared interfaces ────────────────────────────────────────────────────────
 
@@ -16,6 +30,8 @@ export interface BetOption {
   label:     string;
   rulePct:   number;
   ruleNote:  string;
+  /** Décomposition des facteurs (moneyline uniquement) — sert au pie chart client. */
+  factors?:  Array<{ id: string; label: string; weight: number; value: number }>;
 }
 
 export interface MarketGroup {
@@ -23,6 +39,24 @@ export interface MarketGroup {
   title: string;
   cols:  2 | 3;
   options: BetOption[];
+}
+
+/**
+ * Contexte enrichi d'une équipe pour un match donné.
+ * Tous les champs sont optionnels : en leur absence on retombe sur des valeurs
+ * neutres, ce qui laisse buildTeamMarkets (vs adversaire moyen) fonctionner.
+ */
+export interface TeamCtx {
+  homeWinPct?:     number; // 0–1, record à domicile
+  roadWinPct?:     number; // 0–1, record à l'extérieur
+  last10?:         number; // 0–1, forme des 10 derniers
+  streak?:         number; // série signée (+3 = 3 V, -2 = 2 D)
+  ppPct?:          number; // 0–100
+  pkPct?:          number; // 0–100
+  shotsForPg?:     number;
+  shotsAgainstPg?: number;
+  restDays?:       number; // 0–7
+  b2b?:            0 | 1;   // back-to-back
 }
 
 // ─── Math primitives ──────────────────────────────────────────────────────────
@@ -77,6 +111,39 @@ function skellamPeriod(lambdaH: number, lambdaA: number): { home: number; draw: 
   return { home: home / total, draw: draw / total, away: away / total };
 }
 
+/**
+ * Distribution des marges sur un match complet à partir des λ Poisson.
+ * Retourne les probabilités dérivées directement du modèle plutôt que de
+ * constantes forfaitaires (utilisé pour la puck line et la marge de victoire).
+ */
+function marginDistribution(lambdaH: number, lambdaA: number): {
+  homeBy1: number; homeBy2plus: number;      // maison gagne de 1 / de 2+
+  awayBy1: number; awayBy2plus: number;      // visiteur gagne de 1 / de 2+
+  winBy1: number;  winBy2: number; winBy3plus: number; // marge, tout vainqueur
+} {
+  const MAX_K = 15;
+  const ph: number[] = [], pa: number[] = [];
+  for (let k = 0; k <= MAX_K; k++) { ph[k] = poissonPmf(lambdaH, k); pa[k] = poissonPmf(lambdaA, k); }
+
+  let homeBy1 = 0, homeBy2plus = 0, awayBy1 = 0, awayBy2plus = 0;
+  let winBy1 = 0, winBy2 = 0, winBy3plus = 0;
+  for (let h = 0; h <= MAX_K; h++) {
+    for (let a = 0; a <= MAX_K; a++) {
+      const joint = ph[h] * pa[a];
+      if (joint < 1e-12) continue;
+      const diff = h - a;
+      if (diff === 0) continue;                 // égalité → réglée en prolongation
+      const m = Math.abs(diff);
+      if (diff > 0) { if (m === 1) homeBy1 += joint; else homeBy2plus += joint; }
+      else          { if (m === 1) awayBy1 += joint; else awayBy2plus += joint; }
+      if      (m === 1) winBy1 += joint;
+      else if (m === 2) winBy2 += joint;
+      else              winBy3plus += joint;
+    }
+  }
+  return { homeBy1, homeBy2plus, awayBy1, awayBy2plus, winBy1, winBy2, winBy3plus };
+}
+
 /** Clamp and round to integer percentage */
 function pct(p: number): number {
   return Math.round(Math.max(3, Math.min(97, p * 100)));
@@ -89,9 +156,13 @@ function fmt(n: number, decimals = 2): string {
 
 // ─── League constants ─────────────────────────────────────────────────────────
 
-const HOME_ICE_ADJ   = 0.03;   // +3% for home ice
-const LEAGUE_AVG_GPG = 3.05;   // league avg goals/game per team
-const OT_BASE        = 0.225;  // ~22.5% of NHL games go to OT/SO
+const HOME_ICE_ADJ   = 0.02;   // résidu d'avantage local (splits domicile/route captent le reste)
+const LEAGUE_AVG_GPG = 3.05;   // buts/match moyens par équipe (ligue)
+const LEAGUE_AVG_SOG = 30;     // tirs/match moyens (ligue)
+const OT_BASE        = 0.225;  // ~22.5% des matchs NHL vont en prolongation
+const B2B_WIN_PEN    = 0.05;   // pénalité de force pour un back-to-back
+const B2B_GOAL_PEN   = 0.04;   // baisse de λ pour un back-to-back
+const REST_EDGE      = 0.010;  // avantage par jour de repos supplémentaire (cap)
 
 /** Per-period goal fractions (empirical NHL averages) */
 const PERIOD_DIST = [0.305, 0.365, 0.330] as const;
@@ -102,6 +173,35 @@ function otProb(homeWin: number): number {
   return OT_BASE + 0.06 * balance; // range ~18%–28%
 }
 
+/** Borne une valeur dans [lo, hi] */
+function clamp(x: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, x));
+}
+
+/**
+ * Calibration Platt de la probabilité de victoire.
+ * Le Log5 brut est sur-confiant : ces coefficients (a<1 = rétrécissement vers
+ * le centre) ont été ajustés sur ml/data/nhl_games.csv (6099 matchs, split
+ * temporel 70/30) et réduisent le log-loss hors-échantillon de ~0.703 à ~0.683,
+ * au niveau du plafond d'une régression logistique sur les mêmes features.
+ */
+const WIN_CAL_A = 0.45;
+const WIN_CAL_B = 0.06;
+function calibrateWin(p: number): number {
+  const q = clamp(p, 1e-6, 1 - 1e-6);
+  const z = Math.log(q / (1 - q));
+  return clamp(1 / (1 + Math.exp(-(WIN_CAL_A * z + WIN_CAL_B))), 0.03, 0.97);
+}
+
+/**
+ * Force d'équipe combinée : mélange win% saison + split (domicile/route) + forme L10,
+ * puis pénalité back-to-back. Retourne une valeur 0–1.
+ */
+function teamStrength(seasonWin: number, splitWin: number, last10: number, b2b: 0 | 1): number {
+  const blended = 0.55 * seasonWin + 0.25 * splitWin + 0.20 * last10;
+  return clamp(blended * (1 - B2B_WIN_PEN * b2b), 0.05, 0.95);
+}
+
 // ─── Game markets ─────────────────────────────────────────────────────────────
 
 function computeGameMarkets(
@@ -109,6 +209,12 @@ function computeGameMarkets(
   away: any,
   homeName: string,
   awayName: string,
+  homeCtx: TeamCtx = {},
+  awayCtx: TeamCtx = {},
+  oddsImplied: number | null = null,       // prob implicite marché (dé-viggée)
+  injuries: ManualFactor | null = null,    // facteur blessures manuel
+  lineup: ManualFactor | null = null,      // facteur alignement manuel
+  weights?: FactorWeights,                 // poids personnalisés (paramètres user)
 ): MarketGroup[] {
   const wH  = (home.winPct ?? 50) / 100;
   const wA  = (away.winPct ?? 50) / 100;
@@ -117,15 +223,62 @@ function computeGameMarkets(
   const gfA = away.goalsForPerGame     ?? LEAGUE_AVG_GPG;
   const gaA = away.goalsAgainstPerGame ?? LEAGUE_AVG_GPG;
 
-  // Adjusted lambda: blend each team's offence vs the opponent's defence
-  const lambdaH = (gfH + gaA) / 2;   // home expected goals
-  const lambdaA = (gfA + gaH) / 2;   // away expected goals
-  const lambdaT = lambdaH + lambdaA;  // total expected goals
+  // ── Contexte (repos, forme, splits, unités spéciales, tirs) ────────────────
+  const hB2b = homeCtx.b2b ?? 0;
+  const aB2b = awayCtx.b2b ?? 0;
+  const hRest = homeCtx.restDays ?? 2;
+  const aRest = awayCtx.restDays ?? 2;
+  const hL10 = homeCtx.last10 ?? wH;
+  const aL10 = awayCtx.last10 ?? wA;
+  const hSplit = homeCtx.homeWinPct ?? wH;   // record à domicile
+  const aSplit = awayCtx.roadWinPct ?? wA;   // record à l'extérieur
+  const hPP = homeCtx.ppPct ?? 20, hPK = homeCtx.pkPct ?? 80;
+  const aPP = awayCtx.ppPct ?? 20, aPK = awayCtx.pkPct ?? 80;
+  const hSF = homeCtx.shotsForPg ?? LEAGUE_AVG_SOG;
+  const aSF = awayCtx.shotsForPg ?? LEAGUE_AVG_SOG;
 
-  const mlHome = log5(wH + HOME_ICE_ADJ, wA);
+  // ── Facteurs transparents (chacun estime P(victoire domicile), 0–1) ─────────
+  // Qualité d'équipe : win% saison + forme L10, neutre côté glace & fatigue
+  // (traités comme des facteurs séparés), Log5 puis calibration Platt.
+  const sH = clamp(0.70 * wH + 0.30 * hL10, 0.05, 0.95);
+  const sA = clamp(0.70 * wA + 0.30 * aL10, 0.05, 0.95);
+  const fQuality = calibrateWin(log5(sH, sA));
+  const fHomeIce = homeIceFactor(wH, hSplit, wA, aSplit);
+  const fFatigue = fatigueFactor(hRest, aRest, hB2b, aB2b);
+  // Moyenne pondérée des facteurs actifs (règles = boîte de verre transparente).
+  const blend = blendHomeProb({
+    quality: fQuality, homeIce: fHomeIce, fatigue: fFatigue,
+    odds: oddsImplied, injuries, lineup,
+  }, weights);
+  const mlHome = blend.homeProb;
   const mlAway = 1 - mlHome;
+  const mlBreakdown = formatBreakdown(blend);
   const ot     = otProb(mlHome);
   const regAdj = 1 - ot;
+
+  // ── Buts attendus (λ) — ratio attaque × défense relatif à la ligue ─────────
+  // λH = force offensive maison × faiblesse défensive visiteur, échelle ligue.
+  let lambdaH = (gfH / LEAGUE_AVG_GPG) * (gaA / LEAGUE_AVG_GPG) * LEAGUE_AVG_GPG;
+  let lambdaA = (gfA / LEAGUE_AVG_GPG) * (gaH / LEAGUE_AVG_GPG) * LEAGUE_AVG_GPG;
+
+  // Volume de tirs : signal secondaire (poids 12%).
+  lambdaH *= clamp(1 + 0.12 * (hSF / LEAGUE_AVG_SOG - 1), 0.9, 1.1);
+  lambdaA *= clamp(1 + 0.12 * (aSF / LEAGUE_AVG_SOG - 1), 0.9, 1.1);
+
+  // Unités spéciales : PP maison vs PK adverse (et inversement), borné ±8%.
+  lambdaH *= clamp(1 + 0.06 * ((hPP - 20) / 20 - (aPK - 80) / 20) / 2, 0.92, 1.08);
+  lambdaA *= clamp(1 + 0.06 * ((aPP - 20) / 20 - (hPK - 80) / 20) / 2, 0.92, 1.08);
+
+  // Back-to-back : moins de buts. Glace locale : léger bonus offensif maison.
+  lambdaH *= (1 - B2B_GOAL_PEN * hB2b) * 1.02;
+  lambdaA *= (1 - B2B_GOAL_PEN * aB2b) * 0.99;
+
+  lambdaH = clamp(lambdaH, 1.5, 5.0);
+  lambdaA = clamp(lambdaA, 1.5, 5.0);
+  const lambdaT = lambdaH + lambdaA;  // total expected goals
+
+  // Distribution des marges (match complet) — sert puck line & marge de victoire.
+  const md = marginDistribution(lambdaH, lambdaA);
 
   // ── 1. Match Betting ──────────────────────────────────────────────────────
   const matchBetting: MarketGroup = {
@@ -135,7 +288,12 @@ function computeGameMarkets(
         id: 'ml-home',
         label: `${homeName} to Win`,
         rulePct: pct(mlHome),
-        ruleNote: `Win% ${fmt(wH*100,0)}% → Log5 vs opponent ${fmt(wA*100,0)}% → home ice +3% = ${fmt(mlHome*100,0)}%`,
+        ruleNote: [
+          mlBreakdown,
+          injuries?.active ? `blessures : ${injuries.note}` : '',
+          lineup?.active   ? `alignement : ${lineup.note}` : '',
+        ].filter(Boolean).join('  ·  '),
+        factors: blend.lines.map(l => ({ id: l.id, label: l.label, weight: l.weight, value: l.value })),
       },
       {
         id: 'ml-ot',
@@ -148,13 +306,15 @@ function computeGameMarkets(
         label: `${awayName} to Win`,
         rulePct: pct(mlAway),
         ruleNote: `Away win probability = 1 − home win = ${fmt(mlAway*100,0)}%`,
+        factors: blend.lines.map(l => ({ id: l.id, label: l.label, weight: l.weight, value: 1 - l.value })),
       },
     ],
   };
 
   // ── 2. Puck Line ──────────────────────────────────────────────────────────
-  // Home -1.5: team wins by 2+ ≈ 62% of home wins; Away +1.5: covers if away wins or loses by 1
-  const plHome = mlHome * 0.62;
+  // Home −1.5 : la maison gagne de 2+ (en réglementaire), dérivé du modèle Skellam.
+  // Away +1.5 : couvre si la maison ne gagne PAS de 2+ (donc le complément).
+  const plHome = md.homeBy2plus * regAdj;
   const plAway = 1 - plHome;
   const puckLine: MarketGroup = {
     id: 'puckline', title: 'Puck Line', cols: 2,
@@ -163,13 +323,13 @@ function computeGameMarkets(
         id: 'pl-home',
         label: `${homeName} −1.5`,
         rulePct: pct(plHome),
-        ruleNote: `ML ${fmt(mlHome*100,0)}% × 62% (wins-by-2+ rate) = ${fmt(plHome*100,0)}%`,
+        ruleNote: `Skellam P(maison gagne de 2+) ${fmt(md.homeBy2plus*100,0)}% × régl. ${fmt(regAdj*100,0)}% = ${fmt(plHome*100,0)}%`,
       },
       {
         id: 'pl-away',
         label: `${awayName} +1.5`,
         rulePct: pct(plAway),
-        ruleNote: `Covers if away wins OR home wins by exactly 1 = ${fmt(plAway*100,0)}%`,
+        ruleNote: `Couvre sauf défaite visiteur de 2+ = ${fmt(plAway*100,0)}%`,
       },
     ],
   };
@@ -330,31 +490,32 @@ function computeGameMarkets(
   };
 
   // ── 11. Winning Margin ────────────────────────────────────────────────────
-  // Given a winner, margin distribution (historical NHL: ~42% by 1, 30% by 2, 28% by 3+)
-  // Adjust slightly: high-scoring games → fewer 1-goal games
-  const by1Share   = Math.max(0.30, 0.45 - 0.025 * (lambdaT - 6.0));
-  const by2Share   = 0.30;
-  const by3pShare  = Math.max(0.20, 1 - by1Share - by2Share);
+  // Marges dérivées de la distribution Skellam complète, renormalisées sur les
+  // matchs réglés en réglementaire (une victoire par 1/2/3+ exclut la prolongation).
+  const decisive = md.winBy1 + md.winBy2 + md.winBy3plus || 1;
+  const wm1  = (md.winBy1     / decisive) * regAdj;
+  const wm2  = (md.winBy2     / decisive) * regAdj;
+  const wm3p = (md.winBy3plus / decisive) * regAdj;
   const margin: MarketGroup = {
     id: 'margin', title: 'Winning Margin', cols: 3,
     options: [
       {
         id: 'wm-1',
         label: 'Win by 1',
-        rulePct: pct((mlHome + mlAway) * by1Share),
-        ruleNote: `Any reg win × 1-goal game rate (${fmt(by1Share*100,0)}%) = ${fmt((mlHome+mlAway)*by1Share*100,0)}%`,
+        rulePct: pct(wm1),
+        ruleNote: `Skellam marge 1 but ${fmt(md.winBy1/decisive*100,0)}% × régl. = ${fmt(wm1*100,0)}%`,
       },
       {
         id: 'wm-2',
         label: 'Win by 2',
-        rulePct: pct((mlHome + mlAway) * by2Share),
-        ruleNote: `Any reg win × 2-goal margin rate (${fmt(by2Share*100,0)}%)`,
+        rulePct: pct(wm2),
+        ruleNote: `Skellam marge 2 buts ${fmt(md.winBy2/decisive*100,0)}% × régl. = ${fmt(wm2*100,0)}%`,
       },
       {
         id: 'wm-3p',
         label: 'Win by 3+',
-        rulePct: pct((mlHome + mlAway) * by3pShare),
-        ruleNote: `Any reg win × blowout rate (${fmt(by3pShare*100,0)}%), λ=${fmt(lambdaT)}`,
+        rulePct: pct(wm3p),
+        ruleNote: `Skellam marge 3+ ${fmt(md.winBy3plus/decisive*100,0)}% × régl., λ=${fmt(lambdaT)}`,
       },
     ],
   };
@@ -374,7 +535,37 @@ function computeGameMarkets(
 
 // ─── Public: game predictions ─────────────────────────────────────────────────
 
-export async function buildGameMarkets(gameId: string): Promise<MarketGroup[]> {
+/** Parse une chaîne L10 ("7-2-1") en win% 0–1. */
+function parseLastTen(last10: string | undefined, fallback: number): number {
+  if (!last10) return fallback;
+  const [w] = last10.split('-').map(Number);
+  return isNaN(w) ? fallback : Math.min(1, w / 10);
+}
+
+/** Construit le contexte enrichi d'une équipe (splits, forme, PP/PK, tirs, repos). */
+function makeCtx(
+  team: any,
+  summary: Record<string, TeamSummaryStats>,
+  rest: TeamRestInfo,
+): TeamCtx {
+  const abbr = (team.abbreviation ?? '').toUpperCase();
+  const s = summary[abbr];
+  const seasonWin = (team.winPct ?? 50) / 100;
+  return {
+    homeWinPct:     team.homeWinPct ?? seasonWin,
+    roadWinPct:     team.roadWinPct ?? seasonWin,
+    last10:         parseLastTen(team.last10, seasonWin),
+    streak:         team.streakSigned ?? 0,
+    ppPct:          s?.ppPct ?? team.ppPct ?? 20,
+    pkPct:          s?.pkPct ?? team.pkPct ?? 80,
+    shotsForPg:     s?.shotsForPg     ?? LEAGUE_AVG_SOG,
+    shotsAgainstPg: s?.shotsAgainstPg ?? LEAGUE_AVG_SOG,
+    restDays:       rest.restDays,
+    b2b:            rest.b2b,
+  };
+}
+
+export async function buildGameMarkets(gameId: string, weights?: FactorWeights): Promise<MarketGroup[]> {
   const game = await fetchGameById(gameId);
   const homeAbbr = game.homeTeam?.abbreviation ?? game.homeTeam?.abbrev ?? '';
   const awayAbbr = game.awayTeam?.abbreviation ?? game.awayTeam?.abbrev ?? '';
@@ -384,10 +575,33 @@ export async function buildGameMarkets(gameId: string): Promise<MarketGroup[]> {
     fetchTeamByAbbr(awayAbbr),
   ]);
 
+  const homeName = game.homeTeam?.name ?? homeAbbr;
+  const awayName = game.awayTeam?.name ?? awayAbbr;
+
+  // Sources enrichies, tolérantes aux pannes (fallback neutre par source).
+  const [summaryRes, homeRestRes, awayRestRes, oddsRes] = await Promise.allSettled([
+    fetchTeamSummaryStats(),
+    fetchTeamRestInfo(homeAbbr),
+    fetchTeamRestInfo(awayAbbr),
+    fetchOddsImplied(homeName, awayName),
+  ]);
+  const summary  = summaryRes.status  === 'fulfilled' ? summaryRes.value  : {};
+  const homeRest = homeRestRes.status === 'fulfilled' ? homeRestRes.value : { restDays: 2, b2b: 0 as 0 | 1 };
+  const awayRest = awayRestRes.status === 'fulfilled' ? awayRestRes.value : { restDays: 2, b2b: 0 as 0 | 1 };
+  const odds     = oddsRes.status     === 'fulfilled' ? oddsRes.value     : null;
+
+  // Facteurs manuels (blessures + alignement), relus à chaque appel.
+  const manual = getManualFactors(homeAbbr, awayAbbr);
+
   return computeGameMarkets(
     homeTeam, awayTeam,
-    game.homeTeam?.name ?? homeAbbr,
-    game.awayTeam?.name ?? awayAbbr,
+    homeName, awayName,
+    makeCtx(homeTeam, summary, homeRest),
+    makeCtx(awayTeam, summary, awayRest),
+    odds?.homeProb ?? null,
+    manual.injuries,
+    manual.lineup,
+    weights,
   );
 }
 
@@ -404,7 +618,19 @@ export async function buildTeamMarkets(teamAbbr: string): Promise<MarketGroup[]>
     goalsAgainstPerGame:all.reduce((s: number, t: any) => s + (t.goalsAgainstPerGame ?? 3.0), 0) / n,
   };
 
-  return computeGameMarkets(team, avg, team.name, 'Avg Opponent');
+  // Contexte réel pour l'équipe ; adversaire moyen = contexte neutre.
+  const [summaryRes, restRes] = await Promise.allSettled([
+    fetchTeamSummaryStats(),
+    fetchTeamRestInfo(teamAbbr),
+  ]);
+  const summary = summaryRes.status === 'fulfilled' ? summaryRes.value : {};
+  const rest    = restRes.status    === 'fulfilled' ? restRes.value    : { restDays: 2, b2b: 0 as 0 | 1 };
+
+  return computeGameMarkets(
+    team, avg, team.name, 'Avg Opponent',
+    makeCtx(team, summary, rest),
+    {}, // adversaire moyen : neutre
+  );
 }
 
 // ─── Player markets ───────────────────────────────────────────────────────────

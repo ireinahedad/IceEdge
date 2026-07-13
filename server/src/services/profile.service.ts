@@ -20,7 +20,8 @@ export async function getProfileById(userId: string) {
             up.notify_value_bets AS "notifyValueBets",
             up.tier, up.performance_score AS "performanceScore",
             up.joined_at AS "joinedAt",
-            up.openai_api_key AS "openaiApiKey"
+            up.openai_api_key AS "openaiApiKey",
+            up.rule_weights AS "ruleWeights"
      FROM users u
      JOIN user_profiles up ON up.user_id = u.id
      WHERE u.id = $1`,
@@ -46,6 +47,7 @@ export async function getProfileById(userId: string) {
     tier:             profile.tier,
     performanceScore: profile.performanceScore,
     openaiApiKey:     profile.openaiApiKey ?? null,
+    ruleWeights:      profile.ruleWeights ?? null,
     badges,
   };
 }
@@ -72,6 +74,7 @@ export async function updateProfile(userId: string, updates: {
   avatar?: string;
   avatarUrl?: string | null;
   openaiApiKey?: string | null;
+  ruleWeights?: Record<string, number> | null;
 }) {
   // Username lives on the users table — handle it separately, with a uniqueness check
   if (updates.username !== undefined) {
@@ -119,6 +122,7 @@ export async function updateProfile(userId: string, updates: {
   if (updates.avatar        !== undefined) { fields.push(`avatar = $${i++}`);           values.push(String(updates.avatar).slice(0, 20)); }
   if (updates.avatarUrl     !== undefined) { fields.push(`avatar_url = $${i++}`);       values.push(updates.avatarUrl); }
   if (updates.openaiApiKey  !== undefined) { fields.push(`openai_api_key = $${i++}`);   values.push(updates.openaiApiKey); }
+  if (updates.ruleWeights   !== undefined) { fields.push(`rule_weights = $${i++}`);      values.push(updates.ruleWeights === null ? null : JSON.stringify(updates.ruleWeights)); }
 
   if (fields.length === 0 && updates.username === undefined) {
     throw Object.assign(new Error('Nothing to update'), { status: 400 });

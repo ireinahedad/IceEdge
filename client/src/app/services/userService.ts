@@ -131,7 +131,7 @@ export const profileApiService = {
     get<unknown[]>(`/users/${userId}/slips`),
 
   updateProfile: (
-    updates: Partial<Pick<UserProfile, 'username' | 'displayName' | 'bio' | 'favoriteTeam' | 'isPublic' | 'showSlips' | 'notifyValueBets' | 'openaiApiKey' | 'avatar' | 'avatarUrl'>>
+    updates: Partial<Pick<UserProfile, 'username' | 'displayName' | 'bio' | 'favoriteTeam' | 'isPublic' | 'showSlips' | 'notifyValueBets' | 'openaiApiKey' | 'ruleWeights' | 'avatar' | 'avatarUrl'>>
   ): Promise<UserProfile> =>
     patch<UserProfile>('/users/me', updates),
 

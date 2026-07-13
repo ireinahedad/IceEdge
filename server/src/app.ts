@@ -8,6 +8,7 @@ import userRoutes          from './routes/user.routes';
 import profileRoutes       from './routes/profile.routes';
 import nhlRoutes           from './routes/nhl.routes';
 import oddsRoutes          from './routes/odds.routes';
+import injuriesRoutes      from './routes/injuries.routes';
 import mlRoutes            from './routes/ml.routes';
 import tennisRoutes        from './routes/tennis.routes';
 import chatRoutes          from './routes/chat.routes';
@@ -80,6 +81,7 @@ app.use('/api/slips',         writeLimiter, slipRoutes);
 
 // Odds
 app.use('/api/odds',          oddsRoutes);
+app.use('/api/injuries',      injuriesRoutes);
 
 // ML / prediction
 app.use('/api/predict',       mlRoutes);

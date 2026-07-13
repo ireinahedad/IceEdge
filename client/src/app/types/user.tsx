@@ -50,6 +50,7 @@ export interface UserProfile {
   tier: "rookie" | "analyst" | "sharp" | "legend";
   performanceScore: number;
   openaiApiKey?: string | null;
+  ruleWeights?: Record<string, number> | null;
   badges: UserBadge[];
 }
 
