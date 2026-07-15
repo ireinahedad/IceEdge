@@ -731,13 +731,40 @@ async function buildLLMDataContext(mlProps: MLProps | undefined, fr: boolean): P
   }
 }
 
+/* ─── Cache des réponses LLM (localStorage) ──────────────────────────────────
+   Une réponse générée est gardée 24 h par pari : rouvrir la même prédiction ne
+   re-demande pas la même question au LLM. */
+const LLM_CACHE_KEY = "iceedge.llmCache";
+const LLM_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 h
+
+function llmCacheId(label: string, mlProps: MLProps | undefined, lang: string): string {
+  return [mlProps?.subjectId ?? "", mlProps?.opponentId ?? "", mlProps?.propType ?? "", mlProps?.line ?? "", label, lang].join("|");
+}
+function loadLlmCache(id: string): string {
+  try {
+    const all = JSON.parse(localStorage.getItem(LLM_CACHE_KEY) || "{}");
+    const e = all[id];
+    return e && Date.now() - e.ts < LLM_CACHE_TTL ? e.text : "";
+  } catch { return ""; }
+}
+function saveLlmCache(id: string, text: string): void {
+  try {
+    const all = JSON.parse(localStorage.getItem(LLM_CACHE_KEY) || "{}");
+    for (const k of Object.keys(all)) if (Date.now() - (all[k]?.ts ?? 0) >= LLM_CACHE_TTL) delete all[k];
+    all[id] = { text, ts: Date.now() };
+    localStorage.setItem(LLM_CACHE_KEY, JSON.stringify(all));
+  } catch { /* stockage indisponible */ }
+}
+
 /* ─── Prediction bottom sheet ───────────────── */
 function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, factors, factorGroup, onClose }: {
   label: string; rulePct: number; serverPct?: number; ruleNote: string; accent: string;
   mlProps?: MLProps; factors?: RuleFactor[]; factorGroup?: string; onClose: () => void;
 }) {
   const { t, lang } = useI18n();
-  const [llmText, setLlmText]     = useState("");
+  const llmId = llmCacheId(label, mlProps, lang);
+  const [llmText, setLlmText]     = useState(() => loadLlmCache(llmId)); // réponse en cache si déjà générée
+  const [llmOpen, setLlmOpen]     = useState(false); // repliée par défaut pour ne pas cacher les autres cartes
   const [llmLoading, setLlmLoading] = useState(false);
   const [copied, setCopied]       = useState(false);
   const pctColor = rulePct >= 65 ? "#4ade80" : rulePct >= 50 ? accent : rulePct >= 38 ? "#facc15" : "#f87171";
@@ -845,26 +872,36 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
           </div>
         )}
 
-        {/* ── Ask LLM ── */}
+        {/* ── Ask LLM — section repliable, réponse mise en cache 24 h ── */}
         {llmText ? (
-          <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl p-4">
-            <div className="flex items-center gap-2 mb-2">
+          <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3">
               <span className="text-sm">✨</span>
               <span className="text-purple-300 text-xs font-semibold flex-1">{t("pred.llmAnalysis")}</span>
+              {llmOpen && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(llmText);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 1500);
+                    } catch { /* clipboard unavailable */ }
+                  }}
+                  className="text-[10px] font-semibold px-2 py-1 rounded-md bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 transition-colors"
+                >
+                  {copied ? (lang === "fr" ? "Copié ✓" : "Copied ✓") : (lang === "fr" ? "Copier" : "Copy")}
+                </button>
+              )}
               <button
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(llmText);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1500);
-                  } catch { /* clipboard unavailable */ }
-                }}
-                className="text-[10px] font-semibold px-2 py-1 rounded-md bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 transition-colors"
+                onClick={() => setLlmOpen((v) => !v)}
+                className="text-[10px] text-purple-300 font-semibold px-2.5 py-1 rounded-lg border border-purple-400/30 hover:bg-purple-500/15"
               >
-                {copied ? (lang === "fr" ? "Copié ✓" : "Copied ✓") : (lang === "fr" ? "Copier" : "Copy")}
+                {llmOpen ? "▲" : (lang === "fr" ? "Voir" : "View") + " ▼"}
               </button>
             </div>
-            <p className="text-[#bfc8cc] text-xs leading-relaxed whitespace-pre-line">{llmText}</p>
+            {llmOpen && (
+              <p className="text-[#bfc8cc] text-xs leading-relaxed whitespace-pre-line px-4 pb-4">{llmText}</p>
+            )}
           </div>
         ) : (
           <button
@@ -946,6 +983,8 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
 
                 const text = await askLLM(userPrompt, { systemPrompt });
                 setLlmText(text);
+                setLlmOpen(true);            // ouvre la réponse fraîchement générée
+                saveLlmCache(llmId, text);   // persistée 24 h — pas de 2e question identique
               } catch (err: any) {
                 const type = (err as any).type;
                 if (type === "no_api_key") {
@@ -953,6 +992,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
                 } else {
                   setLlmText("❌ " + (err.message ?? "LLM error"));
                 }
+                setLlmOpen(true); // les erreurs ne sont pas mises en cache
               } finally {
                 setLlmLoading(false);
               }

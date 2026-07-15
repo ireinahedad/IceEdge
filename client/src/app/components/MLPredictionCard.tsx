@@ -159,15 +159,17 @@ function MLGaugeLarge({ pct, color }: { pct: number; color: string }) {
 
 // ── Simple card (PredictionSheet) ────────────────────────────────────────────
 
-function MLSimpleCard({ result, ruleBasedPct }: { result: MLPredictionResult; ruleBasedPct?: number }) {
-  const { t } = useI18n();
+function MLSimpleCard({ result }: { result: MLPredictionResult; ruleBasedPct?: number }) {
+  const { t, lang } = useI18n();
   const { probability, confidence, explanation } = result;
+  const [open, setOpen] = useState(false);
   const [barWidth, setBarWidth] = useState(0);
 
   useEffect(() => {
-    const t = setTimeout(() => setBarWidth(probability), 120);
-    return () => clearTimeout(t);
-  }, [probability]);
+    if (!open) { setBarWidth(0); return; }
+    const timer = setTimeout(() => setBarWidth(probability), 120);
+    return () => clearTimeout(timer);
+  }, [probability, open]);
 
   const probColor =
     probability >= 65 ? "#4ade80" :
@@ -178,43 +180,40 @@ function MLSimpleCard({ result, ruleBasedPct }: { result: MLPredictionResult; ru
     confidence >= 75 ? "#4ade80" :
     confidence >= 55 ? "#a78bfa" : "#facc15";
 
-  const verdict = verdictLabel(probability, t);
-  const delta   = ruleBasedPct !== undefined ? probability - ruleBasedPct : null;
-
   return (
     <div className="bg-[#0d0a1a] border border-[#a78bfa]/25 rounded-2xl overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-[#a78bfa]/10">
+      {/* Header — fermé : seulement le score ML */}
+      <div className="flex items-center gap-2.5 px-4 py-3">
         <div className="w-7 h-7 rounded-lg bg-[#a78bfa]/15 border border-[#a78bfa]/30 flex items-center justify-center text-sm flex-shrink-0">🤖</div>
         <span className="text-white text-sm font-bold flex-1">ML</span>
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full"
-          style={{ background: confColor + "18", border: `1px solid ${confColor}40` }}>
-          <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: confColor }} />
-          <span className="text-[10px] font-semibold" style={{ color: confColor }}>{t("ml.conf", { n: confidence })}</span>
-        </div>
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="text-[10px] text-[#a78bfa] font-semibold px-2.5 py-1 rounded-lg border border-[#a78bfa]/30 hover:bg-[#a78bfa]/10 flex-shrink-0"
+        >
+          {lang === "fr" ? "Détails" : "Details"} {open ? "▲" : "▼"}
+        </button>
+        <span className="text-xl font-black flex-shrink-0" style={{ color: probColor }}>{probability}%</span>
       </div>
-      {/* Body */}
-      <div className="px-4 py-3">
-        <div className="flex items-center gap-2 mb-2.5">
-          <span className="text-3xl font-black leading-none" style={{ color: probColor }}>{probability}</span>
-          <span className="text-base font-bold" style={{ color: probColor + "bb" }}>%</span>
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full ml-1"
-            style={{ backgroundColor: verdict.bg, color: verdict.color }}>
-            {verdict.text}
-          </span>
-          {delta !== null && Math.abs(delta) >= 3 && (
-            <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0"
-              style={{ backgroundColor: (delta > 0 ? "#a78bfa" : "#f87171") + "22", color: delta > 0 ? "#a78bfa" : "#f87171" }}>
-              {t("ml.vsRules", { d: `${delta > 0 ? "+" : ""}${delta}` })}
+
+      {/* Corps — ouvert : barre sur la même rangée que le score, confiance en dessous */}
+      {open && (
+        <div className="px-4 pb-3 border-t border-[#a78bfa]/10 pt-3">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl font-black leading-none flex-shrink-0" style={{ color: probColor }}>
+              {probability}<span className="text-base font-bold" style={{ color: probColor + "bb" }}>%</span>
             </span>
-          )}
+            <div className="flex-1 bg-[#0A0E0C] rounded-full h-2 overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-700 ease-out"
+                style={{ width: `${barWidth}%`, backgroundColor: probColor, boxShadow: `0 0 6px ${probColor}88` }} />
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 mt-2">
+            <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: confColor }} />
+            <span className="text-[10px] font-semibold" style={{ color: confColor }}>{t("ml.conf", { n: confidence })}</span>
+          </div>
+          <p className="text-[#9a8ab8] text-[11px] leading-relaxed mt-2">{explanation}</p>
         </div>
-        <div className="w-full bg-[#0A0E0C] rounded-full h-2 mb-2.5 overflow-hidden">
-          <div className="h-full rounded-full transition-all duration-700 ease-out"
-            style={{ width: `${barWidth}%`, backgroundColor: probColor, boxShadow: `0 0 6px ${probColor}88` }} />
-        </div>
-        <p className="text-[#9a8ab8] text-[11px] leading-relaxed">{explanation}</p>
-      </div>
+      )}
     </div>
   );
 }
