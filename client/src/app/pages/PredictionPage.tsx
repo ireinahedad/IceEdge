@@ -446,14 +446,28 @@ function TeamPrediction({ teamId }: { teamId: string }) {
   // victoire/défaite locaux → affiche le pie chart des règles.
   const teamGroupsF: MktGroup[] = (() => {
     if (!apiGroups) return teamGroups;
-    const fMap: Record<string, { factors?: RuleFactor[]; factorGroup?: string }> = {};
+    // Table de correspondance ids locaux (vue équipe) → ids serveur.
+    const TEAM_ID_MAP: Record<string, string> = {
+      "t-win": "ml-home",   "t-lose": "ml-away",
+      "t-ml-ot": "ot-yes",  "t-dc": "dc-home",
+      "t-pl-fav": "pl-home","t-pl-dog": "pl-away",
+      "t-over": ou >= 6 ? "o65" : "o55", "t-under": ou >= 6 ? "u65" : "u55",
+      "t-team-over": "tg-o25", "t-team-under": "tg-u25",
+      "t-cs": "cs-for",     "t-btts": "btts-yes",
+      "t-p1": "p1-home",    "t-p2": "p2-home",  "t-p3": "p3-home",
+      "t-pp-goal": "ppgoal","t-pk": "pk-perfect",
+      "t-w1": "wm-1",       "t-w2": "wm-2",     "t-w3": "wm-3p",
+    };
+    const byServerId: Record<string, { factors?: RuleFactor[]; factorGroup?: string }> = {};
     for (const g of apiGroups) for (const o of g.options as any[]) {
-      if (o.id === "ml-home") fMap["t-win"] = { factors: o.factors, factorGroup: o.factorGroup };
-      if (o.id === "ml-away") fMap["t-lose"] = { factors: o.factors, factorGroup: o.factorGroup };
+      if (o.factors?.length) byServerId[o.id] = { factors: o.factors, factorGroup: o.factorGroup };
     }
     return teamGroups.map((g) => ({
       ...g,
-      options: g.options.map((o) => (fMap[o.id] ? { ...o, ...fMap[o.id] } : o)),
+      options: g.options.map((o) => {
+        const src = TEAM_ID_MAP[o.id] ? byServerId[TEAM_ID_MAP[o.id]] : undefined;
+        return src ? { ...o, ...src } : o;
+      }),
     }));
   })();
 
@@ -1510,6 +1524,66 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
     } as MktGroup] : []),
   ];
 
+  // ── Injecte les facteurs serveur dans les paris locaux (table de mapping ids) ──
+  const playerGroupsF: MktGroup[] = (() => {
+    if (!apiGroups) return playerGroups;
+    const byId: Record<string, { factors?: RuleFactor[]; factorGroup?: string }> = {};
+    for (const g of apiGroups) for (const o of g.options as any[]) {
+      if (o.factors?.length) byId[o.id] = { factors: o.factors, factorGroup: o.factorGroup };
+    }
+    // Choisit l'id serveur dont la ligne est la plus proche de celle du pari local.
+    const nearest = (ids: string[], lines: number[], line?: number): string => {
+      if (line == null) return ids[0];
+      let best = 0, bestD = Infinity;
+      lines.forEach((l, i) => { const d = Math.abs(l - line); if (d < bestD) { bestD = d; best = i; } });
+      return ids[best];
+    };
+    // [id serveur, inverser (paris "under")]
+    const resolve = (o: BetOpt): [string, boolean] | null => {
+      const line = o.mlProps?.line;
+      switch (o.id) {
+        case "p-anytime": case "p-over05": return ["g-anytime", false];
+        case "p-first":                    return ["g-first", false];
+        case "p-over15":                   return ["g-2plus", false];
+        case "p-assist": case "p-assist-over": return ["a-1plus", false];
+        case "p-point":                    return ["pts-1plus", false];
+        case "p-multi-point":              return ["pts-2plus", false];
+        case "p-shots-over":  case "p-shots-over2":
+          return [nearest(["sog-o25","sog-o35","sog-o45"], [2.5,3.5,4.5], line), false];
+        case "p-shots-under": case "p-shots-under2":
+          return [nearest(["sog-o25","sog-o35","sog-o45"], [2.5,3.5,4.5], line), true];
+        case "p-hits-over":  return [nearest(["hits-o15","hits-o25","hits-o35"], [1.5,2.5,3.5], line), false];
+        case "p-hits-under": return [nearest(["hits-o15","hits-o25","hits-o35"], [1.5,2.5,3.5], line), true];
+        case "p-blocks-over":  return [nearest(["blk-o05","blk-o15"], [0.5,1.5], line), false];
+        case "p-blocks-under": return [nearest(["blk-o05","blk-o15"], [0.5,1.5], line), true];
+        case "p-pp-point": return ["pp-point", false];
+        case "p-pp-goal":  return ["pp-goal", false];
+        case "p-pim-over":  return ["pim-o05", false];
+        case "p-pim-under": return ["pim-o05", true];
+        // Gardien
+        case "g-saves-over":   case "g-saves-over2":
+          return [nearest(["sv-o245","sv-o275","sv-o295"], [24.5,27.5,29.5], line), false];
+        case "g-saves-under":  case "g-saves-under2":
+          return [nearest(["sv-o245","sv-o275","sv-o295"], [24.5,27.5,29.5], line), true];
+        case "g-win":     return ["gr-win", false];
+        case "g-shutout": return ["gr-shutout", false];
+        default: return null;
+      }
+    };
+    return playerGroups.map((g) => ({
+      ...g,
+      options: g.options.map((o) => {
+        const r = resolve(o);
+        const src = r ? byId[r[0]] : undefined;
+        if (!src?.factors) return o;
+        const factors = r![1]
+          ? src.factors.map(f => ({ ...f, value: Math.max(0.05, Math.min(0.95, 1 - f.value)) }))
+          : src.factors;
+        return { ...o, factors, factorGroup: src.factorGroup };
+      }),
+    }));
+  })();
+
   return (
     <div className="flex flex-col gap-3">
       {/* Player header */}
@@ -1541,7 +1615,7 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
       {/* Market groups — local groups always used (they carry mlProps) */}
       <PredictionsRevealBar revealAll={revealAll} onToggle={() => setRevealAll(v => !v)} />
       <RevealAllCtx.Provider value={revealAll}>
-        {playerGroups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
+        {playerGroupsF.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
       </RevealAllCtx.Provider>
 
     </div>

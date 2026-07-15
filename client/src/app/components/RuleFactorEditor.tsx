@@ -53,8 +53,46 @@ export function RuleFactorEditor({
   function setW(id: string, v: number) {
     setWeights((prev) => ({ ...prev, [id]: Math.max(0, Math.min(100, Number.isFinite(v) ? v : 0)) }));
   }
+  /**
+   * Coche/décoche un facteur.
+   * Décocher : son poids est redistribué au prorata entre les facteurs restants.
+   * Recocher : il reprend son poids par défaut, repris au prorata sur les autres
+   * (le total reste inchangé).
+   */
   function toggleFactor(f: SimpleFactor) {
-    setWeights((prev) => ({ ...prev, [f.id]: (prev[f.id] ?? f.weight) > 0 ? 0 : f.weight }));
+    setWeights((prev) => {
+      const get = (o: SimpleFactor) => prev[o.id] ?? o.weight;
+      const cur = get(f);
+      const next: Record<string, number> = { ...prev };
+      const others = factors.filter((o) => o.id !== f.id && get(o) > 0);
+      const sum = others.reduce((s, o) => s + get(o), 0);
+
+      if (cur > 0) {
+        // Exclure → redistribue `cur` proportionnellement aux poids des autres.
+        if (sum > 0) {
+          let rest = cur;
+          others.forEach((o, i) => {
+            const share = i === others.length - 1 ? rest : Math.round(cur * (get(o) / sum));
+            next[o.id] = Math.min(100, get(o) + share);
+            rest -= share;
+          });
+        }
+        next[f.id] = 0;
+      } else {
+        // Réinclure → reprend son poids par défaut au prorata sur les autres.
+        const take = Math.min(f.weight, sum);
+        if (sum > 0) {
+          let rest = take;
+          others.forEach((o, i) => {
+            const share = i === others.length - 1 ? rest : Math.round(take * (get(o) / sum));
+            next[o.id] = Math.max(0, get(o) - share);
+            rest -= share;
+          });
+        }
+        next[f.id] = take > 0 ? take : f.weight;
+      }
+      return next;
+    });
   }
   function handleSave() {
     if (overLimit) { toast.error(`La somme des poids (${Math.round(total)}) dépasse 100.`); return; }

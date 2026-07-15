@@ -108,6 +108,20 @@ function marginFactors(pModel: number, target: 'by1' | 'by2' | 'by3', c: GameFac
   ];
 }
 
+/** Nul de période — P(égalité dans la période). */
+function periodDrawFactors(pModel: number, c: GameFactorCtx): Factor[] {
+  const balance = clamp(1 - 2 * Math.abs(c.mlHome - 0.5), 0, 1);
+  const lambdaP = c.lambdaT / 3; // buts attendus dans la période
+  // Moins de buts attendus → plus de chances d'égalité (0-0, 1-1…).
+  const lowScoring = clamp(0.26 + 0.20 * lean(2.0 - lambdaP, 0, 0.35), 0.12, 0.55);
+  const balanceV   = clamp(0.22 + 0.22 * balance, 0.10, 0.55);
+  return [
+    { id: 'drawModel',  label: 'Modèle Skellam (nul)',   weight: 50, value: clamp(pModel, 0.02, 0.98) },
+    { id: 'lowScoring', label: 'Faible rythme de buts',  weight: 30, value: lowScoring },
+    { id: 'balance',    label: 'Équilibre des forces',   weight: 20, value: balanceV },
+  ];
+}
+
 /** Prolongation — P(va en OT). */
 function otFactors(c: GameFactorCtx): Factor[] {
   const balance = 1 - 2 * Math.abs(c.mlHome - 0.5);          // 0..1
@@ -116,6 +130,60 @@ function otFactors(c: GameFactorCtx): Factor[] {
   return [
     { id: 'balance',  label: 'Équilibre des forces', weight: 65, value: balanceV },
     { id: 'lowTotal', label: 'Faible total attendu', weight: 35, value: lowTotalV },
+  ];
+}
+
+// ── Extras équipe (vue équipe uniquement) ──────────────────────────────────────
+// Ces marchés n'existent que dans la vue équipe : buts de l'équipe O/U 2.5,
+// blanchissage, but en avantage numérique, PK parfait.
+
+const PP_OPPS = 3.1; // occasions d'avantage numérique / match (moyenne NHL)
+
+/** Buts de l'équipe (domicile/sujet) > 2.5. */
+function teamTotalFactors(c: GameFactorCtx): Factor[] {
+  return [
+    { id: 'teamOffense', label: 'Attaque de l’équipe',   weight: 40, value: poissonOver(c.gfH, 2.5) },
+    { id: 'oppDefense',  label: 'Défense adverse',       weight: 30, value: poissonOver(c.gaA, 2.5) },
+    { id: 'shotVolume',  label: 'Volume de tirs',        weight: 15, value: poissonOver(c.hSF * SHOOT_PCT, 2.5) },
+    { id: 'ppStrength',  label: 'Avantage numérique',    weight: 15, value: clamp(lean(c.hPP, 20, 4)) },
+  ];
+}
+
+/** Blanchissage (l'équipe ne concède aucun but). */
+function shutoutFactors(c: GameFactorCtx): Factor[] {
+  const base = clamp(Math.exp(-c.lambdaA), 0.02, 0.6);           // P(0 but adverse) selon le modèle
+  const oppWeak = clamp(Math.exp(-c.gfA), 0.02, 0.6);            // attaque adverse faible
+  const defense = clamp(Math.exp(-c.gaH), 0.02, 0.6);            // défense de l'équipe
+  const pk = clamp(0.04 + 0.14 * lean(c.hPK, 80, 4), 0.02, 0.5); // PK solide → moins de buts PP concédés
+  return [
+    { id: 'model',      label: 'Buts adverses attendus', weight: 40, value: base },
+    { id: 'oppAttack',  label: 'Attaque adverse',        weight: 25, value: oppWeak },
+    { id: 'teamDefense',label: 'Défense de l’équipe',    weight: 20, value: defense },
+    { id: 'pkStrength', label: 'Infériorité numérique',  weight: 15, value: pk },
+  ];
+}
+
+/** Marque au moins un but en avantage numérique. */
+function ppGoalFactors(c: GameFactorCtx): Factor[] {
+  const ppEff  = clamp(1 - Math.exp(-PP_OPPS * (c.hPP / 100)));        // efficacité PP × occasions
+  const oppPk  = clamp(1 - Math.exp(-PP_OPPS * ((100 - c.aPK) / 100)));// faiblesse du PK adverse
+  const offense = clamp(lean(c.gfH, 3.05, 0.5));
+  return [
+    { id: 'ppEfficiency', label: 'Efficacité du PP',   weight: 55, value: ppEff },
+    { id: 'oppPkWeak',    label: 'PK adverse',         weight: 30, value: oppPk },
+    { id: 'offense',      label: 'Attaque de l’équipe', weight: 15, value: offense },
+  ];
+}
+
+/** Tue toutes ses pénalités (PK parfait). */
+function pkPerfectFactors(c: GameFactorCtx): Factor[] {
+  const pkPerf  = clamp(Math.pow(c.hPK / 100, PP_OPPS), 0.05, 0.9);        // PK% ^ occasions
+  const oppWeak = clamp(Math.pow(1 - c.aPP / 100, PP_OPPS), 0.05, 0.9);    // PP adverse inefficace
+  const defense = clamp(lean(3.05 - c.gaH, 0, 0.5));                       // défense générale
+  return [
+    { id: 'pkStrength', label: 'Infériorité numérique', weight: 55, value: pkPerf },
+    { id: 'oppPpWeak',  label: 'PP adverse',            weight: 30, value: oppWeak },
+    { id: 'teamDefense',label: 'Défense de l’équipe',   weight: 15, value: defense },
   ];
 }
 
@@ -152,72 +220,243 @@ export function attachGameFactors(groups: any[], c: GameFactorCtx): void {
       // Période
       else if (/^p[123]-home$/.test(id)) set(o, 'period', periodFactors(o.rulePct / 100, c));
       else if (/^p[123]-away$/.test(id)) set(o, 'period', inv(periodFactors(1 - o.rulePct / 100, c)));
-      else if (/^p[123]-draw$/.test(id)) { /* nul : laissé au modèle */ }
+      else if (/^p[123]-draw$/.test(id)) set(o, 'period_draw', periodDrawFactors(o.rulePct / 100, c));
       // Marge
       else if (id === 'wm-1') set(o, 'margin', marginFactors(o.rulePct / 100, 'by1', c));
       else if (id === 'wm-2') set(o, 'margin', marginFactors(o.rulePct / 100, 'by2', c));
       else if (id === 'wm-3p') set(o, 'margin', marginFactors(o.rulePct / 100, 'by3', c));
+      // Extras équipe (vue équipe uniquement)
+      else if (id === 'tg-o25') set(o, 'team_totals', teamTotalFactors(c));
+      else if (id === 'tg-u25') set(o, 'team_totals', inv(teamTotalFactors(c)));
+      else if (id === 'cs-for') set(o, 'team_shutout', shutoutFactors(c));
+      else if (id === 'ppgoal') set(o, 'team_special', ppGoalFactors(c));
+      else if (id === 'pk-perfect') set(o, 'team_special', pkPerfectFactors(c));
     }
   }
 }
 
-// ── Props joueur / gardien (contexte limité : pas d'adversaire dans ces vues) ────
+// ── Props joueur (contexte limité : pas d'adversaire dans ces vues) ─────────────
 
-/** Props offensifs joueur : P(stat > line). rate = taux/match du joueur, spg = tirs/match. */
-function playerOffFactors(rate: number, line: number, spg: number): Factor[] {
+/** Contexte réel du joueur (taux par match, calculés dans nhlPredictions). */
+export interface PlayerFactorCtx {
+  pos: string;      // F | C | D
+  gpg: number;      // buts / match
+  apg: number;      // assists / match
+  ppg: number;      // points / match
+  spg: number;      // tirs / match
+  pppg: number;     // points en avantage numérique / match
+  shotPct: number;  // % de tirs convertis (ex. 13.5), 0 si inconnu
+  hitsPg: number;   // mises en échec / match (moyenne de position à défaut)
+  blocksPg: number; // tirs bloqués / match (moyenne de position à défaut)
+  pimPg: number;    // minutes de pénalité / match (moyenne de position à défaut)
+}
+
+const LEAGUE_SHOT_PCT = 10.2; // % de conversion moyen NHL
+const LEAGUE_SPG      = 2.2;  // tirs / match moyen (patineurs réguliers)
+
+/** Ligne du pari depuis son id (…-o25 → 2.5, …-o05 → 0.5). */
+function lineFromId(id: string): number | null {
+  const m = id.match(/-o(\d)(\d)$/);
+  return m ? Number(m[1]) + Number(m[2]) / 10 : null;
+}
+
+/** Buts : taux de marquage + volume de tirs + finition + production PP. */
+function goalFactors(line: number, c: PlayerFactorCtx): Factor[] {
+  const finishing = c.shotPct > 0 ? lean(c.shotPct, LEAGUE_SHOT_PCT, 3.5) : 0.5;
   return [
-    { id: 'playerRate',  label: 'Taux du joueur',  weight: 78, value: poissonOver(rate, line) },
-    { id: 'shotVolume',  label: 'Volume de tirs',  weight: 22, value: clamp(lean(spg, 2.6, 1.1)) },
+    { id: 'scoringRate', label: 'Taux de buts',        weight: 45, value: poissonOver(c.gpg, line) },
+    { id: 'shotVolume',  label: 'Volume de tirs',      weight: 25, value: clamp(lean(c.spg, 2.6, 1.0)) },
+    { id: 'finishing',   label: 'Finition (tir %)',    weight: 15, value: clamp(finishing) },
+    { id: 'ppUsage',     label: 'Production en PP',    weight: 15, value: clamp(lean(c.pppg, 0.35, 0.25)) },
   ];
 }
-/** Props physiques joueur : seule la moyenne de position est disponible. */
-function playerPhysFactors(posAvg: number, line: number): Factor[] {
+
+/** Premier buteur : part du menace-anytime + part des tirs d'équipe + PP. */
+function firstGoalFactors(c: PlayerFactorCtx): Factor[] {
+  const anytime = 1 - Math.exp(-c.gpg);
   return [
-    { id: 'positionAvg', label: 'Moyenne de position', weight: 100, value: poissonOver(posAvg, line) },
+    { id: 'anytimeShare', label: 'Menace de but (÷ buteurs)', weight: 55, value: clamp(anytime / 5.2, 0.01, 0.35) },
+    { id: 'shotShare',    label: 'Part des tirs d’équipe',    weight: 30, value: clamp(c.spg / 30, 0.01, 0.3) },
+    { id: 'ppUsage',      label: 'Déploiement en PP',         weight: 15, value: clamp(0.03 + 0.25 * lean(c.pppg, 0.35, 0.25) * 0.4, 0.01, 0.3) },
   ];
 }
 
-export function attachPlayerFactors(groups: any[]): void {
+/** Assists : taux + part de passes + environnement offensif + PP. */
+function assistFactors(line: number, c: PlayerFactorCtx): Factor[] {
+  const playShare = c.ppg > 0 ? c.apg / c.ppg : 0.5; // part des points qui sont des passes
+  return [
+    { id: 'assistRate', label: 'Taux d’assists',        weight: 50, value: poissonOver(c.apg, line) },
+    { id: 'playmaking', label: 'Profil de passeur',     weight: 20, value: clamp(lean(playShare, 0.55, 0.15)) },
+    { id: 'offenseEnv', label: 'Production offensive',  weight: 15, value: clamp(lean(c.ppg, 0.8, 0.4)) },
+    { id: 'ppUsage',    label: 'Production en PP',      weight: 15, value: clamp(lean(c.pppg, 0.35, 0.25)) },
+  ];
+}
+
+/** Points : taux + volume de tirs + PP + équilibre buts/passes. */
+function pointFactors(line: number, c: PlayerFactorCtx): Factor[] {
+  const balance = Math.max(c.gpg, c.apg) > 0 ? Math.min(c.gpg, c.apg) / Math.max(c.gpg, c.apg) : 0.5;
+  return [
+    { id: 'pointsRate', label: 'Taux de points',        weight: 55, value: poissonOver(c.ppg, line) },
+    { id: 'shotVolume', label: 'Volume de tirs',        weight: 20, value: clamp(lean(c.spg, 2.6, 1.0)) },
+    { id: 'ppUsage',    label: 'Production en PP',      weight: 15, value: clamp(lean(c.pppg, 0.35, 0.25)) },
+    { id: 'balance',    label: 'Équilibre buts/passes', weight: 10, value: clamp(lean(balance, 0.5, 0.25)) },
+  ];
+}
+
+/** Tirs au but : taux + rôle de tireur + menace offensive. */
+function shotFactors(line: number, c: PlayerFactorCtx): Factor[] {
+  return [
+    { id: 'shotRate',   label: 'Taux de tirs',      weight: 60, value: poissonOver(c.spg, line) },
+    { id: 'shooterRole',label: 'Rôle de tireur',    weight: 25, value: clamp(lean(c.spg, LEAGUE_SPG, 1.0)) },
+    { id: 'goalThreat', label: 'Menace de but',     weight: 15, value: clamp(lean(c.gpg, 0.30, 0.20)) },
+  ];
+}
+
+/** Mises en échec : taux (moyenne de position à défaut) + rôle physique. */
+function hitFactors(line: number, c: PlayerFactorCtx): Factor[] {
+  const physRole = c.pos === 'D' ? 0.58 : clamp(lean(c.hitsPg, 2.1, 0.8));
+  return [
+    { id: 'hitRate',      label: 'Taux de mises en échec', weight: 70, value: poissonOver(c.hitsPg, line) },
+    { id: 'physicalRole', label: 'Rôle physique',          weight: 30, value: clamp(physRole) },
+  ];
+}
+
+/** Tirs bloqués : taux + rôle défensif (les D bloquent bien plus). */
+function blockFactors(line: number, c: PlayerFactorCtx): Factor[] {
+  return [
+    { id: 'blockRate',     label: 'Taux de blocs',   weight: 70, value: poissonOver(c.blocksPg, line) },
+    { id: 'defensiveRole', label: 'Rôle défensif',   weight: 30, value: c.pos === 'D' ? 0.7 : 0.35 },
+  ];
+}
+
+/** Point / but en avantage numérique. */
+function ppPointFactors(c: PlayerFactorCtx): Factor[] {
+  return [
+    { id: 'ppRate',     label: 'Taux de points en PP', weight: 65, value: clamp(1 - Math.exp(-c.pppg)) },
+    { id: 'offenseEnv', label: 'Production offensive', weight: 35, value: clamp(lean(c.ppg, 0.8, 0.4)) },
+  ];
+}
+function ppGoalPlayerFactors(c: PlayerFactorCtx): Factor[] {
+  const finishing = c.shotPct > 0 ? lean(c.shotPct, LEAGUE_SHOT_PCT, 3.5) : 0.5;
+  return [
+    { id: 'ppRate',    label: 'Taux de buts en PP', weight: 65, value: clamp(1 - Math.exp(-c.pppg * 0.45)) },
+    { id: 'finishing', label: 'Finition (tir %)',   weight: 35, value: clamp(finishing) },
+  ];
+}
+
+/** Minutes de pénalité : taux + style de jeu physique. */
+function pimFactors(line: number, c: PlayerFactorCtx): Factor[] {
+  return [
+    { id: 'pimRate',     label: 'Taux de pénalités', weight: 70, value: poissonOver(c.pimPg, line) },
+    { id: 'physicality', label: 'Jeu physique',      weight: 30, value: clamp(lean(c.hitsPg, 2.1, 0.8)) },
+  ];
+}
+
+export function attachPlayerFactors(groups: any[], c: PlayerFactorCtx): void {
   const set = (o: any, group: string, factors: Factor[]) => {
     o.factors = factors.map(f => ({ ...f }));
     o.factorGroup = group;
-    // rulePct laissé tel quel (calculé par le modèle) — le client recompose à l'affichage.
+    o.rulePct = blendPct(factors);
   };
-  // Note : les valeurs de facteurs proviennent de rulePct existant faute de contexte
-  // adverse ; on expose au moins la décomposition disponible.
   for (const g of groups) {
     for (const o of g.options) {
-      const p0 = o.rulePct / 100;
-      if (['hits', 'blocks', 'pim'].includes(g.id)) {
-        set(o, 'player_phys', [{ id: 'positionAvg', label: 'Moyenne de position', weight: 100, value: clamp(p0) }]);
-      } else {
-        // offensif : taux du joueur dominant + volume (approx. depuis p0)
-        set(o, 'player_off', [
-          { id: 'playerRate', label: 'Taux du joueur', weight: 78, value: clamp(p0) },
-          { id: 'shotVolume', label: 'Volume de tirs', weight: 22, value: clamp(p0) },
-        ]);
+      const id: string = o.id;
+      const line = lineFromId(id);
+      if (g.id === 'goals') {
+        if (id === 'g-first') set(o, 'player_first_goal', firstGoalFactors(c));
+        else set(o, 'player_goals', goalFactors(id === 'g-2plus' ? 1.5 : 0.5, c));
       }
+      else if (g.id === 'assists') set(o, 'player_assists', assistFactors(id === 'a-2plus' ? 1.5 : id === 'a-3plus' ? 2.5 : 0.5, c));
+      else if (g.id === 'points')  set(o, 'player_points', pointFactors(id === 'pts-2plus' ? 1.5 : id === 'pts-3plus' ? 2.5 : 0.5, c));
+      else if (g.id === 'shots'  && line != null) set(o, 'player_shots',  shotFactors(line, c));
+      else if (g.id === 'hits'   && line != null) set(o, 'player_hits',   hitFactors(line, c));
+      else if (g.id === 'blocks' && line != null) set(o, 'player_blocks', blockFactors(line, c));
+      else if (id === 'pp-point') set(o, 'player_pp', ppPointFactors(c));
+      else if (id === 'pp-goal')  set(o, 'player_pp', ppGoalPlayerFactors(c));
+      else if (g.id === 'pim'    && line != null) set(o, 'player_pim',    pimFactors(line, c));
     }
   }
 }
 
-export function attachGoalieFactors(groups: any[]): void {
+// ── Gardien ─────────────────────────────────────────────────────────────────────
+
+/** Contexte réel du gardien (stats saison si dispo, sinon moyennes de ligue). */
+export interface GoalieFactorCtx {
+  savesPg: number;  // arrêts / match
+  gaPg: number;     // buts alloués / match (GAA)
+  savePct: number;  // ex. 0.905 — 0 si inconnu
+  winPct: number;   // % de victoires du gardien (0-1)
+  shutoutRate: number; // blanchissages / départs (0-1)
+}
+
+const LEAGUE_SAVE_PCT = 0.902;
+
+/** Arrêts O/U : charge de tirs + efficacité + tenue défensive de l'équipe. */
+function savesFactors(line: number, c: GoalieFactorCtx): Factor[] {
+  const shotsFaced = c.savesPg + c.gaPg; // tirs cadrés subis / match
+  const eff = c.savePct > 0 ? lean(c.savePct, LEAGUE_SAVE_PCT, 0.012) : 0.5;
+  return [
+    { id: 'workload',   label: 'Charge de tirs subie', weight: 60, value: poissonOver(shotsFaced * (c.savePct > 0 ? c.savePct : LEAGUE_SAVE_PCT), line) },
+    { id: 'efficiency', label: 'Efficacité (save %)',  weight: 25, value: clamp(eff) },
+    { id: 'gameScript', label: 'Style de match',       weight: 15, value: clamp(lean(shotsFaced, 30, 3.0)) },
+  ];
+}
+
+/** Buts alloués O/U (côté over). */
+function gaFactors(line: number, c: GoalieFactorCtx): Factor[] {
+  const eff = c.savePct > 0 ? lean(c.savePct, LEAGUE_SAVE_PCT, 0.012) : 0.5;
+  return [
+    { id: 'gaRate',     label: 'Buts alloués / match', weight: 55, value: poissonOver(c.gaPg, line) },
+    { id: 'efficiency', label: 'Efficacité (save %)',  weight: 30, value: clamp(1 - eff) },
+    { id: 'workload',   label: 'Charge de tirs subie', weight: 15, value: clamp(lean(c.savesPg + c.gaPg, 30, 3.0)) },
+  ];
+}
+
+/** Victoire du gardien. */
+function goalieWinFactors(c: GoalieFactorCtx): Factor[] {
+  const eff = c.savePct > 0 ? lean(c.savePct, LEAGUE_SAVE_PCT, 0.012) : 0.5;
+  return [
+    { id: 'teamStrength',  label: 'Force de l’équipe',   weight: 50, value: clamp(c.winPct) },
+    { id: 'goalieQuality', label: 'Qualité du gardien',  weight: 30, value: clamp(eff) },
+    { id: 'gaControl',     label: 'Contrôle des buts',   weight: 20, value: poissonUnderF(c.gaPg, 2.5) },
+  ];
+}
+
+/** Blanchissage. */
+function goalieShutoutFactors(c: GoalieFactorCtx): Factor[] {
+  const eff = c.savePct > 0 ? lean(c.savePct, LEAGUE_SAVE_PCT, 0.012) : 0.5;
+  const history = clamp(c.shutoutRate, 0.02, 0.4);
+  return [
+    { id: 'model',         label: 'Buts alloués attendus', weight: 45, value: clamp(Math.exp(-c.gaPg), 0.02, 0.6) },
+    { id: 'goalieQuality', label: 'Qualité du gardien',    weight: 30, value: clamp(0.04 + 0.18 * eff, 0.02, 0.5) },
+    { id: 'history',       label: 'Historique (SO/départ)', weight: 25, value: history },
+  ];
+}
+
+function poissonUnderF(lambda: number, line: number): number {
+  return clamp(1 - poissonOver(lambda, line - 1), 0.02, 0.98);
+}
+
+export function attachGoalieFactors(groups: any[], c: GoalieFactorCtx): void {
+  const set = (o: any, group: string, factors: Factor[]) => {
+    o.factors = factors.map(f => ({ ...f }));
+    o.factorGroup = group;
+    o.rulePct = blendPct(factors);
+  };
   for (const g of groups) {
     for (const o of g.options) {
-      const p0 = o.rulePct / 100;
-      const win = g.id === 'gresult';
-      o.factorGroup = 'goalie';
-      o.factors = win
-        ? [
-            { id: 'teamStrength', label: 'Force de l’équipe', weight: 50, value: clamp(p0) },
-            { id: 'teamDefense',  label: 'Défense de l’équipe', weight: 35, value: clamp(p0) },
-            { id: 'oppAttack',    label: 'Attaque adverse',    weight: 15, value: clamp(1 - p0) },
-          ]
-        : [
-            { id: 'oppAttack',   label: 'Attaque adverse',    weight: 50, value: clamp(p0) },
-            { id: 'teamDefense', label: 'Défense de l’équipe', weight: 35, value: clamp(p0) },
-            { id: 'fatigue',     label: 'Épuisement',         weight: 15, value: clamp(p0) },
-          ];
+      const id: string = o.id;
+      if (g.id === 'saves') {
+        const line = id === 'sv-o245' ? 24.5 : id === 'sv-o275' ? 27.5 : 29.5;
+        set(o, 'goalie_saves', savesFactors(line, c));
+      } else if (g.id === 'ga') {
+        if (id === 'ga-u25') set(o, 'goalie_ga', inv(gaFactors(2.5, c)));
+        else set(o, 'goalie_ga', gaFactors(id === 'ga-o15' ? 1.5 : 2.5, c));
+      } else if (id === 'gr-win') {
+        set(o, 'goalie_win', goalieWinFactors(c));
+      } else if (id === 'gr-shutout') {
+        set(o, 'goalie_shutout', goalieShutoutFactors(c));
+      }
     }
   }
 }

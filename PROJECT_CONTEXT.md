@@ -14,7 +14,21 @@ When continuing this project:
 - Keep code clean, modular, and production-ready.
 - At the end of each session, update PROJECT_CONTEXT.md.
 
-Last updated: 2026-07-11
+Last updated: 2026-07-15
+
+## Session 2026-07-15 — Pondération complète par type de pari
+
+1. **Facteurs sur mesure pour chaque famille de pari** (`server/src/services/factorModel.ts`) : plus aucun pari sans pondération. Nouvelles familles (factorGroup) avec facteurs dédiés :
+   - `period_draw` — nul de période : modèle Skellam 50, faible rythme de buts 30, équilibre 20
+   - `player_goals` / `player_first_goal` / `player_assists` / `player_points` / `player_shots` / `player_hits` / `player_blocks` / `player_pp` / `player_pim` — décompositions réelles (taux Poisson vs ligne, volume de tirs, finition tir%, production PP, rôle physique/défensif par position) via `PlayerFactorCtx` passé par `buildSkaterMarkets`
+   - `goalie_saves` / `goalie_ga` / `goalie_win` / `goalie_shutout` — via `GoalieFactorCtx` (stats réelles)
+   - `team_totals` / `team_shutout` / `team_special` — extras de la vue équipe
+2. **Stats gardien réelles** : `fetchPlayerById` (nhlApiClient) retourne désormais `savePct`, `goalsAgainstAvg`, `wins`, `shutouts`, `shotsAgainst` (endpoint landing) ; `buildGoalieMarkets` les utilise (fallback = défauts de position).
+3. **Extras équipe** : `computeGameMarkets` a un flag `teamExtras` (true seulement depuis `buildTeamMarkets`) → groupe `teamx` : `tg-o25`/`tg-u25` (buts équipe O/U 2.5), `cs-for` (blanchissage), `ppgoal` (but en PP), `pk-perfect` (tue toutes ses pénalités).
+4. **Mapping ids client → serveur** (`PredictionPage.tsx`) — résout l'item ouvert connu : vue équipe `TEAM_ID_MAP` (t-win→ml-home, t-p1→p1-home, t-w1→wm-1, t-cs→cs-for, etc.) ; vue joueur/gardien `resolve()` (p-anytime→g-anytime, g-win→gr-win…) avec choix de la ligne serveur la plus proche (`nearest`) et **inversion des valeurs (1−v) pour les paris under**. Tous les paris des vues équipe/joueur affichent maintenant la Pondération.
+5. **Redistribution au décochage** (`RuleFactorEditor.tsx`) : décocher un facteur redistribue son poids au prorata entre les facteurs restants ; le recocher reprend son poids par défaut au prorata (total inchangé, arrondis compensés sur le dernier).
+6. **Lacune de données restante** : hits/blocs/PIM par joueur côté serveur = moyennes de position (`POSITION_DEFAULTS`) car absents de l'endpoint landing. Les vraies valeurs existent dans `nhl_player_stats` (seed) — brancher `fetchPlayerById`/`buildSkaterMarkets` dessus serait l'étape suivante.
+7. ⚠️ Vérifier avec `npm run build` (server + client) sur la machine locale — le sandbox de build distant tronque les fichiers (quirk connu).
 
 ## Session 2026-07-11 (3) — Branding ArakIce, Pro, navigation équipe
 
@@ -403,6 +417,12 @@ npm run seed              # (optionnel) données de test
 ---
 
 # Recent Changes
+
+## 2026-07-15
+- Pondération sur mesure pour chaque type de pari (game/team/player/goalie) — voir Session 2026-07-15
+- Mapping ids client → serveur dans `PredictionPage.tsx` (vues équipe + joueur)
+- Stats gardien réelles (save%, GAA, SO, wins) dans `fetchPlayerById`
+- Redistribution proportionnelle des poids au décochage d'un facteur (`RuleFactorEditor`)
 
 ## 2026-07-11
 - Ajouté « Rester connecté » (refresh token 30 j) : migration `015_refresh_remember.sql`, colonne `remember`, `issueTokens/createRefreshToken` paramétrés, cookie `maxAge` aligné, case à cocher dans `LoginPage`

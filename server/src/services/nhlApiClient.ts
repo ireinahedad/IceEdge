@@ -339,6 +339,13 @@ export async function fetchPlayerById(playerId: string): Promise<any> {
     gamesPlayed: gp,
     lastFive:    [] as number[],
     winImpact:   Math.min(99, Math.round((pts / gp) * 100)),
+    // Stats gardien (présentes uniquement si position === 'G' dans seasonTotals)
+    savePct:          cur.savePctg        ?? null,
+    goalsAgainstAvg:  cur.goalsAgainstAvg ?? null,
+    wins:             cur.wins            ?? null,
+    shutouts:         cur.shutouts        ?? null,
+    shotsAgainst:     cur.shotsAgainst    ?? null,
+    goalsAgainst:     cur.goalsAgainst    ?? null,
   };
 }
 

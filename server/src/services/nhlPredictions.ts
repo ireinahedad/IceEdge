@@ -218,6 +218,7 @@ function computeGameMarkets(
   injuries: ManualFactor | null = null,    // facteur blessures manuel
   lineup: ManualFactor | null = null,      // facteur alignement manuel
   weights?: FactorWeights,                 // poids personnalisés (paramètres user)
+  teamExtras = false,                      // marchés propres à la vue équipe
 ): MarketGroup[] {
   const wH  = (home.winPct ?? 50) / 100;
   const wA  = (away.winPct ?? 50) / 100;
@@ -535,6 +536,32 @@ function computeGameMarkets(
     margin,
   ];
 
+  // ── 12. Extras équipe (vue équipe uniquement) ─────────────────────────────
+  // Buts de l'équipe O/U 2.5, blanchissage, but en PP, PK parfait — les valeurs
+  // sont recalculées par attachGameFactors (facteurs dédiés).
+  if (teamExtras) {
+    const PP_OPPS = 3.1;
+    const tOver   = poissonOver(lambdaH, 2.5);
+    const csFor   = Math.exp(-lambdaA);
+    const ppG     = 1 - Math.exp(-PP_OPPS * (hPP / 100));
+    const pkAll   = Math.pow(hPK / 100, PP_OPPS);
+    groups.push({
+      id: 'teamx', title: 'Team Specials', cols: 2,
+      options: [
+        { id: 'tg-o25', label: `${homeName} Over 2.5`, rulePct: pct(tOver),
+          ruleNote: `λ équipe=${fmt(lambdaH)} → Poisson P(>2.5)=${fmt(tOver*100,0)}%` },
+        { id: 'tg-u25', label: `${homeName} Under 2.5`, rulePct: pct(1 - tOver),
+          ruleNote: `P(<2.5) = ${fmt((1-tOver)*100,0)}%` },
+        { id: 'cs-for', label: 'Clean Sheet (Shutout)', rulePct: pct(csFor),
+          ruleNote: `P(0 but adverse) = e^(−${fmt(lambdaA)}) = ${fmt(csFor*100,0)}%` },
+        { id: 'ppgoal', label: 'Scores a PP Goal', rulePct: pct(ppG),
+          ruleNote: `PP ${fmt(hPP,1)}% × ~${PP_OPPS} occasions → ${fmt(ppG*100,0)}%` },
+        { id: 'pk-perfect', label: 'Kills All Penalties', rulePct: pct(pkAll),
+          ruleNote: `PK ${fmt(hPK,1)}% ^ ${PP_OPPS} occasions = ${fmt(pkAll*100,0)}%` },
+      ],
+    });
+  }
+
   // Décompose chaque marché en facteurs ajustables (met à jour rulePct + factors).
   attachGameFactors(groups, {
     wH, wA, gfH, gaH, gfA, gaA,
@@ -644,7 +671,10 @@ export async function buildTeamMarkets(teamAbbr: string): Promise<MarketGroup[]>
   return computeGameMarkets(
     team, avg, team.name, 'Avg Opponent',
     makeCtx(team, summary, rest),
-    {}, // adversaire moyen : neutre
+    {},                      // adversaire moyen : neutre
+    null, null, null,
+    undefined,
+    true,                    // extras équipe (buts 2.5, blanchissage, PP, PK)
   );
 }
 
@@ -869,15 +899,25 @@ function buildSkaterMarkets(p: any, gp: number, pos: string, def: Record<string,
   };
 
   const groups = [goals, assists, points, shots, hitsGroup, blocksGroup, ppGroup, pimGroup];
-  attachPlayerFactors(groups);
+  attachPlayerFactors(groups, {
+    pos, gpg, apg, ppg, spg, pppg,
+    shotPct:  p.shotPct ?? 0,
+    hitsPg:   hits,   // moyenne de position (donnée réelle absente du endpoint landing)
+    blocksPg: blks,
+    pimPg:    pim,
+  });
   return groups;
 }
 
 function buildGoalieMarkets(p: any, gp: number, def: Record<string, number>): MarketGroup[] {
-  const savesLambda = def.saves ?? 27;
-  const gaLambda    = def.goalsAllowed ?? 3.0;
-  // Estimate win probability from save% proxy (higher saves ≈ stronger goalie)
-  const winEstimate = 0.52; // goalies play ~50/50 adjusted for team
+  // Stats réelles du gardien (endpoint landing) si disponibles, sinon défauts de position.
+  const savePct     = p.savePct ?? 0;
+  const gaLambda    = p.goalsAgainstAvg ?? (p.goalsAgainst != null ? p.goalsAgainst / gp : null) ?? def.goalsAllowed ?? 3.0;
+  const savesLambda = p.shotsAgainst != null && savePct > 0
+    ? (p.shotsAgainst / gp) * savePct
+    : def.saves ?? 27;
+  const winEstimate = p.wins != null ? clamp(p.wins / gp, 0.15, 0.85) : 0.52;
+  const shutoutRate = p.shutouts != null ? clamp(p.shutouts / gp, 0, 0.4) : 0.08;
 
   const saves: MarketGroup = {
     id: 'saves', title: 'Saves', cols: 3,
@@ -946,6 +986,12 @@ function buildGoalieMarkets(p: any, gp: number, def: Record<string, number>): Ma
   };
 
   const groups = [saves, goalsAllowed, result];
-  attachGoalieFactors(groups);
+  attachGoalieFactors(groups, {
+    savesPg: savesLambda,
+    gaPg: gaLambda,
+    savePct,
+    winPct: winEstimate,
+    shutoutRate,
+  });
   return groups;
 }
