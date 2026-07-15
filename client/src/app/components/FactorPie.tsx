@@ -20,6 +20,7 @@ export function FactorPie({
   centerSub,
   hideLegend = false,
   vertical = false,
+  reverse = false,
 }: {
   slices: PieSlice[];
   size?: number;
@@ -28,6 +29,7 @@ export function FactorPie({
   centerSub?: string;
   hideLegend?: boolean;
   vertical?: boolean;
+  reverse?: boolean;
 }) {
   const active = slices.filter((s) => s.value > 0);
   const total = active.reduce((s, x) => s + x.value, 0) || 1;
@@ -37,7 +39,7 @@ export function FactorPie({
   let offset = 0;
 
   return (
-    <div className={vertical ? "flex flex-col items-center gap-3" : "flex items-center gap-4"}>
+    <div className={vertical ? "flex flex-col items-center gap-3" : reverse ? "flex flex-row-reverse items-center gap-4" : "flex items-center gap-4"}>
       <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
           <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>

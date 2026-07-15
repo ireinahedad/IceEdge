@@ -22,6 +22,7 @@ import { getManualFactors } from './injuryStore';
 import {
   blendHomeProb, formatBreakdown, homeIceFactor, fatigueFactor, ManualFactor, FactorWeights,
 } from './predictionFactors';
+import { attachGameFactors, attachPlayerFactors, attachGoalieFactors } from './factorModel';
 
 // ─── Shared interfaces ────────────────────────────────────────────────────────
 
@@ -30,8 +31,10 @@ export interface BetOption {
   label:     string;
   rulePct:   number;
   ruleNote:  string;
-  /** Décomposition des facteurs (moneyline uniquement) — sert au pie chart client. */
+  /** Décomposition des facteurs — sert au pie chart & à l'éditeur de pondération. */
   factors?:  Array<{ id: string; label: string; weight: number; value: number }>;
+  /** Famille de facteurs (match | totals | period | margin | ot | player_off | player_phys | goalie). */
+  factorGroup?: string;
 }
 
 export interface MarketGroup {
@@ -520,7 +523,7 @@ function computeGameMarkets(
     ],
   };
 
-  return [
+  const groups = [
     matchBetting,
     puckLine,
     totals,
@@ -531,6 +534,18 @@ function computeGameMarkets(
     overtime,
     margin,
   ];
+
+  // Décompose chaque marché en facteurs ajustables (met à jour rulePct + factors).
+  attachGameFactors(groups, {
+    wH, wA, gfH, gaH, gfA, gaA,
+    lambdaH, lambdaA, lambdaT,
+    hSF, aSF, hPP, aPP, hPK, aPK, hB2b, aB2b,
+    homeIce: fHomeIce, fatigue: fFatigue,
+    mlHome, ot,
+    matchFactors: blend.lines.map(l => ({ id: l.id, label: l.label, weight: Math.round(l.weight * 100), value: l.value })),
+  });
+
+  return groups;
 }
 
 // ─── Public: game predictions ─────────────────────────────────────────────────
@@ -853,7 +868,9 @@ function buildSkaterMarkets(p: any, gp: number, pos: string, def: Record<string,
     ],
   };
 
-  return [goals, assists, points, shots, hitsGroup, blocksGroup, ppGroup, pimGroup];
+  const groups = [goals, assists, points, shots, hitsGroup, blocksGroup, ppGroup, pimGroup];
+  attachPlayerFactors(groups);
+  return groups;
 }
 
 function buildGoalieMarkets(p: any, gp: number, def: Record<string, number>): MarketGroup[] {
@@ -928,5 +945,7 @@ function buildGoalieMarkets(p: any, gp: number, def: Record<string, number>): Ma
     ],
   };
 
-  return [saves, goalsAllowed, result];
+  const groups = [saves, goalsAllowed, result];
+  attachGoalieFactors(groups);
+  return groups;
 }

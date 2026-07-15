@@ -16,7 +16,6 @@ import {
   CalibrationCard,
 } from "./ProfileComponents";
 import { FrozenName } from "../../components/brand/FrozenName";
-import { RulesWeightsCard } from "../../components/RulesWeightsCard";
 import { InjuriesAdminCard } from "../../components/InjuriesAdminCard";
 import { useI18n } from "../../i18n";
 import "./profile-settings.css";
@@ -581,8 +580,8 @@ function SettingsTab({
         )}
       </div>
 
-      {/* Pondération des règles + saisie admin des blessures/alignement */}
-      <RulesWeightsCard serverWeights={profile.ruleWeights ?? null} />
+      {/* Saisie admin des blessures/alignement.
+          (La pondération des règles est désormais dans chaque carte de règle, par type de pari.) */}
       <InjuriesAdminCard />
 
       {/* Save */}

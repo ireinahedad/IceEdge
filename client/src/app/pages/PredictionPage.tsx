@@ -18,8 +18,7 @@ import { tennisApiService } from "../services/tennisApiService";
 import type { TennisRankingEntry } from "../services/tennisApiService";
 import { askLLM } from "../services/llmService";
 import { MLSection } from "../components/MLPredictionCard";
-import { FactorPie } from "../components/FactorPie";
-import { FACTOR_COLORS } from "../services/ruleWeightsService";
+import { RuleFactorEditor } from "../components/RuleFactorEditor";
 
 type Subject = { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 
@@ -447,14 +446,14 @@ function TeamPrediction({ teamId }: { teamId: string }) {
   // victoire/défaite locaux → affiche le pie chart des règles.
   const teamGroupsF: MktGroup[] = (() => {
     if (!apiGroups) return teamGroups;
-    const fMap: Record<string, RuleFactor[] | undefined> = {};
+    const fMap: Record<string, { factors?: RuleFactor[]; factorGroup?: string }> = {};
     for (const g of apiGroups) for (const o of g.options as any[]) {
-      if (o.id === "ml-home") fMap["t-win"] = o.factors;
-      if (o.id === "ml-away") fMap["t-lose"] = o.factors;
+      if (o.id === "ml-home") fMap["t-win"] = { factors: o.factors, factorGroup: o.factorGroup };
+      if (o.id === "ml-away") fMap["t-lose"] = { factors: o.factors, factorGroup: o.factorGroup };
     }
     return teamGroups.map((g) => ({
       ...g,
-      options: g.options.map((o) => (fMap[o.id] ? { ...o, factors: fMap[o.id] } : o)),
+      options: g.options.map((o) => (fMap[o.id] ? { ...o, ...fMap[o.id] } : o)),
     }));
   })();
 
@@ -509,7 +508,7 @@ interface LiveGameView {
 /* ─── Bet types & market groups ─────────────── */
 interface MLProps { type: "game" | "player" | "team"; subjectId: string; opponentId?: string; propType?: string; line?: number; isHome?: boolean; selection?: string; }
 interface RuleFactor { id: string; label: string; weight: number; value: number; }
-interface BetOpt { id: string; label: string; rulePct: number; ruleNote: string; mlProps?: MLProps; factors?: RuleFactor[]; }
+interface BetOpt { id: string; label: string; rulePct: number; ruleNote: string; mlProps?: MLProps; factors?: RuleFactor[]; factorGroup?: string; }
 interface MktGroup { id: string; title: string; cols: 2 | 3; options: BetOpt[]; }
 
 function buildGameGroups(home: string, away: string, hp: number, ou: number): MktGroup[] {
@@ -719,12 +718,11 @@ async function buildLLMDataContext(mlProps: MLProps | undefined, fr: boolean): P
 }
 
 /* ─── Prediction bottom sheet ───────────────── */
-function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, factors, onClose }: {
+function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, factors, factorGroup, onClose }: {
   label: string; rulePct: number; serverPct?: number; ruleNote: string; accent: string;
-  mlProps?: MLProps; factors?: RuleFactor[]; onClose: () => void;
+  mlProps?: MLProps; factors?: RuleFactor[]; factorGroup?: string; onClose: () => void;
 }) {
   const { t, lang } = useI18n();
-  const navigate = useNavigate();
   const [llmText, setLlmText]     = useState("");
   const [llmLoading, setLlmLoading] = useState(false);
   const [copied, setCopied]       = useState(false);
@@ -813,51 +811,25 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
           />
         ) : null}
 
-        {/* ── 📐 Règles — avec explication exacte ── */}
-        <div className="bg-[#0d1519] border border-white/[0.07] rounded-2xl overflow-hidden">
-          <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/[0.05]">
-            <div className="w-7 h-7 rounded-lg bg-white/05 border border-white/10 flex items-center justify-center text-sm flex-shrink-0">📐</div>
-            <span className="text-white text-sm font-bold flex-1">{t("pred.rules")}</span>
-            {factors && factors.length > 0 && (
-              <button
-                onClick={() => { onClose(); navigate("/profile?tab=settings&focus=weights"); }}
-                className="text-[10px] text-[#90C9F0] font-semibold px-2 py-1 rounded-lg border border-[#90C9F0]/30 hover:bg-[#90C9F0]/10 flex-shrink-0"
-                title="Régler la pondération des facteurs"
-              >
-                ⚙ Pondération
-              </button>
-            )}
-            <span className="text-xl font-black flex-shrink-0" style={{ color: pctColor }}>{rulePct}%</span>
-          </div>
-          <div className="px-4 py-3">
-            <div className="w-full bg-[#0A0E0C] rounded-full h-2 mb-2.5 overflow-hidden">
-              <div className="h-2 rounded-full transition-all duration-700"
-                style={{ width: `${rulePct}%`, backgroundColor: pctColor }} />
+        {/* ── 📐 Règles — éditeur de facteurs par pari, ou note simple ── */}
+        {factors && factors.length > 0 && factorGroup ? (
+          <RuleFactorEditor factors={factors} factorGroup={factorGroup} label={t("pred.rules")} />
+        ) : (
+          <div className="bg-[#0d1519] border border-white/[0.07] rounded-2xl overflow-hidden">
+            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/[0.05]">
+              <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-sm flex-shrink-0">📐</div>
+              <span className="text-white text-sm font-bold flex-1">{t("pred.rules")}</span>
+              <span className="text-xl font-black flex-shrink-0" style={{ color: pctColor }}>{rulePct}%</span>
             </div>
-            <p className="text-[#8a9ea6] text-[11px] leading-relaxed">{ruleNote}</p>
-            {factors && factors.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-white/[0.05]">
-                <p className="text-[#8a9ea6] text-[10px] uppercase tracking-wider mb-2">Décomposition du calcul</p>
-                <FactorPie
-                  vertical
-                  size={116}
-                  thickness={18}
-                  slices={factors.map((f) => ({
-                    label: f.label,
-                    value: f.weight * f.value,
-                    color: FACTOR_COLORS[f.id as keyof typeof FACTOR_COLORS] ?? "#8a9ea6",
-                    sub: `${Math.round(f.value * 100)}%`,
-                  }))}
-                  centerLabel={`${rulePct}%`}
-                  centerSub="Règle"
-                />
-                <p className="text-white/30 text-[9px] mt-2 leading-snug">
-                  Part de chaque facteur dans le calcul (poids × valeur) ; « · % » = probabilité estimée par ce facteur.
-                </p>
+            <div className="px-4 py-3">
+              <div className="w-full bg-[#0A0E0C] rounded-full h-2 mb-2.5 overflow-hidden">
+                <div className="h-2 rounded-full transition-all duration-700"
+                  style={{ width: `${rulePct}%`, backgroundColor: pctColor }} />
               </div>
-            )}
+              <p className="text-[#8a9ea6] text-[11px] leading-relaxed">{ruleNote}</p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ── Ask LLM ── */}
         {llmText ? (
@@ -1061,7 +1033,7 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
       {sheet && (
         <PredictionSheet
           label={opt.label} rulePct={opt.rulePct} serverPct={serverPct ?? undefined} ruleNote={opt.ruleNote}
-          accent={accent} mlProps={opt.mlProps} factors={opt.factors} onClose={() => setSheet(false)}
+          accent={accent} mlProps={opt.mlProps} factors={opt.factors} factorGroup={opt.factorGroup} onClose={() => setSheet(false)}
         />
       )}
     </>

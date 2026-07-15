@@ -88,13 +88,76 @@ export function applyServerWeights(w: Record<string, number> | null | undefined)
   }
 }
 
-/** Query string ('?wQuality=..&..') si des poids personnalisés existent, sinon ''. */
+/** Query string — conservé pour compat ; les poids sont désormais appliqués côté client. */
 export function weightsQuery(): string {
-  if (!isCustom()) return '';
-  const w = getWeights();
-  const params = new URLSearchParams();
-  (Object.keys(QUERY_KEYS) as Array<keyof FactorWeights>).forEach(k => {
-    params.set(QUERY_KEYS[k], String(w[k]));
-  });
-  return `?${params.toString()}`;
+  return '';
+}
+
+// ── Poids par famille de pari (nouveau modèle) ──────────────────────────────────
+// Chaque famille (match, totals, period, margin, ot, player_off, player_phys,
+// goalie) a ses propres facteurs et poids, ajustables dans la carte de règle.
+
+export interface SimpleFactor { id: string; label: string; weight: number; value: number; }
+
+const COLOR_MAP: Record<string, string> = {
+  quality: '#9BF019', homeIce: '#90C9F0', fatigue: '#F0B429', odds: '#F06292',
+  injuries: '#B388FF', lineup: '#4DD0E1', offense: '#9BF019', defense: '#F06292',
+  shotPace: '#90C9F0', specialTeams: '#F0B429', model: '#B388FF', periodAD: '#4DD0E1',
+  forceGap: '#9BF019', expectedTotal: '#F0B429', balance: '#90C9F0', lowTotal: '#F06292',
+  playerRate: '#9BF019', shotVolume: '#90C9F0', oppDefense: '#F06292', availability: '#B388FF',
+  positionAvg: '#F0B429', teamStrength: '#9BF019', teamDefense: '#90C9F0', oppAttack: '#F06292',
+};
+const PALETTE = ['#9BF019', '#90C9F0', '#F0B429', '#F06292', '#B388FF', '#4DD0E1'];
+
+/** Couleur stable pour un facteur (par id), avec repli déterministe. */
+export function factorColor(id: string): string {
+  if (COLOR_MAP[id]) return COLOR_MAP[id];
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+
+type FamilyStore = Record<string, Record<string, number>>;
+const FAMILY_KEY = 'iceedge.factorWeights';
+
+export function loadFamilyStore(): FamilyStore {
+  try { return JSON.parse(localStorage.getItem(FAMILY_KEY) || '{}'); } catch { return {}; }
+}
+
+/** Poids courants d'une famille (overrides sauvegardés, sinon poids par défaut des facteurs). */
+export function getFamilyWeights(family: string, factors: SimpleFactor[]): Record<string, number> {
+  const stored = loadFamilyStore()[family] || {};
+  const out: Record<string, number> = {};
+  for (const f of factors) out[f.id] = stored[f.id] != null ? stored[f.id] : f.weight;
+  return out;
+}
+
+export function saveFamilyWeights(family: string, weights: Record<string, number>): FamilyStore {
+  const store = loadFamilyStore();
+  store[family] = weights;
+  localStorage.setItem(FAMILY_KEY, JSON.stringify(store));
+  return store;
+}
+
+export function resetFamilyWeights(family: string): FamilyStore {
+  const store = loadFamilyStore();
+  delete store[family];
+  localStorage.setItem(FAMILY_KEY, JSON.stringify(store));
+  return store;
+}
+
+/** Hydrate le store depuis les poids du compte (profil). */
+export function applyServerFamilyWeights(map: unknown): void {
+  if (map && typeof map === 'object') localStorage.setItem(FAMILY_KEY, JSON.stringify(map));
+}
+
+/** Score (0-100) = moyenne pondérée des facteurs avec les poids fournis. */
+export function blendFactors(factors: SimpleFactor[], weights: Record<string, number>): number {
+  let wsum = 0, acc = 0;
+  for (const f of factors) {
+    const w = weights[f.id] ?? f.weight;
+    wsum += w; acc += w * f.value;
+  }
+  wsum = wsum || 1;
+  return Math.round(Math.max(3, Math.min(97, (acc / wsum) * 100)));
 }
