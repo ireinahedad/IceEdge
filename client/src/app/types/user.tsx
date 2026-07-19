@@ -47,6 +47,8 @@ export interface UserProfile {
   showSlips?: boolean;
   /** Receive value-bet (+EV) notifications — Pro only */
   notifyValueBets?: boolean;
+  /** Minimum +EV edge (whole %) required before a value-bet alert is sent — Pro only */
+  valueBetMinEvPct?: number;
   tier: "rookie" | "analyst" | "sharp" | "legend";
   performanceScore: number;
   openaiApiKey?: string | null;

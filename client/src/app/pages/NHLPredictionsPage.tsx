@@ -87,9 +87,6 @@ function computeRulePrediction(
     case "winning_margin":
       return { pct: Math.round(hw * 0.4), note: t("nhl.note.winning_margin") };
 
-    case "double_chance":
-      return { pct: Math.round(hw * 1.3 + 5), note: t("nhl.note.double_chance") };
-
     case "alt_puck_line":
       return { pct: Math.round(hw * 0.38), note: t("nhl.note.alt_puck_line") };
 

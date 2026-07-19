@@ -12,6 +12,7 @@ When continuing this project:
 - Explain major architectural changes before implementing them.
 - If information is missing, ask instead of assuming.
 - Keep code clean, modular, and production-ready.
+- Verify that what you are implementing is secure
 - At the end of each session, update PROJECT_CONTEXT.md.
 
 Last updated: 2026-07-15

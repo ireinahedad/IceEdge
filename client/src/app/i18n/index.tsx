@@ -283,7 +283,6 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "nhl.note.game_to_ot":      { en: "Close games → OT", fr: "Matchs serrés → OT" },
   "nhl.note.btts":            { en: "GF/G home {h} · away {a}", fr: "GF/G domicile {h} · ext {a}" },
   "nhl.note.winning_margin":  { en: "Exact winning margin", fr: "Marge de victoire exacte" },
-  "nhl.note.double_chance":   { en: "Double chance — insures against a draw", fr: "Double chance — protège contre nul" },
   "nhl.note.alt_puck_line":   { en: "Alternate line ±2.5 goals", fr: "Ligne alternative ±2.5 buts" },
   "nhl.note.ot_winner":       { en: "Favorite in OT if game goes to overtime", fr: "Favori en OT si prolongation" },
   "nhl.note.p1_winner":       { en: "Win% in 1st period", fr: "Win% en 1ère période" },
@@ -574,12 +573,15 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "home.evSpot":      { en: "Value spot · model edge", fr: "Opportunité · edge du modèle" },
   "home.evEmpty":     { en: "No value bets right now — check back soon.", fr: "Aucun value bet pour l'instant — reviens bientôt." },
   "home.evLockDesc":  { en: "The detector flags bets where our model's probability beats the bookmaker's odds (+EV). Pro only.", fr: "Le détecteur repère les paris où la probabilité de notre modèle dépasse la cote (+EV). Réservé aux Pro." },
+  "home.evSettings":  { en: "Alert settings", fr: "Réglages des alertes" },
   "home.bestBetsLockDesc": { en: "The day's top picks, selected and rated by the model. Upgrade to Pro to see them.", fr: "Les meilleurs paris du jour, sélectionnés et notés par le modèle. Passe à Pro pour les voir." },
 
   // ── Profile: notifications (Pro) ──
   "profile.notifications":      { en: "Notifications",         fr: "Notifications" },
   "profile.notifyValueBets":    { en: "Value-bet alerts",      fr: "Alertes value bets" },
   "profile.notifyValueBetsHint":{ en: "Get notified when a new +EV opportunity appears.", fr: "Sois averti dès qu'un nouveau +EV apparaît." },
+  "profile.minEv":              { en: "Minimum edge",           fr: "Edge minimum" },
+  "profile.minEvHint":          { en: "Only alert me when the value bet's edge is at least this %.", fr: "Ne m'alerte que si l'edge du value bet atteint au moins ce %." },
   "profile.notifyDenied":       { en: "Notifications blocked — allow them in your browser.", fr: "Notifications bloquées — autorise-les dans ton navigateur." },
 
   // ── Legal / support ──

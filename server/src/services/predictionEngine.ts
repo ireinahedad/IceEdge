@@ -242,7 +242,12 @@ export async function predictPositionBasedProp(
 
 // ── Additional game / team markets ────────────────────────────────────────────
 
-/** Double chance (Win or OT/Draw): moneyline lifted, since OT covers extra outcomes. */
+/**
+ * Used for `ot_winner` (win probability if the game reaches OT): moneyline
+ * lifted a bit, since a team already alive in OT is closer to a coinflip.
+ * (Previously also backed the `double_chance` market, removed — draws aren't
+ * a real outcome in the NHL, so "home or draw" made no sense for hockey.)
+ */
 export async function predictDoubleChance(
   teamId: string,
   opponentId?: string,

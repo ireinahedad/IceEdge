@@ -117,7 +117,6 @@ export type BetMarketType =
   | "game_to_ot"
   | "both_teams_score"
   | "winning_margin"
-  | "double_chance"          // Home/Draw or Away/Draw (bet365)
   | "alt_puck_line"          // Alternate puck lines (-2.5 / +2.5)
   | "ot_winner"              // Winner if game goes to OT
   // ── NHL: Period markets ───────────────────────────────────────────────────
@@ -223,4 +222,17 @@ export interface BetLeg {
   subjectId: string;
   subjectName: string;
   subjectLogo: string;
-  selection: string; // Human readable: "Bost
+  selection: string; // Human readable: "Boston Bruins to win", "Over 5.5 goals"
+  selectionShort: string;
+  probability: number; // 0-100
+  oddsLabel?: string; // American odds display, e.g. "-150" / "+120"
+  line?: number; // For O/U markets (e.g. 3.5 shots)
+  gameInfo?: string; // Human readable context: "BOS vs NYR · 7:00 PM ET"
+  addedAt: string; // ISO timestamp
+  // Machine-readable fields — required for automatic settlement
+  // (see server/src/services/settlement.service.ts). Optional because not
+  // every market can be safely auto-settled (e.g. faceoff_wins_ou).
+  gameId?: string;
+  /** 'over' | 'under' | 'yes' | team abbreviation, depending on the market. */
+  selectionValue?: string;
+}

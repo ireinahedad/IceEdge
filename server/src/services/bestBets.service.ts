@@ -43,6 +43,8 @@ export interface BestBet {
   teamAbbr:       string | null;  // for building a team logo client-side
   label:          string;   // "BOS to win", "Over 5.5", "McDavid anytime goal"
   selection:      string;
+  /** Machine-readable selection ('over' | 'under' | 'yes' | team abbr) — required for automatic settlement. */
+  selectionValue: string;
   selectionShort: string;
   context:        string;   // "vs NYR · 7:00 PM ET"
   line:           number | null;
@@ -132,35 +134,35 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
     {
       id: `bb-${g.id}-ml-home`, subjectType: 'game', marketType: 'moneyline', marketLabel: 'Moneyline',
       subjectId: g.id, subjectName: matchup, subjectLogo: g.homeTeam?.emoji ?? '🏒', teamAbbr: home,
-      label: `${home} to win`, selection: `${home} to win`, selectionShort: `${home} ML`,
+      label: `${home} to win`, selection: `${home} to win`, selectionValue: homeLc, selectionShort: `${home} ML`,
       context: ctxHome, line: null, gameId: g.id, teamId: homeLc, playerId: null, rulePct: homeMl,
       ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'moneyline' },
     },
     {
       id: `bb-${g.id}-ml-away`, subjectType: 'game', marketType: 'moneyline', marketLabel: 'Moneyline',
       subjectId: g.id, subjectName: matchup, subjectLogo: g.awayTeam?.emoji ?? '🏒', teamAbbr: away,
-      label: `${away} to win`, selection: `${away} to win`, selectionShort: `${away} ML`,
+      label: `${away} to win`, selection: `${away} to win`, selectionValue: awayLc, selectionShort: `${away} ML`,
       context: ctxAway, line: null, gameId: g.id, teamId: awayLc, playerId: null, rulePct: awayMl,
       ml: { kind: 'game', homeId: awayLc, awayId: homeLc, marketType: 'moneyline' },
     },
     {
       id: `bb-${g.id}-over`, subjectType: 'game', marketType: 'total_goals', marketLabel: 'Total Goals O/U',
       subjectId: g.id, subjectName: matchup, subjectLogo: '📈', teamAbbr: null,
-      label: `Over ${line}`, selection: `Over ${line}`, selectionShort: `O${line}`,
+      label: `Over ${line}`, selection: `Over ${line}`, selectionValue: 'over', selectionShort: `O${line}`,
       context: matchup, line, gameId: g.id, teamId: null, playerId: null, rulePct: overPct,
       ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'total_goals_over', line },
     },
     {
       id: `bb-${g.id}-under`, subjectType: 'game', marketType: 'total_goals', marketLabel: 'Total Goals O/U',
       subjectId: g.id, subjectName: matchup, subjectLogo: '📉', teamAbbr: null,
-      label: `Under ${line}`, selection: `Under ${line}`, selectionShort: `U${line}`,
+      label: `Under ${line}`, selection: `Under ${line}`, selectionValue: 'under', selectionShort: `U${line}`,
       context: matchup, line, gameId: g.id, teamId: null, playerId: null, rulePct: underPct,
       ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'total_goals_under', line },
     },
     {
       id: `bb-${g.id}-pl-home`, subjectType: 'game', marketType: 'puck_line', marketLabel: 'Puck Line',
       subjectId: g.id, subjectName: matchup, subjectLogo: g.homeTeam?.emoji ?? '🏒', teamAbbr: home,
-      label: `${home} -1.5`, selection: `${home} -1.5`, selectionShort: `${home} -1.5`,
+      label: `${home} -1.5`, selection: `${home} -1.5`, selectionValue: homeLc, selectionShort: `${home} -1.5`,
       context: ctxHome, line: -1.5, gameId: g.id, teamId: homeLc, playerId: null, rulePct: pl,
       ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'puck_line', line: -1.5 },
     },
@@ -169,7 +171,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
 
 async function buildPlayerCandidates(
   p: any,
-  game: { matchup: string; when: string },
+  game: { matchup: string; when: string; gameId: string },
 ): Promise<Candidate[]> {
   const pid  = String(p.id);
   const name = p.name ?? 'Player';
@@ -187,22 +189,22 @@ async function buildPlayerCandidates(
   const mk = (
     suffix: string, marketType: string, marketLabel: string, label: string,
     short: string, line: number | null, rulePct: number,
-    ml: Candidate['ml'],
+    selectionValue: string, ml: Candidate['ml'],
   ): Candidate => ({
     id: `bb-p-${pid}-${suffix}`, subjectType: 'player', marketType, marketLabel,
     subjectId: pid, subjectName: name, subjectLogo: logo, teamAbbr: abbr,
-    label, selection: label, selectionShort: short, context: ctx,
-    line, gameId: null, teamId: null, playerId: pid, rulePct, ml,
+    label, selection: label, selectionValue, selectionShort: short, context: ctx,
+    line, gameId: game.gameId, teamId: null, playerId: pid, rulePct, ml,
   });
 
   return [
-    mk('atg', 'anytime_goal', 'Anytime Goal', `${name} anytime goal`, 'ATG', null, atg,
+    mk('atg', 'anytime_goal', 'Anytime Goal', `${name} anytime goal`, 'ATG', null, atg, 'yes',
       { kind: 'player', playerId: pid, propType: 'goals', line: 0.5, selection: 'over' }),
-    mk('shots', 'shots_ou', 'Shots O/U', `${name} over 2.5 shots`, 'O2.5 SOG', 2.5, shots,
+    mk('shots', 'shots_ou', 'Shots O/U', `${name} over 2.5 shots`, 'O2.5 SOG', 2.5, shots, 'over',
       { kind: 'player', playerId: pid, propType: 'shots', line: 2.5, selection: 'over' }),
-    mk('points', 'points_ou', 'Points O/U', `${name} over 0.5 points`, 'O0.5 PTS', 0.5, points,
+    mk('points', 'points_ou', 'Points O/U', `${name} over 0.5 points`, 'O0.5 PTS', 0.5, points, 'over',
       { kind: 'player', playerId: pid, propType: 'points', line: 0.5, selection: 'over' }),
-    mk('pp', 'pp_point', 'PP Point', `${name} power-play point`, 'PPP', 0.5, pp,
+    mk('pp', 'pp_point', 'PP Point', `${name} power-play point`, 'PPP', 0.5, pp, 'yes',
       { kind: 'player', playerId: pid, propType: 'pp_point', line: 0.5, selection: 'over' }),
   ];
 }
@@ -254,15 +256,17 @@ export async function getBestBets(opts: BestBetsOptions = {}): Promise<{
 
   // Which teams actually play in this window → team abbr (lowercase) → game info.
   // Player props are ONLY built for players whose team appears here.
-  const teamGame = new Map<string, { matchup: string; when: string }>();
+  // gameId is required so a player-prop bet placed from here can later be
+  // auto-settled — without it, settlement can never look up the boxscore.
+  const teamGame = new Map<string, { matchup: string; when: string; gameId: string }>();
   for (const g of games) {
     const home = String(g.homeTeam?.abbreviation ?? g.homeTeam?.id ?? '').toLowerCase();
     const away = String(g.awayTeam?.abbreviation ?? g.awayTeam?.id ?? '').toLowerCase();
     if (!home || !away) continue;
     const matchup = `${home.toUpperCase()} vs ${away.toUpperCase()}`;
     const when    = g.startTime || g.period || '';
-    if (!teamGame.has(home)) teamGame.set(home, { matchup, when });
-    if (!teamGame.has(away)) teamGame.set(away, { matchup, when });
+    if (!teamGame.has(home)) teamGame.set(home, { matchup, when, gameId: String(g.id) });
+    if (!teamGame.has(away)) teamGame.set(away, { matchup, when, gameId: String(g.id) });
   }
 
   // Keep only players whose team is playing, then cap to maxPlayers.

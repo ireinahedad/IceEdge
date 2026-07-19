@@ -200,13 +200,11 @@ export function attachGameFactors(groups: any[], c: GameFactorCtx): void {
   for (const g of groups) {
     for (const o of g.options) {
       const id: string = o.id;
-      // Résultat du match / double chance / puck line → famille "match"
+      // Résultat du match / puck line → famille "match"
       if (id === 'ml-home') set(o, 'match', c.matchFactors);
       else if (id === 'ml-away') set(o, 'match', inv(c.matchFactors));
       else if (id === 'ml-ot' || id === 'ot-yes') set(o, 'ot', otFactors(c));
       else if (id === 'ot-no') set(o, 'ot', inv(otFactors(c)));
-      else if (id === 'dc-home') set(o, 'match', c.matchFactors.map(f => ({ ...f, value: clamp(f.value + 0.12) })));
-      else if (id === 'dc-away') set(o, 'match', inv(c.matchFactors).map(f => ({ ...f, value: clamp(f.value + 0.12) })));
       else if (id === 'pl-home') set(o, 'match', c.matchFactors.map(f => ({ ...f, value: clamp(f.value - 0.15) })));
       else if (id === 'pl-away') set(o, 'match', inv(c.matchFactors.map(f => ({ ...f, value: clamp(f.value - 0.15) }))));
       // Totaux

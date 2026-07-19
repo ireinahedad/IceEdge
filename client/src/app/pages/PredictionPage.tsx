@@ -5,7 +5,7 @@ import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { PredictionResponse } from "../types/bet";
 import { nhlApiService } from "../services/nhlApiService";
 import { predictionApiService } from "../services/predictionApiService";
-import { requestFromMLProps } from "../services/predictionRequest";
+import { requestFromMLProps, normalizeMarket } from "../services/predictionRequest";
 import { useSport } from "../context/SportContext";
 import { useI18n } from "../i18n";
 import { nhlLogoUrl } from "../data/teamEmoji";
@@ -357,9 +357,6 @@ function TeamPrediction({ teamId }: { teamId: string }) {
         { id: "t-ml-ot",label: "Match Goes to OT",             rulePct: 22,
           ruleNote: "~22-24% of NHL games go to OT/SO regardless of team strength.",
           mlProps: tml("game_to_ot") },
-        { id: "t-dc",   label: `${data.abbr} Wins or OT`,      rulePct: Math.min(90, hp + 14),
-          ruleNote: "Double chance: team wins OR game goes to overtime.",
-          mlProps: tml("double_chance") },
       ],
     },
     {
@@ -520,7 +517,46 @@ interface LiveGameView {
 }
 
 /* ─── Bet types & market groups ─────────────── */
-interface MLProps { type: "game" | "player" | "team"; subjectId: string; opponentId?: string; propType?: string; line?: number; isHome?: boolean; selection?: string; }
+interface MLProps {
+  type: "game" | "player" | "team"; subjectId: string; opponentId?: string; propType?: string;
+  line?: number; isHome?: boolean; selection?: string;
+  /** NHL game id — required for automatic settlement, injected after the game/player loads. */
+  gameId?: string;
+  /**
+   * Canonical settlement market + selection, set ONLY on bet options where the
+   * mapping is unambiguous (see settlementFields below). Left unset for options
+   * whose `propType` is reused across several distinct markets (e.g. "goals" is
+   * used for both "Anytime Goal" and "PP Goal" here) — auto-settling those from
+   * the reused propType would risk crediting the wrong market as a win.
+   */
+  settleMarket?: string;
+  settleSelection?: string;
+}
+
+/**
+ * Resolve { marketType, selectionValue } for the bet-slip leg (used by
+ * settlement.service.ts server-side), from an MLProps object.
+ *   - if `settleMarket` was explicitly set on the option → use it verbatim
+ *     (player props: only set where the mapping is unambiguous).
+ *   - for game/team subjects, propType is already a canonical, unambiguous
+ *     market name (moneyline, puck_line, total_goals_over…), so it's safe to
+ *     derive it via the same normalizeMarket() the probability request uses;
+ *     the team abbreviation (subjectId) is the selection for team-pick markets.
+ *   - otherwise (player props with no explicit settleMarket) → leave both
+ *     undefined so the leg simply stays "pending" instead of risking a wrong
+ *     auto-settlement.
+ */
+function settlementFields(mlProps: MLProps | undefined): { marketType?: string; selectionValue?: string } {
+  if (!mlProps) return {};
+  if (mlProps.settleMarket) {
+    return { marketType: mlProps.settleMarket, selectionValue: mlProps.settleSelection };
+  }
+  if (mlProps.type === "game" || mlProps.type === "team") {
+    const { marketType, selection } = normalizeMarket(mlProps.propType ?? "moneyline", mlProps.selection ?? mlProps.subjectId);
+    return { marketType, selectionValue: selection };
+  }
+  return {};
+}
 interface RuleFactor { id: string; label: string; weight: number; value: number; }
 interface BetOpt { id: string; label: string; rulePct: number; ruleNote: string; mlProps?: MLProps; factors?: RuleFactor[]; factorGroup?: string; }
 interface MktGroup { id: string; title: string; cols: 2 | 3; options: BetOpt[]; }
@@ -570,15 +606,6 @@ function buildGameGroups(home: string, away: string, hp: number, ou: number): Mk
           ruleNote: `Both offenses producing at least one goal. Very common in NHL (~75-80% of games).` },
         { id: "btts-no",  label: "No",  rulePct: Math.max(12, 100 - Math.min(88, Math.round(hp * 0.42 + ap * 0.40 + 20))), mlProps: gml("both_teams_score"),
           ruleNote: `Requires one team to be shut out — only ~15-25% of NHL games end this way.` },
-      ],
-    },
-    {
-      id: "dc", title: "Double Chance", cols: 2,
-      options: [
-        { id: "dc-home", label: `${home} or OT`, rulePct: Math.min(90, hp + 15), mlProps: gml("double_chance"),
-          ruleNote: `Covers home win + OT/SO result. Two outcomes bundled into one bet.` },
-        { id: "dc-away", label: `${away} or OT`, rulePct: Math.min(85, ap + 15), mlProps: gmla("double_chance"),
-          ruleNote: `Covers away win + OT/SO. Less likely when home team is a heavy favorite.` },
       ],
     },
     {
@@ -793,9 +820,10 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
 
   function handleSlip() {
     if (inSlip) { removeLeg(legId); return; }
+    const { marketType, selectionValue } = settlementFields(mlProps);
     const leg: BetLeg = {
       id: legId,
-      marketType: (mlProps?.propType ?? "moneyline") as BetLeg["marketType"],
+      marketType: (marketType ?? mlProps?.propType ?? "moneyline") as BetLeg["marketType"],
       marketLabel: label,
       subjectType: mlProps?.type === "player" ? "player" : mlProps?.type === "team" ? "team" : "game",
       subjectId: mlProps?.subjectId ?? legId,
@@ -806,6 +834,11 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
       probability: legPct,
       line: mlProps?.line,
       addedAt: new Date().toISOString(),
+      // Machine-readable fields for automatic settlement — only populated when
+      // the market is unambiguous (see settlementFields); otherwise the bet
+      // simply stays pending instead of risking a wrong auto-settlement.
+      gameId: mlProps?.gameId,
+      selectionValue,
     };
     addLeg(leg);
   }
@@ -1296,7 +1329,7 @@ function GamePrediction({ gameId }: { gameId: string }) {
   const finalPct = Math.min(85, Math.max(15, home.winPct));
   const localGroups = buildGameGroups(home.abbr, away.abbr, finalPct, gameView.overUnder ?? 5.5);
   // Inject mlProps from localGroups into apiGroups (server groups have better rulePct but no mlProps)
-  const groups = apiGroups
+  const mergedGroups = apiGroups
     ? (() => {
         const mlMap = new Map<string, MLProps>();
         localGroups.forEach(g => g.options.forEach(o => { if (o.mlProps) mlMap.set(o.id, o.mlProps); }));
@@ -1306,6 +1339,12 @@ function GamePrediction({ gameId }: { gameId: string }) {
         }));
       })()
     : localGroups;
+  // Stamp the game id onto every option's mlProps — without it, a bet placed
+  // from this page can never be looked up for automatic settlement.
+  const groups: MktGroup[] = mergedGroups.map(g => ({
+    ...g,
+    options: g.options.map(o => (o.mlProps ? { ...o, mlProps: { ...o.mlProps, gameId } } : o)),
+  }));
 
   return (
     <div className="flex flex-col gap-3">
@@ -1383,6 +1422,9 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [revealAll, setRevealAll] = useState(false);
+  // The game the player is suiting up for next — needed so bets placed here
+  // carry a gameId and can actually be auto-settled (see settlementFields()).
+  const [playerGameId, setPlayerGameId] = useState<string | undefined>(undefined);
   const recentForm = useMemo<("W" | "L" | "OT")[]>(
     // Form biased by the player's scoring pace (points/game).
     () => (data ? generateForm(8, Math.min(0.8, Math.max(0.3, 0.35 + data.ptsPerGame * 0.3))) : []),
@@ -1416,6 +1458,24 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
           penaltyMin: stats.penaltyMinutes ?? 0,
         });
         nhlApiService.getPlayerPredictions(playerId).then(setApiGroups).catch(() => {});
+
+        // Resolve the player's next game (today → tomorrow) from the schedule.
+        const teamAbbr = (info.teamAbbr ?? "").toLowerCase();
+        if (teamAbbr) {
+          const findGame = (games: { id: string; homeTeam: { abbreviation: string }; awayTeam: { abbreviation: string } }[]) =>
+            games.find(
+              (g) => g.homeTeam.abbreviation?.toLowerCase() === teamAbbr || g.awayTeam.abbreviation?.toLowerCase() === teamAbbr,
+            );
+          try {
+            const today = new Date().toISOString().split("T")[0];
+            let g = findGame(await nhlApiService.getGamesByDate(today));
+            if (!g) {
+              const tomorrow = new Date(Date.now() + 86_400_000).toISOString().split("T")[0];
+              g = findGame(await nhlApiService.getGamesByDate(tomorrow));
+            }
+            if (g) setPlayerGameId(g.id);
+          } catch { /* schedule lookup failed — bets placed here just won't carry a gameId */ }
+        }
       } catch (e) { console.error("PlayerPrediction load error", e); }
       finally { setLoading(false); }
     }
@@ -1443,16 +1503,16 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
       options: [
         { id: "g-saves-over", label: "Over 25.5 Saves", rulePct: 62,
           ruleNote: "Goalies face ~28-32 shots per game on average. Saving 26+ is likely in most games.",
-          mlProps: { type: "player", subjectId: playerId, propType: "saves", line: 25.5 } },
+          mlProps: { type: "player", subjectId: playerId, propType: "saves", line: 25.5, settleMarket: "goalie_saves_ou", settleSelection: "over" } },
         { id: "g-saves-under",label: "Under 25.5 Saves",rulePct: 38,
           ruleNote: "Fewer than 26 saves usually means a lower-shot game or an early pull.",
-          mlProps: { type: "player", subjectId: playerId, propType: "saves", line: 25.5 } },
+          mlProps: { type: "player", subjectId: playerId, propType: "saves", line: 25.5, settleMarket: "goalie_saves_ou", settleSelection: "under" } },
         { id: "g-saves-over2", label: "Over 28.5 Saves", rulePct: 44,
           ruleNote: "Higher threshold — requires above-average shot volume against.",
-          mlProps: { type: "player", subjectId: playerId, propType: "saves", line: 28.5 } },
+          mlProps: { type: "player", subjectId: playerId, propType: "saves", line: 28.5, settleMarket: "goalie_saves_ou", settleSelection: "over" } },
         { id: "g-saves-under2",label: "Under 28.5 Saves",rulePct: 56,
           ruleNote: "More common line — under 29 saves covers most average-shot games.",
-          mlProps: { type: "player", subjectId: playerId, propType: "saves", line: 28.5 } },
+          mlProps: { type: "player", subjectId: playerId, propType: "saves", line: 28.5, settleMarket: "goalie_saves_ou", settleSelection: "under" } },
       ],
     },
     {
@@ -1460,10 +1520,10 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
       options: [
         { id: "g-win",    label: "Goalie Win",   rulePct: 50,
           ruleNote: "Winning goalie probability based on team win rate.",
-          mlProps: { type: "player", subjectId: playerId, propType: "wins", line: 0.5 } },
+          mlProps: { type: "player", subjectId: playerId, propType: "wins", line: 0.5, settleMarket: "goalie_win", settleSelection: "yes" } },
         { id: "g-shutout",label: "Shutout",      rulePct: 10,
           ruleNote: "Complete shutouts happen in ~10-15% of NHL starts.",
-          mlProps: { type: "player", subjectId: playerId, propType: "shutouts", line: 0.5 } },
+          mlProps: { type: "player", subjectId: playerId, propType: "shutouts", line: 0.5, settleMarket: "goalie_shutout", settleSelection: "yes" } },
       ],
     },
   ] : [
@@ -1472,16 +1532,18 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
       options: [
         { id: "p-anytime", label: "Anytime Goal Scorer", rulePct: poi(gpg),
           ruleNote: `Poisson model: ${gpg.toFixed(3)} goals/game → P(≥1 goal) = ${poi(gpg)}%. Based on ${data.goals} goals in ${gp} games.`,
-          mlProps: { type: "player", subjectId: playerId, propType: "goals", line: 0.5 } },
+          mlProps: { type: "player", subjectId: playerId, propType: "goals", line: 0.5, settleMarket: "anytime_goal", settleSelection: "yes" } },
         { id: "p-first",   label: "First Goal Scorer",   rulePct: Math.max(3, Math.round(poi(gpg) / 6)),
           ruleNote: `Being the first scorer is rare (~5-10% per player). Scaled from anytime probability of ${poi(gpg)}%.`,
-          mlProps: { type: "player", subjectId: playerId, propType: "goals", line: 0.5 } },
+          mlProps: { type: "player", subjectId: playerId, propType: "goals", line: 0.5, settleMarket: "first_goal_scorer", settleSelection: "yes" } },
         { id: "p-over05",  label: "Goals Over 0.5",      rulePct: poi(gpg),
           ruleNote: `Same as anytime scorer — probability of scoring at least 1 goal.`,
-          mlProps: { type: "player", subjectId: playerId, propType: "goals", line: 0.5 } },
+          mlProps: { type: "player", subjectId: playerId, propType: "goals", line: 0.5, settleMarket: "anytime_goal", settleSelection: "yes" } },
         { id: "p-over15",  label: "Goals Over 1.5",      rulePct: poi(gpg * 2) - poi(gpg),
           ruleNote: `Scoring 2+ goals in a game. Based on extended Poisson with rate ${gpg.toFixed(3)}/game.`,
-          mlProps: { type: "player", subjectId: playerId, propType: "goals", line: 1.5 } },
+          // anytime_goal settlement checks goals > line, so line 1.5 correctly
+          // requires 2+ goals here (not just >=1).
+          mlProps: { type: "player", subjectId: playerId, propType: "goals", line: 1.5, settleMarket: "anytime_goal", settleSelection: "yes" } },
       ],
     },
     {
@@ -1489,16 +1551,16 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
       options: [
         { id: "p-assist",      label: "Any Assist",          rulePct: poi(apg),
           ruleNote: `Poisson model: ${apg.toFixed(3)} assists/game → P(≥1 assist) = ${poi(apg)}%. Based on ${data.assists} assists in ${gp} games.`,
-          mlProps: { type: "player", subjectId: playerId, propType: "assists", line: 0.5 } },
+          mlProps: { type: "player", subjectId: playerId, propType: "assists", line: 0.5, settleMarket: "assists_ou", settleSelection: "over" } },
         { id: "p-assist-over", label: "Assists Over 0.5",    rulePct: poi(apg),
           ruleNote: `Probability of recording at least one assist.`,
-          mlProps: { type: "player", subjectId: playerId, propType: "assists", line: 0.5 } },
+          mlProps: { type: "player", subjectId: playerId, propType: "assists", line: 0.5, settleMarket: "assists_ou", settleSelection: "over" } },
         { id: "p-point",       label: "Any Point (G or A)",  rulePct: poi(ppg),
           ruleNote: `Poisson model: ${ppg.toFixed(3)} pts/game → P(≥1 point) = ${poi(ppg)}%. Based on ${data.points} points in ${gp} games.`,
-          mlProps: { type: "player", subjectId: playerId, propType: "points", line: 0.5 } },
+          mlProps: { type: "player", subjectId: playerId, propType: "points", line: 0.5, settleMarket: "points_ou", settleSelection: "over" } },
         { id: "p-multi-point", label: "Multi-Point Game",    rulePct: Math.min(60, Math.round(poi(ppg) * 0.35)),
           ruleNote: `Recording 2+ points in one game. Less common — roughly 1/3 of point games.`,
-          mlProps: { type: "player", subjectId: playerId, propType: "points", line: 1.5 } },
+          mlProps: { type: "player", subjectId: playerId, propType: "points", line: 1.5, settleMarket: "points_ou", settleSelection: "over" } },
       ],
     },
     ...(data.shots > 0 ? [{
@@ -1506,16 +1568,16 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
       options: [
         { id: "p-shots-over",  label: `Shots Over ${Math.floor(spg + 0.5)}.5`,  rulePct: 52,
           ruleNote: `${data.name} averages ${spg.toFixed(1)} shots/game. The line is close to their average.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "shots", line: Math.floor(spg + 0.5) + 0.5 } },
+          mlProps: { type: "player" as const, subjectId: playerId, propType: "shots", line: Math.floor(spg + 0.5) + 0.5, settleMarket: "shots_ou", settleSelection: "over" } },
         { id: "p-shots-under", label: `Shots Under ${Math.floor(spg + 0.5)}.5`, rulePct: 48,
           ruleNote: `Shooting below their ${spg.toFixed(1)}/game average is possible in any matchup.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "shots", line: Math.floor(spg + 0.5) + 0.5 } },
+          mlProps: { type: "player" as const, subjectId: playerId, propType: "shots", line: Math.floor(spg + 0.5) + 0.5, settleMarket: "shots_ou", settleSelection: "under" } },
         { id: "p-shots-over2", label: `Shots Over ${Math.ceil(spg + 1)}.5`,      rulePct: 38,
           ruleNote: `Higher threshold — requires an active game for ${data.name}.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "shots", line: Math.ceil(spg + 1) + 0.5 } },
+          mlProps: { type: "player" as const, subjectId: playerId, propType: "shots", line: Math.ceil(spg + 1) + 0.5, settleMarket: "shots_ou", settleSelection: "over" } },
         { id: "p-shots-under2",label: `Shots Under ${Math.ceil(spg + 1)}.5`,     rulePct: 62,
           ruleNote: `Easier to hit — any quiet game keeps ${data.name} under this threshold.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "shots", line: Math.ceil(spg + 1) + 0.5 } },
+          mlProps: { type: "player" as const, subjectId: playerId, propType: "shots", line: Math.ceil(spg + 1) + 0.5, settleMarket: "shots_ou", settleSelection: "under" } },
       ],
     } as MktGroup] : []),
     ...(data.hits > 0 ? [{
@@ -1523,10 +1585,10 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
       options: [
         { id: "p-hits-over",  label: `Hits Over ${Math.floor(hpg)}.5`,  rulePct: 52,
           ruleNote: `${data.name} averages ${hpg.toFixed(1)} hits/game.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "hits", line: Math.floor(hpg) + 0.5 } },
+          mlProps: { type: "player" as const, subjectId: playerId, propType: "hits", line: Math.floor(hpg) + 0.5, settleMarket: "hits_ou", settleSelection: "over" } },
         { id: "p-hits-under", label: `Hits Under ${Math.floor(hpg)}.5`, rulePct: 48,
           ruleNote: `Below-average hit game for ${data.name}.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "hits", line: Math.floor(hpg) + 0.5 } },
+          mlProps: { type: "player" as const, subjectId: playerId, propType: "hits", line: Math.floor(hpg) + 0.5, settleMarket: "hits_ou", settleSelection: "under" } },
       ],
     } as MktGroup] : []),
     ...(data.blocks > 0 ? [{
@@ -1534,10 +1596,10 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
       options: [
         { id: "p-blocks-over",  label: `Blocks Over ${Math.floor(bpg)}.5`,  rulePct: 50,
           ruleNote: `${data.name} averages ${bpg.toFixed(1)} blocked shots/game.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "blocks", line: Math.floor(bpg) + 0.5 } },
+          mlProps: { type: "player" as const, subjectId: playerId, propType: "blocks", line: Math.floor(bpg) + 0.5, settleMarket: "blocked_shots_ou", settleSelection: "over" } },
         { id: "p-blocks-under", label: `Blocks Under ${Math.floor(bpg)}.5`, rulePct: 50,
           ruleNote: `Blocked shots are highly situational depending on the game flow.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "blocks", line: Math.floor(bpg) + 0.5 } },
+          mlProps: { type: "player" as const, subjectId: playerId, propType: "blocks", line: Math.floor(bpg) + 0.5, settleMarket: "blocked_shots_ou", settleSelection: "under" } },
       ],
     } as MktGroup] : []),
     ...(data.ppPoints > 0 ? [{
@@ -1545,10 +1607,10 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
       options: [
         { id: "p-pp-point", label: "PP Point",         rulePct: Math.min(70, Math.round((data.ppPoints / gp) * 200)),
           ruleNote: `${data.name} has ${data.ppPoints} PP points in ${gp} games (${(data.ppPoints/gp).toFixed(2)}/game).`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "points", line: 0.5 } },
+          mlProps: { type: "player" as const, subjectId: playerId, propType: "points", line: 0.5, settleMarket: "pp_point", settleSelection: "yes" } },
         { id: "p-pp-goal",  label: "PP Goal",          rulePct: Math.min(50, Math.round((data.ppPoints / gp) * 100)),
           ruleNote: `PP goals are less common than PP assists. Scaled from PP point probability.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "goals", line: 0.5 } },
+          mlProps: { type: "player" as const, subjectId: playerId, propType: "goals", line: 0.5, settleMarket: "pp_goal", settleSelection: "yes" } },
       ],
     } as MktGroup] : []),
     ...(data.penaltyMin > 0 ? [{
@@ -1556,10 +1618,10 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
       options: [
         { id: "p-pim-over",  label: `PIM Over 0.5`,   rulePct: Math.min(70, Math.round((data.penaltyMin / gp) * 100)),
           ruleNote: `${data.name} averages ${(data.penaltyMin/gp).toFixed(2)} penalty minutes/game.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "pim", line: 0.5 } },
+          mlProps: { type: "player" as const, subjectId: playerId, propType: "pim", line: 0.5, settleMarket: "penalty_minutes_ou", settleSelection: "over" } },
         { id: "p-pim-under", label: `PIM Under 0.5`,  rulePct: Math.max(30, 100 - Math.min(70, Math.round((data.penaltyMin / gp) * 100))),
           ruleNote: `Staying out of the penalty box — common for disciplined players.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "pim", line: 0.5 } },
+          mlProps: { type: "player" as const, subjectId: playerId, propType: "pim", line: 0.5, settleMarket: "penalty_minutes_ou", settleSelection: "under" } },
       ],
     } as MktGroup] : []),
   ];
@@ -1624,6 +1686,14 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
     }));
   })();
 
+  // Stamp the resolved game id onto every option's mlProps.
+  const playerGroupsG: MktGroup[] = playerGameId
+    ? playerGroupsF.map(g => ({
+        ...g,
+        options: g.options.map(o => (o.mlProps ? { ...o, mlProps: { ...o.mlProps, gameId: playerGameId } } : o)),
+      }))
+    : playerGroupsF;
+
   return (
     <div className="flex flex-col gap-3">
       {/* Player header */}
@@ -1655,7 +1725,7 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
       {/* Market groups — local groups always used (they carry mlProps) */}
       <PredictionsRevealBar revealAll={revealAll} onToggle={() => setRevealAll(v => !v)} />
       <RevealAllCtx.Provider value={revealAll}>
-        {playerGroupsF.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
+        {playerGroupsG.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
       </RevealAllCtx.Provider>
 
     </div>

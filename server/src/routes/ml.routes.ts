@@ -62,7 +62,7 @@ type BetMarketType =
   | "period1_winner" | "period2_winner" | "period3_winner"
   | "period1_total_goals" | "period2_total_goals" | "period3_total_goals"
   | "game_to_ot" | "both_teams_score" | "winning_margin"
-  | "double_chance" | "alt_puck_line" | "ot_winner"
+  | "alt_puck_line" | "ot_winner"
   | "first_team_score" | "last_team_score" | "team_total_goals"
   | "team_pp_goals" | "team_penalty_kill" | "clean_sheet"
   | "highest_scoring_period"
@@ -194,7 +194,7 @@ async function computeProbability(body: PredictionRequest): Promise<number> {
     if (!teamId) return 50;
     return predictAltPuckLine(teamId, opponentId, isHome);
   }
-  if (market === "double_chance" || market === "ot_winner") {
+  if (market === "ot_winner") {
     if (!teamId) return 50;
     return predictDoubleChance(teamId, opponentId, isHome);
   }

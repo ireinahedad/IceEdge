@@ -306,6 +306,7 @@ function SettingsTab({
   const [isPublic, setIsPublic] = useState(profile.isPublic);
   const [showSlips, setShowSlips] = useState(profile.showSlips ?? false);
   const [notifyValueBets, setNotifyValueBets] = useState(profile.notifyValueBets ?? false);
+  const [minEvPct, setMinEvPct] = useState(profile.valueBetMinEvPct ?? 0);
   const [openaiKey, setOpenaiKey] = useState(profile.openaiApiKey ?? "");
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -339,6 +340,7 @@ function SettingsTab({
         isPublic,
         showSlips,
         notifyValueBets: isPro ? notifyValueBets : false,
+        valueBetMinEvPct: isPro ? minEvPct : 0,
         openaiApiKey: openaiKey.trim() || null,
       });
       onSaved(updated);
@@ -538,6 +540,30 @@ function SettingsTab({
             </button>
           )}
         </div>
+
+        {isPro && notifyValueBets && (
+          <div className="flex items-center gap-3 py-1 border-t border-white/5 pt-3">
+            <div className="flex-1">
+              <label className="text-xs text-white/70">{t("profile.minEv")}</label>
+              <p className="text-white/40 text-[9px] mt-0.5">{t("profile.minEvHint")}</p>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <input
+                type="number"
+                min={0}
+                max={50}
+                step={1}
+                value={minEvPct}
+                onChange={(e) => {
+                  const n = Math.round(Number(e.target.value));
+                  setMinEvPct(Number.isFinite(n) ? Math.min(50, Math.max(0, n)) : 0);
+                }}
+                className="w-14 bg-white/5 rounded-lg px-2 py-1.5 text-white text-xs text-right tabular-nums outline-none focus:bg-white/10"
+              />
+              <span className="text-white/50 text-xs">%</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* AI Settings */}
@@ -754,7 +780,10 @@ export function ProfilePage() {
         }}>
         <div className="flex items-center justify-between">
           <h1 className="text-white text-lg font-bold">{t("profile.title")}</h1>
-          <button onClick={logout} className="text-white/40 text-xs border border-white/10 px-3 py-1.5 rounded-xl">{t("profile.signout")}</button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => navigate("/support")} className="text-white/40 text-xs border border-white/10 px-3 py-1.5 rounded-xl">{t("legal.support")}</button>
+            <button onClick={logout} className="text-white/40 text-xs border border-white/10 px-3 py-1.5 rounded-xl">{t("profile.signout")}</button>
+          </div>
         </div>
 
         {!loading && profile && (

@@ -393,28 +393,6 @@ function computeGameMarkets(
     ],
   };
 
-  // ── 5. Double Chance ──────────────────────────────────────────────────────
-  // Home or Draw = home reg win + OT  |  Away or Draw = away reg win + OT
-  const homeOrOT = mlHome * regAdj + ot;
-  const awayOrOT = mlAway * regAdj + ot;
-  const doubleChance: MarketGroup = {
-    id: 'dc', title: 'Double Chance', cols: 2,
-    options: [
-      {
-        id: 'dc-home',
-        label: `${homeName} or OT`,
-        rulePct: pct(homeOrOT),
-        ruleNote: `Home reg win ${fmt(mlHome*regAdj*100,0)}% + OT ${fmt(ot*100,0)}% = ${fmt(homeOrOT*100,0)}%`,
-      },
-      {
-        id: 'dc-away',
-        label: `${awayName} or OT`,
-        rulePct: pct(awayOrOT),
-        ruleNote: `Away reg win ${fmt(mlAway*regAdj*100,0)}% + OT ${fmt(ot*100,0)}% = ${fmt(awayOrOT*100,0)}%`,
-      },
-    ],
-  };
-
   // ── 6–8. Period Results (Skellam) ─────────────────────────────────────────
   const periodGroups: MarketGroup[] = ['1st', '2nd', '3rd'].map((name, i) => {
     const f  = PERIOD_DIST[i];
@@ -529,7 +507,6 @@ function computeGameMarkets(
     puckLine,
     totals,
     btts,
-    doubleChance,
     ...periodGroups,
     p1Goals,
     overtime,

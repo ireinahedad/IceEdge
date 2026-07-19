@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
-import { Search, TrendingUp, ChevronRight, Plus, Goal, Star, Timer, Zap } from "lucide-react";
+import { Search, TrendingUp, ChevronRight, Plus, Goal, Star, Timer, Zap, Settings } from "lucide-react";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
 import { BottomNav } from "../components/BottomNav";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
@@ -196,6 +196,7 @@ function EvSection({ isPro, items, isLoading, accent }: {
   isPro: boolean; items: EvItem[]; isLoading: boolean; accent: string;
 }) {
   const { t } = useI18n();
+  const navigate = useNavigate();
 
   const list = (rows: EvItem[]) => (
     <div className="flex flex-col gap-1.5">{rows.map((i) => <EvRow key={i.id} item={i} />)}</div>
@@ -206,6 +207,17 @@ function EvSection({ isPro, items, isLoading, accent }: {
       <div className="flex items-center gap-2 mb-3">
         <Zap size={13} style={{ color: accent }} />
         <span className="text-white text-sm font-medium">{t("home.evTitle")}</span>
+        {isPro && (
+          <button
+            onClick={() => navigate("/profile")}
+            aria-label={t("home.evSettings")}
+            title={t("home.evSettings")}
+            className="ml-auto flex items-center gap-1 text-white/50 hover:text-white transition-colors"
+          >
+            <Settings size={13} />
+            <span className="text-[10px]">{t("home.evSettings")}</span>
+          </button>
+        )}
       </div>
 
       {isPro ? (
@@ -425,6 +437,9 @@ function BestBetsSection({
               subjectLogo: logo, selection: b.selection, selectionShort: b.selectionShort,
               probability: b.score, line: b.line ?? undefined,
               gameInfo: b.context, addedAt: new Date().toISOString(),
+              // Machine-readable fields for automatic settlement.
+              gameId: b.gameId ?? undefined,
+              selectionValue: b.selectionValue,
             },
           };
         });

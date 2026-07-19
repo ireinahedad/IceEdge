@@ -94,20 +94,6 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
   },
   // ── Nouveaux marchés NHL bet365 ────────────────────────────────────────────
   {
-    type: "double_chance",
-    label: "Double Chance",
-    shortLabel: "Double Chance",
-    category: "match",
-    description: "Home/Draw or Away/Draw — insures against one outcome",
-    requiresLine: false,
-    requiresSelection: true,
-    selectionOptions: [
-      { label: "Home or Draw", value: "home_draw" },
-      { label: "Away or Draw", value: "away_draw" },
-      { label: "Home or Away", value: "home_away" },
-    ],
-  },
-  {
     type: "alt_puck_line",
     label: "Alternate Puck Line",
     shortLabel: "Alt Puck Line",

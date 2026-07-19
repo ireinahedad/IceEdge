@@ -15,18 +15,44 @@
  *   The loss penalty is proportional to the number of lost legs:
  *   winning every leg but one costs far less than losing them all.
  *
- * Supported markets: moneyline, total_goals (over/under), puck_line.
- * Player-prop markets need boxscore data and are left pending for now.
+ * Supported markets:
+ *   - Game markets: moneyline, total_goals (over/under), puck_line.
+ *   - Player-prop markets (via boxscore, once the game is final): anytime_goal
+ *     (respects the leg's line, e.g. "Over 1.5 goals"), shots_ou, assists_ou,
+ *     points_ou, blocked_shots_ou, hits_ou, penalty_minutes_ou, time_on_ice_ou,
+ *     goalie_saves_ou, goalie_win, goalie_shutout, faceoff_wins_ou (via
+ *     play-by-play — a heavier fetch, kept separate from the boxscore ones).
+ *   - Player-prop markets (via the landing endpoint's scoring summary — goal
+ *     order + strength state, once the game is final): first_goal_scorer,
+ *     last_goal_scorer, pp_point, pp_goal.
+ *   - Team markets (via the same scoring summary): first_team_score,
+ *     last_team_score, team_total_goals, team_pp_goals, clean_sheet,
+ *     team_score_every_period.
+ *   - Period markets (via the same scoring summary): period1/2/3_winner,
+ *     period1/2/3_total_goals, highest_scoring_period.
+ *   Each leg needs gameId recorded at bet time, plus subjectId (player or
+ *   team id) for the markets that need one.
+ *
+ * Deliberately left pending (not auto-settled): everything else — game_to_ot,
+ * ot_winner, alt_puck_line, winning_margin, regulation_result,
+ * both_teams_score, total_penalties, tennis markets. Leaving a bet pending is
+ * always safer than guessing wrong.
  */
 
 import { pool } from '../db/connection';
-import { fetchGameById } from './nhlApiClient';
+import {
+  fetchGameById, fetchGameBoxscore, fetchGameScoringPlays, fetchGameFaceoffWins,
+  type BoxscorePlayerStats, type ScoringGoal,
+} from './nhlApiClient';
 import { applyXpDelta, xpForOutcome } from './slip.service';
 
 type LegResult = 'win' | 'loss' | 'unknown';
 
 // Small per-run cache so a slip with 5 legs on the same game fetches it once
-type GameCache = Map<string, any | null>;
+type GameCache     = Map<string, any | null>;
+type BoxCache      = Map<string, Map<string, BoxscorePlayerStats> | null>;
+type ScoringCache  = Map<string, ScoringGoal[] | null>;
+type FaceoffCache  = Map<string, Map<string, number> | null>;
 
 async function getFinalGame(gameId: string, cache: GameCache): Promise<any | null> {
   if (cache.has(gameId)) return cache.get(gameId);
@@ -41,9 +67,293 @@ async function getFinalGame(gameId: string, cache: GameCache): Promise<any | nul
   return game;
 }
 
-/** Decide a single leg from the final score. */
-async function settleLeg(leg: any, cache: GameCache): Promise<LegResult> {
+/** Boxscore stats for one player in one (final) game, or null if unavailable. */
+async function getPlayerBox(
+  gameId: string,
+  playerId: string,
+  gameCache: GameCache,
+  boxCache: BoxCache,
+): Promise<BoxscorePlayerStats | null> {
+  const game = await getFinalGame(gameId, gameCache);
+  if (!game) return null; // only trust the boxscore once the game is final
+
+  if (!boxCache.has(gameId)) {
+    let box: Map<string, BoxscorePlayerStats> | null = null;
+    try { box = await fetchGameBoxscore(gameId); } catch { box = null; }
+    boxCache.set(gameId, box);
+  }
+  return boxCache.get(gameId)?.get(String(playerId)) ?? null;
+}
+
+/** Chronological goal list for one (final) game, or null if unavailable. */
+async function getScoringPlays(
+  gameId: string,
+  gameCache: GameCache,
+  scoringCache: ScoringCache,
+): Promise<ScoringGoal[] | null> {
+  const game = await getFinalGame(gameId, gameCache);
+  if (!game) return null; // only trust the scoring summary once the game is final
+
+  if (!scoringCache.has(gameId)) {
+    let goals: ScoringGoal[] | null = null;
+    try { goals = await fetchGameScoringPlays(gameId); } catch { goals = null; }
+    scoringCache.set(gameId, goals);
+  }
+  return scoringCache.get(gameId) ?? null;
+}
+
+/** Faceoff win counts by player for one (final) game, or null if unavailable. */
+async function getFaceoffWins(
+  gameId: string,
+  gameCache: GameCache,
+  faceoffCache: FaceoffCache,
+): Promise<Map<string, number> | null> {
+  const game = await getFinalGame(gameId, gameCache);
+  if (!game) return null; // only trust play-by-play once the game is final
+
+  if (!faceoffCache.has(gameId)) {
+    let wins: Map<string, number> | null = null;
+    try { wins = await fetchGameFaceoffWins(gameId); } catch { wins = null; }
+    faceoffCache.set(gameId, wins);
+  }
+  return faceoffCache.get(gameId) ?? null;
+}
+
+/**
+ * Goals scored per team, per regulation period (index 0 = P1, 1 = P2, 2 = P3).
+ * OT/SO goals are excluded — period1/2/3 markets only cover regulation.
+ */
+function periodGoalCounts(goals: ScoringGoal[]): { home: number[]; away: number[] } {
+  const home = [0, 0, 0];
+  const away = [0, 0, 0];
+  for (const g of goals) {
+    if (g.periodType !== 'REG' || g.periodNumber < 1 || g.periodNumber > 3) continue;
+    (g.isHome ? home : away)[g.periodNumber - 1]++;
+  }
+  return { home, away };
+}
+
+const PLAYER_STAT_MARKETS: Record<string, keyof BoxscorePlayerStats> = {
+  shots_ou:           'shots',
+  assists_ou:         'assists',
+  points_ou:          'points',
+  blocked_shots_ou:   'blockedShots',
+  hits_ou:            'hits',
+  penalty_minutes_ou: 'pim',
+  time_on_ice_ou:     'toi',
+};
+
+/** Decide a single leg from the final score (or, for player/team props, the boxscore / scoring summary). */
+async function settleLeg(
+  leg: any, cache: GameCache, boxCache: BoxCache, scoringCache: ScoringCache, faceoffCache: FaceoffCache,
+): Promise<LegResult> {
   if (!leg?.gameId || leg?.selectionValue == null) return 'unknown';
+
+  if (leg.marketType === 'faceoff_wins_ou') {
+    if (!leg.subjectId) return 'unknown';
+    const line = Number(leg.line);
+    if (!Number.isFinite(line)) return 'unknown';
+    const wins = await getFaceoffWins(String(leg.gameId), cache, faceoffCache);
+    if (!wins) return 'unknown';
+    const value = wins.get(String(leg.subjectId)) ?? 0;
+    const sel = String(leg.selectionValue).toLowerCase();
+    if (value === line) return 'unknown'; // push
+    if (sel === 'over')  return value > line ? 'win' : 'loss';
+    if (sel === 'under') return value < line ? 'win' : 'loss';
+    return 'unknown';
+  }
+
+  if (leg.marketType === 'anytime_goal') {
+    if (!leg.subjectId) return 'unknown';
+    // Line defaults to 0.5 ("scores at least once"), but also generalizes to
+    // "Over 1.5" etc. — the client sets an explicit line for those.
+    const line = Number.isFinite(Number(leg.line)) ? Number(leg.line) : 0.5;
+    const stats = await getPlayerBox(String(leg.gameId), String(leg.subjectId), cache, boxCache);
+    if (!stats) return 'unknown';
+    return stats.goals > line ? 'win' : 'loss';
+  }
+
+  if (leg.marketType === 'goalie_win') {
+    if (!leg.subjectId) return 'unknown';
+    const stats = await getPlayerBox(String(leg.gameId), String(leg.subjectId), cache, boxCache);
+    if (!stats || !stats.decision) return 'unknown';
+    return stats.decision.toUpperCase() === 'W' ? 'win' : 'loss';
+  }
+
+  if (leg.marketType === 'goalie_shutout') {
+    if (!leg.subjectId) return 'unknown';
+    const stats = await getPlayerBox(String(leg.gameId), String(leg.subjectId), cache, boxCache);
+    if (!stats || stats.goalsAgainst == null) return 'unknown';
+    return stats.goalsAgainst === 0 ? 'win' : 'loss';
+  }
+
+  if (leg.marketType === 'goalie_saves_ou') {
+    if (!leg.subjectId) return 'unknown';
+    const line = Number(leg.line);
+    if (!Number.isFinite(line)) return 'unknown';
+    const stats = await getPlayerBox(String(leg.gameId), String(leg.subjectId), cache, boxCache);
+    if (!stats || stats.saves == null) return 'unknown';
+    const sel = String(leg.selectionValue).toLowerCase();
+    if (stats.saves === line) return 'unknown'; // push
+    if (sel === 'over')  return stats.saves > line ? 'win' : 'loss';
+    if (sel === 'under') return stats.saves < line ? 'win' : 'loss';
+    return 'unknown';
+  }
+
+  if (leg.marketType === 'first_goal_scorer' || leg.marketType === 'last_goal_scorer') {
+    if (!leg.subjectId) return 'unknown';
+    const goals = await getScoringPlays(String(leg.gameId), cache, scoringCache);
+    if (!goals) return 'unknown';
+    if (goals.length === 0) return 'unknown'; // no goals scored (rare 0-0 → SO game) — can't verify either way
+    const target = leg.marketType === 'first_goal_scorer' ? goals[0] : goals[goals.length - 1];
+    return target.playerId === String(leg.subjectId) ? 'win' : 'loss';
+  }
+
+  if (leg.marketType === 'pp_point' || leg.marketType === 'pp_goal') {
+    if (!leg.subjectId) return 'unknown';
+    const goals = await getScoringPlays(String(leg.gameId), cache, scoringCache);
+    if (!goals) return 'unknown';
+    const subjectId = String(leg.subjectId);
+    const involved = goals.some((g) => {
+      if (g.strength !== 'pp') return false;
+      if (leg.marketType === 'pp_goal') return g.playerId === subjectId; // scorer only
+      return g.playerId === subjectId || g.assistPlayerIds.includes(subjectId); // scorer or assist
+    });
+    return involved ? 'win' : 'loss';
+  }
+
+  // ── Team markets ──────────────────────────────────────────────────────────
+  if (leg.marketType === 'first_team_score' || leg.marketType === 'last_team_score') {
+    const game = await getFinalGame(String(leg.gameId), cache);
+    if (!game) return 'unknown';
+    const homeId = String(game.homeTeam.abbreviation ?? '').toLowerCase();
+    const awayId = String(game.awayTeam.abbreviation ?? '').toLowerCase();
+    const sel = String(leg.selectionValue).toLowerCase();
+    if (sel !== homeId && sel !== awayId) return 'unknown';
+    const goals = await getScoringPlays(String(leg.gameId), cache, scoringCache);
+    if (!goals) return 'unknown';
+    if (goals.length === 0) return 'unknown'; // no goals scored at all — can't verify either way
+    const target = leg.marketType === 'first_team_score' ? goals[0] : goals[goals.length - 1];
+    const winner = target.isHome ? homeId : awayId;
+    return sel === winner ? 'win' : 'loss';
+  }
+
+  if (leg.marketType === 'team_total_goals' || leg.marketType === 'team_pp_goals') {
+    const game = await getFinalGame(String(leg.gameId), cache);
+    if (!game) return 'unknown';
+    const homeId = String(game.homeTeam.abbreviation ?? '').toLowerCase();
+    const awayId = String(game.awayTeam.abbreviation ?? '').toLowerCase();
+    const teamId = String(leg.subjectId ?? '').toLowerCase();
+    if (teamId !== homeId && teamId !== awayId) return 'unknown';
+    const line = Number(leg.line);
+    if (!Number.isFinite(line)) return 'unknown';
+    const sel = String(leg.selectionValue).toLowerCase();
+
+    let value: number;
+    if (leg.marketType === 'team_total_goals') {
+      value = Number(teamId === homeId ? game.homeTeam.score : game.awayTeam.score);
+    } else {
+      const goals = await getScoringPlays(String(leg.gameId), cache, scoringCache);
+      if (!goals) return 'unknown';
+      const isHomeTeam = teamId === homeId;
+      value = goals.filter((g) => g.strength === 'pp' && g.isHome === isHomeTeam).length;
+    }
+    if (!Number.isFinite(value)) return 'unknown';
+    if (value === line) return 'unknown'; // push
+    if (sel === 'over')  return value > line ? 'win' : 'loss';
+    if (sel === 'under') return value < line ? 'win' : 'loss';
+    return 'unknown';
+  }
+
+  if (leg.marketType === 'clean_sheet') {
+    const game = await getFinalGame(String(leg.gameId), cache);
+    if (!game) return 'unknown';
+    const homeId = String(game.homeTeam.abbreviation ?? '').toLowerCase();
+    const awayId = String(game.awayTeam.abbreviation ?? '').toLowerCase();
+    const sel = String(leg.selectionValue).toLowerCase();
+    if (sel !== homeId && sel !== awayId) return 'unknown';
+    const opponentScore = Number(sel === homeId ? game.awayTeam.score : game.homeTeam.score);
+    if (!Number.isFinite(opponentScore)) return 'unknown';
+    return opponentScore === 0 ? 'win' : 'loss';
+  }
+
+  if (leg.marketType === 'team_score_every_period') {
+    const game = await getFinalGame(String(leg.gameId), cache);
+    if (!game) return 'unknown';
+    const homeId = String(game.homeTeam.abbreviation ?? '').toLowerCase();
+    const awayId = String(game.awayTeam.abbreviation ?? '').toLowerCase();
+    const sel = String(leg.selectionValue).toLowerCase();
+    if (sel !== homeId && sel !== awayId) return 'unknown';
+    const goals = await getScoringPlays(String(leg.gameId), cache, scoringCache);
+    if (!goals) return 'unknown';
+    const { home, away } = periodGoalCounts(goals);
+    const counts = sel === homeId ? home : away;
+    return counts.every((c) => c >= 1) ? 'win' : 'loss';
+  }
+
+  // ── Period markets ────────────────────────────────────────────────────────
+  const periodWinnerMatch = /^period([123])_winner$/.exec(String(leg.marketType));
+  if (periodWinnerMatch) {
+    const n = Number(periodWinnerMatch[1]);
+    const game = await getFinalGame(String(leg.gameId), cache);
+    if (!game) return 'unknown';
+    const homeId = String(game.homeTeam.abbreviation ?? '').toLowerCase();
+    const awayId = String(game.awayTeam.abbreviation ?? '').toLowerCase();
+    const sel = String(leg.selectionValue).toLowerCase();
+    if (sel !== homeId && sel !== awayId) return 'unknown';
+    const goals = await getScoringPlays(String(leg.gameId), cache, scoringCache);
+    if (!goals) return 'unknown';
+    const { home, away } = periodGoalCounts(goals);
+    const homeCum = home.slice(0, n).reduce((a, b) => a + b, 0);
+    const awayCum = away.slice(0, n).reduce((a, b) => a + b, 0);
+    if (homeCum === awayCum) return 'unknown'; // tied through this period — push
+    const winner = homeCum > awayCum ? homeId : awayId;
+    return sel === winner ? 'win' : 'loss';
+  }
+
+  const periodTotalMatch = /^period([123])_total_goals$/.exec(String(leg.marketType));
+  if (periodTotalMatch) {
+    const n = Number(periodTotalMatch[1]);
+    const line = Number(leg.line);
+    if (!Number.isFinite(line)) return 'unknown';
+    const goals = await getScoringPlays(String(leg.gameId), cache, scoringCache);
+    if (!goals) return 'unknown';
+    const { home, away } = periodGoalCounts(goals);
+    const total = home[n - 1] + away[n - 1];
+    const sel = String(leg.selectionValue).toLowerCase();
+    if (total === line) return 'unknown'; // push
+    if (sel === 'over')  return total > line ? 'win' : 'loss';
+    if (sel === 'under') return total < line ? 'win' : 'loss';
+    return 'unknown';
+  }
+
+  if (leg.marketType === 'highest_scoring_period') {
+    const goals = await getScoringPlays(String(leg.gameId), cache, scoringCache);
+    if (!goals) return 'unknown';
+    const { home, away } = periodGoalCounts(goals);
+    const totals = [0, 1, 2].map((i) => home[i] + away[i]);
+    const max = Math.max(...totals);
+    const leaders = totals.reduce<number[]>((acc, v, i) => (v === max ? [...acc, i] : acc), []);
+    if (leaders.length !== 1 || max === 0) return 'unknown'; // tie for highest, or no goals at all
+    const sel = String(leg.selectionValue).toLowerCase();
+    return sel === `p${leaders[0] + 1}` ? 'win' : 'loss';
+  }
+
+  const statKey = PLAYER_STAT_MARKETS[leg.marketType as string];
+  if (statKey) {
+    if (!leg.subjectId) return 'unknown';
+    const line = Number(leg.line);
+    if (!Number.isFinite(line)) return 'unknown';
+    const stats = await getPlayerBox(String(leg.gameId), String(leg.subjectId), cache, boxCache);
+    if (!stats) return 'unknown';
+    const value = stats[statKey];
+    if (typeof value !== 'number') return 'unknown';
+    const sel = String(leg.selectionValue).toLowerCase();
+    if (value === line) return 'unknown'; // push (rare -- lines are usually X.5)
+    if (sel === 'over')  return value > line ? 'win' : 'loss';
+    if (sel === 'under') return value < line ? 'win' : 'loss';
+    return 'unknown';
+  }
 
   const game = await getFinalGame(String(leg.gameId), cache);
   if (!game) return 'unknown';
@@ -84,7 +394,7 @@ async function settleLeg(leg: any, cache: GameCache): Promise<LegResult> {
     }
 
     default:
-      return 'unknown'; // player props etc. — not auto-settled yet
+      return 'unknown'; // game_to_ot, winning_margin, etc. — not auto-settled yet
   }
 }
 
@@ -116,13 +426,16 @@ export async function settlePendingSlips(userId?: string, max = 100): Promise<Se
 
   const summary: SettlementSummary = { checked: slips.length, settled: 0, wins: 0, losses: 0 };
   const cache: GameCache = new Map();
+  const boxCache: BoxCache = new Map();
+  const scoringCache: ScoringCache = new Map();
+  const faceoffCache: FaceoffCache = new Map();
 
   for (const slip of slips) {
     const legs: any[] = Array.isArray(slip.legs) ? slip.legs : [];
     if (legs.length === 0) continue;
 
     const results: LegResult[] = [];
-    for (const leg of legs) results.push(await settleLeg(leg, cache));
+    for (const leg of legs) results.push(await settleLeg(leg, cache, boxCache, scoringCache, faceoffCache));
 
     // Parlay semantics: one lost leg loses the slip;
     // a win requires EVERY leg to be settled and won.

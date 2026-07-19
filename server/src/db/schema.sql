@@ -206,6 +206,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   performance_score INT          DEFAULT 0,
   xp                INT          NOT NULL DEFAULT 0,
   notify_value_bets BOOLEAN      NOT NULL DEFAULT FALSE,
+  value_bet_min_ev_pct SMALLINT  NOT NULL DEFAULT 0,
   joined_at         DATE         DEFAULT CURRENT_DATE
 );
 

@@ -76,6 +76,7 @@ export interface ApiBestBet {
   teamAbbr:       string | null;
   label:          string;
   selection:      string;
+  selectionValue: string;
   selectionShort: string;
   context:        string;
   line:           number | null;
@@ -466,7 +467,7 @@ function buildMockFactors(
 
 const GAME_MARKET_TYPES: BetMarketType[] = [
   "moneyline", "puck_line", "total_goals", "regulation_result",
-  "game_to_ot", "both_teams_score", "winning_margin", "double_chance",
+  "game_to_ot", "both_teams_score", "winning_margin",
   "alt_puck_line", "ot_winner",
   "period1_winner", "period2_winner", "period3_winner", "highest_scoring_period",
   "period1_total_goals", "period2_total_goals", "period3_total_goals",

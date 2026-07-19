@@ -535,14 +535,18 @@ export function BetBuilderPage() {
     setSubmitError(null);
     try {
       const slipLegs = legs.map((l) => ({
-        marketType:  l.marketType,
-        subjectId:   l.subjectId,
-        subjectName: l.subjectName,
-        subjectLogo: l.subjectLogo,
-        selection:   l.selection,
-        line:        l.line,
-        probability: l.probability,
-        oddsLabel:   toOddsLabel(l.probability),
+        marketType:     l.marketType,
+        subjectId:      l.subjectId,
+        subjectName:    l.subjectName,
+        subjectLogo:    l.subjectLogo,
+        selection:      l.selection,
+        line:           l.line,
+        probability:    l.probability,
+        oddsLabel:      toOddsLabel(l.probability),
+        // Machine-readable fields — without these the slip can never be
+        // auto-settled and stays "pending" forever, even for simple markets.
+        gameId:         l.gameId,
+        selectionValue: l.selectionValue,
       }));
       const { slipId } = await submitSlip(slipLegs, sport, combinedProbability);
       setSubmitResult({ slipId });

@@ -9,6 +9,10 @@ export interface SlipLeg {
   line?:       number;
   probability: number;
   oddsLabel:   string;
+  /** NHL game id — required for automatic settlement. */
+  gameId?:         string;
+  /** Machine-readable selection ('over' | 'under' | team abbr…) — required for automatic settlement. */
+  selectionValue?: string;
 }
 
 export interface BetSlip {

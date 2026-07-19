@@ -133,6 +133,17 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
     return [];
   }
 
+  // ── Resolve which game a player is playing in (needed for auto-settlement:
+  //    player-prop legs have no natural "game" subject, so without this the
+  //    leg is saved with no gameId and settlement can never look up the
+  //    boxscore for it — it would stay pending forever). ──────────────────────
+  function getPlayerGameId(playerId: string): string | undefined {
+    const player = players.find((p) => p.id === playerId);
+    if (!player) return undefined;
+    const game = games.find((g) => g.team1Id === player.teamId || g.team2Id === player.teamId);
+    return game?.id;
+  }
+
   // ── Add leg to slip ────────────────────────────────────────────────────────
   async function handleAdd() {
     if (!selectedSubject || !selectedMarket) return;
@@ -140,6 +151,8 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
 
     const selectionValue = selectedSelection || "yes";
     const lineValue = selectedLine ?? selectedMarket.lineOptions?.[0];
+    const playerGameId =
+      selectedSubject.type === "player" ? getPlayerGameId(selectedSubject.id) : undefined;
 
     // Build a unique and deterministic ID
     const legId = `${selectedSubject.id}_${selectedMarket.type}_${selectionValue}_${lineValue ?? ""}`;
@@ -182,7 +195,12 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
       gameInfo: selectedSubject.subtitle,
       addedAt: new Date().toISOString(),
       // Machine-readable fields for automatic settlement
-      gameId: selectedSubject.type === "game" ? selectedSubject.id : undefined,
+      gameId:
+        selectedSubject.type === "game"
+          ? selectedSubject.id
+          : selectedSubject.type === "player"
+          ? playerGameId
+          : undefined,
       selectionValue: selectionValue != null ? String(selectionValue) : undefined,
     } as BetLeg;
 
