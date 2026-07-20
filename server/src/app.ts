@@ -1,4 +1,5 @@
 import express from 'express';
+import * as Sentry from '@sentry/node';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -15,7 +16,7 @@ import chatRoutes          from './routes/chat.routes';
 import slipRoutes          from './routes/slip.routes';
 import devRoutes           from './routes/dev.routes';
 import llmRoutes           from './routes/llm.routes';
-import subscriptionRoutes  from './routes/subscription.routes';
+import subscriptionRoutes, { stripeWebhook } from './routes/subscription.routes';
 import pushRoutes          from './routes/push.routes';
 import { getLeaderboard }  from './services/profile.service';
 import { seedAll }         from './db/seed';
@@ -51,6 +52,12 @@ app.use(cors({
   credentials: true,
 }));
 app.use(cookieParser());
+
+// Stripe webhook — MUST receive the raw body to verify the signature, so it is
+// mounted with express.raw BEFORE the JSON parser below. Registered early so it
+// also bypasses the /api JSON rate limiter.
+app.post('/api/subscription/webhook', express.raw({ type: 'application/json' }), stripeWebhook);
+
 // 5 MB: allows base64 avatar uploads (~2 MB binary → ~2.8 MB base64) with margin
 app.use(express.json({ limit: '5mb' }));
 
@@ -98,8 +105,17 @@ app.use('/api/subscription',  subscriptionRoutes);
 // Web Push (value-bet notifications)
 app.use('/api/push',          pushRoutes);
 
-// Dev ML dashboard (admin-only)
-app.use('/api/dev',           devRoutes);
+// Dev ML dashboard (admin-only). Defence in depth: even though every route is
+// gated behind authenticate + requireRole('admin'), the router is not mounted
+// at all in production unless explicitly opted in via ENABLE_DEV_ROUTES=true.
+// This removes the attack surface entirely in a normal prod deployment.
+const devRoutesEnabled =
+  process.env.NODE_ENV !== 'production' || process.env.ENABLE_DEV_ROUTES === 'true';
+if (devRoutesEnabled) {
+  app.use('/api/dev',         devRoutes);
+} else {
+  console.log('[app] /api/dev not mounted (production; set ENABLE_DEV_ROUTES=true to enable)');
+}
 
 // Dev-only seed endpoint
 if (process.env.NODE_ENV !== 'production') {
@@ -114,6 +130,10 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
 // 404 catch-all
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
+
+// Sentry error capture — no-op unless SENTRY_DSN is configured (see instrument.ts).
+// Must be registered after routes and before our own error handler.
+Sentry.setupExpressErrorHandler(app);
 
 // Global error handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

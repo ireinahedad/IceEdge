@@ -4,8 +4,33 @@
 // Provider-agnostic: works with a dev "activate" path today and is ready to be
 // driven by Stripe webhooks later (just call upsertFromStripe from the webhook).
 
+import Stripe from 'stripe';
 import { pool } from '../db/connection';
 import { SubscriptionRow, SubscriptionStatus, BillingPlan, SubStatus } from '../types/subscription.type';
+
+// ─── Stripe client (lazy) ─────────────────────────────────────────────────────
+// Only constructed when STRIPE_SECRET_KEY is set, so the app runs fine without
+// payments configured (dev / pre-launch). Everything below no-ops until then.
+let _stripe: Stripe | null = null;
+
+export function stripeConfigured(): boolean {
+  return !!process.env.STRIPE_SECRET_KEY;
+}
+
+export function getStripe(): Stripe {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    throw Object.assign(new Error('Stripe is not configured'), { status: 501 });
+  }
+  if (!_stripe) _stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  return _stripe;
+}
+
+function clientBaseUrl(): string {
+  return (
+    process.env.CLIENT_URL ||
+    (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',')[0].trim()
+  );
+}
 
 // The default (no row) state: everyone is Free until they subscribe.
 const FREE_STATUS: SubscriptionStatus = {
@@ -155,6 +180,22 @@ export async function redeemPromo(userId: string, code: string): Promise<Subscri
 
 /** Marks the subscription to end at the period boundary (keeps Pro until then). */
 export async function cancel(userId: string): Promise<SubscriptionStatus> {
+  // If this is a real Stripe subscription, cancel it at Stripe too; the webhook
+  // will sync the final state back. The local flag is set immediately so the UI
+  // reflects the choice without waiting for the webhook round-trip.
+  const { rows: existing } = await pool.query<SubscriptionRow>(
+    'SELECT * FROM subscriptions WHERE user_id = $1',
+    [userId],
+  );
+  const subId = existing[0]?.stripe_subscription_id;
+  if (stripeConfigured() && subId) {
+    try {
+      await getStripe().subscriptions.update(subId, { cancel_at_period_end: true });
+    } catch (err: any) {
+      console.error('[subscription] Stripe cancel failed:', err?.message);
+    }
+  }
+
   const { rows } = await pool.query<SubscriptionRow>(
     `UPDATE subscriptions
        SET cancel_at_period_end = TRUE, updated_at = NOW()
@@ -163,4 +204,135 @@ export async function cancel(userId: string): Promise<SubscriptionStatus> {
     [userId],
   );
   return toStatus(rows[0]);
+}
+
+// ─── Stripe checkout + webhook ────────────────────────────────────────────────
+
+/** Maps a Stripe subscription status onto our narrower SubStatus enum. */
+function mapStripeStatus(s: Stripe.Subscription.Status): SubStatus {
+  switch (s) {
+    case 'active':             return 'active';
+    case 'trialing':           return 'trialing';
+    case 'past_due':           return 'past_due';
+    case 'unpaid':             return 'past_due';
+    case 'canceled':           return 'canceled';
+    case 'incomplete_expired': return 'canceled';
+    case 'incomplete':         return 'incomplete';
+    default:                   return 'incomplete';
+  }
+}
+
+/**
+ * Creates a Stripe Checkout Session for the Pro plan and returns its URL.
+ * `client_reference_id` + subscription metadata carry our userId so the webhook
+ * can attribute the resulting subscription back to the right account.
+ */
+export async function createCheckoutSession(userId: string, email?: string): Promise<string> {
+  const stripe = getStripe();
+  const price = process.env.STRIPE_PRICE_PRO_MONTHLY;
+  if (!price) throw Object.assign(new Error('STRIPE_PRICE_PRO_MONTHLY is not set'), { status: 500 });
+
+  // Reuse an existing Stripe customer if we already have one for this user.
+  const { rows } = await pool.query<SubscriptionRow>(
+    'SELECT stripe_customer_id FROM subscriptions WHERE user_id = $1',
+    [userId],
+  );
+  const existingCustomer = rows[0]?.stripe_customer_id || undefined;
+
+  const base = clientBaseUrl();
+  const session = await stripe.checkout.sessions.create({
+    mode: 'subscription',
+    line_items: [{ price, quantity: 1 }],
+    client_reference_id: userId,
+    customer: existingCustomer,
+    customer_email: existingCustomer ? undefined : email,
+    subscription_data: { metadata: { userId } },
+    success_url: `${base}/pro/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${base}/pro`,
+    allow_promotion_codes: true,
+  });
+
+  if (!session.url) throw Object.assign(new Error('Stripe did not return a checkout URL'), { status: 502 });
+  return session.url;
+}
+
+/** Resolve our userId for an incoming Stripe subscription (metadata first, then customer id). */
+async function resolveUserId(sub: Stripe.Subscription): Promise<string | null> {
+  const fromMeta = sub.metadata?.userId;
+  if (fromMeta) return fromMeta;
+  const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
+  if (!customerId) return null;
+  const { rows } = await pool.query<{ user_id: string }>(
+    'SELECT user_id FROM subscriptions WHERE stripe_customer_id = $1',
+    [customerId],
+  );
+  return rows[0]?.user_id ?? null;
+}
+
+/** Upserts our subscriptions row from a Stripe Subscription object. */
+async function syncSubscription(sub: Stripe.Subscription): Promise<void> {
+  const userId = await resolveUserId(sub);
+  if (!userId) {
+    console.warn('[subscription] webhook: could not resolve userId for subscription', sub.id);
+    return;
+  }
+  const status = mapStripeStatus(sub.status);
+  const active = status === 'active' || status === 'trialing';
+  const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id ?? null;
+  // `current_period_end` has moved across Stripe API versions — read defensively.
+  const periodEndUnix = (sub as any).current_period_end as number | undefined;
+  const periodEnd = periodEndUnix ? new Date(periodEndUnix * 1000) : null;
+
+  await upsert(userId, {
+    plan: active ? 'pro' : 'free',
+    status,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: sub.id,
+    currentPeriodEnd: periodEnd,
+    cancelAtPeriodEnd: sub.cancel_at_period_end,
+  });
+}
+
+/**
+ * Verifies a Stripe webhook signature and processes the event.
+ * `rawBody` MUST be the raw request Buffer (see the express.raw route in app.ts).
+ * Throws (400) if the signature can't be verified — Stripe will retry.
+ */
+export async function handleStripeWebhook(rawBody: Buffer, signature: string | undefined): Promise<void> {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) throw Object.assign(new Error('STRIPE_WEBHOOK_SECRET is not set'), { status: 500 });
+  if (!signature) throw Object.assign(new Error('Missing Stripe-Signature header'), { status: 400 });
+
+  const stripe = getStripe();
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(rawBody, signature, secret);
+  } catch (err: any) {
+    throw Object.assign(new Error(`Webhook signature verification failed: ${err.message}`), { status: 400 });
+  }
+
+  switch (event.type) {
+    case 'checkout.session.completed': {
+      const session = event.data.object as Stripe.Checkout.Session;
+      if (session.subscription) {
+        const subId = typeof session.subscription === 'string' ? session.subscription : session.subscription.id;
+        const sub = await stripe.subscriptions.retrieve(subId);
+        // Ensure our userId is attached for future events.
+        if (session.client_reference_id && !sub.metadata?.userId) {
+          sub.metadata = { ...sub.metadata, userId: session.client_reference_id };
+        }
+        await syncSubscription(sub);
+      }
+      break;
+    }
+    case 'customer.subscription.created':
+    case 'customer.subscription.updated':
+    case 'customer.subscription.deleted': {
+      await syncSubscription(event.data.object as Stripe.Subscription);
+      break;
+    }
+    default:
+      // Unhandled event types are acknowledged (200) without action.
+      break;
+  }
 }

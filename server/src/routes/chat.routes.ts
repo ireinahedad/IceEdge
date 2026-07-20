@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { chatService } from '../services/chat.service';
 import { authenticate } from '../middleware/auth.middleware';
+import { InMemoryRateLimitStore, RateLimitStore } from '../middleware/rateLimitStore';
 import { io } from '../socket';
 
 const router = Router();
@@ -14,34 +15,29 @@ function uid(req: Request): string {
   return id;
 }
 
-// ─── Per-user rate limiting (in-memory sliding window) ───────────────────────
+// ─── Per-user rate limiting (sliding window) ─────────────────────────────────
 // Protects against message spam and join-code brute force.
-
-const rateBuckets = new Map<string, number[]>();
+//
+// Storage is abstracted behind RateLimitStore. The default in-memory store is
+// SINGLE-INSTANCE ONLY (counters reset on restart, not shared across instances)
+// and self-prunes stale buckets. To go multi-instance / restart-persistent,
+// swap this for a Redis-backed RateLimitStore — the middleware below is unchanged.
+const rateStore: RateLimitStore = new InMemoryRateLimitStore();
 
 function rateLimit(action: string, max: number, windowMs: number) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const key = `${action}:${(req as any).user?.sub ?? req.ip}`;
-    const now = Date.now();
-    const hits = (rateBuckets.get(key) ?? []).filter((t) => now - t < windowMs);
-    if (hits.length >= max) {
-      return res.status(429).json({ error: 'Too many requests — slow down' });
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const key = `${action}:${(req as any).user?.sub ?? req.ip}`;
+      const allowed = await rateStore.tryConsume(key, max, windowMs);
+      if (!allowed) {
+        return res.status(429).json({ error: 'Too many requests — slow down' });
+      }
+      next();
+    } catch (err) {
+      next(err);
     }
-    hits.push(now);
-    rateBuckets.set(key, hits);
-    next();
   };
 }
-
-// Prune stale buckets every 10 min so memory stays bounded
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, hits] of rateBuckets) {
-    const alive = hits.filter((t) => now - t < 10 * 60_000);
-    if (alive.length === 0) rateBuckets.delete(key);
-    else rateBuckets.set(key, alive);
-  }
-}, 10 * 60_000).unref();
 
 // GET /api/chat/rooms — public rooms + my private rooms (pinned first)
 router.get('/rooms', async (req: Request, res: Response) => {

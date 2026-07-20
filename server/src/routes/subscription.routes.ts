@@ -13,21 +13,23 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
 });
 
 // POST /subscription/checkout — start an upgrade.
-//   • If Stripe is configured (STRIPE_SECRET_KEY set) this is where you'd create
-//     a Checkout Session and return its URL. (Wiring left as a clear next step.)
-//   • Otherwise we fall back to a dev activation so Pro gating can be tested end
-//     to end without a payment provider.
+//   • If Stripe is configured (STRIPE_SECRET_KEY set) → create a real Checkout
+//     Session and return its URL.
+//   • In non-production without Stripe → dev activation so Pro gating can be
+//     tested end to end without a payment provider.
+//   • In production without Stripe → 501 (never silently grant Pro for free).
 router.post('/checkout', authenticate, async (req: Request, res: Response) => {
   try {
-    const stripeConfigured = !!process.env.STRIPE_SECRET_KEY;
-
-    if (stripeConfigured) {
-      // TODO(stripe): create a Checkout Session for the Pro price and return:
-      //   return res.json({ url: session.url });
-      return res.status(501).json({ error: 'Stripe checkout not wired yet' });
+    if (Subscriptions.stripeConfigured()) {
+      const url = await Subscriptions.createCheckoutSession(req.user!.sub, req.user!.email);
+      return res.json({ url });
     }
 
-    // Dev / no-payment mode: grant Pro immediately.
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(501).json({ error: 'Payments are not configured' });
+    }
+
+    // Dev / no-payment mode only.
     const status = await Subscriptions.activateProDev(req.user!.sub);
     return res.json({ devActivated: true, status });
   } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
@@ -56,5 +58,22 @@ router.post('/cancel', authenticate, async (req: Request, res: Response) => {
     return res.json(status);
   } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
 });
+
+// POST /api/subscription/webhook — Stripe events (signature-verified).
+// Mounted separately in app.ts with a RAW body parser (Stripe needs the raw
+// bytes to verify the signature), so it is NOT part of this JSON router.
+export async function stripeWebhook(req: Request, res: Response): Promise<void> {
+  try {
+    await Subscriptions.handleStripeWebhook(
+      req.body as Buffer,
+      req.headers['stripe-signature'] as string | undefined,
+    );
+    res.json({ received: true });
+  } catch (err: any) {
+    // 400 → Stripe will retry. Log for visibility.
+    console.error('[subscription] webhook error:', err?.message);
+    res.status(err.status ?? 400).json({ error: err.message });
+  }
+}
 
 export default router;

@@ -1,4 +1,5 @@
 import { pool } from '../db/connection';
+import { encryptSecret, decryptSecret } from './crypto.util';
 
 // ─── Profile ─────────────────────────────────────────────────────────────────
 
@@ -48,7 +49,8 @@ export async function getProfileById(userId: string) {
     valueBetMinEvPct: profile.valueBetMinEvPct ?? 0,
     tier:             profile.tier,
     performanceScore: profile.performanceScore,
-    openaiApiKey:     profile.openaiApiKey ?? null,
+    // Stored encrypted at rest — decrypt for the owner (legacy plaintext passes through).
+    openaiApiKey:     profile.openaiApiKey ? decryptSecret(profile.openaiApiKey) : null,
     ruleWeights:      profile.ruleWeights ?? null,
     badges,
   };
@@ -130,7 +132,7 @@ export async function updateProfile(userId: string, updates: {
   }
   if (updates.avatar        !== undefined) { fields.push(`avatar = $${i++}`);           values.push(String(updates.avatar).slice(0, 20)); }
   if (updates.avatarUrl     !== undefined) { fields.push(`avatar_url = $${i++}`);       values.push(updates.avatarUrl); }
-  if (updates.openaiApiKey  !== undefined) { fields.push(`openai_api_key = $${i++}`);   values.push(updates.openaiApiKey); }
+  if (updates.openaiApiKey  !== undefined) { fields.push(`openai_api_key = $${i++}`);   values.push(updates.openaiApiKey == null ? null : encryptSecret(updates.openaiApiKey)); }
   if (updates.ruleWeights   !== undefined) { fields.push(`rule_weights = $${i++}`);      values.push(updates.ruleWeights === null ? null : JSON.stringify(updates.ruleWeights)); }
 
   if (fields.length === 0 && updates.username === undefined) {

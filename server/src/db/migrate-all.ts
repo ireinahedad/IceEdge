@@ -24,14 +24,22 @@ const dbDir         = __dirname;                       // src/db
 const schemaPath    = join(dbDir, 'schema.sql');
 const migrationsDir = join(dbDir, 'migrations');
 
+// Collects every migration that failed so the process can exit non-zero.
+// We run *all* files before failing (rather than stopping at the first error)
+// so a single run surfaces the complete list of problems.
+const failures: Array<{ label: string; message: string }> = [];
+
 async function runFile(label: string, path: string): Promise<void> {
   const sql = readFileSync(path, 'utf8');
   try {
     await pool.query(sql);
     console.log(`[migrate] ✓ ${label}`);
   } catch (err: any) {
-    // Keep going: partial/legacy databases may already have some objects.
-    console.warn(`[migrate] ⚠ ${label} — ${err.message}`);
+    // Migrations are written idempotently (IF NOT EXISTS / duplicate-safe
+    // guards), so a genuine error means the schema may be incomplete.
+    // Record it and keep going, but the process will fail at the end.
+    console.error(`[migrate] ✗ ${label} — ${err.message}`);
+    failures.push({ label, message: err.message });
   }
 }
 
@@ -49,8 +57,19 @@ async function runFile(label: string, path: string): Promise<void> {
     await runFile(`migrations/${f}`, join(migrationsDir, f));
   }
 
-  console.log('[migrate] ✓ All migrations applied');
   await pool.end();
+
+  if (failures.length > 0) {
+    console.error(
+      `[migrate] ✗ ${failures.length} migration(s) failed — schema may be incomplete:`,
+    );
+    for (const { label, message } of failures) {
+      console.error(`  • ${label}: ${message}`);
+    }
+    process.exit(1);
+  }
+
+  console.log('[migrate] ✓ All migrations applied');
 })().catch(async (err: any) => {
   console.error('[migrate] ✗ Fatal:', err.message);
   await pool.end();

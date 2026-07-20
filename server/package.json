@@ -10,9 +10,11 @@
     "seed": "ts-node src/db/seed.ts",
     "db:migrate": "psql \"$DATABASE_URL\" -f src/db/schema.sql",
     "db:migrate:all": "ts-node src/db/migrate-all.ts",
-    "db:migrate:slips": "ts-node src/db/migrate-slips.ts"
+    "db:migrate:slips": "ts-node src/db/migrate-slips.ts",
+    "db:encrypt-keys": "ts-node src/db/encrypt-openai-keys.ts"
   },
   "dependencies": {
+    "@sentry/node": "^8.0.0",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -23,6 +25,7 @@
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.12.0",
     "socket.io": "^4.8.3",
+    "stripe": "^17.0.0",
     "web-push": "^3.6.7"
   },
   "devDependencies": {

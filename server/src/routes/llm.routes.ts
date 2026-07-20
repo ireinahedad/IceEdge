@@ -14,6 +14,7 @@ import { Router, Request, Response } from 'express';
 import { pool } from '../db/connection';
 import { authenticate } from '../middleware/auth.middleware';
 import { isPro } from '../services/subscription.service';
+import { decryptSecret } from '../services/crypto.util';
 
 const router = Router();
 
@@ -91,7 +92,9 @@ router.post('/', async (req: Request, res: Response) => {
       throw err;
     }
 
-    const userKey: string | null = rows[0]?.openaiApiKey ?? null;
+    // Keys are stored encrypted at rest (AES-256-GCM); decrypt for use.
+    // Legacy plaintext rows pass through unchanged until the migration runs.
+    const userKey: string | null = rows[0]?.openaiApiKey ? decryptSecret(rows[0].openaiApiKey) : null;
     if (!userKey) {
       return res.status(422).json({
         error: 'no_api_key',
