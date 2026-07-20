@@ -140,8 +140,9 @@ Vercel attribue automatiquement `iceedge.vercel.app` (ou le nom du projet).
 
 ### Vérifier les health checks
 ```bash
-# Backend Node.js
-curl https://[TON-BACKEND].railway.app/api/health
+# Backend Node.js — liveness (aucune dépendance) puis readiness (SELECT 1 sur la DB)
+curl https://[TON-BACKEND].railway.app/health
+curl https://[TON-BACKEND].railway.app/health/ready   # 200 si DB ok, 503 sinon
 
 # Service ML Python
 curl https://[TON-ML].railway.app/health
@@ -157,7 +158,7 @@ curl -X POST https://[TON-BACKEND].railway.app/api/predict/ml \
 
 ### Checklist finale
 - [ ] Supabase : schéma importé, connexion vérifiée
-- [ ] Railway Node.js : deploy réussi, `/api/health` répond 200
+- [ ] Railway Node.js : deploy réussi, `/health` répond 200 et `/health/ready` répond 200
 - [ ] Railway Python : deploy réussi, `/health` répond 200
 - [ ] Vercel : build réussi, app accessible
 - [ ] Google OAuth : URIs de redirection mises à jour

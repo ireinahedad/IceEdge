@@ -19,6 +19,8 @@ import llmRoutes           from './routes/llm.routes';
 import subscriptionRoutes, { stripeWebhook } from './routes/subscription.routes';
 import pushRoutes          from './routes/push.routes';
 import { getLeaderboard }  from './services/profile.service';
+import { pool }            from './db/connection';
+import { httpLogger }      from './logger';
 import { seedAll }         from './db/seed';
 import { apiLimiter, authLimiter, writeLimiter } from './middleware/rateLimit.middleware';
 
@@ -29,6 +31,9 @@ const app = express();
 if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
 
 app.use(helmet());
+// Structured per-request logging + request ids (before routes so every handler
+// gets req.log and the x-request-id header is set on the response).
+app.use(httpLogger);
 // credentials:true is required so the httpOnly refresh-token cookie flows
 // between the client (5173) and the API (3001). '*' is not allowed with
 // credentials, hence the explicit default origin.
@@ -125,8 +130,40 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// Health check
+// Health checks — liveness vs readiness are deliberately separate.
+//
+// Liveness: is the process up and the event loop responsive? No dependencies.
+// An orchestrator uses this to decide whether to RESTART the container, so it
+// must NOT depend on Postgres — a DB blip should not trigger a restart loop.
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+// Readiness: can this instance actually serve requests right now? Checks the
+// one hard dependency, Postgres. A load balancer uses this to decide whether to
+// ROUTE traffic; returning 503 pulls the instance out of rotation while its DB
+// is unreachable instead of sending users failing requests.
+//
+// The ML service is intentionally NOT checked here: predictions fall back to a
+// rule-based path when it's down, so gating readiness on it would cause false
+// outages and hammer the ML service with probe traffic.
+app.get('/health/ready', async (_req, res) => {
+  const checks: Record<string, 'ok' | 'down'> = { db: 'down' };
+  try {
+    const client = await pool.connect();
+    try {
+      // Bound the probe so a hung DB can't hang the health endpoint.
+      await client.query('SET statement_timeout = 3000');
+      await client.query('SELECT 1');
+      checks.db = 'ok';
+    } finally {
+      client.release();
+    }
+  } catch (err: any) {
+    console.error('[health] readiness DB check failed:', err?.message ?? err);
+  }
+
+  const ready = checks.db === 'ok';
+  res.status(ready ? 200 : 503).json({ status: ready ? 'ok' : 'unavailable', checks });
+});
 
 // 404 catch-all
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
@@ -136,8 +173,10 @@ app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 Sentry.setupExpressErrorHandler(app);
 
 // Global error handler
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[Error]', err);
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // Log with the request-scoped logger so the error is correlated to its
+  // request id; fall back to console if the logger middleware didn't run.
+  ((req as any).log?.error?.bind((req as any).log) ?? console.error)({ err }, 'request failed');
   const status = err.status ?? 500;
   // Don't leak internal error details for unexpected 5xx in production.
   const isClientError = status >= 400 && status < 500;

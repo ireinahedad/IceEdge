@@ -1,0 +1,8 @@
+# Build context is ml/ (see python/Dockerfile). Keep models/ — it must ship.
+python/__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+.env
+data/
+python/.dockerignore

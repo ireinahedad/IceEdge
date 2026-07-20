@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
+import { validateBody } from '../middleware/validate.middleware';
+import { slipSubmitSchema } from '../validation/schemas';
 import * as SlipService from '../services/slip.service';
 import { settlePendingSlips } from '../services/settlement.service';
 
@@ -24,7 +26,7 @@ router.post('/settle', async (req: Request, res: Response) => {
 
 // ─── POST /api/slips ──────────────────────────────────────────────────────────
 // Submit a new prediction slip
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', validateBody(slipSubmitSchema), async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.sub;
     if (!userId) { res.status(401).json({ error: 'Unauthorized' }); return; }

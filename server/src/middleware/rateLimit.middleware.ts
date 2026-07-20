@@ -42,3 +42,27 @@ export const writeLimiter = rateLimit({
   legacyHeaders:   false,
   message: { error: 'Too many actions, please slow down.' },
 });
+
+/** Dedicated — LLM proxy. The Pro path bills the operator's GitHub Models
+ *  account, so it needs its own tight, per-user limit independent of the broad
+ *  apiLimiter. Keyed by user id (route is authenticated) with an IP fallback. */
+export const llmLimiter = rateLimit({
+  windowMs: 60 * 1000,            // 1 minute
+  limit:    isProd ? 10 : 60,     // 10 prompts / min / user in prod
+  standardHeaders: 'draft-7',
+  legacyHeaders:   false,
+  keyGenerator: (req) => (req as any).user?.sub || req.ip,
+  message: { error: 'Too many AI requests, please slow down.' },
+});
+
+/** Tight — promo-code redemption. Promo codes are guessable secrets, so this
+ *  blunts brute-forcing. Keyed by user id (redeem is authenticated) with an IP
+ *  fallback, so one account/IP can't grind through the code space. */
+export const redeemLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,       // 1 hour
+  limit:    isProd ? 10 : 100,    // 10 attempts / hour / user in prod
+  standardHeaders: 'draft-7',
+  legacyHeaders:   false,
+  keyGenerator: (req) => (req as any).user?.sub || req.ip,
+  message: { error: 'Too many promo attempts. Try again later.' },
+});

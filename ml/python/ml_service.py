@@ -25,7 +25,7 @@ from typing import List, Optional
 
 import numpy as np
 import xgboost as xgb
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
@@ -157,6 +157,12 @@ def _try_load_models():
         print("[ML]    Lance : python fetch_data.py && python train.py")
 
 _try_load_models()
+
+# Set once the model-load attempt has completed. The readiness probe gates on
+# this so the orchestrator only routes traffic after init (models loaded, or
+# fallback confirmed). Load is synchronous at import, so this is True by the
+# time uvicorn accepts requests.
+_startup_complete = True
 
 # ── Math helpers ──────────────────────────────────────────────────────────────
 
@@ -716,6 +722,24 @@ def health():
         "elo_teams_loaded": len(_elo_ratings),
         "calibrated":       _platt_a is not None,
         "tip": "Lance fetch_data.py puis train.py pour activer XGBoost (models/*.json).",
+    }
+
+@app.get("/health/ready")
+def health_ready(response: Response):
+    """Readiness probe — 200 once model-load has completed, 503 while starting.
+
+    Liveness stays on /health (process is up). Readiness gates traffic on init
+    so the LB/orchestrator holds requests until the service can actually serve.
+    """
+    if not _startup_complete:
+        response.status_code = 503
+        return {"status": "starting"}
+    return {
+        "status": "ready",
+        "trained_models_loaded": {
+            "game_model":   _xgb_game   is not None,
+            "totals_model": _xgb_totals is not None,
+        },
     }
 
 @app.get("/features")

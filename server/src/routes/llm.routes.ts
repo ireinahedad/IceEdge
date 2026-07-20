@@ -13,10 +13,66 @@
 import { Router, Request, Response } from 'express';
 import { pool } from '../db/connection';
 import { authenticate } from '../middleware/auth.middleware';
+import { llmLimiter } from '../middleware/rateLimit.middleware';
 import { isPro } from '../services/subscription.service';
 import { decryptSecret } from '../services/crypto.util';
 
 const router = Router();
+
+// ── Abuse controls ────────────────────────────────────────────────────────────
+// Caps keep a single user (or a leaked token) from running up token-cost on the
+// operator's GitHub Models account or tying up connections indefinitely.
+const MAX_PROMPT_CHARS  = Number(process.env.LLM_MAX_PROMPT_CHARS)  || 8_000;   // ~2k tokens
+const MAX_SYSTEM_CHARS  = Number(process.env.LLM_MAX_SYSTEM_CHARS)  || 2_000;
+const FETCH_TIMEOUT_MS  = Number(process.env.LLM_FETCH_TIMEOUT_MS)  || 30_000;
+// Per-user daily request quota. In-memory (per instance) — good enough as a
+// cost backstop pre-scale; move to Redis/DB if you run multiple instances.
+const DAILY_QUOTA       = Number(process.env.LLM_DAILY_QUOTA)       || 200;
+
+interface QuotaEntry { count: number; day: string; }
+const quota = new Map<string, QuotaEntry>();
+
+function todayKey(): string { return new Date().toISOString().slice(0, 10); }
+
+/** Returns true if the user is within quota (and increments), false if over. */
+function underDailyQuota(userId: string): boolean {
+  const day = todayKey();
+  const entry = quota.get(userId);
+  if (!entry || entry.day !== day) {
+    quota.set(userId, { count: 1, day });
+    return true;
+  }
+  if (entry.count >= DAILY_QUOTA) return false;
+  entry.count += 1;
+  return true;
+}
+
+/** POST to a provider with a hard timeout and one retry on transient failure
+ *  (network error or 5xx). Returns the fetch Response; throws only on a
+ *  network-level error after the retry is exhausted. */
+async function fetchWithTimeoutRetry(
+  endpoint: string,
+  init: Record<string, any>,
+  attempts = 2,
+): Promise<any> {
+  let lastErr: any;
+  for (let i = 0; i < attempts; i++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(endpoint, { ...init, signal: controller.signal }) as any;
+      // Retry once on 5xx (transient upstream); return 4xx/2xx as-is.
+      if (res.status >= 500 && i < attempts - 1) { lastErr = new Error(`upstream ${res.status}`); continue; }
+      return res;
+    } catch (err: any) {
+      lastErr = err;
+      // AbortError (timeout) and network errors fall through to a retry.
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr;
+}
 
 // GitHub Models (personal inference endpoint). See:
 // https://docs.github.com/en/rest/models/inference
@@ -29,8 +85,9 @@ const GITHUB_API_VERSION = '2026-03-10';
 const DEFAULT_PRO_MODEL = 'openai/gpt-4.1-mini';
 const DEFAULT_FREE_MODEL = 'gpt-4o-mini';
 
-// All LLM routes require a valid JWT
+// All LLM routes require a valid JWT, then a dedicated per-user rate limit.
 router.use(authenticate);
+router.use(llmLimiter);
 
 router.post('/', async (req: Request, res: Response) => {
   const userId = (req as any).user?.sub;
@@ -42,7 +99,24 @@ router.post('/', async (req: Request, res: Response) => {
     systemPrompt?: string;
   };
 
-  if (!prompt?.trim()) return res.status(400).json({ error: 'prompt is required' });
+  if (typeof prompt !== 'string' || !prompt.trim()) {
+    return res.status(400).json({ error: 'prompt is required' });
+  }
+  // Size caps — reject oversized payloads before spending any provider tokens.
+  if (prompt.length > MAX_PROMPT_CHARS) {
+    return res.status(413).json({ error: `prompt too long (max ${MAX_PROMPT_CHARS} characters)` });
+  }
+  if (systemPrompt != null && (typeof systemPrompt !== 'string' || systemPrompt.length > MAX_SYSTEM_CHARS)) {
+    return res.status(413).json({ error: `systemPrompt too long (max ${MAX_SYSTEM_CHARS} characters)` });
+  }
+  if (model != null && (typeof model !== 'string' || model.length > 100)) {
+    return res.status(400).json({ error: 'invalid model' });
+  }
+
+  // Per-user daily quota — a hard cost backstop on top of the rate limiter.
+  if (!underDailyQuota(userId)) {
+    return res.status(429).json({ error: 'Daily AI request limit reached. Try again tomorrow.' });
+  }
 
   // Build the shared message array once.
   const messages: { role: string; content: string }[] = [];
@@ -123,9 +197,11 @@ router.post('/', async (req: Request, res: Response) => {
   }
 
   // Node 18+ global fetch returns a Response-like object typed loosely as `any`.
+  // Bounded by a hard timeout with one retry on transient failure, so a hung
+  // provider can't tie up the request/connection indefinitely.
   let providerRes: any;
   try {
-    providerRes = await fetch(endpoint, {
+    providerRes = await fetchWithTimeoutRetry(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -133,9 +209,13 @@ router.post('/', async (req: Request, res: Response) => {
         ...extraHeaders,
       },
       body: JSON.stringify(body),
-    }) as unknown as Response;
+    });
   } catch (err: any) {
-    return res.status(502).json({ error: 'Failed to reach the model provider', detail: err.message });
+    const timedOut = err?.name === 'AbortError';
+    return res.status(timedOut ? 504 : 502).json({
+      error: timedOut ? 'The model provider timed out' : 'Failed to reach the model provider',
+      detail: err?.message,
+    });
   }
 
   if (!providerRes.ok) {

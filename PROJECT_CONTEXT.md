@@ -317,7 +317,9 @@ Erreurs déjà corrigées :
 
 # Database
 
-`postgresql://postgres:mike1970@localhost:5432/IceedgeDB`
+`postgresql://postgres:<DB_PASSWORD>@localhost:5432/IceedgeDB`
+
+> ⚠️ Never commit real credentials to this file. Use a local `server/.env` (git-ignored). See `SECRET_ROTATION.md`.
 
 ## Tables
 
@@ -355,7 +357,7 @@ VITE_BET365_AFFILIATE_CODE=365_XXXXXXX    # À remplacer par le vrai code
 
 ## `server/.env` (à créer si absent)
 ```
-DATABASE_URL=postgresql://postgres:mike1970@localhost:5432/IceedgeDB
+DATABASE_URL=postgresql://postgres:<DB_PASSWORD>@localhost:5432/IceedgeDB
 JWT_SECRET=<secret>
 JWT_REFRESH_SECRET=<secret>
 GOOGLE_CLIENT_ID=<id>

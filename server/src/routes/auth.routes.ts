@@ -1,6 +1,11 @@
 import { Router, Request, Response } from 'express';
 import * as AuthService from '../services/auth.service';
 import { authenticate } from '../middleware/auth.middleware';
+import { validateBody } from '../middleware/validate.middleware';
+import {
+  registerSchema, loginSchema, verifyEmailSchema, resendVerificationSchema,
+  forgotPasswordSchema, resetPasswordSchema,
+} from '../validation/schemas';
 import {
   RegisterBody, LoginBody, RefreshBody, AuthTokens,
   VerifyEmailBody, ResendVerificationBody,
@@ -54,7 +59,7 @@ function publicTokens(tokens: AuthTokens): Omit<AuthTokens, 'refresh_token' | 'r
 
 // POST /auth/register — creates an unverified account and emails a 6-digit code.
 // No tokens are returned; the client must call /auth/verify-email next.
-router.post('/register', async (req: Request<{}, {}, RegisterBody>, res: Response) => {
+router.post('/register', validateBody(registerSchema), async (req: Request<{}, {}, RegisterBody>, res: Response) => {
   try {
     const { email, username, password, first_name, last_name } = req.body;
     if (!email || !username || !password)
@@ -72,7 +77,7 @@ router.post('/register', async (req: Request<{}, {}, RegisterBody>, res: Respons
 });
 
 // POST /auth/verify-email — confirms the code, then logs the user in.
-router.post('/verify-email', async (req: Request<{}, {}, VerifyEmailBody>, res: Response) => {
+router.post('/verify-email', validateBody(verifyEmailSchema), async (req: Request<{}, {}, VerifyEmailBody>, res: Response) => {
   try {
     const { email, code } = req.body;
     if (!email || !code)
@@ -84,7 +89,7 @@ router.post('/verify-email', async (req: Request<{}, {}, VerifyEmailBody>, res: 
 });
 
 // POST /auth/resend-verification — sends a fresh code (always 200 to avoid enumeration).
-router.post('/resend-verification', async (req: Request<{}, {}, ResendVerificationBody>, res: Response) => {
+router.post('/resend-verification', validateBody(resendVerificationSchema), async (req: Request<{}, {}, ResendVerificationBody>, res: Response) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'email is required' });
@@ -94,7 +99,7 @@ router.post('/resend-verification', async (req: Request<{}, {}, ResendVerificati
 });
 
 // POST /auth/forgot-password — emails a reset code (always 200 to avoid enumeration).
-router.post('/forgot-password', async (req: Request<{}, {}, ForgotPasswordBody>, res: Response) => {
+router.post('/forgot-password', validateBody(forgotPasswordSchema), async (req: Request<{}, {}, ForgotPasswordBody>, res: Response) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'email is required' });
@@ -104,7 +109,7 @@ router.post('/forgot-password', async (req: Request<{}, {}, ForgotPasswordBody>,
 });
 
 // POST /auth/reset-password — validates the code and sets a new password.
-router.post('/reset-password', async (req: Request<{}, {}, ResetPasswordBody>, res: Response) => {
+router.post('/reset-password', validateBody(resetPasswordSchema), async (req: Request<{}, {}, ResetPasswordBody>, res: Response) => {
   try {
     const { email, code, new_password } = req.body;
     if (!email || !code || !new_password)
@@ -117,7 +122,7 @@ router.post('/reset-password', async (req: Request<{}, {}, ResetPasswordBody>, r
 });
 
 // POST /auth/login
-router.post('/login', async (req: Request<{}, {}, LoginBody>, res: Response) => {
+router.post('/login', validateBody(loginSchema), async (req: Request<{}, {}, LoginBody>, res: Response) => {
   try {
     const { email, password, remember } = req.body;
     if (!email || !password)

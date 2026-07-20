@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import * as ProfileService from '../services/profile.service';
 import { authenticate, requirePro } from '../middleware/auth.middleware';
+import { validateBody } from '../middleware/validate.middleware';
+import { avatarSchema } from '../validation/schemas';
 
 const router = Router();
 
@@ -81,23 +83,13 @@ router.patch('/me', async (req: Request, res: Response) => {
 
 // POST /api/users/me/avatar  { avatarDataUrl: string }
 // Accepts a base64 data URI and saves it as the user's avatar_url
-router.post('/me/avatar', async (req: Request, res: Response) => {
+router.post('/me/avatar', validateBody(avatarSchema), async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.sub;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { avatarDataUrl } = req.body as { avatarDataUrl?: string };
-    if (!avatarDataUrl) return res.status(400).json({ error: 'avatarDataUrl is required' });
-
-    // Basic validation — must be a data URI image
-    if (!avatarDataUrl.startsWith('data:image/')) {
-      return res.status(400).json({ error: 'avatarDataUrl must be an image data URI' });
-    }
-
-    // Limit size to ~2 MB (base64 is ~4/3 of binary)
-    if (avatarDataUrl.length > 2_800_000) {
-      return res.status(413).json({ error: 'Image too large (max ~2 MB)' });
-    }
+    // Shape + size already enforced by avatarSchema (data:image/ URI, ≤ ~2 MB).
+    const { avatarDataUrl } = req.body as { avatarDataUrl: string };
 
     const updated = await ProfileService.updateProfile(userId, { avatarUrl: avatarDataUrl });
     res.json({ avatarUrl: updated.avatarUrl });

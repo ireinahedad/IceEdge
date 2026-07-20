@@ -3,10 +3,12 @@ import './instrument'; // Sentry — must load before app + its dependencies
 import { createServer } from 'http';
 import type { Server as HttpServer } from 'http';
 import app from './app';
+import { logger } from './logger';
 import { pool, connectDB } from './db/connection';
 import { initSocket, io } from './socket';
 import { startSettlementJob } from './services/settlement.service';
 import { startValueBetScan } from './services/valueBetScan.service';
+import { startCleanupJob } from './services/cleanup.service';
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -20,15 +22,17 @@ const SHUTDOWN_TIMEOUT_MS = Number(process.env.SHUTDOWN_TIMEOUT_MS) || 10_000;
     startSettlementJob();
     // Scan for value bets and push to opted-in Pro users
     startValueBetScan();
+    // Daily housekeeping: prune expired/revoked tokens and used codes
+    startCleanupJob();
   } catch (err: any) {
-    console.warn(`[Server] PostgreSQL unavailable - DB features disabled. (${err.message})`);
+    logger.warn(`[Server] PostgreSQL unavailable - DB features disabled. (${err.message})`);
   }
 
   const httpServer = createServer(app);
   initSocket(httpServer);
 
   httpServer.listen(PORT, () => {
-    console.log(`[Server] Running on http://localhost:${PORT} (HTTP + WebSocket)`);
+    logger.info(`[Server] Running on http://localhost:${PORT} (HTTP + WebSocket)`);
   });
 
   registerGracefulShutdown(httpServer);
@@ -48,10 +52,10 @@ function registerGracefulShutdown(httpServer: HttpServer): void {
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.log(`[Server] ${signal} received — shutting down gracefully…`);
+    logger.info(`[Server] ${signal} received — shutting down gracefully…`);
 
     const forceExit = setTimeout(() => {
-      console.error('[Server] Forced exit after shutdown timeout');
+      logger.error('[Server] Forced exit after shutdown timeout');
       process.exit(1);
     }, SHUTDOWN_TIMEOUT_MS);
     forceExit.unref();
@@ -63,11 +67,11 @@ function registerGracefulShutdown(httpServer: HttpServer): void {
         httpServer.close((err) => (err ? reject(err) : resolve())),
       );
       await pool.end();
-      console.log('[Server] Clean shutdown complete');
+      logger.info('[Server] Clean shutdown complete');
       clearTimeout(forceExit);
       process.exit(0);
     } catch (err: any) {
-      console.error('[Server] Error during shutdown:', err?.message);
+      logger.error('[Server] Error during shutdown:', err?.message);
       process.exit(1);
     }
   };

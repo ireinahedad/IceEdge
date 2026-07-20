@@ -26,11 +26,25 @@ const VERIFICATION_DISABLED = process.env.EMAIL_VERIFICATION_DISABLED === 'true'
 const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret) throw new Error('JWT_SECRET env variable is required');
 
+// Any object that can run a query — the shared pool OR a transaction client.
+// Lets helpers participate in a caller's BEGIN/COMMIT when a client is passed.
+// Deliberately a loose call signature so both `Pool` and `PoolClient` satisfy it
+// (their overloaded query() types don't assign cleanly to Pick<PoolClient,…>).
+type Db = { query: (text: string, params?: any[]) => Promise<any> };
+
 // ---- Helpers ---------------------------------------------------------------
 
 export function toPublicUser(row: UserRow): UserPublic {
   const { password_hash: _ph, ...rest } = row;
   return rest;
+}
+
+/** Hash a refresh token for storage/lookup. The DB never holds the raw secret,
+ *  so a DB read (leak, backup, SQL injection elsewhere) can't yield a usable
+ *  session token. SHA-256 is appropriate here: the token is 64 random bytes of
+ *  high entropy, so it isn't brute-forceable and needs no slow KDF/salt. */
+function hashToken(raw: string): string {
+  return crypto.createHash('sha256').update(raw).digest('hex');
 }
 
 function signAccessToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): string {
@@ -41,9 +55,11 @@ async function createRefreshToken(userId: string, remember: boolean): Promise<{ 
   const ttl       = remember ? REFRESH_TOKEN_TTL_REMEMBER : REFRESH_TOKEN_TTL;
   const token     = crypto.randomBytes(64).toString('hex');
   const expiresAt = new Date(Date.now() + ttl * 1000);
+  // Store only the hash — the raw token is returned to the caller (→ cookie) but
+  // never persisted. See hashToken() for why SHA-256 (not bcrypt) is used here.
   await pool.query(
     'INSERT INTO refresh_tokens (user_id, token, expires_at, remember) VALUES ($1, $2, $3, $4)',
-    [userId, token, expiresAt, remember],
+    [userId, hashToken(token), expiresAt, remember],
   );
   return { token, ttl };
 }
@@ -55,8 +71,9 @@ async function issueTokens(user: UserRow, remember = false): Promise<AuthTokens>
 }
 
 // Creates a user_profiles row if one doesn't already exist for this user.
-async function ensureUserProfile(userId: string, displayName: string, avatarUrl?: string | null) {
-  await pool.query(
+// Accepts an optional executor so it can run inside a caller's transaction.
+async function ensureUserProfile(userId: string, displayName: string, avatarUrl?: string | null, db: Db = pool) {
+  await db.query(
     `INSERT INTO user_profiles
        (user_id, display_name, avatar, tier, performance_score, is_public, joined_at)
      VALUES ($1, $2, '👤', 'rookie', 0, TRUE, NOW())
@@ -65,7 +82,7 @@ async function ensureUserProfile(userId: string, displayName: string, avatarUrl?
   );
   // If an avatar_url was supplied (Google sign-in), store it on the users row too.
   if (avatarUrl) {
-    await pool.query('UPDATE users SET avatar_url = $1 WHERE id = $2 AND avatar_url IS NULL', [avatarUrl, userId]);
+    await db.query('UPDATE users SET avatar_url = $1 WHERE id = $2 AND avatar_url IS NULL', [avatarUrl, userId]);
   }
 }
 
@@ -141,15 +158,28 @@ export async function register(body: RegisterBody): Promise<PendingVerificationR
   }
 
   const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
-  const { rows } = await pool.query<UserRow>(
-    `INSERT INTO users (email, username, password_hash, first_name, last_name, email_verified)
-     VALUES ($1,$2,$3,$4,$5, FALSE) RETURNING *`,
-    [email.toLowerCase(), username.toLowerCase(), password_hash, first_name, last_name],
-  );
 
-  const user = rows[0];
+  // Create the user and its profile atomically: a crash between the two inserts
+  // must not leave a user with no user_profiles row.
   const displayName = first_name ? first_name : username;
-  await ensureUserProfile(user.id, displayName);
+  const client = await pool.connect();
+  let user: UserRow;
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query<UserRow>(
+      `INSERT INTO users (email, username, password_hash, first_name, last_name, email_verified)
+       VALUES ($1,$2,$3,$4,$5, FALSE) RETURNING *`,
+      [email.toLowerCase(), username.toLowerCase(), password_hash, first_name, last_name],
+    );
+    user = rows[0];
+    await ensureUserProfile(user.id, displayName, null, client);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 
   // Dev bypass: mark verified and log in immediately (no email required).
   if (VERIFICATION_DISABLED) {
@@ -324,48 +354,64 @@ export async function exchangeGoogleCode(code: string, redirectUri: string): Pro
 }
 
 export async function loginWithGoogle(googleUser: GoogleUserInfo): Promise<AuthResponse> {
-  // 1. Look up by google_id
-  let { rows } = await pool.query<UserRow>(
-    'SELECT * FROM users WHERE google_id = $1 AND is_active = TRUE',
-    [googleUser.sub],
-  );
-  let user = rows[0];
+  // Resolve (or create/link) the account and guarantee its profile row inside a
+  // single transaction — creating a user and its user_profiles row must be
+  // atomic, and account-linking updates shouldn't half-apply either.
+  const client = await pool.connect();
+  let user: UserRow;
+  try {
+    await client.query('BEGIN');
 
-  if (!user) {
-    // 2. Fall back to matching email (link accounts)
-    const byEmail = await pool.query<UserRow>(
-      'SELECT * FROM users WHERE email = $1 AND is_active = TRUE',
-      [googleUser.email.toLowerCase()],
+    // 1. Look up by google_id
+    const byGoogle = await client.query<UserRow>(
+      'SELECT * FROM users WHERE google_id = $1 AND is_active = TRUE',
+      [googleUser.sub],
     );
-    if (byEmail.rows[0]) {
-      const updated = await pool.query<UserRow>(
-        'UPDATE users SET google_id=$1, avatar_url=$2, email_verified=TRUE WHERE id=$3 RETURNING *',
-        [googleUser.sub, googleUser.picture, byEmail.rows[0].id],
-      );
-      user = updated.rows[0];
-    } else {
-      // 3. Create brand-new user
-      const base     = googleUser.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
-      const username = base + '_' + crypto.randomBytes(3).toString('hex');
-      const { rows: newRows } = await pool.query<UserRow>(
-        `INSERT INTO users (email, username, google_id, avatar_url, first_name, last_name, email_verified)
-         VALUES ($1,$2,$3,$4,$5,$6, TRUE) RETURNING *`,
-        [
-          googleUser.email.toLowerCase(),
-          username,
-          googleUser.sub,
-          googleUser.picture,
-          googleUser.given_name  ?? null,
-          googleUser.family_name ?? null,
-        ],
-      );
-      user = newRows[0];
-    }
-  }
+    user = byGoogle.rows[0];
 
-  // Always ensure a user_profiles row exists
-  const displayName = googleUser.given_name ?? googleUser.name ?? user.username;
-  await ensureUserProfile(user.id, displayName, googleUser.picture);
+    if (!user) {
+      // 2. Fall back to matching email (link accounts)
+      const byEmail = await client.query<UserRow>(
+        'SELECT * FROM users WHERE email = $1 AND is_active = TRUE',
+        [googleUser.email.toLowerCase()],
+      );
+      if (byEmail.rows[0]) {
+        const updated = await client.query<UserRow>(
+          'UPDATE users SET google_id=$1, avatar_url=$2, email_verified=TRUE WHERE id=$3 RETURNING *',
+          [googleUser.sub, googleUser.picture, byEmail.rows[0].id],
+        );
+        user = updated.rows[0];
+      } else {
+        // 3. Create brand-new user
+        const base     = googleUser.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
+        const username = base + '_' + crypto.randomBytes(3).toString('hex');
+        const { rows: newRows } = await client.query<UserRow>(
+          `INSERT INTO users (email, username, google_id, avatar_url, first_name, last_name, email_verified)
+           VALUES ($1,$2,$3,$4,$5,$6, TRUE) RETURNING *`,
+          [
+            googleUser.email.toLowerCase(),
+            username,
+            googleUser.sub,
+            googleUser.picture,
+            googleUser.given_name  ?? null,
+            googleUser.family_name ?? null,
+          ],
+        );
+        user = newRows[0];
+      }
+    }
+
+    // Always ensure a user_profiles row exists
+    const displayName = googleUser.given_name ?? googleUser.name ?? user.username;
+    await ensureUserProfile(user.id, displayName, googleUser.picture, client);
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 
   // Google sign-in is treated as a persistent session by default.
   const tokens = await issueTokens(user, true);
@@ -377,7 +423,7 @@ export async function loginWithGoogle(googleUser: GoogleUserInfo): Promise<AuthR
 export async function refreshTokens(rawToken: string): Promise<AuthTokens> {
   const { rows } = await pool.query<RefreshTokenRow>(
     'SELECT * FROM refresh_tokens WHERE token=$1 AND revoked=FALSE AND expires_at>NOW()',
-    [rawToken],
+    [hashToken(rawToken)],
   );
   const stored = rows[0];
   if (!stored) throw Object.assign(new Error('Invalid or expired refresh token'), { status: 401 });
@@ -398,7 +444,7 @@ export async function refreshTokens(rawToken: string): Promise<AuthTokens> {
 // ---- Logout ----------------------------------------------------------------
 
 export async function logout(rawToken: string): Promise<void> {
-  await pool.query('UPDATE refresh_tokens SET revoked=TRUE WHERE token=$1', [rawToken]);
+  await pool.query('UPDATE refresh_tokens SET revoked=TRUE WHERE token=$1', [hashToken(rawToken)]);
 }
 
 /** Revoke every active refresh token for a user → signs them out on all

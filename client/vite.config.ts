@@ -33,4 +33,21 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  build: {
+    rollupOptions: {
+      output: {
+        // M1 — split the heavy libraries into their own chunks so they aren't
+        // in the main bundle. Combined with route-level React.lazy (see
+        // app/routes.tsx), a chunk only downloads when a route that uses it is
+        // visited — cutting first-paint payload on mobile.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('recharts') || id.includes('/d3-')) return 'charts';
+          if (id.includes('/motion/') || id.includes('framer-motion')) return 'motion';
+          if (id.includes('/ogl') || id.includes('/three')) return 'gfx';
+        },
+      },
+    },
+  },
 })
