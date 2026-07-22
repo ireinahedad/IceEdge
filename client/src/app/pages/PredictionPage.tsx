@@ -19,6 +19,7 @@ import type { TennisRankingEntry } from "../services/tennisApiService";
 import { askLLM } from "../services/llmService";
 import { MLSection } from "../components/MLPredictionCard";
 import { RuleFactorEditor } from "../components/RuleFactorEditor";
+import { FramedLabel } from "../components/brand/FramedLabel";
 
 type Subject = { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 
@@ -891,8 +892,8 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
         ) : (
           <div className="bg-[#0d1519] border border-white/[0.07] rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/[0.05]">
-              <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-sm flex-shrink-0">📐</div>
-              <span className="text-white text-sm font-bold flex-1">{t("pred.rules")}</span>
+              <FramedLabel text={t("pred.rules")} />
+              <div className="flex-1" />
               <span className="text-xl font-black flex-shrink-0" style={{ color: pctColor }}>{rulePct}%</span>
             </div>
             <div className="px-4 py-3">
@@ -2289,7 +2290,7 @@ export function PredictionPage() {
           style={{ background: "rgba(10,14,12,0.92)", backdropFilter: "blur(16px)", borderBottom: "1px solid #283323" }}>
           <div className="flex items-center gap-3">
             <button onClick={() => navigate(-1)} className="text-[#3a5060] text-lg">←</button>
-            <h1 className="text-white text-base font-bold flex-1">{t("pred.title")}</h1>
+            <h1 className="text-white text-base font-bold flex-1 uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("pred.title")}</h1>
           </div>
         </div>
 

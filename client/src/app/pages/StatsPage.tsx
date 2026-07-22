@@ -219,7 +219,7 @@ export function StatsPage() {
         <header className="px-4 pt-12 pb-3 bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>{t("stats.title")}</h1>
+              <h1 className="text-white text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("stats.title")}</h1>
               <p className="text-[#bfc8cc] text-xs">{t("stats.tennis")}</p>
             </div>
             <HowItWorksButton accent={accent} onClick={() => setHowItWorks(true)} />
@@ -256,7 +256,7 @@ export function StatsPage() {
       <header className="px-4 pt-12 pb-3 bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>{t("stats.title")}</h1>
+            <h1 className="text-white text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("stats.title")}</h1>
             <p className="text-[#bfc8cc] text-xs">{t("stats.subtitle")}</p>
           </div>
           <HowItWorksButton accent={accent} onClick={() => setHowItWorks(true)} />

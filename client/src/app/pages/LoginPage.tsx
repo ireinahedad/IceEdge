@@ -9,9 +9,9 @@ import { useI18n } from "../i18n";
 
 type Mode = "login" | "register";
 
-const ACCENT        = "#9BF019";
-const ACCENT_BG     = "rgba(155,240,25,0.12)";
-const ACCENT_BORDER = "rgba(155,240,25,0.3)";
+const ACCENT        = "#86d1ea";
+const ACCENT_BG     = "rgba(134,209,234,0.12)";
+const ACCENT_BORDER = "rgba(134,209,234,0.3)";
 const SURFACE       = "#131A12";
 const BORDER        = "#283323";
 

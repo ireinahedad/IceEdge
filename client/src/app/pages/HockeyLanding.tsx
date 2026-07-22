@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
-import { Search, TrendingUp, ChevronRight, Plus, Goal, Star, Timer, Zap, Settings } from "lucide-react";
+import { Search, TrendingUp, ChevronRight, Plus, Goal, Star, Timer, Zap, Settings, CalendarDays } from "lucide-react";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
 import { BottomNav } from "../components/BottomNav";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
@@ -19,7 +19,8 @@ import {
   extractH2HOdds,
   ODDS_SPORT_KEYS,
 } from "../services/oddsApiService";
-import { openBet365, bet365TennisUrl, bet365HockeyUrl } from "../services/affiliateService";
+import { openBet } from "../services/bookmakers";
+import { useBookmaker } from "../context/BookmakerContext";
 import { nhlLogoUrl } from "../data/teamEmoji";
 import "../components/home-theme.css";
 
@@ -257,7 +258,7 @@ type RiskTier   = "safe" | "moderate" | "risky" | "high";
 type SortOrder  = "safest" | "riskiest";
 
 const RISK_TIERS: { tier: RiskTier; key: string; color: string }[] = [
-  { tier: "safe",     key: "risk.safe",     color: "#22ff00" },
+  { tier: "safe",     key: "risk.safe",     color: "#86d1ea" },
   { tier: "moderate", key: "risk.moderate", color: "#90C9F0" },
   { tier: "risky",    key: "risk.risky",    color: "#facc15" },
   { tier: "high",     key: "risk.high",     color: "#f87171" },
@@ -540,7 +541,7 @@ function BestBetsSection({
             {(["rules", "ml"] as SortSource[]).map((s) => (
               <button key={s} onClick={() => setSortSource(s)}
                 className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium transition-all ${sortSource === s ? "text-[#072E49] font-bold" : "text-[#8a9ea6]"}`}
-                style={sortSource === s ? { backgroundColor: s === "ml" ? "#a78bfa" : "#22ff00" } : {}}>
+                style={sortSource === s ? { backgroundColor: s === "ml" ? "#a78bfa" : "#86d1ea" } : {}}>
                 {s === "ml" ? "ML" : t("home.rules")}
               </button>
             ))}
@@ -623,12 +624,13 @@ function SportSelector() {
 // ─── Odds pill ─────────────────────────────────────────────────────────────────
 
 function OddsPill({ decimal, onBet }: { decimal: number; onBet: () => void }) {
+  const { bookmaker } = useBookmaker();
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onBet(); }}
       className="flex items-center gap-1 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5 active:bg-green-500/20 transition-colors"
     >
-      <span className="text-[9px] text-[#bfc8cc]">bet365</span>
+      <span className="text-[9px] text-[#bfc8cc]">{bookmaker.label}</span>
       <span className="text-[10px] font-bold text-green-400">{decimal.toFixed(2)}</span>
     </button>
   );
@@ -745,16 +747,16 @@ function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: (
       {/* bet365 odds row — only shown when API has real odds */}
       {game.bet365Home && game.bet365Away ? (
         <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
-          <OddsPill decimal={game.bet365Home} onBet={() => openBet365(bet365HockeyUrl())} />
+          <OddsPill decimal={game.bet365Home} onBet={() => openBet("hockey")} />
           <span className="text-[9px] text-[#bfc8cc]">Moneyline</span>
-          <OddsPill decimal={game.bet365Away} onBet={() => openBet365(bet365HockeyUrl())} />
+          <OddsPill decimal={game.bet365Away} onBet={() => openBet("hockey")} />
           {/* Moneyline is a universal betting term, kept as-is */}
         </div>
       ) : (
         /* No API key — show a subtle link to bet365 instead */
         <div className="flex items-center justify-end mt-1">
           <button
-            onClick={(e) => { e.stopPropagation(); openBet365(bet365HockeyUrl()); }}
+            onClick={(e) => { e.stopPropagation(); openBet("hockey"); }}
             className="text-[9px] text-green-400 border border-green-500/20 bg-green-500/8 px-2 py-1 rounded-full"
           >
             {t("home.betOn")}
@@ -820,7 +822,7 @@ function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet
             <span className="text-white text-xs font-medium flex-1 truncate">{game.team1.abbr}</span>
             <span className="text-[10px] font-bold tabular-nums" style={{ color: accent }}>{game.team1.winPct}%</span>
             {game.bet365Home && (
-              <OddsPill decimal={game.bet365Home} onBet={() => openBet365(bet365HockeyUrl())} />
+              <OddsPill decimal={game.bet365Home} onBet={() => openBet("hockey")} />
             )}
           </div>
           {/* Team 2 */}
@@ -829,7 +831,7 @@ function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet
             <span className="text-white text-xs font-medium flex-1 truncate">{game.team2.abbr}</span>
             <span className="text-[#bfc8cc] text-[10px] font-bold tabular-nums">{game.team2.winPct}%</span>
             {game.bet365Away && (
-              <OddsPill decimal={game.bet365Away} onBet={() => openBet365(bet365HockeyUrl())} />
+              <OddsPill decimal={game.bet365Away} onBet={() => openBet("hockey")} />
             )}
           </div>
         </div>
@@ -932,7 +934,7 @@ function TennisLiveCard({ match, accent }: { match: TennisMatch; accent: string 
               ))}
             </div>
             {p.bet365Odds && (
-              <OddsPill decimal={p.bet365Odds} onBet={() => openBet365(bet365TennisUrl())} />
+              <OddsPill decimal={p.bet365Odds} onBet={() => openBet("tennis")} />
             )}
           </div>
         ))}
@@ -1013,7 +1015,7 @@ function TennisMatchRow({ match, accent }: { match: TennisMatch; accent: string 
               <span className="text-white text-xs font-medium flex-1 truncate">{p.name}</span>
               <span className="text-[10px] font-bold tabular-nums" style={{ color: i === 0 ? accent : "#bfc8cc" }}>{p.winPct}%</span>
               {p.bet365Odds && (
-                <OddsPill decimal={p.bet365Odds} onBet={() => openBet365(bet365TennisUrl())} />
+                <OddsPill decimal={p.bet365Odds} onBet={() => openBet("tennis")} />
               )}
             </div>
           ))}
@@ -1322,6 +1324,21 @@ export function HockeyLanding() {
                 </div>
               )}
             </section>
+
+            {/* Game calendar — open the full-season schedule */}
+            <button
+              onClick={() => navigate("/schedule")}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl icy-tile active:scale-[0.99] transition-transform"
+            >
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: `${accent}1a`, border: `1px solid ${accent}40`, color: accent }}
+              >
+                <CalendarDays size={18} />
+              </div>
+              <span className="flex-1 text-left text-white text-sm font-bold">{t("home.schedule")}</span>
+              <ChevronRight size={18} className="text-[#4a6068] flex-shrink-0" />
+            </button>
 
             {/* Value Bets (EV) — Pro only */}
             <EvSection isPro={isPro} items={evItems} isLoading={loading} accent={accent} />

@@ -12,7 +12,7 @@ const navItems = [
   { Icon: User,      key: "nav.profile", path: "/profile" },
 ];
 
-const ACCENT = "#22ff00"; // acid green — design system accent
+const ACCENT = "#86d1ea"; // ice blue — design system accent
 
 export function BottomNav() {
   const navigate = useNavigate();

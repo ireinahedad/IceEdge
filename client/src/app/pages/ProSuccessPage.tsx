@@ -4,9 +4,9 @@ import { useI18n } from "../i18n";
 import { useSubscription } from "../context/SubscriptionContext";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
 
-const ACCENT        = "#9BF019";
-const ACCENT_BG     = "rgba(155,240,25,0.12)";
-const ACCENT_BORDER = "rgba(155,240,25,0.3)";
+const ACCENT        = "#86d1ea";
+const ACCENT_BG     = "rgba(134,209,234,0.12)";
+const ACCENT_BORDER = "rgba(134,209,234,0.3)";
 
 /**
  * Shown right after a user activates Pro (upgrade / trial / promo).

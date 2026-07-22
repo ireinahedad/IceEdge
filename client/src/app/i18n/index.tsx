@@ -61,6 +61,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "profile.showSlips":    { en: "Show my slips to others", fr: "Montrer mes coupons aux autres" },
   "profile.showSlipsHint":{ en: "Players who find you can see your bet slips", fr: "Les joueurs qui te trouvent peuvent voir tes coupons" },
   "profile.language":     { en: "Language",      fr: "Langue" },
+  "profile.bookmaker":    { en: "Sportsbook",    fr: "Site de paris" },
+  "profile.bookmakerHint":{ en: "Which site the “Place bet” buttons open", fr: "Le site que les boutons « Parier » ouvrent" },
   "profile.dark":         { en: "Dark",          fr: "Sombre" },
   "profile.light":        { en: "Light",         fr: "Clair" },
   "profile.aiSettings":   { en: "AI Settings",   fr: "Paramètres IA" },
@@ -179,6 +181,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.signin":       { en: "Sign in to see your slips", fr: "Connecte-toi pour voir tes coupons" },
   "slip.signinHint":   { en: "Your locked slips and history will appear here", fr: "Tes coupons verrouillés et ton historique apparaîtront ici" },
   "slip.placeBet365":  { en: "Place on Bet365 ↗", fr: "Parier sur Bet365 ↗" },
+  "slip.placeBet":     { en: "Place on {book} ↗", fr: "Parier sur {book} ↗" },
   "slip.xpEarned":     { en: "XP earned",       fr: "XP gagnés" },
   "slip.sharePhoto":   { en: "Share",           fr: "Partager" },
   "slip.addToSee":     { en: "Add predictions to see probability", fr: "Ajoute des prédictions pour voir la probabilité" },
@@ -244,7 +247,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "home.add":            { en: "+ Add",             fr: "+ Ajouter" },
   "home.more":           { en: "More",              fr: "Plus" },
   "home.moreBets":       { en: "More bets",         fr: "Plus de paris" },
-  "home.betOn":          { en: "Bet on bet365 →",   fr: "Parier sur bet365 →" },
+  "home.betOn":          { en: "Place a bet →",   fr: "Parier →" },
   "home.addedSlip":      { en: "✓ Added to slip",   fr: "✓ Ajouté au coupon" },
   "home.addToSlip":      { en: "+ Add {name} to slip", fr: "+ Ajouter {name} au coupon" },
   "home.edge":           { en: "+{edge}% edge",     fr: "+{edge}% avantage" },
@@ -567,6 +570,15 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pro.b.markets.d":  { en: "Beyond today's games: the full schedule and every bet365 market.", fr: "Au-delà des matchs du jour : tout le calendrier et chaque marché bet365." },
   "pro.b.others.t":   { en: "Other players' stats & bets", fr: "Stats & bets des autres joueurs" },
   "pro.b.others.d":   { en: "Compare yourself to the leaderboard and see their picks.", fr: "Compare-toi aux meilleurs du classement et vois leurs paris." },
+
+  // ── Schedule (calendrier des matchs) ──
+  "home.schedule":       { en: "Game calendar", fr: "Calendrier des matchs" },
+  "schedule.title":      { en: "Schedule",      fr: "Calendrier" },
+  "schedule.subtitle":   { en: "Every game of the season", fr: "Tous les matchs de la saison" },
+  "schedule.loading":    { en: "Loading games…", fr: "Chargement des matchs…" },
+  "schedule.noGames":    { en: "No games this month.", fr: "Aucun match ce mois-ci." },
+  "schedule.error":      { en: "Couldn't load the schedule.", fr: "Impossible de charger le calendrier." },
+  "schedule.at":         { en: "@", fr: "@" },
 
   // ── Home: value bets (EV) + locked sections ──
   "home.evTitle":     { en: "Value Bets (EV)",  fr: "Value Bets (EV)" },

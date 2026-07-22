@@ -34,6 +34,14 @@ export const nhlApiService = {
     return get<NHLGame[]>(`/games?date=${d}`);
   },
 
+  // Calendrier : tous les matchs entre deux dates (YYYY-MM-DD) incluses.
+  getGamesRange: (start: string, end: string): Promise<NHLGame[]> =>
+    get<NHLGame[]>(`/games/range?start=${start}&end=${end}`),
+
+  // Calendrier : date courante + bornes de saison selon l'API NHL.
+  getScheduleAnchor: (): Promise<{ today: string; seasonStart: string; seasonEnd: string }> =>
+    get<{ today: string; seasonStart: string; seasonEnd: string }>('/schedule/anchor'),
+
   getLiveGames: (): Promise<NHLGame[]> =>
     get<NHLGame[]>('/games/live'),
 

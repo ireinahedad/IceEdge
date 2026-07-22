@@ -490,7 +490,7 @@ export function NHLPredictionsPage() {
             ←
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-white font-bold text-base leading-tight">{t("nhl.title")}</h1>
+            <h1 className="text-white font-bold text-base leading-tight uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("nhl.title")}</h1>
             <p className="text-[#8a9ea6] text-[11px]">{t("nhl.subtitle")}</p>
           </div>
         </div>

@@ -76,8 +76,8 @@ export function RulesWeightsCard({ serverWeights }: { serverWeights?: Record<str
             Ces poids ne s’appliquent qu’aux prédictions de <span className="text-white/80 font-semibold">résultat du match</span> (victoire d’une équipe). Les props de joueur (buts, passes, tirs…) reposent sur le taux propre du joueur et ne sont pas affectées.
           </p>
 
-          <div className="rounded-xl bg-[#9BF019]/10 border border-[#9BF019]/30 p-2.5">
-            <p className="text-[#9BF019] text-[10px] leading-relaxed">
+          <div className="rounded-xl bg-[#86d1ea]/10 border border-[#86d1ea]/30 p-2.5">
+            <p className="text-[#86d1ea] text-[10px] leading-relaxed">
               ⚠️ Les valeurs par défaut ont été retenues après des tests sur des
               données historiques comme offrant les meilleurs résultats. Les
               modifier peut dégrader la fiabilité.
@@ -105,7 +105,7 @@ export function RulesWeightsCard({ serverWeights }: { serverWeights?: Record<str
                     step={0.01}
                     value={w[m.id]}
                     onChange={(e) => update(m.id, Number(e.target.value))}
-                    className="w-12 accent-[#9BF019] flex-shrink-0"
+                    className="w-12 accent-[#86d1ea] flex-shrink-0"
                   />
                   <input
                     type="number"
@@ -133,7 +133,7 @@ export function RulesWeightsCard({ serverWeights }: { serverWeights?: Record<str
               onClick={handleSave}
               disabled={overLimit}
               className="px-3 py-1.5 rounded-lg text-[11px] font-bold disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ background: "#9BF019", color: "#0A0E0C" }}
+              style={{ background: "#86d1ea", color: "#0A0E0C" }}
             >
               Enregistrer
             </button>

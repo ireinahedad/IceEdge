@@ -1,5 +1,5 @@
 {
-  "name": "ArakIce — NHL & Tennis Predictions",
+  "name": "ArakIce — NHL Predictions",
   "short_name": "ArakIce",
   "description": "Statistical edge for smarter sports bets. NHL predictions powered by ML.",
   "start_url": "/",
@@ -10,9 +10,9 @@
   "theme_color": "#0A0E0C",
   "icons": [
     {
-      "src": "/arakice-logo.jpg",
+      "src": "/arakice-logo.png",
       "sizes": "512x512",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "any"
     }
   ]

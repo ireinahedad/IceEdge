@@ -146,7 +146,7 @@ export function CreateRoomModal({ onClose, onCreate }: {
           </div>
           <button
             onClick={() => setIsPrivate((v) => !v)}
-            className={`relative rounded-full transition-colors flex-shrink-0 ${isPrivate ? "bg-[#22ff00]" : "bg-white/10"}`}
+            className={`relative rounded-full transition-colors flex-shrink-0 ${isPrivate ? "bg-[#86d1ea]" : "bg-white/10"}`}
             style={{ height: 22, width: 40 }}
           >
             <span

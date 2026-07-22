@@ -5,6 +5,7 @@ import { BetProvider } from "./context/BetContext";
 import { AuthProvider } from "./context/AuthContext";
 import { SubscriptionProvider } from "./context/SubscriptionContext";
 import { SportProvider, useSport } from "./context/SportContext";
+import { BookmakerProvider } from "./context/BookmakerContext";
 import { LanguageProvider } from "./i18n";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
@@ -53,7 +54,9 @@ export default function App() {
         <SubscriptionProvider>
           <BetProvider>
             <SportProvider>
-              <AppShell />
+              <BookmakerProvider>
+                <AppShell />
+              </BookmakerProvider>
             </SportProvider>
           </BetProvider>
         </SubscriptionProvider>

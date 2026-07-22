@@ -10,6 +10,7 @@
  */
 import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
+import { FramedLabel } from "./brand/FramedLabel";
 
 type TFn = (key: string, params?: Record<string, string | number>) => string;
 
@@ -184,8 +185,8 @@ function MLSimpleCard({ result }: { result: MLPredictionResult; ruleBasedPct?: n
     <div className="bg-[#0d0a1a] border border-[#a78bfa]/25 rounded-2xl overflow-hidden">
       {/* Header — fermé : seulement le score ML */}
       <div className="flex items-center gap-2.5 px-4 py-3">
-        <div className="w-7 h-7 rounded-lg bg-[#a78bfa]/15 border border-[#a78bfa]/30 flex items-center justify-center text-sm flex-shrink-0">🤖</div>
-        <span className="text-white text-sm font-bold flex-1">ML</span>
+        <FramedLabel text="ML" />
+        <div className="flex-1" />
         <button
           onClick={() => setOpen((v) => !v)}
           className="text-[10px] text-[#a78bfa] font-semibold px-2.5 py-1 rounded-lg border border-[#a78bfa]/30 hover:bg-[#a78bfa]/10 flex-shrink-0"

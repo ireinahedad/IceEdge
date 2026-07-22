@@ -18,6 +18,7 @@ import {
 import { FrozenName } from "../../components/brand/FrozenName";
 import { InjuriesAdminCard } from "../../components/InjuriesAdminCard";
 import { useI18n } from "../../i18n";
+import { useBookmaker } from "../../context/BookmakerContext";
 import "./profile-settings.css";
 
 // ── Uiverse-styled settings helpers ────────────────────────────────────────
@@ -208,7 +209,7 @@ function ProfileHeader({
       <div className="flex items-stretch gap-2">
         <MiniStat className="flex-1" label="Hit Rate" value={`${stats.hitRate}%`} />
         <MiniStat className="flex-1" label="Bets ›" value={`${stats.totalBets}`} onClick={onBetsClick} />
-        <MiniStat className="flex-1" label="W - L" value={`${stats.wins}-${stats.losses}`} color={stats.wins > stats.losses ? "#22ff00" : undefined} />
+        <MiniStat className="flex-1" label="W - L" value={`${stats.wins}-${stats.losses}`} color={stats.wins > stats.losses ? "#86d1ea" : undefined} />
         <MiniStat className="flex-1" label="Best" value={`${stats.longestWinStreak}W`} />
       </div>
 
@@ -229,7 +230,7 @@ function OverviewTab({ profile, stats }: { profile: UserProfile; stats: UserBett
       <div className="self-start icy-card rounded-2xl p-3">
         <p className="text-white text-[10px] font-medium mb-2">{t("profile.parlayRecord")}</p>
         <div className="flex gap-1.5">
-          <MiniStat label={t("profile.parlayWins")} value={`${stats.parlayRecord.wins}`} color="#22ff00" />
+          <MiniStat label={t("profile.parlayWins")} value={`${stats.parlayRecord.wins}`} color="#86d1ea" />
           <MiniStat label={t("profile.parlayLosses")} value={`${stats.parlayRecord.losses}`} color="#f87171" />
           <MiniStat label={t("profile.parlayRate")} value={`${total > 0 ? Math.round((stats.parlayRecord.wins / total) * 100) : 0}%`} color="#90C9F0" />
         </div>
@@ -265,6 +266,7 @@ function SettingsTab({
 }) {
   const { t, lang, setLang } = useI18n();
   const { isPro, status: subStatus, refresh: refreshSub } = useSubscription();
+  const { bookmakerId, setBookmakerId, bookmakers } = useBookmaker();
   const { logoutAll } = useAuth();
   const navigate = useNavigate();
   const [signingOutAll, setSigningOutAll] = useState(false);
@@ -393,6 +395,30 @@ function SettingsTab({
           <ToggleSwitch checked={mode === "light"} onChange={() => setMode(mode === "light" ? "dark" : "light")} fontSize={11} />
           <span className={`text-[10px] font-bold transition-colors ${mode === "light" ? "text-[#90C9F0]" : "text-white/40"}`}>{t("profile.light")} ☀️</span>
         </div>
+      </div>
+
+      {/* Sportsbook selector — which betting site the "Place bet" buttons open */}
+      <div className="icy-card rounded-lg px-3 py-2.5">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <span className="text-[11px]">🎯</span>
+          <span className="text-[11px] font-bold text-white/80">{t("profile.bookmaker")}</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {bookmakers.map((b) => (
+            <button
+              key={b.id}
+              onClick={() => setBookmakerId(b.id)}
+              className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-colors ${
+                bookmakerId === b.id
+                  ? "bg-[#90C9F0]/15 border-[#90C9F0]/40 text-[#90C9F0]"
+                  : "border-white/15 text-white/50 active:bg-white/5"
+              }`}
+            >
+              {b.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[9px] text-white/35 mt-1.5">{t("profile.bookmakerHint")}</p>
       </div>
 
       {/* Avatar */}
@@ -534,7 +560,7 @@ function SettingsTab({
             <button
               onClick={() => navigate("/pro")}
               className="px-3 py-1.5 rounded-lg text-[10px] font-bold flex-shrink-0"
-              style={{ background: "#9BF019", color: "#0A0E0C" }}
+              style={{ background: "#86d1ea", color: "#0A0E0C" }}
             >
               {t("pro.unlock")}
             </button>
@@ -619,7 +645,7 @@ function SettingsTab({
         <button
           onClick={handleSave}
           className="self-center px-8 py-2 rounded-xl font-bold text-xs transition-all"
-          style={{ background: "#22ff00", color: "#072E49" }}
+          style={{ background: "#86d1ea", color: "#072E49" }}
         >
           {t("common.save")}
         </button>
@@ -659,7 +685,7 @@ function SettingsTab({
             <button
               onClick={() => navigate("/pro")}
               className="self-start mt-1 text-[11px] font-bold rounded-lg px-3 py-1.5 transition-all"
-              style={{ background: "#9BF019", color: "#0A0E0C" }}
+              style={{ background: "#86d1ea", color: "#0A0E0C" }}
             >
               {t("pro.getPro")}
             </button>
@@ -779,7 +805,7 @@ export function ProfilePage() {
           borderBottom: "1px solid rgba(255,255,255,0.4)",
         }}>
         <div className="flex items-center justify-between">
-          <h1 className="text-white text-lg font-bold">{t("profile.title")}</h1>
+          <h1 className="text-white text-lg font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("profile.title")}</h1>
           <div className="flex items-center gap-2">
             <button onClick={() => navigate("/support")} className="text-white/40 text-xs border border-white/10 px-3 py-1.5 rounded-xl">{t("legal.support")}</button>
             <button onClick={logout} className="text-white/40 text-xs border border-white/10 px-3 py-1.5 rounded-xl">{t("profile.signout")}</button>

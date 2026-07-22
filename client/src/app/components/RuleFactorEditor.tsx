@@ -8,6 +8,7 @@
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { FactorPie } from "./FactorPie";
+import { FramedLabel } from "./brand/FramedLabel";
 import {
   SimpleFactor,
   factorColor,
@@ -41,7 +42,7 @@ export function RuleFactorEditor({
   const blended = blendFactors(factors, weights);
   const total = factors.reduce((s, f) => s + (weights[f.id] ?? f.weight), 0);
   const overLimit = total > 100.0001;
-  const pctColor = blended >= 65 ? "#4ade80" : blended >= 50 ? "#9BF019" : blended >= 38 ? "#facc15" : "#f87171";
+  const pctColor = blended >= 65 ? "#4ade80" : blended >= 50 ? "#86d1ea" : blended >= 38 ? "#facc15" : "#f87171";
 
   const slices = factors.map((f) => ({
     label: f.label,
@@ -110,8 +111,8 @@ export function RuleFactorEditor({
   return (
     <div className="bg-[#0d1519] border border-white/[0.07] rounded-2xl">
       <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/[0.05]">
-        <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-sm flex-shrink-0">📐</div>
-        <span className="text-white text-sm font-bold flex-1">{label}</span>
+        <FramedLabel text={label} />
+        <div className="flex-1" />
         <button
           onClick={() => setOpen((v) => !v)}
           className="text-[10px] text-[#90C9F0] font-semibold px-2.5 py-1 rounded-lg border border-[#90C9F0]/30 hover:bg-[#90C9F0]/10 flex-shrink-0"
@@ -143,13 +144,13 @@ export function RuleFactorEditor({
                 const on = w > 0;
                 return (
                   <div key={f.id} className={`flex items-center gap-2 ${on ? "" : "opacity-40"}`}>
-                    <input type="checkbox" checked={on} onChange={() => toggleFactor(f)} className="accent-[#9BF019] flex-shrink-0" />
+                    <input type="checkbox" checked={on} onChange={() => toggleFactor(f)} className="accent-[#86d1ea] flex-shrink-0" />
                     <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: factorColor(f.id) }} />
                     <span className="text-white/80 text-[10px] flex-1 truncate">{f.label}</span>
                     <input
                       type="range" min={0} max={100} step={1} value={w}
                       onChange={(e) => setW(f.id, Number(e.target.value))}
-                      className="w-14 accent-[#9BF019] flex-shrink-0"
+                      className="w-14 accent-[#86d1ea] flex-shrink-0"
                     />
                     <input
                       type="number" min={0} max={100} step={1} value={w}
@@ -168,7 +169,7 @@ export function RuleFactorEditor({
                 <button
                   onClick={handleSave} disabled={overLimit}
                   className="px-3 py-1.5 rounded-lg text-[11px] font-bold disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{ background: "#9BF019", color: "#0A0E0C" }}
+                  style={{ background: "#86d1ea", color: "#0A0E0C" }}
                 >
                   Enregistrer
                 </button>

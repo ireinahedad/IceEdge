@@ -13,6 +13,7 @@ const HockeyLanding         = lazy(() => import("./pages/HockeyLanding").then(m 
 const LeaguePage            = lazy(() => import("./pages/league/LeaguePage").then(m => ({ default: m.LeaguePage })));
 const ProfilePage           = lazy(() => import("./pages/profile/ProfilePage").then(m => ({ default: m.ProfilePage })));
 const StatsPage             = lazy(() => import("./pages/StatsPage").then(m => ({ default: m.StatsPage })));
+const SchedulePage          = lazy(() => import("./pages/SchedulePage").then(m => ({ default: m.SchedulePage })));
 const PredictionPage        = lazy(() => import("./pages/PredictionPage").then(m => ({ default: m.PredictionPage })));
 const BetBuilderPage        = lazy(() => import("./pages/BetBuilderPage").then(m => ({ default: m.BetBuilderPage })));
 const AuthCallback          = lazy(() => import("./pages/AuthCallback").then(m => ({ default: m.AuthCallback })));
@@ -66,6 +67,7 @@ export const router = createBrowserRouter([
   // Protected — require a signed-in account
   { path: "/",                                   element: withSuspense(<Protected><HockeyLanding /></Protected>)        },
   { path: "/stats",                              element: withSuspense(<Protected><StatsPage /></Protected>)            },
+  { path: "/schedule",                           element: withSuspense(<Protected><SchedulePage /></Protected>)         },
   { path: "/stats/prediction/:type/:id",         element: withSuspense(<Protected><PredictionPage /></Protected>)       },
   { path: "/stats/prediction/tennis-player/:id", element: withSuspense(<Protected><TennisPlayerPage /></Protected>)     },
   { path: "/bet",                                element: withSuspense(<Protected><BetBuilderPage /></Protected>)       },

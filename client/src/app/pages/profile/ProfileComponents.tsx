@@ -40,7 +40,7 @@ export function ScoreRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="#22ff00"
+          stroke="#86d1ea"
           strokeWidth={8}
           strokeLinecap="round"
           strokeDasharray={circumference}
@@ -50,12 +50,12 @@ export function ScoreRing({
       </svg>
 
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-bold" style={{ color: "#22ff00" }}>
+        <span className="text-2xl font-bold" style={{ color: "#86d1ea" }}>
           {score}
         </span>
         <span
           className="text-[8px] uppercase tracking-widest"
-          style={{ color: "#22ff00" }}
+          style={{ color: "#86d1ea" }}
         >
           XP
         </span>
@@ -203,7 +203,7 @@ export function MarketBreakdown({
                   width: `${m.hitRate}%`,
                   backgroundColor:
                     m.hitRate >= 70
-                      ? "#22ff00"
+                      ? "#86d1ea"
                       : m.hitRate >= 60
                       ? "#90C9F0"
                       : "#facc15",
@@ -228,7 +228,7 @@ export function CalibrationCard({
   const score = stats.calibrationScore;
   const color =
     score >= 80
-      ? "#22ff00"
+      ? "#86d1ea"
       : score >= 65
       ? "#90C9F0"
       : "#facc15";

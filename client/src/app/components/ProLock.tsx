@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { useI18n } from "../i18n";
 
-const ACCENT = "#9BF019";
+const ACCENT = "#86d1ea";
 
 /**
  * Wraps Pro-only content. When `locked` is true the children are blurred and a

@@ -82,7 +82,7 @@ function UserProfileModal({ entry, onClose }: {
             <p className="text-white/50 text-[9px] uppercase tracking-wider">{t("league.score")}</p>
           </div>
           <div className="icy-tile rounded-xl p-3 text-center">
-            <p className="text-base font-bold" style={{ color: "#22ff00" }}>{entry.hitRate}%</p>
+            <p className="text-base font-bold" style={{ color: "#86d1ea" }}>{entry.hitRate}%</p>
             <p className="text-white/50 text-[9px] uppercase tracking-wider">{t("league.hitRate")}</p>
           </div>
           <div className="icy-tile rounded-xl p-3 text-center">
@@ -233,7 +233,7 @@ export function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
               onClick={() => setFilter(f.key)}
               className={`flex-1 py-1.5 rounded-xl border text-[10px] font-medium transition-all ${
                 filter === f.key
-                  ? "bg-[#22ff00] text-[#072E49] border-[#22ff00] font-bold"
+                  ? "bg-[#86d1ea] text-[#072E49] border-[#86d1ea] font-bold"
                   : "icy-tile text-white"
               }`}
             >

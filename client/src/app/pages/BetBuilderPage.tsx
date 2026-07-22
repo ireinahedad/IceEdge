@@ -10,7 +10,8 @@ import { submitSlip, getMySlips, settleMySlips } from "../services/slipApiServic
 import type { BetSlip } from "../services/slipApiService";
 import { shareNodeAsImage } from "../services/shareImage";
 import { useSport } from "../context/SportContext";
-import { openBet365 } from "../services/affiliateService";
+import { openBet } from "../services/bookmakers";
+import { useBookmaker } from "../context/BookmakerContext";
 import { useI18n } from "../i18n";
 import "./bet-theme.css";
 
@@ -33,7 +34,7 @@ function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: number }) {
   const offset = circumference * (1 - displayed / 100);
 
   const color =
-    pct >= 65 ? "#22ff00" :
+    pct >= 65 ? "#86d1ea" :
     pct >= 45 ? "#90C9F0" :
     pct >= 25 ? "#facc15" : "#f87171";
 
@@ -90,8 +91,9 @@ function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: number }) {
 function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; onRemove: () => void }) {
   const { sport } = useSport();
   const { t } = useI18n();
+  const { bookmaker } = useBookmaker();
   const barColor =
-    leg.probability >= 65 ? "#22ff00" :
+    leg.probability >= 65 ? "#86d1ea" :
     leg.probability >= 50 ? "#90C9F0" :
     leg.probability >= 35 ? "#facc15" : "#f87171";
 
@@ -120,12 +122,12 @@ function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; onRemov
             <span className="text-[10px] text-[#4a6068] flex-shrink-0 font-mono">{toOddsLabel(leg.probability)}</span>
           </div>
           <button
-            onClick={() => openBet365(sport === "tennis" ? "/#/IP/B13" : "/#/IP/B18")}
+            onClick={() => openBet(sport === "tennis" ? "tennis" : "hockey")}
             className="mt-2 inline-flex items-center gap-1.5 bg-[#126e51] hover:bg-[#0f5c44] text-[#ffd700] text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-colors"
-            title="Open Bet365 to place this bet"
+            title={`${bookmaker.label} — ${t("slip.placeBet")}`}
           >
-            <span className="bg-[#ffd700] text-[#126e51] rounded px-1 py-0.5 text-[8px] font-black leading-none">b365</span>
-            {t("slip.placeBet365")}
+            <span className="bg-[#ffd700] text-[#126e51] rounded px-1 py-0.5 text-[8px] font-black leading-none">{bookmaker.badge}</span>
+            {t("slip.placeBet", { book: bookmaker.label })}
           </button>
         </div>
         <button onClick={onRemove}
@@ -157,7 +159,7 @@ function EmptySlip({ onAdd }: { onAdd: () => void }) {
         </p>
       </div>
       <button onClick={onAdd}
-        className="bg-[#22ff00] text-[#072E49] font-bold px-6 py-3 rounded-2xl text-sm flex items-center gap-2 active:scale-95 transition-transform">
+        className="bg-[#86d1ea] text-[#072E49] font-bold px-6 py-3 rounded-2xl text-sm flex items-center gap-2 active:scale-95 transition-transform">
         <Plus size={14} /> {t("slip.browse")}
       </button>
     </div>
@@ -175,7 +177,7 @@ function LockSlipCTA({
   const { t } = useI18n();
   if (legs.length === 0) return null;
   const color =
-    combinedProbability >= 65 ? "#22ff00" :
+    combinedProbability >= 65 ? "#86d1ea" :
     combinedProbability >= 45 ? "#90C9F0" :
     combinedProbability >= 25 ? "#facc15" : "#f87171";
 
@@ -249,13 +251,13 @@ function SlipCard({ slip }: { slip: BetSlip }) {
   const date = new Date(slip.placedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   const time = new Date(slip.placedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
-  const outcomeColor = isPending ? "#8a9ea6" : isWin ? "#22ff00" : "#f87171";
+  const outcomeColor = isPending ? "#8a9ea6" : isWin ? "#86d1ea" : "#f87171";
   const outcomeBg    = isPending ? "bg-white/5 border-white/10" : isWin ? "bg-green-500/10 border-green-500/20" : "bg-red-500/10 border-red-500/20";
   const outcomeLabel = isPending ? t("slip.pending") : isWin ? t("slip.won") : t("slip.lost");
   const OutcomeIcon  = isPending ? Clock : isWin ? Trophy : AlertCircle;
 
   const combinedColor =
-    (slip.combinedProbability ?? 0) >= 65 ? "#22ff00" :
+    (slip.combinedProbability ?? 0) >= 65 ? "#86d1ea" :
     (slip.combinedProbability ?? 0) >= 45 ? "#90C9F0" :
     (slip.combinedProbability ?? 0) >= 25 ? "#facc15" : "#f87171";
 
@@ -333,7 +335,7 @@ function SlipCard({ slip }: { slip: BetSlip }) {
       {/* Footer: ArakIce branding (kept in the shared image) + share button (excluded) */}
       <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/[0.06]">
         <span className="text-[11px] font-bold tracking-[0.14em]"
-          style={{ fontFamily: "'Oswald','Arial Narrow',sans-serif", color: "#9BF019" }}>
+          style={{ fontFamily: "'Oswald','Arial Narrow',sans-serif", color: "#86d1ea" }}>
           ARAKICE
         </span>
         <button
@@ -341,7 +343,7 @@ function SlipCard({ slip }: { slip: BetSlip }) {
           onClick={handleShare}
           disabled={sharing}
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold disabled:opacity-50 active:scale-95 transition-transform"
-          style={{ background: "rgba(155,240,25,0.12)", color: "#9BF019", border: "1px solid rgba(155,240,25,0.3)" }}
+          style={{ background: "rgba(134,209,234,0.12)", color: "#86d1ea", border: "1px solid rgba(134,209,234,0.3)" }}
         >
           <Share2 size={11} />
           {sharing ? "…" : t("slip.sharePhoto")}
@@ -575,7 +577,7 @@ export function BetBuilderPage() {
       >
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>
+            <h1 className="text-white text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>
               Bet Slip
             </h1>
             <p className="text-[#8a9ea6] text-xs mt-0.5">
@@ -701,7 +703,7 @@ export function BetBuilderPage() {
             <button
               onClick={() => { clearSlip(); navigate("/"); }}
               className="w-full py-3 rounded-2xl font-bold text-sm"
-              style={{ background: "#22ff00", color: "#072E49" }}
+              style={{ background: "#86d1ea", color: "#072E49" }}
             >
               Back to Home
             </button>

@@ -113,7 +113,7 @@ export function InjuriesAdminCard() {
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
           <span className="text-white/70 text-[10px] font-semibold uppercase tracking-wider">{label}</span>
-          <button onClick={() => addPlayer(side)} className="text-[#9BF019] text-[10px] font-bold">
+          <button onClick={() => addPlayer(side)} className="text-[#86d1ea] text-[10px] font-bold">
             + ajouter
           </button>
         </div>
@@ -152,7 +152,7 @@ export function InjuriesAdminCard() {
     <div className="icy-card rounded-2xl p-4 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <p className="text-white text-xs font-medium">Blessures / alignement (admin)</p>
-        <span className="text-[#9BF019] text-[9px] font-bold uppercase tracking-wider">admin</span>
+        <span className="text-[#86d1ea] text-[9px] font-bold uppercase tracking-wider">admin</span>
       </div>
 
       <p className="text-white/50 text-[10px] leading-relaxed">
@@ -199,7 +199,7 @@ export function InjuriesAdminCard() {
               step={0.01}
               value={entry.lineupAdj ?? 0}
               onChange={(e) => setEntry((x) => ({ ...x, lineupAdj: Number(e.target.value) }))}
-              className="w-full accent-[#9BF019]"
+              className="w-full accent-[#86d1ea]"
             />
             <p className="text-white/35 text-[9px]">− favorise le visiteur · + favorise la maison</p>
             <input
@@ -215,7 +215,7 @@ export function InjuriesAdminCard() {
               onClick={handleSave}
               disabled={saving}
               className="px-3 py-1.5 rounded-lg text-[11px] font-bold disabled:opacity-50"
-              style={{ background: "#9BF019", color: "#0A0E0C" }}
+              style={{ background: "#86d1ea", color: "#0A0E0C" }}
             >
               {saving ? "…" : "Enregistrer"}
             </button>

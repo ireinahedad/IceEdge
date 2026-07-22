@@ -47,7 +47,7 @@ export function ConfirmDialog({
           <button
             onClick={onConfirm}
             className={`flex-1 py-3 rounded-2xl text-sm font-bold transition-all ${
-              destructive ? "bg-red-500 text-white" : "bg-[#22ff00] text-[#072E49]"
+              destructive ? "bg-red-500 text-white" : "bg-[#86d1ea] text-[#072E49]"
             }`}
           >
             {confirmLabel ?? t("common.cancel")}

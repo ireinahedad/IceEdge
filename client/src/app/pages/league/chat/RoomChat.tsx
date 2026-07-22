@@ -301,7 +301,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
             onClick={sendMessage}
             disabled={!input.trim()}
             className={`w-7 h-7 rounded-xl flex items-center justify-center text-sm transition-all flex-shrink-0 ${
-              input.trim() ? "bg-[#22ff00] text-[#072E49]" : "bg-white/10 text-white/30"
+              input.trim() ? "bg-[#86d1ea] text-[#072E49]" : "bg-white/10 text-white/30"
             }`}
           >
             ↑
