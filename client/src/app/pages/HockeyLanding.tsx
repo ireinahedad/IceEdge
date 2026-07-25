@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import { Search, TrendingUp, ChevronRight, Plus, Goal, Star, Timer, Zap, Settings, CalendarDays } from "lucide-react";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
@@ -295,8 +295,9 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
         : <span className="text-base flex-shrink-0">{bet.logo}</span>}
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="text-white text-[11px] font-medium truncate">{bet.label}</span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Full bet title always visible — no truncation, wraps if long */}
+          <span className="text-white text-[11px] font-medium">{bet.label}</span>
           <span className="text-[8px] px-1 py-px rounded-full flex-shrink-0 font-medium"
             style={{ color: risk.color, backgroundColor: `${risk.color}18`, border: `1px solid ${risk.color}44` }}>
             {t(risk.key)}
@@ -317,9 +318,6 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
               {t("home.oddsApprox", { odds: odds.toFixed(2) })}
             </span>
           )}
-          {isML && <span className="text-[8px] text-[#a78bfa] flex-shrink-0 font-medium">ML</span>}
-          {sortSource === "ml" && !bet.mlLoading && bet.mlPct == null &&
-            <span className="text-[8px] text-[#bfc8cc] flex-shrink-0">{t("home.rules")}</span>}
         </div>
       </div>
 
@@ -1045,6 +1043,35 @@ function TennisMatchRow({ match, accent }: { match: TennisMatch; accent: string 
   );
 }
 
+// ─── Lazy section ───────────────────────────────────────────────────────────
+// Defers a section's rendering (and any data-fetching it does on mount) until it
+// scrolls near the viewport, so the home page reveals one section at a time
+// instead of mounting and loading everything at once.
+function LazySection({ children, minHeight = 200 }: { children: React.ReactNode; minHeight?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === "undefined") { setShow(true); return; }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) { setShow(true); io.disconnect(); }
+      },
+      { rootMargin: "200px" }, // start loading just before it comes into view
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} style={show ? undefined : { minHeight }}>
+      {show ? children : <div className="icy-tile rounded-2xl animate-pulse" style={{ height: minHeight }} />}
+    </div>
+  );
+}
+
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export function HockeyLanding() {
@@ -1326,33 +1353,39 @@ export function HockeyLanding() {
             </section>
 
             {/* Game calendar — open the full-season schedule */}
-            <button
-              onClick={() => navigate("/schedule")}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl icy-tile active:scale-[0.99] transition-transform"
-            >
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ background: `${accent}1a`, border: `1px solid ${accent}40`, color: accent }}
+            <LazySection minHeight={64}>
+              <button
+                onClick={() => navigate("/schedule")}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl icy-tile active:scale-[0.99] transition-transform"
               >
-                <CalendarDays size={18} />
-              </div>
-              <span className="flex-1 text-left text-white text-sm font-bold">{t("home.schedule")}</span>
-              <ChevronRight size={18} className="text-[#4a6068] flex-shrink-0" />
-            </button>
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: `${accent}1a`, border: `1px solid ${accent}40`, color: accent }}
+                >
+                  <CalendarDays size={18} />
+                </div>
+                <span className="flex-1 text-left text-white text-sm font-bold">{t("home.schedule")}</span>
+                <ChevronRight size={18} className="text-[#4a6068] flex-shrink-0" />
+              </button>
+            </LazySection>
 
             {/* Value Bets (EV) — Pro only */}
-            <EvSection isPro={isPro} items={evItems} isLoading={loading} accent={accent} />
+            <LazySection minHeight={180}>
+              <EvSection isPro={isPro} items={evItems} isLoading={loading} accent={accent} />
+            </LazySection>
 
             {/* Best Bets — Pro only */}
-            <BestBetsSection
-              games={[...liveGames, ...upcomingGames]}
-              tennisLive={[]}
-              tennisUpcoming={[]}
-              sport="hockey"
-              accent={accent}
-              isLoading={loading}
-              locked={!isPro}
-            />
+            <LazySection minHeight={360}>
+              <BestBetsSection
+                games={[...liveGames, ...upcomingGames]}
+                tennisLive={[]}
+                tennisUpcoming={[]}
+                sport="hockey"
+                accent={accent}
+                isLoading={loading}
+                locked={!isPro}
+              />
+            </LazySection>
           </div>
         ) : (
           /* Tennis */
@@ -1392,17 +1425,21 @@ export function HockeyLanding() {
             </section>
 
             {/* Value Bets (EV) — Pro only */}
-            <EvSection isPro={isPro} items={evItems} isLoading={tennisLoading} accent={accent} />
+            <LazySection minHeight={180}>
+              <EvSection isPro={isPro} items={evItems} isLoading={tennisLoading} accent={accent} />
+            </LazySection>
 
-            <BestBetsSection
-              games={[]}
-              tennisLive={tennisLive}
-              tennisUpcoming={tennisUpcoming}
-              sport="tennis"
-              accent={accent}
-              isLoading={tennisLoading}
-              locked={!isPro}
-            />
+            <LazySection minHeight={360}>
+              <BestBetsSection
+                games={[]}
+                tennisLive={tennisLive}
+                tennisUpcoming={tennisUpcoming}
+                sport="tennis"
+                accent={accent}
+                isLoading={tennisLoading}
+                locked={!isPro}
+              />
+            </LazySection>
           </div>
         )}
       </div>

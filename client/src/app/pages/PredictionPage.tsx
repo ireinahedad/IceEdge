@@ -228,29 +228,88 @@ function RecentFormCard({ title, results }: { title?: string; results: ("W" | "L
   );
 }
 
-/** Two-team recent form card (used for a game — one row per team). */
-function GameRecentForm({ home, away, homeForm, awayForm }: {
-  home: { abbr: string; logo: string }; away: { abbr: string; logo: string };
-  homeForm: ("W" | "L" | "OT")[]; awayForm: ("W" | "L" | "OT")[];
+/** Head-to-head — the two teams' most recent meetings this season, with scores. */
+interface H2HMeeting { date: string; homeAbbr: string; awayAbbr: string; homeScore: number; awayScore: number; }
+
+function HeadToHead({ home, away }: {
+  home: { abbr: string; logo: string };
+  away: { abbr: string; logo: string };
 }) {
-  const { t } = useI18n();
-  const Row = ({ team, form }: { team: { abbr: string; logo: string }; form: ("W" | "L" | "OT")[] }) => (
-    <div className="flex items-center gap-3">
-      <div className="flex items-center gap-2 w-16 flex-shrink-0">
-        <img src={team.logo} alt={team.abbr} className="w-6 h-6 object-contain" />
-        <span className="text-white text-xs font-bold">{team.abbr}</span>
-      </div>
-      <FormDots results={form} />
-    </div>
-  );
+  const { t, lang } = useI18n();
+  const locale = lang === "fr" ? "fr-CA" : "en-US";
+  const [meetings, setMeetings] = useState<H2HMeeting[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setMeetings(null);
+    (async () => {
+      try {
+        const isoRe = /^\d{4}-\d{2}-\d{2}$/;
+        const anchor = await nhlApiService.getScheduleAnchor().catch(() => null);
+        const end = anchor?.today && isoRe.test(anchor.today)
+          ? anchor.today
+          : new Date().toISOString().slice(0, 10);
+        const start = anchor?.seasonStart && isoRe.test(anchor.seasonStart)
+          ? anchor.seasonStart
+          : `${Number(end.slice(0, 4)) - 1}-09-01`;
+
+        const games = await nhlApiService.getGamesRange(start, end);
+        const A = home.abbr.toUpperCase();
+        const B = away.abbr.toUpperCase();
+        const found = games
+          .filter((g) => g.status === "final")
+          .filter((g) => {
+            const h = g.homeTeam.abbreviation.toUpperCase();
+            const a = g.awayTeam.abbreviation.toUpperCase();
+            return (h === A && a === B) || (h === B && a === A);
+          })
+          .map((g) => ({
+            date: g.gameDate,
+            homeAbbr: g.homeTeam.abbreviation.toUpperCase(),
+            awayAbbr: g.awayTeam.abbreviation.toUpperCase(),
+            homeScore: g.homeTeam.score ?? 0,
+            awayScore: g.awayTeam.score ?? 0,
+          }))
+          .sort((x, y) => y.date.localeCompare(x.date))
+          .slice(0, 5);
+        if (alive) setMeetings(found);
+      } catch {
+        if (alive) setMeetings([]);
+      }
+    })();
+    return () => { alive = false; };
+  }, [home.abbr, away.abbr]);
+
   return (
     <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
-      <p className="text-white text-sm font-medium mb-3">{t("pred.recentForm")}</p>
-      <div className="flex flex-col gap-3">
-        <Row team={home} form={homeForm} />
-        <Row team={away} form={awayForm} />
-      </div>
-      <FormLegend />
+      <p className="text-white text-sm font-medium mb-3">{t("pred.h2hTitle")}</p>
+      {meetings === null ? (
+        <div className="flex flex-col gap-2">
+          {[1, 2, 3].map((i) => <div key={i} className="h-9 bg-[#0A0E0C] rounded-lg animate-pulse" />)}
+        </div>
+      ) : meetings.length === 0 ? (
+        <p className="text-[#8a9ea6] text-xs">{t("pred.h2hNone")}</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {meetings.map((m, i) => {
+            const homeWon = m.homeScore > m.awayScore;
+            return (
+              <div key={i} className="flex items-center gap-3 text-xs bg-[#0A0E0C] rounded-lg px-3 py-2">
+                <span className="text-[#8a9ea6] w-14 flex-shrink-0 tabular-nums">
+                  {new Date(`${m.date}T00:00:00`).toLocaleDateString(locale, { day: "numeric", month: "short" })}
+                </span>
+                <div className="flex-1 flex items-center justify-center gap-2">
+                  <span className={`font-bold tabular-nums ${!homeWon ? "text-white" : "text-[#8a9ea6]"}`}>{m.awayAbbr}</span>
+                  <span className="text-white font-black tabular-nums">{m.awayScore}</span>
+                  <span className="text-[#4a6070]">–</span>
+                  <span className="text-white font-black tabular-nums">{m.homeScore}</span>
+                  <span className={`font-bold tabular-nums ${homeWon ? "text-white" : "text-[#8a9ea6]"}`}>{m.homeAbbr}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1261,14 +1320,6 @@ function GamePrediction({ gameId }: { gameId: string }) {
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [revealAll, setRevealAll] = useState(false);
-  const homeForm = useMemo<("W" | "L" | "OT")[]>(
-    () => (gameView ? generateForm(8, gameView.home.winPct / 100) : []),
-    [gameView?.home.winPct],
-  );
-  const awayForm = useMemo<("W" | "L" | "OT")[]>(
-    () => (gameView ? generateForm(8, gameView.away.winPct / 100) : []),
-    [gameView?.away.winPct],
-  );
 
   useEffect(() => {
     async function load() {
@@ -1384,12 +1435,10 @@ function GamePrediction({ gameId }: { gameId: string }) {
         </div>
       </div>
 
-      {/* Recent form — both teams, shown above the markets */}
-      <GameRecentForm
+      {/* Head-to-head — the teams' recent meetings, shown above the markets */}
+      <HeadToHead
         home={{ abbr: home.abbr, logo: home.logo }}
         away={{ abbr: away.abbr, logo: away.logo }}
-        homeForm={homeForm}
-        awayForm={awayForm}
       />
 
       {/* Players — jump straight to any player's own prediction page */}
@@ -2291,6 +2340,12 @@ export function PredictionPage() {
           <div className="flex items-center gap-3">
             <button onClick={() => navigate(-1)} className="text-[#3a5060] text-lg">←</button>
             <h1 className="text-white text-base font-bold flex-1 uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("pred.title")}</h1>
+            {(type === "team" || type === "player") && id && (
+              <FramedLabel
+                text={t("pred.chart")}
+                onClick={() => navigate(`/stats/chart/${type}/${id}`)}
+              />
+            )}
           </div>
         </div>
 

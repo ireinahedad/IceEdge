@@ -73,6 +73,33 @@ router.get('/teams/:abbr/roster', async (req, res) => {
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
+// Bet365-style charts: last 6 seasons of per-player stats (skaters + goalies).
+router.get('/teams/:abbr/player-seasons', async (req, res) => {
+  try { res.json(await nhl.getTeamPlayerSeasons(req.params.abbr)); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// Charts: per-opponent player splits for a season (avg-per-game-vs-team column).
+const SEASON_ID = /^\d{8}$/;
+router.get('/teams/:abbr/opponent-splits/:season', async (req, res) => {
+  if (!SEASON_ID.test(req.params.season)) {
+    res.status(400).json({ error: 'Invalid season (expected 8-digit seasonId, e.g. 20252026)' });
+    return;
+  }
+  try { res.json(await nhl.getTeamOpponentSplits(req.params.abbr, req.params.season)); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// Charts: official team stats for a season + per-opponent GF/GA/W from schedule.
+router.get('/teams/:abbr/season-official/:season', async (req, res) => {
+  if (!SEASON_ID.test(req.params.season)) {
+    res.status(400).json({ error: 'Invalid season (expected 8-digit seasonId, e.g. 20252026)' });
+    return;
+  }
+  try { res.json(await nhl.getTeamSeasonOfficial(req.params.abbr, req.params.season)); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
 router.get('/players/:id', async (req, res) => {
   try { res.json(await nhl.getPlayer(req.params.id)); }
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }

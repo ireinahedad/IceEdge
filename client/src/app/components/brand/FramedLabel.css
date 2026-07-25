@@ -48,6 +48,23 @@
   pointer-events: none;
 }
 
+/* Interactive variant — same frame, but behaves as a tappable chip. */
+.framed-label--button {
+  border: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+
+.framed-label--button:hover {
+  background: rgba(134, 209, 234, 0.12);
+}
+
+.framed-label--button:active {
+  transform: scale(0.96);
+}
+
 .framed-label__text {
   position: relative;
   z-index: 1;

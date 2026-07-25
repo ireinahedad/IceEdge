@@ -1,16 +1,16 @@
 import { Search, HelpCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useNHLData, UITeam, UIGame } from "../hooks/useNHLData";
 import { BottomNav } from "../components/BottomNav";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { HowItWorksSheet } from "../components/HowItWorksSheet";
-import { nhlApiService } from "../services/nhlApiService";
 import { useSport } from "../context/SportContext";
-import { nhlLogoUrl, probToOdds } from "../data/teamEmoji";
 import { TennisStatsContent } from "./TennisStatsPage";
 import { PlayersTab } from "../components/PlayersTab";
 import { LastNGamesSection } from "../components/LastNGamesSection";
+import { ScheduleContent } from "./SchedulePage";
+import { FramedLabel } from "../components/brand/FramedLabel";
 import { useI18n } from "../i18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -19,11 +19,6 @@ const filterTabKeys = ["stats.byTeam", "stats.byGame", "stats.byPlayer"];
 
 type Subject = { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 interface AddSheetState { open: boolean; subject?: Subject }
-
-interface LocalFuture {
-  id: string; team: string; logo: string; propLabel: string;
-  propType: string; probability: number; oddsLabel: string;
-}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -76,7 +71,7 @@ function TeamCard({ team, onClick, onAdd, accent }: { team: UITeam; onClick: () 
   );
 }
 
-function GameCard({ game, getTeamById, onClick, onAdd, accent }: { game: UIGame; getTeamById: (id: string) => UITeam | undefined; onClick: () => void; onAdd: (e: React.MouseEvent) => void; accent: string }) {
+function GameCard({ game, getTeamById, onClick, accent }: { game: UIGame; getTeamById: (id: string) => UITeam | undefined; onClick: () => void; accent: string }) {
   const { t } = useI18n();
   const team1 = getTeamById(game.team1Id);
   const team2 = getTeamById(game.team2Id);
@@ -88,10 +83,7 @@ function GameCard({ game, getTeamById, onClick, onAdd, accent }: { game: UIGame;
     >
       <div className="flex items-center justify-between mb-3">
         <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: accent }}>{game.date} · {game.time}</span>
-        <div className="flex items-center gap-2">
-          <span className="text-[#bfc8cc] text-[10px] bg-[#1B2419] px-2 py-0.5 rounded-full">NHL</span>
-          <AddButton onPress={onAdd} accent={accent} />
-        </div>
+        <span className="text-[#bfc8cc] text-[10px] bg-[#1B2419] px-2 py-0.5 rounded-full">NHL</span>
       </div>
       <div className="flex items-center gap-2 mb-3">
         <div className="flex-1 flex items-center gap-2">
@@ -121,40 +113,6 @@ function GameCard({ game, getTeamById, onClick, onAdd, accent }: { game: UIGame;
   );
 }
 
-function SeasonFutureCard({ future, accent, onNavigate }: { future: LocalFuture; accent: string; onNavigate: () => void }) {
-  const { t } = useI18n();
-  const isHigh = future.probability >= 20;
-  return (
-    <button
-      onClick={onNavigate}
-      className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 active:scale-[0.98] transition-transform text-left"
-    >
-      <div className="flex items-center gap-3 mb-2">
-        <img src={future.logo} alt={future.team} className="w-10 h-10 object-contain flex-shrink-0" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <span className="text-[9px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">
-              {future.propType === "cup" ? t("stats.stanleyCup") : future.propType === "conf" ? t("stats.conference") : t("stats.futuresTag")}
-            </span>
-          </div>
-          <p className="text-white text-sm font-medium truncate">{future.team}</p>
-          <p className="text-[#bfc8cc] text-xs truncate">{future.propLabel}</p>
-        </div>
-        <div className="flex flex-col items-end gap-1 flex-shrink-0">
-          <div className="px-2.5 py-1 rounded-full text-sm font-black"
-            style={{ backgroundColor: isHigh ? `${accent}20` : "#ffffff10", color: isHigh ? accent : "#bfc8cc" }}>
-            {future.probability}%
-          </div>
-          <span className="text-[#bfc8cc] text-[10px]">{future.oddsLabel}</span>
-        </div>
-      </div>
-      <div className="w-full bg-[#0A0E0C] rounded-full h-1.5">
-        <div className="h-1.5 rounded-full" style={{ width: `${future.probability}%`, backgroundColor: accent }} />
-      </div>
-    </button>
-  );
-}
-
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export function StatsPage() {
@@ -169,39 +127,6 @@ export function StatsPage() {
 
   function openAdd(subject: Subject) { setAddSheet({ open: true, subject }); }
   const { teams, games, gamesLabel, loading, error, getTeamById } = useNHLData();
-  const [futures, setFutures] = useState<LocalFuture[]>([]);
-
-  useEffect(() => {
-    nhlApiService.getStandings()
-      .then((standings) => {
-        const allTeams = standings.flatMap((s) => s.teams);
-        const east = allTeams.filter(t => t.team.conference === "Eastern")
-          .sort((a, b) => (b.stats.points ?? 0) - (a.stats.points ?? 0)).slice(0, 4);
-        const west = allTeams.filter(t => t.team.conference === "Western")
-          .sort((a, b) => (b.stats.points ?? 0) - (a.stats.points ?? 0)).slice(0, 4);
-        const top = [...east, ...west]
-          .sort((a, b) => (b.stats.points ?? 0) - (a.stats.points ?? 0))
-          .slice(0, 8);
-        setFutures(top.map((entry) => {
-          const abbr = entry.team.abbreviation;
-          const wins = entry.stats.wins;
-          const pts  = entry.stats.points ?? wins * 2;
-          const rank = top.indexOf(entry) + 1;
-          const prob = Math.max(5, Math.round(35 - rank * 3 + (pts - 90) * 0.3));
-          return {
-            id: `${abbr.toLowerCase()}-cup`,
-            team: entry.team.name,
-            logo: nhlLogoUrl(abbr),
-            propLabel: t("stats.winCup"),
-            propType: "cup",
-            probability: Math.max(5, Math.min(60, prob)),
-            oddsLabel: probToOdds(Math.max(5, Math.min(60, prob))),
-          };
-        }));
-      })
-      .catch(() => { setFutures([]); });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t]);
 
   const filteredTeams = teams.filter((t) =>
     !search || t.name.toLowerCase().includes(search.toLowerCase()) || t.abbr.toLowerCase().includes(search.toLowerCase())
@@ -275,6 +200,9 @@ export function StatsPage() {
             </button>
           ))}
         </div>
+        <div className="mt-2 flex">
+          <FramedLabel text={t("stats.statistics")} onClick={() => navigate(activeFilter === 2 ? "/stats/chart/player" : "/stats/chart/team")} />
+        </div>
       </header>
 
       <div className="flex-1 px-4 pb-28 pt-3 overflow-y-auto">
@@ -324,8 +252,7 @@ export function StatsPage() {
                   const t1 = getTeamById(game.team1Id); const t2 = getTeamById(game.team2Id);
                   if (!t1 || !t2) return null;
                   return <GameCard key={game.id} game={game} accent={accent} getTeamById={getTeamById}
-                    onClick={() => navigate(`/stats/prediction/game/${game.id}`)}
-                    onAdd={() => openAdd({ id: game.id, type: "game", name: `${t1.abbr} vs ${t2.abbr}`, logo: "", subtitle: `${game.date} · ${game.time}` })} />;
+                    onClick={() => navigate(`/stats/prediction/game/${game.id}`)} />;
                 })}
               </div>
             ) : (
@@ -339,19 +266,8 @@ export function StatsPage() {
             )}
 
             <div>
-              <p className="text-[#bfc8cc] text-xs mb-2 uppercase tracking-wider font-medium">{t("stats.futures")}</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-                {futures.length > 0 ? (
-                  [...futures]
-                    .sort((a, b) => b.probability - a.probability)
-                    .map((future) => (
-                      <SeasonFutureCard key={future.id} future={future} accent={accent}
-                        onNavigate={() => navigate(`/stats/prediction/future/${future.id}`)} />
-                    ))
-                ) : (
-                  <p className="text-[#bfc8cc] text-xs text-center py-4">{t("stats.loadingStandings")}</p>
-                )}
-              </div>
+              <p className="text-[#bfc8cc] text-xs mb-2 uppercase tracking-wider font-medium">{t("schedule.title")}</p>
+              <ScheduleContent accent={accent} />
             </div>
           </div>
         )}

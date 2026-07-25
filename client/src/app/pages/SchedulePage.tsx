@@ -85,6 +85,54 @@ function buildWeeks(y: number, m: number): Week[] {
 
 export function SchedulePage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
+
+  return (
+    <div className="flex flex-col min-h-screen pb-24" style={{ background: "#0A0E0C" }}>
+      {/* Header */}
+      <header
+        className="sticky top-0 z-40 px-4 pt-12 pb-3"
+        style={{ background: "rgba(10,14,12,0.92)", backdropFilter: "blur(16px)", borderBottom: "1px solid #283323" }}
+      >
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            aria-label="Back"
+            className="w-9 h-9 rounded-xl bg-[#131A12] border border-white/20 flex items-center justify-center flex-shrink-0"
+            style={{ color: ACCENT }}
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <div className="flex-1 min-w-0">
+            <h1
+              className="text-white text-xl font-bold uppercase leading-tight"
+              style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}
+            >
+              {t("schedule.title")}
+            </h1>
+            <p className="text-[#8a9ea6] text-[11px]">{t("schedule.subtitle")}</p>
+          </div>
+        </div>
+      </header>
+
+      {/* Contenu — calendrier mois/semaine + matchs */}
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        <ScheduleContent />
+      </div>
+
+      <BottomNav />
+    </div>
+  );
+}
+
+/**
+ * ScheduleContent — sélecteur mois/semaine + liste des matchs de la semaine
+ * sélectionnée, SANS le chrome de page (en-tête, BottomNav). Extrait pour être
+ * réutilisé tel quel dans la page calendrier dédiée et embarqué ailleurs
+ * (onglet « Par match » des statistiques).
+ */
+export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
+  const navigate = useNavigate();
   const { t, lang } = useI18n();
   const locale = lang === "fr" ? "fr-FR" : "en-US";
 
@@ -173,84 +221,58 @@ export function SchedulePage() {
   const stepMonth = (delta: number) => setCursor(clampCursor(curIdx + delta, bounds));
 
   return (
-    <div className="flex flex-col min-h-screen pb-24" style={{ background: "#0A0E0C" }}>
-      {/* Header */}
-      <header
-        className="sticky top-0 z-40 px-4 pt-12 pb-3"
-        style={{ background: "rgba(10,14,12,0.92)", backdropFilter: "blur(16px)", borderBottom: "1px solid #283323" }}
-      >
-        <div className="flex items-center gap-3 mb-3">
-          <button
-            onClick={() => navigate(-1)}
-            aria-label="Back"
-            className="w-9 h-9 rounded-xl bg-[#131A12] border border-white/20 flex items-center justify-center flex-shrink-0"
-            style={{ color: ACCENT }}
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <div className="flex-1 min-w-0">
-            <h1
-              className="text-white text-xl font-bold uppercase leading-tight"
-              style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}
+    <div className="flex flex-col">
+      {/* Sélecteur de mois */}
+      <div className="flex items-center justify-between bg-white/5 rounded-xl p-1">
+        <button
+          onClick={() => stepMonth(-1)}
+          disabled={curIdx <= minIdx}
+          aria-label="Previous month"
+          className="w-9 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-25"
+          style={{ color: accent }}
+        >
+          <ChevronLeft size={18} />
+        </button>
+        <span
+          className="text-white text-sm font-bold uppercase tracking-wide"
+          style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}
+        >
+          {monthLabel}
+        </span>
+        <button
+          onClick={() => stepMonth(1)}
+          disabled={curIdx >= maxIdx}
+          aria-label="Next month"
+          className="w-9 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-25"
+          style={{ color: accent }}
+        >
+          <ChevronRight size={18} />
+        </button>
+      </div>
+
+      {/* Sélecteur de semaine — chaque bouton = 1er jour de la semaine */}
+      <div className="flex gap-1.5 mt-2 overflow-x-auto scrollbar-hide pb-0.5">
+        {weeks.map((w) => {
+          const active = week?.start === w.start;
+          return (
+            <button
+              key={w.start}
+              onClick={() => setWeek(w)}
+              className="flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wide transition-all"
+              style={
+                active
+                  ? { background: accent, color: "#072E49" }
+                  : { background: "rgba(255,255,255,0.05)", color: "#8a9ea6" }
+              }
             >
-              {t("schedule.title")}
-            </h1>
-            <p className="text-[#8a9ea6] text-[11px]">{t("schedule.subtitle")}</p>
-          </div>
-        </div>
+              {weekLabel(w.start)}
+            </button>
+          );
+        })}
+      </div>
 
-        {/* Sélecteur de mois */}
-        <div className="flex items-center justify-between bg-white/5 rounded-xl p-1">
-          <button
-            onClick={() => stepMonth(-1)}
-            disabled={curIdx <= minIdx}
-            aria-label="Previous month"
-            className="w-9 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-25"
-            style={{ color: ACCENT }}
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <span
-            className="text-white text-sm font-bold uppercase tracking-wide"
-            style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}
-          >
-            {monthLabel}
-          </span>
-          <button
-            onClick={() => stepMonth(1)}
-            disabled={curIdx >= maxIdx}
-            aria-label="Next month"
-            className="w-9 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-25"
-            style={{ color: ACCENT }}
-          >
-            <ChevronRight size={18} />
-          </button>
-        </div>
-
-        {/* Sélecteur de semaine — chaque bouton = 1er jour de la semaine */}
-        <div className="flex gap-1.5 mt-2 overflow-x-auto scrollbar-hide pb-0.5">
-          {weeks.map((w) => {
-            const active = week?.start === w.start;
-            return (
-              <button
-                key={w.start}
-                onClick={() => setWeek(w)}
-                className="flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wide transition-all"
-                style={
-                  active
-                    ? { background: ACCENT, color: "#072E49" }
-                    : { background: "rgba(255,255,255,0.05)", color: "#8a9ea6" }
-                }
-              >
-                {weekLabel(w.start)}
-              </button>
-            );
-          })}
-        </div>
-      </header>
-
-      {/* Contenu — matchs de la semaine sélectionnée */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      {/* Matchs de la semaine sélectionnée */}
+      <div className="mt-4">
         {loading ? (
           <div className="flex flex-col gap-2">
             {[1, 2, 3, 4, 5].map((i) => (
@@ -286,8 +308,6 @@ export function SchedulePage() {
           </div>
         )}
       </div>
-
-      <BottomNav />
     </div>
   );
 }

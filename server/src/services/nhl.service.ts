@@ -94,6 +94,18 @@ export class NHLService {
     return nhlApi.fetchTeamRoster(abbr);
   }
 
+  async getTeamPlayerSeasons(abbr: string) {
+    return nhlApi.fetchTeamPlayerSeasons(abbr);
+  }
+
+  async getTeamOpponentSplits(abbr: string, season: string) {
+    return nhlApi.fetchTeamOpponentSplits(abbr, season);
+  }
+
+  async getTeamSeasonOfficial(abbr: string, season: string) {
+    return nhlApi.fetchTeamSeasonOfficial(abbr, season);
+  }
+
   async getPlayer(id: string) {
     return nhlApi.fetchPlayerById(id);
   }
