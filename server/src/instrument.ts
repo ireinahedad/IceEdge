@@ -20,5 +20,4 @@ if (process.env.SENTRY_DSN) {
     // Don't send PII by default.
     sendDefaultPii: false,
   });
-  console.log('[Sentry] initialised');
 }

@@ -1,144 +1,129 @@
 """
-backtest.py
-===========
-Backtest walk-forward par saison — le test d'honnêteté du modèle.
+backtest.py (v4)
+================
+Backtest "value betting" du modèle sur le TEST SET uniquement (jamais vu à
+l'entraînement) : on parie quand la proba du modèle diverge assez de la proba
+implicite du marché.
 
-Pour chaque saison N (à partir de la 2e) :
-  - entraîne UNIQUEMENT sur les saisons < N (early stopping sur les 15 % finaux du train)
-  - prédit la saison N entière (jamais vue, y compris pour l'ELO et la calibration)
-  - compare aux baselines : domicile-toujours, constante, ELO seul
+Stratégies évaluées :
+  • Flat 1u, seuil d'edge variable (1% → 8%)
+  • Kelly fractionné (1/4)
+Métriques : ROI, nb de paris, hit rate, log-loss comparé au marché.
 
 Usage :
     cd ml/python
-    python backtest.py
+    python backtest.py               # utilise le blend si dispo
+    python backtest.py --use raw     # modèle calibré sans blend
 """
+
+import argparse
+import json
 
 import numpy as np
 import pandas as pd
 import xgboost as xgb
 
-from train import (
-    DATA_PATH, GAME_FEATURES, ALL_GAME_FEATURES,
-    add_diff_features, add_elo_features,
-    fit_platt, apply_platt,
-    log_loss_np, brier_score, accuracy,
-)
-
-PARAMS = {
-    "objective":        "binary:logistic",
-    "eval_metric":      "logloss",
-    "max_depth":        4,
-    "learning_rate":    0.04,
-    "subsample":        0.8,
-    "colsample_bytree": 0.8,
-    "min_child_weight": 3,
-    "gamma":            0.1,
-    "reg_alpha":        0.1,
-    "reg_lambda":       1.0,
-    "seed":             42,
-}
+DATA   = "../data/nhl_games_v4.csv"
+MODELS = "../models"
 
 
-def season_labels(dates: pd.Series) -> np.ndarray:
-    """Numérote les saisons via les trous > 60 jours dans le calendrier."""
-    d = pd.to_datetime(dates).reset_index(drop=True)
-    labels = np.zeros(len(d), dtype=int)
-    season = 0
-    for i in range(1, len(d)):
-        if (d[i] - d[i - 1]).days > 60:
-            season += 1
-        labels[i] = season
-    return labels
+def _logit(p, eps=1e-7):
+    p = np.clip(p, eps, 1 - eps)
+    return np.log(p / (1 - p))
 
-
-def evaluate(name: str, y: np.ndarray, p: np.ndarray) -> dict:
-    return {
-        "name":     name,
-        "accuracy": accuracy(y, p),
-        "log_loss": log_loss_np(y, p),
-        "brier":    brier_score(y, p),
-    }
+def _sigmoid(z):
+    return 1.0 / (1.0 + np.exp(-z))
 
 
 def main():
-    df = pd.read_csv(DATA_PATH)
-    base_available = [f for f in GAME_FEATURES if f in df.columns]
-    df = df.dropna(subset=base_available + ["home_win", "date"]).copy()
-    df = add_diff_features(df)
-    df, _ = add_elo_features(df)          # séquentiel → toujours pré-match
-    df = df.sort_values("date").reset_index(drop=True)
-    df["season"] = season_labels(df["date"])
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--use", choices=["blend", "raw"], default="blend")
+    args = ap.parse_args()
 
-    features = [f for f in ALL_GAME_FEATURES if f in df.columns]
-    n_seasons = df["season"].max() + 1
-    print(f"{len(df)} matchs, {n_seasons} saisons, {len(features)} features\n")
+    report = json.load(open(f"{MODELS}/training_report.json"))
+    feats = report["features"]["game"]
+    gr = report["game_model"]
 
-    rows = []
-    for s in range(1, n_seasons):
-        train = df[df["season"] < s]
-        test  = df[df["season"] == s]
-        if len(train) < 400 or len(test) < 100:
-            continue
+    df = pd.read_csv(DATA, low_memory=False).sort_values("date").reset_index(drop=True)
+    test = df.iloc[int(len(df) * 0.8):].copy()
 
-        # 15 % finaux du train = validation (early stopping + calibration)
-        cut  = int(len(train) * 0.85)
-        tr, val = train.iloc[:cut], train.iloc[cut:]
-
-        Xtr  = tr[features].values.astype(np.float32)
-        ytr  = tr["home_win"].values.astype(np.float32)
-        Xv   = val[features].values.astype(np.float32)
-        yv   = val["home_win"].values.astype(np.float32)
-        Xte  = test[features].values.astype(np.float32)
-        yte  = test["home_win"].values.astype(np.float32)
-
-        dtr = xgb.DMatrix(Xtr, label=ytr, feature_names=features)
-        dv  = xgb.DMatrix(Xv,  label=yv,  feature_names=features)
-        dte = xgb.DMatrix(Xte, label=yte, feature_names=features)
-
-        model = xgb.train(PARAMS, dtr, num_boost_round=500,
-                          evals=[(dv, "val")], early_stopping_rounds=40,
-                          verbose_eval=False)
-
-        p_raw = model.predict(dte)
-        a, b  = fit_platt(model.predict(dv), yv)
-        p_cal = apply_platt(p_raw, a, b)
-
-        results = [
-            evaluate("XGBoost brut",     yte, p_raw),
-            evaluate("XGBoost calibré",  yte, p_cal),
-            evaluate("ELO seul",         yte, test["elo_expected"].values.astype(np.float32)),
-            evaluate("Constante (taux domicile train)", yte, np.full(len(yte), ytr.mean(), dtype=np.float32)),
-        ]
-        home_acc = float(yte.mean())  # accuracy de « domicile gagne toujours »
-
-        print(f"── Saison {s + 1} ({test['date'].min()} → {test['date'].max()}, "
-              f"{len(test)} matchs) — entraîné sur {len(train)}")
-        print(f"   {'Baseline domicile-toujours':<34} acc {home_acc:.3f}")
-        for r in results:
-            edge = r["accuracy"] - home_acc
-            print(f"   {r['name']:<34} acc {r['accuracy']:.3f} ({edge:+.3f})  "
-                  f"log-loss {r['log_loss']:.4f}  brier {r['brier']:.4f}")
-        print()
-        for r in results:
-            rows.append({"season": s + 1, **r, "home_acc": home_acc, "n": len(test)})
-
-    # Agrégat pondéré par le nombre de matchs
-    agg = pd.DataFrame(rows)
-    if agg.empty:
-        print("Pas assez de données pour un backtest.")
+    need = ["market_home_p_close", "home_ml_close", "away_ml_close"]
+    if not all(c in test.columns for c in need):
+        print("❌ Pas de cotes dans le dataset — backtest ROI impossible.")
         return
-    print("═══ AGRÉGAT (pondéré par saison) ═══")
-    home = float(np.average(agg.groupby("season")["home_acc"].first(),
-                            weights=agg.groupby("season")["n"].first()))
-    print(f"   {'Baseline domicile-toujours':<34} acc {home:.3f}")
-    for name, g in agg.groupby("name", sort=False):
-        acc = float(np.average(g["accuracy"], weights=g["n"]))
-        ll  = float(np.average(g["log_loss"], weights=g["n"]))
-        br  = float(np.average(g["brier"],    weights=g["n"]))
-        print(f"   {name:<34} acc {acc:.3f} ({acc - home:+.3f})  "
-              f"log-loss {ll:.4f}  brier {br:.4f}")
-    print("\nLecture : le modèle est utile si « XGBoost calibré » bat à la fois")
-    print("la baseline domicile ET la constante en log-loss, sur PLUSIEURS saisons.")
+    test = test[test["market_home_p_close"].notna()].copy()
+    if len(test) < 100:
+        print(f"❌ Seulement {len(test)} matchs de test avec cotes — backtest peu fiable.")
+        return
+    print(f"📊 Backtest sur {len(test)} matchs de test avec cotes "
+          f"({test['date'].min()} → {test['date'].max()})")
+
+    model = xgb.Booster()
+    model.load_model(f"{MODELS}/game_model.json")
+    dm = xgb.DMatrix(test[feats].values.astype(np.float32),
+                     feature_names=feats, missing=np.nan)
+    p_raw = model.predict(dm)
+
+    cal = gr["calibration"]
+    p_model = _sigmoid(cal["a"] * _logit(p_raw) + cal["b"])
+
+    blend_w = (gr.get("baselines", {}).get("market", {}) or {}).get("blend_weights")
+    if args.use == "blend" and blend_w:
+        w = blend_w
+        p_model = _sigmoid(w[0] * _logit(p_raw)
+                           + w[1] * _logit(test["market_home_p_close"].values) + w[2])
+        print("   → probas = blend modèle ⊕ marché")
+    else:
+        print("   → probas = modèle calibré (sans blend)")
+
+    y = test["home_win"].values.astype(float)
+    p_mkt = test["market_home_p_close"].values
+    dec_h = test["home_ml_close"].values
+    dec_a = test["away_ml_close"].values
+
+    ll_model = -np.mean(y * np.log(np.clip(p_model, 1e-7, 1))
+                        + (1 - y) * np.log(np.clip(1 - p_model, 1e-7, 1)))
+    ll_mkt = -np.mean(y * np.log(p_mkt) + (1 - y) * np.log(1 - p_mkt))
+    print(f"\n   Log-loss : modèle {ll_model:.4f}  vs marché {ll_mkt:.4f}")
+
+    results = []
+    print(f"\n   {'edge>':>6} {'paris':>6} {'hit%':>6} {'ROI flat':>9} {'ROI ¼Kelly':>11}")
+    for edge in [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.08]:
+        profit_flat, profit_kelly, stake_kelly, bets, wins = 0.0, 0.0, 0.0, 0, 0
+        for i in range(len(test)):
+            if not (np.isfinite(dec_h[i]) and np.isfinite(dec_a[i])):
+                continue
+            for p, dec, won in [(p_model[i], dec_h[i], y[i] == 1),
+                                (1 - p_model[i], dec_a[i], y[i] == 0)]:
+                if dec <= 1:
+                    continue
+                p_imp = (1 / dec) / (1 / dec_h[i] + 1 / dec_a[i])   # dévigé
+                if p - p_imp < edge:
+                    continue
+                bets += 1
+                wins += int(won)
+                profit_flat += (dec - 1) if won else -1
+                b = dec - 1
+                k = max(0.0, (p * b - (1 - p)) / b) * 0.25
+                stake_kelly += k
+                profit_kelly += k * b if won else -k
+        roi_f = profit_flat / bets * 100 if bets else 0
+        roi_k = profit_kelly / stake_kelly * 100 if stake_kelly > 0 else 0
+        hit = wins / bets * 100 if bets else 0
+        results.append({"edge_threshold": edge, "n_bets": bets,
+                        "hit_rate": round(hit, 2), "roi_flat_pct": round(roi_f, 2),
+                        "roi_kelly_pct": round(roi_k, 2)})
+        print(f"   {edge:>5.0%} {bets:>6} {hit:>5.1f}% {roi_f:>8.2f}% {roi_k:>10.2f}%")
+
+    out = {"n_test_games": len(test),
+           "period": [str(test["date"].min()), str(test["date"].max())],
+           "probas": args.use,
+           "log_loss": {"model": round(float(ll_model), 4), "market": round(float(ll_mkt), 4)},
+           "strategies": results}
+    json.dump(out, open(f"{MODELS}/backtest_report.json", "w"), indent=2)
+    print(f"\n✅ backtest_report.json → {MODELS}/")
+    print("   ⚠️ ROI basé sur cotes de clôture historiques — le marché réel bouge. "
+          "Un ROI flat > 0 avec ≥ 200 paris est déjà un excellent signe.")
 
 
 if __name__ == "__main__":

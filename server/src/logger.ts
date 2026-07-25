@@ -31,8 +31,17 @@ export const httpLogger = pinoHttp({
     res.setHeader('x-request-id', id);
     return id;
   },
-  // Don't spam logs with health-probe traffic.
+  // Don't spam logs with health-probe traffic or the schedule/calendar polling
+  // (month/week navigation hits these frequently).
   autoLogging: {
-    ignore: (req) => req.url === '/health' || req.url === '/health/ready',
+    ignore: (req) => {
+      const path = (req.url || '').split('?')[0];
+      return (
+        path === '/health' ||
+        path === '/health/ready' ||
+        path === '/api/nhl/games/range' ||
+        path === '/api/nhl/schedule/anchor'
+      );
+    },
   },
 });

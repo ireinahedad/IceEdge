@@ -12,6 +12,25 @@ router.get('/games', async (req, res) => {
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
+// Calendrier : tous les matchs entre deux dates (YYYY-MM-DD) incluses.
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+router.get('/games/range', async (req, res) => {
+  const start = String(req.query.start ?? '');
+  const end   = String(req.query.end ?? '');
+  if (!ISO_DATE.test(start) || !ISO_DATE.test(end) || end < start) {
+    res.status(400).json({ error: 'Invalid start/end (expected YYYY-MM-DD, end >= start)' });
+    return;
+  }
+  try { res.json(await nhl.getGamesRange(start, end)); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// Ancre du calendrier : date courante + bornes de saison selon l'API NHL.
+router.get('/schedule/anchor', async (_req, res) => {
+  try { res.json(await nhl.getScheduleAnchor()); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
 router.get('/games/live', async (_req, res) => {
   try { res.json(await nhl.getLiveGames()); }
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }

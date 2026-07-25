@@ -20,7 +20,7 @@ import subscriptionRoutes, { stripeWebhook } from './routes/subscription.routes'
 import pushRoutes          from './routes/push.routes';
 import { getLeaderboard }  from './services/profile.service';
 import { pool }            from './db/connection';
-import { httpLogger }      from './logger';
+import { httpLogger, logger } from './logger';
 import { seedAll }         from './db/seed';
 import { apiLimiter, authLimiter, writeLimiter } from './middleware/rateLimit.middleware';
 
@@ -118,8 +118,6 @@ const devRoutesEnabled =
   process.env.NODE_ENV !== 'production' || process.env.ENABLE_DEV_ROUTES === 'true';
 if (devRoutesEnabled) {
   app.use('/api/dev',         devRoutes);
-} else {
-  console.log('[app] /api/dev not mounted (production; set ENABLE_DEV_ROUTES=true to enable)');
 }
 
 // Dev-only seed endpoint
@@ -158,7 +156,7 @@ app.get('/health/ready', async (_req, res) => {
       client.release();
     }
   } catch (err: any) {
-    console.error('[health] readiness DB check failed:', err?.message ?? err);
+    logger.error({ err: err?.message ?? err }, '[health] readiness DB check failed');
   }
 
   const ready = checks.db === 'ok';

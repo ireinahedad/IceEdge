@@ -32,6 +32,7 @@ import {
   buildTeamFuturesFeatures,
 } from "../services/featureEngineering";
 import { getBestBets } from "../services/bestBets.service";
+import { logger } from "../logger";
 
 const router = Router();
 
@@ -50,7 +51,7 @@ router.get("/best-bets", async (req: Request, res: Response) => {
     });
     res.json(result);
   } catch (err: any) {
-    console.error("[predict/best-bets]", err.message);
+    logger.error({ err: err.message }, "[predict/best-bets]");
     res.status(500).json({ error: err.message ?? "Best bets failed" });
   }
 });
@@ -282,7 +283,7 @@ router.post("/single", async (req: Request, res: Response) => {
       generatedAt: new Date().toISOString(),
     });
   } catch (err: any) {
-    console.error("[predict/single]", err.message);
+    logger.error({ err: err.message }, "[predict/single]");
     res.status(500).json({ error: err.message ?? "Prediction failed" });
   }
 });
@@ -337,7 +338,7 @@ router.post("/factors", async (req: Request, res: Response) => {
 
     res.json({ basePct: 50, factors, finalPct });
   } catch (err: any) {
-    console.error("[predict/factors]", err.message);
+    logger.error({ err: err.message }, "[predict/factors]");
     res.status(500).json({ error: err.message ?? "Factors failed" });
   }
 });
@@ -395,7 +396,7 @@ router.post("/player-prop", async (req: Request, res: Response) => {
       betNote,
     });
   } catch (err: any) {
-    console.error("[predict/player-prop]", err.message);
+    logger.error({ err: err.message }, "[predict/player-prop]");
     res.status(500).json({ error: err.message ?? "Player prop failed" });
   }
 });
@@ -421,7 +422,7 @@ router.post("/futures", async (req: Request, res: Response) => {
       betNote: `${teamName} ${propType} probability based on current standings.`,
     });
   } catch (err: any) {
-    console.error("[predict/futures]", err.message);
+    logger.error({ err: err.message }, "[predict/futures]");
     res.status(500).json({ error: err.message ?? "Futures failed" });
   }
 });
@@ -543,7 +544,7 @@ router.post('/ml', async (req: Request, res: Response) => {
     res.json(result);
   } catch (err: any) {
     // ML service may be down — return 503 so frontend can silently hide the section
-    console.warn('[predict/ml] ML service unavailable:', err.message);
+    logger.warn({ err: err.message }, '[predict/ml] ML service unavailable');
     res.status(503).json({ error: 'ML service unavailable', detail: err.message });
   }
 });

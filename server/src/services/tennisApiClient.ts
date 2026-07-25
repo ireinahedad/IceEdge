@@ -7,6 +7,8 @@
  *   RAPIDAPI_KEY=your_key_here
  */
 
+import { logger } from '../logger';
+
 const BASE = "https://tennis-live-data.p.rapidapi.com";
 const KEY = process.env.RAPIDAPI_KEY;
 
@@ -35,7 +37,7 @@ async function rapidGet<T>(path: string, ttlMs = 60_000): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    console.warn(`[Tennis] RapidAPI ${res.status} on ${path}: ${body}`);
+    logger.warn({ status: res.status, path, body }, '[Tennis] RapidAPI error');
     // 403 = endpoint not in plan, 429 = rate limited — return empty gracefully
     if (res.status === 403 || res.status === 429) {
       return { results: [] } as unknown as T;

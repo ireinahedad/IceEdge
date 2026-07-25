@@ -1,0 +1,7 @@
+{
+  "_comment": "Absents confirmes du soir (source: Daily Faceoff, compos confirmees). Noms = orthographe MoneyPuck (matching par nom exact, insensible a la casse). Date en heure Est (YYYY-MM-DD). Une cle _comment est ignoree (jamais une date). Exemple ci-dessous a remplacer chaque jour.",
+  "2026-07-22": {
+    "TOR": ["Auston Matthews"],
+    "MTL": ["Kaiden Guhle", "Patrik Laine"]
+  }
+}

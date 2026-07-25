@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { OddsService } from "../services/odds.service";
+import { logger } from "../logger";
 
 const router = Router();
 const odds = new OddsService();
@@ -37,12 +38,12 @@ router.get("/bet365/:sportKey", async (req: Request, res: Response) => {
       `${ODDS_BASE}/sports/${encodeURIComponent(req.params.sportKey)}/odds?${params}`
     );
     if (!upstream.ok) {
-      console.error("[odds proxy]", upstream.status, await upstream.text().catch(() => ""));
+      logger.error({ status: upstream.status, body: await upstream.text().catch(() => "") }, "[odds proxy]");
       return res.status(502).json([]);
     }
     res.json(await upstream.json());
   } catch (err: any) {
-    console.error("[odds proxy] fetch error", err?.message);
+    logger.error({ err: err?.message }, "[odds proxy] fetch error");
     res.status(502).json([]);
   }
 });

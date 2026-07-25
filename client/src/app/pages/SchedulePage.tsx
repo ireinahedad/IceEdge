@@ -1,12 +1,15 @@
 /**
  * SchedulePage — calendrier des matchs de la saison NHL.
- * Navigation mois par mois ; chaque jour liste ses matchs (AWAY @ HOME · heure).
- * Un clic sur un match ouvre sa page de prédiction (/stats/prediction/game/:id).
  *
- * Les bornes et le mois par défaut sont ancrés à la date « courante » et à la
- * fenêtre de saison renvoyées par l'API NHL (nhlApiService.getScheduleAnchor),
- * et NON à l'horloge locale — sinon un décalage entre l'horloge de la machine
- * et les données réelles ferait s'ouvrir la page sur un mois vide.
+ * Deux niveaux de sélection :
+ *   1. Mois  (flèches ‹ ›) — borné à la fenêtre de saison de l'API.
+ *   2. Semaine (rangée de boutons sous le mois) — chaque bouton = 1er jour d'une
+ *      semaine du mois. On ne charge QUE la semaine sélectionnée (lazy), pas
+ *      tout le mois d'un coup.
+ *
+ * Un clic sur un match ouvre sa page de prédiction (/stats/prediction/game/:id).
+ * Bornes/mois par défaut ancrés à la date réelle de l'API (getScheduleAnchor),
+ * pas à l'horloge locale.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
@@ -18,42 +21,42 @@ import { useI18n } from "../i18n";
 
 const ACCENT = "#86d1ea";
 
-// ── Helpers de dates (toutes en 'YYYY-MM-DD', heure locale) ──────────────────
+// ── Helpers de dates ('YYYY-MM-DD', heure locale) ────────────────────────────
 const pad = (n: number) => String(n).padStart(2, "0");
 const iso = (y: number, m: number, d: number) => `${y}-${pad(m + 1)}-${pad(d)}`;
-const monthStart = (y: number, m: number) => iso(y, m, 1);
-const monthEnd = (y: number, m: number) => iso(y, m, new Date(y, m + 1, 0).getDate());
+const isoLocal = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const addDaysLocal = (date: string, n: number) => {
+  const d = new Date(`${date}T00:00:00`);
+  d.setDate(d.getDate() + n);
+  return isoLocal(d);
+};
+const dowMon = (date: string) => (new Date(`${date}T00:00:00`).getDay() + 6) % 7; // 0 = lundi
 const monthIndex = (y: number, m: number) => y * 12 + m;
 const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+const todayIso = () => new Date().toISOString().slice(0, 10);
+const safeDate = (d: string) => (isoDate.test(d) ? d : todayIso());
+const fromIdx = (idx: number): YM => ({ y: Math.floor(idx / 12), m: ((idx % 12) + 12) % 12 });
 
 type YM = { y: number; m: number };
 type Bounds = { first: YM; last: YM };
+type Week = { start: string; end: string };
 
-// Fenêtre de navigation : ~1 an de chaque côté de la date d'ancrage, pour
-// pouvoir atteindre librement n'importe quel mois de la saison (et au-delà).
-const MONTHS_EACH_SIDE = 12;
-const today = () => new Date().toISOString().slice(0, 10);
-const safeDate = (d: string) => (isoDate.test(d) ? d : today());
-const fromIdx = (idx: number): YM => ({ y: Math.floor(idx / 12), m: ((idx % 12) + 12) % 12 });
-
-/** {y, m(0-11)} depuis une date ISO 'YYYY-MM-DD'. */
 function monthOf(date: string): YM {
   const [y, m] = safeDate(date).split("-").map(Number);
   return { y, m: m - 1 };
 }
 
-/** Fenêtre glissante centrée sur `date` (± MONTHS_EACH_SIDE mois). */
+// Fenêtre de navigation : ~1 an de chaque côté de l'ancre (élargie ensuite si la
+// saison réelle déborde), pour atteindre librement n'importe quel mois.
+const MONTHS_EACH_SIDE = 12;
 function windowAround(date: string): Bounds {
   const { y, m } = monthOf(date);
   const c = monthIndex(y, m);
   return { first: fromIdx(c - MONTHS_EACH_SIDE), last: fromIdx(c + MONTHS_EACH_SIDE) };
 }
 
-/**
- * Mois d'ouverture : le mois de `date`, sauf en intersaison (juil.–sept.) où
- * l'on saute directement au coup d'envoi de la saison (octobre) pour tomber
- * sur des matchs plutôt que sur un mois vide.
- */
+/** Mois d'ouverture : le mois de `date`, sauf en intersaison (juil.–sept.) où
+ *  l'on saute au coup d'envoi (octobre) pour tomber sur des matchs. */
 function defaultMonth(date: string, b: Bounds): YM {
   const { y, m } = monthOf(date);
   const target = m >= 6 && m <= 8 ? monthIndex(y, 9) : monthIndex(y, m);
@@ -66,19 +69,39 @@ const clampCursor = (idx: number, b: Bounds): YM => {
   return fromIdx(Math.min(Math.max(idx, min), max));
 };
 
+/** Découpe un mois en semaines (lundi→dimanche), 1re/dernière tronquées au mois. */
+function buildWeeks(y: number, m: number): Week[] {
+  const last = iso(y, m, new Date(y, m + 1, 0).getDate());
+  const weeks: Week[] = [];
+  let s = iso(y, m, 1);
+  while (s <= last) {
+    let e = addDaysLocal(s, 6 - dowMon(s)); // dimanche de cette semaine
+    if (e > last) e = last;
+    weeks.push({ start: s, end: e });
+    s = addDaysLocal(e, 1);
+  }
+  return weeks;
+}
+
 export function SchedulePage() {
   const navigate = useNavigate();
   const { t, lang } = useI18n();
   const locale = lang === "fr" ? "fr-FR" : "en-US";
 
-  // Bornes + mois affiché : d'abord estimés depuis l'horloge locale (fallback),
-  // puis corrigés dès que l'ancre API arrive.
-  const [bounds, setBounds] = useState<Bounds>(() => windowAround(today()));
-  const [cursor, setCursor] = useState<YM>(() => defaultMonth(today(), windowAround(today())));
+  const [anchor, setAnchor] = useState<string>(() => todayIso());
+  const [bounds, setBounds] = useState<Bounds>(() => windowAround(todayIso()));
+  const [cursor, setCursor] = useState<YM>(() => defaultMonth(todayIso(), windowAround(todayIso())));
+  const [week, setWeek] = useState<Week | null>(null);
 
   const [games, setGames] = useState<NHLGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+
+  const weeks = useMemo(() => buildWeeks(cursor.y, cursor.m), [cursor.y, cursor.m]);
+
+  const minIdx = monthIndex(bounds.first.y, bounds.first.m);
+  const maxIdx = monthIndex(bounds.last.y, bounds.last.m);
+  const curIdx = monthIndex(cursor.y, cursor.m);
 
   // 1) Ancre le calendrier sur la date/saison réelles de l'API (une fois).
   useEffect(() => {
@@ -87,10 +110,8 @@ export function SchedulePage() {
       .getScheduleAnchor()
       .then((a) => {
         if (!alive || !a?.today) return;
-        // On élargit (jamais rétrécit) la fenêtre pour englober à la fois la
-        // saison réelle et ± MONTHS_EACH_SIDE autour de l'ancre courante.
-        const anchor = safeDate(a.today);
-        const b = windowAround(anchor);
+        const at = safeDate(a.today);
+        const b = windowAround(at);
         if (isoDate.test(a.seasonStart)) {
           const s = monthOf(a.seasonStart);
           if (monthIndex(s.y, s.m) < monthIndex(b.first.y, b.first.m)) b.first = s;
@@ -99,8 +120,9 @@ export function SchedulePage() {
           const e = monthOf(a.seasonEnd);
           if (monthIndex(e.y, e.m) > monthIndex(b.last.y, b.last.m)) b.last = e;
         }
+        setAnchor(at);
         setBounds(b);
-        setCursor(defaultMonth(anchor, b));
+        setCursor(defaultMonth(at, b));
       })
       .catch(() => {});
     return () => {
@@ -108,28 +130,30 @@ export function SchedulePage() {
     };
   }, []);
 
-  const minIdx = monthIndex(bounds.first.y, bounds.first.m);
-  const maxIdx = monthIndex(bounds.last.y, bounds.last.m);
-  const curIdx = monthIndex(cursor.y, cursor.m);
-  const canPrev = curIdx > minIdx;
-  const canNext = curIdx < maxIdx;
-
-  // 2) Charge les matchs du mois affiché.
+  // 2) À chaque changement de mois (ou d'ancre), sélectionne une semaine par
+  //    défaut : celle qui contient l'ancre si le mois correspond, sinon la 1re.
   useEffect(() => {
+    const ws = buildWeeks(cursor.y, cursor.m);
+    const inMonth = anchor >= ws[0].start && anchor <= ws[ws.length - 1].end;
+    setWeek((inMonth && ws.find((w) => anchor >= w.start && anchor <= w.end)) || ws[0]);
+  }, [cursor.y, cursor.m, anchor]);
+
+  // 3) Charge UNIQUEMENT la semaine sélectionnée.
+  useEffect(() => {
+    if (!week) return;
     let alive = true;
     setLoading(true);
     setError(false);
     nhlApiService
-      .getGamesRange(monthStart(cursor.y, cursor.m), monthEnd(cursor.y, cursor.m))
+      .getGamesRange(week.start, week.end)
       .then((g) => alive && setGames(g))
       .catch(() => alive && setError(true))
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, [cursor.y, cursor.m]);
+  }, [week?.start, week?.end]);
 
-  // Regroupe les matchs par date.
   const byDay = useMemo(() => {
     const map = new Map<string, NHLGame[]>();
     for (const g of games) {
@@ -143,8 +167,10 @@ export function SchedulePage() {
     month: "long",
     year: "numeric",
   });
+  const weekLabel = (start: string) =>
+    new Date(`${start}T00:00:00`).toLocaleDateString(locale, { day: "numeric", month: "short" });
 
-  const step = (delta: number) => setCursor(clampCursor(curIdx + delta, bounds));
+  const stepMonth = (delta: number) => setCursor(clampCursor(curIdx + delta, bounds));
 
   return (
     <div className="flex flex-col min-h-screen pb-24" style={{ background: "#0A0E0C" }}>
@@ -176,8 +202,8 @@ export function SchedulePage() {
         {/* Sélecteur de mois */}
         <div className="flex items-center justify-between bg-white/5 rounded-xl p-1">
           <button
-            onClick={() => step(-1)}
-            disabled={!canPrev}
+            onClick={() => stepMonth(-1)}
+            disabled={curIdx <= minIdx}
             aria-label="Previous month"
             className="w-9 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-25"
             style={{ color: ACCENT }}
@@ -191,8 +217,8 @@ export function SchedulePage() {
             {monthLabel}
           </span>
           <button
-            onClick={() => step(1)}
-            disabled={!canNext}
+            onClick={() => stepMonth(1)}
+            disabled={curIdx >= maxIdx}
             aria-label="Next month"
             className="w-9 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-25"
             style={{ color: ACCENT }}
@@ -200,9 +226,30 @@ export function SchedulePage() {
             <ChevronRight size={18} />
           </button>
         </div>
+
+        {/* Sélecteur de semaine — chaque bouton = 1er jour de la semaine */}
+        <div className="flex gap-1.5 mt-2 overflow-x-auto scrollbar-hide pb-0.5">
+          {weeks.map((w) => {
+            const active = week?.start === w.start;
+            return (
+              <button
+                key={w.start}
+                onClick={() => setWeek(w)}
+                className="flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wide transition-all"
+                style={
+                  active
+                    ? { background: ACCENT, color: "#072E49" }
+                    : { background: "rgba(255,255,255,0.05)", color: "#8a9ea6" }
+                }
+              >
+                {weekLabel(w.start)}
+              </button>
+            );
+          })}
+        </div>
       </header>
 
-      {/* Contenu */}
+      {/* Contenu — matchs de la semaine sélectionnée */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {loading ? (
           <div className="flex flex-col gap-2">

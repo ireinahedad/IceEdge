@@ -11,6 +11,7 @@
  */
 
 import { pool } from '../db/connection';
+import { logger } from '../logger';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Keep revoked tokens for a short window (audit / debugging) before pruning.
@@ -29,16 +30,13 @@ export async function runCleanup(): Promise<{ tokens: number; codes: number }> {
   );
   const tokens = tokensRes.rowCount ?? 0;
   const codes  = codesRes.rowCount ?? 0;
-  if (tokens || codes) {
-    console.log(`[cleanup] pruned ${tokens} refresh token(s), ${codes} verification code(s)`);
-  }
   return { tokens, codes };
 }
 
 /** Schedules the cleanup: once ~1 min after boot, then every 24h. Returns the
  *  interval handle so callers/tests can stop it. Errors are swallowed. */
 export function startCleanupJob(): NodeJS.Timeout {
-  const tick = () => { runCleanup().catch((err) => console.error('[cleanup] failed:', err?.message)); };
+  const tick = () => { runCleanup().catch((err) => logger.error({ err: err?.message }, '[cleanup] failed')); };
   setTimeout(tick, 60_000).unref();
   const handle = setInterval(tick, DAY_MS);
   handle.unref();

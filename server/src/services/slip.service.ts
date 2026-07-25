@@ -1,4 +1,5 @@
 import { pool } from '../db/connection';
+import { notifySlipPlaced } from './settlement.service';
 
 // ─── XP & Tier config ─────────────────────────────────────────────────────────
 
@@ -125,6 +126,10 @@ export async function submitSlip(
      RETURNING id`,
     [userId, sport, JSON.stringify(legs), legs.length, isParlay, combined],
   );
+
+  // Wake the settlement scheduler so it re-plans its wake horizon around this
+  // bet's game(s) instead of waiting out a long idle sleep.
+  notifySlipPlaced();
 
   return rows[0].id;
 }

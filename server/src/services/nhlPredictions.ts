@@ -14,9 +14,13 @@ import {
   fetchPlayerById,
   fetchTeamSummaryStats,
   fetchTeamRestInfo,
+  fetchTeamTravel,
   TeamSummaryStats,
   TeamRestInfo,
 } from './nhlApiClient';
+import { TravelFeatures } from './travel';
+import { getArena } from '../data/arenas';
+import { getGameRefFactor } from './refereeStore';
 import { fetchOddsImplied } from './oddsClient';
 import { getManualFactors } from './injuryStore';
 import {
@@ -60,6 +64,7 @@ export interface TeamCtx {
   shotsAgainstPg?: number;
   restDays?:       number; // 0–7
   b2b?:            0 | 1;   // back-to-back
+  travel?:         TravelFeatures | null; // voyage / fuseaux / altitude / road-trip
 }
 
 // ─── Math primitives ──────────────────────────────────────────────────────────
@@ -219,6 +224,7 @@ function computeGameMarkets(
   lineup: ManualFactor | null = null,      // facteur alignement manuel
   weights?: FactorWeights,                 // poids personnalisés (paramètres user)
   teamExtras = false,                      // marchés propres à la vue équipe
+  refPenaltyMult = 1,                      // volume de PP selon l'arbitrage (totaux)
 ): MarketGroup[] {
   const wH  = (home.winPct ?? 50) / 100;
   const wA  = (away.winPct ?? 50) / 100;
@@ -248,7 +254,19 @@ function computeGameMarkets(
   const sA = clamp(0.70 * wA + 0.30 * aL10, 0.05, 0.95);
   const fQuality = calibrateWin(log5(sH, sA));
   const fHomeIce = homeIceFactor(wH, hSplit, wA, aSplit);
-  const fFatigue = fatigueFactor(hRest, aRest, hB2b, aB2b);
+  // Voyage / fuseaux / altitude : nourrit le facteur "Épuisement" (borné).
+  const hTravel = homeCtx.travel ?? null;
+  const aTravel = awayCtx.travel ?? null;
+  const venueAlt = getArena((home.abbreviation ?? '').toUpperCase())?.alt;
+  const fFatigue = fatigueFactor(hRest, aRest, hB2b, aB2b, {
+    awayDistanceKm: aTravel?.distance_km,
+    awayTzShift:    aTravel?.tz_shift,
+    awayAltGain:    aTravel?.alt_gain,
+    awayGetaway:    aTravel?.getaway,
+    awayDaysAway:   aTravel?.days_away,
+    homeDistanceKm: hTravel?.distance_km,
+    homeAltGain:    hTravel?.alt_gain,
+  });
   // Moyenne pondérée des facteurs actifs (règles = boîte de verre transparente).
   const blend = blendHomeProb({
     quality: fQuality, homeIce: fHomeIce, fatigue: fFatigue,
@@ -544,6 +562,8 @@ function computeGameMarkets(
     wH, wA, gfH, gaH, gfA, gaA,
     lambdaH, lambdaA, lambdaT,
     hSF, aSF, hPP, aPP, hPK, aPK, hB2b, aB2b,
+    venueAlt, hAltGain: hTravel?.alt_gain, aAltGain: aTravel?.alt_gain,
+    refPenaltyMult,
     homeIce: fHomeIce, fatigue: fFatigue,
     mlHome, ot,
     matchFactors: blend.lines.map(l => ({ id: l.id, label: l.label, weight: Math.round(l.weight * 100), value: l.value })),
@@ -566,6 +586,7 @@ function makeCtx(
   team: any,
   summary: Record<string, TeamSummaryStats>,
   rest: TeamRestInfo,
+  travel: TravelFeatures | null = null,
 ): TeamCtx {
   const abbr = (team.abbreviation ?? '').toUpperCase();
   const s = summary[abbr];
@@ -581,6 +602,7 @@ function makeCtx(
     shotsAgainstPg: s?.shotsAgainstPg ?? LEAGUE_AVG_SOG,
     restDays:       rest.restDays,
     b2b:            rest.b2b,
+    travel,
   };
 }
 
@@ -598,16 +620,23 @@ export async function buildGameMarkets(gameId: string, weights?: FactorWeights):
   const awayName = game.awayTeam?.name ?? awayAbbr;
 
   // Sources enrichies, tolérantes aux pannes (fallback neutre par source).
-  const [summaryRes, homeRestRes, awayRestRes, oddsRes] = await Promise.allSettled([
+  const [summaryRes, homeRestRes, awayRestRes, oddsRes,
+         homeTravelRes, awayTravelRes, refFactorRes] = await Promise.allSettled([
     fetchTeamSummaryStats(),
     fetchTeamRestInfo(homeAbbr),
     fetchTeamRestInfo(awayAbbr),
     fetchOddsImplied(homeName, awayName),
+    fetchTeamTravel(homeAbbr, homeAbbr),   // les deux jouent dans l'aréna maison
+    fetchTeamTravel(awayAbbr, homeAbbr),
+    getGameRefFactor(homeAbbr, awayAbbr),  // arbitrage → volume de PP (totaux)
   ]);
   const summary  = summaryRes.status  === 'fulfilled' ? summaryRes.value  : {};
-  const homeRest = homeRestRes.status === 'fulfilled' ? homeRestRes.value : { restDays: 2, b2b: 0 as 0 | 1 };
-  const awayRest = awayRestRes.status === 'fulfilled' ? awayRestRes.value : { restDays: 2, b2b: 0 as 0 | 1 };
+  const homeRest = homeRestRes.status === 'fulfilled' ? homeRestRes.value : { restDays: 2, b2b: 0 as 0 | 1, dense3in4: 0 };
+  const awayRest = awayRestRes.status === 'fulfilled' ? awayRestRes.value : { restDays: 2, b2b: 0 as 0 | 1, dense3in4: 0 };
   const odds     = oddsRes.status     === 'fulfilled' ? oddsRes.value     : null;
+  const homeTravel = homeTravelRes.status === 'fulfilled' ? homeTravelRes.value : null;
+  const awayTravel = awayTravelRes.status === 'fulfilled' ? awayTravelRes.value : null;
+  const refFactor  = refFactorRes.status  === 'fulfilled' ? refFactorRes.value  : null;
 
   // Facteurs manuels (blessures + alignement), relus à chaque appel.
   const manual = getManualFactors(homeAbbr, awayAbbr);
@@ -615,12 +644,14 @@ export async function buildGameMarkets(gameId: string, weights?: FactorWeights):
   return computeGameMarkets(
     homeTeam, awayTeam,
     homeName, awayName,
-    makeCtx(homeTeam, summary, homeRest),
-    makeCtx(awayTeam, summary, awayRest),
+    makeCtx(homeTeam, summary, homeRest, homeTravel),
+    makeCtx(awayTeam, summary, awayRest, awayTravel),
     odds?.homeProb ?? null,
     manual.injuries,
     manual.lineup,
     weights,
+    false,
+    refFactor?.multiplier ?? 1,
   );
 }
 
@@ -638,16 +669,18 @@ export async function buildTeamMarkets(teamAbbr: string): Promise<MarketGroup[]>
   };
 
   // Contexte réel pour l'équipe ; adversaire moyen = contexte neutre.
-  const [summaryRes, restRes] = await Promise.allSettled([
+  const [summaryRes, restRes, travelRes] = await Promise.allSettled([
     fetchTeamSummaryStats(),
     fetchTeamRestInfo(teamAbbr),
+    fetchTeamTravel(teamAbbr, teamAbbr),   // match à domicile (aréna de l'équipe)
   ]);
   const summary = summaryRes.status === 'fulfilled' ? summaryRes.value : {};
-  const rest    = restRes.status    === 'fulfilled' ? restRes.value    : { restDays: 2, b2b: 0 as 0 | 1 };
+  const rest    = restRes.status    === 'fulfilled' ? restRes.value    : { restDays: 2, b2b: 0 as 0 | 1, dense3in4: 0 };
+  const travel  = travelRes.status  === 'fulfilled' ? travelRes.value  : null;
 
   return computeGameMarkets(
     team, avg, team.name, 'Avg Opponent',
-    makeCtx(team, summary, rest),
+    makeCtx(team, summary, rest, travel),
     {},                      // adversaire moyen : neutre
     null, null, null,
     undefined,

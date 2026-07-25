@@ -77,15 +77,46 @@ export function homeIceFactor(homeOverall: number, homeSplit: number,
 }
 
 /**
- * Facteur "épuisement" : repos et back-to-back d'une équipe vs l'autre.
- * 0.5 neutre ; >0.5 favorise la maison (mieux reposée).
+ * Facteur "épuisement" : repos, back-to-back ET voyage/altitude d'une équipe
+ * vs l'autre. 0.5 neutre ; >0.5 favorise la maison (mieux reposée / moins
+ * pénalisée par le déplacement). Le paramètre `travel` est optionnel et
+ * borné pour rester secondaire face au repos.
  */
+export interface FatigueTravel {
+  // Désavantage du VISITEUR (déplacement, décalage, altitude) — favorise la maison.
+  awayDistanceKm?: number;  // trajet du visiteur (km)
+  awayTzShift?:    number;  // fuseaux traversés par le visiteur (|h|)
+  awayAltGain?:    number;  // dénivelé positif du visiteur (m) — ex. arrive à Denver
+  awayGetaway?:    0 | 1;   // dernier match du road trip visiteur (moins d'enjeu)
+  awayDaysAway?:   number;  // jours du visiteur loin de chez lui
+  // Le domicile peut aussi rentrer d'un long trip : atténue son avantage.
+  homeDistanceKm?: number;
+  homeAltGain?:    number;
+}
+
 export function fatigueFactor(hRest: number, aRest: number,
-                              hB2b: 0 | 1, aB2b: 0 | 1): number {
+                              hB2b: 0 | 1, aB2b: 0 | 1,
+                              travel?: FatigueTravel | null): number {
   let f = 0.5;
   f += 0.02 * Math.max(-3, Math.min(3, hRest - aRest)); // différentiel de repos
   f -= 0.06 * hB2b;   // maison en back-to-back
   f += 0.06 * aB2b;   // visiteur en back-to-back
+
+  if (travel) {
+    // Fatigue de déplacement du visiteur → favorise la maison (bornée ≤ ~0.06).
+    let awayFatigue = 0;
+    awayFatigue += 0.010 * Math.min(3, (travel.awayDistanceKm ?? 0) / 1500);   // ~long vol
+    awayFatigue += 0.010 * Math.min(3, Math.abs(travel.awayTzShift ?? 0));      // décalage horaire
+    awayFatigue += 0.015 * Math.min(1, Math.max(0, travel.awayAltGain ?? 0) / 1200); // altitude subie
+    awayFatigue += 0.015 * (travel.awayGetaway ?? 0);                           // get-away game
+    awayFatigue += 0.004 * Math.min(3, (travel.awayDaysAway ?? 0) / 4);         // temps sur la route
+    f += Math.min(0.06, awayFatigue);
+    // La maison rentre d'un long déplacement : petite atténuation symétrique.
+    let homeFatigue = 0;
+    homeFatigue += 0.010 * Math.min(3, (travel.homeDistanceKm ?? 0) / 1500);
+    homeFatigue += 0.010 * Math.min(1, Math.max(0, travel.homeAltGain ?? 0) / 1200);
+    f -= Math.min(0.03, homeFatigue);
+  }
   return clamp01(f);
 }
 

@@ -1,4 +1,5 @@
 import { Pool, PoolConfig } from 'pg';
+import { logger } from '../logger';
 
 // Managed Postgres (Railway, Supabase, Render…) exposes a single DATABASE_URL.
 // Prefer it when present; otherwise fall back to discrete DB_* vars for local dev.
@@ -29,7 +30,7 @@ const config: PoolConfig = process.env.DATABASE_URL
 export const pool = new Pool(config);
 
 pool.on('error', (err) => {
-  console.error('[DB] Unexpected pool error:', err.message);
+  logger.error({ err: err.message }, '[DB] Unexpected pool error');
 });
 
 /** Verify DB connectivity at startup */
@@ -37,7 +38,6 @@ export async function connectDB(): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('SELECT 1');
-    console.log('[DB] PostgreSQL connected ✓');
   } finally {
     client.release();
   }

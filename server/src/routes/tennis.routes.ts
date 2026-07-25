@@ -1,5 +1,6 @@
 import { Router } from "express";
 import * as tennisApi from "../services/tennisApiClient";
+import { logger } from "../logger";
 
 const router = Router();
 
@@ -8,7 +9,7 @@ router.get("/live", async (_req, res) => {
   try {
     res.json(await tennisApi.fetchLiveMatches());
   } catch (err: any) {
-    console.error('[Tennis]', err.message);
+    logger.error({ err: err.message }, '[Tennis]');
     res.status(502).json({ error: err.message });
   }
 });
@@ -20,7 +21,7 @@ router.get("/fixtures", async (req, res) => {
     const date = dateStr ? new Date(dateStr) : new Date();
     res.json(await tennisApi.fetchFixtures(date));
   } catch (err: any) {
-    console.error('[Tennis]', err.message);
+    logger.error({ err: err.message }, '[Tennis]');
     res.status(502).json({ error: err.message });
   }
 });
@@ -35,7 +36,7 @@ router.get("/rankings/:tour", async (req, res) => {
   try {
     res.json(await tennisApi.fetchRankings(tour as "ATP" | "WTA"));
   } catch (err: any) {
-    console.error('[Tennis]', err.message);
+    logger.error({ err: err.message }, '[Tennis]');
     res.status(502).json({ error: err.message });
   }
 });
@@ -46,7 +47,7 @@ router.get("/tournaments", async (req, res) => {
     const year = req.query.year ? Number(req.query.year) : undefined;
     res.json(await tennisApi.fetchTournaments(year));
   } catch (err: any) {
-    console.error('[Tennis]', err.message);
+    logger.error({ err: err.message }, '[Tennis]');
     res.status(502).json({ error: err.message });
   }
 });

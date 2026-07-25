@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
 import { redeemLimiter } from '../middleware/rateLimit.middleware';
 import * as Subscriptions from '../services/subscription.service';
+import { logger } from '../logger';
 
 const router = Router();
 
@@ -73,7 +74,7 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
     res.json({ received: true });
   } catch (err: any) {
     // 400 → Stripe will retry. Log for visibility.
-    console.error('[subscription] webhook error:', err?.message);
+    logger.error({ err: err?.message }, '[subscription] webhook error');
     res.status(err.status ?? 400).json({ error: err.message });
   }
 }

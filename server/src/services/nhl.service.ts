@@ -15,6 +15,14 @@ export class NHLService {
     return nhlApi.fetchGamesByDate(d);
   }
 
+  async getGamesRange(start: string, end: string) {
+    return nhlApi.fetchGamesRange(start, end);
+  }
+
+  async getScheduleAnchor() {
+    return nhlApi.fetchScheduleAnchor();
+  }
+
   async getLiveGames() {
     return nhlApi.fetchLiveGames();
   }

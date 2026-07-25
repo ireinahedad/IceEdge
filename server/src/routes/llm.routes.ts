@@ -16,6 +16,7 @@ import { authenticate } from '../middleware/auth.middleware';
 import { llmLimiter } from '../middleware/rateLimit.middleware';
 import { isPro } from '../services/subscription.service';
 import { decryptSecret } from '../services/crypto.util';
+import { logger } from '../logger';
 
 const router = Router();
 
@@ -224,9 +225,9 @@ router.post('/', async (req: Request, res: Response) => {
     try { body = JSON.parse(raw); } catch { /* non-JSON error page */ }
     const status = (providerRes as any).status ?? 502;
     // Log the FULL upstream error to the server console for debugging.
-    console.error(
-      `[LLM] provider error ${status} (pro=${userIsPro}, model=${requestModel}):`,
-      raw || '(empty body)'
+    logger.error(
+      { status, pro: userIsPro, model: requestModel, body: raw || '(empty body)' },
+      '[LLM] provider error'
     );
     return res.status(status === 401 ? 401 : 502).json({
       error: body?.error?.message ?? body?.error ?? raw ?? 'Model provider error',

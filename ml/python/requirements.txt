@@ -13,3 +13,6 @@ xgboost
 numpy
 pandas
 requests
+
+# v4 — parsing des cotes historiques (xlsx sportsbookreviewsonline)
+openpyxl

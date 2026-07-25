@@ -44,6 +44,9 @@ export interface GameFactorCtx {
   hSF: number; aSF: number;
   hPP: number; aPP: number; hPK: number; aPK: number;
   hB2b: 0 | 1; aB2b: 0 | 1;
+  venueAlt?: number; // altitude du terrain (m) — air raréfié → plus de buts
+  hAltGain?: number; aAltGain?: number; // dénivelé subi (m) par chaque équipe
+  refPenaltyMult?: number; // volume de PP relatif à l'arbitrage (1.0 neutre)
   homeIce: number;   // 0-1, faveur domicile (déjà calculée)
   fatigue: number;   // 0-1, faveur domicile côté fraîcheur
   mlHome: number;    // prob victoire domicile (finale)
@@ -63,13 +66,29 @@ function totalsFactors(line: number, c: GameFactorCtx): Factor[] {
   const ppAdj = c.lambdaT * (1 + 0.05 * ((c.hPP + c.aPP) / 40 - 1));
   const special = poissonOver(ppAdj, line);
   const fatigue = poissonOver(c.lambdaT * (1 - 0.04 * (c.hB2b + c.aB2b)), line);
-  return [
+  const factors: Factor[] = [
     { id: 'offense',      label: 'Attaque combinée',   weight: 30, value: offense },
     { id: 'defense',      label: 'Défense combinée',   weight: 30, value: defense },
     { id: 'shotPace',     label: 'Rythme de tirs',     weight: 15, value: shotPace },
     { id: 'specialTeams', label: 'Unités spéciales',   weight: 10, value: special },
     { id: 'fatigue',      label: 'Épuisement',         weight: 5,  value: fatigue },
   ];
+  // Altitude : air raréfié (Denver ~1600 m, Salt Lake ~1290 m) → plus de buts.
+  // Neutre (0.5) au niveau de la mer ; n'ajoute le facteur qu'en altitude notable.
+  if (c.venueAlt != null && c.venueAlt >= 800) {
+    const altValue = clamp(0.5 + 0.12 * Math.min(1, (c.venueAlt - 500) / 1100));
+    factors.push({ id: 'altitude', label: 'Altitude', weight: 8, value: altValue });
+  }
+  // Arbitrage : arbitre siffleur → plus de power-plays → total plus élevé.
+  // Volume PP ligue ≈ 6.2/match, conversion ≈ 20 % → ~1.24 but par 100 % d'écart.
+  if (c.refPenaltyMult != null && Math.abs(c.refPenaltyMult - 1) > 0.01) {
+    const goalsShift = (c.refPenaltyMult - 1) * 1.24;
+    factors.push({
+      id: 'referee', label: 'Arbitrage (PP)', weight: 8,
+      value: poissonOver(c.lambdaT + goalsShift, line),
+    });
+  }
+  return factors;
 }
 
 /** BTTS Yes : les deux marquent. */

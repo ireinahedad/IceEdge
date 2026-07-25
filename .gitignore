@@ -7,3 +7,19 @@ node_modules/
 .env
 .env.*
 !.env.example
+
+# Python caches
+__pycache__/
+*.pyc
+
+# ── ML : données lourdes & régénérables (on garde le code + les modèles) ───────
+# Régénérables via ml/python/fetch_data_v4.py puis build_dataset.py.
+# NB : ml/models/*.json (petits, embarqués dans l'image Docker) et les petits
+# ml/data/*.json (arenas, scratches…) restent suivis — ne pas les ignorer.
+ml/data/*.csv
+ml/data/*.parquet
+ml/data/raw/**/*.csv
+ml/data/raw/**/*.zip
+ml/data/raw/**/*.zip.zip
+ml/data/raw/**/*.xlsx
+ml/data/raw/**/*.parquet

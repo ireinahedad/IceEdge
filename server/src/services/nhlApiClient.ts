@@ -10,6 +10,7 @@ import {
   MOCK_TOP_PLAYERS,
   MOCK_PLAYER_BY_ID,
 } from '../data/mockNhl';
+import { computeTravel, TravelGame, TravelFeatures } from './travel';
 
 /** When NHL_USE_MOCK=true, serve rich local mock data instead of the live NHL API. */
 const USE_MOCK = process.env.NHL_USE_MOCK === 'true';
@@ -188,6 +189,7 @@ function formatGame(g: any, date?: string): any {
     id:          String(g.id),
     gameDate,
     startTime,
+    startTimeUTC: g.startTimeUTC ?? null, // raw ISO — used by settlement scheduling
     status:      parseGameState(g.gameState ?? ''),
     period:      g.periodDescriptor?.number ?? null,
     clock:       g.clock?.timeRemaining ?? null,
@@ -230,6 +232,107 @@ export async function fetchGamesByDate(date: string): Promise<any[]> {
   setCached(key, games, ttl);
   
   return games;
+}
+
+/**
+ * Retourne tous les matchs (joués + à venir) entre deux dates incluses, en
+ * parcourant l'endpoint hebdomadaire v1/schedule/{date} semaine par semaine.
+ * Utilisé par la page calendrier (schedule) côté client.
+ *  - start / end : 'YYYY-MM-DD' (end doit être >= start).
+ *  - L'amplitude est bornée à 45 jours pour limiter les appels upstream.
+ */
+export async function fetchGamesRange(start: string, end: string): Promise<any[]> {
+  const addDays = (iso: string, n: number): string => {
+    const d = new Date(`${iso}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+
+  // Borne l'amplitude (sécurité : évite les balayages illimités).
+  const MAX_SPAN = 45;
+  if (addDays(start, MAX_SPAN) < end) end = addDays(start, MAX_SPAN);
+
+  if (USE_MOCK) {
+    return (MOCK_GAMES_FULL as any[]).filter(
+      (g) => g.gameDate >= start && g.gameDate <= end,
+    );
+  }
+
+  const key    = `range:${start}:${end}`;
+  const cached = getCached<any[]>(key);
+  if (cached) return cached;
+
+  const seen = new Set<string>();
+  const out: any[] = [];
+  let cursor = start;
+
+  // Parcourt la fenêtre semaine par semaine. Ne s'arrête JAMAIS sur une semaine
+  // vide (ex. début octobre avant le coup d'envoi) : on avance toujours, sinon
+  // on manquerait les matchs situés plus loin dans le mois. Garde-fou large
+  // (une itération par jour dans le pire cas) — les appels sont mis en cache.
+  for (let guard = 0; guard < MAX_SPAN + 2 && cursor <= end; guard++) {
+    let week: any[] = [];
+    try {
+      const data = await fetchNHL<any>(`v1/schedule/${cursor}`);
+      week = data.gameWeek ?? [];
+    } catch {
+      // Jour sans données exploitables : on avance d'un jour.
+    }
+
+    let maxDate = cursor;
+    for (const day of week) {
+      if (day.date > maxDate) maxDate = day.date;
+      if (day.date < start || day.date > end) continue;
+      for (const g of day.games ?? []) {
+        const id = String(g.id);
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push(formatGame(g, day.date));
+      }
+    }
+
+    // Avance après la dernière date couverte par la semaine ; si la semaine
+    // n'a fait progresser le curseur d'aucun jour (réponse vide), on avance
+    // d'un jour pour ne rien sauter.
+    const stepped = addDays(maxDate, 1);
+    cursor = stepped > cursor ? stepped : addDays(cursor, 1);
+  }
+
+  out.sort((a, b) =>
+    a.gameDate === b.gameDate
+      ? String(a.id).localeCompare(String(b.id))
+      : a.gameDate.localeCompare(b.gameDate),
+  );
+
+  setCached(key, out, 10 * 60_000);
+  return out;
+}
+
+/**
+ * Point d'ancrage du calendrier : renvoie la date « courante » selon l'API NHL
+ * (et non l'horloge de la machine) + les bornes de la saison si disponibles.
+ * Permet à la page calendrier de s'ouvrir sur le bon mois même si l'horloge
+ * locale est décalée par rapport aux données réelles de l'API.
+ */
+export async function fetchScheduleAnchor(): Promise<{ today: string; seasonStart: string; seasonEnd: string }> {
+  const clockToday = new Date().toISOString().slice(0, 10);
+
+  if (USE_MOCK) {
+    const dates = (MOCK_GAMES_FULL as any[]).map((g) => g.gameDate).sort();
+    return { today: dates[0] ?? clockToday, seasonStart: dates[0] ?? '', seasonEnd: dates[dates.length - 1] ?? '' };
+  }
+
+  const cached = getCached<{ today: string; seasonStart: string; seasonEnd: string }>('sched:anchor');
+  if (cached) return cached;
+
+  const data = await fetchNHL<any>('v1/schedule/now');
+  const out = {
+    today:       data.gameWeek?.[0]?.date ?? clockToday,
+    seasonStart: data.regularSeasonStartDate ?? data.preSeasonStartDate ?? '',
+    seasonEnd:   data.playoffEndDate ?? data.regularSeasonEndDate ?? '',
+  };
+  setCached('sched:anchor', out, 60 * 60_000); // 1 h
+  return out;
 }
 
 export async function fetchLiveGames(): Promise<any[]> {
@@ -750,6 +853,7 @@ export async function fetchTeamSummaryStats(): Promise<Record<string, TeamSummar
 export interface TeamRestInfo {
   restDays: number;   // jours depuis le dernier match (cap 7)
   b2b:      0 | 1;    // back-to-back (a joué hier)
+  dense3in4: number;  // nb de matchs joués dans les 3 jours précédents (= 3-en-4)
 }
 
 /** Date du jour en heure de l'Est (les gameDate NHL sont en ET). */
@@ -764,7 +868,7 @@ export async function fetchTeamRestInfo(abbr: string): Promise<TeamRestInfo> {
   const cached = getCached<TeamRestInfo>(key);
   if (cached) return cached;
 
-  const fallback: TeamRestInfo = { restDays: 2, b2b: 0 };
+  const fallback: TeamRestInfo = { restDays: 2, b2b: 0, dense3in4: 0 };
   try {
     const data  = await fetchNHL<any>(`v1/club-schedule-season/${upper}/now`);
     const today = todayET();
@@ -779,16 +883,75 @@ export async function fetchTeamRestInfo(abbr: string): Promise<TeamRestInfo> {
 
     if (!played.length) return fallback;
 
-    const lastDate = new Date(played[played.length - 1] + 'T12:00:00');
     const now      = new Date(today + 'T12:00:00');
+    const lastDate = new Date(played[played.length - 1] + 'T12:00:00');
     const days     = Math.round((now.getTime() - lastDate.getTime()) / 86_400_000);
+    // 3-en-4 : matchs joués dans les 3 jours précédents (même déf. que build_dataset).
+    const dense3in4 = played.filter((d: string) => {
+      const diff = Math.round((now.getTime() - new Date(d + 'T12:00:00').getTime()) / 86_400_000);
+      return diff >= 1 && diff <= 3;
+    }).length;
     const info: TeamRestInfo = {
       restDays: Math.min(Math.max(days, 0), 7),
       b2b:      days === 1 ? 1 : 0,
+      dense3in4,
     };
     setCached(key, info, 6 * 60 * 60_000);   // cache 6 h
     return info;
   } catch {
     return fallback;
+  }
+}
+
+// --- Voyage / fuseaux / altitude / road-trip --------------------------------
+
+/**
+ * Features voyage/calendrier d'une équipe pour un match à jouer dans l'aréna
+ * `venueAbbr` (= équipe à domicile du match). Reconstruit la séquence de la
+ * saison (matchs joués + à venir) depuis club-schedule-season et applique la
+ * logique PURE de travel.ts — identique à build_dataset.py::add_travel.
+ * Renvoie null si le calendrier est indisponible (l'appelant met des neutres).
+ */
+export async function fetchTeamTravel(
+  abbr: string,
+  venueAbbr: string,
+): Promise<TravelFeatures | null> {
+  const team  = abbr.toUpperCase();
+  const venue = venueAbbr.toUpperCase();
+  const key   = `travel:${team}:${venue}:${todayET()}`;
+  const cached = getCached<TravelFeatures>(key);
+  if (cached) return cached;
+
+  try {
+    const data  = await fetchNHL<any>(`v1/club-schedule-season/${team}/now`);
+    const today = todayET();
+    const games = (data.games ?? [])
+      .filter((g: any) => g.gameType === 2 && g.gameDate)   // saison régulière
+      .map((g: any) => ({
+        date:     g.gameDate as string,
+        homeAbbr: (g.homeTeam?.abbrev ?? '').toUpperCase(),
+        state:    g.gameState as string,
+      }))
+      .sort((a: any, b: any) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+    if (!games.length) return null;
+
+    const seq: TravelGame[] = games.map((g: any) => ({
+      date: g.date, venueAbbr: g.homeAbbr, isHome: g.homeAbbr === team,
+    }));
+
+    // Match courant = prochain match non terminé disputé dans cet aréna.
+    let idx = games.findIndex(
+      (g: any) => g.homeAbbr === venue &&
+        !['OFF', 'FINAL', 'OVER'].includes(g.state) && g.date >= today,
+    );
+    if (idx < 0) idx = games.findIndex((g: any) => g.homeAbbr === venue && g.date >= today);
+    if (idx < 0) return null;
+
+    const info = computeTravel(seq, idx);
+    setCached(key, info, 6 * 60 * 60_000);   // cache 6 h
+    return info;
+  } catch {
+    return null;
   }
 }

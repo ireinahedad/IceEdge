@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import { pool } from './connection';
-console.log(process.env.DATABASE_URL?.replace(/:[^:@]+@/, ':********@'));
 
 const SQL = `
 -- XP column on user_profiles

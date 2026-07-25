@@ -8,9 +8,28 @@ import {
   fetchPlayerById,
   fetchTeamSummaryStats,
   fetchTeamRestInfo,
+  fetchTeamTravel,
   TeamSummaryStats,
   TeamRestInfo,
 } from './nhlApiClient';
+import { getArena } from '../data/arenas';
+import { fetchOddsImplied, fetchTotalsOdds } from './oddsClient';
+import { getStartingGoalie } from './startingGoalies';
+import { getScratches } from './scratches';
+
+/** Options d'enrichissement pour buildGameFeatures (cotes live, lineup). */
+export interface GameFeatureOpts {
+  /** Inclure les cotes live → active le blend modèle⊕marché (défaut true).
+   *  Mettre à false pour obtenir la proba PURE du modèle (détection de value). */
+  includeOdds?: boolean;
+  homeGoalie?: string;
+  awayGoalie?: string;
+  homeStarsMissing?: number;
+  awayStarsMissing?: number;
+  /** Absents confirmés (noms MoneyPuck). Défaut : lus dans scratches.json. */
+  homeScratches?: string[];
+  awayScratches?: string[];
+}
 
 // ── Feature types (mirror Python Pydantic models) ─────────────────────────────
 
@@ -42,11 +61,33 @@ export interface GameFeatures {
   away_rest_days:        number;
   home_b2b:              0 | 1;  // back-to-back
   away_b2b:              0 | 1;
+  home_3in4?:            number; // matchs joués dans les 3 jours précédents
+  away_3in4?:            number;
+  // ── v5 — voyage / fuseaux / altitude / road-trip (miroir build_dataset)
+  home_distance_km?:     number; away_distance_km?:     number;
+  home_tz_shift?:        number; away_tz_shift?:        number;
+  home_days_away?:       number; away_days_away?:       number;
+  home_road_trip_len?:   number; away_road_trip_len?:   number;
+  home_road_game_num?:   number; away_road_game_num?:   number;
+  home_getaway?:         0 | 1;  away_getaway?:         0 | 1;
+  home_alt_gain?:        number; away_alt_gain?:        number;
+  venue_altitude_m?:     number; // altitude du terrain (aréna domicile)
   // ── ELO (v3) — le service Python résout les ratings via elo_ratings.json
   home_team?:            string; // abréviation, ex. "TOR"
   away_team?:            string;
   market_type:         string;   // "moneyline" | "puck_line" | "total_goals_over" | "total_goals_under"
   line?:               number;   // for total goals markets
+  // ── v4 — cotes live du marché (décimal) → active le blend modèle⊕marché Python
+  home_odds_decimal?:    number;
+  away_odds_decimal?:    number;
+  total_line_market?:    number;
+  // ── v4 — contexte lineup (optionnel)
+  home_goalie?:          string; // nom du gardien partant si connu
+  away_goalie?:          string;
+  home_stars_missing?:   number; // top joueurs absents (blessures) — legacy
+  away_stars_missing?:   number;
+  home_scratches?:       string[]; // absents confirmés (noms MoneyPuck)
+  away_scratches?:       string[];
 }
 
 export interface PlayerPropFeatures {
@@ -97,8 +138,10 @@ export async function buildGameFeatures(
   homeId: string,
   awayId: string,
   marketType: string = 'moneyline',
-  line?: number
+  line?: number,
+  opts: GameFeatureOpts = {}
 ): Promise<GameFeatures> {
+  const includeOdds = opts.includeOdds !== false;   // défaut : true
   const [home, away] = await Promise.all([getTeam(homeId), getTeam(awayId)]);
 
   // Stats spéciales + tirs (PP/PK réels — absents des standings) et repos.
@@ -106,18 +149,36 @@ export async function buildGameFeatures(
   const homeAbbr = home?.abbreviation ?? homeId;
   const awayAbbr = away?.abbreviation ?? awayId;
 
-  const [summaryRes, homeRestRes, awayRestRes] = await Promise.allSettled([
+  // Cotes live (facultatif) — noms complets pour le matching The Odds API.
+  const homeName = home?.name ?? homeAbbr;
+  const awayName = away?.name ?? awayAbbr;
+
+  const [summaryRes, homeRestRes, awayRestRes, oddsRes, totalsRes,
+         homeTravelRes, awayTravelRes] = await Promise.allSettled([
     fetchTeamSummaryStats(),
     fetchTeamRestInfo(homeAbbr),
     fetchTeamRestInfo(awayAbbr),
+    includeOdds ? fetchOddsImplied(homeName, awayName) : Promise.resolve(null),
+    includeOdds ? fetchTotalsOdds(homeName, awayName)  : Promise.resolve(null),
+    // Voyage : les deux équipes jouent dans l'aréna de l'équipe à domicile.
+    fetchTeamTravel(homeAbbr, homeAbbr),
+    fetchTeamTravel(awayAbbr, homeAbbr),
   ]);
+
+  const odds   = oddsRes.status   === 'fulfilled' ? oddsRes.value   : null;
+  const totals = totalsRes.status === 'fulfilled' ? totalsRes.value : null;
 
   const summary: Record<string, TeamSummaryStats> =
     summaryRes.status === 'fulfilled' ? summaryRes.value : {};
   const homeRest: TeamRestInfo =
-    homeRestRes.status === 'fulfilled' ? homeRestRes.value : { restDays: 2, b2b: 0 };
+    homeRestRes.status === 'fulfilled' ? homeRestRes.value : { restDays: 2, b2b: 0, dense3in4: 0 };
   const awayRest: TeamRestInfo =
-    awayRestRes.status === 'fulfilled' ? awayRestRes.value : { restDays: 2, b2b: 0 };
+    awayRestRes.status === 'fulfilled' ? awayRestRes.value : { restDays: 2, b2b: 0, dense3in4: 0 };
+
+  // Voyage : null si calendrier indispo → champs laissés undefined (neutres).
+  const homeTravel = homeTravelRes.status === 'fulfilled' ? homeTravelRes.value : null;
+  const awayTravel = awayTravelRes.status === 'fulfilled' ? awayTravelRes.value : null;
+  const venueAlt = getArena(homeAbbr)?.alt;
 
   const homeSum = summary[homeAbbr.toUpperCase()];
   const awaySum = summary[awayAbbr.toUpperCase()];
@@ -151,10 +212,44 @@ export async function buildGameFeatures(
     away_rest_days:        awayRest.restDays,
     home_b2b:              homeRest.b2b,
     away_b2b:              awayRest.b2b,
+    home_3in4:             homeRest.dense3in4,
+    away_3in4:             awayRest.dense3in4,
+    // ── v5 — voyage / fuseaux / altitude / road-trip
+    home_distance_km:      homeTravel?.distance_km,
+    away_distance_km:      awayTravel?.distance_km,
+    home_tz_shift:         homeTravel?.tz_shift,
+    away_tz_shift:         awayTravel?.tz_shift,
+    home_days_away:        homeTravel?.days_away,
+    away_days_away:        awayTravel?.days_away,
+    home_road_trip_len:    homeTravel?.road_trip_len,
+    away_road_trip_len:    awayTravel?.road_trip_len,
+    home_road_game_num:    homeTravel?.road_game_num,
+    away_road_game_num:    awayTravel?.road_game_num,
+    home_getaway:          homeTravel?.getaway,
+    away_getaway:          awayTravel?.getaway,
+    home_alt_gain:         homeTravel?.alt_gain,
+    away_alt_gain:         awayTravel?.alt_gain,
+    venue_altitude_m:      venueAlt,
     home_team:             homeAbbr.toUpperCase(),
     away_team:             awayAbbr.toUpperCase(),
     market_type:           marketType,
     line,
+    // ── v4 — cotes live (si dispo) → le service Python active le blend
+    home_odds_decimal:     odds?.homeOdds,
+    away_odds_decimal:     odds?.awayOdds,
+    total_line_market:     totals?.line,
+    // ── v4 — gardien partant : override explicite de l'appelant, sinon le
+    //    fichier manuel starting_goalies.json (exceptions), sinon rien (le
+    //    service Python utilise sa moyenne pondérée par usage).
+    home_goalie:           opts.homeGoalie ?? getStartingGoalie(homeAbbr),
+    away_goalie:           opts.awayGoalie ?? getStartingGoalie(awayAbbr),
+    home_stars_missing:    opts.homeStarsMissing,
+    away_stars_missing:    opts.awayStarsMissing,
+    // ── v4 — absents confirmés : override de l'appelant, sinon fichier manuel
+    //    scratches.json (exceptions). Le service Python en dérive stars_missing,
+    //    star_power (bons joueurs retirés) et stars_out_weight (absence pondérée).
+    home_scratches:        opts.homeScratches ?? getScratches(homeAbbr),
+    away_scratches:        opts.awayScratches ?? getScratches(awayAbbr),
   };
 }
 

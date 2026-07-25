@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import * as AuthService from '../services/auth.service';
 import { authenticate } from '../middleware/auth.middleware';
 import { validateBody } from '../middleware/validate.middleware';
+import { logger } from '../logger';
 import {
   registerSchema, loginSchema, verifyEmailSchema, resendVerificationSchema,
   forgotPasswordSchema, resetPasswordSchema,
@@ -223,7 +224,7 @@ router.get('/google/callback', async (req: Request, res: Response) => {
 
     return res.redirect(`${clientUrl}/auth/callback?${params}`);
   } catch (err: any) {
-    console.error('[Google OAuth]', err.message);
+    logger.error({ err: err.message }, '[Google OAuth]');
     return res.redirect(`${clientUrl}/login?error=google_failed`);
   }
 });

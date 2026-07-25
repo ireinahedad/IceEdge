@@ -45,6 +45,7 @@ import {
   type BoxscorePlayerStats, type ScoringGoal,
 } from './nhlApiClient';
 import { applyXpDelta, xpForOutcome } from './slip.service';
+import { logger } from '../logger';
 
 type LegResult = 'win' | 'loss' | 'unknown';
 
@@ -499,11 +500,29 @@ async function pendingGameIds(): Promise<string[]> {
 // Games we already know are final — no need to re-poll or re-trigger for them.
 const knownFinal = new Set<string>();
 
-async function checkFinishedGames(): Promise<void> {
-  const gameIds = await pendingGameIds();
-  if (gameIds.length === 0) return; // nothing pending → zero API calls
+/** What one check pass observed — drives when the scheduler should wake next. */
+interface CheckResult {
+  /** Any slip is still pending (open bets exist). */
+  pending: boolean;
+  /** A referenced game has started (or its start time is unknown) and isn't
+   *  final yet → poll fast until it settles. */
+  live: boolean;
+  /** ms until the earliest *future* pending game starts, or null if none are
+   *  in the future (all live/unknown, or nothing pending). */
+  soonestStartMs: number | null;
+}
 
+async function checkFinishedGames(): Promise<CheckResult> {
+  const gameIds = await pendingGameIds();
+  if (gameIds.length === 0) {
+    return { pending: false, live: false, soonestStartMs: null }; // zero API calls
+  }
+
+  const now = Date.now();
   let newlyFinal = false;
+  let live = false;
+  let soonestStartMs: number | null = null;
+
   for (const id of gameIds) {
     if (knownFinal.has(id)) { newlyFinal = true; continue; } // final but slip still pending → retry settle
     try {
@@ -511,45 +530,120 @@ async function checkFinishedGames(): Promise<void> {
       if (g?.status === 'final') {
         knownFinal.add(id);
         newlyFinal = true;
+        continue;
       }
-    } catch { /* API down / game not found — retry next tick */ }
+      // Not final → is it live/imminent, or still in the future?
+      const startMs = g?.startTimeUTC ? new Date(g.startTimeUTC).getTime() : NaN;
+      if (!Number.isFinite(startMs) || startMs <= now) {
+        live = true; // started (awaiting final) or unknown start → poll fast
+      } else {
+        const until = startMs - now;
+        soonestStartMs = soonestStartMs == null ? until : Math.min(soonestStartMs, until);
+      }
+    } catch {
+      live = true; // API down / game not found → be safe, keep polling fast
+    }
   }
 
   if (newlyFinal) {
-    const s = await settlePendingSlips(undefined, 200);
-    if (s.settled > 0) {
-      console.log(`[Settlement] ${s.settled}/${s.checked} slips settled (${s.wins}W/${s.losses}L)`);
-    }
+    await settlePendingSlips(undefined, 200);
   }
 
   // Don't let the set grow forever across a long-running process
   if (knownFinal.size > 2000) knownFinal.clear();
+
+  return { pending: true, live, soonestStartMs };
+}
+
+// ── Event-driven scheduler ───────────────────────────────────────────────────
+//
+// The check no longer polls on a fixed clock. It reschedules itself based on
+// what's actually pending, so a serverless Postgres (e.g. Neon) can scale its
+// compute to zero while nothing is happening:
+//   - nothing pending          → sleep `idleMs` (long)
+//   - a game is live/imminent  → poll every `activeMs` (fast) until it settles
+//   - all pending games future → sleep until `preRollMs` before the earliest
+//                                start (capped at `maxSleepMs`)
+// A newly placed bet calls notifySlipPlaced() to wake the job immediately so it
+// can re-plan its horizon instead of waiting out a long sleep.
+
+const minToMs = (v: string | undefined, fallback: number): number => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n * 60_000 : fallback;
+};
+
+let checkTimer: NodeJS.Timeout | null = null;
+let activeMs   = 2 * 60_000;
+let idleMs     = 15 * 60_000;
+let preRollMs  = 2 * 60_000;
+const maxSleepMs = 6 * 60 * 60_000; // safety re-check horizon (schedule changes, missed kicks)
+
+/** Delay (ms) until the next check, from what the last pass observed. */
+function nextDelay(r: CheckResult): number {
+  if (!r.pending) return idleMs;                 // no open bets → let the DB sleep
+  if (r.live) return activeMs;                    // a game is on → poll fast
+  if (r.soonestStartMs != null) {                 // all pending games are upcoming
+    const wake = r.soonestStartMs - preRollMs;
+    return Math.min(Math.max(wake, activeMs), maxSleepMs);
+  }
+  return activeMs;                                // pending but timing unknown → be safe
+}
+
+function armCheck(delay: number): void {
+  if (checkTimer) clearTimeout(checkTimer);
+  checkTimer = setTimeout(runCheck, delay);
+  checkTimer.unref();
+}
+
+async function runCheck(): Promise<void> {
+  let delay = activeMs;
+  try {
+    delay = nextDelay(await checkFinishedGames());
+  } catch (err: any) {
+    logger.warn({ err: err.message }, '[Settlement] check failed'); // retry at active cadence
+  }
+  armCheck(delay);
+}
+
+/**
+ * Wake the settlement check now (debounced to a few seconds) so a freshly
+ * placed bet re-plans the wake horizon instead of waiting out a long idle
+ * sleep. No-op if the job hasn't been started (e.g. tests).
+ */
+export function notifySlipPlaced(): void {
+  if (checkTimer) armCheck(5_000);
 }
 
 /**
  * Background job — call once at server startup.
- * @param checkMs    how often to poll the status of games with pending slips (default 2 min)
- * @param fallbackMs full settlement pass as a safety net (default 60 min)
+ *
+ * Cadence knobs (env, minutes):
+ *   - SETTLEMENT_POLL_MIN       fast interval while a game is live (default 2)
+ *   - SETTLEMENT_IDLE_POLL_MIN  interval while nothing is pending (default 15 in
+ *                               production, else same as active)
+ *   - SETTLEMENT_PREROLL_MIN    how early before a game's start to begin polling (default 2)
+ *   - SETTLEMENT_FALLBACK_MIN   safety-net full settlement pass (default 60)
+ * To restore a plain fixed poll every 5 min, set SETTLEMENT_POLL_MIN=5 and
+ * SETTLEMENT_IDLE_POLL_MIN=5.
  */
-export function startSettlementJob(checkMs = 2 * 60_000, fallbackMs = 60 * 60_000): void {
-  const check = async () => {
-    try { await checkFinishedGames(); }
-    catch (err: any) { console.warn('[Settlement] check failed:', err.message); }
-  };
+export function startSettlementJob(): void {
+  activeMs  = minToMs(process.env.SETTLEMENT_POLL_MIN, 2 * 60_000);
+  const idleDefault = process.env.NODE_ENV === 'production' ? 15 * 60_000 : activeMs;
+  idleMs    = minToMs(process.env.SETTLEMENT_IDLE_POLL_MIN, idleDefault);
+  preRollMs = minToMs(process.env.SETTLEMENT_PREROLL_MIN, 2 * 60_000);
+  const fallbackMs = minToMs(process.env.SETTLEMENT_FALLBACK_MIN, 60 * 60_000);
+
   const fallback = async () => {
     try {
-      const s = await settlePendingSlips(undefined, 200);
-      if (s.settled > 0) {
-        console.log(`[Settlement] (fallback) ${s.settled}/${s.checked} slips settled (${s.wins}W/${s.losses}L)`);
-      }
+      await settlePendingSlips(undefined, 200);
     } catch (err: any) {
-      console.warn('[Settlement] fallback failed:', err.message);
+      logger.warn({ err: err.message }, '[Settlement] fallback failed');
     }
   };
 
-  // Catch-up pass shortly after boot (games may have finished while the
-  // server was down), then event-driven checks + hourly fallback.
+  // Catch-up pass shortly after boot (games may have finished while the server
+  // was down), then event-driven checks + periodic fallback safety net.
   setTimeout(fallback, 30_000).unref();
-  setInterval(check, checkMs).unref();
+  armCheck(activeMs);
   setInterval(fallback, fallbackMs).unref();
 }

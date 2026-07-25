@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { pool } from './connection';
+import { logger } from '../logger';
 
 // ============================================================
 //  SEED — all mock data from the app goes into the DB here
@@ -23,7 +24,7 @@ export async function seedAll(): Promise<void> {
     // Chat is NOT seeded: rooms, messages and members are real user data only.
 
     await client.query('COMMIT');
-    console.log('[Seed] ✓ All data seeded successfully');
+    logger.info('[Seed] ✓ All data seeded successfully');
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -60,9 +61,7 @@ async function seedUsers(client: any): Promise<void> {
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [u.email, u.username, hash, u.firstName, u.lastName, u.role]
     );
-  }
-  console.log('[Seed] ✓ Users');
-}
+  }}
 
 // ============================================================
 //  NHL TEAMS
@@ -91,9 +90,7 @@ async function seedNHLTeams(client: any): Promise<void> {
     );
   }
   // Reset sequence
-  await client.query(`SELECT setval('nhl_teams_id_seq', (SELECT MAX(id) FROM nhl_teams))`);
-  console.log('[Seed] ✓ NHL Teams');
-}
+  await client.query(`SELECT setval('nhl_teams_id_seq', (SELECT MAX(id) FROM nhl_teams))`);}
 
 // ============================================================
 //  NHL TEAM STATS
@@ -126,9 +123,7 @@ async function seedNHLTeamStats(client: any): Promise<void> {
       [s.teamId, s.gp, s.w, s.l, s.otl, s.pts, s.gf, s.ga, s.gfpg, s.gapg,
        s.pp, s.pk, s.sfpg, s.sapg, s.fo, s.home, s.away, s.l10, s.streak, s.winPct]
     );
-  }
-  console.log('[Seed] ✓ NHL Team Stats');
-}
+  }}
 
 // ============================================================
 //  NHL GAMES
@@ -156,9 +151,7 @@ async function seedNHLGames(client: any): Promise<void> {
        g.homeId, g.awayId, g.homeScore, g.awayScore,
        g.venue, g.homeOdds, g.awayOdds, g.ou, g.homeWinPct, g.awayWinPct]
     );
-  }
-  console.log('[Seed] ✓ NHL Games');
-}
+  }}
 
 // ============================================================
 //  NHL ODDS
@@ -185,9 +178,7 @@ async function seedNHLOdds(client: any): Promise<void> {
        VALUES ($1,$2,$3,$4,$5)`,
       [o.gameId, o.bookmaker, o.market, o.selection, o.odds]
     );
-  }
-  console.log('[Seed] ✓ NHL Odds');
-}
+  }}
 
 // ============================================================
 //  NHL PLAYERS
@@ -212,9 +203,7 @@ async function seedNHLPlayers(client: any): Promise<void> {
        ON CONFLICT (id) DO NOTHING`,
       [p.id, p.first, p.last, p.full, p.teamId, p.pos, p.num]
     );
-  }
-  console.log('[Seed] ✓ NHL Players');
-}
+  }}
 
 // ============================================================
 //  NHL PLAYER STATS
@@ -245,9 +234,7 @@ async function seedNHLPlayerStats(client: any): Promise<void> {
        s.ppg, s.ppp, s.shg, s.pim, s.bs, s.hits,
        s.toi, s.fopct, lastFiveArr, s.wi]
     );
-  }
-  console.log('[Seed] ✓ NHL Player Stats');
-}
+  }}
 
 // ============================================================
 //  USER PROFILES
@@ -298,9 +285,7 @@ async function seedUserProfiles(client: any): Promise<void> {
         [uid, b.badgeId, b.label, b.desc, b.icon, b.earnedAt, b.tier]
       );
     }
-  }
-  console.log('[Seed] ✓ User Profiles + Badges');
-}
+  }}
 
 // ============================================================
 //  USER BETS
@@ -312,9 +297,7 @@ async function seedUserBets(client: any): Promise<void> {
   const userId = user.rows[0].id;
 
   const existing = await pool.query('SELECT COUNT(*) FROM user_bets WHERE user_id = $1', [userId]);
-  if (parseInt(existing.rows[0].count) > 0) {
-    console.log('[Seed] ✓ User Bets (skipped, already exists)');
-    return;
+  if (parseInt(existing.rows[0].count) > 0) {    return;
   }
 
   const bets = [
@@ -336,9 +319,7 @@ async function seedUserBets(client: any): Promise<void> {
       [userId, b.placedAt, b.mType, b.mLabel, b.sel, b.selShort,
        b.subName, b.subLogo, b.prob, b.isParlay, b.parlayLegs, b.outcome, b.gameInfo]
     );
-  }
-  console.log('[Seed] ✓ User Bets');
-}
+  }}
 
 // ============================================================
 //  Run directly: ts-node src/db/seed.ts
@@ -349,7 +330,7 @@ if (require.main === module) {
     try {
       await seedAll();
     } catch (err) {
-      console.error('[Seed] Failed:', err);
+      logger.error({ err }, '[Seed] Failed');
       process.exit(1);
     } finally {
       await pool.end();

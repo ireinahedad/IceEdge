@@ -1,332 +1,1092 @@
 {
   "game_model": {
-    "model": "XGBoost binary:logistic",
-    "best_iteration": 49,
-    "n_train": 4147,
-    "n_val": 732,
-    "n_test": 1220,
-    "accuracy": 0.5311,
-    "brier_score": 0.2513,
-    "log_loss": 0.6962,
-    "skill_score": -0.0065,
-    "home_win_rate": 0.5339,
-    "baselines": {
-      "home_always_accuracy": 0.5221,
-      "constant_brier": 0.2496,
-      "constant_log_loss": 0.6924,
-      "elo_only": {
-        "accuracy": 0.5393,
-        "log_loss": 0.6945,
-        "brier": 0.2505
-      }
+    "model": "XGBoost binary:logistic (v4)",
+    "best_iteration": 268,
+    "params": {
+      "max_depth": 3,
+      "learning_rate": 0.02,
+      "subsample": 0.8,
+      "colsample_bytree": 0.9,
+      "min_child_weight": 5,
+      "gamma": 0.5,
+      "reg_alpha": 1.0,
+      "reg_lambda": 10.0
     },
-    "uncalibrated": {
-      "brier_score": 0.2496,
-      "log_loss": 0.6927
+    "n_train": 14631,
+    "n_val": 2582,
+    "n_test": 4304,
+    "accuracy": 0.586,
+    "brier_score": 0.2359,
+    "log_loss": 0.6639,
+    "skill_score": 0.0504,
+    "val_log_loss": 0.6533,
+    "home_win_rate": 0.5459,
+    "baselines": {
+      "home_always_accuracy": 0.54,
+      "constant_log_loss": 0.69,
+      "elo_only": {
+        "accuracy": 0.5771,
+        "log_loss": 0.6702,
+        "brier": 0.2389
+      },
+      "market": {}
     },
     "calibration": {
       "method": "platt",
-      "a": 0.757487,
-      "b": 0.256339
+      "a": 1.190488,
+      "b": -0.114323
     },
+    "blend": null,
     "feature_importances": [
       {
-        "name": "shots_diff",
-        "importance": 0.0905
+        "name": "elo_diff",
+        "importance": 0.0477
       },
       {
         "name": "elo_expected",
-        "importance": 0.0571
+        "importance": 0.0465
       },
       {
-        "name": "elo_diff",
-        "importance": 0.0521
+        "name": "ev_xgf_pct_s_diff",
+        "importance": 0.0257
       },
       {
-        "name": "win_pct_diff",
-        "importance": 0.0277
+        "name": "ev_cf_pct_s_diff",
+        "importance": 0.0234
       },
       {
-        "name": "pp_diff",
-        "importance": 0.0272
+        "name": "market_home_p_close",
+        "importance": 0.016
       },
       {
-        "name": "rest_diff",
-        "importance": 0.0272
+        "name": "market_home_p_open",
+        "importance": 0.0135
       },
       {
-        "name": "away_elo",
-        "importance": 0.0262
+        "name": "away_stars_missing",
+        "importance": 0.0106
       },
       {
-        "name": "home_elo",
-        "importance": 0.0254
-      },
-      {
-        "name": "home_shots_against_pg",
-        "importance": 0.0247
-      },
-      {
-        "name": "gf_diff",
-        "importance": 0.0247
-      },
-      {
-        "name": "home_b2b",
-        "importance": 0.0242
-      },
-      {
-        "name": "away_goals_against_pg",
-        "importance": 0.023
-      },
-      {
-        "name": "home_rest_days",
-        "importance": 0.0225
-      },
-      {
-        "name": "away_pk_pct",
-        "importance": 0.0217
-      },
-      {
-        "name": "home_home_win_pct",
-        "importance": 0.0217
-      },
-      {
-        "name": "away_shots_against_pg",
-        "importance": 0.0217
-      },
-      {
-        "name": "pk_diff",
-        "importance": 0.0217
-      },
-      {
-        "name": "home_pp_pct",
-        "importance": 0.0216
-      },
-      {
-        "name": "ga_diff",
-        "importance": 0.0216
-      },
-      {
-        "name": "away_pp_pct",
-        "importance": 0.0213
-      },
-      {
-        "name": "home_goals_for_pg",
-        "importance": 0.0212
-      },
-      {
-        "name": "away_road_win_pct",
-        "importance": 0.0212
-      },
-      {
-        "name": "away_rest_days",
-        "importance": 0.021
-      },
-      {
-        "name": "away_goals_for_pg",
-        "importance": 0.0208
-      },
-      {
-        "name": "form_diff",
-        "importance": 0.0206
-      },
-      {
-        "name": "home_shots_for_pg",
-        "importance": 0.0205
-      },
-      {
-        "name": "home_streak",
-        "importance": 0.0204
-      },
-      {
-        "name": "away_streak",
-        "importance": 0.0204
-      },
-      {
-        "name": "away_win_pct",
-        "importance": 0.0202
-      },
-      {
-        "name": "home_win_pct",
-        "importance": 0.0201
-      },
-      {
-        "name": "away_faceoff_pct",
-        "importance": 0.0201
-      },
-      {
-        "name": "streak_diff",
-        "importance": 0.02
-      },
-      {
-        "name": "away_last10_win_pct",
-        "importance": 0.0198
-      },
-      {
-        "name": "away_shots_for_pg",
-        "importance": 0.0193
-      },
-      {
-        "name": "faceoff_diff",
-        "importance": 0.0191
+        "name": "star_power_diff",
+        "importance": 0.0101
       },
       {
         "name": "away_b2b",
-        "importance": 0.0189
+        "importance": 0.01
       },
       {
-        "name": "home_pk_pct",
-        "importance": 0.0188
+        "name": "home_xga60_s",
+        "importance": 0.0099
       },
       {
-        "name": "home_faceoff_pct",
-        "importance": 0.0183
+        "name": "away_ev_cf_pct_s",
+        "importance": 0.0097
       },
       {
-        "name": "home_last10_win_pct",
-        "importance": 0.0181
+        "name": "away_star_power",
+        "importance": 0.0097
       },
       {
-        "name": "home_goals_against_pg",
-        "importance": 0.0174
+        "name": "away_elo",
+        "importance": 0.0097
+      },
+      {
+        "name": "home_ev_xga60_l",
+        "importance": 0.0096
+      },
+      {
+        "name": "away_ev_xgf_pct_l",
+        "importance": 0.0096
+      },
+      {
+        "name": "home_elo",
+        "importance": 0.0096
+      },
+      {
+        "name": "stars_out_weight_diff",
+        "importance": 0.0095
+      },
+      {
+        "name": "home_gf_l",
+        "importance": 0.0092
+      },
+      {
+        "name": "home_ev_xgf_pct_l",
+        "importance": 0.0092
+      },
+      {
+        "name": "home_xgf60_l",
+        "importance": 0.0091
+      },
+      {
+        "name": "away_win_s",
+        "importance": 0.0091
+      },
+      {
+        "name": "home_xga60_l",
+        "importance": 0.009
+      },
+      {
+        "name": "home_sog_a_l",
+        "importance": 0.009
+      },
+      {
+        "name": "home_sog_a_s",
+        "importance": 0.0089
+      },
+      {
+        "name": "away_ev_cf_pct_l",
+        "importance": 0.0089
+      },
+      {
+        "name": "away_stars_out_weight",
+        "importance": 0.0089
+      },
+      {
+        "name": "home_ev_cf_pct_l",
+        "importance": 0.0086
+      },
+      {
+        "name": "goalie_gsax60_diff",
+        "importance": 0.0084
+      },
+      {
+        "name": "home_ev_cf_pct_s",
+        "importance": 0.0083
+      },
+      {
+        "name": "home_pp_xgf60_l",
+        "importance": 0.0083
+      },
+      {
+        "name": "away_gf_s",
+        "importance": 0.0083
+      },
+      {
+        "name": "away_goalie_gsax60",
+        "importance": 0.0083
+      },
+      {
+        "name": "away_goalie_svpct",
+        "importance": 0.0083
+      },
+      {
+        "name": "away_rest_days",
+        "importance": 0.0083
+      },
+      {
+        "name": "home_ev_xgf_pct_s",
+        "importance": 0.0082
+      },
+      {
+        "name": "away_gf_l",
+        "importance": 0.0082
+      },
+      {
+        "name": "home_b2b",
+        "importance": 0.0081
+      },
+      {
+        "name": "goalie_svpct_diff",
+        "importance": 0.0081
+      },
+      {
+        "name": "away_sog_a_s",
+        "importance": 0.008
+      },
+      {
+        "name": "away_sog_a_l",
+        "importance": 0.008
+      },
+      {
+        "name": "home_rest_days",
+        "importance": 0.008
+      },
+      {
+        "name": "home_goalie_gsax60",
+        "importance": 0.0078
+      },
+      {
+        "name": "away_finishing_l",
+        "importance": 0.0078
+      },
+      {
+        "name": "home_ga_s",
+        "importance": 0.0077
+      },
+      {
+        "name": "home_finishing_l",
+        "importance": 0.0077
+      },
+      {
+        "name": "away_ev_xgf60_s",
+        "importance": 0.0077
+      },
+      {
+        "name": "away_goalie_starts",
+        "importance": 0.0077
+      },
+      {
+        "name": "away_tz_shift",
+        "importance": 0.0077
+      },
+      {
+        "name": "home_ev_xgf60_l",
+        "importance": 0.0076
+      },
+      {
+        "name": "home_pk_xga60_l",
+        "importance": 0.0076
+      },
+      {
+        "name": "home_star_power",
+        "importance": 0.0076
+      },
+      {
+        "name": "away_sog_f_s",
+        "importance": 0.0076
+      },
+      {
+        "name": "away_ev_hdxgf60_s",
+        "importance": 0.0076
+      },
+      {
+        "name": "home_win_l",
+        "importance": 0.0075
+      },
+      {
+        "name": "home_ev_hdxgf60_l",
+        "importance": 0.0075
+      },
+      {
+        "name": "away_xga60_s",
+        "importance": 0.0075
+      },
+      {
+        "name": "venue_altitude_m",
+        "importance": 0.0075
+      },
+      {
+        "name": "home_ev_hdxgf60_s",
+        "importance": 0.0074
+      },
+      {
+        "name": "home_pk_xga60_s",
+        "importance": 0.0074
+      },
+      {
+        "name": "away_ga_l",
+        "importance": 0.0074
+      },
+      {
+        "name": "away_win_l",
+        "importance": 0.0074
+      },
+      {
+        "name": "away_ev_xgf60_l",
+        "importance": 0.0074
+      },
+      {
+        "name": "away_ev_hdxga60_s",
+        "importance": 0.0074
+      },
+      {
+        "name": "distance_km_diff",
+        "importance": 0.0074
+      },
+      {
+        "name": "days_away_diff",
+        "importance": 0.0074
+      },
+      {
+        "name": "away_xga60_l",
+        "importance": 0.0073
+      },
+      {
+        "name": "away_pk_xga60_l",
+        "importance": 0.0073
+      },
+      {
+        "name": "away_3in4",
+        "importance": 0.0073
+      },
+      {
+        "name": "home_stars_missing",
+        "importance": 0.0072
+      },
+      {
+        "name": "away_team_gp",
+        "importance": 0.0072
+      },
+      {
+        "name": "away_ga_s",
+        "importance": 0.0072
+      },
+      {
+        "name": "away_ev_xga60_l",
+        "importance": 0.0072
+      },
+      {
+        "name": "away_pp_xgf60_l",
+        "importance": 0.0072
+      },
+      {
+        "name": "away_days_away",
+        "importance": 0.0072
+      },
+      {
+        "name": "away_road_trip_len",
+        "importance": 0.0072
+      },
+      {
+        "name": "home_finishing_s",
+        "importance": 0.0071
+      },
+      {
+        "name": "home_goalie_starts",
+        "importance": 0.0071
+      },
+      {
+        "name": "alt_gain_diff",
+        "importance": 0.0071
+      },
+      {
+        "name": "away_ev_hdxgf60_l",
+        "importance": 0.007
+      },
+      {
+        "name": "away_ev_hdxga60_l",
+        "importance": 0.007
+      },
+      {
+        "name": "home_tz_shift",
+        "importance": 0.007
+      },
+      {
+        "name": "home_xgf60_s",
+        "importance": 0.0069
+      },
+      {
+        "name": "home_win_s",
+        "importance": 0.0069
+      },
+      {
+        "name": "home_stars_out_weight",
+        "importance": 0.0069
+      },
+      {
+        "name": "home_distance_km",
+        "importance": 0.0069
+      },
+      {
+        "name": "home_ev_xga60_s",
+        "importance": 0.0068
+      },
+      {
+        "name": "home_ev_hdxga60_l",
+        "importance": 0.0068
+      },
+      {
+        "name": "away_xgf60_l",
+        "importance": 0.0068
+      },
+      {
+        "name": "away_ev_xgf_pct_s",
+        "importance": 0.0068
+      },
+      {
+        "name": "home_ev_hdxga60_s",
+        "importance": 0.0067
+      },
+      {
+        "name": "away_finishing_s",
+        "importance": 0.0067
+      },
+      {
+        "name": "away_alt_gain",
+        "importance": 0.0067
+      },
+      {
+        "name": "rest_days_diff",
+        "importance": 0.0067
+      },
+      {
+        "name": "home_sog_f_s",
+        "importance": 0.0066
+      },
+      {
+        "name": "home_ev_xgf60_s",
+        "importance": 0.0066
+      },
+      {
+        "name": "away_sog_f_l",
+        "importance": 0.0066
+      },
+      {
+        "name": "away_pp_xgf60_s",
+        "importance": 0.0066
+      },
+      {
+        "name": "home_3in4",
+        "importance": 0.0066
+      },
+      {
+        "name": "home_alt_gain",
+        "importance": 0.0066
+      },
+      {
+        "name": "home_gf_s",
+        "importance": 0.0065
+      },
+      {
+        "name": "xg_matchup_away",
+        "importance": 0.0065
+      },
+      {
+        "name": "win_s_diff",
+        "importance": 0.0065
+      },
+      {
+        "name": "home_goalie_svpct",
+        "importance": 0.0064
+      },
+      {
+        "name": "away_xgf60_s",
+        "importance": 0.0064
+      },
+      {
+        "name": "away_pk_xga60_s",
+        "importance": 0.0064
+      },
+      {
+        "name": "home_ga_l",
+        "importance": 0.0063
+      },
+      {
+        "name": "home_sog_f_l",
+        "importance": 0.0063
+      },
+      {
+        "name": "stars_missing_diff",
+        "importance": 0.0063
+      },
+      {
+        "name": "finishing_s_diff",
+        "importance": 0.0062
+      },
+      {
+        "name": "home_team_gp",
+        "importance": 0.006
+      },
+      {
+        "name": "home_pp_xgf60_s",
+        "importance": 0.006
+      },
+      {
+        "name": "away_ev_xga60_s",
+        "importance": 0.006
+      },
+      {
+        "name": "xg_matchup_home",
+        "importance": 0.006
+      },
+      {
+        "name": "away_distance_km",
+        "importance": 0.0057
+      },
+      {
+        "name": "tz_shift_diff",
+        "importance": 0.0039
       }
     ]
   },
   "totals_model": {
-    "model": "XGBoost reg:squarederror",
-    "best_iteration": 41,
-    "n_train": 4147,
-    "n_test": 1220,
-    "mae_goals": 1.8414,
-    "rmse_goals": 2.3028,
-    "mean_total": 6.2674,
+    "model": "XGBoost reg:squarederror (v4)",
+    "best_iteration": 252,
+    "params": {
+      "max_depth": 3,
+      "learning_rate": 0.02,
+      "subsample": 0.7,
+      "colsample_bytree": 0.9,
+      "min_child_weight": 10,
+      "gamma": 0,
+      "reg_alpha": 1.0,
+      "reg_lambda": 1.0
+    },
+    "n_train": 14631,
+    "n_test": 4304,
+    "mae_goals": 1.866,
+    "rmse_goals": 2.3285,
+    "baseline_mae": 1.8996,
+    "mean_total": 5.67,
+    "market": {},
     "feature_importances": [
       {
-        "name": "home_shots_against_pg",
-        "importance": 0.0694
+        "name": "total_close",
+        "importance": 0.0567
       },
       {
-        "name": "home_goals_against_pg",
-        "importance": 0.0687
+        "name": "total_open",
+        "importance": 0.0309
       },
       {
-        "name": "home_goals_for_pg",
-        "importance": 0.0674
+        "name": "home_xga60_l",
+        "importance": 0.0183
       },
       {
-        "name": "away_pk_pct",
-        "importance": 0.0659
+        "name": "away_xga60_l",
+        "importance": 0.0177
       },
       {
-        "name": "ga_diff",
-        "importance": 0.0643
+        "name": "away_gf_l",
+        "importance": 0.0176
       },
       {
-        "name": "away_shots_for_pg",
-        "importance": 0.0638
+        "name": "home_xgf60_l",
+        "importance": 0.0145
       },
       {
-        "name": "away_goals_for_pg",
-        "importance": 0.0637
+        "name": "away_ev_xgf60_l",
+        "importance": 0.0145
       },
       {
-        "name": "away_pp_pct",
-        "importance": 0.0635
+        "name": "away_xgf60_l",
+        "importance": 0.0144
       },
       {
-        "name": "home_pk_pct",
-        "importance": 0.0633
+        "name": "away_ev_xga60_l",
+        "importance": 0.0144
       },
       {
-        "name": "home_shots_for_pg",
-        "importance": 0.062
+        "name": "home_ga_l",
+        "importance": 0.0137
       },
       {
-        "name": "away_goals_against_pg",
-        "importance": 0.0613
+        "name": "away_ev_xgf60_s",
+        "importance": 0.0136
       },
       {
-        "name": "home_pp_pct",
-        "importance": 0.061
+        "name": "home_gf_l",
+        "importance": 0.0134
       },
       {
-        "name": "away_shots_against_pg",
-        "importance": 0.0605
+        "name": "home_xgf60_s",
+        "importance": 0.0132
+      },
+      {
+        "name": "home_goalie_starts",
+        "importance": 0.0131
+      },
+      {
+        "name": "home_sog_a_l",
+        "importance": 0.0127
+      },
+      {
+        "name": "home_sog_f_l",
+        "importance": 0.0126
+      },
+      {
+        "name": "away_ga_l",
+        "importance": 0.0126
+      },
+      {
+        "name": "home_sog_f_s",
+        "importance": 0.0122
+      },
+      {
+        "name": "away_ga_s",
+        "importance": 0.0121
+      },
+      {
+        "name": "away_sog_a_l",
+        "importance": 0.012
+      },
+      {
+        "name": "away_goalie_starts",
+        "importance": 0.0118
+      },
+      {
+        "name": "home_ev_xgf60_l",
+        "importance": 0.0113
+      },
+      {
+        "name": "away_ev_xga60_s",
+        "importance": 0.0111
+      },
+      {
+        "name": "home_gf_s",
+        "importance": 0.011
+      },
+      {
+        "name": "home_ev_xga60_l",
+        "importance": 0.011
+      },
+      {
+        "name": "home_goalie_svpct",
+        "importance": 0.0109
+      },
+      {
+        "name": "alt_gain_diff",
+        "importance": 0.0109
+      },
+      {
+        "name": "away_ev_hdxga60_l",
+        "importance": 0.0107
+      },
+      {
+        "name": "home_distance_km",
+        "importance": 0.0107
+      },
+      {
+        "name": "finishing_s_diff",
+        "importance": 0.0107
+      },
+      {
+        "name": "away_xgf60_s",
+        "importance": 0.0106
+      },
+      {
+        "name": "home_alt_gain",
+        "importance": 0.0106
+      },
+      {
+        "name": "home_ev_hdxgf60_s",
+        "importance": 0.0105
+      },
+      {
+        "name": "home_ev_hdxgf60_l",
+        "importance": 0.0105
+      },
+      {
+        "name": "home_ev_hdxga60_l",
+        "importance": 0.0105
+      },
+      {
+        "name": "away_finishing_s",
+        "importance": 0.0105
+      },
+      {
+        "name": "home_ev_xgf_pct_l",
+        "importance": 0.0104
+      },
+      {
+        "name": "away_sog_f_s",
+        "importance": 0.0104
+      },
+      {
+        "name": "venue_altitude_m",
+        "importance": 0.0104
+      },
+      {
+        "name": "home_xga60_s",
+        "importance": 0.0103
+      },
+      {
+        "name": "home_sog_a_s",
+        "importance": 0.0103
+      },
+      {
+        "name": "home_pp_xgf60_s",
+        "importance": 0.0103
+      },
+      {
+        "name": "away_sog_f_l",
+        "importance": 0.0103
+      },
+      {
+        "name": "tz_shift_diff",
+        "importance": 0.0103
+      },
+      {
+        "name": "home_ev_xgf60_s",
+        "importance": 0.0102
+      },
+      {
+        "name": "home_ev_xga60_s",
+        "importance": 0.0102
+      },
+      {
+        "name": "away_goalie_svpct",
+        "importance": 0.0102
       },
       {
         "name": "home_rest_days",
-        "importance": 0.0594
+        "importance": 0.0102
       },
       {
-        "name": "gf_diff",
-        "importance": 0.0561
+        "name": "away_ev_xgf_pct_l",
+        "importance": 0.0101
+      },
+      {
+        "name": "home_ev_hdxga60_s",
+        "importance": 0.01
+      },
+      {
+        "name": "away_xga60_s",
+        "importance": 0.01
       },
       {
         "name": "away_rest_days",
-        "importance": 0.0496
+        "importance": 0.01
+      },
+      {
+        "name": "away_alt_gain",
+        "importance": 0.01
+      },
+      {
+        "name": "distance_km_diff",
+        "importance": 0.01
+      },
+      {
+        "name": "away_pk_xga60_s",
+        "importance": 0.0099
+      },
+      {
+        "name": "home_tz_shift",
+        "importance": 0.0099
+      },
+      {
+        "name": "ev_xgf_pct_s_diff",
+        "importance": 0.0099
+      },
+      {
+        "name": "goalie_gsax60_diff",
+        "importance": 0.0099
+      },
+      {
+        "name": "home_pk_xga60_l",
+        "importance": 0.0098
+      },
+      {
+        "name": "home_ev_xgf_pct_s",
+        "importance": 0.0097
+      },
+      {
+        "name": "goalie_svpct_diff",
+        "importance": 0.0097
+      },
+      {
+        "name": "home_ga_s",
+        "importance": 0.0096
+      },
+      {
+        "name": "home_finishing_l",
+        "importance": 0.0096
+      },
+      {
+        "name": "home_goalie_gsax60",
+        "importance": 0.0096
+      },
+      {
+        "name": "away_gf_s",
+        "importance": 0.0096
+      },
+      {
+        "name": "away_ev_xgf_pct_s",
+        "importance": 0.0096
+      },
+      {
+        "name": "away_goalie_gsax60",
+        "importance": 0.0096
+      },
+      {
+        "name": "rest_days_diff",
+        "importance": 0.0095
+      },
+      {
+        "name": "away_tz_shift",
+        "importance": 0.0094
+      },
+      {
+        "name": "away_road_game_num",
+        "importance": 0.0094
+      },
+      {
+        "name": "home_finishing_s",
+        "importance": 0.0093
+      },
+      {
+        "name": "home_pk_xga60_s",
+        "importance": 0.0093
+      },
+      {
+        "name": "away_ev_hdxga60_s",
+        "importance": 0.0092
+      },
+      {
+        "name": "away_pk_xga60_l",
+        "importance": 0.0092
+      },
+      {
+        "name": "away_distance_km",
+        "importance": 0.0092
+      },
+      {
+        "name": "away_getaway",
+        "importance": 0.0092
+      },
+      {
+        "name": "away_ev_hdxgf60_s",
+        "importance": 0.0091
+      },
+      {
+        "name": "away_ev_hdxgf60_l",
+        "importance": 0.0091
+      },
+      {
+        "name": "away_road_trip_len",
+        "importance": 0.0091
+      },
+      {
+        "name": "away_finishing_l",
+        "importance": 0.009
+      },
+      {
+        "name": "home_pp_xgf60_l",
+        "importance": 0.0088
+      },
+      {
+        "name": "away_pp_xgf60_s",
+        "importance": 0.0087
+      },
+      {
+        "name": "days_away_diff",
+        "importance": 0.0087
+      },
+      {
+        "name": "away_pp_xgf60_l",
+        "importance": 0.0086
+      },
+      {
+        "name": "away_days_away",
+        "importance": 0.0083
+      },
+      {
+        "name": "away_sog_a_s",
+        "importance": 0.0082
+      },
+      {
+        "name": "away_3in4",
+        "importance": 0.0049
       }
     ]
   },
   "features": {
     "game": [
-      "home_win_pct",
-      "away_win_pct",
-      "home_goals_for_pg",
-      "away_goals_for_pg",
-      "home_goals_against_pg",
-      "away_goals_against_pg",
-      "home_pp_pct",
-      "away_pp_pct",
-      "home_pk_pct",
-      "away_pk_pct",
-      "home_last10_win_pct",
-      "away_last10_win_pct",
-      "home_home_win_pct",
-      "away_road_win_pct",
-      "home_streak",
-      "away_streak",
-      "home_shots_for_pg",
-      "away_shots_for_pg",
-      "home_shots_against_pg",
-      "away_shots_against_pg",
-      "home_faceoff_pct",
-      "away_faceoff_pct",
+      "home_team_gp",
+      "home_gf_s",
+      "home_gf_l",
+      "home_ga_s",
+      "home_ga_l",
+      "home_xgf60_s",
+      "home_xgf60_l",
+      "home_xga60_s",
+      "home_xga60_l",
+      "home_sog_f_s",
+      "home_sog_f_l",
+      "home_sog_a_s",
+      "home_sog_a_l",
+      "home_finishing_s",
+      "home_finishing_l",
+      "home_win_s",
+      "home_win_l",
+      "home_ev_xgf60_s",
+      "home_ev_xgf60_l",
+      "home_ev_xga60_s",
+      "home_ev_xga60_l",
+      "home_ev_hdxgf60_s",
+      "home_ev_hdxgf60_l",
+      "home_ev_hdxga60_s",
+      "home_ev_hdxga60_l",
+      "home_ev_cf_pct_s",
+      "home_ev_cf_pct_l",
+      "home_ev_xgf_pct_s",
+      "home_ev_xgf_pct_l",
+      "home_pp_xgf60_s",
+      "home_pp_xgf60_l",
+      "home_pk_xga60_s",
+      "home_pk_xga60_l",
+      "home_goalie_gsax60",
+      "home_goalie_svpct",
+      "home_goalie_starts",
+      "home_star_power",
+      "home_stars_missing",
+      "home_stars_out_weight",
+      "away_team_gp",
+      "away_gf_s",
+      "away_gf_l",
+      "away_ga_s",
+      "away_ga_l",
+      "away_xgf60_s",
+      "away_xgf60_l",
+      "away_xga60_s",
+      "away_xga60_l",
+      "away_sog_f_s",
+      "away_sog_f_l",
+      "away_sog_a_s",
+      "away_sog_a_l",
+      "away_finishing_s",
+      "away_finishing_l",
+      "away_win_s",
+      "away_win_l",
+      "away_ev_xgf60_s",
+      "away_ev_xgf60_l",
+      "away_ev_xga60_s",
+      "away_ev_xga60_l",
+      "away_ev_hdxgf60_s",
+      "away_ev_hdxgf60_l",
+      "away_ev_hdxga60_s",
+      "away_ev_hdxga60_l",
+      "away_ev_cf_pct_s",
+      "away_ev_cf_pct_l",
+      "away_ev_xgf_pct_s",
+      "away_ev_xgf_pct_l",
+      "away_pp_xgf60_s",
+      "away_pp_xgf60_l",
+      "away_pk_xga60_s",
+      "away_pk_xga60_l",
+      "away_goalie_gsax60",
+      "away_goalie_svpct",
+      "away_goalie_starts",
+      "away_star_power",
+      "away_stars_missing",
+      "away_stars_out_weight",
       "home_rest_days",
       "away_rest_days",
       "home_b2b",
       "away_b2b",
-      "win_pct_diff",
-      "gf_diff",
-      "ga_diff",
-      "pp_diff",
-      "pk_diff",
-      "form_diff",
-      "shots_diff",
-      "faceoff_diff",
-      "rest_diff",
-      "streak_diff",
+      "home_3in4",
+      "away_3in4",
+      "home_distance_km",
+      "away_distance_km",
+      "home_tz_shift",
+      "away_tz_shift",
+      "away_days_away",
+      "away_road_trip_len",
+      "away_road_game_num",
+      "away_getaway",
+      "home_alt_gain",
+      "away_alt_gain",
+      "venue_altitude_m",
       "home_elo",
       "away_elo",
       "elo_diff",
-      "elo_expected"
+      "elo_expected",
+      "market_home_p_open",
+      "market_home_p_close",
+      "xg_matchup_home",
+      "xg_matchup_away",
+      "ev_xgf_pct_s_diff",
+      "ev_cf_pct_s_diff",
+      "goalie_gsax60_diff",
+      "goalie_svpct_diff",
+      "star_power_diff",
+      "finishing_s_diff",
+      "win_s_diff",
+      "rest_days_diff",
+      "distance_km_diff",
+      "tz_shift_diff",
+      "days_away_diff",
+      "alt_gain_diff",
+      "road_trip_len_diff",
+      "road_game_num_diff",
+      "stars_missing_diff",
+      "stars_out_weight_diff"
     ],
     "totals": [
-      "home_goals_for_pg",
-      "away_goals_for_pg",
-      "home_goals_against_pg",
-      "away_goals_against_pg",
-      "home_pp_pct",
-      "away_pp_pct",
-      "home_pk_pct",
-      "away_pk_pct",
-      "gf_diff",
-      "ga_diff",
-      "home_shots_for_pg",
-      "away_shots_for_pg",
-      "home_shots_against_pg",
-      "away_shots_against_pg",
+      "home_gf_s",
+      "home_gf_l",
+      "home_ga_s",
+      "home_ga_l",
+      "home_xgf60_s",
+      "home_xgf60_l",
+      "home_xga60_s",
+      "home_xga60_l",
+      "home_sog_f_s",
+      "home_sog_f_l",
+      "home_sog_a_s",
+      "home_sog_a_l",
+      "home_finishing_s",
+      "home_finishing_l",
+      "home_ev_xgf60_s",
+      "home_ev_xgf60_l",
+      "home_ev_xga60_s",
+      "home_ev_xga60_l",
+      "home_ev_hdxgf60_s",
+      "home_ev_hdxgf60_l",
+      "home_ev_hdxga60_s",
+      "home_ev_hdxga60_l",
+      "home_ev_xgf_pct_s",
+      "home_ev_xgf_pct_l",
+      "home_pp_xgf60_s",
+      "home_pp_xgf60_l",
+      "home_pk_xga60_s",
+      "home_pk_xga60_l",
+      "home_goalie_gsax60",
+      "home_goalie_svpct",
+      "home_goalie_starts",
+      "away_gf_s",
+      "away_gf_l",
+      "away_ga_s",
+      "away_ga_l",
+      "away_xgf60_s",
+      "away_xgf60_l",
+      "away_xga60_s",
+      "away_xga60_l",
+      "away_sog_f_s",
+      "away_sog_f_l",
+      "away_sog_a_s",
+      "away_sog_a_l",
+      "away_finishing_s",
+      "away_finishing_l",
+      "away_ev_xgf60_s",
+      "away_ev_xgf60_l",
+      "away_ev_xga60_s",
+      "away_ev_xga60_l",
+      "away_ev_hdxgf60_s",
+      "away_ev_hdxgf60_l",
+      "away_ev_hdxga60_s",
+      "away_ev_hdxga60_l",
+      "away_ev_xgf_pct_s",
+      "away_ev_xgf_pct_l",
+      "away_pp_xgf60_s",
+      "away_pp_xgf60_l",
+      "away_pk_xga60_s",
+      "away_pk_xga60_l",
+      "away_goalie_gsax60",
+      "away_goalie_svpct",
+      "away_goalie_starts",
       "home_rest_days",
-      "away_rest_days"
+      "away_rest_days",
+      "home_b2b",
+      "away_b2b",
+      "home_3in4",
+      "away_3in4",
+      "home_distance_km",
+      "away_distance_km",
+      "home_tz_shift",
+      "away_tz_shift",
+      "away_days_away",
+      "away_road_trip_len",
+      "away_road_game_num",
+      "away_getaway",
+      "home_alt_gain",
+      "away_alt_gain",
+      "venue_altitude_m",
+      "ev_xgf_pct_s_diff",
+      "goalie_gsax60_diff",
+      "goalie_svpct_diff",
+      "finishing_s_diff",
+      "rest_days_diff",
+      "distance_km_diff",
+      "tz_shift_diff",
+      "days_away_diff",
+      "alt_gain_diff",
+      "road_trip_len_diff",
+      "road_game_num_diff",
+      "total_close",
+      "total_open"
     ]
-  }
+  },
+  "dataset": "v4"
 }

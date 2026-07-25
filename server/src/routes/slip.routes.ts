@@ -4,6 +4,7 @@ import { validateBody } from '../middleware/validate.middleware';
 import { slipSubmitSchema } from '../validation/schemas';
 import * as SlipService from '../services/slip.service';
 import { settlePendingSlips } from '../services/settlement.service';
+import { logger } from '../logger';
 
 const router = Router();
 
@@ -19,7 +20,7 @@ router.post('/settle', async (req: Request, res: Response) => {
     const summary = await settlePendingSlips(userId, 50);
     res.json(summary);
   } catch (err: any) {
-    console.error('[POST /api/slips/settle]', err.message);
+    logger.error({ err: err.message }, '[POST /api/slips/settle]');
     res.status(err.status ?? 500).json({ error: err.message });
   }
 });
@@ -45,7 +46,7 @@ router.post('/', validateBody(slipSubmitSchema), async (req: Request, res: Respo
     const slipId = await SlipService.submitSlip(userId, legs, sport, combinedProbability ?? null);
     res.status(201).json({ slipId, message: 'Slip submitted successfully' });
   } catch (err: any) {
-    console.error('[POST /api/slips]', err.message);
+    logger.error({ err: err.message }, '[POST /api/slips]');
     res.status(err.status ?? 500).json({ error: err.message });
   }
 });
@@ -61,7 +62,7 @@ router.get('/', async (req: Request, res: Response) => {
     const slips  = await SlipService.getSlips(userId, limit);
     res.json(slips);
   } catch (err: any) {
-    console.error('[GET /api/slips]', err.message);
+    logger.error({ err: err.message }, '[GET /api/slips]');
     res.status(err.status ?? 500).json({ error: err.message });
   }
 });
@@ -76,7 +77,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     const slip = await SlipService.getSlip(req.params.id, userId);
     res.json(slip);
   } catch (err: any) {
-    console.error('[GET /api/slips/:id]', err.message);
+    logger.error({ err: err.message }, '[GET /api/slips/:id]');
     res.status(err.status ?? 500).json({ error: err.message });
   }
 });
@@ -108,7 +109,7 @@ router.patch('/:id/resolve', async (req: Request, res: Response) => {
         : 'Slip marked as loss',
     });
   } catch (err: any) {
-    console.error('[PATCH /api/slips/:id/resolve]', err.message);
+    logger.error({ err: err.message }, '[PATCH /api/slips/:id/resolve]');
     res.status(err.status ?? 500).json({ error: err.message });
   }
 });

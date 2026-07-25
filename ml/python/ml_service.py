@@ -61,6 +61,11 @@ _elo_home_adv = 50.0
 _platt_a: float | None = None
 _platt_b: float | None = None
 
+# v4 — état d'inférence (rolling MoneyPuck par équipe, gardiens, stars)
+# écrit par build_dataset.py, et blend modèle ⊕ marché (training_report.json)
+_inference_state: dict = {}
+_blend_w: list[float] | None = None
+
 # Features attendues par chaque modèle.
 # Fallback statique (ancien modèle 18 features) — écrasé au chargement par
 # training_report.json["features"], la source de vérité écrite par train.py.
@@ -86,6 +91,7 @@ def _try_load_models():
     global _xgb_game, _xgb_totals, _game_importances, _totals_importances
     global _GAME_FEAT_NAMES, _TOTALS_FEAT_NAMES
     global _elo_ratings, _elo_base, _elo_home_adv, _platt_a, _platt_b
+    global _inference_state, _blend_w
 
     game_path   = os.path.join(MODELS_DIR, "game_model.json")
     totals_path = os.path.join(MODELS_DIR, "totals_model.json")
@@ -108,10 +114,27 @@ def _try_load_models():
             if cal.get("method") == "platt":
                 _platt_a, _platt_b = float(cal["a"]), float(cal["b"])
                 print(f"[ML] ✅ Calibration Platt chargée (a={_platt_a:.3f}, b={_platt_b:.3f})")
+            blend = ((report.get("game_model") or {}).get("baselines") or {}) \
+                        .get("market") or {}
+            if blend.get("blend_weights"):
+                _blend_w = [float(x) for x in blend["blend_weights"]]
+                print(f"[ML] ✅ Blend modèle ⊕ marché chargé (w={_blend_w})")
             print(f"[ML] ✅ Features chargées depuis training_report.json "
                   f"(game: {len(_GAME_FEAT_NAMES)}, totals: {len(_TOTALS_FEAT_NAMES)})")
         except Exception as e:
             print(f"[ML] ⚠️  training_report.json : {e} — fallback listes statiques")
+
+    # État d'inférence v4 (rolling xG/gardiens/stars par équipe)
+    state_path = os.path.join(MODELS_DIR, "inference_state.json")
+    if os.path.exists(state_path):
+        try:
+            with open(state_path) as f:
+                _inference_state = json.load(f)
+            print(f"[ML] ✅ inference_state.json chargé "
+                  f"({len(_inference_state.get('teams', {}))} équipes, "
+                  f"as of {_inference_state.get('as_of', '?')})")
+        except Exception as e:
+            print(f"[ML] ⚠️  inference_state.json : {e}")
 
     # Ratings ELO (pour les features elo_* à l'inférence)
     if os.path.exists(elo_path):
@@ -232,6 +255,26 @@ class GameFeatures(BaseModel):
     away_rest_days:        float = Field(2.0,  ge=0, le=7)
     home_b2b:              int   = Field(0,    ge=0, le=1)   # back-to-back
     away_b2b:              int   = Field(0,    ge=0, le=1)
+    home_3in4:             float = Field(0.0,  ge=0, le=4)   # matchs dans les 3 jours précédents
+    away_3in4:             float = Field(0.0,  ge=0, le=4)
+    # ── v5 — voyage / fuseaux / altitude / road-trip (miroir de build_dataset).
+    #    Défauts neutres (0) si le backend ne les fournit pas → mêmes noms que
+    #    les colonnes d'entraînement, XGBoost gère l'absence via missing=NaN.
+    home_distance_km:   float = Field(0.0, ge=0)   # trajet depuis l'aréna précédent (km)
+    away_distance_km:   float = Field(0.0, ge=0)
+    home_tz_shift:      float = Field(0.0, ge=-4, le=4)  # fuseaux traversés (+ = est)
+    away_tz_shift:      float = Field(0.0, ge=-4, le=4)
+    home_days_away:     float = Field(0.0, ge=0)   # jours loin de la maison
+    away_days_away:     float = Field(0.0, ge=0)
+    home_road_trip_len: float = Field(0.0, ge=0)   # longueur du road trip en cours
+    away_road_trip_len: float = Field(0.0, ge=0)
+    home_road_game_num: float = Field(0.0, ge=0)   # rang du match dans le trip
+    away_road_game_num: float = Field(0.0, ge=0)
+    home_getaway:       int   = Field(0, ge=0, le=1)  # dernier match du road trip
+    away_getaway:       int   = Field(0, ge=0, le=1)
+    home_alt_gain:      float = Field(0.0)         # dénivelé vs aréna précédent (m)
+    away_alt_gain:      float = Field(0.0)
+    venue_altitude_m:   float = Field(0.0, ge=0)   # altitude du terrain (m)
     # ── ELO (v3) — abréviations d'équipes pour lookup dans elo_ratings.json.
     #    Le backend Node envoie home_team/away_team; le service résout les ratings.
     home_team: Optional[str] = None          # abréviation, ex. "TOR"
@@ -240,6 +283,20 @@ class GameFeatures(BaseModel):
     away_elo:  Optional[float] = None
     market_type: str = Field("moneyline")    # "moneyline"|"puck_line"|"total_goals_over"|"total_goals_under"
     line: Optional[float] = None             # for total goals
+    # ── v4 — cotes du marché (The Odds API, format DÉCIMAL, ex. 1.87) ────────
+    home_odds_decimal: Optional[float] = Field(None, gt=1.0)
+    away_odds_decimal: Optional[float] = Field(None, gt=1.0)
+    total_line_market: Optional[float] = None    # ligne O/U du marché (ex. 6.0)
+    # ── v4 — contexte lineup (optionnel; défauts raisonnables sinon) ─────────
+    home_goalie: Optional[str] = None            # nom du gardien partant si connu
+    away_goalie: Optional[str] = None
+    home_stars_missing: int = Field(0, ge=0, le=5)   # legacy : nb de top-5 absents
+    away_stars_missing: int = Field(0, ge=0, le=5)
+    # Absents confirmés du soir (Daily Faceoff) — noms orthographe MoneyPuck.
+    # Si fournis, le service dérive stars_missing/star_power des BONS joueurs et
+    # calcule stars_out_weight (absence pondérée perf + position/trio).
+    home_scratches: List[str] = Field(default_factory=list)
+    away_scratches: List[str] = Field(default_factory=list)
 
 # ── Player prop features ──────────────────────────────────────────────────────
 
@@ -518,7 +575,11 @@ def predict_game(f: GameFeatures) -> MLResponse:
     # features du modèle chargé (training_report.json) → jamais de désalignement
     feat_values = {
         **f.model_dump(exclude={"market_type", "line", "home_team", "away_team",
-                                "home_elo", "away_elo"}),
+                                "home_elo", "away_elo", "home_odds_decimal",
+                                "away_odds_decimal", "total_line_market",
+                                "home_goalie", "away_goalie",
+                                "home_stars_missing", "away_stars_missing",
+                                "home_scratches", "away_scratches"}),
         "home_elo":     home_elo,
         "away_elo":     away_elo,
         "elo_diff":     home_elo - away_elo,
@@ -534,7 +595,91 @@ def predict_game(f: GameFeatures) -> MLResponse:
         "faceoff_diff": f.home_faceoff_pct - f.away_faceoff_pct,
         "rest_diff":    f.home_rest_days   - f.away_rest_days,
         "streak_diff":  f.home_streak      - f.away_streak,
+        # ── v5 — diffs voyage/calendrier (mêmes formules que build_dataset.py)
+        "distance_km_diff":   f.home_distance_km   - f.away_distance_km,
+        "tz_shift_diff":      f.home_tz_shift      - f.away_tz_shift,
+        "days_away_diff":     f.home_days_away     - f.away_days_away,
+        "alt_gain_diff":      f.home_alt_gain      - f.away_alt_gain,
+        "road_trip_len_diff": f.home_road_trip_len - f.away_road_trip_len,
+        "road_game_num_diff": f.home_road_game_num - f.away_road_game_num,
     }
+
+    # ── v4 : features MoneyPuck/gardien/stars depuis inference_state.json ────
+    # Les features inconnues restent NaN — XGBoost (missing=NaN) gère nativement.
+    market_home_p: float | None = None
+    if _inference_state:
+        teams_st  = _inference_state.get("teams", {})
+        goalie_st = _inference_state.get("goalies", {})
+        stars_st  = _inference_state.get("stars", {})
+        for side, team, goalie_name, stars_missing, scratches in [
+            ("home", (f.home_team or "").upper(), f.home_goalie, f.home_stars_missing, f.home_scratches),
+            ("away", (f.away_team or "").upper(), f.away_goalie, f.away_stars_missing, f.away_scratches),
+        ]:
+            for k, v in (teams_st.get(team) or {}).items():
+                if isinstance(v, (int, float)):
+                    feat_values[f"{side}_{k}"] = float(v)
+            goalies = goalie_st.get(team) or []
+            if goalies:
+                # Gardien nommé si fourni, sinon mix pondéré par usage récent
+                named = [g for g in goalies if goalie_name
+                         and g["name"].lower() == goalie_name.lower()]
+                if named:
+                    g0 = named[0]
+                    feat_values[f"{side}_goalie_gsax60"] = g0["gsax60"]
+                    feat_values[f"{side}_goalie_svpct"]  = g0["svpct"]
+                else:
+                    tot = sum(g["recent_start_share"] for g in goalies) or 1.0
+                    feat_values[f"{side}_goalie_gsax60"] = sum(
+                        g["gsax60"] * g["recent_start_share"] for g in goalies) / tot
+                    feat_values[f"{side}_goalie_svpct"] = sum(
+                        g["svpct"] * g["recent_start_share"] for g in goalies) / tot
+            st = stars_st.get(team) or {}
+            scratch_set = {s.strip().lower() for s in (scratches or []) if s and s.strip()}
+            if st.get("top5"):
+                if scratch_set:
+                    # Noms réels connus → on retire les BONS joueurs (pas "du haut")
+                    present = [p["ppg"] for p in st["top5"]
+                              if p["name"].strip().lower() not in scratch_set]
+                    missing = len(st["top5"]) - len(present)
+                else:
+                    # Sans noms : legacy — on suppose que ce sont les meilleurs absents
+                    missing = int(stars_missing or 0)
+                    present = [p["ppg"] for p in st["top5"]][missing:]
+                feat_values[f"{side}_star_power"] = float(sum(present[:3]))
+                feat_values[f"{side}_stars_missing"] = float(missing)
+            # Absence pondérée (perf + position/trio) — poids pré-calculés côté build
+            keys = st.get("keys") or []
+            if keys:
+                feat_values[f"{side}_stars_out_weight"] = float(
+                    sum(k["w"] for k in keys if k["name"].strip().lower() in scratch_set))
+        # Diffs v4 (mêmes formules que build_dataset.py)
+        def _d(name):
+            h, a = feat_values.get(f"home_{name}"), feat_values.get(f"away_{name}")
+            if h is not None and a is not None:
+                feat_values[f"{name}_diff"] = h - a
+        for name in ("ev_xgf_pct_s", "ev_cf_pct_s", "goalie_gsax60", "goalie_svpct",
+                     "star_power", "finishing_s", "win_s", "rest_days"):
+            _d(name)
+        if feat_values.get("home_xgf60_s") is not None and \
+           feat_values.get("away_xga60_s") is not None:
+            feat_values["xg_matchup_home"] = feat_values["home_xgf60_s"] - feat_values["away_xga60_s"]
+            feat_values["xg_matchup_away"] = feat_values["away_xgf60_s"] - feat_values["home_xga60_s"]
+        if "home_stars_missing" in feat_values or "away_stars_missing" in feat_values:
+            feat_values["stars_missing_diff"] = feat_values.get("home_stars_missing", 0.0) \
+                                              - feat_values.get("away_stars_missing", 0.0)
+        if "home_stars_out_weight" in feat_values or "away_stars_out_weight" in feat_values:
+            feat_values["stars_out_weight_diff"] = feat_values.get("home_stars_out_weight", 0.0) \
+                                                 - feat_values.get("away_stars_out_weight", 0.0)
+
+    # ── v4 : cotes du marché (probabilité implicite dévigée) ─────────────────
+    if f.home_odds_decimal and f.away_odds_decimal:
+        inv_h, inv_a = 1.0 / f.home_odds_decimal, 1.0 / f.away_odds_decimal
+        market_home_p = inv_h / (inv_h + inv_a)
+        feat_values["market_home_p_close"] = market_home_p
+        feat_values["market_home_p_open"]  = market_home_p
+    if f.total_line_market is not None:
+        feat_values["total_close"] = f.total_line_market
+        feat_values["total_open"]  = f.total_line_market
 
     # 3. Obtenir base_prob (P(home wins)) depuis XGBoost ou LR
     fi_list: list[FeatureImportance] = []
@@ -542,18 +687,29 @@ def predict_game(f: GameFeatures) -> MLResponse:
     model_version = "lr-nhl-v1.1"
 
     if _xgb_game is not None:
-        row = np.array([[float(feat_values.get(n, 0.0)) for n in _GAME_FEAT_NAMES]],
-                       dtype=np.float32)
-        dmat = xgb.DMatrix(row, feature_names=_GAME_FEAT_NAMES)
-        base_prob     = float(_xgb_game.predict(dmat)[0])
-        # Calibration de Platt (rend les probabilités fiables pour l'EV)
-        if _platt_a is not None and _platt_b is not None:
-            eps = 1e-7
+        def _fv(n):
+            v = feat_values.get(n)
+            return float(v) if v is not None and v == v else np.nan
+        row = np.array([[_fv(n) for n in _GAME_FEAT_NAMES]], dtype=np.float32)
+        dmat = xgb.DMatrix(row, feature_names=_GAME_FEAT_NAMES, missing=np.nan)
+        raw_prob  = float(_xgb_game.predict(dmat)[0])
+        base_prob = raw_prob
+        eps = 1e-7
+        # Blend modèle ⊕ marché (si cotes fournies + blend entraîné) —
+        # sinon calibration de Platt (rend les probabilités fiables pour l'EV)
+        if _blend_w is not None and market_home_p is not None:
+            zm = math.log(min(max(raw_prob, eps), 1 - eps) / (1 - min(max(raw_prob, eps), 1 - eps)))
+            zk = math.log(market_home_p / (1 - market_home_p))
+            base_prob = 1.0 / (1.0 + math.exp(-(_blend_w[0] * zm + _blend_w[1] * zk + _blend_w[2])))
+            model_type    = "XGBoost ⊕ marché (blend)"
+        elif _platt_a is not None and _platt_b is not None:
             p = min(max(base_prob, eps), 1 - eps)
             z = math.log(p / (1 - p))
             base_prob = 1.0 / (1.0 + math.exp(-(_platt_a * z + _platt_b)))
-        model_type    = "XGBoost (trained)"
-        model_version = "xgb-nhl-v3.0"
+            model_type = "XGBoost (trained)"
+        else:
+            model_type = "XGBoost (trained)"
+        model_version = "xgb-nhl-v4.0"
         for fi in (_game_importances[:6] if _game_importances else []):
             name = fi["name"]
             if "win" in name or "form" in name:
@@ -578,9 +734,11 @@ def predict_game(f: GameFeatures) -> MLResponse:
 
     # 4. Branche XGBoost totaux (si modèle entraîné disponible)
     if _xgb_totals is not None and f.market_type in ("total_goals", "total_goals_over", "total_goals_under"):
-        row_tot = np.array([[float(feat_values.get(n, 0.0)) for n in _TOTALS_FEAT_NAMES]],
-                           dtype=np.float32)
-        dmat_tot = xgb.DMatrix(row_tot, feature_names=_TOTALS_FEAT_NAMES)
+        def _fvt(n):
+            v = feat_values.get(n)
+            return float(v) if v is not None and v == v else np.nan
+        row_tot = np.array([[_fvt(n) for n in _TOTALS_FEAT_NAMES]], dtype=np.float32)
+        dmat_tot = xgb.DMatrix(row_tot, feature_names=_TOTALS_FEAT_NAMES, missing=np.nan)
         lam_xgb = float(_xgb_totals.predict(dmat_tot)[0])
         line    = f.line if f.line is not None else 5.5
         raw_ov  = poisson_over(line, lam_xgb)

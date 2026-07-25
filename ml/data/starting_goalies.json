@@ -1,0 +1,7 @@
+{
+  "_comment": "Override manuel des gardiens partants — À REMPLIR seulement pour les exceptions (backup qui part, n1 blesse). Clé = date locale Est YYYY-MM-DD, valeur = { ABBR_EQUIPE: \"Nom complet MoneyPuck\" }. Sans entrée, le modèle utilise sa moyenne de gardiens ponderee par usage. Le nom doit correspondre a l'orthographe MoneyPuck (ex. \"Joseph Woll\").",
+  "_exemple": {
+    "2026-01-15": { "TOR": "Joseph Woll", "MTL": "Cayden Primeau" },
+    "2026-01-16": { "EDM": "Calvin Pickard" }
+  }
+}

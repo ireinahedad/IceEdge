@@ -9,6 +9,7 @@ import { initSocket, io } from './socket';
 import { startSettlementJob } from './services/settlement.service';
 import { startValueBetScan } from './services/valueBetScan.service';
 import { startCleanupJob } from './services/cleanup.service';
+import { startOddsLogger } from './services/oddsLogger.service';
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -24,6 +25,8 @@ const SHUTDOWN_TIMEOUT_MS = Number(process.env.SHUTDOWN_TIMEOUT_MS) || 10_000;
     startValueBetScan();
     // Daily housekeeping: prune expired/revoked tokens and used codes
     startCleanupJob();
+    // Journalise les cotes NHL du jour pour le réentraînement ML (odds_live_log.csv)
+    startOddsLogger();
   } catch (err: any) {
     logger.warn(`[Server] PostgreSQL unavailable - DB features disabled. (${err.message})`);
   }

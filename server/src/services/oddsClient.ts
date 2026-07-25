@@ -11,6 +11,8 @@
  * retombe proprement sur les autres facteurs.
  */
 
+import { logger } from '../logger';
+
 const ODDS_BASE = 'https://api.the-odds-api.com/v4';
 const ODDS_KEY  = process.env.ODDS_API_KEY;
 const SPORT_KEY = 'icehockey_nhl';
@@ -44,6 +46,14 @@ export interface TotalsOdds {
   bookmaker: string;
 }
 
+/** Événement brut de The Odds API (exposé pour le logger de cotes). */
+export type RawOddsEvent = OddsEvent;
+
+/** Récupère tous les événements NHL bruts (h2h + totals). Pour oddsLogger. */
+export async function fetchRawOdds(): Promise<RawOddsEvent[]> {
+  return fetchAllOdds();
+}
+
 /** Récupère toutes les cotes NHL (h2h + totals, mise en cache 5 min). */
 async function fetchAllOdds(): Promise<OddsEvent[]> {
   if (!ODDS_KEY) return [];
@@ -57,12 +67,12 @@ async function fetchAllOdds(): Promise<OddsEvent[]> {
   });
   try {
     const res = await fetch(`${ODDS_BASE}/sports/${SPORT_KEY}/odds?${params}`);
-    if (!res.ok) { console.error('[oddsClient]', res.status); return []; }
+    if (!res.ok) { logger.error({ status: res.status }, '[oddsClient]'); return []; }
     const data = (await res.json()) as OddsEvent[];
     cache = { data, expiresAt: Date.now() + TTL };
     return data;
   } catch (err: any) {
-    console.error('[oddsClient] fetch error', err?.message);
+    logger.error({ err: err?.message }, '[oddsClient] fetch error');
     return [];
   }
 }

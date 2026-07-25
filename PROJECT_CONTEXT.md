@@ -15,7 +15,119 @@ When continuing this project:
 - Verify that what you are implementing is secure
 - At the end of each session, update PROJECT_CONTEXT.md.
 
-Last updated: 2026-07-15
+Last updated: 2026-07-22
+
+## Session 2026-07-22 — Blessures/scratches réels + absence pondérée
+
+Le hook `stars_missing` n'était jamais rempli (Node passait `undefined`). Câblé la
+vraie liste des absents du soir + nouvelle feature d'absence pondérée.
+
+1. **Source = JSON daté manuel** (`server/src/services/scratches.ts` +
+   `ml/data/scratches.json`, chemin `SCRATCHES_PATH`), miroir exact de
+   `startingGoalies.ts` : `{ "YYYY-MM-DD"(Est): { ABBR: ["Nom MoneyPuck", …] } }`.
+   Daily Faceoff non branché en auto (déjà jugé non fiable pour les gardiens :
+   Cloudflare + build-id + ToS). Cache 30 s. Clé `_comment` ignorée.
+2. **Câblage Node** (`featureEngineering.ts`) : `GameFeatureOpts` gagne
+   `homeScratches`/`awayScratches` ; `buildGameFeatures` envoie
+   `home_scratches`/`away_scratches` (override appelant < fichier < []).
+3. **Inférence par noms** (`ml_service.py`) : `GameFeatures` accepte
+   `home/away_scratches: List[str]`. Si fournis → `star_power` retire les BONS
+   joueurs (par nom, plus l'hypothèse « les meilleurs manquent ») et
+   `stars_missing` est dérivé des noms. Rétro-compatible (legacy si liste vide).
+   **Marche avec le modèle ACTUEL sans réentraîner.**
+4. **Nouvelle feature `stars_out_weight`** (perf individuelle × rôle) — pool
+   **top-6 attaquants + top-4 défenseurs** (les D n'entraient jamais dans le
+   top-5 ppg → une blessure de D pesait 0 avant). Poids = `max(ppg, 0.15)` ×
+   prime position (D ×1.6) × palier de trio/paire (rang ppg intra-groupe).
+   Calculée à l'identique dans `build_dataset.py` (colonne + `keys[].w` stockés
+   dans `inference_state`, source unique) et consommée telle quelle par
+   `ml_service.py`. Diff `stars_out_weight_diff`. Trio réel absent de
+   l'historique MoneyPuck → approché par le rang ppg intra-groupe.
+5. Constantes de pondération en tête de `build_star_features` (tunables :
+   `STARS_D_PREMIUM`, `STARS_F_TIER`, `STARS_D_TIER`, `STARS_PPG_FLOOR`).
+
+**⚠️ À faire en local** (sandbox : réseau bloqué + mount tronqué) :
+`cd ml/python && python build_dataset.py && python train.py && python backtest.py`
+(train.py auto-détecte les 3 nouvelles colonnes ; `position` déjà dans
+`SKATER_KEEP`). Puis `npm run build` (server) pour valider le TS. Alimenter
+`scratches.json` chaque soir (noms = orthographe MoneyPuck).
+
+## Session 2026-07-21 — ML v4 (MoneyPuck + gardiens + stars + cotes)
+
+Constat v3 : skill_score négatif, l'ELO seul battait le modèle (53.9% vs 53.1%).
+Refonte complète du pipeline data/features :
+
+1. **`fetch_data_v4.py`** (nouveau) : 3 sources — spine des matchs 2008→ via
+   `api.nhle.com/stats/rest/en/game` (1 requête, scores officiels SO inclus),
+   stats avancées MoneyPuck (all_teams.csv + zips gardiens/patineurs par match),
+   cotes historiques sportsbookreviewsonline (xlsx, ML open/close + totaux).
+   Fusionne aussi `data/odds_live_log.csv` si présent (log The Odds API).
+2. **`build_dataset.py`** (nouveau) : features PRÉ-MATCH sans leakage (EWMA
+   demi-vie 6/20 matchs) — xGF/xGA par 60, xGF%, Corsi%, high-danger, finishing,
+   PP/PK par xG, gardien partant (save%, GSAx/60 EWMA sur ses départs), star
+   power top-3 + stars absentes, repos/b2b/3-en-4, ELO v3, probas implicites
+   dévigées open/close. Sorties : `nhl_games_v4.csv`, `inference_state.json`,
+   `elo_ratings.json`.
+3. **`train.py`** (réécrit) : features auto-détectées, recherche aléatoire
+   d'hyperparamètres sur val (40 essais), NaN natif XGBoost (cotes manquantes ok),
+   calibration Platt, blend logistique modèle ⊕ marché ajusté sur val,
+   baselines honnêtes (domicile/constant/ELO/marché). Fallback v3 si pas de v4.
+4. **`backtest.py`** (réécrit) : ROI value betting sur test set (flat + ¼ Kelly,
+   seuils d'edge 1–8%), log-loss vs marché → `backtest_report.json`.
+5. **`ml_service.py`** : charge `inference_state.json` + blend ; `GameFeatures`
+   accepte `home_odds_decimal`/`away_odds_decimal`/`total_line_market`,
+   `home_goalie`/`away_goalie`, `home/away_stars_missing`. Features v4 résolues
+   par abréviation d'équipe ; DMatrix missing=NaN ; version `xgb-nhl-v4.0`.
+   Les ajouts déploiement (readiness probe `_startup_complete`) sont préservés.
+   Rétro-compatible : le serveur Node fonctionne sans changement.
+
+**⚠️ À faire sur la machine locale** (réseau sandbox bloqué) :
+`cd ml/python && pip install -r requirements.txt && python fetch_data_v4.py
+&& python build_dataset.py && python train.py && python backtest.py`.
+Chaîne complète validée sur données synthétiques (smoke test), y compris
+l'inférence (blend, gardien nommé, équipe inconnue, totaux).
+
+**Résultats v4 (données réelles)** : accuracy 0.586 (ELO 0.577, domicile 0.540),
+log-loss 0.666 (ELO 0.670), skill +0.047 (v3 était −0.007). Backtest walk-forward
+sur 9 saisons avec cotes (2014-15→2022-23, 9823 matchs) : log-loss modèle 0.666
+≈ marché 0.666 ; ROI flat value betting positif à edge modéré (+1.34 % @ edge>2 %
+sur 4578 paris, +2.53 % @ 5 %), négatif au-delà de 6 % (bruit / info manquée).
+
+## Session 2026-07-21 (2) — Câblage cotes live + signal value + logger
+
+1. **Logger de cotes** (`server/src/services/oddsLogger.service.ts`, nouveau) :
+   job serveur qui capture les cotes NHL du jour (The Odds API via `fetchRawOdds`,
+   ajoutée à `oddsClient.ts`) et les ajoute à `ml/data/odds_live_log.csv` au format
+   exact de fetch_data_v4 (dédup par date+équipes, dates en Est). Activé par
+   `ODDS_LOG_ENABLED=true`, chemin `ODDS_LOG_PATH`, passe toutes les 6 h.
+   Câblé dans `server.ts` (`startOddsLogger()`). → débloque le backtest 2023+.
+2. **Cotes live → /predict/game** (`featureEngineering.ts`) : `buildGameFeatures`
+   récupère `fetchOddsImplied`/`fetchTotalsOdds` et remplit `home_odds_decimal`/
+   `away_odds_decimal`/`total_line_market` → le service Python active le blend
+   modèle⊕marché. Option `GameFeatureOpts { includeOdds, homeGoalie, awayGoalie,
+   homeStarsMissing, awayStarsMissing }` (includeOdds défaut true).
+3. **Signal value = edge dé-viggé** (`valueBetScan.service.ts`) : le filtre passe
+   de « EV brut » à « edge = proba_modèle − proba_marché_dévig » dans la bande
+   [MIN_EDGE=0.02, MAX_EDGE=0.06] + EV≥0. C'est le critère dont le ROI est validé
+   par le backtest. Env : `VALUE_BET_MIN_EDGE`, `VALUE_BET_MAX_EDGE`. Notif enrichie
+   (edge% + EV%). Classement des candidats par edge.
+
+**⚠️ Vérifier `npm run build` (server) en local** — tsc est inexploitable dans le
+sandbox distant (bloque). Syntaxe validée via ts.transpileModule sur les 5 fichiers.
+
+4. **Gardien partant — override manuel** (`server/src/services/startingGoalies.ts`,
+   nouveau) : Daily Faceoff jugé non fiable (Cloudflare + build-id volatil + ToS).
+   Route auto propre = feed pré-match de l'API NHL (`gamecenter/{id}/landing` /
+   `right-rail`) mais champ non vérifiable depuis le sandbox → à brancher plus tard.
+   En attendant : fichier `ml/data/starting_goalies.json` daté (Est) → { ABBR: nom }
+   pour les EXCEPTIONS seulement. Lu par `buildGameFeatures` (override < opts <
+   fichier < défaut = moyenne pondérée). Nom = orthographe MoneyPuck. Cache 30 s.
+
+**TODO suivants** : laisser tourner le logger quelques semaines puis relancer
+`fetch_data_v4.py --only odds` (il fusionne odds_live_log.csv) + rebuild + retrain
+pour backtester sur 2023-2026 ; vérifier le champ gardien partant du feed NHL
+pré-match et le brancher en auto (fallback sur starting_goalies.json) ;
+réentraîner chaque mois.
 
 ## Session 2026-07-15 — Pondération complète par type de pari
 

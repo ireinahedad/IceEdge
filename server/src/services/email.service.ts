@@ -11,6 +11,8 @@
 // If RESEND_API_KEY is missing, emails are logged to the console instead of
 // sent — handy for local development without hitting the network.
 
+import { logger } from '../logger';
+
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
 function getConfig() {
@@ -31,9 +33,7 @@ async function sendEmail({ to, subject, html, text }: SendArgs): Promise<void> {
 
   // Dev fallback: no key configured → log instead of send.
   if (!apiKey) {
-    console.warn(`[Email] RESEND_API_KEY not set — email to ${to} NOT sent.`);
-    console.warn(`[Email] Subject: ${subject}`);
-    if (text) console.warn(`[Email] ${text}`);
+    logger.warn({ to, subject }, '[Email] RESEND_API_KEY not set — email NOT sent (dev fallback)');
     return;
   }
 

@@ -7,6 +7,7 @@
 import Stripe from 'stripe';
 import { pool } from '../db/connection';
 import { SubscriptionRow, SubscriptionStatus, BillingPlan, SubStatus } from '../types/subscription.type';
+import { logger } from '../logger';
 
 // ─── Stripe client (lazy) ─────────────────────────────────────────────────────
 // Only constructed when STRIPE_SECRET_KEY is set, so the app runs fine without
@@ -192,7 +193,7 @@ export async function cancel(userId: string): Promise<SubscriptionStatus> {
     try {
       await getStripe().subscriptions.update(subId, { cancel_at_period_end: true });
     } catch (err: any) {
-      console.error('[subscription] Stripe cancel failed:', err?.message);
+      logger.error({ err: err?.message }, '[subscription] Stripe cancel failed');
     }
   }
 
@@ -273,7 +274,7 @@ async function resolveUserId(sub: Stripe.Subscription): Promise<string | null> {
 async function syncSubscription(sub: Stripe.Subscription): Promise<void> {
   const userId = await resolveUserId(sub);
   if (!userId) {
-    console.warn('[subscription] webhook: could not resolve userId for subscription', sub.id);
+    logger.warn({ subscriptionId: sub.id }, '[subscription] webhook: could not resolve userId for subscription');
     return;
   }
   const status = mapStripeStatus(sub.status);

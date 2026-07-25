@@ -19,10 +19,12 @@ if (!url) {
   process.exit(1);
 }
 
-// SSL is required by Neon. rejectUnauthorized:false avoids local CA hassles.
+// SSL is opt-in via DB_SSL=true (required by Neon/Supabase/external connections).
+// Leave unset for local Postgres, which doesn't support SSL.
+const useSsl = process.env.DB_SSL === 'true';
 const pool = new Pool({
   connectionString: url,
-  ssl: { rejectUnauthorized: false },
+  ssl: useSsl ? { rejectUnauthorized: false } : undefined,
   connectionTimeoutMillis: 15_000,
 });
 
@@ -79,7 +81,6 @@ async function runFile(label: string, path: string, alwaysRun = false): Promise<
 
 (async () => {
   console.log('[migrate] Connecting to DB…');
-  console.log(url!.replace(/:[^:@]+@/, ':********@'));
 
   await pool.query(LEDGER_DDL);
 

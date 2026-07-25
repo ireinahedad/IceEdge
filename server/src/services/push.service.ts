@@ -10,6 +10,7 @@
 // installed yet — push is simply disabled (logged) until deps + keys are set.
 
 import { pool } from '../db/connection';
+import { logger } from '../logger';
 
 let webpush: any = null;
 let configured = false;
@@ -22,16 +23,15 @@ function getWebPush(): any | null {
   const priv = process.env.VAPID_PRIVATE_KEY;
   const subj = process.env.VAPID_SUBJECT || 'mailto:admin@iceedge.app';
   if (!pub || !priv) {
-    console.warn('[Push] VAPID keys not set — push notifications disabled.');
+    logger.warn('[Push] VAPID keys not set — push notifications disabled.');
     return null;
   }
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     webpush = require('web-push');
     webpush.setVapidDetails(subj, pub, priv);
-    console.log('[Push] Web Push configured ✓');
   } catch {
-    console.warn('[Push] `web-push` package not installed — run `npm i web-push`.');
+    logger.warn('[Push] `web-push` package not installed — run `npm i web-push`.');
     webpush = null;
   }
   return webpush;
@@ -93,7 +93,7 @@ export async function sendToUser(userId: string, payload: PushPayload): Promise<
       if (err?.statusCode === 404 || err?.statusCode === 410) {
         await removeSubscription(r.endpoint);
       } else {
-        console.warn('[Push] send failed:', err?.statusCode ?? err?.message);
+        logger.warn({ err: err?.statusCode ?? err?.message }, '[Push] send failed');
       }
     }
   }));

@@ -19,6 +19,7 @@
  */
 
 import crypto from 'crypto';
+import { logger } from '../logger';
 
 const PREFIX = 'enc:v1:';
 const ALGO = 'aes-256-gcm';
@@ -63,7 +64,7 @@ export function encryptSecret(plaintext: string): string {
       throw new Error('ENCRYPTION_KEY is required in production to store secrets at rest');
     }
     if (!warnedNoKey) {
-      console.warn('[crypto] ENCRYPTION_KEY not set — storing secret UNENCRYPTED (dev only).');
+      logger.warn('[crypto] ENCRYPTION_KEY not set — storing secret UNENCRYPTED (dev only).');
       warnedNoKey = true;
     }
     return plaintext;
