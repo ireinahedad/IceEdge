@@ -106,6 +106,19 @@ export class NHLService {
     return nhlApi.fetchTeamSeasonOfficial(abbr, season);
   }
 
+  async getAllTeamsSeason(season?: string) {
+    return nhlApi.fetchAllTeamsSeason(season);
+  }
+
+  async getPlayerLeaders(
+    season: string | undefined,
+    view: 'skater' | 'goalie',
+    sort: string,
+    limit: number,
+  ) {
+    return nhlApi.fetchPlayerLeaders(season, view, sort, limit);
+  }
+
   async getPlayer(id: string) {
     return nhlApi.fetchPlayerById(id);
   }

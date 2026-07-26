@@ -200,8 +200,8 @@ export function StatsPage() {
             </button>
           ))}
         </div>
-        <div className="mt-2 flex">
-          <FramedLabel text={t("stats.statistics")} onClick={() => navigate(activeFilter === 2 ? "/stats/chart/player" : "/stats/chart/team")} />
+        <div className="mt-2 flex justify-center">
+          <FramedLabel text={t("stats.statistics")} onClick={() => navigate(activeFilter === 2 ? "/stats/chart/all-players" : "/stats/chart/all-teams")} />
         </div>
       </header>
 

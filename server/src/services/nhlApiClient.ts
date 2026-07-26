@@ -16,6 +16,8 @@ import { computeTravel, TravelGame, TravelFeatures } from './travel';
 const USE_MOCK = process.env.NHL_USE_MOCK === 'true';
 
 const BASE = 'https://api-web.nhle.com/';
+// The player-search endpoint lives on a separate host from the main stats API.
+const SEARCH_BASE = 'https://search.d3.nhle.com/api/';
 
 // --- Simple in-memory TTL cache -------------------------------------------
 
@@ -43,6 +45,24 @@ async function fetchNHL<T>(path: string): Promise<T> {
   if (!res.ok) {
     throw Object.assign(
       new Error(`NHL API ${res.status} for ${path}`),
+      { status: res.status }
+    );
+  }
+  return res.json() as Promise<T>;
+}
+
+/** Same as fetchNHL, but against the separate player-search host. */
+async function fetchNHLSearch<T>(path: string): Promise<T> {
+  const url = `${SEARCH_BASE}${path}`;
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': 'IceEdge/1.0 (nhle-stats-client)',
+      Accept: 'application/json',
+    },
+  });
+  if (!res.ok) {
+    throw Object.assign(
+      new Error(`NHL Search API ${res.status} for ${path}`),
       { status: res.status }
     );
   }
@@ -630,8 +650,8 @@ export async function fetchTopPlayers(): Promise<any[]> {
     const entry = {
       id:          String(p.id),
       name:        [p.firstName?.default, p.lastName?.default].filter(Boolean).join(' '),
-      teamId:      (p.teamAbbreviation ?? '').toLowerCase(),
-      position:    p.positionCode ?? 'F',
+      teamId:      (p.teamAbbrev ?? p.teamAbbreviation ?? '').toLowerCase(),
+      position:    p.positionCode ?? p.position ?? 'F',
       number:      p.sweaterNumber ?? 0,
       goals:       p.goals   ?? 0,
       assists:     p.assists ?? 0,
@@ -700,14 +720,16 @@ export async function fetchPlayerById(playerId: string): Promise<any> {
 export async function searchPlayers(q: string): Promise<any[]> {
   if (!q.trim()) return [];
   try {
-    const data    = await fetchNHL<any>(
+    // This endpoint lives on search.d3.nhle.com, not api-web.nhle.com — it
+    // returns a bare array (not wrapped in { players: [...] }).
+    const data = await fetchNHLSearch<any>(
       `v1/search/player?culture=en-us&limit=20&q=${encodeURIComponent(q)}&active=true`
     );
-    const results: any[] = data.players ?? data ?? [];
+    const results: any[] = Array.isArray(data) ? data : (data?.players ?? []);
     return results.map((p: any) => ({
       id:       String(p.playerId ?? p.id),
       name:     p.name ?? [p.firstName, p.lastName].filter(Boolean).join(' '),
-      teamId:   (p.teamAbbreviation ?? p.teamAbbrev ?? '').toLowerCase(),
+      teamId:   (p.teamAbbrev ?? p.teamAbbreviation ?? '').toLowerCase(),
       position: p.positionCode ?? p.position ?? 'F',
       number:   p.sweaterNumber ?? 0,
       goals: 0, assists: 0, points: 0,
@@ -833,20 +855,29 @@ export async function fetchTeamPlayerSeasons(abbr: string): Promise<any> {
       const cur = bySeason.get(id) ?? {
         seasonId: id, gp: 0, goals: 0, assists: 0, points: 0, plusMinus: 0,
         shots: 0, ppPoints: 0, wins: 0, shutouts: 0, _svW: 0, _gaaW: 0,
+        pim: 0, powerPlayGoals: 0, shorthandedPoints: 0, _foW: 0, _toiW: 0,
+        losses: 0, otLosses: 0,
       };
-      cur.gp += gp;
+      cur.gp  += gp;
+      cur.pim += s.pim ?? 0;
       if (isGoalie) {
         cur.wins     += s.wins     ?? 0;
+        cur.losses   += s.losses   ?? 0;
+        cur.otLosses += s.otLosses ?? 0;
         cur.shutouts += s.shutouts ?? 0;
         cur._svW     += (s.savePctg        ?? 0) * gp;
         cur._gaaW    += (s.goalsAgainstAvg ?? 0) * gp;
       } else {
-        cur.goals     += s.goals           ?? 0;
-        cur.assists   += s.assists         ?? 0;
-        cur.points    += s.points          ?? 0;
-        cur.plusMinus += s.plusMinus       ?? 0;
-        cur.shots     += s.shots           ?? 0;
-        cur.ppPoints  += s.powerPlayPoints ?? 0;
+        cur.goals             += s.goals             ?? 0;
+        cur.assists            += s.assists           ?? 0;
+        cur.points             += s.points            ?? 0;
+        cur.plusMinus          += s.plusMinus         ?? 0;
+        cur.shots              += s.shots             ?? 0;
+        cur.ppPoints           += s.powerPlayPoints   ?? 0;
+        cur.powerPlayGoals     += s.powerPlayGoals    ?? 0;
+        cur.shorthandedPoints  += s.shorthandedPoints ?? 0;
+        cur._foW               += (s.faceoffWinningPctg ?? 0) * gp;
+        cur._toiW              += parseToiMinutes(s.avgToi) * gp;
       }
       bySeason.set(id, cur);
     }
@@ -862,8 +893,10 @@ export async function fetchTeamPlayerSeasons(abbr: string): Promise<any> {
           s.gaa     = s.gp > 0 ? Math.round((s._gaaW / s.gp) * 100)  / 100  : null;
         } else {
           s.shootingPct = s.shots > 0 ? Math.round((s.goals / s.shots) * 1000) / 10 : 0;
+          s.faceoffPct  = s.gp > 0 ? Math.round((s._foW  / s.gp) * 1000) / 10 : null;
+          s.avgToi      = s.gp > 0 ? Math.round((s._toiW / s.gp) * 100)  / 100 : null;
         }
-        delete s._svW; delete s._gaaW;
+        delete s._svW; delete s._gaaW; delete s._foW; delete s._toiW;
         return s;
       });
 
@@ -1103,6 +1136,107 @@ export async function fetchTeamSeasonOfficial(abbr: string, season: string): Pro
 
 const STATS_BASE = 'https://api.nhle.com/stats/rest/en';
 
+/**
+ * League leaders for a season — powers the "All Players" charts page.
+ *
+ * Uses the NHL stats REST summary endpoints, which (unlike the leaders
+ * endpoints in api-web) return a full stat line per player AND support
+ * server-side sorting, so we can ask for "top N by <metric>" directly.
+ *
+ * Rows come back shaped like the client's `PlayerSeasonStat` so the existing
+ * metric formatters on the charts page can render them unchanged.
+ */
+const LEADER_SORT_SKATER: Record<string, string> = {
+  points: 'points', goals: 'goals', assists: 'assists', plusMinus: 'plusMinus',
+  shots: 'shots', ppPoints: 'ppPoints', shootingPct: 'shootingPct',
+  pim: 'penaltyMinutes', powerPlayGoals: 'ppGoals', shorthandedPoints: 'shPoints',
+  faceoffPct: 'faceoffWinPct', avgToi: 'timeOnIcePerGame',
+};
+const LEADER_SORT_GOALIE: Record<string, string> = {
+  wins: 'wins', savePct: 'savePct', gaa: 'goalsAgainstAverage',
+  shutouts: 'shutouts', losses: 'losses', otLosses: 'otLosses',
+};
+
+export async function fetchPlayerLeaders(
+  seasonArg: string | undefined,
+  view: 'skater' | 'goalie',
+  sortKey: string,
+  limit: number,
+): Promise<any> {
+  const season   = seasonArg && /^\d{8}$/.test(seasonArg) ? seasonArg : currentSeason();
+  const isGoalie = view === 'goalie';
+  const map      = isGoalie ? LEADER_SORT_GOALIE : LEADER_SORT_SKATER;
+  const key      = map[sortKey] ? sortKey : (isGoalie ? 'wins' : 'points');
+  const prop     = map[key];
+  // GAA sorts ascending (lower is better); every other metric is "more is better".
+  const dir      = key === 'gaa' ? 'ASC' : 'DESC';
+  const n        = Math.min(Math.max(limit || 20, 1), 100);
+
+  const cacheKey = `leaders_${season}_${view}_${key}_${n}`;
+  const cached   = getCached<any>(cacheKey);
+  if (cached) return cached;
+
+  const sort    = encodeURIComponent(JSON.stringify([{ property: prop, direction: dir }]));
+  const cayenne = encodeURIComponent(`seasonId=${season} and gameTypeId=2`);
+  const res = await fetch(
+    `${STATS_BASE}/${isGoalie ? 'goalie' : 'skater'}/summary` +
+      `?isAggregate=false&isGame=false&start=0&limit=${n}&sort=${sort}&cayenneExp=${cayenne}`,
+    { headers: { 'User-Agent': 'IceEdge/1.0', Accept: 'application/json' } },
+  );
+  if (!res.ok) {
+    throw Object.assign(
+      new Error(`NHL stats API ${res.status} for player leaders`),
+      { status: res.status },
+    );
+  }
+  const data = (await res.json()) as any;
+
+  const players = (data.data ?? []).map((r: any) => ({
+    id:       String(r.playerId),
+    name:     isGoalie ? r.goalieFullName : r.skaterFullName,
+    // `teamAbbrevs` is comma-separated when a player was traded mid-season.
+    teamAbbr: String(r.teamAbbrevs ?? '').split(',')[0].trim().toUpperCase(),
+    position: isGoalie ? 'G' : (r.positionCode ?? 'F'),
+    stat: isGoalie
+      ? {
+          seasonId: Number(season),
+          gp:       r.gamesPlayed ?? 0,
+          wins:     r.wins     ?? 0,
+          losses:   r.losses   ?? 0,
+          otLosses: r.otLosses ?? 0,
+          shutouts: r.shutouts ?? 0,
+          savePct:  r.savePct != null ? Math.round(r.savePct * 1000) / 1000 : null,
+          gaa:      r.goalsAgainstAverage != null
+            ? Math.round(r.goalsAgainstAverage * 100) / 100
+            : null,
+        }
+      : {
+          seasonId:          Number(season),
+          gp:                r.gamesPlayed ?? 0,
+          goals:             r.goals      ?? 0,
+          assists:           r.assists    ?? 0,
+          points:            r.points     ?? 0,
+          plusMinus:         r.plusMinus  ?? 0,
+          shots:             r.shots      ?? 0,
+          ppPoints:          r.ppPoints   ?? 0,
+          pim:               r.penaltyMinutes ?? 0,
+          powerPlayGoals:    r.ppGoals    ?? 0,
+          shorthandedPoints: r.shPoints   ?? 0,
+          // NHL returns these as 0–1 ratios; the client expects 0–100.
+          shootingPct: r.shootingPct   != null ? Math.round(r.shootingPct   * 1000) / 10 : 0,
+          faceoffPct:  r.faceoffWinPct != null ? Math.round(r.faceoffWinPct * 1000) / 10 : null,
+          // ...and time-on-ice per game in seconds; the client expects minutes.
+          avgToi: r.timeOnIcePerGame != null
+            ? Math.round((r.timeOnIcePerGame / 60) * 100) / 100
+            : null,
+        },
+  }));
+
+  const out = { season: Number(season), view, sort: key, players };
+  setCached(cacheKey, out, 30 * 60_000);
+  return out;
+}
+
 const TEAM_NAME_TO_ABBR: Record<string, string> = {
   'Anaheim Ducks': 'ANA',         'Arizona Coyotes': 'ARI',
   'Boston Bruins': 'BOS',         'Buffalo Sabres': 'BUF',
@@ -1123,6 +1257,66 @@ const TEAM_NAME_TO_ABBR: Record<string, string> = {
   'Vegas Golden Knights': 'VGK',  'Washington Capitals': 'WSH',
   'Winnipeg Jets': 'WPG',
 };
+
+/**
+ * Every team's season summary in one call — powers the "All Teams" charts page.
+ * The NHL team/summary endpoint returns all 32 rows at once, so the client can
+ * sort them locally; no per-metric round trip is needed the way it is for
+ * players (where the league has ~940 skaters and we only want the top N).
+ */
+export async function fetchAllTeamsSeason(seasonArg?: string): Promise<any> {
+  const season   = seasonArg && /^\d{8}$/.test(seasonArg) ? seasonArg : currentSeason();
+  const cacheKey = `all_teams_${season}`;
+  const cached   = getCached<any>(cacheKey);
+  if (cached) return cached;
+
+  const cayenne = encodeURIComponent(`seasonId=${season} and gameTypeId=2`);
+  const res = await fetch(
+    `${STATS_BASE}/team/summary?limit=-1&cayenneExp=${cayenne}`,
+    { headers: { 'User-Agent': 'IceEdge/1.0', Accept: 'application/json' } },
+  );
+  if (!res.ok) {
+    throw Object.assign(
+      new Error(`NHL stats API ${res.status} for team summary`),
+      { status: res.status },
+    );
+  }
+  const data = (await res.json()) as any;
+
+  const teams = (data.data ?? []).map((row: any) => {
+    const gp = row.gamesPlayed || 0;
+    const gf = row.goalsFor     ?? 0;
+    const ga = row.goalsAgainst ?? 0;
+    return {
+      abbr: TEAM_NAME_TO_ABBR[row.teamFullName ?? ''] ?? '',
+      name: row.teamFullName ?? '',
+      gamesPlayed: gp,
+      wins:     row.wins     ?? 0,
+      losses:   row.losses   ?? 0,
+      otLosses: row.otLosses ?? 0,
+      points:   row.points   ?? 0,
+      goalsFor: gf,
+      goalsAgainst: ga,
+      goalDiff: gf - ga,
+      goalsForPerGame:     +(row.goalsForPerGame     ?? (gp ? gf / gp : 0)).toFixed(2),
+      goalsAgainstPerGame: +(row.goalsAgainstPerGame ?? (gp ? ga / gp : 0)).toFixed(2),
+      shotsForPerGame:     +(row.shotsForPerGame     ?? 0).toFixed(2),
+      shotsAgainstPerGame: +(row.shotsAgainstPerGame ?? 0).toFixed(2),
+      // NHL sends these as 0–1 ratios; the client renders 0–100.
+      ppPct:      Math.round((row.powerPlayPct   ?? 0) * 1000) / 10,
+      pkPct:      Math.round((row.penaltyKillPct ?? 0) * 1000) / 10,
+      pointPct:   Math.round((row.pointPct       ?? 0) * 1000) / 10,
+      faceoffPct: Math.round((row.faceoffWinPct  ?? 0) * 1000) / 10,
+      shutouts:   row.teamShutouts ?? 0,
+    };
+  // A renamed franchise missing from the abbreviation map would have no logo
+  // and no working link, so drop it rather than render a dead row.
+  }).filter((x: any) => x.abbr);
+
+  const out = { season: Number(season), teams };
+  setCached(cacheKey, out, 30 * 60_000);
+  return out;
+}
 
 export interface TeamSummaryStats {
   ppPct:           number;  // 0–100

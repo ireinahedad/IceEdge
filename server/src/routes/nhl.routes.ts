@@ -14,6 +14,8 @@ router.get('/games', async (req, res) => {
 
 // Calendrier : tous les matchs entre deux dates (YYYY-MM-DD) incluses.
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** NHL season id, e.g. 20252026. */
+const SEASON_ID = /^\d{8}$/;
 router.get('/games/range', async (req, res) => {
   const start = String(req.query.start ?? '');
   const end   = String(req.query.end ?? '');
@@ -47,6 +49,18 @@ router.get('/teams', async (_req, res) => {
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
+// Charts: every team's season summary (All Teams page). Declared before the
+// '/teams/:id/...' routes so "season-summary" isn't captured as a team id.
+router.get('/teams/season-summary', async (req, res) => {
+  const season = req.query.season != null ? String(req.query.season) : undefined;
+  if (season != null && !SEASON_ID.test(season)) {
+    res.status(400).json({ error: 'Invalid season (expected 8-digit seasonId, e.g. 20252026)' });
+    return;
+  }
+  try { res.json(await nhl.getAllTeamsSeason(season)); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
 router.get('/teams/:id/stats', async (req, res) => {
   try { res.json(await nhl.getTeamStats(req.params.id)); }
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
@@ -68,6 +82,36 @@ router.get('/players', async (_req, res) => {
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
+// Charts: league leaders for a season (top N by a chosen metric).
+// Declared before '/players/:id' so "leaders" isn't swallowed as an id.
+// Every input is whitelisted or clamped downstream: `season` must be an
+// 8-digit id, `sort` is looked up in a fixed map, `limit` is clamped 1–100.
+type LeaderQuery =
+  | { ok: true; season?: string; view: 'skater' | 'goalie'; sort: string; limit: number }
+  | { ok: false };
+
+function parseLeaderQuery(q: any): LeaderQuery {
+  const season = q.season != null ? String(q.season) : undefined;
+  if (season != null && !SEASON_ID.test(season)) return { ok: false };
+  const limit = Number(q.limit ?? 20);
+  return {
+    ok: true,
+    season,
+    view: q.view === 'goalie' ? 'goalie' : 'skater',
+    sort: String(q.sort ?? ''),
+    limit: Number.isFinite(limit) ? limit : 20,
+  };
+}
+
+const BAD_SEASON = { error: 'Invalid season (expected 8-digit seasonId, e.g. 20252026)' };
+
+router.get('/players/leaders', async (req, res) => {
+  const p = parseLeaderQuery(req.query);
+  if (!p.ok) { res.status(400).json(BAD_SEASON); return; }
+  try { res.json(await nhl.getPlayerLeaders(p.season, p.view, p.sort, p.limit)); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
 router.get('/teams/:abbr/roster', async (req, res) => {
   try { res.json(await nhl.getTeamRoster(req.params.abbr)); }
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
@@ -80,7 +124,6 @@ router.get('/teams/:abbr/player-seasons', async (req, res) => {
 });
 
 // Charts: per-opponent player splits for a season (avg-per-game-vs-team column).
-const SEASON_ID = /^\d{8}$/;
 router.get('/teams/:abbr/opponent-splits/:season', async (req, res) => {
   if (!SEASON_ID.test(req.params.season)) {
     res.status(400).json({ error: 'Invalid season (expected 8-digit seasonId, e.g. 20252026)' });

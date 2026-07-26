@@ -23,8 +23,11 @@ export interface PlayerSeasonStat {
   // Skater
   goals?: number; assists?: number; points?: number;
   plusMinus?: number; shots?: number; ppPoints?: number; shootingPct?: number;
+  pim?: number; powerPlayGoals?: number; shorthandedPoints?: number;
+  faceoffPct?: number | null; avgToi?: number | null;
   // Goalie
   wins?: number; shutouts?: number; savePct?: number | null; gaa?: number | null;
+  losses?: number; otLosses?: number;
 }
 export interface PlayerSeasons {
   id: string;
@@ -55,6 +58,10 @@ export interface SeriesGame {
   plusMinus?: number; shots?: number; ppPoints?: number;
   wins?: number; shutouts?: number; saves?: number;
   shotsAgainst?: number; goalsAgainst?: number; savePct?: number | null;
+  // Only populated by the leader-series endpoint (the team opponent-splits
+  // series omits these, which is why the metrics reading them fall back to null).
+  pim?: number; powerPlayGoals?: number; shorthandedPoints?: number;
+  losses?: number; otLosses?: number;
 }
 export interface PlayerOpponentSplits {
   id: string;
@@ -67,6 +74,40 @@ export interface TeamOpponentSplits {
   opponents: string[];
   skaters: PlayerOpponentSplits[];
   goalies: PlayerOpponentSplits[];
+}
+
+// League leaders (All Players charts page) — one full stat line per player,
+// already sorted by the requested metric.
+export interface PlayerLeader {
+  id: string;
+  name: string;
+  teamAbbr: string;
+  position: string;
+  stat: PlayerSeasonStat;
+}
+export interface PlayerLeaders {
+  season: number;
+  view: 'skater' | 'goalie';
+  sort: string;
+  players: PlayerLeader[];
+}
+
+// One row per team for the All Teams page. All 32 arrive in a single call, so
+// the client sorts them locally.
+export interface TeamSeasonRow {
+  abbr: string;
+  name: string;
+  gamesPlayed: number;
+  wins: number; losses: number; otLosses: number; points: number;
+  goalsFor: number; goalsAgainst: number; goalDiff: number;
+  goalsForPerGame: number; goalsAgainstPerGame: number;
+  shotsForPerGame: number; shotsAgainstPerGame: number;
+  ppPct: number; pkPct: number; pointPct: number; faceoffPct: number;
+  shutouts: number;
+}
+export interface AllTeamsSeason {
+  season: number;
+  teams: TeamSeasonRow[];
 }
 
 export interface TeamOfficialStats {
@@ -154,8 +195,25 @@ export const nhlApiService = {
   getTeamSeasonOfficial: (abbr: string, season: number | string): Promise<TeamSeasonOfficial> =>
     get<TeamSeasonOfficial>(`/teams/${abbr}/season-official/${season}`),
 
+  // Charts — every team's season summary (All Teams page).
+  getAllTeamsSeason: (season?: number | null): Promise<AllTeamsSeason> =>
+    get<AllTeamsSeason>(`/teams/season-summary${season != null ? `?season=${season}` : ''}`),
+
   searchPlayers: (query: string): Promise<NHLPlayerInfo[]> =>
     get<NHLPlayerInfo[]>(`/players/search?q=${encodeURIComponent(query)}`),
+
+  // Charts — league leaders for a season, sorted server-side by `sort`.
+  // Omit `season` to get the current one (returned in the payload).
+  getPlayerLeaders: (
+    view: 'skater' | 'goalie',
+    sort: string,
+    limit = 20,
+    season?: number | null,
+  ): Promise<PlayerLeaders> => {
+    const q = new URLSearchParams({ view, sort, limit: String(limit) });
+    if (season != null) q.set('season', String(season));
+    return get<PlayerLeaders>(`/players/leaders?${q.toString()}`);
+  },
 
   getAllPlayers: (): Promise<NHLPlayerInfo[]> =>
     get<NHLPlayerInfo[]>('/players'),

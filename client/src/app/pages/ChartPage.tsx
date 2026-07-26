@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from "react-router";
 import { useEffect, useState, useRef, type ReactNode } from "react";
+import { Search, X } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
 import { FramedLabel } from "../components/brand/FramedLabel";
 import { useSport } from "../context/SportContext";
@@ -14,14 +15,19 @@ import type {
   OpponentSplit,
   TeamSeasonOfficial,
   SeriesGame,
+  PlayerLeaders,
+  TeamSeasonRow,
+  AllTeamsSeason,
 } from "../services/nhlApiService";
-import type { NHLTeamInfo } from "../types/bet";
+import type { NHLTeamInfo, NHLPlayerInfo, NHLGame } from "../types/bet";
 import { FactorPie } from "../components/FactorPie";
 import type { PieSlice } from "../components/FactorPie";
 import {
   ResponsiveContainer,
   LineChart,
   Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -59,6 +65,15 @@ function seasonLabel(id: number): string {
   return s.length === 8 ? `${s.slice(2, 4)}/${s.slice(6, 8)}` : s;
 }
 
+/** Current NHL season id (e.g. 20252026). Mirrors the server's rollover rule:
+ *  a new season starts in October, so months before that belong to the
+ *  previous season's id. */
+const currentSeasonId = (() => {
+  const now = new Date();
+  const y = now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1;
+  return Number(`${y}${y + 1}`);
+})();
+
 /* ── Value formatters ──────────────────────────────────── */
 const int = (v?: number | null) => (v == null ? DASH : String(Math.round(v)));
 const sign = (v?: number | null) => (v == null ? DASH : v > 0 ? `+${v}` : String(v));
@@ -68,6 +83,14 @@ const snum2 = (v?: number | null) =>
 const svpct = (v?: number | null) => (v == null ? DASH : v.toFixed(3).replace(/^0/, ""));
 const per = (v?: number | null, gp?: number | null) =>
   v != null && gp && gp > 0 ? v / gp : null;
+const pct1 = (v?: number | null) => (v == null ? DASH : `${v.toFixed(1)}%`);
+/** Decimal minutes (e.g. 21.87) → "MM:SS" for time-on-ice display. */
+const toiFmt = (v?: number | null) => {
+  if (v == null) return DASH;
+  const m = Math.floor(v);
+  const s = Math.round((v - m) * 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+};
 
 /* ── Metric model (player table) ───────────────────────────
  * Each metric renders three columns (Total / Avg-per-game / vs-opponent) and
@@ -150,6 +173,126 @@ function buildGoalieMetrics(t: TFn): PMetric[] {
     },
     countMetric("shutouts", t("chart.m.shutouts")),
   ];
+}
+
+/* ── Extra metrics (player breakdown only) ─────────────────
+ * These don't have opponent-split or per-game series data behind them, so
+ * they're kept out of buildSkaterMetrics/buildGoalieMetrics — adding them
+ * there would leak into the team page's line-chart metric picker and render
+ * an empty/flat chart. The player page's breakdown table has no chart, so
+ * that constraint doesn't apply here.
+ */
+function buildSkaterExtraMetrics(t: TFn): PMetric[] {
+  return [
+    {
+      key: "shootingPct",
+      label: t("chart.m.shootingPct"),
+      total: (s) => pct1(s.shootingPct),
+      avg: () => DASH,
+      vs: (o) => (o.shots && o.shots > 0 ? pct1(((o.goals ?? 0) / o.shots) * 100) : DASH),
+      totalNum: (s) => s.shootingPct ?? null,
+      avgNum: () => null,
+      vsNum: (o) => (o.shots && o.shots > 0 ? ((o.goals ?? 0) / o.shots) * 100 : null),
+      seriesVal: () => null,
+      cumulative: false,
+    },
+    {
+      key: "pim",
+      label: t("chart.m.pim"),
+      total: (s) => int(s.pim),
+      avg: (s) => num2(per(s.pim ?? 0, s.gp)),
+      vs: () => DASH,
+      totalNum: (s) => s.pim ?? null,
+      avgNum: (s) => per(s.pim ?? 0, s.gp),
+      vsNum: () => null,
+      seriesVal: (g) => g.pim ?? null,
+      cumulative: true,
+    },
+    {
+      key: "powerPlayGoals",
+      label: t("chart.m.ppg"),
+      total: (s) => int(s.powerPlayGoals),
+      avg: (s) => num2(per(s.powerPlayGoals ?? 0, s.gp)),
+      vs: () => DASH,
+      totalNum: (s) => s.powerPlayGoals ?? null,
+      avgNum: (s) => per(s.powerPlayGoals ?? 0, s.gp),
+      vsNum: () => null,
+      seriesVal: (g) => g.powerPlayGoals ?? null,
+      cumulative: true,
+    },
+    {
+      key: "shorthandedPoints",
+      label: t("chart.m.shp"),
+      total: (s) => int(s.shorthandedPoints),
+      avg: (s) => num2(per(s.shorthandedPoints ?? 0, s.gp)),
+      vs: () => DASH,
+      totalNum: (s) => s.shorthandedPoints ?? null,
+      avgNum: (s) => per(s.shorthandedPoints ?? 0, s.gp),
+      vsNum: () => null,
+      seriesVal: (g) => g.shorthandedPoints ?? null,
+      cumulative: true,
+    },
+    {
+      key: "faceoffPct",
+      label: t("chart.tm.faceoffPct"),
+      total: (s) => pct1(s.faceoffPct),
+      avg: () => DASH,
+      vs: () => DASH,
+      totalNum: (s) => s.faceoffPct ?? null,
+      avgNum: () => null,
+      vsNum: () => null,
+      seriesVal: () => null,
+      cumulative: false,
+    },
+    {
+      key: "avgToi",
+      label: t("chart.m.toi"),
+      total: (s) => toiFmt(s.avgToi),
+      avg: () => DASH,
+      vs: () => DASH,
+      totalNum: (s) => s.avgToi ?? null,
+      avgNum: () => null,
+      vsNum: () => null,
+      seriesVal: () => null,
+      cumulative: false,
+    },
+  ];
+}
+
+function buildGoalieExtraMetrics(t: TFn): PMetric[] {
+  return [
+    {
+      key: "losses",
+      label: t("chart.m.losses"),
+      total: (s) => int(s.losses),
+      avg: (s) => num2(per(s.losses ?? 0, s.gp)),
+      vs: () => DASH,
+      totalNum: (s) => s.losses ?? null,
+      avgNum: (s) => per(s.losses ?? 0, s.gp),
+      vsNum: () => null,
+      seriesVal: (g) => g.losses ?? null,
+      cumulative: true,
+    },
+    {
+      key: "otLosses",
+      label: t("chart.m.otLosses"),
+      total: (s) => int(s.otLosses),
+      avg: (s) => num2(per(s.otLosses ?? 0, s.gp)),
+      vs: () => DASH,
+      totalNum: (s) => s.otLosses ?? null,
+      avgNum: (s) => per(s.otLosses ?? 0, s.gp),
+      vsNum: () => null,
+      seriesVal: (g) => g.otLosses ?? null,
+      cumulative: true,
+    },
+  ];
+}
+
+/** Direction the server already sorts a leader metric in: GAA is "lower is
+ *  better", everything else is "higher is better". Rows arrive in this order,
+ *  so the table only has to reverse them when the user asks for the opposite. */
+function naturalSortDir(key: string): SortDir {
+  return key === "gaa" ? "asc" : "desc";
 }
 
 /* ── Opponent picker (lives in the vs-column header) ──────── */
@@ -384,20 +527,29 @@ function TeamCharts({ teamId }: { teamId?: string }) {
             <p className="text-[#8a9ea6] text-xs">{t("chart.noTeam")}</p>
           </div>
         )}
-        <select
-          value={teamId ? teamId.toLowerCase() : ""}
-          onChange={(e) => navigate(e.target.value ? `/stats/chart/team/${e.target.value}` : "/stats/chart/team")}
-          className={selectCls}
-          style={{ background: BG_CELL, color: teamId ? "#c8d3cc" : "#8a9ea6" }}
-          aria-label={t("chart.team")}
-        >
-          <option value="">{t("chart.noTeam")}</option>
-          {teamOptions.map((x) => (
-            <option key={x.abbreviation} value={x.abbreviation?.toLowerCase()}>
-              {x.abbreviation?.toUpperCase()}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-col gap-1.5 shrink-0">
+          <select
+            value={teamId ? teamId.toLowerCase() : ""}
+            onChange={(e) => navigate(e.target.value ? `/stats/chart/team/${e.target.value}` : "/stats/chart/team")}
+            className={selectCls}
+            style={{ background: BG_CELL, color: teamId ? "#c8d3cc" : "#8a9ea6" }}
+            aria-label={t("chart.team")}
+          >
+            <option value="">{t("chart.noTeam")}</option>
+            {teamOptions.map((x) => (
+              <option key={x.abbreviation} value={x.abbreviation?.toLowerCase()}>
+                {x.abbreviation?.toUpperCase()}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => navigate("/stats/chart/all-teams")}
+            className={selectCls}
+            style={{ background: BG_CELL, color: accent, borderColor: accent + "66" }}
+          >
+            {t("chart.allTeams")}
+          </button>
+        </div>
       </div>
 
       {!teamId ? (
@@ -655,6 +807,165 @@ function PlayerLineChart({
   );
 }
 
+/* ── Player search box ─────────────────────────────────────
+ * Debounced league-wide player lookup. Used on the charts pages to jump
+ * straight to someone's stats without going through their team first.
+ */
+function PlayerSearchBox({
+  placeholder,
+  onPick,
+}: {
+  placeholder: string;
+  onPick: (p: NHLPlayerInfo) => void;
+}) {
+  const { t } = useI18n();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<NHLPlayerInfo[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) { setResults([]); setSearching(false); return; }
+    let alive = true;
+    setSearching(true);
+    const handle = setTimeout(() => {
+      nhlApiService
+        .searchPlayers(q)
+        .then((res) => { if (alive) setResults(res); })
+        .catch(() => { if (alive) setResults([]); })
+        .finally(() => { if (alive) setSearching(false); });
+    }, 300);
+    return () => { alive = false; clearTimeout(handle); };
+  }, [query]);
+
+  return (
+    <div className="relative">
+      <div
+        className="flex items-center gap-2 rounded-xl border border-white/15 px-3 py-2"
+        style={{ background: BG_CELL }}
+      >
+        <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={placeholder}
+          className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#5c6f63]"
+        />
+        {query && (
+          <button onClick={() => setQuery("")} className="text-[#8a9ea6] hover:text-white transition-colors">
+            <X size={13} />
+          </button>
+        )}
+      </div>
+
+      {query.trim().length >= 2 && (
+        <div
+          className="absolute left-0 right-0 top-full mt-1 z-20 max-h-60 overflow-y-auto rounded-xl border border-white/15 shadow-xl"
+          style={{ background: "#1A2216" }}
+        >
+          {searching ? (
+            <p className="text-[#5c6f63] text-[11px] text-center py-3">…</p>
+          ) : results.length > 0 ? (
+            results.map((p) => (
+              <button
+                key={String(p.id)}
+                onClick={() => { onPick(p); setQuery(""); setResults([]); }}
+                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-white/[0.06] transition-colors"
+              >
+                <span className="text-white text-[12px] font-medium truncate">{p.name}</span>
+                <span className="text-[#8a9ea6] text-[10px] flex-shrink-0">
+                  {String((p as unknown as { teamId?: string }).teamId ?? "").toUpperCase()} · {p.position}
+                </span>
+              </button>
+            ))
+          ) : (
+            <p className="text-[#5c6f63] text-[11px] text-center py-3">{t("chart.noResults")}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Stacked bar: what a player's total is made of ─────────
+ * One bar per player, split into the components that sum to the total —
+ * goals + assists = points for skaters, W/L/OTL = decisions for goalies.
+ * Uses season totals (not per-game data), so it reads straight off the
+ * leaderboard payload.
+ */
+type StackPart = { key: string; label: string; color: string };
+/** `key` holds each part's value; `name`/`short` are the tooltip/axis labels. */
+type StackRow = { name: string; short: string; total: number; [k: string]: string | number };
+
+function StackedTotalsBar({
+  rows,
+  parts,
+  title,
+  note,
+  height,
+}: {
+  rows: StackRow[];
+  parts: StackPart[];
+  title: string;
+  note: string;
+  /** Defaults to ~22px per bar so long lists (all 32 teams) stay readable. */
+  height?: number;
+}) {
+  if (rows.length === 0) return null;
+  const chartHeight = height ?? Math.max(300, rows.length * 22 + 60);
+
+  return (
+    <div className="rounded-2xl border border-white/20 overflow-hidden" style={{ background: BG_CARD }}>
+      <div className="px-4 pt-3 pb-2 border-b border-white/10">
+        <p className="text-white text-sm font-semibold">{title}</p>
+        <p className="text-[#8a9ea6] text-[11px]">{note}</p>
+      </div>
+      <div className="px-2 py-3">
+        {/* Horizontal layout: value along X, one row per player down Y — names
+            read straight across, so no rotated labels. */}
+        <ResponsiveContainer width="100%" height={chartHeight}>
+          <BarChart data={rows} layout="vertical" margin={{ top: 8, right: 14, left: 4, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" horizontal={false} />
+            <XAxis
+              type="number"
+              tick={{ fill: "#8a9ea6", fontSize: 10 }}
+              stroke="rgba(255,255,255,0.15)"
+            />
+            <YAxis
+              type="category"
+              dataKey="short"
+              tick={{ fill: "#8a9ea6", fontSize: 10 }}
+              stroke="rgba(255,255,255,0.15)"
+              interval={0}
+              width={82}
+            />
+            <Tooltip
+              cursor={{ fill: "rgba(255,255,255,0.04)" }}
+              contentStyle={{ background: BG_CELL, border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, fontSize: 12 }}
+              labelStyle={{ color: "#c8d3cc" }}
+              // The axis shows surnames to stay readable; the tooltip shows the full name.
+              labelFormatter={(label, payload) =>
+                (payload?.[0]?.payload as { name?: string })?.name ?? String(label)
+              }
+            />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            {parts.map((p) => (
+              <Bar
+                key={p.key}
+                dataKey={p.key}
+                name={p.label}
+                stackId="total"
+                fill={p.color}
+                isAnimationActive={false}
+              />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 /* ── Pie breakdowns ────────────────────────────────────────
  * Home/away results, plus each player's share of the team's points and goals.
  */
@@ -890,10 +1201,11 @@ function TeamTrendsTable({
 
 /* ── Player charts ─────────────────────────────────────────
  * Bet365-style single-player view: pick a team, then a player, and see that
- * player's current-season breakdown (Total / per-game / vs-opponent) plus a
- * per-game line chart. Reuses the same endpoints as the team charts — the
- * player list comes from the team's player-seasons, and vs/series data from the
- * team's opponent-splits.
+ * player's current-season breakdown (Total / per-game / vs-another-player).
+ * The 4th column lets you search any other skater or goalie and drops their
+ * stat line in for a side-by-side comparison, plus a points-share pie chart.
+ * Reuses the team charts' player-seasons endpoint for both the main player and
+ * whoever is picked to compare against.
  */
 function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) {
   const { t } = useI18n();
@@ -906,12 +1218,17 @@ function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) {
   const [playerSeasons, setPlayerSeasons] = useState<TeamPlayerSeasons | null>(null);
   const [playerId, setPlayerId] = useState<string>(initialPlayerId ?? "");
   const [season, setSeason] = useState<number | null>(null);
-  const [opponent, setOpponent] = useState<string>("");
   const [metricKey, setMetricKey] = useState<string>("points");
-  const [splits, setSplits] = useState<TeamOpponentSplits | null>(null);
-  const [splitsLoading, setSplitsLoading] = useState(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState(false);
+
+  // Player-vs-player comparison (search another player and show stats side by side).
+  const [compareQuery, setCompareQuery] = useState<string>("");
+  const [compareResults, setCompareResults] = useState<NHLPlayerInfo[]>([]);
+  const [compareSearching, setCompareSearching] = useState(false);
+  const [compareSelected, setCompareSelected] = useState<NHLPlayerInfo | null>(null);
+  const [comparePlayerSeasons, setComparePlayerSeasons] = useState<TeamPlayerSeasons | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
 
   // Team list (team picker + opponent dropdown) — fetched once.
   useEffect(() => {
@@ -958,20 +1275,6 @@ function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) {
     return () => { alive = false; };
   }, [teamAbbr]);
 
-  // Opponent splits + per-game series (for the vs column and the line chart).
-  useEffect(() => {
-    if (!teamAbbr || season == null) { setSplits(null); setSplitsLoading(false); return; }
-    let alive = true;
-    setSplits(null);
-    setSplitsLoading(true);
-    nhlApiService
-      .getTeamOpponentSplits(teamAbbr, season)
-      .then((sp) => { if (alive) setSplits(sp); })
-      .catch(() => { if (alive) setSplits(null); })
-      .finally(() => { if (alive) setSplitsLoading(false); });
-    return () => { alive = false; };
-  }, [teamAbbr, season]);
-
   // Keep the URL in sync so a chosen player is shareable / refresh-safe.
   useEffect(() => {
     if (playerId) navigate(`/stats/chart/player/${playerId}`, { replace: true });
@@ -982,31 +1285,66 @@ function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) {
   const selected = [...skaters, ...goalies].find((p) => p.id === playerId) ?? null;
   const isGoalie = !!selected && goalies.some((g) => g.id === selected.id);
 
-  const metrics = isGoalie ? buildGoalieMetrics(t) : buildSkaterMetrics(t);
+  const metrics = isGoalie
+    ? [...buildGoalieMetrics(t), ...buildGoalieExtraMetrics(t)]
+    : [...buildSkaterMetrics(t), ...buildSkaterExtraMetrics(t)];
   const metric = metrics.find((m) => m.key === metricKey) ?? metrics[0];
 
   const teamOptions = [...teams].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
   const abbr = (playerSeasons?.teamAbbr ?? teamAbbr ?? "").toUpperCase();
-  const opponentTeams = teams
-    .filter((x) => x.abbreviation && x.abbreviation.toUpperCase() !== abbr)
-    .sort((a, b) => (a.abbreviation ?? "").localeCompare(b.abbreviation ?? ""));
 
-  // Selected player's current-season stat + vs/series data.
+  // Selected player's current-season stat.
   const stat = selected?.seasons.find((s) => s.seasonId === season) ?? null;
-  const splitGroup = (isGoalie ? splits?.goalies : splits?.skaters) ?? [];
-  const mySplit = splitGroup.find((p) => p.id === playerId);
-  const vsObj = opponent ? mySplit?.vs[opponent] : undefined;
-  const seriesById = new Map<string, SeriesGame[]>(selected ? [[selected.id, mySplit?.series ?? []]] : []);
 
-  const makeOppSelect = () => (
-    <OpponentSelect
-      opponent={opponent}
-      onChange={setOpponent}
-      teams={opponentTeams}
-      accent={accent}
-      placeholder={t("chart.allOpponents")}
-    />
-  );
+  // Debounced player search — same-position players only (skater vs skater,
+  // goalie vs goalie), excluding the currently viewed player.
+  useEffect(() => {
+    const q = compareQuery.trim();
+    if (q.length < 2) { setCompareResults([]); setCompareSearching(false); return; }
+    let alive = true;
+    setCompareSearching(true);
+    const handle = setTimeout(() => {
+      nhlApiService
+        .searchPlayers(q)
+        .then((res) => {
+          if (!alive) return;
+          const filtered = res.filter((p) => {
+            const isG = (p.position ?? "").toUpperCase() === "G";
+            return isG === isGoalie && String(p.id) !== playerId;
+          });
+          setCompareResults(filtered);
+        })
+        .catch(() => { if (alive) setCompareResults([]); })
+        .finally(() => { if (alive) setCompareSearching(false); });
+    }, 300);
+    return () => { alive = false; clearTimeout(handle); };
+  }, [compareQuery, isGoalie, playerId]);
+
+  // Once a comparison player is picked, pull their team roster's player-seasons
+  // (same endpoint as the main view) to find their stat line for this season.
+  useEffect(() => {
+    if (!compareSelected) { setComparePlayerSeasons(null); return; }
+    // NHLPlayerInfo.teamId is typed as a numeric team id elsewhere, but the
+    // /players/search endpoint actually returns the team abbreviation here.
+    const cmpAbbr = String((compareSelected as unknown as { teamId?: string }).teamId ?? "").toUpperCase();
+    if (!cmpAbbr) { setComparePlayerSeasons(null); return; }
+    let alive = true;
+    setCompareLoading(true);
+    setComparePlayerSeasons(null);
+    nhlApiService
+      .getTeamPlayerSeasons(cmpAbbr)
+      .then((ps) => { if (alive) setComparePlayerSeasons(ps); })
+      .catch(() => { if (alive) setComparePlayerSeasons(null); })
+      .finally(() => { if (alive) setCompareLoading(false); });
+    return () => { alive = false; };
+  }, [compareSelected]);
+
+  const compareEntry = comparePlayerSeasons
+    ? [...comparePlayerSeasons.skaters, ...comparePlayerSeasons.goalies].find(
+        (p) => compareSelected != null && p.id === String(compareSelected.id)
+      )
+    : null;
+  const compareStat = compareEntry?.seasons.find((s) => s.seasonId === season) ?? null;
 
   const headshot =
     selected && season != null && abbr
@@ -1080,6 +1418,13 @@ function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) {
               </optgroup>
             )}
           </select>
+          <button
+            onClick={() => navigate("/stats/chart/all-players")}
+            className={selectCls}
+            style={{ background: BG_CELL, color: accent, borderColor: accent + "66" }}
+          >
+            {t("chart.allPlayers")}
+          </button>
         </div>
       </div>
 
@@ -1118,10 +1463,68 @@ function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) {
             </select>
           </div>
 
-          {/* Current-season breakdown: rows = metrics, cols = Total / per-game / vs */}
+          {/* Current-season breakdown: rows = metrics, cols = Total / per-game / compare-player.
+              The 4th column replaces the old "vs opponent team" split with a
+              searchable "vs another player" comparison — pick someone and their
+              stat line drops straight into this column. */}
           <div className="rounded-2xl border border-white/20 overflow-hidden" style={{ background: BG_CARD }}>
-            <div className="px-4 pt-3 pb-2 border-b border-white/10">
-              <p className="text-white text-sm font-semibold">{t("chart.playerStats")}</p>
+            <div className="px-4 pt-3 pb-2 border-b border-white/10 flex items-center justify-between gap-2">
+              <p className="text-white text-sm font-semibold flex-shrink-0">{t("chart.playerStats")}</p>
+              <div className="relative">
+                {compareSelected ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold truncate max-w-[7rem]" style={{ color: "#facc15" }}>
+                      {compareSelected.name}
+                    </span>
+                    <button
+                      onClick={() => { setCompareSelected(null); setComparePlayerSeasons(null); }}
+                      className="text-[#8a9ea6] hover:text-white transition-colors flex-shrink-0"
+                      aria-label={t("chart.compare.title")}
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className="flex items-center gap-1.5 rounded-full border border-white/15 px-2.5 py-1"
+                    style={{ background: BG_CELL }}
+                  >
+                    <Search size={12} className="text-[#8a9ea6] flex-shrink-0" />
+                    <input
+                      value={compareQuery}
+                      onChange={(e) => setCompareQuery(e.target.value)}
+                      placeholder={t("chart.compare.search")}
+                      className="w-28 bg-transparent text-white text-[11px] outline-none placeholder:text-[#5c6f63]"
+                    />
+                  </div>
+                )}
+
+                {!compareSelected && compareQuery.trim().length >= 2 && (
+                  <div
+                    className="absolute right-0 top-full mt-1 z-20 w-60 max-h-60 overflow-y-auto rounded-xl border border-white/15 shadow-xl"
+                    style={{ background: "#1A2216" }}
+                  >
+                    {compareSearching ? (
+                      <p className="text-[#5c6f63] text-[11px] text-center py-3">…</p>
+                    ) : compareResults.length > 0 ? (
+                      compareResults.map((p) => (
+                        <button
+                          key={String(p.id)}
+                          onClick={() => { setCompareSelected(p); setCompareQuery(""); setCompareResults([]); }}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-white/[0.06] transition-colors"
+                        >
+                          <span className="text-white text-[11px] font-medium truncate">{p.name}</span>
+                          <span className="text-[#8a9ea6] text-[10px] flex-shrink-0">
+                            {String((p as unknown as { teamId?: string }).teamId ?? "").toUpperCase()} · {p.position}
+                          </span>
+                        </button>
+                      ))
+                    ) : (
+                      <p className="text-[#5c6f63] text-[11px] text-center py-3">{t("chart.compare.noResults")}</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             {!stat ? (
               <p className="px-4 py-6 text-center text-[#8a9ea6] text-sm">{t("chart.noData")}</p>
@@ -1135,7 +1538,9 @@ function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) {
                       </th>
                       <th className="font-semibold px-3 py-2 text-center">{t("chart.col.total")}</th>
                       <th className="font-semibold px-3 py-2 text-center">{t("chart.col.perGame")}</th>
-                      <th className="px-3 py-2 whitespace-nowrap">{makeOppSelect()}</th>
+                      <th className="font-semibold px-3 py-2 text-center whitespace-nowrap truncate max-w-[6rem]" style={{ color: compareSelected ? "#facc15" : undefined }}>
+                        {compareSelected ? compareSelected.name : t("chart.compare.column")}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1153,8 +1558,8 @@ function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) {
                           </td>
                           <td className="px-3 py-2.5 text-center tabular-nums text-white">{m.total(stat)}</td>
                           <td className="px-3 py-2.5 text-center tabular-nums text-[#c8d3cc]">{m.avg(stat)}</td>
-                          <td className="px-3 py-2.5 text-center tabular-nums" style={{ color: accent }}>
-                            {opponent ? (vsObj ? m.vs(vsObj) : DASH) : DASH}
+                          <td className="px-3 py-2.5 text-center tabular-nums" style={{ color: "#facc15" }}>
+                            {compareLoading ? "…" : compareSelected && compareStat ? m.total(compareStat) : DASH}
                           </td>
                         </tr>
                       );
@@ -1165,20 +1570,24 @@ function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) {
             )}
           </div>
 
-          {/* Per-game line chart for the selected metric */}
-          {splitsLoading ? (
+          {/* ── Points breakdown (skaters only): share of points from goals vs assists ── */}
+          {!isGoalie && stat && (stat.points ?? 0) > 0 && (
             <div className="rounded-2xl border border-white/20 p-4" style={{ background: BG_CARD }}>
-              <div className="h-4 w-40 rounded animate-pulse mb-3" style={{ background: BG_CELL }} />
-              <div className="h-[240px] rounded-xl animate-pulse" style={{ background: BG_CELL }} />
+              <p className="text-white text-sm font-semibold mb-3">{t("chart.pie.pointsBreakdown")}</p>
+              <div className="rounded-xl p-3" style={{ background: BG_CELL }}>
+                <FactorPie
+                  slices={[
+                    { label: t("chart.m.goals"), value: stat.goals ?? 0, color: "#4ade80" },
+                    { label: t("chart.m.assists"), value: stat.assists ?? 0, color: "#86d1ea" },
+                  ]}
+                  vertical
+                  size={140}
+                  thickness={20}
+                  centerLabel={String(stat.points ?? 0)}
+                  centerSub={t("chart.pie.pts")}
+                />
+              </div>
             </div>
-          ) : (
-            <PlayerLineChart
-              players={[{ id: selected.id, name: selected.name }]}
-              seriesById={seriesById}
-              metric={metric}
-              title={`${metric.label} ${t("chart.byGame")}`}
-              note={metric.cumulative ? t("chart.playerCumNote") : t("chart.playerRateNote")}
-            />
           )}
         </>
       )}
@@ -1186,9 +1595,1002 @@ function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) {
   );
 }
 
+/* ── All players (league leaders) ───────────────────────────
+ * Top N players for a season across the same metric set as the single-player
+ * page. Sorting happens server-side (the NHL summary endpoints support it), so
+ * picking a metric re-fetches rather than re-sorting a partial list — that way
+ * "top 20 by PIM" really is the league's top 20, not the top 20 scorers
+ * re-ordered by PIM.
+ */
+function AllPlayersCharts() {
+  const { t } = useI18n();
+  const { theme } = useSport();
+  const navigate = useNavigate();
+  const accent = theme.accent;
+
+  const LIMIT = 20;   // rows in the leaderboard table
+  const CHART_N = 10; // players fed into the bar chart + pies
+  const [view, setView] = useState<View>("skater");
+  // Skaters and goalies have disjoint metric sets, so each view remembers its
+  // own sort. Deriving the active key (rather than resetting it in an effect on
+  // view change) avoids firing a throwaway fetch with a mismatched metric.
+  const [skaterSort, setSkaterSort] = useState<{ key: string; dir: SortDir }>({ key: "points", dir: "desc" });
+  const [goalieSort, setGoalieSort] = useState<{ key: string; dir: SortDir }>({ key: "wins", dir: "desc" });
+  // Seeded client-side so the first fetch already carries a season — starting
+  // from null and adopting the server's value would cost an extra round trip.
+  const [season, setSeason] = useState<number>(currentSeasonId);
+  const [data, setData] = useState<PlayerLeaders | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const isGoalieView = view === "goalie";
+  const activeSort = isGoalieView ? goalieSort : skaterSort;
+  const setActiveSort = isGoalieView ? setGoalieSort : setSkaterSort;
+  const sortKey = activeSort.key;
+  const sortDir = activeSort.dir;
+
+  // Clicking a new column picks that metric (server re-fetches the true top N
+  // for it); clicking the active one just flips the direction, which is a
+  // display-only reversal — no refetch.
+  const toggleSort = (key: string) =>
+    setActiveSort((cur) =>
+      cur.key === key
+        ? { key, dir: cur.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: naturalSortDir(key) },
+    );
+
+  const metrics = isGoalieView
+    ? [...buildGoalieMetrics(t), ...buildGoalieExtraMetrics(t)]
+    : [...buildSkaterMetrics(t), ...buildSkaterExtraMetrics(t)];
+  const metric = metrics.find((m) => m.key === sortKey) ?? metrics[0];
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError(false);
+    nhlApiService
+      .getPlayerLeaders(view, sortKey, LIMIT, season)
+      .then((res) => { if (alive) setData(res); })
+      .catch((e) => { console.error("AllPlayersCharts load error", e); if (alive) setError(true); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [view, sortKey, season]);
+
+  // Six most recent seasons, counting back from the current one.
+  const seasonOptions = Array.from({ length: 6 }, (_, i) => {
+    const y = Math.floor(currentSeasonId / 10000) - i;
+    return Number(`${y}${y + 1}`);
+  });
+
+  // Rows arrive already sorted by the server in the metric's natural direction,
+  // so rank is just position here. Rank stays pinned to the player, meaning
+  // flipping the arrow reverses the list without renumbering it.
+  const ranked = (data?.players ?? []).map((p, i) => ({ ...p, rank: i + 1 }));
+  const displayRows = sortDir === naturalSortDir(sortKey) ? ranked : [...ranked].reverse();
+
+  // ── Chart inputs: always the genuine top 10, regardless of display order ──
+  const top = ranked.slice(0, CHART_N);
+
+  // Stacked bars: the components that add up to each player's total. Bars are
+  // ordered by that total so the chart reads left-to-right like a ranking.
+  const barParts: StackPart[] = isGoalieView
+    ? [
+        { key: "wins",     label: t("chart.m.wins"),     color: "#4ade80" },
+        { key: "losses",   label: t("chart.m.losses"),   color: "#f87171" },
+        { key: "otLosses", label: t("chart.m.otLosses"), color: "#fb923c" },
+      ]
+    : [
+        { key: "goals",   label: t("chart.m.goals"),   color: "#4ade80" },
+        { key: "assists", label: t("chart.m.assists"), color: "#86d1ea" },
+      ];
+
+  // Values are pulled by `barParts` key, so the bars and the legend can never
+  // drift apart — the part keys are PlayerSeasonStat field names.
+  const barRows: StackRow[] = top
+    .map((p) => {
+      const s = p.stat as unknown as Record<string, number | null | undefined>;
+      const row: StackRow = {
+        name: p.name,
+        // Surname only — ten full names won't fit along the axis.
+        short: p.name.split(" ").slice(1).join(" ") || p.name,
+        total: 0,
+      };
+      for (const part of barParts) {
+        const v = s[part.key] ?? 0;
+        row[part.key] = v;
+        row.total += v;
+      }
+      return row;
+    })
+    .filter((r) => r.total > 0)
+    .sort((a, b) => b.total - a.total);
+
+  const shareSlices = (pick: (s: PlayerSeasonStat) => number): PieSlice[] =>
+    top
+      .map((p, i) => ({
+        label: p.name,
+        value: pick(p.stat),
+        color: SERIES_COLORS[i % SERIES_COLORS.length],
+      }))
+      .filter((x) => x.value > 0);
+
+  const pies: { title: string; slices: PieSlice[] }[] = (isGoalieView
+    ? [
+        { title: t("chart.pie.winShare"),     slices: shareSlices((s) => s.wins ?? 0) },
+        { title: t("chart.pie.shutoutShare"), slices: shareSlices((s) => s.shutouts ?? 0) },
+        { title: t("chart.pie.gpShare"),      slices: shareSlices((s) => s.gp ?? 0) },
+      ]
+    : [
+        { title: t("chart.pie.pointShare"),  slices: shareSlices((s) => s.points ?? 0) },
+        { title: t("chart.pie.goalShare"),   slices: shareSlices((s) => s.goals ?? 0) },
+        { title: t("chart.pie.assistShare"), slices: shareSlices((s) => s.assists ?? 0) },
+      ]
+  ).filter((p) => p.slices.length > 0);
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Header + controls */}
+      <div className="rounded-2xl border border-white/20 p-4 flex flex-col gap-3" style={{ background: BG_CARD }}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-white font-bold text-base">{t("chart.allPlayers.title")}</p>
+            <p className="text-[#8a9ea6] text-xs">
+              {t("chart.allPlayers.note", { n: LIMIT, metric: metric.label })}
+            </p>
+          </div>
+          <select
+            value={season}
+            onChange={(e) => setSeason(Number(e.target.value))}
+            className={selectCls}
+            style={{ background: BG_CELL, color: "#c8d3cc" }}
+            aria-label={t("chart.season")}
+          >
+            {seasonOptions.map((sid) => (
+              <option key={sid} value={sid}>{seasonLabel(sid)}</option>
+            ))}
+          </select>
+        </div>
+
+        <PlayerSearchBox
+          placeholder={t("chart.searchPlayer")}
+          onPick={(p) => navigate(`/stats/chart/player/${p.id}`)}
+        />
+
+        <div className="inline-flex self-start rounded-full p-0.5 border border-white/15" style={{ background: BG_CELL }}>
+          {(["skater", "goalie"] as View[]).map((v) => {
+            const isActive = view === v;
+            return (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors"
+                style={isActive ? { background: accent, color: "#0A0E0C" } : { color: "#8a9ea6" }}
+              >
+                {v === "skater" ? t("chart.skaters") : t("chart.goalies")}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Leaderboard */}
+      <div className="rounded-2xl border border-white/20 overflow-hidden" style={{ background: BG_CARD }}>
+        <div className="px-4 pt-3 pb-2 border-b border-white/10">
+          <p className="text-white text-sm font-semibold mb-2">{t("chart.playerStats")}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {metrics.map((m) => {
+              const isActive = m.key === metric.key;
+              return (
+                <button
+                  key={m.key}
+                  onClick={() => toggleSort(m.key)}
+                  className="px-3 py-1 rounded-full text-[11px] font-semibold transition-colors"
+                  style={
+                    isActive
+                      ? { background: accent + "22", color: accent, border: `1px solid ${accent}66` }
+                      : { background: BG_CELL, color: "#8a9ea6", border: "1px solid transparent" }
+                  }
+                >
+                  {m.label}
+                  {isActive && <span className="ml-1 text-[9px]">{sortDir === "asc" ? "▲" : "▼"}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="px-4 py-6 flex flex-col gap-2">
+            {Array.from({ length: 8 }, (_, i) => (
+              <div key={i} className="h-6 rounded animate-pulse" style={{ background: BG_CELL }} />
+            ))}
+          </div>
+        ) : error || !data || data.players.length === 0 ? (
+          <p className="px-4 py-6 text-center text-[#8a9ea6] text-sm">{t("chart.noData")}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-xs">
+              <thead>
+                <tr className="text-[#8a9ea6]">
+                  <th className="text-left font-semibold px-3 py-2 sticky left-0 z-10" style={{ background: BG_CARD }}>
+                    {t("chart.rank")} {t("chart.player")}
+                  </th>
+                  <th className="font-semibold px-3 py-2 text-center">{t("chart.m.gp")}</th>
+                  {metrics.map((m) => (
+                    <th key={m.key} className="px-3 py-2 whitespace-nowrap">
+                      <SortHead
+                        label={m.label}
+                        active={m.key === metric.key}
+                        dir={sortDir}
+                        onClick={() => toggleSort(m.key)}
+                        accent={accent}
+                      />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {displayRows.map((p) => (
+                  <tr
+                    key={p.id}
+                    onClick={() => navigate(`/stats/chart/player/${p.id}`)}
+                    className="border-t border-white/[0.06] cursor-pointer hover:bg-white/[0.04] transition-colors"
+                  >
+                    <td className="px-3 py-2.5 sticky left-0 z-10 whitespace-nowrap" style={{ background: BG_CARD }}>
+                      <span className="text-[#5c6f63] tabular-nums mr-2">{p.rank}</span>
+                      <span className="text-white font-medium">{p.name}</span>
+                      <span className="text-[#5c6f63] ml-1.5">{p.teamAbbr}</span>
+                      <span className="text-[#5c6f63] ml-1.5">{p.position}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-center tabular-nums text-[#c8d3cc]">{int(p.stat.gp)}</td>
+                    {metrics.map((m) => (
+                      <td
+                        key={m.key}
+                        className="px-3 py-2.5 text-center tabular-nums"
+                        style={m.key === metric.key ? { color: accent, fontWeight: 600 } : { color: "#fff" }}
+                      >
+                        {m.total(p.stat)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Stacked bars: what each top-10 player's total is made of ── */}
+      {loading ? (
+        <div className="rounded-2xl border border-white/20 p-4" style={{ background: BG_CARD }}>
+          <div className="h-4 w-40 rounded animate-pulse mb-3" style={{ background: BG_CELL }} />
+          <div className="h-[280px] rounded-xl animate-pulse" style={{ background: BG_CELL }} />
+        </div>
+      ) : (
+        <StackedTotalsBar
+          rows={barRows}
+          parts={barParts}
+          title={isGoalieView ? t("chart.bar.decisions") : t("chart.pie.pointsBreakdown")}
+          note={t("chart.bar.note", { n: barRows.length })}
+        />
+      )}
+
+      {/* ── Share breakdowns across the top 10 ── */}
+      {pies.length > 0 && (
+        <div className="rounded-2xl border border-white/20 p-4" style={{ background: BG_CARD }}>
+          <p className="text-white text-sm font-semibold mb-3" style={{ color: accent }}>
+            {t("chart.breakdowns")}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {pies.map((pie) => (
+              <div key={pie.title} className="rounded-xl p-3" style={{ background: BG_CELL }}>
+                <p className="text-[#c8d3cc] text-xs font-semibold mb-2 text-center">{pie.title}</p>
+                <FactorPie slices={pie.slices} vertical size={120} thickness={18} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── All teams (league-wide team performance) ───────────────
+ * Every team's season summary in one table. Unlike the player leaders page,
+ * all 32 rows arrive in a single call, so sorting is done locally — which also
+ * lets derived columns like goal differential be sortable.
+ */
+type TMetric = {
+  key: string;
+  label: string;
+  fmt: (r: TeamSeasonRow) => string;
+  num: (r: TeamSeasonRow) => number;
+  /** Lower is better (sorts ascending by default). */
+  lowBetter?: boolean;
+};
+
+function buildTeamMetrics(t: TFn): TMetric[] {
+  const pct = (v: number) => `${v.toFixed(1)}%`;
+  return [
+    { key: "points",       label: t("chart.tm.points"),       fmt: (r) => int(r.points),       num: (r) => r.points },
+    { key: "wins",         label: t("chart.tm.wins"),         fmt: (r) => int(r.wins),         num: (r) => r.wins },
+    { key: "losses",       label: t("chart.tm.losses"),       fmt: (r) => int(r.losses),       num: (r) => r.losses, lowBetter: true },
+    { key: "otLosses",     label: t("chart.tm.otLosses"),     fmt: (r) => int(r.otLosses),     num: (r) => r.otLosses, lowBetter: true },
+    { key: "pointPct",     label: t("chart.tm.pointPct"),     fmt: (r) => pct(r.pointPct),     num: (r) => r.pointPct },
+    { key: "goalsFor",     label: t("chart.tm.goalsFor"),     fmt: (r) => int(r.goalsFor),     num: (r) => r.goalsFor },
+    { key: "goalsAgainst", label: t("chart.tm.goalsAgainst"), fmt: (r) => int(r.goalsAgainst), num: (r) => r.goalsAgainst, lowBetter: true },
+    { key: "goalDiff",     label: t("chart.tm.goalDiff"),     fmt: (r) => sign(r.goalDiff),    num: (r) => r.goalDiff },
+    { key: "gfPerGame",    label: `${t("chart.tm.goalsFor")}/G`,     fmt: (r) => num2(r.goalsForPerGame),     num: (r) => r.goalsForPerGame },
+    { key: "gaPerGame",    label: `${t("chart.tm.goalsAgainst")}/G`, fmt: (r) => num2(r.goalsAgainstPerGame), num: (r) => r.goalsAgainstPerGame, lowBetter: true },
+    { key: "ppPct",        label: t("chart.tm.ppPct"),        fmt: (r) => pct(r.ppPct),        num: (r) => r.ppPct },
+    { key: "pkPct",        label: t("chart.tm.pkPct"),        fmt: (r) => pct(r.pkPct),        num: (r) => r.pkPct },
+    { key: "shotsFor",     label: t("chart.tm.shots"),        fmt: (r) => num2(r.shotsForPerGame),     num: (r) => r.shotsForPerGame },
+    { key: "shotsAgainst", label: t("chart.tm.shotsAgainst"), fmt: (r) => num2(r.shotsAgainstPerGame), num: (r) => r.shotsAgainstPerGame, lowBetter: true },
+    { key: "faceoffPct",   label: t("chart.tm.faceoffPct"),   fmt: (r) => pct(r.faceoffPct),   num: (r) => r.faceoffPct },
+    { key: "shutouts",     label: t("chart.tm.shutouts"),     fmt: (r) => int(r.shutouts),     num: (r) => r.shutouts },
+  ];
+}
+
+function AllTeamsCharts() {
+  const { t } = useI18n();
+  const { theme } = useSport();
+  const navigate = useNavigate();
+  const accent = theme.accent;
+
+  const [season, setSeason] = useState<number>(currentSeasonId);
+  const [data, setData] = useState<AllTeamsSeason | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [sort, setSort] = useState<{ key: string; dir: SortDir }>({ key: "points", dir: "desc" });
+  const [query, setQuery] = useState("");
+
+  const metrics = buildTeamMetrics(t);
+  const metric = metrics.find((m) => m.key === sort.key) ?? metrics[0];
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError(false);
+    nhlApiService
+      .getAllTeamsSeason(season)
+      .then((res) => { if (alive) setData(res); })
+      .catch((e) => { console.error("AllTeamsCharts load error", e); if (alive) setError(true); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [season]);
+
+  const seasonOptions = Array.from({ length: 6 }, (_, i) => {
+    const y = Math.floor(currentSeasonId / 10000) - i;
+    return Number(`${y}${y + 1}`);
+  });
+
+  const toggleSort = (key: string) =>
+    setSort((cur) => {
+      if (cur.key === key) return { key, dir: cur.dir === "asc" ? "desc" : "asc" };
+      const m = metrics.find((x) => x.key === key);
+      return { key, dir: m?.lowBetter ? "asc" : "desc" };
+    });
+
+  // Sorted first (so rank reflects the metric), then filtered for display —
+  // searching must not renumber the standings.
+  const sorted = [...(data?.teams ?? [])].sort((a, b) => {
+    const d = metric.num(a) - metric.num(b);
+    return sort.dir === "asc" ? d : -d;
+  });
+  const ranked = sorted.map((r, i) => ({ ...r, rank: i + 1 }));
+
+  const q = query.trim().toLowerCase();
+  const visible = q
+    ? ranked.filter((r) => r.name.toLowerCase().includes(q) || r.abbr.toLowerCase().includes(q))
+    : ranked;
+
+  // Stacked bar: W / L / OTL add up to games played — every team, in the
+  // current sort order. The team-level analogue of the goalie decisions chart.
+  const barParts: StackPart[] = [
+    { key: "wins",     label: t("chart.tm.wins"),     color: "#4ade80" },
+    { key: "losses",   label: t("chart.tm.losses"),   color: "#f87171" },
+    { key: "otLosses", label: t("chart.tm.otLosses"), color: "#fb923c" },
+  ];
+  const barRows: StackRow[] = ranked.map((r) => ({
+    name: r.name,
+    short: r.abbr,
+    total: r.wins + r.losses + r.otLosses,
+    wins: r.wins,
+    losses: r.losses,
+    otLosses: r.otLosses,
+  })).filter((r) => r.total > 0);
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Header + season + search */}
+      <div className="rounded-2xl border border-white/20 p-4 flex flex-col gap-3" style={{ background: BG_CARD }}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-white font-bold text-base">{t("chart.allTeams.title")}</p>
+            <p className="text-[#8a9ea6] text-xs">
+              {t("chart.allTeams.note", { n: data?.teams.length ?? 0 })}
+            </p>
+          </div>
+          <select
+            value={season}
+            onChange={(e) => setSeason(Number(e.target.value))}
+            className={selectCls}
+            style={{ background: BG_CELL, color: "#c8d3cc" }}
+            aria-label={t("chart.season")}
+          >
+            {seasonOptions.map((sid) => (
+              <option key={sid} value={sid}>{seasonLabel(sid)}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* All 32 teams are already loaded, so this filters locally. */}
+        <div className="flex items-center gap-2 rounded-xl border border-white/15 px-3 py-2" style={{ background: BG_CELL }}>
+          <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("chart.searchTeam")}
+            className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#5c6f63]"
+          />
+          {query && (
+            <button onClick={() => setQuery("")} className="text-[#8a9ea6] hover:text-white transition-colors">
+              <X size={13} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Standings table */}
+      <div className="rounded-2xl border border-white/20 overflow-hidden" style={{ background: BG_CARD }}>
+        <div className="px-4 pt-3 pb-2 border-b border-white/10">
+          <p className="text-white text-sm font-semibold mb-2">{t("chart.teamStats")}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {metrics.map((m) => {
+              const isActive = m.key === metric.key;
+              return (
+                <button
+                  key={m.key}
+                  onClick={() => toggleSort(m.key)}
+                  className="px-3 py-1 rounded-full text-[11px] font-semibold transition-colors"
+                  style={
+                    isActive
+                      ? { background: accent + "22", color: accent, border: `1px solid ${accent}66` }
+                      : { background: BG_CELL, color: "#8a9ea6", border: "1px solid transparent" }
+                  }
+                >
+                  {m.label}
+                  {isActive && <span className="ml-1 text-[9px]">{sort.dir === "asc" ? "▲" : "▼"}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="px-4 py-6 flex flex-col gap-2">
+            {Array.from({ length: 8 }, (_, i) => (
+              <div key={i} className="h-6 rounded animate-pulse" style={{ background: BG_CELL }} />
+            ))}
+          </div>
+        ) : error || !data || data.teams.length === 0 ? (
+          <p className="px-4 py-6 text-center text-[#8a9ea6] text-sm">{t("chart.noData")}</p>
+        ) : visible.length === 0 ? (
+          <p className="px-4 py-6 text-center text-[#8a9ea6] text-sm">{t("chart.noResults")}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-xs">
+              <thead>
+                <tr className="text-[#8a9ea6]">
+                  <th className="text-left font-semibold px-3 py-2 sticky left-0 z-10" style={{ background: BG_CARD }}>
+                    {t("chart.rank")} {t("chart.team")}
+                  </th>
+                  <th className="font-semibold px-3 py-2 text-center">{t("chart.tm.gp")}</th>
+                  {metrics.map((m) => (
+                    <th key={m.key} className="px-3 py-2 whitespace-nowrap">
+                      <SortHead
+                        label={m.label}
+                        active={m.key === metric.key}
+                        dir={sort.dir}
+                        onClick={() => toggleSort(m.key)}
+                        accent={accent}
+                      />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((r) => (
+                  <tr
+                    key={r.abbr}
+                    onClick={() => navigate(`/stats/chart/team/${r.abbr.toLowerCase()}`)}
+                    className="border-t border-white/[0.06] cursor-pointer hover:bg-white/[0.04] transition-colors"
+                  >
+                    <td className="px-3 py-2.5 sticky left-0 z-10 whitespace-nowrap" style={{ background: BG_CARD }}>
+                      <span className="text-[#5c6f63] tabular-nums mr-2">{r.rank}</span>
+                      <img src={nhlLogoUrl(r.abbr)} alt={r.abbr} className="w-4 h-4 object-contain inline-block mr-1.5 align-text-bottom" />
+                      <span className="text-white font-medium">{r.name}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-center tabular-nums text-[#c8d3cc]">{int(r.gamesPlayed)}</td>
+                    {metrics.map((m) => (
+                      <td
+                        key={m.key}
+                        className="px-3 py-2.5 text-center tabular-nums"
+                        style={m.key === metric.key ? { color: accent, fontWeight: 600 } : { color: "#fff" }}
+                      >
+                        {m.fmt(r)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Record breakdown for the top 10 by the current sort */}
+      {loading ? (
+        <div className="rounded-2xl border border-white/20 p-4" style={{ background: BG_CARD }}>
+          <div className="h-4 w-40 rounded animate-pulse mb-3" style={{ background: BG_CELL }} />
+          <div className="h-[280px] rounded-xl animate-pulse" style={{ background: BG_CELL }} />
+        </div>
+      ) : (
+        <StackedTotalsBar
+          rows={barRows}
+          parts={barParts}
+          title={t("chart.bar.decisions")}
+          note={t("chart.bar.allNote", { n: barRows.length })}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── All games (league schedule + results) ──────────────────
+ * Same shell as the other overview pages: header card with a period picker and
+ * search, then a sortable table. Charts deliberately left out for now.
+ *
+ * Scoped to one month at a time — a full season is ~1300 games, which is a lot
+ * of rows to fetch and render at once when the useful view is "what happened
+ * recently". The month list is built from the season bounds the NHL reports.
+ */
+type GMetric = {
+  key: string;
+  label: string;
+  /** Sort value; null (unplayed game) always sorts last, either direction. */
+  num: (g: NHLGame) => number | null;
+};
+
+/** "2026-04-16" → { y: 2026, m: 4 } (1-based month). */
+function ymOf(iso: string): { y: number; m: number } {
+  const [y, m] = iso.split("-").map(Number);
+  return { y, m };
+}
+function ymKey(y: number, m: number): string {
+  return `${y}-${String(m).padStart(2, "0")}`;
+}
+/** Inclusive first/last ISO date of a month. */
+function monthRange(y: number, m: number): { start: string; end: string } {
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return { start: `${ymKey(y, m)}-01`, end: `${ymKey(y, m)}-${String(last).padStart(2, "0")}` };
+}
+/** ISO date + n days, in UTC so it can't drift across a DST boundary. */
+function addDaysIso(iso: string, n: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+type GameRange = "5d" | "10d" | "month";
+
+function AllGamesCharts() {
+  const { t, lang } = useI18n();
+  const { theme } = useSport();
+  const navigate = useNavigate();
+  const accent = theme.accent;
+  const locale = lang === "fr" ? "fr-FR" : "en-US";
+
+  const [today, setToday] = useState<string>("");
+  const [months, setMonths] = useState<{ y: number; m: number }[]>([]);
+  const [cursor, setCursor] = useState<{ y: number; m: number } | null>(null);
+  const [range, setRange] = useState<GameRange>("5d");
+  const [team, setTeam] = useState<string>("");
+  // Full league list, so the picker stays stable when the range changes — a
+  // team derived only from the loaded games would vanish and blank the select.
+  const [teamOptions, setTeamOptions] = useState<string[]>([]);
+  const [games, setGames] = useState<NHLGame[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [sort, setSort] = useState<{ key: string; dir: SortDir }>({ key: "date", dir: "desc" });
+
+  useEffect(() => {
+    let alive = true;
+    nhlApiService
+      .getAllTeams()
+      .then((tm) => {
+        if (!alive) return;
+        setTeamOptions(
+          tm.map((x) => (x.abbreviation ?? "").toUpperCase()).filter(Boolean).sort(),
+        );
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // Season bounds come from the NHL's own calendar rather than the local clock,
+  // matching how the schedule page anchors itself.
+  useEffect(() => {
+    let alive = true;
+    nhlApiService
+      .getScheduleAnchor()
+      .then((a) => {
+        if (!alive || !a?.today) return;
+        const first = ymOf(a.seasonStart ?? a.today);
+        const last = ymOf(a.seasonEnd ?? a.today);
+        const list: { y: number; m: number }[] = [];
+        let { y, m } = first;
+        // Guard against a malformed range producing an unbounded loop.
+        for (let i = 0; i < 24; i++) {
+          list.push({ y, m });
+          if (y === last.y && m === last.m) break;
+          m += 1;
+          if (m > 12) { m = 1; y += 1; }
+        }
+        setMonths(list);
+        setToday(a.today);
+        const tm = ymOf(a.today);
+        setCursor(list.some((x) => x.y === tm.y && x.m === tm.m) ? tm : list[list.length - 1] ?? tm);
+      })
+      // Loading stays true on success — setting the anchor immediately kicks
+      // off the games fetch below, so clearing it here would flash "no games".
+      .catch(() => { if (alive) { setError(true); setLoading(false); } });
+    return () => { alive = false; };
+  }, []);
+
+  // The fetch window: a rolling N days from today, or a whole calendar month.
+  const win = (() => {
+    if (range === "month") return cursor ? monthRange(cursor.y, cursor.m) : null;
+    if (!today) return null;
+    return { start: today, end: addDaysIso(today, range === "5d" ? 5 : 10) };
+  })();
+
+  useEffect(() => {
+    if (!win) return;
+    let alive = true;
+    setLoading(true);
+    setError(false);
+    nhlApiService
+      .getGamesRange(win.start, win.end)
+      .then((g) => { if (alive) setGames(g); })
+      .catch((e) => { console.error("AllGamesCharts load error", e); if (alive) setError(true); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+    // `win` is derived, so depend on its primitive bounds rather than identity.
+  }, [win?.start, win?.end]);
+
+  const totalOf = (g: NHLGame) =>
+    g.homeTeam.score == null || g.awayTeam.score == null ? null : g.homeTeam.score + g.awayTeam.score;
+  const marginOf = (g: NHLGame) =>
+    g.homeTeam.score == null || g.awayTeam.score == null
+      ? null
+      : Math.abs(g.homeTeam.score - g.awayTeam.score);
+  const statusLabel = (g: NHLGame) =>
+    g.status === "final" ? t("chart.gm.final") : g.status === "live" ? t("chart.gm.live") : t("chart.gm.scheduled");
+
+  const metrics: GMetric[] = [
+    // "2026-04-16" → 20260416, so date sorts numerically without parsing.
+    { key: "date",   label: t("chart.gm.date"),  num: (g) => Number(g.gameDate.replace(/-/g, "")) },
+    { key: "total",  label: t("chart.gm.total"), num: totalOf },
+    { key: "margin", label: t("chart.gm.diff"),  num: marginOf },
+  ];
+  const metric = metrics.find((m) => m.key === sort.key) ?? metrics[0];
+
+  const toggleSort = (key: string) =>
+    setSort((cur) => (cur.key === key ? { key, dir: cur.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" }));
+
+  const inTeam = (g: NHLGame) =>
+    !team || g.homeTeam.abbreviation === team || g.awayTeam.abbreviation === team;
+  const filtered = games.filter(inTeam);
+
+  // Played games get the chosen sort. Upcoming ones are always soonest-first:
+  // they have no score, so sorting them by total or margin is meaningless.
+  const past = filtered
+    .filter((g) => g.status === "final")
+    .sort((a, b) => {
+      const va = metric.num(a);
+      const vb = metric.num(b);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      return sort.dir === "asc" ? va - vb : vb - va;
+    });
+  const upcoming = filtered
+    .filter((g) => g.status !== "final")
+    .sort((a, b) => a.gameDate.localeCompare(b.gameDate));
+
+
+  const monthLabel = (x: { y: number; m: number }) =>
+    new Date(Date.UTC(x.y, x.m - 1, 1)).toLocaleDateString(locale, { month: "long", year: "numeric", timeZone: "UTC" });
+  const dayLabel = (iso: string) =>
+    new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale, { month: "short", day: "numeric", timeZone: "UTC" });
+
+  const matchupCell = (g: NHLGame) => (
+    <td className="px-3 py-2.5 sticky left-0 z-10 whitespace-nowrap" style={{ background: BG_CARD }}>
+      <img src={nhlLogoUrl(g.awayTeam.abbreviation)} alt={g.awayTeam.abbreviation} className="w-4 h-4 object-contain inline-block mr-1 align-text-bottom" />
+      <span className="text-white font-medium">{g.awayTeam.abbreviation}</span>
+      <span className="text-[#5c6f63] mx-1.5">{t("schedule.at")}</span>
+      <img src={nhlLogoUrl(g.homeTeam.abbreviation)} alt={g.homeTeam.abbreviation} className="w-4 h-4 object-contain inline-block mr-1 align-text-bottom" />
+      <span className="text-white font-medium">{g.homeTeam.abbreviation}</span>
+    </td>
+  );
+
+  const rangeLabel =
+    range === "month"
+      ? (cursor ? monthLabel(cursor) : "—")
+      : range === "5d" ? t("chart.gm.next5") : t("chart.gm.next10");
+
+  const skeleton = (
+    <div className="px-4 py-6 flex flex-col gap-2">
+      {Array.from({ length: 6 }, (_, i) => (
+        <div key={i} className="h-6 rounded animate-pulse" style={{ background: BG_CELL }} />
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Header + range + team filter */}
+      <div className="rounded-2xl border border-white/20 p-4 flex flex-col gap-3" style={{ background: BG_CARD }}>
+        <div className="min-w-0">
+          <p className="text-white font-bold text-base">{t("chart.allGames.title")}</p>
+          <p className="text-[#8a9ea6] text-xs">
+            {t("chart.allGames.note", { n: games.length, month: rangeLabel })}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-full p-0.5 border border-white/15" style={{ background: BG_CELL }}>
+            {([
+              { key: "5d" as GameRange,    label: t("chart.gm.next5") },
+              { key: "10d" as GameRange,   label: t("chart.gm.next10") },
+              { key: "month" as GameRange, label: t("chart.gm.month") },
+            ]).map((r) => {
+              const isActive = range === r.key;
+              return (
+                <button
+                  key={r.key}
+                  onClick={() => setRange(r.key)}
+                  className="px-3 py-1.5 rounded-full text-xs font-semibold transition-colors whitespace-nowrap"
+                  style={isActive ? { background: accent, color: "#0A0E0C" } : { color: "#8a9ea6" }}
+                >
+                  {r.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Only relevant when browsing a whole month. */}
+          {range === "month" && (
+            <select
+              value={cursor ? ymKey(cursor.y, cursor.m) : ""}
+              onChange={(e) => {
+                const [y, m] = e.target.value.split("-").map(Number);
+                setCursor({ y, m });
+              }}
+              className={selectCls}
+              style={{ background: BG_CELL, color: "#c8d3cc" }}
+              aria-label={t("chart.gm.month")}
+            >
+              {months.map((x) => (
+                <option key={ymKey(x.y, x.m)} value={ymKey(x.y, x.m)}>{monthLabel(x)}</option>
+              ))}
+            </select>
+          )}
+
+          {/* Filters what's already loaded — no refetch. */}
+          <select
+            value={team}
+            onChange={(e) => setTeam(e.target.value)}
+            className={selectCls}
+            style={{ background: BG_CELL, color: team ? accent : "#8a9ea6" }}
+            aria-label={t("chart.team")}
+          >
+            <option value="">{t("chart.gm.allTeams")}</option>
+            {teamOptions.map((abbr) => (
+              <option key={abbr} value={abbr}>{abbr}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {error ? (
+        <div className="rounded-2xl border border-white/20 p-6 text-center" style={{ background: BG_CARD }}>
+          <p className="text-[#8a9ea6] text-sm">{t("schedule.error")}</p>
+        </div>
+      ) : (
+        <>
+          {/* ── Results (games already played) ── */}
+          <div className="rounded-2xl border border-white/20 overflow-hidden" style={{ background: BG_CARD }}>
+            <div className="px-4 pt-3 pb-2 border-b border-white/10">
+              <p className="text-white text-sm font-semibold mb-2">{t("chart.gm.results")}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {metrics.map((m) => {
+                  const isActive = m.key === metric.key;
+                  return (
+                    <button
+                      key={m.key}
+                      onClick={() => toggleSort(m.key)}
+                      className="px-3 py-1 rounded-full text-[11px] font-semibold transition-colors"
+                      style={
+                        isActive
+                          ? { background: accent + "22", color: accent, border: `1px solid ${accent}66` }
+                          : { background: BG_CELL, color: "#8a9ea6", border: "1px solid transparent" }
+                      }
+                    >
+                      {m.label}
+                      {isActive && <span className="ml-1 text-[9px]">{sort.dir === "asc" ? "▲" : "▼"}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {loading ? skeleton : past.length === 0 ? (
+              <p className="px-4 py-6 text-center text-[#8a9ea6] text-sm">{t("chart.gm.noResults")}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="text-[#8a9ea6]">
+                      <th className="text-left font-semibold px-3 py-2 sticky left-0 z-10" style={{ background: BG_CARD }}>
+                        {t("chart.gm.matchup")}
+                      </th>
+                      <th className="px-3 py-2 whitespace-nowrap">
+                        <SortHead label={t("chart.gm.date")} active={metric.key === "date"} dir={sort.dir} onClick={() => toggleSort("date")} accent={accent} />
+                      </th>
+                      <th className="font-semibold px-3 py-2 text-center">{t("chart.gm.score")}</th>
+                      <th className="px-3 py-2 whitespace-nowrap">
+                        <SortHead label={t("chart.gm.total")} active={metric.key === "total"} dir={sort.dir} onClick={() => toggleSort("total")} accent={accent} />
+                      </th>
+                      <th className="px-3 py-2 whitespace-nowrap">
+                        <SortHead label={t("chart.gm.diff")} active={metric.key === "margin"} dir={sort.dir} onClick={() => toggleSort("margin")} accent={accent} />
+                      </th>
+                      <th className="font-semibold px-3 py-2 text-left whitespace-nowrap">{t("chart.gm.venue")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {past.map((g) => (
+                      <tr
+                        key={g.id}
+                        onClick={() => navigate(`/stats/prediction/game/${g.id}`)}
+                        className="border-t border-white/[0.06] cursor-pointer hover:bg-white/[0.04] transition-colors"
+                      >
+                        {matchupCell(g)}
+                        <td
+                          className="px-3 py-2.5 text-center tabular-nums whitespace-nowrap"
+                          style={metric.key === "date" ? { color: accent, fontWeight: 600 } : { color: "#c8d3cc" }}
+                        >
+                          {dayLabel(g.gameDate)}
+                        </td>
+                        <td className="px-3 py-2.5 text-center tabular-nums text-white whitespace-nowrap">
+                          {g.awayTeam.score} – {g.homeTeam.score}
+                        </td>
+                        <td className="px-3 py-2.5 text-center tabular-nums" style={metric.key === "total" ? { color: accent, fontWeight: 600 } : { color: "#fff" }}>
+                          {totalOf(g) ?? DASH}
+                        </td>
+                        <td className="px-3 py-2.5 text-center tabular-nums" style={metric.key === "margin" ? { color: accent, fontWeight: 600 } : { color: "#fff" }}>
+                          {marginOf(g) ?? DASH}
+                        </td>
+                        <td className="px-3 py-2.5 text-left text-[#8a9ea6] whitespace-nowrap max-w-[12rem] truncate">{g.venue || DASH}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* ── Upcoming (not yet final) — always soonest first ── */}
+          <div className="rounded-2xl border border-white/20 overflow-hidden" style={{ background: BG_CARD }}>
+            <div className="px-4 pt-3 pb-2 border-b border-white/10">
+              <p className="text-white text-sm font-semibold">{t("chart.gm.upcoming")}</p>
+            </div>
+
+            {loading ? skeleton : upcoming.length === 0 ? (
+              <p className="px-4 py-6 text-center text-[#8a9ea6] text-sm">{t("chart.gm.noUpcoming")}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="text-[#8a9ea6]">
+                      <th className="text-left font-semibold px-3 py-2 sticky left-0 z-10" style={{ background: BG_CARD }}>
+                        {t("chart.gm.matchup")}
+                      </th>
+                      <th className="font-semibold px-3 py-2 text-center">{t("chart.gm.date")}</th>
+                      <th className="font-semibold px-3 py-2 text-center">{t("chart.gm.time")}</th>
+                      <th className="font-semibold px-3 py-2 text-center">{t("chart.gm.status")}</th>
+                      <th className="font-semibold px-3 py-2 text-left whitespace-nowrap">{t("chart.gm.venue")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {upcoming.map((g) => (
+                      <tr
+                        key={g.id}
+                        onClick={() => navigate(`/stats/prediction/game/${g.id}`)}
+                        className="border-t border-white/[0.06] cursor-pointer hover:bg-white/[0.04] transition-colors"
+                      >
+                        {matchupCell(g)}
+                        <td className="px-3 py-2.5 text-center tabular-nums text-[#c8d3cc] whitespace-nowrap">{dayLabel(g.gameDate)}</td>
+                        <td className="px-3 py-2.5 text-center tabular-nums text-white whitespace-nowrap">{g.startTime || DASH}</td>
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                          <span
+                            className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                            style={
+                              g.status === "live"
+                                ? { background: "#f8717122", color: "#f87171" }
+                                : { background: accent + "22", color: accent }
+                            }
+                          >
+                            {statusLabel(g)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-left text-[#8a9ea6] whitespace-nowrap max-w-[12rem] truncate">{g.venue || DASH}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── Section nav (Team / Game / Player) ────────────────────
+ * Flat pills, deliberately plainer than the animated FramedLabel title so the
+ * two don't compete. Each lands on that section's league-wide overview.
+ */
+function ChartNav({ type }: { type?: string }) {
+  const navigate = useNavigate();
+  const { t } = useI18n();
+  const { theme } = useSport();
+  const accent = theme.accent;
+
+  const items = [
+    { key: "team",   label: t("chart.team"),   to: "/stats/chart/all-teams",   match: ["team", "all-teams"] },
+    { key: "game",   label: t("chart.game"),   to: "/stats/chart/all-games",   match: ["game", "all-games"] },
+    { key: "player", label: t("chart.player"), to: "/stats/chart/all-players", match: ["player", "all-players"] },
+  ];
+
+  return (
+    <nav className="flex items-center gap-1 ml-auto shrink-0">
+      {items.map((it) => {
+        const active = it.match.includes(type ?? "");
+        return (
+          <button
+            key={it.key}
+            onClick={() => navigate(it.to)}
+            className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-colors"
+            style={
+              active
+                ? { background: accent, color: "#0A0E0C" }
+                : { background: "rgba(255,255,255,0.06)", color: "#8a9ea6" }
+            }
+          >
+            {it.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
 /* ── Charts page shell ─────────────────────────────────────
  * Mirrors the prediction page layout on the lighter Charts palette, with the
- * framed CHART label reused as the page title.
+ * framed STATISTICS label reused as the page title.
  */
 export function ChartPage() {
   const { type, id } = useParams<{ type: string; id: string }>();
@@ -1196,7 +2598,13 @@ export function ChartPage() {
   const { t } = useI18n();
 
   const content =
-    type === "player" ? (
+    type === "all-players" ? (
+      <AllPlayersCharts />
+    ) : type === "all-teams" ? (
+      <AllTeamsCharts />
+    ) : type === "all-games" ? (
+      <AllGamesCharts />
+    ) : type === "player" ? (
       <PlayerCharts initialPlayerId={id} />
     ) : type === "team" || !type ? (
       <TeamCharts teamId={id} />
@@ -1212,13 +2620,15 @@ export function ChartPage() {
         className="sticky top-0 z-40 px-4 pt-12 pb-3"
         style={{ background: BG_HEADER, backdropFilter: "blur(16px)", borderBottom: "1px solid #2f3b28" }}
       >
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="text-[#3a5060] text-lg">
+        <div className="flex items-center gap-2">
+          {/* Always returns to Stats rather than stepping back through history —
+              charts link to each other (team → player → all-players), so a
+              history-based back could land several charts deep. */}
+          <button onClick={() => navigate("/stats")} className="text-[#3a5060] text-lg shrink-0" aria-label={t("stats.title")}>
             ←
           </button>
-          <div className="flex-1">
-            <FramedLabel text={t("chart.title")} />
-          </div>
+          <FramedLabel text={t("chart.title")} />
+          <ChartNav type={type} />
         </div>
       </div>
 
