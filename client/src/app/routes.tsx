@@ -1,6 +1,7 @@
-import { createBrowserRouter, Navigate, useLocation } from "react-router";
+import { createBrowserRouter, Navigate, Outlet, useLocation } from "react-router";
 import { lazy, Suspense, type ReactNode } from "react";
 import { useAuth } from "./context/AuthContext";
+import { AuthGateProvider } from "./context/AuthGateContext";
 
 // LoginPage stays eager — it's the entry point for unauthenticated visitors, so
 // lazy-loading it would just add a round-trip before first paint.
@@ -42,9 +43,11 @@ function withSuspense(node: ReactNode) {
 }
 
 /**
- * Route guard: nothing in the app is visible without an account.
- * Unauthenticated users are redirected to /login (which shows the app
- * presentation and keeps the navigation bar visible).
+ * Route guard for account-only pages (profile, Pro, dev tools).
+ * The rest of the app — stats, schedule, predictions, the bet builder and the
+ * public chat — is browsable while signed out. Guests are sent to /login only
+ * for pages that inherently need an account; the nav bar stays visible so they
+ * can go back.
  */
 function Protected({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -57,32 +60,53 @@ function Protected({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Root layout — mounts the AuthGate popup once for every route (it lives inside
+ * the router so it can navigate to /login) and renders the matched page via
+ * <Outlet />.
+ */
+function RootLayout() {
+  return (
+    <AuthGateProvider>
+      <Outlet />
+    </AuthGateProvider>
+  );
+}
+
 export const router = createBrowserRouter([
-  // Public — accessible without an account
-  { path: "/login",                              Component: LoginPage                                    },
-  { path: "/auth/callback",                      element: withSuspense(<AuthCallback />)                 },
-  { path: "/terms",                              element: withSuspense(<TermsPage />)                    },
-  { path: "/privacy",                            element: withSuspense(<PrivacyPage />)                  },
-  { path: "/support",                            element: withSuspense(<SupportPage />)                  },
+  {
+    element: <RootLayout />,
+    children: [
+      // Public — accessible without an account
+      { path: "/login",                              Component: LoginPage                                    },
+      { path: "/auth/callback",                      element: withSuspense(<AuthCallback />)                 },
+      { path: "/terms",                              element: withSuspense(<TermsPage />)                    },
+      { path: "/privacy",                            element: withSuspense(<PrivacyPage />)                  },
+      { path: "/support",                            element: withSuspense(<SupportPage />)                  },
 
-  // Protected — require a signed-in account
-  { path: "/",                                   element: withSuspense(<Protected><HockeyLanding /></Protected>)        },
-  { path: "/stats",                              element: withSuspense(<Protected><StatsPage /></Protected>)            },
-  { path: "/schedule",                           element: withSuspense(<Protected><SchedulePage /></Protected>)         },
-  { path: "/stats/prediction/:type/:id",         element: withSuspense(<Protected><PredictionPage /></Protected>)       },
-  { path: "/stats/chart/:type/:id?",             element: withSuspense(<Protected><ChartPage /></Protected>)           },
-  { path: "/stats/prediction/tennis-player/:id", element: withSuspense(<Protected><TennisPlayerPage /></Protected>)     },
-  { path: "/bet",                                element: withSuspense(<Protected><BetBuilderPage /></Protected>)       },
-  { path: "/league",                             element: withSuspense(<Protected><LeaguePage /></Protected>)           },
-  { path: "/profile",                            element: withSuspense(<Protected><ProfilePage /></Protected>)          },
-  { path: "/pro",                                element: withSuspense(<Protected><ProPage /></Protected>)              },
-  { path: "/pro/success",                        element: withSuspense(<Protected><ProSuccessPage /></Protected>)       },
-  { path: "/nhl-predictions",                    element: withSuspense(<Protected><NHLPredictionsPage /></Protected>)   },
-  { path: "/predictions/tennis",                 element: withSuspense(<Protected><TennisPredictionsPage /></Protected>)},
-  { path: "/share/:id",                          element: withSuspense(<Protected><SharePage /></Protected>)            },
-  { path: "/dev/ml",                             element: withSuspense(<Protected><DevMLDashboard /></Protected>)       },
+      // Public browsing — everything the basic plan offers, no account needed.
+      // Write actions inside these pages (e.g. chat) are gated by AuthGate.
+      { path: "/",                                   element: withSuspense(<HockeyLanding />)                },
+      { path: "/stats",                              element: withSuspense(<StatsPage />)                    },
+      { path: "/schedule",                           element: withSuspense(<SchedulePage />)                 },
+      { path: "/stats/prediction/:type/:id",         element: withSuspense(<PredictionPage />)               },
+      { path: "/stats/chart/:type/:id?",             element: withSuspense(<ChartPage />)                    },
+      { path: "/stats/prediction/tennis-player/:id", element: withSuspense(<TennisPlayerPage />)             },
+      { path: "/bet",                                element: withSuspense(<BetBuilderPage />)               },
+      { path: "/league",                             element: withSuspense(<LeaguePage />)                   },
+      { path: "/nhl-predictions",                    element: withSuspense(<NHLPredictionsPage />)           },
+      { path: "/predictions/tennis",                 element: withSuspense(<TennisPredictionsPage />)        },
+      { path: "/share/:id",                          element: withSuspense(<SharePage />)                    },
 
-  // Catch-all — any unmatched URL lands on a friendly 404 instead of the
-  // raw React Router error screen (e.g. broken/shared links).
-  { path: "*",                                   element: withSuspense(<NotFoundPage />)                                 },
+      // Protected — require a signed-in account
+      { path: "/profile",                            element: withSuspense(<Protected><ProfilePage /></Protected>)    },
+      { path: "/pro",                                element: withSuspense(<Protected><ProPage /></Protected>)        },
+      { path: "/pro/success",                        element: withSuspense(<Protected><ProSuccessPage /></Protected>) },
+      { path: "/dev/ml",                             element: withSuspense(<Protected><DevMLDashboard /></Protected>) },
+
+      // Catch-all — any unmatched URL lands on a friendly 404 instead of the
+      // raw React Router error screen (e.g. broken/shared links).
+      { path: "*",                                   element: withSuspense(<NotFoundPage />)                 },
+    ],
+  },
 ]);

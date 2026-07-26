@@ -137,7 +137,10 @@ ${jsonld ? `  <script type="application/ld+json">\n${JSON.stringify(jsonld, null
 <body>
   <header class="site-header">
     <div class="wrap">
-      <a class="brand" href="${SITE}/">Arak<span>Ice</span></a>
+      <a class="brand" href="${SITE}/" aria-label="ArakIce — home">
+        <img class="brand-logo" src="/arakice-logo-80.png" alt="ArakIce" width="40" height="40" />
+        <span class="brand-word">ArakIce</span>
+      </a>
       <a class="nav-cta" href="${SITE}/">Open the app</a>
     </div>
   </header>

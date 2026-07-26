@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { profileApiService } from "../../../services/userService";
+import { useAuthGate } from "../../../context/AuthGateContext";
 import { useI18n } from "../../../i18n";
 import { AppButton } from "../../../components/AppButton";
 import type { ChatRoom } from "../../../types/user";
@@ -19,6 +20,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
   onJoined: (room: ChatRoom) => void;
 }) {
   const { t } = useI18n();
+  const { requireAuth } = useAuthGate();
   const [search, setSearch] = useState("");
   const [openPublic, setOpenPublic] = useState(true);
   const [openPrivate, setOpenPrivate] = useState(true);
@@ -53,6 +55,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
   const looksLikeCode = /^[a-zA-Z0-9]{4,10}$/.test(search.trim()) && publicRooms.length === 0 && privateRooms.length === 0;
 
   async function handleJoinPublic(room: ChatRoom) {
+    if (!requireAuth("gate.joinRoom")) return;
     try {
       const joined = await profileApiService.joinRoom(room.id);
       onJoined(joined);
@@ -75,6 +78,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
 
   async function handleJoinByCode() {
     if (!codeResult) return;
+    if (!requireAuth("gate.joinRoom")) return;
     setJoining(true);
     try {
       const room = await profileApiService.joinRoomByCode(search.trim());

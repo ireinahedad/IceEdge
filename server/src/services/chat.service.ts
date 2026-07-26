@@ -143,6 +143,33 @@ async function viewRoom(room: any, userId: string) {
   };
 }
 
+/** Serialise a public room for a signed-out guest (no membership, no join code). */
+async function viewRoomGuest(room: any) {
+  const count = await memberCount(room.id);
+  const { rows: lastMsg } = await pool.query(
+    `SELECT text, sent_at FROM chat_messages WHERE room_id = $1 ORDER BY sent_at DESC LIMIT 1`,
+    [room.id],
+  );
+  return {
+    id:            room.id,
+    name:          room.name,
+    icon:          room.icon,
+    description:   room.description,
+    color:         room.color ?? null,
+    isLive:        room.isLive,
+    isPrivate:     room.isPrivate,
+    joinCode:      null,
+    memberCount:   count,
+    isMember:      false,
+    role:          null,
+    isPinned:      false,
+    lastMessage:   lastMsg[0]?.text    ?? null,
+    lastMessageAt: lastMsg[0]?.sent_at ?? null,
+    unread:        0,
+    messages:      [],
+  };
+}
+
 // ─── Messages ─────────────────────────────────────────────────────────────────
 
 async function getMessages(roomId: string) {
@@ -201,6 +228,25 @@ export const chatService = {
       [userId],
     );
     return Promise.all(rows.map(r => viewRoom(r, userId)));
+  },
+
+  /** Public rooms only — read-only listing for signed-out guests. */
+  async getPublicRooms() {
+    const { rows } = await pool.query(
+      `SELECT id, name, icon, description, color, is_live AS "isLive",
+              is_private AS "isPrivate", join_code AS "joinCode"
+       FROM chat_rooms
+       WHERE is_private = FALSE
+       ORDER BY name ASC`,
+    );
+    return Promise.all(rows.map(r => viewRoomGuest(r)));
+  },
+
+  /** Messages of a PUBLIC room, for signed-out guests. Private rooms are rejected. */
+  async getPublicRoomMessages(roomId: string) {
+    const room = await getRoomRow(roomId);
+    if (room.isPrivate) throw httpError('Sign in to view this private room', 401);
+    return getMessages(roomId);
   },
 
   /** Look up a room by its join code (works for public and private). */

@@ -19,8 +19,8 @@ export function LeaguePage() {
 
   useEffect(() => {
     Promise.all([
-      profileApiService.getLeaderboard(),
-      profileApiService.getChatRooms(),
+      profileApiService.getLeaderboard().catch(() => [] as LeaderboardEntry[]),
+      profileApiService.getChatRooms().catch(() => [] as ChatRoom[]),
     ]).then(([lb, rm]) => {
       setLeaderboard(lb);
       setRooms(rm);

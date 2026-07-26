@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { profileApiService } from "../../../services/userService";
 import { useAuth } from "../../../context/AuthContext";
+import { useAuthGate } from "../../../context/AuthGateContext";
 import { useI18n } from "../../../i18n";
 import type { ChatRoom, UserProfile } from "../../../types/user";
 import { CreateRoomModal } from "./CreateRoomModal";
@@ -12,6 +13,7 @@ import { RoomChat } from "./RoomChat";
 export function ChatTab() {
   const { t } = useI18n();
   const { user } = useAuth();
+  const { requireAuth } = useAuthGate();
   const currentUserId = user?.id ?? "";
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [activeRoom, setActiveRoom] = useState<ChatRoom | null>(null);
@@ -28,6 +30,12 @@ export function ChatTab() {
     // Load the real profile once — used for optimistic message rendering
     profileApiService.getProfile().then(setMe).catch(() => {});
   }, []);
+
+  // Guests may browse and read rooms; creating one requires an account.
+  function openCreate() {
+    if (!requireAuth("gate.createRoom")) return;
+    setShowCreate(true);
+  }
 
   function handleSelectRoom(room: ChatRoom) {
     setActiveRoom(room);
@@ -66,6 +74,7 @@ export function ChatTab() {
   }
 
   async function handlePinToggle(room: ChatRoom) {
+    if (!requireAuth("gate.pinRoom")) return;
     try {
       const updated = await profileApiService.pinRoom(room.id, !room.isPinned);
       setRooms((prev) => {
@@ -96,7 +105,7 @@ export function ChatTab() {
           <>
             <p className="text-white/60 text-xs">{rooms.length} {t("chat.roomsAvailable")}</p>
             <button
-              onClick={() => setShowCreate(true)}
+              onClick={openCreate}
               className="flex items-center gap-1 bg-[#86d1ea] text-[#072E49] text-xs font-bold px-3 py-1.5 rounded-xl"
             >
               {t("chat.newRoom")}
@@ -120,7 +129,7 @@ export function ChatTab() {
         <RoomList
           rooms={rooms}
           onSelect={handleSelectRoom}
-          onCreateNew={() => setShowCreate(true)}
+          onCreateNew={openCreate}
           onPinToggle={handlePinToggle}
           onJoined={handleJoined}
         />

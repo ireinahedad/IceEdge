@@ -3,6 +3,7 @@ import { MessageBubble } from "./MessageBubble";
 import { MembersModal } from "./MembersModal";
 import { profileApiService } from "../../../services/userService";
 import { useChatSocket } from "../../../hooks/useChatSocket";
+import { useAuthGate } from "../../../context/AuthGateContext";
 import { useI18n } from "../../../i18n";
 import type { ChatRoom, ChatMessage, UserProfile } from "../../../types/user";
 
@@ -33,6 +34,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   onPinToggle: (room: ChatRoom) => void;
 }) {
   const { t } = useI18n();
+  const { requireAuth } = useAuthGate();
   const { messages, onlineCount, connected, initMessages, appendOptimistic, confirmMessage, removeMessage } =
     useChatSocket(room.id);
   const [input, setInput] = useState("");
@@ -62,6 +64,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   async function sendMessage() {
     const text = input.trim();
     if (!text) return;
+    if (!requireAuth("gate.sendMessage")) return;
 
     setInput("");
     const tempId = `optimistic_${Date.now()}`;
@@ -100,11 +103,13 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   }
 
   async function handleReact(msgId: string, emoji: string) {
+    if (!requireAuth("gate.react")) return;
     // Optimistic toggle handled inside MessageBubble via local state
     try { await profileApiService.toggleReaction(room.id, msgId, emoji); } catch { /* non-blocking */ }
   }
 
   async function handleDeleteMessage(msgId: string) {
+    if (!requireAuth("gate.deleteMessage")) return;
     if (!confirm(t("chat.deleteMessageConfirm"))) return;
     removeMessage(msgId); // optimistic
     try {
@@ -115,6 +120,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   }
 
   async function handleLeave() {
+    if (!requireAuth("gate.leaveRoom")) return;
     if (!confirm(`Leave ${room.name}?`)) return;
     try {
       await profileApiService.leaveRoom(room.id);
@@ -125,6 +131,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   }
 
   async function handleDelete() {
+    if (!requireAuth("gate.deleteRoom")) return;
     if (!confirm(`Delete ${room.name} for everyone? This cannot be undone.`)) return;
     try {
       await profileApiService.deleteRoom(room.id);

@@ -161,6 +161,19 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "chat.replyingTo":   { en: "Replying to",          fr: "Réponse à" },
   "chat.message":      { en: "Message",              fr: "Message" },
 
+  // ── Auth gate (guest write actions) ──
+  "gate.title":        { en: "Sign in required",     fr: "Connexion requise" },
+  "gate.message":      { en: "You need to be connected to {action}.", fr: "Vous devez être connecté pour {action}." },
+  "gate.signIn":       { en: "Sign in",              fr: "Se connecter" },
+  "gate.sendMessage":  { en: "send a message",       fr: "envoyer un message" },
+  "gate.createRoom":   { en: "create a room",        fr: "créer un salon" },
+  "gate.joinRoom":     { en: "join a room",          fr: "rejoindre un salon" },
+  "gate.react":        { en: "react to a message",   fr: "réagir à un message" },
+  "gate.pinRoom":      { en: "pin a room",           fr: "épingler un salon" },
+  "gate.leaveRoom":    { en: "leave a room",         fr: "quitter un salon" },
+  "gate.deleteMessage":{ en: "delete a message",     fr: "supprimer un message" },
+  "gate.deleteRoom":   { en: "delete a room",        fr: "supprimer un salon" },
+
   // ── Slips / builder ──
   "slip.build":        { en: "Build",           fr: "Créer" },
   "slip.mySlips":      { en: "My Slips",        fr: "Mes coupons" },
@@ -667,6 +680,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "login.pwdMismatch": { en: "Passwords do not match.", fr: "Les mots de passe ne correspondent pas." },
   "login.introTitle": { en: "Smarter bets, backed by data", fr: "Des paris plus malins, basés sur les données" },
   "login.introSubtitle": { en: "Sign in to unlock the full experience.", fr: "Connectez-vous pour débloquer toute l'expérience." },
+  "login.continueGuest": { en: "Browse without signing in →", fr: "Parcourir sans se connecter →" },
   "login.feat1Title": { en: "AI predictions", fr: "Prédictions IA" },
   "login.feat1Body": { en: "Model-driven win probabilities on every market.", fr: "Probabilités de victoire par modèle sur chaque marché." },
   "login.feat2Title": { en: "Best bets & edges", fr: "Meilleurs paris & edges" },

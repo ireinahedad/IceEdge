@@ -1,17 +1,19 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { chatService } from '../services/chat.service';
-import { authenticate } from '../middleware/auth.middleware';
+import { optionalAuthenticate } from '../middleware/auth.middleware';
 import { InMemoryRateLimitStore, RateLimitStore } from '../middleware/rateLimitStore';
 import { io } from '../socket';
 
 const router = Router();
 
-// Every chat route requires a valid JWT — identity comes from req.user.sub
-router.use(authenticate);
+// Optional auth: read-only endpoints (public room list + public messages) are
+// visible to signed-out guests; every write still calls uid() which throws 401
+// when no valid token is present, so posting/creating/joining stays protected.
+router.use(optionalAuthenticate);
 
 function uid(req: Request): string {
   const id = (req as any).user?.sub;
-  if (!id) throw Object.assign(new Error('Unauthorized'), { status: 401 });
+  if (!id) throw Object.assign(new Error('Sign in to continue'), { status: 401 });
   return id;
 }
 
@@ -39,10 +41,15 @@ function rateLimit(action: string, max: number, windowMs: number) {
   };
 }
 
-// GET /api/chat/rooms — public rooms + my private rooms (pinned first)
+// GET /api/chat/rooms — signed-in: public rooms + my private rooms (pinned
+// first). Guests: public rooms only (read-only).
 router.get('/rooms', async (req: Request, res: Response) => {
-  try { res.json(await chatService.getRoomsForUser(uid(req))); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  try {
+    const userId = (req as any).user?.sub as string | undefined;
+    res.json(userId
+      ? await chatService.getRoomsForUser(userId)
+      : await chatService.getPublicRooms());
+  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
 // POST /api/chat/rooms — create (creator becomes admin) · max 5/5min
@@ -122,10 +129,15 @@ router.delete('/rooms/:roomId', async (req: Request, res: Response) => {
   } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
-// GET /api/chat/rooms/:roomId/messages — members (or public rooms)
+// GET /api/chat/rooms/:roomId/messages — members (or public rooms). Guests may
+// read PUBLIC room messages; private rooms require a signed-in member.
 router.get('/rooms/:roomId/messages', async (req: Request, res: Response) => {
-  try { res.json(await chatService.getRoomMessages(req.params.roomId, uid(req))); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  try {
+    const userId = (req as any).user?.sub as string | undefined;
+    res.json(userId
+      ? await chatService.getRoomMessages(req.params.roomId, userId)
+      : await chatService.getPublicRoomMessages(req.params.roomId));
+  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
 // POST /api/chat/rooms/:roomId/messages — identity derived server-side · max 10/10s

@@ -25,6 +25,34 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
 }
 
 // -------------------------------------------------------
+//  Optional authentication (guest-friendly)
+// -------------------------------------------------------
+//  Attaches req.user when a valid Bearer token is present, but does NOT
+//  reject anonymous requests: routes decide per-endpoint whether a user is
+//  required. Used by read-only public endpoints (e.g. public chat rooms) that
+//  should be visible to signed-out visitors while writes stay protected.
+//
+//  Note: a present-but-invalid/expired token still returns 401 so the client's
+//  authedFetch can refresh and retry, rather than silently downgrading a
+//  logged-in user to the guest view.
+
+export function optionalAuthenticate(req: Request, res: Response, next: NextFunction): void {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader?.startsWith('Bearer ')) {
+    next(); // no credentials → treat as guest
+    return;
+  }
+
+  const token = authHeader.slice(7);
+  try {
+    req.user = verifyAccessToken(token);
+    next();
+  } catch (err: any) {
+    res.status(err.status ?? 401).json({ error: err.message });
+  }
+}
+
+// -------------------------------------------------------
 //  Require specific role(s)
 // -------------------------------------------------------
 

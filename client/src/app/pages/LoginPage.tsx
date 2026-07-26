@@ -175,6 +175,16 @@ export function LoginPage() {
         </h1>
 
         <div className="mt-4 w-12 h-0.5 rounded-full" style={{ background: ACCENT, opacity: 0.5 }} />
+
+        {/* Let visitors leave the login screen and browse the app signed-out. */}
+        <button
+          type="button"
+          onClick={() => navigate("/")}
+          className="mt-5 text-xs"
+          style={{ color: ACCENT }}
+        >
+          {t("login.continueGuest")}
+        </button>
       </div>
 
       {step === "form" ? (
