@@ -222,6 +222,6 @@ export async function apiLogoutAll(): Promise<void> {
 }
 
 export function getGoogleLoginUrl(): string {
-  const serverBase = import.meta.env.VITE_PROFILE_API_URL?.replace('/api', '') || 'http://localhost:3001';
+  const serverBase = import.meta.env.VITE_PROFILE_API_URL?.replace(/\/api\/?$/, '') || 'http://localhost:3001';
   return `${serverBase}/api/auth/google`;
 }

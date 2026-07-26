@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NHL AI Predictions | Machine-Learning Hockey Model — ArakIce</title>
+  <meta name="description" content="See how ArakIce's AI predicts NHL games: a machine-learning model built on expected goals, rest, travel, injuries and referees. Transparent, explainable hockey predictions — not a black box." />
+  <link rel="canonical" href="https://arakice.com/nhl-ai-predictions" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="ArakIce" />
+  <meta property="og:title" content="NHL AI Predictions | Machine-Learning Hockey Model" />
+  <meta property="og:description" content="A transparent AI model for NHL predictions — expected goals, rest, travel, injuries and referees, with the reasoning shown for every pick." />
+  <meta property="og:url" content="https://arakice.com/nhl-ai-predictions" />
+  <meta property="og:image" content="https://arakice.com/arakice-logo.png" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="NHL AI Predictions | ArakIce" />
+  <meta name="twitter:description" content="How an explainable machine-learning model predicts NHL games." />
+  <meta name="twitter:image" content="https://arakice.com/arakice-logo.png" />
+
+  <link rel="icon" type="image/png" href="/arakice-logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/seo.css" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What kind of AI does ArakIce use for NHL predictions?",
+        "acceptedAnswer": { "@type": "Answer", "text": "ArakIce uses a machine-learning model trained on historical NHL data. Rather than a single opaque neural network, it combines learned team-strength ratings with an explainable, factor-based layer for rest, travel, injuries and referees, so every prediction can be traced back to specific reasons." }
+      },
+      {
+        "@type": "Question",
+        "name": "Is the AI a black box, or can I see why it made a pick?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Every prediction is explainable. The model shows which factors moved the number and by how much, so you see whether a pick is driven by a goaltending edge, a travel disadvantage, a low-penalty referee crew, or an injury — not just a final percentage." }
+      },
+      {
+        "@type": "Question",
+        "name": "How is AI better than expert NHL picks?",
+        "acceptedAnswer": { "@type": "Answer", "text": "AI applies the same framework to every game without fatigue, bias or recency effects, and it processes far more data than a human can hold in mind. It is not necessarily smarter than a great analyst on one game, but it is far more consistent across a full season." }
+      },
+      {
+        "@type": "Question",
+        "name": "Does the AI guarantee winning bets?",
+        "acceptedAnswer": { "@type": "Answer", "text": "No. Hockey is high-variance and no model can guarantee outcomes. The goal of the AI is to find value against the odds over a large sample of bets, not to win every game." }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="https://arakice.com/">Arak<span>Ice</span></a>
+      <a class="nav-cta" href="https://arakice.com/">Open the app</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Explainable machine learning for hockey</p>
+      <h1>NHL AI Predictions</h1>
+      <p class="lede">"AI predictions" has become one of the most overused phrases in sports betting. ArakIce takes it literally and takes it seriously: a machine-learning model that reads each NHL matchup the way a sharp analyst would — accounting for expected goals, rest, travel, injuries and officiating — but does it for every game, every night, without bias or fatigue, and shows its work.</p>
+    </section>
+
+    <p>Plenty of sites now slap the word "AI" on the same tired power rankings they always published. This page is about what genuine machine learning actually contributes to NHL predictions, where it helps, where it does not, and why an <em>explainable</em> model is far more useful to a bettor than a mysterious percentage with no reasoning attached. If you want to understand what is under the hood before you trust the output, you are in the right place.</p>
+
+    <div class="cta-box">
+      <h3>Let the model read tonight's slate for you</h3>
+      <p>AI win probabilities and projected totals for every NHL game, ranked by the edge against the odds.</p>
+      <a class="btn" href="https://arakice.com/">See today's AI predictions</a>
+    </div>
+
+    <h2>What the AI is actually doing</h2>
+    <p>At its core, the model answers one question for every game: given everything we know, what is the probability each team wins, and how many goals will the game produce? To get there, it learns from thousands of historical NHL games how specific conditions have changed outcomes, then applies those learned relationships to today's matchups.</p>
+    <p>That learning is what separates a real model from a spreadsheet of averages. A human might say "back-to-backs are bad." The model quantifies exactly <em>how</em> bad, for which kinds of teams, under which travel conditions, and how that penalty interacts with goaltending and rest on the other side. It captures relationships that are too subtle and too numerous for anyone to track by hand, and it updates those relationships as new results come in.</p>
+
+    <h2>Why "explainable" matters more than "advanced"</h2>
+    <p>The temptation in machine learning is to chase the most complex architecture and treat the output as gospel. For betting, that is a mistake. A number you cannot interrogate is a number you cannot trust when it disagrees with obvious reality — like a model loving a team whose starting goaltender was just ruled out. ArakIce is deliberately built as a <strong>glass box</strong>: the learned team-strength ratings feed a transparent, factor-based layer, so each prediction comes with the specific reasons that moved it.</p>
+    <p>In practice, that means when the AI likes the under in a given game, you can see that it is driven by, say, a defensive matchup, two rested goaltenders and a referee crew that rarely calls penalties. When it fades a popular favourite, you can see it is because that team is on the back end of a back-to-back after a three-time-zone flight. You are never asked to trust a bare percentage. That transparency is what lets you overrule the model when you have information it does not — and, just as importantly, trust it when your gut is wrong.</p>
+
+    <h2>The inputs the model learns from</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Learned team strength</h3>
+        <p>Offensive and defensive ratings derived from shot quality and results, updated continuously as the season unfolds.</p>
+      </div>
+      <div class="card">
+        <h3>Expected goals</h3>
+        <p>Shot location and quality data give a truer read on process than the scoreboard, which variance and hot goalies distort.</p>
+      </div>
+      <div class="card">
+        <h3>Rest &amp; fatigue</h3>
+        <p>Days off, back-to-backs and dense stretches, learned as quantified penalties rather than rules of thumb.</p>
+      </div>
+      <div class="card">
+        <h3>Travel &amp; geography</h3>
+        <p>Distance, time-zone shifts, altitude and multi-city road trips — a genuine, measurable edge the market underrates.</p>
+      </div>
+      <div class="card">
+        <h3>Injuries &amp; goaltending</h3>
+        <p>Confirmed absences and the actual starter in net, both of which reshape a projection more than casual bettors expect.</p>
+      </div>
+      <div class="card">
+        <h3>Referee tendencies</h3>
+        <p>Crew-level penalty rates feed the totals model, because more power plays mean more goals on average.</p>
+      </div>
+    </div>
+
+    <h2>Where AI beats human picks — and where it doesn't</h2>
+    <p>The realistic case for AI predictions rests on consistency, coverage and freedom from bias. A model applies the identical framework to a marquee Saturday game and a forgettable Tuesday matinee. It never gets bored, never tilts after a bad beat, and never talks itself into a team because it won 7-1 last night. It also processes far more information at once than any person can hold in their head, from travel logs to referee assignments to lineup news across the whole league.</p>
+    <p>But AI is not a crystal ball, and pretending otherwise is how bettors get hurt. A model is only as good as its inputs; if a goaltending change breaks late and has not been reflected yet, the number can be stale. It can miss intangibles a plugged-in reporter would catch — locker-room turmoil, a nagging injury a team is hiding, a coach quietly resting players before the playoffs. The right mental model is a partnership: let the AI do the heavy, unbiased quantitative work, and layer your own judgment on top for the things numbers cannot see.</p>
+
+    <div class="cta-box">
+      <h3>See the reasoning behind every pick</h3>
+      <p>Open a game and the model shows exactly which factors moved the number — no black boxes.</p>
+      <a class="btn" href="https://arakice.com/">Open ArakIce</a>
+    </div>
+
+    <h2>Turning AI predictions into better bets</h2>
+    <p>A prediction only becomes valuable when you compare it to the price. The AI produces a probability; the bookmaker's odds imply a probability of their own. The difference between them is the edge, and it is the only reason to place a bet. ArakIce ranks each night's games by that difference, so your attention goes to the handful of spots where the model and the market genuinely disagree rather than to the games everyone is already talking about.</p>
+    <p>From there, discipline does the rest. Back the largest, best-supported edges at a sensible stake; pass on the marginal ones. Accept that a strong process will still lose plenty of individual nights, because hockey is noisy and one bounce decides tight games. The AI's job is not to be right tonight — it is to be right often enough, at good enough prices, that the math works over hundreds of bets. That long-run edge is the entire point.</p>
+
+    <h2>How the model is trained and kept honest</h2>
+    <p>A model is only trustworthy if it has been tested the right way. The wrong way is to tune it until it "explains" games that have already happened — any model can be bent to fit the past. The right way is to check it against games it never saw during training, which is the only fair test of whether it has learned something real or simply memorised noise. That discipline, holding data back and grading predictions on out-of-sample results, is what separates a genuine forecasting model from a curve-fitting exercise dressed up in the language of AI.</p>
+    <p>Just as important is <strong>calibration</strong>: when the model says 60%, that outcome should occur close to 60% of the time over a large sample. A model can pick winners and still be poorly calibrated, which quietly ruins bet sizing. ArakIce is built to prioritise honest, calibrated probabilities over flashy hit rates, because the entire value of an AI prediction for a bettor is that the number can be trusted as a number — used to measure the size of an edge, not just its direction.</p>
+
+    <h2>Common myths about betting AI</h2>
+    <p>Three misconceptions trip up newcomers to AI predictions, and clearing them up sets realistic expectations.</p>
+    <h3>"The AI should win almost every pick"</h3>
+    <p>It should not, and any tool that claims to is selling something. Even a strong NHL model wins a modest majority of well-priced bets; the profit comes from that small, persistent edge applied across a large sample at fair odds, not from an implausible hit rate.</p>
+    <h3>"More complex AI is always better"</h3>
+    <p>Complexity for its own sake often makes a model less reliable and impossible to sanity-check. What matters is signal, calibration and the ability to explain a pick — not the buzzword on the architecture.</p>
+    <h3>"AI removes the need to think"</h3>
+    <p>It removes the grunt work and the bias, not the judgment. The best results come from pairing the model's unbiased quantitative read with your own knowledge of late-breaking news it may not have captured yet.</p>
+
+    <h2>Frequently asked questions</h2>
+    <div class="faq">
+      <details>
+        <summary>What kind of AI does ArakIce use?</summary>
+        <p>A machine-learning model trained on historical NHL data. Instead of one opaque network, it combines learned team-strength ratings with an explainable, factor-based layer for rest, travel, injuries and referees, so every prediction traces back to specific reasons.</p>
+      </details>
+      <details>
+        <summary>Is the AI a black box?</summary>
+        <p>No. Every prediction is explainable — you see which factors moved the number and by how much, whether it was goaltending, travel, a referee crew or an injury.</p>
+      </details>
+      <details>
+        <summary>How is AI better than expert picks?</summary>
+        <p>It applies the same framework to every game without fatigue, bias or recency effects, and processes far more data than a human can. It is not necessarily smarter on any one game, but it is far more consistent across a season.</p>
+      </details>
+      <details>
+        <summary>Does the AI guarantee winning bets?</summary>
+        <p>No. Hockey is high-variance and no model guarantees outcomes. The aim is to find value against the odds over a large sample, not to win every game.</p>
+      </details>
+    </div>
+
+    <section class="related">
+      <h2>Explore more</h2>
+      <ul>
+        <li><a href="https://arakice.com/nhl-predictions-today">NHL Predictions Today — tonight's slate</a></li>
+        <li><a href="https://arakice.com/best-nhl-picks-today">Best NHL Picks Today — the biggest edges</a></li>
+        <li><a href="https://arakice.com/">Open the ArakIce app</a></li>
+      </ul>
+    </section>
+
+    <div class="disclaimer">
+      <p>ArakIce provides statistical analysis and predictions for informational and entertainment purposes only. Nothing here is financial advice or a guarantee of results. Betting involves risk and you should never wager more than you can afford to lose. Must be of legal gambling age in your jurisdiction. If gambling stops being fun, help is available — in the US call or text 1-800-GAMBLER.</p>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <nav>
+        <a href="https://arakice.com/nhl-predictions-today">NHL Predictions</a>
+        <a href="https://arakice.com/nhl-ai-predictions">AI Predictions</a>
+        <a href="https://arakice.com/best-nhl-picks-today">Best Picks</a>
+      </nav>
+      <span>&copy; ArakIce — statistical edge for smarter sports bets.</span>
+    </div>
+  </footer>
+</body>
+</html>

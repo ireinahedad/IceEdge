@@ -12,6 +12,9 @@ node_modules/
 __pycache__/
 *.pyc
 
+# SEO generator sample output (offline --sample runs)
+client/scripts/_sample_out/
+
 # ── ML : données lourdes & régénérables (on garde le code + les modèles) ───────
 # Régénérables via ml/python/fetch_data_v4.py puis build_dataset.py.
 # NB : ml/models/*.json (petits, embarqués dans l'image Docker) et les petits
