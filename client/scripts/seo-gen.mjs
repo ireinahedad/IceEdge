@@ -37,7 +37,7 @@ const OUT_DIR = SAMPLE
   ? path.join(os.tmpdir(), "arakice-seo-sample")
   : process.env.SEO_OUT || path.join(__dirname, "..", "public");
 const HORIZON_WEEKS = Number(process.env.HORIZON_WEEKS || 3); // how many schedule weeks to walk
-const MIN_GP = Number(process.env.MIN_GP || 1);               // gate thin player pages
+const MIN_GP = Number(process.env.MIN_GP || 5);               // gate thin player pages
 const CONCURRENCY = 6;
 
 const STATIC_PAGES = [
@@ -46,6 +46,7 @@ const STATIC_PAGES = [
   { loc: "/best-nhl-picks-today", changefreq: "daily", priority: "0.9" },
   { loc: "/nhl-ai-predictions", changefreq: "weekly", priority: "0.8" },
   { loc: "/best-nhl-betting-software", changefreq: "monthly", priority: "0.7" },
+  { loc: "/about", changefreq: "monthly", priority: "0.5" },
 ];
 
 // ── Small utilities ───────────────────────────────────────────────────────────
@@ -176,6 +177,21 @@ function playerPage(p) {
   const posName = { C: "center", L: "left wing", R: "right wing", D: "defenseman", G: "goaltender" }[p.pos] || "player";
   const team = p.teamName || p.team;
   const s = p.stats || {};
+  const gp = Number(s.gamesPlayed || 0);
+
+  // Per-game rates → genuinely unique numbers per player (reduces duplicate-content risk).
+  let rateBlock = "";
+  if (!isGoalie && gp > 0) {
+    const ppg = (Number(s.points || 0) / gp).toFixed(2);
+    const spg = (Number(s.shots || 0) / gp).toFixed(1);
+    const gpg = (Number(s.goals || 0) / gp).toFixed(2);
+    rateBlock = `      <h2>What ${esc(p.name)}'s rates tell us</h2>
+      <p>Across ${gp} games, ${esc(p.name)} is averaging about <strong>${ppg} points</strong> and <strong>${spg} shots on goal</strong> per game, at roughly ${gpg} goals a night. Rates matter more than raw totals for props, because a prop line is a single-game question — and a ${spg}-shot pace is the base the model adjusts up or down for the specific matchup, ice time and pace. When ${esc(p.name)}'s role or linemates change, those rates are the first thing to move.</p>`;
+  } else if (isGoalie && gp > 0) {
+    const svp = s.savePctg != null ? Number(s.savePctg).toFixed(3) : null;
+    rateBlock = `      <h2>What ${esc(p.name)}'s numbers tell us</h2>
+      <p>Over ${gp} appearances${svp ? ` at a ${svp} save percentage` : ""}, ${esc(p.name)} gives the model a base workload and stopping rate to build on. For goaltender props, the swing factor is volume: the model estimates how many shots ${esc(team)}'s opponent is likely to generate, then pairs that with ${esc(p.name)}'s save rate to project saves. A high-event opponent lifts the saves projection even when the win is in doubt; a low-event one suppresses it.</p>`;
+  }
   const statCards = isGoalie
     ? [
         ["GP", s.gamesPlayed], ["W", s.wins], ["GAA", s.goalsAgainstAvg != null ? Number(s.goalsAgainstAvg).toFixed(2) : null],
@@ -225,6 +241,7 @@ ${stats}
       <h2>How we project ${esc(p.name)}'s props</h2>
       <p>${propsFocus}</p>
       <p>Crucially, the projection is not just a season average dressed up. It weighs the specific game: the opponent ${esc(team)} faces, whether either team is on a back-to-back or a long road trip, the goaltending on the other side, and the referee crew's tendencies where they affect scoring. Those factors are weighed per matchup, so ${esc(p.name)}'s number on a rested home night against a weak defense looks very different from a tired night against an elite one.</p>
+${rateBlock}
       <h2>Which ${esc(p.name)} props to watch</h2>
       <p>The best prop bets are the ones where the model and the market disagree most, not simply the ones with the biggest names attached. When ${esc(p.name)}'s projection clearly exceeds the posted line, that gap is the reason to bet the over; when it falls short, the under or a pass is the disciplined play. Treat the size of the gap as your guide to stake size, and remember that even a strong edge will miss plenty of individual nights.</p>
 ${ctaBox(`Track ${p.name} in the app`, `Follow ${p.name}'s projections game by game and get the edge against the line the moment it moves.`, "Open ArakIce")}
@@ -312,6 +329,13 @@ ${ctaBox(`See the live ${a.abbr}–${b.abbr} pick`, `When ${a.name} and ${b.name
       <p>The projection starts with each team's expected-goals profile — how many quality chances ${esc(a.name)} and ${esc(b.name)} generate and concede — which is far more stable than goals scored. It then adjusts for the specifics of the meeting: which goaltenders are confirmed to start, whether either team is on a back-to-back or deep into a road trip, the travel and time-zone toll, and the referee crew's tendencies where they affect the total. Those factors are weighed for this matchup rather than applied as blanket rules.</p>
       <h2>Moneyline, total and puck line</h2>
       <p>The moneyline expresses the model's view of who wins ${esc(a.name)} vs ${esc(b.name)} most directly. The total (over/under) often carries the richest value, because it turns on pace, goaltending and refereeing rather than on which team is better. The puck line rewards backing a favourite expected to win comfortably, or an underdog expected to keep it close — the projected margin is what tells you whether it is worth the risk.</p>
+      <h2>What tends to move ${esc(a.name)} vs ${esc(b.name)}</h2>
+      <p>${sameDiv
+        ? `As a ${esc(a.division)} Division matchup, ${esc(a.name)} and ${esc(b.name)} meet several times a year, often in tight, familiar, defensively tuned games — division rivals know each other well, which can suppress scoring and make the total as interesting as the side.`
+        : sameConf
+        ? `As a ${esc(a.conference)} Conference matchup, ${esc(a.name)} and ${esc(b.name)} carry playoff-seeding weight, and the intensity that brings can tighten checking and lower event rates relative to a casual non-conference date.`
+        : `As an inter-conference matchup, ${esc(a.name)} and ${esc(b.name)} meet rarely, which means unfamiliarity, travel and scheduling quirks play an outsized role — exactly the situational edges the model is built to price.`}
+        Beyond the rivalry angle, the biggest movers are goaltending confirmations, home ice, and whether either side is on the tail of a back-to-back or a long trip. Any one of those can shift the fair number by more than the standings would suggest.</p>
       <h2>Finding the edge</h2>
       <p>A prediction is only actionable next to a price. ArakIce compares its win probability and projected total to the live odds and surfaces the gap — the edge. When the model and the market disagree meaningfully on ${esc(a.name)} vs ${esc(b.name)}, that is the bet; when they agree, the disciplined move is to pass. Open the app the next time these teams meet for the live number.</p>
 ${ctaBox("Get the pick when they play", "Open ArakIce and check the live prediction for this matchup and the rest of tonight's slate.", "Open ArakIce")}

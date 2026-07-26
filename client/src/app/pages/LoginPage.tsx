@@ -435,6 +435,28 @@ export function LoginPage() {
         <span>·</span>
         <button onClick={() => navigate("/support")} className="underline underline-offset-2">{t("legal.support")}</button>
       </div>
+
+      {/* SEO guides — plain <a> (full navigation) so crawlers reach the static
+          prerendered marketing pages in /public, which React Router does not own. */}
+      <nav
+        aria-label="NHL prediction guides"
+        className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-3 text-[10px]"
+        style={{ color: "#92A08A", opacity: 0.55 }}
+      >
+        <a href="/nhl-predictions-today" className="underline underline-offset-2">NHL Predictions Today</a>
+        <span>·</span>
+        <a href="/best-nhl-picks-today" className="underline underline-offset-2">Best NHL Picks</a>
+        <span>·</span>
+        <a href="/nhl-ai-predictions" className="underline underline-offset-2">AI Predictions</a>
+        <span>·</span>
+        <a href="/nhl-player-props" className="underline underline-offset-2">Player Props</a>
+        <span>·</span>
+        <a href="/nhl-matchups" className="underline underline-offset-2">Matchups</a>
+        <span>·</span>
+        <a href="/best-nhl-betting-software" className="underline underline-offset-2">Betting Software</a>
+        <span>·</span>
+        <a href="/about" className="underline underline-offset-2">About</a>
+      </nav>
     </div>
   );
 }
