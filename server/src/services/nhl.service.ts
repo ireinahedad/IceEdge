@@ -31,6 +31,10 @@ export class NHLService {
     return nhlApi.fetchGameById(id);
   }
 
+  async getGameDetail(id: string) {
+    return nhlApi.fetchGameDetail(id);
+  }
+
   // --- Teams ----------------------------------------------------------------
 
   async getTeams() {

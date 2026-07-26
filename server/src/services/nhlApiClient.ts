@@ -383,6 +383,192 @@ export async function fetchGameById(gameId: string): Promise<any> {
   }
 }
 
+/**
+ * Everything the game page needs, in one payload: the landing feed (score,
+ * shots, scoring summary, stars, state) merged with the boxscore (per-player
+ * lines, which is the only place hits/blocks/giveaways live).
+ *
+ * Both are fetched together because a game page always wants both, and the
+ * boxscore is empty for games that haven't started — in which case the caller
+ * still gets the header/matchup half and shows season form instead.
+ */
+export async function fetchGameDetail(gameId: string): Promise<any> {
+  const cacheKey = `game_detail_${gameId}`;
+  const cached = getCached<any>(cacheKey);
+  if (cached) return cached;
+
+  const [landingRes, boxRes] = await Promise.allSettled([
+    fetchNHL<any>(`v1/gamecenter/${gameId}/landing`),
+    fetchNHL<any>(`v1/gamecenter/${gameId}/boxscore`),
+  ]);
+  if (landingRes.status === 'rejected') {
+    throw Object.assign(new Error('Game not found'), { status: 404 });
+  }
+  const L = landingRes.value as any;
+  const B = boxRes.status === 'fulfilled' ? (boxRes.value as any) : null;
+
+  const state  = parseGameState(L.gameState ?? '');
+  const isFinal = state === 'final';
+
+  const side = (tm: any) => ({
+    abbr:  tm?.abbrev ?? '',
+    name:  [tm?.placeName?.default, tm?.commonName?.default].filter(Boolean).join(' '),
+    score: tm?.score ?? null,
+    sog:   tm?.sog ?? null,
+  });
+
+  // --- Goals per period ---
+  // `summary.scoring` only contains periods that had goals, so the columns are
+  // built from the game's actual period structure and then filled in. Deriving
+  // them from the scoring array alone would silently drop a scoreless period.
+  const tally = new Map<string, { home: number; away: number }>();
+  let sawOT = false;
+  let sawSO = false;
+  for (const p of L.summary?.scoring ?? []) {
+    const type = String(p?.periodDescriptor?.periodType ?? 'REG');
+    const num  = Number(p?.periodDescriptor?.number ?? 0);
+    const label = type === 'SO' ? 'SO' : type === 'OT' ? 'OT' : String(num);
+    if (label === 'OT') sawOT = true;
+    if (label === 'SO') sawSO = true;
+    const cur = tally.get(label) ?? { home: 0, away: 0 };
+    for (const g of p?.goals ?? []) (g?.isHome ? cur.home++ : cur.away++);
+    tally.set(label, cur);
+  }
+
+  const regPeriods = Number(L.regPeriods ?? 3);
+  const lastType   = String(L.periodDescriptor?.periodType ?? 'REG');
+  const lastNum    = Number(L.periodDescriptor?.number ?? regPeriods);
+  const labels: string[] = [];
+  for (let i = 1; i <= regPeriods; i++) labels.push(String(i));
+  if (sawOT || lastType === 'OT' || lastNum > regPeriods) labels.push('OT');
+  if (sawSO || lastType === 'SO') labels.push('SO');
+
+  const periods = labels.map((label) => ({
+    label,
+    home: tally.get(label)?.home ?? 0,
+    away: tally.get(label)?.away ?? 0,
+  }));
+
+  // --- Flat scoring summary ---
+  const scoring = (L.summary?.scoring ?? []).flatMap((p: any) => {
+    const type = String(p?.periodDescriptor?.periodType ?? 'REG');
+    const num  = Number(p?.periodDescriptor?.number ?? 0);
+    const label = type === 'SO' ? 'SO' : type === 'OT' ? 'OT' : String(num);
+    return (p?.goals ?? []).map((g: any) => ({
+      period:   label,
+      time:     g?.timeInPeriod ?? '',
+      teamAbbr: g?.teamAbbrev?.default ?? '',
+      scorer:   g?.name?.default ?? '',
+      assists:  (g?.assists ?? []).map((a: any) => a?.name?.default ?? '').filter(Boolean),
+      strength: g?.strength ?? 'ev',
+      isHome:   !!g?.isHome,
+      homeScore: g?.homeScore ?? null,
+      awayScore: g?.awayScore ?? null,
+    }));
+  });
+
+  const threeStars = (L.summary?.threeStars ?? []).map((s: any) => ({
+    star:     s?.star ?? 0,
+    id:       String(s?.playerId ?? ''),
+    name:     s?.name?.default ?? '',
+    teamAbbr: s?.teamAbbrev ?? '',
+    position: s?.position ?? '',
+    goals:    s?.goals ?? 0,
+    assists:  s?.assists ?? 0,
+    points:   s?.points ?? 0,
+  }));
+
+  // --- Per-player lines + aggregated team totals from the boxscore ---
+  const mapSkater = (p: any) => ({
+    id:           String(p?.playerId ?? ''),
+    name:         p?.name?.default ?? '',
+    number:       p?.sweaterNumber ?? 0,
+    position:     p?.position ?? '',
+    goals:        p?.goals   ?? 0,
+    assists:      p?.assists ?? 0,
+    points:       p?.points  ?? 0,
+    plusMinus:    p?.plusMinus ?? 0,
+    sog:          p?.sog ?? 0,
+    hits:         p?.hits ?? 0,
+    blockedShots: p?.blockedShots ?? 0,
+    pim:          p?.pim ?? 0,
+    giveaways:    p?.giveaways ?? 0,
+    takeaways:    p?.takeaways ?? 0,
+    toi:          p?.toi ?? '',
+    toiMin:       parseToiMinutes(p?.toi),
+  });
+  const mapGoalie = (p: any) => ({
+    id:           String(p?.playerId ?? ''),
+    name:         p?.name?.default ?? '',
+    number:       p?.sweaterNumber ?? 0,
+    saves:        p?.saves ?? 0,
+    shotsAgainst: p?.shotsAgainst ?? 0,
+    goalsAgainst: p?.goalsAgainst ?? 0,
+    savePct:      p?.savePctg ?? null,
+    decision:     p?.decision ?? '',
+    starter:      !!p?.starter,
+    toi:          p?.toi ?? '',
+  });
+
+  const pbg = B?.playerByGameStats;
+  const teamPlayers = (which: 'homeTeam' | 'awayTeam') => {
+    const s = pbg?.[which];
+    const skaters = [...(s?.forwards ?? []), ...(s?.defense ?? [])].map(mapSkater);
+    const goalies = (s?.goalies ?? []).map(mapGoalie).filter((g: any) => g.toi && g.toi !== '00:00');
+    return { skaters, goalies };
+  };
+  const homePlayers = teamPlayers('homeTeam');
+  const awayPlayers = teamPlayers('awayTeam');
+
+  // Team totals are summed from the player lines — the NHL doesn't expose them
+  // directly. Faceoff % is deliberately omitted: the boxscore only gives a
+  // per-player percentage, which can't be combined into a team figure.
+  const totals = (players: { skaters: any[]; goalies: any[] }, sog: number | null, isHome: boolean) => {
+    const sum = (k: string) => players.skaters.reduce((a, p) => a + (p[k] ?? 0), 0);
+    return {
+      sog,
+      pim:          sum('pim'),
+      hits:         sum('hits'),
+      blockedShots: sum('blockedShots'),
+      giveaways:    sum('giveaways'),
+      takeaways:    sum('takeaways'),
+      ppGoals:      scoring.filter((s: any) => s.strength === 'pp' && s.isHome === isHome).length,
+    };
+  };
+
+  const home = side(L.homeTeam);
+  const away = side(L.awayTeam);
+
+  const out = {
+    id: String(L.id ?? gameId),
+    season: L.season ?? null,
+    gameDate: L.gameDate ?? '',
+    startTimeUTC: L.startTimeUTC ?? null,
+    venue: L.venue?.default ?? '',
+    venueLocation: L.venueLocation?.default ?? '',
+    gameType: L.gameType === 3 ? 'playoff' : 'regular',
+    status: state,
+    period: L.periodDescriptor?.number ?? null,
+    periodType: L.periodDescriptor?.periodType ?? null,
+    clock: L.clock?.timeRemaining ?? null,
+    inIntermission: !!L.clock?.inIntermission,
+    lastPeriodType: L.gameOutcome?.lastPeriodType ?? null,
+    home,
+    away,
+    periods,
+    scoring,
+    threeStars,
+    teamStats: B
+      ? { home: totals(homePlayers, home.sog, true), away: totals(awayPlayers, away.sog, false) }
+      : null,
+    players: B ? { home: homePlayers, away: awayPlayers } : null,
+  };
+
+  // Finished games never change; live ones need to stay fresh.
+  setCached(cacheKey, out, isFinal ? 6 * 60 * 60_000 : 30_000);
+  return out;
+}
+
 // --- Boxscore (per-player final stats, used for player-prop settlement) ---
 
 export interface BoxscorePlayerStats {

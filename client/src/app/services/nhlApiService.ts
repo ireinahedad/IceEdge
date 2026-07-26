@@ -92,6 +92,61 @@ export interface PlayerLeaders {
   players: PlayerLeader[];
 }
 
+// ── Single game detail (game charts page) ───────────────────────────────────
+export interface GameSide {
+  abbr: string; name: string; score: number | null; sog: number | null;
+}
+export interface GameTeamStats {
+  sog: number | null; pim: number; hits: number; blockedShots: number;
+  giveaways: number; takeaways: number; ppGoals: number;
+}
+export interface GameSkaterLine {
+  id: string; name: string; number: number; position: string;
+  goals: number; assists: number; points: number; plusMinus: number;
+  sog: number; hits: number; blockedShots: number; pim: number;
+  giveaways: number; takeaways: number; toi: string; toiMin: number;
+}
+export interface GameGoalieLine {
+  id: string; name: string; number: number;
+  saves: number; shotsAgainst: number; goalsAgainst: number;
+  savePct: number | null; decision: string; starter: boolean; toi: string;
+}
+export interface GameGoal {
+  period: string; time: string; teamAbbr: string; scorer: string;
+  assists: string[]; strength: string; isHome: boolean;
+  homeScore: number | null; awayScore: number | null;
+}
+export interface GameStar {
+  star: number; id: string; name: string; teamAbbr: string;
+  position: string; goals: number; assists: number; points: number;
+}
+export interface GameDetail {
+  id: string;
+  season: number | null;
+  gameDate: string;
+  startTimeUTC: string | null;
+  venue: string;
+  venueLocation: string;
+  gameType: 'regular' | 'playoff';
+  status: 'scheduled' | 'live' | 'final';
+  period: number | null;
+  periodType: string | null;
+  clock: string | null;
+  inIntermission: boolean;
+  lastPeriodType: string | null;
+  home: GameSide;
+  away: GameSide;
+  periods: { label: string; home: number; away: number }[];
+  scoring: GameGoal[];
+  threeStars: GameStar[];
+  /** Null until the game has started (no boxscore yet). */
+  teamStats: { home: GameTeamStats; away: GameTeamStats } | null;
+  players: {
+    home: { skaters: GameSkaterLine[]; goalies: GameGoalieLine[] };
+    away: { skaters: GameSkaterLine[]; goalies: GameGoalieLine[] };
+  } | null;
+}
+
 // One row per team for the All Teams page. All 32 arrive in a single call, so
 // the client sorts them locally.
 export interface TeamSeasonRow {
@@ -170,6 +225,10 @@ export const nhlApiService = {
 
   getGame: (gameId: string): Promise<NHLGame> =>
     get<NHLGame>(`/games/${gameId}`),
+
+  // Charts — full detail for one game (landing + boxscore merged).
+  getGameDetail: (gameId: string): Promise<GameDetail> =>
+    get<GameDetail>(`/games/${gameId}/detail`),
 
   getAllTeams: (): Promise<NHLTeamInfo[]> =>
     get<NHLTeamInfo[]>('/teams'),

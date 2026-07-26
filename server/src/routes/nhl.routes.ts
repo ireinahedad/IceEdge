@@ -38,6 +38,13 @@ router.get('/games/live', async (_req, res) => {
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
+// Charts: full detail for one game (landing + boxscore merged).
+// Before '/games/:id' so "detail" isn't captured as an id.
+router.get('/games/:id/detail', async (req, res) => {
+  try { res.json(await nhl.getGameDetail(req.params.id)); }
+  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
 router.get('/games/:id', async (req, res) => {
   try { res.json(await nhl.getGame(req.params.id)); }
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
