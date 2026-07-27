@@ -43,6 +43,19 @@ export const writeLimiter = rateLimit({
   message: { error: 'Too many actions, please slow down.' },
 });
 
+/** Dedicated — email-sending endpoints (password reset, resend verification).
+ *  `authLimiter` uses `skipSuccessfulRequests`, and these endpoints always
+ *  return 200 (neutral, to avoid account enumeration), so they would otherwise
+ *  be effectively un-throttled and abusable for email-bombing a victim's inbox.
+ *  This limiter counts EVERY request, keyed by IP. */
+export const passwordResetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,       // 1 hour
+  limit:    isProd ? 5 : 100,     // 5 email triggers / hour / IP in prod
+  standardHeaders: 'draft-7',
+  legacyHeaders:   false,
+  message: { error: 'Too many requests. Please try again later.' },
+});
+
 /** Dedicated — LLM proxy. The Pro path bills the operator's GitHub Models
  *  account, so it needs its own tight, per-user limit independent of the broad
  *  apiLimiter. Keyed by user id (route is authenticated) with an IP fallback. */

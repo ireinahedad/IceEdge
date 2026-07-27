@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import * as AuthService from '../services/auth.service';
 import { authenticate } from '../middleware/auth.middleware';
+import { passwordResetLimiter } from '../middleware/rateLimit.middleware';
 import { validateBody } from '../middleware/validate.middleware';
 import { logger } from '../logger';
 import {
@@ -90,7 +91,7 @@ router.post('/verify-email', validateBody(verifyEmailSchema), async (req: Reques
 });
 
 // POST /auth/resend-verification — sends a fresh code (always 200 to avoid enumeration).
-router.post('/resend-verification', validateBody(resendVerificationSchema), async (req: Request<{}, {}, ResendVerificationBody>, res: Response) => {
+router.post('/resend-verification', passwordResetLimiter, validateBody(resendVerificationSchema), async (req: Request<{}, {}, ResendVerificationBody>, res: Response) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'email is required' });
@@ -100,7 +101,7 @@ router.post('/resend-verification', validateBody(resendVerificationSchema), asyn
 });
 
 // POST /auth/forgot-password — emails a reset code (always 200 to avoid enumeration).
-router.post('/forgot-password', validateBody(forgotPasswordSchema), async (req: Request<{}, {}, ForgotPasswordBody>, res: Response) => {
+router.post('/forgot-password', passwordResetLimiter, validateBody(forgotPasswordSchema), async (req: Request<{}, {}, ForgotPasswordBody>, res: Response) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'email is required' });

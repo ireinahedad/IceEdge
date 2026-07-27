@@ -405,6 +405,36 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
 
 const ML_BASE = `${(import.meta.env.VITE_NHL_API_URL as string | undefined)?.replace("/api/nhl", "") ?? "http://localhost:3001"}/api/predict`;
 
+/**
+ * Fetch ONLY the ML probability (0-100) for a bet — used by the stats-page
+ * tiles when the "ML" reveal mode is active. Mirrors the fetch + normalisation
+ * MLSection does, and falls back to the same rules-derived estimate as
+ * fallbackResult() when the ML server is offline, so a tile and its detail card
+ * always agree.
+ */
+export async function fetchMLProbability(
+  req: { type: "game" | "player" | "team"; subjectId: string; opponentId?: string; propType?: string; line?: number },
+  ruleBasedPct: number,
+): Promise<number> {
+  try {
+    const r = await fetch(`${ML_BASE}/ml`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      if (data && typeof data === "object") {
+        const raw = (data.probability as number) ?? (data.homeWinProb as number);
+        if (typeof raw === "number") return raw > 1 ? Math.round(raw) : Math.round(raw * 100);
+      }
+    }
+  } catch { /* server offline — use fallback below */ }
+  // Same variance as fallbackResult() so the offline ML value looks distinct
+  // from the rule pct without diverging from the card the user can open.
+  return Math.min(95, Math.max(5, ruleBasedPct + (ruleBasedPct > 50 ? 3 : -3)));
+}
+
 interface MLSectionProps {
   type:         "game" | "player" | "team";
   subjectId:    string;

@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { getGoogleLoginUrl, apiResendVerification, apiForgotPassword, apiResetPassword, EmailNotVerifiedError } from "../services/authService";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
 import { AppButton } from "../components/AppButton";
+import { BottomNav } from "../components/BottomNav";
 import { useI18n } from "../i18n";
 
 type Mode = "login" | "register";
@@ -467,6 +468,10 @@ export function LoginPage() {
         <span>·</span>
         <a href="/about" className="underline underline-offset-2">About</a>
       </nav>
+
+      {/* Keep the app nav visible so visitors can leave the login screen and
+          browse signed-out — the page already reserves space via pb-28. */}
+      <BottomNav />
     </div>
   );
 }

@@ -17,14 +17,24 @@ import type { BetLeg } from "../types/bet";
 import { tennisApiService } from "../services/tennisApiService";
 import type { TennisRankingEntry } from "../services/tennisApiService";
 import { askLLM } from "../services/llmService";
-import { MLSection } from "../components/MLPredictionCard";
+import { MLSection, fetchMLProbability } from "../components/MLPredictionCard";
 import { RuleFactorEditor } from "../components/RuleFactorEditor";
 import { FramedLabel } from "../components/brand/FramedLabel";
 
 type Subject = { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 
-/** Context: when true, all BetOptions show their % without requiring a tap */
-const RevealAllCtx = createContext<boolean>(false);
+/**
+ * Reveal mode shared with every BetOption on the page:
+ *   "off"   → tiles hidden, tap one to reveal it (rule-based %).
+ *   "rules" → all tiles reveal their rule-based % at once.
+ *   "ml"    → all tiles reveal the ML model's % at once.
+ * A single toggle cycles off → rules → ml → off.
+ */
+type RevealMode = "off" | "rules" | "ml";
+function nextRevealMode(m: RevealMode): RevealMode {
+  return m === "off" ? "rules" : m === "rules" ? "ml" : "off";
+}
+const RevealModeCtx = createContext<RevealMode>("off");
 /* ─── Circular gauge ─────────────────────────────── */
 function WinGauge({ pct, label, size = 140 }: { pct: number; label: string; size?: number }) {
   const [displayed, setDisplayed] = useState(0);
@@ -359,7 +369,7 @@ function TeamPrediction({ teamId }: { teamId: string }) {
   } | null>(null);
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [revealAll, setRevealAll] = useState(false);
+  const [revealMode, setRevealMode] = useState<RevealMode>("off");
   const recentForm = useMemo<("W" | "L" | "OT")[]>(
     () => (data ? generateForm(8, data.winPct / 100) : []),
     [data?.winPct],
@@ -557,10 +567,10 @@ function TeamPrediction({ teamId }: { teamId: string }) {
       <RecentFormCard results={recentForm} />
 
       {/* Market groups — reveal-all toggle */}
-      <PredictionsRevealBar revealAll={revealAll} onToggle={() => setRevealAll(v => !v)} />
-      <RevealAllCtx.Provider value={revealAll}>
+      <PredictionsRevealBar mode={revealMode} onCycle={() => setRevealMode(nextRevealMode)} />
+      <RevealModeCtx.Provider value={revealMode}>
         {teamGroupsF.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
-      </RevealAllCtx.Provider>
+      </RevealModeCtx.Provider>
 
     </div>
   );
@@ -1111,19 +1121,26 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
 }
 
 /* ─── Reveal-all toggle bar ────────────────────── */
-function PredictionsRevealBar({ revealAll, onToggle }: { revealAll: boolean; onToggle: () => void }) {
+function PredictionsRevealBar({ mode, onCycle }: { mode: RevealMode; onCycle: () => void }) {
   const { t } = useI18n();
+  // One button cycling off → rules → ml → off. Colour reflects the active source.
+  const style =
+    mode === "rules" ? { background: "#86d1ea22", color: "#86d1ea", border: "1px solid #86d1ea44" } :
+    mode === "ml"    ? { background: "#a78bfa22", color: "#a78bfa", border: "1px solid #a78bfa44" } :
+                       { background: "rgba(255,255,255,0.05)", color: "#8a9ea6", border: "1px solid rgba(255,255,255,0.08)" };
+  const label =
+    mode === "rules" ? t("pred.showingRules") :
+    mode === "ml"    ? t("pred.showingMl") :
+                       t("pred.revealAll");
   return (
     <div className="flex items-center justify-between px-1">
       <span className="text-[#4a6070] text-[10px] font-semibold uppercase tracking-wider">{t("pred.markets")}</span>
       <button
-        onClick={onToggle}
+        onClick={onCycle}
         className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-semibold transition-all active:scale-95"
-        style={revealAll
-          ? { background: "#a78bfa22", color: "#a78bfa", border: "1px solid #a78bfa44" }
-          : { background: "rgba(255,255,255,0.05)", color: "#8a9ea6", border: "1px solid rgba(255,255,255,0.08)" }}
+        style={style}
       >
-        {revealAll ? t("pred.hideAll") : t("pred.revealAll")}
+        {label}
       </button>
     </div>
   );
@@ -1132,25 +1149,31 @@ function PredictionsRevealBar({ revealAll, onToggle }: { revealAll: boolean; onT
 /* ─── BetOption ─────────────────────────────── */
 function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
   const { t } = useI18n();
-  const revealAll = useContext(RevealAllCtx);
+  const mode = useContext(RevealModeCtx);
   const [revealed, setRevealed] = useState(false);
   const [sheet, setSheet] = useState(false);
-  const isRevealed = revealAll || revealed;
+  const isRevealed = mode !== "off" || revealed;
 
-  // Single source of truth: the server prediction (same value the coupon stores).
-  // rulePct is only a placeholder shown until the server responds.
-  const [serverPct, setServerPct] = useState<number | null>(null);
+  // Which number the tile shows: the ML model's % only when ML mode is active;
+  // otherwise (rules mode, or an individual tap with no mode chosen) the
+  // rule-based %. No more "engine" single-prediction that matched neither.
+  const source: "rules" | "ml" = mode === "ml" ? "ml" : "rules";
+
+  // ML % is fetched lazily, only while ML mode is showing this tile.
+  const [mlPct, setMlPct] = useState<number | null>(null);
   useEffect(() => {
-    if (!isRevealed || !opt.mlProps || serverPct !== null) return;
+    if (source !== "ml" || !isRevealed || !opt.mlProps) return;
     let alive = true;
-    predictionApiService
-      .getSinglePrediction(requestFromMLProps(opt.mlProps))
-      .then(r => { if (alive) setServerPct(r.probability); })
-      .catch(() => { /* keep placeholder */ });
+    setMlPct(null);
+    fetchMLProbability(
+      { type: opt.mlProps.type, subjectId: opt.mlProps.subjectId, opponentId: opt.mlProps.opponentId, propType: opt.mlProps.propType, line: opt.mlProps.line },
+      opt.rulePct,
+    ).then(p => { if (alive) setMlPct(p); });
     return () => { alive = false; };
-  }, [isRevealed, opt.mlProps, serverPct]);
+  }, [source, isRevealed, opt.mlProps, opt.rulePct]);
 
-  const shownPct = serverPct ?? opt.rulePct;
+  const loadingMl = source === "ml" && !!opt.mlProps && mlPct === null;
+  const shownPct = source === "ml" ? (mlPct ?? opt.rulePct) : opt.rulePct;
   const pctColor = shownPct >= 65 ? "#4ade80" : shownPct >= 50 ? accent : shownPct >= 38 ? "#facc15" : "#f87171";
 
   return (
@@ -1171,7 +1194,7 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
             className="mt-2 px-3 py-0.5 rounded-full text-xs font-bold active:scale-95 transition-transform"
             style={{ background: pctColor + "22", color: pctColor, border: `1px solid ${pctColor}55` }}
           >
-            {serverPct === null && opt.mlProps ? "…" : `${shownPct}%`}
+            {loadingMl ? "…" : `${shownPct}%`}
           </button>
         ) : (
           <span className="mt-2 text-[#3a5060] text-[9px] font-medium">{t("pred.tap")}</span>
@@ -1179,7 +1202,7 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
       </button>
       {sheet && (
         <PredictionSheet
-          label={opt.label} rulePct={opt.rulePct} serverPct={serverPct ?? undefined} ruleNote={opt.ruleNote}
+          label={opt.label} rulePct={opt.rulePct} ruleNote={opt.ruleNote}
           accent={accent} mlProps={opt.mlProps} factors={opt.factors} factorGroup={opt.factorGroup} onClose={() => setSheet(false)}
         />
       )}
@@ -1319,7 +1342,7 @@ function GamePrediction({ gameId }: { gameId: string }) {
   const [gameView, setGameView] = useState<LiveGameView | null>(null);
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [revealAll, setRevealAll] = useState(false);
+  const [revealMode, setRevealMode] = useState<RevealMode>("off");
 
   useEffect(() => {
     async function load() {
@@ -1449,10 +1472,10 @@ function GamePrediction({ gameId }: { gameId: string }) {
       />
 
       {/* ── Market groups ── */}
-      <PredictionsRevealBar revealAll={revealAll} onToggle={() => setRevealAll(v => !v)} />
-      <RevealAllCtx.Provider value={revealAll}>
+      <PredictionsRevealBar mode={revealMode} onCycle={() => setRevealMode(nextRevealMode)} />
+      <RevealModeCtx.Provider value={revealMode}>
         {groups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
-      </RevealAllCtx.Provider>
+      </RevealModeCtx.Provider>
 
     </div>
   );
@@ -1471,7 +1494,7 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
   } | null>(null);
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [revealAll, setRevealAll] = useState(false);
+  const [revealMode, setRevealMode] = useState<RevealMode>("off");
   // The game the player is suiting up for next — needed so bets placed here
   // carry a gameId and can actually be auto-settled (see settlementFields()).
   const [playerGameId, setPlayerGameId] = useState<string | undefined>(undefined);
@@ -1773,10 +1796,10 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
       <RecentFormCard results={recentForm} />
 
       {/* Market groups — local groups always used (they carry mlProps) */}
-      <PredictionsRevealBar revealAll={revealAll} onToggle={() => setRevealAll(v => !v)} />
-      <RevealAllCtx.Provider value={revealAll}>
+      <PredictionsRevealBar mode={revealMode} onCycle={() => setRevealMode(nextRevealMode)} />
+      <RevealModeCtx.Provider value={revealMode}>
         {playerGroupsG.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
-      </RevealAllCtx.Provider>
+      </RevealModeCtx.Provider>
 
     </div>
   );
@@ -2332,7 +2355,7 @@ export function PredictionPage() {
   };
 
   return (
-    <RevealAllCtx.Provider value={false}>
+    <RevealModeCtx.Provider value="off">
       <div className="flex flex-col min-h-screen pb-24" style={{ background: "#0A0E0C" }}>
         {/* Header */}
         <div className="sticky top-0 z-40 px-4 pt-12 pb-3"
@@ -2355,6 +2378,6 @@ export function PredictionPage() {
 
         <BottomNav />
       </div>
-    </RevealAllCtx.Provider>
+    </RevealModeCtx.Provider>
   );
 }

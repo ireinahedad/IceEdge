@@ -8,7 +8,7 @@ Treat any secret that appeared in the repo, a chat, or a screenshot as burned. R
 
 | Secret | Where to rotate | Then update |
 |---|---|---|
-| **Postgres password** (`mike1970`) | Your DB provider (Supabase/Railway) → reset password | `DATABASE_URL` / `DB_PASSWORD` in `server/.env` and the host's env |
+| **Postgres password** (`<OLD_DB_PASSWORD>`) | Your DB provider (Supabase/Railway) → reset password | `DATABASE_URL` / `DB_PASSWORD` in `server/.env` and the host's env |
 | `JWT_SECRET` | Generate new: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` | `server/.env` (note: rotating invalidates all existing access tokens — users re-login) |
 | `GOOGLE_CLIENT_SECRET` | Google Cloud Console → Credentials → reset | `server/.env` |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard → Developers → API keys / Webhooks | `server/.env` |
@@ -38,10 +38,10 @@ Scrubbing the file only removes it from the current commit. To remove it from hi
 ```bash
 # Option A — git filter-repo (recommended)
 pip install git-filter-repo
-git filter-repo --replace-text <(echo 'mike1970==>REDACTED')
+git filter-repo --replace-text <(echo '<OLD_DB_PASSWORD>==>REDACTED')
 
 # Option B — BFG Repo-Cleaner
-bfg --replace-text replacements.txt   # replacements.txt: mike1970==>REDACTED
+bfg --replace-text replacements.txt   # replacements.txt: <OLD_DB_PASSWORD>==>REDACTED
 ```
 
 After rewriting history you must **force-push** and have every collaborator re-clone. (This is why rotation in step 1 matters more than the purge — assume the old value is already exposed.)
@@ -58,4 +58,4 @@ After rewriting history you must **force-push** and have every collaborator re-c
 - [ ] App boots with the new `DATABASE_URL`.
 - [ ] Login works after `JWT_SECRET` rotation (users are logged out once — expected).
 - [ ] `npm run db:encrypt-keys` reports rows encrypted; LLM (free tier) still works.
-- [ ] `git log -p -S mike1970` returns nothing after history purge.
+- [ ] `git log -p -S <OLD_DB_PASSWORD>` returns nothing after history purge.

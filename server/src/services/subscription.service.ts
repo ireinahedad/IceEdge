@@ -161,9 +161,16 @@ function promoCatalog(): Record<string, number> {
       const [code, days] = part.split(':').map((s) => s.trim());
       if (code) catalog[code.toUpperCase()] = Number(days) > 0 ? Number(days) : 365;
     }
-  } else {
-    catalog['ICEEDGEPRO'] = 365; // default demo code
+    return catalog;
   }
+
+  // No codes configured. NEVER fall back to a guessable default in production —
+  // it would grant free Pro to anyone who guesses it. Dev/test only.
+  if (process.env.NODE_ENV === 'production') {
+    logger.warn('[subscription] PRO_PROMO_CODES is not set — promo redemption is disabled in production');
+    return catalog; // empty → every code is rejected (400)
+  }
+  catalog['ICEEDGEPRO'] = 365; // default demo code (non-production only)
   return catalog;
 }
 

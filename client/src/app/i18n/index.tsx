@@ -497,6 +497,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pred.markets":        { en: "Markets",               fr: "Marchés" },
   "pred.hideAll":        { en: "👁 Hide all",           fr: "👁 Masquer tout" },
   "pred.revealAll":      { en: "👁 Reveal all",         fr: "👁 Révéler tout" },
+  "pred.showingRules":   { en: "📐 Rules — all",        fr: "📐 Règles — tout" },
+  "pred.showingMl":      { en: "🤖 ML — all",           fr: "🤖 ML — tout" },
   "pred.tap":            { en: "Tap",                   fr: "Toucher" },
   "pred.today":          { en: "Today",                 fr: "Aujourd'hui" },
   "pred.recommendedBet": { en: "Recommended Bet",       fr: "Pari recommandé" },
