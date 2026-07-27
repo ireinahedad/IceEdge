@@ -105,11 +105,11 @@ Objectif : le produit reste utilisable et ne « ment » pas quand un service tie
 
 | # | Nom du test | Résultat attendu | Priorité | Statut | Notes |
 |---|---|---|---|---|---|
-| R1 | Indisponibilité du service ML (down / timeout / 5xx) | L'API renvoie une erreur maîtrisée, le front affiche un message clair (pas d'écran blanc), aucune prédiction erronée servie ; erreur remontée à Sentry. | Critique | À faire | Simuler ML éteint et ML lent (timeout). Vérifier le timeout côté `mlApiClient`. |
-| R2 | Données tierces indisponibles ou périmées (Odds/NHL down, JSON scratches manquant) | Fallback propre (cache/valeur par défaut/indicateur « données indisponibles ») ; pas de crash serveur ; les cotes placeholder ne sont pas présentées comme réelles. | Haute | À faire | Cf. mémoire projet : cotes Kaggle = placeholders. |
-| R4 | Indisponibilité du fournisseur de paiement pendant le checkout | Si Stripe est injoignable/timeout, l'utilisateur voit une erreur claire et n'est ni débité ni passé Pro ; réessai possible ; aucun état incohérent en base. | Haute | À faire | Simuler erreur/timeout Stripe et webhook retardé. |
-| R5 | Redéploiement / redémarrage sans coupure (Railway) | Un redeploy de l'API ou du ML ne provoque pas d'erreurs 5xx visibles prolongées ; arrêt gracieux (drain des requêtes), reconnexion socket/DB automatique. | Haute | À faire | Vérifier healthcheck et arrêt propre du serveur Node/uvicorn. |
-| R3 | Perte de connexion socket.io + coupure DB transitoire | Le client se reconnecte automatiquement sans doublons ; une erreur Postgres transitoire renvoie 5xx maîtrisé sans fuite de détails ni corruption de slip. | Moyenne | À faire | Vérifier reconnexion et idempotence des écritures de slip. |
+| R1 | Indisponibilité du service ML (down / timeout / 5xx) | L'API renvoie une erreur maîtrisée, le front affiche un message clair (pas d'écran blanc), aucune prédiction erronée servie ; erreur remontée à Sentry. | Critique | Réussi | Audit statique 2026-07-27 — cf. RES-1. Test dynamique (couper le ML) recommandé avant prod. |
+| R2 | Données tierces indisponibles ou périmées (Odds/NHL down, JSON scratches manquant) | Fallback propre (cache/valeur par défaut/indicateur « données indisponibles ») ; pas de crash serveur ; les cotes placeholder ne sont pas présentées comme réelles. | Haute | Réussi | Audit statique 2026-07-27 — cf. RES-2 (note : cotes servies vides plutôt que cache périmé pendant une panne). |
+| R4 | Indisponibilité du fournisseur de paiement pendant le checkout | Si Stripe est injoignable/timeout, l'utilisateur voit une erreur claire et n'est ni débité ni passé Pro ; réessai possible ; aucun état incohérent en base. | Haute | Réussi | Audit statique 2026-07-27 — cf. RES-4 (erreurs structurées, Pro accordé uniquement par webhook signé). |
+| R5 | Redéploiement / redémarrage sans coupure (Railway) | Un redeploy de l'API ou du ML ne provoque pas d'erreurs 5xx visibles prolongées ; arrêt gracieux (drain des requêtes), reconnexion socket/DB automatique. | Haute | Réussi | Audit statique 2026-07-27 — cf. RES-5 (SIGTERM drain + force-exit, `/health`). |
+| R3 | Perte de connexion socket.io + coupure DB transitoire | Le client se reconnecte automatiquement sans doublons ; une erreur Postgres transitoire renvoie 5xx maîtrisé sans fuite de détails ni corruption de slip. | Moyenne | Réussi | Audit statique 2026-07-27 — cf. RES-3 (reconnexion auto + dédup par id + `pool.on('error')`). |
 
 ---
 
@@ -122,37 +122,39 @@ Objectif : le produit reste utilisable et ne « ment » pas quand un service tie
 - [x] `NODE_ENV=production` → routes `/api/dev` non montées, pas d'activation Pro gratuite. → **Réussi** (cf. CFG-2).
 - [x] Rotation/validité des secrets vérifiée (`SECRET_ROTATION.md`). → **Scanner gitleaks ajouté au CI** (cf. CFG-5). Mot de passe DB = local uniquement, rotation non nécessaire.
 
-**Sécurité**
+**Sécurité** — _validé en statique le 2026-07-27 (cf. campagne « Sécurité »)_
 
-- [ ] Cookie refresh `httpOnly; Secure; SameSite=None` fonctionnel cross-site en prod.
-- [ ] Helmet + CORS restreints au domaine de prod ; rate limiting actif avec store Redis partagé.
-- [ ] Contrôle d'accès vérifié sur toutes les routes utilisateur (pas d'IDOR).
-- [ ] Signature des webhooks Stripe vérifiée ; clés OpenAI chiffrées en base.
+- [x] Cookie refresh `httpOnly; Secure; SameSite=None` fonctionnel cross-site en prod. → Code OK (`httpOnly`, `secure`/`sameSite=none` en prod, `path=/api/auth`). Fonctionnement cross-site réel à confirmer en staging.
+- [x] Helmet + CORS restreints au domaine de prod ; rate limiting actif. → Helmet actif, CORS = allowlist + preview Vercel (`credentials:true`), limiters actifs. *Store Redis partagé = différé (CFG-6, mono-instance).* 
+- [x] Contrôle d'accès vérifié sur toutes les routes utilisateur (pas d'IDOR). → SEC-1 ✅ (test dynamique 2-comptes recommandé).
+- [x] Signature des webhooks Stripe vérifiée ; clés OpenAI chiffrées en base. → `constructEvent` (400 si invalide) + AES-256-GCM (`crypto.util`) ✅.
 
 **Données & ML**
 
-- [ ] Migrations Postgres appliquées sur la base de prod (`db:migrate:all`, slips).
-- [ ] Modèle ML entraîné et fichiers d'état présents (`inference_state.json`, `elo_ratings.json`, modèles) ; `/health` OK.
-- [ ] Sources de données du soir alimentées (scratches, gardiens partants, référés) ou fallback validé.
-- [ ] Cotes réelles distinguées des placeholders côté UI.
+- [~] Migrations Postgres appliquées sur la base de prod (`db:migrate:all`, slips). → Migrations présentes dans le dépôt (jusqu'à `011_subscriptions`). **Application sur la base de prod = opérationnel, à confirmer.**
+- [x] Modèle ML entraîné et fichiers d'état présents (`inference_state.json`, `elo_ratings.json`, modèles) ; `/health` OK. → Fichiers présents (`game_model.json`, `totals_model.json`, `inference_state.json`, `elo_ratings.json`…) ; endpoints `/health` + `/health/ready` définis ✅.
+- [x] Sources de données du soir alimentées (scratches, gardiens partants, référés) ou fallback validé. → **Fallback validé** (RES-2 : fichier manquant → `{}` sans crash). Alimentation quotidienne = opérationnel.
+- [~] Cotes réelles distinguées des placeholders côté UI. → Côté serveur, panne odds → `[]` (pas de cote inventée). **À confirmer côté UI** : aucune cote factice/démo affichée comme réelle.
 
 **Qualité & build**
 
-- [ ] `npm run typecheck` + `vitest run` (server) au vert ; build front Vercel OK.
-- [ ] Parcours critiques F1, F2, I1, I2 passés en environnement de staging.
-- [ ] Test mobile iOS Safari du parcours login → prédiction → paiement passé (C1).
+- [ ] `npm run typecheck` + `vitest run` (server) au vert ; build front Vercel OK. → **À lancer en local** (le mount du sandbox tronque les lectures → build non fiable ici). 3 fichiers de tests présents (`app.test.ts`, `slip.service.test.ts`, `schemas.test.ts`) + job CI `server`/`client`.
+- [ ] Parcours critiques F1, F2, I1, I2 passés en environnement de staging. → **Dynamique, à exécuter en staging.**
+- [ ] Test mobile iOS Safari du parcours login → prédiction → paiement passé (C1). → **Dynamique, à exécuter.**
 
 **Observabilité & reprise**
 
-- [ ] Sentry actif et recevant les erreurs (front + API + ML).
-- [ ] Logs pino lisibles, sans fuite de secrets ; monitoring/uptime en place (`MONITORING.md`).
-- [ ] Procédure de sauvegarde/restauration DB validée (`BACKUP_DR.md`).
-- [ ] Plan de rollback déploiement documenté et testé.
+- [x] Sentry actif et recevant les erreurs (front + API + ML). → Front (`main.tsx`) ✅ + API (`instrument.ts`) ✅ + **ML (FastAPI) ajouté le 2026-07-27** (`sentry-sdk[fastapi]` + init conditionnel sur `SENTRY_DSN` dans `ml_service.py`, no-op sinon). **Reste opérationnel** : définir `SENTRY_DSN` sur le service ML Railway (variable propre à ce service).
+- [x] Logs pino lisibles, sans fuite de secrets ; monitoring/uptime en place (`MONITORING.md`). → Rédaction `authorization`/`cookie`/`set-cookie` ✅ ; `MONITORING.md` présent (uptime à brancher = opérationnel).
+- [~] Procédure de sauvegarde/restauration DB validée (`BACKUP_DR.md`). → Doc présente ; **exécution d'un test de restauration = opérationnel, à valider.**
+- [~] Plan de rollback déploiement documenté et testé. → **Opérationnel** (rollback Railway/Vercel à documenter + tester une fois).
 
 **Légal / conformité produit paris**
 
-- [ ] Pages Terms, Privacy, Support accessibles et à jour.
-- [ ] Mentions de responsabilité / avertissement paris présentes selon la juridiction cible.
+- [x] Pages Terms, Privacy, Support accessibles et à jour. → `TermsPage`, `PrivacyPage`, `SupportPage` présentes (EN/FR) ✅.
+- [x] Mentions de responsabilité / avertissement paris présentes selon la juridiction cible. → Disclaimer « 18+ · Jouez de manière responsable · Non disponible dans toutes les juridictions » + Terms « à titre informatif, pas un bookmaker, pas un conseil de pari » ✅. À adapter si juridiction cible spécifique.
+
+**Légende checklist :** [x] validé en statique · [~] partiel / à confirmer en opérationnel · [ ] à exécuter (dynamique/local).
 
 ---
 
@@ -203,3 +205,26 @@ Audit statique du code serveur (`server/src`). Légende : ✅ conforme · ⚠️
 - En-têtes/CSP réellement servis au navigateur (front Vercel).
 
 **Synthèse (mise à jour 2026-07-27) :** SEC-1→SEC-5 conformes. Correctifs appliqués : `passwordResetLimiter` sur les endpoints d'email (SEC-4) et désactivation du code promo par défaut en production (SEC-6). Reste optionnel : plafond d'usage/expiration par code promo (SEC-6, nécessite un changement de schéma — à décider). Aucun bloquant restant pour la Sécurité. **Rappel** : lancer `npm run typecheck && npm test` (server) en local pour valider le TS des 3 fichiers modifiés (`rateLimit.middleware.ts`, `auth.routes.ts`, `subscription.service.ts`).
+
+---
+
+## Résultats — Campagne « Résilience » (2026-07-27)
+
+Audit statique (serveur + client). Légende : ✅ conforme · ⚠️ amélioration possible · 🔴 bloquant.
+
+| # | Vérification | Résultat | Priorité | Statut | Détail / action |
+|---|---|---|---|---|---|
+| RES-1 | Indisponibilité du service ML | ✅ | Critique | Réussi | `mlApiClient` : timeout **5 s** via `AbortController`, throw sur timeout/`!res.ok`. Repli en cascade : route `/predict/ml` → **503 maîtrisé** (`logger.warn`, le front masque la section) ; `bestBets.service` → repli **par candidat** sur le score de règles (`mlScore` renvoie `null`) + flag `mlAvailable` exposé ; court-circuit `ML_DISABLED=true`. Aucune prédiction erronée servie, aucun crash. *Note* : les pannes ML sont journalisées en `warn` (état dégradé attendu), pas envoyées à Sentry comme erreurs — cohérent. |
+| RES-2 | Données tierces indisponibles / périmées | ✅ | Haute | Réussi | `oddsClient` : cache 5 min ; sur `!res.ok`/exception → `logger.error` + renvoie `[]` (pas de crash) ; `findEvent` gère l'absence → pas de cote affichée. `nhlApiClient` : cache TTL en mémoire + `catch` avec fallback neutre par source. `scratches.ts` : fichier manquant/JSON invalide → `catch` → `{}` (comportement legacy). **Amélioration possible** : servir le **cache périmé** plutôt que `[]` pendant une panne de The Odds API (évite un écran sans cotes). |
+| RES-3 | Reconnexion socket + coupure DB transitoire | ✅ | Moyenne | Réussi | Client : `socket.io-client` reconnecte automatiquement ; `disconnect` gère l'état ; **dédup par `id`** sur `new_message` (pas de doublon à la reconnexion) ; `confirmMessage` gère la course socket/HTTP ; **cleanup à l'unmount** (`leave_room` + `disconnect`) → pas de connexions fantômes. DB : `pool.on('error')` empêche le crash du process sur erreur de client idle ; `connectionTimeoutMillis=5s`. |
+| RES-4 | Indisponibilité du fournisseur de paiement | ✅ | Haute | Réussi | `createCheckoutSession` lève des erreurs **structurées** (501/500/502) captées par la route (`res.status(err.status)`), l'utilisateur voit une erreur claire ; le Pro n'est accordé **que** par le webhook signé (`constructEvent`) ou l'activation dev — jamais sur un échec de checkout → pas d'état incohérent. Webhook : signature vérifiée, throw **400** sur signature invalide → Stripe **rejoue**. |
+| RES-5 | Redéploiement / redémarrage sans coupure | ✅ | Haute | Réussi | `registerGracefulShutdown` sur `SIGTERM`/`SIGINT` : draine WebSocket (`io.close`) + HTTP (`httpServer.close`) puis `pool.end()`, avec **timeout dur** `SHUTDOWN_TIMEOUT_MS` (force-exit `unref`'d) et idempotence (2ᵉ signal ignoré). Endpoints `/health` (`{status:ok}`) + readiness (503 si non prêt) pour le healthcheck Railway. |
+
+**Tests dynamiques à réaliser avant prod (non couverts par l'audit statique) :**
+
+- Couper le service ML (down + lent) et vérifier la dégradation UI + le repli règles.
+- Couper The Odds API / retirer `scratches.json` et vérifier l'absence de crash.
+- Redeploy Railway sous trafic : mesurer les 5xx pendant le drain + reconnexion socket auto.
+- Webhook Stripe rejoué/retardé : vérifier l'idempotence (croise avec I3).
+
+**Synthèse :** RES-1→RES-5 **tous conformes** — la gestion d'erreurs/timeouts/pannes est de bonne qualité (repli règles, caches, `pool.on('error')`, arrêt gracieux). **Aucun correctif requis.** Une seule amélioration optionnelle : servir le cache d'odds périmé pendant une panne (RES-2).

@@ -30,6 +30,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
 
+# ── Monitoring d'erreurs (Sentry) ─────────────────────────────────────────────
+# No-op tant que SENTRY_DSN n'est pas défini → dev/CI restent silencieux.
+# L'intégration FastAPI capture automatiquement les exceptions des endpoints.
+_SENTRY_DSN = os.environ.get("SENTRY_DSN")
+if _SENTRY_DSN:
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+        environment=os.environ.get("ENVIRONMENT", "production"),
+    )
+
 app = FastAPI(title="ArakIce ML Service", version="2.0.0")
 
 app.add_middleware(

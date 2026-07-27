@@ -24,17 +24,13 @@ import { FramedLabel } from "../components/brand/FramedLabel";
 type Subject = { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 
 /**
- * Reveal mode shared with every BetOption on the page:
- *   "off"   → tiles hidden, tap one to reveal it (rule-based %).
- *   "rules" → all tiles reveal their rule-based % at once.
- *   "ml"    → all tiles reveal the ML model's % at once.
- * A single toggle cycles off → rules → ml → off.
+ * Prediction source shown by every BetOption on the page. Predictions are
+ * always visible; a segmented toggle at the top switches which number is shown:
+ *   "rules" → the rule-based % (default).
+ *   "ml"    → the ML model's %.
  */
-type RevealMode = "off" | "rules" | "ml";
-function nextRevealMode(m: RevealMode): RevealMode {
-  return m === "off" ? "rules" : m === "rules" ? "ml" : "off";
-}
-const RevealModeCtx = createContext<RevealMode>("off");
+type RevealMode = "rules" | "ml";
+const RevealModeCtx = createContext<RevealMode>("rules");
 /* ─── Circular gauge ─────────────────────────────── */
 function WinGauge({ pct, label, size = 140 }: { pct: number; label: string; size?: number }) {
   const [displayed, setDisplayed] = useState(0);
@@ -369,7 +365,7 @@ function TeamPrediction({ teamId }: { teamId: string }) {
   } | null>(null);
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [revealMode, setRevealMode] = useState<RevealMode>("off");
+  const [revealMode, setRevealMode] = useState<RevealMode>("rules");
   const recentForm = useMemo<("W" | "L" | "OT")[]>(
     () => (data ? generateForm(8, data.winPct / 100) : []),
     [data?.winPct],
@@ -567,7 +563,7 @@ function TeamPrediction({ teamId }: { teamId: string }) {
       <RecentFormCard results={recentForm} />
 
       {/* Market groups — reveal-all toggle */}
-      <PredictionsRevealBar mode={revealMode} onCycle={() => setRevealMode(nextRevealMode)} />
+      <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
       <RevealModeCtx.Provider value={revealMode}>
         {teamGroupsF.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
       </RevealModeCtx.Provider>
@@ -1121,48 +1117,45 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
 }
 
 /* ─── Reveal-all toggle bar ────────────────────── */
-function PredictionsRevealBar({ mode, onCycle }: { mode: RevealMode; onCycle: () => void }) {
+function PredictionsRevealBar({ mode, onSelect }: { mode: RevealMode; onSelect: (m: RevealMode) => void }) {
   const { t } = useI18n();
-  // One button cycling off → rules → ml → off. Colour reflects the active source.
-  const style =
-    mode === "rules" ? { background: "#86d1ea22", color: "#86d1ea", border: "1px solid #86d1ea44" } :
-    mode === "ml"    ? { background: "#a78bfa22", color: "#a78bfa", border: "1px solid #a78bfa44" } :
-                       { background: "rgba(255,255,255,0.05)", color: "#8a9ea6", border: "1px solid rgba(255,255,255,0.08)" };
-  const label =
-    mode === "rules" ? t("pred.showingRules") :
-    mode === "ml"    ? t("pred.showingMl") :
-                       t("pred.revealAll");
+  // Two-segment toggle: Rules | ML. Predictions are always shown; this only
+  // switches which source's % every tile displays.
+  const seg = (m: RevealMode, label: string, activeColor: string) => (
+    <button
+      onClick={() => onSelect(m)}
+      className="px-3 py-1 rounded-full text-[10px] font-semibold transition-all active:scale-95"
+      style={mode === m
+        ? { background: activeColor + "22", color: activeColor, border: `1px solid ${activeColor}44` }
+        : { background: "transparent", color: "#8a9ea6", border: "1px solid transparent" }}
+    >
+      {label}
+    </button>
+  );
   return (
     <div className="flex items-center justify-between px-1">
       <span className="text-[#4a6070] text-[10px] font-semibold uppercase tracking-wider">{t("pred.markets")}</span>
-      <button
-        onClick={onCycle}
-        className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-semibold transition-all active:scale-95"
-        style={style}
-      >
-        {label}
-      </button>
+      <div className="flex items-center gap-0.5 p-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        {seg("rules", `📐 ${t("pred.rules")}`, "#86d1ea")}
+        {seg("ml", "🤖 ML", "#a78bfa")}
+      </div>
     </div>
   );
 }
 
 /* ─── BetOption ─────────────────────────────── */
 function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
-  const { t } = useI18n();
   const mode = useContext(RevealModeCtx);
-  const [revealed, setRevealed] = useState(false);
   const [sheet, setSheet] = useState(false);
-  const isRevealed = mode !== "off" || revealed;
 
-  // Which number the tile shows: the ML model's % only when ML mode is active;
-  // otherwise (rules mode, or an individual tap with no mode chosen) the
-  // rule-based %. No more "engine" single-prediction that matched neither.
+  // Predictions are always shown. The toggle picks the source: ML model % when
+  // "ml" is selected, otherwise the rule-based %.
   const source: "rules" | "ml" = mode === "ml" ? "ml" : "rules";
 
-  // ML % is fetched lazily, only while ML mode is showing this tile.
+  // ML % is fetched lazily, only while ML mode is active on this tile.
   const [mlPct, setMlPct] = useState<number | null>(null);
   useEffect(() => {
-    if (source !== "ml" || !isRevealed || !opt.mlProps) return;
+    if (source !== "ml" || !opt.mlProps) return;
     let alive = true;
     setMlPct(null);
     fetchMLProbability(
@@ -1170,7 +1163,7 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
       opt.rulePct,
     ).then(p => { if (alive) setMlPct(p); });
     return () => { alive = false; };
-  }, [source, isRevealed, opt.mlProps, opt.rulePct]);
+  }, [source, opt.mlProps, opt.rulePct]);
 
   const loadingMl = source === "ml" && !!opt.mlProps && mlPct === null;
   const shownPct = source === "ml" ? (mlPct ?? opt.rulePct) : opt.rulePct;
@@ -1179,26 +1172,17 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
   return (
     <>
       <button
-        onClick={() => setRevealed(v => !v)}
+        onClick={() => setSheet(true)}
         className="flex flex-col items-center justify-between p-3 rounded-xl border transition-all active:scale-[0.97] w-full"
-        style={{
-          minHeight: 64,
-          background: isRevealed ? "#131A12" : "#0d1519",
-          borderColor: isRevealed ? pctColor + "55" : "rgba(255,255,255,0.08)",
-        }}
+        style={{ minHeight: 64, background: "#131A12", borderColor: pctColor + "55" }}
       >
         <span className="text-white text-[11px] font-medium text-center leading-tight">{opt.label}</span>
-        {isRevealed ? (
-          <button
-            onClick={e => { e.stopPropagation(); setSheet(true); }}
-            className="mt-2 px-3 py-0.5 rounded-full text-xs font-bold active:scale-95 transition-transform"
-            style={{ background: pctColor + "22", color: pctColor, border: `1px solid ${pctColor}55` }}
-          >
-            {loadingMl ? "…" : `${shownPct}%`}
-          </button>
-        ) : (
-          <span className="mt-2 text-[#3a5060] text-[9px] font-medium">{t("pred.tap")}</span>
-        )}
+        <span
+          className="mt-2 px-3 py-0.5 rounded-full text-xs font-bold"
+          style={{ background: pctColor + "22", color: pctColor, border: `1px solid ${pctColor}55` }}
+        >
+          {loadingMl ? "…" : `${shownPct}%`}
+        </span>
       </button>
       {sheet && (
         <PredictionSheet
@@ -1342,7 +1326,7 @@ function GamePrediction({ gameId }: { gameId: string }) {
   const [gameView, setGameView] = useState<LiveGameView | null>(null);
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [revealMode, setRevealMode] = useState<RevealMode>("off");
+  const [revealMode, setRevealMode] = useState<RevealMode>("rules");
 
   useEffect(() => {
     async function load() {
@@ -1472,7 +1456,7 @@ function GamePrediction({ gameId }: { gameId: string }) {
       />
 
       {/* ── Market groups ── */}
-      <PredictionsRevealBar mode={revealMode} onCycle={() => setRevealMode(nextRevealMode)} />
+      <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
       <RevealModeCtx.Provider value={revealMode}>
         {groups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
       </RevealModeCtx.Provider>
@@ -1494,7 +1478,7 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
   } | null>(null);
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [revealMode, setRevealMode] = useState<RevealMode>("off");
+  const [revealMode, setRevealMode] = useState<RevealMode>("rules");
   // The game the player is suiting up for next — needed so bets placed here
   // carry a gameId and can actually be auto-settled (see settlementFields()).
   const [playerGameId, setPlayerGameId] = useState<string | undefined>(undefined);
@@ -1796,7 +1780,7 @@ function PlayerPrediction({ playerId }: { playerId: string }) {
       <RecentFormCard results={recentForm} />
 
       {/* Market groups — local groups always used (they carry mlProps) */}
-      <PredictionsRevealBar mode={revealMode} onCycle={() => setRevealMode(nextRevealMode)} />
+      <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
       <RevealModeCtx.Provider value={revealMode}>
         {playerGroupsG.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
       </RevealModeCtx.Provider>
@@ -2355,7 +2339,7 @@ export function PredictionPage() {
   };
 
   return (
-    <RevealModeCtx.Provider value="off">
+    <RevealModeCtx.Provider value="rules">
       <div className="flex flex-col min-h-screen pb-24" style={{ background: "#0A0E0C" }}>
         {/* Header */}
         <div className="sticky top-0 z-40 px-4 pt-12 pb-3"

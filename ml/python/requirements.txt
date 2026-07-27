@@ -16,3 +16,6 @@ requests
 
 # v4 — parsing des cotes historiques (xlsx sportsbookreviewsonline)
 openpyxl
+
+# Monitoring d'erreurs (no-op si SENTRY_DSN n'est pas défini)
+sentry-sdk[fastapi]
