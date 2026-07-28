@@ -10,7 +10,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate }   from '../middleware/auth.middleware';
 import { requireRole }    from '../middleware/auth.middleware';
-import { mlApiClient, mlHeaders } from '../services/mlApiClient';
+import { mlApiClient, mlHeaders, ML_URL } from '../services/mlApiClient';
 import {
   buildGameFeatures,
   buildPlayerPropFeatures,
@@ -20,8 +20,6 @@ const router = Router();
 
 // All dev routes require a valid JWT + admin role
 router.use(authenticate, requireRole('admin'));
-
-const ML_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
 
 // ── GET /api/dev/ml-info ──────────────────────────────────────────────────────
 router.get('/ml-info', async (_req: Request, res: Response) => {

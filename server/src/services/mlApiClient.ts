@@ -11,7 +11,30 @@
 
 import { logger } from '../logger';
 
-const ML_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+/** Normalise `ML_SERVICE_URL` and shout about the two ways it's usually wrong.
+ *  Railway's dashboard displays the internal address bare — `svc.railway.internal` —
+ *  and pasting it as-is makes `fetch` throw "Failed to parse URL", which the route
+ *  turns into a generic 503: the real cause never surfaces. Private networking
+ *  also has no proxy, so the port is mandatory (uvicorn binds `$PORT`, 8080 on
+ *  Railway); omitting it silently means port 80 and a refused connection. */
+function resolveMlUrl(): string {
+  const raw = (process.env.ML_SERVICE_URL || '').trim().replace(/\/+$/, '');
+  if (!raw) return 'http://localhost:8000';
+
+  let url = raw;
+  if (!/^https?:\/\//i.test(url)) {
+    logger.warn({ ML_SERVICE_URL: raw }, '[ML] ML_SERVICE_URL sans schéma — "http://" ajouté. Corrige la variable.');
+    url = `http://${url}`;
+  }
+  if (/\.railway\.internal(\/|$)/i.test(url) && !/:\d+(\/|$)/.test(url)) {
+    logger.warn({ ML_SERVICE_URL: url }, '[ML] Adresse interne sans port — le réseau privé n\'a pas de proxy, ajoute le port écouté par uvicorn (souvent :8080).');
+  }
+  return url;
+}
+
+/** Base URL of the ML service. Exported so callers doing raw fetches (dev routes)
+ *  don't re-derive it from the env and re-introduce the parsing bug. */
+export const ML_URL = resolveMlUrl();
 const TIMEOUT_MS = 5000;
 
 // Without the token every call gets a 401 and the app silently degrades to
