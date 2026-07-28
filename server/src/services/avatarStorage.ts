@@ -50,6 +50,30 @@ export const isAvatarStorageConfigured = Boolean(
   ACCOUNT_ID && ACCESS_KEY && SECRET_KEY && BUCKET && PUBLIC_URL,
 );
 
+// Diagnostic au démarrage. Le repli sur le stockage base64 est volontairement
+// silencieux à l'exécution (l'app doit fonctionner sans object-store), mais un
+// repli silencieux ET invisible est indébogable : sans cette ligne, une variable
+// oubliée se manifeste seulement par des avatars qui restent en data-URI, sans
+// rien dans les logs. On journalise donc les NOMS manquants — jamais les valeurs.
+{
+  const missing = Object.entries({
+    R2_ACCOUNT_ID:        ACCOUNT_ID,
+    R2_ACCESS_KEY_ID:     ACCESS_KEY,
+    R2_SECRET_ACCESS_KEY: SECRET_KEY,
+    R2_BUCKET:            BUCKET,
+    R2_PUBLIC_URL:        PUBLIC_URL,
+  }).filter(([, v]) => !v).map(([k]) => k);
+
+  if (missing.length === 0) {
+    logger.info({ bucket: BUCKET, publicUrl: PUBLIC_URL }, '[avatarStorage] R2 actif');
+  } else if (missing.length === 5) {
+    logger.info('[avatarStorage] R2 non configuré — les avatars restent stockés en base64 dans Postgres');
+  } else {
+    // Cas le plus traître : la configuration a été tentée mais est incomplète.
+    logger.warn({ missing }, '[avatarStorage] configuration R2 INCOMPLÈTE — repli sur le stockage base64');
+  }
+}
+
 let client: S3Client | null = null;
 function s3(): S3Client {
   if (!client) {
