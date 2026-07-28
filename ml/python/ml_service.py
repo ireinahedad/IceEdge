@@ -125,7 +125,14 @@ if _cors_origins:
 # les fichiers .pkl existent dans ml/models/ et sont chargés ici.
 # Si absents, le service utilise les poids manuels comme fallback.
 
-MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
+# En local, ml_service.py est dans ml/python/ → les modèles sont dans ../models.
+# Dans l'image Docker le code est aplati à la racine de /app et les modèles sont
+# dans /app/models : le chemin relatif pointerait alors sur /models (inexistant)
+# et le service démarrerait en mode règles SANS erreur. D'où MODELS_DIR, posé
+# explicitement par le Dockerfile.
+MODELS_DIR = os.environ.get("MODELS_DIR") or os.path.join(
+    os.path.dirname(__file__), "..", "models"
+)
 
 _xgb_game:   xgb.Booster | None = None
 _xgb_totals: xgb.Booster | None = None

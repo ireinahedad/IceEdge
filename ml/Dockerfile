@@ -1,14 +1,14 @@
 # Python 3.12 — wheels précompilés disponibles pour tous les packages ML
 FROM python:3.12-slim
 
-# IMPORTANT — build context must be the ml/ directory (the parent of python/),
-# so the trained models in ml/models are inside the context and actually ship.
-# Build with:   docker build -f Dockerfile        -t iceedge-ml ..   (from ml/python)
-#          or:  docker build -f python/Dockerfile -t iceedge-ml .    (from ml/)
-# NOTE: -f is resolved relative to your shell's cwd, NOT the build context.
-# From ml/python the Dockerfile is ./Dockerfile, so `-f python/Dockerfile` here
-# wrongly resolves to ml/python/python/Dockerfile and fails.
-# See ml/.dockerignore for what's excluded.
+# IMPORTANT — ce Dockerfile vit dans ml/, pas dans ml/python/, et c'est délibéré :
+# le contexte de build doit être ml/ pour que les modèles entraînés (ml/models,
+# frère de ml/python) soient dans le contexte et embarqués dans l'image. Le
+# placer ici le rend aussi détectable automatiquement par Railway/Render quand
+# le root directory du service est `ml` — aucune variable de config à poser.
+#
+# Build local :   cd ml && docker build -t iceedge-ml .
+# Voir ml/.dockerignore pour ce qui est exclu.
 
 WORKDIR /app
 
@@ -24,10 +24,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copier le code
 COPY python/ml_service.py python/fetch_data.py python/train.py ./
 
-# Copier les modèles entraînés. They live in ml/models (sibling of python/), so
-# this only resolves when the build context is ml/ — see the note above. If the
-# models are absent the service still boots in rule-based fallback mode.
+# Copier les modèles entraînés. Ils vivent dans ml/models (frère de python/),
+# donc ce COPY n'existe que parce que le contexte est ml/ — cf. la note en tête.
 COPY models ./models
+
+# Le code est aplati à la racine de /app, alors qu'en local il est dans
+# ml/python/ : le chemin relatif "../models" du service pointerait sur /models.
+# On fixe la destination explicitement, sinon le service démarre en mode règles
+# sans la moindre erreur — panne silencieuse, exactement celle qu'on ne voit pas.
+ENV MODELS_DIR=/app/models
 
 # Run as a non-root user.
 RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app

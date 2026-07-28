@@ -134,13 +134,17 @@ L'ancien objet est supprimé automatiquement lors d'un remplacement.
 
 ### Créer un deuxième service dans le même projet
 1. Railway → **même projet et même environnement** que le backend → **+ New Service → GitHub repo**
-2. Même repo `ICEEDGE` → Settings → Build :
-   - **Root directory : `ml`** ← et non `ml/python`
-   - **Dockerfile path : `python/Dockerfile`**
-3. ⚠️ Le root directory *est* le contexte de build. Le Dockerfile fait
-   `COPY models ./models`, et `ml/models/` est le frère de `ml/python/` : avec
-   `ml/python` comme racine, les modèles sont hors contexte et le build échoue
-   sur `"/models": not found`. Cf. l'en-tête de `ml/python/Dockerfile`.
+2. Même repo `ICEEDGE` → Settings → Build → **Root directory : `ml`** ← et non `ml/python`
+3. Rien d'autre à configurer : le `Dockerfile` est à la racine de `ml/`, Railway
+   le détecte seul (« Using detected Dockerfile » dans les logs). Ni build
+   command, ni `RAILWAY_DOCKERFILE_PATH`.
+
+> ⚠️ Le root directory **est** le contexte de build. Le Dockerfile fait
+> `COPY models ./models`, or `ml/models/` est le frère de `ml/python/` : avec
+> `ml/python` comme racine, les modèles sont hors contexte et le build échoue.
+> Et si Railway répond *« Railpack could not determine how to build the app »*,
+> c'est qu'il n'a pas vu de `Dockerfile` à la racine du contexte — vérifier le
+> root directory, et que le fichier est bien poussé sur la branche déployée.
 
 ### Variables d'environnement
 
