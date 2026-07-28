@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import bcrypt from 'bcryptjs';
+import { hash as bcryptHash } from '@node-rs/bcrypt';
 import { pool } from './connection';
 import { logger } from '../logger';
 
@@ -55,7 +55,7 @@ async function seedUsers(client: any): Promise<void> {
   for (const u of users) {
     const exists = await client.query('SELECT id FROM users WHERE username = $1', [u.username]);
     if (exists.rows.length > 0) continue;
-    const hash = await bcrypt.hash(u.password, 12);
+    const hash = await bcryptHash(u.password, 11);
     await client.query(
       `INSERT INTO users (email, username, password_hash, first_name, last_name, role)
        VALUES ($1, $2, $3, $4, $5, $6)`,

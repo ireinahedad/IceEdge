@@ -15,9 +15,13 @@ Endpoints:
     POST /predict/team       Team futures: cup, conference, playoff
     GET  /health             Health check + model info
     GET  /features           Feature schema reference
+
+Accès : /predict/* et /features exigent l'en-tête `X-ML-Token` (= ML_API_TOKEN).
+/health et /health/ready restent ouverts pour les sondes de la plateforme.
 """
 
 from __future__ import annotations
+import hmac
 import json
 import math
 import os
@@ -25,7 +29,7 @@ from typing import List, Optional
 
 import numpy as np
 import xgboost as xgb
-from fastapi import FastAPI, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
@@ -42,14 +46,78 @@ if _SENTRY_DSN:
         environment=os.environ.get("ENVIRONMENT", "production"),
     )
 
-app = FastAPI(title="ArakIce ML Service", version="2.0.0")
+# ── Contrôle d'accès ──────────────────────────────────────────────────────────
+# Ce service n'a aucune notion d'utilisateur : il ne doit être joignable que par
+# le backend Node. Deux barrières indépendantes :
+#   1. Réseau — déployé SANS domaine public, atteignable uniquement via le réseau
+#      privé Railway (http://<service>.railway.internal:8000). Cf. DEPLOYMENT.md §3.
+#   2. Token partagé — `ML_API_TOKEN`, envoyé dans l'en-tête `X-ML-Token`. Tient
+#      même si un domaine public est généré un jour par inadvertance.
+#
+# En environnement déployé le token est obligatoire : sans lui le process refuse
+# de démarrer plutôt que de servir des inférences XGBoost au monde entier
+# (compute facturé à l'usage + exfiltration du modèle par requêtes répétées).
+# `ML_AUTH_DISABLED=true` est l'échappatoire explicite pour un déploiement
+# strictement privé — à ne poser qu'en connaissance de cause.
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+_ML_API_TOKEN  = os.environ.get("ML_API_TOKEN", "").strip()
+_AUTH_DISABLED = os.environ.get("ML_AUTH_DISABLED", "").lower() == "true"
+_IS_DEPLOYED   = (
+    os.environ.get("ENVIRONMENT", "").lower() == "production"
+    or bool(os.environ.get("RAILWAY_ENVIRONMENT"))
 )
+
+if _IS_DEPLOYED and not _ML_API_TOKEN and not _AUTH_DISABLED:
+    raise RuntimeError(
+        "ML_API_TOKEN manquant. Définir le même secret partagé côté backend Node, "
+        "ou — si le service n'expose AUCUN domaine public — poser explicitement "
+        "ML_AUTH_DISABLED=true."
+    )
+
+_AUTH_ENABLED = bool(_ML_API_TOKEN) and not _AUTH_DISABLED
+
+
+def require_ml_token(
+    x_ml_token: Optional[str] = Header(default=None, alias="X-ML-Token"),
+) -> None:
+    """Garde les endpoints d'inférence. `compare_digest` = comparaison à temps
+    constant : le token ne peut pas être deviné octet par octet via le timing."""
+    if not _AUTH_ENABLED:
+        return
+    # Comparaison sur des bytes : compare_digest lève TypeError sur une str
+    # non-ASCII, et les en-têtes HTTP sont décodés en latin-1 par Starlette —
+    # un octet > 127 dans le header donnerait un 500 au lieu d'un 401.
+    if not x_ml_token or not hmac.compare_digest(
+        x_ml_token.encode("utf-8", "ignore"), _ML_API_TOKEN.encode("utf-8")
+    ):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+# Appliqué aux routes qui coûtent du CPU ou décrivent le modèle. /health et
+# /health/ready restent ouverts : les sondes de la plateforme n'ont pas le token.
+_PROTECTED = [Depends(require_ml_token)]
+
+# Les docs interactives exposent tout le schéma de features (donc l'architecture
+# du modèle). Inutiles en prod, où le seul client est le backend Node.
+app = FastAPI(
+    title="ArakIce ML Service",
+    version="2.0.0",
+    docs_url=None if _IS_DEPLOYED else "/docs",
+    redoc_url=None,
+    openapi_url=None if _IS_DEPLOYED else "/openapi.json",
+)
+
+# CORS : aucun navigateur n'appelle ce service directement (le backend Node fait
+# proxy), donc aucune origine autorisée par défaut. `ML_CORS_ORIGINS` permet d'en
+# déclarer explicitement (séparées par des virgules) — jamais "*".
+_cors_origins = [o.strip() for o in os.environ.get("ML_CORS_ORIGINS", "").split(",") if o.strip()]
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type", "X-ML-Token"],
+    )
 
 # ── Chargement des modèles entraînés (si disponibles) ─────────────────────────
 #
@@ -553,7 +621,7 @@ def _apply_market(
     return clamp(prob, 0.05, 0.95), conf, expl
 
 
-@app.post("/predict/game", response_model=MLResponse)
+@app.post("/predict/game", response_model=MLResponse, dependencies=_PROTECTED)
 def predict_game(f: GameFeatures) -> MLResponse:
     # 1. Corriger les valeurs manquantes (0 = pas de données NHL API)
     if f.home_pk_pct < 50: f.home_pk_pct = 80.0
@@ -788,7 +856,7 @@ def predict_game(f: GameFeatures) -> MLResponse:
 
 # ── Player prop model ─────────────────────────────────────────────────────────
 
-@app.post("/predict/player", response_model=MLResponse)
+@app.post("/predict/player", response_model=MLResponse, dependencies=_PROTECTED)
 def predict_player(f: PlayerPropFeatures) -> MLResponse:
     rate_map = {
         "goals":    f.goals_per_game,
@@ -841,7 +909,7 @@ RANK_PRIORS: dict[str, list[float]] = {
     "playoff": [.97,.95,.91,.85,.77,.68,.56,.43,.30,.20,.12,.07,.04,.02,.01,.005],
 }
 
-@app.post("/predict/team", response_model=MLResponse)
+@app.post("/predict/team", response_model=MLResponse, dependencies=_PROTECTED)
 def predict_team(f: TeamFuturesFeatures) -> MLResponse:
     if f.pk_pct < 50: f.pk_pct = 80.0
     if f.pp_pct == 0: f.pp_pct = 20.0
@@ -912,7 +980,7 @@ def health_ready(response: Response):
         },
     }
 
-@app.get("/features")
+@app.get("/features", dependencies=_PROTECTED)
 def features():
     return {
         "game_features":   GameFeatures.model_json_schema(),

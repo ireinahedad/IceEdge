@@ -76,7 +76,8 @@ Settings → Variables → ajouter :
 | `GOOGLE_REDIRECT_URI` | `https://[TON-SERVICE].railway.app/api/auth/google/callback` |
 | `CLIENT_URL` | `https://iceedge.vercel.app` (à confirmer après Vercel) |
 | `CORS_ORIGIN` | `https://iceedge.vercel.app` |
-| `ML_SERVICE_URL` | URL du service Python Railway (étape 3) |
+| `ML_SERVICE_URL` | **Réseau privé** : `http://<nom-du-service-ml>.railway.internal:8000` (étape 3 — pas de domaine public) |
+| `ML_API_TOKEN` | Secret partagé avec le service ML : `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 
 ### Domaine
 Settings → Networking → **Generate Domain** → noter l'URL (ex: `iceedge-backend.railway.app`)
@@ -132,40 +133,91 @@ L'ancien objet est supprimé automatiquement lors d'un remplacement.
 ## 3. Railway — Service ML Python
 
 ### Créer un deuxième service dans le même projet
-1. Railway → même projet → **+ New Service → GitHub repo**
-2. Même repo `ICEEDGE` → **Root directory : `ml/python`**
-3. Railway détecte le `Dockerfile` dans `ml/python/`
+1. Railway → **même projet et même environnement** que le backend → **+ New Service → GitHub repo**
+2. Même repo `ICEEDGE` → Settings → Build :
+   - **Root directory : `ml`** ← et non `ml/python`
+   - **Dockerfile path : `python/Dockerfile`**
+3. ⚠️ Le root directory *est* le contexte de build. Le Dockerfile fait
+   `COPY models ./models`, et `ml/models/` est le frère de `ml/python/` : avec
+   `ml/python` comme racine, les modèles sont hors contexte et le build échoue
+   sur `"/models": not found`. Cf. l'en-tête de `ml/python/Dockerfile`.
 
 ### Variables d'environnement
-Aucune variable requise par défaut. Optionnel :
 
 | Variable | Valeur |
 |----------|--------|
-| `PORT` | `8000` |
+| `ML_API_TOKEN` | Secret partagé, **identique** à celui du backend (étape 2). Générer : `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `PORT` | `8000` (optionnel — Railway l'injecte) |
+| `ML_CORS_ORIGINS` | Optionnel. Aucune origine autorisée par défaut : aucun navigateur n'appelle ce service, le backend fait proxy. |
+
+> Le service **refuse de démarrer** en environnement déployé si `ML_API_TOKEN`
+> est absent — plutôt que de servir des inférences ouvertes. Si tu tiens à t'en
+> passer parce que le service n'a strictement aucun domaine public, pose
+> explicitement `ML_AUTH_DISABLED=true`.
 
 ### Modèles XGBoost
-Les modèles (`game_model.json`, `totals_model.json`) ne sont **pas** dans le repo Git.
-Deux options :
+`ml/models/*.json` **est suivi par Git** (cf. `.gitignore`) et embarqué dans
+l'image : `game_model.json`, `totals_model.json`, `elo_ratings.json`,
+`inference_state.json`, `training_report.json`. Rien à monter, rien à uploader.
 
-**Option A — Entraîner en local et committer les modèles :**
+Le corollaire : **les modèles déployés sont ceux du dernier commit.** Après un
+ré-entraînement local, il faut committer et pousser, sinon Railway sert
+l'ancien modèle sans le moindre avertissement.
+
 ```bash
-cd ml/python
-python fetch_data.py --seasons 3 --output ../data/nhl_games.csv
-python train.py
-# Modèles générés dans ml/models/
-git add ../models/
-git commit -m "feat: add trained XGBoost models"
-git push
+cd ml/python && python train.py     # régénère ml/models/
+git add ../models && git commit -m "chore(ml): retrain" && git push
 ```
 
-**Option B — Railway Volume (après déploiement) :**
-Si les modèles sont trop lourds pour Git, utiliser un Railway Volume monté sur `/app/models`.
+Sans modèles chargés, le service démarre quand même — en mode règles. C'est
+silencieux, donc à vérifier explicitement après déploiement :
 
-> Sans modèles, le service démarre en mode fallback (règle-based seulement).
+```bash
+curl -s $ML_SERVICE_URL/health   # trained_models_loaded doit être true/true
+```
 
-### Domaine
-Settings → Networking → **Generate Domain** → noter l'URL (ex: `iceedge-ml.railway.app`)
-→ Mettre à jour `ML_SERVICE_URL` dans le service Node.js (étape 2)
+### Réseau — ⚠️ ne PAS générer de domaine public
+
+Ce service n'a aucune notion d'utilisateur : quiconque connaît son URL peut
+envoyer des inférences XGBoost illimitées. Sur Railway le compute est facturé à
+l'usage → facture ouverte, et exfiltration du modèle par requêtes répétées.
+
+**Le seul client légitime est le backend Node, dans le même projet Railway** :
+il n'a donc besoin que du réseau privé.
+
+1. Settings → Networking : **laisser la section Public Networking vide**
+   (si un domaine a déjà été généré : *Remove Domain*).
+2. Noter le nom interne du service (Settings → Service Name), ex. `iceedge-ml`.
+3. Dans le service **Node.js** (étape 2), poser :
+   ```
+   ML_SERVICE_URL=http://iceedge-ml.railway.internal:8000
+   ```
+   Réseau privé Railway : inclus, **0 €**, aucun egress facturé, latence moindre
+   qu'un aller-retour par l'internet public.
+
+> ⚠️ En interne on parle **http** et le port est celui du service (`8000`),
+> pas `443`. Le trafic ne quitte pas le réseau privé du projet.
+
+Trois conditions pour que `railway.internal` résolve :
+- les deux services sont dans le **même projet** ET le **même environnement**
+  (production ↔ production) — l'isolation est stricte entre projets ;
+- le réseau privé n'existe **qu'au runtime**, jamais pendant le build ;
+- le service ML écoute en **IPv6** : les environnements créés avant le
+  2025-10-16 ne résolvent `*.railway.internal` qu'en IPv6, donc un bind sur
+  `0.0.0.0` serait injoignable. Le Dockerfile utilise déjà `--host ::`.
+
+Le token `X-ML-Token` reste la deuxième barrière : il protège le service si un
+domaine public réapparaît un jour (redéploiement, manipulation dans le
+dashboard). Les deux ensemble, pas l'un *ou* l'autre.
+
+### Vérifier
+Depuis le service Node (Railway → Shell) :
+```bash
+curl -s $ML_SERVICE_URL/health                                    # 200
+curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+  $ML_SERVICE_URL/predict/game -H 'Content-Type: application/json' -d '{}'   # 401 sans token
+```
+Et depuis l'extérieur, l'URL publique ne doit **pas** exister.
 
 ---
 
@@ -219,8 +271,9 @@ Vercel attribue automatiquement `iceedge.vercel.app` (ou le nom du projet).
 curl https://[TON-BACKEND].railway.app/health
 curl https://[TON-BACKEND].railway.app/health/ready   # 200 si DB ok, 503 sinon
 
-# Service ML Python
-curl https://[TON-ML].railway.app/health
+# Service ML Python — pas de domaine public (cf. §3) : se tester depuis le
+# Shell Railway du service Node, via le réseau privé.
+curl $ML_SERVICE_URL/health
 ```
 
 ### Vérifier la chaîne complète
@@ -238,9 +291,11 @@ curl -X POST https://[TON-BACKEND].railway.app/api/predict/ml \
 - [ ] Cloudflare R2 : les 5 variables `R2_*` définies, un changement d'avatar renvoie bien une URL et non une data-URI
 - [ ] Railway Node.js : deploy réussi, `/health` répond 200 et `/health/ready` répond 200
 - [ ] Railway Python : deploy réussi, `/health` répond 200
+- [ ] Railway Python : **aucun domaine public** (Public Networking vide), `ML_SERVICE_URL` en `*.railway.internal:8000`
+- [ ] `ML_API_TOKEN` identique sur les deux services ; `POST /predict/game` sans le header renvoie 401
 - [ ] Vercel : build réussi, app accessible
 - [ ] Google OAuth : URIs de redirection mises à jour
-- [ ] Variables d'env croisées mises à jour (ML_SERVICE_URL, CLIENT_URL, CORS_ORIGIN)
+- [ ] Variables d'env croisées mises à jour (ML_SERVICE_URL, ML_API_TOKEN, CLIENT_URL, CORS_ORIGIN)
 - [ ] Modèles XGBoost déployés (ou fallback accepté)
 - [ ] Test de connexion end-to-end (login → prédiction)
 

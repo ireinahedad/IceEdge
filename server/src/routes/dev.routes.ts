@@ -10,7 +10,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate }   from '../middleware/auth.middleware';
 import { requireRole }    from '../middleware/auth.middleware';
-import { mlApiClient }    from '../services/mlApiClient';
+import { mlApiClient, mlHeaders } from '../services/mlApiClient';
 import {
   buildGameFeatures,
   buildPlayerPropFeatures,
@@ -36,8 +36,9 @@ router.get('/ml-info', async (_req: Request, res: Response) => {
         timeout(4000),
       ]).catch((e) => ({ error: e.message ?? 'ML service unreachable' })),
 
+      // /features is token-protected on the ML service — send X-ML-Token.
       Promise.race([
-        fetch(`${ML_URL}/features`).then(r => r.json()),
+        fetch(`${ML_URL}/features`, { headers: mlHeaders() }).then(r => r.json()),
         timeout(4000),
       ]).catch(() => null),
     ]);

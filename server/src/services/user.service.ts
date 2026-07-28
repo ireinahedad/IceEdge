@@ -1,14 +1,12 @@
-import bcrypt from 'bcryptjs';
 import { pool } from '../db/connection';
-import { toPublicUser } from './auth.service';
+// Hashing lives in auth.service so the cost factor has a single definition.
+import { toPublicUser, hashPassword, verifyPassword } from './auth.service';
 import {
   UserRow,
   UserPublic,
   UpdateUserBody,
   UpdatePasswordBody,
 } from '../types/user.type';
-
-const SALT_ROUNDS = 12;
 
 // -------------------------------------------------------
 //  Get all users (admin)
@@ -101,12 +99,12 @@ export async function updatePassword(id: string, body: UpdatePasswordBody): Prom
     throw Object.assign(new Error('User not found'), { status: 404 });
   }
 
-  const valid = await bcrypt.compare(body.current_password, user.password_hash);
+  const valid = await verifyPassword(body.current_password, user.password_hash);
   if (!valid) {
     throw Object.assign(new Error('Current password is incorrect'), { status: 400 });
   }
 
-  const newHash = await bcrypt.hash(body.new_password, SALT_ROUNDS);
+  const newHash = await hashPassword(body.new_password);
 
   await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, id]);
 }

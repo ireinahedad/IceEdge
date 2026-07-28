@@ -44,5 +44,11 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
 # tini as PID 1 → clean shutdown of the uvicorn workers.
 # sh -c + exec: expand $PORT, then replace the shell so uvicorn is tini's direct
 # child (clean signal forwarding). $PORT lets Railway/Render set the bind port.
+#
+# --host :: (not 0.0.0.0) — Railway's private network is IPv6; environments
+# created before 2025-10-16 resolve *.railway.internal to IPv6 ONLY, so a socket
+# bound to 0.0.0.0 (IPv4) is simply unreachable from the backend. Binding to ::
+# also accepts IPv4 through v4-mapped addresses (Linux default bindv6only=0), so
+# local runs and public domains keep working.
 ENTRYPOINT ["tini", "--"]
-CMD ["sh", "-c", "exec uvicorn ml_service:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2"]
+CMD ["sh", "-c", "exec uvicorn ml_service:app --host :: --port ${PORT:-8000} --workers 2"]

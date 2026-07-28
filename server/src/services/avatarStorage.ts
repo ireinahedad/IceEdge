@@ -29,12 +29,29 @@ import crypto from 'crypto';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { logger } from '../logger';
 
-const ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
-const ACCESS_KEY = process.env.R2_ACCESS_KEY_ID;
-const SECRET_KEY = process.env.R2_SECRET_ACCESS_KEY;
-const BUCKET     = process.env.R2_BUCKET;
+/**
+ * Les valeurs sont systématiquement `trim()`ées : un copier-coller dans
+ * l'interface Railway laisse très facilement une espace ou un retour à la ligne
+ * en fin de valeur. Sur la clé secrète, cela casse la signature SigV4 et R2
+ * répond « Access Denied » — un message qui oriente vers les permissions alors
+ * que le problème est un caractère invisible.
+ */
+const env = (name: string): string => (process.env[name] ?? '').trim();
+
+const ACCOUNT_ID = env('R2_ACCOUNT_ID');
+const ACCESS_KEY = env('R2_ACCESS_KEY_ID');
+const SECRET_KEY = env('R2_SECRET_ACCESS_KEY');
+const BUCKET     = env('R2_BUCKET');
 /** Domaine public du bucket, sans slash final (r2.dev ou domaine perso). */
-const PUBLIC_URL = (process.env.R2_PUBLIC_URL ?? '').replace(/\/+$/, '');
+const PUBLIC_URL = env('R2_PUBLIC_URL').replace(/\/+$/, '');
+
+/**
+ * Endpoint S3 du compte. Surchargeable car un bucket créé avec une
+ * *jurisdiction* (EU, FedRAMP) n'est PAS joignable sur l'endpoint standard :
+ * il faut `https://<account>.eu.r2.cloudflarestorage.com`. Viser le mauvais
+ * endpoint renvoie « Access Denied ».
+ */
+const ENDPOINT = env('R2_ENDPOINT') || `https://${ACCOUNT_ID}.r2.cloudflarestorage.com`;
 
 /** Taille maximale acceptée après décodage (le client envoie ~20 ko). */
 const MAX_BYTES = 300 * 1024;
@@ -65,7 +82,19 @@ export const isAvatarStorageConfigured = Boolean(
   }).filter(([, v]) => !v).map(([k]) => k);
 
   if (missing.length === 0) {
-    logger.info({ bucket: BUCKET, publicUrl: PUBLIC_URL }, '[avatarStorage] R2 actif');
+    // On journalise aussi l'endpoint et la longueur des clés : c'est ce qui
+    // permet de repérer un accountId tronqué ou une clé recopiée à moitié,
+    // sans jamais exposer les secrets eux-mêmes.
+    logger.info(
+      {
+        bucket: BUCKET,
+        publicUrl: PUBLIC_URL,
+        endpoint: ENDPOINT,
+        accessKeyIdLength: ACCESS_KEY.length,
+        secretKeyLength: SECRET_KEY.length,
+      },
+      '[avatarStorage] R2 actif',
+    );
   } else if (missing.length === 5) {
     logger.info('[avatarStorage] R2 non configuré — les avatars restent stockés en base64 dans Postgres');
   } else {
@@ -80,8 +109,8 @@ function s3(): S3Client {
     client = new S3Client({
       // R2 ignore la région mais l'SDK en exige une.
       region: 'auto',
-      endpoint: `https://${ACCOUNT_ID}.r2.cloudflarestorage.com`,
-      credentials: { accessKeyId: ACCESS_KEY!, secretAccessKey: SECRET_KEY! },
+      endpoint: ENDPOINT,
+      credentials: { accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY },
     });
   }
   return client;
@@ -155,9 +184,29 @@ export async function uploadAvatar(userId: string, dataUrl: string): Promise<str
     }));
     return `${PUBLIC_URL}/${key}`;
   } catch (err: any) {
-    logger.error({ err: err?.message, userId }, '[avatarStorage] upload échoué');
+    logger.error(r2ErrorContext(err, { userId, key }), '[avatarStorage] upload échoué');
     return null;
   }
+}
+
+/**
+ * Contexte exploitable pour une erreur du SDK S3.
+ *
+ * « Access Denied » seul ne permet pas de trancher entre un token mal scopé,
+ * un accountId erroné, une clé tronquée et un bucket qui n'existe pas. Le code
+ * d'erreur, le statut HTTP et l'identifiant de requête (à fournir au support
+ * Cloudflare) lèvent l'ambiguïté. Aucun secret n'est journalisé.
+ */
+function r2ErrorContext(err: any, extra: Record<string, unknown>) {
+  return {
+    ...extra,
+    err:       err?.message,
+    code:      err?.name ?? err?.Code,
+    status:    err?.$metadata?.httpStatusCode,
+    requestId: err?.$metadata?.requestId,
+    bucket:    BUCKET,
+    endpoint:  ENDPOINT,
+  };
 }
 
 /**
@@ -188,6 +237,6 @@ export async function deleteAvatarByUrl(userId: string, url: string | null | und
   try {
     await s3().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
   } catch (err: any) {
-    logger.warn({ err: err?.message, key }, '[avatarStorage] suppression échouée (objet orphelin)');
+    logger.warn(r2ErrorContext(err, { key }), '[avatarStorage] suppression échouée (objet orphelin)');
   }
 }

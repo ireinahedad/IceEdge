@@ -98,9 +98,10 @@ Dernière mise à jour : 2026-07-04
 ## Plus tard : ajouter le ML
 
 Quand le modèle aura un vrai edge :
-1. Déployer `ml/python/` comme 2e service Railway (Dockerfile déjà présent) → URL publique.
-2. Sur le backend : `ML_SERVICE_URL=https://<ml>.up.railway.app` et `ML_DISABLED=false`.
-3. Redéployer. Aucune autre modif — le proxy et le fallback existent déjà.
+1. Déployer `ml/python/` comme 2e service Railway (Dockerfile déjà présent), **sans domaine public** — cf. DEPLOYMENT.md §3.
+2. Sur les deux services : le même `ML_API_TOKEN` (secret partagé, sinon le service ML refuse de démarrer).
+3. Sur le backend : `ML_SERVICE_URL=http://<ml>.railway.internal:8000` et `ML_DISABLED=false`.
+4. Redéployer. Aucune autre modif — le proxy et le fallback existent déjà.
 
 Coût additionnel : ~5 $/mo pour le 2e service (ou scale-to-zero sur Render si usage faible).
 

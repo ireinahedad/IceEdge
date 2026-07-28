@@ -407,8 +407,8 @@ Ordonnée par rapport valeur/effort. Les six premières lignes sont ce qui te s�
 | ☐ 1 | **Cacher le proxy Odds API** (TTL 5 min) + `Cache-Control` + log de `x-requests-remaining` | `routes/odds.routes.ts` | 1 h | 0 € |
 | ☐ 2 | **Cacher `getBestBets`** (TTL 60 s) + déduplication des requêtes en vol | `services/bestBets.service.ts` | 2 h | 0 € |
 | ☐ 3 | **Dé-N+1 le leaderboard** (1 requête agrégée) + cache 60 s + index `user_bets(user_id, outcome)` | `services/profile.service.ts:322` | 2 h | 0 € |
-| ☐ 4 | **Remplacer `bcryptjs`** par `@node-rs/bcrypt`, `SALT_ROUNDS` → 10-11, SHA-256 pour les codes, e-mail hors du chemin de requête | `services/auth.service.ts` | 2 h | 0 € |
-| ☐ 5 | **Fermer le service ML** : réseau privé Railway (`*.railway.internal`), retirer le domaine public | `DEPLOYMENT.md`, var. Railway | 30 min | 0 € |
+| ☑ 4 | **Remplacer `bcryptjs`** par `@node-rs/bcrypt`, `SALT_ROUNDS` → 10-11, SHA-256 pour les codes, e-mail hors du chemin de requête | `services/auth.service.ts` | 2 h | 0 € |
+| ☑ 5 | **Fermer le service ML** : réseau privé Railway (`*.railway.internal`), retirer le domaine public | `DEPLOYMENT.md`, var. Railway | 30 min | 0 € |
 | ☐ 6 | **Redimensionner les avatars côté client** (256×256 WebP) + `express.json` à `100kb` global, `5mb` sur la seule route avatar | `client` + `app.ts` | 3 h | 0 € |
 | ☐ 7 | **Confirmer que `DATABASE_URL` pointe sur l'endpoint Neon `-pooler`** ; corriger `DEPLOYMENT.md` (il documente encore Supabase) | var. Railway + doc | 30 min | 0 € |
 | ☐ 8 | **Aligner le CORS Socket.io** sur la logique de `app.ts` (liste + regex preview) | `socket.ts` | 30 min | 0 € |

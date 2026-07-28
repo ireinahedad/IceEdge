@@ -1,7 +1,13 @@
-import bcrypt from 'bcryptjs';
+// @node-rs/bcrypt, NOT bcryptjs: bcryptjs is pure JavaScript and runs on the
+// event loop, so a single cost-12 hash freezes the whole process for ~1-2 s on a
+// shared vCPU — a burst of signups times out every other request. The native
+// binding runs off-thread. Same `$2a$`/`$2b$` output, so existing hashes verify
+// unchanged.
+import { hash as bcryptHash, verify as bcryptVerify } from '@node-rs/bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { pool } from '../db/connection';
+import { logger } from '../logger';
 import { sendVerificationCode, sendPasswordResetCode } from './email.service';
 import {
   UserRow, UserPublic, RegisterBody, LoginBody,
@@ -9,7 +15,8 @@ import {
   PendingVerificationResponse,
 } from '../types/user.type';
 
-const SALT_ROUNDS       = 12;
+// Cost 11 ≈ half the CPU of cost 12, still above the OWASP floor (10).
+const SALT_ROUNDS       = 11;
 const ACCESS_TOKEN_TTL  = '15m';
 // Short session (no "remember me"): 7 days. Persistent session: 30 days.
 // Both overridable via env (seconds).
@@ -39,12 +46,60 @@ export function toPublicUser(row: UserRow): UserPublic {
   return rest;
 }
 
+/** Hash a password for storage. Shared with user.service so the cost lives in
+ *  exactly one place. */
+export function hashPassword(plain: string): Promise<string> {
+  return bcryptHash(plain, SALT_ROUNDS);
+}
+
+/** Constant-time password check against a stored bcrypt hash. */
+export function verifyPassword(plain: string, hash: string): Promise<boolean> {
+  return bcryptVerify(plain, hash);
+}
+
+/** Runs a side effect (email, webhook…) outside the request path. The caller
+ *  responds immediately; a failure here is logged, never thrown into the void.
+ *  Used for verification/reset emails: a blocking HTTP call to Resend inside the
+ *  request adds its full latency to every signup for no benefit to the client,
+ *  which only learns "check your inbox" either way. */
+function fireAndForget(work: Promise<unknown>, context: string): void {
+  void work.catch((err: any) => {
+    logger.error({ err: err?.message ?? err }, `[auth] ${context} failed`);
+  });
+}
+
 /** Hash a refresh token for storage/lookup. The DB never holds the raw secret,
  *  so a DB read (leak, backup, SQL injection elsewhere) can't yield a usable
  *  session token. SHA-256 is appropriate here: the token is 64 random bytes of
  *  high entropy, so it isn't brute-forceable and needs no slow KDF/salt. */
 function hashToken(raw: string): string {
   return crypto.createHash('sha256').update(raw).digest('hex');
+}
+
+/** Hash a one-time 6-digit code. Salted SHA-256, not bcrypt: a slow KDF buys
+ *  nothing here — the code has ~10^6 of entropy and lives 15 minutes, so what
+ *  stops guessing is MAX_CODE_ATTEMPTS + expiry, not the hash cost. Meanwhile a
+ *  cost-12 bcrypt costs ~1 s of blocking CPU on every signup. Same reasoning as
+ *  hashToken() above; the salt keeps the 10^6 possible digests un-precomputable.
+ *  Format: `sha256$<salt>$<digest>`. */
+function hashCode(code: string): string {
+  const salt   = crypto.randomBytes(16).toString('hex');
+  const digest = crypto.createHash('sha256').update(`${salt}:${code}`).digest('hex');
+  return `sha256$${salt}$${digest}`;
+}
+
+/** Verifies a code against a stored hash. Self-describing format → codes issued
+ *  by the previous bcrypt path (at most 15 min of them, in flight at deploy
+ *  time) keep working, so no migration and no user locked out. */
+async function verifyCodeHash(code: string, stored: string): Promise<boolean> {
+  if (stored.startsWith('$2')) return bcryptVerify(code, stored);
+
+  const [scheme, salt, digest] = stored.split('$');
+  if (scheme !== 'sha256' || !salt || !digest) return false;
+
+  const expected = crypto.createHash('sha256').update(`${salt}:${code}`).digest('hex');
+  if (expected.length !== digest.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(digest, 'hex'));
 }
 
 function signAccessToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): string {
@@ -100,7 +155,7 @@ async function createCode(user: UserRow, purpose: CodePurpose): Promise<string> 
   );
 
   const code      = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
-  const code_hash = await bcrypt.hash(code, SALT_ROUNDS);
+  const code_hash = hashCode(code);
   const expiresAt = new Date(Date.now() + CODE_TTL_MS);
 
   await pool.query(
@@ -129,7 +184,7 @@ async function consumeCode(userId: string, code: string, purpose: CodePurpose): 
     throw Object.assign(new Error('Too many attempts. Please request a new code.'), { status: 429 });
   }
 
-  const valid = await bcrypt.compare(code, record.code_hash);
+  const valid = await verifyCodeHash(code, record.code_hash);
   if (!valid) {
     await pool.query('UPDATE email_verification_codes SET attempts = attempts + 1 WHERE id = $1', [record.id]);
     throw Object.assign(new Error('Invalid or expired code'), { status: 400 });
@@ -138,10 +193,15 @@ async function consumeCode(userId: string, code: string, purpose: CodePurpose): 
   await pool.query('UPDATE email_verification_codes SET consumed = TRUE WHERE id = $1', [record.id]);
 }
 
-/** Generates + emails a fresh email-confirmation code. */
+/** Generates a fresh email-confirmation code and sends it out of band.
+ *  The code row is written synchronously — it must exist before we answer, or a
+ *  fast user could verify against nothing. Only the SMTP round-trip is deferred:
+ *  the client is told "check your inbox" either way, so waiting on Resend just
+ *  adds its latency to every signup. Worst case (process killed mid-send) the
+ *  user hits "resend". */
 async function issueVerificationCode(user: UserRow): Promise<void> {
   const code = await createCode(user, 'email_verify');
-  await sendVerificationCode(user.email, code, user.first_name);
+  fireAndForget(sendVerificationCode(user.email, code, user.first_name), 'verification email');
 }
 
 // ---- Register --------------------------------------------------------------
@@ -157,7 +217,7 @@ export async function register(body: RegisterBody): Promise<PendingVerificationR
     throw Object.assign(new Error('Email or username already in use'), { status: 409 });
   }
 
-  const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
+  const password_hash = await hashPassword(password);
 
   // Create the user and its profile atomically: a crash between the two inserts
   // must not leave a user with no user_profiles row.
@@ -251,7 +311,9 @@ export async function forgotPassword(email: string): Promise<void> {
   if (!user || !user.password_hash) return;
 
   const code = await createCode(user, 'password_reset');
-  await sendPasswordResetCode(user.email, code, user.first_name);
+  // Out of band, like issueVerificationCode — and it keeps the response time
+  // identical whether or not the account exists (no enumeration by timing).
+  fireAndForget(sendPasswordResetCode(user.email, code, user.first_name), 'password reset email');
 }
 
 /** Validates the reset code and sets a new password. Revokes all sessions. */
@@ -265,7 +327,7 @@ export async function resetPassword(email: string, code: string, newPassword: st
 
   await consumeCode(user.id, code, 'password_reset');
 
-  const password_hash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  const password_hash = await hashPassword(newPassword);
   await pool.query(
     // Completing a reset also proves the user controls the inbox → verify email.
     'UPDATE users SET password_hash = $1, email_verified = TRUE WHERE id = $2',
@@ -290,7 +352,7 @@ export async function login(body: LoginBody): Promise<AuthResponse> {
     throw Object.assign(new Error('Invalid credentials'), { status: 401 });
   }
 
-  const valid = await bcrypt.compare(password, user.password_hash);
+  const valid = await verifyPassword(password, user.password_hash);
   if (!valid) {
     throw Object.assign(new Error('Invalid credentials'), { status: 401 });
   }
