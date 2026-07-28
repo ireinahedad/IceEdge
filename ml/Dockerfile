@@ -12,6 +12,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Sans ça, stdout n'est pas un TTY donc Python bufferise par blocs (~8 ko) : les
+# `print("[ML] ✅ …")` du chargement des modèles n'apparaissent JAMAIS dans les
+# logs Railway, alors que ceux d'uvicorn (via logging → stderr) passent. On perd
+# le seul indicateur qui dit si les modèles sont chargés.
+ENV PYTHONUNBUFFERED=1
+
 # tini forwards signals to uvicorn; curl is used by the HEALTHCHECK below.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc tini curl \

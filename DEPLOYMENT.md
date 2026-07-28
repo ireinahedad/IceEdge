@@ -173,6 +173,10 @@ cd ml/python && python train.py     # régénère ml/models/
 git add ../models && git commit -m "chore(ml): retrain" && git push
 ```
 
+Dans l'image, les modèles sont à `/app/models` et le Dockerfile pose
+`ENV MODELS_DIR=/app/models` — le service les cherche là et non via le chemin
+relatif valable seulement depuis `ml/python/`. Ne pas retirer cette variable.
+
 Sans modèles chargés, le service démarre quand même — en mode règles. C'est
 silencieux, donc à vérifier explicitement après déploiement :
 
@@ -192,9 +196,13 @@ il n'a donc besoin que du réseau privé.
 1. Settings → Networking : **laisser la section Public Networking vide**
    (si un domaine a déjà été généré : *Remove Domain*).
 2. Noter le nom interne du service (Settings → Service Name), ex. `iceedge-ml`.
-3. Dans le service **Node.js** (étape 2), poser :
+3. Relever le **port réellement écouté** dans les logs de démarrage du service ML :
+   `Uvicorn running on http://[::]:8080` → c'est `8080`. Railway injecte `$PORT`
+   (souvent `8080`) ; le `8000` du Dockerfile n'est que le défaut hors plateforme.
+   Le port de `ML_SERVICE_URL` doit correspondre à celui-là, sinon connexion refusée.
+4. Dans le service **Node.js** (étape 2), poser :
    ```
-   ML_SERVICE_URL=http://iceedge-ml.railway.internal:8000
+   ML_SERVICE_URL=http://iceedge-ml.railway.internal:8080
    ```
    Réseau privé Railway : inclus, **0 €**, aucun egress facturé, latence moindre
    qu'un aller-retour par l'internet public.
@@ -215,12 +223,32 @@ domaine public réapparaît un jour (redéploiement, manipulation dans le
 dashboard). Les deux ensemble, pas l'un *ou* l'autre.
 
 ### Vérifier
-Depuis le service Node (Railway → Shell) :
+
+Railway n'a pas de terminal dans le dashboard : le shell passe par la CLI.
+`railway shell` ouvre un sous-shell **sur ta machine** (variables injectées) —
+il ne voit donc pas le réseau privé. C'est `railway ssh` qu'il faut, qui ouvre
+un shell **dans le conteneur déployé** :
+
 ```bash
-curl -s $ML_SERVICE_URL/health                                    # 200
-curl -s -o /dev/null -w '%{http_code}\n' -X POST \
-  $ML_SERVICE_URL/predict/game -H 'Content-Type: application/json' -d '{}'   # 401 sans token
+npm i -g @railway/cli && railway login
+railway ssh --project=<id> --environment=<id> --service=<id-du-service>
 ```
+
+**1. Depuis le conteneur ML** — les modèles sont-ils chargés ?
+(image `python:3.12-slim`, `curl` est installé)
+```bash
+curl -s localhost:8000/health     # trained_models_loaded → true/true
+```
+
+**2. Depuis le conteneur Node** — le réseau privé fonctionne-t-il ?
+⚠️ L'image est `node:20-alpine` : **pas de `curl`**, utiliser le `wget` de busybox.
+```bash
+echo $ML_SERVICE_URL                       # doit finir par .railway.internal:8000
+wget -qO- $ML_SERVICE_URL/health           # 200 + JSON
+wget -qO- --post-data='{}' --header='Content-Type: application/json' \
+  $ML_SERVICE_URL/predict/game             # "ERROR 401" attendu : le token protège bien
+```
+
 Et depuis l'extérieur, l'URL publique ne doit **pas** exister.
 
 ---
