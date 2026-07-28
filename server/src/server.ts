@@ -16,17 +16,35 @@ const PORT = Number(process.env.PORT) || 3001;
 // How long to wait for in-flight work to finish before forcing exit.
 const SHUTDOWN_TIMEOUT_MS = Number(process.env.SHUTDOWN_TIMEOUT_MS) || 10_000;
 
+// Mode veille (hors-saison NHL) : DORMANT=true démarre l'API normalement mais
+// sans aucun job de fond. Neon suspend son compute après 5 min d'inactivité et
+// le plan gratuit ne couvre que 100 CU-heures/mois ; hors saison, les jobs
+// périodiques réveillent la base pour ne rien trouver. Ce n'est pas zéro
+// compute — une requête utilisateur réveille toujours la base — mais c'est zéro
+// réveil programmé. Voir DEPLOYMENT.md § « Budget compute ».
+const DORMANT = process.env.DORMANT === 'true';
+
 (async () => {
   try {
     await connectDB();
-    // Auto-settle pending bets against real NHL results every 15 min
-    startSettlementJob();
-    // Scan for value bets and push to opted-in Pro users
-    startValueBetScan();
-    // Daily housekeeping: prune expired/revoked tokens and used codes
-    startCleanupJob();
-    // Journalise les cotes NHL du jour pour le réentraînement ML (odds_live_log.csv)
-    startOddsLogger();
+    if (DORMANT) {
+      // Volontairement en warn : ce mode a des conséquences fonctionnelles
+      // (paris non réglés) et ne doit pas passer inaperçu dans les logs.
+      logger.warn(
+        '[Server] DORMANT=true — jobs de fond désactivés (règlement, value bets, ' +
+        'nettoyage, log des cotes). Les paris en attente ne seront PAS réglés tant ' +
+        'que la variable reste à true ; le rattrapage se fera au redémarrage.',
+      );
+    } else {
+      // Auto-settle pending bets against real NHL results every 15 min
+      startSettlementJob();
+      // Scan for value bets and push to opted-in Pro users
+      startValueBetScan();
+      // Daily housekeeping: prune expired/revoked tokens and used codes
+      startCleanupJob();
+      // Journalise les cotes NHL du jour pour le réentraînement ML (odds_live_log.csv)
+      startOddsLogger();
+    }
   } catch (err: any) {
     logger.warn(`[Server] PostgreSQL unavailable - DB features disabled. (${err.message})`);
   }

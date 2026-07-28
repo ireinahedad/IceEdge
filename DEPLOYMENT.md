@@ -47,6 +47,64 @@ Dès deux instances, ou quand le job de règlement et les requêtes web se
 disputent le pool, il sature. Le serveur émet un avertissement au démarrage si
 l'URL ne contient pas `-pooler`.
 
+### Taille du pool
+`DB_POOL_MAX` vaut **10 par instance** et doit y rester. À ~200 req/s, 10
+connexions supposent que chaque requête tienne sous 50 ms : augmenter le pool
+sans avoir d'abord corrigé les requêtes lentes ne fait que déplacer la
+saturation du process vers Neon. Ne le monter (10 → 20) qu'avec une mesure du
+temps d'attente d'acquisition d'une connexion à l'appui.
+
+### Budget compute — le scale-to-zero n'est pas optionnel
+Neon suspend le compute après **5 minutes** d'inactivité, et le plan gratuit
+n'inclut que **100 CU-heures/mois** — environ 400 h à 0,25 CU, soit *moins*
+qu'un mois calendaire (730 h). Une base qui ne dort jamais consomme ~182 CU-h et
+se fait **suspendre vers le 20 du mois** : ce n'est pas un sujet de coût, c'est
+une panne. Le budget ne tient que si la base passe l'essentiel du temps en
+veille.
+
+Ce qui réveille la base quand personne n'utilise le site :
+
+| Source | Cadence au repos | Réveille la DB ? |
+|--------|------------------|------------------|
+| Job de règlement (`SETTLEMENT_IDLE_POLL_MIN`) | 15 min | oui — c'est le rythme de référence |
+| Filet de sécurité règlement (`SETTLEMENT_FALLBACK_MIN`) | 60 min | oui |
+| `startCleanupJob` | 24 h | oui |
+| `startValueBetScan` (`PUSH_SCAN_INTERVAL_MIN`) | 30 min | seulement si un value bet est détecté |
+| `startOddsLogger` | 6 h | non (écrit un CSV) |
+| Sonde `/health/ready` | 1-5 min côté monitoring | **non** — résultat mis en cache (`READINESS_DB_TTL_MS`, 10 min par défaut) |
+
+Sans le cache de la sonde, une sonde toutes les 1-5 min suffit à elle seule à
+maintenir le compute allumé 24/7 et à annuler tout le travail événementiel du
+job de règlement. Avec le cache, le rythme est dicté par le règlement : réveil
+toutes les 15 min, ~5 min d'activité ensuite, soit un cycle de service d'environ
+33 % → **~61 CU-h/mois**, sous le plafond gratuit.
+
+Règle à retenir avant d'ajouter un job périodique : **toute tâche qui interroge
+Postgres plus souvent que toutes les 5 minutes supprime le scale-to-zero.**
+Voir `MONITORING.md` pour l'intervalle des sondes.
+
+### Mode veille hors-saison (`DORMANT`)
+Entre la fin des séries et la reprise d'octobre, les jobs de fond réveillent la
+base toutes les 15 minutes pour ne rien trouver. `DORMANT=true` sur Railway
+démarre l'API sans aucun d'entre eux (règlement, value bets, nettoyage, log des
+cotes) : plus aucun réveil programmé.
+
+Ce que ça implique :
+
+- **Ce n'est pas zéro compute.** Une visite du site, ou une sonde de readiness
+  dont le cache a expiré, réveille la base pour au moins 5 min. Pour un vrai
+  zéro, il faut retirer le déploiement Railway (menu « … » du déploiement actif
+  → *Remove*, puis *Redeploy* pour le rallumer) et mettre les sondes uptime en
+  pause. Le service, ses variables et les données Neon sont conservés.
+- **Les paris placés pendant la veille ne sont pas réglés.** Ils restent en
+  attente ; au retour à `DORMANT=false`, la passe de rattrapage du job de
+  règlement (30 s après le démarrage) les traite tous.
+- **Le nettoyage des tokens ne tourne pas.** Sans conséquence de sécurité : un
+  refresh token expiré ou révoqué est refusé à la vérification
+  (`auth.service.ts` filtre sur `revoked=FALSE AND expires_at>NOW()`) ; seule
+  la table grossit, ce que la reprise du job résorbe.
+- **Ne pas oublier de repasser à `false`** avant le premier match de la saison.
+
 ### Rétention / PITR
 Dashboard → **Settings → History retention** : porter la fenêtre à **≥ 7 jours**
 (voir `BACKUP_DR.md`). C'est ce qui permet de restaurer à un instant précis.
@@ -69,6 +127,9 @@ Settings → Variables → ajouter :
 | `PORT` | `3001` |
 | `DATABASE_URL` | URL Neon **pooled** (étape 1) — le nom d'hôte doit contenir `-pooler` |
 | `DB_SSL` | `true` (Neon exige TLS) |
+| `DB_POOL_MAX` | `10` — par instance ; ne pas augmenter sans mesure (voir étape 1) |
+| `READINESS_DB_TTL_MS` | `600000` (défaut) — durée de mise en cache du `SELECT 1` de `/health/ready` |
+| `DORMANT` | `false` en saison · `true` hors saison pour couper les jobs de fond (voir étape 1) |
 | `JWT_SECRET` | `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` |
 | `JWT_REFRESH_SECRET` | (même commande, valeur différente) |
 | `GOOGLE_CLIENT_ID` | Depuis Google Cloud Console |
@@ -320,6 +381,8 @@ curl -X POST https://[TON-BACKEND].railway.app/api/predict/ml \
 - [ ] Neon : schéma + migrations appliqués (`npm run db:migrate:all`), connexion vérifiée
 - [ ] `DATABASE_URL` pointe sur l'endpoint **pooled** (`-pooler` dans le nom d'hôte) — vérifier l'absence d'avertissement au démarrage
 - [ ] Neon : rétention d'historique ≥ 7 jours
+- [ ] Neon : après quelques heures sans trafic, le dashboard montre le compute **suspendu** (sinon un job réveille la base trop souvent — voir « Budget compute »)
+- [ ] Monitoring : sondes `/health/ready` à **5 min**, pas 1 min (`MONITORING.md`)
 - [ ] Cloudflare R2 : les 5 variables `R2_*` définies, un changement d'avatar renvoie bien une URL et non une data-URI
 - [ ] Railway Node.js : deploy réussi, `/health` répond 200 et `/health/ready` répond 200
 - [ ] Railway Python : deploy réussi, `/health` répond 200
@@ -337,7 +400,7 @@ curl -X POST https://[TON-BACKEND].railway.app/api/predict/ml \
 
 | Service | Plan gratuit | Limite |
 |---------|-------------|--------|
-| Neon | Free tier | 0,5 Go de stockage, scale-to-zero |
+| Neon | Free tier | 0,5 Go de stockage · **100 CU-h/mois** (~400 h à 0,25 CU) · scale-to-zero après 5 min, non désactivable |
 | Cloudflare R2 | Free tier | 10 Go, **egress gratuit** |
 | Railway | Hobby ($5/mo) | 512 MB RAM × 2 services |
 | Vercel | Hobby (gratuit) | 100 GB bandwidth |

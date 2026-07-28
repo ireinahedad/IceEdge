@@ -161,24 +161,64 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 // The ML service is intentionally NOT checked here: predictions fall back to a
 // rule-based path when it's down, so gating readiness on it would cause false
 // outages and hammer the ML service with probe traffic.
-app.get('/health/ready', async (_req, res) => {
-  const checks: Record<string, 'ok' | 'down'> = { db: 'down' };
-  try {
-    const client = await pool.connect();
-    try {
-      // Bound the probe so a hung DB can't hang the health endpoint.
-      await client.query('SET statement_timeout = 3000');
-      await client.query('SELECT 1');
-      checks.db = 'ok';
-    } finally {
-      client.release();
-    }
-  } catch (err: any) {
-    logger.error({ err: err?.message ?? err }, '[health] readiness DB check failed');
-  }
+//
+// Le résultat du SELECT 1 est mis en cache : Neon suspend son compute après
+// 5 min d'inactivité, donc une sonde qui interroge la base toutes les 1-5 min
+// l'empêche à elle seule de dormir — et le plan gratuit ne compte que
+// 100 CU-heures/mois (~400 h à 0,25 CU), soit moins qu'un mois calendaire.
+// Un TTL supérieur à la fenêtre de suspension retire la sonde de l'équation.
+// Contrepartie assumée : une panne DB pendant une période sans trafic peut
+// mettre jusqu'à READINESS_DB_TTL_MS à apparaître sur le monitoring. Les
+// requêtes réelles, elles, échouent immédiatement et remontent via Sentry.
+const READINESS_DB_TTL_MS = Number(process.env.READINESS_DB_TTL_MS) || 600_000;
 
-  const ready = checks.db === 'ok';
-  res.status(ready ? 200 : 503).json({ status: ready ? 'ok' : 'unavailable', checks });
+let dbOkUntil = 0;
+let dbProbeInFlight: Promise<boolean> | null = null;
+
+async function probeDb(): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    // Bound the probe so a hung DB can't hang the health endpoint.
+    await client.query('SET statement_timeout = 3000');
+    await client.query('SELECT 1');
+    return true;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Postgres reachable ? Les succès sont mis en cache READINESS_DB_TTL_MS ; les
+ * échecs ne le sont jamais (le cache est invalidé), donc une panne comme un
+ * rétablissement sont vus à la cadence réelle des sondes. Les appels
+ * concurrents partagent la même requête : au réveil de Neon (démarrage à
+ * froid de quelques secondes) plusieurs sondes ne monopolisent pas le pool.
+ */
+async function isDbReady(): Promise<boolean> {
+  if (Date.now() < dbOkUntil) return true;
+  if (!dbProbeInFlight) {
+    dbProbeInFlight = probeDb()
+      .then(() => {
+        dbOkUntil = Date.now() + READINESS_DB_TTL_MS;
+        return true;
+      })
+      .catch((err: any) => {
+        dbOkUntil = 0;
+        logger.error({ err: err?.message ?? err }, '[health] readiness DB check failed');
+        return false;
+      })
+      .finally(() => { dbProbeInFlight = null; });
+  }
+  return dbProbeInFlight;
+}
+
+app.get('/health/ready', async (_req, res) => {
+  const cached = Date.now() < dbOkUntil;
+  const ready = await isDbReady();
+  const checks: Record<string, 'ok' | 'down'> = { db: ready ? 'ok' : 'down' };
+  res
+    .status(ready ? 200 : 503)
+    .json({ status: ready ? 'ok' : 'unavailable', checks, cached: ready && cached });
 });
 
 // 404 catch-all
