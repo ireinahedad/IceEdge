@@ -91,7 +91,7 @@ payload de chat et de leaderboard. R2 offre 10 Go gratuits et **aucun frais
 d'egress**, contrairement au stockage Neon qui est le plus cher de la stack.
 
 ### Créer le bucket
-1. https://dash.cloudflare.com → **R2** → *Create bucket* → nom : `iceedge-avatars`
+1. https://dash.cloudflare.com → **R2** → *Create bucket* → nom : `arakice-avatars`
 2. Bucket → **Settings → Public access** : activer le sous-domaine `r2.dev`
    (URL du type `https://pub-xxxxxxxx.r2.dev`), ou brancher un domaine perso
    (ex. `cdn.arakice.com`). C'est cette URL que les navigateurs appelleront.
@@ -108,7 +108,7 @@ d'egress**, contrairement au stockage Neon qui est le plus cher de la stack.
 | `R2_ACCOUNT_ID` | Account ID Cloudflare |
 | `R2_ACCESS_KEY_ID` | Access Key ID du token |
 | `R2_SECRET_ACCESS_KEY` | Secret Access Key du token |
-| `R2_BUCKET` | `iceedge-avatars` |
+| `R2_BUCKET` | `arakice-avatars` |
 | `R2_PUBLIC_URL` | `https://pub-xxxxxxxx.r2.dev` (sans slash final) |
 
 Les cinq doivent être présentes : s'il en manque une, le serveur retombe
