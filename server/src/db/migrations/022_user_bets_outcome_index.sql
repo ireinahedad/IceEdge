@@ -1,0 +1,27 @@
+-- 022_user_bets_outcome_index.sql
+-- P0-3 — Index composite pour l'agrégation des statistiques de paris.
+--
+-- Le leaderboard et la recherche de joueurs comptent, par utilisateur, le
+-- nombre de paris tranchés et gagnés :
+--
+--   SELECT user_id,
+--          COUNT(*) FILTER (WHERE outcome <> 'pending'),
+--          COUNT(*) FILTER (WHERE outcome = 'win'),
+--          COUNT(*)
+--     FROM user_bets
+--    WHERE user_id = ANY($1::uuid[])
+--    GROUP BY user_id
+--
+-- L'index existant idx_user_bets_user (user_id seul) oblige Postgres à visiter
+-- la table (heap) pour lire `outcome` sur chaque ligne. Le composite
+-- (user_id, outcome) contient les deux colonnes du prédicat et de l'agrégat :
+-- la requête peut être satisfaite par un index-only scan, sans toucher au heap.
+-- Le gain croît avec l'historique de paris — c'est justement là que l'ancienne
+-- implémentation se dégradait.
+--
+-- Note : pas de CREATE INDEX CONCURRENTLY — le runner de migrations exécute
+-- chaque fichier dans une transaction, ce que CONCURRENTLY interdit. Sur une
+-- table déjà volumineuse en production, exécuter la variante CONCURRENTLY à la
+-- main hors migration.
+CREATE INDEX IF NOT EXISTS idx_user_bets_user_outcome
+  ON user_bets (user_id, outcome);

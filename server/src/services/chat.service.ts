@@ -172,7 +172,27 @@ async function viewRoomGuest(room: any) {
 
 // ─── Messages ─────────────────────────────────────────────────────────────────
 
-async function getMessages(roomId: string) {
+export interface RoomMessages {
+  messages: Array<Record<string, unknown>>;
+  /** userId → avatarUrl, pour les seuls auteurs qui ont un avatar. */
+  avatars: Record<string, string>;
+}
+
+/**
+ * Historique d'un salon : 100 messages + la table des avatars de leurs auteurs.
+ *
+ * `avatarUrl` est une propriété de l'AUTEUR, pas du message : la répéter sur
+ * chacun des 100 messages multipliait la même valeur par le nombre de messages
+ * envoyés par la personne. Tant que les avatars sont stockés en data-URI base64
+ * (~27 ko pièce), dix participants bavards suffisaient à produire une réponse
+ * JSON de plusieurs Mo — sérialisée synchrones sur l'event loop du process Node.
+ *
+ * Ici chaque avatar n'apparaît qu'une fois, dans `avatars`. Le client refusionne
+ * (`avatarUrl: avatars[userId] ?? null`) : le contrat des composants ne change
+ * pas. La déduplication reste utile après la migration vers R2 — elle rend la
+ * taille de la réponse indépendante du contenu de `avatar_url`.
+ */
+async function getMessages(roomId: string): Promise<RoomMessages> {
   const { rows } = await pool.query(
     `SELECT m.id, m.user_id AS "userId", m.username, m.display_name AS "displayName",
             m.avatar, m.tier, m.text, m.sent_at AS "sentAt", m.tag,
@@ -187,30 +207,59 @@ async function getMessages(roomId: string) {
     [roomId],
   );
 
-  const messages = await Promise.all(rows.map(async row => {
-    const { rows: reactions } = await pool.query(
-      `SELECT emoji, count FROM chat_reactions WHERE message_id = $1`,
-      [row.id],
-    );
-    return {
-      id:          row.id,
-      userId:      row.userId,
-      username:    row.username,
-      displayName: row.displayName,
-      avatar:      row.avatar,
-      avatarUrl:   row.avatarUrl ?? null,
-      tier:        row.tier,
-      text:        row.text,
-      sentAt:      row.sentAt,
-      tag:         row.tag,
-      replyTo:     row.replyToUsername
-        ? { username: row.replyToUsername, text: row.replyToText }
-        : undefined,
-      reactions: reactions.map(r => ({ emoji: r.emoji, count: parseInt(r.count), reacted: false })),
-    };
+  const reactionsByMessage = await fetchReactions(rows.map((r) => String(r.id)));
+
+  const avatars: Record<string, string> = {};
+  for (const row of rows) {
+    if (row.userId && row.avatarUrl) avatars[String(row.userId)] = row.avatarUrl;
+  }
+
+  const messages = rows.map((row) => ({
+    id:          row.id,
+    userId:      row.userId,
+    username:    row.username,
+    displayName: row.displayName,
+    avatar:      row.avatar,
+    tier:        row.tier,
+    text:        row.text,
+    sentAt:      row.sentAt,
+    tag:         row.tag,
+    replyTo:     row.replyToUsername
+      ? { username: row.replyToUsername, text: row.replyToText }
+      : undefined,
+    reactions:   reactionsByMessage.get(String(row.id)) ?? [],
   }));
 
-  return messages;
+  return { messages, avatars };
+}
+
+interface Reaction { emoji: string; count: number; reacted: boolean }
+
+/**
+ * Réactions de plusieurs messages en UNE requête.
+ *
+ * Remplace un `SELECT … WHERE message_id = $1` par message : ouvrir un salon
+ * de 100 messages coûtait 100 allers-retours Postgres, tous émis en parallèle
+ * — soit 100 connexions du pool mobilisées par visiteur.
+ */
+async function fetchReactions(messageIds: string[]): Promise<Map<string, Reaction[]>> {
+  const byMessage = new Map<string, Reaction[]>();
+  if (messageIds.length === 0) return byMessage;
+
+  const { rows } = await pool.query(
+    `SELECT message_id AS "messageId", emoji, count
+       FROM chat_reactions
+      WHERE message_id = ANY($1::text[])`,
+    [messageIds],
+  );
+
+  for (const r of rows) {
+    const key = String(r.messageId);
+    const list = byMessage.get(key) ?? [];
+    list.push({ emoji: r.emoji, count: parseInt(r.count, 10), reacted: false });
+    byMessage.set(key, list);
+  }
+  return byMessage;
 }
 
 // ─── Public service ───────────────────────────────────────────────────────────

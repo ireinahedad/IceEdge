@@ -63,8 +63,21 @@ app.use(cookieParser());
 // also bypasses the /api JSON rate limiter.
 app.post('/api/subscription/webhook', express.raw({ type: 'application/json' }), stripeWebhook);
 
-// 5 MB: allows base64 avatar uploads (~2 MB binary → ~2.8 MB base64) with margin
-app.use(express.json({ limit: '5mb' }));
+// Body limits. `express.json` parse la chaîne de façon SYNCHRONE : un body de
+// plusieurs Mo bloque l'event loop pour toutes les requêtes en cours. Un plafond
+// global de 5 Mo offrait cette surface à n'importe quelle route.
+//
+// L'avatar est la seule route qui a besoin de plus : elle reçoit une data-URI
+// base64. Elle a donc son propre parser, monté AVANT le parser global — le
+// premier body-parser à s'exécuter marque `req._body`, les suivants passent leur
+// tour. Le client redimensionne désormais en 256×256 WebP (~20 ko, ~27 ko en
+// base64) : 600 ko laissent une marge confortable, y compris pour un client dont
+// le bundle n'est pas encore à jour.
+app.use('/api/users/me/avatar', express.json({ limit: '600kb' }));
+
+// 100 ko pour tout le reste : aucune route légitime n'envoie plus (paris,
+// profil, messages de chat, prompts LLM).
+app.use(express.json({ limit: '100kb' }));
 
 // Broad rate-limit on the whole API (health check stays outside /api).
 app.use('/api', apiLimiter);
@@ -79,9 +92,14 @@ app.use('/api/users',         userRoutes);
 // NHL data (live from NHL API)
 app.use('/api/nhl',           nhlRoutes);
 
-// Leaderboard
+// Leaderboard — public, identique pour tous, caché 60 s côté service.
+// Le même Cache-Control côté HTTP laisse navigateur et CDN absorber le reste.
 app.get('/api/leaderboard', async (_req, res) => {
-  try { res.json(await getLeaderboard()); }
+  try {
+    const leaderboard = await getLeaderboard();
+    res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    res.json(leaderboard);
+  }
   catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 

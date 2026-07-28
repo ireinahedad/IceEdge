@@ -1,0 +1,270 @@
+{
+  "home_win": [
+    {
+      "factor": "home_b2b",
+      "label": "back-to-back (domicile)",
+      "bucket": "1",
+      "n": 2324,
+      "rate": 0.5039,
+      "base_rate": 0.5431,
+      "delta_pp": -3.9,
+      "target": "home_win",
+      "abs_delta": 3.9
+    },
+    {
+      "factor": "away_b2b",
+      "label": "back-to-back (visiteur)",
+      "bucket": "1",
+      "n": 4929,
+      "rate": 0.5766,
+      "base_rate": 0.5431,
+      "delta_pp": 3.4,
+      "target": "home_win",
+      "abs_delta": 3.4
+    },
+    {
+      "factor": "home_alt_gain",
+      "label": "gain d'altitude (domicile)",
+      "bucket": "(0.0, 8.0]",
+      "n": 427,
+      "rate": 0.5738,
+      "base_rate": 0.5431,
+      "delta_pp": 3.1,
+      "target": "home_win",
+      "abs_delta": 3.1
+    },
+    {
+      "factor": "rest_days_diff",
+      "label": "écart de repos",
+      "bucket": "(0.0, 1.0]",
+      "n": 4567,
+      "rate": 0.5695,
+      "base_rate": 0.5431,
+      "delta_pp": 2.6,
+      "target": "home_win",
+      "abs_delta": 2.6
+    },
+    {
+      "factor": "away_rest_days",
+      "label": "jours de repos (visiteur)",
+      "bucket": "(2.0, 3.0]",
+      "n": 3634,
+      "rate": 0.5171,
+      "base_rate": 0.5431,
+      "delta_pp": -2.6,
+      "target": "home_win",
+      "abs_delta": 2.6
+    },
+    {
+      "factor": "venue_altitude_m",
+      "label": "altitude de l'aréna",
+      "bucket": "(7.0, 76.0]",
+      "n": 4400,
+      "rate": 0.5202,
+      "base_rate": 0.5431,
+      "delta_pp": -2.3,
+      "target": "home_win",
+      "abs_delta": 2.3
+    },
+    {
+      "factor": "home_3in4",
+      "label": "3 matchs en 4 soirs (domicile)",
+      "bucket": "2",
+      "n": 3573,
+      "rate": 0.5206,
+      "base_rate": 0.5431,
+      "delta_pp": -2.2,
+      "target": "home_win",
+      "abs_delta": 2.2
+    },
+    {
+      "factor": "venue_altitude_m",
+      "label": "altitude de l'aréna",
+      "bucket": "(1.999, 7.0]",
+      "n": 4893,
+      "rate": 0.5635,
+      "base_rate": 0.5431,
+      "delta_pp": 2.0,
+      "target": "home_win",
+      "abs_delta": 2.0
+    },
+    {
+      "factor": "away_3in4",
+      "label": "3 matchs en 4 soirs (visiteur)",
+      "bucket": "2",
+      "n": 4938,
+      "rate": 0.5603,
+      "base_rate": 0.5431,
+      "delta_pp": 1.7,
+      "target": "home_win",
+      "abs_delta": 1.7
+    },
+    {
+      "factor": "venue_altitude_m",
+      "label": "altitude de l'aréna",
+      "bucket": "(76.0, 168.0]",
+      "n": 4189,
+      "rate": 0.56,
+      "base_rate": 0.5431,
+      "delta_pp": 1.7,
+      "target": "home_win",
+      "abs_delta": 1.7
+    },
+    {
+      "factor": "home_rest_days",
+      "label": "jours de repos (domicile)",
+      "bucket": "(3.0, 7.0]",
+      "n": 2223,
+      "rate": 0.5268,
+      "base_rate": 0.5431,
+      "delta_pp": -1.6,
+      "target": "home_win",
+      "abs_delta": 1.6
+    },
+    {
+      "factor": "home_3in4",
+      "label": "3 matchs en 4 soirs (domicile)",
+      "bucket": "0",
+      "n": 2223,
+      "rate": 0.5268,
+      "base_rate": 0.5431,
+      "delta_pp": -1.6,
+      "target": "home_win",
+      "abs_delta": 1.6
+    }
+  ],
+  "over_hit": [
+    {
+      "factor": "home_alt_gain",
+      "label": "gain d'altitude (domicile)",
+      "bucket": "(0.0, 4.0]",
+      "n": 138,
+      "rate": 0.558,
+      "base_rate": 0.4634,
+      "delta_pp": 9.5,
+      "target": "over_hit",
+      "abs_delta": 9.5
+    },
+    {
+      "factor": "home_rest_days",
+      "label": "jours de repos (domicile)",
+      "bucket": "(3.0, 7.0]",
+      "n": 1061,
+      "rate": 0.5005,
+      "base_rate": 0.4634,
+      "delta_pp": 3.7,
+      "target": "over_hit",
+      "abs_delta": 3.7
+    },
+    {
+      "factor": "home_3in4",
+      "label": "3 matchs en 4 soirs (domicile)",
+      "bucket": "0",
+      "n": 1061,
+      "rate": 0.5005,
+      "base_rate": 0.4634,
+      "delta_pp": 3.7,
+      "target": "over_hit",
+      "abs_delta": 3.7
+    },
+    {
+      "factor": "rest_days_diff",
+      "label": "écart de repos",
+      "bucket": "(1.0, 6.0]",
+      "n": 1061,
+      "rate": 0.4929,
+      "base_rate": 0.4634,
+      "delta_pp": 3.0,
+      "target": "over_hit",
+      "abs_delta": 3.0
+    },
+    {
+      "factor": "venue_altitude_m",
+      "label": "altitude de l'aréna",
+      "bucket": "(76.0, 168.0]",
+      "n": 1911,
+      "rate": 0.4349,
+      "base_rate": 0.4634,
+      "delta_pp": -2.9,
+      "target": "over_hit",
+      "abs_delta": 2.9
+    },
+    {
+      "factor": "away_road_game_num",
+      "label": "n-ième match du road trip (visiteur)",
+      "bucket": "(2.0, 3.0]",
+      "n": 1550,
+      "rate": 0.4387,
+      "base_rate": 0.4634,
+      "delta_pp": -2.5,
+      "target": "over_hit",
+      "abs_delta": 2.5
+    },
+    {
+      "factor": "venue_altitude_m",
+      "label": "altitude de l'aréna",
+      "bucket": "(230.0, 1609.0]",
+      "n": 1778,
+      "rate": 0.4876,
+      "base_rate": 0.4634,
+      "delta_pp": 2.4,
+      "target": "over_hit",
+      "abs_delta": 2.4
+    },
+    {
+      "factor": "home_distance_km",
+      "label": "distance parcourue (domicile)",
+      "bucket": "(1066.132, 4311.131]",
+      "n": 1948,
+      "rate": 0.4841,
+      "base_rate": 0.4634,
+      "delta_pp": 2.1,
+      "target": "over_hit",
+      "abs_delta": 2.1
+    },
+    {
+      "factor": "away_3in4",
+      "label": "3 matchs en 4 soirs (visiteur)",
+      "bucket": "2",
+      "n": 2280,
+      "rate": 0.4439,
+      "base_rate": 0.4634,
+      "delta_pp": -2.0,
+      "target": "over_hit",
+      "abs_delta": 2.0
+    },
+    {
+      "factor": "away_alt_gain",
+      "label": "gain d'altitude (visiteur)",
+      "bucket": "(17.0, 141.6]",
+      "n": 1956,
+      "rate": 0.4448,
+      "base_rate": 0.4634,
+      "delta_pp": -1.9,
+      "target": "over_hit",
+      "abs_delta": 1.9
+    },
+    {
+      "factor": "home_alt_gain",
+      "label": "gain d'altitude (domicile)",
+      "bucket": "(-1607.001, -3.0]",
+      "n": 2000,
+      "rate": 0.4825,
+      "base_rate": 0.4634,
+      "delta_pp": 1.9,
+      "target": "over_hit",
+      "abs_delta": 1.9
+    },
+    {
+      "factor": "away_3in4",
+      "label": "3 matchs en 4 soirs (visiteur)",
+      "bucket": "0",
+      "n": 797,
+      "rate": 0.4818,
+      "base_rate": 0.4634,
+      "delta_pp": 1.8,
+      "target": "over_hit",
+      "abs_delta": 1.8
+    }
+  ]
+}

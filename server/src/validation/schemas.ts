@@ -43,8 +43,15 @@ export const slipSubmitSchema = z.object({
 });
 
 // ── Profile ─────────────────────────────────────────────────────────────────
+// L'avatar est stocké en base64 dans Postgres (user_profiles.avatar_url) et
+// renvoyé dans les payloads du chat et du leaderboard : chaque octet accepté ici
+// se paye en stockage Neon ET en egress, à chaque lecture. Le client produit
+// désormais un 256×256 WebP (~20 ko, ~27 ko une fois en base64) — le plafond de
+// 400 000 caractères (~300 ko binaire) est une marge de sécurité, pas une cible.
+// Il est volontairement plus bas que la limite de body de la route (600 ko) pour
+// qu'un dépassement renvoie un 400 explicite plutôt qu'un 413 opaque.
 export const avatarSchema = z.object({
   avatarDataUrl: z.string()
     .startsWith('data:image/', 'avatarDataUrl must be an image data URI')
-    .max(2_800_000, 'Image too large (max ~2 MB)'),
+    .max(400_000, 'Image too large — please choose a smaller one'),
 });

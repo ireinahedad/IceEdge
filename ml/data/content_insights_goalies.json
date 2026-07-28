@@ -1,0 +1,52 @@
+[
+  {
+    "goalie": "Vesa Toskala",
+    "factor": "road_trip_len",
+    "label": "longueur du road trip",
+    "bucket": "(2.0, 5.0]",
+    "n": 18,
+    "save_pct": 0.8261,
+    "goalie_base_save_pct": 0.8702,
+    "delta_pp": -4.41
+  },
+  {
+    "goalie": "Nico Daws",
+    "factor": "rest_days",
+    "label": "jours de repos",
+    "bucket": "(2.0, 7.0]",
+    "n": 16,
+    "save_pct": 0.8424,
+    "goalie_base_save_pct": 0.8857,
+    "delta_pp": -4.33
+  },
+  {
+    "goalie": "Samuel Ersson",
+    "factor": "tz_shift",
+    "label": "décalage horaire",
+    "bucket": "(0.0, 3.0]",
+    "n": 15,
+    "save_pct": 0.8302,
+    "goalie_base_save_pct": 0.8733,
+    "delta_pp": -4.32
+  },
+  {
+    "goalie": "Yann Danis",
+    "factor": "days_away",
+    "label": "jours loin de la maison",
+    "bucket": "(3.0, 15.0]",
+    "n": 17,
+    "save_pct": 0.8501,
+    "goalie_base_save_pct": 0.8922,
+    "delta_pp": -4.2
+  },
+  {
+    "goalie": "Viktor Fasth",
+    "factor": "rest_days",
+    "label": "jours de repos",
+    "bucket": "(2.0, 7.0]",
+    "n": 16,
+    "save_pct": 0.8492,
+    "goalie_base_save_pct": 0.8908,
+    "delta_pp": -4.16
+  }
+]

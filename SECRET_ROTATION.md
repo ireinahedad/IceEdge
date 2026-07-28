@@ -8,7 +8,7 @@ Treat any secret that appeared in the repo, a chat, or a screenshot as burned. R
 
 | Secret | Where to rotate | Then update |
 |---|---|---|
-| **Postgres password** (`<OLD_DB_PASSWORD>`) | Your DB provider (Supabase/Railway) → reset password | `DATABASE_URL` / `DB_PASSWORD` in `server/.env` and the host's env |
+| **Postgres password** (`<OLD_DB_PASSWORD>`) | Neon → Dashboard → Roles → Reset password (keep the **pooled** endpoint in the new URL) | `DATABASE_URL` / `DB_PASSWORD` in `server/.env` and the host's env |
 | `JWT_SECRET` | Generate new: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` | `server/.env` (note: rotating invalidates all existing access tokens — users re-login) |
 | `GOOGLE_CLIENT_SECRET` | Google Cloud Console → Credentials → reset | `server/.env` |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard → Developers → API keys / Webhooks | `server/.env` |

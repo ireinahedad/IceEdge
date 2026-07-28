@@ -406,11 +406,25 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
 const ML_BASE = `${(import.meta.env.VITE_NHL_API_URL as string | undefined)?.replace("/api/nhl", "") ?? "http://localhost:3001"}/api/predict`;
 
 /**
+ * Extract the ML probability (0-100 integer) from a raw ML-service response.
+ * SINGLE source of truth for both the stats tile (fetchMLProbability) and the
+ * detail card (normalizeMLResponse) so they can never round differently and
+ * show two different ML numbers for the same bet. Returns null when the
+ * response carries no usable probability.
+ */
+export function mlPctFromResponse(data: Record<string, unknown>): number | null {
+  const raw =
+    typeof data.probability === "number" ? data.probability :
+    typeof data.homeWinProb  === "number" ? data.homeWinProb  : null;
+  if (raw === null) return null;
+  return raw > 1 ? Math.round(raw) : Math.round(raw * 100);
+}
+
+/**
  * Fetch ONLY the ML probability (0-100) for a bet — used by the stats-page
- * tiles when the "ML" reveal mode is active. Mirrors the fetch + normalisation
- * MLSection does, and falls back to the same rules-derived estimate as
- * fallbackResult() when the ML server is offline, so a tile and its detail card
- * always agree.
+ * tiles when the "ML" reveal mode is active. Uses the exact same extraction
+ * (mlPctFromResponse) and offline fallback (fallbackResult) as the detail card,
+ * so a tile and the card the user opens always show the same number.
  */
 export async function fetchMLProbability(
   req: { type: "game" | "player" | "team"; subjectId: string; opponentId?: string; propType?: string; line?: number },
@@ -425,8 +439,8 @@ export async function fetchMLProbability(
     if (r.ok) {
       const data = await r.json();
       if (data && typeof data === "object") {
-        const raw = (data.probability as number) ?? (data.homeWinProb as number);
-        if (typeof raw === "number") return raw > 1 ? Math.round(raw) : Math.round(raw * 100);
+        const pct = mlPctFromResponse(data as Record<string, unknown>);
+        if (pct !== null) return pct;
       }
     }
   } catch { /* server offline — use fallback below */ }
@@ -449,20 +463,19 @@ interface MLSectionProps {
 
 /** Normalise any server response shape into the MLPredictionResult the card expects. */
 function normalizeMLResponse(data: Record<string, unknown>, t: TFn): MLPredictionResult {
+  // Same extraction/rounding the stats tile uses → identical ML % in both.
+  const pct = mlPctFromResponse(data) ?? 50;
   if (typeof data.probability === "number" && Array.isArray(data.feature_importances)) {
-    const p = data.probability as number;
     const c = data.confidence as number ?? 0.7;
     return {
-      probability:         p > 1 ? p : Math.round(p * 100),
-      confidence:          c > 1 ? c : Math.round(c * 100),
+      probability:         pct,
+      confidence:          c > 1 ? Math.round(c) : Math.round(c * 100),
       feature_importances: data.feature_importances as MLFeatureImportance[],
       model_type:          (data.model_type as string) ?? "ML Model",
       model_version:       (data.model_version as string) ?? "1.0.0",
       explanation:         (data.explanation as string) ?? "",
     };
   }
-  const rawProb = (data.homeWinProb as number) ?? (data.probability as number) ?? 0.5;
-  const pct     = rawProb > 1 ? Math.round(rawProb) : Math.round(rawProb * 100);
   const rawConf = (data.confidence as number) ?? 0.7;
   const conf    = rawConf > 1 ? Math.round(rawConf) : Math.round(rawConf * 100);
   return {

@@ -49,6 +49,9 @@ router.get("/best-bets", async (req: Request, res: Response) => {
       maxPlayers: req.query.players ? parseInt(String(req.query.players), 10) : undefined,
       source,
     });
+    // Même TTL que le cache serveur : navigateur et CDN absorbent les
+    // rechargements de la landing entre deux recalculs.
+    res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
     res.json(result);
   } catch (err: any) {
     logger.error({ err: err.message }, "[predict/best-bets]");

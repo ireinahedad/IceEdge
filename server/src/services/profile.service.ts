@@ -1,5 +1,62 @@
 import { pool } from '../db/connection';
 import { encryptSecret, decryptSecret } from './crypto.util';
+import { TtlCache } from './ttlCache';
+
+// ─── Statistiques de paris (agrégation partagée) ─────────────────────────────
+
+interface BetStats { decided: number; wins: number; total: number }
+
+const EMPTY_BET_STATS: BetStats = { decided: 0, wins: 0, total: 0 };
+
+/**
+ * Compte les paris de PLUSIEURS utilisateurs en une seule requête agrégée.
+ *
+ * Remplace le N+1 qui faisait une requête `SELECT outcome FROM user_bets
+ * WHERE user_id = $1` par utilisateur affiché, puis comptait en JavaScript :
+ * 21 allers-retours Postgres pour un leaderboard de 20, et tout l'historique
+ * de paris rapatrié à chaque appel pour produire deux entiers.
+ *
+ * Ici le comptage est fait par Postgres et seule une ligne par utilisateur
+ * transite. Sert le leaderboard et la recherche de joueurs.
+ *
+ * Un utilisateur sans aucun pari n'apparaît pas dans le GROUP BY — l'appelant
+ * retombe sur EMPTY_BET_STATS (même résultat qu'avant : hitRate 0, total 0).
+ *
+ * `outcome` est nullable : un NULL n'est compté ni dans `decided` ni dans
+ * `wins` (un pari sans issue n'est pas tranché). L'ancien code JS comptait un
+ * NULL comme tranché-mais-perdu, ce qui faussait le taux de réussite à la
+ * baisse ; en pratique la colonne est toujours renseignée.
+ */
+async function fetchBetStats(userIds: string[]): Promise<Map<string, BetStats>> {
+  const stats = new Map<string, BetStats>();
+  if (userIds.length === 0) return stats;
+
+  const { rows } = await pool.query(
+    `SELECT user_id AS "userId",
+            COUNT(*) FILTER (WHERE outcome <> 'pending') AS decided,
+            COUNT(*) FILTER (WHERE outcome = 'win')      AS wins,
+            COUNT(*)                                     AS total
+       FROM user_bets
+      WHERE user_id = ANY($1::uuid[])
+      GROUP BY user_id`,
+    [userIds],
+  );
+
+  // COUNT(*) revient en bigint → chaîne côté pg ; Number() la normalise.
+  for (const r of rows) {
+    stats.set(String(r.userId), {
+      decided: Number(r.decided),
+      wins:    Number(r.wins),
+      total:   Number(r.total),
+    });
+  }
+  return stats;
+}
+
+/** Taux de réussite en pourcentage, une décimale (0 si aucun pari tranché). */
+function hitRateOf(s: BetStats): number {
+  return s.decided > 0 ? Math.round((s.wins / s.decided) * 1000) / 10 : 0;
+}
 
 // ─── Profile ─────────────────────────────────────────────────────────────────
 
@@ -243,6 +300,21 @@ export async function getBettingStats(userId: string) {
   };
 }
 
+/**
+ * URL d'avatar courante d'un utilisateur.
+ * Sert à supprimer l'objet précédent sur R2 quand l'avatar est remplacé.
+ */
+export async function getAvatarUrl(userId: string): Promise<string | null> {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(up.avatar_url, u.avatar_url) AS "avatarUrl"
+       FROM users u
+       LEFT JOIN user_profiles up ON up.user_id = u.id
+      WHERE u.id = $1`,
+    [userId],
+  );
+  return rows[0]?.avatarUrl ?? null;
+}
+
 // ─── Player search ────────────────────────────────────────────────────────────
 
 /** Search public players by username or display name. */
@@ -267,12 +339,11 @@ export async function searchUsers(q: string, limit = 20) {
     [like, Math.min(limit, 50)],
   );
 
-  return Promise.all(rows.map(async (r) => {
-    const { rows: betRows } = await pool.query(
-      `SELECT outcome FROM user_bets WHERE user_id = $1`, [r.userId],
-    );
-    const decided = betRows.filter(b => b.outcome !== 'pending');
-    const wins    = decided.filter(b => b.outcome === 'win').length;
+  // Une seule requête agrégée pour tous les résultats (au lieu d'une par joueur).
+  const stats = await fetchBetStats(rows.map((r) => String(r.userId)));
+
+  return rows.map((r) => {
+    const s = stats.get(String(r.userId)) ?? EMPTY_BET_STATS;
     return {
       rank:             0,
       userId:           r.userId,
@@ -282,11 +353,11 @@ export async function searchUsers(q: string, limit = 20) {
       avatarUrl:        r.avatarUrl ?? null,
       tier:             r.tier,
       performanceScore: r.performanceScore ?? 0,
-      hitRate:          decided.length > 0 ? Math.round((wins / decided.length) * 1000) / 10 : 0,
-      totalBets:        betRows.length,
+      hitRate:          hitRateOf(s),
+      totalBets:        s.total,
       showSlips:        r.showSlips ?? false,
     };
-  }));
+  });
 }
 
 // ─── Public slips ─────────────────────────────────────────────────────────────
@@ -319,7 +390,43 @@ export async function getPublicSlips(targetUserId: string, viewerId: string, lim
 
 // ─── Leaderboard ─────────────────────────────────────────────────────────────
 
-export async function getLeaderboard() {
+export interface LeaderboardEntry {
+  rank:             number;
+  userId:           string;
+  username:         string;
+  displayName:      string | null;
+  avatar:           string | null;
+  avatarUrl:        string | null;
+  tier:             string | null;
+  performanceScore: number;
+  hitRate:          number;
+  totalBets:        number;
+}
+
+/**
+ * Cache 60 s du classement complet.
+ *
+ * L'endpoint `/api/leaderboard` est public et non authentifié : sans cache,
+ * chaque visiteur déclenchait 21 allers-retours Postgres. Le classement est
+ * identique pour tout le monde et n'a pas besoin d'être à la seconde — une
+ * exécution par minute suffit, quel que soit le trafic. `wrap` dédoublonne en
+ * prime les requêtes concurrentes sur un cache froid.
+ *
+ * Le tableau retourné est partagé entre appelants — il ne doit pas être muté.
+ */
+const LEADERBOARD_TTL = 60_000;
+const leaderboardCache = new TtlCache<LeaderboardEntry[]>(LEADERBOARD_TTL, 1);
+
+export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
+  return leaderboardCache.wrap('top20', computeLeaderboard);
+}
+
+/** Invalidation manuelle (tests, règlement de paris). */
+export function clearLeaderboardCache(): void {
+  leaderboardCache.clear();
+}
+
+async function computeLeaderboard(): Promise<LeaderboardEntry[]> {
   const { rows } = await pool.query(
     `SELECT u.id AS "userId", u.username,
             up.display_name AS "displayName", up.avatar, up.tier,
@@ -331,16 +438,11 @@ export async function getLeaderboard() {
      LIMIT 20`
   );
 
-  const leaderboard = await Promise.all(rows.map(async (r, i) => {
-    const { rows: betRows } = await pool.query(
-      `SELECT outcome FROM user_bets WHERE user_id = $1`, [r.userId]
-    );
-    const decided = betRows.filter(b => b.outcome !== 'pending');
-    const wins    = decided.filter(b => b.outcome === 'win').length;
-    const hitRate = decided.length > 0
-      ? Math.round((wins / decided.length) * 1000) / 10
-      : 0;
+  // 21 requêtes → 2 : le comptage des paris est fait par Postgres, en une fois.
+  const stats = await fetchBetStats(rows.map((r) => String(r.userId)));
 
+  return rows.map((r, i) => {
+    const s = stats.get(String(r.userId)) ?? EMPTY_BET_STATS;
     return {
       rank:             i + 1,
       userId:           r.userId,
@@ -350,10 +452,8 @@ export async function getLeaderboard() {
       avatarUrl:        r.avatarUrl ?? null,
       tier:             r.tier,
       performanceScore: r.performanceScore,
-      hitRate,
-      totalBets:        betRows.length,
+      hitRate:          hitRateOf(s),
+      totalBets:        s.total,
     };
-  }));
-
-  return leaderboard;
+  });
 }

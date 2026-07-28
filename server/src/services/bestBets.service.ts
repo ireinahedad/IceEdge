@@ -29,6 +29,7 @@ import {
   buildPlayerPropFeatures,
 } from './featureEngineering';
 import { mlApiClient } from './mlApiClient';
+import { TtlCache } from './ttlCache';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -238,15 +239,63 @@ export interface BestBetsOptions {
   mlDepth?:     number;   // how many top candidates to enrich with ML (default 30)
 }
 
-export async function getBestBets(opts: BestBetsOptions = {}): Promise<{
+interface NormalizedOptions {
+  limit:      number;
+  source:     'ml' | 'rules';
+  days:       number;
+  maxPlayers: number;
+  mlDepth:    number;
+}
+
+export interface BestBetsResult {
   bets: BestBet[];
   meta: { generatedAt: string; source: string; mlAvailable: boolean; scanned: number };
-}> {
-  const limit      = Math.min(Math.max(opts.limit ?? 15, 1), 50);
-  const source     = opts.source ?? 'ml';
-  const days       = Math.min(Math.max(opts.days ?? 2, 1), 7);
-  const maxPlayers = Math.min(Math.max(opts.maxPlayers ?? 15, 0), 40);
-  const mlDepth    = Math.min(Math.max(opts.mlDepth ?? 30, 0), 60);
+}
+
+/**
+ * Borne chaque option dans un intervalle sûr. C'est aussi ce qui rend l'espace
+ * des clés de cache fini : une requête ne peut pas fabriquer une clé arbitraire.
+ */
+function normalizeOptions(opts: BestBetsOptions): NormalizedOptions {
+  const num = (v: number | undefined, dflt: number, lo: number, hi: number) =>
+    Math.min(Math.max(Number.isFinite(v as number) ? Math.trunc(v as number) : dflt, lo), hi);
+  return {
+    limit:      num(opts.limit,      15, 1, 50),
+    source:     opts.source === 'rules' ? 'rules' : 'ml',
+    days:       num(opts.days,        2, 1,  7),
+    maxPlayers: num(opts.maxPlayers, 15, 0, 40),
+    mlDepth:    num(opts.mlDepth,    30, 0, 60),
+  };
+}
+
+/**
+ * Cache de réponse, TTL 60 s.
+ *
+ * Un seul appel à `computeBestBets` déclenche des dizaines de requêtes HTTP
+ * sortantes (NHL API + jusqu'à `mlDepth` prédictions ML). Sans cache, le coût
+ * est linéaire au nombre de visiteurs et sature le service Python bien avant
+ * le CPU du serveur Node. `TtlCache.wrap` dédoublonne également les requêtes
+ * concurrentes : 500 arrivées simultanées sur un cache froid (typiquement
+ * juste après un redéploiement) ne déclenchent qu'UNE exécution.
+ *
+ * L'objet retourné est partagé entre appelants — il ne doit pas être muté.
+ */
+const BEST_BETS_TTL = 60_000;
+const bestBetsCache = new TtlCache<BestBetsResult>(BEST_BETS_TTL, 50);
+
+export async function getBestBets(opts: BestBetsOptions = {}): Promise<BestBetsResult> {
+  const o = normalizeOptions(opts);
+  const key = `${o.limit}|${o.days}|${o.maxPlayers}|${o.source}|${o.mlDepth}`;
+  return bestBetsCache.wrap(key, () => computeBestBets(o));
+}
+
+/** Invalidation manuelle (tests, job de préchauffage). */
+export function clearBestBetsCache(): void {
+  bestBetsCache.clear();
+}
+
+async function computeBestBets(o: NormalizedOptions): Promise<BestBetsResult> {
+  const { limit, source, days, maxPlayers, mlDepth } = o;
 
   // 1. Gather subjects (only games tonight / next `days` days)
   const [games, allPlayers] = await Promise.all([

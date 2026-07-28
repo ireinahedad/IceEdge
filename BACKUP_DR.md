@@ -12,11 +12,10 @@ Scope: the PostgreSQL database is the only stateful, irreplaceable component. Ev
 
 ## 1. Enable managed backups (do this now)
 
-Both common hosts include this — confirm it's ON:
+Production runs on **Neon** (see `DEPLOYMENT.md` §1) — confirm it's ON:
 
-- **Supabase:** Project → Database → Backups. Free tier = daily; **Pro tier = Point-in-Time Recovery (PITR)**. Enable PITR to hit the 5-min RPO. Daily backups alone = up to 24h data loss.
-- **Railway:** the Postgres plugin takes daily snapshots; enable/verify retention. For PITR-grade protection consider Supabase or Neon (Neon has branching + PITR).
-- **Neon:** History retention gives PITR by default; set retention window ≥ 7 days.
+- **Neon (production):** Settings → History retention gives PITR by default; set the window to **≥ 7 days**. Branching also lets you restore into a throwaway branch and inspect before promoting.
+- **Railway** (if you ever fall back to its Postgres plugin): daily snapshots only; enable/verify retention. No PITR.
 
 > Whatever the host, confirm in the dashboard that at least one successful backup exists **today**. An unverified backup is not a backup.
 

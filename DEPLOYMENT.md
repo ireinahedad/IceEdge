@@ -1,27 +1,55 @@
 # ARAKICE — Guide de déploiement
 
-Architecture : **Vercel** (frontend) + **Railway** (Node.js + Python) + **Supabase** (PostgreSQL)
+Architecture : **Vercel** (frontend) + **Railway** (Node.js + Python) + **Neon** (PostgreSQL) + **Cloudflare R2** (avatars)
+
+> **Note.** Ce guide a longtemps décrit Supabase. La base de production est
+> **Neon** (voir `DEPLOY_PLAN.md`) : c'est son *scale-to-zero* qui rend le job de
+> règlement événementiel rentable — la base s'endort hors des heures de match.
+> Un seul hébergeur Postgres est nécessaire ; si un projet Supabase traîne
+> encore, le supprimer **après** avoir vérifié que le `DATABASE_URL` de Railway
+> pointe bien sur Neon.
 
 ---
 
-## 1. Supabase — Base de données
+## 1. Neon — Base de données
 
 ### Créer le projet
-1. https://supabase.com → New project
-2. Nom : `iceedge` · Région : **US East (N. Virginia)** · Mot de passe DB : générer un fort
-3. Attendre ~2 min que le projet s'initialise
+1. https://neon.tech → New project
+2. Nom : `iceedge` · Région : **AWS US East (Ohio)** ou la plus proche de Railway
+3. Postgres 16 · le projet est prêt en quelques secondes
 
 ### Importer le schéma
-1. Dashboard → **SQL Editor** → New query
-2. Copier-coller le contenu de `server/src/db/schema.sql`
-3. Exécuter (▶)
+Depuis `server/`, avec le `DATABASE_URL` de l'étape suivante dans l'environnement :
+```bash
+npm run db:migrate:all
+```
+Cette commande applique `schema.sql` puis chaque migration `src/db/migrations/*.sql`
+dans l'ordre, en les enregistrant dans la table `schema_migrations` (donc
+ré-exécutable sans risque). L'éditeur SQL du dashboard fonctionne aussi, mais il
+ne tient pas le registre des migrations.
 
-### Récupérer l'URL de connexion
-Dashboard → **Settings → Database → URI** → copier la connection string :
+### Récupérer l'URL de connexion — prendre l'endpoint **pooled**
+Dashboard → **Connection Details** → cocher **Connection pooling**, puis copier :
 ```
-postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
+postgresql://[USER]:[PASSWORD]@ep-xxxx-xxxx-pooler.us-east-2.aws.neon.tech/iceedge?sslmode=require
 ```
-→ Garder cette URL pour les étapes Railway et variables d'env.
+
+⚠️ **Le `-pooler` dans le nom d'hôte n'est pas optionnel.** Neon expose deux
+endpoints :
+
+| Endpoint | Limite de connexions | Usage |
+|----------|---------------------|-------|
+| direct (`ep-xxxx.…`) | quelques dizaines | migrations, psql ponctuel |
+| pooled (`ep-xxxx-pooler.…`) | ~10 000 (PgBouncer) | **l'application** |
+
+Avec une seule instance Railway et `DB_POOL_MAX=10`, l'endpoint direct passe.
+Dès deux instances, ou quand le job de règlement et les requêtes web se
+disputent le pool, il sature. Le serveur émet un avertissement au démarrage si
+l'URL ne contient pas `-pooler`.
+
+### Rétention / PITR
+Dashboard → **Settings → History retention** : porter la fenêtre à **≥ 7 jours**
+(voir `BACKUP_DR.md`). C'est ce qui permet de restaurer à un instant précis.
 
 ---
 
@@ -39,7 +67,8 @@ Settings → Variables → ajouter :
 |----------|--------|
 | `NODE_ENV` | `production` |
 | `PORT` | `3001` |
-| `DATABASE_URL` | URL Supabase (étape 1) |
+| `DATABASE_URL` | URL Neon **pooled** (étape 1) — le nom d'hôte doit contenir `-pooler` |
+| `DB_SSL` | `true` (Neon exige TLS) |
 | `JWT_SECRET` | `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` |
 | `JWT_REFRESH_SECRET` | (même commande, valeur différente) |
 | `GOOGLE_CLIENT_ID` | Depuis Google Cloud Console |
@@ -51,6 +80,52 @@ Settings → Variables → ajouter :
 
 ### Domaine
 Settings → Networking → **Generate Domain** → noter l'URL (ex: `iceedge-backend.railway.app`)
+
+---
+
+## 2 bis. Cloudflare R2 — Stockage des avatars
+
+**Optionnel mais recommandé.** Sans R2, les avatars restent stockés en data-URI
+base64 dans Postgres : ~27 ko par utilisateur dans la base *et* dans chaque
+payload de chat et de leaderboard. R2 offre 10 Go gratuits et **aucun frais
+d'egress**, contrairement au stockage Neon qui est le plus cher de la stack.
+
+### Créer le bucket
+1. https://dash.cloudflare.com → **R2** → *Create bucket* → nom : `iceedge-avatars`
+2. Bucket → **Settings → Public access** : activer le sous-domaine `r2.dev`
+   (URL du type `https://pub-xxxxxxxx.r2.dev`), ou brancher un domaine perso
+   (ex. `cdn.arakice.com`). C'est cette URL que les navigateurs appelleront.
+3. R2 → **Manage API tokens → Create API token**
+   - Permission : **Object Read & Write**
+   - Portée : **ce bucket uniquement** (pas « all buckets »)
+   - Noter `Access Key ID` et `Secret Access Key` — le secret n'est affiché qu'une fois.
+4. `Account ID` : visible en haut à droite du dashboard R2.
+
+### Variables Railway (backend)
+
+| Variable | Valeur |
+|----------|--------|
+| `R2_ACCOUNT_ID` | Account ID Cloudflare |
+| `R2_ACCESS_KEY_ID` | Access Key ID du token |
+| `R2_SECRET_ACCESS_KEY` | Secret Access Key du token |
+| `R2_BUCKET` | `iceedge-avatars` |
+| `R2_PUBLIC_URL` | `https://pub-xxxxxxxx.r2.dev` (sans slash final) |
+
+Les cinq doivent être présentes : s'il en manque une, le serveur retombe
+silencieusement sur le stockage base64 (aucune erreur, mais aucun bénéfice).
+
+### Vérifier
+Changer d'avatar depuis l'app, puis `GET /api/users/me` : `avatarUrl` doit être
+une URL `https://…/avatars/<userId>/<hash>.webp` et non plus `data:image/…`.
+L'ancien objet est supprimé automatiquement lors d'un remplacement.
+
+### Notes
+- Le bucket est public **en lecture seule** ; les écritures passent par le
+  backend avec le token ci-dessus. Ne jamais exposer ces clés au client.
+- Les avatars déjà en base (data-URI) continuent de fonctionner ; ils sont
+  remplacés par une URL au prochain changement d'avatar de chaque utilisateur.
+- Le CSP du client (`client/vercel.json`) autorise déjà `img-src … https:`,
+  aucun changement à prévoir.
 
 ---
 
@@ -157,7 +232,10 @@ curl -X POST https://[TON-BACKEND].railway.app/api/predict/ml \
 ```
 
 ### Checklist finale
-- [ ] Supabase : schéma importé, connexion vérifiée
+- [ ] Neon : schéma + migrations appliqués (`npm run db:migrate:all`), connexion vérifiée
+- [ ] `DATABASE_URL` pointe sur l'endpoint **pooled** (`-pooler` dans le nom d'hôte) — vérifier l'absence d'avertissement au démarrage
+- [ ] Neon : rétention d'historique ≥ 7 jours
+- [ ] Cloudflare R2 : les 5 variables `R2_*` définies, un changement d'avatar renvoie bien une URL et non une data-URI
 - [ ] Railway Node.js : deploy réussi, `/health` répond 200 et `/health/ready` répond 200
 - [ ] Railway Python : deploy réussi, `/health` répond 200
 - [ ] Vercel : build réussi, app accessible
@@ -172,7 +250,8 @@ curl -X POST https://[TON-BACKEND].railway.app/api/predict/ml \
 
 | Service | Plan gratuit | Limite |
 |---------|-------------|--------|
-| Supabase | Free tier | 500 MB DB, 2 GB transfer |
+| Neon | Free tier | 0,5 Go de stockage, scale-to-zero |
+| Cloudflare R2 | Free tier | 10 Go, **egress gratuit** |
 | Railway | Hobby ($5/mo) | 512 MB RAM × 2 services |
 | Vercel | Hobby (gratuit) | 100 GB bandwidth |
 

@@ -1,0 +1,52 @@
+[
+  {
+    "team": "VGK",
+    "factor": "tz_shift",
+    "label": "décalage horaire",
+    "bucket": "(0.0, 3.0]",
+    "n": 116,
+    "rate": 0.4224,
+    "team_base_rate": 0.5698,
+    "delta_pp": -14.7
+  },
+  {
+    "team": "PIT",
+    "factor": "tz_shift",
+    "label": "décalage horaire",
+    "bucket": "(0.0, 3.0]",
+    "n": 116,
+    "rate": 0.6983,
+    "team_base_rate": 0.5606,
+    "delta_pp": 13.8
+  },
+  {
+    "team": "EDM",
+    "factor": "3in4",
+    "label": "3 matchs en 4 soirs",
+    "bucket": "0",
+    "n": 113,
+    "rate": 0.3274,
+    "team_base_rate": 0.4629,
+    "delta_pp": -13.5
+  },
+  {
+    "team": "SEA",
+    "factor": "b2b",
+    "label": "back-to-back",
+    "bucket": "1",
+    "n": 52,
+    "rate": 0.3077,
+    "team_base_rate": 0.4321,
+    "delta_pp": -12.4
+  },
+  {
+    "team": "DAL",
+    "factor": "3in4",
+    "label": "3 matchs en 4 soirs",
+    "bucket": "0",
+    "n": 113,
+    "rate": 0.646,
+    "team_base_rate": 0.5247,
+    "delta_pp": 12.1
+  }
+]

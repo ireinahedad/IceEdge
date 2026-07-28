@@ -16,7 +16,7 @@
 | Frontend | React 18 + Vite + Tailwind + Radix UI, React Router 7, socket.io-client, Sentry, i18n, PWA/web-push | Vercel — `arakice.com` | SPA, appels multi-API (`VITE_*_URL`), thèmes, partage d'images (`html-to-image`) |
 | API | Node/Express (TS), JWT + refresh cookie httpOnly, Google OAuth, Stripe, Zod, Helmet, CORS, rate-limit (+ store Redis), socket.io, pino, Sentry | Railway (Docker) | Auth, gating Pro, cookie `SameSite=None` cross-site, webhooks Stripe |
 | Service ML | Python FastAPI + uvicorn (`/predict/game`, `/predict/player`, `/predict/team`, `/health`) | Railway (Docker) | Dépendance modèle (`inference_state.json`, `elo_ratings.json`), latence, cold start |
-| Base de données | PostgreSQL (`pg`) | Supabase | Migrations, chiffrement des clés OpenAI, intégrité des slips |
+| Base de données | PostgreSQL (`pg`) | Neon | Migrations, chiffrement des clés OpenAI, intégrité des slips |
 | Données externes | NHL API, MoneyPuck, The Odds API, référés/scratches (JSON manuel), Tennis API | — | Indisponibilité/quotas des tiers, données périmées |
 
 **Fonctionnalités clés à couvrir :** inscription/connexion (email + Google), prédictions NHL, Bet Builder / paris (slips), Best Bets / value bet scan, page Charts, prédictions Tennis, abonnement Pro (Stripe + codes promo), chat/LLM, notifications push, pages de partage, pages SEO statiques.
@@ -66,7 +66,7 @@ Objectif : garantir la tenue sous charge des points chers (ML, données live) sa
 | P1 | Charge sur l'endpoint de prédiction ML | Sous charge nominale (ex. 50 req/s pendant 5 min) : p95 sous seuil défini (ex. < 800 ms), 0 erreur 5xx, mémoire stable côté FastAPI. | Haute | À faire | Inclure le cold start Railway ; définir le seuil de p95 accepté. |
 | P2 | Cache et quotas des données externes (Odds / NHL / MoneyPuck) | Les résultats sont servis depuis le cache (TTL respecté) ; le trafic utilisateur ne provoque pas de dépassement de quota The Odds API. | Haute | À faire | Vérifier qu'une hausse de trafic ne multiplie pas les appels tiers. |
 | P4 | Performance de chargement front sur mobile (Lighthouse) | Score perf mobile acceptable (ex. LCP < 2,5 s, bundle maîtrisé) sur la landing et la page prédictions ; pas de blocage sur les gros graphiques Recharts. | Haute | À faire | Vérifier code-splitting Vite et taille du bundle. |
-| P5 | Pool de connexions Postgres sous charge | Sous charge concurrente, le pool `pg` ne s'épuise pas (pas d'erreurs « too many connections » côté Supabase) ; requêtes lentes identifiées. | Haute | À faire | Aligner la taille du pool avec les limites du plan Supabase. |
+| P5 | Pool de connexions Postgres sous charge | Sous charge concurrente, le pool `pg` ne s'épuise pas (pas d'erreurs « too many connections » côté Neon) ; requêtes lentes identifiées. | Haute | À faire | Vérifier d'abord que `DATABASE_URL` pointe sur l'endpoint `-pooler` : sur l'endpoint direct le test échouera pour la mauvaise raison. |
 | P3 | Rate limiting effectif sous burst | Au-delà du seuil (`apiLimiter`/`authLimiter`/`writeLimiter`), réponses `429` propres ; le store Redis partage bien le compteur entre instances. | Moyenne | À faire | Tester en multi-instance (le store mémoire ne suffit pas en prod). |
 
 ---
