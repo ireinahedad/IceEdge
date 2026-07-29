@@ -23,6 +23,7 @@ import { pool }            from './db/connection';
 import { httpLogger, logger } from './logger';
 import { seedAll }         from './db/seed';
 import { apiLimiter, authLimiter, writeLimiter } from './middleware/rateLimit.middleware';
+import { noStore }            from './middleware/httpCache.middleware';
 import { corsOriginCallback }  from './cors';
 
 const app = express();
@@ -70,14 +71,34 @@ app.use(express.json({ limit: '100kb' }));
 // Broad rate-limit on the whole API (health check stays outside /api).
 app.use('/api', apiLimiter);
 
+// --- Cache HTTP : tout ce qui dépend de l'appelant part en `no-store` --------
+//
+// L'API va passer derrière Cloudflare pour que le CDN absorbe le trafic NHL et
+// odds (voir AUDIT_SCALABILITE_COUTS.md, P1-9). Une réponse SANS `Cache-Control`
+// n'est pas « non cachable » : elle est laissée à l'heuristique du cache, et
+// cette heuristique varie d'un CDN, d'un proxy d'entreprise et d'un navigateur
+// à l'autre. Le jour où quelqu'un ajoute une Cache Rule un peu large côté
+// Cloudflare, l'absence d'en-tête devient une fuite de données entre comptes.
+//
+// La règle est donc explicite et posée AU MONTAGE, pas route par route : tout
+// routeur servant une donnée dérivée de l'utilisateur est en `private,
+// no-store`, sans exception à écrire dans chaque handler (donc sans oubli
+// possible quand une route est ajoutée plus tard).
+//
+// `noStore` ne pose l'en-tête que si le handler n'en a pas déjà mis un, donc il
+// n'écrase rien ; et il s'applique à l'envoi, donc les erreurs sont couvertes.
+
 // Auth — strict limiter first (brute-force protection), then routes.
-app.use('/api/auth',          authLimiter, authRoutes);
+// Réponses contenant des jetons : jamais stockées, nulle part.
+app.use('/api/auth',          authLimiter, noStore, authRoutes);
 
 // Users: profile /me routes first (no auth), then admin CRUD (require JWT)
-app.use('/api/users',         profileRoutes);
-app.use('/api/users',         userRoutes);
+app.use('/api/users',         noStore, profileRoutes);
+app.use('/api/users',         noStore, userRoutes);
 
-// NHL data (live from NHL API)
+// NHL data (live from NHL API) — public et identique pour tous.
+// Les en-têtes de cache sont posés par route dans nhl.routes.ts, alignés sur
+// les TTL serveur de nhlApiClient.
 app.use('/api/nhl',           nhlRoutes);
 
 // Leaderboard — public, identique pour tous, caché 60 s côté service.
@@ -92,10 +113,12 @@ app.get('/api/leaderboard', async (_req, res) => {
 });
 
 // Chat (writes are limited to blunt spam)
-app.use('/api/chat',          writeLimiter, chatRoutes);
+// Les messages d'un salon privé et les avatars de ses membres n'ont rien à
+// faire dans un cache partagé.
+app.use('/api/chat',          writeLimiter, noStore, chatRoutes);
 
 // Bet slips (auth-gated; writes limited)
-app.use('/api/slips',         writeLimiter, slipRoutes);
+app.use('/api/slips',         writeLimiter, noStore, slipRoutes);
 
 // Odds
 app.use('/api/odds',          oddsRoutes);
@@ -108,13 +131,15 @@ app.use('/api/predict',       mlRoutes);
 app.use('/api/tennis',        tennisRoutes);
 
 // LLM proxy (uses user's own OpenAI key)
-app.use('/api/llm',           llmRoutes);
+app.use('/api/llm',           noStore, llmRoutes);
 
 // Subscriptions (Free / Pro)
-app.use('/api/subscription',  subscriptionRoutes);
+// Le webhook Stripe est monté plus haut, hors de ce routeur : il n'est pas
+// concerné.
+app.use('/api/subscription',  noStore, subscriptionRoutes);
 
 // Web Push (value-bet notifications)
-app.use('/api/push',          pushRoutes);
+app.use('/api/push',          noStore, pushRoutes);
 
 // Dev ML dashboard (admin-only). Defence in depth: even though every route is
 // gated behind authenticate + requireRole('admin'), the router is not mounted
@@ -123,7 +148,7 @@ app.use('/api/push',          pushRoutes);
 const devRoutesEnabled =
   process.env.NODE_ENV !== 'production' || process.env.ENABLE_DEV_ROUTES === 'true';
 if (devRoutesEnabled) {
-  app.use('/api/dev',         devRoutes);
+  app.use('/api/dev',         noStore, devRoutes);
 }
 
 // Dev-only seed endpoint
