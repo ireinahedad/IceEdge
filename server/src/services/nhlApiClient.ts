@@ -445,18 +445,46 @@ export async function fetchLiveGames(): Promise<any[]> {
   return games;
 }
 
+/**
+ * Cette fonction était la seule du module à ne rien mettre en cache, alors
+ * qu'elle est appelée par `/api/nhl/games/:id`, par `/api/nhl/predictions/game/:id`
+ * (via `buildGameMarkets`) et par CHAQUE `POST /api/predict/single` portant un
+ * `gameId` (via `resolveSubjects`). La déduplication de `fetchNHL` ne couvrait
+ * que les appels strictement simultanés : deux requêtes espacées de 100 ms
+ * repartaient toutes les deux vers la NHL.
+ *
+ * Le TTL suit l'état du match, comme `fetchGamesByDate` et `fetchGameDetail` le
+ * font déjà : un match terminé ne changera plus jamais, un match en cours change
+ * à chaque but.
+ *
+ * Un échec n'est jamais mémorisé — un `gameId` pas encore publié par la NHL doit
+ * pouvoir apparaître à la requête suivante, pas être figé en 404 pour 6 h.
+ */
 export async function fetchGameById(gameId: string): Promise<any> {
   if (USE_MOCK) {
     const g = (MOCK_GAMES_FULL as any[]).find((x) => x.id === gameId);
     if (g) return g;
     throw Object.assign(new Error('Game not found'), { status: 404 });
   }
+
+  const key    = `game:${gameId}`;
+  const cached = getCached<any>(key);
+  if (cached) return cached;
+
+  let game: any;
   try {
     const data = await fetchNHL<any>(`v1/gamecenter/${gameId}/landing`);
-    return formatGame(data);
+    game = formatGame(data);
   } catch {
     throw Object.assign(new Error('Game not found'), { status: 404 });
   }
+
+  setCached(
+    key,
+    game,
+    game.status === 'final' ? 6 * 60 * 60_000 : game.status === 'live' ? 30_000 : 5 * 60_000,
+  );
+  return game;
 }
 
 /**
@@ -938,11 +966,24 @@ export async function fetchTopPlayers(): Promise<any[]> {
   return players;
 }
 
+/**
+ * Comme `fetchGameById`, cette fonction n'avait aucun cache alors qu'elle sert
+ * `/api/nhl/players/:id`, `/api/nhl/players/:id/stats`,
+ * `/api/nhl/predictions/player/:id` et `POST /api/predict/player-prop`.
+ *
+ * TTL de 10 min, aligné sur `fetchTopPlayers` : les totaux de saison d'un joueur
+ * ne bougent qu'après un match, jamais en cours de navigation.
+ */
 export async function fetchPlayerById(playerId: string): Promise<any> {
   if (USE_MOCK) {
     const mp = MOCK_PLAYER_BY_ID[String(playerId)];
     if (mp) return mp;
   }
+
+  const key    = `player:${playerId}`;
+  const cached = getCached<any>(key);
+  if (cached) return cached;
+
   const data    = await fetchNHL<any>(`v1/player/${playerId}/landing`);
   const seasons = (data.seasonTotals ?? []).filter(
     (s: any) => s.leagueAbbrev === 'NHL' && s.gameTypeId === 2
@@ -952,7 +993,7 @@ export async function fetchPlayerById(playerId: string): Promise<any> {
   const pts  = cur.points ?? 0;
   const gp   = cur.gamesPlayed ?? 1;
 
-  return {
+  const player = {
     id:          String(data.playerId),
     name:        [data.firstName?.default, data.lastName?.default].filter(Boolean).join(' '),
     teamId:      abbr.toLowerCase(),
@@ -977,6 +1018,9 @@ export async function fetchPlayerById(playerId: string): Promise<any> {
     shotsAgainst:     cur.shotsAgainst    ?? null,
     goalsAgainst:     cur.goalsAgainst    ?? null,
   };
+
+  setCached(key, player, 10 * 60_000);
+  return player;
 }
 
 export async function searchPlayers(q: string): Promise<any[]> {

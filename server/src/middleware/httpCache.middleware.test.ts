@@ -111,31 +111,50 @@ describe('noStore', () => {
  * `noStore`.
  */
 describe('câblage de app.ts', () => {
-  // Routes réelles, toutes gated par `authenticate` : elles répondent 401 sans
-  // toucher à Postgres, ce qui rend le test rapide et sans dépendance. Le code
-  // de statut n'est pas le sujet — l'en-tête l'est, et il est posé au MONTAGE
-  // du routeur, donc il vaut aussi pour les 401 et pour toute route ajoutée
-  // plus tard dans ces mêmes routeurs.
-  const AUTHENTICATED = [
-    '/api/auth/me',
-    '/api/users/me',
-    '/api/users/me/bets',
-    '/api/chat/rooms',
+  /**
+   * `noStore` est monté sur le PRÉFIXE, pas sur chaque route : c'est ce qui
+   * garantit qu'une route ajoutée demain dans l'un de ces routeurs est couverte
+   * sans que personne y pense. Le test porte donc sur le préfixe.
+   *
+   * Sonder un chemin inexistant sous chaque préfixe est délibéré : la requête
+   * traverse le middleware monté puis retombe sur le 404 global, sans toucher à
+   * Postgres ni à l'authentification. Une sonde sur une vraie route (par ex.
+   * `GET /api/chat/rooms`, ouvert aux invités) irait interroger la base et
+   * rendrait ce garde-fou de sécurité dépendant d'un service externe — donc
+   * instable, donc ignoré au premier rouge.
+   */
+  const USER_DATA_PREFIXES = [
+    '/api/auth',
+    '/api/users',
+    '/api/chat',
     '/api/slips',
-    '/api/subscription/me',
-    '/api/push/vapid-public-key',
+    '/api/llm',
+    '/api/subscription',
+    '/api/push',
   ];
 
-  it('aucune route porteuse de données utilisateur ne répond `public`', async () => {
+  it('tout préfixe portant des données utilisateur répond `no-store`', async () => {
     const { default: appUnderTest } = await import('../app');
 
-    for (const path of AUTHENTICATED) {
-      const res = await request(appUnderTest).get(path);
+    for (const prefix of USER_DATA_PREFIXES) {
+      const res = await request(appUnderTest).get(`${prefix}/__sonde_inexistante__`);
       const cc  = res.headers['cache-control'] ?? '';
       // L'en-tête doit être PRÉSENT et valoir no-store : son absence laisse la
       // décision à l'heuristique du CDN, ce qui est précisément ce qu'on refuse.
-      expect(cc, `${path} → ${res.status} / Cache-Control: ${cc || '(absent)'}`)
+      expect(cc, `${prefix}/* → ${res.status} / Cache-Control: ${cc || '(absent)'}`)
         .toBe(NO_STORE);
+    }
+  });
+
+  // Doublons sur de vraies routes, choisies parce qu'elles répondent 401 sur un
+  // simple test de jeton — sans requête SQL, donc sans dépendance externe.
+  it('le vaut aussi sur de vraies réponses 401', async () => {
+    const { default: appUnderTest } = await import('../app');
+
+    for (const path of ['/api/auth/me', '/api/users/me', '/api/subscription/me']) {
+      const res = await request(appUnderTest).get(path);
+      expect(res.status, `${path} devait répondre 401`).toBe(401);
+      expect(res.headers['cache-control'], path).toBe(NO_STORE);
     }
   });
 

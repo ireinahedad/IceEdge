@@ -96,3 +96,164 @@ describe('nhlApiClient — déduplication des requêtes en vol', () => {
     expect(attempt).toBe(2);
   });
 });
+
+/**
+ * `fetchGameById` et `fetchPlayerById` étaient les deux seules fonctions du
+ * module sans cache : elles repartaient vers la NHL à chaque requête, la
+ * déduplication en vol ne les protégeant que des rafales strictement
+ * simultanées. Elles servent 5 routes NHL et 2 chemins ML.
+ *
+ * Ces tests portent sur ce qui n'a AUCUN symptôme visible — les réponses sont
+ * identiques avec ou sans cache — donc rien d'autre ne les protège d'une
+ * suppression silencieuse.
+ */
+
+/** Bouchonne `fetch` avec une charge de gamecenter/landing paramétrable. */
+async function loadWithGame(gameState: string) {
+  vi.resetModules();
+  process.env.NHL_USE_MOCK = 'false';
+
+  const calls: string[] = [];
+  vi.stubGlobal('fetch', async (url: string) => {
+    calls.push(String(url));
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 2025020123,
+        gameState,
+        gameDate: '2026-01-15',
+        homeTeam: { abbrev: 'BOS', score: 3 },
+        awayTeam: { abbrev: 'MTL', score: 2 },
+      }),
+    };
+  });
+
+  return { mod: await import('./nhlApiClient'), calls };
+}
+
+describe('nhlApiClient — cache de fetchGameById', () => {
+  beforeEach(() => { vi.unstubAllGlobals(); });
+
+  it('ne redemande pas un match déjà chargé', async () => {
+    const { mod, calls } = await loadWithGame('LIVE');
+
+    await mod.fetchGameById('2025020123');
+    await mod.fetchGameById('2025020123');
+    await mod.fetchGameById('2025020123');
+
+    expect(calls.length).toBe(1);
+  });
+
+  it('sépare bien deux matchs différents', async () => {
+    const { mod, calls } = await loadWithGame('FINAL');
+
+    await mod.fetchGameById('2025020123');
+    await mod.fetchGameById('2025020124');
+
+    expect(calls.length).toBe(2);
+  });
+
+  // Le point sensible : un match en direct doit rester frais. On vérifie le TTL
+  // via l'horloge simulée plutôt que par le contenu, qui est identique.
+  it('garde 30 s un match en direct, 6 h un match terminé', async () => {
+    vi.useFakeTimers();
+    try {
+      const live = await loadWithGame('LIVE');
+      await live.mod.fetchGameById('1');
+      vi.advanceTimersByTime(31_000);
+      await live.mod.fetchGameById('1');
+      expect(live.calls.length, 'un match en direct doit être re-demandé après 30 s').toBe(2);
+
+      const final = await loadWithGame('FINAL');
+      await final.mod.fetchGameById('1');
+      vi.advanceTimersByTime(60 * 60_000);   // 1 h
+      await final.mod.fetchGameById('1');
+      expect(final.calls.length, 'un match terminé ne change plus').toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Un gameId pas encore publié par la NHL ne doit pas être figé en 404 : sinon
+  // un match consulté trop tôt resterait introuvable pendant des heures.
+  it('ne mémorise pas un 404', async () => {
+    vi.resetModules();
+    process.env.NHL_USE_MOCK = 'false';
+
+    let attempt = 0;
+    vi.stubGlobal('fetch', async () => {
+      attempt += 1;
+      if (attempt === 1) return { ok: false, status: 404, json: async () => ({}) };
+      return {
+        ok: true, status: 200,
+        json: async () => ({ id: 1, gameState: 'FUT', homeTeam: { abbrev: 'BOS' }, awayTeam: { abbrev: 'MTL' } }),
+      };
+    });
+
+    const mod = await import('./nhlApiClient');
+
+    await expect(mod.fetchGameById('1')).rejects.toThrow('Game not found');
+    await expect(mod.fetchGameById('1')).resolves.toHaveProperty('id');
+    expect(attempt).toBe(2);
+  });
+});
+
+describe('nhlApiClient — cache de fetchPlayerById', () => {
+  beforeEach(() => { vi.unstubAllGlobals(); });
+
+  async function loadWithPlayer() {
+    vi.resetModules();
+    process.env.NHL_USE_MOCK = 'false';
+
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      calls.push(String(url));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          playerId: 8478402,
+          firstName: { default: 'Connor' },
+          lastName:  { default: 'McDavid' },
+          position: 'C',
+          currentTeamAbbrev: 'EDM',
+          seasonTotals: [
+            { leagueAbbrev: 'NHL', gameTypeId: 2, gamesPlayed: 40, goals: 25, assists: 45, points: 70 },
+          ],
+        }),
+      };
+    });
+
+    return { mod: await import('./nhlApiClient'), calls };
+  }
+
+  it('ne redemande pas un joueur déjà chargé', async () => {
+    const { mod, calls } = await loadWithPlayer();
+
+    const a = await mod.fetchPlayerById('8478402');
+    const b = await mod.fetchPlayerById('8478402');
+
+    expect(calls.length).toBe(1);
+    expect(b.points).toBe(a.points);
+    expect(a.name).toBe('Connor McDavid');
+  });
+
+  it('repart vers la NHL après 10 min', async () => {
+    vi.useFakeTimers();
+    try {
+      const { mod, calls } = await loadWithPlayer();
+
+      await mod.fetchPlayerById('8478402');
+      vi.advanceTimersByTime(9 * 60_000);
+      await mod.fetchPlayerById('8478402');
+      expect(calls.length).toBe(1);
+
+      vi.advanceTimersByTime(2 * 60_000);   // total 11 min
+      await mod.fetchPlayerById('8478402');
+      expect(calls.length).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
