@@ -46,6 +46,7 @@ import {
 } from './nhlApiClient';
 import { applyXpDelta, xpForOutcome } from './slip.service';
 import { logger } from '../logger';
+import { withJobLock } from './jobLock';
 
 type LegResult = 'win' | 'loss' | 'unknown';
 
@@ -595,10 +596,34 @@ function armCheck(delay: number): void {
   checkTimer.unref();
 }
 
+/**
+ * TTL des baux. Le check est court (quelques requêtes + appels NHL) ; la passe
+ * de rattrapage peut régler jusqu'à 200 tickets en séquentiel, d'où un TTL bien
+ * plus large. Ces valeurs majorent la durée observée, elles ne la mesurent pas :
+ * elles sont là pour qu'une instance TUÉE ne bloque pas le job indéfiniment, pas
+ * pour interrompre un job lent.
+ */
+const CHECK_LOCK_TTL_MS    = 5 * 60_000;
+const FALLBACK_LOCK_TTL_MS = 15 * 60_000;
+
+/**
+ * Un tour de check, sous verrou.
+ *
+ * Le verrou n'est pas ce qui protège de la double-comptabilisation — c'est
+ * l'`UPDATE … WHERE outcome = 'pending'` de `settleLeg` qui le fait, et il reste
+ * la vraie ligne de défense. Le verrou évite le travail redondant : N instances
+ * qui interrogent l'API NHL pour les mêmes matchs, N fois.
+ *
+ * Quand une autre instance détient le bail, on se replanifie quand même — à la
+ * cadence active, pas à la cadence longue : si l'instance détentrice meurt, on
+ * doit pouvoir reprendre la main en quelques minutes plutôt qu'au prochain
+ * réveil lointain. Le coût d'un tour perdu est d'un seul INSERT.
+ */
 async function runCheck(): Promise<void> {
   let delay = activeMs;
   try {
-    delay = nextDelay(await checkFinishedGames());
+    const outcome = await withJobLock('settlement-check', CHECK_LOCK_TTL_MS, checkFinishedGames);
+    if (outcome.ran) delay = nextDelay(outcome.result);
   } catch (err: any) {
     logger.warn({ err: err.message }, '[Settlement] check failed'); // retry at active cadence
   }
@@ -635,7 +660,8 @@ export function startSettlementJob(): void {
 
   const fallback = async () => {
     try {
-      await settlePendingSlips(undefined, 200);
+      await withJobLock('settlement-fallback', FALLBACK_LOCK_TTL_MS,
+        () => settlePendingSlips(undefined, 200));
     } catch (err: any) {
       logger.warn({ err: err.message }, '[Settlement] fallback failed');
     }

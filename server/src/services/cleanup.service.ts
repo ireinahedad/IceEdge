@@ -12,8 +12,11 @@
 
 import { pool } from '../db/connection';
 import { logger } from '../logger';
+import { withJobLock } from './jobLock';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Deux DELETE : quelques secondes au pire. TTL large pour absorber une base froide. */
+const LOCK_TTL_MS = 10 * 60 * 1000;
 // Keep revoked tokens for a short window (audit / debugging) before pruning.
 const REVOKED_GRACE_DAYS = Number(process.env.TOKEN_CLEANUP_GRACE_DAYS) || 7;
 
@@ -36,7 +39,13 @@ export async function runCleanup(): Promise<{ tokens: number; codes: number }> {
 /** Schedules the cleanup: once ~1 min after boot, then every 24h. Returns the
  *  interval handle so callers/tests can stop it. Errors are swallowed. */
 export function startCleanupJob(): NodeJS.Timeout {
-  const tick = () => { runCleanup().catch((err) => logger.error({ err: err?.message }, '[cleanup] failed')); };
+  // Le nettoyage est idempotent (DELETE conditionnels) : le verrou n'évite pas
+  // une corruption, il évite que N instances fassent N fois le même DELETE au
+  // même instant — soit N× le compute Neon pour un seul résultat utile.
+  const tick = () => {
+    withJobLock('cleanup', LOCK_TTL_MS, runCleanup)
+      .catch((err) => logger.error({ err: err?.message }, '[cleanup] failed'));
+  };
   setTimeout(tick, 60_000).unref();
   const handle = setInterval(tick, DAY_MS);
   handle.unref();

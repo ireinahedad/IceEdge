@@ -20,6 +20,7 @@ import { fetchGameById } from './nhlApiClient';
 import { fetchOddsImplied, fetchTotalsOdds } from './oddsClient';
 import { logger } from '../logger';
 import { sendToUser, pushEnabled } from './push.service';
+import { withJobLock, getJobState, setJobState } from './jobLock';
 
 const SCORE_THRESHOLD = 65;           // only alert on strong model picks
 // Minimum expected-value edge (fraction of stake) to qualify. 0 = any positive
@@ -35,7 +36,21 @@ const MAX_EDGE = Number(process.env.VALUE_BET_MAX_EDGE) || 0.06;
 // How many top moneyline candidates (by score) to price against real odds.
 const MAX_PRICED = 10;
 
-let lastAlertKey: string | null = null;
+/**
+ * Clé de la dernière alerte envoyée, en base et non en mémoire.
+ *
+ * En mémoire, elle avait deux défauts visibles par l'utilisateur final :
+ *   • après chaque redéploiement le compteur repartait à zéro, donc la dernière
+ *     alerte était renvoyée à tous les abonnés ;
+ *   • en multi-instance, le verrou de job ne suffit pas : il n'est tenu que
+ *     pendant l'exécution, donc deux instances dont les timers sont décalés le
+ *     prennent l'une après l'autre et poussent la même alerte. Il faut que le
+ *     « déjà envoyé » soit une mémoire commune.
+ */
+const LAST_ALERT_KEY = 'valueBetScan:lastAlertKey';
+/** Un scan complet appelle getBestBets (jusqu'à 30 appels ML) puis price 10 matchs. */
+const LOCK_TTL_MS = 10 * 60 * 1000;
+
 let timer: NodeJS.Timeout | null = null;
 
 interface ValueBet {
@@ -179,8 +194,20 @@ async function optedInUsers(): Promise<OptedInUser[]> {
 async function runScan(): Promise<void> {
   try {
     const vb = await findTopValueBet();
-    if (!vb || vb.key === lastAlertKey) return;   // nothing new to alert
-    lastAlertKey = vb.key;
+    if (!vb) return;
+
+    // Lu à CHAQUE tour, et sous verrou : c'est ce qui rend l'anti-doublon
+    // efficace entre instances et à travers les redéploiements.
+    if (vb.key === (await getJobState(LAST_ALERT_KEY))) return;   // nothing new to alert
+
+    // Marqué AVANT l'envoi, et l'échec d'écriture annule l'envoi. Ne pas pouvoir
+    // mémoriser « déjà envoyé » et pousser quand même, c'est se garantir de
+    // repousser la même alerte au tour suivant : mieux vaut une alerte manquée
+    // qu'une alerte en boucle chez tous les abonnés.
+    if (!(await setJobState(LAST_ALERT_KEY, vb.key))) {
+      logger.warn({ key: vb.key }, '[ValueBetScan] état non persisté — envoi annulé pour éviter un doublon');
+      return;
+    }
 
     // Only notify users whose personal min-EV threshold is met by this bet.
     const recipients = (await optedInUsers()).filter((u) => vb.evPct >= u.minEvPct);
@@ -197,6 +224,12 @@ async function runScan(): Promise<void> {
   }
 }
 
+/** Un tour de scan, sous verrou d'unicité. */
+function tick(): void {
+  void withJobLock('value-bet-scan', LOCK_TTL_MS, runScan)
+    .catch((err: any) => logger.warn({ err: err?.message }, '[ValueBetScan] tick failed'));
+}
+
 export function startValueBetScan(): void {
   if (process.env.PUSH_SCAN_ENABLED !== 'true') return;
   if (!pushEnabled()) {
@@ -204,7 +237,7 @@ export function startValueBetScan(): void {
     return;
   }
   const minutes = Number(process.env.PUSH_SCAN_INTERVAL_MIN) || 30;
-  timer = setInterval(runScan, minutes * 60 * 1000);
+  timer = setInterval(tick, minutes * 60 * 1000);
   // Kick off one scan shortly after boot.
-  setTimeout(runScan, 15_000);
+  setTimeout(tick, 15_000);
 }

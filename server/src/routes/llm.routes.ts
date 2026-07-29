@@ -8,6 +8,19 @@
  *                   account. Model defaults to `openai/gpt-5-mini`.
  *   • FREE users  → their own OpenAI key stored in user_profiles.openai_api_key.
  *                   Costs are billed to the user's OpenAI account.
+ *
+ * ── PLAFOND DE COÛT (P1-6) ──────────────────────────────────────────────────
+ *
+ * Le chemin Pro est le seul qui coûte de l'argent à l'opérateur. Le nombre de
+ * requêtes qu'un abonné peut y envoyer est PLAFONNÉ MENSUELLEMENT, et ce plafond
+ * est dérivé de ce qu'il paie (voir `services/llmQuota.service.ts`) : la dépense
+ * IA d'un utilisateur ne peut pas dépasser la part prévue de son abonnement.
+ *
+ * Une fois le plafond atteint, le chemin Pro se ferme mais la fonctionnalité ne
+ * disparaît pas : si l'utilisateur a renseigné sa propre clé OpenAI, la requête
+ * repart par le chemin Free, à ses frais. Ce n'est pas seulement plus aimable
+ * qu'un blocage — cela retire la seule raison qu'aurait un abonné d'exiger un
+ * plafond plus haut, donc cela rend le plafond tenable.
  */
 
 import { Router, Request, Response } from 'express';
@@ -19,6 +32,9 @@ import { decryptSecret } from '../services/crypto.util';
 import { TtlCache } from '../services/ttlCache';
 import { recordUpstream } from '../metrics';
 import { logger } from '../logger';
+import {
+  consumeProRequest, refundProRequest, getUsage, MONTHLY_QUOTA, MAX_OUTPUT_TOKENS,
+} from '../services/llmQuota.service';
 
 const router = Router();
 
@@ -28,8 +44,18 @@ const router = Router();
 const MAX_PROMPT_CHARS  = Number(process.env.LLM_MAX_PROMPT_CHARS)  || 8_000;   // ~2k tokens
 const MAX_SYSTEM_CHARS  = Number(process.env.LLM_MAX_SYSTEM_CHARS)  || 2_000;
 const FETCH_TIMEOUT_MS  = Number(process.env.LLM_FETCH_TIMEOUT_MS)  || 30_000;
-// Per-user daily request quota. In-memory (per instance) — good enough as a
-// cost backstop pre-scale; move to Redis/DB if you run multiple instances.
+/**
+ * Quota journalier par utilisateur, en mémoire.
+ *
+ * Ne s'applique plus qu'aux utilisateurs **Free**, et son rôle a changé : ils
+ * paient leurs propres tokens, donc il ne protège pas un budget — il protège
+ * nos ressources serveur (connexions sortantes, event loop) d'un usage
+ * anormal. Approximatif et par instance : c'est acceptable pour cet usage-là.
+ *
+ * Le budget des utilisateurs **Pro**, lui, est protégé par le plafond mensuel
+ * en base (`llmQuota.service`), qui survit aux redéploiements et au
+ * multi-instance — ce que ce compteur-ci ne fait pas.
+ */
 const DAILY_QUOTA       = Number(process.env.LLM_DAILY_QUOTA)       || 200;
 
 interface QuotaEntry { count: number; day: string; }
@@ -112,9 +138,61 @@ const GITHUB_API_VERSION = '2026-03-10';
 const DEFAULT_PRO_MODEL = 'openai/gpt-4.1-mini';
 const DEFAULT_FREE_MODEL = 'gpt-4o-mini';
 
+/**
+ * Récupère la clé OpenAI personnelle de l'utilisateur, déchiffrée.
+ *
+ * Extraite parce que DEUX chemins en ont besoin : l'utilisateur Free, et
+ * l'abonné Pro qui a épuisé son plafond mensuel et bascule à ses frais.
+ */
+async function personalOpenAiKey(userId: string): Promise<string | null> {
+  let rows: any[];
+  try {
+    const result = await pool.query(
+      `SELECT openai_api_key AS "openaiApiKey" FROM user_profiles WHERE user_id = $1`,
+      [userId],
+    );
+    rows = result.rows;
+  } catch (err: any) {
+    if (err.code === '42703') {
+      throw Object.assign(new Error('Database migration 005 not applied.'), { status: 500, code: 'db_schema' });
+    }
+    throw err;
+  }
+  // Keys are stored encrypted at rest (AES-256-GCM); decrypt for use.
+  // Legacy plaintext rows pass through unchanged until the migration runs.
+  return rows[0]?.openaiApiKey ? decryptSecret(rows[0].openaiApiKey) : null;
+}
+
+/** Message affiché à l'abonné qui vient d'atteindre son maximum du mois. */
+function quotaMessage(resetsAt: string, hasOwnKey: boolean): string {
+  const date = new Date(resetsAt).toLocaleDateString('fr-FR', {
+    day: 'numeric', month: 'long', timeZone: 'UTC',
+  });
+  const base = `Tu as atteint ton maximum de ${MONTHLY_QUOTA} requêtes IA pour ce mois-ci. Ton compteur repart le ${date}.`;
+  return hasOwnKey
+    ? `${base} En attendant, tes requêtes utilisent ta propre clé OpenAI (facturée sur ton compte OpenAI).`
+    : `${base} Pour continuer dès maintenant, ajoute ta clé OpenAI dans Paramètres → IA : tes requêtes passeront alors par ton compte OpenAI.`;
+}
+
 // All LLM routes require a valid JWT, then a dedicated per-user rate limit.
 router.use(authenticate);
 router.use(llmLimiter);
+
+/**
+ * GET /api/llm/usage — consommation du mois, pour que le client puisse afficher
+ * un compteur AVANT que l'utilisateur ne se heurte au plafond. Un plafond dont
+ * on ne découvre l'existence qu'en le heurtant est vécu comme une panne.
+ */
+router.get('/usage', async (req: Request, res: Response) => {
+  const userId = (req as any).user?.sub;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const userIsPro = await isPro(userId);
+  // Un utilisateur Free n'a pas de plafond de notre part : il paie ses tokens.
+  if (!userIsPro) return res.json({ pro: false, unlimited: true });
+
+  return res.json({ pro: true, ...(await getUsage(userId)) });
+});
 
 router.post('/', async (req: Request, res: Response) => {
   const userId = (req as any).user?.sub;
@@ -140,11 +218,6 @@ router.post('/', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'invalid model' });
   }
 
-  // Per-user daily quota — a hard cost backstop on top of the rate limiter.
-  if (!underDailyQuota(userId)) {
-    return res.status(429).json({ error: 'Daily AI request limit reached. Try again tomorrow.' });
-  }
-
   // Build the shared message array once.
   const messages: { role: string; content: string }[] = [];
   if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
@@ -153,13 +226,29 @@ router.post('/', async (req: Request, res: Response) => {
   // ── Decide which path to use ──────────────────────────────────────────────
   const userIsPro = await isPro(userId);
 
-  let endpoint: string;
-  let apiKey: string;
-  let requestModel: string;
-  const extraHeaders: Record<string, string> = {};
+  /** Tout ce qu'il faut pour appeler un fournisseur, choisi en un seul endroit. */
+  interface ProviderCall {
+    endpoint: string;
+    apiKey: string;
+    requestModel: string;
+    extraHeaders: Record<string, string>;
+  }
+
+  let call: ProviderCall;
+  /** Vrai si une requête a été décomptée du quota Pro — donc à rembourser en cas d'échec. */
+  let quotaConsumed = false;
+  /** Renseigné quand le plafond mensuel est atteint : sert à informer le client. */
+  let quotaNotice: { limit: number; resetsAt: string; message: string; billedTo: 'user' } | null = null;
+
+  /** Appel facturé à l'utilisateur, sur sa propre clé OpenAI. */
+  const ownKeyCall = (key: string): ProviderCall => ({
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+    apiKey: key,
+    requestModel: model ?? DEFAULT_FREE_MODEL,
+    extraHeaders: {},
+  });
 
   if (userIsPro) {
-    // PRO → app's GitHub Models token
     const token = process.env.GITHUB_MODELS_TOKEN;
     if (!token) {
       return res.status(500).json({
@@ -167,24 +256,65 @@ router.post('/', async (req: Request, res: Response) => {
         message: 'GITHUB_MODELS_TOKEN is not configured on the server.',
       });
     }
-    endpoint = GITHUB_MODELS_URL;
-    apiKey = token;
-    // Accept a caller-supplied model only if it's already publisher-prefixed;
-    // otherwise fall back to the Pro default so we don't send an OpenAI-style id.
-    requestModel = model?.includes('/') ? model : DEFAULT_PRO_MODEL;
-    extraHeaders['X-GitHub-Api-Version'] = GITHUB_API_VERSION;
-    extraHeaders['Accept'] = 'application/vnd.github+json';
+
+    // Plafond mensuel — décompté AVANT l'appel au fournisseur, et remboursé
+    // plus bas si celui-ci n'a finalement rien facturé.
+    const verdict = await consumeProRequest(userId);
+
+    if (verdict.allowed) {
+      quotaConsumed = true;
+      call = {
+        endpoint: GITHUB_MODELS_URL,
+        apiKey: token,
+        // Accept a caller-supplied model only if it's already publisher-prefixed;
+        // otherwise fall back to the Pro default so we don't send an OpenAI-style id.
+        requestModel: model?.includes('/') ? model : DEFAULT_PRO_MODEL,
+        extraHeaders: {
+          'X-GitHub-Api-Version': GITHUB_API_VERSION,
+          Accept: 'application/vnd.github+json',
+        },
+      };
+    } else if (verdict.reason === 'db') {
+      // Fail-closed : ne pas pouvoir compter, c'est ne pas pouvoir garantir. On
+      // préfère une erreur franche et temporaire à une dépense non mesurée.
+      return res.status(503).json({
+        error: 'quota_unavailable',
+        message: 'Impossible de vérifier ton quota IA pour le moment. Réessaie dans un instant.',
+      });
+    } else {
+      // Plafond atteint (personnel ou disjoncteur global). On tente la bascule
+      // sur la clé personnelle plutôt que de couper la fonctionnalité.
+      let ownKey: string | null = null;
+      try { ownKey = await personalOpenAiKey(userId); }
+      catch (err: any) { logger.warn({ err: err?.message, userId }, '[LLM] lecture de la clé perso échouée'); }
+
+      const message = quotaMessage(verdict.resetsAt, Boolean(ownKey));
+
+      if (!ownKey) {
+        return res.status(429).json({
+          error: 'monthly_quota_reached',
+          message,
+          limit: verdict.limit,
+          used: verdict.used,
+          resetsAt: verdict.resetsAt,
+        });
+      }
+
+      logger.info({ userId, reason: verdict.reason }, '[LLM] plafond mensuel atteint — bascule sur la clé de l’utilisateur');
+      quotaNotice = { limit: verdict.limit, resetsAt: verdict.resetsAt, message, billedTo: 'user' };
+      call = ownKeyCall(ownKey);
+    }
   } else {
-    // FREE → user's own OpenAI key
-    let rows: any[];
-    try {
-      const result = await pool.query(
-        `SELECT openai_api_key AS "openaiApiKey" FROM user_profiles WHERE user_id = $1`,
-        [userId]
-      );
-      rows = result.rows;
-    } catch (err: any) {
-      if (err.code === '42703') {
+    // FREE → user's own OpenAI key. Quota journalier en mémoire : ne protège
+    // pas un budget (l'utilisateur paie ses tokens) mais nos ressources.
+    if (!underDailyQuota(userId)) {
+      return res.status(429).json({ error: 'Daily AI request limit reached. Try again tomorrow.' });
+    }
+
+    let userKey: string | null;
+    try { userKey = await personalOpenAiKey(userId); }
+    catch (err: any) {
+      if (err?.code === 'db_schema') {
         return res.status(500).json({
           error: 'db_schema',
           message: 'Database migration 005 not applied. Run: psql -d IceedgeDB -f src/db/migrations/005_openai_key.sql',
@@ -193,18 +323,13 @@ router.post('/', async (req: Request, res: Response) => {
       throw err;
     }
 
-    // Keys are stored encrypted at rest (AES-256-GCM); decrypt for use.
-    // Legacy plaintext rows pass through unchanged until the migration runs.
-    const userKey: string | null = rows[0]?.openaiApiKey ? decryptSecret(rows[0].openaiApiKey) : null;
     if (!userKey) {
       return res.status(422).json({
         error: 'no_api_key',
         message: 'Add your OpenAI API key in Settings → AI Settings, or upgrade to Pro to use the built-in model.',
       });
     }
-    endpoint = 'https://api.openai.com/v1/chat/completions';
-    apiKey = userKey;
-    requestModel = model ?? DEFAULT_FREE_MODEL;
+    call = ownKeyCall(userKey);
   }
 
   // ── Forward the request ───────────────────────────────────────────────────
@@ -212,14 +337,17 @@ router.post('/', async (req: Request, res: Response) => {
   // `max_tokens` (need `max_completion_tokens`) and only accept the default
   // temperature. They also spend output tokens on hidden reasoning, so the
   // budget must be generous or `content` comes back empty.
-  const isReasoning = /(^|\/)(gpt-5|o1|o3|o4)/.test(requestModel);
+  const isReasoning = /(^|\/)(gpt-5|o1|o3|o4)/.test(call.requestModel);
 
-  const body: Record<string, any> = { model: requestModel, messages };
+  const body: Record<string, any> = { model: call.requestModel, messages };
   if (isReasoning) {
     body.max_completion_tokens = 2048;
     // no temperature — reasoning models only allow the default (1)
   } else {
-    body.max_tokens = 512;
+    // Doit rester aligné sur LLM_MAX_OUTPUT_TOKENS dans llmQuota.service, qui
+    // s'en sert pour majorer le coût d'une requête. Les désynchroniser ferait
+    // sous-estimer la dépense pire-cas, donc surestimer le plafond.
+    body.max_tokens = MAX_OUTPUT_TOKENS;
     body.temperature = 0.7;
   }
 
@@ -228,16 +356,20 @@ router.post('/', async (req: Request, res: Response) => {
   // provider can't tie up the request/connection indefinitely.
   let providerRes: any;
   try {
-    providerRes = await fetchWithTimeoutRetry(endpoint, {
+    providerRes = await fetchWithTimeoutRetry(call.endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-        ...extraHeaders,
+        Authorization: `Bearer ${call.apiKey}`,
+        ...call.extraHeaders,
       },
       body: JSON.stringify(body),
     });
   } catch (err: any) {
+    // Le fournisseur n'a jamais été atteint : rien n'a été facturé, donc le
+    // quota du mois ne doit pas être amputé. Sans ce remboursement, une panne
+    // réseau consommerait le quota de l'utilisateur sans rien lui rendre.
+    if (quotaConsumed) await refundProRequest(userId);
     const timedOut = err?.name === 'AbortError';
     return res.status(timedOut ? 504 : 502).json({
       error: timedOut ? 'The model provider timed out' : 'Failed to reach the model provider',
@@ -250,9 +382,16 @@ router.post('/', async (req: Request, res: Response) => {
     let body: any = {};
     try { body = JSON.parse(raw); } catch { /* non-JSON error page */ }
     const status = (providerRes as any).status ?? 502;
+
+    // Remboursé sur 4xx uniquement : la requête a été REJETÉE avant inférence
+    // (modèle inconnu, entrée invalide, authentification), donc rien n'a été
+    // facturé. Sur 5xx, le modèle a pu tourner avant d'échouer — on ne rembourse
+    // pas, par prudence : la garantie doit pencher du côté du plafond.
+    if (quotaConsumed && status >= 400 && status < 500) await refundProRequest(userId);
+
     // Log the FULL upstream error to the server console for debugging.
     logger.error(
-      { status, pro: userIsPro, model: requestModel, body: raw || '(empty body)' },
+      { status, pro: userIsPro, model: call.requestModel, body: raw || '(empty body)' },
       '[LLM] provider error'
     );
     return res.status(status === 401 ? 401 : 502).json({
@@ -265,7 +404,9 @@ router.post('/', async (req: Request, res: Response) => {
   const data = await (providerRes as any).json();
   const text: string = data?.choices?.[0]?.message?.content ?? '';
 
-  return res.json({ text });
+  // `quotaNotice` n'est présent que le mois où le plafond est atteint : le
+  // client affiche alors le message pendant que la réponse arrive quand même.
+  return res.json(quotaNotice ? { text, quota: quotaNotice } : { text });
 });
 
 export default router;

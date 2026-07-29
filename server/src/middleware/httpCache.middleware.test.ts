@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 
@@ -112,61 +112,96 @@ describe('noStore', () => {
  */
 describe('câblage de app.ts', () => {
   /**
+   * Postgres bouchonné, en échec immédiat.
+   *
+   * Une première version de ce test sondait un chemin inexistant sous chaque
+   * préfixe, en supposant qu'il retomberait sur le 404 global sans toucher à la
+   * base. C'était faux : `/api/users/<x>` matche `router.get('/:id')` et
+   * `/api/slips/<x>` aussi — les routes paramétrées avalent n'importe quel
+   * segment. La sonde partait donc en base, `pool.connect()` attendait ses 5 s
+   * de `connectionTimeoutMillis`, et le test échouait par timeout.
+   *
+   * Plutôt que de chercher un chemin qui n'existe vraiment nulle part — une
+   * hypothèse que la prochaine route paramétrée casserait à nouveau — on retire
+   * la dépendance : ce test porte sur des EN-TÊTES, pas sur la base. Peu importe
+   * que la route réponde 401, 404 ou 500, tant qu'elle répond vite ; l'en-tête
+   * est posé au montage du routeur et vaut pour les trois.
+   */
+  /**
+   * Importer `app` tire tout le graphe de dépendances du serveur (Sentry,
+   * Stripe, socket.io, pg…) : ~3 s de transpilation, contre 5 s de budget par
+   * défaut chez vitest. La marge était trop mince — d'où le timeout explicite
+   * sur les cas ci-dessous, et ce chargement mis en cache pour ne le payer
+   * qu'une fois. Les tests ne modifient rien (uniquement des GET) et le
+   * limiteur est à 2000/min, très au-dessus de la douzaine de requêtes émises.
+   */
+  const IMPORT_HEAVY_TIMEOUT_MS = 20_000;
+
+  let cached: Promise<any> | null = null;
+  function loadAppWithoutDb(): Promise<any> {
+    if (!cached) {
+      cached = (async () => {
+        vi.resetModules();
+        const fail = async () => { throw new Error('DB indisponible (bouchon de test)'); };
+        vi.doMock('../db/connection', () => ({
+          pool: { query: fail, connect: fail, on: () => {}, end: async () => {} },
+          connectDB: fail,
+        }));
+        return (await import('../app')).default;
+      })();
+    }
+    return cached;
+  }
+
+  /**
    * `noStore` est monté sur le PRÉFIXE, pas sur chaque route : c'est ce qui
    * garantit qu'une route ajoutée demain dans l'un de ces routeurs est couverte
    * sans que personne y pense. Le test porte donc sur le préfixe.
-   *
-   * Sonder un chemin inexistant sous chaque préfixe est délibéré : la requête
-   * traverse le middleware monté puis retombe sur le 404 global, sans toucher à
-   * Postgres ni à l'authentification. Une sonde sur une vraie route (par ex.
-   * `GET /api/chat/rooms`, ouvert aux invités) irait interroger la base et
-   * rendrait ce garde-fou de sécurité dépendant d'un service externe — donc
-   * instable, donc ignoré au premier rouge.
    */
-  const USER_DATA_PREFIXES = [
-    '/api/auth',
-    '/api/users',
-    '/api/chat',
-    '/api/slips',
-    '/api/llm',
-    '/api/subscription',
-    '/api/push',
+  const USER_DATA_PROBES = [
+    '/api/auth/__sonde__',
+    '/api/users/__sonde__',
+    '/api/chat/__sonde__',
+    '/api/slips/__sonde__',
+    '/api/llm/__sonde__',
+    '/api/subscription/__sonde__',
+    '/api/push/__sonde__',
   ];
 
   it('tout préfixe portant des données utilisateur répond `no-store`', async () => {
-    const { default: appUnderTest } = await import('../app');
+    const appUnderTest = await loadAppWithoutDb();
 
-    for (const prefix of USER_DATA_PREFIXES) {
-      const res = await request(appUnderTest).get(`${prefix}/__sonde_inexistante__`);
+    for (const path of USER_DATA_PROBES) {
+      const res = await request(appUnderTest).get(path);
       const cc  = res.headers['cache-control'] ?? '';
       // L'en-tête doit être PRÉSENT et valoir no-store : son absence laisse la
       // décision à l'heuristique du CDN, ce qui est précisément ce qu'on refuse.
-      expect(cc, `${prefix}/* → ${res.status} / Cache-Control: ${cc || '(absent)'}`)
+      expect(cc, `${path} → ${res.status} / Cache-Control: ${cc || '(absent)'}`)
         .toBe(NO_STORE);
     }
-  });
+  }, IMPORT_HEAVY_TIMEOUT_MS);
 
-  // Doublons sur de vraies routes, choisies parce qu'elles répondent 401 sur un
-  // simple test de jeton — sans requête SQL, donc sans dépendance externe.
+  // Doublon sur de vraies routes : celles-ci répondent 401 sur un simple test de
+  // jeton, donc le code de statut est lui aussi vérifiable.
   it('le vaut aussi sur de vraies réponses 401', async () => {
-    const { default: appUnderTest } = await import('../app');
+    const appUnderTest = await loadAppWithoutDb();
 
     for (const path of ['/api/auth/me', '/api/users/me', '/api/subscription/me']) {
       const res = await request(appUnderTest).get(path);
       expect(res.status, `${path} devait répondre 401`).toBe(401);
       expect(res.headers['cache-control'], path).toBe(NO_STORE);
     }
-  });
+  }, IMPORT_HEAVY_TIMEOUT_MS);
 
   it('les routes NHL publiques annoncent bien un cache partagé', async () => {
-    const { default: appUnderTest } = await import('../app');
+    const appUnderTest = await loadAppWithoutDb();
 
     // Paramètres invalides → 400 immédiat, aucun appel réseau vers la NHL.
     // Un 400 ne doit justement PAS être caché.
     const bad = await request(appUnderTest).get('/api/nhl/games/range?start=nope&end=nope');
     expect(bad.status).toBe(400);
     expect(bad.headers['cache-control']).toBe(NO_STORE);
-  });
+  }, IMPORT_HEAVY_TIMEOUT_MS);
 });
 
 /**

@@ -14,6 +14,10 @@ import fs from 'fs';
 import path from 'path';
 import { fetchRawOdds, type RawOddsEvent } from './oddsClient';
 import { logger } from '../logger';
+import { withJobLock } from './jobLock';
+
+/** Un appel Odds API + une écriture de fichier. Généreux pour un upstream lent. */
+const LOCK_TTL_MS = 5 * 60 * 1000;
 
 // Colonnes attendues par fetch_data_v4.py (identiques à odds.csv).
 const HEADER =
@@ -142,9 +146,12 @@ export function startOddsLogger(): void {
     return;
   }
 
+  // Sans verrou, N instances consomment N× le quota The Odds API pour produire
+  // exactement les mêmes lignes — c'est le job dont la duplication coûte
+  // directement de l'argent.
   const run = async () => {
     try {
-      await logTodaysOdds();
+      await withJobLock('odds-logger', LOCK_TTL_MS, logTodaysOdds);
     } catch (err: any) {
       logger.warn({ err: err?.message }, '[OddsLogger] échec');
     }
