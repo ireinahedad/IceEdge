@@ -10,6 +10,7 @@
  */
 
 import { logger } from '../logger';
+import { timeUpstream } from '../metrics';
 
 /** Normalise `ML_SERVICE_URL` and shout about the two ways it's usually wrong.
  *  Railway's dashboard displays the internal address bare — `svc.railway.internal` —
@@ -69,21 +70,26 @@ export interface MLPredictionResult {
   explanation:          string;
 }
 
+// Point d'étranglement unique des trois méthodes publiques : compter ici suffit
+// à voir toute la charge envoyée au service Python, qui n'a que 2 workers et
+// sature avant le process Node.
 async function mlPost<T>(path: string, body: unknown): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(`${ML_URL}${path}`, {
-      method:  'POST',
-      headers: mlHeaders({ 'Content-Type': 'application/json' }),
-      body:    JSON.stringify(body),
-      signal:  controller.signal,
+    return await timeUpstream('ml', async () => {
+      const res = await fetch(`${ML_URL}${path}`, {
+        method:  'POST',
+        headers: mlHeaders({ 'Content-Type': 'application/json' }),
+        body:    JSON.stringify(body),
+        signal:  controller.signal,
+      });
+      if (!res.ok) {
+        const msg = await res.text().catch(() => res.statusText);
+        throw new Error(`ML service ${res.status}: ${msg}`);
+      }
+      return res.json() as Promise<T>;
     });
-    if (!res.ok) {
-      const msg = await res.text().catch(() => res.statusText);
-      throw new Error(`ML service ${res.status}: ${msg}`);
-    }
-    return res.json() as Promise<T>;
   } finally {
     clearTimeout(timer);
   }

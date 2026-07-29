@@ -5,6 +5,8 @@
  *
  * GET  /api/dev/ml-info          — ML service health + model info + feature importances
  * POST /api/dev/ml-test          — Run a live test prediction and return the full response
+ * GET  /api/dev/metrics          — Compteurs : appels sortants, caches, event loop, mémoire
+ * POST /api/dev/metrics/reset    — Ouvre une nouvelle fenêtre de mesure
  */
 
 import { Router, Request, Response } from 'express';
@@ -15,6 +17,7 @@ import {
   buildGameFeatures,
   buildPlayerPropFeatures,
 } from '../services/featureEngineering';
+import { snapshotMetrics, resetMetrics } from '../metrics';
 
 const router = Router();
 
@@ -105,6 +108,38 @@ router.post('/ml-test', async (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(503).json({ error: err.message ?? 'ML test failed' });
   }
+});
+
+// ── GET /api/dev/metrics ──────────────────────────────────────────────────────
+//
+// Instantané des compteurs : appels sortants par API externe, efficacité de
+// chaque cache nommé, retard de l'event loop, mémoire du process.
+//
+// Existe pour rendre vérifiables les critères des tests de charge de l'audit,
+// qui portent tous sur ce que le serveur ÉMET, pas sur ce qu'il répond — donc
+// invisibles depuis k6. Voir `loadtest/README.md`.
+//
+// Lecture seule, et déjà doublement protégé : `authenticate` + `requireRole('admin')`
+// en tête de ce routeur, lui-même non monté en production sans ENABLE_DEV_ROUTES.
+router.get('/metrics', (_req: Request, res: Response) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(snapshotMetrics());
+});
+
+// ── POST /api/dev/metrics/reset ───────────────────────────────────────────────
+//
+// Ouvre une nouvelle fenêtre de mesure. À appeler juste avant un tir de charge
+// pour que les chiffres ne portent que sur lui.
+//
+// Ne vide PAS les caches : un cache déjà chaud reste chaud. Pour mesurer un
+// démarrage à froid (scénario S3), il faut redémarrer le service — sinon on
+// lirait « 0 exécution » et on conclurait à tort que la déduplication marche.
+// L'instantané d'avant remise à zéro est renvoyé, pour ne rien perdre si on
+// oublie de le lire d'abord.
+router.post('/metrics/reset', (_req: Request, res: Response) => {
+  const before = snapshotMetrics();
+  resetMetrics();
+  res.json({ reset_at: new Date().toISOString(), before });
 });
 
 export default router;

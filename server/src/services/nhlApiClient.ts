@@ -11,6 +11,8 @@ import {
   MOCK_PLAYER_BY_ID,
 } from '../data/mockNhl';
 import { computeTravel, TravelGame, TravelFeatures } from './travel';
+import { TtlCache } from './ttlCache';
+import { timeUpstream } from '../metrics';
 
 /** When NHL_USE_MOCK=true, serve rich local mock data instead of the live NHL API. */
 const USE_MOCK = process.env.NHL_USE_MOCK === 'true';
@@ -19,54 +21,128 @@ const BASE = 'https://api-web.nhle.com/';
 // The player-search endpoint lives on a separate host from the main stats API.
 const SEARCH_BASE = 'https://search.d3.nhle.com/api/';
 
-// --- Simple in-memory TTL cache -------------------------------------------
+// --- Cache mémoire TTL, BORNÉ ---------------------------------------------
+//
+// La `Map` maison qui vivait ici n'évinçait jamais : `getCached` vérifiait
+// l'expiration à la lecture, mais rien ne supprimait les entrées mortes. Or les
+// clés dérivent de paramètres de requête (`player:<id>`, `range:<a>:<b>`,
+// `boxscore:<gameId>`, `schedule:<date>`…) : un visiteur qui fait défiler le
+// calendrier crée une clé par plage consultée. À plusieurs milliers de
+// visiteurs la Map croissait de façon monotone jusqu'à l'OOM et au redémarrage
+// du conteneur — qui vide tous les caches et provoque une tempête de requêtes
+// upstream au redémarrage.
+//
+// `TtlCache` plafonne le nombre de clés (éviction FIFO de la plus ancienne
+// insérée) : la mémoire devient fonction du plafond, plus du trafic. Le
+// dépassement du plafond n'est pas une erreur, juste un taux de hit plus bas.
+//
+// Le plafond se règle sans redéploiement de code : NHL_CACHE_MAX_ENTRIES. Un
+// boxscore complet pèse quelques dizaines de ko, d'où une valeur par défaut
+// prudente plutôt que quelques milliers d'entrées.
+const NHL_CACHE_MAX_ENTRIES = Number(process.env.NHL_CACHE_MAX_ENTRIES) || 500;
 
-interface CacheEntry { data: unknown; expiresAt: number }
-const _cache = new Map<string, CacheEntry>();
+// Le TTL par défaut n'est jamais utilisé tel quel : chaque appelant passe le
+// sien (30 s pour un match en direct, 6 h pour un match terminé).
+const _cache = new TtlCache<unknown>(5 * 60_000, NHL_CACHE_MAX_ENTRIES, 'nhl');
 
 function getCached<T>(key: string): T | null {
-  const e = _cache.get(key);
-  return e && Date.now() < e.expiresAt ? (e.data as T) : null;
+  return _cache.get(key) as T | null;
 }
 function setCached(key: string, data: unknown, ttlMs: number) {
-  _cache.set(key, { data, expiresAt: Date.now() + ttlMs });
+  _cache.set(key, data, ttlMs);
 }
 
 // --- HTTP helper (native fetch, Node 18+) ---------------------------------
 
+// `timeUpstream` enveloppe les DEUX points d'étranglement : toute requête vers
+// la NHL passe par l'un ou l'autre, donc aucun appel ne peut échapper au
+// compteur. C'est ce qui rend vérifiable le critère central des tests de
+// charge — le nombre d'appels sortants doit rester constant quand le nombre de
+// visiteurs augmente.
+// --- Déduplication des requêtes en vol -------------------------------------
+//
+// LE PROBLÈME MESURÉ (loadtest/stampede.ts)
+//
+// Les fonctions de ce module suivent le motif `getCached` → travail →
+// `setCached`. Entre l'instant où N appels concurrents lisent un cache froid et
+// celui où le premier écrit sa réponse, TOUS voient `null` et partent chercher
+// la même donnée. Mesuré sur `fetchTeams` : 10 concurrents → 10 appels NHL,
+// 100 → 100, 500 → 500. Le cache lui-même fonctionne (cache chaud, 500
+// concurrents → 0 appel) ; le trou est strictement la fenêtre froide, qui
+// revient à chaque démarrage, chaque redéploiement et chaque expiration de TTL.
+//
+// POURQUOI ICI ET PAS DANS CHAQUE FONCTION
+//
+// Dédupliquer au point d'étranglement HTTP couvre les 19 fonctions d'un coup —
+// y compris celles qu'on oublierait — et fait mieux : deux fonctions
+// différentes qui demandent la même URL NHL partagent aussi la requête. Surtout,
+// ça ne touche à AUCUNE sémantique de cache : les cas « ne pas mettre en
+// cache » (jour sans match, boxscore absent, échec réseau) restent exactement
+// ce qu'ils étaient.
+//
+// CE QUE ÇA NE FAIT PAS : le post-traitement (formatage, agrégation) tourne
+// encore une fois par appelant. C'est du CPU, plus du réseau ni du quota. Si un
+// profilage le désigne un jour, la suite est de basculer les fonctions les plus
+// chaudes sur `TtlCache.wrap`, qui déduplique le calcul entier.
+//
+// La map ne peut pas fuir : chaque entrée est retirée dans `finally`, donc elle
+// ne contient que les requêtes réellement en vol.
+const _inflight = new Map<string, Promise<unknown>>();
+
+/**
+ * Exécute `fn` une seule fois par URL simultanée. Les appelants concurrents
+ * partagent la même promesse — donc aussi le même objet résolu, comme le font
+ * déjà les valeurs servies depuis le cache.
+ *
+ * Un échec n'est pas mémorisé : l'entrée est retirée quoi qu'il arrive, et
+ * l'erreur est propagée à tous ceux qui attendaient.
+ */
+function dedupe<T>(url: string, fn: () => Promise<T>): Promise<T> {
+  const pending = _inflight.get(url);
+  if (pending) return pending as Promise<T>;
+
+  const p = fn().finally(() => { _inflight.delete(url); });
+  _inflight.set(url, p);
+  return p;
+}
+
 async function fetchNHL<T>(path: string): Promise<T> {
   const url = `${BASE}${path}`;
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'IceEdge/1.0 (nhle-stats-client)',
-      Accept: 'application/json',
-    },
-  });
-  if (!res.ok) {
-    throw Object.assign(
-      new Error(`NHL API ${res.status} for ${path}`),
-      { status: res.status }
-    );
-  }
-  return res.json() as Promise<T>;
+  return dedupe(url, () => timeUpstream('nhl', async () => {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'IceEdge/1.0 (nhle-stats-client)',
+        Accept: 'application/json',
+      },
+    });
+    if (!res.ok) {
+      throw Object.assign(
+        new Error(`NHL API ${res.status} for ${path}`),
+        { status: res.status }
+      );
+    }
+    return res.json() as Promise<T>;
+  }));
 }
 
 /** Same as fetchNHL, but against the separate player-search host. */
 async function fetchNHLSearch<T>(path: string): Promise<T> {
   const url = `${SEARCH_BASE}${path}`;
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'IceEdge/1.0 (nhle-stats-client)',
-      Accept: 'application/json',
-    },
-  });
-  if (!res.ok) {
-    throw Object.assign(
-      new Error(`NHL Search API ${res.status} for ${path}`),
-      { status: res.status }
-    );
-  }
-  return res.json() as Promise<T>;
+  return dedupe(url, () => timeUpstream('nhl', async () => {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'IceEdge/1.0 (nhle-stats-client)',
+        Accept: 'application/json',
+      },
+    });
+    if (!res.ok) {
+      throw Object.assign(
+        new Error(`NHL Search API ${res.status} for ${path}`),
+        { status: res.status }
+      );
+    }
+    return res.json() as Promise<T>;
+  }));
 }
 
 // --- Team emoji / colour metadata (not in the NHL API) --------------------

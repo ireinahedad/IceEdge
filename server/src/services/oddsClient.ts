@@ -12,6 +12,7 @@
  */
 
 import { logger } from '../logger';
+import { recordUpstream } from '../metrics';
 
 const ODDS_BASE = 'https://api.the-odds-api.com/v4';
 const ODDS_KEY  = process.env.ODDS_API_KEY;
@@ -65,13 +66,19 @@ async function fetchAllOdds(): Promise<OddsEvent[]> {
     markets:    'h2h,totals',
     oddsFormat: 'decimal',
   });
+  // Deuxième consommateur du quota The Odds API, à côté du proxy de
+  // `routes/odds.routes.ts`. Il doit être compté lui aussi, sinon le critère
+  // « ≤ 2 appels Odds API » du scénario S1 mesure la moitié de la réalité.
+  const started = Date.now();
   try {
     const res = await fetch(`${ODDS_BASE}/sports/${SPORT_KEY}/odds?${params}`);
+    recordUpstream('odds', Date.now() - started, res.ok);
     if (!res.ok) { logger.error({ status: res.status }, '[oddsClient]'); return []; }
     const data = (await res.json()) as OddsEvent[];
     cache = { data, expiresAt: Date.now() + TTL };
     return data;
   } catch (err: any) {
+    recordUpstream('odds', Date.now() - started, false);
     logger.error({ err: err?.message }, '[oddsClient] fetch error');
     return [];
   }

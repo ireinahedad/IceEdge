@@ -36,14 +36,14 @@ Le pic d'arrivée est le scénario dimensionnant : c'est lui qui casse, pas le r
 | Domaine | 500 simultanés | 5 000 simultanés | Commentaire |
 |---|---|---|---|
 | **Vercel / frontend** | 🟢 OK | 🟢 OK | SPA Vite statique = quasi gratuit. Un seul vrai sujet : le plan Hobby interdit l'usage commercial. |
-| **The Odds API (proxy)** | 🔴 **Casse en minutes** | 🔴 Casse | `odds.routes.ts` n'a **aucun cache**. 2 appels upstream par visiteur. |
-| **`/api/predict/best-bets`** | 🔴 **Casse** | 🔴 Casse | Jusqu'à 30 appels ML + dizaines d'appels NHL **par requête**, aucun cache de réponse. |
-| **`/api/leaderboard`** | 🔴 **Casse** | 🔴 Casse | N+1 (21 requêtes) + scan complet de `user_bets`, endpoint public non caché. |
-| **Avatars base64 en DB** | 🟠 Tenable | 🔴 Casse (stockage + egress) | ~2 Mo par utilisateur dans `user_profiles.avatar_url`, renvoyés dans le chat et le leaderboard. |
-| **Service ML Python** | 🟠 | 🔴 | Public, sans authentification, `allow_origins=["*"]`, 2 workers, aucun cache. |
+| **The Odds API (proxy)** | 🟢 | 🟢 | ✅ Cache 5 min + `Cache-Control` + repli `getStale` si le quota tombe. Coût upstream découplé du trafic (~17 000 appels/mois au pire). |
+| **`/api/predict/best-bets`** | 🟢 | 🟢 | ✅ Cache de réponse 60 s + déduplication en vol : 500 arrivées sur un cache froid = **une** exécution. Cache par instance : chaque redéploiement repart froid. |
+| **`/api/leaderboard`** | 🟢 | 🟢 | ✅ 21 requêtes → 2 (agrégat Postgres), cache 60 s partagé, index `(user_id, outcome)`, `Cache-Control` pour le CDN. |
+| **Avatars base64 en DB** | 🟢 | 🟠 | ✅ 256×256 WebP côté client : ~27 ko en base64 au lieu de ~2 Mo, et déduplication par auteur dans les réponses de chat. Reste le stockage en base (→ R2, ligne E). |
+| **Service ML Python** | 🟢 | 🟠 | ✅ Réseau privé Railway, plus de domaine public. Reste 2 workers et aucun cache côté Python — mais le cache de `best-bets` absorbe l'essentiel. |
 | **Neon Postgres** | 🟢 avec pooler | 🟠 | Pool à 10, connexion directe non documentée, jamais de scale-to-zero (probes + jobs). |
-| **Railway / process Node** | 🟠 | 🔴 | Mono-process, bcrypt**js** bloquant, caches mémoire sans éviction, tous les jobs in-process. |
-| **Socket.io / chat** | 🟢 | 🔴 | Adapter mémoire → impossible de passer à 2 instances. Broadcast O(n) à chaque join. |
+| **Railway / process Node** | 🟢 | 🟠 | ✅ `@node-rs/bcrypt` (hors event loop) et caches mémoire bornés. Reste tous les jobs in-process (ligne C). |
+| **Socket.io / chat** | 🟢 | 🔴 | ✅ Broadcast de présence coalescé (3 s/salon) et CORS aligné sur l'API. **L'adapter mémoire reste le verrou** : impossible de passer à 2 instances (ligne D). |
 | **Stripe** | 🟢 | 🟢 | Bien fait (signature vérifiée, upsert idempotent). Deux points mineurs. |
 | **Google OAuth** | 🟢 | 🟢 | Aucun goulot. |
 | **LLM (GitHub Models)** | 🟠 | 🔴 | Quota par utilisateur mais **aucun plafond global**. Le compte opérateur paie. |
@@ -51,7 +51,12 @@ Le pic d'arrivée est le scénario dimensionnant : c'est lui qui casse, pas le r
 | **Logging / erreurs** | 🟢 | 🟠 | `tracesSampleRate: 0.1` → facture Sentry linéaire au trafic. |
 | **Tâches planifiées** | 🟠 | 🔴 | Empêchent le scale horizontal ; `oddsLogger` écrit sur un disque éphémère. |
 
-**Conclusion courte :** l'architecture est saine et n'a pas besoin d'être remplacée. Mais **elle ne passe pas 500 utilisateurs simultanés en l'état** — pas à cause du design, à cause de **quatre endpoints non cachés** et d'un choix de stockage d'avatars. Ces cinq corrections représentent environ 2 à 3 jours de travail et coûtent **~0 € d'infrastructure supplémentaire**. Tout le reste peut attendre.
+**Conclusion courte :** l'architecture est saine et n'a pas besoin d'être remplacée. Les cinq corrections qui bloquaient les 500 simultanés — quatre endpoints non cachés et le stockage des avatars — **sont faites**, pour ~0 € d'infrastructure supplémentaire.
+
+**Où on en est (2026-07-28) :**
+
+- **500 simultanés : plus de 🔴.** Ce qui reste avant lancement est de la configuration de console, pas du code : plan Vercel (9), endpoint Neon `-pooler` (7), `SENTRY_TRACES_SAMPLE_RATE` (10), alertes de budget (12). Et surtout **le scénario de charge S1 (13), qui n'a pas encore été exécuté** — tant qu'il ne l'a pas été, tout ce tableau reste une prédiction.
+- **5 000 simultanés : un seul 🔴, l'adapter Socket.io** (ligne D). C'est le verrou architectural restant ; il conditionne aussi la ligne C (jobs planifiés) et la ligne Q (2ᵉ instance).
 
 ---
 
@@ -205,6 +210,7 @@ Le pic d'arrivée est le scénario dimensionnant : c'est lui qui casse, pas le r
 - **Solution :** remplacer les `Map` maison par **`lru-cache`** (une dépendance, ~10 lignes de changement) avec `max` en nombre d'entrées + `ttl`. Ou, si tu veux éviter la dépendance : un `setInterval(prune, 5 * 60_000).unref()` qui balaie les entrées expirées, comme le fait déjà correctement `InMemoryRateLimitStore.prune()` — le bon pattern existe déjà dans le repo, il n'est simplement pas appliqué aux caches API.
 - **Coût :** 0 €.
 - **Timing :** 🟠 Peut attendre, mais **avant de dépasser ~1 000 utilisateurs**.
+- **✅ Corrigé (2026-07-28).** Sans dépendance : la classe `TtlCache` existait déjà dans le repo (plafond d'entrées, éviction FIFO, anti-stampede) ; il lui manquait un TTL par entrée, ajouté ici, car les clients d'API n'ont pas une durée unique. `nhlApiClient` (500 entrées), `tennisApiClient` (200), `refereeStore` (60, même défaut non listé ci-dessus) et le quota LLM (20 000) passent dessus ; les signatures `getCached`/`setCached` sont inchangées, donc aucun appelant n'a bougé. Plafonds réglables par variable d'environnement. `knownFinal` était déjà borné (`clear()` à 2 000) — rien à faire. Sur le quota LLM, l'éviction *remet à zéro* le compteur de la personne évincée : elle ne peut jamais bloquer quelqu'un à tort, et le vrai plafond de coût reste `llmLimiter` (10/min), incontournable.
 
 ---
 
@@ -219,6 +225,7 @@ Le pic d'arrivée est le scénario dimensionnant : c'est lui qui casse, pas le r
   3. Index : `chat_messages(room_id, sent_at DESC)` existe (migration 019) ✅.
 - **Coût :** 0 €.
 - **Timing :** 🟠 Avant 1 000 utilisateurs. À faire en même temps que P0-3, c'est le même geste.
+- **✅ Corrigé (2026-07-28).** Le point 1 (réactions) était déjà fait : `fetchReactions` groupait déjà par `= ANY($1::text[])`. Le point 2 est fait : `viewRoom` et `viewRoomGuest` fusionnent en un seul SQL (`LEFT JOIN LATERAL` pour le dernier message, sous-requête corrélée sur la PK `(room_id, user_id)` pour le compte). Dix salons visibles : 31 requêtes → 1. Les chemins mono-salon (`createRoom`, `joinRoom`, `setPinned`, `findRoomByCode`) tombent de 4 requêtes à 1-2. Effet de bord utile : un seul SQL sert les connectés et les invités, donc les deux vues ne peuvent plus diverger sur ce qu'elles exposent — le `joinCode` reste masqué aux non-membres par construction.
 
 ---
 
@@ -236,6 +243,10 @@ Le pic d'arrivée est le scénario dimensionnant : c'est lui qui casse, pas le r
   3. Aligner le CORS socket sur la même logique que `app.ts` (extraire la fonction d'origine autorisée dans un module partagé). **Cette correction-là est à faire avant le lancement** — c'est un bug de configuration, pas une optimisation.
 - **Coût :** **0 à 10 €/mois** (Upstash gratuit à ce volume).
 - **Timing :** 🔴 Le point 3 (CORS) avant le lancement. 🟠 Les points 1-2 avant la 2ᵉ instance.
+- **✅ Points 2 et 3 corrigés (2026-07-28).**
+  - *CORS* : la politique d'origine vit désormais dans `server/src/cors.ts`, importée par `app.ts` **et** `socket.ts` — les deux couches ne peuvent plus diverger. Le bug était réel et silencieux : `CORS_ORIGIN="https://a.com,https://b.com"` cassait le WebSocket pour **les deux** origines, y compris celle qui marchait avant qu'on en ajoute une seconde. `cors.test.ts` couvre la liste à virgules, l'ancrage de la regex Vercel (`https://ice-edge.vercel.app.attaquant.com` doit être refusé) et la requête sans `Origin`.
+  - *`room_users`* : une mesure et un envoi par salon toutes les 3 s (`ROOM_COUNT_INTERVAL_MS`), en fin d'intervalle. Le coup d'envoi d'un match passe de quadratique en sockets à linéaire en salons. L'arrivant reçoit quand même son compte immédiatement via `adapter.rooms.get(id).size` (O(1), un seul destinataire) — sinon il afficherait « 0 en ligne » pendant 3 s. Le `−1` de `disconnecting` disparaît : en mesurant après la rafale, le socket est déjà parti.
+- **⏳ Reste le point 1** (`@socket.io/redis-adapter`) : nécessite de provisionner Redis et des sticky sessions Railway. Voir la ligne D de la feuille de route.
 
 ---
 
@@ -404,19 +415,19 @@ Ordonnée par rapport valeur/effort. Les six premières lignes sont ce qui te s�
 
 | # | Action | Fichier | Effort | Coût |
 |---|---|---|---|---|
-| ☐ 1 | **Cacher le proxy Odds API** (TTL 5 min) + `Cache-Control` + log de `x-requests-remaining` | `routes/odds.routes.ts` | 1 h | 0 € |
-| ☐ 2 | **Cacher `getBestBets`** (TTL 60 s) + déduplication des requêtes en vol | `services/bestBets.service.ts` | 2 h | 0 € |
-| ☐ 3 | **Dé-N+1 le leaderboard** (1 requête agrégée) + cache 60 s + index `user_bets(user_id, outcome)` | `services/profile.service.ts:322` | 2 h | 0 € |
+| ☑ 1 | **Cacher le proxy Odds API** (TTL 5 min) + `Cache-Control` + log de `x-requests-remaining` — fait, avec en prime une liste blanche de marchés (évite l'explosion de clés) et un repli `getStale` quand le quota est épuisé | `routes/odds.routes.ts` | 1 h | 0 € |
+| ☑ 2 | **Cacher `getBestBets`** (TTL 60 s) + déduplication des requêtes en vol — fait via `TtlCache.wrap`, clé dérivée des options normalisées | `services/bestBets.service.ts` | 2 h | 0 € |
+| ☑ 3 | **Dé-N+1 le leaderboard** + cache 60 s + index `user_bets(user_id, outcome)` — fait : 21 requêtes → 2 (`fetchBetStats` agrège côté Postgres), cache partagé, index en migration 022 | `services/profile.service.ts` | 2 h | 0 € |
 | ☑ 4 | **Remplacer `bcryptjs`** par `@node-rs/bcrypt`, `SALT_ROUNDS` → 10-11, SHA-256 pour les codes, e-mail hors du chemin de requête | `services/auth.service.ts` | 2 h | 0 € |
 | ☑ 5 | **Fermer le service ML** : réseau privé Railway (`*.railway.internal`), retirer le domaine public | `DEPLOYMENT.md`, var. Railway | 30 min | 0 € |
-| ☐ 6 | **Redimensionner les avatars côté client** (256×256 WebP) + `express.json` à `100kb` global, `5mb` sur la seule route avatar | `client` + `app.ts` | 3 h | 0 € |
+| ☑ 6 | **Redimensionner les avatars côté client** (256×256 WebP, repli JPEG) + `express.json` à `100kb` global — plafond de la route avatar fixé à **600 ko** et non 5 Mo : un 256×256 WebP pèse ~27 ko en base64, donc 5 Mo laissait une surface de blocage de l'event loop sans aucun usage légitime | `client/services/userService.ts` + `app.ts` | 3 h | 0 € |
 | ☐ 7 | **Confirmer que `DATABASE_URL` pointe sur l'endpoint Neon `-pooler`** ; corriger `DEPLOYMENT.md` (il documente encore Supabase) | var. Railway + doc | 30 min | 0 € |
-| ☐ 8 | **Aligner le CORS Socket.io** sur la logique de `app.ts` (liste + regex preview) | `socket.ts` | 30 min | 0 € |
+| ☑ 8 | **Aligner le CORS Socket.io** sur la logique de `app.ts` (liste + regex preview) — politique extraite dans `server/src/cors.ts`, partagée par HTTP et WebSocket, couverte par `cors.test.ts` | `socket.ts`, `app.ts`, `cors.ts` | 30 min | 0 € |
 | ☐ 9 | **Passer Vercel sur Pro** (usage commercial) | — | 10 min | ~20 $/mois |
 | ☐ 10 | **`SENTRY_TRACES_SAMPLE_RATE=0.01`** en production | var. Railway | 2 min | 0 € |
 | ☐ 11 | **Mettre Cloudflare (gratuit) devant Railway** + `Cache-Control` sur `/api/nhl/*` et `/api/odds/*` | `routes/` + DNS | 3 h | 0 € |
 | ☐ 12 | **Alertes de budget** : Railway (usage), Neon, Stripe, provider LLM, The Odds API | consoles | 1 h | 0 € |
-| ☐ 13 | **Exécuter le scénario de charge S1** ci-dessous et corriger ce qu'il révèle | — | 1 j | 0 € |
+| ◐ 13 | **Exécuter le scénario de charge S1** ci-dessous et corriger ce qu'il révèle — script, compteurs et runbook prêts (`loadtest/`, `server/src/metrics.ts`) ; **reste à choisir la cible et à tirer** | — | 1 j | 0 € |
 
 **Total : ~2,5 jours de travail, +20 $/mois.**
 
@@ -428,12 +439,12 @@ Ordonnée par rapport valeur/effort. Les six premières lignes sont ce qui te s�
 
 | # | Action | Déclencheur | Effort | Coût |
 |---|---|---|---|---|
-| ☐ A | Éviction des caches mémoire (`lru-cache` ou `prune`) | ~1 000 utilisateurs, ou premier OOM Railway | 2 h | 0 € |
-| ☐ B | Dé-N+1 le chat (réactions, liste des salons) | ~200 simultanés dans le chat | 3 h | 0 € |
+| ☑ A | Éviction des caches mémoire — `TtlCache` (plafond d'entrées, éviction FIFO) appliqué à `nhlApiClient`, `tennisApiClient`, `refereeStore` et au quota LLM ; TTL par entrée ajouté à `TtlCache`. Sans dépendance | ~1 000 utilisateurs, ou premier OOM Railway | 2 h | 0 € |
+| ☑ B | Dé-N+1 le chat — réactions déjà groupées (`= ANY($1)`) ; liste des salons passée à une requête unique (`LEFT JOIN LATERAL` + compte corrélé), 31 requêtes → 1 | ~200 simultanés dans le chat | 3 h | 0 € |
 | ☐ C | Verrou consultatif Postgres sur les jobs planifiés | **avant la 2ᵉ instance** | 2 h | 0 € |
-| ☐ D | Redis (Upstash) : adapter Socket.io + `RedisRateLimitStore` (déjà écrit ✅) + quota LLM | **avant la 2ᵉ instance** | 1 j | 0-10 €/mois |
+| ☐ D | Redis (Upstash) : adapter Socket.io + `RedisRateLimitStore` (déjà écrit ✅) + quota LLM (borné en mémoire depuis A, mais toujours **par instance** : N instances = N× le quota) | **avant la 2ᵉ instance** | 1 j | 0-10 €/mois |
 | ☐ E | Avatars vers Cloudflare R2, ne stocker que l'URL | ~500 utilisateurs avec avatar | 1 j | 0-5 €/mois |
-| ☐ F | Débouncer `room_users`, ne pas recalculer `allSockets()` par événement | ~500 sockets dans un salon | 2 h | 0 € |
+| ☑ F | Débouncer `room_users` — une mesure + un envoi par salon toutes les 3 s (`ROOM_COUNT_INTERVAL_MS`) ; l'arrivant reçoit son compte immédiatement en O(1) via `adapter.rooms` | ~500 sockets dans un salon | 2 h | 0 € |
 | ☐ G | Concurrence bornée sur le fan-out push + `WHERE user_id = ANY($1)` | ~300 destinataires opt-in | 3 h | 0 € |
 | ☐ H | Settlement : pagination jusqu'à épuisement, regroupement par match, index partiel | ~300 tickets/soirée | 1 j | 0 € |
 | ☐ I | TanStack Query côté client | quand la facture Railway devient visible | 2 j | 0 € |
@@ -452,6 +463,8 @@ Ordonnée par rapport valeur/effort. Les six premières lignes sont ce qui te s�
 
 Outil recommandé : **k6** (scriptable, gratuit, exécutable en local ou en CI). Alternative : Artillery.
 
+> Les scripts et la procédure vivent dans **`loadtest/`**. Les critères qui portent sur les appels sortants et les exécutions de cache se lisent sur `GET /api/dev/metrics` (module `server/src/metrics.ts`) — k6 ne peut pas les voir.
+
 > **Règle absolue :** exécuter ces tests contre un **environnement de préproduction** avec sa propre base Neon et — surtout — des **clés API externes de test ou désactivées**. Un test de charge contre la production consommerait ton quota The Odds API en quelques secondes et enverrait de vraies notifications push.
 
 ### S1 — Vague d'arrivée sur la landing (**le test qui décide du lancement**)
@@ -459,6 +472,14 @@ Outil recommandé : **k6** (scriptable, gratuit, exécutable en local ou en CI).
 - **À mesurer :** p50/p95/p99 par endpoint, taux d'erreur, **nombre d'appels sortants réellement émis vers The Odds API et vers le service ML** (c'est la métrique clé — elle doit être *constante*, pas proportionnelle aux VUs), RSS du conteneur Node, connexions Neon actives, CPU du service ML.
 - **Critères de réussite :** p95 < 800 ms, erreurs < 0,5 %, **≤ 2 appels Odds API sur toute la durée du test**, **≤ 5 exécutions complètes de `getBestBets`**.
 - **Si ça échoue :** P0-1, P0-2 et P0-3 ne sont pas corrigés.
+- **✅ Outillé (2026-07-28), pas encore exécuté.** Script : `loadtest/s1-landing.js`. Procédure complète : `loadtest/README.md`.
+  Les deux derniers critères n'étaient **pas mesurables depuis k6**, qui ne voit que la façade HTTP : un endpoint qui répond 200 en 40 ms peut avoir appelé l'upstream 500 fois ou 1 fois, c'est indiscernable de l'extérieur. D'où `server/src/metrics.ts` : compteurs d'appels sortants par API externe (posés aux points d'étranglement — `fetchNHL`, `mlPost`, `rapidGet`, les deux consommateurs d'Odds), compteurs par cache nommé (hits / **misses = exécutions réelles** / dedup / évictions), retard de l'event loop et RSS. Lecture sur `GET /api/dev/metrics`, déjà admin-only et non monté en prod sans `ENABLE_DEV_ROUTES`.
+  **Deux pièges documentés dans le runbook :** (1) `apiLimiter` plafonne à 300 req/min/IP — sans `API_RATE_LIMIT` relevé, le test mesure le limiteur et non l'application, et rend un résultat faussement excellent ; (2) `/api/dev/metrics/reset` ne vide pas les caches, donc il ne sert pas à préparer S3.
+  **Trou identifié et MESURÉ (2026-07-28), sans avoir eu besoin du run complet :** `nhlApiClient` utilise `getCached`/`setCached` et non `wrap` — il n'a donc **aucune déduplication en vol**. Banc `loadtest/stampede.ts` (vrai code, `fetch` bouchonné) : 10 concurrents → 10 appels NHL, 100 → 100, 500 → 500. La même charge à travers `wrap` → **1 appel** (dedup = 499). Contrôle à cache chaud → 0 appel, donc le cache fonctionne : le trou est strictement la fenêtre froide (démarrage, redéploiement, expiration de TTL).
+  Ordre de grandeur en trafic réel : les doublons valent environ `débit d'arrivée × latence amont` par fenêtre froide — ~10 appels au lieu d'1 à 50 req/s et 200 ms. L'API NHL étant gratuite, le coût est de la latence et un risque de throttling, pas une facture.
+  **✅ Corrigé (2026-07-28).** La déduplication a été posée dans `fetchNHL` / `fetchNHLSearch` plutôt que fonction par fonction : le point d'étranglement HTTP couvre les 19 fonctions d'un coup — y compris celles qu'on oublierait — et deux fonctions différentes demandant la même URL partagent aussi la requête. Surtout, **aucune sémantique de cache n'est touchée** : les cas « ne pas mettre en cache » (jour sans match, boxscore absent, échec réseau) restent identiques, là où une migration vers `wrap` aurait dû les reproduire un à un dans un diff de 1 650 lignes.
+  Banc rejoué après correction : **500 concurrents → 1 appel** (contre 500). Non-régression verrouillée par `server/src/services/nhlApiClient.test.ts` (4 tests, dont « un échec n'est pas mémorisé » — sans quoi une coupure réseau gèlerait l'endpoint jusqu'au redémarrage).
+  **Reste non fait, volontairement :** le post-traitement (formatage, agrégation) tourne encore une fois par appelant. C'est du CPU, plus du réseau ni du quota. Si un profilage le désigne, la suite est de basculer les fonctions les plus chaudes sur `TtlCache.wrap`.
 
 ### S2 — Vague d'inscriptions/connexions
 - **Profil :** 50 inscriptions puis 200 connexions en 30 s.

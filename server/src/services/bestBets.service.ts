@@ -281,7 +281,7 @@ function normalizeOptions(opts: BestBetsOptions): NormalizedOptions {
  * L'objet retourné est partagé entre appelants — il ne doit pas être muté.
  */
 const BEST_BETS_TTL = 60_000;
-const bestBetsCache = new TtlCache<BestBetsResult>(BEST_BETS_TTL, 50);
+const bestBetsCache = new TtlCache<BestBetsResult>(BEST_BETS_TTL, 50, 'best-bets');
 
 export async function getBestBets(opts: BestBetsOptions = {}): Promise<BestBetsResult> {
   const o = normalizeOptions(opts);

@@ -23,6 +23,7 @@ import { pool }            from './db/connection';
 import { httpLogger, logger } from './logger';
 import { seedAll }         from './db/seed';
 import { apiLimiter, authLimiter, writeLimiter } from './middleware/rateLimit.middleware';
+import { corsOriginCallback }  from './cors';
 
 const app = express();
 
@@ -37,25 +38,12 @@ app.use(httpLogger);
 // credentials:true is required so the httpOnly refresh-token cookie flows
 // between the client (5173) and the API (3001). '*' is not allowed with
 // credentials, hence the explicit default origin.
-// Allowed origins: the configured client(s) (CORS_ORIGIN may be a comma-
-// separated list) plus any Vercel preview deployment of this project.
-const allowedOrigins = (process.env.CORS_ORIGIN || process.env.CLIENT_URL || 'http://localhost:5173')
-  .split(',')
-  .map((o) => o.trim())
-  .filter(Boolean);
-
-// Preview URLs look like https://ice-edge-<hash>-ireina-hedad-s-projects.vercel.app
-const vercelPreview = /^https:\/\/ice-edge[a-z0-9-]*\.vercel\.app$/i;
-
-app.use(cors({
-  origin(origin, cb) {
-    // Non-browser clients (curl, health checks) send no Origin — allow them.
-    if (!origin) return cb(null, true);
-    if (allowedOrigins.includes(origin) || vercelPreview.test(origin)) return cb(null, true);
-    return cb(new Error(`Not allowed by CORS: ${origin}`));
-  },
-  credentials: true,
-}));
+//
+// La politique d'origine (liste CORS_ORIGIN + previews Vercel) vit dans
+// ./cors, partagée avec socket.ts pour que HTTP et WebSocket ne puissent pas
+// diverger — c'était le cas, et le WebSocket cassait dès qu'on configurait
+// deux origines.
+app.use(cors({ origin: corsOriginCallback, credentials: true }));
 app.use(cookieParser());
 
 // Stripe webhook — MUST receive the raw body to verify the signature, so it is

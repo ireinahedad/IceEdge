@@ -16,6 +16,8 @@ import { authenticate } from '../middleware/auth.middleware';
 import { llmLimiter } from '../middleware/rateLimit.middleware';
 import { isPro } from '../services/subscription.service';
 import { decryptSecret } from '../services/crypto.util';
+import { TtlCache } from '../services/ttlCache';
+import { recordUpstream } from '../metrics';
 import { logger } from '../logger';
 
 const router = Router();
@@ -31,11 +33,30 @@ const FETCH_TIMEOUT_MS  = Number(process.env.LLM_FETCH_TIMEOUT_MS)  || 30_000;
 const DAILY_QUOTA       = Number(process.env.LLM_DAILY_QUOTA)       || 200;
 
 interface QuotaEntry { count: number; day: string; }
-const quota = new Map<string, QuotaEntry>();
+
+// Une entrée par utilisateur, jamais supprimée : la `Map` d'origine gardait
+// pour toujours le compteur de chaque personne ayant utilisé l'IA une fois.
+// Le compteur lui-même est minuscule, mais la croissance est monotone — c'est
+// la même fuite que les caches d'API, en plus lent.
+//
+// Plafond volontairement très large : l'éviction FIFO REMET À ZÉRO le quota de
+// l'utilisateur évincé (fail-open). C'est le bon sens de l'échec — une éviction
+// ne peut jamais bloquer quelqu'un à tort — mais il ne faut pas qu'elle serve
+// de contournement, d'où un plafond bien au-dessus du nombre d'utilisateurs
+// actifs quotidiens attendu. Le vrai plafond de coût reste `llmLimiter`
+// (10 requêtes/min/utilisateur), que rien ici ne peut contourner.
+const QUOTA_MAX_USERS = Number(process.env.LLM_QUOTA_MAX_USERS) || 20_000;
+
+// TTL > 24 h : c'est le champ `day` qui gère le passage à minuit, le TTL n'est
+// qu'un filet pour qu'un utilisateur inactif finisse par libérer sa place.
+const quota = new TtlCache<QuotaEntry>(36 * 60 * 60_000, QUOTA_MAX_USERS);
 
 function todayKey(): string { return new Date().toISOString().slice(0, 10); }
 
-/** Returns true if the user is within quota (and increments), false if over. */
+/** Returns true if the user is within quota (and increments), false if over.
+ *  `quota.get` rend la référence stockée : incrémenter `entry.count` met bien à
+ *  jour l'entrée en cache, sans la réinsérer (donc sans toucher à son rang
+ *  d'éviction ni à son expiration). */
 function underDailyQuota(userId: string): boolean {
   const day = todayKey();
   const entry = quota.get(userId);
@@ -60,12 +81,17 @@ async function fetchWithTimeoutRetry(
   for (let i = 0; i < attempts; i++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const started = Date.now();
     try {
       const res = await fetch(endpoint, { ...init, signal: controller.signal }) as any;
+      // Chaque tentative est comptée séparément : une réessayée coûte deux
+      // appels au fournisseur, donc potentiellement deux facturations.
+      recordUpstream('llm', Date.now() - started, res.status < 400);
       // Retry once on 5xx (transient upstream); return 4xx/2xx as-is.
       if (res.status >= 500 && i < attempts - 1) { lastErr = new Error(`upstream ${res.status}`); continue; }
       return res;
     } catch (err: any) {
+      recordUpstream('llm', Date.now() - started, false);
       lastErr = err;
       // AbortError (timeout) and network errors fall through to a retry.
     } finally {

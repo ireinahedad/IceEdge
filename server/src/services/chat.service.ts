@@ -115,59 +115,101 @@ async function memberCount(roomId: string): Promise<number> {
   return rows[0].n;
 }
 
-/** Serialise a room for a given viewer (hides join code from non-members). */
-async function viewRoom(room: any, userId: string) {
-  const member = await getMembership(room.id, userId);
-  const count = await memberCount(room.id);
-  const { rows: lastMsg } = await pool.query(
-    `SELECT text, sent_at FROM chat_messages WHERE room_id = $1 ORDER BY sent_at DESC LIMIT 1`,
-    [room.id],
-  );
+// ─── Vue « salon » ────────────────────────────────────────────────────────────
+
+/**
+ * Une SEULE requête pour tout ce qu'une carte de salon affiche.
+ *
+ * Avant, chaque salon coûtait trois allers-retours Neon (appartenance, nombre
+ * de membres, dernier message) en plus de la requête de liste : ouvrir le chat
+ * avec dix salons visibles = 31 requêtes, toutes lancées en parallèle par le
+ * `Promise.all` — donc 31 connexions du pool mobilisées par visiteur, sur un
+ * pool qui en compte une dizaine. À quelques centaines de personnes ouvrant le
+ * chat en même temps, le pool sature et la latence explose alors que la charge
+ * réelle est dérisoire.
+ *
+ * Ici :
+ *  - l'appartenance vient du LEFT JOIN déjà présent dans la requête de liste ;
+ *  - le nombre de membres est une sous-requête corrélée servie par la clé
+ *    primaire (room_id, user_id) — parcours d'index seul, pas de scan ;
+ *  - le dernier message vient d'un LEFT JOIN LATERAL … LIMIT 1, servi par
+ *    idx_chat_messages_room_sent (migration 019).
+ *
+ * `$1` est l'id du spectateur, ou NULL pour un invité non connecté : la
+ * jointure ne matche alors jamais, donc `isMember` est faux et le code d'accès
+ * reste masqué. Le même SQL sert les deux cas, ce qui supprime la duplication
+ * entre `viewRoom` et `viewRoomGuest` — et le risque qu'elles divergent sur ce
+ * qu'elles exposent.
+ */
+const ROOM_VIEW_SELECT = `
+  SELECT r.id, r.name, r.icon, r.description, r.color,
+         r.is_live    AS "isLive",
+         r.is_private AS "isPrivate",
+         r.join_code  AS "joinCode",
+         m.role,
+         COALESCE(m.pinned, FALSE) AS pinned,
+         (m.user_id IS NOT NULL)   AS "isMember",
+         (SELECT COUNT(*)::int FROM chat_room_members cm WHERE cm.room_id = r.id) AS "memberCount",
+         lm.text    AS "lastMessage",
+         lm.sent_at AS "lastMessageAt"
+    FROM chat_rooms r
+    LEFT JOIN chat_room_members m
+           ON m.room_id = r.id AND m.user_id = $1::uuid
+    LEFT JOIN LATERAL (
+      SELECT text, sent_at
+        FROM chat_messages
+       WHERE room_id = r.id
+       ORDER BY sent_at DESC
+       LIMIT 1
+    ) lm ON TRUE
+`;
+
+/** Ligne plate → objet salon. Le code d'accès n'est jamais exposé à un non-membre. */
+function serializeRoomView(row: any) {
   return {
-    id:            room.id,
-    name:          room.name,
-    icon:          room.icon,
-    description:   room.description,
-    color:         room.color ?? null,
-    isLive:        room.isLive,
-    isPrivate:     room.isPrivate,
-    joinCode:      member ? room.joinCode : null,
-    memberCount:   count,
-    isMember:      !!member,
-    role:          member?.role ?? null,
-    isPinned:      member?.pinned ?? false,
-    lastMessage:   lastMsg[0]?.text    ?? null,
-    lastMessageAt: lastMsg[0]?.sent_at ?? null,
+    id:            row.id,
+    name:          row.name,
+    icon:          row.icon,
+    description:   row.description,
+    color:         row.color ?? null,
+    isLive:        row.isLive,
+    isPrivate:     row.isPrivate,
+    joinCode:      row.isMember ? row.joinCode : null,
+    memberCount:   row.memberCount,
+    isMember:      row.isMember,
+    role:          row.role ?? null,
+    isPinned:      row.pinned,
+    lastMessage:   row.lastMessage   ?? null,
+    lastMessageAt: row.lastMessageAt ?? null,
     unread:        0,
     messages:      [],
   };
 }
 
-/** Serialise a public room for a signed-out guest (no membership, no join code). */
-async function viewRoomGuest(room: any) {
-  const count = await memberCount(room.id);
-  const { rows: lastMsg } = await pool.query(
-    `SELECT text, sent_at FROM chat_messages WHERE room_id = $1 ORDER BY sent_at DESC LIMIT 1`,
-    [room.id],
+/**
+ * @param userId  id du spectateur, ou null pour un invité.
+ * @param where   clause SQL utilisant `r` / `m`. DOIT être une constante écrite
+ *                dans ce module : elle est concaténée telle quelle. Toute valeur
+ *                venant de l'appelant passe par `params` ($2, $3, …), jamais par
+ *                cette chaîne.
+ * @param params  valeurs de $2, $3, …
+ */
+async function roomViews(userId: string | null, where: string, params: unknown[] = []) {
+  const { rows } = await pool.query(
+    // Expression complète plutôt que l'alias `pinned` : pour un non-membre
+    // `m.pinned` vaut NULL, et un tri DESC place les NULL en tête. Le COALESCE
+    // reproduit exactement l'ordre d'origine (épinglés d'abord, puis A→Z).
+    `${ROOM_VIEW_SELECT} WHERE ${where} ORDER BY COALESCE(m.pinned, FALSE) DESC, r.name ASC`,
+    [userId, ...params],
   );
-  return {
-    id:            room.id,
-    name:          room.name,
-    icon:          room.icon,
-    description:   room.description,
-    color:         room.color ?? null,
-    isLive:        room.isLive,
-    isPrivate:     room.isPrivate,
-    joinCode:      null,
-    memberCount:   count,
-    isMember:      false,
-    role:          null,
-    isPinned:      false,
-    lastMessage:   lastMsg[0]?.text    ?? null,
-    lastMessageAt: lastMsg[0]?.sent_at ?? null,
-    unread:        0,
-    messages:      [],
-  };
+  return rows.map(serializeRoomView);
+}
+
+/** Vue d'un seul salon pour un spectateur donné (null = invité). */
+async function viewRoom(roomId: string, userId: string | null) {
+  const [view] = await roomViews(userId, 'r.id = $2', [roomId]);
+  if (!view) throw httpError('Room not found', 404);
+  return view;
 }
 
 // ─── Messages ─────────────────────────────────────────────────────────────────
@@ -267,28 +309,12 @@ async function fetchReactions(messageIds: string[]): Promise<Map<string, Reactio
 export const chatService = {
   /** All public rooms + private rooms the user belongs to. Pinned first. */
   async getRoomsForUser(userId: string) {
-    const { rows } = await pool.query(
-      `SELECT r.id, r.name, r.icon, r.description, r.color, r.is_live AS "isLive",
-              r.is_private AS "isPrivate", r.join_code AS "joinCode"
-       FROM chat_rooms r
-       LEFT JOIN chat_room_members m ON m.room_id = r.id AND m.user_id = $1
-       WHERE r.is_private = FALSE OR m.user_id IS NOT NULL
-       ORDER BY COALESCE(m.pinned, FALSE) DESC, r.name ASC`,
-      [userId],
-    );
-    return Promise.all(rows.map(r => viewRoom(r, userId)));
+    return roomViews(userId, '(r.is_private = FALSE OR m.user_id IS NOT NULL)');
   },
 
   /** Public rooms only — read-only listing for signed-out guests. */
   async getPublicRooms() {
-    const { rows } = await pool.query(
-      `SELECT id, name, icon, description, color, is_live AS "isLive",
-              is_private AS "isPrivate", join_code AS "joinCode"
-       FROM chat_rooms
-       WHERE is_private = FALSE
-       ORDER BY name ASC`,
-    );
-    return Promise.all(rows.map(r => viewRoomGuest(r)));
+    return roomViews(null, 'r.is_private = FALSE');
   },
 
   /** Messages of a PUBLIC room, for signed-out guests. Private rooms are rejected. */
@@ -302,14 +328,9 @@ export const chatService = {
   async findRoomByCode(code: string, userId: string) {
     const normalized = String(code).trim().toUpperCase();
     if (!/^[A-Z0-9]{4,10}$/.test(normalized)) throw httpError('Invalid code format', 400);
-    const { rows } = await pool.query(
-      `SELECT id, name, icon, description, color, is_live AS "isLive",
-              is_private AS "isPrivate", join_code AS "joinCode"
-       FROM chat_rooms WHERE join_code = $1`,
-      [normalized],
-    );
-    if (!rows[0]) throw httpError('No room found for this code', 404);
-    return viewRoom(rows[0], userId);
+    const [view] = await roomViews(userId, 'r.join_code = $2', [normalized]);
+    if (!view) throw httpError('No room found for this code', 404);
+    return view;
   },
 
   /** Join a room: by code (any room) or directly (public rooms only). */
@@ -339,7 +360,7 @@ export const chatService = {
        ON CONFLICT (room_id, user_id) DO NOTHING`,
       [room.id, userId],
     );
-    return viewRoom(room, userId);
+    return viewRoom(room.id, userId);
   },
 
   /** Leave a room. Promotes the oldest member if the last admin leaves. */
@@ -389,7 +410,7 @@ export const chatService = {
       'UPDATE chat_room_members SET pinned = $3 WHERE room_id = $1 AND user_id = $2',
       [roomId, userId, !!pinned],
     );
-    return viewRoom(room, userId);
+    return viewRoom(roomId, userId);
   },
 
   /** Members list — visible to room members only (private rooms). */
@@ -538,8 +559,7 @@ export const chatService = {
       [id, userId],
     );
 
-    const room = await getRoomRow(id);
-    return viewRoom(room, userId);
+    return viewRoom(id, userId);
   },
 
   /** Reactions — same visibility rule as reading the room. */

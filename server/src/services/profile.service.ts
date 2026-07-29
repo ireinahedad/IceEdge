@@ -415,7 +415,7 @@ export interface LeaderboardEntry {
  * Le tableau retourné est partagé entre appelants — il ne doit pas être muté.
  */
 const LEADERBOARD_TTL = 60_000;
-const leaderboardCache = new TtlCache<LeaderboardEntry[]>(LEADERBOARD_TTL, 1);
+const leaderboardCache = new TtlCache<LeaderboardEntry[]>(LEADERBOARD_TTL, 1, 'leaderboard');
 
 export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
   return leaderboardCache.wrap('top20', computeLeaderboard);

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { OddsService } from "../services/odds.service";
 import { TtlCache } from "../services/ttlCache";
+import { timeUpstream } from "../metrics";
 import { logger } from "../logger";
 
 const router = Router();
@@ -38,8 +39,8 @@ const SPORTS_TTL = 60 * 60_000;
 /** Seuil d'alerte sur les crédits restants renvoyés par The Odds API. */
 const QUOTA_WARN = Number(process.env.ODDS_QUOTA_WARN ?? 100);
 
-const oddsCache  = new TtlCache<unknown>(ODDS_TTL, 50);
-const sportsCache = new TtlCache<unknown>(SPORTS_TTL, 1);
+const oddsCache  = new TtlCache<unknown>(ODDS_TTL, 50, 'odds');
+const sportsCache = new TtlCache<unknown>(SPORTS_TTL, 1, 'odds-sports');
 
 /**
  * Marchés autorisés. La valeur entre dans la clé de cache ET dans l'URL
@@ -89,7 +90,7 @@ router.get("/bet365/:sportKey", async (req: Request, res: Response) => {
   });
 
   try {
-    const data = await oddsCache.wrap(key, async () => {
+    const data = await oddsCache.wrap(key, () => timeUpstream('odds', async () => {
       const upstream = await fetch(`${ODDS_BASE}/sports/${sportKey}/odds?${params}`);
       trackQuota(upstream);
       if (!upstream.ok) {
@@ -98,7 +99,7 @@ router.get("/bet365/:sportKey", async (req: Request, res: Response) => {
         throw new Error(`upstream ${upstream.status}`);
       }
       return upstream.json();
-    });
+    }));
 
     // 60 s navigateur/CDN + 5 min de stale-while-revalidate : la vague
     // d'arrivée est absorbée en amont du serveur.
@@ -122,12 +123,12 @@ router.get("/bet365/:sportKey", async (req: Request, res: Response) => {
 router.get("/sports", async (_req: Request, res: Response) => {
   if (!ODDS_KEY) return res.json([]);
   try {
-    const data = await sportsCache.wrap("sports", async () => {
+    const data = await sportsCache.wrap("sports", () => timeUpstream('odds', async () => {
       const upstream = await fetch(`${ODDS_BASE}/sports?apiKey=${ODDS_KEY}`);
       trackQuota(upstream);
       if (!upstream.ok) throw new Error(`upstream ${upstream.status}`);
       return upstream.json();
-    });
+    }));
     res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
     res.json(data);
   } catch {

@@ -72,4 +72,30 @@ describe('TtlCache', () => {
     expect(cache.getStale('a')).toBeNull(); // évincée (FIFO)
     expect(cache.getStale('d')).toBe('d');
   });
+
+  // Les clients d'API (NHL, tennis) n'ont pas un TTL unique : un match terminé
+  // se garde des heures, un match en direct quelques secondes. Sans surcharge
+  // par entrée, ils devaient garder leur propre Map — non bornée, donc OOM.
+  it('accepte un TTL par entrée qui surcharge le défaut', async () => {
+    const cache = new TtlCache<string>(10_000, 10);
+
+    cache.set('court', 'a', 20);
+    cache.set('long', 'b');            // TTL par défaut
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(cache.get('court')).toBeNull();
+    expect(cache.get('long')).toBe('b');
+  });
+
+  it('applique aussi le TTL par entrée via wrap()', async () => {
+    const cache = new TtlCache<number>(10_000, 10);
+    let n = 0;
+
+    await cache.wrap('k', async () => ++n, 20);
+    await new Promise((r) => setTimeout(r, 50));
+    await cache.wrap('k', async () => ++n, 20);
+
+    expect(n).toBe(2); // recalculé : le TTL court a bien primé sur les 10 s
+  });
 });

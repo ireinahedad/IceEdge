@@ -20,6 +20,7 @@
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { TtlCache } from './ttlCache';
 
 // ── Réglages ────────────────────────────────────────────────────────────────
 const STR_BASE = 'https://scoutingtherefs.com/wp-json/wp/v2/posts';
@@ -30,15 +31,17 @@ const REF_TTL  = 3 * 60 * 60_000; // 3 h
 const REFEREES_PATH   = join(__dirname, '..', 'data', 'referees.json');
 const ASSIGNMENTS_PATH = join(__dirname, '..', 'data', 'ref_assignments.json');
 
-// ── Cache mémoire minimal ───────────────────────────────────────────────────
-interface CacheEntry { data: unknown; expiresAt: number }
-const _cache = new Map<string, CacheEntry>();
+// ── Cache mémoire minimal, BORNÉ ────────────────────────────────────────────
+// La clé est la date demandée : une entrée par jour consulté, jamais évincée
+// sans plafond. Un process qui tourne des mois accumule une entrée par jour et
+// par visiteur explorant le calendrier. 60 entrées ≈ deux mois de dates, très
+// au-delà de ce qu'une page consulte réellement.
+const _cache = new TtlCache<unknown>(REF_TTL, 60);
 function getCached<T>(k: string): T | null {
-  const e = _cache.get(k);
-  return e && Date.now() < e.expiresAt ? (e.data as T) : null;
+  return _cache.get(k) as T | null;
 }
 function setCached(k: string, data: unknown, ttl: number) {
-  _cache.set(k, { data, expiresAt: Date.now() + ttl });
+  _cache.set(k, data, ttl);
 }
 
 // ── Table de tendance (relue à chaud) ───────────────────────────────────────

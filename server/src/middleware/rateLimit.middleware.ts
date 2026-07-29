@@ -12,13 +12,46 @@
  */
 
 import rateLimit from 'express-rate-limit';
+import { logger } from '../logger';
 
 const isProd = process.env.NODE_ENV === 'production';
+
+/**
+ * Plafond du limiteur large, surchargeable par `API_RATE_LIMIT`.
+ *
+ * Raison d'être : un test de charge part d'une poignée d'adresses IP. À 500
+ * utilisateurs virtuels, le limiteur répond 429 dès la première seconde et le
+ * test mesure alors le limiteur, pas l'application — on croit avoir prouvé que
+ * le serveur tient, alors qu'il n'a rien servi. Il faut donc pouvoir le relever
+ * le temps du tir, sans toucher au code.
+ *
+ * Le défaut est INCHANGÉ. La surcharge est bruyante en production : une valeur
+ * mise pour un test et oubliée dans les variables Railway est exactement le
+ * genre d'erreur qui ne se remarque qu'au premier abus.
+ */
+function apiLimit(): number {
+  const raw = process.env.API_RATE_LIMIT;
+  const parsed = Number(raw);
+  const fallback = isProd ? 300 : 2000;      // SPA is chatty (many calls per page load)
+
+  if (!raw) return fallback;
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    logger.warn({ API_RATE_LIMIT: raw }, '[rateLimit] valeur invalide — défaut conservé');
+    return fallback;
+  }
+  if (isProd) {
+    logger.warn(
+      { limit: parsed, defaut: fallback },
+      '[rateLimit] API_RATE_LIMIT surchargé EN PRODUCTION — à retirer après le test de charge',
+    );
+  }
+  return parsed;
+}
 
 /** Broad safety net — applied to all /api routes. */
 export const apiLimiter = rateLimit({
   windowMs: 60 * 1000,             // 1 minute
-  limit:    isProd ? 300 : 2000,   // SPA is chatty (many calls per page load)
+  limit:    apiLimit(),
   standardHeaders: 'draft-7',      // RateLimit-* headers
   legacyHeaders:   false,
   message: { error: 'Too many requests, please slow down.' },

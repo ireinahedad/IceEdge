@@ -8,33 +8,49 @@
  */
 
 import { logger } from '../logger';
+import { TtlCache } from './ttlCache';
+import { recordUpstream } from '../metrics';
 
 const BASE = "https://tennis-live-data.p.rapidapi.com";
 const KEY = process.env.RAPIDAPI_KEY;
 
-// --- TTL cache ---------------------------------------------------------------
+// --- Cache TTL, BORNÉ --------------------------------------------------------
+//
+// La clé est le chemin RapidAPI, qui contient des identifiants de tournoi et de
+// match venant de l'URL appelée : une `Map` sans éviction croît avec le nombre
+// de ressources distinctes consultées, jamais avec le temps. Plafonné ici pour
+// que la mémoire dépende du plafond et non du trafic (cf. nhlApiClient).
+const TENNIS_CACHE_MAX_ENTRIES = Number(process.env.TENNIS_CACHE_MAX_ENTRIES) || 200;
 
-interface CacheEntry { data: unknown; expiresAt: number }
-const _cache = new Map<string, CacheEntry>();
+// TTL par défaut = celui de `rapidGet`; chaque appelant peut le surcharger.
+const _cache = new TtlCache<unknown>(60_000, TENNIS_CACHE_MAX_ENTRIES, 'tennis');
 
 function getCached<T>(key: string): T | null {
-  const e = _cache.get(key);
-  return e && Date.now() < e.expiresAt ? (e.data as T) : null;
+  return _cache.get(key) as T | null;
 }
 function setCached(key: string, data: unknown, ttlMs: number) {
-  _cache.set(key, { data, expiresAt: Date.now() + ttlMs });
+  _cache.set(key, data, ttlMs);
 }
 
 async function rapidGet<T>(path: string, ttlMs = 60_000): Promise<T> {
   if (!KEY) throw new Error("RAPIDAPI_KEY not set in server/.env");
   const cached = getCached<T>(path);
   if (cached) return cached;
+  const started = Date.now();
   const res = await fetch(`${BASE}${path}`, {
     headers: {
       "x-rapidapi-host": "tennis-live-data.p.rapidapi.com",
       "x-rapidapi-key": KEY,
     },
+  }).catch((err) => {
+    recordUpstream('rapidapi', Date.now() - started, false);
+    throw err;
   });
+  // Compté ici et non plus bas : un 403/429 consomme le quota RapidAPI au même
+  // titre qu'un succès, alors que la fonction le rattrape et rend une liste
+  // vide. Ne compter que le chemin heureux masquerait exactement la
+  // consommation qu'on cherche à surveiller.
+  recordUpstream('rapidapi', Date.now() - started, res.ok);
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     logger.warn({ status: res.status, path, body }, '[Tennis] RapidAPI error');
