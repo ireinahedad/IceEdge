@@ -1,6 +1,6 @@
 # ARAKICE / ICEEDGE — Audit de scalabilité & de coûts
 
-**Date :** 2026-07-28
+**Date :** 2026-07-28 · **dernière mise à jour :** 2026-07-29
 **Cible :** 500 utilisateurs simultanés au lancement → 5 000 simultanés avec un minimum de changements
 **Contrainte :** infrastructure peu coûteuse, pas de refonte, réutilisation de l'architecture existante
 **Méthode :** inspection directe du code (`server/src`, `client/src`, `ml/python`, `server/src/db`, Dockerfiles, `vercel.json`, `.env.example`). Chaque constat cite un fichier réel.
@@ -46,17 +46,21 @@ Le pic d'arrivée est le scénario dimensionnant : c'est lui qui casse, pas le r
 | **Socket.io / chat** | 🟢 | 🔴 | ✅ Broadcast de présence coalescé (3 s/salon) et CORS aligné sur l'API. **L'adapter mémoire reste le verrou** : impossible de passer à 2 instances (ligne D). |
 | **Stripe** | 🟢 | 🟢 | Bien fait (signature vérifiée, upsert idempotent). Deux points mineurs. |
 | **Google OAuth** | 🟢 | 🟢 | Aucun goulot. |
-| **LLM (GitHub Models)** | 🟠 | 🔴 | Quota par utilisateur mais **aucun plafond global**. Le compte opérateur paie. |
+| **LLM (GitHub Models)** | 🟢 | 🟢 | ✅ Plafond mensuel **dérivé du prix de l'abonnement** (~995 req/mois), compteur en base, disjoncteur global, bascule sur la clé perso au plafond. La dépense IA ne peut plus dépasser la part prévue du revenu. |
 | **Push notifications** | 🟢 | 🔴 | Fan-out `Promise.all` non borné sur tous les destinataires. |
+| **Cache HTTP / CDN** | 🟢 | 🟢 | ✅ `Cache-Control` sur les 20 routes NHL (aligné sur les TTL serveur) + `no-store` sur les 7 routeurs authentifiés. Reste à brancher Cloudflare devant Railway pour que le CDN en profite. |
 | **Logging / erreurs** | 🟢 | 🟠 | `tracesSampleRate: 0.1` → facture Sentry linéaire au trafic. |
-| **Tâches planifiées** | 🟠 | 🔴 | Empêchent le scale horizontal ; `oddsLogger` écrit sur un disque éphémère. |
+| **Tâches planifiées** | 🟢 | 🟠 | ✅ Bail Postgres (`job_locks`) sur les 4 jobs + `lastAlertKey` partagé : plus de duplication ni de notifications en double au scale. Reste `oddsLogger` qui écrit sur un disque éphémère (ligne K, sans urgence tant qu'il est off). |
 
 **Conclusion courte :** l'architecture est saine et n'a pas besoin d'être remplacée. Les cinq corrections qui bloquaient les 500 simultanés — quatre endpoints non cachés et le stockage des avatars — **sont faites**, pour ~0 € d'infrastructure supplémentaire.
 
-**Où on en est (2026-07-28) :**
+**Où on en est (2026-07-29) :**
 
-- **500 simultanés : plus de 🔴.** Ce qui reste avant lancement est de la configuration de console, pas du code : plan Vercel (9), endpoint Neon `-pooler` (7), `SENTRY_TRACES_SAMPLE_RATE` (10), alertes de budget (12). Et surtout **le scénario de charge S1 (13), qui n'a pas encore été exécuté** — tant qu'il ne l'a pas été, tout ce tableau reste une prédiction.
-- **5 000 simultanés : un seul 🔴, l'adapter Socket.io** (ligne D). C'est le verrou architectural restant ; il conditionne aussi la ligne C (jobs planifiés) et la ligne Q (2ᵉ instance).
+- **500 simultanés : plus de 🔴.** Ce qui reste avant lancement est de la configuration de console, pas du code : plan Vercel (9), endpoint Neon `-pooler` (7), `SENTRY_TRACES_SAMPLE_RATE` (10), Cloudflare devant Railway (11, moitié DNS restante), alertes de budget (12). Et surtout **le scénario de charge S1 (13), qui n'a pas encore été exécuté** — tant qu'il ne l'a pas été, tout ce tableau reste une prédiction.
+- **5 000 simultanés : un seul 🔴, l'adapter Socket.io** (ligne D). C'est désormais le **seul** verrou architectural avant la 2ᵉ instance : la ligne C (unicité des jobs) est faite, il ne reste que Redis et la ligne Q.
+- **Dernier lot livré (2026-07-29) :** en-têtes `Cache-Control` sur toute l'API NHL et `no-store` sur les routeurs authentifiés (P1-9, ligne 11). C'était le levier n°1 identifié pour la marche 500 → 5 000, et c'est aussi le prérequis de Cloudflare : mettre un CDN devant une API sans en-têtes de cache n'aurait rien caché. En le posant, deux fonctions sans aucun cache serveur sont apparues (`fetchGameById`, `fetchPlayerById`) — corrigées dans la foulée (P1-15). Puis **l'unicité des jobs planifiés** (P1-4, ligne C) : bail Postgres sur les 4 jobs et `lastAlertKey` sorti de la mémoire du process.
+- **Plafond de coût LLM (P1-6, ligne J), 2026-07-29 :** le nombre de requêtes IA d'un abonné Pro est désormais dérivé de son abonnement — ~995/mois à 9,99 $ avec 30 % alloués à l'IA. Au plafond, bascule sur sa propre clé OpenAI plutôt que blocage. C'est la dernière des quatre « APIs tierces facturées à l'appel » à être bornée.
+- **Deux constats de cet audit se sont révélés périmés** à la relecture du 2026-07-29 et ont été corrigés dans le document : la table `schema_migrations` **existe** (ligne N, `migrate-all.ts`), et le code d'upload R2 des avatars **est écrit et durci** (ligne E) — il n'y manque que la configuration Railway et la migration des data-URI historiques.
 
 ---
 
@@ -264,6 +268,21 @@ Le pic d'arrivée est le scénario dimensionnant : c'est lui qui casse, pas le r
   Dans les deux cas : persister `lastAlertKey` en base plutôt qu'en mémoire.
 - **Coût :** **0 €** (option 1) ou **~5 €/mois** (option 2).
 - **Timing :** 🟠 Peut attendre — **mais devient obligatoire avant de passer à 2 instances**.
+- **✅ Corrigé (2026-07-29), avec un mécanisme différent de celui recommandé ci-dessus.**
+
+  **`pg_try_advisory_lock` aurait été un bug silencieux en production.** C'est un verrou de **session**, et l'endpoint Neon `-pooler` — que la ligne 7 de la checklist impose — est un PgBouncer en mode *transaction* : le backend serveur est réassigné après chaque transaction, donc un verrou de session posé par une requête n'existe plus à la suivante. Neon documente explicitement que les verrous consultatifs de session ne sont pas supportés sur connexion poolée.
+
+  Le mode de défaillance est le pire possible : le verrou **fonctionne** en développement (Postgres local, connexion directe), donc rien ne se voit ; il tombe uniquement en production, et le symptôme est exactement ce qu'on voulait empêcher — des jobs qui tournent en double. `pg_try_advisory_xact_lock` (transactionnel) survit au pooler mais oblige à tenir une transaction ouverte pendant toute la durée du job, soit un backend monopolisé plusieurs minutes pour la passe de rattrapage.
+
+  **Mécanisme retenu : un bail en table** (`job_locks`, migration 023). L'acquisition tient en un seul énoncé — `INSERT … ON CONFLICT DO UPDATE … WHERE job_locks.expires_at < NOW()` — donc atomique sans transaction explicite : il n'existe aucune fenêtre entre « lire » et « écrire » où deux instances pourraient se croire toutes deux gagnantes. Indépendant du mode de pooling, et observable : `SELECT * FROM job_locks` dit qui tient quoi et jusqu'à quand.
+
+  Appliqué aux quatre jobs, avec des TTL qui majorent la durée observée : `settlement-check` (5 min), `settlement-fallback` (15 min, jusqu'à 200 tickets en séquentiel), `value-bet-scan` (10 min), `cleanup` (10 min), `odds-logger` (5 min).
+
+  **Contrepartie assumée :** un verrou consultatif se libère tout seul quand la session meurt ; un bail doit expirer. Une instance tuée net garde donc son bail jusqu'à `expires_at`. D'où des TTL généreux, et le fait que **les jobs restent idempotents indépendamment du verrou** — le règlement filtre déjà sur `outcome = 'pending'` (c'est ça, et non le verrou, qui protège de la double-comptabilisation), le log des cotes dédoublonne par clé, le nettoyage est un `DELETE` conditionnel. Le verrou évite le travail redondant ; il n'est la seule ligne de défense de personne.
+
+  **Le verrou seul ne suffisait pas pour les notifications push.** Il n'est tenu que *pendant* l'exécution : deux instances dont les timers sont décalés de 30 s le prennent l'une après l'autre et poussent la même alerte. C'est `lastAlertKey` — sorti de la mémoire du process vers la table `job_state` — qui ferme ce trou, et qui règle du même coup le rejeu après redéploiement. La clé est écrite **avant** l'envoi, et un échec d'écriture **annule** l'envoi : pousser sans pouvoir mémoriser « déjà envoyé », c'est se garantir de repousser la même alerte au tour suivant.
+
+  12 tests (`jobLock.test.ts`) sur un Postgres bouchonné reproduisant la sémantique des deux énoncés qui comptent — dont la concurrence (3 tours simultanés → 1 seul travaille), le relâchement après erreur, la reprise d'un bail expiré, et le cas où une instance ayant dépassé son TTL ne doit pas retirer en partant le bail que sa remplaçante vient de prendre.
 
 ---
 
@@ -297,6 +316,32 @@ Le pic d'arrivée est le scénario dimensionnant : c'est lui qui casse, pas le r
   4. Mettre en cache les réponses aux prompts identiques (hash du prompt+système+modèle, TTL 1 h) — sur un usage type « explique ce pari », le taux de répétition est élevé.
 - **Coût :** dépend du provider choisi ; l'intérêt de la mesure est précisément de **rendre ce coût plafonnable et prévisible**.
 - **Timing :** 🟠 Peut attendre le lancement (500 utilisateurs), 🔴 obligatoire avant une croissance forte.
+- **✅ Corrigé (2026-07-29) — avec une garantie plus forte que celle demandée ici.**
+
+  L'audit demandait « un plafond global ». Le plafond posé est **par utilisateur, dérivé de ce qu'il paie** — ce qui borne le total *par construction* : coût IA ≤ somme des plafonds ≤ somme des abonnements. Le plafond global existe aussi, mais comme **disjoncteur**, pas comme ceinture principale.
+
+  ```
+  plafond mensuel = (prix Pro × part IA) ÷ coût pire-cas d'une requête
+  ```
+
+Aux valeurs de `.env.example` : 9,99 $ × 30 % = **3,00 $/mois d'IA par abonné**, coût pire-cas **0,0030 $/requête**, soit **~995 requêtes/mois** (~33/jour). Le chiffre exact dépend des bornes de taille configurées — avec les défauts du code (prompt de 8 000 caractères au lieu de 4 000) il tombe à 763. **Le plafond effectif est journalisé au démarrage**, pour qu'un réglage aberrant se voie dans les logs de déploiement et non sur un relevé bancaire.
+
+  **Le « pire cas » est le point qui fait tenir la garantie.** Dimensionner sur une requête *moyenne* la rendrait fausse exactement face à qui elle protège : quelqu'un qui envoie systématiquement des prompts au maximum autorisé. Le coût unitaire est donc calculé avec les bornes de taille que la route impose déjà (`LLM_MAX_PROMPT_CHARS`, `LLM_MAX_SYSTEM_CHARS`, `max_tokens`), un ratio caractères→tokens volontairement bas (3,5 au lieu de ~4 — sous-estimer les tokens surestimerait le plafond), et **×2 pour la réessai automatique** : `fetchWithTimeoutRetry` retente une fois sur 5xx, et une tentative avortée a déjà pu être facturée.
+
+  Effet de bord utile : les bornes de taille et le tarif du modèle entrent dans le calcul, donc **augmenter la taille des prompts ou passer à un modèle plus cher resserre le plafond tout seul**, sans intervention. Un test le vérifie (`gpt-4.1` au lieu de `gpt-4.1-mini` → 763 → 152 requêtes, budget toujours respecté).
+
+  **Le compteur est en base** (`llm_usage`, migration 024), avec incrément et contrôle dans le **même énoncé** (`UPDATE … WHERE count < $limite`) : pas de fenêtre entre lire et incrémenter où deux requêtes concurrentes passeraient toutes deux au-dessus — atteignable avec un limiteur à 10 req/min. Les trois trous de la version en mémoire sont fermés : contournement par redéploiement, N instances = N× le quota, remise à zéro par éviction de cache.
+
+  **Fail-closed sur panne base**, contrairement aux caches : ne pas pouvoir compter, c'est ne pas pouvoir garantir. Et **remboursement** quand le fournisseur n'a rien facturé (panne réseau, 4xx de validation) — sans quoi une indisponibilité amputerait le quota du mois sans rien rendre. Pas de remboursement sur 5xx : le modèle a pu tourner avant d'échouer, la garantie penche du côté du plafond.
+
+  **À la limite, la fonctionnalité ne disparaît pas :** si l'abonné a renseigné sa clé OpenAI, la requête repart par le chemin Free, à ses frais, avec un message expliquant la situation et la date de remise à zéro. Le code du chemin Free existait déjà. Ce n'est pas seulement plus aimable qu'un blocage — cela retire la seule raison qu'aurait un abonné d'exiger un plafond plus haut, donc cela rend le plafond tenable. Sans clé perso : 429 avec le même message et l'invitation à en ajouter une.
+
+  `GET /api/llm/usage` expose le compteur pour que le client l'affiche **avant** la limite : un plafond dont on ne découvre l'existence qu'en le heurtant est vécu comme une panne.
+
+  Le quota journalier en mémoire est conservé mais **ne s'applique plus qu'aux utilisateurs Free**, et son rôle a changé : ils paient leurs propres tokens, donc il protège nos ressources serveur, pas un budget. À cet usage, approximatif et par instance est acceptable.
+
+  16 tests (`llmQuota.service.test.ts`), dont le test central : `plafond × coût pire-cas ≤ budget alloué`. Il échouera si quelqu'un change un paramètre sans mesurer l'effet sur la garantie.
+- **⏸️ Reste non fait :** le cache de prompts identiques (point 4). Il réduirait le coût réel, mais ne change rien à la garantie — laquelle raisonne sur le pire cas, où rien n'est répété.
 
 ---
 
@@ -341,6 +386,19 @@ Le pic d'arrivée est le scénario dimensionnant : c'est lui qui casse, pas le r
   3. Ne **jamais** mettre de cache public sur les routes authentifiées (`/api/users/me`, `/api/slips`, `/api/subscription`) — `private, no-store`.
 - **Coût :** **0 €**.
 - **Timing :** 🟠 Peut attendre, mais c'est le levier n°1 pour la marche 500 → 5 000.
+- **✅ Points 1 et 3 corrigés (2026-07-29).** `grep -rn "Cache-Control" server/src/routes/` renvoie maintenant les 20 routes NHL. La politique vit dans `server/src/middleware/httpCache.middleware.ts` (`publicCache` / `privateCache` / `noStore`) ; les `max-age` **reprennent les TTL déjà en vigueur dans `nhlApiClient`** au lieu d'être choisis à neuf — 30 s pour le direct, 5 min pour les équipes et le classement, 10 min pour le calendrier et les joueurs, 30 min pour les effectifs et les splits, 1 h pour l'ancre de calendrier.
+
+  **Deux choses qu'une ligne `res.set('Cache-Control', …)` ne donne pas**, et qui sont les deux façons dont cet en-tête cause de vrais incidents :
+
+  1. *Ne jamais cacher une erreur.* Un en-tête posé au montage s'applique aussi aux 4xx/5xx qui traversent le gestionnaire d'erreurs global : un 502 de l'API NHL caché 30 min par le CDN transforme une coupure amont de 10 secondes en panne de 30 minutes pour tout le monde. L'en-tête est donc posé **à l'envoi**, uniquement sur un 2xx ; tout le reste part en `no-store`. C'est le seul intérêt d'avoir un middleware plutôt qu'une constante.
+  2. *Jamais `public` sur une donnée d'utilisateur.* `public` **autorise** explicitement un cache partagé à stocker la réponse d'une requête authentifiée (RFC 9111 §3.5) — la directive lève la protection au lieu de l'ajouter. `noStore` est donc monté **au niveau du routeur** dans `app.ts` sur `/api/auth`, `/api/users`, `/api/chat`, `/api/slips`, `/api/llm`, `/api/subscription`, `/api/push` et `/api/dev` : une route ajoutée demain dans l'un de ces routeurs est couverte sans que personne ait à y penser. Une réponse *sans* `Cache-Control` n'est pas « non cachable », elle est laissée à l'heuristique du CDN — c'est ce qui devient une fuite entre comptes le jour où une Cache Rule Cloudflare est écrite un peu large.
+
+  **Affinage repris du serveur :** un match terminé ne change plus jamais. `nhlApiClient` fait déjà la différence (TTL 6 h vs 30 s) ; `cacheByGameStatus` la propage au HTTP, sinon on cacherait 30 s les scores définitifs de la saison dernière et le CDN ne servirait presque rien sur la navigation dans le calendrier. Une journée *vide* reste au TTL court : le calendrier NHL peut encore s'y remplir.
+
+  **Trois routes découvertes sans aucun cache serveur** au passage — `/games/:id`, `/players/:id`, `/predictions/*` appellent l'API NHL ou recalculent à chaque requête, seule la déduplication en vol de `fetchNHL` les protégeait d'une rafale simultanée. Traité juste en dessous (P1-15).
+
+  Couvert par `httpCache.middleware.test.ts` (11 tests, dont l'assertion que les 7 routeurs authentifiés répondent `private, no-store` — elle échouera si un routeur d'utilisateur est monté sans `noStore`) et `nhl.routes.test.ts` (8 tests, service bouchonné, dont la règle « terminé → 6 h » et les deux cas d'erreur). `Vary: Origin` est également verrouillé par un test : sans lui un cache partagé peut servir à l'origine B une réponse dont l'`Access-Control-Allow-Origin` désigne l'origine A.
+- **⏳ Reste le point 2** (Cloudflare devant Railway) : c'est du DNS, pas du code. Les en-têtes sont maintenant là pour qu'il serve à quelque chose — sans eux, mettre un CDN devant l'API n'aurait rien caché.
 
 ---
 
@@ -391,6 +449,29 @@ Le pic d'arrivée est le scénario dimensionnant : c'est lui qui casse, pas le r
 
 ---
 
+## P1-15 · `fetchGameById` / `fetchPlayerById` : les deux seules fonctions NHL sans cache
+
+*(Constat issu de la revue de P1-9 le 2026-07-29 : en posant les en-têtes HTTP route par route, trois routes se sont révélées n'avoir aucun cache serveur du tout.)*
+
+- **Composant :** `services/nhlApiClient.ts` → `fetchGameById`, `fetchPlayerById`.
+- **Pourquoi c'était un risque :** sur les 19 fonctions du module, ces deux-là étaient les seules à ne pas suivre le motif `getCached` → travail → `setCached`. Elles repartaient vers l'API NHL **à chaque requête**. La déduplication posée dans `fetchNHL` ne les protégeait que des rafales *strictement simultanées* : deux requêtes espacées de 100 ms faisaient deux appels.
+
+  La portée est plus large que les routes qui les nomment. `fetchGameById` est appelée par `/api/nhl/games/:id`, par `buildGameMarkets` (donc `/api/nhl/predictions/game/:id`) **et par chaque `POST /api/predict/single` portant un `gameId`**, via `resolveSubjects`. `fetchPlayerById` sert `/api/nhl/players/:id`, `/players/:id/stats`, `/predictions/player/:id` et `POST /api/predict/player-prop`. Soit 5 routes NHL et 2 chemins ML pour deux fonctions.
+- **À partir de quand :** proportionnel au trafic, sans seuil de rupture — mais c'est du quota NHL et de la latence payés sur chaque clic d'une page de match ou de joueur, y compris à 50 utilisateurs.
+- **✅ Corrigé (2026-07-29).** Cache posé **dans le client**, pas dans les routes : c'est là que les 17 autres fonctions cachent déjà, et ça couvre d'un coup les 7 appelants au lieu des 5 routes visibles. TTL selon l'état du match — 6 h terminé, 30 s en direct, 5 min à venir — exactement la règle qu'appliquent déjà `fetchGamesByDate` et `fetchGameDetail`. Joueurs : 10 min, aligné sur `fetchTopPlayers`.
+
+  Un échec n'est jamais mémorisé : un `gameId` que la NHL n'a pas encore publié doit pouvoir apparaître à la requête suivante, et non rester figé en 404 pendant 6 h. Vérifié par test.
+
+  4 nouveaux tests dans `nhlApiClient.test.ts`, dont les TTL sous horloge simulée — ces caches n'ont **aucun symptôme fonctionnel** (les réponses sont identiques avec ou sans), donc rien d'autre ne les protège d'une suppression silencieuse.
+- **⏸️ Non fait, délibérément : cacher la réponse de `/api/nhl/predictions/*`.** Deux raisons.
+  1. `buildGameMarkets` relit `injuries.json` **à chaque appel** (`getManualFactors`, `readFileSync` synchrone) — c'est voulu : une correction manuelle de blessure ou d'alignement doit prendre effet immédiatement. Un cache de 5 min sur la réponse échangerait cette immédiateté contre du CPU dont rien ne prouve encore qu'il soit le goulot.
+  2. Une fois le point ci-dessus corrigé, **tout l'amont de ces routes est déjà caché** : équipes (5 min), résumé de saison (10 min), repos et voyage (6 h), cotes (5 min), arbitres. Il ne reste que le calcul pur, plus un `readFileSync`.
+
+  Si un profilage désigne un jour `computeGameMarkets`, la marche à suivre est `TtlCache.wrap` avec une clé incluant les poids **arrondis** (`parseWeights` accepte n'importe quel flottant : sans arrondi, un appelant peut générer des clés à volonté — `TtlCache` étant plafonné, ça dégrade le taux de hit plutôt que de faire fuir la mémoire, mais autant ne pas ouvrir la porte).
+- **Coût :** 0 €.
+
+---
+
 ## P1-14 · Points divers vérifiés
 
 | Point | Constat | Action |
@@ -401,7 +482,7 @@ Le pic d'arrivée est le scénario dimensionnant : c'est lui qui casse, pas le r
 | **`isPro()`** | Une requête DB à chaque appel LLM et à chaque route `requirePro`. `SELECT *`. | 🟠 Cache mémoire 30-60 s par `userId`. Le commentaire du code dit vouloir l'immédiateté d'un downgrade : 60 s reste immédiat à l'échelle humaine. |
 | **Rotation des refresh tokens** | Une écriture toutes les 15 min par utilisateur actif → ~5,5 écritures/s à 5 000. Le job de cleanup existe ✅ avec 7 jours de grâce, index `expires_at` présent (migration 020) ✅. | 🟢 Acceptable. Réduire `TOKEN_CLEANUP_GRACE_DAYS` à 1-2 si la table gonfle. |
 | **Bundle frontend** | `index.js` 344 ko + CSS 124 ko, découpage par route en place ✅ (`vite.config.ts` `manualChunks` + `React.lazy`). | 🟢 Bien fait. Le CSS de 124 ko est le prochain candidat (purge Tailwind). |
-| **Migrations** | Toujours pas de table `schema_migrations` ; `migrate-all.ts` rejoue tout en s'appuyant sur `IF NOT EXISTS`. | 🟠 Déjà signalé dans l'audit précédent (M2). Devient dangereux quand tu ne peux plus te permettre une interruption. |
+| **Migrations** | ✅ **Constat périmé, corrigé au 2026-07-29.** `migrate-all.ts:40-80` tient un registre `schema_migrations` (PK sur le nom de fichier), applique chaque migration **exactement une fois** et **dans sa propre transaction** (`BEGIN` → exécution → enregistrement → `COMMIT`). Une migration qui échoue est annulée atomiquement et n'est pas enregistrée, donc retentée au run suivant ; le runner exécute tous les fichiers avant de sortir en erreur, pour qu'un seul run révèle la liste complète des problèmes. `schema.sql` reste rejoué à chaque fois (il est `IF NOT EXISTS` de bout en bout et sert de socle). | 🟢 Rien à faire. Seule limite restante : `CREATE INDEX CONCURRENTLY` est incompatible avec l'exécution en transaction — sur une table volumineuse en production, passer la variante `CONCURRENTLY` à la main hors migration (noté dans la migration 022). |
 | **`ml_service.py`** | Endpoints synchrones (`def`, pas `async def`) → FastAPI les exécute dans un threadpool, donc pas de blocage ✅. `--workers 2`, chacun charge numpy/pandas/xgboost (~300-500 Mo RSS chacun). | 🟠 Vérifier la RAM allouée au service Railway ; 2 workers ne tiennent pas dans 512 Mo. Ajouter un cache mémoire sur les prédictions (déterministes à features égales). |
 | **`mlApiClient`** | Timeout 5 s, aucun retry, aucun circuit breaker. Quand le ML ralentit, `getBestBets` maintient 30 sockets ouvertes 5 s par requête entrante. | 🟠 Ajouter un circuit breaker simple (après N échecs consécutifs, court-circuiter vers les règles pendant 60 s). Le repli règles existe déjà ✅, il manque juste le déclencheur rapide. |
 | **`fetchGamesRange`** | Jusqu'à 7 appels NHL séquentiels par plage non cachée, clé de cache `range:<start>:<end>` dérivée de l'entrée utilisateur → prolifération de clés (cf. P1-1). Amplitude bornée à 45 jours ✅. | 🟠 Normaliser la clé sur des semaines calendaires et cacher par semaine, pas par plage arbitraire. |
@@ -425,7 +506,7 @@ Ordonnée par rapport valeur/effort. Les six premières lignes sont ce qui te s�
 | ☑ 8 | **Aligner le CORS Socket.io** sur la logique de `app.ts` (liste + regex preview) — politique extraite dans `server/src/cors.ts`, partagée par HTTP et WebSocket, couverte par `cors.test.ts` | `socket.ts`, `app.ts`, `cors.ts` | 30 min | 0 € |
 | ☐ 9 | **Passer Vercel sur Pro** (usage commercial) | — | 10 min | ~20 $/mois |
 | ☐ 10 | **`SENTRY_TRACES_SAMPLE_RATE=0.01`** en production | var. Railway | 2 min | 0 € |
-| ☐ 11 | **Mettre Cloudflare (gratuit) devant Railway** + `Cache-Control` sur `/api/nhl/*` et `/api/odds/*` | `routes/` + DNS | 3 h | 0 € |
+| ◐ 11 | **`Cache-Control` sur `/api/nhl/*`** — fait : `middleware/httpCache.middleware.ts`, `max-age` alignés sur les TTL de `nhlApiClient`, `no-store` monté sur les 7 routeurs authentifiés, allongement à 6 h sur les matchs terminés ; **reste à mettre Cloudflare devant Railway** (DNS, pas du code) | `routes/nhl.routes.ts`, `app.ts`, `middleware/` + DNS | 3 h | 0 € |
 | ☐ 12 | **Alertes de budget** : Railway (usage), Neon, Stripe, provider LLM, The Odds API | consoles | 1 h | 0 € |
 | ◐ 13 | **Exécuter le scénario de charge S1** ci-dessous et corriger ce qu'il révèle — script, compteurs et runbook prêts (`loadtest/`, `server/src/metrics.ts`) ; **reste à choisir la cible et à tirer** | — | 1 j | 0 € |
 
@@ -439,20 +520,21 @@ Ordonnée par rapport valeur/effort. Les six premières lignes sont ce qui te s�
 
 | # | Action | Déclencheur | Effort | Coût |
 |---|---|---|---|---|
+| ☑ A0 | Cache serveur sur `fetchGameById` / `fetchPlayerById` — les 2 seules fonctions NHL sans cache, 5 routes + 2 chemins ML concernés ; TTL selon l'état du match (P1-15) | découvert en posant les en-têtes HTTP | 1 h | 0 € |
 | ☑ A | Éviction des caches mémoire — `TtlCache` (plafond d'entrées, éviction FIFO) appliqué à `nhlApiClient`, `tennisApiClient`, `refereeStore` et au quota LLM ; TTL par entrée ajouté à `TtlCache`. Sans dépendance | ~1 000 utilisateurs, ou premier OOM Railway | 2 h | 0 € |
 | ☑ B | Dé-N+1 le chat — réactions déjà groupées (`= ANY($1)`) ; liste des salons passée à une requête unique (`LEFT JOIN LATERAL` + compte corrélé), 31 requêtes → 1 | ~200 simultanés dans le chat | 3 h | 0 € |
-| ☐ C | Verrou consultatif Postgres sur les jobs planifiés | **avant la 2ᵉ instance** | 2 h | 0 € |
+| ☑ C | Unicité des jobs planifiés — **bail en table** (`job_locks`, migration 023) et non `pg_try_advisory_lock`, qui est un verrou de session et ne survit pas au pooler Neon ; `lastAlertKey` déplacé en base (`job_state`) car le verrou seul ne dédoublonne pas les notifications | **avant la 2ᵉ instance** | 2 h | 0 € |
 | ☐ D | Redis (Upstash) : adapter Socket.io + `RedisRateLimitStore` (déjà écrit ✅) + quota LLM (borné en mémoire depuis A, mais toujours **par instance** : N instances = N× le quota) | **avant la 2ᵉ instance** | 1 j | 0-10 €/mois |
-| ☐ E | Avatars vers Cloudflare R2, ne stocker que l'URL | ~500 utilisateurs avec avatar | 1 j | 0-5 €/mois |
+| ◐ E | Avatars vers Cloudflare R2 — **le code est écrit** (`services/avatarStorage.ts`) : upload S3, dégradation propre si les `R2_*` sont absentes, et durci (type réel vérifié aux octets magiques et non sur le `Content-Type` déclaré, clé dérivée de l'userId du JWT, suppression restreinte à son propre préfixe, `immutable` sur l'objet). **Reste : poser les 5 variables `R2_*` dans Railway, et migrer les data-URI déjà en base** | ~500 utilisateurs avec avatar | 1 j | 0-5 €/mois |
 | ☑ F | Débouncer `room_users` — une mesure + un envoi par salon toutes les 3 s (`ROOM_COUNT_INTERVAL_MS`) ; l'arrivant reçoit son compte immédiatement en O(1) via `adapter.rooms` | ~500 sockets dans un salon | 2 h | 0 € |
 | ☐ G | Concurrence bornée sur le fan-out push + `WHERE user_id = ANY($1)` | ~300 destinataires opt-in | 3 h | 0 € |
 | ☐ H | Settlement : pagination jusqu'à épuisement, regroupement par match, index partiel | ~300 tickets/soirée | 1 j | 0 € |
 | ☐ I | TanStack Query côté client | quand la facture Railway devient visible | 2 j | 0 € |
-| ☐ J | Plafond global LLM en base + cache de prompts | quand l'usage LLM devient significatif | 1 j | variable |
+| ◐ J | Plafond LLM en base — fait, et **par utilisateur dérivé du prix** (~995 req/mois à 9,99 $ × 30 %) plutôt que seulement global ; disjoncteur global en second rideau ; bascule sur la clé perso de l'abonné au plafond. **Reste le cache de prompts** (n'affecte pas la garantie, qui raisonne sur le pire cas) | quand l'usage LLM devient significatif | 1 j | variable |
 | ☐ K | `oddsLogger` → table Postgres | **avant `ODDS_LOG_ENABLED=true`** | 4 h | 0 € |
 | ☐ L | Cache mémoire sur `isPro()` (30-60 s) | ~1 000 utilisateurs Pro | 1 h | 0 € |
 | ☐ M | Circuit breaker sur `mlApiClient` + cache des prédictions ML | ~1 000 simultanés | 4 h | 0 € |
-| ☐ N | Table `schema_migrations` (ou `node-pg-migrate`) | avant la première migration sur données de production critiques | 1 j | 0 € |
+| ☑ N | Table `schema_migrations` — faite (registre + une transaction par fichier, `migrate-all.ts`) ; constat corrigé le 2026-07-29 | avant la première migration sur données de production critiques | 1 j | 0 € |
 | ☐ O | TTL différenciés Tennis (15-30 min sur fixtures/classements) | à la première alerte de quota RapidAPI | 1 h | 0 € |
 | ☐ P | Webhook Stripe asynchrone + garde d'ordonnancement | ~500 abonnés | 4 h | 0 € |
 | ☐ Q | 2ᵉ instance Railway + sticky sessions | quand la charge CPU dépasse ~70 % en régime | 4 h | ~+5-20 €/mois |
@@ -531,8 +613,12 @@ Pour fiabiliser cet audit, il me faudrait :
 
 **Le problème est que trois ou quatre endroits font un travail proportionnel au nombre d'utilisateurs alors qu'ils devraient faire un travail constant.** Le proxy Odds appelle l'upstream une fois par visiteur au lieu d'une fois toutes les 5 minutes. `best-bets` recalcule 30 prédictions ML par visiteur au lieu d'une fois par minute. Le leaderboard exécute 21 requêtes par visiteur au lieu d'en servir une version cachée. Les avatars sont transportés en base64 dans chaque payload au lieu d'être servis par un CDN. Ce sont quatre corrections locales, sans impact architectural, pour un coût d'infrastructure nul.
 
-**Le seul vrai verrou architectural** — et il n'est pas urgent — est l'**état partagé en mémoire** : caches, limiteurs de débit, adapter Socket.io et ordonnancement des jobs vivent tous dans le process. C'est le bon choix pour une instance et ça ne coûte rien. Mais le jour où tu passes à deux instances, il faut Redis et un verrou d'unicité sur les jobs, sinon les notifications partent en double et le chat se scinde silencieusement en deux moitiés qui ne se parlent pas. Prévois-le comme une étape identifiée, pas comme une urgence.
+**Ces quatre corrections sont faites, ainsi que le cinquième levier : les en-têtes de cache HTTP.** C'était la dernière ligne de code de la marche 500 → 5 000 ; ce qui reste sur ce front est un enregistrement DNS.
 
-**Le plus gros risque de dépense imprévue n'est pas l'hébergement** — Railway, Neon et Vercel resteront de l'ordre de quelques dizaines d'euros par mois à cette échelle. Ce sont les **APIs tierces facturées à l'appel** : The Odds API sans cache, le LLM sans plafond global, le service ML exposé publiquement, et Sentry à 10 % d'échantillonnage. Ce sont les quatre lignes qui peuvent produire une facture surprenante, et ce sont aussi les quatre qui se corrigent le plus vite.
+**Le seul vrai verrou architectural** — et il n'est pas urgent — est l'**état partagé en mémoire** : caches, limiteurs de débit et adapter Socket.io vivent tous dans le process. C'est le bon choix pour une instance et ça ne coûte rien. Mais le jour où tu passes à deux instances, il faut Redis, sinon le chat se scinde silencieusement en deux moitiés qui ne se parlent pas. *(L'ordonnancement des jobs, qui posait le même problème, est réglé depuis le 2026-07-29 : bail Postgres + état partagé en base, sans service supplémentaire.)* Prévois-le comme une étape identifiée, pas comme une urgence.
+
+**Le plus gros risque de dépense imprévue n'est pas l'hébergement** — Railway, Neon et Vercel resteront de l'ordre de quelques dizaines d'euros par mois à cette échelle. Ce sont les **APIs tierces facturées à l'appel** : The Odds API sans cache, le LLM sans plafond, le service ML exposé publiquement, et Sentry à 10 % d'échantillonnage. Trois des quatre sont réglées ; il ne reste que `SENTRY_TRACES_SAMPLE_RATE`, qui est une variable d'environnement.
+
+Sur le LLM en particulier, la protection n'est pas une surveillance mais une **identité comptable** : le nombre de requêtes qu'un abonné peut envoyer sur le compte de l'opérateur est calculé à partir de ce qu'il paie et du coût pire-cas d'une requête. La dépense IA totale est donc bornée par le revenu des abonnements, sans qu'aucune alerte n'ait à se déclencher — et un changement de tarif du fournisseur resserre le plafond automatiquement.
 
 **En une phrase :** environ 2,5 jours de travail avant le lancement (dont l'essentiel est de la mise en cache) et +20 $/mois te font passer de « ne tient pas 500 simultanés » à « tient 500 confortablement, et 5 000 avec Redis et une deuxième instance ».

@@ -3,16 +3,46 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ArakIce</title>
-    <link rel="icon" type="image/png" href="/arakice-logo.png" />
-    <link rel="apple-touch-icon" href="/arakice-logo.png" />
+    <title>ArakIce — NHL Predictions, Picks &amp; Player Props Powered by ML</title>
+    <meta name="description" content="Statistical edge for smarter sports bets. NHL win probabilities, totals and player-prop projections powered by machine learning." />
+    <link rel="canonical" href="https://arakice.com/" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+
+    <!-- Favicons: opaque #0A0E0C background so the mark stays visible on the
+         light surfaces that flatten transparency (Google SERP, iOS home screen).
+         Sizes are multiples of 48px, which is what Google's favicon crawler wants. -->
+    <link rel="icon" type="image/png" sizes="96x96" href="/arakice-icon-96.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/arakice-icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/arakice-icon-512.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/arakice-icon-180.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="description" content="Statistical edge for smarter sports bets. NHL & Tennis predictions powered by ML." />
+
     <meta name="theme-color" content="#0A0E0C" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="ArakIce" />
+
+    <!-- Social sharing (X, Facebook, LinkedIn, Discord, iMessage, Slack) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ArakIce" />
+    <meta property="og:locale" content="en_CA" />
+    <meta property="og:locale:alternate" content="fr_CA" />
+    <meta property="og:title" content="ArakIce — NHL Predictions, Picks &amp; Player Props" />
+    <meta property="og:description" content="Statistical edge for smarter sports bets. NHL win probabilities, totals and player-prop projections powered by machine learning." />
+    <meta property="og:url" content="https://arakice.com/" />
+    <meta property="og:image" content="https://arakice.com/arakice-og.png" />
+    <meta property="og:image:secure_url" content="https://arakice.com/arakice-og.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="ArakIce — NHL predictions powered by ML" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ArakIce — NHL Predictions, Picks &amp; Player Props" />
+    <meta name="twitter:description" content="NHL win probabilities, totals and player-prop projections powered by machine learning." />
+    <meta name="twitter:image" content="https://arakice.com/arakice-og.png" />
+    <meta name="twitter:image:alt" content="ArakIce — NHL predictions powered by ML" />
 
     <!-- Fonts: Oswald (display/numbers) + Inter (body) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -54,11 +84,92 @@
       #root { height: 100%; }
       ::-webkit-scrollbar { width: 0; }
       .font-display { font-family: 'Oswald', sans-serif; }
+
+      /* Crawlable fallback nav — only ever painted when JS is unavailable. */
+      .no-js-nav { padding: 32px 20px; max-width: 760px; margin: 0 auto; }
+      .no-js-nav h1 { font-family: 'Oswald', sans-serif; font-size: 28px; margin: 0 0 8px; }
+      .no-js-nav p { color: var(--color-text-muted); margin: 0 0 20px; }
+      .no-js-nav ul { list-style: none; padding: 0; margin: 0; }
+      .no-js-nav li { margin-bottom: 10px; }
+      .no-js-nav a { color: var(--color-accent); text-decoration: none; font-weight: 500; }
     </style>
+
+    <!--
+      Structured data. Google builds sitelinks and the displayed site name from
+      Organization / WebSite markup on the homepage plus its own crawl of the
+      internal links below. Sitelinks cannot be requested — this only gives the
+      algorithm the signals it looks for.
+    -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://arakice.com/#organization",
+          "name": "ArakIce",
+          "alternateName": "ArakIce NHL Predictions",
+          "url": "https://arakice.com/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://arakice.com/arakice-icon-512.png",
+            "width": 512,
+            "height": 512
+          },
+          "image": "https://arakice.com/arakice-og.png",
+          "description": "ArakIce is a machine-learning NHL prediction platform providing win probabilities, totals and player-prop projections for informational and entertainment purposes.",
+          "sameAs": []
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://arakice.com/#website",
+          "name": "ArakIce",
+          "alternateName": "ArakIce NHL Predictions",
+          "url": "https://arakice.com/",
+          "inLanguage": ["en-CA", "fr-CA"],
+          "publisher": { "@id": "https://arakice.com/#organization" }
+        },
+        {
+          "@type": "SiteNavigationElement",
+          "@id": "https://arakice.com/#nav",
+          "name": [
+            "NHL Predictions Today",
+            "Best NHL Picks Today",
+            "NHL Player Props",
+            "NHL Matchups",
+            "NHL AI Predictions",
+            "About"
+          ],
+          "url": [
+            "https://arakice.com/nhl-predictions-today",
+            "https://arakice.com/best-nhl-picks-today",
+            "https://arakice.com/nhl-player-props",
+            "https://arakice.com/nhl-matchups",
+            "https://arakice.com/nhl-ai-predictions",
+            "https://arakice.com/about"
+          ]
+        }
+      ]
+    }
+    </script>
   </head>
 
   <body>
     <div id="root"></div>
+    <noscript>
+      <nav class="no-js-nav" aria-label="ArakIce sections">
+        <h1>ArakIce</h1>
+        <p>NHL predictions, picks and player-prop projections powered by machine learning.</p>
+        <ul>
+          <li><a href="/nhl-predictions-today">NHL Predictions Today</a> — model win probabilities for tonight's games</li>
+          <li><a href="/best-nhl-picks-today">Best NHL Picks Today</a> — highest-edge picks from the model</li>
+          <li><a href="/nhl-player-props">NHL Player Props</a> — shots, points and goals projections</li>
+          <li><a href="/nhl-matchups">NHL Matchups</a> — every upcoming game, head to head</li>
+          <li><a href="/nhl-ai-predictions">NHL AI Predictions</a> — how the machine-learning model works</li>
+          <li><a href="/about">About</a> — the model, our principles, responsible betting</li>
+        </ul>
+      </nav>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

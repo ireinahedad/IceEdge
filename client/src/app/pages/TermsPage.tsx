@@ -7,7 +7,7 @@ const CONTENT = {
     updated: "Last updated: July 2026",
     sections: [
       { h: "1. Acceptance of terms", b: "By creating an account or using ArakIce, you agree to these Terms of Service. If you do not agree, please do not use the app." },
-      { h: "2. What ArakIce is", b: "ArakIce provides statistical and machine-learning based sports predictions (NHL, tennis) for informational and entertainment purposes only. We are not a bookmaker and do not accept bets or process wagers." },
+      { h: "2. What ArakIce is", b: "ArakIce provides statistical and machine-learning based NHL predictions for informational and entertainment purposes only. We are not a bookmaker and do not accept bets or process wagers." },
       { h: "3. No betting advice", b: "Predictions and probabilities shown in the app are estimates, not guarantees. ArakIce does not guarantee the accuracy of any prediction and is not responsible for any losses resulting from decisions made using the app." },
       { h: "4. Eligibility", b: "You must be 18 or older (or the legal age in your jurisdiction) to create an account. Some jurisdictions may restrict access to sports-betting-adjacent content — you are responsible for complying with local law." },
       { h: "5. Account & subscriptions", b: "You are responsible for keeping your login credentials secure. ArakIce Pro subscriptions renew automatically until cancelled from your account settings." },
@@ -20,7 +20,7 @@ const CONTENT = {
     updated: "Dernière mise à jour : juillet 2026",
     sections: [
       { h: "1. Acceptation des conditions", b: "En créant un compte ou en utilisant ArakIce, tu acceptes ces conditions d'utilisation. Si tu n'es pas d'accord, merci de ne pas utiliser l'application." },
-      { h: "2. Ce qu'est ArakIce", b: "ArakIce fournit des prédictions sportives (LNH, tennis) basées sur des statistiques et un modèle d'apprentissage automatique, à titre informatif et de divertissement uniquement. Nous ne sommes pas un bookmaker et n'acceptons ni ne traitons aucun pari." },
+      { h: "2. Ce qu'est ArakIce", b: "ArakIce fournit des prédictions de la LNH basées sur des statistiques et un modèle d'apprentissage automatique, à titre informatif et de divertissement uniquement. Nous ne sommes pas un bookmaker et n'acceptons ni ne traitons aucun pari." },
       { h: "3. Aucun conseil de pari", b: "Les prédictions et probabilités affichées sont des estimations, pas des garanties. ArakIce ne garantit l'exactitude d'aucune prédiction et n'est pas responsable des pertes résultant de décisions prises à partir de l'application." },
       { h: "4. Admissibilité", b: "Tu dois avoir 18 ans ou plus (ou l'âge légal dans ta juridiction) pour créer un compte. Certaines juridictions peuvent restreindre l'accès à du contenu lié aux paris sportifs — tu es responsable du respect des lois locales." },
       { h: "5. Compte et abonnements", b: "Tu es responsable de la sécurité de tes identifiants de connexion. Les abonnements ArakIce Pro se renouvellent automatiquement jusqu'à annulation depuis les paramètres de ton compte." },

@@ -20,10 +20,8 @@ const ChartPage             = lazy(() => import("./pages/ChartPage").then(m => (
 const BetBuilderPage        = lazy(() => import("./pages/BetBuilderPage").then(m => ({ default: m.BetBuilderPage })));
 const AuthCallback          = lazy(() => import("./pages/AuthCallback").then(m => ({ default: m.AuthCallback })));
 const NHLPredictionsPage    = lazy(() => import("./pages/NHLPredictionsPage").then(m => ({ default: m.NHLPredictionsPage })));
-const TennisPredictionsPage = lazy(() => import("./pages/TennisPredictionsPage").then(m => ({ default: m.TennisPredictionsPage })));
 const SharePage             = lazy(() => import("./pages/SharePage").then(m => ({ default: m.SharePage })));
 const DevMLDashboard        = lazy(() => import("./pages/DevMLDashboard").then(m => ({ default: m.DevMLDashboard })));
-const TennisPlayerPage      = lazy(() => import("./pages/TennisPlayerPage").then(m => ({ default: m.TennisPlayerPage })));
 const ProPage               = lazy(() => import("./pages/ProPage").then(m => ({ default: m.ProPage })));
 const ProSuccessPage        = lazy(() => import("./pages/ProSuccessPage").then(m => ({ default: m.ProSuccessPage })));
 const TermsPage             = lazy(() => import("./pages/TermsPage").then(m => ({ default: m.TermsPage })));
@@ -91,11 +89,9 @@ export const router = createBrowserRouter([
       { path: "/schedule",                           element: withSuspense(<SchedulePage />)                 },
       { path: "/stats/prediction/:type/:id",         element: withSuspense(<PredictionPage />)               },
       { path: "/stats/chart/:type/:id?",             element: withSuspense(<ChartPage />)                    },
-      { path: "/stats/prediction/tennis-player/:id", element: withSuspense(<TennisPlayerPage />)             },
       { path: "/bet",                                element: withSuspense(<BetBuilderPage />)               },
       { path: "/league",                             element: withSuspense(<LeaguePage />)                   },
       { path: "/nhl-predictions",                    element: withSuspense(<NHLPredictionsPage />)           },
-      { path: "/predictions/tennis",                 element: withSuspense(<TennisPredictionsPage />)        },
       { path: "/share/:id",                          element: withSuspense(<SharePage />)                    },
 
       // Protected — require a signed-in account
