@@ -47,6 +47,18 @@ const STATIC_PAGES = [
   { loc: "/nhl-ai-predictions", changefreq: "weekly", priority: "0.8" },
   { loc: "/best-nhl-betting-software", changefreq: "monthly", priority: "0.7" },
   { loc: "/about", changefreq: "monthly", priority: "0.5" },
+
+  // App routes made independently indexable by scripts/route-shells.mjs (each
+  // gets its own title/description/canonical at build time). They must be in the
+  // sitemap for Google to consider them as sitelink candidates. Keep this list in
+  // sync with ROUTES in route-shells.mjs.
+  { loc: "/nhl-predictions", changefreq: "daily", priority: "0.9" },
+  { loc: "/schedule", changefreq: "daily", priority: "0.9" },
+  { loc: "/stats", changefreq: "daily", priority: "0.8" },
+  { loc: "/stats/chart/all-teams", changefreq: "daily", priority: "0.8" },
+  { loc: "/bet", changefreq: "weekly", priority: "0.7" },
+  { loc: "/league", changefreq: "daily", priority: "0.7" },
+  { loc: "/login", changefreq: "monthly", priority: "0.4" },
 ];
 
 // ── Small utilities ───────────────────────────────────────────────────────────

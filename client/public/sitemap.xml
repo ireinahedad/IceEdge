@@ -31,6 +31,41 @@
     <priority>0.5</priority>
   </url>
   <url>
+    <loc>https://arakice.com/nhl-predictions</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://arakice.com/schedule</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://arakice.com/stats</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://arakice.com/stats/chart/all-teams</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://arakice.com/bet</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://arakice.com/league</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://arakice.com/login</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
     <loc>https://arakice.com/props/zakhar-bardakov</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -322,6 +357,11 @@
   </url>
   <url>
     <loc>https://arakice.com/props/lian-bichsel</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://arakice.com/props/kyle-burroughs</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -2042,6 +2082,11 @@
   </url>
   <url>
     <loc>https://arakice.com/props/leo-carlsson</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://arakice.com/props/sam-colangelo</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
