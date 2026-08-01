@@ -1,52 +1,62 @@
 [
   {
-    "goalie": "Vesa Toskala",
+    "scope": "league",
     "factor": "road_trip_len",
     "label": "longueur du road trip",
-    "bucket": "(2.0, 5.0]",
-    "n": 18,
-    "save_pct": 0.8261,
-    "goalie_base_save_pct": 0.8702,
-    "delta_pp": -4.41
+    "bucket": "(2.0, 14.0]",
+    "n": 14078,
+    "save_pct": 0.8975,
+    "base_save_pct": 0.9001,
+    "delta_pp": -0.26,
+    "p_value": 2e-06,
+    "significant": true
   },
   {
-    "goalie": "Nico Daws",
-    "factor": "rest_days",
-    "label": "jours de repos",
-    "bucket": "(2.0, 7.0]",
-    "n": 16,
-    "save_pct": 0.8424,
-    "goalie_base_save_pct": 0.8857,
-    "delta_pp": -4.33
-  },
-  {
-    "goalie": "Samuel Ersson",
-    "factor": "tz_shift",
-    "label": "décalage horaire",
-    "bucket": "(0.0, 3.0]",
-    "n": 15,
-    "save_pct": 0.8302,
-    "goalie_base_save_pct": 0.8733,
-    "delta_pp": -4.32
-  },
-  {
-    "goalie": "Yann Danis",
+    "scope": "league",
     "factor": "days_away",
     "label": "jours loin de la maison",
-    "bucket": "(3.0, 15.0]",
-    "n": 17,
-    "save_pct": 0.8501,
-    "goalie_base_save_pct": 0.8922,
-    "delta_pp": -4.2
+    "bucket": "(3.0, 340.0]",
+    "n": 12604,
+    "save_pct": 0.8979,
+    "base_save_pct": 0.9001,
+    "delta_pp": -0.23,
+    "p_value": 0.000128,
+    "significant": true
   },
   {
-    "goalie": "Viktor Fasth",
-    "factor": "rest_days",
-    "label": "jours de repos",
-    "bucket": "(2.0, 7.0]",
-    "n": 16,
-    "save_pct": 0.8492,
-    "goalie_base_save_pct": 0.8908,
-    "delta_pp": -4.16
+    "scope": "league",
+    "factor": "distance_km",
+    "label": "distance parcourue",
+    "bucket": "(-0.001, 185.427]",
+    "n": 15566,
+    "save_pct": 0.9022,
+    "base_save_pct": 0.9001,
+    "delta_pp": 0.21,
+    "p_value": 3.9e-05,
+    "significant": true
+  },
+  {
+    "scope": "league",
+    "factor": "alt_gain",
+    "label": "gain d'altitude",
+    "bucket": "(-2.0, 4.0]",
+    "n": 15340,
+    "save_pct": 0.9017,
+    "base_save_pct": 0.9001,
+    "delta_pp": 0.16,
+    "p_value": 0.002389,
+    "significant": true
+  },
+  {
+    "scope": "league",
+    "factor": "distance_km",
+    "label": "distance parcourue",
+    "bucket": "(857.916, 4469.161]",
+    "n": 15300,
+    "save_pct": 0.8989,
+    "base_save_pct": 0.9001,
+    "delta_pp": -0.12,
+    "p_value": 0.018211,
+    "significant": true
   }
 ]

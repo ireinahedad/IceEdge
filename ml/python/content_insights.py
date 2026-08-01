@@ -26,6 +26,13 @@ import os
 import numpy as np
 import pandas as pd
 
+from insights_common import (
+    MIN_N_LEAGUE,
+    apply_significance,
+    drop_collinear,
+    two_proportion_p,
+)
+
 DATA_DIR = "../data"
 INPUT_CSV = os.path.join(DATA_DIR, "nhl_games_v4.csv")
 OUT_JSON = os.path.join(DATA_DIR, "content_insights.json")
@@ -87,6 +94,10 @@ def analyze_factor(df: pd.DataFrame, col: str, label: str, kind: str,
         return []
 
     base_rate = sub[target].mean()
+    # Totaux du facteur : servent à tester chaque bucket contre son complément
+    # plutôt que contre une moyenne dont il fait lui-même partie.
+    n_total = len(sub)
+    k_total = float(sub[target].sum())
     results = []
 
     groups: dict[str, pd.DataFrame] = {}
@@ -105,6 +116,7 @@ def analyze_factor(df: pd.DataFrame, col: str, label: str, kind: str,
             continue
         rate = g[target].mean()
         delta = rate - base_rate
+        p_value = two_proportion_p(float(g[target].sum()), n, k_total, n_total)
         results.append({
             "factor": col,
             "label": label,
@@ -114,14 +126,15 @@ def analyze_factor(df: pd.DataFrame, col: str, label: str, kind: str,
             "base_rate": round(float(base_rate), 4),
             "delta_pp": round(float(delta) * 100, 1),
             "target": target,
+            "p_value": round(float(p_value), 6),
         })
     return results
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--min-n", type=int, default=40,
-                         help="minimum sample size per bucket to be considered")
+    parser.add_argument("--min-n", type=int, default=MIN_N_LEAGUE,
+                         help="taille min. d'échantillon par bucket")
     parser.add_argument("--top", type=int, default=15,
                          help="how many top insights to keep per target")
     args = parser.parse_args()
@@ -146,34 +159,65 @@ def main():
         print("Aucun résultat — vérifie que nhl_games_v4.csv contient bien les colonnes attendues.")
         return
 
-    res_df = pd.DataFrame(all_results)
-    res_df["abs_delta"] = res_df["delta_pp"].abs()
-    res_df = res_df.sort_values("abs_delta", ascending=False)
-
+    # Signification AVANT tri : trier par écart absolu puis couper au top 15
+    # revient à sélectionner les plus petits échantillons, puisque ce sont eux
+    # qui produisent les écarts extrêmes. Le filtre passe donc en premier.
     top_per_target = {}
+    rejected = []
     for target in targets:
-        top_per_target[target] = (
-            res_df[res_df["target"] == target]
-            .drop_duplicates(subset=["factor", "bucket"])
-            .head(args.top)
-            .to_dict(orient="records")
-        )
+        rows = [r for r in all_results if r["target"] == target]
+        kept = apply_significance(rows)
+        kept_ids = {(r["factor"], r["bucket"]) for r in kept}
+        rejected.extend([
+            {**r, "reason": "écart non significatif après correction Benjamini-Hochberg"}
+            for r in rows if (r["factor"], r["bucket"]) not in kept_ids
+        ])
+
+        before_dedupe = {(r["factor"], r["bucket"]) for r in kept}
+        kept = drop_collinear(kept, group_keys=("target",))
+        after_dedupe = {(r["factor"], r["bucket"]) for r in kept}
+        rejected.extend([
+            {**r, "reason": "facteur colinéaire — même découpage qu'un facteur plus lisible"}
+            for r in rows if (r["factor"], r["bucket"]) in before_dedupe - after_dedupe
+        ])
+
+        kept.sort(key=lambda r: abs(r["delta_pp"]), reverse=True)
+        top_per_target[target] = kept[:args.top]
 
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(OUT_JSON, "w", encoding="utf-8") as f:
         json.dump(top_per_target, f, ensure_ascii=False, indent=2)
+
+    # Les recalés sont conservés : c'est le seul moyen de vérifier que le filtre
+    # ne jette pas de bonnes histoires en même temps que le bruit.
+    rejected.sort(key=lambda r: abs(r["delta_pp"]), reverse=True)
+    with open(os.path.join(DATA_DIR, "content_insights_rejected.json"), "w", encoding="utf-8") as f:
+        json.dump(rejected[:60], f, ensure_ascii=False, indent=2)
 
     # Human-readable digest
     lines = ["# ICEEDGE — Stats insider pour contenu (généré automatiquement)\n"]
     label_map = {"home_win": "Victoire domicile", "over_hit": "Total dépassé (over)"}
     for target, items in top_per_target.items():
         lines.append(f"\n## {label_map.get(target, target)}\n")
+        if not items:
+            # Cas observé sur over_hit : le meilleur p-value du groupe était de
+            # 0.0104, insuffisant face au nombre de comparaisons. Une section vide
+            # est un résultat, pas une panne — elle dit qu'aucun facteur de
+            # voyage ou de repos ne prédit les totaux de façon détectable, et
+            # elle évite de bâtir une vidéo sur un écart qui n'existe pas.
+            lines.append(
+                "_Aucun écart ne survit à la correction pour comparaisons multiples._\n\n"
+                "Ce n'est pas une erreur d'exécution : sur cette cible, les écarts "
+                "observés sont compatibles avec le hasard une fois pris en compte "
+                "le nombre de facteurs testés. Les candidats recalés, avec leur "
+                "p-value, sont dans `content_insights_rejected.json`.\n"
+            )
         for it in items:
             direction = "plus" if it["delta_pp"] > 0 else "moins"
             lines.append(
                 f"- **{it['label']}** = {it['bucket']} → taux de {it['rate']*100:.1f}% "
                 f"(moyenne: {it['base_rate']*100:.1f}%, {direction} fort de {abs(it['delta_pp']):.1f} pts, "
-                f"n={it['n']})"
+                f"n={it['n']}, p={it['p_value']:.4f})"
             )
     with open(OUT_MD, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")

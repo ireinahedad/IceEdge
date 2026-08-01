@@ -1,52 +1,67 @@
 [
   {
-    "team": "VGK",
-    "factor": "tz_shift",
-    "label": "décalage horaire",
-    "bucket": "(0.0, 3.0]",
-    "n": 116,
-    "rate": 0.4224,
-    "team_base_rate": 0.5698,
-    "delta_pp": -14.7
-  },
-  {
-    "team": "PIT",
-    "factor": "tz_shift",
-    "label": "décalage horaire",
-    "bucket": "(0.0, 3.0]",
-    "n": 116,
-    "rate": 0.6983,
-    "team_base_rate": 0.5606,
-    "delta_pp": 13.8
-  },
-  {
-    "team": "EDM",
-    "factor": "3in4",
-    "label": "3 matchs en 4 soirs",
-    "bucket": "0",
-    "n": 113,
-    "rate": 0.3274,
-    "team_base_rate": 0.4629,
-    "delta_pp": -13.5
-  },
-  {
-    "team": "SEA",
-    "factor": "b2b",
-    "label": "back-to-back",
+    "team": "WPG",
+    "factor": "getaway",
+    "label": "getaway game",
     "bucket": "1",
-    "n": 52,
-    "rate": 0.3077,
-    "team_base_rate": 0.4321,
-    "delta_pp": -12.4
+    "n": 221,
+    "rate": 0.4118,
+    "team_base_rate": 0.5263,
+    "delta_pp": -11.5,
+    "p_value": 0.00015,
+    "is_active": true,
+    "significant": true
   },
   {
     "team": "DAL",
-    "factor": "3in4",
-    "label": "3 matchs en 4 soirs",
-    "bucket": "0",
-    "n": 113,
-    "rate": 0.646,
+    "factor": "b2b",
+    "label": "back-to-back",
+    "bucket": "1",
+    "n": 212,
+    "rate": 0.4104,
     "team_base_rate": 0.5247,
-    "delta_pp": 12.1
+    "delta_pp": -11.4,
+    "p_value": 0.000296,
+    "is_active": true,
+    "significant": true
+  },
+  {
+    "team": "TBL",
+    "factor": "getaway",
+    "label": "getaway game",
+    "bucket": "1",
+    "n": 265,
+    "rate": 0.4528,
+    "team_base_rate": 0.5561,
+    "delta_pp": -10.3,
+    "p_value": 0.000171,
+    "is_active": true,
+    "significant": true
+  },
+  {
+    "team": "TBL",
+    "factor": "alt_gain",
+    "label": "gain d'altitude",
+    "bucket": "(1.0, 1606.0]",
+    "n": 418,
+    "rate": 0.4593,
+    "team_base_rate": 0.5561,
+    "delta_pp": -9.7,
+    "p_value": 2e-06,
+    "is_active": true,
+    "significant": true
+  },
+  {
+    "team": "TBL",
+    "factor": "days_away",
+    "label": "jours loin de la maison",
+    "bucket": "(3.0, 190.0]",
+    "n": 399,
+    "rate": 0.4612,
+    "team_base_rate": 0.5561,
+    "delta_pp": -9.5,
+    "p_value": 6e-06,
+    "is_active": true,
+    "significant": true
   }
 ]

@@ -1,0 +1,516 @@
+{
+  "goalie_synergy": {
+    "team_record_with_goalie": [
+      {
+        "team": "COL",
+        "goalie": "Calvin Pickard",
+        "n": 78,
+        "win_rate_with_goalie": 0.359,
+        "team_base_win_rate": 0.5867,
+        "delta_pp": -22.8,
+        "p_value": 6e-06,
+        "significant": true
+      },
+      {
+        "team": "MTL",
+        "goalie": "Jakub Dobes",
+        "n": 56,
+        "win_rate_with_goalie": 0.6429,
+        "team_base_win_rate": 0.4167,
+        "delta_pp": 22.6,
+        "p_value": 0.000131,
+        "significant": true
+      },
+      {
+        "team": "ANA",
+        "goalie": "Frederik Andersen",
+        "n": 112,
+        "win_rate_with_goalie": 0.6786,
+        "team_base_win_rate": 0.4619,
+        "delta_pp": 21.7,
+        "p_value": 1e-06,
+        "significant": true
+      },
+      {
+        "team": "COL",
+        "goalie": "Scott Wedgewood",
+        "n": 61,
+        "win_rate_with_goalie": 0.7541,
+        "team_base_win_rate": 0.5867,
+        "delta_pp": 16.7,
+        "p_value": 0.004089,
+        "significant": true
+      },
+      {
+        "team": "CBJ",
+        "goalie": "Daniil Tarasov",
+        "n": 59,
+        "win_rate_with_goalie": 0.322,
+        "team_base_win_rate": 0.4834,
+        "delta_pp": -16.1,
+        "p_value": 0.01048,
+        "significant": true
+      }
+    ],
+    "goal_support_for_goalie": [
+      {
+        "team": "COL",
+        "goalie": "Calvin Pickard",
+        "n": 78,
+        "goal_support": 2.24,
+        "team_base_goal_support": 3.31,
+        "delta": -1.07,
+        "p_value": 0.0,
+        "significant": true
+      },
+      {
+        "team": "LAK",
+        "goalie": "Pheonix Copley",
+        "n": 43,
+        "goal_support": 3.63,
+        "team_base_goal_support": 2.74,
+        "delta": 0.88,
+        "p_value": 0.0006,
+        "significant": true
+      },
+      {
+        "team": "STL",
+        "goalie": "Ville Husso",
+        "n": 53,
+        "goal_support": 3.79,
+        "team_base_goal_support": 3.04,
+        "delta": 0.75,
+        "p_value": 0.000387,
+        "significant": true
+      },
+      {
+        "team": "NJD",
+        "goalie": "Vitek Vanecek",
+        "n": 80,
+        "goal_support": 3.6,
+        "team_base_goal_support": 2.98,
+        "delta": 0.62,
+        "p_value": 0.000456,
+        "significant": true
+      },
+      {
+        "team": "TOR",
+        "goalie": "James Reimer",
+        "n": 184,
+        "goal_support": 2.62,
+        "team_base_goal_support": 3.16,
+        "delta": -0.53,
+        "p_value": 0.0,
+        "significant": true
+      }
+    ],
+    "xgf_with_goalie": [
+      {
+        "team": "COL",
+        "goalie": "Calvin Pickard",
+        "n": 78,
+        "xgf_with_goalie": 2.497,
+        "team_base_xgf": 3.084,
+        "delta": -0.587,
+        "p_value": 0.0,
+        "significant": true
+      },
+      {
+        "team": "FLA",
+        "goalie": "James Reimer",
+        "n": 111,
+        "xgf_with_goalie": 2.861,
+        "team_base_xgf": 3.361,
+        "delta": -0.5,
+        "p_value": 0.0,
+        "significant": true
+      },
+      {
+        "team": "OTT",
+        "goalie": "Matt Murray",
+        "n": 44,
+        "xgf_with_goalie": 2.672,
+        "team_base_xgf": 3.161,
+        "delta": -0.488,
+        "p_value": 1.4e-05,
+        "significant": true
+      },
+      {
+        "team": "LAK",
+        "goalie": "Pheonix Copley",
+        "n": 43,
+        "xgf_with_goalie": 3.406,
+        "team_base_xgf": 2.922,
+        "delta": 0.484,
+        "p_value": 0.000824,
+        "significant": true
+      },
+      {
+        "team": "CAR",
+        "goalie": "James Reimer",
+        "n": 45,
+        "xgf_with_goalie": 3.055,
+        "team_base_xgf": 3.507,
+        "delta": -0.453,
+        "p_value": 3.7e-05,
+        "significant": true
+      }
+    ]
+  },
+  "team_consistency": {
+    "most_volatile_xgf": [
+      {
+        "team": "TOR",
+        "seasons": 18,
+        "std_xgf_last10_avg": 0.992
+      },
+      {
+        "team": "CAR",
+        "seasons": 18,
+        "std_xgf_last10_avg": 0.984
+      },
+      {
+        "team": "VGK",
+        "seasons": 9,
+        "std_xgf_last10_avg": 0.946
+      },
+      {
+        "team": "PHI",
+        "seasons": 18,
+        "std_xgf_last10_avg": 0.94
+      },
+      {
+        "team": "PIT",
+        "seasons": 18,
+        "std_xgf_last10_avg": 0.94
+      }
+    ],
+    "most_consistent_xgf": [
+      {
+        "team": "DET",
+        "seasons": 18,
+        "std_xgf_last10_avg": 0.814
+      },
+      {
+        "team": "STL",
+        "seasons": 18,
+        "std_xgf_last10_avg": 0.82
+      },
+      {
+        "team": "CHI",
+        "seasons": 18,
+        "std_xgf_last10_avg": 0.826
+      },
+      {
+        "team": "BUF",
+        "seasons": 18,
+        "std_xgf_last10_avg": 0.826
+      },
+      {
+        "team": "NSH",
+        "seasons": 18,
+        "std_xgf_last10_avg": 0.833
+      }
+    ],
+    "most_volatile_goal_diff": [
+      {
+        "team": "PIT",
+        "seasons": 18,
+        "std_goal_diff_last10_avg": 2.486
+      },
+      {
+        "team": "EDM",
+        "seasons": 18,
+        "std_goal_diff_last10_avg": 2.481
+      },
+      {
+        "team": "TBL",
+        "seasons": 18,
+        "std_goal_diff_last10_avg": 2.467
+      },
+      {
+        "team": "TOR",
+        "seasons": 18,
+        "std_goal_diff_last10_avg": 2.452
+      },
+      {
+        "team": "VGK",
+        "seasons": 9,
+        "std_goal_diff_last10_avg": 2.449
+      }
+    ],
+    "most_consistent_goal_diff": [
+      {
+        "team": "ANA",
+        "seasons": 18,
+        "std_goal_diff_last10_avg": 2.266
+      },
+      {
+        "team": "LAK",
+        "seasons": 18,
+        "std_goal_diff_last10_avg": 2.289
+      },
+      {
+        "team": "BUF",
+        "seasons": 18,
+        "std_goal_diff_last10_avg": 2.291
+      },
+      {
+        "team": "BOS",
+        "seasons": 18,
+        "std_goal_diff_last10_avg": 2.295
+      },
+      {
+        "team": "DET",
+        "seasons": 18,
+        "std_goal_diff_last10_avg": 2.3
+      }
+    ],
+    "wildest_10game_stretch_ever": [
+      {
+        "team": "COL",
+        "std_goal_diff_10games": 4.668,
+        "season": 2023,
+        "window_start_date": "2023-10-24",
+        "window_end_date": "2023-11-15"
+      },
+      {
+        "team": "CAR",
+        "std_goal_diff_10games": 4.619,
+        "season": 2010,
+        "window_start_date": "2010-10-29",
+        "window_end_date": "2010-11-17"
+      },
+      {
+        "team": "NYR",
+        "std_goal_diff_10games": 4.367,
+        "season": 2020,
+        "window_start_date": "2021-02-28",
+        "window_end_date": "2021-03-17"
+      },
+      {
+        "team": "DET",
+        "std_goal_diff_10games": 4.358,
+        "season": 2008,
+        "window_start_date": "2009-02-18",
+        "window_end_date": "2009-03-10"
+      },
+      {
+        "team": "CGY",
+        "std_goal_diff_10games": 4.306,
+        "season": 2021,
+        "window_start_date": "2022-01-02",
+        "window_end_date": "2022-01-27"
+      }
+    ]
+  },
+  "goalie_consistency": {
+    "most_volatile_goalies": [
+      {
+        "goalie": "Jakub Dobes",
+        "n": 56,
+        "avg_gsax": 0.535,
+        "std_goalie_gsax": 1.832,
+        "is_active": true
+      },
+      {
+        "goalie": "Arvid Soderblom",
+        "n": 106,
+        "avg_gsax": -0.232,
+        "std_goalie_gsax": 1.82,
+        "is_active": true
+      },
+      {
+        "goalie": "Karel Vejmelka",
+        "n": 248,
+        "avg_gsax": 0.108,
+        "std_goalie_gsax": 1.777,
+        "is_active": true
+      },
+      {
+        "goalie": "Jonas Johansson",
+        "n": 94,
+        "avg_gsax": -0.389,
+        "std_goalie_gsax": 1.763,
+        "is_active": true
+      },
+      {
+        "goalie": "Cayden Primeau",
+        "n": 50,
+        "avg_gsax": -0.415,
+        "std_goalie_gsax": 1.731,
+        "is_active": true
+      }
+    ],
+    "most_steady_goalies": [
+      {
+        "goalie": "Akira Schmid",
+        "n": 70,
+        "avg_gsax": 0.04,
+        "std_goalie_gsax": 1.311,
+        "is_active": true
+      },
+      {
+        "goalie": "Joonas Korpisalo",
+        "n": 307,
+        "avg_gsax": -0.116,
+        "std_goalie_gsax": 1.361,
+        "is_active": true
+      },
+      {
+        "goalie": "Linus Ullmark",
+        "n": 326,
+        "avg_gsax": 0.143,
+        "std_goalie_gsax": 1.427,
+        "is_active": true
+      },
+      {
+        "goalie": "Tristan Jarry",
+        "n": 301,
+        "avg_gsax": 0.057,
+        "std_goalie_gsax": 1.428,
+        "is_active": true
+      },
+      {
+        "goalie": "Scott Wedgewood",
+        "n": 184,
+        "avg_gsax": 0.137,
+        "std_goalie_gsax": 1.442,
+        "is_active": true
+      }
+    ]
+  },
+  "historical_extremes": {
+    "biggest_blowouts_ever": [
+      {
+        "date": "2016-11-04",
+        "home": "CBJ",
+        "away": "MTL",
+        "score": "10-0",
+        "goal_diff": 10
+      },
+      {
+        "date": "2016-12-10",
+        "home": "MTL",
+        "away": "COL",
+        "score": "10-1",
+        "goal_diff": 9
+      },
+      {
+        "date": "2009-04-07",
+        "home": "CAR",
+        "away": "NYI",
+        "score": "9-0",
+        "goal_diff": 9
+      },
+      {
+        "date": "2017-12-02",
+        "home": "MTL",
+        "away": "DET",
+        "score": "10-1",
+        "goal_diff": 9
+      },
+      {
+        "date": "2012-01-05",
+        "home": "BOS",
+        "away": "CGY",
+        "score": "9-0",
+        "goal_diff": 9
+      }
+    ],
+    "biggest_upsets_ever": [
+      {
+        "date": "2023-10-26",
+        "home": "BOS",
+        "away": "ANA",
+        "score": "3-4",
+        "home_win_probability_pre_game": 0.824,
+        "winner": "ANA"
+      },
+      {
+        "date": "2025-03-03",
+        "home": "TOR",
+        "away": "SJS",
+        "score": "2-3",
+        "home_win_probability_pre_game": 0.822,
+        "winner": "SJS"
+      },
+      {
+        "date": "2023-02-25",
+        "home": "CAR",
+        "away": "ANA",
+        "score": "2-3",
+        "home_win_probability_pre_game": 0.822,
+        "winner": "ANA"
+      },
+      {
+        "date": "2011-04-02",
+        "home": "VAN",
+        "away": "EDM",
+        "score": "1-4",
+        "home_win_probability_pre_game": 0.816,
+        "winner": "EDM"
+      },
+      {
+        "date": "2026-04-01",
+        "home": "COL",
+        "away": "VAN",
+        "score": "6-8",
+        "home_win_probability_pre_game": 0.813,
+        "winner": "VAN"
+      }
+    ],
+    "best_single_game_goalie_performances_ever": [
+      {
+        "date": "2011-02-11",
+        "goalie": "Mikko Koskinen",
+        "team": "NYI",
+        "gsax": 8.56,
+        "goals_allowed": 3,
+        "shots_faced": 38.0,
+        "opponent": "PIT",
+        "is_active": false
+      },
+      {
+        "date": "2025-04-07",
+        "goalie": "Lukas Dostal",
+        "team": "ANA",
+        "gsax": 6.02,
+        "goals_allowed": 2,
+        "shots_faced": 47.0,
+        "opponent": "EDM",
+        "is_active": true
+      },
+      {
+        "date": "2022-12-06",
+        "goalie": "Matt Murray",
+        "team": "TOR",
+        "gsax": 5.98,
+        "goals_allowed": 0,
+        "shots_faced": 44.0,
+        "opponent": "DAL",
+        "is_active": true
+      },
+      {
+        "date": "2025-01-29",
+        "goalie": "Jake Allen",
+        "team": "NJD",
+        "gsax": 5.91,
+        "goals_allowed": 0,
+        "shots_faced": 24.0,
+        "opponent": "PHI",
+        "is_active": true
+      },
+      {
+        "date": "2025-03-24",
+        "goalie": "Jake Oettinger",
+        "team": "DAL",
+        "gsax": 5.88,
+        "goals_allowed": 0,
+        "shots_faced": 32.0,
+        "opponent": "MIN",
+        "is_active": true
+      }
+    ]
+  }
+}

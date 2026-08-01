@@ -1,0 +1,466 @@
+{
+  "version": 1,
+  "updated": "2026-08-01",
+  "note": "Configuration de l'étape 2 (story mining). Séparée de mine-stories.ts pour que les seuils se modifient sans toucher au TypeScript. Tous les seuils ci-dessous ont été calibrés sur les données réelles du 2026-08-01 : chaque règle porte son expected_yield mesuré, pas estimé. Une règle qui sort 0 ou 300 candidats ne sert à rien — la cible est 5 à 50 par règle, pour un total de 200 à 300 avant scoring.",
+
+  "sources": {
+    "player": "content/data/content_insight_player.csv",
+    "goalie": "content/data/content_insight_goalie.csv",
+    "team": "content/data/content_insight_team.csv",
+    "matchup": "content/data/content_insight_matchup.csv",
+    "advanced": "content/data/content_insight_advanced.csv",
+    "league_skaters": "ml/data/content_insights_skaters.json",
+    "league_goalies": "ml/data/content_insights_goalies.json",
+    "league_factors": "ml/data/content_insights.json",
+    "team_factors": "ml/data/content_insights_teams.json",
+    "advanced_json": "ml/data/content_insights_advanced.json"
+  },
+
+  "identity": {
+    "authority": "player",
+    "note": "Le CSV NHL fait autorité. Les deux jeux ne définissent pas 'actif' pareil : le Python retient qui a joué en 2025-26 (98 gardiens), le CSV qui est sur un alignement aujourd'hui (63). Andersen, Pickard et Tarasov ont joué mais sont absents du CSV — au 1er août ils ne sont sous contrat nulle part. Un agent libre non signé ne porte aucun contenu.",
+    "rule": "Tout candidat nommant un joueur doit trouver une correspondance dans player.csv ou goalie.csv, sinon il est écarté avec reason='entité absente des alignements'.",
+    "match_on": ["name", "team"],
+    "applies_to_pooled_insights": false,
+    "pooled_note": "Les analyses groupées (league_skaters, league_goalies) ne nomment personne : la règle d'identité ne s'y applique pas."
+  },
+
+  "season_phases": {
+    "note": "Les seuils de matchs joués n'ont pas le même sens en octobre et en avril. gp_min est substitué à $gp_min dans les conditions. La phase se déduit de la date du jour, ou se force avec --phase=.",
+    "offseason": {
+      "months": [7, 8, 9],
+      "gp_min": 40,
+      "enabled_families": ["evergreen", "career", "matchup", "retrospective", "form"],
+      "retrospective_mode": true,
+      "note": "MODE RÉTROSPECTIF. La famille 'form' reste ouverte, mais elle ne décrit plus une forme en cours : elle dresse le bilan de la saison écoulée. Les gabarits passent au passé et le millésime doit être nommé à l'écran, sinon une vidéo d'août laisse croire que le joueur est chaud aujourd'hui. gp_min à 40 parce que la saison est complète — un seuil bas n'a aucun sens sur des totaux définitifs. 'streak' est exclue ici, contrairement aux autres phases : au premier passage la règle sortait 'Dallas, série de 4 victoires', figée depuis avril. Un bilan de saison se raconte au passé, une série se raconte au présent — les deux ne se mélangent pas."
+    },
+    "early": {
+      "months": [10, 11],
+      "gp_min": 10,
+      "enabled_families": ["evergreen", "form", "career", "matchup"],
+      "note": "Échantillons minces. Les comparaisons avec la saison précédente portent l'essentiel du contenu."
+    },
+    "mid": {
+      "months": [12, 1, 2],
+      "gp_min": 25,
+      "enabled_families": ["evergreen", "form", "career", "matchup", "streak"],
+      "note": "Régime de croisière : toutes les familles sont ouvertes."
+    },
+    "late": {
+      "months": [3, 4],
+      "gp_min": 40,
+      "enabled_families": ["evergreen", "form", "career", "matchup", "streak", "race"],
+      "note": "Course aux séries : les écarts se sont stabilisés, les enjeux sont lisibles."
+    },
+    "playoffs": {
+      "months": [5, 6],
+      "gp_min": 40,
+      "enabled_families": ["evergreen", "career", "matchup", "retrospective"],
+      "note": "Les CSV de saison régulière ne se mettent plus à jour."
+    }
+  },
+
+  "scoring": {
+    "note": "Somme pondérée, chaque composante ramenée sur 0-100. Les poids sont le vrai levier éditorial : monter novelty diversifie, monter notoriety concentre sur les gros marchés.",
+    "weights": {
+      "amplitude": 0.40,
+      "robustness": 0.25,
+      "novelty": 0.20,
+      "notoriety": 0.15
+    },
+    "amplitude_note": "De combien la règle est dépassée, normalisé par le champ 'scale' de chaque règle : scale[0] = seuil d'entrée (score 0), scale[1] = valeur au-delà de laquelle on plafonne à 100.",
+    "robustness_note": "Taille d'échantillon, même principe. Un petit échantillon ne disqualifie pas — il plafonne le score.",
+    "hard_cap_small_sample": {
+      "enabled": true,
+      "max_score": 65,
+      "note": "Un candidat sous le seuil de robustesse de sa règle ne peut pas dépasser 65, quelle que soit son amplitude. Sans ce plafond, un écart énorme sur 12 matchs finit premier."
+    }
+  },
+
+  "notoriety_tiers": {
+    "note": "Bonus léger et assumé : à intérêt statistique égal, une histoire sur Montréal touchera plus de monde qu'une histoire sur Columbus. Le poids reste à 0.15 pour que ça n'écrase jamais le fond.",
+    "tier_1": { "score": 100, "teams": ["TOR", "MTL", "EDM", "NYR", "BOS", "CHI", "DET", "PIT"] },
+    "tier_2": { "score": 60, "teams": ["VAN", "PHI", "CGY", "OTT", "WSH", "COL", "TBL", "VGK", "DAL", "LAK", "STL", "NJD", "MIN", "BUF", "SEA", "NSH"] },
+    "tier_3": { "score": 25, "teams": ["ANA", "ARI", "CAR", "CBJ", "FLA", "NYI", "SJS", "UTA", "WPG"] }
+  },
+
+  "novelty": {
+    "repeat_window_days": 14,
+    "team_repeat_window_days": 4,
+    "template_repeat_window_days": 3,
+    "penalty_full": 0,
+    "penalty_none": 100,
+    "history_file": "content/data/history.json",
+    "note": "Trois fenêtres distinctes. 14 jours pour une même personne : au-delà l'audience a oublié, en deçà elle a l'impression de revoir la même vidéo. 4 jours pour une même équipe, parce qu'une équipe a plusieurs joueurs et qu'enchaîner trois vidéos sur Montréal en une semaine ressemble à un compte de partisans. 3 jours pour un même template, pour que le format ne devienne pas prévisible."
+  },
+
+  "freshness": {
+    "max_source_age_days": 3,
+    "fail_on_missing_source": true,
+    "note": "Strict : une source manquante ou trop vieille arrête le script. ATTENTION — la tâche planifiée tourne tous les 3 jours, donc ce seuil de 3 est exactement à la limite : un seul cycle raté fait échouer le miner. C'est voulu (aucune publication sur des données périmées) mais si tu trouves ça trop cassant, 4 donne une journée de marge sans rien changer d'autre."
+  },
+
+  "retrospective": {
+    "headline_suffix_en": " — 2025-26 season",
+    "on_screen_label_en": "2025-26 SEASON",
+    "note": "En mode rétrospectif, tout visuel doit porter le millésime. Sans lui, une vidéo publiée en août sur un joueur 'en feu' est trompeuse : ses chiffres datent d'avril."
+  },
+
+  "output": {
+    "candidates_per_run": 10,
+    "max_per_template": 2,
+    "max_per_team": 2,
+    "review_gate": true,
+    "output_dir": "content/output/{date}",
+    "family_quotas": {
+      "form": 5,
+      "evergreen": 2,
+      "matchup": 1,
+      "retrospective": 1,
+      "career": 1,
+      "streak": 0
+    },
+    "quota_note": "Places réservées par famille, décidé le 2026-08-01 après le premier passage : sans quotas, les 10 retenus étaient tous 'form' et le premier evergreen arrivait au rang 11. La cause est structurelle — un contenu de ligue n'a pas d'équipe, donc notoriété neutre à 50 contre 100 pour un candidat des Bruins, soit 7.5 points de handicap. Les quotas non remplis (streak fermée hors saison, par exemple) sont redistribués aux meilleurs scores restants : aucune place ne se perd. La somme vaut candidates_per_run, mais ce n'est pas obligatoire.",
+    "note": "10 candidats pour en publier 1 à 2 : la marge sert à jeter sans regret. review_gate=true arrête le pipeline après candidates.json pour ta relecture ; passer à false le laisse aller jusqu'à la vidéo."
+  },
+
+  "derived_fields": {
+    "note": "Champs non présents dans les CSV, à calculer avant l'évaluation des règles.",
+    "team.home_win_pct": "home_w / (home_w + home_l + home_otl)",
+    "team.away_win_pct": "away_w / (away_w + away_l + away_otl)",
+    "team.home_road_split_pp": "(home_win_pct - away_win_pct) * 100",
+    "team.one_goal_win_pct": "one_goal_w / (one_goal_w + one_goal_l + one_goal_otl)",
+    "team.last10_points": "last10_w * 2 + last10_otl",
+    "team.streak_len": "valeur numérique de streak, ex. 'W4' -> 4 ; streak_type -> 'W' ou 'L'"
+  },
+
+  "rules": [
+    {
+      "id": "breakout_pace",
+      "family": "form",
+      "source": "player",
+      "entity": "player",
+      "enabled": true,
+      "expected_yield": 34,
+      "conditions": [
+        { "field": "ppg_delta", "op": ">", "value": 0.25 },
+        { "field": "gp", "op": ">=", "value": "$gp_min" }
+      ],
+      "amplitude": { "field": "ppg_delta", "scale": [0.25, 0.55] },
+      "robustness": { "field": "gp", "scale": ["$gp_min", 60] },
+      "chart": { "kind": "bar_compare", "fields": ["prev_ppg", "ppg"], "unit": "points par match" },
+      "headline_en": "{name} is producing at a completely different level.",
+      "note": "Le rythme, jamais le total. Un joueur blessé 20 matchs n'est pas 'en baisse', il a moins joué. p95 de ppg_delta = 0.27, donc 0.25 attrape la vraie queue de distribution."
+    },
+    {
+      "id": "ice_time_riser",
+      "family": "form",
+      "source": "player",
+      "entity": "player",
+      "enabled": true,
+      "expected_yield": 42,
+      "conditions": [
+        { "field": "toi_delta", "op": ">", "value": 2.5 },
+        { "field": "gp", "op": ">=", "value": "$gp_min" }
+      ],
+      "amplitude": { "field": "toi_delta", "scale": [2.5, 6.0] },
+      "robustness": { "field": "gp", "scale": ["$gp_min", 60] },
+      "chart": { "kind": "bar_compare", "fields": ["prev_avg_toi", "avg_toi"], "unit": "minutes par match" },
+      "headline_en": "His coach just gave him {toi_delta} more minutes a night.",
+      "note": "Le temps de glace bouge AVANT les points : c'est le seul indicateur avancé du lot. Un joueur qui gagne 3 minutes est une histoire avant que la production suive — et c'est exactement le genre d'angle que personne d'autre ne raconte."
+    },
+    {
+      "id": "rookie_watch",
+      "family": "form",
+      "source": "player",
+      "entity": "player",
+      "enabled": true,
+      "expected_yield": 8,
+      "conditions": [
+        { "field": "is_rookie", "op": "==", "value": true },
+        { "field": "ppg", "op": ">=", "value": 0.55 },
+        { "field": "gp", "op": ">=", "value": "$gp_min" }
+      ],
+      "amplitude": { "field": "ppg", "scale": [0.55, 1.10] },
+      "robustness": { "field": "gp", "scale": ["$gp_min", 60] },
+      "chart": { "kind": "bar_rank", "field": "ppg", "filter": "is_rookie", "top": 10, "unit": "points par match, recrues" },
+      "headline_en": "Nobody is talking about this rookie yet.",
+      "note": "54 recrues au total ; le seuil de 0.55 en garde 8, soit le vrai haut du panier."
+    },
+    {
+      "id": "penalty_kill_unsung",
+      "family": "form",
+      "source": "player",
+      "entity": "player",
+      "enabled": true,
+      "expected_yield": 18,
+      "conditions": [
+        { "field": "sh_points", "op": ">=", "value": 4 },
+        { "field": "gp", "op": ">=", "value": "$gp_min" }
+      ],
+      "amplitude": { "field": "sh_points", "scale": [4, 7] },
+      "robustness": { "field": "gp", "scale": ["$gp_min", 60] },
+      "chart": { "kind": "bar_rank", "field": "sh_points", "top": 10, "unit": "points en désavantage numérique" },
+      "headline_en": "Most bettors ignore this stat.",
+      "note": "Marquer en désavantage numérique est rare : la médiane est à 0. Profil de rôle que les classements de points effacent complètement."
+    },
+    {
+      "id": "faceoff_specialist",
+      "family": "form",
+      "source": "player",
+      "entity": "player",
+      "enabled": true,
+      "expected_yield": 39,
+      "conditions": [
+        { "field": "position", "op": "==", "value": "C" },
+        { "field": "faceoff_pct", "op": ">=", "value": 55 },
+        { "field": "gp", "op": ">=", "value": 40 }
+      ],
+      "amplitude": { "field": "faceoff_pct", "scale": [55, 62] },
+      "robustness": { "field": "gp", "scale": [40, 70] },
+      "chart": { "kind": "bar_rank", "field": "faceoff_pct", "filter": "is_center", "top": 10, "unit": "% de mises au jeu gagnées" },
+      "headline_en": "The most underrated skill in hockey.",
+      "note": "CORRIGÉ au premier passage réel (2026-08-01). Sans la condition de position, la règle sortait Lucas Raymond — un ailier gauche à 100 % de mises au jeu, sur une poignée de tentatives — et Josh Anderson à 69.7 %. Le CSV ne contient pas le NOMBRE de mises au jeu prises, donc impossible de filtrer sur le volume : la position sert de substitut, un centre en prend forcément beaucoup. Le rendement passe de 39 à 26 et le maximum réel tombe à 61.5 % (J.T. Miller), ce qui recale l'échelle [55, 62]. Meilleur correctif à terme : ajouter faceoffs_taken dans build-content-insights.ts."
+    },
+    {
+      "id": "sniper_efficiency",
+      "family": "form",
+      "source": "player",
+      "entity": "player",
+      "enabled": true,
+      "expected_yield": 26,
+      "conditions": [
+        { "field": "shooting_pct", "op": ">=", "value": 18 },
+        { "field": "shots", "op": ">=", "value": 100 }
+      ],
+      "amplitude": { "field": "shooting_pct", "scale": [18, 25] },
+      "robustness": { "field": "shots", "scale": [100, 250] },
+      "chart": { "kind": "scatter", "fields": ["shots", "shooting_pct"], "unit": "volume vs efficacité" },
+      "headline_en": "He doesn't shoot often. He just doesn't miss.",
+      "note": "shots>=100 est indispensable : le maximum brut de shooting_pct est 100 %, sur un seul tir. Le nuage volume/efficacité est le vrai visuel — les joueurs en haut à gauche sont les histoires."
+    },
+    {
+      "id": "goalie_surge",
+      "family": "form",
+      "source": "goalie",
+      "entity": "goalie",
+      "enabled": true,
+      "expected_yield": 5,
+      "conditions": [
+        { "field": "gaa_delta", "op": "<", "value": -0.40 },
+        { "field": "gp", "op": ">=", "value": 20 }
+      ],
+      "amplitude": { "field": "gaa_delta", "scale": [-0.40, -1.00], "direction": "negative" },
+      "robustness": { "field": "gp", "scale": [20, 55] },
+      "chart": { "kind": "bar_compare", "fields": ["prev_gaa", "gaa"], "unit": "buts alloués par match" },
+      "headline_en": "This goalie fixed something in the offseason.",
+      "note": "gaa_delta négatif = amélioration, d'où direction:negative. Seulement 63 gardiens au total : le rendement de 5 est normal et suffisant."
+    },
+    {
+      "id": "goalie_shutout_leader",
+      "family": "form",
+      "source": "goalie",
+      "entity": "goalie",
+      "enabled": true,
+      "expected_yield": 8,
+      "conditions": [
+        { "field": "shutouts", "op": ">=", "value": 4 },
+        { "field": "gp", "op": ">=", "value": 20 }
+      ],
+      "amplitude": { "field": "shutouts", "scale": [4, 8] },
+      "robustness": { "field": "gp", "scale": [20, 55] },
+      "chart": { "kind": "bar_rank", "field": "shutouts", "top": 10, "unit": "blanchissages" },
+      "headline_en": "{shutouts} nights where nobody scored on him.",
+      "note": "Statistique que tout le monde comprend sans explication — utile pour un hook de 3 secondes."
+    },
+    {
+      "id": "team_defensive_turnaround",
+      "family": "form",
+      "source": "team",
+      "entity": "team",
+      "enabled": true,
+      "expected_yield": 4,
+      "conditions": [{ "field": "ga_per_game_delta", "op": "<", "value": -0.30 }],
+      "amplitude": { "field": "ga_per_game_delta", "scale": [-0.30, -0.60], "direction": "negative" },
+      "robustness": { "field": "gp", "scale": [20, 82] },
+      "chart": { "kind": "bar_compare", "fields": ["prev_ga_per_game", "ga_per_game"], "unit": "buts alloués par match" },
+      "headline_en": "Same roster. Completely different defense.",
+      "note": "L'écart médian est de -0.005 : l'immense majorité des équipes ne bouge pas d'une saison à l'autre. Franchir -0.30 est donc un vrai événement."
+    },
+    {
+      "id": "powerplay_jump",
+      "family": "form",
+      "source": "team",
+      "entity": "team",
+      "enabled": true,
+      "expected_yield": 7,
+      "conditions": [{ "field": "pp_pct_delta", "op": ">", "value": 4.0 }],
+      "amplitude": { "field": "pp_pct_delta", "scale": [4.0, 8.5] },
+      "robustness": { "field": "gp", "scale": [20, 82] },
+      "chart": { "kind": "bar_compare", "fields": ["prev_pp_pct", "pp_pct"], "unit": "% en avantage numérique" },
+      "headline_en": "Their power play went from worst to dangerous.",
+      "note": null
+    },
+    {
+      "id": "home_road_split",
+      "family": "form",
+      "source": "team",
+      "entity": "team",
+      "enabled": true,
+      "expected_yield": 2,
+      "conditions": [{ "field": "home_road_split_pp", "op": "abs>", "value": 20 }],
+      "amplitude": { "field": "home_road_split_pp", "scale": [20, 32], "absolute": true },
+      "robustness": { "field": "gp", "scale": [20, 82] },
+      "chart": { "kind": "split_pair", "fields": ["home_win_pct", "away_win_pct"], "unit": "% de victoires" },
+      "headline_en": "Two completely different teams depending on the building.",
+      "note": "Rendement volontairement bas : le maximum réel est 31.7 points, seules 2 équipes dépassent 20. Baisser à 15 en ferait remonter beaucoup, mais un écart de 15 points sur 41 matchs à domicile est à la limite du hasard."
+    },
+    {
+      "id": "one_goal_clutch",
+      "family": "form",
+      "source": "team",
+      "entity": "team",
+      "enabled": true,
+      "expected_yield": 6,
+      "conditions": [
+        { "field": "one_goal_win_pct", "op": ">", "value": 0.62 },
+        { "field": "gp", "op": ">=", "value": 40 }
+      ],
+      "amplitude": { "field": "one_goal_win_pct", "scale": [0.62, 0.75] },
+      "robustness": { "field": "gp", "scale": [40, 82] },
+      "chart": { "kind": "bar_rank", "field": "one_goal_win_pct", "top": 10, "unit": "% de victoires dans les matchs à 1 but" },
+      "headline_en": "When it's close, they don't lose.",
+      "note": "À manier avec prudence : les matchs à 1 but sont en grande partie du hasard, et une équipe dominante une saison régresse presque toujours la suivante. Bon contenu, mauvaise base de pari — le script ne doit jamais le présenter comme une tendance à venir."
+    },
+    {
+      "id": "streak_alert",
+      "family": "streak",
+      "source": "team",
+      "entity": "team",
+      "enabled": true,
+      "expected_yield": null,
+      "conditions": [
+        { "field": "streak_len", "op": ">=", "value": 5 },
+        { "field": "streak_type", "op": "in", "value": ["W", "L"] }
+      ],
+      "amplitude": { "field": "streak_len", "scale": [5, 12] },
+      "robustness": { "field": "gp", "scale": [20, 82] },
+      "chart": { "kind": "bar_rank", "field": "last10_points", "top": 10, "unit": "points sur les 10 derniers matchs" },
+      "headline_en": "{streak_len} straight. Nobody saw this coming.",
+      "note": "expected_yield à null : hors saison les séries sont figées à la dernière journée, la règle ne veut rien dire. Elle n'est active qu'en phases mid et late."
+    },
+    {
+      "id": "matchup_domination",
+      "family": "matchup",
+      "source": "matchup",
+      "entity": "matchup",
+      "enabled": true,
+      "expected_yield": 46,
+      "conditions": [
+        { "field": "combined_gp", "op": ">=", "value": 6 },
+        { "field": "combined_win_pct", "op": ">=", "value": 0.8 }
+      ],
+      "amplitude": { "field": "combined_win_pct", "scale": [0.8, 1.0] },
+      "robustness": { "field": "combined_gp", "scale": [6, 10] },
+      "chart": { "kind": "bar_compare", "fields": ["combined_gf_per_game", "combined_ga_per_game"], "unit": "buts par match dans la confrontation" },
+      "headline_en": "{team} owns {opponent}. It isn't close.",
+      "note": "Deux saisons agrégées, jamais une seule : une paire se joue 3-4 fois par an, donc sur une saison l'échantillon est trop mince pour être racontable. Sur deux on atteint 6-8 matchs et une domination devient un fait. C'est aussi pourquoi on ne va pas plus loin — au-delà, les effectifs ont trop changé."
+    },
+    {
+      "id": "career_best_season",
+      "family": "career",
+      "source": "advanced",
+      "entity": "player",
+      "enabled": true,
+      "expected_yield": null,
+      "conditions": [
+        { "field": "is_current_season", "op": "==", "value": true },
+        { "field": "is_career_best_ppg", "op": "==", "value": true },
+        { "field": "gp", "op": ">=", "value": 40 }
+      ],
+      "amplitude": { "field": "ppg", "scale": [0.5, 1.2] },
+      "robustness": { "field": "gp", "scale": [40, 82] },
+      "chart": { "kind": "line_career", "field": "ppg", "group": "name", "unit": "points par match, par saison" },
+      "headline_en": "Career year in {gp} games.",
+      "note": "ATTENTION : is_career_best_ppg seul est presque toujours vrai — 525 lignes sur 2748, puisque chaque joueur a forcément une meilleure saison quelque part. La condition is_current_season est ce qui rend la règle utile ; vérifié au premier passage, le rendement tombe à 2. L'amplitude portait d'abord sur ppg_vs_career_best, ce qui était une erreur : sur une saison-record cet écart vaut toujours 0, donc l'amplitude valait toujours 0. Elle porte maintenant sur le ppg lui-même — un record à 1.10 est une meilleure histoire qu'un record à 0.55.",
+      "min_seasons": 3
+    },
+    {
+      "id": "career_decline",
+      "family": "career",
+      "source": "advanced",
+      "entity": "player",
+      "enabled": false,
+      "expected_yield": null,
+      "conditions": [
+        { "field": "seasons_declining", "op": ">=", "value": 3 },
+        { "field": "gp", "op": ">=", "value": 40 }
+      ],
+      "amplitude": { "field": "ppg_vs_career_best", "scale": [-0.15, -0.45], "direction": "negative" },
+      "robustness": { "field": "gp", "scale": [40, 82] },
+      "chart": { "kind": "line_career", "field": "ppg", "group": "name", "unit": "points par match, par saison" },
+      "headline_en": "The decline nobody wants to talk about.",
+      "note": "Désactivée volontairement. Le champ seasons_declining n'existe pas encore dans advanced.csv, il faudrait le calculer. Et surtout : un contenu qui désigne nommément un joueur en déclin attire des commentaires hostiles et n'apporte rien à la marque. À rouvrir seulement si tu décides que ce ton te convient."
+    },
+    {
+      "id": "league_travel_fatigue",
+      "family": "evergreen",
+      "source": "league_skaters",
+      "entity": "league",
+      "enabled": true,
+      "expected_yield": 14,
+      "conditions": [{ "field": "delta_pct", "op": "abs>", "value": 3.0 }],
+      "amplitude": { "field": "delta_pct", "scale": [3.0, 6.0], "absolute": true },
+      "robustness": { "field": "n", "scale": [5000, 200000] },
+      "chart": { "kind": "bar_rank", "field": "delta_pct", "top": 6, "unit": "% d'écart vs la moyenne" },
+      "headline_en": "We looked at 774,000 player games.",
+      "note": "Contenu intemporel, réutilisable toute l'année. Le fait à ne jamais oublier de mentionner : le temps de glace ne bouge pas. Sans lui on croirait à un banc raccourci, avec lui c'est de la fatigue mesurée — et c'est ce détail qui fait la différence entre une vidéo crédible et une vidéo qu'on démonte en commentaire."
+    },
+    {
+      "id": "league_situational_factor",
+      "family": "evergreen",
+      "source": "league_factors",
+      "entity": "league",
+      "enabled": true,
+      "expected_yield": 14,
+      "conditions": [{ "field": "delta_pp", "op": "abs>", "value": 1.5 }],
+      "amplitude": { "field": "delta_pp", "scale": [1.5, 4.0], "absolute": true },
+      "robustness": { "field": "n", "scale": [300, 20000] },
+      "chart": { "kind": "bar_compare", "fields": ["rate", "base_rate"], "unit": "% de victoires à domicile" },
+      "headline_en": "Vegas knows this. Most bettors don't.",
+      "note": "Ces faits ont déjà passé le test de signification et la correction pour comparaisons multiples en amont : pas de re-filtrage ici, seulement un seuil d'amplitude éditorial."
+    },
+    {
+      "id": "historical_upset",
+      "family": "retrospective",
+      "source": "advanced_json",
+      "path": "historical_extremes.biggest_upsets_ever",
+      "entity": "game",
+      "enabled": true,
+      "expected_yield": 5,
+      "conditions": [{ "field": "home_win_probability_pre_game", "op": "abs>", "value": 0.75 }],
+      "amplitude": { "field": "home_win_probability_pre_game", "scale": [0.75, 0.85], "absolute": true },
+      "robustness": null,
+      "chart": { "kind": "bar_rank", "field": "home_win_probability_pre_game", "top": 5, "unit": "probabilité pré-match du perdant annoncé" },
+      "headline_en": "The model gave them an {pct}% chance. They lost.",
+      "note": "Fait brut, aucune inférence, donc robustness à null. Montrer le modèle en train d'échouer est plus crédible qu'un contenu qui n'exhibe que ses réussites — et c'est le seul angle de la liste qui construit de la confiance en admettant une limite."
+    },
+    {
+      "id": "historical_goalie_game",
+      "family": "retrospective",
+      "source": "advanced_json",
+      "path": "historical_extremes.best_single_game_goalie_performances_ever",
+      "entity": "goalie",
+      "enabled": true,
+      "expected_yield": 5,
+      "conditions": [{ "field": "gsax", "op": ">=", "value": 5.0 }],
+      "amplitude": { "field": "gsax", "scale": [5.0, 8.6] },
+      "robustness": null,
+      "chart": { "kind": "bar_rank", "field": "gsax", "top": 5, "unit": "buts évités vs attendu, un match" },
+      "headline_en": "{shots_faced} shots. {goals_allowed} goals.",
+      "note": "Seule section où la règle d'identité ne s'applique pas aux joueurs nommés : un record de tous les temps filtré sur les actifs n'est plus un record. Le champ is_active permet au scoring de préférer un joueur actuel à amplitude comparable.",
+      "identity_check": false,
+      "prefer_active": true
+    }
+  ]
+}

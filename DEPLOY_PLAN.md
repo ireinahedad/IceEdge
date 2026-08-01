@@ -84,6 +84,46 @@ Dernière mise à jour : 2026-07-04
 
 ---
 
+## Hôte canonique : `arakice.com` (apex, sans `www`)
+
+**Décision (2026-07-30) : l'hôte canonique est `https://arakice.com`.** Tout le
+code l'assume déjà — `SITE` dans `client/scripts/seo-gen.mjs` et
+`client/scripts/route-shells.mjs`, les `<link rel="canonical">` / `og:url` /
+`@id` JSON-LD de `client/index.html`, `robots.txt`, `sitemap.xml` et les ~900
+pages générées dans `client/public/`. **Ne pas changer un seul de ces hôtes sans
+changer les autres** : un canonical qui pointe vers un hôte qui redirige envoie
+des signaux contradictoires à Google et empêche les sitelinks d'apparaître.
+
+Vercel recommande `www` comme domaine principal (le CDN a plus de contrôle sur
+un `www`, qui peut être un CNAME, que sur un apex qui exige un A/ALIAS). On
+choisit quand même l'apex ici parce que la totalité du code et des pages
+générées le référencent déjà, et que basculer coûterait une régénération
+complète. Compromis assumé, pas un oubli.
+
+Ce qui doit rester aligné sur `https://arakice.com` :
+
+| Endroit | Valeur attendue |
+|---|---|
+| Vercel → Settings → Domains | `arakice.com` **primary**, `www.arakice.com` en **redirect** vers lui |
+| DNS apex | A / ALIAS vers Vercel (l'apex ne peut pas être un CNAME) |
+| Railway `CORS_ORIGIN` | doit **contenir** `https://arakice.com` (liste séparée par des virgules — garder `https://www.arakice.com` le temps de la transition ne coûte rien) |
+| Railway `CLIENT_URL` | `https://arakice.com` — sert aux redirections post-OAuth et aux retours Stripe |
+| Google Cloud Console → OAuth | `https://arakice.com` dans « Authorized JavaScript origins ». `GOOGLE_REDIRECT_URI` pointe sur le **backend**, donc l'hôte du frontend ne l'affecte pas. |
+| Search Console | inspecter et soumettre les URLs **sans** `www` |
+
+Effet de bord attendu au moment de la bascule : le cookie de refresh est lié à
+l'hôte, donc les sessions ouvertes sur `www.arakice.com` sont perdues une fois.
+Les utilisateurs se reconnectent, rien n'est corrompu.
+
+Vérification après bascule — les deux commandes doivent donner ceci :
+
+```bash
+curl -sI https://www.arakice.com/ | head -3   # 301/308 + Location: https://arakice.com/
+curl -sI https://arakice.com/     | head -3   # 200, aucun Location
+```
+
+---
+
 ## Checklist avant d'ouvrir au public
 
 - [ ] Secrets JWT forts et **différents** de ceux de dev.

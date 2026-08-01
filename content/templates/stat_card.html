@@ -1,0 +1,15 @@
+<!doctype html>
+<!-- Plan 2 — le chiffre. `big` occupe volontairement un tiers de l'écran :
+     c'est lui qui doit être lisible à la vitesse du défilement, pas le libellé.
+     `sub` porte le point de comparaison, qui est obligatoire. -->
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="_shared.css"><script src="_anim.js"></script></head>
+<body>
+  <div class="slide">
+    <div class="season-label">{{season_label}}</div>
+    <div class="big {{tone}}">{{big}}</div>
+    <div>
+      <div class="label">{{label}}</div>
+      <div class="sub">{{sub}}</div>
+    </div>
+  </div>
+</body></html>

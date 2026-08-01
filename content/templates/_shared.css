@@ -1,0 +1,166 @@
+/* ===========================================================================
+   ICEEDGE / Arakice — socle des gabarits vidéo
+   ---------------------------------------------------------------------------
+   Un seul fichier de style pour les cinq gabarits. Les couleurs sont celles
+   réellement employées dans client/src : les vidéos et le produit doivent se
+   ressembler, sinon le clic depuis la bio arrive sur une interface étrangère.
+
+   Chaque gabarit .html se règle directement dans Chrome — ouvre-le, modifie,
+   recharge. Playwright rend exactement ce que tu vois, à ceci près qu'il fixe
+   la fenêtre à 1080×1920.
+   =========================================================================== */
+
+:root {
+  --bg:        #0A0E0C;
+  --surface:   #131A12;
+  --accent:    #90C9F0;
+  --accent-2:  #86D1EA;
+  --text:      #BFC8CC;
+  --muted:     #8A9EA6;
+  --positive:  #4ADE80;
+  --negative:  #F87171;
+  --alert:     #FACC15;
+
+  /* Zones couvertes par l'interface des plateformes. Rien d'important ne doit
+     s'y trouver : TikTok pose son fil de description et ses boutons en bas,
+     Instagram sa barre de progression en haut. Mesuré sur les deux apps. */
+  --safe-top:    230px;  /* 12 % de 1920 */
+  --safe-bottom: 345px;  /* 18 % de 1920 */
+  --gutter:      96px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, 'Segoe UI', Roboto, system-ui, sans-serif;
+  font-feature-settings: 'tnum' 1;  /* chiffres de largeur fixe : sans ça, une
+                                       animation qui change un nombre fait
+                                       sautiller tout le bloc */
+  display: flex;
+  flex-direction: column;
+  padding: var(--safe-top) var(--gutter) var(--safe-bottom);
+}
+
+/* Halo discret : évite le fond parfaitement plat, qui donne un rendu amateur
+   sur un écran de téléphone. Assez faible pour ne jamais concurrencer le texte. */
+body::before {
+  content: '';
+  position: absolute;
+  top: -25%; left: -25%;
+  width: 150%; height: 90%;
+  background: radial-gradient(ellipse at center, rgba(144, 201, 240, 0.10), transparent 62%);
+  pointer-events: none;
+}
+
+.slide {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 48px;
+}
+
+/* Millésime en mode rétrospectif. Sans lui, une vidéo d'août laisse croire que
+   le joueur est en forme aujourd'hui alors que ses chiffres datent d'avril.
+   Masqué automatiquement quand la valeur n'est pas fournie. */
+.season-label {
+  position: absolute;
+  top: calc(var(--safe-top) * -1 + 96px);
+  left: 0;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 4px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.season-label:empty { display: none; }
+
+.hook {
+  font-size: 128px;
+  font-weight: 800;
+  line-height: 1.06;
+  letter-spacing: -3px;
+  color: #fff;
+  text-wrap: balance;
+}
+
+.big {
+  font-size: 340px;
+  font-weight: 900;
+  line-height: 0.86;
+  letter-spacing: -14px;
+  color: var(--accent);
+}
+.big.positive { color: var(--positive); }
+.big.negative { color: var(--negative); }
+.big.alert    { color: var(--alert); }
+
+.label {
+  font-size: 62px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.15;
+}
+
+.sub {
+  font-size: 44px;
+  font-weight: 500;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.body-text {
+  font-size: 56px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.22;
+  text-wrap: balance;
+}
+
+.chart { width: 100%; }
+
+.pair {
+  display: flex;
+  gap: 40px;
+}
+.pair > div {
+  flex: 1;
+  background: var(--surface);
+  border: 2px solid rgba(144, 201, 240, 0.16);
+  border-radius: 28px;
+  padding: 48px 40px;
+}
+.pair .big { font-size: 190px; letter-spacing: -8px; }
+
+.cta {
+  align-items: center;
+  text-align: center;
+  gap: 64px;
+}
+.cta img { width: 260px; height: auto; }
+.cta .body-text { font-size: 72px; }
+.cta .domain {
+  font-size: 44px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  color: var(--accent);
+  text-transform: lowercase;
+}
+
+/* --- Animation ------------------------------------------------------------
+   Les états sont posés par _anim.js via setProgress(t). Le CSS ne fournit que
+   les origines de transformation : une barre qui pousse doit partir de son
+   bord, pas de son centre, sinon elle grandit dans les deux sens. */
+.big { transform-origin: left center; will-change: transform, opacity; }
+.label, .sub, .body-text { will-change: opacity, transform; }
+.anim-bar-h { transform-origin: left center; }
+.anim-line { stroke-linecap: round; }

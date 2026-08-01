@@ -15,6 +15,24 @@ __pycache__/
 # SEO generator sample output (offline --sample runs)
 client/scripts/_sample_out/
 
+# ── Sorties de compilation ────────────────────────────────────────────────────
+# Produites par `npm run build`. Elles existent déjà sur le disque sans avoir
+# jamais été suivies : sans ces règles, un `git add -A` les embarquerait, et
+# chaque build ferait ensuite un diff de plusieurs milliers de lignes générées.
+server/dist/
+client/dist/
+
+# Rapports de couverture (vitest)
+coverage/
+
+# ── Content engine : sorties régénérables ────────────────────────────────────
+# Regénérés tous les 3 jours par `npm run content:insights` (server/) : les
+# versionner ne produirait qu'un diff de plusieurs milliers de lignes par run,
+# sans rien apporter — la source de vérité est l'API NHL, pas le dépôt.
+content/output/
+content/data/content_insight_*.csv
+content/data/content_insight_meta.json
+
 # ── ML : données lourdes & régénérables (on garde le code + les modèles) ───────
 # Régénérables via ml/python/fetch_data_v4.py puis build_dataset.py.
 # NB : ml/models/*.json (petits, embarqués dans l'image Docker) et les petits
