@@ -69,18 +69,53 @@ body::before {
   gap: 48px;
 }
 
+/* Bandeau d'en-tête : le sujet, puis le millésime. Posé au-dessus de la zone de
+   sécurité haute, il ne coûte rien au contenu et reste identique d'un plan à
+   l'autre — c'est ce qui en fait un repère plutôt qu'une information de plus. */
+.topbar {
+  position: absolute;
+  top: calc(var(--safe-top) * -1 + 96px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* De qui parle ce chiffre. Répété sur CHAQUE plan, parce qu'un spectateur
+   n'entre pas forcément par le premier : un plan « 71 % à domicile » qui ne
+   nomme pas Boston ne veut rien dire, et la légende ne se lit qu'après coup.
+   Rendu depuis candidates.json, jamais saisi à la main — le nom ne peut donc
+   pas manquer ni diverger du candidat.
+   Masqué automatiquement quand la valeur n'est pas fournie. */
+.subject {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #fff;
+  text-transform: uppercase;
+}
+.subject::before {
+  content: '';
+  width: 8px;
+  height: 42px;
+  border-radius: 4px;
+  background: var(--accent);
+}
+.subject:empty { display: none; }
+
 /* Millésime en mode rétrospectif. Sans lui, une vidéo d'août laisse croire que
    le joueur est en forme aujourd'hui alors que ses chiffres datent d'avril.
    Masqué automatiquement quand la valeur n'est pas fournie. */
 .season-label {
-  position: absolute;
-  top: calc(var(--safe-top) * -1 + 96px);
-  left: 0;
   font-size: 30px;
   font-weight: 600;
   letter-spacing: 4px;
   color: var(--muted);
   text-transform: uppercase;
+  padding-left: 28px;  /* aligné sur le texte du sujet, pas sur son trait */
 }
 .season-label:empty { display: none; }
 

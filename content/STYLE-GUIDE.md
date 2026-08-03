@@ -31,17 +31,29 @@ fait défiler son fil en place huit, et seulement s'ils sont gros.
 | 3 | La preuve | **12 mots** + le graphique |
 | 4 | CTA | **6 mots** |
 
+**Le sujet n'entre dans aucun de ces budgets.** Le nom de l'entité —
+`NICK SUZUKI · MTL`, `BOSTON BRUINS`, `NHL` — est affiché en haut de chaque plan
+(sauf le CTA), dérivé automatiquement du candidat. Ne le réécris donc pas dans un
+libellé : « at home » suffit là où « Boston at home » gaspillait un mot sur
+quatre. Il est répété sur tous les plans parce qu'un spectateur n'entre pas
+forcément par le premier — un plan « 71 % » qui ne nomme personne ne dit rien.
+
 Le plan 2 a deux zones de texte distinctes, d'où deux budgets séparés : le
 libellé sous le nombre, et la ligne de comparaison en dessous. Un budget global
 de six mots pour les deux rendait impossible la règle « toujours donner le point
 de comparaison » — les deux consignes se contredisaient, et c'est l'écriture des
 premiers scripts qui l'a révélé.
 
-Règle de durée : **2 secondes minimum par plan, plus 0.3 s par mot.** Un plan de
-8 mots tient 4.4 secondes. En dessous, personne ne finit de lire ; au-dessus,
-on décroche.
+Règle de durée : **2 secondes minimum par plan, plus 0.3 s par mot.** Elle vaut
+pour les plans 2 et 3. Le plan 4 est fixe à 2.5 s — un logo se lit vite.
 
-Quatre plans donnent donc 15 à 18 secondes, et c'est volontaire. Le taux
+**Le plan 1 est fixe à 2 secondes**, quel que soit le nombre de mots. La formule
+lui donnait jusqu'à 4.4 s, soit le temps de le lire deux fois puis d'attendre.
+C'est pourtant le seul plan où le spectateur décide s'il reste : huit mots en
+gros caractères se lisent en une seconde, la deuxième est une marge, la troisième
+coûte des spectateurs. Un hook s'attrape, il ne se déchiffre pas.
+
+Quatre plans donnent donc 12 à 15 secondes, et c'est volontaire. Le taux
 d'achèvement compte plus que la durée sur TikTok : une vidéo de 16 secondes vue
 en entier est mieux servie par l'algorithme qu'une de 30 abandonnée aux deux
 tiers. Si un sujet réclame vraiment plus, on ajoute un cinquième plan plutôt que

@@ -18,8 +18,9 @@ npm run content:mine                          :: 1. choisir les angles
 npm run content:check -- --fix                :: 2. vérifier et recaler les durées
 npm run content:render                        :: 3. produire les images
 npm run content:video                         :: 4. assembler les mp4
+                                              ::    → ouvre content\output\<date>\index.html
 
-::  --- publier depuis le téléphone ---
+::  --- publier depuis le téléphone, légendes copiées depuis index.html ---
 
 npm run content:log -- --posts=1,4            :: 5. journaliser ce qui est SORTI
 ```
@@ -132,7 +133,14 @@ donc aussi bien, mais elle suppose winget ou Chocolatey.
 
 Lit `slides\manifest.json` et écrit `video.mp4` à côté : H.264, 1080×1920,
 30 fps, coupes franches. Un avertissement signale une vidéo hors de la cible
-14-18 s — sans bloquer.
+12-15 s — sans bloquer.
+
+**Écrit aussi `index.html`, la page du jour.** Une carte par post : la vidéo se
+lit sur place, la légende TikTok, la légende Instagram, les hashtags et la
+commande de journal se copient d'un bouton. En bas, cocher les posts publiés
+compose le `content:log` correspondant ; ce qui est déjà journalisé s'affiche
+estompé. La page se construit depuis `posts.json`, donc `--only=` ne l'ampute
+pas : les posts non montés y gardent leur place, vide.
 
 **Muet par défaut**, le son se choisit dans TikTok ou Instagram au moment de
 l'envoi : l'algorithme favorise les sons natifs. `--music` incruste une piste
@@ -145,6 +153,9 @@ npm run content:log -- --list                 :: voir les posts du jour
 npm run content:log -- --posts=1,4            :: journaliser les publiés
 npm run content:log -- --posts=suzuki         :: par fragment de nom
 ```
+
+Les numéros sont ceux de `index.html` : cocher les posts sortis y compose la
+commande, il n'y a rien à recompter.
 
 **Ne journalise que ce qui est réellement publié.** Le pipeline produit huit
 scripts pour une ou deux vidéos ; journaliser les six autres écarterait des

@@ -12,7 +12,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate }   from '../middleware/auth.middleware';
 import { requireRole }    from '../middleware/auth.middleware';
-import { mlApiClient, mlHeaders, ML_URL } from '../services/mlApiClient';
+import { mlApiClient, mlHeaders, ML_URL, mlCircuitState } from '../services/mlApiClient';
 import {
   buildGameFeatures,
   buildPlayerPropFeatures,
@@ -123,7 +123,12 @@ router.post('/ml-test', async (req: Request, res: Response) => {
 // en tête de ce routeur, lui-même non monté en production sans ENABLE_DEV_ROUTES.
 router.get('/metrics', (_req: Request, res: Response) => {
   res.set('Cache-Control', 'no-store');
-  res.json(snapshotMetrics());
+  // Le disjoncteur ML est ajouté ici plutôt que dans `metrics.ts` : c'est un
+  // état, pas un compteur, et il n'a pas à survivre à `resetMetrics`. Sans lui,
+  // un tir de charge où le service Python est tombé montrerait « 0 appel ML »
+  // sans dire si c'est le cache qui a bien travaillé ou le circuit qui est
+  // ouvert — deux situations opposées, indiscernables sur les seuls compteurs.
+  res.json({ ...snapshotMetrics(), mlCircuit: mlCircuitState() });
 });
 
 // ── POST /api/dev/metrics/reset ───────────────────────────────────────────────

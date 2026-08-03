@@ -68,6 +68,20 @@ interface ChartSpec {
   group?: string;
   top?: number;
   unit: string;
+  /**
+   * Libellé de ligne pour les classements dont les lignes ne portent ni `name`
+   * ni `team` : `"{home} {score} {away}"` donne « BOS 3-4 ANA ». Sans lui, ces
+   * graphiques sortaient avec cinq barres nommées « ? ».
+   */
+  label_from?: string;
+  /**
+   * Restreint le classement aux lignes qui partagent la valeur du candidat sur
+   * ce champ. Les JSON de facteurs de ligue contiennent le même facteur mesuré
+   * sur trois grandeurs : sans ce filtre, le graphique alignait « getaway game »
+   * deux fois avec deux valeurs, l'une en points, l'autre en buts attendus. On
+   * compare des facteurs entre eux, donc sur une seule grandeur à la fois.
+   */
+  peer_field?: string;
 }
 
 interface Rule {
@@ -711,12 +725,87 @@ function toCsv(rows: Array<Record<string, unknown>>): string {
   return [header.join(','), ...rows.map((r) => header.map((h) => esc(r[h])).join(','))].join('\n') + '\n';
 }
 
+// ---------------------------------------------------------------------------
+// Libellés
+// ---------------------------------------------------------------------------
+
+/**
+ * Ce qui est écrit sous une barre, à l'écran.
+ *
+ * POURQUOI CE BLOC EXISTE. Les libellés étaient les noms de colonnes bruts : un
+ * graphique de confrontation opposait `combined_gf_per_game` à
+ * `combined_ga_per_game`, et un classement de fatigue affichait « jours loin de
+ * la maison » — en français, sur un compte anglophone. Un spectateur ne saura
+ * jamais qu'une colonne porte ce nom, et il ne devrait pas avoir à le deviner.
+ *
+ * Le vocabulaire vit dans `chart_labels` de rules.json : c'est une question de
+ * ton éditorial, elle se règle sans toucher au TypeScript. Ce qui reste ici,
+ * c'est la seule règle que le dictionnaire ne peut pas porter — les paires
+ * `prev_X` / `X`, dont les deux barres mesurent la même chose et ne diffèrent
+ * que par la saison.
+ */
+const missingLabels = new Set<string>();
+
+/** 20252026 -> « 2025-26 ». */
+function seasonLabel(season: unknown): string | null {
+  const s = String(season ?? '');
+  if (!/^\d{8}$/.test(s)) return null;
+  return `${s.slice(0, 4)}-${s.slice(6, 8)}`;
+}
+
+/**
+ * Libellé d'une colonne dans une paire.
+ *
+ * Une paire `prev_pp_pct` / `pp_pct` reçoit les millésimes plutôt que « Last
+ * season » / « This season » : en août, « this season » désigne une saison
+ * terminée en avril, exactement ce que le mode rétrospectif interdit de laisser
+ * croire. La mesure, elle, est déjà nommée par la phrase du plan.
+ */
+function pairLabel(field: string, c: Candidate, labels: any): string {
+  const season = seasonLabel(c.facts['season']);
+  if (season) {
+    const isPrev = field.startsWith('prev_');
+    const base = isPrev ? field.slice(5) : field;
+    // Ne vaut que si les deux moitiés de la paire existent : `ga_per_game` seul
+    // n'est pas une comparaison de saisons.
+    if (`prev_${base}` in c.facts && base in c.facts) {
+      if (!isPrev) return season;
+      const prev = seasonLabel(Number(c.facts['season']) - 10001);
+      return prev ?? 'Before';
+    }
+  }
+  const mapped = labels?.fields?.[field];
+  if (mapped) return String(mapped);
+  missingLabels.add(`chart_labels.fields.${field}`);
+  // Repli lisible plutôt que du snake_case : « combined ga per game » reste
+  // mauvais, mais il se lit, et l'avertissement dit quoi ajouter au dictionnaire.
+  return field.replace(/_/g, ' ');
+}
+
+/** Libellé d'une ligne de classement. */
+function rowLabel(r: Row, chart: ChartSpec, labels: any): string {
+  if (chart.label_from) {
+    return chart.label_from.replace(/\{(\w+)\}/g, (_m, k) => String(r[k] ?? '')).trim();
+  }
+  const named = r['name'] ?? r['team'];
+  if (named) return String(named);
+  // Lignes de facteurs de ligue : on traduit la clé `factor`, stable, et non le
+  // texte français de `label`, qui change au gré des scripts d'analyse Python.
+  const factor = r['factor'];
+  if (factor) {
+    const mapped = labels?.factors?.[String(factor)];
+    if (mapped) return String(mapped);
+    missingLabels.add(`chart_labels.factors.${factor}`);
+  }
+  return String(r['label'] ?? '?');
+}
+
 /**
  * Un fichier par graphique, 5 à 12 lignes, jamais les 615 de départ.
  * Le CSV existe aussi pour toi : il s'ouvre dans Figma, Excel ou Datawrapper si
  * tu veux soigner un visuel à la main sans dépendre du pipeline.
  */
-function buildChart(c: Candidate, rows: Row[]): Array<Record<string, unknown>> | null {
+function buildChart(c: Candidate, rows: Row[], labels: any): Array<Record<string, unknown>> | null {
   const chart = c.chart;
   const top = chart.top ?? 10;
 
@@ -726,23 +815,34 @@ function buildChart(c: Candidate, rows: Row[]): Array<Record<string, unknown>> |
       const [a, b] = chart.fields ?? [];
       if (!a || !b) return null;
       return [
-        { label: a, value: c.facts[a] ?? null },
-        { label: b, value: c.facts[b] ?? null },
+        { label: pairLabel(a, c, labels), value: c.facts[a] ?? null },
+        { label: pairLabel(b, c, labels), value: c.facts[b] ?? null },
       ];
     }
     case 'bar_rank': {
       const field = chart.field;
       if (!field) return null;
-      const pool = chart.filter ? rows.filter((r) => Boolean(r[chart.filter as string])) : rows;
+      let pool = chart.filter ? rows.filter((r) => Boolean(r[chart.filter as string])) : rows;
+      if (chart.peer_field) {
+        const mine = c.facts[chart.peer_field];
+        pool = pool.filter((r) => r[chart.peer_field as string] === mine);
+      }
       return pool
         .filter((r) => Number.isFinite(Number(r[field])))
         .sort((x, y) => Math.abs(Number(y[field])) - Math.abs(Number(x[field])))
         .slice(0, top)
-        .map((r) => ({
-          label: r['name'] ?? r['team'] ?? r['label'] ?? '?',
-          value: r[field],
-          highlight: (r['name'] ?? r['team']) === c.entity.name ? 1 : 0,
-        }));
+        .map((r) => {
+          const label = rowLabel(r, chart, labels);
+          return {
+            label,
+            value: r[field],
+            // Le libellé entre dans la comparaison : quand il est construit par
+            // `label_from`, c'est lui qui porte l'identité de la ligne, et la
+            // barre du candidat serait sinon la seule à ne pas être mise en
+            // avant dans son propre graphique.
+            highlight: label === c.entity.name || (r['name'] ?? r['team']) === c.entity.name ? 1 : 0,
+          };
+        });
     }
     case 'scatter': {
       const [x, y] = chart.fields ?? [];
@@ -966,12 +1066,22 @@ async function main() {
     const rows = rule.path
       ? flattenJson((sources as any)[`${rule.source}__raw`], rule.path)
       : sources[rule.source] ?? [];
-    const data = buildChart(c, rows);
+    const data = buildChart(c, rows, config.chart_labels);
     if (data && data.length > 0) {
       const file = `charts/${c.id}.csv`;
       await fs.writeFile(path.join(outDir, file), toCsv(data), 'utf8');
       c.chart.file = file;
     }
+  }
+
+  // Un libellé absent du dictionnaire ne casse rien — il ressort en clair sur
+  // une barre, ce qui est précisément le défaut qu'on vient de corriger. Le dire
+  // ici est la seule façon que ce dictionnaire reste complet à mesure que des
+  // règles s'ajoutent : personne ne relit rules.json pour vérifier une omission.
+  if (missingLabels.size > 0) {
+    console.log(`\n  ${missingLabels.size} libellé(s) de graphique absents de rules.json :`);
+    [...missingLabels].sort().forEach((k) => console.log(`    · ${k}`));
+    console.log('    Ces barres afficheront un nom de colonne. Ajoute-les à "chart_labels".');
   }
 
   await fs.writeFile(path.join(outDir, 'candidates.json'),

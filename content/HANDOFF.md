@@ -15,7 +15,7 @@ faire tourner le pipeline.
 |---|---|
 | Langue | Anglais uniquement |
 | Plateformes | TikTok + Instagram Reels |
-| Format | 9:16, 1080 × 1920, 14 à 18 secondes |
+| Format | 9:16, 1080 × 1920, 12 à 15 secondes |
 | Voix | **Aucune** — musique seule |
 | Rendu | HTML/CSS → PNG via Playwright |
 | Montage | ffmpeg |
@@ -75,8 +75,11 @@ l'entretien des jetons OAuth. Reporté tant que le volume ne le justifie pas.
                     └────────────┬─────────────┘
                                  ▼
                     ┌──────────────────────────┐
-                    │  ÉTAPE 6  build-video    │  ffmpeg → mp4
+                    │  ÉTAPE 6  build-video    │  ffmpeg → mp4 + index.html
                     └────────────┬─────────────┘
+                                 ▼
+                    ÉTAPE 7  index.html du jour  légendes copiables
+                                 │
                                  ▼
                         envoi manuel → TikTok / IG
                                  │
@@ -336,6 +339,31 @@ candidat retenu reçoit un CSV de 5 à 12 lignes — pas les 615 de départ. Le 
 existe aussi pour toi : il s'ouvre dans Figma ou Excel si tu veux soigner un
 visuel à la main.
 
+### Les libellés sont du texte à l'écran, pas des noms de colonnes
+
+Jusqu'au 2026-08-02 les barres portaient le nom brut de la colonne : une
+confrontation opposait `combined_gf_per_game` à `combined_ga_per_game`, et le
+classement de fatigue s'affichait en français. Le vocabulaire vit maintenant dans
+`chart_labels` de rules.json — c'est une question de ton, elle se règle sans
+toucher au TypeScript.
+
+| Cas | Libellé | Pourquoi |
+|---|---|---|
+| Paire `prev_X` / `X` | `2024-25` / `2025-26` | « This season » en août désigne une saison finie en avril |
+| Autres paires | `chart_labels.fields` | *At home*, *Goals allowed*, *League average* |
+| Facteurs de ligue | `chart_labels.factors` | traduit la clé `factor`, stable, pas le texte français |
+| Lignes sans nom | `chart.label_from` | `"{home} {score} {away}"` → *BOS 3-4 ANA* |
+
+Deux garde-fous : `chart.peer_field` restreint un classement aux lignes mesurées
+sur la même grandeur (sans lui, « getaway game » apparaissait deux fois avec deux
+valeurs), et tout libellé absent du dictionnaire est **listé en fin
+d'exécution** — c'est ce qui empêche le dictionnaire de prendre du retard sur les
+règles.
+
+Ces libellés sont figés dans le CSV **au moment du minage** : corriger le
+dictionnaire n'améliore pas les sorties déjà produites, il faut relancer
+`content:mine`.
+
 ---
 
 ## 4. ÉTAPE 4 — Rédaction
@@ -349,15 +377,27 @@ Manuelle : `content/prompts/daily-generation.md` collé dans une session avec
 Un narrateur place trente mots en dix secondes ; un lecteur qui fait défiler son
 fil en place huit, et seulement s'ils sont gros.
 
-| Plan | Rôle | Budget |
-|---|---|---|
-| 1 | Hook | 8 mots |
-| 2 | Le chiffre | `label` ≤ 4 mots, `sub` ≤ 6 mots |
-| 3 | La preuve | 12 mots |
-| 4 | CTA | logo seul, durée fixe 2.5 s |
+| Plan | Rôle | Budget | Durée |
+|---|---|---|---|
+| 1 | Hook | 8 mots | fixe, 2.0 s |
+| 2 | Le chiffre | `label` ≤ 4 mots, `sub` ≤ 6 mots | `2.0 + 0.3 × mots` |
+| 3 | La preuve | 12 mots | `2.0 + 0.3 × mots` |
+| 4 | CTA | logo seul | fixe, 2.5 s |
 
-Durée d'un plan : `2.0 + 0.3 × mots`. La vidéo fait 14 à 18 secondes — c'est
-court exprès, le taux d'achèvement compte plus que la durée.
+La vidéo fait 12 à 15 secondes — c'est court exprès, le taux d'achèvement compte
+plus que la durée.
+
+**Pourquoi le hook est fixe.** La formule lui donnait 3.5 à 4.4 s, le temps de le
+lire deux fois puis d'attendre. C'est pourtant le seul plan où le spectateur
+décide s'il reste. Huit mots en gros caractères se lisent en une seconde : la
+deuxième est une marge, la troisième coûte des spectateurs. Constante
+`HOOK_SECONDS` dans `check-posts.ts`, appliquée par `--fix`.
+
+**Le sujet ne s'écrit pas.** Le nom de l'entité — `NICK SUZUKI · MTL`,
+`BOSTON BRUINS`, `NHL` — est dérivé d'`entity` par `render-slides.ts` et posé en
+haut de chaque plan. Le rédacteur ne le saisit donc pas et ne peut pas l'oublier ;
+il n'a pas non plus à dépenser ses mots à le répéter. `subject` dans posts.json
+n'existe que pour les angles de ligue, où le libellé dérivé se réduit à `NHL`.
 
 ### Règles de fond
 
@@ -410,6 +450,11 @@ lisent sans être inclinés.
 bas : TikTok y pose sa description et ses boutons, Instagram sa barre de
 progression. Variables `--safe-top` et `--safe-bottom`.
 
+**Bandeau d'en-tête** — sujet puis millésime, posés dans la bande haute au-dessus
+du contenu (`.topbar` / `.subject` / `.season-label`). Identique d'un plan à
+l'autre : c'est ce qui en fait un repère et non une information de plus. Absent
+du plan CTA, qui ne porte aucune statistique à attribuer.
+
 **Logo** : `content/assets/logo-360.png`, 73 Ko. Ne pas y substituer
 `arakice-icon-512.png`, qui est la version **opaque** — son fond clair ferait un
 carré sur une carte sombre.
@@ -447,7 +492,7 @@ combien de temps.
 `server/scripts/build-video.ts`, appelant ffmpeg.
 
 Entrée : `slides/manifest.json` + les PNG et séquences. Sortie : `video.mp4`,
-H.264, 9:16, 30 fps, 14 à 18 secondes — sous les 90 secondes que l'API Instagram
+H.264, 9:16, 30 fps, 12 à 15 secondes — sous les 90 secondes que l'API Instagram
 impose aux Reels, utile si la publication automatique arrive un jour.
 
 Coupes franches entre les plans plutôt que fondus : le rythme sec convient au
@@ -496,26 +541,51 @@ se prend à l'envoi, pas dans le code.
 
 ## 7. ÉTAPE 7 — Paquet et journal
 
-À construire : un `index.html` par jour rassemblant les vidéos, leurs légendes
-sélectionnables et un bouton de copie, pour valider en une minute au lieu
-d'ouvrir six fichiers.
+`content/output/<date>/index.html`, **écrit par `build-video.ts` à la fin du
+montage**. Une carte par post : la vidéo lisible sur place, la légende TikTok, la
+légende Instagram, les hashtags et la commande de journal — chacun avec son
+bouton de copie.
 
-`log-post.ts` existe déjà. Il ne journalise **que ce qui est publié** : le
-pipeline produit huit scripts pour une ou deux vidéos, et journaliser les six
-autres écarterait des angles que personne n'a vus.
+**Pourquoi le montage l'écrit lui-même** plutôt qu'une commande de plus : c'est le
+motif de `review.html`, produit par le minage. Une étape qu'on peut oublier de
+lancer est une étape qui n'existe pas — et celle-ci sert précisément au moment où
+l'on est pressé.
+
+La page se construit depuis `posts.json`, pas depuis ce que l'exécution vient de
+monter : `--only=suzuki` ne produit pas une page amputée des sept autres. Un post
+sans mp4 s'affiche avec sa place vide plutôt que de disparaître.
+
+En bas, une barre colle au défilement : cocher les posts sortis compose la
+commande `content:log -- --posts=1,4`. Ce qui est déjà dans `history.json`
+s'affiche estompé et non cochable — la page sert à publier, pas à journaliser
+deux fois.
+
+Deux détails qui ont l'air anodins : le presse-papier moderne exige un contexte
+sécurisé, et `file://` n'en est pas un partout — d'où le repli sur
+`execCommand`, faute de quoi le bouton échouerait en silence, ce qui est pire
+qu'un bouton absent. Et un clic dans un bloc le sélectionne en entier, parce
+qu'attraper trois lignes au doigt est plus pénible que la copie elle-même.
+
+`log-post.ts` ne journalise **que ce qui est publié** : le pipeline produit huit
+scripts pour une ou deux vidéos, et journaliser les six autres écarterait des
+angles que personne n'a vus.
 
 Remplir `views` vers J+7. Après 30 à 40 posts, le barème se recalibre sur des
 chiffres réels plutôt que sur des intuitions.
 
 **À trancher :** comment les fichiers arrivent sur le téléphone. Un dossier
-Dropbox ou Drive synchronisé sur `content/output/` est le moins pénible.
+Dropbox ou Drive synchronisé sur `content/output/` est le moins pénible — la page
+du jour suivrait avec, et ses boutons de copie fonctionnent aussi sur mobile.
 
 ---
 
 ## 8. Points ouverts
 
-- **Étape 7** — page de revue quotidienne.
-- **Transfert vers le téléphone.**
+- **Transfert vers le téléphone.** La page du jour existe (étape 7), mais elle
+  s'ouvre sur l'ordinateur : reste à décider comment les mp4 arrivent sur le
+  téléphone. Un dossier Dropbox ou Drive synchronisé sur `content/output/` est le
+  moins pénible — et rendrait `index.html` consultable depuis le téléphone, ses
+  boutons de copie compris.
 - **`#utahmammoth` à vérifier** sur le compte officiel de la franchise. Un
   hashtag d'équipe périmé signale un compte qui ne suit pas la ligue.
 - **Règles des plateformes sur le contenu lié aux paris** — à relire avant le

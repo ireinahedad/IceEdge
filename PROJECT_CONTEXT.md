@@ -97,9 +97,11 @@ sur 4578 paris, +2.53 % @ 5 %), négatif au-delà de 6 % (bruit / info manquée)
 
 1. **Logger de cotes** (`server/src/services/oddsLogger.service.ts`, nouveau) :
    job serveur qui capture les cotes NHL du jour (The Odds API via `fetchRawOdds`,
-   ajoutée à `oddsClient.ts`) et les ajoute à `ml/data/odds_live_log.csv` au format
-   exact de fetch_data_v4 (dédup par date+équipes, dates en Est). Activé par
-   `ODDS_LOG_ENABLED=true`, chemin `ODDS_LOG_PATH`, passe toutes les 6 h.
+   ajoutée à `oddsClient.ts`). Activé par `ODDS_LOG_ENABLED=true`, passe toutes
+   les 6 h, dédup par date+équipes, dates en Est.
+   *Depuis 2026-08-02 (audit, ligne K) : écriture dans la table `odds_log`
+   (migration 027) et non plus dans un CSV — le disque Railway est éphémère.
+   Export vers `ml/data/odds_live_log.csv` par `npm run odds:export`.*
    Câblé dans `server.ts` (`startOddsLogger()`). → débloque le backtest 2023+.
 2. **Cotes live → /predict/game** (`featureEngineering.ts`) : `buildGameFeatures`
    récupère `fetchOddsImplied`/`fetchTotalsOdds` et remplit `home_odds_decimal`/

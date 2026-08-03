@@ -61,15 +61,23 @@ export class TtlCache<T> implements CacheStatsSource {
     if (cacheName) registerCache(this);
   }
 
-  /** Lecture SANS compteur — usage interne, pour ne pas compter deux fois. */
-  private peek(key: string): T | null {
+  /**
+   * Lecture SANS compteur.
+   *
+   * Publique parce qu'un appelant a parfois besoin de savoir si la valeur est
+   * déjà là AVANT de décider d'appeler `wrap` (le client ML consulte le cache
+   * avant son disjoncteur). Passer par `get` dans ce cas compterait le même
+   * accès deux fois, et `misses` — qui est le nombre d'exécutions RÉELLES, donc
+   * le critère des tests de charge — serait faux d'un facteur deux.
+   */
+  peekFresh(key: string): T | null {
     const e = this.store.get(key);
     return e && e.expiresAt > Date.now() ? e.value : null;
   }
 
   /** Valeur fraîche pour cette clé, ou null. */
   get(key: string): T | null {
-    const value = this.peek(key);
+    const value = this.peekFresh(key);
     if (value === null) this.misses += 1;
     else this.hits += 1;
     return value;
@@ -118,6 +126,20 @@ export class TtlCache<T> implements CacheStatsSource {
     this.store.set(key, { value, expiresAt: Date.now() + ttlMs });
   }
 
+  /**
+   * Oublie une clé. Pour les caches dont la donnée source peut changer sur
+   * ACTION (un abonnement qui passe Pro) et non seulement avec le temps : sans
+   * invalidation explicite, l'utilisateur qui vient de payer attendrait le TTL.
+   *
+   * N'annule pas un appel en vol : celui-ci reposera sa valeur en cache en
+   * terminant. C'est voulu — l'interrompre laisserait ses appelants sans
+   * réponse, et l'écriture qui suit une invalidation est déjà visible en base
+   * pour l'appel suivant.
+   */
+  delete(key: string): void {
+    this.store.delete(key);
+  }
+
   /** Vide le cache (tests / invalidation manuelle). */
   clear(): void {
     this.store.clear();
@@ -132,10 +154,10 @@ export class TtlCache<T> implements CacheStatsSource {
    * les appelants en attente (l'appelant décide de retomber sur `getStale`).
    */
   async wrap(key: string, fn: () => Promise<T>, ttlMs?: number): Promise<T> {
-    // `peek` et non `get` : les trois issues sont comptées explicitement ici,
+    // `peekFresh` et non `get` : les trois issues sont comptées explicitement ici,
     // sinon un rattachement à un appel en vol serait compté comme une exécution
     // — l'inverse exact de ce que le test S3 cherche à prouver.
-    const fresh = this.peek(key);
+    const fresh = this.peekFresh(key);
     if (fresh !== null) { this.hits += 1; return fresh; }
 
     const pending = this.inflight.get(key);

@@ -8,6 +8,7 @@ import Stripe from 'stripe';
 import { pool } from '../db/connection';
 import { SubscriptionRow, SubscriptionStatus, BillingPlan, SubStatus } from '../types/subscription.type';
 import { logger } from '../logger';
+import { TtlCache } from './ttlCache';
 
 // ─── Stripe client (lazy) ─────────────────────────────────────────────────────
 // Only constructed when STRIPE_SECRET_KEY is set, so the app runs fine without
@@ -73,9 +74,49 @@ export async function getStatus(userId: string): Promise<SubscriptionStatus> {
   return toStatus(rows[0]);
 }
 
+// ─── Cache d'entitlement (audit, ligne L) ────────────────────────────────────
+//
+// `isPro` était une requête Postgres à CHAQUE appel LLM et à chaque route
+// `requirePro` : la plus fréquente de l'application, pour une donnée qui change
+// quelques fois dans la vie d'un compte.
+//
+// Deux garde-fous rendent le cache sûr plutôt que « probablement sûr » :
+//
+//  1. **Invalidation sur écriture.** Tout chemin qui modifie l'abonnement
+//     (`upsert` — donc Stripe, promo, activation dev —, `startTrial`, `cancel`)
+//     oublie la clé. Quelqu'un qui vient de payer ne doit pas attendre le TTL.
+//  2. **TTL borné par la fin de période.** Un abonnement qui expire dans 10 s ne
+//     peut pas être mis en cache 60 s : sans cela le cache prolongerait
+//     gratuitement un accès payant, ce qui est exactement le genre de détail
+//     qu'on ne découvre jamais.
+//
+// Reste par instance : au scale horizontal, une révocation met au pire un TTL à
+// se propager aux autres instances. Acceptable pour un downgrade (borné, et le
+// prochain cycle de facturation le rattrape) ; c'est la raison pour laquelle le
+// TTL est court et non de plusieurs minutes.
+const PRO_TTL_MS = Number(process.env.PRO_CACHE_TTL_MS) || 60_000;
+const proCache = new TtlCache<boolean>(PRO_TTL_MS, 20_000, 'isPro');
+
+/** Oublie l'entitlement mémorisé pour cet utilisateur. */
+export function invalidateProCache(userId: string): void {
+  proCache.delete(userId);
+}
+
 /** Fast boolean check used by the requirePro middleware. */
 export async function isPro(userId: string): Promise<boolean> {
+  const cached = proCache.get(userId);
+  if (cached !== null) return cached;
+
   const status = await getStatus(userId);
+
+  // Ne jamais garder un « oui » au-delà de la fin de période annoncée.
+  const endMs = status.currentPeriodEnd ? Date.parse(status.currentPeriodEnd) : NaN;
+  const untilEnd = Number.isFinite(endMs) ? endMs - Date.now() : Infinity;
+  const ttl = Math.min(PRO_TTL_MS, Math.max(0, untilEnd));
+
+  // TTL nul (période déjà terminée) : rien à mémoriser, la réponse est déjà
+  // `false` et la relire coûte moins qu'une entrée morte dans la Map.
+  if (ttl > 0) proCache.set(userId, status.isPro, ttl);
   return status.isPro;
 }
 
@@ -86,6 +127,16 @@ interface UpsertOpts {
   stripeSubscriptionId?: string | null;
   currentPeriodEnd?: Date | null;
   cancelAtPeriodEnd?: boolean;
+  /**
+   * Horodatage de l'événement Stripe à l'origine de cette écriture.
+   *
+   * Renseigné UNIQUEMENT par le webhook. Il active la garde d'ordonnancement :
+   * l'écriture est ignorée si la ligne porte déjà un événement plus récent.
+   * Absent (essai gratuit, code promo, activation dev), l'écriture s'applique
+   * toujours — ces chemins-là ne souffrent pas de désordre, ils sont déclenchés
+   * par une action utilisateur unique.
+   */
+  eventCreatedAt?: Date | null;
 }
 
 /** Inserts or updates a user's subscription. Call this from a Stripe webhook
@@ -98,12 +149,22 @@ export async function upsert(userId: string, opts: UpsertOpts): Promise<Subscrip
     stripeSubscriptionId = null,
     currentPeriodEnd = null,
     cancelAtPeriodEnd = false,
+    eventCreatedAt = null,
   } = opts;
 
+  // Garde d'ordonnancement (migration 026). La condition vit dans le `WHERE` du
+  // `DO UPDATE`, donc dans le MÊME énoncé que l'écriture : il n'existe aucune
+  // fenêtre entre « comparer » et « écrire » où deux événements livrés en
+  // parallèle pourraient tous deux se croire les plus récents.
+  //
+  // Trois cas la laissent passer :
+  //   - l'écriture n'a pas d'événement (chemin local) ;
+  //   - la ligne n'en a pas encore (premier passage par Stripe) ;
+  //   - l'événement entrant est plus récent ou identique (rejeu du même).
   const { rows } = await pool.query<SubscriptionRow>(
     `INSERT INTO subscriptions
-       (user_id, plan, status, stripe_customer_id, stripe_subscription_id, current_period_end, cancel_at_period_end, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+       (user_id, plan, status, stripe_customer_id, stripe_subscription_id, current_period_end, cancel_at_period_end, last_event_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
      ON CONFLICT (user_id) DO UPDATE SET
        plan                   = EXCLUDED.plan,
        status                 = EXCLUDED.status,
@@ -111,10 +172,24 @@ export async function upsert(userId: string, opts: UpsertOpts): Promise<Subscrip
        stripe_subscription_id = COALESCE(EXCLUDED.stripe_subscription_id, subscriptions.stripe_subscription_id),
        current_period_end     = EXCLUDED.current_period_end,
        cancel_at_period_end   = EXCLUDED.cancel_at_period_end,
+       last_event_at          = COALESCE(EXCLUDED.last_event_at, subscriptions.last_event_at),
        updated_at             = NOW()
+     WHERE EXCLUDED.last_event_at     IS NULL
+        OR subscriptions.last_event_at IS NULL
+        OR subscriptions.last_event_at <= EXCLUDED.last_event_at
      RETURNING *`,
-    [userId, plan, status, stripeCustomerId, stripeSubscriptionId, currentPeriodEnd, cancelAtPeriodEnd],
+    [userId, plan, status, stripeCustomerId, stripeSubscriptionId, currentPeriodEnd, cancelAtPeriodEnd, eventCreatedAt],
   );
+  invalidateProCache(userId);
+
+  // Aucune ligne renvoyée = la garde a rejeté une écriture périmée. Ce n'est pas
+  // une erreur, mais l'appelant attend l'état de l'abonnement : il faut le
+  // RELIRE. Renvoyer `toStatus(undefined)` ici annoncerait « free » à quelqu'un
+  // qui est Pro — le bug que la garde était censée empêcher, déplacé d'un cran.
+  if (!rows[0]) {
+    logger.info({ userId, eventCreatedAt }, '[subscription] écriture ignorée : événement plus ancien que l\'état courant');
+    return getStatus(userId);
+  }
   return toStatus(rows[0]);
 }
 
@@ -140,6 +215,7 @@ export async function startTrial(userId: string, days = 7): Promise<Subscription
      RETURNING *`,
     [userId, end],
   );
+  invalidateProCache(userId);
   return toStatus(rows[0]);
 }
 
@@ -211,6 +287,11 @@ export async function cancel(userId: string): Promise<SubscriptionStatus> {
      RETURNING *`,
     [userId],
   );
+  // `cancel_at_period_end` ne retire pas l'accès (il court jusqu'à la fin de
+  // période), mais on invalide quand même : la ligne a changé, et un cache dont
+  // l'invalidation dépend de « est-ce que ce champ-là compte ? » finit toujours
+  // par être faux le jour où un champ s'ajoute.
+  invalidateProCache(userId);
   return toStatus(rows[0]);
 }
 
@@ -278,7 +359,7 @@ async function resolveUserId(sub: Stripe.Subscription): Promise<string | null> {
 }
 
 /** Upserts our subscriptions row from a Stripe Subscription object. */
-async function syncSubscription(sub: Stripe.Subscription): Promise<void> {
+async function syncSubscription(sub: Stripe.Subscription, eventCreatedAt: Date | null = null): Promise<void> {
   const userId = await resolveUserId(sub);
   if (!userId) {
     logger.warn({ subscriptionId: sub.id }, '[subscription] webhook: could not resolve userId for subscription');
@@ -298,7 +379,30 @@ async function syncSubscription(sub: Stripe.Subscription): Promise<void> {
     stripeSubscriptionId: sub.id,
     currentPeriodEnd: periodEnd,
     cancelAtPeriodEnd: sub.cancel_at_period_end,
+    eventCreatedAt,
   });
+}
+
+// ─── Déduplication des événements (audit, ligne P) ───────────────────────────
+
+/** Vrai si cet événement a déjà été traité intégralement. */
+async function alreadyProcessed(eventId: string): Promise<boolean> {
+  const { rows } = await pool.query('SELECT 1 FROM stripe_events WHERE id = $1', [eventId]);
+  return rows.length > 0;
+}
+
+/**
+ * Marque un événement comme traité. Écrit APRÈS le traitement, jamais avant :
+ * l'inscrire d'abord ferait passer un traitement échoué pour un traitement fait,
+ * et le réessai de Stripe — qui est ici notre seul filet — serait alors ignoré.
+ */
+async function markProcessed(event: Stripe.Event): Promise<void> {
+  await pool.query(
+    `INSERT INTO stripe_events (id, type, event_created, processed_at)
+     VALUES ($1, $2, to_timestamp($3), NOW())
+     ON CONFLICT (id) DO NOTHING`,
+    [event.id, event.type, event.created],
+  );
 }
 
 /**
@@ -319,6 +423,20 @@ export async function handleStripeWebhook(rawBody: Buffer, signature: string | u
     throw Object.assign(new Error(`Webhook signature verification failed: ${err.message}`), { status: 400 });
   }
 
+  // Rejeu d'un événement déjà traité → acquittement immédiat, sans refaire le
+  // `subscriptions.retrieve` ni l'écriture. C'est ce qui rend les redélivrances
+  // de Stripe gratuites, et donc ce qui évite qu'une série de traitements lents
+  // finisse par faire désactiver l'endpoint.
+  if (await alreadyProcessed(event.id)) {
+    logger.debug({ eventId: event.id, type: event.type }, '[subscription] webhook: événement déjà traité');
+    return;
+  }
+
+  // Horodatage de l'événement, pas de sa réception : c'est l'ordre chez Stripe
+  // qui fait autorité, pas l'ordre d'arrivée chez nous — les deux diffèrent
+  // précisément dans le cas que la garde doit couvrir.
+  const eventCreatedAt = new Date(event.created * 1000);
+
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session;
@@ -329,18 +447,23 @@ export async function handleStripeWebhook(rawBody: Buffer, signature: string | u
         if (session.client_reference_id && !sub.metadata?.userId) {
           sub.metadata = { ...sub.metadata, userId: session.client_reference_id };
         }
-        await syncSubscription(sub);
+        await syncSubscription(sub, eventCreatedAt);
       }
       break;
     }
     case 'customer.subscription.created':
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted': {
-      await syncSubscription(event.data.object as Stripe.Subscription);
+      await syncSubscription(event.data.object as Stripe.Subscription, eventCreatedAt);
       break;
     }
     default:
       // Unhandled event types are acknowledged (200) without action.
       break;
   }
+
+  // Enregistré seulement si tout ce qui précède a réussi. Une exception laisse
+  // l'événement absent du registre, donc rejouable par Stripe — c'est notre
+  // mécanisme de durabilité, et il ne fonctionne que dans cet ordre.
+  await markProcessed(event);
 }

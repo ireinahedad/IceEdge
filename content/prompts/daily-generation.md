@@ -38,25 +38,51 @@ combler. Un chiffre faux dans une vidéo publiée ne se rattrape pas.
 substituer les `{variables}`, ajuster un déterminant, rien de plus. C'est ce qui
 donne au compte une voix constante d'une vidéo à l'autre.
 
+## Le sujet est affiché pour toi
+
+Chaque plan porte en haut, automatiquement, **le nom de l'entité dont parle le
+chiffre** — `NICK SUZUKI · MTL`, `BOSTON BRUINS`, `MTL VS FLA`, `NHL` pour les
+analyses de ligue. Il est repris de `entity` dans candidates.json ; tu n'as rien
+à écrire pour ça et tu ne peux pas le supprimer.
+
+Deux conséquences pour ta rédaction :
+
+- **Ne dépense pas tes mots à renommer le sujet.** `label: "at home"` suffit ; le
+  spectateur voit déjà BOSTON BRUINS au-dessus. Ces mots-là servent mieux au
+  point de comparaison.
+- **Les tournures pronominales redeviennent lisibles.** « Their power play is a
+  different unit now » ne flottait plus dans le vide.
+
+Cas particulier : sur un angle de ligue, le libellé dérivé est `NHL`. Si un
+sujet plus précis rend la vidéo plus claire, ajoute `"subject"` au post — trois
+mots maximum, en anglais, en majuscules (`"NHL · GETAWAY GAMES"`). Sinon,
+n'écris pas ce champ.
+
 ## Budget de mots — non négociable
 
-| Plan | Rôle | Maximum |
-|---|---|---|
-| 1 | Hook | **8 mots** |
-| 2 | Le chiffre | `big` = le nombre · `label` ≤ **4 mots** · `sub` ≤ **6 mots** |
-| 3 | La preuve | **12 mots** |
-| 4 | CTA | **6 mots** |
+| Plan | Rôle | Maximum | Durée |
+|---|---|---|---|
+| 1 | Hook | **8 mots** | **2.0 s, toujours** |
+| 2 | Le chiffre | `big` = le nombre · `label` ≤ **4 mots** · `sub` ≤ **6 mots** | formule |
+| 3 | La preuve | **12 mots** | formule |
+| 4 | CTA | logo seul | 2.5 s |
 
 Le plan 2 a deux zones distinctes : le libellé sous le nombre, et la comparaison
 en dessous. C'est `sub` qui porte le point de comparaison obligatoire.
 
-Durée d'un plan : `2.0 + 0.3 × nombre de mots`, arrondi au dixième. Reporte-la
-dans `duration` — c'est cette valeur qui pilotera le montage, il n'y a pas de
-seconde traduction.
+Durée des plans 2 et 3 : `2.0 + 0.3 × nombre de mots`, arrondi au dixième.
+Reporte-la dans `duration` — c'est cette valeur qui pilotera le montage, il n'y a
+pas de seconde traduction.
 
-La vidéo fait donc 15 à 18 secondes. C'est court exprès : une vidéo vue en entier
+**Le plan 1 dure 2.0 secondes quel que soit le nombre de mots.** C'est là que se
+décide le passage au plan suivant ou le défilement : huit mots en gros
+caractères se lisent en une seconde, la deuxième est une marge, la troisième
+coûte des spectateurs. Écris donc un hook qui s'attrape d'un coup d'œil — pas
+une phrase qui se déchiffre.
+
+La vidéo fait donc 12 à 15 secondes. C'est court exprès : une vidéo vue en entier
 est mieux servie qu'une vidéo longue abandonnée. Si un sujet l'exige vraiment,
-ajoute un cinquième plan plutôt que d'étirer les quatre autres.
+ajoute un cinquième plan plutôt que d'étirer les autres.
 
 **Quand deux candidats racontent presque la même histoire** — deux joueurs de la
 même équipe avec le même angle, deux facettes du même effet de ligue — n'en garde
@@ -134,7 +160,7 @@ Un seul bloc JSON, rien d'autre autour.
       "hook_id": "C13",
       "season_label": "2025-26 SEASON",
       "slides": [
-        { "n": 1, "duration": 3.2, "template": "hook_card",
+        { "n": 1, "duration": 2.0, "template": "hook_card",
           "text": "Same team. Two completely different records." },
         { "n": 2, "duration": 3.5, "template": "stat_card",
           "big": "71%", "label": "at home", "sub": "38% on the road" },
@@ -163,10 +189,12 @@ Relis et vérifie :
 
 1. Chaque chiffre apparaît dans le `facts` de son candidat.
 2. Aucun plan ne dépasse son budget de mots.
-3. Aucun mot de la liste interdite, hashtags compris.
-4. Aucun hook ni CTA répété dans le lot.
-5. En mode rétrospectif : tout au passé, `season_label` partout.
-6. Chaque plan 2 contient un point de comparaison.
+3. Le plan 1 a bien `duration: 2.0`.
+4. Aucun mot de la liste interdite, hashtags compris.
+5. Aucun hook ni CTA répété dans le lot.
+6. En mode rétrospectif : tout au passé, `season_label` partout.
+7. Chaque plan 2 contient un point de comparaison.
+8. Aucun plan ne redit le nom du sujet, déjà affiché en haut de l'image.
 
 Si un candidat ne donne rien de bon — chiffre trop faible, angle qui exige un
 contexte absent — **écarte-le et dis-le**. Un lot de six posts solides vaut mieux

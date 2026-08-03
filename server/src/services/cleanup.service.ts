@@ -20,7 +20,11 @@ const LOCK_TTL_MS = 10 * 60 * 1000;
 // Keep revoked tokens for a short window (audit / debugging) before pruning.
 const REVOKED_GRACE_DAYS = Number(process.env.TOKEN_CLEANUP_GRACE_DAYS) || 7;
 
-export async function runCleanup(): Promise<{ tokens: number; codes: number }> {
+/** Fenêtre de rejeu de Stripe : au-delà, un événement ne reviendra plus, donc
+ *  le garder ne dédoublonne plus rien. 30 jours pour couvrir largement. */
+const STRIPE_EVENT_RETENTION_DAYS = Number(process.env.STRIPE_EVENT_RETENTION_DAYS) || 30;
+
+export async function runCleanup(): Promise<{ tokens: number; codes: number; stripeEvents: number }> {
   const tokensRes = await pool.query(
     `DELETE FROM refresh_tokens
       WHERE expires_at < NOW()
@@ -31,9 +35,15 @@ export async function runCleanup(): Promise<{ tokens: number; codes: number }> {
     `DELETE FROM email_verification_codes
       WHERE consumed = TRUE OR expires_at < NOW()`,
   );
+  // Registre de déduplication des webhooks Stripe (migration 026).
+  const stripeRes = await pool.query(
+    `DELETE FROM stripe_events
+      WHERE processed_at < NOW() - ($1 || ' days')::interval`,
+    [String(STRIPE_EVENT_RETENTION_DAYS)],
+  );
   const tokens = tokensRes.rowCount ?? 0;
   const codes  = codesRes.rowCount ?? 0;
-  return { tokens, codes };
+  return { tokens, codes, stripeEvents: stripeRes.rowCount ?? 0 };
 }
 
 /** Schedules the cleanup: once ~1 min after boot, then every 24h. Returns the

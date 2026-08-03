@@ -134,6 +134,41 @@
     "team.streak_len": "valeur numérique de streak, ex. 'W4' -> 4 ; streak_type -> 'W' ou 'L'"
   },
 
+  "chart_labels": {
+    "note": "Ce qui est ÉCRIT SOUS LES BARRES, à l'écran, pour un spectateur qui ne saura jamais qu'une colonne s'appelle combined_ga_per_game. Les libellés étaient les noms de colonnes bruts jusqu'au 2026-08-02 : un graphique de confrontation opposait 'combined_gf_per_game' à 'combined_ga_per_game', ce qui ne veut rien dire pour un amateur de hockey. Vocabulaire de fan, en anglais, et court : render-slides abrège à 18 caractères sur une barre verticale (bar_compare, split_pair) et 22 sur une barre horizontale (bar_rank). Tout champ ou facteur absent d'ici ressort en clair dans l'avertissement de mine-stories — c'est ainsi que ce dictionnaire reste complet.",
+
+    "fields": {
+      "note": "Paires de bar_compare / split_pair. Les paires prev_X / X n'ont PAS besoin d'entrée : elles sont libellées par saison ('2024-25', '2025-26'), la mesure étant déjà nommée par la phrase du plan. Les entrées prev_* ci-dessous ne servent que de repli quand la saison est inconnue.",
+      "home_win_pct": "At home",
+      "away_win_pct": "On the road",
+      "combined_gf_per_game": "Goals scored",
+      "combined_ga_per_game": "Goals allowed",
+      "rate": "In this spot",
+      "base_rate": "League average",
+      "prev_ppg": "Before",
+      "ppg": "After",
+      "prev_avg_toi": "Before",
+      "avg_toi": "After",
+      "prev_gaa": "Before",
+      "gaa": "After",
+      "prev_ga_per_game": "Before",
+      "ga_per_game": "After",
+      "prev_pp_pct": "Before",
+      "pp_pct": "After"
+    },
+
+    "factors": {
+      "note": "Classements de facteurs de ligue. Les lignes viennent des JSON Python, dont les libellés sont en FRANÇAIS ('jours loin de la maison') — impubliables sur un compte anglophone. La traduction porte sur la clé `factor`, stable, et non sur le texte, qui change au gré des scripts d'analyse.",
+      "getaway": "Getaway game",
+      "b2b": "Back-to-back",
+      "3in4": "3 games, 4 nights",
+      "days_away": "Days on the road",
+      "road_trip_len": "Long road trip",
+      "alt_gain": "Altitude jump",
+      "distance_km": "Distance flown"
+    }
+  },
+
   "rules": [
     {
       "id": "breakout_pace",
@@ -412,7 +447,7 @@
       "conditions": [{ "field": "delta_pct", "op": "abs>", "value": 3.0 }],
       "amplitude": { "field": "delta_pct", "scale": [3.0, 6.0], "absolute": true },
       "robustness": { "field": "n", "scale": [5000, 200000] },
-      "chart": { "kind": "bar_rank", "field": "delta_pct", "top": 6, "unit": "% d'écart vs la moyenne" },
+      "chart": { "kind": "bar_rank", "field": "delta_pct", "top": 6, "peer_field": "metric_label", "unit": "% d'écart vs la moyenne" },
       "headline_en": "We looked at 774,000 player games.",
       "note": "Contenu intemporel, réutilisable toute l'année. Le fait à ne jamais oublier de mentionner : le temps de glace ne bouge pas. Sans lui on croirait à un banc raccourci, avec lui c'est de la fatigue mesurée — et c'est ce détail qui fait la différence entre une vidéo crédible et une vidéo qu'on démonte en commentaire."
     },
@@ -441,7 +476,7 @@
       "conditions": [{ "field": "home_win_probability_pre_game", "op": "abs>", "value": 0.75 }],
       "amplitude": { "field": "home_win_probability_pre_game", "scale": [0.75, 0.85], "absolute": true },
       "robustness": null,
-      "chart": { "kind": "bar_rank", "field": "home_win_probability_pre_game", "top": 5, "unit": "probabilité pré-match du perdant annoncé" },
+      "chart": { "kind": "bar_rank", "field": "home_win_probability_pre_game", "top": 5, "label_from": "{home} {score} {away}", "unit": "probabilité pré-match du perdant annoncé" },
       "headline_en": "The model gave them an {pct}% chance. They lost.",
       "note": "Fait brut, aucune inférence, donc robustness à null. Montrer le modèle en train d'échouer est plus crédible qu'un contenu qui n'exhibe que ses réussites — et c'est le seul angle de la liste qui construit de la confiance en admettant une limite."
     },
@@ -456,7 +491,7 @@
       "conditions": [{ "field": "gsax", "op": ">=", "value": 5.0 }],
       "amplitude": { "field": "gsax", "scale": [5.0, 8.6] },
       "robustness": null,
-      "chart": { "kind": "bar_rank", "field": "gsax", "top": 5, "unit": "buts évités vs attendu, un match" },
+      "chart": { "kind": "bar_rank", "field": "gsax", "top": 5, "label_from": "{goalie}", "unit": "buts évités vs attendu, un match" },
       "headline_en": "{shots_faced} shots. {goals_allowed} goals.",
       "note": "Seule section où la règle d'identité ne s'applique pas aux joueurs nommés : un record de tous les temps filtré sur les actifs n'est plus un record. Le champ is_active permet au scoring de préférer un joueur actuel à amplitude comparable.",
       "identity_check": false,

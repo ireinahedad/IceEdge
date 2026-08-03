@@ -19,7 +19,7 @@ import { getBestBets } from './bestBets.service';
 import { fetchGameById } from './nhlApiClient';
 import { fetchOddsImplied, fetchTotalsOdds } from './oddsClient';
 import { logger } from '../logger';
-import { sendToUser, pushEnabled } from './push.service';
+import { sendToUsers, pushEnabled } from './push.service';
 import { withJobLock, getJobState, setJobState } from './jobLock';
 
 const SCORE_THRESHOLD = 65;           // only alert on strong model picks
@@ -218,7 +218,11 @@ async function runScan(): Promise<void> {
       body: `${vb.label} · edge +${vb.edgePct}% · +${vb.evPct}% EV · cote ${vb.odds.toFixed(2)} (${vb.book}) · modèle ${vb.score}%`,
       url: '/',
     };
-    await Promise.all(recipients.map((u) => sendToUser(u.userId, payload)));
+    // Un seul appel pour tout le lot : une requête de lecture, un plafond
+    // d'envois simultanés, une purge groupée (cf. `sendToUsers`). C'est ici que
+    // la liste est la plus longue — elle vaut le nombre d'abonnés opt-in.
+    const res = await sendToUsers(recipients.map((u) => u.userId), payload);
+    logger.info({ recipients: recipients.length, ...res }, '[ValueBetScan] alerte diffusée');
   } catch (err: any) {
     logger.warn({ err: err?.message }, '[ValueBetScan] scan failed');
   }

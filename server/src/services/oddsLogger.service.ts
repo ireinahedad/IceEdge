@@ -3,20 +3,23 @@
 // ============================================================
 // The Odds API n'archive pas l'historique gratuitement (les cotes publiques
 // s'arrêtent en 2022-23). Pour pouvoir réentraîner et backtester le modèle sur
-// les saisons récentes, on capture chaque jour les cotes de clôture NHL et on
-// les ajoute à ml/data/odds_live_log.csv — le format exact que fetch_data_v4.py
-// fusionne dans le dataset d'entraînement.
+// les saisons récentes, on capture chaque jour les cotes de clôture NHL.
 //
-// Activé via ODDS_LOG_ENABLED=true. Chemin surchargeable via ODDS_LOG_PATH.
+// STOCKAGE : table `odds_log` (migration 027), et non plus un CSV. Le disque de
+// Railway est éphémère : le fichier disparaissait à chaque déploiement, donc le
+// job donnait l'illusion de collecter sans jamais rien accumuler. L'export vers
+// le format attendu par fetch_data_v4.py se fait à la demande
+// (`npm run odds:export`), depuis une donnée qui, elle, survit.
+//
+// Activé via ODDS_LOG_ENABLED=true.
 // Sans clé The Odds API (ODDS_API_KEY) le job se désactive proprement.
 
-import fs from 'fs';
-import path from 'path';
+import { pool } from '../db/connection';
 import { fetchRawOdds, type RawOddsEvent } from './oddsClient';
 import { logger } from '../logger';
 import { withJobLock } from './jobLock';
 
-/** Un appel Odds API + une écriture de fichier. Généreux pour un upstream lent. */
+/** Un appel Odds API + un upsert. Généreux pour un upstream lent. */
 const LOCK_TTL_MS = 5 * 60 * 1000;
 
 // Colonnes attendues par fetch_data_v4.py (identiques à odds.csv).
@@ -87,53 +90,90 @@ function eventToRow(ev: RawOddsEvent): Row | null {
   return { date: easternDate(ev.commence_time), home, away, homeMl, awayMl, total };
 }
 
-function csvPath(): string {
-  if (process.env.ODDS_LOG_PATH) return process.env.ODDS_LOG_PATH;
-  // Par défaut : <repo>/ml/data/odds_live_log.csv (serveur lancé depuis server/)
-  return path.resolve(process.cwd(), '..', 'ml', 'data', 'odds_live_log.csv');
-}
-
-/** Clés (date+home+away) déjà présentes, pour ne rien dupliquer. */
-function existingKeys(file: string): Set<string> {
-  const keys = new Set<string>();
-  if (!fs.existsSync(file)) return keys;
-  const lines = fs.readFileSync(file, 'utf8').split('\n').slice(1);
-  for (const l of lines) {
-    const [date, home, away] = l.split(',');
-    if (date && home && away) keys.add(`${date}|${home}|${away}`);
-  }
-  return keys;
-}
-
-/** Capture les cotes du jour et les ajoute au CSV (idempotent par jour). */
+/**
+ * Capture les cotes du jour dans `odds_log`.
+ *
+ * IDEMPOTENCE — la clé primaire (game_date, home_team, away_team) la porte : le
+ * job peut tourner autant de fois qu'on veut, y compris depuis deux instances,
+ * sans créer de doublon. C'est ce qui remplace la relecture intégrale du CSV à
+ * chaque exécution, dont le coût croissait avec la saison.
+ *
+ * OUVERTURE / CLÔTURE — la première passe d'une journée écrit les deux ; les
+ * suivantes ne mettent à jour que la clôture. Le mouvement de cote entre la
+ * première observation et la dernière est le signal que le CSV ne pouvait pas
+ * capturer (il écrivait open = close et n'y revenait jamais).
+ *
+ * @returns nombre de lignes écrites ou mises à jour.
+ */
 export async function logTodaysOdds(): Promise<number> {
   const events = await fetchRawOdds();
   if (!events.length) return 0;
 
-  const file = csvPath();
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  if (!fs.existsSync(file)) fs.writeFileSync(file, HEADER + '\n');
-
-  const seen = existingKeys(file);
-  const num = (v: number | null) => (v == null ? '' : v.toFixed(4));
-  const newLines: string[] = [];
-
+  const rows: Row[] = [];
+  const seen = new Set<string>();
   for (const ev of events) {
     const r = eventToRow(ev);
     if (!r) continue;
+    // The Odds API peut renvoyer deux entrées pour le même match (marchés
+    // séparés) : on garde la première, la clé primaire ferait le reste mais
+    // autant ne pas envoyer deux fois la même ligne.
     const key = `${r.date}|${r.home}|${r.away}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    // open = close (un seul snapshot par jour) → remplit les deux colonnes
-    newLines.push([
-      r.date, r.home, r.away,
-      num(r.homeMl), num(r.awayMl), num(r.homeMl), num(r.awayMl),
-      num(r.total), num(r.total),
-    ].join(','));
+    rows.push(r);
   }
+  if (!rows.length) return 0;
 
-  if (newLines.length) fs.appendFileSync(file, newLines.join('\n') + '\n');
-  return newLines.length;
+  // Un seul aller-retour pour toute la journée : `unnest` déplie les tableaux
+  // en lignes côté Postgres. Une boucle d'INSERT aurait fait ~15 requêtes pour
+  // une donnée qui tient dans une.
+  const res = await pool.query(
+    `INSERT INTO odds_log (game_date, home_team, away_team,
+                           home_ml_open, away_ml_open, home_ml_close, away_ml_close,
+                           total_open, total_close)
+     SELECT * FROM unnest(
+       $1::date[], $2::text[], $3::text[],
+       $4::numeric[], $5::numeric[], $4::numeric[], $5::numeric[],
+       $6::numeric[], $6::numeric[]
+     )
+     ON CONFLICT (game_date, home_team, away_team) DO UPDATE SET
+       home_ml_close = COALESCE(EXCLUDED.home_ml_close, odds_log.home_ml_close),
+       away_ml_close = COALESCE(EXCLUDED.away_ml_close, odds_log.away_ml_close),
+       total_close   = COALESCE(EXCLUDED.total_close,   odds_log.total_close),
+       updated_at    = NOW()`,
+    [
+      rows.map((r) => r.date),
+      rows.map((r) => r.home),
+      rows.map((r) => r.away),
+      rows.map((r) => r.homeMl),
+      rows.map((r) => r.awayMl),
+      rows.map((r) => r.total),
+    ],
+  );
+  return res.rowCount ?? 0;
+}
+
+/**
+ * Rend le journal au format CSV attendu par `fetch_data_v4.py`.
+ *
+ * Le format de sortie est inchangé — c'est le stockage qui a bougé, pas le
+ * contrat avec le pipeline ML. Utilisé par `npm run odds:export`.
+ */
+export async function exportOddsLogCsv(): Promise<string> {
+  const { rows } = await pool.query(
+    `SELECT to_char(game_date, 'YYYY-MM-DD') AS date, home_team, away_team,
+            home_ml_open, away_ml_open, home_ml_close, away_ml_close,
+            total_open, total_close
+       FROM odds_log
+      ORDER BY game_date ASC, home_team ASC`,
+  );
+  const num = (v: unknown) => (v == null ? '' : Number(v).toFixed(4));
+  const lines = rows.map((r: any) => [
+    r.date, r.home_team, r.away_team,
+    num(r.home_ml_open), num(r.away_ml_open), num(r.home_ml_close), num(r.away_ml_close),
+    num(r.total_open), num(r.total_close),
+  ].join(','));
+  return [HEADER, ...lines].join('\n') + '\n';
 }
 
 let timer: NodeJS.Timeout | null = null;

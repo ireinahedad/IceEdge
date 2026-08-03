@@ -72,8 +72,26 @@ const BANNED = [
   'tip', 'tips', 'prediction', 'predictions', 'sportsbook', 'bookmaker',
 ];
 
-const DURATION_MIN = 12;
+/**
+ * Bornes dures, pas la cible éditoriale — celle-ci vit dans build-video, où elle
+ * avertit sans bloquer. Le plancher est passé de 12 à 10 s en même temps que le
+ * hook devenait fixe : un post de quatre plans tombe désormais à 12.1-13.0 s, et
+ * une erreur bloquante à 12 se serait déclenchée sur la première vidéo un peu
+ * plus sèche que les autres. À 10 s, elle ne signale plus qu'un vrai accident.
+ */
+const DURATION_MIN = 10;
 const DURATION_MAX = 28;
+
+/**
+ * Durée du plan 1, fixe et indépendante du nombre de mots.
+ *
+ * La formule `2.0 + 0.3 × mots` donnait 3.5 à 4.4 s au hook — le temps de le
+ * lire deux fois, puis d'attendre. Or c'est exactement là que se décide le
+ * passage au plan suivant ou le défilement. Huit mots en gros caractères se
+ * lisent en une seconde ; la deuxième sert de marge, la troisième coûte des
+ * spectateurs. Le hook n'est plus un plan à lire mais une amorce.
+ */
+const HOOK_SECONDS = 2.0;
 
 function words(s: unknown): number {
   return String(s ?? '').trim().split(/\s+/).filter(Boolean).length;
@@ -153,7 +171,9 @@ async function main() {
       // mais 2.5 s suffisent pour lire un logo.
       const expected = slide.template === 'cta_card'
         ? 2.5
-        : Math.round((2.0 + 0.3 * textWords) * 10) / 10;
+        : slide.template === 'hook_card'
+          ? HOOK_SECONDS
+          : Math.round((2.0 + 0.3 * textWords) * 10) / 10;
       if (Math.abs(Number(slide.duration) - expected) > 0.05) {
         if (fixDurations) {
           fixed.push(`${tag} plan ${slide.n} : ${slide.duration}s → ${expected}s`);

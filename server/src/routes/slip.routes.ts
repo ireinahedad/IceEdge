@@ -17,7 +17,10 @@ router.post('/settle', async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.sub;
     if (!userId) { res.status(401).json({ error: 'Unauthorized' }); return; }
-    const summary = await settlePendingSlips(userId, 50);
+    // Chemin interactif : quelqu'un attend la réponse. Plafond bas ET budget
+    // court — le job de fond réglera le reste, personne ne doit tenir une
+    // connexion HTTP ouverte pendant que la file se vide.
+    const summary = await settlePendingSlips(userId, { max: 50, budgetMs: 10_000 });
     res.json(summary);
   } catch (err: any) {
     logger.error({ err: err.message }, '[POST /api/slips/settle]');

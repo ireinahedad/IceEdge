@@ -47,6 +47,7 @@ import {
 import { applyXpDelta, xpForOutcome } from './slip.service';
 import { logger } from '../logger';
 import { withJobLock } from './jobLock';
+import { mapLimit } from './concurrency';
 
 type LegResult = 'win' | 'loss' | 'unknown';
 
@@ -405,75 +406,150 @@ export interface SettlementSummary {
   settled:  number;
   wins:     number;
   losses:   number;
+  /** Faux quand la passe s'est arrêtée sur son plafond ou son budget temps —
+   *  il reste donc des tickets réglables. Une valeur durablement fausse est LE
+   *  signal que la file se remplit plus vite qu'elle ne se vide. */
+  exhausted: boolean;
 }
+
+export interface SettleOptions {
+  /** Plafond de tickets EXAMINÉS sur la passe (pas par lot). */
+  max?: number;
+  /** Budget temps de la passe. Doit rester sous le TTL du bail du job appelant. */
+  budgetMs?: number;
+  /** Taille d'un lot lu en base. */
+  batch?: number;
+}
+
+/** Lot lu en base par aller-retour. 100 : assez pour amortir la latence, assez
+ *  peu pour que le budget temps soit vérifié souvent. */
+const SETTLE_BATCH = Number(process.env.SETTLEMENT_BATCH) || 100;
+/** Plafond par défaut. Ce n'est plus lui qui borne la passe en pratique — le
+ *  budget temps le fait — mais il empêche une boucle infinie si la pagination
+ *  n'avance pas. */
+const SETTLE_MAX_DEFAULT = Number(process.env.SETTLEMENT_MAX_SLIPS) || 5_000;
+const SETTLE_BUDGET_DEFAULT_MS = Number(process.env.SETTLEMENT_BUDGET_MS) || 2 * 60_000;
+/** Jambes d'un même ticket traitées en parallèle. Petit : les jambes partagent
+ *  les caches de passe et, en dessous, `fetchNHL` déduplique déjà les appels en
+ *  vol — au-delà de quelques unités on n'achète plus de latence, on ne fait
+ *  qu'élargir les rafales vers l'API NHL. */
+const LEG_CONCURRENCY = Number(process.env.SETTLEMENT_LEG_CONCURRENCY) || 4;
 
 /**
  * Settle pending slips. If `userId` is given, only that user's slips.
  * Safe to call concurrently: the UPDATE is guarded by outcome = 'pending'.
+ *
+ * PAGINATION (audit, ligne H) — la passe boucle jusqu'à épuisement de la file
+ * plutôt que de s'arrêter à 100 ou 200 tickets. Avec l'ancien plafond fixe, une
+ * soirée à 2 000 tickets se vidait à 200/heure : des utilisateurs attendaient
+ * des JOURS le règlement de leur pari alors que le résultat était connu.
+ *
+ * La pagination est par CURSEUR `(placed_at, id)` et non par `OFFSET`. Un ticket
+ * examiné mais non réglable — marché non auto-réglé, match pas encore final —
+ * reste `pending` : une seconde requête `LIMIT` sans curseur renverrait
+ * exactement les mêmes lignes, et la boucle tournerait sur place indéfiniment.
+ *
+ * Les quatre caches sont créés UNE fois pour toute la passe : régler 300 tickets
+ * portant sur les 10 mêmes matchs coûte 10 récupérations, pas 300. C'est
+ * l'essentiel du bénéfice du « regroupement par match » de l'audit, sans en
+ * réorganiser la boucle.
  */
-export async function settlePendingSlips(userId?: string, max = 100): Promise<SettlementSummary> {
-  const params: unknown[] = [max];
-  let where = `outcome = 'pending'`;
-  if (userId) { where += ` AND user_id = $2`; params.push(userId); }
+export async function settlePendingSlips(userId?: string, opts: SettleOptions = {}): Promise<SettlementSummary> {
+  const max      = opts.max      ?? SETTLE_MAX_DEFAULT;
+  const budgetMs = opts.budgetMs ?? SETTLE_BUDGET_DEFAULT_MS;
+  const batch    = Math.max(1, opts.batch ?? SETTLE_BATCH);
+  const deadline = Date.now() + budgetMs;
 
-  const { rows: slips } = await pool.query(
-    `SELECT id, user_id AS "userId", legs,
-            combined_probability AS "combinedProbability"
-     FROM bet_slips
-     WHERE ${where}
-     ORDER BY placed_at ASC
-     LIMIT $1`,
-    params,
-  );
-
-  const summary: SettlementSummary = { checked: slips.length, settled: 0, wins: 0, losses: 0 };
+  const summary: SettlementSummary = { checked: 0, settled: 0, wins: 0, losses: 0, exhausted: true };
   const cache: GameCache = new Map();
   const boxCache: BoxCache = new Map();
   const scoringCache: ScoringCache = new Map();
   const faceoffCache: FaceoffCache = new Map();
 
-  for (const slip of slips) {
-    const legs: any[] = Array.isArray(slip.legs) ? slip.legs : [];
-    if (legs.length === 0) continue;
+  // Curseur de pagination : dernier (placed_at, id) examiné.
+  let cursorAt: string | null = null;
+  let cursorId: string | null = null;
 
-    const results: LegResult[] = [];
-    for (const leg of legs) results.push(await settleLeg(leg, cache, boxCache, scoringCache, faceoffCache));
-
-    // Parlay semantics: one lost leg loses the slip;
-    // a win requires EVERY leg to be settled and won.
-    let outcome: 'win' | 'loss' | null = null;
-    if (results.includes('loss')) outcome = 'loss';
-    else if (results.length > 0 && results.every((r) => r === 'win')) outcome = 'win';
-    if (!outcome) continue; // stays pending
-
-    let xp: number;
-    if (outcome === 'win') {
-      xp = xpForOutcome('win', slip.combinedProbability);
-    } else {
-      // Loss penalty scales with HOW MANY legs were lost:
-      // losing 1 leg out of 4 costs a quarter of the full penalty,
-      // losing them all costs the full risk-based penalty.
-      const lostLegs = results.filter((r) => r === 'loss').length;
-      const fullPenalty = Math.abs(xpForOutcome('loss', slip.combinedProbability));
-      xp = -Math.max(3, Math.round(fullPenalty * (lostLegs / legs.length)));
+  while (summary.checked < max) {
+    const limit = Math.min(batch, max - summary.checked);
+    const params: unknown[] = [limit];
+    let where = `outcome = 'pending'`;
+    if (userId)   { where += ` AND user_id = $${params.length + 1}`; params.push(userId); }
+    if (cursorAt) {
+      where += ` AND (placed_at, id) > ($${params.length + 1}::timestamptz, $${params.length + 2}::uuid)`;
+      params.push(cursorAt, cursorId);
     }
 
-    // Guard against double settlement (interval job + manual trigger)
-    const upd = await pool.query(
-      `UPDATE bet_slips
-       SET outcome = $1, resolved_at = NOW(), xp_awarded = $2
-       WHERE id = $3 AND outcome = 'pending'`,
-      [outcome, xp, slip.id],
+    const { rows: slips } = await pool.query(
+      `SELECT id, user_id AS "userId", legs, placed_at AS "placedAt",
+              combined_probability AS "combinedProbability"
+       FROM bet_slips
+       WHERE ${where}
+       ORDER BY placed_at ASC, id ASC
+       LIMIT $1`,
+      params,
     );
-    if (!upd.rowCount) continue;
+    if (slips.length === 0) break;   // file vide → `exhausted` reste vrai
 
-    await applyXpDelta(slip.userId, xp);
+    for (const slip of slips) {
+      summary.checked++;
+      cursorAt = slip.placedAt instanceof Date ? slip.placedAt.toISOString() : String(slip.placedAt);
+      cursorId = String(slip.id);
 
-    summary.settled++;
-    if (outcome === 'win') summary.wins++;
-    else summary.losses++;
+      const legs: any[] = Array.isArray(slip.legs) ? slip.legs : [];
+      if (legs.length === 0) continue;
+
+      // Jambes en parallèle borné : un ticket de 6 jambes sur 6 matchs
+      // différents prenait 6 allers-retours NHL en série.
+      const results: LegResult[] = await mapLimit(legs, LEG_CONCURRENCY,
+        (leg) => settleLeg(leg, cache, boxCache, scoringCache, faceoffCache));
+
+      // Parlay semantics: one lost leg loses the slip;
+      // a win requires EVERY leg to be settled and won.
+      let outcome: 'win' | 'loss' | null = null;
+      if (results.includes('loss')) outcome = 'loss';
+      else if (results.length > 0 && results.every((r) => r === 'win')) outcome = 'win';
+      if (!outcome) continue; // stays pending
+
+      let xp: number;
+      if (outcome === 'win') {
+        xp = xpForOutcome('win', slip.combinedProbability);
+      } else {
+        // Loss penalty scales with HOW MANY legs were lost:
+        // losing 1 leg out of 4 costs a quarter of the full penalty,
+        // losing them all costs the full risk-based penalty.
+        const lostLegs = results.filter((r) => r === 'loss').length;
+        const fullPenalty = Math.abs(xpForOutcome('loss', slip.combinedProbability));
+        xp = -Math.max(3, Math.round(fullPenalty * (lostLegs / legs.length)));
+      }
+
+      // Guard against double settlement (interval job + manual trigger)
+      const upd = await pool.query(
+        `UPDATE bet_slips
+         SET outcome = $1, resolved_at = NOW(), xp_awarded = $2
+         WHERE id = $3 AND outcome = 'pending'`,
+        [outcome, xp, slip.id],
+      );
+      if (!upd.rowCount) continue;
+
+      await applyXpDelta(slip.userId, xp);
+
+      summary.settled++;
+      if (outcome === 'win') summary.wins++;
+      else summary.losses++;
+    }
+
+    // Budget vérifié entre deux lots, jamais au milieu : un ticket entamé va
+    // toujours à son terme, sinon on paierait ses appels NHL sans écrire le
+    // résultat.
+    if (Date.now() >= deadline) { summary.exhausted = false; break; }
+    if (slips.length < limit)   break;                  // dernier lot → file vide
   }
 
+  if (summary.checked >= max) summary.exhausted = false;
+  if (!summary.exhausted) {
+    logger.warn(summary, '[Settlement] passe interrompue (budget ou plafond) — des tickets restent en attente');
+  }
   return summary;
 }
 
@@ -547,7 +623,10 @@ async function checkFinishedGames(): Promise<CheckResult> {
   }
 
   if (newlyFinal) {
-    await settlePendingSlips(undefined, 200);
+    // Budget sous le TTL du bail `settlement-check` (5 min), en laissant de la
+    // marge pour les appels NHL déjà faits ci-dessus. Ce qui ne rentre pas est
+    // repris au tour suivant : la file n'est jamais perdue, seulement étalée.
+    await settlePendingSlips(undefined, { budgetMs: 3 * 60_000 });
   }
 
   // Don't let the set grow forever across a long-running process
@@ -598,10 +677,16 @@ function armCheck(delay: number): void {
 
 /**
  * TTL des baux. Le check est court (quelques requêtes + appels NHL) ; la passe
- * de rattrapage peut régler jusqu'à 200 tickets en séquentiel, d'où un TTL bien
- * plus large. Ces valeurs majorent la durée observée, elles ne la mesurent pas :
+ * de rattrapage boucle jusqu'à épuisement de la file, d'où un TTL bien plus
+ * large. Ces valeurs majorent la durée observée, elles ne la mesurent pas :
  * elles sont là pour qu'une instance TUÉE ne bloque pas le job indéfiniment, pas
  * pour interrompre un job lent.
+ *
+ * Chaque TTL doit rester STRICTEMENT supérieur au budget temps passé à
+ * `settlePendingSlips` par le job correspondant (3 min sous un bail de 5,
+ * 10 min sous un bail de 15) : c'est le budget qui arrête la passe, jamais le
+ * bail — sinon une deuxième instance reprendrait le travail pendant que la
+ * première l'exécute encore.
  */
 const CHECK_LOCK_TTL_MS    = 5 * 60_000;
 const FALLBACK_LOCK_TTL_MS = 15 * 60_000;
@@ -661,7 +746,7 @@ export function startSettlementJob(): void {
   const fallback = async () => {
     try {
       await withJobLock('settlement-fallback', FALLBACK_LOCK_TTL_MS,
-        () => settlePendingSlips(undefined, 200));
+        () => settlePendingSlips(undefined, { budgetMs: 10 * 60_000 }));
     } catch (err: any) {
       logger.warn({ err: err.message }, '[Settlement] fallback failed');
     }

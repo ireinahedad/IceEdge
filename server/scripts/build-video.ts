@@ -36,6 +36,7 @@ import { spawn } from 'child_process';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const OUTPUT_ROOT = path.join(REPO_ROOT, 'content', 'output');
+const HISTORY_PATH = path.join(REPO_ROOT, 'content', 'data', 'history.json');
 
 const FPS = 30;
 
@@ -48,8 +49,16 @@ const FPS = 30;
 const CRF = 18;
 const PRESET = 'medium';
 
-/** Cible éditoriale, voir HANDOFF §4. Hors bornes : on avertit, on ne bloque pas. */
-const MIN_SECONDS = 14;
+/**
+ * Cible éditoriale, voir HANDOFF §4. Hors bornes : on avertit, on ne bloque pas.
+ *
+ * Le plancher est passé de 14 à 12 s quand le hook est devenu fixe à 2 s : un
+ * post de quatre plans tombe désormais autour de 12.5 s. Laisser 14 aurait fait
+ * clignoter l'avertissement sur chaque vidéo — un avertissement qui se déclenche
+ * toujours ne se lit plus. C'est une cible, pas une limite : les bornes dures
+ * sont celles de check-posts, plus larges.
+ */
+const MIN_SECONDS = 12;
 const MAX_SECONDS = 18;
 
 interface ManifestSlide {
@@ -288,6 +297,274 @@ async function buildPost(
 }
 
 // ===========================================================================
+// Page du jour — étape 7
+// ===========================================================================
+
+/**
+ * POURQUOI LA PAGE EST ÉCRITE ICI. Valider une journée demandait d'ouvrir six
+ * mp4, six blocs de légendes dans posts.json et de recopier les hashtags à la
+ * main. C'est le moment où l'on publie, donc le moment où l'on est pressé : ce
+ * qui est pénible finit par être sauté, à commencer par le journal.
+ *
+ * Elle n'est pas un script de plus mais la fin du montage, comme `review.html`
+ * est la fin du minage. Une étape qu'on peut oublier de lancer est une étape qui
+ * n'existe pas.
+ *
+ * Aucun CDN, aucun serveur : la page s'ouvre par double-clic, les vidéos sont
+ * lues depuis le dossier voisin.
+ */
+
+interface PagePost {
+  /** 1-based : exactement l'index attendu par `content:log -- --posts=`. */
+  index: number;
+  id: string;
+  subject: string;
+  template: string;
+  video: string | null;
+  seconds: number | null;
+  megabytes: number | null;
+  captionTiktok: string;
+  captionInstagram: string;
+  hashtags: string;
+  published: boolean;
+}
+
+function esc(s: unknown): string {
+  return String(s ?? '').replace(/[&<>"]/g, (ch) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch] as string));
+}
+
+/**
+ * Bloc de texte sélectionnable + bouton de copie.
+ *
+ * Le texte vit dans le DOM et non dans un attribut : une légende contient des
+ * apostrophes et des guillemets, et un attribut aurait exigé un second niveau
+ * d'échappement pour rien.
+ */
+function copyBlock(id: string, title: string, text: string, mono = false): string {
+  return `
+      <div class="block">
+        <div class="blabel">${esc(title)}
+          <button class="copy" data-target="${id}">copier</button>
+        </div>
+        <div class="text${mono ? ' mono' : ''}" id="${id}" tabindex="0">${esc(text)}</div>
+      </div>`;
+}
+
+function buildDayHtml(dateKey: string, posts: PagePost[], extras: string[]): string {
+  const cards = posts.map((p) => {
+    const meta = [
+      p.template,
+      p.seconds !== null ? `${p.seconds.toFixed(1)} s` : null,
+      p.megabytes !== null ? `${p.megabytes.toFixed(1)} Mo` : null,
+    ].filter(Boolean).join(' · ');
+
+    const video = p.video
+      ? `<video controls preload="metadata" playsinline src="${esc(p.video)}"></video>`
+      : `<div class="novideo">pas encore monté<br><code>npm run content:video</code></div>`;
+
+    return `
+  <article class="card${p.published ? ' done' : ''}" data-index="${p.index}">
+    <div class="left">
+      ${video}
+      <label class="pick">
+        <input type="checkbox" class="sel" value="${p.index}"${p.published ? ' disabled' : ''}>
+        ${p.published ? 'déjà journalisé' : 'publié'}
+      </label>
+    </div>
+    <div class="right">
+      <header>
+        <span class="idx">#${p.index}</span>
+        <h2>${esc(p.subject)}</h2>
+        <span class="tpl">${esc(meta)}</span>
+      </header>
+      ${copyBlock(`tt-${p.index}`, 'Légende TikTok', p.captionTiktok)}
+      ${copyBlock(`ig-${p.index}`, 'Légende Instagram', p.captionInstagram)}
+      ${copyBlock(`ht-${p.index}`, 'Hashtags', p.hashtags)}
+      ${copyBlock(`lg-${p.index}`, 'Journaliser ce post',
+        `npm run content:log -- --date=${dateKey} --posts=${p.index}`, true)}
+    </div>
+  </article>`;
+  }).join('');
+
+  const links = extras.length
+    ? `<p class="sub">Aussi dans ce dossier : ${extras.map((f) => `<a href="${esc(f)}">${esc(f)}</a>`).join(' · ')}</p>`
+    : '';
+
+  return `<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ICEEDGE — à publier, ${esc(dateKey)}</title>
+<style>
+*{box-sizing:border-box} body{margin:0;padding:28px;background:#0b0f14;color:#e6edf3;
+  font:15px/1.55 -apple-system,Segoe UI,Roboto,sans-serif}
+h1{margin:0 0 4px;font-size:22px} .sub{color:#8b949e;margin:0 0 6px;font-size:13px}
+a{color:#60a5fa}
+.card{display:grid;grid-template-columns:240px 1fr;gap:18px;background:#111823;
+  border:1px solid #1f2937;border-radius:10px;padding:16px;margin-bottom:14px}
+.card.done{opacity:.55}
+.left{display:flex;flex-direction:column;gap:10px}
+video{width:100%;border-radius:8px;background:#000;aspect-ratio:9/16}
+.novideo{width:100%;aspect-ratio:9/16;border:1px dashed #1f2937;border-radius:8px;
+  display:flex;flex-direction:column;justify-content:center;text-align:center;
+  color:#6b7280;font-size:12px;gap:6px}
+.pick{display:flex;align-items:center;gap:7px;font-size:13px;color:#8b949e;cursor:pointer}
+.right header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.idx{color:#6b7280;font-size:13px} h2{margin:0;font-size:16px}
+.tpl{margin-left:auto;background:#1f2937;color:#9ca3af;padding:3px 9px;border-radius:99px;font-size:11px}
+.block{margin-bottom:10px}
+.blabel{display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;
+  letter-spacing:.7px;color:#6b7280;margin-bottom:4px}
+.copy{background:#1f2937;color:#c9d1d9;border:0;border-radius:6px;padding:3px 10px;
+  font-size:11px;cursor:pointer;font-family:inherit}
+.copy:hover{background:#2b3a4d} .copy.ok{background:#166534;color:#dcfce7}
+.text{background:#0e1520;border:1px solid #1f2937;border-radius:8px;padding:9px 11px;
+  font-size:13px;color:#c9d1d9;white-space:pre-wrap;cursor:text}
+.text:focus{outline:1px solid #2b3a4d}
+.mono{font-family:Consolas,Menlo,monospace;font-size:12px;color:#9ca3af}
+.bar{position:sticky;bottom:0;background:#0e1520;border:1px solid #1f2937;border-radius:10px;
+  padding:12px 16px;margin-top:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.bar .mono{flex:1;min-width:280px;padding:7px 10px;background:#0b0f14;border-radius:6px;
+  border:1px solid #1f2937}
+.hint{color:#6b7280;font-size:12px;margin:14px 0 0}
+</style></head><body>
+<h1>À publier — ${esc(dateKey)}</h1>
+<p class="sub">${posts.length} post(s) · les légendes se copient d'un bouton, la vidéo se lit ici.</p>
+${links}
+${cards}
+<div class="bar">
+  <strong style="font-size:13px">Après publication</strong>
+  <div class="mono" id="cmd">coche les posts sortis</div>
+  <button class="copy" data-target="cmd">copier</button>
+</div>
+<p class="hint">Journaliser n'est pas une formalité : l'anti-répétition de
+<code>mine-stories</code> ne lit que <code>history.json</code>. Sans cette ligne, un
+cinquième du barème de sélection ne pénalise rien et le compte se répète au bout de
+trois semaines.</p>
+<script>
+// Le presse-papier moderne exige un contexte sécurisé. Chrome considère file://
+// comme tel, pas tous les navigateurs : la vieille méthode reste en repli, faute
+// de quoi le bouton échouerait en silence — pire qu'un bouton absent.
+function copyText(text, btn) {
+  var done = function () {
+    var old = btn.textContent;
+    btn.textContent = 'copié';
+    btn.classList.add('ok');
+    setTimeout(function () { btn.textContent = old; btn.classList.remove('ok'); }, 1200);
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(done, function () { fallback(text, done); });
+  } else {
+    fallback(text, done);
+  }
+}
+function fallback(text, done) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); done(); } catch (e) { alert('Copie impossible — sélectionne le texte à la main.'); }
+  document.body.removeChild(ta);
+}
+document.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('.copy') : null;
+  if (!btn) return;
+  var el = document.getElementById(btn.dataset.target);
+  if (el) copyText(el.textContent.trim(), btn);
+});
+// Un clic dans un bloc de texte le sélectionne en entier : sur téléphone,
+// attraper trois lignes au doigt est plus pénible que la copie elle-même.
+document.querySelectorAll('.text').forEach(function (el) {
+  el.addEventListener('focus', function () {
+    var r = document.createRange();
+    r.selectNodeContents(el);
+    var s = window.getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+  });
+});
+var boxes = Array.prototype.slice.call(document.querySelectorAll('.sel'));
+function refresh() {
+  var picked = boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
+  document.getElementById('cmd').textContent = picked.length
+    ? 'npm run content:log -- --date=${dateKey} --posts=' + picked.join(',')
+    : 'coche les posts sortis';
+}
+boxes.forEach(function (b) { b.addEventListener('change', refresh); });
+</script>
+</body></html>`;
+}
+
+/**
+ * Construit la page à partir de posts.json, pas de ce que cette exécution a
+ * monté : lancer `--only=suzuki` ne doit pas produire une page amputée des sept
+ * autres posts du jour.
+ */
+async function writeDayPage(dir: string, dateKey: string): Promise<number> {
+  let posts: any;
+  try {
+    posts = JSON.parse(await fs.readFile(path.join(dir, 'posts.json'), 'utf8'));
+  } catch {
+    console.log('  (pas de posts.json — page du jour non écrite)');
+    return 0;
+  }
+
+  let byId = new Map<string, any>();
+  try {
+    const candidates = JSON.parse(await fs.readFile(path.join(dir, 'candidates.json'), 'utf8'));
+    byId = new Map(candidates.candidates.map((c: any) => [c.id, c]));
+  } catch { /* la page se contente alors de l'identifiant du candidat */ }
+
+  // Ce qui est déjà journalisé s'affiche estompé et non cochable : la page sert
+  // à publier, pas à journaliser deux fois le même post.
+  let published = new Set<string>();
+  try {
+    const history = JSON.parse(await fs.readFile(HISTORY_PATH, 'utf8'));
+    published = new Set(history
+      .filter((h: any) => h.date === dateKey)
+      .map((h: any) => h.candidate_id as string));
+  } catch { /* premier passage */ }
+
+  const pagePosts: PagePost[] = [];
+  for (let i = 0; i < posts.posts.length; i++) {
+    const post = posts.posts[i];
+    const c = byId.get(post.candidate_id);
+    const rel = `${post.candidate_id}/video.mp4`;
+    let seconds: number | null = null;
+    let megabytes: number | null = null;
+    let video: string | null = null;
+    try {
+      const stat = await fs.stat(path.join(dir, post.candidate_id, 'video.mp4'));
+      video = rel.replace(/\\/g, '/');
+      megabytes = stat.size / 1024 / 1024;
+      seconds = await probeDuration(path.join(dir, post.candidate_id, 'video.mp4'));
+    } catch { /* post non monté */ }
+
+    pagePosts.push({
+      index: i + 1,
+      id: post.candidate_id,
+      subject: c ? `${c.entity.name}${c.entity.team ? ` · ${c.entity.team}` : ''}` : post.candidate_id,
+      template: c?.template ?? '',
+      video, seconds, megabytes,
+      captionTiktok: post.caption_tiktok ?? '',
+      captionInstagram: post.caption_instagram ?? '',
+      hashtags: (post.hashtags ?? []).join(' '),
+      published: published.has(post.candidate_id),
+    });
+  }
+
+  const extras: string[] = [];
+  for (const f of ['review.html', 'slides-preview.html']) {
+    try { await fs.access(path.join(dir, f)); extras.push(f); } catch { /* absent */ }
+  }
+
+  await fs.writeFile(path.join(dir, 'index.html'), buildDayHtml(dateKey, pagePosts, extras), 'utf8');
+  return pagePosts.length;
+}
+
+// ===========================================================================
 
 async function main() {
   const dateKey = arg('date') ?? new Date().toISOString().slice(0, 10);
@@ -344,7 +621,15 @@ async function main() {
     );
   }
 
-  console.log(`\n  ${built} vidéo(s) dans content\\output\\${dateKey}\\<post>\\video.mp4\n`);
+  const listed = await writeDayPage(dir, dateKey);
+
+  console.log(`\n  ${built} vidéo(s) dans content\\output\\${dateKey}\\<post>\\video.mp4`);
+  if (listed > 0) {
+    console.log(`\n  Ouvre content\\output\\${dateKey}\\index.html — ${listed} post(s),`);
+    console.log(`  vidéos lisibles, légendes et hashtags copiables, commande de journal.\n`);
+  } else {
+    console.log('');
+  }
 }
 
 main().catch((e) => { console.error(`\n${e.message}\n`); process.exit(1); });

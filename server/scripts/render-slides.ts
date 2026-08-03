@@ -272,6 +272,46 @@ function fill(template: string, vars: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_m, key) => vars[key] ?? '');
 }
 
+/**
+ * Le sujet affiché en haut de chaque plan : de qui parle ce chiffre.
+ *
+ * POURQUOI C'EST DÉRIVÉ ET NON RÉDIGÉ. Le nom vit déjà dans `entity` de
+ * candidates.json, verrouillé à l'étape 2. Le demander au rédacteur, c'est le
+ * recopier — donc accepter qu'il manque un jour, ou qu'il désigne autre chose
+ * que le candidat. Même raisonnement que pour `chart.kind`.
+ *
+ * Un plan qui affiche « 71 % à domicile » sans nommer Boston ne veut rien dire :
+ * le spectateur n'entre pas forcément par le plan 1, et la légende ne se lit
+ * qu'après la vidéo. `post.subject` reste possible pour les cas où le libellé
+ * dérivé ne dit rien de lisible.
+ */
+function subjectOf(entity: any): string {
+  if (!entity) return '';
+  const name = String(entity.name ?? '').trim();
+  const team = entity.team ? String(entity.team).trim() : '';
+
+  switch (entity.type) {
+    // Les entités de ligue portent un nom technique et francophone
+    // (« jours loin de la maison = (3.0, 340.0] ») : illisible à l'écran, et
+    // dans la mauvaise langue. Le sujet réel de ces angles est la ligue.
+    case 'league':
+    case 'games':
+      return 'NHL';
+    // Déjà des abréviations lisibles : « MTL vs FLA », « BOS 3-4 ANA ».
+    case 'matchup':
+    case 'teams':
+    case 'game':
+      return name;
+    // Un nom de joueur seul ne dit pas de quelle équipe on parle, et c'est
+    // l'équipe qui donne au spectateur une raison de rester.
+    case 'player':
+    case 'goalie':
+      return team ? `${name} · ${team}` : name;
+    default:
+      return name;
+  }
+}
+
 /** Un chiffre qui commence par + ou − est coloré : le sens se lit avant le texte. */
 function toneOf(big: string): string {
   if (/^\+/.test(big)) return 'positive';
@@ -351,6 +391,11 @@ async function main() {
   const chartKind = new Map<string, string>(
     candidates.candidates.map((c: any) => [c.id, c.chart?.kind ?? 'bar_compare']),
   );
+  // Le sujet suit exactement la même règle que le type de graphique : décidé à
+  // l'étape 2, lu ici, jamais recopié dans posts.json.
+  const subjectById = new Map<string, string>(
+    candidates.candidates.map((c: any) => [c.id, subjectOf(c.entity)]),
+  );
 
   const css = await fs.readFile(path.join(TEMPLATE_DIR, '_shared.css'), 'utf8');
   const animJs = await fs.readFile(path.join(TEMPLATE_DIR, '_anim.js'), 'utf8');
@@ -390,6 +435,10 @@ async function main() {
     const slideDir = path.join(dir, post.candidate_id, 'slides');
     if (!preview) await fs.mkdir(slideDir, { recursive: true });
 
+    // `esc` parce que ce texte vient des données (noms d'équipes et de joueurs)
+    // et part tel quel dans le document : un « & » suffirait à casser le HTML.
+    const subject = esc(post.subject ?? subjectById.get(post.candidate_id) ?? '');
+
     for (const slide of post.slides) {
       const template = templates[slide.template];
       if (!template) { console.log(`  gabarit inconnu : ${slide.template}`); continue; }
@@ -406,6 +455,7 @@ async function main() {
       }
 
       const html = fill(template, {
+        subject,
         season_label: posts.retrospective ? (post.season_label ?? '') : '',
         text: slide.text ?? '',
         big: slide.big ?? '',
