@@ -45,6 +45,38 @@ Sentry is already wired (`server/src/instrument.ts`, activated when
 - Notify when an issue's **event rate spikes** (e.g. > N events / minute).
 - Route to the same Slack/email channel as the uptime alerts.
 
+## Alertes de budget (audit de scalabilité, ligne 12)
+
+Les alertes ci-dessus disent que l'application est **cassée**. Celles-ci disent
+qu'elle est **chère** — un mode de défaillance beaucoup plus discret, parce que
+rien ne se dégrade : ça marche, et la facture arrive à la fin du mois.
+
+Chaque seuil est posé à **~50 % du plafond acceptable**, pas à 90 %. Une alerte à
+90 % arrive quand il est trop tard pour faire autre chose que payer ; à 50 % il
+reste le temps de comprendre d'où vient la consommation.
+
+| Fournisseur | Où | Seuil à poser | Ce que le dépassement signifie |
+|---|---|---|---|
+| **Railway** | Account → Usage → *Usage Limits* : email à un montant, et un *hard limit* au-dessus | alerte à **2× la facture d'un mois calme**, hard limit à 4× | Soit le trafic a réellement doublé, soit une boucle tourne (job sans verrou, redémarrages en boucle). Le hard limit est le seul garde-fou dur de toute la stack : à privilégier, quitte à couper |
+| **Neon** | Project → Settings → Usage quotas | alerte à **50 % des CU-heures et du stockage** du plan | CU-heures : le compute ne dort pas (cf. ligne 7 bis de l'audit). Stockage : probablement les data-URI d'avatars restés en base (ligne E) |
+| **The Odds API** | pas d'alerte fournisseur — surveiller `x-requests-remaining`, déjà journalisé par `odds.routes.ts` | avertir sous **20 % du quota mensuel** | Le cache de 5 min a sauté, ou un tir de charge a été lancé contre la production. Sans cache, le coût est linéaire au nombre de visiteurs |
+| **Provider LLM** (OpenAI / GitHub Models) | console du provider → *Usage limits* : soft à l'email, **hard limit mensuel** | hard limit = **part IA prévue × nombre d'abonnés + 30 %** | Le plafond par utilisateur (`llmQuota.service.ts`) rend ce dépassement théoriquement impossible : s'il se déclenche, c'est que le calcul du plafond a été contourné ou qu'un tarif a changé. À traiter comme un incident, pas comme une croissance |
+| **Stripe** | Developers → Webhooks : alerte sur le **taux d'échec** de l'endpoint | > 1 % d'échecs sur 24 h | Stripe désactive un endpoint qui échoue de façon répétée, et un endpoint désactivé = des abonnés qui paient sans passer Pro. C'est la seule ligne de ce tableau où l'alerte protège une recette, pas une dépense |
+| **Sentry** | Settings → Subscription → *Spend caps* | cap à **1× le quota inclus** (pas de dépassement facturé) | Le tracing de performance est échantillonné à 1 % en production par défaut (`instrument.ts`). Si le quota saute quand même, quelqu'un a posé `SENTRY_TRACES_SAMPLE_RATE` à la main et ne l'a pas retiré |
+| **Cloudflare R2** | Dashboard → R2 → Usage | alerte à **5 Go** (sur 10 Go gratuits) | Les avatars ne sont pas redimensionnés, ou rien ne supprime les anciens objets à chaque changement d'avatar |
+
+**Deux règles pour que ces alertes servent à quelque chose :**
+
+1. **Les router au même endroit que les alertes d'incident.** Une alerte de coût
+   envoyée sur une adresse qu'on ne lit pas est un accusé de réception, pas une
+   alerte.
+2. **Poser les hard limits là où ils existent** (Railway, provider LLM, Sentry).
+   Une alerte suppose que quelqu'un lise et agisse dans l'heure ; un plafond dur
+   agit tout seul. Pour un projet à une personne, c'est la différence entre une
+   mauvaise surprise et une facture qui ne peut pas arriver.
+
+Contexte chiffré et raisonnement complet : `AUDIT_SCALABILITE_COUTS.md`.
+
 ## Notes
 
 - Health probes are excluded from request logging (see `logger.ts`) so they

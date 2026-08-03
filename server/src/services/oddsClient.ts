@@ -13,13 +13,12 @@
 
 import { logger } from '../logger';
 import { recordUpstream } from '../metrics';
+import { TtlCache } from './ttlCache';
 
 const ODDS_BASE = 'https://api.the-odds-api.com/v4';
 const ODDS_KEY  = process.env.ODDS_API_KEY;
 const SPORT_KEY = 'icehockey_nhl';
 
-interface CacheEntry { data: OddsEvent[]; expiresAt: number }
-let cache: CacheEntry | null = null;
 const TTL = 5 * 60_000; // 5 min
 
 interface OddsOutcome { name: string; price: number; point?: number }
@@ -55,10 +54,37 @@ export async function fetchRawOdds(): Promise<RawOddsEvent[]> {
   return fetchAllOdds();
 }
 
+/**
+ * Cache des cotes NHL — UNE seule entrée, puisqu'un appel ramène toute la ligue.
+ *
+ * LE BUG QUE `TtlCache` CORRIGE ICI (trouvé par le tir S1 du 2026-08-03)
+ *
+ * La version précédente tenait un `let cache` maison, sans déduplication en vol :
+ *
+ *     if (cache && cache.expiresAt > Date.now()) return cache.data;
+ *     const res = await fetch(...);          // ← N appelants passent tous par là
+ *     cache = { data, expiresAt: ... };
+ *
+ * Entre l'instant où N appelants concurrents lisent un cache froid et celui où le
+ * premier écrit, **tous** voient `null` et partent chercher la même donnée.
+ * `getBestBets` price ses candidats en parallèle : mesuré sur un démarrage à
+ * froid, **une seule exécution a émis 26 appels** (13 matchs × h2h + totals),
+ * dont 4 rejetés par le limiteur d'en face.
+ *
+ * C'est exactement le troupeau corrigé dans `nhlApiClient` le 2026-07-28 — sur le
+ * seul module du repo où il coûte de l'argent. L'API NHL est gratuite ; The Odds
+ * API est facturée à l'appel. À 26 appels par fenêtre froide de 5 minutes, la
+ * consommation passait de ~8 600 crédits par mois à ~225 000.
+ *
+ * `wrap` rattache les N−1 autres à la promesse en vol : une fenêtre froide coûte
+ * un appel, quel que soit le nombre d'appelants simultanés.
+ */
+const oddsCache = new TtlCache<OddsEvent[]>(TTL, 1, 'odds-client');
+const ODDS_CACHE_KEY = SPORT_KEY;
+
 /** Récupère toutes les cotes NHL (h2h + totals, mise en cache 5 min). */
 async function fetchAllOdds(): Promise<OddsEvent[]> {
   if (!ODDS_KEY) return [];
-  if (cache && cache.expiresAt > Date.now()) return cache.data;
 
   const params = new URLSearchParams({
     apiKey:     ODDS_KEY,
@@ -66,19 +92,38 @@ async function fetchAllOdds(): Promise<OddsEvent[]> {
     markets:    'h2h,totals',
     oddsFormat: 'decimal',
   });
-  // Deuxième consommateur du quota The Odds API, à côté du proxy de
-  // `routes/odds.routes.ts`. Il doit être compté lui aussi, sinon le critère
-  // « ≤ 2 appels Odds API » du scénario S1 mesure la moitié de la réalité.
-  const started = Date.now();
+
   try {
-    const res = await fetch(`${ODDS_BASE}/sports/${SPORT_KEY}/odds?${params}`);
-    recordUpstream('odds', Date.now() - started, res.ok);
-    if (!res.ok) { logger.error({ status: res.status }, '[oddsClient]'); return []; }
-    const data = (await res.json()) as OddsEvent[];
-    cache = { data, expiresAt: Date.now() + TTL };
-    return data;
+    // Deuxième consommateur du quota The Odds API, à côté du proxy de
+    // `routes/odds.routes.ts`. Il doit être compté lui aussi, sinon le critère
+    // « ≤ 2 appels Odds API » du scénario S1 mesure la moitié de la réalité.
+    return await oddsCache.wrap(ODDS_CACHE_KEY, async () => {
+      const started = Date.now();
+      try {
+        const res = await fetch(`${ODDS_BASE}/sports/${SPORT_KEY}/odds?${params}`);
+        recordUpstream('odds', Date.now() - started, res.ok);
+        if (!res.ok) {
+          logger.error({ status: res.status }, '[oddsClient]');
+          // LEVER et non renvoyer `[]` : une réponse vide mise en cache 5 minutes
+          // priverait le moteur de cotes bien après le rétablissement. Rien n'est
+          // mémorisé quand `fn` rejette.
+          throw new Error(`odds upstream ${res.status}`);
+        }
+        return (await res.json()) as OddsEvent[];
+      } catch (err: any) {
+        recordUpstream('odds', Date.now() - started, false);
+        throw err;
+      }
+    });
   } catch (err: any) {
-    recordUpstream('odds', Date.now() - started, false);
+    // Repli sur les dernières cotes connues, même expirées — comme le fait déjà
+    // le proxy. Des cotes de dix minutes valent mieux qu'aucun facteur marché,
+    // et c'est le meilleur prédicteur dont dispose le moteur.
+    const stale = oddsCache.getStale(ODDS_CACHE_KEY);
+    if (stale) {
+      logger.warn({ err: err?.message }, '[oddsClient] upstream KO — cotes périmées servies');
+      return stale;
+    }
     logger.error({ err: err?.message }, '[oddsClient] fetch error');
     return [];
   }

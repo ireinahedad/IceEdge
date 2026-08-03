@@ -3,9 +3,23 @@ import { NHLService } from '../services/nhl.service';
 import { buildGameMarkets, buildTeamMarkets, buildPlayerMarkets } from '../services/nhlPredictions';
 import { FactorWeights } from '../services/predictionFactors';
 import { publicCache, privateCache, publicPolicy, TTL } from '../middleware/httpCache.middleware';
+import { staleFallback } from '../middleware/staleFallback.middleware';
 
 const router = Router();
 const nhl    = new NHLService();
+
+// --- Repli sur la dernière réponse connue ----------------------------------
+//
+// Trouvé par le tir S1 du 2026-08-03 : quand l'API NHL est devenue injoignable,
+// ces routes ont propagé des 500 alors que le proxy Odds, lui, sert déjà du
+// périmé (`getStale`) dans la même situation. Monté ici, en tête du routeur,
+// donc valable aussi pour toute route ajoutée plus tard.
+//
+// Sûr à cet endroit précis parce qu'AUCUNE route de ce fichier ne lit l'identité
+// de l'appelant (c'est déjà l'hypothèse qui autorise `publicCache` juste
+// au-dessus) : la clé de repli est l'URL, et deux visiteurs sur la même URL ont
+// droit à la même réponse. Ne jamais le monter sur un routeur authentifié.
+router.use(staleFallback);
 
 // --- Cache HTTP ------------------------------------------------------------
 //

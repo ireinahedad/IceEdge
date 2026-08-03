@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 /**
  * Garde-fou contre le retour du troupeau (stampede).
@@ -94,6 +94,91 @@ describe('nhlApiClient — déduplication des requêtes en vol', () => {
     // aussi — et l'endpoint resterait cassé jusqu'au redémarrage.
     await expect(mod.fetchTeams()).resolves.toBeInstanceOf(Array);
     expect(attempt).toBe(2);
+  });
+});
+
+/**
+ * TIMEOUT — trouvé par le tir de charge S1 du 2026-08-03, pas par relecture.
+ *
+ * Le module n'avait aucun timeout : `fetch` sans `signal` s'en remet au défaut
+ * d'undici, 300 s. Mesuré pendant le tir : `upstream.nhl.maxMs = 305 043`.
+ *
+ * La déduplication rend ce trou bien pire qu'une lenteur isolée — tous les
+ * appelants d'une URL partagent le sort du premier. Ces deux tests portent
+ * exactement là-dessus, et sur rien de fonctionnellement visible : sans eux, un
+ * retrait du `signal` passerait toute la suite au vert.
+ */
+describe('nhlApiClient — timeout', () => {
+  beforeEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+
+  // `NHL_TIMEOUT_MS` est lu à l'import du module. Le laisser à 50 ms
+  // contaminerait les blocs suivants, dont les `fetch` bouchonnés répondent vite
+  // mais pas instantanément sur une machine chargée — un test qui échoue une
+  // fois sur vingt est pire qu'un test absent.
+  afterEach(() => { delete process.env.NHL_TIMEOUT_MS; });
+
+  /** Charge le module avec un `fetch` qui ne répond jamais, mais respecte `signal`. */
+  async function loadWithHangingFetch(timeoutMs = 50) {
+    vi.resetModules();
+    process.env.NHL_USE_MOCK = 'false';
+    process.env.NHL_TIMEOUT_MS = String(timeoutMs);
+
+    vi.stubGlobal('fetch', (_url: string, init: any) => new Promise((_resolve, reject) => {
+      // Comportement d'undici : l'abandon rejette avec un `AbortError`.
+      init?.signal?.addEventListener('abort', () => {
+        reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+      });
+    }));
+
+    return import('./nhlApiClient');
+  }
+
+  it('abandonne un appel qui ne répond pas, avec un message qui nomme la cause', async () => {
+    const mod = await loadWithHangingFetch(50);
+
+    // Sans timeout, cette promesse tiendrait 300 s et le test expirerait.
+    await expect(mod.fetchTeams()).rejects.toThrow(/timeout/i);
+  });
+
+  it('libère TOUS les appelants dédoublonnés, pas seulement le premier', async () => {
+    const mod = await loadWithHangingFetch(50);
+
+    // C'est le vrai enjeu : pendant le tir, un seul appel bloqué a fait expirer
+    // toutes les requêtes qui attendaient la même URL. Le timeout doit donc
+    // rejeter la promesse PARTAGÉE, sinon il ne protège qu'une requête sur N.
+    const results = await Promise.allSettled(
+      Array.from({ length: 20 }, () => mod.fetchTeams()),
+    );
+
+    expect(results.every((r) => r.status === 'rejected')).toBe(true);
+  });
+
+  it('ne mémorise pas un dépassement de délai : l’appel suivant retente', async () => {
+    vi.resetModules();
+    process.env.NHL_USE_MOCK = 'false';
+    process.env.NHL_TIMEOUT_MS = '50';
+
+    let attempt = 0;
+    vi.stubGlobal('fetch', (_url: string, init: any) => {
+      attempt += 1;
+      if (attempt === 1) {
+        return new Promise((_r, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+          });
+        });
+      }
+      return Promise.resolve({
+        ok: true, status: 200,
+        json: async () => ({ standings: [{ teamAbbrev: { default: 'BOS' } }] }),
+      });
+    });
+
+    const mod = await import('./nhlApiClient');
+
+    await expect(mod.fetchTeams()).rejects.toThrow(/timeout/i);
+    // Une coupure passagère ne doit pas geler l'endpoint jusqu'au redémarrage.
+    await expect(mod.fetchTeams()).resolves.toBeInstanceOf(Array);
   });
 });
 

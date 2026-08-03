@@ -54,6 +54,24 @@ const DORMANT = process.env.DORMANT === 'true';
 
   httpServer.listen(PORT, () => {
     logger.info(`[Server] Running on http://localhost:${PORT} (HTTP + WebSocket)`);
+
+    // Réglages qui changent SILENCIEUSEMENT ce que le serveur fait, et qu'on ne
+    // peut pas déduire de son comportement sans mesurer. Les taire coûte cher :
+    // un tir de charge de six minutes a été perdu (2026-08-03) parce que
+    // `NHL_USE_MOCK` avait été posé dans le mauvais terminal — le run mesurait
+    // l'API NHL réelle en croyant mesurer la mécanique interne, et rien à
+    // l'écran ne le disait. Ces variables sont lues à l'IMPORT des modules :
+    // un serveur déjà démarré ne les verra jamais.
+    logger.info(
+      {
+        NHL_USE_MOCK:   process.env.NHL_USE_MOCK === 'true',
+        NHL_TIMEOUT_MS: Number(process.env.NHL_TIMEOUT_MS) || 8_000,
+        ML_DISABLED:    process.env.ML_DISABLED === 'true',
+        ODDS_API_KEY:   process.env.ODDS_API_KEY ? 'présente' : 'ABSENTE (proxy → [])',
+        API_RATE_LIMIT: process.env.API_RATE_LIMIT ?? 'défaut',
+      },
+      '[Server] Réglages effectifs',
+    );
   });
 
   registerGracefulShutdown(httpServer);

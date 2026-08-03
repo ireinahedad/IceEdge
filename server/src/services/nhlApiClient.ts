@@ -106,15 +106,62 @@ function dedupe<T>(url: string, fn: () => Promise<T>): Promise<T> {
   return p;
 }
 
-async function fetchNHL<T>(path: string): Promise<T> {
-  const url = `${BASE}${path}`;
-  return dedupe(url, () => timeUpstream('nhl', async () => {
-    const res = await fetch(url, {
+/**
+ * Délai au bout duquel un appel NHL est abandonné.
+ *
+ * TROUVÉ PAR LE TIR DE CHARGE S1 (2026-08-03), pas par la lecture du code.
+ * Ce module n'avait AUCUN timeout, et `fetch` sans `signal` s'en remet au défaut
+ * d'undici : 300 secondes. Les compteurs l'ont montré noir sur blanc —
+ * `upstream.nhl` : moyenne 9,6 s, **maximum 305 s**, soit exactement ce plafond.
+ *
+ * POURQUOI C'EST PIRE QU'UNE SIMPLE LENTEUR — la déduplication ci-dessus est la
+ * bonne décision pour le coût, mais elle fait que TOUS les appelants d'une URL
+ * partagent le sort du premier. Un appel NHL parti pour cinq minutes retient
+ * cinq minutes tous ceux qui demandent la même donnée. Pendant le tir, c'est
+ * cette chaîne qui a fait expirer `/api/nhl/games?date=` puis `best-bets`, qui
+ * appelle `fetchUpcomingGames`. Le rayon de souffle d'un upstream lent est donc
+ * l'application entière, pas la seule requête malchanceuse.
+ *
+ * 8 s : très au-dessus de la latence NHL normale (~100-600 ms), assez bas pour
+ * qu'un appelant abandonne avant que l'utilisateur ne parte. Tous les appelants
+ * ont déjà un repli (`.catch(() => [])`, cache périmé, prédiction par règles) :
+ * l'effet visible d'un dépassement est « une section sans donnée », pas « la
+ * page ne répond plus ».
+ *
+ * Un échec n'est jamais mémorisé (ni par `dedupe`, ni par le cache) : l'appel
+ * suivant retente immédiatement.
+ */
+const NHL_TIMEOUT_MS = Number(process.env.NHL_TIMEOUT_MS) || 8_000;
+
+/** `fetch` + abandon au bout de `NHL_TIMEOUT_MS`. */
+async function fetchWithTimeout(url: string): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), NHL_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
       headers: {
         'User-Agent': 'IceEdge/1.0 (nhle-stats-client)',
         Accept: 'application/json',
       },
+      signal: controller.signal,
     });
+  } catch (err: any) {
+    // `AbortError` ne dit pas d'où il vient. Le reformuler ici évite qu'un
+    // dépassement de délai ressemble, dans les logs, à une annulation côté
+    // client — deux causes opposées.
+    if (err?.name === 'AbortError') {
+      throw new Error(`NHL API timeout (${NHL_TIMEOUT_MS} ms) for ${url}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchNHL<T>(path: string): Promise<T> {
+  const url = `${BASE}${path}`;
+  return dedupe(url, () => timeUpstream('nhl', async () => {
+    const res = await fetchWithTimeout(url);
     if (!res.ok) {
       throw Object.assign(
         new Error(`NHL API ${res.status} for ${path}`),
@@ -129,12 +176,7 @@ async function fetchNHL<T>(path: string): Promise<T> {
 async function fetchNHLSearch<T>(path: string): Promise<T> {
   const url = `${SEARCH_BASE}${path}`;
   return dedupe(url, () => timeUpstream('nhl', async () => {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'IceEdge/1.0 (nhle-stats-client)',
-        Accept: 'application/json',
-      },
-    });
+    const res = await fetchWithTimeout(url);
     if (!res.ok) {
       throw Object.assign(
         new Error(`NHL Search API ${res.status} for ${path}`),

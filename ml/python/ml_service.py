@@ -37,13 +37,22 @@ import uvicorn
 # ── Monitoring d'erreurs (Sentry) ─────────────────────────────────────────────
 # No-op tant que SENTRY_DSN n'est pas défini → dev/CI restent silencieux.
 # L'intégration FastAPI capture automatiquement les exceptions des endpoints.
+#
+# ÉCHANTILLONNAGE — même règle que côté Node (`server/src/instrument.ts`,
+# audit ligne 10) : 1 % en production, 10 % ailleurs. Ce réglage ne concerne que
+# le tracing de PERFORMANCE ; les exceptions partent à 100 % dans tous les cas.
+# Ce service reçoit jusqu'à 30 appels par requête `best-bets` : c'est le point de
+# la stack où un taux de traçage élevé coûte le plus cher pour l'information la
+# plus redondante.
 _SENTRY_DSN = os.environ.get("SENTRY_DSN")
+_ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
 if _SENTRY_DSN:
     import sentry_sdk
+    _default_rate = "0.01" if _ENVIRONMENT == "production" else "0.1"
     sentry_sdk.init(
         dsn=_SENTRY_DSN,
-        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
-        environment=os.environ.get("ENVIRONMENT", "production"),
+        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", _default_rate)),
+        environment=_ENVIRONMENT,
     )
 
 # ── Contrôle d'accès ──────────────────────────────────────────────────────────
