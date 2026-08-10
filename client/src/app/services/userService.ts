@@ -23,6 +23,8 @@ import type {
   ChatRoom,
   ChatMessage,
   ChatRoomMember,
+  PlayerSummary,
+  PublicSlip,
 } from '../types/user';
 
 import { authedFetch } from './authService';
@@ -34,6 +36,31 @@ async function get<T>(path: string): Promise<T> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+/**
+ * Erreur d'API qui conserve le code HTTP.
+ *
+ * Le `get` ci-dessus aplatit tout en `Error(message)`, ce qui suffit tant qu'un
+ * échec ne veut dire qu'une chose. La page joueur, elle, doit distinguer trois
+ * refus qui n'appellent pas la même réaction : 402 « il faut être Pro »,
+ * 403 « ce joueur masque ses coupons », 404 « ce joueur n'existe pas ». Les
+ * différencier sur le texte du message serait fragile et intraduisible.
+ */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+async function getOrThrow<T>(path: string): Promise<T> {
+  const res = await authedFetch(path);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string; code?: string };
+    throw new ApiError(body.error ?? `API ${res.status}`, res.status, body.code);
   }
   return res.json() as Promise<T>;
 }
@@ -164,8 +191,17 @@ export const profileApiService = {
   searchUsers: (q: string): Promise<LeaderboardEntry[]> =>
     get<LeaderboardEntry[]>(`/users/search?q=${encodeURIComponent(q)}`),
 
-  getUserSlips: (userId: string): Promise<unknown[]> =>
-    get<unknown[]>(`/users/${userId}/slips`),
+  /** En-tête de la page joueur. Lève une ApiError 402/403/404. */
+  getPlayerSummary: (userId: string): Promise<PlayerSummary> =>
+    getOrThrow<PlayerSummary>(`/users/${userId}/summary`),
+
+  /**
+   * Coupons d'un joueur. Lève une ApiError 402/403/404.
+   * Les coupons verrouillés reviennent avec `legs: null` — le serveur ne les
+   * envoie pas tant que le match n'a pas commencé.
+   */
+  getPlayerSlips: (userId: string, limit = 25): Promise<PublicSlip[]> =>
+    getOrThrow<PublicSlip[]>(`/users/${userId}/slips?limit=${limit}`),
 
   updateProfile: (
     updates: Partial<Pick<UserProfile, 'username' | 'displayName' | 'bio' | 'favoriteTeam' | 'isPublic' | 'showSlips' | 'notifyValueBets' | 'valueBetMinEvPct' | 'openaiApiKey' | 'ruleWeights' | 'avatar' | 'avatarUrl'>>

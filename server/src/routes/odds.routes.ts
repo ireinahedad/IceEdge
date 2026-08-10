@@ -3,6 +3,7 @@ import { OddsService } from "../services/odds.service";
 import { TtlCache } from "../services/ttlCache";
 import { timeUpstream } from "../metrics";
 import { logger } from "../logger";
+import * as oddsQuota from "../services/oddsQuota";
 
 const router = Router();
 const odds = new OddsService();
@@ -57,8 +58,16 @@ function parseMarkets(raw: unknown): string {
   return kept.length ? kept.join(",") : "h2h";
 }
 
-/** Journalise le quota restant et alerte sous le seuil. */
+/**
+ * Journalise le quota restant, alerte sous le seuil, et le publie à l'arbitre
+ * partagé (`oddsQuota`) qui s'en sert pour suspendre la collecte de fond.
+ *
+ * Le proxy est le consommateur PRIORITAIRE : il n'est jamais bridé par la
+ * réserve, c'est lui qu'elle protège. Il se contente d'espacer ses
+ * rafraîchissements quand les crédits baissent.
+ */
 function trackQuota(upstream: { headers: { get(name: string): string | null } }): void {
+  oddsQuota.observe(upstream.headers);
   const remaining = Number(upstream.headers.get("x-requests-remaining"));
   if (!Number.isFinite(remaining)) return;
   const used = upstream.headers.get("x-requests-used");
@@ -89,6 +98,12 @@ router.get("/bet365/:sportKey", async (req: Request, res: Response) => {
     oddsFormat: "decimal",
   });
 
+  // TTL adaptatif : 5 min tant que les crédits abondent, jusqu'à 24 h quand il
+  // n'en reste plus. Le visiteur voit alors des cotes un peu datées plutôt
+  // qu'une page vide — c'est le compromis voulu sur une clé gratuite, où un
+  // TTL fixe de 5 min vaudrait à lui seul ~17 000 appels par mois.
+  const ttl = oddsQuota.proxyTtlMs(ODDS_TTL);
+
   try {
     const data = await oddsCache.wrap(key, () => timeUpstream('odds', async () => {
       const upstream = await fetch(`${ODDS_BASE}/sports/${sportKey}/odds?${params}`);
@@ -99,7 +114,7 @@ router.get("/bet365/:sportKey", async (req: Request, res: Response) => {
         throw new Error(`upstream ${upstream.status}`);
       }
       return upstream.json();
-    }));
+    }), ttl);
 
     // 60 s navigateur/CDN + 5 min de stale-while-revalidate : la vague
     // d'arrivée est absorbée en amont du serveur.

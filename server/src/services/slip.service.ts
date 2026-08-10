@@ -1,5 +1,7 @@
 import { pool } from '../db/connection';
 import { notifySlipPlaced } from './settlement.service';
+import { fetchGameById } from './nhlApiClient';
+import { logger } from '../logger';
 
 // ─── XP & Tier config ─────────────────────────────────────────────────────────
 
@@ -105,6 +107,46 @@ export interface SlipLeg {
   selectionValue?: string;
 }
 
+/**
+ * Heure de verrouillage d'un coupon = mise au jeu de son match le plus TÔT.
+ *
+ * Un parlay se déverrouille dès que son premier match commence : à partir de là
+ * le contenu du ticket n'a plus de valeur pour un copieur, et le masquer plus
+ * longtemps ne protégerait plus rien.
+ *
+ * Résolu ICI, au serveur, et figé en base — jamais accepté du client, qui
+ * s'offrirait le déverrouillage instantané en éditant une requête, et jamais
+ * recalculé à la lecture, qui coûterait un appel NHL par affichage de page.
+ *
+ * Renvoie `null` si aucune heure n'est exploitable (pas de `gameId`, pari
+ * futures, API indisponible). Le NULL n'est pas « pas de verrou » : la lecture
+ * le traite comme « masqué tant que le coupon est pending ». Une panne de
+ * résolution doit rendre un coupon trop discret, pas le divulguer trop tôt.
+ */
+async function resolveLocksAt(legs: SlipLeg[]): Promise<Date | null> {
+  const gameIds = [...new Set(legs.map((l) => l.gameId).filter(Boolean) as string[])];
+  if (!gameIds.length) return null;
+
+  // Séquentiel : un coupon plafonne à 12 jambes, donc à 12 matchs distincts, et
+  // `fetchGameById` est déjà mis en cache côté client NHL.
+  let earliest: number | null = null;
+  for (const id of gameIds) {
+    try {
+      const game = await fetchGameById(id);
+      const ms = game?.startTimeUTC ? new Date(game.startTimeUTC).getTime() : NaN;
+      if (Number.isFinite(ms)) earliest = earliest == null ? ms : Math.min(earliest, ms);
+    } catch {
+      // Un match non résolu ne doit pas faire échouer la soumission : le pari
+      // de l'utilisateur passe avant l'exactitude du verrou.
+    }
+  }
+
+  if (earliest == null) {
+    logger.warn({ gameIds }, '[slip] locks_at non résolu — le coupon restera masqué aux tiers jusqu\'à son règlement');
+  }
+  return earliest == null ? null : new Date(earliest);
+}
+
 export async function submitSlip(
   userId:              string,
   legs:                SlipLeg[],
@@ -119,12 +161,14 @@ export async function submitSlip(
     combinedProbability ??
     Math.round(legs.reduce((acc, l) => acc * (l.probability / 100), 1) * 100);
 
+  const locksAt = await resolveLocksAt(legs);
+
   const { rows } = await pool.query<{ id: string }>(
     `INSERT INTO bet_slips
-       (user_id, sport, legs, leg_count, is_parlay, combined_probability, outcome)
-     VALUES ($1, $2, $3::jsonb, $4, $5, $6, 'pending')
+       (user_id, sport, legs, leg_count, is_parlay, combined_probability, outcome, locks_at)
+     VALUES ($1, $2, $3::jsonb, $4, $5, $6, 'pending', $7)
      RETURNING id`,
-    [userId, sport, JSON.stringify(legs), legs.length, isParlay, combined],
+    [userId, sport, JSON.stringify(legs), legs.length, isParlay, combined, locksAt],
   );
 
   // Wake the settlement scheduler so it re-plans its wake horizon around this

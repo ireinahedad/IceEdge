@@ -75,6 +75,17 @@ interface ChartSpec {
    */
   label_from?: string;
   /**
+   * Plancher d'échantillon appliqué au CLASSEMENT, distinct de celui qui filtre
+   * les candidats.
+   *
+   * Trier un taux sans plancher sélectionne mécaniquement les plus petits
+   * échantillons : le classement des mises au jeu s'ouvrait sur un joueur à
+   * 100 % en deux matchs, au-dessus du candidat. Le graphique contredisait
+   * alors la vidéo qu'il devait prouver. `"$gp_min"` suit la phase de saison,
+   * comme les seuils des règles.
+   */
+  min?: { field: string; value: number | string };
+  /**
    * Restreint le classement aux lignes qui partagent la valeur du candidat sur
    * ce champ. Les JSON de facteurs de ligue contiennent le même facteur mesuré
    * sur trois grandeurs : sans ce filtre, le graphique alignait « getaway game »
@@ -805,7 +816,7 @@ function rowLabel(r: Row, chart: ChartSpec, labels: any): string {
  * Le CSV existe aussi pour toi : il s'ouvre dans Figma, Excel ou Datawrapper si
  * tu veux soigner un visuel à la main sans dépendre du pipeline.
  */
-function buildChart(c: Candidate, rows: Row[], labels: any): Array<Record<string, unknown>> | null {
+function buildChart(c: Candidate, rows: Row[], labels: any, phase: Phase): Array<Record<string, unknown>> | null {
   const chart = c.chart;
   const top = chart.top ?? 10;
 
@@ -823,6 +834,10 @@ function buildChart(c: Candidate, rows: Row[], labels: any): Array<Record<string
       const field = chart.field;
       if (!field) return null;
       let pool = chart.filter ? rows.filter((r) => Boolean(r[chart.filter as string])) : rows;
+      if (chart.min) {
+        const floor = Number(resolveThreshold(chart.min.value, phase));
+        pool = pool.filter((r) => Number(r[chart.min!.field]) >= floor);
+      }
       if (chart.peer_field) {
         const mine = c.facts[chart.peer_field];
         pool = pool.filter((r) => r[chart.peer_field as string] === mine);
@@ -1066,7 +1081,7 @@ async function main() {
     const rows = rule.path
       ? flattenJson((sources as any)[`${rule.source}__raw`], rule.path)
       : sources[rule.source] ?? [];
-    const data = buildChart(c, rows, config.chart_labels);
+    const data = buildChart(c, rows, config.chart_labels, phase);
     if (data && data.length > 0) {
       const file = `charts/${c.id}.csv`;
       await fs.writeFile(path.join(outDir, file), toCsv(data), 'utf8');

@@ -6,3 +6,12 @@ python/__pycache__
 .env
 data/
 python/.dockerignore
+
+# L'ensemble bootstrap (S1) : 20 membres, 8.9 Mo, chargés par ml_service pour
+# exposer probability_std / uncertainty — champs qu'AUCUN code de mise ne
+# consomme. C'est la conclusion assumée de P4 : σ reste un diagnostic hors
+# ligne, la règle de réduction n'a jamais été branchée. `_load_score_ensemble`
+# tolère l'absence du dossier, donc l'exclure ne fait que remettre les champs à
+# `null` — exactement ce que /predict/team renvoie déjà.
+# Pour re-mesurer σ : `python train_score.py --ensemble 20` en local.
+models/score_ensemble/

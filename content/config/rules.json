@@ -218,7 +218,7 @@
       ],
       "amplitude": { "field": "ppg", "scale": [0.55, 1.10] },
       "robustness": { "field": "gp", "scale": ["$gp_min", 60] },
-      "chart": { "kind": "bar_rank", "field": "ppg", "filter": "is_rookie", "top": 10, "unit": "points par match, recrues" },
+      "chart": { "kind": "bar_rank", "field": "ppg", "filter": "is_rookie", "min": { "field": "gp", "value": "$gp_min" }, "top": 10, "unit": "points par match, recrues" },
       "headline_en": "Nobody is talking about this rookie yet.",
       "note": "54 recrues au total ; le seuil de 0.55 en garde 8, soit le vrai haut du panier."
     },
@@ -253,7 +253,7 @@
       ],
       "amplitude": { "field": "faceoff_pct", "scale": [55, 62] },
       "robustness": { "field": "gp", "scale": [40, 70] },
-      "chart": { "kind": "bar_rank", "field": "faceoff_pct", "filter": "is_center", "top": 10, "unit": "% de mises au jeu gagnées" },
+      "chart": { "kind": "bar_rank", "field": "faceoff_pct", "filter": "is_center", "min": { "field": "gp", "value": 40 }, "top": 10, "unit": "% de mises au jeu gagnées" },
       "headline_en": "The most underrated skill in hockey.",
       "note": "CORRIGÉ au premier passage réel (2026-08-01). Sans la condition de position, la règle sortait Lucas Raymond — un ailier gauche à 100 % de mises au jeu, sur une poignée de tentatives — et Josh Anderson à 69.7 %. Le CSV ne contient pas le NOMBRE de mises au jeu prises, donc impossible de filtrer sur le volume : la position sert de substitut, un centre en prend forcément beaucoup. Le rendement passe de 39 à 26 et le maximum réel tombe à 61.5 % (J.T. Miller), ce qui recale l'échelle [55, 62]. Meilleur correctif à terme : ajouter faceoffs_taken dans build-content-insights.ts."
     },

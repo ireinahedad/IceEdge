@@ -1,0 +1,312 @@
+{
+  "edge_threshold": 0.02,
+  "markets": {
+    "total": [
+      {
+        "edge": 0.01,
+        "n_bets": 8822,
+        "n_push": 744,
+        "hit_rate": 49.86,
+        "roi_flat_pct": -3.02,
+        "roi_se_pct": 0.99,
+        "z": -3.05
+      },
+      {
+        "edge": 0.02,
+        "n_bets": 7917,
+        "n_push": 737,
+        "hit_rate": 49.62,
+        "roi_flat_pct": -3.26,
+        "roi_se_pct": 1.04,
+        "z": -3.12
+      },
+      {
+        "edge": 0.03,
+        "n_bets": 7012,
+        "n_push": 712,
+        "hit_rate": 49.65,
+        "roi_flat_pct": -3.01,
+        "roi_se_pct": 1.11,
+        "z": -2.72
+      },
+      {
+        "edge": 0.04,
+        "n_bets": 6201,
+        "n_push": 694,
+        "hit_rate": 49.37,
+        "roi_flat_pct": -3.3,
+        "roi_se_pct": 1.17,
+        "z": -2.81
+      },
+      {
+        "edge": 0.05,
+        "n_bets": 5445,
+        "n_push": 668,
+        "hit_rate": 49.47,
+        "roi_flat_pct": -2.89,
+        "roi_se_pct": 1.25,
+        "z": -2.31
+      }
+    ],
+    "puckline": [
+      {
+        "edge": 0.01,
+        "n_bets": 8238,
+        "n_push": 0,
+        "hit_rate": 58.19,
+        "roi_flat_pct": -0.74,
+        "roi_se_pct": 1.02,
+        "z": -0.72
+      },
+      {
+        "edge": 0.02,
+        "n_bets": 6658,
+        "n_push": 0,
+        "hit_rate": 59.31,
+        "roi_flat_pct": 0.17,
+        "roi_se_pct": 1.11,
+        "z": 0.15
+      },
+      {
+        "edge": 0.03,
+        "n_bets": 5242,
+        "n_push": 0,
+        "hit_rate": 60.23,
+        "roi_flat_pct": 1.02,
+        "roi_se_pct": 1.23,
+        "z": 0.83
+      },
+      {
+        "edge": 0.04,
+        "n_bets": 3945,
+        "n_push": 0,
+        "hit_rate": 61.06,
+        "roi_flat_pct": 2.1,
+        "roi_se_pct": 1.4,
+        "z": 1.5
+      },
+      {
+        "edge": 0.05,
+        "n_bets": 2896,
+        "n_push": 0,
+        "hit_rate": 60.77,
+        "roi_flat_pct": 2.0,
+        "roi_se_pct": 1.62,
+        "z": 1.23
+      }
+    ],
+    "puckline_diagnostics": {
+      "threshold": 0.04,
+      "by_season": [
+        {
+          "season": 2014,
+          "n": 511,
+          "roi_pct": 4.97
+        },
+        {
+          "season": 2015,
+          "n": 393,
+          "roi_pct": 9.32
+        },
+        {
+          "season": 2016,
+          "n": 323,
+          "roi_pct": -8.04
+        },
+        {
+          "season": 2017,
+          "n": 377,
+          "roi_pct": 11.15
+        },
+        {
+          "season": 2018,
+          "n": 524,
+          "roi_pct": 2.95
+        },
+        {
+          "season": 2019,
+          "n": 554,
+          "roi_pct": 1.55
+        },
+        {
+          "season": 2020,
+          "n": 455,
+          "roi_pct": 3.22
+        },
+        {
+          "season": 2021,
+          "n": 674,
+          "roi_pct": -3.46
+        },
+        {
+          "season": 2022,
+          "n": 134,
+          "roi_pct": -8.06
+        }
+      ],
+      "by_leg": {
+        "+1.5": {
+          "n": 3482,
+          "roi_pct": -0.3,
+          "z": -0.23
+        },
+        "-1.5": {
+          "n": 463,
+          "roi_pct": 20.09,
+          "z": 3.05
+        }
+      },
+      "dissection": {
+        "leg": "-1.5",
+        "n": 463,
+        "roi_pct": 20.09,
+        "roi_se_pct": 6.6,
+        "z": 3.05,
+        "profit_share": 1.127,
+        "bet_share": 0.117,
+        "by_season": [
+          {
+            "season": 2014,
+            "n": 41,
+            "roi_pct": 5.61
+          },
+          {
+            "season": 2015,
+            "n": 109,
+            "roi_pct": 32.98
+          },
+          {
+            "season": 2016,
+            "n": 50,
+            "roi_pct": -22.9
+          },
+          {
+            "season": 2017,
+            "n": 99,
+            "roi_pct": 35.18
+          },
+          {
+            "season": 2018,
+            "n": 30,
+            "roi_pct": 52.5
+          },
+          {
+            "season": 2019,
+            "n": 20,
+            "roi_pct": 32.0
+          },
+          {
+            "season": 2020,
+            "n": 52,
+            "roi_pct": 21.29
+          },
+          {
+            "season": 2021,
+            "n": 32,
+            "roi_pct": 3.75
+          },
+          {
+            "season": 2022,
+            "n": 30,
+            "roi_pct": -10.17
+          }
+        ],
+        "seasons_positive": "7/9",
+        "jackknife_season": {
+          "worst_season": 2017,
+          "roi_without_pct": 15.98,
+          "stays_positive": true
+        },
+        "by_odds": [
+          {
+            "lo": 1.7407,
+            "hi": 2.7,
+            "n": 152,
+            "roi_pct": 10.82,
+            "z": 1.1
+          },
+          {
+            "lo": 2.7,
+            "hi": 3.05,
+            "n": 156,
+            "roi_pct": 24.26,
+            "z": 2.13
+          },
+          {
+            "lo": 3.05,
+            "hi": 3.75,
+            "n": 155,
+            "roi_pct": 24.97,
+            "z": 1.94
+          }
+        ],
+        "by_edge": [
+          {
+            "lo": 0.0401,
+            "hi": 0.0482,
+            "n": 154,
+            "roi_pct": 19.88,
+            "z": 1.75
+          },
+          {
+            "lo": 0.0482,
+            "hi": 0.061,
+            "n": 154,
+            "roi_pct": 13.99,
+            "z": 1.23
+          },
+          {
+            "lo": 0.061,
+            "hi": 0.1415,
+            "n": 155,
+            "roi_pct": 26.35,
+            "z": 2.28
+          }
+        ],
+        "by_team_top": [
+          {
+            "team": "BOS",
+            "n": 41,
+            "gross_units": 19.0
+          },
+          {
+            "team": "CGY",
+            "n": 19,
+            "gross_units": 15.71
+          },
+          {
+            "team": "DAL",
+            "n": 23,
+            "gross_units": 10.75
+          },
+          {
+            "team": "MTL",
+            "n": 14,
+            "gross_units": 7.6
+          },
+          {
+            "team": "CHI",
+            "n": 8,
+            "gross_units": 7.45
+          }
+        ],
+        "top3_teams_share": 0.391,
+        "top3_teams_share_null_median": 0.354,
+        "top3_teams_p": 0.27,
+        "wins_to_flip": 40,
+        "wins_to_flip_share": 0.0864,
+        "roi_drop_top1_pct": 19.57,
+        "roi_drop_top3_pct": 18.55,
+        "roi_drop_top5_pct": 17.54,
+        "bootstrap_p_positive": 1.0,
+        "bootstrap_ci95_pct": [
+          7.47,
+          32.95
+        ],
+        "blocking": [],
+        "warnings": [],
+        "verdict": "r\u00e9parti sur tous les axes \u2014 non r\u00e9fut\u00e9. \u00c0 confirmer hors \u00e9chantillon avant toute mise."
+      }
+    }
+  }
+}

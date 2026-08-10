@@ -6,7 +6,7 @@ counter-intuitive, surprising deviations that make good short-form content
 (TikTok/Reels): "team X wins only Y% of the time when Z".
 
 Does NOT touch or reveal the ponderation/weighting logic used by the actual
-prediction models (game_model.json / totals_model.json / feature_importance_*).
+prediction models (game_model.json / score_model.json / feature_importance_*).
 This only computes raw historical win-rate / over-rate deviations per
 situational bucket, from data that is already in the CSV.
 

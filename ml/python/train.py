@@ -1,16 +1,20 @@
 """
 train.py (v4)
 =============
-Entraînement XGBoost sur le dataset v4 (MoneyPuck + gardiens + stars + cotes).
-Aucune dépendance scikit-learn — fonctionne sur Python 3.14+.
+Classifieur moneyline XGBoost sur le dataset v4 (MoneyPuck + gardiens + stars
++ cotes). Aucune dépendance scikit-learn — fonctionne sur Python 3.14+.
 
-Nouveautés v4 :
-  • Features auto-détectées depuis nhl_games_v4.csv (xG, gardiens, stars, cotes…)
+  • Jeu de features CŒUR, 13 colonnes arrêtées empiriquement (cf. CORE_FEATURES)
   • Recherche aléatoire d'hyperparamètres sur le set de VALIDATION (log-loss)
   • Le modèle apprend AVEC les cotes en feature (NaN si absentes — XGBoost gère)
   • Blend final modèle ⊕ marché (régression logistique 2D ajustée sur val)
   • Baselines honnêtes : domicile, constant, ELO seul, MARCHÉ seul
   • Rétro-compatible : si nhl_games_v4.csv absent, retombe sur nhl_games.csv (v3)
+
+Ce que ce fichier ne fait plus :
+  • le modèle de totaux (S2) — `train_score.py` price toute ligne depuis la
+    distribution jointe, et le faisait déjà mieux ;
+  • l'auto-détection de features « full » (S3) — mesurée perdante par P5.
 
 Usage :
     cd ml/python
@@ -45,12 +49,6 @@ def brier(y, p):
 def accuracy(y, p, t=0.5):
     return float(np.mean((p >= t).astype(int) == y))
 
-def mae(y, p):
-    return float(np.mean(np.abs(p - y)))
-
-def rmse(y, p):
-    return float(np.sqrt(np.mean((p - y) ** 2)))
-
 
 # ── Calibration de Platt + blend marché ──────────────────────────────────────
 
@@ -77,41 +75,73 @@ def apply_logistic(X: np.ndarray, w: np.ndarray) -> np.ndarray:
 
 META = {"game_id", "season", "date", "home_team", "away_team", "home_score",
         "away_score", "home_win", "total_goals",
+        # Cibles du modèle de score (P2) — jamais des features, sinon fuite
+        "went_to_ot", "home_reg_score", "away_reg_score", "reg_total_goals",
         "home_ml_open", "away_ml_open", "home_ml_close", "away_ml_close",
-        "total_open", "total_close"}
+        "total_open", "total_close",
+        # Prix des marchés dérivés — JAMAIS des features.
+        # Ce n'est pas une précaution de principe. L'ancienne auto-détection
+        # retenait tout nom contenant "total_close"/"total_open", donc
+        # `total_close_over` entrait tout seul et le modèle apprenait le prix du
+        # bookmaker au lieu du jeu. Le piège est silencieux — il produit
+        # d'excellentes métriques et un ROI nul. La liste reste exhaustive :
+        # `build_dataset.py` peut ajouter des colonnes de prix, et un META
+        # incomplet redeviendrait une fuite.
+        "total_open_over", "total_open_under",
+        "total_close_over", "total_close_under",
+        "puck_line_home", "pl_home_price", "pl_away_price",
+        "market_over_p_open", "market_over_p_close", "market_pl_home_p"}
 
 ODDS_FEATURES = ["market_home_p_open", "market_home_p_close"]
 
+# ── Jeu de features CŒUR ─────────────────────────────────────────────────────
+# Arrêté empiriquement — walk-forward 7 saisons / 7 363 matchs avec cotes :
+#
+#   marché seul          logloss 0.66399   (plafond, indisponible hors saisons cotées)
+#   ELO nu               logloss 0.67055
+#   117 features (auto)  logloss 0.67064   ← MOINS BON qu'un ELO nu
+#   13 features (CŒUR)   logloss 0.66819   ← ce jeu
+#
+# Les ~104 features retirées n'apportaient que de la variance : doublons _s/_l sur
+# la même quantité, côtés home_X/away_X là où le diff existe, features voyage à
+# variance quasi nulle. Tout est en écart signé (diff) pour garantir la symétrie
+# home/away — un modèle qui voit home_X et away_X séparément gaspille de la
+# capacité à ré-apprendre la soustraction.
+CORE_FEATURES = [
+    # Force d'équipe
+    "elo_diff", "elo_expected",
+    # Possession / xG à forces égales — fenêtre courte (EWMA hl=6) et longue (hl=20)
+    "ev_xgf_pct_s_diff", "ev_cf_pct_s_diff", "ev_xgf_pct_l_diff",
+    # Confrontation attaque vs défense
+    "xg_matchup_diff",
+    # Gardien
+    "goalie_gsax60_diff",
+    # Effectif disponible
+    "star_power_diff", "stars_out_weight_diff",
+    # Calendrier
+    "rest_days_diff", "b2b_diff",
+    # Forme récente
+    "finishing_s_diff", "win_s_diff",
+]
+
+
 def select_features(df: pd.DataFrame, use_odds: bool) -> list[str]:
-    feats = []
-    for c in df.columns:
-        if c in META:
-            continue
-        if c in ODDS_FEATURES:
-            if use_odds:
-                feats.append(c)
-            continue
-        if df[c].dtype.kind not in "fib":
-            continue
-        if df[c].notna().mean() < 0.30:      # features quasi vides
-            continue
-        if df[c].std(skipna=True) < 1e-9:    # variance nulle
-            continue
-        feats.append(c)
+    """Le jeu CŒUR, seul jeu de features (S3).
+
+    L'ancien mode « full » auto-détectait ~117 colonnes. P5 l'a mesuré perdant
+    de 0.00245 de log-loss en variance pure — et même moins bon qu'un ELO nu
+    (0.67064 contre 0.67055). Le garder n'était plus un choix mais un piège :
+    qui le relançait obtenait un modèle plus faible sans le voir passer.
+    Le supprimer rend le jeu de features reproductible par construction.
+    """
+    feats = [f for f in CORE_FEATURES if f in df.columns]
+    missing = [f for f in CORE_FEATURES if f not in df.columns]
+    if missing:
+        print(f"   ⚠️  Features cœur absentes du dataset : {missing}")
+        print(f"      → relance `python build_dataset.py` (elles y sont désormais construites)")
+    if use_odds:
+        feats += [c for c in ODDS_FEATURES if c in df.columns]
     return feats
-
-TOTALS_KEYWORDS = ("gf", "ga", "xgf", "xga", "hdxg", "sog", "finishing", "goalie",
-                   "pp_", "pk_", "rest", "b2b", "3in4", "total_close", "total_open",
-                   # ── voyage / calendrier / altitude (impact fatigue + scoring)
-                   "distance", "tz_shift", "days_away", "road_trip", "road_game",
-                   "getaway", "altitude", "alt_gain")
-
-def select_totals_features(feats: list[str], df: pd.DataFrame) -> list[str]:
-    out = [f for f in feats if any(k in f for k in TOTALS_KEYWORDS)]
-    for extra in ("total_close", "total_open"):
-        if extra in df.columns and extra not in out:
-            out.append(extra)
-    return out
 
 
 # ── Split temporel ───────────────────────────────────────────────────────────
@@ -258,55 +288,19 @@ def train_game(train_df, val_df, test_df, features, trials: int):
     return model, report, fi
 
 
-# ── Modèle totaux ────────────────────────────────────────────────────────────
-
-def train_totals(train_df, val_df, test_df, features, trials: int):
-    print(f"\n🎯 Modèle totaux — {len(features)} features")
-    def dm(d):
-        return xgb.DMatrix(d[features].values.astype(np.float32),
-                           label=d["total_goals"].values.astype(np.float32),
-                           feature_names=features, missing=np.nan)
-    dtrain, dval, dtest = dm(train_df), dm(val_df), dm(test_df)
-    y_val  = val_df["total_goals"].values.astype(np.float32)
-    y_test = test_df["total_goals"].values.astype(np.float32)
-    y_train = train_df["total_goals"].values.astype(np.float32)
-
-    base = {"objective": "reg:squarederror", "eval_metric": "rmse", "seed": 42}
-    def rmse_metric(y, p):
-        return rmse(y, p)
-    params, _ = random_search(dtrain, dval, y_val, base, max(trials // 2, 10),
-                              metric_fn=rmse_metric)
-    model = xgb.train(params, dtrain, num_boost_round=800,
-                      evals=[(dval, "eval")], early_stopping_rounds=50, verbose_eval=False)
-
-    preds = model.predict(dtest)
-    m, r = mae(y_test, preds), rmse(y_test, preds)
-    base_mae = mae(y_test, np.full(len(y_test), y_train.mean()))
-    print(f"   MAE {m:.3f} (baseline {base_mae:.3f})   RMSE {r:.3f}")
-
-    mkt = {}
-    if "total_close" in test_df.columns:
-        tm = test_df["total_close"].notna().values
-        if tm.sum() > 100:
-            mkt = {"n": int(tm.sum()),
-                   "market_mae": round(mae(y_test[tm], test_df["total_close"].values[tm]), 4),
-                   "model_mae_same_subset": round(mae(y_test[tm], preds[tm]), 4)}
-            print(f"   Marché (ligne clôture) : MAE {mkt['market_mae']:.3f} vs modèle "
-                  f"{mkt['model_mae_same_subset']:.3f} (n={mkt['n']})")
-
-    scores = model.get_score(importance_type="gain")
-    total = sum(scores.values()) or 1
-    fi = sorted([{"name": k, "importance": round(v / total, 4)} for k, v in scores.items()],
-                key=lambda x: -x["importance"])
-    report = {"model": "XGBoost reg:squarederror (v4)",
-              "best_iteration": int(model.best_iteration),
-              "params": {k: v for k, v in params.items() if k in SEARCH_SPACE},
-              "n_train": len(train_df), "n_test": len(test_df),
-              "mae_goals": round(m, 4), "rmse_goals": round(r, 4),
-              "baseline_mae": round(base_mae, 4),
-              "mean_total": round(float(y_train.mean()), 4),
-              "market": mkt, "feature_importances": fi}
-    return model, report, fi
+# ── Modèle totaux — SUPPRIMÉ (S2) ────────────────────────────────────────────
+#
+# `train_totals` produisait `totals_model.json`, une régression sur le total de
+# buts dont ml_service dérivait un prix par Poisson lisse sur ce total ponctuel.
+# Deux mesures l'ont condamné :
+#   • P2 : ce Poisson sur un total espéré est faux de 2.5 à 4.4 points par ligne.
+#     Le modèle de score price toute ligne depuis la distribution jointe et
+#     compte le but de prolongation correctement.
+#   • Acquis du plan : le total de buts est quasi imprédictible (MAE 1.86 contre
+#     1.90 pour une constante) — il n'y avait rien à gagner à l'affiner.
+# Le service ne chargeait plus ce modèle que comme repli si le modèle de score
+# manquait : un filet qui aurait servi un prix qu'on sait mauvais.
+# → `train_score.py` est le seul producteur de prix de totaux.
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -326,24 +320,21 @@ def main():
     print(f"   {len(df)} matchs")
 
     feats = select_features(df, use_odds=not args.no_odds_features)
-    tot_feats = select_totals_features(feats, df)
+    print(f"   Features moneyline : {len(feats)} (jeu CŒUR)")
     train_df, val_df, test_df = split(df)
     print(f"   Split : {len(train_df)} / {len(val_df)} / {len(test_df)}  "
           f"(test dès {test_df['date'].min()})")
 
     gm, gr, gfi = train_game(train_df, val_df, test_df, feats, args.trials)
-    tm, tr, tfi = train_totals(train_df, val_df, test_df, tot_feats, args.trials)
 
     os.makedirs(MODELS_DIR, exist_ok=True)
     gm.save_model(f"{MODELS_DIR}/game_model.json")
-    tm.save_model(f"{MODELS_DIR}/totals_model.json")
     json.dump(gfi, open(f"{MODELS_DIR}/feature_importance_game.json", "w"), indent=2)
-    json.dump(tfi, open(f"{MODELS_DIR}/feature_importance_totals.json", "w"), indent=2)
-    json.dump({"game_model": gr, "totals_model": tr,
-               "features": {"game": feats, "totals": tot_feats},
+    json.dump({"game_model": gr,
+               "features": {"game": feats},
                "dataset": version},
               open(f"{MODELS_DIR}/training_report.json", "w"), indent=2)
-    print(f"\n✅ Modèles + rapport sauvegardés dans {MODELS_DIR}/")
+    print(f"\n✅ Modèle + rapport sauvegardés dans {MODELS_DIR}/")
     print("🚀 Ensuite : python backtest.py  (ROI vs cotes)  puis relancer ml_service.py")
 
 

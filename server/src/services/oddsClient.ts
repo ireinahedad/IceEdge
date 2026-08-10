@@ -14,6 +14,7 @@
 import { logger } from '../logger';
 import { recordUpstream } from '../metrics';
 import { TtlCache } from './ttlCache';
+import * as oddsQuota from './oddsQuota';
 
 const ODDS_BASE = 'https://api.the-odds-api.com/v4';
 const ODDS_KEY  = process.env.ODDS_API_KEY;
@@ -82,16 +83,37 @@ export async function fetchRawOdds(): Promise<RawOddsEvent[]> {
 const oddsCache = new TtlCache<OddsEvent[]>(TTL, 1, 'odds-client');
 const ODDS_CACHE_KEY = SPORT_KEY;
 
-/** Récupère toutes les cotes NHL (h2h + totals, mise en cache 5 min). */
+/**
+ * Récupère toutes les cotes NHL (h2h + spreads + totals).
+ *
+ * `spreads` a été ajouté le 2026-08-04 : c'est la puck line, et sans elle le
+ * journal `odds_log` ne peut pas constituer le jeu de données dont le modèle
+ * de score a besoin. Le coût passe de 2 à 3 crédits par appel — un tiers de
+ * plus pour la seule famille de marchés où un ROI reste à établir.
+ *
+ * Un unique appel sert les deux consommateurs (moteur de paris et collecteur)
+ * via le même cache : demander `spreads` ici ne crée pas d'appel
+ * supplémentaire, il enrichit celui qui a lieu de toute façon.
+ *
+ * TTL adaptatif — voir `oddsQuota.proxyTtlMs`. À 5 minutes fixes, ce module
+ * vaut à lui seul ~288 appels/jour, soit ~864 crédits : un dimensionnement de
+ * plan payant. Quand les crédits se raréfient, le TTL s'allonge plutôt que le
+ * service ne s'arrête.
+ */
 async function fetchAllOdds(): Promise<OddsEvent[]> {
   if (!ODDS_KEY) return [];
 
   const params = new URLSearchParams({
     apiKey:     ODDS_KEY,
     regions:    'eu',
-    markets:    'h2h,totals',
+    markets:    'h2h,spreads,totals',
     oddsFormat: 'decimal',
   });
+  // Synchrone : rien ne doit s'intercaler entre l'appelant et `wrap`. Un
+  // `await` ici ajoutait un tour de boucle d'événements pendant lequel des
+  // appelants concurrents n'étaient plus dédoublonnés — c'est-à-dire le bug
+  // même que ce module a été écrit pour corriger.
+  const ttl = oddsQuota.proxyTtlMs(TTL);
 
   try {
     // Deuxième consommateur du quota The Odds API, à côté du proxy de
@@ -102,6 +124,9 @@ async function fetchAllOdds(): Promise<OddsEvent[]> {
       try {
         const res = await fetch(`${ODDS_BASE}/sports/${SPORT_KEY}/odds?${params}`);
         recordUpstream('odds', Date.now() - started, res.ok);
+        // Y COMPRIS en erreur : un 429 porte le solde, et c'est justement le
+        // moment où l'information compte.
+        oddsQuota.observe(res.headers);
         if (!res.ok) {
           logger.error({ status: res.status }, '[oddsClient]');
           // LEVER et non renvoyer `[]` : une réponse vide mise en cache 5 minutes
@@ -114,7 +139,7 @@ async function fetchAllOdds(): Promise<OddsEvent[]> {
         recordUpstream('odds', Date.now() - started, false);
         throw err;
       }
-    });
+    }, ttl);
   } catch (err: any) {
     // Repli sur les dernières cotes connues, même expirées — comme le fait déjà
     // le proxy. Des cotes de dix minutes valent mieux qu'aucun facteur marché,

@@ -3,7 +3,7 @@
 Architecture : **Vercel** (frontend) + **Railway** (Node.js + Python) + **Neon** (PostgreSQL) + **Cloudflare R2** (avatars)
 
 > **Note.** Ce guide a longtemps décrit Supabase. La base de production est
-> **Neon** (voir `DEPLOY_PLAN.md`) : c'est son *scale-to-zero* qui rend le job de
+> **Neon** (§1 ci-dessous) : c'est son *scale-to-zero* qui rend le job de
 > règlement événementiel rentable — la base s'endort hors des heures de match.
 > Un seul hébergeur Postgres est nécessaire ; si un projet Supabase traîne
 > encore, le supprimer **après** avoir vérifié que le `DATABASE_URL` de Railway
@@ -222,8 +222,17 @@ L'ancien objet est supprimé automatiquement lors d'un remplacement.
 
 ### Modèles XGBoost
 `ml/models/*.json` **est suivi par Git** (cf. `.gitignore`) et embarqué dans
-l'image : `game_model.json`, `totals_model.json`, `elo_ratings.json`,
-`inference_state.json`, `training_report.json`. Rien à monter, rien à uploader.
+l'image : `game_model.json`, `score_model.json` + `score_report.json`,
+`elo_ratings.json`, `inference_state.json`, `training_report.json`. Rien à
+monter, rien à uploader.
+
+Deux exceptions, exclues par `ml/.dockerignore` :
+
+- `models/score_ensemble/` — 8.9 Mo de membres bootstrap dont σ n'est consommée
+  par aucun code de mise (S1). Régénérable par `python train_score.py --ensemble 20`.
+- `totals_model.json` — supprimé (S2). Les totaux sont pricés depuis la
+  distribution du modèle de score, qui compte le but de prolongation
+  correctement là où l'ancien repli ne le faisait pas.
 
 Le corollaire : **les modèles déployés sont ceux du dernier commit.** Après un
 ré-entraînement local, il faut committer et pousser, sinon Railway sert
@@ -331,12 +340,52 @@ Project Settings → Environment Variables → Production :
 | `VITE_PROFILE_API_URL` | `https://[TON-BACKEND].railway.app/api` |
 | `VITE_PREDICTION_API_URL` | `https://[TON-BACKEND].railway.app/api` |
 | `VITE_SOCKET_URL` | `https://[TON-BACKEND].railway.app` |
-| `VITE_ODDS_API_KEY` | `5333eb4e9ab762d0735120390351985b` |
+| `VITE_ODDS_API_KEY` | `<placeholder>` — **ne jamais commiter la vraie valeur** |
 | `VITE_BET365_AFFILIATE_CODE` | Code affilié Bet365 |
 
-### Domaine
-Vercel attribue automatiquement `iceedge.vercel.app` (ou le nom du projet).
-→ Revenir à l'étape 2 pour mettre à jour `CLIENT_URL` et `CORS_ORIGIN` avec cette URL.
+> ⚠️ **`VITE_*` est exposé au navigateur par construction.** La clé Odds servie au
+> client est publique de fait ; c'est précisément pourquoi le proxy serveur
+> (`odds.routes.ts`) existe et garde la vraie clé sous `ODDS_API_KEY`, côté
+> Railway. Si une valeur littérale a circulé dans le dépôt, la considérer comme
+> compromise : révoquer et régénérer.
+
+### Domaine — hôte canonique `arakice.com` (apex, sans `www`)
+
+**Décision (2026-07-30) : l'hôte canonique est `https://arakice.com`.** Tout le
+code l'assume déjà — `SITE` dans `client/scripts/seo-gen.mjs` et
+`client/scripts/route-shells.mjs`, les `<link rel="canonical">` / `og:url` /
+`@id` JSON-LD de `client/index.html`, `robots.txt`, `sitemap.xml` et les ~900
+pages générées dans `client/public/`. **Ne pas changer un seul de ces hôtes sans
+changer les autres** : un canonical qui pointe vers un hôte qui redirige envoie
+des signaux contradictoires à Google et empêche les sitelinks d'apparaître.
+
+Vercel recommande `www` comme domaine principal (le CDN a plus de contrôle sur
+un `www`, qui peut être un CNAME, que sur un apex qui exige un A/ALIAS). On
+choisit quand même l'apex ici parce que la totalité du code et des pages
+générées le référencent déjà, et que basculer coûterait une régénération
+complète. Compromis assumé, pas un oubli.
+
+Ce qui doit rester aligné sur `https://arakice.com` :
+
+| Endroit | Valeur attendue |
+|---|---|
+| Vercel → Settings → Domains | `arakice.com` **primary**, `www.arakice.com` en **redirect** vers lui |
+| DNS apex | A / ALIAS vers Vercel (l'apex ne peut pas être un CNAME) |
+| Railway `CORS_ORIGIN` | doit **contenir** `https://arakice.com` (liste séparée par des virgules — garder `https://www.arakice.com` le temps de la transition ne coûte rien) |
+| Railway `CLIENT_URL` | `https://arakice.com` — sert aux redirections post-OAuth et aux retours Stripe |
+| Google Cloud Console → OAuth | `https://arakice.com` dans « Authorized JavaScript origins ». `GOOGLE_REDIRECT_URI` pointe sur le **backend**, donc l'hôte du frontend ne l'affecte pas. |
+| Search Console | inspecter et soumettre les URLs **sans** `www` |
+
+Effet de bord attendu au moment de la bascule : le cookie de refresh est lié à
+l'hôte, donc les sessions ouvertes sur `www.arakice.com` sont perdues une fois.
+Les utilisateurs se reconnectent, rien n'est corrompu.
+
+Vérification après bascule — les deux commandes doivent donner ceci :
+
+```bash
+curl -sI https://www.arakice.com/ | head -3   # 301/308 + Location: https://arakice.com/
+curl -sI https://arakice.com/     | head -3   # 200, aucun Location
+```
 
 ---
 
@@ -393,6 +442,152 @@ curl -X POST https://[TON-BACKEND].railway.app/api/predict/ml \
 - [ ] Variables d'env croisées mises à jour (ML_SERVICE_URL, ML_API_TOKEN, CLIENT_URL, CORS_ORIGIN)
 - [ ] Modèles XGBoost déployés (ou fallback accepté)
 - [ ] Test de connexion end-to-end (login → prédiction)
+- [ ] `JWT_SECRET` / `JWT_REFRESH_SECRET` forts et **différents** de ceux de dev
+- [ ] `CORS_ORIGIN` restreint au domaine de prod (jamais `*`)
+- [ ] Le seed **n'est pas** lancé en prod (`/dev/seed` non monté si `NODE_ENV=production`)
+- [ ] Parcours complet à la main : inscription → login → construire un coupon → chat → best bets
+
+---
+
+## 7. Mise en service des coupons publics (page joueur)
+
+Fonctionnalité livrée le 2026-08-09 et **inerte tant que `PUBLIC_SLIPS_SINCE`
+n'est pas renseignée**. Cette section est la procédure d'allumage.
+
+### Ce que ça fait
+
+Un abonné Pro peut ouvrir `/player/:userId` et consulter les coupons d'un autre
+joueur, pari par pari, avec sa forme sur 30 jours glissants. Aucun paiement entre
+utilisateurs n'est impliqué.
+
+> Le marketplace payant entre utilisateurs a été **abandonné** : Stripe classe le
+> « sports forecasting or odds making » avec contrepartie monétaire dans ses
+> commerces prohibés, et avec Connect chaque compte créateur hérite de la
+> restriction. Le repli (PSP high-risk à ~5 % + réserve glissante) imposait une
+> commission plateforme d'environ 30 %. **À rouvrir seulement si** Stripe donne un
+> accord écrit, ou si un PSP alternatif est retenu en connaissance des coûts —
+> auquel cas les sujets à reprendre sont : ROSCA et lois d'auto-renouvellement des
+> États · LPC Québec (contrat à exécution successive) · Loi 96 · substantiation des
+> allégations de ROI (Loi sur la concurrence, FTC Endorsement Guides) · règles AGCO
+> sur les affiliés · TPS/TVQ et *marketplace facilitator laws* · 1099-K et Partie XX
+> de la LIR · EFVP Loi 25 · **jamais de portefeuille interne**, sous peine de
+> basculer dans le régime des entreprises de services monétaires (FINTRAC).
+
+### Les règles à ne pas casser
+
+Ce sont les invariants du dispositif. Toute évolution doit s'y mesurer — les
+enfreindre ne produit pas un bug visible, mais un problème de confiance ou de
+conformité qu'on découvre trop tard.
+
+**Rien de rétroactif.** Seuls les coupons déposés après `PUBLIC_SLIPS_SINCE` sont
+montrés à un tiers. L'historique antérieur a été saisi quand le produit promettait
+l'inverse ; il reste privé pour toujours. C'est ce qui rend l'`UPDATE` de masse de
+la migration 030 acceptable.
+
+**Échec fermé.** `PUBLIC_SLIPS_SINCE` absente ou illisible → aucun coupon visible,
+plus un warn. Une variable oubliée doit casser le feature, jamais la vie privée.
+Même parti pris que `PRO_PROMO_CODES`.
+
+**Le retrait reste gratuit.** L'opt-out (`show_slips`) est **découplé de
+`is_public`**, qui commande la recherche et le classement. Les lier ferait payer
+la discrétion d'un rang, et un « choix » de ce genre n'en est pas un. Ne jamais
+supprimer l'opt-out : forcer la publication d'un renseignement personnel sans
+porte de sortie n'est pas défendable (Loi 25).
+
+**Masquage global, jamais par coupon.** Autoriser à cacher un coupon précis, c'est
+autoriser à cacher ses perdants — et le taux affiché ne veut plus rien dire.
+
+**Le verrou temporel n'est pas un privilège.** Avant `locks_at`, les jambes ne
+sortent pas du service — ni pour un Pro, ni pour un admin. `locks_at` est résolu
+au serveur, jamais accepté du client. `NULL` = masqué tant que `pending` : une
+panne de résolution d'horaire doit rendre un coupon trop discret, jamais le
+divulguer trop tôt. L'erreur inverse est irréversible.
+
+**Redaction dans le service, pas dans le composant.** Envoyer les jambes au client
+« pour les flouter en CSS », c'est les publier.
+
+**Aucun chiffre invérifiable à l'écran.** Les stats de l'en-tête se calculent sur
+les coupons **visibles**, pas sur `user_bets` — sinon on affiche « 64 % sur 128 »
+au-dessus d'une liste de 12. Plancher de 10 paris tranchés : en dessous, le
+serveur renvoie `hitRate: null`. Fenêtre glissante de 30 jours, jamais calendaire
+(un mois calendaire afficherait « 100 % sur 1 pari » chaque 1er du mois).
+
+**Une jambe non évaluée n'est pas une jambe perdue.** `unknown` et les coupons
+antérieurs à la persistance par jambe s'affichent `—`.
+
+**La divulgation vit au point de collecte.** La ligne sous le bouton de soumission
+(`BetBuilderPage`) est ce qui rend le consentement éclairé — pas les CGU, que
+personne n'ouvre.
+
+### Deux verrous, à ouvrir dans cet ordre
+
+| Verrou | Effet fermé | Comment on l'ouvre |
+|---|---|---|
+| `show_slips` (colonne) | Le joueur n'apparaît pas | Migration **030** — passe le défaut à TRUE |
+| `PUBLIC_SLIPS_SINCE` (env) | **Aucun** coupon visible à un tiers, quel que soit `show_slips` | Variable d'environnement sur Railway |
+
+La migration 030 peut être appliquée **des semaines avant** l'allumage : sans la
+variable, elle n'expose rien. C'est voulu — ça décorrèle le déploiement du schéma
+du choix de la date, et ça rend la bascule réversible en une variable.
+
+### Procédure
+
+1. **Vérifier que le code est déployé** (client + serveur) et que
+   `PUBLIC_SLIPS_SINCE` est absente. Au démarrage du serveur, la première lecture
+   d'une page joueur doit produire :
+   `[profile] PUBLIC_SLIPS_SINCE absente ou invalide — aucun coupon n'est visible`.
+2. **Appliquer les migrations** : `npm run db:migrate:all` (029 + 030).
+3. **Prévenir les joueurs** — `npm run notify:slips -- --date 2026-10-07`
+   (simulation), puis `--send`. Contenu minimal : ce qui devient visible, à partir
+   de quand, que rien d'antérieur ne le sera, et où se retirer (Paramètres →
+   Confidentialité). À envoyer **avant** l'étape 4.
+
+   > **Décidé le 2026-08-09 : pas de bandeau in-app.** L'avis passe uniquement par
+   > le courriel. Conséquence assumée — les comptes qui ne lisent pas leurs
+   > courriels découvriront le changement en ouvrant les Paramètres. La divulgation
+   > au moment de la soumission du coupon (`BetBuilderPage`) reste le filet : elle
+   > est vue par tous ceux qui déposent un coupon, donc par tous ceux qui sont
+   > concernés.
+4. **Poser la variable** sur Railway (service Node), au format ISO 8601 :
+   `PUBLIC_SLIPS_SINCE=2026-10-07T00:00:00Z`
+   Viser le **début de saison NHL** : allumer en septembre donnerait des pages
+   vides pendant trois semaines.
+5. **Redéployer** le service Node (Railway relance sur changement de variable).
+
+### Vérifications après allumage
+
+```bash
+# Depuis un compte Pro, sur un joueur tiers
+curl -H "Authorization: Bearer $PRO_TOKEN" \
+     "$API/api/users/$OTHER_USER_ID/slips"      # → 200, uniquement des coupons post-coupure
+
+# Depuis un compte non-Pro
+curl -H "Authorization: Bearer $FREE_TOKEN" \
+     "$API/api/users/$OTHER_USER_ID/slips"      # → 402 PRO_REQUIRED, aucun coupon dans le corps
+
+# Sur un joueur qui s'est retiré
+# → 403 SLIPS_HIDDEN (code distinct : l'abonnement n'est pas en cause)
+```
+
+À contrôler à l'œil, une fois :
+
+- [ ] Un coupon dont le match n'a pas commencé revient avec `legs: null` et `locked: true`
+- [ ] Aucun coupon antérieur à `PUBLIC_SLIPS_SINCE` n'apparaît pour un tiers
+- [ ] Le propriétaire voit bien tout son historique, verrous compris
+- [ ] Le taux de réussite de l'en-tête est cohérent avec la liste affichée
+      (calculé sur les coupons visibles, pas sur `user_bets`)
+- [ ] Sous 10 paris tranchés, aucun pourcentage n'est affiché
+
+### Retour arrière
+
+**Supprimer `PUBLIC_SLIPS_SINCE` et redéployer.** Tout se referme immédiatement,
+sans migration inverse. C'est la raison pour laquelle la date vit dans une
+variable d'environnement plutôt qu'en base.
+
+Un retour arrière plus profond (revenir à l'opt-in) demanderait
+`ALTER TABLE user_profiles ALTER COLUMN show_slips SET DEFAULT FALSE` — mais pas
+d'`UPDATE` de masse en sens inverse : il écraserait les choix de ceux qui ont
+délibérément gardé la visibilité.
 
 ---
 

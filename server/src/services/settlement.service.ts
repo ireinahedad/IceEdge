@@ -523,12 +523,27 @@ export async function settlePendingSlips(userId?: string, opts: SettleOptions = 
         xp = -Math.max(3, Math.round(fullPenalty * (lostLegs / legs.length)));
       }
 
+      // Résultat de CHAQUE jambe, conservé.
+      //
+      // `results` était calculé puis jeté : seul l'`outcome` global du ticket
+      // survivait. La page joueur doit pouvoir montrer QUELLE jambe a fait
+      // tomber un parlay — l'information la plus recherchée en ouvrant un
+      // ticket perdu — et la recalculer à l'affichage voudrait dire rejouer les
+      // appels NHL à chaque consultation.
+      //
+      // Fusionné dans le même UPDATE que l'`outcome`, jamais dans un second :
+      // c'est le `WHERE outcome = 'pending'` qui rend le règlement idempotent
+      // face au job périodique ET au déclenchement manuel. Une écriture séparée
+      // sortirait de cette garde et pourrait laisser un ticket réglé sans son
+      // détail.
+      const settledLegs = legs.map((leg, i) => ({ ...leg, result: results[i] ?? 'unknown' }));
+
       // Guard against double settlement (interval job + manual trigger)
       const upd = await pool.query(
         `UPDATE bet_slips
-         SET outcome = $1, resolved_at = NOW(), xp_awarded = $2
-         WHERE id = $3 AND outcome = 'pending'`,
-        [outcome, xp, slip.id],
+         SET outcome = $1, resolved_at = NOW(), xp_awarded = $2, legs = $3::jsonb
+         WHERE id = $4 AND outcome = 'pending'`,
+        [outcome, xp, JSON.stringify(settledLegs), slip.id],
       );
       if (!upd.rowCount) continue;
 

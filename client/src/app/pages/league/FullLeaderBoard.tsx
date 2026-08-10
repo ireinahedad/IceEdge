@@ -1,13 +1,14 @@
 // components/league/leaderboard/FullLeaderboard.tsx
 
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { FrozenName } from "../../components/brand/FrozenName";
 import { ProLock } from "../../components/ProLock";
 import { profileApiService } from "../../services/userService";
 import { useSubscription } from "../../context/SubscriptionContext";
 import { useAuth } from "../../context/AuthContext";
 import { useI18n } from "../../i18n";
-import type { LeaderboardEntry } from "../../types/user";
+import type { LeaderboardEntry, PublicSlip } from "../../types/user";
 
 // Initials fallback shown when a user has no photo avatar (no emoji avatars).
 function initials(name: string): string {
@@ -19,21 +20,16 @@ function initials(name: string): string {
 
 // ─── User profile modal ───────────────────────────────────────────────────────
 
-type PublicSlip = {
-  id: string;
-  placedAt: string;
-  legs: { selection?: string; subjectName?: string; marketType?: string }[];
-  legCount: number;
-  isParlay: boolean;
-  combinedProbability: number | null;
-  outcome: "pending" | "win" | "loss";
-};
+// Le type local a été remplacé par `PublicSlip` (types/user) : depuis que les
+// coupons non commencés reviennent avec `legs: null`, un type qui promet un
+// tableau ici mentirait au compilateur exactement là où la nuance compte.
 
 function UserProfileModal({ entry, onClose }: {
   entry: LeaderboardEntry;
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const { isPro } = useSubscription();
   const { user } = useAuth();
   const isSelf = user?.id === entry.userId;
@@ -44,8 +40,8 @@ function UserProfileModal({ entry, onClose }: {
   useEffect(() => {
     if (!canViewBets) return;            // don't fetch — Pro lock is shown instead
     setSlips("loading");
-    profileApiService.getUserSlips(entry.userId)
-      .then((s) => setSlips(s as PublicSlip[]))
+    profileApiService.getPlayerSlips(entry.userId, 6)
+      .then((s) => setSlips(s))
       .catch(() => setSlips("private"));
   }, [entry.userId, canViewBets]);
 
@@ -129,7 +125,11 @@ function UserProfileModal({ entry, onClose }: {
                 const color = s.outcome === "win" ? "#4ade80" : s.outcome === "loss" ? "#f87171" : "#8a9ea6";
                 const label = s.outcome === "win" ? t("slip.won") : s.outcome === "loss" ? t("slip.lost") : t("slip.pending");
                 const first = s.legs?.[0];
-                const title = first?.selection ?? first?.subjectName ?? "Slip";
+                // Coupon pas encore commencé : le serveur n'envoie pas les
+                // sélections. On annonce le cadenas plutôt qu'un « Slip » muet.
+                const title = s.locked
+                  ? `🔒 ${s.isParlay ? t("player.parlayLegs", { n: String(s.legCount) }) : t("player.single")}`
+                  : (first?.selection ?? first?.subjectName ?? "Slip");
                 return (
                   <div key={s.id} className="flex items-center gap-2.5 icy-tile rounded-xl px-3 py-2.5">
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
@@ -151,6 +151,16 @@ function UserProfileModal({ entry, onClose }: {
           )}
           </>)}
         </div>
+
+        {/* La modale est un aperçu ; l'historique complet, jambe par jambe, vit
+            sur la page joueur. Un seul rendu de coupon détaillé dans l'app. */}
+        <button
+          onClick={() => { onClose(); navigate(`/player/${entry.userId}`); }}
+          className="w-full py-3 rounded-2xl text-sm font-bold mb-2 active:scale-[0.99] transition-transform"
+          style={{ background: "#86d1ea", color: "#0A0E0C" }}
+        >
+          {t("player.viewAll")}
+        </button>
 
         <button
           onClick={onClose}

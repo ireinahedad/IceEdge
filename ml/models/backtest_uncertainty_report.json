@@ -1,0 +1,66 @@
+{
+  "n_bets": 6494,
+  "edge_threshold": 0.02,
+  "n_members": 10,
+  "sizing": {
+    "kelly_plain": {
+      "final_bankroll": 0.2412,
+      "max_drawdown": 0.8515,
+      "n_staked": 6389,
+      "total_staked": 76.811
+    },
+    "kelly_flat_matched": {
+      "final_bankroll": 0.9761,
+      "max_drawdown": 0.3587,
+      "n_staked": 6389,
+      "total_staked": 36.662,
+      "c": 0.3171
+    },
+    "kelly_sigma_shrunk": {
+      "final_bankroll": 1.4017,
+      "max_drawdown": 0.2847,
+      "n_staked": 5527,
+      "total_staked": 36.663
+    }
+  },
+  "sigma_vs_flat": {
+    "d_final_bankroll": 0.4256,
+    "d_max_drawdown": 0.074,
+    "permutation_p_value": 0.095,
+    "n_permutations": 200
+  },
+  "sigma_buckets": [
+    {
+      "bucket": 1,
+      "n": 1624,
+      "sigma_mean": 0.01308,
+      "edge_predicted": 0.048,
+      "edge_realized": 0.0092,
+      "gap": -0.0388
+    },
+    {
+      "bucket": 2,
+      "n": 1623,
+      "sigma_mean": 0.01773,
+      "edge_predicted": 0.0509,
+      "edge_realized": -0.0144,
+      "gap": -0.0652
+    },
+    {
+      "bucket": 3,
+      "n": 1623,
+      "sigma_mean": 0.02181,
+      "edge_predicted": 0.0517,
+      "edge_realized": -0.0372,
+      "gap": -0.0889
+    },
+    {
+      "bucket": 4,
+      "n": 1624,
+      "sigma_mean": 0.02952,
+      "edge_predicted": 0.054,
+      "edge_realized": -0.0574,
+      "gap": -0.1113
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 // components/league/chat/MessageBubble.tsx
 
+import { useNavigate } from "react-router";
 import type { ChatMessage } from "../../../types/user";
 
 const TAG_STYLE = {
@@ -27,6 +28,7 @@ export function MessageBubble({
   onReply?: (msg: ChatMessage) => void;
   onDelete?: (msgId: string) => void;
 }) {
+  const navigate = useNavigate();
   const time = new Date(msg.sentAt).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
@@ -47,7 +49,14 @@ export function MessageBubble({
       <div className={`max-w-[78%] flex flex-col gap-1 ${isOwn ? "items-end" : "items-start"}`}>
         {/* Name + tag + time */}
         <div className={`flex items-center gap-1.5 flex-wrap ${isOwn ? "flex-row-reverse" : ""}`}>
-          <span className="text-white text-[10px] font-bold">{msg.displayName}</span>
+          {/* Le nom mène à la page joueur. L'avatar sert déjà à répondre — le
+              détourner casserait le geste le plus fréquent du chat. */}
+          <button
+            onClick={() => navigate(`/player/${msg.userId}`)}
+            className="text-white text-[10px] font-bold active:opacity-60 transition-opacity"
+          >
+            {msg.displayName}
+          </button>
           {msg.tag && (
             <span className={`text-[8px] px-1.5 py-0.5 rounded-full border ${TAG_STYLE[msg.tag]}`}>
               {TAG_LABEL[msg.tag]}

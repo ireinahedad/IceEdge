@@ -222,6 +222,23 @@ function LockSlipCTA({
             )}
           </button>
         </div>
+
+        {/*
+          Divulgation de visibilité, au moment de la collecte.
+
+          C'est CETTE ligne qui rend le consentement éclairé, pas les CGU : la
+          personne apprend ce qu'il adviendra de son coupon à l'instant où elle
+          le dépose, pas dans un document qu'elle n'ouvrira jamais.
+
+          Formulée comme la RÈGLE et non comme l'état du compte : afficher le
+          réglage réel imposerait de charger le profil dans un CTA collant, avec
+          le mode de panne qui va avec. Le texte mentionne l'opt-out, il reste
+          donc vrai pour qui s'est retiré — et l'imprécision, s'il en reste une,
+          va dans le sens de la sur-information.
+        */}
+        <p className="text-[#4a6068] text-[9px] leading-snug mt-2.5 text-center">
+          {t("slip.visibilityNotice")}
+        </p>
       </div>
     </div>
   );

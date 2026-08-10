@@ -1,0 +1,293 @@
+{
+  "model": "XGBoost count:poisson empil\u00e9 (\u00e9quipe-match)",
+  "features": [
+    "atk_xgf60_s",
+    "atk_xgf60_l",
+    "atk_ev_xgf60_s",
+    "atk_ev_xgf_pct_s",
+    "atk_gf_s",
+    "atk_finishing_s",
+    "atk_star_power",
+    "atk_stars_out_weight",
+    "atk_pp_xgf60_s",
+    "atk_rest_days",
+    "atk_b2b",
+    "atk_lineup_xg",
+    "atk_lineup_pts",
+    "def_xga60_s",
+    "def_xga60_l",
+    "def_ev_xga60_s",
+    "def_ga_s",
+    "def_pk_xga60_s",
+    "def_goalie_gsax60",
+    "def_goalie_svpct",
+    "is_home",
+    "elo_atk_minus_def"
+  ],
+  "params": {
+    "max_depth": 3,
+    "learning_rate": 0.03,
+    "subsample": 0.9,
+    "colsample_bytree": 0.6,
+    "min_child_weight": 10,
+    "reg_lambda": 1.0
+  },
+  "best_iteration": 370,
+  "tau_margin": {
+    "-6": 0.66018,
+    "-5": 0.75401,
+    "-4": 0.9292,
+    "-3": 1.39814,
+    "-2": 0.91129,
+    "-1": 0.70584,
+    "0": 1.36199,
+    "1": 0.72815,
+    "2": 0.92122,
+    "3": 1.42564,
+    "4": 1.0226,
+    "5": 0.84594,
+    "6": 0.83352
+  },
+  "p_ot_home": 0.49956,
+  "n_train": 14631,
+  "n_test": 4304,
+  "test": {
+    "raw": {
+      "label": "Poisson sans correction",
+      "mae_total": 1.8771,
+      "logloss_moneyline": 0.664,
+      "tie_predicted": 0.1575,
+      "tie_observed": 0.221,
+      "home_-1.5_predicted": 0.3131,
+      "home_-1.5_observed": 0.332,
+      "home_win_predicted": 0.5437,
+      "home_win_observed": 0.54
+    },
+    "corrected": {
+      "label": "Poisson + correction \u03c4",
+      "mae_total": 1.8823,
+      "logloss_moneyline": 0.6643,
+      "tie_predicted": 0.2136,
+      "tie_observed": 0.221,
+      "home_-1.5_predicted": 0.3329,
+      "home_-1.5_observed": 0.332,
+      "home_win_predicted": 0.5503,
+      "home_win_observed": 0.54
+    },
+    "baseline_mae_total": 1.8996
+  },
+  "ensemble": {
+    "n_members": 20,
+    "n_rounds": 371,
+    "sigma_max": 0.02896,
+    "sigma_max_source": "p90 sur la validation (hors \u00e9chantillon)",
+    "sigma_p90_train_insample": 0.02307,
+    "train": {
+      "sigma_mean": 0.01732,
+      "sigma_p90": 0.02307,
+      "buckets": [
+        {
+          "bucket": 1,
+          "n": 3658,
+          "sigma_mean": 0.0124,
+          "log_loss": 0.67331,
+          "p_predicted": 0.5471,
+          "p_observed": 0.5618
+        },
+        {
+          "bucket": 2,
+          "n": 3657,
+          "sigma_mean": 0.01541,
+          "log_loss": 0.67508,
+          "p_predicted": 0.5449,
+          "p_observed": 0.5409
+        },
+        {
+          "bucket": 3,
+          "n": 3658,
+          "sigma_mean": 0.01798,
+          "log_loss": 0.6679,
+          "p_predicted": 0.5433,
+          "p_observed": 0.5375
+        },
+        {
+          "bucket": 4,
+          "n": 3658,
+          "sigma_mean": 0.0235,
+          "log_loss": 0.65367,
+          "p_predicted": 0.5397,
+          "p_observed": 0.5435
+        }
+      ],
+      "verdict": "\u03c3 NON informative \u2014 la r\u00e9duction de mise n'a pas de fondement mesur\u00e9"
+    },
+    "val": {
+      "sigma_mean": 0.02135,
+      "sigma_p90": 0.02896,
+      "buckets": [
+        {
+          "bucket": 1,
+          "n": 646,
+          "sigma_mean": 0.01477,
+          "log_loss": 0.66092,
+          "p_predicted": 0.5419,
+          "p_observed": 0.5402
+        },
+        {
+          "bucket": 2,
+          "n": 645,
+          "sigma_mean": 0.01891,
+          "log_loss": 0.66583,
+          "p_predicted": 0.5498,
+          "p_observed": 0.507
+        },
+        {
+          "bucket": 3,
+          "n": 645,
+          "sigma_mean": 0.02265,
+          "log_loss": 0.64787,
+          "p_predicted": 0.549,
+          "p_observed": 0.5426
+        },
+        {
+          "bucket": 4,
+          "n": 646,
+          "sigma_mean": 0.02907,
+          "log_loss": 0.6482,
+          "p_predicted": 0.5447,
+          "p_observed": 0.5387
+        }
+      ],
+      "verdict": "\u03c3 NON informative \u2014 la r\u00e9duction de mise n'a pas de fondement mesur\u00e9"
+    },
+    "test": {
+      "sigma_mean": 0.02215,
+      "sigma_p90": 0.02942,
+      "buckets": [
+        {
+          "bucket": 1,
+          "n": 1076,
+          "sigma_mean": 0.01572,
+          "log_loss": 0.68361,
+          "p_predicted": 0.5545,
+          "p_observed": 0.5177
+        },
+        {
+          "bucket": 2,
+          "n": 1076,
+          "sigma_mean": 0.01983,
+          "log_loss": 0.66343,
+          "p_predicted": 0.5518,
+          "p_observed": 0.5669
+        },
+        {
+          "bucket": 3,
+          "n": 1076,
+          "sigma_mean": 0.02345,
+          "log_loss": 0.66521,
+          "p_predicted": 0.5493,
+          "p_observed": 0.5372
+        },
+        {
+          "bucket": 4,
+          "n": 1076,
+          "sigma_mean": 0.02961,
+          "log_loss": 0.64509,
+          "p_predicted": 0.5371,
+          "p_observed": 0.5381
+        }
+      ],
+      "verdict": "\u03c3 NON informative \u2014 la r\u00e9duction de mise n'a pas de fondement mesur\u00e9"
+    }
+  },
+  "feature_importances": [
+    {
+      "name": "elo_atk_minus_def",
+      "importance": 0.1302
+    },
+    {
+      "name": "def_xga60_l",
+      "importance": 0.0929
+    },
+    {
+      "name": "is_home",
+      "importance": 0.0917
+    },
+    {
+      "name": "atk_lineup_pts",
+      "importance": 0.0817
+    },
+    {
+      "name": "atk_lineup_xg",
+      "importance": 0.074
+    },
+    {
+      "name": "atk_xgf60_l",
+      "importance": 0.0631
+    },
+    {
+      "name": "def_goalie_svpct",
+      "importance": 0.0453
+    },
+    {
+      "name": "atk_star_power",
+      "importance": 0.0429
+    },
+    {
+      "name": "def_ev_xga60_s",
+      "importance": 0.0358
+    },
+    {
+      "name": "atk_xgf60_s",
+      "importance": 0.034
+    },
+    {
+      "name": "def_ga_s",
+      "importance": 0.0328
+    },
+    {
+      "name": "def_xga60_s",
+      "importance": 0.0314
+    },
+    {
+      "name": "atk_ev_xgf60_s",
+      "importance": 0.0311
+    },
+    {
+      "name": "def_goalie_gsax60",
+      "importance": 0.0274
+    },
+    {
+      "name": "atk_ev_xgf_pct_s",
+      "importance": 0.0254
+    },
+    {
+      "name": "atk_stars_out_weight",
+      "importance": 0.0244
+    },
+    {
+      "name": "atk_rest_days",
+      "importance": 0.0239
+    },
+    {
+      "name": "atk_finishing_s",
+      "importance": 0.0238
+    },
+    {
+      "name": "def_pk_xga60_s",
+      "importance": 0.0238
+    },
+    {
+      "name": "atk_gf_s",
+      "importance": 0.0231
+    },
+    {
+      "name": "atk_b2b",
+      "importance": 0.0216
+    },
+    {
+      "name": "atk_pp_xgf60_s",
+      "importance": 0.0197
+    }
+  ]
+}

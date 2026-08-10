@@ -1,6 +1,7 @@
 import { pool } from '../db/connection';
 import { encryptSecret, decryptSecret } from './crypto.util';
 import { TtlCache } from './ttlCache';
+import { logger } from '../logger';
 
 // ─── Statistiques de paris (agrégation partagée) ─────────────────────────────
 
@@ -360,32 +361,210 @@ export async function searchUsers(q: string, limit = 20) {
   });
 }
 
-// ─── Public slips ─────────────────────────────────────────────────────────────
+// ─── Coupons visibles par un tiers ───────────────────────────────────────────
+//
+// Trois filtres indépendants s'appliquent, et il faut les garder distincts :
+//
+//   1. QUI  — `show_slips` : le joueur peut se retirer (opt-out). Volontairement
+//      DÉCOUPLÉ de `is_public`, qui commande la présence dans la recherche et au
+//      classement. Les lier reviendrait à faire payer la discrétion d'un rang :
+//      un « choix » de ce genre n'en est pas un.
+//   2. QUAND — `PUBLIC_SLIPS_SINCE` : seuls les coupons déposés APRÈS la mise en
+//      service sont exposés. L'historique antérieur a été saisi sous la promesse
+//      inverse ; il reste privé pour toujours.
+//   3. QUOI — `locks_at` : avant la mise au jeu, le coupon est annoncé mais ses
+//      sélections ne le sont pas.
+//
+// Aucun de ces filtres ne s'applique au propriétaire : il voit tout son
+// historique, en entier, tout le temps.
 
-/** A player's slips — visible to others only if they opted in (show_slips). */
+/** Fenêtre de forme affichée en en-tête, et taille minimale pour publier un %. */
+const FORM_WINDOW_DAYS = 30;
+const FORM_MIN_SAMPLE  = 10;
+
+let cutoffWarned = false;
+
+/**
+ * Date à partir de laquelle un coupon peut être montré à un tiers.
+ *
+ * ÉCHEC FERMÉ : variable absente ou illisible → `null`, c'est-à-dire aucun
+ * coupon visible, plus un avertissement au démarrage de la première lecture.
+ * Même parti pris que `PRO_PROMO_CODES`, qui désactive la promo plutôt que de
+ * retomber sur un code devinable. Une variable d'environnement oubliée doit
+ * casser le feature, jamais la vie privée — l'inverse ne se rattrape pas.
+ */
+function publicSlipsSince(): Date | null {
+  const raw = process.env.PUBLIC_SLIPS_SINCE?.trim();
+  const at  = raw ? new Date(raw) : null;
+  if (at && !Number.isNaN(at.getTime())) return at;
+
+  if (!cutoffWarned) {
+    cutoffWarned = true;
+    logger.warn(
+      { PUBLIC_SLIPS_SINCE: raw ?? null },
+      '[profile] PUBLIC_SLIPS_SINCE absente ou invalide — aucun coupon n\'est visible aux autres joueurs',
+    );
+  }
+  return null;
+}
+
+/**
+ * Un coupon est-il encore verrouillé pour un tiers ?
+ *
+ * `locks_at` renseigné → verrouillé jusqu'à la mise au jeu.
+ * `locks_at` NULL (coupon antérieur à la migration 029, `gameId` absent, API NHL
+ * muette au moment de la saisie) → verrouillé tant que le coupon est `pending`,
+ * et dévoilé une fois réglé. Un horaire non résolu doit produire un coupon trop
+ * discret, jamais un coupon divulgué trop tôt.
+ */
+function isLocked(locksAt: Date | string | null, outcome: string): boolean {
+  if (!locksAt) return outcome === 'pending';
+  return Date.now() < new Date(locksAt).getTime();
+}
+
+/** Le coupon amputé de ses sélections. Construit ici, jamais « flouté » plus tard. */
+function redactSlip(slip: any) {
+  const { legs, ...rest } = slip;
+  return { ...rest, legs: null, locked: true };
+}
+
+/**
+ * Les coupons d'un joueur, tels que `viewerId` a le droit de les voir.
+ *
+ * L'appelant a déjà passé le mur Pro (`requirePro` dans profile.routes). Ce qui
+ * se joue ici n'est pas l'abonnement mais le consentement du joueur observé.
+ */
 export async function getPublicSlips(targetUserId: string, viewerId: string, limit = 25) {
-  if (targetUserId !== viewerId) {
+  const isOwner = targetUserId === viewerId;
+  let cutoff: Date | null = null;
+
+  if (!isOwner) {
     const { rows } = await pool.query(
-      `SELECT up.show_slips AS "showSlips", up.is_public AS "isPublic"
-       FROM user_profiles up WHERE up.user_id = $1`,
+      `SELECT up.show_slips AS "showSlips" FROM user_profiles up WHERE up.user_id = $1`,
       [targetUserId],
     );
     if (!rows[0]) throw Object.assign(new Error('Player not found'), { status: 404 });
-    if (!rows[0].isPublic || !rows[0].showSlips) {
-      throw Object.assign(new Error('This player keeps their slips private'), { status: 403 });
+    if (!rows[0].showSlips) {
+      throw Object.assign(new Error('This player hides their slips'), {
+        status: 403,
+        code: 'SLIPS_HIDDEN',   // distinct du 402 PRO_REQUIRED : l'abonnement n'est pas en cause
+      });
     }
+
+    cutoff = publicSlipsSince();
+    if (!cutoff) return [];   // échec fermé
   }
+
+  const params: unknown[] = [targetUserId, Math.min(limit, 100)];
+  let where = 'user_id = $1';
+  if (cutoff) { params.push(cutoff); where += ` AND placed_at >= $${params.length}`; }
+
   const { rows } = await pool.query(
     `SELECT id, placed_at AS "placedAt", sport, legs, leg_count AS "legCount",
             is_parlay AS "isParlay", combined_probability AS "combinedProbability",
-            outcome, resolved_at AS "resolvedAt", xp_awarded AS "xpAwarded"
+            outcome, resolved_at AS "resolvedAt", xp_awarded AS "xpAwarded",
+            locks_at AS "locksAt"
      FROM bet_slips
-     WHERE user_id = $1
+     WHERE ${where}
      ORDER BY placed_at DESC
      LIMIT $2`,
-    [targetUserId, limit],
+    params,
   );
-  return rows;
+
+  if (isOwner) return rows;
+  // La redaction se fait AVANT de rendre la main : les legs d'un coupon
+  // verrouillé ne doivent jamais exister côté client, fût-ce derrière un flou CSS.
+  return rows.map((r: any) => (isLocked(r.locksAt, r.outcome) ? redactSlip(r) : { ...r, locked: false }));
+}
+
+/**
+ * En-tête de la page joueur : identité + forme récente.
+ *
+ * Les compteurs sont calculés sur les coupons RÉELLEMENT VISIBLES par
+ * `viewerId`, jamais sur `user_bets`. Afficher « 64 % sur 128 paris » au-dessus
+ * d'une liste qui n'en montre que 12 recréerait exactement l'allégation
+ * invérifiable que cette page est censée remplacer. Le classement, lui, continue
+ * d'agréger `user_bets` : deux chiffres, deux questions.
+ */
+export async function getPlayerSummary(targetUserId: string, viewerId: string) {
+  const isOwner = targetUserId === viewerId;
+
+  const { rows: profileRows } = await pool.query(
+    `SELECT u.id AS "userId", u.username,
+            COALESCE(up.display_name, u.username) AS "displayName",
+            COALESCE(up.avatar, '👤') AS avatar,
+            COALESCE(up.avatar_url, u.avatar_url) AS "avatarUrl",
+            up.tier, up.show_slips AS "showSlips"
+     FROM users u
+     JOIN user_profiles up ON up.user_id = u.id
+     WHERE u.id = $1 AND u.is_active = TRUE`,
+    [targetUserId],
+  );
+  const profile = profileRows[0];
+  if (!profile) throw Object.assign(new Error('Player not found'), { status: 404 });
+
+  let cutoff: Date | null = null;
+  if (!isOwner) {
+    if (!profile.showSlips) {
+      throw Object.assign(new Error('This player hides their slips'), {
+        status: 403,
+        code: 'SLIPS_HIDDEN',   // distinct du 402 PRO_REQUIRED : l'abonnement n'est pas en cause
+      });
+    }
+    cutoff = publicSlipsSince();
+  }
+
+  const windowStart = new Date(Date.now() - FORM_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  // Sans coupure exploitable, la borne inférieure est « demain » : le compte
+  // retombe à zéro plutôt que d'exposer un agrégat de coupons masqués.
+  const since = isOwner ? new Date(0) : (cutoff ?? new Date(Date.now() + 86_400_000));
+
+  const { rows } = await pool.query(
+    `SELECT
+       COUNT(*) FILTER (WHERE outcome <> 'pending')                            AS settled,
+       COUNT(*) FILTER (WHERE outcome  = 'win')                                AS wins,
+       COUNT(*) FILTER (WHERE outcome <> 'pending' AND placed_at >= $3)        AS "settledWindow",
+       COUNT(*) FILTER (WHERE outcome  = 'win'     AND placed_at >= $3)        AS "winsWindow"
+     FROM bet_slips
+     WHERE user_id = $1 AND placed_at >= $2`,
+    [targetUserId, since, windowStart],
+  );
+  const c = rows[0] ?? {};
+
+  // Sous le plancher, on renvoie le décompte mais PAS de pourcentage. « 2 gagnés
+  // sur 3 » s'affiche 67 % et ne veut rien dire ; le client doit être incapable
+  // de peindre un chiffre qui n'a pas de sens, pas simplement invité à s'abstenir.
+  const rate = (wins: number, settled: number) =>
+    settled >= FORM_MIN_SAMPLE ? Math.round((wins / settled) * 1000) / 10 : null;
+
+  const settled       = Number(c.settled ?? 0);
+  const wins          = Number(c.wins ?? 0);
+  const settledWindow = Number(c.settledWindow ?? 0);
+  const winsWindow    = Number(c.winsWindow ?? 0);
+
+  return {
+    userId:      profile.userId,
+    username:    profile.username,
+    displayName: profile.displayName,
+    avatar:      profile.avatar,
+    avatarUrl:   profile.avatarUrl ?? null,
+    tier:        profile.tier,
+    /** Forme récente — ce que l'en-tête met en avant. */
+    form: {
+      windowDays: FORM_WINDOW_DAYS,
+      minSample:  FORM_MIN_SAMPLE,
+      settled:    settledWindow,
+      wins:       winsWindow,
+      hitRate:    rate(winsWindow, settledWindow),   // null = échantillon insuffisant
+    },
+    /** Cumul sur tout ce qui est visible — ligne secondaire. */
+    overall: {
+      since:   isOwner ? null : (cutoff ? cutoff.toISOString() : null),
+      settled,
+      wins,
+      hitRate: rate(wins, settled),
+    },
+  };
 }
 
 // ─── Leaderboard ─────────────────────────────────────────────────────────────

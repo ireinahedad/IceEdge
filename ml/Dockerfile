@@ -27,8 +27,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY python/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copier le code
-COPY python/ml_service.py python/fetch_data.py python/train.py ./
+# Copier le code.
+# score_model.py est INDISPENSABLE : ml_service.py fait `from score_model import
+# …` au niveau module. Sans lui l'image ne démarre pas du tout — ImportError
+# avant même le premier log de chargement des modèles.
+COPY python/ml_service.py python/score_model.py python/fetch_data.py python/train.py ./
 
 # Copier les modèles entraînés. Ils vivent dans ml/models (frère de python/),
 # donc ce COPY n'existe que parce que le contexte est ml/ — cf. la note en tête.

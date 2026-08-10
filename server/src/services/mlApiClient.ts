@@ -70,6 +70,15 @@ export interface MLPredictionResult {
   model_version:        string;
   model_type:           string;
   explanation:          string;
+  // ── P4 — incertitude d'estimation. Optionnels : absents si le service tourne
+  //    sans ensemble bootstrap, ou si le marché n'est pas dérivable du modèle
+  //    de score. Ne jamais supposer leur présence.
+  //
+  //    À ne pas confondre avec `confidence` : celui-ci mesure la force du signal
+  //    des features, alors que σ mesure si le modèle SAIT ce qu'il dit. Un match
+  //    à 50/50 parfaitement compris a un σ proche de 0.
+  probability_std?:     number | null;  // écart-type, en POINTS de pourcentage
+  uncertainty?:         number | null;  // σ/σ_max borné à 1 — fraction de mise à retirer
 }
 
 // ─── Disjoncteur (audit, ligne M) ────────────────────────────────────────────

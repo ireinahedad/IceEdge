@@ -15,7 +15,63 @@ When continuing this project:
 - Verify that what you are implementing is secure
 - At the end of each session, update PROJECT_CONTEXT.md.
 
-Last updated: 2026-07-22
+Last updated: 2026-08-09
+
+## Session 2026-08-09 — Coupons publics réservés aux abonnés Pro
+
+Ajout d'une valeur Pro : consulter les paris des autres joueurs. **Pivot en cours
+de route** — le plan initial (marketplace, abonnement payant entre utilisateurs,
+Stripe Connect) a été abandonné : Stripe classe le « sports forecasting or odds
+making » avec contrepartie monétaire dans ses commerces prohibés, et chaque compte
+connecté hérite de la restriction. Le périmètre retenu, les invariants de vie
+privée à ne pas casser et la procédure d'allumage font foi dans `DEPLOYMENT.md`
+§7 (« Mise en service des coupons publics »).
+
+1. **Résultats par jambe conservés** (`settlement.service.ts`) — `results[]` était
+   calculé puis jeté ; seul l'`outcome` du ticket survivait. Fusionné dans `legs`
+   (champ `result` par jambe) **dans le même UPDATE** que l'outcome : c'est le
+   `WHERE outcome = 'pending'` qui porte l'idempotence, une écriture séparée en
+   sortirait. Les coupons réglés avant ce lot n'ont pas de détail → affichés `—`,
+   jamais « perdu ».
+2. **`locks_at`** (migration **029**) — mise au jeu du match le plus tôt du
+   coupon, résolue au serveur à la soumission (`slip.service.ts`, `fetchGameById`),
+   jamais acceptée du client. Avant cette heure, un tiers voit qu'un coupon existe
+   mais pas ses sélections. `NULL` = masqué tant que `pending` (défaut sûr : une
+   panne de résolution doit rendre un coupon trop discret, pas le divulguer).
+3. **Trois filtres distincts** dans `getPublicSlips` (`profile.service.ts`) :
+   `show_slips` (qui), `PUBLIC_SLIPS_SINCE` (quand), `locks_at` (quoi). Aucun ne
+   s'applique au propriétaire. **Découplé de `is_public`** — le lier ferait payer
+   la discrétion d'un rang au classement. Redaction faite dans le service, jamais
+   « floutée » côté client.
+4. **`PUBLIC_SLIPS_SINCE`** — date de coupure en variable d'environnement, **échec
+   fermé** : absente → aucun coupon visible + warn (même parti pris que
+   `PRO_PROMO_CODES`). Seuls les coupons postérieurs sont exposés ; l'historique
+   antérieur reste privé pour toujours (il a été saisi sous la promesse inverse).
+5. **`GET /users/:userId/summary`** — forme sur 30 jours glissants + cumul, calculés
+   sur les coupons **visibles** (pas `user_bets`, qui produirait « 64 % sur 128 »
+   au-dessus d'une liste de 12). Plancher de 10 paris tranchés : en dessous,
+   `hitRate` vaut `null` et le client ne peut pas peindre un chiffre insensé.
+   Mur Pro partagé par `/slips` et `/summary` via `requireProForOthers`.
+6. **Client** — `PlayerBetsPage` (`/player/:userId`, route protégée), coupons
+   repliables, jambe fautive mise en évidence, `ApiError` qui conserve le statut
+   pour distinguer 402 / 403 / 404. Entrées : classement et recherche via la
+   modale existante de `FullLeaderBoard` (qui gagne « Voir tous ses paris »),
+   chat via le **nom** de l'auteur (l'avatar sert déjà à répondre).
+7. **Opt-out, pas opt-in** (migration **030**) — `show_slips` passe à
+   `DEFAULT TRUE`. Le réglage n'est pas supprimé : forcer la publication sans
+   porte de sortie n'est pas défendable (Loi 25). Déplacé dans une carte
+   « Confidentialité » et formulé à la négative. Ligne de divulgation ajoutée sous
+   le bouton de soumission du coupon — c'est elle qui rend le consentement
+   éclairé, pas les CGU. `TermsPage` / `PrivacyPage` mises à jour (FR + EN).
+
+**⚠️ État : livré mais INERTE.** Rien n'est visible tant que `PUBLIC_SLIPS_SINCE`
+n'est pas renseignée. Procédure d'allumage complète en **§7 de `DEPLOYMENT.md`**
+(bascule visée au début de la saison NHL ; retour arrière = retirer la variable).
+
+**⚠️ À faire en local** : `npm run db:migrate:all` (029 + 030), puis
+`npm run typecheck && npm test` (server) et `npm run build` (client). Le sandbox
+ne peut ni compiler ni lancer vitest (rollup natif Windows) ; seule la syntaxe a
+été validée via `ts.transpileModule`.
 
 ## Session 2026-07-22 — Blessures/scratches réels + absence pondérée
 
@@ -235,7 +291,7 @@ ICEEDGE/
 │   │   │   ├── slipApiService.ts
 │   │   │   ├── oddsApiService.ts
 │   │   │   ├── authService.ts
-│   │   │   └── affiliateService.ts
+│   │   │   └── bookmakers.ts        # Liens affiliés Bet365 / Stake
 │   │   └── data/
 │   │       ├── betMarkets.ts      # Définitions des 40+ marchés
 │   │       └── teamEmoji.ts
@@ -273,7 +329,7 @@ ICEEDGE/
     │   └── nhl_games.csv          # ~3600 matchs (généré par fetch_data.py)
     └── models/
         ├── game_model.json        # XGBoost moneyline (si entraîné)
-        ├── totals_model.json      # XGBoost total de buts (si entraîné)
+        ├── score_model.json       # Poisson empilé — price TOUS les marchés dérivés
         └── training_report.json
 ```
 
@@ -346,19 +402,14 @@ Erreurs déjà corrigées :
 
 ## 📋 Todo
 
-### High
-- Connecter ML au frontend (déboguer la chaîne frontend → Node.js → Python)
-- Entraîner le modèle XGBoost : `python fetch_data.py --seasons 3 && python train.py`
-
-### Medium
-- **Section 6 — Share** : bouton share après submit slip, `SharePage`, `navigator.share()`
-- **Section 7 — EV/Opportunities** : frontend pour `/api/opportunities` (backend existe)
-- TennisPredictionsPage — ML section (type tennis pas géré dans Python ML)
-
-### Low
-- **Section 8 — Production** : variables d'env prod, PWA manifest, error boundaries, Google Analytics
-- Splitter `PredictionPage.tsx` (trop long)
-- 404 route
+> **Cette liste a été vidée le 2026-08-10 : elle était entièrement livrée ou
+> morte.** Share et la route 404 existent, `/api/opportunities` a été supprimé du
+> backend, les deux pages de prédiction tennis étaient orphelines (le tennis
+> reste vivant via le toggle de sport dans Stats), et la Section 8 est couverte
+> par les audits.
+>
+> **Le seul inventaire à jour de ce qui reste est `RESTE_A_FAIRE.md`**, à la
+> racine. Ne pas rouvrir de todo ici : deux listes divergent toujours.
 
 ---
 
@@ -560,7 +611,7 @@ npm run seed              # (optionnel) données de test
 - Créé `DEPLOYMENT.md` — guide complet Supabase + Railway + Vercel (étapes, env vars, OAuth, checklist)
 
 ## Sessions précédentes
-- Sections 1–5 complètes (voir PLAN.md pour détail)
+- Sections 1–5 complètes (`PLAN.md` supprimé le 2026-08-10, entièrement livré ; détail dans l'historique Git)
 - Section 3 : predictionEngine.ts (Log5, Poisson), featureEngineering.ts, mlApiClient.ts
 - Section 4 : auth gate returnTo, odds labels américains, parlay implied odds, clear confirmation
 - Section 5 : Socket.io chat temps réel (server/socket.ts + useChatSocket hook)

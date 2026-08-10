@@ -37,8 +37,40 @@ DATA_DIR   = "../data"
 MODELS_DIR = "../models"
 
 SHORT_HL, LONG_HL = 6, 20         # demi-vies EWMA (matchs)
-GOALIE_HL         = 8             # demi-vie EWMA gardien (départs)
+GOALIE_HL         = 8             # demi-vie EWMA gardien (départs) — legacy, cf. ci-dessous
 MIN_GP            = 5             # matchs minimum avant d'émettre une ligne
+
+# ── Gardien : régression vers la moyenne (P3) ────────────────────────────────
+# Le GSAx60 d'un gardien est essentiellement du bruit à court terme. Mesuré sur
+# 45 222 départs :
+#   • fiabilité pair/impair intra-saison : 0.19 à 0.25 — et elle N'AUGMENTE PAS
+#     avec le nombre de départs (10-20 départs : 0.242 ; 50-90 : 0.246)
+#   • corrélation entre le GSAx60 passé et celui du match suivant : r = +0.038
+#
+# L'EWMA hl=8 avec min_periods=3 laissait un gardien à 3 départs peser autant
+# qu'un vétéran, avec des valeurs allant jusqu'à ±3.4 GSAx60 — du pur bruit
+# d'échantillonnage. On estime désormais par cumul régressé vers 0 :
+#
+#     gsax60 = Σ(GSAx passés) / (Σ(heures passées) + GOALIE_PRIOR_HOURS)
+#
+# GOALIE_PRIOR_HOURS = 50 h a été retenu par optimisation directe de la
+# corrélation avec le match suivant (testé de 0 à 600 h). L'écart-type des
+# estimations tombe de 0.394 à 0.119, ce qui correspond à l'écart réel mesuré
+# entre quartiles de gardiens (Q4−Q1 = 0.165 but/60, à xG subi identique).
+GOALIE_PRIOR_HOURS = 50.0
+GOALIE_PRIOR_SVPCT = 0.906        # % d'arrêts moyen de la ligue
+GOALIE_PRIOR_STARTS = 50          # pseudo-départs pour la régression du sv%
+
+# ── Alignement : projection bottom-up (P3) ───────────────────────────────────
+# Somme, sur les patineurs réellement habillés, de leur taux de xG individuel
+# passé × leur temps de glace projeté. Remplace avantageusement les proxys
+# grossiers (`star_power` = somme des ppg du top-3 disponible) : mesuré en
+# déviance Poisson de validation, 1.05500 → 1.05232, et log-loss moneyline
+# 0.6687 → 0.6675. Les deux signaux sont complémentaires — on garde les deux.
+LINEUP_HL = 20                    # demi-vie EWMA par joueur (matchs)
+LINEUP_RECENT_GAMES = 25          # fenêtre définissant l'effectif « actuel »
+LINEUP_ROSTER_MAX   = 26          # profondeur conservée (marge pour les absences)
+LINEUP_DRESSED      = 18          # patineurs habillés par match (12 att. + 6 déf.)
 
 # ── ELO (identique à train.py v3) ────────────────────────────────────────────
 ELO_BASE, ELO_K, ELO_HOME_ADV, ELO_SEASON_REGRESS = 1500.0, 6.0, 50.0, 0.30
@@ -171,37 +203,139 @@ def build_goalie_features() -> tuple[pd.DataFrame, dict]:
 
     # Forme du gardien : EWMA sur SES départs (décalé → pré-match)
     starters = starters.sort_values(["playerId", "date"]).reset_index(drop=True)
-    hours = starters["icetime"].replace(0, np.nan) / 3600.0
-    starters["g_gsax60_raw"] = (starters["xGoals"] - starters["goals"]) / hours
+    starters["hours"] = starters["icetime"].replace(0, np.nan) / 3600.0
+    starters["gsax_abs"] = starters["xGoals"] - starters["goals"]   # GSAx absolu du match
+    hours = starters["hours"]
+    starters["g_gsax60_raw"] = starters["gsax_abs"] / hours
     starters["g_svpct_raw"]  = 1.0 - starters["goals"] / starters["ongoal"].replace(0, np.nan)
 
     grp = starters.groupby("playerId", sort=False)
-    starters["goalie_gsax60"] = grp["g_gsax60_raw"].transform(
-        lambda s: s.shift(1).ewm(halflife=GOALIE_HL, min_periods=3).mean())
-    starters["goalie_svpct"] = grp["g_svpct_raw"].transform(
-        lambda s: s.shift(1).ewm(halflife=GOALIE_HL, min_periods=3).mean())
-    starters["goalie_starts"] = grp.cumcount()
+    # Cumul régressé vers la moyenne de ligue (cf. GOALIE_PRIOR_HOURS).
+    # Aucun min_periods : un gardien sans historique reçoit exactement le prior
+    # (0 pour le GSAx60, la moyenne de ligue pour le sv%), ce qui est la bonne
+    # réponse — et non un NaN ni une valeur extrême tirée de 3 matchs.
+    cum_gsax  = grp["gsax_abs"].transform(lambda s: s.shift(1).cumsum())
+    cum_hours = grp["hours"].transform(lambda s: s.shift(1).cumsum())
+    starters["goalie_gsax60"] = (
+        cum_gsax / (cum_hours.fillna(0.0) + GOALIE_PRIOR_HOURS)).fillna(0.0)
+
+    cum_sv = grp["g_svpct_raw"].transform(lambda s: s.shift(1).expanding().mean())
+    n_prev = grp.cumcount()
+    starters["goalie_svpct"] = (
+        (cum_sv.fillna(GOALIE_PRIOR_SVPCT) * n_prev
+         + GOALIE_PRIOR_SVPCT * GOALIE_PRIOR_STARTS)
+        / (n_prev + GOALIE_PRIOR_STARTS))
+    starters["goalie_starts"] = n_prev
 
     out = starters[["team", "gameId", "date", "name",
                     "goalie_gsax60", "goalie_svpct", "goalie_starts"]].copy()
 
-    # État d'inférence : pour chaque équipe, les 2 gardiens les plus utilisés récemment
+    # État d'inférence : pour chaque équipe, les 2 gardiens les plus utilisés récemment.
+    # Les estimations reposent sur la carrière COMPLÈTE du gardien (toutes équipes
+    # confondues) et sur le même estimateur régressé qu'à l'entraînement — un
+    # gardien échangé en cours de saison ne repart donc pas de zéro.
+    career = starters.groupby("playerId").agg(
+        gsax_sum=("gsax_abs", "sum"), hours_sum=("hours", "sum"),
+        sv_mean=("g_svpct_raw", "mean"), n=("g_svpct_raw", "size"))
+    career["gsax60"] = career["gsax_sum"] / (career["hours_sum"] + GOALIE_PRIOR_HOURS)
+    career["svpct"] = ((career["sv_mean"].fillna(GOALIE_PRIOR_SVPCT) * career["n"]
+                        + GOALIE_PRIOR_SVPCT * GOALIE_PRIOR_STARTS)
+                       / (career["n"] + GOALIE_PRIOR_STARTS))
+
     state: dict = {}
     for team, g in starters.groupby("team"):
         recent = g.sort_values("date").tail(15)
         usage = recent["name"].value_counts(normalize=True)
         goalies = []
         for gname, share in usage.head(2).items():
-            last = g[g["name"] == gname].sort_values("date").iloc[-1]
-            gsax = last["g_gsax60_raw"]  # inclure le dernier match dans l'EWMA d'inférence
-            hist = g[g["name"] == gname].sort_values("date")
+            pid = g.loc[g["name"] == gname, "playerId"].iloc[-1]
+            c = career.loc[pid]
             goalies.append({
                 "name": gname, "recent_start_share": round(float(share), 3),
-                "gsax60": round(float(hist["g_gsax60_raw"].ewm(halflife=GOALIE_HL).mean().iloc[-1]), 4),
-                "svpct":  round(float(hist["g_svpct_raw"].ewm(halflife=GOALIE_HL).mean().iloc[-1]), 4),
+                "gsax60": round(float(c["gsax60"]), 4),
+                "svpct":  round(float(c["svpct"]), 4),
+                "career_starts": int(c["n"]),
             })
         state[team] = goalies
     print(f"   ✅ {len(out)} départs de gardien qualifiés")
+    return out, state
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 2 bis. Projection bottom-up de l'alignement (P3)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def build_lineup_features() -> tuple[pd.DataFrame, dict]:
+    """Force offensive reconstruite depuis les patineurs réellement habillés.
+
+    Pour chaque joueur, on calcule en pré-match (EWMA décalée, donc sans fuite) :
+      • son taux de xG individuel par 60 minutes
+      • son temps de glace habituel
+
+    La projection d'équipe est la somme, sur l'alignement du soir, de
+    `xg60 × toi / 60`. Contrairement à `star_power` — qui compte des ppg parmi un
+    top-5 figé — cette somme baisse exactement de la contribution du joueur absent,
+    pondérée par son usage réel.
+
+    Contrôle de cohérence : la somme moyenne vaut 2.84 xG par équipe-match, contre
+    2.83 buts réglementaires réellement marqués en moyenne. L'échelle est bonne.
+
+    Retourne (DataFrame (team, date, lineup_*), état d'inférence par équipe).
+    """
+    print("👥 Projection bottom-up de l'alignement …")
+    sk = pd.read_csv(f"{DATA_DIR}/mp_skater_games.csv", low_memory=False)
+    need_cols(sk, ["playerId", "name", "playerTeam", "gameDate", "situation",
+                   "icetime", "I_F_xGoals", "I_F_points"], "mp_skater_games.csv")
+    if "situation" in sk.columns:
+        sk = sk[sk["situation"] == "all"].copy()
+    sk = sk[sk["icetime"] > 0].copy()
+    sk["team"] = sk["playerTeam"].map(norm_team)
+    sk["date"] = sk["gameDate"].map(mp_date)
+    sk = sk.sort_values(["playerId", "date"]).reset_index(drop=True)
+
+    sk["xg60"] = sk["I_F_xGoals"] / (sk["icetime"] / 3600.0)
+    grp = sk.groupby("playerId", sort=False)
+    sk["xg60_prior"] = grp["xg60"].transform(
+        lambda s: s.shift(1).ewm(halflife=LINEUP_HL, min_periods=2).mean())
+    sk["toi_prior"] = grp["icetime"].transform(
+        lambda s: s.shift(1).ewm(halflife=LINEUP_HL, min_periods=2).mean())
+    sk["pts_prior"] = grp["I_F_points"].transform(
+        lambda s: s.shift(1).ewm(halflife=LINEUP_HL, min_periods=2).mean())
+    sk["contrib"] = sk["xg60_prior"] * sk["toi_prior"] / 3600.0
+
+    out = (sk.groupby(["team", "date"], as_index=False)
+             .agg(lineup_xg=("contrib", "sum"),
+                  lineup_pts=("pts_prior", "sum"),
+                  lineup_size=("contrib", "size")))
+
+    # État d'inférence : effectif ACTUEL de chaque équipe.
+    #
+    # Restreindre aux joueurs vus sur les LINEUP_RECENT_GAMES derniers matchs de
+    # l'équipe est indispensable : sans ce filtre, on remonterait tout l'historique
+    # de la franchise depuis 2008 et la somme d'alignement serait plus du double de
+    # celle vue à l'entraînement — un décalage entraînement/service silencieux.
+    valid = sk.dropna(subset=["xg60_prior", "toi_prior"])
+    state: dict = {}
+    for team, g in valid.groupby("team"):
+        recent_dates = sorted(g["date"].unique())[-LINEUP_RECENT_GAMES:]
+        g_recent = g[g["date"].isin(recent_dates)]
+        last = g_recent.sort_values("date").groupby("playerId").tail(1)
+        # Classement par TEMPS DE GLACE, pas par xG : un entraîneur habille par
+        # rôle, pas par talent offensif. Trier par xG sélectionnerait 18 marqueurs
+        # et surestimerait la projection de 18.6 % ; par temps de glace, l'écart
+        # avec l'échelle d'entraînement tombe à 2.3 %.
+        roster = last.sort_values("toi_prior", ascending=False).head(LINEUP_ROSTER_MAX)
+        state[team] = [
+            {"name": r["name"],
+             "xg": round(float(r["contrib"]), 5),
+             "pts": round(float(r["pts_prior"]), 4),
+             "toi": round(float(r["toi_prior"]), 1)}
+            for _, r in roster.iterrows() if r["contrib"] == r["contrib"]
+        ]
+    sums = [sum(p["xg"] for p in v[:LINEUP_DRESSED]) for v in state.values() if v]
+    print(f"   ✅ {len(out)} équipes-matchs, somme moyenne {out['lineup_xg'].mean():.3f} xG")
+    print(f"   ✅ état d'inférence : {len(state)} équipes, somme top-{LINEUP_DRESSED} "
+          f"moyenne {np.mean(sums):.3f} xG (doit rester proche de la valeur ci-dessus)")
     return out, state
 
 
@@ -497,6 +631,58 @@ def devig(p_home_raw: pd.Series, p_away_raw: pd.Series) -> pd.Series:
     return p_home_raw / s
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Cibles du modèle de score (P2) — prolongation et buts réglementaires
+# ══════════════════════════════════════════════════════════════════════════════
+
+def build_ot_flags() -> pd.DataFrame:
+    """Détecte les matchs allés en prolongation via le temps de glace MoneyPuck.
+
+    Aucune colonne du dataset n'indique la prolongation. Mais `iceTime` en
+    situation 'all' donne la durée réelle du match : 3600 s en temps
+    réglementaire, davantage sinon (3600 + jusqu'à 300 s d'OT, puis fusillade).
+
+    Vérifié sur 46 444 lignes : 79.5 % à exactement 60 min, le reste réparti
+    entre 61-65 min — soit un taux de prolongation de 23.0 %, qui correspond
+    au taux NHL connu.
+
+    Retourne un DataFrame (team, date, went_to_ot).
+    """
+    mp = pd.read_csv(f"{DATA_DIR}/mp_team_games.csv", low_memory=False,
+                     usecols=["playerTeam", "gameDate", "situation", "iceTime"])
+    a = mp[mp["situation"] == "all"].copy()
+    a["team"] = a["playerTeam"].map(norm_team)
+    a["date"] = a["gameDate"].map(mp_date)
+    # Marge de 10 s : un match réglementaire ne dépasse jamais 3610 s
+    a["went_to_ot"] = (a["iceTime"] > 3610).astype(int)
+    out = a.groupby(["team", "date"], as_index=False)["went_to_ot"].max()
+    print(f"⏱️  Prolongations détectées : {out['went_to_ot'].mean():.1%} des équipes-matchs")
+    return out
+
+
+def add_score_targets(df: pd.DataFrame, ot: pd.DataFrame) -> pd.DataFrame:
+    """Ajoute les cibles du modèle de score.
+
+    Un match en prolongation était forcément à égalité à la fin du temps
+    réglementaire : le score réglementaire vaut donc min(dom, ext) des deux
+    côtés, et le but supplémentaire (OT ou fusillade) revient au vainqueur.
+    C'est exact, pas une approximation.
+    """
+    df = df.merge(ot.rename(columns={"team": "home_team", "went_to_ot": "_ot"}),
+                  on=["home_team", "date"], how="left")
+    tied = df["_ot"].fillna(0).astype(int) == 1
+    low = df[["home_score", "away_score"]].min(axis=1)
+    df["went_to_ot"] = df["_ot"]
+    df["home_reg_score"] = np.where(tied, low, df["home_score"])
+    df["away_reg_score"] = np.where(tied, low, df["away_score"])
+    df["reg_total_goals"] = df["home_reg_score"] + df["away_reg_score"]
+    df = df.drop(columns=["_ot"])
+    cov = df["went_to_ot"].notna().mean()
+    print(f"🥅 Cibles de score : couverture prolongation {cov:.1%}, "
+          f"buts réglementaires moy {df['reg_total_goals'].mean():.2f}")
+    return df
+
+
 def main():
     for f in ("games_spine.csv", "mp_team_games.csv", "mp_goalie_games.csv"):
         if not os.path.exists(f"{DATA_DIR}/{f}"):
@@ -511,11 +697,13 @@ def main():
 
     team_feats, team_state   = build_team_features()
     goalie_feats, goalie_state = build_goalie_features()
+    lineup_feats, lineup_state = build_lineup_features()
     star_feats, star_state   = build_star_features()
 
     df = spine.copy()
     df["home_win"]    = (df["home_score"] > df["away_score"]).astype(int)
     df["total_goals"] = df["home_score"] + df["away_score"]
+    df = add_score_targets(df, build_ot_flags())
 
     # Merge des features par (équipe, gameId MoneyPuck ≠ game_id NHL) → clé (team, date)
     def merge_side(base, feats, side):
@@ -530,6 +718,7 @@ def main():
     for side in ("home", "away"):
         df = merge_side(df, team_feats, side)
         df = merge_side(df, goalie_feats, side)
+        df = merge_side(df, lineup_feats, side)
         if star_feats is not None and not star_feats.empty:
             df = merge_side(df, star_feats, side)
 
@@ -551,6 +740,23 @@ def main():
                 df[f"market_home_p_{stage}"] = devig(1 / h, 1 / a)
         cov = df["market_home_p_close"].notna().mean() if "market_home_p_close" in df else 0
         print(f"💰 Cotes fusionnées — couverture clôture : {cov:.1%}")
+
+        # ── Marchés dérivés dévigés ──────────────────────────────────────────
+        # Même traitement que le moneyline : on retire la marge du bookmaker
+        # pour obtenir une probabilité comparable à celle du modèle. Sans ça,
+        # tout « edge » calculé contient la marge et est faux d'environ 2 points.
+        for stage in ("open", "close"):
+            o, u = df.get(f"total_{stage}_over"), df.get(f"total_{stage}_under")
+            if o is not None and u is not None:
+                df[f"market_over_p_{stage}"] = devig(1 / o, 1 / u)
+        ph, pa = df.get("pl_home_price"), df.get("pl_away_price")
+        if ph is not None and pa is not None:
+            df["market_pl_home_p"] = devig(1 / ph, 1 / pa)
+
+        for label, col in [("prix totaux (clôture)", "market_over_p_close"),
+                           ("prix puck line",        "market_pl_home_p")]:
+            if col in df:
+                print(f"   {label} — couverture : {df[col].notna().mean():.1%}")
     else:
         print("💰 Pas de odds.csv — dataset sans cotes.")
 
@@ -560,7 +766,9 @@ def main():
     if "home_xgf60_s" in df and "away_xga60_s" in df:
         df["xg_matchup_home"] = df["home_xgf60_s"] - df["away_xga60_s"]  # attaque H vs défense A
         df["xg_matchup_away"] = df["away_xgf60_s"] - df["home_xga60_s"]
-    for c in ("ev_xgf_pct_s", "ev_cf_pct_s", "goalie_gsax60", "goalie_svpct",
+        df["xg_matchup_diff"] = df["xg_matchup_home"] - df["xg_matchup_away"]
+    for c in ("ev_xgf_pct_s", "ev_cf_pct_s", "ev_xgf_pct_l", "ev_cf_pct_l",
+              "goalie_gsax60", "goalie_svpct",
               "star_power", "finishing_s", "win_s", "rest_days",
               # ── voyage / calendrier ──
               "distance_km", "tz_shift", "days_away", "alt_gain",
@@ -572,6 +780,11 @@ def main():
         df["stars_missing_diff"] = df["home_stars_missing"].fillna(0) - df["away_stars_missing"].fillna(0)
     if "home_stars_out_weight" in df.columns:
         df["stars_out_weight_diff"] = df["home_stars_out_weight"].fillna(0) - df["away_stars_out_weight"].fillna(0)
+    # Calendrier : dos-à-dos et 3-en-4 en écart signé (symétrie home/away)
+    for c in ("b2b", "3in4"):
+        h, a = f"home_{c}", f"away_{c}"
+        if h in df.columns and a in df.columns:
+            df[f"{c}_diff"] = df[h].fillna(0).astype(float) - df[a].fillna(0).astype(float)
 
     # Filtre début de saison : minimum de matchs joués
     before = len(df)
@@ -588,6 +801,7 @@ def main():
             "as_of": str(df["date"].max()),
             "teams": team_state,
             "goalies": goalie_state,
+            "lineups": lineup_state,
             "stars": star_state,
         }, f, indent=1)
     with open(f"{MODELS_DIR}/elo_ratings.json", "w") as f:

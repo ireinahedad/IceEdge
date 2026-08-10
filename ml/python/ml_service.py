@@ -29,6 +29,7 @@ from typing import List, Optional
 
 import numpy as np
 import xgboost as xgb
+from score_model import P_OT_HOME, ScoreDistribution, ScoreEnsemble
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -144,9 +145,35 @@ MODELS_DIR = os.environ.get("MODELS_DIR") or os.path.join(
 )
 
 _xgb_game:   xgb.Booster | None = None
-_xgb_totals: xgb.Booster | None = None
 _game_importances:   list[dict] = []
-_totals_importances: list[dict] = []
+
+# Il n'y a plus de modèle de totaux dédié (S2). Le repli `totals_model.json`
+# appliquait un Poisson lisse sur un total espéré ponctuel — P2 l'a mesuré faux
+# de 2.5 à 4.4 points par ligne. Le modèle de score price toute ligne depuis la
+# distribution jointe complète et compte correctement le but de prolongation.
+# Un repli qui, s'il se déclenchait, servirait un prix qu'on sait mauvais n'est
+# pas un filet de sécurité : sans modèle de score, on retombe sur les
+# heuristiques déclarées comme telles (`_apply_market`).
+
+# Modèle de score (P2) — Poisson empilé équipe-match. Voir score_model.py.
+# Une fois chargé, il price exactement moneyline, puck-line, totaux (toute
+# ligne), totaux d'équipe et prolongation, en remplacement des heuristiques.
+# Patineurs habillés par match — doit rester égal à LINEUP_DRESSED dans
+# build_dataset.py, sinon la projection d'alignement servie n'est plus à la même
+# échelle que celle vue à l'entraînement.
+_LINEUP_DRESSED = 18
+
+_xgb_score: xgb.Booster | None = None
+_SCORE_FEAT_NAMES: list[str] = []
+_score_tau: dict[int, float] | None = None
+_score_p_ot: float = P_OT_HOME
+
+# Ensemble bootstrap (P4) — mesure l'incertitude d'ESTIMATION du prix, pas le
+# hasard du match. Optionnel : sans lui le service répond exactement comme
+# avant, sans champ σ. Le prix servi reste toujours celui du modèle principal ;
+# les membres ne servent qu'à mesurer la dispersion (cf. ScoreEnsemble).
+_score_members: list[xgb.Booster] = []
+_score_sigma_max: float | None = None
 
 # ELO (écrit par train.py) — ratings par équipe pour l'inférence
 _elo_ratings:  dict[str, float] = {}
@@ -174,25 +201,54 @@ _GAME_FEAT_NAMES = [
     "home_last10_win_pct", "away_last10_win_pct",
     "win_pct_diff", "gf_diff", "ga_diff", "pp_diff", "pk_diff", "form_diff",
 ]
-_TOTALS_FEAT_NAMES = [
-    "home_goals_for_pg", "away_goals_for_pg",
-    "home_goals_against_pg", "away_goals_against_pg",
-    "home_pp_pct", "away_pp_pct",
-    "home_pk_pct", "away_pk_pct",
-    "gf_diff", "ga_diff",
-]
+
+
+def _load_score_ensemble(rep: dict) -> None:
+    """Charge les membres bootstrap s'ils existent (P4).
+
+    Entièrement facultatif : sans `score_ensemble/`, `_score_members` reste vide
+    et le service se comporte exactement comme avant. On exige `sigma_max` en
+    plus des membres, parce qu'un σ sans échelle de référence n'est pas
+    interprétable — et cette échelle doit venir de l'entraînement, pas d'ici.
+    """
+    global _score_members, _score_sigma_max
+    _score_members, _score_sigma_max = [], None
+
+    meta = rep.get("ensemble") or {}
+    ens_dir = os.path.join(MODELS_DIR, "score_ensemble")
+    if not meta or not os.path.isdir(ens_dir):
+        print("[ML] ℹ️  Pas d'ensemble bootstrap — σ non exposée")
+        return
+    try:
+        files = sorted(f for f in os.listdir(ens_dir)
+                       if f.startswith("member_") and f.endswith(".json"))
+        members = []
+        for fname in files:
+            b = xgb.Booster()
+            b.load_model(os.path.join(ens_dir, fname))
+            members.append(b)
+        sigma_max = meta.get("sigma_max")
+        if len(members) < 2 or not sigma_max:
+            raise ValueError(f"{len(members)} membre(s), sigma_max={sigma_max}")
+        _score_members = members
+        _score_sigma_max = float(sigma_max)
+        verdict = ((meta.get("test") or {}).get("verdict")) or "verdict non consigné"
+        print(f"[ML] ✅ ensemble bootstrap — {len(members)} membres, "
+              f"σ_max={_score_sigma_max:.5f}")
+        print(f"[ML]    {verdict}")
+    except Exception as e:
+        _score_members, _score_sigma_max = [], None
+        print(f"[ML] ⚠️  ensemble bootstrap ignoré : {e} — σ non exposée")
 
 
 def _try_load_models():
-    global _xgb_game, _xgb_totals, _game_importances, _totals_importances
-    global _GAME_FEAT_NAMES, _TOTALS_FEAT_NAMES
+    global _xgb_game, _game_importances
+    global _GAME_FEAT_NAMES
     global _elo_ratings, _elo_base, _elo_home_adv, _platt_a, _platt_b
     global _inference_state, _blend_w
 
     game_path   = os.path.join(MODELS_DIR, "game_model.json")
-    totals_path = os.path.join(MODELS_DIR, "totals_model.json")
     gi_path     = os.path.join(MODELS_DIR, "feature_importance_game.json")
-    ti_path     = os.path.join(MODELS_DIR, "feature_importance_totals.json")
     report_path = os.path.join(MODELS_DIR, "training_report.json")
     elo_path    = os.path.join(MODELS_DIR, "elo_ratings.json")
 
@@ -204,8 +260,6 @@ def _try_load_models():
             feats = report.get("features", {})
             if feats.get("game"):
                 _GAME_FEAT_NAMES = feats["game"]
-            if feats.get("totals"):
-                _TOTALS_FEAT_NAMES = feats["totals"]
             cal = (report.get("game_model") or {}).get("calibration") or {}
             if cal.get("method") == "platt":
                 _platt_a, _platt_b = float(cal["a"]), float(cal["b"])
@@ -216,7 +270,7 @@ def _try_load_models():
                 _blend_w = [float(x) for x in blend["blend_weights"]]
                 print(f"[ML] ✅ Blend modèle ⊕ marché chargé (w={_blend_w})")
             print(f"[ML] ✅ Features chargées depuis training_report.json "
-                  f"(game: {len(_GAME_FEAT_NAMES)}, totals: {len(_TOTALS_FEAT_NAMES)})")
+                  f"(game: {len(_GAME_FEAT_NAMES)})")
         except Exception as e:
             print(f"[ML] ⚠️  training_report.json : {e} — fallback listes statiques")
 
@@ -254,24 +308,40 @@ def _try_load_models():
             _xgb_game = None
             print(f"[ML] ⚠️  game_model.json : {e}")
 
-    if os.path.exists(totals_path):
+    # ── Modèle de score (P2) ────────────────────────────────────────────────
+    # Chargé indépendamment des autres : s'il manque, le service garde les
+    # heuristiques historiques et continue de répondre normalement.
+    global _xgb_score, _SCORE_FEAT_NAMES, _score_tau, _score_p_ot
+    score_path  = os.path.join(MODELS_DIR, "score_model.json")
+    score_rep   = os.path.join(MODELS_DIR, "score_report.json")
+    if os.path.exists(score_path) and os.path.exists(score_rep):
         try:
-            _xgb_totals = xgb.Booster()
-            _xgb_totals.load_model(totals_path)
-            print(f"[ML] ✅ totals_model.json chargé (XGBoost)")
+            with open(score_rep) as fh:
+                rep = json.load(fh)
+            _SCORE_FEAT_NAMES = list(rep.get("features") or [])
+            _score_tau = {int(k): float(v)
+                          for k, v in (rep.get("tau_margin") or {}).items()}
+            _score_p_ot = float(rep.get("p_ot_home", P_OT_HOME))
+            if not _SCORE_FEAT_NAMES:
+                raise ValueError("score_report.json sans liste de features")
+            b = xgb.Booster()
+            b.load_model(score_path)
+            _xgb_score = b
+            print(f"[ML] ✅ score_model.json chargé — {len(_SCORE_FEAT_NAMES)} features, "
+                  f"τ sur {len(_score_tau)} écarts, P(dom en OT)={_score_p_ot:.4f}")
+            _load_score_ensemble(rep)
         except Exception as e:
-            _xgb_totals = None
-            print(f"[ML] ⚠️  totals_model.json : {e}")
+            _xgb_score, _SCORE_FEAT_NAMES, _score_tau = None, [], None
+            print(f"[ML] ⚠️  score_model.json : {e} — heuristiques conservées")
+    else:
+        print("[ML] ℹ️  Pas de score_model.json — heuristiques de marchés dérivés")
+        print("[ML]    Lance : python build_dataset.py && python train_score.py")
 
     if os.path.exists(gi_path):
         with open(gi_path) as f:
             _game_importances = json.load(f)
 
-    if os.path.exists(ti_path):
-        with open(ti_path) as f:
-            _totals_importances = json.load(f)
-
-    if _xgb_game is None and _xgb_totals is None:
+    if _xgb_game is None and _xgb_score is None:
         print("[ML] ℹ️  Aucun modèle .json — utilisation des poids manuels (fallback)")
         print("[ML]    Lance : python fetch_data.py && python train.py")
 
@@ -320,6 +390,21 @@ class MLResponse(BaseModel):
     model_version: str
     model_type: str
     explanation: str
+    # ── P4 — incertitude d'estimation, en POINTS DE POURCENTAGE ──────────────
+    # Écart-type de la probabilité entre les membres de l'ensemble bootstrap.
+    # Absent (None) si l'ensemble n'est pas chargé ou si le marché n'est pas
+    # dérivable du modèle de score : le champ est optionnel pour rester
+    # rétro-compatible avec les clients existants.
+    #
+    # Attention à la lecture : c'est l'incertitude sur le PRIX, pas sur le
+    # résultat du match. Un match parfaitement prévisible à 50/50 aura un σ
+    # proche de 0. σ répond à « le modèle sait-il ce qu'il dit ? », pas à
+    # « le match est-il serré ? ».
+    probability_std: Optional[float] = None
+    # σ / σ_max, borné à 1. C'est exactement la fraction de mise retirée par
+    # `uncertainty_haircut` — exposée pour que le backend puisse dimensionner
+    # sans recoder la règle ni connaître σ_max.
+    uncertainty: Optional[float] = None
 
 # ── Game features ─────────────────────────────────────────────────────────────
 
@@ -458,6 +543,100 @@ def _game_moneyline(f: GameFeatures) -> tuple[float, float]:
     return prob, confidence
 
 
+def _apply_score_model(market: str, f: GameFeatures,
+                       dist: "ScoreDistribution") -> "tuple[float, float, str] | None":
+    """Prix exact issu du modèle de score (P2), quand le marché est dérivable.
+
+    Là où les heuristiques historiques appliquaient des multiplicateurs arbitraires
+    (puck-line = base_prob × 0.60, régulation = base_prob × 0.85 avec un taux de
+    prolongation supposé de 15 % alors qu'il est de 23 %), on somme ici la vraie
+    distribution jointe des scores. Calibration mesurée sur 3 762 matchs de test :
+
+        nul réglementaire  prédit 0.2185  observé 0.2204
+        domicile -1.5      prédit 0.3296  observé 0.3312
+
+    Retourne None si le marché n'est pas dérivable — l'appelant retombe alors sur
+    l'heuristique historique.
+    """
+    lh, la = dist.lam_home, dist.lam_away
+
+    if market == "moneyline":
+        p = dist.p_home_win()
+        return p, 1.00, (f"Modèle de score λ={lh:.2f}/{la:.2f} → domicile "
+                         f"{int(p * 100)}% (prolongation incluse).")
+
+    if market == "puck_line":
+        p = dist.p_home_cover_minus_15()
+        return p, 0.92, (f"P(domicile gagne par ≥2) = {int(p * 100)}% — "
+                         f"un match en prolongation se finit toujours à 1 but d'écart.")
+
+    if market == "alt_puck_line":
+        p = float(dist.M[dist._margin >= 3].sum())
+        return p, 0.85, f"P(domicile gagne par ≥3) = {int(p * 100)}%."
+
+    if market in ("total_goals", "total_goals_over"):
+        line = f.line if f.line is not None else 5.5
+        p = dist.p_over(line)
+        return p, 0.88, (f"Distribution de score λ={lh:.2f}/{la:.2f}, total espéré "
+                         f"{dist.expected_total():.2f} → OVER {line} : {int(p * 100)}%.")
+
+    if market == "total_goals_under":
+        line = f.line if f.line is not None else 5.5
+        p = dist.p_under(line)
+        return p, 0.88, (f"Distribution de score λ={lh:.2f}/{la:.2f}, total espéré "
+                         f"{dist.expected_total():.2f} → UNDER {line} : {int(p * 100)}%.")
+
+    if market == "team_total_goals":
+        line = f.line if f.line is not None else 2.5
+        p = dist.p_team_over("home", line)
+        return p, 0.85, (f"Buts du domicile (λ={lh:.2f}, but de prolongation inclus) "
+                         f"→ OVER {line} : {int(p * 100)}%.")
+
+    if market == "regulation_result":
+        p = float(dist.M[dist._margin > 0].sum())
+        return p, 0.90, (f"Victoire du domicile en 60 minutes : {int(p * 100)}% "
+                         f"(P(nul réglementaire) = {dist.p_regulation_tie():.0%}).")
+
+    if market == "game_to_ot":
+        p = dist.p_regulation_tie()
+        return p, 0.90, f"P(nul après 60 minutes) = {int(p * 100)}%."
+
+    return None
+
+
+def _score_market_fn(market: str, f: GameFeatures):
+    """`dist -> proba` pour le marché servi, ou None s'il n'est pas dérivable.
+
+    Sert à mesurer σ sur EXACTEMENT la quantité qu'on price. Prendre σ sur λ ou
+    sur le moneyline pour ensuite l'appliquer à un total serait faux : deux λ
+    incertains mais dont la somme est stable donnent un moneyline très incertain
+    et un total très sûr. Chaque marché a sa propre incertitude.
+
+    Doit rester aligné sur `_apply_score_model` — même marché, même formule.
+    """
+    line = f.line
+    if market == "moneyline":
+        return lambda d: d.p_home_win()
+    if market == "puck_line":
+        return lambda d: d.p_home_cover_minus_15()
+    if market == "alt_puck_line":
+        return lambda d: float(d.M[d._margin >= 3].sum())
+    if market in ("total_goals", "total_goals_over"):
+        ln = line if line is not None else 5.5
+        return lambda d: d.p_over(ln)
+    if market == "total_goals_under":
+        ln = line if line is not None else 5.5
+        return lambda d: d.p_under(ln)
+    if market == "team_total_goals":
+        ln = line if line is not None else 2.5
+        return lambda d: d.p_team_over("home", ln)
+    if market == "regulation_result":
+        return lambda d: float(d.M[d._margin > 0].sum())
+    if market == "game_to_ot":
+        return lambda d: d.p_regulation_tie()
+    return None
+
+
 def _apply_market(
     market: str,
     base_prob: float,
@@ -466,12 +645,22 @@ def _apply_market(
     lam_home: float,
     lam_away: float,
     model_label: str,
+    dist: "ScoreDistribution | None" = None,
 ) -> "tuple[float, float, str]":
     """
     Derive market-specific probability from the base home-win probability.
     Returns (probability 0-1, confidence_multiplier 0-1, explanation string).
     base_prob = P(home team wins) from XGBoost or logistic regression.
+
+    Si le modèle de score est chargé, les marchés dérivables sont pricés
+    exactement par `_apply_score_model`; le reste garde les heuristiques.
     """
+    if dist is not None:
+        exact = _apply_score_model(market, f, dist)
+        if exact is not None:
+            p, conf, expl = exact
+            return clamp(p, 0.02, 0.98), conf, expl
+
     total_lam = lam_home + lam_away
     line = f.line if f.line is not None else 5.5
     bp = int(base_prob * 100)
@@ -637,6 +826,88 @@ def _apply_market(
     return clamp(prob, 0.05, 0.95), conf, expl
 
 
+def _build_score_distribution(feat_values: dict, home_elo: float,
+                              away_elo: float) -> "ScoreDistribution | None":
+    """Construit la distribution de score du match à partir de `feat_values`.
+
+    Le modèle est entraîné sur des lignes « équipe-match » : on l'interroge donc
+    deux fois, une fois par équipe, en inversant les rôles attaque/défense.
+
+    Les noms de features sont lus depuis `score_report.json` plutôt que codés en
+    dur : le vecteur d'entrée reste ainsi aligné sur ce qui a réellement été
+    entraîné, même si la liste change. Toute feature introuvable reste NaN —
+    XGBoost la gère nativement.
+    """
+    if _xgb_score is None or not _SCORE_FEAT_NAMES:
+        return None
+
+    def row_for(atk: str, dfn: str, is_home: float, elo_signed: float) -> list[float]:
+        out = []
+        for name in _SCORE_FEAT_NAMES:
+            if name == "is_home":
+                out.append(is_home)
+            elif name == "elo_atk_minus_def":
+                out.append(elo_signed)
+            elif name.startswith("atk_"):
+                v = feat_values.get(f"{atk}_{name[4:]}")
+                out.append(float(v) if isinstance(v, (int, float)) and v == v else np.nan)
+            elif name.startswith("def_"):
+                v = feat_values.get(f"{dfn}_{name[4:]}")
+                out.append(float(v) if isinstance(v, (int, float)) and v == v else np.nan)
+            else:
+                v = feat_values.get(name)
+                out.append(float(v) if isinstance(v, (int, float)) and v == v else np.nan)
+        return out
+
+    try:
+        rows = np.array([
+            row_for("home", "away", 1.0, home_elo - away_elo),
+            row_for("away", "home", 0.0, away_elo - home_elo),
+        ], dtype=np.float32)
+        dmat = xgb.DMatrix(rows, feature_names=_SCORE_FEAT_NAMES, missing=np.nan)
+        lam = _xgb_score.predict(dmat)
+        lam_h, lam_a = float(lam[0]), float(lam[1])
+        # Garde-fou : une intensité aberrante trahit un vecteur mal rempli.
+        # Mieux vaut retomber sur l'heuristique que servir un prix absurde.
+        if not (0.5 <= lam_h <= 8.0 and 0.5 <= lam_a <= 8.0):
+            return None
+        dist = ScoreDistribution(lam_h, lam_a, _score_p_ot, _score_tau)
+        dist._dmatrix = dmat          # réutilisé par l'ensemble, cf. ci-dessous
+        return dist
+    except Exception as e:
+        print(f"[ML] ⚠️  modèle de score indisponible pour ce match : {e}")
+        return None
+
+
+def _build_score_ensemble(dist: "ScoreDistribution | None") -> "ScoreEnsemble | None":
+    """Rejoue les mêmes features sur les K membres bootstrap → dispersion.
+
+    On réutilise la DMatrix déjà construite pour le modèle principal : σ doit
+    mesurer le désaccord entre membres sur un vecteur d'entrée IDENTIQUE, sinon
+    on mélangerait l'incertitude du modèle avec un écart de construction des
+    features. Les membres aberrants sont écartés plutôt que de tirer σ vers le
+    haut artificiellement.
+    """
+    if dist is None or not _score_members or _score_sigma_max is None:
+        return None
+    dmat = getattr(dist, "_dmatrix", None)
+    if dmat is None:
+        return None
+    try:
+        lambdas = []
+        for mdl in _score_members:
+            lam = mdl.predict(dmat)
+            lh, la = float(lam[0]), float(lam[1])
+            if 0.5 <= lh <= 8.0 and 0.5 <= la <= 8.0:
+                lambdas.append((lh, la))
+        if len(lambdas) < 2:
+            return None
+        return ScoreEnsemble(lambdas, _score_p_ot, _score_tau, point=dist)
+    except Exception as e:
+        print(f"[ML] ⚠️  ensemble indisponible pour ce match : {e}")
+        return None
+
+
 @app.post("/predict/game", response_model=MLResponse, dependencies=_PROTECTED)
 def predict_game(f: GameFeatures) -> MLResponse:
     # 1. Corriger les valeurs manquantes (0 = pas de données NHL API)
@@ -707,6 +978,7 @@ def predict_game(f: GameFeatures) -> MLResponse:
         teams_st  = _inference_state.get("teams", {})
         goalie_st = _inference_state.get("goalies", {})
         stars_st  = _inference_state.get("stars", {})
+        lineup_st = _inference_state.get("lineups", {})
         for side, team, goalie_name, stars_missing, scratches in [
             ("home", (f.home_team or "").upper(), f.home_goalie, f.home_stars_missing, f.home_scratches),
             ("away", (f.away_team or "").upper(), f.away_goalie, f.away_stars_missing, f.away_scratches),
@@ -748,18 +1020,47 @@ def predict_game(f: GameFeatures) -> MLResponse:
             if keys:
                 feat_values[f"{side}_stars_out_weight"] = float(
                     sum(k["w"] for k in keys if k["name"].strip().lower() in scratch_set))
+
+            # ── Projection bottom-up de l'alignement (P3) ────────────────────
+            # Somme des contributions xG des patineurs effectivement disponibles.
+            # Chaque absent retire exactement sa propre contribution, pondérée par
+            # son temps de glace habituel — là où `stars_missing` ne comptait que
+            # des têtes parmi un top-5 figé.
+            roster = lineup_st.get(team) or []
+            if roster:
+                avail = [p for p in roster
+                         if p.get("name", "").strip().lower() not in scratch_set]
+                # Une équipe NHL habille 18 patineurs (12 attaquants, 6 défenseurs).
+                # L'effectif stocké est plus profond pour absorber les absences ;
+                # sommer tout le monde gonflerait la projection bien au-delà de
+                # l'échelle vue à l'entraînement.
+                #
+                # Le tri se fait par TEMPS DE GLACE : c'est le proxy du rôle, et
+                # c'est ainsi qu'un entraîneur compose son alignement. Trier par xG
+                # reviendrait à habiller 18 marqueurs et surestimerait la
+                # projection de ~19 %.
+                dressed = sorted(avail, key=lambda p: -p.get("toi", 0.0))[:_LINEUP_DRESSED]
+                feat_values[f"{side}_lineup_xg"] = float(
+                    sum(p.get("xg", 0.0) for p in dressed))
+                feat_values[f"{side}_lineup_pts"] = float(
+                    sum(p.get("pts", 0.0) for p in dressed))
+                feat_values[f"{side}_lineup_size"] = float(len(dressed))
         # Diffs v4 (mêmes formules que build_dataset.py)
         def _d(name):
             h, a = feat_values.get(f"home_{name}"), feat_values.get(f"away_{name}")
             if h is not None and a is not None:
                 feat_values[f"{name}_diff"] = h - a
-        for name in ("ev_xgf_pct_s", "ev_cf_pct_s", "goalie_gsax60", "goalie_svpct",
-                     "star_power", "finishing_s", "win_s", "rest_days"):
+        for name in ("ev_xgf_pct_s", "ev_cf_pct_s", "ev_xgf_pct_l", "ev_cf_pct_l",
+                     "goalie_gsax60", "goalie_svpct",
+                     "star_power", "finishing_s", "win_s", "rest_days",
+                     "b2b", "3in4"):
             _d(name)
         if feat_values.get("home_xgf60_s") is not None and \
            feat_values.get("away_xga60_s") is not None:
             feat_values["xg_matchup_home"] = feat_values["home_xgf60_s"] - feat_values["away_xga60_s"]
             feat_values["xg_matchup_away"] = feat_values["away_xgf60_s"] - feat_values["home_xga60_s"]
+            feat_values["xg_matchup_diff"] = feat_values["xg_matchup_home"] \
+                                           - feat_values["xg_matchup_away"]
         if "home_stars_missing" in feat_values or "away_stars_missing" in feat_values:
             feat_values["stars_missing_diff"] = feat_values.get("home_stars_missing", 0.0) \
                                               - feat_values.get("away_stars_missing", 0.0)
@@ -828,35 +1129,32 @@ def predict_game(f: GameFeatures) -> MLResponse:
             FeatureImportance(name="Home ice",           importance=round(GAME_WEIGHTS["intercept"],                     3), direction="positive"),
         ], key=lambda x: x.importance, reverse=True)
 
-    # 4. Branche XGBoost totaux (si modèle entraîné disponible)
-    if _xgb_totals is not None and f.market_type in ("total_goals", "total_goals_over", "total_goals_under"):
-        def _fvt(n):
-            v = feat_values.get(n)
-            return float(v) if v is not None and v == v else np.nan
-        row_tot = np.array([[_fvt(n) for n in _TOTALS_FEAT_NAMES]], dtype=np.float32)
-        dmat_tot = xgb.DMatrix(row_tot, feature_names=_TOTALS_FEAT_NAMES, missing=np.nan)
-        lam_xgb = float(_xgb_totals.predict(dmat_tot)[0])
-        line    = f.line if f.line is not None else 5.5
-        raw_ov  = poisson_over(line, lam_xgb)
-        prob    = clamp(raw_ov if f.market_type != "total_goals_under" else 1.0 - raw_ov, 0.05, 0.95)
-        fi_tot  = [FeatureImportance(name=fi["name"], importance=fi["importance"], direction="positive")
-                   for fi in (_totals_importances[:5] if _totals_importances else [])]
-        ou      = "OVER" if f.market_type != "total_goals_under" else "UNDER"
-        return MLResponse(
-            probability=int(prob * 100),
-            confidence=65,
-            feature_importances=fi_tot,
-            model_version="xgb-totals-v1.0",
-            model_type="XGBoost + Poisson (trained)",
-            explanation=f"XGBoost prédit λ={lam_xgb:.2f} buts → {ou} {line}: {int(prob*100)}%.",
-        )
-
-    # 5. Appliquer la transformation propre au marché
+    # 4. Appliquer la transformation propre au marché
+    #    Le modèle de score price exactement les marchés dérivables ; les autres
+    #    gardent les heuristiques. `None` = repli intégral sur l'existant.
+    score_dist = _build_score_distribution(feat_values, home_elo, away_elo)
     prob, conf_mult, explanation = _apply_market(
-        f.market_type, base_prob, f, win_diff, lam_home, lam_away, model_type
+        f.market_type, base_prob, f, win_diff, lam_home, lam_away, model_type,
+        dist=score_dist,
     )
+    if score_dist is not None:
+        model_type = f"{model_type} + modèle de score"
+
+    # 5. Incertitude d'estimation (P4) — σ sur le marché effectivement servi
+    prob_std = uncertainty = None
+    ens = _build_score_ensemble(score_dist)
+    market_fn = _score_market_fn(f.market_type, f) if ens is not None else None
+    if ens is not None and market_fn is not None:
+        _, sd = ens.spread(market_fn)
+        if np.isfinite(sd):
+            prob_std = round(sd * 100.0, 2)      # en points de pourcentage
+            uncertainty = round(min(1.0, sd / _score_sigma_max), 4)
 
     # 6. Confidence = signal des features × multiplicateur du marché
+    #    Volontairement inchangé : ce champ est consommé par le backend
+    #    (mlApiClient.ts, entier 40–95) et le rescaler sur σ changerait le
+    #    comportement de tri des paris sans qu'on ait mesuré l'effet. σ est
+    #    exposée à part, dans `probability_std` / `uncertainty`.
     magnitude  = abs(win_diff) * 2 + abs(gf_diff) / 3 + abs(form_diff)
     base_conf  = clamp(0.55 + magnitude * 0.25, 0.45, 0.92)
     confidence = int(clamp(base_conf * conf_mult, 0.38, 0.90) * 100)
@@ -868,6 +1166,8 @@ def predict_game(f: GameFeatures) -> MLResponse:
         model_version=model_version,
         model_type=model_type,
         explanation=explanation,
+        probability_std=prob_std,
+        uncertainty=uncertainty,
     )
 
 # ── Player prop model ─────────────────────────────────────────────────────────
@@ -965,13 +1265,19 @@ def health():
         "status": "ok",
         "models": {
             "game":   "XGBoost (trained)" if _xgb_game   is not None else "Logistic Regression (fallback)",
-            "totals": "XGBoost + Poisson (trained)" if _xgb_totals is not None else "Poisson (fallback)",
+            # Les totaux sont pricés depuis la distribution du modèle de score
+            # (S2 a retiré totals_model.json) ; sans lui, heuristique déclarée.
+            "totals": "Modèle de score (Poisson empilé)" if _xgb_score is not None else "Poisson (fallback)",
             "player": "Poisson Distribution",
             "team":   "Bayesian Prior",
         },
         "trained_models_loaded": {
             "game_model":   _xgb_game   is not None,
-            "totals_model": _xgb_totals is not None,
+            "score_model":  _xgb_score  is not None,
+        },
+        "uncertainty": {
+            "ensemble_members": len(_score_members),
+            "sigma_max":        _score_sigma_max,
         },
         "elo_teams_loaded": len(_elo_ratings),
         "calibrated":       _platt_a is not None,
@@ -992,7 +1298,7 @@ def health_ready(response: Response):
         "status": "ready",
         "trained_models_loaded": {
             "game_model":   _xgb_game   is not None,
-            "totals_model": _xgb_totals is not None,
+            "score_model":  _xgb_score  is not None,
         },
     }
 

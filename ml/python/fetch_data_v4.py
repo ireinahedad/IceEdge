@@ -4,7 +4,14 @@ fetch_data_v4.py
 Collecte v4 — 3 sources :
   1. Spine des matchs (scores officiels, SO inclus)  → api.nhle.com/stats/rest/en/game  (1 requête)
   2. Stats avancées MoneyPuck (xG, Corsi, gardiens, joueurs) → moneypuck.com (CSV/zips)
-  3. Cotes historiques (moneyline + totaux, open/close) → sportsbookreviewsonline.com (xlsx)
+  3. Cotes historiques → deux sources, chacune tracée dans la colonne `source` :
+       • sportsbookreviewsonline (SBRO)  2007-08 → 2022-23 — archive FIGÉE
+       • The Odds API                    depuis 2020-06-29 — moneyline, puck
+         line et totals, snapshots 5 min, clé dans ODDS_API_KEY
+
+     SBRO ne publiera plus rien : sa page d'index annonce « NHL scores and odds
+     archive will not be updated » (vérifié le 2026-08-04). Toute saison à
+     partir de 2023-24 vient donc de The Odds API.
 
 Sorties dans ml/data/ :
     games_spine.csv       # date, home, away, scores (toutes saisons)
@@ -19,11 +26,23 @@ Usage :
     python fetch_data_v4.py --skip-skaters # sans les patineurs (plus rapide)
     python fetch_data_v4.py --only odds    # une seule source (spine|moneypuck|odds)
 
+Backfill des cotes 2023-24 → 2025-26 (The Odds API) :
+    export ODDS_API_KEY=...          # PowerShell : $env:ODDS_API_KEY = '...'
+    python fetch_data_v4.py --only odds --odds-api-dry-run \
+        --odds-api-from 2023-10-01 --odds-api-to 2024-06-30      # chiffre le coût
+    python fetch_data_v4.py --only odds --odds-api-book draftkings \
+        --odds-api-from 2023-10-01 --odds-api-to 2024-06-30      # récupère
+
+Les snapshots sont mis en cache dans data/raw/odds/oddsapi/ : relancer la même
+plage ne coûte plus rien. Faire d'abord une saison de RECOUVREMENT (2021-22 par
+exemple, couverte par les deux sources) pour comparer avant d'étendre.
+
 Ensuite : python build_dataset.py  puis  python train.py
 """
 
 import argparse
 import io
+import json
 import os
 import sys
 import time
@@ -214,6 +233,14 @@ SBRO_HTML_SLUGS = {
     "2011-12": 2011, "2012-13": 2012, "2013-14": 2013, "2014-15": 2014,
     "2015-16": 2015, "2016-17": 2016, "2017-18": 2017, "2018-19": 2018,
     "2019-20": 2019, "2021": 2020, "2021-22": 2021, "2022-23": 2022,
+    # 2022-23 est la DERNIÈRE saison publiée. La page d'index annonce
+    # elle-même « NHL scores and odds archive will not be updated » (vérifié le
+    # 2026-08-04) et les slugs 2023-24 et suivants n'existent pas.
+    #
+    # Ce n'était donc jamais un blocage anti-script contournable en enregistrant
+    # les pages depuis un navigateur : la donnée n'a pas été produite. Les
+    # saisons 2023-24 → 2025-26 passent par The Odds API
+    # (`--odds-api-from/--odds-api-to`, voir plus bas).
 }
 
 SBRO_TEAM_MAP = {
@@ -313,6 +340,29 @@ def _pair_rows(recs: list[dict], start: int, all_rows: list[dict]) -> int:
                     row[dst] = val if 3.5 <= val <= 9.5 else None
                 except (TypeError, ValueError):
                     row[dst] = None
+
+        # ── Prix des marchés dérivés ─────────────────────────────────────────
+        # Sans eux, aucun ROI n'est calculable sur les totaux ni la puck line —
+        # c'est-à-dire précisément les marchés que le modèle de score price le
+        # mieux. La ligne visiteur porte le Over, la ligne domicile le Under
+        # (convention vérifiée, cf. _parse_sbro_html).
+        row["total_open_over"]   = _american_to_decimal(v.get("open ou price"))
+        row["total_open_under"]  = _american_to_decimal(h.get("open ou price"))
+        row["total_close_over"]  = _american_to_decimal(v.get("close ou price"))
+        row["total_close_under"] = _american_to_decimal(h.get("close ou price"))
+
+        # Puck line : la valeur portée par la ligne domicile est le handicap du
+        # domicile (−1.5 s'il est favori, +1.5 sinon). Chaque camp a son prix.
+        pl_home = h.get("puck line")
+        row["puck_line_home"]  = (float(pl_home)
+                                  if isinstance(pl_home, (int, float)) and pl_home == pl_home
+                                  else None)
+        row["pl_home_price"] = _american_to_decimal(h.get("pl price"))
+        row["pl_away_price"] = _american_to_decimal(v.get("pl price"))
+        # Provenance explicite : depuis que deux sources coexistent, toute
+        # analyse doit pouvoir isoler l'une ou l'autre. Un ROI qui n'apparaît
+        # que d'un côté de la jointure est un artefact de source, pas un edge.
+        row["source"] = "sbro"
         all_rows.append(row)
         n_season += 1
         i += 2
@@ -327,6 +377,21 @@ def _parse_sbro_html(html: str) -> list[dict]:
       8 Open  9 Close  10 PuckLine  11 PLprix  12 OpenOU  13 OUprix
       14 CloseOU  15 OUprix
     On lit les cellules par position (read_html) au lieu de découper du texte.
+
+    Attention : la ligne d'en-tête ne nomme QUE 13 colonnes sur 16 — les
+    cellules de prix sont vides dans le HTML, donc pandas complète par des
+    `nan` en fin de ligne et l'en-tête se retrouve décalé par rapport aux
+    données. Ne jamais se fier aux noms de colonnes ici, uniquement aux
+    positions ci-dessus, vérifiées sur les données.
+
+    Les prix (11, 13, 15) étaient auparavant lus puis jetés : seules les lignes
+    étaient conservées. C'est ce qui rendait le ROI des marchés dérivés
+    impossible à mesurer, alors que la donnée était déjà sur le disque.
+
+    Convention Over/Under, **vérifiée empiriquement** sur 9 061 matchs (push
+    exclus) : la ligne VISITEUR porte le prix du Over, la ligne DOMICILE celui
+    du Under. Log-loss 0.69086 dans ce sens contre 0.69978 dans l'autre, pour
+    une constante à 0.69314 — seul le bon sens bat le taux de base.
     """
     try:
         tables = pd.read_html(io.StringIO(html))
@@ -368,6 +433,9 @@ def _parse_sbro_html(html: str) -> list[dict]:
             "final": num(vals[7]),
             "open":  num(vals[8]),  "close": num(vals[9]),
             "open ou": num(vals[12]), "close ou": num(vals[14]),
+            # Prix des marchés dérivés — en cotes américaines à ce stade.
+            "puck line":    num(vals[10]), "pl price":       num(vals[11]),
+            "open ou price": num(vals[13]), "close ou price": num(vals[15]),
         })
     return recs
 
@@ -404,85 +472,398 @@ def _local_html_sources():
             yield os.path.basename(path), start, fh.read()
 
 
-# ── Source alternative : CSV tiers déposé dans data/raw/odds/ ─────────────────
-# (une ligne = un match, colonnes déjà séparées domicile/visiteur — p. ex. le
-#  dataset Kaggle "NHL Full Game & Betting Statistics"). Détection tolérante des
-#  noms de colonnes : si une colonne clé manque, on affiche ce qui a été vu.
-_ODDS_COL_ALIASES = {
-    "date":          ["date", "game_date", "gamedate", "datetime", "game_datetime"],
-    "home_team":     ["home_team", "home", "hometeam", "home_abbr", "home_name",
-                      "home_team_abbr"],
-    "away_team":     ["away_team", "away", "awayteam", "away_abbr", "away_name",
-                      "visitor", "visitor_team", "away_team_abbr"],
-    "home_ml_close": ["home_ml_close", "home_ml", "home_moneyline", "home_close",
-                      "close_home_ml", "moneyline_home", "home_ml_closing", "ml_home",
-                      "home_odds"],
-    "away_ml_close": ["away_ml_close", "away_ml", "away_moneyline", "away_close",
-                      "close_away_ml", "moneyline_away", "away_ml_closing", "ml_away",
-                      "away_odds"],
-    "home_ml_open":  ["home_ml_open", "open_home_ml", "home_open_ml", "home_ml_opening"],
-    "away_ml_open":  ["away_ml_open", "open_away_ml", "away_open_ml", "away_ml_opening"],
-    "total_close":   ["total_close", "close_ou", "closeou", "total", "over_under",
-                      "ou_close", "closing_total"],
-    "total_open":    ["total_open", "open_ou", "openou", "ou_open", "opening_total"],
+# ── Chargeur de CSV tiers — SUPPRIMÉ (S5) ────────────────────────────────────
+#
+# `_load_local_odds_csv()` avalait n'importe quel CSV déposé dans
+# `data/raw/odds/`, en devinant les noms de colonnes par une table d'alias. Le
+# principal candidat — le dataset ESPN/Kaggle « NHL Full Game & Betting
+# Statistics », que `data/raw/odds/build_dataset_extra.py` écrit précisément
+# dans ce dossier — a des colonnes de paris FACTICES : chaque match de 2004 à
+# 2018 y porte `favorite_moneyline -105`, `over_under 5.5`, `spread -1.5`.
+#
+# Un chargeur tolérant qui absorbe en silence une source connue fausse n'est pas
+# une commodité : il fabrique des cotes constantes sur 14 saisons, donc un ROI
+# qui ne mesure plus rien. Et rien dans `odds.csv` ne le signalerait — la
+# colonne `source` était même absente de ce chemin.
+#
+# Les sources restantes sont nommées et vérifiées : archives SBRO (xlsx/html,
+# ≤ 2022-23), The Odds API (historique et log live). Ajouter une source se fait
+# désormais explicitement, avec sa propre valeur de `source`.
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Source de remplacement : The Odds API (historique)
+#
+# L'archive SBRO s'arrête à 2022-23 et la page l'annonce elle-même : « NHL
+# scores and odds archive will not be updated » (vérifié le 2026-08-04). Ce
+# n'est donc pas un blocage anti-script contournable en enregistrant les pages
+# à la main — la donnée n'existe pas. Les saisons 2023-24 et suivantes doivent
+# venir d'ailleurs.
+#
+# The Odds API couvre la NHL depuis le 2020-06-29 avec moneyline, spreads
+# (puck line) ET totals, en snapshots de 5 minutes. Le recouvrement 2020-2023
+# avec SBRO est le vrai intérêt : il permet de vérifier qu'un résultat obtenu
+# sur SBRO se reproduit sur un autre bookmaker AVANT d'étendre la série. Deux
+# époques, deux books, un ROI qui n'existe que de part et d'autre de la
+# jointure : c'est la façon la plus banale de fabriquer un faux edge.
+# ══════════════════════════════════════════════════════════════════════════════
+
+ODDS_API_BASE = "https://api.the-odds-api.com/v4"
+ODDS_API_SPORT = "icehockey_nhl"
+# Première donnée NHL disponible côté fournisseur.
+ODDS_API_FIRST_TS = "2020-06-29T19:25:00Z"
+ODDS_API_CACHE = f"{RAW_DIR}/odds/oddsapi"
+
+# The Odds API rend les noms complets. Table alignée sur `NAME_TO_ABBR` de
+# server/src/services/oddsLogger.service.ts — les deux doivent rester d'accord.
+ODDS_API_TEAMS = {
+    "anaheim ducks": "ANA", "arizona coyotes": "UTA", "utah hockey club": "UTA",
+    "utah mammoth": "UTA", "boston bruins": "BOS", "buffalo sabres": "BUF",
+    "calgary flames": "CGY", "carolina hurricanes": "CAR",
+    "chicago blackhawks": "CHI", "colorado avalanche": "COL",
+    "columbus blue jackets": "CBJ", "dallas stars": "DAL",
+    "detroit red wings": "DET", "edmonton oilers": "EDM",
+    "florida panthers": "FLA", "los angeles kings": "LAK",
+    "minnesota wild": "MIN", "montreal canadiens": "MTL",
+    "montréal canadiens": "MTL", "nashville predators": "NSH",
+    "new jersey devils": "NJD", "new york islanders": "NYI",
+    "new york rangers": "NYR", "ottawa senators": "OTT",
+    "philadelphia flyers": "PHI", "pittsburgh penguins": "PIT",
+    "san jose sharks": "SJS", "seattle kraken": "SEA", "st louis blues": "STL",
+    "st. louis blues": "STL", "tampa bay lightning": "TBL",
+    "toronto maple leafs": "TOR", "vancouver canucks": "VAN",
+    "vegas golden knights": "VGK", "washington capitals": "WSH",
+    "winnipeg jets": "WPG",
 }
 
 
-def _to_decimal_series(s: pd.Series) -> pd.Series:
-    """Convertit une colonne de cotes en décimales (auto-détection américaine)."""
-    v = pd.to_numeric(s, errors="coerce")
-    if ((v < 0) | (v.abs() >= 100)).any():        # au moins une cote américaine
-        return v.map(_american_to_decimal)
-    return v                                       # déjà en décimales
+def _oddsapi_team(name) -> str | None:
+    return ODDS_API_TEAMS.get(str(name).strip().lower())
 
 
-def _norm_any_team(x) -> str | None:
-    """Accepte une abréviation (CHI) ou un nom complet (Chicago / St. Louis)."""
-    t = norm_team(str(x))
-    if len(t) == 3 and t.isalpha():
-        return t
-    return _sbro_team(x)
+def _oddsapi_game_date(commence_time: str) -> str | None:
+    """Date LOCALE du match à partir du `commence_time` en UTC.
+
+    Piège qui a coûté un premier jet entièrement vide : un match de 19 h à
+    l'Est est à 00:00Z **le lendemain**. Découper sur la date UTC écarterait la
+    quasi-totalité du calendrier, et silencieusement — le fichier serait
+    simplement plus petit que prévu.
+
+    Toutes les équipes NHL jouent entre l'heure de l'Est et celle du
+    Pacifique : retirer 8 heures ramène tout coup d'envoi du soir sur sa date
+    locale, et laisse les matinées (13 h à l'Est = 18:00Z) sur la leur. C'est
+    la date qu'utilise `games_spine.csv`, donc celle sur laquelle la jointure
+    de `build_dataset.py` se fait.
+    """
+    try:
+        return (pd.Timestamp(commence_time) - pd.Timedelta(hours=8)).strftime("%Y-%m-%d")
+    except Exception:
+        return None
 
 
-def _load_local_odds_csv() -> list[dict]:
-    import glob as _glob
-    rows: list[dict] = []
-    for path in sorted(_glob.glob(f"{RAW_DIR}/odds/*.csv")):
-        name = os.path.basename(path)
+def _oddsapi_key() -> str | None:
+    """Clé lue dans l'environnement, jamais dans le code ni sur le disque."""
+    key = os.environ.get("ODDS_API_KEY", "").strip()
+    if not key:
+        print("   ❌ ODDS_API_KEY absente de l'environnement.")
+        print("      PowerShell : $env:ODDS_API_KEY = 'ta-cle'")
+        print("      bash       : export ODDS_API_KEY=ta-cle")
+        return None
+    return key
+
+
+# Coût d'un appel, en crédits : 10 par marché et par région pour l'endpoint
+# HISTORIQUE, contre 1 par marché et par région pour l'endpoint live. Avec nos
+# 3 marchés sur une région : 30 crédits l'appel historique, 3 en live.
+ODDS_API_HIST_COST = 10 * 3      # h2h + spreads + totals, une région
+
+
+class _OddsApiStop(Exception):
+    """Budget épuisé, ou l'offre ne donne pas accès à l'historique."""
+
+
+def _oddsapi_get(path: str, params: dict, key: str) -> dict | list | None:
+    """Appel authentifié. La clé n'apparaît jamais dans un message d'erreur."""
+    url = f"{ODDS_API_BASE}{path}"
+    try:
+        r = SESSION.get(url, params={**params, "apiKey": key}, timeout=60)
+    except Exception as e:
+        print(f"   [WARN] {path} → {e}")
+        return None
+    if r.status_code == 401:
+        print("   ❌ 401 — clé refusée.")
+        raise _OddsApiStop("clé refusée")
+    if r.status_code in (403, 429):
+        # 403 = l'offre ne couvre pas l'endpoint (l'historique est exclu du
+        # plan gratuit) ; 429 = quota épuisé. Dans les deux cas, insister ne
+        # ferait que répéter le même refus — on arrête net.
+        print(f"   ❌ HTTP {r.status_code} — accès refusé à {path}.")
+        print("      L'endpoint /historical/ n'est pas servi aux clés "
+              "gratuites : il faut un plan payant.")
+        raise _OddsApiStop(f"HTTP {r.status_code}")
+    if r.status_code == 422:
+        # Hors de la fenêtre historique du fournisseur : normal en bord de plage.
+        return None
+    if r.status_code != 200:
+        print(f"   [WARN] {path} → HTTP {r.status_code}")
+        return None
+    remaining = r.headers.get("x-requests-remaining")
+    if remaining is not None:
+        _oddsapi_get.remaining = remaining
         try:
-            df = pd.read_csv(path)
-        except Exception as e:
-            print(f"   [WARN] {name}: lecture impossible ({e})")
-            continue
-        cols_lower = {str(c).strip().lower(): c for c in df.columns}
-        pick = {k: next((cols_lower[a] for a in al if a in cols_lower), None)
-                for k, al in _ODDS_COL_ALIASES.items()}
-        need = ("date", "home_team", "away_team", "home_ml_close", "away_ml_close")
-        missing = [k for k in need if pick[k] is None]
-        if missing:
-            print(f"   [WARN] {name}: colonnes clés non reconnues {missing}")
-            print(f"          colonnes vues : {list(df.columns)}")
-            continue
-        out = pd.DataFrame({
-            "date": pd.to_datetime(df[pick["date"]], errors="coerce").dt.strftime("%Y-%m-%d"),
-            "home_team": df[pick["home_team"]].map(_norm_any_team),
-            "away_team": df[pick["away_team"]].map(_norm_any_team),
-            "home_ml_close": _to_decimal_series(df[pick["home_ml_close"]]),
-            "away_ml_close": _to_decimal_series(df[pick["away_ml_close"]]),
-        })
-        for k in ("home_ml_open", "away_ml_open"):
-            out[k] = _to_decimal_series(df[pick[k]]) if pick[k] else pd.NA
-        for k in ("total_open", "total_close"):
-            out[k] = pd.to_numeric(df[pick[k]], errors="coerce") if pick[k] else pd.NA
-        out = out.dropna(subset=["date", "home_team", "away_team"])
-        rows.extend(out.to_dict("records"))
-        print(f"   {name}: {len(out)} matchs avec cotes")
+            # Garde-fou côté fournisseur : si le solde réel ne couvre plus un
+            # appel, on s'arrête sans attendre le prochain refus.
+            if float(remaining) < ODDS_API_HIST_COST:
+                print(f"   ⛔ crédits restants ({remaining}) insuffisants pour "
+                      f"un appel de plus ({ODDS_API_HIST_COST}).")
+                raise _OddsApiStop("crédits fournisseur épuisés")
+        except (TypeError, ValueError):
+            pass
+    try:
+        return r.json()
+    except ValueError:
+        return None
+
+
+def _oddsapi_cache_path(ts: str, regions: str) -> str:
+    return f"{ODDS_API_CACHE}/{regions}_{ts.replace(':', '').replace('-', '')}.json"
+
+
+def _oddsapi_snapshot(ts: str, key: str, regions: str, use_cache: bool = True):
+    """Un snapshot horodaté, mis en cache sur disque.
+
+    Le cache n'est pas une optimisation de confort : chaque appel historique
+    coûte 10 crédits par marché et par région, donc de l'argent. Un `build`
+    relancé ne doit jamais repayer une donnée déjà obtenue — l'historique est
+    immuable par construction.
+    """
+    os.makedirs(ODDS_API_CACHE, exist_ok=True)
+    path = _oddsapi_cache_path(ts, regions)
+    if use_cache and os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                return json.load(fh)
+        except Exception:
+            pass
+    data = _oddsapi_get(
+        f"/historical/sports/{ODDS_API_SPORT}/odds",
+        {"regions": regions, "markets": "h2h,spreads,totals",
+         "oddsFormat": "decimal", "date": ts}, key)
+    if data is None:
+        return None
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+    except Exception as e:
+        print(f"   [WARN] cache non écrit ({e})")
+    return data
+
+
+def _pick_book(event: dict, book: str | None) -> dict | None:
+    """Le bookmaker retenu pour un événement.
+
+    Un book **nommé** est préférable à un consensus : la marge et la convention
+    de prix diffèrent d'un opérateur à l'autre, et mélanger les books d'un match
+    à l'autre introduit une variation qui n'a rien à voir avec le hockey. Sans
+    préférence, on prend le premier disponible et on le trace dans `source`.
+    """
+    books = event.get("bookmakers") or []
+    if not books:
+        return None
+    if book:
+        for b in books:
+            if b.get("key") == book:
+                return b
+        return None
+    return books[0]
+
+
+def _oddsapi_row(event: dict, bk: dict) -> dict | None:
+    """Un événement + un bookmaker → une ligne au schéma d'odds.csv."""
+    home = _oddsapi_team(event.get("home_team"))
+    away = _oddsapi_team(event.get("away_team"))
+    date = _oddsapi_game_date(str(event.get("commence_time") or ""))
+    if not home or not away or not date:
+        return None
+
+    markets = {m.get("key"): m for m in (bk.get("markets") or [])}
+    row = {"date": date, "home_team": home, "away_team": away,
+           "source": f"oddsapi:{bk.get('key')}"}
+
+    def price(outcomes, name):
+        for o in outcomes or []:
+            if o.get("name") == name:
+                return o.get("price"), o.get("point")
+        return None, None
+
+    h2h = markets.get("h2h", {}).get("outcomes")
+    row["home_ml_close"], _ = price(h2h, event.get("home_team"))
+    row["away_ml_close"], _ = price(h2h, event.get("away_team"))
+
+    # Totaux : le point est identique des deux côtés, le prix ne l'est pas.
+    tot = markets.get("totals", {}).get("outcomes")
+    o_px, o_pt = price(tot, "Over")
+    u_px, u_pt = price(tot, "Under")
+    row["total_close"] = o_pt if o_pt is not None else u_pt
+    row["total_close_over"] = o_px
+    row["total_close_under"] = u_px
+
+    # Puck line : `point` du côté domicile = son handicap (−1.5 favori, +1.5
+    # sinon). Le backtest ne retient que |1.5| ; les lignes alternatives (±2.5)
+    # sont écartées ici pour ne pas mélanger deux marchés dans une colonne.
+    sp = markets.get("spreads", {}).get("outcomes")
+    h_px, h_pt = price(sp, event.get("home_team"))
+    a_px, _ = price(sp, event.get("away_team"))
+    if h_pt is not None and abs(abs(float(h_pt)) - 1.5) < 1e-9:
+        row["puck_line_home"] = float(h_pt)
+        row["pl_home_price"] = h_px
+        row["pl_away_price"] = a_px
+
+    # `*_open` reste vide : un snapshot pré-match n'est pas une cote
+    # d'ouverture, et remplir la colonne avec « le premier snapshot du jour »
+    # lui donnerait une sémantique différente de celle des lignes SBRO.
+    # Une colonne à moitié fausse est pire qu'une colonne absente.
+    return row if row["home_ml_close"] and row["away_ml_close"] else None
+
+
+def fetch_odds_api(start: str, end: str, book: str | None, regions: str,
+                   dry_run: bool = False, use_cache: bool = True,
+                   budget: int | None = None) -> list[dict]:
+    """Historique The Odds API entre deux dates (AAAA-MM-JJ incluses).
+
+    **Comment on approxime la cote de clôture.** Un snapshot renvoie tous les
+    matchs pas encore commencés, chacun avec son `commence_time`. Pour chaque
+    journée on tire donc un premier snapshot avant la première mise au jeu —
+    il découvre le programme — puis un snapshot juste avant chaque heure de
+    début distincte. Chaque match retient le dernier snapshot antérieur à SON
+    propre coup d'envoi. Une soirée NHL a 2 à 4 heures de début distinctes,
+    d'où ~4 appels par jour.
+
+    **Coût.** 10 crédits par marché et par région : avec h2h + spreads +
+    totals sur une région, 30 crédits par appel, soit ~120 par jour de match
+    et ~33 000 par saison. `--dry-run` chiffre avant de dépenser, `budget`
+    impose un plafond dur.
+
+    **Le budget n'est pas une commodité.** Les crédits sont de l'argent et une
+    plage de dates un peu large les consomme silencieusement. Trois barrières
+    indépendantes : le plafond demandé, le solde réel renvoyé par le
+    fournisseur (`x-requests-remaining`), et le cache disque qui rend toute
+    reprise gratuite. Un appel servi par le cache ne coûte rien et n'est donc
+    pas décompté.
+    """
+    key = None if dry_run else _oddsapi_key()
+    if key is None and not dry_run:
+        return []
+
+    days = pd.date_range(start, end, freq="D")
+    if dry_run:
+        n = len(days) * 4
+        print(f"   Estimation : {len(days)} jours × ~4 appels × "
+              f"{ODDS_API_HIST_COST} crédits = ~{n * ODDS_API_HIST_COST:,} crédits")
+        print(f"   (les jours sans match coûtent {ODDS_API_HIST_COST} au lieu "
+              f"de {4 * ODDS_API_HIST_COST} — c'est une borne haute)")
+        if budget:
+            reach = budget // ODDS_API_HIST_COST
+            print(f"   Avec un budget de {budget:,} crédits : ~{reach} appels, "
+                  f"soit ~{reach // 4} jours de match couverts.")
+        return []
+
+    best: dict[str, tuple[str, dict, dict]] = {}   # id → (ts, event, bookmaker)
+    n_calls = spent = 0
+    stopped = None
+    for day in days:
+        d = day.strftime("%Y-%m-%d")
+        # Reconnaissance à 15:30Z (10h30 à l'Est) : AVANT tout coup d'envoi, y
+        # compris les matinées de week-end. Un snapshot plus tardif serait
+        # meilleur marché en prix mais raterait purement et simplement les
+        # matchs déjà commencés. Ce premier appel ne sert qu'à découvrir le
+        # programme et les heures de début ; les prix viennent des snapshots de
+        # clôture programmés juste après.
+        pending = [f"{d}T15:30:00Z"]
+        seen_ts, day_rows = set(), 0
+        while pending:
+            ts = pending.pop(0)
+            if ts in seen_ts:
+                continue
+            seen_ts.add(ts)
+            # Un snapshot déjà en cache ne coûte rien : on ne le décompte pas
+            # du budget, sinon une simple reprise le consommerait à vide.
+            cached = _oddsapi_cache_path(ts, regions)
+            billable = not (use_cache and os.path.exists(cached))
+            if billable and budget is not None and spent + ODDS_API_HIST_COST > budget:
+                stopped = f"budget atteint ({spent}/{budget} crédits)"
+                break
+            try:
+                snap = _oddsapi_snapshot(ts, key, regions, use_cache)
+            except _OddsApiStop as e:
+                stopped = str(e)
+                break
+            n_calls += 1
+            if billable:
+                spent += ODDS_API_HIST_COST
+            if not snap:
+                continue
+            snap_ts = str(snap.get("timestamp") or ts)
+            for ev in snap.get("data") or []:
+                ct = str(ev.get("commence_time") or "")
+                if ct <= snap_ts:
+                    continue                        # match déjà commencé
+                if _oddsapi_game_date(ct) != d:
+                    continue                        # autre journée de calendrier
+                bk = _pick_book(ev, book)
+                if bk is None:
+                    continue
+                gid = str(ev.get("id"))
+                if gid not in best or snap_ts > best[gid][0]:
+                    best[gid] = (snap_ts, ev, bk)
+                    day_rows += 1
+                # Programme un snapshot juste avant CE coup d'envoi.
+                close_ts = (pd.Timestamp(ct) - pd.Timedelta(minutes=8)) \
+                    .strftime("%Y-%m-%dT%H:%M:%SZ")
+                if close_ts > snap_ts and close_ts not in seen_ts:
+                    pending.append(close_ts)
+            pending.sort()
+        if day_rows:
+            print(f"   {d}: {day_rows} maj  ({n_calls} appels, {spent} crédits)",
+                  end="\r")
+        if stopped:
+            print(f"\n   ⛔ arrêt : {stopped}")
+            print(f"      Les {len(best)} matchs déjà obtenus sont conservés, "
+                  f"et le cache évitera de les repayer.")
+            break
+
+    rows = [r for r in (_oddsapi_row(ev, bk) for _, ev, bk in best.values())
+            if r is not None]
+    rem = getattr(_oddsapi_get, "remaining", "?")
+    print(f"\n   The Odds API : {len(rows)} matchs, {n_calls} appels, "
+          f"{spent} crédits dépensés, restants {rem}")
     return rows
 
 
-def fetch_odds(from_local: bool = False) -> None:
+def fetch_odds(from_local: bool = False, api_range: tuple | None = None,
+               book: str | None = None, regions: str = "us",
+               dry_run: bool = False, api_cache: bool = True,
+               budget: int | None = None) -> None:
     print("💰 Cotes historiques (sportsbookreviewsonline) …")
     all_rows = []
+
+    # The Odds API — seule source pour 2023-24 et au-delà (SBRO s'arrête à
+    # 2022-23 et ne sera plus mis à jour). Traité en premier pour que le
+    # `drop_duplicates(keep="last")` en fin de fonction laisse SBRO gagner sur
+    # les saisons de recouvrement : tant que la comparaison des deux sources
+    # n'est pas faite, la série historique reste homogène.
+    if api_range or dry_run:
+        s, e = api_range or ("2023-10-01", "2024-04-30")
+        print(f"   The Odds API {s} → {e} "
+              f"(book={book or 'premier disponible'}, regions={regions})")
+        if budget is not None:
+            print(f"   Budget dur : {budget:,} crédits "
+                  f"({budget // ODDS_API_HIST_COST} appels au maximum)")
+        api_rows = fetch_odds_api(s, e, book, regions, dry_run, api_cache, budget)
+        if dry_run:
+            return
+        all_rows.extend(api_rows)
+
     if from_local:
         # xlsx téléchargés manuellement dans data/raw/odds/
         for label, start, content in _sbro_sources(True):
@@ -505,8 +886,7 @@ def fetch_odds(from_local: bool = False) -> None:
                 continue
             n = _pair_rows(recs, start, all_rows)
             print(f"   {label}: {n} matchs avec cotes")
-        # CSV tiers (Kaggle, etc.) — une ligne par match, colonnes auto-détectées
-        all_rows.extend(_load_local_odds_csv())
+        # Les CSV déposés dans data/raw/odds/ ne sont plus lus — cf. S5 ci-dessus.
     else:
         # Scraping des pages HTML d'archives (les xlsx n'existent plus)
         for slug, start in SBRO_HTML_SLUGS.items():
@@ -520,13 +900,24 @@ def fetch_odds(from_local: bool = False) -> None:
     df = pd.DataFrame(all_rows)
 
     # ── Fusion avec le log de cotes live (The Odds API, loggé par le serveur) ──
+    # Depuis 2026-08-04 ce log porte AUSSI les prix over/under et la puck line
+    # (migration 028) : c'est la seule source vivante pour ces marchés, et elle
+    # se construit au fil de l'eau. Les colonnes portent déjà les noms
+    # d'odds.csv, la concaténation les aligne donc d'elle-même ; celles qui
+    # manqueraient d'un côté deviennent simplement NaN.
     live_path = f"{DATA_DIR}/odds_live_log.csv"
     if os.path.exists(live_path):
         live = pd.read_csv(live_path)
         live["home_team"] = live["home_team"].map(norm_team)
         live["away_team"] = live["away_team"].map(norm_team)
+        if "source" not in live.columns:
+            live["source"] = "oddsapi:live"      # exports antérieurs à la 028
         df = pd.concat([df, live], ignore_index=True)
-        print(f"   + {len(live)} lignes du log live (odds_live_log.csv)")
+        derived = [c for c in ("total_close_over", "pl_home_price")
+                   if c in live.columns and live[c].notna().any()]
+        print(f"   + {len(live)} lignes du log live (odds_live_log.csv)"
+              + (f" — marchés dérivés présents : {', '.join(derived)}" if derived
+                 else " — sans marchés dérivés (export d'avant la migration 028)"))
 
     if df.empty:
         print("   ⚠️  Aucune cote récupérée — le modèle s'entraînera sans cotes.")
@@ -534,6 +925,17 @@ def fetch_odds(from_local: bool = False) -> None:
     df = df.drop_duplicates(subset=["date", "home_team", "away_team"], keep="last")
     df.to_csv(f"{DATA_DIR}/odds.csv", index=False)
     print(f"   ✅ {len(df)} matchs avec cotes → odds.csv")
+
+    # Couverture par source et par saison : c'est ce tableau qui dit si une
+    # saison est servie par SBRO, par l'API, ou par les deux — et donc si un
+    # résultat mesuré dessus peut être comparé à un autre.
+    if "source" in df.columns:
+        d = df.dropna(subset=["date"]).copy()
+        yr = pd.to_datetime(d["date"], errors="coerce")
+        d["season"] = yr.dt.year.where(yr.dt.month >= 8, yr.dt.year - 1)
+        tab = d.groupby(["season", d["source"].fillna("?")]).size().unstack(fill_value=0)
+        print("\n   Couverture par saison et par source :")
+        print(tab.to_string().replace("\n", "\n   "))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -546,7 +948,37 @@ def main():
                    help="Lit les fichiers téléchargés manuellement dans data/raw/ "
                         "(all_teams.csv, goalies_*.zip, skaters_*.zip, odds/*.xlsx) "
                         "au lieu de les télécharger")
+    # ── The Odds API — seule source pour 2023-24 et au-delà ──────────────────
+    p.add_argument("--odds-api-from", metavar="AAAA-MM-JJ",
+                   help="Début de l'historique The Odds API à récupérer "
+                        "(couverture NHL depuis 2020-06-29). Nécessite "
+                        "ODDS_API_KEY dans l'environnement.")
+    p.add_argument("--odds-api-to", metavar="AAAA-MM-JJ",
+                   help="Fin de l'historique The Odds API (incluse)")
+    p.add_argument("--odds-api-book", default=None,
+                   help="Clé du bookmaker à retenir (draftkings, fanduel, "
+                        "pinnacle…). Recommandé : un book NOMMÉ, sinon la marge "
+                        "varie d'un match à l'autre sans rapport avec le hockey")
+    p.add_argument("--odds-api-regions", default="us",
+                   help="Régions de bookmakers (us, us2, uk, eu, au). "
+                        "'eu' pour Pinnacle. Défaut : us")
+    p.add_argument("--odds-api-dry-run", action="store_true",
+                   help="Chiffre le coût en crédits sans appeler l'API")
+    p.add_argument("--odds-api-no-cache", action="store_true",
+                   help="Ignore les snapshots déjà en cache (redépense des "
+                        "crédits — à n'utiliser que si le cache est suspect)")
+    p.add_argument("--odds-api-budget", type=int, default=None, metavar="CREDITS",
+                   help="Plafond DUR de crédits pour cette exécution. "
+                        "L'arrêt conserve tout ce qui a déjà été récupéré, et "
+                        "le cache évite de le repayer. Fortement recommandé : "
+                        "une plage de dates large consomme sans prévenir")
     args = p.parse_args()
+
+    api_range = None
+    if args.odds_api_from or args.odds_api_to:
+        if not (args.odds_api_from and args.odds_api_to):
+            p.error("--odds-api-from et --odds-api-to vont par paire")
+        api_range = (args.odds_api_from, args.odds_api_to)
 
     os.makedirs(DATA_DIR, exist_ok=True)
     t0 = time.time()
@@ -555,7 +987,11 @@ def main():
     if args.only in (None, "moneypuck"):
         fetch_moneypuck(skip_skaters=args.skip_skaters, from_local=args.from_local)
     if args.only in (None, "odds"):
-        fetch_odds(from_local=args.from_local)
+        fetch_odds(from_local=args.from_local, api_range=api_range,
+                   book=args.odds_api_book, regions=args.odds_api_regions,
+                   dry_run=args.odds_api_dry_run,
+                   api_cache=not args.odds_api_no_cache,
+                   budget=args.odds_api_budget)
     print(f"\n🏁 Terminé en {(time.time() - t0) / 60:.1f} min. "
           f"Prochaine étape : python build_dataset.py")
 

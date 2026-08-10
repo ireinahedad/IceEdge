@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import * as ProfileService from '../services/profile.service';
 import { authenticate, requirePro } from '../middleware/auth.middleware';
 import { validateBody } from '../middleware/validate.middleware';
@@ -21,20 +21,36 @@ router.get('/search', authenticate, async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/users/:userId/slips — another player's bets/slips.
-// Viewing OTHER players' bets is a Pro feature; own slips are fetched via /me routes.
-router.get('/:userId/slips', authenticate, async (req: Request, res: Response, next) => {
-  // Your own slips are always allowed; someone else's require Pro.
+// Consulter les paris d'un AUTRE joueur est réservé aux abonnés Pro ; les siens
+// restent accessibles sans abonnement. Extrait en middleware nommé pour que
+// `/slips` et `/summary` partagent exactement la même règle — deux copies de la
+// même closure finiraient par diverger, et c'est un mur d'accès.
+function requireProForOthers(req: Request, res: Response, next: NextFunction) {
   const viewerId = (req as any).user?.sub;
   if (viewerId && viewerId === req.params.userId) return next();
   return requirePro(req, res, next);
-}, async (req: Request, res: Response) => {
+}
+
+// GET /api/users/:userId/summary — identité + forme récente, pour l'en-tête.
+router.get('/:userId/summary', authenticate, requireProForOthers, async (req: Request, res: Response) => {
   try {
     const viewerId = (req as any).user?.sub;
     if (!viewerId) return res.status(401).json({ error: 'Unauthorized' });
-    res.json(await ProfileService.getPublicSlips(req.params.userId, viewerId));
+    res.json(await ProfileService.getPlayerSummary(req.params.userId, viewerId));
   } catch (err: any) {
-    res.status(err.status ?? 500).json({ error: err.message });
+    res.status(err.status ?? 500).json({ error: err.message, code: err.code });
+  }
+});
+
+// GET /api/users/:userId/slips — another player's bets/slips.
+router.get('/:userId/slips', authenticate, requireProForOthers, async (req: Request, res: Response) => {
+  try {
+    const viewerId = (req as any).user?.sub;
+    if (!viewerId) return res.status(401).json({ error: 'Unauthorized' });
+    const limit = Number(req.query.limit) || 25;
+    res.json(await ProfileService.getPublicSlips(req.params.userId, viewerId, limit));
+  } catch (err: any) {
+    res.status(err.status ?? 500).json({ error: err.message, code: err.code });
   }
 });
 

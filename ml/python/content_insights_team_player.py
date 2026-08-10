@@ -6,7 +6,7 @@ calcule pour chaque ÉQUIPE (et chaque GARDIEN) l'écart de taux de victoire /
 % arrêts entre une situation (back-to-back, repos, décalage horaire, altitude,
 road trip) et SA PROPRE moyenne — puis classe les 5 plus gros écarts.
 
-Ne touche pas aux modèles de prédiction (game_model.json, totals_model.json,
+Ne touche pas aux modèles de prédiction (game_model.json, score_model.json,
 feature_importance_*.json) : uniquement des statistiques descriptives brutes.
 
 Usage:

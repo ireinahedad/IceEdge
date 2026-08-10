@@ -58,8 +58,8 @@ const PRESET = 'medium';
  * toujours ne se lit plus. C'est une cible, pas une limite : les bornes dures
  * sont celles de check-posts, plus larges.
  */
-const MIN_SECONDS = 12;
-const MAX_SECONDS = 18;
+const MIN_SECONDS = 8;
+const MAX_SECONDS = 15;
 
 interface ManifestSlide {
   n: number;
@@ -196,7 +196,7 @@ async function buildSegment(slideDir: string, slide: ManifestSlide, out: string)
     await run(FFMPEG, [
       '-y', '-loglevel', 'error',
       '-loop', '1', '-framerate', String(FPS), '-i', png,
-      '-t', slide.duration.toFixed(3),
+      '-t', slide.duration.toFixed(2),
       '-vf', 'format=yuv420p,setsar=1',
       ...VIDEO_ARGS, out,
     ]);

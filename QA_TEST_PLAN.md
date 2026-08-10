@@ -38,7 +38,7 @@ Objectif : valider les parcours qui portent la valeur métier et la monétisatio
 | F4 | Affichage des prédictions NHL du jour (page `NHLPredictionsPage`) | La liste des matchs du soir se charge avec probabilités, cotes et facteurs ; état vide géré (aucun match) ; rafraîchissement live cohérent. | Haute | À faire | Vérifier gardien partant/scratches réellement reflétés. |
 | F5 | Best Bets / value bet scan | Les paris à valeur sont calculés et affichés (edge > seuil), tri correct, gating Pro respecté si le contenu est premium. | Haute | À faire | Couvre `bestBets.service` + `valueBetScan.service`. |
 | F6 | Récupération de mot de passe (forgot → email → reset → login) | Lien de reset valide à usage unique et expirant, nouveau mot de passe accepté, ancien refusé, anciens refresh invalidés. | Haute | À faire | Vérifier non-divulgation de l'existence du compte (message neutre). |
-| F7 | Prédictions Tennis (parcours `TennisPredictionsPage` / joueur) | Les matchs et prédictions tennis se chargent via `tennisApiClient`, page joueur et stats cohérentes. | Haute | À faire | Fonction secondaire mais exposée publiquement. |
+| F7 | Tennis — onglet Stats via le sélecteur de sport | L'onglet tennis de `StatsPage` (rendu par `TennisStatsContent`) charge matchs, classements et tournois via `tennisApiService` → `/api/tennis/*`. | Moyenne | À faire | **Périmètre réduit le 2026-08-10** : `TennisPredictionsPage` et `TennisPlayerPage` ont été supprimées (0 route, 0 importeur). Le tennis n'est plus atteignable que par le toggle de sport dans Stats — **ne pas tester de page de prédiction tennis, il n'y en a plus.** |
 
 ---
 

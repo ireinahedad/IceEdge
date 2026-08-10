@@ -109,6 +109,73 @@ export interface LeaderboardEntry {
   isCurrentUser?: boolean;
 }
 
+// ─── Coupons d'un autre joueur (page joueur, réservée aux abonnés Pro) ───────
+
+/** Issue d'une jambe, écrite par le règlement automatique. */
+export type LegResult = "win" | "loss" | "unknown";
+
+export interface PublicSlipLeg {
+  marketType: string;
+  subjectId?: string;
+  subjectName: string;
+  subjectLogo?: string;
+  selection?: string;
+  line?: number;
+  probability: number;
+  oddsLabel?: string;
+  gameId?: string;
+  /**
+   * Absent sur les coupons réglés AVANT la persistance des résultats par jambe :
+   * ces jambes s'affichent « non évaluées », jamais perdantes.
+   */
+  result?: LegResult;
+}
+
+export interface PublicSlip {
+  id: string;
+  placedAt: string;
+  sport: string;
+  /** `null` quand le coupon est verrouillé — le serveur ne les envoie pas. */
+  legs: PublicSlipLeg[] | null;
+  legCount: number;
+  isParlay: boolean;
+  combinedProbability: number | null;
+  outcome: "win" | "loss" | "pending";
+  resolvedAt: string | null;
+  xpAwarded: number;
+  /** Mise au jeu du premier match. `null` = horaire inconnu. */
+  locksAt: string | null;
+  /** Sélections masquées : le match n'a pas commencé. */
+  locked?: boolean;
+}
+
+export interface PlayerFormStats {
+  windowDays: number;
+  minSample: number;
+  settled: number;
+  wins: number;
+  /** `null` sous le plancher d'échantillon — ne pas afficher de pourcentage. */
+  hitRate: number | null;
+}
+
+export interface PlayerSummary {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatar: string;
+  avatarUrl: string | null;
+  tier: UserProfile["tier"];
+  /** Forme récente, mise en avant. */
+  form: PlayerFormStats;
+  /** Cumul sur tout ce qui est visible. `since` = date de coupure. */
+  overall: {
+    since: string | null;
+    settled: number;
+    wins: number;
+    hitRate: number | null;
+  };
+}
+
 // ─── Chat ─────────────────────────────────────────────────────────────────────
 
 export interface ChatMessage {

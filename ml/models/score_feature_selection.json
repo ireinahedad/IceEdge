@@ -1,0 +1,12 @@
+{
+  "method": "ablation par permutation (dimension constante), walk-forward",
+  "metric": "log-loss de la puck line, deux jambes, \u03c4 ajust\u00e9 par variante",
+  "secondary_metrics_displayed_only": [
+    "deviance",
+    "ll_moneyline"
+  ],
+  "keep_share": 0.7,
+  "sentinel_bar": 0.6429,
+  "sentinel_median_share": 0.5714,
+  "seasons": [
+    

@@ -27,6 +27,7 @@ const ProSuccessPage        = lazy(() => import("./pages/ProSuccessPage").then(m
 const TermsPage             = lazy(() => import("./pages/TermsPage").then(m => ({ default: m.TermsPage })));
 const PrivacyPage           = lazy(() => import("./pages/PrivacyPage").then(m => ({ default: m.PrivacyPage })));
 const SupportPage           = lazy(() => import("./pages/SupportPage").then(m => ({ default: m.SupportPage })));
+const PlayerBetsPage        = lazy(() => import("./pages/PlayerBetsPage").then(m => ({ default: m.PlayerBetsPage })));
 const NotFoundPage          = lazy(() => import("./pages/NotFoundPage").then(m => ({ default: m.NotFoundPage })));
 
 /** Minimal fallback shown while a lazy route chunk loads. Matches the app's
@@ -95,6 +96,10 @@ export const router = createBrowserRouter([
       { path: "/share/:id",                          element: withSuspense(<SharePage />)                    },
 
       // Protected — require a signed-in account
+      // La page joueur exige un compte : le serveur doit savoir QUI regarde pour
+      // trancher entre « c'est moi » et « il faut être Pro ». Le mur Pro lui-même
+      // est appliqué côté serveur (402), pas ici.
+      { path: "/player/:userId",                     element: withSuspense(<Protected><PlayerBetsPage /></Protected>) },
       { path: "/profile",                            element: withSuspense(<Protected><ProfilePage /></Protected>)    },
       { path: "/pro",                                element: withSuspense(<Protected><ProPage /></Protected>)        },
       { path: "/pro/success",                        element: withSuspense(<Protected><ProSuccessPage /></Protected>) },

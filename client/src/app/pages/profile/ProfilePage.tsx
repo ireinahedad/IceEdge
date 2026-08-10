@@ -536,13 +536,6 @@ function SettingsTab({
           <ToggleSwitch checked={isPublic} onChange={() => setIsPublic((v) => !v)} fontSize={12} />
         </div>
 
-        <div className="flex items-center gap-3 py-1">
-          <div>
-            <label className="text-white/70 text-xs">{t("profile.showSlips")}</label>
-            <p className="text-white/40 text-[9px] mt-0.5">{t("profile.showSlipsHint")}</p>
-          </div>
-          <ToggleSwitch checked={showSlips} onChange={() => setShowSlips((v) => !v)} fontSize={12} />
-        </div>
       </div>
 
       {/* Notifications — value bets (Pro only) */}
@@ -691,6 +684,23 @@ function SettingsTab({
             </button>
           </>
         )}
+      </div>
+
+      {/* Confidentialité — retrait des coupons publics.
+          Formulé à la NÉGATIVE et laissé décoché par défaut : la visibilité est
+          l'état normal, se retirer est le geste délibéré. Volontairement séparé
+          de « Profil public » (carte Infos), qui commande la présence dans la
+          recherche et au classement — les lier reviendrait à faire payer la
+          discrétion d'un rang, et un « choix » de ce genre n'en est pas un. */}
+      <div className="icy-card rounded-2xl p-4 flex flex-col gap-2">
+        <p className="text-white text-xs font-medium">{t("profile.privacy")}</p>
+        <div className="flex items-center gap-3 py-1">
+          <div className="flex-1">
+            <label className="text-white/70 text-xs">{t("profile.hideSlips")}</label>
+            <p className="text-white/40 text-[9px] mt-0.5">{t("profile.hideSlipsHint")}</p>
+          </div>
+          <ToggleSwitch checked={!showSlips} onChange={() => setShowSlips((v) => !v)} fontSize={12} />
+        </div>
       </div>
 
       {/* Security */}
