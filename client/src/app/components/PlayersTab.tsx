@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { UITeam } from "../hooks/useNHLData";
 import { nhlApiService } from "../services/nhlApiService";
-import { nhlLogoUrl } from "../data/teamEmoji";
+import { nhlLogoUrl, teamColors } from "../data/teamEmoji";
 import { useI18n } from "../i18n";
 
 export function PlayersTab({ teams, accent }: { teams: UITeam[]; accent: string }) {
@@ -29,20 +29,36 @@ export function PlayersTab({ teams, accent }: { teams: UITeam[]; accent: string 
       {/* Team picker */}
       <div className="flex flex-col gap-2">
         <p className="text-[#8a9ea6] text-xs uppercase tracking-wider font-medium">{t("players.selectTeam")}</p>
-        <div className="flex gap-2 flex-wrap">
-          {teams.map(team => (
-            <button
-              key={team.id}
-              onClick={() => setSelectedTeamId(team.id === selectedTeamId ? null : team.id)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-medium transition-all"
-              style={team.id === selectedTeamId
-                ? { backgroundColor: accent, color: "#0A0E0C", borderColor: accent }
-                : { backgroundColor: "#131A12", color: "#bfc8cc", borderColor: "rgba(255,255,255,0.1)" }}
-            >
-              <img src={team.logo} alt={team.abbr} className="w-4 h-4 object-contain" />
-              <span>{team.abbr}</span>
-            </button>
-          ))}
+        {/* Picking a team is the first half of picking a player, so these carry
+            the club's colours the same way the team cards do — with a scrim, so
+            the white abbreviation survives the light clubs. Selection is an
+            accent ring plus full opacity; the unselected ones step back to 78%
+            rather than losing their colour, which is what identifies them. */}
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+          {teams.map(team => {
+            const selected = team.id === selectedTeamId;
+            const { primary, secondary } = teamColors(team.abbr);
+            return (
+              <button
+                key={team.id}
+                onClick={() => setSelectedTeamId(selected ? null : team.id)}
+                aria-pressed={selected}
+                className="flex flex-col items-center justify-center gap-1 py-2.5 rounded-xl border text-[11px] font-bold transition-all active:scale-95"
+                style={{
+                  background:
+                    `linear-gradient(180deg, rgba(0,0,0,0.34) 0%, rgba(0,0,0,0.58) 100%),` +
+                    `linear-gradient(140deg, ${primary}, ${secondary})`,
+                  color: "#fff",
+                  borderColor: selected ? accent : "rgba(255,255,255,0.18)",
+                  boxShadow: selected ? `0 0 0 2px ${accent}, 0 6px 14px rgba(0,0,0,0.4)` : "none",
+                  opacity: selected ? 1 : 0.78,
+                }}
+              >
+                <img src={team.logo} alt={team.abbr} className="w-6 h-6 object-contain" />
+                <span>{team.abbr}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 

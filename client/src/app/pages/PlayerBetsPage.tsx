@@ -4,6 +4,7 @@ import { BottomNav } from "../components/BottomNav";
 import { ProLock } from "../components/ProLock";
 import { profileApiService, ApiError } from "../services/userService";
 import { useI18n } from "../i18n";
+import "../components/rink-theme.css";
 import type { PlayerSummary, PublicSlip, PublicSlipLeg } from "../types/user";
 
 const ACCENT = "#86d1ea";
@@ -248,10 +249,11 @@ export function PlayerBetsPage() {
   return (
     <div className="flex flex-col min-h-screen pb-24" style={{ background: "#0A0E0C" }}>
       <div
-        className="sticky top-0 z-40 px-4 pt-12 pb-3"
-        style={{ background: "rgba(10,14,12,0.92)", backdropFilter: "blur(16px)", borderBottom: "1px solid #283323" }}
+        className="sticky top-0 z-40"
+        style={{ background: "rgba(10,14,12,0.92)", backdropFilter: "blur(16px)", paddingTop: "env(safe-area-inset-top, 0px)" }}
       >
-        <div className="flex items-center gap-3">
+        <div className="rink-boards" aria-hidden />
+        <div className="px-4 pt-3 pb-3 flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="text-[#3a5060] text-lg" aria-label={t("common.back")}>←</button>
           <h1 className="text-white text-base font-bold flex-1 truncate">{title}</h1>
         </div>

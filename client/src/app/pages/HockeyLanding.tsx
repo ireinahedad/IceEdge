@@ -1,1047 +1,39 @@
+/**
+ * HockeyLanding.tsx — page d'accueil.
+ *
+ * Ce fichier faisait 1468 lignes ; il a été découpé le 2026-08-10 en 5 fichiers
+ * (`./landing/`) sans toucher une ligne de code — seuls les imports et les
+ * `export` ont été ajoutés. Il ne reste ici que l'assemblage des sections et
+ * `LazySection`, qui diffère le montage de chacune jusqu'à ce qu'elle approche
+ * du viewport.
+ *
+ *   landingTypes.ts       DisplayGame, TennisMatch, conversions, replis tennis
+ *   EvSection.tsx         paris à valeur (EV), réservé aux abonnés Pro
+ *   BestBetsSection.tsx   Best Bets : tri, paliers de risque, cotes implicites
+ *   LandingCards.tsx      sélecteur de sport, pastilles de cote, cartes de match
+ *
+ * `HockeyLanding` reste le seul export public : `routes.tsx` est inchangé.
+ */
+
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
-import { Search, TrendingUp, ChevronRight, Plus, Goal, Star, Timer, Zap, Settings, CalendarDays } from "lucide-react";
-import { IceedgeLogo } from "../components/brand/IceedgeLogo";
+import { ChevronRight, CalendarDays } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { nhlApiService } from "../services/nhlApiService";
-import { predictionApiService } from "../services/predictionApiService";
 import { tennisApiService } from "../services/tennisApiService";
-import type { TennisApiMatch } from "../services/tennisApiService";
-import type { NHLGame, BetLeg } from "../types/bet";
 import { useSport } from "../context/SportContext";
-import { useBet } from "../context/BetContext";
 import { useSubscription } from "../context/SubscriptionContext";
-import { ProLock } from "../components/ProLock";
 import { useI18n } from "../i18n";
-import {
-  fetchBet365Odds,
-  extractH2HOdds,
-  ODDS_SPORT_KEYS,
-} from "../services/oddsApiService";
-import { openBet } from "../services/bookmakers";
-import { useBookmaker } from "../context/BookmakerContext";
-import { nhlLogoUrl } from "../data/teamEmoji";
+import { fetchBet365Odds, extractH2HOdds, ODDS_SPORT_KEYS } from "../services/oddsApiService";
 import "../components/home-theme.css";
+import "../components/rink-theme.css";
+import { BestBetsSection } from "./landing/BestBetsSection";
+import { EvItem, EvSection } from "./landing/EvSection";
+import { LiveGameCard, SportSelector, TennisLiveCard, TennisMatchRow, UpcomingGameRow } from "./landing/LandingCards";
+import { TeamCarousel } from "./landing/TeamCarousel";
+import { AddSheetState, DisplayGame, TENNIS_LIVE_FALLBACK, TENNIS_TOP_PREDICTIONS_FALLBACK, TENNIS_UPCOMING_FALLBACK, TennisMatch, calcEdge, toDisplayGame, toTennisMatch } from "./landing/landingTypes";
 
-// ─── Hockey helpers ────────────────────────────────────────────────────────────
-
-
-
-interface DisplayGame {
-  id: string;
-  period?: string;
-  time?: string;
-  overUnder?: number;
-  totalPct?: number;
-  // bet365 decimal odds — only populated when VITE_ODDS_API_KEY is set
-  bet365Home?: number;
-  bet365Away?: number;
-  team1: { id: string; abbr: string; name: string; score?: number; logo: string; winPct: number };
-  team2: { id: string; abbr: string; name: string; score?: number; logo: string; winPct: number };
-}
-
-async function toDisplayGame(game: NHLGame): Promise<DisplayGame> {
-  const [homePred, totalPred] = await Promise.all([
-    predictionApiService.getSinglePrediction({ marketType: "moneyline", gameId: game.id, teamId: game.homeTeam.abbreviation.toLowerCase() }),
-    predictionApiService.getSinglePrediction({ marketType: "total_goals", gameId: game.id, selection: "over", line: 5.5 }),
-  ]);
-  return {
-    id: game.id,
-    period: game.period ? `${game.period}P • ${game.clock}` : undefined,
-    time: game.startTime,
-    overUnder: 5.5,
-    totalPct: totalPred.probability,
-    team1: { id: game.homeTeam.abbreviation.toLowerCase(), abbr: game.homeTeam.abbreviation, name: game.homeTeam.name, score: game.homeTeam.score, logo: nhlLogoUrl(game.homeTeam.abbreviation), winPct: homePred.probability },
-    team2: { id: game.awayTeam.abbreviation.toLowerCase(), abbr: game.awayTeam.abbreviation, name: game.awayTeam.name, score: game.awayTeam.score, logo: nhlLogoUrl(game.awayTeam.abbreviation), winPct: 100 - homePred.probability },
-  };
-}
-
-// ─── Edge detection helpers ───────────────────────────────────────────────────
-
-/** Convert a bet365 decimal odd to the bookmaker's implied win probability (%) */
-function impliedPct(decimal: number): number {
-  return Math.round(100 / decimal);
-}
-
-/**
- * Edge = our model's probability minus the bookmaker's implied probability.
- * Only meaningful when we have real bet365 odds.
- */
-function calcEdge(modelPct: number, decimal: number): number {
-  return modelPct - impliedPct(decimal);
-}
-
-// ─── Tennis mock data ──────────────────────────────────────────────────────────
-
-interface TennisMatch {
-  id: string;
-  player1: { name: string; country: string; winPct: number; sets?: number[]; serving?: boolean; bet365Odds?: number };
-  player2: { name: string; country: string; winPct: number; sets?: number[]; serving?: boolean; bet365Odds?: number };
-  time: string; tournament: string; surface: string; surfaceIcon: string;
-  isLive?: boolean; liveSet?: string;
-}
-
-const TENNIS_LIVE_FALLBACK: TennisMatch[] = [
-  {
-    id: "tl1",
-    player1: { name: "N. Djokovic", country: "🇷🇸", winPct: 62, sets: [6, 4], serving: true, bet365Odds: 1.52 },
-    player2: { name: "C. Alcaraz",  country: "🇪🇸", winPct: 38, sets: [3, 5],                bet365Odds: 2.55 },
-    time: "Live", tournament: "Roland Garros", surface: "Clay", surfaceIcon: "🟫", isLive: true, liveSet: "SET 2",
-  },
-  {
-    id: "tl2",
-    player1: { name: "J. Sinner", country: "🇮🇹", winPct: 71, sets: [6], serving: true, bet365Odds: 1.35 },
-    player2: { name: "A. Zverev", country: "🇩🇪", winPct: 29, sets: [2],                 bet365Odds: 3.10 },
-    time: "Live", tournament: "Roland Garros", surface: "Clay", surfaceIcon: "🟫", isLive: true, liveSet: "SET 1",
-  },
-];
-
-const TENNIS_UPCOMING_FALLBACK: TennisMatch[] = [
-  { id: "tu1", player1: { name: "I. Swiatek",  country: "🇵🇱", winPct: 61, bet365Odds: 1.65 }, player2: { name: "A. Sabalenka", country: "🇧🇾", winPct: 39, bet365Odds: 2.30 }, time: "14:00", tournament: "Roland Garros", surface: "Clay", surfaceIcon: "🟫" },
-  { id: "tu2", player1: { name: "D. Medvedev", country: "🇷🇺", winPct: 55, bet365Odds: 1.80 }, player2: { name: "H. Rune",      country: "🇩🇰", winPct: 45, bet365Odds: 2.00 }, time: "16:00", tournament: "Roland Garros", surface: "Clay", surfaceIcon: "🟫" },
-  { id: "tu3", player1: { name: "C. Gauff",    country: "🇺🇸", winPct: 58, bet365Odds: 1.72 }, player2: { name: "E. Rybakina",  country: "🇰🇿", winPct: 42, bet365Odds: 2.15 }, time: "18:30", tournament: "Roland Garros", surface: "Clay", surfaceIcon: "🟫" },
-];
-
-const TENNIS_TOP_PREDICTIONS_FALLBACK = [
-  { icon: "🇷🇸", name: "Djokovic", label: "Win vs Alcaraz",   pct: 62, trend: "+3%", edge: 62 - impliedPct(1.52) },
-  { icon: "🇮🇹", name: "Sinner",   label: "Win vs Zverev",    pct: 71, trend: "+5%", edge: 71 - impliedPct(1.35) },
-  { icon: "🇵🇱", name: "Swiatek",  label: "Win vs Sabalenka", pct: 61, trend: "+1%", edge: 61 - impliedPct(1.65) },
-];
-
-async function toTennisMatch(m: TennisApiMatch): Promise<TennisMatch> {
-  const pred = await predictionApiService.getSinglePrediction({
-    marketType: "moneyline",
-    gameId: m.id,
-    playerId: m.player1.id,
-  });
-
-  let time = "TBD";
-  if (m.isLive) {
-    time = "Live";
-  } else if (m.scheduledIso) {
-    const d = new Date(m.scheduledIso);
-    time = d.toLocaleTimeString("en-US", {
-      hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/New_York",
-    });
-  }
-
-  return {
-    id: m.id,
-    tournament: m.tournament,
-    surface: m.surface,
-    surfaceIcon: m.surfaceIcon,
-    isLive: m.isLive,
-    liveSet: m.liveSet,
-    time,
-    player1: {
-      name: m.player1.name,
-      country: m.player1.country,
-      winPct: pred.probability,
-      sets: m.player1.sets,
-      serving: m.player1.serving,
-    },
-    player2: {
-      name: m.player2.name,
-      country: m.player2.country,
-      winPct: 100 - pred.probability,
-      sets: m.player2.sets,
-      serving: m.player2.serving,
-    },
-  };
-}
-
-interface AddSheetState {
-  open: boolean;
-  subject?: { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
-}
-
-// ─── Value Bets (EV) — Pro only ─────────────────────────────────────────────
-
-interface EvItem {
-  id: string;
-  logo: string;
-  label: string;
-  context: string;
-  pct: number;   // model probability
-  edge: number;  // model% − implied%
-}
-
-// Static, realistic-looking rows shown (blurred) to non-Pro users so they can
-// see what the feature looks like without exposing real value bets.
-const EV_SAMPLE: EvItem[] = [
-  { id: "ev-s1", logo: "🏒", label: "TOR ML vs MTL",       context: "Value spot", pct: 58, edge: 11 },
-  { id: "ev-s2", logo: "🏒", label: "Over 5.5 · BOS–FLA",  context: "Value spot", pct: 63, edge: 9 },
-  { id: "ev-s3", logo: "🎾", label: "Sinner to win",       context: "Value spot", pct: 71, edge: 8 },
-];
-
-function EvRow({ item }: { item: EvItem }) {
-  return (
-    <div className="flex items-center gap-2.5 icy-card rounded-xl px-2.5 py-2">
-      {item.logo?.startsWith("http")
-        ? <img src={item.logo} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
-        : <span className="text-base flex-shrink-0">{item.logo}</span>}
-      <div className="flex-1 min-w-0">
-        <div className="text-white text-[11px] font-medium truncate">{item.label}</div>
-        <div className="text-[#8a9ea6] text-[9px] truncate">{item.context}</div>
-      </div>
-      <div className="text-right flex-shrink-0">
-        <div className="text-green-400 text-[11px] font-bold tabular-nums">+{item.edge}% EV</div>
-        <div className="text-[#bfc8cc] text-[9px] tabular-nums">{item.pct}% {"" /* model */}</div>
-      </div>
-    </div>
-  );
-}
-
-function EvSection({ isPro, items, isLoading, accent }: {
-  isPro: boolean; items: EvItem[]; isLoading: boolean; accent: string;
-}) {
-  const { t } = useI18n();
-  const navigate = useNavigate();
-
-  const list = (rows: EvItem[]) => (
-    <div className="flex flex-col gap-1.5">{rows.map((i) => <EvRow key={i.id} item={i} />)}</div>
-  );
-
-  return (
-    <section className="px-4">
-      <div className="flex items-center gap-2 mb-3">
-        <Zap size={13} style={{ color: accent }} />
-        <span className="text-white text-sm font-medium">{t("home.evTitle")}</span>
-        {isPro && (
-          <button
-            onClick={() => navigate("/profile")}
-            aria-label={t("home.evSettings")}
-            title={t("home.evSettings")}
-            className="ml-auto flex items-center gap-1 text-white/50 hover:text-white transition-colors"
-          >
-            <Settings size={13} />
-            <span className="text-[10px]">{t("home.evSettings")}</span>
-          </button>
-        )}
-      </div>
-
-      {isPro ? (
-        isLoading ? (
-          <div className="flex flex-col gap-1.5">{[1, 2, 3].map((i) => <div key={i} className="h-11 icy-tile rounded-xl animate-pulse" />)}</div>
-        ) : items.length === 0 ? (
-          <div className="py-6 text-center text-[#bfc8cc] text-xs">{t("home.evEmpty")}</div>
-        ) : list(items)
-      ) : (
-        <ProLock locked title={t("home.evTitle")} description={t("home.evLockDesc")}>
-          {list(EV_SAMPLE)}
-        </ProLock>
-      )}
-    </section>
-  );
-}
-
-// ─── Best Bets ─────────────────────────────────────────────────────────────────
-
-const BB_BASE = import.meta.env.VITE_PREDICTION_API_URL || "";
-
-interface BestBet {
-  id: string;
-  label: string;
-  context: string;
-  logo: string;
-  rulePct: number;
-  mlPct: number | null;
-  mlLoading: boolean;
-  leg: BetLeg;
-  gameId?: string;
-  teamId?: string;
-}
-
-type SortSource = "rules" | "ml";
-type RiskTier   = "safe" | "moderate" | "risky" | "high";
-type SortOrder  = "safest" | "riskiest";
-
-const RISK_TIERS: { tier: RiskTier; key: string; color: string }[] = [
-  { tier: "safe",     key: "risk.safe",     color: "#86d1ea" },
-  { tier: "moderate", key: "risk.moderate", color: "#90C9F0" },
-  { tier: "risky",    key: "risk.risky",    color: "#facc15" },
-  { tier: "high",     key: "risk.high",     color: "#f87171" },
-];
-
-function riskLabel(pct: number): { tier: RiskTier; key: string; color: string } {
-  if (pct >= 70) return RISK_TIERS[0];
-  if (pct >= 55) return RISK_TIERS[1];
-  if (pct >= 40) return RISK_TIERS[2];
-  return RISK_TIERS[3];
-}
-
-/** Implied decimal odds from a win probability — a proxy "cote" so users can
- * gauge potential payout even when no real bookmaker price is attached
- * (best bets span team, game and player markets bet365 doesn't all cover). */
-function impliedOdds(pct: number): number | null {
-  if (pct <= 0 || pct >= 100) return null;
-  return Math.round((100 / pct) * 100) / 100;
-}
-
-function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource }) {
-  const { addLeg, removeLeg, hasLeg } = useBet();
-  const { t } = useI18n();
-  const inSlip = hasLeg(bet.id);
-  const displayPct = sortSource === "ml" ? (bet.mlPct ?? bet.rulePct) : bet.rulePct;
-  const risk = riskLabel(displayPct);
-  const odds = impliedOdds(displayPct);
-  const isML = sortSource === "ml" && bet.mlPct != null;
-
-  return (
-    <div className="flex items-center gap-2.5 icy-card rounded-xl px-2.5 py-1.5">
-      {bet.logo?.startsWith("http")
-        ? <img src={bet.logo} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
-        : <span className="text-base flex-shrink-0">{bet.logo}</span>}
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {/* Full bet title always visible — no truncation, wraps if long */}
-          <span className="text-white text-[11px] font-medium">{bet.label}</span>
-          <span className="text-[8px] px-1 py-px rounded-full flex-shrink-0 font-medium"
-            style={{ color: risk.color, backgroundColor: `${risk.color}18`, border: `1px solid ${risk.color}44` }}>
-            {t(risk.key)}
-          </span>
-          <span className="text-[#8a9ea6] text-[9px] truncate">· {bet.context}</span>
-        </div>
-        <div className="flex items-center gap-2 mt-1">
-          <div className="flex-1 bg-[#0A0E0C] rounded-full h-1 overflow-hidden">
-            <div className="h-full rounded-full transition-all duration-500"
-              style={{ width: `${displayPct}%`, backgroundColor: isML ? "#a78bfa" : risk.color }} />
-          </div>
-          <span className="text-[10px] font-bold flex-shrink-0 tabular-nums"
-            style={{ color: isML ? "#a78bfa" : risk.color }}>
-            {sortSource === "ml" && bet.mlLoading ? "…" : `${displayPct}%`}
-          </span>
-          {odds != null && (
-            <span className="text-[9px] font-semibold flex-shrink-0 tabular-nums text-[#bfc8cc] bg-white/5 px-1.5 py-px rounded-full">
-              {t("home.oddsApprox", { odds: odds.toFixed(2) })}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <button
-        onClick={() => inSlip ? removeLeg(bet.id) : addLeg({ ...bet.leg, probability: displayPct })}
-        className={`w-7 h-7 rounded-lg border flex items-center justify-center text-sm flex-shrink-0 transition-colors ${
-          inSlip
-            ? "bg-green-500/15 border-green-500/30 text-green-400"
-            : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
-        }`}
-      >
-        {inSlip ? "✓" : "+"}
-      </button>
-    </div>
-  );
-}
-
-function BestBetsSection({
-  games,
-  tennisLive,
-  tennisUpcoming,
-  sport,
-  accent,
-  isLoading,
-  locked = false,
-}: {
-  games: DisplayGame[];
-  tennisLive: TennisMatch[];
-  tennisUpcoming: TennisMatch[];
-  sport: "hockey" | "tennis";
-  accent: string;
-  isLoading: boolean;
-  locked?: boolean;
-}) {
-  const { t, lang } = useI18n();
-  const [sortSource, setSortSource] = useState<SortSource>("ml");
-  const [sortOrder,  setSortOrder]  = useState<SortOrder>("safest");
-  // Risk-tier filters are combinable (multi-select) instead of an exclusive
-  // toggle, so users can view e.g. "risky" and "high" payout picks together,
-  // or leave everything selected to see safe and risky bets side by side.
-  const [riskFilter, setRiskFilter] = useState<Set<RiskTier>>(new Set(["safe", "moderate", "risky", "high"]));
-  const toggleRisk = (tier: RiskTier) => setRiskFilter(prev => {
-    const next = new Set(prev);
-    if (next.has(tier)) next.delete(tier); else next.add(tier);
-    return next;
-  });
-  const [bets, setBets]             = useState<BestBet[]>([]);
-  const [mlFetched,  setMlFetched]  = useState(false);
-  const [collapsed,  setCollapsed]  = useState<boolean>(() => {
-    try { return localStorage.getItem("iceedge_bestbets_collapsed") === "1"; }
-    catch { return false; }
-  });
-  const toggleCollapsed = () => setCollapsed(c => {
-    const next = !c;
-    try { localStorage.setItem("iceedge_bestbets_collapsed", next ? "1" : "0"); }
-    catch { /* ignore */ }
-    return next;
-  });
-
-  // When hockey has no games (e.g. off-season), fall back to tennis matches
-  const usingTennisFallback = sport === "hockey" && games.length === 0 && (tennisLive.length > 0 || tennisUpcoming.length > 0);
-
-  // Build the bets list.
-  //  · Hockey → fetch the pre-ranked, all-markets best bets from the backend
-  //    (team + player props, scored by rules + ML, sorted by prediction score).
-  //  · Tennis / hockey off-season fallback → build from match data client-side.
-  useEffect(() => {
-    if (locked) return;             // don't fetch Pro-only data for free users
-    let cancelled = false;
-
-    // Tennis (or hockey off-season fallback showing tennis)
-    if (sport === "tennis" || usingTennisFallback) {
-      const raw: BestBet[] = [];
-      for (const m of [...tennisLive, ...tennisUpcoming]) {
-        const ctx = `${m.tournament} · ${m.isLive ? t("home.live") : m.time}`;
-        raw.push({
-          id: `bb-tennis-${m.id}-p1`, label: t("bb.playerWin", { name: m.player1.name }), context: ctx,
-          logo: m.player1.country, rulePct: m.player1.winPct, mlPct: null, mlLoading: false,
-          leg: { id: `bb-tennis-${m.id}-p1`, marketType: "tennis_match_winner", marketLabel: "Match Winner",
-            subjectType: "player", subjectId: m.id, subjectName: m.player1.name,
-            subjectLogo: m.player1.country, selection: `${m.player1.name} to win`,
-            selectionShort: `${m.player1.name.split(" ").pop()} W`,
-            probability: m.player1.winPct, gameInfo: ctx, addedAt: new Date().toISOString() },
-        });
-        raw.push({
-          id: `bb-tennis-${m.id}-p2`, label: t("bb.playerWin", { name: m.player2.name }), context: ctx,
-          logo: m.player2.country, rulePct: m.player2.winPct, mlPct: null, mlLoading: false,
-          leg: { id: `bb-tennis-${m.id}-p2`, marketType: "tennis_match_winner", marketLabel: "Match Winner",
-            subjectType: "player", subjectId: m.id, subjectName: m.player2.name,
-            subjectLogo: m.player2.country, selection: `${m.player2.name} to win`,
-            selectionShort: `${m.player2.name.split(" ").pop()} W`,
-            probability: m.player2.winPct, gameInfo: ctx, addedAt: new Date().toISOString() },
-        });
-      }
-      setBets(raw);
-      setMlFetched(false); // tennis still uses the lazy per-bet ML fetch
-      return;
-    }
-
-    // Hockey → backend best-bets endpoint (all markets, rules + ML, pre-sorted)
-    (async () => {
-      try {
-        // Fetch a larger pool (both rule + ML scores) so the Rules/ML toggle
-        // re-ranks honestly client-side; the list itself still shows the top 15.
-        const { bets: apiBets } = await predictionApiService.getBestBets({ limit: 30, source: "ml" });
-        if (cancelled) return;
-        const mapped: BestBet[] = apiBets.map((b) => {
-          const logo = b.teamAbbr ? nhlLogoUrl(b.teamAbbr) : b.subjectLogo;
-          return {
-            id: b.id, label: b.label, context: b.context, logo,
-            rulePct: b.rulePct, mlPct: b.mlPct, mlLoading: false,
-            gameId: b.gameId ?? undefined, teamId: b.teamId ?? undefined,
-            leg: {
-              id: b.id, marketType: b.marketType, marketLabel: b.marketLabel,
-              subjectType: b.subjectType, subjectId: b.subjectId, subjectName: b.subjectName,
-              subjectLogo: logo, selection: b.selection, selectionShort: b.selectionShort,
-              probability: b.score, line: b.line ?? undefined,
-              gameInfo: b.context, addedAt: new Date().toISOString(),
-              // Machine-readable fields for automatic settlement.
-              gameId: b.gameId ?? undefined,
-              selectionValue: b.selectionValue,
-            },
-          };
-        });
-        setBets(mapped);
-        setMlFetched(true); // scores already include ML — skip the lazy per-bet fetch
-      } catch {
-        if (!cancelled) { setBets([]); setMlFetched(true); }
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, [games, tennisLive, tennisUpcoming, sport, lang, usingTennisFallback, locked]);
-
-  // Lazy ML fetch when ML tab selected
-  useEffect(() => {
-    if (locked || sortSource !== "ml" || mlFetched || bets.length === 0 || !BB_BASE) return;
-    setMlFetched(true);
-    setBets(prev => prev.map(b => ({ ...b, mlLoading: true })));
-
-    bets.slice(0, 20).forEach(async (bet) => {
-      try {
-        const body: Record<string, unknown> = { type: sport === "hockey" ? "game" : "tennis", subjectId: bet.teamId ?? bet.gameId ?? bet.id };
-        if (bet.teamId) body.opponentId = bet.gameId;
-        const res = await fetch(`${BB_BASE}/predict/ml`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-        if (res.ok) {
-          const data = await res.json() as { probability?: number };
-          setBets(prev => prev.map(b => b.id === bet.id ? { ...b, mlPct: Math.round(data.probability ?? bet.rulePct), mlLoading: false } : b));
-        } else {
-          setBets(prev => prev.map(b => b.id === bet.id ? { ...b, mlLoading: false } : b));
-        }
-      } catch {
-        setBets(prev => prev.map(b => b.id === bet.id ? { ...b, mlLoading: false } : b));
-      }
-    });
-  }, [sortSource, mlFetched, bets, sport]);
-
-  const sorted = useMemo(() => {
-    const src = (b: BestBet) => sortSource === "ml" ? (b.mlPct ?? b.rulePct) : b.rulePct;
-    // Empty selection = no filter applied (show every risk tier), so users
-    // can never accidentally hide the whole list by deselecting every chip.
-    const filtered = riskFilter.size === 0
-      ? bets
-      : bets.filter(b => riskFilter.has(riskLabel(src(b)).tier));
-    return [...filtered]
-      .sort((a, b) => sortOrder === "safest" ? src(b) - src(a) : src(a) - src(b))
-      .slice(0, 15);
-  }, [bets, sortSource, sortOrder, riskFilter]);
-
-  // Pro-only: free users see the section title but the picks are locked/blurred.
-  if (locked) {
-    return (
-      <section className="px-4 mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Star size={13} style={{ color: accent }} />
-          <span className="text-white text-sm font-medium">{t("home.bestBets")}</span>
-        </div>
-        <ProLock locked title={t("home.bestBets")} description={t("home.bestBetsLockDesc")}>
-          <div className="flex flex-col gap-1.5">
-            {["TOR ML", "Over 5.5", "McDavid 2+ pts", "BOS ML", "Under 6.5"].map((label, i) => (
-              <div key={i} className="flex items-center gap-2.5 icy-card rounded-xl px-2.5 py-2">
-                <span className="text-base flex-shrink-0">🏒</span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-white text-[11px] font-medium">{label}</div>
-                  <div className="h-1 mt-1 rounded-full" style={{ width: `${70 - i * 6}%`, background: accent, opacity: 0.6 }} />
-                </div>
-                <span className="text-[10px] font-bold" style={{ color: accent }}>{72 - i * 5}%</span>
-              </div>
-            ))}
-          </div>
-        </ProLock>
-      </section>
-    );
-  }
-
-  return (
-    <section className="px-4 mb-6">
-      <div className="flex items-center justify-between mb-3">
-        <button
-          onClick={toggleCollapsed}
-          className="flex items-center gap-2 select-none"
-          aria-expanded={!collapsed}
-          title={collapsed ? t("home.show") : t("home.hide")}
-        >
-          <ChevronRight
-            size={14}
-            className="text-[#8a9ea6] transition-transform"
-            style={{ transform: collapsed ? "rotate(0deg)" : "rotate(90deg)" }}
-          />
-          <Star size={13} style={{ color: accent }} />
-          <span className="text-white text-sm font-medium">{t("home.bestBets")}</span>
-          {!isLoading && <span className="text-[10px] text-[#bfc8cc] icy-tile px-1.5 py-0.5 rounded-full">{t("home.top", { n: sorted.length })}</span>}
-          {usingTennisFallback && <span className="text-[10px] text-[#facc15] bg-[#facc15]/10 border border-[#facc15]/20 px-1.5 py-0.5 rounded-full">{t("home.tennisOffseason")}</span>}
-        </button>
-        {!collapsed && (
-        <div className="flex items-center gap-1.5">
-          {/* Source toggle — which score (rules vs ML) drives display + filtering */}
-          <div className="flex icy-tile rounded-full p-0.5 gap-0.5">
-            {(["rules", "ml"] as SortSource[]).map((s) => (
-              <button key={s} onClick={() => setSortSource(s)}
-                className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium transition-all ${sortSource === s ? "text-[#072E49] font-bold" : "text-[#8a9ea6]"}`}
-                style={sortSource === s ? { backgroundColor: s === "ml" ? "#a78bfa" : "#86d1ea" } : {}}>
-                {s === "ml" ? "ML" : t("home.rules")}
-              </button>
-            ))}
-          </div>
-          {/* Sort order — only reorders the (already-filtered) list, never hides anything */}
-          <button onClick={() => setSortOrder(o => o === "safest" ? "riskiest" : "safest")}
-            className="px-2.5 py-1 rounded-full icy-tile text-[10px] text-[#8a9ea6] hover:text-white transition-all whitespace-nowrap">
-            {sortOrder === "safest" ? t("home.safe") : t("home.risky")}
-          </button>
-        </div>
-        )}
-      </div>
-
-      {/* Risk-tier filters — combinable checkboxes, not exclusive tabs, so
-          safe and risky (higher-payout) bets can be viewed together. */}
-      {!collapsed && (
-        <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-          {RISK_TIERS.map(({ tier, key, color }) => {
-            const active = riskFilter.size === 0 || riskFilter.has(tier);
-            return (
-              <button
-                key={tier}
-                onClick={() => toggleRisk(tier)}
-                className="px-2 py-1 rounded-full text-[9px] font-semibold transition-all border"
-                style={active
-                  ? { color, backgroundColor: `${color}1a`, borderColor: `${color}55` }
-                  : { color: "#5a6660", backgroundColor: "transparent", borderColor: "rgba(255,255,255,0.08)" }}
-              >
-                {t(key)}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {!collapsed && (isLoading ? (
-        <div className="flex flex-col gap-1.5">
-          {[1,2,3,4,5].map(i => <div key={i} className="h-12 icy-tile rounded-xl animate-pulse" />)}
-        </div>
-      ) : sorted.length === 0 ? (
-        <div className="py-8 text-center text-[#bfc8cc] text-xs">{t("home.noBets")}</div>
-      ) : (
-        <div className="flex flex-col gap-1.5">
-          {sorted.map(bet => <BestBetRow key={bet.id} bet={bet} sortSource={sortSource} />)}
-        </div>
-      ))}
-    </section>
-  );
-}
-
-// ─── Brand header (logo always returns home) ───────────────────────────────────
-
-function SportSelector() {
-  const { theme } = useSport();
-  const navigate = useNavigate();
-  return (
-    <button
-      onClick={() => navigate("/")}
-      className="flex items-center gap-2.5 select-none"
-      aria-label="Accueil ArakIce"
-    >
-      {/* ARAKICE logo mark — always returns to the home page */}
-      <IceedgeLogo size={38} wordmark={false} />
-      {/* Brand name + sport label */}
-      <div className="flex flex-col leading-none gap-0.5">
-        <span
-          className="tracking-[0.14em] uppercase text-sm font-bold text-white"
-          style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif", letterSpacing: "0.12em" }}
-        >
-          ARAKICE
-        </span>
-        <span className="text-[10px] tracking-wider" style={{ color: theme.accent, opacity: 0.85 }}>
-          {theme.sportLabel}
-        </span>
-      </div>
-    </button>
-  );
-}
-
-// ─── Odds pill ─────────────────────────────────────────────────────────────────
-
-function OddsPill({ decimal, onBet }: { decimal: number; onBet: () => void }) {
-  const { bookmaker } = useBookmaker();
-  return (
-    <button
-      onClick={(e) => { e.stopPropagation(); onBet(); }}
-      className="flex items-center gap-1 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5 active:bg-green-500/20 transition-colors"
-    >
-      <span className="text-[9px] text-[#bfc8cc]">{bookmaker.label}</span>
-      <span className="text-[10px] font-bold text-green-400">{decimal.toFixed(2)}</span>
-    </button>
-  );
-}
-
-// ─── Edge badge ────────────────────────────────────────────────────────────────
-
-function EdgeBadge({ edge }: { edge: number }) {
-  const { t } = useI18n();
-  if (edge < 8) return null;
-  return (
-    <span className="text-[9px] px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/25 text-green-400 font-medium flex-shrink-0">
-      {t("home.edge", { edge })}
-    </span>
-  );
-}
-
-// ─── Hockey live game card ─────────────────────────────────────────────────────
-
-function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: () => void }) {
-  const { theme } = useSport();
-  const accent = theme.accent;
-  const { addLeg, hasLeg } = useBet();
-  const { t } = useI18n();
-  const navigate = useNavigate();
-
-  const legId = `${game.id}-moneyline-${game.team1.id}`;
-  const isAdded = hasLeg(legId);
-
-  const edge = game.bet365Home ? calcEdge(game.team1.winPct, game.bet365Home) : 0;
-
-  function quickAdd(e: React.MouseEvent) {
-    e.stopPropagation();
-    if (isAdded) return;
-    const leg: BetLeg = {
-      id: legId,
-      marketType: "moneyline",
-      marketLabel: "Moneyline",
-      subjectType: "game",
-      subjectId: game.id,
-      subjectName: `${game.team1.abbr} vs ${game.team2.abbr}`,
-      subjectLogo: game.team1.logo,
-      selection: `${game.team1.name} to win`,
-      selectionShort: `${game.team1.abbr} ML`,
-      probability: game.team1.winPct,
-      gameInfo: `${game.team1.abbr} vs ${game.team2.abbr} · Live`,
-      addedAt: new Date().toISOString(),
-    };
-    addLeg(leg);
-  }
-
-  return (
-    <div
-      onClick={() => navigate(`/stats/prediction/game/${game.id}`)}
-      className="min-w-[280px] icy-card rounded-2xl p-4 flex-shrink-0 cursor-pointer active:scale-[0.99] transition-transform"
-    >
-
-      {/* Header: live badge + edge + buttons */}
-      <div className="flex items-center justify-between mb-3 gap-2">
-        <span className="text-[10px] text-red-400 font-medium uppercase tracking-wide flex items-center gap-1 flex-shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />{game.period}
-        </span>
-        <div className="flex items-center gap-1.5 min-w-0">
-          <EdgeBadge edge={edge} />
-          <button
-            onClick={quickAdd}
-            className={`text-[10px] px-2.5 py-0.5 rounded-full border font-medium flex-shrink-0 transition-colors ${
-              isAdded
-                ? "bg-green-500/15 border-green-500/30 text-green-400"
-                : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
-            }`}
-          >
-            {isAdded ? t("home.added") : t("home.add")}
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onOpenSheet(); }}
-            className="text-[10px] text-[#bfc8cc] border border-white/20 px-2 py-0.5 rounded-full flex-shrink-0 active:bg-white/5"
-          >
-            {t("home.more")}
-          </button>
-        </div>
-      </div>
-
-      {/* Teams + score */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex flex-col items-center gap-1">
-          <img src={game.team1.logo} alt={game.team1.abbr} className="w-8 h-8 object-contain" />
-          <span className="text-white text-xs font-bold">{game.team1.abbr}</span>
-        </div>
-        <div className="flex flex-col items-center gap-0.5">
-          <div className="flex items-center gap-2.5">
-            <span className="text-white text-3xl font-bold tabular-nums">{game.team1.score}</span>
-            <span className="text-[#bfc8cc] text-lg">–</span>
-            <span className="text-white text-3xl font-bold tabular-nums">{game.team2.score}</span>
-          </div>
-          {game.overUnder && <span className="text-[#bfc8cc] text-[9px]">O/U {game.overUnder}</span>}
-        </div>
-        <div className="flex flex-col items-center gap-1">
-          <img src={game.team2.logo} alt={game.team2.abbr} className="w-8 h-8 object-contain" />
-          <span className="text-white text-xs font-bold">{game.team2.abbr}</span>
-        </div>
-      </div>
-
-      {/* Model probability bar */}
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-[10px] font-bold w-7 flex-shrink-0" style={{ color: accent }}>{game.team1.winPct}%</span>
-        <div className="flex-1 bg-[#0A0E0C] rounded-full h-2 overflow-hidden flex">
-          <div className="h-full rounded-l-full transition-all duration-500" style={{ width: `${game.team1.winPct}%`, backgroundColor: accent }} />
-          <div className="h-full bg-[#1B2419] flex-1" />
-        </div>
-        <span className="text-[#bfc8cc] text-[10px] font-bold w-7 text-right flex-shrink-0">{game.team2.winPct}%</span>
-      </div>
-
-      {/* bet365 odds row — only shown when API has real odds */}
-      {game.bet365Home && game.bet365Away ? (
-        <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
-          <OddsPill decimal={game.bet365Home} onBet={() => openBet("hockey")} />
-          <span className="text-[9px] text-[#bfc8cc]">Moneyline</span>
-          <OddsPill decimal={game.bet365Away} onBet={() => openBet("hockey")} />
-          {/* Moneyline is a universal betting term, kept as-is */}
-        </div>
-      ) : (
-        /* No API key — show a subtle link to bet365 instead */
-        <div className="flex items-center justify-end mt-1">
-          <button
-            onClick={(e) => { e.stopPropagation(); openBet("hockey"); }}
-            className="text-[9px] text-green-400 border border-green-500/20 bg-green-500/8 px-2 py-1 rounded-full"
-          >
-            {t("home.betOn")}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Hockey upcoming game row ──────────────────────────────────────────────────
-
-function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: () => void }) {
-  const { theme } = useSport();
-  const accent = theme.accent;
-  const { addLeg, hasLeg } = useBet();
-  const { t } = useI18n();
-  const navigate = useNavigate();
-
-  const legId = `${game.id}-moneyline-${game.team1.id}`;
-  const isAdded = hasLeg(legId);
-
-  const edge = game.bet365Home ? calcEdge(game.team1.winPct, game.bet365Home) : 0;
-
-  function quickAdd(e: React.MouseEvent) {
-    e.stopPropagation();
-    if (isAdded) return;
-    const leg: BetLeg = {
-      id: legId,
-      marketType: "moneyline",
-      marketLabel: "Moneyline",
-      subjectType: "game",
-      subjectId: game.id,
-      subjectName: `${game.team1.abbr} vs ${game.team2.abbr}`,
-      subjectLogo: game.team1.logo,
-      selection: `${game.team1.name} to win`,
-      selectionShort: `${game.team1.abbr} ML`,
-      probability: game.team1.winPct,
-      gameInfo: `${game.team1.abbr} vs ${game.team2.abbr} · ${game.time}`,
-      addedAt: new Date().toISOString(),
-    };
-    addLeg(leg);
-  }
-
-  return (
-    <div
-      onClick={() => navigate(`/stats/prediction/game/${game.id}`)}
-      className="icy-card rounded-2xl p-3.5 cursor-pointer active:scale-[0.99] transition-transform"
-    >
-      <div className="flex items-center gap-3">
-
-        {/* Time column */}
-        <div className="flex flex-col items-center min-w-[38px] flex-shrink-0">
-          <span className="text-xs font-medium" style={{ color: accent }}>{game.time}</span>
-          <span className="text-[#bfc8cc] text-[9px]">ET</span>
-        </div>
-
-        {/* Teams column */}
-        <div className="flex-1 min-w-0">
-          {/* Team 1 */}
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <img src={game.team1.logo} alt={game.team1.abbr} className="w-5 h-5 object-contain flex-shrink-0" />
-            <span className="text-white text-xs font-medium flex-1 truncate">{game.team1.abbr}</span>
-            <span className="text-[10px] font-bold tabular-nums" style={{ color: accent }}>{game.team1.winPct}%</span>
-            {game.bet365Home && (
-              <OddsPill decimal={game.bet365Home} onBet={() => openBet("hockey")} />
-            )}
-          </div>
-          {/* Team 2 */}
-          <div className="flex items-center gap-1.5">
-            <img src={game.team2.logo} alt={game.team2.abbr} className="w-5 h-5 object-contain flex-shrink-0" />
-            <span className="text-white text-xs font-medium flex-1 truncate">{game.team2.abbr}</span>
-            <span className="text-[#bfc8cc] text-[10px] font-bold tabular-nums">{game.team2.winPct}%</span>
-            {game.bet365Away && (
-              <OddsPill decimal={game.bet365Away} onBet={() => openBet("hockey")} />
-            )}
-          </div>
-        </div>
-
-        {/* Actions column */}
-        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-          <div className="flex items-center gap-1.5">
-            {edge >= 8 && <EdgeBadge edge={edge} />}
-            <button
-              onClick={quickAdd}
-              className={`w-8 h-8 rounded-xl border flex items-center justify-center text-sm font-bold transition-colors ${
-                isAdded
-                  ? "bg-green-500/15 border-green-500/30 text-green-400"
-                  : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
-              }`}
-              title={isAdded ? t("home.addedSlip") : t("home.addToSlip", { name: game.team1.abbr })}
-            >
-              {isAdded ? "✓" : "+"}
-            </button>
-          </div>
-          {/* O/U info */}
-          {game.overUnder && (
-            <div className="text-right">
-              <span className="text-[9px] text-[#bfc8cc]">O/U {game.overUnder}</span>
-              {game.totalPct && <span className="text-[9px] text-[#90C9F0] ml-1">{game.totalPct}%</span>}
-            </div>
-          )}
-          <button
-            onClick={(e) => { e.stopPropagation(); onOpenSheet(); }}
-            className="text-[9px] text-[#bfc8cc] underline underline-offset-2"
-          >
-            {t("home.moreBets")}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Tennis live card ─────────────────────────────────────────────────────────
-
-function TennisLiveCard({ match, accent }: { match: TennisMatch; accent: string }) {
-  const navigate = useNavigate();
-  const { addLeg, hasLeg } = useBet();
-  const { t } = useI18n();
-  const legId = `tennis-${match.id}-p1`;
-  const isAdded = hasLeg(legId);
-
-  const edge = match.player1.bet365Odds ? calcEdge(match.player1.winPct, match.player1.bet365Odds) : 0;
-
-  function quickAdd(e: React.MouseEvent) {
-    e.stopPropagation();
-    if (isAdded) return;
-    addLeg({
-      id: legId,
-      marketType: "moneyline",
-      marketLabel: "Match Winner",
-      subjectType: "player",
-      subjectId: match.id,
-      subjectName: match.player1.name,
-      subjectLogo: match.player1.country,
-      selection: `${match.player1.name} to win`,
-      selectionShort: `${match.player1.name.split(" ").pop()} W`,
-      probability: match.player1.winPct,
-      gameInfo: `${match.player1.name} vs ${match.player2.name} · ${match.tournament}`,
-      addedAt: new Date().toISOString(),
-    });
-  }
-
-  return (
-    <div
-      className="min-w-[280px] icy-card rounded-2xl p-4 flex-shrink-0 cursor-pointer active:scale-[0.98] transition-transform"
-      onClick={() => navigate(`/predictions/tennis?id=${match.id}`)}
-    >
-
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3 gap-2">
-        <span className="text-[10px] text-red-400 font-medium uppercase tracking-wide flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />{match.liveSet}
-        </span>
-        <div className="flex items-center gap-1.5">
-          <EdgeBadge edge={edge} />
-          <span className="text-[10px] px-2 py-0.5 rounded-full border" style={{ color: accent, borderColor: `${accent}4d`, backgroundColor: `${accent}1a` }}>
-            {match.surfaceIcon} {match.surface}
-          </span>
-        </div>
-      </div>
-
-      {/* Players + sets */}
-      <div className="flex flex-col gap-2 mb-3">
-        {[match.player1, match.player2].map((p, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="text-base w-6 flex-shrink-0">{p.country}</span>
-            <span className="text-white text-xs flex-1 font-medium">{p.name}</span>
-            {p.serving && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: accent }} />}
-            <div className="flex gap-1">
-              {(p.sets ?? []).map((s, j) => (
-                <span key={j} className="text-xs font-bold w-5 text-center rounded tabular-nums"
-                  style={{ color: j === (p.sets!.length - 1) ? accent : "#bfc8cc" }}>{s}</span>
-              ))}
-            </div>
-            {p.bet365Odds && (
-              <OddsPill decimal={p.bet365Odds} onBet={() => openBet("tennis")} />
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Probability bar */}
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-[10px] font-bold w-7" style={{ color: accent }}>{match.player1.winPct}%</span>
-        <div className="flex-1 bg-[#0A0E0C] rounded-full h-2 overflow-hidden flex">
-          <div className="h-full rounded-l-full" style={{ width: `${match.player1.winPct}%`, backgroundColor: accent }} />
-          <div className="h-full bg-[#1B2419] flex-1" />
-        </div>
-        <span className="text-[#bfc8cc] text-[10px] font-bold w-7 text-right">{match.player2.winPct}%</span>
-      </div>
-
-      {/* Quick add — stops propagation so card click doesn't also fire */}
-      <button
-        onClick={(e) => { e.stopPropagation(); quickAdd(e); }}
-        className={`w-full mt-1 py-1.5 rounded-xl text-xs font-bold transition-colors ${
-          isAdded
-            ? "bg-green-500/15 border border-green-500/30 text-green-400"
-            : "bg-[#90C9F0]/10 border border-[#90C9F0]/25 text-[#90C9F0] active:bg-[#90C9F0]/20"
-        }`}
-      >
-        {isAdded ? t("home.addedSlip") : t("home.addToSlip", { name: match.player1.name.split(" ").pop() ?? "" })}
-      </button>
-    </div>
-  );
-}
-
-// ─── Tennis upcoming row ──────────────────────────────────────────────────────
-
-function TennisMatchRow({ match, accent }: { match: TennisMatch; accent: string }) {
-  const navigate = useNavigate();
-  const { addLeg, hasLeg } = useBet();
-  const legId = `tennis-${match.id}-p1`;
-  const isAdded = hasLeg(legId);
-
-  const edge = match.player1.bet365Odds ? calcEdge(match.player1.winPct, match.player1.bet365Odds) : 0;
-
-  function quickAdd(e: React.MouseEvent) {
-    e.stopPropagation();
-    if (isAdded) return;
-    addLeg({
-      id: legId,
-      marketType: "moneyline",
-      marketLabel: "Match Winner",
-      subjectType: "player",
-      subjectId: match.id,
-      subjectName: match.player1.name,
-      subjectLogo: match.player1.country,
-      selection: `${match.player1.name} to win`,
-      selectionShort: `${match.player1.name.split(" ").pop()} W`,
-      probability: match.player1.winPct,
-      gameInfo: `${match.player1.name} vs ${match.player2.name} · ${match.tournament}`,
-      addedAt: new Date().toISOString(),
-    });
-  }
-
-  return (
-    <div
-      className="icy-card rounded-2xl p-3.5 cursor-pointer active:scale-[0.98] transition-transform"
-      onClick={() => navigate(`/predictions/tennis?id=${match.id}`)}
-    >
-      <div className="flex items-center gap-3">
-
-        {/* Time */}
-        <div className="flex flex-col items-center min-w-[38px] flex-shrink-0">
-          <span className="text-xs font-medium" style={{ color: accent }}>{match.time}</span>
-          <span className="text-[#bfc8cc] text-[9px]">ET</span>
-        </div>
-
-        {/* Players */}
-        <div className="flex-1 min-w-0">
-          {[match.player1, match.player2].map((p, i) => (
-            <div key={i} className={`flex items-center gap-1.5 ${i === 0 ? "mb-1.5" : ""}`}>
-              <span className="text-base flex-shrink-0">{p.country}</span>
-              <span className="text-white text-xs font-medium flex-1 truncate">{p.name}</span>
-              <span className="text-[10px] font-bold tabular-nums" style={{ color: i === 0 ? accent : "#bfc8cc" }}>{p.winPct}%</span>
-              {p.bet365Odds && (
-                <OddsPill decimal={p.bet365Odds} onBet={() => openBet("tennis")} />
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Actions */}
-        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-          <div className="flex items-center gap-1.5">
-            {edge >= 8 && <EdgeBadge edge={edge} />}
-            <button
-              onClick={(e) => { e.stopPropagation(); quickAdd(e); }}
-              className={`w-8 h-8 rounded-xl border flex items-center justify-center text-sm font-bold transition-colors ${
-                isAdded
-                  ? "bg-green-500/15 border-green-500/30 text-green-400"
-                  : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
-              }`}
-            >
-              {isAdded ? "✓" : "+"}
-            </button>
-          </div>
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ color: accent, backgroundColor: `${accent}1a` }}>
-            {match.surfaceIcon} {match.surface}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Lazy section ───────────────────────────────────────────────────────────
 // Defers a section's rendering (and any data-fetching it does on mount) until it
@@ -1305,29 +297,30 @@ export function HockeyLanding() {
 
   return (
     <div className="flex flex-col min-h-screen pb-24" style={{ background: "#0A0E0C" }}>
-      {/* Header */}
-      <div className="sticky top-0 z-40 px-4 pt-12 pb-3"
-        style={{ background: "rgba(10,14,12,0.88)", backdropFilter: "blur(16px)", borderBottom: "1px solid #283323" }}>
-        <SportSelector />
+      {/* Header — the boards are the very first thing on the page: nothing sits
+          above them. The only top padding is env(safe-area-inset-top), which is
+          0 in a browser and only grows on a notched device, where the boards
+          would otherwise be hidden under the status bar. */}
+      <div className="sticky top-0 z-40"
+        style={{ background: "rgba(10,14,12,0.88)", backdropFilter: "blur(16px)", paddingTop: "env(safe-area-inset-top, 0px)" }}>
+        <div className="rink-boards" aria-hidden />
+        <div className="px-4 pt-3 pb-3">
+          <SportSelector />
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {sport === "hockey" ? (
+          /* The page is laid out as a rink: boards above, then the sheet, cut by
+             a blue line, centre ice (red line + faceoff circle), a second blue
+             line, and boards again at the foot. Everything that was already on
+             the home page still lives inside the sheet. */
+          <div className="rink-ice">
+
+          {/* ── Offensive zone: teams + tonight's slate ────────────────── */}
           <div className="px-4 py-4 flex flex-col gap-6">
-            {/* Live Games */}
-            {liveGames.length > 0 && (
-              <section>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <h2 className="text-white text-sm font-bold uppercase tracking-wider">{t("home.liveNow")}</h2>
-                </div>
-                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
-                  {liveGames.map((g) => (
-                    <LiveGameCard key={g.id} game={g} onOpenSheet={() => openGameSheet(g.id)} accent={accent} />
-                  ))}
-                </div>
-              </section>
-            )}
+            {/* All 32 teams — jerseys scrolling right → left, 6 at a time */}
+            <TeamCarousel />
 
             {/* Upcoming Games */}
             <section>
@@ -1352,23 +345,78 @@ export function HockeyLanding() {
               )}
             </section>
 
-            {/* Game calendar — open the full-season schedule */}
-            <LazySection minHeight={64}>
+            {/* Game calendar — a board ad panel, not a frosted tile: it is
+                navigation, and must not read as one more game card. Full-bleed
+                (-mx-4 + the matching width) so it closes the offensive zone. */}
+            <LazySection minHeight={72}>
               <button
                 onClick={() => navigate("/schedule")}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl icy-tile active:scale-[0.99] transition-transform"
+                className="rink-signboard -mx-4"
+                style={{ width: "calc(100% + 2rem)" }}
               >
-                <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: `${accent}1a`, border: `1px solid ${accent}40`, color: accent }}
-                >
+                <span className="rink-signboard-icon">
                   <CalendarDays size={18} />
-                </div>
-                <span className="flex-1 text-left text-white text-sm font-bold">{t("home.schedule")}</span>
-                <ChevronRight size={18} className="text-[#4a6068] flex-shrink-0" />
+                </span>
+                <span className="rink-signboard-text">
+                  <span className="rink-signboard-kicker">{t("schedule.subtitle")}</span>
+                  <span className="rink-signboard-label">{t("home.schedule")}</span>
+                </span>
+                <span className="rink-signboard-cta">
+                  {t("home.scheduleCta")}
+                  <ChevronRight size={13} />
+                </span>
               </button>
             </LazySection>
+          </div>
 
+          <div className="rink-line rink-line--blue" aria-hidden />
+
+          {/* ── Centre ice: whoever is playing right now ───────────────── */}
+          {/* The red line and the faceoff circle are decoration behind the
+              cards; when nothing is live the circle stays empty, with just the
+              faceoff dot in it. */}
+          <section className="relative px-4 py-12">
+            <div className="rink-line rink-line--red absolute inset-x-0 top-1/2 -translate-y-1/2" aria-hidden />
+            <div className="rink-faceoff" aria-hidden />
+
+            <div className="relative z-10">
+              <div className="flex items-center justify-center gap-2 mb-4">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                <h2 className="text-white text-sm font-bold uppercase tracking-wider">{t("home.liveNow")}</h2>
+              </div>
+
+              {liveGames.length > 0 ? (
+                /* Same right → left marquee as the jersey carousel: no
+                   scrollbar, pauses on hover. Cards are 280px + a 12px gutter,
+                   scrolled at ~34px/s, with a floor so a single game doesn't
+                   whip past. */
+                <div
+                  className="ice-marquee -mx-4"
+                  style={
+                    {
+                      "--ice-duration": `${Math.max(18, Math.round((liveGames.length * 292) / 34))}s`,
+                    } as React.CSSProperties
+                  }
+                >
+                  <div className="ice-marquee-track">
+                    {[...liveGames, ...liveGames].map((g, i) => (
+                      <LiveGameCard key={`${g.id}-${i}`} game={g} onOpenSheet={() => openGameSheet(g.id)} accent={accent} />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 py-14">
+                  <span className="rink-faceoff-dot" />
+                  <p className="text-[#7f97a3] text-xs">{t("home.noLiveGames")}</p>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <div className="rink-line rink-line--blue" aria-hidden />
+
+          {/* ── Defensive zone: the model's picks ──────────────────────── */}
+          <div className="px-4 py-4 flex flex-col gap-6">
             {/* Value Bets (EV) — Pro only */}
             <LazySection minHeight={180}>
               <EvSection isPro={isPro} items={evItems} isLoading={loading} accent={accent} />
@@ -1386,6 +434,10 @@ export function HockeyLanding() {
                 locked={!isPro}
               />
             </LazySection>
+          </div>
+
+          {/* Foot of the page: the boards close the rink */}
+          <div className="rink-boards rink-boards--bottom" aria-hidden />
           </div>
         ) : (
           /* Tennis */

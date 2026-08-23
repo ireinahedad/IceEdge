@@ -607,25 +607,9 @@ export const TENNIS_MARKET_DEFINITIONS: TennisMarketDefinition[] = [
   },
 ];
 
-export const TENNIS_CATEGORY_LABELS: Record<TennisMarketDefinition["category"], string> = {
-  match: "Match Result",
-  set: "Set Betting",
-  game: "Game Betting",
-  player: "Player Props",
-  special: "Specials",
-};
-
-export const TENNIS_CATEGORY_ICONS: Record<TennisMarketDefinition["category"], string> = {
-  match: "🎾",
-  set: "📋",
-  game: "🏓",
-  player: "⭐",
-  special: "✨",
-};
-
-export function getTennisMarketsByCategory(category: TennisMarketDefinition["category"]) {
-  return TENNIS_MARKET_DEFINITIONS.filter((m) => m.category === category);
-}
+// Les libellés, icônes et le filtre par catégorie côté tennis ont été supprimés
+// le 2026-08-10 : ils n'avaient plus d'appelant depuis le retrait des pages de
+// prédiction tennis. `TENNIS_MARKET_DEFINITIONS` reste utilisé ci-dessus.
 
 export const CATEGORY_LABELS: Record<MarketDefinition["category"], string> = {
   game:    "Game Lines",

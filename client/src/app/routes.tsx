@@ -8,7 +8,7 @@ import { AuthGateProvider } from "./context/AuthGateContext";
 import { LoginPage } from "./pages/LoginPage";
 
 // M1 — every other page is code-split via React.lazy so its JS (and any heavy
-// libs it pulls in: recharts, motion, ogl) only downloads when the route is
+// libs it pulls in — recharts, on ChartPage) only downloads when the route is
 // visited. Pages use named exports, hence the `.then` re-map to `default`.
 const HockeyLanding         = lazy(() => import("./pages/HockeyLanding").then(m => ({ default: m.HockeyLanding })));
 const LeaguePage            = lazy(() => import("./pages/league/LeaguePage").then(m => ({ default: m.LeaguePage })));

@@ -19,6 +19,7 @@ import {
 } from "../data/betMarkets";
 import type { BetMarketType } from "../types/bet";
 import { useI18n } from "../i18n";
+import "../components/rink-theme.css";
 // MLSection used only in PredictionSheet (per-bet click), not here
 
 type TFn = (key: string, params?: Record<string, string | number>) => string;
@@ -480,8 +481,9 @@ export function NHLPredictionsPage() {
   return (
     <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] mx-auto">
       {/* ── Header ── */}
-      <header className="px-4 pt-12 pb-3 bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
-        <div className="flex items-center gap-3 mb-3">
+      <header className="bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+        <div className="rink-boards" aria-hidden />
+        <div className="px-4 pt-3 pb-3 flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
             className="w-9 h-9 rounded-xl bg-[#131A12] border border-white/20 flex items-center justify-center flex-shrink-0"
@@ -496,6 +498,7 @@ export function NHLPredictionsPage() {
         </div>
 
         {/* Sélecteur de match — pills horizontaux */}
+        <div className="px-4 pb-3">
         {loadingGames ? (
           <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
             {[1, 2, 3].map((i) => (
@@ -524,6 +527,7 @@ export function NHLPredictionsPage() {
               </button>
             );
           })}
+        </div>
         </div>
       </header>
 

@@ -477,9 +477,10 @@ def _local_html_sources():
 # `_load_local_odds_csv()` avalait n'importe quel CSV déposé dans
 # `data/raw/odds/`, en devinant les noms de colonnes par une table d'alias. Le
 # principal candidat — le dataset ESPN/Kaggle « NHL Full Game & Betting
-# Statistics », que `data/raw/odds/build_dataset_extra.py` écrit précisément
-# dans ce dossier — a des colonnes de paris FACTICES : chaque match de 2004 à
+# Statistics » — a des colonnes de paris FACTICES : chaque match de 2004 à
 # 2018 y porte `favorite_moneyline -105`, `over_under 5.5`, `spread -1.5`.
+# Les deux scripts qui l'écrivaient dans ce dossier (`download_dataset.py`,
+# `build_dataset_extra.py`) ont été supprimés le 2026-08-10.
 #
 # Un chargeur tolérant qui absorbe en silence une source connue fausse n'est pas
 # une commodité : il fabrique des cotes constantes sur 14 saisons, donc un ROI
@@ -723,7 +724,92 @@ def _oddsapi_row(event: dict, bk: dict) -> dict | None:
     # d'ouverture, et remplir la colonne avec « le premier snapshot du jour »
     # lui donnerait une sémantique différente de celle des lignes SBRO.
     # Une colonne à moitié fausse est pire qu'une colonne absente.
+    #
+    # Ce que le CLV réclame ne passe donc PAS par cette colonne : les snapshots
+    # intermédiaires partent dans `odds_snapshots_hist.csv`, horodatés, où leur
+    # sémantique est explicite. Voir `_oddsapi_snapshot_row`.
     return row if row["home_ml_close"] and row["away_ml_close"] else None
+
+
+# ── La série temporelle historique — même correctif que côté serveur ─────────
+#
+# LE MÊME GASPILLAGE, DES DEUX CÔTÉS DU PIPELINE. `oddsLogger.service.ts`
+# appelait l'API toutes les 6 h et écrasait `*_close` à chaque passe : les
+# observations intermédiaires étaient perdues. Ici, `fetch_odds_api` visite
+# déjà ~4 snapshots par journée de match — un de reconnaissance à 15:30Z, puis
+# un juste avant chaque heure de coup d'envoi — et **ne garde que le dernier**.
+# Les autres sont téléchargés, payés, puis jetés.
+#
+# Or c'est exactement la matière du CLV : « quel prix était affiché à tel
+# instant, et où la ligne a-t-elle fini ? ». Les conserver ne coûte **aucun
+# crédit de plus** — les appels ont lieu de toute façon.
+#
+# POURQUOI UN FICHIER SÉPARÉ ET NON LES COLONNES `*_open` D'`odds.csv`. Parce
+# que la remarque ci-dessus est juste : « le prix à 15:30Z » n'est pas « la
+# cote d'ouverture » de SBRO. Les mélanger dans une même colonne fabriquerait
+# un CLV qui compare deux choses différentes selon la source de la ligne, sans
+# que rien ne le signale. Ici chaque enregistrement porte son horodatage : la
+# sémantique est dans la donnée, pas dans une convention implicite.
+#
+# Le schéma est celui de la table `odds_snapshots` (migration 031), pour que la
+# collecte live et le backfill historique produisent la même forme.
+
+SNAPSHOTS_HIST = f"{DATA_DIR}/odds_snapshots_hist.csv"
+
+SNAPSHOT_COLS = ["game_date", "home_team", "away_team", "observed_at",
+                 "commence_time", "markets", "home_ml", "away_ml", "total",
+                 "total_over", "total_under", "puck_line_home",
+                 "pl_home_price", "pl_away_price", "source"]
+
+
+def _oddsapi_snapshot_row(event: dict, bk: dict, snap_ts: str) -> dict | None:
+    """Un événement observé à un instant donné → une ligne de série temporelle."""
+    home = _oddsapi_team(event.get("home_team"))
+    away = _oddsapi_team(event.get("away_team"))
+    ct = str(event.get("commence_time") or "")
+    date = _oddsapi_game_date(ct)
+    if not home or not away or not date:
+        return None
+
+    markets = {m.get("key"): m for m in (bk.get("markets") or [])}
+
+    def price(outcomes, name):
+        for o in outcomes or []:
+            if o.get("name") == name:
+                return o.get("price"), o.get("point")
+        return None, None
+
+    row = {"game_date": date, "home_team": home, "away_team": away,
+           "observed_at": snap_ts, "commence_time": ct,
+           "markets": "+".join(sorted(markets)) or "none",
+           "source": f"oddsapi:{bk.get('key')}"}
+
+    h2h = markets.get("h2h", {}).get("outcomes")
+    row["home_ml"], _ = price(h2h, event.get("home_team"))
+    row["away_ml"], _ = price(h2h, event.get("away_team"))
+
+    tot = markets.get("totals", {}).get("outcomes")
+    o_px, o_pt = price(tot, "Over")
+    u_px, u_pt = price(tot, "Under")
+    row["total"] = o_pt if o_pt is not None else u_pt
+    row["total_over"] = o_px
+    row["total_under"] = u_px
+
+    sp = markets.get("spreads", {}).get("outcomes")
+    h_px, h_pt = price(sp, event.get("home_team"))
+    a_px, _ = price(sp, event.get("away_team"))
+    # Même règle que partout : seule la ligne standard ±1.5. Une alternative
+    # (±2.5) dans la même colonne rendrait le règlement ambigu au backtest.
+    if h_pt is not None and abs(abs(float(h_pt)) - 1.5) < 1e-9:
+        row["puck_line_home"] = float(h_pt)
+        row["pl_home_price"] = h_px
+        row["pl_away_price"] = a_px
+
+    # Une observation sans aucun prix n'apprend rien.
+    if row["home_ml"] is None and row["total"] is None \
+            and row.get("pl_home_price") is None:
+        return None
+    return row
 
 
 def fetch_odds_api(start: str, end: str, book: str | None, regions: str,
@@ -739,10 +825,19 @@ def fetch_odds_api(start: str, end: str, book: str | None, regions: str,
     propre coup d'envoi. Une soirée NHL a 2 à 4 heures de début distinctes,
     d'où ~4 appels par jour.
 
-    **Coût.** 10 crédits par marché et par région : avec h2h + spreads +
-    totals sur une région, 30 crédits par appel, soit ~120 par jour de match
-    et ~33 000 par saison. `--dry-run` chiffre avant de dépenser, `budget`
-    impose un plafond dur.
+    **Coût, recalculé le 2026-08-21 aux tarifs du fournisseur.** 10 crédits
+    par marché et par région : avec h2h + spreads + totals sur une région,
+    **30 crédits par appel**, ~4 appels par jour de match, donc ~120 crédits la
+    journée. Une saison NHL compte ~186 jours de match → **~22 000 crédits la
+    saison**, ~67 000 pour les trois saisons que SBRO ne couvre pas
+    (2023-24 → 2025-26). `--dry-run` chiffre avant de dépenser sur la plage de
+    dates demandée, `budget` impose un plafond dur.
+
+    **Ces appels servent deux fois.** Le dernier snapshot avant chaque coup
+    d'envoi alimente `odds.csv` (la clôture) ; **tous** les snapshots partent
+    dans `odds_snapshots_hist.csv`, la série temporelle du CLV. Le second
+    fichier ne coûte pas un crédit de plus — ces observations étaient
+    téléchargées, payées, puis jetées.
 
     **Le budget n'est pas une commodité.** Les crédits sont de l'argent et une
     plage de dates un peu large les consomme silencieusement. Trois barrières
@@ -760,6 +855,9 @@ def fetch_odds_api(start: str, end: str, book: str | None, regions: str,
         n = len(days) * 4
         print(f"   Estimation : {len(days)} jours × ~4 appels × "
               f"{ODDS_API_HIST_COST} crédits = ~{n * ODDS_API_HIST_COST:,} crédits")
+        print(f"   Borne haute : les jours SANS match ne coûtent qu'un appel. "
+              f"Sur une saison\n   complète, compter plutôt ~186 jours de match, "
+              f"soit ~{186 * 4 * ODDS_API_HIST_COST:,} crédits.")
         print(f"   (les jours sans match coûtent {ODDS_API_HIST_COST} au lieu "
               f"de {4 * ODDS_API_HIST_COST} — c'est une borne haute)")
         if budget:
@@ -769,6 +867,11 @@ def fetch_odds_api(start: str, end: str, book: str | None, regions: str,
         return []
 
     best: dict[str, tuple[str, dict, dict]] = {}   # id → (ts, event, bookmaker)
+    # Toutes les observations, et pas seulement la dernière : c'est la série
+    # temporelle du CLV, et elle ne coûte rien de plus (cf. le commentaire de
+    # `_oddsapi_snapshot_row`). Clé (id, horodatage) pour l'idempotence — un
+    # snapshot servi par le cache lors d'une reprise ne doit pas se dupliquer.
+    snaps: dict[tuple, dict] = {}
     n_calls = spent = 0
     stopped = None
     for day in days:
@@ -817,6 +920,9 @@ def fetch_odds_api(start: str, end: str, book: str | None, regions: str,
                 if gid not in best or snap_ts > best[gid][0]:
                     best[gid] = (snap_ts, ev, bk)
                     day_rows += 1
+                sr = _oddsapi_snapshot_row(ev, bk, snap_ts)
+                if sr is not None:
+                    snaps[(gid, snap_ts)] = sr
                 # Programme un snapshot juste avant CE coup d'envoi.
                 close_ts = (pd.Timestamp(ct) - pd.Timedelta(minutes=8)) \
                     .strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -834,10 +940,47 @@ def fetch_odds_api(start: str, end: str, book: str | None, regions: str,
 
     rows = [r for r in (_oddsapi_row(ev, bk) for _, ev, bk in best.values())
             if r is not None]
+    _write_snapshots(list(snaps.values()))
     rem = getattr(_oddsapi_get, "remaining", "?")
-    print(f"\n   The Odds API : {len(rows)} matchs, {n_calls} appels, "
-          f"{spent} crédits dépensés, restants {rem}")
+    print(f"\n   The Odds API : {len(rows)} matchs, {len(snaps)} observations, "
+          f"{n_calls} appels, {spent} crédits dépensés, restants {rem}")
     return rows
+
+
+def _write_snapshots(rows: list[dict]) -> None:
+    """Fusionne les observations dans `odds_snapshots_hist.csv`.
+
+    **Fusion et non écrasement** : une reprise après un arrêt sur budget ne doit
+    pas effacer ce que la passe précédente avait obtenu. La clé
+    (match, horodatage) porte l'idempotence, comme la clé primaire de la table
+    `odds_snapshots` côté serveur.
+    """
+    if not rows:
+        return
+    df = pd.DataFrame(rows)
+    for c in SNAPSHOT_COLS:
+        if c not in df.columns:
+            df[c] = None
+    df = df[SNAPSHOT_COLS]
+    if os.path.exists(SNAPSHOTS_HIST):
+        try:
+            old = pd.read_csv(SNAPSHOTS_HIST)
+            df = pd.concat([old, df], ignore_index=True)
+        except Exception as e:
+            print(f"   ⚠️  {SNAPSHOTS_HIST} illisible ({e}) — non fusionné, "
+                  f"l'ancien fichier est conservé sous .bak")
+            try:
+                os.replace(SNAPSHOTS_HIST, SNAPSHOTS_HIST + ".bak")
+            except OSError:
+                pass
+    df = df.drop_duplicates(subset=["game_date", "home_team", "away_team",
+                                    "observed_at"], keep="last")
+    df = df.sort_values(["game_date", "home_team", "observed_at"])
+    df.to_csv(SNAPSHOTS_HIST, index=False)
+    n_games = df.groupby(["game_date", "home_team", "away_team"]).ngroups
+    per = len(df) / n_games if n_games else 0
+    print(f"\n   📈 {SNAPSHOTS_HIST} : {len(df):,} observations sur "
+          f"{n_games:,} matchs ({per:.1f} par match)")
 
 
 def fetch_odds(from_local: bool = False, api_range: tuple | None = None,

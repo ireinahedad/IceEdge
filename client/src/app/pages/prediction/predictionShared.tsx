@@ -1,0 +1,462 @@
+/**
+ * predictionShared.tsx
+ *
+ * Extrait de PredictionPage.tsx le 2026-08-10.
+ * Découpage mécanique : le corps du code est identique à l'original,
+ * seuls les imports et les mots-clés `export` ont été ajoutés.
+ */
+
+import { useNavigate } from "react-router";
+import { useEffect, useState, createContext } from "react";
+import { nhlApiService } from "../../services/nhlApiService";
+import { useI18n } from "../../i18n";
+import type { CalcFactor } from "../../services/predictionApiService";
+
+type Subject = { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
+
+/**
+ * Prediction source shown by every BetOption on the page. Predictions are
+ * always visible; a segmented toggle at the top switches which number is shown:
+ *   "rules" → the rule-based % (default).
+ *   "ml"    → the ML model's %.
+ */
+export type RevealMode = "rules" | "ml";
+export const RevealModeCtx = createContext<RevealMode>("rules");
+/* ─── Circular gauge ─────────────────────────────── */
+function WinGauge({ pct, label, size = 140 }: { pct: number; label: string; size?: number }) {
+  const [displayed, setDisplayed] = useState(0);
+  const radius = (size - 20) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference * (1 - displayed / 100);
+
+  const color =
+    pct >= 65 ? "#4ade80" :
+    pct >= 50 ? "#86d1ea" :
+    pct >= 40 ? "#facc15" :
+    "#f87171";
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      let start = 0;
+      const step = () => {
+        start += 1;
+        setDisplayed(start);
+        if (start < pct) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [pct]);
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#1e2d32" strokeWidth={10} />
+        <circle
+          cx={size / 2} cy={size / 2} r={radius} fill="none"
+          stroke={color} strokeWidth={10}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          style={{ transition: "stroke-dashoffset 0.05s linear" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-white text-3xl font-bold">{displayed}<span className="text-xl">%</span></span>
+        <span className="text-[#bfc8cc] text-[10px] mt-0.5 text-center px-2 leading-tight">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Reason card ─────────────────────────────────── */
+function ReasonBar({ icon, label, value, maxValue, color, detail }: {
+  icon: string; label: string; value: number; maxValue: number; color: string; detail: string;
+}) {
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => setWidth((value / maxValue) * 100), 400);
+    return () => clearTimeout(t);
+  }, [value, maxValue]);
+
+  return (
+    <div className="bg-[#131A12] border border-white/20 rounded-2xl p-3.5">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">{icon}</span>
+          <span className="text-white text-xs font-medium">{label}</span>
+        </div>
+        <span className="text-xs font-bold" style={{ color }}>{detail}</span>
+      </div>
+      <div className="w-full bg-[#0A0E0C] rounded-full h-2">
+        <div
+          className="h-2 rounded-full transition-all duration-700 ease-out"
+          style={{ width: `${width}%`, backgroundColor: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ─── Calculated Breakdown (waterfall) ─────────── */
+
+function CalculatedBreakdown({ basePct, factors, finalPct, accent }: {
+  basePct: number;
+  factors: CalcFactor[];
+  finalPct: number;
+  accent: string;
+}) {
+  const { t } = useI18n();
+  const [revealed, setRevealed] = useState(0);
+
+  useEffect(() => {
+    let i = 0;
+    const id = setInterval(() => {
+      i++;
+      setRevealed(i);
+      if (i >= factors.length) clearInterval(id);
+    }, 220);
+    return () => clearInterval(id);
+  }, [factors.length]);
+
+  let running = basePct;
+
+  return (
+    <div className="bg-[#131A12] border border-white/20 rounded-2xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/20 flex items-center justify-between">
+        <span className="text-white text-sm font-semibold">{t("pred.calcPredictions")}</span>
+        <span className="text-[10px] text-[#bfc8cc] bg-[#0A0E0C] px-2 py-0.5 rounded-full">{t("pred.base", { n: basePct })}</span>
+      </div>
+      <div className="divide-y divide-[#1e2d32]">
+        {factors.map((f, i) => {
+          running += f.delta;
+          const isPos = f.delta >= 0;
+          const color = isPos ? "#4ade80" : "#f87171";
+          const show = i < revealed;
+          return (
+            <div key={i} className="flex items-center gap-3 px-4 py-3 transition-all duration-300"
+              style={{ opacity: show ? 1 : 0, transform: show ? "translateY(0)" : "translateY(6px)" }}>
+              <span className="text-base w-6 text-center flex-shrink-0">{f.icon}</span>
+              <span className="text-[#bfc8cc] text-xs flex-1 leading-tight">{f.label}</span>
+              <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                <span className="text-xs font-bold" style={{ color }}>{isPos ? "+" : ""}{f.delta}%</span>
+                <span className="text-[9px] text-[#bfc8cc]">{Math.round(running)}%</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="px-4 py-4 flex items-center justify-between border-t-2" style={{ borderColor: accent }}>
+        <div>
+          <p className="text-[#bfc8cc] text-[10px] uppercase tracking-widest">{t("pred.aiPrediction")}</p>
+          <p className="text-white text-2xl font-black mt-0.5">{finalPct}<span className="text-sm font-medium text-[#bfc8cc]">%</span></p>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium"
+          style={{ color: accent, borderColor: `${accent}40`, backgroundColor: `${accent}15` }}>
+          <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: accent }} />
+          {t("pred.liveModel")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Confidence badge ──────────────────────────── */
+function ConfidenceBadge({ pct }: { pct: number }) {
+  const { t } = useI18n();
+  const label = pct >= 70 ? t("pred.confHigh") : pct >= 55 ? t("pred.confModerate") : pct >= 45 ? t("pred.confEven") : t("pred.confUnderdog");
+  const cls = pct >= 70 ? "bg-green-500/20 text-green-400 border-green-500/30" :
+    pct >= 55 ? "bg-[#86d1ea]/20 text-[#86d1ea] border-[#86d1ea]/30" :
+    pct >= 45 ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" :
+    "bg-red-500/20 text-red-400 border-red-500/30";
+  return (
+    <span className={`border rounded-full px-3 py-1 text-xs font-medium ${cls}`}>{label}</span>
+  );
+}
+
+/* ─── Form dots ────────────────────────────────── */
+function FormDots({ results }: { results: ("W" | "L" | "OT")[] }) {
+  return (
+    <div className="flex gap-1.5 flex-wrap">
+      {results.map((r, i) => (
+        <div key={i} className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold ${
+          r === "W" ? "bg-green-500/20 text-green-400 border border-green-500/30" :
+          r === "OT" ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" :
+          "bg-red-500/20 text-red-400 border border-red-500/30"
+        }`}>{r}</div>
+      ))}
+    </div>
+  );
+}
+
+
+
+
+/* ─── Recent form card (reusable) ─────────────── */
+function FormLegend() {
+  const { t } = useI18n();
+  return (
+    <div className="flex items-center gap-4 mt-3">
+      <div className="flex items-center gap-1.5">
+        <div className="w-3 h-3 rounded-full bg-green-500/40 border border-green-500/60" />
+        <span className="text-[#bfc8cc] text-[10px]">{t("pred.win")}</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <div className="w-3 h-3 rounded-full bg-yellow-500/40 border border-yellow-500/60" />
+        <span className="text-[#bfc8cc] text-[10px]">OT</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <div className="w-3 h-3 rounded-full bg-red-500/40 border border-red-500/60" />
+        <span className="text-[#bfc8cc] text-[10px]">{t("pred.loss")}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Single-subject recent form card (used for player & team). */
+export function RecentFormCard({ title, results }: { title?: string; results: ("W" | "L" | "OT")[] }) {
+  const { t } = useI18n();
+  return (
+    <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
+      <p className="text-white text-sm font-medium mb-3">{title ?? t("pred.recentForm")}</p>
+      <FormDots results={results} />
+      <FormLegend />
+    </div>
+  );
+}
+
+/** Head-to-head — the two teams' most recent meetings this season, with scores. */
+interface H2HMeeting { date: string; homeAbbr: string; awayAbbr: string; homeScore: number; awayScore: number; }
+
+export function HeadToHead({ home, away }: {
+  home: { abbr: string; logo: string };
+  away: { abbr: string; logo: string };
+}) {
+  const { t, lang } = useI18n();
+  const locale = lang === "fr" ? "fr-CA" : "en-US";
+  const [meetings, setMeetings] = useState<H2HMeeting[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setMeetings(null);
+    (async () => {
+      try {
+        const isoRe = /^\d{4}-\d{2}-\d{2}$/;
+        const anchor = await nhlApiService.getScheduleAnchor().catch(() => null);
+        const end = anchor?.today && isoRe.test(anchor.today)
+          ? anchor.today
+          : new Date().toISOString().slice(0, 10);
+        const start = anchor?.seasonStart && isoRe.test(anchor.seasonStart)
+          ? anchor.seasonStart
+          : `${Number(end.slice(0, 4)) - 1}-09-01`;
+
+        const games = await nhlApiService.getGamesRange(start, end);
+        const A = home.abbr.toUpperCase();
+        const B = away.abbr.toUpperCase();
+        const found = games
+          .filter((g) => g.status === "final")
+          .filter((g) => {
+            const h = g.homeTeam.abbreviation.toUpperCase();
+            const a = g.awayTeam.abbreviation.toUpperCase();
+            return (h === A && a === B) || (h === B && a === A);
+          })
+          .map((g) => ({
+            date: g.gameDate,
+            homeAbbr: g.homeTeam.abbreviation.toUpperCase(),
+            awayAbbr: g.awayTeam.abbreviation.toUpperCase(),
+            homeScore: g.homeTeam.score ?? 0,
+            awayScore: g.awayTeam.score ?? 0,
+          }))
+          .sort((x, y) => y.date.localeCompare(x.date))
+          .slice(0, 5);
+        if (alive) setMeetings(found);
+      } catch {
+        if (alive) setMeetings([]);
+      }
+    })();
+    return () => { alive = false; };
+  }, [home.abbr, away.abbr]);
+
+  return (
+    <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
+      <p className="text-white text-sm font-medium mb-3">{t("pred.h2hTitle")}</p>
+      {meetings === null ? (
+        <div className="flex flex-col gap-2">
+          {[1, 2, 3].map((i) => <div key={i} className="h-9 bg-[#0A0E0C] rounded-lg animate-pulse" />)}
+        </div>
+      ) : meetings.length === 0 ? (
+        <p className="text-[#8a9ea6] text-xs">{t("pred.h2hNone")}</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {meetings.map((m, i) => {
+            const homeWon = m.homeScore > m.awayScore;
+            return (
+              <div key={i} className="flex items-center gap-3 text-xs bg-[#0A0E0C] rounded-lg px-3 py-2">
+                <span className="text-[#8a9ea6] w-14 flex-shrink-0 tabular-nums">
+                  {new Date(`${m.date}T00:00:00`).toLocaleDateString(locale, { day: "numeric", month: "short" })}
+                </span>
+                <div className="flex-1 flex items-center justify-center gap-2">
+                  <span className={`font-bold tabular-nums ${!homeWon ? "text-white" : "text-[#8a9ea6]"}`}>{m.awayAbbr}</span>
+                  <span className="text-white font-black tabular-nums">{m.awayScore}</span>
+                  <span className="text-[#4a6070]">–</span>
+                  <span className="text-white font-black tabular-nums">{m.homeScore}</span>
+                  <span className={`font-bold tabular-nums ${homeWon ? "text-white" : "text-[#8a9ea6]"}`}>{m.homeAbbr}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* --- Recent-form generator --- */
+/** Deterministic-ish recent form: `count` results biased by win probability `prob` (0..1). */
+export function generateForm(count: number, prob: number): ("W" | "L" | "OT")[] {
+  const p = Math.min(0.95, Math.max(0.05, prob));
+  const out: ("W" | "L" | "OT")[] = [];
+  for (let i = 0; i < count; i++) {
+    const r = Math.random();
+    if (r < p)                 out.push("W");
+    else if (r < p + 0.12)     out.push("OT");
+    else                       out.push("L");
+  }
+  return out;
+}
+
+/* --- Last-N games view model --- */
+export interface NGamesView {
+  teamName: string; teamAbbr: string; logo: string;
+  wins: number; losses: number; otLosses: number;
+  goalsFor: number; goalsAgainst: number;
+  goalsForPerGame: number; goalsAgainstPerGame: number;
+  ppPct: number; pkPct: number;
+  streak: string; last10: string; winRateN: number;
+}
+
+/* --- Loading skeleton --- */
+export function LoadingSkeleton() {
+  return (
+    <div className="flex flex-col gap-3">
+      {[1,2,3,4].map(i => <div key={i} className="h-20 bg-[#131A12] rounded-2xl animate-pulse" />)}
+    </div>
+  );
+}
+
+
+/* ─── Shared layout ────────────────────────────── */
+function BetRec({ rec, note, onAddToSlip }: { rec: string; note: string; onAddToSlip?: () => void }) {
+  const navigate = useNavigate();
+  const { t } = useI18n();
+  return (
+    <div className="bg-gradient-to-br from-[#86d1ea]/10 to-[#0f1416] border border-[#86d1ea]/30 rounded-2xl p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-lg">💡</span>
+        <p className="text-white text-sm font-medium">{t("pred.recommendedBet")}</p>
+        <span className="ml-auto bg-[#86d1ea]/20 text-[#86d1ea] text-[10px] px-2 py-0.5 rounded-full font-medium">{rec}</span>
+      </div>
+      <p className="text-[#bfc8cc] text-xs leading-relaxed">{note}</p>
+      <button
+        onClick={() => onAddToSlip ? onAddToSlip() : navigate("/bet")}
+        className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] bg-[#86d1ea] text-[#0A0E0C]"
+      >
+        {t("pred.goToBuilder")}
+      </button>
+    </div>
+  );
+}
+
+export function PredictionLayout({
+  title, subtitle, logo, winPct, winLabel, calcFactors, basePct, accent, recentForm, betRec, betNote, extraStats,
+}: {
+  title: string; subtitle: string; logo: string; winPct: number; winLabel: string;
+  calcFactors?: CalcFactor[]; basePct?: number; accent?: string;
+  recentForm: ("W" | "L" | "OT")[]; betRec: string; betNote: string;
+  extraStats: { label: string; value: string }[];
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Hero card */}
+      <div className="bg-[#131A12] border border-white/20 rounded-2xl p-5">
+        <div className="flex items-center gap-3 mb-5">
+          <img src={logo} alt={title} className="w-12 h-12 object-contain" />
+          <div>
+            <p className="text-white font-bold">{title}</p>
+            <p className="text-[#bfc8cc] text-xs">{subtitle}</p>
+          </div>
+          <div className="ml-auto">
+            <ConfidenceBadge pct={winPct} />
+          </div>
+        </div>
+
+        {/* Gauge */}
+        <div className="flex justify-center">
+          <div className="relative flex items-center justify-center" style={{ width: 160, height: 160 }}>
+            <WinGauge pct={winPct} label={winLabel} size={160} />
+          </div>
+        </div>
+
+        {/* Extra stats row */}
+        <div className="grid grid-cols-4 gap-2 mt-4">
+          {extraStats.map((s, i) => (
+            <div key={i} className="bg-[#0A0E0C] rounded-xl p-2 text-center">
+              <p className="text-white text-xs font-bold">{s.value}</p>
+              <p className="text-[#bfc8cc] text-[9px]">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Calculated breakdown waterfall */}
+      {calcFactors && basePct !== undefined && accent && (
+        <CalculatedBreakdown
+          basePct={basePct}
+          factors={calcFactors}
+          finalPct={winPct}
+          accent={accent}
+        />
+      )}
+
+      {/* Recent form */}
+      <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
+        <p className="text-white text-sm font-medium mb-3">{t("pred.recentForm")}</p>
+        <FormDots results={recentForm} />
+        <div className="flex items-center gap-4 mt-3">
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-green-500/40 border border-green-500/60" />
+            <span className="text-[#bfc8cc] text-[10px]">{t("pred.win")}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-yellow-500/40 border border-yellow-500/60" />
+            <span className="text-[#bfc8cc] text-[10px]">OT</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-red-500/40 border border-red-500/60" />
+            <span className="text-[#bfc8cc] text-[10px]">{t("pred.loss")}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Bet recommendation */}
+      <BetRec rec={betRec} note={betNote} />
+    </div>
+  );
+}
+
+
+/* ─── Main PredictionPage ──────────────────────────── */
+
+export function NotFound() {
+  const navigate = useNavigate();
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
+      <p className="text-4xl mb-4">🏒</p>
+      <p className="text-white font-bold text-lg mb-2">{t("pred.notFound")}</p>
+      <p className="text-[#8a9ea6] text-sm mb-6">{t("pred.notExist")}</p>
+      <button onClick={() => navigate(-1)} className="px-6 py-2 rounded-xl bg-[#86d1ea]/10 border border-[#86d1ea]/30 text-[#86d1ea] text-sm">{t("pred.goBack")}</button>
+    </div>
+  );
+}

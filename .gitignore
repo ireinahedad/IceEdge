@@ -44,3 +44,9 @@ ml/data/raw/**/*.zip
 ml/data/raw/**/*.zip.zip
 ml/data/raw/**/*.xlsx
 ml/data/raw/**/*.parquet
+
+# Ensemble bootstrap du modèle de score (S1) : 20 membres, 8.9 Mo, régénérables
+# par `python train_score.py --ensemble 20`. σ n'est consommée par aucun code de
+# mise — c'est un diagnostic hors ligne. Déjà exclu de l'image Docker
+# (ml/.dockerignore) ; sorti du dépôt le 2026-08-10.
+ml/models/score_ensemble/

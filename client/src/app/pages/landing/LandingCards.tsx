@@ -1,0 +1,473 @@
+/**
+ * LandingCards.tsx
+ *
+ * Extrait de HockeyLanding.tsx le 2026-08-10.
+ * Découpage mécanique : le corps du code est identique à l'original,
+ * seuls les imports et les mots-clés `export` ont été ajoutés.
+ */
+
+import { useNavigate } from "react-router";
+import { IceedgeLogo } from "../../components/brand/IceedgeLogo";
+import type { BetLeg } from "../../types/bet";
+import { useSport } from "../../context/SportContext";
+import { useBet } from "../../context/BetContext";
+import { useI18n } from "../../i18n";
+import { openBet } from "../../services/bookmakers";
+import { useBookmaker } from "../../context/BookmakerContext";
+import { DisplayGame, TennisMatch, calcEdge } from "./landingTypes";
+
+
+// ─── Brand header (logo always returns home) ───────────────────────────────────
+
+/**
+ * Centred wordmark. The sport sub-label was dropped on 2026-08-21 at the user's
+ * request — it was already empty for hockey (`SPORT_THEMES.hockey.sportLabel`),
+ * so removing it only changes the tennis header, which is retired.
+ */
+export function SportSelector() {
+  const navigate = useNavigate();
+  return (
+    <button
+      onClick={() => navigate("/")}
+      className="w-full flex items-center justify-center gap-3 select-none"
+      aria-label="Accueil ArakIce"
+    >
+      {/* ARAKICE logo mark — always returns to the home page */}
+      <IceedgeLogo size={44} wordmark={false} />
+      <span
+        className="uppercase font-bold text-white leading-none"
+        style={{
+          fontFamily: "'Oswald', 'Arial Narrow', sans-serif",
+          fontSize: 27,
+          letterSpacing: "0.2em",
+        }}
+      >
+        ARAKICE
+      </span>
+    </button>
+  );
+}
+
+// ─── Odds pill ─────────────────────────────────────────────────────────────────
+
+function OddsPill({ decimal, onBet }: { decimal: number; onBet: () => void }) {
+  const { bookmaker } = useBookmaker();
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onBet(); }}
+      className="flex items-center gap-1 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5 active:bg-green-500/20 transition-colors"
+    >
+      <span className="text-[9px] text-[#bfc8cc]">{bookmaker.label}</span>
+      <span className="text-[10px] font-bold text-green-400">{decimal.toFixed(2)}</span>
+    </button>
+  );
+}
+
+// ─── Edge badge ────────────────────────────────────────────────────────────────
+
+function EdgeBadge({ edge }: { edge: number }) {
+  const { t } = useI18n();
+  if (edge < 8) return null;
+  return (
+    <span className="text-[9px] px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/25 text-green-400 font-medium flex-shrink-0">
+      {t("home.edge", { edge })}
+    </span>
+  );
+}
+
+// ─── Hockey live game card ─────────────────────────────────────────────────────
+
+export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: () => void }) {
+  const { theme } = useSport();
+  const accent = theme.accent;
+  const { addLeg, hasLeg } = useBet();
+  const { t } = useI18n();
+  const navigate = useNavigate();
+
+  const legId = `${game.id}-moneyline-${game.team1.id}`;
+  const isAdded = hasLeg(legId);
+
+  const edge = game.bet365Home ? calcEdge(game.team1.winPct, game.bet365Home) : 0;
+
+  function quickAdd(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (isAdded) return;
+    const leg: BetLeg = {
+      id: legId,
+      marketType: "moneyline",
+      marketLabel: "Moneyline",
+      subjectType: "game",
+      subjectId: game.id,
+      subjectName: `${game.team1.abbr} vs ${game.team2.abbr}`,
+      subjectLogo: game.team1.logo,
+      selection: `${game.team1.name} to win`,
+      selectionShort: `${game.team1.abbr} ML`,
+      probability: game.team1.winPct,
+      gameInfo: `${game.team1.abbr} vs ${game.team2.abbr} · Live`,
+      addedAt: new Date().toISOString(),
+    };
+    addLeg(leg);
+  }
+
+  return (
+    <div
+      onClick={() => navigate(`/stats/prediction/game/${game.id}`)}
+      className="min-w-[280px] icy-card rounded-2xl p-4 flex-shrink-0 cursor-pointer active:scale-[0.99] transition-transform"
+    >
+
+      {/* Header: live badge + edge + buttons */}
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <span className="text-[10px] text-red-400 font-medium uppercase tracking-wide flex items-center gap-1 flex-shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />{game.period}
+        </span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <EdgeBadge edge={edge} />
+          <button
+            onClick={quickAdd}
+            className={`text-[10px] px-2.5 py-0.5 rounded-full border font-medium flex-shrink-0 transition-colors ${
+              isAdded
+                ? "bg-green-500/15 border-green-500/30 text-green-400"
+                : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
+            }`}
+          >
+            {isAdded ? t("home.added") : t("home.add")}
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onOpenSheet(); }}
+            className="text-[10px] text-[#bfc8cc] border border-white/20 px-2 py-0.5 rounded-full flex-shrink-0 active:bg-white/5"
+          >
+            {t("home.more")}
+          </button>
+        </div>
+      </div>
+
+      {/* Teams + score */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-col items-center gap-1">
+          <img src={game.team1.logo} alt={game.team1.abbr} className="w-8 h-8 object-contain" />
+          <span className="text-white text-xs font-bold">{game.team1.abbr}</span>
+        </div>
+        <div className="flex flex-col items-center gap-0.5">
+          <div className="flex items-center gap-2.5">
+            <span className="text-white text-3xl font-bold tabular-nums">{game.team1.score}</span>
+            <span className="text-[#bfc8cc] text-lg">–</span>
+            <span className="text-white text-3xl font-bold tabular-nums">{game.team2.score}</span>
+          </div>
+          {game.overUnder && <span className="text-[#bfc8cc] text-[9px]">O/U {game.overUnder}</span>}
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <img src={game.team2.logo} alt={game.team2.abbr} className="w-8 h-8 object-contain" />
+          <span className="text-white text-xs font-bold">{game.team2.abbr}</span>
+        </div>
+      </div>
+
+      {/* Model probability bar */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] font-bold w-7 flex-shrink-0" style={{ color: accent }}>{game.team1.winPct}%</span>
+        <div className="flex-1 bg-[#0A0E0C] rounded-full h-2 overflow-hidden flex">
+          <div className="h-full rounded-l-full transition-all duration-500" style={{ width: `${game.team1.winPct}%`, backgroundColor: accent }} />
+          <div className="h-full bg-[#1B2419] flex-1" />
+        </div>
+        <span className="text-[#bfc8cc] text-[10px] font-bold w-7 text-right flex-shrink-0">{game.team2.winPct}%</span>
+      </div>
+
+      {/* bet365 odds row — only shown when API has real odds */}
+      {game.bet365Home && game.bet365Away ? (
+        <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
+          <OddsPill decimal={game.bet365Home} onBet={() => openBet("hockey")} />
+          <span className="text-[9px] text-[#bfc8cc]">Moneyline</span>
+          <OddsPill decimal={game.bet365Away} onBet={() => openBet("hockey")} />
+          {/* Moneyline is a universal betting term, kept as-is */}
+        </div>
+      ) : (
+        /* No API key — show a subtle link to bet365 instead */
+        <div className="flex items-center justify-end mt-1">
+          <button
+            onClick={(e) => { e.stopPropagation(); openBet("hockey"); }}
+            className="text-[9px] text-green-400 border border-green-500/20 bg-green-500/8 px-2 py-1 rounded-full"
+          >
+            {t("home.betOn")}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Hockey upcoming game row ──────────────────────────────────────────────────
+
+export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: () => void }) {
+  const { theme } = useSport();
+  const accent = theme.accent;
+  const { addLeg, hasLeg } = useBet();
+  const { t } = useI18n();
+  const navigate = useNavigate();
+
+  const legId = `${game.id}-moneyline-${game.team1.id}`;
+  const isAdded = hasLeg(legId);
+
+  const edge = game.bet365Home ? calcEdge(game.team1.winPct, game.bet365Home) : 0;
+
+  function quickAdd(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (isAdded) return;
+    const leg: BetLeg = {
+      id: legId,
+      marketType: "moneyline",
+      marketLabel: "Moneyline",
+      subjectType: "game",
+      subjectId: game.id,
+      subjectName: `${game.team1.abbr} vs ${game.team2.abbr}`,
+      subjectLogo: game.team1.logo,
+      selection: `${game.team1.name} to win`,
+      selectionShort: `${game.team1.abbr} ML`,
+      probability: game.team1.winPct,
+      gameInfo: `${game.team1.abbr} vs ${game.team2.abbr} · ${game.time}`,
+      addedAt: new Date().toISOString(),
+    };
+    addLeg(leg);
+  }
+
+  return (
+    <div
+      onClick={() => navigate(`/stats/prediction/game/${game.id}`)}
+      className="icy-card rounded-2xl p-3.5 cursor-pointer active:scale-[0.99] transition-transform"
+    >
+      <div className="flex items-center gap-3">
+
+        {/* Time column */}
+        <div className="flex flex-col items-center min-w-[38px] flex-shrink-0">
+          <span className="text-xs font-medium" style={{ color: accent }}>{game.time}</span>
+          <span className="text-[#bfc8cc] text-[9px]">ET</span>
+        </div>
+
+        {/* Teams column */}
+        <div className="flex-1 min-w-0">
+          {/* Team 1 */}
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <img src={game.team1.logo} alt={game.team1.abbr} className="w-5 h-5 object-contain flex-shrink-0" />
+            <span className="text-white text-xs font-medium flex-1 truncate">{game.team1.abbr}</span>
+            <span className="text-[10px] font-bold tabular-nums" style={{ color: accent }}>{game.team1.winPct}%</span>
+            {game.bet365Home && (
+              <OddsPill decimal={game.bet365Home} onBet={() => openBet("hockey")} />
+            )}
+          </div>
+          {/* Team 2 */}
+          <div className="flex items-center gap-1.5">
+            <img src={game.team2.logo} alt={game.team2.abbr} className="w-5 h-5 object-contain flex-shrink-0" />
+            <span className="text-white text-xs font-medium flex-1 truncate">{game.team2.abbr}</span>
+            <span className="text-[#bfc8cc] text-[10px] font-bold tabular-nums">{game.team2.winPct}%</span>
+            {game.bet365Away && (
+              <OddsPill decimal={game.bet365Away} onBet={() => openBet("hockey")} />
+            )}
+          </div>
+        </div>
+
+        {/* Actions column */}
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+          <div className="flex items-center gap-1.5">
+            {edge >= 8 && <EdgeBadge edge={edge} />}
+            <button
+              onClick={quickAdd}
+              className={`w-8 h-8 rounded-xl border flex items-center justify-center text-sm font-bold transition-colors ${
+                isAdded
+                  ? "bg-green-500/15 border-green-500/30 text-green-400"
+                  : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
+              }`}
+              title={isAdded ? t("home.addedSlip") : t("home.addToSlip", { name: game.team1.abbr })}
+            >
+              {isAdded ? "✓" : "+"}
+            </button>
+          </div>
+          {/* O/U info */}
+          {game.overUnder && (
+            <div className="text-right">
+              <span className="text-[9px] text-[#bfc8cc]">O/U {game.overUnder}</span>
+              {game.totalPct && <span className="text-[9px] text-[#90C9F0] ml-1">{game.totalPct}%</span>}
+            </div>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); onOpenSheet(); }}
+            className="text-[9px] text-[#bfc8cc] underline underline-offset-2"
+          >
+            {t("home.moreBets")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tennis live card ─────────────────────────────────────────────────────────
+
+export function TennisLiveCard({ match, accent }: { match: TennisMatch; accent: string }) {
+  const navigate = useNavigate();
+  const { addLeg, hasLeg } = useBet();
+  const { t } = useI18n();
+  const legId = `tennis-${match.id}-p1`;
+  const isAdded = hasLeg(legId);
+
+  const edge = match.player1.bet365Odds ? calcEdge(match.player1.winPct, match.player1.bet365Odds) : 0;
+
+  function quickAdd(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (isAdded) return;
+    addLeg({
+      id: legId,
+      marketType: "moneyline",
+      marketLabel: "Match Winner",
+      subjectType: "player",
+      subjectId: match.id,
+      subjectName: match.player1.name,
+      subjectLogo: match.player1.country,
+      selection: `${match.player1.name} to win`,
+      selectionShort: `${match.player1.name.split(" ").pop()} W`,
+      probability: match.player1.winPct,
+      gameInfo: `${match.player1.name} vs ${match.player2.name} · ${match.tournament}`,
+      addedAt: new Date().toISOString(),
+    });
+  }
+
+  return (
+    <div
+      className="min-w-[280px] icy-card rounded-2xl p-4 flex-shrink-0 cursor-pointer active:scale-[0.98] transition-transform"
+      onClick={() => navigate(`/predictions/tennis?id=${match.id}`)}
+    >
+
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <span className="text-[10px] text-red-400 font-medium uppercase tracking-wide flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />{match.liveSet}
+        </span>
+        <div className="flex items-center gap-1.5">
+          <EdgeBadge edge={edge} />
+          <span className="text-[10px] px-2 py-0.5 rounded-full border" style={{ color: accent, borderColor: `${accent}4d`, backgroundColor: `${accent}1a` }}>
+            {match.surfaceIcon} {match.surface}
+          </span>
+        </div>
+      </div>
+
+      {/* Players + sets */}
+      <div className="flex flex-col gap-2 mb-3">
+        {[match.player1, match.player2].map((p, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="text-base w-6 flex-shrink-0">{p.country}</span>
+            <span className="text-white text-xs flex-1 font-medium">{p.name}</span>
+            {p.serving && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: accent }} />}
+            <div className="flex gap-1">
+              {(p.sets ?? []).map((s, j) => (
+                <span key={j} className="text-xs font-bold w-5 text-center rounded tabular-nums"
+                  style={{ color: j === (p.sets!.length - 1) ? accent : "#bfc8cc" }}>{s}</span>
+              ))}
+            </div>
+            {p.bet365Odds && (
+              <OddsPill decimal={p.bet365Odds} onBet={() => openBet("tennis")} />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Probability bar */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] font-bold w-7" style={{ color: accent }}>{match.player1.winPct}%</span>
+        <div className="flex-1 bg-[#0A0E0C] rounded-full h-2 overflow-hidden flex">
+          <div className="h-full rounded-l-full" style={{ width: `${match.player1.winPct}%`, backgroundColor: accent }} />
+          <div className="h-full bg-[#1B2419] flex-1" />
+        </div>
+        <span className="text-[#bfc8cc] text-[10px] font-bold w-7 text-right">{match.player2.winPct}%</span>
+      </div>
+
+      {/* Quick add — stops propagation so card click doesn't also fire */}
+      <button
+        onClick={(e) => { e.stopPropagation(); quickAdd(e); }}
+        className={`w-full mt-1 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+          isAdded
+            ? "bg-green-500/15 border border-green-500/30 text-green-400"
+            : "bg-[#90C9F0]/10 border border-[#90C9F0]/25 text-[#90C9F0] active:bg-[#90C9F0]/20"
+        }`}
+      >
+        {isAdded ? t("home.addedSlip") : t("home.addToSlip", { name: match.player1.name.split(" ").pop() ?? "" })}
+      </button>
+    </div>
+  );
+}
+
+// ─── Tennis upcoming row ──────────────────────────────────────────────────────
+
+export function TennisMatchRow({ match, accent }: { match: TennisMatch; accent: string }) {
+  const navigate = useNavigate();
+  const { addLeg, hasLeg } = useBet();
+  const legId = `tennis-${match.id}-p1`;
+  const isAdded = hasLeg(legId);
+
+  const edge = match.player1.bet365Odds ? calcEdge(match.player1.winPct, match.player1.bet365Odds) : 0;
+
+  function quickAdd(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (isAdded) return;
+    addLeg({
+      id: legId,
+      marketType: "moneyline",
+      marketLabel: "Match Winner",
+      subjectType: "player",
+      subjectId: match.id,
+      subjectName: match.player1.name,
+      subjectLogo: match.player1.country,
+      selection: `${match.player1.name} to win`,
+      selectionShort: `${match.player1.name.split(" ").pop()} W`,
+      probability: match.player1.winPct,
+      gameInfo: `${match.player1.name} vs ${match.player2.name} · ${match.tournament}`,
+      addedAt: new Date().toISOString(),
+    });
+  }
+
+  return (
+    <div
+      className="icy-card rounded-2xl p-3.5 cursor-pointer active:scale-[0.98] transition-transform"
+      onClick={() => navigate(`/predictions/tennis?id=${match.id}`)}
+    >
+      <div className="flex items-center gap-3">
+
+        {/* Time */}
+        <div className="flex flex-col items-center min-w-[38px] flex-shrink-0">
+          <span className="text-xs font-medium" style={{ color: accent }}>{match.time}</span>
+          <span className="text-[#bfc8cc] text-[9px]">ET</span>
+        </div>
+
+        {/* Players */}
+        <div className="flex-1 min-w-0">
+          {[match.player1, match.player2].map((p, i) => (
+            <div key={i} className={`flex items-center gap-1.5 ${i === 0 ? "mb-1.5" : ""}`}>
+              <span className="text-base flex-shrink-0">{p.country}</span>
+              <span className="text-white text-xs font-medium flex-1 truncate">{p.name}</span>
+              <span className="text-[10px] font-bold tabular-nums" style={{ color: i === 0 ? accent : "#bfc8cc" }}>{p.winPct}%</span>
+              {p.bet365Odds && (
+                <OddsPill decimal={p.bet365Odds} onBet={() => openBet("tennis")} />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+          <div className="flex items-center gap-1.5">
+            {edge >= 8 && <EdgeBadge edge={edge} />}
+            <button
+              onClick={(e) => { e.stopPropagation(); quickAdd(e); }}
+              className={`w-8 h-8 rounded-xl border flex items-center justify-center text-sm font-bold transition-colors ${
+                isAdded
+                  ? "bg-green-500/15 border-green-500/30 text-green-400"
+                  : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
+              }`}
+            >
+              {isAdded ? "✓" : "+"}
+            </button>
+          </div>
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ color: accent, backgroundColor: `${accent}1a` }}>
+            {match.surfaceIcon} {match.surface}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}

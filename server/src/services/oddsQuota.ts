@@ -202,7 +202,13 @@ export function proxyTtlMs(baseTtlMs: number): number {
   return baseTtlMs;
 }
 
-/** Pour /health et les tests. */
+/**
+ * Pour /health et les tests.
+ *
+ * **Aucun appelant aujourd'hui — gardée exprès** (décision du 2026-08-10). C'est
+ * le seul moyen de lire le solde de crédits et le TTL courant sans provoquer un
+ * appel facturé ; un diagnostic de quota qui coûte un crédit ne sert à rien.
+ */
 export function snapshot(): {
   remaining: number; used: number | null; userReserve: number; known: boolean;
 } {

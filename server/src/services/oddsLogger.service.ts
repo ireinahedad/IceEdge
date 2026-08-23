@@ -11,11 +11,17 @@
 // le format attendu par fetch_data_v4.py se fait à la demande
 // (`npm run odds:export`), depuis une donnée qui, elle, survit.
 //
+// SÉRIE TEMPORELLE (A3, 2026-08-21) : chaque passe archive en plus son état
+// dans `odds_snapshots` (migration 031). `odds_log` écrase — il ne garde qu'une
+// ouverture et une clôture — alors que le CLV a besoin de savoir quel prix était
+// affiché à un instant donné. Le calendrier des passes vit dans `SLOTS`, en bas
+// de ce fichier, avec le raisonnement sur le quota qui lui donne sa forme.
+//
 // Activé via ODDS_LOG_ENABLED=true.
 // Sans clé The Odds API (ODDS_API_KEY) le job se désactive proprement.
 
 import { pool } from '../db/connection';
-import { fetchRawOdds, type RawOddsEvent } from './oddsClient';
+import { fetchRawOdds, fetchSpreadsOnly, type RawOddsEvent } from './oddsClient';
 import { logger } from '../logger';
 import { withJobLock } from './jobLock';
 import * as oddsQuota from './oddsQuota';
@@ -23,8 +29,16 @@ import * as oddsQuota from './oddsQuota';
 /** Un appel Odds API + un upsert. Généreux pour un upstream lent. */
 const LOCK_TTL_MS = 5 * 60 * 1000;
 
-/** Coût d'une passe de collecte : 3 marchés × 1 région, 1 crédit chacun. */
-const COLLECT_COST = 3;
+/**
+ * Coût d'une passe, en crédits The Odds API : 1 par marché et par région.
+ *
+ * `full` demande h2h + spreads + totals ; `spreads` ne demande que la puck
+ * line. C'est ce qui rend le calendrier d'A3 finançable — voir `SLOTS`.
+ */
+const COLLECT_COST: Record<PassKind, number> = { full: 3, spreads: 1 };
+
+/** Quels marchés une passe demande. Stocké tel quel dans `odds_snapshots`. */
+export type PassKind = 'full' | 'spreads';
 
 /** L'état `active` d'une ligue change au plus une fois par jour. */
 let seasonCache: { active: boolean; at: number } | null = null;
@@ -99,6 +113,13 @@ function pickBook(ev: RawOddsEvent, market: string) {
 
 interface Row {
   date: string; home: string; away: string;
+  /**
+   * Mise au jeu, telle que renvoyée par l'API. Indispensable au CLV : les
+   * matchs d'une même soirée commencent entre 19 h et 22 h 30 ET, donc le
+   * « T−3 h » et le « dernier prix avant le début » sont propres à chaque
+   * match et ne se déduisent pas de `date`.
+   */
+  commenceTime: string;
   homeMl: number | null; awayMl: number | null; total: number | null;
   // Marchés dérivés (2026-08-04). Sans ces PRIX, aucun ROI n'est calculable
   // sur les totaux ni la puck line — c'est-à-dire précisément les marchés que
@@ -154,9 +175,13 @@ function eventToRow(ev: RawOddsEvent): Row | null {
     }
   }
 
-  if (homeMl == null && total == null) return null;
+  // Une passe `spreads` ne ramène ni moneyline ni total : refuser la ligne sur
+  // l'absence des deux jetterait exactement ce qu'on est venu chercher.
+  if (homeMl == null && total == null && puckLineHome == null) return null;
   return {
-    date: easternDate(ev.commence_time), home, away, homeMl, awayMl, total,
+    date: easternDate(ev.commence_time), home, away,
+    commenceTime: ev.commence_time,
+    homeMl, awayMl, total,
     totalOver, totalUnder, puckLineHome, plHomePrice, plAwayPrice,
   };
 }
@@ -174,9 +199,17 @@ function eventToRow(ev: RawOddsEvent): Row | null {
  * première observation et la dernière est le signal que le CSV ne pouvait pas
  * capturer (il écrivait open = close et n'y revenait jamais).
  *
- * @returns nombre de lignes écrites ou mises à jour.
+ * SNAPSHOTS (A3, 2026-08-21) — en plus de l'upsert ci-dessus, chaque passe
+ * insère son état complet dans `odds_snapshots`. Le résumé ouverture/clôture
+ * reste le contrat de `fetch_data_v4.py` et ne bouge pas ; la série temporelle
+ * est ce que le CLV réclame, et elle ne coûte aucun crédit supplémentaire —
+ * l'appel ramenait déjà ces prix, le collecteur les jetait.
+ *
+ * @param kind `full` (h2h + spreads + totals, 3 crédits) ou `spreads` (puck
+ *             line seule, 1 crédit). Voir `SLOTS` pour le calendrier.
+ * @returns nombre de lignes écrites ou mises à jour dans `odds_log`.
  */
-export async function logTodaysOdds(): Promise<number> {
+export async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
   // ── Deux garde-fous AVANT de dépenser le moindre crédit ───────────────────
   //
   // 1. La saison est-elle en cours ? L'endpoint /v4/sports est gratuit (il ne
@@ -193,14 +226,19 @@ export async function logTodaysOdds(): Promise<number> {
   //    Le collecteur cède toujours : une journée de collecte manquée est une
   //    perte pour le futur modèle, une page vide est une perte immédiate pour
   //    quelqu'un qui est là maintenant.
-  if (!(await oddsQuota.collectorMaySpend(COLLECT_COST))) {
-    logger.warn({ remaining: oddsQuota.remaining() },
+  if (!(await oddsQuota.collectorMaySpend(COLLECT_COST[kind]))) {
+    logger.warn({ remaining: oddsQuota.remaining(), kind },
       '[OddsLogger] réserve visiteurs atteinte — collecte suspendue ce cycle.');
     return 0;
   }
 
-  const events = await fetchRawOdds();
+  const events = kind === 'spreads' ? await fetchSpreadsOnly() : await fetchRawOdds();
   if (!events.length) return 0;
+
+  // Un seul horodatage pour toute la passe, calculé ici et non par `NOW()`
+  // ligne à ligne : c'est ce qui rend « l'état du marché à 18 h 45 »
+  // regroupable, au lieu d'horodatages qui diffèrent de quelques millisecondes.
+  const observedAt = new Date();
 
   const rows: Row[] = [];
   const seen = new Set<string>();
@@ -244,6 +282,21 @@ export async function logTodaysOdds(): Promise<number> {
        $10::numeric[], $11::numeric[]
      )
      ON CONFLICT (game_date, home_team, away_team) DO UPDATE SET
+       -- L'ouverture ne se réécrit JAMAIS quand elle existe (l'argument de
+       -- gauche gagne) — mais elle se remplit si elle était nulle. Deux cas
+       -- réels le demandent : un book qui n'a pas encore affiché un marché lors
+       -- de la première passe, et une journée dont la première passe est une
+       -- passe 'spreads' (démarrage du serveur en soirée), qui ne rapporte ni
+       -- moneyline ni total. Sans ce rattrapage, ces colonnes restaient nulles
+       -- pour toujours, puisque seules les colonnes de clôture étaient mises à
+       -- jour.
+       home_ml_open      = COALESCE(odds_log.home_ml_open,      EXCLUDED.home_ml_open),
+       away_ml_open      = COALESCE(odds_log.away_ml_open,      EXCLUDED.away_ml_open),
+       total_open        = COALESCE(odds_log.total_open,        EXCLUDED.total_open),
+       total_open_over   = COALESCE(odds_log.total_open_over,   EXCLUDED.total_open_over),
+       total_open_under  = COALESCE(odds_log.total_open_under,  EXCLUDED.total_open_under),
+       pl_home_price_open = COALESCE(odds_log.pl_home_price_open, EXCLUDED.pl_home_price_open),
+       pl_away_price_open = COALESCE(odds_log.pl_away_price_open, EXCLUDED.pl_away_price_open),
        home_ml_close     = COALESCE(EXCLUDED.home_ml_close,     odds_log.home_ml_close),
        away_ml_close     = COALESCE(EXCLUDED.away_ml_close,     odds_log.away_ml_close),
        total_close       = COALESCE(EXCLUDED.total_close,       odds_log.total_close),
@@ -269,7 +322,65 @@ export async function logTodaysOdds(): Promise<number> {
       rows.map((r) => r.plAwayPrice),
     ],
   );
+
+  await insertSnapshots(rows, observedAt, kind);
   return res.rowCount ?? 0;
+}
+
+/**
+ * Archive l'état du marché à un instant donné (A3).
+ *
+ * Complémentaire de `odds_log`, qui écrase : ici rien n'est jamais réécrit, on
+ * empile. C'est la seule forme qui permette de répondre à « quel prix était
+ * affiché quand le modèle aurait misé, et où la ligne a-t-elle fini ? ».
+ *
+ * `ON CONFLICT DO NOTHING` plutôt qu'un upsert : deux exécutions concurrentes
+ * du même créneau — que `withJobLock` empêche déjà — ne doivent pas se
+ * réécrire l'une l'autre. Un snapshot est un fait observé, pas un état courant.
+ *
+ * Un échec ici ne fait pas échouer la passe : `odds_log` est déjà écrit, et
+ * c'est lui qui alimente le pipeline ML existant. Perdre un point de série
+ * temporelle est regrettable, perdre la clôture du jour l'est bien davantage.
+ */
+async function insertSnapshots(
+  rows: Row[], observedAt: Date, kind: PassKind,
+): Promise<void> {
+  try {
+    await pool.query(
+      `INSERT INTO odds_snapshots (game_date, home_team, away_team,
+                                   observed_at, commence_time, markets,
+                                   home_ml, away_ml, total,
+                                   total_over, total_under,
+                                   puck_line_home, pl_home_price, pl_away_price)
+       SELECT * FROM unnest(
+         $1::date[], $2::text[], $3::text[],
+         $4::timestamptz[], $5::timestamptz[], $6::text[],
+         $7::numeric[], $8::numeric[], $9::numeric[],
+         $10::numeric[], $11::numeric[],
+         $12::numeric[], $13::numeric[], $14::numeric[]
+       )
+       ON CONFLICT (game_date, home_team, away_team, observed_at) DO NOTHING`,
+      [
+        rows.map((r) => r.date),
+        rows.map((r) => r.home),
+        rows.map((r) => r.away),
+        rows.map(() => observedAt),
+        rows.map((r) => r.commenceTime),
+        rows.map(() => kind),
+        rows.map((r) => r.homeMl),
+        rows.map((r) => r.awayMl),
+        rows.map((r) => r.total),
+        rows.map((r) => r.totalOver),
+        rows.map((r) => r.totalUnder),
+        rows.map((r) => r.puckLineHome),
+        rows.map((r) => r.plHomePrice),
+        rows.map((r) => r.plAwayPrice),
+      ],
+    );
+  } catch (err: any) {
+    logger.warn({ err: err?.message, kind },
+      '[OddsLogger] snapshot non archivé — odds_log reste à jour');
+  }
 }
 
 /**
@@ -302,9 +413,84 @@ export async function exportOddsLogCsv(): Promise<string> {
   return [HEADER, ...lines].join('\n') + '\n';
 }
 
+// ── Calendrier de collecte ───────────────────────────────────────────────────
+//
+// CE QUI A CHANGÉ ET POURQUOI (A3, 2026-08-21). L'ancienne version faisait
+// `setInterval(6 h)` amorcé au démarrage du processus : la phase dépendait donc
+// de l'heure du dernier déploiement Railway. Rien ne garantissait qu'une passe
+// tombe près d'une mise au jeu, et le dernier prix observé avant un match de
+// 19 h ET pouvait dater de six heures. Or le CLV se mesure CONTRE la clôture :
+// une « clôture » à T−5 h n'en est pas une, et toute la mesure s'en trouvait
+// faussée dans le sens optimiste (une ligne qui a moins bougé paraît plus
+// souvent du bon côté).
+//
+// LE BUDGET COMMANDE LA FORME. Quota gratuit 500 crédits/mois, dont 150
+// réservés aux visiteurs (`ODDS_USER_RESERVE`) : il reste 350 pour la collecte.
+// Quatre passes complètes par jour en coûtaient 12, soit 360 — au-dessus du
+// budget, la collecte s'arrêtait donc vers la fin de chaque mois de saison.
+//
+// Ici : deux passes complètes + quatre passes `spreads` = **10 crédits/jour,
+// 300/mois**, sous le budget pour la première fois, avec deux fois plus
+// d'observations. C'est possible parce que The Odds API facture au marché et
+// que la puck line est le seul marché encore vivant (A2 : le moneyline est
+// clos, les totaux sont condamnés à −2.75 % de ROI).
+//
+// CE QU'ON PERD, ASSUMÉ : le moneyline et les totaux n'ont plus de clôture
+// stricte, leur dernier prix est celui de 17 h. Ils gardent leur ouverture, ce
+// qui suffit à mesurer le mouvement — et aucune stratégie vivante ne les price.
+//
+// LES HEURES. 11 h ET : les lignes du soir sont affichées, c'est l'ouverture
+// utile. 17 h ET : dernière passe complète avant les matchs. 18 h 45 / 19 h 45 :
+// juste avant les créneaux de 19 h et 20 h, qui portent la majorité du
+// calendrier. 21 h 45 / 22 h 45 : les matchs de la côte Ouest.
+const SLOTS: Array<{ hour: number; minute: number; kind: PassKind }> = [
+  { hour: 11, minute: 0,  kind: 'full'    },
+  { hour: 17, minute: 0,  kind: 'full'    },
+  { hour: 18, minute: 45, kind: 'spreads' },
+  { hour: 19, minute: 45, kind: 'spreads' },
+  { hour: 21, minute: 45, kind: 'spreads' },
+  { hour: 22, minute: 45, kind: 'spreads' },
+];
+
+const ET = 'America/New_York';
+
+/** Minutes écoulées depuis minuit, heure murale de l'Est. */
+function easternMinutesNow(now: Date): number {
+  const [h, m] = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ET, hour12: false, hour: '2-digit', minute: '2-digit',
+  }).format(now).split(':').map(Number);
+  // `en-CA` rend minuit « 24:00 » plutôt que « 00:00 ».
+  return (h % 24) * 60 + m;
+}
+
+/**
+ * Prochain créneau et délai jusqu'à lui.
+ *
+ * Le calcul se fait en minutes d'horloge murale de l'Est, puis le délai est
+ * appliqué comme une durée réelle. Aux deux bascules d'heure d'été de l'année,
+ * l'écart entre les deux vaut une heure : un créneau tombe alors une heure trop
+ * tôt ou trop tard, une fois. Le calendrier se recale au créneau suivant, et
+ * une observation légèrement décalée deux fois par an ne change rien à une
+ * mesure de CLV. La solution exacte demanderait une dépendance de cron, ce que
+ * ce dépôt n'a pour aucun de ses autres jobs planifiés.
+ */
+function nextSlot(now: Date): { delayMs: number; kind: PassKind } {
+  const cur = easternMinutesNow(now);
+  const mins = SLOTS.map((s) => ({ at: s.hour * 60 + s.minute, kind: s.kind }));
+  const next = mins.find((s) => s.at > cur) ?? { ...mins[0], at: mins[0].at + 1440 };
+  return { delayMs: (next.at - cur) * 60_000, kind: next.kind };
+}
+
 let timer: NodeJS.Timeout | null = null;
 
-/** Lance le logging quotidien des cotes (idempotent, dédup par jour). */
+/**
+ * Lance la collecte quotidienne des cotes (idempotente, verrouillée).
+ *
+ * Chaque créneau se replanifie après son exécution plutôt que de tourner sur
+ * un intervalle fixe : c'est ce qui permet d'espacer inégalement les passes
+ * (une le matin, quatre serrées le soir) et de rester calé sur l'heure de
+ * l'Est, à laquelle le calendrier NHL est écrit.
+ */
 export function startOddsLogger(): void {
   if (process.env.ODDS_LOG_ENABLED !== 'true') return;
   if (!process.env.ODDS_API_KEY) {
@@ -315,19 +501,53 @@ export function startOddsLogger(): void {
   // Sans verrou, N instances consomment N× le quota The Odds API pour produire
   // exactement les mêmes lignes — c'est le job dont la duplication coûte
   // directement de l'argent.
-  const run = async () => {
+  const run = async (kind: PassKind) => {
     try {
-      await withJobLock('odds-logger', LOCK_TTL_MS, logTodaysOdds);
+      await withJobLock('odds-logger', LOCK_TTL_MS, () => logTodaysOdds(kind));
     } catch (err: any) {
-      logger.warn({ err: err?.message }, '[OddsLogger] échec');
+      logger.warn({ err: err?.message, kind }, '[OddsLogger] échec');
     }
   };
-  // Plusieurs passes/jour pour attraper les matchs affichés tard + cotes de clôture
-  timer = setInterval(run, 6 * 60 * 60 * 1000);
-  setTimeout(run, 20_000);
+
+  const schedule = () => {
+    const { delayMs, kind } = nextSlot(new Date());
+    timer = setTimeout(() => {
+      // On replanifie AVANT d'attendre la passe : une collecte lente ou en
+      // échec ne doit pas décaler ni interrompre le calendrier.
+      schedule();
+      void run(kind);
+    }, delayMs);
+    timer.unref?.();
+  };
+
+  logger.info({ slots: SLOTS.length, creditsPerDay: SLOTS.reduce(
+    (n, s) => n + COLLECT_COST[s.kind], 0) }, '[OddsLogger] calendrier armé');
+  schedule();
+
+  // Vérification de mise en service, explicitement opt-in.
+  //
+  // L'ancienne version lançait une passe 20 s après chaque démarrage. Railway
+  // redéploie souvent : c'étaient 3 crédits offerts à chaque déploiement, pour
+  // une donnée que le créneau suivant aurait ramenée de toute façon. Le
+  // calendrier ne fait donc plus rien au boot — mais il faut bien pouvoir
+  // constater UNE fois que la chaîne complète fonctionne, sans attendre 11 h ET.
+  // D'où cette variable, à poser le temps d'un déploiement puis à retirer.
+  if (process.env.ODDS_LOG_RUN_AT_BOOT === 'true') {
+    logger.warn('[OddsLogger] ODDS_LOG_RUN_AT_BOOT — passe de vérification, '
+      + 'à retirer après contrôle (3 crédits par démarrage).');
+    setTimeout(() => void run('full'), 20_000).unref?.();
+  }
 }
 
+/**
+ * Arrête la boucle de collecte.
+ *
+ * **Aucun appelant aujourd'hui — gardée exprès** (décision du 2026-08-10). Sans
+ * elle, un test qui démarre le collecteur laisse un `setTimeout` en vie et le
+ * runner ne rend jamais la main. À brancher aussi dans l'arrêt gracieux le jour
+ * où la collecte devient longue.
+ */
 export function stopOddsLogger(): void {
-  if (timer) clearInterval(timer);
+  if (timer) clearTimeout(timer);
   timer = null;
 }

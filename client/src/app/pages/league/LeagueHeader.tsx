@@ -2,6 +2,7 @@
 
 import { useSport } from "../../context/SportContext";
 import { useI18n } from "../../i18n";
+import "../../components/rink-theme.css";
 
 type Tab = "leaderboard" | "chat";
 
@@ -24,8 +25,9 @@ export function LeagueHeader({
   ];
 
   return (
-    <header className="px-4 pt-12 pb-3 bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
-      <div className="flex items-center justify-between mb-3">
+    <header className="bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+      <div className="rink-boards" aria-hidden />
+      <div className="px-4 pt-3 pb-3 flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-white text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("nav.league")}</h1>
@@ -43,7 +45,7 @@ export function LeagueHeader({
         </div>
       </div>
 
-      <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+      <div className="mx-4 mb-3 flex gap-1 bg-white/5 rounded-xl p-1">
         {tabs.map((t) => (
           <button
             key={t.key}

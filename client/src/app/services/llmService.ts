@@ -49,15 +49,10 @@ export interface LLMUsage {
   resetsAt?: string;
 }
 
-export async function getLLMUsage(): Promise<LLMUsage | null> {
-  try {
-    const res = await authedFetch('/llm/usage');
-    if (!res.ok) return null;
-    return await res.json() as LLMUsage;
-  } catch {
-    return null;   // un compteur indisponible ne doit jamais casser la page
-  }
-}
+// `getLLMUsage()` supprimée le 2026-08-10 : aucun écran n'affichait le compteur.
+// L'endpoint `/llm/usage` existe toujours côté serveur, et le type `LLMUsage`
+// ci-dessus reste utilisé par `askLLMFull` (l'avis de quota accompagne la
+// réponse). Refaire l'appel isolé est trivial si un jour un écran l'affiche.
 
 /**
  * Variante renvoyant la réponse complète, avis de quota compris.

@@ -17,19 +17,66 @@ export function teamEmoji(abbr: string): string {
   return TEAM_EMOJI[abbr?.toUpperCase()] ?? "\u{1F3D2}";
 }
 
-/** Convert win probability (0-100) to a rough American odds string. */
-export function probToOdds(pct: number): string {
-  const p = Math.max(5, Math.min(95, pct)) / 100;
-  if (p >= 0.5) {
-    const odds = Math.round(p / (1 - p) * 100);
-    return `-${odds}`;
-  } else {
-    const odds = Math.round((1 - p) / p * 100);
-    return `+${odds}`;
-  }
-}
+// `probToOdds` supprimée le 2026-08-10 : sans appelant, et doublon exact de
+// `probToOddsLabel` (privée) dans `predictionApiService.ts`, qui est la version
+// réellement utilisée. Deux conversions identiques finissent toujours par diverger.
 
 /** Returns the official NHL team logo URL (light/white version) for the given abbreviation. */
 export function nhlLogoUrl(abbr: string): string {
   return `https://assets.nhle.com/logos/nhl/svg/${abbr.toUpperCase()}_light.svg`;
+}
+
+// ─── Team colours ─────────────────────────────────────────────────────────────
+// Same contract as TEAM_EMOJI above: purely cosmetic, client-side only. The NHL
+// API returns `logoUrl` but no colours, so the home-page jersey tiles need this
+// map to paint their background. Nothing here feeds a model or a stat.
+
+export const TEAM_COLORS: Record<string, { primary: string; secondary: string }> = {
+  ANA: { primary: "#F47A38", secondary: "#B9975B" },
+  ARI: { primary: "#8C2633", secondary: "#E2D6B5" },
+  BOS: { primary: "#FFB81C", secondary: "#101010" },
+  BUF: { primary: "#003087", secondary: "#FFB81C" },
+  CAR: { primary: "#CC0000", secondary: "#101010" },
+  CBJ: { primary: "#002654", secondary: "#CE1126" },
+  CGY: { primary: "#D2001C", secondary: "#FAAF19" },
+  CHI: { primary: "#CF0A2C", secondary: "#101010" },
+  COL: { primary: "#6F263D", secondary: "#236192" },
+  DAL: { primary: "#006847", secondary: "#8F8F8C" },
+  DET: { primary: "#CE1126", secondary: "#8C9199" },
+  EDM: { primary: "#041E42", secondary: "#FF4C00" },
+  FLA: { primary: "#041E42", secondary: "#C8102E" },
+  LAK: { primary: "#111111", secondary: "#A2AAAD" },
+  MIN: { primary: "#154734", secondary: "#A6192E" },
+  MTL: { primary: "#AF1E2D", secondary: "#192168" },
+  NJD: { primary: "#CE1126", secondary: "#101010" },
+  NSH: { primary: "#FFB81C", secondary: "#041E42" },
+  NYI: { primary: "#00539B", secondary: "#F47D30" },
+  NYR: { primary: "#0038A8", secondary: "#CE1126" },
+  OTT: { primary: "#C52032", secondary: "#C2912C" },
+  PHI: { primary: "#F74902", secondary: "#101010" },
+  PIT: { primary: "#101010", secondary: "#FCB514" },
+  SEA: { primary: "#001628", secondary: "#99D9D9" },
+  SJS: { primary: "#006D75", secondary: "#EA7200" },
+  STL: { primary: "#002F87", secondary: "#FCB514" },
+  TBL: { primary: "#002868", secondary: "#6A7885" },
+  TOR: { primary: "#00205B", secondary: "#5A7BB5" },
+  UTA: { primary: "#71AFE5", secondary: "#101010" },
+  VAN: { primary: "#00205B", secondary: "#00843D" },
+  VGK: { primary: "#B4975A", secondary: "#333F42" },
+  WPG: { primary: "#041E42", secondary: "#004C97" },
+  WSH: { primary: "#041E42", secondary: "#C8102E" },
+};
+
+/** Colour pair for a team, with a neutral ice-slate fallback for unknown abbrs. */
+export function teamColors(abbr: string): { primary: string; secondary: string } {
+  return TEAM_COLORS[abbr?.toUpperCase()] ?? { primary: "#1B2A33", secondary: "#0D1519" };
+}
+
+/**
+ * Local jersey artwork for a team: `client/public/jerseys/<ABBR>.png`.
+ * These files are supplied by us, not by the NHL API. Callers must handle a
+ * missing file (`onError`) — the carousel falls back to `nhlLogoUrl`.
+ */
+export function jerseyUrl(abbr: string): string {
+  return `/jerseys/${abbr.toUpperCase()}.png`;
 }

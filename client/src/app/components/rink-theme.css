@@ -1,0 +1,486 @@
+/* ─────────────────────────────────────────────────────────────
+   Rink chrome — shared page furniture
+   Extracted from home-theme.css on 2026-08-23, when the dasher
+   boards spread from the landing page to every page's header.
+   Nothing here is landing-specific any more; import it from any
+   page that shows boards, a puck, a rink line or the marquee.
+   ───────────────────────────────────────────────────────────── */
+
+/* ═══════════════════════════════════════════════════════════════
+   RINK — landing page laid out as a night rink (added 2026-08-21)
+
+   Every class below is opt-in and only used by HockeyLanding, so no
+   other page's look changes. The ice is deliberately NIGHT ice (deep
+   blue-black) rather than white: the whole app is white-on-dark, and a
+   white sheet would have broken every text colour on the page.
+
+   Vertical order on the page:
+     .rink-boards            dasher boards under the sticky header
+     .rink-ice               the sheet itself
+       └ .rink-line--blue    blue line
+       └ .rink-line--red     centre red line, crossing .rink-faceoff
+     .rink-boards--bottom    dasher boards at the foot of the page
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── The sheet ─────────────────────────────────────────────────── */
+.rink-ice {
+  position: relative;
+  background:
+    radial-gradient(120% 55% at 50% 0%, rgba(134, 209, 234, 0.10), transparent 62%),
+    radial-gradient(90% 45% at 12% 38%, rgba(120, 190, 235, 0.06), transparent 72%),
+    radial-gradient(90% 45% at 88% 76%, rgba(120, 190, 235, 0.05), transparent 72%),
+    linear-gradient(180deg, #08131b 0%, #0a1620 45%, #08121a 100%);
+}
+
+/* Skate marks — cross-hatched scratches, faded out at the edges. */
+.rink-ice::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image:
+    repeating-linear-gradient(114deg, rgba(255, 255, 255, 0.030) 0 1px, transparent 1px 15px),
+    repeating-linear-gradient(66deg,  rgba(255, 255, 255, 0.022) 0 1px, transparent 1px 23px);
+  -webkit-mask-image: radial-gradient(120% 80% at 50% 50%, #000 25%, transparent 100%);
+          mask-image: radial-gradient(120% 80% at 50% 50%, #000 25%, transparent 100%);
+}
+
+/* Content sits above the scratch layer. */
+.rink-ice > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Dasher boards ─────────────────────────────────────────────── */
+/* Read top-to-bottom: glass shine, white board face, shadowed base,
+   then the yellow kickplate that meets the ice. */
+.rink-boards {
+  position: relative;
+  height: 30px;
+  flex: none;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.72) 0 2px,
+    #eef4f7 2px 10px,
+    #cfdae1 10px 19px,
+    #a4b3bc 19px 24px,
+    #f2c744 24px 30px
+  );
+}
+
+/* Panel seams. */
+.rink-boards::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 62px);
+}
+
+/* Foot of the page: same boards, flipped so the kickplate faces the ice. */
+.rink-boards--bottom {
+  transform: scaleY(-1);
+}
+
+/* ── Ice lines ─────────────────────────────────────────────────── */
+.rink-line {
+  height: 4px;
+  width: 100%;
+  flex: none;
+}
+
+.rink-line--blue {
+  background: linear-gradient(180deg, #3574d6, #1a4fa8);
+  box-shadow: 0 0 14px rgba(47, 111, 208, 0.45);
+}
+
+.rink-line--red {
+  background: linear-gradient(180deg, #e0384f, #b1112a);
+  box-shadow: 0 0 14px rgba(224, 56, 79, 0.40);
+}
+
+/* ── Centre-ice faceoff circle ─────────────────────────────────── */
+/* Decorative only: it sits behind the live-game content, which is free
+   to overflow it the way players spread out around a faceoff. */
+.rink-faceoff {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(52vw, 210px);
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  border: 3px solid rgba(224, 56, 79, 0.7);
+  box-shadow:
+    0 0 26px rgba(224, 56, 79, 0.22),
+    inset 0 0 44px rgba(224, 56, 79, 0.05);
+  pointer-events: none;
+}
+
+.rink-faceoff-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #d31f38;
+  box-shadow: 0 0 12px rgba(211, 31, 56, 0.7);
+}
+
+/* ── Puck ──────────────────────────────────────────────────────── */
+/* The stats page's Team / Game / Player selector. A puck is vulcanised
+   rubber: matte black, a milled edge, one soft highlight off the arena
+   lights. The milling is what makes it read as a puck and not a dot, so it
+   stays even when the puck is selected — selection is an ice-blue ring
+   instead of a colour change, because a blue puck stops being a puck. */
+.rink-puck {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 74px;
+  height: 74px;
+  padding: 0 7px;
+  border-radius: 50%;
+  text-align: center;
+  color: #d8e4ea;
+  background: radial-gradient(80% 70% at 50% 22%, #3b4249 0%, #20262b 45%, #0d1013 100%);
+  box-shadow:
+    0 6px 14px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.6);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, color 0.16s ease;
+}
+
+/* Milled edge — a conic comb, masked down to the outer 7px. */
+.rink-puck::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(255, 255, 255, 0.14) 0deg 2deg,
+    rgba(0, 0, 0, 0.34) 2deg 4deg
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 7px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 7px));
+}
+
+.rink-puck-label {
+  position: relative;
+  z-index: 1;
+  font-family: "Oswald", "Arial Narrow", sans-serif;
+  font-weight: 700;
+  font-size: 10px;
+  line-height: 1.15;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rink-puck.is-active {
+  color: #86d1ea;
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 3px #86d1ea,
+    0 10px 20px rgba(134, 209, 234, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.6);
+}
+
+.rink-puck:active { transform: translateY(1px); }
+
+/* ── Board ad ──────────────────────────────────────────────────── */
+/* The schedule entry, painted on the boards like a rink-side advert: saturated
+   panel, headline over a kicker, a call-to-action in kickplate yellow, and the
+   panel seams running straight through the artwork — which is what makes it
+   read as printed ON the boards rather than as another card. */
+.rink-signboard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 16px 18px;
+  overflow: hidden;
+  text-align: left;
+  color: #fff;
+  background: linear-gradient(100deg, #0b3a51 0%, #146a8f 38%, #1f93c4 68%, #0b3a51 100%);
+  border-top: 2px solid rgba(255, 255, 255, 0.8);
+  border-bottom: 7px solid #f2c744;
+  box-shadow:
+    inset 0 -12px 22px rgba(0, 0, 0, 0.20),
+    0 6px 18px rgba(0, 0, 0, 0.4);
+  transition: filter 0.18s ease;
+}
+
+/* Arena light raking across the panel. */
+.rink-signboard::before {
+  content: "";
+  position: absolute;
+  top: -40%;
+  left: -15%;
+  width: 42%;
+  height: 180%;
+  transform: rotate(18deg);
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+}
+
+/* Panel seams, same rhythm as .rink-boards. */
+.rink-signboard::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px 62px);
+}
+
+.rink-signboard > * {
+  position: relative;
+  z-index: 1;
+}
+
+.rink-signboard:active { filter: brightness(0.94); }
+
+.rink-signboard-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+}
+
+.rink-signboard-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.rink-signboard-kicker {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rink-signboard-label {
+  display: block;
+  font-family: "Oswald", "Arial Narrow", sans-serif;
+  font-weight: 700;
+  font-size: clamp(15px, 4.6vw, 22px);
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rink-signboard-cta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: #f2c744;
+  color: #0b1620;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MARQUEE — the shared right → left scroll
+   Used by the jersey carousel and by the centre-ice live row. Both
+   render their list twice; one loop is half the track plus half a
+   gutter, so the seam never shows. Overflow is hidden, which is also
+   what removes the scrollbar.
+   ═══════════════════════════════════════════════════════════════ */
+
+@keyframes ice-marquee {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(calc(-50% - (var(--marquee-gap) / 2)), 0, 0); }
+}
+
+.ice-marquee {
+  --marquee-gap: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.ice-marquee-track {
+  display: flex;
+  gap: var(--marquee-gap);
+  width: max-content;
+  animation: ice-marquee var(--ice-duration, 45s) linear infinite;
+}
+
+.ice-marquee:hover .ice-marquee-track {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ice-marquee-track { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   JERSEY CAROUSEL — 6 teams visible, scrolling right → left
+   `--jersey-w` and `--jersey-duration` are measured in JS and set
+   inline on .jersey-viewport (a percentage would resolve against the
+   max-content track, which is circular).
+   ═══════════════════════════════════════════════════════════════ */
+
+.jersey-viewport {
+  --marquee-gap: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Fade the tiles into the boards at both ends. */
+.jersey-viewport::before,
+.jersey-viewport::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 28px;
+  z-index: 2;
+  pointer-events: none;
+}
+.jersey-viewport::before { left: 0;  background: linear-gradient(90deg, #09141d, transparent); }
+.jersey-viewport::after  { right: 0; background: linear-gradient(270deg, #09141d, transparent); }
+
+.jersey-track {
+  display: flex;
+  gap: var(--marquee-gap);
+  width: max-content;
+  animation: ice-marquee var(--jersey-duration, 60s) linear infinite;
+}
+
+.jersey-viewport:hover .jersey-track,
+.jersey-viewport[data-paused="true"] .jersey-track {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jersey-track { animation: none; }
+}
+
+/* ── One team tile ─────────────────────────────────────────────── */
+.jersey-tile {
+  position: relative;
+  flex: 0 0 var(--jersey-w, 96px);
+  width: var(--jersey-w, 96px);
+  aspect-ratio: 3 / 4;
+  border-radius: 14px;
+  overflow: hidden;
+  isolation: isolate;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.jersey-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  transition: filter 0.22s ease, transform 0.22s ease;
+}
+
+/* Fallback while the jersey artwork is missing: the abbreviation, big, on the
+   team's colours. Sized off --jersey-w (inherited from the viewport) so it
+   scales with the tile without a container query. */
+.jersey-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-family: "Oswald", "Arial Narrow", sans-serif;
+  font-weight: 700;
+  font-size: calc(var(--jersey-w, 96px) * 0.24);
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.94);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  transition: filter 0.22s ease, transform 0.22s ease;
+}
+
+.jersey-abbr {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 3px 0 4px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.55));
+  transition: opacity 0.18s ease;
+}
+
+/* ── Hover (desktop) / tap (mobile) reveals the two destinations ── */
+.jersey-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+.jersey-tile.is-open .jersey-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+.jersey-tile.is-open .jersey-img,
+.jersey-tile.is-open .jersey-fallback {
+  filter: blur(4px) brightness(0.45);
+  transform: scale(1.06);
+}
+.jersey-tile.is-open .jersey-abbr { opacity: 0; }
+
+@media (hover: hover) {
+  .jersey-tile:hover .jersey-overlay { opacity: 1; pointer-events: auto; }
+  .jersey-tile:hover .jersey-img,
+  .jersey-tile:hover .jersey-fallback { filter: blur(4px) brightness(0.45); transform: scale(1.06); }
+  .jersey-tile:hover .jersey-abbr { opacity: 0; }
+}
+
+.jersey-choice {
+  width: 100%;
+  padding: 4px 2px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #eaf6fb;
+  background: rgba(10, 20, 26, 0.72);
+  border: 1px solid rgba(134, 209, 234, 0.45);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.jersey-choice:active { background: rgba(134, 209, 234, 0.25); }

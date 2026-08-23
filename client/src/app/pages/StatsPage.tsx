@@ -12,6 +12,8 @@ import { LastNGamesSection } from "../components/LastNGamesSection";
 import { ScheduleContent } from "./SchedulePage";
 import { FramedLabel } from "../components/brand/FramedLabel";
 import { useI18n } from "../i18n";
+import { teamColors } from "../data/teamEmoji";
+import "../components/rink-theme.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -19,6 +21,34 @@ const filterTabKeys = ["stats.byTeam", "stats.byGame", "stats.byPlayer"];
 
 type Subject = { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 interface AddSheetState { open: boolean; subject?: Subject }
+
+// ─── Team colours on cards ────────────────────────────────────────────────────
+// The club's colours carry the card, but several clubs are light (NSH gold, VGK
+// sand, BOS yellow) and the card text is white — so every colour layer sits
+// under a scrim. The scrim is directional, not flat: it is heaviest where the
+// text is and thinnest at the far edge, which keeps the colour readable as an
+// identity while the type stays legible.
+
+/** One club: colours running left → right, darkened under the text. */
+function teamCardBackground(abbr: string): string {
+  const { primary, secondary } = teamColors(abbr);
+  return (
+    `linear-gradient(90deg, rgba(0,0,0,0.70) 0%, rgba(0,0,0,0.46) 60%, rgba(0,0,0,0.14) 100%),` +
+    `linear-gradient(120deg, ${primary}, ${secondary})`
+  );
+}
+
+/** Two clubs: a diagonal split at the middle, seamed in white like a jersey. */
+function gameCardBackground(abbr1: string, abbr2: string): string {
+  const a = teamColors(abbr1);
+  const b = teamColors(abbr2);
+  return (
+    `linear-gradient(180deg, rgba(0,0,0,0.58) 0%, rgba(0,0,0,0.32) 50%, rgba(0,0,0,0.62) 100%),` +
+    `linear-gradient(100deg, ${a.primary} 0%, ${a.secondary} 45%,` +
+    ` rgba(255,255,255,0.85) 49%, rgba(255,255,255,0.85) 51%,` +
+    ` ${b.secondary} 55%, ${b.primary} 100%)`
+  );
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -52,7 +82,8 @@ function TeamCard({ team, onClick, onAdd, accent }: { team: UITeam; onClick: () 
   return (
     <button
       onClick={onClick}
-      className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-transform text-left"
+      className="w-full border border-white/20 rounded-2xl p-4 flex items-center gap-3 active:scale-[0.98] transition-transform text-left overflow-hidden"
+      style={{ background: teamCardBackground(team.abbr) }}
     >
       <img src={team.logo} alt={team.name} className="w-11 h-11 object-contain flex-shrink-0" />
       <div className="flex-1 min-w-0">
@@ -79,18 +110,19 @@ function GameCard({ game, getTeamById, onClick, accent }: { game: UIGame; getTea
   return (
     <button
       onClick={onClick}
-      className="w-full bg-[#131A12]/70 backdrop-blur-md border border-white/20 rounded-2xl p-4 active:scale-[0.98] transition-transform text-left"
+      className="w-full border border-white/20 rounded-2xl p-4 active:scale-[0.98] transition-transform text-left overflow-hidden"
+      style={{ background: gameCardBackground(team1.abbr, team2.abbr) }}
     >
       <div className="flex items-center justify-between mb-3">
         <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: accent }}>{game.date} · {game.time}</span>
-        <span className="text-[#bfc8cc] text-[10px] bg-[#1B2419] px-2 py-0.5 rounded-full">NHL</span>
+        <span className="text-[#bfc8cc] text-[10px] bg-black/40 px-2 py-0.5 rounded-full">NHL</span>
       </div>
       <div className="flex items-center gap-2 mb-3">
         <div className="flex-1 flex items-center gap-2">
           <img src={team1.logo} alt={team1.abbr} className="w-7 h-7 object-contain" />
           <div>
             <p className="text-white text-sm font-medium">{team1.abbr}</p>
-            <p className="text-[10px] text-[#8a9ea6]">{team1.record}</p>
+            <p className="text-[10px] text-white/75">{team1.record}</p>
           </div>
         </div>
         <div className="flex flex-col items-center px-2">
@@ -100,13 +132,13 @@ function GameCard({ game, getTeamById, onClick, accent }: { game: UIGame; getTea
         <div className="flex-1 flex items-center gap-2 justify-end">
           <div className="text-right">
             <p className="text-white text-sm font-medium">{team2.abbr}</p>
-            <p className="text-[10px] text-[#8a9ea6]">{team2.record}</p>
+            <p className="text-[10px] text-white/75">{team2.record}</p>
           </div>
           <img src={team2.logo} alt={team2.abbr} className="w-7 h-7 object-contain" />
         </div>
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-[#8a9ea6] text-[10px]">{game.venue ?? ""}</span>
+        <span className="text-white/70 text-[10px]">{game.venue ?? ""}</span>
         <span className="text-[#bfc8cc] text-[10px]" style={{ color: accent }}>{t("stats.viewBets")}</span>
       </div>
     </button>
@@ -141,8 +173,9 @@ export function StatsPage() {
   if (sport === "tennis") {
     return (
       <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] md:max-w-5xl mx-auto relative z-10 w-full">
-        <header className="px-4 pt-12 pb-3 bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
-          <div className="flex items-center justify-between mb-3">
+        <header className="bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+          <div className="rink-boards" aria-hidden />
+          <div className="px-4 pt-3 pb-3 flex items-center justify-between">
             <div>
               <h1 className="text-white text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("stats.title")}</h1>
               <p className="text-[#bfc8cc] text-xs">{t("stats.tennis")}</p>
@@ -178,30 +211,40 @@ export function StatsPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] md:max-w-5xl mx-auto relative z-10 w-full">
-      <header className="px-4 pt-12 pb-3 bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40 border-b border-white/[0.04]">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h1 className="text-white text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("stats.title")}</h1>
-            <p className="text-[#bfc8cc] text-xs">{t("stats.subtitle")}</p>
+      {/* Header — the boards close the title block, then the controls sit below
+          them, the way everything else on this app sits on the ice. */}
+      <header className="bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+        <div className="rink-boards" aria-hidden />
+        <div className="px-4 pt-3 pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-white text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("stats.title")}</h1>
+              <p className="text-[#bfc8cc] text-xs">{t("stats.subtitle")}</p>
+            </div>
+            <HowItWorksButton accent={accent} onClick={() => setHowItWorks(true)} />
           </div>
-          <HowItWorksButton accent={accent} onClick={() => setHowItWorks(true)} />
         </div>
-        <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2.5 mb-3">
-          <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
-          <input className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#bfc8cc]"
-            placeholder={t("stats.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
-          {search && <button onClick={() => setSearch("")} className="text-[#bfc8cc] text-xs">×</button>}
-        </div>
-        <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-0.5">
-          {filterTabKeys.map((tabKey, i) => (
-            <button key={tabKey} onClick={() => setActiveFilter(i)} className="flex-shrink-0 px-4 py-2 rounded-full text-xs font-medium transition-all"
-              style={activeFilter === i ? { backgroundColor: accent, color: "#0f1416", fontWeight: 700 } : { backgroundColor: "#1B2419", color: "#bfc8cc" }}>
-              {t(tabKey)}
-            </button>
-          ))}
-        </div>
-        <div className="mt-2 flex justify-center">
-          <FramedLabel text={t("stats.statistics")} onClick={() => navigate(activeFilter === 2 ? "/stats/chart/all-players" : "/stats/chart/all-teams")} />
+        <div className="px-4 pb-3">
+          {/* Team / Game / Player as pucks, with the charts entry beside them */}
+          <div className="flex items-center justify-center gap-2.5 mb-3">
+            {filterTabKeys.map((tabKey, i) => (
+              <button
+                key={tabKey}
+                onClick={() => setActiveFilter(i)}
+                className={`rink-puck${activeFilter === i ? " is-active" : ""}`}
+                aria-pressed={activeFilter === i}
+              >
+                <span className="rink-puck-label">{t(tabKey)}</span>
+              </button>
+            ))}
+            <FramedLabel text={t("stats.statistics")} onClick={() => navigate(activeFilter === 2 ? "/stats/chart/all-players" : "/stats/chart/all-teams")} />
+          </div>
+          <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2.5">
+            <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
+            <input className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#bfc8cc]"
+              placeholder={t("stats.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
+            {search && <button onClick={() => setSearch("")} className="text-[#bfc8cc] text-xs">×</button>}
+          </div>
         </div>
       </header>
 

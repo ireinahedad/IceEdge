@@ -801,6 +801,14 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // ── League: Pro lock on other players' bets ──
   "league.othersProTitle": { en: "See their bets with Pro", fr: "Vois leurs paris avec Pro" },
   "league.othersProDesc":  { en: "Viewing other players' bet slips is a Pro feature.", fr: "Voir les coupons des autres joueurs est réservé aux Pro." },
+
+  // ── Home: rink layout (jersey carousel + centre-ice live zone) ──
+  "home.allTeams":     { en: "All Teams",   fr: "Toutes les équipes" },
+  "home.teamStats":    { en: "Stats",       fr: "Stats" },
+  "home.teamPrediction": { en: "Prediction", fr: "Prédiction" },
+  "home.teamOptions":  { en: "Open {team}", fr: "Ouvrir {team}" },
+  "home.noLiveGames":  { en: "No game in progress", fr: "Aucun match en cours" },
+  "home.scheduleCta":  { en: "View",           fr: "Voir" },
 };
 
 type TParams = Record<string, string | number>;

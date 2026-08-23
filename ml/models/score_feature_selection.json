@@ -1,12 +1,2203 @@
 {
   "method": "ablation par permutation (dimension constante), walk-forward",
-  "metric": "log-loss de la puck line, deux jambes, \u03c4 ajust\u00e9 par variante",
+  "metric": "log-loss de la puck line, deux jambes, τ ajusté par variante",
   "secondary_metrics_displayed_only": [
     "deviance",
     "ll_moneyline"
   ],
+  "rebuilt_from_cache": "Rapport reconstruit le 2026-08-18 depuis score_ablation_cache.json (364 entrées v2, run du 2026-08-09 complet). L'écriture d'origine avait été interrompue. Les gains sont des différences exactes de valeurs mises en cache — aucun réentraînement. Seul `n_games` par saison manque, il n'était pas mis en cache.",
   "keep_share": 0.7,
   "sentinel_bar": 0.6429,
   "sentinel_median_share": 0.5714,
   "seasons": [
-    
+    2012,
+    2013,
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "search_trials_per_fold": null,
+  "structural_features": [
+    "is_home"
+  ],
+  "chance_reference": {
+    "p_single_feature": 0.08978,
+    "n_candidates": 21,
+    "expected_false_keeps": 1.89,
+    "n_kept": 6
+  },
+  "sentinels": [
+    {
+      "feature": "sentinel_0",
+      "n_seasons_positive": 7,
+      "share_positive": 0.5,
+      "mean_gain_puckline": 0.000121,
+      "median_gain_puckline": 2e-06,
+      "mean_gain_deviance": 0.000371,
+      "mean_gain_ll_moneyline": 0.000152
+    },
+    {
+      "feature": "sentinel_1",
+      "n_seasons_positive": 8,
+      "share_positive": 0.5714,
+      "mean_gain_puckline": 0.000207,
+      "median_gain_puckline": 7.7e-05,
+      "mean_gain_deviance": 0.000196,
+      "mean_gain_ll_moneyline": 2.2e-05
+    },
+    {
+      "feature": "sentinel_2",
+      "n_seasons_positive": 9,
+      "share_positive": 0.6429,
+      "mean_gain_puckline": 5.5e-05,
+      "median_gain_puckline": 0.000105,
+      "mean_gain_deviance": -7.3e-05,
+      "mean_gain_ll_moneyline": 1.5e-05
+    }
+  ],
+  "features": [
+    {
+      "feature": "elo_atk_minus_def",
+      "n_seasons_positive": 13,
+      "share_positive": 0.9286,
+      "mean_gain_puckline": 0.001193,
+      "median_gain_puckline": 0.001228,
+      "mean_gain_deviance": 0.002594,
+      "mean_gain_ll_moneyline": 0.00251,
+      "verdict": "GARDER",
+      "structural": false
+    },
+    {
+      "feature": "def_ev_xga60_s",
+      "n_seasons_positive": 12,
+      "share_positive": 0.8571,
+      "mean_gain_puckline": 0.000306,
+      "median_gain_puckline": 0.000241,
+      "mean_gain_deviance": 0.000647,
+      "mean_gain_ll_moneyline": 0.000282,
+      "verdict": "GARDER",
+      "structural": false
+    },
+    {
+      "feature": "atk_lineup_pts",
+      "n_seasons_positive": 11,
+      "share_positive": 0.7857,
+      "mean_gain_puckline": 0.00048,
+      "median_gain_puckline": 0.000525,
+      "mean_gain_deviance": 0.000963,
+      "mean_gain_ll_moneyline": 0.000282,
+      "verdict": "GARDER",
+      "structural": false
+    },
+    {
+      "feature": "atk_ev_xgf_pct_s",
+      "n_seasons_positive": 10,
+      "share_positive": 0.7143,
+      "mean_gain_puckline": 0.000247,
+      "median_gain_puckline": 0.000268,
+      "mean_gain_deviance": 0.000576,
+      "mean_gain_ll_moneyline": 0.000292,
+      "verdict": "GARDER",
+      "structural": false
+    },
+    {
+      "feature": "atk_stars_out_weight",
+      "n_seasons_positive": 10,
+      "share_positive": 0.7143,
+      "mean_gain_puckline": 0.000203,
+      "median_gain_puckline": 0.000162,
+      "mean_gain_deviance": 0.000499,
+      "mean_gain_ll_moneyline": 2.6e-05,
+      "verdict": "GARDER",
+      "structural": false
+    },
+    {
+      "feature": "def_goalie_svpct",
+      "n_seasons_positive": 10,
+      "share_positive": 0.7143,
+      "mean_gain_puckline": 0.000179,
+      "median_gain_puckline": 0.000304,
+      "mean_gain_deviance": -0.000584,
+      "mean_gain_ll_moneyline": -4.9e-05,
+      "verdict": "GARDER",
+      "structural": false
+    },
+    {
+      "feature": "atk_finishing_s",
+      "n_seasons_positive": 9,
+      "share_positive": 0.6429,
+      "mean_gain_puckline": 0.000183,
+      "median_gain_puckline": 0.000127,
+      "mean_gain_deviance": 0.000316,
+      "mean_gain_ll_moneyline": 0.000102,
+      "verdict": "RETIRER",
+      "structural": false
+    },
+    {
+      "feature": "def_goalie_gsax60",
+      "n_seasons_positive": 9,
+      "share_positive": 0.6429,
+      "mean_gain_puckline": 8e-05,
+      "median_gain_puckline": 0.000109,
+      "mean_gain_deviance": 0.000495,
+      "mean_gain_ll_moneyline": 6.1e-05,
+      "verdict": "RETIRER",
+      "structural": false
+    },
+    {
+      "feature": "atk_ev_xgf60_s",
+      "n_seasons_positive": 9,
+      "share_positive": 0.6429,
+      "mean_gain_puckline": -5.1e-05,
+      "median_gain_puckline": 8.3e-05,
+      "mean_gain_deviance": -3.9e-05,
+      "mean_gain_ll_moneyline": -7e-05,
+      "verdict": "RETIRER",
+      "structural": false
+    },
+    {
+      "feature": "is_home",
+      "n_seasons_positive": 8,
+      "share_positive": 0.5714,
+      "mean_gain_puckline": 0.000246,
+      "median_gain_puckline": 9.1e-05,
+      "mean_gain_deviance": 0.004914,
+      "mean_gain_ll_moneyline": 9.2e-05,
+      "verdict": "STRUCTUREL",
+      "structural": true
+    },
+    {
+      "feature": "atk_star_power",
+      "n_seasons_positive": 8,
+      "share_positive": 0.5714,
+      "mean_gain_puckline": 0.000164,
+      "median_gain_puckline": 0.00011,
+      "mean_gain_deviance": 0.000371,
+      "mean_gain_ll_moneyline": 8e-06,
+      "verdict": "RETIRER",
+      "structural": false
+    },
+    {
+      "feature": "atk_xgf60_l",
+      "n_seasons_positive": 8,
+      "share_positive": 0.5714,
+      "mean_gain_puckline": 0.000157,
+      "median_gain_puckline": 0.000132,
+      "mean_gain_deviance": -6.7e-05,
+      "mean_gain_ll_moneyline": 2.2e-05,
+      "verdict": "RETIRER",
+      "structural": false
+    },
+    {
+      "feature": "def_xga60_l",
+      "n_seasons_positive": 8,
+      "share_positive": 0.5714,
+      "mean_gain_puckline": 0.000115,
+      "median_gain_puckline": 0.000106,
+      "mean_gain_deviance": 4.8e-05,
+      "mean_gain_ll_moneyline": -7e-05,
+      "verdict": "RETIRER",
+      "structural": false
+    },
+    {
+      "feature": "atk_rest_days",
+      "n_seasons_positive": 8,
+      "share_positive": 0.5714,
+      "mean_gain_puckline": -1.5e-05,
+      "median_gain_puckline": 1e-05,
+      "mean_gain_deviance": 4e-06,
+      "mean_gain_ll_moneyline": -0.000131,
+      "verdict": "RETIRER",
+      "structural": false
+    },
+    {
+      "feature": "def_pk_xga60_s",
+      "n_seasons_positive": 7,
+      "share_positive": 0.5,
+      "mean_gain_puckline": 8.3e-05,
+      "median_gain_puckline": -2.9e-05,
+      "mean_gain_deviance": 0.000363,
+      "mean_gain_ll_moneyline": 7.4e-05,
+      "verdict": "RETIRER",
+      "structural": false
+    },
+    {
+      "feature": "def_xga60_s",
+      "n_seasons_positive": 7,
+      "share_positive": 0.5,
+      "mean_gain_puckline": 6.9e-05,
+      "median_gain_puckline": 1.5e-05,
+      "mean_gain_deviance": 0.000274,
+      "mean_gain_ll_moneyline": -0.00019,
+      "verdict": "RETIRER",
+      "structural": false
+    },
+    {
+      "feature": "atk_lineup_xg",
+      "n_seasons_positive": 7,
+      "share_positive": 0.5,
+      "mean_gain_puckline": -1.6e-05,
+      "median_gain_puckline": 1e-05,
+      "mean_gain_deviance": -0.00044,
+      "mean_gain_ll_moneyline": 6.1e-05,
+      "verdict": "RETIRER",
+      "structural": false
+    },
+    {
+      "feature": "def_ga_s",
+      "n_seasons_positive": 6,
+      "share_positive": 0.4286,
+      "mean_gain_puckline": 0.00013,
+      "median_gain_puckline": -4.8e-05,
+      "mean_gain_deviance": 0.000323,
+      "mean_gain_ll_moneyline": 8.3e-05,
+      "verdict": "RETIRER",
+      "structural": false
+    },
+    {
+      "feature": "atk_xgf60_s",
+      "n_seasons_positive": 6,
+      "share_positive": 0.4286,
+      "mean_gain_puckline": -6.7e-05,
+      "median_gain_puckline": -9.4e-05,
+      "mean_gain_deviance": -0.000374,
+      "mean_gain_ll_moneyline": -0.000287,
+      "verdict": "RETIRER",
+      "structural": false
+    },
+    {
+      "feature": "atk_pp_xgf60_s",
+      "n_seasons_positive": 6,
+      "share_positive": 0.4286,
+      "mean_gain_puckline": -0.000119,
+      "median_gain_puckline": -3.7e-05,
+      "mean_gain_deviance": -0.000313,
+      "mean_gain_ll_moneyline": -0.000203,
+      "verdict": "RETIRER",
+      "structural": false
+    },
+    {
+      "feature": "atk_b2b",
+      "n_seasons_positive": 5,
+      "share_positive": 0.3571,
+      "mean_gain_puckline": -2e-06,
+      "median_gain_puckline": 0.0,
+      "mean_gain_deviance": -5.7e-05,
+      "mean_gain_ll_moneyline": -1e-06,
+      "verdict": "RETIRER",
+      "structural": false
+    },
+    {
+      "feature": "atk_gf_s",
+      "n_seasons_positive": 3,
+      "share_positive": 0.2143,
+      "mean_gain_puckline": 1.5e-05,
+      "median_gain_puckline": -7.3e-05,
+      "mean_gain_deviance": 1.3e-05,
+      "mean_gain_ll_moneyline": -0.000105,
+      "verdict": "RETIRER",
+      "structural": false
+    }
+  ],
+  "by_season": {
+    "2012": {
+      "n_games": null,
+      "ref": {
+        "ll_puckline": 0.5724073189160538,
+        "deviance": 1.0948826169473098,
+        "ll_moneyline": 0.6705581294458316
+      },
+      "gains": {
+        "atk_xgf60_s": {
+          "ll_puckline": 7.172992083670504e-05,
+          "deviance": -0.00022084168355163136,
+          "ll_moneyline": -0.0003462188929566068
+        },
+        "atk_xgf60_l": {
+          "ll_puckline": -2.6213100334793182e-06,
+          "deviance": 0.00037831100102048154,
+          "ll_moneyline": -0.00019558795086349612
+        },
+        "atk_ev_xgf60_s": {
+          "ll_puckline": -0.00172859309074902,
+          "deviance": -0.002208249020435149,
+          "ll_moneyline": -0.001441704700333224
+        },
+        "atk_ev_xgf_pct_s": {
+          "ll_puckline": 6.887270845368221e-05,
+          "deviance": -0.0012432549817293914,
+          "ll_moneyline": 0.00029314286213655283
+        },
+        "atk_gf_s": {
+          "ll_puckline": 0.0009389396123560267,
+          "deviance": 0.0012656605854608483,
+          "ll_moneyline": -0.0003438670515172326
+        },
+        "atk_finishing_s": {
+          "ll_puckline": 0.0016417290478760727,
+          "deviance": 0.003908268687657923,
+          "ll_moneyline": 0.00030822709031086415
+        },
+        "atk_star_power": {
+          "ll_puckline": 0.001124648146264895,
+          "deviance": 0.0035443450397409926,
+          "ll_moneyline": -0.0016280567571982374
+        },
+        "atk_stars_out_weight": {
+          "ll_puckline": 0.0013777727696123732,
+          "deviance": 0.002259289774544815,
+          "ll_moneyline": -7.647111806208251e-05
+        },
+        "atk_pp_xgf60_s": {
+          "ll_puckline": -0.0008545333660162635,
+          "deviance": -0.0026371538340852485,
+          "ll_moneyline": -0.0015599348037246275
+        },
+        "atk_rest_days": {
+          "ll_puckline": 1.6340600470954314e-05,
+          "deviance": -0.0011044466232870143,
+          "ll_moneyline": -0.0005030121943166987
+        },
+        "atk_b2b": {
+          "ll_puckline": -0.0001152356894200679,
+          "deviance": -0.00032551247930401317,
+          "ll_moneyline": -0.00017532651761598128
+        },
+        "atk_lineup_xg": {
+          "ll_puckline": -0.00016602796557108057,
+          "deviance": -5.243689126799289e-05,
+          "ll_moneyline": 0.0007893968611150104
+        },
+        "atk_lineup_pts": {
+          "ll_puckline": 0.0005507334089426275,
+          "deviance": 0.0005153484708630973,
+          "ll_moneyline": -0.0010752777304161576
+        },
+        "def_xga60_s": {
+          "ll_puckline": 0.00057839816069849,
+          "deviance": 0.002013212323413782,
+          "ll_moneyline": -0.0010657634579481767
+        },
+        "def_xga60_l": {
+          "ll_puckline": 0.0006150555020099091,
+          "deviance": 0.0026926534051963102,
+          "ll_moneyline": 0.00041996763861040787
+        },
+        "def_ev_xga60_s": {
+          "ll_puckline": -0.00028846242889346563,
+          "deviance": -7.177543486158733e-05,
+          "ll_moneyline": -0.001675914004522272
+        },
+        "def_ga_s": {
+          "ll_puckline": 0.0017524060618304693,
+          "deviance": 0.003062057084247005,
+          "ll_moneyline": 0.001472557341174019
+        },
+        "def_pk_xga60_s": {
+          "ll_puckline": 0.0014896598134650496,
+          "deviance": 0.004513510786580799,
+          "ll_moneyline": 0.0011348966305405606
+        },
+        "def_goalie_gsax60": {
+          "ll_puckline": 0.0008721598953471688,
+          "deviance": 0.0022797812708110765,
+          "ll_moneyline": 0.0002438119394059246
+        },
+        "def_goalie_svpct": {
+          "ll_puckline": 0.00021390369731311143,
+          "deviance": 0.0028198543499335926,
+          "ll_moneyline": -0.0008986982124878917
+        },
+        "is_home": {
+          "ll_puckline": 0.0026382055403837423,
+          "deviance": 0.008350139993364536,
+          "ll_moneyline": 0.0018437970560787331
+        },
+        "elo_atk_minus_def": {
+          "ll_puckline": 0.000951174032386537,
+          "deviance": -0.0018487554416266594,
+          "ll_moneyline": 0.0019956287568897446
+        },
+        "sentinel_0": {
+          "ll_puckline": -0.0005138853421396972,
+          "deviance": 0.0008268967155840024,
+          "ll_moneyline": 0.00014289210807605368
+        },
+        "sentinel_1": {
+          "ll_puckline": 0.0018544960739359517,
+          "deviance": 0.0015592598800160395,
+          "ll_moneyline": 0.0005954166968326069
+        },
+        "sentinel_2": {
+          "ll_puckline": 0.0003758634705600672,
+          "deviance": 0.0015213853699227453,
+          "ll_moneyline": -9.008937406396189e-05
+        }
+      }
+    },
+    "2013": {
+      "n_games": null,
+      "ref": {
+        "ll_puckline": 0.552358353031734,
+        "deviance": 1.0186167676593176,
+        "ll_moneyline": 0.6768069547708766
+      },
+      "gains": {
+        "atk_xgf60_s": {
+          "ll_puckline": 0.00012580988174215602,
+          "deviance": -0.00031422117380119907,
+          "ll_moneyline": 0.00013512500630752378
+        },
+        "atk_xgf60_l": {
+          "ll_puckline": 0.0014167826264335215,
+          "deviance": 0.0014557272649720066,
+          "ll_moneyline": 0.001221615601347037
+        },
+        "atk_ev_xgf60_s": {
+          "ll_puckline": 0.00024142107956948156,
+          "deviance": 7.833443653448846e-05,
+          "ll_moneyline": 0.0005981271233248542
+        },
+        "atk_ev_xgf_pct_s": {
+          "ll_puckline": 0.001032840947558178,
+          "deviance": 0.003066175220004297,
+          "ll_moneyline": 0.001584668137865397
+        },
+        "atk_gf_s": {
+          "ll_puckline": -3.819487632561458e-05,
+          "deviance": -0.00041334878508680895,
+          "ll_moneyline": -0.00024746836884570467
+        },
+        "atk_finishing_s": {
+          "ll_puckline": 0.00018977429598565632,
+          "deviance": -0.00021860095077608221,
+          "ll_moneyline": 6.427926995566935e-05
+        },
+        "atk_star_power": {
+          "ll_puckline": 0.00045453487587077124,
+          "deviance": 9.569119350794075e-05,
+          "ll_moneyline": 0.0005805554982742933
+        },
+        "atk_stars_out_weight": {
+          "ll_puckline": 0.00033643747589273687,
+          "deviance": 0.0007012562181907267,
+          "ll_moneyline": 0.0005830726153955856
+        },
+        "atk_pp_xgf60_s": {
+          "ll_puckline": 8.676438599475311e-06,
+          "deviance": -0.0011337011369816352,
+          "ll_moneyline": -0.0002386707525630083
+        },
+        "atk_rest_days": {
+          "ll_puckline": -0.00021305309507324566,
+          "deviance": -0.0005985485578101635,
+          "ll_moneyline": -0.00011333418048919963
+        },
+        "atk_b2b": {
+          "ll_puckline": 8.245580738863723e-06,
+          "deviance": 2.5362268376127872e-05,
+          "ll_moneyline": 3.3544302256993674e-06
+        },
+        "atk_lineup_xg": {
+          "ll_puckline": 0.00014253310474654501,
+          "deviance": 0.0014887018167104582,
+          "ll_moneyline": 0.0010070623632686404
+        },
+        "atk_lineup_pts": {
+          "ll_puckline": 0.0002607736452080456,
+          "deviance": 0.0011255096423166133,
+          "ll_moneyline": -1.4804583470140464e-05
+        },
+        "def_xga60_s": {
+          "ll_puckline": 0.0015612830579404546,
+          "deviance": 0.003299775918297332,
+          "ll_moneyline": 0.0010672628483929802
+        },
+        "def_xga60_l": {
+          "ll_puckline": 0.0006013415056910221,
+          "deviance": 0.0006170468448452038,
+          "ll_moneyline": 0.001033190515344229
+        },
+        "def_ev_xga60_s": {
+          "ll_puckline": 0.000563497968764981,
+          "deviance": 0.0008265848512385432,
+          "ll_moneyline": 0.0007737429817202823
+        },
+        "def_ga_s": {
+          "ll_puckline": 0.00020837575693910537,
+          "deviance": 4.827421562958456e-05,
+          "ll_moneyline": -0.00014148239786593297
+        },
+        "def_pk_xga60_s": {
+          "ll_puckline": 6.852624886310998e-06,
+          "deviance": 0.0008926624920269077,
+          "ll_moneyline": 0.0002218779843471408
+        },
+        "def_goalie_gsax60": {
+          "ll_puckline": 0.0001964883966659725,
+          "deviance": 0.0023343646829894205,
+          "ll_moneyline": 9.687290704984974e-05
+        },
+        "def_goalie_svpct": {
+          "ll_puckline": 0.0003935358509740139,
+          "deviance": 0.00032431796411502845,
+          "ll_moneyline": 0.0009760262716304036
+        },
+        "is_home": {
+          "ll_puckline": 7.502955255977994e-05,
+          "deviance": 0.005363928659801065,
+          "ll_moneyline": 0.001058700130344592
+        },
+        "elo_atk_minus_def": {
+          "ll_puckline": 0.0012762022496762837,
+          "deviance": 0.0009544972863140266,
+          "ll_moneyline": 0.001574876474135234
+        },
+        "sentinel_0": {
+          "ll_puckline": 0.0005374038595172825,
+          "deviance": 0.0012546902327321696,
+          "ll_moneyline": 0.0010329694705908388
+        },
+        "sentinel_1": {
+          "ll_puckline": 0.00018138966115632815,
+          "deviance": 0.0003320955873455933,
+          "ll_moneyline": 0.00024684890621406996
+        },
+        "sentinel_2": {
+          "ll_puckline": 0.00021777037472336946,
+          "deviance": 1.9052777402661647e-05,
+          "ll_moneyline": 0.00027025321523499457
+        }
+      }
+    },
+    "2014": {
+      "n_games": null,
+      "ref": {
+        "ll_puckline": 0.5556507231323827,
+        "deviance": 1.050757081941279,
+        "ll_moneyline": 0.6685863935220926
+      },
+      "gains": {
+        "atk_xgf60_s": {
+          "ll_puckline": -0.00026007201410904734,
+          "deviance": -0.0005123156470163703,
+          "ll_moneyline": -0.0005373094986853566
+        },
+        "atk_xgf60_l": {
+          "ll_puckline": 0.00017931603422061126,
+          "deviance": 5.603154299294033e-05,
+          "ll_moneyline": -0.00011680779502154515
+        },
+        "atk_ev_xgf60_s": {
+          "ll_puckline": 9.22586692521099e-05,
+          "deviance": 6.115263372596935e-05,
+          "ll_moneyline": -0.00015984856889361687
+        },
+        "atk_ev_xgf_pct_s": {
+          "ll_puckline": -0.0005410230106128733,
+          "deviance": -0.00047760950373665345,
+          "ll_moneyline": -0.0004948181333879198
+        },
+        "atk_gf_s": {
+          "ll_puckline": 0.00034957690321724133,
+          "deviance": 0.0004267879755694981,
+          "ll_moneyline": 0.0002048307138892147
+        },
+        "atk_finishing_s": {
+          "ll_puckline": 6.054930056431651e-05,
+          "deviance": -0.00024967021329813655,
+          "ll_moneyline": -0.00020914581521369602
+        },
+        "atk_star_power": {
+          "ll_puckline": -0.0001063241549990046,
+          "deviance": -0.0012326861438356485,
+          "ll_moneyline": -0.0005350866840847512
+        },
+        "atk_stars_out_weight": {
+          "ll_puckline": -0.0005025775910878494,
+          "deviance": -0.0014303627406371255,
+          "ll_moneyline": -0.0009017899069954094
+        },
+        "atk_pp_xgf60_s": {
+          "ll_puckline": 0.0003716804477466029,
+          "deviance": -0.0001689352803313504,
+          "ll_moneyline": 9.583523602119115e-05
+        },
+        "atk_rest_days": {
+          "ll_puckline": 9.933723248056747e-05,
+          "deviance": -1.572309039254982e-05,
+          "ll_moneyline": -4.593213316939071e-05
+        },
+        "atk_b2b": {
+          "ll_puckline": 0.0,
+          "deviance": 0.0,
+          "ll_moneyline": 0.0
+        },
+        "atk_lineup_xg": {
+          "ll_puckline": 0.0002859869125044767,
+          "deviance": 0.0011063945916438556,
+          "ll_moneyline": 0.000564802139039311
+        },
+        "atk_lineup_pts": {
+          "ll_puckline": 0.0006121208138593071,
+          "deviance": 0.0005176514299760626,
+          "ll_moneyline": 0.0006153225196346979
+        },
+        "def_xga60_s": {
+          "ll_puckline": 0.0005278884472754708,
+          "deviance": -0.00010173827901960308,
+          "ll_moneyline": 0.00041541922311227886
+        },
+        "def_xga60_l": {
+          "ll_puckline": -0.00046380518156374784,
+          "deviance": 0.00031761026790788627,
+          "ll_moneyline": -0.001017241202734609
+        },
+        "def_ev_xga60_s": {
+          "ll_puckline": 0.00012319010159067556,
+          "deviance": 0.00010597677475066014,
+          "ll_moneyline": -1.8947912347022644e-05
+        },
+        "def_ga_s": {
+          "ll_puckline": -0.0001287564900683824,
+          "deviance": -0.00035653386678347054,
+          "ll_moneyline": -0.00011105164281866031
+        },
+        "def_pk_xga60_s": {
+          "ll_puckline": 0.00025657413317303757,
+          "deviance": 0.0004026091756601513,
+          "ll_moneyline": 0.0002026258292623373
+        },
+        "def_goalie_gsax60": {
+          "ll_puckline": -0.00011083186033833403,
+          "deviance": -0.0003872834290288285,
+          "ll_moneyline": 8.383167168501959e-05
+        },
+        "def_goalie_svpct": {
+          "ll_puckline": 0.0012009473161148643,
+          "deviance": 0.003420435883756623,
+          "ll_moneyline": 0.0011910211638427315
+        },
+        "is_home": {
+          "ll_puckline": 0.00044271833589415444,
+          "deviance": 0.005655957062915773,
+          "ll_moneyline": 0.0003034906410552818
+        },
+        "elo_atk_minus_def": {
+          "ll_puckline": 0.00046742803641464103,
+          "deviance": 0.0013144795173787305,
+          "ll_moneyline": 0.0012351663802246948
+        },
+        "sentinel_0": {
+          "ll_puckline": -2.3823244319709502e-05,
+          "deviance": -6.303827954035057e-05,
+          "ll_moneyline": -2.071326735020307e-06
+        },
+        "sentinel_1": {
+          "ll_puckline": -0.0005675739340041952,
+          "deviance": -0.0006732988130708772,
+          "ll_moneyline": -0.0008295067862463812
+        },
+        "sentinel_2": {
+          "ll_puckline": 7.419365615546347e-05,
+          "deviance": -0.00016018766069403334,
+          "ll_moneyline": -0.00013644009392088652
+        }
+      }
+    },
+    "2015": {
+      "n_games": null,
+      "ref": {
+        "ll_puckline": 0.5727069579074591,
+        "deviance": 1.0458394270445126,
+        "ll_moneyline": 0.6802831302654698
+      },
+      "gains": {
+        "atk_xgf60_s": {
+          "ll_puckline": -0.00015664389045766391,
+          "deviance": -0.0002796698958849042,
+          "ll_moneyline": 0.00020850056942489648
+        },
+        "atk_xgf60_l": {
+          "ll_puckline": -0.00022715919835170073,
+          "deviance": -0.0009595148310186374,
+          "ll_moneyline": -3.4271704256738644e-06
+        },
+        "atk_ev_xgf60_s": {
+          "ll_puckline": 7.392550301843492e-05,
+          "deviance": -0.0004132009201276432,
+          "ll_moneyline": 7.389438368932133e-05
+        },
+        "atk_ev_xgf_pct_s": {
+          "ll_puckline": 0.0008012549898789301,
+          "deviance": 0.001535009766379769,
+          "ll_moneyline": 0.0010072941753997977
+        },
+        "atk_gf_s": {
+          "ll_puckline": -0.00011556360292197532,
+          "deviance": -0.0006004397896937075,
+          "ll_moneyline": -3.8477235621448e-05
+        },
+        "atk_finishing_s": {
+          "ll_puckline": 0.00022377891545166673,
+          "deviance": 2.393491767826994e-05,
+          "ll_moneyline": 0.00037023920384626763
+        },
+        "atk_star_power": {
+          "ll_puckline": 0.0001589075948583707,
+          "deviance": 0.00012433175586723522,
+          "ll_moneyline": 0.0007259944855844136
+        },
+        "atk_stars_out_weight": {
+          "ll_puckline": 0.00030375934225101986,
+          "deviance": 0.00027207199503620494,
+          "ll_moneyline": 0.0004091512866345459
+        },
+        "atk_pp_xgf60_s": {
+          "ll_puckline": 0.00021499996479368289,
+          "deviance": -0.00017392370855917605,
+          "ll_moneyline": 0.000399692073141944
+        },
+        "atk_rest_days": {
+          "ll_puckline": 0.00020365146359269115,
+          "deviance": 0.0004443315385496138,
+          "ll_moneyline": 0.00011502466294777136
+        },
+        "atk_b2b": {
+          "ll_puckline": -1.6908843084695313e-05,
+          "deviance": -0.0001599879773559465,
+          "ll_moneyline": 1.440105881445053e-05
+        },
+        "atk_lineup_xg": {
+          "ll_puckline": 0.000328962847130132,
+          "deviance": -0.0012433551152317701,
+          "ll_moneyline": -0.0003157080822175917
+        },
+        "atk_lineup_pts": {
+          "ll_puckline": 0.000852510748924562,
+          "deviance": 0.0003688568544275572,
+          "ll_moneyline": 0.0007924676870011416
+        },
+        "def_xga60_s": {
+          "ll_puckline": 0.0006564836541046448,
+          "deviance": -0.0007683026156268813,
+          "ll_moneyline": 0.0007823637761528168
+        },
+        "def_xga60_l": {
+          "ll_puckline": -0.00017734613490505424,
+          "deviance": 4.700888375630541e-05,
+          "ll_moneyline": 0.0003700877637758948
+        },
+        "def_ev_xga60_s": {
+          "ll_puckline": 0.00010208200637562559,
+          "deviance": -0.0004861975017462772,
+          "ll_moneyline": 0.0005805293561265135
+        },
+        "def_ga_s": {
+          "ll_puckline": -7.324337189906771e-05,
+          "deviance": 0.00013796706444746398,
+          "ll_moneyline": 4.968107198588534e-05
+        },
+        "def_pk_xga60_s": {
+          "ll_puckline": -0.00046684052479362137,
+          "deviance": -0.0012058423205640878,
+          "ll_moneyline": -0.00011918860204618298
+        },
+        "def_goalie_gsax60": {
+          "ll_puckline": 0.00011439294568371672,
+          "deviance": -0.0004024890162608319,
+          "ll_moneyline": 0.0007065442254661214
+        },
+        "def_goalie_svpct": {
+          "ll_puckline": -0.00011487978107649344,
+          "deviance": -0.0013266515368759446,
+          "ll_moneyline": -0.0005923038245142509
+        },
+        "is_home": {
+          "ll_puckline": 0.00010691129292916823,
+          "deviance": 0.005281862407282123,
+          "ll_moneyline": -4.3124959319906786e-05
+        },
+        "elo_atk_minus_def": {
+          "ll_puckline": 9.269074118156695e-05,
+          "deviance": -0.0011715676848635947,
+          "ll_moneyline": 0.0014203654556678158
+        },
+        "sentinel_0": {
+          "ll_puckline": 8.063186550666401e-06,
+          "deviance": -0.00010708021644645349,
+          "ll_moneyline": 0.0004421830028569218
+        },
+        "sentinel_1": {
+          "ll_puckline": -0.00015081549873074973,
+          "deviance": -0.000218245177373122,
+          "ll_moneyline": 0.00020759706317252657
+        },
+        "sentinel_2": {
+          "ll_puckline": -3.4009447254512715e-05,
+          "deviance": -0.00044554187070899864,
+          "ll_moneyline": 6.694293637965476e-05
+        }
+      }
+    },
+    "2016": {
+      "n_games": null,
+      "ref": {
+        "ll_puckline": 0.5627211504143238,
+        "deviance": 1.0763792159867394,
+        "ll_moneyline": 0.668763098165349
+      },
+      "gains": {
+        "atk_xgf60_s": {
+          "ll_puckline": -0.00019301120467452026,
+          "deviance": 1.9534989698088978e-05,
+          "ll_moneyline": -0.00040848671561977135
+        },
+        "atk_xgf60_l": {
+          "ll_puckline": -3.36169737259473e-05,
+          "deviance": -8.46542753625279e-05,
+          "ll_moneyline": -0.00020831105993979193
+        },
+        "atk_ev_xgf60_s": {
+          "ll_puckline": 0.00046697017831820453,
+          "deviance": 0.0005018477837746005,
+          "ll_moneyline": 0.00048359930009123087
+        },
+        "atk_ev_xgf_pct_s": {
+          "ll_puckline": -0.00016636849198414794,
+          "deviance": 0.0001613489737049001,
+          "ll_moneyline": -0.0004140210052276938
+        },
+        "atk_gf_s": {
+          "ll_puckline": -2.326572734512311e-05,
+          "deviance": -1.3006686675032242e-05,
+          "ll_moneyline": 4.886443716878297e-06
+        },
+        "atk_finishing_s": {
+          "ll_puckline": 6.353112994283983e-05,
+          "deviance": 0.0001371150389397613,
+          "ll_moneyline": 0.00018405295741796834
+        },
+        "atk_star_power": {
+          "ll_puckline": 0.00016760112981883957,
+          "deviance": 0.00022663341684037164,
+          "ll_moneyline": 0.00016255705416645672
+        },
+        "atk_stars_out_weight": {
+          "ll_puckline": -0.0003389756975680225,
+          "deviance": -0.00011642329631311732,
+          "ll_moneyline": -0.00012459955111343568
+        },
+        "atk_pp_xgf60_s": {
+          "ll_puckline": -0.00025608610568661483,
+          "deviance": -0.0005725059787278219,
+          "ll_moneyline": -0.00034994355996176285
+        },
+        "atk_rest_days": {
+          "ll_puckline": -8.800922204621475e-05,
+          "deviance": 0.00011482182365196714,
+          "ll_moneyline": -0.00022297301857532315
+        },
+        "atk_b2b": {
+          "ll_puckline": -7.498109648840234e-06,
+          "deviance": 6.693914023525593e-05,
+          "ll_moneyline": 6.631887074393106e-06
+        },
+        "atk_lineup_xg": {
+          "ll_puckline": -7.87689173923356e-05,
+          "deviance": 0.0010205440068438154,
+          "ll_moneyline": 7.760687612201611e-05
+        },
+        "atk_lineup_pts": {
+          "ll_puckline": 0.00030521198417077233,
+          "deviance": 0.0011786891067722127,
+          "ll_moneyline": 0.0003546803404412824
+        },
+        "def_xga60_s": {
+          "ll_puckline": -0.0007602750437181172,
+          "deviance": -0.001004589383984511,
+          "ll_moneyline": -0.0009371494431742455
+        },
+        "def_xga60_l": {
+          "ll_puckline": 0.0005268386062616814,
+          "deviance": 0.0007380895915185537,
+          "ll_moneyline": 0.0006849294199496869
+        },
+        "def_ev_xga60_s": {
+          "ll_puckline": 7.564210351984624e-05,
+          "deviance": -0.0001899204033155577,
+          "ll_moneyline": -3.886098449457087e-05
+        },
+        "def_ga_s": {
+          "ll_puckline": -0.0002430302739890866,
+          "deviance": 0.00014420024665251496,
+          "ll_moneyline": 4.893642501546669e-05
+        },
+        "def_pk_xga60_s": {
+          "ll_puckline": -0.00026846538176472645,
+          "deviance": -0.0004506043581766761,
+          "ll_moneyline": -0.00035903880852028447
+        },
+        "def_goalie_gsax60": {
+          "ll_puckline": -9.783779652849933e-05,
+          "deviance": -0.00013586520194319718,
+          "ll_moneyline": -9.763011939367683e-05
+        },
+        "def_goalie_svpct": {
+          "ll_puckline": 0.00015914012366624597,
+          "deviance": 0.0016258525953669611,
+          "ll_moneyline": -0.00013399020295568054
+        },
+        "is_home": {
+          "ll_puckline": 0.000877972354265899,
+          "deviance": 0.007260410875715273,
+          "ll_moneyline": 0.0010488684899676581
+        },
+        "elo_atk_minus_def": {
+          "ll_puckline": 0.001984560236350963,
+          "deviance": 0.002387604133031962,
+          "ll_moneyline": 0.0025888419952783126
+        },
+        "sentinel_0": {
+          "ll_puckline": 0.0003711550763596527,
+          "deviance": -0.0003286392745804889,
+          "ll_moneyline": 9.059423927448851e-05
+        },
+        "sentinel_1": {
+          "ll_puckline": -0.00013987745646870664,
+          "deviance": -1.9867848172427927e-05,
+          "ll_moneyline": -5.8319823865948806e-05
+        },
+        "sentinel_2": {
+          "ll_puckline": 5.987040693844481e-05,
+          "deviance": -0.0004514842696419219,
+          "ll_moneyline": 0.000121478796147656
+        }
+      }
+    },
+    "2017": {
+      "n_games": null,
+      "ref": {
+        "ll_puckline": 0.5855803872175172,
+        "deviance": 1.0979321232414256,
+        "ll_moneyline": 0.6696339034007244
+      },
+      "gains": {
+        "atk_xgf60_s": {
+          "ll_puckline": -8.542255917209918e-05,
+          "deviance": -0.0005956955220394189,
+          "ll_moneyline": -0.00020254138803543764
+        },
+        "atk_xgf60_l": {
+          "ll_puckline": 0.0003843541729896538,
+          "deviance": 0.0003723983533010511,
+          "ll_moneyline": 0.0004408678967572355
+        },
+        "atk_ev_xgf60_s": {
+          "ll_puckline": -0.00020793306386213128,
+          "deviance": -0.00070461771657504,
+          "ll_moneyline": -5.4233036040018945e-05
+        },
+        "atk_ev_xgf_pct_s": {
+          "ll_puckline": 0.00030655732508544364,
+          "deviance": 0.0005340942600851051,
+          "ll_moneyline": 0.0001928996997145882
+        },
+        "atk_gf_s": {
+          "ll_puckline": -0.0002023059398617022,
+          "deviance": -0.00047367611022042233,
+          "ll_moneyline": -2.4046287549039924e-05
+        },
+        "atk_finishing_s": {
+          "ll_puckline": -0.0007168519469731294,
+          "deviance": -5.2093774538297666e-05,
+          "ll_moneyline": -0.0006999321630534183
+        },
+        "atk_star_power": {
+          "ll_puckline": 6.059781001510611e-05,
+          "deviance": 0.001844673664950669,
+          "ll_moneyline": 0.0004733955378160015
+        },
+        "atk_stars_out_weight": {
+          "ll_puckline": 0.00013059466632603378,
+          "deviance": 0.0005000491959343822,
+          "ll_moneyline": -0.0001672248617856642
+        },
+        "atk_pp_xgf60_s": {
+          "ll_puckline": -5.926596407956897e-05,
+          "deviance": 0.0009072760100929944,
+          "ll_moneyline": 0.00034627297505551713
+        },
+        "atk_rest_days": {
+          "ll_puckline": 0.000102720445137372,
+          "deviance": 0.00025778032479095714,
+          "ll_moneyline": 0.00012084723015859389
+        },
+        "atk_b2b": {
+          "ll_puckline": 8.720179963928043e-05,
+          "deviance": 0.00021466296330308055,
+          "ll_moneyline": 0.00018293568254068582
+        },
+        "atk_lineup_xg": {
+          "ll_puckline": 2.7422672118304625e-05,
+          "deviance": 0.0003661867826039167,
+          "ll_moneyline": -0.00031979161181594495
+        },
+        "atk_lineup_pts": {
+          "ll_puckline": 0.0004988260532895472,
+          "deviance": 0.0010787107934426832,
+          "ll_moneyline": 0.00044910409518972294
+        },
+        "def_xga60_s": {
+          "ll_puckline": 3.125295558581431e-05,
+          "deviance": 0.00017292000883473158,
+          "ll_moneyline": 0.00013338497477211053
+        },
+        "def_xga60_l": {
+          "ll_puckline": 0.0006041138536672097,
+          "deviance": 0.0023862683679476415,
+          "ll_moneyline": 0.0004961342597934459
+        },
+        "def_ev_xga60_s": {
+          "ll_puckline": 0.0002762209138152949,
+          "deviance": 0.0009051349802351449,
+          "ll_moneyline": -0.0003777112300094032
+        },
+        "def_ga_s": {
+          "ll_puckline": -7.650594168406855e-05,
+          "deviance": -0.0002695453019774252,
+          "ll_moneyline": 0.0001575054324333136
+        },
+        "def_pk_xga60_s": {
+          "ll_puckline": 0.0005447022618645381,
+          "deviance": 0.000634579221485243,
+          "ll_moneyline": 0.0005257636101769769
+        },
+        "def_goalie_gsax60": {
+          "ll_puckline": 0.00021706776756780233,
+          "deviance": -0.000312825345554435,
+          "ll_moneyline": 0.00030512323079434633
+        },
+        "def_goalie_svpct": {
+          "ll_puckline": -0.00019843809343500496,
+          "deviance": 0.00010343708870697021,
+          "ll_moneyline": -0.0004555875173226642
+        },
+        "is_home": {
+          "ll_puckline": -6.58248948862683e-05,
+          "deviance": 0.006722728256639332,
+          "ll_moneyline": -0.0007824546332629856
+        },
+        "elo_atk_minus_def": {
+          "ll_puckline": 0.0011835968279622078,
+          "deviance": 0.003518174947631847,
+          "ll_moneyline": 0.003311658481415014
+        },
+        "sentinel_0": {
+          "ll_puckline": 0.0008848654129034461,
+          "deviance": 0.0001636154099255993,
+          "ll_moneyline": 0.0004811065191574482
+        },
+        "sentinel_1": {
+          "ll_puckline": 0.0002591903642676918,
+          "deviance": 0.0003203134579508049,
+          "ll_moneyline": -0.00016104556245388757
+        },
+        "sentinel_2": {
+          "ll_puckline": -0.0003992540880067841,
+          "deviance": -0.0007734903934142334,
+          "ll_moneyline": -0.00011314599665401825
+        }
+      }
+    },
+    "2018": {
+      "n_games": null,
+      "ref": {
+        "ll_puckline": 0.5913857681013462,
+        "deviance": 1.118033205085014,
+        "ll_moneyline": 0.675686003506665
+      },
+      "gains": {
+        "atk_xgf60_s": {
+          "ll_puckline": 1.9968661770786156e-05,
+          "deviance": 2.231816246633933e-05,
+          "ll_moneyline": -0.00034570487310359166
+        },
+        "atk_xgf60_l": {
+          "ll_puckline": 0.00017520092437217638,
+          "deviance": 0.0003088108759183861,
+          "ll_moneyline": 9.598804851873588e-05
+        },
+        "atk_ev_xgf60_s": {
+          "ll_puckline": -0.00023816533632137205,
+          "deviance": 0.0008594875487835107,
+          "ll_moneyline": -0.00020945426285612356
+        },
+        "atk_ev_xgf_pct_s": {
+          "ll_puckline": 0.00040537220850134226,
+          "deviance": -0.0006813849762576929,
+          "ll_moneyline": 0.0003852618924421458
+        },
+        "atk_gf_s": {
+          "ll_puckline": -4.3640873001904446e-05,
+          "deviance": 0.000270665314951124,
+          "ll_moneyline": 0.00010622170545648846
+        },
+        "atk_finishing_s": {
+          "ll_puckline": 0.00026201860275643085,
+          "deviance": 0.0011390128697179591,
+          "ll_moneyline": 0.0004047694164567295
+        },
+        "atk_star_power": {
+          "ll_puckline": -0.00020923571646591643,
+          "deviance": 0.0009292444030644109,
+          "ll_moneyline": -0.0007242146293329199
+        },
+        "atk_stars_out_weight": {
+          "ll_puckline": -6.520588468250654e-05,
+          "deviance": 0.0001618450084048817,
+          "ll_moneyline": -0.00011169309881742251
+        },
+        "atk_pp_xgf60_s": {
+          "ll_puckline": 0.00021354407214058124,
+          "deviance": 0.00210844723139747,
+          "ll_moneyline": 0.0009369448731539887
+        },
+        "atk_rest_days": {
+          "ll_puckline": 3.053032004507461e-05,
+          "deviance": 0.0005978694812793783,
+          "ll_moneyline": -0.0002555678633590075
+        },
+        "atk_b2b": {
+          "ll_puckline": 0.0,
+          "deviance": 0.0,
+          "ll_moneyline": 0.0
+        },
+        "atk_lineup_xg": {
+          "ll_puckline": 0.00020233554835602519,
+          "deviance": 0.0004310506679892079,
+          "ll_moneyline": 6.498597462367695e-05
+        },
+        "atk_lineup_pts": {
+          "ll_puckline": -1.7650945163261156e-06,
+          "deviance": 0.00225047205922424,
+          "ll_moneyline": -0.00016730574018908317
+        },
+        "def_xga60_s": {
+          "ll_puckline": -0.0002303841733752865,
+          "deviance": 0.0003214108186631037,
+          "ll_moneyline": -0.0007209013048320445
+        },
+        "def_xga60_l": {
+          "ll_puckline": -0.00041432014093201186,
+          "deviance": 0.0027825616483647675,
+          "ll_moneyline": -0.000942844056987413
+        },
+        "def_ev_xga60_s": {
+          "ll_puckline": 0.0002057979132847887,
+          "deviance": 0.0005926326425254036,
+          "ll_moneyline": 0.00018583200479216355
+        },
+        "def_ga_s": {
+          "ll_puckline": 0.0002573489609866142,
+          "deviance": 0.001132144206139607,
+          "ll_moneyline": 0.0004383405477362823
+        },
+        "def_pk_xga60_s": {
+          "ll_puckline": -0.0002859137824913205,
+          "deviance": -0.0008951514889987688,
+          "ll_moneyline": -0.0002854056546593986
+        },
+        "def_goalie_gsax60": {
+          "ll_puckline": 0.0001736164294083853,
+          "deviance": 0.00020362773899451625,
+          "ll_moneyline": -0.00019162260529970165
+        },
+        "def_goalie_svpct": {
+          "ll_puckline": 0.0009237642481382258,
+          "deviance": 0.001389982864014483,
+          "ll_moneyline": 0.0006116032117016168
+        },
+        "is_home": {
+          "ll_puckline": -0.0009247603925400805,
+          "deviance": 0.00503511831755965,
+          "ll_moneyline": -0.001281962026817851
+        },
+        "elo_atk_minus_def": {
+          "ll_puckline": 0.0012830514340516075,
+          "deviance": 0.00040863845835281687,
+          "ll_moneyline": 0.0025963851167055685
+        },
+        "sentinel_0": {
+          "ll_puckline": -0.00023437585408880857,
+          "deviance": -0.0005167574690887466,
+          "ll_moneyline": -0.0003554636664215849
+        },
+        "sentinel_1": {
+          "ll_puckline": 0.00045781535416122843,
+          "deviance": 0.0011107960661831395,
+          "ll_moneyline": 0.00024700633250640536
+        },
+        "sentinel_2": {
+          "ll_puckline": -0.00023613867264771216,
+          "deviance": -0.00036629349865879846,
+          "ll_moneyline": -0.00022880034959693596
+        }
+      }
+    },
+    "2019": {
+      "n_games": null,
+      "ref": {
+        "ll_puckline": 0.5863599254885042,
+        "deviance": 1.0364394776563535,
+        "ll_moneyline": 0.6819705872524935
+      },
+      "gains": {
+        "atk_xgf60_s": {
+          "ll_puckline": -0.00010317347082267059,
+          "deviance": 0.0007223955003867744,
+          "ll_moneyline": -0.00023812138365453261
+        },
+        "atk_xgf60_l": {
+          "ll_puckline": 0.00020714196488269554,
+          "deviance": -0.00139227922901064,
+          "ll_moneyline": 0.0003102461624738817
+        },
+        "atk_ev_xgf60_s": {
+          "ll_puckline": 0.00012424498066898604,
+          "deviance": 0.0010529709135995713,
+          "ll_moneyline": -3.3325373254400326e-05
+        },
+        "atk_ev_xgf_pct_s": {
+          "ll_puckline": -0.00013959518294703877,
+          "deviance": -7.634396014832845e-05,
+          "ll_moneyline": 0.00031022170858474585
+        },
+        "atk_gf_s": {
+          "ll_puckline": -9.368989406255412e-05,
+          "deviance": -2.8087713340285703e-05,
+          "ll_moneyline": -8.131015463708202e-06
+        },
+        "atk_finishing_s": {
+          "ll_puckline": 0.0002674301066973861,
+          "deviance": 0.00029887576666465243,
+          "ll_moneyline": -0.00010587561602259932
+        },
+        "atk_star_power": {
+          "ll_puckline": 0.0002968471265645256,
+          "deviance": 0.0015441085527232445,
+          "ll_moneyline": -0.0002379410798860615
+        },
+        "atk_stars_out_weight": {
+          "ll_puckline": 0.000316618043158301,
+          "deviance": 0.0009278320584316102,
+          "ll_moneyline": 0.000334054309436671
+        },
+        "atk_pp_xgf60_s": {
+          "ll_puckline": -8.814987485239456e-05,
+          "deviance": -5.4627266391493734e-05,
+          "ll_moneyline": -0.00019129897609493351
+        },
+        "atk_rest_days": {
+          "ll_puckline": -0.000362866291636621,
+          "deviance": -7.490083968031414e-05,
+          "ll_moneyline": -0.0007308668612659996
+        },
+        "atk_b2b": {
+          "ll_puckline": 2.017597133596727e-05,
+          "deviance": 0.000144087665632453,
+          "ll_moneyline": 8.014786294952003e-05
+        },
+        "atk_lineup_xg": {
+          "ll_puckline": -0.001033219816142572,
+          "deviance": -0.0011685237915266544,
+          "ll_moneyline": -0.0018444361185705471
+        },
+        "atk_lineup_pts": {
+          "ll_puckline": 0.0007957345037560293,
+          "deviance": 0.004120071390236957,
+          "ll_moneyline": 0.0009983494411104354
+        },
+        "def_xga60_s": {
+          "ll_puckline": 6.023367995988682e-05,
+          "deviance": 1.3003374305320392e-05,
+          "ll_moneyline": -0.00024566314421492486
+        },
+        "def_xga60_l": {
+          "ll_puckline": 1.421794760492201e-05,
+          "deviance": 0.0036730004911791347,
+          "ll_moneyline": -0.0004149193938971507
+        },
+        "def_ev_xga60_s": {
+          "ll_puckline": -1.5144040120707025e-05,
+          "deviance": 0.00042304266770187837,
+          "ll_moneyline": 0.00010142728755269115
+        },
+        "def_ga_s": {
+          "ll_puckline": 0.00014887561537424432,
+          "deviance": 0.0009765836053261534,
+          "ll_moneyline": 0.00024390372748173128
+        },
+        "def_pk_xga60_s": {
+          "ll_puckline": 6.834347464312884e-05,
+          "deviance": 0.0005539859489731569,
+          "ll_moneyline": -6.811085740399125e-05
+        },
+        "def_goalie_gsax60": {
+          "ll_puckline": 0.00010420663950339026,
+          "deviance": 0.0007478224631300989,
+          "ll_moneyline": 0.00018618322558139333
+        },
+        "def_goalie_svpct": {
+          "ll_puckline": 0.0006654446357606814,
+          "deviance": -0.0011654369371738582,
+          "ll_moneyline": 0.0002066585227786799
+        },
+        "is_home": {
+          "ll_puckline": 0.0003475725108671446,
+          "deviance": 0.008536061306857912,
+          "ll_moneyline": -2.4947955322152104e-05
+        },
+        "elo_atk_minus_def": {
+          "ll_puckline": 0.0012728060730087254,
+          "deviance": 0.0003559205013758948,
+          "ll_moneyline": 0.0022244505764068556
+        },
+        "sentinel_0": {
+          "ll_puckline": 0.00017278348714833136,
+          "deviance": 0.0005512101343125853,
+          "ll_moneyline": 0.00024198826537591422
+        },
+        "sentinel_1": {
+          "ll_puckline": 1.593793025689294e-05,
+          "deviance": 4.1119588344740166e-05,
+          "ll_moneyline": 6.441203991613964e-05
+        },
+        "sentinel_2": {
+          "ll_puckline": -0.0001268940172004518,
+          "deviance": -0.0002418544363804731,
+          "ll_moneyline": -0.0004912735266594526
+        }
+      }
+    },
+    "2020": {
+      "n_games": null,
+      "ref": {
+        "ll_puckline": 0.5747602865285204,
+        "deviance": 1.1194382191283327,
+        "ll_moneyline": 0.6560602615054374
+      },
+      "gains": {
+        "atk_xgf60_s": {
+          "ll_puckline": 9.593319656187038e-05,
+          "deviance": -0.001044133890647947,
+          "ll_moneyline": -0.000518533912411967
+        },
+        "atk_xgf60_l": {
+          "ll_puckline": 8.810125933766955e-05,
+          "deviance": 0.0012638423225770357,
+          "ll_moneyline": -0.00010861092526770477
+        },
+        "atk_ev_xgf60_s": {
+          "ll_puckline": -0.00033241501906611237,
+          "deviance": -0.00198619040314596,
+          "ll_moneyline": -0.0007083428513138257
+        },
+        "atk_ev_xgf_pct_s": {
+          "ll_puckline": 0.0006790188597797231,
+          "deviance": 0.0019101479020511292,
+          "ll_moneyline": 0.00031870712327397577
+        },
+        "atk_gf_s": {
+          "ll_puckline": -6.329123269788184e-05,
+          "deviance": 0.00029623392062938514,
+          "ll_moneyline": -0.00015148209783755195
+        },
+        "atk_finishing_s": {
+          "ll_puckline": 0.0008017995848480508,
+          "deviance": 0.0006149817988716499,
+          "ll_moneyline": 0.0007597011547686439
+        },
+        "atk_star_power": {
+          "ll_puckline": -0.00030976461382614673,
+          "deviance": -0.0020709940550307504,
+          "ll_moneyline": 0.00034293832659160195
+        },
+        "atk_stars_out_weight": {
+          "ll_puckline": 0.0005218065556329421,
+          "deviance": 0.0001426541553746219,
+          "ll_moneyline": -0.0005914330555971681
+        },
+        "atk_pp_xgf60_s": {
+          "ll_puckline": -0.0006775263520777397,
+          "deviance": -0.0011858040981571616,
+          "ll_moneyline": -0.0009159325531118423
+        },
+        "atk_rest_days": {
+          "ll_puckline": 2.0071795058584918e-05,
+          "deviance": -0.0005846560121232081,
+          "ll_moneyline": 0.00012298873363103535
+        },
+        "atk_b2b": {
+          "ll_puckline": -8.799952258886634e-05,
+          "deviance": -0.0006866401688128132,
+          "ll_moneyline": 8.166925965291671e-05
+        },
+        "atk_lineup_xg": {
+          "ll_puckline": -6.719410678202031e-06,
+          "deviance": -0.0025096943698321716,
+          "ll_moneyline": 0.000365212993499453
+        },
+        "atk_lineup_pts": {
+          "ll_puckline": 0.0009219630049952521,
+          "deviance": 0.002148543714258988,
+          "ll_moneyline": 0.0011441975113124503
+        },
+        "def_xga60_s": {
+          "ll_puckline": -0.0006803896175126001,
+          "deviance": -0.0025232288309713358,
+          "ll_moneyline": -0.0006203801763771111
+        },
+        "def_xga60_l": {
+          "ll_puckline": 0.0001974528043674484,
+          "deviance": 0.0006332697256867803,
+          "ll_moneyline": 0.0005746205851487884
+        },
+        "def_ev_xga60_s": {
+          "ll_puckline": 0.0005497075347740132,
+          "deviance": 0.0004965650017099144,
+          "ll_moneyline": 0.001093098624789235
+        },
+        "def_ga_s": {
+          "ll_puckline": -8.49137757666929e-05,
+          "deviance": -0.0005217311077236886,
+          "ll_moneyline": -0.00024256407627543108
+        },
+        "def_pk_xga60_s": {
+          "ll_puckline": 0.00024807780564684023,
+          "deviance": -1.525939008795163e-05,
+          "ll_moneyline": 0.0004058415648721114
+        },
+        "def_goalie_gsax60": {
+          "ll_puckline": 1.533363299766055e-05,
+          "deviance": -0.0006202186444059787,
+          "ll_moneyline": 0.000314159633889588
+        },
+        "def_goalie_svpct": {
+          "ll_puckline": 0.0005876926724962539,
+          "deviance": -0.0008114137190549098,
+          "ll_moneyline": 3.541726370892562e-05
+        },
+        "is_home": {
+          "ll_puckline": -0.0002241019811461964,
+          "deviance": 0.00449647349400184,
+          "ll_moneyline": -0.00020661411762334936
+        },
+        "elo_atk_minus_def": {
+          "ll_puckline": 0.0031978716887778313,
+          "deviance": 0.0043382667060836155,
+          "ll_moneyline": 0.005535461728607194
+        },
+        "sentinel_0": {
+          "ll_puckline": 0.0010201971214126582,
+          "deviance": 0.0017050265648714813,
+          "ll_moneyline": 0.00033483968992131796
+        },
+        "sentinel_1": {
+          "ll_puckline": 0.0002441446420513582,
+          "deviance": 9.836191881928968e-05,
+          "ll_moneyline": -0.0004097445156313606
+        },
+        "sentinel_2": {
+          "ll_puckline": 0.00020920539714475161,
+          "deviance": 7.4016702011903135e-06,
+          "ll_moneyline": 0.00038873376026549167
+        }
+      }
+    },
+    "2021": {
+      "n_games": null,
+      "ref": {
+        "ll_puckline": 0.5804850635465139,
+        "deviance": 1.0797064874062297,
+        "ll_moneyline": 0.6478019818755975
+      },
+      "gains": {
+        "atk_xgf60_s": {
+          "ll_puckline": 0.0001898913568744165,
+          "deviance": 0.00012621510716570583,
+          "ll_moneyline": 1.0166323101912234e-05
+        },
+        "atk_xgf60_l": {
+          "ll_puckline": -0.0005103856110916238,
+          "deviance": -0.0004892228349342442,
+          "ll_moneyline": -0.00022015284690790615
+        },
+        "atk_ev_xgf60_s": {
+          "ll_puckline": -7.554479451987728e-05,
+          "deviance": 0.0002575402856603848,
+          "ll_moneyline": 0.00019429003089221908
+        },
+        "atk_ev_xgf_pct_s": {
+          "ll_puckline": -0.00011927592523508501,
+          "deviance": -0.0003668480974647892,
+          "ll_moneyline": 0.0001329821211956128
+        },
+        "atk_gf_s": {
+          "ll_puckline": -0.0003436718266660588,
+          "deviance": -0.0007836683199080596,
+          "ll_moneyline": -0.00041490869136429076
+        },
+        "atk_finishing_s": {
+          "ll_puckline": 0.0005170345870330051,
+          "deviance": 0.0008078532520736648,
+          "ll_moneyline": 0.0008635924404846174
+        },
+        "atk_star_power": {
+          "ll_puckline": 0.00037519441495170724,
+          "deviance": 0.001274263852538704,
+          "ll_moneyline": 0.0015467963127243634
+        },
+        "atk_stars_out_weight": {
+          "ll_puckline": 4.819449128179443e-05,
+          "deviance": 3.600619354138246e-05,
+          "ll_moneyline": 0.00019061879013748673
+        },
+        "atk_pp_xgf60_s": {
+          "ll_puckline": -0.00021909835272082567,
+          "deviance": -0.0006870017377174076,
+          "ll_moneyline": -0.0004523113591073935
+        },
+        "atk_rest_days": {
+          "ll_puckline": -4.894885303940999e-05,
+          "deviance": 0.00028982029201052306,
+          "ll_moneyline": 0.0001520567279824636
+        },
+        "atk_b2b": {
+          "ll_puckline": 2.823933368711895e-05,
+          "deviance": 5.5761783483987415e-06,
+          "ll_moneyline": -1.348611914453457e-05
+        },
+        "atk_lineup_xg": {
+          "ll_puckline": 0.00019323040352581256,
+          "deviance": 1.842210077795947e-05,
+          "ll_moneyline": 0.0004039932817941905
+        },
+        "atk_lineup_pts": {
+          "ll_puckline": 0.0009643497192685091,
+          "deviance": 0.0017686747436389538,
+          "ll_moneyline": 0.0007392246467845531
+        },
+        "def_xga60_s": {
+          "ll_puckline": -0.00019901431231783562,
+          "deviance": -0.0004007269810306635,
+          "ll_moneyline": -7.62315858190421e-05
+        },
+        "def_xga60_l": {
+          "ll_puckline": -3.888328266654639e-05,
+          "deviance": 0.0018084251670664742,
+          "ll_moneyline": -0.0004882794584890604
+        },
+        "def_ev_xga60_s": {
+          "ll_puckline": 0.0006440146163836369,
+          "deviance": 0.0014062655973019478,
+          "ll_moneyline": 0.0008916890951564671
+        },
+        "def_ga_s": {
+          "ll_puckline": -0.00010100242015631533,
+          "deviance": -5.668157877192215e-05,
+          "ll_moneyline": -3.852016400407443e-05
+        },
+        "def_pk_xga60_s": {
+          "ll_puckline": -6.413783170455822e-05,
+          "deviance": 0.0003373348185236047,
+          "ll_moneyline": 5.743410317538e-05
+        },
+        "def_goalie_gsax60": {
+          "ll_puckline": -0.00017474514509052685,
+          "deviance": -4.3531827207621276e-05,
+          "ll_moneyline": -0.00011886928880633363
+        },
+        "def_goalie_svpct": {
+          "ll_puckline": 0.0008148855184851866,
+          "deviance": 6.183840750062508e-05,
+          "ll_moneyline": 0.0015224993616830274
+        },
+        "is_home": {
+          "ll_puckline": -0.0007111091570489725,
+          "deviance": 0.003079533643044252,
+          "ll_moneyline": -0.0006526442770656837
+        },
+        "elo_atk_minus_def": {
+          "ll_puckline": 0.003151547089287443,
+          "deviance": 0.004400551344408976,
+          "ll_moneyline": 0.005553292899294293
+        },
+        "sentinel_0": {
+          "ll_puckline": 4.478870723900741e-05,
+          "deviance": 0.00031802082461807046,
+          "ll_moneyline": 0.00013034323986593765
+        },
+        "sentinel_1": {
+          "ll_puckline": -2.674519741552306e-05,
+          "deviance": 0.00028897416336826076,
+          "ll_moneyline": -2.15541978736411e-05
+        },
+        "sentinel_2": {
+          "ll_puckline": 0.00013664399762891577,
+          "deviance": 0.00020522653524834844,
+          "ll_moneyline": 0.000140402951709917
+        }
+      }
+    },
+    "2022": {
+      "n_games": null,
+      "ref": {
+        "ll_puckline": 0.5817260168220546,
+        "deviance": 1.0367047869413322,
+        "ll_moneyline": 0.6624985963236486
+      },
+      "gains": {
+        "atk_xgf60_s": {
+          "ll_puckline": -0.00043264405945009354,
+          "deviance": -0.003413479222257987,
+          "ll_moneyline": -0.0009258175688716674
+        },
+        "atk_xgf60_l": {
+          "ll_puckline": 0.0006534442641110694,
+          "deviance": 0.0015827151734331135,
+          "ll_moneyline": 0.0006780414900351417
+        },
+        "atk_ev_xgf60_s": {
+          "ll_puckline": 0.00014900383848848175,
+          "deviance": -0.0002883365445180974,
+          "ll_moneyline": 3.775050498966426e-05
+        },
+        "atk_ev_xgf_pct_s": {
+          "ll_puckline": 0.0004925233534434081,
+          "deviance": 0.0016096479442613276,
+          "ll_moneyline": 0.0004687102623718298
+        },
+        "atk_gf_s": {
+          "ll_puckline": -0.00018682093516153575,
+          "deviance": -0.0005017207216639896,
+          "ll_moneyline": 2.0762054307454925e-05
+        },
+        "atk_finishing_s": {
+          "ll_puckline": -0.0006308425879389956,
+          "deviance": -0.002528211041818551,
+          "ll_moneyline": -0.0005809621029382317
+        },
+        "atk_star_power": {
+          "ll_puckline": -0.0003287108520687587,
+          "deviance": -0.0010576533405126654,
+          "ll_moneyline": -0.0010123010756729611
+        },
+        "atk_stars_out_weight": {
+          "ll_puckline": -0.00014832329347902462,
+          "deviance": -0.0005124706390295941,
+          "ll_moneyline": -0.0001239569509218219
+        },
+        "atk_pp_xgf60_s": {
+          "ll_puckline": -1.513308029332805e-05,
+          "deviance": -0.0003612711713461003,
+          "ll_moneyline": -0.00013070861690656077
+        },
+        "atk_rest_days": {
+          "ll_puckline": -0.00020763230231390928,
+          "deviance": 2.2684919336102283e-05,
+          "ll_moneyline": -0.0004324678244898017
+        },
+        "atk_b2b": {
+          "ll_puckline": -1.9399321167345995e-05,
+          "deviance": -4.156542285471687e-06,
+          "ll_moneyline": -1.9109128351457727e-05
+        },
+        "atk_lineup_xg": {
+          "ll_puckline": 0.0006757115622971765,
+          "deviance": -0.0012862768343235853,
+          "ll_moneyline": -8.038655055608857e-05
+        },
+        "atk_lineup_pts": {
+          "ll_puckline": -0.0006098628537886119,
+          "deviance": -0.0020674757115370923,
+          "ll_moneyline": -0.0008529965250675398
+        },
+        "def_xga60_s": {
+          "ll_puckline": -0.0005322163563714621,
+          "deviance": -0.0005244345256072425,
+          "ll_moneyline": -0.0005320638897062802
+        },
+        "def_xga60_l": {
+          "ll_puckline": -0.0006105320552499682,
+          "deviance": -0.004254090346818673,
+          "ll_moneyline": -0.0005339134819232205
+        },
+        "def_ev_xga60_s": {
+          "ll_puckline": 0.0009258903890412284,
+          "deviance": -0.0004403033524058575,
+          "ll_moneyline": 0.0005931776705858649
+        },
+        "def_ga_s": {
+          "ll_puckline": -0.00043195003992169134,
+          "deviance": -0.000978651250536977,
+          "ll_moneyline": -0.0006439487476750383
+        },
+        "def_pk_xga60_s": {
+          "ll_puckline": 7.366198564673354e-05,
+          "deviance": 0.0004946498818585443,
+          "ll_moneyline": -0.0002249506012780289
+        },
+        "def_goalie_gsax60": {
+          "ll_puckline": -0.00035926523152784995,
+          "deviance": -0.00020914170017660716,
+          "ll_moneyline": -0.0004052699934119497
+        },
+        "def_goalie_svpct": {
+          "ll_puckline": -0.0009542772154351731,
+          "deviance": -0.002400411438673977,
+          "ll_moneyline": -0.0002060665765062364
+        },
+        "is_home": {
+          "ll_puckline": -1.253080524432626e-05,
+          "deviance": -5.3408231836415965e-05,
+          "ll_moneyline": 5.328258354031501e-05
+        },
+        "elo_atk_minus_def": {
+          "ll_puckline": 0.0018572284291192842,
+          "deviance": 0.008373419569482898,
+          "ll_moneyline": 0.0034558110688253096
+        },
+        "sentinel_0": {
+          "ll_puckline": -0.0003654212228104692,
+          "deviance": 9.574020046221321e-05,
+          "ll_moneyline": 0.00017780180261173228
+        },
+        "sentinel_1": {
+          "ll_puckline": -3.803260564483324e-06,
+          "deviance": -0.0001351072729971481,
+          "ll_moneyline": 5.569479036515723e-06
+        },
+        "sentinel_2": {
+          "ll_puckline": 0.00026986985173527156,
+          "deviance": 8.966320405434658e-05,
+          "ll_moneyline": 0.0003945085118556291
+        }
+      }
+    },
+    "2023": {
+      "n_games": null,
+      "ref": {
+        "ll_puckline": 0.5941429082469232,
+        "deviance": 1.099328874500803,
+        "ll_moneyline": 0.658587860319403
+      },
+      "gains": {
+        "atk_xgf60_s": {
+          "ll_puckline": 0.0004993953428077402,
+          "deviance": 0.0007914337617298539,
+          "ll_moneyline": -4.2015530812067325e-05
+        },
+        "atk_xgf60_l": {
+          "ll_puckline": 0.00022590561494906236,
+          "deviance": -0.0016500552096727628,
+          "ll_moneyline": -0.0006178302826891358
+        },
+        "atk_ev_xgf60_s": {
+          "ll_puckline": 0.0005269342748431827,
+          "deviance": 0.001107678379276944,
+          "ll_moneyline": 7.012061437694506e-05
+        },
+        "atk_ev_xgf_pct_s": {
+          "ll_puckline": 0.00035187199880992726,
+          "deviance": 0.0014789042322287393,
+          "ll_moneyline": -3.0609471772802266e-06
+        },
+        "atk_gf_s": {
+          "ll_puckline": 0.00021726085966944364,
+          "deviance": 0.0006987839841343657,
+          "ll_moneyline": -0.0003869358144459323
+        },
+        "atk_finishing_s": {
+          "ll_puckline": -2.192016278379505e-05,
+          "deviance": 0.000530927686055005,
+          "ll_moneyline": -2.7224979481821343e-05
+        },
+        "atk_star_power": {
+          "ll_puckline": 0.0008233879488813711,
+          "deviance": 0.002517917735039621,
+          "ll_moneyline": 0.00030266247687449344
+        },
+        "atk_stars_out_weight": {
+          "ll_puckline": 0.0006290012587982785,
+          "deviance": 0.0017847698620458985,
+          "ll_moneyline": 0.0007732817860569563
+        },
+        "atk_pp_xgf60_s": {
+          "ll_puckline": 8.318900070636293e-05,
+          "deviance": 0.00025351081669100495,
+          "ll_moneyline": -0.0004522090931394773
+        },
+        "atk_rest_days": {
+          "ll_puckline": 0.0002887688157112711,
+          "deviance": 0.00033787401829510344,
+          "ll_moneyline": 7.818932683767432e-05
+        },
+        "atk_b2b": {
+          "ll_puckline": 8.169697981375013e-05,
+          "deviance": -7.422195371242779e-05,
+          "ll_moneyline": -0.00016985967591254258
+        },
+        "atk_lineup_xg": {
+          "ll_puckline": -0.00011719916945662767,
+          "deviance": -0.002646104084772949,
+          "ll_moneyline": 8.423899159304415e-05
+        },
+        "atk_lineup_pts": {
+          "ll_puckline": -7.751156113489088e-05,
+          "deviance": -0.001329097264722856,
+          "ll_moneyline": 0.00019152413206169339
+        },
+        "def_xga60_s": {
+          "ll_puckline": -1.7635193851894826e-06,
+          "deviance": 0.001802328737262382,
+          "ll_moneyline": -0.0005162102462977769
+        },
+        "def_xga60_l": {
+          "ll_puckline": 0.0010412019303049913,
+          "deviance": -0.003900905478773087,
+          "ll_moneyline": 0.00030730368762388327
+        },
+        "def_ev_xga60_s": {
+          "ll_puckline": 0.0007234590991496148,
+          "deviance": 0.002158575431921328,
+          "ll_moneyline": 0.0010140738791891701
+        },
+        "def_ga_s": {
+          "ll_puckline": 0.00037300142428986494,
+          "deviance": 0.0004026568060286895,
+          "ll_moneyline": -0.00016464307034202985
+        },
+        "def_pk_xga60_s": {
+          "ll_puckline": -0.0001505235767872426,
+          "deviance": -9.555354566948004e-05,
+          "ll_moneyline": -0.0003160194501132807
+        },
+        "def_goalie_gsax60": {
+          "ll_puckline": -0.00012132443840995322,
+          "deviance": 0.0006562521829462931,
+          "ll_moneyline": -0.0005073769086407776
+        },
+        "def_goalie_svpct": {
+          "ll_puckline": -0.0018542355185275916,
+          "deviance": -0.005036597140035681,
+          "ll_moneyline": -0.002548260616828779
+        },
+        "is_home": {
+          "ll_puckline": 0.0005109309495210379,
+          "deviance": 0.003639250911701808,
+          "ll_moneyline": -3.591382780310237e-05
+        },
+        "elo_atk_minus_def": {
+          "ll_puckline": 0.0004673753709053541,
+          "deviance": 0.0069555768988682765,
+          "ll_moneyline": 0.002283023819231289
+        },
+        "sentinel_0": {
+          "ll_puckline": -3.068456074895032e-06,
+          "deviance": -0.0001064953118359302,
+          "ll_moneyline": -0.00017450408942942808
+        },
+        "sentinel_1": {
+          "ll_puckline": 0.000665596041342309,
+          "deviance": -0.0002653975564457234,
+          "ll_moneyline": 0.00039381669624294346
+        },
+        "sentinel_2": {
+          "ll_puckline": 0.0001584647051831034,
+          "deviance": -0.0007033382304946212,
+          "ll_moneyline": -4.8652522008585386e-05
+        }
+      }
+    },
+    "2024": {
+      "n_games": null,
+      "ref": {
+        "ll_puckline": 0.5989176810687146,
+        "deviance": 1.132394472352652,
+        "ll_moneyline": 0.6619798984613773
+      },
+      "gains": {
+        "atk_xgf60_s": {
+          "ll_puckline": -0.0006031050383233927,
+          "deviance": -0.0004786395025817569,
+          "ll_moneyline": -0.000699492777198718
+        },
+        "atk_xgf60_l": {
+          "ll_puckline": -0.00014423108680594598,
+          "deviance": -0.0009054193864082016,
+          "ll_moneyline": -0.0007689903262313447
+        },
+        "atk_ev_xgf60_s": {
+          "ll_puckline": 1.0071525001098536e-05,
+          "deviance": 0.0005632116634735063,
+          "ll_moneyline": -2.4971614976276868e-05
+        },
+        "atk_ev_xgf_pct_s": {
+          "ll_puckline": 6.115856783961426e-05,
+          "deviance": 0.0005999016873110552,
+          "ll_moneyline": 0.00010688923849877519
+        },
+        "atk_gf_s": {
+          "ll_puckline": -8.180031076177041e-05,
+          "deviance": 1.2225760404716013e-05,
+          "ll_moneyline": -1.1122682181619048e-05
+        },
+        "atk_finishing_s": {
+          "ll_puckline": -2.254553018365968e-05,
+          "deviance": -0.00010905533448868354,
+          "ll_moneyline": 0.00015773090479065388
+        },
+        "atk_star_power": {
+          "ll_puckline": -4.2416261632372e-05,
+          "deviance": -0.001705999460713148,
+          "ll_moneyline": 0.0001822736896418542
+        },
+        "atk_stars_out_weight": {
+          "ll_puckline": 0.0001930538778087687,
+          "deviance": 0.0014522256061924033,
+          "ll_moneyline": 6.80324790165443e-05
+        },
+        "atk_pp_xgf60_s": {
+          "ll_puckline": -0.0004588889471286439,
+          "deviance": -0.0008787079422141186,
+          "ll_moneyline": -0.0004016612613324533
+        },
+        "atk_rest_days": {
+          "ll_puckline": -5.208361785125071e-05,
+          "deviance": 0.00031989908071117235,
+          "ll_moneyline": -7.766216783811064e-05
+        },
+        "atk_b2b": {
+          "ll_puckline": 0.0,
+          "deviance": 0.0,
+          "ll_moneyline": 0.0
+        },
+        "atk_lineup_xg": {
+          "ll_puckline": -0.0004936990945910713,
+          "deviance": -0.0006245841571668187,
+          "ll_moneyline": -0.0003036398513007743
+        },
+        "atk_lineup_pts": {
+          "ll_puckline": 0.0004281622703831145,
+          "deviance": 0.0005778690212243642,
+          "ll_moneyline": 0.0002857745423302527
+        },
+        "def_xga60_s": {
+          "ll_puckline": -0.00016478833897126677,
+          "deviance": 0.0010745105124922993,
+          "ll_moneyline": -0.00041468646881881455
+        },
+        "def_xga60_l": {
+          "ll_puckline": -0.0005072981057253623,
+          "deviance": -0.0045774191438701095,
+          "ll_moneyline": -0.0013663173207416612
+        },
+        "def_ev_xga60_s": {
+          "ll_puckline": 4.526374066249339e-05,
+          "deviance": 0.0017914777885643662,
+          "ll_moneyline": 0.0001688487747250056
+        },
+        "def_ga_s": {
+          "ll_puckline": 0.00023688040601921312,
+          "deviance": 0.000594519682865835,
+          "ll_moneyline": 0.0002839652752075761
+        },
+        "def_pk_xga60_s": {
+          "ll_puckline": -0.0001379383790464095,
+          "deviance": -0.00014887495500937042,
+          "ll_moneyline": -6.80733591970073e-05
+        },
+        "def_goalie_gsax60": {
+          "ll_puckline": 0.00015970720970659436,
+          "deviance": 0.0009865267915436515,
+          "ll_moneyline": 5.240003475981414e-05
+        },
+        "def_goalie_svpct": {
+          "ll_puckline": 0.0006097599257078867,
+          "deviance": -0.003043304282672299,
+          "ll_moneyline": 0.0001442830475540946
+        },
+        "is_home": {
+          "ll_puckline": -0.0002945573701412796,
+          "deviance": 0.004713631570766985,
+          "ll_moneyline": -0.0002399883788175572
+        },
+        "elo_atk_minus_def": {
+          "ll_puckline": 0.0006235912133665256,
+          "deviance": 0.005455835981457824,
+          "ll_moneyline": 0.0032127561743087174
+        },
+        "sentinel_0": {
+          "ll_puckline": -0.00010898426964922603,
+          "deviance": 0.0012995398177224615,
+          "ll_moneyline": -0.00035924134403853003
+        },
+        "sentinel_1": {
+          "ll_puckline": 0.00013816967691226978,
+          "deviance": 0.0003004658810661365,
+          "ll_moneyline": 8.508707754784073e-05
+        },
+        "sentinel_2": {
+          "ll_puckline": -0.00016109845692013902,
+          "deviance": 8.553152727119873e-05,
+          "ll_moneyline": -0.0002322923894888529
+        }
+      }
+    },
+    "2025": {
+      "n_games": null,
+      "ref": {
+        "ll_puckline": 0.5844972258917704,
+        "deviance": 1.0503101230999254,
+        "ll_moneyline": 0.6851582094554729
+      },
+      "gains": {
+        "atk_xgf60_s": {
+          "ll_puckline": -0.000104703087967839,
+          "deviance": -5.373565428379301e-05,
+          "ll_moneyline": -0.00011234873051890748
+        },
+        "atk_xgf60_l": {
+          "ll_puckline": -0.00020774888301533512,
+          "deviance": -0.0008694205201837946,
+          "ll_moneyline": -0.0001967397970863427
+        },
+        "atk_ev_xgf60_s": {
+          "ll_puckline": 0.0001787571686692191,
+          "deviance": 0.0005793410358165829,
+          "ll_moneyline": 0.00019130319353932723
+        },
+        "atk_ev_xgf_pct_s": {
+          "ll_puckline": 0.0002285275325440983,
+          "deviance": 1.996620655120296e-05,
+          "ll_moneyline": 0.00019521360207530591
+        },
+        "atk_gf_s": {
+          "ll_puckline": -0.00010778604851269247,
+          "deviance": 2.4926915939804672e-05,
+          "ll_moneyline": -0.00018131118814068703
+        },
+        "atk_finishing_s": {
+          "ll_puckline": -7.941931274202396e-05,
+          "deviance": 0.00012080878349318702,
+          "ll_moneyline": -5.604720931839946e-05
+        },
+        "atk_star_power": {
+          "ll_puckline": -0.00017591816389062043,
+          "deviance": -0.0008398768157267256,
+          "ll_moneyline": -7.188924875667357e-05
+        },
+        "atk_stars_out_weight": {
+          "ll_puckline": 4.609861906690327e-05,
+          "deviance": 0.0008049408409802616,
+          "ll_moneyline": 0.00010037161659626204
+        },
+        "atk_pp_xgf60_s": {
+          "ll_puckline": 7.516009124841627e-05,
+          "deviance": 0.00019788234301243435,
+          "ll_moneyline": 7.212818708068891e-05
+        },
+        "atk_rest_days": {
+          "ll_puckline": 4.358823624373009e-06,
+          "deviance": 4.778413238604173e-05,
+          "ll_moneyline": -4.69380862698765e-05
+        },
+        "atk_b2b": {
+          "ll_puckline": 0.0,
+          "deviance": 0.0,
+          "ll_moneyline": 0.0
+        },
+        "atk_lineup_xg": {
+          "ll_puckline": -0.00018411370307624964,
+          "deviance": -0.0010562506318694265,
+          "ll_moneyline": 0.00036309087396724227
+        },
+        "atk_lineup_pts": {
+          "ll_puckline": 0.0012129356808080471,
+          "deviance": 0.0012327138739154364,
+          "ll_moneyline": 0.0004871899358774856
+        },
+        "def_xga60_s": {
+          "ll_puckline": 0.00012148357982388891,
+          "deviance": 0.00046351896093099754,
+          "ll_moneyline": 6.669350746091318e-05
+        },
+        "def_xga60_l": {
+          "ll_puckline": 0.00021795981321937052,
+          "deviance": -0.0022856169047713593,
+          "ll_moneyline": -0.0001082302818696812
+        },
+        "def_ev_xga60_s": {
+          "ll_puckline": 0.00034644673813855054,
+          "deviance": 0.0015436534748172193,
+          "ll_moneyline": 0.0006522356266559504
+        },
+        "def_ga_s": {
+          "ll_puckline": -2.3731139234151044e-05,
+          "deviance": 0.00021280791867384075,
+          "ll_moneyline": -0.00019070096695938954
+        },
+        "def_pk_xga60_s": {
+          "ll_puckline": -0.000145461312304751,
+          "deviance": 6.876723184778832e-05,
+          "ll_moneyline": -7.016788343583436e-05
+        },
+        "def_goalie_gsax60": {
+          "ll_puckline": 0.00012704396877372126,
+          "deviance": 0.0018276862541573013,
+          "ll_moneyline": 0.00018962471158623373
+        },
+        "def_goalie_svpct": {
+          "ll_puckline": 5.339624720457348e-05,
+          "deviance": -0.004135740934280374,
+          "ll_moneyline": -0.0005344891435686838
+        },
+        "is_home": {
+          "ll_puckline": 0.0006713649422195322,
+          "deviance": 0.0007089998224116822,
+          "ll_moneyline": 0.00024998482829441393
+        },
+        "elo_atk_minus_def": {
+          "ll_puckline": -0.0011046252487176833,
+          "deviance": 0.0008755921753673679,
+          "ll_moneyline": -0.001851550498977006
+        },
+        "sentinel_0": {
+          "ll_puckline": -8.900161793956585e-05,
+          "deviance": 9.986775352177624e-05,
+          "ll_moneyline": -4.9065938564019085e-05
+        },
+        "sentinel_1": {
+          "ll_puckline": -2.859474489713687e-05,
+          "deviance": 5.272379225429447e-06,
+          "ll_moneyline": -5.242678779771026e-05
+        },
+        "sentinel_2": {
+          "ll_puckline": 0.00022410328610777963,
+          "deviance": 0.00019851432418849235,
+          "ll_moneyline": 0.0001681026181337142
+        }
+      }
+    }
+  }
+}

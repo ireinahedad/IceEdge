@@ -56,6 +56,54 @@ export async function fetchRawOdds(): Promise<RawOddsEvent[]> {
 }
 
 /**
+ * Récupère UNIQUEMENT la puck line — **1 crédit au lieu de 3** (A3).
+ *
+ * The Odds API facture un crédit par marché et par région. Une passe complète
+ * en coûte donc trois, alors que le seul marché encore vivant est la puck line
+ * (A2 : le moneyline est clos, les totaux sont condamnés à −2.75 % de ROI).
+ * Cette version permet quatre observations rapprochées de la mise au jeu pour
+ * un tiers du prix d'une passe complète — c'est ce qui donne au CLV une vraie
+ * clôture par créneau de match au lieu d'un prix vieux de plusieurs heures.
+ *
+ * **NE PASSE VOLONTAIREMENT PAS PAR `oddsCache`.** Le cache est partagé avec le
+ * proxy public : y déposer une réponse dépourvue de `h2h` et de `totals`
+ * priverait les visiteurs de leurs cotes pendant tout le TTL. Le troupeau que
+ * `TtlCache` corrige n'existe pas ici — un seul appelant, une fois par créneau.
+ *
+ * Pas de repli sur des cotes périmées non plus : un collecteur qui rate un
+ * cycle perd un point de mesure, ce qui est sans gravité, là où réécrire un
+ * snapshot avec un prix ancien fabriquerait un faux mouvement de ligne.
+ */
+export async function fetchSpreadsOnly(): Promise<RawOddsEvent[]> {
+  if (!ODDS_KEY) return [];
+
+  const params = new URLSearchParams({
+    apiKey:     ODDS_KEY,
+    regions:    'eu',
+    markets:    'spreads',
+    oddsFormat: 'decimal',
+  });
+
+  const started = Date.now();
+  try {
+    const res = await fetch(`${ODDS_BASE}/sports/${SPORT_KEY}/odds?${params}`);
+    recordUpstream('odds', Date.now() - started, res.ok);
+    // Y compris en erreur : un 429 porte le solde, et c'est le moment où il
+    // compte le plus.
+    oddsQuota.observe(res.headers);
+    if (!res.ok) {
+      logger.error({ status: res.status }, '[oddsClient] spreads');
+      return [];
+    }
+    return (await res.json()) as OddsEvent[];
+  } catch (err: any) {
+    recordUpstream('odds', Date.now() - started, false);
+    logger.error({ err: err?.message }, '[oddsClient] spreads fetch error');
+    return [];
+  }
+}
+
+/**
  * Cache des cotes NHL — UNE seule entrée, puisqu'un appel ramène toute la ligue.
  *
  * LE BUG QUE `TtlCache` CORRIGE ICI (trouvé par le tir S1 du 2026-08-03)

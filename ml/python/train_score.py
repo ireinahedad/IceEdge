@@ -62,6 +62,45 @@ RNG = np.random.default_rng(42)
 # ── Features orientées ───────────────────────────────────────────────────────
 # ATK : capacité offensive de l'équipe qui marque
 # DEF : capacité défensive de l'adversaire (gardien inclus)
+#
+# ── A5, clos le 2026-08-21 : ces 22 features ne sont PAS départageables ──────
+#
+# Ne pas relancer d'élagage ici sans lire d'abord ce paragraphe : la mesure a
+# été faite, elle a coûté 364 entraînements, et sa conclusion est négative au
+# sens propre — pas « garder les 22 est optimal », mais « l'historique
+# disponible ne permet pas de dire lesquelles retirer ».
+#
+# L'ablation par permutation (14 saisons 2012-2025, métrique = log-loss de la
+# puck line, rapport dans `../models/score_feature_selection.json`) classe six
+# features au-dessus de la barre : `elo_atk_minus_def` (92,9 % de saisons
+# positives), `def_ev_xga60_s` (85,7 %), `atk_lineup_pts` (78,6 %),
+# `atk_ev_xgf_pct_s`, `atk_stars_out_weight`, `def_goalie_svpct` (71,4 %).
+# Trois colonnes de bruit pur soumises au même traitement décrochent 50 %,
+# 57,1 % et 64,3 % — le hasard, tel que cette procédure le produit.
+#
+# Le contrôle par suppression réelle (`backtest_walkforward.py
+# --confirm-score-features`, rapport dans `score_feature_confirmation.json`) a
+# retiré les 12 features à ≤ 57,1 %. Résultat :
+#
+#     Δ log-loss puck line  +0,00019  ±  0,00024 (erreur-type, 14 saisons)
+#
+# **L'écart est plus petit que sa propre barre d'erreur** (t = 0,82 ; 8 saisons
+# sur 14 dégradées, ce que du pile ou face produit 39,5 % du temps). L'écart-type
+# inter-saisons est de 0,00089 : il faudrait ≈ 154 saisons pour résoudre un effet
+# de cette taille. Le critère pré-enregistré rend DÉGRADE et on s'y tient, mais
+# ce qu'il faut retenir est plus fort — **aucun sous-groupe ne sera plus
+# résoluble**, puisqu'un effet plus petit demande encore plus de saisons.
+#
+# Les deux métriques secondaires, chacune contre son propre bruit, expliquent
+# pourquoi la puck line reste muette : déviance de Poisson +0,00089 (±0,00037,
+# nettement pire) contre log-loss moneyline −0,00054 (±0,00015, nettement mieux).
+# Les 12 colonnes retirées portent le **niveau** de λ, pas l'**écart** entre les
+# deux équipes. La puck line dépend de l'écart : elle se retrouve entre les deux
+# et ne tranche pas.
+#
+# Ce que ça coûte de garder les 22 : P5 avait mesuré 0,00245 de log-loss pour
+# 104 features en trop sur le classifieur. Ici il s'agit de 12, dont l'effet
+# mesuré vaut 0,0002. Négligeable — et c'est la raison de ne pas y revenir.
 ATK_COLS = ["xgf60_s", "xgf60_l", "ev_xgf60_s", "ev_xgf_pct_s", "gf_s",
             "finishing_s", "star_power", "stars_out_weight",
             "pp_xgf60_s", "rest_days", "b2b",

@@ -71,8 +71,6 @@ export const teams:   Team[]   = [];
 export const games:   Game[]   = [];
 export const players: Player[] = [];
 
-export const lastNGamesOptions = [5, 10, 20, 30];
-
 export const getTeamById   = (id: string): Team   | undefined => teams.find(t => t.id === id);
 export const getGameById   = (id: string): Game   | undefined => games.find(g => g.id === id);
 export const getPlayerById = (id: string): Player | undefined => players.find(p => p.id === id);

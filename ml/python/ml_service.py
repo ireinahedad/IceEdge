@@ -15,8 +15,9 @@ Endpoints:
     POST /predict/team       Team futures: cup, conference, playoff
     GET  /health             Health check + model info
     GET  /features           Feature schema reference
+    GET  /reports            Rapports d'entraînement/backtest + fraîcheur des artefacts
 
-Accès : /predict/* et /features exigent l'en-tête `X-ML-Token` (= ML_API_TOKEN).
+Accès : /predict/*, /features et /reports exigent l'en-tête `X-ML-Token` (= ML_API_TOKEN).
 /health et /health/ready restent ouverts pour les sondes de la plateforme.
 """
 
@@ -25,6 +26,7 @@ import hmac
 import json
 import math
 import os
+from datetime import datetime, timezone
 from typing import List, Optional
 
 import numpy as np
@@ -1309,6 +1311,124 @@ def features():
         "player_features": PlayerPropFeatures.model_json_schema(),
         "team_features":   TeamFuturesFeatures.model_json_schema(),
     }
+
+
+# ── Rapports d'entraînement et de backtest ────────────────────────────────────
+#
+# POURQUOI ICI ET PAS CÔTÉ NODE — les rapports vivent dans MODELS_DIR, qui
+# n'existe QUE dans cette image (le Dockerfile fait `COPY models ./models`). Le
+# backend Node tourne dans un autre conteneur : un `fs.readFile('../ml/models')`
+# y marcherait en local et renverrait ENOENT en production, c'est-à-dire
+# exactement le genre de panne qui ne se voit qu'une fois déployée. Le service
+# qui possède les fichiers est le seul à pouvoir les servir.
+#
+# Lecture seule, protégée par le même token que /features : ces chiffres
+# décrivent la performance du modèle et n'ont rien à faire en public.
+#
+# Le poids compte : `inference_state.json` (165 ko), `score_ablation_cache.json`
+# (112 ko) et les deux modèles XGBoost (0,8 Mo et 0,5 Mo) ne sont JAMAIS
+# renvoyés entiers — seuls leur `as_of`, leurs compteurs et leur date de fichier
+# le sont. La charge utile reste sous ~25 ko, donc rafraîchissable à la main
+# sans y penser.
+
+# Fichiers renvoyés intégralement : tous petits (< 10 ko) et entièrement utiles.
+_REPORT_FILES = (
+    "training_report",
+    "score_report",
+    "backtest_walkforward_report",
+    "backtest_derived_report",
+    "backtest_uncertainty_report",
+    "feature_importance_game",
+    "score_feature_selection",
+)
+
+# Fichiers dont on ne veut QUE la fraîcheur et la taille (trop gros à renvoyer).
+_ARTIFACT_FILES = (
+    "game_model",
+    "score_model",
+    "inference_state",
+    "score_ablation_cache",
+    "fold_params_cache",
+)
+
+
+def _file_meta(name: str) -> dict:
+    """Âge et taille d'un artefact, sans le lire. `None` s'il manque."""
+    path = os.path.join(MODELS_DIR, f"{name}.json")
+    if not os.path.exists(path):
+        return {"present": False, "modified_at": None, "bytes": None}
+    st = os.stat(path)
+    return {
+        "present": True,
+        # UTC explicite : le conteneur tourne en UTC, le navigateur non. Sans le
+        # 'Z', le client parserait l'horodatage comme une heure locale et
+        # afficherait un modèle « entraîné dans 5 heures ».
+        "modified_at": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+                               .isoformat().replace("+00:00", "Z"),
+        "bytes": st.st_size,
+    }
+
+
+@app.get("/reports", dependencies=_PROTECTED)
+def reports():
+    loaded: dict = {}
+    errors: dict = {}
+
+    for name in _REPORT_FILES:
+        path = os.path.join(MODELS_DIR, f"{name}.json")
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path) as f:
+                loaded[name] = json.load(f)
+        except Exception as e:  # fichier tronqué / JSON invalide
+            # On n'échoue pas la requête entière pour un rapport illisible :
+            # le but du dashboard est justement de rendre ce genre d'incident
+            # visible, pas de renvoyer un 500 opaque.
+            errors[name] = str(e)
+
+    # `training_report.game_model.feature_importances` peut être long ; on garde
+    # les 25 premières (déjà triées par le script d'entraînement), le reste
+    # n'est pas lisible dans un graphe de toute façon.
+    gm = (loaded.get("training_report") or {}).get("game_model")
+    if isinstance(gm, dict) and isinstance(gm.get("feature_importances"), list):
+        gm["feature_importances"] = gm["feature_importances"][:25]
+
+    # L'ensemble de score : présence + nombre de membres, pas les fichiers.
+    ens_dir = os.path.join(MODELS_DIR, "score_ensemble")
+    ensemble_members = (
+        len([f for f in os.listdir(ens_dir) if f.endswith(".json")])
+        if os.path.isdir(ens_dir) else 0
+    )
+
+    return {
+        "models_dir": MODELS_DIR,
+        "reports": loaded,
+        "report_errors": errors,
+        # Fraîcheur : à quand remonte le dernier entraînement, le dernier
+        # rafraîchissement de l'état d'inférence ? C'est la question qui dit si
+        # le pipeline est vivant, et aucun rapport ne la porte.
+        "artifacts": {
+            name: _file_meta(name) for name in (*_REPORT_FILES, *_ARTIFACT_FILES)
+        },
+        "runtime": {
+            # Ce que le service a RÉELLEMENT chargé en mémoire — à comparer aux
+            # fichiers présents sur disque. Les deux divergent quand un modèle a
+            # été déposé après le démarrage du process : le disque dit « à
+            # jour », l'inférence sert encore l'ancien.
+            "game_model_loaded":  _xgb_game  is not None,
+            "score_model_loaded": _xgb_score is not None,
+            "calibrated":         _platt_a is not None,
+            "blend_weights":      _blend_w,
+            "elo_teams":          len(_elo_ratings),
+            "inference_state_as_of": (_inference_state or {}).get("as_of"),
+            "inference_state_teams": len((_inference_state or {}).get("teams", {})),
+            "score_ensemble_members_loaded": len(_score_members),
+            "score_ensemble_files_on_disk":  ensemble_members,
+            "sigma_max": _score_sigma_max,
+        },
+    }
+
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────
 

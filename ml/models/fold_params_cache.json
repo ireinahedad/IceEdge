@@ -110,5 +110,117 @@
     "colsample_bytree": 1.0,
     "min_child_weight": 5,
     "reg_lambda": 1.0
+  },
+  "2012|4109|2011-12-22|8|e1df2d31": {
+    "max_depth": 4,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 1.0,
+    "min_child_weight": 10,
+    "reg_lambda": 3.0
+  },
+  "2013|4721|2012-03-24|8|e1df2d31": {
+    "max_depth": 3,
+    "learning_rate": 0.03,
+    "subsample": 0.7,
+    "colsample_bytree": 0.8,
+    "min_child_weight": 10,
+    "reg_lambda": 3.0
+  },
+  "2014|5767|2013-11-03|8|e1df2d31": {
+    "max_depth": 3,
+    "learning_rate": 0.02,
+    "subsample": 0.9,
+    "colsample_bytree": 1.0,
+    "min_child_weight": 10,
+    "reg_lambda": 3.0
+  },
+  "2015|6812|2014-10-11|8|e1df2d31": {
+    "max_depth": 3,
+    "learning_rate": 0.02,
+    "subsample": 0.9,
+    "colsample_bytree": 0.8,
+    "min_child_weight": 5,
+    "reg_lambda": 3.0
+  },
+  "2016|7858|2015-03-21|8|e1df2d31": {
+    "max_depth": 5,
+    "learning_rate": 0.02,
+    "subsample": 0.9,
+    "colsample_bytree": 0.6,
+    "min_child_weight": 20,
+    "reg_lambda": 3.0
+  },
+  "2017|8903|2016-02-22|8|e1df2d31": {
+    "max_depth": 3,
+    "learning_rate": 0.03,
+    "subsample": 0.7,
+    "colsample_bytree": 0.6,
+    "min_child_weight": 20,
+    "reg_lambda": 10.0
+  },
+  "2018|9979|2017-01-26|8|e1df2d31": {
+    "max_depth": 3,
+    "learning_rate": 0.05,
+    "subsample": 0.9,
+    "colsample_bytree": 1.0,
+    "min_child_weight": 1,
+    "reg_lambda": 3.0
+  },
+  "2019|11060|2017-12-30|8|e1df2d31": {
+    "max_depth": 3,
+    "learning_rate": 0.03,
+    "subsample": 0.7,
+    "colsample_bytree": 1.0,
+    "min_child_weight": 5,
+    "reg_lambda": 1.0
+  },
+  "2020|11979|2018-11-09|8|e1df2d31": {
+    "max_depth": 3,
+    "learning_rate": 0.05,
+    "subsample": 0.9,
+    "colsample_bytree": 0.8,
+    "min_child_weight": 5,
+    "reg_lambda": 10.0
+  },
+  "2021|12717|2019-02-26|8|e1df2d31": {
+    "max_depth": 4,
+    "learning_rate": 0.02,
+    "subsample": 0.8,
+    "colsample_bytree": 1.0,
+    "min_child_weight": 20,
+    "reg_lambda": 10.0
+  },
+  "2022|13828|2020-02-04|8|e1df2d31": {
+    "max_depth": 4,
+    "learning_rate": 0.03,
+    "subsample": 0.8,
+    "colsample_bytree": 1.0,
+    "min_child_weight": 5,
+    "reg_lambda": 1.0
+  },
+  "2023|14943|2021-05-10|8|e1df2d31": {
+    "max_depth": 4,
+    "learning_rate": 0.03,
+    "subsample": 0.8,
+    "colsample_bytree": 1.0,
+    "min_child_weight": 5,
+    "reg_lambda": 1.0
+  },
+  "2024|16059|2022-04-03|8|e1df2d31": {
+    "max_depth": 3,
+    "learning_rate": 0.03,
+    "subsample": 0.7,
+    "colsample_bytree": 1.0,
+    "min_child_weight": 1,
+    "reg_lambda": 10.0
+  },
+  "2025|17174|2023-02-21|8|e1df2d31": {
+    "max_depth": 3,
+    "learning_rate": 0.02,
+    "subsample": 0.8,
+    "colsample_bytree": 1.0,
+    "min_child_weight": 5,
+    "reg_lambda": 1.0
   }
 }

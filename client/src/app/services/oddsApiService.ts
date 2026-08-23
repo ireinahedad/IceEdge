@@ -84,24 +84,6 @@ export function extractH2HOdds(
   return { home: home.price, away: away.price };
 }
 
-/**
- * Convert decimal odds to implied win probability (%).
- */
-export function decimalToWinPct(decimal: number): number {
-  return Math.round((1 / decimal) * 100);
-}
-
-/**
- * Fetch available sports/tournaments (useful for finding correct sport keys).
- */
-export async function fetchAvailableSports(): Promise<
-  Array<{ key: string; title: string; active: boolean }>
-> {
-  try {
-    const res = await fetch(`${API_BASE}/odds/sports`);
-    if (!res.ok) return [];
-    return res.json();
-  } catch {
-    return [];
-  }
-}
+// `decimalToWinPct` et `fetchAvailableSports` supprimées le 2026-08-10 (0 appelant).
+// La conversion cote → probabilité vit dans `HockeyLanding` (`impliedPct`), qui
+// dévigue la paire au lieu d'inverser une seule cote — c'est la bonne version.

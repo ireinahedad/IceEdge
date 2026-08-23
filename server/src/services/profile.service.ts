@@ -600,7 +600,13 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
   return leaderboardCache.wrap('top20', computeLeaderboard);
 }
 
-/** Invalidation manuelle (tests, règlement de paris). */
+/**
+ * Invalidation manuelle (tests, règlement de paris).
+ *
+ * **Aucun appelant aujourd'hui — gardée exprès** (décision du 2026-08-10). Le
+ * classement est caché 60 s ; un test qui vérifie qu'un pari réglé change le
+ * rang a besoin de vider ce cache, sinon il mesure la valeur d'avant.
+ */
 export function clearLeaderboardCache(): void {
   leaderboardCache.clear();
 }

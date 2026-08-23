@@ -167,7 +167,8 @@ export async function sendToUsers(userIds: string[], payload: PushPayload): Prom
   return { sent, failed, expired: expired.length };
 }
 
-/** Sends a payload to every registered device of a user. Prunes dead endpoints. */
-export async function sendToUser(userId: string, payload: PushPayload): Promise<void> {
-  await sendToUsers([userId], payload);
-}
+// `sendToUser(userId, payload)` supprimée le 2026-08-10 : ce n'était plus qu'un
+// `sendToUsers([userId], payload)` sans appelant depuis que le fan-out a été
+// borné (ligne G de l'audit de scalabilité). Passer par `sendToUsers` même pour
+// un seul destinataire est volontaire — une requête de lecture, un plafond de
+// concurrence, une purge groupée.

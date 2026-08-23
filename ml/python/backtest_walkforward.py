@@ -74,7 +74,8 @@ Une vraie feature doit les battre — c'est un étalonnage mesuré, pas argument
 
 Le mode écrit un rapport et **n'élague rien tout seul** : `ATK_COLS` /
 `DEF_COLS` se modifient à la main. Classement par permutation, confirmation par
-suppression réelle.
+suppression réelle — cette dernière est `--confirm-score-features`, qui rejoue
+le jeu élagué contre les références par saison du rapport de sélection.
 """
 
 import argparse
@@ -905,6 +906,42 @@ def run_derived(df, test_seasons, edge_threshold: float, n_members: int = 0,
                          "roi_se_pct": round(se, 2), "z": round(z, 2)})
             print(f"   {edge:>5.0%} {len(sel):>7} {n_push:>6} {hit:>6.1f}% "
                   f"{roi:>9.2f}% {se:>6.2f}% {z:>6.2f}")
+        # Cohérence entre les deux mesures : elles doivent raconter la même
+        # histoire. Quand elles divergent, c'est la plus PRÉCISE qui décide —
+        # et le bloc de convergence, plus bas, chiffre laquelle l'est.
+        worst = max((r for r in rows
+                     if r.get("gap_vs_close_sigma") is not None),
+                    key=lambda r: abs(r["gap_vs_close_sigma"]), default=None)
+        if worst and abs(worst["gap_vs_close_sigma"]) >= 2:
+            print(f"\n   ⚠️  À edge ≥ {worst['edge']:.0%}, le ROI réalisé "
+                  f"({worst['roi_open_pct']:+.2f} %) s'écarte de "
+                  f"{worst['gap_vs_close_sigma']:+.2f}σ\n       de ce que la "
+                  f"clôture prédisait ({worst['roi_implied_by_close_pct']:+.2f} %). "
+                  f"Deux lectures :\n       ces paris ont battu la clôture — ce "
+                  f"que P1 dit impossible — ou l'écart est du bruit.\n       Le "
+                  f"CLV, mesuré bien plus efficacement que le ROI, dit la seconde.")
+
+        # Le verdict qui compte : le CLV réel bat-il celui d'un modèle rendu
+        # ignorant ? Sinon, tout le chiffre est de la régression vers la moyenne.
+        beat = [r for r in rows if r.get("clv_net") is not None]
+        if beat:
+            best = max(beat, key=lambda r: r["clv_net"])
+            pl = best["clv_placebo"]
+            print(f"\n   Placebo (modèle permuté entre matchs, {pl['n_shuffles']} "
+                  f"tirages) — le mécanisme de\n   sélection produit à lui seul "
+                  f"{pl['mean']:+.4f} de CLV (max {pl['max']:+.4f}).")
+            if best["clv_net"] <= 0:
+                print("   → Le CLV mesuré NE BAT PAS le placebo : c'est de la "
+                      "régression vers la\n     moyenne, pas une lecture du "
+                      "marché. Le modèle n'y est pour rien.")
+            elif best["clv_net"] < pl["sd"] * 2:
+                print("   → Le CLV dépasse le placebo de moins de deux "
+                      "écarts-types de celui-ci :\n     indistinguable du "
+                      "mécanisme de sélection.")
+            else:
+                print(f"   → Le CLV NET du placebo vaut {best['clv_net']:+.4f} "
+                      f"à edge ≥ {best['edge']:.0%}.\n     C'est ce qui reste "
+                      f"attribuable au modèle, et rien de plus.")
         out["markets"][market] = rows
 
         # ── Les deux contrôles qui décident si un ROI positif est crédible ────
@@ -976,6 +1013,378 @@ def run_derived(df, test_seasons, edge_threshold: float, n_members: int = 0,
     return out
 
 
+# ── A3 — battre l'OUVERTURE, et mesurer le CLV ───────────────────────────────
+#
+# POURQUOI CE MODE EXISTE. Tout ce qui a été mesuré jusqu'ici l'a été contre la
+# cote de CLÔTURE, l'estimateur le plus dur qui soit — celui qui intègre toute
+# l'information jusqu'à la mise au jeu. Trois chemins indépendants ont conclu
+# qu'il n'y a rien. Mais **on ne parie jamais la clôture** : on parie ce qui est
+# affiché au moment où on mise.
+#
+# Deux questions distinctes, que ce mode sépare exprès :
+#
+# 1. **ROI à l'ouverture.** Repère bien plus faible que la clôture. Si le modèle
+#    ne bat pas non plus l'ouverture, le dossier moneyline est clos pour de bon.
+# 2. **CLV — closing line value.** Le prix pris à l'ouverture est-il meilleur que
+#    le prix de clôture ? C'est l'indicateur avancé standard d'un edge réel, et
+#    il CONVERGE BEAUCOUP PLUS VITE que le ROI : on mesure un écart de prix sur
+#    chaque pari au lieu d'attendre un résultat binaire très bruité. A2 a rendu
+#    ça obligatoire — ~51 paris par saison ne concluront jamais sur un ROI.
+#
+# CE QUE CE MODE NE PEUT PAS FAIRE, ET IL FAUT LE DIRE EN GRAND. L'archive SBRO
+# ne donne qu'UN SEUL prix de puck line par match (`pl_price`), pas une paire
+# ouverture/clôture — contrairement au moneyline et aux totaux, qui en ont une.
+# **Le CLV de la règle A2 n'est donc pas mesurable sur l'historique.** Il faudra
+# la collecte live (`odds_snapshots`, migration 031). Ce mode mesure ce qui est
+# mesurable aujourd'hui, et le dit quand il ne peut pas mesurer le reste.
+#
+# LE PIÈGE DES TOTAUX, qu'une implémentation naïve rate. La LIGNE de total bouge
+# (5.5 → 6.0). Quand elle a bougé, `market_over_p_open` et `market_over_p_close`
+# ne décrivent pas le même pari, et leur différence n'est pas un CLV : c'est un
+# changement de marché. Le CLV des totaux n'est donc calculé QUE sur les lignes
+# restées identiques, et le nombre de paris écartés est imprimé — pas de
+# troncature silencieuse.
+
+
+def _clv_stats(deltas: np.ndarray) -> dict:
+    """Moyenne, erreur-type, t et part positive d'une série de CLV."""
+    n = len(deltas)
+    mean = float(np.mean(deltas))
+    sd = float(np.std(deltas, ddof=1)) if n > 1 else float("nan")
+    se = sd / np.sqrt(n) if n > 1 else float("nan")
+    return {"n": n, "mean": mean, "sd": sd, "se": se,
+            "t": mean / se if se and np.isfinite(se) and se > 0 else float("nan"),
+            "share_positive": float(np.mean(deltas > 0))}
+
+
+# ── Le placebo du CLV — sans lui, le chiffre ne veut rien dire ───────────────
+#
+# LE BIAIS, ET IL EST STRUCTUREL. On sélectionne les paris sur
+# `p_modèle − p_ouverture ≥ seuil`, puis on mesure
+# `CLV = p_clôture − p_ouverture`. Les deux expressions partagent
+# `p_ouverture`, et `p_ouverture` porte du bruit.
+#
+# Écrivons `p_ouv = vrai + ε_o` et `p_clô = vrai + ε_c`, avec ε_c plus petit
+# (la clôture est le meilleur estimateur). Sélectionner sur un grand
+# `p_modèle − p_ouv` retient préférentiellement les matchs où **ε_o est
+# négatif** — où l'ouverture est trop basse, y compris par pur hasard. Sur ces
+# matchs, `CLV = ε_c − ε_o` est positif EN MOYENNE, quelle que soit la qualité
+# du modèle. Un modèle sans aucune information produit ce CLV positif.
+#
+# C'est de la régression vers la moyenne, et sa signature est visible dans le
+# tableau : plus le seuil d'edge monte, plus le CLV monte. Une vraie compétence
+# produirait exactement la même courbe. **Les deux sont indiscernables dans la
+# sortie brute** — d'où ce placebo.
+#
+# LE PROTOCOLE, calqué sur les sentinelles d'A5, qui ont déjà servi une fois :
+# plutôt que d'argumenter sur l'ampleur du biais, on le fait courir dans le
+# même tuyau et on regarde ce qu'il produit. On permute les probabilités du
+# modèle ENTRE LES MATCHS d'une même saison — le modèle ne sait donc plus rien
+# du match qu'il price — et on refait exactement la même sélection.
+#
+# DEUX DÉTAILS SANS LESQUELS LE PLACEBO SERAIT FAUX :
+#
+# 1. **La permutation est par MATCH, pas par pari.** Les deux côtés d'un match
+#    sont complémentaires (p et 1−p) ; les permuter séparément casserait cette
+#    contrainte et le placebo choisirait parfois les deux côtés du même match.
+# 2. **On égalise le NOMBRE de paris, pas le seuil d'edge.** Un modèle permuté
+#    est décorrélé du marché, donc ses edges sont plus dispersés : à seuil égal
+#    il sélectionnerait un ensemble plus grand et plus extrême. On prend donc
+#    ses N meilleurs edges, N étant l'effectif réel du seuil comparé.
+#
+# Lecture : le CLV réel doit battre le placebo. S'il ne le bat pas, tout le
+# chiffre est de la régression vers la moyenne et le modèle n'y est pour rien.
+
+
+def _clv_placebo(bets: list, n_target: int, n_shuffles: int = 20) -> dict | None:
+    """CLV obtenu par le MÊME mécanisme de sélection, modèle rendu ignorant."""
+    games: dict = {}
+    for b in bets:
+        games.setdefault(b["game_id"], []).append(b)
+    # Un match n'est utilisable que s'il a ses deux côtés et un CLV défini.
+    usable = [(gid, sides) for gid, sides in games.items()
+              if len(sides) == 2 and all(x["clv"] is not None for x in sides)]
+    if len(usable) < max(30, n_target):
+        return None
+
+    # `p_ref` = probabilité du côté de référence (home / over) selon le modèle,
+    # et `p_mkt_ref` = la même chose selon le marché à l'ouverture. Tout le
+    # reste du match se déduit par complémentarité.
+    refs, others = [], []
+    for _, sides in usable:
+        ref = sides[0] if sides[0]["side"] in ("home", "over") else sides[1]
+        oth = sides[1] if ref is sides[0] else sides[0]
+        refs.append(ref)
+        others.append(oth)
+    p_ref = np.array([b["p"] for b in refs], dtype=float)
+    p_mkt_ref = np.array([b["p"] - b["edge"] for b in refs], dtype=float)
+    clv_ref = np.array([b["clv"] for b in refs], dtype=float)
+    season = np.array([b["season"] for b in refs])
+
+    means = []
+    for k in range(n_shuffles):
+        # Graine stable : reproductible d'une exécution à l'autre, et
+        # différente à chaque tirage.
+        rng = np.random.default_rng(_stable_seed("clv-placebo", k, len(refs)))
+        shuffled = p_ref.copy()
+        # Permutation À L'INTÉRIEUR de chaque saison : un modèle qui pricerait
+        # 2014 avec les probabilités de 2021 verrait aussi changer le régime de
+        # scoring de la ligue, ce qui n'est pas le bruit qu'on veut mesurer.
+        for sea in np.unique(season):
+            m = season == sea
+            shuffled[m] = rng.permutation(p_ref[m])
+        edge = shuffled - p_mkt_ref          # >0 : le placebo prend la réf.
+        # Le CLV du côté choisi. `clv` est antisymétrique entre les deux côtés
+        # (p_clô − p_ouv d'un côté vaut l'opposé de l'autre), d'où le signe.
+        clv_taken = np.where(edge > 0, clv_ref, -clv_ref)
+        order = np.argsort(-np.abs(edge))[:n_target]
+        means.append(float(np.mean(clv_taken[order])))
+
+    arr = np.array(means)
+    return {"n_shuffles": n_shuffles, "n_target": n_target,
+            "mean": float(arr.mean()), "sd": float(arr.std(ddof=1)),
+            "max": float(arr.max())}
+
+def run_clv(df, test_seasons, edge_threshold: float, search_trials: int = 0,
+            use_cache: bool = True):
+    feats = TS.stacked_features()
+    params = base_score_params(search_trials)
+
+    need = ["home_reg_score", "away_reg_score", "went_to_ot", "total_goals"]
+    if "market_home_p_open" not in df.columns:
+        print("❌ Pas de probabilités d\'ouverture dans le dataset.")
+        print("   → python fetch_data_v4.py --only odds --from-local")
+        print("     puis python build_dataset.py")
+        return None
+
+    bets = []
+    n_line_moved = 0          # totaux écartés du CLV : la ligne a bougé
+    n_no_open = 0             # matchs sans ouverture exploitable
+
+    print(f"   {'saison':>8} {'matchs':>7} {'moneyline':>10} {'totaux':>8}")
+    for s in test_seasons:
+        train_df = df[df["season"] < s].dropna(subset=need).reset_index(drop=True)
+        test_df = df[(df["season"] == s)].dropna(subset=need).reset_index(drop=True)
+        if len(test_df) < 50 or len(train_df) < 800:
+            continue
+        main_m, _, tau, p_ot = fit_score_fold(
+            train_df, feats, params, 0,
+            search_trials=search_trials, season=s, use_cache=use_cache)
+        s_te = TS.stack(test_df)
+        lam_h, lam_a = TS.lambdas_for(main_m, feats, s_te, len(test_df))
+
+        n_ml = n_tot = 0
+        for j in range(len(test_df)):
+            r = test_df.iloc[j]
+            d = ScoreDistribution(lam_h[j], lam_a[j], p_ot, tau)
+            total = float(r["total_goals"])
+            home_won = float(r["home_score"]) > float(r["away_score"])
+
+            def ok(*xs):
+                return all(x is not None and np.isfinite(x) for x in xs)
+
+            # ── Moneyline ────────────────────────────────────────────────────
+            # Pas de ligne, donc pas de piège de mouvement : ouverture et
+            # clôture décrivent toujours le même pari.
+            p_open = r.get("market_home_p_open")
+            p_close = r.get("market_home_p_close")
+            ho, ao = r.get("home_ml_open"), r.get("away_ml_open")
+            if ok(p_open, p_close, ho, ao) and ho > 1 and ao > 1:
+                p_home = d.p_home_win()
+                for side, p, dec, p_mkt_o, p_mkt_c, won in [
+                        ("home", p_home,     ho, p_open,     p_close,     home_won),
+                        ("away", 1 - p_home, ao, 1 - p_open, 1 - p_close, not home_won)]:
+                    bets.append({
+                        "market": "moneyline", "season": s, "date": r["date"],
+                        # `game_id` apparie les deux côtés d'un même match : le
+                        # placebo permute le modèle MATCH PAR MATCH, sinon les
+                        # deux côtés cesseraient d'être complémentaires.
+                        "game_id": f"{s}|ml|{j}",
+                        "side": side, "p": p, "dec": dec,
+                        "edge": p - p_mkt_o, "won": bool(won), "push": False,
+                        # CLV en points de probabilité : le marché a-t-il bougé
+                        # VERS le côté qu'on a pris ? Positif = on a acheté
+                        # moins cher que la clôture.
+                        "clv": p_mkt_c - p_mkt_o,
+                        "leg": side,
+                        # L'équipe misée, pour que `dissect` puisse repérer un
+                        # ROI porté par deux ou trois franchises.
+                        "team": str(r["home_team"] if side == "home"
+                                    else r["away_team"]),
+                        "line": None})
+                n_ml += 1
+            else:
+                n_no_open += 1
+
+            # ── Totaux ───────────────────────────────────────────────────────
+            l_open, l_close = r.get("total_open"), r.get("total_close")
+            po, pc = r.get("market_over_p_open"), r.get("market_over_p_close")
+            oo, uo = r.get("total_open_over"), r.get("total_open_under")
+            if ok(l_open, l_close, po, pc, oo, uo) and oo > 1 and uo > 1:
+                # Le CLV n'a de sens que si la ligne n'a pas bougé : sinon
+                # ouverture et clôture ne sont pas le même pari.
+                same_line = abs(float(l_open) - float(l_close)) < 1e-9
+                if not same_line:
+                    n_line_moved += 1
+                p_over = d.p_over(float(l_open))
+                push = abs(total - float(l_open)) < 1e-9
+                for side, p, dec, p_mkt_o, p_mkt_c, won in [
+                        ("over",  p_over,     oo, po,     pc,     total > l_open),
+                        ("under", 1 - p_over, uo, 1 - po, 1 - pc, total < l_open)]:
+                    bets.append({
+                        "market": "total", "season": s, "date": r["date"],
+                        "game_id": f"{s}|tot|{j}",
+                        "side": side, "p": p, "dec": dec,
+                        "edge": p - p_mkt_o, "won": bool(won), "push": push,
+                        "clv": (p_mkt_c - p_mkt_o) if same_line else None,
+                        "leg": side, "team": None, "line": float(l_open)})
+                n_tot += 1
+        print(f"   {s}-{str(s + 1)[2:]:<2} {len(test_df):>7} {n_ml:>10} {n_tot:>8}")
+
+    if not bets:
+        print("❌ Aucun pari généré — vérifie la couverture des ouvertures.")
+        return None
+
+    if n_line_moved:
+        print(f"\n   {n_line_moved} matchs dont la LIGNE de total a bougé entre "
+              f"ouverture et clôture :\n   leur ROI est comptabilisé, leur CLV "
+              f"ne l'est pas (ce ne serait pas le même pari).")
+
+    out = {"edge_threshold": edge_threshold, "markets": {},
+           "totals_line_moved": n_line_moved,
+           "puckline": "CLV non mesurable — SBRO ne donne qu'un prix de puck "
+                       "line par match, pas une paire ouverture/clôture. "
+                       "Attendre la collecte live (odds_snapshots, migration 031)."}
+
+    for market in ("moneyline", "total"):
+        sel_all = [b for b in bets if b["market"] == market]
+        if not sel_all:
+            continue
+        print(f"\n   ── {market.upper()} — {len(sel_all)} paris possibles à "
+              f"l'ouverture ──")
+        print(f"   {'edge>':>6} {'paris':>7} {'hit%':>7} {'ROI ouv.':>10} {'z':>6} "
+              f"{'CLV net':>9} {'ROI clôt.':>10} {'écart':>8}")
+        rows = []
+        for edge in [0.01, 0.02, 0.03, 0.04, 0.05]:
+            sel = [b for b in sel_all if b["edge"] >= edge]
+            if len(sel) < 30:
+                continue
+            live = [b for b in sel if not b["push"]]
+            # `bet_stats` rend un TUPLE (roi, erreur-type, z) — pas un dict.
+            roi, se, z = bet_stats(sel)
+            hit = np.mean([b["won"] for b in live]) * 100 if live else float("nan")
+            clv = np.array([b["clv"] for b in sel if b["clv"] is not None],
+                           dtype=float)
+            c = _clv_stats(clv) if len(clv) > 1 else None
+            # Le placebo tourne sur le MÊME effectif : c'est ce qui rend la
+            # comparaison licite (cf. le commentaire de `_clv_placebo`).
+            pl = _clv_placebo(sel_all, len(clv)) if c else None
+            net = (c["mean"] - pl["mean"]) if (c and pl) else None
+            # ── Ce que la CLÔTURE dit de ces paris exacts ────────────────
+            #
+            # Le chiffre qui départage les deux lectures, et il ne demande
+            # aucune donnée de plus. P1 a établi que la cote de clôture dévigée
+            # est le meilleur estimateur disponible. On lui demande donc ce que
+            # valaient ces paris : `p_clôture × cote_ouverture − 1`.
+            #
+            # Si ce ROI attendu vaut ce qui a été réalisé, le CLV se convertit
+            # bien en argent et tout est cohérent. S'il est très en dessous,
+            # alors ces paris ont **battu la clôture elle-même** — ce que P1 dit
+            # impossible — et l'écart est plus probablement de la chance.
+            #
+            # Comparaison sur le MÊME sous-ensemble (ceux dont le CLV est
+            # défini), sinon on comparerait deux populations différentes.
+            with_clv = [b for b in sel if b["clv"] is not None]
+            exp_roi = gap = gap_se = None
+            if len(with_clv) > 1:
+                p_close = np.array([(b["p"] - b["edge"]) + b["clv"]
+                                    for b in with_clv], dtype=float)
+                dec_a = np.array([b["dec"] for b in with_clv], dtype=float)
+                exp_roi = float(np.mean(p_close * dec_a - 1)) * 100
+                real = bet_returns(with_clv) * 100
+                gap = float(real.mean()) - exp_roi
+                gap_se = float(real.std(ddof=1) / np.sqrt(len(real)))
+            print(f"   {edge:>6.0%} {len(sel):>7} {hit:>6.1f}% "
+                  f"{roi:>9.2f}% {z:>6.2f} "
+                  + (f"{net:>+9.4f} " if net is not None else f"{'—':>9} ")
+                  + (f"{exp_roi:>+9.2f}% " if exp_roi is not None else f"{'—':>10} ")
+                  + (f"{gap / gap_se:>+7.2f}σ" if gap_se else f"{'—':>8}"))
+            rows.append({"edge": edge, "n_bets": len(sel),
+                         "n_push": len(sel) - len(live),
+                         "hit_rate": round(float(hit), 2),
+                         "roi_open_pct": round(float(roi), 2),
+                         "roi_se_pct": round(float(se), 2),
+                         "z": round(float(z), 2),
+                         "clv": {k: (round(v, 6) if isinstance(v, float) else v)
+                                 for k, v in c.items()} if c else None,
+                         "clv_placebo": {k: (round(v, 6) if isinstance(v, float)
+                                             else v)
+                                         for k, v in pl.items()} if pl else None,
+                         "clv_net": round(net, 6) if net is not None else None,
+                         "roi_implied_by_close_pct": (round(exp_roi, 2)
+                                                      if exp_roi is not None else None),
+                         "gap_vs_close_sigma": (round(gap / gap_se, 2)
+                                                if gap_se else None)})
+        out["markets"][market] = rows
+
+        # ── Le ROI à l'ouverture positif : réel ou bruit concentré ? ─────────
+        #
+        # Même traitement qu'A2, et pour la même raison : un ROI positif obtenu
+        # sur le MEILLEUR de cinq seuils testés n'est pas un résultat tant qu'il
+        # n'est pas réparti dans le temps, à travers les cotes, à travers les
+        # équipes, et qu'il ne tient pas à quelques gains.
+        best_roi = max(rows, key=lambda r: r["roi_open_pct"]) if rows else None
+        if best_roi and best_roi["roi_open_pct"] > 0:
+            thr = best_roi["edge"]
+            sub = [b for b in sel_all if b["edge"] >= thr]
+            print(f"\n   ── Dissection du ROI à l'ouverture, edge ≥ {thr:.0%} "
+                  f"({len(sub)} paris) ──")
+            print("   Rappel : ce seuil est le MEILLEUR de cinq testés. Le "
+                  "sélectionner après\n   coup gonfle le z d'environ un demi "
+                  "point — la dissection est là pour ça.")
+            out["markets"][market + "_dissection"] = dissect(
+                sub, bet_stats, label=f"{market}@open",
+                profit_share=1.0, n_parent=len(sel_all))
+
+    # ── La démonstration qui justifie tout le poste ──────────────────────────
+    #
+    # A3 affirme que le CLV converge plus vite que le ROI. Ce n'est pas un
+    # argument, c'est une comparaison d'écarts-types, et elle se fait ici sur
+    # les MÊMES paris. Le nombre de paris nécessaires pour distinguer un effet
+    # de zéro à 2 erreurs-types varie comme (écart-type / effet)².
+    ml = [b for b in bets if b["market"] == "moneyline"
+          and b["edge"] >= edge_threshold and b["clv"] is not None]
+    if len(ml) > 30:
+        ret = np.array([(b["dec"] - 1) if b["won"] else -1.0 for b in ml])
+        clv = np.array([b["clv"] for b in ml], dtype=float)
+        print(f"\n   ── Pourquoi le CLV, et pas le ROI (mêmes {len(ml)} paris, "
+              f"edge ≥ {edge_threshold:.0%}) ──")
+        print(f"   écart-type du rendement par pari : {ret.std(ddof=1):.4f}")
+        print(f"   écart-type du CLV par pari       : {clv.std(ddof=1):.4f}")
+        r_eff, c_eff = 0.02, 0.005      # effets de référence, déclarés ici
+        n_roi = (2 * ret.std(ddof=1) / r_eff) ** 2
+        n_clv = (2 * clv.std(ddof=1) / c_eff) ** 2
+        print(f"   paris pour détecter {r_eff:.0%} de ROI      : ~{n_roi:,.0f}")
+        print(f"   paris pour détecter {c_eff:.1%} de CLV     : ~{n_clv:,.0f}")
+        print("   (à lire sur le CLV NET du placebo — le CLV brut contient la "
+              "régression\n    vers la moyenne, qui ne se réduit pas avec "
+              "l'échantillon.)")
+        print(f"   → rapport {n_roi / n_clv:,.0f}×" if n_clv else "")
+        out["convergence"] = {
+            "n_bets": len(ml),
+            "sd_return": float(ret.std(ddof=1)),
+            "sd_clv": float(clv.std(ddof=1)),
+            "roi_effect_ref": r_eff, "clv_effect_ref": c_eff,
+            "n_needed_roi": float(n_roi), "n_needed_clv": float(n_clv)}
+
+    print("\n   Lecture. Un ROI à l'ouverture qui reste négatif ferme le dossier "
+          "moneyline\n   pour de bon — l'ouverture est le repère le plus faible "
+          "qui existe. Un CLV\n   positif et significatif dirait l'inverse d'un "
+          "ROI nul : le modèle voit\n   quelque chose que le marché finit par "
+          "voir aussi, et l'échantillon est trop\n   petit pour que le ROI le "
+          "montre.")
+    return out
+
 # ── A5 — élagage des features du modèle de score ─────────────────────────────
 #
 # Incohérence que ce mode corrige : P5 a élagué le CLASSIFIEUR (117 → 13) et
@@ -987,6 +1396,8 @@ def run_derived(df, test_seasons, edge_threshold: float, n_members: int = 0,
 # on garde ce qui est positif sur au moins 70 % des saisons.
 
 ABLATION_CACHE = f"{MODELS}/score_ablation_cache.json"
+SELECTION_REPORT = f"{MODELS}/score_feature_selection.json"
+CONFIRMATION_REPORT = f"{MODELS}/score_feature_confirmation.json"
 
 # ── Métrique de sélection, déclarée AVANT de regarder quoi que ce soit ───────
 #
@@ -1075,8 +1486,9 @@ def _prepare(stacked: pd.DataFrame, season, n_sentinels: int,
     colonne disparaît. Le contraste redevient propre.
 
     Le vrai test de suppression n'est pas perdu pour autant : il reste l'étape de
-    contrôle finale, réentraîner sans les « RETIRER » et vérifier que la métrique
-    ne se dégrade pas. Classement par permutation, confirmation par suppression.
+    contrôle finale, `--confirm-score-features`, qui réentraîne sans les
+    « RETIRER » et vérifie que la métrique ne se dégrade pas. Classement par
+    permutation, confirmation par suppression.
     """
     out = stacked.copy()
     rng = np.random.default_rng(_stable_seed("sentinel", season, len(out)))
@@ -1359,10 +1771,11 @@ def run_score_feature_ablation(df, test_seasons, search_trials: int,
           "DEF_COLS\n   se modifient à la main, après lecture — un élagage "
           "appliqué automatiquement\n   sur un tableau qu'on n'a pas lu est une "
           "sélection sur le bruit.")
-    print("   Contrôle avant d'appliquer : réentraîner en SUPPRIMANT réellement "
-          "les\n   « RETIRER » et vérifier que la log-loss puck line NE MONTE "
-          "PAS. Le classement\n   se fait par permutation, la confirmation par "
-          "suppression.")
+    print("   Contrôle après avoir élagué : `--confirm-score-features` "
+          "réentraîne en\n   SUPPRIMANT réellement et vérifie que la log-loss "
+          "puck line NE MONTE PAS —\n   1 entraînement par saison au lieu de "
+          f"{len(feats) + 1}. Le classement se fait par\n   permutation, la "
+          "confirmation par suppression.")
 
     return {
         "method": "ablation par permutation (dimension constante), walk-forward",
@@ -1381,6 +1794,262 @@ def run_score_feature_ablation(df, test_seasons, search_trials: int,
         "sentinels": sent_rows,
         "features": summary,
         "by_season": {str(s): per_season[s] for s in seasons},
+    }
+
+
+# ── A5, étape de confirmation ────────────────────────────────────────────────
+#
+# « Classement par permutation, confirmation par suppression. » L'ablation
+# ci-dessus ne supprime jamais rien : elle permute, pour garder la dimension
+# constante et laisser les hyperparamètres adéquats. C'est ce qui rend son
+# classement propre, et c'est aussi sa limite — chaque verdict mesure ce
+# qu'apporte une feature *les autres présentes*. Deux colonnes corrélées se
+# partagent le crédit et sortent faibles toutes les deux, sans que ça prouve
+# qu'on puisse les retirer ENSEMBLE.
+#
+# Ce mode teste exactement ça : le jeu réellement élagué, tel qu'il est écrit
+# dans `train_score.ATK_COLS` / `DEF_COLS` à l'instant du run, contre la
+# référence par saison enregistrée dans `score_feature_selection.json`.
+#
+# Trois choix qui font que la comparaison veut dire quelque chose :
+#
+# 1. **Les sentinelles restent en place**, en même nombre que dans le run de
+#    référence. Elles ne portent aucune information ; les garder fait que la
+#    SEULE chose qui change entre la référence et la variante est l'information
+#    retirée — pas le protocole.
+# 2. **Les hyperparamètres sont re-cherchés** pour le jeu élagué (la clé de
+#    `fold_params_cache.json` contient le hash des features, donc le cache ne
+#    rend pas ceux de l'ancien jeu). Comparer un modèle amputé à des réglages
+#    taillés pour 22 colonnes mesurerait l'inadéquation des réglages, pas
+#    l'élagage. Chaque variante à son meilleur : c'est la seule comparaison
+#    honnête quand la dimension change pour de bon.
+# 3. **Le critère est fixé ici, avant le run** (cf. `_confirmation_verdict`).
+#
+# Coût : une saison = une recherche d'hyperparamètres + un entraînement, contre
+# 26 entraînements par saison pour l'ablation complète. Le cache d'ablation est
+# réutilisé tel quel — sa clé contient le hash des features, donc la variante ne
+# peut pas se confondre avec le run de référence, et un second appel est gratuit.
+
+
+def _confirmation_verdict(mean_delta: float, n_worse: int, n_seasons: int,
+                          noise: float) -> str:
+    """Critère de confirmation, déclaré AVANT de regarder le résultat.
+
+    `noise` est la plus grande moyenne de gain décrochée par une sentinelle dans
+    le run de référence : l'ordre de grandeur de ce que cette procédure produit
+    à partir de rien. Un écart plus petit que ça n'est pas un écart, c'est le
+    bruit du tuyau — et un élagage neutre est un élagage réussi, puisqu'il rend
+    des colonnes en moins pour la même log-loss.
+
+    Le garde-fou sur `n_worse` empêche qu'une moyenne tirée par une saison
+    aberrante fasse passer une dégradation systématique.
+    """
+    if mean_delta > noise:
+        return "DÉGRADE"
+    if n_worse > n_seasons / 2 and mean_delta > 0:
+        return "DÉGRADE"
+    if mean_delta < -noise:
+        return "AMÉLIORE"
+    return "NEUTRE"
+
+
+def run_score_feature_confirmation(df, test_seasons, search_trials: int,
+                                   use_cache: bool = True,
+                                   n_sentinels: int = 3):
+    from math import comb
+
+    real_feats = TS.stacked_features()
+    feats = real_feats + _sentinel_names(n_sentinels)
+
+    try:
+        prev = json.load(open(SELECTION_REPORT))
+    except Exception:
+        print(f"❌ {SELECTION_REPORT.split('/')[-1]} introuvable ou illisible.")
+        print("   → python backtest_walkforward.py --select-score-features")
+        return None
+
+    ref_by_season = prev.get("by_season") or {}
+    before = [r["feature"] for r in prev.get("features") or []]
+    if not ref_by_season or not before:
+        print("❌ Rapport de sélection incomplet — pas de référence par saison.")
+        return None
+
+    dropped = [f for f in before if f not in real_feats]
+    added = [f for f in real_feats if f not in before]
+    if not dropped and not added:
+        print("ℹ️  Le jeu de features est identique à celui du run de référence.")
+        print("   Rien à confirmer : élague d'abord ATK_COLS / DEF_COLS dans "
+              "train_score.py.")
+        return None
+
+    # Un bruit PAR MÉTRIQUE : la déviance de Poisson vaut ~1.09 et la log-loss
+    # ~0.57, donc juger un écart de déviance contre un seuil calibré sur la puck
+    # line compare deux échelles différentes et crie au désaccord pour rien.
+    ref_sent = prev.get("sentinels") or []
+
+    def _noise(metric_key: str) -> float:
+        return max((abs(r.get(metric_key, 0.0)) for r in ref_sent), default=0.0)
+
+    noise = _noise("mean_gain_puckline")
+    noise_by_metric = {"deviance": _noise("mean_gain_deviance"),
+                       "ll_moneyline": _noise("mean_gain_ll_moneyline")}
+
+    # `n_sentinels` doit valoir celui du run de référence, sinon le protocole
+    # change en même temps que les features et la comparaison ne dit plus rien.
+    ref_n_sent = sum(1 for r in ref_sent)
+    if ref_n_sent != n_sentinels:
+        print(f"⚠️  Le run de référence avait {ref_n_sent} sentinelle(s), "
+              f"celui-ci en a {n_sentinels}.")
+        print("   → relance avec --sentinels "
+              f"{ref_n_sent} pour que le protocole soit identique.")
+
+    seasons = [s for s in test_seasons if str(s) in ref_by_season]
+    print(f"🔬 A5 — confirmation par SUPPRESSION : {len(before)} features → "
+          f"{len(real_feats)}")
+    print(f"   Retirées ({len(dropped)}) : {', '.join(dropped)}")
+    if added:
+        print(f"   ⚠️  Ajoutées ({len(added)}) : {', '.join(added)} — le run de "
+              f"référence ne les a jamais vues.")
+    print(f"   {len(seasons)} saisons, 1 entraînement chacune (+ recherche "
+          f"d'hyperparamètres).")
+    print(f"   Bruit de procédure mesuré par les sentinelles : {noise:.5f}.\n")
+
+    cache = {}
+    if use_cache:
+        try:
+            cache = json.load(open(ABLATION_CACHE))
+        except Exception:
+            cache = {}
+
+    base_params = base_score_params(search_trials)
+    rows = []
+    for s in seasons:
+        train_df = df[df["season"] < s]
+        test_df = df[df["season"] == s].dropna(
+            subset=["home_reg_score", "away_reg_score",
+                    "home_score", "away_score"]).copy()
+        if len(test_df) < 50:
+            continue
+
+        params = search_params_fold(train_df.iloc[:int(len(train_df) * 0.85)]
+                                    .reset_index(drop=True),
+                                    real_feats, base_params, search_trials,
+                                    seed=42, season=s, use_cache=use_cache)
+
+        key = _ablation_cache_key(s, train_df, feats, "-", n_sentinels)
+        if key in cache:
+            after = cache[key]
+        else:
+            after = _season_scores(train_df, test_df, feats, params, s,
+                                   n_sentinels, None)
+            cache[key] = after
+            if use_cache:
+                try:
+                    json.dump(cache, open(ABLATION_CACHE, "w"), indent=2)
+                except Exception:
+                    pass
+
+        ref = ref_by_season[str(s)]["ref"]
+        rows.append({
+            # `int()` explicite : `s` vient de `df["season"].unique()`, donc
+            # c'est un numpy.int64, que le module json refuse de sérialiser.
+            "season": int(s),
+            "n_games": int(len(test_df)),
+            "before": {k: ref[k] for k in ref},
+            "after": after,
+            "delta": {k: after[k] - ref[k] for k in ref if k in after},
+        })
+        d = rows[-1]["delta"]["ll_puckline"]
+        print(f"   {s}-{str(s + 1)[2:]:<2} {len(test_df):>5} matchs · "
+              f"{ref['ll_puckline']:.5f} → {after['ll_puckline']:.5f}  "
+              f"Δ {d:+.5f}  {'↑ pire' if d > 0 else '↓ mieux'}")
+
+    if not rows:
+        print("❌ Aucune saison comparable.")
+        return None
+
+    deltas = np.array([r["delta"]["ll_puckline"] for r in rows])
+    mean_delta = float(np.mean(deltas))
+    n_worse = int((deltas > 0).sum())
+    verdict = _confirmation_verdict(mean_delta, n_worse, len(rows), noise)
+
+    # Ce que le critère ne dit pas et qu'il faut lire à côté : la précision de la
+    # mesure. Le critère est pré-enregistré et tranche seul — mais un verdict
+    # rendu sur un écart plus petit que sa propre barre d'erreur est un verdict
+    # « je ne sais pas » déguisé, et le savoir change la suite (élaguer autrement
+    # ne servira à rien si la mesure ne peut pas départager).
+    se = float(np.std(deltas, ddof=1) / np.sqrt(len(deltas))) if len(deltas) > 1 \
+        else float("nan")
+    p_signs = (sum(comb(len(rows), k) for k in range(n_worse, len(rows) + 1))
+               / (2 ** len(rows)))
+
+    print(f"\n   Δ moyen puck line : {mean_delta:+.5f} "
+          f"(médiane {float(np.median(deltas)):+.5f})")
+    print(f"   Incertitude : ± {se:.5f} (erreur-type sur {len(rows)} saisons) "
+          f"→ t = {mean_delta / se:+.2f}")
+    print(f"   Saisons dégradées : {n_worse}/{len(rows)} — du pile ou face en "
+          f"produirait autant {p_signs:.0%} du temps")
+    print(f"   Bruit de la procédure (max des sentinelles) : ±{noise:.5f}")
+    if abs(mean_delta) < se:
+        print("   ⚠️  L'écart est plus petit que son erreur-type : cette mesure "
+              "ne PEUT PAS\n       départager les deux jeux de features. Le "
+              "verdict ci-dessous applique la\n       règle pré-enregistrée, il "
+              "ne constate pas un effet établi.")
+    print(f"\n   → {verdict}")
+    if verdict == "DÉGRADE":
+        print("   L'élagage coûte plus que le bruit. Les features retirées "
+              "portaient de\n   l'information que l'ablation marginale n'a pas "
+              "vue — typiquement un groupe\n   corrélé dont chaque membre "
+              "paraissait dispensable. Remets-en une partie et\n   recommence, "
+              "par sous-groupes.")
+    elif verdict == "NEUTRE":
+        print("   Même log-loss avec moins de colonnes : l'élagage est confirmé.")
+    else:
+        print("   La log-loss BAISSE : les features retirées coûtaient de la "
+              "variance.")
+    print("\n   Ensuite : `python train_score.py` pour régénérer "
+          "score_model.json et\n   score_report.json — ml_service lit la liste "
+          "des features dans le rapport,\n   l'élagage s'y propage seul.")
+
+    # Les métriques secondaires n'ont pas décidé de l'élagage et ne décident pas
+    # plus de sa confirmation : un désaccord se regarde, il ne renverse rien.
+    secondary = {}
+    for k in ("deviance", "ll_moneyline"):
+        md = float(np.mean([r["delta"][k] for r in rows if k in r["delta"]]))
+        nk = noise_by_metric.get(k, 0.0)
+        sign = 0 if abs(md) <= nk else (1 if md > 0 else -1)
+        ref_sign = 0 if abs(mean_delta) <= noise else (1 if mean_delta > 0 else -1)
+        flag = "  ⚠️ désaccord" if sign and ref_sign and sign != ref_sign else ""
+        if sign and not ref_sign:
+            flag = "  ↳ tranche là où la puck line ne tranche pas"
+        secondary[k] = {"mean_delta": round(md, 6), "noise": round(nk, 6),
+                        "direction": sign}
+        print(f"   ({k} : Δ moyen {md:+.5f} contre un bruit de ±{nk:.5f}, "
+              f"indicatif{flag})")
+
+    return {
+        "method": "confirmation par suppression réelle, walk-forward",
+        "metric": "log-loss de la puck line, deux jambes, τ ajusté par variante",
+        "criterion": ("DÉGRADE si Δ moyen > bruit des sentinelles, ou si Δ > 0 "
+                      "sur plus de la moitié des saisons avec Δ moyen > 0 ; "
+                      "AMÉLIORE si Δ moyen < −bruit ; NEUTRE sinon"),
+        "noise_reference": round(noise, 6),
+        "features_before": before,
+        "features_after": real_feats,
+        "dropped": dropped,
+        "added": added,
+        "n_sentinels": n_sentinels,
+        "search_trials_per_fold": search_trials,
+        "mean_delta_puckline": round(mean_delta, 6),
+        "median_delta_puckline": round(float(np.median(deltas)), 6),
+        "stderr_delta_puckline": round(se, 6),
+        "resolvable": bool(abs(mean_delta) >= se),
+        "sign_test_p": round(p_signs, 4),
+        "secondary_metrics_displayed_only": secondary,
+        "n_seasons_worse": n_worse,
+        "n_seasons": len(rows),
+        "verdict": verdict,
+        "by_season": rows,
     }
 
 
@@ -1406,10 +2075,23 @@ def main():
                          "une tranche interne au train du fold. 0 relit "
                          "score_report.json et réintroduit une fuite (params "
                          "choisis sur un split qui recouvre des saisons de test)")
+    ap.add_argument("--clv", action="store_true",
+                    help="A3 : ROI aux prix d'OUVERTURE et closing line value. "
+                         "Répond à « le modèle bat-il l'ouverture ? » et mesure "
+                         "si le prix pris est meilleur que la clôture. La puck "
+                         "line en est absente — SBRO n'en donne qu'un seul "
+                         "prix, pas une paire ouverture/clôture")
     ap.add_argument("--select-score-features", action="store_true",
                     help="A5 : ablation laisser-une-de-côté des features du "
                          "modèle de score, saison par saison. N'écrit qu'un "
                          "rapport — n'élague rien tout seul")
+    ap.add_argument("--confirm-score-features", action="store_true",
+                    help="A5, étape de confirmation : compare le jeu de "
+                         "features RÉELLEMENT élagué (celui de train_score.py "
+                         "à l'instant du run) aux références par saison de "
+                         "score_feature_selection.json. 1 entraînement par "
+                         "saison au lieu de 26 — le classement se fait par "
+                         "permutation, la confirmation par suppression")
     ap.add_argument("--keep-share", type=float, default=0.70,
                     help="Part des saisons où le gain doit être positif pour "
                          "garder une feature (A5, 0.70 comme P5)")
@@ -1429,9 +2111,11 @@ def main():
     # A5 ne regarde que la qualité des λ — aucun prix n'intervient. Il passe donc
     # AVANT le garde sur les cotes, sinon un dataset sans cotes interdirait une
     # mesure qui n'en a pas besoin.
-    if args.select_score_features:
+    if args.select_score_features or args.confirm_score_features:
         # Saisons choisies sur l'historique disponible, pas sur la couverture
-        # des cotes : s'y restreindre jetterait de la donnée utile.
+        # des cotes : s'y restreindre jetterait de la donnée utile. La
+        # confirmation utilise EXACTEMENT le même filtre que la sélection, sans
+        # quoi elle comparerait des saisons que la référence n'a pas mesurées.
         sel_seasons = [s for s in sorted(df["season"].unique())
                        if s >= args.min_season
                        and (df["season"] < s).sum() >= 800
@@ -1440,14 +2124,21 @@ def main():
             print("❌ Pas assez d'historique, ou cibles réglementaires absentes.")
             print("   → python build_dataset.py")
             return
+        if args.confirm_score_features:
+            res = run_score_feature_confirmation(
+                df, sel_seasons, args.search_trials,
+                use_cache=not args.no_param_cache, n_sentinels=args.sentinels)
+            if res:
+                json.dump(res, open(CONFIRMATION_REPORT, "w"), indent=2)
+                print(f"\n✅ {CONFIRMATION_REPORT.split('/')[-1]} → {MODELS}/")
+            return
         res = run_score_feature_ablation(df, sel_seasons, args.search_trials,
                                          use_cache=not args.no_param_cache,
                                          keep_share=args.keep_share,
                                          n_sentinels=args.sentinels)
         if res:
-            json.dump(res, open(f"{MODELS}/score_feature_selection.json", "w"),
-                      indent=2)
-            print(f"\n✅ score_feature_selection.json → {MODELS}/")
+            json.dump(res, open(SELECTION_REPORT, "w"), indent=2)
+            print(f"\n✅ {SELECTION_REPORT.split('/')[-1]} → {MODELS}/")
         return
 
     if "market_home_p_close" not in df.columns:
@@ -1477,6 +2168,37 @@ def main():
     print(f"📊 Walk-forward sur {len(test_seasons)} saisons : "
           f"{test_seasons[0]}-{str(test_seasons[0]+1)[2:]} → "
           f"{test_seasons[-1]}-{str(test_seasons[-1]+1)[2:]}")
+
+    if args.clv:
+        # Saisons sélectionnées sur la couverture des OUVERTURES : elle est plus
+        # étroite que celle des clôtures, et une saison sans ouverture ne peut
+        # rien dire ici.
+        col = "market_home_p_open"
+        if col not in df.columns:
+            print("❌ Pas de probabilités d'ouverture dans le dataset.")
+            print("   → python fetch_data_v4.py --only odds --from-local")
+            print("     puis python build_dataset.py")
+            return
+        cseasons = [s for s in sorted(df["season"].unique())
+                    if df.loc[df["season"] == s, col].notna().sum() >= 50
+                    and s >= args.min_season and (df["season"] < s).sum() >= 800]
+        if not cseasons:
+            print("❌ Aucune saison avec assez d'ouvertures.")
+            return
+        print(f"   A3 — CLV et ROI à l'ouverture, {len(cseasons)} saisons")
+        print("   ⚠️  La puck line est ABSENTE de ce mode : l'archive SBRO n'en "
+              "donne qu'un\n       seul prix par match, pas une paire "
+              "ouverture/clôture. Le CLV de la\n       règle A2 attend la "
+              "collecte live (odds_snapshots, migration 031).\n")
+        res = run_clv(df, cseasons,
+                      args.edge if args.edge is not None else 0.02,
+                      search_trials=args.search_trials,
+                      use_cache=not args.no_param_cache)
+        if res:
+            json.dump(res, open(f"{MODELS}/backtest_clv_report.json", "w"),
+                      indent=2)
+            print(f"\n✅ backtest_clv_report.json → {MODELS}/")
+        return
 
     if args.derived:
         # Saisons sélectionnées sur la couverture des PRIX dérivés, pas sur
