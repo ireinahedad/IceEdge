@@ -10,7 +10,7 @@
  *   gameMarkets.tsx        types de marché, construction des groupes, contexte LLM
  *   PredictionSheet.tsx    fiche de marché, BetOption, MarketGroup, alignements
  *   TeamPrediction · GamePrediction · PlayerPrediction ·
- *   NGamesPrediction · PlayerPropPrediction · TennisPlayerPrediction
+ *   NGamesPrediction · PlayerPropPrediction
  *
  * `PredictionPage` reste le seul export public : `routes.tsx` est inchangé.
  */
@@ -24,7 +24,6 @@ import { FramedLabel } from "../components/brand/FramedLabel";
 import { GamePrediction } from "./prediction/GamePrediction";
 import { PlayerPrediction } from "./prediction/PlayerPrediction";
 import { TeamPrediction } from "./prediction/TeamPrediction";
-import { TennisPlayerPrediction } from "./prediction/TennisPlayerPrediction";
 import { NotFound, RevealModeCtx } from "./prediction/predictionShared";
 
 
@@ -41,7 +40,6 @@ export function PredictionPage() {
       case "game":    return <GamePrediction gameId={id} />;
       case "team":    return <TeamPrediction teamId={id} />;
       case "player":  return <PlayerPrediction playerId={id} />;
-      case "tennis":  return <TennisPlayerPrediction playerId={id} />;
       default:        return <NotFound />;
     }
   };

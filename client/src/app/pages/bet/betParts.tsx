@@ -9,7 +9,6 @@
 import { useState, useEffect } from "react";
 import { Plus, X, Lock, Share2, ChevronRight } from "lucide-react";
 import type { BetLeg } from "../../types/bet";
-import { useSport } from "../../context/SportContext";
 import { openBet } from "../../services/bookmakers";
 import { useBookmaker } from "../../context/BookmakerContext";
 import { useI18n } from "../../i18n";
@@ -89,7 +88,6 @@ export function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: numb
 // ─── Single leg card (builder) ────────────────────────────────────────────────
 
 export function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; onRemove: () => void }) {
-  const { sport } = useSport();
   const { t } = useI18n();
   const { bookmaker } = useBookmaker();
   const barColor =
@@ -122,7 +120,7 @@ export function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; 
             <span className="text-[10px] text-[#4a6068] flex-shrink-0 font-mono">{toOddsLabel(leg.probability)}</span>
           </div>
           <button
-            onClick={() => openBet(sport === "tennis" ? "tennis" : "hockey")}
+            onClick={() => openBet("hockey")}
             className="mt-2 inline-flex items-center gap-1.5 bg-[#126e51] hover:bg-[#0f5c44] text-[#ffd700] text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-colors"
             title={`${bookmaker.label} — ${t("slip.placeBet")}`}
           >

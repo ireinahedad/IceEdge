@@ -11,7 +11,6 @@ import nhlRoutes           from './routes/nhl.routes';
 import oddsRoutes          from './routes/odds.routes';
 import injuriesRoutes      from './routes/injuries.routes';
 import mlRoutes            from './routes/ml.routes';
-import tennisRoutes        from './routes/tennis.routes';
 import chatRoutes          from './routes/chat.routes';
 import slipRoutes          from './routes/slip.routes';
 import devRoutes           from './routes/dev.routes';
@@ -127,8 +126,6 @@ app.use('/api/injuries',      injuriesRoutes);
 // ML / prediction
 app.use('/api/predict',       mlRoutes);
 
-// Tennis live data
-app.use('/api/tennis',        tennisRoutes);
 
 // LLM proxy (uses user's own OpenAI key)
 app.use('/api/llm',           noStore, llmRoutes);

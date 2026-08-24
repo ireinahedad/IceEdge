@@ -2,11 +2,10 @@
 
 **Créé le 2026-08-10 · mis à jour le 2026-08-24.**
 
-> **Reprendre ici.** Une seule décision est en attente côté ML : **payer ou non
-> un mois de The Odds API (59 $)**. Le calcul complet, avec les arguments des
-> deux côtés, est en **§2**. Indépendamment de cette décision, la mise en
-> service de la collecte live a une échéance réelle — **la pré-saison NHL, fin
-> septembre**.
+> **Reprendre ici.** Décidé le 2026-08-24 : **mettre d'abord la collecte live en
+> service** (A1bis, gratuit, échéance réelle à la pré-saison de fin septembre).
+> La décision des **59 $** de backfill The Odds API reste ouverte et n'est pas
+> urgente — le calcul complet, avec les arguments des deux côtés, est en **§2**.
 
 Ce document regroupe **tout ce qui n'est pas fait**, tiré
 des 6 plans et audits du dépôt. Il ne raconte pas ce qui a été livré — l'historique
@@ -221,8 +220,8 @@ sources que la comparaison est censée détecter. Le défaut du script est `us`.
 
 ### Ce qui reste, poste par poste
 
-**A1bis — mise en service de la collecte live** (indépendant de la décision de
-payer, et à faire de toute façon) :
+**A1bis — mise en service de la collecte live. C'EST LE PROCHAIN POSTE**
+(décidé le 2026-08-24 ; indépendant de la décision de payer) :
 
 - [ ] Migrations **028 et 031** : `npm run db:migrate:all`, puis `npm test`
 - [ ] Railway : `ODDS_LOG_ENABLED=true` et `ODDS_USER_RESERVE`
@@ -273,24 +272,31 @@ simultanés.**
 | **D** 🔴 | **Redis (Upstash)** : adapter Socket.io + `RedisRateLimitStore` (déjà écrit, à brancher) + quota LLM Free | **avant la 2ᵉ instance** | 1 j |
 | E | Migrer les data-URI d'avatars déjà en base vers R2 — code et variables en place | ~500 utilisateurs avec avatar | 2 h |
 | Q | 2ᵉ instance Railway + sticky sessions | CPU > ~70 % en régime | 4 h |
-| 7 bis | **Décider** : scale-to-zero Neon **ou** compute permanent assumé. Aujourd'hui : le coût des deux, le bénéfice d'aucun | hors-saison NHL | 2 h |
+| 7 bis | **Décidé le 2026-08-24 : scale-to-zero.** À activer dans la console Neon ; accepter un cold start de quelques secondes après inactivité | maintenant | 30 min |
 | U | RAM du service ML : 2 workers uvicorn à ~300-500 Mo RSS chacun ne tiennent pas dans 512 Mo | avant le premier pic réel | 15 min |
 | I | TanStack Query côté client — `fetch` brut partout, aucune déduplication | quand la facture Railway devient visible | 2 j |
-| R | `apiLimiter` : clé par `userId` quand authentifié, IP en repli (NAT mobile) | premiers signalements de 429 | 2 h |
-| S | `fetchGamesRange` : clé de cache sur semaines calendaires | prolifération de clés dans `/api/dev/metrics` | 2 h |
 | T | Cache de prompts LLM identiques | quand l'usage LLM devient significatif | 4 h |
 | V | Échantillonner les logs 2xx | à la première facture de logs | 1 h |
 | W | Purge Tailwind — le CSS pèse 124 ko (le JS est déjà découpé par route) | — | 2 h |
 
 **Écarté sciemment** — décision produit, pas oubli : Redis tant qu'il n'y a
-qu'une instance, et les TTL différenciés Tennis (ligne O).
+qu'une instance. (La ligne O, TTL différenciés Tennis, est sans objet depuis le
+retrait du tennis.)
 
-**Non traité, repéré ligne X :** les **4 `fetch` bruts vers `STATS_BASE`**
-(classements, sommaires de saison) contournent `fetchNHL` et restent **sans
-timeout**. Ils n'étaient pas exercés par S1. À faire si un tir les met en cause.
+**Question ouverte, laissée exprès :** `writeLimiter` (30 écritures/min, monté
+sur `/api/chat` et les routes d'écriture) est encore classé **par IP** et souffre
+donc du NAT mobile que `apiLimiter` ne subit plus. Passer les écritures « par
+compte » affaiblirait l'anti-spam là où il sert le plus, et les salons ont déjà
+leur propre limiteur par action. À trancher.
 
-**Amélioration optionnelle, repérée RES-2 :** servir le **cache d'odds périmé**
-plutôt que `[]` pendant une panne de The Odds API — évite un écran sans cotes.
+**Ne pas « corriger » :** `fetchSpreadsOnly` (`oddsClient`) renvoie `[]` en cas de
+panne au lieu de servir un prix périmé. C'est voulu — un collecteur qui rate un
+cycle perd un point de mesure, alors qu'un snapshot réécrit avec un prix ancien
+fabriquerait un faux mouvement de ligne.
+
+- [ ] **Sur ta machine :** `cd server && npm test` pour le dernier lot du
+      2026-08-24 (limiteur, cache du calendrier, hôte des stats,
+      `profileUpdateSchema`)
 
 ---
 
@@ -301,7 +307,7 @@ Sécurité et résilience sont **validées en statique** ; ce qui reste est dyna
 
 **Fonctionnel** — F1 auth complète · F2 gating Pro bout en bout · F3 slip +
 settlement · F4 prédictions NHL du jour · F5 Best Bets / value bet scan ·
-F6 récupération de mot de passe · F7 tennis
+F6 récupération de mot de passe
 
 **Intégration** — I1 chaîne ML Front→Node→FastAPI · I2 CORS + cookie cross-site ·
 I3 webhook Stripe idempotent · I4 Google OAuth · I5 socket.io · I6 pipeline
@@ -317,9 +323,7 @@ C2 cross-navigateur desktop · C3 push web
 
 **Vérifications dynamiques de sécurité** (le statique est passé) — test IDOR à
 2 comptes · JWT expiré/altéré rejeté et refresh non rejouable après logout ·
-en-têtes **CSP réellement servis par Vercel** (l'API n'y peut rien, c'est le front) ·
-**corps de `PATCH /users/me` non validé** (cf. §5 : seul `ruleWeights` est borné
-depuis le 2026-08-24)
+en-têtes **CSP réellement servis par Vercel** (l'API n'y peut rien, c'est le front)
 
 **Tests de résilience à provoquer** — couper le ML · couper The Odds API et
 retirer `scratches.json` · redeploy Railway sous trafic · webhook Stripe rejoué
@@ -337,58 +341,17 @@ dans l'historique est celui d'une base **locale**, sans valeur pour un attaquant
 Point clos, ne pas le rouvrir. Le scanner gitleaks du CI empêche qu'un vrai secret
 y entre à l'avenir.
 
-### 🐛 Synchro des poids de règles — câblée le 2026-08-24
+### Synchro des poids de règles — câblée le 2026-08-24
 
-Le trou : le serveur avait tout (colonne `user_profiles.rule_weights`,
-migration **017**, lue en `ruleWeights` et écrivable via `PATCH /users/me`) mais
-`RuleFactorEditor` n'écrivait que dans `localStorage` et **rien ne lisait jamais
-la valeur du compte**. C'est pour ça que `applyServerFamilyWeights` avait été
-gardée sans appelant.
+Le câblage et ses règles de conflit sont dans le code (`ruleWeightsService`) ;
+`PATCH /users/me` est désormais borné par `profileUpdateSchema` (liste blanche
+zod sur la route + double barrière dans le service). Il ne reste qu'une
+vérification, qui ne peut se faire qu'à la main :
 
-- [x] Hydratation depuis le compte
-- [x] Push vers `PATCH /users/me` à l'enregistrement
-
-**Comment c'est branché** — le compte fait foi, `localStorage` reste le cache de
-travail qui sert à calculer les scores :
-
-- **L'hydratation est paresseuse et unique par chargement d'app.**
-  `ensureFamilyWeightsHydrated()` (`ruleWeightsService`) mutualise un seul appel,
-  déclenché par la première carte de règles montée ; la page Profil s'en acquitte
-  gratuitement puisqu'elle a déjà le profil en main. **Un invité ne déclenche
-  aucun appel**, et `AuthProvider` n'a pas été touché — la décision d'y éviter un
-  fetch de profil au démarrage tient toujours.
-- **Une valeur vide côté compte n'efface rien** : « pas d'opinion », pas « remets
-  les défauts ». Et si le compte n'a aucun poids alors que l'appareil en a, ce
-  sont ceux de l'appareil qui montent — sinon les réglages faits avant l'existence
-  de la synchro seraient à ressaisir un par un.
-- **Un échec réseau n'annule pas l'enregistrement local** ; il déclenche un toast
-  « Enregistré sur cet appareil ; la synchro du compte a échoué ».
-- Le type `UserProfile.ruleWeights` était **faux** (`Record<string, number>`) : le
-  store est imbriqué, famille → { idFacteur → poids }. Corrigé des deux côtés.
-
-**Sécurité — la vraie trouvaille de ce câblage.** `rule_weights` partait en JSONB
-**sans aucune validation** : `PATCH /users/me` n'a pas de `validateBody`, et le
-champ était `JSON.stringify`é tel quel. N'importe quel compte pouvait donc y
-ranger un objet arbitrairement gros, facturé en stockage Neon et **relu à chaque
-`GET /users/me`**. Un `ruleWeightsSchema` zod borné (16 familles × 32 facteurs,
-poids 0-100, clés alphanumériques, `__proto__` refusé) est posé dans
-`validation/schemas.ts` et appliqué au point d'écriture, dans
-`ProfileService.updateProfile` — la route reste inchangée. 7 cas de test ajoutés
-à `schemas.test.ts`.
-
-- [ ] **Sur ta machine :** `cd server && npm test` (les 7 cas `ruleWeightsSchema`)
-      puis `npm run build` des deux côtés
-- [ ] **Vérif manuelle à 2 appareils** (ou 2 navigateurs) : régler une pondération
-      et l'enregistrer sur A, recharger B connecté au même compte → B doit voir les
+- [ ] **À 2 appareils** (ou 2 navigateurs) : régler une pondération et
+      l'enregistrer sur A, recharger B connecté au même compte → B doit voir les
       curseurs de A. Puis en invité : l'onglet Réseau ne doit montrer **aucun**
       appel `/users/me` déclenché par une carte de règles.
-
-> **Reste ouvert, repéré ici :** `PATCH /users/me` ne valide toujours pas le
-> **reste** de son corps (bio, displayName, openaiApiKey… partent sans borne de
-> taille). Un `profileUpdateSchema` sur la route serait le vrai correctif ; il n'a
-> pas été fait dans la foulée parce qu'il touche des champs que l'app envoie déjà
-> et demande de vérifier chaque borne contre les écrans existants. À ranger avec
-> les vérifications dynamiques de sécurité du §4.
 
 ### Codes promo — tranché le 2026-08-10 : pas de changement de schéma
 
@@ -411,154 +374,78 @@ coder, pas de table `promo_redemptions`.
 
 ---
 
-## 6. Ménage du 2026-08-10 — ce qui a été fait, ce qu'il te reste
+## 6. Ménage du 2026-08-10 — ce qu'il en reste
 
-### Supprimé du code (0 importeur, prouvé par analyse transitive)
+Le détail de ce qui a été supprimé (kit shadcn de 49 fichiers, 7 fichiers morts,
+42 dépendances sur 50, 15 exports) est dans l'historique Git. Ne restent ici que
+les points encore vivants.
 
-**Le kit `client/src/app/components/ui/` en entier — 49 fichiers.** C'était un
-dump shadcn/ui complet dont **rien dans l'application n'importait quoi que ce
-soit** : les seuls importeurs des composants `ui/*` étaient d'autres fichiers
-`ui/*`. Aucune occurrence de `@/components` dans tout le client.
+### Reste à faire
 
-**7 fichiers de code projet :**
-
-| Fichier | Pourquoi mort |
-|---|---|
-| `services/affiliateService.ts` | Remplacé par `services/bookmakers.ts` (multi-book Bet365 + Stake, codes affiliés par book) |
-| `pages/TennisPredictionsPage.tsx` · `pages/TennisPlayerPage.tsx` | 0 route, 0 importeur. **Attention : le tennis n'est pas mort** — `TennisStatsPage` reste rendu par `StatsPage` via le toggle de sport. Seules les deux pages de *prédiction* tennis étaient orphelines. |
-| `data/hockeyProps.ts` | Module vide de 10 lignes. Les props joueur et futures sont générés dynamiquement depuis `/api/nhl/players` et `/api/nhl/standings` |
-| `components/RulesWeightsCard.tsx` | 151 lignes, jamais montées |
-| `components/brand/IceBackground.tsx` | 132 lignes, jamais montées |
-| `components/ui/Balatro.jsx` | 127 lignes + `Balatro.css`, jamais montées |
-
-**Gardé délibérément :** `server/src/middleware/redisRateLimitStore.ts`. Il
-apparaît orphelin, mais c'est le stub prévu pour la ligne D — le brancher est
-« une ligne par limiteur » précisément parce qu'il existe déjà.
-
-### `package.json` — 42 dépendances sur 50 retirées
-
-Chaque dépendance a été testée individuellement contre le code survivant
-(`src/`, `scripts/`, `index.html`, `vite.config`). Après la coupe : **8 restantes,
-0 inutilisée**.
-
-**Gardées, chacune avec un consommateur réel :** `@sentry/react`, `html-to-image`,
-`lucide-react`, `react-router`, `recharts` (`ChartPage`), `socket.io-client`,
-`sonner` (`App.tsx`, `ProfilePage`, `RoomList`, `CreateRoomModal`,
-`InjuriesAdminCard`, `RuleFactorEditor`), `tw-animate-css`.
-
-**Retirées :** les 26 `@radix-ui/react-*`, `class-variance-authority`, `clsx`,
-`cmdk`, `date-fns`, `embla-carousel-react`, `input-otp`, `motion`, `next-themes`,
-`react-day-picker`, `react-hook-form`, `react-popper`, `@popperjs/core`,
-`react-resizable-panels`, `react-responsive-masonry`, `tailwind-merge`, `vaul`.
-
-> `motion` méritait une vérification à part vu les animations de l'app : la seule
-> occurrence dans le dépôt était un **commentaire** de `routes.tsx`. `clsx` et
-> `tailwind-merge` ne servaient qu'au helper `cn` de `ui/utils.ts`, parti avec le
-> kit.
-
-**→ `npm install` obligatoire** pour resynchroniser le lockfile (ligne B0 du §1).
-Je ne l'ai pas lancé : `node_modules` a été installé sous Windows et le sandbox
-n'aurait pas produit un lockfile valide pour ta machine.
-
-Pour réintroduire un composant shadcn plus tard : `npx shadcn@latest add <nom>`.
-Rien n'est perdu.
-
-### Exports morts : 15 supprimés, 5 gardés exprès
-
-Le premier scan en annonçait 108 — il n'incluait pas `server/scripts/` parmi les
-consommateurs, donc il proposait de supprimer des fonctions dont dépendent les
-commandes npm (`notify:slips`, `odds:export`). Corrigé, il en restait 19.
-
-**Supprimés (15) :** `TENNIS_CATEGORY_LABELS`, `TENNIS_CATEGORY_ICONS`,
-`getTennisMarketsByCategory`, `lastNGamesOptions`, `probToOdds`, `getLLMUsage`,
-`decimalToWinPct`, `fetchAvailableSports`, `sendToUser`, et l'ancien modèle de
-poids à six facteurs de `ruleWeightsService` (`WEIGHT_META`, `FACTOR_COLORS`,
-`getWeights`, `isCustom`, `applyServerWeights` + leurs dépendances privées).
-
-> Deux suppressions valent mieux qu'un simple gain de lignes : `probToOdds` était
-> un **doublon exact** de `probToOddsLabel` (privée, dans `predictionApiService`),
-> et `decimalToWinPct` inversait une cote isolée là où `HockeyLanding` dévigue la
-> paire. Deux conversions concurrentes finissent toujours par diverger.
-
-**Gardés (5), avec un commentaire disant pourquoi :** `clearBestBetsCache`,
-`clearLeaderboardCache`, `stopOddsLogger`, `snapshot` (oddsQuota) — les points
-d'entrée dont un test d'intégration a besoin — et `applyServerFamilyWeights`
-(cf. le bug ci-dessus).
-
-### Découpage des fichiers > 500 lignes — en cours
-
-Méthode : **extraction de plages de lignes par script**, jamais à la main. Le
-corps du code est identique à l'original ; seuls les imports et les `export` sont
-ajoutés. Trois contrôles automatiques à chaque fichier : syntaxe, résolution de
-chaque import interne, et **comparaison des multiensembles de lignes avant/après**
-(c'est celui qui prouve qu'aucune ligne n'a été perdue ni altérée). Un détecteur
-d'imports circulaires a été ajouté après le premier faux positif.
-
-| Fichier | Avant | Après | Plus gros morceau | Build |
-|---|---|---|---|---|
-| `ChartPage.tsx` | 3106 | 11 fichiers (`pages/charts/`) | `GameCharts.tsx` 457 | ✅ vert |
-| `PredictionPage.tsx` | 2367 | 10 fichiers (`pages/prediction/`) | `PredictionSheet.tsx` 491 | ✅ vert |
-| `HockeyLanding.tsx` | 1468 | 5 fichiers (`pages/landing/`) | `LandingCards.tsx` 471 | ✅ vert |
-| `ProfilePage.tsx` | 866 | 3 fichiers (`pages/profile/`) | `SettingsTab.tsx` 509 | ✅ vert |
-| `BetBuilderPage.tsx` | 739 | 3 fichiers (`pages/bet/`) | `MySlipsTab.tsx` 288 | ⏳ à builder |
-
-Dans les cinq cas le fichier d'origine ne garde que l'aiguillage et **reste le
-seul export public** — `routes.tsx` est inchangé. **8 546 lignes réparties, zéro
-ligne perdue** (vérifié fichier par fichier).
-
-> Trois pièges rencontrés, tous attrapés par les contrôles et aucun par la
-> relecture : le script a d'abord écrasé son propre fichier source (depuis, il lit
-> une copie) ; l'extraction d'identifiants attrapait les noms **cités dans les
-> commentaires**, fabriquant des imports circulaires imaginaires (elle passe
-> désormais par l'AST) ; et les imports **à effet de bord** (`import "x.css"`)
-> n'ayant aucun binding, ils étaient silencieusement supprimés — la page aurait
-> perdu ses styles sans qu'aucun test ne bronche. Le script les réinjecte dans la
-> coquille et refuse de tourner s'il en trouve un sans coquille désignée.
-
-#### Ce qui dépasse encore 500 lignes — et pourquoi je m'y suis arrêté
+- [ ] **Révoquer et régénérer `VITE_ODDS_API_KEY`** si la valeur littérale qui
+      était en clair dans `DEPLOYMENT.md` §4 était réelle et que le dépôt a
+      circulé. (La doc porte un placeholder depuis.)
+- [ ] **Découpage > 500 lignes**, si on le poursuit :
 
 | Fichier | Lignes | Pourquoi ce n'est pas un découpage mécanique |
 |---|---|---|
-| `i18n/index.tsx` | 855 | Dictionnaire de traductions. Le découper par domaine est faisable mais c'est du rangement, pas de la structure. |
+| `i18n/index.tsx` | 855 | Dictionnaire de traductions. Le découper par domaine est du rangement, pas de la structure. |
 | `data/betMarkets.ts` | 628 | Table de données. Même remarque. |
-| `pages/NHLPredictionsPage.tsx` | 589 | Jamais analysé — candidat sérieux pour la suite. |
-| `pages/TennisStatsPage.tsx` | 578 | Idem, mais le tennis est en périmètre réduit : à faire seulement si on le garde. |
-| `components/MLPredictionCard.tsx` | 541 | Idem. |
-| `components/MarketSelectorSheet.tsx` | 519 | Idem. |
-| `profile/SettingsTab.tsx` | 509 | **453 lignes de code réel.** Un seul composant portant ~20 `useState` partagés par toutes ses sections. Les séparer = faire descendre ces états en props, donc un vrai refactoring — à faire avec le navigateur ouvert, pas à l'aveugle. |
+| `pages/NHLPredictionsPage.tsx` | 589 | Jamais analysé — le candidat le plus sérieux. |
+| `components/MLPredictionCard.tsx` | 541 | Candidat. |
+| `components/MarketSelectorSheet.tsx` | 519 | Candidat. |
+| `profile/SettingsTab.tsx` | 509 | **453 lignes réelles**, un seul composant portant ~20 `useState` partagés. Les séparer = faire descendre ces états en props : un vrai refactoring, à faire avec le navigateur ouvert. |
 
-### Documentation corrigée au passage
+### Retrait du tennis — décidé et fait le 2026-08-24
 
-- `DEPLOYMENT.md` §4 : la **valeur littérale de `VITE_ODDS_API_KEY`** a été
-  remplacée par un placeholder, avec la note expliquant pourquoi `VITE_*` est
-  public par construction et pourquoi le proxy serveur existe.
-  **Si cette clé était réelle et que le dépôt a circulé : la révoquer et la
-  régénérer.**
-- `DEPLOYMENT.md` §7 : la procédure disait « courriel + bandeau in-app » alors
-  que la décision du 2026-08-09 est **courriel uniquement**. Corrigé, et la
-  commande `npm run notify:slips` ajoutée.
-- Les en-têtes de `content_insights.py` et `content_insights_team_player.py`
-  citaient `totals_model.json`, supprimé par S2. Remplacé par `score_model.json`.
-- `client/ATTRIBUTIONS.md` : l'attribution shadcn/ui a été retirée — le kit ne
-  fait plus partie du produit. La ligne à remettre en cas de réintroduction est
-  gardée en commentaire dans le fichier.
-- `routes.tsx` : le commentaire M1 citait `motion` et `ogl` comme libs lourdes
-  découpées par route. Ni l'une ni l'autre n'est plus une dépendance.
+Le tennis est sorti du produit : les 5 fichiers dédiés (2 pages, le service et le
+client d'API, la route serveur) sont **déplacés dans `_to_delete/tennis-2026-08-24/`**
+— le bridge ne peut pas supprimer, c'est à toi de le faire — et 18 fichiers ont
+été nettoyés (branche tennis de `HockeyLanding`, `BestBetsSection`, `StatsPage`,
+`PredictionPage`, marchés, types, i18n, route et branche ML côté serveur).
 
-### Côté ML
+`SportContext` **reste**, en mono-sport : il porte le thème que consomment une
+vingtaine d'écrans. Le supprimer aurait disséminé trois constantes partout.
 
-- **`ml/data/raw/odds/download_dataset.py` et `build_dataset_extra.py` supprimés.**
-  Ils produisaient `nhl_data_extensive.csv`, dont les colonnes de paris sont
-  factices (chaque match 2004-2018 : `favorite_moneyline -105`, `over_under 5.5`,
-  `spread -1.5`), et leur lecteur avait déjà disparu avec S5.
-- **`ml/models/score_ensemble/` sorti du dépôt** (`git rm -r --cached`) et ajouté
-  à `.gitignore` — 8.9 Mo. **Les 20 membres restent sur ton disque**, et
-  `ml_service.py` les chargera si le dossier est là : le chargement était déjà
-  entièrement facultatif, et l'image Docker les excluait depuis S1. Régénérables
-  par `python train_score.py --ensemble 20`.
-- **Deux cases de `REFACTOR_PLAN.md` étaient déjà faites :**
-  `ml/models/totals_model.json` et `feature_importance_totals.json` n'existent
-  plus sur le disque. La case S2 « sur ta machine » peut être cochée.
+- [ ] Supprimer `_to_delete/tennis-2026-08-24/` (ou `git rm` les 5 chemins)
+- [ ] `npm run build` **des deux côtés** — c'est le vrai filet ici : je n'ai pu
+      faire qu'un pré-check de syntaxe, pas un typecheck
+- [ ] Railway : retirer `RAPIDAPI_KEY` (la ligne est partie de `.env.example`)
+- [ ] Vérifier une page d'accueil et l'onglet Stats dans le navigateur
+
+> **Les paris tennis déjà en base ne bougent pas.** `settlement.service` les
+> laissait déjà en attente (aucune logique de règlement tennis n'a jamais
+> existé) et un coupon affiche des libellés stockés, pas des définitions de
+> marché : rien ne casse, ils restent simplement « pending » pour toujours. Si
+> tu veux les solder, c'est une requête SQL manuelle, à décider séparément.
+
+### À ne pas défaire
+
+- **`server/src/middleware/redisRateLimitStore.ts`** paraît orphelin : c'est le
+  stub de la ligne D (§3). Le brancher est « une ligne par limiteur » *parce
+  qu'il existe déjà*.
+- **5 exports sans appelant sont gardés exprès**, chacun commenté :
+  `clearBestBetsCache`, `clearLeaderboardCache`, `stopOddsLogger`, `snapshot`
+  (oddsQuota) — points d'entrée dont un test d'intégration a besoin — et
+  `applyServerFamilyWeights`, désormais appelée (§5).
+
+### Méthode de découpage — les trois pièges, si on reprend
+
+Extraction de plages de lignes **par script**, jamais à la main, avec trois
+contrôles : syntaxe, résolution de chaque import interne, et comparaison des
+multiensembles de lignes avant/après (c'est celui qui prouve qu'aucune ligne n'a
+été perdue). Les trois pièges rencontrés, tous attrapés par les contrôles et
+aucun par la relecture :
+
+1. le script écrasait son propre fichier source (il lit une copie depuis) ;
+2. l'extraction d'identifiants attrapait les noms **cités dans les commentaires**
+   et fabriquait des imports circulaires imaginaires (elle passe par l'AST) ;
+3. les imports **à effet de bord** (`import "x.css"`) n'ont aucun binding : ils
+   étaient silencieusement supprimés — la page aurait perdu ses styles sans
+   qu'aucun test ne bronche. Le script les réinjecte et refuse de tourner s'il en
+   trouve un sans coquille désignée.
+
+Pour réintroduire un composant shadcn : `npx shadcn@latest add <nom>`.
 
 ---
 

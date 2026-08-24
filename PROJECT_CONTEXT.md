@@ -234,7 +234,8 @@ réentraîner chaque mois.
 
 ## Goal
 
-**ICEEDGE** — Application mobile-first de prédictions sportives (NHL + Tennis).
+**ICEEDGE** — Application mobile-first de prédictions sportives NHL.
+(Le tennis a été retiré du produit le 2026-08-24 : pages, API et marchés supprimés.)
 Permet aux utilisateurs de consulter des prédictions basées sur des règles statistiques et un modèle ML (XGBoost), de construire des slips de paris, de rejoindre des ligues avec chat en temps réel, et de suivre leur performance.
 
 ## Tech Stack
@@ -245,7 +246,7 @@ Permet aux utilisateurs de consulter des prédictions basées sur des règles st
 - **Authentication:** JWT (localStorage) + Google OAuth
 - **Real-time:** Socket.io (WebSocket pour le chat)
 - **ML Service:** Python 3.14 + FastAPI + XGBoost (port 8000, processus séparé)
-- **API externe:** NHL Stats API (`api-web.nhle.com/v1`), RapidAPI Tennis, The Odds API (Bet365)
+- **API externe:** NHL Stats API (`api-web.nhle.com/v1`), The Odds API (Bet365)
 - **Hosting:** Local dev — pas encore déployé
 
 ---
@@ -263,11 +264,10 @@ ICEEDGE/
 │   │   ├── context/
 │   │   │   ├── AuthContext.tsx    # JWT auth state
 │   │   │   ├── BetContext.tsx     # Legs + parlay probability
-│   │   │   └── SportContext.tsx   # Hockey/Tennis toggle + thème
+│   │   │   └── SportContext.tsx   # thème (mono-sport depuis le retrait du tennis)
 │   │   ├── components/
 │   │   │   ├── HockeyLanding.tsx
 │   │   │   ├── StatsPage.tsx
-│   │   │   ├── TennisStatsPage.tsx
 │   │   │   ├── PlayersTab.tsx
 │   │   │   ├── PredictionPage.tsx
 │   │   │   ├── BetBuilderPage.tsx
@@ -308,7 +308,6 @@ ICEEDGE/
 │       │   ├── chat.routes.ts
 │       │   ├── slip.routes.ts
 │       │   ├── profile.routes.ts
-│       │   ├── tennis.route.ts
 │       │   └── odds.route.ts
 │       ├── services/
 │       │   ├── predictionEngine.ts    # Log5, Poisson, futures
@@ -371,10 +370,9 @@ ICEEDGE/
 
 - **App shell** — React Router 11 routes, SportContext, AuthContext, BetContext, BottomNav
 - **Auth** — Email/password + Google OAuth, access token (15 min) en localStorage + refresh token en cookie httpOnly, `returnTo` param, « Rester connecté » (30 j), « Se déconnecter de tous les appareils »
-- **Home** — HockeyLanding avec matchs en direct, odds Bet365, switcher hockey/tennis
+- **Home** — HockeyLanding avec matchs en direct et odds Bet365
 - **Stats Hockey** — By Team, By Game, By Player, By Form (LastNGames)
-- **Stats Tennis** — By Player, By Match, By Surface, By Tournament
-- **Prediction Page** — 6 types: team, game, player, ngames, future, tennis-player
+- **Prediction Page** — 5 types: team, game, player, ngames, future
 - **Bet Builder** — Legs, parlay gauge, odds labels américains, confirmation clear, auth gate
 - **Slip resolve** — PATCH /api/slips/:id/resolve → XP badge
 - **League/Chat** — Rooms PostgreSQL + Socket.io temps réel + compteur online
@@ -405,7 +403,7 @@ Erreurs déjà corrigées :
 > **Cette liste a été vidée le 2026-08-10 : elle était entièrement livrée ou
 > morte.** Share et la route 404 existent, `/api/opportunities` a été supprimé du
 > backend, les deux pages de prédiction tennis étaient orphelines (le tennis
-> reste vivant via le toggle de sport dans Stats), et la Section 8 est couverte
+> a depuis été retiré entièrement, le 2026-08-24), et la Section 8 est couverte
 > par les audits.
 >
 > **Le seul inventaire à jour de ce qui reste est `RESTE_A_FAIRE.md`**, à la

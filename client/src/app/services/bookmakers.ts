@@ -11,7 +11,7 @@
 //   VITE_STAKE_AFFILIATE_CODE=abcd1234
 // Links work without a code — they're just untracked.
 
-export type Sport = "hockey" | "tennis";
+export type Sport = "hockey";
 export type BookmakerId = "bet365" | "stake";
 
 export interface Bookmaker {
@@ -38,7 +38,7 @@ const BET365: Bookmaker = {
   affiliateParam: (code) => `?affiliate=${code}`,
   // Bet365 doesn't expose clean per-match deep links publicly, so we link to
   // the in-play section for the sport.
-  sectionPath: (sport) => (sport === "tennis" ? "/#/IP/B13" : "/#/IP/B18"),
+  sectionPath: () => "/#/IP/B18",
   signupPath: "/#/OA/E/",
 };
 
@@ -52,7 +52,7 @@ const STAKE: Bookmaker = {
   affiliateCode: import.meta.env.VITE_STAKE_AFFILIATE_CODE as string | undefined,
   // Stake tracks referrals with a campaign code: ?c=CODE
   affiliateParam: (code) => `?c=${code}`,
-  sectionPath: (sport) => (sport === "tennis" ? "/sports/tennis" : "/sports/ice-hockey"),
+  sectionPath: () => "/sports/ice-hockey",
   signupPath: "/?tab=register",
 };
 

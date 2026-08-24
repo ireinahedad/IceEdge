@@ -6,7 +6,6 @@ import { BottomNav } from "../components/BottomNav";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { HowItWorksSheet } from "../components/HowItWorksSheet";
 import { useSport } from "../context/SportContext";
-import { TennisStatsContent } from "./TennisStatsPage";
 import { PlayersTab } from "../components/PlayersTab";
 import { LastNGamesSection } from "../components/LastNGamesSection";
 import { ScheduleContent } from "./SchedulePage";
@@ -148,7 +147,7 @@ function GameCard({ game, getTeamById, onClick, accent }: { game: UIGame; getTea
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export function StatsPage() {
-  const { sport, theme } = useSport();
+  const { theme } = useSport();
   const { t } = useI18n();
   const accent = theme.accent;
   const [activeFilter, setActiveFilter] = useState(0);
@@ -169,28 +168,6 @@ export function StatsPage() {
     if (!t1 || !t2) return false;
     return [t1.name, t2.name, t1.abbr, t2.abbr].some((s) => s.toLowerCase().includes(search.toLowerCase()));
   });
-
-  if (sport === "tennis") {
-    return (
-      <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] md:max-w-5xl mx-auto relative z-10 w-full">
-        <header className="bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
-          <div className="rink-boards" aria-hidden />
-          <div className="px-4 pt-3 pb-3 flex items-center justify-between">
-            <div>
-              <h1 className="text-white text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("stats.title")}</h1>
-              <p className="text-[#bfc8cc] text-xs">{t("stats.tennis")}</p>
-            </div>
-            <HowItWorksButton accent={accent} onClick={() => setHowItWorks(true)} />
-          </div>
-        </header>
-        <div className="flex-1 px-4 pb-28 pt-3 overflow-y-auto">
-          <TennisStatsContent accent={accent} />
-        </div>
-        {howItWorks && <HowItWorksSheet onClose={() => setHowItWorks(false)} />}
-        <BottomNav />
-      </div>
-    );
-  }
 
   if (loading) return (
     <div className="flex flex-col min-h-screen bg-transparent text-white items-center justify-center max-w-[430px] md:max-w-5xl mx-auto relative z-10 w-full">

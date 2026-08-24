@@ -7,10 +7,10 @@
  * `LazySection`, qui diffère le montage de chacune jusqu'à ce qu'elle approche
  * du viewport.
  *
- *   landingTypes.ts       DisplayGame, TennisMatch, conversions, replis tennis
+ *   landingTypes.ts       DisplayGame et conversions
  *   EvSection.tsx         paris à valeur (EV), réservé aux abonnés Pro
  *   BestBetsSection.tsx   Best Bets : tri, paliers de risque, cotes implicites
- *   LandingCards.tsx      sélecteur de sport, pastilles de cote, cartes de match
+ *   LandingCards.tsx      en-tête de marque, pastilles de cote, cartes de match
  *
  * `HockeyLanding` reste le seul export public : `routes.tsx` est inchangé.
  */
@@ -21,7 +21,6 @@ import { ChevronRight, CalendarDays } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { nhlApiService } from "../services/nhlApiService";
-import { tennisApiService } from "../services/tennisApiService";
 import { useSport } from "../context/SportContext";
 import { useSubscription } from "../context/SubscriptionContext";
 import { useI18n } from "../i18n";
@@ -30,9 +29,9 @@ import "../components/home-theme.css";
 import "../components/rink-theme.css";
 import { BestBetsSection } from "./landing/BestBetsSection";
 import { EvItem, EvSection } from "./landing/EvSection";
-import { LiveGameCard, SportSelector, TennisLiveCard, TennisMatchRow, UpcomingGameRow } from "./landing/LandingCards";
+import { LiveGameCard, SportSelector, UpcomingGameRow } from "./landing/LandingCards";
 import { TeamCarousel } from "./landing/TeamCarousel";
-import { AddSheetState, DisplayGame, TENNIS_LIVE_FALLBACK, TENNIS_TOP_PREDICTIONS_FALLBACK, TENNIS_UPCOMING_FALLBACK, TennisMatch, calcEdge, toDisplayGame, toTennisMatch } from "./landing/landingTypes";
+import { AddSheetState, DisplayGame, calcEdge, toDisplayGame } from "./landing/landingTypes";
 
 
 // ─── Lazy section ───────────────────────────────────────────────────────────
@@ -68,7 +67,7 @@ function LazySection({ children, minHeight = 200 }: { children: React.ReactNode;
 
 export function HockeyLanding() {
   const navigate = useNavigate();
-  const { sport, theme } = useSport();
+  const { theme } = useSport();
   const { t, lang } = useI18n();
   const { isPro } = useSubscription();
   const accent = theme.accent;
@@ -79,18 +78,11 @@ export function HockeyLanding() {
   const [loading, setLoading] = useState(true);
   const [upcomingLabel, setUpcomingLabel] = useState(() => t("home.tonightGames"));
 
-  // Tennis state
-  const [tennisLive, setTennisLive] = useState<TennisMatch[]>([]);
-  const [tennisUpcoming, setTennisUpcoming] = useState<TennisMatch[]>([]);
-  const [tennisTopPreds, setTennisTopPreds] = useState<Array<{ icon: string; name: string; label: string; pct: number; trend: string; edge: number }>>([]);
-  const [tennisLoading, setTennisLoading] = useState(false);
-
   // Value bets (+EV): model probability beats the bookmaker's implied probability.
   // Only meaningful when real bet365 odds are present (VITE_ODDS_API_KEY set).
   const evItems: EvItem[] = useMemo(() => {
     const out: EvItem[] = [];
-    if (sport === "hockey") {
-      for (const g of [...liveGames, ...upcomingGames]) {
+    for (const g of [...liveGames, ...upcomingGames]) {
         if (g.bet365Home) {
           const edge = calcEdge(g.team1.winPct, g.bet365Home);
           if (edge >= 5) out.push({ id: `ev-${g.id}-h`, logo: g.team1.logo, label: `${g.team1.abbr} ML vs ${g.team2.abbr}`, context: t("home.evSpot"), pct: g.team1.winPct, edge });
@@ -100,24 +92,11 @@ export function HockeyLanding() {
           if (edge >= 5) out.push({ id: `ev-${g.id}-a`, logo: g.team2.logo, label: `${g.team2.abbr} ML vs ${g.team1.abbr}`, context: t("home.evSpot"), pct: g.team2.winPct, edge });
         }
       }
-    } else {
-      for (const m of [...tennisLive, ...tennisUpcoming]) {
-        if (m.player1.bet365Odds) {
-          const edge = calcEdge(m.player1.winPct, m.player1.bet365Odds);
-          if (edge >= 5) out.push({ id: `ev-${m.id}-1`, logo: m.player1.country, label: `${m.player1.name} to win`, context: t("home.evSpot"), pct: m.player1.winPct, edge });
-        }
-        if (m.player2.bet365Odds) {
-          const edge = calcEdge(m.player2.winPct, m.player2.bet365Odds);
-          if (edge >= 5) out.push({ id: `ev-${m.id}-2`, logo: m.player2.country, label: `${m.player2.name} to win`, context: t("home.evSpot"), pct: m.player2.winPct, edge });
-        }
-      }
-    }
     return out.sort((a, b) => b.edge - a.edge).slice(0, 6);
-  }, [sport, liveGames, upcomingGames, tennisLive, tennisUpcoming, t]);
+  }, [liveGames, upcomingGames, t]);
 
   // Load NHL games + model predictions
   useEffect(() => {
-    if (sport !== "hockey") return;
     setLoading(true);
     async function load() {
       try {
@@ -168,11 +147,10 @@ export function HockeyLanding() {
       }
     }
     load();
-  }, [sport, lang]);
+  }, [lang]);
 
   // Overlay real Bet365 odds — stored separately, does NOT overwrite model winPct
   useEffect(() => {
-    if (sport !== "hockey") return;
     fetchBet365Odds(ODDS_SPORT_KEYS.hockey).then((events) => {
       if (!events.length) return;
 
@@ -206,90 +184,7 @@ export function HockeyLanding() {
         })
       );
     });
-  }, [sport]);
-
-  // Load tennis matches from API, fall back to mock data if key not set
-  useEffect(() => {
-    if (sport !== "tennis") return;
-    setTennisLoading(true);
-    async function load() {
-      try {
-        const [liveRaw, fixturesRaw] = await Promise.all([
-          tennisApiService.getLiveMatches(),
-          tennisApiService.getFixtures(),
-        ]);
-        const [liveDisplay, upcomingDisplay] = await Promise.all([
-          Promise.all(liveRaw.map(toTennisMatch)),
-          Promise.all(fixturesRaw.map(toTennisMatch)),
-        ]);
-        setTennisLive(liveDisplay);
-        setTennisUpcoming(upcomingDisplay);
-        const all = [...liveDisplay, ...upcomingDisplay];
-        setTennisTopPreds(
-          all
-            .sort((a, b) => b.player1.winPct - a.player1.winPct)
-            .slice(0, 3)
-            .map((m) => ({
-              icon: m.player1.country,
-              name: m.player1.name.split(" ")[0],
-              label: `Win vs ${m.player2.name.split(" ")[0]}`,
-              pct: m.player1.winPct,
-              trend: "+2%",
-              edge: m.player1.bet365Odds ? calcEdge(m.player1.winPct, m.player1.bet365Odds) : 0,
-            }))
-        );
-      } catch (err) {
-        console.warn("[Tennis] API unavailable — using fallback data:", err);
-        setTennisLive(TENNIS_LIVE_FALLBACK);
-        setTennisUpcoming(TENNIS_UPCOMING_FALLBACK);
-        setTennisTopPreds(TENNIS_TOP_PREDICTIONS_FALLBACK);
-      } finally {
-        setTennisLoading(false);
-      }
-    }
-    load();
-  }, [sport]);
-
-  // Overlay Bet365 tennis odds from The Odds API
-  useEffect(() => {
-    if (sport !== "tennis") return;
-    fetchBet365Odds(ODDS_SPORT_KEYS.tennis).then((events) => {
-      if (!events.length) return;
-
-      /** Extract last name: "Djokovic N." → "djokovic", "Novak Djokovic" → "djokovic" */
-      function lastNameOf(n: string): string {
-        const parts = n.trim().split(" ");
-        return (parts[parts.length - 1].endsWith(".")
-          ? parts[0]
-          : parts[parts.length - 1]
-        ).toLowerCase();
-      }
-
-      function applyTennisOdds(prev: TennisMatch[]): TennisMatch[] {
-        return prev.map((m) => {
-          const p1 = lastNameOf(m.player1.name);
-          const p2 = lastNameOf(m.player2.name);
-          const ev = events.find((e) => {
-            const h = lastNameOf(e.homeTeam);
-            const a = lastNameOf(e.awayTeam);
-            return (h === p1 && a === p2) || (h === p2 && a === p1);
-          });
-          if (!ev) return m;
-          const odds = extractH2HOdds(ev);
-          if (!odds) return m;
-          const homeIsP1 = lastNameOf(ev.homeTeam) === p1;
-          return {
-            ...m,
-            player1: { ...m.player1, bet365Odds: homeIsP1 ? odds.home : odds.away },
-            player2: { ...m.player2, bet365Odds: homeIsP1 ? odds.away : odds.home },
-          };
-        });
-      }
-
-      setTennisLive(applyTennisOdds);
-      setTennisUpcoming(applyTennisOdds);
-    });
-  }, [sport]);
+  }, []);
 
   function openGameSheet(gameId: string) {
     setAddSheet({ open: true, gameId });
@@ -313,12 +208,11 @@ export function HockeyLanding() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {sport === "hockey" ? (
-          /* The page is laid out as a rink: boards above, then the sheet, cut by
-             a blue line, centre ice (red line + faceoff circle), a second blue
-             line, and boards again at the foot. Everything that was already on
-             the home page still lives inside the sheet. */
-          <div className="rink-ice">
+        {/* The page is laid out as a rink: boards above, then the sheet, cut by
+            a blue line, centre ice (red line + faceoff circle), a second blue
+            line, and boards again at the foot. Everything that was already on
+            the home page still lives inside the sheet. */}
+        <div className="rink-ice">
 
           {/* ── Offensive zone: teams + tonight's slate ────────────────── */}
           <div className="px-4 py-4 flex flex-col gap-6">
@@ -429,9 +323,6 @@ export function HockeyLanding() {
             <LazySection minHeight={360}>
               <BestBetsSection
                 games={[...liveGames, ...upcomingGames]}
-                tennisLive={[]}
-                tennisUpcoming={[]}
-                sport="hockey"
                 accent={accent}
                 isLoading={loading}
                 locked={!isPro}
@@ -442,61 +333,6 @@ export function HockeyLanding() {
           {/* Foot of the page: the boards close the rink */}
           <div className="rink-boards rink-boards--bottom" aria-hidden />
           </div>
-        ) : (
-          /* Tennis */
-          <div className="px-4 py-4 flex flex-col gap-6">
-
-            {tennisLive.length > 0 && (
-              <section>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <h2 className="text-white text-sm font-bold uppercase tracking-wider">{t("home.liveNow")}</h2>
-                </div>
-                <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
-                  {tennisLive.map((m) => (
-                    <TennisLiveCard key={m.id} match={m} accent={accent} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            <section>
-              <h2 className="text-white text-sm font-bold uppercase tracking-wider mb-3">{t("home.upcomingMatches")}</h2>
-              {tennisLoading ? (
-                <div className="flex flex-col gap-2">
-                  {[1, 2, 3].map((i) => <div key={i} className="h-20 icy-tile rounded-2xl animate-pulse" />)}
-                </div>
-              ) : tennisUpcoming.length > 0 ? (
-                <div className="flex flex-col gap-2">
-                  {tennisUpcoming.map((m) => (
-                    <TennisMatchRow key={m.id} match={m} accent={accent} />
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <p className="text-[#4a6068] text-sm">{t("home.noMatches")}</p>
-                </div>
-              )}
-            </section>
-
-            {/* Value Bets (EV) — Pro only */}
-            <LazySection minHeight={180}>
-              <EvSection isPro={isPro} items={evItems} isLoading={tennisLoading} accent={accent} />
-            </LazySection>
-
-            <LazySection minHeight={360}>
-              <BestBetsSection
-                games={[]}
-                tennisLive={tennisLive}
-                tennisUpcoming={tennisUpcoming}
-                sport="tennis"
-                accent={accent}
-                isLoading={tennisLoading}
-                locked={!isPro}
-              />
-            </LazySection>
-          </div>
-        )}
       </div>
 
       {/* Market selector sheet */}

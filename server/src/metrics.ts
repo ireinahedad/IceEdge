@@ -39,7 +39,6 @@ export type UpstreamTarget =
   | 'odds'      // The Odds API — quota mensuel strict, la plus chère à gaspiller
   | 'nhl'       // api-web.nhle.com — gratuite mais rate-limitée de fait
   | 'ml'        // service Python interne — 2 workers, c'est lui qui sature en premier
-  | 'rapidapi'  // Tennis Live Data — quota mensuel
   | 'llm';      // GitHub Models / OpenAI — facturé au token
 
 export interface UpstreamStats {
@@ -53,7 +52,7 @@ export interface UpstreamStats {
   maxMs:  number;
 }
 
-const TARGETS: UpstreamTarget[] = ['odds', 'nhl', 'ml', 'rapidapi', 'llm'];
+const TARGETS: UpstreamTarget[] = ['odds', 'nhl', 'ml', 'llm'];
 
 const upstream = new Map<UpstreamTarget, UpstreamStats>();
 

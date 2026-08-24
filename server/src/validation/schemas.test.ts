@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { registerSchema, loginSchema, avatarSchema, slipSubmitSchema, ruleWeightsSchema } from './schemas';
+import { registerSchema, loginSchema, avatarSchema, slipSubmitSchema, ruleWeightsSchema, profileUpdateSchema } from './schemas';
 
 describe('registerSchema', () => {
   it('rejects passwords under 8 chars', () => {
@@ -88,5 +88,54 @@ describe('ruleWeightsSchema', () => {
   it('rejects non-numeric weights', () => {
     expect(ruleWeightsSchema.safeParse({ match: { quality: '40' } }).success).toBe(false);
     expect(ruleWeightsSchema.safeParse({ match: { quality: NaN } }).success).toBe(false);
+  });
+});
+
+describe('profileUpdateSchema', () => {
+  it('accepte ce que l’écran Paramètres envoie réellement', () => {
+    const r = profileUpdateSchema.safeParse({
+      username: 'ireina',
+      displayName: 'Ireina',
+      bio: 'Fan des Bruins',
+      favoriteTeam: 'BOS',
+      isPublic: true,
+      showSlips: false,
+      notifyValueBets: true,
+      valueBetMinEvPct: 3,
+      openaiApiKey: null,
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('retire les clés inconnues au lieu de les laisser filer jusqu’au service', () => {
+    const r = profileUpdateSchema.safeParse({ bio: 'ok', tier: 'legend', performanceScore: 9999 });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data).toEqual({ bio: 'ok' });
+  });
+
+  it('refuse les champs texte démesurés — c’est tout l’objet du schéma', () => {
+    // Colonnes `TEXT` : sans borne ici, ces 100 ko partaient en base et
+    // revenaient dans CHAQUE lecture de profil.
+    expect(profileUpdateSchema.safeParse({ bio: 'x'.repeat(100_000) }).success).toBe(false);
+    expect(profileUpdateSchema.safeParse({ displayName: 'x'.repeat(500) }).success).toBe(false);
+    expect(profileUpdateSchema.safeParse({ openaiApiKey: 'x'.repeat(5_000) }).success).toBe(false);
+  });
+
+  it('refuse un type qui ne correspond pas', () => {
+    expect(profileUpdateSchema.safeParse({ isPublic: 'oui' }).success).toBe(false);
+    expect(profileUpdateSchema.safeParse({ valueBetMinEvPct: 'beaucoup' }).success).toBe(false);
+    expect(profileUpdateSchema.safeParse({ ruleWeights: { match: { quality: 101 } } }).success).toBe(false);
+  });
+
+  it('laisse passer `null` là où le client efface une valeur', () => {
+    expect(profileUpdateSchema.safeParse({ openaiApiKey: null }).success).toBe(true);
+    expect(profileUpdateSchema.safeParse({ avatarUrl: null }).success).toBe(true);
+    expect(profileUpdateSchema.safeParse({ ruleWeights: null }).success).toBe(true);
+  });
+
+  it('garde `username` large — la vraie règle vit dans le service', () => {
+    // Le service tranche 3-20 minuscules AVEC le contrôle d'unicité et le
+    // message affiché par l'UI ; dupliquer la règle ici la ferait diverger.
+    expect(profileUpdateSchema.safeParse({ username: 'Deux Mots' }).success).toBe(true);
   });
 });

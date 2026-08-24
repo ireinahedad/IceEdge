@@ -194,9 +194,11 @@ export async function updateProfile(userId: string, updates: {
   if (updates.avatarUrl     !== undefined) { fields.push(`avatar_url = $${i++}`);       values.push(updates.avatarUrl); }
   if (updates.openaiApiKey  !== undefined) { fields.push(`openai_api_key = $${i++}`);   values.push(updates.openaiApiKey == null ? null : encryptSecret(updates.openaiApiKey)); }
   if (updates.ruleWeights   !== undefined) {
-    // La route PATCH ne valide pas encore son corps : ce champ part directement
-    // en JSONB, donc la borne est posée ici, au point d'écriture. `null` reste
-    // accepté — c'est ainsi qu'on efface les poids d'un compte.
+    // Double barrière volontaire : la route valide déjà son corps
+    // (`profileUpdateSchema`), mais ce service est aussi appelé directement —
+    // par `POST /me/avatar` aujourd'hui, par un script demain. La borne reste
+    // donc au point d'écriture, là où le JSONB est réellement produit. `null`
+    // est accepté : c'est ainsi qu'on efface les poids d'un compte.
     let weights: string | null = null;
     if (updates.ruleWeights !== null) {
       const parsed = ruleWeightsSchema.safeParse(updates.ruleWeights);

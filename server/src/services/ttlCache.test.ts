@@ -73,7 +73,7 @@ describe('TtlCache', () => {
     expect(cache.getStale('d')).toBe('d');
   });
 
-  // Les clients d'API (NHL, tennis) n'ont pas un TTL unique : un match terminé
+  // Les clients d'API n'ont pas un TTL unique : un match terminé
   // se garde des heures, un match en direct quelques secondes. Sans surcharge
   // par entrée, ils devaient garder leur propre Map — non bornée, donc OOM.
   it('accepte un TTL par entrée qui surcharge le défaut', async () => {

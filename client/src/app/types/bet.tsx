@@ -149,18 +149,7 @@ export type BetMarketType =
   | "blocked_shots_ou"
   | "time_on_ice_ou"
   | "faceoff_wins_ou"
-  | "hits_ou"
-  // ── Tennis markets ────────────────────────────────────────────────────────
-  | "tennis_match_winner"
-  | "tennis_total_sets"
-  | "tennis_first_set"
-  | "tennis_set_handicap"    // Set handicap (-1.5 / +1.5 sets)
-  | "tennis_total_games"     // Total games O/U in match
-  | "tennis_game_handicap"   // Game handicap
-  | "tennis_correct_score"   // Correct score in sets (2-0, 2-1, etc.)
-  | "tennis_to_win_set"      // Player wins at least one set
-  | "tennis_tiebreak"        // Will there be a tiebreak?
-  | "tennis_first_set_games";// O/U games in first set
+  | "hits_ou";
 
 export interface PredictionRequest {
   marketType: BetMarketType;

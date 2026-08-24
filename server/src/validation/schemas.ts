@@ -80,3 +80,42 @@ export const ruleWeightsSchema = z
   .refine((m) => Object.keys(m).length <= 16, 'too many factor families');
 
 export type RuleWeightsMap = z.infer<typeof ruleWeightsSchema>;
+
+/**
+ * Corps de `PATCH /api/users/me`.
+ *
+ * Cette route recevait `req.body` **tel quel** : chaque champ partait en base
+ * sans borne de taille, dans des colonnes `TEXT` qui n'en posent aucune non plus.
+ * Un compte pouvait donc y ranger ~100 ko (le plafond du body parser) de bio à
+ * chaque requête — payé en stockage Neon, puis **en egress à chaque lecture de
+ * profil**, y compris dans les charges utiles de chat et de leaderboard.
+ *
+ * Les bornes ci-dessous sont calées sur les écrans qui écrivent réellement
+ * (`SettingsTab`, `RuleFactorEditor`), avec de la marge : elles doivent refuser
+ * l'abus, pas une saisie légitime.
+ *
+ * `username` reste volontairement large ici : sa vraie règle (3-20, minuscules)
+ * vit dans `ProfileService.updateProfile`, avec le message d'erreur que l'UI
+ * affiche et le contrôle d'unicité. La dupliquer ici ferait diverger les deux.
+ *
+ * Les clés inconnues sont **silencieusement retirées** (comportement zod par
+ * défaut) : le corps qui atteint le service est une liste blanche.
+ */
+export const profileUpdateSchema = z.object({
+  username:         z.string().trim().max(50).optional(),
+  displayName:      z.string().trim().max(60).optional(),
+  bio:              z.string().trim().max(500).optional(),
+  favoriteTeam:     z.string().trim().max(40).optional(),
+  isPublic:         z.boolean().optional(),
+  showSlips:        z.boolean().optional(),
+  notifyValueBets:  z.boolean().optional(),
+  // Le service reborne ensuite à 0-50 ; ici on refuse seulement l'absurde.
+  valueBetMinEvPct: z.number().finite().min(0).max(100).optional(),
+  avatar:           z.string().max(40).optional(),
+  // Le client n'écrit ici qu'une URL de drapeau ; les data-URI d'avatar passent
+  // par `POST /me/avatar`. Le plafond réel est celui du body parser (100 ko sur
+  // cette route) — ce max ne fait que refuser proprement au lieu d'écrire.
+  avatarUrl:        z.string().max(100_000).nullable().optional(),
+  openaiApiKey:     z.string().max(200).nullable().optional(),
+  ruleWeights:      ruleWeightsSchema.nullable().optional(),
+});

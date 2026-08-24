@@ -14,7 +14,7 @@ import { useBet } from "../../context/BetContext";
 import { ProLock } from "../../components/ProLock";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
-import { DisplayGame, TennisMatch } from "./landingTypes";
+import { DisplayGame } from "./landingTypes";
 
 
 // ─── Best Bets ─────────────────────────────────────────────────────────────────
@@ -118,17 +118,11 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
 
 export function BestBetsSection({
   games,
-  tennisLive,
-  tennisUpcoming,
-  sport,
   accent,
   isLoading,
   locked = false,
 }: {
   games: DisplayGame[];
-  tennisLive: TennisMatch[];
-  tennisUpcoming: TennisMatch[];
-  sport: "hockey" | "tennis";
   accent: string;
   isLoading: boolean;
   locked?: boolean;
@@ -158,45 +152,12 @@ export function BestBetsSection({
     return next;
   });
 
-  // When hockey has no games (e.g. off-season), fall back to tennis matches
-  const usingTennisFallback = sport === "hockey" && games.length === 0 && (tennisLive.length > 0 || tennisUpcoming.length > 0);
-
-  // Build the bets list.
-  //  · Hockey → fetch the pre-ranked, all-markets best bets from the backend
-  //    (team + player props, scored by rules + ML, sorted by prediction score).
-  //  · Tennis / hockey off-season fallback → build from match data client-side.
+  // Construit la liste : l'endpoint best-bets du serveur (tous marchés, règles +
+  // ML, déjà trié). Le repli « hors-saison » sur des matchs de tennis est parti
+  // avec le tennis, le 2026-08-24 : hors saison, la section est simplement vide.
   useEffect(() => {
     if (locked) return;             // don't fetch Pro-only data for free users
     let cancelled = false;
-
-    // Tennis (or hockey off-season fallback showing tennis)
-    if (sport === "tennis" || usingTennisFallback) {
-      const raw: BestBet[] = [];
-      for (const m of [...tennisLive, ...tennisUpcoming]) {
-        const ctx = `${m.tournament} · ${m.isLive ? t("home.live") : m.time}`;
-        raw.push({
-          id: `bb-tennis-${m.id}-p1`, label: t("bb.playerWin", { name: m.player1.name }), context: ctx,
-          logo: m.player1.country, rulePct: m.player1.winPct, mlPct: null, mlLoading: false,
-          leg: { id: `bb-tennis-${m.id}-p1`, marketType: "tennis_match_winner", marketLabel: "Match Winner",
-            subjectType: "player", subjectId: m.id, subjectName: m.player1.name,
-            subjectLogo: m.player1.country, selection: `${m.player1.name} to win`,
-            selectionShort: `${m.player1.name.split(" ").pop()} W`,
-            probability: m.player1.winPct, gameInfo: ctx, addedAt: new Date().toISOString() },
-        });
-        raw.push({
-          id: `bb-tennis-${m.id}-p2`, label: t("bb.playerWin", { name: m.player2.name }), context: ctx,
-          logo: m.player2.country, rulePct: m.player2.winPct, mlPct: null, mlLoading: false,
-          leg: { id: `bb-tennis-${m.id}-p2`, marketType: "tennis_match_winner", marketLabel: "Match Winner",
-            subjectType: "player", subjectId: m.id, subjectName: m.player2.name,
-            subjectLogo: m.player2.country, selection: `${m.player2.name} to win`,
-            selectionShort: `${m.player2.name.split(" ").pop()} W`,
-            probability: m.player2.winPct, gameInfo: ctx, addedAt: new Date().toISOString() },
-        });
-      }
-      setBets(raw);
-      setMlFetched(false); // tennis still uses the lazy per-bet ML fetch
-      return;
-    }
 
     // Hockey → backend best-bets endpoint (all markets, rules + ML, pre-sorted)
     (async () => {
@@ -231,7 +192,7 @@ export function BestBetsSection({
     })();
 
     return () => { cancelled = true; };
-  }, [games, tennisLive, tennisUpcoming, sport, lang, usingTennisFallback, locked]);
+  }, [games, lang, locked]);
 
   // Lazy ML fetch when ML tab selected
   useEffect(() => {
@@ -241,7 +202,7 @@ export function BestBetsSection({
 
     bets.slice(0, 20).forEach(async (bet) => {
       try {
-        const body: Record<string, unknown> = { type: sport === "hockey" ? "game" : "tennis", subjectId: bet.teamId ?? bet.gameId ?? bet.id };
+        const body: Record<string, unknown> = { type: "game", subjectId: bet.teamId ?? bet.gameId ?? bet.id };
         if (bet.teamId) body.opponentId = bet.gameId;
         const res = await fetch(`${BB_BASE}/predict/ml`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
         if (res.ok) {
@@ -254,7 +215,7 @@ export function BestBetsSection({
         setBets(prev => prev.map(b => b.id === bet.id ? { ...b, mlLoading: false } : b));
       }
     });
-  }, [sortSource, mlFetched, bets, sport]);
+  }, [sortSource, mlFetched, bets]);
 
   const sorted = useMemo(() => {
     const src = (b: BestBet) => sortSource === "ml" ? (b.mlPct ?? b.rulePct) : b.rulePct;
@@ -311,7 +272,6 @@ export function BestBetsSection({
           <Star size={13} style={{ color: accent }} />
           <span className="text-white text-sm font-medium">{t("home.bestBets")}</span>
           {!isLoading && <span className="text-[10px] text-[#bfc8cc] icy-tile px-1.5 py-0.5 rounded-full">{t("home.top", { n: sorted.length })}</span>}
-          {usingTennisFallback && <span className="text-[10px] text-[#facc15] bg-[#facc15]/10 border border-[#facc15]/20 px-1.5 py-0.5 rounded-full">{t("home.tennisOffseason")}</span>}
         </button>
         {!collapsed && (
         <div className="flex items-center gap-1.5">

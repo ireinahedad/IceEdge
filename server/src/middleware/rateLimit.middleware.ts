@@ -12,9 +12,51 @@
  */
 
 import rateLimit from 'express-rate-limit';
+import type { Request } from 'express';
 import { logger } from '../logger';
+import { verifyAccessToken } from '../services/auth.service';
 
 const isProd = process.env.NODE_ENV === 'production';
+
+/**
+ * Clé du limiteur : l'utilisateur authentifié, l'adresse IP à défaut.
+ *
+ * POURQUOI PAS L'IP SEULE — derrière un NAT d'opérateur mobile, des milliers
+ * d'abonnés partagent une poignée d'adresses. Une seule IP consommait donc le
+ * quota de tous : le premier utilisateur actif faisait rendre des 429 à des
+ * inconnus, et le symptôme (« l'app rame sur mon téléphone, jamais sur le
+ * wifi ») ne ressemble pas du tout à un limiteur.
+ *
+ * POURQUOI LE JETON EST VÉRIFIÉ ICI — `apiLimiter` est monté sur `/api` AVANT
+ * toute route, donc avant `authenticate` : `req.user` n'existe pas encore. Lire
+ * le `sub` d'un jeton NON vérifié serait un contournement complet du limiteur —
+ * il suffirait de forger un `sub` différent à chaque requête pour repartir d'un
+ * compteur neuf. La signature est donc validée (HMAC sur une charge minuscule,
+ * quelques microsecondes) et un jeton invalide ou expiré retombe sur l'IP.
+ *
+ * CE QUE ÇA CHANGE, HONNÊTEMENT : le plafond devient « par compte » au lieu de
+ * « par adresse ». Un attaquant disposant de N comptes vérifiés obtient N fois
+ * le quota depuis une seule IP — la barrière déplacée est celle de la création
+ * de comptes (`authLimiter` + vérification d'e-mail), pas celle-ci.
+ *
+ * Les préfixes `u:` / `ip:` évitent qu'un identifiant de compte puisse un jour
+ * entrer en collision avec une adresse.
+ */
+export function userOrIpKey(req: Request): string {
+  const attached = (req as any).user?.sub;
+  if (attached) return `u:${attached}`;
+
+  const header = req.headers['authorization'];
+  if (header?.startsWith('Bearer ')) {
+    try {
+      return `u:${verifyAccessToken(header.slice(7)).sub}`;
+    } catch {
+      // Jeton absent, forgé ou expiré → on retombe sur l'IP, jamais sur un
+      // identifiant non prouvé.
+    }
+  }
+  return `ip:${req.ip ?? 'unknown'}`;
+}
 
 /**
  * Plafond du limiteur large, surchargeable par `API_RATE_LIMIT`.
@@ -48,12 +90,15 @@ function apiLimit(): number {
   return parsed;
 }
 
-/** Broad safety net — applied to all /api routes. */
+/** Broad safety net — applied to all /api routes.
+ *  Keyed per account when the request carries a valid token, per IP otherwise
+ *  (cf. `userOrIpKey` : le NAT mobile faisait partager un quota à des inconnus). */
 export const apiLimiter = rateLimit({
   windowMs: 60 * 1000,             // 1 minute
   limit:    apiLimit(),
   standardHeaders: 'draft-7',      // RateLimit-* headers
   legacyHeaders:   false,
+  keyGenerator: userOrIpKey,
   message: { error: 'Too many requests, please slow down.' },
 });
 
@@ -67,12 +112,19 @@ export const authLimiter = rateLimit({
   message: { error: 'Too many attempts. Try again in a few minutes.' },
 });
 
-/** Moderate — writes (slips, chat messages, profile updates). */
+/** Moderate — writes (slips, chat messages, profile updates).
+ *  Même clé que `apiLimiter` depuis le 2026-08-24 : par compte quand le jeton est
+ *  valide, par IP sinon. Le NAT mobile faisait partager 30 écritures/min à des
+ *  abonnés qui ne se connaissent pas — et c'est sur les écritures que le
+ *  symptôme est le plus visible (message de chat refusé). Contrepartie assumée :
+ *  N comptes valent N × 30 depuis une même adresse ; les salons gardent en plus
+ *  leur propre limiteur par action (`chat.routes.ts`). */
 export const writeLimiter = rateLimit({
   windowMs: 60 * 1000,            // 1 minute
-  limit:    isProd ? 30 : 500,    // 30 writes / min / IP in prod
+  limit:    isProd ? 30 : 500,    // 30 writes / min / compte en prod
   standardHeaders: 'draft-7',
   legacyHeaders:   false,
+  keyGenerator: userOrIpKey,
   message: { error: 'Too many actions, please slow down.' },
 });
 

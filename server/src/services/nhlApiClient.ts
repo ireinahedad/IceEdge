@@ -25,9 +25,9 @@ const SEARCH_BASE = 'https://search.d3.nhle.com/api/';
 //
 // La `Map` maison qui vivait ici n'évinçait jamais : `getCached` vérifiait
 // l'expiration à la lecture, mais rien ne supprimait les entrées mortes. Or les
-// clés dérivent de paramètres de requête (`player:<id>`, `range:<a>:<b>`,
-// `boxscore:<gameId>`, `schedule:<date>`…) : un visiteur qui fait défiler le
-// calendrier crée une clé par plage consultée. À plusieurs milliers de
+// clés dérivent de paramètres de requête (`player:<id>`, `boxscore:<gameId>`,
+// `schedule:<date>`…) : un visiteur qui fait défiler le
+// calendrier créait une clé par plage consultée. À plusieurs milliers de
 // visiteurs la Map croissait de façon monotone jusqu'à l'OOM et au redémarrage
 // du conteneur — qui vide tous les caches et provoque une tempête de requêtes
 // upstream au redémarrage.
@@ -35,6 +35,9 @@ const SEARCH_BASE = 'https://search.d3.nhle.com/api/';
 // `TtlCache` plafonne le nombre de clés (éviction FIFO de la plus ancienne
 // insérée) : la mémoire devient fonction du plafond, plus du trafic. Le
 // dépassement du plafond n'est pas une erreur, juste un taux de hit plus bas.
+//
+// Depuis le 2026-08-24, le calendrier n'est plus une source de clés : il est mis
+// en cache par SEMAINE et non par plage consultée (cf. `fetchScheduleWeek`).
 //
 // Le plafond se règle sans redéploiement de code : NHL_CACHE_MAX_ENTRIES. Un
 // boxscore complet pèse quelques dizaines de ko, d'où une valeur par défaut
@@ -180,6 +183,31 @@ async function fetchNHLSearch<T>(path: string): Promise<T> {
     if (!res.ok) {
       throw Object.assign(
         new Error(`NHL Search API ${res.status} for ${path}`),
+        { status: res.status }
+      );
+    }
+    return res.json() as Promise<T>;
+  }));
+}
+
+/**
+ * Même chose pour l'hôte `api.nhle.com/stats/rest` (`STATS_BASE`), dont les URL
+ * sont construites au point d'appel (expressions cayenne, tri sérialisé) — d'où
+ * l'URL complète en paramètre plutôt qu'un chemin.
+ *
+ * Ces quatre appels étaient les derniers `fetch` bruts du module : **sans
+ * timeout**, donc sur le défaut d'undici de 300 s que le tir de charge S1 a
+ * mesuré (cf. `NHL_TIMEOUT_MS`), sans déduplication et hors compteur
+ * `upstream.nhl`. Les faire passer ici corrige les trois d'un coup — et la
+ * déduplication vaut particulièrement pour `team/summary?limit=-1`, que trois
+ * fonctions différentes demandent avec la même URL.
+ */
+async function fetchStats<T>(url: string, what: string): Promise<T> {
+  return dedupe(url, () => timeUpstream('nhl', async () => {
+    const res = await fetchWithTimeout(url);
+    if (!res.ok) {
+      throw Object.assign(
+        new Error(`NHL stats API ${res.status} for ${what}`),
         { status: res.status }
       );
     }
@@ -372,20 +400,81 @@ export async function fetchGamesByDate(date: string): Promise<any[]> {
   return games;
 }
 
+/** `'YYYY-MM-DD'` décalé de `n` jours (UTC, comme les `gameDate` de la NHL). */
+function addDays(iso: string, n: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+const WEEK_TTL = 10 * 60_000;
+
+/**
+ * Une semaine de calendrier NHL, mise en cache **sous sa propre date de début**.
+ *
+ * CE QUE ÇA CORRIGE (ligne S de l'audit) — la version précédente mettait en
+ * cache le RÉSULTAT ASSEMBLÉ sous `range:<début>:<fin>`. Les bornes viennent du
+ * calendrier côté client : chaque plage consultée créait sa propre clé, deux
+ * plages qui se chevauchent de six jours sur sept ne partageaient rien, et le
+ * cache s'auto-évinçait (FIFO) au fil de la navigation. Le nombre de clés
+ * suivait le nombre de plages distinctes ; il suit maintenant le nombre de
+ * semaines, c'est-à-dire ~52 par saison.
+ *
+ * La clé est la date de début renvoyée par l'API, pas celle demandée : deux
+ * curseurs tombant dans la même semaine doivent partager une entrée. La
+ * recherche remonte donc jusqu'à six jours en arrière et vérifie que la semaine
+ * trouvée couvre bien le curseur — aucune hypothèse sur le jour où commence une
+ * semaine NHL, qui n'est pas à nous de décider.
+ *
+ * Une semaine vide (hors saison) est mémorisée elle aussi, sous la date
+ * demandée : sans ça, un balayage d'août refait ses 45 appels à chaque fois.
+ */
+async function fetchScheduleWeek(cursor: string): Promise<any[]> {
+  const exact = getCached<any[]>(`sched:week:${cursor}`);
+  if (exact) return exact;
+
+  for (let back = 1; back < 7; back++) {
+    const week = getCached<any[]>(`sched:week:${addDays(cursor, -back)}`);
+    if (week?.length) {
+      const dates = week.map((d: any) => String(d.date));
+      const first = dates.reduce((a, b) => (a < b ? a : b));
+      const last  = dates.reduce((a, b) => (a > b ? a : b));
+      if (first <= cursor && cursor <= last) return week;
+    }
+  }
+
+  let week: any[] = [];
+  try {
+    const data = await fetchNHL<any>(`v1/schedule/${cursor}`);
+    week = (data.gameWeek ?? []) as any[];
+  } catch {
+    // Jour sans données exploitables : l'appelant avancera d'un jour. Rien n'est
+    // mémorisé — un échec réseau ne doit pas se transformer en semaine vide de
+    // dix minutes.
+    return [];
+  }
+
+  setCached(`sched:week:${cursor}`, week, WEEK_TTL);
+  const firstDate = week.length
+    ? week.map((d: any) => String(d.date)).reduce((a, b) => (a < b ? a : b))
+    : null;
+  if (firstDate && firstDate !== cursor) setCached(`sched:week:${firstDate}`, week, WEEK_TTL);
+  return week;
+}
+
 /**
  * Retourne tous les matchs (joués + à venir) entre deux dates incluses, en
  * parcourant l'endpoint hebdomadaire v1/schedule/{date} semaine par semaine.
  * Utilisé par la page calendrier (schedule) côté client.
  *  - start / end : 'YYYY-MM-DD' (end doit être >= start).
  *  - L'amplitude est bornée à 45 jours pour limiter les appels upstream.
+ *
+ * L'assemblage n'est plus mis en cache : ce sont les semaines qui le sont
+ * (cf. `fetchScheduleWeek`). Recomposer une plage revient à parcourir sept
+ * semaines déjà en mémoire — quelques centaines d'itérations — là où la clé par
+ * plage faisait croître le cache avec le nombre de plages consultées.
  */
 export async function fetchGamesRange(start: string, end: string): Promise<any[]> {
-  const addDays = (iso: string, n: number): string => {
-    const d = new Date(`${iso}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() + n);
-    return d.toISOString().slice(0, 10);
-  };
-
   // Borne l'amplitude (sécurité : évite les balayages illimités).
   const MAX_SPAN = 45;
   if (addDays(start, MAX_SPAN) < end) end = addDays(start, MAX_SPAN);
@@ -396,10 +485,6 @@ export async function fetchGamesRange(start: string, end: string): Promise<any[]
     );
   }
 
-  const key    = `range:${start}:${end}`;
-  const cached = getCached<any[]>(key);
-  if (cached) return cached;
-
   const seen = new Set<string>();
   const out: any[] = [];
   let cursor = start;
@@ -407,15 +492,9 @@ export async function fetchGamesRange(start: string, end: string): Promise<any[]
   // Parcourt la fenêtre semaine par semaine. Ne s'arrête JAMAIS sur une semaine
   // vide (ex. début octobre avant le coup d'envoi) : on avance toujours, sinon
   // on manquerait les matchs situés plus loin dans le mois. Garde-fou large
-  // (une itération par jour dans le pire cas) — les appels sont mis en cache.
+  // (une itération par jour dans le pire cas) — les semaines sont en cache.
   for (let guard = 0; guard < MAX_SPAN + 2 && cursor <= end; guard++) {
-    let week: any[] = [];
-    try {
-      const data = await fetchNHL<any>(`v1/schedule/${cursor}`);
-      week = data.gameWeek ?? [];
-    } catch {
-      // Jour sans données exploitables : on avance d'un jour.
-    }
+    const week = await fetchScheduleWeek(cursor);
 
     let maxDate = cursor;
     for (const day of week) {
@@ -442,7 +521,6 @@ export async function fetchGamesRange(start: string, end: string): Promise<any[]
       : a.gameDate.localeCompare(b.gameDate),
   );
 
-  setCached(key, out, 10 * 60_000);
   return out;
 }
 
@@ -1384,34 +1462,31 @@ export async function fetchTeamSeasonOfficial(abbr: string, season: string): Pro
   let official: any = null;
   try {
     const cayenne = encodeURIComponent(`seasonId=${season} and gameTypeId=2`);
-    const res = await fetch(
+    const data = await fetchStats<any>(
       `${STATS_BASE}/team/summary?limit=-1&cayenneExp=${cayenne}`,
-      { headers: { 'User-Agent': 'IceEdge/1.0', Accept: 'application/json' } },
+      'team summary',
     );
-    if (res.ok) {
-      const data = (await res.json()) as any;
-      const row  = (data.data ?? []).find(
-        (t: any) => TEAM_NAME_TO_ABBR[t.teamFullName ?? ''] === upper,
-      );
-      if (row) {
-        const gp = row.gamesPlayed || 82;
-        official = {
-          gamesPlayed:         gp,
-          wins:                row.wins   ?? 0,
-          losses:              row.losses ?? 0,
-          points:              row.points ?? 0,
-          goalsFor:            row.goalsFor     ?? 0,
-          goalsAgainst:        row.goalsAgainst ?? 0,
-          goalsForPerGame:     +(row.goalsForPerGame     ?? (row.goalsFor     ?? 0) / gp).toFixed(2),
-          goalsAgainstPerGame: +(row.goalsAgainstPerGame ?? (row.goalsAgainst ?? 0) / gp).toFixed(2),
-          ppPct:               Math.round((row.powerPlayPct   ?? 0) * 1000) / 10,
-          pkPct:               Math.round((row.penaltyKillPct ?? 0) * 1000) / 10,
-          pointPct:            Math.round((row.pointPct       ?? 0) * 1000) / 10,
-          faceoffPct:          Math.round((row.faceoffWinPct  ?? 0) * 1000) / 10,
-          shotsForPerGame:     +(row.shotsForPerGame     ?? 0).toFixed(2),
-          shotsAgainstPerGame: +(row.shotsAgainstPerGame ?? 0).toFixed(2),
-        };
-      }
+    const row  = (data.data ?? []).find(
+      (t: any) => TEAM_NAME_TO_ABBR[t.teamFullName ?? ''] === upper,
+    );
+    if (row) {
+      const gp = row.gamesPlayed || 82;
+      official = {
+        gamesPlayed:         gp,
+        wins:                row.wins   ?? 0,
+        losses:              row.losses ?? 0,
+        points:              row.points ?? 0,
+        goalsFor:            row.goalsFor     ?? 0,
+        goalsAgainst:        row.goalsAgainst ?? 0,
+        goalsForPerGame:     +(row.goalsForPerGame     ?? (row.goalsFor     ?? 0) / gp).toFixed(2),
+        goalsAgainstPerGame: +(row.goalsAgainstPerGame ?? (row.goalsAgainst ?? 0) / gp).toFixed(2),
+        ppPct:               Math.round((row.powerPlayPct   ?? 0) * 1000) / 10,
+        pkPct:               Math.round((row.penaltyKillPct ?? 0) * 1000) / 10,
+        pointPct:            Math.round((row.pointPct       ?? 0) * 1000) / 10,
+        faceoffPct:          Math.round((row.faceoffWinPct  ?? 0) * 1000) / 10,
+        shotsForPerGame:     +(row.shotsForPerGame     ?? 0).toFixed(2),
+        shotsAgainstPerGame: +(row.shotsAgainstPerGame ?? 0).toFixed(2),
+      };
     }
   } catch { /* summary unavailable → official stays null */ }
 
@@ -1526,18 +1601,11 @@ export async function fetchPlayerLeaders(
 
   const sort    = encodeURIComponent(JSON.stringify([{ property: prop, direction: dir }]));
   const cayenne = encodeURIComponent(`seasonId=${season} and gameTypeId=2`);
-  const res = await fetch(
+  const data = await fetchStats<any>(
     `${STATS_BASE}/${isGoalie ? 'goalie' : 'skater'}/summary` +
       `?isAggregate=false&isGame=false&start=0&limit=${n}&sort=${sort}&cayenneExp=${cayenne}`,
-    { headers: { 'User-Agent': 'IceEdge/1.0', Accept: 'application/json' } },
+    'player leaders',
   );
-  if (!res.ok) {
-    throw Object.assign(
-      new Error(`NHL stats API ${res.status} for player leaders`),
-      { status: res.status },
-    );
-  }
-  const data = (await res.json()) as any;
 
   const players = (data.data ?? []).map((r: any) => ({
     id:       String(r.playerId),
@@ -1619,17 +1687,10 @@ export async function fetchAllTeamsSeason(seasonArg?: string): Promise<any> {
   if (cached) return cached;
 
   const cayenne = encodeURIComponent(`seasonId=${season} and gameTypeId=2`);
-  const res = await fetch(
+  const data = await fetchStats<any>(
     `${STATS_BASE}/team/summary?limit=-1&cayenneExp=${cayenne}`,
-    { headers: { 'User-Agent': 'IceEdge/1.0', Accept: 'application/json' } },
+    'team summary',
   );
-  if (!res.ok) {
-    throw Object.assign(
-      new Error(`NHL stats API ${res.status} for team summary`),
-      { status: res.status },
-    );
-  }
-  const data = (await res.json()) as any;
 
   const teams = (data.data ?? []).map((row: any) => {
     const gp = row.gamesPlayed || 0;
@@ -1682,12 +1743,10 @@ export async function fetchTeamSummaryStats(): Promise<Record<string, TeamSummar
   const cayenne = encodeURIComponent(
     `seasonId=${currentSeason()} and gameTypeId=2`
   );
-  const res = await fetch(
+  const data = await fetchStats<any>(
     `${STATS_BASE}/team/summary?limit=-1&cayenneExp=${cayenne}`,
-    { headers: { 'User-Agent': 'IceEdge/1.0', Accept: 'application/json' } }
+    'team/summary',
   );
-  if (!res.ok) throw new Error(`NHL stats API ${res.status} for team/summary`);
-  const data = (await res.json()) as any;
 
   const out: Record<string, TeamSummaryStats> = {};
   for (const t of data.data ?? []) {

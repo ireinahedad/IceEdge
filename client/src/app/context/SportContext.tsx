@@ -1,6 +1,18 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 
-export type Sport = "hockey" | "tennis";
+/**
+ * Contexte de sport — mono-sport depuis le retrait du tennis (2026-08-24).
+ *
+ * Le tennis est sorti du produit : pages, service d'API, sélecteur de sport et
+ * marchés sont partis. Le contexte, lui, reste : c'est lui qui porte le thème
+ * (`bg`, `accent`, `gradientGlow`) que consomment la plupart des écrans. Le
+ * supprimer aurait voulu dire disséminer ces trois constantes dans une vingtaine
+ * de composants — beaucoup de churn pour aucun gain.
+ *
+ * Il n'y a donc plus de `setSport` : la valeur ne change plus. Si un deuxième
+ * sport revient un jour, c'est ici qu'il se rebranche.
+ */
+export type Sport = "hockey";
 
 export interface SportTheme {
   bg: string;
@@ -18,27 +30,18 @@ export const SPORT_THEMES: Record<Sport, SportTheme> = {
     sportIcon: "",
     sportLabel: "",
   },
-  tennis: {
-    bg: "#0a1209",
-    accent: "#a8e060",
-    gradientGlow: "rgba(168,224,96,0.07)",
-    sportIcon: "T",
-    sportLabel: "Tennis",
-  },
 };
 
 interface SportContextType {
   sport: Sport;
-  setSport: (s: Sport) => void;
   theme: SportTheme;
 }
 
 const SportContext = createContext<SportContextType | null>(null);
 
 export function SportProvider({ children }: { children: ReactNode }) {
-  const [sport, setSport] = useState<Sport>("hockey");
   return (
-    <SportContext.Provider value={{ sport, setSport, theme: SPORT_THEMES[sport] }}>
+    <SportContext.Provider value={{ sport: "hockey", theme: SPORT_THEMES.hockey }}>
       {children}
     </SportContext.Provider>
   );

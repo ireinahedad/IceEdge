@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import * as ProfileService from '../services/profile.service';
 import { authenticate, requirePro } from '../middleware/auth.middleware';
 import { validateBody } from '../middleware/validate.middleware';
-import { avatarSchema } from '../validation/schemas';
+import { avatarSchema, profileUpdateSchema } from '../validation/schemas';
 import { uploadAvatar, deleteAvatarByUrl } from '../services/avatarStorage';
 
 const router = Router();
@@ -88,7 +88,12 @@ router.get('/me/stats', async (req: Request, res: Response) => {
 });
 
 // PATCH /api/users/me
-router.patch('/me', async (req: Request, res: Response) => {
+//
+// `validateBody` posé le 2026-08-24 : la route acceptait `req.body` tel quel, et
+// les colonnes visées sont des `TEXT` sans borne. Le schéma est une liste blanche
+// (les clés inconnues sont retirées) et plafonne chaque champ — cf.
+// `profileUpdateSchema`, qui explique pourquoi `username` y reste large.
+router.patch('/me', validateBody(profileUpdateSchema), async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.sub;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });

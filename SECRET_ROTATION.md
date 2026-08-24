@@ -14,7 +14,7 @@ Treat any secret that appeared in the repo, a chat, or a screenshot as burned. R
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard → Developers → API keys / Webhooks | `server/.env` |
 | `GITHUB_MODELS_TOKEN` | GitHub → Settings → Developer settings → PATs | `server/.env` |
 | `RESEND_API_KEY` | Resend dashboard | `server/.env` |
-| `ODDS_API_KEY`, `RAPIDAPI_KEY` | Respective provider dashboards | `server/.env` |
+| `ODDS_API_KEY` | The Odds API dashboard | `server/.env` |
 | `VAPID_*` | Regenerate: `npx web-push generate-vapid-keys` (note: invalidates existing push subs) | `server/.env` + client public key |
 
 ## 2. Generate the new at-rest encryption key (new requirement)

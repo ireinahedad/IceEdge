@@ -12,7 +12,6 @@ const API_BASE =
 // Sport keys used by The Odds API
 export const ODDS_SPORT_KEYS = {
   hockey: "icehockey_nhl",
-  tennis: "tennis_atp_french_open", // swap per tournament
 } as const;
 
 export interface OddsOutcome {

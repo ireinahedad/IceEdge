@@ -95,6 +95,21 @@ describe('nhlApiClient — déduplication des requêtes en vol', () => {
     await expect(mod.fetchTeams()).resolves.toBeInstanceOf(Array);
     expect(attempt).toBe(2);
   });
+
+  /**
+   * `team/summary?limit=-1` est demandé par TROIS fonctions avec exactement la
+   * même URL (`fetchTeamSeasonOfficial`, `fetchAllTeamsSeason`,
+   * `fetchTeamSummaryStats`). Tant qu'elles faisaient leur `fetch` elles-mêmes,
+   * chacune payait son aller-retour ; le passage par `fetchStats` les rattache à
+   * la même requête en vol.
+   */
+  it('dédoublonne team/summary entre deux fonctions différentes', async () => {
+    const { mod, calls } = await loadWithStubbedFetch();
+
+    await Promise.all([mod.fetchAllTeamsSeason(), mod.fetchTeamSummaryStats()]);
+
+    expect(calls.filter((u) => u.includes('/team/summary')).length).toBe(1);
+  });
 });
 
 /**
@@ -179,6 +194,90 @@ describe('nhlApiClient — timeout', () => {
     await expect(mod.fetchTeams()).rejects.toThrow(/timeout/i);
     // Une coupure passagère ne doit pas geler l'endpoint jusqu'au redémarrage.
     await expect(mod.fetchTeams()).resolves.toBeInstanceOf(Array);
+  });
+
+  /**
+   * L'hôte `api.nhle.com/stats/rest` (classements, sommaires de saison) était
+   * servi par quatre `fetch` bruts qui contournaient `fetchWithTimeout` : le
+   * timeout ci-dessus ne les protégeait pas, et le tir S1 ne les avait pas
+   * exercés. Ils passent par `fetchStats` depuis le 2026-08-24 — ce test est ce
+   * qui empêche d'y revenir sans s'en apercevoir.
+   */
+  it('couvre aussi l’hôte des stats (team/summary)', async () => {
+    const mod = await loadWithHangingFetch(50);
+
+    await expect(mod.fetchTeamSummaryStats()).rejects.toThrow(/timeout/i);
+  });
+});
+
+/**
+ * CALENDRIER — cache par SEMAINE et non par plage (ligne S de l'audit).
+ *
+ * `fetchGamesRange` mettait en cache le résultat assemblé sous
+ * `range:<début>:<fin>`. Les bornes viennent du calendrier côté client : deux
+ * plages qui se chevauchent de six jours sur sept ne partageaient rien, et le
+ * nombre de clés suivait le nombre de plages consultées. Ces tests portent sur
+ * ce qui ne se voit pas dans la réponse — elle est identique dans les deux cas.
+ */
+describe('nhlApiClient — cache du calendrier par semaine', () => {
+  beforeEach(() => { vi.unstubAllGlobals(); });
+
+  const plusDays = (iso: string, n: number): string => {
+    const d = new Date(`${iso}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+
+  /** `fetch` bouchonné : rend une semaine de 7 jours à partir de la date demandée. */
+  async function loadWithSchedule() {
+    vi.resetModules();
+    process.env.NHL_USE_MOCK = 'false';
+
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      calls.push(String(url));
+      const asked = String(url).split('/').pop() ?? '';
+      const gameWeek = Array.from({ length: 7 }, (_, i) => ({
+        date: plusDays(asked, i),
+        games: [{ id: `${asked}-${i}`, gameState: 'FUT', homeTeam: { abbrev: 'BOS' }, awayTeam: { abbrev: 'MTL' } }],
+      }));
+      return { ok: true, status: 200, json: async () => ({ gameWeek }) };
+    });
+
+    return { mod: await import('./nhlApiClient'), calls };
+  }
+
+  it('ne redemande rien pour une plage incluse dans des semaines déjà chargées', async () => {
+    const { mod, calls } = await loadWithSchedule();
+
+    const wide = await mod.fetchGamesRange('2026-01-05', '2026-01-25');
+    expect(wide.length).toBeGreaterThan(0);
+    const first = calls.length;
+    expect(first).toBeGreaterThan(0);
+
+    // Décalée d'un jour : sous l'ancienne clé `range:<début>:<fin>`, c'était un
+    // cache froid et toute la fenêtre repartait vers la NHL.
+    await mod.fetchGamesRange('2026-01-06', '2026-01-24');
+
+    expect(calls.length).toBe(first);
+  });
+
+  it('rend la même chose au deuxième appel qu’au premier', async () => {
+    const { mod } = await loadWithSchedule();
+
+    const a = await mod.fetchGamesRange('2026-01-05', '2026-01-18');
+    const b = await mod.fetchGamesRange('2026-01-05', '2026-01-18');
+
+    expect(b.map((g: any) => g.id)).toEqual(a.map((g: any) => g.id));
+  });
+
+  it('borne la fenêtre à 45 jours', async () => {
+    const { mod } = await loadWithSchedule();
+
+    const games = await mod.fetchGamesRange('2026-01-05', '2026-12-31');
+    const dates = games.map((g: any) => g.gameDate).sort();
+
+    expect(dates[dates.length - 1] <= plusDays('2026-01-05', 45)).toBe(true);
   });
 });
 

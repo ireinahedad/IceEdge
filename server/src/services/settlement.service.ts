@@ -35,7 +35,7 @@
  *
  * Deliberately left pending (not auto-settled): everything else — game_to_ot,
  * ot_winner, alt_puck_line, winning_margin, regulation_result,
- * both_teams_score, total_penalties, tennis markets. Leaving a bet pending is
+ * both_teams_score, total_penalties. Leaving a bet pending is
  * always safer than guessing wrong.
  */
 
