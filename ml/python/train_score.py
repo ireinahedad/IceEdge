@@ -63,7 +63,7 @@ RNG = np.random.default_rng(42)
 # ATK : capacité offensive de l'équipe qui marque
 # DEF : capacité défensive de l'adversaire (gardien inclus)
 #
-# ── A5, clos le 2026-08-21 : ces 22 features ne sont PAS départageables ──────
+# ── A5, clos le 2026-08-23 : ces 22 features ne sont PAS départageables ──────
 #
 # Ne pas relancer d'élagage ici sans lire d'abord ce paragraphe : la mesure a
 # été faite, elle a coûté 364 entraînements, et sa conclusion est négative au

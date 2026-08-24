@@ -8,8 +8,14 @@
 > **A2 mesuré** : la puck line n'est pas réfutée, mais tout tient sur 463 paris
 > d'une seule jambe, et l'historique disponible ne permettra pas de trancher.
 > Une règle falsifiable est figée ; **A3 (CLV) devient le chemin critique**.
-> **A5 est clos (2026-08-21)** : l'élagage a été mesuré, testé et annulé — 14
-> saisons ne départagent pas ces features. Reste **A3 (CLV)**, puis S4.
+> **A5 est clos (2026-08-23)** : l'élagage a été mesuré, testé et annulé — 14
+> saisons ne départagent pas ces features.
+>
+> **État au 2026-08-23.** L'outillage A3 est livré et **la mesure moneyline est
+> faite** : le CLV est réel (placebo à +0,0002) mais il annule tout juste la
+> marge au lieu de la battre. Le CLV de la **puck line**, seule piste vivante,
+> reste **impossible** sur l'historique. **Une seule décision est ouverte :
+> payer ou non un mois de The Odds API — dossier complet en A1.**
 
 ---
 
@@ -28,8 +34,11 @@ du temps perdu ; les ignorer serait pire.
 | σ (ensemble bootstrap) dit-elle où le modèle se trompe ? | **Non** en général. Elle dit où l'edge *sélectionné* est gonflé (malédiction du vainqueur, p ≈ 0.04). Non actionnable : l'edge corrigé est négatif partout. | 20 membres, σ_max calibré hors échantillon. |
 | La forme d'un gardien est-elle prévisible ? | **Non.** r = +0.038 d'un match au suivant. Mais le *talent* est réel : 0.165 but/match entre Q1 et Q4, à xG subi plat. | 45 222 départs. |
 | Les totaux sont-ils jouables ? | **Non.** ROI −2.75 % sur 8 833 paris à prix réels. (Le modèle récupère ~1.7 pt sur une marge de 4.4 % : du signal, pas assez.) | 9 saisons, prix de clôture SBRO. |
-| Peut-on élaguer les 22 features du modèle de score ? | **Non tranchable.** Retirer les 12 features au niveau du hasard coûte +0.00019 de log-loss puck line, pour une erreur-type de 0.00024. Il faudrait ≈ 154 saisons. | Ablation par permutation 14 saisons + contrôle par suppression réelle (2026-08-21). Voir A5. |
+| Peut-on élaguer les 22 features du modèle de score ? | **Non tranchable.** Retirer les 12 features au niveau du hasard coûte +0.00019 de log-loss puck line, pour une erreur-type de 0.00024. Il faudrait ≈ 154 saisons. | Ablation par permutation 14 saisons + contrôle par suppression réelle (2026-08-23). Voir A5. |
 | La puck line est-elle jouable ? | **Non tranché, et la question a changé de forme.** Sans la fuite d'hyperparamètres : +2.10 % à edge ≥4 % (z 1.50). Mais **tout vient de la jambe −1.5** : 463 paris à +20.09 % (z 3.05), pendant que les 3 482 paris +1.5 font −0.30 %. | Walk-forward 9 saisons, prix de clôture réels, sélection par fold (2026-08-08). Voir A2. |
+
+| Bat-on la ligne d'OUVERTURE au moneyline ? | **Presque, et c'est nouveau.** Le CLV est réel (net du placebo +0.0133 à edge ≥4 %, placebo +0.0002), mais la clôture ne valorise ces paris qu'à **−0.25 %** à edge ≥4 % et **+0.44 %** à ≥5 % : le modèle bat l'ouverture d'environ une marge, pas plus. Le +4.30 % réalisé dépasse cela de 1.6-2.3 σ et la dissection l'attribue à la queue (tercile d'edge 1.60/0.36/**10.93 %**, 44 paris sur 3 751 le renversent). | `--clv`, 9 saisons, 19 644 paris aux prix d'ouverture (2026-08-23). Voir A3. |
+| Le CLV des TOTAUX vaut-il quelque chose ? | **Non, et c'est un artefact.** Son CLV net est **inférieur à son propre placebo** à tous les seuils (+0.0020 contre +0.0030) : entièrement de la régression vers la moyenne. La clôture les valorise à −3.2 % constant. | Même run. Le placebo est ce qui l'a révélé. |
 
 > **Sur 2022-23, à savoir avant d'interpréter A2.** Cette saison ne compte que
 > 342 matchs dans `odds.csv`, et ce n'est pas un trou de couverture de la puck
@@ -37,7 +46,7 @@ du temps perdu ; les ignorer serait pire.
 > C'est l'une des deux saisons négatives d'A2, et elle ne pèse que sept semaines
 > de début de saison — la période où les fenêtres glissantes de forme sont à
 > peine remplies. Ce n'est pas une saison, c'est un octobre-novembre.
-> (Vérifié le 2026-08-21 ; question ouverte depuis A2, close.)
+> (Vérifié le 2026-08-23 ; question ouverte depuis A2, close.)
 
 **Deux règles de méthode issues de ces mesures :**
 
@@ -272,7 +281,7 @@ sont nommées et posent chacune leur valeur de `source` dans `odds.csv`.
 
 ## A — Améliorer
 
-### A1. Backfill payant The Odds API 🔴 CHEMIN CRITIQUE — décidé le 2026-08-21
+### A1. Backfill payant The Odds API ⏸️ DÉCISION OUVERTE — rien n'est payé
 
 **Constat, vérifié aux sources le 2026-08-04.** L'endpoint `/v4/historical/`
 n'est **pas servi aux clés gratuites** — le plan Starter liste explicitement
@@ -302,16 +311,68 @@ comparaison de sources n'a pas besoin d'une saison entière — **~300 crédits
 pour comparer marge et niveau de prix. C'est le backfill complet qui est cher,
 pas la vérification.
 
-#### Décision du 2026-08-21 : un mois payant, backfill, puis résiliation
+#### Le dossier : faut-il payer ? — ouvert, à trancher
 
-**Pourquoi ce poste passe de « en attente » à chemin critique.** Il n'existe
-plus **aucune** donnée hors échantillon : SBRO s'arrête au 2022-11-27 et la
-collecte live ne produira rien avant octobre. Or trois résultats attendent
-exactement ça — le ROI moneyline à l'ouverture (+4,30 %, non réfuté par la
-dissection), la règle A2 sur la puck line, et le CLV de la puck line qui n'est
-pas mesurable sur SBRO faute de paire ouverture/clôture.
+**Statut : rien n'est payé, la décision est ouverte.** Ce qui suit est le
+dossier, chiffres des deux côtés, pour pouvoir trancher sans le refaire.
 
-**Tarifs revérifiés à la source le 2026-08-21** (ceux du plan dataient du
+#### L'argument pour, en un calcul
+
+Le mode `--clv` imprime lui-même le rapport qui fonde tout ce poste :
+
+```
+écart-type du rendement par pari : 1,1542
+écart-type du CLV par pari       : 0,0317
+paris pour détecter 2 % de ROI   : ~13 321
+paris pour détecter 0,5 % de CLV : ~160        → rapport 83×
+```
+
+Le CLV converge **83 fois plus vite** que le ROI. Mais le CLV de la **puck
+line** — la seule piste vivante — **n'est pas mesurable sur SBRO**, qui ne donne
+qu'un prix par match. Le levier existe et ne s'applique pas là où il servirait.
+
+Or A2 produit **463 paris sur 9 saisons, ~51 par saison** sur la jambe −1.5 :
+
+| Chemin | Paris disponibles | Verdict CLV possible en |
+|---|---|---|
+| **Backfill payant** (2023-24 → 2025-26) | ~154 | **une semaine** |
+| Collecte live seule (démarre en octobre) | ~51/an | **~2029** |
+
+**Un mois à 59 $ achète précisément l'échantillon qui rend A2 décidable** —
+~154 paris contre les ~160 nécessaires — et maintenant plutôt qu'en 2029. C'est
+la seule chose que cet argent achète et qu'on ne peut obtenir autrement :
+l'archive SBRO est close, le site est injoignable, l'endpoint historique n'est
+pas servi aux clés gratuites.
+
+Le mois donne aussi, sans coût supplémentaire : **~3 900 matchs vraiment hors
+échantillon** (il n'en existe aujourd'hui aucun — SBRO s'arrête au 2022-11-27),
+**+30 % de volume sur A2 en ROI**, et **A4 enfin mesurable** grâce aux snapshots
+à 5 minutes. Le jeu de données reste sur le disque après résiliation.
+
+#### L'argument contre, et il est sérieux
+
+- **Le résultat moneyline du 2026-08-23 est un avant-goût du verdict probable.**
+  CLV réel, mais qui annule tout juste la marge : la clôture valorise ces paris
+  à −0,25 % (edge ≥4 %) et +0,44 % (≥5 %). Si la puck line se comporte pareil,
+  le mois achète un **résultat négatif** — utile pour arrêter de chercher, pas
+  pour gagner.
+- **Les ~160 paris sont empruntés au moneyline** (écart-type du CLV 0,0317).
+  Celui de la puck line est inconnu et pourrait être plus grand, auquel cas
+  154 paris ne suffiraient pas.
+- **La collecte live est gratuite** et démarre dans cinq semaines. L'attente
+  coûte du temps, pas de l'argent.
+- **Rien ne se perd en attendant** : la NHL est inactive en août, aucune donnée
+  ne file entre les doigts avant la pré-saison.
+
+**Ce qui n'est PAS un argument pour payer :** espérer que les saisons neuves
+fassent réapparaître le +4,30 %. La dissection dit qu'il tient à 44 paris et que
+l'edge n'y trie pas le rendement. S'il revient, ce sera une surprise.
+
+> **En une phrase :** 59 $ compriment une attente de trois ans en une semaine,
+> sur la seule piste encore vivante — et le résultat le plus probable est un
+> « non » propre plutôt qu'un « oui ».
+
+**Tarifs revérifiés à la source le 2026-08-23** (ceux du plan dataient du
 2026-08-04 et étaient incomplets) :
 
 | Plan | Prix | Crédits/mois | Historique |
@@ -337,7 +398,7 @@ h2h + spreads + totals × 1 région          = 30 crédits
 → **le plan 100K à 59 $ couvre les trois saisons avec ~33 % de marge** ; celui à
 20 000 crédits ne couvre que ~0,9 saison. Un seul mois suffit, puis résiliation.
 
-#### 🐛 Le fetcher jetait la moitié de ce qu'il payait — corrigé le 2026-08-21
+#### 🐛 Le fetcher jetait la moitié de ce qu'il payait — corrigé le 2026-08-23
 
 **Exactement le même défaut que côté serveur, et il aurait gâché le mois payé.**
 `fetch_odds_api` visite déjà ~4 snapshots par journée de match (un de
@@ -556,7 +617,7 @@ Ce second point attaque directement le problème qui bloque tout le projet —
 quelques centaines de paris est un signal plus fort qu'un ROI positif sur le
 même échantillon.
 
-**La collecte est livrée le 2026-08-21.** Ce qui bloquait n'était pas le
+**La collecte est livrée le 2026-08-23.** Ce qui bloquait n'était pas le
 stockage mais le quota : un appel ramène déjà tous les matchs du jour, donc
 garder chaque passage ne coûte rien de plus. En revanche le budget était dépassé
 (4 passes × 3 crédits = 360/mois pour 350 disponibles) et la phase des passes
@@ -597,7 +658,7 @@ Aucune stratégie vivante ne les price (A2), et ils gardent leur ouverture.
       SBRO, et `build_dataset.py` en dérive `market_home_p_open` et
       `market_over_p_open`, dévigées. Couverture : **2014-15 → 2021-22
       complètes**, 2022-23 partielle. ~9 800 matchs.
-- [x] **Mode `--clv` livré le 2026-08-21.** Sépare les deux questions de ce
+- [x] **Mode `--clv` livré le 2026-08-23.** Sépare les deux questions de ce
       poste : le **ROI aux prix d'ouverture** et le **CLV** proprement dit.
       Imprime en plus la comparaison d'écarts-types qui justifie le poste — sur
       les mêmes paris, combien il en faudrait pour conclure sur un ROI contre
@@ -622,7 +683,7 @@ Aucune stratégie vivante ne les price (A2), et ils gardent leur ouverture.
 > changement de marché, pas un CLV. Ces paris comptent dans le ROI, pas dans le
 > CLV, et le nombre écarté est imprimé — pas de troncature silencieuse.
 
-**Premier run le 2026-08-21.** ROI à l'ouverture : −0,93 % (edge ≥ 2 %),
+**Premier run le 2026-08-23.** ROI à l'ouverture : −0,93 % (edge ≥ 2 %),
 **+4,30 % à edge ≥ 4 %** (z 2,16, 3 751 paris), +4,30 % à 5 % (z 1,80). Totaux
 négatifs partout. CLV brut de +0,0085 à +0,0153 selon le seuil, avec des t
 au-dessus de 20.
@@ -642,7 +703,7 @@ information** produit un CLV positif et massivement significatif. Le CLV qui
 monte avec le seuil d'edge est la signature de cette régression vers la moyenne…
 et aussi celle d'une vraie compétence. Indiscernables dans la sortie brute.
 
-- [x] **Placebo du CLV, livré le 2026-08-21** — même principe que les
+- [x] **Placebo du CLV, livré le 2026-08-23** — même principe que les
       sentinelles d'A5 : plutôt que d'argumenter sur l'ampleur du biais, on le
       fait courir dans le tuyau. Les probabilités du modèle sont permutées
       **entre les matchs** d'une même saison, et la même sélection est refaite
@@ -659,9 +720,20 @@ et aussi celle d'une vraie compétence. Indiscernables dans la sortie brute.
       choisir après coup gonfle le z, et c'est exactement ce que la dissection
       est là pour contrôler.
 
-- [ ] **Sur ta machine :** relancer `python backtest_walkforward.py --clv`.
-      Trois colonnes de plus (`placebo`, `net`) et un verdict explicite.
-      **Ne rien conclure du CLV avant la colonne `net`.**
+- [x] **Mesuré le 2026-08-23** — 9 saisons, 19 644 paris moneyline. Résultat
+      dans le tableau des acquis en tête de document, détail dans
+      `../models/backtest_clv_report.json` et `RESTE_A_FAIRE.md` §2.
+      Trois enseignements : le CLV moneyline est **réel** (placebo +0,0002) ;
+      il **annule tout juste la marge** (la clôture valorise ces paris à −0,25 %
+      à edge ≥4 %, +0,44 % à ≥5 %) ; et le +4,30 % réalisé est **au-dessus de ce
+      que la clôture justifie de 1,6-2,3 σ**, avec une dissection qui l'attribue
+      à la queue. Les totaux sont définitivement clos — leur CLV est **sous leur
+      propre placebo**.
+
+- [ ] **Le CLV de la puck line reste à mesurer**, et il faut pour ça des données
+      que SBRO n'a pas. Deux chemins, un seul à choisir : le backfill payant
+      (A1, dossier chiffré) ou la collecte live (A1bis, gratuite, verdict
+      ~2029).
 
 ### A4. La fenêtre de confirmation du gardien
 
@@ -797,7 +869,7 @@ moyenne.
       annonçait ≈ 1,89 faux GARDER sur 21 : **6 gardées se distinguent du
       hasard, mais ~2 d'entre elles sont probablement chanceuses.**
       Tableau complet : `RESTE_A_FAIRE.md` §2.
-- [x] **Élagage en deux paliers, 2026-08-21.** Parce que l'ablation est
+- [x] **Élagage en deux paliers, 2026-08-23.** Parce que l'ablation est
       marginale et l'élagage collectif : les trois mesures de tir attaquant
       corrélées se partagent le crédit et sortent faibles ensemble, et
       `atk_star_power` / `atk_lineup_xg`, documentées comme complémentaires dans
@@ -816,7 +888,7 @@ moyenne.
       (les comparer à des réglages taillés pour 22 colonnes mesurerait
       l'inadéquation des réglages, pas l'élagage) ; critère écrit dans le code
       avant le run, avec la bande d'indifférence fixée au bruit des sentinelles.
-- [x] **Contrôle lancé le 2026-08-21 — verdict `DÉGRADE`, élagage ANNULÉ.**
+- [x] **Contrôle lancé le 2026-08-23 — verdict `DÉGRADE`, élagage ANNULÉ.**
       Retirer les 12 features à ≤ 57,1 % donne
       `Δ ll_puckline = +0,00019 ± 0,00024` (erreur-type sur 14 saisons, t = 0,82,
       8 saisons dégradées sur 14 — ce que le pile ou face donne 39,5 % du temps).
@@ -876,12 +948,20 @@ fait                    A2 — mesuré le 2026-08-08. Non réfuté sur la jambe 
                         non confirmable avec les données disponibles.
                         Règle figée, à évaluer en CLV.
 
-fait                    A5 — mesuré, testé, ANNULÉ (2026-08-21). 14 saisons ne
+fait                    A5 — mesuré, testé, ANNULÉ (2026-08-23). 14 saisons ne
                         départagent pas ces features. Jeu d'origine conservé.
 
-maintenant              A3 (CLV) — chemin critique depuis A2. Collecte livrée
-                        le 2026-08-21 (odds_snapshots + calendrier sous budget) ;
-                        reste la mise en service, puis le mode --clv
+fait                    A3 — outillage complet (mode --clv, placebo, dissection,
+                        odds_snapshots, backfill corrigé) et mesure moneyline :
+                        CLV réel mais qui annule tout juste la marge.
+                        Le CLV puck line reste impossible sur SBRO.
+
+maintenant              DÉCISION A1 — payer 59 $ un mois, ou attendre 2029.
+                        Dossier chiffré des deux côtés dans la section A1.
+
+                        A1bis — mise en service de la collecte live, à faire
+                        quelle que soit la décision. Échéance : pré-saison,
+                        fin septembre.
                         A3 (CLV) — promu chemin critique par A2
 
 ensuite                 S4 — blend score ⊕ marché réajusté, décomposition λ,

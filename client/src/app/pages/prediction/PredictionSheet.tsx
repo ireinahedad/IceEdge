@@ -394,40 +394,19 @@ export function MarketGroup({ group, accent }: { group: MktGroup; accent: string
   );
 }
 
-/* ─── GamePrediction ────────────────────────── */
-/** Roster player row — clicking navigates to that player's prediction page. */
-function GameRosterPlayerRow({ player, teamAbbr, accent }: {
-  player: any; teamAbbr: string; accent: string;
-}) {
-  const navigate = useNavigate();
-  const id = String(player.id);
-  const name = player.name ?? player.fullName ?? `${player.firstName ?? ""} ${player.lastName ?? ""}`.trim();
-  const number = player.number ?? player.jerseyNumber ?? player.sweaterNumber ?? 0;
-  return (
-    <button
-      onClick={() => navigate(`/stats/prediction/player/${id}`)}
-      className="w-full bg-[#0A0E0C] border border-white/10 rounded-xl px-3 py-2.5 flex items-center gap-2.5 active:scale-[0.98] transition-transform text-left"
-    >
-      <img src={nhlLogoUrl(teamAbbr)} alt={teamAbbr} className="w-7 h-7 object-contain flex-shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-white text-xs font-medium truncate">{name}</p>
-        <p className="text-[#8a9ea6] text-[10px]">#{number} · {player.position ?? "—"}</p>
-      </div>
-      <span className="text-[10px] font-bold flex-shrink-0" style={{ color: accent }}>
-        {player.points ?? 0} PTS
-      </span>
-      <span className="text-[#8a9ea6] text-sm flex-shrink-0">›</span>
-    </button>
-  );
-}
-
-/** Togglable "Players" section on a game's prediction page — lets a user pick
- * either roster and jump straight to a player's own prediction page. */
-export function GamePlayersSection({ home, away, accent }: {
-  home: { abbr: string; name: string }; away: { abbr: string; name: string }; accent: string;
+/* ─── Players table (bottom of a game's prediction page) ───────────────────
+ * One table at a time, home or away, showing each player's season line. A row
+ * opens that player's own prediction page with this game pre-selected, so the
+ * props shown there are the ones for the match being looked at.
+ */
+export function GamePlayersTable({ gameId, home, away, accent }: {
+  gameId: string;
+  home: { abbr: string; name: string };
+  away: { abbr: string; name: string };
+  accent: string;
 }) {
   const { t } = useI18n();
-  const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
   const [side, setSide] = useState<"home" | "away">("home");
   const [rosters, setRosters] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(false);
@@ -435,55 +414,97 @@ export function GamePlayersSection({ home, away, accent }: {
   const activeAbbr = side === "home" ? home.abbr : away.abbr;
 
   useEffect(() => {
-    if (!open || rosters[activeAbbr]) return;
+    if (!activeAbbr || rosters[activeAbbr]) return;
+    let alive = true;
     setLoading(true);
     nhlApiService.getTeamRoster(activeAbbr.toUpperCase())
-      .then((roster: any[]) => setRosters(prev => ({ ...prev, [activeAbbr]: roster })))
-      .catch(() => setRosters(prev => ({ ...prev, [activeAbbr]: [] })))
-      .finally(() => setLoading(false));
-  }, [open, activeAbbr]);
+      .then((roster: any[]) => { if (alive) setRosters(prev => ({ ...prev, [activeAbbr]: roster })); })
+      .catch(() => { if (alive) setRosters(prev => ({ ...prev, [activeAbbr]: [] })); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [activeAbbr]);
 
-  const players = rosters[activeAbbr] ?? [];
+  // Server already sorts by points, but a re-sort keeps the order stable if a
+  // future endpoint stops doing so.
+  const players = [...(rosters[activeAbbr] ?? [])].sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
+
+  const head = (label: string) => (
+    <th className="font-semibold px-2 py-2 text-center whitespace-nowrap">{label}</th>
+  );
+  const cell = (value: number | string) => (
+    <td className="px-2 py-2 text-center tabular-nums text-[#c8d3cc]">{value}</td>
+  );
 
   return (
     <div className="bg-[#131A12] border border-white/20 rounded-2xl overflow-hidden">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-3.5"
-      >
-        <span className="text-white text-sm font-medium">{t("pred.viewPlayers")}</span>
-        <span className="text-[#8a9ea6] text-xs transition-transform" style={{ transform: open ? "rotate(180deg)" : "none" }}>▾</span>
-      </button>
-      {open && (
-        <div className="px-4 pb-4 flex flex-col gap-3">
-          {/* Team tabs */}
-          <div className="flex gap-1.5 bg-[#0A0E0C] rounded-xl p-1">
-            {[{ key: "home" as const, abbr: home.abbr }, { key: "away" as const, abbr: away.abbr }].map(o => (
-              <button
-                key={o.key}
-                onClick={() => setSide(o.key)}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all"
-                style={side === o.key ? { background: accent, color: "#0A0E0C" } : { color: "#8a9ea6" }}
-              >
-                <img src={nhlLogoUrl(o.abbr)} alt={o.abbr} className="w-4 h-4 object-contain" />
-                {o.abbr}
-              </button>
-            ))}
-          </div>
+      <div className="px-4 pt-3 pb-2 flex items-center gap-2">
+        <span className="text-white text-sm font-medium">{t("pred.playersTable")}</span>
+        <span className="text-[#8a9ea6] text-[10px] ml-auto">{t("pred.seasonStats")}</span>
+      </div>
 
-          {loading ? (
-            <div className="flex flex-col gap-2">
-              {[1, 2, 3].map(i => <div key={i} className="h-12 bg-[#0A0E0C] rounded-xl animate-pulse" />)}
-            </div>
-          ) : players.length === 0 ? (
-            <p className="text-[#8a9ea6] text-xs text-center py-4">{t("players.none", { abbr: activeAbbr })}</p>
-          ) : (
-            <div className="flex flex-col gap-1.5 max-h-80 overflow-y-auto">
-              {players.map((p: any) => (
-                <GameRosterPlayerRow key={p.id} player={p} teamAbbr={activeAbbr} accent={accent} />
-              ))}
-            </div>
-          )}
+      {/* Team tabs */}
+      <div className="px-4 pb-3">
+        <div className="flex gap-1.5 bg-[#0A0E0C] rounded-xl p-1">
+          {[{ key: "home" as const, abbr: home.abbr }, { key: "away" as const, abbr: away.abbr }].map(o => (
+            <button
+              key={o.key}
+              onClick={() => setSide(o.key)}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all"
+              style={side === o.key ? { background: accent, color: "#0A0E0C" } : { color: "#8a9ea6" }}
+            >
+              <img src={nhlLogoUrl(o.abbr)} alt={o.abbr} className="w-4 h-4 object-contain" />
+              {o.abbr}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading && players.length === 0 ? (
+        <div className="px-4 pb-4 flex flex-col gap-2">
+          {[1, 2, 3, 4].map(i => <div key={i} className="h-9 bg-[#0A0E0C] rounded-lg animate-pulse" />)}
+        </div>
+      ) : players.length === 0 ? (
+        <p className="text-[#8a9ea6] text-xs text-center py-6">{t("players.none", { abbr: activeAbbr })}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-xs">
+            <thead>
+              <tr className="text-[#8a9ea6]">
+                <th className="text-left font-semibold px-3 py-2 sticky left-0 z-10" style={{ background: "#131A12" }}>
+                  {t("chart.player")}
+                </th>
+                {head("GP")}{head("G")}{head("A")}{head("P")}{head("+/-")}{head("SOG")}{head("PP")}
+              </tr>
+            </thead>
+            <tbody>
+              {players.map((p: any) => {
+                const id = String(p.id);
+                const name = p.name ?? p.fullName ?? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim();
+                const number = p.number ?? p.jerseyNumber ?? p.sweaterNumber ?? 0;
+                const pm = p.plusMinus ?? 0;
+                return (
+                  <tr
+                    key={id}
+                    onClick={() => navigate(`/stats/prediction/player/${id}?game=${gameId}`)}
+                    className="border-t border-white/[0.06] cursor-pointer hover:bg-white/[0.04] transition-colors"
+                  >
+                    <td className="px-3 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: "#131A12" }}>
+                      <span className="text-[#5c6f63] tabular-nums mr-1.5">{number}</span>
+                      <span className="text-white font-medium">{name}</span>
+                      <span className="text-[#5c6f63] ml-1.5">{p.position ?? "—"}</span>
+                    </td>
+                    {cell(p.gamesPlayed ?? 0)}
+                    {cell(p.goals ?? 0)}
+                    {cell(p.assists ?? 0)}
+                    <td className="px-2 py-2 text-center tabular-nums font-semibold" style={{ color: accent }}>{p.points ?? 0}</td>
+                    {cell(pm > 0 ? `+${pm}` : String(pm))}
+                    {cell(p.shots ?? 0)}
+                    {cell(p.ppPoints ?? 0)}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

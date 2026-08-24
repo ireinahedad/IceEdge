@@ -14,7 +14,7 @@ import { useSport } from "../../context/SportContext";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { getTeamById, getGameById } from "../../data/hockeyData";
-import { GamePlayersSection, MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
+import { GamePlayersTable, MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { LiveGameView, MLProps, MktGroup, buildGameGroups } from "./gameMarkets";
 import { HeadToHead, NotFound, RevealMode, RevealModeCtx } from "./predictionShared";
 
@@ -24,7 +24,9 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const accent = theme.accent;
-  const openTeam = (abbr: string) => navigate(`/stats/prediction/team/${abbr.toLowerCase()}`);
+  // Carries the game along, so the team page opens on THIS match rather than
+  // defaulting to the club's next one.
+  const openTeam = (abbr: string) => navigate(`/stats/prediction/team/${abbr.toLowerCase()}?game=${gameId}`);
   const [gameView, setGameView] = useState<LiveGameView | null>(null);
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -150,19 +152,20 @@ export function GamePrediction({ gameId }: { gameId: string }) {
         away={{ abbr: away.abbr, logo: away.logo }}
       />
 
-      {/* Players — jump straight to any player's own prediction page */}
-      <GamePlayersSection
-        home={{ abbr: home.abbr, name: home.name }}
-        away={{ abbr: away.abbr, name: away.name }}
-        accent={accent}
-      />
-
       {/* ── Market groups ── */}
       <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
       <RevealModeCtx.Provider value={revealMode}>
         {groups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
       </RevealModeCtx.Provider>
 
+      {/* Players — last block on the page. A row opens that player's own
+          prediction page with THIS game pre-selected. */}
+      <GamePlayersTable
+        gameId={gameId}
+        home={{ abbr: home.abbr, name: home.name }}
+        away={{ abbr: away.abbr, name: away.name }}
+        accent={accent}
+      />
     </div>
   );
 }

@@ -6,10 +6,12 @@
  * seuls les imports et les mots-clés `export` ont été ajoutés.
  */
 
-import { useNavigate } from "react-router";
-import { useEffect, useState, createContext } from "react";
+import { useNavigate, useSearchParams } from "react-router";
+import { useCallback, useEffect, useMemo, useState, createContext } from "react";
 import { nhlApiService } from "../../services/nhlApiService";
+import { nhlLogoUrl } from "../../data/teamEmoji";
 import { useI18n } from "../../i18n";
+import type { NHLGame } from "../../types/bet";
 import type { CalcFactor } from "../../services/predictionApiService";
 
 type Subject = { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
@@ -305,6 +307,198 @@ export function HeadToHead({ home, away }: {
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Game picker (player & team prediction pages) ──────────────────────────
+ * A bet placed from a player or team page needs a gameId to be auto-settled,
+ * and "which game?" is only obvious once it's on screen. Both pages therefore
+ * open on the subject's NEXT game and let the user switch with a dropdown.
+ * The choice lives in the `?game=` search param, so a link from a game page
+ * (or a shared URL) opens on the right match instead of the default one.
+ */
+
+/** One selectable game, described from the point of view of one team. */
+export interface UpcomingGame {
+  id: string;
+  /** YYYY-MM-DD */
+  date: string;
+  /** Display string from the API, e.g. "7:00 PM ET". */
+  startTime: string;
+  homeAbbr: string;
+  awayAbbr: string;
+  /** The other team — i.e. the opponent of the team this list was built for. */
+  opponentAbbr: string;
+  isHome: boolean;
+  status: NHLGame["status"];
+}
+
+/** How far ahead the dropdown looks. One range call covers every team. */
+const UPCOMING_DAYS = 14;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+const shiftIso = (date: string, days: number) => {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+
+function toUpcoming(g: NHLGame, teamAbbr: string): UpcomingGame {
+  const homeAbbr = (g.homeTeam.abbreviation ?? "").toUpperCase();
+  const awayAbbr = (g.awayTeam.abbreviation ?? "").toUpperCase();
+  const isHome = homeAbbr === teamAbbr.toUpperCase();
+  return {
+    id: String(g.id),
+    date: g.gameDate,
+    startTime: g.startTime,
+    homeAbbr,
+    awayAbbr,
+    opponentAbbr: isHome ? awayAbbr : homeAbbr,
+    isHome,
+    status: g.status,
+  };
+}
+
+/**
+ * A team's games over the next {@link UPCOMING_DAYS} days, soonest first.
+ * `null` while loading, `[]` when the team has no game in that window.
+ *
+ * `pinnedId` (the `?game=` value) is fetched on its own and merged in when it
+ * falls outside the window — without that, a link to a game further out would
+ * silently switch the page over to a different match.
+ */
+export function useUpcomingGames(teamAbbr: string | undefined, pinnedId?: string): UpcomingGame[] | null {
+  const [scheduled, setScheduled] = useState<UpcomingGame[] | null>(null);
+  const [pinned, setPinned] = useState<UpcomingGame | null>(null);
+
+  // Schedule window — refetched only when the team changes, never when the
+  // user picks a different game in the dropdown.
+  useEffect(() => {
+    if (!teamAbbr) { setScheduled(null); return; }
+    let alive = true;
+    setScheduled(null);
+    (async () => {
+      const abbr = teamAbbr.toUpperCase();
+      try {
+        const anchor = await nhlApiService.getScheduleAnchor().catch(() => null);
+        const start = anchor?.today && ISO_DATE.test(anchor.today)
+          ? anchor.today
+          : new Date().toISOString().slice(0, 10);
+        const all = await nhlApiService.getGamesRange(start, shiftIso(start, UPCOMING_DAYS));
+        const list = all
+          .filter(g => g.status !== "final")
+          .filter(g => [g.homeTeam.abbreviation, g.awayTeam.abbreviation]
+            .some(a => (a ?? "").toUpperCase() === abbr))
+          .map(g => toUpcoming(g, abbr));
+        if (alive) setScheduled(list);
+      } catch {
+        // Schedule unavailable — the page still works, just without a game.
+        if (alive) setScheduled([]);
+      }
+    })();
+    return () => { alive = false; };
+  }, [teamAbbr]);
+
+  // A `?game=` id outside the window (older, or further ahead) is fetched once.
+  useEffect(() => {
+    if (!teamAbbr || !pinnedId || !scheduled || scheduled.some(g => g.id === pinnedId)) {
+      setPinned(null);
+      return;
+    }
+    let alive = true;
+    nhlApiService.getGame(pinnedId)
+      .then(g => { if (alive) setPinned(toUpcoming(g, teamAbbr)); })
+      .catch(() => { if (alive) setPinned(null); }); // unknown id → fall back to the next game
+    return () => { alive = false; };
+  }, [teamAbbr, pinnedId, scheduled]);
+
+  return useMemo(() => {
+    if (scheduled === null) return null;
+    const all = pinned ? [...scheduled, pinned] : scheduled;
+    // One game per team per day, so the date alone orders them.
+    return [...all].sort((a, b) => a.date.localeCompare(b.date));
+  }, [scheduled, pinned]);
+}
+
+/**
+ * The game the page is bound to: `?game=` when it points at a listed game,
+ * otherwise the next one. `select` rewrites the param in place (replace) —
+ * switching games is not a new page.
+ */
+export function useSelectedGame(games: UpcomingGame[] | null) {
+  const [params, setParams] = useSearchParams();
+  const fromUrl = params.get("game") ?? undefined;
+
+  const selected = useMemo(() => {
+    if (!games || games.length === 0) return null;
+    return games.find(g => g.id === fromUrl) ?? games[0];
+  }, [games, fromUrl]);
+
+  const select = useCallback((id: string) => {
+    const next = new URLSearchParams(params);
+    next.set("game", id);
+    setParams(next, { replace: true });
+  }, [params, setParams]);
+
+  return { selected, select };
+}
+
+/** Header card: which game these bets are for, with a dropdown to switch. */
+export function GameSelector({ games, selected, onSelect, accent }: {
+  games: UpcomingGame[] | null;
+  selected: UpcomingGame | null;
+  onSelect: (gameId: string) => void;
+  accent: string;
+}) {
+  const navigate = useNavigate();
+  const { t, lang } = useI18n();
+  const locale = lang === "fr" ? "fr-CA" : "en-US";
+
+  const optionLabel = (g: UpcomingGame) => {
+    const day = ISO_DATE.test(g.date)
+      ? new Date(`${g.date}T00:00:00`).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" })
+      : g.date;
+    return `${g.isHome ? "vs" : "@"} ${g.opponentAbbr} · ${day}${g.startTime ? ` · ${g.startTime}` : ""}`;
+  };
+
+  if (games === null) {
+    return <div className="h-16 bg-[#131A12] rounded-2xl animate-pulse" />;
+  }
+
+  return (
+    <div className="bg-[#131A12] border border-white/20 rounded-2xl px-4 py-3">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[#8a9ea6] text-[10px] uppercase tracking-wider font-semibold">{t("pred.forGame")}</span>
+        {selected && (
+          <button
+            onClick={() => navigate(`/stats/prediction/game/${selected.id}`)}
+            className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-md border transition-colors"
+            style={{ color: accent, borderColor: accent + "55", background: accent + "14" }}
+          >
+            {t("pred.viewGame")}
+          </button>
+        )}
+      </div>
+
+      {games.length === 0 || !selected ? (
+        <p className="text-[#8a9ea6] text-xs">{t("pred.noUpcoming")}</p>
+      ) : (
+        <div className="flex items-center gap-2">
+          <img src={nhlLogoUrl(selected.opponentAbbr)} alt={selected.opponentAbbr} className="w-7 h-7 object-contain flex-shrink-0" />
+          <select
+            value={selected.id}
+            onChange={e => onSelect(e.target.value)}
+            aria-label={t("pred.chooseGame")}
+            className="flex-1 min-w-0 rounded-xl border border-white/15 px-2.5 py-2 text-xs font-semibold text-white outline-none"
+            style={{ background: "#0A0E0C" }}
+          >
+            {games.map(g => (
+              <option key={g.id} value={g.id}>{optionLabel(g)}</option>
+            ))}
+          </select>
         </div>
       )}
     </div>

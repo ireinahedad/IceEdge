@@ -11,7 +11,7 @@
 // le format attendu par fetch_data_v4.py se fait à la demande
 // (`npm run odds:export`), depuis une donnée qui, elle, survit.
 //
-// SÉRIE TEMPORELLE (A3, 2026-08-21) : chaque passe archive en plus son état
+// SÉRIE TEMPORELLE (A3, 2026-08-23) : chaque passe archive en plus son état
 // dans `odds_snapshots` (migration 031). `odds_log` écrase — il ne garde qu'une
 // ouverture et une clôture — alors que le CLV a besoin de savoir quel prix était
 // affiché à un instant donné. Le calendrier des passes vit dans `SLOTS`, en bas
@@ -199,7 +199,7 @@ function eventToRow(ev: RawOddsEvent): Row | null {
  * première observation et la dernière est le signal que le CSV ne pouvait pas
  * capturer (il écrivait open = close et n'y revenait jamais).
  *
- * SNAPSHOTS (A3, 2026-08-21) — en plus de l'upsert ci-dessus, chaque passe
+ * SNAPSHOTS (A3, 2026-08-23) — en plus de l'upsert ci-dessus, chaque passe
  * insère son état complet dans `odds_snapshots`. Le résumé ouverture/clôture
  * reste le contrat de `fetch_data_v4.py` et ne bouge pas ; la série temporelle
  * est ce que le CLV réclame, et elle ne coûte aucun crédit supplémentaire —
@@ -415,7 +415,7 @@ export async function exportOddsLogCsv(): Promise<string> {
 
 // ── Calendrier de collecte ───────────────────────────────────────────────────
 //
-// CE QUI A CHANGÉ ET POURQUOI (A3, 2026-08-21). L'ancienne version faisait
+// CE QUI A CHANGÉ ET POURQUOI (A3, 2026-08-23). L'ancienne version faisait
 // `setInterval(6 h)` amorcé au démarrage du processus : la phase dépendait donc
 // de l'heure du dernier déploiement Railway. Rien ne garantissait qu'une passe
 // tombe près d'une mise au jeu, et le dernier prix observé avant un match de

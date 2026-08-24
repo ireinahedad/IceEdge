@@ -7,12 +7,13 @@
  */
 
 import { useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "react-router";
 import { nhlApiService } from "../../services/nhlApiService";
 import { useSport } from "../../context/SportContext";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { MLProps, MktGroup, RuleFactor } from "./gameMarkets";
-import { LoadingSkeleton, NotFound, RecentFormCard, RevealMode, RevealModeCtx, generateForm } from "./predictionShared";
+import { GameSelector, LoadingSkeleton, NotFound, RecentFormCard, RevealMode, RevealModeCtx, generateForm, useSelectedGame, useUpcomingGames } from "./predictionShared";
 
 
 /* ─── Team Prediction ─────────────────────────── */
@@ -28,6 +29,14 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [revealMode, setRevealMode] = useState<RevealMode>("rules");
+
+  // Which game these bets are for. Defaults to the team's next game, switchable
+  // from the dropdown, and overridden by a `?game=` param. The id is stamped on
+  // every bet so it can be auto-settled (see settlementFields()).
+  const [searchParams] = useSearchParams();
+  const games = useUpcomingGames(data?.abbr || undefined, searchParams.get("game") ?? undefined);
+  const { selected: selectedGame, select: selectGame } = useSelectedGame(games);
+
   const recentForm = useMemo<("W" | "L" | "OT")[]>(
     () => (data ? generateForm(8, data.winPct / 100) : []),
     [data?.winPct],
@@ -70,7 +79,7 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
 
   // ── build team-level bet groups ──────────────────────────────────────────
   const tml = (propType: string, line?: number): MLProps =>
-    ({ type: "team", subjectId: data.abbr, propType, line });
+    ({ type: "team", subjectId: data.abbr, propType, line, gameId: selectedGame?.id });
 
   const teamGroups: MktGroup[] = [
     {
@@ -198,6 +207,9 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Which game these bets are for — next game by default */}
+      <GameSelector games={games} selected={selectedGame} onSelect={selectGame} accent={accent} />
+
       {/* Team header */}
       <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
         <div className="flex items-center gap-3 mb-3">

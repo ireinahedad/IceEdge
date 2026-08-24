@@ -1,7 +1,14 @@
 # ARAKICE / ICEEDGE — Ce qui reste
 
-**Créé le 2026-08-10 · mis à jour le 2026-08-21** (A5 clos, §2 — la suite ML
-est A3/CLV). Ce document regroupe **tout ce qui n'est pas fait**, tiré
+**Créé le 2026-08-10 · mis à jour le 2026-08-23.**
+
+> **Reprendre ici.** Une seule décision est en attente côté ML : **payer ou non
+> un mois de The Odds API (59 $)**. Le calcul complet, avec les arguments des
+> deux côtés, est en **§2**. Indépendamment de cette décision, la mise en
+> service de la collecte live a une échéance réelle — **la pré-saison NHL, fin
+> septembre**.
+
+Ce document regroupe **tout ce qui n'est pas fait**, tiré
 des 6 plans et audits du dépôt. Il ne raconte pas ce qui a été livré — l'historique
 Git et `PROJECT_CONTEXT.md` s'en chargent.
 
@@ -44,313 +51,196 @@ Rien ici ne demande de conception ; tout demande **ta machine ou une console**.
 
 ---
 
-## 2. ML — le chemin critique
+## 2. ML — où reprendre
 
-Source : `ml/REFACTOR_PLAN.md`, qui reste la référence. **A5 est clos depuis le
-2026-08-21** (résultat négatif, détail ci-dessous), donc l'ordre restant est
-**A3 puis S4**. S4 était retenu tant que le modèle pouvait encore changer de
-features ; ce n'est plus le cas, il reste seulement le dernier parce qu'il est
-le seul chantier qui touche ce que voit l'app.
+**Une seule décision est en attente, et elle commande tout le reste : payer ou
+non un mois de The Odds API.** Le calcul est plus bas, avec les arguments des
+deux côtés.
 
-### ✅ A5 — clos le 2026-08-21 : les features ne sont pas départageables
+### L'état en une table
 
-**Conclusion, à ne pas re-tester.** L'élagage a été mesuré puis testé, et le
-résultat est négatif au sens propre : ce n'est pas « garder les 22 features est
-optimal », c'est **« 14 saisons ne permettent pas de dire lesquelles retirer »**.
-Le jeu de features est revenu à son état d'origine (13 ATK + 7 DEF), avec la
-conclusion écrite en tête de `train_score.py` pour que personne ne recommence.
-
-Le contrôle par suppression réelle a retiré les 12 features au niveau du hasard :
-
-```
-Δ log-loss puck line   +0,00019  ±  0,00024   (erreur-type, 14 saisons)
-t = 0,82 · 8 saisons dégradées sur 14, ce que le pile ou face donne 39,5 % du temps
-```
-
-**L'écart est plus petit que sa propre barre d'erreur.** L'écart-type
-inter-saisons vaut 0,00089 : il faudrait **≈ 154 saisons** pour résoudre un effet
-de cette taille, ≈ 25 pour un effet de 0,0005. Le critère pré-enregistré rend
-`DÉGRADE` (garde-fou sur le compte des signes) et on s'y tient — mais la leçon
-qui compte est ailleurs : **aucun sous-groupe ne sera plus résoluble**, puisqu'un
-effet plus petit exige encore plus de saisons. Continuer par sous-groupes aurait
-été un tapis roulant.
-
-Les métriques secondaires, chacune contre son propre bruit, disent pourquoi la
-puck line reste muette : **déviance +0,00089** (±0,00037, nettement pire) contre
-**log-loss moneyline −0,00054** (±0,00015, nettement mieux). Les 12 colonnes
-portent le **niveau** de λ, pas l'**écart** entre les deux équipes ; la puck line
-dépend de l'écart, donc elle se retrouve entre les deux.
-
-> **Ce que ça coûte de garder les 22.** P5 avait mesuré 0,00245 de log-loss pour
-> 104 features en trop sur le classifieur. Ici il s'agit de 12, dont l'effet
-> mesuré vaut 0,0002. Négligeable — c'est la raison de ne pas y revenir.
-
-**Livré au passage et réutilisable :** le mode `--confirm-score-features`
-(1 entraînement par saison au lieu de 26, sentinelles conservées, hyperparamètres
-re-cherchés pour le jeu réduit, critère écrit avant le run) et, dans sa sortie,
-l'erreur-type et le test des signes à côté du verdict. Trois corrections issues
-du run : le crash JSON sur `numpy.int64`, le bruit calculé **par métrique** (la
-déviance et la log-loss ne sont pas sur la même échelle) et le drapeau de
-désaccord qui en découle.
-
-> **Ordre du plan mis à jour :** A5 étant clos, la suite est **A3 (CLV)**, déjà
-> chemin critique depuis A2. S4 reste en dernier, et il n'est plus bloqué — le
-> modèle de score ne changera plus de features.
-
-<details>
-<summary>Le détail de la mesure A5 (conservé pour référence)</summary>
-
-
-**Débloqué le 2026-08-18.** Le fichier tronqué de 356 octets n'était pas un
-calcul perdu : le run du 2026-08-09 était **complet dans le cache**, seule
-l'écriture du rapport avait été coupée. `score_feature_selection.json` a été
-**reconstruit depuis `score_ablation_cache.json`** (364 entrées v2, différences
-exactes de valeurs mises en cache, aucun réentraînement). Il fait maintenant
-74 875 octets et couvre les 14 saisons 2012-2025. Seul `n_games` par saison
-manque — il n'était pas mis en cache. **Aucun fit à relancer.**
-
-**Les sentinelles d'abord, comme prévu.** Trois features de bruit pur passées
-dans le même tuyau : parts positives **50 %, 57,1 %, 64,3 %**. La médiane à
-57,1 % est proche des 50 % attendus → la procédure est saine, le biais résiduel
-est faible. Le maximum, **64,3 %, est la barre** ; le seuil de conservation était
-pré-enregistré à 70 %.
-
-**Verdicts** (part des 14 saisons où la permutation dégrade la log-loss puck line) :
-
-| Feature | Part + | Gain moyen | Verdict |
-|---|---|---|---|
-| `elo_atk_minus_def` | **92,9 %** | 0,001193 | GARDER |
-| `def_ev_xga60_s` | **85,7 %** | 0,000306 | GARDER |
-| `atk_lineup_pts` | **78,6 %** | 0,000480 | GARDER |
-| `atk_ev_xgf_pct_s` | 71,4 % | 0,000247 | GARDER |
-| `atk_stars_out_weight` | 71,4 % | 0,000203 | GARDER |
-| `def_goalie_svpct` | 71,4 % | 0,000179 | GARDER |
-| `atk_finishing_s` · `def_goalie_gsax60` · `atk_ev_xgf60_s` | 64,3 % | ≤ 0,000183 | RETIRER — **exactement à la barre** |
-| `is_home` | 57,1 % | 0,000246 | STRUCTUREL (gardée sans vote) |
-| `atk_star_power` · `atk_xgf60_l` · `def_xga60_l` · `atk_rest_days` | 57,1 % | ≤ 0,000164 | RETIRER |
-| `def_pk_xga60_s` · `def_xga60_s` · `atk_lineup_xg` | 50,0 % | ≤ 0,000083 | RETIRER |
-| `def_ga_s` · `atk_xgf60_s` · `atk_pp_xgf60_s` | 42,9 % | ≤ 0,000130 | RETIRER |
-| `atk_b2b` | 35,7 % | −0,000002 | RETIRER |
-| `atk_gf_s` | 21,4 % | 0,000015 | RETIRER |
-
-**Étalonnage du hasard, fourni par le rapport lui-même :** sous l'hypothèse
-nulle, une feature isolée passe la barre avec p = 0,0898 ; sur 21 candidates cela
-fait **1,89 conservation fausse attendue**. Six ont passé. Le signal est réel,
-mais il faut lire « 6 gardées » comme « ~4 vraies et ~2 chanceuses », pas comme
-six certitudes — et le rapport ne dit pas lesquelles.
-
-> **Le piège à ne pas manquer : l'ablation est marginale, l'élagage est
-> collectif.** Chaque verdict mesure ce qu'apporte une feature *les autres étant
-> présentes*. Trois mesures de tir attaquant corrélées (`atk_xgf60_s`,
-> `atk_ev_xgf60_s`, `atk_xgf60_l`) se partagent le crédit et sortent toutes les
-> trois faibles — ce qui ne prouve pas que les retirer **toutes ensemble** soit
-> sans coût. Même configuration pour `atk_star_power` et `atk_lineup_xg`, dont le
-> commentaire de `train_score.py` dit explicitement qu'elles sont
-> complémentaires, et qui tombent maintenant toutes les deux. Le réentraînement
-> de confirmation n'est pas une formalité : c'est **le** test de cette hypothèse.
-
-- [x] Rapport reconstruit depuis le cache · sentinelles lues en premier
-- [x] Élagage appliqué (12 features à ≤ 57,1 %), contrôlé, puis **annulé** au vu
-      du verdict — cf. la conclusion en tête de section
-- [x] `train_score.py` revenu aux 13 ATK + 7 DEF d'origine, conclusion documentée
-- [x] Rien à faire côté service : `ml_service.py:323` lit la liste des features
-      dans `score_report.json`. Comme le jeu n'a pas bougé au final, **aucun
-      réentraînement n'est nécessaire** — `score_model.json` reste valide.
-
-</details>
-
-
-### A3 — CLV (chemin critique) — collecte livrée le 2026-08-21
-
-A2 a rendu ce poste obligatoire : ~51 paris par saison ne permettront **jamais**
-de conclure sur un ROI. Le CLV se mesure comme un écart de prix sur chaque pari,
-donc il converge en quelques centaines de paris.
-
-**Ce qui bloquait n'était pas le stockage, c'était le quota.** Un appel à The
-Odds API ramène déjà tous les matchs du jour : garder chaque passage ne coûte pas
-un crédit de plus, le collecteur les jetait simplement. Mais le budget était
-dépassé et le calendrier mal placé :
-
-```
-Quota gratuit 500/mois − ODDS_USER_RESERVE 150 = 350 pour la collecte
-Avant : setInterval(6 h) → 4 passes × 3 crédits = 12/jour = 360/mois  ✗
-Après : 2 passes complètes + 4 passes spreads   = 10/jour = 300/mois  ✓
-```
-
-`COLLECT_COST` valait 3 parce qu'une passe demande trois marchés
-(`h2h,spreads,totals`), facturés un crédit chacun. **Une passe `spreads` seule
-coûte 1 crédit** — et la puck line est le seul marché encore vivant (A2). D'où
-six observations par jour pour moins cher que quatre.
-
-Le second défaut était plus grave pour cette mesure précise : `setInterval(6 h)`
-démarrait au lancement du processus, donc **la phase dépendait de l'heure du
-dernier déploiement Railway**. Le dernier prix observé avant un match de 19 h ET
-pouvait dater de six heures. Une « clôture » à T−5 h n'en est pas une, et le
-biais va dans le sens optimiste : une ligne qui a moins bougé paraît plus souvent
-du bon côté.
-
-- [x] **Migration 031, `odds_snapshots`** — série temporelle, rien n'est jamais
-      réécrit. `observed_at` identique pour toute une passe (calculé côté Node,
-      pas `NOW()` ligne à ligne) pour que « l'état du marché à 18 h 45 » soit
-      regroupable. `commence_time` stockée : les matchs d'une soirée s'étalent de
-      19 h à 22 h 30 ET, donc le « T−3 h » est propre à chaque match.
-      ~18 000 lignes par saison.
-- [x] **`odds_log` inchangé** — c'est le contrat de `fetch_data_v4.py` et de
-      `npm run odds:export`. Le logger écrit les deux ; aucun consommateur
-      existant ne bouge.
-- [x] **Calendrier calé sur l'heure de l'Est** : complètes à 11 h (l'ouverture
-      utile, les lignes du soir sont affichées) et 17 h ; `spreads` à 18 h 45,
-      19 h 45, 21 h 45 et 22 h 45. Chaque créneau se replanifie après coup, donc
-      les passes peuvent être inégalement espacées.
-- [x] **Deux bogues corrigés au passage.** L'ancienne version lançait une passe
-      20 s après *chaque* démarrage : 3 crédits offerts à chaque redéploiement
-      Railway (désormais opt-in via `ODDS_LOG_RUN_AT_BOOT`, pour vérifier la
-      chaîne une fois). Et les colonnes `*_open` n'étaient jamais rattrapées : si
-      un book n'avait pas encore affiché un marché à la première passe, son
-      ouverture restait nulle **pour toujours**, puisque seules les colonnes de
-      clôture étaient mises à jour.
-
-> **Ce qu'on perd, assumé :** le moneyline et les totaux n'ont plus de clôture
-> stricte — leur dernier prix est celui de 17 h. Ils gardent leur ouverture, ce
-> qui suffit à mesurer le mouvement, et aucune stratégie vivante ne les price.
-
-- [ ] **Sur ta machine :** appliquer les migrations **028 et 031**
-      (`npm run db:migrate:all`), puis `npm test`
-- [ ] **Prod :** poser `ODDS_LOG_ENABLED=true` et `ODDS_USER_RESERVE` sur
-      Railway. Optionnellement `ODDS_LOG_RUN_AT_BOOT=true` le temps d'un
-      déploiement pour voir une passe complète dans les logs, **puis le retirer**.
-#### ⚠️ Le plan se trompait : les ouvertures existent déjà
-
-La case « colonnes `*_open` réelles dans `odds.csv`, aujourd'hui vides » était
-**fausse**. Vérifié dans le fichier : `home_ml_open`, `away_ml_open`,
-`total_open` et les prix over/under d'ouverture sont remplis à **100 %** sur
-10 591 lignes. La remarque « un snapshot pré-match n'est pas une ouverture » ne
-concernait que le chemin The Odds API (commentaire de `fetch_data_v4.py:723`) —
-elle s'est propagée dans le plan comme si elle valait pour tout le fichier.
-`_parse_sbro_html` lit bien les colonnes d'ouverture des pages SBRO, et
-`build_dataset.py` en dérive `market_home_p_open` et `market_over_p_open`,
-dévigées. **Tout est dans `nhl_games_v4.csv` depuis le début.**
-
-| Saisons avec ouverture | 2014-15 → 2021-22 (complètes) + 2022-23 (partielle) |
+| Poste | État |
 |---|---|
-| Matchs exploitables | ~9 800 |
-| Lignes de total inchangées ouverture→clôture | 82,3 % |
-| Écart-type du mouvement moneyline | 0,0315 en probabilité |
+| **A5** — élaguer les features du modèle de score | ✅ **Clos.** Non tranchable avec 14 saisons. Conclusion en tête de `train_score.py`. **Ne pas recommencer.** |
+| **A3** — outillage CLV | ✅ **Livré.** Mode `--clv` avec placebo, dissection et « ROI clôture ». Table `odds_snapshots` (migration 031). Backfill historique corrigé. |
+| **A3** — mesure moneyline et totaux | ✅ **Faite le 2026-08-23.** Résultats ci-dessous. |
+| **A3** — mesure puck line | ⛔ **Impossible sur l'historique** : SBRO ne donne qu'un prix de puck line par match, pas de paire ouverture/clôture. |
+| **A1** — backfill payant | ⏸️ **En attente de ta décision.** Le code est prêt et borné. |
+| **A1bis** — collecte live gratuite | ⏸️ **Codée, jamais activée.** Migrations 028 + 031 à appliquer, `ODDS_LOG_ENABLED=true` en prod. **Échéance : la pré-saison, fin septembre.** |
+| **A2** — règle puck line | ⏸️ Figée et falsifiable, non évaluable avant l'un des deux postes ci-dessus. |
+| **S4** — servir le moneyline depuis le modèle de score | ⏸️ Conçu, code non commencé. **Plus bloqué par A5** : le jeu de features est figé. |
+| **A4** — fenêtre de confirmation du gardien | ⏸️ Demande des snapshots serrés autour du coup d'envoi. |
+| **A6** — team totals, prolongation, écarts ±2.5 | ⏸️ Après A1 et A2. |
 
-- [x] **Mode `--clv` livré le 2026-08-21.** Deux mesures séparées : le **ROI aux
-      prix d'ouverture** (« le modèle bat-il le repère faible ? ») et le **CLV**
-      (le prix pris est-il meilleur que la clôture ?). Il imprime aussi la
-      comparaison d'écarts-types qui justifie tout le poste — combien de paris
-      pour conclure sur un ROI contre combien pour conclure sur un CLV, sur les
-      mêmes paris.
-#### Premier run du 2026-08-21 — et le contrôle qui manquait
+---
 
-19 644 paris moneyline et 19 638 paris totaux sur 9 saisons.
+### Ce que la mesure du 2026-08-23 a établi
 
-| edge ≥ | paris | ROI ouverture | z | CLV brut |
-|---|---|---|---|---|
-| 2 % | 6 475 | −0,93 % | −0,65 | +0,0103 |
-| 3 % | 4 988 | +2,11 % | 1,26 | +0,0117 |
-| **4 %** | **3 751** | **+4,30 %** | **2,16** | +0,0135 |
-| 5 % | 2 760 | +4,30 % | 1,80 | +0,0153 |
+Neuf saisons, 19 644 paris moneyline et 19 638 paris totaux aux **prix
+d'ouverture**, chacun comparé à ce que la clôture en disait.
 
-Totaux : ROI négatif à tous les seuils (−2,1 % à −0,9 %). Rien de neuf, cohérent
-avec le verdict « condamnés ».
+| edge ≥ | paris | ROI réalisé | ROI selon la clôture | écart | CLV net du placebo |
+|---|---|---|---|---|---|
+| 1 % | 8 103 | −1,13 % | −1,78 % | +0,52 σ | +0,0083 |
+| 2 % | 6 475 | −0,93 % | −1,30 % | +0,25 σ | +0,0101 |
+| 3 % | 4 988 | +2,11 % | −0,85 % | +1,76 σ | +0,0115 |
+| **4 %** | 3 751 | **+4,30 %** | **−0,25 %** | +2,28 σ | **+0,0133** |
+| 5 % | 2 760 | +4,30 % | **+0,44 %** | +1,61 σ | +0,0151 |
 
-**L'apparente contradiction — CLV très positif, ROI négatif — n'en est pas une.**
-Le CLV se mesure sur des probabilités **dévigées**, le ROI paie la **marge de
-4,43 %**. Un CLV de +1,03 point sur un pari à ~45 % vaut environ +2,3 % de mise
-brute ; moins la marge, cela fait ≈ −2,1 %. Observé : −0,93 % (± 1,4 %). Les deux
-chiffres sont cohérents. **La barre à franchir n'est pas « CLV > 0 », c'est
-« CLV > la marge ».**
+**Trois conclusions, dans l'ordre de solidité.**
 
-**En revanche le CLV brut est inutilisable tel quel, et c'est mon omission.** On
-sélectionne sur `p_modèle − p_ouverture`, puis on mesure `p_clôture − p_ouverture`
-— les deux partagent `p_ouverture`, qui porte du bruit. La sélection retient
-préférentiellement les matchs où l'ouverture est trop basse, **y compris par pur
-hasard**, et la clôture y remonte mécaniquement. **Un modèle sans aucune
-information produit un CLV positif et massivement significatif.** La signature
-est dans le tableau : le CLV monte avec le seuil d'edge (+0,0085 → +0,0153) —
-mais une vraie compétence produirait exactement la même courbe. Les deux sont
-indiscernables dans la sortie brute.
+**1. Le CLV moneyline est réel.** Le placebo — modèle permuté entre les matchs,
+même sélection, même effectif — ne décroche que **+0,0002**. Le signal n'est
+donc pas de la régression vers la moyenne : le modèle prend bien des prix que le
+marché déplace ensuite dans son sens.
 
-- [x] **Placebo livré le 2026-08-21**, sur le modèle des sentinelles d'A5 : on
-      permute les probabilités du modèle **entre les matchs** d'une même saison
-      — il ne sait donc plus rien du match qu'il price — et on refait la même
-      sélection, **à effectif égal** (pas à seuil égal : un modèle permuté est
-      décorrélé du marché, ses edges sont plus dispersés). Vérifié sur données
-      simulées : un modèle sans information sort un CLV brut de +0,0040 pour un
-      placebo de +0,0041 → **net −0,0001** ; un modèle parfait sort +0,0539
-      contre un placebo de +0,0085 → **net +0,0454**. Le contrôle sépare bien
-      les deux.
-- [x] **Dissection du ROI à l'ouverture** branchée sur `dissect()`, le même
-      outil qu'A2 : stabilité par saison, jackknife, tranches de cote, tranches
-      d'edge, concentration par équipe, `wins_to_flip`. Le seuil de 4 % est le
-      **meilleur de cinq testés** — le sélectionner après coup gonfle le z, la
-      dissection est là pour ça.
+**2. Et il suffit tout juste à annuler la marge, pas à gagner.** C'est la
+colonne « ROI selon la clôture », et c'est le vrai résultat de ce run : elle
+monte de −1,78 % à **+0,44 %** avec le seuil d'edge. Autrement dit, aux edges
+élevés, le modèle trouve des ouvertures que la clôture juge **à peu près
+équitables après la marge de 4,43 %** — pas rentables. P1 disait « on ne bat pas
+la clôture » ; on peut préciser : **on bat l'ouverture d'environ une marge**.
 
-- [ ] **Sur ta machine :** relancer `python backtest_walkforward.py --clv`. Le
-      tableau porte maintenant trois colonnes de plus — `placebo`, `net` — et un
-      verdict explicite. **Ne rien conclure du CLV avant d'avoir lu la colonne
-      `net`.**
+**3. Le +4,30 % réalisé est probablement de la chance.** Il dépasse de 1,6 à
+2,3 σ ce que la clôture justifie. La dissection le montre sans ambiguïté : par
+tercile d'edge le ROI fait **1,60 % / 0,36 % / 10,93 %** — l'edge ne trie pas le
+rendement, tout est dans le tercile supérieur ; le taux de réussite n'est que de
+45,7 %, donc le gain vient de **cotes longues qui sont tombées** ; et retirer
+44 paris sur 3 751 (1,2 %) annule le résultat.
 
-> **Ce que ce mode ne peut PAS mesurer, et c'est le point qui compte.** L'archive
-> SBRO ne donne **qu'un seul prix de puck line par match**, pas une paire
-> ouverture/clôture — contrairement au moneyline et aux totaux. **Le CLV de la
-> règle A2 n'est donc pas mesurable sur l'historique** : il attend la collecte
-> live. Le mode le dit à l'écran plutôt que d'omettre silencieusement le marché.
->
-> Ce qui ne le rend pas inutile pour autant : il répond à la question 1 d'A3
-> (« si le modèle ne bat pas non plus l'ouverture, le dossier moneyline est clos
-> pour de bon ») et il **rode l'outil sur de vraies données avant la saison** —
-> découvrir un bogue de mesure en janvier, sur trois mois de collecte
-> irremplaçable, serait le pire moment.
+> **Les totaux sont morts pour de bon.** Leur CLV net est **inférieur à leur
+> propre placebo** à tous les seuils (+0,0020 contre +0,0030) : ce qu'on y voyait
+> était entièrement de la régression vers la moyenne. Et la clôture leur donne
+> −3,2 % constant. Le placebo a payé son billet ici.
 
-> **Piège traité, qu'une version naïve raterait :** la ligne de total bouge dans
-> 17,7 % des cas. Quand elle bouge, `market_over_p_open` et
-> `market_over_p_close` ne décrivent pas le même pari et leur différence n'est
-> pas un CLV. Ces paris comptent dans le ROI, pas dans le CLV, et le nombre
-> écarté est imprimé.
+---
 
-> **Le calendrier joue en notre faveur pour une fois.** `isSeasonActive()`
-> interroge `/v4/sports`, qui est hors quota, et la NHL est inactive en août :
-> activer maintenant ne coûte **aucun crédit**. La pré-saison commence fin
-> septembre — c'est la vraie échéance.
+### La décision : payer 59 $ un mois, ou non
 
-### A2 — puck line : règle figée, à évaluer
+**L'argument, en un calcul.** C'est le bloc que le mode imprime lui-même :
 
-La règle est pré-enregistrée (miser la jambe qui **donne** les 1.5 buts quand
-`p_modèle − p_marché ≥ 0.04`, mise à plat, critère **ROI > 0** et non « ≈ 20 % »).
+```
+écart-type du rendement par pari : 1,1542
+écart-type du CLV par pari       : 0,0317
+paris pour détecter 2 % de ROI   : ~13 321
+paris pour détecter 0,5 % de CLV : ~160        → rapport 83×
+```
 
-- [x] **Résolu le 2026-08-21 : 2022-23 n'a pas un problème de puck line, elle
-      s'arrête.** Les 342 lignes ne sont pas une couverture partielle du marché,
-      c'est **tout ce que `odds.csv` contient pour cette saison** : du
-      2022-10-07 au **2022-11-27**, puis plus rien. L'archive SBRO a cessé
-      d'être mise à jour en cours de saison — cohérent avec la page d'index qui
-      annonce « will not be updated ». Rien à réparer côté parsing.
-      **Ce que ça change pour A2**, en revanche : 2022-23 est l'une des deux
-      saisons négatives, et elle ne pèse que **sept semaines de début de
-      saison** — la période où les features de forme sont les plus faibles
-      (fenêtres glissantes à peine remplies) et où le marché est le moins
-      efficace. Ce n'est pas une saison, c'est un octobre-novembre. En tenir
-      compte avant d'y voir une contradiction du résultat.
-- [ ] Évaluer la règle en **CLV** (via A3), pas en ROI
-- [ ] **Ne rien miser d'ici là.** « Non réfuté » n'est pas « établi ».
+Le CLV converge **83 fois plus vite** que le ROI. Mais — et c'est tout le
+problème — **le CLV de la puck line n'est pas mesurable sur les données
+actuelles**, faute de paire ouverture/clôture chez SBRO. Le levier existe et on
+ne peut pas l'appliquer là où il servirait.
 
-### A1bis — collecte gratuite (livré, reste l'activation)
+Or la règle A2 produit **463 paris sur 9 saisons, soit ~51 par saison** sur la
+jambe −1.5. D'où l'arithmétique qui décide :
 
-> Fusionné avec A3 ci-dessus depuis le 2026-08-21 : c'est la même mise en
-> service, et il y a désormais **deux** migrations à appliquer (028 et 031).
+| Chemin | Paris disponibles | Verdict CLV possible en |
+|---|---|---|
+| **Backfill payant** (2023-24 → 2025-26) | ~154 | **une semaine** |
+| Collecte live seule (démarre en octobre) | ~51/an | **~2029** |
 
-- [ ] **Local :** `npm run db:migrate:all` (028 + 031), puis `npm test`
-- [ ] **Prod :** poser `ODDS_LOG_ENABLED=true` et `ODDS_USER_RESERVE`
+**Un mois à 59 $ achète précisément l'échantillon qui rend la règle A2
+décidable** — ~154 paris contre les ~160 nécessaires — et il le fait maintenant
+au lieu de 2029. C'est la seule chose que cet argent achète et qu'on ne peut pas
+obtenir autrement : l'archive SBRO est close, le site est injoignable, et
+l'endpoint historique n'est pas servi aux clés gratuites.
 
-> **Le compteur tourne.** Chaque journée de match non collectée est définitivement
-> perdue — la cote de clôture d'hier n'existe plus nulle part.
+**Ce que le mois donne aussi, sans coût supplémentaire :**
 
-### S4 — servir le moneyline depuis le modèle de score
+- **~3 900 matchs vraiment hors échantillon** (2023-24 → 2025-26) pour confirmer
+  ou tuer le résultat moneyline ci-dessus. Il n'existe aujourd'hui **aucune**
+  donnée que le modèle n'ait pas vue : SBRO s'arrête au 2022-11-27.
+- **+30 % de volume sur A2 lui-même**, en ROI cette fois, pas seulement en CLV.
+- **A4 devient mesurable** : les snapshots à 5 minutes permettent de voir la
+  ligne bouger autour de la confirmation du gardien.
+- Un jeu de données qui **reste sur ton disque après résiliation** — le cache
+  rend toute reprise gratuite.
 
-Conception faite, **code non commencé volontairement**. Ne pas démarrer avant A5.
+**Les arguments contre, et ils sont sérieux :**
+
+- **Le résultat moneyline ci-dessus est un avant-goût du verdict probable.** Si
+  la puck line se comporte pareil — CLV réel mais qui annule tout juste la marge
+  — le mois achète un **résultat négatif**. Utile pour arrêter de chercher, pas
+  pour gagner de l'argent.
+- **Les ~160 paris sont une estimation empruntée au moneyline** (écart-type du
+  CLV 0,0317). Celui de la puck line est inconnu et pourrait être plus grand,
+  auquel cas 154 paris ne suffiraient pas.
+- **La collecte live est gratuite** et démarre dans cinq semaines. L'attente
+  coûte du temps, pas de l'argent.
+- Rien n'est urgent : **on n'est pas en train de perdre des données** en août,
+  la NHL est inactive.
+
+**Ce qui n'est PAS un argument pour payer** : espérer que les saisons neuves
+fassent réapparaître le +4,30 %. La dissection dit qu'il tient à 44 paris et que
+l'edge n'y trie pas le rendement. S'il revient, ce sera une surprise, pas
+l'attendu.
+
+> **En une phrase :** 59 $ compriment une attente de trois ans en une semaine,
+> sur la seule piste encore vivante du projet — et le résultat le plus probable
+> est un « non » propre plutôt qu'un « oui ».
+
+---
+
+### Reprendre : les commandes
+
+Tout ce qui suit tourne sur ta machine (xgboost et `node_modules` sont
+Windows-only pour ce dépôt).
+
+```bash
+cd ml/python
+
+# Gratuit — chiffre le backfill sans dépenser ni clé
+python fetch_data_v4.py --only odds --odds-api-dry-run \
+    --odds-api-from 2023-10-01 --odds-api-to 2026-06-30
+
+# Si tu paies — dans l'ordre, et JAMAIS sans --from-local ni --only odds
+#   1. la clé, pour cette fenêtre seulement (cmd.exe) :
+#      for /f "tokens=1,* delims==" %a in ('findstr /b "ODDS_API_KEY=" ..\..\server\.env') do set ODDS_API_KEY=%b
+#   2. ~300 crédits : comparer SBRO et l'API sur une plage couverte par les deux
+python fetch_data_v4.py --only odds --from-local --odds-api-budget 300 \
+    --odds-api-regions eu --odds-api-book bet365 \
+    --odds-api-from 2021-11-01 --odds-api-to 2021-11-10
+#   3. le backfill, plafond dur posé
+#   4. python build_dataset.py, puis --clv et --derived sur des saisons neuves
+#   5. résilier
+```
+
+> ⚠️ **`odds.csv` est irremplaçable et réécrit à chaque exécution.** Il a été
+> détruit une fois le 2026-08-23 (commande sans `--from-local` : SBRO échoue en
+> réseau, et 17 lignes du log live ont suffi à écraser 10 591). Récupéré depuis
+> les pages HTML de `ml/data/raw/odds/`. Un garde-fou refuse désormais toute
+> écriture qui ferait perdre plus de 10 % des lignes, et `odds.csv.backup-2026-08-23`
+> est posé à côté. **Toujours `--only odds --from-local`.**
+
+**Cohérence de source à ne pas casser :** le collecteur live utilise
+`regions: eu` et préfère Bet365. Le backfill doit utiliser les mêmes
+(`--odds-api-regions eu --odds-api-book bet365`), sinon on recrée le mélange de
+sources que la comparaison est censée détecter. Le défaut du script est `us`.
+
+---
+
+### Ce qui reste, poste par poste
+
+**A1bis — mise en service de la collecte live** (indépendant de la décision de
+payer, et à faire de toute façon) :
+
+- [ ] Migrations **028 et 031** : `npm run db:migrate:all`, puis `npm test`
+- [ ] Railway : `ODDS_LOG_ENABLED=true` et `ODDS_USER_RESERVE`
+- [ ] Optionnel, le temps d'un déploiement : `ODDS_LOG_RUN_AT_BOOT=true` pour
+      voir une passe complète dans les logs, **puis le retirer** (3 crédits par
+      démarrage)
+
+Le calendrier posé coûte **10 crédits/jour, 300/mois** — deux passes complètes
+(11 h, 17 h ET) et quatre passes `spreads` seules (18 h 45, 19 h 45, 21 h 45,
+22 h 45 ET), sous les 350 disponibles pour la première fois.
+
+**A2 — puck line :** la règle est figée (miser la jambe qui **donne** les
+1.5 buts quand `p_modèle − p_marché ≥ 0.04`, mise à plat, critère **ROI > 0** et
+non « ≈ 20 % »). **Ne rien miser d'ici là** — « non réfuté » n'est pas
+« établi ».
+
+**S4 — servir le moneyline depuis le modèle de score.** Conception faite, code
+non commencé, plus bloqué par A5.
 
 - [ ] Blend `score ⊕ marché` dans `train_score.py`, poids dans `score_report.json`
 - [ ] Décomposition λ pour `feature_importances` (`pred_contribs`, 7 groupes)
@@ -360,58 +250,18 @@ Conception faite, **code non commencé volontairement**. Ne pas démarrer avant 
 - [ ] Puis suppression du classifieur, **route par route**
 
 > Le piège de S4 : le blend marché est **vivant** (`featureEngineering.ts:238`
-> passe les cotes). Supprimer le classifieur supprimerait le blend, et P1 a mesuré
-> le marché seul meilleur que les deux modèles nus. C'est pour ça qu'on réajuste
-> le blend au lieu de le perdre.
+> passe les cotes). Supprimer le classifieur supprimerait le blend, et P1 a
+> mesuré le marché seul meilleur que les deux modèles nus. D'où le réajustement
+> plutôt que la perte.
 
-### 🔴 A1 — backfill payant : décidé le 2026-08-21, chemin critique
-
-**Pourquoi maintenant.** Il n'existe plus **aucune** donnée hors échantillon :
-SBRO s'arrête au 2022-11-27, la collecte live ne produira rien avant octobre. Or
-trois résultats l'attendent — le ROI moneyline à l'ouverture, la règle A2, et le
-CLV de la puck line qui est **impossible** sur SBRO (un seul prix par match).
-
-**Tarifs revérifiés à la source** (ceux du plan dataient du 2026-08-04) : le plan
-à **30 $ / 20 000 crédits inclut l'historique**, ce qu'on ne savait pas — mais il
-ne couvre que ~0,9 saison. Le calcul, refait :
-
-```
-appel historique = 10 × marchés × régions → 30 crédits (h2h+spreads+totals, 1 région)
-~4 appels/jour de match → 120 crédits/jour → ~22 000 crédits/saison
-2023-24 + 2024-25 + 2025-26              → ~67 000 crédits
-```
-
-→ **plan 100K à 59 $, un mois, ~33 % de marge, puis résiliation.**
-(L'ancien chiffre du plan, « ~33 000 la saison », était faux.)
-
-**🐛 Trouvé avant de dépenser : le fetcher jetait la moitié de ce qu'il paie.**
-`fetch_odds_api` visite déjà ~4 snapshots par jour de match et **ne gardait que
-le dernier** — exactement le même défaut que le collecteur live. Un backfill
-lancé tel quel aurait rendu des clôtures seules, donc **aucun CLV**, donc aucune
-confirmation possible du résultat qui motive la dépense. Corrigé : tous les
-snapshots partent dans `odds_snapshots_hist.csv`, au schéma de la migration 031,
-**sans un crédit de plus**.
-
-- [ ] `--odds-api-dry-run` sur la plage visée — ne dépense rien, chiffre tout
-- [ ] **~300 crédits** sur une plage de recouvrement (2021-22, couverte par les
-      deux sources) pour comparer marge et niveau de prix. Un ROI qui
-      n'apparaîtrait que d'un côté de la jointure serait un artefact de source.
-- [ ] Backfill 2023-10-01 → 2026-06-30 avec `--odds-api-budget`
-- [ ] `build_dataset.py`, puis `--clv` et `--derived` sur des saisons jamais vues
-- [ ] **Résilier** — le cache disque rend toute reprise gratuite
-
-### En attente
-
-- **A6** — team totals, prolongation, écarts ±2.5 : priçables, jamais confrontés
-  à des prix réels. À regarder **après** le backfill et A2.
-
-### A4 — fenêtre de confirmation du gardien
-
-Mesure préalable, pas une stratégie : elle dit s'il y a lieu de construire.
+**A4 — fenêtre de confirmation du gardien.** Mesure préalable, pas une
+stratégie : elle dit s'il y a lieu de construire.
 
 - [ ] Extraire la trajectoire des lignes autour de l'heure de confirmation
 
----
+**A6 — team totals, prolongation, écarts ±2.5.** Priçables par `score_model.py`,
+jamais confrontés à des prix réels. Après A1 et A2.
+
 
 ## 3. Scalabilité — déclenchés sur seuil
 

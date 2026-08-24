@@ -559,6 +559,13 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pred.change":         { en: "Change",                fr: "Changer" },
   "pred.odds":           { en: "Odds",                  fr: "Cote" },
   "pred.viewPlayers":    { en: "👥 View players",       fr: "👥 Voir les joueurs" },
+  // Game picker (player & team pages) + players table (game page)
+  "pred.forGame":        { en: "Bets for game",         fr: "Paris pour le match" },
+  "pred.chooseGame":     { en: "Choose a game",         fr: "Choisir un match" },
+  "pred.viewGame":       { en: "View game →",           fr: "Voir le match →" },
+  "pred.noUpcoming":     { en: "No game scheduled in the next 14 days", fr: "Aucun match prévu dans les 14 prochains jours" },
+  "pred.playersTable":   { en: "Players",               fr: "Joueurs" },
+  "pred.seasonStats":    { en: "Season stats",          fr: "Stats de la saison" },
   "pro.back":            { en: "Back",                  fr: "Retour" },
   // Tennis player prop markets
   "pred.t.winNext":      { en: "Win Next Match",        fr: "Gagne le prochain match" },

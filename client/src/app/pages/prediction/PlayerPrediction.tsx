@@ -7,12 +7,13 @@
  */
 
 import { useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "react-router";
 import { nhlApiService } from "../../services/nhlApiService";
 import { useSport } from "../../context/SportContext";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { BetOpt, MktGroup, RuleFactor } from "./gameMarkets";
-import { LoadingSkeleton, NotFound, RecentFormCard, RevealMode, RevealModeCtx, generateForm } from "./predictionShared";
+import { GameSelector, LoadingSkeleton, NotFound, RecentFormCard, RevealMode, RevealModeCtx, generateForm, useSelectedGame, useUpcomingGames } from "./predictionShared";
 
 
 /* ─── Player Prediction ──────────────────────── */
@@ -29,9 +30,16 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [revealMode, setRevealMode] = useState<RevealMode>("rules");
-  // The game the player is suiting up for next — needed so bets placed here
-  // carry a gameId and can actually be auto-settled (see settlementFields()).
-  const [playerGameId, setPlayerGameId] = useState<string | undefined>(undefined);
+
+  // Which game these props are for. Defaults to the player's next game and is
+  // switchable from the dropdown; a `?game=` param (e.g. arriving from that
+  // game's page) wins. Bets carry the id so they can be auto-settled — see
+  // settlementFields().
+  const [searchParams] = useSearchParams();
+  const games = useUpcomingGames(data?.team || undefined, searchParams.get("game") ?? undefined);
+  const { selected: selectedGame, select: selectGame } = useSelectedGame(games);
+  const playerGameId = selectedGame?.id;
+
   const recentForm = useMemo<("W" | "L" | "OT")[]>(
     // Form biased by the player's scoring pace (points/game).
     () => (data ? generateForm(8, Math.min(0.8, Math.max(0.3, 0.35 + data.ptsPerGame * 0.3))) : []),
@@ -65,24 +73,9 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
           penaltyMin: stats.penaltyMinutes ?? 0,
         });
         nhlApiService.getPlayerPredictions(playerId).then(setApiGroups).catch(() => {});
-
-        // Resolve the player's next game (today → tomorrow) from the schedule.
-        const teamAbbr = (info.teamAbbr ?? "").toLowerCase();
-        if (teamAbbr) {
-          const findGame = (games: { id: string; homeTeam: { abbreviation: string }; awayTeam: { abbreviation: string } }[]) =>
-            games.find(
-              (g) => g.homeTeam.abbreviation?.toLowerCase() === teamAbbr || g.awayTeam.abbreviation?.toLowerCase() === teamAbbr,
-            );
-          try {
-            const today = new Date().toISOString().split("T")[0];
-            let g = findGame(await nhlApiService.getGamesByDate(today));
-            if (!g) {
-              const tomorrow = new Date(Date.now() + 86_400_000).toISOString().split("T")[0];
-              g = findGame(await nhlApiService.getGamesByDate(tomorrow));
-            }
-            if (g) setPlayerGameId(g.id);
-          } catch { /* schedule lookup failed — bets placed here just won't carry a gameId */ }
-        }
+        // The game itself is resolved by useUpcomingGames(data.team) above —
+        // it looks 14 days ahead and feeds the dropdown, so this loader only
+        // has to publish the player's team.
       } catch (e) { console.error("PlayerPrediction load error", e); }
       finally { setLoading(false); }
     }
@@ -303,6 +296,9 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Which game these props are for — next game by default */}
+      <GameSelector games={games} selected={selectedGame} onSelect={selectGame} accent={accent} />
+
       {/* Player header */}
       <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
         <div className="flex items-center gap-3 mb-3">

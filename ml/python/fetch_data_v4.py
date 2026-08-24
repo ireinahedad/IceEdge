@@ -46,6 +46,7 @@ import json
 import os
 import sys
 import time
+import shutil
 import zipfile
 
 import pandas as pd
@@ -144,15 +145,52 @@ SKATER_KEEP = ["playerId", "name", "playerTeam", "team", "gameId", "gameDate", "
 
 def _read_zip_csvs(content: bytes, keep: list[str] | None = None,
                    situation: str | None = "all") -> pd.DataFrame:
+    """Lit les CSV d'un zip MoneyPuck en ne matérialisant que le nécessaire.
+
+    **Le bug corrigé (2026-08-23) : `MemoryError` sur les zips de patineurs.**
+    La version précédente faisait `pd.read_csv(f)` sur le fichier entier, PUIS
+    filtrait `situation == "all"` et ne gardait que 13 colonnes. Or le
+    game-by-game des patineurs 2008-2024 fait plus de 150 colonnes et des
+    millions de lignes, toutes situations confondues : la trame large était
+    intégralement construite en mémoire avant d'être réduite à ~8 % de sa
+    taille. Sur une machine 64 bits ça finissait en
+    « C error: out of memory », et le message ne disait pas que 92 % de ce qui
+    était chargé allait être jeté à la ligne suivante.
+
+    Ici les deux filtres descendent DANS la lecture : `usecols` ne décode que
+    les colonnes retenues, et `chunksize` traite le fichier par tranches dont
+    seules les lignes gardées s'accumulent. Le résultat est identique — mêmes
+    lignes, mêmes colonnes, même ordre — mais le pic mémoire devient celui de
+    la sortie, pas celui de l'entrée.
+    """
     frames = []
     with zipfile.ZipFile(io.BytesIO(content)) as z:
         for name in z.namelist():
             if not name.endswith(".csv"):
                 continue
+            # L'en-tête d'abord : `usecols` lève si on demande une colonne
+            # absente, et les fichiers MoneyPuck n'ont pas tous le même schéma
+            # selon la saison.
             with z.open(name) as f:
-                df = pd.read_csv(f, low_memory=False)
-            if situation and "situation" in df.columns:
-                df = df[df["situation"] == situation]
+                header = pd.read_csv(f, nrows=0).columns.tolist()
+            want = None
+            if keep:
+                want = [c for c in keep if c in header]
+                if not want:
+                    continue
+                # `situation` doit être lue pour pouvoir filtrer, même si elle
+                # n'est pas demandée dans `keep`.
+                if situation and "situation" in header and "situation" not in want:
+                    want.append("situation")
+            with z.open(name) as f:
+                parts = [
+                    chunk[chunk["situation"] == situation]
+                    if situation and "situation" in chunk.columns else chunk
+                    for chunk in pd.read_csv(f, usecols=want, low_memory=False,
+                                             chunksize=250_000)
+                ]
+            df = (pd.concat(parts, ignore_index=True) if parts
+                  else pd.DataFrame(columns=want or header))
             if keep:
                 df = df[[c for c in keep if c in df.columns]]
             frames.append(df)
@@ -567,8 +605,14 @@ def _oddsapi_key() -> str | None:
     key = os.environ.get("ODDS_API_KEY", "").strip()
     if not key:
         print("   ❌ ODDS_API_KEY absente de l'environnement.")
+        # `cmd.exe` d'abord : c'est l'invite par défaut sous Windows, et sa
+        # syntaxe n'est ni celle de PowerShell ni celle de bash.
+        print("      cmd.exe    : set ODDS_API_KEY=ta-cle")
         print("      PowerShell : $env:ODDS_API_KEY = 'ta-cle'")
         print("      bash       : export ODDS_API_KEY=ta-cle")
+        print("      La variable ne vaut que pour CETTE fenêtre — c'est "
+              "voulu : la clé\n      ne doit vivre ni dans le code ni sur le "
+              "disque.")
         return None
     return key
 
@@ -825,7 +869,7 @@ def fetch_odds_api(start: str, end: str, book: str | None, regions: str,
     propre coup d'envoi. Une soirée NHL a 2 à 4 heures de début distinctes,
     d'où ~4 appels par jour.
 
-    **Coût, recalculé le 2026-08-21 aux tarifs du fournisseur.** 10 crédits
+    **Coût, recalculé le 2026-08-23 aux tarifs du fournisseur.** 10 crédits
     par marché et par région : avec h2h + spreads + totals sur une région,
     **30 crédits par appel**, ~4 appels par jour de match, donc ~120 crédits la
     journée. Une saison NHL compte ~186 jours de match → **~22 000 crédits la
@@ -983,10 +1027,60 @@ def _write_snapshots(rows: list[dict]) -> None:
           f"{n_games:,} matchs ({per:.1f} par match)")
 
 
+def _write_odds_csv(df: pd.DataFrame, allow_shrink: bool = False) -> bool:
+    """Écrit `odds.csv` — mais refuse de le faire rétrécir sans autorisation.
+
+    **POURQUOI CE GARDE-FOU EXISTE (2026-08-23).** `odds.csv` est
+    IRREMPLAÇABLE : l'archive SBRO s'arrête à 2022-23, sa page d'index annonce
+    qu'elle ne sera plus mise à jour, et le site est aujourd'hui injoignable.
+    Ce qui a été parsé ne se re-télécharge pas.
+
+    Or `fetch_odds` réécrit le fichier à chaque exécution, et son seul garde-fou
+    était `if df.empty: return`. Il ne protège que du cas total. Le cas partiel
+    — SBRO injoignable, pas de clé API, mais `odds_live_log.csv` présent avec
+    quelques dizaines de lignes — produit un `df` NON vide, et **10 592 lignes
+    d'historique sont alors remplacées par une poignée**, silencieusement, avec
+    un ✅ dans la sortie.
+
+    Ce scénario a failli se produire le 2026-08-23 : commande lancée sans
+    `--from-local` (SBRO a échoué en réseau) et sans `ODDS_API_KEY`. Seul le
+    hasard du contenu de `odds_live_log.csv` a évité la perte.
+
+    La règle : un fichier qui rétrécit de plus de 10 % est refusé. C'est le
+    signe d'une source manquante, pas d'une intention. `--allow-shrink` force,
+    et une sauvegarde `.bak` est posée dans tous les cas.
+    """
+    path = f"{DATA_DIR}/odds.csv"
+    if os.path.exists(path):
+        try:
+            n_old = len(pd.read_csv(path, usecols=[0]))
+        except Exception:
+            n_old = 0
+        if n_old and len(df) < n_old * 0.9 and not allow_shrink:
+            print(f"\n   ⛔ ÉCRITURE REFUSÉE — {len(df)} lignes contre "
+                  f"{n_old} existantes ({len(df) / n_old:.0%}).")
+            print("      `odds.csv` est irremplaçable : SBRO ne sera plus mis à "
+                  "jour et le site\n      est injoignable. Un tel écart signale "
+                  "une source absente, pas une intention.")
+            print("      Causes probables : `--from-local` oublié (SBRO se "
+                  "scrape alors en ligne\n      et échoue), ou ODDS_API_KEY "
+                  "absente.")
+            print("      Le fichier existant est INTACT. Pour forcer malgré "
+                  "tout : --allow-shrink")
+            return False
+        if n_old:
+            try:
+                shutil.copyfile(path, path + ".bak")
+            except OSError as e:
+                print(f"   ⚠️  sauvegarde .bak impossible ({e})")
+    df.to_csv(path, index=False)
+    return True
+
+
 def fetch_odds(from_local: bool = False, api_range: tuple | None = None,
                book: str | None = None, regions: str = "us",
                dry_run: bool = False, api_cache: bool = True,
-               budget: int | None = None) -> None:
+               budget: int | None = None, allow_shrink: bool = False) -> None:
     print("💰 Cotes historiques (sportsbookreviewsonline) …")
     all_rows = []
 
@@ -1066,7 +1160,8 @@ def fetch_odds(from_local: bool = False, api_range: tuple | None = None,
         print("   ⚠️  Aucune cote récupérée — le modèle s'entraînera sans cotes.")
         return
     df = df.drop_duplicates(subset=["date", "home_team", "away_team"], keep="last")
-    df.to_csv(f"{DATA_DIR}/odds.csv", index=False)
+    if not _write_odds_csv(df, allow_shrink):
+        return
     print(f"   ✅ {len(df)} matchs avec cotes → odds.csv")
 
     # Couverture par source et par saison : c'est ce tableau qui dit si une
@@ -1110,6 +1205,13 @@ def main():
     p.add_argument("--odds-api-no-cache", action="store_true",
                    help="Ignore les snapshots déjà en cache (redépense des "
                         "crédits — à n'utiliser que si le cache est suspect)")
+    p.add_argument("--allow-shrink", action="store_true",
+                   help="Autorise odds.csv à perdre plus de 10 %% de ses lignes. "
+                        "Par défaut c'est REFUSÉ : l'archive SBRO ne sera plus "
+                        "mise à jour et le site est injoignable, donc ce que le "
+                        "fichier contient ne se re-télécharge pas. Un tel écart "
+                        "signale presque toujours --from-local oublié ou "
+                        "ODDS_API_KEY absente")
     p.add_argument("--odds-api-budget", type=int, default=None, metavar="CREDITS",
                    help="Plafond DUR de crédits pour cette exécution. "
                         "L'arrêt conserve tout ce qui a déjà été récupéré, et "
@@ -1134,7 +1236,8 @@ def main():
                    book=args.odds_api_book, regions=args.odds_api_regions,
                    dry_run=args.odds_api_dry_run,
                    api_cache=not args.odds_api_no_cache,
-                   budget=args.odds_api_budget)
+                   budget=args.odds_api_budget,
+                   allow_shrink=args.allow_shrink)
     print(f"\n🏁 Terminé en {(time.time() - t0) / 60:.1f} min. "
           f"Prochaine étape : python build_dataset.py")
 
