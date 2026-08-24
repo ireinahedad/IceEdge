@@ -145,9 +145,23 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   const displayOnline = connected ? onlineCount : 0;
 
   return (
-    <div className="flex flex-col h-full w-full">
-      {/* Room header */}
-      <div className="flex items-center gap-3 mb-3 flex-shrink-0">
+    <div className="relative flex flex-col h-full w-full">
+      {/* Ouvrir un salon privé, c'est pousser la porte du vestiaire : deux
+          battants de casier s'écartent une fois sur la conversation, puis le
+          calque se retire. `key={room.id}` rejoue l'animation à chaque salon
+          ouvert plutôt qu'une seule fois au montage du composant. */}
+      {room.isPrivate && (
+        <div className="arena-doors" key={room.id} aria-hidden>
+          <span />
+          <span />
+        </div>
+      )}
+
+      {/* En-tête du salon — il reprend la surface de la rangée d'où l'on
+          vient (casier de vestiaire si privé, panneau de bande si public) :
+          c'est le seul repère qui dit dans quel type de salon on est une
+          fois la liste quittée. */}
+      <div className={`flex items-center gap-3 mb-3 flex-shrink-0 rounded-2xl px-3 py-2 ${room.isPrivate ? "arena-locker" : "arena-adboard"}`}>
         <button
           onClick={onBack}
           className="w-8 h-8 rounded-xl chat-tile flex items-center justify-center text-[#90C9F0] flex-shrink-0"
@@ -308,7 +322,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
             onClick={sendMessage}
             disabled={!input.trim()}
             className={`w-7 h-7 rounded-xl flex items-center justify-center text-sm transition-all flex-shrink-0 ${
-              input.trim() ? "bg-[#86d1ea] text-[#072E49]" : "bg-white/10 text-white/30"
+              input.trim() ? "bg-[#86d1ea] text-[#072E49] arena-glow" : "bg-white/10 text-white/30"
             }`}
           >
             ↑

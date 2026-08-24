@@ -55,3 +55,28 @@ export const avatarSchema = z.object({
     .startsWith('data:image/', 'avatarDataUrl must be an image data URI')
     .max(400_000, 'Image too large — please choose a smaller one'),
 });
+
+// `user_profiles.rule_weights` (migration 017) est un JSONB écrit tel quel depuis
+// le corps d'un PATCH : sans borne, un compte peut y ranger un objet arbitraire,
+// facturé en stockage Neon et relu à chaque `GET /users/me`.
+//
+// La forme réelle est celle du store client : famille → { idFacteur → poids }.
+// Les familles sont les 8 de `factorModel.ts` (match, totals, period, margin, ot,
+// player_off, player_phys, goalie) et les ids de facteurs sont alphanumériques ;
+// les plafonds ci-dessous laissent de la marge sans rendre le champ extensible
+// (16 × 32 clés bornées ≈ 25 ko au pire).
+// Les clés `__proto__` / `__defineGetter__`… traversent `z.record` comme des clés
+// propres : elles sont refusées ici plutôt que stockées, pour qu'aucun objet relu
+// plus tard ne porte de nom réservé.
+const factorKey = z.string().regex(/^(?!__)[A-Za-z0-9_]{1,40}$/, 'invalid factor id');
+
+export const ruleWeightsSchema = z
+  .record(
+    z.string().regex(/^(?!__)[a-z0-9_]{1,32}$/, 'invalid factor family'),
+    z
+      .record(factorKey, z.number().finite().min(0).max(100))
+      .refine((m) => Object.keys(m).length <= 32, 'too many factors in a family'),
+  )
+  .refine((m) => Object.keys(m).length <= 16, 'too many factor families');
+
+export type RuleWeightsMap = z.infer<typeof ruleWeightsSchema>;

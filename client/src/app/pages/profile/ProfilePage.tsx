@@ -23,6 +23,7 @@ import { useNavigate, useSearchParams } from "react-router";
 import { BottomNav } from "../../components/BottomNav";
 import { useAuth } from "../../context/AuthContext";
 import { profileApiService } from "./../../services/userService";
+import { applyServerFamilyWeights } from "./../../services/ruleWeightsService";
 import type { UserProfile, UserBettingStats } from "./../../types/user";
 import { useI18n } from "../../i18n";
 import "./profile-settings.css";
@@ -74,6 +75,10 @@ export function ProfilePage() {
     ]).then(([p, s]) => {
       setProfile(p);
       setStats(s);
+      // Le profil porte la pondération des règles du compte : l'appliquer ici
+      // évite que la première carte de règles redemande la même information
+      // (cf. `ensureFamilyWeightsHydrated`).
+      applyServerFamilyWeights(p.ruleWeights);
     }).catch((e) => {
       setError(e.message ?? "Could not load profile");
     }).finally(() => setLoading(false));

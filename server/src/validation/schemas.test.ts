@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { registerSchema, loginSchema, avatarSchema, slipSubmitSchema } from './schemas';
+import { registerSchema, loginSchema, avatarSchema, slipSubmitSchema, ruleWeightsSchema } from './schemas';
 
 describe('registerSchema', () => {
   it('rejects passwords under 8 chars', () => {
@@ -44,5 +44,49 @@ describe('slipSubmitSchema', () => {
   });
   it('accepts a bounded slip with a percentage probability', () => {
     expect(slipSubmitSchema.safeParse({ legs: [{ a: 1 }], sport: 'hockey', combinedProbability: 45 }).success).toBe(true);
+  });
+});
+
+describe('ruleWeightsSchema', () => {
+  it('accepts the shape the client actually stores', () => {
+    const r = ruleWeightsSchema.safeParse({
+      match:  { quality: 40, homeIce: 20, fatigue: 15, odds: 25 },
+      totals: { expectedTotal: 60, shotPace: 40 },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('accepts an empty store (aucun réglage)', () => {
+    expect(ruleWeightsSchema.safeParse({}).success).toBe(true);
+  });
+
+  it('rejects a flat map — ce n_est pas la forme du store', () => {
+    expect(ruleWeightsSchema.safeParse({ quality: 40 }).success).toBe(false);
+  });
+
+  it('rejects weights outside 0-100', () => {
+    expect(ruleWeightsSchema.safeParse({ match: { quality: 101 } }).success).toBe(false);
+    expect(ruleWeightsSchema.safeParse({ match: { quality: -1 } }).success).toBe(false);
+  });
+
+  it('rejects unbounded payloads (familles, facteurs, longueur de clé)', () => {
+    const families = Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`f${i}`, { a: 1 }]));
+    expect(ruleWeightsSchema.safeParse(families).success).toBe(false);
+
+    const factors = Object.fromEntries(Array.from({ length: 33 }, (_, i) => [`f${i}`, 1]));
+    expect(ruleWeightsSchema.safeParse({ match: factors }).success).toBe(false);
+
+    expect(ruleWeightsSchema.safeParse({ ['x'.repeat(33)]: { a: 1 } }).success).toBe(false);
+    expect(ruleWeightsSchema.safeParse({ match: { ['y'.repeat(41)]: 1 } }).success).toBe(false);
+  });
+
+  it('rejects reserved keys', () => {
+    expect(ruleWeightsSchema.safeParse({ ['__proto__']: { quality: 1 } }).success).toBe(false);
+    expect(ruleWeightsSchema.safeParse({ match: { ['__proto__']: 1 } }).success).toBe(false);
+  });
+
+  it('rejects non-numeric weights', () => {
+    expect(ruleWeightsSchema.safeParse({ match: { quality: '40' } }).success).toBe(false);
+    expect(ruleWeightsSchema.safeParse({ match: { quality: NaN } }).success).toBe(false);
   });
 });

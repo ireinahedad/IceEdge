@@ -2,6 +2,7 @@ import { pool } from '../db/connection';
 import { encryptSecret, decryptSecret } from './crypto.util';
 import { TtlCache } from './ttlCache';
 import { logger } from '../logger';
+import { ruleWeightsSchema, type RuleWeightsMap } from '../validation/schemas';
 
 // ─── Statistiques de paris (agrégation partagée) ─────────────────────────────
 
@@ -137,7 +138,8 @@ export async function updateProfile(userId: string, updates: {
   avatar?: string;
   avatarUrl?: string | null;
   openaiApiKey?: string | null;
-  ruleWeights?: Record<string, number> | null;
+  /** Store de pondération du client : famille → { idFacteur → poids 0-100 }. */
+  ruleWeights?: RuleWeightsMap | null;
 }) {
   // Username lives on the users table — handle it separately, with a uniqueness check
   if (updates.username !== undefined) {
@@ -191,7 +193,20 @@ export async function updateProfile(userId: string, updates: {
   if (updates.avatar        !== undefined) { fields.push(`avatar = $${i++}`);           values.push(String(updates.avatar).slice(0, 20)); }
   if (updates.avatarUrl     !== undefined) { fields.push(`avatar_url = $${i++}`);       values.push(updates.avatarUrl); }
   if (updates.openaiApiKey  !== undefined) { fields.push(`openai_api_key = $${i++}`);   values.push(updates.openaiApiKey == null ? null : encryptSecret(updates.openaiApiKey)); }
-  if (updates.ruleWeights   !== undefined) { fields.push(`rule_weights = $${i++}`);      values.push(updates.ruleWeights === null ? null : JSON.stringify(updates.ruleWeights)); }
+  if (updates.ruleWeights   !== undefined) {
+    // La route PATCH ne valide pas encore son corps : ce champ part directement
+    // en JSONB, donc la borne est posée ici, au point d'écriture. `null` reste
+    // accepté — c'est ainsi qu'on efface les poids d'un compte.
+    let weights: string | null = null;
+    if (updates.ruleWeights !== null) {
+      const parsed = ruleWeightsSchema.safeParse(updates.ruleWeights);
+      if (!parsed.success) {
+        throw Object.assign(new Error('Invalid ruleWeights payload'), { status: 400 });
+      }
+      weights = JSON.stringify(parsed.data);
+    }
+    fields.push(`rule_weights = $${i++}`); values.push(weights);
+  }
 
   if (fields.length === 0 && updates.username === undefined) {
     throw Object.assign(new Error('Nothing to update'), { status: 400 });

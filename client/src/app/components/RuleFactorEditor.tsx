@@ -3,7 +3,8 @@
  * Carte « Règles » d'un pari : score = moyenne pondérée des facteurs de sa
  * famille. La section « Pondération » (repliable, fermée par défaut) montre
  * d'ABORD le pie de décomposition (voir la pondération), puis les curseurs
- * (la modifier). Poids propres à chaque famille, persistés en localStorage.
+ * (la modifier). Poids propres à chaque famille, persistés en localStorage et
+ * rattachés au compte quand une session existe (cf. `ruleWeightsService`).
  */
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
@@ -16,6 +17,8 @@ import {
   saveFamilyWeights,
   resetFamilyWeights,
   blendFactors,
+  ensureFamilyWeightsHydrated,
+  pushFamilyWeights,
 } from "../services/ruleWeightsService";
 
 export function RuleFactorEditor({
@@ -30,6 +33,27 @@ export function RuleFactorEditor({
   const [open, setOpen] = useState(false);
   const [weights, setWeights] = useState<Record<string, number>>(() => getFamilyWeights(factorGroup, factors));
   const sectionRef = useRef<HTMLDivElement>(null);
+  // Une modification en cours ne doit pas être écrasée par l'arrivée tardive des
+  // poids du compte : c'est le seul rôle de ce drapeau.
+  const touchedRef = useRef(false);
+
+  /**
+   * Récupère les poids du compte au premier montage d'une carte de règles.
+   * L'appel est mutualisé et ne part qu'une fois par chargement d'app (et jamais
+   * pour un invité) — voir `ensureFamilyWeightsHydrated`.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    ensureFamilyWeightsHydrated().then((changed) => {
+      if (changed && !cancelled && !touchedRef.current) {
+        setWeights(getFamilyWeights(factorGroup, factors));
+      }
+    });
+    return () => { cancelled = true; };
+    // `factors` ne change pas d'identité de valeur pour une même carte ; on se cale
+    // sur la famille, qui est ce qui détermine les poids lus.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [factorGroup]);
 
   // Défile la section à l'écran quand on l'ouvre.
   useEffect(() => {
@@ -52,6 +76,7 @@ export function RuleFactorEditor({
   }));
 
   function setW(id: string, v: number) {
+    touchedRef.current = true;
     setWeights((prev) => ({ ...prev, [id]: Math.max(0, Math.min(100, Number.isFinite(v) ? v : 0)) }));
   }
   /**
@@ -61,6 +86,7 @@ export function RuleFactorEditor({
    * (le total reste inchangé).
    */
   function toggleFactor(f: SimpleFactor) {
+    touchedRef.current = true;
     setWeights((prev) => {
       const get = (o: SimpleFactor) => prev[o.id] ?? o.weight;
       const cur = get(f);
@@ -95,17 +121,30 @@ export function RuleFactorEditor({
       return next;
     });
   }
+  /**
+   * Rattache le store au compte. L'enregistrement local a déjà eu lieu quand on
+   * arrive ici : un échec réseau ne doit donc rien annuler, juste le dire.
+   */
+  function syncToAccount(store: ReturnType<typeof saveFamilyWeights>) {
+    pushFamilyWeights(store).catch(() => {
+      toast.warning("Enregistré sur cet appareil ; la synchro du compte a échoué.");
+    });
+  }
   function handleSave() {
     if (overLimit) { toast.error(`La somme des poids (${Math.round(total)}) dépasse 100.`); return; }
-    saveFamilyWeights(factorGroup, weights);
+    const store = saveFamilyWeights(factorGroup, weights);
+    touchedRef.current = false;
     toast.success("Pondération enregistrée pour ce type de pari.");
+    syncToAccount(store);
   }
   function handleReset() {
-    resetFamilyWeights(factorGroup);
+    const store = resetFamilyWeights(factorGroup);
     const def: Record<string, number> = {};
     factors.forEach((f) => (def[f.id] = f.weight));
     setWeights(def);
+    touchedRef.current = false;
     toast.success("Pondération réinitialisée.");
+    syncToAccount(store);
   }
 
   return (
@@ -181,7 +220,8 @@ export function RuleFactorEditor({
                 </button>
               </div>
               <p className="text-white/30 text-[9px] leading-snug">
-                Décoche un facteur pour l'exclure. Réglages propres à ce type de pari, gardés sur cet appareil.
+                Décoche un facteur pour l'exclure. Réglages propres à ce type de pari, gardés sur cet appareil
+                et rattachés à ton compte si tu es connecté.
               </p>
             </div>
           </div>

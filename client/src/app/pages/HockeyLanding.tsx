@@ -295,8 +295,11 @@ export function HockeyLanding() {
     setAddSheet({ open: true, gameId });
   }
 
+  // Largeur : même gabarit que StatsPage (max-w-[430px] md:max-w-5xl), qui est
+  // la mesure de référence de l'app. L'accueil était la seule page à courir
+  // pleine largeur — sur grand écran elle se lisait comme un autre produit.
   return (
-    <div className="flex flex-col min-h-screen pb-24" style={{ background: "#0A0E0C" }}>
+    <div className="flex flex-col min-h-screen pb-24 max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: "#0A0E0C" }}>
       {/* Header — the boards are the very first thing on the page: nothing sits
           above them. The only top padding is env(safe-area-inset-top), which is
           0 in a browser and only grows on a notched device, where the boards

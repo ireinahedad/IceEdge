@@ -106,7 +106,7 @@ export function ChatTab() {
             <p className="text-white/60 text-xs">{rooms.length} {t("chat.roomsAvailable")}</p>
             <button
               onClick={openCreate}
-              className="flex items-center gap-1 bg-[#86d1ea] text-[#072E49] text-xs font-bold px-3 py-1.5 rounded-xl"
+              className="flex items-center gap-1 bg-[#86d1ea] text-[#072E49] text-xs font-bold px-3 py-1.5 rounded-xl arena-glow"
             >
               {t("chat.newRoom")}
             </button>

@@ -52,7 +52,13 @@ export interface UserProfile {
   tier: "rookie" | "analyst" | "sharp" | "legend";
   performanceScore: number;
   openaiApiKey?: string | null;
-  ruleWeights?: Record<string, number> | null;
+  /**
+   * Pondération des règles rattachée au compte : famille de pari →
+   * { idFacteur → poids 0-100 }. Miroir de `FamilyStore` côté
+   * `ruleWeightsService` ; le type plat d'avant ne décrivait pas ce qui est
+   * réellement stocké en base (`user_profiles.rule_weights`, migration 017).
+   */
+  ruleWeights?: Record<string, Record<string, number>> | null;
   badges: UserBadge[];
 }
 

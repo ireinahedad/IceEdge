@@ -57,3 +57,601 @@
 .league-light textarea {
   color: #072e49;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ARÉNA — la page League jouée depuis le centre du stade
+   Ajouté le 2026-08-24. Aucune glace ici, volontairement : la page
+   League n'est pas un match, c'est la foule autour du match. Le décor
+   est donc la tribune, et tout le reste (chat, classement) est du
+   mobilier d'aréna — panneaux publicitaires, casiers de vestiaire,
+   tableau indicateur.
+
+   Tout est en CSS pur : aucune image à charger ni à licencier.
+   Les calques de décor sont en `pointer-events: none` et en
+   `z-index: 0` ; le contenu de la page passe au-dessus en
+   `relative z-10` (posé explicitement dans le JSX, pour qu'on puisse
+   le lire sans avoir à ouvrir cette feuille).
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Le bol ────────────────────────────────────────────────────── */
+/* Sombre en haut (la charpente du toit), un peu plus clair à hauteur
+   des gradins, sombre à nouveau au sol. C'est ce triple palier qui
+   donne la hauteur ; un aplat aurait donné une boîte. */
+.arena-stage {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(130% 60% at 50% -12%, rgba(120, 180, 225, 0.09), transparent 60%),
+    radial-gradient(90% 45% at 50% 108%, rgba(0, 0, 0, 0.55), transparent 70%),
+    linear-gradient(180deg, #04070a 0%, #080e14 34%, #0b1219 66%, #05080c 100%);
+}
+
+/* ── Les gradins ───────────────────────────────────────────────── */
+/* Un seul conteneur qui découpe (overflow) les trois tribunes, pour
+   qu'aucune ne déborde de la colonne de la page. */
+.arena-stands {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Une tribune. Trois couches lues de bas en haut :
+     1. le dossier des sièges (clair en haut de rangée, sombre en bas)
+     2. la séparation verticale entre deux sièges voisins
+     3. le creux horizontal entre deux rangées
+   Le pas est de 22 px en rangée et 18 px en siège : plus serré, la
+   perspective écrase les rangées et la tribune devient du bruit. Les
+   dossiers montent à 0.42 d'opacité — en dessous, une fois le masque et
+   la pénombre appliqués, on ne voyait plus qu'un tunnel sombre. */
+.arena-bank {
+  position: absolute;
+  background-color: #0b1219;
+  background-image:
+    repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0 4px, transparent 4px 22px),
+    repeating-linear-gradient(90deg,  rgba(0, 0, 0, 0.5) 0 3px, transparent 3px 18px),
+    repeating-linear-gradient(180deg, rgba(152, 186, 210, 0.42) 0 11px, rgba(22, 34, 45, 0.78) 11px 22px);
+}
+
+/* Quatre tribunes, pas trois (2026-08-24) : il restait un plancher noir
+   au milieu de la page, qui lisait comme un couloir et non comme un bol.
+   Chaque tribune fait plus de la moitié de la hauteur (ou de la largeur),
+   donc elles se recouvrent au centre, et AUCUN masque ne descend à zéro —
+   il s'arrête à ~0.3, ce qui laisse des sièges partout tout en gardant la
+   profondeur (net au bord, estompé au loin). */
+
+/* Fond : pivotée autour de son bord bas, elle s'éloigne vers le haut.
+   Débordée de 30 % à gauche et à droite — la perspective rétrécit la
+   base, et sans ce débord on verrait les coins vides. */
+.arena-bank--top {
+  top: 0;
+  left: -30%;
+  right: -30%;
+  height: 88%;
+  transform-origin: 50% 100%;
+  transform: perspective(620px) rotateX(58deg);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.6) 32%, rgba(0, 0, 0, 0.9) 78%, rgba(0, 0, 0, 0.34) 100%);
+          mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.6) 32%, rgba(0, 0, 0, 0.9) 78%, rgba(0, 0, 0, 0.34) 100%);
+}
+
+/* Proche : la tribune dans notre dos, pivotée autour de son bord haut.
+   Le sens de rotation est l'inverse du fond, sinon les deux fuient du
+   même côté et le bol se replie en boîte. */
+/* La tribune dans notre dos : elle vient VERS la caméra, donc les sièges
+   grossissent vers le bas de l'écran. C'est `rotateX` POSITIF autour du
+   bord haut. Le négatif (premier essai) la renvoyait au loin et laissait
+   le plancher noir qu'on cherchait justement à supprimer. */
+.arena-bank--bottom {
+  bottom: 0;
+  left: -30%;
+  right: -30%;
+  height: 46%;
+  transform-origin: 50% 0%;
+  transform: perspective(900px) rotateX(46deg);
+  /* Le masque PLAFONNE à 0,58 : venant vers la caméra, cette tribune a
+     les sièges les plus gros et les plus clairs de la page. À pleine
+     opacité elle lisait comme un sol quadrillé lumineux et volait la
+     vedette aux salons (constaté 2026-08-24). */
+  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.26) 0%, rgba(0, 0, 0, 0.42) 40%, rgba(0, 0, 0, 0.58) 100%);
+          mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.26) 0%, rgba(0, 0, 0, 0.42) 40%, rgba(0, 0, 0, 0.58) 100%);
+}
+
+/* Latérales : pivotées autour du bord collé à l'écran, donc c'est leur
+   bord intérieur qui part vers le fond. */
+/* Attention à la largeur : `rotateY(48deg)` comprime la tribune d'un
+   facteur cos(48°) ≈ 0,67. À 56 % chacune ne couvrait que ~37 % de la
+   page et il restait un couloir noir au milieu (constaté 2026-08-24).
+   96 % projette ~64 %, donc les deux se recouvrent franchement. */
+.arena-bank--left {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 96%;
+  transform-origin: 0% 50%;
+  transform: perspective(560px) rotateY(48deg);
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0.75) 46%, rgba(0, 0, 0, 0.3) 100%);
+          mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0.75) 46%, rgba(0, 0, 0, 0.3) 100%);
+}
+
+.arena-bank--right {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 96%;
+  transform-origin: 100% 50%;
+  transform: perspective(560px) rotateY(-48deg);
+  -webkit-mask-image: linear-gradient(270deg, #000 0%, rgba(0, 0, 0, 0.75) 46%, rgba(0, 0, 0, 0.3) 100%);
+          mask-image: linear-gradient(270deg, #000 0%, rgba(0, 0, 0, 0.75) 46%, rgba(0, 0, 0, 0.3) 100%);
+}
+
+/* Les projecteurs, accrochés à la charpente : deux nappes de lumière
+   qui tombent des coins hauts. C'est ce qui empêche les gradins de
+   se lire comme un simple motif. */
+.arena-stands::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(48% 38% at 14% 0%, rgba(196, 228, 246, 0.18), transparent 72%),
+    radial-gradient(48% 38% at 86% 0%, rgba(196, 228, 246, 0.18), transparent 72%),
+    /* Maintenant que les gradins couvrent toute la page, le centre a
+       besoin d'un voile pour que le texte y reste lisible : il éteint
+       les sièges au milieu sans les effacer, ce qui donne en prime la
+       profondeur (net au bord, sombre au loin). */
+    radial-gradient(68% 46% at 50% 50%, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.18) 72%, transparent 100%),
+    /* Et le bas s'enfonce dans l'ombre : c'est ce qui nous met AU MILIEU
+       du bol plutôt qu'au-dessus d'une maquette éclairée. */
+    linear-gradient(180deg, transparent 54%, rgba(0, 0, 0, 0.5) 100%);
+}
+
+/* ── Lumière d'aréna sur un élément ────────────────────────────── */
+/* Le halo qui dit « c'est ça qu'il faut regarder ». Deux tons : le
+   bleu glace par défaut, le rouge pour ce qui est en direct. */
+.arena-glow {
+  box-shadow:
+    0 0 0 1px rgba(134, 209, 234, 0.24),
+    0 0 26px rgba(134, 209, 234, 0.18),
+    0 8px 26px rgba(0, 0, 0, 0.5);
+}
+
+.arena-glow--live {
+  box-shadow:
+    0 0 0 1px rgba(255, 90, 110, 0.35),
+    0 0 26px rgba(255, 70, 95, 0.25),
+    0 8px 26px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Panneau publicitaire de bord de bande ─────────────────────── */
+/* Les salons publics. Même langage que `.rink-signboard` (rink-theme.css) :
+   panneau saturé, joints de bande qui traversent l'image, plinthe jaune.
+   La différence est qu'ici c'est une rangée de liste, pas un bouton
+   pleine largeur — d'où le rythme de joints plus serré (44 px) qui
+   garde plusieurs panneaux visibles dans la hauteur d'une rangée. */
+.arena-adboard {
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+  background:
+    repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px 3px),
+    linear-gradient(100deg, #0a2637 0%, #114f6e 38%, #17708f 64%, #0a2637 100%);
+  border-top: 2px solid rgba(255, 255, 255, 0.5);
+  border-bottom: 5px solid #f2c744;
+  box-shadow:
+    inset 0 -10px 20px rgba(0, 0, 0, 0.25),
+    0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+/* La lumière qui balaie le panneau en biais. */
+.arena-adboard::before {
+  content: "";
+  position: absolute;
+  top: -40%;
+  left: -15%;
+  width: 38%;
+  height: 180%;
+  transform: rotate(18deg);
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.14), transparent);
+}
+
+/* Les joints de bande, traversant l'affiche. */
+.arena-adboard::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 44px);
+}
+
+.arena-adboard > * {
+  position: relative;
+  z-index: 1;
+}
+
+.arena-adboard:active { filter: brightness(0.94); }
+
+/* ── Casier de vestiaire ───────────────────────────────────────── */
+/* Les salons privés. Une porte de casier : tôle peinte, montants
+   verticaux, arête de lumière en haut, et le liseré bleu glace à
+   gauche qui dit « celui-ci est à toi ». */
+.arena-locker {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(0, 0, 0, 0.3)),
+    repeating-linear-gradient(90deg, #1b2733 0 28px, #141d27 28px 30px, #202d3a 30px 58px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-left: 4px solid rgba(134, 209, 234, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+/* L'arête de lumière sur le haut de la porte. Une grille d'aération a
+   été essayée d'abord (2026-08-24) : où qu'on la place dans une rangée
+   de 68 px, elle tombe sur l'icône du salon, l'horodatage ou l'épingle.
+   La tôle striée et la plaque gravée suffisent à dire « casier ». */
+.arena-locker::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4) 22%, rgba(255, 255, 255, 0.4) 78%, transparent);
+}
+
+.arena-locker > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* La plaque gravée où est écrit le nom du salon. */
+.arena-nameplate {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #cdd8e0, #93a3b0);
+  color: #0d1620 !important;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TABLEAU INDICATEUR — un seul design, deux tailles
+   `.arena-scoreboard`          le commutateur d'onglets
+   `.arena-scoreboard--full`    le classement, sur toute la page
+   Le cadre est le caisson (métal brossé), `.arena-scoreboard-screen`
+   est la dalle à l'intérieur. Ne pas fondre les deux : c'est le
+   contraste caisson / dalle qui fait le jumbotron.
+   ═══════════════════════════════════════════════════════════════ */
+
+.arena-scoreboard {
+  position: relative;
+  padding: 6px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #2c3846 0%, #151d26 46%, #0a1017 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.6),
+    0 0 34px rgba(134, 209, 234, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* Les câbles de suspension — le tableau pend de la charpente. Réservés à
+   la version plein écran : au-dessus du petit commutateur d'onglets ils
+   tomberaient dans le sous-titre de l'en-tête. */
+.arena-scoreboard--full::before {
+  content: "";
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  bottom: 100%;
+  height: 26px;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent calc(50% - 1px), rgba(190, 215, 230, 0.35) calc(50% - 1px), rgba(190, 215, 230, 0.35) calc(50% + 1px), transparent calc(50% + 1px)),
+    linear-gradient(90deg, rgba(190, 215, 230, 0.28) 0 1px, transparent 1px 100%),
+    linear-gradient(270deg, rgba(190, 215, 230, 0.28) 0 1px, transparent 1px 100%);
+}
+
+.arena-scoreboard-screen {
+  position: relative;
+  overflow: hidden;
+  border-radius: 9px;
+  background: radial-gradient(130% 140% at 50% 0%, #0e1c27 0%, #05090d 72%);
+  box-shadow:
+    inset 0 0 0 1px rgba(134, 209, 234, 0.16),
+    inset 0 0 28px rgba(0, 0, 0, 0.85);
+}
+
+/* La matrice de points : c'est elle qui fait qu'on lit un écran et
+   non un panneau imprimé. 3 px de pas — au-delà on voit la trame, en
+   deçà elle disparaît sur un écran à forte densité. */
+.arena-scoreboard-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.36) 1px, transparent 1.2px);
+  background-size: 3px 3px;
+}
+
+.arena-scoreboard-screen > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Version plein écran ───────────────────────────────────────── */
+/* Le tableau prend toute la page : c'est le cadre qui grandit, la
+   dalle défile à l'intérieur. `min-height: 0` est obligatoire aux deux
+   niveaux, sinon un enfant scrollable en flex refuse de rétrécir. */
+.arena-scoreboard--full {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 8px;
+  border-radius: 18px;
+}
+
+.arena-scoreboard--full .arena-scoreboard-screen {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  border-radius: 12px;
+}
+
+/* ── Typographie du tableau ────────────────────────────────────── */
+/* Ampoules, pas encre : la couleur porte un halo. Ambre par défaut
+   (c'est la couleur d'un afficheur d'aréna), rouge et vert réservés
+   aux verdicts. */
+.scoreboard-digit {
+  font-family: "Oswald", "Arial Narrow", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #ffd257;
+  text-shadow:
+    0 0 8px rgba(255, 190, 60, 0.75),
+    0 0 22px rgba(255, 160, 40, 0.32);
+}
+
+.scoreboard-digit--cool {
+  color: #86d1ea;
+  text-shadow:
+    0 0 8px rgba(134, 209, 234, 0.7),
+    0 0 22px rgba(100, 180, 220, 0.3);
+}
+
+.scoreboard-digit--live {
+  color: #ff6076;
+  text-shadow: 0 0 9px rgba(255, 70, 100, 0.7);
+}
+
+.scoreboard-label {
+  font-family: "Oswald", "Arial Narrow", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: rgba(180, 212, 230, 0.5);
+}
+
+/* ── Onglet du tableau ─────────────────────────────────────────── */
+.scoreboard-tab {
+  position: relative;
+  flex: 1;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 11px 6px;
+  border-radius: 7px;
+  font-family: "Oswald", "Arial Narrow", sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(170, 200, 215, 0.45);
+  transition: color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.scoreboard-tab.is-active {
+  color: #ffd257;
+  background: radial-gradient(120% 150% at 50% 0%, rgba(255, 190, 60, 0.2), rgba(255, 160, 40, 0.04) 72%);
+  text-shadow:
+    0 0 10px rgba(255, 190, 60, 0.8),
+    0 0 26px rgba(255, 160, 40, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(255, 190, 60, 0.35);
+}
+
+.scoreboard-tab:active { transform: translateY(1px); }
+
+/* ── Rangée de classement ──────────────────────────────────────── */
+/* Les lignes d'un afficheur : séparateur en creux, surbrillance de la
+   ligne du joueur courant en ambre très faible. */
+.scoreboard-row {
+  border-bottom: 1px solid rgba(134, 209, 234, 0.10);
+  transition: background 0.16s ease;
+}
+
+.scoreboard-row:last-child { border-bottom: 0; }
+
+.scoreboard-row:active { background: rgba(134, 209, 234, 0.07); }
+
+.scoreboard-row--me {
+  background: linear-gradient(90deg, rgba(255, 190, 60, 0.13), rgba(255, 190, 60, 0.02) 70%);
+  box-shadow: inset 3px 0 0 rgba(255, 190, 60, 0.7);
+}
+
+/* Variante compacte de l'onglet, pour les tris à l'intérieur du tableau
+   (Score / Réussite / Volume) : mêmes ampoules, moins de place. */
+.scoreboard-tab--sm {
+  padding: 6px 4px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  border-radius: 6px;
+}
+
+/* ── Panneau du podium ─────────────────────────────────────────── */
+/* Les trois premiers affichés comme les scores d'un match : en haut du
+   tableau, séparés de la liste par un creux lumineux. */
+.scoreboard-podium {
+  position: relative;
+  background:
+    radial-gradient(90% 130% at 50% 0%, rgba(255, 190, 60, 0.10), transparent 70%),
+    linear-gradient(180deg, rgba(134, 209, 234, 0.05), transparent 80%);
+  border-bottom: 1px solid rgba(134, 209, 234, 0.18);
+  box-shadow: 0 6px 18px -10px rgba(255, 190, 60, 0.5);
+}
+
+/* ── Intitulé de section ───────────────────────────────────────── */
+/* « Privés » / « Publics » étaient en blanc à 60 % sur un fond de
+   gradins : illisibles (2026-08-24). Ils deviennent une signalétique
+   d'aréna — barre lumineuse à gauche, capitales espacées, halo bleu
+   glace — et le compte reste en retrait pour ne pas voler la ligne. */
+.arena-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: "Oswald", "Arial Narrow", sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: #e2f2fa;
+  text-shadow: 0 0 14px rgba(134, 209, 234, 0.55), 0 2px 6px rgba(0, 0, 0, 0.8);
+}
+
+.arena-section-title::before {
+  content: "";
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: #86d1ea;
+  box-shadow: 0 0 10px rgba(134, 209, 234, 0.9);
+}
+
+.arena-section-count {
+  font-family: "Oswald", "Arial Narrow", sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  color: rgba(134, 209, 234, 0.65);
+  text-shadow: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ENTRER DANS LE VESTIAIRE — sans jamais écrire le mot
+   Les noms de salon appartiennent aux utilisateurs : le vestiaire ne
+   peut donc pas être une étiquette, c'est un endroit où l'on entre.
+   Deux gestes, aucun texte :
+     `.arena-doorway`  la section des salons privés est vue à travers
+                       un chambranle éclairé — on regarde DEDANS ;
+     `.arena-doors`    en ouvrant un salon privé, deux portes de casier
+                       s'écartent une fois sur la conversation.
+   ═══════════════════════════════════════════════════════════════ */
+
+.arena-doorway {
+  position: relative;
+  padding-top: 12px;
+}
+
+/* Le linteau éclairé du chambranle. */
+.arena-doorway::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(134, 209, 234, 0.85) 14%, rgba(134, 209, 234, 0.85) 86%, transparent);
+  box-shadow: 0 0 16px rgba(134, 209, 234, 0.6);
+}
+
+/* La pénombre juste sous le linteau : on passe d'un couloir éclairé à
+   une pièce plus sombre. Elle ne mord que sur les 22 premiers px, pour
+   ne pas assombrir les casiers eux-mêmes. */
+.arena-doorway::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 0;
+  right: 0;
+  height: 22px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.6), transparent);
+}
+
+/* ── Les portes qui s'écartent ─────────────────────────────────── */
+/* Superposées à la conversation, une seule fois, puis retirées du
+   rendu. `overflow: hidden` vit sur le calque et non sur la page :
+   posé plus haut, il découperait le menu du salon. */
+.arena-doors {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  overflow: hidden;
+  pointer-events: none;
+  animation: arena-doors-off 0.01s 0.66s forwards;
+}
+
+@keyframes arena-doors-off {
+  to { visibility: hidden; }
+}
+
+.arena-doors span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50.5%;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(0, 0, 0, 0.35)),
+    repeating-linear-gradient(90deg, #1b2733 0 28px, #141d27 28px 30px, #202d3a 30px 58px);
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.6);
+}
+
+.arena-doors span:first-child {
+  left: 0;
+  border-right: 1px solid rgba(134, 209, 234, 0.4);
+  animation: arena-door-left 0.64s cubic-bezier(0.55, 0, 0.2, 1) forwards;
+}
+
+.arena-doors span:last-child {
+  right: 0;
+  border-left: 1px solid rgba(134, 209, 234, 0.4);
+  animation: arena-door-right 0.64s cubic-bezier(0.55, 0, 0.2, 1) forwards;
+}
+
+@keyframes arena-door-left  { to { transform: translateX(-101%); } }
+@keyframes arena-door-right { to { transform: translateX(101%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .arena-doors { display: none; }
+}
+
+/* ── Plinthe de bande, version aréna ───────────────────────────────── */
+/* Le jaune de `.rink-boards` (rink-theme.css) est la couleur de kickplate
+   d'une patinoire, mais sur cette page il était la seule note chaude au
+   milieu d'un bol entièrement bleu glace — il lisait comme un accident.
+   Ce modificateur ne repeint QUE la plinthe, et il est posé uniquement
+   sur l'en-tête de League. La règle `.rink-boards` de base ne bouge pas :
+   elle est partagée par toutes les pages. Même mécanique que
+   `.rink-boards--goal` sur la page Coupon. */
+.rink-boards--ice {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.72) 0 2px,
+    #eef4f7 2px 10px,
+    #cfdae1 10px 19px,
+    #a4b3bc 19px 24px,
+    #86d1ea 24px 30px
+  );
+  box-shadow: 0 3px 16px rgba(134, 209, 234, 0.4);
+}

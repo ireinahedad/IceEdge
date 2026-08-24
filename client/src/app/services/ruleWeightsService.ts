@@ -1,7 +1,8 @@
 /**
  * ruleWeightsService.ts
  * Poids des facteurs des règles hockey, réglables par l'utilisateur.
- * Stockés dans localStorage (par appareil) et appliqués côté client.
+ * Appliqués côté client depuis localStorage ; rattachés au compte quand une
+ * session existe (voir « Synchro avec le compte » plus bas).
  *
  * ⚠️ Un **modèle par famille de pari** a remplacé l'ancien modèle à six facteurs
  * globaux (`FactorWeights`, `DEFAULT_WEIGHTS`, `WEIGHT_META`, `getWeights`,
@@ -9,6 +10,9 @@
  * il n'avait plus aucun appelant depuis le retrait de `RulesWeightsCard`.
  * Ne pas le réintroduire — `RuleFactorEditor` est le seul éditeur.
  */
+
+import { getAccessToken } from './authService';
+import { profileApiService } from './userService';
 
 /** Query string — conservé pour compat ; les poids sont appliqués côté client. */
 export function weightsQuery(): string {
@@ -39,7 +43,7 @@ export function factorColor(id: string): string {
   return PALETTE[h % PALETTE.length];
 }
 
-type FamilyStore = Record<string, Record<string, number>>;
+export type FamilyStore = Record<string, Record<string, number>>;
 const FAMILY_KEY = 'iceedge.factorWeights';
 
 export function loadFamilyStore(): FamilyStore {
@@ -68,19 +72,118 @@ export function resetFamilyWeights(family: string): FamilyStore {
   return store;
 }
 
+// ── Synchro avec le compte ──────────────────────────────────────────────────
+// Le serveur détient la référence (`user_profiles.rule_weights`, migration 017,
+// lue en `ruleWeights` et écrite par `PATCH /users/me`) ; localStorage est le
+// cache de travail, seul utilisé pour calculer les scores.
+//
+// L'hydratation est **paresseuse et unique par chargement d'app** : ni
+// `AuthProvider` ni la navigation ne déclenchent d'appel — c'est la première
+// carte de règles montée qui le fait, et la page Profil s'en acquitte
+// gratuitement puisqu'elle a déjà le profil en main. Un invité ne déclenche
+// jamais rien.
+
+/** Clé de famille ou de facteur acceptable — mêmes bornes que `ruleWeightsSchema`. */
+const KEY_RE = /^(?!__)[A-Za-z0-9_]{1,40}$/;
+
 /**
- * Hydrate le store depuis les poids du compte (profil).
- *
- * ⚠️ **Aucun appelant aujourd'hui — la synchro entre appareils ne fonctionne pas.**
- * Le serveur a pourtant tout ce qu'il faut : colonne `user_profiles.rule_weights`
- * (migration 017), lue en `ruleWeights` et écrivable via `PATCH /api/profile`.
- * Il manque uniquement les deux bouts côté client : appeler cette fonction au
- * chargement du profil, et pousser le store vers l'API quand `RuleFactorEditor`
- * sauvegarde. Gardée exprès plutôt que supprimée comme code mort : le trou est
- * dans le câblage, pas dans cette fonction.
+ * Nettoie une valeur venue du réseau (ou du localStorage d'une vieille version) :
+ * familles → { facteur → poids 0-100 }. Ce que le serveur refuserait est écarté
+ * ici aussi, pour ne jamais écrire dans le store ce qu'on ne pourrait pas y relire.
  */
-export function applyServerFamilyWeights(map: unknown): void {
-  if (map && typeof map === 'object') localStorage.setItem(FAMILY_KEY, JSON.stringify(map));
+function sanitizeStore(map: unknown): FamilyStore {
+  const out: FamilyStore = {};
+  if (!map || typeof map !== 'object' || Array.isArray(map)) return out;
+  for (const [family, weights] of Object.entries(map as Record<string, unknown>)) {
+    if (!KEY_RE.test(family)) continue;
+    if (!weights || typeof weights !== 'object' || Array.isArray(weights)) continue;
+    const clean: Record<string, number> = {};
+    for (const [id, w] of Object.entries(weights as Record<string, unknown>)) {
+      if (!KEY_RE.test(id)) continue;
+      const n = Number(w);
+      if (Number.isFinite(n)) clean[id] = Math.max(0, Math.min(100, n));
+    }
+    if (Object.keys(clean).length) out[family] = clean;
+  }
+  return out;
+}
+
+/** Vrai si le compte est connecté — sans quoi toute synchro est inutile. */
+function isSignedIn(): boolean {
+  return !!getAccessToken();
+}
+
+let hydrated = false;
+let hydrating: Promise<boolean> | null = null;
+
+/**
+ * Écrit dans le store local les poids venus du compte.
+ *
+ * Deux garde-fous : une valeur vide ou illisible **n'efface pas** les réglages
+ * de l'appareil (un store vide côté compte vaut « pas d'opinion », pas « remets
+ * tout par défaut »), et l'appel marque la synchro comme faite dans tous les
+ * cas — l'état du serveur est connu, inutile de le redemander.
+ *
+ * Sinon le remplacement est complet, famille comprise : le push envoie toujours
+ * le store entier, donc ce que le compte porte fait foi.
+ *
+ * @returns vrai si le store local a effectivement changé.
+ */
+export function applyServerFamilyWeights(map: unknown): boolean {
+  hydrated = true;
+  const clean = sanitizeStore(map);
+  if (!Object.keys(clean).length) return false;
+
+  const next = JSON.stringify(clean);
+  if (next === localStorage.getItem(FAMILY_KEY)) return false;
+  localStorage.setItem(FAMILY_KEY, next);
+  return true;
+}
+
+/**
+ * Pousse le store vers le compte. Sans session, ne fait rien.
+ * L'appelant décide quoi faire de l'échec ; rien ici n'est bloquant.
+ */
+export async function pushFamilyWeights(store: FamilyStore = loadFamilyStore()): Promise<boolean> {
+  if (!isSignedIn()) return false;
+  await profileApiService.updateProfile({ ruleWeights: sanitizeStore(store) });
+  return true;
+}
+
+/**
+ * Récupère une fois par chargement d'app les poids du compte.
+ *
+ * Cas particulier volontaire : si le compte n'a **aucun** poids enregistré et que
+ * l'appareil en a, ce sont ceux de l'appareil qui montent. Sans ça, un utilisateur
+ * qui a réglé ses curseurs avant que la synchro existe devrait les ré-enregistrer
+ * un par un pour que son deuxième appareil les voie.
+ *
+ * @returns vrai si le store local a changé (l'appelant doit se rafraîchir).
+ */
+export function ensureFamilyWeightsHydrated(): Promise<boolean> {
+  if (hydrated || !isSignedIn()) return Promise.resolve(false);
+  if (hydrating) return hydrating;
+
+  hydrating = (async () => {
+    try {
+      const profile = await profileApiService.getProfile();
+      const changed = applyServerFamilyWeights(profile.ruleWeights);
+
+      if (!Object.keys(sanitizeStore(profile.ruleWeights)).length) {
+        const local = loadFamilyStore();
+        if (Object.keys(local).length) await pushFamilyWeights(local).catch(() => false);
+      }
+      return changed;
+    } catch {
+      // Hors ligne, 401, profil illisible : on garde les poids de l'appareil et
+      // on réessaiera au prochain chargement.
+      return false;
+    } finally {
+      hydrating = null;
+    }
+  })();
+
+  return hydrating;
 }
 
 /** Score (0-100) = moyenne pondérée des facteurs avec les poids fournis. */

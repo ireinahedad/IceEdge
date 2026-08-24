@@ -31,11 +31,23 @@ export function LeaguePage() {
   const totalUnread = rooms.reduce((acc, r) => acc + (r.unread ?? 0), 0);
 
   return (
-    <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] mx-auto w-full">
+    /* La page est jouée depuis le centre de l'aréna : les gradins montent en
+       perspective au fond et sur les deux côtés, et tout le reste est du
+       mobilier de stade. Pas de glace ici — la page League n'est pas un
+       match, c'est la foule autour du match. */
+    <div className="arena-stage flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full">
+      {/* Décor : hors du flux, hors des événements, sous tout le reste. */}
+      <div className="arena-stands" aria-hidden>
+        <div className="arena-bank arena-bank--top" />
+        <div className="arena-bank arena-bank--bottom" />
+        <div className="arena-bank arena-bank--left" />
+        <div className="arena-bank arena-bank--right" />
+      </div>
+
       <LeagueHeader tab={tab} setTab={setTab} totalUnread={totalUnread} />
 
       {/* Single pane driven by the tab bar (Chat is the default), on all sizes. */}
-      <div className="flex-1 flex flex-col px-4 pb-28 pt-4 overflow-hidden min-h-0">
+      <div className="relative z-10 flex-1 flex flex-col px-4 pb-28 pt-4 overflow-hidden min-h-0">
         {/* Chat */}
         <div
           className={`${tab === "chat" ? "flex" : "hidden"} flex-col flex-1 min-h-0 overflow-hidden`}
@@ -43,9 +55,12 @@ export function LeaguePage() {
           <ChatTab />
         </div>
 
-        {/* Podium */}
+        {/* Classement — c'est lui-même le tableau indicateur, donc cette
+            enveloppe ne défile pas : c'est la dalle, à l'intérieur du caisson,
+            qui défile. `overflow-hidden` ici est ce qui permet au cadre du
+            tableau de tenir toute la hauteur de la page. */}
         <div
-          className={`${tab === "leaderboard" ? "flex" : "hidden"} flex-col flex-1 min-h-0 overflow-y-auto`}
+          className={`${tab === "leaderboard" ? "flex" : "hidden"} flex-col flex-1 min-h-0 overflow-hidden`}
         >
           {loading ? (
             <div className="flex flex-col gap-3">

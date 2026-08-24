@@ -91,20 +91,27 @@ export function BetBuilderPage() {
 
   return (
     <div
-      className={`flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full ${mode === "light" ? "bet-light" : "bet-dark"}`}
+      className={`relative flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full ${mode === "light" ? "bet-light" : "bet-dark"}`}
       style={{ background: mode === "light" ? "#D4FFEE" : "#0A0E0C" }}
     >
+      {/* Le but : maille + tuyaux, en CSS pur (voir .bet-net dans
+          bet-theme.css). Premier enfant et purement décoratif — tout ce qui
+          suit passe au-dessus en `relative z-10`. */}
+      <div className="bet-net" aria-hidden />
 
-      {/* Header */}
+      {/* Bandeau en verre dépoli (`.rink-header-glass`, rink-theme.css) : on
+          devine la maille du filet derrière, les onglets restent lisibles.
+          Il a été opaque un temps — le verre ICY d'origine, trop clair,
+          mangeait la rondelle ; c'est le voile sombre qui règle ça, pas la
+          suppression du flou. Le fond n'est plus posé ici : seul le mode
+          clair a besoin d'une teinte à lui (voir bet-theme.css). */}
       <header
-        className="backdrop-blur-md sticky top-0 z-40 bet-ink-black"
-        style={{
-          background: "linear-gradient(160deg, rgba(220,245,255,0.22), rgba(150,205,240,0.12) 45%, rgba(235,250,255,0.20))",
-          WebkitBackdropFilter: "blur(16px)",
-          paddingTop: "env(safe-area-inset-top, 0px)",
-        }}
+        className="rink-header-glass sticky top-0 z-40 bet-ink-black"
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
       >
-        <div className="rink-boards" aria-hidden />
+        {/* La plinthe de la bande est peinte en rouge : c'est la barre du
+            haut du but, elle referme le cadre du filet. */}
+        <div className="rink-boards rink-boards--goal" aria-hidden />
         <div className="px-4 pt-3 pb-3 flex items-center justify-between">
           <div>
             <h1 className="text-white text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>
@@ -124,12 +131,21 @@ export function BetBuilderPage() {
           )}
         </div>
 
-        {/* Tab switcher */}
-        <div className="flex gap-1 mx-4 mb-3 bg-white/5 rounded-xl p-1">
+        {/* Commutateur — la rondelle patine d'un onglet à l'autre
+            (`.puck-tabs`, rink-theme.css). `--puck-index` est la seule
+            chose que le composant pilote ; la glisse est en CSS. */}
+        <div
+          className="puck-tabs mx-4 mb-3"
+          style={{ "--puck-count": 2, "--puck-index": tab === "build" ? 0 : 1 } as React.CSSProperties}
+        >
+          <span className="puck-tabs-thumb" aria-hidden />
           {([["build", t("slip.build")], ["slips", t("slip.mySlips")]] as [PageTab, string][]).map(([key, label]) => (
-            <button key={key} onClick={() => setTab(key)}
-              className="flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all"
-              style={tab === key ? { background: "#90C9F0", color: "#072E49" } : { color: "#92A08A" }}>
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`puck-tab${tab === key ? " is-active" : ""}`}
+              aria-pressed={tab === key}
+            >
               {label}
               {key === "slips" && user && tab !== "slips" && legs.length === 0 && (
                 <span className="ml-1 text-[9px] opacity-60">history</span>
@@ -141,7 +157,7 @@ export function BetBuilderPage() {
 
       {/* Build tab */}
       {tab === "build" && (
-        <div className={`flex-1 px-4 overflow-y-auto bet-ink-black ${mode === "light" ? "bet-light" : "bet-dark"}`} style={{ paddingBottom: legs.length > 0 ? "160px" : "112px" }}>
+        <div className={`relative z-10 flex-1 px-4 overflow-y-auto bet-ink-black ${mode === "light" ? "bet-light" : "bet-dark"}`} style={{ paddingBottom: legs.length > 0 ? "160px" : "112px" }}>
           {legs.length > 0 && (
           <div className="flex flex-col items-center py-6">
             <ProbabilityGauge pct={combinedProbability} size={180} />
@@ -207,7 +223,7 @@ export function BetBuilderPage() {
 
       {/* My Slips tab */}
       {tab === "slips" && (
-        <div className={`flex-1 px-4 overflow-y-auto bet-ink-black ${mode === "light" ? "bet-light" : "bet-dark"}`}>
+        <div className={`relative z-10 flex-1 px-4 overflow-y-auto bet-ink-black ${mode === "light" ? "bet-light" : "bet-dark"}`}>
           <MySlipsTab user={user} />
         </div>
       )}

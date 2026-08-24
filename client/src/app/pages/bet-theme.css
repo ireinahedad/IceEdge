@@ -54,3 +54,121 @@
 .bet-light textarea {
   color: #072e49;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   FILET DE BUT — fond de la page Coupon (ajouté 2026-08-24)
+
+   La page est mise en scène derrière un but vu de face : la maille en
+   losanges, les tuyaux rouges et le halo des projecteurs. Tout est en
+   CSS pur — aucune image, donc rien à charger et rien à licencier.
+
+   Le calque est strictement décoratif (`pointer-events: none`) et vit
+   en `z-index: 0` ; le contenu de la page passe au-dessus avec
+   `relative z-10`. Il est en `absolute` et non `fixed` : l'enveloppe de
+   la page grandit avec le contenu, donc le filet défile avec lui au
+   lieu de rester collé au viewport comme un fond d'écran.
+   ═══════════════════════════════════════════════════════════════ */
+
+.bet-net {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* La lumière de l'aréna, derrière la maille : froide en haut,
+     rougie autour du but. */
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(134, 209, 234, 0.10), transparent 60%),
+    /* La lumière rougit le long des tuyaux, pas au milieu de la page :
+       le but n'est plus une arche posée au centre, c'est le cadre. */
+    linear-gradient(90deg, rgba(203, 46, 68, 0.14), transparent 12%),
+    linear-gradient(270deg, rgba(203, 46, 68, 0.14), transparent 12%);
+}
+
+/* La maille — deux peignes croisés à ±58°, ce qui donne des losanges
+   et non des carrés (un but n'est pas un grillage). Chaque corde est
+   doublée d'une ligne sombre décalée d'1 px : c'est cette ombre qui
+   fait qu'elle a une épaisseur au lieu d'être un trait. Pas de 22 px :
+   sous ~14 px la maille se lit comme du bruit sur un écran de
+   téléphone. `inset: -10%` évite que la rotation laisse voir les coins. */
+.bet-net::before {
+  content: "";
+  position: absolute;
+  inset: -10%;
+  background-image:
+    repeating-linear-gradient(58deg,  rgba(233, 244, 250, 0.17) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(-58deg, rgba(233, 244, 250, 0.17) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(58deg,  rgba(0, 0, 0, 0.34) 1px 2px, transparent 2px 22px),
+    repeating-linear-gradient(-58deg, rgba(0, 0, 0, 0.34) 1px 2px, transparent 2px 22px);
+  /* La maille couvre toute la page maintenant que le cadre en fait le
+     tour : elle ne s'éteint qu'au ras du bas, là où le filet s'ouvre. */
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 74%, rgba(0, 0, 0, 0.4) 92%, transparent 100%);
+          mask-image: linear-gradient(180deg, #000 0%, #000 74%, rgba(0, 0, 0, 0.4) 92%, transparent 100%);
+}
+
+/* Les tuyaux — ils font le tour de la page : montant gauche, montant
+   droit, et pas de barre inférieure, parce qu'un but s'ouvre sur la
+   glace. Le haut n'est pas dessiné ici : c'est la plinthe de la bande
+   du bandeau qui est peinte en rouge (`.rink-boards--goal` plus bas),
+   pour que le cadre se poursuive sans couture derrière l'en-tête, qui
+   recouvrirait de toute façon une bordure posée ici.
+
+   Le rouge est celui d'un tube peint, pas d'un néon : le halo reste
+   sous 0.3. Un premier essai en arche centrale à 7 px et halo 0.45
+   (2026-08-24) volait toute l'attention aux cotes. */
+.bet-net::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-left: 6px solid rgba(203, 46, 68, 0.88);
+  border-right: 6px solid rgba(203, 46, 68, 0.88);
+  box-shadow:
+    inset 12px 0 24px -14px rgba(203, 46, 68, 0.55),
+    inset -12px 0 24px -14px rgba(203, 46, 68, 0.55);
+  /* Les montants se dissolvent au ras du sol, comme la maille. */
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 86%, transparent 100%);
+          mask-image: linear-gradient(180deg, #000 0%, #000 86%, transparent 100%);
+}
+
+/* La plinthe de la bande, repeinte en rouge : c'est la barre du haut du
+   but. `.rink-boards` (rink-theme.css) est partagée par toutes les pages,
+   donc la couleur est changée par un modificateur posé uniquement sur la
+   page Coupon — surtout ne pas toucher la règle de base. */
+.rink-boards--goal {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.72) 0 2px,
+    #eef4f7 2px 10px,
+    #cfdae1 10px 19px,
+    #a4b3bc 19px 24px,
+    #cb2e44 24px 30px
+  );
+  box-shadow: 0 3px 16px rgba(203, 46, 68, 0.35);
+}
+
+/* Mode clair : sur le fond menthe, une corde blanche est invisible —
+   la maille s'inverse en corde sombre. */
+.bet-light .bet-net {
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(7, 46, 73, 0.06), transparent 60%),
+    linear-gradient(90deg, rgba(203, 46, 68, 0.12), transparent 22%),
+    linear-gradient(270deg, rgba(203, 46, 68, 0.12), transparent 22%);
+}
+
+.bet-light .bet-net::before {
+  background-image:
+    repeating-linear-gradient(58deg,  rgba(7, 46, 73, 0.16) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(-58deg, rgba(7, 46, 73, 0.16) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(58deg,  rgba(255, 255, 255, 0.55) 1px 2px, transparent 2px 22px),
+    repeating-linear-gradient(-58deg, rgba(255, 255, 255, 0.55) 1px 2px, transparent 2px 22px);
+}
+
+/* Mode clair : le voile du bandeau s'inverse, sinon un verre sombre sur le
+   fond menthe donne une barre grise. Le flou vient de `.rink-header-glass`. */
+.bet-light .rink-header-glass {
+  background: rgba(212, 255, 238, 0.46);
+}
+
+.bet-light .rink-header-glass::after {
+  background: linear-gradient(180deg, rgba(212, 255, 238, 0.34), transparent);
+}

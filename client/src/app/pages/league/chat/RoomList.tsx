@@ -105,10 +105,15 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
 
   function RoomRow({ room }: { room: ChatRoom }) {
     const isMine = !!room.isMember;
-    // Glossy frost is reserved for pinned rooms; everything else is flat.
-    const tileClass = room.isPinned ? "icy-tile" : "chat-tile";
+    // Deux mobiliers d'aréna, pas deux nuances de la même carte :
+    //   privé  → une porte de casier de vestiaire (`.arena-locker`)
+    //   public → un panneau publicitaire de bord de bande (`.arena-adboard`)
+    // Le halo (`.arena-glow`) est la lumière d'aréna : elle ne tombe que sur
+    // ce qui compte — un salon en direct (rouge) ou épinglé (bleu glace).
+    const surface = room.isPrivate ? "arena-locker" : "arena-adboard";
+    const glow = room.isLive ? " arena-glow--live" : room.isPinned ? " arena-glow" : "";
     return (
-      <div className={`w-full flex items-center gap-3 px-4 py-3 ${tileClass} rounded-2xl active:bg-white/10 transition-all`}>
+      <div className={`w-full flex items-center gap-3 px-4 py-3 ${surface}${glow} rounded-2xl transition-all`}>
         <button onClick={() => onSelect(room)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
           <div className="relative flex-shrink-0">
             <div
@@ -124,7 +129,12 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 mb-0.5">
-              <span className="text-white text-xs font-bold truncate">{room.name}</span>
+              {/* Sur un casier, le nom est gravé sur la plaque de porte. */}
+              {room.isPrivate ? (
+                <span className="arena-nameplate text-[11px] truncate max-w-[150px]">{room.name}</span>
+              ) : (
+                <span className="text-white text-xs font-bold truncate">{room.name}</span>
+              )}
               {room.isPrivate && <span className="text-[9px] flex-shrink-0">🔒</span>}
               {room.role === "admin" && (
                 <span className="text-[8px] text-[#90C9F0] border border-[#90C9F0]/40 rounded-full px-1.5 py-0.5 flex-shrink-0">admin</span>
@@ -133,8 +143,10 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
                 <span className="text-[8px] text-red-400 border border-red-400/30 rounded-full px-1.5 py-0.5 flex-shrink-0">LIVE</span>
               )}
             </div>
-            <p className="text-white/50 text-[10px] truncate">{room.lastMessage || room.description}</p>
-            <p className="text-white/40 text-[9px] mt-0.5">{room.memberCount} {t("common.members")}</p>
+            {/* Le panneau publicitaire est plus lumineux qu'une carte givrée :
+                le texte secondaire y remonte d'un cran pour rester lisible. */}
+            <p className={`${room.isPrivate ? "text-white/50" : "text-white/70"} text-[10px] truncate`}>{room.lastMessage || room.description}</p>
+            <p className={`${room.isPrivate ? "text-white/40" : "text-white/60"} text-[9px] mt-0.5`}>{room.memberCount} {t("common.members")}</p>
           </div>
         </button>
 
@@ -178,8 +190,8 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
         onClick={onToggle}
         className="w-full flex items-center justify-between px-1 py-1 text-left"
       >
-        <span className="text-white/60 text-[11px] uppercase tracking-widest font-semibold">
-          {title} <span className="text-white/30">({count})</span>
+        <span className="arena-section-title">
+          {title} <span className="arena-section-count">({count})</span>
         </span>
         <span className={`text-white/40 text-xs transition-transform ${open ? "rotate-0" : "-rotate-90"}`}>▾</span>
       </button>
@@ -228,8 +240,11 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
         <p className="text-white/40 text-[10px] text-center">{codeError}</p>
       )}
 
-      {/* Private section */}
-      <div className="flex flex-col gap-2">
+      {/* Salons privés — vus à travers un chambranle éclairé : on regarde DANS
+          la pièce, sans qu'un seul mot n'ait à la nommer. Les noms de salon
+          appartiennent aux utilisateurs, le vestiaire ne peut donc pas être
+          une étiquette : c'est un endroit où l'on entre. */}
+      <div className="arena-doorway flex flex-col gap-2">
         <SectionHeader title={t("chat.sectionPrivate")} count={privateRooms.length} open={openPrivate} onToggle={() => setOpenPrivate((v) => !v)} />
         {openPrivate && (
           privateRooms.length > 0 ? (

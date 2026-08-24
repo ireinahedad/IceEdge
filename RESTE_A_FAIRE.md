@@ -1,6 +1,6 @@
 # ARAKICE / ICEEDGE — Ce qui reste
 
-**Créé le 2026-08-10 · mis à jour le 2026-08-23.**
+**Créé le 2026-08-10 · mis à jour le 2026-08-24.**
 
 > **Reprendre ici.** Une seule décision est en attente côté ML : **payer ou non
 > un mois de The Odds API (59 $)**. Le calcul complet, avec les arguments des
@@ -317,7 +317,9 @@ C2 cross-navigateur desktop · C3 push web
 
 **Vérifications dynamiques de sécurité** (le statique est passé) — test IDOR à
 2 comptes · JWT expiré/altéré rejeté et refresh non rejouable après logout ·
-en-têtes **CSP réellement servis par Vercel** (l'API n'y peut rien, c'est le front)
+en-têtes **CSP réellement servis par Vercel** (l'API n'y peut rien, c'est le front) ·
+**corps de `PATCH /users/me` non validé** (cf. §5 : seul `ruleWeights` est borné
+depuis le 2026-08-24)
 
 **Tests de résilience à provoquer** — couper le ML · couper The Odds API et
 retirer `scratches.json` · redeploy Railway sous trafic · webhook Stripe rejoué
@@ -335,20 +337,58 @@ dans l'historique est celui d'une base **locale**, sans valeur pour un attaquant
 Point clos, ne pas le rouvrir. Le scanner gitleaks du CI empêche qu'un vrai secret
 y entre à l'avenir.
 
-### 🐛 Trouvé pendant le ménage : la synchro des poids de règles n'est pas câblée
+### 🐛 Synchro des poids de règles — câblée le 2026-08-24
 
-Ce n'est pas du code mort, c'est une fonctionnalité **à moitié construite** — et
-c'est pour ça que `applyServerFamilyWeights` a été gardée alors qu'elle n'a aucun
-appelant.
+Le trou : le serveur avait tout (colonne `user_profiles.rule_weights`,
+migration **017**, lue en `ruleWeights` et écrivable via `PATCH /users/me`) mais
+`RuleFactorEditor` n'écrivait que dans `localStorage` et **rien ne lisait jamais
+la valeur du compte**. C'est pour ça que `applyServerFamilyWeights` avait été
+gardée sans appelant.
 
-Le serveur a tout : colonne `user_profiles.rule_weights` (migration **017**), lue
-en `ruleWeights` par `profile.service.ts` et écrivable via `PATCH /api/profile`.
-Côté client, `RuleFactorEditor` n'écrit que dans `localStorage` et **rien ne lit
-jamais la valeur du compte**. Conséquence : les poids ne suivent pas l'utilisateur
-d'un appareil à l'autre, alors que la base les stocke.
+- [x] Hydratation depuis le compte
+- [x] Push vers `PATCH /users/me` à l'enregistrement
 
-- [ ] Appeler `applyServerFamilyWeights(profile.ruleWeights)` au chargement du profil
-- [ ] Pousser le store vers `PATCH /api/profile` quand `RuleFactorEditor` sauvegarde
+**Comment c'est branché** — le compte fait foi, `localStorage` reste le cache de
+travail qui sert à calculer les scores :
+
+- **L'hydratation est paresseuse et unique par chargement d'app.**
+  `ensureFamilyWeightsHydrated()` (`ruleWeightsService`) mutualise un seul appel,
+  déclenché par la première carte de règles montée ; la page Profil s'en acquitte
+  gratuitement puisqu'elle a déjà le profil en main. **Un invité ne déclenche
+  aucun appel**, et `AuthProvider` n'a pas été touché — la décision d'y éviter un
+  fetch de profil au démarrage tient toujours.
+- **Une valeur vide côté compte n'efface rien** : « pas d'opinion », pas « remets
+  les défauts ». Et si le compte n'a aucun poids alors que l'appareil en a, ce
+  sont ceux de l'appareil qui montent — sinon les réglages faits avant l'existence
+  de la synchro seraient à ressaisir un par un.
+- **Un échec réseau n'annule pas l'enregistrement local** ; il déclenche un toast
+  « Enregistré sur cet appareil ; la synchro du compte a échoué ».
+- Le type `UserProfile.ruleWeights` était **faux** (`Record<string, number>`) : le
+  store est imbriqué, famille → { idFacteur → poids }. Corrigé des deux côtés.
+
+**Sécurité — la vraie trouvaille de ce câblage.** `rule_weights` partait en JSONB
+**sans aucune validation** : `PATCH /users/me` n'a pas de `validateBody`, et le
+champ était `JSON.stringify`é tel quel. N'importe quel compte pouvait donc y
+ranger un objet arbitrairement gros, facturé en stockage Neon et **relu à chaque
+`GET /users/me`**. Un `ruleWeightsSchema` zod borné (16 familles × 32 facteurs,
+poids 0-100, clés alphanumériques, `__proto__` refusé) est posé dans
+`validation/schemas.ts` et appliqué au point d'écriture, dans
+`ProfileService.updateProfile` — la route reste inchangée. 7 cas de test ajoutés
+à `schemas.test.ts`.
+
+- [ ] **Sur ta machine :** `cd server && npm test` (les 7 cas `ruleWeightsSchema`)
+      puis `npm run build` des deux côtés
+- [ ] **Vérif manuelle à 2 appareils** (ou 2 navigateurs) : régler une pondération
+      et l'enregistrer sur A, recharger B connecté au même compte → B doit voir les
+      curseurs de A. Puis en invité : l'onglet Réseau ne doit montrer **aucun**
+      appel `/users/me` déclenché par une carte de règles.
+
+> **Reste ouvert, repéré ici :** `PATCH /users/me` ne valide toujours pas le
+> **reste** de son corps (bio, displayName, openaiApiKey… partent sans borne de
+> taille). Un `profileUpdateSchema` sur la route serait le vrai correctif ; il n'a
+> pas été fait dans la foulée parce qu'il touche des champs que l'app envoie déjà
+> et demande de vérifier chaque borne contre les écrans existants. À ranger avec
+> les vérifications dynamiques de sécurité du §4.
 
 ### Codes promo — tranché le 2026-08-10 : pas de changement de schéma
 

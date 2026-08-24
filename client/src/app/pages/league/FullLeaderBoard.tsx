@@ -232,160 +232,141 @@ export function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
     { key: "volume", label: t("league.volume") },
   ];
 
+  // Un joueur du podium, affiché comme un score de match : le rang en gros
+  // chiffre d'ampoules, la photo, le nom, puis la valeur. `size` distingue le
+  // 1er des deux autres — c'est le seul écart entre les trois colonnes.
+  function PodiumSlot({ entry, place }: { entry: LeaderboardEntry; place: 1 | 2 | 3 }) {
+    const first = place === 1;
+    const medal = place === 1 ? "🥇" : place === 2 ? "🥈" : "🥉";
+    return (
+      <button
+        onClick={() => setSelectedUser(entry)}
+        className={`flex flex-col items-center gap-1 px-1 ${first ? "pb-1" : "pb-3"} active:scale-95 transition-transform min-w-0`}
+      >
+        <span className={first ? "text-base leading-none" : "text-xs leading-none"}>{medal}</span>
+        {entry.avatarUrl
+          ? <img src={entry.avatarUrl} alt="" className={`${first ? "w-12 h-12" : "w-9 h-9"} rounded-full object-cover border border-[#86d1ea]/35`} />
+          : <span className={`${first ? "w-12 h-12 text-sm" : "w-9 h-9 text-[11px]"} rounded-full bg-white/8 border border-[#86d1ea]/25 flex items-center justify-center font-bold text-white/80`}>{initials(entry.displayName)}</span>}
+        <span className="max-w-full truncate">
+          <FrozenName name={entry.displayName} score={entry.performanceScore} size={first ? 12 : 10} />
+        </span>
+        <span className={`scoreboard-digit ${first ? "text-2xl" : "text-lg"} leading-none mt-1`}>
+          {entry.performanceScore}
+        </span>
+      </button>
+    );
+  }
+
   return (
     <>
-      <div className="flex flex-col gap-3 w-full">
-        {/* Sort filters */}
-        <div className="flex gap-1">
-          {filterButtons.map((f) => (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              className={`flex-1 py-1.5 rounded-xl border text-[10px] font-medium transition-all ${
-                filter === f.key
-                  ? "bg-[#86d1ea] text-[#072E49] border-[#86d1ea] font-bold"
-                  : "icy-tile text-white"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+      {/* Le classement N'EST PAS une liste posée sur la page : c'est le tableau
+          indicateur de l'aréna, au format du stade. Même caisson et même dalle
+          que le commutateur d'onglets de l'en-tête, en grand. Le cadre tient la
+          hauteur de la page ; c'est la dalle, à l'intérieur, qui défile. */}
+      <div className="arena-scoreboard arena-scoreboard--full w-full">
+        <div className="arena-scoreboard-screen">
 
-        {/* Player search */}
-        <div className="icy-card rounded-2xl flex items-center gap-2 px-3 py-2.5">
-          <span className="text-white/40 text-sm">🔎</span>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("league.searchPlayer")}
-            className="flex-1 bg-transparent text-white text-xs outline-none placeholder-white/30"
-          />
-          {searching && <span className="w-3 h-3 rounded-full border border-[#90C9F0]/40 border-t-[#90C9F0] animate-spin flex-shrink-0" />}
-          {search && !searching && <button onClick={() => setSearch("")} className="text-white/50 text-xs">✕</button>}
-        </div>
-
-        {/* Podium — only when score sort + no search */}
-        {filter === "score" && !q && podium.length >= 3 && (
-          <div className="icy-card rounded-2xl p-4">
-            <p className="text-white/40 text-[10px] uppercase tracking-widest text-center mb-4">
-              {t("league.podium")}
-            </p>
-            <div className="flex items-end justify-center gap-4">
-              {/* 2nd */}
-              <button
-                onClick={() => setSelectedUser(podium[1])}
-                className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
-              >
-                {podium[1].avatarUrl
-                  ? <img src={podium[1].avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-white/20" />
-                  : <span className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[11px] font-bold text-white/80">{initials(podium[1].displayName)}</span>}
-                <div className="text-center">
-                  <FrozenName name={podium[1].displayName} score={podium[1].performanceScore} size={11} />
-                  <p className="text-[#90C9F0] text-[10px] mt-2">{podium[1].performanceScore}</p>
-                </div>
-                <div className="w-16 icy-tile rounded-t-lg flex items-center justify-center" style={{ height: 44 }}>
-                  <span className="text-lg">🥇</span>
-                </div>
-              </button>
-
-              {/* 1st */}
-              <button
-                onClick={() => setSelectedUser(podium[0])}
-                className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
-              >
-                <span className="text-xl leading-none -mb-1">👑</span>
-                {podium[0].avatarUrl
-                  ? <img src={podium[0].avatarUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-white/20" />
-                  : <span className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-sm font-bold text-white/80">{initials(podium[0].displayName)}</span>}
-                <div className="text-center">
-                  <FrozenName name={podium[0].displayName} score={podium[0].performanceScore} size={13} />
-                  <p className="text-yellow-400 text-[10px] font-bold mt-2">{podium[0].performanceScore}</p>
-                </div>
-                <div className="w-16 icy-tile rounded-t-lg flex items-center justify-center" style={{ height: 60 }}>
-                  <span className="text-xl">🥇</span>
-                </div>
-              </button>
-
-              {/* 3rd */}
-              <button
-                onClick={() => setSelectedUser(podium[2])}
-                className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
-              >
-                {podium[2].avatarUrl
-                  ? <img src={podium[2].avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-white/20" />
-                  : <span className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[11px] font-bold text-white/80">{initials(podium[2].displayName)}</span>}
-                <div className="text-center">
-                  <FrozenName name={podium[2].displayName} score={podium[2].performanceScore} size={11} />
-                  <p className="text-amber-600 text-[10px] mt-2">{podium[2].performanceScore}</p>
-                </div>
-                <div className="w-16 icy-tile rounded-t-lg flex items-center justify-center" style={{ height: 32 }}>
-                  <span className="text-lg">🥇</span>
-                </div>
-              </button>
+          {/* Bandeau de commande — fixe en haut de la dalle */}
+          <div className="flex-shrink-0 px-3 pt-3 pb-2.5 flex flex-col gap-2 border-b border-[#86d1ea]/15">
+            <div className="flex gap-1">
+              {filterButtons.map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => setFilter(f.key)}
+                  className={`scoreboard-tab scoreboard-tab--sm${filter === f.key ? " is-active" : ""}`}
+                  aria-pressed={filter === f.key}
+                >
+                  {f.label}
+                </button>
+              ))}
             </div>
-            <p className="text-white/30 text-[9px] text-center mt-3">{t("league.podiumTap")}</p>
-          </div>
-        )}
 
-        {/* Full list */}
-        <div className="icy-card rounded-2xl overflow-hidden">
-          <div className="flex items-center px-4 py-2 border-b border-white/20">
-            <span className="text-white/40 text-[9px] uppercase tracking-wider w-8">#</span>
-            <span className="text-white/40 text-[9px] uppercase tracking-wider flex-1">{t("league.player")}</span>
-            <span className="text-white/40 text-[9px] uppercase tracking-wider w-14 text-right">
+            <div className="flex items-center gap-2 rounded-lg px-2.5 py-2 bg-black/40 border border-[#86d1ea]/15">
+              <span className="text-[#86d1ea]/50 text-sm">🔎</span>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t("league.searchPlayer")}
+                className="flex-1 bg-transparent text-white text-xs outline-none placeholder-white/25"
+              />
+              {searching && <span className="w-3 h-3 rounded-full border border-[#90C9F0]/40 border-t-[#90C9F0] animate-spin flex-shrink-0" />}
+              {search && !searching && <button onClick={() => setSearch("")} className="text-white/50 text-xs">✕</button>}
+            </div>
+          </div>
+
+          {/* Podium — les trois premiers en gros, comme les scores d'un match.
+              Il ne s'affiche qu'au tri par score et hors recherche : sur un
+              autre tri, « le podium » ne voudrait plus rien dire. */}
+          {filter === "score" && !q && podium.length >= 3 && (
+            <div className="scoreboard-podium flex-shrink-0 px-3 pt-3 pb-2">
+              <p className="scoreboard-label text-[9px] text-center mb-2">{t("league.podium")}</p>
+              <div className="grid grid-cols-3 items-end gap-1">
+                <PodiumSlot entry={podium[1]} place={2} />
+                <PodiumSlot entry={podium[0]} place={1} />
+                <PodiumSlot entry={podium[2]} place={3} />
+              </div>
+              <p className="scoreboard-label text-[8px] text-center mt-1">{t("league.podiumTap")}</p>
+            </div>
+          )}
+
+          {/* En-têtes de colonnes */}
+          <div className="flex-shrink-0 flex items-center px-3 py-1.5 border-b border-[#86d1ea]/15 bg-black/30">
+            <span className="scoreboard-label text-[8px] w-8">#</span>
+            <span className="scoreboard-label text-[8px] flex-1">{t("league.player")}</span>
+            <span className="scoreboard-label text-[8px] w-16 text-right">
               {filter === "score" ? t("league.score") : filter === "hitrate" ? "HR%" : "Bets"}
             </span>
           </div>
 
-          {visibleRows.map((entry) => {
-            const medal = medalFor(entry.displayRank);
-            const showCrown = entry.displayRank === 1 || entry.isCurrentUser;
-            const mainValue =
-              filter === "score" ? entry.performanceScore :
-              filter === "hitrate" ? `${entry.hitRate}%` :
-              entry.totalBets;
+          {/* La liste, seule partie qui défile */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {visibleRows.map((entry) => {
+              const medal = medalFor(entry.displayRank);
+              const showCrown = entry.displayRank === 1 || entry.isCurrentUser;
+              const mainValue =
+                filter === "score" ? entry.performanceScore :
+                filter === "hitrate" ? `${entry.hitRate}%` :
+                entry.totalBets;
 
-            return (
-              <button
-                key={entry.userId}
-                onClick={() => setSelectedUser(entry)}
-                className={`w-full flex items-center gap-3 px-4 py-3 border-b border-white/10 last:border-0 text-left active:bg-white/5 transition-colors ${
-                  entry.isCurrentUser ? "bg-[#90C9F0]/10" : ""
-                }`}
-              >
-                <div className="w-8 flex-shrink-0 flex flex-col items-center justify-center leading-none">
-                  {medal && <span className="text-sm">{medal}</span>}
-                  <span className="text-white/40 text-[9px] font-bold mt-0.5">{entry.displayRank}</span>
-                </div>
+              return (
+                <button
+                  key={entry.userId}
+                  onClick={() => setSelectedUser(entry)}
+                  className={`scoreboard-row w-full flex items-center gap-2.5 px-3 py-2.5 text-left ${
+                    entry.isCurrentUser ? "scoreboard-row--me" : ""
+                  }`}
+                >
+                  <div className="w-8 flex-shrink-0 flex flex-col items-center justify-center leading-none">
+                    {medal && <span className="text-[11px]">{medal}</span>}
+                    <span className="scoreboard-digit scoreboard-digit--cool text-[11px] mt-0.5">{entry.displayRank}</span>
+                  </div>
 
-                {entry.avatarUrl
-                  ? <img src={entry.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover border border-white/20 flex-shrink-0" />
-                  : <span className="w-7 h-7 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[10px] font-bold text-white/80 flex-shrink-0">{initials(entry.displayName)}</span>}
+                  {entry.avatarUrl
+                    ? <img src={entry.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover border border-[#86d1ea]/25 flex-shrink-0" />
+                    : <span className="w-7 h-7 rounded-full bg-white/8 border border-[#86d1ea]/20 flex items-center justify-center text-[10px] font-bold text-white/80 flex-shrink-0">{initials(entry.displayName)}</span>}
 
-                <div className="flex-1 min-w-0 py-1">
-                  <div className="flex items-center gap-1.5">
-                    {showCrown && <span className="text-sm flex-shrink-0">👑</span>}
-                    <FrozenName name={entry.displayName} score={entry.performanceScore} size={12} />
-                    {entry.isCurrentUser && (
-                      <span className="text-[8px] text-[#90C9F0] border border-[#90C9F0]/40 rounded-full px-1 flex-shrink-0">
-                        {t("league.you")}
-                      </span>
+                  <div className="flex-1 min-w-0 py-1">
+                    <div className="flex items-center gap-1.5">
+                      {showCrown && <span className="text-sm flex-shrink-0">👑</span>}
+                      <FrozenName name={entry.displayName} score={entry.performanceScore} size={12} />
+                      {entry.isCurrentUser && (
+                        <span className="text-[8px] text-[#ffd257] border border-[#ffd257]/40 rounded-full px-1 flex-shrink-0">
+                          {t("league.you")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="w-16 text-right flex-shrink-0">
+                    <span className="scoreboard-digit text-sm">{mainValue}</span>
+                    {filter === "score" && (
+                      <p className="scoreboard-label text-[8px] mt-0.5">{entry.hitRate}% HR</p>
                     )}
                   </div>
-                </div>
-
-                <div className="w-14 text-right flex-shrink-0">
-                  <span className={`text-xs font-bold ${entry.isCurrentUser ? "text-[#90C9F0]" : "text-white"}`}>
-                    {mainValue}
-                  </span>
-                  {filter === "score" && (
-                    <p className="text-white/40 text-[9px]">{entry.hitRate}% HR</p>
-                  )}
-                </div>
-              </button>
-            );
-          })}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
