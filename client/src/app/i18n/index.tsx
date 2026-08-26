@@ -593,6 +593,19 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "ml.sameSignal":   { en: "≈ same signal",   fr: "≈ même signal" },
   "ml.keyFactors":   { en: "Key model factors", fr: "Facteurs clés du modèle" },
   "ml.topFactors":   { en: "Top Factors",     fr: "Facteurs principaux" },
+  // ── Facteurs du modèle de score (S4 ②) ─────────────────────────────────────
+  // Le service ML renvoie une CLÉ (`factor.attack`, …) et non un libellé, pour
+  // que le facteur soit traduit comme le reste. Un nom inconnu — les colonnes
+  // brutes du repli classifieur — s'affiche tel quel, cf. `factorLabel`.
+  "ml.factor.attack":        { en: "Attack",           fr: "Attaque" },
+  "ml.factor.opp_defense":   { en: "Opponent defense", fr: "Défense adverse" },
+  "ml.factor.goalie":        { en: "Goaltending",      fr: "Gardien" },
+  "ml.factor.lineup":        { en: "Lineup",           fr: "Alignement" },
+  "ml.factor.schedule":      { en: "Schedule",         fr: "Calendrier" },
+  "ml.factor.team_strength": { en: "Team strength",    fr: "Force d'équipe" },
+  "ml.factor.home_ice":      { en: "Home ice",         fr: "Avantage glace" },
+  // Filet de `_factor_of` côté service : ne devrait jamais s'afficher.
+  "ml.factor.other":         { en: "Other",            fr: "Autres" },
   "ml.verdictStrong":{ en: "Strong signal ▲", fr: "Fort signal ▲" },
   "ml.verdictPos":   { en: "Positive signal", fr: "Signal positif" },
   "ml.verdictNeutral":{ en: "Neutral signal", fr: "Signal neutre" },

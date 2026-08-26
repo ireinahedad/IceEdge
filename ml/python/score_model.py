@@ -126,6 +126,110 @@ def apply_margin_correction(M: np.ndarray, tau: dict[int, float] | None) -> np.n
     return out / s if s > 0 else M
 
 
+# ── Blend logistique « modèle ⊕ marché » (S4) ────────────────────────────────
+#
+# POURQUOI CES TROIS FONCTIONS VIVENT ICI. Elles sont le seul point commun entre
+# l'entraînement et le service : `train_score.py` AJUSTE les poids sur la tranche
+# de validation et les écrit dans `score_report.json`, `ml_service` les APPLIQUE
+# à `dist.p_home_win()`. Les poser dans l'un des deux obligerait l'autre à
+# l'importer — or `train.py`, qui porte aujourd'hui des copies de ces fonctions
+# pour le classifieur, est précisément ce que S4 doit finir par supprimer.
+# `score_model.py` est déjà importé des deux côtés : c'est le bon foyer.
+#
+# POURQUOI UN BLEND PLUTÔT QUE LE MODÈLE NU. Mesuré (P1) : le marché seul fait
+# 0.66399 de log-loss, le modèle de score nu 0.6664. Le marché est le meilleur
+# estimateur connu du moneyline ; jeter son apport pour simplifier le service
+# paierait une dégradation mesurable contre une économie de lignes. La
+# simplification de S4 vient de la suppression d'un *modèle* entier, pas du blend.
+#
+# Descente de gradient plutôt que scipy : deux poids et un biais sur quelques
+# milliers de lignes convergent en une fraction de seconde, et le service tourne
+# déjà sans scipy — on n'ajoute pas une dépendance pour ça.
+
+def logit(p, eps: float = 1e-7):
+    """log(p / (1-p)), borné pour rester fini aux extrêmes."""
+    p = np.clip(p, eps, 1 - eps)
+    return np.log(p / (1 - p))
+
+
+def fit_logistic(X: np.ndarray, y: np.ndarray, lr: float = 0.1,
+                 iters: int = 4000) -> np.ndarray:
+    """Régression logistique par descente de gradient.
+
+    X : (n, k) — ici les deux logits à combiner. Retourne (k+1,) = [w…, biais].
+    Même procédure et mêmes hyperparamètres que la calibration du classifieur
+    dans `train.py`, pour que les deux blends restent comparables.
+    """
+    n, k = X.shape
+    w = np.zeros(k + 1)
+    Xb = np.hstack([X, np.ones((n, 1))])
+    for _ in range(iters):
+        q = 1.0 / (1.0 + np.exp(-(Xb @ w)))
+        w -= lr * (Xb.T @ (q - y)) / n
+    return w
+
+
+def apply_logistic(X: np.ndarray, w: np.ndarray) -> np.ndarray:
+    """Applique les poids rendus par `fit_logistic`. X : (n, k)."""
+    Xb = np.hstack([X, np.ones((X.shape[0], 1))])
+    return 1.0 / (1.0 + np.exp(-(Xb @ w)))
+
+
+# ── Prolongation dépendante de l'affiche (S4) ────────────────────────────────
+#
+# `p_home_win = p_reg + p_tie × p_ot_home`. Ce troisième facteur était une
+# constante : un gros favori qui va en prolongation était traité comme un pile
+# ou face. Mesuré le 2026-08-26 sur les 951 prolongations de la tranche de test
+# — favori ≥ 0.65 selon le modèle : 61.7 % de victoires en prolongation
+# (n = 149, IC 95 % [0.537 ; 0.692]) ; la constante 0.4996 tombe hors de l'IC.
+#
+# Le remplaçant est AJUSTÉ par `train_score.fit_ot_model` et LU ici, pour que
+# l'entraînement, le service et la mesure (`backtest.py --reliability`) ne
+# puissent pas diverger sur la formule ou sur ce qu'ils acceptent.
+
+OT_LEVEL_MIN, OT_LEVEL_MAX = 0.35, 0.65
+
+
+def read_ot_model(rep: dict) -> list[float] | None:
+    """[pente, ordonnée] lus dans `score_report.json`, ou None si douteux.
+
+    Tout est vérifié plutôt que supposé : un rapport antérieur à ce changement
+    n'a pas la clé, un rapport futur peut porter un autre signal. Une pente
+    négative dirait que les favoris perdent PLUS souvent leurs prolongations —
+    signe d'un ajustement raté, pas une découverte. Une ordonnée aberrante
+    déplacerait le NIVEAU, donc toutes les probabilités, au lieu de corriger les
+    seules affiches tranchées. Dans les deux cas on rend None, et l'appelant
+    garde le scalaire.
+    """
+    cal = rep.get("p_ot_model")
+    if not isinstance(cal, dict) or cal.get("signal") != "lambda_diff":
+        return None
+    raw = cal.get("w")
+    if not isinstance(raw, list) or len(raw) != 2:
+        return None
+    try:
+        a, b = float(raw[0]), float(raw[1])
+    except (TypeError, ValueError):
+        return None
+    if not (np.isfinite(a) and np.isfinite(b)) or a <= 0:
+        return None
+    if not (OT_LEVEL_MIN <= 1.0 / (1.0 + np.exp(-b)) <= OT_LEVEL_MAX):
+        return None
+    return [a, b]
+
+
+def p_ot_for(w: list[float] | None, lam_home: float, lam_away: float,
+             default: float) -> float:
+    """P(le domicile gagne la prolongation) pour CE match, ou `default`."""
+    if not w:
+        return default
+    d = float(lam_home) - float(lam_away)
+    if not np.isfinite(d):
+        return default
+    z = float(np.clip(w[0] * d + w[1], -30.0, 30.0))
+    return float(1.0 / (1.0 + np.exp(-z)))
+
+
 class ScoreDistribution:
     """Distribution complète d'un match à partir de (λ_dom, λ_ext).
 
@@ -383,6 +487,26 @@ def sanity_check() -> None:
             > uncertainty_haircut(0.10, 0.03, 0.05)), "réduction non monotone"
     assert uncertainty_haircut(0.10, 0.02, 0.0) == 0.10, "σ_max absent → pas de réduction"
     print("  réduction de mise     bornes et monotonie OK")
+
+    # ── Blend logistique (S4) ────────────────────────────────────────────────
+    #
+    # Ces trois fonctions décident de la probabilité moneyline SERVIE. Une erreur
+    # de signe, ou une descente qui n'a pas convergé, donnerait des poids
+    # d'apparence plausible et une dégradation silencieuse — le genre de panne
+    # qu'aucune assertion de forme n'attrape. On ajuste donc sur une vérité
+    # terrain simulée et on vérifie qu'elle est retrouvée.
+    rng = np.random.default_rng(0)
+    x = rng.normal(size=(4000, 1))
+    y = (rng.random(4000) < 1.0 / (1.0 + np.exp(-(1.5 * x[:, 0] - 0.3)))).astype(float)
+    w = fit_logistic(x, y, lr=0.5, iters=8000)
+    assert abs(w[0] - 1.5) < 0.25, f"blend : poids mal retrouvé ({w[0]:.3f} pour 1.5)"
+    assert abs(w[1] + 0.3) < 0.20, f"blend : biais mal retrouvé ({w[1]:.3f} pour -0.3)"
+    p_fit = apply_logistic(x, w)
+    assert np.all((p_fit > 0.0) & (p_fit < 1.0)), "blend : probabilité hors bornes"
+    # `logit` doit borner les extrêmes plutôt que renvoyer ±inf : une cote à 0 ou
+    # 1 (bookmaker qui ferme un marché) ne doit pas empoisonner tout le vecteur.
+    assert np.all(np.isfinite(logit(np.array([0.0, 1.0])))), "logit : ±inf non borné"
+    print(f"  blend logistique      poids {w[0]:.3f} (1.5) · biais {w[1]:.3f} (-0.3) OK")
 
     print("✅ score_model : contrôles internes OK")
 

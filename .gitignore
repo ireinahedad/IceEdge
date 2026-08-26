@@ -50,3 +50,7 @@ ml/data/raw/**/*.parquet
 # mise — c'est un diagnostic hors ligne. Déjà exclu de l'image Docker
 # (ml/.dockerignore) ; sorti du dépôt le 2026-08-10.
 ml/models/score_ensemble/
+
+# Fichiers retirés du produit, gardés hors dépôt en attendant une suppression
+# manuelle (le bridge ne peut pas supprimer). Sortis de l'index le 2026-08-25.
+_to_delete/

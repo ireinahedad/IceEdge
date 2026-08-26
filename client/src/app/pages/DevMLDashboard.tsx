@@ -43,6 +43,11 @@ interface MLSample {
   model_version: string;
   model_type: string;
   explanation: string;
+  // Les deux estimateurs de P(domicile gagne), côte à côte (S4 ⑤). Optionnels :
+  // absents si le modèle concerné n'a pas répondu. Ce ne sont pas
+  // `probability`, qui est la probabilité du marché demandé.
+  probability_score_model?: number | null;
+  probability_classifier?: number | null;
 }
 
 interface MLInfoResponse {
@@ -119,7 +124,9 @@ interface MLReportsResponse {
     };
     backtest_derived_report?: {
       edge_threshold?: number;
-      markets?: Record<string, RoiRow[]>;
+      // ⚠️ Pas seulement des tableaux de ROI : le run A2 a ajouté
+      //    `puckline_diagnostics`, un OBJET. D'où le filtre à l'affichage.
+      markets?: Record<string, RoiRow[] | Record<string, unknown>>;
     };
     backtest_uncertainty_report?: {
       n_bets?: number;
@@ -313,6 +320,23 @@ function ProbGauge({ pct }: { pct: number }) {
   );
 }
 
+/**
+ * Marchés proposés au test manuel.
+ *
+ * Le premier groupe est pricé EXACTEMENT par la distribution de score
+ * (`_apply_score_model`) : `base_prob` n'y est même pas lu. Le second retombe
+ * sur les heuristiques et consomme `base_prob` — ce sont les six marchés que
+ * S4 ④ a fait passer du classifieur au modèle de score. C'est là, et seulement
+ * là, qu'un changement de `base_prob` se voit.
+ */
+const TEST_MARKETS: Array<{ id: string; group: string }> = [
+  ...["moneyline", "puck_line", "total_goals", "both_teams_score"]
+    .map(id => ({ id, group: "dérivable (distribution)" })),
+  ...["last_team_score", "period1_winner", "period2_winner", "period3_winner",
+      "winning_margin", "double_chance"]
+    .map(id => ({ id, group: "heuristique (base_prob → S4 ④)" })),
+];
+
 function SampleCard({ label, sample }: { label: string; sample: MLSample | null }) {
   if (!sample) return (
     <div className="p-3 bg-[#0A0E0C]/60 rounded-xl border border-white/8 text-[#bfc8cc] text-xs">
@@ -332,6 +356,27 @@ function SampleCard({ label, sample }: { label: string; sample: MLSample | null 
         </div>
       </div>
       <p className="text-[#bfc8cc] text-[10px] italic mb-3 leading-relaxed">{sample.explanation}</p>
+      {/* S4 ⑤ — l'écart entre les deux estimateurs, celui qui décidera si le
+          classifieur peut disparaître. Affiché ici et nulle part ailleurs :
+          c'est un outil de dev, pas une information pour le parieur. */}
+      {(sample.probability_score_model != null || sample.probability_classifier != null) && (
+        <div className="mb-3 flex items-center gap-3 text-[10px]">
+          <span className="text-white/50 uppercase tracking-wider">P(dom)</span>
+          <span className="text-[#bfc8cc]">
+            score <span className="font-mono text-white">{sample.probability_score_model ?? "—"}%</span>
+          </span>
+          <span className="text-[#bfc8cc]">
+            classifieur <span className="font-mono text-white">{sample.probability_classifier ?? "—"}%</span>
+          </span>
+          {sample.probability_score_model != null && sample.probability_classifier != null && (
+            <span className="font-mono"
+              style={{ color: Math.abs(sample.probability_score_model - sample.probability_classifier) >= 5 ? "#facc15" : "#4ade80" }}>
+              Δ{sample.probability_score_model - sample.probability_classifier > 0 ? "+" : ""}
+              {sample.probability_score_model - sample.probability_classifier} pt
+            </span>
+          )}
+        </div>
+      )}
       <div>
         <p className="text-[10px] text-white/50 mb-1.5 uppercase tracking-wider">Feature Importances</p>
         {sample.feature_importances.map((fi, i) => (
@@ -465,6 +510,7 @@ export function DevMLDashboard() {
   const [testOppId, setTestOppId]       = useState("nyr");
   const [testPlayerId, setTestPlayerId] = useState("8478402");
   const [testPropType, setTestPropType] = useState("goals");
+  const [testMarket, setTestMarket]     = useState("moneyline");
   const [testLine, setTestLine]         = useState("0.5");
   const [testResult, setTestResult]     = useState<TestResult | null>(null);
   const [testLoading, setTestLoading]   = useState(false);
@@ -558,7 +604,7 @@ export function DevMLDashboard() {
     setTestResult(null);
     try {
       const body: Record<string, unknown> = { type: testType };
-      if (testType === "game")   { body.teamId = testTeamId; body.opponentId = testOppId; body.propType = "moneyline"; }
+      if (testType === "game")   { body.teamId = testTeamId; body.opponentId = testOppId; body.propType = testMarket; }
       if (testType === "player") { body.playerId = testPlayerId; body.propType = testPropType; body.line = parseFloat(testLine); body.selection = "over"; }
       if (testType === "team")   { body.teamId = testTeamId; body.propType = "cup"; }
 
@@ -712,6 +758,19 @@ export function DevMLDashboard() {
                       className="w-full bg-[#0A0E0C] border border-white/15 rounded-lg px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-[#a78bfa]/60" placeholder="nyr" />
                   </label>
                 </div>
+                <label>
+                  <span className="text-[10px] text-[#bfc8cc] mb-1 block">Marché</span>
+                  <select value={testMarket} onChange={e => setTestMarket(e.target.value)}
+                    className="w-full bg-[#0A0E0C] border border-white/15 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-[#a78bfa]/60">
+                    {[...new Set(TEST_MARKETS.map(m => m.group))].map(g => (
+                      <optgroup key={g} label={g}>
+                        {TEST_MARKETS.filter(m => m.group === g).map(m => (
+                          <option key={m.id} value={m.id}>{m.id}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </label>
               </>}
               {testType === "player" && <>
                 <label>
@@ -1122,7 +1181,16 @@ function BacktestTab({
             hint="Totaux et puck line, pricés par la distribution de score. Le z indique si le ROI se distingue de zéro.">
         {der?.markets ? (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            {Object.entries(der.markets).map(([market, rows]) => (
+            {/* Ne garder que les entrées qui SONT des tableaux de lignes de ROI.
+                `backtest_derived_report.json` contient aussi
+                `puckline_diagnostics`, un objet (seuil, by_season, by_leg,
+                dissection) ajouté par le run A2 — le passer à `roiRows` faisait
+                planter tout l'onglet avec « (rows ?? []).map is not a function ».
+                Filtrer plutôt que lister les clés connues : un diagnostic ajouté
+                plus tard sera ignoré au lieu de casser la page. */}
+            {Object.entries(der.markets)
+              .filter((e): e is [string, RoiRow[]] => Array.isArray(e[1]))
+              .map(([market, rows]) => (
               <div key={market}>
                 <p className="text-white text-xs font-bold mb-2 capitalize">{market}</p>
                 <DataTable columns={roiCols} rows={roiRows(rows)} />

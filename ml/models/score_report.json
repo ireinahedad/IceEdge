@@ -49,157 +49,65 @@
     "6": 0.83352
   },
   "p_ot_home": 0.49956,
+  "p_ot_model": {
+    "signal": "lambda_diff",
+    "source": "train",
+    "n": 3427,
+    "w": [
+      0.264466,
+      -0.06097
+    ],
+    "mean_fitted": 0.49956,
+    "logloss_const": 0.69315,
+    "logloss_model": 0.69142
+  },
+  "blend": null,
+  "confidence": {
+    "signal": "abs_lambda_diff",
+    "source": "train",
+    "n": 14631,
+    "deciles": [
+      2e-05,
+      0.0671,
+      0.13652,
+      0.20651,
+      0.27986,
+      0.36246,
+      0.45362,
+      0.55706,
+      0.68615,
+      0.87261,
+      1.99671
+    ]
+  },
   "n_train": 14631,
   "n_test": 4304,
   "test": {
     "raw": {
       "label": "Poisson sans correction",
       "mae_total": 1.8771,
-      "logloss_moneyline": 0.664,
+      "logloss_moneyline": 0.6636,
       "tie_predicted": 0.1575,
       "tie_observed": 0.221,
       "home_-1.5_predicted": 0.3131,
       "home_-1.5_observed": 0.332,
-      "home_win_predicted": 0.5437,
+      "home_win_predicted": 0.5432,
       "home_win_observed": 0.54
     },
     "corrected": {
       "label": "Poisson + correction \u03c4",
       "mae_total": 1.8823,
-      "logloss_moneyline": 0.6643,
+      "logloss_moneyline": 0.6637,
       "tie_predicted": 0.2136,
       "tie_observed": 0.221,
       "home_-1.5_predicted": 0.3329,
       "home_-1.5_observed": 0.332,
-      "home_win_predicted": 0.5503,
+      "home_win_predicted": 0.5496,
       "home_win_observed": 0.54
     },
     "baseline_mae_total": 1.8996
   },
-  "ensemble": {
-    "n_members": 20,
-    "n_rounds": 371,
-    "sigma_max": 0.02896,
-    "sigma_max_source": "p90 sur la validation (hors \u00e9chantillon)",
-    "sigma_p90_train_insample": 0.02307,
-    "train": {
-      "sigma_mean": 0.01732,
-      "sigma_p90": 0.02307,
-      "buckets": [
-        {
-          "bucket": 1,
-          "n": 3658,
-          "sigma_mean": 0.0124,
-          "log_loss": 0.67331,
-          "p_predicted": 0.5471,
-          "p_observed": 0.5618
-        },
-        {
-          "bucket": 2,
-          "n": 3657,
-          "sigma_mean": 0.01541,
-          "log_loss": 0.67508,
-          "p_predicted": 0.5449,
-          "p_observed": 0.5409
-        },
-        {
-          "bucket": 3,
-          "n": 3658,
-          "sigma_mean": 0.01798,
-          "log_loss": 0.6679,
-          "p_predicted": 0.5433,
-          "p_observed": 0.5375
-        },
-        {
-          "bucket": 4,
-          "n": 3658,
-          "sigma_mean": 0.0235,
-          "log_loss": 0.65367,
-          "p_predicted": 0.5397,
-          "p_observed": 0.5435
-        }
-      ],
-      "verdict": "\u03c3 NON informative \u2014 la r\u00e9duction de mise n'a pas de fondement mesur\u00e9"
-    },
-    "val": {
-      "sigma_mean": 0.02135,
-      "sigma_p90": 0.02896,
-      "buckets": [
-        {
-          "bucket": 1,
-          "n": 646,
-          "sigma_mean": 0.01477,
-          "log_loss": 0.66092,
-          "p_predicted": 0.5419,
-          "p_observed": 0.5402
-        },
-        {
-          "bucket": 2,
-          "n": 645,
-          "sigma_mean": 0.01891,
-          "log_loss": 0.66583,
-          "p_predicted": 0.5498,
-          "p_observed": 0.507
-        },
-        {
-          "bucket": 3,
-          "n": 645,
-          "sigma_mean": 0.02265,
-          "log_loss": 0.64787,
-          "p_predicted": 0.549,
-          "p_observed": 0.5426
-        },
-        {
-          "bucket": 4,
-          "n": 646,
-          "sigma_mean": 0.02907,
-          "log_loss": 0.6482,
-          "p_predicted": 0.5447,
-          "p_observed": 0.5387
-        }
-      ],
-      "verdict": "\u03c3 NON informative \u2014 la r\u00e9duction de mise n'a pas de fondement mesur\u00e9"
-    },
-    "test": {
-      "sigma_mean": 0.02215,
-      "sigma_p90": 0.02942,
-      "buckets": [
-        {
-          "bucket": 1,
-          "n": 1076,
-          "sigma_mean": 0.01572,
-          "log_loss": 0.68361,
-          "p_predicted": 0.5545,
-          "p_observed": 0.5177
-        },
-        {
-          "bucket": 2,
-          "n": 1076,
-          "sigma_mean": 0.01983,
-          "log_loss": 0.66343,
-          "p_predicted": 0.5518,
-          "p_observed": 0.5669
-        },
-        {
-          "bucket": 3,
-          "n": 1076,
-          "sigma_mean": 0.02345,
-          "log_loss": 0.66521,
-          "p_predicted": 0.5493,
-          "p_observed": 0.5372
-        },
-        {
-          "bucket": 4,
-          "n": 1076,
-          "sigma_mean": 0.02961,
-          "log_loss": 0.64509,
-          "p_predicted": 0.5371,
-          "p_observed": 0.5381
-        }
-      ],
-      "verdict": "\u03c3 NON informative \u2014 la r\u00e9duction de mise n'a pas de fondement mesur\u00e9"
-    }
-  },
+  "ensemble": null,
   "feature_importances": [
     {
       "name": "elo_atk_minus_def",

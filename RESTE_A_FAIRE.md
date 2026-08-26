@@ -1,6 +1,6 @@
 # ARAKICE / ICEEDGE — Ce qui reste
 
-**Créé le 2026-08-10 · mis à jour le 2026-08-24.**
+**Créé le 2026-08-10 · mis à jour le 2026-08-26.**
 
 > **Reprendre ici.** Décidé le 2026-08-24 : **mettre d'abord la collecte live en
 > service** (A1bis, gratuit, échéance réelle à la pré-saison de fin septembre).
@@ -229,6 +229,29 @@ sources que la comparaison est censée détecter. Le défaut du script est `us`.
       voir une passe complète dans les logs, **puis le retirer** (3 crédits par
       démarrage)
 
+> **Revue de mise en service faite le 2026-08-25 — la chaîne est complète.**
+> `028` et `031` sont idempotentes (`IF NOT EXISTS` partout) et le runner
+> `migrate-all.ts` découvre le dossier tout seul avec un registre
+> `schema_migrations` : il n'y a rien à déclarer, `npm run db:migrate:all` suffit.
+> `startOddsLogger()` est bien appelé (`server.ts:46`), `insertSnapshots` écrit
+> bien dans `odds_snapshots`, et le calendrier code (2 passes `full` à 3 crédits
+> + 4 passes `spreads` à 1) fait bien **10 crédits/jour**, conforme au texte.
+>
+> **Un piège corrigé au passage.** `USER_RESERVE` se lisait
+> `Number(process.env.ODDS_USER_RESERVE ?? 150)` : le `??` n'attrape que
+> `undefined`. Or cette variable se pose **à la main dans une console**, et les
+> deux fautes de frappe possibles échouaient en silence — valeur vide → `0`,
+> donc plus de réserve visiteurs et une collecte libre de vider le quota ;
+> valeur non numérique → `NaN`, et `remaining - cost >= NaN` est toujours faux,
+> donc **la collecte ne démarre jamais sans un seul message**. La lecture est
+> désormais validée (vide / non numérique / négatif → défaut 150 + `logger.warn`).
+> `oddsQuota.test.ts` pose `'150'` avant l'import : comportement inchangé pour lui.
+>
+> Reste vraiment à faire côté machine : les migrations, `npm test`, et les
+> variables Railway. Après le premier déploiement, `GET /api/dev/...` relit
+> `odds_quota_state` (`dev.routes.ts:184`) pour vérifier le solde sans dépenser
+> de crédit.
+
 Le calendrier posé coûte **10 crédits/jour, 300/mois** — deux passes complètes
 (11 h, 17 h ET) et quatre passes `spreads` seules (18 h 45, 19 h 45, 21 h 45,
 22 h 45 ET), sous les 350 disponibles pour la première fois.
@@ -241,12 +264,173 @@ non « ≈ 20 % »). **Ne rien miser d'ici là** — « non réfuté » n'est pa
 **S4 — servir le moneyline depuis le modèle de score.** Conception faite, code
 non commencé, plus bloqué par A5.
 
-- [ ] Blend `score ⊕ marché` dans `train_score.py`, poids dans `score_report.json`
-- [ ] Décomposition λ pour `feature_importances` (`pred_contribs`, 7 groupes)
-- [ ] `confidence` depuis |λ_dom − λ_ext|, calibrée sur la distribution actuelle
-- [ ] `base_prob = dist.p_home_win()` pour les marchés non dérivables
-      (`last_team_score`, `period{1,2,3}_winner`, `winning_margin`, `double_chance`)
-- [ ] Puis suppression du classifieur, **route par route**
+- [x] Blend `score ⊕ marché` dans `train_score.py`, poids dans `score_report.json`
+      — **écrit le 2026-08-25, pas encore exécuté.** Détail et caveat dans
+      `ml/REFACTOR_PLAN.md` §S4. Rien du service n'a bougé : c'est un
+      post-traitement du rapport. **À toi : `cd ml/python && python
+      train_score.py`, puis on lit la table log-loss avant d'aller plus loin.**
+- [x] **`evaluate()` mesurait un autre modèle que celui servi — corrigé le
+      2026-08-25.** Elle retombait sur la constante `P_OT_HOME` au lieu du
+      `p_ot_home` mesuré sur l'entraînement, celui que `ml_service` relit
+      (`ml_service.py:326`). Attendu au prochain run : les chiffres du bloc
+      `test` de `score_report.json` bougent légèrement — c'est la correction.
+      Le réglementaire (nul, dom −1.5) et le MAE du total sont inchangés.
+      Le même oubli est laissé exprès à `backtest_walkforward.py:1556` (A5 est
+      clos et sa mémoïsation mélangerait les résultats) — détail dans
+      `ml/REFACTOR_PLAN.md` §S4.
+- [x] **Décomposition λ pour `feature_importances` — livrée le 2026-08-25.**
+      `pred_contribs` sur la DMatrix déjà construite (zéro prédiction en plus),
+      `contrib(dom) − contrib(ext)`, 7 concepts, parts normalisées. Remplace les
+      gains globaux du classifieur, identiques pour tous les matchs ; celui-ci
+      ne reste qu'en repli. Le service envoie une **clé** (`factor.attack`, …),
+      traduite côté client (8 entrées EN/FR + `factorLabel`, repli sur le nom
+      brut) — les facteurs sont traduits pour la première fois. Détail et
+      répartition des 22 features dans `ml/REFACTOR_PLAN.md` §S4.
+      🐛 Corrigé au passage : `MLPredictionCard` rendait `{f.feature}` au lieu de
+      `{f.name}` dans la mise en page « standard » — libellé vide à l'écran.
+- [x] **`confidence` depuis |λ_dom − λ_ext| — livrée le 2026-08-25.** Déciles
+      mesurés sur l'entraînement par `train_score` → `score_report.json` ; le
+      service place le match à son **rang** dedans. Bornes, multiplicateur de
+      marché et clamp final **inchangés** : seule la source du signal change.
+      Repli sur l'ancienne formule si le rapport n'a pas de calibration lisible.
+      Sans effet sur le tri des paris — vérifié, `bestBets` et `ml.routes`
+      dérivent leur propre libellé de la probabilité. Détail dans
+      `ml/REFACTOR_PLAN.md` §S4.
+- [x] **`base_prob = dist.p_home_win()` pour les marchés non dérivables —
+      livré le 2026-08-25.** Portée réelle : **six marchés**
+      (`last_team_score`, `period{1,2,3}_winner`, `winning_margin`,
+      `double_chance`) ; tout le reste est déjà pricé par la distribution avant
+      que `base_prob` soit lu. +1,5 à +3,1 points selon le marché. `model_type`
+      et `model_version` suivent (`score-nhl-v1.0`, corrigé le 2026-08-26).
+      **Vérifié en navigateur le 2026-08-26**, chiffres reproduits hors ligne à
+      l'unité près — détail dans `ml/REFACTOR_PLAN.md` §S4.
+- [x] **Les deux estimateurs exposés côte à côte — livré le 2026-08-25.**
+      `probability_score_model` et `probability_classifier` dans `MLResponse`
+      (optionnels, rétrocompatibles), relayés par `mlApiClient.ts` et affichés
+      avec leur Δ dans `DevMLDashboard`. **Coût zéro en calcul :** depuis ④ le
+      classifieur tourne toujours et son résultat était jeté.
+- [ ] **⑤ Suppression du classifieur — REPORTÉE À APRÈS LE LANCEMENT**, et
+      alors en « option 1 » : classifieur rétrogradé en **repli pur**, `_blend_w`
+      et le chemin nominal supprimés, `game_model.json` gardé **une release de
+      plus**. Réversible ; suppression définitive au déploiement suivant si rien
+      n'a bougé. Raisons détaillées dans `ml/REFACTOR_PLAN.md` §S4.
+- [x] **2 bogues corrigés à la première vérification navigateur (2026-08-25).**
+      ① `_read_confidence_deciles` était définie sous `_try_load_models()`, qui
+      tourne au chargement du module → `NameError` avalé par son `except`, et
+      **tout le modèle de score désactivé en silence** (②③④ d'un coup). Bloc
+      remonté + test structurel `ast` qui verrouille la classe de bogue.
+      ② `DevMLDashboard`, onglet Backtest : `markets.puckline_diagnostics` est
+      un objet parmi des tableaux depuis le run A2 → filtre `Array.isArray`.
+      Ajouté : un menu **Marché** dans le panneau de test, sans quoi ④ n'était
+      pas vérifiable en un clic (le bouton envoyait `moneyline` en dur, un
+      marché dérivable où ④ n'a aucun effet).
+- [x] ⚠️ **Diagramme de fiabilité des DEUX modèles — MESURÉ le 2026-08-26.**
+      `python backtest.py --reliability` (nouveau mode, sans cotes : il tourne
+      là où le mode ROI ne peut pas), rapport dans
+      `../models/reliability_report.json`. **C'est le classifieur qui a raison
+      dans les extrêmes.** Sur ses PROPRES bins — le seul test inattaquable,
+      chacun conditionné sur sa propre probabilité — le modèle de score sort de
+      l'IC là où ça compte : bin **0,7-0,8**, il annonce **0,726**, l'observé
+      est **0,821** sur 240 matchs (IC [0,767 ; 0,864]). Le classifieur, lui,
+      est dans l'IC dans **tous** ses bins d'effectif suffisant, jusqu'à 0,8-0,9
+      (annonce 0,826, observé 0,837, n = 86). Sur COL-SJS, 77 % était donc le
+      bon chiffre, pas 66 %.
+      **La compression est symétrique et mécanique** : écart-type des
+      probabilités 0,095 contre 0,120, maximum 0,804 contre 0,877, 242 matchs
+      au-dessus de 0,70 contre 435. ECE 0,0200 contre 0,0110 ; MCE 0,0953 contre
+      0,0369.
+      **Ce qui ne se conclut PAS** : la log-loss globale reste à parité (Δ
+      apparié score − classifieur **−0,00111 ± 0,00186**, l'IC contient 0 ;
+      0,66421 contre 0,66532, qui reproduisent à l'unité près les rapports
+      existants). Le modèle de score n'est pas moins bon — il est **mal
+      calibré**, ce qui est un autre défaut, et lui est réparable.
+      ⚠️ **Conséquence directe sur ④** : les six marchés basculés sur
+      `base_prob = dist.p_home_win()` sortent une probabilité de favori trop
+      basse de ~6 à 10 points sur les affiches tranchées, donc une EV faussée
+      dans le sens qui pousse vers l'outsider. **Ne pas miser dessus** tant que
+      le poste suivant n'est pas fait.
+- [x] **Prolongation dépendante de l'affiche — CODE LIVRÉ le 2026-08-26.**
+      Cause mesurée, pas déduite : sur les 951 matchs de test allés en
+      prolongation, quand le modèle fait du domicile un favori ≥ 0,65 il gagne
+      **61,7 %** de ses prolongations (n = 149, IC [0,537 ; 0,692]) — la
+      constante 0,4996 est **hors de l'IC**. Les trois autres tranches sont
+      compatibles.
+      Où ça vit : `score_model.read_ot_model` / `p_ot_for` (le contrat partagé,
+      pour que l'entraînement, le service et la mesure appliquent la **même**
+      formule), `train_score.fit_ot_model` (l'ajustement, sur l'ENTRAÎNEMENT),
+      `ml_service._p_ot_for` (la lecture, définie **au-dessus** du chargeur —
+      cf. le bogue muet du 2026-08-25), et `backtest.py --reliability` qui lit
+      désormais le même modèle, donc mesure ce qui est **servi**.
+      Cinq garde-fous font retomber sur le scalaire sans bruit : effectif < 500,
+      coefficients non finis, **pente ≤ 0** (les favoris perdraient plus souvent
+      leurs prolongations : ajustement raté, pas découverte), **niveau moyen à
+      plus de 0,02 de la constante** (c'est ce garde-fou qui aurait refusé
+      l'ajustement sur la validation), et log-loss non améliorée.
+- [x] **En service depuis ton run du 2026-08-26 07:00.** `score_report.json`
+      porte `p_ot_model` = σ(+0,264466·Δλ −0,06097) sur 3 427 prolongations,
+      avec `mean_fitted` **0,49956** — le niveau moyen égale la constante au
+      chiffre près, le garde-fou a donc bien tenu. `backtest.py --reliability`
+      relancé derrière prend le chemin « DÉJÀ EN SERVICE » et rend
+      **exactement** les chiffres annoncés hors échantillon : log-loss 0,66368,
+      ECE 0,02146, MCE 0,0723, pente **1,1045 ± 0,0753 — l'IC contient 1**.
+      Le bloc `test` du rapport a bougé comme prévu (`logloss_moneyline`
+      0,6642 → **0,6637**, `home_win_predicted` 0,5491 → 0,5496) : c'est
+      `evaluate()` qui price désormais avec le p_ot servi.
+- [x] **Service ML redéployé et confirmé au démarrage** — la bannière
+      `[ML] ✅ Prolongation dépendante de l'affiche — σ(+0.2645·Δλ -0.0610)`
+      a été vue en prod. Le poste est clos de bout en bout : mesure → cause →
+      correctif → run → déploiement.
+- [ ] **⚠️ Ça ne referme PAS la queue, et il faut le savoir avant de le faire.**
+      Après correction, le bin 0,7-0,8 annonce 0,7295 pour un observé de 0,8018 :
+      toujours hors de son IC. La prolongation n'explique que **~2 points sur
+      les 9,5** — exactement ce que l'arithmétique donnait avant la mesure. Le
+      reste est une compression de la distribution elle-même. **④ reste sous
+      caution**, avec un biais ramené de ~9,5 à ~7 points sur les affiches
+      tranchées, toujours dans le sens qui pousse vers l'outsider.
+- [ ] **Étirer l'écart de λ (γ) — REPORTÉ, sciemment, après la saison 2026-27.**
+      Le correctif de fond : `S = λ_dom + λ_ext` conservé, `δ = log λ_dom −
+      log λ_ext` remplacé par `γ·δ`, un seul paramètre ajusté sur la validation.
+      Les totaux sont intacts par construction (S conservé) et tous les marchés
+      dérivés héritent de la correction de façon cohérente. **Pourquoi on
+      attend :** après la correction de prolongation, la pente vaut 1,105 ±
+      0,075 — elle n'est **plus** significativement > 1, alors que le bin de
+      queue échoue encore. Les deux tests se contredisent faute de matchs
+      au-dessus de 0,75 : il y en a 228. Poser γ sur cette base serait ajuster
+      un paramètre sur du bruit. `backtest.py --reliability` mesure déjà tout ce
+      qu'il faut pour trancher quand la saison sera dans le dataset.
+- [x] **A2 n'est PAS biaisé par la calibration — vérifié le 2026-08-26.** La
+      puck line −1.5 est calibrée dans tous ses bins d'effectif suffisant (ECE
+      0,0071 contre 0,0200 pour le moneyline), et la règle A2 opère entre 0,15
+      et 0,55, précisément la plage vérifiée. Nuance à ne pas perdre : la puck
+      line n'a **aucune queue** (4 matchs au-dessus de 0,60, zéro au-dessus de
+      0,70), donc ce contrôle ne peut pas détecter une compression des
+      extrêmes — il blanchit A2, pas la distribution.
+- [ ] **La mesure qui tranchera ⑤ — à faire quand la saison 2026-27 sera dans
+      le dataset.** `python build_dataset.py`, puis `train.py` et
+      `train_score.py` : la comparaison porte alors sur des matchs qu'**aucun
+      des deux modèles n'a vus**, au lieu des 0,0011 de log-loss actuels qui
+      sont dans le bruit. C'est la vraie raison de garder `game_model.json` une
+      release de plus — la mesure a besoin des deux modèles. En attendant,
+      `DevMLDashboard` montre l'écart match par match.
+
+> ### 🔍 Le run du 2026-08-25 a renversé la prémisse de S4
+>
+> **Le blend ⊕ marché n'a jamais tourné en production.** `_blend_w` se lit dans
+> `training_report.json → game_model.baselines.market.blend_weights` — clé
+> **absente** du rapport. Cause : le découpage est chronologique et les cotes
+> SBRO s'arrêtent en 2022-23, donc la tranche de **test (4 304 matchs,
+> 2023-02-26 → 2026-04-16) ne contient AUCUNE cote**. `train.py` bute sur le
+> même mur depuis toujours. **Aucun blend marché n'est ajustable tant qu'A1
+> (backfill payant) ou A1bis (collecte accumulée) n'a pas comblé 2023-2026** —
+> argument à porter au dossier A1 en §2.
+>
+> Conséquence : la crainte qui bloquait ④ et ⑤ portait sur un blend inexistant.
+> Sur la même tranche de test, **modèle de score + τ 0.6642 contre classifieur +
+> Platt 0.6653** — le modèle de score est déjà devant. S4 est une simplification
+> **à parité**, pas un compromis. Détail chiffré dans `ml/REFACTOR_PLAN.md` §S4.
+>
+> ① reste écrit et juste : ses poids s'appliqueront par-dessus
+> `dist.p_home_win()` le jour où il y aura des cotes à ajuster.
 
 > Le piège de S4 : le blend marché est **vivant** (`featureEngineering.ts:238`
 > passe les cotes). Supprimer le classifieur supprimerait le blend, et P1 a
@@ -407,9 +591,26 @@ client d'API, la route serveur) sont **déplacés dans `_to_delete/tennis-2026-0
 `SportContext` **reste**, en mono-sport : il porte le thème que consomment une
 vingtaine d'écrans. Le supprimer aurait disséminé trois constantes partout.
 
-- [ ] Supprimer `_to_delete/tennis-2026-08-24/` (ou `git rm` les 5 chemins)
-- [ ] `npm run build` **des deux côtés** — c'est le vrai filet ici : je n'ai pu
-      faire qu'un pré-check de syntaxe, pas un typecheck
+- [x] **Sorti de l'index Git le 2026-08-25** (`git rm -r --cached _to_delete`,
+      `_to_delete/` ajouté au `.gitignore`). Les 5 fichiers étaient **commités**
+      dans `_to_delete/` par 1583804 : ils partaient donc encore avec le dépôt.
+      Reste à **supprimer le dossier à la main** dans l'Explorateur — le bridge
+      n'a pas le droit de supprimer.
+- [x] **Contrôle statique passé le 2026-08-25** : zéro référence vivante à
+      `tennis`/`rapidapi` (il ne reste que 4 commentaires d'explication), zéro
+      usage de `setSport`, `TennisLiveCard`, `TennisMatchRow`,
+      `TENNIS_MARKET_DEFINITIONS`, `tennisLive`/`tennisUpcoming`, et sur les 194
+      fichiers de `client/src` + `server/src` : 0 erreur de syntaxe, 0 import
+      relatif cassé.
+- [ ] `npm run build` **des deux côtés, sur Windows** — impossible depuis le
+      bridge : chaque appel shell y est plafonné à 45 s **dans un namespace PID
+      isolé**, donc un build lancé en arrière-plan est tué dès que l'appel rend
+      la main. `vite build` et `tsc` dépassent tous les deux (et `git status` /
+      `git diff` aussi, sur ce mount). À noter : `client` n'a **pas de
+      `tsconfig.json`**, son build est `vite build` seul — il ne typecheck donc
+      pas, et le contrôle statique ci-dessus couvre à peu près ce qu'il aurait
+      attrapé. Le seul vrai typecheck du dépôt, c'est `server` → `npm run
+      typecheck`.
 - [ ] Railway : retirer `RAPIDAPI_KEY` (la ligne est partie de `.env.example`)
 - [ ] Vérifier une page d'accueil et l'onglet Stats dans le navigateur
 

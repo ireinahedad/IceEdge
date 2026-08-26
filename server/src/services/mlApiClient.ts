@@ -79,6 +79,18 @@ export interface MLPredictionResult {
   //    à 50/50 parfaitement compris a un σ proche de 0.
   probability_std?:     number | null;  // écart-type, en POINTS de pourcentage
   uncertainty?:         number | null;  // σ/σ_max borné à 1 — fraction de mise à retirer
+  // ── Les deux estimateurs de P(victoire domicile), côte à côte (S4 ⑤) ───────
+  //    Depuis S4 ④ le moneyline servi vient du modèle de score, mais le
+  //    classifieur tourne toujours et son résultat était jeté. Exposé pour que
+  //    l'écart soit visible match par match avant de décider de le supprimer —
+  //    décision reportée à après le lancement.
+  //
+  //    ⚠️ Ce ne sont PAS `probability`, qui est la probabilité du marché
+  //    demandé après transformation. Ces deux-ci sont toujours P(domicile
+  //    gagne), donc comparables entre eux et à rien d'autre. Optionnels : ne
+  //    jamais supposer leur présence.
+  probability_score_model?: number | null;  // entier 0–100
+  probability_classifier?:  number | null;  // entier 0–100
 }
 
 // ─── Disjoncteur (audit, ligne M) ────────────────────────────────────────────

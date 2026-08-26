@@ -42,7 +42,8 @@ const DORMANT = process.env.DORMANT === 'true';
       startValueBetScan();
       // Daily housekeeping: prune expired/revoked tokens and used codes
       startCleanupJob();
-      // Journalise les cotes NHL du jour pour le réentraînement ML (odds_live_log.csv)
+      // Journalise les cotes NHL du jour pour le réentraînement ML
+      // (tables `odds_log` et `odds_snapshots` — plus de CSV depuis la 027)
       startOddsLogger();
     }
   } catch (err: any) {

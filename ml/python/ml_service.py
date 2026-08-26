@@ -31,7 +31,8 @@ from typing import List, Optional
 
 import numpy as np
 import xgboost as xgb
-from score_model import P_OT_HOME, ScoreDistribution, ScoreEnsemble
+from score_model import (P_OT_HOME, ScoreDistribution, ScoreEnsemble,
+                         p_ot_for, read_ot_model)
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -169,6 +170,12 @@ _xgb_score: xgb.Booster | None = None
 _SCORE_FEAT_NAMES: list[str] = []
 _score_tau: dict[int, float] | None = None
 _score_p_ot: float = P_OT_HOME
+# Remplaçant du scalaire ci-dessus : [pente, ordonnée] d'une logistique sur
+# (λ_dom − λ_ext). None → on sert le scalaire, comportement d'avant.
+_score_p_ot_model: list[float] | None = None
+# Déciles de |λ_dom − λ_ext| mesurés à l'entraînement (S4 ③). None = pas de
+# calibration lisible dans le rapport → l'ancienne heuristique de confiance.
+_score_conf_deciles: list[float] | None = None
 
 # Ensemble bootstrap (P4) — mesure l'incertitude d'ESTIMATION du prix, pas le
 # hasard du match. Optionnel : sans lui le service répond exactement comme
@@ -243,6 +250,108 @@ def _load_score_ensemble(rep: dict) -> None:
         print(f"[ML] ⚠️  ensemble bootstrap ignoré : {e} — σ non exposée")
 
 
+# ⚠️ CE BLOC DOIT RESTER AU-DESSUS DE `_try_load_models()`.
+# Ce dernier est appelé au CHARGEMENT DU MODULE (plus bas, hors de toute
+# fonction) et appelle `_read_confidence_deciles`. Défini plus bas, le nom
+# n'existe pas encore à ce moment : `NameError`, avalé par le `except` du
+# chargeur, qui rend alors « score_model.json : name ... is not defined » et
+# désactive tout le modèle de score en silence. Vécu le 2026-08-25.
+# ── S4 ③ — jauge de confiance calibrée sur |λ_dom − λ_ext| ──────────────────
+#
+# CE QUE CE CHAMP EST, ET N'EST PAS. `confidence` (entier 40-95) est un élément
+# d'AFFICHAGE : il colore la jauge de `MLPredictionCard` (seuils 55/75) et rien
+# d'autre. Vérifié le 2026-08-25 côté serveur — `bestBets.service` calcule son
+# propre libellé de confiance à partir de la PROBABILITÉ (`confidenceFor(pct)`)
+# et `mlScore()` ne lit que `res.probability` ; `ml.routes.ts` fait de même sur
+# sa route « single ». Aucun tri, aucun filtre, aucun seuil de mise ne dépend de
+# ce champ. C'est ce qui rend ce changement sûr.
+#
+# CE QUI CHANGE. La force du signal venait de
+# `|win_diff|·2 + |gf_diff|/3 + |form_diff|` — trois écarts de statistiques
+# d'équipe sans rapport avec le modèle qui produit réellement la probabilité
+# affichée. On prend désormais l'écart entre les deux intensités du modèle de
+# score : la façon dont il dit lui-même si l'affiche est tranchée.
+#
+# POURQUOI UN RANG ET PAS UN SEUIL. Un seuil posé au jugé sur |Δλ| ferait sauter
+# la jauge et deviendrait faux au moindre changement d'échelle du modèle. On
+# place donc le match à son RANG dans la distribution mesurée à l'entraînement
+# (déciles dans `score_report.json`, interpolés entre eux) : un écart médian
+# donne une confiance médiane, par construction, quel que soit le modèle.
+#
+# CE QUI NE CHANGE PAS. Les bornes. `base_conf` couvre exactement le même
+# [0.45, 0.92] qu'avant, le multiplicateur de marché s'applique après comme
+# avant, et le clamp final reste [0.38, 0.90]. Seule la SOURCE du signal change.
+# Sans calibration lisible dans le rapport, ou sans modèle de score pour ce
+# match, l'ancienne formule reprend la main telle quelle.
+
+_CONF_MIN, _CONF_MAX = 0.45, 0.92
+_CONF_DECILE_RANKS = tuple(i / 10 for i in range(11))
+
+
+def _read_confidence_deciles(rep: dict) -> list[float] | None:
+    """Déciles de |λ_dom − λ_ext| lus dans `score_report.json`, ou None.
+
+    Tout est vérifié plutôt que supposé — le rapport peut venir d'un
+    entraînement antérieur à S4 ③, ou d'une version future : signal attendu,
+    longueur, convertibilité, stricte croissance (sans laquelle l'interpolation
+    serait ambiguë). Au moindre doute on rend None, et la jauge garde son
+    ancien comportement au lieu de se coller à une valeur.
+    """
+    cal = rep.get("confidence")
+    if not isinstance(cal, dict) or cal.get("signal") != "abs_lambda_diff":
+        return None
+    raw = cal.get("deciles")
+    if not isinstance(raw, list) or len(raw) != len(_CONF_DECILE_RANKS):
+        return None
+    try:
+        q = [float(v) for v in raw]
+    except (TypeError, ValueError):
+        return None
+    if not all(math.isfinite(v) for v in q):
+        return None
+    if not all(b > a for a, b in zip(q, q[1:])):
+        return None
+    return q
+
+
+# ── S4 — prolongation dépendante de l'affiche ───────────────────────────────
+#
+# `p_home_win = p_reg + p_tie × p_ot_home`. Le troisième facteur était une
+# CONSTANTE : un gros favori qui va en prolongation était traité comme un pile
+# ou face. Mesuré le 2026-08-26 sur les 951 prolongations de la tranche de test
+# — favori ≥ 0.65 selon le modèle : 61.7 % de victoires en prolongation
+# (n = 149, IC 95 % [0.537 ; 0.692]), la constante 0.4996 est hors de l'IC.
+# `python backtest.py --reliability` rejoue la mesure.
+#
+# ⚠️ Ça ne corrige qu'une PART de la compression des queues (~2 points sur 9.5) :
+# le reste vient de la distribution elle-même. Cf. `REFACTOR_PLAN.md` §S4.
+#
+# Comme pour ③, tout est vérifié plutôt que supposé : un rapport antérieur à ce
+# changement n'a pas la clé, un rapport futur peut avoir un autre signal.
+
+def _p_ot_for(lam_home: float, lam_away: float) -> float:
+    """P(le domicile gagne la prolongation) pour CE match — scalaire si pas de modèle.
+
+    Le calcul lui-même est dans `score_model`, partagé avec `train_score` et
+    `backtest.py --reliability` : les trois doivent appliquer exactement la même
+    formule, sans quoi la mesure ne décrirait pas le service.
+    """
+    return p_ot_for(_score_p_ot_model, lam_home, lam_away, _score_p_ot)
+
+
+def _confidence_from_lambdas(dist: "ScoreDistribution | None") -> float | None:
+    """Force du signal pour ce match, dans [_CONF_MIN, _CONF_MAX]. None = repli."""
+    if dist is None or _score_conf_deciles is None:
+        return None
+    diff = abs(dist.lam_home - dist.lam_away)
+    if not math.isfinite(diff):
+        return None
+    # `np.interp` borne aux extrémités : un écart hors de la plage observée à
+    # l'entraînement reçoit le rang 0 ou 1, jamais une extrapolation.
+    rank = float(np.interp(diff, _score_conf_deciles, _CONF_DECILE_RANKS))
+    return _CONF_MIN + (_CONF_MAX - _CONF_MIN) * rank
+
+
 def _try_load_models():
     global _xgb_game, _game_importances
     global _GAME_FEAT_NAMES
@@ -314,6 +423,7 @@ def _try_load_models():
     # Chargé indépendamment des autres : s'il manque, le service garde les
     # heuristiques historiques et continue de répondre normalement.
     global _xgb_score, _SCORE_FEAT_NAMES, _score_tau, _score_p_ot
+    global _score_conf_deciles, _score_p_ot_model
     score_path  = os.path.join(MODELS_DIR, "score_model.json")
     score_rep   = os.path.join(MODELS_DIR, "score_report.json")
     if os.path.exists(score_path) and os.path.exists(score_rep):
@@ -324,6 +434,8 @@ def _try_load_models():
             _score_tau = {int(k): float(v)
                           for k, v in (rep.get("tau_margin") or {}).items()}
             _score_p_ot = float(rep.get("p_ot_home", P_OT_HOME))
+            _score_conf_deciles = _read_confidence_deciles(rep)
+            _score_p_ot_model = read_ot_model(rep)
             if not _SCORE_FEAT_NAMES:
                 raise ValueError("score_report.json sans liste de features")
             b = xgb.Booster()
@@ -331,9 +443,31 @@ def _try_load_models():
             _xgb_score = b
             print(f"[ML] ✅ score_model.json chargé — {len(_SCORE_FEAT_NAMES)} features, "
                   f"τ sur {len(_score_tau)} écarts, P(dom en OT)={_score_p_ot:.4f}")
+            # Dit à voix haute si la jauge de confiance est calibrée (S4 ③) ou
+            # si elle reste sur l'ancienne heuristique : sans cette ligne, les
+            # deux cas se ressemblent exactement au démarrage.
+            # Dit à voix haute lequel des deux traitements de la prolongation
+            # tourne : sans cette ligne les deux cas se ressemblent au démarrage.
+            if _score_p_ot_model:
+                a, b = _score_p_ot_model
+                print(f"[ML] ✅ Prolongation dépendante de l'affiche — "
+                      f"σ({a:+.4f}·Δλ {b:+.4f}), soit "
+                      f"{_p_ot_for(4.0, 3.0):.3f} pour Δλ=1.0 contre "
+                      f"{_score_p_ot:.3f} en constante")
+            else:
+                print(f"[ML] ℹ️  Prolongation : constante {_score_p_ot:.4f} "
+                      "(relance train_score.py pour le remplaçant)")
+            if _score_conf_deciles:
+                print(f"[ML] ✅ Confiance calibrée sur |λ_dom − λ_ext| — "
+                      f"médiane {_score_conf_deciles[5]:.3f}, "
+                      f"étendue {_score_conf_deciles[0]:.3f}–{_score_conf_deciles[10]:.3f}")
+            else:
+                print("[ML] ℹ️  Pas de calibration de confiance dans le rapport — "
+                      "ancienne heuristique (relance train_score.py pour l'obtenir)")
             _load_score_ensemble(rep)
         except Exception as e:
             _xgb_score, _SCORE_FEAT_NAMES, _score_tau = None, [], None
+            _score_conf_deciles = None
             print(f"[ML] ⚠️  score_model.json : {e} — heuristiques conservées")
     else:
         print("[ML] ℹ️  Pas de score_model.json — heuristiques de marchés dérivés")
@@ -407,6 +541,24 @@ class MLResponse(BaseModel):
     # `uncertainty_haircut` — exposée pour que le backend puisse dimensionner
     # sans recoder la règle ni connaître σ_max.
     uncertainty: Optional[float] = None
+    # ── S4 ⑤ — les deux estimateurs de P(victoire domicile), côte à côte ─────
+    #
+    # POURQUOI. Depuis S4 ④, le moneyline servi vient du modèle de score, mais
+    # le classifieur tourne toujours à chaque requête : son résultat était
+    # simplement jeté. L'exposer ne coûte donc AUCUN calcul et rend visible,
+    # match par match, l'écart entre les deux — la seule chose qui reste à
+    # trancher avant de supprimer le classifieur (S4 ⑤, après le lancement).
+    #
+    # À NE PAS CONFONDRE AVEC `probability`, qui est la probabilité du MARCHÉ
+    # demandé, après transformation. Ces deux champs-ci sont toujours
+    # P(victoire domicile), donc directement comparables entre eux et à rien
+    # d'autre.
+    #
+    # Optionnels : `probability_score_model` est absent si le modèle de score
+    # n'a pas répondu pour ce match, `probability_classifier` si le classifieur
+    # n'est pas chargé (auquel cas la base vient du repli logistique).
+    probability_score_model: Optional[int] = None
+    probability_classifier: Optional[int] = None
 
 # ── Game features ─────────────────────────────────────────────────────────────
 
@@ -873,12 +1025,131 @@ def _build_score_distribution(feat_values: dict, home_elo: float,
         # Mieux vaut retomber sur l'heuristique que servir un prix absurde.
         if not (0.5 <= lam_h <= 8.0 and 0.5 <= lam_a <= 8.0):
             return None
-        dist = ScoreDistribution(lam_h, lam_a, _score_p_ot, _score_tau)
+        dist = ScoreDistribution(lam_h, lam_a, _p_ot_for(lam_h, lam_a), _score_tau)
         dist._dmatrix = dmat          # réutilisé par l'ensemble, cf. ci-dessous
         return dist
     except Exception as e:
         print(f"[ML] ⚠️  modèle de score indisponible pour ce match : {e}")
         return None
+
+
+# ── S4 ② — décomposition de log λ en facteurs lisibles ───────────────────────
+#
+# CE QUE ÇA REMPLACE. Jusqu'ici `feature_importances` servait les gains globaux
+# du classifieur : les MÊMES six colonnes pour tous les matchs de la saison, et
+# une `direction` devinée par correspondance de chaînes sur le nom de la feature
+# (`"win" in name`, `"gf" in name`…) confrontée à trois écarts globaux. Ça ne
+# disait rien du match affiché.
+#
+# CE QUE ÇA DONNE À LA PLACE. XGBoost expose `predict(..., pred_contribs=True)`,
+# soit la contribution EXACTE de chaque feature au score brut — ici log λ,
+# puisque le modèle de score est un `count:poisson`. On la lit sur les deux
+# lignes déjà construites pour ce match (ligne domicile, ligne extérieur) et on
+# prend l'écart :
+#
+#     effet_net(f) = contrib(f, ligne dom) − contrib(f, ligne ext)
+#
+# positif = pousse vers le domicile. C'est par match, c'est signé, et c'est la
+# décomposition réelle du modèle, pas une heuristique.
+#
+# `is_home` et `elo_atk_minus_def` se décomposent correctement sans traitement
+# spécial : la ligne domicile porte `is_home=1` et `elo_dom − elo_ext`, la ligne
+# extérieur `is_home=0` et l'opposé. L'écart des contributions EST l'avantage de
+# la glace, et l'écart de force d'équipe.
+#
+# POURQUOI DES GROUPES ET PAS LES COLONNES. Sept concepts se lisent ; vingt-deux
+# noms de colonnes non. Et surtout un groupe est **stable** : si le jeu de
+# features bouge, une colonne disparaît simplement de son groupe au lieu de
+# faire disparaître une ligne de l'affichage.
+#
+# `factor.other` est un filet, pas un huitième concept : une colonne qu'aucune
+# règle ne reconnaît y tombe au lieu d'être silencieusement perdue. S'il
+# apparaît à l'écran, c'est que `_factor_of` a besoin d'une règle de plus.
+
+# Part minimale pour qu'un facteur mérite une ligne : en dessous, la barre est
+# invisible et n'ajoute que du bruit à une liste déjà courte.
+_FACTOR_MIN_SHARE = 0.005
+
+
+def _factor_of(name: str) -> str:
+    """Concept auquel rattacher une feature du modèle de score.
+
+    Par règles et non par table exhaustive : une colonne ajoutée à `ATK_COLS`
+    ou `DEF_COLS` tombe alors dans le bon groupe sans qu'on ait à toucher ici.
+    """
+    if name == "is_home":
+        return "factor.home_ice"
+    if name == "elo_atk_minus_def":
+        return "factor.team_strength"
+    stem = name[4:] if name[:4] in ("atk_", "def_") else name
+    if stem.startswith("goalie_"):
+        return "factor.goalie"
+    if stem in ("star_power", "stars_out_weight", "lineup_xg", "lineup_pts"):
+        return "factor.lineup"
+    if stem in ("rest_days", "b2b"):
+        return "factor.schedule"
+    if name.startswith("def_"):
+        return "factor.opp_defense"
+    if name.startswith("atk_"):
+        return "factor.attack"
+    return "factor.other"
+
+
+def _lambda_factor_importances(
+    dist: "ScoreDistribution | None",
+) -> list[FeatureImportance]:
+    """Facteurs du match, décomposés depuis log λ. Liste vide = repli.
+
+    Rend une liste VIDE plutôt que de lever : `feature_importances` est un
+    élément d'affichage, il ne doit jamais faire échouer une prédiction. Chaque
+    sortie vide laisse l'appelant conserver la liste du classifieur.
+
+    `name` porte une CLÉ i18n (`factor.*`), pas un libellé : le client la traduit
+    et retombe sur la chaîne brute s'il ne la connaît pas — ce qui garde le repli
+    classifieur, dont les noms sont des colonnes, affichable tel quel.
+
+    `importance` est une part normalisée du total des |effets| (le client la
+    rend en pourcentage), et `direction` dit vers quel camp le facteur pousse :
+    `positive` = vers le DOMICILE, comme la probabilité affichée.
+    """
+    dmat = getattr(dist, "_dmatrix", None)
+    if dmat is None or _xgb_score is None or not _SCORE_FEAT_NAMES:
+        return []
+    try:
+        contribs = np.asarray(_xgb_score.predict(dmat, pred_contribs=True))
+    except Exception as e:
+        print(f"[ML] ⚠️  décomposition λ indisponible : {e}")
+        return []
+
+    # (2, n_features + 1) — la dernière colonne est le biais, commun aux deux
+    # lignes : il s'annule dans l'écart, on l'écarte explicitement.
+    n = len(_SCORE_FEAT_NAMES)
+    if contribs.ndim != 2 or contribs.shape[0] != 2 or contribs.shape[1] < n:
+        return []
+    net = contribs[0, :n] - contribs[1, :n]
+
+    agg: dict[str, float] = {}
+    for name, value in zip(_SCORE_FEAT_NAMES, net):
+        if not np.isfinite(value):
+            continue
+        key = _factor_of(name)
+        agg[key] = agg.get(key, 0.0) + float(value)
+
+    total = sum(abs(v) for v in agg.values())
+    if total <= 0.0:
+        return []
+
+    out = [
+        FeatureImportance(
+            name=key,
+            importance=round(abs(value) / total, 4),
+            direction="positive" if value > 0 else "negative",
+        )
+        for key, value in agg.items()
+        if abs(value) / total >= _FACTOR_MIN_SHARE
+    ]
+    out.sort(key=lambda fi: fi.importance, reverse=True)
+    return out
 
 
 def _build_score_ensemble(dist: "ScoreDistribution | None") -> "ScoreEnsemble | None":
@@ -904,7 +1175,10 @@ def _build_score_ensemble(dist: "ScoreDistribution | None") -> "ScoreEnsemble | 
                 lambdas.append((lh, la))
         if len(lambdas) < 2:
             return None
-        return ScoreEnsemble(lambdas, _score_p_ot, _score_tau, point=dist)
+        # Les membres partagent le p_ot du point estimé : leurs λ n'en diffèrent
+        # que d'un bruit d'échantillonnage, et σ mesure la dispersion des λ, pas
+        # celle de la prolongation.
+        return ScoreEnsemble(lambdas, dist.p_ot_home, _score_tau, point=dist)
     except Exception as e:
         print(f"[ML] ⚠️  ensemble indisponible pour ce match : {e}")
         return None
@@ -1135,12 +1409,62 @@ def predict_game(f: GameFeatures) -> MLResponse:
     #    Le modèle de score price exactement les marchés dérivables ; les autres
     #    gardent les heuristiques. `None` = repli intégral sur l'existant.
     score_dist = _build_score_distribution(feat_values, home_elo, away_elo)
+
+    # 4bis. Facteurs affichés — décomposition λ du match dès que le modèle de
+    #       score répond (S4 ②). Les gains globaux du classifieur, calculés en
+    #       3, ne restent qu'en repli : ils sont identiques pour tous les
+    #       matchs de la saison.
+    if score_dist is not None:
+        lam_fi = _lambda_factor_importances(score_dist)
+        if lam_fi:
+            fi_list = lam_fi
+
+    # 4ter. Le moneyline de base vient du modèle de score dès qu'il répond
+    #       (S4 ④). Il ne sert QUE de repli : `_apply_market` price d'abord les
+    #       marchés dérivables exactement, via `_apply_score_model`. Les marchés
+    #       qui retombent ici — `last_team_score`, `period{1,2,3}_winner`,
+    #       `winning_margin`, `double_chance` — appliquaient jusqu'ici leur
+    #       coefficient à la probabilité du CLASSIFIEUR.
+    #
+    #       CE QUI JUSTIFIE LE CHANGEMENT, mesuré le 2026-08-25 sur la MÊME
+    #       tranche de test (4 304 matchs, 2023-02-26 → 2026-04-16) :
+    #
+    #           modèle de score + τ   log-loss 0.6642
+    #           classifieur + Platt   log-loss 0.6653
+    #
+    #       Le plan redoutait de perdre le « blend ⊕ marché » du classifieur en
+    #       faisant ça. Ce blend n'a **jamais été actif** : `_blend_w` se lit
+    #       dans `training_report.json → game_model.baselines.market
+    #       .blend_weights`, et cette clé est absente du rapport — les cotes
+    #       SBRO s'arrêtent en 2022-23, la tranche de test n'en contient aucune,
+    #       donc `train.py` n'a jamais pu l'ajuster. `base_prob` valait le
+    #       classifieur calibré Platt, point. Il n'y avait rien à perdre.
+    #
+    #       Le jour où les cotes reviendront (A1 payant ou A1bis accumulé), le
+    #       blend de S4 ① s'appliquera PAR-DESSUS `dist.p_home_win()` — c'est
+    #       exactement ce que `train_score.fit_market_blend` prépare.
+    #
+    #       Le classifieur reste calculé en 3 : on garde sa valeur avant de
+    #       l'écraser, pour l'exposer à côté de celle servie (cf. les deux
+    #       champs `probability_*` de `MLResponse`). Zéro calcul en plus.
+    p_clf = base_prob if _xgb_game is not None else None
+    p_score_model = None
+    if score_dist is not None:
+        p_score_model = score_dist.p_home_win()
+        base_prob = p_score_model
+        model_type = "Modèle de score (Poisson empilé)"
+        # `model_version` identifiait l'entraînement du CLASSIFIEUR
+        # (`xgb-nhl-v4.0`). L'UI affiche les deux côte à côte —
+        # « v xgb-nhl-v4.0 · Modèle de score (Poisson empilé) » annonçait donc la
+        # version d'un modèle qui ne produit plus cette probabilité. Champ
+        # purement d'affichage, vérifié : aucun usage fonctionnel côté serveur
+        # ni client.
+        model_version = "score-nhl-v1.0"
+
     prob, conf_mult, explanation = _apply_market(
         f.market_type, base_prob, f, win_diff, lam_home, lam_away, model_type,
         dist=score_dist,
     )
-    if score_dist is not None:
-        model_type = f"{model_type} + modèle de score"
 
     # 5. Incertitude d'estimation (P4) — σ sur le marché effectivement servi
     prob_std = uncertainty = None
@@ -1152,13 +1476,19 @@ def predict_game(f: GameFeatures) -> MLResponse:
             prob_std = round(sd * 100.0, 2)      # en points de pourcentage
             uncertainty = round(min(1.0, sd / _score_sigma_max), 4)
 
-    # 6. Confidence = signal des features × multiplicateur du marché
-    #    Volontairement inchangé : ce champ est consommé par le backend
-    #    (mlApiClient.ts, entier 40–95) et le rescaler sur σ changerait le
-    #    comportement de tri des paris sans qu'on ait mesuré l'effet. σ est
-    #    exposée à part, dans `probability_std` / `uncertainty`.
-    magnitude  = abs(win_diff) * 2 + abs(gf_diff) / 3 + abs(form_diff)
-    base_conf  = clamp(0.55 + magnitude * 0.25, 0.45, 0.92)
+    # 6. Confidence = force du signal × multiplicateur du marché
+    #    Depuis S4 ③, la force vient de |λ_dom − λ_ext| replacé dans la
+    #    distribution d'entraînement ; les trois écarts de statistiques
+    #    d'équipe ne servent plus que de repli. Voir `_confidence_from_lambdas`
+    #    pour le raisonnement, et pourquoi c'est sans effet sur le tri des paris.
+    #
+    #    σ (incertitude d'ESTIMATION du prix) reste un champ à part,
+    #    `probability_std` / `uncertainty` : ce n'est pas la même grandeur et
+    #    elle n'entre toujours pas dans cette jauge.
+    base_conf = _confidence_from_lambdas(score_dist)
+    if base_conf is None:
+        magnitude = abs(win_diff) * 2 + abs(gf_diff) / 3 + abs(form_diff)
+        base_conf = clamp(0.55 + magnitude * 0.25, _CONF_MIN, _CONF_MAX)
     confidence = int(clamp(base_conf * conf_mult, 0.38, 0.90) * 100)
 
     return MLResponse(
@@ -1170,6 +1500,10 @@ def predict_game(f: GameFeatures) -> MLResponse:
         explanation=explanation,
         probability_std=prob_std,
         uncertainty=uncertainty,
+        probability_score_model=(None if p_score_model is None
+                                 else int(round(p_score_model * 100))),
+        probability_classifier=(None if p_clf is None
+                                else int(round(p_clf * 100))),
     )
 
 # ── Player prop model ─────────────────────────────────────────────────────────

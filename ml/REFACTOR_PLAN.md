@@ -244,11 +244,498 @@ repli logistique `_game_moneyline` — mais il ne va pas de soi et doit être é
 - Risque : **le seul changement de cette liste qui touche ce que voit l'app.**
   À vérifier route par route.
 - [x] Sort du blend tranché : réajusté sur le modèle de score
-- [ ] Blend `score ⊕ marché` dans `train_score.py` + poids dans `score_report.json`
-- [ ] Décomposition λ pour `feature_importances` (`pred_contribs`, 7 groupes)
-- [ ] `confidence` depuis λ, calibrée sur la distribution actuelle
-- [ ] `base_prob` = `dist.p_home_win()` pour les marchés non dérivables
-- [ ] Puis suppression du classifieur, route par route
+- [x] **Blend `score ⊕ marché` dans `train_score.py` + poids dans `score_report.json`
+      — écrit le 2026-08-25, pas encore exécuté.** `fit_market_blend()` ajuste
+      `logit(p_score) ⊕ logit(market_home_p_close)` sur la VALIDATION et mesure
+      sur le TEST (seuils 200/100 repris de `train.py:train_game`) ; les poids
+      partent dans `score_report.json` sous la clé `blend`, `None` si la
+      couverture est insuffisante. `logit`/`fit_logistic`/`apply_logistic` sont
+      posées dans **`score_model.py`** — le seul module importé à la fois par
+      l'entraînement et par `ml_service`, et qui survivra à la suppression de
+      `train.py`. Contrôles ajoutés à `score_model.sanity_check()` (le fit
+      retrouve une relation logistique connue à ±0,25). ⚠️ Les poids sont
+      ajustés sur des prix de **clôture** alors que le service verra un prix
+      antérieur : le poids du marché mesuré est un plafond. `odds_snapshots`
+      (A3) permettra un jour de réajuster à T−N heures.
+      **Reste à faire : `python train_score.py` sur ta machine, puis lire la
+      table log-loss du rapport avant de brancher quoi que ce soit.**
+- [x] **`evaluate()` évaluait un autre modèle que celui servi — corrigé le
+      2026-08-25.** Elle construisait ses `ScoreDistribution` avec `tau=tau`
+      seul, donc avec la constante `P_OT_HOME` de `score_model` (0.5051) et non
+      le `p_ot_home` mesuré sur l'entraînement — celui qui part dans
+      `score_report.json` et que `ml_service` relit au démarrage
+      (`ml_service.py:326`). La table imprimée et le bloc `test` du rapport ne
+      décrivaient donc pas tout à fait le modèle servi. `evaluate()` prend
+      désormais `p_ot_home` en paramètre.
+      **Conséquence à connaître : les chiffres du bloc `test` bougeront
+      légèrement au prochain run.** Ce n'est pas une régression. Mesuré sur
+      lambdas constantes : P(dom) passe de 0.5169 à 0.5682 quand `p_ot_home` va
+      de 0.35 à 0.65 — l'effet réel sera bien plus petit, la valeur mesurée
+      étant proche de 0.5051. Les métriques de temps réglementaire (nul,
+      dom −1.5) et le MAE du total sont **inchangés** : seuls les marchés qui
+      dépendent de la prolongation bougent.
+
+> **⚠️ Le même oubli subsiste à `backtest_walkforward.py:1556`** — et il n'est
+> **pas** corrigé, délibérément. C'est le chemin d'ablation d'A5, une mesure
+> **close** (14 saisons, 364 entraînements) : changer le calcul rendrait ses
+> chiffres non comparables à ceux déjà publiés. Pire, cette fonction est
+> mémoïsée par `_ablation_cache_key`, dont le suffixe `|v2` ne dépend pas du
+> code de scoring : corriger sans bumper la clé **mélangerait silencieusement
+> anciens et nouveaux résultats dans le même cache**. Si A5 devait un jour
+> rouvrir, il faudrait corriger la ligne ET passer la clé en `|v3`. Les trois
+> autres `ScoreDistribution` de ce fichier passent bien `p_ot`.
+- [x] **Décomposition λ pour `feature_importances` — livrée le 2026-08-25.**
+      `ml_service._lambda_factor_importances()` lit
+      `predict(dmat, pred_contribs=True)` sur la DMatrix à deux lignes déjà
+      construite pour le match (donc **zéro prédiction supplémentaire**), fait
+      `contrib(ligne dom) − contrib(ligne ext)`, agrège en 7 concepts et
+      normalise en parts. `is_home` et `elo_atk_minus_def` se décomposent sans
+      traitement spécial : les deux lignes portent des valeurs opposées, l'écart
+      des contributions EST l'avantage de la glace et l'écart de force.
+      Le regroupement (`_factor_of`) est **par règles et non par table** : une
+      colonne ajoutée à `ATK_COLS`/`DEF_COLS` tombe dans le bon groupe sans
+      qu'on y touche. Les 22 features actuelles se répartissent en attaque 7 ·
+      défense adverse 5 · alignement 4 · gardien 2 · calendrier 2 · glace 1 ·
+      force d'équipe 1, et **rien** dans le filet `factor.other`.
+      Ça remplace les gains GLOBAUX du classifieur — les mêmes six colonnes pour
+      tous les matchs de la saison, avec une `direction` devinée par
+      correspondance de chaînes sur le nom de la feature. Le classifieur ne
+      reste qu'en repli si le modèle de score ne répond pas ; toute sortie vide
+      (booster absent, exception, forme inattendue, total nul) laisse ce repli
+      en place — `feature_importances` est de l'affichage, il ne doit jamais
+      faire échouer une prédiction.
+      **Côté client :** le service envoie une CLÉ (`factor.attack`, …), pas un
+      libellé ; 8 entrées EN/FR ajoutées à `i18n`, et `factorLabel()` traduit
+      dans les deux endroits qui affichent, en retombant sur la chaîne brute si
+      elle n'est pas une clé connue — donc le repli classifieur reste
+      affichable tel quel. **Les facteurs sont traduits pour la première fois.**
+      `DevMLDashboard` affiche volontairement la clé brute : c'est un outil de
+      dev, la clé y est plus informative que le libellé.
+
+      🐛 **Corrigé au passage :** la mise en page « standard » de
+      `MLPredictionCard` (cartes dépliées de `NHLPredictionsPage`) rendait
+      `{f.feature}` alors que le champ s'appelle `name` — le libellé du facteur
+      était donc **vide à l'écran** à cet endroit. `client` n'ayant pas de
+      `tsconfig.json` et son build étant `vite build` seul, rien ne l'avait
+      signalé.
+- [x] **`confidence` depuis λ, calibrée sur la distribution actuelle — livrée le
+      2026-08-25.** `train_score.confidence_calibration()` mesure les onze
+      déciles de |λ_dom − λ_ext| sur l'ENTRAÎNEMENT (même tranche que τ et
+      `p_ot_home`, les trois constantes que le service relit) et les écrit dans
+      `score_report.json` sous `confidence`.
+      `ml_service._confidence_from_lambdas()` place le match à son **rang** dans
+      cette distribution (interpolation entre déciles) et le projette sur
+      `[0.45, 0.92]` — exactement les bornes que l'ancienne formule produisait.
+      Le multiplicateur de marché s'applique après comme avant, le clamp final
+      reste `[0.38, 0.90]` : **seule la SOURCE du signal change.** Un rang plutôt
+      qu'un seuil, parce qu'un seuil posé au jugé ferait sauter la jauge et
+      deviendrait faux au moindre changement d'échelle du modèle ; là, un écart
+      médian donne une confiance médiane par construction.
+      Repli intégral sur `|win_diff|·2 + |gf_diff|/3 + |form_diff|` si le rapport
+      n'a pas de calibration lisible (rapport d'avant cette date, longueur ou
+      signal inattendus, déciles non strictement croissants, NaN) ou si le
+      modèle de score ne répond pas pour ce match.
+
+      **Ce qui rend le changement sûr, vérifié le 2026-08-25 :** `confidence`
+      est un champ d'AFFICHAGE et rien d'autre. `bestBets.service` calcule son
+      propre libellé depuis la PROBABILITÉ (`confidenceFor(pct)`), `mlScore()`
+      ne lit que `res.probability`, et `ml.routes.ts` fait de même sur sa route
+      « single ». Aucun tri, aucun filtre, aucun seuil de mise ne dépend de ce
+      champ. Le vieux commentaire de l'étape 6 qui redoutait un effet sur le tri
+      visait σ, pas ce signal — il est corrigé.
+- [x] **`base_prob` = `dist.p_home_win()` pour les marchés non dérivables —
+      livré le 2026-08-25.** Une fois `score_dist` construit, `base_prob` vient
+      du modèle de score. Portée réelle **exactement six marchés**, ceux qui
+      retombent sur les heuristiques : `last_team_score`,
+      `period{1,2,3}_winner`, `winning_margin`, `double_chance`. Tout le reste
+      est déjà pricé par `_apply_score_model` AVANT que `base_prob` soit lu —
+      vérifié, `moneyline`, `puck_line`, `total_goals` et `both_teams_score`
+      rendent une valeur strictement identique quel que soit `base_prob`.
+      Effet mesuré sur une affiche λ 3.35/2.55 : +1,5 à +3,1 points de
+      pourcentage selon le marché. `model_type` devient « Modèle de score
+      (Poisson empilé) » ; le suffixe « + modèle de score », qui aurait fait
+      doublon, est retiré. **`model_version` suit** depuis le 2026-08-26 :
+      `score-nhl-v1.0` au lieu de `xgb-nhl-v4.0`, qui identifiait
+      l'entraînement du classifieur — l'UI affichant les deux côte à côte,
+      « v xgb-nhl-v4.0 · Modèle de score (Poisson empilé) » annonçait la version
+      d'un modèle qui ne produit plus cette probabilité. Champ purement
+      d'affichage, vérifié : aucun usage fonctionnel serveur ni client.
+- [x] **Les deux estimateurs exposés côte à côte — livré le 2026-08-25.**
+      `probability_score_model` et `probability_classifier` dans `MLResponse`,
+      relayés par `mlApiClient.ts`, affichés avec leur Δ dans `DevMLDashboard`
+      (et nulle part ailleurs : c'est un outil de dev, pas une information pour
+      le parieur). Les deux sont **toujours P(victoire domicile)** — donc
+      comparables entre eux, et surtout **pas** à `probability`, qui est la
+      probabilité du marché demandé après transformation.
+      **Coût zéro en calcul :** depuis ④ le classifieur prédit toujours à chaque
+      requête et son résultat était simplement jeté ; on le garde avant de
+      l'écraser. Un test structurel (`ast`) verrouille l'ordre des affectations :
+      inversé, le champ renverrait silencieusement la valeur du modèle de score.
+- [ ] **⑤ Suppression du classifieur — REPORTÉE À APRÈS LE LANCEMENT.**
+
+> ### Pourquoi ⑤ attend, et sous quelle forme il se fera
+>
+> **1. Il n'y a pas de résultat, il y a une parité.** 0.6642 contre 0.6653 sur
+> 4 304 matchs, soit 0.0011 — largement dans le bruit. A5 a coûté 364
+> entraînements pour établir exactement ça : qu'un effet de cette taille n'est
+> pas résoluble sur l'historique disponible. « Équivalents » justifie ⑤ comme
+> simplification **gratuite** ; mais gratuit n'est sans risque que si on est sûr.
+>
+> **2. ⑤ supprimerait la seule chose qui permettra de trancher.** Les deux
+> modèles tournant sur la même requête forment un oracle de comparaison, et
+> depuis ④ il ne coûte rien. Surtout : la mesure rigoureuse **hors échantillon**
+> viendra toute seule — quand la saison 2026-27 entrera dans
+> `nhl_games_v4.csv`, il suffira de relancer `build_dataset.py` puis les deux
+> entraînements pour comparer sur des matchs qu'aucun des deux n'a vus. **Ça ne
+> marche que si les deux modèles existent encore.** C'est la vraie raison de
+> garder `game_model.json` une release de plus, plus que le journal live.
+>
+> **3. Le gain est de la maintenance, pas de la précision.** `game_model.json`
+> pèse 838 Ko dans un service dont le problème RAM documenté (§3 ligne U) se
+> compte en centaines de mégaoctets. Réel, mais pas urgent.
+>
+> **4. Le moment est mauvais.** ④ vient de déplacer six marchés de 1,5 à 3,1
+> points et personne ne l'a vu dans un navigateur. Ce qui bloque réellement le
+> lancement est de la vérification (§1). Empiler la suppression du seul filet
+> par-dessus des changements non vérifiés, c'est garantir de ne plus savoir d'où
+> vient un problème.
+>
+> **Forme retenue (« option 1 »), quand ce sera le moment :** classifieur
+> rétrogradé en **repli pur** — `_blend_w` et le chemin nominal supprimés, le
+> modèle gardé une release. Réversible, et supprimable pour de bon au
+> déploiement suivant si rien n'a bougé.
+>
+> **⚠️ Option écartée, et à ne pas re-proposer :** « durcir
+> `_build_score_distribution` pour qu'il ne rende jamais `None` ». Ça revient à
+> retirer le garde-fou `0,5 ≤ λ ≤ 8,0`, qui attrape un vecteur de features mal
+> rempli. Ce serait choisir de servir un prix absurde avec assurance plutôt
+> qu'une heuristique médiocre.
+>
+> À traiter avec ⑤ : `double_chance` estime la prolongation avec deux
+> heuristiques sur `win_diff` (`ot_rate`, `ot_home`) alors que la distribution
+> donne `dist.p_regulation_tie()` et `_score_p_ot` exactement.
+
+#### ✅ Vérification navigateur du 2026-08-26 — ②③④ confirmés, et une question ouverte
+
+Test manuel `/dev/ml` → Service → Run Test, deux affiches.
+
+**Ce qui est prouvé.** `model_type` sert « Modèle de score (Poisson empilé) ».
+Les facteurs sortent en clés (`factor.*`) avec des directions contrastées —
+`factor.goalie` négatif pendant que `factor.home_ice` est positif — donc la
+décomposition est bien propre au match et non figée. Sur COL-SJS
+(λ 3.98/2.91), les trois nombres se reproduisent **exactement** hors ligne :
+
+    p_home_win(τ, p_ot mesuré) = 0.6607        → probability 66 ✓
+    |λ_dom − λ_ext| = 1.070 → rang 0.918
+      → base_conf 0.8813 → confidence 88       → confidence 88 ✓
+
+Le rang 0.918 vient des déciles écrits dans `score_report.json` : ③ est donc
+vivant et calibré à l'unité près. Et `probability` (66) suit
+`probability_score_model` (66), pas `probability_classifier` (77) — le contrôle
+sur marché dérivable passe.
+
+**⚠️ La question ouverte : les deux modèles divergent de 11 points sur une
+affiche déséquilibrée.**
+
+| affiche | modèle de score | classifieur | écart |
+|---|---|---|---|
+| BOS-NYR (équilibrée) | 56 % | 56 % | 0 |
+| COL-SJS (déséquilibrée) | 66 % | 77 % | **11 pt** |
+
+Le modèle de score est nettement **plus conservateur dans les extrêmes**. Ce
+n'est pas rassurant ni inquiétant en soi — c'est **non mesuré**. Le rapport ne
+dit rien là-dessus : `home_win_predicted 0.5491 / observé 0.5400` est une
+moyenne, et une moyenne juste est compatible avec des queues fausses dans les
+deux sens.
+
+Or c'est exactement là que ça compte : les affiches déséquilibrées sont celles
+où un edge se détecte et où une mise se pose. ④ vient de déplacer six marchés
+vers l'estimateur le plus prudent des deux, sans qu'on sache lequel a raison
+dans les queues.
+
+**La mesure qui répond, et elle est bon marché :** un diagramme de fiabilité sur
+les 4 304 matchs de test — regrouper les prédictions par bin de probabilité et
+comparer prédit contre observé, pour les DEUX modèles. Les données existent, les
+deux modèles existent, ça tourne hors ligne. **Faite le 2026-08-26, section
+suivante.**
+
+#### ✅ La réponse — diagramme de fiabilité, 2026-08-26 : c'est le classifieur qui a raison
+
+`python backtest.py --reliability` (mode ajouté ce jour-là ; rapport complet
+dans `../models/reliability_report.json`). Il n'a besoin d'**aucune cote** — il
+tourne donc là où le mode ROI de ce même fichier s'arrête faute de prix sur la
+tranche de test.
+
+**Ce qu'il fait, et pourquoi c'est construit comme ça.**
+
+1. Il reconstruit les DEUX tranches de test — celle de `train.py` (`dropna` sur
+   3 colonnes) et celle de `train_score.py` (sur 6) — et vérifie qu'elles
+   portent sur les **mêmes matchs**, sur `game_id` et jamais sur la position :
+   le tri par date de pandas n'est pas stable, donc à date égale l'ordre peut
+   différer d'un frame à l'autre. Si un `dropna` bouge un jour, le mode refuse
+   de comparer au lieu de comparer faux.
+2. Les probabilités passent par les fonctions d'entraînement elles-mêmes
+   (`train_score.stack` / `lambdas_for` / `p_home_from_lambdas`, Platt lu dans
+   `training_report.json`) — pas de réimplémentation qui pourrait diverger en
+   silence. **Contrôle de validité** : les log-loss retombent sur **0,66421** et
+   **0,66532**, soit les 0,6642 / 0,6653 déjà écrits dans `score_report.json` et
+   `training_report.json`.
+
+**Le résultat, sur les PROPRES bins de chaque modèle** — le seul test
+inattaquable, puisque chacun y est conditionné sur sa propre probabilité :
+
+| modèle | bin | n | annonce | observé | IC 95 % | |
+|---|---|---|---|---|---|---|
+| score | 0,3-0,4 | 200 | 0,374 | 0,310 | [0,250 ; 0,377] | ✓ |
+| score | **0,7-0,8** | **240** | **0,726** | **0,821** | **[0,767 ; 0,864]** | **✗** |
+| classifieur | 0,7-0,8 | 349 | 0,743 | 0,719 | [0,670 ; 0,764] | ✓ |
+| classifieur | 0,8-0,9 | 86 | 0,826 | 0,837 | [0,745 ; 0,900] | ✓ |
+
+Le classifieur est **dans l'IC dans tous ses bins d'effectif suffisant**. Le
+modèle de score en sort dans un seul — et c'est celui des gros favoris. Sur
+COL-SJS, **77 % était le bon chiffre, pas 66 %**.
+
+**La compression est symétrique, donc mécanique.** Écart-type des probabilités
+0,095 contre 0,120 ; maximum 0,804 contre 0,877 ; 242 matchs au-dessus de 0,70
+contre 435. En bas il annonce 0,374 quand l'observé est 0,310, en haut 0,726
+quand l'observé est 0,821 : **le même écrasement vers 50 %, dans les deux
+queues**. ECE 0,0200 contre 0,0110 ; MCE 0,0953 contre 0,0369.
+
+**Ce qui ne se conclut PAS.** La log-loss globale reste à parité : Δ **apparié**
+(score − classifieur) **−0,00111 ± 0,00186**, l'IC contient 0 ; et dans les
+extrêmes (n = 937) −0,00172 ± 0,00476, dans le bruit aussi. Le modèle de score
+n'est donc pas « moins bon » — il est **mal calibré**, ce qui est un défaut
+différent, et lui est réparable. La conclusion de la section précédente (S4 est
+une simplification **à parité**) tient toujours ; ce qui change, c'est qu'elle
+ne vaut qu'après calibration.
+
+> **Un piège de lecture, laissé exprès dans la sortie.** La table « les extrêmes,
+> orientés côté favori » sélectionne sur `p_classifieur`. C'est donc un test de
+> calibration pour le CLASSIFIEUR (`E[y | p_c] = p_c`, sa définition même) et
+> seulement une **comparaison** pour le modèle de score : rien ne garantit
+> `E[y | p_c ∈ S] = E[p_s | p_c ∈ S]` si `p_s` n'est calibré que
+> conditionnellement à lui-même. Elle est là pour répondre à « lequel colle à
+> l'observé sur les affiches où l'un annonce un gros favori », pas pour décerner
+> un brevet de calibration. La preuve, c'est la table des bins propres.
+
+**⚠️ Conséquence directe sur ④.** Les six marchés basculés sur
+`base_prob = dist.p_home_win()` (`last_team_score`, `period{1,2,3}_winner`,
+`winning_margin`, `double_chance`) sortent une probabilité de favori **trop
+basse de ~6 à 10 points** sur les affiches tranchées — donc une EV faussée dans
+le sens qui pousse vers l'outsider. Ne pas miser dessus tant que le poste
+ci-dessous n'est pas fait. Sur les affiches équilibrées, rien à signaler : bin
+0,5-0,6, annonce 0,550, observé 0,550.
+
+#### ✅ La cause isolée, 2026-08-26 (2ᵉ passe) : la prolongation, mais pas seule
+
+Le mode `--reliability` a été étendu pour répondre à « où est la compression ».
+Quatre mesures, dans l'ordre où elles se contraignent.
+
+**1. La puck line −1.5, lue dans la même matrice jointe.** Le moyen de savoir si
+le défaut appartient à la distribution ou au seul moneyline : un match allé en
+prolongation finit forcément à un but d'écart, donc `p_ot_home` **n'entre pas**
+dans le prix de la puck line. Résultat : calibrée partout où l'effectif suffit,
+ECE **0,0071** contre 0,0200 pour le moneyline.
+
+> ⚠️ **Ce que ce contrôle ne peut pas faire.** La puck line n'a **aucune
+> queue** : 4 matchs au-dessus de 0,60, zéro au-dessus de 0,70. Elle est
+> calibrée sur 0,15–0,55 — la plage où le moneyline l'est aussi. Ce test est
+> donc structurellement incapable de détecter une compression des extrêmes. Il
+> ne blanchit pas la distribution ; il dit où elle est saine.
+>
+> **Ce qu'il tranche pour de bon, en revanche : A2 n'est pas biaisé.** La règle
+> opère sur la jambe −1.5 entre 0,15 et 0,55, exactement la plage vérifiée.
+
+**2. La pente de recalibration `a` de `y ~ σ(a·logit(p) + b)`** — la compression
+en un nombre, comparable d'un marché à l'autre. Ajustée sur la validation,
+re-mesurée sur le test :
+
+| | a (validation) | a (test) |
+|---|---|---|
+| moneyline — modèle de score | 1,3460 ± 0,0999 | **1,2106 ± 0,0825** |
+| puck line −1.5 — modèle de score | 1,0955 ± 0,0948 | 1,0575 ± 0,0793 |
+| moneyline — classifieur + Platt | 1,0000 ± 0,0728 | 0,9055 ± 0,0642 |
+
+**3. Le test qui sépare vraiment, et la faute qu'il corrige.** Conclure « le
+moneyline sort, la puck line non, donc c'est le moneyline » est le sophisme
+classique : « non significatif » n'est pas « nul », et l'IC de la puck line
+**contient** la valeur ponctuelle du moneyline. Le seul test honnête porte sur
+l'écart, par bootstrap **apparié** sur les matchs (les deux pentes sont
+fortement corrélées — même modèle, mêmes affiches) :
+
+    moneyline − puck line : +0,156 ± 0,074, IC 95 % [+0,020 ; +0,303]
+
+Significatif. Le moneyline est bien plus comprimé que la puck line.
+
+**4. La cause, mesurée en face.** Sur les 951 matchs de test allés en
+prolongation, le taux de victoire à domicile **par tranche** :
+
+| P(dom) moneyline | n | observé en OT | IC 95 % | vs la constante 0,4996 |
+|---|---|---|---|---|
+| < 0,45 | 147 | 0,469 | [0,391 ; 0,550] | compatible |
+| 0,45–0,55 | 336 | 0,503 | [0,450 ; 0,556] | compatible |
+| 0,55–0,65 | 319 | 0,492 | [0,438 ; 0,547] | compatible |
+| **≥ 0,65** | **149** | **0,617** | [0,537 ; 0,692] | **✗ hors IC** |
+
+La prolongation n'est pas un pile ou face uniforme : les favoris y gagnent
+61,7 %. `p_ot_home` servi comme un scalaire est bien un défaut réel.
+
+#### ✅ Livré le 2026-08-26 : `p_ot_home` dépendant de l'affiche
+
+**Où chaque morceau vit, et pourquoi là.**
+
+| morceau | fichier | pourquoi |
+|---|---|---|
+| `read_ot_model` · `p_ot_for` | `score_model.py` | Le **contrat partagé**. Trois modules l'appliquent — entraînement, service, mesure ; une formule dupliquée aurait fini par diverger en silence, et la mesure aurait cessé de décrire le service. |
+| `fit_ot_model` | `train_score.py` | L'ajustement, à côté de `confidence_calibration` : les deux produisent une constante du rapport, sur la même tranche. |
+| `_p_ot_for` | `ml_service.py` | Un délégué de deux lignes, **défini au-dessus du chargeur** — la classe de bogue du 2026-08-25, où un nom défini trop bas devenait une panne muette. |
+| lecture du modèle | `backtest.py` | `--reliability` lit désormais `p_ot_model` : il mesure ce qui est **servi**, pas ce qui l'était avant. Et la simulation « ce que la correction donnerait » **se désactive toute seule** quand le modèle est en service, sinon elle empilerait une seconde correction sur la première. |
+
+**Les cinq garde-fous**, tous vers le même repli silencieux (le scalaire) :
+effectif < 500 prolongations · coefficients non finis · **pente ≤ 0** (les
+favoris perdraient plus souvent leurs prolongations : signe d'un ajustement
+raté, pas d'une découverte) · **niveau moyen à plus de 0,02 de la constante** ·
+log-loss non améliorée. Côté lecture s'ajoute la validation du rapport lui-même
+(signal attendu, `w` de longueur 2, convertible, ordonnée donnant un p_ot entre
+0,35 et 0,65).
+
+> Le garde-fou de niveau n'est pas décoratif : c'est **exactement** lui qui
+> aurait refusé l'ajustement sur la validation, dont l'ordonnée portait le
+> niveau à 0,5226. Un garde-fou écrit d'après une erreur réellement commise.
+
+**Ce qui a été vérifié, et comment.** Tout tourne dans le bac à sable cloud
+(xgboost + fastapi installés, cf. la recette) :
+
+1. `fit_ot_model` reproduit à **4 × 10⁻⁶** près les coefficients que
+   `backtest.py` avait ajustés indépendamment (+0,2645 / −0,0610) — deux
+   chemins de code, même résultat.
+2. Le **niveau est conservé au chiffre près** : `mean_fitted` = 0,49956 contre
+   une constante de 0,49956.
+3. Rapport patché avec `p_ot_model`, `--reliability` relancé : il reproduit
+   **exactement** les chiffres que la simulation annonçait — log-loss 0,66368,
+   ECE 0,02146, MCE 0,0723, pente 1,1045. Le chemin servi et le chemin simulé
+   sont donc le même.
+4. `ml_service` importé pour de vrai : `[ML] ✅ Prolongation dépendante de
+   l'affiche — σ(+0,2645·Δλ −0,0610)`. Sur COL-SJS (λ 3,98/2,91) le prix passe
+   de **0,6607 à 0,6715** (+1,08 pt) ; sur une affiche équilibrée il bouge de
+   −0,26 pt. C'est le comportement voulu : corriger les affiches tranchées,
+   laisser les autres tranquilles.
+5. Les six formes de rapport invalides rendent bien `None`, et sans la clé le
+   service écrit `[ML] ℹ️ Prolongation : constante 0.4996`.
+6. `python train_score.py --trials 1` de bout en bout : la clé part dans le
+   rapport, `evaluate()` price avec le p_ot servi.
+
+**⚠️ Rien n'est actif tant que `train_score.py` n'a pas été relancé** — le
+rapport n'a pas encore la clé, et c'est le comportement voulu. Le bloc `test`
+du rapport bougera légèrement à ce moment-là : `evaluate()` price désormais avec
+le p_ot servi, comme la correction du 2026-08-25 l'avait déjà fait pour le
+scalaire.
+
+#### ⏸️ γ — étirer l'écart de λ : reporté après la saison 2026-27
+
+Le correctif de fond, s'il faut y venir : `S = λ_dom + λ_ext` **conservé**,
+`δ = log λ_dom − log λ_ext` remplacé par `γ·δ`, un seul paramètre ajusté sur la
+validation. Les totaux restent intacts par construction et tous les marchés
+dérivés héritent de la correction de façon cohérente.
+
+**Pourquoi on n'y va pas maintenant.** Après la correction de prolongation, la
+pente vaut 1,105 ± 0,075 : elle **n'est plus** significativement > 1, alors que
+le bin de queue échoue encore. Les deux tests se contredisent, et la raison est
+l'effectif — 228 matchs au-dessus de 0,75. Ajuster γ là-dessus, c'est ajuster un
+paramètre sur du bruit, exactement ce qu'A5 a conclu pour l'élagage. Le mode
+`--reliability` mesure déjà tout ce qu'il faudra pour trancher quand la saison
+2026-27 sera dans le dataset ; et il faudra alors vérifier que γ ne dégrade pas
+la puck line, aujourd'hui saine.
+
+#### 🐛 Deux bogues attrapés à la première vérification navigateur (2026-08-25)
+
+**1. `ml_service` — ordre de définition, panne silencieuse.**
+`_read_confidence_deciles` était définie **plus bas** que l'appel
+`_try_load_models()`, qui s'exécute au **chargement du module**. Résultat :
+`NameError`, avalé par le `except` du chargeur, qui affichait
+`⚠️ score_model.json : name '_read_confidence_deciles' is not defined —
+heuristiques conservées` et **désactivait tout le modèle de score** — donc ②,
+③ et ④ d'un coup, sans que rien d'autre ne le signale.
+
+Le bloc S4 ③ est remonté au-dessus du chargeur, avec un commentaire qui dit
+pourquoi il ne doit pas redescendre. Et un test structurel (`ast`) parcourt
+maintenant tout ce que le chargeur appelle, transitivement, et vérifie que
+chaque fonction est définie **au-dessus de la ligne d'appel** — c'est la classe
+de bogue entière qui est verrouillée, pas ce cas-là.
+
+Leçon générale : le `try/except` du chargeur est là pour qu'un artefact manquant
+ne tue pas le service, mais il transforme aussi **n'importe quelle** erreur de
+programmation en dégradation muette. Toute fonction appelée depuis
+`_try_load_models` doit être définie avant lui.
+
+**2. `DevMLDashboard` — l'onglet Backtest ne s'ouvrait plus.**
+`(rows ?? []).map is not a function` : `backtest_derived_report.json` contient
+`markets.puckline_diagnostics`, un **objet** (`threshold`, `by_season`,
+`by_leg`, `dissection`) ajouté par le run A2, à côté des tableaux `total` et
+`puckline`. `Object.entries(...).map` le passait à `roiRows`. Antérieur à S4,
+révélé seulement parce que personne n'avait rouvert l'onglet depuis A2.
+Corrigé par un **filtre sur `Array.isArray`** plutôt qu'une liste de clés
+connues : un diagnostic ajouté plus tard sera ignoré au lieu de casser la page.
+
+**Ajouté dans la foulée :** un menu **Marché** dans le panneau de test (onglet
+Service), groupé en « dérivable (distribution) » et « heuristique (base_prob →
+S4 ④) ». Sans lui, le bouton envoyait `moneyline` en dur — un marché dérivable,
+sur lequel ④ n'a par construction aucun effet : la vérification passait par un
+copier-comme-fetch dans les devtools. Un test croise le menu avec le vrai
+`_apply_market` et vérifie que **chaque marché se comporte comme son groupe
+l'annonce**.
+
+> ### 🔍 Ce que le run du 2026-08-25 a renversé
+>
+> **`blend` est `null` dans `score_report.json` — et celui du classifieur l'est
+> aussi, depuis toujours.** Le blend ⊕ marché n'a **jamais tourné en
+> production** : `_blend_w` se lit dans `training_report.json →
+> game_model.baselines.market.blend_weights`, et cette clé est **absente** du
+> rapport sur disque. `base_prob` a toujours valu le classifieur calibré Platt.
+> Le `model_type` servi le confirme : « XGBoost (trained) », jamais
+> « XGBoost ⊕ marché (blend) ».
+>
+> **La cause, chiffrée.** Le découpage est chronologique et les cotes SBRO
+> s'arrêtent en pleine saison 2022-23 :
+>
+> | tranche | n | période | matchs cotés |
+> |---|---|---|---|
+> | train | 14 631 | 2008-10-19 → 2021-03-30 | 7 843 (53,6 %) |
+> | val | 2 582 | 2021-03-30 → 2023-02-26 | 1 980 (76,7 %) |
+> | **test** | **4 304** | 2023-02-26 → 2026-04-16 | **0 (0,0 %)** |
+>
+> Le seuil `tmask > 100` ne peut pas être atteint. Ce n'est pas un défaut de
+> `fit_market_blend` : `train.py` bute sur exactement le même mur depuis
+> toujours. **Aucun blend marché n'est ajustable tant que les cotes n'atteignent
+> pas la tranche de test** — c'est-à-dire tant qu'A1 (backfill payant) ou A1bis
+> (collecte accumulée) n'a pas comblé 2023-2026. À porter au dossier A1.
+>
+> **Ce que ça change pour S4.** La crainte qui retenait ④ et ⑤ — « supprimer le
+> classifieur supprimerait le blend et dégraderait le servi » — portait sur un
+> blend inexistant. Sur la **même** tranche de test (4 304 matchs, mêmes
+> `n_train`/`n_val`/`n_test` des deux côtés) :
+>
+> | | log-loss moneyline |
+> |---|---|
+> | modèle de score, sans correction | 0.6640 |
+> | modèle de score + τ *(ce qui est servi)* | 0.6642 |
+> | classifieur + Platt *(ce qui était servi)* | 0.6653 |
+>
+> Le modèle de score est **déjà devant**, de peu. S4 est donc une simplification
+> à parité, pas un compromis : un modèle entier en moins sans rien payer.
+> ① reste écrit et juste — ses poids s'appliqueront par-dessus
+> `dist.p_home_win()` le jour où il y aura des cotes à ajuster.
+>
+> **Calibration du modèle servi**, à garder en tête : τ améliore le nul (0,2136
+> prédit contre 0,2210 observé) et la puck line (0,3329 contre 0,3320), mais
+> pousse le moneyline à 0,5491 contre 0,5400 observé — +0,9 point de biais
+> domicile. Sans τ : 0,5428, mieux calibré, mais nul à 0,1575 contre 0,2210.
+> Le compromis actuel privilégie les marchés dérivables ; c'est le bon choix
+> tant que ce sont eux qui portent les paris.
+>
+> Repéré, à traiter avec ⑤ : `double_chance` estime la prolongation avec deux
+> heuristiques sur `win_diff` (`ot_rate`, `ot_home`) alors que la distribution
+> donne `dist.p_regulation_tie()` et `_score_p_ot` exactement.
 
 > **Décision d'ordonnancement (2026-08-08) : rien de tout ceci ne démarre avant
 > que les runs A2 et A5 aient tourné.** S4 ne dépend techniquement d'aucun des

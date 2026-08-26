@@ -33,8 +33,38 @@
 import { pool } from '../db/connection';
 import { logger } from '../logger';
 
-/** Plancher réservé aux visiteurs : la collecte n'y touche pas. */
-const USER_RESERVE = Number(process.env.ODDS_USER_RESERVE ?? 150);
+const DEFAULT_USER_RESERVE = 150;
+
+/**
+ * Plancher réservé aux visiteurs : la collecte n'y touche pas.
+ *
+ * La lecture est durcie parce que cette variable se pose **à la main dans une
+ * console Railway**, et que les deux fautes de frappe possibles échouaient en
+ * silence :
+ *
+ *   - valeur vide → `Number('')` vaut **0**, donc plus aucune réserve : la
+ *     collecte devenait libre de vider le quota et un visiteur tombait sur une
+ *     page sans cotes ;
+ *   - valeur non numérique → `NaN`, et `remaining - cost >= NaN` est TOUJOURS
+ *     faux : la collecte ne démarrait jamais, sans un seul message.
+ *
+ * Le second cas est le plus coûteux ici : chaque jour sans collecte est perdu
+ * définitivement (la cote de clôture d'hier n'existe plus nulle part). On
+ * retombe donc sur le défaut et on le dit fort.
+ */
+const USER_RESERVE = ((): number => {
+  const raw = process.env.ODDS_USER_RESERVE;
+  if (raw === undefined || raw.trim() === '') return DEFAULT_USER_RESERVE;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) {
+    logger.warn(
+      { raw, fallback: DEFAULT_USER_RESERVE },
+      '[oddsQuota] ODDS_USER_RESERVE illisible — défaut appliqué.',
+    );
+    return DEFAULT_USER_RESERVE;
+  }
+  return Math.floor(n);
+})();
 
 /**
  * Solde supposé tant qu'aucune réponse n'a été observée ET que la base ne sait

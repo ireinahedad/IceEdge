@@ -79,7 +79,29 @@ function MLGauge({ pct }: { pct: number }) {
 
 // ── Feature importance bar ────────────────────────────────────────────────────
 
+/**
+ * Libellé affichable d'un facteur du modèle.
+ *
+ * Depuis S4 ②, le service ML renvoie une CLÉ (`factor.attack`, `factor.goalie`,
+ * …) plutôt qu'un libellé : la décomposition de log λ produit sept concepts, et
+ * une clé permet de les traduire comme le reste de l'interface.
+ *
+ * Tout ce qui ne ressemble pas à une clé s'affiche tel quel — c'est le repli
+ * quand le modèle de score ne répond pas et que le service retombe sur les
+ * gains du classifieur, dont les « noms » sont des colonnes brutes. Même
+ * prudence si le service ajoute une clé que ce client ne connaît pas encore :
+ * `t()` rend la clé quand elle manque du dictionnaire, on préfère alors le nom
+ * d'origine à un `ml.factor.xxx` affiché à l'écran.
+ */
+function factorLabel(name: string, t: TFn): string {
+  if (!name.startsWith("factor.")) return name;
+  const key = `ml.${name}`;
+  const label = t(key);
+  return label === key ? name : label;
+}
+
 function ImportanceBar({ fi, maxImp }: { fi: MLFeatureImportance; maxImp: number }) {
+  const { t } = useI18n();
   const [width, setWidth] = useState(0);
   const pct = maxImp > 0 ? (fi.importance / maxImp) * 100 : 0;
   const color = fi.direction === "positive" ? "#a78bfa" : "#f87171";
@@ -95,7 +117,7 @@ function ImportanceBar({ fi, maxImp }: { fi: MLFeatureImportance; maxImp: number
         {fi.direction === "positive" ? "▲" : "▼"}
       </span>
       <div className="flex-1 min-w-0">
-        <p className="text-[#c0cdd4] text-[10px] truncate mb-0.5">{fi.name}</p>
+        <p className="text-[#c0cdd4] text-[10px] truncate mb-0.5">{factorLabel(fi.name, t)}</p>
         <div className="w-full bg-[#0A0E0C] rounded-full h-1">
           <div
             className="h-1 rounded-full transition-all duration-700 ease-out"
@@ -383,7 +405,7 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
             <div className="flex flex-col gap-1.5">
               {feature_importances.slice(0, 5).map((f, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <span className="text-[#8a9ea6] text-[11px] w-28 truncate">{f.feature}</span>
+                  <span className="text-[#8a9ea6] text-[11px] w-28 truncate">{factorLabel(f.name, t)}</span>
                   <div className="flex-1 h-1.5 rounded-full bg-white/5">
                     <div
                       className="h-1.5 rounded-full"
