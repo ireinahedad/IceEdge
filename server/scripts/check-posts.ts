@@ -21,6 +21,7 @@
 
 import { promises as fs } from 'fs';
 import path from 'path';
+import { findBanned } from './lib/compliance';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const OUTPUT_ROOT = path.join(REPO_ROOT, 'content', 'output');
@@ -62,15 +63,12 @@ const WORD_BUDGET: Record<string, { text?: number; label?: number; sub?: number 
 };
 
 /**
- * Une seule occurrence suffit à faire classer le compte comme promotion de jeu
- * d'argent, et la portée perdue ne revient pas. C'est la vérification qui compte
- * le plus de tout le fichier.
+ * Le vocabulaire interdit vit dans ./lib/compliance.ts — voir l'en-tête de ce
+ * fichier. Il est partagé avec build-recap.ts, qui génère ses textes sans
+ * rédacteur : deux copies de cette liste finiraient par diverger, et le trou
+ * serait du côté qu'on ne relit jamais.
  */
-const BANNED = [
-  'bet', 'bets', 'betting', 'bettor', 'bettors', 'spread', 'parlay',
-  'wager', 'wagers', 'lock', 'locks', 'guaranteed', 'edge', 'pick', 'picks',
-  'tip', 'tips', 'prediction', 'predictions', 'sportsbook', 'bookmaker',
-];
+
 
 /**
  * Bornes dures, pas la cible éditoriale — celle-ci vit dans build-video, où elle
@@ -200,10 +198,8 @@ async function main() {
       ...post.slides.map((s: any) => `${s.text ?? ''} ${s.label ?? ''} ${s.sub ?? ''}`),
       post.caption_tiktok, post.caption_instagram, (post.hashtags ?? []).join(' '),
     ].join(' ').toLowerCase();
-    for (const word of BANNED) {
-      if (new RegExp(`\\b${word}\\b`).test(haystack)) {
-        errors.push(`${tag} : mot interdit "${word}" — risque de classement gambling`);
-      }
+    for (const word of findBanned(haystack)) {
+      errors.push(`${tag} : mot interdit "${word}" — risque de classement gambling`);
     }
 
     // 5. Mode rétrospectif : le millésime doit être présent.

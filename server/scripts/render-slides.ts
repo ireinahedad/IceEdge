@@ -27,6 +27,11 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 
+// La table des couleurs de club est celle du produit (client/src). Une seconde
+// table pour les vidéos serait une seconde vérité : le jour où une équipe change
+// d'identité, une seule des deux serait corrigée.
+import { teamColors } from '../../client/src/app/data/teamEmoji';
+
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const TEMPLATE_DIR = path.join(REPO_ROOT, 'content', 'templates');
 const OUTPUT_ROOT = path.join(REPO_ROOT, 'content', 'output');
@@ -42,6 +47,13 @@ const OUTPUT_ROOT = path.join(REPO_ROOT, 'content', 'output');
  */
 const LOGO_PATH = path.join(REPO_ROOT, 'content', 'assets', 'logo-360.png');
 const LOGO_FALLBACK = path.join(REPO_ROOT, 'client', 'public', 'arakice-logo.png');
+
+/**
+ * Logos d'équipe, déposés par build-recap.ts. Ils ne sont PAS téléchargés ici :
+ * le rendu doit continuer de tourner sans réseau, comme il l'a toujours fait.
+ * Un logo absent ne casse rien — la carte tombe sur l'abréviation seule.
+ */
+const LOGO_ROOT = path.join(REPO_ROOT, 'content', 'assets', 'logos');
 
 const WIDTH = 1080;
 const HEIGHT = 1920;
@@ -265,6 +277,184 @@ function buildSvg(kind: string, rows: ChartRow[]): string {
 }
 
 // ===========================================================================
+// Blocs HTML des cartes de récap
+// ===========================================================================
+//
+// Même statut que le SVG des graphiques : ce sont des blocs GÉNÉRÉS, pas des
+// gabarits. Le nombre de lignes d'un tableau de scores dépend du nombre de
+// matchs de la nuit et ne peut pas vivre dans un fichier .html figé. Le style,
+// lui, reste entièrement dans _shared.css — c'est là qu'on règle le rendu.
+
+/** Les gabarits dont le contenu est un bloc généré (variable {{block}}). */
+const RECAP_TEMPLATES = [
+  'score_card', 'scoreboard_card', 'stars_card', 'summary_card', 'teamstats_card',
+];
+
+/**
+ * Logos d'équipe en data-URI, lus une seule fois chacun.
+ *
+ * Inlinés plutôt que liés, pour la même raison que le logo Arakice : le rendu
+ * se fait par setContent, sans URL de base, donc aucun chemin relatif ne serait
+ * résolu — et une image manquante passerait inaperçue jusqu'au PNG final.
+ */
+const logoCache = new Map<string, string>();
+
+async function teamLogo(abbr: unknown): Promise<string> {
+  const key = String(abbr ?? '').toUpperCase();
+  if (!key) return '';
+  const hit = logoCache.get(key);
+  if (hit !== undefined) return hit;
+  let uri = '';
+  try {
+    const svg = await fs.readFile(path.join(LOGO_ROOT, `${key}.svg`));
+    uri = `data:image/svg+xml;base64,${svg.toString('base64')}`;
+  } catch { /* build-recap n'a pas pu le déposer : on continue sans */ }
+  logoCache.set(key, uri);
+  return uri;
+}
+
+const logoImg = (uri: string) => (uri ? `<img class="tlogo" src="${uri}" alt="">` : '');
+
+/** Couleur principale du club, pour le liseré des cartes. */
+const clubColor = (abbr: unknown) => teamColors(String(abbr ?? '')).primary;
+
+/** score_card — le score final d'un match, avec la ligne des périodes. */
+async function scoreBlock(game: any): Promise<string> {
+  if (!game) return '';
+  const rows: string[] = [];
+  for (const t of [game.away, game.home]) {
+    rows.push(
+      `<div class="score-row${t.win ? ' win' : ''}" style="--c:${clubColor(t.abbr)}">`
+      + logoImg(await teamLogo(t.abbr))
+      + `<div class="tname"><b>${esc(t.nick)}</b><span>${esc(t.abbr)}</span></div>`
+      + `<div class="tscore">${esc(t.score)}</div>`
+      + `</div>`,
+    );
+  }
+  const periods: any[] = game.periods ?? [];
+  // La colonne T ferme la ligne : sans total, l'œil additionne les périodes
+  // pour vérifier le score qu'il vient de lire juste au-dessus.
+  const cells = (side: 'away' | 'home', team: any) =>
+    `<tr><td class="ab">${esc(team.abbr)}</td>`
+    + periods.map((p) => `<td>${esc(p[side])}</td>`).join('')
+    + `<td>${esc(team.score)}</td></tr>`;
+  const table = periods.length
+    ? `<table class="periods">`
+      + `<tr><th class="ab"></th>${periods.map((p) => `<th>${esc(p.label)}</th>`).join('')}<th>T</th></tr>`
+      + cells('away', game.away) + cells('home', game.home)
+      + `</table>`
+    : '';
+  return `<div class="final-tag">${esc(game.ending)}</div>`
+    + `<div class="score-rows">${rows.join('')}</div>${table}`;
+}
+
+/** scoreboard_card — plusieurs matchs, une ligne chacun. */
+async function boardBlock(games: any[]): Promise<string> {
+  const rows: string[] = [];
+  for (const g of games ?? []) {
+    rows.push(
+      `<div class="board-row">`
+      + logoImg(await teamLogo(g.away.abbr))
+      + `<span class="ab">${esc(g.away.abbr)}</span>`
+      + `<span class="sc${g.away.win ? ' win' : ''}">${esc(g.away.score)}</span>`
+      + `<span class="dash">&#8211;</span>`
+      + `<span class="sc${g.home.win ? ' win' : ''}">${esc(g.home.score)}</span>`
+      + `<span class="ab right">${esc(g.home.abbr)}</span>`
+      + logoImg(await teamLogo(g.home.abbr))
+      + (g.tag ? `<span class="tag">${esc(g.tag)}</span>` : '')
+      + `</div>`,
+    );
+  }
+  return `<div class="board-rows">${rows.join('')}</div>`;
+}
+
+/** stars_card — les étoiles désignées par la ligue. */
+async function starsBlock(stars: any[]): Promise<string> {
+  const rows: string[] = [];
+  for (const s of stars ?? []) {
+    rows.push(
+      `<div class="star-row" style="--c:${clubColor(s.abbr)}">`
+      + `<div class="rank">${esc(s.rank)}</div>`
+      + logoImg(await teamLogo(s.abbr))
+      + `<div class="who"><b>${esc(s.name)}</b><span>${esc(s.meta)}</span></div>`
+      + `<div class="line">${esc(s.line)}</div>`
+      + `</div>`,
+    );
+  }
+  return `<div class="star-rows">${rows.join('')}</div>`;
+}
+
+/** summary_card — les buts dans l'ordre, avec le score courant. */
+async function goalsBlock(goals: any[]): Promise<string> {
+  const rows: string[] = [];
+  for (const g of goals ?? []) {
+    rows.push(
+      `<div class="goal-row" style="--c:${clubColor(g.abbr)}">`
+      + `<div class="when">${esc(g.when)}</div>`
+      + logoImg(await teamLogo(g.abbr))
+      + `<div class="who">${esc(g.scorer)}${g.assists ? `<i>${esc(g.assists)}</i>` : ''}</div>`
+      + (g.strength ? `<div class="str">${esc(g.strength)}</div>` : '')
+      + `<div class="run">${esc(g.run)}</div>`
+      + `</div>`,
+    );
+  }
+  return `<div class="goal-rows">${rows.join('')}</div>`;
+}
+
+/** teamstats_card — totaux d'équipe en barres, puis la ligne des gardiens. */
+async function statsBlock(stats: any): Promise<string> {
+  if (!stats) return '';
+  const cAway = clubColor(stats.away?.abbr);
+  const cHome = clubColor(stats.home?.abbr);
+  const head = `<div class="stat-head">`
+    + `<div class="side">${logoImg(await teamLogo(stats.away?.abbr))}${esc(stats.away?.abbr)}</div>`
+    + `<div class="side">${esc(stats.home?.abbr)}${logoImg(await teamLogo(stats.home?.abbr))}</div>`
+    + `</div>`;
+
+  // La barre partage 100 % entre les deux équipes. À 0-0 (aucun but en
+  // supériorité, par exemple), la moitié-moitié est la lecture juste : personne
+  // n'a dominé cette ligne.
+  const rows = (stats.rows ?? []).map((r: any) => {
+    const total = Number(r.away) + Number(r.home);
+    const pct = total > 0 ? (Number(r.away) / total) * 100 : 50;
+    return `<div class="stat-line">`
+      + `<div class="top"><span>${esc(r.away)}</span><em>${esc(r.label)}</em><span>${esc(r.home)}</span></div>`
+      + `<div class="stat-bar">`
+      + `<i style="width:${pct.toFixed(1)}%;background:${cAway}"></i>`
+      + `<i style="width:${(100 - pct).toFixed(1)}%;background:${cHome}"></i>`
+      + `</div></div>`;
+  }).join('');
+
+  // Pas de logo sur la ligne des gardiens : le liseré de couleur suffit à dire
+  // le camp, et une troisième taille d'image sur la même carte fait du bruit.
+  const goalies = (stats.goalies ?? []).map((k: any) =>
+    `<div class="goalie-row" style="--c:${clubColor(k.abbr)}">`
+    + `<b>${esc(k.name)}</b> ${esc(k.abbr)}${k.decision ? ` (${esc(k.decision)})` : ''}`
+    + `<span class="line">${esc(k.line)}</span>`
+    + `</div>`).join('');
+
+  return head + `<div class="stat-rows">${rows}</div>`
+    + (goalies ? `<div class="goalie-rows">${goalies}</div>` : '');
+}
+
+/** Aiguillage : un plan de récap, son bloc. */
+async function buildRecapBlock(slide: any): Promise<string> {
+  // Le titre coiffe le bloc au lieu de le suivre. « Three stars » lu après les
+  // trois noms n'apprend plus rien ; lu avant, il dit comment lire la carte.
+  // score_card fait exception : son titre est l'état du match (FINAL / OT), qui
+  // appartient au bloc lui-même.
+  const head = slide.title ? `<div class="final-tag">${esc(slide.title)}</div>` : '';
+  switch (slide.template) {
+    case 'score_card':      return scoreBlock(slide.game);
+    case 'scoreboard_card': return head + await boardBlock(slide.games);
+    case 'stars_card':      return head + await starsBlock(slide.stars);
+    case 'summary_card':    return head + await goalsBlock(slide.goals);
+    case 'teamstats_card':  return head + await statsBlock(slide.stats);
+    default:                return '';
+  }
+}
+
+// ===========================================================================
 // Rendu
 // ===========================================================================
 
@@ -400,7 +590,10 @@ async function main() {
   const css = await fs.readFile(path.join(TEMPLATE_DIR, '_shared.css'), 'utf8');
   const animJs = await fs.readFile(path.join(TEMPLATE_DIR, '_anim.js'), 'utf8');
   const templates: Record<string, string> = {};
-  for (const name of ['hook_card', 'stat_card', 'chart_card', 'cta_card', 'compare_card']) {
+  for (const name of [
+    'hook_card', 'stat_card', 'chart_card', 'cta_card', 'compare_card',
+    ...RECAP_TEMPLATES,
+  ]) {
     const raw = await fs.readFile(path.join(TEMPLATE_DIR, `${name}.html`), 'utf8');
     // La feuille est inlinée plutôt que liée : on rend avec setContent, sans
     // URL de base, donc aucun chemin relatif ne serait résolu.
@@ -454,8 +647,13 @@ async function main() {
         }
       }
 
+      // Le bloc central des cartes de récap : même statut que `chart_svg`, du
+      // HTML dessiné en code parce que son nombre de lignes dépend de la soirée.
+      const block = RECAP_TEMPLATES.includes(slide.template) ? await buildRecapBlock(slide) : '';
+
       const html = fill(template, {
         subject,
+        block,
         season_label: posts.retrospective ? (post.season_label ?? '') : '',
         text: slide.text ?? '',
         big: slide.big ?? '',

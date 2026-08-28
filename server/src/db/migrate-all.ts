@@ -79,7 +79,34 @@ async function runFile(label: string, path: string, alwaysRun = false): Promise<
   }
 }
 
+/**
+ * Affiche la CIBLE avant de toucher quoi que ce soit.
+ *
+ * POURQUOI — `DATABASE_URL` vient de `.env`, qui porte la base de DÉV. Les
+ * migrations qui comptent s'appliquent sur Neon, en surchargeant la variable
+ * dans l'environnement le temps de la commande (cf. DEPLOYMENT.md §1). Les deux
+ * commandes sont identiques à l'écran : rien, dans la sortie, ne disait laquelle
+ * venait de tourner. On peut donc croire avoir migré la prod en ayant migré son
+ * poste — et le découvrir au premier symptôme, qui sera muet (une table
+ * manquante côté prod ne lève pas d'erreur, elle produit une donnée vide).
+ *
+ * Le mot de passe est retiré : cette ligne finit dans des logs de déploiement.
+ */
+function describeTarget(raw: string): string {
+  try {
+    const u = new URL(raw);
+    const db = u.pathname.replace(/^\//, '') || '(défaut)';
+    const local = /^(localhost|127\.0\.0\.1|::1)$/.test(u.hostname);
+    return `${u.hostname}:${u.port || '5432'}/${db}`
+      + `  ssl=${useSsl ? 'on' : 'off'}`
+      + (local ? '  ← BASE LOCALE' : '');
+  } catch {
+    return '(URL illisible)';
+  }
+}
+
 (async () => {
+  console.log(`[migrate] Cible : ${describeTarget(url)}`);
   console.log('[migrate] Connecting to DB…');
 
   await pool.query(LEDGER_DDL);
@@ -110,6 +137,18 @@ async function runFile(label: string, path: string, alwaysRun = false): Promise<
   console.log('[migrate] ✓ All migrations applied');
 })().catch(async (err: any) => {
   console.error('[migrate] ✗ Fatal:', err.message);
+  // Les deux pannes de connexion qui ne se lisent pas d'elles-mêmes. Le couple
+  // (hôte, DB_SSL) est le seul réglage qu'on peut avoir juste pour une cible et
+  // faux pour l'autre — d'où une erreur qui survient précisément quand on vient
+  // de changer de cible, c'est-à-dire au pire moment.
+  if (/does not support SSL/i.test(err.message)) {
+    console.error(
+      '[migrate]   → Postgres local : poser DB_SSL=false (ou le retirer) pour '
+      + 'cette commande. DB_SSL=true ne vaut que pour Neon.',
+    );
+  } else if (/self.signed|SSL|certificate/i.test(err.message)) {
+    console.error('[migrate]   → Cible distante : DB_SSL=true est requis (Neon exige TLS).');
+  }
   await pool.end();
   process.exit(1);
 });

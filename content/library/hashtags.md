@@ -98,6 +98,7 @@ Franchises disparues, pour le contenu rétrospectif uniquement : ATL →
 | `league_travel_fatigue` | `#travelfatigue` `#sportsscience` |
 | `league_situational_factor` | `#nhlschedule` `#restdays` |
 | `historical_upset` | `#upset` `#nhlhistory` |
+| `recap_game`, `recap_night` (après-match) | `#nhlrecap` `#nhlscores` |
 
 ## 4. Niche analytique
 

@@ -1,6 +1,6 @@
 # ARAKICE / ICEEDGE — Ce qui reste
 
-**Créé le 2026-08-10 · mis à jour le 2026-08-26.**
+**Créé le 2026-08-10 · mis à jour le 2026-08-28.**
 
 > **Reprendre ici.** Décidé le 2026-08-24 : **mettre d'abord la collecte live en
 > service** (A1bis, gratuit, échéance réelle à la pré-saison de fin septembre).
@@ -223,11 +223,101 @@ sources que la comparaison est censée détecter. Le défaut du script est `us`.
 **A1bis — mise en service de la collecte live. C'EST LE PROCHAIN POSTE**
 (décidé le 2026-08-24 ; indépendant de la décision de payer) :
 
-- [ ] Migrations **028 et 031** : `npm run db:migrate:all`, puis `npm test`
-- [ ] Railway : `ODDS_LOG_ENABLED=true` et `ODDS_USER_RESERVE`
-- [ ] Optionnel, le temps d'un déploiement : `ODDS_LOG_RUN_AT_BOOT=true` pour
-      voir une passe complète dans les logs, **puis le retirer** (3 crédits par
-      démarrage)
+- [x] **1a.** ✅ 2026-08-28 — Répétition en local : `set DB_SSL=false` puis
+      `npm run db:migrate:all`. Prouve que l'arriéré s'applique proprement et
+      aligne la base de dév sur la prod pour l'étape 2.
+- [x] **1b.** ✅ 2026-08-28 — **La migration qui compte, sur Neon** — `.env` pointe sur
+      `localhost`, or le collecteur tourne sur Railway contre Neon. Surcharger
+      la cible le temps de la commande (`dotenv` ne réécrit pas une variable
+      déjà posée) :
+      ```
+      set DATABASE_URL=<URL Neon DIRECTE, sans -pooler>
+      set DB_SSL=true
+      npm run db:migrate:all
+      ```
+      Lire la ligne `[migrate] Cible :` avant tout : elle doit nommer l'hôte
+      Neon et **pas** `← BASE LOCALE`. Endpoint **direct** ici (le pooled reste
+      pour l'appli) : un DDL multi-instructions passe mal en pooling transaction.
+      Voir aussi l'avertissement « ce n'est pas 028 et 031, c'est tout
+      l'arriéré » ci-dessous. Refermer le `set` en fermant la console.
+- [x] **2.** ✅ 2026-08-28 (`npm test` + `npm run typecheck` verts) — `cd server && npm test`, puis `npm run typecheck` (seul vrai
+      typecheck du dépôt ; il couvre les deux fichiers touchés le 2026-08-28)
+- [ ] **3.** ⚠️ **D'abord `git commit` + `push`** — Railway déploie depuis git,
+      et les contrôles des étapes 4 et 5 n'existent que dans le code du
+      2026-08-28 (sonde `odds_snapshots`, bloc `data-health`, bannière
+      `[migrate] Cible`). Puis Railway : `ODDS_LOG_ENABLED=true`, `ODDS_USER_RESERVE=150`,
+      `ODDS_QUOTA_WARN=100` — et vérifier que `ODDS_API_KEY` y est déjà
+- [ ] **4.** Redéployer, puis **lire la bannière de démarrage** : `[OddsLogger]
+      calendrier armé` avec `creditsPerDay: 10`, et **aucune** ligne
+      `⛔ odds_snapshots INTROUVABLE`
+- [ ] **5.** `GET /api/dev/data-health` → le bloc `odds_snapshots` doit exister
+      (`rows: 0` est normal en intersaison ; `error: table indisponible` ne
+      l'est pas)
+- [ ] **6.** ⏳ **À la pré-saison, le seul contrôle qui compte** : revenir sur
+      `data-health` en fin de journée de matchs. `passes_today` doit valoir
+      **6** et `with_puckline` être > 0. Si `rows` reste à 0 alors que
+      `odds_log.rows` monte, la 031 est en place mais les snapshots échouent —
+      chercher `[OddsLogger] snapshot non archivé` dans les logs.
+- [ ] ~~`ODDS_LOG_RUN_AT_BOOT=true`~~ — **sans objet avant la pré-saison**, cf.
+      ci-dessous. À garder en tête pour octobre, pas maintenant.
+
+> ### ⚠️ Revu le 2026-08-28 — trois choses que la revue du 25 n'avait pas vues
+>
+> **0. La cible par défaut est la mauvaise base — constaté le 2026-08-28.** Le
+> premier `npm run db:migrate:all` a échoué sur *« The server does not support
+> SSL connections »* : `DB_SSL=true` contre le `localhost` de `.env`. L'erreur
+> est bénigne, ce qu'elle cachait ne l'est pas — **la commande visait la base de
+> dév**, alors qu'A1bis n'a de sens que sur Neon, où écrit le collecteur
+> Railway. Sans le SSL mal réglé, elle aurait réussi en silence et laissé croire
+> la prod migrée. Le mode d'échec côté prod est muet (table absente → donnée
+> vide, pas d'erreur), donc rien ne l'aurait rattrapé.
+> `migrate-all.ts` imprime désormais `[migrate] Cible : hôte:port/base ssl=…`
+> avant de se connecter, avec un `← BASE LOCALE` explicite, et nomme le réglage
+> `DB_SSL` fautif dans les deux sens.
+>
+> **1. `npm run db:migrate:all` n'applique pas « 028 et 031 » : il applique tout
+> l'arriéré.** Le runner balaie le dossier et rejoue tout ce qui manque au
+> registre — donc aussi **029** (`bet_slips.locks_at`) et **030**, qui contient
+> un `UPDATE user_profiles SET show_slips = TRUE` **de masse**. C'est sans
+> danger *à condition que `PUBLIC_SLIPS_SINCE` ne soit pas renseignée sur
+> Railway* : sans elle `getPublicSlips` renvoie une liste vide quoi qu'il
+> arrive. Elle est commentée dans `.env.example` — **le vérifier dans la console
+> avant de lancer la migration**, pas après. Poser `DB_SSL=true` (Neon).
+>
+> **2. `ODDS_LOG_RUN_AT_BOOT=true` ne vérifie rien avant octobre.**
+> `logTodaysOdds` sort sur le garde-fou `isSeasonActive()` **avant** la moindre
+> écriture, de juin à début octobre. La passe de démarrage ne coûte donc pas les
+> 3 crédits annoncés — elle ne coûte rien — mais elle n'écrit rien non plus et
+> le log dit « NHL inactive ». La ligne de la checklist promettait une
+> vérification que l'intersaison rend impossible. Corrigé dans `.env.example`.
+>
+> **3. Le mode d'échec réel était invisible.** `insertSnapshots` avale son
+> erreur dans un `logger.warn` — délibérément, pour qu'une panne de snapshot ne
+> fasse pas perdre la clôture du jour. Mais si la **031 n'est pas appliquée**,
+> la conséquence n'est plus une passe manquée : la collecte tourne toute la
+> saison, `odds_log` se remplit, les logs disent « ok », et `odds_snapshots`
+> reste vide. On ne le découvrirait qu'en ouvrant le mode `--clv` — une saison
+> trop tard, sur une donnée qu'aucune archive ne reconstitue. Et **rien dans le
+> produit ne lisait cette table** : ni `data-health`, ni l'export, ni le
+> dashboard.
+>
+> **Deux correctifs posés le 2026-08-28** (aucun crédit, aucun appel réseau) :
+>
+> - `startOddsLogger()` sonde `to_regclass('public.odds_snapshots')` au
+>   démarrage et crie en `logger.error` si la table manque. Placé au **démarrage**
+>   et non sur le chemin d'écriture, précisément parce que le chemin d'écriture
+>   est muet pendant les cinq semaines où l'on peut encore corriger.
+> - `GET /api/dev/data-health` expose un bloc **`odds_snapshots`** : `rows`,
+>   `passes`, `passes_today`, `last_observed`, `rows_full` / `rows_spreads`,
+>   `with_puckline`. `passes_today` est le chiffre à surveiller — il doit
+>   atteindre 6 en saison ; s'il plafonne à 1 ou 2, le calendrier ne se
+>   replanifie pas et l'instance redémarre.
+>
+> ⚠️ **`npm run typecheck` n'a pas pu être joué** sur ces deux fichiers : `tsc`
+> dépasse les 45 s du bridge. Contrôle de **syntaxe** passé (esbuild) — il a
+> d'ailleurs attrapé une vraie faute au passage, des backticks dans un
+> littéral SQL gabarit qui fermaient la chaîne. **Le typecheck reste à jouer sur
+> ta machine**, étape 2 ci-dessus.
 
 > **Revue de mise en service faite le 2026-08-25 — la chaîne est complète.**
 > `028` et `031` sont idempotentes (`IF NOT EXISTS` partout) et le runner
@@ -248,9 +338,10 @@ sources que la comparaison est censée détecter. Le défaut du script est `us`.
 > `oddsQuota.test.ts` pose `'150'` avant l'import : comportement inchangé pour lui.
 >
 > Reste vraiment à faire côté machine : les migrations, `npm test`, et les
-> variables Railway. Après le premier déploiement, `GET /api/dev/...` relit
-> `odds_quota_state` (`dev.routes.ts:184`) pour vérifier le solde sans dépenser
-> de crédit.
+> variables Railway — **la liste exacte et ordonnée est la checklist ci-dessus**,
+> revue le 2026-08-28. Après le premier déploiement, `GET /api/dev/data-health`
+> relit `odds_quota_state` pour vérifier le solde sans dépenser de crédit, et
+> depuis le 2026-08-28 il montre aussi le remplissage d'`odds_snapshots`.
 
 Le calendrier posé coûte **10 crédits/jour, 300/mois** — deux passes complètes
 (11 h, 17 h ET) et quatre passes `spreads` seules (18 h 45, 19 h 45, 21 h 45,

@@ -155,12 +155,14 @@ router.get('/ml-reports', async (_req: Request, res: Response) => {
 //     close sont égaux partout et le CLV est structurellement inmesurable.
 //  2. `odds_quota_state` — crédits The Odds API restants et âge de la mesure.
 //  3. Volumes de paris — dont l'arriéré de tickets en attente de règlement.
+//  4. `odds_snapshots` — la série temporelle du CLV (A1bis). Voir le bloc.
+//     C'est la seule des quatre dont l'absence ne se voit nulle part ailleurs.
 //
 // Toutes les requêtes sont bornées et indexées ; aucune ne scanne une table
 // utilisateur en entier.
 router.get('/data-health', async (_req: Request, res: Response) => {
   try {
-    const [oddsLog, quota, slips] = await Promise.all([
+    const [oddsLog, quota, slips, snapshots] = await Promise.all([
       pool.query(
         `SELECT COUNT(*)::int                                            AS rows,
                 MIN(game_date)                                           AS first_date,
@@ -198,11 +200,41 @@ router.get('/data-health', async (_req: Request, res: Response) => {
                 )::int                                                         AS stale_pending
            FROM bet_slips`,
       ).catch(() => null),
+
+      // 4. `odds_snapshots` (migration 031) — la SEULE table qu'A1bis existe
+      //    pour remplir, et la seule dont l'échec est SILENCIEUX :
+      //    `insertSnapshots` avale son erreur dans un `logger.warn` pour ne pas
+      //    faire tomber la passe (odds_log prime). Table absente ou colonne
+      //    manquante → la collecte tourne, les logs disent « ok », et la série
+      //    temporelle reste vide. Sans ce bloc, rien dans le produit ne lit
+      //    cette table : le trou ne se verrait qu'au moment de l'analyse, une
+      //    saison trop tard.
+      //
+      //    `passes_today` est le chiffre qui compte : il doit atteindre 6 en
+      //    fin de journée de saison (2 `full` + 4 `spreads`). S'il plafonne à 1
+      //    ou 2, le calendrier ne se replanifie pas — l'instance redémarre.
+      pool.query(
+        `SELECT COUNT(*)::int                                    AS rows,
+                COUNT(DISTINCT observed_at)::int                 AS passes,
+                COUNT(DISTINCT observed_at) FILTER (
+                  WHERE observed_at >= NOW() - INTERVAL '24 hours'
+                )::int                                           AS passes_today,
+                MIN(game_date)                                   AS first_date,
+                MAX(game_date)                                   AS last_date,
+                MAX(observed_at)                                 AS last_observed,
+                COUNT(*) FILTER (WHERE markets = 'full')::int    AS rows_full,
+                COUNT(*) FILTER (WHERE markets = 'spreads')::int AS rows_spreads,
+                -- Une puck line absente partout = les passes 'spreads'
+                -- ramenent des lignes vides, donc 4 credits/jour perdus.
+                COUNT(*) FILTER (WHERE pl_home_price IS NOT NULL)::int AS with_puckline
+           FROM odds_snapshots`,
+      ).catch(() => null),
     ]);
 
     res.json({
       odds_log:  oddsLog?.rows[0] ?? { error: 'table indisponible (migration 027/028 ?)' },
       odds_quota: quota?.rows[0]  ?? { error: 'table indisponible (migration 028 ?)' },
+      odds_snapshots: snapshots?.rows[0] ?? { error: 'table indisponible (migration 031 ?)' },
       slips:     slips?.rows[0]   ?? { error: 'table indisponible' },
       retrieved_at: new Date().toISOString(),
     });

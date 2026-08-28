@@ -56,6 +56,19 @@ async function main() {
   const dateKey = arg('date') ?? new Date().toISOString().slice(0, 10);
   const dir = path.join(OUTPUT_ROOT, dateKey);
 
+  // Les récaps d'après-match ne rentrent PAS dans l'historique.
+  //
+  // history.json ne sert qu'à une chose : empêcher mine-stories de reproposer le
+  // même sujet. Un récap n'est pas un angle — il traite chaque soir toutes les
+  // équipes qui ont joué. Le journaliser reviendrait à écarter de la sélection
+  // quotidienne, pendant deux semaines, précisément les équipes les plus
+  // actives. Le dégât serait invisible : des candidats simplement absents.
+  if (dateKey.endsWith('-recap')) {
+    console.log(`\n  ${dateKey} est un lot de récaps — rien à journaliser.`);
+    console.log('  history.json ne suit que les angles du pipeline quotidien.\n');
+    return;
+  }
+
   const posts = JSON.parse(await fs.readFile(path.join(dir, 'posts.json'), 'utf8'));
   const candidates = JSON.parse(await fs.readFile(path.join(dir, 'candidates.json'), 'utf8'));
   const byId = new Map<string, any>(candidates.candidates.map((c: any) => [c.id, c]));

@@ -524,6 +524,42 @@ export function startOddsLogger(): void {
     (n, s) => n + COLLECT_COST[s.kind], 0) }, '[OddsLogger] calendrier armé');
   schedule();
 
+  // Contrôle de mise en service de la 031, au démarrage, sans dépenser un
+  // crédit ni attendre la saison.
+  //
+  // POURQUOI IL FAUT LE FAIRE ICI. `insertSnapshots` avale délibérément son
+  // erreur (odds_log prime sur la série temporelle : perdre la clôture du jour
+  // coûte plus cher que perdre un point de mesure). La conséquence, voulue pour
+  // une panne passagère, est intenable pour une migration oubliée : la collecte
+  // tournerait toute la saison, les logs diraient « ok », et `odds_snapshots`
+  // resterait vide — on ne le découvrirait qu'en ouvrant le mode `--clv`, une
+  // saison trop tard, sur une donnée qu'aucune archive ne peut reconstituer.
+  //
+  // POURQUOI AU DÉMARRAGE ET PAS À LA PREMIÈRE PASSE. En intersaison,
+  // `logTodaysOdds` retourne AVANT d'écrire (garde-fou `isSeasonActive`) : la
+  // première écriture réelle n'a lieu qu'à la pré-saison. Un contrôle placé sur
+  // le chemin d'écriture ne dirait donc rien pendant les cinq semaines où l'on
+  // peut encore corriger. Celui-ci parle au premier déploiement.
+  //
+  // Le `to_regclass` ne lit aucune ligne et ne verrouille rien.
+  void pool
+    .query(`SELECT to_regclass('public.odds_snapshots') AS t`)
+    .then(({ rows }) => {
+      if (rows[0]?.t) return;
+      logger.error(
+        '[OddsLogger] ⛔ `odds_snapshots` INTROUVABLE — migration 031 non '
+        + 'appliquée. La collecte va tourner et remplir `odds_log`, mais la '
+        + 'série temporelle du CLV sera perdue jour après jour, en silence. '
+        + 'Lancer `npm run db:migrate:all`.',
+      );
+    })
+    .catch((err: any) => {
+      // Base injoignable : le serveur a déjà tranché plus haut, on ne double
+      // pas l'alarme — mais on ne prétend pas non plus avoir vérifié.
+      logger.warn({ err: err?.message },
+        '[OddsLogger] contrôle de `odds_snapshots` impossible.');
+    });
+
   // Vérification de mise en service, explicitement opt-in.
   //
   // L'ancienne version lançait une passe 20 s après chaque démarrage. Railway

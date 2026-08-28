@@ -596,6 +596,21 @@ async function main() {
     );
   }
 
+  // Cible éditoriale déclarée post par post, quand posts.json en porte une.
+  //
+  // Les récaps d'après-match (build-recap.ts) durent de 15 à 50 secondes selon
+  // le nombre de matchs de la nuit : les mesurer contre les 8-15 s du format
+  // quotidien ferait clignoter l'avertissement sur chacun d'eux, et un
+  // avertissement qui se déclenche toujours ne se lit plus. Le défaut ne bouge
+  // pas — un post sans `duration_target` reste jugé sur la cible du pipeline.
+  const targets = new Map<string, [number, number]>();
+  try {
+    const posts = JSON.parse(await fs.readFile(path.join(dir, 'posts.json'), 'utf8'));
+    for (const post of posts.posts ?? []) {
+      const t = post.duration_target;
+      if (Array.isArray(t) && t.length === 2) targets.set(post.candidate_id, [Number(t[0]), Number(t[1])]);
+    }
+  } catch { /* pas de posts.json : cible par défaut pour tout le monde */ }
   console.log(`\n  Montage — ${dateKey}${music ? ` · musique ${path.basename(music)}` : ' · muet'}\n`);
 
   let built = 0;
@@ -605,8 +620,9 @@ async function main() {
     if (!result) continue;
 
     const shown = result.actual ?? result.expected;
-    const flag = shown < MIN_SECONDS || shown > MAX_SECONDS
-      ? `  ⚠ hors cible ${MIN_SECONDS}-${MAX_SECONDS} s`
+    const [minTarget, maxTarget] = targets.get(name) ?? [MIN_SECONDS, MAX_SECONDS];
+    const flag = shown < minTarget || shown > maxTarget
+      ? `  ⚠ hors cible ${minTarget}-${maxTarget} s`
       : '';
     const size = (await fs.stat(result.file)).size / 1024 / 1024;
     console.log(`  ${name} — ${shown.toFixed(1)} s · ${size.toFixed(1)} Mo${flag}`);
