@@ -115,12 +115,32 @@ en staging → `traces_sample_rate=0.1` ; paquet manquant ou init en erreur →
 les quatre cas**. Un taux illisible retombe sur le défaut avec un avertissement au
 lieu de lever un `ValueError`.
 
-Reste à faire quand une session Sentry est ouverte : créer un projet **Python /
-FastAPI** distinct de celui du Node (les erreurs XGBoost et les erreurs Express
-n'ont ni la même cadence ni les mêmes destinataires, et le quota Sentry se compte
-par organisation — un second projet ne coûte donc rien), poser `SENTRY_DSN` sur
-chacun des deux services, **ne pas** poser `SENTRY_TRACES_SAMPLE_RATE`, et lire la
-bannière au redémarrage.
+**Fait le 2026-08-29.** Organisation Sentry `arakice`, deux projets distincts —
+`node-express` (existant) et `python-fastapi` (créé ce jour, alerte sur « high
+priority issues ») : les erreurs XGBoost et les erreurs Express n'ont ni la même
+cadence ni les mêmes destinataires, et le quota Sentry se comptant par
+organisation, un second projet ne coûte rien. `SENTRY_DSN` posée sur les **deux**
+services Railway ; `SENTRY_TRACES_SAMPLE_RATE` volontairement **non** posée.
+La DSN du Node a été recoupée avec le bloc OTLP de la console avant d'être
+collée — même clé, même identifiant de projet, pas de coquille.
+
+**Vérifié en production, pas seulement posé** :
+`[ML] ✅ Sentry armé — environment=production, traces_sample_rate=0.01`
+lu dans les logs de démarrage du conteneur `courageous-analysis`.
+
+> ⚠️ **Ne pas suivre l'assistant « Configure Express SDK » de Sentry.** Le SDK
+> Node est déjà entièrement câblé : `@sentry/node` 8.55.2, `instrument.ts`
+> importé en ligne 2 de `server.ts` (avant `app`), et
+> `Sentry.setupExpressErrorHandler(app)` dans `app.ts` après les routes. Suivre
+> l'assistant ajouterait **un second `Sentry.init()`** et écraserait le
+> `tracesSampleRate` à 1 %, choisi avec le calcul du §3 de l'audit. De cet écran,
+> seule la DSN est utile.
+
+**La même sonde a été écrite côté Node** (`instrument.ts`), pour la même raison et
+avec le même garde-fou `try/catch` : `[Sentry] ✅ armé — environment=…,
+tracesSampleRate=…`, `[Sentry] ℹ️  inactif` sans DSN, `[Sentry] ⚠️  non armé` si
+l'init échoue. Elle utilise `console` et non `logger`, puisque ce fichier
+s'exécute avant que le logger n'existe.
 
 ### B9 — clos le 2026-08-29 : la couche de mocks est supprimée
 

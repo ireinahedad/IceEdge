@@ -45,14 +45,30 @@ const tracesSampleRate =
     ? configured
     : (isProd ? 0.01 : 0.1);
 
+// La sonde imprime SA REUSSITE, pas seulement ses echecs. Sans elle, une DSN
+// correcte, une DSN mal collee et une DSN absente donnent exactement la meme
+// sortie -- rien -- et « Sentry est branche » devient une croyance invérifiable.
+// `console` et non `logger` : ce fichier doit s'executer AVANT tout le reste
+// (cf. l'en-tete), donc avant que le logger n'existe.
 if (process.env.SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV || 'development',
-    tracesSampleRate,
-    // Don't send PII by default.
-    sendDefaultPii: false,
-  });
+  try {
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      environment: process.env.NODE_ENV || 'development',
+      tracesSampleRate,
+      // Don't send PII by default.
+      sendDefaultPii: false,
+    });
+    console.log(
+      `[Sentry] ✅ armé — environment=${process.env.NODE_ENV || 'development'}, ` +
+      `tracesSampleRate=${tracesSampleRate}`,
+    );
+  } catch (e: any) {
+    // Le monitoring ne doit jamais empecher de demarrer ce qu'il surveille.
+    console.warn(`[Sentry] ⚠️  non armé : ${e?.message ?? e} — le serveur démarre sans`);
+  }
+} else {
+  console.log('[Sentry] ℹ️  inactif — SENTRY_DSN non définie');
 }
 
 export { tracesSampleRate };
