@@ -50,14 +50,33 @@ import uvicorn
 # plus redondante.
 _SENTRY_DSN = os.environ.get("SENTRY_DSN")
 _ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
+# La sonde imprime SA REUSSITE, pas seulement ses echecs : sans elle, une DSN mal
+# collee et une DSN absente se ressemblent — les deux ne disent rien. Et l'import
+# est protege : le monitoring ne doit jamais empecher de demarrer le service qu'il
+# surveille (sans ce garde-fou, poser SENTRY_DSN sur une image ou sentry-sdk
+# manquerait tuerait le process au lieu de le laisser tourner sans Sentry).
 if _SENTRY_DSN:
-    import sentry_sdk
     _default_rate = "0.01" if _ENVIRONMENT == "production" else "0.1"
-    sentry_sdk.init(
-        dsn=_SENTRY_DSN,
-        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", _default_rate)),
-        environment=_ENVIRONMENT,
-    )
+    _rate_raw = os.environ.get("SENTRY_TRACES_SAMPLE_RATE", _default_rate)
+    try:
+        _rate = float(_rate_raw)
+    except (TypeError, ValueError):
+        _rate = float(_default_rate)
+        print(f"[ML] ⚠️  SENTRY_TRACES_SAMPLE_RATE={_rate_raw!r} illisible — "
+              f"repli sur {_rate}")
+    try:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=_SENTRY_DSN,
+            traces_sample_rate=_rate,
+            environment=_ENVIRONMENT,
+        )
+        print(f"[ML] ✅ Sentry armé — environment={_ENVIRONMENT}, "
+              f"traces_sample_rate={_rate}")
+    except Exception as e:
+        print(f"[ML] ⚠️  Sentry non armé : {e} — le service démarre sans")
+else:
+    print("[ML] ℹ️  Sentry inactif — SENTRY_DSN non définie")
 
 # ── Contrôle d'accès ──────────────────────────────────────────────────────────
 # Ce service n'a aucune notion d'utilisateur : il ne doit être joignable que par

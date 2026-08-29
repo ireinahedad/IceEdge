@@ -35,9 +35,92 @@ Rien ici ne demande de conception ; tout demande **ta machine ou une console**.
 | B3 | Tir de charge **S1 de validation** : `NHL_USE_MOCK=true` vérifié dans les logs de démarrage, 50 VUs | préprod | Les deux premiers tirs ont mesuré une API NHL morte. Un critère vert peut vouloir dire que le code n'a pas tourné. `AUDIT_SCALABILITE_COUTS.md` §5. |
 | B4 | Parcours critiques **F1, F2, I1, I2** en staging | staging | Auth complète, gating Pro, chaîne ML, CORS+cookie cross-site. `QA_TEST_PLAN.md` §1-2. |
 | B5 | **C1** — parcours mobile iOS Safari (login → prédiction → paiement) | appareil réel | Safari iOS est la source n°1 de bugs cookies/`SameSite`/PWA. |
-| B6 | Poser les **alertes de budget** dans les consoles (Railway, Neon, Odds, LLM, Stripe, Sentry, R2) | consoles | Seuils déjà documentés dans `MONITORING.md`. Hard limits là où ils existent. |
-| B7 | Définir `SENTRY_DSN` sur le service **ML** Railway | console | Variable propre à ce service ; le code est prêt et no-op sans elle. |
-| B8 | Confirmer la présence de **toutes** les variables d'env dans Railway/Vercel | consoles | Les `.env.example` sont complets ; leur miroir en prod ne l'est pas vérifié. |
+| B6 | Poser les **alertes de budget** dans les consoles — **Railway fait le 2026-08-29**, reste Neon, Odds, LLM, Stripe, Sentry, R2 | consoles | Seuils déjà documentés dans `MONITORING.md`. Hard limits là où ils existent. |
+| B7 | Définir `SENTRY_DSN` — **sur les DEUX services, pas seulement le ML** | console | Voir l'encadré ci-dessous : la variable est absente partout, donc **aucune erreur de production ne remonte nulle part**. |
+| B8 | ~~Confirmer la présence de toutes les variables d'env~~ — **fait le 2026-08-29**, voir l'encadré | consoles | Miroir vérifié variable par variable contre les `.env.example`. |
+
+### État réel de la production, relevé le 2026-08-29 dans la console Railway
+
+Ce relevé a été fait **après** que le reste de ce document ait été écrit, et il a
+contredit trois de ses affirmations. Il vaut la peine de dire d'où il vient : pas
+des variables lues une à une dans le dashboard, mais de la **bannière
+`[Server] Réglages effectifs` imprimée au démarrage du conteneur** — la seule
+source qui dise ce que le processus *fait*, et non ce que quelqu'un croit avoir
+posé.
+
+**La topologie est conforme, contrairement à ce qu'on redoutait.** Les deux
+services sont dans le **même projet** `harmonious-perception`, même environnement
+`production`, même workspace : `courageous-analysis` (ML) et `IceEdge`
+(`api.arakice.com`). `ML_SERVICE_URL = http://courageous-analysis.railway.internal:8080`
+— réseau privé, port correct — le service ML est marqué **« Unexposed service »**
+(aucun domaine public), `ML_API_TOKEN` est présent des deux côtés et
+`ML_DISABLED=false`. Le §3 de `DEPLOYMENT.md` est donc respecté sur toute la ligne.
+Le second projet Railway, `generous-fulfillment`, est **vide** — il n'héberge rien.
+
+**Trois choses n'allaient pas, deux sont réglées.**
+
+| Ce qui a été trouvé | État |
+|---|---|
+| **`NHL_USE_MOCK=true` en production** — équipes, matchs, meilleurs joueurs et fiches joueur venaient tous de `mockNhl.ts`. Le jumeau serveur exact de B9 : les faux chiffres avaient été retirés du front, l'interrupteur de simulation du backend était resté | **corrigé le 2026-08-29**, `NHL_USE_MOCK: false` lu dans les logs du nouveau conteneur |
+| **`DORMANT=true` en production** — ce drapeau coupe le règlement des paris, le scan de value bets, le nettoyage **et `startOddsLogger()`** | **corrigé le 2026-08-29** — voir §2, A1bis |
+| **`SENTRY_DSN` absente des DEUX services** — pas seulement du ML comme le disait B7 | **ouvert** — bloqué sur une session Sentry |
+
+**Le piège de l'interrupteur de mock, à retenir même une fois refermé.** Le job de
+règlement lit ses résultats par `nhlApiClient`, donc par les mocks quand ils sont
+actifs. Ça n'a *pas* causé de règlement erroné — les six matchs simulés sont en
+`live` ou `scheduled`, **aucun en `final`**, et `getFinalGame()` n'accepte qu'un
+match final : rien ne pouvait se régler. Mais le corollaire est plus gênant que le
+risque évité : **tant que `NHL_USE_MOCK` est à `true`, le règlement ne peut rien
+régler du tout**, même en pleine saison. Les paris resteraient « pending » pour
+toujours, sans une seule erreur dans les logs.
+
+**B8 — le miroir des variables, mesuré.** 44 variables sur `IceEdge`, 1 sur
+`courageous-analysis` (`ML_API_TOKEN`). **Aucune variable en production n'est
+absente des `.env.example`** — le miroir est complet dans ce sens. Dans l'autre,
+46 des 90 variables des `.env.example` ne sont pas posées : ce sont toutes des
+réglages optionnels à défaut codé (`SETTLEMENT_*`, `LLM_*`, `VALUE_BET_*`, TTL,
+timeouts, `PORT` qu'injecte Railway, `REDIS_URL` sans objet à une instance), **sauf
+`SENTRY_DSN`**, qui est la seule absence qui compte. `SENTRY_TRACES_SAMPLE_RATE`
+est absente elle aussi — et c'est **voulu** : `MONITORING.md` dit que si le quota
+Sentry saute un jour, c'est que quelqu'un l'a posée à la main et ne l'a pas retirée.
+
+**B6 — Railway, posé le 2026-08-29 :** alerte e-mail à **10 $**, **hard limit à
+25 $**, plus un plafond séparé de 5 $ sur l'agent Railway. Les limites sont au
+niveau du **workspace**, donc elles couvrent les deux services d'un coup.
+⚠️ **Ce réglage s'inverse à la première vente.** Aujourd'hui une coupure vaut mieux
+qu'une facture non bornée ; le jour où des abonnés paient, un hard limit atteint
+met hors ligne des gens qui ont payé. Même déclencheur que Vercel Pro plus haut.
+
+**Deux observations annexes, sans action immédiate.** ① Le panneau *Agent* de
+Railway suggérait `ML_SERVICE_URL=${{ …RAILWAY_PUBLIC_DOMAIN }}` — **à ne pas
+suivre** : ça exposerait publiquement le service ML, l'exact inverse du §3.
+② Les logs portent un avertissement `pg` : les modes SSL `prefer`, `require` et
+`verify-ca` sont aujourd'hui des alias de `verify-full` et changeront de sens en
+`pg` v9 / `pg-connection-string` v3. À traiter avant cette montée de version, pas
+avant.
+
+### B7 — la sonde Sentry côté ML, écrite le 2026-08-29 (la variable, elle, reste à poser)
+
+`ml_service.py` lisait `SENTRY_DSN` et appelait `sentry_sdk.init()` **sans rien
+imprimer** : une DSN correcte, une DSN mal collée et une DSN absente donnaient la
+même sortie — rien. Et `import sentry_sdk` n'était pas protégé, donc poser la
+variable sur une image où le paquet manquerait aurait **empêché le service de
+démarrer** : le monitoring aurait tué ce qu'il surveille.
+
+Les deux sont corrigés, dans le style du reste du fichier (`[ML] ✅ …`), et **les
+quatre branches ont été exécutées** : DSN absente → `[ML] ℹ️  Sentry inactif` ;
+DSN posée en prod → `[ML] ✅ Sentry armé — environment=production, traces_sample_rate=0.01` ;
+en staging → `traces_sample_rate=0.1` ; paquet manquant ou init en erreur →
+`[ML] ⚠️  Sentry non armé : … — le service démarre sans`, **code de retour 0 dans
+les quatre cas**. Un taux illisible retombe sur le défaut avec un avertissement au
+lieu de lever un `ValueError`.
+
+Reste à faire quand une session Sentry est ouverte : créer un projet **Python /
+FastAPI** distinct de celui du Node (les erreurs XGBoost et les erreurs Express
+n'ont ni la même cadence ni les mêmes destinataires, et le quota Sentry se compte
+par organisation — un second projet ne coûte donc rien), poser `SENTRY_DSN` sur
+chacun des deux services, **ne pas** poser `SENTRY_TRACES_SAMPLE_RATE`, et lire la
+bannière au redémarrage.
 
 ### B9 — clos le 2026-08-29 : la couche de mocks est supprimée
 
@@ -268,6 +351,27 @@ sources que la comparaison est censée détecter. Le défaut du script est `us`.
 
 ### A1bis — en service. Un seul contrôle reste.
 
+> ⚠️ **Correction du 2026-08-29, quelques heures après le paragraphe ci-dessous.**
+> Ce paragraphe affirmait la mise en service « terminée », bannière vue en prod à
+> l'appui. C'était vrai à l'instant où la bannière a été lue — et faux ensuite :
+> le déploiement suivant a démarré avec **`DORMANT=true`**, un drapeau qui coupe
+> `startOddsLogger()` avant qu'il n'arme quoi que ce soit. Le collecteur a donc
+> été **éteint sans que rien ne le dise**, et les deux tâches planifiées du
+> 22 septembre et du 13 octobre auraient trouvé `passes_today = 0` — en renvoyant
+> vers un bug de la migration 031 qui n'y était pour rien.
+> **`DORMANT=false` a été posé et déployé le 2026-08-29**, et la bannière est
+> revenue dans les logs du nouveau conteneur, avec la sonde de la 031 :
+> `[OddsLogger] calendrier armé — slots: 6, creditsPerDay: 10` et
+> `[OddsLogger] ✅ odds_snapshots présente`.
+>
+> **La leçon, et elle est différente de celle du bas de section.** Celle-ci disait :
+> *la cible doit être visible dans la sortie*. Celle-là dit : **une mesure porte
+> une date, pas un état.** Un contrôle passé ne prouve rien du déploiement
+> suivant, et un drapeau d'environnement peut défaire en silence ce qu'un contrôle
+> a établi la veille. Avant de se fier à cette section, relire
+> `[Server] Réglages effectifs` et l'absence de la ligne `DORMANT=true` dans les
+> logs du conteneur **en cours**.
+
 **Mise en service terminée le 2026-08-29.** Les migrations (dont 028 et 031) sont
 appliquées sur **Neon** et vérifiées par rejoue idempotente ; `npm test` et
 `npm run typecheck` sont verts ; `ODDS_LOG_ENABLED=true`, `ODDS_USER_RESERVE=150`,
@@ -496,28 +600,58 @@ serveur 155/155 tests toujours verts, client build + typecheck toujours verts, e
 un `npm ci` propre depuis le nouveau lock reconstruit tout en 4 s. Les deux
 `package-lock.json` de ton dépôt ont été remplacés par ces versions vérifiées.
 
-- [ ] **À faire une fois, sur ta machine :** `cd client && npm ci` puis
-      `cd ../server && npm ci`. **`npm ci`, pas `npm install`** — les locks
+- [x] **Joué sur la machine Windows le 2026-08-29 — les deux côtés sont
+      alignés sur les locks.** `npm ci` puis `npm audit`, `npm run typecheck`,
+      `npm run build` côté client, et `npm ci`, `npm audit`, `npm run typecheck`,
+      `npm test` côté serveur : tout vert, `npm audit` vide des deux côtés.
+      **Vérifié autrement que par la sortie de la console**, parce qu'une sortie
+      verte ne dit pas quel arbre a été installé : les versions réellement
+      présentes dans `node_modules` ont été relues sur le disque —
+      `vite` 6.4.3, `react-router` 7.18.3, `typescript` 5.6.3 côté client ;
+      `socket.io-parser` 4.2.7, `body-parser` 1.20.6, `qs` 6.15.3 côté serveur —
+      et l'horodatage de `dist/` confirme que le build a réécrit les chunks au
+      lieu de laisser les anciens. Commité en `4c8c97e`.
+      ⚠️ **`npm ci` sous Windows a réécrit `server/package.json` et
+      `server/package-lock.json` en CRLF**, sans rien changer à leur contenu :
+      `git diff` annonçait 11 566 lignes touchées pour 62 lignes réelles, et
+      `server/package.json` n'avait **aucun** changement de fond. Les deux ont été
+      remis en LF avant le commit (contenu vérifié identique hors CR, JSON
+      reparsé). Le dépôt n'a **pas** de `.gitattributes` et `core.autocrlf` n'est
+      pas posé : **le CRLF reviendra au prochain `npm ci` sous Windows.** Le
+      garde-fou, si on le veut, tient en deux lignes (`package.json text eol=lf`,
+      `package-lock.json text eol=lf`) — une règle large type `* text=auto`
+      renormaliserait des centaines de fichiers d'un coup et est à éviter.
+      *Rappel de la consigne, toujours valable pour la prochaine fois :*
+      **`npm ci`, pas `npm install`** — les locks
       livrés sont exactement ceux qui ont été testés. Le lock client porte aussi
       les trois devDependencies du typecheck : ce `npm ci` remplace le
       `npm install` demandé plus haut. Commiter les deux locks ensuite.
       Ce que ça referme : `socket.io-parser` 4.2.6 → 4.2.7 (l'avis « high »
       commun aux deux côtés), `body-parser` 1.20.5 → 1.20.6 et `qs` 6.15.1 →
       6.15.3 (deux DoS côté serveur), plus 26 bumps de correctif transitifs.
-      Aucun `package.json` n'a bougé.
-- [ ] **Deux montées de version à planifier — elles sortent des plages
-      épinglées, donc pas de `audit fix` possible :**
-      **`react-router` 7.13.0 → 7.18.3.** Seul avis « high » restant en
-      dépendance de production du client. Rappel de portée : la majorité des
-      avis vise les modes SSR/RSC, sans objet ici ; ce qui s'applique, ce sont
-      les deux redirections ouvertes côté client.
-      **`vite` 6.3.5 → 6.4.3** (épinglé deux fois : `devDependencies` **et**
-      `pnpm.overrides`). Les sept avis portent **tous sur le serveur de
-      développement** — contournements de `server.fs.deny`, lecture de fichier
-      via le WebSocket du dev server, `launch-editor` sur Windows. La prod est
-      du statique sur Vercel, le dev server n'y tourne jamais : le risque est
-      pour la machine d'un développeur exposée sur son réseau, pas pour le
-      produit. À monter, sans urgence.
+      Le lock client porte **en plus** les deux montées de version ci-dessous
+      (`react-router` 7.18.3, `vite` 6.4.3) : après ce `npm ci`, `npm audit` est
+      **vide des deux côtés**. Seul `client/package.json` a bougé, pour ces deux
+      versions.
+- [x] **Les deux montées de version sont faites — 2026-08-29.**
+      `react-router` **7.13.0 → 7.18.3** et `vite` **6.3.5 → 6.4.3** (l'épingle
+      de `pnpm.overrides` suivie aussi). `client/package.json` et son lock ont
+      été remplacés par les versions vérifiées.
+      **Résultat : `npm audit` rend `found 0 vulnerabilities`** — plus un seul
+      avis, production comme développement, là où il y en avait deux « high ».
+      **Comment ça a été vérifié**, parce qu'un bump de mineure de routeur ne se
+      juge pas sur un build vert : `npm ci` propre depuis le nouveau lock (4,9 s),
+      `tsc --noEmit` à **0 erreur**, `vite build` vert, puis **un test de fumée
+      au navigateur** — les six routes (`/`, `/stats`, `/nhl-predictions`,
+      `/bet`, `/league`, `/login`) chargées dans Chromium sur le `dist/` servi en
+      statique, avant et après. **Résultats identiques au caractère près** :
+      mêmes tailles de DOM montées (7676, 4378, 6965, 6250, 8347, 11173),
+      **zéro exception non rattrapée** des deux côtés, et pour seule erreur de
+      console le `VITE_NHL_API_URL is not configured` attendu quand aucune API ne
+      tourne. Le routeur se comporte donc identiquement.
+      Effet de bord mesuré : le bundle principal passe de 212,7 à 218,9 ko
+      (+6,2 ko brut, +2,0 ko gzip) — c'est le prix des correctifs de
+      `react-router`.
 
 **Tests de résilience à provoquer** — couper le ML · couper The Odds API et
 retirer `scratches.json` · redeploy Railway sous trafic · webhook Stripe rejoué
@@ -657,7 +791,10 @@ vingtaine d'écrans. Le supprimer aurait disséminé trois constantes partout.
 > C'est exactement le contrôle qui manquait le 2026-08-29 au premier essai, où
 > une sortie vide voulait dire « rien n'a été vérifié ». Un contrôle muet ne se
 > distingue pas d'un contrôle qui n'a pas tourné.
-- [ ] Railway : retirer `RAPIDAPI_KEY` (la ligne est partie de `.env.example`)
+- [x] **Railway : `RAPIDAPI_KEY` n'existe plus — vérifié le 2026-08-29** en
+      relevant les 44 variables du service `IceEdge` et la seule du service ML.
+      Le code non plus n'en lit aucune trace (`server/src`, `client/src`,
+      `ml/python` : zéro occurrence).
 - [ ] Vérifier une page d'accueil et l'onglet Stats dans le navigateur
 
 > **Les paris tennis déjà en base ne bougent pas.** `settlement.service` les
