@@ -242,18 +242,73 @@ sources que la comparaison est censée détecter. Le défaut du script est `us`.
       l'arriéré » ci-dessous. Refermer le `set` en fermant la console.
 - [x] **2.** ✅ 2026-08-28 (`npm test` + `npm run typecheck` verts) — `cd server && npm test`, puis `npm run typecheck` (seul vrai
       typecheck du dépôt ; il couvre les deux fichiers touchés le 2026-08-28)
-- [ ] **3.** ⚠️ **D'abord `git commit` + `push`** — Railway déploie depuis git,
+- [x] **3.** ✅ 2026-08-28 — poussé, variables posées, redéployé. ⚠️ **D'abord `git commit` + `push`** — Railway déploie depuis git,
       et les contrôles des étapes 4 et 5 n'existent que dans le code du
       2026-08-28 (sonde `odds_snapshots`, bloc `data-health`, bannière
       `[migrate] Cible`). Puis Railway : `ODDS_LOG_ENABLED=true`, `ODDS_USER_RESERVE=150`,
       `ODDS_QUOTA_WARN=100` — et vérifier que `ODDS_API_KEY` y est déjà
-- [ ] **4.** Redéployer, puis **lire la bannière de démarrage** : `[OddsLogger]
-      calendrier armé` avec `creditsPerDay: 10`, et **aucune** ligne
-      `⛔ odds_snapshots INTROUVABLE`
-- [ ] **5.** `GET /api/dev/data-health` → le bloc `odds_snapshots` doit exister
-      (`rows: 0` est normal en intersaison ; `error: table indisponible` ne
-      l'est pas)
-- [ ] **6.** ⏳ **À la pré-saison, le seul contrôle qui compte** : revenir sur
+- [x] **4.** ✅ 2026-08-28 — bannière vue : `[OddsLogger] calendrier armé`,
+      `slots: 6`, `creditsPerDay: 10`. Conforme au calendrier codé.
+      ⚠️ La sonde `odds_snapshots` était **muette en cas de succès** et
+      s'exécute *après* cette bannière : ne rien voir n'était pas une preuve,
+      seulement l'absence d'une erreur. **Corrigé le 2026-08-28** — elle
+      imprime désormais `[OddsLogger] ✅ odds_snapshots présente`. Au prochain
+      déploiement, c'est cette ligne qu'il faut chercher, et son absence
+      devient à son tour un signal. (Un contrôle muet ne se distingue pas d'un
+      contrôle qui n'a pas tourné — à cinq semaines du prochain contrôle réel,
+      sur une donnée irrécupérable, la différence compte.)
+- [x] **5a.** ✅ 2026-08-29 — Preuve rapide, sans HTTP ni auth — **rejouer la migration sur
+      Neon** (idempotente, elle ne réécrit rien) :
+      ```
+      set DATABASE_URL=<URL Neon directe>
+      set DB_SSL=true
+      npm run db:migrate:all
+      ```
+      Attendu : `[migrate] • migrations/031_odds_snapshots.sql (already applied,
+      skipped)` — le registre `schema_migrations` de Neon l'atteste. C'est la
+      vérification la plus directe : elle interroge la bonne base sans passer
+      par le produit.
+- [x] **5b.** ✅ 2026-08-29 (`ENABLE_DEV_ROUTES=true` posée sur Railway) — ⚠️ **`/api/dev/*` n'est PAS joignable en prod par défaut.** Deux
+      barrières, indépendantes : le routeur n'est **pas monté du tout** si
+      `NODE_ENV=production` sans `ENABLE_DEV_ROUTES=true` (`app.ts:145`), et
+      chaque route exige ensuite un **JWT + rôle `admin`**
+      (`dev.routes.ts:30`). Il faut donc poser `ENABLE_DEV_ROUTES=true` sur
+      Railway et s'authentifier avec un compte admin — sinon on lit
+      `Missing or malformed Authorization header`, ce qui ne dit **rien** de la
+      base. À poser maintenant : les deux contrôles planifiés (22 sept.,
+      13 oct.) en dépendent.
+- [x] **5c.** ✅ 2026-08-29 — **Où lire la mesure, une fois pour toutes :**
+      `https://arakice.com/dev/ml`, onglet **« Données »**, carte **« Série
+      temporelle des cotes (odds_snapshots) »** (colonne de droite, au-dessus de
+      « Paris & règlement »). Les cinq onglets sont Service · **Données** ·
+      Modèle · Backtest · Live.
+      **Par le dashboard, jamais par l'URL de l'API** : les routes exigent un
+      `Authorization: Bearer` qu'un onglet de navigateur n'envoie pas ; la page,
+      elle, pose le jeton via `authedFetch`. Compte **admin** obligatoire.
+      La carte a été ajoutée le 2026-08-28 : avant, l'API renvoyait bien le bloc
+      `odds_snapshots` et **l'UI le jetait**. Elle n'apparaît donc qu'après un
+      déploiement du **client**.
+      Attendu hors saison : 0 partout — c'est le succès, pas un problème. Le
+      seul échec est la carte en « table indisponible ».
+
+> **Les trois déguisements du même piège — l'histoire complète, pour ne pas la
+> repayer.** Une même question (« la 031 est-elle sur Neon ? ») a été posée trois
+> fois à trois mauvaises adresses, chacune répondant de façon plausible :
+>
+> | Adresse essayée | Ce qu'elle a répondu | Ce qu'elle décrit vraiment |
+> |---|---|---|
+> | `npm run db:migrate:all` avec le `.env` | erreur SSL | le Postgres **local** |
+> | `curl localhost:3001/api/dev/...` | en-tête `Authorization` manquant | le Postgres **local**, via le serveur de dév |
+> | `https://arakice.com/api/dev/...` | page blanche | le **front Vercel**, qui sert l'app React |
+>
+> Aucune n'a jamais touché Neon. La leçon n'est pas « faire attention » : c'est
+> que **la cible doit être visible dans la sortie**. D'où la ligne
+> `[migrate] Cible : hôte/base ssl=… ← BASE LOCALE`, et d'où la carte du
+> dashboard, qui ne peut interroger que la base de son propre backend.
+- [ ] **6.** ⏳ **À la pré-saison, le seul contrôle qui compte** — *deux tâches
+      planifiées posées le 2026-08-28 : le 22 septembre (pré-saison) et le
+      13 octobre (filet, saison régulière). Ne pas compter dessus seul : elles
+      demandent le bloc `data-health`, elles ne le lisent pas à ta place.* : revenir sur
       `data-health` en fin de journée de matchs. `passes_today` doit valoir
       **6** et `with_puckline` être > 0. Si `rows` reste à 0 alors que
       `odds_log.rows` monte, la 031 est en place mais les snapshots échouent —

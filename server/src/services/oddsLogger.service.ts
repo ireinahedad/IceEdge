@@ -545,7 +545,18 @@ export function startOddsLogger(): void {
   void pool
     .query(`SELECT to_regclass('public.odds_snapshots') AS t`)
     .then(({ rows }) => {
-      if (rows[0]?.t) return;
+      if (rows[0]?.t) {
+        // Ligne de SUCCÈS, et pas seulement d'échec. Un contrôle muet quand
+        // tout va bien ne se distingue pas d'un contrôle qui n'a pas tourné :
+        // au démarrage du 2026-08-28, « je ne vois pas d'erreur » ne prouvait
+        // rien de plus que « je n'ai pas déroulé les logs ». Le prochain
+        // contrôle réel est en pré-saison, à cinq semaines de distance et sur
+        // une donnée irrécupérable — il faut quelque chose à chercher, pas une
+        // absence à interpréter.
+        logger.info('[OddsLogger] ✅ `odds_snapshots` présente — série '
+          + 'temporelle du CLV prête (migration 031 appliquée).');
+        return;
+      }
       logger.error(
         '[OddsLogger] ⛔ `odds_snapshots` INTROUVABLE — migration 031 non '
         + 'appliquée. La collecte va tourner et remplir `odds_log`, mais la '

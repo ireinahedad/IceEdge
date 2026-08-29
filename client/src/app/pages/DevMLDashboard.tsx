@@ -166,6 +166,12 @@ interface DataHealthResponse {
     error?: string;
   };
   odds_quota: { remaining?: number; used?: number; observed_at?: string; error?: string };
+  odds_snapshots?: {
+    rows?: number; passes?: number; passes_today?: number;
+    first_date?: string; last_date?: string; last_observed?: string;
+    rows_full?: number; rows_spreads?: number; with_puckline?: number;
+    error?: string;
+  };
   slips: {
     total?: number; pending?: number; settled?: number;
     last_placed?: string; last_resolved?: string; stale_pending?: number;
@@ -869,6 +875,7 @@ function DataTab({
   const ol = health.odds_log ?? {};
   const q  = health.odds_quota ?? {};
   const s  = health.slips ?? {};
+  const sn = health.odds_snapshots ?? {};
 
   const lastWrite = timeAgo(ol.last_write);
   const quotaAge  = timeAgo(q.observed_at);
@@ -878,6 +885,14 @@ function DataTab({
   const collectStale = lastWrite.days != null && lastWrite.days > 2;
   const quotaLow     = q.remaining != null && q.remaining < 100;
   const movementPct  = ol.rows ? (100 * (ol.with_ml_movement ?? 0)) / ol.rows : null;
+
+  // 6 passes/jour au calendrier (2 `full` + 4 `spreads`). En dessous, le
+  // planificateur ne se replanifie pas — typiquement une instance qui redémarre.
+  // À 0 pendant la saison, la série temporelle du CLV ne se constitue pas, et
+  // c'est irrattrapable : la cote de clôture d'hier n'existe plus nulle part.
+  const snapObserved = timeAgo(sn.last_observed);
+  const snapStale    = snapObserved.days != null && snapObserved.days > 2;
+  const passesShort  = (sn.passes_today ?? 0) > 0 && (sn.passes_today ?? 0) < 6;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
@@ -943,6 +958,38 @@ function DataTab({
             <p className="text-[10px] text-[#bfc8cc]/50 mt-2">
               Ouvre l'onglet Modèle pour charger les rapports du service ML.
             </p>
+          )}
+        </Card>
+
+        <Card title="Série temporelle des cotes (odds_snapshots)"
+              hint="La table qu'A1bis existe pour remplir. Son échec est SILENCIEUX : insertSnapshots avale son erreur pour ne jamais faire perdre la clôture du jour à odds_log — donc des logs normaux ne prouvent rien, seul ce bloc le fait.">
+          {sn.error ? (
+            <p className="text-red-400 text-xs">{sn.error}</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-3">
+                <Metric label="Snapshots" value={String(sn.rows ?? 0)} />
+                <Metric label="Passes (24 h)" value={`${sn.passes_today ?? 0} / 6`}
+                  color={passesShort ? "#facc15" : (sn.passes_today ?? 0) === 6 ? "#4ade80" : undefined}
+                  warn={passesShort} />
+                <Metric label="Dernière passe" value={snapObserved.label}
+                  color={snapStale ? "#facc15" : undefined} warn={snapStale} />
+                <Metric label="Passes full" value={String(sn.rows_full ?? 0)} />
+                <Metric label="Passes spreads" value={String(sn.rows_spreads ?? 0)} />
+                <Metric label="Avec puck line" value={String(sn.with_puckline ?? 0)}
+                  color={(sn.rows ?? 0) > 0 && (sn.with_puckline ?? 0) === 0 ? "#f87171" : undefined}
+                  warn={(sn.rows ?? 0) > 0 && (sn.with_puckline ?? 0) === 0} />
+              </div>
+              <p className="text-[10px] text-[#bfc8cc]/60 leading-relaxed">
+                Hors saison, 0 partout est normal : la collecte sort sur le
+                garde-fou <code>isSeasonActive()</code> avant d'écrire. Ce qui ne
+                l'est pas : « table indisponible » (migration 031 absente), ou un
+                compteur à 0 pendant que <em>odds_log</em> monte. « Avec puck
+                line » à 0 alors que des lignes existent veut dire que les quatre
+                passes <em>spreads</em> ramènent du vide — 4 crédits/jour perdus
+                sur le seul marché encore vivant.
+              </p>
+            </>
           )}
         </Card>
 
