@@ -456,9 +456,12 @@ panne au lieu de servir un prix périmé. C'est voulu — un collecteur qui rate
 cycle perd un point de mesure, alors qu'un snapshot réécrit avec un prix ancien
 fabriquerait un faux mouvement de ligne.
 
-- [ ] **Sur ta machine :** `cd server && npm test` pour le dernier lot du
-      2026-08-24 (limiteur, cache du calendrier, hôte des stats,
-      `profileUpdateSchema`)
+- [x] **Suite serveur jouée le 2026-08-29 — `17 fichiers, 155 tests, tous verts`
+      en 7,8 s**, plus `npm run typecheck` à 0 erreur. Le lot du 2026-08-24
+      (limiteur, cache du calendrier, hôte des stats, `profileUpdateSchema`) est
+      couvert. Rejoué dans un Linux propre, hors du dépôt : `npm ci` depuis le
+      lock seul, aucune base de données requise (`vitest.setup.ts` pose
+      `NODE_ENV=test` et un `JWT_SECRET` factice avant tout import).
 
 ---
 
@@ -487,18 +490,34 @@ C2 cross-navigateur desktop · C3 push web
 2 comptes · JWT expiré/altéré rejeté et refresh non rejouable après logout ·
 en-têtes **CSP réellement servis par Vercel** (l'API n'y peut rien, c'est le front)
 
-**Deux avis `npm audit` « high » en dépendance de production du client** — relevés
-le 2026-08-29, aucun ne bloque le lancement :
+**Avis `npm audit` — la moitié est refermée, le reste est une montée de version.**
+`npm audit fix` a été joué des deux côtés dans le container et **vérifié** :
+serveur 155/155 tests toujours verts, client build + typecheck toujours verts, et
+un `npm ci` propre depuis le nouveau lock reconstruit tout en 4 s. Les deux
+`package-lock.json` de ton dépôt ont été remplacés par ces versions vérifiées.
 
-- **`react-router` 7.13.0 (épinglé).** La douzaine d'avis vise en majorité les modes
-  **SSR / RSC / framework** (RCE turbo-stream, single-fetch, `__manifest`,
-  hydratation) : `routes.tsx:75` utilise `createBrowserRouter`, SPA pure, donc sans
-  objet ici. **Restent deux redirections ouvertes côté client** — antislash et `//`
-  protocol-relative dans `<Link>` / `useNavigate` — réelles dès qu'une cible de
-  navigation vient d'une entrée utilisateur. Correctif en 7.18.3, **hors de la
-  plage épinglée** : c'est une montée de version à planifier, pas un `audit fix`.
-- **`socket.io-parser` 4.2.6 (transitif).** Épuisement mémoire par pièce jointe
-  vide. Correctif **dans la plage** : `npm audit fix`, puis rejouer le build.
+- [ ] **À faire une fois, sur ta machine :** `cd client && npm ci` puis
+      `cd ../server && npm ci`. **`npm ci`, pas `npm install`** — les locks
+      livrés sont exactement ceux qui ont été testés. Le lock client porte aussi
+      les trois devDependencies du typecheck : ce `npm ci` remplace le
+      `npm install` demandé plus haut. Commiter les deux locks ensuite.
+      Ce que ça referme : `socket.io-parser` 4.2.6 → 4.2.7 (l'avis « high »
+      commun aux deux côtés), `body-parser` 1.20.5 → 1.20.6 et `qs` 6.15.1 →
+      6.15.3 (deux DoS côté serveur), plus 26 bumps de correctif transitifs.
+      Aucun `package.json` n'a bougé.
+- [ ] **Deux montées de version à planifier — elles sortent des plages
+      épinglées, donc pas de `audit fix` possible :**
+      **`react-router` 7.13.0 → 7.18.3.** Seul avis « high » restant en
+      dépendance de production du client. Rappel de portée : la majorité des
+      avis vise les modes SSR/RSC, sans objet ici ; ce qui s'applique, ce sont
+      les deux redirections ouvertes côté client.
+      **`vite` 6.3.5 → 6.4.3** (épinglé deux fois : `devDependencies` **et**
+      `pnpm.overrides`). Les sept avis portent **tous sur le serveur de
+      développement** — contournements de `server.fs.deny`, lecture de fichier
+      via le WebSocket du dev server, `launch-editor` sur Windows. La prod est
+      du statique sur Vercel, le dev server n'y tourne jamais : le risque est
+      pour la machine d'un développeur exposée sur son réseau, pas pour le
+      produit. À monter, sans urgence.
 
 **Tests de résilience à provoquer** — couper le ML · couper The Odds API et
 retirer `scratches.json` · redeploy Railway sous trafic · webhook Stripe rejoué
@@ -604,9 +623,10 @@ vingtaine d'écrans. Le supprimer aurait disséminé trois constantes partout.
 - [x] **Le client a désormais son typecheck** — `tsconfig.json` en `strict`,
       plus `@types/react`, `@types/react-dom` et `typescript` en
       devDependencies, et un script `npm run typecheck`.
-      ⚠️ **`package.json` a changé sans le lock : lancer `npm install` une fois**
-      (il régénère `package-lock.json`, à commiter), puis `npm run typecheck` —
-      **il rend 0 erreur** (vérifié ici avant livraison, avec `vite build` vert).
+      ⚠️ `package.json` a gagné trois devDependencies. Le `package-lock.json`
+      livré le 2026-08-29 les porte déjà : **un seul `npm ci` suffit** (voir la
+      ligne « À faire une fois, sur ta machine » du §4), puis `npm run typecheck`
+      — **il rend 0 erreur** (vérifié ici, avec `vite build` vert).
 - [x] **Les 10 erreurs de type préexistantes sont refermées — 2026-08-29.
       `npm run typecheck` rend 0 erreur.** Quatre d'entre elles n'étaient pas
       des broutilles de typage, mais des bogues visibles :
