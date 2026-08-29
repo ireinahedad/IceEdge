@@ -409,7 +409,11 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
                   <div className="flex-1 h-1.5 rounded-full bg-white/5">
                     <div
                       className="h-1.5 rounded-full"
-                      style={{ width: `${Math.round(f.importance * 100)}%`, background: accent }}
+                      // `accent` n'a jamais été défini dans ce fichier : cette ligne jetait un
+                      // ReferenceError dès que `feature_importances` n'était pas vide, donc
+                      // chaque fois que la carte ML avait quelque chose à montrer. Remplacé
+                      // par le violet ML de la carte, celui d'`ImportanceBar`.
+                      style={{ width: `${Math.round(f.importance * 100)}%`, background: "#a78bfa" }}
                     />
                   </div>
                   <span className="text-[10px] text-[#8a9ea6]">{Math.round(f.importance * 100)}%</span>

@@ -9,11 +9,10 @@
 import { useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 import { nhlApiService } from "../../services/nhlApiService";
-import { predictionApiService } from "../../services/predictionApiService";
+import { predictionApiService, isPredictionUnavailable } from "../../services/predictionApiService";
 import { useSport } from "../../context/SportContext";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
-import { getTeamById, getGameById } from "../../data/hockeyData";
 import { GamePlayersTable, MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { LiveGameView, MLProps, MktGroup, buildGameGroups } from "./gameMarkets";
 import { HeadToHead, NotFound, RevealMode, RevealModeCtx } from "./predictionShared";
@@ -35,36 +34,35 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const staticGame = getGameById(gameId);
-      if (staticGame) {
-        const t1 = getTeamById(staticGame.team1Id);
-        const t2 = getTeamById(staticGame.team2Id);
-        if (t1 && t2) {
-          setGameView({ id: gameId,
-            home: { abbr: t1.abbr, name: t1.name, logo: t1.logo, winPct: staticGame.winPct1 },
-            away: { abbr: t2.abbr, name: t2.name, logo: t2.logo, winPct: staticGame.winPct2 },
-            time: staticGame.time, overUnder: staticGame.overUnder });
-          setLoading(false);
-          return;
-        }
-      }
+      // Branche « données statiques » supprimée le 2026-08-29 : `hockeyData`
+      // n'expose plus que des tableaux vides depuis le passage au backend, donc
+      // `getGameById` rendait toujours `undefined`. Le code était mort et
+      // portait deux erreurs de type que rien ne pouvait déclencher.
       try {
-        const [nhlGame, homePred] = await Promise.all([
+        // La probabilité du modèle peut manquer ; dans ce cas elle vaut `null`
+        // et la page masque les marchés qui en dérivent. Aucun nombre de repli.
+        const [nhlGame, homePct] = await Promise.all([
           nhlApiService.getGame(gameId),
-          predictionApiService.getSinglePrediction({ marketType: "moneyline", gameId, teamId: "" })
-            .catch(() => ({ probability: 55 })),
+          predictionApiService
+            .getSinglePrediction({ marketType: "moneyline", gameId, teamId: "" })
+            .then(r => r.probability as number | null)
+            .catch((e: unknown) => {
+              if (!isPredictionUnavailable(e)) throw e;
+              console.warn("[GamePrediction] prédiction indisponible :", e.reason);
+              return null;
+            }),
         ]);
         setGameView({
           id: gameId,
           home: {
             abbr: nhlGame.homeTeam.abbreviation, name: nhlGame.homeTeam.name,
             logo: nhlLogoUrl(nhlGame.homeTeam.abbreviation),
-            score: nhlGame.homeTeam.score, winPct: homePred.probability,
+            score: nhlGame.homeTeam.score, winPct: homePct,
           },
           away: {
             abbr: nhlGame.awayTeam.abbreviation, name: nhlGame.awayTeam.name,
             logo: nhlLogoUrl(nhlGame.awayTeam.abbreviation),
-            score: nhlGame.awayTeam.score, winPct: 100 - homePred.probability,
+            score: nhlGame.awayTeam.score, winPct: homePct == null ? null : 100 - homePct,
           },
           period: nhlGame.period ? nhlGame.period + "P • " + nhlGame.clock : undefined,
           time: nhlGame.startTime,
@@ -89,8 +87,12 @@ export function GamePrediction({ gameId }: { gameId: string }) {
 
   const { home, away } = gameView;
   const isLive = !!gameView.period;
-  const finalPct = Math.min(85, Math.max(15, home.winPct));
-  const localGroups = buildGameGroups(home.abbr, away.abbr, finalPct, gameView.overUnder ?? 5.5);
+  // Sans probabilité du modèle il n'y a pas de marchés dérivés à construire :
+  // on ne garde que les groupes du moteur de règles, servis par le backend.
+  const finalPct = home.winPct == null ? null : Math.min(85, Math.max(15, home.winPct));
+  const localGroups = finalPct == null
+    ? []
+    : buildGameGroups(home.abbr, away.abbr, finalPct, gameView.overUnder ?? 5.5);
   // Inject mlProps from localGroups into apiGroups (server groups have better rulePct but no mlProps)
   const mergedGroups = apiGroups
     ? (() => {
@@ -111,6 +113,12 @@ export function GamePrediction({ gameId }: { gameId: string }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {finalPct == null && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+          <p className="text-amber-300 text-[11px] font-semibold">{t("pred.unavailable")}</p>
+          <p className="text-amber-200/70 text-[10px] mt-0.5">{t("pred.unavailableHint")}</p>
+        </div>
+      )}
       {/* ── Match header ── */}
       <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
         {isLive && (

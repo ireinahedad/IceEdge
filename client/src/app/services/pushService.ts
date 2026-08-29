@@ -45,7 +45,9 @@ export async function enableValueBetPush(): Promise<boolean> {
   if (!sub) {
     sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(key),
+      // L'API Push attend un `BufferSource`. Le tableau est fraîchement alloué
+      // sur son propre buffer, donc `.buffer` est exactement la même donnée.
+      applicationServerKey: urlBase64ToUint8Array(key).buffer as ArrayBuffer,
     });
   }
 

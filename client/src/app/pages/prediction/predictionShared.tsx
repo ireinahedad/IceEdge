@@ -216,8 +216,9 @@ function FormLegend() {
 }
 
 /** Single-subject recent form card (used for player & team). */
-export function RecentFormCard({ title, results }: { title?: string; results: ("W" | "L" | "OT")[] }) {
+export function RecentFormCard({ title, results }: { title?: string; results?: ("W" | "L" | "OT")[] }) {
   const { t } = useI18n();
+  if (!results || results.length === 0) return null;
   return (
     <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
       <p className="text-white text-sm font-medium mb-3">{title ?? t("pred.recentForm")}</p>
@@ -507,17 +508,14 @@ export function GameSelector({ games, selected, onSelect, accent }: {
 
 /* --- Recent-form generator --- */
 /** Deterministic-ish recent form: `count` results biased by win probability `prob` (0..1). */
-export function generateForm(count: number, prob: number): ("W" | "L" | "OT")[] {
-  const p = Math.min(0.95, Math.max(0.05, prob));
-  const out: ("W" | "L" | "OT")[] = [];
-  for (let i = 0; i < count; i++) {
-    const r = Math.random();
-    if (r < p)                 out.push("W");
-    else if (r < p + 0.12)     out.push("OT");
-    else                       out.push("L");
-  }
-  return out;
-}
+// `generateForm` a été supprimée le 2026-08-29. Elle fabriquait une suite de
+// W/L/OT avec `Math.random()` à partir d'un pourcentage, et cette suite était
+// rendue sous le titre « Forme récente », avec sa légende W/OT/L — donc lue
+// comme les vrais derniers résultats de l'équipe ou du joueur. Elle changeait à
+// chaque rechargement. Aucune source ne donne aujourd'hui l'ORDRE des derniers
+// résultats (`getTeamLastNGamesStats` ne rend que des totaux), donc la carte ne
+// s'affiche plus du tout : `RecentFormCard` et `PredictionLayout` rendent `null`
+// sans `results`. Le jour où l'API expose la séquence, il suffit de la passer.
 
 /* --- Last-N games view model --- */
 export interface NGamesView {
@@ -566,7 +564,8 @@ export function PredictionLayout({
 }: {
   title: string; subtitle: string; logo: string; winPct: number; winLabel: string;
   calcFactors?: CalcFactor[]; basePct?: number; accent?: string;
-  recentForm: ("W" | "L" | "OT")[]; betRec: string; betNote: string;
+  /** Vrais derniers résultats uniquement. Absent → la carte n'est pas rendue. */
+  recentForm?: ("W" | "L" | "OT")[]; betRec: string; betNote: string;
   extraStats: { label: string; value: string }[];
 }) {
   const { t } = useI18n();
@@ -613,25 +612,27 @@ export function PredictionLayout({
         />
       )}
 
-      {/* Recent form */}
-      <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
-        <p className="text-white text-sm font-medium mb-3">{t("pred.recentForm")}</p>
-        <FormDots results={recentForm} />
-        <div className="flex items-center gap-4 mt-3">
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-green-500/40 border border-green-500/60" />
-            <span className="text-[#bfc8cc] text-[10px]">{t("pred.win")}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-yellow-500/40 border border-yellow-500/60" />
-            <span className="text-[#bfc8cc] text-[10px]">OT</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-red-500/40 border border-red-500/60" />
-            <span className="text-[#bfc8cc] text-[10px]">{t("pred.loss")}</span>
+      {/* Recent form — rendue seulement si on a de VRAIS résultats */}
+      {recentForm && recentForm.length > 0 && (
+        <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
+          <p className="text-white text-sm font-medium mb-3">{t("pred.recentForm")}</p>
+          <FormDots results={recentForm} />
+          <div className="flex items-center gap-4 mt-3">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-green-500/40 border border-green-500/60" />
+              <span className="text-[#bfc8cc] text-[10px]">{t("pred.win")}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-yellow-500/40 border border-yellow-500/60" />
+              <span className="text-[#bfc8cc] text-[10px]">OT</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-red-500/40 border border-red-500/60" />
+              <span className="text-[#bfc8cc] text-[10px]">{t("pred.loss")}</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Bet recommendation */}
       <BetRec rec={betRec} note={betNote} />

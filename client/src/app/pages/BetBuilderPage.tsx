@@ -47,7 +47,9 @@ export function BetBuilderPage() {
   });
   const [showSheet, setShowSheet] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitResult, setSubmitResult] = useState<{ slipId: string } | null>(null);
+  // `message` vient du serveur ; il était jeté à la réception puis lu au rendu,
+  // donc le sous-titre de l'écran de succès était vide depuis toujours.
+  const [submitResult, setSubmitResult] = useState<{ slipId: string; message?: string } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -79,8 +81,8 @@ export function BetBuilderPage() {
         gameId:         l.gameId,
         selectionValue: l.selectionValue,
       }));
-      const { slipId } = await submitSlip(slipLegs, sport, combinedProbability);
-      setSubmitResult({ slipId });
+      const { slipId, message } = await submitSlip(slipLegs, sport, combinedProbability);
+      setSubmitResult({ slipId, message });
       clearSlip();
     } catch (err: any) {
       setSubmitError(err.message ?? "Submission failed. Try again.");
@@ -160,25 +162,31 @@ export function BetBuilderPage() {
         <div className={`relative z-10 flex-1 px-4 overflow-y-auto bet-ink-black ${mode === "light" ? "bet-light" : "bet-dark"}`} style={{ paddingBottom: legs.length > 0 ? "160px" : "112px" }}>
           {legs.length > 0 && (
           <div className="flex flex-col items-center py-6">
-            <ProbabilityGauge pct={combinedProbability} size={180} />
+            <ProbabilityGauge pct={combinedProbability ?? 0} size={180} />
             {legs.length > 1 && (
               <>
                 <p className="text-[#4a6068] text-[10px] text-center mt-2 max-w-[240px]">
-                  Combined probability all {legs.length} predictions hit
+                  {combinedProbability == null
+                    ? t("pred.unavailableParlay")
+                    : `Combined probability all ${legs.length} predictions hit`}
                 </p>
-                <div className="mt-2 px-4 py-1.5 rounded-full icy-tile">
-                  <span className="text-white font-bold text-sm font-mono">{toOddsLabel(combinedProbability)}</span>
-                  <span className="text-[#4a6068] text-[10px] ml-1.5">implied odds</span>
-                </div>
+                {combinedProbability != null && (
+                  <div className="mt-2 px-4 py-1.5 rounded-full icy-tile">
+                    <span className="text-white font-bold text-sm font-mono">{toOddsLabel(combinedProbability)}</span>
+                    <span className="text-[#4a6068] text-[10px] ml-1.5">implied odds</span>
+                  </div>
+                )}
               </>
             )}
             {legs.length === 1 && (
               <>
                 <p className="text-[#4a6068] text-[10px] text-center mt-2">{t("slip.individualProb")}</p>
-                <div className="mt-2 px-4 py-1.5 rounded-full icy-tile">
-                  <span className="text-white font-bold text-sm font-mono">{toOddsLabel(combinedProbability)}</span>
-                  <span className="text-[#4a6068] text-[10px] ml-1.5">implied odds</span>
-                </div>
+                {combinedProbability != null && (
+                  <div className="mt-2 px-4 py-1.5 rounded-full icy-tile">
+                    <span className="text-white font-bold text-sm font-mono">{toOddsLabel(combinedProbability)}</span>
+                    <span className="text-[#4a6068] text-[10px] ml-1.5">implied odds</span>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -245,7 +253,9 @@ export function BetBuilderPage() {
           <div className="icy-card bet-ink-black rounded-3xl p-8 text-center max-w-[300px] w-full">
             <div className="text-5xl mb-4">✅</div>
             <p className="text-white font-bold text-lg mb-2">Slip Locked!</p>
-            <p className="text-[#92A08A] text-sm mb-6">{submitResult.message}</p>
+            {submitResult.message && (
+              <p className="text-[#92A08A] text-sm mb-6">{submitResult.message}</p>
+            )}
             <button
               onClick={() => { clearSlip(); navigate("/"); }}
               className="w-full py-3 rounded-2xl font-bold text-sm"

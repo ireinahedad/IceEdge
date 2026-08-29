@@ -13,7 +13,7 @@ import { useSport } from "../../context/SportContext";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { BetOpt, MktGroup, RuleFactor } from "./gameMarkets";
-import { GameSelector, LoadingSkeleton, NotFound, RecentFormCard, RevealMode, RevealModeCtx, generateForm, useSelectedGame, useUpcomingGames } from "./predictionShared";
+import { GameSelector, LoadingSkeleton, NotFound, RecentFormCard, RevealMode, RevealModeCtx, useSelectedGame, useUpcomingGames } from "./predictionShared";
 
 
 /* ─── Player Prediction ──────────────────────── */
@@ -39,12 +39,6 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
   const games = useUpcomingGames(data?.team || undefined, searchParams.get("game") ?? undefined);
   const { selected: selectedGame, select: selectGame } = useSelectedGame(games);
   const playerGameId = selectedGame?.id;
-
-  const recentForm = useMemo<("W" | "L" | "OT")[]>(
-    // Form biased by the player's scoring pace (points/game).
-    () => (data ? generateForm(8, Math.min(0.8, Math.max(0.3, 0.35 + data.ptsPerGame * 0.3))) : []),
-    [data?.ptsPerGame],
-  );
 
   useEffect(() => {
     async function load() {
@@ -323,7 +317,6 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
         </div>
       </div>
       {/* Recent form — shown above the markets */}
-      <RecentFormCard results={recentForm} />
 
       {/* Market groups — local groups always used (they carry mlProps) */}
       <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />

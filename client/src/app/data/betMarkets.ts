@@ -460,8 +460,12 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
   },
 ];
 
+// ⚠️ La clé est « match », pas « game » : aucune des 37 définitions n'utilise
+// `category: "game"`. Les deux tables ci-dessous étaient donc interrogées avec
+// « match » et rendaient `undefined` — le groupe de marchés le plus important de
+// la feuille s'affichait sans titre ni icône.
 export const CATEGORY_LABELS: Record<MarketDefinition["category"], string> = {
-  game:    "Game Lines",
+  match:   "Game Lines",
   team:    "Team Props",
   player:  "Player Props",
   period:  "Period Betting",
@@ -469,7 +473,7 @@ export const CATEGORY_LABELS: Record<MarketDefinition["category"], string> = {
 };
 
 export const CATEGORY_ICONS: Record<MarketDefinition["category"], string> = {
-  game:    "🏒",
+  match:   "🏒",
   team:    "🛡",
   player:  "⛸",
   period:  "⏱",

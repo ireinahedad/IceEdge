@@ -9,7 +9,8 @@
     "dev": "vite",
     "seo:gen": "node scripts/seo-gen.mjs",
     "seo:sample": "node scripts/seo-gen.mjs --sample",
-    "seo:shells": "node scripts/route-shells.mjs"
+    "seo:shells": "node scripts/route-shells.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@sentry/react": "^8.0.0",
@@ -23,8 +24,11 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.12",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
     "@vitejs/plugin-react": "4.7.0",
     "tailwindcss": "4.1.12",
+    "typescript": "5.6.3",
     "vite": "6.3.5"
   },
   "peerDependencies": {

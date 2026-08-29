@@ -6,7 +6,7 @@
  * seuls les imports et les mots-clés `export` ont été ajoutés.
  */
 
-import { predictionApiService } from "../../services/predictionApiService";
+import { predictionApiService, isPredictionUnavailable } from "../../services/predictionApiService";
 import type { NHLGame } from "../../types/bet";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 
@@ -20,27 +20,45 @@ export interface DisplayGame {
   period?: string;
   time?: string;
   overUnder?: number;
-  totalPct?: number;
+  totalPct?: number | null;
   // bet365 decimal odds — only populated when VITE_ODDS_API_KEY is set
   bet365Home?: number;
   bet365Away?: number;
-  team1: { id: string; abbr: string; name: string; score?: number; logo: string; winPct: number };
-  team2: { id: string; abbr: string; name: string; score?: number; logo: string; winPct: number };
+  // `null` = le modèle n'a pas répondu. Jamais un nombre de repli : voir
+  // l'entête de `predictionApiService.ts`.
+  team1: { id: string; abbr: string; name: string; score?: number; logo: string; winPct: number | null };
+  team2: { id: string; abbr: string; name: string; score?: number; logo: string; winPct: number | null };
+}
+
+/**
+ * Une probabilité que le modèle n'a pas rendue vaut `null` — jamais un nombre
+ * fabriqué. La carte affiche « — » et le calcul d'edge est neutralisé.
+ */
+async function pctOrNull(
+  req: Parameters<typeof predictionApiService.getSinglePrediction>[0]
+): Promise<number | null> {
+  try {
+    return (await predictionApiService.getSinglePrediction(req)).probability;
+  } catch (e) {
+    if (!isPredictionUnavailable(e)) throw e;
+    console.warn("[landing] prédiction indisponible :", e.reason);
+    return null;
+  }
 }
 
 export async function toDisplayGame(game: NHLGame): Promise<DisplayGame> {
-  const [homePred, totalPred] = await Promise.all([
-    predictionApiService.getSinglePrediction({ marketType: "moneyline", gameId: game.id, teamId: game.homeTeam.abbreviation.toLowerCase() }),
-    predictionApiService.getSinglePrediction({ marketType: "total_goals", gameId: game.id, selection: "over", line: 5.5 }),
+  const [homePct, totalPct] = await Promise.all([
+    pctOrNull({ marketType: "moneyline", gameId: game.id, teamId: game.homeTeam.abbreviation.toLowerCase() }),
+    pctOrNull({ marketType: "total_goals", gameId: game.id, selection: "over", line: 5.5 }),
   ]);
   return {
     id: game.id,
     period: game.period ? `${game.period}P • ${game.clock}` : undefined,
     time: game.startTime,
     overUnder: 5.5,
-    totalPct: totalPred.probability,
-    team1: { id: game.homeTeam.abbreviation.toLowerCase(), abbr: game.homeTeam.abbreviation, name: game.homeTeam.name, score: game.homeTeam.score, logo: nhlLogoUrl(game.homeTeam.abbreviation), winPct: homePred.probability },
-    team2: { id: game.awayTeam.abbreviation.toLowerCase(), abbr: game.awayTeam.abbreviation, name: game.awayTeam.name, score: game.awayTeam.score, logo: nhlLogoUrl(game.awayTeam.abbreviation), winPct: 100 - homePred.probability },
+    totalPct,
+    team1: { id: game.homeTeam.abbreviation.toLowerCase(), abbr: game.homeTeam.abbreviation, name: game.homeTeam.name, score: game.homeTeam.score, logo: nhlLogoUrl(game.homeTeam.abbreviation), winPct: homePct },
+    team2: { id: game.awayTeam.abbreviation.toLowerCase(), abbr: game.awayTeam.abbreviation, name: game.awayTeam.name, score: game.awayTeam.score, logo: nhlLogoUrl(game.awayTeam.abbreviation), winPct: homePct == null ? null : 100 - homePct },
   };
 }
 
@@ -61,5 +79,9 @@ export function calcEdge(modelPct: number, decimal: number): number {
 
 export interface AddSheetState {
   open: boolean;
+  /** Match d'où la feuille a été ouverte. `HockeyLanding` l'écrivait et le
+   *  relisait sans qu'il soit déclaré ici : ça marchait en JS, mais le type
+   *  mentait sur la forme réelle de l'état. */
+  gameId?: string;
   subject?: { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 }

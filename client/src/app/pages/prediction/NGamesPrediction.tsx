@@ -12,7 +12,7 @@ import { useSport } from "../../context/SportContext";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import type { CalcFactor } from "../../services/predictionApiService";
-import { NGamesView, NotFound, PredictionLayout, generateForm } from "./predictionShared";
+import { NGamesView, NotFound, PredictionLayout } from "./predictionShared";
 
 
 function NGamesPrediction({ teamId, n }: { teamId: string; n: number }) {
@@ -140,7 +140,6 @@ function NGamesPrediction({ teamId, n }: { teamId: string; n: number }) {
   ].filter((f) => f.delta !== 0);
 
   const finalPct = Math.min(82, Math.max(18, view.winRateN));
-  const form = generateForm(Math.min(n, 8), finalPct / 100);
   const wl = `${view.wins}W – ${view.losses}L${view.otLosses > 0 ? ` – ${view.otLosses}OT` : ""}`;
 
   return (
@@ -153,7 +152,6 @@ function NGamesPrediction({ teamId, n }: { teamId: string; n: number }) {
       calcFactors={calcFactors}
       basePct={50}
       accent={accent}
-      recentForm={form}
       betRec={finalPct >= 60 ? "Moneyline" : "Over/Under"}
       betNote={`Over the last ${n} games, ${view.teamName} has gone ${wl} with ${view.goalsForPerGame.toFixed(1)} goals/game. ${finalPct >= 55 ? "Strong form makes them a solid moneyline pick." : "Inconsistent results suggest value in the totals market."}`}
       extraStats={[

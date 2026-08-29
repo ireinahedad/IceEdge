@@ -52,9 +52,10 @@ function riskLabel(pct: number): { tier: RiskTier; key: string; color: string } 
   return RISK_TIERS[3];
 }
 
-/** Implied decimal odds from a win probability — a proxy "cote" so users can
- * gauge potential payout even when no real bookmaker price is attached
- * (best bets span team, game and player markets bet365 doesn't all cover). */
+/** Cote **équitable** déduite de la probabilité du modèle — sans marge, et sans
+ * rapport avec un prix de bookmaker. Affichée pour donner un ordre de grandeur du
+ * gain sur les marchés que bet365 ne couvre pas tous. Le `≈` seul ne suffisait pas
+ * à le dire : la pastille porte désormais une infobulle explicite. */
 function impliedOdds(pct: number): number | null {
   if (pct <= 0 || pct >= 100) return null;
   return Math.round((100 / pct) * 100) / 100;
@@ -95,7 +96,9 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
             {sortSource === "ml" && bet.mlLoading ? "…" : `${displayPct}%`}
           </span>
           {odds != null && (
-            <span className="text-[9px] font-semibold flex-shrink-0 tabular-nums text-[#bfc8cc] bg-white/5 px-1.5 py-px rounded-full">
+            <span
+              title={t("home.oddsFairHint")}
+              className="text-[9px] font-semibold flex-shrink-0 tabular-nums text-[#bfc8cc] bg-white/5 px-1.5 py-px rounded-full cursor-help">
               {t("home.oddsApprox", { odds: odds.toFixed(2) })}
             </span>
           )}

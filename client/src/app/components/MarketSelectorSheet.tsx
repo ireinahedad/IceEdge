@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { MARKET_DEFINITIONS, CATEGORY_LABELS, CATEGORY_ICONS } from "../data/betMarkets";
-import { predictionApiService } from "../services/predictionApiService";
+import { predictionApiService, isPredictionUnavailable } from "../services/predictionApiService";
 import { useBet } from "../context/BetContext";
 import { useNHLData } from "../hooks/useNHLData";
 import { useI18n } from "../i18n";
@@ -42,6 +42,9 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<Category>("match");
   const [adding, setAdding] = useState(false);
+  // Message affiché quand le modèle ne rend pas de probabilité : on refuse
+  // d'inscrire une jambe au coupon plutôt que d'en inventer une.
+  const [addError, setAddError] = useState<string | null>(null);
   const [added, setAdded] = useState(false);
 
   // ── Build searchable subject list ──────────────────────────────────────────
@@ -163,15 +166,26 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
       return;
     }
 
-    // Get probability from prediction service
-    const response = await predictionApiService.getSinglePrediction({
-      marketType: selectedMarket.type as BetMarketType,
-      gameId: selectedSubject.type === "game" ? selectedSubject.id : undefined,
-      teamId: selectedSubject.type === "team" ? selectedSubject.id : undefined,
-      playerId: selectedSubject.type === "player" ? selectedSubject.id : undefined,
-      line: lineValue,
-      selection: selectionValue,
-    });
+    // La probabilité vient du service de prédiction. Sans elle, on n'ajoute
+    // rien : une jambe porte sa probabilité jusqu'au règlement du coupon, donc
+    // un chiffre inventé ici survivrait bien après la panne qui l'a produit.
+    let response;
+    try {
+      response = await predictionApiService.getSinglePrediction({
+        marketType: selectedMarket.type as BetMarketType,
+        gameId: selectedSubject.type === "game" ? selectedSubject.id : undefined,
+        teamId: selectedSubject.type === "team" ? selectedSubject.id : undefined,
+        playerId: selectedSubject.type === "player" ? selectedSubject.id : undefined,
+        line: lineValue,
+        selection: selectionValue,
+      });
+    } catch (e) {
+      if (!isPredictionUnavailable(e)) throw e;
+      console.warn("[MarketSelectorSheet] prédiction indisponible :", e.reason);
+      setAddError(t("pred.unavailableLeg"));
+      setAdding(false);
+      return;
+    }
 
     const selectionLabel = buildSelectionLabel(
       selectedMarket,
@@ -469,6 +483,9 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
               </div>
             )}
 
+            {addError && (
+              <p className="mb-2 text-center text-[11px] font-semibold text-amber-300">{addError}</p>
+            )}
             <button
               onClick={handleAdd}
               disabled={!canAdd || adding || added}
@@ -506,7 +523,9 @@ function TeamSelectionsForGame({ gameId, selected, onSelect, getTeamById, getGam
       {[t1, t2].map((t) => (
         <button
           key={t.id}
-          onClick={() => onSelect(t.id, t.name, t.logo)}
+          // `onSelect` ne prend qu'un argument (c'est un setState) : les deux
+          // autres étaient ignorés en silence.
+          onClick={() => onSelect(t.id)}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors active:bg-white/5"
           style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
         >

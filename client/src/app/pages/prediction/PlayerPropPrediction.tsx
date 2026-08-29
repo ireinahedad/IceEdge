@@ -11,9 +11,9 @@ import { nhlApiService } from "../../services/nhlApiService";
 import { useSport } from "../../context/SportContext";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
-import { factorsApiService } from "../../services/predictionApiService";
+import { factorsApiService, isPredictionUnavailable, predictionErrorKey } from "../../services/predictionApiService";
 import type { CalcFactor } from "../../services/predictionApiService";
-import { LoadingSkeleton, NotFound, PredictionLayout, generateForm } from "./predictionShared";
+import { LoadingSkeleton, NotFound, PredictionLayout } from "./predictionShared";
 
 
 /* ─── Player Prop Prediction ──────────────────────────── */
@@ -26,8 +26,11 @@ function PlayerPropPrediction({ propId }: { propId: string }) {
   const playerId = dashIdx > 0 ? propId.slice(0, dashIdx) : propId;
   const propType = dashIdx > 0 ? propId.slice(dashIdx + 1) : "points";
 
-  const [result, setResult] = useState<{ name: string; team: string; logo: string; season: string; probability: number; oddsLabel: string; factors: CalcFactor[]; betNote: string; extraStats: { label: string; value: string }[] } | null>(null);
+  const [result, setResult] = useState<{ name: string; team: string; logo: string; season: string; probability: number; oddsLabel?: string; factors: CalcFactor[]; betNote: string; extraStats: { label: string; value: string }[] } | null>(null);
   const [loading, setLoading] = useState(true);
+  // Clé i18n du message d'indisponibilité. Le modèle muet ne produit plus de
+  // probabilité ni de cote heuristiques : la page le dit.
+  const [errKey, setErrKey] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -69,13 +72,18 @@ function PlayerPropPrediction({ propId }: { propId: string }) {
           betNote:     propResponse.betNote,
           extraStats: [
             { label: "Line",  value: String(line)                    },
-            { label: t("pred.odds"),  value: propResponse.oddsLabel  },
+            // Pas de cote inventée : la ligne n'apparaît que si le serveur en
+            // a envoyé une vraie.
+            ...(propResponse.oddsLabel
+              ? [{ label: t("pred.odds"), value: propResponse.oddsLabel }]
+              : []),
             { label: propType.charAt(0).toUpperCase() + propType.slice(1), value: String(currentVal) },
             { label: "GP",    value: String(gp)                      },
           ],
         });
       } catch (e) {
         console.error("PlayerPropPrediction load error", e);
+        setErrKey(isPredictionUnavailable(e) ? predictionErrorKey(e) : "pred.unavailable");
       } finally {
         setLoading(false);
       }
@@ -84,7 +92,15 @@ function PlayerPropPrediction({ propId }: { propId: string }) {
   }, [propId]);
 
   if (loading) return <LoadingSkeleton />;
-  if (!result) return <NotFound />;
+  if (!result) {
+    if (!errKey) return <NotFound />;
+    return (
+      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-6 text-center">
+        <p className="text-amber-300 text-sm font-bold">{t(errKey)}</p>
+        <p className="text-amber-200/70 text-[11px] mt-1">{t("pred.unavailableHint")}</p>
+      </div>
+    );
+  }
 
   return (
     <PredictionLayout
@@ -96,7 +112,6 @@ function PlayerPropPrediction({ propId }: { propId: string }) {
       calcFactors={result.factors}
       basePct={50}
       accent={accent}
-      recentForm={generateForm(8, result.probability / 100)}
       betRec={`${propType.charAt(0).toUpperCase() + propType.slice(1)} Over Line`}
       betNote={result.betNote}
       extraStats={result.extraStats}

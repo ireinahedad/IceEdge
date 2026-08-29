@@ -15,8 +15,10 @@ import { normalizeMarket } from "../../services/predictionRequest";
 
 export interface LiveGameView {
   id: string;
-  home: { abbr: string; name: string; logo: string; score?: number; winPct: number };
-  away: { abbr: string; name: string; logo: string; score?: number; winPct: number };
+  // `null` = probabilité du modèle indisponible ; la page masque les marchés
+  // dérivés du modèle au lieu d'en inventer un.
+  home: { abbr: string; name: string; logo: string; score?: number; winPct: number | null };
+  away: { abbr: string; name: string; logo: string; score?: number; winPct: number | null };
   period?: string; time?: string; overUnder: number;
 }
 

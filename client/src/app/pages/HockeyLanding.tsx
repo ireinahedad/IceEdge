@@ -74,7 +74,9 @@ export function HockeyLanding() {
   const [addSheet, setAddSheet] = useState<AddSheetState>({ open: false });
   const [liveGames, setLiveGames] = useState<DisplayGame[]>([]);
   const [upcomingGames, setUpcomingGames] = useState<DisplayGame[]>([]);
-  const [topPredictions, setTopPredictions] = useState<{ teamLogo: string; team: string; label: string; pct: number; trend: string; edge: number }[]>([]);
+  // `topPredictions` supprimé le 2026-08-29 : cet état était alimenté mais
+  // JAMAIS rendu, et il portait un `trend: "+2%"` écrit en dur — une variation
+  // inventée qui n'attendait qu'un composant pour s'afficher.
   const [loading, setLoading] = useState(true);
   const [upcomingLabel, setUpcomingLabel] = useState(() => t("home.tonightGames"));
 
@@ -83,13 +85,17 @@ export function HockeyLanding() {
   const evItems: EvItem[] = useMemo(() => {
     const out: EvItem[] = [];
     for (const g of [...liveGames, ...upcomingGames]) {
-        if (g.bet365Home) {
-          const edge = calcEdge(g.team1.winPct, g.bet365Home);
-          if (edge >= 5) out.push({ id: `ev-${g.id}-h`, logo: g.team1.logo, label: `${g.team1.abbr} ML vs ${g.team2.abbr}`, context: t("home.evSpot"), pct: g.team1.winPct, edge });
+        // Sans probabilité du modèle il n'y a pas d'edge à calculer : le match
+        // est simplement absent de la liste +EV.
+        const homePct = g.team1.winPct;
+        const awayPct = g.team2.winPct;
+        if (g.bet365Home && homePct != null) {
+          const edge = calcEdge(homePct, g.bet365Home);
+          if (edge >= 5) out.push({ id: `ev-${g.id}-h`, logo: g.team1.logo, label: `${g.team1.abbr} ML vs ${g.team2.abbr}`, context: t("home.evSpot"), pct: homePct, edge });
         }
-        if (g.bet365Away) {
-          const edge = calcEdge(g.team2.winPct, g.bet365Away);
-          if (edge >= 5) out.push({ id: `ev-${g.id}-a`, logo: g.team2.logo, label: `${g.team2.abbr} ML vs ${g.team1.abbr}`, context: t("home.evSpot"), pct: g.team2.winPct, edge });
+        if (g.bet365Away && awayPct != null) {
+          const edge = calcEdge(awayPct, g.bet365Away);
+          if (edge >= 5) out.push({ id: `ev-${g.id}-a`, logo: g.team2.logo, label: `${g.team2.abbr} ML vs ${g.team1.abbr}`, context: t("home.evSpot"), pct: awayPct, edge });
         }
       }
     return out.sort((a, b) => b.edge - a.edge).slice(0, 6);
@@ -123,25 +129,10 @@ export function HockeyLanding() {
         setLiveGames(liveDisplay);
         setUpcomingGames(upcomingDisplay);
         setUpcomingLabel(label);
-        const allDisplay = [...liveDisplay, ...upcomingDisplay];
-        setTopPredictions(
-          allDisplay
-            .sort((a, b) => b.team1.winPct - a.team1.winPct)
-            .slice(0, 3)
-            .map((g) => ({
-              teamLogo: g.team1.logo,
-              team: g.team1.abbr,
-              label: `Win vs ${g.team2.abbr}`,
-              pct: g.team1.winPct,
-              trend: "+2%",
-              edge: g.bet365Home ? calcEdge(g.team1.winPct, g.bet365Home) : 0,
-            }))
-        );
       } catch (err) {
         console.error("[HockeyLanding] Failed to load games:", err);
         setLiveGames([]);
         setUpcomingGames([]);
-        setTopPredictions([]);
       } finally {
         setLoading(false);
       }
@@ -171,18 +162,6 @@ export function HockeyLanding() {
       setLiveGames(applyOdds);
       setUpcomingGames(applyOdds);
 
-      // Recalculate top predictions with edge now that odds are available
-      setTopPredictions((prev) =>
-        prev.map((p) => {
-          // Find matching event by team abbr
-        
-          const ev = events.find((e) => e.homeTeam?.toLowerCase().includes(p.team.toLowerCase()));
-          if (!ev) return p;
-          const odds = extractH2HOdds(ev);
-          if (!odds) return p;
-          return { ...p, edge: calcEdge(p.pct, odds.home) };
-        })
-      );
     });
   }, []);
 
@@ -297,7 +276,7 @@ export function HockeyLanding() {
                 >
                   <div className="ice-marquee-track">
                     {[...liveGames, ...liveGames].map((g, i) => (
-                      <LiveGameCard key={`${g.id}-${i}`} game={g} onOpenSheet={() => openGameSheet(g.id)} accent={accent} />
+                      <LiveGameCard key={`${g.id}-${i}`} game={g} onOpenSheet={() => openGameSheet(g.id)} />
                     ))}
                   </div>
                 </div>

@@ -13,7 +13,7 @@ import { useSport } from "../../context/SportContext";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { MLProps, MktGroup, RuleFactor } from "./gameMarkets";
-import { GameSelector, LoadingSkeleton, NotFound, RecentFormCard, RevealMode, RevealModeCtx, generateForm, useSelectedGame, useUpcomingGames } from "./predictionShared";
+import { GameSelector, LoadingSkeleton, NotFound, RecentFormCard, RevealMode, RevealModeCtx, useSelectedGame, useUpcomingGames } from "./predictionShared";
 
 
 /* ─── Team Prediction ─────────────────────────── */
@@ -36,11 +36,6 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
   const [searchParams] = useSearchParams();
   const games = useUpcomingGames(data?.abbr || undefined, searchParams.get("game") ?? undefined);
   const { selected: selectedGame, select: selectGame } = useSelectedGame(games);
-
-  const recentForm = useMemo<("W" | "L" | "OT")[]>(
-    () => (data ? generateForm(8, data.winPct / 100) : []),
-    [data?.winPct],
-  );
 
   useEffect(() => {
     async function load() {
@@ -234,7 +229,6 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
         </div>
       </div>
       {/* Recent form — shown above the markets */}
-      <RecentFormCard results={recentForm} />
 
       {/* Market groups — reveal-all toggle */}
       <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />

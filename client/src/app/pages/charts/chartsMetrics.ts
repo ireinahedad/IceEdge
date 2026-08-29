@@ -31,7 +31,7 @@ function countMetric(key: keyof PlayerSeasonStat, label: string, signed = false)
   const f = signed ? snum2 : num2;
   const tf = signed ? sign : int;
   const raw = (s: PlayerSeasonStat) => (s[key] as number | null | undefined) ?? null;
-  const rawO = (o: OpponentSplit) => ((o as Record<string, number>)[key as string]) ?? 0;
+  const rawO = (o: OpponentSplit) => ((o as unknown as Record<string, number>)[key as string]) ?? 0;
   return {
     key: key as string,
     label,

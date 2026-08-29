@@ -20,7 +20,8 @@ export interface UITeam {
   conf: string;     // "East" | "West"
   record: string;   // "48-22-8"
   pts: number;
-  winPct: number;
+  /** `null` = le backend ne l'a pas fourni. Jamais 50 par défaut. */
+  winPct: number | null;
   homeRecord: string;
   awayRecord: string;
   streak: string;
@@ -42,8 +43,9 @@ export interface UIGame {
   odds2?: number;
   overUnder?: number;
   venue?: string;
-  winPct1: number;
-  winPct2: number;
+  /** Probabilités du modèle/moteur de règles. `null` = non fournies. */
+  winPct1: number | null;
+  winPct2: number | null;
 }
 
 export interface UIPlayer {
@@ -81,7 +83,7 @@ function toUITeam(t: any): UITeam {
     conf:         t.conference === 'Eastern' ? 'East' : 'West',
     record:       `${t.wins ?? 0}-${t.losses ?? 0}-${t.otLosses ?? 0}`,
     pts:          t.points ?? 0,
-    winPct:       Math.round(Number(t.winPct ?? 50)),
+    winPct:       t.winPct == null ? null : Math.round(Number(t.winPct)),
     homeRecord:   t.homeRecord ?? '',
     awayRecord:   t.awayRecord ?? '',
     streak:       t.streak ?? '',
@@ -105,8 +107,8 @@ function toUIGame(g: any): UIGame {
     odds2:     g.awayTeam?.odds,
     overUnder: g.overUnder ? Number(g.overUnder) : undefined,
     venue:     g.venue,
-    winPct1:   g.homeWinPct ?? 50,
-    winPct2:   g.awayWinPct ?? 50,
+    winPct1:   g.homeWinPct ?? null,
+    winPct2:   g.awayWinPct ?? null,
   };
 }
 

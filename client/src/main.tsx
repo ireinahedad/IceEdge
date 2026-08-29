@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
 import * as Sentry from "@sentry/react";
-import App from "./app/App.tsx";
+import App from "./app/App";
 import "./styles/index.css";
 
 // Error monitoring — no-op unless VITE_SENTRY_DSN is set (dev stays quiet).

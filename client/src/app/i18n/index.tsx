@@ -295,6 +295,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "home.game":           { en: "Game",              fr: "Match" },
   "home.nhlGame":        { en: "NHL Game",          fr: "Match LNH" },
   "home.oddsApprox":     { en: "≈{odds}",           fr: "≈{odds}" },
+  "home.oddsFairHint":   { en: "Fair odds implied by our model — not a bookmaker price.", fr: "Cote équitable déduite de notre modèle — ce n'est pas un prix de bookmaker." },
 
   // ── Risk labels ──
   "risk.safe":     { en: "Safe",      fr: "Sûr" },
@@ -556,6 +557,13 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pred.bettingOn":      { en: "Betting on",            fr: "Pari sur" },
   "pred.change":         { en: "Change",                fr: "Changer" },
   "pred.odds":           { en: "Odds",                  fr: "Cote" },
+  "pred.unavailable":               { en: "Model prediction unavailable",                       fr: "Prédiction du modèle indisponible" },
+  "pred.unavailableNotConfigured":  { en: "Prediction service not configured",                  fr: "Service de prédiction non configuré" },
+  "pred.unavailableOffline":        { en: "Prediction service unreachable",                     fr: "Service de prédiction injoignable" },
+  "pred.unavailableHint":           { en: "No estimate is shown rather than a made-up one. Try again shortly.", fr: "Aucune estimation n'est affichée plutôt qu'un chiffre inventé. Réessaie dans un instant." },
+  "pred.unavailableLeg":            { en: "Can't add this leg — no model probability right now.", fr: "Impossible d'ajouter cette jambe — pas de probabilité du modèle pour l'instant." },
+  "pred.unavailableParlay":         { en: "Combined probability unavailable",                   fr: "Probabilité combinée indisponible" },
+  "lastn.noData":                   { en: "No data",                                            fr: "Pas de données" },
   "pred.viewPlayers":    { en: "👥 View players",       fr: "👥 Voir les joueurs" },
   // Game picker (player & team pages) + players table (game page)
   "pred.forGame":        { en: "Bets for game",         fr: "Paris pour le match" },

@@ -89,11 +89,14 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
   const legId = `${game.id}-moneyline-${game.team1.id}`;
   const isAdded = hasLeg(legId);
 
-  const edge = game.bet365Home ? calcEdge(game.team1.winPct, game.bet365Home) : 0;
+  const homePct = game.team1.winPct;
+  const awayPct = game.team2.winPct;
+  // Pas de probabilité modèle → pas d'edge, et pas d'ajout au coupon.
+  const edge = game.bet365Home != null && homePct != null ? calcEdge(homePct, game.bet365Home) : 0;
 
   function quickAdd(e: React.MouseEvent) {
     e.stopPropagation();
-    if (isAdded) return;
+    if (isAdded || homePct == null) return;
     const leg: BetLeg = {
       id: legId,
       marketType: "moneyline",
@@ -104,7 +107,7 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
       subjectLogo: game.team1.logo,
       selection: `${game.team1.name} to win`,
       selectionShort: `${game.team1.abbr} ML`,
-      probability: game.team1.winPct,
+      probability: homePct,
       gameInfo: `${game.team1.abbr} vs ${game.team2.abbr} · Live`,
       addedAt: new Date().toISOString(),
     };
@@ -165,12 +168,12 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
 
       {/* Model probability bar */}
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-[10px] font-bold w-7 flex-shrink-0" style={{ color: accent }}>{game.team1.winPct}%</span>
+        <span className="text-[10px] font-bold w-7 flex-shrink-0" style={{ color: accent }}>{homePct != null ? `${homePct}%` : "—"}</span>
         <div className="flex-1 bg-[#0A0E0C] rounded-full h-2 overflow-hidden flex">
-          <div className="h-full rounded-l-full transition-all duration-500" style={{ width: `${game.team1.winPct}%`, backgroundColor: accent }} />
+          <div className="h-full rounded-l-full transition-all duration-500" style={{ width: `${homePct ?? 0}%`, backgroundColor: accent }} />
           <div className="h-full bg-[#1B2419] flex-1" />
         </div>
-        <span className="text-[#bfc8cc] text-[10px] font-bold w-7 text-right flex-shrink-0">{game.team2.winPct}%</span>
+        <span className="text-[#bfc8cc] text-[10px] font-bold w-7 text-right flex-shrink-0">{awayPct != null ? `${awayPct}%` : "—"}</span>
       </div>
 
       {/* bet365 odds row — only shown when API has real odds */}
@@ -208,11 +211,14 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
   const legId = `${game.id}-moneyline-${game.team1.id}`;
   const isAdded = hasLeg(legId);
 
-  const edge = game.bet365Home ? calcEdge(game.team1.winPct, game.bet365Home) : 0;
+  const homePct = game.team1.winPct;
+  const awayPct = game.team2.winPct;
+  // Pas de probabilité modèle → pas d'edge, et pas d'ajout au coupon.
+  const edge = game.bet365Home != null && homePct != null ? calcEdge(homePct, game.bet365Home) : 0;
 
   function quickAdd(e: React.MouseEvent) {
     e.stopPropagation();
-    if (isAdded) return;
+    if (isAdded || homePct == null) return;
     const leg: BetLeg = {
       id: legId,
       marketType: "moneyline",
@@ -223,7 +229,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
       subjectLogo: game.team1.logo,
       selection: `${game.team1.name} to win`,
       selectionShort: `${game.team1.abbr} ML`,
-      probability: game.team1.winPct,
+      probability: homePct,
       gameInfo: `${game.team1.abbr} vs ${game.team2.abbr} · ${game.time}`,
       addedAt: new Date().toISOString(),
     };
@@ -249,7 +255,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
           <div className="flex items-center gap-1.5 mb-1.5">
             <img src={game.team1.logo} alt={game.team1.abbr} className="w-5 h-5 object-contain flex-shrink-0" />
             <span className="text-white text-xs font-medium flex-1 truncate">{game.team1.abbr}</span>
-            <span className="text-[10px] font-bold tabular-nums" style={{ color: accent }}>{game.team1.winPct}%</span>
+            <span className="text-[10px] font-bold tabular-nums" style={{ color: accent }}>{homePct != null ? `${homePct}%` : "—"}</span>
             {game.bet365Home && (
               <OddsPill decimal={game.bet365Home} onBet={() => openBet("hockey")} />
             )}
@@ -258,7 +264,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
           <div className="flex items-center gap-1.5">
             <img src={game.team2.logo} alt={game.team2.abbr} className="w-5 h-5 object-contain flex-shrink-0" />
             <span className="text-white text-xs font-medium flex-1 truncate">{game.team2.abbr}</span>
-            <span className="text-[#bfc8cc] text-[10px] font-bold tabular-nums">{game.team2.winPct}%</span>
+            <span className="text-[#bfc8cc] text-[10px] font-bold tabular-nums">{awayPct != null ? `${awayPct}%` : "—"}</span>
             {game.bet365Away && (
               <OddsPill decimal={game.bet365Away} onBet={() => openBet("hockey")} />
             )}
@@ -285,7 +291,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
           {game.overUnder && (
             <div className="text-right">
               <span className="text-[9px] text-[#bfc8cc]">O/U {game.overUnder}</span>
-              {game.totalPct && <span className="text-[9px] text-[#90C9F0] ml-1">{game.totalPct}%</span>}
+              {game.totalPct != null && <span className="text-[9px] text-[#90C9F0] ml-1">{game.totalPct}%</span>}
             </div>
           )}
           <button

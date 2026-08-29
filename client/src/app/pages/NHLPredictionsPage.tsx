@@ -412,7 +412,15 @@ export function NHLPredictionsPage() {
           agf = s2.goalsForPerGame || 3.0;
         } catch { /* use defaults */ }
 
-        const hw = g.winPct1 || Math.min(75, Math.max(25, Math.round(50 + (t1.winPct - 50) * 0.8)));
+        // Sans probabilité du backend, le match n'est pas proposé : tout ce que
+        // cette page calcule ensuite (`computeRulePrediction`) en dérive, donc un
+        // repli fabriqué ici contaminerait chaque marché affiché. Avant le
+        // 2026-08-29 la ligne était `g.winPct1 || <50 + (winPct saison − 50)×0,8>`.
+        const hw = g.winPct1;
+        if (hw == null) {
+          console.warn("[NHLPredictions] pas de probabilité pour", g.id, "— match masqué");
+          return null;
+        }
         const aw = 100 - hw;
 
         return {

@@ -12,7 +12,7 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [search, setSearch] = useState("");
-  const [nGamesStats, setNGamesStats] = useState<Record<number, { wins: number; losses: number } | null>>({});
+  const [nGamesStats, setNGamesStats] = useState<Record<number, { wins: number | null; losses: number | null }>>({});
   const [loadingStats, setLoadingStats] = useState(false);
 
   const selectedTeamData = selectedTeam ? teams.find((t) => t.id === selectedTeam) ?? null : null;
@@ -28,14 +28,18 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
       LAST_N_OPTIONS.map(async (n) => {
         try {
           const stats = await nhlApiService.getTeamLastNGamesStats(selectedTeam, n);
-          return { n, wins: stats?.wins ?? Math.round(n * (selectedTeamData.winPct / 100)), losses: stats?.losses ?? n - Math.round(n * (selectedTeamData.winPct / 100)) };
+          // Un bilan W/L est un fait, pas une estimation : sans réponse de
+          // l'API on rend `null` et la carte affiche « — ». Auparavant on le
+          // déduisait du % de victoires de la saison, ce qui inventait un
+          // palmarès sur les N derniers matchs.
+          if (stats?.wins == null || stats?.losses == null) return { n, wins: null, losses: null };
+          return { n, wins: stats.wins, losses: stats.losses };
         } catch {
-          const wins = Math.round(n * (selectedTeamData.winPct / 100));
-          return { n, wins, losses: n - wins };
+          return { n, wins: null, losses: null };
         }
       })
     ).then((results) => {
-      const map: Record<number, { wins: number; losses: number }> = {};
+      const map: Record<number, { wins: number | null; losses: number | null }> = {};
       results.forEach(({ n, wins, losses }) => { map[n] = { wins, losses }; });
       setNGamesStats(map);
       setLoadingStats(false);
@@ -96,9 +100,9 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
           <div className="grid grid-cols-2 gap-2">
             {LAST_N_OPTIONS.map((n) => {
               const stats = nGamesStats[n];
-              const wins = stats?.wins ?? Math.round(n * (selectedTeamData.winPct / 100));
-              const losses = stats?.losses ?? n - wins;
-              const pct = Math.round((wins / n) * 100);
+              const wins = stats?.wins ?? null;
+              const losses = stats?.losses ?? null;
+              const pct = wins == null ? null : Math.round((wins / n) * 100);
               return (
                 <button
                   key={n}
@@ -112,12 +116,16 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
                       <div
                         key={i}
                         className="w-1.5 h-1.5 rounded-full"
-                        style={{ backgroundColor: i < Math.round(10 * (pct / 100)) ? accent : "#1e2d32" }}
+                        style={{ backgroundColor: pct != null && i < Math.round(10 * (pct / 100)) ? accent : "#1e2d32" }}
                       />
                     ))}
                   </div>
                   <span className="text-[10px] mt-0.5" style={{ color: accent }}>
-                    {loadingStats ? t("lastn.loading") : `${wins}W – ${losses}L · ${pct}%`}
+                    {loadingStats
+                      ? t("lastn.loading")
+                      : wins == null || losses == null || pct == null
+                      ? t("lastn.noData")
+                      : `${wins}W – ${losses}L · ${pct}%`}
                   </span>
                 </button>
               );

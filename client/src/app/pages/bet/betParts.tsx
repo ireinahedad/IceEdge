@@ -169,12 +169,13 @@ export function EmptySlip({ onAdd }: { onAdd: () => void }) {
 export function LockSlipCTA({
   legs, combinedProbability, onAdd, onLock, isSubmitting,
 }: {
-  legs: BetLeg[]; combinedProbability: number;
+  legs: BetLeg[]; combinedProbability: number | null;
   onAdd: () => void; onLock: () => void; isSubmitting: boolean;
 }) {
   const { t } = useI18n();
   if (legs.length === 0) return null;
   const color =
+    combinedProbability == null ? "#8a9ea6" :
     combinedProbability >= 65 ? "#86d1ea" :
     combinedProbability >= 45 ? "#90C9F0" :
     combinedProbability >= 25 ? "#facc15" : "#f87171";
@@ -195,7 +196,7 @@ export function LockSlipCTA({
           </div>
           <div className="text-right">
             <p className="text-[10px] text-[#8a9ea6]">{t("slip.combined")}</p>
-            <p className="text-lg font-black" style={{ color }}>{combinedProbability}%</p>
+            <p className="text-lg font-black" style={{ color }}>{combinedProbability != null ? `${combinedProbability}%` : "—"}</p>
           </div>
         </div>
         <div className="flex gap-2">

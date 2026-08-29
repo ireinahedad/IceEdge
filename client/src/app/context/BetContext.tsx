@@ -7,7 +7,7 @@ interface BetContextValue {
   addLeg: (leg: BetLeg) => void;
   removeLeg: (id: string) => void;
   clearSlip: () => void;
-  combinedProbability: number;
+  combinedProbability: number | null;
   hasLeg: (legId: string) => boolean;
 }
 
@@ -15,15 +15,21 @@ const BetContext = createContext<BetContextValue | null>(null);
 
 export function BetProvider({ children }: { children: React.ReactNode }) {
   const [legs, setLegs] = useState<BetLeg[]>([]);
-  const [combinedProbability, setCombined] = useState(0); // ← useState, not useMemo
+  // `null` = le service de parlay n'a pas répondu. Multiplier les jambes
+  // côté client supposerait leur indépendance et surestimerait le coupon.
+  const [combinedProbability, setCombined] = useState<number | null>(0); // ← useState, not useMemo
 
   useEffect(() => {
     if (legs.length === 0) { setCombined(0); return; }
     if (legs.length === 1) { setCombined(legs[0].probability); return; }
 
+    let alive = true;
     predictionApiService.getParlayPrediction({
       legs: legs.map((l) => ({ marketType: l.marketType, probability: l.probability })),
-    }).then((r) => setCombined(r.adjustedProbability));
+    })
+      .then((r) => { if (alive) setCombined(r.adjustedProbability); })
+      .catch(() => { if (alive) setCombined(null); });
+    return () => { alive = false; };
   }, [legs]);
 
   const addLeg = useCallback((leg: BetLeg) => {
