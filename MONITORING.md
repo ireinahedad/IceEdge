@@ -58,7 +58,7 @@ reste le temps de comprendre d'où vient la consommation.
 | Fournisseur | Où | Seuil à poser | Ce que le dépassement signifie |
 |---|---|---|---|
 | **Railway** | Account → Usage → *Usage Limits* : email à un montant, et un *hard limit* au-dessus | alerte à **2× la facture d'un mois calme**, hard limit à 4× | Soit le trafic a réellement doublé, soit une boucle tourne (job sans verrou, redémarrages en boucle). Le hard limit est le seul garde-fou dur de toute la stack : à privilégier, quitte à couper |
-| **Neon** | Project → Settings → Usage quotas | alerte à **50 % des CU-heures et du stockage** du plan | CU-heures : le compute ne dort pas (cf. ligne 7 bis de l'audit). Stockage : probablement les data-URI d'avatars restés en base (ligne E) |
+| **Neon** | Organization → Billing → *Spending notifications*. **Il n'y a pas de quota de plan sur Launch** — l'ancienne consigne « Usage quotas, 50 % des CU-heures » visait le plan gratuit, que ce projet n'utilise pas | alerte en **dollars**, pas en CU-heures — **armée à 6 $ le 2026-08-29** (Neon prévient à 80 % puis 100 % du seuil) | **Neon n'a aucun plafond dur** : le dépassement ne coupe rien, il facture (0,106 $/CU-h, 0,35 $/Go-mois). Compute qui monte = la base ne dort pas (ligne 7 bis de l'audit) ; stockage qui monte = les data-URI d'avatars restées en base (ligne E). ⚠️ Le rythme normal **en saison** vaut déjà ≈ 6,5 $/mois : ce seuil sonnera de lui-même — le relever d'un cran une fois la consommation réelle mesurée, sinon il devient du bruit |
 | **The Odds API** | pas d'alerte fournisseur — surveiller `x-requests-remaining`, déjà journalisé par `odds.routes.ts` | avertir sous **20 % du quota mensuel** | Le cache de 5 min a sauté, ou un tir de charge a été lancé contre la production. Sans cache, le coût est linéaire au nombre de visiteurs |
 | **Provider LLM** (OpenAI / GitHub Models) | console du provider → *Usage limits* : soft à l'email, **hard limit mensuel** | hard limit = **part IA prévue × nombre d'abonnés + 30 %** | Le plafond par utilisateur (`llmQuota.service.ts`) rend ce dépassement théoriquement impossible : s'il se déclenche, c'est que le calcul du plafond a été contourné ou qu'un tarif a changé. À traiter comme un incident, pas comme une croissance |
 | **Stripe** | Developers → Webhooks : alerte sur le **taux d'échec** de l'endpoint | > 1 % d'échecs sur 24 h | Stripe désactive un endpoint qui échoue de façon répétée, et un endpoint désactivé = des abonnés qui paient sans passer Pro. C'est la seule ligne de ce tableau où l'alerte protège une recette, pas une dépense |
@@ -71,6 +71,8 @@ reste le temps de comprendre d'où vient la consommation.
    envoyée sur une adresse qu'on ne lit pas est un accusé de réception, pas une
    alerte.
 2. **Poser les hard limits là où ils existent** (Railway, provider LLM, Sentry).
+   **Neon et R2 n'en offrent pas** : leurs alertes restent des e-mails, et rien
+   ne s'y coupe tout seul. Ce sont les deux lignes à relire à la main.
    Une alerte suppose que quelqu'un lise et agisse dans l'heure ; un plafond dur
    agit tout seul. Pour un projet à une personne, c'est la différence entre une
    mauvaise surprise et une facture qui ne peut pas arriver.
@@ -82,9 +84,11 @@ Contexte chiffré et raisonnement complet : `AUDIT_SCALABILITE_COUTS.md`.
 - Health probes are excluded from request logging (see `logger.ts`) so they
   don't flood logs.
 - **Probe interval vs. Neon scale-to-zero.** Neon suspends the compute after
-  5 min of inactivity and the free plan only covers 100 CU-hours/month — less
-  than a calendar month of always-on compute. An uncached `SELECT 1` every
-  1–5 min would keep the database awake permanently and blow that budget, so
+  5 min of inactivity. This project is on the **Launch** plan, which includes no
+  compute allowance and bills **$0.106/CU-hour with no hard cap** — so an
+  uncached `SELECT 1` every 1–5 min would *not* suspend the database the way the
+  free plan would: it would keep it awake 24/7 at roughly **$19/month**,
+  indefinitely and silently. Hence
   `/health/ready` caches successful checks for `READINESS_DB_TTL_MS` (10 min).
   Keep the monitor at 5 min: it detects a dead process or a dead HTTP surface
   immediately, and a DB outage within at most 10 min. Real user traffic fails

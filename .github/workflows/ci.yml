@@ -1,8 +1,14 @@
 name: CI
 
 on:
+  # ⚠️ La branche par défaut de ce dépôt est `master`, pas `main` : ne pas
+  # retirer `master` de cette liste. Jusqu'au 2026-08-30 elle n'y était pas, et
+  # le scan de secrets ci-dessous ne tournait donc QUE sur les pull requests —
+  # une poussée directe sur la branche par défaut n'était scannée par rien.
+  # `pull_request` n'a volontairement pas de filtre : tout ce qui entre dans
+  # `master` est ainsi scanné, par l'un ou l'autre des deux déclencheurs.
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
 
 jobs:

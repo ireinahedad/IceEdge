@@ -54,13 +54,45 @@ sans avoir d'abord corrigé les requêtes lentes ne fait que déplacer la
 saturation du process vers Neon. Ne le monter (10 → 20) qu'avec une mesure du
 temps d'attente d'acquisition d'une connexion à l'appui.
 
-### Budget compute — le scale-to-zero n'est pas optionnel
-Neon suspend le compute après **5 minutes** d'inactivité, et le plan gratuit
-n'inclut que **100 CU-heures/mois** — environ 400 h à 0,25 CU, soit *moins*
-qu'un mois calendaire (730 h). Une base qui ne dort jamais consomme ~182 CU-h et
-se fait **suspendre vers le 20 du mois** : ce n'est pas un sujet de coût, c'est
-une panne. Le budget ne tient que si la base passe l'essentiel du temps en
-veille.
+### Budget compute — le scale-to-zero protège désormais la facture, plus la disponibilité
+
+> ⚠️ **Réécrit le 2026-08-30.** Ce paragraphe raisonnait sur le **plan gratuit**
+> de Neon. Le projet est en réalité sur **Launch** (« Free limits are removed »,
+> relevé dans la console le 2026-08-29), et le sens du risque **s'inverse**.
+
+| | Plan gratuit (ce que disait ce §) | **Launch — la réalité** |
+|---|---|---|
+| Compute | 100 CU-h/mois inclus | **aucune allocation incluse — 0,106 $/CU-heure** |
+| Stockage | 0,5 Go inclus | **aucune allocation incluse — 0,35 $/Go-mois** |
+| Transfert réseau public | — | 500 Go/projet inclus, puis 0,10 $/Go |
+| Au dépassement | **compute suspendu** jusqu'au mois suivant | **rien ne s'arrête — la facture monte** |
+| Scale-to-zero | 5 min, non désactivable | 5 min, **désactivable** — ne pas y toucher |
+
+**Ce que ça change.** « Ce n'est pas un sujet de coût, c'est une panne » était
+vrai sur le plan gratuit et est **faux ici** : sur Launch, Neon ne suspend rien.
+Une base qui ne dort jamais ne se fait pas couper vers le 20 du mois, elle
+facture — à 0,25 CU en continu, 730 h × 0,25 = **182,5 CU-h ≈ 19,35 $/mois**,
+indéfiniment. Le scale-to-zero reste donc obligatoire, mais pour une autre
+raison : il ne protège plus la disponibilité, il protège la facture.
+
+**Et il n'y a aucun plafond dur à poser.** Neon n'offre sur Launch que des
+*spending notifications* (alerte à 80 % puis 100 % d'un seuil en dollars qu'on
+choisit soi-même). Le seuil est armé à **6 $** depuis le 2026-08-29. Ce n'est
+pas un garde-fou, c'est un e-mail : avec le stockage, Neon est la seule ligne de
+la stack qui ne peut pas se couper toute seule. Voir `MONITORING.md`.
+
+**Le seuil de 6 $ sonnera en fonctionnement normal, pas en incident.** Le rythme
+événementiel décrit ci-dessous (~61 CU-h/mois) vaut **≈ 6,5 $/mois** — 6 $
+correspondent à ~57 CU-h. À relever d'un cran dès que la saison aura donné une
+consommation réelle, sinon l'alerte devient du bruit qu'on apprend à ignorer.
+
+**Le 0,55 CU-h relevé depuis le 1er août ne vaut plus rien** : il a été mesuré
+avec `DORMANT=true`, donc sans un seul job de fond. `DORMANT=false` depuis le
+2026-08-29.
+
+**Le stockage n'est plus gratuit non plus** — 0,35 $/Go-mois dès le premier
+octet. Les data-URI d'avatars restées en base (ligne E de l'audit) sont
+désormais une dépense directe, et pas seulement une inélégance.
 
 Ce qui réveille la base quand personne n'utilise le site :
 
@@ -70,14 +102,16 @@ Ce qui réveille la base quand personne n'utilise le site :
 | Filet de sécurité règlement (`SETTLEMENT_FALLBACK_MIN`) | 60 min | oui |
 | `startCleanupJob` | 24 h | oui |
 | `startValueBetScan` (`PUSH_SCAN_INTERVAL_MIN`) | 30 min | seulement si un value bet est détecté |
-| `startOddsLogger` | 6 h | non (écrit un CSV) |
+| `startOddsLogger` | 6 passes/jour **en saison** (11 h et 17 h ET, plus quatre passes `spreads` en soirée) | **oui** — il écrit dans `odds_log` et `odds_snapshots` depuis la migration 027. L'ancienne mention « non (écrit un CSV) » était périmée |
 | Sonde `/health/ready` | 1-5 min côté monitoring | **non** — résultat mis en cache (`READINESS_DB_TTL_MS`, 10 min par défaut) |
 
 Sans le cache de la sonde, une sonde toutes les 1-5 min suffit à elle seule à
 maintenir le compute allumé 24/7 et à annuler tout le travail événementiel du
 job de règlement. Avec le cache, le rythme est dicté par le règlement : réveil
 toutes les 15 min, ~5 min d'activité ensuite, soit un cycle de service d'environ
-33 % → **~61 CU-h/mois**, sous le plafond gratuit.
+33 % → **~61 CU-h/mois**, soit **≈ 6,5 $/mois** sur Launch. (Ce calcul ne
+compte pas encore les six réveils quotidiens du log des cotes : négligeables en
+cadence, mais ils s'ajoutent en saison.)
 
 Règle à retenir avant d'ajouter un job périodique : **toute tâche qui interroge
 Postgres plus souvent que toutes les 5 minutes supprime le scale-to-zero.**
@@ -595,7 +629,7 @@ délibérément gardé la visibilité.
 
 | Service | Plan gratuit | Limite |
 |---------|-------------|--------|
-| Neon | Free tier | 0,5 Go de stockage · **100 CU-h/mois** (~400 h à 0,25 CU) · scale-to-zero après 5 min, non désactivable |
+| Neon | **Launch — payant, aucun plan gratuit** | aucune allocation incluse : **0,106 $/CU-h**, **0,35 $/Go-mois**, 500 Go de transfert public inclus puis 0,10 $/Go. **Aucun plafond dur** — seulement une alerte de dépense, armée à 6 $. Scale-to-zero à 5 min, désactivable : ne pas y toucher |
 | Cloudflare R2 | Free tier | 10 Go, **egress gratuit** |
 | Railway | Hobby ($5/mo) | 512 MB RAM × 2 services |
 | Vercel | Hobby (gratuit) | 100 GB bandwidth |

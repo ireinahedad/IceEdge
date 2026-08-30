@@ -1,6 +1,19 @@
 # ARAKICE / ICEEDGE — Ce qui reste
 
-**Créé le 2026-08-10 · mis à jour le 2026-08-29.**
+**Créé le 2026-08-10 · mis à jour le 2026-08-30.**
+
+> **Élagué le 2026-08-30.** Tout ce qui était clos ET sans leçon a été retiré
+> (B7, B8, B9, le détail Sentry, le lot `npm audit`, le §7 soldé, la ligne 7 bis
+> du §3, les contrôles du retrait tennis). Ce qui reste des points fermés, ce
+> sont les avertissements — « ne pas refaire », « ne pas défaire », « ne pas
+> rouvrir » — condensés à quelques lignes chacun. Le détail supprimé est dans
+> l'historique Git, à partir du commit `15ecbb6`.
+>
+> **Second passage le 2026-08-30**, après trois contrôles passés au navigateur :
+> le **§7 a disparu** (son dernier survivant, M6, est vert), et les trois cases
+> fermées ce jour-là — CSP, synchro des poids, retrait tennis — sont réduites à
+> leur seule leçon. Une ligne fermée ne reste dans ce document que si elle
+> empêche quelqu'un de refaire une erreur.
 
 > **Reprendre ici.** Décidé le 2026-08-24 : **mettre d'abord la collecte live en
 > service** (A1bis, gratuit, échéance réelle à la pré-saison de fin septembre).
@@ -21,112 +34,239 @@ ici et leur contenu durable a été déplacé (détail en dernière section) :
 | `MARKETPLACE_PLAN.md` | Livré le 2026-08-09 | `DEPLOYMENT.md` §7 (invariants + annexe marketplace) |
 
 **Toujours vivants, à tenir à jour :** `ml/REFACTOR_PLAN.md`, `QA_TEST_PLAN.md`,
-`AUDIT_SCALABILITE_COUTS.md`, `PRODUCTION_READINESS_AUDIT.md` (ce dernier est
-désormais entièrement absorbé — cf. § « Audit de production : soldé »).
+`AUDIT_SCALABILITE_COUTS.md`. `PRODUCTION_READINESS_AUDIT.md` (2026-07-20) est
+**intégralement soldé depuis le 2026-08-30** — H8, M2, M4, M7, M1 et enfin M6 :
+il est conservé comme trace, il n'a plus rien à piloter.
 
 ---
 
 ## 1. Bloquant avant lancement
+
+> **🧊 Gelé jusqu'au 2026-09-06 — tentative de récupération du compte Google.**
+> Le compte `arakice.support@gmail.com` ne sert **pas** à R2 : R2 est refait et
+> opérationnel sur `Ireinahedad@icloud.com's Account` (cf. § « R2 refait sur le
+> compte accessible »). Il sert à deux autres choses — la **zone DNS
+> `arakice.com`**, aujourd'hui servie par un compte perdu, et les **anciens
+> avatars**, qui deviennent des orphelins dès que `R2_PUBLIC_URL` change.
+>
+> **Trois lignes seulement en dépendent. Ne pas y toucher avant que ce soit
+> tranché :**
+> 1. les quatre variables R2 sur Railway — surtout `R2_PUBLIC_URL`, à poser **une
+>    seule fois** : chaque changement orpheline les avatars du préfixe précédent ;
+> 2. connecter `cdn.arakice.com` et désactiver l'URL `pub-92ed72f7…r2.dev` ;
+> 3. les étapes **3 et 4** de la bascule (serveurs de noms chez le registrar,
+>    attente de l'état *Active*).
+>
+> **Cutoff au 2026-09-06.** Une récupération Google aboutit en quelques jours ou
+> jamais ; la pré-saison est fin septembre et la bascule NS demande de la
+> propagation. Passé cette date, prendre la branche icloud et migrer — ne pas
+> laisser l'échéance trancher seule.
+>
+> **Faisable tout de suite, dans les deux branches :** l'**étape 1** de la bascule
+> — relever les vraies origines chez Vercel et Railway et corriger les 13
+> enregistrements de la zone en attente (sans risque si le compte revient, chemin
+> critique sinon) ; et **mesurer si R2 écrit encore en production**, par un
+> `HeadBucket` au démarrage, puisque `[avatarStorage] R2 actif` ne fait aucun
+> appel réseau.
+>
+> **À retarder au contraire :** basculer le webhook Stripe sur `api.arakice.com`.
+> Ce nom est servi par le compte perdu — ce serait échanger une panne muette
+> contre une autre.
+>
+> **Le reste du document est indépendant de cette question** : B3, B4, B5, tout
+> le §4 QA, la décision des 59 $ du §2, l'essai Sentry qui expire vers le
+> 12 septembre. *(Le § « Budget compute » de `MONITORING.md` / `DEPLOYMENT.md`
+> a été corrigé le 2026-08-30 — voir plus bas.)*
 
 Rien ici ne demande de conception ; tout demande **ta machine ou une console**.
 
 | # | Quoi | Où | Pourquoi ça bloque |
 |---|---|---|---|
 | B3 | Tir de charge **S1 de validation** : `NHL_USE_MOCK=true` vérifié dans les logs de démarrage, 50 VUs | préprod | Les deux premiers tirs ont mesuré une API NHL morte. Un critère vert peut vouloir dire que le code n'a pas tourné. `AUDIT_SCALABILITE_COUTS.md` §5. |
-| B4 | Parcours critiques **F1, F2, I1, I2** en staging | staging | Auth complète, gating Pro, chaîne ML, CORS+cookie cross-site. `QA_TEST_PLAN.md` §1-2. |
+| B4 | Parcours critiques **F1, F2, I1, I2** en staging | staging | Auth complète, gating Pro, chaîne ML, CORS+cookie cross-site. **Runbooks exécutables écrits le 2026-08-30** : `QA_TEST_PLAN.md` § « Runbooks B4 » — séquence, assertions et pièges, plus un préflight de 4 variables sans lequel trois des quatre parcours échouent pour la mauvaise raison. |
 | B5 | **C1** — parcours mobile iOS Safari (login → prédiction → paiement) | appareil réel | Safari iOS est la source n°1 de bugs cookies/`SameSite`/PWA. |
-| B6 | Poser les **alertes de budget** dans les consoles — **Railway fait le 2026-08-29**, reste Neon, Odds, LLM, Stripe, Sentry, R2 | consoles | Seuils déjà documentés dans `MONITORING.md`. Hard limits là où ils existent. |
-| B7 | Définir `SENTRY_DSN` — **sur les DEUX services, pas seulement le ML** | console | Voir l'encadré ci-dessous : la variable est absente partout, donc **aucune erreur de production ne remonte nulle part**. |
-| B8 | ~~Confirmer la présence de toutes les variables d'env~~ — **fait le 2026-08-29**, voir l'encadré | consoles | Miroir vérifié variable par variable contre les `.env.example`. |
+| B6 | Alertes de budget : **six fournisseurs sur sept sont clos** (détail plus bas), reste **R2** | console Cloudflare | Gelé avec le fork DNS ci-dessus. Seuils dans `MONITORING.md`. |
 
-### État réel de la production, relevé le 2026-08-29 dans la console Railway
+### État réel de la production — relevé du 2026-08-29, ce qu'il en reste
 
-Ce relevé a été fait **après** que le reste de ce document ait été écrit, et il a
-contredit trois de ses affirmations. Il vaut la peine de dire d'où il vient : pas
-des variables lues une à une dans le dashboard, mais de la **bannière
-`[Server] Réglages effectifs` imprimée au démarrage du conteneur** — la seule
-source qui dise ce que le processus *fait*, et non ce que quelqu'un croit avoir
-posé.
+**La topologie est conforme.** Les deux services sont dans le même projet
+`harmonious-perception`, environnement `production` : `courageous-analysis` (ML,
+**Unexposed service**, aucun domaine public) et `IceEdge` (`api.arakice.com`),
+reliés par `ML_SERVICE_URL = http://courageous-analysis.railway.internal:8080`,
+`ML_API_TOKEN` des deux côtés, `ML_DISABLED=false`. Le §3 de `DEPLOYMENT.md` est
+respecté sur toute la ligne. Le second projet Railway, `generous-fulfillment`,
+est vide.
 
-**La topologie est conforme, contrairement à ce qu'on redoutait.** Les deux
-services sont dans le **même projet** `harmonious-perception`, même environnement
-`production`, même workspace : `courageous-analysis` (ML) et `IceEdge`
-(`api.arakice.com`). `ML_SERVICE_URL = http://courageous-analysis.railway.internal:8080`
-— réseau privé, port correct — le service ML est marqué **« Unexposed service »**
-(aucun domaine public), `ML_API_TOKEN` est présent des deux côtés et
-`ML_DISABLED=false`. Le §3 de `DEPLOYMENT.md` est donc respecté sur toute la ligne.
-Le second projet Railway, `generous-fulfillment`, est **vide** — il n'héberge rien.
+**Les trois anomalies trouvées ce jour-là sont refermées** : `NHL_USE_MOCK=true`
+et `DORMANT=true` corrigés le 2026-08-29, `SENTRY_DSN` posée sur les deux
+services (B7 ci-dessous). Le miroir des variables est complet — aucune variable
+de production absente des `.env.example`, et les 46 non posées sont toutes des
+réglages optionnels à défaut codé. `SENTRY_TRACES_SAMPLE_RATE` reste
+**volontairement** absente : si le quota Sentry saute un jour, c'est que
+quelqu'un l'a posée à la main et ne l'a pas retirée.
 
-**Trois choses n'allaient pas, deux sont réglées.**
+> ⚠️ **La leçon du mock, à garder même l'interrupteur refermé.** Le job de
+> règlement lit ses résultats par `nhlApiClient`, donc par les mocks quand ils
+> sont actifs : tant que `NHL_USE_MOCK` est à `true`, **il ne peut rien régler
+> du tout**, même en pleine saison. Les paris resteraient « pending » pour
+> toujours, **sans une seule erreur dans les logs**. Aucun règlement erroné n'a
+> eu lieu — les six matchs simulés n'étaient jamais `final` — mais le risque
+> évité était le moindre des deux.
 
-| Ce qui a été trouvé | État |
+> ⚠️ **Et la méthode, qui vaut pour tout ce document.** Ce relevé vient de la
+> bannière `[Server] Réglages effectifs` imprimée **au démarrage du conteneur**,
+> pas des variables lues une à une dans le dashboard : c'est la seule source qui
+> dise ce que le processus *fait*. Corollaire : **une mesure porte une date, pas
+> un état.** Un déploiement suivant peut défaire en silence ce qu'un contrôle a
+> établi la veille — c'est exactement ce qui est arrivé à `DORMANT` (§2, A1bis).
+
+**B6 — six lignes sur sept sont closes.** Railway (alerte 10 $, **hard limit
+25 $**, posés au niveau du workspace donc valables pour les deux services) ·
+Neon (notification à 6 $ — **aucun plafond dur chez Neon**, cf. `MONITORING.md`)
+· GitHub, le provider LLM (5 budgets de compte à 0 $ avec « Stop usage », dont
+« All AI Credit SKUs ») · The Odds API (clos **par le code** : `oddsQuota.ts` lit
+`x-requests-remaining` et `ODDS_QUOTA_WARN=100` est posée — rien à faire en
+console) · Sentry (sans objet : aucun moyen de paiement enregistré, le
+dépassement est structurellement impossible) · Stripe (alerte « Échecs des
+webhooks » cochée ; Stripe n'offre **pas** de seuil configurable à 1 %, cette
+case *est* le mécanisme). **Reste R2**, ci-dessous.
+
+### R2 refait sur le compte accessible — 2026-08-29, et ce que ça a révélé
+
+L'ancien compte Cloudflare était rattaché à `arakice.support@gmail.com`, **bloqué
+par Google et définitivement hors d'accès**. Tout a donc été reconstruit sur
+`Ireinahedad@icloud.com's Account` (`bf7c6f89fb06ac6abd19927f43a95c30`).
+
+**Fait :** abonnement R2 activé (palier gratuit : 10 Go, 1 M d'opérations classe A,
+10 M classe B) ; bucket **`arakice-avatars`** créé — même nom que l'ancien, donc
+`R2_BUCKET` ne bouge pas — en **Western North America (WNAM)**, classe Standard,
+**sans juridiction**. Ces deux derniers points sont délibérés : WNAM parce que le
+défaut proposé était *Asia Pacific* (choisi d'après la position de l'utilisateur,
+pas celle de l'infrastructure) alors que Railway est en **US West** et Neon en
+**AWS US East 1** ; et pas de juridiction parce que `avatarStorage.ts` prévient
+qu'un bucket sous juridiction n'est **pas** joignable sur l'endpoint standard.
+Alerte de budget posée à **1 $** (« R2 - sortie du palier gratuit »), faute de
+mieux : l'alerte Cloudflare est **en dollars**, elle ne peut pas exprimer le
+« 5 Go sur 10 » de `MONITORING.md` puisque 5 Go coûtent 0 $. Le seuil à 1 $ sonne
+donc dès que le stockage cesse d'être gratuit, pas à mi-parcours du palier.
+*(Création enregistrée mais non re-vérifiée dans la liste des notifications : la
+console est devenue non réactive juste après.)*
+
+> ⚠️ **L'URL de développement publique a été activée par erreur** —
+> `https://pub-92ed72f782ab420fa7a71bade56eddca.r2.dev`. Un clic destiné à
+> « Cancel » a atterri sur « Allow ». Sans conséquence (le bucket est vide) mais
+> **à désactiver** une fois le domaine définitif en place, pour ne garder qu'une
+> seule URL canonique.
+
+**🔴 Le domaine `cdn.arakice.com` n'a PAS pu être connecté, et la raison est bien
+plus grave que R2.** Cloudflare a refusé avec « The specified zone id is not
+valid ». La zone `arakice.com` de ce compte est en état **pending** :
+
+| | Serveurs de noms |
 |---|---|
-| **`NHL_USE_MOCK=true` en production** — équipes, matchs, meilleurs joueurs et fiches joueur venaient tous de `mockNhl.ts`. Le jumeau serveur exact de B9 : les faux chiffres avaient été retirés du front, l'interrupteur de simulation du backend était resté | **corrigé le 2026-08-29**, `NHL_USE_MOCK: false` lu dans les logs du nouveau conteneur |
-| **`DORMANT=true` en production** — ce drapeau coupe le règlement des paris, le scan de value bets, le nettoyage **et `startOddsLogger()`** | **corrigé le 2026-08-29** — voir §2, A1bis |
-| **`SENTRY_DSN` absente des DEUX services** — pas seulement du ML comme le disait B7 | **ouvert** — bloqué sur une session Sentry |
+| **Chez le registrar aujourd'hui** | `gerardo.ns.cloudflare.com`, `serenity.ns.cloudflare.com` |
+| **Attendus par le nouveau compte** | `love.ns.cloudflare.com`, `piers.ns.cloudflare.com` |
 
-**Le piège de l'interrupteur de mock, à retenir même une fois refermé.** Le job de
-règlement lit ses résultats par `nhlApiClient`, donc par les mocks quand ils sont
-actifs. Ça n'a *pas* causé de règlement erroné — les six matchs simulés sont en
-`live` ou `scheduled`, **aucun en `final`**, et `getFinalGame()` n'accepte qu'un
-match final : rien ne pouvait se régler. Mais le corollaire est plus gênant que le
-risque évité : **tant que `NHL_USE_MOCK` est à `true`, le règlement ne peut rien
-régler du tout**, même en pleine saison. Les paris resteraient « pending » pour
-toujours, sans une seule erreur dans les logs.
+Les deux paires sont des serveurs Cloudflare — mais la première appartient à
+**l'ancien compte, celui qui est perdu**. Autrement dit : **tout le DNS
+d'`arakice.com` est actuellement servi par un compte auquel personne n'a plus
+accès**, `api.arakice.com` et l'apex Vercel compris. Ça marche tant que rien n'y
+touche ; le jour où ce compte est supprimé ou la zone retirée, **le site entier
+devient injoignable**, et il n'y aura aucun moyen d'agir dessus.
 
-**B8 — le miroir des variables, mesuré.** 44 variables sur `IceEdge`, 1 sur
-`courageous-analysis` (`ML_API_TOKEN`). **Aucune variable en production n'est
-absente des `.env.example`** — le miroir est complet dans ce sens. Dans l'autre,
-46 des 90 variables des `.env.example` ne sont pas posées : ce sont toutes des
-réglages optionnels à défaut codé (`SETTLEMENT_*`, `LLM_*`, `VALUE_BET_*`, TTL,
-timeouts, `PORT` qu'injecte Railway, `REDIS_URL` sans objet à une instance), **sauf
-`SENTRY_DSN`**, qui est la seule absence qui compte. `SENTRY_TRACES_SAMPLE_RATE`
-est absente elle aussi — et c'est **voulu** : `MONITORING.md` dit que si le quota
-Sentry saute un jour, c'est que quelqu'un l'a posée à la main et ne l'a pas retirée.
+**Le piège de la bascule, à ne surtout pas manquer.** Les 13 enregistrements ont
+bien été importés dans la nouvelle zone (apex, `www`, `api`, en A et AAAA, plus le
+TXT de vérification Google), **mais leurs adresses sont fausses** :
+`104.21.56.11`, `172.67.175.172`, `2606:4700:3035::…` sont des **IP anycast de
+Cloudflare**, pas les vraies origines. C'est ce que produit un scan de zone sur un
+domaine *déjà* derrière Cloudflare : il relève les IP du proxy de l'ancien compte.
+Basculer les serveurs de noms en l'état enverrait le nouveau proxy vers l'ancien —
+boucle ou site hors ligne. **Les enregistrements doivent être corrigés AVANT la
+bascule**, vers ce que dit `DEPLOYMENT.md` §4 : apex en A/ALIAS vers **Vercel**
+(l'apex ne peut pas être un CNAME), `www` en redirection, `api` vers **Railway**.
+Les valeurs exactes se lisent dans la console Vercel (Settings → Domains) et dans
+Railway (domaine du service `IceEdge`).
 
-**B6 — Railway, posé le 2026-08-29 :** alerte e-mail à **10 $**, **hard limit à
-25 $**, plus un plafond séparé de 5 $ sur l'agent Railway. Les limites sont au
-niveau du **workspace**, donc elles couvrent les deux services d'un coup.
-⚠️ **Ce réglage s'inverse à la première vente.** Aujourd'hui une coupure vaut mieux
-qu'une facture non bornée ; le jour où des abonnés paient, un hard limit atteint
-met hors ligne des gens qui ont payé. Même déclencheur que Vercel Pro plus haut.
+**Ordre à respecter, parce qu'il n'est pas rattrapable dans le désordre :**
+1. relever les vraies origines chez Vercel et Railway ;
+2. corriger les 13 enregistrements dans la zone du **nouveau** compte ;
+3. changer les serveurs de noms **chez le registrar** vers `love`/`piers` ;
+4. attendre que la zone passe **Active** ;
+5. seulement alors, connecter `cdn.arakice.com` au bucket et désactiver l'URL r2.dev.
 
-**Deux observations annexes, sans action immédiate.** ① Le panneau *Agent* de
-Railway suggérait `ML_SERVICE_URL=${{ …RAILWAY_PUBLIC_DOMAIN }}` — **à ne pas
-suivre** : ça exposerait publiquement le service ML, l'exact inverse du §3.
-② Les logs portent un avertissement `pg` : les modes SSL `prefer`, `require` et
-`verify-ca` sont aujourd'hui des alias de `verify-full` et changeront de sens en
-`pg` v9 / `pg-connection-string` v3. À traiter avant cette montée de version, pas
-avant.
+**En attendant**, l'URL r2.dev fonctionne et débloque R2 : c'est elle qui va dans
+`R2_PUBLIC_URL`. Elle est limitée en débit et déconseillée en production par
+Cloudflare — donc provisoire, mais pas pire que l'ancienne configuration, qui
+était exactement du même type.
 
-### B7 — la sonde Sentry côté ML, écrite le 2026-08-29 (la variable, elle, reste à poser)
+**Les quatre variables Railway à changer sur le service `IceEdge`** (`R2_BUCKET`
+reste `arakice-avatars`) : `R2_ACCOUNT_ID` → `bf7c6f89fb06ac6abd19927f43a95c30`,
+`R2_PUBLIC_URL` → l'URL r2.dev ci-dessus (puis `https://cdn.arakice.com` après la
+migration DNS), et `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` → issus d'un jeton
+d'API R2 **à générer et à coller à la main** (des identifiants ne se saisissent
+pas à ta place).
 
-`ml_service.py` lisait `SENTRY_DSN` et appelait `sentry_sdk.init()` **sans rien
-imprimer** : une DSN correcte, une DSN mal collée et une DSN absente donnaient la
-même sortie — rien. Et `import sentry_sdk` n'était pas protégé, donc poser la
-variable sur une image où le paquet manquerait aurait **empêché le service de
-démarrer** : le monitoring aurait tué ce qu'il surveille.
+**Les avatars existants ne sont pas migrables.** `user_profiles.avatar_url` stocke
+l'URL absolue : les anciennes continueront de s'afficher tant que l'ancien compte
+sert son domaine public, et deviendront des orphelins non supprimables dès que
+`R2_PUBLIC_URL` change (`deleteAvatarByUrl` compare au préfixe courant et sortira
+sans rien faire). Rien ne casse, mais rien ne se récupère non plus.
 
-Les deux sont corrigés, dans le style du reste du fichier (`[ML] ✅ …`), et **les
-quatre branches ont été exécutées** : DSN absente → `[ML] ℹ️  Sentry inactif` ;
-DSN posée en prod → `[ML] ✅ Sentry armé — environment=production, traces_sample_rate=0.01` ;
-en staging → `traces_sample_rate=0.1` ; paquet manquant ou init en erreur →
-`[ML] ⚠️  Sentry non armé : … — le service démarre sans`, **code de retour 0 dans
-les quatre cas**. Un taux illisible retombe sur le défaut avec un avertissement au
-lieu de lever un `ValueError`.
+⚠️ **Le webhook Stripe pointe sur le domaine Railway, pas sur `api.arakice.com`.**
+La destination est `https://arakice-production-6005.u…way.app/api/subscription/webhook`
+(Actif, 6 événements, 0 % d'erreur). Ça marche tant que ce sous-domaine généré
+existe ; s'il disparaît — service recréé, domaine retiré — le webhook casse **en
+silence**, et c'est la seule ligne du tableau qui protège une recette et non une
+dépense. À basculer sur le domaine canonique, en pensant à ce que
+`STRIPE_WEBHOOK_SECRET` suit la destination. **Mais pas avant que le fork DNS
+soit tranché** : `api.arakice.com` est servi par le compte perdu, ce serait
+échanger une panne muette contre une autre.
 
-**Fait le 2026-08-29.** Organisation Sentry `arakice`, deux projets distincts —
-`node-express` (existant) et `python-fastapi` (créé ce jour, alerte sur « high
-priority issues ») : les erreurs XGBoost et les erreurs Express n'ont ni la même
-cadence ni les mêmes destinataires, et le quota Sentry se comptant par
-organisation, un second projet ne coûte rien. `SENTRY_DSN` posée sur les **deux**
-services Railway ; `SENTRY_TRACES_SAMPLE_RATE` volontairement **non** posée.
-La DSN du Node a été recoupée avec le bloc OTLP de la console avant d'être
-collée — même clé, même identifiant de projet, pas de coquille.
+✅ **`[avatarStorage] R2 actif` ne prouvait rien — réglé le 2026-08-30.** Ce
+contrôle ne faisait **aucun appel réseau** : il vérifiait la présence des cinq
+variables, et le repli sur le stockage base64 est « volontairement silencieux à
+l'exécution ». Des identifiants pointant sur un compte mort donnaient la même
+ligne verte. Un `HeadBucket` au démarrage (`verifyAvatarStorage()`, appelée sans
+`await` depuis `server.ts`) tranche désormais, avec trois issues distinctes dans
+les logs. Il prouve la lecture, **pas le droit d'écrire** : un jeton en lecture
+seule passerait et échouerait au premier `PutObject`.
 
-**Vérifié en production, pas seulement posé** :
-`[ML] ✅ Sentry armé — environment=production, traces_sample_rate=0.01`
-lu dans les logs de démarrage du conteneur `courageous-analysis`.
+⚠️ **Railway et GitHub s'inversent à la première vente.** Aujourd'hui une coupure
+vaut mieux qu'une facture non bornée. Le jour où des abonnés paient, le hard limit
+Railway met hors ligne des gens qui ont payé — et le budget GitHub à 0 $ **bloque**
+les appels LLM des abonnés Pro au lieu de les facturer. Le repli existe
+(`llm.routes.ts` renvoie l'utilisateur sur sa propre clé OpenAI) mais suppose
+qu'il en ait renseigné une, ce que peu feront. Même déclencheur que Vercel Pro.
+
+⚠️ **L'essai Sentry expire vers le 12 septembre 2026.** Le compte est en *Business
+Plan Trial*, volume inclus **1 000 000 d'erreurs**. À l'échéance il retombe sur le
+plan choisi — ou sur rien. À trancher avant cette date, sinon elle tranche seule.
+
+⚠️ **`pg` : les modes SSL `prefer`, `require` et `verify-ca` sont aujourd'hui des
+alias de `verify-full`** et changeront de sens en `pg` v9 / `pg-connection-string`
+v3. Un avertissement le dit dans les logs. À traiter avant cette montée de
+version, pas avant.
+
+⚠️ **Ne pas suivre la suggestion du panneau *Agent* de Railway**
+(`ML_SERVICE_URL=${{ …RAILWAY_PUBLIC_DOMAIN }}`) : ça exposerait publiquement le
+service ML, l'exact inverse du §3 de `DEPLOYMENT.md`.
+
+### B7 — clos le 2026-08-29 : Sentry est armé des deux côtés
+
+`SENTRY_DSN` est posée sur les **deux** services Railway. Organisation `arakice`,
+deux projets distincts — `node-express` et `python-fastapi` — parce que les
+erreurs XGBoost et les erreurs Express n'ont ni la même cadence ni les mêmes
+destinataires, et qu'un second projet ne coûte rien (le quota se compte par
+organisation). **Vérifié en production, pas seulement posé** :
+`[ML] ✅ Sentry armé — environment=production, traces_sample_rate=0.01` lu dans
+les logs de démarrage du conteneur `courageous-analysis`.
+
+Les deux sondes (`ml_service.py`, `instrument.ts`) impriment maintenant leur état
+— armé / inactif / non armé — au lieu de se taire, et sont protégées par un
+`try/catch` : sans lui, poser la variable sur une image où le paquet manquerait
+aurait **empêché le service de démarrer**, c'est-à-dire que le monitoring aurait
+tué ce qu'il surveille. Les quatre branches ont été exécutées, code de retour 0
+dans les quatre cas.
 
 > ⚠️ **Ne pas suivre l'assistant « Configure Express SDK » de Sentry.** Le SDK
 > Node est déjà entièrement câblé : `@sentry/node` 8.55.2, `instrument.ts`
@@ -136,85 +276,35 @@ lu dans les logs de démarrage du conteneur `courageous-analysis`.
 > `tracesSampleRate` à 1 %, choisi avec le calcul du §3 de l'audit. De cet écran,
 > seule la DSN est utile.
 
-**La même sonde a été écrite côté Node** (`instrument.ts`), pour la même raison et
-avec le même garde-fou `try/catch` : `[Sentry] ✅ armé — environment=…,
-tracesSampleRate=…`, `[Sentry] ℹ️  inactif` sans DSN, `[Sentry] ⚠️  non armé` si
-l'init échoue. Elle utilise `console` et non `logger`, puisque ce fichier
-s'exécute avant que le logger n'existe.
+### B9 — clos le 2026-08-29 : plus aucun nombre inventé côté client
 
-### B9 — clos le 2026-08-29 : la couche de mocks est supprimée
+Toute la couche de repli local de `predictionApiService.ts` est supprimée — six
+fonctions et deux tables de taux écrits en dur (`bos: 68, nyr: 61…`), plus les
+trois derniers gisements trouvés au second passage : `generateForm()` qui
+fabriquait une suite W/L/OT au `Math.random()` sous le titre « Forme récente »,
+les `?? 50` de `useNHLData`, et la probabilité de repli de `NHLPredictionsPage`.
+Le service lève désormais un seul type d'erreur, `PredictionUnavailableError`,
+qui porte sa cause (`not_configured`, `network`, `http`, `bad_response`).
 
-L'audit avait trouvé pire que « une cote factice » : `predictionApiService.ts`
-retombait, sur **toute** défaillance (base non configurée, réseau, 500, service ML
-éteint), sur `buildMockPrediction` / `buildMockPlayerProp` / `buildMockFutures`.
-`estimateProbability` y tenait des taux de victoire **écrits en dur**
-(`bos: 68, nyr: 61, col: 66…`) et des taux de but par joueur indexés sur de vrais
-`playerId` ; `probToOddsLabel()` en dérivait une cote américaine complète affichée
-sous le libellé « Cote ». Deux autres nombres inventés se cachaient aux appelants :
-`GamePrediction` avait un `.catch(() => ({ probability: 55 }))`, et le parlay se
-repliait sur une multiplication naïve corrigée d'un facteur 0,95 arbitraire.
-
-**Ce qui a été fait.** Tout le repli local est supprimé — six fonctions et deux
-tables de constantes. Le service lève désormais un seul type d'erreur,
-`PredictionUnavailableError`, qui porte la cause (`not_configured`, `network`,
-`http`, `bad_response`) pour que l'UI dise quelque chose de vrai. Chaque point
-d'appel a été traité :
-
-| Où | Comportement en panne |
-|---|---|
-| `landingTypes` / `LandingCards` | `winPct` et `totalPct` deviennent `number \| null` → « — » à l'écran, edge neutralisé, ajout rapide au coupon désactivé |
-| `GamePrediction` | bandeau d'indisponibilité ; les marchés **dérivés du modèle** ne sont plus construits, seuls ceux du moteur de règles (backend) restent |
-| `MarketSelectorSheet` | **refuse d'ajouter la jambe** et l'explique — une jambe porte sa probabilité jusqu'au règlement, un chiffre inventé y survivrait à la panne qui l'a produit |
-| `BetContext` / `BetBuilderPage` / `betParts` | `combinedProbability` devient `number \| null` → « — », pas de cote implicite affichée |
-| `PlayerPropPrediction` | état d'erreur explicite ; la ligne « Cote » n'apparaît **que** si le serveur en a envoyé une vraie (`oddsLabel` est devenu optionnel) |
-| `PredictionSheet` | déjà correct — son `.catch` retombe sur `rulePct`, une vraie mesure du moteur de règles. Il recevait pourtant du mock jusqu'ici, puisque le service ne levait jamais : **supprimer les mocks l'a réparé sans le toucher.** |
-
-Six clés i18n EN/FR ajoutées (`pred.unavailable*`). Trois exports morts sont partis
-au passage — `getFactors`, `getFutures`, `getAvailableMarketsFor*` — dont un qui
-référençait `PLAYER_MARKET_TYPES`, **une constante qui n'existe pas dans le
-fichier** : l'appel aurait jeté un `ReferenceError`, et seul le fait qu'il était
-mort l'a caché.
-
-**Vérifié** : `vite build` vert (2 594 modules) et **zéro régression de type** —
-mesuré en comparant `tsc --noEmit` en `strict` avant et après, erreur par
-erreur. Le bundle principal perd 2,7 ko.
-
-> ⚠️ **Correction d'une affirmation fausse du 2026-08-29.** Il a d'abord été
-> écrit ici que le typecheck rendait « 0 erreur ». C'était un artefact : le
-> `tsconfig` d'essai portait un `baseUrl`, que TypeScript 5.6 refuse avec
-> l'erreur de configuration **TS5101** — et `tsc` s'arrête là, **sans rien
-> vérifier**. Une sortie vide ne voulait pas dire « aucune erreur », mais
-> « aucune vérification ». Le vrai chiffre de départ est **13 erreurs**, dont
-> 3 refermées par le correctif B9 ; les 10 restantes sont listées au §6.
-
-- [x] **Les trois derniers gisements de nombres inventés — supprimés le
-      2026-08-29.** Ce n'étaient pas des replis de panne, donc ils avaient
-      survécu au premier passage :
-      **①** `generateForm()` fabriquait avec **`Math.random()`** une suite de
-      W/L/OT, rendue sous le titre « Forme récente » avec sa légende — donc lue
-      comme les vrais derniers résultats, et **différente à chaque
-      rechargement**. Quatre pages l'affichaient. Aucune source ne donne
-      aujourd'hui l'*ordre* des derniers résultats (`getTeamLastNGamesStats` ne
-      rend que des totaux) : la fonction est supprimée et la carte ne s'affiche
-      plus tant qu'on ne lui passe pas de vrais résultats.
-      **②** `useNHLData` faisait `?? 50` sur `winPct`, `winPct1` et `winPct2` —
-      un champ absent devenait « 50 % » à l'écran. Les trois sont désormais
-      `number | null`.
-      **③** `NHLPredictionsPage` remplaçait une probabilité manquante par
-      `50 + (winPct saison − 50) × 0,8`, avec un `||` qui déclenchait aussi sur
-      un vrai 0. Comme **tous** les marchés de la page en dérivent
-      (`computeRulePrediction`), le match est maintenant simplement masqué.
-      Deux blocs morts sont partis au passage : un `topPredictions` alimenté mais
-      jamais rendu, qui portait un `trend: "+2%"` écrit en dur, et la branche
-      « données statiques » de `GamePrediction`, morte depuis que `hockeyData`
-      n'expose que des tableaux vides. `LastNGamesSection` n'invente plus de
-      bilan W/L pour les N derniers matchs, et la pastille de cote équitable de
-      `BestBetsSection` porte enfin une infobulle qui dit ce qu'elle est.
+**Ce qu'il faut en retenir pour la suite :** en panne, l'écran affiche « — » et
+un bandeau d'indisponibilité, et `MarketSelectorSheet` **refuse d'ajouter la
+jambe** — une jambe porte sa probabilité jusqu'au règlement, un chiffre inventé y
+survivrait à la panne qui l'a produit. Donc **voir un chiffre suffit désormais à
+conclure qu'il vient du modèle** : c'est ce qui rend le runbook I1 de
+`QA_TEST_PLAN.md` aussi court.
 
 > **La règle, écrite en tête de `predictionApiService.ts` pour qu'elle survive :**
 > pas de repli local, jamais. Un nombre faux qui a l'air juste est pire que pas de
 > nombre — et une cote fabriquée à partir d'une probabilité l'est doublement,
 > parce que rien à l'écran ne la distingue d'un prix de bookmaker.
+
+> ⚠️ **Le piège de vérification, à ne pas refaire.** Il a d'abord été écrit ici
+> que le typecheck rendait « 0 erreur ». C'était un artefact : le `tsconfig`
+> d'essai portait un `baseUrl`, que TypeScript 5.6 refuse avec l'erreur de
+> configuration **TS5101** — et `tsc` s'arrête là, **sans rien vérifier**. Une
+> sortie vide ne voulait pas dire « aucune erreur » mais « aucune vérification ».
+> Depuis, un typecheck se prouve actif en y insérant une faute volontaire avant
+> de conclure.
 
 **Reportés au lancement officiel, sciemment** — pas des oublis :
 
@@ -331,6 +421,69 @@ fassent réapparaître le +4,30 %. S'il revient, ce sera une surprise.
 > sur la seule piste encore vivante du projet — et le résultat le plus probable
 > est un « non » propre plutôt qu'un « oui ».
 
+### Le chiffrage, exécuté le 2026-08-30 — et il change la marge
+
+Le mode `--odds-api-dry-run` a été **joué** (aucun crédit, aucune clé) :
+`1004 jours × ~4 appels × 30 crédits = ~120 480 crédits` en borne haute, et un
+forfait de `186 jours/saison → 66 960`. **Aucun des deux n'est le bon chiffre** :
+la borne haute facture 4 appels les jours sans match, le forfait n'en facture
+aucun — alors que le code envoie **une reconnaissance à 15:30Z tous les jours**,
+match ou pas, soit 30 crédits.
+
+Le vrai compte se lit dans `ml/data/games_spine.csv`, qui vient d'`api.nhle.com`
+(gratuit, à jour, 1 312 matchs par saison = les 32×82/2 de la saison régulière) :
+
+| | jours | dont avec match | crédits |
+|---|---|---|---|
+| Fenêtre documentée `2023-10-01 → 2026-06-30` | 1 004 | **528** (+ 476 vides) | **77 640** |
+
+**Mais 77 640 est encore trop bas, et c'est le point.** `games_spine.csv` ne
+contient **que la saison régulière** (`game_id` en `…02`) : les ~40 à 60 jours
+de séries d'avril-juin n'y sont pas, alors que l'API, elle, les facturera au
+tarif d'un jour de match. Chaque jour qui passe de vide à jour de match coûte
++90 crédits :
+
+| séries retenues | crédits | part des 100 000 qu'achètent 59 $ |
+|---|---|---|
+| 40 j/saison | 88 440 | **88 %** |
+| 50 j/saison | 91 140 | **91 %** |
+| 60 j/saison | 93 840 | **94 %** |
+
+La marge réelle est donc de **6 à 12 %**, pas les 33 % que suggérait le forfait.
+Et les crédits des séries n'achètent **rien d'utilisable** : le jeu de données
+est en saison régulière, `build_dataset.py` ne peut pas joindre une cote de
+série.
+
+**Le correctif tient en une ligne : trois plages au lieu d'une.** En calant
+chaque plage sur `1er octobre → 30 avril`, on récupère **exactement les mêmes
+3 936 matchs** — le chiffre que ce § annonçait déjà — pour :
+
+| Plage | jours | avec match | matchs | crédits |
+|---|---|---|---|---|
+| 2023-10-01 → 2024-04-30 | 213 | 183 | 1 312 | 22 860 |
+| 2024-10-01 → 2025-04-30 | 212 | 178 | 1 312 | 22 380 |
+| 2025-10-01 → 2026-04-30 | 212 | 167 | 1 312 | 21 390 |
+| **Total** | | | **3 936** | **66 630 — 67 % du budget, marge 33 370** |
+
+Soit **~22 000 à 27 000 crédits économisés** pour un jeu de données identique.
+La commande du bloc ci-dessous a été corrigée en conséquence.
+
+> ⚠️ **Le « ~4 appels par jour » reste une hypothèse, pas une mesure.** Il vient
+> du docstring de `fetch_odds_api` (une reconnaissance + une par heure de début
+> distincte) ; `games_spine.csv` n'a pas d'heure de coup d'envoi, donc rien ici
+> ne le vérifie. À surveiller sur **2025-26 en particulier** : 1 312 matchs en
+> **167 jours** au lieu de 178-183 (calendrier comprimé, probablement la coupure
+> olympique de février 2026), donc plus de matchs par soirée et sans doute plus
+> d'heures de début distinctes. La marge de 33 370 de la variante à trois plages
+> absorbe cet écart ; celle de la fenêtre en une seule passe, non. **C'est une
+> raison de plus de poser `--odds-api-budget`**, qui reste le seul plafond dur.
+
+**Ce que ce chiffrage ne tranche pas :** il ne dit pas s'il faut payer. Il dit
+seulement que si tu paies, la fenêtre documentée gaspillait un quart du budget.
+La décision reste celle du § précédent, et elle reste la tienne.
+
+---
+
 ### Reprendre : les commandes
 
 Tout ce qui suit tourne sur ta machine (xgboost et `node_modules` sont
@@ -339,7 +492,9 @@ Windows-only pour ce dépôt).
 ```bash
 cd ml/python
 
-# Gratuit — chiffre le backfill sans dépenser ni clé
+# Gratuit — chiffre le backfill sans dépenser ni clé.
+# ⚠️ Ne donne qu'une borne haute et un forfait : les deux sont faux. Le vrai
+#    chiffre est dans le § ci-dessus (66 630 crédits en trois plages).
 python fetch_data_v4.py --only odds --odds-api-dry-run \
     --odds-api-from 2023-10-01 --odds-api-to 2026-06-30
 
@@ -350,7 +505,20 @@ python fetch_data_v4.py --only odds --odds-api-dry-run \
 python fetch_data_v4.py --only odds --from-local --odds-api-budget 300 \
     --odds-api-regions eu --odds-api-book bet365 \
     --odds-api-from 2021-11-01 --odds-api-to 2021-11-10
-#   3. le backfill, plafond dur posé
+#   3. le backfill, EN TROIS PLAGES (66 630 cr au lieu de ~91 000 : voir §
+#      « Le chiffrage »). Une seule plage continue paierait les étés et les
+#      séries, que le jeu de données ne peut pas utiliser.
+python fetch_data_v4.py --only odds --from-local --odds-api-budget 23000 \
+    --odds-api-regions eu --odds-api-book bet365 \
+    --odds-api-from 2023-10-01 --odds-api-to 2024-04-30
+python fetch_data_v4.py --only odds --from-local --odds-api-budget 23000 \
+    --odds-api-regions eu --odds-api-book bet365 \
+    --odds-api-from 2024-10-01 --odds-api-to 2025-04-30
+python fetch_data_v4.py --only odds --from-local --odds-api-budget 23000 \
+    --odds-api-regions eu --odds-api-book bet365 \
+    --odds-api-from 2025-10-01 --odds-api-to 2026-04-30
+#      (le plafond par plage est volontairement au-dessus de l'estimation :
+#       il borne la casse, il ne doit pas couper une plage correcte en deux)
 #   4. python build_dataset.py, puis --clv et --derived sur des saisons neuves
 #   5. résilier
 ```
@@ -558,7 +726,6 @@ simultanés.**
 | **D** 🔴 | **Redis (Upstash)** : adapter Socket.io + `RedisRateLimitStore` (déjà écrit, à brancher) + quota LLM Free | **avant la 2ᵉ instance** | 1 j |
 | E | Migrer les data-URI d'avatars déjà en base vers R2 — code et variables en place | ~500 utilisateurs avec avatar | 2 h |
 | Q | 2ᵉ instance Railway + sticky sessions | CPU > ~70 % en régime | 4 h |
-| 7 bis | **Décidé le 2026-08-24 : scale-to-zero.** À activer dans la console Neon ; accepter un cold start de quelques secondes après inactivité | maintenant | 30 min |
 | U | RAM du service ML : 2 workers uvicorn à ~300-500 Mo RSS chacun ne tiennent pas dans 512 Mo | avant le premier pic réel | 15 min |
 | I | TanStack Query côté client — `fetch` brut partout, aucune déduplication | quand la facture Railway devient visible | 2 j |
 | T | Cache de prompts LLM identiques | quand l'usage LLM devient significatif | 4 h |
@@ -580,12 +747,9 @@ panne au lieu de servir un prix périmé. C'est voulu — un collecteur qui rate
 cycle perd un point de mesure, alors qu'un snapshot réécrit avec un prix ancien
 fabriquerait un faux mouvement de ligne.
 
-- [x] **Suite serveur jouée le 2026-08-29 — `17 fichiers, 155 tests, tous verts`
-      en 7,8 s**, plus `npm run typecheck` à 0 erreur. Le lot du 2026-08-24
-      (limiteur, cache du calendrier, hôte des stats, `profileUpdateSchema`) est
-      couvert. Rejoué dans un Linux propre, hors du dépôt : `npm ci` depuis le
-      lock seul, aucune base de données requise (`vitest.setup.ts` pose
-      `NODE_ENV=test` et un `JWT_SECRET` factice avant tout import).
+- [x] Suite serveur : **17 fichiers, 155 tests verts** + `npm run typecheck` à 0
+      erreur (2026-08-29), rejoués dans un Linux propre depuis le lock seul,
+      sans base de données.
 
 ---
 
@@ -593,6 +757,10 @@ fabriquerait un faux mouvement de ligne.
 
 Source : `QA_TEST_PLAN.md`, qui garde le détail (résultat attendu, notes, pièges).
 Sécurité et résilience sont **validées en statique** ; ce qui reste est dynamique.
+
+> **F1, F2, I1 et I2 ont un runbook** depuis le 2026-08-30 :
+> `QA_TEST_PLAN.md` § « Runbooks B4 ». Les autres lignes ci-dessous n'en ont pas
+> encore.
 
 **Fonctionnel** — F1 auth complète · F2 gating Pro bout en bout · F3 slip +
 settlement · F4 prédictions NHL du jour · F5 Best Bets / value bet scan ·
@@ -611,67 +779,53 @@ P2 cache et quotas externes · P4 Lighthouse mobile · P5 pool Postgres
 C2 cross-navigateur desktop · C3 push web
 
 **Vérifications dynamiques de sécurité** (le statique est passé) — test IDOR à
-2 comptes · JWT expiré/altéré rejeté et refresh non rejouable après logout ·
-en-têtes **CSP réellement servis par Vercel** (l'API n'y peut rien, c'est le front)
+2 comptes · JWT expiré/altéré rejeté et refresh non rejouable après logout
 
-**Avis `npm audit` — la moitié est refermée, le reste est une montée de version.**
-`npm audit fix` a été joué des deux côtés dans le container et **vérifié** :
-serveur 155/155 tests toujours verts, client build + typecheck toujours verts, et
-un `npm ci` propre depuis le nouveau lock reconstruit tout en 4 s. Les deux
-`package-lock.json` de ton dépôt ont été remplacés par ces versions vérifiées.
+✅ **CSP réellement servie par Vercel — mesurée verte le 2026-08-30**, les six
+en-têtes de `client/vercel.json` présents et la valeur identique au caractère
+près. Clôt M6, et avec lui l'audit de production en entier.
 
-- [x] **Joué sur la machine Windows le 2026-08-29 — les deux côtés sont
-      alignés sur les locks.** `npm ci` puis `npm audit`, `npm run typecheck`,
-      `npm run build` côté client, et `npm ci`, `npm audit`, `npm run typecheck`,
-      `npm test` côté serveur : tout vert, `npm audit` vide des deux côtés.
-      **Vérifié autrement que par la sortie de la console**, parce qu'une sortie
-      verte ne dit pas quel arbre a été installé : les versions réellement
-      présentes dans `node_modules` ont été relues sur le disque —
-      `vite` 6.4.3, `react-router` 7.18.3, `typescript` 5.6.3 côté client ;
-      `socket.io-parser` 4.2.7, `body-parser` 1.20.6, `qs` 6.15.3 côté serveur —
-      et l'horodatage de `dist/` confirme que le build a réécrit les chunks au
-      lieu de laisser les anciens. Commité en `4c8c97e`.
-      ⚠️ **`npm ci` sous Windows a réécrit `server/package.json` et
-      `server/package-lock.json` en CRLF**, sans rien changer à leur contenu :
-      `git diff` annonçait 11 566 lignes touchées pour 62 lignes réelles, et
-      `server/package.json` n'avait **aucun** changement de fond. Les deux ont été
-      remis en LF avant le commit (contenu vérifié identique hors CR, JSON
-      reparsé). Le dépôt n'a **pas** de `.gitattributes` et `core.autocrlf` n'est
-      pas posé : **le CRLF reviendra au prochain `npm ci` sous Windows.** Le
-      garde-fou, si on le veut, tient en deux lignes (`package.json text eol=lf`,
-      `package-lock.json text eol=lf`) — une règle large type `* text=auto`
-      renormaliserait des centaines de fichiers d'un coup et est à éviter.
-      *Rappel de la consigne, toujours valable pour la prochaine fois :*
-      **`npm ci`, pas `npm install`** — les locks
-      livrés sont exactement ceux qui ont été testés. Le lock client porte aussi
-      les trois devDependencies du typecheck : ce `npm ci` remplace le
-      `npm install` demandé plus haut. Commiter les deux locks ensuite.
-      Ce que ça referme : `socket.io-parser` 4.2.6 → 4.2.7 (l'avis « high »
-      commun aux deux côtés), `body-parser` 1.20.5 → 1.20.6 et `qs` 6.15.1 →
-      6.15.3 (deux DoS côté serveur), plus 26 bumps de correctif transitifs.
-      Le lock client porte **en plus** les deux montées de version ci-dessous
-      (`react-router` 7.18.3, `vite` 6.4.3) : après ce `npm ci`, `npm audit` est
-      **vide des deux côtés**. Seul `client/package.json` a bougé, pour ces deux
-      versions.
-- [x] **Les deux montées de version sont faites — 2026-08-29.**
-      `react-router` **7.13.0 → 7.18.3** et `vite` **6.3.5 → 6.4.3** (l'épingle
-      de `pnpm.overrides` suivie aussi). `client/package.json` et son lock ont
-      été remplacés par les versions vérifiées.
-      **Résultat : `npm audit` rend `found 0 vulnerabilities`** — plus un seul
-      avis, production comme développement, là où il y en avait deux « high ».
-      **Comment ça a été vérifié**, parce qu'un bump de mineure de routeur ne se
-      juge pas sur un build vert : `npm ci` propre depuis le nouveau lock (4,9 s),
-      `tsc --noEmit` à **0 erreur**, `vite build` vert, puis **un test de fumée
-      au navigateur** — les six routes (`/`, `/stats`, `/nhl-predictions`,
-      `/bet`, `/league`, `/login`) chargées dans Chromium sur le `dist/` servi en
-      statique, avant et après. **Résultats identiques au caractère près** :
-      mêmes tailles de DOM montées (7676, 4378, 6965, 6250, 8347, 11173),
-      **zéro exception non rattrapée** des deux côtés, et pour seule erreur de
-      console le `VITE_NHL_API_URL is not configured` attendu quand aucune API ne
-      tourne. Le routeur se comporte donc identiquement.
-      Effet de bord mesuré : le bundle principal passe de 212,7 à 218,9 ko
-      (+6,2 ko brut, +2,0 ko gzip) — c'est le prix des correctifs de
-      `react-router`.
+> ⚠️ **Ce que la même mesure a montré, et qui n'était pas cherché.** La réponse
+> porte `server: cloudflare` et un `cf-ray`, avec `x-vercel-cache: HIT` derrière.
+> Le trafic de l'apex passe donc bien par le proxy de **l'ancien compte
+> Cloudflare** — celui qui est perdu. C'est la confirmation *par la mesure* de ce
+> que le §1 ne faisait que déduire des serveurs de noms, et Vercel n'est que
+> l'origine derrière lui : seule la couche DNS/proxy est en jeu.
+
+**`npm audit` est vide des deux côtés — clos le 2026-08-29.** `npm audit fix`
+plus les deux montées de version (`react-router` 7.13.0 → 7.18.3, `vite`
+6.3.5 → 6.4.3) ; joué sur la machine Windows, vérifié autrement que par une
+console verte (versions relues dans `node_modules`, six routes chargées dans
+Chromium avant/après avec des DOM identiques au caractère près). Commité en
+`4c8c97e`.
+
+> ✅ **Le CRLF est neutralisé — 2026-08-30.** Il est bien revenu comme annoncé,
+> mais **beaucoup plus large que prévu** : 60 fichiers de `client/`, `server/` et
+> `ml/` réécrits en CRLF sans un caractère de contenu changé. `git diff`
+> annonçait **26 292 lignes touchées pour 745 réelles** — cinq fichiers portaient
+> tout le vrai travail, soixante ne portaient que du bruit.
+>
+> **Le remède posé n'est pas celui que cette ligne prévoyait.** Au lieu du
+> `.gitattributes`, `git config core.autocrlf input` : un réglage **local**, qui
+> normalise CRLF→LF au moment du commit sans toucher ni le disque ni le dépôt.
+> Les 60 fantômes ont disparu de `git status` sur-le-champ et ne reviendront plus
+> au prochain `npm ci`. **Pourquoi ce choix :** couvrir 60 fichiers de trois
+> dossiers aurait demandé une règle large, or `* text=auto` renormalise des
+> centaines de fichiers d'un coup — exactement ce que cette ligne interdisait. Le
+> réglage local obtient le même résultat sans commit de renormalisation.
+>
+> ⚠️ **Ce qu'il ne couvre PAS : une autre machine.** `core.autocrlf` n'est pas
+> versionné. Un second poste Windows, ou un clone frais, retrouverait le problème
+> intact. C'est là — et seulement là — qu'un `.gitattributes` ciblé par extension
+> deviendrait justifié.
+>
+> ⚠️ **Et la leçon de méthode, qui vaut au-delà du CRLF :** `git diff --shortstat
+> --ignore-all-space` face à `git diff --shortstat` répond en une seconde à « ce
+> gros diff contient-il du vrai travail ? ». Sans ce réflexe, 25 000 lignes de
+> bruit partent dans un commit et rendent illisible tout ce qu'il contient.
+>
+> **Et toujours `npm ci`, jamais `npm install`** : les locks livrés sont
+> exactement ceux qui ont été testés.
 
 **Tests de résilience à provoquer** — couper le ML · couper The Odds API et
 retirer `scratches.json` · redeploy Railway sous trafic · webhook Stripe rejoué
@@ -682,40 +836,43 @@ Railway/Vercel.
 
 ---
 
-## 5. Décisions — toutes tranchées
+## 5. Décisions tranchées — il n'en reste qu'un contrôle
 
 **Purge de l'historique Git : abandonnée (2026-08-10).** Le mot de passe présent
 dans l'historique est celui d'une base **locale**, sans valeur pour un attaquant.
-Point clos, ne pas le rouvrir. Le scanner gitleaks du CI empêche qu'un vrai secret
-y entre à l'avenir.
+**Point clos, ne pas le rouvrir** — et ne pas le confondre avec la clé The Odds
+API du §6, qui est un cas différent et, lui, réel.
 
-### Synchro des poids de règles — câblée le 2026-08-24
+✅ **Le scanner gitleaks du CI ne couvrait pas ce qu'on croyait** — trouvé et
+corrigé le 2026-08-30. Il se déclenchait sur `push` vers `main`, une branche qui
+n'existe pas ici (la branche par défaut est `master`) : il ne protégeait donc
+que les pull requests. `master` est ajouté ; le garde-fou invoqué ci-dessus est
+désormais réel. Détail et règle de non-régression au §6.
 
-Le câblage et ses règles de conflit sont dans le code (`ruleWeightsService`) ;
-`PATCH /users/me` est désormais borné par `profileUpdateSchema` (liste blanche
-zod sur la route + double barrière dans le service). Il ne reste qu'une
-vérification, qui ne peut se faire qu'à la main :
+**Synchro des poids de règles : câblée le 2026-08-24** (`ruleWeightsService` ;
+`PATCH /users/me` borné par `profileUpdateSchema`, liste blanche zod sur la route
+et double barrière dans le service).
 
-- [ ] **À 2 appareils** (ou 2 navigateurs) : régler une pondération et
-      l'enregistrer sur A, recharger B connecté au même compte → B doit voir les
-      curseurs de A. Puis en invité : l'onglet Réseau ne doit montrer **aucun**
-      appel `/users/me` déclenché par une carte de règles.
+✅ **Vérifiée à 2 navigateurs le 2026-08-30** : les poids enregistrés sur A
+arrivent sur B au même compte, et en invité le réglage ne sort pas de l'appareil.
 
-### Codes promo — tranché le 2026-08-10 : pas de changement de schéma
+> Portée exacte, pour ne pas relire ce vert plus large qu'il n'est : c'est le
+> **comportement** qui a été observé, pas le compteur de requêtes. L'enjeu était
+> qu'un invité n'écrive nulle part, et c'est établi — mais l'absence d'un
+> `GET /users/me` inutile au chargement ne l'est que par le code
+> (`ensureFamilyWeightsHydrated` sort sur `isSignedIn()` avant tout appel). Si
+> une facture de requêtes surprend un jour, c'est là qu'il faut regarder.
 
-Les codes sont **réservés au lancement** et doivent cesser de fonctionner ensuite.
-Le mécanisme existant suffit : `promoCatalog()` (`subscription.service.ts`) lit
-`PRO_PROMO_CODES` et, si la variable est absente **en production**, le catalogue
-est vide — tout code est rejeté en 400, avec un `logger.warn`.
-
-**Retirer les codes = vider `PRO_PROMO_CODES` sur Railway et redéployer.** Rien à
-coder, pas de table `promo_redemptions`.
+**Codes promo : pas de changement de schéma (2026-08-10).** `promoCatalog()`
+lit `PRO_PROMO_CODES` ; variable absente **en production** → catalogue vide, tout
+code rejeté en 400 avec un `logger.warn`. Retirer les codes = vider la variable
+et redéployer. Rien à coder, pas de table `promo_redemptions`.
 
 > Ce qu'il faut accepter en attendant : tant que la variable porte un code, il
 > reste utilisable par **plusieurs comptes** — il n'y a pas de plafond d'usage.
-> C'est sans conséquence pour des codes de lancement distribués sciemment ; ça ne
-> le serait plus si les codes devenaient individuels. Le jour où ça change, il
-> faudra la table (`max_uses` / `expires_at`), et ce sera un changement de schéma.
+> Sans conséquence pour des codes de lancement distribués sciemment ; le jour où
+> les codes deviennent individuels, il faudra la table (`max_uses` /
+> `expires_at`), et ce sera un changement de schéma.
 
 - [ ] **Après le lancement :** vider `PRO_PROMO_CODES` sur Railway, redéployer,
       et vérifier qu'un ancien code renvoie bien 400.
@@ -730,9 +887,19 @@ les points encore vivants.
 
 ### Reste à faire
 
-- [ ] **Révoquer et régénérer `VITE_ODDS_API_KEY`** si la valeur littérale qui
-      était en clair dans `DEPLOYMENT.md` §4 était réelle et que le dépôt a
-      circulé. (La doc porte un placeholder depuis.)
+- [ ] 🔴 **Commiter `.github/workflows/ci.yml`.** Le lot du 2026-08-30 a été
+      validé, déployé et poussé (`528b844`) — **mais `ci.yml` est resté sur le
+      disque**, jamais commité. Le correctif gitleaks, celui qui protège
+      l'avenir, n'a donc pas quitté la machine et le trou est toujours ouvert
+      côté GitHub. C'est le seul reste de ce lot.
+
+- [ ] **Vérifier la sonde dans les logs Railway du conteneur courant.** La ligne
+      attendue est `[OddsLogger] ✅ ODDS_API_KEY acceptée par The Odds API`.
+      Déployer ne suffit pas à conclure : c'est tout l'objet de la sonde, et le
+      document a déjà été démenti deux fois par un contrôle qu'il croyait fait
+      (`DORMANT`, `[avatarStorage] R2 actif`). **Une mesure porte une date, pas
+      un état.**
+
 - [ ] **Découpage > 500 lignes**, si on le poursuit :
 
 | Fichier | Lignes | Pourquoi ce n'est pas un découpage mécanique |
@@ -744,84 +911,67 @@ les points encore vivants.
 | `components/MarketSelectorSheet.tsx` | 519 | Candidat. |
 | `profile/SettingsTab.tsx` | 509 | **453 lignes réelles**, un seul composant portant ~20 `useState` partagés. Les séparer = faire descendre ces états en props : un vrai refactoring, à faire avec le navigateur ouvert. |
 
-### Retrait du tennis — décidé et fait le 2026-08-24
+### Sécurité — le lot du 2026-08-30, et les quatre règles qui en restent
 
-Le tennis est sorti du produit : les 5 fichiers dédiés (2 pages, le service et le
-client d'API, la route serveur) sont **déplacés dans `_to_delete/tennis-2026-08-24/`**
-— le bridge ne peut pas supprimer, c'est à toi de le faire — et 18 fichiers ont
-été nettoyés (branche tennis de `HockeyLanding`, `BestBetsSection`, `StatsPage`,
-`PredictionPage`, marchés, types, i18n, route et branche ML côté serveur).
+**Fait, plus rien à faire dessus :** la clé The Odds API est régénérée — la
+valeur littérale de `DEPLOYMENT.md` (`5333eb4e…`, du commit `9197b31` à
+`89ee8bb`) **était bien réelle**, elle est morte, et `server/.env` comme Railway
+portent la nouvelle. Le CI scanne enfin les poussées sur `master`. Une clé
+refusée sort désormais en rouge au démarrage (`verifyOddsApiKey()`, calquée sur
+`verifyAvatarStorage()`).
 
-`SportContext` **reste**, en mono-sport : il porte le thème que consomment une
-vingtaine d'écrans. Le supprimer aurait disséminé trois constantes partout.
+Ce qui vaut d'être gardé, ce sont les règles :
 
-- [x] **Sorti de l'index Git le 2026-08-25** (`git rm -r --cached _to_delete`,
-      `_to_delete/` ajouté au `.gitignore`). Les 5 fichiers étaient **commités**
-      dans `_to_delete/` par 1583804 : ils partaient donc encore avec le dépôt.
-      **Dossier supprimé pour de bon le 2026-08-29** — plus rien sur le disque,
-      `_to_delete/` reste au `.gitignore` par sécurité.
-- [x] **Contrôle statique passé le 2026-08-25** : zéro référence vivante à
-      `tennis`/`rapidapi` (il ne reste que 4 commentaires d'explication), zéro
-      usage de `setSport`, `TennisLiveCard`, `TennisMatchRow`,
-      `TENNIS_MARKET_DEFINITIONS`, `tennisLive`/`tennisUpcoming`, et sur les 194
-      fichiers de `client/src` + `server/src` : 0 erreur de syntaxe, 0 import
-      relatif cassé.
-- [x] **Build Windows rejoué le 2026-08-29** — `npm ci && npm run build` côté
-      `client`, vert : `dist/` reconstruit, les 7 shells de route écrits, 0 erreur.
-      Le `npm ci` a du même coup nettoyé un `node_modules` à moitié installé (58
-      répertoires de staging npm laissés par un `npm install` tué en cours
-      d'extraction). À noter pour la suite : `client` n'a **pas de
-      `tsconfig.json`**, son build est `vite build` seul — il ne typecheck donc
-      pas. Le seul vrai typecheck du dépôt reste `server` → `npm run typecheck`,
-      joué vert le 2026-08-28.
-- [x] **Le client a désormais son typecheck** — `tsconfig.json` en `strict`,
-      plus `@types/react`, `@types/react-dom` et `typescript` en
-      devDependencies, et un script `npm run typecheck`.
-      ⚠️ `package.json` a gagné trois devDependencies. Le `package-lock.json`
-      livré le 2026-08-29 les porte déjà : **un seul `npm ci` suffit** (voir la
-      ligne « À faire une fois, sur ta machine » du §4), puis `npm run typecheck`
-      — **il rend 0 erreur** (vérifié ici, avec `vite build` vert).
-- [x] **Les 10 erreurs de type préexistantes sont refermées — 2026-08-29.
-      `npm run typecheck` rend 0 erreur.** Quatre d'entre elles n'étaient pas
-      des broutilles de typage, mais des bogues visibles :
-      **①** `MLPredictionCard.tsx:412` utilisait une variable `accent` **qui
-      n'existe nulle part dans le fichier** — un `ReferenceError` levé dès que
-      `feature_importances` n'était pas vide, c'est-à-dire chaque fois que la
-      carte ML avait quelque chose à montrer. Remplacée par le violet ML de la
-      carte.
-      **②** `betMarkets.ts` : `CATEGORY_LABELS` et `CATEGORY_ICONS` portaient la
-      clé `game`, alors qu'aucune des définitions n'utilise `category: "game"` —
-      elles disent toutes `"match"`. Les deux tables étaient donc interrogées
-      avec une clé absente et rendaient `undefined` : le groupe « Game Lines »,
-      le plus important de la feuille de marchés, s'affichait **sans titre ni
-      icône**.
-      **③** `BetBuilderPage` jetait le `message` renvoyé par le serveur à la
-      réception puis le lisait au rendu : le sous-titre de l'écran « Slip
-      Locked! » était vide depuis toujours.
-      **④** `MarketSelectorSheet:526` appelait `onSelect(t.id, t.name, t.logo)`
-      sur une fonction à un seul argument.
-      Les six autres étaient du typage à remettre d'aplomb : `AddSheetState` ne
-      déclarait pas le `gameId` que `HockeyLanding` y écrivait et relisait,
-      `LiveGameCard` recevait une prop `accent` qu'il n'accepte pas, plus trois
-      détails (`chartsMetrics`, `pushService`, extension `.tsx` dans `main.tsx`).
+1. **Jamais un secret derrière un préfixe `VITE_`.** Vite les **inline** dans le
+   bundle au build : tant que ce nom a servi, la clé était lisible par n'importe
+   quel visiteur dans le JS servi. C'est ça qui rendait la purge de l'historique
+   Git secondaire, et non l'inverse — d'où la décision assumée de **ne pas**
+   réécrire l'historique : dépôt privé, clé morte, et une réécriture casserait
+   les SHA que ce document cite (`15ecbb6`, `4c8c97e`, `89ee8bb`). Corrigé à la
+   source, le serveur proxifie The Odds API. **Il n'y a pas de secret côté
+   client.**
+2. **Un contrôle de présence n'est pas un contrôle de validité.** Troisième
+   occurrence du même défaut, après `[avatarStorage] R2 actif` et
+   `NHL_USE_MOCK` : une clé révoquée passait les trois contrôles au vert. La
+   bannière dit maintenant `présente (validité vérifiée par verifyOddsApiKey)`,
+   pour que le mot ne puisse plus se relire comme « valide ».
+3. **Ne jamais journaliser l'URL de The Odds API** — elle porte la clé en clair
+   dans sa query string. Statut HTTP et `err.name` uniquement ; jamais l'erreur
+   brute ni `err.cause`. Le fichier respectait déjà cette discipline
+   (`err?.message` seul) : c'est elle qu'il ne faut pas casser.
+4. **Ne pas retirer `master` de `ci.yml`** — et ne pas non plus élargir à toutes
+   les branches. `pull_request` n'a volontairement aucun filtre : tout ce qui
+   *entre* dans `master` est scanné par l'un ou l'autre déclencheur, sans faire
+   tourner le build et les 155 tests sur chaque branche de travail.
 
-> **Le typecheck a été prouvé actif, pas seulement silencieux.** Une faute
-> volontaire (`const x: number = "texte"`) a été insérée dans `main.tsx` : `tsc`
-> l'a signalée, puis le fichier a été restauré et la sortie est redevenue vide.
-> C'est exactement le contrôle qui manquait le 2026-08-29 au premier essai, où
-> une sortie vide voulait dire « rien n'a été vérifié ». Un contrôle muet ne se
-> distingue pas d'un contrôle qui n'a pas tourné.
-- [x] **Railway : `RAPIDAPI_KEY` n'existe plus — vérifié le 2026-08-29** en
-      relevant les 44 variables du service `IceEdge` et la seule du service ML.
-      Le code non plus n'en lit aucune trace (`server/src`, `client/src`,
-      `ml/python` : zéro occurrence).
-- [ ] Vérifier une page d'accueil et l'onglet Stats dans le navigateur
+> ⚠️ **Le repli d'`isSeasonActive()` n'a PAS été touché, et c'est délibéré.**
+> `!res.ok` continue de répondre « en saison » : mieux vaut une passe inutile
+> qu'une saison entière ratée sur une erreur transitoire. Le lot a ajouté de la
+> **parole**, pas un garde-fou — un échec réseau reste « non concluant », il ne
+> devient pas rouge. Ne pas « durcir » ça plus tard sans relire cette ligne.
+
+### Retrait du tennis — fait le 2026-08-24, à ne pas réintroduire
+
+Les 5 fichiers dédiés sont supprimés du disque et de l'index Git, 18 fichiers
+nettoyés, contrôle statique passé (zéro référence vivante), build Windows rejoué
+vert. `SportContext` **reste**, en mono-sport : il porte le thème que consomment
+une vingtaine d'écrans ; le supprimer aurait disséminé trois constantes partout.
+
+✅ **Vérifié à l'écran le 2026-08-30** — accueil, onglet Stats et `/league` : plus
+aucune trace visible, aucun trou laissé par ce qui est parti. Les seules mentions
+restantes sont des commentaires de code : **ne pas les retirer**, ce sont eux qui
+empêchent de réintroduire le tennis par distraction.
 
 > **Les paris tennis déjà en base ne bougent pas.** `settlement.service` les
 > laissait déjà en attente (aucune logique de règlement tennis n'a jamais
 > existé) et un coupon affiche des libellés stockés, pas des définitions de
-> marché : rien ne casse, ils restent simplement « pending » pour toujours. Si
-> tu veux les solder, c'est une requête SQL manuelle, à décider séparément.
+> marché : rien ne casse, ils restent « pending » pour toujours. Si tu veux les
+> solder, c'est une requête SQL manuelle, à décider séparément.
+
+> ⚠️ **`client` a désormais son propre `tsconfig.json` en `strict` et un
+> `npm run typecheck`** — il n'en avait pas, et `vite build` seul ne typecheck
+> rien. Le lock livré porte les trois devDependencies nécessaires : un seul
+> `npm ci` suffit.
 
 ### À ne pas défaire
 
@@ -850,24 +1000,3 @@ aucun par la relecture :
    trouve un sans coquille désignée.
 
 Pour réintroduire un composant shadcn : `npx shadcn@latest add <nom>`.
-
----
-
-## 7. Audit de production : soldé
-
-`PRODUCTION_READINESS_AUDIT.md` (2026-07-20) est conservé comme trace, mais
-**toutes ses recommandations sont traitées**. Vérifié dans le code aujourd'hui pour
-les quatre qui restaient ambiguës :
-
-- **H8** (hacher les refresh tokens) → fait, `auth.service.ts` les stocke hachés
-- **M2** (registre de migrations) → fait, `migrate-all.ts` tient `schema_migrations`,
-  une transaction par fichier
-- **M4** (transactions multi-écritures) → fait, `auth.service.ts` ouvre
-  `BEGIN`/`COMMIT` et les helpers acceptent le client de l'appelant
-- **M7** (index composite chat) → fait, migration `019_chat_pagination_index.sql`
-  crée `(room_id, sent_at DESC)`
-- **M1** (code splitting) → fait, le JS est découpé par route ; reste le CSS
-  Tailwind (ligne W ci-dessus)
-
-Seul survivant, et il est déjà dans ce document : **M6 / la CSP réellement servie
-par Vercel** (§4), et la question de la purge d'historique Git (§5.4).

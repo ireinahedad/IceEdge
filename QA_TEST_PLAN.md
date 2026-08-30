@@ -30,6 +30,8 @@
 
 Objectif : valider les parcours qui portent la valeur métier et la monétisation.
 
+> **F1 et F2 ont un runbook exécutable** en fin de document (§ « Runbooks B4 »).
+
 | # | Nom du test | Résultat attendu | Priorité | Statut | Notes |
 |---|---|---|---|---|---|
 | F1 | Cycle d'authentification complet (register → vérif email → login → refresh → logout) | Compte créé, email vérifié requis, JWT court + cookie refresh httpOnly émis, refresh renouvelle le token, logout invalide le refresh. OAuth Google aboutit sur `AuthCallback`. | Critique | À faire | Vérifier `SameSite=None; Secure` en prod, `Lax` en dev. |
@@ -44,6 +46,8 @@ Objectif : valider les parcours qui portent la valeur métier et la monétisatio
 ## 2. Tests d'intégration
 
 Objectif : valider les frontières entre les 3 services (Front ↔ API ↔ ML) et les données tierces.
+
+> **I1 et I2 ont un runbook exécutable** en fin de document (§ « Runbooks B4 »).
 
 | # | Nom du test | Résultat attendu | Priorité | Statut | Notes |
 |---|---|---|---|---|---|
@@ -227,3 +231,211 @@ Audit statique (serveur + client). Légende : ✅ conforme · ⚠️ améliorati
 - Webhook Stripe rejoué/retardé : vérifier l'idempotence (croise avec I3).
 
 **Synthèse :** RES-1→RES-5 **tous conformes** — la gestion d'erreurs/timeouts/pannes est de bonne qualité (repli règles, caches, `pool.on('error')`, arrêt gracieux). **Aucun correctif requis.** La seule amélioration optionnelle (servir le cache d'odds périmé pendant une panne, RES-2) est **implémentée** ; il reste à la provoquer en dynamique, pas à l'écrire.
+
+
+---
+
+# Runbooks B4 — F1, F2, I1, I2
+
+*Écrits le 2026-08-30, depuis le code (`auth.routes.ts`, `subscription.routes.ts`,
+`ml.routes.ts`, `dev.routes.ts`, `cors.ts`, `mlApiClient.ts`). Ces quatre
+parcours sont la ligne **B4** de `RESTE_A_FAIRE.md` §1 : bloquants avant
+lancement. Le but de cette section est qu'exécuter la campagne ne demande plus
+aucune décision — seulement de lire et de comparer.*
+
+Conventions : `$API` = base de l'API de staging (ex. `https://…up.railway.app`),
+`$FRONT` = origine du front de staging. **Les deux en `https://`, sans slash
+final.** `$ACCESS` = le jeton d'accès (JWT court) renvoyé dans le corps JSON.
+
+## Préflight commun — 4 variables à lire AVANT de commencer
+
+Trois des quatre parcours échouent pour la même poignée de raisons, et aucune ne
+se voit dans la réponse HTTP. À lire dans la bannière `[Server] Réglages
+effectifs` du conteneur, **pas dans le dashboard** : c'est la seule source qui
+dise ce que le process fait.
+
+| Variable | Ce qu'il faut | Ce qui casse silencieusement sinon |
+|---|---|---|
+| `NODE_ENV` | **`production`** | En dessous, le cookie de refresh part en `SameSite=Lax` **sans `Secure`** (`auth.routes.ts` : `IS_PROD`). Le navigateur le refuse en cross-site → F1 et I2 échouent tous les deux, et l'erreur ressemble à un bug d'auth |
+| `CORS_ORIGIN` | **exactement** `$FRONT` | Une liste séparée par des virgules est acceptée, mais un slash final ou une casse différente ne matche pas : `isAllowedOrigin` fait une **égalité de chaîne** |
+| `EMAIL_VERIFICATION_DISABLED` | à connaître, pas à changer | Décide quelle branche de F1 s'applique (voir plus bas). Ne pas le basculer pour « aller plus vite » : on testerait alors un parcours qui n'existe pas en production |
+| `ENABLE_DEV_ROUTES` | **`true`** pour I1 | Sans ça, `/api/dev/*` n'est **pas monté du tout** en production (`app.ts`) : les appels renvoient 404, ce qui se lit à tort comme « la route est cassée » |
+
+Pour I1, ajouter : `ML_DISABLED=false`, `ML_API_TOKEN` présent **des deux côtés**,
+et `ML_SERVICE_URL` avec **son port** (`http://<service>.railway.internal:8080`).
+Sans port, `mlApiClient` journalise `[ML] Adresse interne sans port` au
+démarrage — un avertissement à chercher avant de conclure quoi que ce soit.
+
+---
+
+## F1 — Cycle d'authentification complet
+
+**Ce qui est réellement testé :** que le refresh vit dans un cookie httpOnly aux
+bons attributs, qu'il ne fuit jamais dans le corps JSON, et qu'un logout le rend
+**définitivement** inutilisable.
+
+### Séquence
+
+| # | Appel | Attendu | Assertion qui compte |
+|---|---|---|---|
+| 1 | `POST $API/api/auth/register` · `{email, username, password}` (≥ 8 caractères) | **201** | Si `EMAIL_VERIFICATION_DISABLED=true` → corps `{user, tokens}` **et** un `Set-Cookie`. Sinon → corps `{pending:true, email}` et **aucun cookie** : c'est correct, aucun jeton n'est émis avant vérification |
+| 2 | *(branche vérification)* récupérer le code à 6 chiffres | — | Si `RESEND_API_KEY` est absente, l'e-mail **n'est pas envoyé** : le code n'existe que dans les logs Railway, ligne `[Email] RESEND_API_KEY not set`. Le chercher là plutôt que dans une boîte mail |
+| 3 | `POST $API/api/auth/verify-email` · `{email, code}` | **200** + `Set-Cookie` | Attributs **exacts** : `HttpOnly`, `Secure`, `SameSite=None`, **`Path=/api/auth`**, `Max-Age` = 604800 (7 j) ou 2592000 (« remember me »). Un seul attribut faux et le navigateur jette le cookie sans rien dire |
+| 4 | `POST $API/api/auth/login` · `{email, password}` | **200** | Le corps **ne doit pas contenir** `refresh_token` ni `refresh_expires_in` (`publicTokens` les retire). S'ils y sont, le refresh a fuité hors du cookie : **échec, même si le parcours marche** |
+| 5 | `GET $API/api/auth/me` · `Authorization: Bearer $ACCESS` | **200**, l'utilisateur créé | — |
+| 6 | `POST $API/api/auth/refresh` · **cookie seul, sans Bearer** | **200**, nouvel access token | Doit marcher sans en-tête d'autorisation : c'est tout l'intérêt du cookie |
+| 7 | `POST $API/api/auth/logout` · Bearer **+** cookie | **200** | `logout` est derrière `authenticate` : sans le Bearer c'est 401, et on croit à tort que le logout est cassé |
+| 8 | `POST $API/api/auth/refresh` avec le **même** cookie | **401** | Le rejeu après logout doit échouer. C'est aussi la vérification « refresh non rejouable » de la campagne Sécurité |
+| 9 | `POST /api/auth/login` avec un compte **non vérifié** | rejeté | `auth.service.ts` refuse tant que `email_verified` est faux (sauf bypass) |
+| 10 | `POST /api/auth/register` en réutilisant l'e-mail | **409** | Message identique pour e-mail et username déjà pris — voulu |
+| 11 | `GET $API/api/auth/google` puis retour | atterrit sur `AuthCallback` côté front | Croise I4 ; l'URI de callback de **staging** doit être enregistrée côté Google |
+
+### Les trois pièges de F1
+
+1. **`Path=/api/auth` n'est pas un bug.** Le cookie n'est envoyé qu'aux routes
+   d'auth. Un `fetch` vers `/api/users/me` ne le porte pas — c'est le design,
+   pas une régression.
+2. **`Secure` exige HTTPS.** Contre une URL de staging en `http://`, le
+   navigateur ignore le cookie en silence. `curl` l'acceptera quand même : le
+   parcours passera en ligne de commande et échouera dans le navigateur.
+3. **`authLimiter` est monté sur tout `/api/auth`.** Répéter la séquence
+   plusieurs fois de suite finit en **429**. Espacer, ou changer d'IP — et ne
+   pas interpréter le 429 comme un échec d'authentification.
+
+---
+
+## F2 — Gating Pro de bout en bout
+
+**Ce qui est réellement testé :** qu'un compte gratuit ne peut pas atteindre le
+contenu Pro, et surtout qu'**en production sans Stripe, personne ne devient Pro
+gratuitement**.
+
+### Le mur Pro côté serveur, celui qu'il faut viser
+
+Le gating visible est côté client ; le seul mur qui compte est côté API. Il est
+dans `profile.routes.ts` (`requireProForOthers`) :
+
+- `GET $API/api/users/<SON PROPRE id>/summary` → **200** même en gratuit ;
+- `GET $API/api/users/<id D'UN AUTRE>/summary` → **403** en gratuit, **200** en Pro ;
+- idem pour `/api/users/<id>/slips`.
+
+Tester le mur sur **son propre** identifiant ne prouve rien : la règle laisse
+volontairement passer. C'est l'erreur facile de ce test.
+
+### Séquence
+
+| # | Appel | Gratuit | Pro |
+|---|---|---|---|
+| 1 | `GET $API/api/subscription/me` | `{isPro:false, plan, status, trialUsed:false}` | `isPro:true` |
+| 2 | `GET /api/users/<autre>/summary` | **403** | 200 |
+| 3 | `GET /api/users/<autre>/slips` | **403** | 200 |
+| 4 | `POST /api/subscription/checkout` | **en prod sans Stripe → 501** `Payments are not configured` | avec Stripe → `{url}` d'une session Checkout réelle |
+| 5 | `POST /api/subscription/redeem` · `{code}` | dépend du code — **les promos sont désactivées par défaut en production** (SEC-6) | — |
+| 6 | `POST /api/subscription/trial` | 1ʳᵉ fois : Pro + `trialUsed:true` · 2ᵉ fois : refus | — |
+| 7 | `POST /api/subscription/cancel` | `cancelAtPeriodEnd:true` **et `isPro` reste `true`** jusqu'à `currentPeriodEnd` | — |
+
+### Le critère qui fait passer ou échouer F2
+
+Après le **501** de l'étape 4, vérifier qu'**aucune ligne d'abonnement n'a été
+créée** pour ce compte et que `/subscription/me` renvoie toujours `isPro:false`.
+Un 501 suivi d'un Pro accordé serait le pire résultat possible du test, et il ne
+se voit pas dans le code de retour.
+
+### Le piège du cache d'entitlement
+
+`isPro` est mis en cache **par instance**, invalidé à l'écriture et borné par la
+fin de période (`subscription.service.ts`). Conséquence pour le test : un
+changement de plan écrit par un **webhook Stripe** peut mettre jusqu'à un TTL à
+se voir sur une autre instance. À une seule instance — la configuration actuelle
+— le problème n'existe pas ; y penser le jour où la ligne Q de l'audit passe à
+deux instances, et **ne pas conclure d'un test à une instance** que la
+propagation est bonne.
+
+---
+
+## I1 — Chaîne ML : Front → Node → FastAPI
+
+**Ce qui est réellement testé :** que la prédiction affichée vient bien du modèle
+Python, et que le contrat de features Node ↔ Python n'a pas divergé.
+
+### L'appel qui répond à presque tout
+
+`GET $API/api/dev/ml-info` — **compte admin obligatoire**, et
+`ENABLE_DEV_ROUTES=true`. Un seul appel renvoie :
+
+- `ml_url` — la valeur réellement résolue (repère un port oublié) ;
+- `service_up` — `/health` du service Python a répondu ;
+- `features` — la liste des features **attendues par Python** ;
+- `samples.game` et `samples.player` — deux prédictions réellement calculées
+  (`bos` vs `nyr`, et le joueur `8478402`).
+
+**Critère :** `service_up: true` **et** `samples.game` non nul. `service_up:true`
+avec `samples.game: null` est le cas intéressant : le service répond mais la
+prédiction échoue — c'est un problème de **features**, pas de réseau. Comparer
+alors la liste `features` avec ce que `buildGameFeatures` envoie.
+
+### Ensuite
+
+| # | Appel | Attendu |
+|---|---|---|
+| 2 | `POST $API/api/dev/ml-test` · `{"type":"game","teamId":"bos","opponentId":"nyr"}` | une prédiction ; **503** avec un message si le ML est indisponible |
+| 3 | `POST $API/api/predict/ml` · `{"type":"game","subjectId":"bos","opponentId":"nyr"}` | le **même ordre de grandeur** qu'à l'étape 2. C'est le seul appel des trois qui emprunte le chemin du front |
+| 4 | même chose en `"type":"player"` puis `"team"` | les trois routes Python sont couvertes |
+| 5 | dans le navigateur, ouvrir une page de prédiction | une probabilité s'affiche |
+
+### Le critère d'acceptation a changé depuis B9 — et il vous facilite la vie
+
+La couche de mocks a été **supprimée** le 2026-08-29 : plus aucun repli local ne
+fabrique de probabilité. Un nombre affiché vient donc nécessairement du modèle,
+et une panne se manifeste par « — », un bandeau d'indisponibilité, et le refus
+d'ajouter la jambe au coupon. **Autrement dit : voir un chiffre suffit
+désormais à conclure.** Avant B9, il aurait fallu vérifier qu'il n'était pas
+inventé.
+
+### Le piège du disjoncteur
+
+`mlApiClient` a un **circuit breaker** (`mlCircuitState`) : après quelques
+échecs, les appels suivants échouent **immédiatement sans toucher Python**. Un
+test relancé juste après un test raté mesure donc le disjoncteur, pas le
+service. Laisser retomber le circuit (ou redémarrer le conteneur) avant de
+conclure. Même logique pour le timeout de **5 s** : un cold start du service ML
+peut le dépasser une fois, puis passer.
+
+---
+
+## I2 — CORS + cookie cross-site (Vercel ↔ Railway)
+
+**Ce qui est réellement testé :** la cause n°1 des « ça marche en local, pas en
+prod ». Front et API sont sur deux sites différents : tout repose sur
+`CORS_ORIGIN` et sur `SameSite=None; Secure`.
+
+### Séquence
+
+| # | Appel | Attendu |
+|---|---|---|
+| 1 | `OPTIONS $API/api/auth/login` avec `Origin: $FRONT` et `Access-Control-Request-Method: POST` | **204** · `Access-Control-Allow-Origin` **égal à `$FRONT`** (pas `*`) · `Access-Control-Allow-Credentials: true` |
+| 2 | même chose avec `Origin: https://exemple-hostile.com` | refusé |
+| 3 | même chose avec `Origin: https://ice-edge-abc123.vercel.app` | **accepté** — les préviews Vercel sont autorisées par la regex ancrée de `cors.ts` |
+| 4 | `curl` **sans** en-tête `Origin` | **accepté** — voulu (`isAllowedOrigin` renvoie `true` sans origine) |
+| 5 | dans le navigateur : se connecter sur `$FRONT`, puis DevTools → Application → Cookies **du domaine de l'API** | `ice_refresh` présent, `HttpOnly` ✓ `Secure` ✓ `SameSite=None` ✓ |
+| 6 | toujours dans le navigateur, déclencher un refresh | la requête vers `/api/auth/refresh` **porte** le cookie, et renvoie 200 |
+| 7 | ouvrir le chat (socket.io) depuis `$FRONT` | la connexion WebSocket s'établit |
+
+### Les deux pièges de I2
+
+1. **L'étape 4 n'est pas une faille.** Une requête sans `Origin` (curl, sonde de
+   santé, client non navigateur) n'est pas une requête cross-origin : il n'y a
+   rien à protéger. Un navigateur envoie **toujours** `Origin` en cross-site.
+   Ne pas « corriger » ce comportement.
+2. **L'étape 7 n'est pas redondante.** Le bug historique que `cors.ts` a corrigé
+   ne cassait **que** le WebSocket : `socket.ts` recevait la variable brute,
+   donc dès que `CORS_ORIGIN` contenait deux origines, la chaîne complète
+   n'égalait aucune origine réelle et le chat tombait **pendant que l'API
+   répondait normalement**. Tester HTTP sans tester le socket laisserait
+   exactement cette panne passer.
+
+### Ce que I2 ne couvre pas, et qui doit suivre
+
+Safari iOS bloque les cookies tiers plus agressivement que Chrome. I2 vert dans
+Chrome ne dit **rien** de Safari : c'est précisément l'objet de **C1 / B5**, à
+exécuter sur un appareil réel. Les deux tests ne sont pas interchangeables.
