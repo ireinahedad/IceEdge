@@ -26,7 +26,7 @@
  */
 
 import crypto from 'crypto';
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { logger } from '../logger';
 
 /**
@@ -93,7 +93,7 @@ export const isAvatarStorageConfigured = Boolean(
         accessKeyIdLength: ACCESS_KEY.length,
         secretKeyLength: SECRET_KEY.length,
       },
-      '[avatarStorage] R2 actif',
+      '[avatarStorage] R2 configuré — joignabilité vérifiée au démarrage par verifyAvatarStorage()',
     );
   } else if (missing.length === 5) {
     logger.info('[avatarStorage] R2 non configuré — les avatars restent stockés en base64 dans Postgres');
@@ -207,6 +207,66 @@ function r2ErrorContext(err: any, extra: Record<string, unknown>) {
     bucket:    BUCKET,
     endpoint:  ENDPOINT,
   };
+}
+
+/**
+ * Délai au-delà duquel la sonde renonce. Elle est lancée en « fire and
+ * forget » : elle ne retarde pas le démarrage, ce plafond sert seulement à ce
+ * qu'un endpoint qui ne répond jamais ne laisse pas une requête pendante.
+ */
+const PROBE_TIMEOUT_MS = 5_000;
+
+/**
+ * Sonde de démarrage : prouve par un appel RÉSEAU que le bucket configuré
+ * existe et que nos identifiants y donnent accès.
+ *
+ * **Pourquoi elle existe.** Le bloc de diagnostic en tête de fichier ne vérifie
+ * que la *présence* des cinq variables ; il n'appelle rien. Des identifiants
+ * pointant sur un compte mort, un bucket supprimé ou un `R2_ACCOUNT_ID` d'un
+ * autre compte produisent exactement la même ligne verte. Et comme
+ * `uploadAvatar` renvoie `null` en cas d'échec, l'appelant retombe
+ * silencieusement sur le data-URI base64 : une panne de R2 n'a alors **aucun
+ * symptôme visible**, les avatars repartent grossir Postgres et rien ne le dit.
+ * Un contrôle qui ne peut pas échouer ne mesure rien.
+ *
+ * **Ce qu'elle prouve, et ce qu'elle ne prouve pas.** `HeadBucket` établit que
+ * l'endpoint résout, que la signature SigV4 passe et que le jeton voit le
+ * bucket. Il n'établit *pas* le droit d'**écrire** : un jeton scopé en lecture
+ * seule passerait cette sonde et échouerait au premier `PutObject`. Écrire un
+ * objet de test lèverait ce doute mais salirait le bucket à chaque démarrage —
+ * le compromis retenu est donc de sonder en lecture, et de laisser l'erreur
+ * d'upload (déjà journalisée avec son contexte) trancher le reste.
+ *
+ * **Ne lève jamais et ne rejette jamais.** Le stockage d'avatars est
+ * accessoire : il ne doit pas pouvoir empêcher le serveur de démarrer. Même
+ * garde-fou que la sonde Sentry de `instrument.ts`.
+ */
+export async function verifyAvatarStorage(): Promise<void> {
+  // Non configuré, ou configuré à moitié : le bloc de diagnostic l'a déjà dit
+  // et il n'y a rien à sonder. Se taire ici évite deux lignes pour un seul fait.
+  if (!isAvatarStorageConfigured) return;
+
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), PROBE_TIMEOUT_MS);
+
+  try {
+    await s3().send(new HeadBucketCommand({ Bucket: BUCKET }), { abortSignal: abort.signal });
+    logger.info(
+      { bucket: BUCKET, endpoint: ENDPOINT },
+      '[avatarStorage] ✅ R2 joignable — HeadBucket OK',
+    );
+  } catch (err: any) {
+    // `status` désambiguïse le diagnostic, là où « Access Denied » seul ne dit
+    // rien : 403 → identifiants ou jeton mal scopé · 404 → bucket absent de ce
+    // compte · 401 → compte injoignable · aucun statut → DNS, réseau, ou délai
+    // dépassé (`timedOut`).
+    logger.error(
+      r2ErrorContext(err, { timedOut: abort.signal.aborted }),
+      '[avatarStorage] ⚠️ R2 INJOIGNABLE — les avatars repartent en base64 dans Postgres, sans autre signal',
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**

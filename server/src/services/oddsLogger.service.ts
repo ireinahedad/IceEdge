@@ -60,7 +60,21 @@ async function isSeasonActive(): Promise<boolean> {
     const res = await fetch(
       `https://api.the-odds-api.com/v4/sports?apiKey=${process.env.ODDS_API_KEY}`,
     );
-    if (!res.ok) return true;
+    if (!res.ok) {
+      // Le repli reste inchangé — mieux vaut une passe inutile qu'une saison
+      // ratée. Mais un 401/403 n'est pas un incident transitoire : c'est une
+      // clé morte, et sans cette ligne elle ne se manifesterait qu'au premier
+      // jour de matchs, en `[OddsLogger] échec` sans cause désignée.
+      // ⚠️ On ne journalise QUE le statut : l'URL ci-dessus porte la clé en
+      // clair dans sa query string et ne doit jamais être écrite dans un log.
+      if (res.status === 401 || res.status === 403) {
+        logger.error(
+          { status: res.status },
+          '[OddsLogger] ⚠️ ODDS_API_KEY REFUSÉE par The Odds API — collecte et proxy hors service',
+        );
+      }
+      return true;
+    }
     const sports = (await res.json()) as Array<{ key: string; active: boolean }>;
     const nhl = sports.find((s) => s.key === 'icehockey_nhl');
     const active = nhl?.active !== false;
@@ -68,6 +82,69 @@ async function isSeasonActive(): Promise<boolean> {
     return active;
   } catch {
     return true;
+  }
+}
+
+/** La sonde de démarrage ne doit pas retarder l'écoute du serveur. */
+const KEY_PROBE_TIMEOUT_MS = 5_000;
+
+/**
+ * Sonde de démarrage : la clé The Odds API est-elle encore acceptée ?
+ *
+ * **Pourquoi elle existe.** Trois contrôles prétendaient couvrir cette clé et
+ * aucun ne testait sa validité : la bannière `[Server] Réglages effectifs`
+ * imprime `ODDS_API_KEY: présente` sur la seule présence de la variable,
+ * `startOddsLogger()` teste exactement la même chose, et `isSeasonActive()`
+ * répond « en saison » sur n'importe quel échec. Une clé révoquée passait donc
+ * au vert au démarrage et ne se manifestait qu'au premier jour de matchs —
+ * jusqu'à quatre mois plus tard si la révocation tombait hors saison. C'est le
+ * défaut corrigé côté R2 par `verifyAvatarStorage()`, dont cette fonction
+ * reprend la forme et les trois issues distinctes.
+ *
+ * **Elle est gratuite** : `/v4/sports` est explicitement hors quota côté
+ * fournisseur (cf. `isSeasonActive`). Lancée sans `await` depuis `server.ts` :
+ * elle ne doit ni retarder l'écoute, ni pouvoir empêcher le démarrage.
+ *
+ * ⚠️ **Sécurité.** L'URL porte la clé en clair dans sa query string. Ne jamais
+ * journaliser l'URL, l'erreur brute, ni `err.cause` — uniquement le statut HTTP
+ * et le nom de l'erreur, qui ne peuvent pas la contenir.
+ */
+export async function verifyOddsApiKey(): Promise<void> {
+  // Absente : la bannière de démarrage le dit déjà, et il n'y a rien à sonder.
+  if (!process.env.ODDS_API_KEY) return;
+
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), KEY_PROBE_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(
+      `https://api.the-odds-api.com/v4/sports?apiKey=${process.env.ODDS_API_KEY}`,
+      { signal: abort.signal },
+    );
+
+    if (res.ok) {
+      logger.info('[OddsLogger] ✅ ODDS_API_KEY acceptée par The Odds API');
+    } else if (res.status === 401 || res.status === 403) {
+      logger.error(
+        { status: res.status },
+        '[OddsLogger] ⚠️ ODDS_API_KEY REFUSÉE — clé révoquée, expirée, ou absente de ce compte. '
+          + 'La collecte de cotes et le proxy /api/odds sont hors service.',
+      );
+    } else {
+      logger.warn(
+        { status: res.status },
+        '[OddsLogger] ODDS_API_KEY non vérifiable — réponse inattendue de The Odds API',
+      );
+    }
+  } catch (err: any) {
+    // Réseau, DNS, ou délai dépassé : on ne peut pas conclure, et surtout pas
+    // conclure à une clé morte. Non concluant n'est pas rouge.
+    logger.warn(
+      { err: err?.name, timedOut: abort.signal.aborted },
+      '[OddsLogger] ODDS_API_KEY non vérifiable — The Odds API injoignable au démarrage',
+    );
+  } finally {
+    clearTimeout(timer);
   }
 }
 

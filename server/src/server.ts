@@ -9,7 +9,8 @@ import { initSocket, io } from './socket';
 import { startSettlementJob } from './services/settlement.service';
 import { startValueBetScan } from './services/valueBetScan.service';
 import { startCleanupJob } from './services/cleanup.service';
-import { startOddsLogger } from './services/oddsLogger.service';
+import { startOddsLogger, verifyOddsApiKey } from './services/oddsLogger.service';
+import { verifyAvatarStorage } from './services/avatarStorage';
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -17,9 +18,10 @@ const PORT = Number(process.env.PORT) || 3001;
 const SHUTDOWN_TIMEOUT_MS = Number(process.env.SHUTDOWN_TIMEOUT_MS) || 10_000;
 
 // Mode veille (hors-saison NHL) : DORMANT=true démarre l'API normalement mais
-// sans aucun job de fond. Neon suspend son compute après 5 min d'inactivité et
-// le plan gratuit ne couvre que 100 CU-heures/mois ; hors saison, les jobs
-// périodiques réveillent la base pour ne rien trouver. Ce n'est pas zéro
+// sans aucun job de fond. Neon suspend son compute après 5 min d'inactivité, et
+// le projet est sur le plan Launch : aucune allocation incluse, 0,106 $/CU-heure
+// facturée sans plafond dur. Hors saison, les jobs périodiques réveillent donc
+// la base pour ne rien trouver, et chaque réveil se paie. Ce n'est pas zéro
 // compute — une requête utilisateur réveille toujours la base — mais c'est zéro
 // réveil programmé. Voir DEPLOYMENT.md § « Budget compute ».
 const DORMANT = process.env.DORMANT === 'true';
@@ -68,11 +70,25 @@ const DORMANT = process.env.DORMANT === 'true';
         NHL_USE_MOCK:   process.env.NHL_USE_MOCK === 'true',
         NHL_TIMEOUT_MS: Number(process.env.NHL_TIMEOUT_MS) || 8_000,
         ML_DISABLED:    process.env.ML_DISABLED === 'true',
-        ODDS_API_KEY:   process.env.ODDS_API_KEY ? 'présente' : 'ABSENTE (proxy → [])',
+        ODDS_API_KEY:   process.env.ODDS_API_KEY ? 'présente (validité vérifiée par verifyOddsApiKey)' : 'ABSENTE (proxy → [])',
         API_RATE_LIMIT: process.env.API_RATE_LIMIT ?? 'défaut',
       },
       '[Server] Réglages effectifs',
     );
+
+    // Sonde R2 : un appel réseau réel, parce que la ligne « R2 configuré » ne
+    // vérifie que la présence des variables. Sans elle, un bucket injoignable
+    // se traduit seulement par des avatars qui repartent en base64 — un repli
+    // volontairement silencieux, donc indébogable. Lancée sans `await` : elle
+    // ne doit ni retarder l'écoute ni pouvoir empêcher le démarrage.
+    void verifyAvatarStorage();
+
+    // Sonde The Odds API : même raison que ci-dessus, appliquée à la clé de
+    // cotes. La ligne `ODDS_API_KEY: présente` du bloc au-dessus ne teste que
+    // la présence de la variable ; une clé révoquée y passerait au vert et ne
+    // se manifesterait qu'au premier jour de matchs. La sonde est gratuite
+    // (`/v4/sports` est hors quota) et, comme l'autre, lancée sans `await`.
+    void verifyOddsApiKey();
   });
 
   registerGracefulShutdown(httpServer);

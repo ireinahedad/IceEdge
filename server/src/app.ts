@@ -174,8 +174,9 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 //
 // Le résultat du SELECT 1 est mis en cache : Neon suspend son compute après
 // 5 min d'inactivité, donc une sonde qui interroge la base toutes les 1-5 min
-// l'empêche à elle seule de dormir — et le plan gratuit ne compte que
-// 100 CU-heures/mois (~400 h à 0,25 CU), soit moins qu'un mois calendaire.
+// l'empêche à elle seule de dormir. Sur le plan Launch (celui du projet), ça ne
+// suspend rien : ça facture 0,106 $/CU-heure sans plafond, soit ~19 $/mois pour
+// une base allumée 24/7 à 0,25 CU.
 // Un TTL supérieur à la fenêtre de suspension retire la sonde de l'équation.
 // Contrepartie assumée : une panne DB pendant une période sans trafic peut
 // mettre jusqu'à READINESS_DB_TTL_MS à apparaître sur le monitoring. Les
