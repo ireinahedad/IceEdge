@@ -1,6 +1,6 @@
 # ARAKICE / ICEEDGE — Ce qui reste
 
-**Créé le 2026-08-10 · mis à jour le 2026-08-30.**
+**Créé le 2026-08-10 · mis à jour le 2026-08-31.**
 
 > **Élagué le 2026-08-30.** Tout ce qui était clos ET sans leçon a été retiré
 > (B7, B8, B9, le détail Sentry, le lot `npm audit`, le §7 soldé, la ligne 7 bis
@@ -77,6 +77,22 @@ il est conservé comme trace, il n'a plus rien à piloter.
 > le §4 QA, la décision des 59 $ du §2, l'essai Sentry qui expire vers le
 > 12 septembre. *(Le § « Budget compute » de `MONITORING.md` / `DEPLOYMENT.md`
 > a été corrigé le 2026-08-30 — voir plus bas.)*
+>
+> **Point du 2026-08-31 : le compte Google est toujours inaccessible.** Décision
+> prise ce jour : **on tient la date butoir**, on ne bascule pas en avance. Ce
+> qui a été fait à la place, parce que c'est valable dans les deux branches :
+> l'**étape 1 est terminée** — origines relevées, zone lue enregistrement par
+> enregistrement, table de correction écrite (§ « Étape 1 de la bascule »). Il ne
+> reste qu'une valeur inconnue, la cible CNAME de Railway.
+>
+> ⚠️ **Et le relevé du jour a montré que la production écrit toujours ses avatars
+> dans l'ANCIEN R2**, pas dans celui qui a été refait le 2026-08-29
+> (§ « Ce que les logs du conteneur en cours disent »). **Décision du même
+> jour : on l'y laisse**, jusqu'à confirmation — et non supposition — de la
+> perte d'accès au compte d'origine. Le jeton R2 ne passe pas par la connexion
+> Google, il continue de fonctionner. Le prix à payer est connu : chaque avatar
+> téléversé d'ici la bascule sera un orphelin non supprimable le jour où
+> `R2_PUBLIC_URL` changera.
 
 Rien ici ne demande de conception ; tout demande **ta machine ou une console**.
 
@@ -251,6 +267,184 @@ version, pas avant.
 (`ML_SERVICE_URL=${{ …RAILWAY_PUBLIC_DOMAIN }}`) : ça exposerait publiquement le
 service ML, l'exact inverse du §3 de `DEPLOYMENT.md`.
 
+### Étape 1 de la bascule — faite le 2026-08-31
+
+Ce que le § précédent laissait « faisable tout de suite, dans les deux branches »
+est fait : origines relevées chez Vercel et Railway, zone du nouveau compte lue
+enregistrement par enregistrement, résolution mesurée depuis l'extérieur.
+**Rien n'a été modifié** — ni chez Vercel, ni chez Railway, ni dans la zone.
+
+**Le diagnostic du 2026-08-29 est confirmé, et il est plus large qu'écrit.**
+
+| Mesure | Résultat |
+|---|---|
+| Résolution de `arakice.com`, `www.arakice.com` **et `api.arakice.com`** | les trois rendent les **mêmes** `104.21.56.11` / `172.67.175.172` et `2606:4700:3035::6815:380b` / `::ac43:afac` |
+| Vercel → projet `ice-edge` → Domains | `arakice.com` et `www.arakice.com` marqués **« Proxy Detected »** |
+| Railway → `IceEdge` → Networking | `api.arakice.com` marqué **« Cloudflare proxy detected »** |
+| Serveurs de noms qui font autorité | `gerardo` / `serenity.ns.cloudflare.com` — l'ancien compte |
+
+Le document ne déduisait le point que pour l'apex. Les **trois** noms sont
+concernés, et les deux hébergeurs le disent chacun de son côté : le proxy du
+compte perdu est devant la **totalité** du produit, front et API. Confirmé aussi
+par les en-têtes `cf-connecting-ip` / `cf-ray` reçus par le serveur Railway.
+
+**Les 13 enregistrements de la zone en attente, relevés tels quels.** Les douze
+premiers portent les IP anycast de l'ancien proxy et sont **tous « Proxied »** :
+
+| Nom | Type | Contenu | Proxy |
+|---|---|---|---|
+| `arakice.com` | A ×2 | `104.21.56.11` · `172.67.175.172` | Proxied |
+| `www.arakice.com` | A ×2 | `104.21.56.11` · `172.67.175.172` | Proxied |
+| `api.arakice.com` | A ×2 | `104.21.56.11` · `172.67.175.172` | Proxied |
+| `arakice.com` | AAAA ×2 | `2606:4700:3035::6815:380b` · `::ac43:afac` | Proxied |
+| `www.arakice.com` | AAAA ×2 | idem | Proxied |
+| `api.arakice.com` | AAAA ×2 | idem | Proxied |
+| `arakice.com` | TXT | `google-site-verification=xWIbjFinrXaZ…` | DNS only |
+
+**Ce qu'il faut poser à la place — et pourquoi ce ne sont pas des A.**
+
+| Nom | Type | Contenu | Proxy |
+|---|---|---|---|
+| `arakice.com` | CNAME | `cname.vercel-dns.com` | **DNS only** |
+| `www.arakice.com` | CNAME | `cname.vercel-dns.com` | **DNS only** |
+| `api.arakice.com` | CNAME | **cible Railway — seule valeur encore inconnue, voir plus bas** | **DNS only** |
+| `arakice.com` | TXT | inchangé | DNS only |
+
+Les **12 A/AAAA sont à supprimer**, pas à corriger : trois CNAME remplacent six
+noms d'enregistrement. Trois raisons, par ordre d'importance :
+
+1. **Vercel ne publie pas d'IP stable.** Mesuré le 2026-08-31 :
+   `cname.vercel-dns.com` rend `66.33.60.129` / `76.76.21.22`, alors que le
+   déploiement du projet (`ice-edge-hazel.vercel.app`) rend `216.198.79.67` /
+   `64.29.17.67`, et que la documentation cite encore `76.76.21.21`. Trois
+   générations de valeurs coexistent. Figer une IP dans la zone, c'est refaire
+   l'erreur qu'on est en train de réparer, avec une valeur juste au lieu d'une
+   fausse. Un CNAME suit Vercel tout seul.
+2. **Cloudflare aplatit les CNAME à l'apex** (*CNAME flattening*, actif d'office
+   à la racine). L'objection « l'apex ne peut pas être un CNAME » de
+   `DEPLOYMENT.md` §4 vise les hébergeurs DNS qui ne savent pas le faire ; elle
+   ne s'applique pas ici. **L'hôte canonique reste l'apex sans `www`** — rien à
+   changer côté code, et `www` garde sa redirection 308, déjà configurée chez
+   Vercel.
+3. **Aucun AAAA à écrire à la main** : la résolution suit le CNAME.
+
+⚠️ **Proxy sur « DNS only », et ce n'est pas un réglage de confort.** Vercel
+écrit qu'un proxy devant lui empêche ses protections DDoS et anti-bots de
+fonctionner ; Railway lève le même drapeau. Remettre Cloudflare devant Railway
+reste au programme (« reportés au lancement officiel », plus haut) — mais
+**après** la bascule, sciemment, et avec le mode SSL en *Full (strict)*.
+Basculer proxy allumé, ce serait recréer d'un coup l'état opaque dont on sort.
+
+🔴 **La seule valeur qui manque : la cible CNAME de `api.arakice.com` chez
+Railway.** Railway ne l'affiche **que** tant que l'enregistrement ne résout pas
+déjà vers lui ; aujourd'hui l'écran montre « Cloudflare proxy detected » à la
+place. À lire dans Railway → `IceEdge` → Settings → Networking **au moment de
+l'étape 2**, avant d'écrire le CNAME. **Ne pas la deviner** : le domaine généré
+du service, `arakice-production-6005.up.railway.app` (→ `69.46.46.43`), est une
+valeur *plausible et non vérifiée* — et c'est exactement ce genre de valeur
+plausible qui a rempli cette zone d'IP anycast.
+
+**Trois risques cherchés et écartés — ils n'auront pas à l'être deux fois.**
+L'ancienne zone, qui fait autorité aujourd'hui, a été interrogée directement :
+
+- **aucun MX, aucun SPF, aucun DKIM, aucun DMARC.** Le domaine ne reçoit ni
+  n'envoie de courrier : la bascule ne peut pas casser d'e-mail en silence, ce
+  qui est le premier accident classique d'un changement de serveurs de noms ;
+- **aucun CAA.** Rien n'empêchera Vercel, Railway ou Let's Encrypt d'émettre
+  leurs certificats après la bascule ;
+- **aucun autre sous-domaine** (`cdn`, `mail`, `ml`, `staging`, `blog`, `app`
+  testés : NXDOMAIN). Les 13 enregistrements importés sont donc **la zone
+  entière**, pas un échantillon — et `cdn.arakice.com` n'existe nulle part, il
+  sera créé de zéro à l'étape 5.
+
+⚠️ **Un fil à ne pas laisser pendre : le TXT `google-site-verification`.** Il
+prouve la propriété du domaine auprès d'un compte Google — vraisemblablement
+celui qui est perdu. **Le garder tel quel** (le supprimer ne rendrait rien),
+mais en tirer la question : si la propriété Search Console est rattachée à ce
+compte, alors le sitemap, la couverture d'indexation et les rapports des ~900
+pages générées sont derrière la même porte fermée. À vérifier depuis un compte
+Google accessible **avant** de conclure que le compte perdu ne coûte que le DNS
+et les avatars.
+
+### Ce que les logs du conteneur en cours disent — relevé du 2026-08-31
+
+Bannière de démarrage du conteneur **actif** (déploiement `7da21c2c`, commit
+`674b199`, démarré le 2026-08-30 15:43 GMT+8), relue en entier — la méthode
+imposée plus haut : ce que le processus *fait*, pas ce que le dashboard *dit*.
+
+**Vert, et vérifié :** `NHL_USE_MOCK: false` · `ML_DISABLED: false` ·
+`[Sentry] ✅ armé — tracesSampleRate=0.01` · `[OddsLogger] calendrier armé —
+slots: 6, creditsPerDay: 10` · `[OddsLogger] ✅ odds_snapshots présente` ·
+`[avatarStorage] ✅ R2 joignable — HeadBucket OK`. Les deux interrupteurs qui
+avaient déjà défait un contrôle en silence — `NHL_USE_MOCK` et `DORMANT` — sont
+toujours du bon côté.
+
+✅ **`ODDS_API_KEY` : refusée le matin, acceptée dans la foulée — clos le
+2026-08-31.** Le conteneur `7da21c2c` imprimait `[OddsLogger] ⚠️ ODDS_API_KEY
+REFUSÉE — clé révoquée, expirée, ou absente de ce compte. La collecte de cotes
+et le proxy /api/odds sont hors service.`, status 401, au démarrage **et à
+chaque créneau** (23:00, 05:00, 06:45, 07:45).
+
+**La cause n'était pas dans le code.** Le service `IceEdge` portait une
+modification de `ODDS_API_KEY` **saisie mais jamais déployée** : le bandeau
+« Apply 1 change / Deploy » était resté ouvert, et le processus tournait avec
+l'ancienne valeur. Le §6 affirmait que « `server/.env` comme Railway portent la
+nouvelle » — c'était vrai du champ de saisie, faux du processus.
+
+- [x] Modification déployée le 2026-08-31. **Conteneur `20f5b0ce`, démarré à
+      09:50 GMT+8 : `[OddsLogger] ✅ ODDS_API_KEY acceptée par The Odds API`**,
+      le reste de la bannière identique et vert. Déployer ne concluait pas ;
+      c'est cette ligne qui conclut, et elle est là.
+
+**Ce que la panne a coûté : rien.** Entre le 2026-08-30 15:43 et le 2026-08-31
+09:50, aucune cote n'a été archivée — mais on est hors saison, il n'y avait rien
+à archiver. **Le même incident en octobre aurait creusé un trou de dix-huit
+heures dans `odds_snapshots`**, sans une erreur ailleurs que dans cette ligne et
+sans qu'aucune alerte ne se déclenche.
+
+> ⚠️ **La leçon, et c'est la quatrième fois.** Après `NHL_USE_MOCK`, `DORMANT`
+> et `[avatarStorage] R2 actif` : **une valeur saisie n'est pas une valeur en
+> service.** Railway met les modifications de variables en attente derrière un
+> bouton ; tant qu'il n'est pas pressé, le dashboard montre la nouvelle valeur
+> et le processus utilise l'ancienne. Un écran vert de plus qui ne prouve rien.
+
+🔴 **Le même relevé a trouvé autre chose : la production écrit dans l'ANCIEN
+R2.** La sonde imprime son endpoint et son URL publique, et ce ne sont pas ceux
+du bucket refait le 2026-08-29 : l'endpoint porte l'identifiant de compte
+`2216e2d9…`, pas `bf7c6f89…`, et l'URL publique est `pub-9cbc747d…r2.dev`, pas
+le `pub-92ed72f7…` cité plus haut. Les quatre variables R2 n'ont donc jamais été
+changées — c'est cohérent, elles sont gelées — mais il faut en tirer les deux
+conséquences :
+
+1. **`HeadBucket ✅` prouve que l'ancien bucket répond encore, pas que le nouveau
+   est branché.** La sonde a été écrite pour distinguer « configuré » de
+   « joignable » ; elle ne distingue pas « joignable » de « le bon ».
+2. **Chaque avatar téléversé d'ici la bascule atterrit dans l'ancien compte**, où
+   il deviendra un orphelin non supprimable dès que `R2_PUBLIC_URL` changera.
+
+**Décision du 2026-08-31 : on garde l'ancien R2 en service**, jusqu'à ce que la
+perte d'accès au compte d'origine soit **confirmée** et non seulement supposée.
+Trois choses à savoir pour que ce choix reste tenable :
+
+- **Il tient techniquement.** Le jeton d'API R2 ne passe pas par la connexion
+  Google : il continuera de fonctionner tant que personne ne le révoque et que
+  le compte n'est pas supprimé. `HeadBucket ✅` le vérifie à chaque démarrage —
+  c'est la meilleure sonde de survie qu'on ait sur ce compte, autant la lire
+  comme telle.
+- **Ce qu'on ne peut plus faire dessus, en revanche :** révoquer ou faire tourner
+  ce jeton, changer une politique du bucket, lire la facturation, réagir à un
+  dépassement de palier. **L'alerte de budget à 1 $ posée le 2026-08-29 est sur
+  le NOUVEAU compte** : elle ne surveille pas ce bucket-ci. Le seul poste du
+  tableau B6 encore ouvert l'est donc doublement.
+- **Le compteur d'orphelins tourne pendant ce temps.** Ce n'est pas une raison
+  de basculer tout de suite ; c'en est une de ne pas laisser la confirmation
+  traîner.
+
+⚠️ **Une échéance de plus, notée au passage** (même famille que l'avertissement
+`pg` ci-dessus) : le conteneur tourne sur **node v20.20.2**, et le SDK AWS v3 —
+celui qui parle à R2 — **exigera node ≥ 22 pour ses versions publiées après
+début janvier 2027**. Rien à faire maintenant ; tout à faire avant cette date.
+
 ### B7 — clos le 2026-08-29 : Sentry est armé des deux côtés
 
 `SENTRY_DSN` est posée sur les **deux** services Railway. Organisation `arakice`,
@@ -329,7 +523,7 @@ deux côtés.
 | **A3** — outillage CLV | ✅ **Livré.** Mode `--clv` avec placebo, dissection et « ROI clôture ». Table `odds_snapshots` (migration 031). |
 | **A3** — mesure moneyline et totaux | ✅ **Faite le 2026-08-23.** Résultats ci-dessous. |
 | **A3** — mesure puck line | ⛔ **Impossible sur l'historique** : SBRO ne donne qu'un prix de puck line par match, pas de paire ouverture/clôture. |
-| **A1bis** — collecte live gratuite | ✅ **En service depuis le 2026-08-29.** Migrations, variables et sondes posées et vérifiées. Reste **un seul contrôle**, à la pré-saison. |
+| **A1bis** — collecte live gratuite | ✅ **En service, revérifié le 2026-08-31.** Panne de 18 h les 30-31 août (`ODDS_API_KEY` refusée, 401) refermée par le déploiement de la clé ; hors saison, rien de perdu. Reste **un seul contrôle**, à la pré-saison. |
 | **S4** — servir le moneyline depuis le modèle de score | 🔸 **Livré et déployé**, sauf ⑤ (suppression du classifieur) et le correctif de calibration γ, tous deux reportés sciemment. |
 | **A1** — backfill payant | ⏸️ **En attente de ta décision.** Le code est prêt et borné. |
 | **A2** — règle puck line | ⏸️ Figée et falsifiable, non évaluable avant A1 ou une saison de collecte live. |
@@ -537,7 +731,23 @@ sources que la comparaison est censée détecter. Le défaut du script est `us`.
 
 ---
 
-### A1bis — en service. Un seul contrôle reste.
+### A1bis — en service, revérifié le 2026-08-31. Un seul contrôle reste.
+
+> ⚠️ **Deuxième démenti de cette section — refermé le jour même.** Le
+> 2026-08-31 au matin, le calendrier était bien armé (`slots: 6,
+> creditsPerDay: 10`) et `odds_snapshots` bien présente, mais **`ODDS_API_KEY`
+> était refusée en production** : 401 au démarrage et à chaque créneau depuis le
+> 2026-08-30 15:43. Chaque passe repartait les mains vides — A1bis était
+> *déployé* sans être *en service*. La cause n'était pas dans le code mais dans
+> une variable Railway saisie et jamais déployée ; une fois déployée, le
+> conteneur `20f5b0ce` rend `[OddsLogger] ✅ ODDS_API_KEY acceptée par The Odds
+> API`. Détail et leçon au §1, « Ce que les logs du conteneur en cours disent ».
+>
+> **Ce qu'il faut en retenir pour la pré-saison :** la panne a duré dix-huit
+> heures sans qu'aucune alerte ne se déclenche — seule la relecture de la
+> bannière l'a montrée. Le contrôle du 22 septembre doit donc **commencer** par
+> cette ligne, avant même de regarder `passes_today`.
+
 
 > ⚠️ **Correction du 2026-08-29, quelques heures après le paragraphe ci-dessous.**
 > Ce paragraphe affirmait la mise en service « terminée », bannière vue en prod à
@@ -887,18 +1097,26 @@ les points encore vivants.
 
 ### Reste à faire
 
-- [ ] 🔴 **Commiter `.github/workflows/ci.yml`.** Le lot du 2026-08-30 a été
-      validé, déployé et poussé (`528b844`) — **mais `ci.yml` est resté sur le
-      disque**, jamais commité. Le correctif gitleaks, celui qui protège
-      l'avenir, n'a donc pas quitté la machine et le trou est toujours ouvert
-      côté GitHub. C'est le seul reste de ce lot.
+✅ **Lot sécurité du 2026-08-30 : commité et poussé en entier.** Le code dans
+`528b844`, puis `ci.yml` et les documents dans `674b199` — ce dernier avait
+d'abord été oublié, noyé dans les 60 fichiers de bruit CRLF au moment de choisir
+quoi ajouter. C'est précisément ce que le réflexe `--ignore-all-space` du §4 sert
+à éviter.
 
-- [ ] **Vérifier la sonde dans les logs Railway du conteneur courant.** La ligne
-      attendue est `[OddsLogger] ✅ ODDS_API_KEY acceptée par The Odds API`.
-      Déployer ne suffit pas à conclure : c'est tout l'objet de la sonde, et le
-      document a déjà été démenti deux fois par un contrôle qu'il croyait fait
-      (`DORMANT`, `[avatarStorage] R2 actif`). **Une mesure porte une date, pas
-      un état.**
+> **La preuve reste à venir, et elle est gratuite :** le premier déclenchement du
+> job `Secret scan — gitleaks` sur une poussée vers `master` — celle-ci — est ce
+> qui établit que le correctif marche. Jusque-là, on sait seulement que le
+> fichier est correct, pas que GitHub l'exécute.
+
+✅ **Sonde relue, corrigée et vérifiée verte — clos le 2026-08-31.** Elle a
+d'abord répondu **rouge** (`[OddsLogger] ⚠️ ODDS_API_KEY REFUSÉE`, 401) : la clé
+était bien régénérée, mais la nouvelle valeur était restée **en attente** sur
+Railway derrière le bouton « Deploy », et le processus tournait avec l'ancienne.
+Une fois la modification déployée, le conteneur `20f5b0ce` imprime
+`[OddsLogger] ✅ ODDS_API_KEY acceptée par The Odds API`. Détail et leçon au §1,
+« Ce que les logs du conteneur en cours disent ». **La sonde a fait exactement
+son travail** — sans elle, la collecte serait restée muette jusqu'au
+22 septembre.
 
 - [ ] **Découpage > 500 lignes**, si on le poursuit :
 
