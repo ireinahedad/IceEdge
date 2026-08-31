@@ -2,7 +2,7 @@ import 'dotenv/config';
 import './instrument'; // Sentry — must load before app + its dependencies
 import { createServer } from 'http';
 import type { Server as HttpServer } from 'http';
-import app from './app';
+import app, { devRoutesEnabled } from './app';
 import { logger } from './logger';
 import { pool, connectDB } from './db/connection';
 import { initSocket, io } from './socket';
@@ -11,6 +11,7 @@ import { startValueBetScan } from './services/valueBetScan.service';
 import { startCleanupJob } from './services/cleanup.service';
 import { startOddsLogger, verifyOddsApiKey } from './services/oddsLogger.service';
 import { verifyAvatarStorage } from './services/avatarStorage';
+import { allowedOrigins } from './cors';
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -72,6 +73,15 @@ const DORMANT = process.env.DORMANT === 'true';
         ML_DISABLED:    process.env.ML_DISABLED === 'true',
         ODDS_API_KEY:   process.env.ODDS_API_KEY ? 'présente (validité vérifiée par verifyOddsApiKey)' : 'ABSENTE (proxy → [])',
         API_RATE_LIMIT: process.env.API_RATE_LIMIT ?? 'défaut',
+        // Les quatre du préflight B4 (`QA_TEST_PLAN.md`, § Runbooks B4). Même
+        // critère que les lignes ci-dessus : chacune casse quelque chose en
+        // silence, et aucune ne se voit dans une réponse HTTP.
+        NODE_ENV:       process.env.NODE_ENV ?? 'non posé (⇒ cookie de refresh sans Secure)',
+        // La liste RÉSOLUE, pas la variable : c'est elle que `isAllowedOrigin`
+        // compare par égalité de chaîne, slash final et casse compris.
+        CORS_ORIGIN:    allowedOrigins,
+        EMAIL_VERIFICATION_DISABLED: process.env.EMAIL_VERIFICATION_DISABLED === 'true',
+        ENABLE_DEV_ROUTES: devRoutesEnabled ? 'routes /api/dev MONTÉES' : 'routes /api/dev NON montées',
       },
       '[Server] Réglages effectifs',
     );

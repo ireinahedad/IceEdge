@@ -142,7 +142,11 @@ app.use('/api/push',          noStore, pushRoutes);
 // gated behind authenticate + requireRole('admin'), the router is not mounted
 // at all in production unless explicitly opted in via ENABLE_DEV_ROUTES=true.
 // This removes the attack surface entirely in a normal prod deployment.
-const devRoutesEnabled =
+// Exporté pour la bannière `[Server] Réglages effectifs` : le préflight des
+// runbooks B4 (`QA_TEST_PLAN.md`) a besoin de la valeur EFFECTIVE, pas de la
+// variable brute. Un routeur non monté répond 404, ce qui se lit à tort comme
+// « la route est cassée » — une seule définition, deux lecteurs.
+export const devRoutesEnabled =
   process.env.NODE_ENV !== 'production' || process.env.ENABLE_DEV_ROUTES === 'true';
 if (devRoutesEnabled) {
   app.use('/api/dev',         noStore, devRoutes);
