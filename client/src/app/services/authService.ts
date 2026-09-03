@@ -67,7 +67,7 @@ export async function authedFetch(path: string, init: RequestInit = {}): Promise
  * A failure clears the session, which now notifies the auth context (R3.8):
  * before that, the tokens were dropped but the UI kept rendering 401s.
  */
-async function tryRefresh(): Promise<boolean> {
+async function doRefresh(): Promise<boolean> {
   try {
     const refresh = await tokenStore.getRefresh();
 
@@ -90,6 +90,40 @@ async function tryRefresh(): Promise<boolean> {
     await tokenStore.clear();
     return false;
   }
+}
+
+/**
+ * R3bis.1 — one refresh at a time, however many callers ask.
+ *
+ * `authedFetch` is called concurrently (a page load fires `/users/me` and
+ * `/subscription/me` together). With an expired access token each of them takes
+ * a 401 and each used to call the refresh independently: one 401 produced three
+ * `POST /auth/refresh`, observed in production on 2026-09-03.
+ *
+ * That matters more than the wasted requests. The server rotates on every
+ * refresh, and its rotation is a SELECT followed by an UPDATE rather than one
+ * atomic statement (`auth.service.ts`), so the concurrent callers all pass the
+ * `revoked=FALSE` check and one refresh token becomes three — each valid for
+ * 7 to 30 days, two of them orphaned but live. Coalescing here is also what
+ * makes the server side safe to fix later: the day that rotation becomes
+ * atomic, the extra callers would get a 401, and `doRefresh` answers a 401 by
+ * clearing the session. Without this, hardening the server would sign users out
+ * on every silent refresh. See PRE_IOS_PLAN.md R3bis.
+ *
+ * Not covered, deliberately: two browser tabs each coalesce their own callers
+ * but not each other, and a caller whose 401 lands just after a refresh settled
+ * starts a second one instead of retrying with the token it could now read.
+ * Both need the server-side grace window (R3bis.2), not more client state.
+ */
+let inFlightRefresh: Promise<boolean> | null = null;
+
+function tryRefresh(): Promise<boolean> {
+  // `doRefresh` is async, so it cannot settle before this assignment lands —
+  // the `.finally()` that clears the slot always runs on a later tick.
+  if (!inFlightRefresh) {
+    inFlightRefresh = doRefresh().finally(() => { inFlightRefresh = null; });
+  }
+  return inFlightRefresh;
 }
 
 // --- Auth API calls ---------------------------------------------------------
