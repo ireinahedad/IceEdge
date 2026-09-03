@@ -541,8 +541,9 @@ the old UI rendering 401s.
 
 ## ▶ RESUME HERE — state as of 2026-09-03
 
-Everything up to and including R4.2d is done. Start a new session by reading this
-block, then the R4 section below.
+Everything up to and including R4.2g is done — the server half of R4 is finished
+except the admin queue (R4.2h). Start a new session by reading this block, then
+the R4 section below.
 
 ### Shipped and verified in production
 R7 (`2cc2ce4`), R2 + R3 (`551aca0`), R3bis.1 the refresh gate (`d6353d8`).
@@ -553,19 +554,26 @@ logout, Google, 30-day `Max-Age`, chat socket at 101.
 ### Committed
 `e39f648` R4.2a/b — the filter, wired into `sendMessage()`, plus the dry-run script.
 `e6e93a2` R4.2c + R4.2d — report endpoint and auto-hide.
+`<R4.2efg>` R4.2e + R4.2f + R4.2g — block endpoints, filtered reads, socket note.
 Server: 201 tests green, `tsc --noEmit` clean. Migration 032 is committed
 (`cf6110c`) **and applied to Neon** (confirmed 2026-09-03).
 
-### The next task is R4.2e
-`POST /users/:userId/block`, `DELETE /users/:userId/block`, `GET /users/me/blocks`
-in `user.routes.ts`. Then f (filtered reads — the item that finally makes both
-`hidden_at` and the block list visible on screen), then g and h.
-Put the logic in a service, not the route — see R4.2b for why.
+### The next task is R4.2h, then the whole of R4.3 (client)
+`GET /api/dev/reports` + `POST /api/dev/reports/:id` in `dev.routes.ts`, which is
+already `requireRole('admin')`. After that the server is done and everything left
+is client work — and **none of R4 is visible to a user until R4.3 ships**: today
+you can block someone with `curl` and it works, but no screen offers the button.
 
-⚠️ **`hidden_at` is written but nothing reads it yet.** A message hidden by three
-reporters today is still delivered by `GET /rooms/:roomId/messages` and by the
-socket. R4.2f is what closes that gap, and until it lands the auto-hide is
-bookkeeping, not moderation. Do not demo the report flow before f.
+⚠️ **Live socket messages are still unfiltered** (R4.2g, deliberate). History is
+filtered in SQL; the real-time path is not, and R4.3d is what filters it in the
+client. A blocked person's message still reaches the blocker's browser — it is
+just never rendered.
+
+⚠️ **Pre-existing, found while writing R4.2f, NOT fixed:** `getMessages()` ends
+with `ORDER BY m.sent_at ASC LIMIT 100`, which returns the **oldest** hundred
+messages in the room, not the newest. Any room past a hundred messages shows its
+opening history forever and never the current conversation. Untouched here on
+purpose — it is not R4, and fixing it changes what every chat user sees.
 
 ### Facts about this environment that will save you an hour
 - **Nothing applies migrations automatically.** No `railway.json`, no Procfile, no
@@ -769,16 +777,43 @@ deletion gracefully — which matters once you build the delete-account flow (`A
       ⚠️ Threshold 3 is brigadable by three colluding accounts. That is the accepted price of
       hiding without a human in the loop — which is why the hide is reversible and why the
       admin queue (R4.2h) has to actually be read.
-- [ ] **R4.2e** `POST /users/:userId/block`, `DELETE /users/:userId/block`,
-      `GET /users/me/blocks` in `user.routes.ts`.
-- [ ] **R4.2f** Filter reads: `GET /rooms/:roomId/messages` (`chat.routes.ts:134`) excludes
-      messages where `hidden_at IS NOT NULL` **or** the author is in the caller's block list.
-      One `LEFT JOIN user_blocks` — do it in SQL, not in JS.
-- [ ] **R4.2g** **Socket path**: `chat.routes.ts` broadcasts with
-      `io.to(roomId).emit('new_message', msg)` to the whole room, so the server cannot filter
-      per-recipient there without extra work. For v1, filter client-side in `useChatSocket`
-      against the block list (see R4.3d). Document the choice — a reviewer will not see it,
-      but future-you will wonder.
+- [x] **R4.2e ✅ 2026-09-03** `POST /users/:userId/block`, `DELETE /users/:userId/block`,
+      `GET /users/me/blocks` in `user.routes.ts`; logic in `user.service.ts`.
+
+      ⚠️ These routes deliberately carry **no `requireOwnerOrAdmin`**. `:userId` is the
+      *target* of the block, not the owner of the resource — the middleware would mean "you
+      may only block yourself". The blocker is always `req.user.sub`, never a client value.
+      Anyone reading this file will want to "fix" that omission; this is the note that says
+      not to.
+
+      Both writes are idempotent: blocking twice keeps the first `created_at` (`DO NOTHING`,
+      not `DO UPDATE`), and unblocking something that was never blocked returns 204 rather
+      than 404 — Apple checks that a block is reversible, not that it complains. A non-UUID
+      `:userId` returns 404 instead of a Postgres 22P02 turned into a 500.
+
+      `GET /users/me/blocks` returns **only people the caller blocked**, never people who
+      blocked the caller. The hiding is symmetric; the list is not. "So-and-so blocked you"
+      is information no product hands out — it converts straight into harassment.
+- [x] **R4.2f ✅ 2026-09-03** — `getMessages()` now takes the viewer and filters in SQL:
+      `m.hidden_at IS NULL`, plus a `LEFT JOIN user_blocks` / `b.blocker_id IS NULL`
+      anti-join whose condition is symmetric (caller is blocker **or** blocked). One query,
+      no second round trip. `$2::uuid IS NOT NULL` short-circuits the whole join for a
+      signed-out guest — the explicit cast is required, Postgres cannot type a parameter that
+      only ever appears in a NULL comparison.
+
+      Filtering in JS after the fact would have been shorter and wrong: `LIMIT 100` applies
+      first, so blocking one chatty person would have returned emptier and emptier pages.
+
+      A hidden message disappears for **everyone, its own author included**. Hiding it from
+      others only is a shadow-ban: the author believes they are being read and has no reason
+      to correct anything.
+- [x] **R4.2g ✅ 2026-09-03** — documented at the broadcast site in `chat.routes.ts`, not
+      implemented, exactly as this plan intended. `io.to(roomId)` emits to the whole room;
+      per-recipient filtering would mean either one emit per socket carrying each viewer's
+      block list, or derived per-pair rooms with a cache to invalidate on every block. For a
+      chat room, the client filters instead (R4.3d). **The consequence to know:** a blocked
+      person's message still crosses the network to the blocker's browser. It is never
+      displayed, but it is not a server-side secret — unlike history, which is filtered in SQL.
 - [ ] **R4.2h** Admin moderation queue: `GET /api/dev/reports` + `POST /api/dev/reports/:id`
       (actioned | dismissed) in `dev.routes.ts`, which is already `requireRole('admin')`.
       Reuse `DevMLDashboard` shell for the UI. **You must actually read this queue** — Apple
@@ -816,8 +851,10 @@ test file. Until then, treat the three lines below as verified-once, not guarded
 - [~] Reporting the same message twice does not create a second row. *(proven in the sandbox)*
 - [~] 3 distinct reporters hides the message; a 4th report does not error. *(proven in the
       sandbox, including two simultaneous third reports)*
-- [ ] A blocked user's messages are absent from history **and** from live socket delivery.
-- [ ] Unblock restores visibility.
+- [~] A blocked user's messages are absent from history. *(proven in the sandbox, both
+      directions, plus no duplicate rows when the block is reciprocal)* **Live socket
+      delivery is NOT filtered server-side** — that is R4.3d, in the client.
+- [~] Unblock restores visibility. *(proven in the sandbox)*
 
 **Done when:** a second test account can post something, your account can report it, block
 that user, stop seeing them, unblock them, and see them again — all in the deployed web app,

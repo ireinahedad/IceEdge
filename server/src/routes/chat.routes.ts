@@ -149,6 +149,22 @@ router.post('/rooms/:roomId/messages', rateLimit('msg', 10, 10_000), async (req:
     const msg = await chatService.sendMessage(req.params.roomId, uid(req), { text, tag, replyTo });
     res.status(201).json(msg);
     // Broadcast to all clients in the room (real-time)
+    //
+    // ⚠️ R4.2g — ce broadcast N'EST PAS filtré par les blocages, et c'est un
+    // choix, pas un oubli. `io.to(roomId)` émet à la salle entière : filtrer par
+    // destinataire demanderait soit une émission par socket avec la liste de
+    // blocage de chacun, soit des salles dérivées par paire — deux fois plus de
+    // requêtes et un cache à invalider à chaque blocage, pour un salon de chat.
+    //
+    // Pour la v1, c'est le CLIENT qui filtre le direct contre la liste de
+    // blocage qu'il a déjà chargée (R4.3d). Conséquence à connaître : le message
+    // d'une personne bloquée traverse quand même le réseau jusqu'au navigateur
+    // de celui qui l'a bloquée — il n'est jamais affiché, mais ce n'est pas un
+    // secret gardé côté serveur. L'historique (R4.2f), lui, est filtré en SQL.
+    //
+    // Le jour où ça ne suffit plus : émettre depuis le serveur vers des sockets
+    // nommés plutôt que vers la salle, en gardant la liste de blocage en mémoire
+    // par connexion.
     try { io?.to(req.params.roomId).emit('new_message', msg); } catch { /* io not yet initialised */ }
   } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });

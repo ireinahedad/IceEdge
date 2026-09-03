@@ -26,6 +26,48 @@ router.get('/', requireRole('admin'), async (_req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------
+//  Blocage entre utilisateurs — R4.2e (Guideline 1.2)
+// -------------------------------------------------------
+//
+// Déclarées AVANT `/:id` : `/me/blocks` a deux segments et ne serait pas
+// capturée par `/:id` de toute façon, mais l'ordre rend la lecture sans piège
+// pour la prochaine route « me » que quelqu'un ajoutera.
+//
+// ⚠️ Pas de `requireOwnerOrAdmin` ici, et ce n'est pas un oubli : `:userId` est
+// la CIBLE du blocage, pas le propriétaire de la ressource. Le middleware
+// signifierait « tu ne peux bloquer que toi-même ». Le bloqueur est toujours
+// `req.user.sub`, jamais une valeur envoyée par le client.
+
+// GET /users/me/blocks — la liste que l'écran Réglages affiche
+router.get('/me/blocks', async (req: Request, res: Response) => {
+  try {
+    return res.json(await UserService.getBlockedUsers(req.user!.sub));
+  } catch (err: any) {
+    return res.status(err.status ?? 500).json({ error: err.message });
+  }
+});
+
+// POST /users/:userId/block — bloquer. Idempotent.
+router.post('/:userId/block', async (req: Request, res: Response) => {
+  try {
+    await UserService.blockUser(req.user!.sub, req.params.userId);
+    return res.status(204).send();
+  } catch (err: any) {
+    return res.status(err.status ?? 500).json({ error: err.message });
+  }
+});
+
+// DELETE /users/:userId/block — débloquer. Idempotent et silencieux.
+router.delete('/:userId/block', async (req: Request, res: Response) => {
+  try {
+    await UserService.unblockUser(req.user!.sub, req.params.userId);
+    return res.status(204).send();
+  } catch (err: any) {
+    return res.status(err.status ?? 500).json({ error: err.message });
+  }
+});
+
+// -------------------------------------------------------
 //  GET /users/:id
 // -------------------------------------------------------
 

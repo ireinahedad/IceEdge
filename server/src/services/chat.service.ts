@@ -275,8 +275,37 @@ export interface RoomMessages {
  * (`avatarUrl: avatars[userId] ?? null`) : le contrat des composants ne change
  * pas. La déduplication reste utile après la migration vers R2 — elle rend la
  * taille de la réponse indépendante du contenu de `avatar_url`.
+ *
+ * ── R4.2f — le filtrage vit en SQL, pas en JS ───────────────────────────────
+ *
+ * Deux exclusions, en une seule requête :
+ *
+ * 1. `m.hidden_at IS NULL` — les messages masqués par trois rapporteurs
+ *    (R4.2d) disparaissent pour TOUT LE MONDE, y compris leur auteur. Un
+ *    masquage visible uniquement des autres est un bannissement fantôme : celui
+ *    qui écrit croit être lu, et n'a aucune raison de se corriger.
+ *
+ * 2. L'anti-jointure sur `user_blocks` — un `LEFT JOIN` suivi de
+ *    `b.blocker_id IS NULL` garde les messages pour lesquels AUCUNE ligne de
+ *    blocage n'existe. La condition est symétrique : bloquer cache dans les deux
+ *    sens, donc on cherche « je suis bloqueur OU bloqué ». C'est cette seconde
+ *    moitié qui justifie `idx_user_blocks_blocked` (migration 032).
+ *
+ * `viewerId` vaut NULL pour un invité : `$2::uuid IS NOT NULL` court-circuite
+ * alors la jointure entière, et il ne reste que le filtre des masqués. Le cast
+ * explicite est obligatoire — sans lui Postgres ne sait pas typer un paramètre
+ * qui n'apparaît que dans une comparaison à NULL.
+ *
+ * Filtrer en JS après coup aurait été plus court et faux : `LIMIT 100`
+ * s'applique AVANT, donc bloquer un bavard aurait rendu des pages de moins en
+ * moins remplies.
+ *
+ * ⚠️ Ce qui n'est PAS filtré ici : les messages envoyés en direct par le socket
+ * (R4.2g). Le serveur diffuse à toute la salle et ne peut pas filtrer par
+ * destinataire sans réécrire la diffusion ; c'est le client qui s'en charge
+ * (R4.3d). L'historique et le direct n'ont donc pas la même garantie.
  */
-async function getMessages(roomId: string): Promise<RoomMessages> {
+async function getMessages(roomId: string, viewerId: string | null): Promise<RoomMessages> {
   const { rows } = await pool.query(
     `SELECT m.id, m.user_id AS "userId", m.username, m.display_name AS "displayName",
             m.avatar, m.tier, m.text, m.sent_at AS "sentAt", m.tag,
@@ -285,10 +314,16 @@ async function getMessages(roomId: string): Promise<RoomMessages> {
      FROM chat_messages m
      LEFT JOIN users u          ON u.id = m.user_id
      LEFT JOIN user_profiles up ON up.user_id = m.user_id
+     LEFT JOIN user_blocks b
+            ON $2::uuid IS NOT NULL
+           AND (   (b.blocker_id = $2::uuid AND b.blocked_id = m.user_id)
+                OR (b.blocked_id = $2::uuid AND b.blocker_id = m.user_id))
      WHERE m.room_id = $1
+       AND m.hidden_at IS NULL
+       AND b.blocker_id IS NULL
      ORDER BY m.sent_at ASC
      LIMIT 100`,
-    [roomId],
+    [roomId, viewerId],
   );
 
   const reactionsByMessage = await fetchReactions(rows.map((r) => String(r.id)));
@@ -363,7 +398,8 @@ export const chatService = {
   async getPublicRoomMessages(roomId: string) {
     const room = await getRoomRow(roomId);
     if (room.isPrivate) throw httpError('Sign in to view this private room', 401);
-    return getMessages(roomId);
+    // Invité : aucune liste de blocage, mais les messages masqués restent masqués.
+    return getMessages(roomId, null);
   },
 
   /** Look up a room by its join code (works for public and private). */
@@ -514,7 +550,7 @@ export const chatService = {
   /** Messages — private rooms require membership. */
   async getRoomMessages(roomId: string, userId: string) {
     await assertCanRead(roomId, userId);
-    return getMessages(roomId);
+    return getMessages(roomId, userId);
   },
 
   /** Send a message. Identity comes from the DB, never the client. */

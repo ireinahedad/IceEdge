@@ -110,6 +110,98 @@ export async function updatePassword(id: string, body: UpdatePasswordBody): Prom
 }
 
 // -------------------------------------------------------
+//  Blocage entre utilisateurs (R4.2e)
+// -------------------------------------------------------
+//
+// Le blocage est SYMÉTRIQUE : une seule ligne cache les messages dans les deux
+// sens. C'est la migration 032 qui porte ce choix, et l'index sur `blocked_id`
+// n'existe que pour la moitié « je suis le bloqué » de la lecture.
+//
+// Ces routes ne portent volontairement PAS `requireOwnerOrAdmin` : `:userId`
+// est la CIBLE du blocage, pas le propriétaire de la ressource. Le middleware y
+// signifierait « tu ne peux bloquer que toi-même », ce que le CHECK de la table
+// interdit de toute façon. Le bloqueur est toujours l'appelant authentifié,
+// jamais un identifiant venu du client.
+
+/** Un identifiant non-UUID ferait échouer Postgres en 22P02, donc en 500. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export interface BlockedUser {
+  id: string;
+  username: string;
+  displayName: string;
+  avatar: string;
+  avatarUrl: string | null;
+  createdAt: string;
+}
+
+/**
+ * Bloquer quelqu'un. Idempotent : bloquer deux fois n'est pas une erreur, et la
+ * date du premier blocage est conservée (`DO NOTHING`, pas `DO UPDATE`).
+ */
+export async function blockUser(blockerId: string, blockedId: string): Promise<void> {
+  if (!UUID_RE.test(blockedId)) {
+    throw Object.assign(new Error('User not found'), { status: 404 });
+  }
+  if (blockerId === blockedId) {
+    throw Object.assign(new Error('You cannot block yourself'), { status: 400 });
+  }
+
+  const { rowCount } = await pool.query(
+    'SELECT 1 FROM users WHERE id = $1 AND is_active = TRUE',
+    [blockedId],
+  );
+  if (!rowCount) {
+    throw Object.assign(new Error('User not found'), { status: 404 });
+  }
+
+  await pool.query(
+    `INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)
+     ON CONFLICT (blocker_id, blocked_id) DO NOTHING`,
+    [blockerId, blockedId],
+  );
+}
+
+/**
+ * Débloquer. Idempotent aussi, et silencieux si rien n'était bloqué : Apple
+ * vérifie qu'un blocage est réversible, pas qu'il proteste. Un 404 ici ne ferait
+ * qu'obliger le client à distinguer deux états qui donnent le même résultat.
+ */
+export async function unblockUser(blockerId: string, blockedId: string): Promise<void> {
+  if (!UUID_RE.test(blockedId)) return;
+  await pool.query(
+    'DELETE FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2',
+    [blockerId, blockedId],
+  );
+}
+
+/**
+ * La liste que l'écran « Utilisateurs bloqués » affiche (R4.3e).
+ *
+ * Ne rend QUE les gens que l'appelant a bloqués — jamais ceux qui l'ont bloqué.
+ * Le masquage est symétrique, mais la liste ne l'est pas : révéler « untel vous
+ * a bloqué » est une information qu'aucun produit ne donne, et qui se retourne
+ * immédiatement en harcèlement.
+ */
+export async function getBlockedUsers(blockerId: string): Promise<BlockedUser[]> {
+  const { rows } = await pool.query(
+    `SELECT u.id,
+            u.username,
+            COALESCE(up.display_name, u.first_name, u.username) AS "displayName",
+            COALESCE(up.avatar, '👤')                           AS avatar,
+            COALESCE(up.avatar_url, u.avatar_url)               AS "avatarUrl",
+            b.created_at                                        AS "createdAt"
+       FROM user_blocks b
+       JOIN users u             ON u.id = b.blocked_id
+       LEFT JOIN user_profiles up ON up.user_id = u.id
+      WHERE b.blocker_id = $1
+      ORDER BY b.created_at DESC`,
+    [blockerId],
+  );
+  return rows as BlockedUser[];
+}
+
+// -------------------------------------------------------
 //  Delete user
 // -------------------------------------------------------
 
