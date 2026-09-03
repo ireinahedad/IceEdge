@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { pool } from '../db/connection';
+import { containsProhibited } from './moderation.service';
 
 /**
  * Chat service — public & private rooms with membership.
@@ -494,6 +495,22 @@ export const chatService = {
     }
 
     const text = sanitizeText(payload.text);
+
+    // R4.2b — Guideline 1.2 : le contenu objectionnable est refusé à l'insertion.
+    //
+    // 422 et un message clair, PAS de bannissement fantôme. Un message qui
+    // disparaît sans explication est signalé comme un bug par celui qui l'a
+    // écrit, et il recommence ; un refus visible se corrige tout seul.
+    //
+    // Le filtre tourne APRÈS sanitizeText et AVANT tout INSERT : rien
+    // d'objectionnable ne touche la base, donc rien à masquer après coup.
+    if (containsProhibited(text)) {
+      throw httpError(
+        'Your message was blocked because it contains language that is not allowed here. Please rephrase.',
+        422,
+      );
+    }
+
     const tag  = payload.tag && ['pick', 'analysis', 'hot'].includes(payload.tag) ? payload.tag : null;
     const replyUsername = payload.replyTo?.username ? String(payload.replyTo.username).slice(0, 100) : null;
     const replyText     = payload.replyTo?.text ? String(payload.replyTo.text).slice(0, 300) : null;

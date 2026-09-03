@@ -539,6 +539,73 @@ the old UI rendering 401s.
 
 ---
 
+## ▶ RESUME HERE — state as of 2026-09-03
+
+Everything before R4.2c is done. Start a new session by reading this block, then
+the R4 section below.
+
+### Shipped and verified in production
+R7 (`2cc2ce4`), R2 + R3 (`551aca0`), R3bis.1 the refresh gate (`d6353d8`).
+Auth was walked end to end on arakice.com: cookie set with no token in the body,
+`Vary: X-Client`, one silent refresh and replay, clean sign-out on a dead refresh,
+logout, Google, 30-day `Max-Age`, chat socket at 101.
+
+### Done locally, verified, **not yet committed**
+```
+ M PRE_IOS_PLAN.md
+ M server/package.json                          (+ moderation:dry-run script)
+ M server/src/services/chat.service.ts          (R4.2b — filter wired into sendMessage)
+?? server/scripts/moderation-dry-run.ts
+?? server/src/services/moderation.service.ts    (R4.2a)
+?? server/src/services/moderation.service.test.ts
+```
+Server: 201 tests green, `tsc --noEmit` clean. Migration 032 is committed
+(`cf6110c`) **and applied to Neon** (confirmed 2026-09-03).
+
+### The next task is R4.2c
+`POST /chat/messages/:messageId/report` — auth required, body `{reason, note?}`,
+`ON CONFLICT DO NOTHING` on `UNIQUE (message_id, reporter_id)`, rate-limited with
+the existing `rateLimit()` helper already used in `chat.routes.ts`. Then d, e, f, h.
+Put the logic in `chat.service.ts`, not the route — see R4.2b for why.
+
+### Facts about this environment that will save you an hour
+- **Nothing applies migrations automatically.** No `railway.json`, no Procfile, no
+  step at server start. `cd server && npm run db:migrate:all`, by hand, against Neon.
+- **Neither shell can reach Neon or arakice.com** (egress). Anything touching the
+  live database or site is run by the user in their own terminal.
+- **`npm test` / `tsc` / `npm run build` cannot run on the user's machine through
+  the bridge** — `node_modules` is installed for Windows. They DO run in the cloud
+  container: tar the sources across, `npm ci`, run. Check resolved versions against
+  `package-lock.json` and compare `md5sum` on both sides before believing a result.
+- **A migration can be executed for real** against a throwaway PostgreSQL 16 in the
+  cloud container before it ever touches Neon. That is how 032 was validated.
+- **`git diff --stat` on the mount times out.** Verify an edit by re-reading the
+  file. `git status --porcelain` and `git log` are fine.
+- **`remote.origin.fetch` is empty** in this clone, so there are no remote-tracking
+  branches and `git status` never says ahead/behind. Do not read that as "never
+  pushed" — check the Vercel deployment list instead.
+- **Client tests do not exist.** `client/` has no runner and no `test` script; only
+  the server has vitest. The client's guard is `npm run typecheck`, which is not in
+  most checklists in this document and should be.
+
+### Decisions already taken — do not relitigate without a reason
+- Reports cascade away with the message (R4.1). The cost is recorded there.
+- The profanity filter has **zero dependencies** and is EN + FR by hand (R4.2a).
+- The filter lives in the service, not the route (R4.2b).
+- `idx_user_blocks_blocker` was replaced by `idx_user_blocks_blocked` (R4.1).
+- R3bis.2, the server-side rotation race, stays open **on purpose**. Read its
+  ordering warning before touching it.
+
+### Open and blocking
+**R4.0.** The support address has not been chosen ("too early", 2026-09-03).
+It is the only part of R4 that is a real problem *today*: abuse reports would go
+to a mailbox nobody can open. 8 occurrences in 4 files — `SupportPage.tsx` (8,19),
+`PrivacyPage.tsx` (17,31), `TermsPage.tsx` (18,33), and
+`server/src/services/email.service.ts` (124,137), **which this plan never mentions**
+and which sends outbound mail.
+
+---
+
 ## R4 — Chat moderation (3–5 days) — the big one
 
 Guideline 1.2 requires four things for user-generated content. You currently have **zero**
@@ -633,12 +700,44 @@ deletion gracefully — which matters once you build the delete-account flow (`A
 
 ### R4.2 — Server
 
-- [ ] **R4.2a** `server/src/services/moderation.service.ts` — a profanity/slur list
-      (start with a maintained package, keep an override list for hockey slang that trips
-      false positives) plus `containsProhibited(text): boolean`.
-- [ ] **R4.2b** In `POST /rooms/:roomId/messages` (`chat.routes.ts:144`): reject with 422 and
-      a clear message when the filter trips. Do **not** shadow-ban — users who cannot see
-      why their message vanished report it as a bug.
+- [x] **R4.2a ✅ 2026-09-03** `server/src/services/moderation.service.ts` — **zero dependency**,
+      by decision: the server's dependency list stays short and the word list stays readable.
+      A maintained package would have covered English only, and the app ships EN + FR, so a
+      hand-written French/Québécois set was needed either way.
+
+      Two passes rather than `includes()`. Word boundaries on a folded text (NFKD accent
+      stripping, confusable digits, collapsed repeats) — this is what saves **`assist`**, which
+      contains `ass` and is the most common word in a hockey chat. Then a de-spacing pass that
+      applies **only inside deliberately spaced runs** (`f u c k`, `f.u.c.k`); de-spacing the
+      whole text would fuse `class ass` into a match that was never written.
+
+      `inspect()` returns which terms fired, which is what makes the dry run useful;
+      `containsProhibited()` is the predicate the insert path uses.
+
+      **Two things the tests caught, worth keeping in mind:**
+      1. `va te faire enculer` was NOT blocked — the folded term is `encule` and the suffix
+         list was English-only. French verb endings are not optional here.
+      2. `fold()` collapses repeats, so **`ass` becomes `as`** — one of the most common words
+         in English, and « as » in French. The list carries `asshole` and never `ass`; a
+         dedicated test block fails the day someone adds a short term without folding it first.
+
+      Mild profanity (`damn`, `hell`, `merde`) is deliberately absent: Guideline 1.2 asks for a
+      filter on *objectionable* content, not a politeness course, and blocking the ambient
+      swearing of a sports chat only produces "this is a bug" reports.
+
+      Known limit, documented rather than hidden: `fvck` is not caught. Vowel substitution
+      needs a distance algorithm, not one more list entry.
+
+      **Dry run (`npm run moderation:dry-run`, 2026-09-03): 2 of 6 messages blocked, both of
+      them deliberate test messages, zero false positives.** ⚠️ Six messages is far too small a
+      corpus to have actually tested false positives — the test suite is what carries that
+      weight today. Re-run this once the chat has real traffic and fill `ALLOWED` then.
+- [x] **R4.2b ✅ 2026-09-03** — wired in `chat.service.ts` `sendMessage()`, **not** in the
+      route. The routes in this file are thin by design and every guard already lives in the
+      service, which throws `httpError(msg, status)`; putting the filter in the route would
+      have been the only validation not in the service. 422 with a clear message, no
+      shadow-ban, after `sanitizeText()` and before any INSERT — nothing objectionable reaches
+      the table, so there is nothing to hide after the fact.
 - [ ] **R4.2c** `POST /chat/messages/:messageId/report` — auth required, body `{reason, note?}`,
       `ON CONFLICT DO NOTHING` on the unique constraint. Rate-limit with the existing
       `rateLimit()` helper (`report`, 10 / 5 min) — the pattern is already in this file.

@@ -22,6 +22,7 @@
     "content:recap": "ts-node scripts/build-recap.ts",
     "content:check": "ts-node scripts/check-posts.ts",
     "content:log": "ts-node scripts/log-post.ts",
+    "moderation:dry-run": "ts-node scripts/moderation-dry-run.ts",
     "content:render": "ts-node scripts/render-slides.ts",
     "content:video": "ts-node scripts/build-video.ts"
   },
