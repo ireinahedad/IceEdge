@@ -414,10 +414,46 @@ let two concurrent callers both fetch the profile.
 - [x] `cd server && npm run typecheck` and `npm run build` — both exit 0.
 - [x] `cd client && npm run check:env && npm run build` — both pass. **`npm run typecheck` was
       not on this list and it should have been** (see below).
-- [ ] On the preview deploy, the full loop from "Guarding R3" above: register, log in,
-      hard-refresh, wait past the 15-minute access-token expiry and confirm the silent refresh,
-      log out, log back in, "remember me" across a browser restart, and the Google login path.
-- [ ] Deploy R3 **alone**, on a day you can watch it. Not stacked with R4.
+- [x] The full loop from "Guarding R3" above — run **on production**, not on a preview
+      (see "What actually happened" below): login sets the cookie with no token in the body,
+      `Vary: X-Client` present, silent refresh + replay, clean sign-out on a dead refresh,
+      logout, Google login, `Max-Age` 30 days with "remember me", and the chat socket
+      reaching 101.
+- [x] Deployed and watched. **Not alone, though** — R2 and R3 shipped in the same deploy.
+
+### ✅ R3 shipped 2026-09-03 — production, commit `551aca0`
+
+Server and client are both live; `Vary: X-Client` on `/auth/login` is the one-glance proof
+that the R3 server is the one running, and the bundle hash is the proof for the client.
+
+**What actually happened, versus what this section told you to do:**
+
+- **No preview stage.** The commit went straight to production on both halves. It passed, but
+  the sequencing the plan asked for did not happen — worth knowing before trusting the next
+  "deploy to a preview first" instruction in this document.
+- **R2 and R3 rode the same deploy.** The "four separate deploys" in the definition of done is
+  now three: R7, then R2+R3 together. If auth had broken, R2 would have been rolled back with
+  it for no reason.
+- **A preview would have been a bad test anyway**, and this is the part worth keeping:
+  `api.arakice.com` and `arakice.com` share a registrable domain, so `ice_refresh` is a
+  *same-site* cookie in production. On `ice-edge-*.vercel.app` it becomes a **third-party**
+  cookie — Safari blocks it outright, Chrome blocks it in private windows. The refresh loop
+  would have failed for a reason with nothing to do with R3. Test auth on the real domain, or
+  in a Chrome window with third-party cookies allowed.
+
+**Two checklist items in this document were wrong, and both cost time:**
+
+1. **"hard-refresh … confirm the silent refresh" conflates two paths.** `AuthContext`
+   rehydrates from the localStorage access token and decodes the JWT *without checking its
+   expiry* — it never calls `/auth/refresh` on load. F5 proves nothing about refreshing.
+   The refresh only fires on the first 401 from `authedFetch`.
+2. **The 15-minute wait is unnecessary.** Edit `ice_access` in localStorage and change one
+   character in the **third** segment (the signature). The payload still decodes, so the app
+   believes it is signed in; the server rejects the signature; the 401 path runs. Same
+   scenario, ten seconds. Use this in every future auth item.
+
+Running that shortcut is what surfaced **R3bis** below — three concurrent `/auth/refresh`
+where there should be one.
 
 #### Ran 2026-09-03 in the cloud sandbox — and how
 
@@ -442,6 +478,64 @@ the container, `npm ci`, run. The resolved versions were checked against `packag
    Verified both ways: `VITE_TARGET=ios` → no `AuthCallback-*.js` and 0 `api/auth/google`;
    web → chunk present and 1 `api/auth/google`. R2's "done when" passed *before* this fix too
    (the chunk carried no Google URL), so this is tidiness, not a 4.8 risk.
+
+---
+
+## R3bis — The refresh stampede (found 2026-09-03, NOT part of R3)
+
+Observed on production while running the R3 loop: breaking the access token and loading
+`/profile` produced **one 401 and three `POST /auth/refresh`, all three returning 200**.
+This is not an R3 regression — it reproduces on the pre-R3 build. It is two independent
+defects that compound, and the order in which they are fixed matters enormously.
+
+**Client — `tryRefresh()` has no in-flight coalescing.** `/users/me` and `/subscription/me`
+are in flight together; each takes a 401, each calls `tryRefresh()` on its own. N concurrent
+401s produce N refreshes.
+
+**Server — `refreshTokens()` rotation is not atomic** (`auth.service.ts:485`):
+
+```
+SELECT * FROM refresh_tokens WHERE token=$1 AND revoked=FALSE AND expires_at>NOW()
+UPDATE refresh_tokens SET revoked=TRUE WHERE id=$1
+```
+
+Three concurrent callers all read `revoked=FALSE` before any UPDATE commits, so **all three
+succeed and one refresh token becomes three**, each valid 7–30 days. The last `Set-Cookie`
+wins; the other two sit in the table, orphaned but live. Nobody is logged out today, but
+every silent refresh leaves two extra long-lived credentials behind.
+
+### ⚠️ Do not fix the server first
+
+Make the rotation atomic without coalescing the client, and two of the three calls start
+returning 401 → `tryRefresh` hits its `catch` → `tokenStore.clear()` → **the user is signed
+out on every silent refresh**. A cosmetic defect becomes an auth outage. R3.8 makes this
+*more* visible, not less: a failed refresh now drops the user immediately instead of leaving
+the old UI rendering 401s.
+
+- [x] **R3bis.1 — client first. ✅ Shipped and verified in production 2026-09-03.**
+      Observed on arakice.com after the deploy: three 401s (`stats`, `me`, `me`) followed by
+      **one** `/auth/refresh` and three successful replays. Before: three refreshes.
+      `authService.ts`:
+      `tryRefresh()` is now a gate over `doRefresh()`, holding a module-level
+      `inFlightRefresh: Promise<boolean> | null` cleared in `.finally()`. Three concurrent
+      401s produce one refresh.
+
+      Proven, not asserted: a throwaway vitest suite run in the cloud sandbox against the
+      real module asserts 1 refresh for 3 concurrent callers, and `clear()` called once
+      rather than per-caller on a failed refresh. Reverting the gate makes it fail with
+      **"expected 3 to be 1"** — the exact number seen in production. The suite was not
+      committed: `client/` has no test runner at all (no vitest in its devDependencies, no
+      `test` script), and adding one is its own decision. See the note below.
+
+      **How it was accepted:** the shortcut from the R3 section — break the signature of
+      `ice_access`, F5, load `/profile`. The 401s stay plural (each call takes its own before
+      the refresh lands); it is the `refresh` count that must drop to one.
+- [ ] **R3bis.2 — server, separately, and not without a grace window.** Even with the client
+      coalesced, two open tabs still race: coalescing is per-tab. A strictly atomic server
+      would sign out the losing tab. The fix is a single statement
+      (`UPDATE … WHERE token=$1 AND revoked=FALSE RETURNING *`) **plus** a few seconds of
+      grace in which a just-rotated token returns the same new pair instead of a 401.
+      That is a design decision, not a patch — do not ship it as one.
 
 ---
 
@@ -471,6 +565,35 @@ address Apple would use to reach you. **Reports would go to a mailbox nobody can
       `grep -rn "arakice.support@gmail" .` — check `PrivacyPage.tsx` and `TermsPage.tsx` too.
 
 ### R4.1 — Database (migration `032_chat_moderation.sql`)
+
+**✅ Written and executed 2026-09-03 — not yet applied to Neon.** The file is in
+`server/src/db/migrations/`. It was run for real against a throwaway PostgreSQL 16 in the
+cloud sandbox: `schema.sql` plus all 32 migrations in order, zero failures, and 032 re-runs
+as a clean no-op.
+
+Behaviour proven, not just syntax: a second report from the same person is swallowed by
+`ON CONFLICT DO NOTHING`; an invalid `reason` and an invalid `status` are both rejected; a
+self-block is rejected; the distinct-reporter count crosses 3 exactly when it should; the
+single symmetric `LEFT JOIN` read returns only the message that is neither hidden nor from a
+blocked author; and deleting a message takes its three reports with it.
+
+**Two deliberate departures from the sketch below** (the sketch is kept as written, for the
+record):
+
+1. **`CHECK` constraints on `reason` and `status`.** The sketch listed the allowed values in a
+   comment. They are now enforced in the schema too, so a script, a console or a future route
+   that forgets zod cannot poison the queue. Cost: adding a reason needs a migration.
+2. **`idx_user_blocks_blocker` was replaced by `idx_user_blocks_blocked`.** The one the sketch
+   asked for is redundant — the primary key `(blocker_id, blocked_id)` already leads with
+   `blocker_id` and serves those lookups. The index genuinely missing is on `blocked_id`,
+   because hiding is *symmetric*: the read asks for rows where the caller is blocker **or**
+   blocked, and that second half had no index at all.
+
+**Not chosen, and worth revisiting:** reports cascade away with the message
+(2026-09-03 decision). A user reported five times whose messages were all deleted looks clean,
+and nothing records what was moderated. Reversing it means a later migration making
+`message_id` nullable `ON DELETE SET NULL`, plus `reported_user_id` and a snapshot of the
+reported text.
 
 Next free number after `031_odds_snapshots.sql`.
 
@@ -598,11 +721,15 @@ Do not start these until `APPLE_PLAN.md` Phase 3:
 
 ## Definition of done for this plan
 
-- [ ] Four separate deploys to production, each verified on arakice.com
+- [~] Four separate deploys to production, each verified on arakice.com — **it was three**:
+      R7 (`2cc2ce4`), then R2+R3 together (`551aca0`). R4 remains.
 - [x] A missing env var fails the Vercel build instead of shipping (see R7 note 2)
 - [x] `VITE_TARGET=ios npm run build` builds and contains no Google-OAuth code (verified
       2026-09-03: 0 occurrences of `api/auth/google`, and no `AuthCallback` chunk)
-- [ ] Web login, refresh and logout behave exactly as before
+- [x] Web login, refresh and logout behave exactly as before — verified on arakice.com
+      2026-09-03. ⚠️ One known deviation, pre-existing and not caused by R3: a single 401
+      fires three `/auth/refresh` calls. See **R3bis**, and read its ordering warning before
+      touching either half.
 - [ ] Report + block + unblock work end-to-end for a real second account
 - [ ] `grep -rn "arakice.support@gmail" .` returns nothing
 - [ ] `git tag pre-ios-freeze` — then open `APPLE_PLAN.md` at Phase 0
