@@ -555,7 +555,7 @@ logout, Google, 30-day `Max-Age`, chat socket at 101.
 `e39f648` R4.2a/b — the filter, wired into `sendMessage()`, plus the dry-run script.
 `e6e93a2` R4.2c + R4.2d — report endpoint and auto-hide.
 `86bd1b4` R4.2e + R4.2f + R4.2g — block endpoints, filtered reads, socket note.
-`<R4.2h>` R4.2h — admin moderation queue, plus the newest-100 history fix.
+`6f44230` R4.2h — admin moderation queue, plus the newest-100 history fix.
 Server: 201 tests green, `tsc --noEmit` clean. Migration 032 is committed
 (`cf6110c`) **and applied to Neon** (confirmed 2026-09-03).
 
