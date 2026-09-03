@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
 import { FramedLabel } from "./brand/FramedLabel";
+import { env } from "../env";
 
 type TFn = (key: string, params?: Record<string, string | number>) => string;
 
@@ -429,7 +430,7 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
 
 // ─── MLSection — fetches from /api/predict/ml and renders MLPredictionCard ───
 
-const ML_BASE = `${(import.meta.env.VITE_NHL_API_URL as string | undefined)?.replace("/api/nhl", "") ?? "http://localhost:3001"}/api/predict`;
+const ML_BASE = `${env.nhlServerUrl}/api/predict`;
 
 /**
  * Extract the ML probability (0-100 integer) from a raw ML-service response.

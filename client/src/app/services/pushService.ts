@@ -7,8 +7,9 @@
  * browsers (returns false).
  */
 import { authedFetch } from './authService';
+import { env } from '../env';
 
-const BASE = import.meta.env.VITE_PROFILE_API_URL || '';
+const BASE = env.profileApiUrl;
 
 function supported(): boolean {
   return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;

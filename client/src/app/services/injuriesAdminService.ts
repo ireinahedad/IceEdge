@@ -4,11 +4,9 @@
  * blessures/alignements. Écriture protégée côté serveur par requireRole('admin').
  */
 import { getAccessToken } from './authService';
+import { env } from '../env';
 
-const API_BASE =
-  (import.meta.env.VITE_PROFILE_API_URL as string | undefined) ||
-  (import.meta.env.VITE_PREDICTION_API_URL as string | undefined) ||
-  'http://localhost:3001/api';
+const API_BASE = env.apiBase;
 
 const INJURIES_URL = `${API_BASE}/injuries`;
 

@@ -31,19 +31,11 @@ export function LeaguePage() {
   const totalUnread = rooms.reduce((acc, r) => acc + (r.unread ?? 0), 0);
 
   return (
-    /* La page est jouée depuis le centre de l'aréna : les gradins montent en
-       perspective au fond et sur les deux côtés, et tout le reste est du
-       mobilier de stade. Pas de glace ici — la page League n'est pas un
-       match, c'est la foule autour du match. */
+    /* La page est jouée depuis le centre de l'aréna, mais les gradins ont été
+       retirés (2026-09-03) : il ne reste que la pénombre du bol en fond, et
+       tout le reste est du mobilier de stade. Pas de glace ici — la page
+       League n'est pas un match, c'est la foule autour du match. */
     <div className="arena-stage flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full">
-      {/* Décor : hors du flux, hors des événements, sous tout le reste. */}
-      <div className="arena-stands" aria-hidden>
-        <div className="arena-bank arena-bank--top" />
-        <div className="arena-bank arena-bank--bottom" />
-        <div className="arena-bank arena-bank--left" />
-        <div className="arena-bank arena-bank--right" />
-      </div>
-
       <LeagueHeader tab={tab} setTab={setTab} totalUnread={totalUnread} />
 
       {/* Single pane driven by the tab bar (Chat is the default), on all sizes. */}

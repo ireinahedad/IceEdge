@@ -96,11 +96,6 @@ export function BetBuilderPage() {
       className={`relative flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full ${mode === "light" ? "bet-light" : "bet-dark"}`}
       style={{ background: mode === "light" ? "#D4FFEE" : "#0A0E0C" }}
     >
-      {/* Le but : maille + tuyaux, en CSS pur (voir .bet-net dans
-          bet-theme.css). Premier enfant et purement décoratif — tout ce qui
-          suit passe au-dessus en `relative z-10`. */}
-      <div className="bet-net" aria-hidden />
-
       {/* Bandeau en verre dépoli (`.rink-header-glass`, rink-theme.css) : on
           devine la maille du filet derrière, les onglets restent lisibles.
           Il a été opaque un temps — le verre ICY d'origine, trop clair,
@@ -111,9 +106,7 @@ export function BetBuilderPage() {
         className="rink-header-glass sticky top-0 z-40 bet-ink-black"
         style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
       >
-        {/* La plinthe de la bande est peinte en rouge : c'est la barre du
-            haut du but, elle referme le cadre du filet. */}
-        <div className="rink-boards rink-boards--goal" aria-hidden />
+        <div className="rink-boards" aria-hidden />
         <div className="px-4 pt-3 pb-3 flex items-center justify-between">
           <div>
             <h1 className="text-white text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>

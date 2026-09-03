@@ -29,8 +29,9 @@ import type {
   ParlayPredictionResponse,
   BetMarketType,
 } from "./../types/bet";
+import { env } from "../env";
 
-const BASE_URL = import.meta.env.VITE_PREDICTION_API_URL || "";
+const BASE_URL = env.predictionApiUrl;
 
 // ─── Error type ───────────────────────────────────────────────────────────────
 

@@ -202,8 +202,8 @@ export function StatsPage() {
           </div>
         </div>
         <div className="px-4 pb-3">
-          {/* Team / Game / Player as pucks, with the charts entry beside them */}
-          <div className="flex items-center justify-center gap-2.5 mb-3">
+          {/* Team / Game / Player as pucks. */}
+          <div className="flex items-center justify-center gap-2.5 mb-2.5">
             {filterTabKeys.map((tabKey, i) => (
               <button
                 key={tabKey}
@@ -214,8 +214,14 @@ export function StatsPage() {
                 <span className="rink-puck-label">{t(tabKey)}</span>
               </button>
             ))}
-            <FramedLabel text={t("stats.statistics")} onClick={() => navigate(activeFilter === 2 ? "/stats/chart/all-players" : "/stats/chart/all-teams")} />
           </div>
+          {/* L'entrée « Statistiques » : un bandeau pleine largeur sous les
+              rondelles, plutôt qu'une pastille serrée à côté d'elles. */}
+          <FramedLabel
+            className="framed-label--banner mb-3"
+            text={t("stats.statistics")}
+            onClick={() => navigate(activeFilter === 2 ? "/stats/chart/all-players" : "/stats/chart/all-teams")}
+          />
           <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2.5">
             <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
             <input className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#bfc8cc]"

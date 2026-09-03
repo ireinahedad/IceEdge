@@ -3,11 +3,10 @@
 // The Odds API key now lives server-side only — it is never shipped to the client.
 // Falls back to empty array when the backend/upstream is unavailable.
 
-// Backend base, e.g. https://<railway>/api  (defaults to local dev API)
-const API_BASE =
-  (import.meta.env.VITE_PROFILE_API_URL as string | undefined) ||
-  (import.meta.env.VITE_PREDICTION_API_URL as string | undefined) ||
-  "http://localhost:3001/api";
+import { env } from "../env";
+
+// Backend base, e.g. https://<railway>/api — validated in env.ts, no localhost fallback.
+const API_BASE = env.apiBase;
 
 // Sport keys used by The Odds API
 export const ODDS_SPORT_KEYS = {

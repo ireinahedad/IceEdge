@@ -13,8 +13,9 @@ import type {
 } from '../types/bet';
 
 import { weightsQuery } from './ruleWeightsService';
+import { env } from '../env';
 
-const BASE_URL = import.meta.env.VITE_NHL_API_URL || '';
+const BASE_URL = env.nhlApiUrl;
 
 // ── Bet365-style charts (per-player, last 6 seasons) ────────────────────────
 export interface PlayerSeasonStat {

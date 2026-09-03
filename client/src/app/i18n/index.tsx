@@ -258,7 +258,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "stats.matches":     { en: "{n} matches", fr: "{n} matchs" },
   "stats.players":     { en: "Players",   fr: "Joueurs" },
   "stats.tapToAdd":    { en: "Tap + to add to slip", fr: "Touche + pour ajouter au coupon" },
-  "stats.loadingTeamsHint": { en: "Make sure the backend is running at localhost:3001", fr: "Assure-toi que le serveur tourne sur localhost:3001" },
+  "stats.loadingTeamsHint": { en: "The stats service is not responding. Try again in a moment.", fr: "Le service de statistiques ne répond pas. Réessaie dans un instant." },
   "stats.noGamesHint": { en: "Check back on game nights, or explore season futures below", fr: "Reviens les soirs de match, ou explore les paris de saison ci-dessous" },
   "stats.loadingStandings": { en: "Loading standings data...", fr: "Chargement du classement..." },
   "stats.viewBets":    { en: "View bets ›", fr: "Voir les paris ›" },

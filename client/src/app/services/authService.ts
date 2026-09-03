@@ -8,7 +8,9 @@
  *   flows between the client origin and the API origin.
  */
 
-const BASE = import.meta.env.VITE_PROFILE_API_URL || '';
+import { env } from '../env';
+
+const BASE = env.profileApiUrl;
 
 // --- Token storage ----------------------------------------------------------
 
@@ -222,6 +224,6 @@ export async function apiLogoutAll(): Promise<void> {
 }
 
 export function getGoogleLoginUrl(): string {
-  const serverBase = import.meta.env.VITE_PROFILE_API_URL?.replace(/\/api\/?$/, '') || 'http://localhost:3001';
+  const serverBase = env.profileServerUrl;
   return `${serverBase}/api/auth/google`;
 }

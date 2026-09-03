@@ -5,9 +5,9 @@
  */
 
 import { authedFetch } from './authService';
+import { env } from '../env';
 
-const BASE = (import.meta.env.VITE_NHL_API_URL as string | undefined)
-  ?.replace('/api/nhl', '') ?? 'http://localhost:3001';
+const BASE = env.nhlServerUrl;
 
 export interface LLMError {
   type: 'no_api_key' | 'openai_error' | 'network' | 'unknown' | 'monthly_quota';

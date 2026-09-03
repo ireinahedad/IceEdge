@@ -15,11 +15,12 @@ import { ProLock } from "../../components/ProLock";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { DisplayGame } from "./landingTypes";
+import { env } from "../../env";
 
 
 // ─── Best Bets ─────────────────────────────────────────────────────────────────
 
-const BB_BASE = import.meta.env.VITE_PREDICTION_API_URL || "";
+const BB_BASE = env.predictionApiUrl;
 
 interface BestBet {
   id: string;

@@ -11,6 +11,8 @@
 //   VITE_STAKE_AFFILIATE_CODE=abcd1234
 // Links work without a code — they're just untracked.
 
+import { env } from "../env";
+
 export type Sport = "hockey";
 export type BookmakerId = "bet365" | "stake";
 
@@ -34,7 +36,7 @@ const BET365: Bookmaker = {
   label: "Bet365",
   badge: "b365",
   base: "https://www.bet365.com",
-  affiliateCode: import.meta.env.VITE_BET365_AFFILIATE_CODE as string | undefined,
+  affiliateCode: env.bet365AffiliateCode,
   affiliateParam: (code) => `?affiliate=${code}`,
   // Bet365 doesn't expose clean per-match deep links publicly, so we link to
   // the in-play section for the sport.
@@ -49,7 +51,7 @@ const STAKE: Bookmaker = {
   // Global domain (works for testing outside Canada). For Ontario use
   // "https://stake.com/en" -> "https://stake.ca". Change here if needed.
   base: "https://stake.com",
-  affiliateCode: import.meta.env.VITE_STAKE_AFFILIATE_CODE as string | undefined,
+  affiliateCode: env.stakeAffiliateCode,
   // Stake tracks referrals with a campaign code: ?c=CODE
   affiliateParam: (code) => `?c=${code}`,
   sectionPath: () => "/sports/ice-hockey",
