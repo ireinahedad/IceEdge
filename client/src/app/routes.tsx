@@ -19,7 +19,12 @@ const SchedulePage          = lazy(() => import("./pages/SchedulePage").then(m =
 const PredictionPage        = lazy(() => import("./pages/PredictionPage").then(m => ({ default: m.PredictionPage })));
 const ChartPage             = lazy(() => import("./pages/ChartPage").then(m => ({ default: m.ChartPage })));
 const BetBuilderPage        = lazy(() => import("./pages/BetBuilderPage").then(m => ({ default: m.BetBuilderPage })));
-const AuthCallback          = lazy(() => import("./pages/AuthCallback").then(m => ({ default: m.AuthCallback })));
+// R2.3 — the lazy() binding itself is conditional, not just the route entry.
+// Dropping the route from the array is NOT enough: lazy() runs at module scope,
+// so Rollup keeps the import() alive and still emits the AuthCallback chunk.
+// Folding the binding to null on iOS is what actually deletes it (verified:
+// VITE_TARGET=ios build emits no AuthCallback-*.js; the web build still does).
+const AuthCallback          = features.googleLogin ? lazy(() => import("./pages/AuthCallback").then(m => ({ default: m.AuthCallback }))) : null;
 const NHLPredictionsPage    = lazy(() => import("./pages/NHLPredictionsPage").then(m => ({ default: m.NHLPredictionsPage })));
 const SharePage             = lazy(() => import("./pages/SharePage").then(m => ({ default: m.SharePage })));
 const DevMLDashboard        = lazy(() => import("./pages/DevMLDashboard").then(m => ({ default: m.DevMLDashboard })));
@@ -82,7 +87,7 @@ export const router = createBrowserRouter([
       // R2.3 — dead route on iOS: no Google login means nothing ever lands here.
       // The spread leaves the array untouched on web and lets Rollup drop the
       // AuthCallback chunk entirely from the iOS bundle.
-      ...(features.googleLogin
+      ...(AuthCallback
         ? [{ path: "/auth/callback",                  element: withSuspense(<AuthCallback />)                 }]
         : []),
       { path: "/terms",                              element: withSuspense(<TermsPage />)                    },

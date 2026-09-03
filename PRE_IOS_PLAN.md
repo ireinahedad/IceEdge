@@ -407,16 +407,41 @@ Also worth knowing: `ensureFamilyWeightsHydrated()` now assigns its `hydrating` 
 the first `await`. The sign-in check became async, and testing it before memoising would have
 let two concurrent callers both fetch the profile.
 
-**Verification checklist — none of it done yet:**
+**Verification checklist:**
 
-- [ ] `cd server && npm test` — `auth.routes.test.ts` covers all three states (browser → cookie
-      only; native → body only; native header *from* a browser origin → cookie, the XSS guard).
-- [ ] `cd server && npm run typecheck` and `npm run build`.
-- [ ] `cd client && npm run check:env && npm run build`.
+- [x] `cd server && npm test` — **161/161 green**, `auth.routes.test.ts` 6/6 including the XSS
+      guard (native header *from* a browser origin → cookie, no token in the body).
+- [x] `cd server && npm run typecheck` and `npm run build` — both exit 0.
+- [x] `cd client && npm run check:env && npm run build` — both pass. **`npm run typecheck` was
+      not on this list and it should have been** (see below).
 - [ ] On the preview deploy, the full loop from "Guarding R3" above: register, log in,
       hard-refresh, wait past the 15-minute access-token expiry and confirm the silent refresh,
       log out, log back in, "remember me" across a browser restart, and the Google login path.
 - [ ] Deploy R3 **alone**, on a day you can watch it. Not stacked with R4.
+
+#### Ran 2026-09-03 in the cloud sandbox — and how
+
+The Windows `node_modules` is what blocks vitest and tsc in the Linux bridge VM. The cloud
+container has network, so a **fresh Linux install of the same lockfile** runs both for real:
+tar `server/{src,package.json,tsconfig.json,vitest.config.ts}` (and the client equivalent) into
+the container, `npm ci`, run. The resolved versions were checked against `package-lock.json`
+(vitest 2.1.9, typescript 5.9.3, express 4.22.2 — identical), so the run is representative.
+`client/vitest.setup.ts` must be recreated: it is not under `src/`.
+
+#### Two defects this actually caught
+
+1. **`client && npm run typecheck` failed** — `AuthContext.tsx:70` read `result.tokens
+   .refresh_token`, but `AuthResult.tokens` in `authService.ts` declared only
+   `{ access_token, expires_in }`. The client build is `vite build` (esbuild strips types
+   without checking them), so **no build would ever have caught this** — R3 would have shipped
+   with a type that lies about the native response shape. Fixed: the two native-only fields are
+   now declared optional. **Add `npm run typecheck` to the client checklist for every item.**
+2. **R2's `AuthCallback` chunk was still emitted in the iOS build.** Removing the route by array
+   spread is *not* sufficient, contrary to the note in the R2 section: `lazy()` runs at module
+   scope, so Rollup keeps the `import()` alive. The binding itself now folds to `null` on iOS.
+   Verified both ways: `VITE_TARGET=ios` → no `AuthCallback-*.js` and 0 `api/auth/google`;
+   web → chunk present and 1 `api/auth/google`. R2's "done when" passed *before* this fix too
+   (the chunk carried no Google URL), so this is tidiness, not a 4.8 risk.
 
 ---
 
@@ -575,7 +600,8 @@ Do not start these until `APPLE_PLAN.md` Phase 3:
 
 - [ ] Four separate deploys to production, each verified on arakice.com
 - [x] A missing env var fails the Vercel build instead of shipping (see R7 note 2)
-- [ ] `VITE_TARGET=ios npm run build` builds and contains no Google-OAuth code
+- [x] `VITE_TARGET=ios npm run build` builds and contains no Google-OAuth code (verified
+      2026-09-03: 0 occurrences of `api/auth/google`, and no `AuthCallback` chunk)
 - [ ] Web login, refresh and logout behave exactly as before
 - [ ] Report + block + unblock work end-to-end for a real second account
 - [ ] `grep -rn "arakice.support@gmail" .` returns nothing

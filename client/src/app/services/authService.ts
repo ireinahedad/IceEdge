@@ -106,7 +106,20 @@ export interface AuthUser {
 
 export interface AuthResult {
   user: AuthUser;
-  tokens: { access_token: string; expires_in: number };
+  /**
+   * R3.3 — `sendTokens()` returns two shapes. A browser gets the access token
+   * only; the refresh credential is in the httpOnly cookie and must stay
+   * unreachable from JavaScript. A native client gets the refresh pair in the
+   * body, because no cookie survives WKWebView. Optional, therefore, rather
+   * than absent: `setSession()` forwards `refresh_token` to the store, which
+   * drops it on web.
+   */
+  tokens: {
+    access_token: string;
+    expires_in: number;
+    refresh_token?: string;
+    refresh_expires_in?: number;
+  };
 }
 
 /** /register no longer logs in immediately — it returns a pending state. */
