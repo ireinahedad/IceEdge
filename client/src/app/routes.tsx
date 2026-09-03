@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate, Outlet, useLocation } from "react-router
 import { lazy, Suspense, type ReactNode } from "react";
 import { useAuth } from "./context/AuthContext";
 import { AuthGateProvider } from "./context/AuthGateContext";
+import { features } from "./platform";
 
 // LoginPage stays eager — it's the entry point for unauthenticated visitors, so
 // lazy-loading it would just add a round-trip before first paint.
@@ -78,7 +79,12 @@ export const router = createBrowserRouter([
     children: [
       // Public — accessible without an account
       { path: "/login",                              Component: LoginPage                                    },
-      { path: "/auth/callback",                      element: withSuspense(<AuthCallback />)                 },
+      // R2.3 — dead route on iOS: no Google login means nothing ever lands here.
+      // The spread leaves the array untouched on web and lets Rollup drop the
+      // AuthCallback chunk entirely from the iOS bundle.
+      ...(features.googleLogin
+        ? [{ path: "/auth/callback",                  element: withSuspense(<AuthCallback />)                 }]
+        : []),
       { path: "/terms",                              element: withSuspense(<TermsPage />)                    },
       { path: "/privacy",                            element: withSuspense(<PrivacyPage />)                  },
       { path: "/support",                            element: withSuspense(<SupportPage />)                  },
@@ -103,7 +109,10 @@ export const router = createBrowserRouter([
       { path: "/profile",                            element: withSuspense(<Protected><ProfilePage /></Protected>)    },
       { path: "/pro",                                element: withSuspense(<Protected><ProPage /></Protected>)        },
       { path: "/pro/success",                        element: withSuspense(<Protected><ProSuccessPage /></Protected>) },
-      { path: "/dev/ml",                             element: withSuspense(<Protected><DevMLDashboard /></Protected>) },
+      // R17 — the ML dashboard is a developer tool, not a shippable screen.
+      ...(features.devRoutes
+        ? [{ path: "/dev/ml",                         element: withSuspense(<Protected><DevMLDashboard /></Protected>) }]
+        : []),
 
       // Catch-all — any unmatched URL lands on a friendly 404 instead of the
       // raw React Router error screen (e.g. broken/shared links).

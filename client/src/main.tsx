@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import * as Sentry from "@sentry/react";
 import { env, envProblems, assertEnv } from "./app/env";
+import { features } from "./app/platform";
 import App from "./app/App";
 import "./styles/index.css";
 
@@ -72,7 +73,9 @@ try {
   createRoot(rootEl).render(<App />);
 
   // Register the service worker (PWA install + push notifications).
-  if ("serviceWorker" in navigator) {
+  // R6 — WKWebView has no service worker, and iOS notifications go through
+  // APNs, so the iOS build must not try to register one.
+  if (features.serviceWorker && "serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker.register("/sw.js").catch((err) => {
         console.warn("[SW] registration failed:", err);

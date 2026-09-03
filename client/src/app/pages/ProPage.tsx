@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { useI18n } from "../i18n";
+import { features } from "../platform";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
 import { AppButton } from "../components/AppButton";
 import {
@@ -55,6 +56,10 @@ export function ProPage() {
   }, [user]);
 
   async function handleUpgrade() {
+    // APPLE_PLAN §7 — Guideline 3.1.1: a paid upgrade on iOS must go through
+    // In-App Purchase, never Stripe Checkout. Every button below is hidden
+    // when the flag is off; this guard is what makes that non-negotiable.
+    if (!features.stripeCheckout) return;
     if (!user) { navigate("/login?returnTo=/pro"); return; }
     setError(null);
     setLoading(true);
@@ -163,8 +168,9 @@ export function ProPage() {
         </div>
       )}
 
-      {/* Price card */}
-      {!isPro && (
+      {/* Price card — a price shown without a way to buy is worse than no
+          price, so it travels with the checkout flag (APPLE_PLAN §7). */}
+      {!isPro && features.stripeCheckout && (
         <div className="rounded-2xl p-5 mb-6 text-center"
           style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
           <div className="flex items-end justify-center gap-1 mb-1">
@@ -215,15 +221,17 @@ export function ProPage() {
           <AppButton onClick={handleTrial} disabled={loading} loading={loading} fullWidth size="lg">
             {user ? t("pro.startTrial") : t("pro.loginPrompt")}
           </AppButton>
-          <AppButton variant="ghost" onClick={handleUpgrade} disabled={loading} loading={loading} fullWidth>
-            {t("pro.cta")}
-          </AppButton>
+          {features.stripeCheckout && (
+            <AppButton variant="ghost" onClick={handleUpgrade} disabled={loading} loading={loading} fullWidth>
+              {t("pro.cta")}
+            </AppButton>
+          )}
         </div>
-      ) : (
+      ) : features.stripeCheckout ? (
         <AppButton onClick={handleUpgrade} disabled={loading} loading={loading} fullWidth size="lg">
           {user ? t("pro.cta") : t("pro.loginPrompt")}
         </AppButton>
-      )}
+      ) : null}
 
       {/* Promo code — activate Pro without payment */}
       {!isPro && (

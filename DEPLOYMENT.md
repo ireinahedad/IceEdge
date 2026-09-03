@@ -363,7 +363,14 @@ Et depuis l'extérieur, l'URL publique ne doit **pas** exister.
 1. https://vercel.com → New Project → Importer `ICEEDGE`
 2. **Root directory : `client`**
 3. Framework : **Vite** (détecté automatiquement)
-4. Build command : `npm run build` · Output : `dist`
+4. Build command : `npm run check:env && npm run build` · Output : `dist`
+
+> `check:env` (PRE_IOS_PLAN.md R7) valide les quatre URLs **avant** de
+> construire : présence, `https://` obligatoire. C'est le seul endroit du
+> pipeline où les vraies variables existent, donc le seul endroit où cette
+> vérification a du sens. Un build qui échoue ici laisse la version précédente
+> en ligne — préférable à déployer un bundle qui pointe vers le vide.
+> La CI GitHub ne vérifie que le bundle construit (`check:env:dist`).
 
 ### Variables d'environnement
 Project Settings → Environment Variables → Production :
@@ -375,7 +382,14 @@ Project Settings → Environment Variables → Production :
 | `VITE_PREDICTION_API_URL` | `https://[TON-BACKEND].railway.app/api` |
 | `VITE_SOCKET_URL` | `https://[TON-BACKEND].railway.app` |
 | `VITE_ODDS_API_KEY` | `<placeholder>` — **ne jamais commiter la vraie valeur** |
-| `VITE_BET365_AFFILIATE_CODE` | Code affilié Bet365 |
+| `VITE_BET365_AFFILIATE_CODE` | Code affilié Bet365 — optionnel |
+| `VITE_STAKE_AFFILIATE_CODE` | Code affilié Stake — optionnel |
+| `VITE_SENTRY_DSN` | DSN frontend Sentry — optionnel, vide = monitoring désactivé |
+
+> Les quatre premières sont **obligatoires** depuis R7 : il n'y a plus de repli
+> sur `localhost`. Une variable manquante fait échouer le build Vercel (étape 2
+> de R7 : elle affichera un écran « Configuration error » au lieu d'une page
+> blanche). Les trois dernières sont optionnelles par construction.
 
 > ⚠️ **`VITE_*` est exposé au navigateur par construction.** La clé Odds servie au
 > client est publique de fait ; c'est précisément pourquoi le proxy serveur

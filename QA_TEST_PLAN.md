@@ -142,7 +142,7 @@ Objectif : le produit reste utilisable et ne « ment » pas quand un service tie
 **Qualité & build**
 
 - [ ] `npm run typecheck` + `vitest run` (server) au vert ; build front Vercel OK. → **À lancer en local** (le mount du sandbox tronque les lectures → build non fiable ici). 3 fichiers de tests présents (`app.test.ts`, `slip.service.test.ts`, `schemas.test.ts`) + job CI `server`/`client`.
-- [ ] Parcours critiques F1, F2, I1, I2 passés en environnement de staging. → **Dynamique, à exécuter en staging.**
+- [~] Parcours critiques F1, F2, I1, I2. → **I1 et I2 exécutés le 2026-08-31 — verts, contre la PRODUCTION** (il n'existe pas de staging : voir § « Exécution du 2026-08-31 » en fin de document). **F1 et F2 restent à faire** : ils écrivent en base.
 - [ ] Test mobile iOS Safari du parcours login → prédiction → paiement passé (C1). → **Dynamique, à exécuter.**
 
 **Observabilité & reprise**
@@ -439,3 +439,163 @@ prod ». Front et API sont sur deux sites différents : tout repose sur
 Safari iOS bloque les cookies tiers plus agressivement que Chrome. I2 vert dans
 Chrome ne dit **rien** de Safari : c'est précisément l'objet de **C1 / B5**, à
 exécuter sur un appareil réel. Les deux tests ne sont pas interchangeables.
+
+---
+
+# Exécution du 2026-08-31 — I1 et I2 verts, F1 et F2 en attente
+
+*Ce qui suit est un relevé, pas un plan. Chaque ligne a été mesurée ; aucune n'a
+été déduite.*
+
+## Ce qui a changé avant de commencer — il n'y a pas de staging
+
+Le mot « staging » n'apparaît ni dans `DEPLOYMENT.md`, ni dans une variable
+d'environnement, et Railway n'a qu'un environnement `production` (le second
+projet, `generous-fulfillment`, est vide). Les runbooks ci-dessus sont écrits
+contre un `$API` et un `$FRONT` qui n'existent pas.
+
+**Décision du 2026-08-31 : découper.** I1 et I2 n'écrivent quasiment rien et la
+production *est* déjà la vraie paire Vercel↔Railway cross-site que I2 cherche à
+tester — un staging la simulerait moins bien. F1 et F2 créent des comptes,
+consomment un essai Pro et ouvrent une session Stripe : ils attendent une cible
+jetable.
+
+## Le préflight, enfin lisible — et ce qu'il dit
+
+La bannière n'imprimait aucune des quatre variables du préflight. Elle les porte
+depuis le 2026-08-31 (`server.ts`, bloc `[Server] Réglages effectifs` ;
+`devRoutesEnabled` est exporté par `app.ts` pour que la valeur soit l'**effective**
+et non la variable brute). Relevé sur le conteneur `d5056ddd` :
+
+| Variable | Valeur en production | Verdict |
+|---|---|---|
+| `NODE_ENV` | `production` | ✅ cookie de refresh en `Secure` + `SameSite=None` |
+| `CORS_ORIGIN` | `[0] https://arakice.com` · `[1] https://www.arakice.com` | ✅ deux origines, sans slash final, casse exacte |
+| `EMAIL_VERIFICATION_DISABLED` | **`true`** | ⚠️ voir ci-dessous — ce n'est pas ce que le runbook supposait |
+| `ENABLE_DEV_ROUTES` | routes `/api/dev` **MONTÉES** | ✅ I1 exécutable |
+
+> ⚠️ **`EMAIL_VERIFICATION_DISABLED=true` en production change F1, et pas
+> seulement le test.** La branche « vérification » de F1 (étapes 2, 3 et 9) n'a
+> pas d'existence réelle : `register` rend directement `{user, tokens}` et pose
+> le cookie. Conséquence produit, qui dépasse la QA : **n'importe qui peut
+> s'inscrire avec une adresse qu'il ne possède pas et être authentifié
+> immédiatement.** C'est peut-être délibéré — sans `RESEND_API_KEY`, exiger une
+> vérification enfermerait tout le monde dehors — mais alors la récupération de
+> mot de passe (F6) repose sur le même canal absent. **À trancher avant le
+> lancement, pas pendant.**
+
+## I1 — chaîne ML : ✅ les quatre étapes
+
+Via le dashboard `/dev/ml` (compte admin ; un onglet n'envoie pas le `Bearer`,
+c'est le front qui l'attache) et un appel direct au chemin du front.
+
+| # | Mesure | Résultat |
+|---|---|---|
+| 1 | `ml_url` | `http://courageous-analysis.railway.internal:8080` — **avec son port** ✅ |
+| 1 | `service_up` | Python ML Service — **Online** ✅ |
+| 1 | `samples.game` / `samples.player` | 56 % (`vscore-nhl-v1.0`) et 44 % (`vpoisson-v1.0`) — **non nuls** ✅ |
+| 2 | Run Test *game* `bos`/`nyr` moneyline | 56 %, confiance 67 % |
+| 4 | Run Test *player* `8478402` goals 0.5 | 44 %, `vpoisson-v1.0` |
+| 4 | Run Test *team* `bos` | 9 %, `vrank-bayes-v1.0 · Bayesian Prior` |
+| 3 | `POST /api/predict/ml` `{game, bos, nyr}` depuis l'origine du front | **56 %, confiance 67 %, mêmes feature importances au centième** |
+
+**Le critère est dépassé.** Le runbook demandait « le même ordre de grandeur »
+entre le chemin dev et le chemin du front ; les trois chemins — échantillon de
+démarrage, route dev, route du front — rendent **le même chiffre**. Les trois
+routes Python sont couvertes.
+
+⚠️ **L'étape 5 n'a pas pu être faite, et la raison est un défaut.** Voir la
+section suivante.
+
+## I2 — CORS + cookie cross-site : ✅ six étapes sur sept
+
+Méthode : plutôt que de lire les en-têtes à l'œil, on laisse **le navigateur**
+juger. Un `fetch` cross-origin avec `credentials: 'include'` et
+`Content-Type: application/json` force un préflight `OPTIONS` réel, et le
+navigateur ne le laisse passer que si `Access-Control-Allow-Origin` vaut
+**exactement** l'origine appelante (jamais `*`) **et** que
+`Access-Control-Allow-Credentials` est `true`. Une origine refusée fait *jeter*
+le `fetch`. C'est une preuve plus forte qu'une lecture d'en-tête.
+
+| # | Origine | Attendu | Mesuré |
+|---|---|---|---|
+| 1 | `https://arakice.com` | accepté | **préflight PASSÉ**, 401 `Invalid credentials` ✅ |
+| 2 | `https://example.com` | refusé | **BLOQUÉ** — `TypeError: Failed to fetch` ✅ |
+| 3 | `https://ice-edge-hazel.vercel.app` | accepté (regex ancrée) | **préflight PASSÉ**, 401 ✅ |
+| 4 | sans en-tête `Origin` | accepté | ⏳ **reste à faire** — impossible depuis un navigateur, voir plus bas |
+| 5-6 | `POST /api/auth/refresh`, cookie seul, cross-site | 200 | **200**, corps `{access_token, expires_in}` ✅ |
+| 7 | handshake socket.io | connexion établie | **200**, `{"sid":…,"upgrades":["websocket"]}` ✅ |
+
+**Ce que les étapes 5-6 prouvent d'un coup.** Un `POST /api/auth/refresh`
+cross-site **sans en-tête `Authorization`** qui rend 200 démontre que le
+navigateur a bien envoyé `ice_refresh` : donc `HttpOnly`, `Secure`,
+`SameSite=None` et `Path=/api/auth` sont tous corrects en production. Lire les
+attributs dans DevTools aurait dit la même chose moins bien.
+
+✅ **Et une assertion de F1 tombe au passage** — la seule qui fasse échouer F1
+même quand le parcours marche : le corps de la réponse ne contient que
+`access_token` et `expires_in`. **Pas de `refresh_token`, pas de
+`refresh_expires_in`.** Le refresh ne fuit pas hors du cookie.
+
+✅ **L'étape 7 n'était pas redondante et elle rapporte.** Le handshake
+`GET /socket.io/?EIO=4&transport=polling` passe en cross-origin depuis l'apex :
+`socket.ts` et `cors.ts` sont bien d'accord, malgré les **deux** origines dans
+`CORS_ORIGIN` — exactement la configuration qui déclenchait le bug historique.
+
+### Ce qui reste : l'étape 4, et pourquoi elle ne peut pas passer par le navigateur
+
+Un navigateur envoie **toujours** `Origin` en cross-site : il est structurellement
+incapable de tester une requête qui n'en a pas. Il faut un client non navigateur,
+et `arakice.com`, `api.arakice.com` comme le domaine Railway sont **bloqués par
+l'allowlist d'egress** des shells de session (vérifié le 2026-08-31, les deux
+shells). À lancer depuis un terminal de la machine :
+
+```bash
+# 4 — sans Origin : doit être ACCEPTÉ (voulu ; ce n'est pas une requête cross-origin)
+curl -i -X POST https://api.arakice.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"cors-probe@invalid.test","password":"x"}'
+# attendu : 401 Invalid credentials — et surtout PAS un refus CORS
+
+# 1 bis — la même avec Origin, pour lire les en-têtes à l'œil
+curl -i -X OPTIONS https://api.arakice.com/api/auth/login \
+  -H "Origin: https://arakice.com" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: content-type"
+# attendu : 204 · access-control-allow-origin: https://arakice.com (PAS *)
+#           · access-control-allow-credentials: true
+```
+
+## Le défaut trouvé en chemin — la page NHL Predictions hors saison
+
+`/nhl-predictions` reste **indéfiniment sur ses squelettes de chargement** :
+quatre cartes grises, aucun texte, aucune fin. Ce n'est pas une panne — les six
+appels `GET /api/nhl/games?date=…` rendent **200**, et leur corps est `[]` : on
+est hors saison, il n'y a aucun match à afficher.
+
+**Pourquoi ça compte malgré tout.** L'écran d'un état vide légitime est
+strictement identique à celui d'une panne réseau. B9 a établi qu'une
+indisponibilité se manifeste par « — » et un bandeau ; un chargement qui ne se
+termine jamais n'est ni l'un ni l'autre. Le premier visiteur d'octobre verra la
+bonne page, mais **tout visiteur d'ici là voit un site cassé** — et si la chaîne
+tombe vraiment un soir de match, personne ne saura faire la différence.
+
+C'est aussi ce qui a empêché de cocher l'étape 5 de I1 : il n'existe aujourd'hui
+aucune page où une probabilité puisse s'afficher. Le modèle, lui, répond — I1
+étape 3 le prouve par l'API.
+
+## Deux observations mineures, notées pour ne pas les reperdre
+
+- **Le dashboard `/dev/ml` s'auto-contredit.** L'onglet *Service* affiche
+  `Game Model : XGBoost (trained)` et, trois lignes plus bas, en jaune :
+  *« Lance fetch_data.py puis train.py pour activer XGBoost »*. L'onglet
+  *Modèle* tranche : le modèle est bien chargé (log loss test **0,6653**, val
+  0,6514, accuracy 59,2 %, skill score 0,0477, `calibration platt · active`) —
+  et 0,6653 est exactement la valeur de `training_report.json`. **C'est le
+  message jaune qui est faux**, et il pousserait à relancer un entraînement
+  inutile.
+- **`P(OT DOMICILE) : 0.500`** et **`MEMBRES ENSEMBLE : 0 chargés`** sur l'onglet
+  *Modèle*. Le 0,500 plat confirme que la correction `p_ot_home` par affiche est
+  en code mais **pas encore dans le modèle déployé** — elle s'activera au
+  prochain `train_score.py`, comme prévu. Rien d'anormal, mais c'est la preuve
+  visible qu'il reste un entraînement à lancer.

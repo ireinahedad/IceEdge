@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io as socketIO, Socket } from 'socket.io-client';
 import type { ChatMessage } from '../types/user';
-import { getAccessToken } from '../services/authService';
+import { tokenStore } from '../services/tokenStore';
 import { env } from '../env';
 
 const SOCKET_URL = env.socketUrl;
@@ -30,7 +30,12 @@ export function useChatSocket(roomId: string | null) {
     const socket = socketIO(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       path: '/socket.io',
-      auth: { token: getAccessToken() ?? '' },
+      // Callback form, not a literal: reading the token is async since R3.6.
+      // Socket.io calls this before each (re)connection, so a token refreshed
+      // in the meantime is picked up instead of the one captured at mount.
+      auth: (cb: (data: object) => void) => {
+        tokenStore.getAccess().then((token) => cb({ token: token ?? '' }));
+      },
     });
     socketRef.current = socket;
 

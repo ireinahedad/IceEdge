@@ -19,6 +19,7 @@ import type { UserProfile } from "./../../types/user";
 import { InjuriesAdminCard } from "../../components/InjuriesAdminCard";
 import { useI18n } from "../../i18n";
 import { useBookmaker } from "../../context/BookmakerContext";
+import { features } from "../../platform";
 import { DotLoader, InputBox, ToggleSwitch, UserAvatar } from "./ProfileParts";
 
 
@@ -173,28 +174,32 @@ export function SettingsTab({
       </div>
 
       {/* Sportsbook selector — which betting site the "Place bet" buttons open */}
-      <div className="icy-card rounded-lg px-3 py-2.5">
-        <div className="flex items-center gap-1.5 mb-1.5">
-          <span className="text-[11px]">🎯</span>
-          <span className="text-[11px] font-bold text-white/80">{t("profile.bookmaker")}</span>
+      {/* APPLE_PLAN §4 — Guideline 5.3: nothing links out to a sportsbook on iOS,
+          so there is no book to choose. */}
+      {features.bookmakerLinks && (
+        <div className="icy-card rounded-lg px-3 py-2.5">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-[11px]">🎯</span>
+            <span className="text-[11px] font-bold text-white/80">{t("profile.bookmaker")}</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {bookmakers.map((b) => (
+              <button
+                key={b.id}
+                onClick={() => setBookmakerId(b.id)}
+                className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-colors ${
+                  bookmakerId === b.id
+                    ? "bg-[#90C9F0]/15 border-[#90C9F0]/40 text-[#90C9F0]"
+                    : "border-white/15 text-white/50 active:bg-white/5"
+                }`}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[9px] text-white/35 mt-1.5">{t("profile.bookmakerHint")}</p>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {bookmakers.map((b) => (
-            <button
-              key={b.id}
-              onClick={() => setBookmakerId(b.id)}
-              className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-colors ${
-                bookmakerId === b.id
-                  ? "bg-[#90C9F0]/15 border-[#90C9F0]/40 text-[#90C9F0]"
-                  : "border-white/15 text-white/50 active:bg-white/5"
-              }`}
-            >
-              {b.label}
-            </button>
-          ))}
-        </div>
-        <p className="text-[9px] text-white/35 mt-1.5">{t("profile.bookmakerHint")}</p>
-      </div>
+      )}
 
       {/* Avatar */}
       <div className="icy-card rounded-2xl p-4 flex flex-col gap-4">
@@ -314,91 +319,99 @@ export function SettingsTab({
       </div>
 
       {/* Notifications — value bets (Pro only) */}
-      <div className="icy-card rounded-2xl p-4 flex flex-col gap-3">
-        <p className="text-white text-xs font-medium">{t("profile.notifications")}</p>
+      {/* R6 — this whole card drives the Web Push API. iOS notifications go through
+          APNs and get their own card when APPLE_PLAN R6 lands. */}
+      {features.webPush && (
+        <div className="icy-card rounded-2xl p-4 flex flex-col gap-3">
+          <p className="text-white text-xs font-medium">{t("profile.notifications")}</p>
 
-        <div className="flex items-center gap-3 py-1">
-          <div className="flex-1">
-            <label className={`text-xs ${isPro ? "text-white/70" : "text-white/40"}`}>{t("profile.notifyValueBets")}</label>
-            <p className="text-white/40 text-[9px] mt-0.5">{t("profile.notifyValueBetsHint")}</p>
+          <div className="flex items-center gap-3 py-1">
+            <div className="flex-1">
+              <label className={`text-xs ${isPro ? "text-white/70" : "text-white/40"}`}>{t("profile.notifyValueBets")}</label>
+              <p className="text-white/40 text-[9px] mt-0.5">{t("profile.notifyValueBetsHint")}</p>
+            </div>
+            {isPro ? (
+              <ToggleSwitch checked={notifyValueBets} onChange={handleToggleNotify} fontSize={12} />
+            ) : (
+              <button
+                onClick={() => navigate("/pro")}
+                className="px-3 py-1.5 rounded-lg text-[10px] font-bold flex-shrink-0"
+                style={{ background: "#86d1ea", color: "#0A0E0C" }}
+              >
+                {t("pro.unlock")}
+              </button>
+            )}
           </div>
-          {isPro ? (
-            <ToggleSwitch checked={notifyValueBets} onChange={handleToggleNotify} fontSize={12} />
-          ) : (
+
+          {isPro && notifyValueBets && (
+            <div className="flex items-center gap-3 py-1 border-t border-white/5 pt-3">
+              <div className="flex-1">
+                <label className="text-xs text-white/70">{t("profile.minEv")}</label>
+                <p className="text-white/40 text-[9px] mt-0.5">{t("profile.minEvHint")}</p>
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <input
+                  type="number"
+                  min={0}
+                  max={50}
+                  step={1}
+                  value={minEvPct}
+                  onChange={(e) => {
+                    const n = Math.round(Number(e.target.value));
+                    setMinEvPct(Number.isFinite(n) ? Math.min(50, Math.max(0, n)) : 0);
+                  }}
+                  className="w-14 bg-white/5 rounded-lg px-2 py-1.5 text-white text-xs text-right tabular-nums outline-none focus:bg-white/10"
+                />
+                <span className="text-white/50 text-xs">%</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* AI Settings */}
+      {/* APPLE_PLAN R8 — bring-your-own OpenAI key sits in the 3.1.1 grey zone;
+          hidden on iOS until that call is made. */}
+      {features.byokOpenAI && (
+        <div className="icy-card rounded-2xl p-4 flex flex-col gap-3">
+          <p className="text-white text-xs font-medium">{t("profile.aiSettings")}</p>
+          <p className="text-white/50 text-[10px]">
+            {t("profile.aiSettingsDesc")}{" "}
+            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-[#90C9F0] underline">
+              {t("profile.getKey")}
+            </a>
+          </p>
+
+          <div>
+            <label className="block text-white/50 text-[9px] uppercase tracking-wider mb-1">{t("profile.openaiKey")}</label>
+            <div className="relative">
+              <input
+                type={showKey ? "text" : "password"}
+                value={openaiKey}
+                onChange={(e) => setOpenaiKey(e.target.value)}
+                placeholder="sk-proj-..."
+                className={`w-full bg-black/20 border border-white/40 rounded-lg pl-2.5 pr-12 py-2 text-[11px] font-semibold placeholder-white/25 outline-none focus:border-[#90C9F0]/60 transition-colors ${mode === "light" ? "text-[#072E49]" : "text-[#90C9F0]"}`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#90C9F0] text-[10px]"
+              >
+                {showKey ? t("profile.hide") : t("profile.show")}
+              </button>
+            </div>
+          </div>
+
+          {openaiKey && (
             <button
-              onClick={() => navigate("/pro")}
-              className="px-3 py-1.5 rounded-lg text-[10px] font-bold flex-shrink-0"
-              style={{ background: "#86d1ea", color: "#0A0E0C" }}
+              onClick={() => setOpenaiKey("")}
+              className="text-red-400 text-[10px] self-start hover:text-red-300"
             >
-              {t("pro.unlock")}
+              {t("profile.removeKey")}
             </button>
           )}
         </div>
-
-        {isPro && notifyValueBets && (
-          <div className="flex items-center gap-3 py-1 border-t border-white/5 pt-3">
-            <div className="flex-1">
-              <label className="text-xs text-white/70">{t("profile.minEv")}</label>
-              <p className="text-white/40 text-[9px] mt-0.5">{t("profile.minEvHint")}</p>
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <input
-                type="number"
-                min={0}
-                max={50}
-                step={1}
-                value={minEvPct}
-                onChange={(e) => {
-                  const n = Math.round(Number(e.target.value));
-                  setMinEvPct(Number.isFinite(n) ? Math.min(50, Math.max(0, n)) : 0);
-                }}
-                className="w-14 bg-white/5 rounded-lg px-2 py-1.5 text-white text-xs text-right tabular-nums outline-none focus:bg-white/10"
-              />
-              <span className="text-white/50 text-xs">%</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* AI Settings */}
-      <div className="icy-card rounded-2xl p-4 flex flex-col gap-3">
-        <p className="text-white text-xs font-medium">{t("profile.aiSettings")}</p>
-        <p className="text-white/50 text-[10px]">
-          {t("profile.aiSettingsDesc")}{" "}
-          <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-[#90C9F0] underline">
-            {t("profile.getKey")}
-          </a>
-        </p>
-
-        <div>
-          <label className="block text-white/50 text-[9px] uppercase tracking-wider mb-1">{t("profile.openaiKey")}</label>
-          <div className="relative">
-            <input
-              type={showKey ? "text" : "password"}
-              value={openaiKey}
-              onChange={(e) => setOpenaiKey(e.target.value)}
-              placeholder="sk-proj-..."
-              className={`w-full bg-black/20 border border-white/40 rounded-lg pl-2.5 pr-12 py-2 text-[11px] font-semibold placeholder-white/25 outline-none focus:border-[#90C9F0]/60 transition-colors ${mode === "light" ? "text-[#072E49]" : "text-[#90C9F0]"}`}
-            />
-            <button
-              type="button"
-              onClick={() => setShowKey((v) => !v)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#90C9F0] text-[10px]"
-            >
-              {showKey ? t("profile.hide") : t("profile.show")}
-            </button>
-          </div>
-        </div>
-
-        {openaiKey && (
-          <button
-            onClick={() => setOpenaiKey("")}
-            className="text-red-400 text-[10px] self-start hover:text-red-300"
-          >
-            {t("profile.removeKey")}
-          </button>
-        )}
-      </div>
+      )}
 
       {/* Saisie admin des blessures/alignement.
           (La pondération des règles est désormais dans chaque carte de règle, par type de pari.) */}

@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   AuthUser, AuthResult, PendingVerification,
-  getAccessToken, storeTokens, clearTokens,
   apiLogin, apiRegister, apiLogout, apiLogoutAll, apiVerifyEmail,
 } from '../services/authService';
+import { tokenStore, onSessionCleared } from '../services/tokenStore';
 
 interface AuthContextValue {
   user:        AuthUser | null;
@@ -24,25 +24,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token,   setToken]   = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Rehydrate from localStorage on mount
+  // Rehydrate from the token store on mount. Async since R3.6: the native
+  // store is promise-based, and `loading` already covers the gap — the router
+  // waits for it before deciding whether to send anyone to /login.
   useEffect(() => {
-    const stored = getAccessToken();
-    if (stored) {
-      // Decode payload to get user info (no network call needed)
-      try {
-        const payload = JSON.parse(atob(stored.split('.')[1]));
-        // We only have sub/email/role in the JWT; fetch full profile lazily
-        setToken(stored);
-        setUser({ id: payload.sub, email: payload.email, username: '', first_name: null, last_name: null, role: payload.role });
-      } catch {
-        clearTokens();
+    let cancelled = false;
+
+    (async () => {
+      const stored = await tokenStore.getAccess();
+      if (cancelled) return;
+
+      if (stored) {
+        // Decode payload to get user info (no network call needed)
+        try {
+          const payload = JSON.parse(atob(stored.split('.')[1]));
+          // We only have sub/email/role in the JWT; fetch full profile lazily
+          setToken(stored);
+          setUser({ id: payload.sub, email: payload.email, username: '', first_name: null, last_name: null, role: payload.role });
+        } catch {
+          await tokenStore.clear();
+        }
       }
-    }
-    setLoading(false);
+      if (!cancelled) setLoading(false);
+    })();
+
+    return () => { cancelled = true; };
   }, []);
 
+  /**
+   * R3.8 — the session can end without anyone here asking for it: a refresh
+   * fails, the store clears itself, and until now the UI carried on believing
+   * it was signed in and rendered 401s. Dropping the user is enough to fix it —
+   * the app is browsable signed-out, and `Protected` already redirects to
+   * /login (with returnTo) for the pages that do need an account. No forced
+   * navigation from here, so nobody gets bounced off /stats.
+   */
+  useEffect(() => onSessionCleared(() => {
+    setUser(null);
+    setToken(null);
+  }), []);
+
   const setSession = useCallback((result: AuthResult) => {
-    storeTokens(result.tokens.access_token); // refresh token lives in an httpOnly cookie
+    // On web the refresh token is not in this payload — it is in the httpOnly
+    // cookie, and the store drops the argument. Native gets it here.
+    void tokenStore.setTokens(result.tokens.access_token, result.tokens.refresh_token);
     setToken(result.tokens.access_token);
     setUser(result.user);
   }, []);

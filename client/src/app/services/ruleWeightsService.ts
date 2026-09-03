@@ -11,7 +11,7 @@
  * Ne pas le réintroduire — `RuleFactorEditor` est le seul éditeur.
  */
 
-import { getAccessToken } from './authService';
+import { tokenStore } from './tokenStore';
 import { profileApiService } from './userService';
 
 /** Query string — conservé pour compat ; les poids sont appliqués côté client. */
@@ -109,8 +109,8 @@ function sanitizeStore(map: unknown): FamilyStore {
 }
 
 /** Vrai si le compte est connecté — sans quoi toute synchro est inutile. */
-function isSignedIn(): boolean {
-  return !!getAccessToken();
+async function isSignedIn(): Promise<boolean> {
+  return !!(await tokenStore.getAccess());
 }
 
 let hydrated = false;
@@ -145,7 +145,7 @@ export function applyServerFamilyWeights(map: unknown): boolean {
  * L'appelant décide quoi faire de l'échec ; rien ici n'est bloquant.
  */
 export async function pushFamilyWeights(store: FamilyStore = loadFamilyStore()): Promise<boolean> {
-  if (!isSignedIn()) return false;
+  if (!(await isSignedIn())) return false;
   await profileApiService.updateProfile({ ruleWeights: sanitizeStore(store) });
   return true;
 }
@@ -161,11 +161,15 @@ export async function pushFamilyWeights(store: FamilyStore = loadFamilyStore()):
  * @returns vrai si le store local a changé (l'appelant doit se rafraîchir).
  */
 export function ensureFamilyWeightsHydrated(): Promise<boolean> {
-  if (hydrated || !isSignedIn()) return Promise.resolve(false);
+  if (hydrated) return Promise.resolve(false);
   if (hydrating) return hydrating;
 
+  // `hydrating` is assigned before the first await on purpose: the sign-in
+  // check is async since R3.6, and testing it before memoising would let two
+  // concurrent callers both slip through and fetch the profile twice.
   hydrating = (async () => {
     try {
+      if (!(await isSignedIn())) return false;
       const profile = await profileApiService.getProfile();
       const changed = applyServerFamilyWeights(profile.ruleWeights);
 

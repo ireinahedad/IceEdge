@@ -13,6 +13,7 @@ import { useSport } from "../../context/SportContext";
 import { useBet } from "../../context/BetContext";
 import { useI18n } from "../../i18n";
 import { openBet } from "../../services/bookmakers";
+import { features } from "../../platform";
 import { useBookmaker } from "../../context/BookmakerContext";
 import { DisplayGame, calcEdge } from "./landingTypes";
 
@@ -54,6 +55,18 @@ export function SportSelector() {
 
 function OddsPill({ decimal, onBet }: { decimal: number; onBet: () => void }) {
   const { bookmaker } = useBookmaker();
+
+  // APPLE_PLAN §4 — Guideline 5.3. The price is information the prediction
+  // pages lean on, so it stays; what goes is the tap that opens a sportsbook
+  // and the book's name next to it. Same pill, no handler.
+  if (!features.bookmakerLinks) {
+    return (
+      <span className="flex items-center gap-1 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5">
+        <span className="text-[10px] font-bold text-green-400">{decimal.toFixed(2)}</span>
+      </span>
+    );
+  }
+
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onBet(); }}
@@ -184,8 +197,9 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
           <OddsPill decimal={game.bet365Away} onBet={() => openBet("hockey")} />
           {/* Moneyline is a universal betting term, kept as-is */}
         </div>
-      ) : (
-        /* No API key — show a subtle link to bet365 instead */
+      ) : features.bookmakerLinks ? (
+        /* No API key — show a subtle link to bet365 instead.
+           Nothing to show on iOS: no odds and no link out (Guideline 5.3). */
         <div className="flex items-center justify-end mt-1">
           <button
             onClick={(e) => { e.stopPropagation(); openBet("hockey"); }}
@@ -194,7 +208,7 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
             {t("home.betOn")}
           </button>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

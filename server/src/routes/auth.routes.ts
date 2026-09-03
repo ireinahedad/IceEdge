@@ -59,6 +59,61 @@ function publicTokens(tokens: AuthTokens): Omit<AuthTokens, 'refresh_token' | 'r
   return rest;
 }
 
+// ── Native mode (PRE_IOS_PLAN.md R3.1) ────────────────────────────────────────
+// A WKWebView runs on a `capacitor://localhost` origin. To the API that is a
+// cross-site request, and WKWebView's tracking prevention drops the
+// SameSite=None cookie set above — so a native client would be silently logged
+// out every 15 minutes, when the access token expires, with no way to recover.
+// Native therefore needs the refresh token in hand.
+//
+// Opt-in, per request, via `X-Client: native`. Without that header nothing
+// changes: the browser path is exactly the code that ran before this existed.
+
+/** http(s) — the scheme every browser origin uses. */
+const BROWSER_ORIGIN = /^https?:\/\//i;
+
+/**
+ * Is this request allowed to use native mode?
+ *
+ * The Origin guard is the point of this function. `X-Client` is a request
+ * header and a browser can set it, so without the guard an XSS on arakice.com
+ * could ask /auth/refresh for native mode and read the refresh token straight
+ * out of the JSON body. The httpOnly cookie exists precisely so that JS can never do that;
+ * handing the same token to any caller that asks would give the whole guarantee
+ * away.
+ *
+ * Browsers send `Origin` on every POST — including same-origin ones — and it is
+ * always http(s). A native shell sends `capacitor://localhost`, `ionic://…`,
+ * `file://` or no Origin at all. Matching on the *scheme* rather than on the
+ * CORS allow-list is deliberate: Phase 3 will have to add the Capacitor origin
+ * to CORS_ORIGIN, and an allow-list check would then demote native back to the
+ * cookie path — the exact bug this mode exists to avoid.
+ */
+function isNativeClient(req: Request): boolean {
+  if (req.get('x-client') !== 'native') return false;
+  const origin = req.get('origin');
+  if (origin && BROWSER_ORIGIN.test(origin)) return false;
+  return true;
+}
+
+/**
+ * Hand the session to the client the way that client can actually keep it:
+ * httpOnly cookie for browsers, refresh token in the body for native.
+ *
+ * Rotation, revocation and hashing are untouched (R3.2) — `refreshTokens()`
+ * still revokes the old token, `refresh_tokens` still stores hashes. Native
+ * gets the same guarantees, not weaker ones.
+ */
+function sendTokens(req: Request, res: Response, tokens: AuthTokens) {
+  // The body now depends on a request header. Caches must not mix the two.
+  res.vary('X-Client');
+
+  if (isNativeClient(req)) return tokens;
+
+  setRefreshCookie(res, tokens.refresh_token, tokens.refresh_expires_in);
+  return publicTokens(tokens);
+}
+
 // POST /auth/register — creates an unverified account and emails a 6-digit code.
 // No tokens are returned; the client must call /auth/verify-email next.
 router.post('/register', validateBody(registerSchema), async (req: Request<{}, {}, RegisterBody>, res: Response) => {
@@ -73,8 +128,7 @@ router.post('/register', validateBody(registerSchema), async (req: Request<{}, {
       return res.status(201).json(result); // { pending: true, email } — must verify
     }
     // Verification bypassed → logged in immediately.
-    setRefreshCookie(res, result.tokens.refresh_token, result.tokens.refresh_expires_in);
-    return res.status(201).json({ user: result.user, tokens: publicTokens(result.tokens) });
+    return res.status(201).json({ user: result.user, tokens: sendTokens(req, res, result.tokens) });
   } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
@@ -85,8 +139,7 @@ router.post('/verify-email', validateBody(verifyEmailSchema), async (req: Reques
     if (!email || !code)
       return res.status(400).json({ error: 'email and code are required' });
     const result = await AuthService.verifyEmail(email, code);
-    setRefreshCookie(res, result.tokens.refresh_token, result.tokens.refresh_expires_in);
-    return res.status(200).json({ user: result.user, tokens: publicTokens(result.tokens) });
+    return res.status(200).json({ user: result.user, tokens: sendTokens(req, res, result.tokens) });
   } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
@@ -130,8 +183,7 @@ router.post('/login', validateBody(loginSchema), async (req: Request<{}, {}, Log
     if (!email || !password)
       return res.status(400).json({ error: 'email and password are required' });
     const result = await AuthService.login({ email, password, remember });
-    setRefreshCookie(res, result.tokens.refresh_token, result.tokens.refresh_expires_in);
-    return res.status(200).json({ user: result.user, tokens: publicTokens(result.tokens) });
+    return res.status(200).json({ user: result.user, tokens: sendTokens(req, res, result.tokens) });
   } catch (err: any) {
     // Surface the "not verified" case so the client can prompt for the code.
     if (err.code === 'EMAIL_NOT_VERIFIED') {
@@ -141,14 +193,14 @@ router.post('/login', validateBody(loginSchema), async (req: Request<{}, {}, Log
   }
 });
 
-// POST /auth/refresh — reads the httpOnly cookie (body fallback for legacy clients)
+// POST /auth/refresh — the httpOnly cookie for browsers, `{ refresh_token }`
+// in the body for native clients (R3.1). The body was already accepted here.
 router.post('/refresh', async (req: Request<{}, {}, RefreshBody>, res: Response) => {
   try {
     const raw = req.cookies?.[REFRESH_COOKIE] || req.body?.refresh_token;
     if (!raw) return res.status(400).json({ error: 'refresh token is required' });
     const tokens = await AuthService.refreshTokens(raw); // rotates: old token revoked
-    setRefreshCookie(res, tokens.refresh_token, tokens.refresh_expires_in);
-    return res.status(200).json(publicTokens(tokens));
+    return res.status(200).json(sendTokens(req, res, tokens));
   } catch (err: any) {
     clearRefreshCookie(res);
     return res.status(err.status ?? 500).json({ error: err.message });
@@ -220,6 +272,11 @@ router.get('/google/callback', async (req: Request, res: Response) => {
 
     // Refresh token → httpOnly cookie; only the short-lived access token
     // transits in the redirect URL.
+    //
+    // No native branch here on purpose (PRE_IOS_PLAN.md R3.1 lists one): this is
+    // a browser redirect, not a fetch, so there is no request header to opt in
+    // with — and R2 removed Google Sign-In from the iOS build entirely
+    // (Guideline 4.8), so nothing native ever reaches this handler.
     setRefreshCookie(res, tokens.refresh_token, tokens.refresh_expires_in);
     const params = new URLSearchParams({ access_token: tokens.access_token });
 

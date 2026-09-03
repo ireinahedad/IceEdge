@@ -7,6 +7,7 @@ import { IceedgeLogo } from "../components/brand/IceedgeLogo";
 import { AppButton } from "../components/AppButton";
 import { BottomNav } from "../components/BottomNav";
 import { useI18n } from "../i18n";
+import { features } from "../platform";
 
 type Mode = "login" | "register";
 
@@ -206,27 +207,33 @@ export function LoginPage() {
         ))}
       </div>
 
-      {/* Google SSO */}
-      <button
-        onClick={handleGoogleLogin}
-        className="w-full flex items-center justify-center gap-3 py-3 rounded-xl text-sm font-medium active:scale-[0.98] transition-all mb-4"
-        style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: "#F3F7F0" }}
-      >
-        <svg width="18" height="18" viewBox="0 0 48 48" fill="none">
-          <path d="M47.5 24.5c0-1.6-.1-3.2-.4-4.7H24v8.9h13.2c-.6 3-2.3 5.5-4.9 7.2v6h7.9c4.6-4.3 7.3-10.6 7.3-17.4z" fill="#4285F4"/>
-          <path d="M24 48c6.5 0 12-2.1 16-5.8l-7.9-6c-2.2 1.5-5 2.3-8.1 2.3-6.2 0-11.5-4.2-13.4-9.9H2.4v6.2C6.4 42.6 14.6 48 24 48z" fill="#34A853"/>
-          <path d="M10.6 28.6A14.3 14.3 0 0 1 10 24c0-1.6.3-3.1.6-4.6v-6.2H2.4A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.4 10.8l8.2-6.2z" fill="#FBBC05"/>
-          <path d="M24 9.5c3.5 0 6.6 1.2 9.1 3.5l6.8-6.8C35.9 2.1 30.5 0 24 0 14.6 0 6.4 5.4 2.4 13.2l8.2 6.2C12.5 13.7 17.8 9.5 24 9.5z" fill="#EA4335"/>
-        </svg>
-        {t("login.google")}
-      </button>
+      {/* R2.2 — Guideline 4.8: the iOS build ships e-mail login only, so the
+          Google button and its divider disappear with it. VITE_TARGET is unset
+          on web, so this is always true there and nothing changes. */}
+      {features.googleLogin && (
+        <>
+        <button
+          onClick={handleGoogleLogin}
+          className="w-full flex items-center justify-center gap-3 py-3 rounded-xl text-sm font-medium active:scale-[0.98] transition-all mb-4"
+          style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: "#F3F7F0" }}
+        >
+          <svg width="18" height="18" viewBox="0 0 48 48" fill="none">
+            <path d="M47.5 24.5c0-1.6-.1-3.2-.4-4.7H24v8.9h13.2c-.6 3-2.3 5.5-4.9 7.2v6h7.9c4.6-4.3 7.3-10.6 7.3-17.4z" fill="#4285F4"/>
+            <path d="M24 48c6.5 0 12-2.1 16-5.8l-7.9-6c-2.2 1.5-5 2.3-8.1 2.3-6.2 0-11.5-4.2-13.4-9.9H2.4v6.2C6.4 42.6 14.6 48 24 48z" fill="#34A853"/>
+            <path d="M10.6 28.6A14.3 14.3 0 0 1 10 24c0-1.6.3-3.1.6-4.6v-6.2H2.4A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.4 10.8l8.2-6.2z" fill="#FBBC05"/>
+            <path d="M24 9.5c3.5 0 6.6 1.2 9.1 3.5l6.8-6.8C35.9 2.1 30.5 0 24 0 14.6 0 6.4 5.4 2.4 13.2l8.2 6.2C12.5 13.7 17.8 9.5 24 9.5z" fill="#EA4335"/>
+          </svg>
+          {t("login.google")}
+        </button>
 
-      {/* Divider */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex-1 h-px" style={{ background: BORDER }} />
-        <span className="text-[10px] uppercase tracking-widest" style={{ color: "#92A08A" }}>{t("login.or")}</span>
-        <div className="flex-1 h-px" style={{ background: BORDER }} />
-      </div>
+        {/* Divider */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex-1 h-px" style={{ background: BORDER }} />
+          <span className="text-[10px] uppercase tracking-widest" style={{ color: "#92A08A" }}>{t("login.or")}</span>
+          <div className="flex-1 h-px" style={{ background: BORDER }} />
+        </div>
+        </>
+      )}
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">

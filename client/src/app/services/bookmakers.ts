@@ -12,6 +12,7 @@
 // Links work without a code — they're just untracked.
 
 import { env } from "../env";
+import { features } from "../platform";
 
 export type Sport = "hockey";
 export type BookmakerId = "bet365" | "stake";
@@ -103,6 +104,10 @@ export function buildBookmakerUrl(book: Bookmaker, path = ""): string {
 }
 
 function openUrl(url: string): void {
+  // APPLE_PLAN §4 — Guideline 5.3. Every entry point is already hidden on
+  // iOS; this is the second line of defence, so a call site added later
+  // cannot quietly re-open a sportsbook from inside the app.
+  if (!features.bookmakerLinks) return;
   window.open(url, "_blank", "noopener,noreferrer");
 }
 

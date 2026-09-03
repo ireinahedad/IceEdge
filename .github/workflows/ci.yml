@@ -60,3 +60,18 @@ jobs:
           cache-dependency-path: client/package-lock.json
       - run: npm ci
       - run: npm run build
+
+      # PRE_IOS_PLAN.md R7.3 — le bundle de production ne doit jamais contenir
+      # d'URL de serveur de dev. Ne demande aucune variable : il relit le dist/
+      # qui vient d'être construit.
+      #
+      # La validation des quatre URLs elles-mêmes ne se fait PAS ici. GitHub
+      # Actions ne déploie rien : dupliquer les URLs dans des variables de dépôt
+      # créerait une deuxième source de vérité qui peut diverger de Vercel en
+      # silence. Elle tourne dans la commande de build Vercel, là où les vraies
+      # variables existent :
+      #     npm run check:env && npm run build
+      # Un déploiement qui échoue laisse la version précédente en ligne — c'est
+      # le mode d'échec le plus sûr. Voir DEPLOYMENT.md § 4.
+      - name: check:env — scan du bundle
+        run: npm run check:env:dist

@@ -1,38 +1,31 @@
 /**
  * authService.ts
- * Wraps /api/auth/* endpoints and manages token storage.
+ * Wraps /api/auth/* endpoints. Where the session is *kept* is tokenStore.ts.
  *
- * Access token  → localStorage (short-lived, 15 min).
- * Refresh token → httpOnly cookie set by the server (never visible to JS).
- *   All /auth calls therefore use `credentials: 'include'` so the cookie
- *   flows between the client origin and the API origin.
+ * Web: access token in localStorage, refresh token in an httpOnly cookie the
+ * server sets — so every /auth call uses `credentials: 'include'` and the
+ * cookie flows between the client origin and the API origin.
+ *
+ * Native (Phase 3): WKWebView drops that cookie, so the refresh token is held
+ * by the store and travels in the request body behind `X-Client: native`
+ * (PRE_IOS_PLAN.md R3). Only one function below branches on it — `tryRefresh`
+ * — and it branches on whether the *store* has a refresh token, not on the
+ * platform. On web the store returns null forever, so the browser path is the
+ * code that always ran.
  */
 
 import { env } from '../env';
+import { tokenStore } from './tokenStore';
 
 const BASE = env.profileApiUrl;
 
-// --- Token storage ----------------------------------------------------------
-
-const ACCESS_KEY  = 'ice_access';
-const LEGACY_REFRESH_KEY = 'ice_refresh'; // pre-cookie era — cleaned up on load
-
-export function getAccessToken(): string | null  { return localStorage.getItem(ACCESS_KEY); }
-
-export function storeTokens(access: string) {
-  localStorage.setItem(ACCESS_KEY, access);
-  localStorage.removeItem(LEGACY_REFRESH_KEY);
-}
-
-export function clearTokens() {
-  localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(LEGACY_REFRESH_KEY);
-}
+/** Marks a request as coming from the native shell (see tokenStore.ts). */
+const NATIVE_CLIENT_HEADER = { 'X-Client': 'native' } as const;
 
 // --- Authed fetch helper ----------------------------------------------------
 
 export async function authedFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const token = getAccessToken();
+  const token = await tokenStore.getAccess();
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
@@ -47,7 +40,7 @@ export async function authedFetch(path: string, init: RequestInit = {}): Promise
   if (res.status === 401) {
     const refreshed = await tryRefresh();
     if (refreshed) {
-      const newToken = getAccessToken();
+      const newToken = await tokenStore.getAccess();
       return fetch(`${BASE}${path}`, {
         ...init,
         headers: {
@@ -62,19 +55,39 @@ export async function authedFetch(path: string, init: RequestInit = {}): Promise
   return res;
 }
 
+/**
+ * Exchange the refresh credential for a new access token. R3.5.
+ *
+ * One branch, keyed on what the store holds rather than on the platform:
+ *   web    → getRefresh() is null → `credentials: 'include'`, no body. The
+ *            httpOnly cookie *is* the credential, exactly as before.
+ *   native → the token is in hand → it travels in the body behind
+ *            `X-Client: native`, because no cookie survives WKWebView.
+ *
+ * A failure clears the session, which now notifies the auth context (R3.8):
+ * before that, the tokens were dropped but the UI kept rendering 401s.
+ */
 async function tryRefresh(): Promise<boolean> {
   try {
+    const refresh = await tokenStore.getRefresh();
+
     const res = await fetch(`${BASE}/auth/refresh`, {
       method: 'POST',
-      credentials: 'include', // sends the httpOnly refresh cookie
-      headers: { 'Content-Type': 'application/json' },
+      credentials: refresh ? 'omit' : 'include',
+      headers: refresh
+        ? { 'Content-Type': 'application/json', ...NATIVE_CLIENT_HEADER }
+        : { 'Content-Type': 'application/json' },
+      body: refresh ? JSON.stringify({ refresh_token: refresh }) : undefined,
     });
-    if (!res.ok) { clearTokens(); return false; }
+    if (!res.ok) { await tokenStore.clear(); return false; }
+
     const data = await res.json();
-    storeTokens(data.access_token);
+    // `refresh_token` is present only in a native response; the store drops it
+    // on web. Rotation means the old one is already revoked server-side.
+    await tokenStore.setTokens(data.access_token, data.refresh_token);
     return true;
   } catch {
-    clearTokens();
+    await tokenStore.clear();
     return false;
   }
 }
@@ -197,21 +210,28 @@ export async function apiLogin(email: string, password: string, remember = false
 }
 
 export async function apiLogout(): Promise<void> {
-  const token = getAccessToken();
+  const token   = await tokenStore.getAccess();
+  const refresh = await tokenStore.getRefresh(); // native only — null on web
+
   await fetch(`${BASE}/auth/logout`, {
     method: 'POST',
-    credentials: 'include', // server reads + revokes the cookie
+    credentials: refresh ? 'omit' : 'include', // web: server reads + revokes the cookie
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(refresh ? NATIVE_CLIENT_HEADER : {}),
     },
+    // The route already accepted a body token before R3; native needs it,
+    // otherwise the server has nothing to revoke.
+    body: refresh ? JSON.stringify({ refresh_token: refresh }) : undefined,
   }).catch(() => {});
-  clearTokens();
+
+  await tokenStore.clear();
 }
 
 /** Sign out from every device by revoking all of the user's refresh tokens. */
 export async function apiLogoutAll(): Promise<void> {
-  const token = getAccessToken();
+  const token = await tokenStore.getAccess();
   await fetch(`${BASE}/auth/logout-all`, {
     method: 'POST',
     credentials: 'include',
@@ -220,7 +240,7 @@ export async function apiLogoutAll(): Promise<void> {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   }).catch(() => {});
-  clearTokens();
+  await tokenStore.clear();
 }
 
 export function getGoogleLoginUrl(): string {

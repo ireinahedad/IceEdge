@@ -99,7 +99,7 @@ Rien ici ne demande de conception ; tout demande **ta machine ou une console**.
 | # | Quoi | Où | Pourquoi ça bloque |
 |---|---|---|---|
 | B3 | Tir de charge **S1 de validation** : `NHL_USE_MOCK=true` vérifié dans les logs de démarrage, 50 VUs | préprod | Les deux premiers tirs ont mesuré une API NHL morte. Un critère vert peut vouloir dire que le code n'a pas tourné. `AUDIT_SCALABILITE_COUTS.md` §5. |
-| B4 | Parcours critiques **F1, F2, I1, I2** en staging | staging | Auth complète, gating Pro, chaîne ML, CORS+cookie cross-site. **Runbooks exécutables écrits le 2026-08-30** : `QA_TEST_PLAN.md` § « Runbooks B4 » — séquence, assertions et pièges, plus un préflight de 4 variables sans lequel trois des quatre parcours échouent pour la mauvaise raison. |
+| B4 | Parcours critiques **F1, F2**, ~~I1, I2~~ | prod (pas de staging) | ✅ **I1 et I2 verts le 2026-08-31**, mesurés contre la production — relevé complet dans `QA_TEST_PLAN.md` § « Exécution du 2026-08-31 ». **Reste F1 et F2**, qui écrivent en base (comptes, essai Pro, session Stripe) et attendent une cible jetable. Reste aussi **l'étape 4 de I2**, un `curl` sans en-tête `Origin` : les shells de session sont bloqués par l'egress, la commande est écrite dans le runbook. |
 | B5 | **C1** — parcours mobile iOS Safari (login → prédiction → paiement) | appareil réel | Safari iOS est la source n°1 de bugs cookies/`SameSite`/PWA. |
 | B6 | Alertes de budget : **six fournisseurs sur sept sont clos** (détail plus bas), reste **R2** | console Cloudflare | Gelé avec le fork DNS ci-dessus. Seuils dans `MONITORING.md`. |
 
@@ -971,6 +971,26 @@ Sécurité et résilience sont **validées en statique** ; ce qui reste est dyna
 > **F1, F2, I1 et I2 ont un runbook** depuis le 2026-08-30 :
 > `QA_TEST_PLAN.md` § « Runbooks B4 ». Les autres lignes ci-dessous n'en ont pas
 > encore.
+>
+> ✅ **I1 et I2 sont exécutés et verts depuis le 2026-08-31.** Relevé complet —
+> préflight, mesures, méthode — dans `QA_TEST_PLAN.md` § « Exécution du
+> 2026-08-31 ». Trois choses en sont sorties qui ne sont pas de la QA :
+>
+> 1. 🔴 **Il n'existe aucun environnement de staging.** Le mot n'est ni dans
+>    `DEPLOYMENT.md`, ni dans une variable, et Railway n'a qu'un environnement
+>    `production`. Toutes les lignes de ce §4 qui disent « en staging » sont
+>    donc à relire : soit on en crée un, soit on choisit à chaque fois entre la
+>    production et rien.
+> 2. ⚠️ **`EMAIL_VERIFICATION_DISABLED=true` en production.** Une inscription
+>    authentifie immédiatement, avec une adresse que personne n'a vérifiée. Sans
+>    doute délibéré — `RESEND_API_KEY` est absente, exiger la vérification
+>    enfermerait tout le monde dehors — mais **la récupération de mot de passe
+>    (F6) repose sur ce même canal absent**. À trancher avant le lancement.
+> 3. 🔴 **`/nhl-predictions` reste bloquée sur ses squelettes hors saison.** Les
+>    appels rendent 200 avec `[]` : il n'y a pas de match, c'est normal. Ce qui
+>    ne l'est pas, c'est qu'un état vide légitime soit **visuellement identique
+>    à une panne** — B9 a pourtant établi qu'une indisponibilité se dit par
+>    « — » et un bandeau. En attendant octobre, un visiteur voit un site cassé.
 
 **Fonctionnel** — F1 auth complète · F2 gating Pro bout en bout · F3 slip +
 settlement · F4 prédictions NHL du jour · F5 Best Bets / value bet scan ·
@@ -1103,10 +1123,21 @@ d'abord été oublié, noyé dans les 60 fichiers de bruit CRLF au moment de cho
 quoi ajouter. C'est précisément ce que le réflexe `--ignore-all-space` du §4 sert
 à éviter.
 
-> **La preuve reste à venir, et elle est gratuite :** le premier déclenchement du
-> job `Secret scan — gitleaks` sur une poussée vers `master` — celle-ci — est ce
-> qui établit que le correctif marche. Jusque-là, on sait seulement que le
-> fichier est correct, pas que GitHub l'exécute.
+> ✅ **La preuve est arrivée — 2026-08-31.** Le run `CI #1` sur la poussée
+> `674b199` vers **`master`** est passé : `Secret scan — gitleaks` a tourné en
+> 10 s, résumé **« No leaks detected ✅ »**, artefact `gitleaks-results.sarif`
+> produit ; les deux autres jobs sont verts aussi (serveur typecheck/build/test
+> 59 s, client build 27 s). Le correctif de branche du 2026-08-30 n'est donc plus
+> seulement correct sur le disque : **GitHub l'exécute**. C'est la seule chose
+> que cette ligne attendait.
+>
+> ⚠️ **Une échéance repérée dans les avertissements du run**, même famille que
+> `pg` v9 et le SDK AWS : `actions/checkout@v4`, `actions/setup-node@v4` et
+> `gitleaks/gitleaks-action@v2` ciblent **Node.js 20, déprécié sur les runners**
+> et déjà forcés sur Node 24. Ça marche aujourd'hui ; ça cassera à la
+> suppression du repli. Monter les trois actions d'un cran quand une autre raison
+> fera rouvrir `ci.yml` — pas avant, et **sans toucher aux déclencheurs**
+> (`master` + `pull_request`, cf. règle 4 ci-dessous).
 
 ✅ **Sonde relue, corrigée et vérifiée verte — clos le 2026-08-31.** Elle a
 d'abord répondu **rouge** (`[OddsLogger] ⚠️ ODDS_API_KEY REFUSÉE`, 401) : la clé

@@ -10,6 +10,7 @@ import { useState, useEffect } from "react";
 import { Plus, X, Lock, Share2, ChevronRight } from "lucide-react";
 import type { BetLeg } from "../../types/bet";
 import { openBet } from "../../services/bookmakers";
+import { features } from "../../platform";
 import { useBookmaker } from "../../context/BookmakerContext";
 import { useI18n } from "../../i18n";
 
@@ -119,14 +120,18 @@ export function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; 
             <span className="text-xs font-bold flex-shrink-0" style={{ color: barColor }}>{leg.probability}%</span>
             <span className="text-[10px] text-[#4a6068] flex-shrink-0 font-mono">{toOddsLabel(leg.probability)}</span>
           </div>
-          <button
-            onClick={() => openBet("hockey")}
-            className="mt-2 inline-flex items-center gap-1.5 bg-[#126e51] hover:bg-[#0f5c44] text-[#ffd700] text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-colors"
-            title={`${bookmaker.label} — ${t("slip.placeBet")}`}
-          >
-            <span className="bg-[#ffd700] text-[#126e51] rounded px-1 py-0.5 text-[8px] font-black leading-none">{bookmaker.badge}</span>
-            {t("slip.placeBet", { book: bookmaker.label })}
-          </button>
+          {/* APPLE_PLAN §4 — Guideline 5.3: the leg keeps its price, the link out
+              to the sportsbook does not ship on iOS. */}
+          {features.bookmakerLinks && (
+            <button
+              onClick={() => openBet("hockey")}
+              className="mt-2 inline-flex items-center gap-1.5 bg-[#126e51] hover:bg-[#0f5c44] text-[#ffd700] text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-colors"
+              title={`${bookmaker.label} — ${t("slip.placeBet")}`}
+            >
+              <span className="bg-[#ffd700] text-[#126e51] rounded px-1 py-0.5 text-[8px] font-black leading-none">{bookmaker.badge}</span>
+              {t("slip.placeBet", { book: bookmaker.label })}
+            </button>
+          )}
         </div>
         <button onClick={onRemove}
           className="w-7 h-7 rounded-full icy-tile flex items-center justify-center text-[#8a9ea6] flex-shrink-0 active:bg-red-500/20 active:text-red-400 active:border-red-400/30 transition-colors">

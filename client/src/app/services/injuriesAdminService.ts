@@ -3,7 +3,7 @@
  * Appels CRUD (admin) vers /api/injuries pour la saisie manuelle des
  * blessures/alignements. Écriture protégée côté serveur par requireRole('admin').
  */
-import { getAccessToken } from './authService';
+import { tokenStore } from './tokenStore';
 import { env } from '../env';
 
 const API_BASE = env.apiBase;
@@ -18,8 +18,8 @@ export interface GameInjuries {
   lineupNote?: string;
 }
 
-function authHeaders(): Record<string, string> {
-  const token = getAccessToken();
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await tokenStore.getAccess();
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -37,7 +37,7 @@ export async function fetchAllInjuries(): Promise<Record<string, GameInjuries>> 
 export async function saveInjuries(key: string, entry: GameInjuries): Promise<void> {
   const res = await fetch(`${INJURIES_URL}/${encodeURIComponent(key)}`, {
     method: 'PUT',
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body: JSON.stringify(entry),
   });
   if (!res.ok) throw new Error((await res.text().catch(() => '')) || `Injuries save ${res.status}`);
@@ -47,7 +47,7 @@ export async function saveInjuries(key: string, entry: GameInjuries): Promise<vo
 export async function deleteInjuries(key: string): Promise<void> {
   const res = await fetch(`${INJURIES_URL}/${encodeURIComponent(key)}`, {
     method: 'DELETE',
-    headers: authHeaders(),
+    headers: await authHeaders(),
   });
   if (!res.ok) throw new Error(`Injuries delete ${res.status}`);
 }
