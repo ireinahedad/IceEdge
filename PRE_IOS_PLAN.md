@@ -541,8 +541,8 @@ the old UI rendering 401s.
 
 ## ▶ RESUME HERE — state as of 2026-09-03
 
-Everything before R4.2c is done. Start a new session by reading this block, then
-the R4 section below.
+Everything up to and including R4.2d is done. Start a new session by reading this
+block, then the R4 section below.
 
 ### Shipped and verified in production
 R7 (`2cc2ce4`), R2 + R3 (`551aca0`), R3bis.1 the refresh gate (`d6353d8`).
@@ -550,23 +550,22 @@ Auth was walked end to end on arakice.com: cookie set with no token in the body,
 `Vary: X-Client`, one silent refresh and replay, clean sign-out on a dead refresh,
 logout, Google, 30-day `Max-Age`, chat socket at 101.
 
-### Done locally, verified, **not yet committed**
-```
- M PRE_IOS_PLAN.md
- M server/package.json                          (+ moderation:dry-run script)
- M server/src/services/chat.service.ts          (R4.2b — filter wired into sendMessage)
-?? server/scripts/moderation-dry-run.ts
-?? server/src/services/moderation.service.ts    (R4.2a)
-?? server/src/services/moderation.service.test.ts
-```
+### Committed
+`e39f648` R4.2a/b — the filter, wired into `sendMessage()`, plus the dry-run script.
+`bc99112` R4.2c + R4.2d — report endpoint and auto-hide.
 Server: 201 tests green, `tsc --noEmit` clean. Migration 032 is committed
 (`cf6110c`) **and applied to Neon** (confirmed 2026-09-03).
 
-### The next task is R4.2c
-`POST /chat/messages/:messageId/report` — auth required, body `{reason, note?}`,
-`ON CONFLICT DO NOTHING` on `UNIQUE (message_id, reporter_id)`, rate-limited with
-the existing `rateLimit()` helper already used in `chat.routes.ts`. Then d, e, f, h.
-Put the logic in `chat.service.ts`, not the route — see R4.2b for why.
+### The next task is R4.2e
+`POST /users/:userId/block`, `DELETE /users/:userId/block`, `GET /users/me/blocks`
+in `user.routes.ts`. Then f (filtered reads — the item that finally makes both
+`hidden_at` and the block list visible on screen), then g and h.
+Put the logic in a service, not the route — see R4.2b for why.
+
+⚠️ **`hidden_at` is written but nothing reads it yet.** A message hidden by three
+reporters today is still delivered by `GET /rooms/:roomId/messages` and by the
+socket. R4.2f is what closes that gap, and until it lands the auto-hide is
+bookkeeping, not moderation. Do not demo the report flow before f.
 
 ### Facts about this environment that will save you an hour
 - **Nothing applies migrations automatically.** No `railway.json`, no Procfile, no
@@ -738,11 +737,38 @@ deletion gracefully — which matters once you build the delete-account flow (`A
       have been the only validation not in the service. 422 with a clear message, no
       shadow-ban, after `sanitizeText()` and before any INSERT — nothing objectionable reaches
       the table, so there is nothing to hide after the fact.
-- [ ] **R4.2c** `POST /chat/messages/:messageId/report` — auth required, body `{reason, note?}`,
-      `ON CONFLICT DO NOTHING` on the unique constraint. Rate-limit with the existing
-      `rateLimit()` helper (`report`, 10 / 5 min) — the pattern is already in this file.
-- [ ] **R4.2d** Auto-hide: once a message has **3 distinct reporters**, set `hidden_at` and
-      `hidden_reason = 'auto'`. Cheap, and it is the "timely response" Apple asks about.
+- [x] **R4.2c ✅ 2026-09-03** — shipped as **`POST /rooms/:roomId/messages/:messageId/report`**,
+      nested, **not** the flat path this plan sketched. The roomId is not decoration: it
+      authorises the read *before* anything touches the message, and the message is then
+      checked as belonging to that room — the same guard `toggleReaction` already uses. On the
+      flat path any account could report a message in a private room, and so confirm it exists,
+      by guessing an id; `msg_<timestamp>_<6 hex>` is not a secret. The client knows the roomId
+      already, so the nesting costs nothing.
+
+      Logic in `chat.service.reportMessage()`, route thin, `rateLimit('report', 10, 5 * 60_000)`.
+      Reporting twice is **not** an error: `ON CONFLICT DO NOTHING`, and the response carries
+      `alreadyReported` while the status stays 201 in both cases — a 409 would teach a hostile
+      client what it has already reported and buys the UI nothing. Reporting your own message is
+      400; an unknown reason is 400 (the list is in `REPORT_REASONS`, which must move together
+      with the CHECK constraint in migration 032). The note is truncated to 500 chars, never
+      rejected — nobody should lose a report for writing too much.
+
+      One small refactor of working code: the control-character filter inside `sanitizeText()`
+      is now `stripControlChars()`, shared with the new `sanitizeNote()`. `sanitizeText()`
+      behaves exactly as before.
+- [x] **R4.2d ✅ 2026-09-03** — auto-hide at **3 distinct reporters**, in the **same
+      transaction** as the report insert: the counter cannot be read before the report that
+      tips it is acquired, and a rollback never leaves a hidden message without the row that
+      explains why.
+
+      `WHERE hidden_at IS NULL` is not an optimisation — it locks the message row, so two
+      simultaneous third reports cannot overwrite each other's timestamp. Proven, not assumed:
+      two `reportMessage()` calls fired in parallel against a real PostgreSQL returned
+      `hidden: true` exactly once, with all four rows written.
+
+      ⚠️ Threshold 3 is brigadable by three colluding accounts. That is the accepted price of
+      hiding without a human in the loop — which is why the hide is reversible and why the
+      admin queue (R4.2h) has to actually be read.
 - [ ] **R4.2e** `POST /users/:userId/block`, `DELETE /users/:userId/block`,
       `GET /users/me/blocks` in `user.routes.ts`.
 - [ ] **R4.2f** Filter reads: `GET /rooms/:roomId/messages` (`chat.routes.ts:134`) excludes
@@ -777,9 +803,19 @@ deletion gracefully — which matters once you build the delete-account flow (`A
 
 ### R4.4 — Tests
 
+⚠️ **The report and auto-hide paths have no test in the repo, and cannot have one yet.**
+`server/` has vitest but no database fixture: every existing test either mocks the service
+or mocks `pool`. The R4.2c/d behaviour below was proven by running the **real**
+`chat.service` against a throwaway PostgreSQL 16 in the cloud sandbox — 20 checks plus a
+concurrency check, all green on 2026-09-03 — but that script is not committed and nothing
+re-runs it. Making these permanent needs a decision first: a DB-backed test setup
+(testcontainers, or a `TEST_DATABASE_URL` skipped when absent) is new architecture, not a
+test file. Until then, treat the three lines below as verified-once, not guarded.
+
 - [ ] Profanity filter rejects, and does not false-positive on ordinary hockey talk.
-- [ ] Reporting the same message twice does not create a second row.
-- [ ] 3 distinct reporters hides the message; a 4th report does not error.
+- [~] Reporting the same message twice does not create a second row. *(proven in the sandbox)*
+- [~] 3 distinct reporters hides the message; a 4th report does not error. *(proven in the
+      sandbox, including two simultaneous third reports)*
 - [ ] A blocked user's messages are absent from history **and** from live socket delivery.
 - [ ] Unblock restores visibility.
 

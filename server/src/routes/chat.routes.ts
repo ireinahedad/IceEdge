@@ -173,4 +173,26 @@ router.post('/rooms/:roomId/messages/:messageId/reactions', rateLimit('react', 2
   } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
+// POST /api/chat/rooms/:roomId/messages/:messageId/report · max 10/5min
+//
+// Guideline 1.2 : une façon de signaler du contenu répréhensible. Le chemin est
+// imbriqué comme les réactions et la suppression, pas plat comme l'annonçait le
+// plan : le roomId sert d'abord à autoriser la lecture, et le message est
+// ensuite vérifié comme appartenant à ce salon. Un chemin plat aurait laissé
+// n'importe quel compte confirmer l'existence d'un message d'un salon privé.
+//
+// La route reste fine : validation du motif, refus de l'auto-signalement et
+// masquage automatique vivent dans chat.service.ts, avec tous les autres
+// garde-fous de ce domaine.
+router.post('/rooms/:roomId/messages/:messageId/report', rateLimit('report', 10, 5 * 60_000), async (req: Request, res: Response) => {
+  try {
+    const { reason, note } = req.body ?? {};
+    if (!reason) return res.status(400).json({ error: 'reason is required' });
+    const result = await chatService.reportMessage(
+      req.params.roomId, req.params.messageId, uid(req), { reason, note },
+    );
+    res.status(201).json(result);
+  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
 export default router;

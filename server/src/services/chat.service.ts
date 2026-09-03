@@ -17,6 +17,29 @@ import { containsProhibited } from './moderation.service';
 
 const MAX_TEXT_LENGTH = 1000;
 
+/**
+ * Motifs de signalement — exactement la liste du CHECK de la migration 032.
+ * Les deux doivent bouger ensemble : ajouter un motif ici sans migration donne
+ * un 500 Postgres, l'inverse donne un motif que personne ne peut choisir.
+ */
+export const REPORT_REASONS = ['spam', 'harassment', 'hate', 'sexual', 'other'] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
+/** Longueur maximale de la note libre jointe à un signalement. */
+const MAX_NOTE_LENGTH = 500;
+
+/**
+ * Nombre de rapporteurs DISTINCTS qui masque un message sans revue humaine
+ * (R4.2d). C'est la « réponse rapide » que demande la Guideline 1.2 : assez
+ * bas pour agir avant qu'un humain ne lise la file, assez haut pour qu'une
+ * seule personne ne puisse pas faire taire quelqu'un.
+ *
+ * Ça reste brigadable par trois comptes complices. C'est le prix assumé d'un
+ * masquage automatique — d'où le fait qu'il soit réversible (hidden_at remis à
+ * NULL) et que la file d'admin (R4.2h) doive être lue pour de vrai.
+ */
+const AUTO_HIDE_REPORTS = 3;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function httpError(message: string, status: number) {
@@ -42,9 +65,9 @@ function generateJoinCode(): string {
   return code;
 }
 
-function sanitizeText(raw: string): string {
-  // Strip control characters (keep newlines/tabs), enforce length
-  const cleaned = String(raw)
+/** Retire les caractères de contrôle (garde tabulation et sauts de ligne). */
+function stripControlChars(raw: unknown): string {
+  return String(raw)
     .split('')
     .filter((ch) => {
       const c = ch.charCodeAt(0);
@@ -52,9 +75,27 @@ function sanitizeText(raw: string): string {
     })
     .join('')
     .trim();
+}
+
+function sanitizeText(raw: string): string {
+  // Strip control characters (keep newlines/tabs), enforce length
+  const cleaned = stripControlChars(raw);
   if (!cleaned) throw httpError('Message text is empty', 400);
   if (cleaned.length > MAX_TEXT_LENGTH) throw httpError(`Message too long (max ${MAX_TEXT_LENGTH} chars)`, 400);
   return cleaned;
+}
+
+/**
+ * Note libre d'un signalement : optionnelle, tronquée, jamais rejetée.
+ *
+ * Contrairement au texte d'un message, une note vide n'est pas une erreur — le
+ * motif seul suffit à signaler. Elle est tronquée plutôt que refusée : personne
+ * ne doit renoncer à signaler parce qu'il a trop écrit.
+ */
+function sanitizeNote(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null;
+  const cleaned = stripControlChars(raw).slice(0, MAX_NOTE_LENGTH);
+  return cleaned || null;
 }
 
 /** Identity used for messages — always loaded from DB, never from the client. */
@@ -611,6 +652,97 @@ export const chatService = {
     if (msg.user_id !== userId) throw httpError('You can only delete your own messages', 403);
     // Reactions cascade via ON DELETE CASCADE.
     await pool.query('DELETE FROM chat_messages WHERE id = $1', [messageId]);
+  },
+
+  /**
+   * Signaler un message (R4.2c), et le masquer tout seul à trois rapporteurs
+   * distincts (R4.2d).
+   *
+   * AUTORISATION — signaler exige de pouvoir LIRE le salon. Sans ce contrôle,
+   * n'importe quel compte pourrait signaler un message d'un salon privé, donc
+   * confirmer son existence, en devinant un identifiant (`msg_<horodatage>_<6
+   * hexa>` n'est pas un secret). Le chemin est imbriqué sous /rooms/:roomId
+   * pour cette raison : le salon autorise, le message est ensuite vérifié comme
+   * lui appartenant — même garde que toggleReaction.
+   *
+   * SIGNALER DEUX FOIS N'EST PAS UNE ERREUR. `ON CONFLICT DO NOTHING` sur
+   * `UNIQUE (message_id, reporter_id)` : la contrainte EST la limite, personne
+   * ne peut gonfler le compteur de masquage tout seul. La réponse porte
+   * `alreadyReported`, mais le statut reste 201 dans les deux cas — répondre
+   * 409 apprendrait à un client hostile ce qu'il a déjà signalé sans rien
+   * apporter à l'interface.
+   */
+  async reportMessage(
+    roomId: string,
+    messageId: string,
+    reporterId: string,
+    payload: { reason: string; note?: string },
+  ): Promise<{ alreadyReported: boolean; hidden: boolean }> {
+    await assertCanRead(roomId, reporterId);
+
+    const { rows } = await pool.query(
+      'SELECT room_id, user_id FROM chat_messages WHERE id = $1',
+      [messageId],
+    );
+    const msg = rows[0];
+    if (!msg || msg.room_id !== roomId) throw httpError('Message not found in this room', 404);
+    if (msg.user_id === reporterId) throw httpError('You cannot report your own message', 400);
+
+    const reason = String(payload?.reason ?? '');
+    if (!(REPORT_REASONS as readonly string[]).includes(reason)) {
+      throw httpError(`reason must be one of: ${REPORT_REASONS.join(', ')}`, 400);
+    }
+    const note = sanitizeNote(payload?.note);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const inserted = await client.query(
+        `INSERT INTO chat_reports (message_id, reporter_id, reason, note)
+         VALUES ($1,$2,$3,$4)
+         ON CONFLICT (message_id, reporter_id) DO NOTHING
+         RETURNING id`,
+        [messageId, reporterId, reason, note],
+      );
+      const created = inserted.rows.length > 0;
+
+      // Le masquage vit dans la MÊME transaction que l'insertion : le compteur
+      // ne peut pas être lu avant que le signalement qui le fait basculer soit
+      // acquis, et un rollback n'abandonne jamais un message masqué sans la
+      // ligne qui explique pourquoi.
+      //
+      // `hidden_at IS NULL` n'est pas une optimisation : il verrouille la ligne
+      // du message, donc deux troisièmes signalements simultanés ne s'écrasent
+      // pas l'horodatage l'un l'autre — le second ne renvoie rien et rend
+      // `hidden: false`, ce qui est exact : il n'a pas masqué.
+      //
+      // COUNT(DISTINCT reporter_id) alors que UNIQUE (message_id, reporter_id)
+      // rend le DISTINCT redondant : la requête énonce la règle qu'elle
+      // applique, et survit au jour où la contrainte bougera.
+      let hidden = false;
+      if (created) {
+        const hide = await client.query(
+          `UPDATE chat_messages
+              SET hidden_at = NOW(), hidden_reason = 'auto'
+            WHERE id = $1
+              AND hidden_at IS NULL
+              AND (SELECT COUNT(DISTINCT reporter_id)
+                     FROM chat_reports WHERE message_id = $1) >= $2
+          RETURNING id`,
+          [messageId, AUTO_HIDE_REPORTS],
+        );
+        hidden = hide.rows.length > 0;
+      }
+
+      await client.query('COMMIT');
+      return { alreadyReported: !created, hidden };
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
   /** Used by the socket layer to authorise joining a room channel. */
