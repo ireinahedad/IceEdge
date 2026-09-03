@@ -552,7 +552,7 @@ logout, Google, 30-day `Max-Age`, chat socket at 101.
 
 ### Committed
 `e39f648` R4.2a/b — the filter, wired into `sendMessage()`, plus the dry-run script.
-`bc99112` R4.2c + R4.2d — report endpoint and auto-hide.
+`e6e93a2` R4.2c + R4.2d — report endpoint and auto-hide.
 Server: 201 tests green, `tsc --noEmit` clean. Migration 032 is committed
 (`cf6110c`) **and applied to Neon** (confirmed 2026-09-03).
 
