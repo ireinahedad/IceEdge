@@ -13,20 +13,24 @@
  * set in its dashboard — which this repo cannot inspect. Throwing on day one
  * would turn an unverified assumption into a white screen for every visitor.
  *
- *   Stage 1 (current)  ENFORCEMENT = 'warn'
- *       A problem is pushed to `envProblems`, logged to the console, and sent
- *       to Sentry by main.tsx. The app boots. Watch Sentry for 24h.
- *   Stage 2            ENFORCEMENT = 'throw'
+ *   Stage 1 (done, 2026-09-03)  ENFORCEMENT = 'warn'
+ *       Deployed alone. The four production variables were confirmed present in
+ *       the Vercel dashboard, and Sentry recorded no `[env]` event afterwards.
+ *   Stage 2 (current)           ENFORCEMENT = 'throw'
  *       `assertEnv()` throws and main.tsx renders a readable "Configuration
- *       error" screen instead of a white page. Flip the constant below — that
- *       is the whole change.
+ *       error" screen instead of a white page.
+ *
+ * Two nets now, in this order: the Vercel build command runs
+ * `npm run check:env && npm run build`, so a missing variable fails the deploy
+ * and leaves the previous version live — the user never reaches the throw. The
+ * throw is what catches the case the build cannot see.
  *
  * Only production is strict about https. In dev, `import.meta.env.PROD` is
  * false, so `http://localhost:3001` in your `.env` keeps working.
  */
 
-/** R7 stage 2: change this to 'throw'. Nothing else needs to move. */
-const ENFORCEMENT: 'warn' | 'throw' = 'warn';
+/** Back to 'warn' only to debug a live configuration problem — not by default. */
+const ENFORCEMENT: 'warn' | 'throw' = 'throw';
 
 export interface EnvProblem {
   /** The variable at fault, e.g. 'VITE_SOCKET_URL'. */

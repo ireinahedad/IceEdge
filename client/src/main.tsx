@@ -14,9 +14,9 @@ if (env.sentryDsn) {
   });
 }
 
-// PRE_IOS_PLAN.md R7, stage 1 — a missing or non-https API URL is reported,
-// not fatal. env.ts already logged it to the console; this is how it reaches
-// you in production. Sentry is initialised above, so these are not lost.
+// PRE_IOS_PLAN.md R7 — report every configuration problem before assertEnv()
+// acts on it, so Sentry carries the diagnosis even when the next line stops the
+// app. Sentry is initialised above, so these are not lost.
 for (const problem of envProblems) {
   Sentry.captureMessage(`[env] ${problem.message}`, "error");
 }
@@ -63,9 +63,10 @@ function renderConfigError(err: unknown): void {
 }
 
 try {
-  // Stage 1: no-op. Stage 2 (ENFORCEMENT = 'throw' in env.ts): throws here,
-  // which is why the check lives in a function rather than at import time —
-  // a module that throws while being evaluated cannot be caught by its importer.
+  // Throws when a required variable is missing or not https in production.
+  // The check lives in a function rather than at import time on purpose: a
+  // module that throws while being evaluated cannot be caught by its importer,
+  // and the user would get the white page this whole item exists to remove.
   assertEnv();
 
   createRoot(rootEl).render(<App />);
