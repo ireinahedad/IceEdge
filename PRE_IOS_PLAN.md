@@ -541,8 +541,8 @@ the old UI rendering 401s.
 
 ## ▶ RESUME HERE — state as of 2026-09-03
 
-Everything up to and including R4.2g is done — the server half of R4 is finished
-except the admin queue (R4.2h). Start a new session by reading this block, then
+**The whole server half of R4 is done (R4.2a → R4.2h).** Everything left is
+client work: R4.3, then R4.4. Start a new session by reading this block, then
 the R4 section below.
 
 ### Shipped and verified in production
@@ -555,25 +555,39 @@ logout, Google, 30-day `Max-Age`, chat socket at 101.
 `e39f648` R4.2a/b — the filter, wired into `sendMessage()`, plus the dry-run script.
 `e6e93a2` R4.2c + R4.2d — report endpoint and auto-hide.
 `86bd1b4` R4.2e + R4.2f + R4.2g — block endpoints, filtered reads, socket note.
+`<R4.2h>` R4.2h — admin moderation queue, plus the newest-100 history fix.
 Server: 201 tests green, `tsc --noEmit` clean. Migration 032 is committed
 (`cf6110c`) **and applied to Neon** (confirmed 2026-09-03).
 
-### The next task is R4.2h, then the whole of R4.3 (client)
-`GET /api/dev/reports` + `POST /api/dev/reports/:id` in `dev.routes.ts`, which is
-already `requireRole('admin')`. After that the server is done and everything left
-is client work — and **none of R4 is visible to a user until R4.3 ships**: today
-you can block someone with `curl` and it works, but no screen offers the button.
+### The next task is R4.3 — the client, all of it
+**None of R4 is visible to a user today.** The server is complete and correct:
+you can report, auto-hide, block, unblock and moderate with `curl`, and it all
+works. No screen offers any of it. R4.3a→g is what turns a working server into a
+feature, and it is also what the "Done when" test at the end of R4 requires.
 
-⚠️ **Live socket messages are still unfiltered** (R4.2g, deliberate). History is
-filtered in SQL; the real-time path is not, and R4.3d is what filters it in the
-client. A blocked person's message still reaches the blocker's browser — it is
-just never rendered.
+Start with R4.3d (fetch the block list on chat mount, filter history **and**
+socket) — it is the one that makes R4.2g's client-side choice real; the rest is
+UI on top.
 
-⚠️ **Pre-existing, found while writing R4.2f, NOT fixed:** `getMessages()` ends
-with `ORDER BY m.sent_at ASC LIMIT 100`, which returns the **oldest** hundred
-messages in the room, not the newest. Any room past a hundred messages shows its
-opening history forever and never the current conversation. Untouched here on
-purpose — it is not R4, and fixing it changes what every chat user sees.
+⚠️ **Live socket messages are unfiltered server-side** (R4.2g, deliberate). A
+blocked person's message still reaches the blocker's browser. It must never be
+rendered — that is R4.3d's job, and nothing else enforces it.
+
+⚠️ **There is no admin screen yet.** `GET /api/dev/reports` returns the queue as
+JSON and `POST /api/dev/reports/:id` decides. Until a screen exists you read the
+queue with `curl` and an admin token — and **you must actually read it**. Apple
+asks about the response process; an unread queue promises moderation that never
+comes.
+
+### Fixed in passing, 2026-09-03 — the history window
+`getMessages()` used to end with `ORDER BY m.sent_at ASC LIMIT 100`, which
+returned the **oldest** hundred messages: any room past a hundred messages showed
+its opening history forever and never the current conversation. It now takes the
+newest hundred (`ORDER BY sent_at DESC, id DESC LIMIT 100` inside a subquery) and
+re-sorts them ascending for display. The `id DESC` tie-break is not decoration —
+`sent_at` can be identical to the millisecond, and without it the hundredth row
+varied between calls. Older history is simply not served; no pagination was
+added, because none existed before either.
 
 ### Facts about this environment that will save you an hour
 - **Nothing applies migrations automatically.** No `railway.json`, no Procfile, no
@@ -814,10 +828,31 @@ deletion gracefully — which matters once you build the delete-account flow (`A
       chat room, the client filters instead (R4.3d). **The consequence to know:** a blocked
       person's message still crosses the network to the blocker's browser. It is never
       displayed, but it is not a server-side secret — unlike history, which is filtered in SQL.
-- [ ] **R4.2h** Admin moderation queue: `GET /api/dev/reports` + `POST /api/dev/reports/:id`
-      (actioned | dismissed) in `dev.routes.ts`, which is already `requireRole('admin')`.
-      Reuse `DevMLDashboard` shell for the UI. **You must actually read this queue** — Apple
-      asks about your response process, and an unread queue is worse than none.
+- [x] **R4.2h ✅ 2026-09-03** — `GET /api/dev/reports` + `POST /api/dev/reports/:id` in
+      `dev.routes.ts`. The whole router is already `authenticate` + `requireRole('admin')`, so
+      these add no guard of their own. **The UI is not built** — that is client work and goes
+      with R4.3; until then the queue is read with `curl`.
+
+      **The queue is grouped by MESSAGE, not by report.** Three people reporting the same
+      message ask the admin one question, not three; a row-per-report queue would make you
+      re-read the same text three times and go incoherent if you only handled two of them.
+      Each entry carries the reported text, its author, the room name, the distinct reasons,
+      every reporter note, the count, and the current hidden state. `reportId` is the smallest
+      id in the group — the one you POST back.
+
+      **A decision applies to every open report on that message**, in one transaction.
+      `actioned` hides it with `hidden_reason = 'admin'`, overwriting an `'auto'` hide: the
+      human decision replaces the automatic one, and that is what distinguishes them later.
+      `dismissed` **removes** the hide — but only when its reason is `'auto'`. That is the
+      escape hatch for the three-reporter threshold: three colluding accounts hide something
+      innocent, an admin restores it in one call. A hide an admin placed is never undone as a
+      side effect of dismissing a later report.
+
+      Nothing is deleted. Reports cascade away with the message (R4.1), so deleting here would
+      erase the record of what was moderated.
+- [ ] **R4.2h-UI** Reuse the `DevMLDashboard` shell for the queue screen. **You must actually
+      read this queue** — Apple asks about your response process, and an unread queue is worse
+      than none.
 
 ### R4.3 — Client
 

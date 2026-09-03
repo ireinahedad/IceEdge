@@ -10,6 +10,8 @@
  * GET  /api/dev/live-performance — Calibration, hit rate et ROI des paris réellement réglés
  * GET  /api/dev/metrics          — Compteurs : appels sortants, caches, event loop, mémoire
  * POST /api/dev/metrics/reset    — Ouvre une nouvelle fenêtre de mesure
+ * GET  /api/dev/reports          — File de modération du chat : signalements ouverts
+ * POST /api/dev/reports/:id      — Trancher : actioned (masque) | dismissed (rétablit)
  */
 
 import { Router, Request, Response } from 'express';
@@ -21,6 +23,7 @@ import {
   buildPlayerPropFeatures,
 } from '../services/featureEngineering';
 import { snapshotMetrics, resetMetrics } from '../metrics';
+import { chatService } from '../services/chat.service';
 import { pool } from '../db/connection';
 
 const router = Router();
@@ -456,6 +459,45 @@ router.post('/metrics/reset', (_req: Request, res: Response) => {
   const before = snapshotMetrics();
   resetMetrics();
   res.json({ reset_at: new Date().toISOString(), before });
+});
+
+// ── File de modération du chat — R4.2h (Guideline 1.2) ───────────────────────
+//
+// ⚠️ À ne pas confondre avec `/ml-reports` juste au-dessus, qui parle des
+// rapports d'entraînement du modèle. Ici il s'agit de contenu signalé par des
+// utilisateurs.
+//
+// Tout ce routeur est déjà `authenticate` + `requireRole('admin')` (l.29), donc
+// ces deux routes n'ajoutent aucun garde-fou : elles seraient redondantes.
+//
+// **Cette file doit être lue pour de vrai.** Apple ne demande pas seulement
+// qu'un mécanisme existe, il demande le processus de réponse ; une file jamais
+// ouverte est pire que pas de file, parce qu'elle promet une modération qui
+// n'arrive jamais.
+
+// GET /api/dev/reports — les signalements ouverts, groupés par message
+router.get('/reports', async (req: Request, res: Response) => {
+  try {
+    const limit = req.query.limit !== undefined ? Number(req.query.limit) : 100;
+    res.json({ reports: await chatService.getOpenReports(limit) });
+  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+});
+
+// POST /api/dev/reports/:id  { status: 'actioned' | 'dismissed' }
+//
+// `:id` est UN signalement, mais la décision porte sur le MESSAGE : tous les
+// signalements ouverts du même message sont tranchés ensemble (voir
+// chatService.reviewReport). C'est pour ça que la file rend un seul `reportId`
+// par message.
+router.post('/reports/:id', async (req: Request, res: Response) => {
+  try {
+    const { status } = req.body ?? {};
+    if (!status) return res.status(400).json({ error: 'status is required' });
+    const result = await chatService.reviewReport(
+      Number(req.params.id), req.user!.sub, String(status),
+    );
+    res.json(result);
+  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
 });
 
 export default router;

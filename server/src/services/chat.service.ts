@@ -25,6 +25,15 @@ const MAX_TEXT_LENGTH = 1000;
 export const REPORT_REASONS = ['spam', 'harassment', 'hate', 'sexual', 'other'] as const;
 export type ReportReason = (typeof REPORT_REASONS)[number];
 
+/**
+ * Les deux décisions qu'un admin peut rendre (R4.2h). `open` est l'état initial
+ * et n'est pas une décision — on ne « remet pas en attente » un signalement
+ * traité. Même contrainte que ci-dessus : cette liste et le CHECK de la
+ * migration 032 bougent ensemble.
+ */
+export const REVIEW_DECISIONS = ['actioned', 'dismissed'] as const;
+export type ReviewDecision = (typeof REVIEW_DECISIONS)[number];
+
 /** Longueur maximale de la note libre jointe à un signalement. */
 const MAX_NOTE_LENGTH = 500;
 
@@ -304,25 +313,45 @@ export interface RoomMessages {
  * (R4.2g). Le serveur diffuse à toute la salle et ne peut pas filtrer par
  * destinataire sans réécrire la diffusion ; c'est le client qui s'en charge
  * (R4.3d). L'historique et le direct n'ont donc pas la même garantie.
+ *
+ * ── Pourquoi une sous-requête et deux tris ─────────────────────────────────
+ *
+ * On veut les cent messages les plus RÉCENTS, affichés du plus ancien au plus
+ * récent. `ORDER BY sent_at ASC LIMIT 100` faisait le contraire : il rendait les
+ * cent PREMIERS messages du salon, donc un salon actif affichait son histoire
+ * d'ouverture pour toujours et jamais la conversation en cours (corrigé le
+ * 2026-09-03, le tri croissant seul datait d'avant R4).
+ *
+ * Le `LIMIT` doit donc s'appliquer à un tri DÉCROISSANT, et la remise en ordre
+ * chronologique se fait ensuite, sur ces cent lignes-là. Faire les deux dans une
+ * seule requête est impossible : un `ORDER BY` sert le `LIMIT`, pas l'affichage.
+ *
+ * `m.id DESC` en second critère n'est pas décoratif : `sent_at` peut être
+ * identique à la milliseconde pour deux messages, et sans départage la centième
+ * ligne varierait d'un appel à l'autre. Les identifiants sont
+ * `msg_<horodatage>_<hexa>`, donc leur ordre lexicographique suit le temps.
  */
 async function getMessages(roomId: string, viewerId: string | null): Promise<RoomMessages> {
   const { rows } = await pool.query(
-    `SELECT m.id, m.user_id AS "userId", m.username, m.display_name AS "displayName",
-            m.avatar, m.tier, m.text, m.sent_at AS "sentAt", m.tag,
-            m.reply_to_username AS "replyToUsername", m.reply_to_text AS "replyToText",
-            COALESCE(up.avatar_url, u.avatar_url) AS "avatarUrl"
-     FROM chat_messages m
-     LEFT JOIN users u          ON u.id = m.user_id
-     LEFT JOIN user_profiles up ON up.user_id = m.user_id
-     LEFT JOIN user_blocks b
-            ON $2::uuid IS NOT NULL
-           AND (   (b.blocker_id = $2::uuid AND b.blocked_id = m.user_id)
-                OR (b.blocked_id = $2::uuid AND b.blocker_id = m.user_id))
-     WHERE m.room_id = $1
-       AND m.hidden_at IS NULL
-       AND b.blocker_id IS NULL
-     ORDER BY m.sent_at ASC
-     LIMIT 100`,
+    `SELECT * FROM (
+       SELECT m.id, m.user_id AS "userId", m.username, m.display_name AS "displayName",
+              m.avatar, m.tier, m.text, m.sent_at AS "sentAt", m.tag,
+              m.reply_to_username AS "replyToUsername", m.reply_to_text AS "replyToText",
+              COALESCE(up.avatar_url, u.avatar_url) AS "avatarUrl"
+         FROM chat_messages m
+         LEFT JOIN users u          ON u.id = m.user_id
+         LEFT JOIN user_profiles up ON up.user_id = m.user_id
+         LEFT JOIN user_blocks b
+                ON $2::uuid IS NOT NULL
+               AND (   (b.blocker_id = $2::uuid AND b.blocked_id = m.user_id)
+                    OR (b.blocked_id = $2::uuid AND b.blocker_id = m.user_id))
+        WHERE m.room_id = $1
+          AND m.hidden_at IS NULL
+          AND b.blocker_id IS NULL
+        ORDER BY m.sent_at DESC, m.id DESC
+        LIMIT 100
+     ) recent
+     ORDER BY recent."sentAt" ASC, recent.id ASC`,
     [roomId, viewerId],
   );
 
@@ -773,6 +802,132 @@ export const chatService = {
 
       await client.query('COMMIT');
       return { alreadyReported: !created, hidden };
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
+  /**
+   * La file de modération (R4.2h) — les signalements ouverts, GROUPÉS PAR
+   * MESSAGE, pas un par ligne.
+   *
+   * Trois personnes qui signalent le même message posent une seule question à
+   * l'admin, pas trois. Une file ligne à ligne ferait relire le même texte trois
+   * fois et rendrait la décision incohérente si on n'en traitait que deux.
+   *
+   * `reportId` est le plus petit identifiant du groupe : c'est celui qu'on
+   * renvoie à `reviewReport()`, qui applique la décision à TOUS les
+   * signalements ouverts du message.
+   *
+   * Réservé aux admins par la route (`dev.routes.ts` est déjà
+   * `authenticate` + `requireRole('admin')` sur tout le routeur), donc rien
+   * n'est masqué ici : le texte signalé est exactement ce qu'il y a à juger.
+   */
+  async getOpenReports(limit = 100) {
+    const { rows } = await pool.query(
+      `SELECT MIN(r.id)::int                        AS "reportId",
+              r.message_id                          AS "messageId",
+              COUNT(*)::int                         AS "reportCount",
+              ARRAY_AGG(DISTINCT r.reason)          AS reasons,
+              ARRAY_REMOVE(ARRAY_AGG(r.note), NULL) AS notes,
+              MIN(r.created_at)                     AS "firstReportedAt",
+              MAX(r.created_at)                     AS "lastReportedAt",
+              m.room_id                             AS "roomId",
+              rm.name                               AS "roomName",
+              m.text,
+              m.sent_at                             AS "sentAt",
+              m.user_id                             AS "authorId",
+              m.username                            AS "authorUsername",
+              m.hidden_at                           AS "hiddenAt",
+              m.hidden_reason                       AS "hiddenReason"
+         FROM chat_reports r
+         JOIN chat_messages m       ON m.id  = r.message_id
+         LEFT JOIN chat_rooms rm    ON rm.id = m.room_id
+        WHERE r.status = 'open'
+        GROUP BY r.message_id, m.room_id, rm.name, m.text, m.sent_at,
+                 m.user_id, m.username, m.hidden_at, m.hidden_reason
+        ORDER BY MAX(r.created_at) DESC
+        LIMIT $1`,
+      [Math.min(Math.max(Number(limit) || 100, 1), 500)],
+    );
+    return rows;
+  },
+
+  /**
+   * Trancher (R4.2h). L'admin agit sur un MESSAGE, pas sur une ligne : la
+   * décision est appliquée à tous les signalements encore ouverts de ce message,
+   * dans une transaction. Sinon un message signalé trois fois ressortirait deux
+   * fois dans la file après un premier traitement.
+   *
+   * `actioned` masque le message avec `hidden_reason = 'admin'`, y compris s'il
+   * était déjà masqué en `'auto'` : la décision humaine remplace la décision
+   * automatique, et c'est ce qui distingue ensuite les deux au démasquage.
+   *
+   * `dismissed` RETIRE le masquage — mais seulement si sa raison est `'auto'`.
+   * C'est la sortie de secours du seuil à trois : trois comptes complices font
+   * masquer un message innocent, un admin le rétablit d'un geste. Un masquage
+   * posé par un admin n'est jamais annulé par le rejet d'un signalement
+   * ultérieur — cette décision-là se révoque à la main, pas par effet de bord.
+   *
+   * Rien n'est supprimé : le CASCADE de la migration 032 fait disparaître les
+   * signalements avec le message, donc supprimer ici effacerait la trace de ce
+   * qui a été modéré.
+   */
+  async reviewReport(reportId: number, adminId: string, decision: string) {
+    if (!Number.isInteger(reportId) || reportId < 1) {
+      throw httpError('Invalid report id', 400);
+    }
+    if (!(REVIEW_DECISIONS as readonly string[]).includes(decision)) {
+      throw httpError(`status must be one of: ${REVIEW_DECISIONS.join(', ')}`, 400);
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const { rows: found } = await client.query(
+        'SELECT message_id FROM chat_reports WHERE id = $1',
+        [reportId],
+      );
+      if (!found[0]) throw httpError('Report not found', 404);
+      const messageId: string = found[0].message_id;
+
+      const updated = await client.query(
+        `UPDATE chat_reports
+            SET status = $2, reviewed_by = $3, reviewed_at = NOW()
+          WHERE message_id = $1 AND status = 'open'
+        RETURNING id`,
+        [messageId, decision, adminId],
+      );
+
+      let hidden: boolean;
+      if (decision === 'actioned') {
+        await client.query(
+          `UPDATE chat_messages
+              SET hidden_at = COALESCE(hidden_at, NOW()), hidden_reason = 'admin'
+            WHERE id = $1`,
+          [messageId],
+        );
+        hidden = true;
+      } else {
+        await client.query(
+          `UPDATE chat_messages
+              SET hidden_at = NULL, hidden_reason = NULL
+            WHERE id = $1 AND hidden_reason = 'auto'`,
+          [messageId],
+        );
+        const { rows: after } = await client.query(
+          'SELECT hidden_at FROM chat_messages WHERE id = $1',
+          [messageId],
+        );
+        hidden = after[0]?.hidden_at != null;
+      }
+
+      await client.query('COMMIT');
+      return { messageId, status: decision, reportsUpdated: updated.rows.length, hidden };
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});
       throw err;
