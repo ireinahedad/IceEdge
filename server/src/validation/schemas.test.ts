@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { registerSchema, loginSchema, avatarSchema, slipSubmitSchema, ruleWeightsSchema, profileUpdateSchema } from './schemas';
+import {
+  registerSchema, loginSchema, avatarSchema, slipSubmitSchema, ruleWeightsSchema, profileUpdateSchema,
+  singlePredictionSchema, parlayPredictionSchema, predictFactorsSchema,
+  playerPropSchema, predictFuturesSchema, predictMlSchema,
+} from './schemas';
 
 describe('registerSchema', () => {
   it('rejects passwords under 8 chars', () => {
@@ -137,5 +141,126 @@ describe('profileUpdateSchema', () => {
     // Le service tranche 3-20 minuscules AVEC le contrôle d'unicité et le
     // message affiché par l'UI ; dupliquer la règle ici la ferait diverger.
     expect(profileUpdateSchema.safeParse({ username: 'Deux Mots' }).success).toBe(true);
+  });
+});
+
+
+// ── Prédiction ────────────────────────────────────────────────────────────────
+//
+// Ces schémas gardent les routes les plus chères du serveur. Les cas ci-dessous
+// sont donc écrits dans les deux sens : ce qu'ils doivent refuser (l'abus), et
+// ce qu'ils NE DOIVENT PAS refuser (les corps que le client envoie vraiment
+// aujourd'hui — c'est le vrai risque de régression).
+
+describe('singlePredictionSchema', () => {
+  it("accepte le corps de la landing (gameId seul)", () => {
+    expect(singlePredictionSchema.safeParse(
+      { marketType: 'total_goals', gameId: '2025020123', selection: 'over', line: 5.5 },
+    ).success).toBe(true);
+  });
+
+  it("accepte teamId vide — GamePrediction.tsx l'envoie ainsi", () => {
+    // `resolveSubjects` déduit les équipes depuis `gameId` ; refuser la chaîne
+    // vide casserait la page de prédiction d'un match.
+    const r = singlePredictionSchema.safeParse({ marketType: 'moneyline', gameId: '2025020123', teamId: '' });
+    expect(r.success).toBe(true);
+  });
+
+  it('accepte un marché hors union — le moteur en connaît plus que le type', () => {
+    // `computeProbability` traite `last_goal_scorer`, absent de `BetMarketType`.
+    expect(singlePredictionSchema.safeParse({ marketType: 'last_goal_scorer', playerId: '8478402' }).success).toBe(true);
+  });
+
+  it('refuse un marketType qui n\'en est pas un', () => {
+    expect(singlePredictionSchema.safeParse({ marketType: 'A'.repeat(200) }).success).toBe(false);
+    expect(singlePredictionSchema.safeParse({ marketType: { $ne: null } }).success).toBe(false);
+    expect(singlePredictionSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('refuse une ligne non finie', () => {
+    expect(singlePredictionSchema.safeParse({ marketType: 'shots_ou', line: 1e9 }).success).toBe(false);
+  });
+
+  it('retire les champs que le serveur ne lit pas', () => {
+    const r = singlePredictionSchema.safeParse({ marketType: 'moneyline', period: 2, seasonContext: { lastNGames: 5 } });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect('period' in r.data).toBe(false);
+      expect('seasonContext' in r.data).toBe(false);
+    }
+  });
+});
+
+describe('parlayPredictionSchema', () => {
+  it('accepte un coupon normal', () => {
+    expect(parlayPredictionSchema.safeParse({
+      legs: [{ marketType: 'moneyline', probability: 62 }, { marketType: 'total_goals', probability: 55 }],
+    }).success).toBe(true);
+  });
+
+  it('refuse une probabilité non numérique — la route renvoyait NaN au client', () => {
+    expect(parlayPredictionSchema.safeParse({ legs: [{ marketType: 'moneyline', probability: null }] }).success).toBe(false);
+    expect(parlayPredictionSchema.safeParse({ legs: [{ marketType: 'moneyline', probability: '62' }] }).success).toBe(false);
+    expect(parlayPredictionSchema.safeParse({ legs: [{ marketType: 'moneyline', probability: 140 }] }).success).toBe(false);
+  });
+
+  it('exige au moins une jambe et en plafonne 30', () => {
+    expect(parlayPredictionSchema.safeParse({ legs: [] }).success).toBe(false);
+    const leg = { marketType: 'moneyline', probability: 50 };
+    // 30 = le plafond de `slipSubmitSchema` : un coupon soumettable doit rester
+    // calculable.
+    expect(parlayPredictionSchema.safeParse({ legs: Array(30).fill(leg) }).success).toBe(true);
+    expect(parlayPredictionSchema.safeParse({ legs: Array(31).fill(leg) }).success).toBe(false);
+  });
+});
+
+describe('predictFactorsSchema', () => {
+  it('refuse un type hors des deux branches de buildRealFactors', () => {
+    expect(predictFactorsSchema.safeParse({ type: 'team', id: 'TOR' }).success).toBe(true);
+    expect(predictFactorsSchema.safeParse({ type: 'goalie', id: 'x' }).success).toBe(false);
+  });
+
+  it('borne fallbackPct', () => {
+    expect(predictFactorsSchema.safeParse({ type: 'player', id: '8478402', context: { fallbackPct: 63 } }).success).toBe(true);
+    expect(predictFactorsSchema.safeParse({ type: 'player', id: '8478402', context: { fallbackPct: 900 } }).success).toBe(false);
+  });
+});
+
+describe('playerPropSchema', () => {
+  it('accepte le corps de PlayerPropPrediction.tsx', () => {
+    const r = playerPropSchema.safeParse({
+      playerId: '8478402', playerName: 'Connor McDavid', propType: 'points', line: 118,
+      season: '2025-26', currentGoals: 30, currentPoints: 80, gamesPlayed: 50,
+    });
+    expect(r.success).toBe(true);
+    // Les stats du client sont retirées : le handler les recalcule depuis
+    // `fetchPlayerById`, et un chiffre venu du client ne doit jamais entrer.
+    if (r.success) expect('currentPoints' in r.data).toBe(false);
+  });
+
+  it('refuse un propType inconnu', () => {
+    expect(playerPropSchema.safeParse({ playerName: 'X', propType: 'hits', line: 10 }).success).toBe(false);
+  });
+});
+
+describe('predictFuturesSchema', () => {
+  it('accepte les trois marchés à terme, refuse le reste', () => {
+    expect(predictFuturesSchema.safeParse({ teamName: 'Maple Leafs', teamId: 'TOR', propType: 'cup' }).success).toBe(true);
+    expect(predictFuturesSchema.safeParse({ teamName: 'Maple Leafs', propType: 'president' }).success).toBe(false);
+  });
+});
+
+describe('predictMlSchema', () => {
+  it('accepte le corps de BestBetsSection (landing, sans compte)', () => {
+    expect(predictMlSchema.safeParse({ type: 'game', subjectId: 'TOR', opponentId: '2025020123' }).success).toBe(true);
+  });
+
+  it('exige un subjectId non vide — c\'est la clé de cache de mlApiClient', () => {
+    expect(predictMlSchema.safeParse({ type: 'game', subjectId: '' }).success).toBe(false);
+    expect(predictMlSchema.safeParse({ type: 'game' }).success).toBe(false);
+  });
+
+  it('refuse un type inconnu', () => {
+    expect(predictMlSchema.safeParse({ type: 'goalie', subjectId: 'x' }).success).toBe(false);
   });
 });

@@ -3,19 +3,37 @@
 **Date :** 2026-09-04 · **Périmètre :** `client/` (52 k lignes TS/TSX), `server/` (TS/Express), `.github/`, config de build
 **Méthode :** lecture intégrale des routes, services, contextes et middlewares ; `tsc --noEmit` client + serveur (0 erreur) ; inspection de `dist/`, `public/`, CI, Dockerfile, CSP.
 
-> **État au 2026-09-04 — 10 correctifs appliqués.** Chaque finding traité porte
-> la mention ✅ **CORRIGÉ** et le détail de ce qui a été fait ; le tableau du § 9
-> les liste. Les 3 des 11 blocants encore ouverts sont en tête du § 10.
->
-> **Vérification :** `tsc --noEmit` propre client et serveur · suite serveur
-> **287 tests, 25 fichiers** (48 ajoutés par ces correctifs) · migration 034
-> rejouée contre un Postgres 16 réel.
+## État — 2026-09-04
+
+**10 correctifs appliqués**, dont 3 des 4 findings CRITICAL. Sur les 11 blocants
+du § 10, **4 sont faits** ; les 7 autres sont tous côté iOS / App Store, sauf la
+migration à appliquer en production.
+
+Restent ouverts : **1 CRITICAL** (la barre de navigation sous l'indicateur
+d'accueil) et **9 HIGH**, dont sept ne se voient que sur un iPhone. Tout ce qui
+touchait à la sécurité serveur est traité.
+
+**Comment lire les titres :**
+
+| Titre | Sens |
+|---|---|
+| `✅ CORRIGÉ · [HIGH]` | traité ; le bloc dit ce qui a été fait et ce qu'il reste à faire de ton côté |
+| `🟡 PARTIELLEMENT CORRIGÉ · [MEDIUM]` | une partie est traitée, le bloc distingue ✅ et ⬜ ; la pastille reste celle de la gravité |
+| `🔴 [CRITICAL]` · `🟠 [HIGH]` · `🟡 [MEDIUM]` · `🟢 [LOW]` | ouvert, par gravité |
+
+Un titre qui commence par une pastille de couleur est donc **ouvert** ; un titre
+qui commence par ✅ ne l'est plus. Le § 9 liste les dix lots de correctifs avec
+leurs fichiers.
+
+**Vérification :** `tsc --noEmit` propre client et serveur · suite serveur
+**287 tests, 25 fichiers** (48 ajoutés par ces correctifs) · migration 034
+rejouée contre un Postgres 16 réel.
 
 ---
 
 ## 1. Sécurité
 
-### 🔴 [CRITICAL] La regex des previews Vercel autorisait n'importe quel compte Vercel ✅ CORRIGÉ
+### ✅ CORRIGÉ · [CRITICAL] La regex des previews Vercel autorisait n'importe quel compte Vercel
 **Fichier :** `server/src/cors.ts`
 
 - **Problème :** `vercelPreview = /^https:\/\/ice-edge[a-z0-9-]*\.vercel\.app$/i` accepte `https://ice-edge-nimportequoi.vercel.app`. Or un sous-domaine `<projet>.vercel.app` est attribué **au premier arrivé, sur n'importe quel compte Vercel**. Il suffisait de créer un projet nommé `ice-edge-x` pour obtenir une origine autorisée par ton API.
@@ -23,7 +41,7 @@
 - **Solution appliquée :** la regex exige désormais le slug d'équipe (`-ireina-hedad-s-projects`), qui n'est pas attribuable à un tiers. Surchargeable par `VERCEL_TEAM_SLUG`. Le domaine de production reste déclaré explicitement dans `CORS_ORIGIN`.
 - **À faire de ton côté :** vérifier que `CORS_ORIGIN` contient bien `https://arakice.com` (+ `https://www.arakice.com` si utilisé) et tester une preview après déploiement.
 
-### 🟠 [HIGH] Fuite d'informations internes dans les réponses d'erreur ✅ CORRIGÉ
+### ✅ CORRIGÉ · [HIGH] Fuite d'informations internes dans les réponses d'erreur
 **Fichiers :** `ml.routes.ts`, `llm.routes.ts`, `odds.routes.ts`, `app.ts` (leaderboard), `auth.routes.ts`, `profile.routes.ts`, `chat.routes.ts`, `slip.routes.ts`
 
 - **Problème :** le handler d'erreur global d'`app.ts` masque correctement les 5xx en production (`'Internal server error'`). Mais **presque toutes les routes répondent elles-mêmes** avec `res.status(err.status ?? 500).json({ error: err.message })` — elles court-circuitent donc cette protection. Cas les plus parlants :
@@ -39,7 +57,7 @@
   - Un cas garde son message, délibérément : quand l'appel LLM est facturé sur la **clé OpenAI de l'utilisateur**, l'erreur du fournisseur parle de SA clé (« Incorrect API key provided ») et l'aide à corriger. Le nouveau champ `billedTo` sur `ProviderCall` fait la distinction ; sur le chemin Pro, facturé à l'opérateur, le message reste générique.
   - 15 tests de régression (`httpError.test.ts`), dont un qui rejoue la fuite réelle : `NHL API timeout (8000 ms) for https://api-web.nhle.com/v1/score/…` ne doit plus quitter le serveur — mais doit rester entier dans le journal.
 
-### 🟠 [HIGH] `GET /api/users/me` renvoie la clé OpenAI en clair ✅ CORRIGÉ
+### ✅ CORRIGÉ · [HIGH] `GET /api/users/me` renvoie la clé OpenAI en clair
 **Fichiers :** `server/src/services/profile.service.ts`, `client/src/app/pages/profile/SettingsTab.tsx`, `client/src/app/types/user.tsx`, `client/src/app/services/userService.ts`
 
 - **Problème :** `openaiApiKey: profile.openaiApiKey ? decryptSecret(...) : null`. La clé est chiffrée au repos (bien), puis **déchiffrée et renvoyée intégralement au client à chaque chargement de profil**.
@@ -60,19 +78,27 @@
 - **Impact :** si Google renvoie une adresse non vérifiée (cas résiduel, notamment sur certains comptes Workspace), le rattachement donne accès à un compte existant.
 - **Solution recommandée :** ajouter `email_verified?: boolean` à `GoogleUserInfo` et refuser (`403`) quand il vaut `false`.
 
-### 🟡 [MEDIUM] `POST /api/push/unsubscribe` — IDOR ✅ CORRIGÉ
+### ✅ CORRIGÉ · [MEDIUM] `POST /api/push/unsubscribe` — IDOR
 **Fichiers :** `server/src/routes/push.routes.ts`, `server/src/services/push.service.ts`
 
 - **Problème :** `removeSubscription(endpoint)` supprimait par endpoint seul. N'importe quel compte authentifié pouvait désabonner un **autre** utilisateur.
 - **Impact :** notifications coupées pour la victime, sans qu'elle sache pourquoi. Difficulté d'exploitation faible (l'endpoint est opaque) mais la faille d'autorisation est réelle.
 - **Solution appliquée :** `DELETE … WHERE endpoint = $1 AND user_id = $2`.
 
-### 🟡 [MEDIUM] `/api/predict/*` : public, sans validation, et coûteux
-**Fichier :** `server/src/routes/ml.routes.ts` (aucun `router.use`)
+### ✅ CORRIGÉ · [MEDIUM] `/api/predict/*` : public, sans validation, et coûteux
+**Fichiers :** `server/src/routes/ml.routes.ts`, `server/src/validation/schemas.ts`, `server/src/middleware/rateLimit.middleware.ts`, `server/src/routes/ml.routes.test.ts` *(nouveau)*
 
-- **Problème :** `POST /single`, `/parlay`, `/factors`, `/player-prop`, `/futures`, `/ml` et `GET /best-bets` sont ouverts à tous, sans schéma zod. Ils déclenchent des appels vers l'API NHL, `buildRealFactors`, `buildGameFeatures` et le service ML Python.
-- **Impact :** amplification — une requête entrante gratuite génère plusieurs requêtes sortantes coûteuses. Seul `apiLimiter` (300/min/IP) freine. `/parlay` accepte des `probability` non validées (`NaN` → `combinedProbability: NaN` renvoyé au client).
-- **Solution recommandée :** schémas zod sur les six routes (bornes sur `line`, `limit`, `days`, `legs.length ≤ 20`, `probability ∈ [0,100]`), et envisager `optionalAuthenticate` + limiteur dédié plus strict sur `/ml` et `/factors`.
+- **Problème :** `POST /single`, `/parlay`, `/factors`, `/player-prop`, `/futures`, `/ml` et `GET /best-bets` étaient ouverts à tous, sans schéma zod. Ils déclenchent des appels vers l'API NHL, `buildRealFactors`, `buildGameFeatures` et le service ML Python.
+- **Impact :** amplification — une requête entrante gratuite génère plusieurs requêtes sortantes coûteuses. Seul `apiLimiter` (300/min) freinait. `/parlay` acceptait des `probability` non validées (`NaN` → `combinedProbability: NaN` renvoyé au client, et affiché).
+- **Solution appliquée :**
+  - **`validateBody` sur les six routes POST**, avec six schémas dans `validation/schemas.ts` : bornes sur `line`, `probability ∈ [0,100]`, identifiants NHL à 40 caractères, enums fermées pour `type` et `propType`. Le corps invalide est refusé **avant le premier appel sortant** — c'est tout l'objet de l'item, et c'est ce que le nouveau `ml.routes.test.ts` vérifie explicitement (`expect(buildGameFeatures).not.toHaveBeenCalled()`), parce qu'un schéma correct mais non câblé ne protège rien.
+  - **`predictLimiter` — 60/min/compte en production — sur `/ml` et `/factors`**, les deux routes qui construisent des variables puis appellent le service Python. Même clé que `apiLimiter` (`userOrIpKey` : par compte si le jeton est valide, par IP sinon). 60 laisse trois fois la plus grosse rafale légitime, les 20 appels que `BestBetsSection` déclenche d'un coup sur la landing.
+- **Ce qui a été écarté, et pourquoi :**
+  - **Pas d'`optionalAuthenticate`.** Il n'apporterait rien : `userOrIpKey` vérifie déjà la signature du jeton pour établir la clé du limiteur. Et **exiger un compte est exclu** — la landing appelle `/predict/ml` et `/predict/single` sans session ; ce serait retirer la fonctionnalité au visiteur.
+  - **`marketType` reste une chaîne bornée (`/^[a-z0-9_]{1,40}$/`), pas une enum.** `computeProbability` traite `last_goal_scorer`, **qui n'est pas dans l'union `BetMarketType`** : une enum bâtie sur l'union refuserait un marché que le moteur sait calculer, et chaque nouveau marché devrait être déclaré à deux endroits — une omission se paierait en 400 en production. Le moteur retombe déjà sur 50 % pour un marché inconnu.
+  - **Plafond de parlay à 30 jambes, pas 20.** `slipSubmitSchema` en accepte 30 : refuser de calculer la probabilité combinée d'un coupon par ailleurs soumettable serait une régression.
+  - **Rien sur `GET /best-bets`** : `limit`, `days` et `maxPlayers` sont **déjà** bornés dans `getBestBets` (`num(v, défaut, lo, hi)`), et `source` y est déjà réduit à `'ml' | 'rules'`.
+- **⚠️ Ce que ça ne corrige pas :** les routes restent publiques, donc N comptes valent N × 60 depuis une même adresse. La barrière déplacée est celle de la création de comptes, pas celle-ci — même arbitrage assumé que pour `apiLimiter`.
 
 ### 🟡 [MEDIUM] `systemPrompt` piloté par le client sur le chemin Pro
 **Fichier :** `server/src/routes/llm.routes.ts`
@@ -88,8 +114,12 @@
 - **Impact :** un jeton d'accès valide 15 min peut se retrouver dans Sentry, dans l'historique du navigateur, et dans l'en-tête `Referer` de toute sous-ressource chargée par cette page.
 - **Solution recommandée :** passer le jeton dans le **fragment** (`#access_token=`, jamais envoyé au serveur ni loggé) ; appeler `history.replaceState` dès le premier effet ; ajouter un `beforeSend` qui remplace `access_token=…` par `access_token=[redacted]` dans `event.request.url` et les breadcrumbs.
 
-### 🟡 [MEDIUM] Validation zod partielle
-`validateBody` n'est posé que sur auth, slips, avatar et profil. Absent sur : chat (`/rooms`, `/messages`, `/reactions`, `/report`), `PUT /api/injuries/:key`, `/api/push/subscribe`, `/api/subscription/redeem`, et tout `/api/predict/*`. Le chat compense par une sanitisation serveur solide (`chat.service.ts` : `stripControlChars`, `MAX_TEXT_LENGTH`, `slice`) ; les autres non.
+### 🟡 PARTIELLEMENT CORRIGÉ · [MEDIUM] Validation zod partielle
+`validateBody` n'était posé que sur auth, slips, avatar et profil.
+
+- ✅ **Traité :** toute la saisie manuelle. `PUT /api/injuries/:key` n'avait aucune validation — la route recopiait les tableaux du corps dans un fichier — et ses remplaçantes `/api/manual/*` ont quatre schémas bornés (barème d'impact, plage de `lineupAdj`, nombre d'équipes, longueur des noms), plus une validation des clés d'URL, qui entrent dans une clé primaire et dans une clé de cache.
+- ✅ **Traité :** tout `/api/predict/*` (six schémas + `predictLimiter`, voir le bloc plus haut).
+- ⬜ **Reste :** chat (`/rooms`, `/messages`, `/reactions`, `/report`), `/api/push/subscribe`, `/api/subscription/redeem`. Le chat compense par une sanitisation serveur solide (`chat.service.ts` : `stripControlChars`, `MAX_TEXT_LENGTH`, `slice`) ; les deux autres non.
 
 ### 🟢 [LOW] Divers
 - **Deux routeurs montés sur `/api/users`** (`profileRoutes` puis `userRoutes`) : une route ajoutée dans le second peut être silencieusement masquée par le premier, et `authenticate` s'exécute deux fois sur `/me/*`. Fusionner ou préfixer.
@@ -100,7 +130,7 @@
 
 ## 2. iOS / Mobile
 
-### 🔴 [CRITICAL] `viewport-fit=cover` manquant — toutes les safe areas valaient 0 ✅ CORRIGÉ
+### ✅ CORRIGÉ · [CRITICAL] `viewport-fit=cover` manquant — toutes les safe areas valaient 0
 **Fichier :** `client/index.html`
 
 - **Problème :** `<meta name="viewport" content="width=device-width, initial-scale=1.0">`. **Sans `viewport-fit=cover`, `env(safe-area-inset-*)` vaut 0 px sur iPhone.** Les 14 endroits du code qui font `paddingTop: "env(safe-area-inset-top, 0px)"` étaient donc **entièrement inopérants**.
@@ -191,7 +221,7 @@ Aucun `-webkit-tap-highlight-color` (flash gris sur chaque tap), aucun `user-sel
 
 ## 3. Fonctionnalités / bugs
 
-### 🟠 [HIGH] Décodage JWT en `atob` — déconnexions aléatoires ✅ CORRIGÉ
+### ✅ CORRIGÉ · [HIGH] Décodage JWT en `atob` — déconnexions aléatoires
 **Fichiers :** `AuthContext.tsx`, `AuthCallback.tsx` → nouveau `client/src/app/services/jwt.ts`
 
 - **Problème :** `JSON.parse(atob(token.split('.')[1]))`. Un JWT encode en **base64url**, pas en base64 : `-` et `_` au lieu de `+` et `/`, sans remplissage. `atob` **lève** `InvalidCharacterError` dès que la charge utile produit l'un de ces caractères.
@@ -199,14 +229,14 @@ Aucun `-webkit-tap-highlight-color` (flash gris sur chaque tap), aucun `user-sel
 - **Solution appliquée :** module `jwt.ts` avec conversion base64url → base64, remplissage, et décodage UTF-8 (les prénoms accentués étaient aussi mal décodés). Les deux appelants l'utilisent.
 - **Bonus corrigé :** `AuthCallback` lisait `payload.username`, `payload.first_name`, `payload.last_name`, `payload.avatar_url` — **aucun de ces champs n'est dans le jeton** (`signAccessToken` ne met que `sub`, `email`, `role`). Les valeurs retombaient toujours sur le défaut. C'est désormais explicite.
 
-### 🟠 [HIGH] La liste de blocage fuit entre comptes ✅ CORRIGÉ
+### ✅ CORRIGÉ · [HIGH] La liste de blocage fuit entre comptes
 **Fichier :** `client/src/app/context/BlockContext.tsx`
 
 - **Problème :** `requested` est un `useRef` jamais remis à zéro. Après déconnexion et connexion d'un **autre compte sur le même appareil**, `ensureLoaded()` sortait immédiatement.
 - **Impact :** le nouvel utilisateur héritait de la liste de blocage du précédent — messages masqués pour la mauvaise personne dans le chat, et **la liste de blocage de quelqu'un d'autre affichée dans ses Paramètres**. Fuite de données entre comptes.
 - **Solution appliquée :** un effet suit `user?.id` et réinitialise `requested` + la liste au changement de compte.
 
-### 🟠 [HIGH] Quatre sources de données du modèle sont mortes en production ✅ CORRIGÉ
+### ✅ CORRIGÉ · [HIGH] Quatre sources de données du modèle sont mortes en production
 **Fichiers :** `injuryStore.ts`, `injuries.routes.ts`, `refereeStore.ts`, `scratches.ts`, `startingGoalies.ts`
 
 - **Problème :** ces modules lisent des fichiers à l'exécution :
@@ -278,7 +308,7 @@ Le serveur refuse au-delà de 1000 caractères (`MAX_TEXT_LENGTH`) ; le client n
 
 ## 5. Performance
 
-### 🟠 [HIGH] Le logo était un PNG de 1,49 Mo ✅ CORRIGÉ
+### ✅ CORRIGÉ · [HIGH] Le logo était un PNG de 1,49 Mo
 **Fichiers :** `client/src/app/components/brand/IceedgeLogo.tsx`, `client/public/sw.js`
 
 - **Problème :** `<img src="/arakice-logo.png">` — le master **1024×1024, 1 489 844 octets** — affiché à 28–72 px sur 8 écrans (connexion, accueil, Pro, 404, Conditions, Confidentialité, Support, succès). Le service worker s'en servait aussi comme icône **et** badge de notification.
@@ -323,7 +353,7 @@ Le middleware socket exige un JWT (`if (!token) return next(new Error(...))`), a
 
 ## 7. Production readiness
 
-### 🔴 [CRITICAL] « Mode démo : le paiement Stripe n'est pas encore branché » était affiché en production ✅ CORRIGÉ
+### ✅ CORRIGÉ · [CRITICAL] « Mode démo : le paiement Stripe n'est pas encore branché » était affiché en production
 **Fichiers :** `client/src/app/pages/ProPage.tsx`, `client/src/app/i18n/index.tsx`
 
 - **Problème :** la clé `pro.devNote` — *« Demo mode: Stripe payment isn't wired yet — the subscription activates immediately so you can test. »* — était rendue **sans condition**, sous le bouton d'abonnement, pour **tous les visiteurs**.
@@ -397,9 +427,11 @@ Par ordre d'impact : la mention mode démo (corrigée) · les textes à 8-9 px �
 
 ---
 
-## 9. Correctifs appliqués (non commités)
+## 9. Correctifs appliqués
 
-Travail fait directement sur `master` dans `~/dev/ICEEDGE`, sans commit — à toi de relire et de committer.
+Travail fait directement sur `master` dans `~/dev/ICEEDGE`, sans commit de ma
+part — tu relis et tu committes. Les lots 1-9 sont déjà dans ton historique
+(`357a458`, `816e547`) ; les lots 10 et 11 attendent ta relecture.
 
 | # | Fichier(s) | Changement |
 |---|---|---|
@@ -413,8 +445,9 @@ Travail fait directement sur `master` dans `~/dev/ICEEDGE`, sans commit — à t
 | 8 | `034_manual_data.sql`, `manualData.service.ts`, `manual.routes.ts`, `injuryStore/refereeStore/scratches/startingGoalies`, `nhlPredictions`, `featureEngineering`, `cleanup.service`, `app.ts`, `schemas.ts` + carte admin et service côté client | Saisie manuelle en base — les quatre facteurs morts en production revivent, et la saisie devient faisable depuis le téléphone |
 | 9 | `httpError.ts` *(nouveau)* + 12 fichiers, 93 handlers | Une seule règle de mise en forme des erreurs ; plus aucun message interne dans une réponse, et les 5xx enfin journalisés |
 | 10 | `profile.service.ts`, `SettingsTab.tsx`, `types/user.tsx`, `userService.ts`, `i18n` | Clé OpenAI en écriture seule — elle ne sort plus de la base, et elle ne s'efface plus par accident |
+| 11 | `validation/schemas.ts`, `middleware/rateLimit.middleware.ts`, `routes/ml.routes.ts`, `routes/ml.routes.test.ts` *(nouveau)*, `validation/schemas.test.ts` | `/api/predict/*` borné : six schémas zod et `predictLimiter` (60/min) sur les deux routes qui appellent le service Python |
 
-`npx tsc --noEmit` passe sur le client **et** sur le serveur après ces changements, et la suite de tests serveur est verte : **287 tests, 25 fichiers** (dont 48 nouveaux — 25 pour la saisie manuelle, 15 pour la mise en forme des erreurs, 7 pour la clé OpenAI, 1 pour la faille CORS).
+`npx tsc --noEmit` passe sur le client **et** sur le serveur après ces changements, et la suite de tests serveur est verte : **312 tests, 26 fichiers** (dont 8 nouveaux pour le câblage de `/api/predict/*` et 17 pour ses schémas).
 
 ---
 
@@ -427,21 +460,21 @@ migration à appliquer en production.
 
 | | Sujet | État |
 |---|---|---|
-| 1 | CORS previews Vercel → prise de contrôle de compte | ✅ corrigé |
-| 2 | `viewport-fit=cover` manquant → safe areas inertes | ✅ corrigé |
-| 3 | Mention « mode démo Stripe » en production | ✅ corrigé |
+| 1 | CORS previews Vercel → prise de contrôle de compte | ✅ CORRIGÉ |
+| 2 | `viewport-fit=cover` manquant → safe areas inertes | ✅ CORRIGÉ |
+| 3 | Mention « mode démo Stripe » en production | ✅ CORRIGÉ |
 | 4 | `BottomNav` sans `safe-area-inset-bottom` | à faire |
 | 5 | Champs < 16 px → zoom iOS irréversible | à faire |
 | 6 | Cibles tactiles 28-32 px (envoi chat en premier) | à faire |
 | 7 | Page `/share/:id` « bientôt disponible » (Guideline 2.1) | à faire |
 | 8 | Décision Pro sur iOS : IAP ou retrait complet (Guideline 3.1.1) | à trancher |
 | 9 | Chat : resync au retour au premier plan + `connect_error` | à faire |
-| 10 | Fichiers de données jamais copiés dans `dist/` (blessures, arbitres, gardiens) | ✅ corrigé — passés en base |
+| 10 | Fichiers de données jamais copiés dans `dist/` (blessures, arbitres, gardiens) | ✅ CORRIGÉ — passés en base |
 | 11 | `tokenStore` natif absent → session perdue toutes les 15 min en WKWebView | phase 3, à planifier |
 
 ### 🟠 Importants, peuvent attendre un peu
 
-Coupon non persisté · aucun timeout de requête ni bouton « Réessayer » · `autoComplete` pour le Trousseau iOS · message de chat échoué qui reste affiché · `email_verified` Google · `/api/predict/*` sans validation ni auth · jeton d'accès dans l'URL + Sentry sans `beforeSend` · erreurs transformées en états vides (Ligue) · 401 LLM confondu avec 401 de session · `/api/odds/live` qui sert des cotes fictives · `typecheck` client absent de la CI.
+Coupon non persisté · aucun timeout de requête ni bouton « Réessayer » · `autoComplete` pour le Trousseau iOS · message de chat échoué qui reste affiché · `email_verified` Google · jeton d'accès dans l'URL + Sentry sans `beforeSend` · erreurs transformées en états vides (Ligue) · 401 LLM confondu avec 401 de session · `/api/odds/live` qui sert des cotes fictives · `typecheck` client absent de la CI.
 
 ### 🟡 Améliorations recommandées
 
@@ -487,7 +520,7 @@ Le niveau de commentaire explicatif — pas « ce que fait le code » mais « po
 - [ ] `autoComplete` sur tous les champs de `LoginPage`
 - [ ] Chat : retirer la bulle optimiste en cas d'échec et restaurer le texte
 - [ ] Vérifier `email_verified` dans `loginWithGoogle`
-- [ ] Schémas zod sur `/api/predict/*`
+- [x] ~~Schémas zod sur `/api/predict/*`~~ → six schémas + `predictLimiter` (60/min) sur `/ml` et `/factors`
 - [ ] `beforeSend` Sentry qui masque `access_token` ; jeton dans le fragment
 - [ ] `LeaguePage` : distinguer « vide » de « en erreur »
 - [ ] Supprimer `/api/odds/live` et `/api/odds/game/:gameId` (cotes fictives)

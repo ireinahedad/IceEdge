@@ -164,3 +164,35 @@ export const redeemLimiter = rateLimit({
   keyGenerator: (req) => (req as any).user?.sub || req.ip,
   message: { error: 'Too many promo attempts. Try again later.' },
 });
+
+/**
+ * Dédié — les deux routes de prédiction qui construisent des variables et
+ * appellent le service ML Python (`POST /api/predict/ml`, `POST
+ * /api/predict/factors`).
+ *
+ * POURQUOI UN LIMITEUR À PART. Ces routes sont publiques et doivent le rester :
+ * la landing (`BestBetsSection`) appelle `/predict/ml` sans compte, et exiger
+ * une authentification supprimerait la fonctionnalité pour un visiteur. Le coût
+ * n'est donc borné que par le débit. Une requête entrante y déclenche plusieurs
+ * requêtes sortantes — API NHL puis service Python — et les caches TTL ne
+ * couvrent rien quand l'identifiant change à chaque appel, ce qu'un abus fait
+ * par construction. `apiLimiter` (300/min) plafonne la façade ; ici on plafonne
+ * la dépense.
+ *
+ * POURQUOI 60 ET PAS MOINS. La rafale légitime la plus grosse est celle de
+ * `BestBetsSection` : 20 appels `/predict/ml` d'un coup quand l'onglet ML est
+ * sélectionné. 60/min laisse trois fois cette rafale avant le premier 429.
+ * Descendre en dessous rendrait des 429 à un visiteur qui ne fait que cliquer.
+ *
+ * Même clé que `apiLimiter` (`userOrIpKey`) : par compte quand le jeton est
+ * valide, par IP sinon — le NAT mobile ferait sinon partager 60 prédictions à
+ * des abonnés qui ne se connaissent pas.
+ */
+export const predictLimiter = rateLimit({
+  windowMs: 60 * 1000,            // 1 minute
+  limit:    isProd ? 60 : 600,    // 60 prédictions ML / min / compte en prod
+  standardHeaders: 'draft-7',
+  legacyHeaders:   false,
+  keyGenerator: userOrIpKey,
+  message: { error: 'Too many prediction requests, please slow down.' },
+});

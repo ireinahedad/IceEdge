@@ -34,7 +34,37 @@ import {
 import { getBestBets } from "../services/bestBets.service";
 import { logger } from "../logger";
 import { sendError } from "../httpError";
+import { validateBody } from "../middleware/validate.middleware";
+import { predictLimiter } from "../middleware/rateLimit.middleware";
+import {
+  singlePredictionSchema,
+  parlayPredictionSchema,
+  predictFactorsSchema,
+  playerPropSchema,
+  predictFuturesSchema,
+  predictMlSchema,
+} from "../validation/schemas";
 
+/**
+ * Routeur de prédiction — PUBLIC À DESSEIN, et donc protégé en deux temps.
+ *
+ * Ces routes restent ouvertes sans compte : la landing affiche des probabilités
+ * à un visiteur qui n'a rien signé, et c'est le produit. Ce qu'elles ne peuvent
+ * pas se permettre, c'est de rester ouvertes SANS BORNES — une requête entrante
+ * gratuite y déclenche des appels sortants vers l'API NHL et le service ML
+ * Python.
+ *
+ *   1. `validateBody` refuse le corps hors bornes AVANT tout appel sortant
+ *      (schémas dans `validation/schemas.ts`, avec le pourquoi de chaque borne).
+ *   2. `predictLimiter` plafonne les deux routes qui construisent des variables
+ *      et appellent le service Python (`/ml`, `/factors`) — les autres restent
+ *      sous `apiLimiter`, parce que la landing peut en tirer ~32 d'un coup.
+ *
+ * Les gardes en début de handler (`legs array required`, `type and subjectId
+ * are required`) sont désormais redondantes avec les schémas. Elles sont
+ * conservées : elles ne coûtent rien et gardent le handler juste s'il est un
+ * jour monté sans son middleware.
+ */
 const router = Router();
 
 // GET /api/predict/best-bets
@@ -260,7 +290,7 @@ async function computeProbability(body: PredictionRequest): Promise<number> {
 // --- Routes ---
 
 // POST /api/predict/single
-router.post("/single", async (req: Request, res: Response) => {
+router.post("/single", validateBody(singlePredictionSchema), async (req: Request, res: Response) => {
   try {
     const body        = req.body as PredictionRequest;
     const probability = await computeProbability(body);
@@ -291,7 +321,7 @@ router.post("/single", async (req: Request, res: Response) => {
 });
 
 // POST /api/predict/parlay
-router.post("/parlay", (req: Request, res: Response) => {
+router.post("/parlay", validateBody(parlayPredictionSchema), (req: Request, res: Response) => {
   const { legs } = req.body as {
     legs: Array<{ marketType: BetMarketType; probability: number }>;
   };
@@ -325,7 +355,7 @@ router.get("/markets/player/:id", (_req: Request, res: Response) => {
 });
 
 // POST /api/predict/factors
-router.post("/factors", async (req: Request, res: Response) => {
+router.post("/factors", predictLimiter, validateBody(predictFactorsSchema), async (req: Request, res: Response) => {
   try {
     const { type, id, context = {} } = req.body as {
       type: string;
@@ -345,7 +375,7 @@ router.post("/factors", async (req: Request, res: Response) => {
 });
 
 // POST /api/predict/player-prop  (season-long prop)
-router.post("/player-prop", async (req: Request, res: Response) => {
+router.post("/player-prop", validateBody(playerPropSchema), async (req: Request, res: Response) => {
   try {
     const { playerName, propType, line, playerId } = req.body as {
       playerName: string;
@@ -402,7 +432,7 @@ router.post("/player-prop", async (req: Request, res: Response) => {
 });
 
 // POST /api/predict/futures
-router.post("/futures", async (req: Request, res: Response) => {
+router.post("/futures", validateBody(predictFuturesSchema), async (req: Request, res: Response) => {
   try {
     const { teamName, teamId, propType } = req.body as {
       teamName: string;
@@ -434,7 +464,7 @@ router.post("/futures", async (req: Request, res: Response) => {
 //
 // Body: { type, subjectId, opponentId?, propType?, line?, selection? }
 
-router.post('/ml', async (req: Request, res: Response) => {
+router.post('/ml', predictLimiter, validateBody(predictMlSchema), async (req: Request, res: Response) => {
   try {
     const { type, subjectId, opponentId, propType, line, selection } = req.body as {
       type:        'game' | 'player' | 'team';

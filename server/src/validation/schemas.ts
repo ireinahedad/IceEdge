@@ -187,3 +187,124 @@ export const refereesTableSchema = z.object({
 export const refAssignmentSchema = z.object({
   refs: z.array(z.string().trim().min(2).max(60)).min(1).max(4),
 });
+
+
+// ── Prédiction (`/api/predict/*`) ─────────────────────────────────────────────
+//
+// Ces routes étaient les dernières routes publiques sans validation, et ce sont
+// les plus chères du serveur : une requête entrante gratuite déclenche des
+// appels sortants vers l'API NHL, `buildRealFactors`, `buildGameFeatures` et le
+// service ML Python. Le facteur d'amplification est le vrai sujet ici — pas
+// l'injection : chaque identifiant inédit rate les caches TTL (`nhlApiClient`,
+// `mlApiClient`) et paye le trajet complet.
+//
+// POURQUOI DES CHAÎNES BORNÉES ET NON DES ENUMS pour `marketType` / `propType` :
+// `computeProbability` traite `last_goal_scorer`, qui n'est PAS dans l'union
+// `BetMarketType` du routeur. Une enum construite sur l'union refuserait donc un
+// marché que le moteur sait calculer, et chaque nouveau marché devrait être
+// ajouté à deux endroits — une omission se paierait en 400 en production. Le
+// motif ci-dessous refuse le corps poubelle (objets, chaînes de 10 ko, clés
+// réservées) sans jamais se mettre en travers du moteur, qui retombe déjà sur
+// 50 % pour un marché qu'il ne connaît pas.
+const marketType = z.string().trim().regex(/^[a-z0-9_]{1,40}$/, 'marketType invalide');
+
+// Identifiant NHL : soit un id numérique, soit une abréviation d'équipe. Pas de
+// `min(1)` : `GamePrediction.tsx` envoie `teamId: ""` (le match seul suffit,
+// `resolveSubjects` déduit les équipes depuis `gameId`), et le refuser casserait
+// la page de prédiction d'un match.
+const nhlSubjectId = z.string().trim().max(40);
+
+// « over », « under », ou une abréviation d'équipe.
+const selectionValue = z.string().trim().max(40);
+
+// Une ligne de pari : -1.5 (puck line) à ~120 (prop de saison en points). Les
+// bornes refusent l'absurde, pas une ligne réelle. `finite()` est le point
+// important : sans lui, `null`/`Infinity` traversent et ressortent en `NaN` dans
+// une probabilité affichée à l'utilisateur.
+const betLine = z.number().finite().min(-50).max(500);
+
+/** Corps de `POST /api/predict/single`. */
+export const singlePredictionSchema = z.object({
+  marketType,
+  gameId:     nhlSubjectId.optional(),
+  teamId:     nhlSubjectId.optional(),
+  opponentId: nhlSubjectId.optional(),
+  playerId:   nhlSubjectId.optional(),
+  selection:  selectionValue.optional(),
+  line:       betLine.optional(),
+  isHome:     z.boolean().optional(),
+});
+// `period` et `seasonContext` sont envoyés par le type client `PredictionRequest`
+// mais ne sont lus NULLE PART côté serveur : ils sont volontairement absents ici
+// et donc silencieusement retirés (comportement zod par défaut). Les déclarer
+// donnerait l'illusion qu'ils comptent.
+
+/**
+ * Corps de `POST /api/predict/parlay`.
+ *
+ * `probability` est le champ qui comptait : la route multipliait les jambes sans
+ * rien vérifier, donc une jambe non numérique renvoyait `combinedProbability:
+ * NaN` au client, qui l'affichait. La borne 0-100 est celle du reste du produit.
+ *
+ * Le plafond de 30 jambes est calé sur `slipSubmitSchema` À DESSEIN : un coupon
+ * de 25 jambes est soumettable, donc refuser d'en calculer la probabilité
+ * combinée casserait un coupon par ailleurs valide.
+ */
+export const parlayPredictionSchema = z.object({
+  legs: z.array(z.object({
+    marketType,
+    probability: z.number().finite().min(0).max(100),
+    correlation: z.number().finite().min(-1).max(1).optional(),
+  })).min(1, 'legs array is required').max(30, 'too many legs'),
+});
+
+/**
+ * Corps de `POST /api/predict/factors`.
+ *
+ * `type` est une enum ici — contrairement à `marketType` — parce que
+ * `buildRealFactors` ne connaît que deux branches : `'team'`, et tout le reste
+ * qui part sur le chemin joueur. Une chaîne libre y entrait donc comme
+ * « joueur », et `fetchPlayerById` partait chercher n'importe quel identifiant.
+ */
+export const predictFactorsSchema = z.object({
+  type: z.enum(['team', 'player']),
+  id:   nhlSubjectId,
+  // Seul `fallbackPct` est lu ; le reste du contexte est retiré.
+  context: z.object({
+    fallbackPct: z.number().finite().min(0).max(100).optional(),
+  }).optional(),
+});
+
+/** Corps de `POST /api/predict/player-prop` (prop de saison). */
+export const playerPropSchema = z.object({
+  playerName: z.string().trim().min(1).max(80),
+  propType:   z.enum(['goals', 'points', 'assists', 'award']),
+  line:       betLine,
+  playerId:   nhlSubjectId.optional(),
+});
+// `season`, `currentGoals`, `currentPoints`, `currentAssists` et `gamesPlayed`
+// sont envoyés par `PlayerPropPrediction.tsx` mais le handler les recalcule
+// depuis `fetchPlayerById` : ils sont retirés plutôt que déclarés, pour qu'on ne
+// croie jamais qu'un chiffre venu du client entre dans le calcul.
+
+/** Corps de `POST /api/predict/futures`. */
+export const predictFuturesSchema = z.object({
+  teamName: z.string().trim().min(1).max(60),
+  teamId:   nhlSubjectId.optional(),
+  propType: z.enum(['cup', 'conf', 'playoff']),
+});
+
+/**
+ * Corps de `POST /api/predict/ml` — la route la plus chère du serveur :
+ * `buildGameFeatures` interroge l'API NHL avant que le service Python ne soit
+ * appelé. `subjectId` est le seul champ obligatoire non vide : c'est la clé de
+ * cache de `mlApiClient`, donc le levier d'amplification.
+ */
+export const predictMlSchema = z.object({
+  type:       z.enum(['game', 'player', 'team']),
+  subjectId:  z.string().trim().min(1, 'subjectId is required').max(40),
+  opponentId: nhlSubjectId.optional(),
+  propType:   marketType.optional(),
+  line:       betLine.optional(),
+  selection:  selectionValue.optional(),
+});
