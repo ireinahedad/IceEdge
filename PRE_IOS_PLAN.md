@@ -12,8 +12,8 @@ normal Vercel deploy. That is the whole point: debug it where you can actually d
 |-----|------|--------|-------------|
 | **R7** ✅ | Fail loudly on missing/invalid env URLs | 0.5 day | Fixes a real production bug: a missing Vercel env var currently makes the app silently call `localhost` |
 | **R2** ✅ | Platform flag layer (prepares "no Google login on iOS") | 0.5 day | Zero visible change on web; one honest seam instead of `if (iOS)` scattered later |
-| **R3** ⏳ | Token transport abstraction | 1 day | Cleaner auth layer, removes the legacy-token cruft, testable |
-| **R4** | Chat moderation: report, block, filter | 3–5 days | A real community feature your web app is missing, and an App Store blocker (Guideline 1.2) |
+| **R3** ✅ | Token transport abstraction | 1 day | Shipped, plus R3bis (the refresh stampede) in both halves |
+| **R4** ✅ | Chat moderation: report, block, filter | 3–5 days | Shipped 2026-09-04. 🔴 One piece left: the published support address still bounces (R4.0) |
 
 **Total: 5–7 working days.** Do them in this order — each one is independently shippable.
 
@@ -561,511 +561,178 @@ the old UI rendering 401s.
 
 ---
 
-## ▶ RESUME HERE — state as of 2026-09-03
+## ▶ RESUME HERE — state as of 2026-09-04
 
-**Everything in this plan is written and tested. Nothing is deployed.** R7, R2, R3,
-R3bis (both halves) and R4 (0 → 4) are done in the repo; the server suite is 239
-green. What is left is not code: **run migration 033 against Neon, deploy, and walk
-the "Done when" in a browser.** Start a new session by reading this block.
+**Everything in this plan is written, tested and deployed.** R7, R2, R3, R3bis (both halves)
+and R4 are in production. Migration `033` is applied to Neon. R4 was walked on the live site
+on 2026-09-04: the filter refuses a slur and lets `assist` through, a blocked person's live
+message never renders, and the admin queue reports → hides correctly.
 
-### Shipped and verified in production
-R7 (`2cc2ce4`), R2 + R3 (`551aca0`), R3bis.1 the refresh gate (`d6353d8`).
-Auth was walked end to end on arakice.com: cookie set with no token in the body,
-`Vary: X-Client`, one silent refresh and replay, clean sign-out on a dead refresh,
-logout, Google, 30-day `Max-Age`, chat socket at 101.
+### The only thing left before the tag
 
-### Committed
-`e39f648` R4.2a/b — the filter, wired into `sendMessage()`, plus the dry-run script.
-`e6e93a2` R4.2c + R4.2d — report endpoint and auto-hide.
-`86bd1b4` R4.2e + R4.2f + R4.2g — block endpoints, filtered reads, socket note.
-`6f44230` R4.2h — admin moderation queue, plus the newest-100 history fix.
-`f1a966b` R4.0 + R4.3 + the admin queue screen — the whole front end.
-`c64edb4` R2 — DevMLDashboard folded to `null` on iOS, like every other dev route.
-`6807bc3` R4.4 tests + R3bis.2 atomic rotation (migration `033`).
-Server: 201 tests green, `tsc --noEmit` clean. Migration 032 is committed
-(`cf6110c`) **and applied to Neon** (confirmed 2026-09-03).
+🔴 **The support address.** `VITE_SUPPORT_EMAIL` (Vercel) and `SUPPORT_EMAIL` (Railway), same
+address, plus the mail route — deferred on 2026-09-04, so both sides currently fall back to
+`support@arakice.com`, **which bounces**. It is the Guideline 1.2 contact for abuse reports and
+the address Apple uses to reach you, so it is not a detail to tag past. Send a real mail to it
+and confirm delivery. See R4.0.
 
-### What is left, in order
+Then `git tag pre-ios-freeze` and open `APPLE_PLAN.md` at Phase 0.
 
-**1. `cd server && npm run db:migrate:all` against Neon.** Migration **033**
-(`rotated_at`, R3bis.2) has never been applied there — 032 has. Nothing applies
-migrations automatically: no `railway.json`, no Procfile, no step at start-up. Do
-this **before** the deploy, not after: the new `refreshTokens()` writes that column
-on every rotation, so shipping the code first breaks every sign-in refresh.
+### Still open on purpose, and not blocking the tag
 
-**2. Set `VITE_SUPPORT_EMAIL` in Vercel and `SUPPORT_EMAIL` in Railway**, to the
-same address, and create the mail route for it. Until then both sides fall back to
-`support@arakice.com`, which **bounces**.
-
-**3. Deploy.** This is the biggest deploy of the plan: R4 whole, plus the auth
-rotation. The document asked for one item per deploy and a preview first — that was
-not done for R2/R3, and it matters more here. Watch `/auth/refresh` for 401s in the
-first minutes; that is the one change that can sign people out.
-
-**4. Walk the "Done when" below**, with a second account, in a real browser.
-Nothing in R4 has ever run in one.
-
-⚠️ **Live socket messages are unfiltered server-side** (R4.2g, deliberate). The
-only thing that hides a blocked person's live message is the render filter in
-`RoomChat` (`visibleMessages`). Remove it and blocking silently stops working
-for anything arriving in real time; the history would still look correct, which
-is exactly how that regression would ship unnoticed.
-
-⚠️ **The admin queue is at `/dev/moderation`**, admin-only, and **you must
-actually read it**. Apple asks about the response process; an unread queue
-promises moderation that never comes.
-
-### Fixed in passing, 2026-09-03 — the history window
-`getMessages()` used to end with `ORDER BY m.sent_at ASC LIMIT 100`, which
-returned the **oldest** hundred messages: any room past a hundred messages showed
-its opening history forever and never the current conversation. It now takes the
-newest hundred (`ORDER BY sent_at DESC, id DESC LIMIT 100` inside a subquery) and
-re-sorts them ascending for display. The `id DESC` tie-break is not decoration —
-`sent_at` can be identical to the millisecond, and without it the hundredth row
-varied between calls. Older history is simply not served; no pagination was
-added, because none existed before either.
+- **R4.4's two unwalked cases**: unblock restoring visibility, and auto-hide at three distinct
+  reporters (needs a third account). Both are covered by tests.
+- **`client/` has no test runner.** Its only guard is `npm run typecheck`, which is why the
+  socket block filter (see R4, decision 7) has nothing watching it.
+- **Nothing applies migrations automatically** — no `railway.json`, no Procfile, no step at
+  start-up. `cd server && npm run db:migrate:all`, by hand, against Neon, **before** deploying
+  code that depends on a new column.
 
 ### Facts about this environment that will save you an hour
-- **Nothing applies migrations automatically.** No `railway.json`, no Procfile, no
-  step at server start. `cd server && npm run db:migrate:all`, by hand, against Neon.
-- **Neither shell can reach Neon or arakice.com** (egress). Anything touching the
-  live database or site is run by the user in their own terminal.
-- **`npm test` / `tsc` / `npm run build` cannot run on the user's machine through
-  the bridge** — `node_modules` is installed for Windows. They DO run in the cloud
-  container: tar the sources across, `npm ci`, run. Check resolved versions against
-  `package-lock.json` and compare `md5sum` on both sides before believing a result.
-- **A migration can be executed for real** against a throwaway PostgreSQL 16 in the
-  cloud container before it ever touches Neon. That is how 032 was validated.
-- **`git diff --stat` on the mount times out.** Verify an edit by re-reading the
-  file. `git status --porcelain` and `git log` are fine.
-- **`remote.origin.fetch` is empty** in this clone, so there are no remote-tracking
-  branches and `git status` never says ahead/behind. Do not read that as "never
-  pushed" — check the Vercel deployment list instead.
-- **Client tests do not exist.** `client/` has no runner and no `test` script; only
-  the server has vitest. The client's guard is `npm run typecheck`, which is not in
-  most checklists in this document and should be.
+
+- **Neither shell can reach Neon or arakice.com** (egress). Anything touching the live database
+  or site is run by you, in your own terminal. The Vercel connector *can* fetch arakice.com and
+  returns the served headers.
+- **`npm test` / `tsc` / `npm run build` cannot run on your machine through the bridge** —
+  `node_modules` is installed for Windows. They DO run in the cloud container: tar the sources
+  across, `npm ci`, run. Compare `md5sum` on both sides before believing a result.
+- **A migration can be executed for real** against a throwaway PostgreSQL 16 in the cloud
+  container before it ever touches Neon. That is how 032 and 033 were validated.
+- **`git diff --stat` on the mount times out.** Verify an edit by re-reading the file.
+- **`remote.origin.fetch` is empty** in this clone, so there are no remote-tracking branches and
+  `git status` never says ahead/behind. Do not read that as "never pushed".
+- **⚠️ Removing a route from the table does NOT remove its chunk.** `lazy()` runs at module
+  level, so Rollup keeps the `import()` alive. Only `const X = flag ? lazy(...) : null` makes it
+  disappear. This trap has caught three things: `AuthCallback`, `DevMLDashboard`, and it would
+  have caught `ModerationQueuePage`.
+- **⚠️ The hard-refresh does not test the refresh**, and the 15-minute wait is unnecessary:
+  change one character of the **third segment** of `ice_access` in localStorage (the signature).
+  The payload still decodes, the app believes it is signed in, the server rejects, and the 401
+  path runs. Ten seconds instead of fifteen minutes. Reuse it for any auth item.
 
 ### Decisions already taken — do not relitigate without a reason
-- Reports cascade away with the message (R4.1). The cost is recorded there.
-- The profanity filter has **zero dependencies** and is EN + FR by hand (R4.2a).
-- The filter lives in the service, not the route (R4.2b).
-- `idx_user_blocks_blocker` was replaced by `idx_user_blocks_blocked` (R4.1).
-- R3bis.2, the server-side rotation race, stays open **on purpose**. Read its
-  ordering warning before touching it.
 
-### Open and blocking
-**R4.0.** The support address has not been chosen ("too early", 2026-09-03).
-It is the only part of R4 that is a real problem *today*: abuse reports would go
-to a mailbox nobody can open. 8 occurrences in 4 files — `SupportPage.tsx` (8,19),
-`PrivacyPage.tsx` (17,31), `TermsPage.tsx` (18,33), and
-`server/src/services/email.service.ts` (124,137), **which this plan never mentions**
-and which sends outbound mail.
+- Reports cascade away with the message; the block routes carry no `requireOwnerOrAdmin`; the
+  block list is one-way; a hidden message is hidden for its author too. All of R4's decisions
+  are listed in that section.
+- R3bis.2's grace window is three mechanisms, not one — read its item before touching the
+  rotation.
 
 ---
 
-## R4 — Chat moderation (3–5 days) — the big one
+## R4 — Chat moderation ✅ shipped and verified in production 2026-09-04
 
-Guideline 1.2 requires four things for user-generated content. You currently have **zero**
-of them. `server/src/routes/chat.routes.ts` has rooms, messages, reactions, kick and delete;
-grep for `report|block|mute|moderat|profanity` across `client/src/app/pages/league/chat/`
-returns nothing at all.
+Guideline 1.2 asks four things of user-generated content. Three are done and were
+walked on the live site; the fourth is the one still open.
 
-| Apple requires | You have | Build |
-|----------------|----------|-------|
-| A filter for objectionable material | ❌ | profanity filter on message insert |
-| A way to report content | ❌ | `chat_reports` + report button |
-| A way to block abusive users | ❌ | `user_blocks` + filtered reads |
-| Published contact info | ⚠️ **broken** | see R4.0 |
+| Apple requires | Status |
+|----------------|--------|
+| A filter for objectionable material | ✅ verified — a slur is refused with a visible reason; `great assist by Suzuki` posts |
+| A way to report content | ✅ verified — report → admin queue → hide, end to end |
+| A way to block abusive users | ✅ verified — including a live socket message that never renders |
+| Published contact info | 🔴 **still broken** — see R4.0 |
 
-### R4.0 — Fix the support email FIRST (30 minutes, blocking)
+Not separately walked: unblock restoring visibility, and auto-hide at three distinct
+reporters (it needs a third account). Both are covered by tests and were proven against a
+real PostgreSQL; neither has been seen on screen.
 
-`client/src/app/pages/SupportPage.tsx:8,19` publishes **`arakice.support@gmail.com`** — the
-account you no longer have access to. That address is simultaneously: the Guideline 1.2
-contact for abuse reports, the support URL contact on your App Store listing, and the
-address Apple would use to reach you. **Reports would go to a mailbox nobody can open.**
+### 🔴 R4.0 — the support address is the last open item of this whole plan
 
-- [x] **R4.0 ✅ 2026-09-03** — the address is gone from the code and is now **configuration**:
-      `VITE_SUPPORT_EMAIL` for the client (read in `src/app/env.ts`, the only place the client
-      may touch `import.meta.env`) and `SUPPORT_EMAIL` for the server (`email.service.ts`).
+The code is done: the address is configuration, not a literal. **The variables are not set**
+(deferred 2026-09-04), so both sides fall back to `support@arakice.com`, **which bounces**.
 
-      **Two variables, not one, and that is not an oversight.** The client is a static bundle
-      built by Vercel; the server runs on Railway. A single source would mean the client
-      fetching its own support address over the network to render a `mailto:` link. Each side
-      reads its own copy — set both, to the same address.
+- `VITE_SUPPORT_EMAIL` in Vercel, `SUPPORT_EMAIL` in Railway, **same address**, plus the mail
+  route that makes it deliver. Two variables and not one because the client is a static bundle
+  built by Vercel while the API runs on Railway; a single source would mean a network call to
+  render a `mailto:` link. The fallback is duplicated in `client/src/app/env.ts` and
+  `server/src/services/email.service.ts` — change both together.
+- Optional rather than required on purpose: making them required would fail a deploy until
+  both dashboards have them.
+- ⚠️ This is not cosmetic. It is the Guideline 1.2 contact for abuse reports, the support
+  contact on the App Store listing, and how Apple reaches you. **Do not tag `pre-ios-freeze`
+  believing R4 is complete while it bounces.** Send a real mail to it and confirm it arrives.
 
-      **Optional with a fallback**, unlike the four URLs of R7. Making it required would fail
-      the next deploy until both dashboards have it. Unset falls back to
-      `support@arakice.com` — on a domain we control, which is what this item always intended.
-      ⚠️ That fallback **bounces** until the mail route exists. A bounce tells the sender; the
-      Gmail it replaces swallowed mail silently. Verified absent from the built bundle.
+### What shipped
 
-      Both fallbacks are duplicated (`client/src/app/env.ts`, `server/.../email.service.ts`) —
-      change the two together.
+**Database** — migration `032_chat_moderation.sql` (`chat_reports`, `user_blocks`,
+`chat_messages.hidden_at` / `hidden_reason`), applied to Neon. **Server** — profanity filter
+on insert, report endpoint, auto-hide, block/unblock, filtered reads, admin queue.
+**Client** — the `⋯` menu on a message, report sheet, block confirmation, blocked-users
+section in Settings, community guidelines as Terms §7, `/dev/moderation`, and a shared account
+card. **Tests** — 26 cases in `chatModeration.test.ts`.
 
-### R4.1 — Database (migration `032_chat_moderation.sql`)
+### Decisions that outlive this section — do not relitigate without a reason
 
-**✅ Written and executed 2026-09-03 — not yet applied to Neon.** The file is in
-`server/src/db/migrations/`. It was run for real against a throwaway PostgreSQL 16 in the
-cloud sandbox: `schema.sql` plus all 32 migrations in order, zero failures, and 032 re-runs
-as a clean no-op.
+1. **Reports cascade away with the message** (`ON DELETE CASCADE`). The queue empties itself
+   when you act, but a repeat offender whose messages were all deleted looks clean and nothing
+   records what was moderated. Reversing it means a migration making `message_id` nullable
+   `ON DELETE SET NULL`, plus `reported_user_id` and a snapshot of the text.
+2. **The allowed values live in three places** — the `CHECK` constraints in migration 032,
+   `REPORT_REASONS` / `REVIEW_DECISIONS` in `chat.service.ts`, and `REPORT_REASONS` in
+   `client/src/app/types/user.tsx`. Adding a reason means touching all three.
+3. **Reporting is nested** (`POST /rooms/:roomId/messages/:messageId/report`), not the flat
+   path this plan first sketched. The roomId authorises the read *before* anything touches the
+   message. On a flat path any account could confirm a private-room message exists by guessing
+   an id; `msg_<timestamp>_<6 hex>` is not a secret.
+4. **⚠️ The block routes deliberately carry no `requireOwnerOrAdmin`.** `:userId` is the
+   *target*, not the owner — the middleware would mean "you may only block yourself". The
+   blocker is always `req.user.sub`. Someone will want to "fix" this apparent omission.
+5. **`GET /users/me/blocks` returns only people the caller blocked**, never the reverse. The
+   hiding is symmetric; the list is not. "So-and-so blocked you" converts straight into
+   harassment.
+6. **A hidden message disappears for everyone, its author included.** Hiding it from others
+   only is a shadow-ban: the author believes they are being read and never corrects anything.
+7. **⚠️ The socket is not filtered server-side.** `io.to(roomId)` emits to the whole room, so a
+   blocked person's message still crosses the network to the blocker's browser. **The only
+   thing that stops it rendering is `visibleMessages` in `RoomChat`**, and `client/` has no
+   test runner, so nothing guards it. Delete that line and blocking silently stops working in
+   real time while history still looks correct.
+8. **Auto-hide at three distinct reporters**, brigadable by three colluding accounts. That is
+   the accepted price of hiding without a human; the escape hatch is `dismissed` in the admin
+   queue, which clears an `auto` hide and never an `admin` one.
+9. **The admin queue groups by message, not by report**, and one decision closes every open
+   report on that message. **It has to actually be read** — Apple asks about the response
+   process, and an unread queue promises moderation that never comes.
+10. **The `⋯` is a button, not a long-press** (long-press fights text selection and iOS's own
+    context menu, and has no keyboard equivalent), and **it must stay visible without
+    hovering**. Its first styling was ~12 % opacity, which is invisible on a phone.
+11. **`components/UserIdentity.tsx` is how an account is drawn, everywhere**, and
+    `UserSheet.tsx` is its card — the second route to blocking, which works even when the
+    person deleted every message. The sheet makes **no network call**: `/users/:id/summary` is
+    Pro-gated for other people, so loading it would show a 402 on the screen whose job is to
+    offer "block".
+12. **Bottom sheets clear the floating nav** with `pb-[calc(6rem+env(safe-area-inset-bottom,0px))]`.
+    `BottomNav` is `fixed bottom-3` and eats about 72 px; `pb-10` put the last button
+    underneath. Nothing type-checks a layout — this was found by using the app.
 
-Behaviour proven, not just syntax: a second report from the same person is swallowed by
-`ON CONFLICT DO NOTHING`; an invalid `reason` and an invalid `status` are both rejected; a
-self-block is rejected; the distinct-reporter count crosses 3 exactly when it should; the
-single symmetric `LEFT JOIN` read returns only the message that is neither hidden nor from a
-blocked author; and deleting a message takes its three reports with it.
+### Traps in the filter, found by tests
 
-**Two deliberate departures from the sketch below** (the sketch is kept as written, for the
-record):
+- **`fold()` collapses repeats, so `ass` becomes `as`** — one of the commonest words in
+  English, and « as » in French. The list carries `asshole` and **never `ass`**. Any term
+  whose folded form drops under four letters must be folded mentally before it is added.
+- **English suffixes are not enough**: `va te faire enculer` passed, because the folded term is
+  `encule` and `r` / `z` / `ent` were missing.
+- Mild profanity (`damn`, `hell`, `merde`) is absent on purpose. Known limit: `fvck` is not
+  caught — vowel substitution needs a distance algorithm, not one more list entry.
+- The dry run (`npm run moderation:dry-run`) covered six messages, which is far too small to
+  have tested false positives. Re-run it once the chat has real traffic.
 
-1. **`CHECK` constraints on `reason` and `status`.** The sketch listed the allowed values in a
-   comment. They are now enforced in the schema too, so a script, a console or a future route
-   that forgets zod cannot poison the queue. Cost: adding a reason needs a migration.
-2. **`idx_user_blocks_blocker` was replaced by `idx_user_blocks_blocked`.** The one the sketch
-   asked for is redundant — the primary key `(blocker_id, blocked_id)` already leads with
-   `blocker_id` and serves those lookups. The index genuinely missing is on `blocked_id`,
-   because hiding is *symmetric*: the read asks for rows where the caller is blocker **or**
-   blocked, and that second half had no index at all.
+### Fixed in passing — the history window
 
-**Not chosen, and worth revisiting:** reports cascade away with the message
-(2026-09-03 decision). A user reported five times whose messages were all deleted looks clean,
-and nothing records what was moderated. Reversing it means a later migration making
-`message_id` nullable `ON DELETE SET NULL`, plus `reported_user_id` and a snapshot of the
-reported text.
+`getMessages()` used to end with `ORDER BY sent_at ASC LIMIT 100`, returning the **oldest**
+hundred messages: an active room showed its opening history forever. It now takes the newest
+hundred inside a subquery and re-sorts them ascending. The `id DESC` tie-break is not
+decoration — `sent_at` can be identical to the millisecond, and without it the hundredth row
+varied between calls.
 
-Next free number after `031_odds_snapshots.sql`.
+### What the tests do and do not prove
 
-```sql
--- Reports. One report per user per message; the UNIQUE constraint is the rate limit.
-CREATE TABLE IF NOT EXISTS chat_reports (
-  id           SERIAL       PRIMARY KEY,
-  message_id   VARCHAR(50)  NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
-  reporter_id  UUID         NOT NULL REFERENCES users(id)         ON DELETE CASCADE,
-  reason       VARCHAR(30)  NOT NULL,   -- spam | harassment | hate | sexual | other
-  note         TEXT,
-  status       VARCHAR(20)  NOT NULL DEFAULT 'open', -- open | actioned | dismissed
-  created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-  reviewed_by  UUID         REFERENCES users(id) ON DELETE SET NULL,
-  reviewed_at  TIMESTAMPTZ,
-  UNIQUE (message_id, reporter_id)
-);
-CREATE INDEX IF NOT EXISTS idx_chat_reports_open ON chat_reports(status, created_at DESC);
-
--- Blocks. Symmetric hiding: a block hides both directions.
-CREATE TABLE IF NOT EXISTS user_blocks (
-  blocker_id  UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  blocked_id  UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (blocker_id, blocked_id),
-  CHECK (blocker_id <> blocked_id)
-);
-CREATE INDEX IF NOT EXISTS idx_user_blocks_blocker ON user_blocks(blocker_id);
-
--- Auto-hide state on the message itself.
-ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS hidden_at     TIMESTAMPTZ;
-ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS hidden_reason VARCHAR(30);
-```
-
-`chat_messages.user_id` is `ON DELETE SET NULL`, so reports and blocks survive an account
-deletion gracefully — which matters once you build the delete-account flow (`APPLE_PLAN` §8).
-
-### R4.2 — Server
-
-- [x] **R4.2a ✅ 2026-09-03** `server/src/services/moderation.service.ts` — **zero dependency**,
-      by decision: the server's dependency list stays short and the word list stays readable.
-      A maintained package would have covered English only, and the app ships EN + FR, so a
-      hand-written French/Québécois set was needed either way.
-
-      Two passes rather than `includes()`. Word boundaries on a folded text (NFKD accent
-      stripping, confusable digits, collapsed repeats) — this is what saves **`assist`**, which
-      contains `ass` and is the most common word in a hockey chat. Then a de-spacing pass that
-      applies **only inside deliberately spaced runs** (`f u c k`, `f.u.c.k`); de-spacing the
-      whole text would fuse `class ass` into a match that was never written.
-
-      `inspect()` returns which terms fired, which is what makes the dry run useful;
-      `containsProhibited()` is the predicate the insert path uses.
-
-      **Two things the tests caught, worth keeping in mind:**
-      1. `va te faire enculer` was NOT blocked — the folded term is `encule` and the suffix
-         list was English-only. French verb endings are not optional here.
-      2. `fold()` collapses repeats, so **`ass` becomes `as`** — one of the most common words
-         in English, and « as » in French. The list carries `asshole` and never `ass`; a
-         dedicated test block fails the day someone adds a short term without folding it first.
-
-      Mild profanity (`damn`, `hell`, `merde`) is deliberately absent: Guideline 1.2 asks for a
-      filter on *objectionable* content, not a politeness course, and blocking the ambient
-      swearing of a sports chat only produces "this is a bug" reports.
-
-      Known limit, documented rather than hidden: `fvck` is not caught. Vowel substitution
-      needs a distance algorithm, not one more list entry.
-
-      **Dry run (`npm run moderation:dry-run`, 2026-09-03): 2 of 6 messages blocked, both of
-      them deliberate test messages, zero false positives.** ⚠️ Six messages is far too small a
-      corpus to have actually tested false positives — the test suite is what carries that
-      weight today. Re-run this once the chat has real traffic and fill `ALLOWED` then.
-- [x] **R4.2b ✅ 2026-09-03** — wired in `chat.service.ts` `sendMessage()`, **not** in the
-      route. The routes in this file are thin by design and every guard already lives in the
-      service, which throws `httpError(msg, status)`; putting the filter in the route would
-      have been the only validation not in the service. 422 with a clear message, no
-      shadow-ban, after `sanitizeText()` and before any INSERT — nothing objectionable reaches
-      the table, so there is nothing to hide after the fact.
-- [x] **R4.2c ✅ 2026-09-03** — shipped as **`POST /rooms/:roomId/messages/:messageId/report`**,
-      nested, **not** the flat path this plan sketched. The roomId is not decoration: it
-      authorises the read *before* anything touches the message, and the message is then
-      checked as belonging to that room — the same guard `toggleReaction` already uses. On the
-      flat path any account could report a message in a private room, and so confirm it exists,
-      by guessing an id; `msg_<timestamp>_<6 hex>` is not a secret. The client knows the roomId
-      already, so the nesting costs nothing.
-
-      Logic in `chat.service.reportMessage()`, route thin, `rateLimit('report', 10, 5 * 60_000)`.
-      Reporting twice is **not** an error: `ON CONFLICT DO NOTHING`, and the response carries
-      `alreadyReported` while the status stays 201 in both cases — a 409 would teach a hostile
-      client what it has already reported and buys the UI nothing. Reporting your own message is
-      400; an unknown reason is 400 (the list is in `REPORT_REASONS`, which must move together
-      with the CHECK constraint in migration 032). The note is truncated to 500 chars, never
-      rejected — nobody should lose a report for writing too much.
-
-      One small refactor of working code: the control-character filter inside `sanitizeText()`
-      is now `stripControlChars()`, shared with the new `sanitizeNote()`. `sanitizeText()`
-      behaves exactly as before.
-- [x] **R4.2d ✅ 2026-09-03** — auto-hide at **3 distinct reporters**, in the **same
-      transaction** as the report insert: the counter cannot be read before the report that
-      tips it is acquired, and a rollback never leaves a hidden message without the row that
-      explains why.
-
-      `WHERE hidden_at IS NULL` is not an optimisation — it locks the message row, so two
-      simultaneous third reports cannot overwrite each other's timestamp. Proven, not assumed:
-      two `reportMessage()` calls fired in parallel against a real PostgreSQL returned
-      `hidden: true` exactly once, with all four rows written.
-
-      ⚠️ Threshold 3 is brigadable by three colluding accounts. That is the accepted price of
-      hiding without a human in the loop — which is why the hide is reversible and why the
-      admin queue (R4.2h) has to actually be read.
-- [x] **R4.2e ✅ 2026-09-03** `POST /users/:userId/block`, `DELETE /users/:userId/block`,
-      `GET /users/me/blocks` in `user.routes.ts`; logic in `user.service.ts`.
-
-      ⚠️ These routes deliberately carry **no `requireOwnerOrAdmin`**. `:userId` is the
-      *target* of the block, not the owner of the resource — the middleware would mean "you
-      may only block yourself". The blocker is always `req.user.sub`, never a client value.
-      Anyone reading this file will want to "fix" that omission; this is the note that says
-      not to.
-
-      Both writes are idempotent: blocking twice keeps the first `created_at` (`DO NOTHING`,
-      not `DO UPDATE`), and unblocking something that was never blocked returns 204 rather
-      than 404 — Apple checks that a block is reversible, not that it complains. A non-UUID
-      `:userId` returns 404 instead of a Postgres 22P02 turned into a 500.
-
-      `GET /users/me/blocks` returns **only people the caller blocked**, never people who
-      blocked the caller. The hiding is symmetric; the list is not. "So-and-so blocked you"
-      is information no product hands out — it converts straight into harassment.
-- [x] **R4.2f ✅ 2026-09-03** — `getMessages()` now takes the viewer and filters in SQL:
-      `m.hidden_at IS NULL`, plus a `LEFT JOIN user_blocks` / `b.blocker_id IS NULL`
-      anti-join whose condition is symmetric (caller is blocker **or** blocked). One query,
-      no second round trip. `$2::uuid IS NOT NULL` short-circuits the whole join for a
-      signed-out guest — the explicit cast is required, Postgres cannot type a parameter that
-      only ever appears in a NULL comparison.
-
-      Filtering in JS after the fact would have been shorter and wrong: `LIMIT 100` applies
-      first, so blocking one chatty person would have returned emptier and emptier pages.
-
-      A hidden message disappears for **everyone, its own author included**. Hiding it from
-      others only is a shadow-ban: the author believes they are being read and has no reason
-      to correct anything.
-- [x] **R4.2g ✅ 2026-09-03** — documented at the broadcast site in `chat.routes.ts`, not
-      implemented, exactly as this plan intended. `io.to(roomId)` emits to the whole room;
-      per-recipient filtering would mean either one emit per socket carrying each viewer's
-      block list, or derived per-pair rooms with a cache to invalidate on every block. For a
-      chat room, the client filters instead (R4.3d). **The consequence to know:** a blocked
-      person's message still crosses the network to the blocker's browser. It is never
-      displayed, but it is not a server-side secret — unlike history, which is filtered in SQL.
-- [x] **R4.2h ✅ 2026-09-03** — `GET /api/dev/reports` + `POST /api/dev/reports/:id` in
-      `dev.routes.ts`. The whole router is already `authenticate` + `requireRole('admin')`, so
-      these add no guard of their own. **The UI is not built** — that is client work and goes
-      with R4.3; until then the queue is read with `curl`.
-
-      **The queue is grouped by MESSAGE, not by report.** Three people reporting the same
-      message ask the admin one question, not three; a row-per-report queue would make you
-      re-read the same text three times and go incoherent if you only handled two of them.
-      Each entry carries the reported text, its author, the room name, the distinct reasons,
-      every reporter note, the count, and the current hidden state. `reportId` is the smallest
-      id in the group — the one you POST back.
-
-      **A decision applies to every open report on that message**, in one transaction.
-      `actioned` hides it with `hidden_reason = 'admin'`, overwriting an `'auto'` hide: the
-      human decision replaces the automatic one, and that is what distinguishes them later.
-      `dismissed` **removes** the hide — but only when its reason is `'auto'`. That is the
-      escape hatch for the three-reporter threshold: three colluding accounts hide something
-      innocent, an admin restores it in one call. A hide an admin placed is never undone as a
-      side effect of dismissing a later report.
-
-      Nothing is deleted. Reports cascade away with the message (R4.1), so deleting here would
-      erase the record of what was moderated.
-
-### R4.3 — Client
-
-- [x] **R4.3a ✅ 2026-09-03** `MessageBubble.tsx` takes `onReport` / `onBlock` (the whole
-      message, not just its id — the modal and the block dialog both need the author). Never
-      passed for `isOwn`: reporting yourself is a 400 server-side.
-
-      **A "⋯" button, not a long-press**, against what this plan sketched. Long-press fights
-      text selection and iOS's own context menu, is discoverable by nobody, and has no
-      keyboard equivalent — Apple reviews accessibility too. The button repeats the room
-      menu's pattern, already on this screen, and works everywhere.
-
-      ⚠️ **It must stay visible without hovering.** The first version copied the delete
-      button's styling (`text-white/30` × `opacity-40` — about 12 % real opacity), which is
-      invisible, and on a phone there is no hover to reveal it. Fixed 2026-09-04 to a proper
-      tinted 24 px tile. This is the only route to report and block; it is not the place to be
-      tasteful.
-- [x] **R4.3b ✅ 2026-09-03** `ReportModal.tsx` — bottom sheet like `ConfirmDialog`, reason
-      required, note optional and capped at 500 in the UI so the server's truncation is never
-      a surprise. The reported text is quoted in the sheet: on a phone the sheet covers the
-      conversation, and without it you report from memory. `sonner` toast on success, and a
-      different one for `alreadyReported` — the server returns 201 either way.
-- [x] **R4.3c ✅ 2026-09-03** Block confirmation via `ConfirmDialog`. The copy says the block
-      works **both ways** and that it can be undone in Settings — Apple checks reversibility.
-- [x] **R4.3c bis ✅ 2026-09-04 — a second way to block, and one account card everywhere.**
-      Blocking used to require finding one of the person's messages *and* the small menu on
-      it. Impossible once they deleted that message, and awkward from the member list.
-
-      `components/UserIdentity.tsx` is now the single way an account is drawn — `UserBadge`,
-      `UserRow`, `UserTag`. The member list, the blocked list and the chat all used to redraw
-      the same avatar-plus-name three different ways, drifting apart at every tweak.
-
-      `components/UserSheet.tsx` is the account card: avatar, name, `@username`, "View full
-      profile", and **Block / Unblock**. It opens from a member row and from the author's name
-      on a message. ⚠️ **That name used to navigate straight to `/player/:userId`** — it now
-      opens the card, and the old destination is one tap further in. Deliberate: the card is
-      what carries the block, and the chat is where you decide to use it.
-
-      **No network call**, on purpose: `GET /users/:id/summary` is Pro-gated for other people,
-      so loading it here would show a 402 to half the visitors on a screen whose job is to
-      offer "block". The card draws from what the caller already holds; the player page keeps
-      its own Pro wall.
-
-      Not restyled: `FullLeaderBoard`, where a row is rank-plus-score rather than an identity.
-- [x] **R4.3c ter ✅ 2026-09-04 — the bottom nav was eating the sheets.** `BottomNav` is
-      `fixed bottom-3` and occupies roughly 72 px; pages clear it with `pb-24`. Every bottom
-      sheet stopped at `pb-10` (40 px), so its last button — **"Block", among others** — sat
-      underneath. Reported from the app, not caught by a build: nothing type-checks a layout.
-
-      All four sheets now use `pb-[calc(6rem+env(safe-area-inset-bottom,0px))]`, one value
-      instead of a number invented per sheet, and their z-index sits above the nav
-      (`ConfirmDialog` at 80, since it can open on top of another sheet). `ConfirmDialog` was
-      already shipping this bug everywhere it is used — cancel subscription, log out
-      everywhere — so the fix is not limited to R4's screens.
-- [x] **Block from the player page ✅ 2026-09-04** — `/player/:userId` gets Block / Unblock,
-      because that page is often reached from a shared link without going through the chat.
-      Only in the `ok` state: the optimistic block needs the username and avatar to draw the
-      row in Settings, and a hidden or Pro-locked profile supplies neither.
-- [x] **R4.3d ✅ 2026-09-03** `context/BlockContext.tsx`, shared by the chat and Settings, so
-      unblocking in Settings restores messages in the chat with no reload. **Lazy**: the
-      provider wraps the app and fetches nothing until `ensureLoaded()` — most visits never
-      open the chat, and a signed-out visitor would only earn a 401. It keeps a `Set` of ids
-      beside the array because the chat tests membership for 100 messages on every render.
-
-      **The filter is applied at render in `RoomChat` (`visibleMessages`), not inside
-      `useChatSocket` as sketched.** One filter covers history and live delivery instead of
-      two, and unblocking brings messages back instantly without re-fetching. ⚠️ It is also
-      the *only* thing hiding a blocked person's live message (R4.2g) — delete it and blocking
-      quietly stops working in real time while history still looks right.
-- [x] **R4.3e ✅ 2026-09-03** "Blocked users" in `SettingsTab.tsx`, with unblock. The card
-      stays visible when the list is empty: a card that disappears reads as a broken feature,
-      and you cannot confirm you have blocked nobody.
-- [x] **R4.3f ✅ 2026-09-03** Community guidelines as **§7 of `TermsPage.tsx`** (EN + FR), with
-      §7–§10 renumbered to §8–§11. Reachable from the room menu ("Community guidelines"), not
-      only buried in Terms.
-- [x] **R4.3g ✅ 2026-09-03** 33 keys in `app/i18n/index.tsx`, EN + FR, including two new
-      `gate.*` actions so a signed-out visitor is told "sign in to report a message" rather
-      than "to send a message".
-- [x] **R4.2h-UI ✅ 2026-09-03** `pages/ModerationQueuePage.tsx` at **`/dev/moderation`**,
-      admin-only, behind `features.devRoutes` with the `const X = flag ? lazy(...) : null`
-      binding — verified: the chunk is emitted in the web build and absent from the iOS one.
-      A separate page rather than a sixth `DevMLDashboard` tab: that file is 1 475 lines about
-      models, not people. Its visual language is reused, its file is not.
-
-### R4.4 — Tests ✅ 2026-09-04
-
-Committed as `src/services/chatModeration.test.ts` (26 cases) and
-`src/services/authRefresh.test.ts` (9 cases, R3bis.2). Server suite: **239 green**, up from
-201.
-
-**No new test architecture was added.** They reuse the pattern already in `jobLock.test.ts`:
-`vi.doMock('../db/connection')` with an in-memory fake pool that reproduces the *semantics*
-of the statements that matter — `ON CONFLICT DO NOTHING` on the unique constraint, the
-distinct-reporter count, the symmetric anti-join, `hidden_at IS NULL`, the newest-100 window,
-the atomic `UPDATE … RETURNING`. **Any statement the fake does not recognise throws**, so
-rewriting the SQL surfaces here instead of in production.
-
-⚠️ **What these tests do NOT prove: that the SQL is valid.** A fake pool checks no syntax, no
-types, no Postgres behaviour. The throwaway PostgreSQL 16 recipe stays the other half of the
-answer, and both migrations and every service path have been run through it. The two are
-complementary; neither replaces the other.
-
-- [x] Profanity filter rejects, and does not false-positive on ordinary hockey talk.
-      *(`moderation.service.test.ts`, already committed with R4.2a)*
-- [x] Reporting the same message twice does not create a second row.
-- [x] 3 distinct reporters hides the message; a 4th does not error and does not rewrite the
-      timestamp. The same reporter three times hides nothing.
-- [x] A blocked user's messages are absent from history, **both directions**. ⚠️ **Live socket
-      delivery is not filtered server-side** — that is `visibleMessages` in `RoomChat`, and
-      `client/` still has no test runner, so nothing guards it. Read R4.3d before touching it.
-- [x] Unblock restores visibility.
-- [x] A hidden message disappears for its own author too — the shadow-ban guard.
-- [x] The history window returns the newest 100, not the first 100.
-- [x] The admin queue groups by message; `dismissed` clears an `auto` hide and never an
-      `admin` one.
-
-**Done when:** a second test account can post something, your account can report it, block
-that user, stop seeing them, unblock them, and see them again — all in the deployed web app,
-without a database console.
-
-⚠️ **Still not done.** Every part of R4 has been proven against a throwaway PostgreSQL, a
-fake pool and two builds. **None of it has run in a browser.** This walkthrough is what turns
-"correct" into "works", and it needs the second account and the deployed app.
-
-#### The walkthrough, step by step
-
-Before you start: **`cd server && npm run db:migrate:all` against Neon** (032 is already
-applied; **033 is not**). Nothing applies migrations automatically. Then deploy, and open two
-browsers — not two tabs of one: you need two accounts signed in at once. A normal window and a
-private window works. **Do not use a Vercel preview URL** — see the cookie warning above.
-
-1. **The filter.** From account B, post `you are an asshole`. Expect a **visible refusal**
-   naming the reason, and the message never appears. Then post `great assist by Suzuki` — it
-   must go through. That second one is the test that matters: `assist` contains `ass`, and it
-   is the most common word in a hockey chat.
-2. **Report.** From A, open the `⋯` on one of B's messages → Report → pick a reason → send.
-   Expect a toast. Report the same message again: expect a toast saying you already did, **not**
-   an error, and no second row.
-3. **No self-moderation.** Check the `⋯` does not appear on your own messages at all.
-4. **Block.** From A, `⋯` → Block user → confirm. B's messages must vanish from A's screen
-   immediately, with no reload. Then have B post again while A watches: **nothing must appear.**
-   That step is the only test of the client-side socket filter (R4.2g/R4.3d) — the server still
-   sends that message to A's browser.
-5. **Both directions.** Look at B's screen: A's messages must be gone there too.
-6. **Unblock.** A → Profile → Settings → Blocked users → Unblock. B reappears, again with no
-   reload.
-7. **The admin queue.** As an admin, open `/dev/moderation`. The report from step 2 is there,
-   with the text, the author, the room and the reason. Press **Hide message** → it leaves the
-   queue and disappears from the chat for everyone, B included. Then report something else,
-   press **Dismiss**, and check it stays visible.
-8. **Auto-hide.** Needs three accounts, so it is the one step you may skip. If you have them:
-   three different people report the same message and it disappears on its own.
-9. **The support address.** Open /support, /privacy and /terms and confirm the address shown
-   is the one you set — and **send a mail to it and check it arrives**. That is the whole point
-   of R4.0; a published address nobody reads is what this item exists to remove.
-10. **The guidelines.** Room menu → "Community guidelines" opens Terms §7, in both languages.
-
-### Found while building R4.3 — ✅ fixed 2026-09-04
-`DevMLDashboard` was bound with a bare `lazy(...)` instead of R2's
-`features.devRoutes ? lazy(...) : null`, so its chunk **was emitted into the iOS bundle** even
-though the route was never registered. Both dev screens now share the conditional binding, and
-the iOS build emits neither chunk. This is the third time the same trap has caught something
-(`AuthCallback`, then `DevMLDashboard`): **removing a route from the table does not remove its
-chunk — only folding the binding to `null` does.**
-
----
+`chatModeration.test.ts` and `authRefresh.test.ts` reuse the fake-pool pattern from
+`jobLock.test.ts`: an in-memory stand-in that reproduces the *semantics* of the statements that
+matter and **throws on any statement it does not recognise**, so rewriting the SQL surfaces
+there. ⚠️ **A fake pool checks no syntax, no types and no Postgres behaviour** — the throwaway
+PostgreSQL 16 recipe is the other half, and both migrations and every service path went through
+it. ⚠️ **The client has no test runner at all**; its only guard is `npm run typecheck`.
 
 ## What this buys you on the web
 
@@ -1109,7 +776,9 @@ Do not start these until `APPLE_PLAN.md` Phase 3:
 ## Definition of done for this plan
 
 - [~] Four separate deploys to production, each verified on arakice.com — **it was three**:
-      R7 (`2cc2ce4`), then R2+R3 together (`551aca0`). R4 remains.
+      R7 (`2cc2ce4`), R2+R3 together (`551aca0`), then R4 + R3bis.2 together (2026-09-04).
+      The plan asked for one item per deploy and a preview first; neither happened. It went
+      fine twice, which is not the same as it being the right way.
 - [x] A missing env var fails the Vercel build instead of shipping (see R7 note 2)
 - [x] `VITE_TARGET=ios npm run build` builds and contains no Google-OAuth code (verified
       2026-09-03: 0 occurrences of `api/auth/google`, and no `AuthCallback` chunk)
@@ -1117,10 +786,18 @@ Do not start these until `APPLE_PLAN.md` Phase 3:
       2026-09-03. ⚠️ One known deviation, pre-existing and not caused by R3: a single 401
       fires three `/auth/refresh` calls. See **R3bis**, and read its ordering warning before
       touching either half.
-- [ ] Report + block + unblock work end-to-end for a real second account
+- [x] Report + block work end-to-end for a real second account — walked on arakice.com
+      2026-09-04: the filter refuses a slur and passes `assist`, a blocked person's live
+      message never renders, and the admin queue reports → hides. ⚠️ **Unblock was not walked**,
+      nor auto-hide at three distinct reporters (it needs a third account). Both are covered by
+      tests and were proven against a real PostgreSQL, but neither has been seen on screen.
 - [x] **The dead Gmail is out of the code** (2026-09-04). ⚠️ The check as first written can
       never pass: this document quotes the address twice, in the R4.0 section and in this very
       line. Run it against the source only —
       `grep -rn "arakice.support@gmail" client/src server/src` — which returns nothing today.
       Verified absent from the built bundle too.
+- [ ] 🔴 **The support address delivers.** Set `VITE_SUPPORT_EMAIL` and `SUPPORT_EMAIL`, create
+      the mail route, send a real mail and confirm it arrives. Deferred 2026-09-04, so today it
+      falls back to `support@arakice.com`, which bounces. This is the Guideline 1.2 contact —
+      **the last real item of this plan**, not a detail to tag past.
 - [ ] `git tag pre-ios-freeze` — then open `APPLE_PLAN.md` at Phase 0
