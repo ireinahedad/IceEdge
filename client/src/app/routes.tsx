@@ -27,10 +27,17 @@ const BetBuilderPage        = lazy(() => import("./pages/BetBuilderPage").then(m
 const AuthCallback          = features.googleLogin ? lazy(() => import("./pages/AuthCallback").then(m => ({ default: m.AuthCallback }))) : null;
 const NHLPredictionsPage    = lazy(() => import("./pages/NHLPredictionsPage").then(m => ({ default: m.NHLPredictionsPage })));
 const SharePage             = lazy(() => import("./pages/SharePage").then(m => ({ default: m.SharePage })));
-const DevMLDashboard        = lazy(() => import("./pages/DevMLDashboard").then(m => ({ default: m.DevMLDashboard })));
-// R4.2h-UI — la file de modération. Même liaison conditionnelle que les autres
-// routes dev : `lazy()` s'exécute au niveau du module, donc seul un `null` ici
-// empêche Rollup d'émettre le chunk dans le bundle iOS (voir R2).
+// Les deux écrans de développement, sous la MÊME liaison conditionnelle que
+// AuthCallback ci-dessus. `lazy()` s'exécute au niveau du module : retirer une
+// route du tableau plus bas ne suffit pas, l'`import()` reste vivant et Rollup
+// émet le chunk quand même. Seul le repli sur `null` le fait disparaître.
+//
+// DevMLDashboard portait un `lazy()` nu jusqu'au 2026-09-04 : sa route n'était
+// pas enregistrée dans le build iOS, mais son chunk y partait quand même.
+const DevMLDashboard        = features.devRoutes
+  ? lazy(() => import("./pages/DevMLDashboard").then(m => ({ default: m.DevMLDashboard })))
+  : null;
+// R4.2h-UI — la file de modération.
 const ModerationQueuePage   = features.devRoutes
   ? lazy(() => import("./pages/ModerationQueuePage").then(m => ({ default: m.ModerationQueuePage })))
   : null;
@@ -121,7 +128,7 @@ export const router = createBrowserRouter([
       { path: "/pro",                                element: withSuspense(<Protected><ProPage /></Protected>)        },
       { path: "/pro/success",                        element: withSuspense(<Protected><ProSuccessPage /></Protected>) },
       // R17 — the ML dashboard is a developer tool, not a shippable screen.
-      ...(features.devRoutes && ModerationQueuePage
+      ...(features.devRoutes && DevMLDashboard && ModerationQueuePage
         ? [
             { path: "/dev/ml",                        element: withSuspense(<Protected><DevMLDashboard /></Protected>) },
             { path: "/dev/moderation",                element: withSuspense(<Protected><ModerationQueuePage /></Protected>) },

@@ -867,9 +867,6 @@ deletion gracefully — which matters once you build the delete-account flow (`A
 
       Nothing is deleted. Reports cascade away with the message (R4.1), so deleting here would
       erase the record of what was moderated.
-- [ ] **R4.2h-UI** Reuse the `DevMLDashboard` shell for the queue screen. **You must actually
-      read this queue** — Apple asks about your response process, and an unread queue is worse
-      than none.
 
 ### R4.3 — Client
 
@@ -942,11 +939,13 @@ without a database console.
 type-checker and two builds. **None of it has run in a browser.** This walkthrough is what
 turns "correct" into "works", and it needs the second account and the deployed app.
 
-### Found while building R4.3, NOT fixed
-`DevMLDashboard` is bound with a bare `lazy(...)`, not the `features.devRoutes ? lazy(...) :
-null` pattern R2 established — so its chunk **is emitted into the iOS bundle** even though the
-route is not registered. Confirmed by inspecting `dist/assets` after `VITE_TARGET=ios`. Dead
-weight rather than a leak of anything private, and it is R2's business, not R4's.
+### Found while building R4.3 — ✅ fixed 2026-09-04
+`DevMLDashboard` was bound with a bare `lazy(...)` instead of R2's
+`features.devRoutes ? lazy(...) : null`, so its chunk **was emitted into the iOS bundle** even
+though the route was never registered. Both dev screens now share the conditional binding, and
+the iOS build emits neither chunk. This is the third time the same trap has caught something
+(`AuthCallback`, then `DevMLDashboard`): **removing a route from the table does not remove its
+chunk — only folding the binding to `null` does.**
 
 ---
 
