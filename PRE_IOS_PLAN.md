@@ -570,11 +570,12 @@ message never renders, and the admin queue reports → hides correctly.
 
 ### The only thing left before the tag
 
-🔴 **The support address.** `VITE_SUPPORT_EMAIL` (Vercel) and `SUPPORT_EMAIL` (Railway), same
-address, plus the mail route — deferred on 2026-09-04, so both sides currently fall back to
-`support@arakice.com`, **which bounces**. It is the Guideline 1.2 contact for abuse reports and
-the address Apple uses to reach you, so it is not a detail to tag past. Send a real mail to it
-and confirm delivery. See R4.0.
+🔴 **Prove the support address delivers.** `support.arakice@gmail.com` is in the code as of
+2026-09-04 and is served on Support, Privacy and Terms whether or not the environment variables
+are set. What has *not* been done is the only test that matters: **send a real mail to it and
+confirm it arrives, and that you can open the mailbox.** The address this replaced failed
+exactly that test — published for months, readable by nobody. See R4.0, which also records the
+separate developer-contact address for App Store Connect.
 
 Then `git tag pre-ios-freeze` and open `APPLE_PLAN.md` at Phase 0.
 
@@ -630,27 +631,41 @@ walked on the live site; the fourth is the one still open.
 | A filter for objectionable material | ✅ verified — a slur is refused with a visible reason; `great assist by Suzuki` posts |
 | A way to report content | ✅ verified — report → admin queue → hide, end to end |
 | A way to block abusive users | ✅ verified — including a live socket message that never renders |
-| Published contact info | 🔴 **still broken** — see R4.0 |
+| Published contact info | ✅ `support.arakice@gmail.com` is in the code and served — **one thing left, see R4.0** |
 
-Not separately walked: unblock restoring visibility, and auto-hide at three distinct
-reporters (it needs a third account). Both are covered by tests and were proven against a
-real PostgreSQL; neither has been seen on screen.
+Unblock was walked too (2026-09-04). The one case never seen on screen is **auto-hide at
+three distinct reporters** — it needs a third account. It is covered by tests and was proven
+against a real PostgreSQL.
 
-### 🔴 R4.0 — the support address is the last open item of this whole plan
+### R4.0 — the support address ✅ set 2026-09-04
 
-The code is done: the address is configuration, not a literal. **The variables are not set**
-(deferred 2026-09-04), so both sides fall back to `support@arakice.com`, **which bounces**.
+**There are two different addresses, for two different jobs. Do not merge them.**
 
-- `VITE_SUPPORT_EMAIL` in Vercel, `SUPPORT_EMAIL` in Railway, **same address**, plus the mail
-  route that makes it deliver. Two variables and not one because the client is a static bundle
-  built by Vercel while the API runs on Railway; a single source would mean a network call to
-  render a `mailto:` link. The fallback is duplicated in `client/src/app/env.ts` and
-  `server/src/services/email.service.ts` — change both together.
-- Optional rather than required on purpose: making them required would fail a deploy until
-  both dashboards have them.
-- ⚠️ This is not cosmetic. It is the Guideline 1.2 contact for abuse reports, the support
-  contact on the App Store listing, and how Apple reaches you. **Do not tag `pre-ios-freeze`
-  believing R4 is complete while it bounces.** Send a real mail to it and confirm it arrives.
+| Purpose | Address | Where it lives |
+|---------|---------|----------------|
+| Published support + abuse reports (Guideline 1.2) | `support.arakice@gmail.com` | **In the code** — Support, Privacy, Terms and outgoing mail |
+| Developer contact — how Apple reaches you | `ireinahedad24@gmail.com` | **App Store Connect only**, never in the app |
+
+The second one is a store-listing field entered at `APPLE_PLAN.md` Phase 0. Putting it in the
+app would publish a personal mailbox to every visitor, which is not what a contact address on a
+public site is for.
+
+`support.arakice@gmail.com` is now the fallback in `client/src/app/env.ts` and
+`server/src/services/email.service.ts`, so the published contact works whether or not the
+environment variables are set. `VITE_SUPPORT_EMAIL` (Vercel) and `SUPPORT_EMAIL` (Railway) stay
+available to change it later without a deploy — two variables and not one because the client is
+a static bundle built by Vercel while the API runs on Railway; a single source would mean a
+network call to render a `mailto:` link.
+
+- ⚠️ **It is one word-order away from the dead mailbox.** The abandoned account was
+  `arakice.support@gmail.com`; the live one is `support.arakice@gmail.com`. Side by side they
+  read as a typo of each other. Both files carry a warning; do not "correct" one back.
+- ⚠️ **It is a Gmail, not an address on the domain.** That is fine for Apple as long as it is
+  monitored, but it means there is still no `@arakice.com` mail route, so a future
+  `support@arakice.com` on a business card or an invoice would bounce.
+- 🔴 **The one thing still owed: prove it delivers.** Send a real mail and confirm it arrives —
+  and confirm you can sign in to that mailbox. This whole item exists because the previous
+  address was one nobody could open.
 
 ### What shipped
 
@@ -786,18 +801,19 @@ Do not start these until `APPLE_PLAN.md` Phase 3:
       2026-09-03. ⚠️ One known deviation, pre-existing and not caused by R3: a single 401
       fires three `/auth/refresh` calls. See **R3bis**, and read its ordering warning before
       touching either half.
-- [x] Report + block work end-to-end for a real second account — walked on arakice.com
-      2026-09-04: the filter refuses a slur and passes `assist`, a blocked person's live
-      message never renders, and the admin queue reports → hides. ⚠️ **Unblock was not walked**,
-      nor auto-hide at three distinct reporters (it needs a third account). Both are covered by
-      tests and were proven against a real PostgreSQL, but neither has been seen on screen.
+- [x] Report + block + unblock work end-to-end for a real second account — walked on
+      arakice.com 2026-09-04: the filter refuses a slur and passes `assist`, a blocked person's
+      live message never renders, unblock restores them, and the admin queue reports → hides.
+      ⚠️ Auto-hide at three distinct reporters was never seen on screen (it needs a third
+      account); it is covered by tests and was proven against a real PostgreSQL.
 - [x] **The dead Gmail is out of the code** (2026-09-04). ⚠️ The check as first written can
       never pass: this document quotes the address twice, in the R4.0 section and in this very
       line. Run it against the source only —
       `grep -rn "arakice.support@gmail" client/src server/src` — which returns nothing today.
       Verified absent from the built bundle too.
-- [ ] 🔴 **The support address delivers.** Set `VITE_SUPPORT_EMAIL` and `SUPPORT_EMAIL`, create
-      the mail route, send a real mail and confirm it arrives. Deferred 2026-09-04, so today it
-      falls back to `support@arakice.com`, which bounces. This is the Guideline 1.2 contact —
-      **the last real item of this plan**, not a detail to tag past.
+- [x] The published support address is a real one — `support.arakice@gmail.com`, in the code
+      2026-09-04, so it works with or without the environment variables.
+- [ ] 🔴 **Prove it delivers.** Send a real mail to `support.arakice@gmail.com` and confirm it
+      arrives *and* that you can open the mailbox. The previous address failed this exact test
+      — it was published for months and nobody could read it. **The last item of this plan.**
 - [ ] `git tag pre-ios-freeze` — then open `APPLE_PLAN.md` at Phase 0

@@ -79,10 +79,16 @@ function serverOrigin(url: string): string {
 }
 
 /**
- * Used when `VITE_SUPPORT_EMAIL` is not set. Change it here AND in
- * `server/src/services/email.service.ts`, which carries the same fallback.
+ * The address actually in use, and the fallback when `VITE_SUPPORT_EMAIL` is not
+ * set. Change it here AND in `server/src/services/email.service.ts`, which
+ * carries the same fallback.
+ *
+ * ⚠️ ONE CHARACTER-ORDER AWAY FROM A DEAD MAILBOX. The account this project
+ * abandoned was `arakice.support@gmail.com`; this one is `support.arakice@`.
+ * Reading them side by side they look like a typo of each other. They are not.
+ * Do not "correct" this back, and do not copy the old one from an old commit.
  */
-const SUPPORT_EMAIL_FALLBACK = 'support@arakice.com';
+const SUPPORT_EMAIL_FALLBACK = 'support.arakice@gmail.com';
 
 const nhlApiUrl        = requiredUrl('VITE_NHL_API_URL',        import.meta.env.VITE_NHL_API_URL);
 const predictionApiUrl = requiredUrl('VITE_PREDICTION_API_URL', import.meta.env.VITE_PREDICTION_API_URL);
@@ -128,12 +134,9 @@ export const env = {
    *
    * Optional with a fallback, unlike the four URLs above, and deliberately so:
    * making it required would fail the next deploy until the variable exists in
-   * both dashboards. The fallback is the address this project already intends
-   * to use, on a domain we control — it replaces a dead Gmail nobody can open,
-   * and the day `VITE_SUPPORT_EMAIL` is set it wins.
-   *
-   * ⚠️ The fallback bounces until the Cloudflare/Vercel email route exists. A
-   * bounce tells the sender; the mailbox it replaces silently swallowed mail.
+   * both dashboards. The fallback is the live address (2026-09-04), so the
+   * published contact works whether or not the variable is set; setting the
+   * variable is how you change it later without a deploy.
    */
   supportEmail: optional(import.meta.env.VITE_SUPPORT_EMAIL) ?? SUPPORT_EMAIL_FALLBACK,
 } as const;

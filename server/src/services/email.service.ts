@@ -26,15 +26,19 @@ const RESEND_ENDPOINT = 'https://api.resend.com/emails';
  * e-mails ne racontent pas la même chose.
  *
  * Repli plutôt qu'obligation : rendre la variable obligatoire ferait échouer un
- * déploiement tant qu'elle n'est pas posée des deux côtés. Le repli est
- * l'adresse que ce projet prévoit d'utiliser, sur un domaine qu'on contrôle —
- * il remplace un Gmail mort que personne ne peut ouvrir. ⚠️ Il rebondit tant
- * que la redirection Cloudflare/Vercel n'existe pas ; un rebond prévient au
- * moins l'expéditeur, contrairement à la boîte qu'il remplace.
+ * déploiement tant qu'elle n'est pas posée des deux côtés. Le repli EST
+ * l'adresse en service (2026-09-04), donc le contact publié fonctionne que la
+ * variable soit posée ou non ; la variable sert à en changer sans redéployer.
+ *
+ * ⚠️ À UN ORDRE DE MOTS PRÈS D'UNE BOÎTE MORTE. Le compte que ce projet a
+ * abandonné était `arakice.support@gmail.com` ; celui-ci est `support.arakice@`.
+ * Côte à côte, ils ont l'air d'être une faute de frappe l'un de l'autre. Ils ne
+ * le sont pas. Ne pas « corriger » vers l'ancien, ne pas le recopier d'un vieux
+ * commit.
  *
  * Le repli est dupliqué dans `client/src/app/env.ts` — changer les deux.
  */
-const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL?.trim() || 'support@arakice.com';
+const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL?.trim() || 'support.arakice@gmail.com';
 
 function getConfig() {
   const apiKey = process.env.RESEND_API_KEY;
