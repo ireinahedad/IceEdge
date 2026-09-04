@@ -479,7 +479,7 @@ export function NHLPredictionsPage() {
   const categoryMarkets = MARKET_DEFINITIONS.filter((m) => m.category === activeCategory);
 
   return (
-    <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] mx-auto">
+    <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] md:max-w-5xl mx-auto w-full">
       {/* ── Header ── */}
       <header className="bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
         <div className="rink-boards" aria-hidden />

@@ -46,7 +46,7 @@ export function PredictionPage() {
 
   return (
     <RevealModeCtx.Provider value="rules">
-      <div className="flex flex-col min-h-screen pb-24" style={{ background: "#0A0E0C" }}>
+      <div className="flex flex-col min-h-screen pb-24 max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: "#0A0E0C" }}>
         {/* Header */}
         <div className="sticky top-0 z-40"
           style={{ background: "rgba(10,14,12,0.92)", backdropFilter: "blur(16px)", paddingTop: "env(safe-area-inset-top, 0px)" }}>

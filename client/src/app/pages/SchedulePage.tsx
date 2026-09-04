@@ -89,7 +89,7 @@ export function SchedulePage() {
   const { t } = useI18n();
 
   return (
-    <div className="flex flex-col min-h-screen pb-24" style={{ background: "#0A0E0C" }}>
+    <div className="flex flex-col min-h-screen pb-24 max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: "#0A0E0C" }}>
       {/* Header */}
       <header
         className="sticky top-0 z-40"

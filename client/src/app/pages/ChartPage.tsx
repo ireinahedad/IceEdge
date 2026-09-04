@@ -16,7 +16,7 @@
  * `ChartPage` reste le seul export public : `routes.tsx` est inchangé.
  */
 
-import { useParams, useNavigate } from "react-router";
+import { useParams, useNavigate, useLocation } from "react-router";
 import { BottomNav } from "../components/BottomNav";
 import { FramedLabel } from "../components/brand/FramedLabel";
 import { useSport } from "../context/SportContext";
@@ -76,7 +76,17 @@ function ChartNav({ type }: { type?: string }) {
 export function ChartPage() {
   const { type, id } = useParams<{ type: string; id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useI18n();
+
+  // La flèche revient d'où l'on vient — la page prédiction d'un joueur, celle
+  // d'un match, Stats… Elle renvoyait toujours sur /stats jusqu'au 2026-09-04,
+  // par crainte des graphiques qui se lient entre eux ; c'est le fil d'Ariane
+  // ci-dessous (`parent`) qui règle ce cas, pas la flèche.
+  // `location.key` vaut "default" quand cette page est la PREMIÈRE entrée de
+  // l'historique (lien partagé, rechargement) : là il n'y a rien derrière, on
+  // retombe sur Stats plutôt que de sortir du site.
+  const goBack = () => (location.key === "default" ? navigate("/stats") : navigate(-1));
 
   // On a detail view, step up to that section's overview. The arrow beside the
   // title leaves the charts section entirely; this one navigates within it.
@@ -106,7 +116,7 @@ export function ChartPage() {
     );
 
   return (
-    <div className="flex flex-col min-h-screen pb-24" style={{ background: BG_PAGE }}>
+    <div className="flex flex-col min-h-screen pb-24 max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: BG_PAGE }}>
       <div
         className="sticky top-0 z-40"
         style={{ background: BG_HEADER, backdropFilter: "blur(16px)", paddingTop: "env(safe-area-inset-top, 0px)" }}
@@ -114,10 +124,7 @@ export function ChartPage() {
         <div className="rink-boards" aria-hidden />
         <div className="px-4 pt-3 pb-3">
         <div className="flex items-center gap-2">
-          {/* Always returns to Stats rather than stepping back through history —
-              charts link to each other (team → player → all-players), so a
-              history-based back could land several charts deep. */}
-          <button onClick={() => navigate("/stats")} className="text-[#3a5060] text-lg shrink-0" aria-label={t("stats.title")}>
+          <button onClick={goBack} className="text-[#3a5060] text-lg shrink-0" aria-label={t("stats.title")}>
             ←
           </button>
           <FramedLabel text={t("chart.title")} />

@@ -407,9 +407,9 @@ export function MarketGroup({ group, accent }: { group: MktGroup; accent: string
 
 type PlayerSide = { key: string; abbr: string; name: string };
 
-/** The three destinations offered for the tapped player, and the way back. */
-function PlayerRowActions({ playerId, abbr, gameId, accent, onClose }: {
-  playerId: string; abbr: string; gameId?: string; accent: string; onClose: () => void;
+/** The destinations offered for the tapped player, and the way back. */
+function PlayerRowActions({ playerId, abbr, gameId, accent, showTeam, onClose }: {
+  playerId: string; abbr: string; gameId?: string; accent: string; showTeam: boolean; onClose: () => void;
 }) {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -428,7 +428,10 @@ function PlayerRowActions({ playerId, abbr, gameId, accent, onClose }: {
   return (
     <div className="flex items-center gap-1.5 px-3 py-2">
       {act(t("pred.playerCharts"), `/stats/chart/player/${playerId}`)}
-      {act(t("pred.playerTeam"),   `/stats/prediction/team/${abbr.toLowerCase()}${suffix}`)}
+      {/* Sur la page prédiction de l'équipe elle-même, ce bouton pointait vers
+          la page où l'on se trouve déjà : il ne se passait rien. Il n'y est
+          plus (2026-09-04). */}
+      {showTeam && act(t("pred.playerTeam"), `/stats/prediction/team/${abbr.toLowerCase()}${suffix}`)}
       {act(t("pred.playerPreds"),  `/stats/prediction/player/${playerId}${suffix}`)}
       <button
         onClick={(e) => { e.stopPropagation(); onClose(); }}
@@ -442,10 +445,12 @@ function PlayerRowActions({ playerId, abbr, gameId, accent, onClose }: {
   );
 }
 
-function PlayersStatsTable({ sides, gameId, accent }: {
+function PlayersStatsTable({ sides, gameId, accent, showTeamAction = true }: {
   sides: PlayerSide[];
   gameId?: string;
   accent: string;
+  /** false sur la page d'une équipe : le bouton mènerait à la page courante. */
+  showTeamAction?: boolean;
 }) {
   const { t } = useI18n();
   const [sideKey, setSideKey] = useState(sides[0]?.key ?? "");
@@ -563,6 +568,7 @@ function PlayersStatsTable({ sides, gameId, accent }: {
                             abbr={activeAbbr}
                             gameId={gameId}
                             accent={accent}
+                            showTeam={showTeamAction}
                             onClose={() => setOpenPlayer(null)}
                           />
                         </td>
@@ -607,6 +613,7 @@ export function TeamPlayersTable({ abbr, name, gameId, accent }: {
       sides={[{ key: "team", abbr, name }]}
       gameId={gameId}
       accent={accent}
+      showTeamAction={false}
     />
   );
 }
