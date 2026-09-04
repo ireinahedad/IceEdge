@@ -990,5 +990,9 @@ Do not start these until `APPLE_PLAN.md` Phase 3:
       fires three `/auth/refresh` calls. See **R3bis**, and read its ordering warning before
       touching either half.
 - [ ] Report + block + unblock work end-to-end for a real second account
-- [ ] `grep -rn "arakice.support@gmail" .` returns nothing
+- [x] **The dead Gmail is out of the code** (2026-09-04). ⚠️ The check as first written can
+      never pass: this document quotes the address twice, in the R4.0 section and in this very
+      line. Run it against the source only —
+      `grep -rn "arakice.support@gmail" client/src server/src` — which returns nothing today.
+      Verified absent from the built bundle too.
 - [ ] `git tag pre-ios-freeze` — then open `APPLE_PLAN.md` at Phase 0
