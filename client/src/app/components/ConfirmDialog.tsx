@@ -28,10 +28,10 @@ export function ConfirmDialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center" onClick={onCancel}>
+    <div className="fixed inset-0 z-[80] flex items-end justify-center" onClick={onCancel}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative w-full max-w-[430px] md:max-w-lg icy-card rounded-t-3xl p-6 pb-10"
+        className="relative w-full max-w-[430px] md:max-w-lg icy-card rounded-t-3xl p-6 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />

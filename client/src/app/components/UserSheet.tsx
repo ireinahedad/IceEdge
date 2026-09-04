@@ -71,10 +71,12 @@ export function UserSheet({
 
   return (
     <>
-      <div className="fixed inset-0 z-[60] flex items-end justify-center" onClick={onClose}>
+      {/* z-[70] : au-dessus de BottomNav (z-50) quoi qu'il arrive dans les
+          contextes d'empilement des pages qui ouvrent cette feuille. */}
+      <div className="fixed inset-0 z-[70] flex items-end justify-center" onClick={onClose}>
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
         <div
-          className="relative w-full max-w-[430px] md:max-w-lg icy-card rounded-t-3xl p-6 pb-10"
+          className="relative w-full max-w-[430px] md:max-w-lg icy-card rounded-t-3xl p-6 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />

@@ -44,7 +44,7 @@ export function MembersModal({ room, currentUserId, onClose }: {
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative w-full max-w-[430px] max-h-[70vh] overflow-y-auto icy-card rounded-t-3xl p-6 pb-10"
+        className="relative w-full max-w-[430px] max-h-[70vh] overflow-y-auto icy-card rounded-t-3xl p-6 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />

@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router";
+import { toast } from "sonner";
 import { BottomNav } from "../components/BottomNav";
 import { ProLock } from "../components/ProLock";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { profileApiService, ApiError } from "../services/userService";
+import { useAuth } from "../context/AuthContext";
+import { useBlocks } from "../context/BlockContext";
 import { useI18n } from "../i18n";
 import "../components/rink-theme.css";
 import type { PlayerSummary, PublicSlip, PublicSlipLeg } from "../types/user";
@@ -215,7 +219,14 @@ export function PlayerBetsPage() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
   const { t } = useI18n();
+  const { user } = useAuth();
+  const { isBlocked, block, unblock, ensureLoaded } = useBlocks();
+  const [confirmBlock, setConfirmBlock] = useState(false);
+  const [blocking, setBlocking] = useState(false);
   const [state, setState] = useState<LoadState>({ kind: "loading" });
+
+  // La liste de blocage doit être chargée pour savoir quel bouton afficher.
+  useEffect(() => { ensureLoaded(); }, [ensureLoaded]);
 
   useEffect(() => {
     if (!userId) { setState({ kind: "missing" }); return; }
@@ -245,6 +256,45 @@ export function PlayerBetsPage() {
 
   const title =
     state.kind === "ok" ? state.summary.displayName : t("player.title");
+
+  // ── Bloquer depuis la page joueur ────────────────────────────────────────
+  // Deuxième porte après la fiche de compte : on arrive souvent ici par un lien
+  // ou un partage, sans passer par le chat, et il faut pouvoir agir sur place.
+  //
+  // Réservé à l'état `ok` : le blocage optimiste a besoin du pseudo et de
+  // l'avatar pour dessiner la ligne dans les Réglages, et un profil masqué ou
+  // verrouillé par le mur Pro ne les fournit pas.
+  const isSelf = !!user && !!userId && user.id === userId;
+  const blocked = isBlocked(userId);
+
+  async function handleBlock() {
+    if (state.kind !== "ok") return;
+    setConfirmBlock(false);
+    setBlocking(true);
+    try {
+      await block({
+        id: state.summary.userId,
+        username: state.summary.username,
+        displayName: state.summary.displayName,
+        avatar: state.summary.avatar,
+        avatarUrl: state.summary.avatarUrl,
+      });
+      toast.success(t("block.done", { name: state.summary.displayName }));
+    } catch (e: any) {
+      toast.error(e?.message ?? t("block.failed"));
+    } finally { setBlocking(false); }
+  }
+
+  async function handleUnblock() {
+    if (!userId) return;
+    setBlocking(true);
+    try {
+      await unblock(userId);
+      toast.success(t("block.unblockDone", { name: title }));
+    } catch (e: any) {
+      toast.error(e?.message ?? t("block.unblockFailed"));
+    } finally { setBlocking(false); }
+  }
 
   return (
     <div className="flex flex-col min-h-screen pb-24" style={{ background: "#0A0E0C" }}>
@@ -311,6 +361,28 @@ export function PlayerBetsPage() {
               </div>
             </div>
 
+            {!isSelf && (
+              <div className="flex gap-2 mb-3">
+                {blocked ? (
+                  <button
+                    onClick={handleUnblock}
+                    disabled={blocking}
+                    className="flex-1 py-2.5 rounded-2xl bg-[#86d1ea] text-[#072E49] text-xs font-bold disabled:opacity-50"
+                  >
+                    {t("blocked.unblock")}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setConfirmBlock(true)}
+                    disabled={blocking}
+                    className="flex-1 py-2.5 rounded-2xl border border-red-400/30 text-red-400 text-xs font-semibold disabled:opacity-50"
+                  >
+                    🚫 {t("chat.blockUser")}
+                  </button>
+                )}
+              </div>
+            )}
+
             <FormCard summary={state.summary} />
 
             {state.slips.length === 0 ? (
@@ -328,6 +400,15 @@ export function PlayerBetsPage() {
           </>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmBlock}
+        title={t("block.title", { name: title })}
+        description={t("block.description")}
+        confirmLabel={t("block.confirm")}
+        onConfirm={handleBlock}
+        onCancel={() => setConfirmBlock(false)}
+      />
 
       <BottomNav />
     </div>

@@ -944,6 +944,20 @@ deletion gracefully — which matters once you build the delete-account flow (`A
       its own Pro wall.
 
       Not restyled: `FullLeaderBoard`, where a row is rank-plus-score rather than an identity.
+- [x] **R4.3c ter ✅ 2026-09-04 — the bottom nav was eating the sheets.** `BottomNav` is
+      `fixed bottom-3` and occupies roughly 72 px; pages clear it with `pb-24`. Every bottom
+      sheet stopped at `pb-10` (40 px), so its last button — **"Block", among others** — sat
+      underneath. Reported from the app, not caught by a build: nothing type-checks a layout.
+
+      All four sheets now use `pb-[calc(6rem+env(safe-area-inset-bottom,0px))]`, one value
+      instead of a number invented per sheet, and their z-index sits above the nav
+      (`ConfirmDialog` at 80, since it can open on top of another sheet). `ConfirmDialog` was
+      already shipping this bug everywhere it is used — cancel subscription, log out
+      everywhere — so the fix is not limited to R4's screens.
+- [x] **Block from the player page ✅ 2026-09-04** — `/player/:userId` gets Block / Unblock,
+      because that page is often reached from a shared link without going through the chat.
+      Only in the `ok` state: the optimistic block needs the username and avatar to draw the
+      row in Settings, and a hidden or Pro-locked profile supplies neither.
 - [x] **R4.3d ✅ 2026-09-03** `context/BlockContext.tsx`, shared by the chat and Settings, so
       unblocking in Settings restores messages in the chat with no reload. **Lazy**: the
       provider wraps the app and fetches nothing until `ensureLoaded()` — most visits never
@@ -1069,6 +1083,16 @@ Not scaffolding for iOS. Real improvements you would want anyway:
 ---
 
 ## Explicitly NOT in this plan
+
+**Friendship / following (asked for 2026-09-04, deliberately deferred).** Adding a friend
+button to the player page is a whole feature, not a button: a table, endpoints, four states
+(none / request sent / request received / friends), and a friends list somewhere. **Decision:
+after `pre-ios-freeze`, as its own plan.** R4 is an App Store blocker and friendship is not;
+stacking it into the same deploy is how you get the change that breaks everything right before
+review. **Also decided: being someone's friend grants no extra rights** — a social link and a
+list, nothing more. That keeps it away from the Pro wall on slips and away from the Privacy
+page, which currently states slips are visible "to Pro members". Blocking from the player page
+shipped instead, since that one belongs to R4.
 
 Do not start these until `APPLE_PLAN.md` Phase 3:
 
