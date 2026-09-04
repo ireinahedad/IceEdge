@@ -530,21 +530,43 @@ the old UI rendering 401s.
       **How it was accepted:** the shortcut from the R3 section — break the signature of
       `ice_access`, F5, load `/profile`. The 401s stay plural (each call takes its own before
       the refresh lands); it is the `refresh` count that must drop to one.
-- [ ] **R3bis.2 — server, separately, and not without a grace window.** Even with the client
-      coalesced, two open tabs still race: coalescing is per-tab. A strictly atomic server
-      would sign out the losing tab. The fix is a single statement
-      (`UPDATE … WHERE token=$1 AND revoked=FALSE RETURNING *`) **plus** a few seconds of
-      grace in which a just-rotated token returns the same new pair instead of a 401.
-      That is a design decision, not a patch — do not ship it as one.
+- [x] **R3bis.2 ✅ 2026-09-04 — atomic rotation with a grace window.** Migration `033`
+      (`rotated_at`), then one statement:
+      `UPDATE … SET revoked = TRUE, rotated_at = NOW() WHERE token = $1 AND revoked = FALSE
+      RETURNING *`. Among N concurrent callers exactly one gets a row back.
+
+      **The grace window is what makes atomicity safe**, and it is three mechanisms, not one:
+
+      1. **The winner's promise is registered before it is awaited.** This is the piece that
+         actually carries the concurrent case, and the first design got it wrong: a loser
+         arriving *while* the winner is still issuing found nothing cached, and saw a session
+         with **zero** live tokens — the old one revoked, the new one not yet inserted. Storing
+         the in-flight promise lets the loser await it and receive the winner's pair,
+         byte-for-byte. It is the server-side twin of R3bis.1's client gate. **A test caught
+         this, not a review.**
+      2. **A database fallback** for the process that restarted or the second Railway instance:
+         if `rotated_at` is within 10 s, issue a *fresh* pair rather than a 401. ⚠️ That does
+         create a second live token — but only inside 10 s of a legitimate rotation, where the
+         old bug allowed unlimited siblings at any time. Deliberate trade: nobody is ever
+         signed out.
+      3. **`sessionStillAlive()`** — without it the grace window would reopen a closed session:
+         after `logoutAll`, a tab replaying its old token 5 s later would get a new pair, and
+         "log out of all devices" would not. Note the ordering: the loser **awaits the pair
+         first, then** checks liveness. The reverse fails in exactly the concurrent case.
+
+      A logout revokes **without** setting `rotated_at`, which is precisely what keeps a
+      logged-out token out of the window. Nine vitest cases in `authRefresh.test.ts`, plus the
+      real thing against a throwaway PostgreSQL: two genuinely concurrent calls return the same
+      pair and create one token.
 
 ---
 
 ## ▶ RESUME HERE — state as of 2026-09-03
 
-**R4 is functionally complete.** R4.0, the whole server (R4.2a → R4.2h) and the
-whole client (R4.3a → R4.3g, plus the admin queue screen) are in. What is left is
-R4.4 — tests — which is blocked on a decision, and the "Done when" walkthrough on
-the deployed app. Start a new session by reading this block, then the R4 section.
+**Everything in this plan is written and tested. Nothing is deployed.** R7, R2, R3,
+R3bis (both halves) and R4 (0 → 4) are done in the repo; the server suite is 239
+green. What is left is not code: **run migration 033 against Neon, deploy, and walk
+the "Done when" in a browser.** Start a new session by reading this block.
 
 ### Shipped and verified in production
 R7 (`2cc2ce4`), R2 + R3 (`551aca0`), R3bis.1 the refresh gate (`d6353d8`).
@@ -558,19 +580,30 @@ logout, Google, 30-day `Max-Age`, chat socket at 101.
 `86bd1b4` R4.2e + R4.2f + R4.2g — block endpoints, filtered reads, socket note.
 `6f44230` R4.2h — admin moderation queue, plus the newest-100 history fix.
 `f1a966b` R4.0 + R4.3 + the admin queue screen — the whole front end.
+`c64edb4` R2 — DevMLDashboard folded to `null` on iOS, like every other dev route.
+`<R44>` R4.4 tests + R3bis.2 atomic rotation (migration `033`).
 Server: 201 tests green, `tsc --noEmit` clean. Migration 032 is committed
 (`cf6110c`) **and applied to Neon** (confirmed 2026-09-03).
 
-### The next task: set the two support variables, then walk the "Done when"
-**1. Set `VITE_SUPPORT_EMAIL` in Vercel and `SUPPORT_EMAIL` in Railway**, to the
-same address, and create the mail route for it. Until then both sides fall back
-to `support@arakice.com`, which **bounces** — better than the dead Gmail it
-replaced, which swallowed mail silently, but not a working contact address, and
-Guideline 1.2 requires one that works.
+### What is left, in order
 
-**2. Walk the "Done when" test below on the deployed app**, with a second
-account. Nothing in R4 has ever run against a browser — it has been proven
-against a throwaway PostgreSQL and a type-checker, which is not the same thing.
+**1. `cd server && npm run db:migrate:all` against Neon.** Migration **033**
+(`rotated_at`, R3bis.2) has never been applied there — 032 has. Nothing applies
+migrations automatically: no `railway.json`, no Procfile, no step at start-up. Do
+this **before** the deploy, not after: the new `refreshTokens()` writes that column
+on every rotation, so shipping the code first breaks every sign-in refresh.
+
+**2. Set `VITE_SUPPORT_EMAIL` in Vercel and `SUPPORT_EMAIL` in Railway**, to the
+same address, and create the mail route for it. Until then both sides fall back to
+`support@arakice.com`, which **bounces**.
+
+**3. Deploy.** This is the biggest deploy of the plan: R4 whole, plus the auth
+rotation. The document asked for one item per deploy and a preview first — that was
+not done for R2/R3, and it matters more here. Watch `/auth/refresh` for 401s in the
+first minutes; that is the one change that can sign people out.
+
+**4. Walk the "Done when" below**, with a second account, in a real browser.
+Nothing in R4 has ever run in one.
 
 ⚠️ **Live socket messages are unfiltered server-side** (R4.2g, deliberate). The
 only thing that hides a blocked person's live message is the render filter in
@@ -911,33 +944,78 @@ deletion gracefully — which matters once you build the delete-account flow (`A
       A separate page rather than a sixth `DevMLDashboard` tab: that file is 1 475 lines about
       models, not people. Its visual language is reused, its file is not.
 
-### R4.4 — Tests
+### R4.4 — Tests ✅ 2026-09-04
 
-⚠️ **The report and auto-hide paths have no test in the repo, and cannot have one yet.**
-`server/` has vitest but no database fixture: every existing test either mocks the service
-or mocks `pool`. The R4.2c/d behaviour below was proven by running the **real**
-`chat.service` against a throwaway PostgreSQL 16 in the cloud sandbox — 20 checks plus a
-concurrency check, all green on 2026-09-03 — but that script is not committed and nothing
-re-runs it. Making these permanent needs a decision first: a DB-backed test setup
-(testcontainers, or a `TEST_DATABASE_URL` skipped when absent) is new architecture, not a
-test file. Until then, treat the three lines below as verified-once, not guarded.
+Committed as `src/services/chatModeration.test.ts` (26 cases) and
+`src/services/authRefresh.test.ts` (9 cases, R3bis.2). Server suite: **239 green**, up from
+201.
 
-- [ ] Profanity filter rejects, and does not false-positive on ordinary hockey talk.
-- [~] Reporting the same message twice does not create a second row. *(proven in the sandbox)*
-- [~] 3 distinct reporters hides the message; a 4th report does not error. *(proven in the
-      sandbox, including two simultaneous third reports)*
-- [~] A blocked user's messages are absent from history. *(proven in the sandbox, both
-      directions, plus no duplicate rows when the block is reciprocal)* **Live socket
-      delivery is NOT filtered server-side** — that is R4.3d, in the client.
-- [~] Unblock restores visibility. *(proven in the sandbox)*
+**No new test architecture was added.** They reuse the pattern already in `jobLock.test.ts`:
+`vi.doMock('../db/connection')` with an in-memory fake pool that reproduces the *semantics*
+of the statements that matter — `ON CONFLICT DO NOTHING` on the unique constraint, the
+distinct-reporter count, the symmetric anti-join, `hidden_at IS NULL`, the newest-100 window,
+the atomic `UPDATE … RETURNING`. **Any statement the fake does not recognise throws**, so
+rewriting the SQL surfaces here instead of in production.
+
+⚠️ **What these tests do NOT prove: that the SQL is valid.** A fake pool checks no syntax, no
+types, no Postgres behaviour. The throwaway PostgreSQL 16 recipe stays the other half of the
+answer, and both migrations and every service path have been run through it. The two are
+complementary; neither replaces the other.
+
+- [x] Profanity filter rejects, and does not false-positive on ordinary hockey talk.
+      *(`moderation.service.test.ts`, already committed with R4.2a)*
+- [x] Reporting the same message twice does not create a second row.
+- [x] 3 distinct reporters hides the message; a 4th does not error and does not rewrite the
+      timestamp. The same reporter three times hides nothing.
+- [x] A blocked user's messages are absent from history, **both directions**. ⚠️ **Live socket
+      delivery is not filtered server-side** — that is `visibleMessages` in `RoomChat`, and
+      `client/` still has no test runner, so nothing guards it. Read R4.3d before touching it.
+- [x] Unblock restores visibility.
+- [x] A hidden message disappears for its own author too — the shadow-ban guard.
+- [x] The history window returns the newest 100, not the first 100.
+- [x] The admin queue groups by message; `dismissed` clears an `auto` hide and never an
+      `admin` one.
 
 **Done when:** a second test account can post something, your account can report it, block
 that user, stop seeing them, unblock them, and see them again — all in the deployed web app,
 without a database console.
 
 ⚠️ **Still not done.** Every part of R4 has been proven against a throwaway PostgreSQL, a
-type-checker and two builds. **None of it has run in a browser.** This walkthrough is what
-turns "correct" into "works", and it needs the second account and the deployed app.
+fake pool and two builds. **None of it has run in a browser.** This walkthrough is what turns
+"correct" into "works", and it needs the second account and the deployed app.
+
+#### The walkthrough, step by step
+
+Before you start: **`cd server && npm run db:migrate:all` against Neon** (032 is already
+applied; **033 is not**). Nothing applies migrations automatically. Then deploy, and open two
+browsers — not two tabs of one: you need two accounts signed in at once. A normal window and a
+private window works. **Do not use a Vercel preview URL** — see the cookie warning above.
+
+1. **The filter.** From account B, post `you are an asshole`. Expect a **visible refusal**
+   naming the reason, and the message never appears. Then post `great assist by Suzuki` — it
+   must go through. That second one is the test that matters: `assist` contains `ass`, and it
+   is the most common word in a hockey chat.
+2. **Report.** From A, open the `⋯` on one of B's messages → Report → pick a reason → send.
+   Expect a toast. Report the same message again: expect a toast saying you already did, **not**
+   an error, and no second row.
+3. **No self-moderation.** Check the `⋯` does not appear on your own messages at all.
+4. **Block.** From A, `⋯` → Block user → confirm. B's messages must vanish from A's screen
+   immediately, with no reload. Then have B post again while A watches: **nothing must appear.**
+   That step is the only test of the client-side socket filter (R4.2g/R4.3d) — the server still
+   sends that message to A's browser.
+5. **Both directions.** Look at B's screen: A's messages must be gone there too.
+6. **Unblock.** A → Profile → Settings → Blocked users → Unblock. B reappears, again with no
+   reload.
+7. **The admin queue.** As an admin, open `/dev/moderation`. The report from step 2 is there,
+   with the text, the author, the room and the reason. Press **Hide message** → it leaves the
+   queue and disappears from the chat for everyone, B included. Then report something else,
+   press **Dismiss**, and check it stays visible.
+8. **Auto-hide.** Needs three accounts, so it is the one step you may skip. If you have them:
+   three different people report the same message and it disappears on its own.
+9. **The support address.** Open /support, /privacy and /terms and confirm the address shown
+   is the one you set — and **send a mail to it and check it arrives**. That is the whole point
+   of R4.0; a published address nobody reads is what this item exists to remove.
+10. **The guidelines.** Room menu → "Community guidelines" opens Terms §7, in both languages.
 
 ### Found while building R4.3 — ✅ fixed 2026-09-04
 `DevMLDashboard` was bound with a bare `lazy(...)` instead of R2's

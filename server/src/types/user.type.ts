@@ -138,6 +138,9 @@ export interface RefreshTokenRow {
   revoked: boolean;
   remember: boolean;
   created_at: Date;
+  /** Quand la rotation a eu lieu (R3bis.2). NULL pour une révocation par
+   *  déconnexion — ce qui est exactement ce qui l'exclut de la fenêtre de grâce. */
+  rotated_at: Date | null;
 }
 
 // -------------------------------------------------------

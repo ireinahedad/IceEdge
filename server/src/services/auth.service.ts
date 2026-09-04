@@ -481,26 +481,168 @@ export async function loginWithGoogle(googleUser: GoogleUserInfo): Promise<AuthR
 }
 
 // ---- Refresh ---------------------------------------------------------------
+//
+// R3bis.2 — rotation ATOMIQUE avec fenêtre de grâce.
+//
+// Avant : un SELECT puis un UPDATE séparés. Deux appels concurrents lisaient
+// tous les deux `revoked = FALSE` avant le moindre UPDATE, donc tous
+// réussissaient — un refresh token en engendrait plusieurs, chacun valide 7 à
+// 30 jours, orphelins mais vivants.
+//
+// L'énoncé unique plus bas ne peut désigner qu'un gagnant. Mais l'atomicité
+// SEULE renverrait un 401 au perdant, et côté client un 401 sur /auth/refresh
+// vide le stockage : deux onglets ouverts se déconnecteraient à chaque
+// rafraîchissement silencieux. La coalescence client (R3bis.1) est par onglet,
+// elle ne couvre pas ce cas. D'où la grâce.
+
+/** Durée pendant laquelle un jeton qui vient d'être tourné reste utilisable. */
+const REFRESH_GRACE_MS = 10_000;
+
+/**
+ * Ce que le gagnant est en train d'émettre — une PROMESSE, pas un résultat.
+ *
+ * La distinction est ce qui fait marcher le cas vraiment concurrent. Deux
+ * onglets qui partent à la même milliseconde : le gagnant gagne l'UPDATE, mais
+ * il lui reste à charger l'utilisateur et à insérer le nouveau jeton. Le perdant
+ * arrive PENDANT ce trou. S'il ne trouvait qu'un résultat déjà calculé, il ne
+ * trouverait rien, et il verrait une session sans aucun jeton vivant — l'ancien
+ * révoqué, le nouveau pas encore né. En stockant la promesse dès la victoire, le
+ * perdant l'attend et reçoit la paire du gagnant, à l'identique. C'est
+ * l'équivalent serveur du portillon client de R3bis.1.
+ *
+ * En mémoire du process, comme `InMemoryRateLimitStore` côté chat : mono-instance,
+ * perdu au redémarrage. Ce n'est pas un défaut caché, c'est pourquoi le repli
+ * plus bas existe et pourquoi il doit rester correct sans ce cache.
+ */
+const recentRotations = new Map<string, { promise: Promise<AuthTokens>; userId: string; at: number }>();
+
+function rememberRotation(hash: string, userId: string, promise: Promise<AuthTokens>): void {
+  recentRotations.set(hash, { promise, userId, at: Date.now() });
+  // Une rotation qui échoue ne doit pas empoisonner la fenêtre : on retire
+  // l'entrée pour que le prochain appel reparte proprement.
+  promise.catch(() => { recentRotations.delete(hash); });
+  // Élagage paresseux : la carte ne vit que par cette écriture, aucun minuteur
+  // à arrêter, et rien ne tourne quand personne ne se rafraîchit.
+  if (recentRotations.size > 500) {
+    const cutoff = Date.now() - REFRESH_GRACE_MS;
+    for (const [k, v] of recentRotations) if (v.at < cutoff) recentRotations.delete(k);
+  }
+}
+
+function recallRotation(hash: string): { promise: Promise<AuthTokens>; userId: string } | null {
+  const hit = recentRotations.get(hash);
+  if (!hit) return null;
+  if (Date.now() - hit.at > REFRESH_GRACE_MS) {
+    recentRotations.delete(hash);
+    return null;
+  }
+  return hit;
+}
+
+/**
+ * La session existe-t-elle encore quelque part ?
+ *
+ * Sans ce contrôle, la fenêtre de grâce rouvrirait une session fermée : après un
+ * `logout` ou surtout un `logoutAll`, un onglet qui rejoue son ancien jeton dans
+ * les dix secondes se verrait rendre une paire neuve — « se déconnecter de tous
+ * les appareils » ne déconnecterait alors pas tout le monde. Un seul jeton encore
+ * vivant suffit à prouver que la session n'a pas été fermée, et l'index
+ * `idx_refresh_user_id` sert cette recherche.
+ */
+async function sessionStillAlive(userId: string): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    'SELECT 1 FROM refresh_tokens WHERE user_id = $1 AND revoked = FALSE AND expires_at > NOW() LIMIT 1',
+    [userId],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+async function activeUser(userId: string): Promise<UserRow> {
+  const { rows } = await pool.query<UserRow>(
+    'SELECT * FROM users WHERE id=$1 AND is_active=TRUE',
+    [userId],
+  );
+  const user = rows[0];
+  if (!user) throw Object.assign(new Error('User not found or inactive'), { status: 401 });
+  return user;
+}
+
+const invalidRefresh = () =>
+  Object.assign(new Error('Invalid or expired refresh token'), { status: 401 });
 
 export async function refreshTokens(rawToken: string): Promise<AuthTokens> {
+  const hash = hashToken(rawToken);
+
+  // UN SEUL énoncé. `WHERE revoked = FALSE` est évalué au moment de l'écriture,
+  // sous verrou de ligne : parmi N appels concurrents, exactement un obtient une
+  // ligne en retour, les autres en obtiennent zéro.
   const { rows } = await pool.query<RefreshTokenRow>(
-    'SELECT * FROM refresh_tokens WHERE token=$1 AND revoked=FALSE AND expires_at>NOW()',
-    [hashToken(rawToken)],
+    `UPDATE refresh_tokens
+        SET revoked = TRUE, rotated_at = NOW()
+      WHERE token = $1 AND revoked = FALSE AND expires_at > NOW()
+      RETURNING *`,
+    [hash],
   );
   const stored = rows[0];
-  if (!stored) throw Object.assign(new Error('Invalid or expired refresh token'), { status: 401 });
+  if (!stored) return refreshAfterRotation(hash);
 
-  await pool.query('UPDATE refresh_tokens SET revoked=TRUE WHERE id=$1', [stored.id]);
+  // La promesse est enregistrée AVANT d'être attendue : un appel concurrent qui
+  // arrive dans l'intervalle doit pouvoir s'y accrocher.
+  const issuing = (async () => {
+    const user = await activeUser(stored.user_id);
+    // Preserve the persistence choice across rotation.
+    return issueTokens(user, stored.remember);
+  })();
+  rememberRotation(hash, stored.user_id, issuing);
+  return issuing;
+}
 
-  const { rows: userRows } = await pool.query<UserRow>(
-    'SELECT * FROM users WHERE id=$1 AND is_active=TRUE',
-    [stored.user_id],
+/**
+ * Le chemin du perdant : zéro ligne mise à jour. Deux raisons possibles, et il
+ * faut les distinguer — un jeton mort doit rester mort.
+ */
+async function refreshAfterRotation(hash: string): Promise<AuthTokens> {
+  // 1. Cas idéal : le gagnant est passé par CE process il y a moins de dix
+  //    secondes, ou est encore en train d'émettre. On rend sa paire, à
+  //    l'identique. Rien de nouveau n'est créé.
+  //
+  //    ⚠️ L'ordre compte : on ATTEND la paire avant de juger si la session vit
+  //    encore. L'inverse échouerait exactement dans le cas concurrent — pendant
+  //    que le gagnant émet, l'ancien jeton est révoqué et le nouveau n'existe
+  //    pas, donc la session paraîtrait morte au moment précis où elle renaît.
+  const cached = recallRotation(hash);
+  if (cached) {
+    const tokens = await cached.promise;
+    if (!(await sessionStillAlive(cached.userId))) throw invalidRefresh();
+    return tokens;
+  }
+
+  // 2. Pas en mémoire : autre instance, ou le process a redémarré. La base sait
+  //    quand même si ce jeton a été tourné récemment.
+  const { rows } = await pool.query<RefreshTokenRow>(
+    `SELECT * FROM refresh_tokens
+      WHERE token = $1
+        AND rotated_at IS NOT NULL
+        AND rotated_at > NOW() - ($2::int * INTERVAL '1 millisecond')`,
+    [hash, REFRESH_GRACE_MS],
   );
-  const user = userRows[0];
-  if (!user) throw Object.assign(new Error('User not found or inactive'), { status: 401 });
+  const rotated = rows[0];
+  if (!rotated) throw invalidRefresh();
+  if (!(await sessionStillAlive(rotated.user_id))) throw invalidRefresh();
 
-  // Preserve the persistence choice across rotation.
-  return issueTokens(user, stored.remember);
+  // ⚠️ Ici on émet une paire NEUVE, donc un deuxième jeton vivant pour cette
+  // session. C'est un choix, pas un accident : l'alternative était un 401, donc
+  // un onglet déconnecté à chaque redémarrage tombant dans la fenêtre. Et la
+  // portée n'a rien à voir avec l'ancien bogue — cela n'arrive que dans les dix
+  // secondes suivant une rotation LÉGITIME, là où c'était auparavant illimité et
+  // à tout moment. `rotated_at IS NOT NULL` exclut les révocations par
+  // déconnexion, qui ne posent jamais cette colonne.
+  const issuing = (async () => {
+    const user = await activeUser(rotated.user_id);
+    return issueTokens(user, rotated.remember);
+  })();
+  rememberRotation(hash, rotated.user_id, issuing);
+  return issuing;
 }
 
 // ---- Logout ----------------------------------------------------------------
