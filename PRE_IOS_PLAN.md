@@ -541,9 +541,10 @@ the old UI rendering 401s.
 
 ## ▶ RESUME HERE — state as of 2026-09-03
 
-**The whole server half of R4 is done (R4.2a → R4.2h).** Everything left is
-client work: R4.3, then R4.4. Start a new session by reading this block, then
-the R4 section below.
+**R4 is functionally complete.** R4.0, the whole server (R4.2a → R4.2h) and the
+whole client (R4.3a → R4.3g, plus the admin queue screen) are in. What is left is
+R4.4 — tests — which is blocked on a decision, and the "Done when" walkthrough on
+the deployed app. Start a new session by reading this block, then the R4 section.
 
 ### Shipped and verified in production
 R7 (`2cc2ce4`), R2 + R3 (`551aca0`), R3bis.1 the refresh gate (`d6353d8`).
@@ -556,28 +557,30 @@ logout, Google, 30-day `Max-Age`, chat socket at 101.
 `e6e93a2` R4.2c + R4.2d — report endpoint and auto-hide.
 `86bd1b4` R4.2e + R4.2f + R4.2g — block endpoints, filtered reads, socket note.
 `6f44230` R4.2h — admin moderation queue, plus the newest-100 history fix.
+`<R4client>` R4.0 + R4.3 + the admin queue screen — the whole front end.
 Server: 201 tests green, `tsc --noEmit` clean. Migration 032 is committed
 (`cf6110c`) **and applied to Neon** (confirmed 2026-09-03).
 
-### The next task is R4.3 — the client, all of it
-**None of R4 is visible to a user today.** The server is complete and correct:
-you can report, auto-hide, block, unblock and moderate with `curl`, and it all
-works. No screen offers any of it. R4.3a→g is what turns a working server into a
-feature, and it is also what the "Done when" test at the end of R4 requires.
+### The next task: set the two support variables, then walk the "Done when"
+**1. Set `VITE_SUPPORT_EMAIL` in Vercel and `SUPPORT_EMAIL` in Railway**, to the
+same address, and create the mail route for it. Until then both sides fall back
+to `support@arakice.com`, which **bounces** — better than the dead Gmail it
+replaced, which swallowed mail silently, but not a working contact address, and
+Guideline 1.2 requires one that works.
 
-Start with R4.3d (fetch the block list on chat mount, filter history **and**
-socket) — it is the one that makes R4.2g's client-side choice real; the rest is
-UI on top.
+**2. Walk the "Done when" test below on the deployed app**, with a second
+account. Nothing in R4 has ever run against a browser — it has been proven
+against a throwaway PostgreSQL and a type-checker, which is not the same thing.
 
-⚠️ **Live socket messages are unfiltered server-side** (R4.2g, deliberate). A
-blocked person's message still reaches the blocker's browser. It must never be
-rendered — that is R4.3d's job, and nothing else enforces it.
+⚠️ **Live socket messages are unfiltered server-side** (R4.2g, deliberate). The
+only thing that hides a blocked person's live message is the render filter in
+`RoomChat` (`visibleMessages`). Remove it and blocking silently stops working
+for anything arriving in real time; the history would still look correct, which
+is exactly how that regression would ship unnoticed.
 
-⚠️ **There is no admin screen yet.** `GET /api/dev/reports` returns the queue as
-JSON and `POST /api/dev/reports/:id` decides. Until a screen exists you read the
-queue with `curl` and an admin token — and **you must actually read it**. Apple
-asks about the response process; an unread queue promises moderation that never
-comes.
+⚠️ **The admin queue is at `/dev/moderation`**, admin-only, and **you must
+actually read it**. Apple asks about the response process; an unread queue
+promises moderation that never comes.
 
 ### Fixed in passing, 2026-09-03 — the history window
 `getMessages()` used to end with `ORDER BY m.sent_at ASC LIMIT 100`, which
@@ -648,9 +651,23 @@ account you no longer have access to. That address is simultaneously: the Guidel
 contact for abuse reports, the support URL contact on your App Store listing, and the
 address Apple would use to reach you. **Reports would go to a mailbox nobody can open.**
 
-- [ ] **R4.0** Replace it everywhere with an address on a domain you control
-      (`support@arakice.com` via a Cloudflare/Vercel email route). Grep the whole repo:
-      `grep -rn "arakice.support@gmail" .` — check `PrivacyPage.tsx` and `TermsPage.tsx` too.
+- [x] **R4.0 ✅ 2026-09-03** — the address is gone from the code and is now **configuration**:
+      `VITE_SUPPORT_EMAIL` for the client (read in `src/app/env.ts`, the only place the client
+      may touch `import.meta.env`) and `SUPPORT_EMAIL` for the server (`email.service.ts`).
+
+      **Two variables, not one, and that is not an oversight.** The client is a static bundle
+      built by Vercel; the server runs on Railway. A single source would mean the client
+      fetching its own support address over the network to render a `mailto:` link. Each side
+      reads its own copy — set both, to the same address.
+
+      **Optional with a fallback**, unlike the four URLs of R7. Making it required would fail
+      the next deploy until both dashboards have it. Unset falls back to
+      `support@arakice.com` — on a domain we control, which is what this item always intended.
+      ⚠️ That fallback **bounces** until the mail route exists. A bounce tells the sender; the
+      Gmail it replaces swallowed mail silently. Verified absent from the built bundle.
+
+      Both fallbacks are duplicated (`client/src/app/env.ts`, `server/.../email.service.ts`) —
+      change the two together.
 
 ### R4.1 — Database (migration `032_chat_moderation.sql`)
 
@@ -856,20 +873,46 @@ deletion gracefully — which matters once you build the delete-account flow (`A
 
 ### R4.3 — Client
 
-- [ ] **R4.3a** `MessageBubble.tsx` — add `onReport?: (msgId) => void` alongside the existing
-      `onReact` / `onReply` / `onDelete` props. Long-press (mobile) / hover menu (desktop)
-      → "Report", "Block user". Do not show either on your own messages (`isOwn`).
-- [ ] **R4.3b** A small `ReportModal` — reason picker (spam / harassment / hate / sexual /
-      other) + optional note. Confirmation toast via `sonner`, which you already ship.
-- [ ] **R4.3c** Block confirmation dialog — reuse `ConfirmDialog.tsx`. Copy must say what a
-      block does: "You will no longer see their messages."
-- [ ] **R4.3d** Fetch the block list once on chat mount, keep it in context, and filter both
-      the REST history **and** incoming socket messages in `hooks/useChatSocket.ts`.
-- [ ] **R4.3e** "Blocked users" section in `pages/profile/SettingsTab.tsx` with unblock.
-      Apple checks that a block is reversible.
-- [ ] **R4.3f** Community guidelines: a short section in `TermsPage.tsx` (what is not allowed,
-      what happens when you report) linked from the chat header. Apple looks for this.
-- [ ] **R4.3g** i18n: every new string into `app/i18n/index.tsx`, EN + FR. Roughly 20 keys.
+- [x] **R4.3a ✅ 2026-09-03** `MessageBubble.tsx` takes `onReport` / `onBlock` (the whole
+      message, not just its id — the modal and the block dialog both need the author). Never
+      passed for `isOwn`: reporting yourself is a 400 server-side.
+
+      **A "⋯" button, not a long-press**, against what this plan sketched. Long-press fights
+      text selection and iOS's own context menu, is discoverable by nobody, and has no
+      keyboard equivalent — Apple reviews accessibility too. The button repeats the room
+      menu's pattern, already on this screen, and works everywhere.
+- [x] **R4.3b ✅ 2026-09-03** `ReportModal.tsx` — bottom sheet like `ConfirmDialog`, reason
+      required, note optional and capped at 500 in the UI so the server's truncation is never
+      a surprise. The reported text is quoted in the sheet: on a phone the sheet covers the
+      conversation, and without it you report from memory. `sonner` toast on success, and a
+      different one for `alreadyReported` — the server returns 201 either way.
+- [x] **R4.3c ✅ 2026-09-03** Block confirmation via `ConfirmDialog`. The copy says the block
+      works **both ways** and that it can be undone in Settings — Apple checks reversibility.
+- [x] **R4.3d ✅ 2026-09-03** `context/BlockContext.tsx`, shared by the chat and Settings, so
+      unblocking in Settings restores messages in the chat with no reload. **Lazy**: the
+      provider wraps the app and fetches nothing until `ensureLoaded()` — most visits never
+      open the chat, and a signed-out visitor would only earn a 401. It keeps a `Set` of ids
+      beside the array because the chat tests membership for 100 messages on every render.
+
+      **The filter is applied at render in `RoomChat` (`visibleMessages`), not inside
+      `useChatSocket` as sketched.** One filter covers history and live delivery instead of
+      two, and unblocking brings messages back instantly without re-fetching. ⚠️ It is also
+      the *only* thing hiding a blocked person's live message (R4.2g) — delete it and blocking
+      quietly stops working in real time while history still looks right.
+- [x] **R4.3e ✅ 2026-09-03** "Blocked users" in `SettingsTab.tsx`, with unblock. The card
+      stays visible when the list is empty: a card that disappears reads as a broken feature,
+      and you cannot confirm you have blocked nobody.
+- [x] **R4.3f ✅ 2026-09-03** Community guidelines as **§7 of `TermsPage.tsx`** (EN + FR), with
+      §7–§10 renumbered to §8–§11. Reachable from the room menu ("Community guidelines"), not
+      only buried in Terms.
+- [x] **R4.3g ✅ 2026-09-03** 33 keys in `app/i18n/index.tsx`, EN + FR, including two new
+      `gate.*` actions so a signed-out visitor is told "sign in to report a message" rather
+      than "to send a message".
+- [x] **R4.2h-UI ✅ 2026-09-03** `pages/ModerationQueuePage.tsx` at **`/dev/moderation`**,
+      admin-only, behind `features.devRoutes` with the `const X = flag ? lazy(...) : null`
+      binding — verified: the chunk is emitted in the web build and absent from the iOS one.
+      A separate page rather than a sixth `DevMLDashboard` tab: that file is 1 475 lines about
+      models, not people. Its visual language is reused, its file is not.
 
 ### R4.4 — Tests
 
@@ -894,6 +937,16 @@ test file. Until then, treat the three lines below as verified-once, not guarded
 **Done when:** a second test account can post something, your account can report it, block
 that user, stop seeing them, unblock them, and see them again — all in the deployed web app,
 without a database console.
+
+⚠️ **Still not done.** Every part of R4 has been proven against a throwaway PostgreSQL, a
+type-checker and two builds. **None of it has run in a browser.** This walkthrough is what
+turns "correct" into "works", and it needs the second account and the deployed app.
+
+### Found while building R4.3, NOT fixed
+`DevMLDashboard` is bound with a bare `lazy(...)`, not the `features.devRoutes ? lazy(...) :
+null` pattern R2 established — so its chunk **is emitted into the iOS bundle** even though the
+route is not registered. Confirmed by inspecting `dist/assets` after `VITE_TARGET=ios`. Dead
+weight rather than a leak of anything private, and it is R2's business, not R4's.
 
 ---
 

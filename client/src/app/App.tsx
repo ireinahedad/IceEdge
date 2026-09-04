@@ -6,6 +6,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { SubscriptionProvider } from "./context/SubscriptionContext";
 import { SportProvider, useSport } from "./context/SportContext";
 import { BookmakerProvider } from "./context/BookmakerContext";
+import { BlockProvider } from "./context/BlockContext";
 import { LanguageProvider } from "./i18n";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
@@ -55,7 +56,13 @@ export default function App() {
           <BetProvider>
             <SportProvider>
               <BookmakerProvider>
-                <AppShell />
+                {/* R4.3d — la liste de blocage est partagée entre le chat et
+                    les Paramètres. Elle ne charge rien au montage : voir
+                    BlockContext, `ensureLoaded`. Sous AuthProvider, dont elle
+                    lit l'utilisateur courant. */}
+                <BlockProvider>
+                  <AppShell />
+                </BlockProvider>
               </BookmakerProvider>
             </SportProvider>
           </BetProvider>

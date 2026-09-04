@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
 import { useI18n } from "../i18n";
+import { env } from "../env";
 
 const CONTENT = {
   en: {
@@ -14,7 +15,7 @@ const CONTENT = {
       { h: "6. Data retention & deletion", b: "You can request deletion of your account and associated data at any time by contacting support. Refresh tokens and session data are automatically purged on logout or expiry." },
       { h: "7. Security", b: "Passwords are hashed, refresh tokens are stored in httpOnly cookies, and API keys you provide (e.g. for AI features) are stored securely and used only for your own requests." },
       { h: "8. Your rights", b: "Depending on your jurisdiction, you may have the right to access, correct, or delete your personal data. Contact us to exercise these rights." },
-      { h: "9. Contact", b: "Privacy questions can be sent to arakice.support@gmail.com." },
+      { h: "9. Contact", b: `Privacy questions can be sent to ${env.supportEmail}.` },
     ],
   },
   fr: {
@@ -28,7 +29,7 @@ const CONTENT = {
       { h: "6. Conservation et suppression des données", b: "Tu peux demander la suppression de ton compte et des données associées à tout moment en contactant le support. Les jetons de rafraîchissement et données de session sont automatiquement purgés à la déconnexion ou à l'expiration." },
       { h: "7. Sécurité", b: "Les mots de passe sont hachés, les jetons de rafraîchissement sont stockés dans des cookies httpOnly, et les clés API que tu fournis (ex. pour les fonctions IA) sont stockées en sécurité et utilisées uniquement pour tes propres requêtes." },
       { h: "8. Tes droits", b: "Selon ta juridiction, tu peux avoir le droit d'accéder à, de corriger ou de supprimer tes données personnelles. Contacte-nous pour exercer ces droits." },
-      { h: "9. Contact", b: "Pour toute question sur la confidentialité, écris-nous à arakice.support@gmail.com." },
+      { h: "9. Contact", b: `Pour toute question sur la confidentialité, écris-nous à ${env.supportEmail}.` },
     ],
   },
 };

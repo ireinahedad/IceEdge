@@ -199,6 +199,49 @@ export interface ChatMessage {
   tag?: "pick" | "analysis" | "hot";
 }
 
+// ── Modération du chat — PRE_IOS_PLAN.md R4 ──────────────────────────────────
+
+/**
+ * Motifs de signalement. ⚠️ Cette liste existe à TROIS endroits : ici, dans
+ * `REPORT_REASONS` (server/src/services/chat.service.ts) et dans le CHECK de la
+ * migration 032. En ajouter un demande de toucher aux trois.
+ */
+export const REPORT_REASONS = ["spam", "harassment", "hate", "sexual", "other"] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
+/** Une personne que l'utilisateur courant a bloquée. */
+export interface BlockedUser {
+  id: string;
+  username: string;
+  displayName: string;
+  avatar: string;
+  avatarUrl: string | null;
+  createdAt: string;
+}
+
+/**
+ * Une entrée de la file de modération — un MESSAGE, pas un signalement :
+ * le serveur regroupe, donc trois personnes qui signalent le même message
+ * posent une seule question à l'admin.
+ */
+export interface ModerationQueueItem {
+  reportId: number;
+  messageId: string;
+  reportCount: number;
+  reasons: ReportReason[];
+  notes: string[];
+  firstReportedAt: string;
+  lastReportedAt: string;
+  roomId: string;
+  roomName: string | null;
+  text: string;
+  sentAt: string;
+  authorId: string | null;
+  authorUsername: string | null;
+  hiddenAt: string | null;
+  hiddenReason: string | null;
+}
+
 export interface ChatRoom {
   id: string;
   name: string;

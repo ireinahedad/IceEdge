@@ -25,6 +25,9 @@ import type {
   ChatRoomMember,
   PlayerSummary,
   PublicSlip,
+  BlockedUser,
+  ModerationQueueItem,
+  ReportReason,
 } from '../types/user';
 
 import { authedFetch } from './authService';
@@ -76,6 +79,18 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+/**
+ * DELETE authentifié. Les quatre suppressions plus bas répètent ce bloc en
+ * ligne ; elles marchent, on n'y touche pas — les nouvelles passent par ici.
+ */
+async function del(path: string): Promise<void> {
+  const res = await authedFetch(path, { method: 'DELETE' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
+  }
 }
 
 async function patch<T>(path: string, body: unknown): Promise<T> {
@@ -313,4 +328,50 @@ export const profileApiService = {
       throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
     }
   },
+
+  // ── Modération — PRE_IOS_PLAN.md R4 ───────────────────────────────────────
+
+  /**
+   * Signaler un message. Le chemin est imbriqué sous le salon (R4.2c) : le
+   * serveur s'en sert pour vérifier que l'appelant peut LIRE ce salon avant de
+   * toucher au message.
+   *
+   * `alreadyReported` n'est pas une erreur — signaler deux fois rend 201 aussi.
+   * `hidden` dit si ce signalement est celui qui a fait basculer le masquage
+   * automatique, ce qui permet de retirer le message de l'écran tout de suite.
+   */
+  reportMessage: (
+    roomId: string,
+    messageId: string,
+    payload: { reason: ReportReason; note?: string },
+  ): Promise<{ alreadyReported: boolean; hidden: boolean }> =>
+    post(`/chat/rooms/${roomId}/messages/${messageId}/report`, payload),
+
+  /** Les gens que J'AI bloqués. Jamais ceux qui m'ont bloqué (R4.2e). */
+  getBlockedUsers: (): Promise<BlockedUser[]> =>
+    get<BlockedUser[]>('/users/me/blocks'),
+
+  /** Idempotent côté serveur : bloquer deux fois ne casse rien. */
+  blockUser: (userId: string): Promise<void> =>
+    post(`/users/${userId}/block`, {}),
+
+  /** Idempotent et silencieux : débloquer ce qui ne l'est pas rend 204. */
+  unblockUser: (userId: string): Promise<void> =>
+    del(`/users/${userId}/block`),
+
+  // ── File de modération, admin uniquement (R4.2h) ──────────────────────────
+
+  getModerationQueue: (): Promise<{ reports: ModerationQueueItem[] }> =>
+    get<{ reports: ModerationQueueItem[] }>('/dev/reports'),
+
+  /**
+   * Trancher. `actioned` masque le message, `dismissed` retire un masquage
+   * AUTOMATIQUE (jamais celui qu'un admin a posé). La décision porte sur le
+   * message : tous ses signalements ouverts sont tranchés ensemble.
+   */
+  reviewReport: (
+    reportId: number,
+    status: 'actioned' | 'dismissed',
+  ): Promise<{ messageId: string; status: string; reportsUpdated: number; hidden: boolean }> =>
+    post(`/dev/reports/${reportId}`, { status }),
 };

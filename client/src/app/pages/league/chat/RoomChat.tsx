@@ -1,11 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router";
+import { toast } from "sonner";
 import { MessageBubble } from "./MessageBubble";
 import { MembersModal } from "./MembersModal";
+import { ReportModal } from "./ReportModal";
+import { ConfirmDialog } from "../../../components/ConfirmDialog";
 import { profileApiService } from "../../../services/userService";
 import { useChatSocket } from "../../../hooks/useChatSocket";
 import { useAuthGate } from "../../../context/AuthGateContext";
+import { useBlocks } from "../../../context/BlockContext";
 import { useI18n } from "../../../i18n";
-import type { ChatRoom, ChatMessage, UserProfile } from "../../../types/user";
+import type { ChatRoom, ChatMessage, UserProfile, ReportReason } from "../../../types/user";
 
 // ─── Tag styles ───────────────────────────────────────────────────────────────
 
@@ -34,7 +39,9 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   onPinToggle: (room: ChatRoom) => void;
 }) {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const { requireAuth } = useAuthGate();
+  const { isBlocked, ensureLoaded, block } = useBlocks();
   const { messages, onlineCount, connected, initMessages, appendOptimistic, confirmMessage, removeMessage } =
     useChatSocket(room.id);
   const [input, setInput] = useState("");
@@ -44,8 +51,29 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   const [menuOpen, setMenuOpen] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [reportTarget, setReportTarget] = useState<ChatMessage | null>(null);
+  const [reporting, setReporting] = useState(false);
+  const [blockTarget, setBlockTarget] = useState<ChatMessage | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const isAdmin = room.role === "admin";
+
+  // R4.3d — la liste de blocage, chargée une fois quand on ouvre un salon.
+  useEffect(() => { ensureLoaded(); }, [ensureLoaded]);
+
+  /**
+   * R4.3d — le SEUL filtre de blocage du chat, appliqué au rendu.
+   *
+   * Le serveur filtre déjà l'historique en SQL (R4.2f), mais PAS le direct : il
+   * diffuse à toute la salle (R4.2g), donc le message d'une personne bloquée
+   * arrive quand même ici. Filtrer à l'affichage couvre les deux chemins d'un
+   * coup, au lieu d'un filtre dans le hook de socket plus un autre à
+   * l'historique — et surtout, débloquer quelqu'un fait revenir ses messages
+   * immédiatement, sans rappeler le serveur.
+   */
+  const visibleMessages = useMemo(
+    () => messages.filter((m) => !isBlocked(m.userId)),
+    [messages, isBlocked],
+  );
 
   // Load HTTP history on mount, seed into socket hook
   useEffect(() => {
@@ -59,7 +87,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   // Auto-scroll on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+  }, [visibleMessages.length]);
 
   async function sendMessage() {
     const text = input.trim();
@@ -116,6 +144,43 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
       await profileApiService.deleteMessage(room.id, msgId);
     } catch (e: any) {
       setErrorMsg(e.message ?? "Could not delete message");
+    }
+  }
+
+  async function handleReport(payload: { reason: ReportReason; note?: string }) {
+    const target = reportTarget;
+    if (!target) return;
+    setReporting(true);
+    try {
+      const res = await profileApiService.reportMessage(room.id, target.id, payload);
+      setReportTarget(null);
+      toast.success(res.alreadyReported ? t("report.already") : t("report.sent"));
+      // Le serveur dit si CE signalement est celui qui a fait basculer le
+      // masquage automatique : dans ce cas le message n'est plus servi à
+      // personne, autant le retirer tout de suite plutôt qu'au rechargement.
+      if (res.hidden) removeMessage(target.id);
+    } catch (e: any) {
+      toast.error(e?.message ?? t("report.failed"));
+    } finally {
+      setReporting(false);
+    }
+  }
+
+  async function handleBlock() {
+    const target = blockTarget;
+    if (!target) return;
+    setBlockTarget(null);
+    try {
+      await block({
+        id: target.userId,
+        username: target.username,
+        displayName: target.displayName,
+        avatar: target.avatar,
+        avatarUrl: target.avatarUrl,
+      });
+      toast.success(t("block.done", { name: target.displayName || target.username }));
+    } catch (e: any) {
+      toast.error(e?.message ?? t("block.failed"));
     }
   }
 
@@ -224,6 +289,15 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
             <span className="text-white/80 text-xs">{t("chat.membersMenu")}</span>
             <span className="text-white/40 text-xs">{room.memberCount} 👥</span>
           </button>
+          {/* R4.3f — les règles de la communauté doivent être atteignables
+              DEPUIS le chat, pas seulement enfouies dans les Conditions. */}
+          <button
+            onClick={() => { setMenuOpen(false); navigate("/terms"); }}
+            className="w-full flex items-center justify-between px-4 py-3 text-left border-b border-white/5 active:bg-white/5"
+          >
+            <span className="text-white/80 text-xs">{t("chat.guidelines")}</span>
+            <span className="text-xs">📋</span>
+          </button>
           <button
             onClick={handleLeave}
             className="w-full flex items-center justify-between px-4 py-3 text-left border-b border-white/5 active:bg-white/5"
@@ -261,14 +335,14 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
           ))
         ) : (
           <>
-            {messages.length === 0 && (
+            {visibleMessages.length === 0 && (
               <div className="flex flex-col items-center justify-center py-10 gap-2">
                 <span className="text-3xl">{room.icon}</span>
                 <p className="text-white text-xs font-medium">{room.name}</p>
                 <p className="text-white/50 text-[10px] text-center">{room.description}<br />{t("chat.beFirst")}</p>
               </div>
             )}
-            {messages.map((msg) => (
+            {visibleMessages.map((msg) => (
               <MessageBubble
                 key={msg.id}
                 msg={msg}
@@ -276,6 +350,8 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
                 onReact={handleReact}
                 onReply={setReplyTo}
                 onDelete={msg.userId === currentUserId ? handleDeleteMessage : undefined}
+                onReport={(m) => { if (requireAuth("gate.report")) setReportTarget(m); }}
+                onBlock={(m) => { if (requireAuth("gate.block")) setBlockTarget(m); }}
               />
             ))}
           </>
@@ -333,6 +409,26 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
       {showMembers && (
         <MembersModal room={room} currentUserId={currentUserId} onClose={() => setShowMembers(false)} />
       )}
+
+      {reportTarget && (
+        <ReportModal
+          message={reportTarget}
+          submitting={reporting}
+          onSubmit={handleReport}
+          onCancel={() => setReportTarget(null)}
+        />
+      )}
+
+      {/* R4.3c — la formulation dit ce que fait un blocage, dans les deux sens,
+          et qu'il se défait. Apple vérifie qu'un blocage est réversible. */}
+      <ConfirmDialog
+        open={blockTarget !== null}
+        title={t("block.title", { name: blockTarget?.displayName || blockTarget?.username || "" })}
+        description={t("block.description")}
+        confirmLabel={t("block.confirm")}
+        onConfirm={handleBlock}
+        onCancel={() => setBlockTarget(null)}
+      />
     </div>
   );
 }

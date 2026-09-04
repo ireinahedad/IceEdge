@@ -1,6 +1,8 @@
 // components/league/chat/MessageBubble.tsx
 
+import { useState } from "react";
 import { useNavigate } from "react-router";
+import { useI18n } from "../../../i18n";
 import type { ChatMessage } from "../../../types/user";
 
 const TAG_STYLE = {
@@ -21,14 +23,29 @@ export function MessageBubble({
   onReact,
   onReply,
   onDelete,
+  onReport,
+  onBlock,
 }: {
   msg: ChatMessage;
   isOwn: boolean;
   onReact?: (msgId: string, emoji: string) => void;
   onReply?: (msg: ChatMessage) => void;
   onDelete?: (msgId: string) => void;
+  /** R4.3a — signaler. Jamais passé pour ses propres messages. */
+  onReport?: (msg: ChatMessage) => void;
+  /** R4.3a — bloquer l'auteur. Jamais passé pour ses propres messages. */
+  onBlock?: (msg: ChatMessage) => void;
 }) {
   const navigate = useNavigate();
+  const { t } = useI18n();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // R4.3a — un bouton « ⋯ », pas un appui long. L'appui long se dispute la
+  // sélection de texte et le menu natif d'iOS, ne se découvre pas, et n'a
+  // aucun équivalent au clavier. Le bouton reprend le motif du menu de salon
+  // déjà présent dans cette page, et il n'apparaît jamais sur ses propres
+  // messages : se signaler soi-même est refusé en 400 par le serveur.
+  const canModerate = !isOwn && (onReport || onBlock);
   const time = new Date(msg.sentAt).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
@@ -92,6 +109,43 @@ export function MessageBubble({
             >
               🗑️
             </button>
+          )}
+          {canModerate && (
+            <div className="relative self-center flex-shrink-0">
+              <button
+                onClick={() => setMenuOpen((v) => !v)}
+                aria-label={t("chat.messageActions")}
+                aria-expanded={menuOpen}
+                className="text-white/30 hover:text-white text-[11px] opacity-40 hover:opacity-100 transition-opacity px-1"
+              >
+                ⋯
+              </button>
+              {menuOpen && (
+                <>
+                  {/* Calque de fermeture : un clic n'importe où referme, comme
+                      les autres feuilles de l'app. */}
+                  <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                  <div className="absolute z-50 bottom-full mb-1 left-0 min-w-[160px] chat-tile rounded-xl overflow-hidden border border-white/10">
+                    {onReport && (
+                      <button
+                        onClick={() => { setMenuOpen(false); onReport(msg); }}
+                        className="w-full text-left px-3 py-2.5 text-[11px] text-white/80 active:bg-white/5 border-b border-white/5"
+                      >
+                        🚩 {t("chat.report")}
+                      </button>
+                    )}
+                    {onBlock && (
+                      <button
+                        onClick={() => { setMenuOpen(false); onBlock(msg); }}
+                        className="w-full text-left px-3 py-2.5 text-[11px] text-red-400 active:bg-white/5"
+                      >
+                        🚫 {t("chat.blockUser")}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
 

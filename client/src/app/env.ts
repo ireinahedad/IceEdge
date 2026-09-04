@@ -78,6 +78,12 @@ function serverOrigin(url: string): string {
   return url.replace(/\/api(\/.*)?$/, '');
 }
 
+/**
+ * Used when `VITE_SUPPORT_EMAIL` is not set. Change it here AND in
+ * `server/src/services/email.service.ts`, which carries the same fallback.
+ */
+const SUPPORT_EMAIL_FALLBACK = 'support@arakice.com';
+
 const nhlApiUrl        = requiredUrl('VITE_NHL_API_URL',        import.meta.env.VITE_NHL_API_URL);
 const predictionApiUrl = requiredUrl('VITE_PREDICTION_API_URL', import.meta.env.VITE_PREDICTION_API_URL);
 const profileApiUrl    = requiredUrl('VITE_PROFILE_API_URL',    import.meta.env.VITE_PROFILE_API_URL);
@@ -109,6 +115,27 @@ export const env = {
   /** Optional public affiliate codes; the links work untracked without them. */
   bet365AffiliateCode: optional(import.meta.env.VITE_BET365_AFFILIATE_CODE),
   stakeAffiliateCode: optional(import.meta.env.VITE_STAKE_AFFILIATE_CODE),
+
+  /**
+   * Published support address — PRE_IOS_PLAN.md R4.0.
+   *
+   * This is not decoration. Guideline 1.2 requires published contact info for
+   * abuse reports, it is the support URL contact on the App Store listing, and
+   * it is how Apple reaches you. It appears on Support, Privacy and Terms, and
+   * the server sends it in outgoing mail (`SUPPORT_EMAIL` there — a static
+   * bundle is built by Vercel and the API runs on Railway, so each side reads
+   * its own variable; the alternative was a network call for a mailto link).
+   *
+   * Optional with a fallback, unlike the four URLs above, and deliberately so:
+   * making it required would fail the next deploy until the variable exists in
+   * both dashboards. The fallback is the address this project already intends
+   * to use, on a domain we control — it replaces a dead Gmail nobody can open,
+   * and the day `VITE_SUPPORT_EMAIL` is set it wins.
+   *
+   * ⚠️ The fallback bounces until the Cloudflare/Vercel email route exists. A
+   * bounce tells the sender; the mailbox it replaces silently swallowed mail.
+   */
+  supportEmail: optional(import.meta.env.VITE_SUPPORT_EMAIL) ?? SUPPORT_EMAIL_FALLBACK,
 } as const;
 
 /**

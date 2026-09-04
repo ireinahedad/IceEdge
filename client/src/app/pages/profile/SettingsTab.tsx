@@ -6,7 +6,7 @@
  * seuls les imports et les mots-clés `export` ont été ajoutés.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -19,6 +19,7 @@ import type { UserProfile } from "./../../types/user";
 import { InjuriesAdminCard } from "../../components/InjuriesAdminCard";
 import { useI18n } from "../../i18n";
 import { useBookmaker } from "../../context/BookmakerContext";
+import { useBlocks } from "../../context/BlockContext";
 import { features } from "../../platform";
 import { DotLoader, InputBox, ToggleSwitch, UserAvatar } from "./ProfileParts";
 
@@ -49,6 +50,25 @@ export function SettingsTab({
   const [cancelingSub, setCancelingSub] = useState(false);
   const [confirmCancelSub, setConfirmCancelSub] = useState(false);
   const [confirmLogoutAll, setConfirmLogoutAll] = useState(false);
+
+  // ── Utilisateurs bloqués (R4.3e) ────────────────────────────────────────
+  // L'état vit dans BlockContext, partagé avec le chat : débloquer ici fait
+  // réapparaître les messages là-bas sans rechargement.
+  const { blocked, ensureLoaded, unblock, loading: blocksLoading, error: blocksError } = useBlocks();
+  const [unblocking, setUnblocking] = useState<string | null>(null);
+  useEffect(() => { ensureLoaded(); }, [ensureLoaded]);
+
+  async function handleUnblock(userId: string, name: string) {
+    setUnblocking(userId);
+    try {
+      await unblock(userId);
+      toast.success(t("block.unblockDone", { name }));
+    } catch (e: any) {
+      toast.error(e?.message ?? t("block.unblockFailed"));
+    } finally {
+      setUnblocking(null);
+    }
+  }
 
   async function handleCancelSub() {
     setConfirmCancelSub(false);
@@ -489,6 +509,46 @@ export function SettingsTab({
           </div>
           <ToggleSwitch checked={!showSlips} onChange={() => setShowSlips((v) => !v)} fontSize={12} />
         </div>
+      </div>
+
+      {/* Utilisateurs bloqués — R4.3e.
+          Apple vérifie qu'un blocage est RÉVERSIBLE : il faut donc un endroit
+          où l'on voit qui l'on a bloqué et où on le défait. La carte reste
+          affichée même vide, sinon on ne peut pas vérifier qu'on n'a bloqué
+          personne — une carte qui disparaît ressemble à une fonction cassée. */}
+      <div className="icy-card rounded-2xl p-4 flex flex-col gap-2">
+        <p className="text-white text-xs font-medium">{t("blocked.title")}</p>
+        <p className="text-white/40 text-[9px]">{t("blocked.hint")}</p>
+        {blocksError ? (
+          <p className="text-red-400 text-[10px] mt-1">{t("blocked.loadFailed")}</p>
+        ) : blocksLoading ? (
+          <DotLoader />
+        ) : blocked.length === 0 ? (
+          <p className="text-white/40 text-[10px] mt-1">{t("blocked.empty")}</p>
+        ) : (
+          <div className="flex flex-col gap-1 mt-1">
+            {blocked.map((b) => (
+              <div key={b.id} className="flex items-center gap-2.5 py-1.5">
+                <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-xs flex-shrink-0 overflow-hidden">
+                  {b.avatarUrl
+                    ? <img src={b.avatarUrl} alt="" className="w-full h-full object-cover rounded-full" />
+                    : b.avatar}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-[11px] truncate">{b.displayName}</p>
+                  <p className="text-white/40 text-[9px] truncate">@{b.username}</p>
+                </div>
+                <button
+                  onClick={() => handleUnblock(b.id, b.displayName || b.username)}
+                  disabled={unblocking === b.id}
+                  className="text-[#86d1ea] text-[10px] font-semibold border border-[#86d1ea]/30 rounded-lg px-2.5 py-1 disabled:opacity-50 flex-shrink-0"
+                >
+                  {unblocking === b.id ? "…" : t("blocked.unblock")}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Security */}

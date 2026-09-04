@@ -15,6 +15,27 @@ import { logger } from '../logger';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
+/**
+ * Adresse de support publiée (PRE_IOS_PLAN.md R4.0).
+ *
+ * Elle part dans les e-mails sortants, et le client l'affiche sur Support,
+ * Confidentialité et Conditions. ⚠️ Le CLIENT lit sa propre variable
+ * `VITE_SUPPORT_EMAIL` (`client/src/app/env.ts`) : c'est un bundle statique
+ * construit par Vercel alors que l'API tourne sur Railway, donc chaque côté a
+ * sa copie. Les deux doivent porter la MÊME adresse, sinon les pages et les
+ * e-mails ne racontent pas la même chose.
+ *
+ * Repli plutôt qu'obligation : rendre la variable obligatoire ferait échouer un
+ * déploiement tant qu'elle n'est pas posée des deux côtés. Le repli est
+ * l'adresse que ce projet prévoit d'utiliser, sur un domaine qu'on contrôle —
+ * il remplace un Gmail mort que personne ne peut ouvrir. ⚠️ Il rebondit tant
+ * que la redirection Cloudflare/Vercel n'existe pas ; un rebond prévient au
+ * moins l'expéditeur, contrairement à la boîte qu'il remplace.
+ *
+ * Le repli est dupliqué dans `client/src/app/env.ts` — changer les deux.
+ */
+const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL?.trim() || 'support@arakice.com';
+
 function getConfig() {
   const apiKey = process.env.RESEND_API_KEY;
   const from   = process.env.RESEND_FROM || 'ArakIce <onboarding@resend.dev>';
@@ -121,7 +142,7 @@ export async function sendSlipsVisibilityNotice(
       <a href="${settingsUrl}" style="display:inline-block;padding:12px 20px;background:#9BF019;color:#0A0E0C;font-weight:700;font-size:14px;text-decoration:none;border-radius:10px">Gérer la visibilité de mes coupons</a>
     </p>
 
-    <p style="margin:0;color:#92A08A;font-size:13px">Vous pouvez changer d'avis à tout moment dans Paramètres → Confidentialité. Une question&nbsp;? Écrivez-nous à arakice.support@gmail.com.</p>
+    <p style="margin:0;color:#92A08A;font-size:13px">Vous pouvez changer d'avis à tout moment dans Paramètres → Confidentialité. Une question&nbsp;? Écrivez-nous à ${SUPPORT_EMAIL}.</p>
   </div>`;
 
   const text =
@@ -134,7 +155,7 @@ export async function sendSlipsVisibilityNotice(
     `Si vous préférez garder vos coupons pour vous, vous pouvez vous retirer dès maintenant. Cela masque tout votre historique d'un coup et n'affecte pas votre rang au classement :\n` +
     `${settingsUrl}\n\n` +
     `Vous pouvez changer d'avis à tout moment dans Paramètres → Confidentialité.\n` +
-    `Une question ? arakice.support@gmail.com`;
+    `Une question ? ${SUPPORT_EMAIL}`;
 
   await sendEmail({ to, subject, html, text });
 }

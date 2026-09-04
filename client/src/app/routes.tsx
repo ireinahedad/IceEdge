@@ -28,6 +28,12 @@ const AuthCallback          = features.googleLogin ? lazy(() => import("./pages/
 const NHLPredictionsPage    = lazy(() => import("./pages/NHLPredictionsPage").then(m => ({ default: m.NHLPredictionsPage })));
 const SharePage             = lazy(() => import("./pages/SharePage").then(m => ({ default: m.SharePage })));
 const DevMLDashboard        = lazy(() => import("./pages/DevMLDashboard").then(m => ({ default: m.DevMLDashboard })));
+// R4.2h-UI — la file de modération. Même liaison conditionnelle que les autres
+// routes dev : `lazy()` s'exécute au niveau du module, donc seul un `null` ici
+// empêche Rollup d'émettre le chunk dans le bundle iOS (voir R2).
+const ModerationQueuePage   = features.devRoutes
+  ? lazy(() => import("./pages/ModerationQueuePage").then(m => ({ default: m.ModerationQueuePage })))
+  : null;
 const ProPage               = lazy(() => import("./pages/ProPage").then(m => ({ default: m.ProPage })));
 const ProSuccessPage        = lazy(() => import("./pages/ProSuccessPage").then(m => ({ default: m.ProSuccessPage })));
 const TermsPage             = lazy(() => import("./pages/TermsPage").then(m => ({ default: m.TermsPage })));
@@ -115,8 +121,11 @@ export const router = createBrowserRouter([
       { path: "/pro",                                element: withSuspense(<Protected><ProPage /></Protected>)        },
       { path: "/pro/success",                        element: withSuspense(<Protected><ProSuccessPage /></Protected>) },
       // R17 — the ML dashboard is a developer tool, not a shippable screen.
-      ...(features.devRoutes
-        ? [{ path: "/dev/ml",                         element: withSuspense(<Protected><DevMLDashboard /></Protected>) }]
+      ...(features.devRoutes && ModerationQueuePage
+        ? [
+            { path: "/dev/ml",                        element: withSuspense(<Protected><DevMLDashboard /></Protected>) },
+            { path: "/dev/moderation",                element: withSuspense(<Protected><ModerationQueuePage /></Protected>) },
+          ]
         : []),
 
       // Catch-all — any unmatched URL lands on a friendly 404 instead of the

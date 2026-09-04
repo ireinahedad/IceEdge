@@ -1,11 +1,11 @@
 import { useNavigate } from "react-router";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
 import { useI18n } from "../i18n";
+import { env } from "../env";
 
 const CONTENT = {
   en: {
     intro: "Need help? Reach out and we'll get back to you as soon as possible.",
-    email: "arakice.support@gmail.com",
     faqTitle: "Frequently asked questions",
     faq: [
       { q: "How are predictions calculated?", a: "ArakIce combines statistical rules (recent form, head-to-head, home ice/court advantage) with a machine-learning model trained on historical results. Both are shown side by side so you can compare." },
@@ -16,7 +16,6 @@ const CONTENT = {
   },
   fr: {
     intro: "Besoin d'aide ? Écris-nous et nous te répondrons dans les meilleurs délais.",
-    email: "arakice.support@gmail.com",
     faqTitle: "Questions fréquentes",
     faq: [
       { q: "Comment les prédictions sont-elles calculées ?", a: "ArakIce combine des règles statistiques (forme récente, confrontations directes, avantage de la glace/du court) avec un modèle d'apprentissage automatique entraîné sur des résultats historiques. Les deux sont affichés côte à côte pour comparaison." },
@@ -41,8 +40,9 @@ export function SupportPage() {
       </div>
 
       <p className="text-[#bfc8cc] text-sm mb-4">{c.intro}</p>
-      <a href={`mailto:${c.email}`} className="text-sm font-bold mb-8 inline-block" style={{ color: "#86d1ea" }}>
-        {c.email}
+      {/* R4.0 — une seule source pour l'adresse : env.supportEmail. */}
+      <a href={`mailto:${env.supportEmail}`} className="text-sm font-bold mb-8 inline-block" style={{ color: "#86d1ea" }}>
+        {env.supportEmail}
       </a>
 
       <p className="text-white text-sm font-semibold mb-3">{c.faqTitle}</p>
