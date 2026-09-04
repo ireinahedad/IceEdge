@@ -106,7 +106,15 @@ export function SettingsTab({
   const [showSlips, setShowSlips] = useState(profile.showSlips ?? false);
   const [notifyValueBets, setNotifyValueBets] = useState(profile.notifyValueBets ?? false);
   const [minEvPct, setMinEvPct] = useState(profile.valueBetMinEvPct ?? 0);
-  const [openaiKey, setOpenaiKey] = useState(profile.openaiApiKey ?? "");
+  // La clé OpenAI est en écriture seule : le serveur ne renvoie que
+  // `hasOpenaiKey`, jamais la clé (voir `profile.service.getProfileById`). Le
+  // champ part donc toujours vide, et trois états décrivent l'intention de
+  // l'utilisateur — sinon « champ vide » voudrait dire à la fois « je n'ai pas
+  // de clé », « je n'y touche pas » et « efface-la ».
+  const [keyStored,  setKeyStored]  = useState(profile.hasOpenaiKey ?? false);
+  const [openaiKey,  setOpenaiKey]  = useState("");
+  const [editingKey, setEditingKey] = useState(!(profile.hasOpenaiKey ?? false));
+  const [removeKey,  setRemoveKey]  = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -131,6 +139,20 @@ export function SettingsTab({
     setSaveMsg(null);
     try {
       const newUsername = username.trim().toLowerCase();
+
+      // ⚠️ La clé n'est envoyée QUE si l'utilisateur en a saisi une nouvelle ou
+      // demandé son retrait. Le champ étant vide au chargement, l'inclure
+      // systématiquement — ce que faisait `openaiApiKey: openaiKey.trim() || null` —
+      // effacerait la clé enregistrée à chaque changement de bio.
+      // `''` et non `null` pour l'effacement : côté serveur, `null` ne touche
+      // pas à la colonne, précisément pour qu'un ancien bundle en cache — qui
+      // envoyait `openaiApiKey: null` à chaque enregistrement — ne puisse pas
+      // effacer la clé par accident pendant un déploiement.
+      const keyPatch =
+        removeKey          ? { openaiApiKey: '' } :
+        openaiKey.trim()   ? { openaiApiKey: openaiKey.trim() } :
+                             {};
+
       const updated = await profileApiService.updateProfile({
         ...(newUsername !== profile.username ? { username: newUsername } : {}),
         displayName: displayName.trim() || undefined,
@@ -140,9 +162,18 @@ export function SettingsTab({
         showSlips,
         notifyValueBets: isPro ? notifyValueBets : false,
         valueBetMinEvPct: isPro ? minEvPct : 0,
-        openaiApiKey: openaiKey.trim() || null,
+        ...keyPatch,
       });
       onSaved(updated);
+
+      // `onSaved` remonte le profil au parent, mais les `useState` ci-dessus ne
+      // se réinitialisent pas sur un changement de prop : c'est ici qu'on
+      // reflète ce qui vient d'être écrit.
+      if (removeKey) { setKeyStored(false); setEditingKey(true); }
+      else if (openaiKey.trim()) { setKeyStored(true); setEditingKey(false); }
+      setOpenaiKey("");
+      setRemoveKey(false);
+
       setSaveMsg("Saved!");
     } catch (err: any) {
       setSaveMsg(err.message ?? "Failed to save");
@@ -403,33 +434,77 @@ export function SettingsTab({
             </a>
           </p>
 
-          <div>
-            <label className="block text-white/50 text-[9px] uppercase tracking-wider mb-1">{t("profile.openaiKey")}</label>
-            <div className="relative">
-              <input
-                type={showKey ? "text" : "password"}
-                value={openaiKey}
-                onChange={(e) => setOpenaiKey(e.target.value)}
-                placeholder="sk-proj-..."
-                className={`w-full bg-black/20 border border-white/40 rounded-lg pl-2.5 pr-12 py-2 text-[11px] font-semibold placeholder-white/25 outline-none focus:border-[#90C9F0]/60 transition-colors ${mode === "light" ? "text-[#072E49]" : "text-[#90C9F0]"}`}
-              />
+          {/* Trois affichages, un par intention : une clé est en place et on n'y
+              touche pas · on va la retirer · on en saisit une. Le champ de
+              saisie n'existe que dans le dernier cas, ce qui rend impossible
+              l'envoi accidentel d'un champ vide. */}
+          {keyStored && !editingKey && !removeKey ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[#90C9F0] text-[11px] font-semibold">
+                🔒 {t("profile.keyStored")}
+              </span>
+              <p className="text-white/40 text-[10px] leading-relaxed">{t("profile.keyNotShown")}</p>
+              <div className="flex items-center gap-4 mt-0.5">
+                <button
+                  type="button"
+                  onClick={() => { setEditingKey(true); setShowKey(false); }}
+                  className="text-[#90C9F0] text-[11px] font-semibold py-1"
+                >
+                  {t("profile.replaceKey")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRemoveKey(true)}
+                  className="text-red-400 text-[11px] py-1 hover:text-red-300"
+                >
+                  {t("profile.removeKey")}
+                </button>
+              </div>
+            </div>
+          ) : removeKey ? (
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-red-400 text-[11px]">{t("profile.keyPendingRemoval")}</span>
               <button
                 type="button"
-                onClick={() => setShowKey((v) => !v)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#90C9F0] text-[10px]"
+                onClick={() => setRemoveKey(false)}
+                className="text-white/60 text-[11px] py-1"
               >
-                {showKey ? t("profile.hide") : t("profile.show")}
+                {t("common.cancel")}
               </button>
             </div>
-          </div>
-
-          {openaiKey && (
-            <button
-              onClick={() => setOpenaiKey("")}
-              className="text-red-400 text-[10px] self-start hover:text-red-300"
-            >
-              {t("profile.removeKey")}
-            </button>
+          ) : (
+            <div>
+              <label className="block text-white/50 text-[9px] uppercase tracking-wider mb-1">{t("profile.openaiKey")}</label>
+              <div className="relative">
+                <input
+                  type={showKey ? "text" : "password"}
+                  value={openaiKey}
+                  onChange={(e) => setOpenaiKey(e.target.value)}
+                  placeholder="sk-proj-..."
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className={`w-full bg-black/20 border border-white/40 rounded-lg pl-2.5 pr-12 py-2 text-[11px] font-semibold placeholder-white/25 outline-none focus:border-[#90C9F0]/60 transition-colors ${mode === "light" ? "text-[#072E49]" : "text-[#90C9F0]"}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey((v) => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#90C9F0] text-[10px]"
+                >
+                  {showKey ? t("profile.hide") : t("profile.show")}
+                </button>
+              </div>
+              {keyStored && (
+                <button
+                  type="button"
+                  onClick={() => { setEditingKey(false); setOpenaiKey(""); }}
+                  className="text-white/60 text-[11px] mt-2 py-1"
+                >
+                  {t("common.cancel")}
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}

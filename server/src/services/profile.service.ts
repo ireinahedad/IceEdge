@@ -1,5 +1,7 @@
 import { pool } from '../db/connection';
-import { encryptSecret, decryptSecret } from './crypto.util';
+// `decryptSecret` n'est plus importé ici : ce service ne déchiffre plus rien.
+// La seule lecture du clair vit dans `llm.routes.ts`, au moment de s'en servir.
+import { encryptSecret } from './crypto.util';
 import { TtlCache } from './ttlCache';
 import { logger } from '../logger';
 import { ruleWeightsSchema, type RuleWeightsMap } from '../validation/schemas';
@@ -81,7 +83,10 @@ export async function getProfileById(userId: string) {
             up.value_bet_min_ev_pct AS "valueBetMinEvPct",
             up.tier, up.performance_score AS "performanceScore",
             up.joined_at AS "joinedAt",
-            up.openai_api_key AS "openaiApiKey",
+            -- Le chiffré n'est PAS sélectionné : voir hasOpenaiKey plus bas.
+            -- Ne pas le remettre ici « pour simplifier » — le secret quitterait
+            -- de nouveau la base à chaque chargement de profil.
+            (up.openai_api_key IS NOT NULL) AS "hasOpenaiKey",
             up.rule_weights AS "ruleWeights"
      FROM users u
      JOIN user_profiles up ON up.user_id = u.id
@@ -108,8 +113,30 @@ export async function getProfileById(userId: string) {
     valueBetMinEvPct: profile.valueBetMinEvPct ?? 0,
     tier:             profile.tier,
     performanceScore: profile.performanceScore,
-    // Stored encrypted at rest — decrypt for the owner (legacy plaintext passes through).
-    openaiApiKey:     profile.openaiApiKey ? decryptSecret(profile.openaiApiKey) : null,
+    /**
+     * La clé OpenAI est en ÉCRITURE SEULE. On dit qu'il y en a une, jamais
+     * laquelle.
+     *
+     * Avant : `openaiApiKey: decryptSecret(profile.openaiApiKey)`. Le secret
+     * était chiffré au repos — précisément pour qu'une fuite de la base ne le
+     * livre pas — puis déchiffré et renvoyé EN ENTIER à chaque chargement du
+     * profil. Il traversait le réseau, atterrissait dans la mémoire JS de
+     * l'onglet, et devenait lisible par n'importe quelle extension de
+     * navigateur ou capture de trafic. Le chiffrement au repos ne protège pas
+     * grand-chose quand le clair ressort à la demande.
+     *
+     * Pas de « quatre derniers caractères » non plus, bien que ce soit l'usage :
+     * les calculer obligerait à déchiffrer à chaque lecture de profil. Un
+     * booléen se dérive en SQL, donc le chiffré ne quitte même pas la base pour
+     * cette requête. L'écran affiche « une clé est enregistrée » avec
+     * « Remplacer » et « Retirer », ce qui couvre tout ce qu'on peut vouloir en
+     * faire — on ne relit pas une clé d'API, on la remplace.
+     *
+     * L'écriture reste possible : `PATCH /users/me` accepte toujours
+     * `openaiApiKey` — une chaîne pour l'enregistrer, `''` pour l'effacer.
+     * `null` n'y touche pas (voir `updateProfile`).
+     */
+    hasOpenaiKey:     Boolean(profile.hasOpenaiKey),
     ruleWeights:      profile.ruleWeights ?? null,
     badges,
   };
@@ -192,7 +219,32 @@ export async function updateProfile(userId: string, updates: {
   }
   if (updates.avatar        !== undefined) { fields.push(`avatar = $${i++}`);           values.push(String(updates.avatar).slice(0, 20)); }
   if (updates.avatarUrl     !== undefined) { fields.push(`avatar_url = $${i++}`);       values.push(updates.avatarUrl); }
-  if (updates.openaiApiKey  !== undefined) { fields.push(`openai_api_key = $${i++}`);   values.push(updates.openaiApiKey == null ? null : encryptSecret(updates.openaiApiKey)); }
+  /**
+   * Trois valeurs, trois intentions — et `null` n'en est PAS une.
+   *
+   *   absent  → ne pas toucher à la colonne
+   *   `null`  → ne pas toucher à la colonne  ← voir ci-dessous
+   *   `''`    → effacer la clé
+   *   sinon   → chiffrer et écrire
+   *
+   * Pourquoi `null` est neutre plutôt qu'un effacement, alors que c'est le
+   * réflexe : depuis que la clé est en écriture seule, le champ du formulaire
+   * est vide au chargement. L'ancienne version de l'écran envoyait
+   * `openaiApiKey: openaiKey.trim() || null` à CHAQUE enregistrement de profil —
+   * donc un bundle client resté en cache pendant le déploiement effacerait la
+   * clé de son propriétaire dès qu'il modifie sa bio, en silence et sans retour
+   * possible. La fenêtre est étroite, la perte est définitive, et la refermer
+   * coûte cette ligne.
+   *
+   * L'effacement volontaire dit donc quelque chose que personne n'envoie par
+   * accident : la chaîne vide. C'est ce que l'écran envoie quand on clique
+   * « Retirer ».
+   */
+  if (updates.openaiApiKey !== undefined && updates.openaiApiKey !== null) {
+    const raw = updates.openaiApiKey;
+    fields.push(`openai_api_key = $${i++}`);
+    values.push(raw === '' ? null : encryptSecret(raw));
+  }
   if (updates.ruleWeights   !== undefined) {
     // Double barrière volontaire : la route valide déjà son corps
     // (`profileUpdateSchema`), mais ce service est aussi appelé directement —

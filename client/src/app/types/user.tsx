@@ -51,7 +51,13 @@ export interface UserProfile {
   valueBetMinEvPct?: number;
   tier: "rookie" | "analyst" | "sharp" | "legend";
   performanceScore: number;
-  openaiApiKey?: string | null;
+  /**
+   * Une clé OpenAI est-elle enregistrée sur ce compte ? Le serveur ne renvoie
+   * PAS la clé — il ne dit que son existence (voir `getProfileById`). Elle reste
+   * écrivable via `updateProfile`, d'où l'asymétrie assumée entre ce type et le
+   * type de mise à jour dans `userService`.
+   */
+  hasOpenaiKey?: boolean;
   /**
    * Pondération des règles rattachée au compte : famille de pari →
    * { idFacteur → poids 0-100 }. Miroir de `FamilyStore` côté

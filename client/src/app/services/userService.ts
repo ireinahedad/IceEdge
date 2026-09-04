@@ -218,8 +218,19 @@ export const profileApiService = {
   getPlayerSlips: (userId: string, limit = 25): Promise<PublicSlip[]> =>
     getOrThrow<PublicSlip[]>(`/users/${userId}/slips?limit=${limit}`),
 
+  /**
+   * `openaiApiKey` est en ÉCRITURE SEULE : il ne fait pas partie de
+   * `UserProfile` (le serveur ne renvoie que `hasOpenaiKey`), mais il reste
+   * acceptable en écriture — `null` efface la clé enregistrée.
+   *
+   * ⚠️ Ne l'envoie que si l'utilisateur a réellement saisi une nouvelle clé, ou
+   * demandé son retrait. L'inclure systématiquement dans un enregistrement de
+   * profil effacerait la clé stockée à chaque changement de bio, puisque le
+   * champ du formulaire est vide au chargement.
+   */
   updateProfile: (
-    updates: Partial<Pick<UserProfile, 'username' | 'displayName' | 'bio' | 'favoriteTeam' | 'isPublic' | 'showSlips' | 'notifyValueBets' | 'valueBetMinEvPct' | 'openaiApiKey' | 'ruleWeights' | 'avatar' | 'avatarUrl'>>
+    updates: Partial<Pick<UserProfile, 'username' | 'displayName' | 'bio' | 'favoriteTeam' | 'isPublic' | 'showSlips' | 'notifyValueBets' | 'valueBetMinEvPct' | 'ruleWeights' | 'avatar' | 'avatarUrl'>>
+      & { openaiApiKey?: string | null }
   ): Promise<UserProfile> =>
     patch<UserProfile>('/users/me', updates),
 

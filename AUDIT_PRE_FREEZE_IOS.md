@@ -3,7 +3,13 @@
 **Date :** 2026-09-04 · **Périmètre :** `client/` (52 k lignes TS/TSX), `server/` (TS/Express), `.github/`, config de build
 **Méthode :** lecture intégrale des routes, services, contextes et middlewares ; `tsc --noEmit` client + serveur (0 erreur) ; inspection de `dist/`, `public/`, CI, Dockerfile, CSP.
 
-> **Correctifs déjà appliqués** (7, non commités — voir § 9). Chaque finding corrigé porte la mention ✅ **CORRIGÉ**.
+> **État au 2026-09-04 — 10 correctifs appliqués.** Chaque finding traité porte
+> la mention ✅ **CORRIGÉ** et le détail de ce qui a été fait ; le tableau du § 9
+> les liste. Les 3 des 11 blocants encore ouverts sont en tête du § 10.
+>
+> **Vérification :** `tsc --noEmit` propre client et serveur · suite serveur
+> **287 tests, 25 fichiers** (48 ajoutés par ces correctifs) · migration 034
+> rejouée contre un Postgres 16 réel.
 
 ---
 
@@ -33,12 +39,19 @@
   - Un cas garde son message, délibérément : quand l'appel LLM est facturé sur la **clé OpenAI de l'utilisateur**, l'erreur du fournisseur parle de SA clé (« Incorrect API key provided ») et l'aide à corriger. Le nouveau champ `billedTo` sur `ProviderCall` fait la distinction ; sur le chemin Pro, facturé à l'opérateur, le message reste générique.
   - 15 tests de régression (`httpError.test.ts`), dont un qui rejoue la fuite réelle : `NHL API timeout (8000 ms) for https://api-web.nhle.com/v1/score/…` ne doit plus quitter le serveur — mais doit rester entier dans le journal.
 
-### 🟠 [HIGH] `GET /api/users/me` renvoie la clé OpenAI en clair
-**Fichier :** `server/src/services/profile.service.ts:112`
+### 🟠 [HIGH] `GET /api/users/me` renvoie la clé OpenAI en clair ✅ CORRIGÉ
+**Fichiers :** `server/src/services/profile.service.ts`, `client/src/app/pages/profile/SettingsTab.tsx`, `client/src/app/types/user.tsx`, `client/src/app/services/userService.ts`
 
 - **Problème :** `openaiApiKey: profile.openaiApiKey ? decryptSecret(...) : null`. La clé est chiffrée au repos (bien), puis **déchiffrée et renvoyée intégralement au client à chaque chargement de profil**.
 - **Impact :** la clé traverse le réseau à chaque montage du profil, vit dans la mémoire JS de l'onglet, et devient capturable par n'importe quelle extension, outil de débogage ou intégration analytique. Le chiffrement au repos ne protège plus grand-chose si le secret ressort à la demande.
-- **Solution recommandée :** renvoyer `hasOpenaiKey: boolean` + `openaiKeyLast4: string`. L'écran Paramètres affiche `sk-…a1b2` et un bouton « Remplacer » ; pour changer la clé on la ressaisit. `SettingsTab.tsx:109` (`useState(profile.openaiApiKey ?? "")`) devient `useState("")`.
+- **Solution appliquée (2026-09-04) :** la clé devient **en écriture seule**.
+  - Le SELECT du profil ne lit plus la colonne du tout : il calcule `(up.openai_api_key IS NOT NULL) AS "hasOpenaiKey"`. Le chiffré ne quitte donc même plus la base pour cette requête, et `profile.service` n'importe plus `decryptSecret` — la seule lecture du clair vit dans `llm.routes.ts`, au moment de s'en servir.
+  - **Pas de « quatre derniers caractères »**, contrairement à ce que je recommandais : les calculer obligerait à déchiffrer à chaque chargement de profil, donc à faire ressortir le secret de la base pour un gain d'affichage. L'écran dit « une clé est enregistrée » avec **Remplacer** et **Retirer** — on ne relit pas une clé d'API, on la remplace.
+  - **Le piège que ce correctif crée**, traité des deux côtés : le champ étant désormais vide au chargement, un `openaiApiKey: openaiKey.trim() || null` envoyé à chaque enregistrement **effacerait la clé dès qu'on modifie sa bio**.
+    - *Côté client* : la clé n'est transmise que si l'utilisateur en a saisi une nouvelle ou demandé le retrait ; sinon le champ est absent du PATCH.
+    - *Côté serveur* : `null` ne touche plus la colonne. Seule la chaîne vide efface. Un bundle client resté en cache pendant le déploiement — qui, lui, envoie `null` à chaque enregistrement — ne peut donc plus détruire la clé de son propriétaire. La fenêtre était étroite et la perte définitive ; la refermer coûtait une ligne.
+  - `UserProfile` perd `openaiApiKey` et gagne `hasOpenaiKey` ; le type de `updateProfile` le garde en écriture (`& { openaiApiKey?: string | null }`), ce qui rend l'asymétrie visible dans les types plutôt que dans un commentaire.
+  - 7 tests de régression (`profile.service.test.ts`), dont un qui vérifie **la requête SQL elle-même** : les assertions de forme passeraient encore si quelqu'un remettait `up.openai_api_key AS "openaiApiKey"` dans le SELECT en oubliant de le recopier dans l'objet rendu — le chiffré quitterait alors de nouveau la base, prêt à ressortir à la première ligne de débogage.
 
 ### 🟡 [MEDIUM] Google : `email_verified` n'est pas vérifié avant le rattachement de compte
 **Fichier :** `server/src/services/auth.service.ts` (`loginWithGoogle`)
@@ -399,14 +412,18 @@ Travail fait directement sur `master` dans `~/dev/ICEEDGE`, sans commit — à t
 | 7 | `client/src/app/components/brand/IceedgeLogo.tsx`, `client/public/sw.js`, 3 PNG générés | Logo 1,49 Mo → 8/24/49 ko avec `srcSet` |
 | 8 | `034_manual_data.sql`, `manualData.service.ts`, `manual.routes.ts`, `injuryStore/refereeStore/scratches/startingGoalies`, `nhlPredictions`, `featureEngineering`, `cleanup.service`, `app.ts`, `schemas.ts` + carte admin et service côté client | Saisie manuelle en base — les quatre facteurs morts en production revivent, et la saisie devient faisable depuis le téléphone |
 | 9 | `httpError.ts` *(nouveau)* + 12 fichiers, 93 handlers | Une seule règle de mise en forme des erreurs ; plus aucun message interne dans une réponse, et les 5xx enfin journalisés |
+| 10 | `profile.service.ts`, `SettingsTab.tsx`, `types/user.tsx`, `userService.ts`, `i18n` | Clé OpenAI en écriture seule — elle ne sort plus de la base, et elle ne s'efface plus par accident |
 
-`npx tsc --noEmit` passe sur le client **et** sur le serveur après ces changements, et la suite de tests serveur est verte : **280 tests, 24 fichiers** (dont 41 nouveaux — 25 pour la saisie manuelle, 15 pour la mise en forme des erreurs, 1 pour la faille CORS).
+`npx tsc --noEmit` passe sur le client **et** sur le serveur après ces changements, et la suite de tests serveur est verte : **287 tests, 25 fichiers** (dont 48 nouveaux — 25 pour la saisie manuelle, 15 pour la mise en forme des erreurs, 7 pour la clé OpenAI, 1 pour la faille CORS).
 
 ---
 
 ## 10. Résumé
 
 ### 🔴 À corriger absolument avant le freeze iOS
+
+**4 faits sur 11.** Les 7 restants sont tous côté iOS/App Store, sauf la
+migration à appliquer en production.
 
 | | Sujet | État |
 |---|---|---|
@@ -424,7 +441,7 @@ Travail fait directement sur `master` dans `~/dev/ICEEDGE`, sans commit — à t
 
 ### 🟠 Importants, peuvent attendre un peu
 
-Clé OpenAI renvoyée en clair · coupon non persisté · aucun timeout de requête ni bouton « Réessayer » · `autoComplete` pour le Trousseau iOS · message de chat échoué qui reste affiché · `email_verified` Google · `/api/predict/*` sans validation ni auth · jeton d'accès dans l'URL + Sentry sans `beforeSend` · erreurs transformées en états vides (Ligue) · 401 LLM confondu avec 401 de session · `/api/odds/live` qui sert des cotes fictives · `typecheck` client absent de la CI.
+Coupon non persisté · aucun timeout de requête ni bouton « Réessayer » · `autoComplete` pour le Trousseau iOS · message de chat échoué qui reste affiché · `email_verified` Google · `/api/predict/*` sans validation ni auth · jeton d'accès dans l'URL + Sentry sans `beforeSend` · erreurs transformées en états vides (Ligue) · 401 LLM confondu avec 401 de session · `/api/odds/live` qui sert des cotes fictives · `typecheck` client absent de la CI.
 
 ### 🟡 Améliorations recommandées
 
@@ -459,11 +476,12 @@ Le niveau de commentaire explicatif — pas « ce que fait le code » mais « po
 - [ ] Socket : resync de l'historique sur `connect`, écouteur `connect_error` avec refresh, affichage de `room_error`
 - [x] ~~Copier `src/data/*.json` dans `dist/`~~ → migré en base (034). **Reste :** appliquer la migration en prod avant de déployer le serveur
 - [ ] Vérifier `CORS_ORIGIN` en production et tester une preview Vercel après le déploiement du correctif CORS
+- [ ] Vérifier après déploiement que la carte admin (Profil → Paramètres → Saisie manuelle) affiche bien « une clé est enregistrée » et que modifier sa bio ne l'efface pas
 - [ ] Planifier `nativeStore` (`@capacitor/preferences`) pour la phase 3
 
 **Important**
-- [ ] Helper `sendError()` unique ; retirer `detail`, `raw` et le message `psql …` des réponses
-- [ ] `GET /users/me` : renvoyer `hasOpenaiKey` + `last4` au lieu de la clé
+- [x] ~~Helper `sendError()` unique ; retirer `detail`, `raw` et le message `psql …` des réponses~~ → `httpError.ts`, 93 handlers
+- [x] ~~`GET /users/me` : renvoyer `hasOpenaiKey` au lieu de la clé~~ (sans `last4` : le calculer imposerait de déchiffrer à chaque lecture)
 - [ ] Persister le coupon (`BetContext`) dans le stockage local
 - [ ] `AbortSignal.timeout(15000)` dans les helpers `request()` + boutons « Réessayer »
 - [ ] `autoComplete` sur tous les champs de `LoginPage`
@@ -475,6 +493,11 @@ Le niveau de commentaire explicatif — pas « ce que fait le code » mais « po
 - [ ] Supprimer `/api/odds/live` et `/api/odds/game/:gameId` (cotes fictives)
 - [ ] Ajouter `npm run typecheck` au job client de la CI
 - [ ] `git rm server/src/services/.fuse_hidden0000000e00000001`
+
+**Ordre de déploiement de ce qui est déjà fait**
+1. `npm run db:migrate:all` avec le `DATABASE_URL` de **production** (migration 034).
+2. Déployer le serveur. Avant l'étape 1, toutes les lectures de saisie manuelle retombent en neutre — avec un `warn` dans les journaux, plus en silence.
+3. Déployer le client. Aucun ordre imposé avec le serveur : un ancien bundle resté en cache affichera un champ de clé vide au lieu de la clé, et son `openaiApiKey: null` est désormais ignoré côté serveur — il ne peut plus rien effacer.
 
 **Avant de soumettre**
 - [ ] `npm audit` sur `client/` et `server/` (n'a pas pu tourner ici — le réseau du poste bloquait le registre)
