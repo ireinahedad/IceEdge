@@ -6,6 +6,7 @@ import {
   requireOwnerOrAdmin,
 } from '../middleware/auth.middleware';
 import { UpdateUserBody, UpdatePasswordBody } from '../types/user.type';
+import { sendError } from '../httpError';
 
 const router = Router();
 
@@ -21,7 +22,7 @@ router.get('/', requireRole('admin'), async (_req: Request, res: Response) => {
     const users = await UserService.getAllUsers();
     return res.json(users);
   } catch (err: any) {
-    return res.status(err.status ?? 500).json({ error: err.message });
+    return sendError(res, err);
   }
 });
 
@@ -43,7 +44,7 @@ router.get('/me/blocks', async (req: Request, res: Response) => {
   try {
     return res.json(await UserService.getBlockedUsers(req.user!.sub));
   } catch (err: any) {
-    return res.status(err.status ?? 500).json({ error: err.message });
+    return sendError(res, err);
   }
 });
 
@@ -53,7 +54,7 @@ router.post('/:userId/block', async (req: Request, res: Response) => {
     await UserService.blockUser(req.user!.sub, req.params.userId);
     return res.status(204).send();
   } catch (err: any) {
-    return res.status(err.status ?? 500).json({ error: err.message });
+    return sendError(res, err);
   }
 });
 
@@ -63,7 +64,7 @@ router.delete('/:userId/block', async (req: Request, res: Response) => {
     await UserService.unblockUser(req.user!.sub, req.params.userId);
     return res.status(204).send();
   } catch (err: any) {
-    return res.status(err.status ?? 500).json({ error: err.message });
+    return sendError(res, err);
   }
 });
 
@@ -76,7 +77,7 @@ router.get('/:id', requireOwnerOrAdmin, async (req: Request, res: Response) => {
     const user = await UserService.getUserById(req.params.id);
     return res.json(user);
   } catch (err: any) {
-    return res.status(err.status ?? 500).json({ error: err.message });
+    return sendError(res, err);
   }
 });
 
@@ -92,7 +93,7 @@ router.patch(
       const updated = await UserService.updateUser(req.params.id, req.body);
       return res.json(updated);
     } catch (err: any) {
-      return res.status(err.status ?? 500).json({ error: err.message });
+      return sendError(res, err);
     }
   },
 );
@@ -117,7 +118,7 @@ router.patch(
       await UserService.updatePassword(req.params.id, { current_password, new_password });
       return res.status(204).send();
     } catch (err: any) {
-      return res.status(err.status ?? 500).json({ error: err.message });
+      return sendError(res, err);
     }
   },
 );
@@ -131,7 +132,7 @@ router.delete('/:id', requireOwnerOrAdmin, async (req: Request, res: Response) =
     await UserService.deleteUser(req.params.id);
     return res.status(204).send();
   } catch (err: any) {
-    return res.status(err.status ?? 500).json({ error: err.message });
+    return sendError(res, err);
   }
 });
 

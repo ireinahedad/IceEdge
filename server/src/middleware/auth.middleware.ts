@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '../services/auth.service';
 import { isPro } from '../services/subscription.service';
 import { UserRole } from '../types/user.type';
+import { sendError } from '../httpError';
 
 // -------------------------------------------------------
 //  Require a valid JWT access token
@@ -20,7 +21,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
     req.user = verifyAccessToken(token);
     next();
   } catch (err: any) {
-    res.status(err.status ?? 401).json({ error: err.message });
+    sendError(res, err, { fallbackStatus: 401 });
   }
 }
 
@@ -48,7 +49,7 @@ export function optionalAuthenticate(req: Request, res: Response, next: NextFunc
     req.user = verifyAccessToken(token);
     next();
   } catch (err: any) {
-    res.status(err.status ?? 401).json({ error: err.message });
+    sendError(res, err, { fallbackStatus: 401 });
   }
 }
 
@@ -88,7 +89,7 @@ export async function requirePro(req: Request, res: Response, next: NextFunction
     }
     res.status(402).json({ error: 'Pro subscription required', code: 'PRO_REQUIRED' });
   } catch (err: any) {
-    res.status(err.status ?? 500).json({ error: err.message });
+    sendError(res, err);
   }
 }
 

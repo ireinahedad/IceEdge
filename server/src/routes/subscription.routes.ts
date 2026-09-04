@@ -3,6 +3,7 @@ import { authenticate } from '../middleware/auth.middleware';
 import { redeemLimiter } from '../middleware/rateLimit.middleware';
 import * as Subscriptions from '../services/subscription.service';
 import { logger } from '../logger';
+import { sendError } from '../httpError';
 
 const router = Router();
 
@@ -11,7 +12,7 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
   try {
     const status = await Subscriptions.getStatus(req.user!.sub);
     return res.json(status);
-  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { return sendError(res, err); }
 });
 
 // POST /subscription/checkout — start an upgrade.
@@ -34,7 +35,7 @@ router.post('/checkout', authenticate, async (req: Request, res: Response) => {
     // Dev / no-payment mode only.
     const status = await Subscriptions.activateProDev(req.user!.sub);
     return res.json({ devActivated: true, status });
-  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { return sendError(res, err); }
 });
 
 // POST /subscription/redeem — activate Pro with a promo code (no payment).
@@ -43,7 +44,7 @@ router.post('/redeem', authenticate, redeemLimiter, async (req: Request, res: Re
   try {
     const status = await Subscriptions.redeemPromo(req.user!.sub, req.body?.code);
     return res.json({ redeemed: true, status });
-  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { return sendError(res, err); }
 });
 
 // POST /subscription/trial — start the one-time 7-day free trial.
@@ -51,7 +52,7 @@ router.post('/trial', authenticate, async (req: Request, res: Response) => {
   try {
     const status = await Subscriptions.startTrial(req.user!.sub);
     return res.json(status);
-  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { return sendError(res, err); }
 });
 
 // POST /subscription/cancel — cancel at period end (keeps Pro until it lapses).
@@ -59,7 +60,7 @@ router.post('/cancel', authenticate, async (req: Request, res: Response) => {
   try {
     const status = await Subscriptions.cancel(req.user!.sub);
     return res.json(status);
-  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { return sendError(res, err); }
 });
 
 // POST /api/subscription/webhook — Stripe events (signature-verified).
@@ -73,9 +74,17 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
     );
     res.json({ received: true });
   } catch (err: any) {
-    // 400 → Stripe will retry. Log for visibility.
+    // `err.status ?? 400` était un piège : une erreur INATTENDUE (panne base,
+    // TypeError) n'a pas de `status`, retombait donc sur 400 — un code client —
+    // et son message repartait tel quel dans la réponse. C'est-à-dire que le
+    // seul chemin où le message avait le plus de chances d'être interne était
+    // aussi celui qui le laissait passer.
+    //
+    // Sans statut explicite, c'est donc 500. Stripe réessaie sur 5xx comme sur
+    // 4xx, rien n'est perdu ; ce qui change est que l'échec est visible comme
+    // une panne serveur au lieu d'un refus de signature.
     logger.error({ err: err?.message }, '[subscription] webhook error');
-    res.status(err.status ?? 400).json({ error: err.message });
+    sendError(res, err, { context: '[subscription] webhook' });
   }
 }
 

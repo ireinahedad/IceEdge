@@ -33,6 +33,7 @@ import {
 } from "../services/featureEngineering";
 import { getBestBets } from "../services/bestBets.service";
 import { logger } from "../logger";
+import { sendError } from "../httpError";
 
 const router = Router();
 
@@ -54,8 +55,7 @@ router.get("/best-bets", async (req: Request, res: Response) => {
     res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
     res.json(result);
   } catch (err: any) {
-    logger.error({ err: err.message }, "[predict/best-bets]");
-    res.status(500).json({ error: err.message ?? "Best bets failed" });
+    sendError(res, err, { context: '[predict/best-bets]', fallbackMessage: 'Best bets failed' });
   }
 });
 
@@ -286,8 +286,7 @@ router.post("/single", async (req: Request, res: Response) => {
       generatedAt: new Date().toISOString(),
     });
   } catch (err: any) {
-    logger.error({ err: err.message }, "[predict/single]");
-    res.status(500).json({ error: err.message ?? "Prediction failed" });
+    sendError(res, err, { context: '[predict/single]', fallbackMessage: 'Prediction failed' });
   }
 });
 
@@ -341,8 +340,7 @@ router.post("/factors", async (req: Request, res: Response) => {
 
     res.json({ basePct: 50, factors, finalPct });
   } catch (err: any) {
-    logger.error({ err: err.message }, "[predict/factors]");
-    res.status(500).json({ error: err.message ?? "Factors failed" });
+    sendError(res, err, { context: '[predict/factors]', fallbackMessage: 'Factors failed' });
   }
 });
 
@@ -399,8 +397,7 @@ router.post("/player-prop", async (req: Request, res: Response) => {
       betNote,
     });
   } catch (err: any) {
-    logger.error({ err: err.message }, "[predict/player-prop]");
-    res.status(500).json({ error: err.message ?? "Player prop failed" });
+    sendError(res, err, { context: '[predict/player-prop]', fallbackMessage: 'Player prop failed' });
   }
 });
 
@@ -425,8 +422,7 @@ router.post("/futures", async (req: Request, res: Response) => {
       betNote: `${teamName} ${propType} probability based on current standings.`,
     });
   } catch (err: any) {
-    logger.error({ err: err.message }, "[predict/futures]");
-    res.status(500).json({ error: err.message ?? "Futures failed" });
+    sendError(res, err, { context: '[predict/futures]', fallbackMessage: 'Futures failed' });
   }
 });
 
@@ -476,9 +472,15 @@ router.post('/ml', async (req: Request, res: Response) => {
 
     res.json(result);
   } catch (err: any) {
-    // ML service may be down — return 503 so frontend can silently hide the section
+    // ML service may be down — return 503 so frontend can silently hide the section.
+    //
+    // `detail: err.message` a été retiré : il portait l'adresse du service
+    // Python (« fetch failed for http://ml-internal:8000/predict/game ») droit
+    // dans le corps d'une réponse publique. Le client ne s'en servait pas — il
+    // masque simplement la section sur un 503 — et le message complet part
+    // maintenant dans les journaux, où il sert vraiment.
     logger.warn({ err: err.message }, '[predict/ml] ML service unavailable');
-    res.status(503).json({ error: 'ML service unavailable', detail: err.message });
+    res.status(503).json({ error: 'ML service unavailable' });
   }
 });
 

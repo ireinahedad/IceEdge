@@ -3,6 +3,7 @@ import { chatService } from '../services/chat.service';
 import { optionalAuthenticate } from '../middleware/auth.middleware';
 import { InMemoryRateLimitStore, RateLimitStore } from '../middleware/rateLimitStore';
 import { io } from '../socket';
+import { sendError } from '../httpError';
 
 const router = Router();
 
@@ -49,7 +50,7 @@ router.get('/rooms', async (req: Request, res: Response) => {
     res.json(userId
       ? await chatService.getRoomsForUser(userId)
       : await chatService.getPublicRooms());
-  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { sendError(res, err); }
 });
 
 // POST /api/chat/rooms — create (creator becomes admin) · max 5/5min
@@ -60,7 +61,7 @@ router.post('/rooms', rateLimit('create', 5, 5 * 60_000), async (req: Request, r
     res.status(201).json(await chatService.createRoom(uid(req), {
       name, icon: icon ?? '💬', description: description ?? '', isPrivate: !!isPrivate, color,
     }));
-  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { sendError(res, err); }
 });
 
 // GET /api/chat/rooms/lookup?code=ABC123 — search a room by join code · max 10/min (anti brute-force)
@@ -69,7 +70,7 @@ router.get('/rooms/lookup', rateLimit('code', 10, 60_000), async (req: Request, 
     const code = String(req.query.code ?? '');
     if (!code) return res.status(400).json({ error: 'code is required' });
     res.json(await chatService.findRoomByCode(code, uid(req)));
-  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { sendError(res, err); }
 });
 
 // POST /api/chat/rooms/join — join by code (public or private) · max 10/min (anti brute-force)
@@ -78,31 +79,31 @@ router.post('/rooms/join', rateLimit('code', 10, 60_000), async (req: Request, r
     const { code } = req.body;
     if (!code) return res.status(400).json({ error: 'code is required' });
     res.json(await chatService.joinRoom(uid(req), { code }));
-  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { sendError(res, err); }
 });
 
 // POST /api/chat/rooms/:roomId/join — join a public room directly
 router.post('/rooms/:roomId/join', async (req: Request, res: Response) => {
   try { res.json(await chatService.joinRoom(uid(req), { roomId: req.params.roomId })); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // POST /api/chat/rooms/:roomId/leave
 router.post('/rooms/:roomId/leave', async (req: Request, res: Response) => {
   try { await chatService.leaveRoom(req.params.roomId, uid(req)); res.status(204).send(); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // POST /api/chat/rooms/:roomId/pin  { pinned: boolean }
 router.post('/rooms/:roomId/pin', async (req: Request, res: Response) => {
   try { res.json(await chatService.setPinned(req.params.roomId, uid(req), !!req.body.pinned)); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // GET /api/chat/rooms/:roomId/members
 router.get('/rooms/:roomId/members', async (req: Request, res: Response) => {
   try { res.json(await chatService.getMembers(req.params.roomId, uid(req))); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // DELETE /api/chat/rooms/:roomId/members/:userId — admin kick
@@ -110,7 +111,7 @@ router.delete('/rooms/:roomId/members/:userId', async (req: Request, res: Respon
   try {
     await chatService.kickMember(req.params.roomId, uid(req), req.params.userId);
     res.status(204).send();
-  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { sendError(res, err); }
 });
 
 // POST /api/chat/rooms/:roomId/members/:userId/role  { role: 'admin' | 'member' }
@@ -118,7 +119,7 @@ router.post('/rooms/:roomId/members/:userId/role', async (req: Request, res: Res
   try {
     await chatService.setRole(req.params.roomId, uid(req), req.params.userId, req.body.role);
     res.status(204).send();
-  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { sendError(res, err); }
 });
 
 // DELETE /api/chat/rooms/:roomId — admin only
@@ -126,7 +127,7 @@ router.delete('/rooms/:roomId', async (req: Request, res: Response) => {
   try {
     await chatService.deleteRoom(req.params.roomId, uid(req));
     res.status(204).send();
-  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { sendError(res, err); }
 });
 
 // GET /api/chat/rooms/:roomId/messages — members (or public rooms). Guests may
@@ -137,7 +138,7 @@ router.get('/rooms/:roomId/messages', async (req: Request, res: Response) => {
     res.json(userId
       ? await chatService.getRoomMessages(req.params.roomId, userId)
       : await chatService.getPublicRoomMessages(req.params.roomId));
-  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { sendError(res, err); }
 });
 
 // POST /api/chat/rooms/:roomId/messages — identity derived server-side · max 10/10s
@@ -166,7 +167,7 @@ router.post('/rooms/:roomId/messages', rateLimit('msg', 10, 10_000), async (req:
     // nommés plutôt que vers la salle, en gardant la liste de blocage en mémoire
     // par connexion.
     try { io?.to(req.params.roomId).emit('new_message', msg); } catch { /* io not yet initialised */ }
-  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { sendError(res, err); }
 });
 
 // DELETE /api/chat/rooms/:roomId/messages/:messageId — own messages only
@@ -176,7 +177,7 @@ router.delete('/rooms/:roomId/messages/:messageId', async (req: Request, res: Re
     res.status(204).send();
     // Tell everyone in the room to drop the message in real time
     try { io?.to(req.params.roomId).emit('message_deleted', { messageId: req.params.messageId }); } catch { /* io not ready */ }
-  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { sendError(res, err); }
 });
 
 // POST /api/chat/rooms/:roomId/messages/:messageId/reactions · max 20/10s
@@ -186,7 +187,7 @@ router.post('/rooms/:roomId/messages/:messageId/reactions', rateLimit('react', 2
     if (!emoji) return res.status(400).json({ error: 'emoji is required' });
     await chatService.toggleReaction(req.params.roomId, req.params.messageId, uid(req), emoji);
     res.status(204).send();
-  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { sendError(res, err); }
 });
 
 // POST /api/chat/rooms/:roomId/messages/:messageId/report · max 10/5min
@@ -208,7 +209,7 @@ router.post('/rooms/:roomId/messages/:messageId/report', rateLimit('report', 10,
       req.params.roomId, req.params.messageId, uid(req), { reason, note },
     );
     res.status(201).json(result);
-  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { sendError(res, err); }
 });
 
 export default router;

@@ -17,7 +17,7 @@
 - **Solution appliquée :** la regex exige désormais le slug d'équipe (`-ireina-hedad-s-projects`), qui n'est pas attribuable à un tiers. Surchargeable par `VERCEL_TEAM_SLUG`. Le domaine de production reste déclaré explicitement dans `CORS_ORIGIN`.
 - **À faire de ton côté :** vérifier que `CORS_ORIGIN` contient bien `https://arakice.com` (+ `https://www.arakice.com` si utilisé) et tester une preview après déploiement.
 
-### 🟠 [HIGH] Fuite d'informations internes dans les réponses d'erreur
+### 🟠 [HIGH] Fuite d'informations internes dans les réponses d'erreur ✅ CORRIGÉ
 **Fichiers :** `ml.routes.ts`, `llm.routes.ts`, `odds.routes.ts`, `app.ts` (leaderboard), `auth.routes.ts`, `profile.routes.ts`, `chat.routes.ts`, `slip.routes.ts`
 
 - **Problème :** le handler d'erreur global d'`app.ts` masque correctement les 5xx en production (`'Internal server error'`). Mais **presque toutes les routes répondent elles-mêmes** avec `res.status(err.status ?? 500).json({ error: err.message })` — elles court-circuitent donc cette protection. Cas les plus parlants :
@@ -25,7 +25,13 @@
   - `POST /api/llm` → `message: 'Database migration 005 not applied. Run: psql -d IceedgeDB -f src/db/migrations/005_openai_key.sql'` (nom de base + arborescence)
   - `POST /api/llm` → relaie le corps d'erreur **brut** du fournisseur (`raw`), qui peut contenir des identifiants d'organisation
 - **Impact :** cartographie gratuite de ton infrastructure pour un attaquant. Aucune de ces chaînes n'aide un utilisateur.
-- **Solution recommandée :** un helper unique `sendError(res, err)` qui applique la même règle que le handler global (message réel pour 4xx, générique pour 5xx en prod) et l'utiliser partout. Supprimer `detail`, `raw` et le message de migration des réponses.
+- **Solution appliquée (2026-09-04) :** un module unique, `server/src/httpError.ts`, et **93 handlers réécrits**.
+  - `sendError(res, err)` applique la règle : 4xx → message tel quel (il est écrit pour être lu) ; 5xx → message fixe en production, vrai message en dev. Le gestionnaire global d'`app.ts` passe par la **même** fonction, donc il n'existe plus qu'une seule définition de « ce qu'on a le droit de dire ».
+  - **Les 5xx sont journalisés** avec le `request-id` de la requête. Masquer un message sans le garder aurait échangé une fuite contre un aveuglement — c'était le vrai risque de ce correctif.
+  - Le statut ne vient plus de `err.status ?? 500` naïvement : une valeur qui n'est pas un code HTTP valide (une erreur `pg` porte `code: '23505'`, un `AbortError` ne porte rien) retombe sur 500, donc sur le chemin muet. Le webhook Stripe faisait exactement l'inverse — `err.status ?? 400` transformait toute erreur inattendue en 4xx et lui rendait donc son message.
+  - Fuites nommées, supprimées : `detail` sur `/api/predict/ml` (adresse du service Python) et sur les 502/504 de `/api/llm` ; le message `psql -d IceedgeDB -f src/db/migrations/005_openai_key.sql` ; le corps d'erreur **brut** du fournisseur LLM (`raw`), qui pouvait être une page HTML avec des noms d'hôtes internes.
+  - Un cas garde son message, délibérément : quand l'appel LLM est facturé sur la **clé OpenAI de l'utilisateur**, l'erreur du fournisseur parle de SA clé (« Incorrect API key provided ») et l'aide à corriger. Le nouveau champ `billedTo` sur `ProviderCall` fait la distinction ; sur le chemin Pro, facturé à l'opérateur, le message reste générique.
+  - 15 tests de régression (`httpError.test.ts`), dont un qui rejoue la fuite réelle : `NHL API timeout (8000 ms) for https://api-web.nhle.com/v1/score/…` ne doit plus quitter le serveur — mais doit rester entier dans le journal.
 
 ### 🟠 [HIGH] `GET /api/users/me` renvoie la clé OpenAI en clair
 **Fichier :** `server/src/services/profile.service.ts:112`
@@ -392,8 +398,9 @@ Travail fait directement sur `master` dans `~/dev/ICEEDGE`, sans commit — à t
 | 6 | `client/src/app/context/BlockContext.tsx` | Réinitialisation au changement de compte (fuite de la liste de blocage) |
 | 7 | `client/src/app/components/brand/IceedgeLogo.tsx`, `client/public/sw.js`, 3 PNG générés | Logo 1,49 Mo → 8/24/49 ko avec `srcSet` |
 | 8 | `034_manual_data.sql`, `manualData.service.ts`, `manual.routes.ts`, `injuryStore/refereeStore/scratches/startingGoalies`, `nhlPredictions`, `featureEngineering`, `cleanup.service`, `app.ts`, `schemas.ts` + carte admin et service côté client | Saisie manuelle en base — les quatre facteurs morts en production revivent, et la saisie devient faisable depuis le téléphone |
+| 9 | `httpError.ts` *(nouveau)* + 12 fichiers, 93 handlers | Une seule règle de mise en forme des erreurs ; plus aucun message interne dans une réponse, et les 5xx enfin journalisés |
 
-`npx tsc --noEmit` passe sur le client **et** sur le serveur après ces changements, et la suite de tests serveur est verte : **265 tests, 23 fichiers** (dont 26 nouveaux — 25 pour la saisie manuelle, 1 pour la faille CORS).
+`npx tsc --noEmit` passe sur le client **et** sur le serveur après ces changements, et la suite de tests serveur est verte : **280 tests, 24 fichiers** (dont 41 nouveaux — 25 pour la saisie manuelle, 15 pour la mise en forme des erreurs, 1 pour la faille CORS).
 
 ---
 
@@ -417,7 +424,7 @@ Travail fait directement sur `master` dans `~/dev/ICEEDGE`, sans commit — à t
 
 ### 🟠 Importants, peuvent attendre un peu
 
-Fuite d'infos dans les erreurs (helper unique) · clé OpenAI renvoyée en clair · coupon non persisté · aucun timeout de requête ni bouton « Réessayer » · `autoComplete` pour le Trousseau iOS · message de chat échoué qui reste affiché · `email_verified` Google · `/api/predict/*` sans validation ni auth · jeton d'accès dans l'URL + Sentry sans `beforeSend` · erreurs transformées en états vides (Ligue) · 401 LLM confondu avec 401 de session · `/api/odds/live` qui sert des cotes fictives · `typecheck` client absent de la CI.
+Clé OpenAI renvoyée en clair · coupon non persisté · aucun timeout de requête ni bouton « Réessayer » · `autoComplete` pour le Trousseau iOS · message de chat échoué qui reste affiché · `email_verified` Google · `/api/predict/*` sans validation ni auth · jeton d'accès dans l'URL + Sentry sans `beforeSend` · erreurs transformées en états vides (Ligue) · 401 LLM confondu avec 401 de session · `/api/odds/live` qui sert des cotes fictives · `typecheck` client absent de la CI.
 
 ### 🟡 Améliorations recommandées
 

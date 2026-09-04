@@ -4,6 +4,7 @@ import { authenticate, requirePro } from '../middleware/auth.middleware';
 import { validateBody } from '../middleware/validate.middleware';
 import { avatarSchema, profileUpdateSchema } from '../validation/schemas';
 import { uploadAvatar, deleteAvatarByUrl } from '../services/avatarStorage';
+import { sendError } from '../httpError';
 
 const router = Router();
 
@@ -17,7 +18,7 @@ router.get('/search', authenticate, async (req: Request, res: Response) => {
     if (q.trim().length < 2) return res.json([]);
     res.json(await ProfileService.searchUsers(q));
   } catch (err: any) {
-    res.status(err.status ?? 500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -38,7 +39,7 @@ router.get('/:userId/summary', authenticate, requireProForOthers, async (req: Re
     if (!viewerId) return res.status(401).json({ error: 'Unauthorized' });
     res.json(await ProfileService.getPlayerSummary(req.params.userId, viewerId));
   } catch (err: any) {
-    res.status(err.status ?? 500).json({ error: err.message, code: err.code });
+    sendError(res, err);
   }
 });
 
@@ -50,7 +51,7 @@ router.get('/:userId/slips', authenticate, requireProForOthers, async (req: Requ
     const limit = Number(req.query.limit) || 25;
     res.json(await ProfileService.getPublicSlips(req.params.userId, viewerId, limit));
   } catch (err: any) {
-    res.status(err.status ?? 500).json({ error: err.message, code: err.code });
+    sendError(res, err);
   }
 });
 
@@ -61,7 +62,7 @@ router.get('/me', async (req: Request, res: Response) => {
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     res.json(await ProfileService.getProfileById(userId));
   } catch (err: any) {
-    res.status(err.status ?? 500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -72,7 +73,7 @@ router.get('/me/bets', async (req: Request, res: Response) => {
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     res.json(await ProfileService.getBetHistory(userId));
   } catch (err: any) {
-    res.status(err.status ?? 500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -83,7 +84,7 @@ router.get('/me/stats', async (req: Request, res: Response) => {
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     res.json(await ProfileService.getBettingStats(userId));
   } catch (err: any) {
-    res.status(err.status ?? 500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -99,7 +100,7 @@ router.patch('/me', validateBody(profileUpdateSchema), async (req: Request, res:
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     res.json(await ProfileService.updateProfile(userId, req.body));
   } catch (err: any) {
-    res.status(err.status ?? 500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -130,7 +131,7 @@ router.post('/me/avatar', validateBody(avatarSchema), async (req: Request, res: 
 
     res.json({ avatarUrl: updated.avatarUrl });
   } catch (err: any) {
-    res.status(err.status ?? 500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 

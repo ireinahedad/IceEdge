@@ -13,6 +13,7 @@ import {
   VerifyEmailBody, ResendVerificationBody,
   ForgotPasswordBody, ResetPasswordBody,
 } from '../types/user.type';
+import { sendError } from '../httpError';
 
 const router = Router();
 
@@ -129,7 +130,7 @@ router.post('/register', validateBody(registerSchema), async (req: Request<{}, {
     }
     // Verification bypassed → logged in immediately.
     return res.status(201).json({ user: result.user, tokens: sendTokens(req, res, result.tokens) });
-  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { return sendError(res, err); }
 });
 
 // POST /auth/verify-email — confirms the code, then logs the user in.
@@ -140,7 +141,7 @@ router.post('/verify-email', validateBody(verifyEmailSchema), async (req: Reques
       return res.status(400).json({ error: 'email and code are required' });
     const result = await AuthService.verifyEmail(email, code);
     return res.status(200).json({ user: result.user, tokens: sendTokens(req, res, result.tokens) });
-  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { return sendError(res, err); }
 });
 
 // POST /auth/resend-verification — sends a fresh code (always 200 to avoid enumeration).
@@ -150,7 +151,7 @@ router.post('/resend-verification', passwordResetLimiter, validateBody(resendVer
     if (!email) return res.status(400).json({ error: 'email is required' });
     await AuthService.resendVerification(email);
     return res.status(200).json({ ok: true });
-  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { return sendError(res, err); }
 });
 
 // POST /auth/forgot-password — emails a reset code (always 200 to avoid enumeration).
@@ -160,7 +161,7 @@ router.post('/forgot-password', passwordResetLimiter, validateBody(forgotPasswor
     if (!email) return res.status(400).json({ error: 'email is required' });
     await AuthService.forgotPassword(email);
     return res.status(200).json({ ok: true });
-  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { return sendError(res, err); }
 });
 
 // POST /auth/reset-password — validates the code and sets a new password.
@@ -173,7 +174,7 @@ router.post('/reset-password', validateBody(resetPasswordSchema), async (req: Re
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     await AuthService.resetPassword(email, code, new_password);
     return res.status(200).json({ ok: true });
-  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { return sendError(res, err); }
 });
 
 // POST /auth/login
@@ -187,9 +188,13 @@ router.post('/login', validateBody(loginSchema), async (req: Request<{}, {}, Log
   } catch (err: any) {
     // Surface the "not verified" case so the client can prompt for the code.
     if (err.code === 'EMAIL_NOT_VERIFIED') {
-      return res.status(403).json({ error: err.message, code: err.code, email: err.email });
+      // 403 + `code` + `email` : le client en a besoin pour enchaîner sur la
+      // saisie du code de confirmation. `code` passe tout seul, `email` est un
+      // extra explicite — l'erreur le porte, mais rien ne doit sortir d'une
+      // erreur par défaut.
+      return sendError(res, err, { fallbackStatus: 403, extra: { email: err.email } });
     }
-    return res.status(err.status ?? 500).json({ error: err.message });
+    return sendError(res, err);
   }
 });
 
@@ -203,7 +208,7 @@ router.post('/refresh', async (req: Request<{}, {}, RefreshBody>, res: Response)
     return res.status(200).json(sendTokens(req, res, tokens));
   } catch (err: any) {
     clearRefreshCookie(res);
-    return res.status(err.status ?? 500).json({ error: err.message });
+    return sendError(res, err);
   }
 });
 
@@ -214,7 +219,7 @@ router.post('/logout', authenticate, async (req: Request<{}, {}, RefreshBody>, r
     if (raw) await AuthService.logout(raw); // revoke in DB
     clearRefreshCookie(res);
     return res.status(204).send();
-  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { return sendError(res, err); }
 });
 
 // POST /auth/logout-all — revoke every refresh token for the current user
@@ -224,7 +229,7 @@ router.post('/logout-all', authenticate, async (req: Request, res: Response) => 
     await AuthService.logoutAll(req.user!.sub);
     clearRefreshCookie(res); // also drop this device's cookie
     return res.status(204).send();
-  } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { return sendError(res, err); }
 });
 
 // GET /auth/me

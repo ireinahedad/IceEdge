@@ -4,6 +4,7 @@ import { buildGameMarkets, buildTeamMarkets, buildPlayerMarkets } from '../servi
 import { FactorWeights } from '../services/predictionFactors';
 import { publicCache, privateCache, publicPolicy, TTL } from '../middleware/httpCache.middleware';
 import { staleFallback } from '../middleware/staleFallback.middleware';
+import { sendError } from '../httpError';
 
 const router = Router();
 const nhl    = new NHLService();
@@ -58,7 +59,7 @@ router.get('/games', publicCache(TTL.LIVE), async (req, res) => {
     cacheByGameStatus(res, games);
     res.json(games);
   }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // Calendrier : tous les matchs entre deux dates (YYYY-MM-DD) incluses.
@@ -79,18 +80,18 @@ router.get('/games/range', publicCache(TTL.MEDIUM), async (req, res) => {
     cacheByGameStatus(res, games);
     res.json(games);
   }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // Ancre du calendrier : date courante + bornes de saison selon l'API NHL.
 router.get('/schedule/anchor', publicCache(TTL.HOUR), async (_req, res) => {
   try { res.json(await nhl.getScheduleAnchor()); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 router.get('/games/live', publicCache(TTL.LIVE), async (_req, res) => {
   try { res.json(await nhl.getLiveGames()); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // Charts: full detail for one game (landing + boxscore merged).
@@ -101,7 +102,7 @@ router.get('/games/:id/detail', publicCache(TTL.LIVE), async (req, res) => {
     cacheByGameStatus(res, detail);
     res.json(detail);
   }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // Contrairement aux autres, `fetchGameById` n'a AUCUN cache serveur : chaque
@@ -114,13 +115,13 @@ router.get('/games/:id', publicCache(TTL.LIVE), async (req, res) => {
     cacheByGameStatus(res, game);
     res.json(game);
   }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // Teams
 router.get('/teams', publicCache(TTL.SHORT), async (_req, res) => {
   try { res.json(await nhl.getTeams()); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // Charts: every team's season summary (All Teams page). Declared before the
@@ -132,17 +133,17 @@ router.get('/teams/season-summary', publicCache(TTL.LONG), async (req, res) => {
     return;
   }
   try { res.json(await nhl.getAllTeamsSeason(season)); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 router.get('/teams/:id/stats', publicCache(TTL.SHORT), async (req, res) => {
   try { res.json(await nhl.getTeamStats(req.params.id)); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 router.get('/teams/:id/last/:n', publicCache(TTL.SHORT), async (req, res) => {
   try { res.json(await nhl.getTeamLastNGames(req.params.id, parseInt(req.params.n))); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // Players
@@ -152,12 +153,12 @@ router.get('/teams/:id/last/:n', publicCache(TTL.SHORT), async (req, res) => {
 // une trace de navigation, rien qui doive dormir dans un cache partagé.
 router.get('/players/search', privateCache(TTL.SHORT), async (req, res) => {
   try { res.json(await nhl.searchPlayers(req.query.q as string ?? '')); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 router.get('/players', publicCache(TTL.MEDIUM), async (_req, res) => {
   try { res.json(await nhl.getAllPlayerStats()); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // Charts: league leaders for a season (top N by a chosen metric).
@@ -187,18 +188,18 @@ router.get('/players/leaders', publicCache(TTL.LONG), async (req, res) => {
   const p = parseLeaderQuery(req.query);
   if (!p.ok) { res.status(400).json(BAD_SEASON); return; }
   try { res.json(await nhl.getPlayerLeaders(p.season, p.view, p.sort, p.limit)); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 router.get('/teams/:abbr/roster', publicCache(TTL.LONG), async (req, res) => {
   try { res.json(await nhl.getTeamRoster(req.params.abbr)); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // Bet365-style charts: last 6 seasons of per-player stats (skaters + goalies).
 router.get('/teams/:abbr/player-seasons', publicCache(TTL.LONG), async (req, res) => {
   try { res.json(await nhl.getTeamPlayerSeasons(req.params.abbr)); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // Charts: per-opponent player splits for a season (avg-per-game-vs-team column).
@@ -208,7 +209,7 @@ router.get('/teams/:abbr/opponent-splits/:season', publicCache(TTL.LONG), async 
     return;
   }
   try { res.json(await nhl.getTeamOpponentSplits(req.params.abbr, req.params.season)); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // Charts: official team stats for a season + per-opponent GF/GA/W from schedule.
@@ -218,19 +219,19 @@ router.get('/teams/:abbr/season-official/:season', publicCache(TTL.LONG), async 
     return;
   }
   try { res.json(await nhl.getTeamSeasonOfficial(req.params.abbr, req.params.season)); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // Comme `/games/:id`, `fetchPlayerById` n'a pas de cache serveur : l'en-tête
 // HTTP est le seul cache de ces deux routes.
 router.get('/players/:id', publicCache(TTL.MEDIUM), async (req, res) => {
   try { res.json(await nhl.getPlayer(req.params.id)); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 router.get('/players/:id/stats', publicCache(TTL.MEDIUM), async (req, res) => {
   try { res.json(await nhl.getPlayerStats(req.params.id)); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // Parse les poids personnalisés depuis la query (?wQuality=&wHomeIce=&...).
@@ -256,23 +257,23 @@ function parseWeights(q: any): FactorWeights | undefined {
 // 5 min : les données sources (équipes, joueurs) ne bougent pas plus vite.
 router.get('/predictions/game/:gameId', publicCache(TTL.SHORT), async (req, res) => {
   try { res.json(await buildGameMarkets(req.params.gameId, parseWeights(req.query))); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 router.get('/predictions/team/:abbr', publicCache(TTL.SHORT), async (req, res) => {
   try { res.json(await buildTeamMarkets(req.params.abbr)); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 router.get('/predictions/player/:playerId', publicCache(TTL.SHORT), async (req, res) => {
   try { res.json(await buildPlayerMarkets(req.params.playerId)); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // Standings — dérivé de `fetchTeams` (TTL serveur 5 min).
 router.get('/standings', publicCache(TTL.SHORT), async (_req, res) => {
   try { res.json(await nhl.getStandings()); }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 export default router;

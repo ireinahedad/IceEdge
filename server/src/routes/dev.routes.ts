@@ -25,6 +25,7 @@ import {
 import { snapshotMetrics, resetMetrics } from '../metrics';
 import { chatService } from '../services/chat.service';
 import { pool } from '../db/connection';
+import { sendError } from '../httpError';
 
 const router = Router();
 
@@ -77,7 +78,7 @@ router.get('/ml-info', async (_req: Request, res: Response) => {
       retrieved_at: new Date().toISOString(),
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -242,7 +243,7 @@ router.get('/data-health', async (_req: Request, res: Response) => {
       retrieved_at: new Date().toISOString(),
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -420,7 +421,7 @@ router.get('/live-performance', async (req: Request, res: Response) => {
       retrieved_at: new Date().toISOString(),
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -480,7 +481,7 @@ router.get('/reports', async (req: Request, res: Response) => {
   try {
     const limit = req.query.limit !== undefined ? Number(req.query.limit) : 100;
     res.json({ reports: await chatService.getOpenReports(limit) });
-  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { sendError(res, err); }
 });
 
 // POST /api/dev/reports/:id  { status: 'actioned' | 'dismissed' }
@@ -497,7 +498,7 @@ router.post('/reports/:id', async (req: Request, res: Response) => {
       Number(req.params.id), req.user!.sub, String(status),
     );
     res.json(result);
-  } catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  } catch (err: any) { sendError(res, err); }
 });
 
 export default router;

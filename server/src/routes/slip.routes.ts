@@ -5,6 +5,7 @@ import { slipSubmitSchema } from '../validation/schemas';
 import * as SlipService from '../services/slip.service';
 import { settlePendingSlips } from '../services/settlement.service';
 import { logger } from '../logger';
+import { sendError } from '../httpError';
 
 const router = Router();
 
@@ -24,7 +25,7 @@ router.post('/settle', async (req: Request, res: Response) => {
     res.json(summary);
   } catch (err: any) {
     logger.error({ err: err.message }, '[POST /api/slips/settle]');
-    res.status(err.status ?? 500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -50,7 +51,7 @@ router.post('/', validateBody(slipSubmitSchema), async (req: Request, res: Respo
     res.status(201).json({ slipId, message: 'Slip submitted successfully' });
   } catch (err: any) {
     logger.error({ err: err.message }, '[POST /api/slips]');
-    res.status(err.status ?? 500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -66,7 +67,7 @@ router.get('/', async (req: Request, res: Response) => {
     res.json(slips);
   } catch (err: any) {
     logger.error({ err: err.message }, '[GET /api/slips]');
-    res.status(err.status ?? 500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -81,7 +82,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     res.json(slip);
   } catch (err: any) {
     logger.error({ err: err.message }, '[GET /api/slips/:id]');
-    res.status(err.status ?? 500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -113,7 +114,7 @@ router.patch('/:id/resolve', async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     logger.error({ err: err.message }, '[PATCH /api/slips/:id/resolve]');
-    res.status(err.status ?? 500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 

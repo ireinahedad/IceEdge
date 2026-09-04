@@ -232,6 +232,18 @@ router.post('/', async (req: Request, res: Response) => {
     apiKey: string;
     requestModel: string;
     extraHeaders: Record<string, string>;
+    /**
+     * Qui paie — et donc DE QUI parle un message d'erreur du fournisseur.
+     *
+     * C'est la distinction qui décide si l'on a le droit de relayer ce message.
+     * Sur `user`, l'erreur porte sur la clé OpenAI de l'appelant : « Incorrect
+     * API key provided: sk-…4f2a » est exactement ce qu'il doit lire pour
+     * corriger. Sur `operator`, elle porte sur le compte GitHub Models du
+     * projet — modèle retiré, organisation suspendue, quota dépassé — et
+     * n'apprend rien à l'utilisateur qu'il puisse corriger, tout en décrivant
+     * notre infrastructure.
+     */
+    billedTo: 'user' | 'operator';
   }
 
   let call: ProviderCall;
@@ -246,6 +258,7 @@ router.post('/', async (req: Request, res: Response) => {
     apiKey: key,
     requestModel: model ?? DEFAULT_FREE_MODEL,
     extraHeaders: {},
+    billedTo: 'user',
   });
 
   if (userIsPro) {
@@ -273,6 +286,7 @@ router.post('/', async (req: Request, res: Response) => {
           'X-GitHub-Api-Version': GITHUB_API_VERSION,
           Accept: 'application/vnd.github+json',
         },
+        billedTo: 'operator',
       };
     } else if (verdict.reason === 'db') {
       // Fail-closed : ne pas pouvoir compter, c'est ne pas pouvoir garantir. On
@@ -315,9 +329,24 @@ router.post('/', async (req: Request, res: Response) => {
     try { userKey = await personalOpenAiKey(userId); }
     catch (err: any) {
       if (err?.code === 'db_schema') {
-        return res.status(500).json({
-          error: 'db_schema',
-          message: 'Database migration 005 not applied. Run: psql -d IceedgeDB -f src/db/migrations/005_openai_key.sql',
+        // Le message rendait publics le nom de la base ET l'arborescence du
+        // dépôt : « Run: psql -d IceedgeDB -f src/db/migrations/005_openai_key.sql ».
+        // C'était une consigne d'exploitation adressée à l'opérateur, envoyée à
+        // l'utilisateur. Elle part maintenant dans les journaux, où l'opérateur
+        // la lira ; l'utilisateur reçoit ce qui le concerne — le service est
+        // indisponible, il n'y peut rien.
+        logger.error(
+          { err: err?.message },
+          '[LLM] colonne openai_api_key absente — appliquer la migration 005 (npm run db:migrate:all)',
+        );
+        // `error` porte le texte lisible et non le code : le client
+        // (`llmService.askLLMDetailed`) ne teste explicitement que
+        // `monthly_quota_reached` et `no_api_key` ; pour tout le reste il
+        // affiche `body.error` tel quel. Y mettre « unavailable » aurait mis le
+        // mot « unavailable » sous les yeux de l'utilisateur.
+        return res.status(503).json({
+          error: 'La fonction IA est momentanément indisponible. Réessaie plus tard.',
+          code: 'unavailable',
         });
       }
       throw err;
@@ -371,9 +400,17 @@ router.post('/', async (req: Request, res: Response) => {
     // réseau consommerait le quota de l'utilisateur sans rien lui rendre.
     if (quotaConsumed) await refundProRequest(userId);
     const timedOut = err?.name === 'AbortError';
+    // `detail: err?.message` retiré : sur un échec réseau, `err.message` est du
+    // type « fetch failed for https://models.inference.ai.azure.com/… », donc
+    // l'adresse exacte du fournisseur et le chemin appelé. Le client n'en
+    // faisait rien (il affiche « openai_error »), et le message complet est déjà
+    // journalisé par `fetchWithTimeoutRetry` en amont.
+    logger.warn(
+      { err: err?.message, timedOut, model: call.requestModel },
+      '[LLM] fournisseur injoignable',
+    );
     return res.status(timedOut ? 504 : 502).json({
       error: timedOut ? 'The model provider timed out' : 'Failed to reach the model provider',
-      detail: err?.message,
     });
   }
 
@@ -394,9 +431,30 @@ router.post('/', async (req: Request, res: Response) => {
       { status, pro: userIsPro, model: call.requestModel, body: raw || '(empty body)' },
       '[LLM] provider error'
     );
+    // Ce qui remonte au client dépend de QUI paie l'appel.
+    //
+    // Avant : `body?.error?.message ?? body?.error ?? raw` — donc, en dernier
+    // recours, le corps BRUT de la réponse amont. Ce `raw` est le pire des trois :
+    // quand le fournisseur ou un proxy répond une page HTML d'erreur, elle part
+    // entière au client, avec les noms d'hôtes internes qu'elle contient. Et sur
+    // le chemin Pro, même un message JSON propre parle du compte GitHub Models
+    // du projet, pas de l'utilisateur.
+    //
+    // Sur la clé de l'utilisateur, en revanche, le message EST l'information
+    // utile : « Incorrect API key provided » lui dit quoi corriger dans les
+    // Paramètres. On le relaie donc, mais seulement s'il est une chaîne (jamais
+    // `raw`, jamais un objet) et borné.
+    const upstreamMessage =
+      typeof body?.error?.message === 'string' ? body.error.message.slice(0, 300) : null;
+
+    const clientMessage =
+      call.billedTo === 'user' && upstreamMessage
+        ? upstreamMessage
+        : 'Le fournisseur de modèle a refusé la requête.';
+
     return res.status(status === 401 ? 401 : 502).json({
-      error: body?.error?.message ?? body?.error ?? raw ?? 'Model provider error',
-      code:  body?.error?.code  ?? 'provider_error',
+      error: clientMessage,
+      code:  typeof body?.error?.code === 'string' ? body.error.code : 'provider_error',
       upstreamStatus: status,
     });
   }

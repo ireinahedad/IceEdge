@@ -24,6 +24,7 @@ import { seedAll }         from './db/seed';
 import { apiLimiter, authLimiter, writeLimiter } from './middleware/rateLimit.middleware';
 import { noStore }            from './middleware/httpCache.middleware';
 import { corsOriginCallback }  from './cors';
+import { sendError, errorStatus, errorBody } from './httpError';
 
 const app = express();
 
@@ -108,7 +109,7 @@ app.get('/api/leaderboard', async (_req, res) => {
     res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
     res.json(leaderboard);
   }
-  catch (err: any) { res.status(err.status ?? 500).json({ error: err.message }); }
+  catch (err: any) { sendError(res, err); }
 });
 
 // Chat (writes are limited to blunt spam)
@@ -162,7 +163,7 @@ if (devRoutesEnabled) {
 if (process.env.NODE_ENV !== 'production') {
   app.post('/dev/seed', async (_req, res) => {
     try { await seedAll(); res.json({ message: 'Seed complete' }); }
-    catch (err: any) { res.status(500).json({ error: err.message }); }
+    catch (err: any) { sendError(res, err); }
   });
 }
 
@@ -250,18 +251,20 @@ app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 Sentry.setupExpressErrorHandler(app);
 
 // Global error handler
+//
+// Le filet pour tout ce qui remonte par `next(err)` : erreurs non attrapées,
+// corps JSON malformé, routeurs qui ne répondent pas eux-mêmes.
+//
+// La mise en forme vient de `httpError.ts`, comme celle des handlers qui
+// répondent directement. C'était le vrai défaut de la version précédente : elle
+// avait raison, mais elle était SEULE à avoir raison. Quatre-vingt-treize
+// handlers répondaient sans passer par ici, donc sans sa protection. Une règle
+// n'est une règle que s'il n'existe qu'un endroit où elle est écrite.
 app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   // Log with the request-scoped logger so the error is correlated to its
   // request id; fall back to console if the logger middleware didn't run.
   ((req as any).log?.error?.bind((req as any).log) ?? console.error)({ err }, 'request failed');
-  const status = err.status ?? 500;
-  // Don't leak internal error details for unexpected 5xx in production.
-  const isClientError = status >= 400 && status < 500;
-  const message =
-    isClientError || process.env.NODE_ENV !== 'production'
-      ? err.message ?? 'Internal server error'
-      : 'Internal server error';
-  res.status(status).json({ error: message });
+  res.status(errorStatus(err)).json(errorBody(err));
 });
 
 export default app;
