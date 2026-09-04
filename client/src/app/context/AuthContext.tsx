@@ -4,6 +4,7 @@ import {
   apiLogin, apiRegister, apiLogout, apiLogoutAll, apiVerifyEmail,
 } from '../services/authService';
 import { tokenStore, onSessionCleared } from '../services/tokenStore';
+import { decodeJwtPayload } from '../services/jwt';
 
 interface AuthContextValue {
   user:        AuthUser | null;
@@ -36,12 +37,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (stored) {
         // Decode payload to get user info (no network call needed)
-        try {
-          const payload = JSON.parse(atob(stored.split('.')[1]));
+        // base64url, pas base64 : voir services/jwt.ts. L'ancien `atob` brut
+        // levait sur certaines charges utiles et le `catch` effaçait alors la
+        // session — une déconnexion aléatoire au démarrage.
+        const payload = decodeJwtPayload(stored);
+        if (payload) {
           // We only have sub/email/role in the JWT; fetch full profile lazily
           setToken(stored);
-          setUser({ id: payload.sub, email: payload.email, username: '', first_name: null, last_name: null, role: payload.role });
-        } catch {
+          setUser({ id: payload.sub, email: payload.email, username: '', first_name: null, last_name: null, role: payload.role ?? 'user' });
+        } else {
           await tokenStore.clear();
         }
       }

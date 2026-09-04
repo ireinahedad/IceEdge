@@ -5,6 +5,7 @@
  * auth tables don't grow unbounded (which slowly degrades token/code lookups):
  *   • refresh_tokens          — expired, OR revoked more than a grace window ago
  *   • email_verification_codes — consumed, OR expired
+ *   • manual_data (datés)      — gardiens partants et absents des jours passés
  *
  * Runs once shortly after boot and then daily. Best-effort: a failed run is
  * logged and retried on the next tick, never crashes the process.
@@ -13,6 +14,7 @@
 import { pool } from '../db/connection';
 import { logger } from '../logger';
 import { withJobLock } from './jobLock';
+import { purgeDatedBefore } from './manualData.service';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Deux DELETE : quelques secondes au pire. TTL large pour absorber une base froide. */
@@ -24,7 +26,18 @@ const REVOKED_GRACE_DAYS = Number(process.env.TOKEN_CLEANUP_GRACE_DAYS) || 7;
  *  le garder ne dédoublonne plus rien. 30 jours pour couvrir largement. */
 const STRIPE_EVENT_RETENTION_DAYS = Number(process.env.STRIPE_EVENT_RETENTION_DAYS) || 30;
 
-export async function runCleanup(): Promise<{ tokens: number; codes: number; stripeEvents: number }> {
+/**
+ * Rétention des saisies datées (gardiens partants, absents du soir).
+ *
+ * L'ancienne consigne était « purge-les de temps en temps pour la lisibilité »,
+ * c'est-à-dire jamais : personne n'ouvre un fichier JSON pour y supprimer des
+ * lignes qui ne gênent rien. Une entrée datée devient inerte après le match,
+ * mais elle reste, et une saison en produit ~180. Quinze jours laissent large de
+ * quoi relire une soirée récente pour comprendre une prédiction passée.
+ */
+const MANUAL_DATED_RETENTION_DAYS = Number(process.env.MANUAL_DATED_RETENTION_DAYS) || 15;
+
+export async function runCleanup(): Promise<{ tokens: number; codes: number; stripeEvents: number; manualDated: number }> {
   const tokensRes = await pool.query(
     `DELETE FROM refresh_tokens
       WHERE expires_at < NOW()
@@ -41,9 +54,16 @@ export async function runCleanup(): Promise<{ tokens: number; codes: number; str
       WHERE processed_at < NOW() - ($1 || ' days')::interval`,
     [String(STRIPE_EVENT_RETENTION_DAYS)],
   );
+  // Saisies datées passées (migration 034). La date est la CLÉ, au format
+  // YYYY-MM-DD : la comparaison de chaînes suffit et fait exactement la même
+  // chose qu'une comparaison de dates, sans cast.
+  const cutoff = new Date(Date.now() - MANUAL_DATED_RETENTION_DAYS * DAY_MS)
+    .toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  const manualDated = await purgeDatedBefore(cutoff);
+
   const tokens = tokensRes.rowCount ?? 0;
   const codes  = codesRes.rowCount ?? 0;
-  return { tokens, codes, stripeEvents: stripeRes.rowCount ?? 0 };
+  return { tokens, codes, stripeEvents: stripeRes.rowCount ?? 0, manualDated };
 }
 
 /** Schedules the cleanup: once ~1 min after boot, then every 24h. Returns the

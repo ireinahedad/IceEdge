@@ -63,8 +63,20 @@ export async function saveSubscription(userId: string, sub: PushSubscriptionInpu
   );
 }
 
-export async function removeSubscription(endpoint: string): Promise<void> {
-  await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [endpoint]);
+/**
+ * Désabonne UN endpoint.
+ *
+ * `ownerId` est requis : la route /push/unsubscribe est authentifiée, mais elle
+ * ne prouvait rien sur l'endpoint reçu. N'importe quel compte pouvait donc
+ * supprimer l'abonnement d'un autre en fournissant son endpoint — les
+ * notifications de la victime s'arrêtaient sans qu'elle sache pourquoi.
+ * La clause `user_id = $2` fait de la propriété une condition de la suppression.
+ */
+export async function removeSubscription(endpoint: string, ownerId: string): Promise<void> {
+  await pool.query(
+    'DELETE FROM push_subscriptions WHERE endpoint = $1 AND user_id = $2',
+    [endpoint, ownerId],
+  );
 }
 
 /** Purge d'un lot d'endpoints morts en UNE requête (voir `sendToUsers`). */

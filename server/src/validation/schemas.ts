@@ -119,3 +119,71 @@ export const profileUpdateSchema = z.object({
   openaiApiKey:     z.string().max(200).nullable().optional(),
   ruleWeights:      ruleWeightsSchema.nullable().optional(),
 });
+
+
+// ── Saisie manuelle (`manual_data`, migration 034) ────────────────────────────
+//
+// `PUT /api/injuries/:key` n'avait AUCUNE validation : la route recopiait les
+// tableaux du corps dans un JSON écrit sur disque. Les colonnes visées sont
+// maintenant un JSONB, donc un corps non borné devient une ligne non bornée en
+// base — et surtout, un `impact` de 50 au lieu de 0.05 déplace une probabilité
+// sans que rien ne le refuse. Les bornes ci-dessous sont celles du barème
+// documenté dans SAISIE_MANUELLE.md, avec de la marge.
+
+/** Abréviation d'équipe NHL. Clé d'objet, donc validée comme chaîne. */
+const teamAbbrKey  = z.string().trim().regex(/^[A-Za-z]{2,4}$/, 'abréviation d\'équipe invalide');
+/** Orthographe MoneyPuck — le service Python matche par nom exact. */
+const manualPlayer = z.string().trim().min(2).max(80);
+
+const injuryPlayerSchema = z.object({
+  player: manualPlayer,
+  role:   z.string().trim().max(10).optional(),
+  status: z.string().trim().max(20).optional(),
+  // Barème : gardien partant 0.12, joueur clé 0.06, role player 0.03. Le
+  // plafond à 0.5 laisse la place à un cas extrême sans permettre l'absurde —
+  // au-delà, ce n'est plus un facteur, c'est un pronostic écrit à la main.
+  impact: z.number().finite().min(0).max(0.5),
+});
+
+export const injuriesEntrySchema = z.object({
+  home:       z.array(injuryPlayerSchema).max(12).optional(),
+  away:       z.array(injuryPlayerSchema).max(12).optional(),
+  // Même plage que le curseur de la carte admin.
+  lineupAdj:  z.number().finite().min(-0.1).max(0.1).optional(),
+  lineupNote: z.string().trim().max(200).optional(),
+});
+
+/**
+ * Une journée de gardiens partants et/ou d'absents.
+ *
+ * Les deux champs sont facultatifs mais l'un des deux est requis : un PUT vide
+ * ne veut rien dire, et l'accepter écrirait une ligne inutile.
+ * Le nombre de clés est plafonné — la NHL compte 32 équipes, et un objet à
+ * clés libres est sinon un moyen de faire grossir une ligne JSONB sans limite.
+ */
+export const lineupsEntrySchema = z.object({
+  goalies:   z.record(teamAbbrKey, manualPlayer).optional(),
+  scratches: z.record(teamAbbrKey, z.array(manualPlayer).max(12)).optional(),
+})
+  .refine((v) => v.goalies !== undefined || v.scratches !== undefined,
+          { message: 'goalies ou scratches est requis' })
+  .refine((v) => Object.keys(v.goalies ?? {}).length <= 40
+              && Object.keys(v.scratches ?? {}).length <= 40,
+          { message: 'trop d\'équipes' });
+
+/** Table de tendance des arbitres — saisie en une passe par saison. */
+export const refereesTableSchema = z.object({
+  // Occasions de power-play par match, deux équipes cumulées (~6.2 en NHL).
+  leagueAvgPpPerGame: z.number().finite().min(1).max(20).optional(),
+  referees: z.array(z.object({
+    name:      z.string().trim().min(2).max(60),
+    ppPerGame: z.number().finite().min(0).max(20),
+    note:      z.string().trim().max(120).optional(),
+  })).max(200).optional(),
+}).refine((v) => v.leagueAvgPpPerGame !== undefined || v.referees !== undefined,
+          { message: 'leagueAvgPpPerGame ou referees est requis' });
+
+/** Assignation manuelle : un match NHL a un ou deux arbitres. */
+export const refAssignmentSchema = z.object({
+  refs: z.array(z.string().trim().min(2).max(60)).min(1).max(4),
+});

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
+import { decodeJwtPayload } from "../services/jwt";
 
 /**
  * AuthCallback
@@ -26,19 +27,35 @@ export function AuthCallback() {
       return;
     }
 
+    // Decode user payload from JWT (no verification needed on client).
+    // base64url, pas base64 : voir services/jwt.ts — l'ancien `atob` brut levait
+    // sur certaines charges utiles et renvoyait alors vers /login, donc une
+    // connexion Google qui échouait au hasard, sans message.
+    const payload = decodeJwtPayload(access_token);
+    if (!payload) {
+      navigate("/login?error=google_failed", { replace: true });
+      return;
+    }
+
     try {
-      // Decode user payload from JWT (no verification needed on client)
-      const payload = JSON.parse(atob(access_token.split(".")[1]));
       setSession({
         tokens: { access_token, expires_in: 900 },
+        // Le jeton d'accès ne contient QUE { sub, email, role } — voir
+        // `signAccessToken` côté serveur. Les lignes qui lisaient ici
+        // `payload.username`, `payload.first_name`, `payload.last_name` et
+        // `payload.avatar_url` retombaient donc TOUJOURS sur leur valeur par
+        // défaut : elles donnaient l'illusion de renseigner le profil sans
+        // jamais le faire. Les valeurs vides sont explicites, et identiques à
+        // ce que fait AuthContext quand il réhydrate une session au démarrage :
+        // le profil complet est chargé ensuite par l'écran qui en a besoin.
         user: {
           id:         payload.sub,
           email:      payload.email,
-          username:   payload.username ?? "",
-          first_name: payload.first_name ?? null,
-          last_name:  payload.last_name  ?? null,
-          role:       payload.role       ?? "user",
-          avatar_url: payload.avatar_url ?? null,
+          username:   "",
+          first_name: null,
+          last_name:  null,
+          role:       payload.role ?? "user",
+          avatar_url: null,
         },
       });
       navigate("/profile", { replace: true });

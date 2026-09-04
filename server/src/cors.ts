@@ -29,8 +29,30 @@ export const allowedOrigins = (
  *
  * L'ancre `^…$` est essentielle : sans elle, un domaine hostile du type
  * `https://ice-edge.vercel.app.attaquant.com` passerait.
+ *
+ * ⚠️ LE SUFFIXE D'ÉQUIPE EST LA PARTIE QUI PROTÈGE, PAS LE PRÉFIXE.
+ * La version précédente était `^https://ice-edge[a-z0-9-]*\.vercel\.app$`, donc
+ * elle acceptait AUSSI `https://ice-edge-nimportequoi.vercel.app`. Or un
+ * sous-domaine `<projet>.vercel.app` s'attribue au premier arrivé, sur
+ * N'IMPORTE QUEL compte Vercel : il suffisait de créer un projet nommé
+ * `ice-edge-x` pour obtenir une origine autorisée. Avec `credentials: true` et
+ * le cookie de refresh en SameSite=None, une page hébergée là pouvait appeler
+ * POST /api/auth/refresh avec les cookies de la victime ET LIRE LA RÉPONSE —
+ * donc repartir avec un jeton d'accès valide. Prise de contrôle de compte
+ * complète, sans XSS.
+ *
+ * Le slug d'équipe (`-ireina-hedad-s-projects`) n'est pas attribuable à un
+ * tiers : il vient du compte propriétaire. C'est lui qui ferme la porte.
+ * Si le nom de l'équipe Vercel change, cette constante doit changer avec.
+ *
+ * Le domaine de production (arakice.com, ice-edge.vercel.app) n'a rien à faire
+ * ici : il se déclare dans CORS_ORIGIN, explicitement.
  */
-export const vercelPreview = /^https:\/\/ice-edge[a-z0-9-]*\.vercel\.app$/i;
+const VERCEL_TEAM_SLUG = process.env.VERCEL_TEAM_SLUG || 'ireina-hedad-s-projects';
+export const vercelPreview = new RegExp(
+  `^https://ice-edge-[a-z0-9-]+-${VERCEL_TEAM_SLUG.replace(/[^a-z0-9-]/gi, '')}\\.vercel\\.app$`,
+  'i',
+);
 
 /**
  * Une origine est-elle autorisée ?

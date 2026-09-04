@@ -9,7 +9,7 @@ import userRoutes          from './routes/user.routes';
 import profileRoutes       from './routes/profile.routes';
 import nhlRoutes           from './routes/nhl.routes';
 import oddsRoutes          from './routes/odds.routes';
-import injuriesRoutes      from './routes/injuries.routes';
+import manualRoutes        from './routes/manual.routes';
 import mlRoutes            from './routes/ml.routes';
 import chatRoutes          from './routes/chat.routes';
 import slipRoutes          from './routes/slip.routes';
@@ -121,7 +121,13 @@ app.use('/api/slips',         writeLimiter, noStore, slipRoutes);
 
 // Odds
 app.use('/api/odds',          oddsRoutes);
-app.use('/api/injuries',      injuriesRoutes);
+
+// Saisie manuelle (blessures, gardiens partants, absents, arbitres) — admin.
+// Remplace `/api/injuries`, qui écrivait dans un `dist/data/` inexistant en
+// production. `noStore` et `writeLimiter` comme les autres routeurs d'écriture ;
+// `noStore` compte double ici, car la réponse contient la liste nominative des
+// joueurs qu'on croit absents — elle n'a rien à faire dans un cache partagé.
+app.use('/api/manual',        writeLimiter, noStore, manualRoutes);
 
 // ML / prediction
 app.use('/api/predict',       mlRoutes);

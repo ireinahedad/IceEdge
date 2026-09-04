@@ -16,8 +16,10 @@ self.addEventListener("push", (event) => {
   const title = data.title || "IceEdge";
   const options = {
     body: data.body || "",
-    icon: "/arakice-logo.png",
-    badge: "/arakice-logo.png",
+    // 192/96 px et non /arakice-logo.png : ce dernier est le master 1024×1024
+    // de 1,49 Mo, téléchargé à chaque notification pour une icône de 24 px.
+    icon: "/arakice-mark-192.png",
+    badge: "/arakice-mark-96.png",
     data: { url: data.url || "/" },
   };
 

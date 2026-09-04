@@ -1,18 +1,26 @@
 /**
  * injuryStore.ts
- * Lit le fichier de saisie manuelle (data/injuries.json) et produit deux facteurs
- * 0-1 (faveur "victoire domicile", 0.5 = neutre) avec une note lisible :
+ * Produit deux facteurs 0-1 (faveur « victoire domicile », 0.5 = neutre) à
+ * partir de la saisie manuelle, avec une note lisible :
  *   - injuries : blessures / joueurs manquants (impact par joueur)
  *   - lineup   : nouvel alignement / ajustement manuel direct
  *
- * Le fichier est relu à chaque appel (édition à chaud possible).
+ * ── Source : la base, plus `data/injuries.json` ─────────────────────────────
+ * Le fichier n'existait pas dans le conteneur (`tsc` n'émet pas les `.json`,
+ * le Dockerfile ne copie que `dist/`), donc cette fonction rendait TOUJOURS
+ * neutre en production, sans rien signaler — et l'écriture admin échouait en
+ * 500. Voir `db/migrations/034_manual_data.sql`.
+ *
+ * La fonction devient asynchrone. Son unique appelant, `buildGameMarkets`,
+ * l'attendait déjà dans un `Promise.allSettled` d'autres sources : elle y a
+ * simplement rejoint les autres, donc elle n'ajoute pas un aller-retour en
+ * série. Le cache de 30 s de `manualData.service` fait le reste.
  */
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import type { ManualFactor } from './predictionFactors';
+import { getEntry } from './manualData.service';
 
-interface InjuryEntry { player: string; role?: string; status?: string; impact: number }
-interface GameInjuries {
+export interface InjuryEntry { player: string; role?: string; status?: string; impact: number }
+export interface GameInjuries {
   home?: InjuryEntry[];
   away?: InjuryEntry[];
   lineupAdj?: number;    // -0.10..+0.10, + favorise la maison
@@ -21,11 +29,11 @@ interface GameInjuries {
 
 export interface ManualFactors { injuries: ManualFactor; lineup: ManualFactor }
 
-const INJURIES_PATH = join(__dirname, '..', 'data', 'injuries.json');
-
-function gameKey(homeAbbr: string, awayAbbr: string): string {
+/** Clé de saisie d'un match : « VISITEUR@MAISON », abréviations en majuscules. */
+export function injuryGameKey(homeAbbr: string, awayAbbr: string): string {
   return `${awayAbbr.toUpperCase()}@${homeAbbr.toUpperCase()}`;
 }
+
 function sumImpact(list?: InjuryEntry[]): number {
   return (list ?? []).reduce((s, e) => s + (Number(e.impact) || 0), 0);
 }
@@ -33,16 +41,10 @@ function clamp(x: number, lo: number, hi: number): number { return Math.max(lo, 
 
 const NEUTRAL: ManualFactor = { active: false, homeProb: 0.5, note: 'non renseigné' };
 
-/** Facteurs manuels (blessures + alignement) pour un match. Tolérant aux erreurs. */
-export function getManualFactors(homeAbbr: string, awayAbbr: string): ManualFactors {
-  let games: Record<string, GameInjuries> = {};
-  try {
-    games = JSON.parse(readFileSync(INJURIES_PATH, 'utf8')).games ?? {};
-  } catch {
-    return { injuries: { ...NEUTRAL }, lineup: { ...NEUTRAL } };
-  }
-
-  const entry = games[gameKey(homeAbbr, awayAbbr)];
+/** Facteurs manuels (blessures + alignement) pour un match. Tolérant aux pannes. */
+export async function getManualFactors(homeAbbr: string, awayAbbr: string): Promise<ManualFactors> {
+  // `getEntry` ne lève jamais : base injoignable → null → neutre, journalisé.
+  const entry = await getEntry<GameInjuries>('injuries', injuryGameKey(homeAbbr, awayAbbr));
   if (!entry) return { injuries: { ...NEUTRAL }, lineup: { ...NEUTRAL } };
 
   // ── Facteur blessures ──

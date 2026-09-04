@@ -27,7 +27,10 @@ router.post('/subscribe', authenticate, async (req: Request, res: Response) => {
 router.post('/unsubscribe', authenticate, async (req: Request, res: Response) => {
   try {
     const { endpoint } = req.body as { endpoint?: string };
-    if (endpoint) await Push.removeSubscription(endpoint);
+    // L'identifiant du propriétaire est passé au service : sans lui, n'importe
+    // quel compte authentifié pouvait supprimer l'abonnement push d'un AUTRE
+    // utilisateur en devinant/rejouant son endpoint.
+    if (endpoint) await Push.removeSubscription(endpoint, req.user!.sub);
     return res.json({ ok: true });
   } catch (err: any) { return res.status(err.status ?? 500).json({ error: err.message }); }
 });

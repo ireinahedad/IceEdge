@@ -266,9 +266,13 @@ export function ProPage() {
         </div>
       )}
 
-      <p className="text-center text-[10px] mt-4" style={{ color: MUTED, opacity: 0.6 }}>
-        {t("pro.devNote")}
-      </p>
+      {/* La ligne « Mode démo : le paiement Stripe n'est pas encore branché »
+          vivait ici et s'affichait à TOUT LE MONDE en production, sous le bouton
+          d'abonnement. En production Stripe EST configuré (sinon /checkout rend
+          un 501), donc le message était faux ; et faux ou vrai, annoncer à un
+          visiteur que le paiement n'est pas branché sur la page qui lui demande
+          de payer est ce qui fait passer un produit pour un prototype.
+          Clé `pro.devNote` supprimée du dictionnaire avec ce rendu. */}
     </div>
   );
 }

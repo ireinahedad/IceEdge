@@ -16,7 +16,7 @@ import { apiCancelSubscription } from "../../services/subscriptionService";
 import { profileApiService } from "./../../services/userService";
 import { enableValueBetPush, disableValueBetPush } from "./../../services/pushService";
 import type { UserProfile } from "./../../types/user";
-import { InjuriesAdminCard } from "../../components/InjuriesAdminCard";
+import { ManualEntryCard } from "../../components/ManualEntryCard";
 import { useI18n } from "../../i18n";
 import { useBookmaker } from "../../context/BookmakerContext";
 import { useBlocks } from "../../context/BlockContext";
@@ -436,7 +436,7 @@ export function SettingsTab({
 
       {/* Saisie admin des blessures/alignement.
           (La pondération des règles est désormais dans chaque carte de règle, par type de pari.) */}
-      <InjuriesAdminCard />
+      <ManualEntryCard />
 
       {/* Save */}
       {saving ? (

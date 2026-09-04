@@ -14,8 +14,8 @@ import {
 } from './nhlApiClient';
 import { getArena } from '../data/arenas';
 import { fetchOddsImplied, fetchTotalsOdds } from './oddsClient';
-import { getStartingGoalie } from './startingGoalies';
-import { getScratches } from './scratches';
+import { getStartingGoalies } from './startingGoalies';
+import { getScratchesDay } from './scratches';
 
 /** Options d'enrichissement pour buildGameFeatures (cotes live, lineup). */
 export interface GameFeatureOpts {
@@ -154,7 +154,7 @@ export async function buildGameFeatures(
   const awayName = away?.name ?? awayAbbr;
 
   const [summaryRes, homeRestRes, awayRestRes, oddsRes, totalsRes,
-         homeTravelRes, awayTravelRes] = await Promise.allSettled([
+         homeTravelRes, awayTravelRes, goaliesRes, scratchesRes] = await Promise.allSettled([
     fetchTeamSummaryStats(),
     fetchTeamRestInfo(homeAbbr),
     fetchTeamRestInfo(awayAbbr),
@@ -163,6 +163,12 @@ export async function buildGameFeatures(
     // Voyage : les deux équipes jouent dans l'aréna de l'équipe à domicile.
     fetchTeamTravel(homeAbbr, homeAbbr),
     fetchTeamTravel(awayAbbr, homeAbbr),
+    // Gardiens partants et absents du soir : en base depuis la migration 034
+    // (les fichiers `ml/data/*.json` n'existaient pas dans le conteneur, donc
+    // ces deux features étaient TOUJOURS vides en production). La journée
+    // entière est lue en un accès, pas une lecture par équipe.
+    getStartingGoalies(),
+    getScratchesDay(),
   ]);
 
   const odds   = oddsRes.status   === 'fulfilled' ? oddsRes.value   : null;
@@ -179,6 +185,12 @@ export async function buildGameFeatures(
   const homeTravel = homeTravelRes.status === 'fulfilled' ? homeTravelRes.value : null;
   const awayTravel = awayTravelRes.status === 'fulfilled' ? awayTravelRes.value : null;
   const venueAlt = getArena(homeAbbr)?.alt;
+
+  // Saisie manuelle du jour. Repli sur un objet vide : une base injoignable doit
+  // retirer la feature, pas casser la prédiction (c'est déjà ce que faisait le
+  // `catch` du chargeur de fichier).
+  const goaliesToday   = goaliesRes.status   === 'fulfilled' ? goaliesRes.value   : {};
+  const scratchesToday = scratchesRes.status === 'fulfilled' ? scratchesRes.value : {};
 
   const homeSum = summary[homeAbbr.toUpperCase()];
   const awaySum = summary[awayAbbr.toUpperCase()];
@@ -239,17 +251,17 @@ export async function buildGameFeatures(
     away_odds_decimal:     odds?.awayOdds,
     total_line_market:     totals?.line,
     // ── v4 — gardien partant : override explicite de l'appelant, sinon le
-    //    fichier manuel starting_goalies.json (exceptions), sinon rien (le
-    //    service Python utilise sa moyenne pondérée par usage).
-    home_goalie:           opts.homeGoalie ?? getStartingGoalie(homeAbbr),
-    away_goalie:           opts.awayGoalie ?? getStartingGoalie(awayAbbr),
+    //    saisie manuelle du jour (kind `starting_goalies`, exceptions), sinon
+    //    rien (le service Python utilise sa moyenne pondérée par usage).
+    home_goalie:           opts.homeGoalie ?? goaliesToday[homeAbbr.toUpperCase()],
+    away_goalie:           opts.awayGoalie ?? goaliesToday[awayAbbr.toUpperCase()],
     home_stars_missing:    opts.homeStarsMissing,
     away_stars_missing:    opts.awayStarsMissing,
     // ── v4 — absents confirmés : override de l'appelant, sinon fichier manuel
-    //    scratches.json (exceptions). Le service Python en dérive stars_missing,
+    //    du jour (kind `scratches`). Le service Python en dérive stars_missing,
     //    star_power (bons joueurs retirés) et stars_out_weight (absence pondérée).
-    home_scratches:        opts.homeScratches ?? getScratches(homeAbbr),
-    away_scratches:        opts.awayScratches ?? getScratches(awayAbbr),
+    home_scratches:        opts.homeScratches ?? scratchesToday[homeAbbr.toUpperCase()] ?? [],
+    away_scratches:        opts.awayScratches ?? scratchesToday[awayAbbr.toUpperCase()] ?? [],
   };
 }
 

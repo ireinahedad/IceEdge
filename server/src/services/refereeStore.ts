@@ -3,12 +3,22 @@
  * Facteur ARBITRE pour les totaux (boîte de verre, hors ML).
  *
  * Deux sources :
- *   1. Tendance par arbitre  — server/src/data/referees.json (semi-manuel,
- *      rempli depuis Scouting the Refs). Arbitre inconnu → moyenne (neutre).
+ *   1. Tendance par arbitre  — table `manual_data` kind `ref_tendency`
+ *      (semi-manuel, rempli depuis Scouting the Refs via
+ *      `PUT /api/manual/referees`). Arbitre inconnu → moyenne (neutre).
  *   2. Assignation du jour    — scrappée sur Scouting the Refs (API WordPress
  *      wp-json, plus stable que le HTML), avec cache mémoire + repli gracieux.
- *      Un fichier manuel optionnel data/ref_assignments.json a la PRIORITÉ
+ *      Une saisie manuelle optionnelle (kind `ref_assignment`) a la PRIORITÉ
  *      (belt-and-suspenders : si le scrape casse, on garde la main).
+ *
+ * ── La tendance venait de server/src/data/referees.json ─────────────────────
+ * Ce fichier n'existait pas dans le conteneur : `tsc` n'émet pas les `.json` et
+ * le Dockerfile ne copie que `dist/`. `loadTendencies()` retombait donc TOUJOURS
+ * sur une table vide en production, en silence. Le symptôme était invisible
+ * parce que le fichier ne contenait que des placeholders à la moyenne exacte :
+ * il ne produisait aucun effet non plus. Le jour où les vrais chiffres y
+ * auraient été saisis, ils n'auraient rien changé en production et rien ne
+ * l'aurait dit. Voir `db/migrations/034_manual_data.sql`.
  *
  * Sortie : getGameRefFactor(home, away, date) → multiplicateur borné du volume
  * de PP (1.0 = neutre), la liste des arbitres et la source. Tolérant aux pannes :
@@ -18,18 +28,14 @@
  * Linesmen » de Scouting the Refs. À valider une fois sur un vrai jour de match ;
  * si leur structure change, seule extractAssignments() est à ajuster.
  */
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { TtlCache } from './ttlCache';
+import { getEntry, mapEntries } from './manualData.service';
 
 // ── Réglages ────────────────────────────────────────────────────────────────
 const STR_BASE = 'https://scoutingtherefs.com/wp-json/wp/v2/posts';
 const MULT_MIN = 0.85;   // borne basse du multiplicateur PP
 const MULT_MAX = 1.20;   // borne haute
 const REF_TTL  = 3 * 60 * 60_000; // 3 h
-
-const REFEREES_PATH   = join(__dirname, '..', 'data', 'referees.json');
-const ASSIGNMENTS_PATH = join(__dirname, '..', 'data', 'ref_assignments.json');
 
 // ── Cache mémoire minimal, BORNÉ ────────────────────────────────────────────
 // La clé est la date demandée : une entrée par jour consulté, jamais évincée
@@ -47,23 +53,40 @@ function setCached(k: string, data: unknown, ttl: number) {
 // ── Table de tendance (relue à chaud) ───────────────────────────────────────
 interface RefTable { league: number; refs: Record<string, number> }
 
-function loadTendencies(): RefTable {
-  try {
-    const raw = JSON.parse(readFileSync(REFEREES_PATH, 'utf8'));
-    const league = Number(raw.league_avg_pp_per_game) || 6.2;
-    const refs: Record<string, number> = {};
-    for (const [name, v] of Object.entries(raw.referees ?? {})) {
-      const pg = Number((v as any)?.pp_per_game);
-      if (name && Number.isFinite(pg)) refs[normalizeName(name)] = pg;
-    }
-    return { league, refs };
-  } catch {
-    return { league: 6.2, refs: {} };
+/**
+ * Table de tendance depuis la base. Les clés stockées sont DÉJÀ normalisées
+ * (`manual.routes.ts` applique `normalizeRefName` à l'écriture), mais on
+ * renormalise ici : une ligne insérée à la main en SQL ne passerait pas par la
+ * route, et une clé non normalisée ne matcherait jamais un nom scrappé.
+ *
+ * `getEntry`/`mapEntries` ne lèvent pas — base injoignable → table vide →
+ * multiplicateur neutre, journalisé par `manualData.service`.
+ */
+async function loadTendencies(): Promise<RefTable> {
+  const [rows, config] = await Promise.all([
+    mapEntries<{ name?: string; ppPerGame?: number }>('ref_tendency'),
+    getEntry<{ avgPpPerGame?: number }>('ref_config', 'league'),
+  ]);
+
+  const league = Number(config?.avgPpPerGame) || 6.2;
+  const refs: Record<string, number> = {};
+  for (const [key, v] of Object.entries(rows)) {
+    const pg = Number(v?.ppPerGame);
+    if (Number.isFinite(pg)) refs[normalizeRefName(v?.name ?? key)] = pg;
   }
+  return { league, refs };
 }
 
-/** Normalise un nom d'arbitre pour la comparaison (min., accents, ponctuation). */
-function normalizeName(n: string): string {
+/**
+ * Normalise un nom d'arbitre pour la comparaison (min., accents, ponctuation).
+ *
+ * Exporté parce que c'est aussi la CLÉ de stockage : `manual.routes.ts`
+ * l'applique à l'écriture pour que « Wes McCauley », « wes mccauley » et
+ * « Wes  McCauley » désignent la même ligne. Deux implémentations de cette
+ * normalisation finiraient par diverger, et le symptôme serait un arbitre saisi
+ * qui ne matche jamais.
+ */
+export function normalizeRefName(n: string): string {
   return (n || '')
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -121,16 +144,12 @@ function gameKey(home: string, away: string): string {
   return `${away.toUpperCase()}@${home.toUpperCase()}`;
 }
 
-/** Fichier manuel optionnel (priorité). Clé "AWAY@HOME" → { referees: [...] }. */
-function manualAssignment(home: string, away: string): RefAssignment | null {
-  try {
-    const raw = JSON.parse(readFileSync(ASSIGNMENTS_PATH, 'utf8'));
-    const g = (raw.games ?? {})[gameKey(home, away)];
-    const refs = (g?.referees ?? g?.refs ?? []).filter((s: any) => typeof s === 'string');
-    return refs.length ? { refs, source: 'manual' } : null;
-  } catch {
-    return null;
-  }
+/** Saisie manuelle optionnelle (priorité). Clé "AWAY@HOME" → { refs: [...] }. */
+async function manualAssignment(home: string, away: string): Promise<RefAssignment | null> {
+  const entry = await getEntry<{ refs?: unknown }>('ref_assignment', gameKey(home, away));
+  const refs = (Array.isArray(entry?.refs) ? entry!.refs : [])
+    .filter((r: unknown): r is string => typeof r === 'string' && r.trim().length > 0);
+  return refs.length ? { refs, source: 'manual' } : null;
 }
 
 /** Extrait 1-2 noms d'arbitres d'une ligne « Referees: #12 A B, #34 C D ». */
@@ -224,10 +243,17 @@ export async function getGameRefFactor(
 ): Promise<RefFactor> {
   const home = homeAbbr.toUpperCase();
   const away = awayAbbr.toUpperCase();
-  const { league, refs: tend } = loadTendencies();
+  // Tendance et assignation manuelle sont deux lectures indépendantes : en
+  // parallèle, pas en série. Toutes deux passent par le cache 30 s de
+  // `manualData.service`, donc une soirée à douze matchs ne fait pas
+  // vingt-quatre requêtes.
+  const [{ league, refs: tend }, manual] = await Promise.all([
+    loadTendencies(),
+    manualAssignment(home, away),
+  ]);
 
   // 1. Assignation : manuel prioritaire, sinon scrape.
-  let assignment = manualAssignment(home, away);
+  let assignment = manual;
   if (!assignment) {
     const day = await fetchDailyAssignments(date);
     const hit = day.find(g => g.abbrs.includes(home) && g.abbrs.includes(away));
@@ -237,7 +263,7 @@ export async function getGameRefFactor(
 
   // 2. Tendance : moyenne des arbitres connus / moyenne ligue → multiplicateur.
   const rates = assignment.refs
-    .map(r => tend[normalizeName(r)])
+    .map(r => tend[normalizeRefName(r)])
     .filter((v): v is number => Number.isFinite(v));
   if (!rates.length || league <= 0) {
     return { multiplier: 1.0, refs: assignment.refs, source: assignment.source,

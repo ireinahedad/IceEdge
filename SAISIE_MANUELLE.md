@@ -8,13 +8,22 @@ altitude) se rafraîchit seul.
 
 ## 1. Récapitulatif
 
+> **Changement du 2026-09-04 — tout est en base, plus dans des fichiers.**
+> Les quatre tables manuelles vivaient dans des `.json` que le build ne copiait
+> jamais dans l'image du serveur : elles étaient **mortes en production**, en
+> silence, et l'écriture admin répondait 500. Voir la migration
+> `server/src/db/migrations/034_manual_data.sql`. Concrètement, pour toi :
+> la saisie se fait maintenant depuis l'app (Profil → Paramètres → **Saisie
+> manuelle**), donc **depuis ton téléphone**, et elle survit aux
+> redéploiements.
+
 | # | Quoi | Où | Fréquence | Temps |
 |---|---|---|---|---|
-| 1 | Gardiens partants (exceptions) | `ml\data\starting_goalies.json` | chaque jour de match, 1-2 h avant | 2 min |
-| 2 | Absents confirmés | `ml\data\scratches.json` | chaque jour de match, 1-2 h avant | 2 min |
-| 3 | Blessures / alignement (facteur) | UI : Profil → carte admin | chaque jour de match, 2 passes | 5-10 min |
-| 4 | Tendance PP des arbitres | `server\src\data\referees.json` | 1× en début de saison + 1 rafraîchissement mi-saison | 30 min |
-| 5 | Assignation d'arbitres (secours) | `server\src\data\ref_assignments.json` | seulement si le scraper Scouting the Refs casse | 1 min/jour |
+| 1 | Gardiens partants (exceptions) | UI : Profil → Saisie manuelle → **Compos du soir** | chaque jour de match, 1-2 h avant | 2 min |
+| 2 | Absents confirmés | UI : Profil → Saisie manuelle → **Compos du soir** | chaque jour de match, 1-2 h avant | 2 min |
+| 3 | Blessures / alignement (facteur) | UI : Profil → Saisie manuelle → **Blessures** | chaque jour de match, 2 passes | 5-10 min |
+| 4 | Tendance PP des arbitres | API `PUT /api/manual/referees` | 1× en début de saison + 1 rafraîchissement mi-saison | 30 min |
+| 5 | Assignation d'arbitres (secours) | API `PUT /api/manual/ref-assignments/:cle` | seulement si le scraper Scouting the Refs casse | 1 min/jour |
 | 6 | Patinoires | `ml\data\arenas.json` + `server\src\data\arenas.ts` | 1× par saison, ou déménagement/rénovation | 10 min |
 | 7 | Rafraîchissement des données contenu | `content\refresh-insights.cmd` | tous les 3 jours (tâche planifiée) + `WITH_ADVANCED` 1×/saison | automatique |
 
@@ -51,31 +60,29 @@ Barème d'impact (0-1, désavantage infligé à SON équipe) :
 
 ### 1-2 h avant la mise au jeu — passe finale (la plus importante)
 
-C'est ici que se remplissent les **deux fichiers JSON**, une fois les compos
-confirmées. Les deux sont datés en **heure de l'Est** et relus automatiquement
-dans les 30 s (aucun redémarrage).
+C'est ici que se remplit l'onglet **Compos du soir**, une fois les compos
+confirmées. Il liste toutes les équipes qui jouent ce jour-là, groupées par
+match, avec deux champs par équipe. La date est en **heure de l'Est** et la
+saisie est relue automatiquement dans les 30 s (aucun redémarrage).
 
-**`ml\data\starting_goalies.json`** — uniquement les **exceptions** (backup qui
-part, n°1 blessé). Sans entrée, le modèle retombe sur sa moyenne de gardiens
-pondérée par l'usage récent, ce qui est le bon défaut quand le n°1 part.
+- **Gardien partant** — uniquement les **exceptions** (backup qui part, n°1
+  blessé). Laisse vide sinon : le modèle retombe alors sur sa moyenne de
+  gardiens pondérée par l'usage récent, ce qui est le bon défaut.
+- **Absents** — séparés par des virgules : `Auston Matthews, Kaiden Guhle`.
 
-```json
-{
-  "2026-01-15": { "TOR": "Joseph Woll", "MTL": "Cayden Primeau" }
-}
-```
-
-**`ml\data\scratches.json`** — les absents du soir.
-
-```json
-{
-  "2026-01-15": { "TOR": ["Auston Matthews"], "MTL": ["Kaiden Guhle"] }
-}
-```
+Vider un champ et réenregistrer **retire** la saisie : c'est ainsi qu'on corrige
+un gardien annoncé qui ne part finalement pas.
 
 > **Le nom doit être l'orthographe MoneyPuck** — le service Python matche par
 > nom exact (insensible à la casse) contre son pool de joueurs clés (top-6
 > attaquants + top-4 défenseurs). Un nom mal orthographié est ignoré en silence.
+
+> Depuis un poste plutôt que le téléphone, la même chose en une commande :
+> ```bash
+> curl -X PUT https://api.arakice.com/api/manual/lineups/2026-01-15 \
+>   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+>   -d '{"goalies":{"TOR":"Joseph Woll"},"scratches":{"MTL":["Kaiden Guhle"]}}'
+> ```
 
 - Confirme les gardiens partants (annonces officielles / warmup). **Ne parie pas
   avant de l'avoir confirmé.**
@@ -84,9 +91,10 @@ pondérée par l'usage récent, ce qui est le bon défaut quand le n°1 part.
 
 ### Après le match
 
-Rien. Les entrées sont datées et deviennent inertes. Les vieilles dates dans les
-JSON ne gênent pas ; purge-les de temps en temps pour la lisibilité. Supprime une
-entrée `injuries.json` seulement si elle était fausse.
+Rien. Les entrées datées deviennent inertes, et le job de nettoyage quotidien
+purge celles de plus de 15 jours (`MANUAL_DATED_RETENTION_DAYS`) — il n'y a plus
+de fichier à ranger à la main. Supprime une entrée de blessures seulement si elle
+était fausse.
 
 ### Règles de jugement
 
@@ -103,28 +111,52 @@ entrée `injuries.json` seulement si elle était fausse.
 
 ## 3. Saisonnier et occasionnel
 
-### Arbitres — `server\src\data\referees.json` (début de saison)
+### Arbitres — `PUT /api/manual/referees` (début de saison)
 
-⚠️ **Le fichier ne contient aujourd'hui que 6 placeholders, tous à la moyenne
-(6.2) — le facteur arbitre est donc inerte.** Tant qu'il n'est pas rempli, il
-n'apporte rien.
+⚠️ **La table est VIDE — le facteur arbitre est donc inerte.** Elle l'était déjà
+avant : l'ancien `referees.json` ne contenait que 6 placeholders tous posés à la
+moyenne exacte (6.2), donc un multiplicateur de 1.0 et aucun effet. Ils n'ont
+volontairement pas été repris en base : une table qui a l'air remplie sans l'être
+est pire que vide. Tant que les vrais chiffres n'y sont pas, ce facteur n'apporte
+rien.
 
 - Source : scoutingtherefs.com, section *Referee Stats* (moyennes de saison).
-- Remplis `pp_per_game` = occasions de power-play accordées par match (deux
-  équipes cumulées) sous cet arbitre, et ajuste `league_avg_pp_per_game`.
+- `ppPerGame` = occasions de power-play accordées par match (deux équipes
+  cumulées) sous cet arbitre ; `leagueAvgPpPerGame` = la moyenne de la ligue.
 - Un arbitre absent de la table retombe sur la moyenne (multiplicateur 1.0,
   aucun effet) — inutile de viser l'exhaustivité, commence par les 20-25
   arbitres les plus utilisés.
+- L'appel **remplace la table entière** (transaction) : envoie toujours la liste
+  complète. C'est voulu — une table à moitié à jour est pire qu'une table
+  ancienne mais cohérente.
 - **Fréquence :** une passe en début de saison avec les chiffres de la saison
   précédente, une révision vers Noël avec les chiffres de la saison en cours.
 
-### Assignation d'arbitres — `server\src\data\ref_assignments.json` (secours)
+```bash
+curl -X PUT https://api.arakice.com/api/manual/referees \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{
+    "leagueAvgPpPerGame": 6.2,
+    "referees": [
+      { "name": "Wes McCauley",     "ppPerGame": 6.9 },
+      { "name": "Kelly Sutherland", "ppPerGame": 5.6 }
+    ]
+  }'
+```
+
+### Assignation d'arbitres — `PUT /api/manual/ref-assignments/:cle` (secours)
 
 Normalement **automatique** : `refereeStore.ts` scrape Scouting the Refs via son
-API WordPress. Le fichier manuel (clé `AWAY@HOME`) n'existe pas et n'est à créer
-que si le scraper cesse de parser (changement de format du site). En cas
+API WordPress. La saisie manuelle (clé `VISITEUR@MAISON`) est vide et n'est à
+remplir que si le scraper cesse de parser (changement de format du site). En cas
 d'échec, tout retombe en neutre — aucune prédiction n'est cassée, le facteur
 disparaît simplement.
+
+```bash
+curl -X PUT https://api.arakice.com/api/manual/ref-assignments/TOR@BOS \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"refs":["Wes McCauley","Garrett Rank"]}'
+```
 
 > Le parser n'a **jamais été validé sur du vrai HTML** (site injoignable depuis
 > le sandbox). À vérifier une fois lors d'une vraie journée de match.
@@ -162,27 +194,47 @@ warmup et saisis tard.
 
 ---
 
-## 5. ⚠️ Deux points à régler avant que tout ceci serve en production
+## 5. État des deux points bloquants
 
-Vérifié dans le code le 2026-08-11 — à confirmer de ton côté avant le lancement.
+**a) Les quatre tables manuelles étaient mortes en production — RÉGLÉ le 2026-09-04.**
 
-**a) Les quatre fichiers manuels n'existent pas dans le conteneur.**
-`server\Dockerfile` ne copie que `dist/`, et `tsc` n'émet pas les `.json` de
-`src/data/`. Le dossier `ml/` n'est pas dans l'image non plus. Conséquence en
-prod :
+Le diagnostic du 2026-08-11 était juste, et pire que prévu : `server\Dockerfile`
+ne copie que `dist/`, `tsc` n'émet pas les `.json` de `src/data/`, et le dossier
+`ml/` n'est pas dans l'image. Vérifié dans le `dist/` réel : il ne contenait que
+les `.js`. Conséquence, silencieuse dans les quatre cas :
 
 | Fichier | Comportement en prod |
 |---|---|
-| `referees.json` | absent → tous les arbitres neutres, facteur mort (silencieux) |
-| `injuries.json` | lecture → `{}` ; l'écriture admin (`PUT /api/injuries`) écrit dans `dist/data/`, qui n'existe pas → erreur, et de toute façon effacé à chaque redéploiement |
+| `referees.json` | absent → tous les arbitres neutres, facteur mort |
+| `injuries.json` | lecture → `{}` ; `PUT /api/injuries` écrivait dans un `dist/data/` inexistant → **500**, et de toute façon effacé à chaque redéploiement |
 | `starting_goalies.json` / `scratches.json` | chemin `cwd/../ml/data` inexistant → zéro absent, zéro gardien |
 
-Trois options, à trancher : copier les JSON dans l'image et monter un volume
-persistant pour ceux qui s'écrivent · déplacer ces quatre tables en base
-(cohérent avec le fait que `injuries.json` a déjà une UI d'écriture) · ou assumer
-que la saisie manuelle est locale et que la prod tourne sans.
+**Option retenue : les quatre tables en base** (migration
+`034_manual_data.sql`). C'est la seule qui règle les trois problèmes à la fois —
+présence dans l'image, persistance au redéploiement, partage entre instances.
+Copier les JSON dans l'image n'aurait réglé que la lecture : le système de
+fichiers d'un conteneur est éphémère, donc toute saisie faite depuis la carte
+admin aurait disparu au déploiement suivant.
 
-**b) Un gardien absent se saisit à deux endroits.**
-`injuries.json` (impact 0.12, facteur glass-box) et `starting_goalies.json`
-(feature ML). Les deux alimentent la prédiction finale. Il faut vérifier sur un
-cas réel que l'effet ne se compte pas deux fois — je ne l'ai pas mesuré.
+Ce qui change pour toi :
+
+- La saisie se fait dans l'app (Profil → Paramètres → **Saisie manuelle**), donc
+  **depuis le téléphone**, ce qui rend enfin faisable la passe de 1-2 h avant la
+  mise au jeu — les matchs sont le soir en Amérique.
+- Les anciens `.json` ont été supprimés du dépôt : il n'y a plus deux sources de
+  vérité possibles.
+- Les entrées datées se purgent toutes seules après 15 jours.
+- Les variables `SCRATCHES_PATH` et `STARTING_GOALIES_PATH` n'existent plus.
+
+⚠️ **La migration doit être appliquée en production** (`npm run db:migrate:all`
+avec le `DATABASE_URL` de prod) avant le déploiement du serveur, sinon toutes les
+lectures échouent et retombent en neutre — avec, cette fois, un `warn` dans les
+logs.
+
+**b) Un gardien absent se saisit toujours à deux endroits.** — NON RÉGLÉ.
+
+L'onglet **Blessures** (impact 0.12, facteur glass-box) et l'onglet **Compos du
+soir** (feature ML) alimentent tous deux la prédiction finale. Le passage en base
+n'a rien changé à ce point : c'est une question de modèle, pas de stockage. À
+mesurer sur un cas réel avant de s'y fier — un gardien saisi des deux côtés peut
+compter double.

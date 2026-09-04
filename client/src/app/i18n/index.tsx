@@ -754,7 +754,6 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pro.settingsCancel": { en: "Cancel subscription", fr: "Annuler l'abonnement" },
   "pro.canceling":    { en: "Canceling…",      fr: "Annulation…" },
   "pro.subscription": { en: "Subscription",    fr: "Abonnement" },
-  "pro.devNote":      { en: "Demo mode: Stripe payment isn't wired yet — the subscription activates immediately so you can test.", fr: "Mode démo : le paiement Stripe n'est pas encore branché — l'abonnement s'active immédiatement pour tester." },
   "pro.promo.label":       { en: "Have a promo code?", fr: "Tu as un code promo ?" },
   "pro.promo.placeholder": { en: "Enter code",         fr: "Entre ton code" },
   "pro.promo.apply":       { en: "Apply",              fr: "Appliquer" },

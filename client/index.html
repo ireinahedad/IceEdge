@@ -2,7 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover est OBLIGATOIRE pour que env(safe-area-inset-*) soit
+         autre chose que 0px sur iPhone. Sans lui, tous les paddings
+         `env(safe-area-inset-top)` de l'app valaient 0 : le contenu passait sous
+         l'encoche en PWA (status-bar-style=black-translucent) et passera sous
+         l'encoche ET l'indicateur d'accueil dans le WKWebView Capacitor. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>ArakIce — NHL Predictions, Picks &amp; Player Props Powered by ML</title>
     <meta name="description" content="Statistical edge for smarter sports bets. NHL win probabilities, totals and player-prop projections powered by machine learning." />
     <link rel="canonical" href="https://arakice.com/" />

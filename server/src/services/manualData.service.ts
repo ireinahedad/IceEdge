@@ -1,0 +1,238 @@
+/**
+ * manualData.service.ts — la seule porte vers la table `manual_data`.
+ *
+ * Remplace quatre lectures de fichiers qui étaient MORTES en production (voir
+ * `db/migrations/034_manual_data.sql` pour le détail : `tsc` n'émet pas les
+ * `.json`, le Dockerfile ne copie que `dist/`, et le dossier `ml/` n'est pas
+ * dans l'image). Les quatre jeux vivent désormais en base, donc ils survivent
+ * au redéploiement et sont vus par toutes les instances.
+ *
+ * ── Le cache est la raison d'être de ce module ──────────────────────────────
+ * `buildGameMarkets` et `buildGameFeatures` consultent ces données à CHAQUE
+ * prédiction. Sans cache, la page d'accueil d'un soir à douze matchs ferait
+ * quelques dizaines de requêtes pour lire trois lignes qui ne bougent pas.
+ *
+ * Le TTL est de 30 s, exactement comme la revérification de mtime que faisaient
+ * `scratches.ts` et `startingGoalies.ts` : une saisie faite depuis la carte
+ * admin est visible au plus tard 30 s après, sans redémarrage. C'est ce qui
+ * permet à la routine « 1-2 h avant la mise au jeu » de rester utilisable.
+ *
+ * Une écriture invalide immédiatement les entrées concernées SUR CETTE
+ * INSTANCE ; les autres attendent l'expiration. Différence sans conséquence
+ * pratique ici (une seule personne saisit, et 30 s de retard sur un facteur de
+ * blessure ne changent rien) — mais il faut la connaître.
+ *
+ * ── Les absences sont mises en cache, elles aussi ───────────────────────────
+ * La plupart des matchs n'ont AUCUNE saisie. Si seules les valeurs trouvées
+ * étaient mises en cache, le cas majoritaire — « rien pour ce match » —
+ * repartirait en base à chaque prédiction, c'est-à-dire exactement le contraire
+ * du but. D'où la boîte `{ v }` : `TtlCache` distingue « pas en cache » de
+ * « en cache, et la valeur est null » uniquement si null est emballé.
+ *
+ * ── Les pannes sont journalisées, plus silencieuses ─────────────────────────
+ * L'ancien code répondait à toute erreur par un `catch {}` muet et une valeur
+ * neutre. Le repli neutre est conservé — une base indisponible ne doit pas
+ * casser une prédiction, elle doit lui retirer un facteur — mais il passe
+ * désormais par `logger.warn`. C'est précisément ce qui manquait pour que la
+ * panne de production se voie.
+ */
+
+import { pool } from '../db/connection';
+import { logger } from '../logger';
+import { TtlCache } from './ttlCache';
+
+// ── Jeux de données ──────────────────────────────────────────────────────────
+
+export type ManualKind =
+  /** clé = 'AWAY@HOME' — blessés/absents et ajustement d'alignement */
+  | 'injuries'
+  /** clé = 'YYYY-MM-DD' (heure Est) — { ABBR: "Nom MoneyPuck" } */
+  | 'starting_goalies'
+  /** clé = 'YYYY-MM-DD' (heure Est) — { ABBR: ["Nom MoneyPuck", …] } */
+  | 'scratches'
+  /** clé = nom d'arbitre normalisé — { name, ppPerGame, note? } */
+  | 'ref_tendency'
+  /** clé = 'AWAY@HOME' — { refs: [...] }, secours si le scrape STR casse */
+  | 'ref_assignment'
+  /** clé = 'league' — { avgPpPerGame } */
+  | 'ref_config';
+
+export interface ManualRow<T = unknown> {
+  key: string;
+  payload: T;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+// ── Cache ────────────────────────────────────────────────────────────────────
+
+const TTL_MS = Number(process.env.MANUAL_DATA_TTL_MS) || 30_000;
+
+/**
+ * Plafond volontairement large au regard du volume réel (une poignée de matchs
+ * par jour, une date par jour, quelques dizaines d'arbitres), mais borné quand
+ * même : `entry_key` vient d'une entrée utilisateur sur les routes de lecture,
+ * et un cache non plafonné dont les clés viennent de l'extérieur est un DoS
+ * mémoire. Même règle que partout ailleurs dans ce dépôt.
+ */
+const MAX_ENTRIES = Number(process.env.MANUAL_DATA_CACHE_MAX) || 400;
+
+/** La boîte qui rend `null` cachable — voir l'en-tête. */
+interface Boxed<T> { v: T }
+
+const cache = new TtlCache<Boxed<unknown>>(TTL_MS, MAX_ENTRIES, 'manual');
+
+const oneKey  = (kind: ManualKind, key: string) => `${kind}:${key}`;
+const listKey = (kind: ManualKind)              => `${kind}:*`;
+
+/** Une écriture rend fausses l'entrée ET la liste de son kind. */
+function invalidate(kind: ManualKind, key: string): void {
+  cache.delete(oneKey(kind, key));
+  cache.delete(listKey(kind));
+}
+
+// ── Lecture ──────────────────────────────────────────────────────────────────
+
+/**
+ * Une entrée, ou `null` si elle n'existe pas.
+ *
+ * Ne lève jamais : une base injoignable rend `null`, donc un facteur neutre,
+ * comme le faisait le `catch` de l'ancien code — mais avec une trace.
+ */
+export async function getEntry<T>(kind: ManualKind, key: string): Promise<T | null> {
+  try {
+    const boxed = await cache.wrap(oneKey(kind, key), async () => {
+      const { rows } = await pool.query(
+        'SELECT payload FROM manual_data WHERE kind = $1 AND entry_key = $2',
+        [kind, key],
+      );
+      return { v: (rows[0]?.payload ?? null) as unknown };
+    });
+    return boxed.v as T | null;
+  } catch (err: any) {
+    logger.warn({ err: err?.message ?? err, kind, key }, '[manualData] lecture impossible — repli neutre');
+    return null;
+  }
+}
+
+/** Toutes les entrées d'un jeu de données, les plus récemment modifiées d'abord. */
+export async function listEntries<T>(kind: ManualKind): Promise<ManualRow<T>[]> {
+  try {
+    const boxed = await cache.wrap(listKey(kind), async () => {
+      const { rows } = await pool.query(
+        `SELECT entry_key AS "key", payload, updated_at AS "updatedAt", updated_by AS "updatedBy"
+           FROM manual_data
+          WHERE kind = $1
+          ORDER BY updated_at DESC`,
+        [kind],
+      );
+      return { v: rows as unknown };
+    });
+    return (boxed.v as ManualRow<T>[]) ?? [];
+  } catch (err: any) {
+    logger.warn({ err: err?.message ?? err, kind }, '[manualData] liste impossible — repli vide');
+    return [];
+  }
+}
+
+/** Les entrées d'un jeu de données sous forme d'objet `{ clé: payload }`. */
+export async function mapEntries<T>(kind: ManualKind): Promise<Record<string, T>> {
+  const rows = await listEntries<T>(kind);
+  const out: Record<string, T> = {};
+  for (const r of rows) out[r.key] = r.payload;
+  return out;
+}
+
+// ── Écriture ─────────────────────────────────────────────────────────────────
+//
+// Les écritures, elles, LÈVENT. Un admin qui enregistre une saisie doit savoir
+// qu'elle n'est pas passée : c'est le seul moment où quelqu'un attend devant
+// l'écran, et un échec silencieux lui ferait croire que le facteur est pris en
+// compte alors qu'il ne l'est pas.
+
+/** Crée ou remplace une entrée. */
+export async function setEntry(
+  kind: ManualKind,
+  key: string,
+  payload: unknown,
+  updatedBy?: string | null,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO manual_data (kind, entry_key, payload, updated_by, updated_at)
+     VALUES ($1, $2, $3::jsonb, $4, NOW())
+     ON CONFLICT (kind, entry_key)
+     DO UPDATE SET payload = EXCLUDED.payload,
+                   updated_by = EXCLUDED.updated_by,
+                   updated_at = NOW()`,
+    [kind, key, JSON.stringify(payload), updatedBy ?? null],
+  );
+  invalidate(kind, key);
+}
+
+/** Supprime une entrée. Rend `true` si elle existait. */
+export async function deleteEntry(kind: ManualKind, key: string): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    'DELETE FROM manual_data WHERE kind = $1 AND entry_key = $2',
+    [kind, key],
+  );
+  invalidate(kind, key);
+  return (rowCount ?? 0) > 0;
+}
+
+/**
+ * Remplace TOUT le contenu d'un jeu de données, en une transaction.
+ *
+ * Existe pour la table des tendances d'arbitres, qui se saisit en une passe en
+ * début de saison depuis Scouting the Refs : un remplacement atomique évite
+ * l'état intermédiaire où la moitié des arbitres viennent de la saison passée
+ * et l'autre de la nouvelle.
+ */
+export async function replaceKind(
+  kind: ManualKind,
+  entries: Array<{ key: string; payload: unknown }>,
+  updatedBy?: string | null,
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM manual_data WHERE kind = $1', [kind]);
+    for (const e of entries) {
+      await client.query(
+        `INSERT INTO manual_data (kind, entry_key, payload, updated_by)
+         VALUES ($1, $2, $3::jsonb, $4)`,
+        [kind, e.key, JSON.stringify(e.payload), updatedBy ?? null],
+      );
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+  cache.clear();
+}
+
+/**
+ * Purge les entrées datées antérieures à `beforeDate` (exclue).
+ *
+ * Les gardiens partants et les absents sont datés : passé le match, l'entrée est
+ * inerte mais elle reste. L'ancienne consigne était « purge-les de temps en
+ * temps pour la lisibilité », c'est-à-dire jamais. Appelée par le job de
+ * nettoyage quotidien.
+ */
+export async function purgeDatedBefore(beforeDate: string): Promise<number> {
+  const { rowCount } = await pool.query(
+    `DELETE FROM manual_data
+      WHERE kind IN ('starting_goalies', 'scratches')
+        AND entry_key < $1`,
+    [beforeDate],
+  );
+  if (rowCount) cache.clear();
+  return rowCount ?? 0;
+}
+
+/** Vide le cache. Tests, et invalidation manuelle après un import en masse. */
+export function clearManualDataCache(): void {
+  cache.clear();
+}

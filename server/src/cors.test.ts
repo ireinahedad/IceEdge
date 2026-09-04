@@ -51,6 +51,34 @@ describe('politique CORS partagée', () => {
     expect(isAllowedOrigin('http://ice-edge-abc.vercel.app')).toBe(false); // http, pas https
   });
 
+  /**
+   * LA faille que le suffixe d'équipe ferme (2026-09-04).
+   *
+   * La regex était `^https://ice-edge[a-z0-9-]*\.vercel\.app$` : le préfixe
+   * seul, sans le slug d'équipe. Or un sous-domaine `<projet>.vercel.app`
+   * s'attribue au PREMIER ARRIVÉ, sur n'importe quel compte Vercel. Créer un
+   * projet nommé `ice-edge-x` suffisait donc à obtenir une origine autorisée.
+   *
+   * Ce que ça donnait, concrètement : `cors({ credentials: true })` + le cookie
+   * de refresh en `SameSite=None` → une page hébergée là appelait
+   * `POST /api/auth/refresh` avec `credentials: 'include'` ET LISAIT LA RÉPONSE,
+   * donc repartait avec un jeton d'accès valide. Prise de contrôle de compte
+   * complète, sans XSS, pour tout visiteur connecté ouvrant le lien.
+   *
+   * Le slug d'équipe vient du compte propriétaire : il n'est pas attribuable à
+   * un tiers. C'est lui, et lui seul, qui ferme la porte.
+   */
+  it('refuse un projet Vercel tiers dont le nom commence par ice-edge', async () => {
+    const { isAllowedOrigin } = await loadCors('https://arakice.com');
+
+    expect(isAllowedOrigin('https://ice-edge-evil.vercel.app')).toBe(false);
+    expect(isAllowedOrigin('https://ice-edge.vercel.app')).toBe(false);
+    expect(isAllowedOrigin('https://ice-edge-abc123.vercel.app')).toBe(false);
+    // Slug d'équipe imité mais pas identique.
+    expect(isAllowedOrigin('https://ice-edge-abc-ireina-hedad-s-project.vercel.app')).toBe(false);
+    expect(isAllowedOrigin('https://ice-edge-abc-autre-equipe.vercel.app')).toBe(false);
+  });
+
   // curl, sondes de santé, clients non navigateur : pas d'en-tête Origin, donc
   // pas de requête cross-origin à protéger.
   it('laisse passer une requête sans Origin', async () => {

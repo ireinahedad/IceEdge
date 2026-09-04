@@ -621,7 +621,7 @@ export async function buildGameMarkets(gameId: string, weights?: FactorWeights):
 
   // Sources enrichies, tolérantes aux pannes (fallback neutre par source).
   const [summaryRes, homeRestRes, awayRestRes, oddsRes,
-         homeTravelRes, awayTravelRes, refFactorRes] = await Promise.allSettled([
+         homeTravelRes, awayTravelRes, refFactorRes, manualRes] = await Promise.allSettled([
     fetchTeamSummaryStats(),
     fetchTeamRestInfo(homeAbbr),
     fetchTeamRestInfo(awayAbbr),
@@ -629,6 +629,11 @@ export async function buildGameMarkets(gameId: string, weights?: FactorWeights):
     fetchTeamTravel(homeAbbr, homeAbbr),   // les deux jouent dans l'aréna maison
     fetchTeamTravel(awayAbbr, homeAbbr),
     getGameRefFactor(homeAbbr, awayAbbr),  // arbitrage → volume de PP (totaux)
+    // Blessures / alignement : lecture en base depuis la migration 034 (le
+    // fichier n'existait pas dans le conteneur). Placée ICI et non plus après le
+    // bloc : elle est asynchrone maintenant, et l'attendre en série aurait
+    // ajouté un aller-retour à chaque prédiction pour rien.
+    getManualFactors(homeAbbr, awayAbbr),
   ]);
   const summary  = summaryRes.status  === 'fulfilled' ? summaryRes.value  : {};
   const homeRest = homeRestRes.status === 'fulfilled' ? homeRestRes.value : { restDays: 2, b2b: 0 as 0 | 1, dense3in4: 0 };
@@ -638,8 +643,12 @@ export async function buildGameMarkets(gameId: string, weights?: FactorWeights):
   const awayTravel = awayTravelRes.status === 'fulfilled' ? awayTravelRes.value : null;
   const refFactor  = refFactorRes.status  === 'fulfilled' ? refFactorRes.value  : null;
 
-  // Facteurs manuels (blessures + alignement), relus à chaque appel.
-  const manual = getManualFactors(homeAbbr, awayAbbr);
+  // Facteurs manuels (blessures + alignement). `getManualFactors` ne lève pas,
+  // mais `allSettled` garde le repli neutre explicite si cela changeait un jour.
+  const manual = manualRes.status === 'fulfilled'
+    ? manualRes.value
+    : { injuries: { active: false, homeProb: 0.5, note: 'non renseigné' },
+        lineup:   { active: false, homeProb: 0.5, note: 'non renseigné' } };
 
   return computeGameMarkets(
     homeTeam, awayTeam,

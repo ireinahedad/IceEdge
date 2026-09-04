@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { profileApiService } from "../services/userService";
 import { useAuth } from "./AuthContext";
 import type { BlockedUser } from "../types/user";
@@ -68,6 +68,26 @@ export function BlockProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   }, [apply]);
+
+  /**
+   * Remise à zéro au changement de compte.
+   *
+   * `requested` est un ref, donc il survivait à une déconnexion : après un
+   * changement de compte sur le même appareil, `ensureLoaded()` repartait
+   * immédiatement (`requested.current` valait déjà true) et le nouvel
+   * utilisateur héritait de la liste de blocage du précédent — messages masqués
+   * pour la mauvaise personne dans le chat, et surtout la liste de quelqu'un
+   * d'autre affichée dans ses Paramètres. On suit l'identifiant, pas l'objet :
+   * `user` est recréé à chaque rendu d'AuthProvider, `user.id` ne change que
+   * quand le compte change vraiment.
+   */
+  const loadedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (loadedFor.current === (user?.id ?? null)) return;
+    loadedFor.current = user?.id ?? null;
+    requested.current = false;
+    apply([]);
+  }, [user?.id, apply]);
 
   const ensureLoaded = useCallback(() => {
     if (requested.current || !user) return;
