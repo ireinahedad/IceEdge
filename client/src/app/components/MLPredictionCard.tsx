@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
 import { FramedLabel } from "./brand/FramedLabel";
 import { env } from "../env";
+import { pctColor } from "../data/pctScale";
 
 type TFn = (key: string, params?: Record<string, string | number>) => string;
 
@@ -53,10 +54,7 @@ function MLGauge({ pct }: { pct: number }) {
     return () => clearTimeout(t);
   }, [pct]);
 
-  const color =
-    pct >= 65 ? "#4ade80" :
-    pct >= 50 ? "#a78bfa" :
-    pct >= 38 ? "#facc15" : "#f87171";
+  const color = pctColor(pct);
 
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
@@ -136,10 +134,12 @@ function ImportanceBar({ fi, maxImp }: { fi: MLFeatureImportance; maxImp: number
 // ── Verdict label ─────────────────────────────────────────────────────────────
 
 function verdictLabel(pct: number, t: TFn): { text: string; color: string; bg: string } {
-  if (pct >= 70) return { text: t("ml.verdictStrong"),  color: "#4ade80", bg: "rgba(74,222,128,0.12)" };
-  if (pct >= 58) return { text: t("ml.verdictPos"),     color: "#a78bfa", bg: "rgba(167,139,250,0.12)" };
-  if (pct >= 45) return { text: t("ml.verdictNeutral"), color: "#facc15", bg: "rgba(250,204,21,0.10)" };
-  return           { text: t("ml.verdictWeak"),         color: "#f87171", bg: "rgba(248,113,113,0.10)" };
+  const color = pctColor(pct);
+  const bg = color + "1f";
+  if (pct >= 70) return { text: t("ml.verdictStrong"),  color, bg };
+  if (pct >= 58) return { text: t("ml.verdictPos"),     color, bg };
+  if (pct >= 45) return { text: t("ml.verdictNeutral"), color, bg };
+  return           { text: t("ml.verdictWeak"),         color, bg };
 }
 
 // ── Animated big gauge (hero) ─────────────────────────────────────────────────
@@ -195,14 +195,8 @@ function MLSimpleCard({ result }: { result: MLPredictionResult; ruleBasedPct?: n
     return () => clearTimeout(timer);
   }, [probability, open]);
 
-  const probColor =
-    probability >= 65 ? "#4ade80" :
-    probability >= 50 ? "#a78bfa" :
-    probability >= 38 ? "#facc15" : "#f87171";
-
-  const confColor =
-    confidence >= 75 ? "#4ade80" :
-    confidence >= 55 ? "#a78bfa" : "#facc15";
+  const probColor = pctColor(probability);
+  const confColor = pctColor(confidence);
 
   return (
     <div className="bg-[#0d0a1a] border border-[#a78bfa]/25 rounded-2xl overflow-hidden">
@@ -257,14 +251,8 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
   const { t } = useI18n();
   const { probability, confidence, feature_importances, model_type, model_version, explanation } = result;
 
-  const probColor =
-    probability >= 65 ? "#4ade80" :
-    probability >= 50 ? "#a78bfa" :
-    probability >= 38 ? "#facc15" : "#f87171";
-
-  const confColor =
-    confidence >= 75 ? "#4ade80" :
-    confidence >= 55 ? "#a78bfa" : "#facc15";
+  const probColor = pctColor(probability);
+  const confColor = pctColor(confidence);
 
   // ── Compact badge ──────────────────────────────────────────────────────────
   if (compact) {
@@ -530,14 +518,33 @@ function fallbackResult(ruleBasedPct: number | undefined, propType: string | und
   };
 }
 
+/**
+ * Placeholder affiché pendant l'appel au service ML — même cadre que la carte,
+ * pour que rien ne bouge quand le vrai résultat arrive.
+ */
+function MLSkeleton() {
+  return (
+    <div className="bg-[#0d0a1a] border border-[#a78bfa]/25 rounded-2xl overflow-hidden">
+      <div className="flex items-center gap-2.5 px-4 py-3">
+        <FramedLabel text="ML" />
+        <div className="flex-1" />
+        <div className="h-6 w-16 rounded-lg bg-[#a78bfa]/10 animate-pulse" />
+      </div>
+    </div>
+  );
+}
+
 export function MLSection({ type, subjectId, opponentId, propType, line, ruleBasedPct, label, simple, hero }: MLSectionProps) {
   const { t, lang } = useI18n();
   const [result, setResult] = useState<MLPredictionResult | null>(null);
 
   useEffect(() => {
     let alive = true;
-    // Show fallback immediately so the card is always visible
-    setResult(fallbackResult(ruleBasedPct, propType, t));
+    // Aucun chiffre tant que le modèle n'a pas répondu. Jusqu'au 2026-09-04 la
+    // carte affichait immédiatement le repli (rulePct ± 3) puis le remplaçait
+    // par la vraie probabilité une seconde plus tard : le pourcentage sautait
+    // sous les yeux de l'utilisateur. Le repli ne sert plus qu'en cas d'échec.
+    setResult(null);
 
     fetch(`${ML_BASE}/ml`, {
       method: "POST",
@@ -546,16 +553,17 @@ export function MLSection({ type, subjectId, opponentId, propType, line, ruleBas
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (alive && data && typeof data === "object") {
-          setResult(normalizeMLResponse(data as Record<string, unknown>, t));
-        }
+        if (!alive) return;
+        setResult(data && typeof data === "object"
+          ? normalizeMLResponse(data as Record<string, unknown>, t)
+          : fallbackResult(ruleBasedPct, propType, t));
       })
-      .catch(() => { /* server offline — keep fallback */ });
+      .catch(() => { if (alive) setResult(fallbackResult(ruleBasedPct, propType, t)); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type, subjectId, opponentId, propType, line, ruleBasedPct, lang]);
 
-  if (!result) return null;
+  if (!result) return <MLSkeleton />;
   return (
     <MLPredictionCard
       result={result}

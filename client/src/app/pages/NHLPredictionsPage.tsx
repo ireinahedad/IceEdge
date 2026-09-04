@@ -11,6 +11,7 @@ import { useSport } from "../context/SportContext";
 import { useNHLData } from "../hooks/useNHLData";
 import { nhlApiService } from "../services/nhlApiService";
 import { nhlLogoUrl } from "../data/teamEmoji";
+import { pctColor } from "../data/pctScale";
 import {
   MARKET_DEFINITIONS,
   CATEGORY_LABELS,
@@ -184,15 +185,6 @@ function computeRulePrediction(
     default:
       return { pct: 50, note: t("nhl.note.default") };
   }
-}
-
-// ─── Couleur selon % ──────────────────────────────────────────────────────────
-
-function pctColor(pct: number): string {
-  if (pct >= 65) return "#4ade80";
-  if (pct >= 50) return "#86d1ea";
-  if (pct >= 38) return "#facc15";
-  return "#f87171";
 }
 
 // ─── Jauge circulaire compacte ────────────────────────────────────────────────

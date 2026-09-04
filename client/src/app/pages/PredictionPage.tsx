@@ -54,7 +54,10 @@ export function PredictionPage() {
           <div className="px-4 pt-3 pb-3 flex items-center gap-3">
             <button onClick={() => navigate(-1)} className="text-[#3a5060] text-lg">←</button>
             <h1 className="text-white text-base font-bold flex-1 uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("pred.title")}</h1>
-            {(type === "team" || type === "player") && id && (
+            {/* Le raccourci vers les graphiques vaut pour les trois sujets :
+                /stats/chart/game/:id existe déjà (GameCharts), seul le bouton
+                manquait sur un match. */}
+            {(type === "team" || type === "player" || type === "game") && id && (
               <FramedLabel
                 text={t("pred.chart")}
                 onClick={() => navigate(`/stats/chart/${type}/${id}`)}

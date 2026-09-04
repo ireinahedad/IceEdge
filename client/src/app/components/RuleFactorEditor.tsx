@@ -9,6 +9,7 @@
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { FactorPie } from "./FactorPie";
+import { pctColor } from "../data/pctScale";
 import { FramedLabel } from "./brand/FramedLabel";
 import {
   SimpleFactor,
@@ -66,7 +67,7 @@ export function RuleFactorEditor({
   const blended = blendFactors(factors, weights);
   const total = factors.reduce((s, f) => s + (weights[f.id] ?? f.weight), 0);
   const overLimit = total > 100.0001;
-  const pctColor = blended >= 65 ? "#4ade80" : blended >= 50 ? "#86d1ea" : blended >= 38 ? "#facc15" : "#f87171";
+  const blendedColor = pctColor(blended);
 
   const slices = factors.map((f) => ({
     label: f.label,
@@ -158,12 +159,12 @@ export function RuleFactorEditor({
         >
           Pondération {open ? "▲" : "▼"}
         </button>
-        <span className="text-xl font-black flex-shrink-0" style={{ color: pctColor }}>{blended}%</span>
+        <span className="text-xl font-black flex-shrink-0" style={{ color: blendedColor }}>{blended}%</span>
       </div>
 
       <div className="px-4 py-3">
         <div className="w-full bg-[#0A0E0C] rounded-full h-2 overflow-hidden">
-          <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${blended}%`, backgroundColor: pctColor }} />
+          <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${blended}%`, backgroundColor: blendedColor }} />
         </div>
 
         {open && (

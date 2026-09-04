@@ -27,6 +27,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { authedFetch } from "../services/authService";
+import { pctColor } from "../data/pctScale";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -212,10 +213,7 @@ type Tab = "service" | "data" | "model" | "backtest" | "live";
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function probColor(p: number) {
-  if (p >= 65) return "#4ade80";
-  if (p >= 50) return "#a78bfa";
-  if (p >= 38) return "#facc15";
-  return "#f87171";
+  return pctColor(p);
 }
 
 function confidenceLabel(c: number) {

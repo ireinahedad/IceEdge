@@ -612,6 +612,10 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pred.noUpcoming":     { en: "No game scheduled in the next 14 days", fr: "Aucun match prévu dans les 14 prochains jours" },
   "pred.playersTable":   { en: "Players",               fr: "Joueurs" },
   "pred.seasonStats":    { en: "Season stats",          fr: "Stats de la saison" },
+  "pred.playerCharts":   { en: "Stats",                 fr: "Stats" },
+  "pred.playerTeam":     { en: "Team",                  fr: "Équipe" },
+  "pred.playerPreds":    { en: "Predictions",           fr: "Prédictions" },
+  "pred.playerBackToStats": { en: "Back to his stats",  fr: "Revoir ses stats" },
   "pro.back":            { en: "Back",                  fr: "Retour" },
   // ── Market selector sheet ──
   "mkt.addPrediction": { en: "Add Prediction",   fr: "Ajouter une prédiction" },

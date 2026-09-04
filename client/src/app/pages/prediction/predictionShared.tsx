@@ -10,6 +10,7 @@ import { useNavigate, useSearchParams } from "react-router";
 import { useCallback, useEffect, useMemo, useState, createContext } from "react";
 import { nhlApiService } from "../../services/nhlApiService";
 import { nhlLogoUrl } from "../../data/teamEmoji";
+import { pctColor } from "../../data/pctScale";
 import { useI18n } from "../../i18n";
 import type { NHLGame } from "../../types/bet";
 import type { CalcFactor } from "../../services/predictionApiService";
@@ -31,11 +32,7 @@ function WinGauge({ pct, label, size = 140 }: { pct: number; label: string; size
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference * (1 - displayed / 100);
 
-  const color =
-    pct >= 65 ? "#4ade80" :
-    pct >= 50 ? "#86d1ea" :
-    pct >= 40 ? "#facc15" :
-    "#f87171";
+  const color = pctColor(pct);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -167,12 +164,15 @@ function CalculatedBreakdown({ basePct, factors, finalPct, accent }: {
 function ConfidenceBadge({ pct }: { pct: number }) {
   const { t } = useI18n();
   const label = pct >= 70 ? t("pred.confHigh") : pct >= 55 ? t("pred.confModerate") : pct >= 45 ? t("pred.confEven") : t("pred.confUnderdog");
-  const cls = pct >= 70 ? "bg-green-500/20 text-green-400 border-green-500/30" :
-    pct >= 55 ? "bg-[#86d1ea]/20 text-[#86d1ea] border-[#86d1ea]/30" :
-    pct >= 45 ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" :
-    "bg-red-500/20 text-red-400 border-red-500/30";
+  // Couleurs en style inline plutôt qu'en classes Tailwind : la rampe vit
+  // maintenant dans pctScale, hors de portée du JIT qui n'accepte que des
+  // noms de classe littéraux.
+  const color = pctColor(pct);
   return (
-    <span className={`border rounded-full px-3 py-1 text-xs font-medium ${cls}`}>{label}</span>
+    <span
+      className="border rounded-full px-3 py-1 text-xs font-medium"
+      style={{ background: color + "33", color, borderColor: color + "4d" }}
+    >{label}</span>
   );
 }
 

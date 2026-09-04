@@ -11,7 +11,7 @@ import { useSearchParams } from "react-router";
 import { nhlApiService } from "../../services/nhlApiService";
 import { useSport } from "../../context/SportContext";
 import { nhlLogoUrl } from "../../data/teamEmoji";
-import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
+import { MarketGroup, PredictionsRevealBar, TeamPlayersTable } from "./PredictionSheet";
 import { MLProps, MktGroup, RuleFactor } from "./gameMarkets";
 import { GameSelector, LoadingSkeleton, NotFound, RecentFormCard, RevealMode, RevealModeCtx, useSelectedGame, useUpcomingGames } from "./predictionShared";
 
@@ -236,6 +236,15 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
         {teamGroupsF.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
       </RevealModeCtx.Provider>
 
+      {/* Effectif — même tableau que sur la page d'un match, un seul club ici.
+          Le match sélectionné suit le joueur pour que ses props soient ceux de
+          cette affiche. */}
+      <TeamPlayersTable
+        abbr={data.abbr}
+        name={data.name}
+        gameId={selectedGame?.id}
+        accent={accent}
+      />
     </div>
   );
 }

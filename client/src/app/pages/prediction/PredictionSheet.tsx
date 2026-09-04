@@ -7,7 +7,7 @@
  */
 
 import { useNavigate } from "react-router";
-import { useEffect, useState, useContext } from "react";
+import { Fragment, useEffect, useState, useContext } from "react";
 import { nhlApiService } from "../../services/nhlApiService";
 import { predictionApiService } from "../../services/predictionApiService";
 import { requestFromMLProps } from "../../services/predictionRequest";
@@ -20,6 +20,7 @@ import { MLSection, fetchMLProbability } from "../../components/MLPredictionCard
 import { RuleFactorEditor } from "../../components/RuleFactorEditor";
 import { FramedLabel } from "../../components/brand/FramedLabel";
 import { BetOpt, MLProps, MktGroup, RuleFactor, buildLLMDataContext, llmCacheId, loadLlmCache, saveLlmCache, settlementFields } from "./gameMarkets";
+import { pctColor } from "../../data/pctScale";
 import { RevealMode, RevealModeCtx } from "./predictionShared";
 
 /* ─── Prediction bottom sheet ───────────────── */
@@ -33,7 +34,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   const [llmOpen, setLlmOpen]     = useState(false); // repliée par défaut pour ne pas cacher les autres cartes
   const [llmLoading, setLlmLoading] = useState(false);
   const [copied, setCopied]       = useState(false);
-  const pctColor = rulePct >= 65 ? "#4ade80" : rulePct >= 50 ? accent : rulePct >= 38 ? "#facc15" : "#f87171";
+  const ruleColor = pctColor(rulePct);
 
   // Fall back to fetching the server prediction if the parent hasn't yet.
   const [ownServerPct, setOwnServerPct] = useState<number | undefined>(serverPct);
@@ -132,12 +133,12 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
             <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/[0.05]">
               <FramedLabel text={t("pred.rules")} />
               <div className="flex-1" />
-              <span className="text-xl font-black flex-shrink-0" style={{ color: pctColor }}>{rulePct}%</span>
+              <span className="text-xl font-black flex-shrink-0" style={{ color: ruleColor }}>{rulePct}%</span>
             </div>
             <div className="px-4 py-3">
               <div className="w-full bg-[#0A0E0C] rounded-full h-2 mb-2.5 overflow-hidden">
                 <div className="h-2 rounded-full transition-all duration-700"
-                  style={{ width: `${rulePct}%`, backgroundColor: pctColor }} />
+                  style={{ width: `${rulePct}%`, backgroundColor: ruleColor }} />
               </div>
               <p className="text-[#8a9ea6] text-[11px] leading-relaxed">{ruleNote}</p>
             </div>
@@ -340,19 +341,19 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
 
   const loadingMl = source === "ml" && !!opt.mlProps && mlPct === null;
   const shownPct = source === "ml" ? (mlPct ?? opt.rulePct) : opt.rulePct;
-  const pctColor = shownPct >= 65 ? "#4ade80" : shownPct >= 50 ? accent : shownPct >= 38 ? "#facc15" : "#f87171";
+  const shownColor = pctColor(shownPct);
 
   return (
     <>
       <button
         onClick={() => setSheet(true)}
         className="flex flex-col items-center justify-between p-3 rounded-xl border transition-all active:scale-[0.97] w-full"
-        style={{ minHeight: 64, background: "#131A12", borderColor: pctColor + "55" }}
+        style={{ minHeight: 64, background: "#131A12", borderColor: shownColor + "55" }}
       >
         <span className="text-white text-[11px] font-medium text-center leading-tight">{opt.label}</span>
         <span
           className="mt-2 px-3 py-0.5 rounded-full text-xs font-bold"
-          style={{ background: pctColor + "22", color: pctColor, border: `1px solid ${pctColor}55` }}
+          style={{ background: shownColor + "22", color: shownColor, border: `1px solid ${shownColor}55` }}
         >
           {loadingMl ? "…" : `${shownPct}%`}
         </span>
@@ -394,24 +395,66 @@ export function MarketGroup({ group, accent }: { group: MktGroup; accent: string
   );
 }
 
-/* ─── Players table (bottom of a game's prediction page) ───────────────────
- * One table at a time, home or away, showing each player's season line. A row
- * opens that player's own prediction page with this game pre-selected, so the
- * props shown there are the ones for the match being looked at.
+/* ─── Players table (game and team prediction pages) ───────────────────────
+ * One table at a time, showing each player's season line. On a game there are
+ * two sides and a home/away switch; on a team page there is a single side and
+ * no switch.
+ *
+ * A row no longer navigates on its own (2026-09-04): tapping it fades the line
+ * and offers the three destinations — the player's charts, his club, his own
+ * predictions — plus a × that brings the season line back.
  */
-export function GamePlayersTable({ gameId, home, away, accent }: {
-  gameId: string;
-  home: { abbr: string; name: string };
-  away: { abbr: string; name: string };
-  accent: string;
+
+type PlayerSide = { key: string; abbr: string; name: string };
+
+/** The three destinations offered for the tapped player, and the way back. */
+function PlayerRowActions({ playerId, abbr, gameId, accent, onClose }: {
+  playerId: string; abbr: string; gameId?: string; accent: string; onClose: () => void;
 }) {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const [side, setSide] = useState<"home" | "away">("home");
+  // Le match suit le joueur et le club, pour que la page d'arrivée parle de
+  // CETTE affiche plutôt que du prochain match par défaut.
+  const suffix = gameId ? `?game=${gameId}` : "";
+  const act = (label: string, to: string) => (
+    <button
+      onClick={(e) => { e.stopPropagation(); navigate(to); }}
+      className="flex-1 min-w-0 px-2 py-2 rounded-lg text-[11px] font-semibold truncate transition-transform active:scale-95"
+      style={{ background: accent + "1a", color: accent, border: `1px solid ${accent}44` }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="flex items-center gap-1.5 px-3 py-2">
+      {act(t("pred.playerCharts"), `/stats/chart/player/${playerId}`)}
+      {act(t("pred.playerTeam"),   `/stats/prediction/team/${abbr.toLowerCase()}${suffix}`)}
+      {act(t("pred.playerPreds"),  `/stats/prediction/player/${playerId}${suffix}`)}
+      <button
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
+        aria-label={t("pred.playerBackToStats")}
+        title={t("pred.playerBackToStats")}
+        className="w-8 h-8 flex-shrink-0 rounded-lg text-sm font-bold text-[#8a9ea6] bg-[#0A0E0C] border border-white/15 transition-transform active:scale-95"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+function PlayersStatsTable({ sides, gameId, accent }: {
+  sides: PlayerSide[];
+  gameId?: string;
+  accent: string;
+}) {
+  const { t } = useI18n();
+  const [sideKey, setSideKey] = useState(sides[0]?.key ?? "");
   const [rosters, setRosters] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(false);
+  const [openPlayer, setOpenPlayer] = useState<string | null>(null);
 
-  const activeAbbr = side === "home" ? home.abbr : away.abbr;
+  const side = sides.find(s => s.key === sideKey) ?? sides[0];
+  const activeAbbr = side?.abbr ?? "";
 
   useEffect(() => {
     if (!activeAbbr || rosters[activeAbbr]) return;
@@ -423,6 +466,9 @@ export function GamePlayersTable({ gameId, home, away, accent }: {
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [activeAbbr]);
+
+  // Changer de côté ferme la ligne ouverte : elle appartenait à l'autre club.
+  useEffect(() => { setOpenPlayer(null); }, [activeAbbr]);
 
   // Server already sorts by points, but a re-sort keeps the order stable if a
   // future endpoint stops doing so.
@@ -439,25 +485,30 @@ export function GamePlayersTable({ gameId, home, away, accent }: {
     <div className="bg-[#131A12] border border-white/20 rounded-2xl overflow-hidden">
       <div className="px-4 pt-3 pb-2 flex items-center gap-2">
         <span className="text-white text-sm font-medium">{t("pred.playersTable")}</span>
+        {sides.length === 1 && side && (
+          <span className="text-[#8a9ea6] text-[11px]">· {side.name}</span>
+        )}
         <span className="text-[#8a9ea6] text-[10px] ml-auto">{t("pred.seasonStats")}</span>
       </div>
 
-      {/* Team tabs */}
-      <div className="px-4 pb-3">
-        <div className="flex gap-1.5 bg-[#0A0E0C] rounded-xl p-1">
-          {[{ key: "home" as const, abbr: home.abbr }, { key: "away" as const, abbr: away.abbr }].map(o => (
-            <button
-              key={o.key}
-              onClick={() => setSide(o.key)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all"
-              style={side === o.key ? { background: accent, color: "#0A0E0C" } : { color: "#8a9ea6" }}
-            >
-              <img src={nhlLogoUrl(o.abbr)} alt={o.abbr} className="w-4 h-4 object-contain" />
-              {o.abbr}
-            </button>
-          ))}
+      {/* Team tabs — only when there are two clubs to switch between */}
+      {sides.length > 1 && (
+        <div className="px-4 pb-3">
+          <div className="flex gap-1.5 bg-[#0A0E0C] rounded-xl p-1">
+            {sides.map(o => (
+              <button
+                key={o.key}
+                onClick={() => setSideKey(o.key)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all"
+                style={sideKey === o.key ? { background: accent, color: "#0A0E0C" } : { color: "#8a9ea6" }}
+              >
+                <img src={nhlLogoUrl(o.abbr)} alt={o.abbr} className="w-4 h-4 object-contain" />
+                {o.abbr}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {loading && players.length === 0 ? (
         <div className="px-4 pb-4 flex flex-col gap-2">
@@ -482,25 +533,42 @@ export function GamePlayersTable({ gameId, home, away, accent }: {
                 const name = p.name ?? p.fullName ?? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim();
                 const number = p.number ?? p.jerseyNumber ?? p.sweaterNumber ?? 0;
                 const pm = p.plusMinus ?? 0;
+                const open = openPlayer === id;
                 return (
-                  <tr
-                    key={id}
-                    onClick={() => navigate(`/stats/prediction/player/${id}?game=${gameId}`)}
-                    className="border-t border-white/[0.06] cursor-pointer hover:bg-white/[0.04] transition-colors"
-                  >
-                    <td className="px-3 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: "#131A12" }}>
-                      <span className="text-[#5c6f63] tabular-nums mr-1.5">{number}</span>
-                      <span className="text-white font-medium">{name}</span>
-                      <span className="text-[#5c6f63] ml-1.5">{p.position ?? "—"}</span>
-                    </td>
-                    {cell(p.gamesPlayed ?? 0)}
-                    {cell(p.goals ?? 0)}
-                    {cell(p.assists ?? 0)}
-                    <td className="px-2 py-2 text-center tabular-nums font-semibold" style={{ color: accent }}>{p.points ?? 0}</td>
-                    {cell(pm > 0 ? `+${pm}` : String(pm))}
-                    {cell(p.shots ?? 0)}
-                    {cell(p.ppPoints ?? 0)}
-                  </tr>
+                  <Fragment key={id}>
+                    <tr
+                      onClick={() => setOpenPlayer(open ? null : id)}
+                      aria-expanded={open}
+                      className="border-t border-white/[0.06] cursor-pointer hover:bg-white/[0.04] transition-colors"
+                      style={open ? { opacity: 0.45 } : undefined}
+                    >
+                      <td className="px-3 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: "#131A12" }}>
+                        <span className="text-[#5c6f63] tabular-nums mr-1.5">{number}</span>
+                        <span className="text-white font-medium">{name}</span>
+                        <span className="text-[#5c6f63] ml-1.5">{p.position ?? "—"}</span>
+                      </td>
+                      {cell(p.gamesPlayed ?? 0)}
+                      {cell(p.goals ?? 0)}
+                      {cell(p.assists ?? 0)}
+                      <td className="px-2 py-2 text-center tabular-nums font-semibold" style={{ color: accent }}>{p.points ?? 0}</td>
+                      {cell(pm > 0 ? `+${pm}` : String(pm))}
+                      {cell(p.shots ?? 0)}
+                      {cell(p.ppPoints ?? 0)}
+                    </tr>
+                    {open && (
+                      <tr>
+                        <td colSpan={8} className="p-0" style={{ background: "#0F160E" }}>
+                          <PlayerRowActions
+                            playerId={id}
+                            abbr={activeAbbr}
+                            gameId={gameId}
+                            accent={accent}
+                            onClose={() => setOpenPlayer(null)}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -508,5 +576,37 @@ export function GamePlayersTable({ gameId, home, away, accent }: {
         </div>
       )}
     </div>
+  );
+}
+
+/** Both rosters of a match, with a home/away switch. */
+export function GamePlayersTable({ gameId, home, away, accent }: {
+  gameId: string;
+  home: { abbr: string; name: string };
+  away: { abbr: string; name: string };
+  accent: string;
+}) {
+  return (
+    <PlayersStatsTable
+      sides={[{ key: "home", ...home }, { key: "away", ...away }]}
+      gameId={gameId}
+      accent={accent}
+    />
+  );
+}
+
+/** A single club's roster, for the team prediction page. */
+export function TeamPlayersTable({ abbr, name, gameId, accent }: {
+  abbr: string;
+  name: string;
+  gameId?: string;
+  accent: string;
+}) {
+  return (
+    <PlayersStatsTable
+      sides={[{ key: "team", abbr, name }]}
+      gameId={gameId}
+      accent={accent}
+    />
   );
 }
