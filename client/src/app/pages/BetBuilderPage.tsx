@@ -12,7 +12,7 @@
  * `BetBuilderPage` reste le seul export public : `routes.tsx` est inchangé.
  */
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Plus, Lightbulb, Trash2 } from "lucide-react";
 import { useBet } from "../context/BetContext";
@@ -52,6 +52,34 @@ export function BetBuilderPage() {
   const [submitResult, setSubmitResult] = useState<{ slipId: string; message?: string } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  // ── Marge basse sous le bloc « prêts à verrouiller » ────────────────────────
+  // Ce bloc est `fixed` : il ne pousse rien et recouvrait la fin de l'onglet
+  // Build (la carte « comment on calcule »), qu'aucun défilement ne pouvait
+  // faire remonter. On MESURE sa hauteur plutôt que de la coder en dur : elle
+  // change avec la langue et avec la largeur de l'écran, et le 160px figé
+  // d'avant était déjà trop court en anglais.
+  const ctaRef = useRef<HTMLDivElement | null>(null);
+  // Valeur de départ ~ la hauteur réelle, pour qu'il n'y ait pas de saut entre
+  // la première peinture et la première mesure.
+  const [ctaHeight, setCtaHeight] = useState(150);
+
+  useLayoutEffect(() => {
+    const el = ctaRef.current;
+    if (!el) return;
+    const measure = () => setCtaHeight(el.getBoundingClientRect().height);
+    measure();
+    // Le contenu du bloc bouge tout seul (« Submitting… », le texte de
+    // visibilité qui passe à la ligne) : un observateur, pas une mesure unique.
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [tab, legs.length]);
+
+  // 68px = l'écart entre le bas de l'écran et le bloc (`bottom-[68px]`, il
+  // laisse passer BottomNav), 16px = de l'air sous le dernier élément.
+  const buildPaddingBottom = legs.length > 0 ? `${Math.ceil(ctaHeight) + 68 + 16}px` : "112px";
 
   // Switch to My Slips after successful lock
   function handleSuccessDone() {
@@ -152,7 +180,7 @@ export function BetBuilderPage() {
 
       {/* Build tab */}
       {tab === "build" && (
-        <div className={`relative z-10 flex-1 px-4 overflow-y-auto bet-ink-black ${mode === "light" ? "bet-light" : "bet-dark"}`} style={{ paddingBottom: legs.length > 0 ? "160px" : "112px" }}>
+        <div className={`relative z-10 flex-1 px-4 overflow-y-auto bet-ink-black ${mode === "light" ? "bet-light" : "bet-dark"}`} style={{ paddingBottom: buildPaddingBottom }}>
           {legs.length > 0 && (
           <div className="flex flex-col items-center py-6">
             <ProbabilityGauge pct={combinedProbability ?? 0} size={180} />
@@ -224,7 +252,8 @@ export function BetBuilderPage() {
 
       {/* My Slips tab */}
       {tab === "slips" && (
-        <div className={`relative z-10 flex-1 px-4 overflow-y-auto bet-ink-black ${mode === "light" ? "bet-light" : "bet-dark"}`}>
+        <div className={`relative z-10 flex-1 px-4 overflow-y-auto bet-ink-black ${mode === "light" ? "bet-light" : "bet-dark"}`}
+          style={{ paddingBottom: "112px" }}>
           <MySlipsTab user={user} />
         </div>
       )}
@@ -237,6 +266,7 @@ export function BetBuilderPage() {
           onAdd={() => setShowSheet(true)}
           onLock={handleLock}
           isSubmitting={isSubmitting}
+          panelRef={ctaRef}
         />
       )}
 

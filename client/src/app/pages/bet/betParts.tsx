@@ -6,7 +6,7 @@
  * seuls les imports et les mots-clés `export` ont été ajoutés.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type Ref } from "react";
 import { Plus, X, Lock, Share2, ChevronRight } from "lucide-react";
 import type { BetLeg } from "../../types/bet";
 import { openBet } from "../../services/bookmakers";
@@ -172,10 +172,17 @@ export function EmptySlip({ onAdd }: { onAdd: () => void }) {
 // ─── Lock CTA ─────────────────────────────────────────────────────────────────
 
 export function LockSlipCTA({
-  legs, combinedProbability, onAdd, onLock, isSubmitting,
+  legs, combinedProbability, onAdd, onLock, isSubmitting, panelRef,
 }: {
   legs: BetLeg[]; combinedProbability: number | null;
   onAdd: () => void; onLock: () => void; isSubmitting: boolean;
+  /** Posé sur le bloc flottant pour que la page puisse MESURER sa hauteur et
+   *  se réserver autant de marge basse. Sans ça, la carte recouvre la fin du
+   *  contenu, qu'aucun défilement ne peut faire remonter : le bloc est
+   *  `fixed`, il ne fait pas partie du flux. Une constante ne suffisait pas —
+   *  la hauteur change avec la langue (le texte de visibilité passe de deux à
+   *  trois lignes en français) et avec la largeur de l'écran. */
+  panelRef?: Ref<HTMLDivElement>;
 }) {
   const { t } = useI18n();
   if (legs.length === 0) return null;
@@ -186,7 +193,7 @@ export function LockSlipCTA({
     combinedProbability >= 25 ? "#facc15" : "#f87171";
 
   return (
-    <div className="fixed bottom-[68px] left-1/2 -translate-x-1/2 max-w-[430px] md:max-w-5xl w-full px-4 z-40">
+    <div ref={panelRef} className="fixed bottom-[68px] left-1/2 -translate-x-1/2 max-w-[430px] md:max-w-5xl w-full px-4 z-40">
       <div className="icy-card bet-ink-black rounded-2xl p-3 shadow-xl shadow-black/40">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">

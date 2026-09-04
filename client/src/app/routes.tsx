@@ -41,6 +41,11 @@ const DevMLDashboard        = features.devRoutes
 const ModerationQueuePage   = features.devRoutes
   ? lazy(() => import("./pages/ModerationQueuePage").then(m => ({ default: m.ModerationQueuePage })))
   : null;
+// Le sommaire des outils internes : la seule URL /dev/* à retenir. Même
+// liaison conditionnelle que ses deux voisines, pour la même raison.
+const DevIndexPage          = features.devRoutes
+  ? lazy(() => import("./pages/DevIndexPage").then(m => ({ default: m.DevIndexPage })))
+  : null;
 const ProPage               = lazy(() => import("./pages/ProPage").then(m => ({ default: m.ProPage })));
 const ProSuccessPage        = lazy(() => import("./pages/ProSuccessPage").then(m => ({ default: m.ProSuccessPage })));
 const TermsPage             = lazy(() => import("./pages/TermsPage").then(m => ({ default: m.TermsPage })));
@@ -128,8 +133,9 @@ export const router = createBrowserRouter([
       { path: "/pro",                                element: withSuspense(<Protected><ProPage /></Protected>)        },
       { path: "/pro/success",                        element: withSuspense(<Protected><ProSuccessPage /></Protected>) },
       // R17 — the ML dashboard is a developer tool, not a shippable screen.
-      ...(features.devRoutes && DevMLDashboard && ModerationQueuePage
+      ...(features.devRoutes && DevMLDashboard && ModerationQueuePage && DevIndexPage
         ? [
+            { path: "/dev",                           element: withSuspense(<Protected><DevIndexPage /></Protected>) },
             { path: "/dev/ml",                        element: withSuspense(<Protected><DevMLDashboard /></Protected>) },
             { path: "/dev/moderation",                element: withSuspense(<Protected><ModerationQueuePage /></Protected>) },
           ]

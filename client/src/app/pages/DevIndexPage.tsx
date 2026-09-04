@@ -1,0 +1,84 @@
+/**
+ * DevIndexPage — le sommaire des écrans de développement.
+ * Route : /dev   (admin uniquement, comme /dev/ml et /dev/moderation)
+ *
+ * Les outils internes n'ont aucune entrée dans la navigation : ils vivent hors
+ * de BottomNav exprès, pour ne pas exister pour un utilisateur normal. Le prix,
+ * c'est qu'il fallait taper l'URL exacte de mémoire. Cette page est le seul
+ * point d'entrée à retenir ; les écrans restent, eux, invisibles.
+ *
+ * Volontairement sans appel réseau : c'est un index, pas un tableau de bord.
+ * Une panne d'API ne doit pas empêcher d'atteindre les outils qui servent à la
+ * diagnostiquer.
+ *
+ * ⚠️ Comme les deux écrans qu'elle liste, cette page est reliée dans
+ * routes.tsx par une liaison CONDITIONNELLE (`features.devRoutes ? lazy(...)
+ * : null`) : un `lazy()` nu enverrait son chunk dans le bundle iOS même sans
+ * route enregistrée.
+ */
+
+import { useEffect } from "react";
+import { useNavigate } from "react-router";
+import { useAuth } from "../context/AuthContext";
+
+/** Les écrans internes, dans l'ordre où on les ouvre le plus souvent. */
+const DEV_LINKS: { path: string; title: string; blurb: string; icon: string }[] = [
+  {
+    path:  "/dev/moderation",
+    title: "Moderation queue",
+    blurb: "Signalements de chat ouverts, groupés par message. Masquer ou rejeter.",
+    icon:  "🛡️",
+  },
+  {
+    path:  "/dev/ml",
+    title: "ML dashboard",
+    blurb: "Modèles, calibration, facteurs et suivi des prédictions.",
+    icon:  "📊",
+  },
+];
+
+export function DevIndexPage() {
+  const navigate = useNavigate();
+  const { user, loading } = useAuth();
+
+  // Même courtoisie que sur les deux écrans qu'elle liste : le serveur refuse
+  // déjà tout non-admin (403), ce renvoi évite juste une page vide à qui
+  // arriverait là par un lien.
+  useEffect(() => {
+    if (!loading && user && user.role !== "admin") navigate("/", { replace: true });
+  }, [loading, user, navigate]);
+
+  return (
+    <div
+      className="flex flex-col min-h-screen text-white max-w-[900px] mx-auto px-5 pt-14 pb-16"
+      style={{ background: "#0A0E0C" }}
+    >
+      <div className="flex items-center gap-3 mb-2">
+        <button onClick={() => navigate(-1)} className="text-[#bfc8cc] text-lg">←</button>
+        <h1 className="text-white text-base font-bold flex-1">Dev tools</h1>
+      </div>
+      <p className="text-white/40 text-[10px] mb-6">
+        Écrans internes, admin uniquement. Ils ne sont dans aucun menu et n'existent pas dans le
+        build iOS.
+      </p>
+
+      <div className="flex flex-col gap-3">
+        {DEV_LINKS.map(({ path, title, blurb, icon }) => (
+          <button
+            key={path}
+            onClick={() => navigate(path)}
+            className="icy-card rounded-2xl p-4 flex items-center gap-3.5 text-left active:scale-[0.99] transition-transform"
+          >
+            <span className="text-2xl leading-none" aria-hidden>{icon}</span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-white text-xs font-bold">{title}</span>
+              <span className="block text-white/45 text-[10px] mt-0.5 leading-relaxed">{blurb}</span>
+              <span className="block text-[#86d1ea]/70 text-[9px] font-mono mt-1">{path}</span>
+            </span>
+            <span className="text-[#bfc8cc] text-lg" aria-hidden>→</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
