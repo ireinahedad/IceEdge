@@ -911,6 +911,12 @@ deletion gracefully — which matters once you build the delete-account flow (`A
       text selection and iOS's own context menu, is discoverable by nobody, and has no
       keyboard equivalent — Apple reviews accessibility too. The button repeats the room
       menu's pattern, already on this screen, and works everywhere.
+
+      ⚠️ **It must stay visible without hovering.** The first version copied the delete
+      button's styling (`text-white/30` × `opacity-40` — about 12 % real opacity), which is
+      invisible, and on a phone there is no hover to reveal it. Fixed 2026-09-04 to a proper
+      tinted 24 px tile. This is the only route to report and block; it is not the place to be
+      tasteful.
 - [x] **R4.3b ✅ 2026-09-03** `ReportModal.tsx` — bottom sheet like `ConfirmDialog`, reason
       required, note optional and capped at 500 in the UI so the server's truncation is never
       a surprise. The reported text is quoted in the sheet: on a phone the sheet covers the
@@ -918,6 +924,26 @@ deletion gracefully — which matters once you build the delete-account flow (`A
       different one for `alreadyReported` — the server returns 201 either way.
 - [x] **R4.3c ✅ 2026-09-03** Block confirmation via `ConfirmDialog`. The copy says the block
       works **both ways** and that it can be undone in Settings — Apple checks reversibility.
+- [x] **R4.3c bis ✅ 2026-09-04 — a second way to block, and one account card everywhere.**
+      Blocking used to require finding one of the person's messages *and* the small menu on
+      it. Impossible once they deleted that message, and awkward from the member list.
+
+      `components/UserIdentity.tsx` is now the single way an account is drawn — `UserBadge`,
+      `UserRow`, `UserTag`. The member list, the blocked list and the chat all used to redraw
+      the same avatar-plus-name three different ways, drifting apart at every tweak.
+
+      `components/UserSheet.tsx` is the account card: avatar, name, `@username`, "View full
+      profile", and **Block / Unblock**. It opens from a member row and from the author's name
+      on a message. ⚠️ **That name used to navigate straight to `/player/:userId`** — it now
+      opens the card, and the old destination is one tap further in. Deliberate: the card is
+      what carries the block, and the chat is where you decide to use it.
+
+      **No network call**, on purpose: `GET /users/:id/summary` is Pro-gated for other people,
+      so loading it here would show a 402 to half the visitors on a screen whose job is to
+      offer "block". The card draws from what the caller already holds; the player page keeps
+      its own Pro wall.
+
+      Not restyled: `FullLeaderBoard`, where a row is rank-plus-score rather than an identity.
 - [x] **R4.3d ✅ 2026-09-03** `context/BlockContext.tsx`, shared by the chat and Settings, so
       unblocking in Settings restores messages in the chat with no reload. **Lazy**: the
       provider wraps the app and fetches nothing until `ensureLoaded()` — most visits never

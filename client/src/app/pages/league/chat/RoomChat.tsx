@@ -5,6 +5,7 @@ import { MessageBubble } from "./MessageBubble";
 import { MembersModal } from "./MembersModal";
 import { ReportModal } from "./ReportModal";
 import { ConfirmDialog } from "../../../components/ConfirmDialog";
+import { UserSheet } from "../../../components/UserSheet";
 import { profileApiService } from "../../../services/userService";
 import { useChatSocket } from "../../../hooks/useChatSocket";
 import { useAuthGate } from "../../../context/AuthGateContext";
@@ -54,6 +55,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   const [reportTarget, setReportTarget] = useState<ChatMessage | null>(null);
   const [reporting, setReporting] = useState(false);
   const [blockTarget, setBlockTarget] = useState<ChatMessage | null>(null);
+  const [sheetUser, setSheetUser] = useState<ChatMessage | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const isAdmin = room.role === "admin";
 
@@ -352,6 +354,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
                 onDelete={msg.userId === currentUserId ? handleDeleteMessage : undefined}
                 onReport={(m) => { if (requireAuth("gate.report")) setReportTarget(m); }}
                 onBlock={(m) => { if (requireAuth("gate.block")) setBlockTarget(m); }}
+                onOpenUser={setSheetUser}
               />
             ))}
           </>
@@ -408,6 +411,20 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
 
       {showMembers && (
         <MembersModal room={room} currentUserId={currentUserId} onClose={() => setShowMembers(false)} />
+      )}
+
+      {sheetUser && (
+        <UserSheet
+          user={{
+            userId: sheetUser.userId,
+            username: sheetUser.username,
+            displayName: sheetUser.displayName,
+            avatar: sheetUser.avatar,
+            avatarUrl: sheetUser.avatarUrl,
+          }}
+          isSelf={sheetUser.userId === currentUserId}
+          onClose={() => setSheetUser(null)}
+        />
       )}
 
       {reportTarget && (

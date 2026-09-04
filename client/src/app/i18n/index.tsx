@@ -193,6 +193,9 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "blocked.hint":      { en: "Blocking hides messages both ways. Unblocking restores them.", fr: "Le blocage masque les messages dans les deux sens. Le déblocage les rétablit." },
   "blocked.unblock":   { en: "Unblock",             fr: "Débloquer" },
   "blocked.loadFailed": { en: "Could not load the blocked list", fr: "Impossible de charger la liste des blocages" },
+
+  "user.viewProfile":  { en: "View full profile",   fr: "Voir le profil complet" },
+  "user.blocked":      { en: "blocked",             fr: "bloqué" },
   "chat.openRoom":     { en: "Open room",            fr: "Ouvrir le salon" },
   "chat.shareCode":    { en: "Share this code so others can join:", fr: "Partage ce code pour inviter d'autres joueurs :" },
   "chat.privateCreated": { en: "🔒 Private room created", fr: "🔒 Salon privé créé" },

@@ -20,6 +20,7 @@ import { InjuriesAdminCard } from "../../components/InjuriesAdminCard";
 import { useI18n } from "../../i18n";
 import { useBookmaker } from "../../context/BookmakerContext";
 import { useBlocks } from "../../context/BlockContext";
+import { UserRow } from "../../components/UserIdentity";
 import { features } from "../../platform";
 import { DotLoader, InputBox, ToggleSwitch, UserAvatar } from "./ProfileParts";
 
@@ -528,23 +529,20 @@ export function SettingsTab({
         ) : (
           <div className="flex flex-col gap-1 mt-1">
             {blocked.map((b) => (
-              <div key={b.id} className="flex items-center gap-2.5 py-1.5">
-                <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-xs flex-shrink-0 overflow-hidden">
-                  {b.avatarUrl
-                    ? <img src={b.avatarUrl} alt="" className="w-full h-full object-cover rounded-full" />
-                    : b.avatar}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-[11px] truncate">{b.displayName}</p>
-                  <p className="text-white/40 text-[9px] truncate">@{b.username}</p>
-                </div>
-                <button
-                  onClick={() => handleUnblock(b.id, b.displayName || b.username)}
-                  disabled={unblocking === b.id}
-                  className="text-[#86d1ea] text-[10px] font-semibold border border-[#86d1ea]/30 rounded-lg px-2.5 py-1 disabled:opacity-50 flex-shrink-0"
-                >
-                  {unblocking === b.id ? "…" : t("blocked.unblock")}
-                </button>
+              <div key={b.id} className="py-1.5">
+                <UserRow
+                  user={{ userId: b.id, username: b.username, displayName: b.displayName, avatar: b.avatar, avatarUrl: b.avatarUrl }}
+                  size="sm"
+                  actions={
+                    <button
+                      onClick={() => handleUnblock(b.id, b.displayName || b.username)}
+                      disabled={unblocking === b.id}
+                      className="text-[#86d1ea] text-[10px] font-semibold border border-[#86d1ea]/30 rounded-lg px-2.5 py-1 disabled:opacity-50"
+                    >
+                      {unblocking === b.id ? "…" : t("blocked.unblock")}
+                    </button>
+                  }
+                />
               </div>
             ))}
           </div>

@@ -1,7 +1,6 @@
 // components/league/chat/MessageBubble.tsx
 
 import { useState } from "react";
-import { useNavigate } from "react-router";
 import { useI18n } from "../../../i18n";
 import type { ChatMessage } from "../../../types/user";
 
@@ -25,6 +24,7 @@ export function MessageBubble({
   onDelete,
   onReport,
   onBlock,
+  onOpenUser,
 }: {
   msg: ChatMessage;
   isOwn: boolean;
@@ -35,8 +35,9 @@ export function MessageBubble({
   onReport?: (msg: ChatMessage) => void;
   /** R4.3a — bloquer l'auteur. Jamais passé pour ses propres messages. */
   onBlock?: (msg: ChatMessage) => void;
+  /** Ouvre la fiche de l'auteur. Remplace l'ancienne navigation directe. */
+  onOpenUser?: (msg: ChatMessage) => void;
 }) {
-  const navigate = useNavigate();
   const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -45,6 +46,13 @@ export function MessageBubble({
   // aucun équivalent au clavier. Le bouton reprend le motif du menu de salon
   // déjà présent dans cette page, et il n'apparaît jamais sur ses propres
   // messages : se signaler soi-même est refusé en 400 par le serveur.
+  //
+  // ⚠️ Il doit rester VISIBLE SANS SURVOL. La première version copiait le style
+  // de la corbeille juste en dessous (`text-white/30` × `opacity-40`, soit ~12 %
+  // d'opacité réelle) : introuvable, et sur mobile il n'y a aucun survol pour le
+  // révéler. C'est le SEUL chemin vers « signaler » et « bloquer » — les deux
+  // choses qu'un examinateur Apple cherche à l'écran. Ne pas le rendre discret
+  // pour faire joli.
   const canModerate = !isOwn && (onReport || onBlock);
   const time = new Date(msg.sentAt).toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -66,10 +74,12 @@ export function MessageBubble({
       <div className={`max-w-[78%] flex flex-col gap-1 ${isOwn ? "items-end" : "items-start"}`}>
         {/* Name + tag + time */}
         <div className={`flex items-center gap-1.5 flex-wrap ${isOwn ? "flex-row-reverse" : ""}`}>
-          {/* Le nom mène à la page joueur. L'avatar sert déjà à répondre — le
-              détourner casserait le geste le plus fréquent du chat. */}
+          {/* Le nom ouvre la FICHE de l'auteur, plus la page joueur directement :
+              c'est de là qu'on peut le bloquer, et « Voir le profil complet » y
+              mène toujours en un geste de plus. L'avatar sert déjà à répondre —
+              le détourner casserait le geste le plus fréquent du chat. */}
           <button
-            onClick={() => navigate(`/player/${msg.userId}`)}
+            onClick={() => onOpenUser?.(msg)}
             className="text-white text-[10px] font-bold active:opacity-60 transition-opacity"
           >
             {msg.displayName}
@@ -116,7 +126,9 @@ export function MessageBubble({
                 onClick={() => setMenuOpen((v) => !v)}
                 aria-label={t("chat.messageActions")}
                 aria-expanded={menuOpen}
-                className="text-white/30 hover:text-white text-[11px] opacity-40 hover:opacity-100 transition-opacity px-1"
+                className={`w-6 h-6 rounded-lg flex items-center justify-center text-sm leading-none transition-colors ${
+                  menuOpen ? "bg-white/15 text-white" : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
+                }`}
               >
                 ⋯
               </button>

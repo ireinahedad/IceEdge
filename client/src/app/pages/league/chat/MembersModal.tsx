@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { profileApiService } from "../../../services/userService";
+import { UserRow, UserTag } from "../../../components/UserIdentity";
+import { UserSheet } from "../../../components/UserSheet";
 import { useI18n } from "../../../i18n";
 import type { ChatRoom, ChatRoomMember } from "../../../types/user";
 
@@ -14,6 +16,9 @@ export function MembersModal({ room, currentUserId, onClose }: {
   const [members, setMembers] = useState<ChatRoomMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Toucher un membre ouvre sa fiche — c'est de là qu'on bloque quelqu'un sans
+  // avoir à retrouver un de ses messages (R4.3c bis).
+  const [openUser, setOpenUser] = useState<ChatRoomMember | null>(null);
   const isAdmin = room.role === "admin";
 
   function load() {
@@ -53,45 +58,47 @@ export function MembersModal({ room, currentUserId, onClose }: {
         ) : (
           <div className="flex flex-col gap-2">
             {members.map((m) => (
-              <div key={m.userId} className="flex items-center gap-3 icy-tile rounded-xl px-3 py-2.5">
-                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-base overflow-hidden flex-shrink-0">
-                  {m.avatarUrl
-                    ? <img src={m.avatarUrl} alt="" className="w-full h-full object-cover rounded-full" />
-                    : m.avatar}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-white text-xs font-medium truncate">{m.displayName}</p>
-                    {m.role === "admin" && (
-                      <span className="text-[8px] text-[#90C9F0] border border-[#90C9F0]/40 rounded-full px-1.5 py-0.5 flex-shrink-0">admin</span>
-                    )}
-                    {m.userId === currentUserId && (
-                      <span className="text-[8px] text-white/40 border border-white/20 rounded-full px-1.5 py-0.5 flex-shrink-0">{t("league.you")}</span>
-                    )}
-                  </div>
-                  <p className="text-white/40 text-[9px]">@{m.username}</p>
-                </div>
-                {isAdmin && m.userId !== currentUserId && (
-                  <div className="flex gap-1.5 flex-shrink-0">
-                    <button
-                      onClick={() => handlePromote(m.userId, m.role === "admin" ? "member" : "admin")}
-                      className="text-[9px] text-white/60 border border-white/15 rounded-lg px-2 py-1"
-                    >
-                      {m.role === "admin" ? "Demote" : "Make admin"}
-                    </button>
-                    <button
-                      onClick={() => handleKick(m.userId)}
-                      className="text-[9px] text-red-400 border border-red-400/30 rounded-lg px-2 py-1"
-                    >
-                      Kick
-                    </button>
-                  </div>
-                )}
+              <div key={m.userId} className="icy-tile rounded-xl px-3 py-2.5">
+                <UserRow
+                  user={m}
+                  onClick={() => setOpenUser(m)}
+                  badges={
+                    <>
+                      {m.role === "admin" && <UserTag tone="accent">admin</UserTag>}
+                      {m.userId === currentUserId && <UserTag>{t("league.you")}</UserTag>}
+                    </>
+                  }
+                  actions={isAdmin && m.userId !== currentUserId ? (
+                    <>
+                      <button
+                        onClick={() => handlePromote(m.userId, m.role === "admin" ? "member" : "admin")}
+                        className="text-[9px] text-white/60 border border-white/15 rounded-lg px-2 py-1"
+                      >
+                        {m.role === "admin" ? "Demote" : "Make admin"}
+                      </button>
+                      <button
+                        onClick={() => handleKick(m.userId)}
+                        className="text-[9px] text-red-400 border border-red-400/30 rounded-lg px-2 py-1"
+                      >
+                        Kick
+                      </button>
+                    </>
+                  ) : undefined}
+                />
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {openUser && (
+        <UserSheet
+          user={openUser}
+          isSelf={openUser.userId === currentUserId}
+          badges={openUser.role === "admin" ? <UserTag tone="accent">admin</UserTag> : undefined}
+          onClose={() => setOpenUser(null)}
+        />
+      )}
     </div>
   );
 }
