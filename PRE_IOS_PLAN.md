@@ -581,7 +581,7 @@ logout, Google, 30-day `Max-Age`, chat socket at 101.
 `6f44230` R4.2h — admin moderation queue, plus the newest-100 history fix.
 `f1a966b` R4.0 + R4.3 + the admin queue screen — the whole front end.
 `c64edb4` R2 — DevMLDashboard folded to `null` on iOS, like every other dev route.
-`<R44>` R4.4 tests + R3bis.2 atomic rotation (migration `033`).
+`6807bc3` R4.4 tests + R3bis.2 atomic rotation (migration `033`).
 Server: 201 tests green, `tsc --noEmit` clean. Migration 032 is committed
 (`cf6110c`) **and applied to Neon** (confirmed 2026-09-03).
 
