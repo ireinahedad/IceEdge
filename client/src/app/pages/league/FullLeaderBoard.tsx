@@ -177,29 +177,20 @@ function UserProfileModal({ entry, onClose }: {
 
 type LeaderboardFilter = "score" | "hitrate" | "volume";
 
-export function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
+export function FullLeaderboard({ entries, search = "", remoteResults = [] }: {
+  entries: LeaderboardEntry[];
+  /** La requête tapée dans la barre de la page (`PlayerSearchBar`). Le tableau
+   *  ne possède plus de champ à lui : il y en avait un ici, il n'était
+   *  atteignable qu'une fois sur cet onglet. */
+  search?: string;
+  /** Les joueurs trouvés côté serveur pour cette requête — y compris hors du
+   *  top 50 affiché. Fournis par `usePlayerSearch`, seul appelant de
+   *  /users/search. */
+  remoteResults?: LeaderboardEntry[];
+}) {
   const { t } = useI18n();
   const [filter, setFilter] = useState<LeaderboardFilter>("score");
   const [selectedUser, setSelectedUser] = useState<LeaderboardEntry | null>(null);
-  const [search, setSearch] = useState("");
-  const [remoteResults, setRemoteResults] = useState<LeaderboardEntry[]>([]);
-  const [searching, setSearching] = useState(false);
-
-  // Search players on the server (debounced) — finds anyone with a public
-  // profile, even outside the top 20 leaderboard.
-  useEffect(() => {
-    const q = search.trim();
-    setRemoteResults([]);
-    if (q.length < 2) { setSearching(false); return; }
-    setSearching(true);
-    const t = setTimeout(() => {
-      profileApiService.searchUsers(q)
-        .then(setRemoteResults)
-        .catch(() => {})
-        .finally(() => setSearching(false));
-    }, 350);
-    return () => clearTimeout(t);
-  }, [search]);
 
   const q = search.trim().toLowerCase();
   const localFiltered = entries.filter(
@@ -279,18 +270,6 @@ export function FullLeaderboard({ entries }: { entries: LeaderboardEntry[] }) {
                   {f.label}
                 </button>
               ))}
-            </div>
-
-            <div className="flex items-center gap-2 rounded-lg px-2.5 py-2 bg-black/40 border border-[#86d1ea]/15">
-              <span className="text-[#86d1ea]/50 text-sm">🔎</span>
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t("league.searchPlayer")}
-                className="flex-1 bg-transparent text-white text-xs outline-none placeholder-white/25"
-              />
-              {searching && <span className="w-3 h-3 rounded-full border border-[#90C9F0]/40 border-t-[#90C9F0] animate-spin flex-shrink-0" />}
-              {search && !searching && <button onClick={() => setSearch("")} className="text-white/50 text-xs">✕</button>}
             </div>
           </div>
 

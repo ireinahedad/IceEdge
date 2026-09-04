@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BottomNav } from "../../components/BottomNav";
 import { LeagueHeader } from "./LeagueHeader";
 import { FullLeaderboard } from "./FullLeaderBoard";
+import { PlayerSearchBar, usePlayerSearch } from "./PlayerSearchBar";
 import { ChatTab } from "./chat/ChatTab";
 import { profileApiService } from "../../services/userService";
 import type { LeaderboardEntry, ChatRoom } from "../../types/user";
@@ -16,6 +17,10 @@ export function LeaguePage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState(true);
+  // La recherche de joueur appartient à la PAGE, pas à un onglet : la barre
+  // l'affiche, le classement s'en sert comme filtre. Un seul appel réseau pour
+  // les deux (voir PlayerSearchBar).
+  const playerSearch = usePlayerSearch();
 
   useEffect(() => {
     Promise.all([
@@ -37,6 +42,14 @@ export function LeaguePage() {
        League n'est pas un match, c'est la foule autour du match. */
     <div className="arena-stage flex flex-col min-h-screen text-white max-w-[430px] md:max-w-5xl mx-auto w-full">
       <LeagueHeader tab={tab} setTab={setTab} totalUnread={totalUnread} />
+
+      {/* Chercher quelqu'un est une action de PAGE : la barre est posée sous
+          les onglets, au-dessus des deux panneaux, donc au-dessus de la
+          recherche de salon. Sur Classement elle n'ouvre pas de liste — le
+          tableau affiche déjà les résultats fusionnés à son classement. */}
+      <div className="relative z-30 px-4 pt-3 flex-shrink-0">
+        <PlayerSearchBar search={playerSearch} showResults={tab === "chat"} />
+      </div>
 
       {/* Single pane driven by the tab bar (Chat is the default), on all sizes. */}
       <div className="relative z-10 flex-1 flex flex-col px-4 pb-28 pt-4 overflow-hidden min-h-0">
@@ -61,7 +74,11 @@ export function LeaguePage() {
               ))}
             </div>
           ) : (
-            <FullLeaderboard entries={leaderboard} />
+            <FullLeaderboard
+              entries={leaderboard}
+              search={playerSearch.query}
+              remoteResults={playerSearch.results}
+            />
           )}
         </div>
       </div>

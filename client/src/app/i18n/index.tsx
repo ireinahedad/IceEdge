@@ -104,6 +104,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "league.podium":     { en: "This Season's Podium", fr: "Podium de la saison" },
   "league.podiumTap":  { en: "Tap a player to view their profile", fr: "Touche un joueur pour voir son profil" },
   "league.searchPlayer": { en: "Search a player…",   fr: "Rechercher un joueur…" },
+  "league.noPlayerFound": { en: "No player found", fr: "Aucun joueur trouvé" },
   "league.score":      { en: "Score",                fr: "Score" },
   "league.hitRate":    { en: "Hit Rate",             fr: "Réussite" },
   "league.volume":     { en: "Volume",               fr: "Volume" },
@@ -218,6 +219,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "gate.deleteRoom":   { en: "delete a room",        fr: "supprimer un salon" },
   "gate.report":       { en: "report a message",     fr: "signaler un message" },
   "gate.block":        { en: "block a user",         fr: "bloquer un utilisateur" },
+  "gate.searchPlayers":{ en: "search for a player",  fr: "rechercher un joueur" },
 
   // ── Slips / builder ──
   "slip.build":        { en: "Build",           fr: "Créer" },
