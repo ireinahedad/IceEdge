@@ -143,7 +143,7 @@ export function GameCharts({ gameId }: { gameId?: string }) {
     >
       <img src={nhlLogoUrl(side.abbr)} alt={side.abbr} className="w-12 h-12 object-contain" />
       <span className="text-white text-sm font-bold group-hover:underline">{side.abbr}</span>
-      <span className="text-[#5c6f63] text-[10px] truncate max-w-[7rem]">{side.name}</span>
+      <span className="text-[#5c6f63] text-[11px] truncate max-w-[7rem]">{side.name}</span>
     </button>
   );
 
@@ -264,7 +264,7 @@ export function GameCharts({ gameId }: { gameId?: string }) {
       {/* Hero: matchup, score / start time, status */}
       <div className="rounded-2xl border border-white/20 p-4" style={{ background: BG_CARD }}>
         <div className="flex items-center justify-center mb-3">
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider" style={statusStyle}>
+          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider" style={statusStyle}>
             {statusText}
           </span>
         </div>
@@ -281,7 +281,7 @@ export function GameCharts({ gameId }: { gameId?: string }) {
             ) : (
               <>
                 <span className="text-white text-lg font-bold">{timeLabel || t("schedule.at")}</span>
-                <span className="text-[#5c6f63] text-[10px]">{dateLabel}</span>
+                <span className="text-[#5c6f63] text-[11px]">{dateLabel}</span>
               </>
             )}
           </div>
@@ -340,7 +340,7 @@ export function GameCharts({ gameId }: { gameId?: string }) {
         <div className="rounded-2xl border border-white/20 overflow-hidden" style={{ background: BG_CARD }}>
           <div className="px-4 pt-3 pb-2 border-b border-white/10 flex items-center justify-between">
             <p className="text-white text-sm font-semibold">{t("chart.gm.teamStats")}</p>
-            <span className="text-[10px] font-semibold">
+            <span className="text-[11px] font-semibold">
               <span style={{ color: "#facc15" }}>{data.away.abbr}</span>
               <span className="text-[#5c6f63] mx-1">/</span>
               <span style={{ color: accent }}>{data.home.abbr}</span>
@@ -367,19 +367,19 @@ export function GameCharts({ gameId }: { gameId?: string }) {
           {data.scoring.map((g, i) => (
             <div key={i} className="px-4 py-2.5 border-t border-white/[0.06] flex items-start gap-3">
               <div className="flex flex-col items-center shrink-0 w-9">
-                <span className="text-[#5c6f63] text-[10px]">{g.period}</span>
-                <span className="text-[#8a9ea6] text-[10px] tabular-nums">{g.time}</span>
+                <span className="text-[#5c6f63] text-[11px]">{g.period}</span>
+                <span className="text-[#8a9ea6] text-[11px] tabular-nums">{g.time}</span>
               </div>
               <img src={nhlLogoUrl(g.teamAbbr)} alt={g.teamAbbr} className="w-4 h-4 object-contain shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="text-white text-xs font-medium">
                   {g.scorer}
                   {g.strength !== "ev" && (
-                    <span className="ml-1.5 text-[9px] font-bold uppercase" style={{ color: accent }}>{g.strength}</span>
+                    <span className="ml-1.5 text-[11px] font-bold uppercase" style={{ color: accent }}>{g.strength}</span>
                   )}
                 </p>
                 {g.assists.length > 0 && (
-                  <p className="text-[#5c6f63] text-[10px] truncate">{g.assists.join(", ")}</p>
+                  <p className="text-[#5c6f63] text-[11px] truncate">{g.assists.join(", ")}</p>
                 )}
               </div>
               <span className="text-[#c8d3cc] text-xs tabular-nums shrink-0">
@@ -418,7 +418,7 @@ export function GameCharts({ gameId }: { gameId?: string }) {
         <div className="rounded-2xl border border-white/20 overflow-hidden" style={{ background: BG_CARD }}>
           <div className="px-4 pt-3 pb-2 border-b border-white/10 flex items-center justify-between">
             <p className="text-white text-sm font-semibold">{t("chart.gm.seasonForm")}</p>
-            <span className="text-[10px] font-semibold">
+            <span className="text-[11px] font-semibold">
               <span style={{ color: "#facc15" }}>{data.away.abbr}</span>
               <span className="text-[#5c6f63] mx-1">/</span>
               <span style={{ color: accent }}>{data.home.abbr}</span>

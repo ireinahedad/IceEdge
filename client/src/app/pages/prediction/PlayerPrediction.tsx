@@ -311,7 +311,7 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
           ].map(s => (
             <div key={s.label} className="bg-[#0A0E0C] rounded-xl p-2 text-center">
               <p className="text-white text-sm font-bold">{s.value}</p>
-              <p className="text-[#8a9ea6] text-[9px]">{s.label}</p>
+              <p className="text-[#8a9ea6] text-[11px]">{s.label}</p>
             </div>
           ))}
         </div>

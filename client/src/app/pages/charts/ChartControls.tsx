@@ -71,7 +71,7 @@ export function SortHead({
       style={{ color: active ? accent : undefined }}
     >
       <span className="font-semibold">{label}</span>
-      <span className="text-[9px] w-2">{active ? (dir === "asc" ? "▲" : "▼") : ""}</span>
+      <span className="text-[11px] w-2">{active ? (dir === "asc" ? "▲" : "▼") : ""}</span>
     </button>
   );
 }
@@ -121,7 +121,7 @@ export function PlayerSearchBox({
           className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#5c6f63]"
         />
         {query && (
-          <button onClick={() => setQuery("")} className="text-[#8a9ea6] hover:text-white transition-colors">
+          <button onClick={() => setQuery("")} className="tap-44 text-[#8a9ea6] hover:text-white transition-colors">
             <X size={13} />
           </button>
         )}
@@ -142,7 +142,7 @@ export function PlayerSearchBox({
                 className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-white/[0.06] transition-colors"
               >
                 <span className="text-white text-[12px] font-medium truncate">{p.name}</span>
-                <span className="text-[#8a9ea6] text-[10px] flex-shrink-0">
+                <span className="text-[#8a9ea6] text-[11px] flex-shrink-0">
                   {String((p as unknown as { teamId?: string }).teamId ?? "").toUpperCase()} · {p.position}
                 </span>
               </button>

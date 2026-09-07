@@ -49,8 +49,13 @@ const Manual = {
   replaceKind:  vi.fn(),
   purgeDatedBefore: vi.fn(),
   clearManualDataCache: vi.fn(),
+  coverage:     vi.fn(),
 };
 vi.mock('../services/manualData.service', () => Manual);
+
+// Le calendrier du jour sert à dire « 0 sur 12 » plutôt que « 0 ».
+const fetchGamesByDate = vi.fn();
+vi.mock('../services/nhlApiClient', () => ({ fetchGamesByDate }));
 
 // `normalizeRefName` vit dans refereeStore, qui tire tout le module (fetch,
 // TtlCache, table d'équipes). On le bouchonne pour garder ce test sur les
@@ -75,6 +80,8 @@ beforeEach(() => {
   Manual.setEntry.mockResolvedValue(undefined);
   Manual.deleteEntry.mockResolvedValue(true);
   Manual.replaceKind.mockResolvedValue(undefined);
+  Manual.coverage.mockResolvedValue({});
+  fetchGamesByDate.mockResolvedValue([]);
 });
 
 describe('garde admin', () => {
@@ -204,5 +211,53 @@ describe('arbitres', () => {
   it('rend la moyenne par défaut quand rien n\'est configuré', async () => {
     const res = await request(await app()).get('/api/manual/referees').expect(200);
     expect(res.body).toEqual({ leagueAvgPpPerGame: 6.2, referees: [] });
+  });
+});
+
+
+describe('couverture des saisies', () => {
+  const soiree = [
+    { awayTeam: { abbreviation: 'STL' }, homeTeam: { abbreviation: 'TOR' } },
+    { awayTeam: { abbreviation: 'SEA' }, homeTeam: { abbreviation: 'DET' } },
+  ];
+
+  it('dit « 0 sur 2 » quand rien n\'est saisi — c\'est tout l\'intérêt', async () => {
+    // Une table vide rend exactement les mêmes probabilités qu'un fichier
+    // introuvable. Sans ce relevé, la panne d'origine revient sans un mot.
+    fetchGamesByDate.mockResolvedValue(soiree);
+    const res = await request(await app()).get('/api/manual/coverage?date=2025-11-18').expect(200);
+
+    expect(res.body.matchs).toBe(2);
+    expect(res.body.blessures).toEqual({ saisi: 0, attendu: 2, actif: false });
+    expect(res.body.gardiensPartants).toEqual({ saisi: 0, attendu: 4, actif: false });
+    expect(res.body.absents).toEqual({ saisi: 0, attendu: 4, actif: false });
+    expect(res.body.arbitres.actif).toBe(false);
+  });
+
+  it('ne compte que les matchs DU JOUR, pas toutes les blessures en base', async () => {
+    fetchGamesByDate.mockResolvedValue(soiree);
+    Manual.mapEntries.mockResolvedValue({
+      'STL@TOR': { home: [], away: [] },      // ce soir
+      'BOS@MTL': { home: [], away: [] },      // un autre soir
+    });
+    Manual.getEntry.mockResolvedValue({ TOR: 'Joseph Woll' });
+    Manual.coverage.mockResolvedValue({ ref_tendency: 0, ref_tendency_auto: 32 });
+
+    const res = await request(await app()).get('/api/manual/coverage?date=2025-11-18').expect(200);
+    expect(res.body.blessures).toEqual({ saisi: 1, attendu: 2, actif: true });
+    expect(res.body.gardiensPartants.saisi).toBe(1);
+    // Le facteur arbitre est le seul qui se remplit tout seul.
+    expect(res.body.arbitres).toEqual({ saisiManuellement: 0, releveAutomatique: 32, actif: true });
+  });
+
+  it('un jour sans match rend 0 sur 0, pas une erreur', async () => {
+    fetchGamesByDate.mockRejectedValue(new Error('hors saison'));
+    const res = await request(await app()).get('/api/manual/coverage?date=2026-09-04').expect(200);
+    expect(res.body.matchs).toBe(0);
+    expect(res.body.blessures.attendu).toBe(0);
+  });
+
+  it('refuse une date malformée', async () => {
+    await request(await app()).get('/api/manual/coverage?date=hier').expect(400);
   });
 });

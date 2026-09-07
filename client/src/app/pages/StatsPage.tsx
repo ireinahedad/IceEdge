@@ -11,6 +11,7 @@ import { LastNGamesSection } from "../components/LastNGamesSection";
 import { ScheduleContent } from "./SchedulePage";
 import { FramedLabel } from "../components/brand/FramedLabel";
 import { useI18n } from "../i18n";
+import { ErrorState } from "../components/ErrorState";
 import { teamColors } from "../data/teamEmoji";
 import "../components/rink-theme.css";
 
@@ -56,7 +57,7 @@ function HowItWorksButton({ onClick, accent }: { onClick: () => void; accent: st
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold flex-shrink-0 transition-all active:scale-95"
+      className="tap-44 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold flex-shrink-0 transition-all active:scale-95"
       style={{ color: accent, borderColor: `${accent}4d`, backgroundColor: `${accent}1a`, border: `1px solid ${accent}4d` }}
     >
       <HelpCircle size={13} />
@@ -69,7 +70,7 @@ function AddButton({ onPress, accent }: { onPress: (e: React.MouseEvent) => void
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onPress(e); }}
-      className="w-8 h-8 rounded-xl border flex items-center justify-center font-bold flex-shrink-0 transition-colors"
+      className="tap-44 w-8 h-8 rounded-xl border flex items-center justify-center font-bold flex-shrink-0 transition-colors"
       style={{ color: accent, borderColor: `${accent}4d`, backgroundColor: `${accent}1a` }}
     >
       +
@@ -89,8 +90,8 @@ function TeamCard({ team, onClick, onAdd, accent }: { team: UITeam; onClick: () 
         <p className="text-white text-sm font-medium truncate">{team.name}</p>
         <p className="text-[#bfc8cc] text-xs">{team.record} · {team.pts} pts</p>
         <div className="flex items-center gap-1.5 mt-1">
-          <span className={`text-[10px] font-medium ${team.streak.startsWith("W") ? "text-green-400" : "text-red-400"}`}>{team.streak}</span>
-          <span className="text-[#bfc8cc] text-[10px]">· {team.conf}ern</span>
+          <span className={`text-[11px] font-medium ${team.streak.startsWith("W") ? "text-green-400" : "text-red-400"}`}>{team.streak}</span>
+          <span className="text-[#bfc8cc] text-[11px]">· {team.conf}ern</span>
         </div>
       </div>
       <div className="flex flex-col items-end gap-2 flex-shrink-0">
@@ -113,32 +114,32 @@ function GameCard({ game, getTeamById, onClick, accent }: { game: UIGame; getTea
       style={{ background: gameCardBackground(team1.abbr, team2.abbr) }}
     >
       <div className="flex items-center justify-between mb-3">
-        <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: accent }}>{game.date} · {game.time}</span>
-        <span className="text-[#bfc8cc] text-[10px] bg-black/40 px-2 py-0.5 rounded-full">NHL</span>
+        <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: accent }}>{game.date} · {game.time}</span>
+        <span className="text-[#bfc8cc] text-[11px] bg-black/40 px-2 py-0.5 rounded-full">NHL</span>
       </div>
       <div className="flex items-center gap-2 mb-3">
         <div className="flex-1 flex items-center gap-2">
           <img src={team1.logo} alt={team1.abbr} className="w-7 h-7 object-contain" />
           <div>
             <p className="text-white text-sm font-medium">{team1.abbr}</p>
-            <p className="text-[10px] text-white/75">{team1.record}</p>
+            <p className="text-[11px] text-white/75">{team1.record}</p>
           </div>
         </div>
         <div className="flex flex-col items-center px-2">
           <span className="text-[#bfc8cc] text-xs">vs</span>
-          <span className="text-[#bfc8cc] text-[10px]">O/U {game.overUnder}</span>
+          <span className="text-[#bfc8cc] text-[11px]">O/U {game.overUnder}</span>
         </div>
         <div className="flex-1 flex items-center gap-2 justify-end">
           <div className="text-right">
             <p className="text-white text-sm font-medium">{team2.abbr}</p>
-            <p className="text-[10px] text-white/75">{team2.record}</p>
+            <p className="text-[11px] text-white/75">{team2.record}</p>
           </div>
           <img src={team2.logo} alt={team2.abbr} className="w-7 h-7 object-contain" />
         </div>
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-white/70 text-[10px]">{game.venue ?? ""}</span>
-        <span className="text-[#bfc8cc] text-[10px]" style={{ color: accent }}>{t("stats.viewBets")}</span>
+        <span className="text-white/70 text-[11px]">{game.venue ?? ""}</span>
+        <span className="text-[#bfc8cc] text-[11px]" style={{ color: accent }}>{t("stats.viewBets")}</span>
       </div>
     </button>
   );
@@ -157,7 +158,7 @@ export function StatsPage() {
   const navigate = useNavigate();
 
   function openAdd(subject: Subject) { setAddSheet({ open: true, subject }); }
-  const { teams, games, gamesLabel, loading, error, getTeamById } = useNHLData();
+  const { teams, games, gamesLabel, loading, error, reload, getTeamById } = useNHLData();
 
   const filteredTeams = teams.filter((t) =>
     !search || t.name.toLowerCase().includes(search.toLowerCase()) || t.abbr.toLowerCase().includes(search.toLowerCase())
@@ -179,9 +180,11 @@ export function StatsPage() {
     </div>
   );
 
+  // Le message du serveur (`error`) partait seul à l'écran, sans recours : il
+  // sert maintenant de sous-titre sous un titre lisible et un bouton.
   if (error) return (
     <div className="flex flex-col min-h-screen bg-transparent text-white items-center justify-center max-w-[430px] md:max-w-5xl mx-auto relative z-10 w-full">
-      <p className="text-red-400 text-sm">{error}</p>
+      <ErrorState onRetry={reload} hint={error} />
       <BottomNav />
     </div>
   );
@@ -226,19 +229,19 @@ export function StatsPage() {
             <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
             <input className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#bfc8cc]"
               placeholder={t("stats.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
-            {search && <button onClick={() => setSearch("")} className="text-[#bfc8cc] text-xs">×</button>}
+            {search && <button onClick={() => setSearch("")} className="tap-44 text-[#bfc8cc] text-xs">×</button>}
           </div>
         </div>
       </header>
 
-      <div className="flex-1 px-4 pb-28 pt-3 overflow-y-auto">
+      <div className="flex-1 px-4 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] pt-3 overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
           <span className="text-[#bfc8cc] text-xs">
             {activeFilter === 0 && `${filteredTeams.length} ${t("stats.teams")}`}
             {activeFilter === 1 && (
               <span className="flex items-center gap-2">
                 <span>{t("stats.matches", { n: filteredGames.length })}</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1B2419] text-[#bfc8cc]">{gamesLabel}</span>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#1B2419] text-[#bfc8cc]">{gamesLabel}</span>
               </span>
             )}
             {activeFilter === 2 && t("stats.players")}

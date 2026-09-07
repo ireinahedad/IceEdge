@@ -89,9 +89,9 @@ export function PlayersTab({ teams, accent }: { teams: UITeam[]; accent: string 
                     <p className="text-white text-sm font-medium truncate">{name}</p>
                     <p className="text-[#8a9ea6] text-xs">{selectedTeam.abbr} · #{number} · {p.position ?? '—'}</p>
                     <div className="flex items-center gap-3 mt-1">
-                      <span className="text-[#8a9ea6] text-[10px]">G: <span className="text-white">{p.goals ?? 0}</span></span>
-                      <span className="text-[#8a9ea6] text-[10px]">A: <span className="text-white">{p.assists ?? 0}</span></span>
-                      <span className="text-[10px] font-bold" style={{ color: accent }}>PTS: {p.points ?? 0}</span>
+                      <span className="text-[#8a9ea6] text-[11px]">G: <span className="text-white">{p.goals ?? 0}</span></span>
+                      <span className="text-[#8a9ea6] text-[11px]">A: <span className="text-white">{p.assists ?? 0}</span></span>
+                      <span className="text-[11px] font-bold" style={{ color: accent }}>PTS: {p.points ?? 0}</span>
                     </div>
                   </div>
                   <span className="text-[#8a9ea6] text-base flex-shrink-0">›</span>

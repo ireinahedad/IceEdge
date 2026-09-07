@@ -67,7 +67,7 @@ function UserProfileModal({ entry, onClose }: {
           {medal && (
             <div className="text-center flex-shrink-0">
               <p className="text-2xl">{medal}</p>
-              <p className="text-white/40 text-[9px]">Rank #{entry.rank}</p>
+              <p className="text-white/40 text-[11px]">Rank #{entry.rank}</p>
             </div>
           )}
         </div>
@@ -75,21 +75,21 @@ function UserProfileModal({ entry, onClose }: {
         <div className="grid grid-cols-3 gap-2 mb-4">
           <div className="icy-tile rounded-xl p-3 text-center">
             <p className="text-[#90C9F0] text-base font-bold">{entry.performanceScore}</p>
-            <p className="text-white/50 text-[9px] uppercase tracking-wider">{t("league.score")}</p>
+            <p className="text-white/50 text-[11px] uppercase tracking-wider">{t("league.score")}</p>
           </div>
           <div className="icy-tile rounded-xl p-3 text-center">
             <p className="text-base font-bold" style={{ color: "#86d1ea" }}>{entry.hitRate}%</p>
-            <p className="text-white/50 text-[9px] uppercase tracking-wider">{t("league.hitRate")}</p>
+            <p className="text-white/50 text-[11px] uppercase tracking-wider">{t("league.hitRate")}</p>
           </div>
           <div className="icy-tile rounded-xl p-3 text-center">
             <p className="text-white text-base font-bold">{entry.totalBets}</p>
-            <p className="text-white/50 text-[9px] uppercase tracking-wider">{t("league.bets")}</p>
+            <p className="text-white/50 text-[11px] uppercase tracking-wider">{t("league.bets")}</p>
           </div>
         </div>
 
         {/* Recent slips — viewing another player's bets is a Pro feature */}
         <div className="mb-4">
-          <p className="text-white/40 text-[9px] uppercase tracking-widest mb-2">{t("league.recentSlips")}</p>
+          <p className="text-white/40 text-[11px] uppercase tracking-widest mb-2">{t("league.recentSlips")}</p>
           {!canViewBets ? (
             <ProLock locked title={t("league.othersProTitle")} description={t("league.othersProDesc")}>
               <div className="flex flex-col gap-2">
@@ -100,7 +100,7 @@ function UserProfileModal({ entry, onClose }: {
                       <div className="h-2.5 w-24 bg-white/20 rounded mb-1.5" />
                       <div className="h-2 w-16 bg-white/10 rounded" />
                     </div>
-                    <span className="text-[10px] font-bold text-white/30">••</span>
+                    <span className="text-[11px] font-bold text-white/30">••</span>
                   </div>
                 ))}
               </div>
@@ -113,11 +113,11 @@ function UserProfileModal({ entry, onClose }: {
           )}
           {slips === "private" && (
             <div className="icy-tile rounded-xl px-3 py-3 text-center">
-              <p className="text-white/50 text-[10px]">{t("league.slipsPrivate")}</p>
+              <p className="text-white/50 text-[11px]">{t("league.slipsPrivate")}</p>
             </div>
           )}
           {Array.isArray(slips) && slips.length === 0 && (
-            <p className="text-white/40 text-[10px] text-center py-3">{t("league.noSlips")}</p>
+            <p className="text-white/40 text-[11px] text-center py-3">{t("league.noSlips")}</p>
           )}
           {Array.isArray(slips) && slips.length > 0 && (
             <div className="flex flex-col gap-2">
@@ -137,13 +137,13 @@ function UserProfileModal({ entry, onClose }: {
                       <p className="text-white text-[11px] font-medium truncate">
                         {title}{s.legCount > 1 ? ` +${s.legCount - 1} legs` : ""}
                       </p>
-                      <p className="text-white/40 text-[9px]">
+                      <p className="text-white/40 text-[11px]">
                         {new Date(s.placedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                         {s.isParlay ? " · parlay" : ""}
                         {s.combinedProbability != null ? ` · ${s.combinedProbability}%` : ""}
                       </p>
                     </div>
-                    <span className="text-[10px] font-bold flex-shrink-0" style={{ color }}>{label}</span>
+                    <span className="text-[11px] font-bold flex-shrink-0" style={{ color }}>{label}</span>
                   </div>
                 );
               })}
@@ -278,21 +278,21 @@ export function FullLeaderboard({ entries, search = "", remoteResults = [] }: {
               autre tri, « le podium » ne voudrait plus rien dire. */}
           {filter === "score" && !q && podium.length >= 3 && (
             <div className="scoreboard-podium flex-shrink-0 px-3 pt-3 pb-2">
-              <p className="scoreboard-label text-[9px] text-center mb-2">{t("league.podium")}</p>
+              <p className="scoreboard-label text-[11px] text-center mb-2">{t("league.podium")}</p>
               <div className="grid grid-cols-3 items-end gap-1">
                 <PodiumSlot entry={podium[1]} place={2} />
                 <PodiumSlot entry={podium[0]} place={1} />
                 <PodiumSlot entry={podium[2]} place={3} />
               </div>
-              <p className="scoreboard-label text-[8px] text-center mt-1">{t("league.podiumTap")}</p>
+              <p className="scoreboard-label text-[11px] text-center mt-1">{t("league.podiumTap")}</p>
             </div>
           )}
 
           {/* En-têtes de colonnes */}
           <div className="flex-shrink-0 flex items-center px-3 py-1.5 border-b border-[#86d1ea]/15 bg-black/30">
-            <span className="scoreboard-label text-[8px] w-8">#</span>
-            <span className="scoreboard-label text-[8px] flex-1">{t("league.player")}</span>
-            <span className="scoreboard-label text-[8px] w-16 text-right">
+            <span className="scoreboard-label text-[11px] w-8">#</span>
+            <span className="scoreboard-label text-[11px] flex-1">{t("league.player")}</span>
+            <span className="scoreboard-label text-[11px] w-16 text-right">
               {filter === "score" ? t("league.score") : filter === "hitrate" ? "HR%" : "Bets"}
             </span>
           </div>
@@ -322,14 +322,14 @@ export function FullLeaderboard({ entries, search = "", remoteResults = [] }: {
 
                   {entry.avatarUrl
                     ? <img src={entry.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover border border-[#86d1ea]/25 flex-shrink-0" />
-                    : <span className="w-7 h-7 rounded-full bg-white/8 border border-[#86d1ea]/20 flex items-center justify-center text-[10px] font-bold text-white/80 flex-shrink-0">{initials(entry.displayName)}</span>}
+                    : <span className="w-7 h-7 rounded-full bg-white/8 border border-[#86d1ea]/20 flex items-center justify-center text-[11px] font-bold text-white/80 flex-shrink-0">{initials(entry.displayName)}</span>}
 
                   <div className="flex-1 min-w-0 py-1">
                     <div className="flex items-center gap-1.5">
                       {showCrown && <span className="text-sm flex-shrink-0">👑</span>}
                       <FrozenName name={entry.displayName} score={entry.performanceScore} size={12} />
                       {entry.isCurrentUser && (
-                        <span className="text-[8px] text-[#ffd257] border border-[#ffd257]/40 rounded-full px-1 flex-shrink-0">
+                        <span className="text-[11px] text-[#ffd257] border border-[#ffd257]/40 rounded-full px-1 flex-shrink-0">
                           {t("league.you")}
                         </span>
                       )}
@@ -339,7 +339,7 @@ export function FullLeaderboard({ entries, search = "", remoteResults = [] }: {
                   <div className="w-16 text-right flex-shrink-0">
                     <span className="scoreboard-digit text-sm">{mainValue}</span>
                     {filter === "score" && (
-                      <p className="scoreboard-label text-[8px] mt-0.5">{entry.hitRate}% HR</p>
+                      <p className="scoreboard-label text-[11px] mt-0.5">{entry.hitRate}% HR</p>
                     )}
                   </div>
                 </button>

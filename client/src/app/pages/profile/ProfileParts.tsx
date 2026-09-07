@@ -54,7 +54,7 @@ export function InputBox({
     "w-full bg-black/20 border border-white/15 rounded-lg px-2.5 py-2 text-[#86d1ea] text-[11px] font-semibold placeholder-white/25 outline-none focus:border-[#86d1ea]/60 transition-colors";
   return (
     <div>
-      <label className="block text-white/50 text-[9px] uppercase tracking-wider mb-1">{label}</label>
+      <label className="block text-white/50 text-[11px] uppercase tracking-wider mb-1">{label}</label>
       {textarea ? (
         <textarea
           className={`${fieldCls} resize-none h-14`}
@@ -148,7 +148,7 @@ function MiniStat({ label, value, color, className, onClick }: { label: string; 
   const inner = (
     <>
       <span className={`text-sm font-bold leading-none ${color ? "" : "text-white"}`} style={color ? { color } : undefined}>{value}</span>
-      <span className="text-white/60 text-[8px] uppercase tracking-wide mt-1 text-center leading-none">{label}</span>
+      <span className="text-white/60 text-[11px] uppercase tracking-wide mt-1 text-center leading-none">{label}</span>
     </>
   );
   return onClick
@@ -182,7 +182,7 @@ export function ProfileHeader({
             uploading={avatarUploading}
           />
           {profile.favoriteTeam && (
-            <div className="absolute -bottom-1.5 -right-1.5 bg-[#90C9F0] text-[#072E49] text-[8px] font-bold px-1.5 py-0.5 rounded-full pointer-events-none">
+            <div className="absolute -bottom-1.5 -right-1.5 bg-[#90C9F0] text-[#072E49] text-[11px] font-bold px-1.5 py-0.5 rounded-full pointer-events-none">
               {profile.favoriteTeam}
             </div>
           )}
@@ -205,7 +205,7 @@ export function ProfileHeader({
       </div>
 
       {profile.bio && (
-        <p className="text-white/70 text-[10px] leading-relaxed border-t border-white/20 pt-3 mt-4">
+        <p className="text-white/70 text-[11px] leading-relaxed border-t border-white/20 pt-3 mt-4">
           {profile.bio}
         </p>
       )}
@@ -219,7 +219,7 @@ export function OverviewTab({ profile, stats }: { profile: UserProfile; stats: U
   return (
     <div className="flex flex-col gap-3">
       <div className="self-start icy-card rounded-2xl p-3">
-        <p className="text-white text-[10px] font-medium mb-2">{t("profile.parlayRecord")}</p>
+        <p className="text-white text-[11px] font-medium mb-2">{t("profile.parlayRecord")}</p>
         <div className="flex gap-1.5">
           <MiniStat label={t("profile.parlayWins")} value={`${stats.parlayRecord.wins}`} color="#86d1ea" />
           <MiniStat label={t("profile.parlayLosses")} value={`${stats.parlayRecord.losses}`} color="#f87171" />
@@ -230,7 +230,7 @@ export function OverviewTab({ profile, stats }: { profile: UserProfile; stats: U
       <CalibrationCard stats={stats} />
       <MarketBreakdown stats={stats} />
       <div className="flex items-center justify-center gap-2 py-2">
-        <span className="text-white/70 text-[10px]">
+        <span className="text-white/70 text-[11px]">
           {t("profile.memberSince", { date: new Date(profile.joinedAt).toLocaleDateString(lang === "fr" ? "fr-CA" : "en-US", { month: "long", year: "numeric" }) })}
         </span>
       </div>

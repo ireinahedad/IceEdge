@@ -216,7 +216,7 @@ export function AllPlayersCharts() {
                   }
                 >
                   {m.label}
-                  {isActive && <span className="ml-1 text-[9px]">{sortDir === "asc" ? "▲" : "▼"}</span>}
+                  {isActive && <span className="ml-1 text-[11px]">{sortDir === "asc" ? "▲" : "▼"}</span>}
                 </button>
               );
             })}

@@ -214,14 +214,14 @@ export function SettingsTab({
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex items-center gap-2 icy-card rounded-lg px-2.5 py-1.5">
           <span className="text-[11px]">🌐</span>
-          <span className={`text-[10px] font-bold transition-colors ${lang === "en" ? "text-[#90C9F0]" : "text-white/40"}`}>EN</span>
+          <span className={`text-[11px] font-bold transition-colors ${lang === "en" ? "text-[#90C9F0]" : "text-white/40"}`}>EN</span>
           <ToggleSwitch checked={lang === "fr"} onChange={() => setLang(lang === "fr" ? "en" : "fr")} fontSize={11} />
-          <span className={`text-[10px] font-bold transition-colors ${lang === "fr" ? "text-[#90C9F0]" : "text-white/40"}`}>FR</span>
+          <span className={`text-[11px] font-bold transition-colors ${lang === "fr" ? "text-[#90C9F0]" : "text-white/40"}`}>FR</span>
         </div>
         <div className="inline-flex items-center gap-2 icy-card rounded-lg px-2.5 py-1.5">
-          <span className={`text-[10px] font-bold transition-colors ${mode === "dark" ? "text-[#90C9F0]" : "text-white/40"}`}>🌙 {t("profile.dark")}</span>
+          <span className={`text-[11px] font-bold transition-colors ${mode === "dark" ? "text-[#90C9F0]" : "text-white/40"}`}>🌙 {t("profile.dark")}</span>
           <ToggleSwitch checked={mode === "light"} onChange={() => setMode(mode === "light" ? "dark" : "light")} fontSize={11} />
-          <span className={`text-[10px] font-bold transition-colors ${mode === "light" ? "text-[#90C9F0]" : "text-white/40"}`}>{t("profile.light")} ☀️</span>
+          <span className={`text-[11px] font-bold transition-colors ${mode === "light" ? "text-[#90C9F0]" : "text-white/40"}`}>{t("profile.light")} ☀️</span>
         </div>
       </div>
 
@@ -239,7 +239,7 @@ export function SettingsTab({
               <button
                 key={b.id}
                 onClick={() => setBookmakerId(b.id)}
-                className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-colors ${
+                className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-colors ${
                   bookmakerId === b.id
                     ? "bg-[#90C9F0]/15 border-[#90C9F0]/40 text-[#90C9F0]"
                     : "border-white/15 text-white/50 active:bg-white/5"
@@ -249,7 +249,7 @@ export function SettingsTab({
               </button>
             ))}
           </div>
-          <p className="text-[9px] text-white/35 mt-1.5">{t("profile.bookmakerHint")}</p>
+          <p className="text-[11px] text-white/35 mt-1.5">{t("profile.bookmakerHint")}</p>
         </div>
       )}
 
@@ -259,7 +259,7 @@ export function SettingsTab({
 
         {/* ── 1. Profile photo ── */}
         <div>
-          <p className="text-white/50 text-[9px] uppercase tracking-wider mb-2">{t("profile.choosePhoto")}</p>
+          <p className="text-white/50 text-[11px] uppercase tracking-wider mb-2">{t("profile.choosePhoto")}</p>
           <div className="flex items-center gap-4">
             <UserAvatar
               avatarUrl={profile.avatarUrl}
@@ -272,11 +272,11 @@ export function SettingsTab({
               <button
                 onClick={onAvatarClick}
                 disabled={avatarUploading}
-                className="px-3 py-1.5 rounded-lg bg-[#90C9F0]/10 border border-[#90C9F0]/30 text-[#90C9F0] text-[10px] font-medium hover:bg-[#90C9F0]/20 transition-all disabled:opacity-50"
+                className="px-3 py-1.5 rounded-lg bg-[#90C9F0]/10 border border-[#90C9F0]/30 text-[#90C9F0] text-[11px] font-medium hover:bg-[#90C9F0]/20 transition-all disabled:opacity-50"
               >
                 {avatarUploading ? t("profile.uploading") : t("profile.changePhoto")}
               </button>
-              <p className="text-white/40 text-[9px] mt-1.5">{t("profile.photoHint")}</p>
+              <p className="text-white/40 text-[11px] mt-1.5">{t("profile.photoHint")}</p>
             </div>
           </div>
         </div>
@@ -287,8 +287,8 @@ export function SettingsTab({
             onClick={() => setShowFlags((v) => !v)}
             className="w-full flex items-center justify-between text-left"
           >
-            <span className="text-white/50 text-[9px] uppercase tracking-wider">{t("profile.chooseFlag")}</span>
-            <span className="text-[#90C9F0] text-[10px]">{showFlags ? "▲" : "▼"}</span>
+            <span className="text-white/50 text-[11px] uppercase tracking-wider">{t("profile.chooseFlag")}</span>
+            <span className="text-[#90C9F0] text-[11px]">{showFlags ? "▲" : "▼"}</span>
           </button>
           {showFlags && (
             <>
@@ -312,7 +312,7 @@ export function SettingsTab({
                   );
                 })}
               </div>
-              <p className="text-white/40 text-[9px] mt-2">{t("profile.flagHint")}</p>
+              <p className="text-white/40 text-[11px] mt-2">{t("profile.flagHint")}</p>
             </>
           )}
         </div>
@@ -331,7 +331,7 @@ export function SettingsTab({
               onChange={(v) => setUsername(v.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
               maxLength={20}
             />
-            <p className="text-white/30 text-[9px] mt-1">{t("profile.usernameHint")}</p>
+            <p className="text-white/30 text-[11px] mt-1">{t("profile.usernameHint")}</p>
           </div>
 
           <InputBox
@@ -360,7 +360,7 @@ export function SettingsTab({
             maxLength={200}
             textarea
           />
-          <p className="text-white/30 text-[9px] text-right">{bio.length}/200</p>
+          <p className="text-white/30 text-[11px] text-right">{bio.length}/200</p>
         </div>
 
         <div className="flex items-center gap-3 py-1">
@@ -380,14 +380,14 @@ export function SettingsTab({
           <div className="flex items-center gap-3 py-1">
             <div className="flex-1">
               <label className={`text-xs ${isPro ? "text-white/70" : "text-white/40"}`}>{t("profile.notifyValueBets")}</label>
-              <p className="text-white/40 text-[9px] mt-0.5">{t("profile.notifyValueBetsHint")}</p>
+              <p className="text-white/40 text-[11px] mt-0.5">{t("profile.notifyValueBetsHint")}</p>
             </div>
             {isPro ? (
               <ToggleSwitch checked={notifyValueBets} onChange={handleToggleNotify} fontSize={12} />
             ) : (
               <button
                 onClick={() => navigate("/pro")}
-                className="px-3 py-1.5 rounded-lg text-[10px] font-bold flex-shrink-0"
+                className="px-3 py-1.5 rounded-lg text-[11px] font-bold flex-shrink-0"
                 style={{ background: "#86d1ea", color: "#0A0E0C" }}
               >
                 {t("pro.unlock")}
@@ -399,7 +399,7 @@ export function SettingsTab({
             <div className="flex items-center gap-3 py-1 border-t border-white/5 pt-3">
               <div className="flex-1">
                 <label className="text-xs text-white/70">{t("profile.minEv")}</label>
-                <p className="text-white/40 text-[9px] mt-0.5">{t("profile.minEvHint")}</p>
+                <p className="text-white/40 text-[11px] mt-0.5">{t("profile.minEvHint")}</p>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <input
@@ -427,7 +427,7 @@ export function SettingsTab({
       {features.byokOpenAI && (
         <div className="icy-card rounded-2xl p-4 flex flex-col gap-3">
           <p className="text-white text-xs font-medium">{t("profile.aiSettings")}</p>
-          <p className="text-white/50 text-[10px]">
+          <p className="text-white/50 text-[11px]">
             {t("profile.aiSettingsDesc")}{" "}
             <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-[#90C9F0] underline">
               {t("profile.getKey")}
@@ -443,7 +443,7 @@ export function SettingsTab({
               <span className="text-[#90C9F0] text-[11px] font-semibold">
                 🔒 {t("profile.keyStored")}
               </span>
-              <p className="text-white/40 text-[10px] leading-relaxed">{t("profile.keyNotShown")}</p>
+              <p className="text-white/40 text-[11px] leading-relaxed">{t("profile.keyNotShown")}</p>
               <div className="flex items-center gap-4 mt-0.5">
                 <button
                   type="button"
@@ -474,7 +474,7 @@ export function SettingsTab({
             </div>
           ) : (
             <div>
-              <label className="block text-white/50 text-[9px] uppercase tracking-wider mb-1">{t("profile.openaiKey")}</label>
+              <label className="block text-white/50 text-[11px] uppercase tracking-wider mb-1">{t("profile.openaiKey")}</label>
               <div className="relative">
                 <input
                   type={showKey ? "text" : "password"}
@@ -490,7 +490,7 @@ export function SettingsTab({
                 <button
                   type="button"
                   onClick={() => setShowKey((v) => !v)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#90C9F0] text-[10px]"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#90C9F0] text-[11px]"
                 >
                   {showKey ? t("profile.hide") : t("profile.show")}
                 </button>
@@ -534,12 +534,16 @@ export function SettingsTab({
         </p>
       )}
 
-      {/* Subscription */}
+      {/* Subscription — visible sur un build sans chemin vers Pro UNIQUEMENT
+          pour un abonné (souscrit sur le web, même compte) : il doit pouvoir
+          lire son échéance et résilier. Résilier n'est pas un achat, et une
+          carte « passe Pro » sans bouton ne dirait rien à personne. */}
+      {(isPro || features.proUpgrade) && (
       <div className="icy-card rounded-2xl p-4 flex flex-col gap-2">
         <p className="text-white text-xs font-medium">{t("pro.subscription")}</p>
         {isPro ? (
           <>
-            <p className="text-white/50 text-[10px]">
+            <p className="text-white/50 text-[11px]">
               {subStatus?.cancelAtPeriodEnd
                 ? `${t("pro.cancelScheduled")} ${subStatus.currentPeriodEnd ? new Date(subStatus.currentPeriodEnd).toLocaleDateString() : ""}`
                 : subStatus?.currentPeriodEnd
@@ -558,7 +562,7 @@ export function SettingsTab({
           </>
         ) : (
           <>
-            <p className="text-white/50 text-[10px]">{t("pro.subtitle")}</p>
+            <p className="text-white/50 text-[11px]">{t("pro.subtitle")}</p>
             <button
               onClick={() => navigate("/pro")}
               className="self-start mt-1 text-[11px] font-bold rounded-lg px-3 py-1.5 transition-all"
@@ -569,6 +573,7 @@ export function SettingsTab({
           </>
         )}
       </div>
+      )}
 
       {/* Confidentialité — retrait des coupons publics.
           Formulé à la NÉGATIVE et laissé décoché par défaut : la visibilité est
@@ -581,7 +586,7 @@ export function SettingsTab({
         <div className="flex items-center gap-3 py-1">
           <div className="flex-1">
             <label className="text-white/70 text-xs">{t("profile.hideSlips")}</label>
-            <p className="text-white/40 text-[9px] mt-0.5">{t("profile.hideSlipsHint")}</p>
+            <p className="text-white/40 text-[11px] mt-0.5">{t("profile.hideSlipsHint")}</p>
           </div>
           <ToggleSwitch checked={!showSlips} onChange={() => setShowSlips((v) => !v)} fontSize={12} />
         </div>
@@ -594,13 +599,13 @@ export function SettingsTab({
           personne — une carte qui disparaît ressemble à une fonction cassée. */}
       <div className="icy-card rounded-2xl p-4 flex flex-col gap-2">
         <p className="text-white text-xs font-medium">{t("blocked.title")}</p>
-        <p className="text-white/40 text-[9px]">{t("blocked.hint")}</p>
+        <p className="text-white/40 text-[11px]">{t("blocked.hint")}</p>
         {blocksError ? (
-          <p className="text-red-400 text-[10px] mt-1">{t("blocked.loadFailed")}</p>
+          <p className="text-red-400 text-[11px] mt-1">{t("blocked.loadFailed")}</p>
         ) : blocksLoading ? (
           <DotLoader />
         ) : blocked.length === 0 ? (
-          <p className="text-white/40 text-[10px] mt-1">{t("blocked.empty")}</p>
+          <p className="text-white/40 text-[11px] mt-1">{t("blocked.empty")}</p>
         ) : (
           <div className="flex flex-col gap-1 mt-1">
             {blocked.map((b) => (
@@ -612,7 +617,7 @@ export function SettingsTab({
                     <button
                       onClick={() => handleUnblock(b.id, b.displayName || b.username)}
                       disabled={unblocking === b.id}
-                      className="text-[#86d1ea] text-[10px] font-semibold border border-[#86d1ea]/30 rounded-lg px-2.5 py-1 disabled:opacity-50"
+                      className="text-[#86d1ea] text-[11px] font-semibold border border-[#86d1ea]/30 rounded-lg px-2.5 py-1 disabled:opacity-50"
                     >
                       {unblocking === b.id ? "…" : t("blocked.unblock")}
                     </button>
@@ -627,7 +632,7 @@ export function SettingsTab({
       {/* Security */}
       <div className="icy-card rounded-2xl p-4 flex flex-col gap-2">
         <p className="text-white text-xs font-medium">{t("profile.security")}</p>
-        <p className="text-white/50 text-[10px]">{t("profile.signoutAllDesc")}</p>
+        <p className="text-white/50 text-[11px]">{t("profile.signoutAllDesc")}</p>
         <button
           onClick={() => setConfirmLogoutAll(true)}
           disabled={signingOutAll}

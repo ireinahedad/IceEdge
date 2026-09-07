@@ -14,6 +14,7 @@ import type {
 
 import { weightsQuery } from './ruleWeightsService';
 import { env } from '../env';
+import { fetchWithTimeout } from './http';
 
 const BASE_URL = env.nhlApiUrl;
 
@@ -197,7 +198,7 @@ export interface TeamSeasonOfficial {
 
 async function get<T>(path: string): Promise<T> {
   if (!BASE_URL) throw new Error('VITE_NHL_API_URL is not configured');
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetchWithTimeout(`${BASE_URL}${path}`, {
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
   });
   if (!res.ok) {

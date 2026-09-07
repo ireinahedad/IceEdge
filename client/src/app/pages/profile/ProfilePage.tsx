@@ -106,7 +106,7 @@ export function ProfilePage() {
   if (!user) return null;
 
   return (
-    <div className={`flex flex-col min-h-screen pb-24 max-w-[430px] md:max-w-5xl mx-auto w-full ${mode === "light" ? "profile-light" : "profile-dark"}`} style={{ background: mode === "light" ? "#D4FFEE" : "#0A0E0C" }}>
+    <div className={`flex flex-col min-h-screen pb-[calc(6rem+env(safe-area-inset-bottom,0px))] max-w-[430px] md:max-w-5xl mx-auto w-full ${mode === "light" ? "profile-light" : "profile-dark"}`} style={{ background: mode === "light" ? "#D4FFEE" : "#0A0E0C" }}>
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
 
       {/* Header */}

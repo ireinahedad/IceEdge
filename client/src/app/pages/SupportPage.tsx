@@ -34,7 +34,7 @@ export function SupportPage() {
   return (
     <div className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-14 pb-16" style={{ background: "#0A0E0C" }}>
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate(-1)} className="text-[#bfc8cc] text-lg">←</button>
+        <button onClick={() => navigate(-1)} className="tap-44 text-[#bfc8cc] text-lg">←</button>
         <button onClick={() => navigate("/")} aria-label="Accueil ArakIce"><IceedgeLogo size={28} wordmark={false} /></button>
         <h1 className="text-white text-base font-bold flex-1">{t("legal.support")}</h1>
       </div>

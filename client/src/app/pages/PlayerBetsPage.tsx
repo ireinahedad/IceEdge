@@ -88,7 +88,7 @@ function SlipCard({ slip }: { slip: PublicSlip }) {
           <span className="text-sm">🔒</span>
           <div className="flex-1 min-w-0">
             <p className="text-white text-[12px] font-medium">{date} · {kind}</p>
-            <p className="text-[10px]" style={{ color: MUTED }}>
+            <p className="text-[11px]" style={{ color: MUTED }}>
               {unlock ? t("player.unlocksAt", { time: unlock }) : t("player.unlocksAtStart")}
             </p>
           </div>
@@ -110,17 +110,17 @@ function SlipCard({ slip }: { slip: PublicSlip }) {
         <div className="flex-1 min-w-0">
           <p className="text-white text-[12px] font-medium truncate">{date} · {kind}</p>
           {slip.combinedProbability != null && (
-            <p className="text-[10px]" style={{ color: MUTED }}>{slip.combinedProbability}%</p>
+            <p className="text-[11px]" style={{ color: MUTED }}>{slip.combinedProbability}%</p>
           )}
         </div>
-        <span className="text-[10px] font-bold flex-shrink-0" style={{ color }}>{label}</span>
-        <span className="text-[10px] flex-shrink-0" style={{ color: MUTED }}>{open ? "▾" : "▸"}</span>
+        <span className="text-[11px] font-bold flex-shrink-0" style={{ color }}>{label}</span>
+        <span className="text-[11px] flex-shrink-0" style={{ color: MUTED }}>{open ? "▾" : "▸"}</span>
       </button>
 
       {open && (
         <div className="px-3.5 pb-3 flex flex-col gap-1.5">
           {legs.length === 0 && (
-            <p className="text-[10px]" style={{ color: MUTED }}>{t("player.noLegDetail")}</p>
+            <p className="text-[11px]" style={{ color: MUTED }}>{t("player.noLegDetail")}</p>
           )}
           {legs.map((leg, i) => {
             const mark = legMark(leg.result, pending);
@@ -143,9 +143,9 @@ function SlipCard({ slip }: { slip: PublicSlip }) {
                     {leg.selection ?? leg.subjectName}
                     {leg.line != null ? ` ${leg.line}` : ""}
                   </p>
-                  <p className="text-[9px] truncate" style={{ color: MUTED }}>{leg.subjectName}</p>
+                  <p className="text-[11px] truncate" style={{ color: MUTED }}>{leg.subjectName}</p>
                 </div>
-                <span className="text-[10px] flex-shrink-0" style={{ color: MUTED }}>
+                <span className="text-[11px] flex-shrink-0" style={{ color: MUTED }}>
                   {Math.round(leg.probability)}%
                 </span>
               </div>
@@ -185,7 +185,7 @@ function FormCard({ summary }: { summary: PlayerSummary }) {
       )}
 
       {overall.settled > 0 && (
-        <p className="text-[10px] mt-1.5" style={{ color: MUTED }}>
+        <p className="text-[11px] mt-1.5" style={{ color: MUTED }}>
           {overall.hitRate != null ? `${overall.hitRate}% · ` : ""}
           {t("player.overallLine", { settled: String(overall.settled) })}
           {sinceLabel ? ` ${t("player.since", { date: sinceLabel })}` : ""}
@@ -206,7 +206,7 @@ function LockedPreview() {
             <div className="h-2.5 w-28 bg-white/15 rounded mb-1.5" />
             <div className="h-2 w-16 bg-white/10 rounded" />
           </div>
-          <span className="text-[10px] font-bold text-white/25">••</span>
+          <span className="text-[11px] font-bold text-white/25">••</span>
         </div>
       ))}
     </div>
@@ -297,14 +297,14 @@ export function PlayerBetsPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen pb-24" style={{ background: "#0A0E0C" }}>
+    <div className="flex flex-col min-h-screen pb-[calc(6rem+env(safe-area-inset-bottom,0px))]" style={{ background: "#0A0E0C" }}>
       <div
         className="sticky top-0 z-40"
         style={{ background: "rgba(10,14,12,0.92)", backdropFilter: "blur(16px)", paddingTop: "env(safe-area-inset-top, 0px)" }}
       >
         <div className="rink-boards" aria-hidden />
         <div className="px-4 pt-3 pb-3 flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="text-[#3a5060] text-lg" aria-label={t("common.back")}>←</button>
+          <button onClick={() => navigate(-1)} className="tap-44 text-[#3a5060] text-lg" aria-label={t("common.back")}>←</button>
           <h1 className="text-white text-base font-bold flex-1 truncate">{title}</h1>
         </div>
       </div>

@@ -62,7 +62,7 @@ function WinGauge({ pct, label, size = 140 }: { pct: number; label: string; size
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-white text-3xl font-bold">{displayed}<span className="text-xl">%</span></span>
-        <span className="text-[#bfc8cc] text-[10px] mt-0.5 text-center px-2 leading-tight">{label}</span>
+        <span className="text-[#bfc8cc] text-[11px] mt-0.5 text-center px-2 leading-tight">{label}</span>
       </div>
     </div>
   );
@@ -124,7 +124,7 @@ function CalculatedBreakdown({ basePct, factors, finalPct, accent }: {
     <div className="bg-[#131A12] border border-white/20 rounded-2xl overflow-hidden">
       <div className="px-4 py-3 border-b border-white/20 flex items-center justify-between">
         <span className="text-white text-sm font-semibold">{t("pred.calcPredictions")}</span>
-        <span className="text-[10px] text-[#bfc8cc] bg-[#0A0E0C] px-2 py-0.5 rounded-full">{t("pred.base", { n: basePct })}</span>
+        <span className="text-[11px] text-[#bfc8cc] bg-[#0A0E0C] px-2 py-0.5 rounded-full">{t("pred.base", { n: basePct })}</span>
       </div>
       <div className="divide-y divide-[#1e2d32]">
         {factors.map((f, i) => {
@@ -139,7 +139,7 @@ function CalculatedBreakdown({ basePct, factors, finalPct, accent }: {
               <span className="text-[#bfc8cc] text-xs flex-1 leading-tight">{f.label}</span>
               <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
                 <span className="text-xs font-bold" style={{ color }}>{isPos ? "+" : ""}{f.delta}%</span>
-                <span className="text-[9px] text-[#bfc8cc]">{Math.round(running)}%</span>
+                <span className="text-[11px] text-[#bfc8cc]">{Math.round(running)}%</span>
               </div>
             </div>
           );
@@ -147,7 +147,7 @@ function CalculatedBreakdown({ basePct, factors, finalPct, accent }: {
       </div>
       <div className="px-4 py-4 flex items-center justify-between border-t-2" style={{ borderColor: accent }}>
         <div>
-          <p className="text-[#bfc8cc] text-[10px] uppercase tracking-widest">{t("pred.aiPrediction")}</p>
+          <p className="text-[#bfc8cc] text-[11px] uppercase tracking-widest">{t("pred.aiPrediction")}</p>
           <p className="text-white text-2xl font-black mt-0.5">{finalPct}<span className="text-sm font-medium text-[#bfc8cc]">%</span></p>
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium"
@@ -181,7 +181,7 @@ function FormDots({ results }: { results: ("W" | "L" | "OT")[] }) {
   return (
     <div className="flex gap-1.5 flex-wrap">
       {results.map((r, i) => (
-        <div key={i} className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold ${
+        <div key={i} className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold ${
           r === "W" ? "bg-green-500/20 text-green-400 border border-green-500/30" :
           r === "OT" ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" :
           "bg-red-500/20 text-red-400 border border-red-500/30"
@@ -201,15 +201,15 @@ function FormLegend() {
     <div className="flex items-center gap-4 mt-3">
       <div className="flex items-center gap-1.5">
         <div className="w-3 h-3 rounded-full bg-green-500/40 border border-green-500/60" />
-        <span className="text-[#bfc8cc] text-[10px]">{t("pred.win")}</span>
+        <span className="text-[#bfc8cc] text-[11px]">{t("pred.win")}</span>
       </div>
       <div className="flex items-center gap-1.5">
         <div className="w-3 h-3 rounded-full bg-yellow-500/40 border border-yellow-500/60" />
-        <span className="text-[#bfc8cc] text-[10px]">OT</span>
+        <span className="text-[#bfc8cc] text-[11px]">OT</span>
       </div>
       <div className="flex items-center gap-1.5">
         <div className="w-3 h-3 rounded-full bg-red-500/40 border border-red-500/60" />
-        <span className="text-[#bfc8cc] text-[10px]">{t("pred.loss")}</span>
+        <span className="text-[#bfc8cc] text-[11px]">{t("pred.loss")}</span>
       </div>
     </div>
   );
@@ -472,11 +472,11 @@ export function GameSelector({ games, selected, onSelect, accent }: {
   return (
     <div className="bg-[#131A12] border border-white/20 rounded-2xl px-4 py-3">
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-[#8a9ea6] text-[10px] uppercase tracking-wider font-semibold">{t("pred.forGame")}</span>
+        <span className="text-[#8a9ea6] text-[11px] uppercase tracking-wider font-semibold">{t("pred.forGame")}</span>
         {selected && (
           <button
             onClick={() => navigate(`/stats/prediction/game/${selected.id}`)}
-            className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-md border transition-colors"
+            className="ml-auto text-[11px] font-semibold px-2 py-0.5 rounded-md border transition-colors"
             style={{ color: accent, borderColor: accent + "55", background: accent + "14" }}
           >
             {t("pred.viewGame")}
@@ -546,7 +546,7 @@ function BetRec({ rec, note, onAddToSlip }: { rec: string; note: string; onAddTo
       <div className="flex items-center gap-2 mb-2">
         <span className="text-lg">💡</span>
         <p className="text-white text-sm font-medium">{t("pred.recommendedBet")}</p>
-        <span className="ml-auto bg-[#86d1ea]/20 text-[#86d1ea] text-[10px] px-2 py-0.5 rounded-full font-medium">{rec}</span>
+        <span className="ml-auto bg-[#86d1ea]/20 text-[#86d1ea] text-[11px] px-2 py-0.5 rounded-full font-medium">{rec}</span>
       </div>
       <p className="text-[#bfc8cc] text-xs leading-relaxed">{note}</p>
       <button
@@ -596,7 +596,7 @@ export function PredictionLayout({
           {extraStats.map((s, i) => (
             <div key={i} className="bg-[#0A0E0C] rounded-xl p-2 text-center">
               <p className="text-white text-xs font-bold">{s.value}</p>
-              <p className="text-[#bfc8cc] text-[9px]">{s.label}</p>
+              <p className="text-[#bfc8cc] text-[11px]">{s.label}</p>
             </div>
           ))}
         </div>
@@ -620,15 +620,15 @@ export function PredictionLayout({
           <div className="flex items-center gap-4 mt-3">
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-full bg-green-500/40 border border-green-500/60" />
-              <span className="text-[#bfc8cc] text-[10px]">{t("pred.win")}</span>
+              <span className="text-[#bfc8cc] text-[11px]">{t("pred.win")}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-full bg-yellow-500/40 border border-yellow-500/60" />
-              <span className="text-[#bfc8cc] text-[10px]">OT</span>
+              <span className="text-[#bfc8cc] text-[11px]">OT</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-full bg-red-500/40 border border-red-500/60" />
-              <span className="text-[#bfc8cc] text-[10px]">{t("pred.loss")}</span>
+              <span className="text-[#bfc8cc] text-[11px]">{t("pred.loss")}</span>
             </div>
           </div>
         </div>

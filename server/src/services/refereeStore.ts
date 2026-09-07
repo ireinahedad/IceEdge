@@ -29,13 +29,29 @@
  * si leur structure change, seule extractAssignments() est à ajuster.
  */
 import { TtlCache } from './ttlCache';
-import { getEntry, mapEntries } from './manualData.service';
+import { getEntry, mapEntries, setEntry } from './manualData.service';
+import { logger } from '../logger';
 
 // ── Réglages ────────────────────────────────────────────────────────────────
 const STR_BASE = 'https://scoutingtherefs.com/wp-json/wp/v2/posts';
 const MULT_MIN = 0.85;   // borne basse du multiplicateur PP
 const MULT_MAX = 1.20;   // borne haute
 const REF_TTL  = 3 * 60 * 60_000; // 3 h
+
+/**
+ * Titre du billet quotidien. Il a DÉJÀ changé une fois — « Referees and
+ * Linesmen » est devenu « Referees and Linespersons » — et les billets de
+ * séries s'appellent « NHL Playoff Referees and Linespersons ». Le motif ne
+ * porte donc que sur la partie qui n'a pas bougé.
+ */
+const TITLE_RE = /referees\s+and\s+lines/i;
+
+/**
+ * Nombre d'arbitres connus en dessous duquel on n'ose pas calculer la moyenne
+ * de référence soi-même. La ligue compte ~40 arbitres actifs ; sous ce seuil la
+ * moyenne dirait surtout qui a été de service cette semaine.
+ */
+const MIN_POP  = 10;
 
 // ── Cache mémoire minimal, BORNÉ ────────────────────────────────────────────
 // La clé est la date demandée : une entrée par jour consulté, jamais évincée
@@ -54,26 +70,51 @@ function setCached(k: string, data: unknown, ttl: number) {
 interface RefTable { league: number; refs: Record<string, number> }
 
 /**
- * Table de tendance depuis la base. Les clés stockées sont DÉJÀ normalisées
- * (`manual.routes.ts` applique `normalizeRefName` à l'écriture), mais on
- * renormalise ici : une ligne insérée à la main en SQL ne passerait pas par la
- * route, et une clé non normalisée ne matcherait jamais un nom scrappé.
+ * Table de tendance depuis la base : `ref_tendency_auto` (relevé automatique
+ * des billets STR) PUIS `ref_tendency` (saisie humaine), qui écrase. La saisie
+ * de la carte admin reste donc le dernier mot, et le relevé automatique ne la
+ * touche jamais — c'est la raison d'être des deux `kind` séparés.
+ *
+ * Les clés stockées sont DÉJÀ normalisées (`manual.routes.ts` applique
+ * `normalizeRefName` à l'écriture), mais on renormalise ici : une ligne insérée
+ * à la main en SQL ne passerait pas par la route, et une clé non normalisée ne
+ * matcherait jamais un nom scrappé.
+ *
+ * ── LE DÉNOMINATEUR EST LE POINT DÉLICAT ────────────────────────────────────
+ * `multiplier = moyenne(arbitres du match) / league`. Si `league` ne vient pas
+ * de la MÊME mesure que le numérateur, le facteur n'est plus un écart entre
+ * arbitres : c'est une remise constante déguisée en signal. Le 6,2 semé dans
+ * `ref_config` est une moyenne de ligue générique ; les chiffres STR sont des
+ * « PP Opp/Gm » par arbitre. Sur la colonne SAISON (5,1-6,2), diviser par 6,2
+ * donnerait ≈ 0,90 à tout le monde, tous les soirs.
+ *
+ * D'où la règle : dès qu'on connaît assez d'arbitres, la référence est la
+ * moyenne de CES chiffres-là. `ref_config` ne sert plus que de repli tant que
+ * la population est trop petite pour qu'une moyenne veuille dire quelque chose.
  *
  * `getEntry`/`mapEntries` ne lèvent pas — base injoignable → table vide →
  * multiplicateur neutre, journalisé par `manualData.service`.
  */
 async function loadTendencies(): Promise<RefTable> {
-  const [rows, config] = await Promise.all([
+  const [auto, manual, config] = await Promise.all([
+    mapEntries<{ name?: string; ppPerGame?: number }>('ref_tendency_auto'),
     mapEntries<{ name?: string; ppPerGame?: number }>('ref_tendency'),
     getEntry<{ avgPpPerGame?: number }>('ref_config', 'league'),
   ]);
 
-  const league = Number(config?.avgPpPerGame) || 6.2;
   const refs: Record<string, number> = {};
-  for (const [key, v] of Object.entries(rows)) {
-    const pg = Number(v?.ppPerGame);
-    if (Number.isFinite(pg)) refs[normalizeRefName(v?.name ?? key)] = pg;
+  for (const rows of [auto, manual]) {            // le manuel passe en second
+    for (const [key, v] of Object.entries(rows)) {
+      const pg = Number(v?.ppPerGame);
+      if (Number.isFinite(pg)) refs[normalizeRefName(v?.name ?? key)] = pg;
+    }
   }
+
+  const known  = Object.values(refs);
+  const league = known.length >= MIN_POP
+    ? known.reduce((sum, v) => sum + v, 0) / known.length
+    : (Number(config?.avgPpPerGame) || 6.2);
+
   return { league, refs };
 }
 
@@ -121,7 +162,9 @@ const TEAM_NAMES: Record<string, string> = {
   'st. louis': 'STL', 'st louis': 'STL', 'blues': 'STL',
   'tampa bay': 'TBL', 'lightning': 'TBL',
   'toronto': 'TOR', 'maple leafs': 'TOR',
-  'utah': 'UTA', 'mammoth': 'UTA', 'hockey club': 'UTA',
+  // « hockey club » a été retiré : l'alias matchait n'importe quelle phrase
+  // contenant ces deux mots. « Utah Hockey Club » reste couvert par 'utah'.
+  'utah': 'UTA', 'mammoth': 'UTA',
   'vancouver': 'VAN', 'canucks': 'VAN',
   'vegas': 'VGK', 'golden knights': 'VGK',
   'washington': 'WSH', 'capitals': 'WSH',
@@ -152,70 +195,172 @@ async function manualAssignment(home: string, away: string): Promise<RefAssignme
   return refs.length ? { refs, source: 'manual' } : null;
 }
 
-/** Extrait 1-2 noms d'arbitres d'une ligne « Referees: #12 A B, #34 C D ». */
-function parseRefNames(s: string): string[] {
-  return s
-    .split(/,|\band\b|\/|\n/i)
-    .map(x => x.replace(/#?\d+/g, '').replace(/\(.*?\)/g, '').trim())
-    .filter(x => /[a-z]/i.test(x) && x.split(/\s+/).length >= 2 && x.length <= 40)
-    .slice(0, 2);
+
+/** Un match tel qu'un billet STR le décrit. */
+interface StrGame {
+  /** `['STL','TOR']` — l'ancre du billet donne extérieur puis domicile. */
+  abbrs: string[];
+  /** 1-2 arbitres, numéro retiré. Jamais les juges de ligne. */
+  refs: string[];
+  /** nom normalisé → PP Opp/Gm **carrière** lu dans le tableau du billet. */
+  career: Record<string, number>;
+}
+
+/** `<h1 id="#STLvsTOR">` — les deux abréviations, sans passer par les noms. */
+const ANCHOR_RE   = /id="#?([A-Z]{3})vs([A-Z]{3})"/;
+/** `<strong>Corey Syvret #23</strong>` — le numéro est ce qui distingue un
+ *  nom d'officiel de n'importe quel autre texte en gras du billet. */
+const REF_NAME_RE = /<strong>\s*([^<#]{2,40}?)\s*#\d+\s*<\/strong>/g;
+
+function stripTags(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#8217;|&#8216;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
- * Parse le contenu HTML d'un billet STR en assignations { abbrs, refs }.
- * Approche par BLOCS : une ligne « matchup » (2 équipes + « at/vs/@ ») ouvre un
- * bloc ; la 1re ligne « Referees … » du bloc fournit les arbitres. Robuste au
- * titre du billet (« NHL Referees and Linesmen ») car il n'a pas de matchup.
- * À ajuster ici seul si Scouting the Refs change de gabarit.
+ * Parse un billet STR en assignations.
+ *
+ * ── Pourquoi cette fonction a été réécrite le 2026-09-04 ────────────────────
+ * La version précédente cherchait une ligne « Referees: A, B » après un
+ * « matchup ». Ce format n'existe pas : STR met `REFEREES` seul dans un `<h3>`
+ * et les noms plus loin, dans une cellule de tableau. Passée sur le vrai billet
+ * du 18/11/2025 (8 matchs), elle ne rendait pas zéro arbitre — elle en rendait
+ * DEUX, tous deux inventés : « Linesmen TBD » (extrait de « Referees and
+ * Linesmen TBD », le match dont les officiels ne sont pas encore annoncés) et
+ * « 's rank among active officials. » (extrait de la légende du tableau). Ces
+ * chaînes seraient sorties à l'écran dans `RefFactor.note`. Un faux nom qui a
+ * l'air d'un vrai est exactement ce que ce dépôt refuse ailleurs.
+ *
+ * ── La structure réelle, et pourquoi elle est fiable ────────────────────────
+ * Un `<h1 id="#AWAYvsHOME">` par match, puis un `table.TOTable` contenant
+ * `<h3>REFEREES</h3>` … `<h3>LINESPERSONS</h3>`. Le parsing s'appuie sur
+ * l'ANCRE plutôt que sur les noms d'équipes : elle porte déjà les abréviations,
+ * ce qui supprime tout un étage d'interprétation. `abbrsInText` ne sert plus
+ * que de repli pour un `<h1>` sans ancre — c'est le cas du match « TBD ».
+ *
+ * Le tableau porte aussi `PP Opp/Gm` par arbitre, sous la forme
+ * `5.7 (10) | 5.6 (37)` = **saison passée (rang) | carrière (rang)**. C'est la
+ * tendance que `ref_tendency` attendait qu'on saisisse à la main. On lit la
+ * colonne CARRIÈRE : vérifié sur deux billets à un mois d'écart, le bloc de
+ * statistiques de STR n'est pas rafraîchi en cours de saison, et la colonne
+ * carrière est la plus discriminante (les rangs vont jusqu'à ~42, contre une
+ * plage plus resserrée sur la colonne saison).
+ *
+ * Un match sans section REFEREES, ou dont aucun nom ne porte de numéro, est
+ * ignoré — pas deviné.
  */
-function extractAssignments(html: string): Array<{ abbrs: string[]; refs: string[] }> {
-  const lines = html
-    .replace(/<[^>]+>/g, '\n')
-    .replace(/&#8217;|&#8216;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/&nbsp;/g, ' ')
-    .split('\n')
-    .map(l => l.trim())
-    .filter(Boolean);
+function extractAssignments(html: string): StrGame[] {
+  const out: StrGame[] = [];
 
-  const out: Array<{ abbrs: string[]; refs: string[] }> = [];
-  let cur: { abbrs: string[]; refs: string[] } | null = null;
-  for (const line of lines) {
-    const teams = [...abbrsInText(line)];
-    const isMatchup = teams.length >= 2 && /\bat\b|\bvs\.?\b|@/i.test(line);
-    if (isMatchup) {
-      if (cur && cur.refs.length) out.push(cur);
-      cur = { abbrs: teams.slice(0, 2), refs: [] };
-      continue;
+  // ⚠️ Pas de `.slice(1)` : `split` sur une avant-garde ne produit pas
+  // d'élément vide quand la coupure tombe en position 0, et le premier match
+  // du billet se faisait manger. On garde les segments qui SONT un `<h1>`.
+  for (const block of html.split(/(?=<h1[\s>])/i).filter(b => /^<h1[\s>]/i.test(b))) {
+    // 1. Les équipes : l'ancre d'abord, les noms en dernier recours.
+    const anchor = ANCHOR_RE.exec(block);
+    const abbrs  = anchor
+      ? [anchor[1], anchor[2]]
+      : [...abbrsInText(stripTags(block.slice(0, block.indexOf('</h1>') + 1)))].slice(0, 2);
+    if (abbrs.length < 2) continue;
+
+    // 2. La section des ARBITRES, jamais celle des juges de ligne.
+    const start = block.search(/>\s*REFEREES\s*</i);
+    if (start === -1) continue;
+    const rest    = block.slice(start);
+    const end     = rest.search(/>\s*LINESPERSONS?\s*</i);
+    const section = end === -1 ? rest : rest.slice(0, end);
+
+    // 3. Les noms.
+    const refs = [...section.matchAll(REF_NAME_RE)].map(m => m[1].trim()).slice(0, 2);
+    if (!refs.length) continue;
+
+    // 4. La ligne « PP Opp/Gm », une cellule par arbitre, colonne carrière.
+    const career: Record<string, number> = {};
+    const ppRow = /PP Opp\/Gm\s*<\/td>((?:\s*<td[\s\S]*?<\/td>)+)/i.exec(section);
+    if (ppRow) {
+      const cells = ppRow[1].match(/<td[\s\S]*?<\/td>/gi) ?? [];
+      cells.forEach((cell, i) => {
+        const m = /([\d.]+)[^|]*\|\s*([\d.]+)/.exec(stripTags(cell));
+        const v = m ? Number(m[2]) : NaN;
+        if (refs[i] && Number.isFinite(v)) career[normalizeRefName(refs[i])] = v;
+      });
     }
-    if (cur && !cur.refs.length) {
-      const m = /Referees?\s*[:\-]?\s*(.+)/i.exec(line);
-      if (m) cur.refs = parseRefNames(m[1]);
-    }
+
+    out.push({ abbrs, refs, career });
   }
-  if (cur && cur.refs.length) out.push(cur);
+
   return out;
 }
 
-/** Récupère les assignations STR du jour (cache + repli gracieux). */
-async function fetchDailyAssignments(date: string): Promise<Array<{ abbrs: string[]; refs: string[] }>> {
+/**
+ * Mémorise les PP Opp/Gm relevés, dans `ref_tendency_auto`.
+ *
+ * Le facteur arbitre devient ainsi le SEUL des quatre jeux de saisie manuelle
+ * qui se remplit tout seul. Deux raisons de persister plutôt que de se
+ * contenter du cache mémoire : la tendance survit à un redémarrage et à une
+ * panne de Scouting the Refs un soir de match, et elle est visible en base.
+ *
+ * Écrit dans un `kind` SÉPARÉ de `ref_tendency` : la saisie humaine ne doit
+ * jamais être écrasée par un relevé automatique. `loadTendencies` applique
+ * l'ordre auto → manuel.
+ *
+ * Jamais attendu par la requête en cours, jamais fatal : au pire la tendance
+ * sera relue au prochain billet.
+ */
+function rememberCareerRates(games: StrGame[]): void {
+  const seen = new Map<string, { name: string; pp: number }>();
+  for (const g of games) {
+    for (const name of g.refs) {
+      const key = normalizeRefName(name);
+      const pp  = g.career[key];
+      if (Number.isFinite(pp) && !seen.has(key)) seen.set(key, { name, pp });
+    }
+  }
+  for (const [key, v] of seen) {
+    void setEntry('ref_tendency_auto', key, { name: v.name, ppPerGame: v.pp, source: 'scoutingtherefs' })
+      .catch((err: any) => logger.warn({ err: err?.message ?? err, ref: key },
+        '[refs] tendance relevée non mémorisée'));
+  }
+}
+
+/**
+ * Assignations du jour (cache + repli gracieux).
+ *
+ * ⚠️ Le billet doit être CELUI DE LA DATE DEMANDÉE. L'ancien code retombait sur
+ * `posts[0]` quand il ne le trouvait pas : un jour sans billet dans les cinq
+ * derniers appliquait donc **les arbitres d'un autre soir**, en silence. Un
+ * facteur neutre est infiniment préférable à un facteur faux.
+ */
+async function fetchDailyAssignments(date: string): Promise<StrGame[]> {
   const key = `str:${date}`;
-  const cached = getCached<Array<{ abbrs: string[]; refs: string[] }>>(key);
+  const cached = getCached<StrGame[]>(key);
   if (cached) return cached;
   try {
-    // Billet du jour : recherche par mot-clé + tri par date décroissante.
-    const url = `${STR_BASE}?search=referees%20linesmen&per_page=5&_fields=date,title,content&orderby=date&order=desc`;
+    const url = `${STR_BASE}?search=${encodeURIComponent('nhl referees')}`
+              + '&per_page=15&_fields=date,title,content&orderby=date&order=desc';
     const res = await fetch(url, { headers: { 'User-Agent': 'IceEdge/1.0', Accept: 'application/json' } });
     if (!res.ok) throw new Error(`STR ${res.status}`);
     const posts = (await res.json()) as Array<any>;
-    // Billet dont la date correspond au jour visé, sinon le plus récent.
-    const post = posts.find(p => (p.date ?? '').slice(0, 10) === date) ?? posts[0];
-    const html = post?.content?.rendered ?? '';
-    const parsed = html ? extractAssignments(html) : [];
-    setCached(key, parsed, REF_TTL);
+    const post  = posts.find(p =>
+      (p?.date ?? '').slice(0, 10) === date && TITLE_RE.test(p?.title?.rendered ?? ''));
+
+    const parsed = post ? extractAssignments(post.content?.rendered ?? '') : [];
+    // Pas de billet pour cette date : hors saison, ou pas encore publié. On
+    // recache court pour re-tenter dans l'heure plutôt que dans trois.
+    setCached(key, parsed, parsed.length ? REF_TTL : REF_TTL / 3);
+    if (parsed.length) rememberCareerRates(parsed);
     return parsed;
-  } catch {
-    setCached(key, [], REF_TTL / 3);   // échec → re-tenter plus tôt
+  } catch (err: any) {
+    // L'ancien `catch {}` était muet : une panne de STR ne se distinguait pas
+    // d'un jour sans match.
+    logger.warn({ err: err?.message ?? err, date },
+      '[refs] billet Scouting the Refs illisible — facteur arbitre neutre');
+    setCached(key, [], REF_TTL / 3);
     return [];
   }
 }
@@ -254,16 +399,20 @@ export async function getGameRefFactor(
 
   // 1. Assignation : manuel prioritaire, sinon scrape.
   let assignment = manual;
+  let scraped: StrGame | undefined;
   if (!assignment) {
     const day = await fetchDailyAssignments(date);
-    const hit = day.find(g => g.abbrs.includes(home) && g.abbrs.includes(away));
-    if (hit) assignment = { refs: hit.refs, source: 'scrape' };
+    scraped = day.find(g => g.abbrs.includes(home) && g.abbrs.includes(away));
+    if (scraped) assignment = { refs: scraped.refs, source: 'scrape' };
   }
   if (!assignment || !assignment.refs.length) return { ...NEUTRAL };
 
-  // 2. Tendance : moyenne des arbitres connus / moyenne ligue → multiplicateur.
+  // 2. Tendance : moyenne des arbitres connus / moyenne de référence.
+  //    La table passe en premier (elle porte la saisie humaine), le relevé du
+  //    billet du soir sert au premier passage, avant que `rememberCareerRates`
+  //    n'ait fini d'écrire.
   const rates = assignment.refs
-    .map(r => tend[normalizeRefName(r)])
+    .map(r => tend[normalizeRefName(r)] ?? scraped?.career[normalizeRefName(r)])
     .filter((v): v is number => Number.isFinite(v));
   if (!rates.length || league <= 0) {
     return { multiplier: 1.0, refs: assignment.refs, source: assignment.source,

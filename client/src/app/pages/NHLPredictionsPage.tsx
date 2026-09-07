@@ -245,7 +245,7 @@ function BetPredictionCard({
           <p className="text-white text-sm font-semibold leading-tight">{market.label}</p>
           <div className="flex items-center gap-1.5 mt-0.5">
             <p className="text-[#8a9ea6] text-[11px] leading-snug truncate">{market.description}</p>
-            <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#a78bfa]/10 text-[#a78bfa] border border-[#a78bfa]/20">🤖 ML</span>
+            <span className="flex-shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-[#a78bfa]/10 text-[#a78bfa] border border-[#a78bfa]/20">🤖 ML</span>
           </div>
         </div>
         <span className="text-[#4a6068] text-xs flex-shrink-0">{expanded ? "▲" : "▼"}</span>
@@ -486,7 +486,7 @@ export function NHLPredictionsPage() {
         <div className="px-4 pt-3 pb-3 flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-xl bg-[#131A12] border border-white/20 flex items-center justify-center flex-shrink-0"
+            className="min-w-[44px] min-h-[44px] w-9 h-9 rounded-xl bg-[#131A12] border border-white/20 flex items-center justify-center flex-shrink-0"
             style={{ color: accent }}
           >
             ←
@@ -523,7 +523,7 @@ export function NHLPredictionsPage() {
                   : { backgroundColor: "#1B2419", color: "#bfc8cc" }}
               >
                 {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}
-                <span className="text-[9px] opacity-70">({count})</span>
+                <span className="text-[11px] opacity-70">({count})</span>
               </button>
             );
           })}
@@ -532,7 +532,7 @@ export function NHLPredictionsPage() {
       </header>
 
       {/* ── Contenu ── */}
-      <div className="flex-1 px-4 pb-28 pt-4 overflow-y-auto">
+      <div className="flex-1 px-4 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] pt-4 overflow-y-auto">
         {/* Skeleton while games load */}
         {loadingGames && (
           <div className="flex flex-col gap-3">

@@ -1,6 +1,6 @@
 # ARAKICE / ICEEDGE — Ce qui reste
 
-**Créé le 2026-08-10 · mis à jour le 2026-08-31.**
+**Créé le 2026-08-10 · mis à jour le 2026-09-07.**
 
 > **Élagué le 2026-08-30.** Tout ce qui était clos ET sans leçon a été retiré
 > (B7, B8, B9, le détail Sentry, le lot `npm audit`, le §7 soldé, la ligne 7 bis
@@ -10,7 +10,8 @@
 > l'historique Git, à partir du commit `15ecbb6`.
 >
 > **Second passage le 2026-08-30**, après trois contrôles passés au navigateur :
-> le **§7 a disparu** (son dernier survivant, M6, est vert), et les trois cases
+> le **§7 d'alors a disparu** (son dernier survivant, M6, est vert — le §7
+> actuel est le SEO, ajouté le 2026-09-07, sans rapport), et les trois cases
 > fermées ce jour-là — CSP, synchro des poids, retrait tennis — sont réduites à
 > leur seule leçon. Une ligne fermée ne reste dans ce document que si elle
 > empêche quelqu'un de refaire une erreur.
@@ -328,6 +329,24 @@ noms d'enregistrement. Trois raisons, par ordre d'importance :
    Vercel.
 3. **Aucun AAAA à écrire à la main** : la résolution suit le CNAME.
 
+🔴 **Correction du 2026-09-07 : la redirection 308 de `www` ne tient pas.** La
+phrase « `www` garde sa redirection 308, déjà configurée chez Vercel » ci-dessus
+était une hypothèse, pas une mesure. Search Console, lu ce jour, la contredit :
+`www.arakice.com` est **indexé et servi** en parallèle de l'apex — six des dix
+premières pages du rapport Performance sont en `www`, avec des clics et des
+impressions réels — pendant que 162 autres URL `www` sont classées « Page with
+redirect » et 7 en « Redirect error » (toutes des routes d'app : `/league`,
+`/login`, `/bet`, `/schedule`, `/stats`, `/stats/chart/all-teams`). La
+redirection s'applique donc de façon **inconstante** selon le chemin. Détail et
+chiffres en **§7**.
+
+Conséquence pour la bascule : **poser explicitement la règle de redirection dans
+la nouvelle zone**, `www.arakice.com/*` → `https://arakice.com/$1` en **301, en
+conservant le chemin**, et ne pas se reposer sur celle de Vercel. Le canonical
+existe déjà sur toutes les pages et n'a pas suffi — c'est bien la redirection,
+pas la balise, qui manque. À vérifier après bascule sur les six routes d'app
+ci-dessus, pas seulement sur l'apex : ce sont elles qui échouent aujourd'hui.
+
 ⚠️ **Proxy sur « DNS only », et ce n'est pas un réglage de confort.** Vercel
 écrit qu'un proxy devant lui empêche ses protections DDoS et anti-bots de
 fonctionner ; Railway lève le même drapeau. Remettre Cloudflare devant Railway
@@ -358,13 +377,41 @@ L'ancienne zone, qui fait autorité aujourd'hui, a été interrogée directement
   sera créé de zéro à l'étape 5.
 
 ⚠️ **Un fil à ne pas laisser pendre : le TXT `google-site-verification`.** Il
-prouve la propriété du domaine auprès d'un compte Google — vraisemblablement
-celui qui est perdu. **Le garder tel quel** (le supprimer ne rendrait rien),
-mais en tirer la question : si la propriété Search Console est rattachée à ce
-compte, alors le sitemap, la couverture d'indexation et les rapports des ~900
-pages générées sont derrière la même porte fermée. À vérifier depuis un compte
-Google accessible **avant** de conclure que le compte perdu ne coûte que le DNS
-et les avatars.
+prouve la propriété du domaine auprès d'un compte Google. Le document supposait
+ici que c'était **le compte perdu**, et en tirait la crainte que le sitemap, la
+couverture d'indexation et les rapports des ~900 pages générées soient derrière
+la même porte fermée.
+
+✅ **Vérifié le 2026-09-07 dans Search Console : la supposition était fausse, la
+porte est ouverte.** Relevé sur la propriété `sc-domain:arakice.com` :
+
+| Point | Ce que Search Console affiche |
+|---|---|
+| Utilisateurs | **un seul**, propriétaire vérifié — le **Gmail personnel** (celui qui sert d'adresse de récupération sur `arakice.support@gmail.com`), **pas** le compte perdu |
+| Jetons de propriété inutilisés | **0** |
+| Vérification | **réussie le 2026-07-26**, méthode : **« Domain name provider »** |
+
+**Le compte perdu ne coûte donc que le DNS et les avatars**, comme le disait
+l'hypothèse haute — l'historique Search Console, lui, est accessible.
+
+🔴 **Mais la vérification tient à la ZONE, et c'est la zone qui bouge.** La
+méthode « Domain name provider » est une vérification **par DNS** : elle ne
+dépend pas du compte Google (qui va bien) mais de l'enregistrement présent dans
+la zone `arakice.com`. Deux conséquences pour la bascule :
+
+1. **Recopier le TXT à l'identique à l'étape 2**, au même titre que les trois
+   CNAME. La ligne « TXT | inchangé » du tableau plus haut n'est pas un détail de
+   confort : c'est le seul enregistrement dont l'oubli se paierait en perte de
+   propriété. ⚠️ Seul le **début** de la valeur est noté ici
+   (`google-site-verification=xWIbjFinrXaZ…`) — **la relire en entier dans
+   l'ancienne zone** avant de l'écrire, ne pas la reconstituer de mémoire.
+2. **Recontrôler après bascule** (Search Console → Paramètres → Validation de la
+   propriété). « Domain name provider » peut aussi passer par l'intégration
+   automatique de Google **avec le compte Cloudflare** — et ce compte-là, c'est
+   justement celui qu'on quitte. Si la validation tombe, elle se refait depuis le
+   Gmail personnel ; ce n'est pas une perte définitive, mais une propriété qui
+   reste non validée finit par perdre l'accès aux données. **Ne pas laisser
+   traîner.**
 
 ### Ce que les logs du conteneur en cours disent — relevé du 2026-08-31
 
@@ -1249,3 +1296,117 @@ aucun par la relecture :
    trouve un sans coquille désignée.
 
 Pour réintroduire un composant shadcn : `npx shadcn@latest add <nom>`.
+
+---
+
+## 7. SEO — ce que Search Console dit vraiment
+
+**Relevé le 2026-09-07**, propriété `sc-domain:arakice.com`, fenêtre 90 jours
+arrêtée au 2026-09-04. Jusqu'ici le SEO n'était piloté que par ce que le dépôt
+contenait ; c'est la première fois que le rapport de Google est lu. Il déplace
+les priorités.
+
+### Les chiffres, tels quels
+
+| Mesure | Valeur |
+|---|---|
+| Clics / impressions | **35** / **1 420** |
+| CTR moyen · position moyenne | 2,5 % · **23,8** (page 3) |
+| Pages indexées | 1 050 |
+| Pages **non** indexées | **747**, en 6 motifs |
+
+| Motif de non-indexation | Pages | Ce que c'est vraiment |
+|---|---|---|
+| `Crawled – currently not indexed` | **417** | 🔴 **que des `/props/`**. Google les a crawlées et **refusées**. |
+| `Page with redirect` | 162 | 🔴 **toutes en `www.arakice.com`**. Apparu le 2026-08-05, monté de ~120 à 162 en août. |
+| `Alternate page with proper canonical` | 101 | attendu (variantes canonicalisées) |
+| `Discovered – currently not indexed` | 59 | jamais crawlées — c'était l'effet des pages orphelines, corrigé ci-dessous |
+| `Redirect error` | **7** | 🔴 `www.arakice.com/{league,login,bet,schedule,stats,stats/chart/all-teams}` |
+| `Not found (404)` | 1 | — |
+
+⚠️ **Le refus des 417 ne vise pas les prospects, il vise le gabarit.**
+L'échantillon d'URL contient **Chris Kreider, Trevor Zegras, Shane Wright** — des
+joueurs établis, avec des statistiques pleines. Ce n'est donc pas « les pages
+sans stats sont minces », c'est **786 pages dont ~90 % de la prose est
+identique**. Relever le plancher de matchs joués (fait, cf. plus bas) assainit
+les cas extrêmes ; ça ne règle pas ce refus-là.
+
+### La demande est sur les affiches, pas sur les props
+
+Requêtes du haut du rapport, **toutes à 0 clic** :
+
+| Requête | Impressions |
+|---|---|
+| `utah mammoth vs maple leafs live odds` / `betting odds` / `odds` | 28 · 26 · 25 |
+| `utah mammoth maple leafs odds today` | 25 |
+| `predators vs maple leafs odds` / `odds today` | 21 · 21 |
+| `nhl player props` | 19 |
+
+Position ~23 **et** une page `/matchup/` qui n'affiche **ni cote ni pronostic** —
+juste un explicatif générique et « Open the app ». Personne ne clique, et celui
+qui cliquerait ne trouverait pas ce qu'il cherchait. Les pages d'affiche sont
+celles qui accrochent la demande ; c'est là que le contenu réel manque, pas sur
+les props.
+
+### Corrigé le 2026-09-07 — dans le dossier, **non commité**
+
+1. 🔴 **786 pages de props étaient orphelines.** `nhl-player-props.html` livrait
+   un `<ul>` **vide** plus un blob JSON, et `seo-search.js` fabriquait les lignes
+   en JS — **avec un plafond à 300**. Zéro `<a href="/props/…">` dans le HTML
+   servi : les pages n'étaient joignables que par le sitemap, et une URL
+   sitemap-seule sans lien interne est ce que Google crawle en dernier. C'est
+   l'explication des 59 « Discovered ». Désormais `propsHubPage()` émet les
+   **752 ancres réelles** côté serveur (triées, avec `data-hay`), et
+   `seo-search.js` **filtre** des lignes existantes (`row.hidden`) au lieu de les
+   créer. `#player-list li[hidden]{display:none}` posé dans `seo.css`.
+   `public/nhl-player-props.html` a été reconstruit depuis son propre blob, sans
+   appel à l'API NHL.
+   ⚠️ **Ne jamais revenir au rendu JS** : c'est lui qui a créé les orphelines.
+2. **88 pages minces** (< 20 matchs joués), dont **34 orphelines d'un vieux run**
+   absentes à la fois du sitemap et du hub → `noindex, follow` et retirées du
+   sitemap. `MIN_GP` par défaut relevé **5 → 20** dans `seo-gen.mjs`.
+3. **`/login` était indexable et dans le sitemap.** `route-shells.mjs` accepte un
+   champ `route.robots` (défaut inchangé pour les autres routes) et pose
+   `noindex, follow` sur login ; l'entrée est retirée de `STATIC_PAGES`.
+4. **`<lastmod>` ajouté au sitemap.** Google ignore `changefreq` et `priority`,
+   mais lit `lastmod`.
+5. **`arakice-logo.png` (1,49 Mo)** servait de **favicon** *et* d'`og:image` sur 5
+   pages écrites à la main et 34 pages générées périmées : 1,5 Mo téléchargés
+   pour une icône de 16 px, et une image carrée là où les cartes veulent du
+   1200×630. Remplacé par `arakice-og.png` et le jeu d'icônes. **0 référence
+   restante.**
+
+Sitemap : **896 → 841 URL**, 0 doublon, 0 URL sans fichier, 0 URL en `noindex`.
+
+### Comment ça a été vérifié
+
+- `npm run seo:sample` → le hub généré contient les ancres, plus de blob
+  `players-data`, `lastmod` présent, pas de `/login`.
+- `DIST_DIR=… node scripts/route-shells.mjs` sur une copie de `dist/index.html` →
+  **seul** `login.html` porte `noindex, follow`.
+- Le filtre de recherche testé pour de vrai (Playwright, conteneur cloud) :
+  752 lignes, **752 ancres avec JavaScript désactivé**, « mcdavid » → 1,
+  « EDM » → 26, insensible aux accents **dans les deux sens**
+  (« lafreniere » ↔ « Lafrenière »), remise à zéro OK, aucune erreur de page.
+- ⚠️ **`npm run build` échoue dans le shell Linux monté** : `node_modules` a été
+  installé sous Windows, le binaire natif de rollup manque
+  (`MODULE_NOT_FOUND` sur `rollup/dist/native.js`). **Ce n'est pas une
+  régression** — lancer le build côté Windows.
+
+### Ce qui reste, par ordre d'impact
+
+1. 🔴 **La redirection `www` → apex, à poser pendant la bascule Cloudflare.**
+   C'est le point le plus rentable du lot : aujourd'hui les signaux de classement
+   sont **partagés entre deux hôtes**. Détail et libellé exact de la règle en
+   **§1**, dans « Étape 1 de la bascule ».
+2. 🔴 **Le gabarit `/props/`.** 417 refus veut dire que la forme actuelle ne
+   passe pas. Deux issues, à trancher : enrichir avec des données réellement
+   propres à chaque joueur (splits domicile/extérieur, tendance sur 10 matchs,
+   écart à la ligne affichée), **ou** réduire franchement le nombre de pages.
+   Continuer à en générer 786 identiques ne changera rien.
+3. **Mettre une vraie cote et un vrai pronostic sur les pages `/matchup/`** —
+   c'est là qu'il y a de la demande et un CTR à 0.
+4. **Regénérer (`npm run seo:gen`) une fois la saison 2026-27 commencée.** Les
+   statistiques affichées sont celles de **2025-26**, figées au 2026-07-30. Ne
+   pas le faire avant : hors saison, l'API rendrait des zéros.
+

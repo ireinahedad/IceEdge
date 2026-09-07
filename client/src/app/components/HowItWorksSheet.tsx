@@ -100,7 +100,7 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[#1B2419] flex items-center justify-center text-[#bfc8cc] flex-shrink-0"
+            className="tap-44 w-8 h-8 rounded-full bg-[#1B2419] flex items-center justify-center text-[#bfc8cc] flex-shrink-0"
           >
             ✕
           </button>
@@ -111,7 +111,7 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
           <p className="text-[#bfc8cc] text-[13px] leading-relaxed">{intro}</p>
 
           <div>
-            <p className="text-[#4a6070] text-[10px] font-semibold uppercase tracking-wider mb-2">
+            <p className="text-[#4a6070] text-[11px] font-semibold uppercase tracking-wider mb-2">
               {fr ? "Les 3 sources de prédiction" : "The 3 prediction sources"}
             </p>
             <div className="flex flex-col gap-2.5">
@@ -134,7 +134,7 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
           </div>
 
           <div>
-            <p className="text-[#4a6070] text-[10px] font-semibold uppercase tracking-wider mb-2">
+            <p className="text-[#4a6070] text-[11px] font-semibold uppercase tracking-wider mb-2">
               {fr ? "Lire une prédiction" : "Reading a prediction"}
             </p>
             <div className="bg-[#131A12] border border-white/10 rounded-2xl p-4 flex flex-col gap-2">
@@ -148,7 +148,7 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
           </div>
 
           <div>
-            <p className="text-[#4a6070] text-[10px] font-semibold uppercase tracking-wider mb-2">
+            <p className="text-[#4a6070] text-[11px] font-semibold uppercase tracking-wider mb-2">
               {fr ? "Ce que tu peux faire" : "What you can do"}
             </p>
             <div className="bg-[#131A12] border border-white/10 rounded-2xl p-4 flex flex-col gap-2">

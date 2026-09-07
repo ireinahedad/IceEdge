@@ -113,7 +113,7 @@ export function PlayerSearchBar({
           <span className="w-3 h-3 rounded-full border border-[#90C9F0]/40 border-t-[#90C9F0] animate-spin flex-shrink-0" />
         )}
         {query && !loading && (
-          <button onClick={() => setQuery("")} className="text-white/50 text-xs" aria-label={t("common.close")}>✕</button>
+          <button onClick={() => setQuery("")} className="tap-44 text-white/50 text-xs" aria-label={t("common.close")}>✕</button>
         )}
       </div>
 
@@ -122,7 +122,7 @@ export function PlayerSearchBar({
            à chaque lettre. z-30 la met sous l'en-tête collant (z-40). */
         <div className="absolute left-0 right-0 top-full mt-2 z-30 rounded-2xl overflow-hidden border border-[#86d1ea]/20 bg-[#0A0E0C]/95 backdrop-blur-md shadow-xl shadow-black/50 max-h-[45vh] overflow-y-auto">
           {results.length === 0 ? (
-            <p className="text-white/40 text-[10px] px-4 py-3 text-center">
+            <p className="text-white/40 text-[11px] px-4 py-3 text-center">
               {loading ? t("common.loading") : t("league.noPlayerFound")}
             </p>
           ) : (
@@ -148,7 +148,7 @@ export function PlayerSearchBar({
                   <span className="block truncate">
                     <FrozenName name={entry.displayName} score={entry.performanceScore} size={11} />
                   </span>
-                  <span className="block text-white/35 text-[9px] truncate">@{entry.username}</span>
+                  <span className="block text-white/35 text-[11px] truncate">@{entry.username}</span>
                 </span>
                 <span className="scoreboard-digit text-sm leading-none flex-shrink-0">{entry.performanceScore}</span>
               </button>

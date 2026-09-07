@@ -260,6 +260,10 @@ li { margin: 0 0 9px; }
   gap: 10px;
 }
 #player-list li { margin: 0; }
+/* seo-search.js filters by toggling `hidden` on rows that are already in the
+   DOM (so the anchors stay crawlable). Stated explicitly because a future
+   `display` rule on these <li> would silently beat the UA default. */
+#player-list li[hidden] { display: none; }
 .player-row {
   display: flex;
   flex-direction: column;

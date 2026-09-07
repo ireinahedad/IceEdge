@@ -18,6 +18,7 @@ import { BottomNav } from "../components/BottomNav";
 import { nhlApiService } from "../services/nhlApiService";
 import type { NHLGame } from "../types/bet";
 import { useI18n } from "../i18n";
+import { ErrorState } from "../components/ErrorState";
 import "../components/rink-theme.css";
 
 const ACCENT = "#86d1ea";
@@ -89,7 +90,7 @@ export function SchedulePage() {
   const { t } = useI18n();
 
   return (
-    <div className="flex flex-col min-h-screen pb-24 max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: "#0A0E0C" }}>
+    <div className="flex flex-col min-h-screen pb-[calc(6rem+env(safe-area-inset-bottom,0px))] max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: "#0A0E0C" }}>
       {/* Header */}
       <header
         className="sticky top-0 z-40"
@@ -100,7 +101,7 @@ export function SchedulePage() {
           <button
             onClick={() => navigate(-1)}
             aria-label="Back"
-            className="w-9 h-9 rounded-xl bg-[#131A12] border border-white/20 flex items-center justify-center flex-shrink-0"
+            className="min-w-[44px] min-h-[44px] w-9 h-9 rounded-xl bg-[#131A12] border border-white/20 flex items-center justify-center flex-shrink-0"
             style={{ color: ACCENT }}
           >
             <ChevronLeft size={18} />
@@ -145,7 +146,10 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
 
   const [games, setGames] = useState<NHLGame[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  // Rejouer le chargement de la semaine sans changer de semaine : incrémenter
+  // ce compteur relance l'effet ci-dessous. C'est ce que « Réessayer » fait.
+  const [reloadKey, setReloadKey] = useState(0);
 
   const weeks = useMemo(() => buildWeeks(cursor.y, cursor.m), [cursor.y, cursor.m]);
 
@@ -193,16 +197,16 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
     if (!week) return;
     let alive = true;
     setLoading(true);
-    setError(false);
+    setError(null);
     nhlApiService
       .getGamesRange(week.start, week.end)
       .then((g) => alive && setGames(g))
-      .catch(() => alive && setError(true))
+      .catch((err) => alive && setError(err ?? new Error("schedule load failed")))
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, [week?.start, week?.end]);
+  }, [week?.start, week?.end, reloadKey]);
 
   const byDay = useMemo(() => {
     const map = new Map<string, NHLGame[]>();
@@ -230,7 +234,7 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
           onClick={() => stepMonth(-1)}
           disabled={curIdx <= minIdx}
           aria-label="Previous month"
-          className="w-9 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-25"
+          className="min-w-[44px] min-h-[44px] w-9 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-25"
           style={{ color: accent }}
         >
           <ChevronLeft size={18} />
@@ -245,7 +249,7 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
           onClick={() => stepMonth(1)}
           disabled={curIdx >= maxIdx}
           aria-label="Next month"
-          className="w-9 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-25"
+          className="min-w-[44px] min-h-[44px] w-9 h-8 rounded-lg flex items-center justify-center transition-all disabled:opacity-25"
           style={{ color: accent }}
         >
           <ChevronRight size={18} />
@@ -282,9 +286,11 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
             ))}
           </div>
         ) : error ? (
-          <div className="text-center py-16">
-            <p className="text-[#f87171] text-sm">{t("schedule.error")}</p>
-          </div>
+          <ErrorState
+            error={error}
+            title={t("schedule.error")}
+            onRetry={() => setReloadKey((k) => k + 1)}
+          />
         ) : byDay.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-[#4a6068] text-sm">{t("schedule.noGames")}</p>
@@ -346,7 +352,7 @@ function GameRow({
       {/* Heure / statut */}
       <div className="flex-shrink-0 text-right">
         {isLive ? (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "#f8717122", color: "#f87171" }}>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: "#f8717122", color: "#f87171" }}>
             LIVE
           </span>
         ) : isFinal ? (
@@ -354,7 +360,7 @@ function GameRow({
             <div className="text-white text-sm font-bold tabular-nums">
               {game.awayTeam.score}–{game.homeTeam.score}
             </div>
-            <div className="text-[#4a6068] text-[10px] uppercase">Final</div>
+            <div className="text-[#4a6068] text-[11px] uppercase">Final</div>
           </>
         ) : (
           <div className="text-sm font-bold tabular-nums" style={{ color: ACCENT }}>

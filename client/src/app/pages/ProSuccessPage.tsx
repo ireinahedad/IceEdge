@@ -27,7 +27,7 @@ export function ProSuccessPage() {
         <IceedgeLogo size={64} wordmark={false} className="mb-5" />
       </button>
 
-      <div className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4"
+      <div className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-widest mb-4"
         style={{ background: ACCENT_BG, color: ACCENT, border: `1px solid ${ACCENT_BORDER}` }}>
         ArakIce Pro
       </div>

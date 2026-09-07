@@ -112,6 +112,10 @@ const ROUTES = [
     desc: "Sign in to ArakIce to save slips, track your prediction history and get notified when the model finds a value bet.",
     heading: "Sign In to ArakIce",
     blurb: "Save slips, track your history and get notified when the model finds a value bet.",
+    // A sign-in form has nothing to rank for. Indexed, it only competes with the
+    // homepage on brand queries and pads the crawl budget. `follow` is kept so
+    // the links out of the shell still count.
+    robots: "noindex, follow",
   },
 ];
 
@@ -164,6 +168,8 @@ function shellFor(base, route) {
     `<meta name="description" content="${esc(route.desc)}" />`);
   html = sub(html, 'link rel="canonical"', /<link rel="canonical" href="[^"]*" \/>/,
     `<link rel="canonical" href="${url}" />`);
+  html = sub(html, 'meta name="robots"', /<meta name="robots" content="[^"]*" \/>/,
+    `<meta name="robots" content="${route.robots || "index, follow, max-image-preview:large"}" />`);
 
   html = sub(html, 'meta property="og:title"', /<meta property="og:title" content="[^"]*" \/>/,
     `<meta property="og:title" content="${esc(route.title)}" />`);

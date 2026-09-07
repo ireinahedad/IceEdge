@@ -54,7 +54,7 @@ export function DevIndexPage() {
       style={{ background: "#0A0E0C" }}
     >
       <div className="flex items-center gap-3 mb-2">
-        <button onClick={() => navigate(-1)} className="text-[#bfc8cc] text-lg">←</button>
+        <button onClick={() => navigate(-1)} className="tap-44 text-[#bfc8cc] text-lg">←</button>
         <h1 className="text-white text-base font-bold flex-1">Dev tools</h1>
       </div>
       <p className="text-white/40 text-[10px] mb-6">

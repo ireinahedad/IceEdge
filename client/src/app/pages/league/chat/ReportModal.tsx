@@ -45,8 +45,8 @@ export function ReportModal({
 
         {/* Rappel du message visé */}
         <div className="chat-tile rounded-xl px-3 py-2 mb-4">
-          <p className="text-[#90C9F0] text-[9px] font-medium mb-0.5">@{message.username}</p>
-          <p className="text-white/60 text-[10px] line-clamp-3">{message.text}</p>
+          <p className="text-[#90C9F0] text-[11px] font-medium mb-0.5">@{message.username}</p>
+          <p className="text-white/60 text-[11px] line-clamp-3">{message.text}</p>
         </div>
 
         <div className="flex flex-col gap-1.5 mb-4">
@@ -66,7 +66,7 @@ export function ReportModal({
           ))}
         </div>
 
-        <label className="block text-white/60 text-[10px] mb-1.5">{t("report.noteLabel")}</label>
+        <label className="block text-white/60 text-[11px] mb-1.5">{t("report.noteLabel")}</label>
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value.slice(0, MAX_NOTE))}
@@ -74,7 +74,7 @@ export function ReportModal({
           rows={3}
           className="w-full chat-tile rounded-xl px-3 py-2 text-white text-xs outline-none placeholder-white/30 resize-none mb-1"
         />
-        <p className="text-white/30 text-[9px] text-right mb-5">{note.length}/{MAX_NOTE}</p>
+        <p className="text-white/30 text-[11px] text-right mb-5">{note.length}/{MAX_NOTE}</p>
 
         <div className="flex gap-2">
           <button

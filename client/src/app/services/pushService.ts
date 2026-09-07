@@ -8,6 +8,7 @@
  */
 import { authedFetch } from './authService';
 import { env } from '../env';
+import { fetchWithTimeout } from './http';
 
 const BASE = env.profileApiUrl;
 
@@ -35,7 +36,7 @@ export async function enableValueBetPush(): Promise<boolean> {
   if (permission !== 'granted') return false;
 
   // Fetch the server's VAPID public key.
-  const keyRes = await fetch(`${BASE}/push/vapid-public-key`);
+  const keyRes = await fetchWithTimeout(`${BASE}/push/vapid-public-key`);
   if (!keyRes.ok) return false;
   const { key } = await keyRes.json() as { key: string };
 

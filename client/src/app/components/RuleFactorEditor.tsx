@@ -155,7 +155,7 @@ export function RuleFactorEditor({
         <div className="flex-1" />
         <button
           onClick={() => setOpen((v) => !v)}
-          className="text-[10px] text-[#90C9F0] font-semibold px-2.5 py-1 rounded-lg border border-[#90C9F0]/30 hover:bg-[#90C9F0]/10 flex-shrink-0"
+          className="text-[11px] text-[#90C9F0] font-semibold px-2.5 py-1 rounded-lg border border-[#90C9F0]/30 hover:bg-[#90C9F0]/10 flex-shrink-0"
         >
           Pondération {open ? "▲" : "▼"}
         </button>
@@ -172,7 +172,7 @@ export function RuleFactorEditor({
             {/* ── 1) Voir la pondération : pie de décomposition ── */}
             <div>
               <FactorPie reverse size={104} thickness={16} slices={slices} centerLabel={`${blended}%`} centerSub="Règle" />
-              <p className="text-white/30 text-[9px] mt-2 leading-snug">
+              <p className="text-white/30 text-[11px] mt-2 leading-snug">
                 Part de chaque facteur dans le calcul (poids × valeur) ; « · % » = probabilité estimée par ce facteur.
               </p>
             </div>
@@ -186,7 +186,7 @@ export function RuleFactorEditor({
                   <div key={f.id} className={`flex items-center gap-2 ${on ? "" : "opacity-40"}`}>
                     <input type="checkbox" checked={on} onChange={() => toggleFactor(f)} className="accent-[#86d1ea] flex-shrink-0" />
                     <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: factorColor(f.id) }} />
-                    <span className="text-white/80 text-[10px] flex-1 truncate">{f.label}</span>
+                    <span className="text-white/80 text-[11px] flex-1 truncate">{f.label}</span>
                     <input
                       type="range" min={0} max={100} step={1} value={w}
                       onChange={(e) => setW(f.id, Number(e.target.value))}
@@ -195,14 +195,14 @@ export function RuleFactorEditor({
                     <input
                       type="number" min={0} max={100} step={1} value={w}
                       onChange={(e) => setW(f.id, Number(e.target.value))}
-                      className="w-11 flex-shrink-0 bg-black/20 border border-white/25 rounded px-1 py-0.5 text-[10px] text-white text-right outline-none focus:border-[#90C9F0]/60"
+                      className="w-11 flex-shrink-0 bg-black/20 border border-white/25 rounded px-1 py-0.5 text-[11px] text-white text-right outline-none focus:border-[#90C9F0]/60"
                     />
                   </div>
                 );
               })}
 
               <div className="flex items-center gap-2 flex-wrap mt-1">
-                <span className={`text-[10px] font-semibold tabular-nums ${overLimit ? "text-red-400" : "text-white/50"}`}>
+                <span className={`text-[11px] font-semibold tabular-nums ${overLimit ? "text-red-400" : "text-white/50"}`}>
                   Total : {Math.round(total)} / 100
                 </span>
                 <span className="flex-1" />
@@ -220,7 +220,7 @@ export function RuleFactorEditor({
                   Réinitialiser
                 </button>
               </div>
-              <p className="text-white/30 text-[9px] leading-snug">
+              <p className="text-white/30 text-[11px] leading-snug">
                 Décoche un facteur pour l'exclure. Réglages propres à ce type de pari, gardés sur cet appareil
                 et rattachés à ton compte si tu es connecté.
               </p>

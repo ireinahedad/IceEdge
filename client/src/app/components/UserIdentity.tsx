@@ -69,7 +69,7 @@ export function UserRow({
           <p className="text-white text-xs font-medium truncate">{user.displayName || user.username}</p>
           {badges}
         </div>
-        <p className="text-white/40 text-[9px] truncate">@{user.username}</p>
+        <p className="text-white/40 text-[11px] truncate">@{user.username}</p>
       </div>
     </>
   );
@@ -94,7 +94,7 @@ export function UserRow({
 export function UserTag({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "accent" }) {
   return (
     <span
-      className={`text-[8px] rounded-full px-1.5 py-0.5 flex-shrink-0 border ${
+      className={`text-[11px] rounded-full px-1.5 py-0.5 flex-shrink-0 border ${
         tone === "accent"
           ? "text-[#90C9F0] border-[#90C9F0]/40"
           : "text-white/40 border-white/20"

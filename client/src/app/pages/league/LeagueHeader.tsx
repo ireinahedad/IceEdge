@@ -52,7 +52,7 @@ export function LeagueHeader({
             {/* Sport badge */}
             {[theme.sportIcon, theme.sportLabel].filter(Boolean).length > 0 && (
               <span
-                className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                className="text-[11px] px-2 py-0.5 rounded-full font-medium"
                 style={{ backgroundColor: `${accent}1a`, color: accent }}
               >
                 {[theme.sportIcon, theme.sportLabel].filter(Boolean).join(" ")}
@@ -81,7 +81,7 @@ export function LeagueHeader({
           >
             <span>{tb.label}</span>
             {tb.key === "chat" && totalUnread > 0 && tab !== "chat" && (
-              <span className="absolute top-0 right-1 bg-red-500 text-white text-[8px] font-bold w-3.5 h-3.5 rounded-full flex items-center justify-center">
+              <span className="absolute top-0 right-1 bg-red-500 text-white text-[11px] font-bold w-3.5 h-3.5 rounded-full flex items-center justify-center">
                 {totalUnread > 9 ? "9+" : totalUnread}
               </span>
             )}

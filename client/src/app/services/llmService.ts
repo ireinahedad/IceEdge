@@ -9,6 +9,18 @@ import { env } from '../env';
 
 const BASE = env.nhlServerUrl;
 
+/**
+ * 45 s — la seule requête du client qui dépasse le défaut de 15 s d'`http.ts`.
+ *
+ * Le serveur laisse `LLM_FETCH_TIMEOUT_MS` (30 s par défaut) à son amont
+ * (`llm.routes.ts`). Un délai client plus court couperait une réponse que le
+ * serveur allait rendre : l'utilisateur verrait un échec là où il n'y en a pas.
+ * Les 15 s de marge couvrent le trajet et la lecture du corps.
+ *
+ * ⚠️ À garder AU-DESSUS de `LLM_FETCH_TIMEOUT_MS` si cette variable change.
+ */
+const LLM_TIMEOUT_MS = 45_000;
+
 export interface LLMError {
   type: 'no_api_key' | 'openai_error' | 'network' | 'unknown' | 'monthly_quota';
   message: string;
@@ -65,6 +77,7 @@ export async function askLLMDetailed(
 ): Promise<LLMAnswer> {
   const res = await authedFetch('/llm', {
     method: 'POST',
+    timeoutMs: LLM_TIMEOUT_MS,
     body: JSON.stringify({
       prompt,
       systemPrompt: opts?.systemPrompt,

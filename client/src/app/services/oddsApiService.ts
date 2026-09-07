@@ -4,6 +4,7 @@
 // Falls back to empty array when the backend/upstream is unavailable.
 
 import { env } from "../env";
+import { fetchWithTimeout } from "./http";
 
 // Backend base, e.g. https://<railway>/api — validated in env.ts, no localhost fallback.
 const API_BASE = env.apiBase;
@@ -48,7 +49,7 @@ export async function fetchBet365Odds(
 ): Promise<OddsEvent[]> {
   try {
     const params = new URLSearchParams({ markets: markets.join(",") });
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${API_BASE}/odds/bet365/${encodeURIComponent(sportKey)}?${params}`
     );
     if (!res.ok) {

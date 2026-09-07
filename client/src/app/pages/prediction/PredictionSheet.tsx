@@ -160,14 +160,14 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
                       setTimeout(() => setCopied(false), 1500);
                     } catch { /* clipboard unavailable */ }
                   }}
-                  className="text-[10px] font-semibold px-2 py-1 rounded-md bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 transition-colors"
+                  className="text-[11px] font-semibold px-2 py-1 rounded-md bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 transition-colors"
                 >
                   {copied ? (lang === "fr" ? "Copié ✓" : "Copied ✓") : (lang === "fr" ? "Copier" : "Copy")}
                 </button>
               )}
               <button
                 onClick={() => setLlmOpen((v) => !v)}
-                className="text-[10px] text-purple-300 font-semibold px-2.5 py-1 rounded-lg border border-purple-400/30 hover:bg-purple-500/15"
+                className="text-[11px] text-purple-300 font-semibold px-2.5 py-1 rounded-lg border border-purple-400/30 hover:bg-purple-500/15"
               >
                 {llmOpen ? "▲" : (lang === "fr" ? "Voir" : "View") + " ▼"}
               </button>
@@ -298,7 +298,7 @@ export function PredictionsRevealBar({ mode, onSelect }: { mode: RevealMode; onS
   const seg = (m: RevealMode, label: string, activeColor: string) => (
     <button
       onClick={() => onSelect(m)}
-      className="px-3 py-1 rounded-full text-[10px] font-semibold transition-all active:scale-95"
+      className="px-3 py-1 rounded-full text-[11px] font-semibold transition-all active:scale-95"
       style={mode === m
         ? { background: activeColor + "22", color: activeColor, border: `1px solid ${activeColor}44` }
         : { background: "transparent", color: "#8a9ea6", border: "1px solid transparent" }}
@@ -308,7 +308,7 @@ export function PredictionsRevealBar({ mode, onSelect }: { mode: RevealMode; onS
   );
   return (
     <div className="flex items-center justify-between px-1">
-      <span className="text-[#4a6070] text-[10px] font-semibold uppercase tracking-wider">{t("pred.markets")}</span>
+      <span className="text-[#4a6070] text-[11px] font-semibold uppercase tracking-wider">{t("pred.markets")}</span>
       <div className="flex items-center gap-0.5 p-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
         {seg("rules", `📐 ${t("pred.rules")}`, "#86d1ea")}
         {seg("ml", "🤖 ML", "#a78bfa")}
@@ -437,7 +437,7 @@ function PlayerRowActions({ playerId, abbr, gameId, accent, showTeam, onClose }:
         onClick={(e) => { e.stopPropagation(); onClose(); }}
         aria-label={t("pred.playerBackToStats")}
         title={t("pred.playerBackToStats")}
-        className="w-8 h-8 flex-shrink-0 rounded-lg text-sm font-bold text-[#8a9ea6] bg-[#0A0E0C] border border-white/15 transition-transform active:scale-95"
+        className="tap-44 w-8 h-8 flex-shrink-0 rounded-lg text-sm font-bold text-[#8a9ea6] bg-[#0A0E0C] border border-white/15 transition-transform active:scale-95"
       >
         ×
       </button>
@@ -493,7 +493,7 @@ function PlayersStatsTable({ sides, gameId, accent, showTeamAction = true }: {
         {sides.length === 1 && side && (
           <span className="text-[#8a9ea6] text-[11px]">· {side.name}</span>
         )}
-        <span className="text-[#8a9ea6] text-[10px] ml-auto">{t("pred.seasonStats")}</span>
+        <span className="text-[#8a9ea6] text-[11px] ml-auto">{t("pred.seasonStats")}</span>
       </div>
 
       {/* Team tabs — only when there are two clubs to switch between */}

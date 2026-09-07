@@ -274,13 +274,13 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
             {step !== "subject" && !preselectedSubject && (
               <button
                 onClick={() => { setStep("subject"); setSelectedMarket(null); setSelectedLine(null); setSelectedSelection(null); }}
-                className="text-[#86d1ea] text-lg mr-1"
+                className="tap-44 text-[#86d1ea] text-lg mr-1"
               >←</button>
             )}
             {step === "market" && !preselectedSubject && (
               <button
                 onClick={() => { setStep("subject"); setSelectedSubject(null); }}
-                className="text-[#86d1ea] text-lg mr-1"
+                className="tap-44 text-[#86d1ea] text-lg mr-1"
               >←</button>
             )}
             <p className="text-white font-bold">
@@ -291,7 +291,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[#1B2419] flex items-center justify-center text-[#bfc8cc]"
+            className="tap-44 w-8 h-8 rounded-full bg-[#1B2419] flex items-center justify-center text-[#bfc8cc]"
           >✕</button>
         </div>
 
@@ -308,7 +308,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
                 {searchQuery && (
-                  <button onClick={() => setSearchQuery("")} className="text-[#bfc8cc] text-xs">✕</button>
+                  <button onClick={() => setSearchQuery("")} className="tap-44 text-[#bfc8cc] text-xs">✕</button>
                 )}
               </div>
             </div>
@@ -321,7 +321,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                 const label = type === "game" ? t("mkt.games") : type === "team" ? t("mkt.teams") : t("mkt.players");
                 return (
                   <div key={type} className="mb-4">
-                    <p className="text-[#bfc8cc] text-[10px] uppercase tracking-wider mb-2">{label}</p>
+                    <p className="text-[#bfc8cc] text-[11px] uppercase tracking-wider mb-2">{label}</p>
                     <div className="flex flex-col gap-1">
                       {items.slice(0, 8).map((subject) => (
                         <button
@@ -336,7 +336,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                           {subject.logo ? <img src={subject.logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" /> : <span className="text-xl flex-shrink-0">🏒</span>}
                           <div className="flex-1 min-w-0">
                             <p className="text-white text-xs font-medium truncate">{subject.name}</p>
-                            <p className="text-[#bfc8cc] text-[10px]">{subject.subtitle}</p>
+                            <p className="text-[#bfc8cc] text-[11px]">{subject.subtitle}</p>
                           </div>
                           <span className="text-[#86d1ea] text-xs">→</span>
                         </button>
@@ -358,7 +358,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                 {selectedSubject.logo ? <img src={selectedSubject.logo} alt="" className="w-6 h-6 object-contain" /> : <span>🏒</span>}
                 <div>
                   <p className="text-white text-xs font-medium">{selectedSubject.name}</p>
-                  <p className="text-[#bfc8cc] text-[10px]">{selectedSubject.subtitle}</p>
+                  <p className="text-[#bfc8cc] text-[11px]">{selectedSubject.subtitle}</p>
                 </div>
               </div>
             </div>
@@ -369,7 +369,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                 <button
                   key={cat}
                   onClick={() => setActiveCategory(cat)}
-                  className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-[10px] font-medium transition-all ${
+                  className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all ${
                     activeCategory === cat
                       ? "bg-[#86d1ea] text-[#0A0E0C]"
                       : "bg-[#131A12] text-[#bfc8cc] border border-white/20"
@@ -406,7 +406,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                     <span className="text-xl">{CATEGORY_ICONS[market.category]}</span>
                     <div className="flex-1">
                       <p className="text-white text-xs font-medium">{market.label}</p>
-                      <p className="text-[#bfc8cc] text-[10px]">{market.description}</p>
+                      <p className="text-[#bfc8cc] text-[11px]">{market.description}</p>
                     </div>
                     <span className="text-[#86d1ea] text-xs">→</span>
                   </button>

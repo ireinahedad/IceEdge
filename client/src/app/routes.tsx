@@ -26,7 +26,6 @@ const BetBuilderPage        = lazy(() => import("./pages/BetBuilderPage").then(m
 // VITE_TARGET=ios build emits no AuthCallback-*.js; the web build still does).
 const AuthCallback          = features.googleLogin ? lazy(() => import("./pages/AuthCallback").then(m => ({ default: m.AuthCallback }))) : null;
 const NHLPredictionsPage    = lazy(() => import("./pages/NHLPredictionsPage").then(m => ({ default: m.NHLPredictionsPage })));
-const SharePage             = lazy(() => import("./pages/SharePage").then(m => ({ default: m.SharePage })));
 // Les deux écrans de développement, sous la MÊME liaison conditionnelle que
 // AuthCallback ci-dessus. `lazy()` s'exécute au niveau du module : retirer une
 // route du tableau plus bas ne suffit pas, l'`import()` reste vivant et Rollup
@@ -46,8 +45,16 @@ const ModerationQueuePage   = features.devRoutes
 const DevIndexPage          = features.devRoutes
   ? lazy(() => import("./pages/DevIndexPage").then(m => ({ default: m.DevIndexPage })))
   : null;
-const ProPage               = lazy(() => import("./pages/ProPage").then(m => ({ default: m.ProPage })));
-const ProSuccessPage        = lazy(() => import("./pages/ProSuccessPage").then(m => ({ default: m.ProSuccessPage })));
+// Guideline 3.1.1 — le build iOS v1 n'a aucun chemin vers Pro. MÊME liaison
+// conditionnelle que AuthCallback : retirer les deux routes plus bas ne
+// suffirait pas, `lazy()` s'exécute au niveau du module et les deux chunks
+// partiraient quand même dans le bundle iOS.
+const ProPage               = features.proUpgrade
+  ? lazy(() => import("./pages/ProPage").then(m => ({ default: m.ProPage })))
+  : null;
+const ProSuccessPage        = features.proUpgrade
+  ? lazy(() => import("./pages/ProSuccessPage").then(m => ({ default: m.ProSuccessPage })))
+  : null;
 const TermsPage             = lazy(() => import("./pages/TermsPage").then(m => ({ default: m.TermsPage })));
 const PrivacyPage           = lazy(() => import("./pages/PrivacyPage").then(m => ({ default: m.PrivacyPage })));
 const SupportPage           = lazy(() => import("./pages/SupportPage").then(m => ({ default: m.SupportPage })));
@@ -122,7 +129,13 @@ export const router = createBrowserRouter([
       { path: "/bet",                                element: withSuspense(<BetBuilderPage />)               },
       { path: "/league",                             element: withSuspense(<LeaguePage />)                   },
       { path: "/nhl-predictions",                    element: withSuspense(<NHLPredictionsPage />)           },
-      { path: "/share/:id",                          element: withSuspense(<SharePage />)                    },
+      // `/share/:id` a été supprimée le 2026-09-06 : la page n'affichait qu'un
+      // « les coupons partagés arrivent bientôt », rien dans l'app n'y renvoyait
+      // (le partage passe par une image, ce qui reste le bon choix), et Apple
+      // rejette le contenu « coming soon » (Guideline 2.1 / 4.2). Une URL
+      // partagée qui existait encore tombe désormais sur NotFoundPage, qui est
+      // faite pour ça. La rétablir demande d'IMPLÉMENTER la page, pas de
+      // remettre la ligne.
 
       // Protected — require a signed-in account
       // La page joueur exige un compte : le serveur doit savoir QUI regarde pour
@@ -130,8 +143,12 @@ export const router = createBrowserRouter([
       // est appliqué côté serveur (402), pas ici.
       { path: "/player/:userId",                     element: withSuspense(<Protected><PlayerBetsPage /></Protected>) },
       { path: "/profile",                            element: withSuspense(<Protected><ProfilePage /></Protected>)    },
-      { path: "/pro",                                element: withSuspense(<Protected><ProPage /></Protected>)        },
-      { path: "/pro/success",                        element: withSuspense(<Protected><ProSuccessPage /></Protected>) },
+      ...(features.proUpgrade && ProPage && ProSuccessPage
+        ? [
+            { path: "/pro",                           element: withSuspense(<Protected><ProPage /></Protected>)        },
+            { path: "/pro/success",                   element: withSuspense(<Protected><ProSuccessPage /></Protected>) },
+          ]
+        : []),
       // R17 — the ML dashboard is a developer tool, not a shippable screen.
       ...(features.devRoutes && DevMLDashboard && ModerationQueuePage && DevIndexPage
         ? [

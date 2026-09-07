@@ -90,7 +90,7 @@ export function ModerationQueuePage() {
   return (
     <div className="flex flex-col min-h-screen text-white max-w-[900px] mx-auto px-5 pt-14 pb-16" style={{ background: "#0A0E0C" }}>
       <div className="flex items-center gap-3 mb-2">
-        <button onClick={() => navigate(-1)} className="text-[#bfc8cc] text-lg">←</button>
+        <button onClick={() => navigate(-1)} className="tap-44 text-[#bfc8cc] text-lg">←</button>
         <h1 className="text-white text-base font-bold flex-1">Moderation queue</h1>
         <button
           onClick={() => void load()}

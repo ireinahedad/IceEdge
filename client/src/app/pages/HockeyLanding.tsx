@@ -20,6 +20,7 @@ import { useNavigate } from "react-router";
 import { ChevronRight, CalendarDays } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
+import { ErrorState } from "../components/ErrorState";
 import { nhlApiService } from "../services/nhlApiService";
 import { useSport } from "../context/SportContext";
 import { useSubscription } from "../context/SubscriptionContext";
@@ -78,6 +79,15 @@ export function HockeyLanding() {
   // JAMAIS rendu, et il portait un `trend: "+2%"` écrit en dur — une variation
   // inventée qui n'attendait qu'un composant pour s'afficher.
   const [loading, setLoading] = useState(true);
+  /**
+   * L'échec, gardé À PART des listes vides.
+   *
+   * Jusqu'ici le `catch` du chargement remettait les deux listes à `[]` et
+   * l'accueil affichait « aucun match ce soir » : un réseau coupé était rendu
+   * comme une soirée sans hockey, ce qui est faux et n'offre aucun recours.
+   */
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [upcomingLabel, setUpcomingLabel] = useState(() => t("home.tonightGames"));
 
   // Value bets (+EV): model probability beats the bookmaker's implied probability.
@@ -104,6 +114,7 @@ export function HockeyLanding() {
   // Load NHL games + model predictions
   useEffect(() => {
     setLoading(true);
+    setLoadError(null);
     async function load() {
       try {
         const live = await nhlApiService.getLiveGames();
@@ -133,12 +144,13 @@ export function HockeyLanding() {
         console.error("[HockeyLanding] Failed to load games:", err);
         setLiveGames([]);
         setUpcomingGames([]);
+        setLoadError(err ?? new Error("landing load failed"));
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [lang]);
+  }, [lang, reloadKey]);
 
   // Overlay real Bet365 odds — stored separately, does NOT overwrite model winPct
   useEffect(() => {
@@ -173,7 +185,7 @@ export function HockeyLanding() {
   // la mesure de référence de l'app. L'accueil était la seule page à courir
   // pleine largeur — sur grand écran elle se lisait comme un autre produit.
   return (
-    <div className="flex flex-col min-h-screen pb-24 max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: "#0A0E0C" }}>
+    <div className="flex flex-col min-h-screen pb-[calc(6rem+env(safe-area-inset-bottom,0px))] max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: "#0A0E0C" }}>
       {/* Header — the boards are the very first thing on the page: nothing sits
           above them. The only top padding is env(safe-area-inset-top), which is
           0 in a browser and only grows on a notched device, where the boards
@@ -208,6 +220,10 @@ export function HockeyLanding() {
                 <div className="flex flex-col gap-2">
                   {[1, 2, 3].map((i) => <div key={i} className="h-20 icy-tile rounded-2xl animate-pulse" />)}
                 </div>
+              ) : loadError ? (
+                /* Le bouton relance TOUT le chargement de l'accueil, matchs en
+                   direct compris — d'où l'absence d'un second bouton plus bas. */
+                <ErrorState error={loadError} onRetry={() => setReloadKey((k) => k + 1)} compact />
               ) : upcomingGames.length > 0 ? (
                 <div className="flex flex-col gap-2">
                   {upcomingGames.map((g) => (
@@ -283,7 +299,13 @@ export function HockeyLanding() {
               ) : (
                 <div className="flex flex-col items-center gap-3 py-14">
                   <span className="rink-faceoff-dot" />
-                  <p className="text-[#7f97a3] text-xs">{t("home.noLiveGames")}</p>
+                  {/* Même placeholder, autre phrase : quand le chargement a
+                      échoué, « aucun match en direct » serait faux. Pas de
+                      bouton ici — celui de la section du haut recharge les
+                      deux, et deux boutons pour la même action se piétinent. */}
+                  <p className="text-[#7f97a3] text-xs">
+                    {loadError ? t("common.loadFailed") : t("home.noLiveGames")}
+                  </p>
                 </div>
               )}
             </div>

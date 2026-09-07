@@ -43,8 +43,11 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   const navigate = useNavigate();
   const { requireAuth } = useAuthGate();
   const { isBlocked, ensureLoaded, block } = useBlocks();
-  const { messages, onlineCount, connected, initMessages, appendOptimistic, confirmMessage, removeMessage } =
-    useChatSocket(room.id);
+  const {
+    messages, onlineCount, connected,
+    initMessages, mergeMessages, appendOptimistic, confirmMessage, removeMessage,
+    resyncKey, authError, roomError,
+  } = useChatSocket(room.id);
   const [input, setInput] = useState("");
   const [tag, setTag] = useState<"pick" | "analysis" | undefined>();
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
@@ -77,14 +80,41 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
     [messages, isBlocked],
   );
 
-  // Load HTTP history on mount, seed into socket hook
+  /**
+   * L'historique HTTP — au montage, puis à chaque fois que le hook réclame une
+   * resynchronisation (`resyncKey` : reconnexion du socket, ou retour au
+   * premier plan).
+   *
+   * Une resynchro ne se comporte PAS comme un montage :
+   *   • elle FUSIONNE (`mergeMessages`) au lieu d'écraser — sinon un message
+   *     optimiste encore en vol disparaît, et tout ce qui précède la fenêtre
+   *     d'historique aussi ;
+   *   • elle ne repasse pas l'écran en « chargement », qui clignoterait à
+   *     chaque retour au premier plan ;
+   *   • elle n'affiche pas son échec : on est déjà en train de récupérer d'une
+   *     coupure, un bandeau rouge de plus n'aide personne. Le prochain
+   *     `visibilitychange` réessaiera.
+   */
   useEffect(() => {
-    setLoadingMessages(true);
+    const isResync = resyncKey > 0;
+    if (!isResync) setLoadingMessages(true);
     profileApiService.getRoomMessages(room.id)
-      .then((msgs) => initMessages(msgs))
-      .catch((e) => setErrorMsg(e.message ?? "Could not load messages"))
-      .finally(() => setLoadingMessages(false));
-  }, [room.id]);
+      .then((msgs) => (isResync ? mergeMessages(msgs) : initMessages(msgs)))
+      .catch((e) => { if (!isResync) setErrorMsg(e.message ?? "Could not load messages"); })
+      .finally(() => { if (!isResync) setLoadingMessages(false); });
+  }, [room.id, resyncKey]);
+
+  /**
+   * Les deux pannes que le socket sait nommer, dans le bandeau qui existait
+   * déjà. Sans ça, une session expirée ou un accès refusé se traduisaient par
+   * un salon qui ne reçoit plus rien, sans un mot.
+   */
+  useEffect(() => {
+    if (authError) setErrorMsg(t("chat.sessionExpired"));
+    else if (roomError) {
+      setErrorMsg(roomError === "Access denied" ? t("chat.accessDenied") : t("chat.roomJoinFailed"));
+    }
+  }, [authError, roomError, t]);
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -231,7 +261,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
       <div className={`flex items-center gap-3 mb-3 flex-shrink-0 rounded-2xl px-3 py-2 ${room.isPrivate ? "arena-locker" : "arena-adboard"}`}>
         <button
           onClick={onBack}
-          className="w-8 h-8 rounded-xl chat-tile flex items-center justify-center text-[#90C9F0] flex-shrink-0"
+          className="min-w-[44px] min-h-[44px] w-8 h-8 rounded-xl chat-tile flex items-center justify-center text-[#90C9F0] flex-shrink-0"
         >
           ←
         </button>
@@ -244,22 +274,22 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <p className="text-white text-sm font-bold truncate">{room.name}</p>
-            {room.isPrivate && <span className="text-[10px]">🔒</span>}
+            {room.isPrivate && <span className="text-[11px]">🔒</span>}
             {isAdmin && (
-              <span className="text-[8px] text-[#90C9F0] border border-[#90C9F0]/40 rounded-full px-1.5 py-0.5 flex-shrink-0">admin</span>
+              <span className="text-[11px] text-[#90C9F0] border border-[#90C9F0]/40 rounded-full px-1.5 py-0.5 flex-shrink-0">admin</span>
             )}
             {room.isLive && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
           </div>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1">
               <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-green-400 animate-pulse" : "bg-white/20"}`} />
-              <span className="text-[9px] text-white/40">{displayOnline} {t("common.online")}</span>
+              <span className="text-[11px] text-white/40">{displayOnline} {t("common.online")}</span>
             </div>
           </div>
         </div>
         <button
           onClick={() => setMenuOpen((v) => !v)}
-          className="w-8 h-8 rounded-xl chat-tile flex items-center justify-center text-white/60 flex-shrink-0"
+          className="min-w-[44px] min-h-[44px] w-8 h-8 rounded-xl chat-tile flex items-center justify-center text-white/60 flex-shrink-0"
         >
           ⋯
         </button>
@@ -321,8 +351,8 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
 
       {errorMsg && (
         <div className="flex items-center justify-between bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2 mb-2 flex-shrink-0">
-          <p className="text-red-400 text-[10px]">{errorMsg}</p>
-          <button onClick={() => setErrorMsg(null)} className="text-red-400 text-xs">✕</button>
+          <p className="text-red-400 text-[11px]">{errorMsg}</p>
+          <button onClick={() => setErrorMsg(null)} className="tap-44 text-red-400 text-xs">✕</button>
         </div>
       )}
 
@@ -341,7 +371,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
               <div className="flex flex-col items-center justify-center py-10 gap-2">
                 <span className="text-3xl">{room.icon}</span>
                 <p className="text-white text-xs font-medium">{room.name}</p>
-                <p className="text-white/50 text-[10px] text-center">{room.description}<br />{t("chat.beFirst")}</p>
+                <p className="text-white/50 text-[11px] text-center">{room.description}<br />{t("chat.beFirst")}</p>
               </div>
             )}
             {visibleMessages.map((msg) => (
@@ -366,10 +396,10 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
       {replyTo && (
         <div className="flex items-center gap-2 chat-tile rounded-xl px-3 py-2 mb-2 flex-shrink-0">
           <div className="flex-1 min-w-0">
-            <p className="text-[#90C9F0] text-[9px] font-medium">{t("chat.replyingTo")} @{replyTo.username}</p>
-            <p className="text-white/50 text-[9px] truncate">{replyTo.text}</p>
+            <p className="text-[#90C9F0] text-[11px] font-medium">{t("chat.replyingTo")} @{replyTo.username}</p>
+            <p className="text-white/50 text-[11px] truncate">{replyTo.text}</p>
           </div>
-          <button onClick={() => setReplyTo(null)} className="text-white/50 text-xs">✕</button>
+          <button onClick={() => setReplyTo(null)} className="tap-44 text-white/50 text-xs">✕</button>
         </div>
       )}
 
@@ -380,14 +410,14 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
             <button
               key={t}
               onClick={() => setTag(tag === t ? undefined : t)}
-              className={`px-2 py-1 rounded-full text-[9px] border transition-all ${
+              className={`px-2 py-1 rounded-full text-[11px] border transition-all ${
                 tag === t ? TAG_STYLE[t] : "text-white/50 border-white/10"
               }`}
             >
               {TAG_LABEL[t]}
             </button>
           ))}
-          {tag && <span className="text-white/40 text-[9px] self-center">tagged</span>}
+          {tag && <span className="text-white/40 text-[11px] self-center">tagged</span>}
         </div>
         <div className="flex items-center gap-2 chat-tile rounded-2xl px-3 py-2">
           <input
@@ -400,7 +430,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
           <button
             onClick={sendMessage}
             disabled={!input.trim()}
-            className={`w-7 h-7 rounded-xl flex items-center justify-center text-sm transition-all flex-shrink-0 ${
+            className={`min-w-[44px] min-h-[44px] w-7 h-7 rounded-xl flex items-center justify-center text-sm transition-all flex-shrink-0 ${
               input.trim() ? "bg-[#86d1ea] text-[#072E49] arena-glow" : "bg-white/10 text-white/30"
             }`}
           >

@@ -1,26 +1,22 @@
 /* ArakIce — player search for the props hub.
-   CSP-safe: loaded from 'self', reads an inert <script type="application/json">
-   blob and filters the rendered list client-side. No inline JS, no storage. */
+   CSP-safe: loaded from 'self', no inline JS, no storage.
+
+   The rows are rendered server-side by scripts/seo-gen.mjs so that the served
+   HTML contains a real <a href="/props/..."> for every player — this file only
+   SHOWS and HIDES rows that already exist. It used to build them from a JSON
+   blob, which left the page with no crawlable links and capped the list at 300
+   rows; do not go back to that. */
 (function () {
   "use strict";
 
   var input = document.getElementById("player-search");
   var listEl = document.getElementById("player-list");
   var countEl = document.getElementById("player-count");
-  var dataEl = document.getElementById("players-data");
-  if (!input || !listEl || !dataEl) return;
+  if (!input || !listEl) return;
 
-  var players = [];
-  try {
-    players = JSON.parse(dataEl.textContent || "[]");
-  } catch (e) {
-    return;
-  }
-
-  // Pre-sort alphabetically by name for a stable default view.
-  players.sort(function (a, b) {
-    return (a.name || "").localeCompare(b.name || "");
-  });
+  var rows = Array.prototype.slice.call(listEl.querySelectorAll("li[data-hay]"));
+  if (!rows.length) return;
+  var total = rows.length;
 
   function normalize(s) {
     return (s || "")
@@ -30,36 +26,19 @@
   }
 
   function render(filter) {
-    var q = normalize(filter);
-    var frag = document.createDocumentFragment();
+    var q = normalize(filter).trim();
     var shown = 0;
-    for (var i = 0; i < players.length; i++) {
-      var p = players[i];
-      var hay = normalize(p.name + " " + (p.team || "") + " " + (p.pos || ""));
-      if (q && hay.indexOf(q) === -1) continue;
-      shown++;
-      var li = document.createElement("li");
-      var a = document.createElement("a");
-      a.href = p.url;
-      a.className = "player-row";
-      var name = document.createElement("span");
-      name.className = "player-name";
-      name.textContent = p.name;
-      var meta = document.createElement("span");
-      meta.className = "player-meta";
-      meta.textContent = [p.pos, p.team].filter(Boolean).join(" · ");
-      a.appendChild(name);
-      a.appendChild(meta);
-      li.appendChild(a);
-      frag.appendChild(li);
-      if (shown >= 300) break; // cap DOM size for very long queries
+    for (var i = 0; i < total; i++) {
+      var row = rows[i];
+      var match = !q || row.getAttribute("data-hay").indexOf(q) !== -1;
+      // .hidden keeps the anchor in the DOM — hiding is a display concern, and
+      // a crawler that ignores our CSS still sees every link.
+      row.hidden = !match;
+      if (match) shown++;
     }
-    listEl.innerHTML = "";
-    listEl.appendChild(frag);
     if (countEl) {
-      countEl.textContent = shown === players.length
-        ? players.length + " players"
-        : shown + " of " + players.length + " players";
+      countEl.textContent =
+        shown === total ? total + " players" : shown + " of " + total + " players";
     }
   }
 
@@ -69,6 +48,4 @@
     var v = input.value;
     t = setTimeout(function () { render(v); }, 80);
   });
-
-  render("");
 })();

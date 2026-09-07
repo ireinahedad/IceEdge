@@ -135,27 +135,27 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
               ) : (
                 <span className="text-white text-xs font-bold truncate">{room.name}</span>
               )}
-              {room.isPrivate && <span className="text-[9px] flex-shrink-0">🔒</span>}
+              {room.isPrivate && <span className="text-[11px] flex-shrink-0">🔒</span>}
               {room.role === "admin" && (
-                <span className="text-[8px] text-[#90C9F0] border border-[#90C9F0]/40 rounded-full px-1.5 py-0.5 flex-shrink-0">admin</span>
+                <span className="text-[11px] text-[#90C9F0] border border-[#90C9F0]/40 rounded-full px-1.5 py-0.5 flex-shrink-0">admin</span>
               )}
               {room.isLive && (
-                <span className="text-[8px] text-red-400 border border-red-400/30 rounded-full px-1.5 py-0.5 flex-shrink-0">LIVE</span>
+                <span className="text-[11px] text-red-400 border border-red-400/30 rounded-full px-1.5 py-0.5 flex-shrink-0">LIVE</span>
               )}
             </div>
             {/* Le panneau publicitaire est plus lumineux qu'une carte givrée :
                 le texte secondaire y remonte d'un cran pour rester lisible. */}
-            <p className={`${room.isPrivate ? "text-white/50" : "text-white/70"} text-[10px] truncate`}>{room.lastMessage || room.description}</p>
-            <p className={`${room.isPrivate ? "text-white/40" : "text-white/60"} text-[9px] mt-0.5`}>{room.memberCount} {t("common.members")}</p>
+            <p className={`${room.isPrivate ? "text-white/50" : "text-white/70"} text-[11px] truncate`}>{room.lastMessage || room.description}</p>
+            <p className={`${room.isPrivate ? "text-white/40" : "text-white/60"} text-[11px] mt-0.5`}>{room.memberCount} {t("common.members")}</p>
           </div>
         </button>
 
         {isMine ? (
           <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-            <span className="text-white/40 text-[9px]">{timeAgo(room.lastMessageAt)}</span>
+            <span className="text-white/40 text-[11px]">{timeAgo(room.lastMessageAt)}</span>
             <button
               onClick={(e) => { e.stopPropagation(); onPinToggle(room); }}
-              className={`text-sm transition-opacity ${room.isPinned ? "opacity-100" : "opacity-30"}`}
+              className={`tap-44 text-sm transition-opacity ${room.isPinned ? "opacity-100" : "opacity-30"}`}
               title={room.isPinned ? t("chat.unpinRoom") : t("chat.pinRoom")}
             >
               📌
@@ -172,7 +172,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
             </AppButton>
             <button
               onClick={(e) => { e.stopPropagation(); hideRoom(room.id); }}
-              className="text-white/40 text-[9px] hover:text-white/70"
+              className="text-white/40 text-[11px] hover:text-white/70"
             >
               {t("chat.hide")}
             </button>
@@ -220,9 +220,9 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-white text-xs font-bold truncate">{codeResult.name}</span>
-              {codeResult.isPrivate && <span className="text-[9px]">🔒</span>}
+              {codeResult.isPrivate && <span className="text-[11px]">🔒</span>}
             </div>
-            <p className="text-white/50 text-[10px]">{codeResult.memberCount} {t("common.members")}</p>
+            <p className="text-white/50 text-[11px]">{codeResult.memberCount} {t("common.members")}</p>
           </div>
           <AppButton
             variant="secondary"
@@ -237,7 +237,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
         </div>
       )}
       {codeError && looksLikeCode && (
-        <p className="text-white/40 text-[10px] text-center">{codeError}</p>
+        <p className="text-white/40 text-[11px] text-center">{codeError}</p>
       )}
 
       {/* Salons privés — vus à travers un chambranle éclairé : on regarde DANS
@@ -252,7 +252,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
               {privateRooms.map((r) => <RoomRow key={r.id} room={r} />)}
             </div>
           ) : (
-            <p className="text-white/40 text-[10px] px-1 py-2">{t("chat.noPrivateRooms")}</p>
+            <p className="text-white/40 text-[11px] px-1 py-2">{t("chat.noPrivateRooms")}</p>
           )
         )}
       </div>
@@ -266,13 +266,13 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
               {publicRooms.map((r) => <RoomRow key={r.id} room={r} />)}
             </div>
           ) : (
-            !codeResult && <p className="text-white/40 text-[10px] px-1 py-2">{t("chat.noPublicRooms")}</p>
+            !codeResult && <p className="text-white/40 text-[11px] px-1 py-2">{t("chat.noPublicRooms")}</p>
           )
         )}
         {openPublic && hiddenCount > 0 && (
           <button
             onClick={resetHidden}
-            className="text-white/40 text-[10px] underline self-center"
+            className="text-white/40 text-[11px] underline self-center"
           >
             {t("chat.showHidden", { n: hiddenCount })}
           </button>

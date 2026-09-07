@@ -298,7 +298,7 @@ export function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) 
                     </span>
                     <button
                       onClick={() => { setCompareSelected(null); setComparePlayerSeasons(null); }}
-                      className="text-[#8a9ea6] hover:text-white transition-colors flex-shrink-0"
+                      className="tap-44 text-[#8a9ea6] hover:text-white transition-colors flex-shrink-0"
                       aria-label={t("chart.compare.title")}
                     >
                       <X size={13} />
@@ -334,7 +334,7 @@ export function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) 
                           className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-white/[0.06] transition-colors"
                         >
                           <span className="text-white text-[11px] font-medium truncate">{p.name}</span>
-                          <span className="text-[#8a9ea6] text-[10px] flex-shrink-0">
+                          <span className="text-[#8a9ea6] text-[11px] flex-shrink-0">
                             {String((p as unknown as { teamId?: string }).teamId ?? "").toUpperCase()} · {p.position}
                           </span>
                         </button>

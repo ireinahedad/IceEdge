@@ -139,7 +139,7 @@ export function ProPage() {
         <button onClick={() => navigate("/")} aria-label="Accueil ArakIce">
           <IceedgeLogo size={56} wordmark={false} className="mb-4" />
         </button>
-        <div className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-3"
+        <div className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-widest mb-3"
           style={{ background: ACCENT_BG, color: ACCENT, border: `1px solid ${ACCENT_BORDER}` }}>
           ArakIce Pro
         </div>

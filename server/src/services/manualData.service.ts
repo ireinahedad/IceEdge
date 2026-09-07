@@ -50,8 +50,17 @@ export type ManualKind =
   | 'starting_goalies'
   /** clé = 'YYYY-MM-DD' (heure Est) — { ABBR: ["Nom MoneyPuck", …] } */
   | 'scratches'
-  /** clé = nom d'arbitre normalisé — { name, ppPerGame, note? } */
+  /** clé = nom d'arbitre normalisé — { name, ppPerGame, note? }, SAISI À LA MAIN */
   | 'ref_tendency'
+  /**
+   * clé = nom d'arbitre normalisé — { name, ppPerGame, source }, RELEVÉ
+   * AUTOMATIQUEMENT dans les billets Scouting the Refs par `refereeStore`.
+   *
+   * Séparé de `ref_tendency` pour que le relevé n'écrase jamais une saisie
+   * humaine : `loadTendencies` lit l'automatique puis le manuel, qui gagne.
+   * La carte admin, elle, ne montre et ne modifie que `ref_tendency`.
+   */
+  | 'ref_tendency_auto'
   /** clé = 'AWAY@HOME' — { refs: [...] }, secours si le scrape STR casse */
   | 'ref_assignment'
   /** clé = 'league' — { avgPpPerGame } */
@@ -230,6 +239,34 @@ export async function purgeDatedBefore(beforeDate: string): Promise<number> {
   );
   if (rowCount) cache.clear();
   return rowCount ?? 0;
+}
+
+/**
+ * Combien d'entrées par jeu de données.
+ *
+ * ── Pourquoi cette fonction existe ──────────────────────────────────────────
+ * La panne d'origine (quatre sources de données mortes en production pendant
+ * des mois) n'était pas une erreur, c'était un SILENCE : le repli neutre est
+ * indiscernable d'une vraie absence de blessés. La migration 034 a réparé le
+ * chemin de lecture et rendu les échecs journalisés — mais une table simplement
+ * VIDE ne dit toujours rien, et une table vide donne exactement les mêmes
+ * probabilités qu'un fichier introuvable.
+ *
+ * Ce relevé est ce qui manquait : un chiffre, tous les jours dans les journaux
+ * et à la demande sur la carte admin, qui dit si le modèle est nourri.
+ */
+export async function coverage(): Promise<Record<string, number>> {
+  try {
+    const { rows } = await pool.query(
+      'SELECT kind, COUNT(*)::int AS n FROM manual_data GROUP BY kind',
+    );
+    const out: Record<string, number> = {};
+    for (const r of rows as Array<{ kind: string; n: number }>) out[r.kind] = r.n;
+    return out;
+  } catch (err: any) {
+    logger.warn({ err: err?.message ?? err }, '[manualData] relevé de couverture impossible');
+    return {};
+  }
 }
 
 /** Vide le cache. Tests, et invalidation manuelle après un import en masse. */

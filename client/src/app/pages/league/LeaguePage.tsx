@@ -7,6 +7,7 @@ import { FullLeaderboard } from "./FullLeaderBoard";
 import { PlayerSearchBar, usePlayerSearch } from "./PlayerSearchBar";
 import { ChatTab } from "./chat/ChatTab";
 import { profileApiService } from "../../services/userService";
+import { ErrorState } from "../../components/ErrorState";
 import type { LeaderboardEntry, ChatRoom } from "../../types/user";
 import "./league-theme.css";
 
@@ -17,21 +18,37 @@ export function LeaguePage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState(true);
+  /**
+   * L'échec du CLASSEMENT seulement.
+   *
+   * Les deux appels avaient un `.catch(() => [])` : un classement injoignable
+   * s'affichait comme un classement vide, sans un mot. Celui des salons garde
+   * son repli — l'onglet Chat a sa propre gestion et le badge de non-lus ne
+   * doit pas empêcher le classement de s'afficher.
+   */
+  const [lbError, setLbError] = useState<unknown>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   // La recherche de joueur appartient à la PAGE, pas à un onglet : la barre
   // l'affiche, le classement s'en sert comme filtre. Un seul appel réseau pour
   // les deux (voir PlayerSearchBar).
   const playerSearch = usePlayerSearch();
 
   useEffect(() => {
+    setLoading(true);
+    setLbError(null);
     Promise.all([
-      profileApiService.getLeaderboard().catch(() => [] as LeaderboardEntry[]),
+      profileApiService.getLeaderboard().then(
+        (lb) => ({ ok: true as const, lb }),
+        (err: unknown) => ({ ok: false as const, err }),
+      ),
       profileApiService.getChatRooms().catch(() => [] as ChatRoom[]),
-    ]).then(([lb, rm]) => {
-      setLeaderboard(lb);
+    ]).then(([lbRes, rm]) => {
+      if (lbRes.ok) setLeaderboard(lbRes.lb);
+      else setLbError(lbRes.err ?? new Error("leaderboard load failed"));
       setRooms(rm);
       setLoading(false);
     });
-  }, []);
+  }, [reloadKey]);
 
   const totalUnread = rooms.reduce((acc, r) => acc + (r.unread ?? 0), 0);
 
@@ -52,7 +69,7 @@ export function LeaguePage() {
       </div>
 
       {/* Single pane driven by the tab bar (Chat is the default), on all sizes. */}
-      <div className="relative z-10 flex-1 flex flex-col px-4 pb-28 pt-4 overflow-hidden min-h-0">
+      <div className="relative z-10 flex-1 flex flex-col px-4 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] pt-4 overflow-hidden min-h-0">
         {/* Chat */}
         <div
           className={`${tab === "chat" ? "flex" : "hidden"} flex-col flex-1 min-h-0 overflow-hidden`}
@@ -73,6 +90,8 @@ export function LeaguePage() {
                 <div key={i} className="h-14 bg-white/5 rounded-2xl animate-pulse" />
               ))}
             </div>
+          ) : lbError ? (
+            <ErrorState error={lbError} onRetry={() => setReloadKey((k) => k + 1)} />
           ) : (
             <FullLeaderboard
               entries={leaderboard}

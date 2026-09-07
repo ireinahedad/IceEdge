@@ -75,7 +75,7 @@ export function FactorPie({
         {(centerLabel || centerSub) && (
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
             {centerLabel && <span className="text-white text-base font-black leading-none">{centerLabel}</span>}
-            {centerSub && <span className="text-white/45 text-[8px] uppercase tracking-wider mt-0.5">{centerSub}</span>}
+            {centerSub && <span className="text-white/45 text-[11px] uppercase tracking-wider mt-0.5">{centerSub}</span>}
           </div>
         )}
       </div>
@@ -85,8 +85,8 @@ export function FactorPie({
         {slices.map((s, i) => (
           <div key={i} className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: s.color }} />
-            <span className="text-white/80 text-[10px] flex-1 truncate">{s.label}</span>
-            <span className="text-white/55 text-[10px] tabular-nums flex-shrink-0">
+            <span className="text-white/80 text-[11px] flex-1 truncate">{s.label}</span>
+            <span className="text-white/55 text-[11px] tabular-nums flex-shrink-0">
               {Math.round((Math.max(0, s.value) / total) * 100)}%
               {s.sub ? <span className="text-white/35"> · {s.sub}</span> : null}
             </span>

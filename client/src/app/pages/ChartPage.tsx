@@ -54,7 +54,7 @@ function ChartNav({ type }: { type?: string }) {
           <button
             key={it.key}
             onClick={() => navigate(it.to)}
-            className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-colors"
+            className="px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider transition-colors"
             style={
               active
                 ? { background: accent, color: "#0A0E0C" }
@@ -116,7 +116,7 @@ export function ChartPage() {
     );
 
   return (
-    <div className="flex flex-col min-h-screen pb-24 max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: BG_PAGE }}>
+    <div className="flex flex-col min-h-screen pb-[calc(6rem+env(safe-area-inset-bottom,0px))] max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: BG_PAGE }}>
       <div
         className="sticky top-0 z-40"
         style={{ background: BG_HEADER, backdropFilter: "blur(16px)", paddingTop: "env(safe-area-inset-top, 0px)" }}
@@ -124,7 +124,7 @@ export function ChartPage() {
         <div className="rink-boards" aria-hidden />
         <div className="px-4 pt-3 pb-3">
         <div className="flex items-center gap-2">
-          <button onClick={goBack} className="text-[#3a5060] text-lg shrink-0" aria-label={t("stats.title")}>
+          <button onClick={goBack} className="tap-44 text-[#3a5060] text-lg shrink-0" aria-label={t("stats.title")}>
             ←
           </button>
           <FramedLabel text={t("chart.title")} />

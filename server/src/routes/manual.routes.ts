@@ -30,6 +30,7 @@ import {
   injuriesEntrySchema, lineupsEntrySchema, refereesTableSchema, refAssignmentSchema,
 } from '../validation/schemas';
 import * as Manual from '../services/manualData.service';
+import { fetchGamesByDate } from '../services/nhlApiClient';
 import { normalizeRefName } from '../services/refereeStore';
 import type { GameInjuries } from '../services/injuryStore';
 import type { GoalieDay } from '../services/startingGoalies';
@@ -68,6 +69,68 @@ function dateParam(req: Request, res: Response): string | null {
 }
 
 const actor = (req: Request) => (req as any).user?.sub as string | undefined;
+
+/** Aujourd'hui en heure de l'Est — les jours de match NHL y sont référencés. */
+const todayET = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Couverture — « est-ce que le modèle est nourri, ce soir ? »
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/manual/coverage?date=YYYY-MM-DD
+ *
+ * ── Pourquoi cette route existe ─────────────────────────────────────────────
+ * La migration 034 a réparé le CHEMIN de lecture des quatre sources de données
+ * du modèle ; elle ne les a pas rendues vivantes. Une table vide produit
+ * exactement les mêmes probabilités qu'un fichier introuvable : facteur neutre,
+ * sans un mot. C'est le mode de panne d'origine — quatre entrées mortes pendant
+ * des mois sans symptôme — et il ne demande qu'à revenir, cette fois par simple
+ * absence de saisie.
+ *
+ * La route répond donc à la seule question qui compte : sur les matchs de ce
+ * soir, combien sont renseignés ? `attendu` est le nombre de matchs (ou
+ * d'équipes) du jour, `saisi` ce qu'on a. `actif: false` veut dire « ce facteur
+ * ne fait rien ce soir ».
+ *
+ * Le facteur arbitre est le seul à se remplir tout seul (`ref_tendency_auto`,
+ * relevé dans les billets Scouting the Refs), d'où son décompte à part.
+ */
+router.get('/coverage', async (req: Request, res: Response) => {
+  const raw = String(req.query.date ?? '').trim();
+  if (raw && !DATE_RE.test(raw)) {
+    return res.status(400).json({ error: 'date invalide — format attendu : YYYY-MM-DD' });
+  }
+  const date = raw || todayET();
+
+  const [games, injuries, goalies, scratches, cov] = await Promise.all([
+    // Un jour sans match n'est pas une erreur : la couverture vaut alors 0/0.
+    fetchGamesByDate(date).catch(() => [] as any[]),
+    Manual.mapEntries<GameInjuries>('injuries'),
+    Manual.getEntry<GoalieDay>('starting_goalies', date),
+    Manual.getEntry<ScratchDay>('scratches', date),
+    Manual.coverage(),
+  ]);
+
+  const cles = games.map((g: any) =>
+    `${String(g?.awayTeam?.abbreviation ?? '').toUpperCase()}@${String(g?.homeTeam?.abbreviation ?? '').toUpperCase()}`);
+  const equipes = cles.length * 2;
+
+  const bloc = (saisi: number, attendu: number) => ({ saisi, attendu, actif: saisi > 0 });
+
+  return res.json({
+    date,
+    matchs: cles.length,
+    blessures:        bloc(cles.filter((k) => injuries[k]).length, cles.length),
+    gardiensPartants: bloc(Object.keys(goalies   ?? {}).length, equipes),
+    absents:          bloc(Object.keys(scratches ?? {}).length, equipes),
+    arbitres: {
+      saisiManuellement: cov.ref_tendency      ?? 0,
+      releveAutomatique: cov.ref_tendency_auto ?? 0,
+      actif: ((cov.ref_tendency ?? 0) + (cov.ref_tendency_auto ?? 0)) > 0,
+    },
+  });
+});
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  Blessures / alignement — clé « VISITEUR@MAISON »

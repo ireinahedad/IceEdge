@@ -54,7 +54,7 @@ export function ScoreRing({
           {score}
         </span>
         <span
-          className="text-[8px] uppercase tracking-widest"
+          className="text-[11px] uppercase tracking-widest"
           style={{ color: "#86d1ea" }}
         >
           XP
@@ -155,7 +155,7 @@ export function HitRateChart({
 
       <div className="flex justify-between mt-2">
         {months.map((m, i) => (
-          <span key={i} className="text-white/70 text-[9px]">
+          <span key={i} className="text-white/70 text-[11px]">
             {m.month}
           </span>
         ))}
@@ -182,15 +182,15 @@ export function MarketBreakdown({
         {stats.marketBreakdown.map((m) => (
           <div key={m.marketType}>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-white/70 text-[10px]">
+              <span className="text-white/70 text-[11px]">
                 {m.label}
               </span>
 
               <div className="flex items-center gap-2">
-                <span className="text-white/70 text-[9px]">
+                <span className="text-white/70 text-[11px]">
                   {m.bets} bets
                 </span>
-                <span className="text-white text-[10px] font-bold">
+                <span className="text-white text-[11px] font-bold">
                   {m.hitRate}%
                 </span>
               </div>
@@ -268,12 +268,12 @@ export function CalibrationCard({
         />
       </div>
 
-      <p className="text-white/70 text-[10px] leading-relaxed">
+      <p className="text-white/70 text-[11px] leading-relaxed">
         {desc}
       </p>
 
       <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/20">
-             <span className="text-white/40 text-[9px]">{t("profile.calibration")}</span>
+             <span className="text-white/40 text-[11px]">{t("profile.calibration")}</span>
         <span className="text-xs font-bold" style={{ color }}>{score}/100</span>
       </div>
     </div>

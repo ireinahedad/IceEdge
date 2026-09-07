@@ -16,6 +16,7 @@
 
 import { env } from '../env';
 import { tokenStore } from './tokenStore';
+import { fetchWithTimeout, type TimedRequestInit } from './http';
 
 const BASE = env.profileApiUrl;
 
@@ -24,9 +25,19 @@ const NATIVE_CLIENT_HEADER = { 'X-Client': 'native' } as const;
 
 // --- Authed fetch helper ----------------------------------------------------
 
-export async function authedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+/**
+ * Tout passe par `fetchWithTimeout` : sans délai, une requête partie sur un
+ * réseau mobile dégradé n'échouait jamais et l'écran restait figé (voir
+ * `http.ts`). `init.timeoutMs` permet de sortir du défaut de 15 s — un seul
+ * appelant le fait, `llmService`, dont l'amont a droit à 30 s côté serveur.
+ *
+ * Le rejeu après un 401 rearme son propre délai : deux allers-retours peuvent
+ * donc prendre jusqu'à 2 × le budget, ce qui est voulu — le refresh est court
+ * et l'utilisateur préfère une session rafraîchie à un abandon.
+ */
+export async function authedFetch(path: string, init: TimedRequestInit = {}): Promise<Response> {
   const token = await tokenStore.getAccess();
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetchWithTimeout(`${BASE}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -41,7 +52,7 @@ export async function authedFetch(path: string, init: RequestInit = {}): Promise
     const refreshed = await tryRefresh();
     if (refreshed) {
       const newToken = await tokenStore.getAccess();
-      return fetch(`${BASE}${path}`, {
+      return fetchWithTimeout(`${BASE}${path}`, {
         ...init,
         headers: {
           'Content-Type': 'application/json',
@@ -71,7 +82,7 @@ async function doRefresh(): Promise<boolean> {
   try {
     const refresh = await tokenStore.getRefresh();
 
-    const res = await fetch(`${BASE}/auth/refresh`, {
+    const res = await fetchWithTimeout(`${BASE}/auth/refresh`, {
       method: 'POST',
       credentials: refresh ? 'omit' : 'include',
       headers: refresh
@@ -124,6 +135,23 @@ function tryRefresh(): Promise<boolean> {
     inFlightRefresh = doRefresh().finally(() => { inFlightRefresh = null; });
   }
   return inFlightRefresh;
+}
+
+/**
+ * Le rafraîchissement partagé, pour le seul appelant qui ne passe pas par
+ * `authedFetch` : le socket du chat.
+ *
+ * Son handshake porte le jeton d'accès ; passé 15 minutes le serveur le refuse
+ * (`socket.ts`, « Invalid or expired token ») et **rien** ne déclenchait alors
+ * de refresh — socket.io réessayait en boucle avec le même jeton mort.
+ *
+ * ⚠️ Passe par `tryRefresh` et NON par `doRefresh` : c'est la coalescence
+ * R3bis.1 qui empêche le socket et une requête HTTP simultanée de lancer deux
+ * rotations concurrentes — exactement la panne du 2026-09-03. Un second chemin
+ * de refresh la ferait revenir.
+ */
+export function refreshSession(): Promise<boolean> {
+  return tryRefresh();
 }
 
 // --- Auth API calls ---------------------------------------------------------
@@ -180,7 +208,7 @@ export async function apiRegister(
   password: string,
   first_name?: string
 ): Promise<PendingVerification | AuthResult> {
-  const res = await fetch(`${BASE}/auth/register`, {
+  const res = await fetchWithTimeout(`${BASE}/auth/register`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -195,7 +223,7 @@ export async function apiRegister(
 
 /** Confirms the 6-digit code; on success the user is logged in. */
 export async function apiVerifyEmail(email: string, code: string): Promise<AuthResult> {
-  const res = await fetch(`${BASE}/auth/verify-email`, {
+  const res = await fetchWithTimeout(`${BASE}/auth/verify-email`, {
     method: 'POST',
     credentials: 'include', // receive the refresh cookie
     headers: { 'Content-Type': 'application/json' },
@@ -209,7 +237,7 @@ export async function apiVerifyEmail(email: string, code: string): Promise<AuthR
 }
 
 export async function apiResendVerification(email: string): Promise<void> {
-  await fetch(`${BASE}/auth/resend-verification`, {
+  await fetchWithTimeout(`${BASE}/auth/resend-verification`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -219,7 +247,7 @@ export async function apiResendVerification(email: string): Promise<void> {
 
 /** Requests a password-reset code by email. Always resolves (no enumeration). */
 export async function apiForgotPassword(email: string): Promise<void> {
-  await fetch(`${BASE}/auth/forgot-password`, {
+  await fetchWithTimeout(`${BASE}/auth/forgot-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
@@ -228,7 +256,7 @@ export async function apiForgotPassword(email: string): Promise<void> {
 
 /** Sets a new password using the emailed reset code. */
 export async function apiResetPassword(email: string, code: string, newPassword: string): Promise<void> {
-  const res = await fetch(`${BASE}/auth/reset-password`, {
+  const res = await fetchWithTimeout(`${BASE}/auth/reset-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, code, new_password: newPassword }),
@@ -240,7 +268,7 @@ export async function apiResetPassword(email: string, code: string, newPassword:
 }
 
 export async function apiLogin(email: string, password: string, remember = false): Promise<AuthResult> {
-  const res = await fetch(`${BASE}/auth/login`, {
+  const res = await fetchWithTimeout(`${BASE}/auth/login`, {
     method: 'POST',
     credentials: 'include', // receive the refresh cookie
     headers: { 'Content-Type': 'application/json' },
@@ -260,7 +288,7 @@ export async function apiLogout(): Promise<void> {
   const token   = await tokenStore.getAccess();
   const refresh = await tokenStore.getRefresh(); // native only — null on web
 
-  await fetch(`${BASE}/auth/logout`, {
+  await fetchWithTimeout(`${BASE}/auth/logout`, {
     method: 'POST',
     credentials: refresh ? 'omit' : 'include', // web: server reads + revokes the cookie
     headers: {
@@ -279,7 +307,7 @@ export async function apiLogout(): Promise<void> {
 /** Sign out from every device by revoking all of the user's refresh tokens. */
 export async function apiLogoutAll(): Promise<void> {
   const token = await tokenStore.getAccess();
-  await fetch(`${BASE}/auth/logout-all`, {
+  await fetchWithTimeout(`${BASE}/auth/logout-all`, {
     method: 'POST',
     credentials: 'include',
     headers: {

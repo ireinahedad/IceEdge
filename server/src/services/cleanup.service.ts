@@ -14,7 +14,7 @@
 import { pool } from '../db/connection';
 import { logger } from '../logger';
 import { withJobLock } from './jobLock';
-import { purgeDatedBefore } from './manualData.service';
+import { purgeDatedBefore, coverage } from './manualData.service';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Deux DELETE : quelques secondes au pire. TTL large pour absorber une base froide. */
@@ -60,6 +60,23 @@ export async function runCleanup(): Promise<{ tokens: number; codes: number; str
   const cutoff = new Date(Date.now() - MANUAL_DATED_RETENTION_DAYS * DAY_MS)
     .toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
   const manualDated = await purgeDatedBefore(cutoff);
+
+  // Relevé de couverture : voir `coverage()`. Il ne nettoie rien — il est ici
+  // parce que c'est le seul rendez-vous quotidien du serveur, et parce qu'une
+  // ligne par jour dans les journaux est exactement la bonne dose pour une
+  // donnée qui n'a d'intérêt que sur la durée. Les quatre jeux sont énumérés
+  // même à zéro : « injuries=0 » est l'information, l'absence de ligne non.
+  const cov = await coverage();
+  logger.info(
+    {
+      injuries:          cov.injuries          ?? 0,
+      starting_goalies:  cov.starting_goalies   ?? 0,
+      scratches:         cov.scratches          ?? 0,
+      ref_tendency:      cov.ref_tendency       ?? 0,
+      ref_tendency_auto: cov.ref_tendency_auto  ?? 0,
+    },
+    '[manual] couverture des saisies — un 0 signifie facteur neutre, pas absence de blessés',
+  );
 
   const tokens = tokensRes.rowCount ?? 0;
   const codes  = codesRes.rowCount ?? 0;

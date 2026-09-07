@@ -98,7 +98,7 @@ export function CreateRoomModal({ onClose, onCreate }: {
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
         <p className="text-white font-bold text-base mb-4">{t("chat.createTitle")}</p>
 
-        <p className="text-white/60 text-[10px] uppercase tracking-wider mb-1.5">
+        <p className="text-white/60 text-[11px] uppercase tracking-wider mb-1.5">
           {t("chat.roomName")} <span className="text-red-400">*</span>
         </p>
         <input
@@ -113,7 +113,7 @@ export function CreateRoomModal({ onClose, onCreate }: {
           }`}
         />
 
-        <p className="text-white/60 text-[10px] uppercase tracking-wider mb-1.5">{t("chat.description")}</p>
+        <p className="text-white/60 text-[11px] uppercase tracking-wider mb-1.5">{t("chat.description")}</p>
         <input
           value={desc}
           onChange={(e) => setDesc(e.target.value)}
@@ -123,14 +123,14 @@ export function CreateRoomModal({ onClose, onCreate }: {
         />
 
         {/* Color picker */}
-        <p className="text-white/60 text-[10px] uppercase tracking-wider mb-1.5">{t("chat.roomColor")}</p>
+        <p className="text-white/60 text-[11px] uppercase tracking-wider mb-1.5">{t("chat.roomColor")}</p>
         <div className="flex items-center gap-2 mb-4 flex-wrap">
           {ROOM_COLORS.map((c) => (
             <button
               key={c}
               onClick={() => setColor(c)}
               aria-label={c}
-              className={`w-7 h-7 rounded-full transition-all ${color === c ? "ring-2 ring-white ring-offset-2 ring-offset-[#0A0E0C] scale-110" : "opacity-80"}`}
+              className={`tap-44 w-7 h-7 rounded-full transition-all ${color === c ? "ring-2 ring-white ring-offset-2 ring-offset-[#0A0E0C] scale-110" : "opacity-80"}`}
               style={{ background: c }}
             />
           ))}
@@ -140,7 +140,7 @@ export function CreateRoomModal({ onClose, onCreate }: {
         <div className="flex items-center justify-between icy-tile rounded-xl px-3 py-3 mb-4">
           <div>
             <p className="text-white text-xs font-medium">{isPrivate ? t("chat.private") : t("chat.publicRoom")}</p>
-            <p className="text-white/40 text-[9px] mt-0.5">
+            <p className="text-white/40 text-[11px] mt-0.5">
               {isPrivate ? t("chat.privateHint") : t("chat.publicHint")}
             </p>
           </div>

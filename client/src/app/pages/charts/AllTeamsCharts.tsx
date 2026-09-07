@@ -158,7 +158,7 @@ export function AllTeamsCharts() {
             className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#5c6f63]"
           />
           {query && (
-            <button onClick={() => setQuery("")} className="text-[#8a9ea6] hover:text-white transition-colors">
+            <button onClick={() => setQuery("")} className="tap-44 text-[#8a9ea6] hover:text-white transition-colors">
               <X size={13} />
             </button>
           )}
@@ -184,7 +184,7 @@ export function AllTeamsCharts() {
                   }
                 >
                   {m.label}
-                  {isActive && <span className="ml-1 text-[9px]">{sort.dir === "asc" ? "▲" : "▼"}</span>}
+                  {isActive && <span className="ml-1 text-[11px]">{sort.dir === "asc" ? "▲" : "▼"}</span>}
                 </button>
               );
             })}

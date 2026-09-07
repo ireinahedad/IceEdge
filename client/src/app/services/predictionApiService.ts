@@ -30,6 +30,7 @@ import type {
   BetMarketType,
 } from "./../types/bet";
 import { env } from "../env";
+import { fetchWithTimeout } from "./http";
 
 const BASE_URL = env.predictionApiUrl;
 
@@ -84,7 +85,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   let res: Response;
   try {
-    res = await fetch(`${BASE_URL}${path}`, {
+    res = await fetchWithTimeout(`${BASE_URL}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",

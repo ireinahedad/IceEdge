@@ -79,7 +79,12 @@ export function BetBuilderPage() {
 
   // 68px = l'écart entre le bas de l'écran et le bloc (`bottom-[68px]`, il
   // laisse passer BottomNav), 16px = de l'air sous le dernier élément.
-  const buildPaddingBottom = legs.length > 0 ? `${Math.ceil(ctaHeight) + 68 + 16}px` : "112px";
+  // L'inset du bas s'ajoute à tout ça : la nav et le bloc CTA sont eux-mêmes
+  // remontés de `env(safe-area-inset-bottom)`.
+  const buildPaddingBottom =
+    legs.length > 0
+      ? `calc(${Math.ceil(ctaHeight) + 68 + 16}px + env(safe-area-inset-bottom, 0px))`
+      : "calc(112px + env(safe-area-inset-bottom, 0px))";
 
   // Switch to My Slips after successful lock
   function handleSuccessDone() {
@@ -148,7 +153,7 @@ export function BetBuilderPage() {
           </div>
           {tab === "build" && legs.length > 0 && (
             <button onClick={() => setShowClearConfirm(true)}
-              className="flex items-center gap-1.5 text-red-400 text-xs border border-red-400/30 rounded-xl px-3 py-1.5 active:bg-red-500/10 transition-colors">
+              className="tap-44 flex items-center gap-1.5 text-red-400 text-xs border border-red-400/30 rounded-xl px-3 py-1.5 active:bg-red-500/10 transition-colors">
               <Trash2 size={11} /> Clear
             </button>
           )}
@@ -171,7 +176,7 @@ export function BetBuilderPage() {
             >
               {label}
               {key === "slips" && user && tab !== "slips" && legs.length === 0 && (
-                <span className="ml-1 text-[9px] opacity-60">history</span>
+                <span className="ml-1 text-[11px] opacity-60">history</span>
               )}
             </button>
           ))}
@@ -186,7 +191,7 @@ export function BetBuilderPage() {
             <ProbabilityGauge pct={combinedProbability ?? 0} size={180} />
             {legs.length > 1 && (
               <>
-                <p className="text-[#4a6068] text-[10px] text-center mt-2 max-w-[240px]">
+                <p className="text-[#4a6068] text-[11px] text-center mt-2 max-w-[240px]">
                   {combinedProbability == null
                     ? t("pred.unavailableParlay")
                     : `Combined probability all ${legs.length} predictions hit`}
@@ -194,18 +199,18 @@ export function BetBuilderPage() {
                 {combinedProbability != null && (
                   <div className="mt-2 px-4 py-1.5 rounded-full icy-tile">
                     <span className="text-white font-bold text-sm font-mono">{toOddsLabel(combinedProbability)}</span>
-                    <span className="text-[#4a6068] text-[10px] ml-1.5">implied odds</span>
+                    <span className="text-[#4a6068] text-[11px] ml-1.5">implied odds</span>
                   </div>
                 )}
               </>
             )}
             {legs.length === 1 && (
               <>
-                <p className="text-[#4a6068] text-[10px] text-center mt-2">{t("slip.individualProb")}</p>
+                <p className="text-[#4a6068] text-[11px] text-center mt-2">{t("slip.individualProb")}</p>
                 {combinedProbability != null && (
                   <div className="mt-2 px-4 py-1.5 rounded-full icy-tile">
                     <span className="text-white font-bold text-sm font-mono">{toOddsLabel(combinedProbability)}</span>
-                    <span className="text-[#4a6068] text-[10px] ml-1.5">implied odds</span>
+                    <span className="text-[#4a6068] text-[11px] ml-1.5">implied odds</span>
                   </div>
                 )}
               </>
@@ -220,7 +225,7 @@ export function BetBuilderPage() {
               <div className="flex items-center justify-between mb-3">
                 <p className="text-white text-sm font-medium">{t("slip.predictions")}</p>
                 <button onClick={() => setShowSheet(true)}
-                  className="flex items-center gap-1 text-[#90C9F0] text-xs bg-[#90C9F0]/10 border border-[#90C9F0]/25 rounded-full px-3 py-1.5 active:scale-95 transition-transform">
+                  className="tap-44 flex items-center gap-1 text-[#90C9F0] text-xs bg-[#90C9F0]/10 border border-[#90C9F0]/25 rounded-full px-3 py-1.5 active:scale-95 transition-transform">
                   <Plus size={10} /> {t("slip.add")}
                 </button>
               </div>
@@ -240,7 +245,7 @@ export function BetBuilderPage() {
                 </div>
                 <div>
                   <p className="text-white text-xs font-medium mb-1">{t("slip.howProbTitle")}</p>
-                  <p className="text-[#8a9ea6] text-[10px] leading-relaxed">
+                  <p className="text-[#8a9ea6] text-[11px] leading-relaxed">
                     {t("slip.howProbBody")}
                   </p>
                 </div>
@@ -253,7 +258,7 @@ export function BetBuilderPage() {
       {/* My Slips tab */}
       {tab === "slips" && (
         <div className={`relative z-10 flex-1 px-4 overflow-y-auto bet-ink-black ${mode === "light" ? "bet-light" : "bet-dark"}`}
-          style={{ paddingBottom: "112px" }}>
+          style={{ paddingBottom: "calc(112px + env(safe-area-inset-bottom, 0px))" }}>
           <MySlipsTab user={user} />
         </div>
       )}

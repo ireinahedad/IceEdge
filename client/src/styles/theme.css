@@ -179,3 +179,79 @@
     line-height: 1.5;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Zoom automatique iOS sur les champs de saisie
+ * ──────────────────────────────────────────────────────────────────────────
+ * Safari et WKWebView zooment la page dès qu'on met le focus sur un champ dont
+ * la `font-size` est sous 16 px — et ne dézooment jamais ensuite. 35 champs
+ * étaient concernés : les 10 de `LoginPage` (par sa constante `inputCls`),
+ * l'input du chat à 12 px, les barres de recherche, les sélecteurs des pages
+ * Charts.
+ *
+ * Deux choix délibérés, tous les deux nécessaires :
+ *
+ * 1. HORS `@layer`. Les utilitaires Tailwind (`text-xs`, `text-sm`) vivent
+ *    dans une couche, et une règle SANS couche l'emporte sur toute règle en
+ *    couche quelle que soit la spécificité. C'est ce qui permet de battre
+ *    `text-xs` sans `!important`. Le bloc `@layer base` plus haut, lui, se
+ *    fait écraser par ces mêmes classes — c'est écrit dans son commentaire, et
+ *    c'est pour ça que son `input { font-size: var(--text-base) }` ne suffisait
+ *    pas.
+ *
+ * 2. Seulement sur les appareils tactiles. Le défaut n'existe que là. Le
+ *    bureau garde exactement son design ; un champ ne fait donc pas la même
+ *    taille sur un écran et sur un téléphone, c'est assumé.
+ *
+ * Les types sans texte saisissable sont exclus : leur `font-size` ne déclenche
+ * aucun zoom et la forcer déforme la case, le curseur ou le bouton de fichier.
+ *
+ * ⚠️ Ne PAS remplacer ça par `maximum-scale=1` dans le viewport : ça casse le
+ * zoom d'accessibilité et Apple le relève en revue.
+ */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * `.tap-44` — cible tactile de 44 pt SANS toucher au design
+ * ──────────────────────────────────────────────────────────────────────────
+ * Le minimum des HIG est 44×44 pt. La plupart des boutons icône de l'app font
+ * 24 à 36 px et ont un fond ou une bordure visibles : les agrandir vraiment
+ * changerait le dessin (un rond de 28 px qui passe à 44, une pastille de
+ * couleur, une tuile d'en-tête). `.tap-44` étend donc la ZONE TACTILE par un
+ * pseudo-élément centré d'au moins 44×44 qui ne prend AUCUNE place dans la
+ * mise en page — le bouton garde exactement sa taille visible.
+ *
+ * Les contrôles où l'agrandissement ne se voit pas (envoi du chat, retour et
+ * ⋯ de l'en-tête, flèches de mois) portent au contraire de vrais
+ * `min-w-[44px] min-h-[44px]` : moins de magie, et ça se vérifie à
+ * l'inspecteur.
+ *
+ * ⚠️ Deux règles pour poser cette classe :
+ *   1. JAMAIS sur un élément `overflow-hidden` — le pseudo serait rogné.
+ *      (C'est pour ça que l'avatar de `MessageBubble` a perdu le sien.)
+ *   2. JAMAIS sur deux boutons collés : la zone déborde et volerait le tap du
+ *      voisin. Vérifier l'écart avant d'en ajouter une.
+ *
+ * Tactile seulement : la souris vise juste, et ça évite de fausser un survol.
+ */
+@media (hover: none) and (pointer: coarse) {
+  .tap-44 { position: relative; }
+
+  .tap-44::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    min-width: 44px;
+    min-height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}

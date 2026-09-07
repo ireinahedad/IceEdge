@@ -64,7 +64,9 @@ export function MessageBubble({
       {/* Avatar */}
       <button
         onClick={() => onReply?.(msg)}
-        className="w-7 h-7 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center flex-shrink-0 self-end active:scale-95 transition-transform overflow-hidden"
+        /* `overflow-hidden` retire : il rognait la zone tactile de `tap-44`.
+            L'image interne porte deja `rounded-full`, la decoupe tient sans lui. */
+        className="tap-44 w-7 h-7 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center flex-shrink-0 self-end active:scale-95 transition-transform"
       >
         {msg.avatarUrl
           ? <img src={msg.avatarUrl} alt="" className="w-full h-full object-cover rounded-full" />
@@ -80,23 +82,23 @@ export function MessageBubble({
               le détourner casserait le geste le plus fréquent du chat. */}
           <button
             onClick={() => onOpenUser?.(msg)}
-            className="text-white text-[10px] font-bold active:opacity-60 transition-opacity"
+            className="text-white text-[11px] font-bold active:opacity-60 transition-opacity"
           >
             {msg.displayName}
           </button>
           {msg.tag && (
-            <span className={`text-[8px] px-1.5 py-0.5 rounded-full border ${TAG_STYLE[msg.tag]}`}>
+            <span className={`text-[11px] px-1.5 py-0.5 rounded-full border ${TAG_STYLE[msg.tag]}`}>
               {TAG_LABEL[msg.tag]}
             </span>
           )}
-          <span className="text-white/40 text-[8px]">{time}</span>
+          <span className="text-white/40 text-[11px]">{time}</span>
         </div>
 
         {/* Reply preview */}
         {msg.replyTo && (
           <div className="bg-white/5 rounded-lg px-2 py-1 border-l-2 border-[#90C9F0]">
-            <p className="text-[#90C9F0] text-[9px] font-medium">@{msg.replyTo.username}</p>
-            <p className="text-white/50 text-[9px] truncate">{msg.replyTo.text}</p>
+            <p className="text-[#90C9F0] text-[11px] font-medium">@{msg.replyTo.username}</p>
+            <p className="text-white/50 text-[11px] truncate">{msg.replyTo.text}</p>
           </div>
         )}
 
@@ -114,7 +116,7 @@ export function MessageBubble({
           {isOwn && onDelete && (
             <button
               onClick={() => onDelete(msg.id)}
-              className="text-white/30 hover:text-red-400 text-[11px] opacity-40 hover:opacity-100 transition-opacity self-center flex-shrink-0"
+              className="tap-44 text-white/30 hover:text-red-400 text-[11px] opacity-40 hover:opacity-100 transition-opacity self-center flex-shrink-0"
               title="Delete"
             >
               🗑️
@@ -126,7 +128,7 @@ export function MessageBubble({
                 onClick={() => setMenuOpen((v) => !v)}
                 aria-label={t("chat.messageActions")}
                 aria-expanded={menuOpen}
-                className={`w-6 h-6 rounded-lg flex items-center justify-center text-sm leading-none transition-colors ${
+                className={`tap-44 w-6 h-6 rounded-lg flex items-center justify-center text-sm leading-none transition-colors ${
                   menuOpen ? "bg-white/15 text-white" : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
                 }`}
               >
@@ -168,7 +170,7 @@ export function MessageBubble({
               <button
                 key={r.emoji}
                 onClick={() => onReact?.(msg.id, r.emoji)}
-                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full border text-[9px] transition-all ${
+                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full border text-[11px] transition-all ${
                   r.reacted
                     ? "bg-[#90C9F0]/20 border-[#90C9F0]/50 text-[#90C9F0]"
                     : "bg-white/5 border-white/10 text-white/50"

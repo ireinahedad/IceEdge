@@ -313,7 +313,7 @@ export function AllGamesCharts() {
                         <td className="px-3 py-2.5 text-center tabular-nums text-white whitespace-nowrap">{g.startTime || DASH}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">
                           <span
-                            className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                            className="px-2 py-0.5 rounded-full text-[11px] font-semibold"
                             style={
                               g.status === "live"
                                 ? { background: "#f8717122", color: "#f87171" }
@@ -351,7 +351,7 @@ export function AllGamesCharts() {
                       }
                     >
                       {m.label}
-                      {isActive && <span className="ml-1 text-[9px]">{sort.dir === "asc" ? "▲" : "▼"}</span>}
+                      {isActive && <span className="ml-1 text-[11px]">{sort.dir === "asc" ? "▲" : "▼"}</span>}
                     </button>
                   );
                 })}

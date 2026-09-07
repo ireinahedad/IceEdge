@@ -149,6 +149,12 @@ interface NHLData {
   gamesLabel:  string;
   loading:     boolean;
   error:       string | null;
+  /**
+   * Rejoue les trois appels. Rien d'autre ne relance ce hook : son effet est
+   * monté une fois pour toute la vie de la page, donc sans ça un échec réseau
+   * restait à l'écran jusqu'à un rechargement complet de l'application.
+   */
+  reload:      () => void;
   getTeamById:   (id: string) => UITeam | undefined;
   getGameById:   (id: string) => UIGame | undefined;
   getPlayerById: (id: string) => UIPlayer | undefined;
@@ -161,6 +167,7 @@ export function useNHLData(): NHLData {
   const [players,    setPlayers]    = useState<UIPlayer[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState<string | null>(null);
+  const [reloadKey,  setReloadKey]  = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -217,11 +224,13 @@ export function useNHLData(): NHLData {
       });
 
     return () => { alive = false; };
-  }, []);
+  }, [reloadKey]);
 
   const getTeamById   = (id: string) => teams.find(t => t.id === id);
   const getGameById   = (id: string) => games.find(g => g.id === id);
   const getPlayerById = (id: string) => players.find(p => p.id === id);
 
-  return { teams, games, players, gamesLabel, loading, error, getTeamById, getGameById, getPlayerById };
+  const reload = () => setReloadKey(k => k + 1);
+
+  return { teams, games, players, gamesLabel, loading, error, reload, getTeamById, getGameById, getPlayerById };
 }

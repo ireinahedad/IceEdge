@@ -90,7 +90,7 @@ export function ManualEntryCard() {
     <div className="icy-card rounded-2xl p-4 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <p className="text-white text-xs font-medium">Saisie manuelle</p>
-        <span className="text-[#86d1ea] text-[10px] font-bold uppercase tracking-wider">admin</span>
+        <span className="text-[#86d1ea] text-[11px] font-bold uppercase tracking-wider">admin</span>
       </div>
 
       <div className="flex gap-1 p-1 rounded-xl bg-black/20">

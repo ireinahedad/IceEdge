@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
 import { FramedLabel } from "./brand/FramedLabel";
 import { env } from "../env";
+import { fetchWithTimeout } from "../services/http";
 import { pctColor } from "../data/pctScale";
 
 type TFn = (key: string, params?: Record<string, string | number>) => string;
@@ -112,11 +113,11 @@ function ImportanceBar({ fi, maxImp }: { fi: MLFeatureImportance; maxImp: number
 
   return (
     <div className="flex items-center gap-2">
-      <span className={`text-[9px] flex-shrink-0 ${fi.direction === "positive" ? "text-[#a78bfa]" : "text-[#f87171]"}`}>
+      <span className={`text-[11px] flex-shrink-0 ${fi.direction === "positive" ? "text-[#a78bfa]" : "text-[#f87171]"}`}>
         {fi.direction === "positive" ? "▲" : "▼"}
       </span>
       <div className="flex-1 min-w-0">
-        <p className="text-[#c0cdd4] text-[10px] truncate mb-0.5">{factorLabel(fi.name, t)}</p>
+        <p className="text-[#c0cdd4] text-[11px] truncate mb-0.5">{factorLabel(fi.name, t)}</p>
         <div className="w-full bg-[#0A0E0C] rounded-full h-1">
           <div
             className="h-1 rounded-full transition-all duration-700 ease-out"
@@ -124,7 +125,7 @@ function ImportanceBar({ fi, maxImp }: { fi: MLFeatureImportance; maxImp: number
           />
         </div>
       </div>
-      <span className="text-[10px] font-mono flex-shrink-0" style={{ color }}>
+      <span className="text-[11px] font-mono flex-shrink-0" style={{ color }}>
         {fi.importance.toFixed(2)}
       </span>
     </div>
@@ -206,7 +207,7 @@ function MLSimpleCard({ result }: { result: MLPredictionResult; ruleBasedPct?: n
         <div className="flex-1" />
         <button
           onClick={() => setOpen((v) => !v)}
-          className="text-[10px] text-[#a78bfa] font-semibold px-2.5 py-1 rounded-lg border border-[#a78bfa]/30 hover:bg-[#a78bfa]/10 flex-shrink-0"
+          className="text-[11px] text-[#a78bfa] font-semibold px-2.5 py-1 rounded-lg border border-[#a78bfa]/30 hover:bg-[#a78bfa]/10 flex-shrink-0"
         >
           {lang === "fr" ? "Détails" : "Details"} {open ? "▲" : "▼"}
         </button>
@@ -227,7 +228,7 @@ function MLSimpleCard({ result }: { result: MLPredictionResult; ruleBasedPct?: n
           </div>
           <div className="flex items-center gap-1.5 mt-2">
             <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: confColor }} />
-            <span className="text-[10px] font-semibold" style={{ color: confColor }}>{t("ml.conf", { n: confidence })}</span>
+            <span className="text-[11px] font-semibold" style={{ color: confColor }}>{t("ml.conf", { n: confidence })}</span>
           </div>
           <p className="text-[#9a8ab8] text-[11px] leading-relaxed mt-2">{explanation}</p>
         </div>
@@ -258,9 +259,9 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
   if (compact) {
     return (
       <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#1a1230] border border-[#a78bfa]/25">
-        <span className="text-[9px] text-[#a78bfa] font-bold">🤖 ML</span>
+        <span className="text-[11px] text-[#a78bfa] font-bold">🤖 ML</span>
         <span className="text-xs font-black" style={{ color: probColor }}>{probability}%</span>
-        <span className="text-[9px] text-[#4a4060]">{model_type.split(' ')[0]}</span>
+        <span className="text-[11px] text-[#4a4060]">{model_type.split(' ')[0]}</span>
       </div>
     );
   }
@@ -285,13 +286,13 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
           <div className="flex-1 min-w-0">
             <p className="text-white text-sm font-bold">{t("ml.title")}</p>
             {label
-              ? <p className="text-[#a78bfa] text-[10px] font-semibold truncate">↳ {label}</p>
-              : <p className="text-[#6b5a8a] text-[10px] truncate">{model_type} · {model_version}</p>
+              ? <p className="text-[#a78bfa] text-[11px] font-semibold truncate">↳ {label}</p>
+              : <p className="text-[#6b5a8a] text-[11px] truncate">{model_type} · {model_version}</p>
             }
           </div>
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: confColor + "18", border: `1px solid ${confColor}40` }}>
             <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: confColor }} />
-            <span className="text-[10px] font-semibold" style={{ color: confColor }}>{t("ml.conf", { n: confidence })}</span>
+            <span className="text-[11px] font-semibold" style={{ color: confColor }}>{t("ml.conf", { n: confidence })}</span>
           </div>
         </div>
 
@@ -313,11 +314,11 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
               {/* Delta vs rules */}
               {delta !== null && (
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[10px] text-[#4a4060]">{t("ml.rules")}</span>
-                  <span className="text-[10px] font-bold text-[#86d1ea]">{ruleBasedPct}%</span>
-                  <span className="text-[10px] text-[#4a4060]">→ ML</span>
+                  <span className="text-[11px] text-[#4a4060]">{t("ml.rules")}</span>
+                  <span className="text-[11px] font-bold text-[#86d1ea]">{ruleBasedPct}%</span>
+                  <span className="text-[11px] text-[#4a4060]">→ ML</span>
                   {Math.abs(delta) >= 3 ? (
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                    <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full"
                       style={{
                         backgroundColor: (Math.abs(delta) >= 12 ? "#f87171" : "#facc15") + "22",
                         color: Math.abs(delta) >= 12 ? "#f87171" : "#facc15",
@@ -325,7 +326,7 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
                       {delta > 0 ? "+" : ""}{delta}%
                     </span>
                   ) : (
-                    <span className="text-[10px] text-[#4a4060]">{t("ml.sameSignal")}</span>
+                    <span className="text-[11px] text-[#4a4060]">{t("ml.sameSignal")}</span>
                   )}
                 </div>
               )}
@@ -339,7 +340,7 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
         {/* ── Facteurs clés ── */}
         {feature_importances.length > 0 && (
           <div className="px-4 pb-5 border-t border-[#a78bfa]/08 pt-3">
-            <p className="text-[#5a4a7a] text-[9px] uppercase tracking-widest mb-3 font-semibold">{t("ml.keyFactors")}</p>
+            <p className="text-[#5a4a7a] text-[11px] uppercase tracking-widest mb-3 font-semibold">{t("ml.keyFactors")}</p>
             <div className="flex flex-col gap-2.5">
               {feature_importances.map((fi, i) => (
                 <ImportanceBar key={i} fi={fi} maxImp={maxImp} />
@@ -358,11 +359,11 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
         <div className="w-7 h-7 rounded-lg bg-[#a78bfa]/15 border border-[#a78bfa]/30 flex items-center justify-center text-sm">🤖</div>
         <div className="flex-1">
           <p className="text-white text-xs font-bold">{t("ml.aiPrediction")}</p>
-          <p className="text-[#6b5a8a] text-[9px]">{model_type} · {model_version}</p>
+          <p className="text-[#6b5a8a] text-[11px]">{model_type} · {model_version}</p>
         </div>
         <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/5 border border-white/10">
           <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: confColor }} />
-          <span className="text-[9px]" style={{ color: confColor }}>{t("ml.confidence", { n: confidence })}</span>
+          <span className="text-[11px]" style={{ color: confColor }}>{t("ml.confidence", { n: confidence })}</span>
         </div>
       </div>
       <div className="p-4">
@@ -371,15 +372,15 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
           <div className="flex-1 min-w-0">
             <p className="text-white text-sm font-black mb-1">
               {probability}%
-              <span className="text-[#6b5a8a] text-[10px] font-normal ml-1.5">{t("ml.probability")}</span>
+              <span className="text-[#6b5a8a] text-[11px] font-normal ml-1.5">{t("ml.probability")}</span>
             </p>
-            <p className="text-[#8a7aaa] text-[10px] leading-relaxed">{explanation}</p>
+            <p className="text-[#8a7aaa] text-[11px] leading-relaxed">{explanation}</p>
             {ruleBasedPct !== undefined && delta !== null && (
               <div className="mt-2 flex items-center gap-2 flex-wrap">
-                <span className="text-[9px] text-[#4a4060]">{t("ml.rulesColon")} <span className="text-[#86d1ea] font-bold">{ruleBasedPct}%</span></span>
-                <span className="text-[9px] text-[#4a4060]">→ ML: <span style={{ color: probColor }} className="font-bold">{probability}%</span></span>
+                <span className="text-[11px] text-[#4a4060]">{t("ml.rulesColon")} <span className="text-[#86d1ea] font-bold">{ruleBasedPct}%</span></span>
+                <span className="text-[11px] text-[#4a4060]">→ ML: <span style={{ color: probColor }} className="font-bold">{probability}%</span></span>
                 {Math.abs(delta) >= 5 && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full"
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-full"
                     style={{ backgroundColor: (Math.abs(delta) >= 10 ? "#f87171" : "#facc15") + "22", color: Math.abs(delta) >= 10 ? "#f87171" : "#facc15" }}>
                     Δ{delta > 0 ? "+" : ""}{delta}%
                   </span>
@@ -405,7 +406,7 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
                       style={{ width: `${Math.round(f.importance * 100)}%`, background: "#a78bfa" }}
                     />
                   </div>
-                  <span className="text-[10px] text-[#8a9ea6]">{Math.round(f.importance * 100)}%</span>
+                  <span className="text-[11px] text-[#8a9ea6]">{Math.round(f.importance * 100)}%</span>
                 </div>
               ))}
             </div>
@@ -446,7 +447,7 @@ export async function fetchMLProbability(
   ruleBasedPct: number,
 ): Promise<number> {
   try {
-    const r = await fetch(`${ML_BASE}/ml`, {
+    const r = await fetchWithTimeout(`${ML_BASE}/ml`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
@@ -546,7 +547,7 @@ export function MLSection({ type, subjectId, opponentId, propType, line, ruleBas
     // sous les yeux de l'utilisateur. Le repli ne sert plus qu'en cas d'échec.
     setResult(null);
 
-    fetch(`${ML_BASE}/ml`, {
+    fetchWithTimeout(`${ML_BASE}/ml`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type, subjectId, opponentId, propType, line }),

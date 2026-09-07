@@ -39,11 +39,11 @@ function EvRow({ item }: { item: EvItem }) {
         : <span className="text-base flex-shrink-0">{item.logo}</span>}
       <div className="flex-1 min-w-0">
         <div className="text-white text-[11px] font-medium truncate">{item.label}</div>
-        <div className="text-[#8a9ea6] text-[9px] truncate">{item.context}</div>
+        <div className="text-[#8a9ea6] text-[11px] truncate">{item.context}</div>
       </div>
       <div className="text-right flex-shrink-0">
         <div className="text-green-400 text-[11px] font-bold tabular-nums">+{item.edge}% EV</div>
-        <div className="text-[#bfc8cc] text-[9px] tabular-nums">{item.pct}% {"" /* model */}</div>
+        <div className="text-[#bfc8cc] text-[11px] tabular-nums">{item.pct}% {"" /* model */}</div>
       </div>
     </div>
   );
@@ -72,7 +72,7 @@ export function EvSection({ isPro, items, isLoading, accent }: {
             className="ml-auto flex items-center gap-1 text-white/50 hover:text-white transition-colors"
           >
             <Settings size={13} />
-            <span className="text-[10px]">{t("home.evSettings")}</span>
+            <span className="text-[11px]">{t("home.evSettings")}</span>
           </button>
         )}
       </div>

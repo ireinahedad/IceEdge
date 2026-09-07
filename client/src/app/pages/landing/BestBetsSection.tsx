@@ -16,6 +16,7 @@ import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { DisplayGame } from "./landingTypes";
 import { env } from "../../env";
+import { fetchWithTimeout } from "../../services/http";
 
 
 // ─── Best Bets ─────────────────────────────────────────────────────────────────
@@ -81,25 +82,25 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
         <div className="flex items-center gap-1.5 flex-wrap">
           {/* Full bet title always visible — no truncation, wraps if long */}
           <span className="text-white text-[11px] font-medium">{bet.label}</span>
-          <span className="text-[8px] px-1 py-px rounded-full flex-shrink-0 font-medium"
+          <span className="text-[11px] px-1 py-px rounded-full flex-shrink-0 font-medium"
             style={{ color: risk.color, backgroundColor: `${risk.color}18`, border: `1px solid ${risk.color}44` }}>
             {t(risk.key)}
           </span>
-          <span className="text-[#8a9ea6] text-[9px] truncate">· {bet.context}</span>
+          <span className="text-[#8a9ea6] text-[11px] truncate">· {bet.context}</span>
         </div>
         <div className="flex items-center gap-2 mt-1">
           <div className="flex-1 bg-[#0A0E0C] rounded-full h-1 overflow-hidden">
             <div className="h-full rounded-full transition-all duration-500"
               style={{ width: `${displayPct}%`, backgroundColor: isML ? "#a78bfa" : risk.color }} />
           </div>
-          <span className="text-[10px] font-bold flex-shrink-0 tabular-nums"
+          <span className="text-[11px] font-bold flex-shrink-0 tabular-nums"
             style={{ color: isML ? "#a78bfa" : risk.color }}>
             {sortSource === "ml" && bet.mlLoading ? "…" : `${displayPct}%`}
           </span>
           {odds != null && (
             <span
               title={t("home.oddsFairHint")}
-              className="text-[9px] font-semibold flex-shrink-0 tabular-nums text-[#bfc8cc] bg-white/5 px-1.5 py-px rounded-full cursor-help">
+              className="text-[11px] font-semibold flex-shrink-0 tabular-nums text-[#bfc8cc] bg-white/5 px-1.5 py-px rounded-full cursor-help">
               {t("home.oddsApprox", { odds: odds.toFixed(2) })}
             </span>
           )}
@@ -108,7 +109,7 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
 
       <button
         onClick={() => inSlip ? removeLeg(bet.id) : addLeg({ ...bet.leg, probability: displayPct })}
-        className={`w-7 h-7 rounded-lg border flex items-center justify-center text-sm flex-shrink-0 transition-colors ${
+        className={`tap-44 w-7 h-7 rounded-lg border flex items-center justify-center text-sm flex-shrink-0 transition-colors ${
           inSlip
             ? "bg-green-500/15 border-green-500/30 text-green-400"
             : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
@@ -208,7 +209,7 @@ export function BestBetsSection({
       try {
         const body: Record<string, unknown> = { type: "game", subjectId: bet.teamId ?? bet.gameId ?? bet.id };
         if (bet.teamId) body.opponentId = bet.gameId;
-        const res = await fetch(`${BB_BASE}/predict/ml`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const res = await fetchWithTimeout(`${BB_BASE}/predict/ml`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
         if (res.ok) {
           const data = await res.json() as { probability?: number };
           setBets(prev => prev.map(b => b.id === bet.id ? { ...b, mlPct: Math.round(data.probability ?? bet.rulePct), mlLoading: false } : b));
@@ -250,7 +251,7 @@ export function BestBetsSection({
                   <div className="text-white text-[11px] font-medium">{label}</div>
                   <div className="h-1 mt-1 rounded-full" style={{ width: `${70 - i * 6}%`, background: accent, opacity: 0.6 }} />
                 </div>
-                <span className="text-[10px] font-bold" style={{ color: accent }}>{72 - i * 5}%</span>
+                <span className="text-[11px] font-bold" style={{ color: accent }}>{72 - i * 5}%</span>
               </div>
             ))}
           </div>
@@ -275,7 +276,7 @@ export function BestBetsSection({
           />
           <Star size={13} style={{ color: accent }} />
           <span className="text-white text-sm font-medium">{t("home.bestBets")}</span>
-          {!isLoading && <span className="text-[10px] text-[#bfc8cc] icy-tile px-1.5 py-0.5 rounded-full">{t("home.top", { n: sorted.length })}</span>}
+          {!isLoading && <span className="text-[11px] text-[#bfc8cc] icy-tile px-1.5 py-0.5 rounded-full">{t("home.top", { n: sorted.length })}</span>}
         </button>
         {!collapsed && (
         <div className="flex items-center gap-1.5">
@@ -283,7 +284,7 @@ export function BestBetsSection({
           <div className="flex icy-tile rounded-full p-0.5 gap-0.5">
             {(["rules", "ml"] as SortSource[]).map((s) => (
               <button key={s} onClick={() => setSortSource(s)}
-                className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium transition-all ${sortSource === s ? "text-[#072E49] font-bold" : "text-[#8a9ea6]"}`}
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${sortSource === s ? "text-[#072E49] font-bold" : "text-[#8a9ea6]"}`}
                 style={sortSource === s ? { backgroundColor: s === "ml" ? "#a78bfa" : "#86d1ea" } : {}}>
                 {s === "ml" ? "ML" : t("home.rules")}
               </button>
@@ -291,7 +292,7 @@ export function BestBetsSection({
           </div>
           {/* Sort order — only reorders the (already-filtered) list, never hides anything */}
           <button onClick={() => setSortOrder(o => o === "safest" ? "riskiest" : "safest")}
-            className="px-2.5 py-1 rounded-full icy-tile text-[10px] text-[#8a9ea6] hover:text-white transition-all whitespace-nowrap">
+            className="px-2.5 py-1 rounded-full icy-tile text-[11px] text-[#8a9ea6] hover:text-white transition-all whitespace-nowrap">
             {sortOrder === "safest" ? t("home.safe") : t("home.risky")}
           </button>
         </div>
@@ -308,7 +309,7 @@ export function BestBetsSection({
               <button
                 key={tier}
                 onClick={() => toggleRisk(tier)}
-                className="px-2 py-1 rounded-full text-[9px] font-semibold transition-all border"
+                className="px-2 py-1 rounded-full text-[11px] font-semibold transition-all border"
                 style={active
                   ? { color, backgroundColor: `${color}1a`, borderColor: `${color}55` }
                   : { color: "#5a6660", backgroundColor: "transparent", borderColor: "rgba(255,255,255,0.08)" }}

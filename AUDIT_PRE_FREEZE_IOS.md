@@ -3,15 +3,28 @@
 **Date :** 2026-09-04 · **Périmètre :** `client/` (52 k lignes TS/TSX), `server/` (TS/Express), `.github/`, config de build
 **Méthode :** lecture intégrale des routes, services, contextes et middlewares ; `tsc --noEmit` client + serveur (0 erreur) ; inspection de `dist/`, `public/`, CI, Dockerfile, CSP.
 
-## État — 2026-09-04
+## État — 2026-09-06
 
-**10 correctifs appliqués**, dont 3 des 4 findings CRITICAL. Sur les 11 blocants
-du § 10, **4 sont faits** ; les 7 autres sont tous côté iOS / App Store, sauf la
-migration à appliquer en production.
+**12 correctifs appliqués** (11 committés, le 12ᵉ en attente de relecture), dont
+3 des 4 findings CRITICAL. Sur les 11 blocants du § 10, **4 sont faits** ; les 7
+autres sont tous côté iOS / App Store. La migration `034` est appliquée en
+production.
 
-Restent ouverts : **1 CRITICAL** (la barre de navigation sous l'indicateur
-d'accueil) et **9 HIGH**, dont sept ne se voient que sur un iPhone. Tout ce qui
-touchait à la sécurité serveur est traité.
+**Mise à jour 2026-09-06.** Le CRITICAL qui restait (la barre de navigation sous
+l'indicateur d'accueil) est corrigé : **plus aucun CRITICAL ouvert**. Quatre
+HIGH sont tombés depuis — délais de requête et bouton « Réessayer », `/share/:id`
+supprimée, Pro retiré du build iOS, plancher de 11 px sur le texte.
+
+🔴 **Le seul blocant restant n'est pas du code : l'adresse de support rebondit.**
+C'est le contact Guideline 1.2 et l'adresse par laquelle Apple joint le
+propriétaire. Envoyer un vrai mail et confirmer qu'il arrive, **avant**
+`git tag pre-ios-freeze`.
+
+🟠 **Reste un HIGH, explicitement de phase 3 :** `tokenStore` natif
+(`@capacitor/preferences`) — sans lui le build iOS perd la session toutes les
+15 minutes. La couture serveur est déjà prête.
+
+Tout ce qui touchait à la sécurité serveur est traité.
 
 **Comment lire les titres :**
 
@@ -137,26 +150,45 @@ rejouée contre un Postgres 16 réel.
 - **Impact :** aggravé par `apple-mobile-web-app-status-bar-style: black-translucent`, déjà présent : en PWA installée, le contenu passe **déjà aujourd'hui** sous la barre d'état. Dans le WKWebView Capacitor, il passera sous l'encoche **et** sous l'indicateur d'accueil.
 - **Solution appliquée :** `viewport-fit=cover` ajouté. **À vérifier visuellement sur un iPhone à encoche** : maintenant que les insets sont réels, les en-têtes vont descendre — c'est le comportement voulu, mais l'espacement mérite un coup d'œil.
 
-### 🔴 [CRITICAL] La barre de navigation ignore la safe area du bas
-**Fichier :** `client/src/app/components/BottomNav.tsx`
+### ✅ CORRIGÉ · [CRITICAL] La barre de navigation ignore la safe area du bas
+**Fichiers :** `BottomNav.tsx`, `bet/betParts.tsx`, `BetBuilderPage.tsx` + les 11 pages qui réservent la place de la barre
 
 - **Problème :** `className="fixed bottom-3 …"` — 12 px du bas, sans `env(safe-area-inset-bottom)`. Sur iPhone l'indicateur d'accueil occupe 34 pt.
 - **Impact :** la barre chevauche l'indicateur d'accueil ; les onglets du bas deviennent difficiles à toucher et le geste de retour à l'accueil se déclenche à leur place. C'est **le** défaut que les testeurs remarquent en premier.
-- **Solution recommandée :** `style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))" }}`. Vérifier aussi les `pb-24` des pages qui réservent la place de la barre.
+- **Solution appliquée**, en trois temps parce que **trois choses** se calent sur le bas de l'écran, pas une :
+  1. `BottomNav` : `bottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))"` en style inline (la classe `bottom-3` est retirée). L'inset **s'ajoute** à l'écart de 12 px, il ne le remplace pas.
+  2. `LockSlipCTA` (`/bet`, le second bloc flottant) est calé sur la barre : `bottom-[68px]` → `bottom-[calc(68px+env(safe-area-inset-bottom,0px))]`, sinon il redescend sur elle.
+  3. Les marges basses des pages, qui réservaient une place devenue trop courte : `pb-24` → `pb-[calc(6rem+env(safe-area-inset-bottom,0px))]` (7 pages), `pb-28` → `pb-[calc(7rem+…)]` (4 pages), et les deux `paddingBottom` de `BetBuilderPage` — dont celui **mesuré** au `ResizeObserver` — passent en `calc(… + env(safe-area-inset-bottom, 0px))`.
+- **Vérifié :** `npm run typecheck` propre ; `vite build` web **et** `VITE_TARGET=ios vite build` passent ; le CSS émis contient bien `.pb-[calc(6rem+env(safe-area-inset-bottom,0px))]{padding-bottom:calc(6rem + env(safe-area-inset-bottom,0px))}` et la règle en `68px` — la valeur arbitraire Tailwind avec `env()` génère donc réellement la règle, ce qu'un `typecheck` seul n'aurait pas prouvé.
+- ⚠️ **Reste à voir à l'écran sur un iPhone à encoche.** Rien n'est déployé.
+- ⚠️ Repéré au passage, **non corrigé** (hors périmètre) : dans l'onglet *My Slips*, `MySlipsTab` porte `pb-32` **à l'intérieur** du conteneur qui a déjà 112 px — les deux s'additionnent, ~240 px de vide en bas. Sans effet sur la safe area, à trancher séparément.
 
-### 🟠 [HIGH] Champs de saisie sous 16 px → zoom automatique iOS
-**Fichiers :** `LoginPage.tsx` (`text-sm` = 14 px), `RoomChat.tsx` (`text-xs` = 12 px), et la plupart des 38 `<input>`
+### ✅ CORRIGÉ · [HIGH] Champs de saisie sous 16 px → zoom automatique iOS
+**Fichier :** `client/src/styles/theme.css` (une seule règle, aucun composant touché)
 
 - **Problème :** Safari/WKWebView **zoome la page** quand on met le focus sur un champ dont la `font-size` est < 16 px, et ne dézoome pas ensuite.
 - **Impact :** à chaque tap sur « e-mail », « mot de passe » ou l'input du chat, la page saute et reste zoomée. C'est le comportement qui dit le plus clairement « ceci est un site web dans une coquille ».
-- **Solution recommandée :** `input, textarea, select { font-size: 16px; }` dans le CSS global (le rendu visuel change peu, la taille perçue reste proche). Ne **pas** utiliser `maximum-scale=1` pour le contourner : ça casse le zoom d'accessibilité et Apple le relève.
+- **Périmètre réel, mesuré :** **35 champs** — les 10 de `LoginPage` (par sa constante `inputCls`, `text-sm`), l'input du chat (`text-xs` = 12 px), `RoomList`, `PlayerSearchBar`, le `textarea` de signalement, les sélecteurs des pages Charts (`text-[11px]`), `SettingsTab`, et les 7 du tableau de bord ML (hors build iOS, mais comptés).
+- **⚠️ Pourquoi `@layer base` ne suffisait pas :** `theme.css` **avait déjà** `input { font-size: var(--text-base) }` — dans `@layer base`, donc écrasé par `text-xs`/`text-sm`, comme son propre commentaire l'annonce. La règle ajoutée est **hors de toute `@layer`** : une règle sans couche l'emporte sur n'importe quelle règle en couche, quelle que soit la spécificité. C'est ce qui permet de battre `text-xs` **sans `!important`**, et c'est ce qui fait gagner les sélecteurs `textarea` et `select`, dont la spécificité seule perdrait.
+- **Solution appliquée :** limitée aux appareils tactiles, `@media (hover: none) and (pointer: coarse)`, sur décision du user — le défaut n'existe que là et le bureau garde exactement son design. Contrepartie assumée : un champ ne fait pas la même taille sur un écran et sur un téléphone. Les types sans texte saisissable (`checkbox`, `radio`, `range`, `file`, `color`) sont exclus.
+- **Vérifié :** `typecheck` propre, `vite build` web **et** `VITE_TARGET=ios` passent, la règle sort bien dans le CSS bâti, et un contrôle par script confirme qu'elle y est **à la profondeur 0, hors couche**, alors que `.text-xs` est dans `@layer utilities` — c'est ce qui prouve la cascade, pas la lecture du source.
+- **`maximum-scale=1` n'a pas été utilisé** : ça casse le zoom d'accessibilité et Apple le relève.
+- ⚠️ **Reste à voir à l'écran** : l'input du chat passe de 12 à 16 px sur téléphone, sa rangée va grandir un peu.
 
-### 🟠 [HIGH] Cibles tactiles sous 44 pt
-- Bouton d'envoi du chat : `w-7 h-7` = **28 px**
-- Retour, icône du salon, menu `⋯` : `w-8 h-8` = **32 px**
-- 41 occurrences de `w-6/7/8 h-6/7/8` sur des éléments cliquables
+### ✅ CORRIGÉ · [HIGH] Cibles tactiles sous 44 pt
+**Fichiers :** `styles/theme.css` (la classe `.tap-44`) + 43 boutons dans 26 fichiers
+
 - **Impact :** taux d'erreur de tap élevé, en particulier pour l'envoi de message. Le minimum HIG est 44×44 pt.
-- **Solution recommandée :** garder l'icône visuellement petite mais élargir la zone : `p-2 -m-2` ou une classe utilitaire `min-w-[44px] min-h-[44px] flex items-center justify-center`.
+- **⚠️ Le chiffre de 41 était un comptage de `grep`, pas une mesure.** Les boutons ont été **mesurés** un par un dans Chromium (les classes réelles, le CSS bâti, une fenêtre de 390 px). Ce que ça a changé :
+  - **La barre du bas n'est PAS en défaut** : ses onglets font **52×47**, pas 43×31 — l'icône, l'écart et le libellé de 9 px s'additionnent. La checklist demandait de les élargir : c'était inutile.
+  - Les deux gros boutons du coupon (`Add leg`, `Lock slip`) font déjà **44** de haut, ainsi que le bouton « parcourir » du coupon vide et les lignes de résultat de recherche (**55**).
+  - À l'inverse, **le grep manquait des cibles plus petites que tout ce qu'il listait** : les flèches `←` de 9 en-têtes, les `✕` d'effacement, le 📌 de la liste des salons, et surtout le **🗑️** de suppression d'un message (un emoji en `text-[11px]`, sans aucune classe de taille — la plus petite cible de l'app).
+- **Solution appliquée, en deux mécanismes** parce qu'un seul ne marchait pas :
+  1. **`.tap-44`** (36 boutons) — un pseudo-élément centré d'au moins 44×44 étend la **zone tactile** sans occuper la moindre place : le bouton garde sa taille visible. C'est ce qu'il faut partout où le bouton a un fond ou une bordure (rond de suppression d'une jambe, pastilles de couleur d'un salon, boutons de fermeture des feuilles, `+` d'ajout au coupon, pastilles de texte serrées).
+  2. **Vrais `min-w-[44px] min-h-[44px]`** (7 boutons) là où l'agrandissement ne se voit pas ou est souhaitable : envoi du chat, retour et `⋯` de l'en-tête du chat, retour de `SchedulePage` et de `NHLPredictionsPage`, flèches de mois. Moins de magie, et ça se vérifie à l'inspecteur.
+- **⚠️ Deux règles pour poser `.tap-44` à l'avenir** (elles sont écrites dans le CSS) : jamais sur un élément `overflow-hidden` (le pseudo serait rogné — c'est pourquoi l'avatar de `MessageBubble` a perdu le sien, son image portant déjà `rounded-full`), et jamais sur deux boutons collés (la zone déborde et volerait le tap du voisin).
+- **Vérifié, par test de frappe et pas par lecture :** dans Chromium en profil iPhone (`pointer: coarse`), un point à 21 px du centre — donc **hors** d'un bouton de 28 px — renvoie bien le bouton via `elementFromPoint` ; le même point sur un bouton témoin sans la classe renvoie son parent. Les variantes `min-w`/`min-h` mesurent bien 44×44. `typecheck` propre, `vite build` web et `VITE_TARGET=ios` passent.
+- ⚠️ **Non déployé, non essayé au doigt.** Les liens de texte (« mot de passe oublié », Conditions, Confidentialité) ont été laissés tels quels : cibles conventionnelles, et leurs zones de 44 se chevaucheraient entre elles.
 
 ### 🟠 [HIGH] Le stockage natif des jetons n'existe pas encore
 **Fichier :** `client/src/app/services/tokenStore.ts`
@@ -165,26 +197,54 @@ rejouée contre un Postgres 16 réel.
 - **Impact :** en l'état, le build iOS perd la session **toutes les 15 minutes** (WKWebView jette le cookie `SameSite=None`) sans aucun moyen de récupérer.
 - **Solution recommandée :** c'est du travail de phase 3, mais il doit être **dans le plan de freeze**, pas après. La couture est déjà prête (`TokenStore` est une interface, toutes les méthodes sont `async`) — il ne manque que `nativeStore`.
 
-### 🟠 [HIGH] Le chat ne survit pas au retour au premier plan
-**Fichiers :** `client/src/app/hooks/useChatSocket.ts`, `RoomChat.tsx`
+### ✅ CORRIGÉ · [HIGH] Le chat ne survit pas au retour au premier plan
+**Fichiers :** `useChatSocket.ts`, `RoomChat.tsx`, `authService.ts`, `i18n/index.tsx`
 
 Trois défauts qui se cumulent, tous visibles dès le premier verrouillage d'écran :
 1. **Aucune resynchronisation après reconnexion.** Le handler `connect` fait `socket.emit('join_room')` et rien d'autre. Les messages arrivés pendant que l'app était en arrière-plan sont **perdus définitivement** — trou silencieux dans la conversation.
 2. **Aucun écouteur `connect_error`.** Le jeton d'accès expire au bout de 15 min ; le serveur refuse alors le handshake (`Invalid or expired token`) et **rien ne déclenche de refresh**. Socket.io réessaie en boucle, le chat est mort, l'utilisateur ne voit qu'un point gris.
 3. **`room_error` est émis par le serveur mais jamais écouté côté client.** Un accès refusé laisse l'utilisateur dans un salon qui ne reçoit rien, sans message.
-- **Solution recommandée :** sur `connect`, refaire l'appel HTTP d'historique et le fusionner (au lieu de `initMessages` qui écrase) ; sur `connect_error` contenant « token », appeler le refresh puis `socket.connect()` ; afficher `room_error`.
 
-### 🟠 [HIGH] Le coupon est perdu à chaque mise en arrière-plan
+**Solution appliquée.** Le hook expose `resyncKey`, un compteur ; `RoomChat` l'a mis dans les dépendances de son effet d'historique. C'est tout le mécanisme — aucun appel réseau n'entre dans le hook, la page reste seule à parler à l'API.
+
+- **`resyncKey` monte sur une RE-connexion** (jamais sur la première : la page charge déjà l'historique) **et sur le retour au premier plan**. Ce `visibilitychange` n'était dans aucun des trois points et c'est pourtant le cas du titre : iOS gèle la WKWebView, la socket peut se croire vivante au réveil et le ping de socket.io met une vingtaine de secondes à découvrir qu'elle est morte. Au retour, on relance la socket si elle est tombée et on redemande l'historique sans attendre.
+- **Une resynchro FUSIONNE** (`mergeMessages`), elle n'écrase pas : écraser perdrait les messages optimistes encore en vol et tout ce qui précède la fenêtre d'historique. Union par identifiant, le serveur faisant foi, tri sur `sentAt`. Elle ne repasse pas l'écran en « chargement » (il clignoterait à chaque retour) et n'affiche pas son échec (on récupère déjà d'une coupure ; le prochain retour au premier plan réessaiera).
+- **`connect_error`** ne réagit qu'aux messages d'authentification — le reste est une panne réseau que socket.io retente très bien seul. Un seul refresh par cycle, réarmé par un `connect` réussi : sans ce garde, chaque tentative de reconnexion relancerait une rotation de jeton.
+- **⚠️ Le refresh passe par `refreshSession()`, un export neuf de `authService` qui délègue à `tryRefresh`**, donc à la coalescence R3bis.1 — pas à `doRefresh`. Un second chemin de refresh ferait revenir la tempête de rotations du 2026-09-03.
+- **`room_error` et la session morte** s'affichent dans le bandeau `errorMsg` qui existait déjà, avec trois clés i18n neuves. Aucune UI nouvelle.
+- **⚠️ Changer de salon remet `resyncKey` à zéro pendant le rendu** (le patron React d'ajustement d'état), sinon l'effet de la page croirait revenir d'une coupure et **fusionnerait l'historique du nouveau salon dans les messages de l'ancien**.
+- **⚠️ Connu et assumé :** un message supprimé pendant l'absence n'est pas dans l'historique rechargé, donc la fusion le laisse affiché jusqu'au prochain `message_deleted` ou au prochain montage. C'est le prix de ne rien perdre.
+
+**Vérifié — et cette fois par des tests, pas par relecture.** `client/` n'a aucun runner ; un banc d'essai jetable a été monté dans le conteneur (esbuild qui bundle le **vrai** `useChatSocket.ts`, avec `socket.io-client`, `authService` et `tokenStore` remplacés par des doublures, rendu dans Chromium par Playwright). **19 assertions, toutes vertes** : la 1re connexion ne resynchronise pas, la reconnexion oui, le retour au premier plan aussi et il rappelle `connect()` quand la socket est morte, l'onglet caché ne déclenche rien, une erreur réseau ne provoque aucun refresh, un jeton expiré en provoque exactement un, un second refus n'en relance pas et lève le bandeau, un `connect` réussi réarme le droit au refresh et efface le bandeau, `room_error` remonte, la fusion garde l'optimiste et trie, et le changement de salon remet le compteur à zéro. `typecheck` propre, `vite build` web et `VITE_TARGET=ios` passent.
+
+⚠️ **Le banc d'essai n'est PAS dans le dépôt** (ce serait ajouter un runner au client, décision à part). Rien n'est déployé ni essayé sur un vrai téléphone.
+
+### ✅ CORRIGÉ · [HIGH] Le coupon est perdu à chaque mise en arrière-plan
 **Fichier :** `client/src/app/context/BetContext.tsx`
 
 - **Problème :** `useState<BetLeg[]>([])`, aucune persistance.
 - **Impact :** iOS purge régulièrement les WKWebView en arrière-plan. Un utilisateur qui construit un coupon à 5 jambes, reçoit un appel et revient **repart de zéro**. Sur le web, un simple rechargement suffit aussi.
-- **Solution recommandée :** persister `legs` dans `localStorage` (et `@capacitor/preferences` en natif) avec un TTL court, dans un `useEffect`. ~15 lignes.
+- **Solution appliquée :** `localStorage` sous la clé `iceedge_slip`, relu par un initialiseur paresseux de `useState`, réécrit par un `useEffect` sur `legs`. `@capacitor/preferences` n'est **pas** utilisé : il n'est pas dans `package.json` et relève de la phase 3 ; localStorage fonctionne dans la WKWebView.
+- **TTL de 12 heures, mesuré depuis la jambe la plus récemment ajoutée** — donc un coupon en cours de construction n'expire jamais sous les doigts de son auteur. Ce n'est pas une garantie de fraîcheur (les probabilités dorment avec le coupon, c'est le serveur qui valide au verrouillage) : c'est une limite de bon sens, douze heures couvrant une soirée interrompue et pas un coupon d'avant-hier.
+- **Ce qui est relu vient du disque, donc rien n'est fait sur parole :** un champ `v: 1` (une version inconnue est jetée, pas devinée), un filtre de forme sur chaque jambe (`id`, `marketType`, `probability`, `addedAt`), et un `try/catch` qui couvre le JSON cassé comme la navigation privée de Safari. Un coupon vide **retire** la clé au lieu d'y laisser un tableau.
+- **Vérifié au banc d'essai** (même recette esbuild + Playwright que le hook de chat, jetable cette fois, servi en HTTP parce que `localStorage` n'existe pas sur `file://`) : **13 assertions vertes** — restauration à 5 min, encore restauré à 11 h 30, jeté à 13 h, TTL calculé sur la jambe la plus récente, JSON cassé sans exception, `v: 2` jeté, `legs` non-tableau jeté, jambes malformées filtrées sans perdre la bonne, écriture avec `v: 1`, survie au rechargement, et `clearSlip` comme le retrait de la dernière jambe qui retirent la clé. `typecheck` propre, builds web et iOS.
+- ⚠️ **Connu :** le coupon n'est pas rattaché à un compte — une déconnexion ne le vide pas. Sans conséquence de sécurité (rien de sensible dans une jambe), mais deux comptes sur le même navigateur se partagent le brouillon.
 
-### 🟠 [HIGH] Aucun timeout de requête, aucun bouton « Réessayer »
+### ✅ CORRIGÉ · [HIGH] Aucun timeout de requête, aucun bouton « Réessayer »
+**Fichiers :** `client/src/app/services/http.ts` (nouveau), `components/ErrorState.tsx` (nouveau), + les 4 helpers `request()` et 5 écrans.
+
 - **Problème :** `grep AbortController|AbortSignal` sur tout `client/` → **0 résultat**. `grep -i retry|réessayer` → **0 résultat**.
-- **Impact :** c'est exactement le scénario « mauvaise connexion » que tu redoutes. Sur un réseau mobile dégradé, un `fetch` peut rester en attente une minute sans que l'écran change ; et quand il échoue, le seul recours de l'utilisateur est de tuer l'app. Le serveur, lui, a bien des timeouts partout.
-- **Solution recommandée :** ajouter `signal: AbortSignal.timeout(15000)` dans les helpers `request()` de `nhlApiService`, `predictionApiService` et `authedFetch` ; ajouter un bouton « Réessayer » aux états d'erreur des pages principales.
+- **Impact :** c'est exactement le scénario « mauvaise connexion » que tu redoutes. Sur un réseau mobile dégradé, un `fetch` peut rester en attente une minute sans que l'écran change ; et quand il échouait, le seul recours de l'utilisateur était de tuer l'app. Le serveur, lui, a bien des timeouts partout.
+- **Solution appliquée :** un seul `fetchWithTimeout` (`http.ts`), appelé par `authedFetch`, `nhlApiService.get`, `predictionApiService.request`, `oddsApiService`, `pushService` et les 3 `fetch` bruts de `MLPredictionCard`/`BestBetsSection`. Il ne reste **aucun** `fetch` sans délai dans `client/src`, hors `shareImage.ts` qui lit une `data:` URL.
+- **`AbortController` + `setTimeout`, PAS `AbortSignal.timeout()`** comme l'audit le suggérait : celui-ci n'existe qu'à partir d'iOS **16**, et `AbortSignal.any()` — nécessaire pour fusionner le délai avec un `signal` de l'appelant — qu'à partir d'**iOS 17.4**. La version iOS minimale n'étant pas arrêtée, la version manuelle marche partout.
+- **15 s par défaut, 45 s pour `/llm`.** Le défaut est **au-dessus** de tous les délais serveur (NHL 8 s, ML 5 s) plus la marge d'un démarrage à froid Railway : le client n'abandonne jamais une requête que le serveur allait servir. L'IA est la seule exception — `LLM_FETCH_TIMEOUT_MS` laisse **30 s** à l'amont, donc 15 s côté client auraient coupé des réponses valides. ⚠️ Garder `LLM_TIMEOUT_MS` au-dessus si la variable serveur change.
+- **Un délai dépassé n'est pas une coupure réseau :** `RequestTimeoutError` est un type à part, sinon les deux arrivent en `AbortError` indistinguable d'un abandon volontaire (démontage d'un composant), et quitter une page ferait clignoter une erreur.
+- **Aucun réessai automatique.** L'échec remonte tel quel et c'est l'utilisateur qui rejoue. Un réessai automatique transformerait une panne d'amont en troupeau — précisément ce que le tir S1 a coûté sur l'API de cotes facturée à l'appel.
+- **Le bouton, sur 5 écrans** via `ErrorState` (message + `AppButton variant="ghost"` + `.tap-44`) : Accueil, Calendrier, Stats, Ligue/classement, Mes coupons. Il ne connaît pas l'erreur — il reçoit un `onRetry`, et chaque écran sait ce que « recharger » veut dire chez lui.
+- **Trois états vides mensongers corrigés au passage**, parce qu'un bouton n'a nulle part où s'accrocher sans ça : l'accueil rendait un réseau coupé en « aucun match ce soir », le classement en classement vide (`.catch(() => [])`), et « Mes coupons » affichait la ligne rouge **et** l'état vide « aucun coupon » l'un sous l'autre.
+- **Vérifié au banc jetable** (esbuild + Node 22, doublure de `fetch` qui honore le signal ; pas de Playwright, `http.ts` ne touche ni au DOM ni au stockage) : **16 assertions vertes** — abandon **au** délai mesuré, budget porté par l'erreur, `timeoutMs` qui ne fuit pas dans le `RequestInit`, minuteur désarmé après succès, abandon de l'appelant qui reste un `AbortError`, signal déjà abandonné, `timeoutMs: 0`, erreur réseau non déguisée, écouteur retiré. Banc et mode d'emploi dans `.claude-tmp/banc-http/` — ⚠️ **rien ne le lance**. `typecheck` propre, builds web et `VITE_TARGET=ios` verts.
+- ⚠️ **Connu :** le délai couvre l'attente des **en-têtes**, pas la lecture du corps — le minuteur est désarmé dès que `fetch` rend la main. Couvrir le corps demanderait de reconstruire la `Response` autour d'un flux surveillé, ce qui perd `url`/`redirected` et lève sur un 204. Les corps servis ici sont du JSON court, lu immédiatement.
+- ⚠️ **Non traité :** le socket du chat (socket.io a ses propres délais) et le « Réessayer » des écrans secondaires (graphiques, feuilles de prédiction, modération). Rien n'est déployé ni essayé sur un vrai téléphone.
 
 ### 🟡 [MEDIUM] `autoComplete` absent des champs de connexion
 **Fichier :** `client/src/app/pages/LoginPage.tsx`
@@ -251,7 +311,47 @@ Aucun `-webkit-tap-highlight-color` (flash gris sur chaque tap), aucun `user-sel
   - **`PUT /api/injuries/:key` lève ENOENT** (`writeFileSync` dans un dossier inexistant) → 500. La carte d'admin des blessures ne fonctionne pas en production.
   - Même si le fichier était copié : le système de fichiers d'un conteneur est **éphémère**, donc toute saisie manuelle disparaîtrait au prochain déploiement, et ne serait pas partagée entre instances.
 - **Solution appliquée (2026-09-04) :** les quatre tables passent en base — migration `034_manual_data.sql`, table `manual_data (kind, entry_key, payload JSONB, updated_at, updated_by)`, service unique `manualData.service.ts` avec cache TTL 30 s (les absences aussi sont mises en cache : la plupart des matchs n'ont aucune saisie) et **pannes journalisées** au lieu d'un `catch {}` muet. Les quatre stores lisent la base, `PUT /api/manual/*` écrit dedans, et l'onglet « Compos du soir » de la carte admin rend enfin faisable la saisie gardiens/absents depuis un téléphone 1-2 h avant le match. Les anciens `.json` sont supprimés du dépôt. Migration validée contre un vrai Postgres 16 (application, idempotence, purge datée) ; 25 tests de régression ajoutés (`manualData.service.test.ts`, `manual.routes.test.ts`).
-- **Reste à faire de ton côté :** appliquer la migration en production (`npm run db:migrate:all` avec le `DATABASE_URL` de prod) **avant** de déployer le serveur.
+- **⚠️ Ce que la correction ne fait PAS, et qu'il faut lire avant de cocher cet item.** Le code est réparé ; **les quatre facteurs ne sont pas pour autant vivants**. `034` crée une table **vide** — seule la moyenne ligue (`ref_config` = 6,2 pp/match) est semée. Tant que rien n'y est saisi, les quatre entrées rendent exactement la même valeur neutre qu'avant. Ce qui a changé, c'est que **la saisie est enfin possible et persistante**, et que l'échec est **journalisé** (`logger.warn '[manualData] lecture impossible'`) au lieu d'être muet. Le mode de panne d'origine — quatre entrées mortes sans symptôme — n'est pas éliminé, il est devenu visible.
+
+  | Source | `kind` | Après la migration seule | Ce qu'il faut pour l'activer |
+  |---|---|---|---|
+  | Blessures / alignement | `injuries` | table vide → facteur neutre | saisie **par match**, carte admin |
+  | Gardiens partants | `starting_goalies` | vide → zéro gardien | saisie **par jour**, 1-2 h avant la mise au jeu |
+  | Absents (*scratches*) | `scratches` | vide → zéro absent | saisie **par jour** |
+  | Tendance d'arbitre | `ref_tendency` + `ref_tendency_auto` | ✅ **se remplit tout seul** depuis le 2026-09-04 | rien — voir le bloc suivant |
+  | Assignation d'arbitre | `ref_assignment` | **scrapée en direct** (wp-json STR) ; la saisie n'est qu'un secours | ✅ parseur réécrit et testé sur un vrai billet |
+
+- **Reste à faire de ton côté :**
+  1. **Appliquer la migration en production** (`npm run db:migrate:all` avec le `DATABASE_URL` de prod) **avant** de déployer le serveur qui la suppose. Un déploiement dans l'autre ordre ne casse rien de visible — `manualData.service` retombe sur neutre — mais rejoue exactement la panne d'origine, avec une trace cette fois.
+  2. **Vérifier que la table existe**, connecté en admin : `GET /api/manual/injuries` doit rendre **200 `[]`**. Un 500 = migration non appliquée.
+  3. **Décider si la saisie sera réellement tenue** pour les trois jeux qui la demandent (blessures, gardiens, absents). C'est la vraie question ouverte de cet item : sans routine quotidienne, ces trois tables restent vides et le modèle porte trois entrées inertes. `GET /api/manual/coverage` (ci-dessous) est là pour que ça ne puisse plus passer inaperçu.
+
+### ✅ CORRIGÉ · [HIGH] Le scrape d'arbitres ne se contentait pas d'échouer — il inventait des noms
+**Fichiers :** `server/src/services/refereeStore.ts`, `services/__fixtures__/str-2025-11-18.html` *(nouveau)*, `services/refereeStore.test.ts` *(nouveau)*
+
+Trouvé le 2026-09-04 en allant lire un vrai billet Scouting the Refs, ce que
+personne n'avait fait — le commentaire du fichier disait « à valider une fois
+sur un vrai jour de match ».
+
+- **Problème :** `extractAssignments()` cherchait une ligne `Referees: A, B`. Ce format n'existe pas : STR met `REFEREES` seul dans un `<h3>` et les noms plus loin, dans une cellule de tableau. Passée sur le billet du 18/11/2025 (8 matchs), la fonction ne rendait pas zéro arbitre — elle en rendait **deux, tous deux inventés** :
+
+  ```
+  [ { abbrs: ['DAL','NYI'], refs: ['Linesmen TBD'] },
+    { abbrs: ['SJS','UTA'], refs: ["'s rank among active officials."] } ]
+  ```
+
+  Le premier vient de « Referees and Linesmen TBD » (le match dont les officiels ne sont pas encore annoncés), le second de la légende du tableau. Ces chaînes seraient sorties **à l'écran** dans `RefFactor.note` : « arbitres Linesmen TBD — tendance inconnue ».
+- **Deux défauts trouvés en même temps :** `posts.find(...) ?? posts[0]` appliquait **les arbitres d'un autre jour** quand le billet du jour n'était pas dans les cinq derniers, en silence ; et l'alias `'hockey club': 'UTA'` matchait n'importe quelle phrase contenant ces deux mots.
+- **Solution appliquée :** parsing par l'ancre `<h1 id="#AWAYvsHOME">` (les abréviations sont dedans, plus besoin d'interpréter les noms d'équipes) puis la section `REFEREES` du `table.TOTable`, en s'arrêtant avant `LINESPERSONS`. Un match sans section arbitres est **ignoré, pas deviné**. Le repli `posts[0]` est supprimé — un facteur neutre vaut infiniment mieux qu'un facteur faux. Le `catch {}` muet est journalisé.
+- **Et le facteur s'auto-alimente désormais.** Le même tableau porte `PP Opp/Gm` par arbitre — `5.7 (10) | 5.6 (37)` = saison passée | **carrière** — c'est-à-dire exactement la tendance que `ref_tendency` attendait qu'on saisisse à la main. Elle est lue et mémorisée dans un `kind` **séparé**, `ref_tendency_auto`, pour qu'un relevé automatique n'écrase jamais une saisie humaine (`loadTendencies` lit l'auto puis le manuel, qui gagne). **Le facteur arbitre est donc le seul des quatre à vivre sans routine quotidienne.**
+- **⚠️ Le piège de mesure, qui décidait si ce facteur aide ou nuit :** `multiplier = moyenne(arbitres du match) / league`. Les valeurs STR de la colonne saison vont de 5,1 à 6,2 — **toutes sous le 6,2 semé dans `ref_config`**. Diviser par 6,2 aurait donné ≈ 0,90 à tout le monde, tous les soirs : pas un signal, une remise constante déguisée. Le dénominateur est donc maintenant **la moyenne des tendances connues**, la même mesure que le numérateur ; `ref_config` ne sert plus que de repli sous 10 arbitres connus. (Rassurant au passage : la moyenne de la colonne carrière tombe autour de 6,2 — le 6,2 était juste pour la carrière, faux pour la saison.)
+- **Preuve :** `refereeStore.test.ts`, 10 tests contre un **extrait verbatim** du billet du 18/11/2025 gardé en fixture — les deux matchs avec officiels, le match « TBD », et la légende. Quatre tests sont des assertions **négatives** : aucun nom ne contient « TBD » / « rank » / « official », les juges de ligne du même tableau ne sont jamais pris pour des arbitres, et un billet d'une autre date ne s'applique pas.
+
+### ✅ CORRIGÉ · [HIGH] Une table de saisie VIDE est aussi muette qu'un fichier introuvable
+**Fichiers :** `server/src/services/manualData.service.ts`, `services/cleanup.service.ts`, `routes/manual.routes.ts`
+
+- **Problème :** la migration `034` répare le chemin de lecture et journalise les échecs, mais **une table vide rend exactement les mêmes probabilités qu'un fichier introuvable** — facteur neutre, sans un mot. Le mode de panne d'origine (quatre entrées mortes des mois durant, sans symptôme) ne demandait qu'à revenir, cette fois par simple absence de saisie.
+- **Solution appliquée :** `coverage()` compte les entrées par jeu de données. Le job de nettoyage quotidien en journalise une ligne — **les quatre jeux énumérés même à zéro**, parce que « injuries=0 » est l'information et qu'une ligne absente n'en est pas une. Et `GET /api/manual/coverage?date=` (admin) répond à la question utile : sur les matchs de **ce soir**, combien sont renseignés — `{ saisi, attendu, actif }` par jeu, `matchs` pris du calendrier NHL du jour. Un jour sans match rend 0/0, pas une erreur.
 
 ### 🟡 [MEDIUM] Un message de chat qui échoue reste affiché comme envoyé
 **Fichier :** `RoomChat.tsx` (`sendMessage`)
@@ -332,8 +432,16 @@ Aucun rafraîchissement proactif du jeton : le premier appel après expiration p
 
 ## 6. UX / UI / Accessibilité
 
-### 🟠 [HIGH] 351 occurrences de texte de 8 à 10 px
-Réparties sur 30 fichiers, y compris les libellés de la barre de navigation (`text-[9px]`), les badges de rôle (`text-[8px]`) et le compteur « en ligne ». Le minimum HIG est 11 pt, et rien ne réagit à la taille de texte système. **C'est le facteur numéro un qui fait « page web dense » plutôt qu'« app iOS ».** Passer un plancher à 11-12 px sur les libellés et 13-14 px sur le texte secondaire.
+### ✅ CORRIGÉ · [HIGH] 351 occurrences de texte de 8 à 10 px
+**Fichiers :** 47 `.tsx` + `rink-theme.css` et `league-theme.css`.
+
+Le décompte de 351 incluait les écrans internes. Hors ceux-là — `DevMLDashboard`, `DevIndexPage`, `ModerationQueuePage` sont derrière `devRoutes: isWeb`, donc absents du build iOS — le vrai chiffre était **283 occurrences sur 47 fichiers**, plus **6 règles CSS** à 9-10 px.
+
+- **Plancher unique à 11 px**, pas l'échelle 11-12 / 13-14 suggérée : `text-[11px]` est **déjà employé 104 fois** dans le design, donc rien de nouveau n'entre dans la palette et le rendu ne part pas en refonte à trois jours du gel. 8, 9 et 10 px deviennent 11 ; ce qui était déjà à 11 ne bouge pas.
+- **Les 3 écrans internes ne sont PAS touchés** : tableaux denses d'outil interne, invisibles pour Apple, et personne ne relirait leur grille.
+- **Prouvé dans le CSS bâti**, pas dans les sources : `cat dist/assets/*.css | grep -o "font-size:[0-9.]*px"` ne rend plus que `.text-[9px]` et `.text-[10px]` — deux utilitaires que Tailwind génère parce que les écrans internes s'en servent encore, et qu'**aucun écran atteignable sur iOS ne porte**. C'est la seule vérification qui vaut : une classe Tailwind ne se prouve pas en grepant le TSX.
+- ⚠️ **Non touché :** les graduations d'axe des graphiques (`fontSize: 10` passé à Recharts, 4 occurrences dans `ChartVisuals.tsx`). Ce n'est pas du texte d'interface, l'audit ne les comptait pas, et les monter chevaucherait sur un axe dense.
+- ⚠️ **À vérifier à l'œil** : la barre de navigation, les badges de rôle et les libellés à fort interlettrage (`.rink-signboard-kicker` à 0.22em, `.jersey-choice`) sont ceux qui peuvent déborder. Rien n'est déployé.
 
 ### 🟡 [MEDIUM] Formulaires : aucun `<label>`, erreurs non annoncées
 `LoginPage` n'utilise que des `placeholder` — qui disparaissent dès qu'on tape et ne sont pas lus comme des étiquettes. Les blocs `{error}` et `{notice}` n'ont ni `role="alert"` ni `aria-live`, donc un lecteur d'écran ne les annonce jamais.
@@ -360,12 +468,15 @@ Le middleware socket exige un JWT (`if (!token) return next(new Error(...))`), a
 - **Impact :** en production Stripe **est** configuré (sinon `/checkout` rend un 501), donc le message était **faux**. Et faux ou vrai, annoncer à quelqu'un que le paiement n'est pas branché sur la page où on lui demande de payer est exactement ce qui détruit la confiance dans un produit payant. C'était le signal « prototype » le plus visible de l'app.
 - **Solution appliquée :** rendu supprimé, clé retirée du dictionnaire.
 
-### 🟠 [HIGH] `/share/:id` est une page « bientôt disponible » en production
-**Fichier :** `client/src/app/pages/SharePage.tsx` — affiche `t("share.soon")` = « Les coupons partagés arrivent bientôt. »
+### ✅ CORRIGÉ · [HIGH] `/share/:id` est une page « bientôt disponible » en production
+**Fichiers :** `routes.tsx`, `i18n/index.tsx` ; `pages/SharePage.tsx` supprimée.
 
-La route est enregistrée et publiquement atteignable. Rien dans l'app n'y renvoie (le partage passe par une image, ce qui est le bon choix), donc c'est du code mort **avec du texte de remplacement**. Apple rejette explicitement le contenu « coming soon » (Guideline 2.1 / 4.2 — App Completeness). **Supprimer la route et la page**, ou l'implémenter.
+- **Problème :** la page affichait `t("share.soon")` = « Les coupons partagés arrivent bientôt. » Route enregistrée et publiquement atteignable, alors que **rien dans l'app n'y renvoyait** — le partage passe par une image, ce qui reste le bon choix. Du code mort avec du texte de remplacement, rejeté par Apple (Guideline 2.1 / 4.2).
+- **Solution appliquée :** page supprimée (déplacée dans `_to_delete/`, le bridge ne peut pas effacer), route retirée, et **la liaison `lazy()` avec elle** — c'est le piège qui a déjà attrapé `AuthCallback` et `DevMLDashboard` : `lazy()` s'exécute au niveau du module, retirer la ligne de route n'aurait pas tué le chunk.
+- **Clés `share.title` / `heading` / `slipId` / `soon` retirées** du dictionnaire. `share.goHome` **reste** : `NotFoundPage` s'en sert, c'est son seul autre appelant.
+- **Vérifié dans `dist/` :** aucun `SharePage-*.js` dans le build web ni dans le build iOS. Une ancienne URL partagée tombe désormais sur `NotFoundPage`, qui est faite pour ça.
 
-### 🟠 [HIGH] Sur iOS, la page Pro est une impasse
+### ✅ CORRIGÉ · [HIGH] Sur iOS, la page Pro est une impasse
 **Fichier :** `client/src/app/pages/ProPage.tsx`
 
 Avec `features.stripeCheckout === false` :
@@ -377,7 +488,11 @@ Avec `features.stripeCheckout === false` :
 Un utilisateur iOS voit donc la liste complète des avantages Pro, sans aucun moyen d'y accéder — sauf un code promo. Deux problèmes :
 1. **Parcours en impasse** : c'est le genre d'écran qui fait dire « c'est incomplet ».
 2. **Risque de rejet 3.1.1** : déverrouiller du contenu payant sur iOS par un code hors App Store est précisément ce que la règle interdit, et le testeur d'Apple doit pouvoir exercer les fonctions payantes. À ce jour il n'y a **aucun chemin IAP** dans le code.
-- **Solution :** c'est la décision structurante de ta phase iOS. Soit tu livres l'IAP avant le freeze, soit tu assumes un build v1 « lecture seule » où Pro n'existe pas du tout sur iOS (masquer la page entière, pas seulement le bouton) — mais alors le champ promo doit disparaître aussi.
+- **Décision prise le 2026-09-06 : build v1 sans Pro sur iOS.** L'IAP est reporté ; la page entière disparaît du build iOS, champ promo compris.
+- **Solution appliquée :** un drapeau `features.proUpgrade` (`platform.ts`) — « ce build a-t-il **un** chemin vers Pro », distinct de `stripeCheckout` qui ne dit que **comment** on paie. Les deux valent `isWeb` aujourd'hui, ce qui a l'air redondant ; ça cesse de l'être le jour où l'IAP arrive en phase 3 et où `proUpgrade` passe à vrai sur iOS pendant que `stripeCheckout` reste faux. Les séparer maintenant fait de ce jour-là un changement d'une ligne au lieu d'un audit de tous les écrans Pro.
+- **Ce qui disparaît du build iOS :** `/pro` et `/pro/success` (routes **et** liaisons `lazy()` — vérifié : aucun `ProPage-*.js` ni `ProSuccessPage-*.js` dans `dist/` en `VITE_TARGET=ios`, les deux sont bien là dans le build web), le prix, le champ code promo, et le bouton « Passe Pro » de la carte Abonnement des Paramètres.
+- **Ce qui reste :** les sections Pro restent **verrouillées** (`ProLock` garde son flou et son titre) mais **sans appel à l'action** — sur un build sans `/pro`, le bouton pointerait vers une route inexistante, soit un cul-de-sac pire que celui qu'on corrige. Et il ne fallait **pas** le remplacer par « disponible sur le web » : renvoyer vers un achat hors App Store est précisément ce que 3.1.1 interdit. La carte Abonnement reste visible pour un **abonné** (souscrit sur le web, même compte) afin qu'il lise son échéance et puisse résilier — résilier n'est pas un achat.
+- ⚠️ **Tension assumée :** un testeur d'Apple verra du contenu flouté sans aucun moyen d'y accéder. C'est permis (3.1.1 interdit de pointer vers un achat externe, pas de verrouiller du contenu) mais ça peut se lire comme incomplet. L'alternative — retirer les sections Pro du build iOS — change le produit, pas seulement l'écran. À trancher avant de **soumettre**, pas avant de taguer.
 
 ### 🟡 [MEDIUM] Des cotes fictives sont servies publiquement
 `GET /api/odds/live` et `GET /api/odds/game/:gameId` renvoient `MOCK_ODDS` — deux entrées codées en dur (`BOS 1.85`, `NYR 2.05`) depuis `server/src/data/mock.ts`. Aucun écran client ne les appelle (le client passe par `/odds/bet365/...`), donc ce sont **des endpoints publics morts qui servent des cotes inventées** sous ton nom de domaine. À supprimer.
@@ -394,7 +509,7 @@ Rien de grave : les `console.*` restants sont légitimes (scripts de migration, 
 
 **Ce qui semble bizarre ou inutile**
 - La mention « mode démo » sous le bouton d'abonnement (corrigée) : c'était le premier truc qui faisait douter.
-- Une page « bientôt disponible » atteignable.
+- Une page « bientôt disponible » atteignable (supprimée).
 - Sur iPhone, la page zoome à chaque tap dans un champ et ne dézoome pas.
 - L'avatar disparaît de la barre du bas après un rechargement.
 
@@ -405,8 +520,8 @@ Rien de grave : les `console.*` restants sont légitimes (scripts de migration, 
 
 **Où l'utilisateur peut se perdre**
 - Chat : après un verrouillage d'écran, la conversation reprend avec un trou et sans indication.
-- Ligue : quand le réseau tombe, « vide » et « cassé » sont indistinguables, et il n'y a rien à réessayer.
-- Pro sur iOS : liste d'avantages, aucun bouton.
+- Ligue : quand le réseau tombe, « vide » et « cassé » sont indistinguables, et il n'y a rien à réessayer (corrigé).
+- Pro sur iOS : liste d'avantages, aucun bouton (la page entière est retirée du build iOS).
 
 **Étapes inutiles**
 - Un aller-retour réseau à chaque modification du coupon, pour une multiplication.
@@ -418,9 +533,9 @@ Par ordre d'impact : la mention mode démo (corrigée) · les textes à 8-9 px �
 **Risques App Store**
 | Guideline | Risque | État |
 |---|---|---|
-| 2.1 / 4.2 — App Completeness | Page `/share/:id` « coming soon » | 🔴 à traiter |
-| 3.1.1 — In-App Purchase | Pro déverrouillable par code promo, aucun IAP | 🔴 décision à prendre |
-| 4.0 — Design | Cibles < 44 pt, texte 8-9 px, safe areas | 🟠 à traiter |
+| 2.1 / 4.2 — App Completeness | ~~Page `/share/:id` « coming soon »~~ supprimée 2026-09-06 | 🟢 traité |
+| 3.1.1 — In-App Purchase | ~~Pro déverrouillable par code promo~~ → build v1 sans Pro sur iOS (`features.proUpgrade`) ; ⚠️ contenu verrouillé sans CTA, à relire avant de soumettre | 🟢 traité |
+| 4.0 — Design | ✅ cibles 44 pt, safe areas, et plancher de 11 px posé 2026-09-06 (283 + 6 règles) | 🟢 traité |
 | 5.3 — Gambling | Liens sortants coupés par `features.bookmakerLinks`, double barrière dans `openUrl` | 🟢 bien traité |
 | 4.8 — Sign in with Apple | Google retiré du build iOS (`features.googleLogin`) | 🟢 bien traité |
 | 1.2 — Safety / UGC | Signalement, blocage réversible, file de modération, règles accessibles depuis le chat, adresse de support publiée | 🟢 bien traité |
@@ -429,9 +544,9 @@ Par ordre d'impact : la mention mode démo (corrigée) · les textes à 8-9 px �
 
 ## 9. Correctifs appliqués
 
-Travail fait directement sur `master` dans `~/dev/ICEEDGE`, sans commit de ma
-part — tu relis et tu committes. Les lots 1-9 sont déjà dans ton historique
-(`357a458`, `816e547`) ; les lots 10 et 11 attendent ta relecture.
+Travail fait directement sur `master` dans `~/dev/ICEEDGE`, relu et committé
+par le user : lots 1-9 (`357a458`, `816e547`), lot 10 (`a204a20`), lot 11
+(`3194c1b`).
 
 | # | Fichier(s) | Changement |
 |---|---|---|
@@ -446,8 +561,9 @@ part — tu relis et tu committes. Les lots 1-9 sont déjà dans ton historique
 | 9 | `httpError.ts` *(nouveau)* + 12 fichiers, 93 handlers | Une seule règle de mise en forme des erreurs ; plus aucun message interne dans une réponse, et les 5xx enfin journalisés |
 | 10 | `profile.service.ts`, `SettingsTab.tsx`, `types/user.tsx`, `userService.ts`, `i18n` | Clé OpenAI en écriture seule — elle ne sort plus de la base, et elle ne s'efface plus par accident |
 | 11 | `validation/schemas.ts`, `middleware/rateLimit.middleware.ts`, `routes/ml.routes.ts`, `routes/ml.routes.test.ts` *(nouveau)*, `validation/schemas.test.ts` | `/api/predict/*` borné : six schémas zod et `predictLimiter` (60/min) sur les deux routes qui appellent le service Python |
+| 12 | `services/refereeStore.ts`, `services/refereeStore.test.ts` + `__fixtures__/str-2025-11-18.html` *(nouveaux)*, `manualData.service.ts`, `cleanup.service.ts`, `routes/manual.routes.ts`, `routes/manual.routes.test.ts` | Facteur arbitre : parseur réécrit (il **inventait** des noms), tendances auto-alimentées depuis STR, dénominateur mesuré au lieu du 6,2 en dur — et un relevé de couverture pour que quatre tables vides ne repassent plus inaperçues |
 
-`npx tsc --noEmit` passe sur le client **et** sur le serveur après ces changements, et la suite de tests serveur est verte : **312 tests, 26 fichiers** (dont 8 nouveaux pour le câblage de `/api/predict/*` et 17 pour ses schémas).
+`npx tsc --noEmit` passe sur le client **et** sur le serveur après ces changements, et la suite de tests serveur est verte : **326 tests, 27 fichiers** (dont 8 pour le câblage de `/api/predict/*`, 17 pour ses schémas, 10 pour le facteur arbitre contre un vrai billet, et 4 pour la couverture).
 
 ---
 
@@ -455,30 +571,32 @@ part — tu relis et tu committes. Les lots 1-9 sont déjà dans ton historique
 
 ### 🔴 À corriger absolument avant le freeze iOS
 
-**4 faits sur 11.** Les 7 restants sont tous côté iOS/App Store, sauf la
-migration à appliquer en production.
+**10 faits sur 11 au 2026-09-06.** Le seul non fait est le `tokenStore` natif,
+que l'audit range lui-même en phase 3. Le vrai verrou avant le tag n'est pas
+dans cette table : **c'est l'adresse de support, qui rebondit encore** (voir
+l'en-tête).
 
 | | Sujet | État |
 |---|---|---|
 | 1 | CORS previews Vercel → prise de contrôle de compte | ✅ CORRIGÉ |
 | 2 | `viewport-fit=cover` manquant → safe areas inertes | ✅ CORRIGÉ |
 | 3 | Mention « mode démo Stripe » en production | ✅ CORRIGÉ |
-| 4 | `BottomNav` sans `safe-area-inset-bottom` | à faire |
-| 5 | Champs < 16 px → zoom iOS irréversible | à faire |
-| 6 | Cibles tactiles 28-32 px (envoi chat en premier) | à faire |
-| 7 | Page `/share/:id` « bientôt disponible » (Guideline 2.1) | à faire |
-| 8 | Décision Pro sur iOS : IAP ou retrait complet (Guideline 3.1.1) | à trancher |
-| 9 | Chat : resync au retour au premier plan + `connect_error` | à faire |
+| 4 | `BottomNav` sans `safe-area-inset-bottom` | ✅ CORRIGÉ |
+| 5 | Champs < 16 px → zoom iOS irréversible | ✅ CORRIGÉ |
+| 6 | Cibles tactiles 28-32 px (envoi chat en premier) | ✅ CORRIGÉ |
+| 7 | Page `/share/:id` « bientôt disponible » (Guideline 2.1) | ✅ CORRIGÉ — page et route supprimées |
+| 8 | Décision Pro sur iOS : IAP ou retrait complet (Guideline 3.1.1) | ✅ TRANCHÉ 2026-09-06 — build v1 sans Pro sur iOS (`features.proUpgrade`) ; IAP reporté en phase 3 |
+| 9 | Chat : resync au retour au premier plan + `connect_error` | ✅ CORRIGÉ |
 | 10 | Fichiers de données jamais copiés dans `dist/` (blessures, arbitres, gardiens) | ✅ CORRIGÉ — passés en base |
 | 11 | `tokenStore` natif absent → session perdue toutes les 15 min en WKWebView | phase 3, à planifier |
 
 ### 🟠 Importants, peuvent attendre un peu
 
-Coupon non persisté · aucun timeout de requête ni bouton « Réessayer » · `autoComplete` pour le Trousseau iOS · message de chat échoué qui reste affiché · `email_verified` Google · jeton d'accès dans l'URL + Sentry sans `beforeSend` · erreurs transformées en états vides (Ligue) · 401 LLM confondu avec 401 de session · `/api/odds/live` qui sert des cotes fictives · `typecheck` client absent de la CI.
+~~Coupon non persisté~~ ✅ · ~~aucun timeout de requête ni bouton « Réessayer »~~ ✅ · `autoComplete` pour le Trousseau iOS · message de chat échoué qui reste affiché · `email_verified` Google · jeton d'accès dans l'URL + Sentry sans `beforeSend` · ~~erreurs transformées en états vides (Ligue)~~ ✅ (accueil, classement et « Mes coupons ») · 401 LLM confondu avec 401 de session · `/api/odds/live` qui sert des cotes fictives · `typecheck` client absent de la CI.
 
 ### 🟡 Améliorations recommandées
 
-Texte 8-10 px (351 occurrences) · `confirm()`/`alert()` système · `<label>` + `role="alert"` sur les formulaires · `<html lang>` et détection de langue · chat figé pour les invités · partage d'image qui échoue en silence · réglages tactiles iOS (`tap-highlight`, `user-select`, `overscroll`) · aller-retour réseau pour le parlay · rafraîchissement proactif du jeton · `.fuse_hidden…` versionné · `@figma/my-make-file` et react en peerDependency optionnelle · prix codé en dur · tu/vous · cache client des requêtes.
+~~Texte 8-10 px (351 occurrences)~~ ✅ plancher de 11 px, 283 classes + 6 règles CSS · `confirm()`/`alert()` système · `<label>` + `role="alert"` sur les formulaires · `<html lang>` et détection de langue · chat figé pour les invités · partage d'image qui échoue en silence · réglages tactiles iOS (`tap-highlight`, `user-select`, `overscroll`) · aller-retour réseau pour le parlay · rafraîchissement proactif du jeton · `.fuse_hidden…` versionné · `@figma/my-make-file` et react en peerDependency optionnelle · prix codé en dur · tu/vous · cache client des requêtes.
 
 ### 🟢 Ce qui est déjà très bien fait
 
@@ -500,13 +618,13 @@ Le niveau de commentaire explicatif — pas « ce que fait le code » mais « po
 ## 11. Checklist finale pré-freeze iOS
 
 **Bloquant**
-- [ ] `BottomNav` : `bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px))`
+- [x] ~~`BottomNav` : `bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px))`~~ → fait, avec `LockSlipCTA` et les marges basses des 11 pages. **Reste :** le voir sur un iPhone à encoche
 - [ ] Vérifier visuellement toutes les pages sur iPhone à encoche maintenant que `viewport-fit=cover` est actif
-- [ ] `input, textarea, select { font-size: 16px }` global
-- [ ] Élargir à 44×44 pt : envoi du chat, retour, `⋯`, onglets de la nav
+- [x] ~~`input, textarea, select { font-size: 16px }` global~~ → posé dans `theme.css`, hors `@layer`, sous `@media (pointer: coarse)`. **Reste :** vérifier la rangée du chat sur téléphone
+- [x] ~~Élargir à 44×44 pt : envoi du chat, retour, `⋯`, onglets de la nav~~ → 43 boutons, `.tap-44` ou vrais `min-w`/`min-h`. **Les onglets de la nav étaient déjà à 52×47**, mesurés — rien à y faire. **Reste :** l'essayer au doigt
 - [ ] Supprimer la route et la page `/share/:id`
 - [ ] Trancher Pro sur iOS : IAP livré, **ou** page Pro entièrement masquée (bouton, prix **et** code promo)
-- [ ] Socket : resync de l'historique sur `connect`, écouteur `connect_error` avec refresh, affichage de `room_error`
+- [x] ~~Socket : resync de l'historique sur `connect`, écouteur `connect_error` avec refresh, affichage de `room_error`~~ → `resyncKey` + fusion, un refresh par cycle via `refreshSession()`, bandeau. **Reste :** l'essayer sur un vrai téléphone (verrouiller l'écran deux minutes)
 - [x] ~~Copier `src/data/*.json` dans `dist/`~~ → migré en base (034). **Reste :** appliquer la migration en prod avant de déployer le serveur
 - [ ] Vérifier `CORS_ORIGIN` en production et tester une preview Vercel après le déploiement du correctif CORS
 - [ ] Vérifier après déploiement que la carte admin (Profil → Paramètres → Saisie manuelle) affiche bien « une clé est enregistrée » et que modifier sa bio ne l'efface pas
@@ -515,14 +633,17 @@ Le niveau de commentaire explicatif — pas « ce que fait le code » mais « po
 **Important**
 - [x] ~~Helper `sendError()` unique ; retirer `detail`, `raw` et le message `psql …` des réponses~~ → `httpError.ts`, 93 handlers
 - [x] ~~`GET /users/me` : renvoyer `hasOpenaiKey` au lieu de la clé~~ (sans `last4` : le calculer imposerait de déchiffrer à chaque lecture)
-- [ ] Persister le coupon (`BetContext`) dans le stockage local
-- [ ] `AbortSignal.timeout(15000)` dans les helpers `request()` + boutons « Réessayer »
+- [x] ~~Persister le coupon (`BetContext`) dans le stockage local~~ → `iceedge_slip`, TTL 12 h depuis la jambe la plus récente, relecture défensive. 13 assertions vertes
+- [x] ~~`AbortSignal.timeout(15000)` dans les helpers `request()` + boutons « Réessayer »~~ → `http.ts` (`AbortController`, pas `AbortSignal.timeout` : iOS 16+) à 15 s / 45 s pour `/llm`, `ErrorState` sur 5 écrans. 16 assertions vertes
+- [x] ~~Supprimer `/share/:id`~~ → page dans `_to_delete/`, route **et** liaison `lazy()` retirées, 4 clés i18n supprimées. Aucun `SharePage-*.js` dans les deux builds
+- [x] ~~Décision Pro sur iOS~~ → `features.proUpgrade` ; `/pro` et `/pro/success` absentes du build iOS (chunks vérifiés), champ promo et prix avec. ⚠️ contenu Pro verrouillé sans CTA — à relire avant de soumettre
+- [x] ~~Plancher de 11 px sur le texte~~ → 283 classes Tailwind + 6 règles CSS ; les 3 écrans internes non touchés (hors build iOS). Prouvé en grepant `dist/assets/*.css`. ⚠️ à vérifier à l'œil (nav, badges, libellés à fort interlettrage)
 - [ ] `autoComplete` sur tous les champs de `LoginPage`
 - [ ] Chat : retirer la bulle optimiste en cas d'échec et restaurer le texte
 - [ ] Vérifier `email_verified` dans `loginWithGoogle`
 - [x] ~~Schémas zod sur `/api/predict/*`~~ → six schémas + `predictLimiter` (60/min) sur `/ml` et `/factors`
 - [ ] `beforeSend` Sentry qui masque `access_token` ; jeton dans le fragment
-- [ ] `LeaguePage` : distinguer « vide » de « en erreur »
+- [x] ~~`LeaguePage` : distinguer « vide » de « en erreur »~~ → fait avec le lot « Réessayer » (accueil et « Mes coupons » aussi)
 - [ ] Supprimer `/api/odds/live` et `/api/odds/game/:gameId` (cotes fictives)
 - [ ] Ajouter `npm run typecheck` au job client de la CI
 - [ ] `git rm server/src/services/.fuse_hidden0000000e00000001`

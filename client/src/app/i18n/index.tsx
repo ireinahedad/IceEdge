@@ -33,6 +33,13 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "common.loading": { en: "Loading…",     fr: "Chargement…" },
   "common.members": { en: "members",      fr: "membres" },
   "common.online":  { en: "online",       fr: "en ligne" },
+  "common.retry":   { en: "Try again",    fr: "Réessayer" },
+  // Les trois clés de l'état d'erreur partagé (`ErrorState`). Le titre reste
+  // vague à dessein : l'utilisateur n'a rien à faire d'un code HTTP, et le
+  // détail technique part déjà dans la console.
+  "common.loadFailed":     { en: "Couldn\u2019t load this.", fr: "Impossible de charger ça." },
+  "common.loadFailedHint": { en: "Check your connection, then try again.", fr: "Vérifie ta connexion, puis réessaie." },
+  "common.timedOut":       { en: "The connection is taking too long.", fr: "La connexion prend trop de temps." },
 
   // ── Profile ──
   "profile.title":        { en: "Profile",       fr: "Profil" },
@@ -169,6 +176,14 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "chat.report":       { en: "Report message",      fr: "Signaler le message" },
   "chat.blockUser":    { en: "Block user",          fr: "Bloquer l'utilisateur" },
   "chat.guidelines":   { en: "Community guidelines", fr: "Règles de la communauté" },
+
+  // ── Pannes du socket de chat — audit pré-freeze iOS ──
+  "chat.sessionExpired":  { en: "Your session expired — sign in again to keep chatting.",
+                            fr: "Ta session a expiré — reconnecte-toi pour continuer à discuter." },
+  "chat.accessDenied":    { en: "You no longer have access to this room.",
+                            fr: "Tu n'as plus accès à ce salon." },
+  "chat.roomJoinFailed":  { en: "Could not join this room.",
+                            fr: "Impossible de rejoindre ce salon." },
 
   "report.title":      { en: "Report this message", fr: "Signaler ce message" },
   "report.subtitle":   { en: "We read every report. Tell us what is wrong with it.", fr: "Nous lisons chaque signalement. Dis-nous ce qui ne va pas." },
@@ -689,10 +704,9 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "players.pickHint":    { en: "← Pick a team to see its players", fr: "← Choisis une équipe pour voir ses joueurs" },
 
   // ── Share page ──
-  "share.title":      { en: "Shared Slip",        fr: "Coupon partagé" },
-  "share.heading":    { en: "Shared Prediction",  fr: "Prédiction partagée" },
-  "share.slipId":     { en: "Slip ID: {id}",      fr: "ID du coupon : {id}" },
-  "share.soon":       { en: "Shared slips coming soon.", fr: "Les coupons partagés arrivent bientôt." },
+  // `share.title` / `heading` / `slipId` / `soon` retirées avec SharePage le
+  // 2026-09-06 (Guideline 2.1 / 4.2). `share.goHome` reste : NotFoundPage s'en
+  // sert, c'est son seul appelant.
   "share.goHome":     { en: "Go to Home",         fr: "Aller à l'accueil" },
 
   // ── Login ──

@@ -40,6 +40,21 @@ export const features = {
   bookmakerLinks: isWeb,
   /** APPLE_PLAN §7 — Guideline 3.1.1: payment on iOS must go through IAP, not Stripe. */
   stripeCheckout: isWeb,
+  /**
+   * Guideline 3.1.1 — does this build have ANY path to Pro at all?
+   *
+   * Distinct from `stripeCheckout`, which only says *how* one pays. Today both
+   * are `isWeb`, and that looks redundant; it stops looking redundant the day
+   * IAP lands in phase 3, when `proUpgrade` turns true on iOS while
+   * `stripeCheckout` stays false. Keeping them separate now is what makes that
+   * day a one-line change instead of an audit of every Pro screen.
+   *
+   * With this false, the v1 iOS build has no Pro page, no price, and — the part
+   * 3.1.1 actually forbids — no promo field that unlocks paid content outside
+   * the App Store. Pro-only sections stay locked and simply carry no call to
+   * action: an external purchase path must not be hinted at either.
+   */
+  proUpgrade:     isWeb,
   /** APPLE_PLAN R8 — 3.1.1 grey zone: bring-your-own OpenAI key. */
   byokOpenAI:     isWeb,
   /** R6 — iOS uses APNs, not the Web Push API. */

@@ -120,7 +120,7 @@ export function LastNGamesSection({ teams, accent }: { teams: UITeam[]; accent: 
                       />
                     ))}
                   </div>
-                  <span className="text-[10px] mt-0.5" style={{ color: accent }}>
+                  <span className="text-[11px] mt-0.5" style={{ color: accent }}>
                     {loadingStats
                       ? t("lastn.loading")
                       : wins == null || losses == null || pct == null

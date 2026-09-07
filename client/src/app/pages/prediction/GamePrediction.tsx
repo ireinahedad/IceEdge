@@ -116,7 +116,7 @@ export function GamePrediction({ gameId }: { gameId: string }) {
       {finalPct == null && (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
           <p className="text-amber-300 text-[11px] font-semibold">{t("pred.unavailable")}</p>
-          <p className="text-amber-200/70 text-[10px] mt-0.5">{t("pred.unavailableHint")}</p>
+          <p className="text-amber-200/70 text-[11px] mt-0.5">{t("pred.unavailableHint")}</p>
         </div>
       )}
       {/* ── Match header ── */}
@@ -124,7 +124,7 @@ export function GamePrediction({ gameId }: { gameId: string }) {
         {isLive && (
           <div className="flex items-center justify-center gap-1.5 mb-3">
             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-red-400 text-[10px] font-semibold uppercase tracking-widest">{gameView.period}</span>
+            <span className="text-red-400 text-[11px] font-semibold uppercase tracking-widest">{gameView.period}</span>
           </div>
         )}
         <div className="flex items-center justify-between">
@@ -140,7 +140,7 @@ export function GamePrediction({ gameId }: { gameId: string }) {
           <div className="flex flex-col items-center gap-1 px-2">
             {!isLive && <span className="text-[#8a9ea6] text-xs">{gameView.time ?? t("pred.today")}</span>}
             <span className="text-[#8a9ea6] font-bold text-base">VS</span>
-            <span className="text-[#4a6070] text-[10px]">O/U {gameView.overUnder}</span>
+            <span className="text-[#4a6070] text-[11px]">O/U {gameView.overUnder}</span>
           </div>
           <button
             onClick={() => openTeam(away.abbr)}

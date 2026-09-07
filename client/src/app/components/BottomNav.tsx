@@ -26,10 +26,15 @@ export function BottomNav() {
     return location.pathname.startsWith(path);
   };
 
+  // La barre est `fixed` : sans `env(safe-area-inset-bottom)` elle se pose à
+  // 12 px du bas et chevauche l'indicateur d'accueil de l'iPhone (34 pt) —
+  // les onglets deviennent durs à toucher et le geste d'accueil part à leur
+  // place. L'inset s'AJOUTE à l'écart de 12 px, il ne le remplace pas.
   return (
     <nav
-      className="fixed bottom-3 left-1/2 -translate-x-1/2 w-[94%] max-w-[420px] flex items-center justify-around px-2 py-2 z-50 rounded-[22px]"
+      className="fixed left-1/2 -translate-x-1/2 w-[94%] max-w-[420px] flex items-center justify-around px-2 py-2 z-50 rounded-[22px]"
       style={{
+        bottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))",
         background:
           "linear-gradient(160deg, rgba(220,245,255,0.22), rgba(150,205,240,0.12) 45%, rgba(235,250,255,0.20))",
         backdropFilter: "blur(18px)",
@@ -70,7 +75,7 @@ export function BottomNav() {
 
               {showBadge && (
                 <span
-                  className="absolute -top-1.5 -right-1.5 text-[8px] rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold"
+                  className="absolute -top-1.5 -right-1.5 text-[11px] rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold"
                   style={{ background: ACCENT, color: "#0A0E0C" }}
                 >
                   {legs.length}
@@ -85,7 +90,7 @@ export function BottomNav() {
               )}
             </div>
 
-            <span className="text-[9px]" style={{ color: active ? ACCENT : "#92A08A" }}>
+            <span className="text-[11px]" style={{ color: active ? ACCENT : "#92A08A" }}>
               {label}
             </span>
           </button>

@@ -72,13 +72,13 @@ export function MembersModal({ room, currentUserId, onClose }: {
                     <>
                       <button
                         onClick={() => handlePromote(m.userId, m.role === "admin" ? "member" : "admin")}
-                        className="text-[9px] text-white/60 border border-white/15 rounded-lg px-2 py-1"
+                        className="text-[11px] text-white/60 border border-white/15 rounded-lg px-2 py-1"
                       >
                         {m.role === "admin" ? "Demote" : "Make admin"}
                       </button>
                       <button
                         onClick={() => handleKick(m.userId)}
-                        className="text-[9px] text-red-400 border border-red-400/30 rounded-lg px-2 py-1"
+                        className="text-[11px] text-red-400 border border-red-400/30 rounded-lg px-2 py-1"
                       >
                         Kick
                       </button>

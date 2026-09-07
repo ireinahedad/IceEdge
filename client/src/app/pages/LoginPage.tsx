@@ -161,7 +161,7 @@ export function LoginPage() {
 
   return (
     <div
-      className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-16 pb-28"
+      className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-16 pb-[calc(7rem+env(safe-area-inset-bottom,0px))]"
       style={{ background: "#0A0E0C" }}
     >
       {/* Brand hero */}
@@ -229,7 +229,7 @@ export function LoginPage() {
         {/* Divider */}
         <div className="flex items-center gap-3 mb-4">
           <div className="flex-1 h-px" style={{ background: BORDER }} />
-          <span className="text-[10px] uppercase tracking-widest" style={{ color: "#92A08A" }}>{t("login.or")}</span>
+          <span className="text-[11px] uppercase tracking-widest" style={{ color: "#92A08A" }}>{t("login.or")}</span>
           <div className="flex-1 h-px" style={{ background: BORDER }} />
         </div>
         </>
@@ -443,10 +443,10 @@ export function LoginPage() {
       </form>
       )}
 
-      <p className="text-center text-[10px] tracking-wide mt-8" style={{ color: "#92A08A", opacity: 0.5 }}>
+      <p className="text-center text-[11px] tracking-wide mt-8" style={{ color: "#92A08A", opacity: 0.5 }}>
         {t("login.disclaimer")}
       </p>
-      <div className="flex items-center justify-center gap-3 mt-3 text-[10px]" style={{ color: "#92A08A", opacity: 0.6 }}>
+      <div className="flex items-center justify-center gap-3 mt-3 text-[11px]" style={{ color: "#92A08A", opacity: 0.6 }}>
         <button onClick={() => navigate("/terms")} className="underline underline-offset-2">{t("legal.terms")}</button>
         <span>·</span>
         <button onClick={() => navigate("/privacy")} className="underline underline-offset-2">{t("legal.privacy")}</button>
@@ -458,7 +458,7 @@ export function LoginPage() {
           prerendered marketing pages in /public, which React Router does not own. */}
       <nav
         aria-label="NHL prediction guides"
-        className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-3 text-[10px]"
+        className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-3 text-[11px]"
         style={{ color: "#92A08A", opacity: 0.55 }}
       >
         <a href="/nhl-predictions-today" className="underline underline-offset-2">NHL Predictions Today</a>
@@ -477,7 +477,7 @@ export function LoginPage() {
       </nav>
 
       {/* Keep the app nav visible so visitors can leave the login screen and
-          browse signed-out — the page already reserves space via pb-28. */}
+          browse signed-out — the page already reserves space via its bottom padding. */}
       <BottomNav />
     </div>
   );

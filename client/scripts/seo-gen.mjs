@@ -37,7 +37,12 @@ const OUT_DIR = SAMPLE
   ? path.join(os.tmpdir(), "arakice-seo-sample")
   : process.env.SEO_OUT || path.join(__dirname, "..", "public");
 const HORIZON_WEEKS = Number(process.env.HORIZON_WEEKS || 3); // how many schedule weeks to walk
-const MIN_GP = Number(process.env.MIN_GP || 5);               // gate thin player pages
+// Gate thin player pages. 20 GP (a quarter season) is the floor at which a
+// player page has enough real data to say anything the template does not already
+// say. Below it the page is ~750 words of boilerplate around a line of zeroes,
+// which is what Google's scaled-content-abuse policy targets — and hundreds of
+// those drag down the pages that DO deserve to rank.
+const MIN_GP = Number(process.env.MIN_GP || 20);
 const CONCURRENCY = 6;
 
 const STATIC_PAGES = [
@@ -58,7 +63,9 @@ const STATIC_PAGES = [
   { loc: "/stats/chart/all-teams", changefreq: "daily", priority: "0.8" },
   { loc: "/bet", changefreq: "weekly", priority: "0.7" },
   { loc: "/league", changefreq: "daily", priority: "0.7" },
-  { loc: "/login", changefreq: "monthly", priority: "0.4" },
+  // /login is deliberately absent: route-shells.mjs marks it `noindex`, and a
+  // sitemap entry for a noindexed URL is a contradictory signal that shows up in
+  // Search Console as "Submitted URL marked noindex".
 ];
 
 // ── Small utilities ───────────────────────────────────────────────────────────
@@ -288,7 +295,29 @@ ${ctaBox(`Track ${p.name} in the app`, `Follow ${p.name}'s projections game by g
 }
 
 function propsHubPage(players) {
-  const data = players.map((p) => ({ name: p.name, team: p.team, pos: p.pos, url: `/props/${p.slug}` }));
+  // WHY THE LIST IS RENDERED HERE AND NOT BY seo-search.js
+  // This hub used to ship an empty <ul> plus a JSON blob, and let the browser
+  // build the rows. That left ZERO <a href="/props/..."> in the served HTML, so
+  // every player page was an orphan reachable only from sitemap.xml — and a
+  // sitemap-only URL with no internal link is the lowest-priority thing Google
+  // crawls. (The client build also capped the rendered list at 300 rows, so
+  // even after JS ran, most players had no link pointing at them at all.)
+  //
+  // The rows are now emitted here, as real anchors, sorted by name. seo-search.js
+  // filters the rows that already exist instead of creating them, so the search
+  // box behaves identically and the CSS is untouched.
+  const sorted = [...players].sort((a, b) => a.name.localeCompare(b.name));
+  const rows = sorted
+    .map((p) => {
+      // Lower-cased, diacritic-free haystack so the filter never has to
+      // normalize at keystroke time.
+      const hay = `${p.name} ${p.teamName || p.team} ${p.pos}`
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "");
+      return `        <li data-hay="${esc(hay)}"><a class="player-row" href="/props/${p.slug}"><span class="player-name">${esc(p.name)}</span><span class="player-meta">${esc([p.pos, p.team].filter(Boolean).join(" · "))}</span></a></li>`;
+    })
+    .join("\n");
   const jsonld = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
@@ -303,10 +332,11 @@ function propsHubPage(players) {
     </section>
     <div class="search-wrap">
       <input id="player-search" type="search" placeholder="Search a player — e.g. Connor McDavid" autocomplete="off" aria-label="Search NHL players" />
-      <div id="player-count"></div>
+      <div id="player-count">${players.length} players</div>
     </div>
-    <ul id="player-list"></ul>
-    <script id="players-data" type="application/json">${JSON.stringify(data)}</script>
+    <ul id="player-list">
+${rows}
+    </ul>
     <script src="/seo-search.js" defer></script>
 ${ctaBox("See tonight's prop edges", "The app ranks tonight's player props by how far the projection beats the line. Open it to see the biggest edges live.", "Open ArakIce")}
       <h2>How ArakIce projects player props</h2>
@@ -413,12 +443,16 @@ ${items}
 
 // ── Sitemap ──────────────────────────────────────────────────────────────────
 async function writeSitemap(dynamicLocs) {
+  // Google ignores <changefreq> and <priority> entirely, but it does read
+  // <lastmod> — and only trusts it if it is accurate. A generator run is the
+  // only thing that rewrites these pages, so the run date is the honest value.
+  const lastmod = new Date().toISOString().slice(0, 10);
   const rows = [];
   for (const p of STATIC_PAGES) {
-    rows.push(`  <url>\n    <loc>${SITE}${p.loc}</loc>\n    <changefreq>${p.changefreq}</changefreq>\n    <priority>${p.priority}</priority>\n  </url>`);
+    rows.push(`  <url>\n    <loc>${SITE}${p.loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>${p.changefreq}</changefreq>\n    <priority>${p.priority}</priority>\n  </url>`);
   }
   for (const loc of dynamicLocs) {
-    rows.push(`  <url>\n    <loc>${SITE}${loc}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.6</priority>\n  </url>`);
+    rows.push(`  <url>\n    <loc>${SITE}${loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.6</priority>\n  </url>`);
   }
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${rows.join("\n")}\n</urlset>\n`;
   await fs.writeFile(path.join(OUT_DIR, "sitemap.xml"), xml, "utf-8");

@@ -61,11 +61,6 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://arakice.com/login</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.4</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/zakhar-bardakov</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -107,11 +102,6 @@
   </url>
   <url>
     <loc>https://arakice.com/props/brock-nelson</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/logan-o-connor</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -281,11 +271,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/pyotr-kochetkov</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/jamie-benn</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -421,22 +406,12 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/konsta-helenius</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/tyson-kozak</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://arakice.com/props/peyton-krebs</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/jiri-kulich</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -491,11 +466,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/dennis-gilbert</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/zach-metsa</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -521,11 +491,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/colten-ellis</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/ukko-pekka-luukkonen</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -537,11 +502,6 @@
   </url>
   <url>
     <loc>https://arakice.com/props/anthony-cirelli</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/conor-geekie</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -671,11 +631,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/owen-beck</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/zachary-bolduc</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -731,22 +686,12 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/florian-xhekaj</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/alexandre-carrier</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://arakice.com/props/noah-dobson</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/adam-engstrom</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -777,11 +722,6 @@
   </url>
   <url>
     <loc>https://arakice.com/props/jakub-dobes</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/jacob-fowler</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -817,11 +757,6 @@
   </url>
   <url>
     <loc>https://arakice.com/props/nick-foligno</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/hunter-haight</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -886,11 +821,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/matt-kiersted</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/olli-maatta</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -902,11 +832,6 @@
   </url>
   <url>
     <loc>https://arakice.com/props/filip-gustavsson</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/calvin-pickard</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -996,11 +921,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/jordan-harris</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/henri-jokiharju</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -1081,16 +1001,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/hayden-hodgson</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/kurtis-macdermid</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/shane-pinto</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -1107,11 +1017,6 @@
   </url>
   <url>
     <loc>https://arakice.com/props/thomas-chabot</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/cameron-crotty</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -1261,11 +1166,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/sergei-murashov</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/arturs-silovs</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -1277,11 +1177,6 @@
   </url>
   <url>
     <loc>https://arakice.com/props/denver-barkey</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/alex-bump</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -1321,11 +1216,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/porter-martone</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/matvei-michkov</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -1347,11 +1237,6 @@
   </url>
   <url>
     <loc>https://arakice.com/props/jamie-drysdale</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/helge-grans</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -1421,11 +1306,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/ivan-miroshnichenko</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/alex-ovechkin</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -1471,17 +1351,7 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/cole-hutson</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/timothy-liljegren</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/dylan-mcilrath</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -1546,16 +1416,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/william-karlsson</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/tanner-laczynski</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/mitch-marner</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -1581,11 +1441,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/ville-heinola</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/jeremy-lauzon</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -1606,17 +1461,7 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/carter-hart</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/adin-hill</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/carl-lindbom</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -1736,11 +1581,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/devon-levi</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/daniil-but</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -1821,11 +1661,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/maveric-lamoureux</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/john-marino</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -1852,11 +1687,6 @@
   </url>
   <url>
     <loc>https://arakice.com/props/mackenzie-weegar</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/jaxson-stauber</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -2086,11 +1916,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/sam-colangelo</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/cutter-gauthier</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -2156,11 +1981,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/tyson-hinds</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/nick-jensen</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -2172,11 +1992,6 @@
   </url>
   <url>
     <loc>https://arakice.com/props/pavel-mintyukov</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/travis-mitchell</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -2281,11 +2096,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/alexander-romanov</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/matthew-schaefer</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -2297,11 +2107,6 @@
   </url>
   <url>
     <loc>https://arakice.com/props/vitek-vanecek</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/semyon-varlamov</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -2881,11 +2686,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/jonah-gadjovich</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/garnet-hathaway</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -2966,11 +2766,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/dmitry-kulikov</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/niko-mikkola</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -2997,11 +2792,6 @@
   </url>
   <url>
     <loc>https://arakice.com/props/morgan-barron</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/nikita-chibrikov</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -3226,11 +3016,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/bo-groulx</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/dakota-joshua</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -3311,11 +3096,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/chris-tanev</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/sergei-bobrovsky</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -3351,16 +3131,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/tyson-gross</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/samuel-honzek</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/jonathan-huberdeau</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -3387,11 +3157,6 @@
   </url>
   <url>
     <loc>https://arakice.com/props/ryan-strome</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/aydar-suniev</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -3516,11 +3281,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/adam-sykora</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/joe-veleno</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -3532,11 +3292,6 @@
   </url>
   <url>
     <loc>https://arakice.com/props/sean-durzi</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/drew-fortescue</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -3596,17 +3351,7 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/sacha-boisvert</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/ryan-donato</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/anton-frondell</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -3661,11 +3406,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/dominic-toninato</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/bowen-byram</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -3676,17 +3416,7 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arakice.com/props/ethan-del-mastro</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://arakice.com/props/wyatt-kaiser</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/kevin-korchinski</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -3717,11 +3447,6 @@
   </url>
   <url>
     <loc>https://arakice.com/props/brock-boeser</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://arakice.com/props/filip-chytil</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>

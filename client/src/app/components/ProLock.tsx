@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { useI18n } from "../i18n";
+import { features } from "../platform";
 
 const ACCENT = "#86d1ea";
 
@@ -40,14 +41,22 @@ export function ProLock({
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6"
         style={{ background: "rgba(10,14,12,0.6)" }}>
         <div className="text-white text-sm font-bold mb-1">🔒 {title}</div>
-        <div className="text-[#B7C4AD] text-xs mb-3 max-w-[300px]">{description}</div>
-        <button
-          onClick={() => navigate("/pro")}
-          className="px-4 py-2 rounded-xl text-xs font-bold active:scale-[0.98] transition-all"
-          style={{ background: ACCENT, color: "#0A0E0C" }}
-        >
-          {t("pro.unlock")}
-        </button>
+        <div className="text-[#B7C4AD] text-xs max-w-[300px]">{description}</div>
+        {/* Guideline 3.1.1 — sur un build sans chemin vers Pro, ce bouton
+            pointerait vers une route qui n'existe pas (`/pro` n'est pas
+            enregistrée), donc un cul-de-sac pire que celui qu'on corrige. Et il
+            ne faut PAS le remplacer par « disponible sur le web » : renvoyer
+            vers un achat hors App Store est exactement ce que 3.1.1 interdit.
+            Le contenu reste verrouillé, sans appel à l'action. */}
+        {features.proUpgrade && (
+          <button
+            onClick={() => navigate("/pro")}
+            className="mt-3 px-4 py-2 rounded-xl text-xs font-bold active:scale-[0.98] transition-all"
+            style={{ background: ACCENT, color: "#0A0E0C" }}
+          >
+            {t("pro.unlock")}
+          </button>
+        )}
       </div>
     </div>
   );
