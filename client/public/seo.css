@@ -306,3 +306,17 @@ li { margin: 0 0 9px; }
 .matchup-teams img { width: 72px; height: 72px; }
 .matchup-teams .abbr { font-family: 'Oswald', sans-serif; font-weight: 600; margin-top: 6px; }
 .matchup-teams .vs { font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 24px; color: var(--color-text-muted); }
+
+/* ── Head to head figure and table (matchup pages) ── */
+.h2h-fig { margin: 22px 0; }
+.h2h-fig svg { display: block; border: 1px solid var(--color-border); border-radius: 10px; }
+.h2h-fig figcaption { color: var(--color-text-muted); font-size: 14px; line-height: 1.6; padding-top: 10px; }
+.h2h-wrap { overflow-x: auto; margin: 22px 0; }
+.h2h { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 460px; }
+.h2h caption { text-align: left; color: var(--color-text-muted); font-size: 13px; padding-bottom: 8px; }
+.h2h th, .h2h td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--color-border); }
+.h2h thead th { font-family: 'Oswald', sans-serif; font-weight: 600; color: var(--color-text-muted);
+  text-transform: uppercase; letter-spacing: .04em; font-size: 12px; }
+.h2h .num { text-align: right; font-variant-numeric: tabular-nums; }
+.h2h tbody tr:last-child td { border-bottom: 0; }
+p.src { color: var(--color-text-muted); font-size: 13px; font-style: italic; }

@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "Les seules pages /props/ que le générateur écrit.",
+    "Provenance : Search Console, propriété sc-domain:arakice.com, fenêtre 90 jours",
+    "arrêtée au 2026-09-05. Ce sont les pages ayant au moins 5 impressions, apex et",
+    "www additionnés. 56 pages sur 786, soit 45 % des impressions et 17 des 28 clics.",
+    "Le reste du gabarit produisait 786 pages quasi identiques dont Google en a",
+    "refusé 417 (Crawled - currently not indexed).",
+    "",
+    "POUR METTRE À JOUR : Search Console > Performance > Pages, trier par",
+    "impressions, additionner apex et www, reprendre les slugs au-dessus du seuil.",
+    "À refaire une fois la saison 2026-27 lancée : ces chiffres sont d'intersaison",
+    "et sous-estiment les joueurs établis.",
+    "",
+    "⚠️ Retirer un slug d'ici ne suffit pas : il faut aussi que sa page cesse",
+    "d'exister ET que /props/<slug> soit couvert par la redirection de vercel.json,",
+    "sinon le rewrite SPA le sert en 200 avec la page d'accueil (soft 404)."
+  ],
+  "threshold_impressions": 5,
+  "source_window": "2026-06-08 → 2026-09-05",
+  "slugs": [
+    "will-smith", "macklin-celebrini", "jason-robertson", "matthew-schaefer",
+    "sam-dickinson", "matthew-wood", "danila-yurov", "mavrik-bourque",
+    "kent-johnson", "jake-neighbours", "martin-necas", "cutter-gauthier",
+    "frank-nazar", "jiri-kulich", "lucas-raymond", "juraj-slafkovsky",
+    "auston-matthews", "ilya-protas", "jack-quinn", "maksymilian-szuber",
+    "gabe-perreault", "john-tavares", "jared-mccann", "filip-chytil",
+    "berkly-catton", "justus-annunen", "matty-beniers", "mikko-rantanen",
+    "vince-dunn", "ben-meyers", "carl-lindbom", "porter-martone",
+    "thomas-harley", "yaroslav-askarov", "filip-forsberg", "mattias-samuelsson",
+    "sam-rinzel", "adin-hill", "aleksander-barkov", "jackson-lacombe",
+    "konsta-helenius", "beckett-sennecke", "mason-mctavish", "collin-graf",
+    "dylan-strome", "moritz-seider", "filip-hronek", "yegor-sharangovich",
+    "mackie-samoskevich", "patrick-kane", "noah-dobson", "morgan-frost",
+    "trevor-zegras", "elias-pettersson-8483678", "jack-mcbain", "matthew-tkachuk"
+  ]
+}

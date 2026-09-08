@@ -68,6 +68,97 @@ const STATIC_PAGES = [
   // Search Console as "Submitted URL marked noindex".
 ];
 
+// ── Liste blanche des pages joueur ───────────────────────────────────────────
+// Le gabarit produisait 786 pages quasi identiques ; Search Console en a refusé
+// 417 (« Crawled - currently not indexed »). On ne garde que celles dont la
+// donnée montre qu'elles servent à quelque chose. La liste et sa provenance
+// vivent dans scripts/props-allowlist.json, pour être remise à jour depuis
+// Search Console sans toucher au code.
+//
+// ⚠️ MIN_GP ne suffisait pas : c'était un proxy de « page mince » et il se
+// trompait. Sept pages sous 20 matchs joués rankaient réellement, dont une en
+// position 4 avec un clic. C'est la donnée qui tranche, pas le nombre de matchs.
+const ALLOWLIST_PATH = process.env.PROPS_ALLOWLIST
+  || path.join(__dirname, "props-allowlist.json");
+
+async function loadPropsAllowlist() {
+  try {
+    const raw = await fs.readFile(ALLOWLIST_PATH, "utf-8");
+    const slugs = JSON.parse(raw).slugs;
+    if (!Array.isArray(slugs) || !slugs.length) throw new Error("slugs vide");
+    return new Set(slugs);
+  } catch (e) {
+    // Pas de repli silencieux sur « tout écrire » : ce serait republier les 786
+    // pages sans que personne ne le remarque.
+    throw new Error(`liste blanche des props illisible (${ALLOWLIST_PATH}) : ${e.message}`);
+  }
+}
+
+// ── Head to head history ─────────────────────────────────────────────────────
+// Les pages d'affiche ne servaient qu'un explicatif générique : Google en a
+// refusé 417 sur 786 du même moule côté joueurs, et les pages d'affiche
+// plafonnaient à 0 clic malgré des impressions réelles. Elles servent
+// maintenant l'historique réel de la confrontation, tiré du jeu de données ML.
+//
+// ⚠️ COUPLAGE ASSUMÉ : ce générateur, qui ne lisait que l'API NHL, dépend
+// désormais d'un fichier de `ml/`. Le couplage se limite aux 9 colonnes ci-
+// dessous, qui sont stables. La lecture est tolérante : fichier absent ou
+// illisible => les pages se génèrent sans le bloc plutôt que de casser le build.
+const H2H_CSV = process.env.H2H_CSV || path.join(__dirname, "..", "..", "ml", "data", "nhl_games_v4.csv");
+const H2H_SEASONS = new Set(["2021", "2022", "2023", "2024", "2025"]); // 5 dernières
+// Sous ce nombre de rencontres on donne le décompte brut et jamais un
+// pourcentage : « 100 % en prolongation » sur 4 matchs décrédibilise la page.
+const H2H_MIN_PCT = 8;
+// La franchise d'Utah n'existe que depuis 2024-25. Le jeu de données réécrit
+// TOUTE l'histoire d'Arizona/Phoenix en UTA : sans ce plancher, la page
+// attribuerait à Utah seize saisons qui ne sont pas les siennes.
+const RELOCATED_SINCE = { UTA: "2024" };
+
+async function loadH2H() {
+  let raw;
+  try {
+    raw = await fs.readFile(H2H_CSV, "utf-8");
+  } catch {
+    console.warn(`  ⚠️  ${H2H_CSV} illisible — les pages d'affiche seront générées sans historique.`);
+    return new Map();
+  }
+  const lines = raw.split("\n");
+  const head = lines[0].split(",");
+  const ix = {};
+  for (const c of ["season","date","home_team","away_team","home_score","away_score","home_win","total_goals","went_to_ot"]) {
+    ix[c] = head.indexOf(c);
+    if (ix[c] < 0) {
+      console.warn(`  ⚠️  colonne « ${c} » absente de ${H2H_CSV} — historique désactivé.`);
+      return new Map();
+    }
+  }
+  // Le fichier est écrit par pandas : pas de champ entre guillemets, un split
+  // suffit. Les booléens y sont sérialisés en "1.0"/"0.0" et non "1"/"0" —
+  // comparer à "1" rendait 0 prolongation sur 129 pages, un chiffre inventé.
+  const yes = (v) => v === "1" || v === "1.0";
+  const games = new Map();
+  for (let i = 1; i < lines.length; i++) {
+    const f = lines[i].split(",");
+    if (f.length < head.length) continue;
+    const season = f[ix.season];
+    if (!H2H_SEASONS.has(season)) continue;
+    const total = f[ix.total_goals];
+    if (!total) continue;
+    const home = f[ix.home_team], away = f[ix.away_team];
+    const floor = RELOCATED_SINCE[home] || RELOCATED_SINCE[away];
+    if (floor && season < floor) continue;
+    const key = [home, away].sort().join("|");
+    if (!games.has(key)) games.set(key, []);
+    games.get(key).push({
+      date: f[ix.date], home, away,
+      hs: Number(f[ix.home_score]), as: Number(f[ix.away_score]),
+      homeWin: yes(f[ix.home_win]), total: Number(total), ot: yes(f[ix.went_to_ot]),
+    });
+  }
+  for (const list of games.values()) list.sort((x, y) => x.date.localeCompare(y.date));
+  return games;
+}
+
 // ── Small utilities ───────────────────────────────────────────────────────────
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -126,7 +217,11 @@ async function writePage(relPath, html) {
 }
 
 // ── Shared HTML shell ─────────────────────────────────────────────────────────
-function layout({ title, desc, canonicalPath, jsonld, body, extraHead = "" }) {
+// `disclaimer` : l'avertissement de jeu responsable n'a de sens que sur une page
+// qui parle de pari ou de cotes. Les pages d'affiche n'en parlent plus (elles ne
+// servent que des statistiques de match) et le passent donc à false ; toutes les
+// autres pages le gardent.
+function layout({ title, desc, canonicalPath, jsonld, body, extraHead = "", disclaimer = true }) {
   const url = SITE + canonicalPath;
   return `<!DOCTYPE html>
 <html lang="en">
@@ -147,12 +242,12 @@ function layout({ title, desc, canonicalPath, jsonld, body, extraHead = "" }) {
   <meta property="og:image:type" content="image/png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="ArakIce — NHL predictions powered by ML" />
+  <meta property="og:image:alt" content="ArakIce, NHL predictions powered by ML" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${esc(title)}" />
   <meta name="twitter:description" content="${esc(desc)}" />
   <meta name="twitter:image" content="${SITE}/arakice-og.png" />
-  <meta name="twitter:image:alt" content="ArakIce — NHL predictions powered by ML" />
+  <meta name="twitter:image:alt" content="ArakIce, NHL predictions powered by ML" />
   <link rel="icon" type="image/png" sizes="96x96" href="/arakice-icon-96.png" />
   <link rel="icon" type="image/png" sizes="192x192" href="/arakice-icon-192.png" />
   <link rel="icon" type="image/png" sizes="512x512" href="/arakice-icon-512.png" />
@@ -165,7 +260,7 @@ ${jsonld ? `  <script type="application/ld+json">\n${JSON.stringify(jsonld, null
 <body>
   <header class="site-header">
     <div class="wrap">
-      <a class="brand" href="${SITE}/" aria-label="ArakIce — home">
+      <a class="brand" href="${SITE}/" aria-label="ArakIce home">
         <img class="brand-logo" src="/arakice-logo-80.png" alt="ArakIce" width="40" height="40" />
         <span class="brand-word">ArakIce</span>
       </a>
@@ -174,9 +269,9 @@ ${jsonld ? `  <script type="application/ld+json">\n${JSON.stringify(jsonld, null
   </header>
   <main>
 ${body}
-    <div class="disclaimer">
-      <p>ArakIce provides statistical analysis and predictions for informational and entertainment purposes only. Nothing here is financial advice or a guarantee of results. Betting involves risk and you should never wager more than you can afford to lose. Must be of legal gambling age in your jurisdiction. If gambling stops being fun, help is available — in the US call or text 1-800-GAMBLER.</p>
-    </div>
+${disclaimer ? `    <div class="disclaimer">
+      <p>ArakIce provides statistical analysis and predictions for informational and entertainment purposes only. Nothing here is financial advice or a guarantee of results. Betting involves risk and you should never wager more than you can afford to lose. Must be of legal gambling age in your jurisdiction. If gambling stops being fun, help is available. In the US, call or text 1-800-GAMBLER.</p>
+    </div>` : ""}
   </main>
   <footer class="site-footer">
     <div class="wrap">
@@ -186,7 +281,7 @@ ${body}
         <a href="${SITE}/nhl-matchups">Matchups</a>
         <a href="${SITE}/best-nhl-picks-today">Best Picks</a>
       </nav>
-      <span>&copy; ArakIce — statistical edge for smarter sports bets.</span>
+      <span>&copy; ArakIce. Statistical edge for smarter sports bets.</span>
     </div>
   </footer>
 </body>
@@ -217,11 +312,11 @@ function playerPage(p) {
     const spg = (Number(s.shots || 0) / gp).toFixed(1);
     const gpg = (Number(s.goals || 0) / gp).toFixed(2);
     rateBlock = `      <h2>What ${esc(p.name)}'s rates tell us</h2>
-      <p>Across ${gp} games, ${esc(p.name)} is averaging about <strong>${ppg} points</strong> and <strong>${spg} shots on goal</strong> per game, at roughly ${gpg} goals a night. Rates matter more than raw totals for props, because a prop line is a single-game question — and a ${spg}-shot pace is the base the model adjusts up or down for the specific matchup, ice time and pace. When ${esc(p.name)}'s role or linemates change, those rates are the first thing to move.</p>`;
+      <p>Across ${gp} games, ${esc(p.name)} is averaging about <strong>${ppg} points</strong> and <strong>${spg} shots on goal</strong> per game, at roughly ${gpg} goals a night. Rates matter more than raw totals for props, because a prop line is a single game question, and a pace of ${spg} shots is the base the model adjusts up or down for the specific matchup, ice time and pace. When ${esc(p.name)}'s role or linemates change, those rates are the first thing to move.</p>`;
   } else if (isGoalie && gp > 0) {
     const svp = s.savePctg != null ? Number(s.savePctg).toFixed(3) : null;
     rateBlock = `      <h2>What ${esc(p.name)}'s numbers tell us</h2>
-      <p>Over ${gp} appearances${svp ? ` at a ${svp} save percentage` : ""}, ${esc(p.name)} gives the model a base workload and stopping rate to build on. For goaltender props, the swing factor is volume: the model estimates how many shots ${esc(team)}'s opponent is likely to generate, then pairs that with ${esc(p.name)}'s save rate to project saves. A high-event opponent lifts the saves projection even when the win is in doubt; a low-event one suppresses it.</p>`;
+      <p>Over ${gp} appearances${svp ? ` at a ${svp} save percentage` : ""}, ${esc(p.name)} gives the model a base workload and stopping rate to build on. For goaltender props, the swing factor is volume: the model estimates how many shots ${esc(team)}'s opponent is likely to generate, then pairs that with ${esc(p.name)}'s save rate to project saves. A busy opponent lifts the saves projection even when the win is in doubt. A quiet one suppresses it.</p>`;
   }
   const statCards = isGoalie
     ? [
@@ -237,15 +332,15 @@ function playerPage(p) {
     .join("\n");
 
   const propsFocus = isGoalie
-    ? `For a goaltender like ${esc(p.name)}, the props that matter most are saves and, on the totals side, the game's over/under — both driven by how many shots the opposition is likely to generate. Our model estimates ${esc(p.name)}'s expected workload from the quality of shots ${esc(team)} tends to allow, the pace of the opponent, and rest, then compares that projection to the posted save line.`
-    : `For a skater like ${esc(p.name)}, shots on goal and points are the headline props. Shots are the more stable of the two — they depend on ice time, role and how many attempts ${esc(team)} generates — while points swing more with linemates and finishing luck. The model projects each from ${esc(p.name)}'s usage and matchup, then flags where that number diverges from the sportsbook line.`;
+    ? `For a goaltender like ${esc(p.name)}, the props that matter most are saves and, on the totals side, the game's over/under. Both driven by how many shots the opposition is likely to generate. Our model estimates ${esc(p.name)}'s expected workload from the quality of shots ${esc(team)} tends to allow, the pace of the opponent, and rest, then compares that projection to the posted save line.`
+    : `For a skater like ${esc(p.name)}, shots on goal and points are the headline props. Shots are the more stable of the two. They depend on ice time, role and how many attempts ${esc(team)} generates. Points swing more with linemates and finishing luck. The model projects each from ${esc(p.name)}'s usage and matchup, then flags where that number diverges from the sportsbook line.`;
 
   const stats = p.stats && p.stats.gamesPlayed
     ? `      <h2>${esc(p.name)}'s season at a glance</h2>
       <div class="stats-row">
 ${cardsHtml}
       </div>
-      <p>These are ${esc(p.name)}'s current regular-season totals. They form the base rate the model starts from before adjusting for tonight's specific matchup, opponent quality, rest and role.</p>`
+      <p>These are ${esc(p.name)}'s current regular season totals. They form the base rate the model starts from before adjusting for tonight's specific matchup, opponent quality, rest and role.</p>`
     : "";
 
   const jsonld = {
@@ -253,7 +348,7 @@ ${cardsHtml}
     "@type": "FAQPage",
     mainEntity: [
       { "@type": "Question", name: `How are ${p.name}'s prop projections made?`,
-        acceptedAnswer: { "@type": "Answer", text: `ArakIce projects ${p.name}'s output from usage, role and matchup — how many chances ${team} generates or allows, the opponent's pace, rest and recent form — then compares the projection to the posted prop line to find value.` } },
+        acceptedAnswer: { "@type": "Answer", text: `ArakIce projects ${p.name}'s output from usage, role and matchup: how many chances ${team} generates or allows, the opponent's pace, rest and recent form. It then compares the projection to the posted prop line to find value.` } },
       { "@type": "Question", name: `Where can I see ${p.name}'s projection for tonight?`,
         acceptedAnswer: { "@type": "Answer", text: `Open the ArakIce app. When ${p.name} is on the slate, the live projection and the edge against the current line appear there, updated as lineups and odds move.` } },
       { "@type": "Question", name: `Are ${p.name} prop predictions guaranteed?`,
@@ -264,14 +359,14 @@ ${cardsHtml}
   const body = `    <section class="hero">
       <p class="eyebrow">${esc(team)} · ${esc(posName)}</p>
       <h1>${esc(p.name)} Prop Predictions</h1>
-      <p class="lede">Projections and betting context for ${esc(p.name)} of the ${esc(team)}. See how ArakIce models ${esc(p.name)}'s props — ${isGoalie ? "saves and totals" : "shots, points and more"} — and where the numbers point against the sportsbook line.</p>
+      <p class="lede">Projections and betting context for ${esc(p.name)} of the ${esc(team)}. See how ArakIce models ${esc(p.name)}'s props, ${isGoalie ? "saves and totals" : "shots and points included"}, and where the numbers point against the sportsbook line.</p>
     </section>
     <p>If you follow ${esc(p.name)}, you already know the box score only tells part of the story. Prop betting rewards understanding the <em>process</em> behind the numbers: the ice time, the role, the matchup and the pace that decide how many chances a ${esc(posName)} actually gets. This page explains how ArakIce turns that context into a projection for ${esc(p.name)}, and how to use it without fooling yourself.</p>
-${ctaBox(`See ${p.name}'s live projection tonight`, `When ${p.name} is playing, ArakIce shows the projection and the edge against the current prop line — updated through the day.`, "Open ArakIce")}
+${ctaBox(`See ${p.name}'s live projection tonight`, `When ${p.name} is playing, ArakIce shows the projection and the edge against the current prop line, updated through the day.`, "Open ArakIce")}
 ${stats}
       <h2>How we project ${esc(p.name)}'s props</h2>
       <p>${propsFocus}</p>
-      <p>Crucially, the projection is not just a season average dressed up. It weighs the specific game: the opponent ${esc(team)} faces, whether either team is on a back-to-back or a long road trip, the goaltending on the other side, and the referee crew's tendencies where they affect scoring. Those factors are weighed per matchup, so ${esc(p.name)}'s number on a rested home night against a weak defense looks very different from a tired night against an elite one.</p>
+      <p>The projection is not a season average dressed up. It weighs the specific game: the opponent ${esc(team)} faces, whether either team is playing a second night in a row or sitting deep in a road trip, the goaltending on the other side, and the referee crew where it affects scoring. Those factors are weighed per matchup, so ${esc(p.name)}'s number on a rested home night against a weak defense looks very different from a tired night against an elite one.</p>
 ${rateBlock}
       <h2>Which ${esc(p.name)} props to watch</h2>
       <p>The best prop bets are the ones where the model and the market disagree most, not simply the ones with the biggest names attached. When ${esc(p.name)}'s projection clearly exceeds the posted line, that gap is the reason to bet the over; when it falls short, the under or a pass is the disciplined play. Treat the size of the gap as your guide to stake size, and remember that even a strong edge will miss plenty of individual nights.</p>
@@ -328,10 +423,10 @@ function propsHubPage(players) {
   const body = `    <section class="hero">
       <p class="eyebrow">Search ${players.length} NHL players</p>
       <h1>NHL Player Prop Predictions</h1>
-      <p class="lede">Type any player's name to open their prop page — shots, points and goaltender saves, with the projection and the edge against the sportsbook line. Every active NHL player, one search away.</p>
+      <p class="lede">Type any player's name to open their prop page. Shots, points and goaltender saves, each with the projection and the edge against the sportsbook line. Every active NHL player, one search away.</p>
     </section>
     <div class="search-wrap">
-      <input id="player-search" type="search" placeholder="Search a player — e.g. Connor McDavid" autocomplete="off" aria-label="Search NHL players" />
+      <input id="player-search" type="search" placeholder="Search a player, for example Connor McDavid" autocomplete="off" aria-label="Search NHL players" />
       <div id="player-count">${players.length} players</div>
     </div>
     <ul id="player-list">
@@ -340,73 +435,184 @@ ${rows}
     <script src="/seo-search.js" defer></script>
 ${ctaBox("See tonight's prop edges", "The app ranks tonight's player props by how far the projection beats the line. Open it to see the biggest edges live.", "Open ArakIce")}
       <h2>How ArakIce projects player props</h2>
-      <p>A player prop is a bet on an individual's output — shots on goal, points, goaltender saves — rather than on who wins. The edge comes from projecting that output more accurately than the sportsbook's line. ArakIce builds each projection from usage and role, the pace and quality of the matchup, rest and travel, and the goaltending involved, then compares it to the posted number. Where the two disagree, there is value; where they agree, there is not.</p>
+      <p>A player prop is a bet on an individual's output rather than on who wins: shots on goal, points, goaltender saves. The edge comes from projecting that output more accurately than the sportsbook's line. ArakIce builds each projection from usage and role, the pace and quality of the matchup, rest and travel, and the goaltending involved, then compares it to the posted number. Where the two disagree, there is value; where they agree, there is not.</p>
       <p>Props are fertile ground for edges because sportsbooks price hundreds of them every night and cannot sharpen each one. Use the search above to find any player, read the reasoning on their page, and open the app for tonight's live projection.</p>`;
   return layout({
-    title: "NHL Player Prop Predictions | Search Any Player — ArakIce",
-    desc: "Search any NHL player for prop projections — shots, points and goaltender saves — with the edge against the line, from ArakIce's model.",
+    title: "NHL Player Prop Predictions | Search Any Player | ArakIce",
+    desc: "Search any NHL player for prop projections, shots and points and goaltender saves, with the edge against the line, from ArakIce's model.",
     canonicalPath: "/nhl-player-props",
     jsonld,
     body,
   });
 }
 
-function matchupPage(a, b) {
+// ── Statistiques de confrontation ────────────────────────────────────────────
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function niceDate(iso) {
+  const [y, m, d] = iso.split("-");
+  return `${MONTHS[Number(m) - 1]} ${Number(d)}, ${y}`;
+}
+
+// La ligne de total la plus courante à la LNH. Sert de repère au graphique et
+// de pivot au décompte « en dessous / au dessus ».
+const COMMON_LINE = 6;
+
+function h2hStats(games, a, b) {
+  if (!games || !games.length) return null;
+  const totals = games.map((g) => g.total);
+  const n = games.length;
+  const aWins = games.filter((g) => (g.home === a.abbr) === g.homeWin).length;
+  const roadWins = games.filter((g) => !g.homeWin);
+  return {
+    n, games, aWins, bWins: n - aWins,
+    avg: totals.reduce((x, y) => x + y, 0) / n,
+    homeWins: games.filter((g) => g.homeWin).length,
+    ot: games.filter((g) => g.ot).length,
+    under: totals.filter((t) => t < COMMON_LINE).length,
+    over: totals.filter((t) => t > COMMON_LINE).length,
+    onLine: totals.filter((t) => t === COMMON_LINE).length,
+    lo: Math.min(...totals), hi: Math.max(...totals),
+    biggest: games.reduce((m, g) => (g.total > m.total ? g : m), games[0]),
+    last: games[games.length - 1],
+    firstYear: games[0].date.slice(0, 4),
+    roadWin: roadWins[0] || null,
+  };
+}
+
+// Figure : un point par rencontre sur l'axe des buts. Le SVG est écrit à la
+// main plutôt que dessiné par une bibliothèque parce que ces pages n'exécutent
+// aucun JS et n'ont le droit de charger aucune ressource externe (CSP).
+// Une seule couleur : c'est une seule série, une deuxième teinte ne coderait rien.
+function h2hFigure(st, a, b) {
+  const X0 = 62, X1 = 676, BASE = 126, STEP = 19, R = 7;
+  const span = Math.max(1, st.hi - st.lo);
+  const x = (g) => X0 + ((g - st.lo) * (X1 - X0)) / span;
+  const counts = new Map();
+  for (const g of st.games) counts.set(g.total, (counts.get(g.total) || 0) + 1);
+  let dots = "";
+  for (const g of [...counts.keys()].sort((m, n) => m - n)) {
+    for (let i = 0; i < counts.get(g); i++) {
+      // L'anneau couleur surface évite que deux points empilés se confondent.
+      dots += `<circle cx="${x(g).toFixed(1)}" cy="${(BASE - 10 - i * STEP).toFixed(1)}" r="${R}" fill="#1A8AFF" stroke="#131A12" stroke-width="2"/>`;
+    }
+  }
+  let ticks = "";
+  for (let g = st.lo; g <= st.hi; g++) {
+    ticks += `<line x1="${x(g).toFixed(1)}" y1="${BASE}" x2="${x(g).toFixed(1)}" y2="${BASE + 6}" stroke="#283323" stroke-width="1"/>`
+           + `<text x="${x(g).toFixed(1)}" y="${BASE + 24}" fill="#92A08A" font-size="13" text-anchor="middle" font-family="Inter, system-ui, sans-serif">${g}</text>`;
+  }
+  const refx = x(COMMON_LINE + 0.5).toFixed(1);
+  const alt = `Total goals in each of the ${st.n} meetings between ${a.name} and ${b.name} since ${st.firstYear}. `
+            + `${st.under} finished below ${COMMON_LINE + 1} goals, ${st.over} above, ${st.onLine} on ${COMMON_LINE}.`;
+  return `      <figure class="h2h-fig">
+        <svg viewBox="0 0 720 186" width="100%" role="img" xmlns="http://www.w3.org/2000/svg" aria-label="${esc(alt)}">
+          <rect x="0" y="0" width="720" height="186" fill="#131A12" rx="10"/>
+          <line x1="${refx}" y1="24" x2="${refx}" y2="${BASE}" stroke="#3B4A36" stroke-width="2" stroke-dasharray="3 4"/>
+          <text x="${(Number(refx) + 10).toFixed(1)}" y="36" fill="#92A08A" font-size="12.5" font-family="Inter, system-ui, sans-serif">common line ${COMMON_LINE}.5</text>
+          <line x1="${X0 - 26}" y1="${BASE}" x2="${X1 + 26}" y2="${BASE}" stroke="#283323" stroke-width="1"/>
+          ${ticks}${dots}
+          <text x="360" y="${BASE + 52}" fill="#92A08A" font-size="13" text-anchor="middle" font-family="Inter, system-ui, sans-serif">total goals, one dot per meeting</text>
+        </svg>
+        <figcaption>${st.n} meetings since ${st.firstYear}. ${st.under} finished at ${COMMON_LINE - 1} goals or fewer, ${st.over} at ${COMMON_LINE + 1} or more, and ${st.onLine === 0 ? `none landed on ${COMMON_LINE}` : `${st.onLine} landed on ${COMMON_LINE}`}.</figcaption>
+      </figure>`;
+}
+
+function matchupPage(a, b, games) {
   const sameDiv = a.division && a.division === b.division;
   const sameConf = a.conference && a.conference === b.conference;
-  const rel = sameDiv ? `a ${esc(a.division)} Division clash` : sameConf ? `a ${esc(a.conference)} Conference matchup` : "an inter-conference matchup";
-  const jsonld = {
+  const rel = sameDiv ? `a ${esc(a.division)} Division matchup`
+            : sameConf ? `a ${esc(a.conference)} Conference matchup`
+            : "a matchup between the conferences";
+  const st = h2hStats(games, a, b);
+
+  // Décompte plutôt que pourcentage sous le plancher.
+  const pct = (k) => (st.n >= H2H_MIN_PCT ? ` (${Math.round((100 * k) / st.n)}%)` : "");
+  const city = (t) => t.common || t.name;
+  const byAbbr = { [a.abbr]: a, [b.abbr]: b };
+  const winTxt = (g) => {
+    const w = g.homeWin ? g.home : g.away, l = g.homeWin ? g.away : g.home;
+    const ws = g.homeWin ? g.hs : g.as, ls = g.homeWin ? g.as : g.hs;
+    return `${esc(city(byAbbr[w]))} ${ws}, ${esc(city(byAbbr[l]))} ${ls}`;
+  };
+
+  const jsonld = st ? {
     "@context": "https://schema.org",
     "@type": "FAQPage",
     mainEntity: [
-      { "@type": "Question", name: `Who is favored, ${a.name} or ${b.name}?`,
-        acceptedAnswer: { "@type": "Answer", text: `It depends on the specific game — home ice, rest, travel, goaltending and injuries all move the number. ArakIce projects a win probability for each side and compares it to the odds; open the app for the live number when these teams next meet.` } },
-      { "@type": "Question", name: `How does ArakIce predict ${a.name} vs ${b.name}?`,
-        acceptedAnswer: { "@type": "Answer", text: `The model weighs each team's expected goals, recent form, confirmed goaltending, rest and travel, and referee tendencies for the total, then converts that into a win probability and projected total for the game.` } },
-      { "@type": "Question", name: `Are these predictions guaranteed?`,
-        acceptedAnswer: { "@type": "Answer", text: `No. Hockey is high-variance and no prediction is guaranteed. The aim is to find value against the odds over a large sample of games.` } },
+      { "@type": "Question", name: `What is the record between ${a.name} and ${b.name}?`,
+        acceptedAnswer: { "@type": "Answer", text: `Over their last ${st.n} meetings, going back to ${st.firstYear}, ${st.aWins > st.bWins ? a.name : b.name} lead ${Math.max(st.aWins, st.bWins)} wins to ${Math.min(st.aWins, st.bWins)}. The home team won ${st.homeWins} of the ${st.n}.` } },
+      { "@type": "Question", name: `How many goals do ${a.name} and ${b.name} games usually produce?`,
+        acceptedAnswer: { "@type": "Answer", text: `Their last ${st.n} meetings averaged ${st.avg.toFixed(2)} goals. ${st.under} finished at ${COMMON_LINE - 1} goals or fewer and ${st.over} at ${COMMON_LINE + 1} or more. The highest was ${st.biggest.total} goals on ${niceDate(st.biggest.date)}.` } },
+      { "@type": "Question", name: `When did ${a.name} and ${b.name} last play?`,
+        acceptedAnswer: { "@type": "Answer", text: `${niceDate(st.last.date)}. ${winTxt(st.last).replace(/&#39;/g, "'")}.` } },
     ],
-  };
+  } : null;
+
+  const table = [...st.games].reverse().map((g) =>
+    `        <tr><td>${niceDate(g.date)}</td><td>${winTxt(g)}${g.ot ? " (OT)" : ""}</td><td>${esc(city(byAbbr[g.home]))}</td><td class="num">${g.total}</td></tr>`
+  ).join("\n");
+
+  const leader = st.aWins > st.bWins ? a : b;
+
   const body = `    <section class="hero">
       <p class="eyebrow">${rel}</p>
-      <h1>${esc(a.name)} vs ${esc(b.name)} Prediction</h1>
+      <h1>${esc(a.name)} vs ${esc(b.name)} Head to Head</h1>
       <div class="matchup-teams">
         <div class="team"><img src="${nhlLogo(a.abbr)}" alt="${esc(a.name)} logo" width="72" height="72" /><div class="abbr">${esc(a.abbr)}</div></div>
         <div class="vs">vs</div>
         <div class="team"><img src="${nhlLogo(b.abbr)}" alt="${esc(b.name)} logo" width="72" height="72" /><div class="abbr">${esc(b.abbr)}</div></div>
       </div>
-      <p class="lede">Model-driven predictions and betting context for ${esc(a.name)} against ${esc(b.name)} — moneyline, total and puck line — with the factors that decide the matchup and a live pick in the app whenever these two meet.</p>
+${h2hFigure(st, a, b)}
     </section>
-    <p>When ${esc(a.name)} and ${esc(b.name)} meet, the smart number rarely matches the gut reaction. Records and recent scores are noisy; what actually predicts the game is the quality of chances each side creates and allows, who is in net, and the situational edges — rest, travel and schedule — that the public tends to overlook. This page explains how ArakIce reads ${esc(a.name)} vs ${esc(b.name)}.</p>
-${ctaBox(`See the live ${a.abbr}–${b.abbr} pick`, `When ${a.name} and ${b.name} are on the slate, ArakIce shows the win probability, projected total and the edge against the odds — live.`, "Open ArakIce")}
+    <p>Here is what the record between these two clubs looks like, and how ArakIce reads their next meeting.</p>
+      <h2>The last ${st.n} meetings</h2>
+      <div class="stats-row">
+        <div class="stat"><div class="value">${st.n}</div><div class="label">meetings since ${st.firstYear}</div></div>
+        <div class="stat"><div class="value">${st.avg.toFixed(2)}</div><div class="label">goals per game</div></div>
+        <div class="stat"><div class="value">${st.homeWins} of ${st.n}</div><div class="label">won by the home team</div></div>
+        <div class="stat"><div class="value">${st.over} of ${st.n}</div><div class="label">over ${COMMON_LINE}.5</div></div>
+      </div>
+      <p>${esc(city(leader))} lead the recent series ${Math.max(st.aWins, st.bWins)} wins to ${Math.min(st.aWins, st.bWins)}. ${st.n >= H2H_MIN_PCT ? `Where the game is played has mattered more than who is better. ` : ``}The home team won ${st.homeWins} of the ${st.n}${pct(st.homeWins)}.${st.roadWin ? ` The only road win by either club was ${winTxt(st.roadWin)} on ${niceDate(st.roadWin.date)}.` : ""}</p>
+      <p>${st.n >= H2H_MIN_PCT && st.onLine === 0 ? `Totals have split rather than clustered. ` : ``}${st.under} of the ${st.n} finished at ${COMMON_LINE - 1} goals or fewer. ${st.over} finished at ${COMMON_LINE + 1} or more. ${st.onLine === 0 ? `The number never landed on ${COMMON_LINE}.` : `${st.onLine} landed on ${COMMON_LINE}.`} The busiest was ${niceDate(st.biggest.date)}, ${winTxt(st.biggest)}, ${st.biggest.total} goals between them. ${st.ot} of the ${st.n} needed overtime. Most recent meeting: ${niceDate(st.last.date)}, ${winTxt(st.last)}.</p>
+      <div class="h2h-wrap">
+        <table class="h2h">
+          <caption>Every ${esc(a.name)} and ${esc(b.name)} meeting since ${st.firstYear}</caption>
+          <thead><tr><th>Date</th><th>Result</th><th>Host</th><th class="num">Goals</th></tr></thead>
+          <tbody>
+${table}
+          </tbody>
+        </table>
+      </div>
+      <p class="src">Compiled from ArakIce's own game database, covering every meeting between these clubs since ${st.firstYear}. Percentages appear only for matchups with at least ${H2H_MIN_PCT} meetings.</p>
+${ctaBox("See the projection for this game", `When ${esc(a.name)} and ${esc(b.name)} are on the slate, ArakIce projects a win probability and a total for the game.`, "Open ArakIce")}
       <h2>How the model reads ${esc(a.name)} vs ${esc(b.name)}</h2>
-      <p>The projection starts with each team's expected-goals profile — how many quality chances ${esc(a.name)} and ${esc(b.name)} generate and concede — which is far more stable than goals scored. It then adjusts for the specifics of the meeting: which goaltenders are confirmed to start, whether either team is on a back-to-back or deep into a road trip, the travel and time-zone toll, and the referee crew's tendencies where they affect the total. Those factors are weighed for this matchup rather than applied as blanket rules.</p>
-      <h2>Moneyline, total and puck line</h2>
-      <p>The moneyline expresses the model's view of who wins ${esc(a.name)} vs ${esc(b.name)} most directly. The total (over/under) often carries the richest value, because it turns on pace, goaltending and refereeing rather than on which team is better. The puck line rewards backing a favourite expected to win comfortably, or an underdog expected to keep it close — the projected margin is what tells you whether it is worth the risk.</p>
+      <p>The projection starts with expected goals, meaning the quality of chances each club creates and gives up. That holds up better than goals scored, which swing on shooting luck. From there it adjusts for what is true only of this game: who is confirmed in net, whether either club is playing a second night in a row or sitting deep in a road trip, the travel and the time zones, and the referee crew where it moves the total.</p>
       <h2>What tends to move ${esc(a.name)} vs ${esc(b.name)}</h2>
       <p>${sameDiv
-        ? `As a ${esc(a.division)} Division matchup, ${esc(a.name)} and ${esc(b.name)} meet several times a year, often in tight, familiar, defensively tuned games — division rivals know each other well, which can suppress scoring and make the total as interesting as the side.`
+        ? `Division rivals meet several times a year and know each other well. Those games tend to be tighter and more defensive, which is part of why the totals above sit where they do.`
         : sameConf
-        ? `As a ${esc(a.conference)} Conference matchup, ${esc(a.name)} and ${esc(b.name)} carry playoff-seeding weight, and the intensity that brings can tighten checking and lower event rates relative to a casual non-conference date.`
-        : `As an inter-conference matchup, ${esc(a.name)} and ${esc(b.name)} meet rarely, which means unfamiliarity, travel and scheduling quirks play an outsized role — exactly the situational edges the model is built to price.`}
-        Beyond the rivalry angle, the biggest movers are goaltending confirmations, home ice, and whether either side is on the tail of a back-to-back or a long trip. Any one of those can shift the fair number by more than the standings would suggest.</p>
-      <h2>Finding the edge</h2>
-      <p>A prediction is only actionable next to a price. ArakIce compares its win probability and projected total to the live odds and surfaces the gap — the edge. When the model and the market disagree meaningfully on ${esc(a.name)} vs ${esc(b.name)}, that is the bet; when they agree, the disciplined move is to pass. Open the app the next time these teams meet for the live number.</p>
-${ctaBox("Get the pick when they play", "Open ArakIce and check the live prediction for this matchup and the rest of tonight's slate.", "Open ArakIce")}
+        ? `Conference games carry playoff seeding weight. The intensity tightens the checking and pulls event rates down compared with a casual date against the other conference.`
+        : `These clubs meet rarely, so unfamiliarity, travel and scheduling quirks carry more weight than usual. Those are exactly the situations the model is built to read.`}
+        Beyond that, the biggest movers are goaltending confirmations, home ice, and whether either side is playing a second night in a row or finishing a long trip.</p>
       <section class="related">
         <h2>Explore more</h2>
         <ul>
-          <li><a href="${SITE}/nhl-matchups">All NHL matchup predictions</a></li>
+          <li><a href="${SITE}/nhl-matchups">All NHL matchup pages</a></li>
           <li><a href="${SITE}/nhl-predictions-today">NHL predictions today</a></li>
           <li><a href="${SITE}/">Open the ArakIce app</a></li>
         </ul>
       </section>`;
+
   return layout({
-    title: `${a.name} vs ${b.name} Prediction, Odds & Pick | ArakIce`,
-    desc: `${a.name} vs ${b.name} prediction: moneyline, total and puck-line context from ArakIce's NHL model, with a live pick in the app whenever they meet.`,
+    title: `${a.name} vs ${b.name} Head to Head Record and Totals | ArakIce`,
+    desc: `${a.name} against ${b.name}: the last ${st.n} meetings, ${st.avg.toFixed(2)} goals a game, ${st.homeWins} of ${st.n} won by the home team, with every result listed.`,
     canonicalPath: `/matchup/${a.slug}-vs-${b.slug}`,
     jsonld,
     body,
+    // Cette page ne parle plus de moneyline, de cotes ni de mise : elle ne sert
+    // que des résultats de matchs. L'avertissement de jeu responsable reste sur
+    // toutes les pages qui, elles, parlent de pari.
+    disclaimer: false,
   });
 }
 
@@ -417,15 +623,15 @@ function matchupHubPage(pairs) {
   const jsonld = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
-    name: "NHL Matchup Predictions",
+    name: "NHL Head to Head Records",
     url: `${SITE}/nhl-matchups`,
   };
   const body = `    <section class="hero">
       <p class="eyebrow">${pairs.length} upcoming matchups</p>
-      <h1>NHL Matchup Predictions</h1>
-      <p class="lede">Model-driven predictions for every upcoming NHL matchup — moneyline, total and puck line, with the factors behind each game and a live pick in the app.</p>
+      <h1>NHL Head to Head Records</h1>
+      <p class="lede">Every upcoming NHL matchup, with the record between the two clubs over the last five seasons: how the meetings have gone, how many goals they produce, and how much home ice has mattered.</p>
     </section>
-${ctaBox("See tonight's full slate", "ArakIce ranks tonight's games by edge against the odds. Open it for the live picks.", "Open ArakIce")}
+${ctaBox("See tonight's full slate", "ArakIce projects a win probability and a total for every game on tonight's schedule.", "Open ArakIce")}
       <section class="related">
         <h2>Upcoming matchups</h2>
         <ul>
@@ -433,11 +639,12 @@ ${items}
         </ul>
       </section>`;
   return layout({
-    title: "NHL Matchup Predictions | Every Upcoming Game — ArakIce",
-    desc: "NHL matchup predictions for every upcoming game — moneyline, total and puck-line context from ArakIce's model.",
+    title: "NHL Head to Head Records | Every Upcoming Game | ArakIce",
+    desc: "Head to head records for every upcoming NHL game: recent meetings, goals per game and how often the home team wins.",
     canonicalPath: "/nhl-matchups",
     jsonld,
     body,
+    disclaimer: false,   // ce hub n'ouvre que sur des pages de statistiques
   });
 }
 
@@ -529,7 +736,8 @@ async function fetchPlayers(teams) {
     } catch { p.stats = {}; }
   });
 
-  // Slug + de-dup, gate by games played.
+  // Slug + de-dup. Le filtrage par liste blanche est fait dans main(), pour que
+  // le mode --sample (qui ne passe jamais ici) obéisse à la même règle.
   const usedSlugs = new Set();
   const out = [];
   for (const p of players) {
@@ -551,10 +759,14 @@ function sampleData() {
     CGY: { abbr: "CGY", name: "Calgary Flames", common: "Flames", slug: "flames", division: "Pacific", conference: "Western" },
     TOR: { abbr: "TOR", name: "Toronto Maple Leafs", common: "Maple Leafs", slug: "maple-leafs", division: "Atlantic", conference: "Eastern" },
   };
+  // ⚠️ Chiffres INVENTÉS : ce sont des fixtures hors ligne, pas des statistiques.
+  // Les slugs, eux, doivent appartenir à props-allowlist.json, sinon --sample
+  // n'écrit plus aucune page joueur et ne teste donc plus playerPage().
+  // Un patineur, un ailier et un gardien, pour couvrir les deux branches.
   const players = [
-    { id: 8478402, name: "Connor McDavid", pos: "C", team: "EDM", teamName: "Edmonton Oilers", slug: "connor-mcdavid", stats: { gamesPlayed: 76, goals: 44, assists: 88, points: 132, shots: 258 } },
-    { id: 8477934, name: "Leon Draisaitl", pos: "C", team: "EDM", teamName: "Edmonton Oilers", slug: "leon-draisaitl", stats: { gamesPlayed: 78, goals: 51, assists: 55, points: 106, shots: 271 } },
-    { id: 8480830, name: "Jacob Markstrom", pos: "G", team: "CGY", teamName: "Calgary Flames", slug: "jacob-markstrom", stats: { gamesPlayed: 52, wins: 23, goalsAgainstAvg: 2.78, savePctg: 0.905, shutouts: 3 } },
+    { id: 8479318, name: "Auston Matthews", pos: "C", team: "TOR", teamName: "Toronto Maple Leafs", slug: "auston-matthews", stats: { gamesPlayed: 70, goals: 40, assists: 30, points: 70, shots: 250 } },
+    { id: 8478420, name: "Mikko Rantanen", pos: "R", team: "DAL", teamName: "Dallas Stars", slug: "mikko-rantanen", stats: { gamesPlayed: 70, goals: 30, assists: 50, points: 80, shots: 220 } },
+    { id: 8481691, name: "Yaroslav Askarov", pos: "G", team: "SJS", teamName: "San Jose Sharks", slug: "yaroslav-askarov", stats: { gamesPlayed: 40, wins: 18, goalsAgainstAvg: 2.80, savePctg: 0.905, shutouts: 2 } },
   ];
   const pairs = [{ a: teams.CGY, b: teams.EDM }];
   return { teams, players, pairs };
@@ -564,6 +776,8 @@ function sampleData() {
 async function main() {
   console.log(`ArakIce SEO generator — ${SAMPLE ? "SAMPLE (offline)" : "LIVE (NHL API)"} → ${OUT_DIR}`);
   let teams, players, pairs;
+
+  const allow = await loadPropsAllowlist();
 
   if (SAMPLE) {
     ({ teams, players, pairs } = sampleData());
@@ -576,7 +790,18 @@ async function main() {
     console.log(`  ${pairs.length} upcoming pairs`);
     console.log("Fetching rosters + player stats…");
     players = await fetchPlayers(teams);
-    console.log(`  ${players.length} players (>= ${MIN_GP} GP)`);
+    console.log(`  ${players.length} players before the allowlist`);
+  }
+
+  // Un seul endroit décide quelles pages joueur existent, mode --sample compris.
+  const beforeAllow = players.length;
+  players = players.filter((p) => allow.has(p.slug));
+  const missing = [...allow].filter((sl) => !players.some((p) => p.slug === sl));
+  console.log(`  ${players.length} player pages after the allowlist (${beforeAllow} candidates, allowlist of ${allow.size})`);
+  if (missing.length) {
+    // Slug de la liste sans joueur correspondant : échangé, retraité, renommé.
+    // On le signale, on n'invente pas la page.
+    console.warn(`  ⚠️  ${missing.length} allowlisted slug(s) with no matching player: ${missing.join(", ")}`);
   }
 
   const dynamicLocs = [];
@@ -590,16 +815,35 @@ async function main() {
   dynamicLocs.push("/nhl-player-props");
 
   // Matchup pages + hub
+  console.log("Loading head to head history…");
+  const h2h = await loadH2H();
+  console.log(`  ${h2h.size} team pairs with recent meetings`);
+
+  let noHistory = 0;
+  const written = [];   // le hub ne doit lister que les pages réellement écrites
   for (const pr of pairs) {
-    await writePage(`matchup/${pr.a.slug}-vs-${pr.b.slug}.html`, matchupPage(pr.a, pr.b));
+    const games = h2h.get([pr.a.abbr, pr.b.abbr].sort().join("|")) || [];
+    if (!games.length) { noHistory++; continue; }   // pas d'invention : pas de page
+    await writePage(`matchup/${pr.a.slug}-vs-${pr.b.slug}.html`, matchupPage(pr.a, pr.b, games));
     dynamicLocs.push(`/matchup/${pr.a.slug}-vs-${pr.b.slug}`);
+    written.push(pr);
   }
-  await writePage("nhl-matchups.html", matchupHubPage(pairs));
+  await writePage("nhl-matchups.html", matchupHubPage(written));
   dynamicLocs.push("/nhl-matchups");
 
   await writeSitemap(dynamicLocs);
 
-  console.log(`Done. Wrote ${players.length} player pages, ${pairs.length} matchup pages, 2 hubs, sitemap.xml.`);
+  if (noHistory) console.log(`  ⚠️  ${noHistory} pair(s) skipped: no meeting in the last five seasons.`);
+  console.log(`Done. Wrote ${players.length} player pages, ${pairs.length - noHistory} matchup pages, 2 hubs, sitemap.xml.`);
 }
 
-main().catch((e) => { console.error("Generator failed:", e); process.exit(1); });
+// `main()` ne s'exécute que si ce fichier est lancé directement. Importé, il
+// n'expose que ses fabriques de pages : c'est ce qui permet de régénérer un
+// sous-ensemble de pages hors ligne (ou de tester une page) sans déclencher une
+// campagne complète d'appels à l'API NHL.
+const RUN_DIRECTLY = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (RUN_DIRECTLY) {
+  main().catch((e) => { console.error("Generator failed:", e); process.exit(1); });
+}
+
+export { layout, matchupPage, playerPage, propsHubPage, matchupHubPage, loadH2H, h2hStats, writeSitemap };

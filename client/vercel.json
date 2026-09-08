@@ -1,13 +1,26 @@
 {
   "cleanUrls": true,
+  "redirects": [
+    {
+      "source": "/props/:slug((?!(?:will-smith|macklin-celebrini|jason-robertson|matthew-schaefer|sam-dickinson|matthew-wood|danila-yurov|mavrik-bourque|kent-johnson|jake-neighbours|martin-necas|cutter-gauthier|frank-nazar|jiri-kulich|lucas-raymond|juraj-slafkovsky|auston-matthews|ilya-protas|jack-quinn|maksymilian-szuber|gabe-perreault|john-tavares|jared-mccann|filip-chytil|berkly-catton|justus-annunen|matty-beniers|mikko-rantanen|vince-dunn|ben-meyers|carl-lindbom|porter-martone|thomas-harley|yaroslav-askarov|filip-forsberg|mattias-samuelsson|sam-rinzel|adin-hill|aleksander-barkov|jackson-lacombe|konsta-helenius|beckett-sennecke|mason-mctavish|collin-graf|dylan-strome|moritz-seider|filip-hronek|yegor-sharangovich|mackie-samoskevich|patrick-kane|noah-dobson|morgan-frost|trevor-zegras|elias-pettersson-8483678|jack-mcbain|matthew-tkachuk)$)[^/]+)",
+      "destination": "/nhl-player-props",
+      "permanent": true
+    }
+  ],
   "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
+    {
+      "source": "/(.*)",
+      "destination": "/"
+    }
   ],
   "headers": [
     {
       "source": "/assets/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     },
     {
@@ -17,11 +30,26 @@
           "key": "Content-Security-Policy",
           "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src https://accounts.google.com; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
         },
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
-        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
+        }
       ]
     }
   ]
