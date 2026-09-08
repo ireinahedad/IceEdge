@@ -126,6 +126,11 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
     if (!text) return;
     if (!requireAuth("gate.sendMessage")) return;
 
+    // Capturés AVANT que les champs ne soient vidés : le `catch` plus bas doit
+    // pouvoir tout remettre en place, réponse et étiquette comprises.
+    const sentTag     = tag;
+    const sentReplyTo = replyTo;
+
     setInput("");
     const tempId = `optimistic_${Date.now()}`;
 
@@ -158,7 +163,25 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
       confirmMessage(tempId, confirmed);
       onUpdate({ ...room, lastMessage: text, lastMessageAt: confirmed.sentAt, unread: 0 });
     } catch (e: any) {
-      setErrorMsg(e.message ?? "Message not sent");
+      /**
+       * L'échec doit DÉFAIRE l'optimisme, sinon il ment.
+       *
+       * Avant, le `catch` ne faisait que poser le bandeau : la bulle restait à
+       * l'écran comme un message envoyé, et le texte était perdu — l'input
+       * ayant été vidé au départ. L'utilisateur croyait avoir écrit quelque
+       * chose que personne n'a jamais reçu, et n'avait aucun moyen de le
+       * récupérer. `removeMessage` existait déjà et n'était pas appelé ici.
+       *
+       * Pas de file de renvoi : le texte revient dans la zone de saisie avec sa
+       * réponse et son étiquette, donc renvoyer, c'est appuyer sur Envoyer. Une
+       * file demanderait un état de persistance qui n'a pas sa place la veille
+       * d'un gel.
+       */
+      removeMessage(tempId);
+      setInput(text);
+      setTag(sentTag);
+      setReplyTo(sentReplyTo);
+      setErrorMsg(e.message ?? t("chat.sendFailed"));
     }
   }
 

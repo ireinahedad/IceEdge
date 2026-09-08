@@ -59,6 +59,12 @@ jobs:
           cache: 'npm'
           cache-dependency-path: client/package-lock.json
       - run: npm ci
+      # ⚠️ `npm run build` NE VÉRIFIE PAS LES TYPES : `vite build` passe par
+      # esbuild, qui jette les annotations sans les contrôler. `client/` n'ayant
+      # aucun runner de test, ce `typecheck` est son SEUL garde-fou automatique
+      # — il tournait à la main jusqu'au 2026-09-08, c'est-à-dire quand on y
+      # pensait. Il est placé AVANT le build pour échouer vite.
+      - run: npm run typecheck
       - run: npm run build
 
       # PRE_IOS_PLAN.md R7.3 — le bundle de production ne doit jamais contenir

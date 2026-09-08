@@ -106,7 +106,13 @@ export async function askLLMDetailed(
       const err: LLMError = { type: 'no_api_key', message: body.message ?? 'Add your OpenAI API key in Settings.' };
       throw Object.assign(new Error(err.message), err);
     }
-    if (res.status === 401) {
+    // Clé OpenAI invalide. Reconnue par son CODE et non par un statut 401 : le
+    // serveur rend désormais un 502 dans ce cas, précisément pour qu'un 401 de
+    // cette API ne veuille plus dire qu'une chose, « session expirée ».
+    // `authedFetch` intercepte les 401 avant nous et lance un refresh — un 401
+    // relayé ici finissait par déconnecter l'utilisateur d'ArakIce à cause
+    // d'une mauvaise clé OpenAI.
+    if (body.code === 'invalid_api_key') {
       const err: LLMError = { type: 'openai_error', message: 'Invalid OpenAI API key. Check your key in Settings → AI Settings.' };
       throw Object.assign(new Error(err.message), err);
     }

@@ -383,6 +383,11 @@ interface GoogleUserInfo {
   picture: string;
   given_name?: string;
   family_name?: string;
+  /**
+   * Rendu par l'endpoint OIDC `oauth2/v3/userinfo` utilisé ci-dessous.
+   * Optionnel dans le type, obligatoire à l'usage : voir `loginWithGoogle`.
+   */
+  email_verified?: boolean;
 }
 
 export async function exchangeGoogleCode(code: string, redirectUri: string): Promise<GoogleUserInfo> {
@@ -415,7 +420,33 @@ export async function exchangeGoogleCode(code: string, redirectUri: string): Pro
   return userRes.json() as Promise<GoogleUserInfo>;
 }
 
+/** Levée quand Google rend une adresse non vérifiée. Le code voyage jusqu'à la redirection. */
+export const GOOGLE_EMAIL_UNVERIFIED = 'GOOGLE_EMAIL_UNVERIFIED';
+
 export async function loginWithGoogle(googleUser: GoogleUserInfo): Promise<AuthResponse> {
+  /**
+   * ⚠️ Le rattachement de compte ci-dessous se fait sur la SEULE égalité
+   * d'adresse : une adresse Google non vérifiée qui correspond à un compte
+   * mot-de-passe existant en donnerait la maîtrise. C'est pour ça que le
+   * contrôle est ici et pas dans la route — c'est cette fonction qui rattache.
+   *
+   * **Refus par défaut, pas seulement sur `false`.** L'endpoint OIDC
+   * `oauth2/v3/userinfo` renvoie toujours `email_verified`; si un jour il
+   * cessait de le faire, un test `=== false` laisserait passer tout le monde en
+   * silence et rouvrirait le trou sans que rien ne le signale. Le sens de la
+   * panne est choisi : une connexion Google cassée se voit tout de suite et
+   * l'e-mail/mot de passe reste disponible, alors qu'une prise de contrôle de
+   * compte ne se voit jamais. Le code d'erreur distinct est ce qui rend ce
+   * choix tenable en exploitation — si ça casse un jour, la cause est écrite
+   * dans l'URL, pas noyée dans un `google_failed` générique.
+   */
+  if (googleUser.email_verified !== true) {
+    throw Object.assign(
+      new Error('Google account e-mail is not verified'),
+      { status: 403, code: GOOGLE_EMAIL_UNVERIFIED },
+    );
+  }
+
   // Resolve (or create/link) the account and guarantee its profile row inside a
   // single transaction — creating a user and its user_profiles row must be
   // atomic, and account-linking updates shouldn't half-apply either.

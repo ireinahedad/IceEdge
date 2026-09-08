@@ -1,20 +1,19 @@
 import { Router, Request, Response } from "express";
-import { OddsService } from "../services/odds.service";
 import { TtlCache } from "../services/ttlCache";
 import { timeUpstream } from "../metrics";
 import { logger } from "../logger";
 import * as oddsQuota from "../services/oddsQuota";
 
 const router = Router();
-const odds = new OddsService();
 
-router.get("/live", (req, res) => {
-  res.json(odds.getLiveOdds());
-});
-
-router.get("/game/:gameId", (req, res) => {
-  res.json(odds.getOddsByGame(req.params.gameId));
-});
+// `GET /live` et `GET /game/:gameId` ont été supprimées le 2026-09-08. Elles
+// servaient `MOCK_ODDS` — deux cotes écrites en dur sur un match « g1 » — à
+// n'importe qui, sans authentification et sans le dire. Sur une app de paris,
+// une cote inventée qui a l'air vraie est le pire mode d'échec possible ; c'est
+// le même arbitrage que `PredictionUnavailableError` côté prédictions.
+// Aucun appelant : le client passe par `/bet365/:sportKey` ci-dessous, qui relaie
+// The Odds API. `services/odds.service.ts` et `data/mock.ts` sont partis avec
+// elles, faute d'appelant.
 
 // ── The Odds API proxy ────────────────────────────────────────────────────────
 // Keeps the API key server-side (was previously exposed in the client bundle via

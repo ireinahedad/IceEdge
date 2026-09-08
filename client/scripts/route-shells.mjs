@@ -59,15 +59,15 @@ const ROUTES = [
   {
     out: "nhl-predictions.html",
     loc: "/nhl-predictions",
-    title: "NHL Predictions — Model Win Probabilities for Every Game | ArakIce",
-    desc: "Machine-learning win probabilities, totals and puck-line context for every NHL game on the slate, updated as odds move.",
+    title: "NHL Predictions | Model Win Probabilities for Every Game | ArakIce",
+    desc: "Machine learning win probabilities, totals and puck line context for every NHL game on the slate, updated as odds move.",
     heading: "NHL Predictions",
     blurb: "Model win probabilities, totals and puck-line context for every game on the slate.",
   },
   {
     out: "schedule.html",
     loc: "/schedule",
-    title: "Tonight's NHL Games — Schedule & Model Picks | ArakIce",
+    title: "Tonight's NHL Games | Schedule and Model Picks | ArakIce",
     desc: "Every NHL game playing tonight with ArakIce's model probabilities, start times and the edges our model sees against the book.",
     heading: "Tonight's NHL Games",
     blurb: "Every game on today's slate with model probabilities, start times and the edges against the book.",
@@ -75,24 +75,24 @@ const ROUTES = [
   {
     out: "stats.html",
     loc: "/stats",
-    title: "NHL Team & Player Stats — Model Inputs | ArakIce",
+    title: "NHL Team and Player Stats | Model Inputs | ArakIce",
     desc: "The team and player statistics behind ArakIce's NHL predictions: scoring rates, goaltending, special teams and recent form.",
     heading: "NHL Stats",
-    blurb: "The team and player numbers our NHL model runs on — scoring rates, goaltending, special teams, recent form.",
+    blurb: "The team and player numbers our NHL model runs on: scoring rates, goaltending, special teams, recent form.",
   },
   {
     // Nested path: written to dist/stats/chart/all-teams.html
     out: path.join("stats", "chart", "all-teams.html"),
     loc: "/stats/chart/all-teams",
-    title: "NHL Team Stats Charts — All 32 Teams Compared | ArakIce",
-    desc: "Interactive charts comparing all 32 NHL teams across the metrics that drive ArakIce's predictions — goals, expected goals, special teams and form.",
+    title: "NHL Team Stats Charts | All 32 Teams Compared | ArakIce",
+    desc: "Interactive charts comparing all 32 NHL teams across the metrics that drive ArakIce's predictions: goals, expected goals, special teams and form.",
     heading: "NHL Team Stats Charts",
     blurb: "All 32 NHL teams compared across the metrics that drive our predictions.",
   },
   {
     out: "bet.html",
     loc: "/bet",
-    title: "NHL Bet Builder — Score Any Slip Against the Model | ArakIce",
+    title: "NHL Bet Builder | Score Any Slip Against the Model | ArakIce",
     desc: "Build an NHL slip leg by leg and see ArakIce's model probability and expected value for each selection before you commit.",
     heading: "NHL Bet Builder",
     blurb: "Build a slip leg by leg and see the model probability and expected value for each selection.",
@@ -108,7 +108,7 @@ const ROUTES = [
   {
     out: "login.html",
     loc: "/login",
-    title: "Sign In to ArakIce — NHL Predictions",
+    title: "Sign In to ArakIce | NHL Predictions",
     desc: "Sign in to ArakIce to save slips, track your prediction history and get notified when the model finds a value bet.",
     heading: "Sign In to ArakIce",
     blurb: "Save slips, track your history and get notified when the model finds a value bet.",
@@ -220,8 +220,8 @@ function shellFor(base, route) {
     `        <h1>${esc(route.heading)}</h1>\n` +
     `        <p>${esc(route.blurb)}</p>\n` +
     `        <ul>\n` +
-    `          <li><a href="/">ArakIce home</a> — all NHL predictions and tools</li>\n` +
-    `          <li><a href="/about">About the model</a> — how our predictions are built</li>\n` +
+    `          <li><a href="/">ArakIce home</a>, all NHL predictions and tools</li>\n` +
+    `          <li><a href="/about">About the model</a>, how our predictions are built</li>\n` +
     `        </ul>\n` +
     `      </nav>\n` +
     `    </noscript>`;

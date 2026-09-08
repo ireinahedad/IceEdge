@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -38,6 +38,36 @@ export function LoginPage() {
   const [error,       setError]       = useState<string | null>(null);
   const [notice,      setNotice]      = useState<string | null>(null);
   const [loading,     setLoading]     = useState(false);
+
+  /**
+   * Les refus de la connexion Google, que le serveur pose dans `?error=`.
+   *
+   * Rien ne les lisait : `google_denied` et `google_failed` existaient côté
+   * serveur depuis toujours et ramenaient sur un formulaire vide, sans un mot —
+   * un échec silencieux, exactement ce que l'audit reproche ailleurs.
+   * `google_unverified` est arrivé avec le contrôle d'`email_verified`, et il a
+   * besoin d'une phrase qui dise quoi faire : ce n'est pas une panne, c'est un
+   * refus, et l'e-mail/mot de passe reste ouvert.
+   *
+   * Le paramètre est retiré de l'URL après lecture, sinon le message revient à
+   * chaque rechargement, y compris après une connexion réussie par un autre
+   * chemin.
+   */
+  useEffect(() => {
+    const reason = new URLSearchParams(location.search).get("error");
+    if (!reason) return;
+    const key = reason === "google_denied"     ? "login.googleDenied"
+              : reason === "google_unverified" ? "login.googleUnverified"
+              : reason === "google_failed"     ? "login.googleFailed"
+              : null;
+    if (key) setError(t(key));
+    try {
+      window.history.replaceState(null, "", window.location.pathname);
+    } catch { /* contexte sans history */ }
+    // `t` volontairement hors des dépendances : changer de langue ne doit pas
+    // rejouer cet effet, dont le paramètre d'URL a déjà été effacé.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -155,6 +185,21 @@ export function LoginPage() {
     window.location.href = getGoogleLoginUrl();
   }
 
+  /**
+   * ⚠️ `autoComplete` n'est pas décoratif ici : sans lui, le Trousseau iOS ne
+   * propose NI de remplir NI d'enregistrer. Seuls les champs de code OTP
+   * l'avaient (`one-time-code`) ; l'e-mail, le pseudo et les mots de passe
+   * n'avaient rien, donc créer un compte dans l'app laissait l'utilisateur sans
+   * mot de passe enregistré nulle part. `autoCapitalize="none"` et
+   * `autoCorrect="off"` vont avec : iOS met une majuscule au premier caractère
+   * d'un e-mail et « corrige » un pseudo.
+   *
+   * `aria-label` sur chaque champ plutôt que des `<label>` visibles : un
+   * `placeholder` disparaît dès la première frappe et n'est pas lu comme une
+   * étiquette. Poser de vraies étiquettes changerait le dessin de l'écran, ce
+   * qui n'est pas une décision à prendre à la veille d'un gel — l'`aria-label`
+   * règle la partie lecteur d'écran sans toucher au rendu.
+   */
   const inputCls = `w-full px-4 py-3 rounded-xl text-white text-sm placeholder-[#92A08A] focus:outline-none transition-all`;
   const inputStyle = { background: SURFACE, border: `1px solid ${BORDER}` };
   const inputFocusStyle = { borderColor: `${ACCENT}80`, background: ACCENT_BG };
@@ -239,6 +284,8 @@ export function LoginPage() {
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <input type="email" placeholder={t("login.email")} value={email} onChange={(e) => setEmail(e.target.value)}
           required className={inputCls} style={inputStyle}
+          aria-label={t("login.email")}
+          autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck={false}
           onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
           onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
 
@@ -246,18 +293,28 @@ export function LoginPage() {
           <>
             <input type="text" placeholder={t("login.username")} value={username} onChange={(e) => setUsername(e.target.value)}
               required minLength={3} className={inputCls} style={inputStyle}
+              aria-label={t("login.username")}
+              autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false}
               onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
               onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
             <input type="text" placeholder={t("login.firstName")} value={firstName} onChange={(e) => setFirstName(e.target.value)}
               className={inputCls} style={inputStyle}
+              aria-label={t("login.firstName")}
+              autoComplete="given-name"
               onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
               onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
           </>
         )}
 
         <div className="relative">
+          {/* `current-password` à la connexion, `new-password` à l'inscription :
+              c'est CE couple qui décide si iOS propose le mot de passe existant
+              ou en propose un fort à enregistrer. Un `autoComplete` fixe se
+              tromperait dans un des deux cas. */}
           <input type={showPwd ? "text" : "password"} placeholder={t("login.password")} value={password} onChange={(e) => setPassword(e.target.value)}
             required minLength={8} className={`${inputCls} pr-11`} style={inputStyle}
+            aria-label={t("login.password")}
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
             onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
             onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
           <button type="button" onClick={() => setShowPwd(v => !v)}
@@ -270,6 +327,8 @@ export function LoginPage() {
         {mode === "register" && (
           <input type={showPwd ? "text" : "password"} placeholder={t("login.confirmPassword")} value={confirmPwd} onChange={(e) => setConfirmPwd(e.target.value)}
             required minLength={8} className={inputCls} style={inputStyle}
+            aria-label={t("login.confirmPassword")}
+            autoComplete="new-password"
             onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
             onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
         )}
@@ -283,12 +342,14 @@ export function LoginPage() {
         )}
 
         {notice && (
-          <div className="text-xs text-center py-2 px-3 rounded-xl" style={{ color: ACCENT, background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>
+          /* `status` + `polite` : une confirmation ne doit pas couper la lecture
+             en cours, contrairement à l'erreur juste en dessous. */
+          <div role="status" aria-live="polite" className="text-xs text-center py-2 px-3 rounded-xl" style={{ color: ACCENT, background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>
             {notice}
           </div>
         )}
         {error && (
-          <div className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20">
+          <div role="alert" className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20">
             {error}
           </div>
         )}
@@ -338,6 +399,7 @@ export function LoginPage() {
 
         <input
           type="text" inputMode="numeric" autoComplete="one-time-code"
+          aria-label={t("login.verifyBtn")}
           maxLength={6} placeholder="______"
           value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
           required
@@ -347,12 +409,14 @@ export function LoginPage() {
           onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
 
         {notice && (
-          <div className="text-xs text-center py-2 px-3 rounded-xl" style={{ color: ACCENT, background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>
+          /* `status` + `polite` : une confirmation ne doit pas couper la lecture
+             en cours, contrairement à l'erreur juste en dessous. */
+          <div role="status" aria-live="polite" className="text-xs text-center py-2 px-3 rounded-xl" style={{ color: ACCENT, background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>
             {notice}
           </div>
         )}
         {error && (
-          <div className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20">
+          <div role="alert" className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20">
             {error}
           </div>
         )}
@@ -378,11 +442,13 @@ export function LoginPage() {
         </p>
         <input type="email" placeholder={t("login.email")} value={email} onChange={(e) => setEmail(e.target.value)}
           required className={inputCls} style={inputStyle}
+          aria-label={t("login.email")}
+          autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck={false}
           onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
           onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
 
         {error && (
-          <div className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20">
+          <div role="alert" className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20">
             {error}
           </div>
         )}
@@ -404,6 +470,7 @@ export function LoginPage() {
 
         <input
           type="text" inputMode="numeric" autoComplete="one-time-code"
+          aria-label={t("login.verifyBtn")}
           maxLength={6} placeholder="______"
           value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
           required
@@ -414,16 +481,20 @@ export function LoginPage() {
 
         <input type="password" placeholder={t("login.newPassword")} value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
           required minLength={8} className={inputCls} style={inputStyle}
+          aria-label={t("login.newPassword")}
+          autoComplete="new-password"
           onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
           onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
 
         {notice && (
-          <div className="text-xs text-center py-2 px-3 rounded-xl" style={{ color: ACCENT, background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>
+          /* `status` + `polite` : une confirmation ne doit pas couper la lecture
+             en cours, contrairement à l'erreur juste en dessous. */
+          <div role="status" aria-live="polite" className="text-xs text-center py-2 px-3 rounded-xl" style={{ color: ACCENT, background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>
             {notice}
           </div>
         )}
         {error && (
-          <div className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20">
+          <div role="alert" className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20">
             {error}
           </div>
         )}

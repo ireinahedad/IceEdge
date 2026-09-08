@@ -283,12 +283,28 @@ router.get('/google/callback', async (req: Request, res: Response) => {
     // with — and R2 removed Google Sign-In from the iOS build entirely
     // (Guideline 4.8), so nothing native ever reaches this handler.
     setRefreshCookie(res, tokens.refresh_token, tokens.refresh_expires_in);
+
+    /**
+     * Le jeton part dans le FRAGMENT, pas dans la chaîne de requête.
+     *
+     * Un fragment n'est jamais envoyé au serveur, n'apparaît donc dans aucun
+     * journal d'accès ni dans l'en-tête `Referer` des sous-ressources chargées
+     * par la page — et Sentry, qui attache l'URL de la page à chaque événement
+     * et fil d'Ariane, n'en voit rien. Avec `?access_token=`, un jeton valide
+     * 15 minutes se retrouvait dans les trois. `AuthCallback` le lit dans
+     * `location.hash` et l'efface par `history.replaceState`.
+     */
     const params = new URLSearchParams({ access_token: tokens.access_token });
 
-    return res.redirect(`${clientUrl}/auth/callback?${params}`);
+    return res.redirect(`${clientUrl}/auth/callback#${params}`);
   } catch (err: any) {
-    logger.error({ err: err.message }, '[Google OAuth]');
-    return res.redirect(`${clientUrl}/login?error=google_failed`);
+    logger.error({ err: err.message, code: err.code }, '[Google OAuth]');
+    // Une adresse Google non vérifiée a son propre code : c'est un refus, pas
+    // une panne, et l'écran de connexion doit pouvoir le dire.
+    const reason = err.code === AuthService.GOOGLE_EMAIL_UNVERIFIED
+      ? 'google_unverified'
+      : 'google_failed';
+    return res.redirect(`${clientUrl}/login?error=${reason}`);
   }
 });
 

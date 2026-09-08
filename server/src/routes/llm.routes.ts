@@ -452,9 +452,30 @@ router.post('/', async (req: Request, res: Response) => {
         ? upstreamMessage
         : 'Le fournisseur de modèle a refusé la requête.';
 
-    return res.status(status === 401 ? 401 : 502).json({
+    /**
+     * ⚠️ **502 même quand l'amont répond 401.** Jusqu'au 2026-09-08 ce 401 était
+     * relayé tel quel, et c'était une déconnexion déguisée : côté client,
+     * `authedFetch` traite TOUT 401 comme « jeton d'accès expiré ». Une clé
+     * OpenAI invalide déclenchait donc un refresh, une rotation du refresh
+     * token et un rejeu inutile de la requête — et si ce refresh échouait au
+     * même instant, `tokenStore.clear()` **déconnectait l'utilisateur
+     * d'ArakIce parce que sa clé OpenAI était mauvaise**.
+     *
+     * La règle qui en découle, et qui vaut au-delà de cette route : un 401 rendu
+     * par cette API signifie « ta session ArakIce a expiré », et rien d'autre.
+     * L'échec d'un fournisseur amont est un 502, quel que soit son propre code.
+     *
+     * `invalid_api_key` porte l'information à la place du statut : le client
+     * s'appuie dessus pour dire « vérifie ta clé dans les Paramètres ».
+     */
+    const clientCode =
+      status === 401
+        ? 'invalid_api_key'
+        : (typeof body?.error?.code === 'string' ? body.error.code : 'provider_error');
+
+    return res.status(502).json({
       error: clientMessage,
-      code:  typeof body?.error?.code === 'string' ? body.error.code : 'provider_error',
+      code:  clientCode,
       upstreamStatus: status,
     });
   }

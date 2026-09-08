@@ -9,11 +9,35 @@
  * Unknown keys fall back to English, then to the key itself.
  */
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 export type Lang = "en" | "fr";
 const STORAGE_KEY = "iceedge_lang";
+
+/**
+ * La langue du navigateur, quand l'utilisateur n'a encore rien choisi.
+ *
+ * Jusqu'au 2026-09-08 le repli était `"en"` en dur : un iPhone configuré en
+ * français démarrait en anglais, et il fallait trouver le sélecteur pour
+ * revenir dans sa langue. Le choix explicite (localStorage) reste prioritaire —
+ * quelqu'un qui a mis l'anglais sur un téléphone français le garde.
+ *
+ * `navigator.languages` avant `navigator.language` : la liste reflète l'ordre
+ * de préférence réel, et sur iOS un appareil réglé en français avec l'anglais
+ * en second y apparaît dans le bon ordre. Tout ce qui commence par `fr`
+ * (`fr-CA`, `fr-FR`…) compte ; le reste tombe en anglais, qui est la langue
+ * complète du dictionnaire.
+ */
+function detectLang(): Lang {
+  try {
+    const list = navigator.languages?.length ? navigator.languages : [navigator.language];
+    for (const tag of list) {
+      if (typeof tag === "string" && tag.toLowerCase().startsWith("fr")) return "fr";
+    }
+  } catch { /* pas de navigator (rendu hors navigateur) */ }
+  return "en";
+}
 
 const DICT: Record<string, { en: string; fr: string }> = {
   // ── Navigation ──
@@ -34,6 +58,13 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "common.members": { en: "members",      fr: "membres" },
   "common.online":  { en: "online",       fr: "en ligne" },
   "common.retry":   { en: "Try again",    fr: "Réessayer" },
+  "chat.sendFailed": { en: "Message not sent \u2014 your text is back in the box.", fr: "Message non envoyé \u2014 ton texte est revenu dans la zone de saisie." },
+  // Les trois issues d'échec de la connexion Google. Le serveur les met dans
+  // `?error=` ; jusqu'au 2026-09-08 l'écran de connexion les ignorait purement
+  // et simplement, donc un refus Google ramenait sur un formulaire muet.
+  "login.googleDenied":     { en: "Google sign-in was cancelled.", fr: "La connexion Google a été annulée." },
+  "login.googleFailed":     { en: "Google sign-in failed. Try again, or use your e-mail and password.", fr: "La connexion Google a échoué. Réessaie, ou utilise ton e-mail et ton mot de passe." },
+  "login.googleUnverified": { en: "This Google account\u2019s e-mail address is not verified. Verify it with Google, or sign in with your e-mail and password.", fr: "L\u2019adresse de ce compte Google n\u2019est pas vérifiée. Vérifie-la chez Google, ou connecte-toi avec ton e-mail et ton mot de passe." },
   // Les trois clés de l'état d'erreur partagé (`ErrorState`). Le titre reste
   // vague à dessein : l'utilisateur n'a rien à faire d'un code HTTP, et le
   // détail technique part déjà dans la console.
@@ -865,16 +896,29 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      return stored === "fr" || stored === "en" ? stored : "en";
-    } catch {
-      return "en";
-    }
+      if (stored === "fr" || stored === "en") return stored;
+    } catch { /* navigation privée : on tombe sur la détection */ }
+    return detectLang();
   });
 
   const setLang = (l: Lang) => {
     setLangState(l);
     try { localStorage.setItem(STORAGE_KEY, l); } catch { /* ignore */ }
   };
+
+  /**
+   * `<html lang>` suit la langue affichée.
+   *
+   * `index.html` est servi avec `lang="en"` en dur et ne bougeait jamais : les
+   * lecteurs d'écran lisaient donc du français avec une voix anglaise, et la
+   * correction orthographique du navigateur se trompait de dictionnaire. C'est
+   * la seule écriture hors React de ce module, et elle est volontairement dans
+   * un effet plutôt qu'au rendu — muter le document pendant le rendu est un
+   * effet de bord que React se réserve le droit de rejouer.
+   */
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
 
   return (
     <I18nContext.Provider value={{ lang, setLang, t: (k, p) => translate(k, lang, p) }}>

@@ -3,17 +3,24 @@
 **Date :** 2026-09-04 · **Périmètre :** `client/` (52 k lignes TS/TSX), `server/` (TS/Express), `.github/`, config de build
 **Méthode :** lecture intégrale des routes, services, contextes et middlewares ; `tsc --noEmit` client + serveur (0 erreur) ; inspection de `dist/`, `public/`, CI, Dockerfile, CSP.
 
-## État — 2026-09-06
+## État — 2026-09-08
 
 **12 correctifs appliqués** (11 committés, le 12ᵉ en attente de relecture), dont
 3 des 4 findings CRITICAL. Sur les 11 blocants du § 10, **4 sont faits** ; les 7
 autres sont tous côté iOS / App Store. La migration `034` est appliquée en
 production.
 
-**Mise à jour 2026-09-06.** Le CRITICAL qui restait (la barre de navigation sous
+**Mise à jour 2026-09-08.** Le CRITICAL qui restait (la barre de navigation sous
 l'indicateur d'accueil) est corrigé : **plus aucun CRITICAL ouvert**. Quatre
-HIGH sont tombés depuis — délais de requête et bouton « Réessayer », `/share/:id`
-supprimée, Pro retiré du build iOS, plancher de 11 px sur le texte.
+HIGH sont tombés le 2026-09-06 — délais de requête et bouton « Réessayer »,
+`/share/:id` supprimée, Pro retiré du build iOS, plancher de 11 px sur le texte.
+
+Le 2026-09-08, **huit MEDIUM de plus** : `autoComplete` et accessibilité des
+formulaires, `<html lang>` et détection de langue, `email_verified` Google,
+jeton d'accès hors de l'URL + Sentry masqué, 401 LLM qui déconnectait,
+bulle de chat optimiste sur échec, cotes fictives retirées, `typecheck` client
+dans la CI, et le `.fuse_hidden…` sorti de l'arborescence.
+**Le groupe 🟠 « Importants » du § 10 est désormais vide.**
 
 🔴 **Le seul blocant restant n'est pas du code : l'adresse de support rebondit.**
 C'est le contact Guideline 1.2 et l'adresse par laquelle Apple joint le
@@ -84,12 +91,16 @@ rejouée contre un Postgres 16 réel.
   - `UserProfile` perd `openaiApiKey` et gagne `hasOpenaiKey` ; le type de `updateProfile` le garde en écriture (`& { openaiApiKey?: string | null }`), ce qui rend l'asymétrie visible dans les types plutôt que dans un commentaire.
   - 7 tests de régression (`profile.service.test.ts`), dont un qui vérifie **la requête SQL elle-même** : les assertions de forme passeraient encore si quelqu'un remettait `up.openai_api_key AS "openaiApiKey"` dans le SELECT en oubliant de le recopier dans l'objet rendu — le chiffré quitterait alors de nouveau la base, prêt à ressortir à la première ligne de débogage.
 
-### 🟡 [MEDIUM] Google : `email_verified` n'est pas vérifié avant le rattachement de compte
-**Fichier :** `server/src/services/auth.service.ts` (`loginWithGoogle`)
+### ✅ CORRIGÉ · [MEDIUM] Google : `email_verified` n'est pas vérifié avant le rattachement de compte
+**Fichiers :** `server/src/services/auth.service.ts`, `routes/auth.routes.ts`, `client/.../LoginPage.tsx`
 
-- **Problème :** l'interface `GoogleUserInfo` ne lit pas `email_verified`, et `loginWithGoogle` rattache un compte Google à un compte mot-de-passe existant **sur la seule égalité d'adresse e-mail**.
-- **Impact :** si Google renvoie une adresse non vérifiée (cas résiduel, notamment sur certains comptes Workspace), le rattachement donne accès à un compte existant.
-- **Solution recommandée :** ajouter `email_verified?: boolean` à `GoogleUserInfo` et refuser (`403`) quand il vaut `false`.
+- **Problème :** l'interface `GoogleUserInfo` ne lisait pas `email_verified`, et `loginWithGoogle` rattachait un compte Google à un compte mot-de-passe existant **sur la seule égalité d'adresse e-mail**.
+- **Impact :** si Google renvoie une adresse non vérifiée, le rattachement donne accès à un compte existant.
+- **Solution appliquée — refus PAR DÉFAUT, pas seulement sur `false`**, contrairement à ce que je recommandais : le test est `email_verified !== true`. Un `=== false` ne casserait aucun parcours (l'endpoint OIDC `oauth2/v3/userinfo` renvoie toujours le champ) et rouvrirait le trou en silence le jour où il cesserait de le renvoyer. Le sens de la panne est choisi : une connexion Google cassée se voit immédiatement et l'e-mail/mot de passe reste disponible, alors qu'une prise de contrôle de compte ne se voit jamais.
+- **Le garde s'exécute AVANT `pool.connect()`** — le refus précède la transaction, donc aucun rattachement partiel n'est possible.
+- **Ce qui rend ce choix tenable en exploitation :** un code d'erreur distinct (`google_unverified`) qui remonte jusqu'à l'écran de connexion. Si le garde se met un jour à tout refuser, la cause est écrite dans l'URL au lieu d'être noyée dans un `google_failed` générique.
+- **Effet de bord corrigé au passage :** `google_denied` et `google_failed` existaient depuis toujours côté serveur et **rien ne les lisait** — un refus Google ramenait sur un formulaire muet. Les trois ont maintenant une phrase, et le paramètre est retiré de l'URL après lecture.
+- **4 tests** (`googleLogin.test.ts`), dont le seul qui compte vraiment : **une adresse vérifiée doit atteindre la base**. Sans lui, un garde qui refuserait tout le monde passerait les trois autres. Suite serveur : **330 verts, 28 fichiers**.
 
 ### ✅ CORRIGÉ · [MEDIUM] `POST /api/push/unsubscribe` — IDOR
 **Fichiers :** `server/src/routes/push.routes.ts`, `server/src/services/push.service.ts`
@@ -120,12 +131,15 @@ rejouée contre un Postgres 16 réel.
 - **Impact :** tout compte Pro (y compris via essai gratuit ou code promo) dispose d'un proxy LLM généraliste à tes frais, dans la limite du quota mensuel. Le quota borne la dépense, pas l'usage détourné.
 - **Solution recommandée :** construire le `systemPrompt` côté serveur à partir d'un `taskType` fermé (`'explain_bet' | 'summarize_game' | …`) envoyé par le client.
 
-### 🟡 [MEDIUM] Jeton d'accès dans l'URL + Sentry sans `beforeSend`
-**Fichiers :** `server/src/routes/auth.routes.ts` (callback Google), `client/src/main.tsx`
+### ✅ CORRIGÉ · [MEDIUM] Jeton d'accès dans l'URL + Sentry sans `beforeSend`
+**Fichiers :** `server/src/routes/auth.routes.ts`, `client/src/main.tsx`, `client/.../AuthCallback.tsx`
 
-- **Problème :** le serveur redirige vers `/auth/callback?access_token=eyJ…`. Côté client, `Sentry.init` n'a **pas** de `beforeSend`, et Sentry attache l'URL de la page à chaque événement et fil d'Ariane.
-- **Impact :** un jeton d'accès valide 15 min peut se retrouver dans Sentry, dans l'historique du navigateur, et dans l'en-tête `Referer` de toute sous-ressource chargée par cette page.
-- **Solution recommandée :** passer le jeton dans le **fragment** (`#access_token=`, jamais envoyé au serveur ni loggé) ; appeler `history.replaceState` dès le premier effet ; ajouter un `beforeSend` qui remplace `access_token=…` par `access_token=[redacted]` dans `event.request.url` et les breadcrumbs.
+- **Problème :** le serveur redirigeait vers `/auth/callback?access_token=eyJ…`, et `Sentry.init` n'avait **pas** de `beforeSend` alors que Sentry attache l'URL de la page à chaque événement **et** à chaque fil d'Ariane de navigation.
+- **Solution appliquée, trois couches, dans cet ordre :**
+  1. **Le fragment** (`#access_token=`) : jamais envoyé au serveur, donc absent des journaux d'accès, de l'en-tête `Referer` des sous-ressources, et de l'URL que Sentry attache.
+  2. **`history.replaceState` en tout premier** dans l'effet d'`AuthCallback`, avant même le décodage : à partir de là, ni l'URL affichée ni l'historique ne portent de jeton.
+  3. **`beforeSend` ET `beforeBreadcrumb`** qui masquent `access_token=` et `refresh_token=`. Les deux, pas l'un : masquer l'URL de l'événement en laissant les fils d'Ariane ne sert à rien. Regex sur la chaîne plutôt que parcours d'`URL` — la valeur doit disparaître même d'une URL malformée, et un `URL()` qui lève ferait perdre l'événement entier.
+- ⚠️ **Le repli sur `?access_token=` est conservé dans `AuthCallback`** : client et serveur se déploient séparément, donc pendant la fenêtre de déploiement un client neuf peut recevoir une redirection de l'ancien serveur. **À retirer** une fois le serveur déployé et stabilisé.
 
 ### 🟡 PARTIELLEMENT CORRIGÉ · [MEDIUM] Validation zod partielle
 `validateBody` n'était posé que sur auth, slips, avatar et profil.
@@ -246,10 +260,13 @@ Trois défauts qui se cumulent, tous visibles dès le premier verrouillage d'éc
 - ⚠️ **Connu :** le délai couvre l'attente des **en-têtes**, pas la lecture du corps — le minuteur est désarmé dès que `fetch` rend la main. Couvrir le corps demanderait de reconstruire la `Response` autour d'un flux surveillé, ce qui perd `url`/`redirected` et lève sur un 204. Les corps servis ici sont du JSON court, lu immédiatement.
 - ⚠️ **Non traité :** le socket du chat (socket.io a ses propres délais) et le « Réessayer » des écrans secondaires (graphiques, feuilles de prédiction, modération). Rien n'est déployé ni essayé sur un vrai téléphone.
 
-### 🟡 [MEDIUM] `autoComplete` absent des champs de connexion
+### ✅ CORRIGÉ · [MEDIUM] `autoComplete` absent des champs de connexion
 **Fichier :** `client/src/app/pages/LoginPage.tsx`
 
-Seuls les champs de code OTP ont `autoComplete="one-time-code"` (bien vu). L'e-mail, le nom d'utilisateur et les mots de passe n'ont rien → **le Trousseau iOS ne propose ni de remplir ni d'enregistrer**. Ajouter `autoComplete="email"` / `"username"` / `"current-password"` / `"new-password"`, plus `autoCapitalize="none"` et `autoCorrect="off"` sur e-mail et nom d'utilisateur.
+Seuls les champs de code OTP avaient `autoComplete="one-time-code"`. L'e-mail, le nom d'utilisateur et les mots de passe n'avaient rien → **le Trousseau iOS ne proposait ni de remplir ni d'enregistrer**, donc créer un compte dans l'app laissait l'utilisateur sans mot de passe enregistré nulle part.
+
+- Les 9 champs sont annotés, plus `autoCapitalize="none"` / `autoCorrect="off"` / `spellCheck={false}` sur e-mail et pseudo — iOS met une majuscule au premier caractère d'un e-mail et « corrige » un pseudo.
+- **Le mot de passe est conditionnel** : `current-password` en connexion, `new-password` en inscription. C'est ce couple qui décide si iOS propose le mot de passe existant ou en propose un fort à enregistrer ; une valeur fixe se tromperait dans un des deux cas.
 
 ### 🟡 [MEDIUM] Boîtes de dialogue système
 4 `confirm()` + 1 `alert()` (`RoomChat.tsx:143,191,202`, `MembersModal.tsx:33`, `ProfilePage.tsx:99`) — alors que `ConfirmDialog` existe et est utilisé pour le blocage. En WKWebView ces dialogues affichent un titre technique et bloquent le fil. Incohérent, et immédiatement repérable en revue.
@@ -353,22 +370,33 @@ sur un vrai jour de match ».
 - **Problème :** la migration `034` répare le chemin de lecture et journalise les échecs, mais **une table vide rend exactement les mêmes probabilités qu'un fichier introuvable** — facteur neutre, sans un mot. Le mode de panne d'origine (quatre entrées mortes des mois durant, sans symptôme) ne demandait qu'à revenir, cette fois par simple absence de saisie.
 - **Solution appliquée :** `coverage()` compte les entrées par jeu de données. Le job de nettoyage quotidien en journalise une ligne — **les quatre jeux énumérés même à zéro**, parce que « injuries=0 » est l'information et qu'une ligne absente n'en est pas une. Et `GET /api/manual/coverage?date=` (admin) répond à la question utile : sur les matchs de **ce soir**, combien sont renseignés — `{ saisi, attendu, actif }` par jeu, `matchs` pris du calendrier NHL du jour. Un jour sans match rend 0/0, pas une erreur.
 
-### 🟡 [MEDIUM] Un message de chat qui échoue reste affiché comme envoyé
+### ✅ CORRIGÉ · [MEDIUM] Un message de chat qui échoue reste affiché comme envoyé
 **Fichier :** `RoomChat.tsx` (`sendMessage`)
 
-`setInput("")` puis `appendOptimistic(...)` ; en cas d'échec, le `catch` ne fait que `setErrorMsg`. La bulle optimiste **reste**, donc l'utilisateur croit son message envoyé, et **son texte est perdu** (l'input a été vidé). `removeMessage(tempId)` existe déjà et n'est pas appelé ici. Correctif : retirer la bulle, restaurer `setInput(text)`, et proposer un renvoi.
+Le `catch` ne faisait que `setErrorMsg` : la bulle optimiste **restait** à l'écran comme un message envoyé, et **le texte était perdu** (l'input avait été vidé au départ). `removeMessage(tempId)` existait déjà et n'était pas appelé ici.
+
+- L'échec **défait** l'optimisme : `removeMessage(tempId)`, `setInput(text)`, et — ce que l'audit ne mentionnait pas — **restauration de `tag` et `replyTo`**, capturés avant que les champs ne soient vidés. Perdre la cible d'une réponse est le même bug.
+- **Pas de file de renvoi**, contrairement au « proposer un renvoi » recommandé : le texte revient dans la zone de saisie avec sa réponse et son étiquette, donc renvoyer c'est appuyer sur Envoyer. Une file demanderait un état de persistance qui n'a pas sa place la veille d'un gel.
 
 ### 🟡 [MEDIUM] Course entre l'historique HTTP et le socket
 `initMessages(msgs)` fait `setMessages(msgs)` — un **remplacement**. Si un message arrive par le socket avant que le `GET /messages` ne réponde, il est écrasé. Fusionner par id plutôt que remplacer.
 
-### 🟡 [MEDIUM] Le 401 du LLM est confondu avec une expiration de session
-`llmService.askLLMDetailed` passe par `authedFetch`. Quand la clé OpenAI de l'utilisateur est invalide, le serveur relaie un **401**, et `authedFetch` interprète tout 401 comme « jeton expiré » : il déclenche un refresh, fait tourner le refresh token, puis rejoue la requête (deuxième appel inutile). Si ce refresh échoue au même moment, `tokenStore.clear()` → **l'utilisateur est déconnecté d'ArakIce parce que sa clé OpenAI était mauvaise**. Le serveur devrait répondre `502` avec `code: 'invalid_api_key'`.
+### ✅ CORRIGÉ · [MEDIUM] Le 401 du LLM est confondu avec une expiration de session
+**Fichiers :** `server/src/routes/llm.routes.ts`, `client/src/app/services/llmService.ts`
+
+Le serveur relayait le **401** du fournisseur. Côté client, `authedFetch` interprète tout 401 comme « jeton expiré » : refresh, rotation du refresh token, rejeu inutile — et si ce refresh échouait au même instant, `tokenStore.clear()` **déconnectait l'utilisateur d'ArakIce parce que sa clé OpenAI était mauvaise**.
+
+- **Le serveur rend désormais 502 quel que soit le code amont**, avec `code: 'invalid_api_key'` quand l'amont a répondu 401.
+- **La règle qui en découle, et qui vaut au-delà de cette route :** un 401 rendu par cette API signifie « ta session ArakIce a expiré », et rien d'autre. L'échec d'un fournisseur amont est un 502.
+- Côté client, la clé invalide est reconnue par son **code**, plus par un statut.
 
 ### 🟡 [MEDIUM] L'auto-scroll du chat ramène toujours en bas
 `useEffect(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), [visibleMessages.length])` : si l'utilisateur remonte lire l'historique, chaque nouveau message le **renvoie en bas**. De plus `scrollIntoView` fait défiler **tous** les conteneurs ancêtres sur iOS. Ne défiler que si l'utilisateur était déjà près du bas.
 
-### 🟡 [MEDIUM] Les erreurs se transforment en états vides
-`LeaguePage.tsx:27-28` : `.catch(() => [])` sur le classement **et** sur les salons. Une panne réseau s'affiche donc comme « il n'y a rien ici ». L'utilisateur ne peut pas distinguer « vide » de « cassé », et il n'a rien à réessayer. Même motif dans `NHLPredictionsPage` (`catch { /* use defaults */ }`).
+### 🟡 PARTIELLEMENT CORRIGÉ · [MEDIUM] Les erreurs se transforment en états vides
+**✅ Trois écrans corrigés le 2026-09-06** avec le lot « Réessayer » : l'accueil (un réseau coupé s'affichait en « aucun match ce soir »), le classement de `LeaguePage` (le `.catch(() => [])` du classement ; celui des **salons** garde son repli à dessein — l'onglet Chat a sa propre gestion et le badge de non-lus ne doit pas bloquer le classement), et « Mes coupons » (qui affichait la ligne rouge **et** l'état vide l'un sous l'autre).
+
+**⬜ Reste `NHLPredictionsPage`** (`catch { /* use defaults */ }`) — non traité.
 
 ### 🟡 [MEDIUM] Nom d'utilisateur vide après rechargement
 `AuthContext` réhydrate avec `username: ''` et `avatar_url` absent (le jeton ne les contient pas), et rien ne recharge le profil complet au démarrage. Conséquence visible : **l'avatar disparaît de la barre de navigation après chaque rechargement**, remplacé par l'icône générique. Charger le profil dans un effet quand `user` existe.
@@ -387,7 +415,10 @@ Le serveur refuse au-delà de 1000 caractères (`MAX_TEXT_LENGTH`) ; le client n
 
 ## 4. Architecture / code
 
-### 🟡 [MEDIUM] Aucun test ni typecheck côté client dans la CI
+### 🟡 PARTIELLEMENT CORRIGÉ · [MEDIUM] Aucun test ni typecheck côté client dans la CI
+**✅ Le typecheck y est (2026-09-08)** — `npm run typecheck` placé AVANT `npm run build` dans le job client, pour échouer vite. `vite build` passe par esbuild, qui jette les annotations de type sans les contrôler : le build ne prouvait donc rien, et `typecheck`, seul garde-fou automatique du client, ne tournait que quand on y pensait.
+**⬜ Il n'y a toujours aucun test client** — `client/` n'a aucun runner, décision reportée après le gel.
+
 `.github/workflows/ci.yml` : le job `client` fait `npm ci`, `npm run build`, `npm run check:env:dist`. Il **ne lance pas `npm run typecheck`** (qui existe pourtant), et il n'existe **aucun test client** — 0 fichier `.test.tsx`. Le serveur, lui, a 14 fichiers de test et un vrai job. Ajouter `npm run typecheck` au job client est gratuit.
 
 ### 🟡 [MEDIUM] Le serveur démarre même sans base de données
@@ -398,7 +429,11 @@ Le serveur refuse au-delà de 1000 caractères (`MAX_TEXT_LENGTH`) ; le client n
 - `server/dist/` contient encore `app.controller.js`, `app.module.js`, `app.service.js` — des restes d'un squelette NestJS, exclus par `tsconfig.json` mais jamais nettoyés du `dist/` local. (Le Dockerfile repart de zéro, donc ils ne partent pas en prod.)
 - `client/public/jerseys/` est un dossier **vide**.
 
-### 🟡 [MEDIUM] Un ancien `chat.service.ts` est versionné sous un nom d'artefact FUSE
+### ✅ CORRIGÉ · [MEDIUM] Un ancien `chat.service.ts` est versionné sous un nom d'artefact FUSE
+**Sorti de l'arborescence le 2026-09-08** (déplacé dans `_to_delete/` — le bridge ne peut pas effacer ; `git` voit la suppression).
+
+Le texte d'origine :
+
 `server/src/services/.fuse_hidden0000000e00000001` — 450 lignes, une **copie datée du 1er juillet de `chat.service.ts`**, committée (commit `22e61fe`). Elle part dans le contexte de build Docker (`COPY src ./src`). À supprimer.
 
 ### 🟢 [LOW] Prix codé en dur
@@ -443,11 +478,17 @@ Le décompte de 351 incluait les écrans internes. Hors ceux-là — `DevMLDashb
 - ⚠️ **Non touché :** les graduations d'axe des graphiques (`fontSize: 10` passé à Recharts, 4 occurrences dans `ChartVisuals.tsx`). Ce n'est pas du texte d'interface, l'audit ne les comptait pas, et les monter chevaucherait sur un axe dense.
 - ⚠️ **À vérifier à l'œil** : la barre de navigation, les badges de rôle et les libellés à fort interlettrage (`.rink-signboard-kicker` à 0.22em, `.jersey-choice`) sont ceux qui peuvent déborder. Rien n'est déployé.
 
-### 🟡 [MEDIUM] Formulaires : aucun `<label>`, erreurs non annoncées
-`LoginPage` n'utilise que des `placeholder` — qui disparaissent dès qu'on tape et ne sont pas lus comme des étiquettes. Les blocs `{error}` et `{notice}` n'ont ni `role="alert"` ni `aria-live`, donc un lecteur d'écran ne les annonce jamais.
+### ✅ CORRIGÉ · [MEDIUM] Formulaires : aucun `<label>`, erreurs non annoncées
+`LoginPage` n'utilisait que des `placeholder` — qui disparaissent dès la première frappe et ne sont pas lus comme des étiquettes. Les blocs `{error}` et `{notice}` n'avaient ni `role` ni `aria-live`.
 
-### 🟡 [MEDIUM] La langue n'est jamais reflétée dans le document
-`LanguageProvider` bascule le dictionnaire mais `<html lang="en">` reste figé, et il n'y a **aucune détection de `navigator.language`** — un iPhone configuré en français démarre en anglais. Ajouter `document.documentElement.lang = lang` et une détection initiale.
+- **`aria-label` sur chaque champ, pas des `<label>` visibles.** Poser de vraies étiquettes change le dessin de l'écran, ce qui n'est pas une décision à prendre la veille d'un gel ; l'`aria-label` règle la partie lecteur d'écran sans toucher au rendu. À reconsidérer après le gel si la refonte est souhaitée.
+- **4 blocs d'erreur en `role="alert"`, 3 blocs de confirmation en `role="status"` + `aria-live="polite"`** — la distinction compte : une confirmation ne doit pas interrompre la lecture en cours, une erreur si.
+
+### ✅ CORRIGÉ · [MEDIUM] La langue n'est jamais reflétée dans le document
+**Fichier :** `client/src/app/i18n/index.tsx`
+
+- **`document.documentElement.lang = lang`** dans un effet — volontairement pas au rendu : muter le document pendant le rendu est un effet de bord que React se réserve le droit de rejouer. Sans ça, un lecteur d'écran lisait du français avec une voix anglaise et le correcteur du navigateur se trompait de dictionnaire.
+- **Détection initiale** via `navigator.languages` (l'ordre de préférence réel) avant `navigator.language`, tout ce qui commence par `fr` comptant. **Le choix explicite reste prioritaire** : quelqu'un qui a mis l'anglais sur un téléphone français le garde.
 
 ### 🟡 [MEDIUM] Le chat public est figé pour les visiteurs non connectés
 Le middleware socket exige un JWT (`if (!token) return next(new Error(...))`), alors que l'historique des salons publics est lisible sans compte via HTTP. Un invité voit donc les messages **mais jamais les nouveaux**, avec « 0 en ligne » et un point gris — l'app a l'air cassée. Soit autoriser le socket en lecture seule pour les invités, soit afficher explicitement « Connecte-toi pour suivre en direct ».
@@ -494,7 +535,11 @@ Un utilisateur iOS voit donc la liste complète des avantages Pro, sans aucun mo
 - **Ce qui reste :** les sections Pro restent **verrouillées** (`ProLock` garde son flou et son titre) mais **sans appel à l'action** — sur un build sans `/pro`, le bouton pointerait vers une route inexistante, soit un cul-de-sac pire que celui qu'on corrige. Et il ne fallait **pas** le remplacer par « disponible sur le web » : renvoyer vers un achat hors App Store est précisément ce que 3.1.1 interdit. La carte Abonnement reste visible pour un **abonné** (souscrit sur le web, même compte) afin qu'il lise son échéance et puisse résilier — résilier n'est pas un achat.
 - ⚠️ **Tension assumée :** un testeur d'Apple verra du contenu flouté sans aucun moyen d'y accéder. C'est permis (3.1.1 interdit de pointer vers un achat externe, pas de verrouiller du contenu) mais ça peut se lire comme incomplet. L'alternative — retirer les sections Pro du build iOS — change le produit, pas seulement l'écran. À trancher avant de **soumettre**, pas avant de taguer.
 
-### 🟡 [MEDIUM] Des cotes fictives sont servies publiquement
+### ✅ CORRIGÉ · [MEDIUM] Des cotes fictives sont servies publiquement
+**Supprimé le 2026-09-08.** `GET /api/odds/live` et `GET /api/odds/game/:gameId` servaient `MOCK_ODDS` — deux cotes écrites en dur sur un match « g1 » — à n'importe qui, sans authentification et sans le dire. Aucun appelant : le client passe par `/bet365/:sportKey`, qui relaie The Odds API. `services/odds.service.ts` et `data/mock.ts` sont partis avec elles, faute d'appelant. Sur une app de paris, une cote inventée qui a l'air vraie est le pire mode d'échec possible — même arbitrage que `PredictionUnavailableError` côté prédictions.
+
+Le texte d'origine :
+
 `GET /api/odds/live` et `GET /api/odds/game/:gameId` renvoient `MOCK_ODDS` — deux entrées codées en dur (`BOS 1.85`, `NYR 2.05`) depuis `server/src/data/mock.ts`. Aucun écran client ne les appelle (le client passe par `/odds/bet365/...`), donc ce sont **des endpoints publics morts qui servent des cotes inventées** sous ton nom de domaine. À supprimer.
 
 ### 🟡 [MEDIUM] Journalisation
@@ -592,7 +637,9 @@ l'en-tête).
 
 ### 🟠 Importants, peuvent attendre un peu
 
-~~Coupon non persisté~~ ✅ · ~~aucun timeout de requête ni bouton « Réessayer »~~ ✅ · `autoComplete` pour le Trousseau iOS · message de chat échoué qui reste affiché · `email_verified` Google · jeton d'accès dans l'URL + Sentry sans `beforeSend` · ~~erreurs transformées en états vides (Ligue)~~ ✅ (accueil, classement et « Mes coupons ») · 401 LLM confondu avec 401 de session · `/api/odds/live` qui sert des cotes fictives · `typecheck` client absent de la CI.
+~~Coupon non persisté~~ ✅ · ~~aucun timeout de requête ni bouton « Réessayer »~~ ✅ · ~~`autoComplete` pour le Trousseau iOS~~ ✅ · ~~message de chat échoué qui reste affiché~~ ✅ · ~~`email_verified` Google~~ ✅ · ~~jeton d'accès dans l'URL + Sentry sans `beforeSend`~~ ✅ · ~~erreurs transformées en états vides (Ligue)~~ ✅ (accueil, classement et « Mes coupons ») · ~~401 LLM confondu avec 401 de session~~ ✅ · ~~`/api/odds/live` qui sert des cotes fictives~~ ✅ · ~~`typecheck` client absent de la CI~~ ✅.
+
+**Le groupe 🟠 est vide.** Ce qui reste est 🟡 ou 🟢, plus le `tokenStore` natif de phase 3 — et l'adresse de support, qui n'est pas du code.
 
 ### 🟡 Améliorations recommandées
 
@@ -622,8 +669,8 @@ Le niveau de commentaire explicatif — pas « ce que fait le code » mais « po
 - [ ] Vérifier visuellement toutes les pages sur iPhone à encoche maintenant que `viewport-fit=cover` est actif
 - [x] ~~`input, textarea, select { font-size: 16px }` global~~ → posé dans `theme.css`, hors `@layer`, sous `@media (pointer: coarse)`. **Reste :** vérifier la rangée du chat sur téléphone
 - [x] ~~Élargir à 44×44 pt : envoi du chat, retour, `⋯`, onglets de la nav~~ → 43 boutons, `.tap-44` ou vrais `min-w`/`min-h`. **Les onglets de la nav étaient déjà à 52×47**, mesurés — rien à y faire. **Reste :** l'essayer au doigt
-- [ ] Supprimer la route et la page `/share/:id`
-- [ ] Trancher Pro sur iOS : IAP livré, **ou** page Pro entièrement masquée (bouton, prix **et** code promo)
+- [x] ~~Supprimer la route et la page `/share/:id`~~ → faite le 2026-09-06, liaison `lazy()` comprise
+- [x] ~~Trancher Pro sur iOS~~ → tranché le 2026-09-06 : build v1 sans Pro sur iOS (`features.proUpgrade`), bouton, prix **et** code promo retirés
 - [x] ~~Socket : resync de l'historique sur `connect`, écouteur `connect_error` avec refresh, affichage de `room_error`~~ → `resyncKey` + fusion, un refresh par cycle via `refreshSession()`, bandeau. **Reste :** l'essayer sur un vrai téléphone (verrouiller l'écran deux minutes)
 - [x] ~~Copier `src/data/*.json` dans `dist/`~~ → migré en base (034). **Reste :** appliquer la migration en prod avant de déployer le serveur
 - [ ] Vérifier `CORS_ORIGIN` en production et tester une preview Vercel après le déploiement du correctif CORS
@@ -638,15 +685,16 @@ Le niveau de commentaire explicatif — pas « ce que fait le code » mais « po
 - [x] ~~Supprimer `/share/:id`~~ → page dans `_to_delete/`, route **et** liaison `lazy()` retirées, 4 clés i18n supprimées. Aucun `SharePage-*.js` dans les deux builds
 - [x] ~~Décision Pro sur iOS~~ → `features.proUpgrade` ; `/pro` et `/pro/success` absentes du build iOS (chunks vérifiés), champ promo et prix avec. ⚠️ contenu Pro verrouillé sans CTA — à relire avant de soumettre
 - [x] ~~Plancher de 11 px sur le texte~~ → 283 classes Tailwind + 6 règles CSS ; les 3 écrans internes non touchés (hors build iOS). Prouvé en grepant `dist/assets/*.css`. ⚠️ à vérifier à l'œil (nav, badges, libellés à fort interlettrage)
-- [ ] `autoComplete` sur tous les champs de `LoginPage`
-- [ ] Chat : retirer la bulle optimiste en cas d'échec et restaurer le texte
-- [ ] Vérifier `email_verified` dans `loginWithGoogle`
+- [x] ~~`autoComplete` sur tous les champs de `LoginPage`~~ → 9 champs, mot de passe conditionnel `current-`/`new-`, + `aria-label`, `role="alert"`/`role="status"`, `<html lang>` et détection de `navigator.language`
+- [x] ~~Chat : retirer la bulle optimiste en cas d'échec et restaurer le texte~~ → + `tag` et `replyTo` restaurés ; pas de file de renvoi (le texte revient, renvoyer = ré-appuyer)
+- [x] ~~Vérifier `email_verified` dans `loginWithGoogle`~~ → refus **par défaut** (`!== true`), garde avant `pool.connect()`, code `google_unverified` visible à l'écran, 4 tests
 - [x] ~~Schémas zod sur `/api/predict/*`~~ → six schémas + `predictLimiter` (60/min) sur `/ml` et `/factors`
-- [ ] `beforeSend` Sentry qui masque `access_token` ; jeton dans le fragment
+- [x] ~~`beforeSend` Sentry qui masque `access_token` ; jeton dans le fragment~~ → fragment + `history.replaceState` + `beforeSend` **et** `beforeBreadcrumb`. ⚠️ repli `?access_token=` gardé pour la fenêtre de déploiement, à retirer ensuite
 - [x] ~~`LeaguePage` : distinguer « vide » de « en erreur »~~ → fait avec le lot « Réessayer » (accueil et « Mes coupons » aussi)
-- [ ] Supprimer `/api/odds/live` et `/api/odds/game/:gameId` (cotes fictives)
-- [ ] Ajouter `npm run typecheck` au job client de la CI
-- [ ] `git rm server/src/services/.fuse_hidden0000000e00000001`
+- [x] ~~Supprimer `/api/odds/live` et `/api/odds/game/:gameId` (cotes fictives)~~ → routes, `odds.service.ts` et `data/mock.ts` retirés
+- [x] ~~Ajouter `npm run typecheck` au job client de la CI~~ → avant `npm run build`, pour échouer vite
+- [x] ~~`git rm server/src/services/.fuse_hidden0000000e00000001`~~ → déplacé dans `_to_delete/`
+- [ ] 401 LLM : ~~confondu avec un 401 de session~~ ✅ corrigé — le serveur rend 502 + `code: invalid_api_key`
 
 **Ordre de déploiement de ce qui est déjà fait**
 1. `npm run db:migrate:all` avec le `DATABASE_URL` de **production** (migration 034).

@@ -6,9 +6,16 @@ import { decodeJwtPayload } from "../services/jwt";
 /**
  * AuthCallback
  * Landed here after server redirects from Google OAuth:
- *   /auth/callback?access_token=...
+ *   /auth/callback#access_token=...
  * (The refresh token was set as an httpOnly cookie by the server.)
  * Reads the access token, calls setSession, then sends user to /profile.
+ *
+ * ── Pourquoi le FRAGMENT ────────────────────────────────────────────────────
+ * Un fragment n'est jamais envoyé au serveur : il n'entre ni dans les journaux
+ * d'accès, ni dans l'en-tête `Referer` des sous-ressources de cette page, ni
+ * dans l'URL que Sentry attache à chaque événement. Avec l'ancien
+ * `?access_token=`, un jeton valide 15 minutes se retrouvait dans les trois.
+ * Il reste l'historique du navigateur, d'où le `history.replaceState` ci-dessous.
  */
 export function AuthCallback() {
   const navigate = useNavigate();
@@ -19,8 +26,25 @@ export function AuthCallback() {
     if (ran.current) return;
     ran.current = true;
 
-    const params = new URLSearchParams(window.location.search);
-    const access_token = params.get("access_token");
+    // Le fragment d'abord, la chaîne de requête ensuite.
+    //
+    // ⚠️ Ce repli n'est PAS de la politesse : client et serveur se déploient
+    // séparément, donc pendant la fenêtre de déploiement un client neuf peut
+    // recevoir une redirection de l'ANCIEN serveur, qui envoie encore
+    // `?access_token=`. Sans le repli, la connexion Google casserait le temps
+    // du déploiement. À retirer une fois le serveur déployé et stabilisé.
+    const hash   = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const search = new URLSearchParams(window.location.search);
+    const access_token = hash.get("access_token") ?? search.get("access_token");
+
+    // Effacer AVANT tout le reste : à partir d'ici l'URL affichée, celle que
+    // l'historique retient et celle que lira une capture d'erreur ne portent
+    // plus de jeton. `replaceState` ne crée pas d'entrée d'historique.
+    if (access_token) {
+      try {
+        window.history.replaceState(null, "", window.location.pathname);
+      } catch { /* contexte sans history : le beforeSend de Sentry reste */ }
+    }
 
     if (!access_token) {
       navigate("/login", { replace: true });
