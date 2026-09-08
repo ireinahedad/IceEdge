@@ -15,6 +15,7 @@ import { useI18n } from "../../i18n";
 import { openBet } from "../../services/bookmakers";
 import { features } from "../../platform";
 import { useBookmaker } from "../../context/BookmakerContext";
+import { useOddsFormat } from "../../context/OddsFormatContext";
 import { DisplayGame, calcEdge } from "./landingTypes";
 
 
@@ -55,6 +56,10 @@ export function SportSelector() {
 
 function OddsPill({ decimal, onBet }: { decimal: number; onBet: () => void }) {
   const { bookmaker } = useBookmaker();
+  // Vrai prix de bookmaker (décimal), pas une probabilité du modèle : converti
+  // par `odds()` et non par `prob()` — la première ne borne pas la valeur, parce
+  // qu'un prix affiché par le livre n'est pas une estimation à nous.
+  const { odds } = useOddsFormat();
 
   // APPLE_PLAN §4 — Guideline 5.3. The price is information the prediction
   // pages lean on, so it stays; what goes is the tap that opens a sportsbook
@@ -62,7 +67,7 @@ function OddsPill({ decimal, onBet }: { decimal: number; onBet: () => void }) {
   if (!features.bookmakerLinks) {
     return (
       <span className="flex items-center gap-1 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5">
-        <span className="text-[11px] font-bold text-green-400">{decimal.toFixed(2)}</span>
+        <span className="text-[11px] font-bold text-green-400 tabular-nums">{odds(decimal)}</span>
       </span>
     );
   }
@@ -73,7 +78,7 @@ function OddsPill({ decimal, onBet }: { decimal: number; onBet: () => void }) {
       className="flex items-center gap-1 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5 active:bg-green-500/20 transition-colors"
     >
       <span className="text-[11px] text-[#bfc8cc]">{bookmaker.label}</span>
-      <span className="text-[11px] font-bold text-green-400">{decimal.toFixed(2)}</span>
+      <span className="text-[11px] font-bold text-green-400 tabular-nums">{odds(decimal)}</span>
     </button>
   );
 }

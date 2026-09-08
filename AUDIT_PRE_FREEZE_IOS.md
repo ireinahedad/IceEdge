@@ -5,8 +5,9 @@
 
 ## État — 2026-09-08
 
-**13 correctifs appliqués** (11 committés, les 12ᵉ et 13ᵉ en attente de
-relecture), dont 3 des 4 findings CRITICAL. Sur les 11 blocants du § 10, **4 sont faits** ; les 7
+**14 correctifs appliqués** (13 committés — le lot sécurité serveur est parti
+dans `f91f2ba` —, le 14ᵉ en attente de relecture), dont 3 des 4 findings
+CRITICAL. Sur les 11 blocants du § 10, **4 sont faits** ; les 7
 autres sont tous côté iOS / App Store. La migration `034` est appliquée en
 production.
 
@@ -30,6 +31,14 @@ odds — seul `fetch` sortant du serveur encore sans borne de temps — reçoit 
 délai de 8 s ; et `NHL_USE_MOCK` est ignoré en production sans un second
 interrupteur explicite. **Il ne reste plus rien d'ouvert en § 1 « Sécurité »
 hors le 🟢 « Divers », lui-même réduit à deux lignes.**
+
+**Lot du 2026-09-08 (3ᵉ passage) — ce que le doigt touche.** Sept 🟡 de plus,
+tous côté client : les 4 `confirm()` et l'`alert()` remplacés par
+`ConfirmDialog` et `toast` (et **traduits** — ils étaient en anglais en dur),
+les trois réglages tactiles iOS, `maxLength` + compteur sur le chat, le partage
+d'image qui échouait sans un mot, l'auto-scroll qui empêchait de remonter lire,
+la course entre l'historique HTTP et le socket, et l'avatar qui disparaissait de
+la nav à chaque rechargement.
 
 🔴 **Le seul blocant restant n'est pas du code : l'adresse de support rebondit.**
 C'est le contact Guideline 1.2 et l'adresse par laquelle Apple joint le
@@ -55,8 +64,9 @@ qui commence par ✅ ne l'est plus. Le § 9 liste les dix lots de correctifs ave
 leurs fichiers.
 
 **Vérification :** `tsc --noEmit` propre client et serveur · suite serveur
-**348 tests, 29 fichiers** · `vite build` web et `VITE_TARGET=ios` · migration
-034 rejouée contre un Postgres 16 réel.
+**348 tests, 29 fichiers** · `vite build` web et `VITE_TARGET=ios` · les trois
+règles tactiles **lues dans le CSS bâti**, à la bonne profondeur de couche ·
+migration 034 rejouée contre un Postgres 16 réel.
 
 ---
 
@@ -295,24 +305,41 @@ Seuls les champs de code OTP avaient `autoComplete="one-time-code"`. L'e-mail, l
 - Les 9 champs sont annotés, plus `autoCapitalize="none"` / `autoCorrect="off"` / `spellCheck={false}` sur e-mail et pseudo — iOS met une majuscule au premier caractère d'un e-mail et « corrige » un pseudo.
 - **Le mot de passe est conditionnel** : `current-password` en connexion, `new-password` en inscription. C'est ce couple qui décide si iOS propose le mot de passe existant ou en propose un fort à enregistrer ; une valeur fixe se tromperait dans un des deux cas.
 
-### 🟡 [MEDIUM] Boîtes de dialogue système
-4 `confirm()` + 1 `alert()` (`RoomChat.tsx:143,191,202`, `MembersModal.tsx:33`, `ProfilePage.tsx:99`) — alors que `ConfirmDialog` existe et est utilisé pour le blocage. En WKWebView ces dialogues affichent un titre technique et bloquent le fil. Incohérent, et immédiatement repérable en revue.
+### ✅ CORRIGÉ · [MEDIUM] Boîtes de dialogue système
+**Fichiers :** `RoomChat.tsx`, `MembersModal.tsx`, `ProfilePage.tsx`, `i18n/index.tsx`
+
+4 `confirm()` + 1 `alert()` — alors que `ConfirmDialog` existe et sert déjà au blocage. En WKWebView ces dialogues affichent **le nom de domaine en titre** et gèlent le fil JavaScript.
+
+- **Solution appliquée (2026-09-08) :** les 3 `confirm()` de `RoomChat` passent par **un seul état générique** `confirmAction {title, description, cta, run}` plutôt qu'un booléen par geste. Les trois posent la même question, seuls le texte et l'action changent — et trois états auraient permis d'en ouvrir deux à la fois, ce que `window.confirm()` interdisait par construction.
+- ⚠️ **`run` est appelée APRÈS la fermeture** : quitter ou supprimer un salon démonte `RoomChat`, et l'ordre inverse laissait un `setState` sur un composant démonté.
+- `MembersModal` a son propre `kickTarget` (le dialogue y est indépendant du reste), et l'`alert()` de `ProfilePage` — **le seul de l'app** — devient un `toast.error`, comme tous les autres échecs.
+- **Effet de bord réparé au passage :** ces cinq textes étaient **en anglais en dur**, jamais traduits. 12 clés i18n ajoutées.
 
 ### 🟡 [MEDIUM] `AppShell` : `w-screen h-screen overflow-hidden` + défilement imbriqué
 **Fichier :** `client/src/app/App.tsx`
 
 `100vh` sur iOS Safari inclut la zone sous la barre d'outils → le bas de l'app est coupé, et `overflow-hidden` empêche la barre d'URL de se replier. Le défilement dans un `<div>` imbriqué plutôt que sur le document casse la restauration de position et surtout le **repositionnement automatique du curseur quand le clavier s'ouvre**. Préférer `100dvh` (avec repli `100vh`) et laisser le document défiler.
 
-### 🟡 [MEDIUM] Le partage d'image échoue en silence
-**Fichiers :** `client/src/app/services/shareImage.ts`, `MySlipsTab.tsx:30`
+### ✅ CORRIGÉ · [MEDIUM] Le partage d'image échoue en silence
+**Fichiers :** `client/src/app/services/shareImage.ts`, `MySlipsTab.tsx`
 
-- `toPng` avec `cacheBust: true` sur une carte contenant des logos NHL cross-origin → **canvas contaminé** → `SecurityError`. L'erreur n'est que `console.warn` : **l'utilisateur tape « Partager » et il ne se passe rien**.
-- Le repli `a.download` **ne fonctionne pas** en WKWebView.
-- `pixelRatio: 2` sur une grande carte : allocation mémoire notable sur iPhone ancien.
-- **Solution :** `crossOrigin="anonymous"` sur les images de la carte (ou les proxifier), et un `toast.error()` en cas d'échec.
+- `toPng` avec `cacheBust: true` sur une carte contenant des logos NHL cross-origin → **canvas contaminé** → `SecurityError`, avalée par un `console.warn` : **l'utilisateur tapait « Partager » et il ne se passait rien** — indiscernable d'un bouton mort.
+- **Solution appliquée (2026-09-08), en quatre points dont aucun ne suffit seul :**
+  1. `crossOrigin="anonymous"` sur le logo de la carte — **avec un `onError` qui retire l'attribut et recharge**. Si le CDN de la NHL ne renvoie pas d'en-tête CORS, la demande anonyme fait échouer le **chargement** : le logo disparaîtrait de l'écran pour sauver une capture. Le repli garde le logo visible et laisse le partage échouer proprement.
+  2. `cacheBust` retiré : il ajoutait `?t=…` à chaque URL, forçant un aller-retour réseau neuf et perdant le bénéfice d'une image déjà chargée correctement.
+  3. `pixelRatio` passe de `2` en dur à `Math.min(2, devicePixelRatio)` — `2` allouait 4× la surface de la carte quel que soit l'écran.
+  4. **L'échec remonte à l'appelant**, qui l'affiche en `toast`. Un `console.warn` n'est pas une gestion d'erreur.
+- ⚠️ **`a.download` ne fait rien en WKWebView** : sur le build iOS, arriver au repli lève désormais `ShareUnavailableError` et l'écran propose une capture d'écran, au lieu de simuler un clic sans effet.
 
-### 🟡 [MEDIUM] Réglages tactiles iOS absents
-Aucun `-webkit-tap-highlight-color` (flash gris sur chaque tap), aucun `user-select: none` sur les éléments de chrome (l'appui long sélectionne le texte et ouvre le menu contextuel), aucun `overscroll-behavior` (le rebond fait bouger toute la page). Trois lignes de CSS global qui changent énormément la sensation.
+### ✅ CORRIGÉ · [MEDIUM] Réglages tactiles iOS absents
+**Fichier :** `client/src/styles/theme.css` (aucun composant touché)
+
+Les trois — flash gris à chaque tap, appui long qui sélectionne le texte du chrome, rebond qui décolle toute la page — sont posés le 2026-09-08, tactile uniquement.
+
+- ⚠️⚠️ **Dans `@layer base`, PAS hors couche — l'inverse du bloc des 16 px juste au-dessus, et c'est délibéré.** Là-bas il fallait *battre* `text-xs` ; ici on pose des **défauts** qu'une classe Tailwind (`select-text`, `active:opacity-100`) doit pouvoir reprendre au cas par cas. Une règle hors couche gagnerait contre elles et rendrait ces classes inopérantes sans que personne ne comprenne pourquoi. **Vérifié dans le CSS bâti** : les trois sortent à `@layer base > @media`, la règle des 16 px à `@media` seul.
+- ⚠️ **Supprimer le flash sans rien mettre à la place retire le seul retour tactile** des boutons sans classe `active:` — l'app en a 66, donc loin de tous. D'où le repli `button:not(:disabled):active { opacity: .75 }`, qui s'ajoute proprement à `active:scale-[0.98]` et `active:bg-*`.
+- ⚠️ **`user-select: none` est volontairement ÉTROIT** (`button, [role=button], nav, label`). Global, il aurait empêché de **copier un message de chat** — geste légitime et attendu. Les messages ne sont pas des boutons : ils gardent la sélection sans qu'on ait à la réactiver.
+- ⚠️ `overscroll-behavior-y` seulement : `-x` toucherait au geste de retour par balayage. **À revérifier à l'écran le jour où `AppShell` passera en `100dvh`** — c'est cette règle qui décidera s'il reste un rebond.
 
 ### 🟡 [MEDIUM] Aucune gestion du clavier
 `grep visualViewport` → 0 résultat. Combiné à la barre de navigation `fixed` et au défilement imbriqué, l'input du chat peut se retrouver **sous** le clavier.
@@ -405,8 +432,13 @@ Le `catch` ne faisait que `setErrorMsg` : la bulle optimiste **restait** à l'é
 - L'échec **défait** l'optimisme : `removeMessage(tempId)`, `setInput(text)`, et — ce que l'audit ne mentionnait pas — **restauration de `tag` et `replyTo`**, capturés avant que les champs ne soient vidés. Perdre la cible d'une réponse est le même bug.
 - **Pas de file de renvoi**, contrairement au « proposer un renvoi » recommandé : le texte revient dans la zone de saisie avec sa réponse et son étiquette, donc renvoyer c'est appuyer sur Envoyer. Une file demanderait un état de persistance qui n'a pas sa place la veille d'un gel.
 
-### 🟡 [MEDIUM] Course entre l'historique HTTP et le socket
-`initMessages(msgs)` fait `setMessages(msgs)` — un **remplacement**. Si un message arrive par le socket avant que le `GET /messages` ne réponde, il est écrasé. Fusionner par id plutôt que remplacer.
+### ✅ CORRIGÉ · [MEDIUM] Course entre l'historique HTTP et le socket
+**Fichiers :** `client/src/app/hooks/useChatSocket.ts`, `RoomChat.tsx`
+
+`initMessages(msgs)` faisait `setMessages(msgs)` — un **remplacement**. Un message arrivé par le socket pendant que le `GET /messages` était en vol était écrasé. Court, mais **permanent** : ce message-là ne revenait jamais.
+
+- **Solution appliquée (2026-09-08) :** `initMessages` est **supprimé**. `mergeMessages` (qui existait déjà pour la resynchro après coupure) devient le seul point d'entrée de l'historique HTTP, au montage comme après une reconnexion.
+- ⚠️ **Ce qu'`initMessages` faisait d'AUTRE, et qu'il fallait remplacer : isoler les salons.** Le hook ne vidait jamais `messages` ; c'était le remplacement du premier `fetch` qui s'en chargeait, par effet de bord. Fusionner sans y toucher aurait **mêlé les messages de deux salons**. La remise à zéro vit maintenant dans l'effet `[roomId]` du hook — à l'endroit où le salon change.
 
 ### ✅ CORRIGÉ · [MEDIUM] Le 401 du LLM est confondu avec une expiration de session
 **Fichiers :** `server/src/routes/llm.routes.ts`, `client/src/app/services/llmService.ts`
@@ -417,25 +449,42 @@ Le serveur relayait le **401** du fournisseur. Côté client, `authedFetch` inte
 - **La règle qui en découle, et qui vaut au-delà de cette route :** un 401 rendu par cette API signifie « ta session ArakIce a expiré », et rien d'autre. L'échec d'un fournisseur amont est un 502.
 - Côté client, la clé invalide est reconnue par son **code**, plus par un statut.
 
-### 🟡 [MEDIUM] L'auto-scroll du chat ramène toujours en bas
-`useEffect(() => bottomRef.current?.scrollIntoView({behavior:"smooth"}), [visibleMessages.length])` : si l'utilisateur remonte lire l'historique, chaque nouveau message le **renvoie en bas**. De plus `scrollIntoView` fait défiler **tous** les conteneurs ancêtres sur iOS. Ne défiler que si l'utilisateur était déjà près du bas.
+### ✅ CORRIGÉ · [MEDIUM] L'auto-scroll du chat ramène toujours en bas
+**Fichier :** `client/src/app/pages/league/chat/RoomChat.tsx`
+
+Les deux défauts sont traités le 2026-09-08 :
+
+- **Remonter lire l'historique était impossible** dans un salon actif : chaque message arrivant renvoyait l'utilisateur en bas. On ne défile plus que si le conteneur était **déjà à moins de 80 px du bas** (marge pour qu'un pouce qui effleure ne désarme pas le suivi).
+- `scrollIntoView` fait défiler **tous les conteneurs ancêtres** sur iOS — la page entière bougeait sous la barre de navigation. Remplacé par `scrollTo` sur le conteneur, qui ne touche que lui. `bottomRef` et son `<div>` sentinelle sont retirés.
+- **`atBottom` est une `ref`, pas un `state`** : elle est écrite à chaque événement de défilement ; en faire un état re-rendrait toute la liste des messages à chaque pixel.
+- Deux exceptions volontaires au « seulement si en bas » : **l'entrée dans le salon** (positionnement instantané, sans animer tout l'historique sous les yeux) et **l'envoi de son propre message** — envoyer, c'est vouloir se voir.
 
 ### 🟡 PARTIELLEMENT CORRIGÉ · [MEDIUM] Les erreurs se transforment en états vides
 **✅ Trois écrans corrigés le 2026-09-06** avec le lot « Réessayer » : l'accueil (un réseau coupé s'affichait en « aucun match ce soir »), le classement de `LeaguePage` (le `.catch(() => [])` du classement ; celui des **salons** garde son repli à dessein — l'onglet Chat a sa propre gestion et le badge de non-lus ne doit pas bloquer le classement), et « Mes coupons » (qui affichait la ligne rouge **et** l'état vide l'un sous l'autre).
 
 **⬜ Reste `NHLPredictionsPage`** (`catch { /* use defaults */ }`) — non traité.
 
-### 🟡 [MEDIUM] Nom d'utilisateur vide après rechargement
-`AuthContext` réhydrate avec `username: ''` et `avatar_url` absent (le jeton ne les contient pas), et rien ne recharge le profil complet au démarrage. Conséquence visible : **l'avatar disparaît de la barre de navigation après chaque rechargement**, remplacé par l'icône générique. Charger le profil dans un effet quand `user` existe.
+### ✅ CORRIGÉ · [MEDIUM] Nom d'utilisateur vide après rechargement
+**Fichier :** `client/src/app/context/AuthContext.tsx`
 
-### 🟡 [MEDIUM] Pas de `maxLength` sur l'input du chat
-Le serveur refuse au-delà de 1000 caractères (`MAX_TEXT_LENGTH`) ; le client ne le dit pas. On peut taper 3000 caractères et découvrir l'erreur à l'envoi. Ajouter `maxLength={1000}` + un compteur au-delà de 900.
+`AuthContext` réhydratait avec `username: ''` et sans `avatar_url` (le jeton ne les porte pas), et rien ne rechargeait le profil. **L'avatar disparaissait de la barre de navigation à chaque rechargement**, remplacé par l'icône générique — et ça se réparait tout seul dès qu'on ouvrait la page Profil, ce qui rendait le défaut d'autant plus déroutant.
+
+- **Solution appliquée (2026-09-08) :** un effet qui complète l'utilisateur par `GET /users/me`.
+- ⚠️ **Déclenché par `token`, PAS par `user`** — comme le recommandait l'audit. `setUser` à l'intérieur de l'effet relancerait un effet dépendant de `user` : boucle infinie. Le jeton ne change qu'à une vraie transition de session.
+- ⚠️ **Un échec est ignoré volontairement.** `login()` et `setSession()` renseignent déjà l'utilisateur complet ; cet effet ne fait qu'enrichir. Un réseau coupé au démarrage ne doit ni déconnecter, ni afficher une erreur pour un avatar.
+
+### ✅ CORRIGÉ · [MEDIUM] Pas de `maxLength` sur l'input du chat
+**Fichier :** `client/src/app/pages/league/chat/RoomChat.tsx`
+
+`maxLength={1000}` + un compteur qui n'apparaît qu'à partir de 900 caractères et passe au rouge sur la limite — sans lui, `maxLength` ferait simplement **cesser de répondre** la frappe, sans explication.
+
+⚠️ `MAX_MESSAGE_CHARS` doit rester égal à `MAX_TEXT_LENGTH` de `chat.service.ts` **et** à `chatSendMessageSchema` (posé le même jour). Trois endroits, une seule valeur.
 
 ### 🟢 [LOW]
 - `tempId = optimistic_${Date.now()}` : collision si deux messages partent dans la même milliseconde. `crypto.randomUUID()`.
 - `GET /api/predict/markets/game/:id` **ignore complètement `:id`** et renvoie une constante — paramètre trompeur.
 - `ruleWeightsService.ts:64,71` : `localStorage.setItem` **sans try/catch**, alors que `tokenStore` protège soigneusement les siens. Lève en navigation privée Safari.
-- `RoomChat` teste `!e.shiftKey` sur un `<input>` simple ligne : Shift+Entrée n'y fait rien. Soit passer en `<textarea>`, soit retirer la condition.
+- ✅ **CORRIGÉ le 2026-09-08** — `RoomChat` testait `!e.shiftKey` sur un `<input>` d'une seule ligne, où Maj+Entrée n'insère rien. La condition ne faisait qu'**avaler un envoi** quand Maj traînait sous le doigt — exactement ce que fait un clavier tactile qui vient d'écrire une majuscule. Condition retirée (pas de passage en `<textarea>` : ce serait un changement de mise en page avant le gel).
 - ✅ **CORRIGÉ le 2026-09-08** — `llmService.ts` déclarait `const BASE = env.nhlServerUrl`, jamais utilisé (les appels passent par `authedFetch`, qui a sa propre base). Parti avec le lot `taskType`, l'import `env` avec.
 
 ---
@@ -650,6 +699,8 @@ par le user : lots 1-9 (`357a458`, `816e547`), lot 10 (`a204a20`), lot 11
 
 `npx tsc --noEmit` passe sur le client **et** sur le serveur après ces changements, et la suite de tests serveur est verte : **348 tests, 29 fichiers** (dont 8 pour le câblage de `/api/predict/*`, 30 pour ses schémas, 10 pour le facteur arbitre contre un vrai billet, 4 pour la couverture, et 5 qui lisent le corps réellement envoyé au fournisseur LLM).
 
+| 14 | `styles/theme.css`, `pages/league/chat/RoomChat.tsx`, `MembersModal.tsx`, `hooks/useChatSocket.ts`, `context/AuthContext.tsx`, `services/shareImage.ts`, `pages/bet/MySlipsTab.tsx`, `pages/profile/ProfilePage.tsx`, `i18n/index.tsx` | **Lot « ce que le doigt touche » du 2026-09-08.** Dialogues système → `ConfirmDialog`/`toast` (+ 14 clés i18n) · réglages tactiles iOS · `maxLength` + compteur sur le chat · partage d'image qui échoue visiblement · auto-scroll qui respecte la lecture · fusion de l'historique au montage · avatar rechargé au démarrage |
+
 **Vérifié dans le conteneur cloud le 2026-09-08**, sur une installation Linux fraîche du lockfile — `tsc --noEmit` serveur et client, `vitest run` (348/348), `vite build` web **et** `VITE_TARGET=ios`. Les empreintes `md5sum` des 9 fichiers serveur modifiés ont été comparées des deux côtés avant de lancer quoi que ce soit, donc c'est bien le code du disque qui a tourné.
 
 ---
@@ -687,10 +738,19 @@ l'en-tête).
 
 ~~Texte 8-10 px (351 occurrences)~~ ✅ plancher de 11 px, 283 classes + 6 règles CSS · ~~`systemPrompt` piloté par le client~~ ✅ · ~~validation zod partielle~~ ✅ · ~~timeout du proxy odds~~ ✅ · ~~`NHL_USE_MOCK` non bridé en production~~ ✅ · `confirm()`/`alert()` système · `<label>` + `role="alert"` sur les formulaires · `<html lang>` et détection de langue · chat figé pour les invités · partage d'image qui échoue en silence · réglages tactiles iOS (`tap-highlight`, `user-select`, `overscroll`) · aller-retour réseau pour le parlay · rafraîchissement proactif du jeton · `.fuse_hidden…` versionné · `@figma/my-make-file` et react en peerDependency optionnelle · prix codé en dur · tu/vous · cache client des requêtes.
 
-**Ce qui reste de 🟡 après le 2026-09-08 est entièrement côté CLIENT** — écran,
-clavier, ressenti au doigt — plus deux reliquats de scaffolding. **Le § 1
-« Sécurité » n'a plus d'item ouvert** hors les deux routeurs montés sur
-`/api/users` et `EMAIL_VERIFICATION_DISABLED`, écarté sur décision du user.
+**Après le 3ᵉ passage du 2026-09-08**, sept 🟡 de plus sont tombés :
+~~`confirm()`/`alert()` système~~ ✅ · ~~réglages tactiles iOS~~ ✅ ·
+~~`maxLength` du chat~~ ✅ · ~~partage d'image muet~~ ✅ · ~~auto-scroll~~ ✅ ·
+~~course historique/socket~~ ✅ · ~~pseudo et avatar vides~~ ✅.
+
+**Ce qui reste ouvert tient en cinq lignes**, et rien n'y est de la sécurité :
+`AppShell`/clavier (mis de côté, voir ci-dessous) · chat figé pour les invités ·
+aller-retour réseau pour le parlay · rafraîchissement proactif du jeton · cache
+client des requêtes · `NHLPredictionsPage` qui transforme encore une erreur en
+état vide · les reliquats de scaffolding (`@figma/my-make-file`, react en
+peerDependency) · prix codé en dur · tu/vous · et le 🟢 « Divers » du § 1 (deux
+routeurs sur `/api/users`, `EMAIL_VERIFICATION_DISABLED` écarté sur décision du
+user).
 
 ⚠️ **`AppShell` (`w-screen h-screen overflow-hidden` → `100dvh`) et la gestion
 du clavier (`visualViewport`) sont mis de côté volontairement** (décision du

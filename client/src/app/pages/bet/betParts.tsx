@@ -12,11 +12,23 @@ import type { BetLeg } from "../../types/bet";
 import { openBet } from "../../services/bookmakers";
 import { features } from "../../platform";
 import { useBookmaker } from "../../context/BookmakerContext";
+import { useOddsFormat } from "../../context/OddsFormatContext";
 import { useI18n } from "../../i18n";
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Probabilité → cote américaine, en TEXTE STOCKÉ.
+ *
+ * ⚠️ Ne pas remplacer par le format choisi dans les Réglages. Cette fonction ne
+ * sert plus à l'affichage : `BetBuilderPage` s'en sert pour remplir le champ
+ * `oddsLabel` du pari ENREGISTRÉ, qui part en base et se relit des mois plus
+ * tard, éventuellement sur un autre appareil réglé autrement. Une donnée
+ * archivée doit avoir un format fixe ; c'est le rendu qui se règle, pas le
+ * stockage. L'affichage passe par `useOddsFormat()` (voir
+ * `services/oddsFormat.ts`, dont les bornes 5–95 % viennent d'ici).
+ */
 export function toOddsLabel(pct: number): string {
   const p = Math.max(5, Math.min(95, pct)) / 100;
   return p >= 0.5
@@ -28,6 +40,7 @@ export function toOddsLabel(pct: number): string {
 
 export function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: number }) {
   const { t } = useI18n();
+  const { format, prob } = useOddsFormat();
   const [displayed, setDisplayed] = useState(0);
   const radius = (size - 24) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -72,7 +85,15 @@ export function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: numb
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         {pct > 0 ? (
           <>
-            <span className="text-white text-4xl font-bold">{displayed}<span className="text-2xl">%</span></span>
+            {/* Le compteur ne s'anime qu'en % : une cote qui défile part de la
+                borne basse (5 % → +1900) et « descend » vers sa valeur, ce qui
+                se lit comme une erreur d'affichage plutôt que comme une
+                animation. Hors %, on écrit la valeur finale directement. */}
+            {format === "percent" ? (
+              <span className="text-white text-4xl font-bold">{displayed}<span className="text-2xl">%</span></span>
+            ) : (
+              <span className="text-white text-4xl font-bold font-mono">{prob(pct)}</span>
+            )}
             <span className="text-xs mt-0.5 font-medium" style={{ color }}>{label}</span>
           </>
         ) : (
@@ -91,6 +112,7 @@ export function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: numb
 export function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; onRemove: () => void }) {
   const { t } = useI18n();
   const { bookmaker } = useBookmaker();
+  const { format, prob } = useOddsFormat();
   const barColor =
     leg.probability >= 65 ? "#86d1ea" :
     leg.probability >= 50 ? "#90C9F0" :
@@ -117,8 +139,13 @@ export function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; 
               <div className="h-1.5 rounded-full transition-all duration-500"
                 style={{ width: `${leg.probability}%`, backgroundColor: barColor }} />
             </div>
-            <span className="text-xs font-bold flex-shrink-0" style={{ color: barColor }}>{leg.probability}%</span>
-            <span className="text-[11px] text-[#4a6068] flex-shrink-0 font-mono">{toOddsLabel(leg.probability)}</span>
+            <span className="text-xs font-bold flex-shrink-0 font-mono" style={{ color: barColor }}>{prob(leg.probability)}</span>
+            {/* La cote américaine en second n'a de sens qu'à côté d'un % : dans
+                les deux autres formats elle serait soit le même chiffre écrit
+                deux fois, soit deux cotes concurrentes pour un seul pari. */}
+            {format === "percent" && (
+              <span className="text-[11px] text-[#4a6068] flex-shrink-0 font-mono">{toOddsLabel(leg.probability)}</span>
+            )}
           </div>
           {/* APPLE_PLAN §4 — Guideline 5.3: the leg keeps its price, the link out
               to the sportsbook does not ship on iOS. */}

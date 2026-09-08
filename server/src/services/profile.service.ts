@@ -6,6 +6,17 @@ import { TtlCache } from './ttlCache';
 import { logger } from '../logger';
 import { ruleWeightsSchema, type RuleWeightsMap } from '../validation/schemas';
 
+/**
+ * Edge minimum par défaut d'une alerte value bet, en % entiers.
+ *
+ * 2 % et pas 0 : le scan serveur refuse déjà tout edge sous `MIN_EDGE` (0,02),
+ * plancher tiré du backtest walk-forward où le ROI ne devient positif que vers
+ * 2 %. Un compte à 0 ne recevait donc pas plus d'alertes qu'un compte à 2 — le
+ * zéro affiché dans les Réglages promettait simplement quelque chose que le
+ * serveur ne fait pas. Le défaut de la colonne est posé par la migration 035.
+ */
+export const DEFAULT_MIN_EDGE_PCT = 2;
+
 // ─── Statistiques de paris (agrégation partagée) ─────────────────────────────
 
 interface BetStats { decided: number; wins: number; total: number }
@@ -110,7 +121,7 @@ export async function getProfileById(userId: string) {
     isPublic:         profile.isPublic,
     showSlips:        profile.showSlips ?? false,
     notifyValueBets:  profile.notifyValueBets ?? false,
-    valueBetMinEvPct: profile.valueBetMinEvPct ?? 0,
+    valueBetMinEvPct: profile.valueBetMinEvPct ?? DEFAULT_MIN_EDGE_PCT,
     tier:             profile.tier,
     performanceScore: profile.performanceScore,
     /**

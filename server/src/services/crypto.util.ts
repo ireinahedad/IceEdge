@@ -44,6 +44,65 @@ function getKey(): Buffer | null {
   return key;
 }
 
+/**
+ * Sonde de démarrage : ENCRYPTION_KEY est-elle réellement utilisable ?
+ *
+ * Ajoutée le 2026-09-08 après un `PATCH /api/users/me` qui répondait 500 en
+ * production dès qu'on enregistrait une clé OpenAI. La cause possible tient en
+ * deux lignes de ce fichier — `encryptSecret` LÈVE quand la clé est absente en
+ * production, et `getKey` lève quand elle ne fait pas 32 octets — mais rien ne
+ * le disait avant la première écriture d'un utilisateur, et `sendError` masque
+ * le message des 5xx en production. Le symptôme était donc « le bouton
+ * Enregistrer renvoie 500 », sans rien de plus, des semaines après le
+ * déploiement fautif.
+ *
+ * Même principe que `verifyAvatarStorage` et `verifyOddsApiKey` : une variable
+ * dont l'absence ne casse rien AU DÉMARRAGE mérite une ligne de log au
+ * démarrage, sinon la panne apparaît chez l'utilisateur et pas dans les logs.
+ * On fait un vrai aller-retour chiffrement/déchiffrement, pas seulement un test
+ * de présence — une clé de 32 octets mais tronquée à la copie passerait le test
+ * de présence et échouerait en usage.
+ *
+ * Ne lève jamais : un serveur qui démarre à moitié est plus difficile à
+ * diagnostiquer qu'un serveur qui démarre en criant dans ses logs.
+ */
+export function verifyEncryptionKey(): void {
+  let key: Buffer | null;
+  try {
+    key = getKey();
+  } catch (err: any) {
+    logger.error(
+      { err: err?.message },
+      '[crypto] ⚠️ ENCRYPTION_KEY INVALIDE — tout enregistrement de clé OpenAI ' +
+      '(PATCH /api/users/me) répondra 500. Attendu : 64 caractères hexadécimaux, ' +
+      'ou du base64 décodant sur exactement 32 octets.',
+    );
+    return;
+  }
+
+  if (!key) {
+    const msg =
+      '[crypto] ENCRYPTION_KEY ABSENTE — aucun secret ne peut être chiffré. ' +
+      'En production, PATCH /api/users/me répond 500 dès qu\'une clé OpenAI est enregistrée.';
+    if (process.env.NODE_ENV === 'production') logger.error(msg);
+    else logger.warn(msg + ' (dev : les secrets seraient stockés EN CLAIR)');
+    return;
+  }
+
+  try {
+    const probe = 'encryption-key-probe';
+    if (decryptSecret(encryptSecret(probe)) !== probe) {
+      throw new Error('aller-retour chiffrement/déchiffrement incohérent');
+    }
+    logger.info('[crypto] ✅ ENCRYPTION_KEY valide — chiffrement des secrets au repos opérationnel');
+  } catch (err: any) {
+    logger.error(
+      { err: err?.message },
+      '[crypto] ⚠️ ENCRYPTION_KEY présente mais INUTILISABLE — PATCH /api/users/me répondra 500.',
+    );
+  }
+}
+
 /** True if a value is already in our encrypted envelope format. */
 export function isEncrypted(value: string | null | undefined): boolean {
   return typeof value === 'string' && value.startsWith(PREFIX);

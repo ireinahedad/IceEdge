@@ -11,14 +11,19 @@ import { Lock, Share2, Clock, History, Trophy, AlertCircle, RefreshCw } from "lu
 import { getMySlips, settleMySlips } from "../../services/slipApiService";
 import { ErrorState } from "../../components/ErrorState";
 import type { BetSlip } from "../../services/slipApiService";
-import { shareNodeAsImage } from "../../services/shareImage";
+import { shareNodeAsImage, ShareUnavailableError } from "../../services/shareImage";
 import { useI18n } from "../../i18n";
+import { useOddsFormat } from "../../context/OddsFormatContext";
+import { toast } from "sonner";
 
 
 // ─── Slip card (My Slips) ─────────────────────────────────────────────────────
 
 function SlipCard({ slip }: { slip: BetSlip }) {
   const { t } = useI18n();
+  // Les probabilités ARCHIVÉES d'un coupon se relisent dans le format choisi
+  // aujourd'hui : le nombre stocké ne change pas, seule son écriture change.
+  const { prob } = useOddsFormat();
   const cardRef = useRef<HTMLDivElement>(null);
   const [sharing, setSharing] = useState(false);
 
@@ -28,7 +33,15 @@ function SlipCard({ slip }: { slip: BetSlip }) {
     try {
       await shareNodeAsImage(cardRef.current, `arakice-slip-${slip.id}.png`, "ArakIce");
     } catch (err) {
+      // Avant : un `console.warn` seul. L'utilisateur touchait « Partager » et
+      // il ne se passait rien — le pire mode d'échec possible, parce qu'il est
+      // indiscernable d'un bouton mort.
       console.warn("[Share] failed:", err);
+      toast.error(
+        err instanceof ShareUnavailableError
+          ? t("slip.shareUnavailable")
+          : t("slip.shareFailed"),
+      );
     } finally {
       setSharing(false);
     }
@@ -73,8 +86,8 @@ function SlipCard({ slip }: { slip: BetSlip }) {
         <div className="text-right">
           <p className="text-[11px] text-[#4a6068]">{date} · {time}</p>
           {slip.combinedProbability != null && (
-            <p className="text-sm font-black" style={{ color: combinedColor }}>
-              {slip.combinedProbability}%
+            <p className="text-sm font-black tabular-nums" style={{ color: combinedColor }}>
+              {prob(slip.combinedProbability)}
             </p>
           )}
         </div>
@@ -85,14 +98,34 @@ function SlipCard({ slip }: { slip: BetSlip }) {
         {(slip.legs as any[]).map((leg, i) => (
           <div key={i} className="flex items-center gap-2 py-1.5 border-t border-white/[0.05] first:border-0">
             {leg.subjectLogo?.startsWith("http")
-              ? <img src={leg.subjectLogo} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
+              ? <img
+                  src={leg.subjectLogo}
+                  alt=""
+                  // Sans ce mode, dessiner ce logo tiers dans le canvas de
+                  // `toPng` CONTAMINE le canvas et fait échouer tout le partage.
+                  crossOrigin="anonymous"
+                  // ⚠️ Et si le CDN ne renvoie pas d'en-tête CORS, la demande
+                  // en mode anonyme fait échouer le CHARGEMENT — le logo
+                  // disparaîtrait de l'écran pour sauver une capture. On
+                  // retombe donc sur un chargement ordinaire : le logo reste
+                  // visible, et c'est le partage qui échouera, proprement et
+                  // avec un message.
+                  onError={(e) => {
+                    const img = e.currentTarget;
+                    if (img.crossOrigin) {
+                      img.removeAttribute("crossorigin");
+                      img.src = leg.subjectLogo;
+                    }
+                  }}
+                  className="w-5 h-5 object-contain flex-shrink-0"
+                />
               : <span className="text-sm flex-shrink-0">{leg.subjectLogo}</span>}
             <div className="flex-1 min-w-0">
               <p className="text-white text-[11px] font-medium truncate">{leg.subjectName}</p>
               <p className="text-[#8a9ea6] text-[11px] truncate">{leg.selection ?? leg.marketType}</p>
             </div>
-            <span className="text-[11px] font-bold flex-shrink-0" style={{ color: combinedColor }}>
-              {leg.probability}%
+            <span className="text-[11px] font-bold flex-shrink-0 tabular-nums" style={{ color: combinedColor }}>
+              {prob(leg.probability)}
             </span>
           </div>
         ))}

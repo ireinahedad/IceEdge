@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { useI18n } from "../i18n";
 import { features } from "../platform";
 
@@ -22,6 +22,7 @@ export function ProLock({
   children: ReactNode;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useI18n();
 
   if (!locked) return <>{children}</>;
@@ -49,8 +50,10 @@ export function ProLock({
             vers un achat hors App Store est exactement ce que 3.1.1 interdit.
             Le contenu reste verrouillé, sans appel à l'action. */}
         {features.proUpgrade && (
+          /* `state.from` : /pro ne peut pas revenir par l'historique, Stripe
+             Checkout y est empilé. Voir `useProBackTarget` dans ProPage. */
           <button
-            onClick={() => navigate("/pro")}
+            onClick={() => navigate("/pro", { state: { from: location.pathname + location.search } })}
             className="mt-3 px-4 py-2 rounded-xl text-xs font-bold active:scale-[0.98] transition-all"
             style={{ background: ACCENT, color: "#0A0E0C" }}
           >

@@ -22,6 +22,7 @@ import { FramedLabel } from "../../components/brand/FramedLabel";
 import { BetOpt, MLProps, MktGroup, RuleFactor, buildLLMDataContext, llmCacheId, loadLlmCache, saveLlmCache, settlementFields } from "./gameMarkets";
 import { pctColor } from "../../data/pctScale";
 import { RevealMode, RevealModeCtx } from "./predictionShared";
+import { useOddsFormat } from "../../context/OddsFormatContext";
 
 /* ─── Prediction bottom sheet ───────────────── */
 function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, factors, factorGroup, onClose }: {
@@ -307,6 +308,7 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
   const loadingMl = source === "ml" && !!opt.mlProps && mlPct === null;
   const shownPct = source === "ml" ? (mlPct ?? opt.rulePct) : opt.rulePct;
   const shownColor = pctColor(shownPct);
+  const { prob } = useOddsFormat();
 
   return (
     <>
@@ -320,7 +322,7 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
           className="mt-2 px-3 py-0.5 rounded-full text-xs font-bold"
           style={{ background: shownColor + "22", color: shownColor, border: `1px solid ${shownColor}55` }}
         >
-          {loadingMl ? "…" : `${shownPct}%`}
+          {loadingMl ? "…" : prob(shownPct)}
         </span>
       </button>
       {sheet && (

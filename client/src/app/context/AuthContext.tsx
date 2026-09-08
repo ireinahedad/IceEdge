@@ -5,6 +5,7 @@ import {
 } from '../services/authService';
 import { tokenStore, onSessionCleared } from '../services/tokenStore';
 import { decodeJwtPayload } from '../services/jwt';
+import { profileApiService } from '../services/userService';
 
 interface AuthContextValue {
   user:        AuthUser | null;
@@ -42,7 +43,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // session — une déconnexion aléatoire au démarrage.
         const payload = decodeJwtPayload(stored);
         if (payload) {
-          // We only have sub/email/role in the JWT; fetch full profile lazily
+          // Le jeton ne porte que sub/email/role. `username: ''` et l'absence
+          // d'`avatar_url` sont donc un état PROVISOIRE — l'écran complet
+          // arrive par `hydrateProfile()` juste en dessous.
           setToken(stored);
           setUser({ id: payload.sub, email: payload.email, username: '', first_name: null, last_name: null, role: payload.role ?? 'user' });
         } else {
@@ -54,6 +57,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => { cancelled = true; };
   }, []);
+
+  /**
+   * Compléter l'utilisateur réhydraté avec son profil serveur.
+   *
+   * Le JWT ne contient ni le pseudo ni l'avatar, et rien ne les rechargeait :
+   * **l'avatar disparaissait de la barre de navigation à chaque rechargement
+   * de page**, remplacé par l'icône générique, et le pseudo restait vide. Ça se
+   * réparait tout seul dès qu'on ouvrait la page Profil — ce qui rendait le
+   * défaut d'autant plus déroutant.
+   *
+   * ⚠️ Déclenché par `token`, PAS par `user` : `setUser` plus bas remettrait
+   * l'effet en marche à chaque fois qu'il écrit, donc en boucle. Le jeton, lui,
+   * ne change qu'à une vraie transition de session.
+   *
+   * ⚠️ Un échec est ignoré volontairement. `login()` et `setSession()`
+   * renseignent déjà l'utilisateur complet ; ici on ne fait qu'enrichir. Un
+   * réseau coupé au démarrage ne doit ni déconnecter, ni afficher une erreur
+   * pour un avatar.
+   */
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+
+    profileApiService.getProfile()
+      .then((p) => {
+        if (cancelled) return;
+        setUser((u) => (u ? {
+          ...u,
+          username:   p.username || u.username,
+          avatar_url: p.avatarUrl ?? u.avatar_url ?? null,
+        } : u));
+      })
+      .catch(() => { /* enrichissement seulement — voir plus haut */ });
+
+    return () => { cancelled = true; };
+  }, [token]);
 
   /**
    * R3.8 — the session can end without anyone here asking for it: a refresh

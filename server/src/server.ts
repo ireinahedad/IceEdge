@@ -11,6 +11,7 @@ import { startValueBetScan } from './services/valueBetScan.service';
 import { startCleanupJob } from './services/cleanup.service';
 import { startOddsLogger, verifyOddsApiKey } from './services/oddsLogger.service';
 import { verifyAvatarStorage } from './services/avatarStorage';
+import { verifyEncryptionKey } from './services/crypto.util';
 import { allowedOrigins } from './cors';
 import { USE_MOCK } from './services/nhlApiClient';
 
@@ -105,6 +106,13 @@ const DORMANT = process.env.DORMANT === 'true';
     // se manifesterait qu'au premier jour de matchs. La sonde est gratuite
     // (`/v4/sports` est hors quota) et, comme l'autre, lancée sans `await`.
     void verifyOddsApiKey();
+
+    // Sonde du chiffrement au repos. Synchrone et sans réseau, contrairement aux
+    // deux précédentes : c'est un aller-retour en mémoire. Elle est ici quand
+    // même, parce qu'elle couvre la même catégorie de panne — une variable
+    // d'environnement dont l'absence ne se voit qu'au premier geste d'un
+    // utilisateur, et sous la forme d'un 500 au message masqué.
+    verifyEncryptionKey();
   });
 
   registerGracefulShutdown(httpServer);

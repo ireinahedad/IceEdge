@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
 import { redeemLimiter } from '../middleware/rateLimit.middleware';
 import { validateBody } from '../middleware/validate.middleware';
-import { redeemPromoSchema } from '../validation/schemas';
+import { checkoutSchema, redeemPromoSchema } from '../validation/schemas';
 import * as Subscriptions from '../services/subscription.service';
 import { logger } from '../logger';
 import { sendError } from '../httpError';
@@ -10,10 +10,15 @@ import { sendError } from '../httpError';
 const router = Router();
 
 // GET /subscription/me — current plan/status for the signed-in user.
+//
+// `periods` est ajouté ICI et non dans `getStatus` : c'est une propriété de la
+// configuration du serveur (quels IDs de tarif Stripe existent), pas de
+// l'abonnement de l'utilisateur. Le mettre dans le mapper de ligne mêlerait les
+// deux. La page /pro s'en sert pour n'afficher que les cadences achetables.
 router.get('/me', authenticate, async (req: Request, res: Response) => {
   try {
     const status = await Subscriptions.getStatus(req.user!.sub);
-    return res.json(status);
+    return res.json({ ...status, periods: Subscriptions.availablePeriods() });
   } catch (err: any) { return sendError(res, err); }
 });
 
@@ -23,10 +28,12 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
 //   • In non-production without Stripe → dev activation so Pro gating can be
 //     tested end to end without a payment provider.
 //   • In production without Stripe → 501 (never silently grant Pro for free).
-router.post('/checkout', authenticate, async (req: Request, res: Response) => {
+router.post('/checkout', authenticate, validateBody(checkoutSchema), async (req: Request, res: Response) => {
   try {
     if (Subscriptions.stripeConfigured()) {
-      const url = await Subscriptions.createCheckoutSession(req.user!.sub, req.user!.email);
+      // Corps absent = ancien bundle client → mensuel, comme avant (cf. `checkoutSchema`).
+      const period = (req.body as { period?: Subscriptions.BillingPeriod } | undefined)?.period ?? 'monthly';
+      const url = await Subscriptions.createCheckoutSession(req.user!.sub, req.user!.email, period);
       return res.json({ url });
     }
 

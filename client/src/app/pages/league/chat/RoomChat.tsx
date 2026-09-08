@@ -29,6 +29,20 @@ const TAG_LABEL = {
 
 // ─── Active room chat ─────────────────────────────────────────────────────────
 
+/**
+ * Plafond de longueur d'un message.
+ *
+ * ⚠️ **Doit rester égal à `MAX_TEXT_LENGTH` de `server/src/services/chat.service.ts`**
+ * (et donc à `chatSendMessageSchema`). Le serveur refusait déjà au-delà ; le
+ * client, lui, ne le disait nulle part : on pouvait taper 3 000 caractères et
+ * ne l'apprendre qu'au moment de l'envoi, message perdu de vue dans un bandeau
+ * rouge. Un plafond qu'on ne découvre qu'en le heurtant est vécu comme une
+ * panne — c'est le même raisonnement que le compteur de quota IA.
+ */
+const MAX_MESSAGE_CHARS = 1000;
+/** À partir d'ici le compteur s'affiche. Avant, il ne serait que du bruit. */
+const COUNTER_FROM = 900;
+
 export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, onDeleted, onPinToggle }: {
   room: ChatRoom;
   currentUserId: string;
@@ -45,7 +59,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   const { isBlocked, ensureLoaded, block } = useBlocks();
   const {
     messages, onlineCount, connected,
-    initMessages, mergeMessages, appendOptimistic, confirmMessage, removeMessage,
+    mergeMessages, appendOptimistic, confirmMessage, removeMessage,
     resyncKey, authError, roomError,
   } = useChatSocket(room.id);
   const [input, setInput] = useState("");
@@ -58,8 +72,37 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
   const [reportTarget, setReportTarget] = useState<ChatMessage | null>(null);
   const [reporting, setReporting] = useState(false);
   const [blockTarget, setBlockTarget] = useState<ChatMessage | null>(null);
+  /**
+   * La confirmation générique qui remplace les trois `window.confirm()`.
+   *
+   * UN seul état pour trois gestes destructifs plutôt qu'un booléen par geste :
+   * les trois posent exactement la même question à l'utilisateur (« es-tu
+   * sûr ? »), seul le texte et l'action changent. Trois états auraient aussi
+   * permis d'en ouvrir deux à la fois, ce que `window.confirm()` rendait
+   * impossible par construction.
+   *
+   * ⚠️ `run` est appelée APRÈS la fermeture : une action qui démonte ce
+   * composant (quitter ou supprimer le salon) laisserait sinon un `setState`
+   * sur un composant démonté.
+   */
+  const [confirmAction, setConfirmAction] = useState<{
+    title: string;
+    description?: string;
+    cta: string;
+    run: () => void;
+  } | null>(null);
   const [sheetUser, setSheetUser] = useState<ChatMessage | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  /**
+   * L'utilisateur est-il collé au bas de la liste ?
+   *
+   * Une `ref` et non un `state` : la valeur est lue dans un effet et mise à
+   * jour à chaque événement de défilement — en faire un état re-rendrait toute
+   * la liste des messages à chaque pixel défilé.
+   */
+  const atBottomRef = useRef(true);
+  /** Le tout premier positionnement doit être instantané, pas animé. */
+  const firstScrollDoneRef = useRef(false);
   const isAdmin = room.role === "admin";
 
   // R4.3d — la liste de blocage, chargée une fois quand on ouvre un salon.
@@ -99,7 +142,9 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
     const isResync = resyncKey > 0;
     if (!isResync) setLoadingMessages(true);
     profileApiService.getRoomMessages(room.id)
-      .then((msgs) => (isResync ? mergeMessages(msgs) : initMessages(msgs)))
+      // Toujours fusionner, jamais remplacer — même au montage : le socket peut
+      // avoir livré un message pendant que cette requête était en vol.
+      .then(mergeMessages)
       .catch((e) => { if (!isResync) setErrorMsg(e.message ?? "Could not load messages"); })
       .finally(() => { if (!isResync) setLoadingMessages(false); });
   }, [room.id, resyncKey]);
@@ -116,10 +161,52 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
     }
   }, [authError, roomError, t]);
 
-  // Auto-scroll on new messages
+  /**
+   * Défilement automatique — mais seulement si on y était déjà.
+   *
+   * Avant : `bottomRef.scrollIntoView({behavior:"smooth"})` à chaque nouveau
+   * message. Deux défauts, tous les deux visibles au doigt :
+   *
+   *   1. **Remonter lire l'historique était impossible** dans un salon actif :
+   *      chaque message arrivant renvoyait l'utilisateur en bas, au milieu de
+   *      sa lecture.
+   *   2. `scrollIntoView` fait défiler **tous les conteneurs ancêtres** sur
+   *      iOS, pas seulement la liste — la page entière bougeait sous la barre
+   *      de navigation. `scrollTo` sur le conteneur ne touche que lui.
+   *
+   * Le seuil de 80 px est la marge d'« il est en bas » : un pouce qui effleure
+   * ne doit pas désarmer le suivi.
+   */
+  function markAtBottom() {
+    const el = listRef.current;
+    if (!el) return;
+    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }
+
+  function scrollToBottom(smooth = true) {
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+    atBottomRef.current = true;
+  }
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!visibleMessages.length) return;
+    if (!firstScrollDoneRef.current) {
+      // Arrivée dans le salon : on se pose en bas sans animation. Une
+      // animation ferait défiler tout l'historique sous les yeux.
+      firstScrollDoneRef.current = true;
+      scrollToBottom(false);
+      return;
+    }
+    if (atBottomRef.current) scrollToBottom();
   }, [visibleMessages.length]);
+
+  // Changer de salon remet le suivi à zéro : on entre toujours par le bas.
+  useEffect(() => {
+    firstScrollDoneRef.current = false;
+    atBottomRef.current = true;
+  }, [room.id]);
 
   async function sendMessage() {
     const text = input.trim();
@@ -150,6 +237,9 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
       replyTo: replyTo ? { username: replyTo.username, text: replyTo.text } : undefined,
     };
     appendOptimistic(optimistic);
+    // Envoyer, c'est vouloir voir son message : on redescend même si on était
+    // remonté dans l'historique.
+    scrollToBottom();
     setTag(undefined);
     setReplyTo(null);
 
@@ -191,15 +281,20 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
     try { await profileApiService.toggleReaction(room.id, msgId, emoji); } catch { /* non-blocking */ }
   }
 
-  async function handleDeleteMessage(msgId: string) {
+  function handleDeleteMessage(msgId: string) {
     if (!requireAuth("gate.deleteMessage")) return;
-    if (!confirm(t("chat.deleteMessageConfirm"))) return;
-    removeMessage(msgId); // optimistic
-    try {
-      await profileApiService.deleteMessage(room.id, msgId);
-    } catch (e: any) {
-      setErrorMsg(e.message ?? "Could not delete message");
-    }
+    setConfirmAction({
+      title: t("chat.deleteMessageConfirm"),
+      cta: t("chat.deleteMessageConfirmCta"),
+      run: async () => {
+        removeMessage(msgId); // optimistic
+        try {
+          await profileApiService.deleteMessage(room.id, msgId);
+        } catch (e: any) {
+          setErrorMsg(e.message ?? "Could not delete message");
+        }
+      },
+    });
   }
 
   async function handleReport(payload: { reason: ReportReason; note?: string }) {
@@ -239,26 +334,38 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
     }
   }
 
-  async function handleLeave() {
+  function handleLeave() {
     if (!requireAuth("gate.leaveRoom")) return;
-    if (!confirm(`Leave ${room.name}?`)) return;
-    try {
-      await profileApiService.leaveRoom(room.id);
-      onLeft(room.id);
-    } catch (e: any) {
-      setErrorMsg(e.message ?? "Could not leave room");
-    }
+    setConfirmAction({
+      title: t("chat.leaveRoomTitle", { name: room.name }),
+      description: t("chat.leaveRoomDescription"),
+      cta: t("chat.leaveRoomCta"),
+      run: async () => {
+        try {
+          await profileApiService.leaveRoom(room.id);
+          onLeft(room.id);
+        } catch (e: any) {
+          setErrorMsg(e.message ?? "Could not leave room");
+        }
+      },
+    });
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!requireAuth("gate.deleteRoom")) return;
-    if (!confirm(`Delete ${room.name} for everyone? This cannot be undone.`)) return;
-    try {
-      await profileApiService.deleteRoom(room.id);
-      onDeleted(room.id);
-    } catch (e: any) {
-      setErrorMsg(e.message ?? "Could not delete room");
-    }
+    setConfirmAction({
+      title: t("chat.deleteRoomTitle", { name: room.name }),
+      description: t("chat.deleteRoomDescription"),
+      cta: t("chat.deleteRoomCta"),
+      run: async () => {
+        try {
+          await profileApiService.deleteRoom(room.id);
+          onDeleted(room.id);
+        } catch (e: any) {
+          setErrorMsg(e.message ?? "Could not delete room");
+        }
+      },
+    });
   }
 
   // Real-time count from the socket only — no fabricated fallback
@@ -380,7 +487,11 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto flex flex-col gap-3 py-1 min-h-0">
+      <div
+        ref={listRef}
+        onScroll={markAtBottom}
+        className="flex-1 overflow-y-auto flex flex-col gap-3 py-1 min-h-0"
+      >
         {loadingMessages ? (
           [1, 2, 3].map((i) => (
             <div key={i} className={`flex gap-2 ${i % 2 === 0 ? "flex-row-reverse" : ""}`}>
@@ -412,7 +523,6 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
             ))}
           </>
         )}
-        <div ref={bottomRef} />
       </div>
 
       {/* Reply preview */}
@@ -446,10 +556,30 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+            maxLength={MAX_MESSAGE_CHARS}
+            aria-label={`${t("chat.message")} ${room.name}`}
+            // `!e.shiftKey` retiré : c'est un `<input>` d'une seule ligne, où
+            // Maj+Entrée n'insère rien. La condition ne faisait qu'AVALER un
+            // envoi quand Maj traînait sous le doigt — un clavier tactile qui
+            // vient d'écrire une majuscule est exactement ce cas-là.
+            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             placeholder={`${t("chat.message")} ${room.name}…`}
             className="flex-1 bg-transparent text-white text-xs outline-none placeholder-white/30"
           />
+          {/* Le compteur n'apparaît que dans les 100 derniers caractères, et
+              passe au rouge sur la limite atteinte — `maxLength` bloque déjà la
+              frappe à ce moment-là, donc sans lui la touche cesserait de
+              répondre sans explication. */}
+          {input.length >= COUNTER_FROM && (
+            <span
+              aria-live="polite"
+              className={`text-[11px] tabular-nums flex-shrink-0 ${
+                input.length >= MAX_MESSAGE_CHARS ? "text-red-400" : "text-white/40"
+              }`}
+            >
+              {t("chat.charsLeft", { n: String(MAX_MESSAGE_CHARS - input.length) })}
+            </span>
+          )}
           <button
             onClick={sendMessage}
             disabled={!input.trim()}
@@ -498,6 +628,17 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
         confirmLabel={t("block.confirm")}
         onConfirm={handleBlock}
         onCancel={() => setBlockTarget(null)}
+      />
+
+      {/* Les trois gestes destructifs du salon. On ferme AVANT d'exécuter :
+          `run` peut démonter ce composant (quitter, supprimer). */}
+      <ConfirmDialog
+        open={confirmAction !== null}
+        title={confirmAction?.title ?? ""}
+        description={confirmAction?.description}
+        confirmLabel={confirmAction?.cta}
+        onConfirm={() => { const a = confirmAction; setConfirmAction(null); a?.run(); }}
+        onCancel={() => setConfirmAction(null)}
       />
     </div>
   );

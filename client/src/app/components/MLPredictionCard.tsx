@@ -14,6 +14,7 @@ import { FramedLabel } from "./brand/FramedLabel";
 import { env } from "../env";
 import { fetchWithTimeout } from "../services/http";
 import { pctColor } from "../data/pctScale";
+import { useOddsFormat } from "../context/OddsFormatContext";
 
 type TFn = (key: string, params?: Record<string, string | number>) => string;
 
@@ -56,6 +57,7 @@ function MLGauge({ pct }: { pct: number }) {
   }, [pct]);
 
   const color = pctColor(pct);
+  const { format, prob } = useOddsFormat();
 
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
@@ -71,7 +73,13 @@ function MLGauge({ pct }: { pct: number }) {
         )}
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-white text-xl font-black">{displayed}<span className="text-sm">%</span></span>
+        {/* Même règle que la jauge du coupon : le compteur ne défile qu'en %.
+            Une cote qui « descend » depuis sa borne se lit comme un bug. */}
+        {format === "percent" ? (
+          <span className="text-white text-xl font-black">{displayed}<span className="text-sm">%</span></span>
+        ) : (
+          <span className="text-white text-base font-black font-mono">{prob(pct)}</span>
+        )}
       </div>
     </div>
   );
@@ -151,6 +159,7 @@ function MLGaugeLarge({ pct, color }: { pct: number; color: string }) {
   const radius = 52;
   const circ = 2 * Math.PI * radius;
   const offset = circ * (1 - displayed / 100);
+  const { format, prob } = useOddsFormat();
 
   useEffect(() => {
     setDisplayed(0);
@@ -175,8 +184,16 @@ function MLGaugeLarge({ pct, color }: { pct: number; color: string }) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl font-black leading-none" style={{ color }}>{displayed}</span>
-        <span className="text-sm font-bold" style={{ color }}>%</span>
+        {/* Compteur animé en % seulement — cf. la même règle sur les deux
+            autres jauges de l'app. */}
+        {format === "percent" ? (
+          <>
+            <span className="text-3xl font-black leading-none" style={{ color }}>{displayed}</span>
+            <span className="text-sm font-bold" style={{ color }}>%</span>
+          </>
+        ) : (
+          <span className="text-2xl font-black leading-none font-mono" style={{ color }}>{prob(pct)}</span>
+        )}
       </div>
     </div>
   );
@@ -186,6 +203,7 @@ function MLGaugeLarge({ pct, color }: { pct: number; color: string }) {
 
 function MLSimpleCard({ result }: { result: MLPredictionResult; ruleBasedPct?: number }) {
   const { t, lang } = useI18n();
+  const { format, prob } = useOddsFormat();
   const { probability, confidence, explanation } = result;
   const [open, setOpen] = useState(false);
   const [barWidth, setBarWidth] = useState(0);
@@ -211,15 +229,19 @@ function MLSimpleCard({ result }: { result: MLPredictionResult; ruleBasedPct?: n
         >
           {lang === "fr" ? "Détails" : "Details"} {open ? "▲" : "▼"}
         </button>
-        <span className="text-xl font-black flex-shrink-0" style={{ color: probColor }}>{probability}%</span>
+        <span className="text-xl font-black flex-shrink-0 tabular-nums" style={{ color: probColor }}>{prob(probability)}</span>
       </div>
 
       {/* Corps — ouvert : barre sur la même rangée que le score, confiance en dessous */}
       {open && (
         <div className="px-4 pb-3 border-t border-[#a78bfa]/10 pt-3">
           <div className="flex items-center gap-3">
-            <span className="text-3xl font-black leading-none flex-shrink-0" style={{ color: probColor }}>
-              {probability}<span className="text-base font-bold" style={{ color: probColor + "bb" }}>%</span>
+            <span className="text-3xl font-black leading-none flex-shrink-0 tabular-nums" style={{ color: probColor }}>
+              {/* Le « % » atténué fait partie de l'identité visuelle de ce
+                  chiffre ; hors du format %, il n'y a pas de suffixe à atténuer. */}
+              {format === "percent" ? (
+                <>{probability}<span className="text-base font-bold" style={{ color: probColor + "bb" }}>%</span></>
+              ) : prob(probability)}
             </span>
             <div className="flex-1 bg-[#0A0E0C] rounded-full h-2 overflow-hidden">
               <div className="h-full rounded-full transition-all duration-700 ease-out"
@@ -250,6 +272,7 @@ interface MLPredictionCardProps {
 
 export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero = false, simple = false, label }: MLPredictionCardProps) {
   const { t } = useI18n();
+  const { format: oddsFormat, prob: probFmt } = useOddsFormat();
   const { probability, confidence, feature_importances, model_type, model_version, explanation } = result;
 
   const probColor = pctColor(probability);
@@ -260,7 +283,7 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
     return (
       <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#1a1230] border border-[#a78bfa]/25">
         <span className="text-[11px] text-[#a78bfa] font-bold">🤖 ML</span>
-        <span className="text-xs font-black" style={{ color: probColor }}>{probability}%</span>
+        <span className="text-xs font-black tabular-nums" style={{ color: probColor }}>{probFmt(probability)}</span>
         <span className="text-[11px] text-[#4a4060]">{model_type.split(' ')[0]}</span>
       </div>
     );
@@ -306,10 +329,20 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
                 style={{ backgroundColor: verdict.bg, color: verdict.color }}>
                 {verdict.text}
               </div>
-              {/* Big number */}
+              {/* Big number.
+                  La ligne « règles → ML » juste en dessous reste, elle, en % :
+                  c'est une COMPARAISON de deux sorties de modèle et un écart en
+                  points de pourcentage, pas un prix. L'écrire en cote rendrait
+                  l'écart illisible. */}
               <div className="flex items-baseline gap-1 mb-1">
-                <span className="text-4xl font-black" style={{ color: probColor }}>{probability}</span>
-                <span className="text-xl font-black" style={{ color: probColor + "bb" }}>%</span>
+                {oddsFormat === "percent" ? (
+                  <>
+                    <span className="text-4xl font-black" style={{ color: probColor }}>{probability}</span>
+                    <span className="text-xl font-black" style={{ color: probColor + "bb" }}>%</span>
+                  </>
+                ) : (
+                  <span className="text-4xl font-black font-mono" style={{ color: probColor }}>{probFmt(probability)}</span>
+                )}
               </div>
               {/* Delta vs rules */}
               {delta !== null && (
@@ -370,8 +403,8 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
         <div className="flex items-center gap-4 mb-4">
           <MLGauge pct={probability} />
           <div className="flex-1 min-w-0">
-            <p className="text-white text-sm font-black mb-1">
-              {probability}%
+            <p className="text-white text-sm font-black mb-1 tabular-nums">
+              {probFmt(probability)}
               <span className="text-[#6b5a8a] text-[11px] font-normal ml-1.5">{t("ml.probability")}</span>
             </p>
             <p className="text-[#8a7aaa] text-[11px] leading-relaxed">{explanation}</p>

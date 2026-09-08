@@ -404,3 +404,19 @@ export const redeemPromoSchema = z.object({
   code: z.string().trim().min(1, 'Code required').max(64)
     .regex(/^[A-Za-z0-9_-]+$/, 'Invalid promo code'),
 });
+
+// `POST /subscription/checkout` — la cadence de facturation choisie sur /pro.
+//
+// Le champ s'appelle `period` et non `plan` : `plan` désigne déjà le NIVEAU
+// d'abonnement (`free` / `pro`) dans la table et dans `SubscriptionStatus`.
+//
+// Le corps entier est `.optional()`, et ce n'est pas de la complaisance : la
+// route n'envoyait AUCUN corps avant l'ajout de la cadence annuelle, donc un
+// bundle client resté en cache pendant le déploiement poste toujours à vide.
+// Refuser ce cas casserait le paiement pendant toute la fenêtre de déploiement,
+// pour rien — une cadence absente retombe simplement sur le mensuel, l'ancien
+// comportement. L'énumération, elle, reste stricte : la cadence choisit une
+// variable d'environnement, elle ne doit jamais venir d'une chaîne libre.
+export const checkoutSchema = z
+  .object({ period: z.enum(['monthly', 'yearly']).optional() })
+  .optional();

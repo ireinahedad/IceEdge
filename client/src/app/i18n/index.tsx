@@ -106,6 +106,15 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "profile.language":     { en: "Language",      fr: "Langue" },
   "profile.bookmaker":    { en: "Sportsbook",    fr: "Site de paris" },
   "profile.bookmakerHint":{ en: "Which site the “Place bet” buttons open", fr: "Le site que les boutons « Parier » ouvrent" },
+  // Format d'affichage des cotes. Les clés `.percent` / `.decimal` / `.american`
+  // sont construites à partir de l'identifiant du format
+  // (`profile.oddsFormat.${f}`) : renommer un identifiant dans
+  // `services/oddsFormat.ts` sans renommer la clé ici afficherait la clé brute.
+  "profile.oddsFormat":          { en: "Odds display",   fr: "Affichage des cotes" },
+  "profile.oddsFormat.percent":  { en: "Percent",        fr: "Pourcentage" },
+  "profile.oddsFormat.decimal":  { en: "Decimal",        fr: "Cote décimale" },
+  "profile.oddsFormat.american": { en: "American",       fr: "Cote américaine" },
+  "profile.oddsFormatHint":      { en: "How every betting probability is written across the app. Stats (win rate, ROI, form) always stay in %.", fr: "Comment s'écrit chaque probabilité de pari dans l'app. Les statistiques (taux de victoire, ROI, forme) restent toujours en %." },
   "profile.dark":         { en: "Dark",          fr: "Sombre" },
   "profile.light":        { en: "Light",         fr: "Clair" },
   "profile.aiSettings":   { en: "AI Settings",   fr: "Paramètres IA" },
@@ -169,6 +178,25 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "chat.noPrivateRooms": { en: "No private rooms yet — join one with a code.", fr: "Aucun salon privé — rejoins-en un avec un code." },
   "chat.roomColor":    { en: "Room Color",           fr: "Couleur du salon" },
   "chat.deleteMessageConfirm": { en: "Delete this message?", fr: "Supprimer ce message ?" },
+
+  // Les quatre confirmations qui passaient par `window.confirm()` jusqu'au
+  // 2026-09-08. En WKWebView ce dialogue affiche le NOM DE DOMAINE en titre et
+  // bloque le fil JavaScript ; il n'était de surcroît pas traduit — les trois
+  // formulations vivaient en anglais en dur dans le code.
+  "chat.deleteMessageConfirmCta": { en: "Delete",  fr: "Supprimer" },
+  "chat.leaveRoomTitle":       { en: "Leave {name}?", fr: "Quitter {name} ?" },
+  "chat.leaveRoomDescription": { en: "You can come back later with the room's join code.", fr: "Tu pourras revenir plus tard avec le code d'accès du salon." },
+  "chat.leaveRoomCta":         { en: "Leave",     fr: "Quitter" },
+  "chat.deleteRoomTitle":      { en: "Delete {name} for everyone?", fr: "Supprimer {name} pour tout le monde ?" },
+  "chat.deleteRoomDescription":{ en: "This cannot be undone — the room and all its messages disappear for every member.", fr: "C'est définitif — le salon et tous ses messages disparaissent pour tous les membres." },
+  "chat.deleteRoomCta":        { en: "Delete",    fr: "Supprimer" },
+  "chat.removeMemberTitle":    { en: "Remove {name} from the room?", fr: "Retirer {name} du salon ?" },
+  "chat.removeMemberDescription": { en: "They can join again with the room's code.", fr: "Cette personne pourra revenir avec le code du salon." },
+  "chat.removeMemberCta":      { en: "Remove",    fr: "Retirer" },
+  "chat.charsLeft":            { en: "{n} left",  fr: "{n} restants" },
+  "profile.avatarUploadFailed": { en: "Couldn\u2019t upload this picture", fr: "Impossible de téléverser cette image" },
+  "slip.shareFailed":      { en: "Couldn\u2019t create the image", fr: "Impossible de créer l'image" },
+  "slip.shareUnavailable": { en: "Sharing isn\u2019t available here — take a screenshot instead.", fr: "Le partage n'est pas disponible ici — fais plutôt une capture d'écran." },
   "chat.newRoom":      { en: "+ New Room",           fr: "+ Nouveau salon" },
   "chat.createRoom":   { en: "Create a new room",    fr: "Créer un nouveau salon" },
   "chat.createTitle":  { en: "New Chat Room",        fr: "Nouveau salon" },
@@ -783,10 +811,20 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pro.badge":        { en: "Pro",             fr: "Pro" },
   "pro.unlock":       { en: "Unlock with Pro", fr: "Débloquer avec Pro" },
   "pro.perMonth":     { en: "/mo",             fr: "/mois" },
-  "pro.annualNote":   { en: "or $99/yr (2 months free)", fr: "ou 99 $/an (2 mois offerts)" },
+  "pro.perYear":      { en: "/yr",             fr: "/an" },
+  "pro.billingPeriod":{ en: "Billing period",  fr: "Cadence de facturation" },
+  "pro.planMonthly":  { en: "Monthly",         fr: "Mensuel" },
+  "pro.planYearly":   { en: "Yearly",          fr: "Annuel" },
+  // `{price}` est injecté depuis ProPage pour que le montant annuel ne soit
+  // écrit qu'à UN endroit (les constantes de la page). Deux prix à tenir à jour
+  // dans deux fichiers finissent toujours par diverger, et ici diverger veut
+  // dire annoncer un montant que Stripe ne débitera pas.
+  "pro.annualNote":   { en: "or {price}/yr — 2 months free", fr: "ou {price}/an — 2 mois offerts" },
+  "pro.yearlyNote":   { en: "That's $5/mo — 2 months free vs monthly.", fr: "Soit 5 $/mois — 2 mois offerts par rapport au mensuel." },
   "pro.cta":          { en: "Upgrade to Pro",  fr: "Passer à Pro" },
   "pro.startTrial":   { en: "Start 7-day free trial", fr: "Commencer l'essai gratuit 7 jours" },
   "pro.trialNote":    { en: "Start with 7 days free, then billed monthly.", fr: "7 jours gratuits, puis facturé mensuellement." },
+  "pro.trialNoteYearly": { en: "Start with 7 days free, then billed yearly.", fr: "7 jours gratuits, puis facturé annuellement." },
   "pro.trialActive":  { en: "Free trial active 🎉", fr: "Essai gratuit actif 🎉" },
   "pro.trialEnds":    { en: "Trial ends on",   fr: "Essai se termine le" },
   "pro.loginPrompt":  { en: "Sign in to subscribe", fr: "Connecte-toi pour t'abonner" },
@@ -802,6 +840,13 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pro.manage":       { en: "Manage subscription", fr: "Gérer l'abonnement" },
   "pro.settingsCancel": { en: "Cancel subscription", fr: "Annuler l'abonnement" },
   "pro.canceling":    { en: "Canceling…",      fr: "Annulation…" },
+  // Ce que « annuler » veut dire ici : on coupe le RENOUVELLEMENT, on ne coupe
+  // pas l'accès. Le serveur pose `cancel_at_period_end` chez Stripe et en base
+  // (`subscription.service.cancel`), donc le Pro court jusqu'à la fin de la
+  // période déjà payée. Le dire dans la boîte de confirmation évite la seule
+  // lecture coûteuse de ce bouton : « j'ai payé le mois et je perds tout ».
+  "pro.cancelConfirmBody":       { en: "Your subscription won't renew. You keep full Pro access until {date}.", fr: "Ton abonnement ne sera pas renouvelé. Tu gardes l'accès Pro complet jusqu'au {date}." },
+  "pro.cancelConfirmBodyNoDate": { en: "Your subscription won't renew. You keep full Pro access until the end of the period you already paid for.", fr: "Ton abonnement ne sera pas renouvelé. Tu gardes l'accès Pro complet jusqu'à la fin de la période déjà payée." },
   "pro.subscription": { en: "Subscription",    fr: "Abonnement" },
   "pro.promo.label":       { en: "Have a promo code?", fr: "Tu as un code promo ?" },
   "pro.promo.placeholder": { en: "Enter code",         fr: "Entre ton code" },

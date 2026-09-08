@@ -312,14 +312,60 @@ function mapStripeStatus(s: Stripe.Subscription.Status): SubStatus {
 }
 
 /**
+ * Les deux cadences de facturation vendues.
+ *
+ * ⚠️ Ne PAS appeler ça `BillingPlan` : ce nom est déjà pris, et par le NIVEAU
+ * d'abonnement (`'free' | 'pro'`, dans `types/subscription.type.ts`), qui vit
+ * dans le champ `plan` de la table et de `SubscriptionStatus`. Les deux notions
+ * se croisent partout dans ce fichier — un abonné `pro` payé `yearly` — et le
+ * typecheck a déjà attrapé la collision une fois. « Période » pour le rythme,
+ * « plan » pour le niveau.
+ */
+export type BillingPeriod = 'monthly' | 'yearly';
+
+/** Quelle variable d'environnement porte l'ID de tarif Stripe de chaque cadence. */
+const PERIOD_PRICE_ENV: Record<BillingPeriod, string> = {
+  monthly: 'STRIPE_PRICE_PRO_MONTHLY',
+  yearly:  'STRIPE_PRICE_PRO_YEARLY',
+};
+
+/**
+ * Cadences réellement achetables : celles dont l'ID de tarif est configuré.
+ *
+ * Exposé par `GET /subscription/me` pour que la page /pro n'affiche jamais un
+ * bouton qui échouerait. Un prix annoncé sans moyen de l'acheter est pire que
+ * pas de prix du tout — c'est déjà la règle de la carte de prix côté client.
+ */
+export function availablePeriods(): BillingPeriod[] {
+  if (!stripeConfigured()) return [];
+  return (Object.keys(PERIOD_PRICE_ENV) as BillingPeriod[])
+    .filter((p) => !!process.env[PERIOD_PRICE_ENV[p]]?.trim());
+}
+
+/**
  * Creates a Stripe Checkout Session for the Pro plan and returns its URL.
  * `client_reference_id` + subscription metadata carry our userId so the webhook
  * can attribute the resulting subscription back to the right account.
  */
-export async function createCheckoutSession(userId: string, email?: string): Promise<string> {
+export async function createCheckoutSession(
+  userId: string,
+  email?: string,
+  period: BillingPeriod = 'monthly',
+): Promise<string> {
   const stripe = getStripe();
-  const price = process.env.STRIPE_PRICE_PRO_MONTHLY;
-  if (!price) throw Object.assign(new Error('STRIPE_PRICE_PRO_MONTHLY is not set'), { status: 500 });
+  const envName = PERIOD_PRICE_ENV[period];
+  const price = process.env[envName]?.trim();
+  if (!price) throw Object.assign(new Error(`${envName} is not set`), { status: 500 });
+  // Stripe attend un ID de TARIF (`price_…`), pas un ID de PRODUIT (`prod_…`).
+  // Les deux se copient au même endroit du tableau de bord et se ressemblent ;
+  // la seule différence visible sans cette garde serait un
+  // « No such price: prod_… » remonté par Stripe au milieu du paiement.
+  if (price.startsWith('prod_')) {
+    throw Object.assign(
+      new Error(`${envName} contient un ID de produit (${price}) au lieu d'un ID de tarif price_…`),
+      { status: 500 },
+    );
+  }
 
   // Reuse an existing Stripe customer if we already have one for this user.
   const { rows } = await pool.query<SubscriptionRow>(
@@ -335,7 +381,7 @@ export async function createCheckoutSession(userId: string, email?: string): Pro
     client_reference_id: userId,
     customer: existingCustomer,
     customer_email: existingCustomer ? undefined : email,
-    subscription_data: { metadata: { userId } },
+    subscription_data: { metadata: { userId, period } },
     success_url: `${base}/pro/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${base}/pro`,
     allow_promotion_codes: true,

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { profileApiService } from "../../../services/userService";
 import { UserRow, UserTag } from "../../../components/UserIdentity";
 import { UserSheet } from "../../../components/UserSheet";
+import { ConfirmDialog } from "../../../components/ConfirmDialog";
 import { useI18n } from "../../../i18n";
 import type { ChatRoom, ChatRoomMember } from "../../../types/user";
 
@@ -19,6 +20,10 @@ export function MembersModal({ room, currentUserId, onClose }: {
   // Toucher un membre ouvre sa fiche — c'est de là qu'on bloque quelqu'un sans
   // avoir à retrouver un de ses messages (R4.3c bis).
   const [openUser, setOpenUser] = useState<ChatRoomMember | null>(null);
+  // Remplace `window.confirm("Remove this member from the room?")`, qui n'était
+  // ni traduit ni cohérent avec le reste de l'app, et qui gèle le fil en
+  // WKWebView.
+  const [kickTarget, setKickTarget] = useState<ChatRoomMember | null>(null);
   const isAdmin = room.role === "admin";
 
   function load() {
@@ -30,8 +35,15 @@ export function MembersModal({ room, currentUserId, onClose }: {
   useEffect(load, [room.id]);
 
   async function handleKick(userId: string) {
-    if (!confirm("Remove this member from the room?")) return;
-    try { await profileApiService.kickMember(room.id, userId); load(); }
+    const target = members.find((m) => m.userId === userId) ?? null;
+    setKickTarget(target);
+  }
+
+  async function confirmKick() {
+    const target = kickTarget;
+    setKickTarget(null);
+    if (!target) return;
+    try { await profileApiService.kickMember(room.id, target.userId); load(); }
     catch (e: any) { setError(e.message); }
   }
 
@@ -99,6 +111,15 @@ export function MembersModal({ room, currentUserId, onClose }: {
           onClose={() => setOpenUser(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={kickTarget !== null}
+        title={t("chat.removeMemberTitle", { name: kickTarget?.displayName || kickTarget?.username || "" })}
+        description={t("chat.removeMemberDescription")}
+        confirmLabel={t("chat.removeMemberCta")}
+        onConfirm={confirmKick}
+        onCancel={() => setKickTarget(null)}
+      />
     </div>
   );
 }

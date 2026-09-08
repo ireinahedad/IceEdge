@@ -26,6 +26,7 @@ import { profileApiService } from "./../../services/userService";
 import { applyServerFamilyWeights } from "./../../services/ruleWeightsService";
 import type { UserProfile, UserBettingStats } from "./../../types/user";
 import { useI18n } from "../../i18n";
+import { toast } from "sonner";
 import "./profile-settings.css";
 import { OverviewTab, ProfileHeader, Skeleton, Tab } from "./ProfileParts";
 import { SettingsTab } from "./SettingsTab";
@@ -96,7 +97,10 @@ export function ProfilePage() {
       const url = await profileApiService.uploadAvatar(file);
       setProfile((p) => p ? { ...p, avatarUrl: url } : p);
     } catch (err: any) {
-      alert(err.message ?? "Upload failed");
+      // `alert()` était le SEUL de l'app : dialogue système non traduit, qui
+      // affiche le nom de domaine en titre en WKWebView et gèle le fil. Le
+      // reste de l'app signale déjà ses échecs par `sonner`.
+      toast.error(err.message ?? t("profile.avatarUploadFailed"));
     } finally {
       setAvatarUploading(false);
       e.target.value = "";

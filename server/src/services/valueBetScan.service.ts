@@ -209,8 +209,17 @@ async function runScan(): Promise<void> {
       return;
     }
 
-    // Only notify users whose personal min-EV threshold is met by this bet.
-    const recipients = (await optedInUsers()).filter((u) => vb.evPct >= u.minEvPct);
+    // Only notify users whose personal minimum-EDGE threshold is met by this bet.
+    //
+    // ⚠️ Comparé à `edgePct`, PAS à `evPct` — c'était l'inverse jusqu'au 2026-09-08.
+    // L'écran Réglages intitule le champ « Edge minimum » et son aide parle d'edge,
+    // mais le filtre lisait l'EV : deux quantités différentes (edge = proba modèle
+    // − proba marché dé-viggée ; EV = proba modèle × cote − 1), donc un seuil réglé
+    // à 3 % ne coupait pas ce que l'utilisateur croyait couper. C'est aussi l'edge,
+    // et non l'EV, dont le ROI est validé au backtest walk-forward, et c'est lui que
+    // bornent MIN_EDGE / MAX_EDGE plus haut : le seuil personnel prolonge donc le
+    // plancher global au lieu de le croiser.
+    const recipients = (await optedInUsers()).filter((u) => vb.edgePct >= u.minEvPct);
     if (recipients.length === 0) return;
 
     const payload = {

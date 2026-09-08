@@ -4,6 +4,15 @@
  */
 import { authedFetch } from './authService';
 
+/**
+ * Cadence de facturation.
+ *
+ * ⚠️ Distincte du champ `plan` ci-dessous, qui est le NIVEAU d'abonnement
+ * (`free` / `pro`). Les deux se croisent — un abonné `pro` facturé `yearly` —
+ * et côté serveur la confusion des deux noms a déjà cassé le typecheck.
+ */
+export type BillingPeriod = 'monthly' | 'yearly';
+
 export interface SubscriptionStatus {
   plan: 'free' | 'pro';
   status: string;
@@ -11,6 +20,12 @@ export interface SubscriptionStatus {
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   trialUsed: boolean;
+  /**
+   * Cadences réellement achetables, d'après les IDs de tarif configurés côté
+   * serveur. Optionnel : un serveur pas encore déployé ne renvoie pas le champ,
+   * et l'écran doit alors se comporter comme avant (mensuel seul).
+   */
+  periods?: BillingPeriod[];
 }
 
 export interface CheckoutResult {
@@ -25,8 +40,12 @@ export async function apiGetSubscription(): Promise<SubscriptionStatus> {
   return res.json();
 }
 
-export async function apiStartCheckout(): Promise<CheckoutResult> {
-  const res = await authedFetch('/subscription/checkout', { method: 'POST' });
+export async function apiStartCheckout(period: BillingPeriod = 'monthly'): Promise<CheckoutResult> {
+  const res = await authedFetch('/subscription/checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ period }),
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error ?? 'Checkout failed');

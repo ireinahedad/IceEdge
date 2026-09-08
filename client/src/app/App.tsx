@@ -6,6 +6,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { SubscriptionProvider } from "./context/SubscriptionContext";
 import { SportProvider, useSport } from "./context/SportContext";
 import { BookmakerProvider } from "./context/BookmakerContext";
+import { OddsFormatProvider } from "./context/OddsFormatContext";
 import { BlockProvider } from "./context/BlockContext";
 import { LanguageProvider } from "./i18n";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -56,13 +57,21 @@ export default function App() {
           <BetProvider>
             <SportProvider>
               <BookmakerProvider>
-                {/* R4.3d — la liste de blocage est partagée entre le chat et
-                    les Paramètres. Elle ne charge rien au montage : voir
-                    BlockContext, `ensureLoaded`. Sous AuthProvider, dont elle
-                    lit l'utilisateur courant. */}
-                <BlockProvider>
-                  <AppShell />
-                </BlockProvider>
+                {/* Format d'affichage des cotes (%, cote décimale, cote
+                    américaine). Réglage de LECTURE seulement : il ne touche
+                    aucun calcul. Placé ici parce qu'il est lu partout sous
+                    AppShell, et sous BookmakerProvider parce que les deux
+                    répondent à la même question — comment ce lecteur-là lit un
+                    prix. Voir context/OddsFormatContext.tsx. */}
+                <OddsFormatProvider>
+                  {/* R4.3d — la liste de blocage est partagée entre le chat et
+                      les Paramètres. Elle ne charge rien au montage : voir
+                      BlockContext, `ensureLoaded`. Sous AuthProvider, dont elle
+                      lit l'utilisateur courant. */}
+                  <BlockProvider>
+                    <AppShell />
+                  </BlockProvider>
+                </OddsFormatProvider>
               </BookmakerProvider>
             </SportProvider>
           </BetProvider>

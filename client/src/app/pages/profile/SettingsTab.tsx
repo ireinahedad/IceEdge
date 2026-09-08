@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useAuth } from "../../context/AuthContext";
@@ -15,10 +15,12 @@ import { useSubscription } from "../../context/SubscriptionContext";
 import { apiCancelSubscription } from "../../services/subscriptionService";
 import { profileApiService } from "./../../services/userService";
 import { enableValueBetPush, disableValueBetPush } from "./../../services/pushService";
-import type { UserProfile } from "./../../types/user";
+import { DEFAULT_MIN_EDGE_PCT, type UserProfile } from "./../../types/user";
 import { ManualEntryCard } from "../../components/ManualEntryCard";
 import { useI18n } from "../../i18n";
 import { useBookmaker } from "../../context/BookmakerContext";
+import { useOddsFormat } from "../../context/OddsFormatContext";
+import { ODDS_FORMAT_SAMPLE } from "../../services/oddsFormat";
 import { useBlocks } from "../../context/BlockContext";
 import { UserRow } from "../../components/UserIdentity";
 import { features } from "../../platform";
@@ -45,8 +47,13 @@ export function SettingsTab({
   const { t, lang, setLang } = useI18n();
   const { isPro, status: subStatus, refresh: refreshSub } = useSubscription();
   const { bookmakerId, setBookmakerId, bookmakers } = useBookmaker();
+  const { format: oddsFormat, setFormat: setOddsFormat, formats: oddsFormats } = useOddsFormat();
   const { logoutAll } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  // /pro ne peut pas revenir par l'historique (Stripe Checkout y est empilé) :
+  // les deux boutons ci-dessous lui passent la route d'où l'on vient.
+  const proState = { state: { from: location.pathname + location.search } };
   const [signingOutAll, setSigningOutAll] = useState(false);
   const [cancelingSub, setCancelingSub] = useState(false);
   const [confirmCancelSub, setConfirmCancelSub] = useState(false);
@@ -105,7 +112,11 @@ export function SettingsTab({
   const [isPublic, setIsPublic] = useState(profile.isPublic);
   const [showSlips, setShowSlips] = useState(profile.showSlips ?? false);
   const [notifyValueBets, setNotifyValueBets] = useState(profile.notifyValueBets ?? false);
-  const [minEvPct, setMinEvPct] = useState(profile.valueBetMinEvPct ?? 0);
+  // Défaut à 2 % et non 0 : le scan serveur ignore déjà tout edge sous son
+  // plancher MIN_EDGE (0,02), issu du backtest walk-forward. Un 0 affiché ici
+  // promettait « alerte-moi sur n'importe quel edge positif », ce que le
+  // serveur ne fait pas. Voir migration 035 et `DEFAULT_MIN_EDGE_PCT`.
+  const [minEvPct, setMinEvPct] = useState(profile.valueBetMinEvPct ?? DEFAULT_MIN_EDGE_PCT);
   // La clé OpenAI est en écriture seule : le serveur ne renvoie que
   // `hasOpenaiKey`, jamais la clé (voir `profile.service.getProfileById`). Le
   // champ part donc toujours vide, et trois états décrivent l'intention de
@@ -161,7 +172,10 @@ export function SettingsTab({
         isPublic,
         showSlips,
         notifyValueBets: isPro ? notifyValueBets : false,
-        valueBetMinEvPct: isPro ? minEvPct : 0,
+        // Un compte non-Pro ne peut pas régler ce seuil ; on le laisse sur le
+        // défaut plutôt que sur 0, pour qu'un abonnement pris plus tard parte
+        // d'une valeur qui a un sens au lieu d'un seuil désactivé.
+        valueBetMinEvPct: isPro ? minEvPct : DEFAULT_MIN_EDGE_PCT,
         ...keyPatch,
       });
       onSaved(updated);
@@ -252,6 +266,39 @@ export function SettingsTab({
           <p className="text-[11px] text-white/35 mt-1.5">{t("profile.bookmakerHint")}</p>
         </div>
       )}
+
+      {/* Format d'affichage des cotes.
+          Volontairement HORS du garde `features.bookmakerLinks` du bloc
+          ci-dessus : celui-ci disparaît sur iOS (Guideline 5.3, aucun lien
+          sortant vers un livre), alors que lire ses probabilités en cote
+          américaine n'a rien à voir avec un lien sortant et doit rester
+          disponible partout.
+          L'exemple sous chaque nom fait le travail que l'étiquette ne fait pas :
+          « Cote décimale » ne dit rien, « 1.47 » se reconnaît. */}
+      <div className="icy-card rounded-lg px-3 py-2.5">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <span className="text-[11px]">🔢</span>
+          <span className="text-[11px] font-bold text-white/80">{t("profile.oddsFormat")}</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {oddsFormats.map((f) => (
+            <button
+              key={f}
+              onClick={() => setOddsFormat(f)}
+              aria-pressed={oddsFormat === f}
+              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-colors ${
+                oddsFormat === f
+                  ? "bg-[#90C9F0]/15 border-[#90C9F0]/40 text-[#90C9F0]"
+                  : "border-white/15 text-white/50 active:bg-white/5"
+              }`}
+            >
+              {t(`profile.oddsFormat.${f}`)}
+              <span className="ml-1.5 font-mono opacity-60">{ODDS_FORMAT_SAMPLE[f]}</span>
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] text-white/35 mt-1.5">{t("profile.oddsFormatHint")}</p>
+      </div>
 
       {/* Avatar */}
       <div className="icy-card rounded-2xl p-4 flex flex-col gap-4">
@@ -386,7 +433,7 @@ export function SettingsTab({
               <ToggleSwitch checked={notifyValueBets} onChange={handleToggleNotify} fontSize={12} />
             ) : (
               <button
-                onClick={() => navigate("/pro")}
+                onClick={() => navigate("/pro", proState)}
                 className="px-3 py-1.5 rounded-lg text-[11px] font-bold flex-shrink-0"
                 style={{ background: "#86d1ea", color: "#0A0E0C" }}
               >
@@ -564,7 +611,7 @@ export function SettingsTab({
           <>
             <p className="text-white/50 text-[11px]">{t("pro.subtitle")}</p>
             <button
-              onClick={() => navigate("/pro")}
+              onClick={() => navigate("/pro", proState)}
               className="self-start mt-1 text-[11px] font-bold rounded-lg px-3 py-1.5 transition-all"
               style={{ background: "#86d1ea", color: "#0A0E0C" }}
             >
@@ -642,9 +689,18 @@ export function SettingsTab({
         </button>
       </div>
 
+      {/* La description n'est pas décorative : sans elle, « Annuler
+          l'abonnement » se lit comme « je perds Pro tout de suite ». Le serveur
+          pose `cancel_at_period_end`, donc l'accès court jusqu'à la date déjà
+          affichée au-dessus du bouton. */}
       <ConfirmDialog
         open={confirmCancelSub}
         title={`${t("pro.settingsCancel")} ?`}
+        description={
+          subStatus?.currentPeriodEnd
+            ? t("pro.cancelConfirmBody", { date: new Date(subStatus.currentPeriodEnd).toLocaleDateString() })
+            : t("pro.cancelConfirmBodyNoDate")
+        }
         onConfirm={handleCancelSub}
         onCancel={() => setConfirmCancelSub(false)}
       />

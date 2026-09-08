@@ -6,9 +6,21 @@
  *     useChatSocket(roomId);
  *
  * Flow:
- *   1. On mount, caller fetches HTTP history and calls initMessages(msgs)
+ *   1. On mount, caller fetches HTTP history and calls mergeMessages(msgs)
  *   2. Socket emits 'new_message' → deduped and appended automatically
  *   3. For own sends: appendOptimistic(msg) immediately, then confirmMessage(tempId, serverMsg)
+ *
+ * ⚠️ **L'historique est TOUJOURS fusionné, jamais écrasé** — au montage comme
+ * après une coupure. `initMessages`, qui remplaçait la liste, a été retiré le
+ * 2026-09-08 : il ouvrait une course. Le socket se connecte pendant que le
+ * `GET /messages` est en vol, et un message arrivé dans cet intervalle était
+ * **effacé par la réponse HTTP**. Court, mais permanent : ce message-là ne
+ * revenait jamais.
+ *
+ * Ce que `initMessages` faisait d'autre, et qu'il fallait remplacer : isoler
+ * les salons. C'est maintenant l'effet ci-dessous qui vide la liste quand
+ * `roomId` change — donc à l'endroit où le salon change, et non dans le premier
+ * `fetch` de l'appelant, où c'était un effet de bord invisible.
  *
  * Survivre à un passage en arrière-plan (audit pré-freeze iOS)
  * ───────────────────────────────────────────────────────────
@@ -63,6 +75,11 @@ export function useChatSocket(roomId: string | null) {
 
   useEffect(() => {
     if (!roomId) return;
+
+    // Changer de salon vide la liste. Sans ça, la fusion mêlerait les messages
+    // du salon précédent à ceux du nouveau. C'est la contrepartie du retrait
+    // d'`initMessages` : la remise à zéro appartient au changement de salon.
+    setMessages([]);
 
     // Portées à l'effet, pas au composant : elles doivent repartir de zéro
     // avec chaque socket.
@@ -161,16 +178,13 @@ export function useChatSocket(roomId: string | null) {
     };
   }, [roomId]);
 
-  /** Seed the initial HTTP history */
-  const initMessages = useCallback((msgs: ChatMessage[]) => {
-    setMessages(msgs);
-  }, []);
-
   /**
-   * Fusionner un historique fraîchement rechargé avec ce qui est déjà à
-   * l'écran — c'est ce qu'il faut après une coupure, jamais `initMessages`.
+   * Fusionner un historique fraîchement chargé avec ce qui est déjà à l'écran.
+   * Le SEUL point d'entrée de l'historique HTTP, au montage comme après une
+   * coupure.
    *
-   * Écraser perdrait deux choses : les messages optimistes encore en vol, et
+   * Écraser perdrait trois choses : un message arrivé par le socket pendant
+   * que la requête était en vol, les messages optimistes encore en attente, et
    * tout ce qui est plus ancien que la fenêtre que renvoie l'API. Le serveur
    * fait foi sur les identifiants qu'il renvoie ; le tri se fait sur `sentAt`
    * parce que l'ordre d'arrivée d'une reconnexion ne veut plus rien dire.
@@ -211,7 +225,7 @@ export function useChatSocket(roomId: string | null) {
 
   return {
     messages, onlineCount, connected,
-    initMessages, mergeMessages, appendOptimistic, confirmMessage, removeMessage,
+    mergeMessages, appendOptimistic, confirmMessage, removeMessage,
     resyncKey, authError, roomError,
   };
 }

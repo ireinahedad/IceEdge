@@ -16,6 +16,16 @@
 
 import type { BetMarketType } from "./../types/bet";
 
+/**
+ * Edge minimum par défaut d'une alerte value bet, en % entiers.
+ *
+ * Doit rester égal à `DEFAULT_MIN_EDGE_PCT` côté serveur
+ * (`profile.service.ts`) et au DEFAULT de la colonne posé par la migration 035.
+ * 2 % est le plancher que le scan applique déjà (`MIN_EDGE`) : en dessous,
+ * aucune alerte n'est émise de toute façon.
+ */
+export const DEFAULT_MIN_EDGE_PCT = 2;
+
 
 export type BadgeId =
   | "sharp_shooter" | "parlay_king" | "streak_master"
@@ -47,7 +57,7 @@ export interface UserProfile {
   showSlips?: boolean;
   /** Receive value-bet (+EV) notifications — Pro only */
   notifyValueBets?: boolean;
-  /** Minimum +EV edge (whole %) required before a value-bet alert is sent — Pro only */
+  /** Minimum edge (whole %) required before a value-bet alert is sent — Pro only */
   valueBetMinEvPct?: number;
   tier: "rookie" | "analyst" | "sharp" | "legend";
   performanceScore: number;

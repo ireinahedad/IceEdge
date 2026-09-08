@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { useI18n } from "../i18n";
 import { features } from "../platform";
@@ -7,7 +7,7 @@ import { IceedgeLogo } from "../components/brand/IceedgeLogo";
 import { AppButton } from "../components/AppButton";
 import {
   apiGetSubscription, apiStartCheckout, apiStartTrial, apiCancelSubscription,
-  apiRedeemPromo, SubscriptionStatus,
+  apiRedeemPromo, SubscriptionStatus, type BillingPeriod,
 } from "../services/subscriptionService";
 
 const ACCENT        = "#86d1ea";
@@ -18,7 +18,14 @@ const BORDER        = "#283323";
 const MUTED         = "#92A08A";
 
 // ── Pricing (edit freely) ──────────────────────────────────────────────────
-const PRICE_MONTHLY = "11,99 $";
+//
+// ⚠️ Ces trois constantes ne sont que de l'AFFICHAGE. Le montant réellement
+// débité vient du tarif Stripe désigné par STRIPE_PRICE_PRO_MONTHLY /
+// STRIPE_PRICE_PRO_YEARLY côté serveur. Les changer ici sans changer le tarif
+// là-bas ment au client au moment le plus coûteux : entre le prix affiché et
+// l'écran de paiement.
+const PRICE_MONTHLY = "5,99 $";
+const PRICE_YEARLY  = "60 $";
 const CURRENCY      = "CAD";
 
 // Pro-exclusive benefits only. Anything also available on Free is intentionally
@@ -37,15 +44,58 @@ function useBenefits(): Benefit[] {
   ];
 }
 
+/**
+ * Où renvoie le bouton « Retour » de /pro.
+ *
+ * ── Pourquoi ce n'est PAS `navigate(-1)` ────────────────────────────────────
+ * Le parcours d'achat quitte l'app : `window.location.href = <url Stripe>`
+ * empile Stripe Checkout dans l'historique du navigateur, et l'`cancel_url` de
+ * la session ramène sur /pro. L'historique vaut donc
+ * `… → /pro → checkout.stripe.com → /pro`, et un `navigate(-1)` depuis ce
+ * dernier /pro renvoie sur Stripe — c'est le bug signalé. Aucune API ne permet
+ * de retirer l'entrée Stripe de l'historique : la seule correction possible est
+ * que le bouton cesse de dépendre de l'historique.
+ *
+ * ── Ce qu'on mémorise à la place ────────────────────────────────────────────
+ * La route d'origine, passée en `state` par les appelants (`ProLock`, les deux
+ * boutons des Réglages). Elle est recopiée dans `sessionStorage` parce que le
+ * retour de Stripe est un CHARGEMENT COMPLET : `location.state` est alors nul,
+ * et sans ce relais on retomberait sur l'accueil après un achat annulé.
+ * Repli sur l'accueil : /pro n'a pas de BottomNav, elle ne doit jamais être un
+ * cul-de-sac, y compris en lien direct depuis l'extérieur.
+ */
+const PRO_BACK_KEY = "arakice_pro_back";
+
+function useProBackTarget(): string {
+  const location = useLocation();
+  const fromState = (location.state as { from?: string } | null)?.from;
+
+  // sessionStorage lève dans un onglet privé verrouillé ; un bouton Retour ne
+  // vaut pas une page blanche.
+  try {
+    if (fromState) sessionStorage.setItem(PRO_BACK_KEY, fromState);
+    else {
+      const stored = sessionStorage.getItem(PRO_BACK_KEY);
+      if (stored) return stored;
+    }
+  } catch { /* pas de mémoire de session : on garde le repli */ }
+
+  return fromState ?? "/";
+}
+
 export function ProPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { t } = useI18n();
   const benefits = useBenefits();
+  const backTo = useProBackTarget();
 
   const [sub,     setSub]     = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
+  // Cadence choisie sur la carte de prix. Mensuel par défaut : c'est le moindre
+  // engagement, donc le défaut honnête.
+  const [period, setPeriod] = useState<BillingPeriod>("monthly");
   const [promo,      setPromo]      = useState("");
   const [promoBusy,  setPromoBusy]  = useState(false);
   const [promoError, setPromoError] = useState<string | null>(null);
@@ -64,7 +114,7 @@ export function ProPage() {
     setError(null);
     setLoading(true);
     try {
-      const result = await apiStartCheckout();
+      const result = await apiStartCheckout(period);
       if (result.url) {
         window.location.href = result.url;         // Stripe Checkout
       } else if (result.status) {
@@ -117,6 +167,10 @@ export function ProPage() {
   const fmtDate = (iso: string | null) =>
     iso ? new Date(iso).toLocaleDateString() : "";
 
+  // N'afficher le choix annuel que si le serveur a bien un ID de tarif pour lui :
+  // un bouton qui mène à une erreur de paiement coûte plus qu'un bouton absent.
+  const yearlyAvailable = sub?.periods?.includes("yearly") ?? false;
+  const isYearly = yearlyAvailable && period === "yearly";
   const isPro = sub?.isPro ?? false;
   const isTrial = sub?.status === "trialing";
   const trialAvailable = !!user && !sub?.trialUsed;
@@ -125,9 +179,11 @@ export function ProPage() {
     <div className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-14 pb-12"
       style={{ background: "#0A0E0C" }}>
 
-      {/* Explicit back button — this page has no BottomNav, so it must never be a dead end */}
+      {/* Explicit back button — this page has no BottomNav, so it must never be a
+          dead end. Cible calculée par `useProBackTarget`, jamais l'historique :
+          voir le commentaire de cette fonction. */}
       <button
-        onClick={() => navigate(-1)}
+        onClick={() => navigate(backTo)}
         className="flex items-center gap-1.5 text-[#bfc8cc] text-sm mb-4 self-start active:opacity-70"
         aria-label={t("pro.back") || "Retour"}
       >
@@ -173,13 +229,54 @@ export function ProPage() {
       {!isPro && features.stripeCheckout && (
         <div className="rounded-2xl p-5 mb-6 text-center"
           style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+
+          {/* Sélecteur de cadence. Absent tant que le serveur n'annonce pas de
+              tarif annuel — voir `yearlyAvailable`. */}
+          {yearlyAvailable && (
+            <div role="radiogroup" aria-label={t("pro.billingPeriod")}
+              className="flex gap-1 p-1 rounded-xl mb-4"
+              style={{ background: "rgba(255,255,255,0.05)" }}>
+              {(["monthly", "yearly"] as BillingPeriod[]).map((p) => (
+                <button
+                  key={p}
+                  role="radio"
+                  aria-checked={period === p}
+                  onClick={() => setPeriod(p)}
+                  className="flex-1 py-2 rounded-lg text-xs font-bold transition-colors tap-44"
+                  style={period === p
+                    ? { background: ACCENT, color: "#0A0E0C" }
+                    : { color: MUTED, background: "transparent" }}
+                >
+                  {t(p === "yearly" ? "pro.planYearly" : "pro.planMonthly")}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="flex items-end justify-center gap-1 mb-1">
-            <span className="text-4xl font-bold" style={{ color: ACCENT }}>{PRICE_MONTHLY}</span>
-            <span className="text-sm mb-1" style={{ color: MUTED }}>{CURRENCY} {t("pro.perMonth")}</span>
+            <span className="text-4xl font-bold" style={{ color: ACCENT }}>
+              {isYearly ? PRICE_YEARLY : PRICE_MONTHLY}
+            </span>
+            <span className="text-sm mb-1" style={{ color: MUTED }}>
+              {CURRENCY} {t(isYearly ? "pro.perYear" : "pro.perMonth")}
+            </span>
           </div>
-          <div className="text-xs" style={{ color: MUTED }}>{t("pro.annualNote")}</div>
+
+          {/* Sur le mensuel on montre l'économie de l'annuel (argument d'achat) ;
+              sur l'annuel on ramène le prix au mois, la seule comparaison que le
+              lecteur veut faire à cet instant. */}
+          {yearlyAvailable && (
+            <div className="text-xs" style={{ color: MUTED }}>
+              {isYearly
+                ? t("pro.yearlyNote")
+                : t("pro.annualNote", { price: `${PRICE_YEARLY} ${CURRENCY}` })}
+            </div>
+          )}
+
           {trialAvailable && (
-            <div className="text-[11px] font-semibold mt-2" style={{ color: ACCENT }}>{t("pro.trialNote")}</div>
+            <div className="text-[11px] font-semibold mt-2" style={{ color: ACCENT }}>
+              {t(isYearly ? "pro.trialNoteYearly" : "pro.trialNote")}
+            </div>
           )}
         </div>
       )}

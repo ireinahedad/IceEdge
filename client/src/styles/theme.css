@@ -255,3 +255,79 @@
     transform: translate(-50%, -50%);
   }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Réglages tactiles iOS — les trois défauts qui font « site web dans une app »
+ * ──────────────────────────────────────────────────────────────────────────
+ * Aucun des trois n'était posé. Ils ne changent rien au dessin, seulement à ce
+ * que le doigt ressent — et c'est ce que les testeurs remarquent en premier.
+ *
+ * ⚠️ **Tout est dans `@layer base`, PAS hors couche** — l'inverse du bloc des
+ * 16 px juste au-dessus, et c'est délibéré. Là-bas il fallait BATTRE
+ * `text-xs` ; ici on pose des valeurs par DÉFAUT qu'une classe Tailwind
+ * (`select-text`, `active:opacity-100`) doit pouvoir reprendre au cas par cas.
+ * Une règle hors couche gagnerait contre elles et rendrait ces classes
+ * inopérantes sans que personne ne comprenne pourquoi.
+ *
+ * ⚠️ Tactile uniquement (`hover: none` + `pointer: coarse`) : ces trois
+ * défauts n'existent qu'au doigt, et le bureau doit garder sa sélection de
+ * texte, son survol et son défilement inchangés.
+ */
+@layer base {
+  @media (hover: none) and (pointer: coarse) {
+
+    /* 1 ─ Le flash gris à chaque tap.
+     *
+     * iOS peint un rectangle translucide sur TOUTE la boîte de l'élément
+     * touché — sur une tuile arrondie à fond sombre, ça se lit comme un bogue
+     * d'affichage, pas comme un retour.
+     *
+     * ⚠️ Le supprimer sans rien mettre à la place, c'est retirer le SEUL
+     * retour tactile des boutons qui n'ont pas de classe `active:` — l'app en
+     * a 66, donc loin de tous. D'où le repli d'opacité juste en dessous : il
+     * s'ajoute proprement à `active:scale-[0.98]` et à `active:bg-*`, et une
+     * classe Tailwind peut le reprendre puisque tout ceci est en couche.
+     */
+    html { -webkit-tap-highlight-color: transparent; }
+
+    button:not(:disabled):active,
+    a:active,
+    [role="button"]:active {
+      opacity: 0.75;
+    }
+
+    /* 2 ─ L'appui long qui sélectionne le texte du chrome.
+     *
+     * Rester appuyé sur un onglet, un libellé de bouton ou un en-tête fait
+     * apparaître la poignée de sélection bleue et le menu « Copier / Tout
+     * sélectionner ». Aucune app native ne fait ça.
+     *
+     * ⚠️ Portée volontairement ÉTROITE — boutons, nav et libellés seulement.
+     * Un `user-select: none` global aurait empêché de **copier un message de
+     * chat**, qui est un geste légitime et attendu. Les messages ne sont pas
+     * des boutons : ils gardent la sélection par défaut, sans avoir à la
+     * réactiver quelque part.
+     *
+     * `-webkit-touch-callout` est le second menu, celui que déclenche l'appui
+     * long sur une image ou un lien à l'intérieur d'un bouton.
+     */
+    button, [role="button"], nav, label {
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    /* 3 ─ Le rebond qui décolle toute la page.
+     *
+     * Défiler au-delà du bas d'une liste faisait rebondir le document entier,
+     * barre de navigation `fixed` comprise. `-y` seulement : `overscroll-x`
+     * touche au geste de retour par balayage, qu'on ne veut pas désarmer.
+     *
+     * ⚠️ Ceci suppose le défilement imbriqué actuel d'`AppShell`. Le jour où
+     * `h-screen overflow-hidden` passera en `100dvh` avec défilement du
+     * document (chantier laissé de côté le 2026-09-08), **revérifier cette
+     * règle à l'écran** : c'est elle qui décidera s'il reste un rebond.
+     */
+    html, body { overscroll-behavior-y: none; }
+  }
+}

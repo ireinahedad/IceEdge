@@ -21,6 +21,7 @@ import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { BottomNav } from "../components/BottomNav";
 import { submitSlip } from "../services/slipApiService";
 import { useSport } from "../context/SportContext";
+import { useOddsFormat } from "../context/OddsFormatContext";
 import { useI18n } from "../i18n";
 import "./bet-theme.css";
 import { MySlipsTab } from "./bet/MySlipsTab";
@@ -37,6 +38,7 @@ export function BetBuilderPage() {
   const { user } = useAuth();
   const { sport } = useSport();
   const { t } = useI18n();
+  const { format: oddsFormat } = useOddsFormat();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState<PageTab>(searchParams.get("tab") === "slips" ? "slips" : "build");
@@ -196,7 +198,10 @@ export function BetBuilderPage() {
                     ? t("pred.unavailableParlay")
                     : `Combined probability all ${legs.length} predictions hit`}
                 </p>
-                {combinedProbability != null && (
+                {/* La pastille « implied odds » ne s'affiche qu'en % : dans les
+                    deux autres formats, la jauge juste au-dessus montre DÉJÀ la
+                    cote, et cette pastille répéterait le même nombre. */}
+                {oddsFormat === "percent" && combinedProbability != null && (
                   <div className="mt-2 px-4 py-1.5 rounded-full icy-tile">
                     <span className="text-white font-bold text-sm font-mono">{toOddsLabel(combinedProbability)}</span>
                     <span className="text-[#4a6068] text-[11px] ml-1.5">implied odds</span>
@@ -207,7 +212,8 @@ export function BetBuilderPage() {
             {legs.length === 1 && (
               <>
                 <p className="text-[#4a6068] text-[11px] text-center mt-2">{t("slip.individualProb")}</p>
-                {combinedProbability != null && (
+                {/* Même raison que ci-dessus : redondant hors du format %. */}
+                {oddsFormat === "percent" && combinedProbability != null && (
                   <div className="mt-2 px-4 py-1.5 rounded-full icy-tile">
                     <span className="text-white font-bold text-sm font-mono">{toOddsLabel(combinedProbability)}</span>
                     <span className="text-[#4a6068] text-[11px] ml-1.5">implied odds</span>
