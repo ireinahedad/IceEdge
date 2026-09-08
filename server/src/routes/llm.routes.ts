@@ -32,6 +32,7 @@ import { decryptSecret } from '../services/crypto.util';
 import { TtlCache } from '../services/ttlCache';
 import { recordUpstream } from '../metrics';
 import { logger } from '../logger';
+import { sendError } from '../httpError';
 import {
   consumeProRequest, refundProRequest, getUsage, MONTHLY_QUOTA, MAX_OUTPUT_TOKENS,
 } from '../services/llmQuota.service';
@@ -188,18 +189,65 @@ router.use(llmLimiter);
  * un compteur AVANT que l'utilisateur ne se heurte au plafond. Un plafond dont
  * on ne découvre l'existence qu'en le heurtant est vécu comme une panne.
  */
+// `try` obligatoire ici aussi : `isPro()` et `getUsage()` touchent la base, et
+// un gestionnaire `async` qui laisse fuir un rejet ne produit PAS une réponse
+// d'erreur sous Express 4 — voir le long commentaire du POST ci-dessous.
 router.get('/usage', async (req: Request, res: Response) => {
-  const userId = (req as any).user?.sub;
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const userId = (req as any).user?.sub;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-  const userIsPro = await isPro(userId);
-  // Un utilisateur Free n'a pas de plafond de notre part : il paie ses tokens.
-  if (!userIsPro) return res.json({ pro: false, unlimited: true });
+    const userIsPro = await isPro(userId);
+    // Un utilisateur Free n'a pas de plafond de notre part : il paie ses tokens.
+    if (!userIsPro) return res.json({ pro: false, unlimited: true });
 
-  return res.json({ pro: true, ...(await getUsage(userId)) });
+    return res.json({ pro: true, ...(await getUsage(userId)) });
+  } catch (err: any) {
+    return sendError(res, err, { context: '[LLM/usage]' });
+  }
 });
 
+/**
+ * Filet de sécurité posé le 2026-09-08, après un « No 'Access-Control-Allow-Origin' »
+ * suivi d'un 502 sur cette route en production.
+ *
+ * ── Pourquoi une route peut répondre SANS en-tête CORS ──────────────────────
+ *
+ * `app.ts` monte `cors()` en tête de chaîne (ligne 47), donc TOUTE réponse que
+ * cette application produit porte l'en-tête. Une réponse qui n'en a pas ne vient
+ * donc pas d'ici : elle vient du bord (Railway), qui répond 502 quand l'instance
+ * n'a rien répondu du tout. Le message CORS du navigateur est le symptôme ; la
+ * cause est que le processus n'a pas rendu la main.
+ *
+ * ── Ce que ce fichier avait de particulier ─────────────────────────────────
+ *
+ * Le corps du gestionnaire était `async` et une bonne partie de ses `await` —
+ * `isPro()` en tête — n'étaient dans AUCUN `try`. Express 4 ne rattrape pas le
+ * rejet d'un gestionnaire asynchrone : la promesse part en `unhandledRejection`,
+ * et selon la configuration Node/Sentry cela fait soit tomber le processus, soit
+ * traîner la requête jusqu'au délai du bord. Dans les deux cas : 502 sans CORS,
+ * et pour tout le monde, pas seulement pour l'appelant.
+ *
+ * Le corps est donc extrait dans `handleLlmRequest` et le gestionnaire ne fait
+ * plus que l'attendre sous `try`. Une panne inattendue devient une réponse 500
+ * propre — avec en-tête CORS, donc lisible par le client — et une ligne de
+ * journal corrélée au `request-id`, au lieu d'une panne d'infrastructure muette.
+ *
+ * ⚠️ Ne pas « simplifier » en remettant le corps directement dans `router.post`.
+ * C'est l'absence de ce `try` qui était le défaut.
+ */
 router.post('/', async (req: Request, res: Response) => {
+  try {
+    await handleLlmRequest(req, res);
+  } catch (err: any) {
+    // Le remboursement de quota des chemins CONNUS est déjà fait au plus près de
+    // l'échec (voir `refundProRequest` plus bas). Ici on est par définition dans
+    // l'inattendu : on journalise et on rend une erreur propre.
+    sendError(res, err, { context: '[LLM]' });
+  }
+});
+
+async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
   const userId = (req as any).user?.sub;
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
@@ -510,12 +558,28 @@ router.post('/', async (req: Request, res: Response) => {
     });
   }
 
-  const data = await (providerRes as any).json();
+  // `.json()` peut LEVER : un amont qui répond 200 avec une page HTML (proxy,
+  // portail captif, page d'erreur d'un CDN) passe le test `providerRes.ok` puis
+  // casse ici. C'était l'un des `await` qui pouvaient s'échapper du gestionnaire.
+  let data: any;
+  try {
+    data = await (providerRes as any).json();
+  } catch (err: any) {
+    logger.error(
+      { err: err?.message, model: call.requestModel, pro: userIsPro },
+      '[LLM] réponse amont illisible (200 mais pas du JSON)',
+    );
+    return res.status(502).json({
+      error: 'Le fournisseur de modèle a renvoyé une réponse illisible.',
+      code: 'provider_error',
+    });
+  }
+
   const text: string = data?.choices?.[0]?.message?.content ?? '';
 
   // `quotaNotice` n'est présent que le mois où le plafond est atteint : le
   // client affiche alors le message pendant que la réponse arrive quand même.
   return res.json(quotaNotice ? { text, quota: quotaNotice } : { text });
-});
+}
 
 export default router;

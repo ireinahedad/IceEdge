@@ -22,11 +22,47 @@ if (!url) {
 // SSL is opt-in via DB_SSL=true (required by Neon/Supabase/external connections).
 // Leave unset for local Postgres, which doesn't support SSL.
 const useSsl = process.env.DB_SSL === 'true';
+
+// 60 s, et pas les 15 s d'origine : sur Neon plan Launch le compute est SUSPENDU
+// après 5 min d'inactivité (voir DEPLOYMENT.md § Budget compute). La toute
+// première connexion doit donc attendre un démarrage à froid — et cette commande
+// est justement celle qu'on lance après des heures sans y toucher, donc celle qui
+// tombe systématiquement dessus. 15 s suffisaient depuis une machine proche de
+// us-east-1 ; ils ne suffisent pas partout, et un échec ici ressemble à une panne
+// alors que la base va très bien.
+const CONNECT_TIMEOUT_MS = Number(process.env.DB_CONNECT_TIMEOUT_MS) || 60_000;
+
 const pool = new Pool({
   connectionString: url,
   ssl: useSsl ? { rejectUnauthorized: false } : undefined,
-  connectionTimeoutMillis: 15_000,
+  connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
 });
+
+/**
+ * Réveille la base avant de commencer, avec deux essais.
+ *
+ * Le deuxième essai n'est pas de la superstition : sur un compute suspendu, le
+ * premier `SELECT 1` est celui qui déclenche le démarrage, et c'est lui qui peut
+ * expirer pendant que le réveil se poursuit côté Neon. Le suivant trouve alors
+ * une base déjà debout et répond en quelques dizaines de millisecondes.
+ *
+ * Séparé du reste pour que l'échec de CONNEXION ne se confonde pas avec l'échec
+ * d'une MIGRATION : ce sont deux problèmes différents et deux gestes différents.
+ */
+async function waitForDb(): Promise<void> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await pool.query('SELECT 1');
+      return;
+    } catch (err: any) {
+      if (attempt === 2) throw err;
+      console.log(
+        `[migrate]   … pas de réponse en ${Math.round(CONNECT_TIMEOUT_MS / 1000)} s `
+        + '(compute Neon probablement en train de se réveiller) — 2e essai.',
+      );
+    }
+  }
+}
 
 const dbDir         = __dirname;                       // src/db
 const schemaPath    = join(dbDir, 'schema.sql');
@@ -109,6 +145,7 @@ function describeTarget(raw: string): string {
   console.log(`[migrate] Cible : ${describeTarget(url)}`);
   console.log('[migrate] Connecting to DB…');
 
+  await waitForDb();
   await pool.query(LEDGER_DDL);
 
   // Base schema is idempotent (IF NOT EXISTS throughout) → re-run every time.
@@ -148,6 +185,14 @@ function describeTarget(raw: string): string {
     );
   } else if (/self.signed|SSL|certificate/i.test(err.message)) {
     console.error('[migrate]   → Cible distante : DB_SSL=true est requis (Neon exige TLS).');
+  } else if (/timeout|ETIMEDOUT|ENOTFOUND|ECONNREFUSED/i.test(err.message)) {
+    console.error(
+      '[migrate]   → La base n\'a pas répondu en '
+      + `${Math.round(CONNECT_TIMEOUT_MS / 1000)} s, deux fois. Ouvre le tableau de `
+      + 'bord Neon pour vérifier que le projet n\'est pas en pause (plan Launch : '
+      + 'le compute se suspend, il ne disparaît pas), puis relance. '
+      + 'Rallonger : DB_CONNECT_TIMEOUT_MS=120000.',
+    );
   }
   await pool.end();
   process.exit(1);

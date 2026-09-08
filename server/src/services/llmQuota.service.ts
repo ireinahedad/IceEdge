@@ -45,8 +45,23 @@ const num = (name: string, fallback: number): number => {
 
 // ── Entrées du calcul ───────────────────────────────────────────────────────
 
-/** Prix mensuel de l'abonnement Pro, dans la devise de facturation. */
-const PRO_PRICE = num('PRO_PRICE_MONTHLY', 9.99);
+/**
+ * Prix mensuel de l'abonnement Pro, dans la devise de facturation.
+ *
+ * 5,99 $ CAD depuis le 2026-09-08 (auparavant 9,99). Le plafond dérivé passe
+ * donc de 763 à **457 requêtes/mois** par abonné — c'est le chiffre que la
+ * bannière de démarrage journalise, et le seul endroit où vérifier.
+ *
+ * ⚠️ **La cadence annuelle paie moins par mois.** 60 $/an = 5,00 $/mois, et une
+ * fois la commission Stripe déduite (~2,9 % + 0,30 $, prélevée UNE fois sur
+ * l'année au lieu de douze) environ 4,80 $/mois net — donc un peu moins qu'un
+ * abonné mensuel, qui laisse ~5,52 $ net. Dimensionner sur 5,99 surestime donc
+ * de ~20 % ce que paie un abonné annuel. La garantie tient quand même largement,
+ * parce que `AI_BUDGET_SHARE` ne dépense que 30 % : 1,80 $ de plafond IA face à
+ * 4,80 $ encaissés. Pour dimensionner sur le moins-disant plutôt que sur le
+ * mensuel, poser `PRO_PRICE_MONTHLY=5` (plafond 382/mois).
+ */
+const PRO_PRICE = num('PRO_PRICE_MONTHLY', 5.99);
 
 /**
  * Part de l'abonnement qu'on accepte de dépenser en IA (0–1).
