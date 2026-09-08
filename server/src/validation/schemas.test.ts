@@ -3,6 +3,9 @@ import {
   registerSchema, loginSchema, avatarSchema, slipSubmitSchema, ruleWeightsSchema, profileUpdateSchema,
   singlePredictionSchema, parlayPredictionSchema, predictFactorsSchema,
   playerPropSchema, predictFuturesSchema, predictMlSchema,
+  chatCreateRoomSchema, chatJoinByCodeSchema, chatSendMessageSchema,
+  chatReactionSchema, chatReportSchema,
+  pushSubscribeSchema, pushUnsubscribeSchema, redeemPromoSchema,
 } from './schemas';
 
 describe('registerSchema', () => {
@@ -262,5 +265,103 @@ describe('predictMlSchema', () => {
 
   it('refuse un type inconnu', () => {
     expect(predictMlSchema.safeParse({ type: 'goalie', subjectId: 'x' }).success).toBe(false);
+  });
+});
+
+// ── Les schémas ajoutés le 2026-09-08 ───────────────────────────────────────
+//
+// Chaque `describe` commence par le corps que le VRAI client envoie : un
+// schéma qui refuse la production est pire que pas de schéma, et c'est
+// l'erreur la plus facile à commettre en resserrant une validation.
+
+describe('chatSendMessageSchema', () => {
+  it('accepte le corps de userService.sendMessage', () => {
+    expect(chatSendMessageSchema.safeParse({
+      text: 'TOR gagne ce soir', tag: 'pick',
+      replyTo: { username: 'ireina', text: 'pourquoi ?' },
+    }).success).toBe(true);
+    expect(chatSendMessageSchema.safeParse({ text: 'salut' }).success).toBe(true);
+  });
+
+  it('refuse au-delà de 1000 caractères — la limite était appliquée par un slice() muet', () => {
+    expect(chatSendMessageSchema.safeParse({ text: 'a'.repeat(1000) }).success).toBe(true);
+    expect(chatSendMessageSchema.safeParse({ text: 'a'.repeat(1001) }).success).toBe(false);
+  });
+
+  it('refuse un texte vide et un tag hors des trois valeurs', () => {
+    expect(chatSendMessageSchema.safeParse({ text: '' }).success).toBe(false);
+    expect(chatSendMessageSchema.safeParse({ text: 'x', tag: 'spam' }).success).toBe(false);
+  });
+
+  it('borne la citation de réponse, qui est du texte fourni par le client', () => {
+    expect(chatSendMessageSchema.safeParse({
+      text: 'x', replyTo: { username: 'u', text: 'a'.repeat(301) },
+    }).success).toBe(false);
+  });
+});
+
+describe('chatCreateRoomSchema / chatJoinByCodeSchema', () => {
+  it('accepte le corps de userService.createRoom', () => {
+    expect(chatCreateRoomSchema.safeParse({
+      name: 'Habs', icon: '🏒', description: 'salon MTL', isPrivate: false, color: '#a11',
+    }).success).toBe(true);
+  });
+
+  it('exige un nom non vide et le borne à 100', () => {
+    expect(chatCreateRoomSchema.safeParse({ name: '   ' }).success).toBe(false);
+    expect(chatCreateRoomSchema.safeParse({ name: 'a'.repeat(101) }).success).toBe(false);
+  });
+
+  it('borne le code de salon', () => {
+    expect(chatJoinByCodeSchema.safeParse({ code: 'ABC123' }).success).toBe(true);
+    expect(chatJoinByCodeSchema.safeParse({ code: 'a'.repeat(33) }).success).toBe(false);
+  });
+});
+
+describe('chatReactionSchema / chatReportSchema', () => {
+  it('laisse passer un emoji composé, refuse un roman', () => {
+    expect(chatReactionSchema.safeParse({ emoji: '👨‍👩‍👧' }).success).toBe(true);
+    expect(chatReactionSchema.safeParse({ emoji: 'x'.repeat(9) }).success).toBe(false);
+  });
+
+  it('n\'accepte que les motifs de REPORT_REASONS', () => {
+    expect(chatReportSchema.safeParse({ reason: 'harassment', note: 'insultes' }).success).toBe(true);
+    expect(chatReportSchema.safeParse({ reason: 'parce que' }).success).toBe(false);
+    expect(chatReportSchema.safeParse({ reason: 'other', note: 'n'.repeat(501) }).success).toBe(false);
+  });
+});
+
+describe('pushSubscribeSchema', () => {
+  it('accepte ce que sub.toJSON() produit, et RETIRE expirationTime', () => {
+    const r = pushSubscribeSchema.safeParse({
+      endpoint: 'https://fcm.googleapis.com/fcm/send/abc123',
+      expirationTime: null,
+      keys: { p256dh: 'BEl62iUYgUiv', auth: 'tBHItJI5svbp' },
+    });
+    expect(r.success).toBe(true);
+    expect(r.success && 'expirationTime' in r.data).toBe(false);
+  });
+
+  it('refuse un endpoint non https ou démesuré — il sert de clé unique en base', () => {
+    expect(pushSubscribeSchema.safeParse({
+      endpoint: 'http://evil.test/x', keys: { p256dh: 'a', auth: 'b' },
+    }).success).toBe(false);
+    expect(pushSubscribeSchema.safeParse({
+      endpoint: 'https://x.test/' + 'a'.repeat(2000), keys: { p256dh: 'a', auth: 'b' },
+    }).success).toBe(false);
+  });
+
+  it('exige les deux clés', () => {
+    expect(pushSubscribeSchema.safeParse({ endpoint: 'https://x.test/a' }).success).toBe(false);
+    expect(pushUnsubscribeSchema.safeParse({ endpoint: 'https://x.test/a' }).success).toBe(true);
+  });
+});
+
+describe('redeemPromoSchema', () => {
+  it('accepte un code normal, refuse le vide, le trop long et les caractères libres', () => {
+    expect(redeemPromoSchema.safeParse({ code: 'ARAK-2026' }).success).toBe(true);
+    expect(redeemPromoSchema.safeParse({ code: '  ' }).success).toBe(false);
+    expect(redeemPromoSchema.safeParse({ code: 'A'.repeat(65) }).success).toBe(false);
+    expect(redeemPromoSchema.safeParse({ code: "'; DROP TABLE" }).success).toBe(false);
   });
 });

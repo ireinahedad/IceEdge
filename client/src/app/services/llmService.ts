@@ -5,9 +5,18 @@
  */
 
 import { authedFetch } from './authService';
-import { env } from '../env';
 
-const BASE = env.nhlServerUrl;
+/**
+ * Les tâches que le proxy `/api/llm` accepte.
+ *
+ * ⚠️ **Cette union doit rester alignée sur `LLM_TASK_TYPES` du serveur**
+ * (`server/src/services/llmPrompts.ts`), qui est la source de vérité : c'est
+ * LUI qui écrit l'invite système. Depuis le 2026-09-08 le client ne l'envoie
+ * plus — un `systemPrompt` libre faisait du chemin Pro, facturé à l'opérateur,
+ * un proxy LLM généraliste. Ajouter une tâche se fait donc côté serveur
+ * d'abord, ici ensuite.
+ */
+export type LLMTaskType = 'explain_bet';
 
 /**
  * 45 s — la seule requête du client qui dépasse le défaut de 15 s d'`http.ts`.
@@ -73,14 +82,15 @@ export interface LLMUsage {
  */
 export async function askLLMDetailed(
   prompt: string,
-  opts?: { systemPrompt?: string; model?: string }
+  opts: { taskType: LLMTaskType; locale: 'fr' | 'en'; model?: string }
 ): Promise<LLMAnswer> {
   const res = await authedFetch('/llm', {
     method: 'POST',
     timeoutMs: LLM_TIMEOUT_MS,
     body: JSON.stringify({
       prompt,
-      systemPrompt: opts?.systemPrompt,
+      taskType: opts.taskType,
+      locale: opts.locale,
       model: opts?.model ?? 'gpt-4o-mini',
     }),
   });
@@ -125,7 +135,7 @@ export async function askLLMDetailed(
 
 export async function askLLM(
   prompt: string,
-  opts?: { systemPrompt?: string; model?: string }
+  opts: { taskType: LLMTaskType; locale: 'fr' | 'en'; model?: string }
 ): Promise<string> {
   return (await askLLMDetailed(prompt, opts)).text;
 }

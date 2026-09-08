@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
 import { redeemLimiter } from '../middleware/rateLimit.middleware';
+import { validateBody } from '../middleware/validate.middleware';
+import { redeemPromoSchema } from '../validation/schemas';
 import * as Subscriptions from '../services/subscription.service';
 import { logger } from '../logger';
 import { sendError } from '../httpError';
@@ -40,7 +42,7 @@ router.post('/checkout', authenticate, async (req: Request, res: Response) => {
 
 // POST /subscription/redeem — activate Pro with a promo code (no payment).
 // authenticate first so the limiter can key on the user id (see redeemLimiter).
-router.post('/redeem', authenticate, redeemLimiter, async (req: Request, res: Response) => {
+router.post('/redeem', authenticate, redeemLimiter, validateBody(redeemPromoSchema), async (req: Request, res: Response) => {
   try {
     const status = await Subscriptions.redeemPromo(req.user!.sub, req.body?.code);
     return res.json({ redeemed: true, status });

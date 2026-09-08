@@ -5,8 +5,8 @@
 
 ## État — 2026-09-08
 
-**12 correctifs appliqués** (11 committés, le 12ᵉ en attente de relecture), dont
-3 des 4 findings CRITICAL. Sur les 11 blocants du § 10, **4 sont faits** ; les 7
+**13 correctifs appliqués** (11 committés, les 12ᵉ et 13ᵉ en attente de
+relecture), dont 3 des 4 findings CRITICAL. Sur les 11 blocants du § 10, **4 sont faits** ; les 7
 autres sont tous côté iOS / App Store. La migration `034` est appliquée en
 production.
 
@@ -21,6 +21,15 @@ jeton d'accès hors de l'URL + Sentry masqué, 401 LLM qui déconnectait,
 bulle de chat optimiste sur échec, cotes fictives retirées, `typecheck` client
 dans la CI, et le `.fuse_hidden…` sorti de l'arborescence.
 **Le groupe 🟠 « Importants » du § 10 est désormais vide.**
+
+**Lot du 2026-09-08 (2ᵉ passage) — sécurité serveur, le dernier trou ouvert.**
+`systemPrompt` ne vient plus du client : `taskType` est une énumération fermée
+et le texte vit dans `services/llmPrompts.ts`. Avec lui, la validation zod est
+complétée sur le chat, `/push/subscribe` et `/subscription/redeem` ; le proxy
+odds — seul `fetch` sortant du serveur encore sans borne de temps — reçoit un
+délai de 8 s ; et `NHL_USE_MOCK` est ignoré en production sans un second
+interrupteur explicite. **Il ne reste plus rien d'ouvert en § 1 « Sécurité »
+hors le 🟢 « Divers », lui-même réduit à deux lignes.**
 
 🔴 **Le seul blocant restant n'est pas du code : l'adresse de support rebondit.**
 C'est le contact Guideline 1.2 et l'adresse par laquelle Apple joint le
@@ -46,8 +55,8 @@ qui commence par ✅ ne l'est plus. Le § 9 liste les dix lots de correctifs ave
 leurs fichiers.
 
 **Vérification :** `tsc --noEmit` propre client et serveur · suite serveur
-**287 tests, 25 fichiers** (48 ajoutés par ces correctifs) · migration 034
-rejouée contre un Postgres 16 réel.
+**348 tests, 29 fichiers** · `vite build` web et `VITE_TARGET=ios` · migration
+034 rejouée contre un Postgres 16 réel.
 
 ---
 
@@ -124,12 +133,18 @@ rejouée contre un Postgres 16 réel.
   - **Rien sur `GET /best-bets`** : `limit`, `days` et `maxPlayers` sont **déjà** bornés dans `getBestBets` (`num(v, défaut, lo, hi)`), et `source` y est déjà réduit à `'ml' | 'rules'`.
 - **⚠️ Ce que ça ne corrige pas :** les routes restent publiques, donc N comptes valent N × 60 depuis une même adresse. La barrière déplacée est celle de la création de comptes, pas celle-ci — même arbitrage assumé que pour `apiLimiter`.
 
-### 🟡 [MEDIUM] `systemPrompt` piloté par le client sur le chemin Pro
-**Fichier :** `server/src/routes/llm.routes.ts`
+### ✅ CORRIGÉ · [MEDIUM] `systemPrompt` piloté par le client sur le chemin Pro
+**Fichiers :** `server/src/services/llmPrompts.ts` *(nouveau)*, `routes/llm.routes.ts`, `routes/llm.routes.test.ts` *(nouveau)*, `client/.../llmService.ts`, `client/.../PredictionSheet.tsx`
 
-- **Problème :** `prompt` **et** `systemPrompt` viennent du corps de requête, et le chemin Pro utilise `GITHUB_MODELS_TOKEN`, **facturé à toi**.
-- **Impact :** tout compte Pro (y compris via essai gratuit ou code promo) dispose d'un proxy LLM généraliste à tes frais, dans la limite du quota mensuel. Le quota borne la dépense, pas l'usage détourné.
-- **Solution recommandée :** construire le `systemPrompt` côté serveur à partir d'un `taskType` fermé (`'explain_bet' | 'summarize_game' | …`) envoyé par le client.
+- **Problème :** `prompt` **et** `systemPrompt` venaient du corps de requête, et le chemin Pro utilise `GITHUB_MODELS_TOKEN`, **facturé à toi**.
+- **Impact :** tout compte Pro (y compris via essai gratuit ou code promo) disposait d'un proxy LLM généraliste à tes frais, dans la limite du quota mensuel. Le quota borne la dépense, pas l'usage détourné.
+- **Solution appliquée (2026-09-08) :** le client n'envoie plus qu'un `taskType` pris dans une **énumération fermée** (`LLM_TASK_TYPES`) et une langue. Le texte des invites est déplacé — **non réécrit** — du composant client vers `services/llmPrompts.ts`, qui devient leur seule définition.
+  - **Le même verrou sur LES DEUX chemins**, pas seulement sur le chemin Pro. Sur la clé personnelle d'un utilisateur, une invite libre ne coûte rien à l'opérateur, donc « laisser passer » était défendable — mais c'était garder deux formes de la requête, dont une seule est testée. Une seule règle : l'invite système vient du serveur.
+  - **Un `systemPrompt` encore présent dans le corps est ignoré en silence**, et un `taskType` absent retombe sur la seule tâche existante. C'est la fenêtre de déploiement : client et serveur partent séparément, donc un ancien bundle continue d'envoyer l'ancien corps. Un 400 aurait cassé le bouton « Analyse IA » le temps du déploiement. ⚠️ **Le jour où il y aura une deuxième tâche, ce défaut devra devenir un 400** — deviner la tâche demandée n'aurait alors plus de sens.
+  - **La langue retombe sur `Accept-Language`** quand le corps ne la porte pas, pour que ce même ancien bundle ne bascule pas les francophones en anglais.
+  - `LLM_MAX_SYSTEM_CHARS` disparaît : la taille de l'invite est désormais connue à la compilation.
+- **⚠️ Ce que ça ne corrige PAS**, et qu'il ne faut pas croire corrigé : **le `prompt` utilisateur reste libre** — c'est la question de la personne, on ne peut pas la fermer. Ce qui a changé, c'est que l'invite système ancre le modèle sur l'analyse de paris LNH au lieu d'être choisie par l'appelant. Les vraies bornes de la dépense restent le plafond mensuel (`llmQuota.service`) et `llmLimiter` (10 req/min/compte).
+- **5 tests** (`llm.routes.test.ts`). Celui qui compte **lit le corps JSON réellement POSTé au fournisseur** : un `systemPrompt` retiré de la lecture du corps mais réinjecté ailleurs passerait toutes les autres assertions. Vérifié aussi dans le bundle bâti — ni `systemPrompt` ni le texte de l'invite n'apparaissent plus dans `dist/assets/`.
 
 ### ✅ CORRIGÉ · [MEDIUM] Jeton d'accès dans l'URL + Sentry sans `beforeSend`
 **Fichiers :** `server/src/routes/auth.routes.ts`, `client/src/main.tsx`, `client/.../AuthCallback.tsx`
@@ -141,17 +156,29 @@ rejouée contre un Postgres 16 réel.
   3. **`beforeSend` ET `beforeBreadcrumb`** qui masquent `access_token=` et `refresh_token=`. Les deux, pas l'un : masquer l'URL de l'événement en laissant les fils d'Ariane ne sert à rien. Regex sur la chaîne plutôt que parcours d'`URL` — la valeur doit disparaître même d'une URL malformée, et un `URL()` qui lève ferait perdre l'événement entier.
 - ⚠️ **Le repli sur `?access_token=` est conservé dans `AuthCallback`** : client et serveur se déploient séparément, donc pendant la fenêtre de déploiement un client neuf peut recevoir une redirection de l'ancien serveur. **À retirer** une fois le serveur déployé et stabilisé.
 
-### 🟡 PARTIELLEMENT CORRIGÉ · [MEDIUM] Validation zod partielle
+### ✅ CORRIGÉ · [MEDIUM] Validation zod partielle
 `validateBody` n'était posé que sur auth, slips, avatar et profil.
 
 - ✅ **Traité :** toute la saisie manuelle. `PUT /api/injuries/:key` n'avait aucune validation — la route recopiait les tableaux du corps dans un fichier — et ses remplaçantes `/api/manual/*` ont quatre schémas bornés (barème d'impact, plage de `lineupAdj`, nombre d'équipes, longueur des noms), plus une validation des clés d'URL, qui entrent dans une clé primaire et dans une clé de cache.
 - ✅ **Traité :** tout `/api/predict/*` (six schémas + `predictLimiter`, voir le bloc plus haut).
-- ⬜ **Reste :** chat (`/rooms`, `/messages`, `/reactions`, `/report`), `/api/push/subscribe`, `/api/subscription/redeem`. Le chat compense par une sanitisation serveur solide (`chat.service.ts` : `stripControlChars`, `MAX_TEXT_LENGTH`, `slice`) ; les deux autres non.
+- ✅ **Traité le 2026-09-08 :** le chat (`/rooms`, `/rooms/join`, `/messages`, `/reactions`, `/report`), `/api/push/subscribe` + `/unsubscribe`, et `/api/subscription/redeem`. Huit schémas de plus dans `validation/schemas.ts`, 13 assertions.
+  - **Là où il n'y avait AUCUNE compensation** : `push/subscribe`. L'`endpoint` du navigateur était écrit en base sans aucune borne **et sert de clé unique** (`ON CONFLICT (endpoint)`) — rien n'empêchait un mégaoctet de texte d'entrer dans un index. Il est maintenant une URL `https` d'au plus 2 000 caractères. Le code promo, lui, est comparé à un catalogue en mémoire (donc il n'atteint jamais la base), mais n'était borné ni en taille ni en alphabet.
+  - **Le chat était déjà défendu**, et ces schémas ne le remplacent pas. Ce qu'ils changent est ailleurs : **un `slice()` accepte en silence**. Un client qui envoyait 3 000 caractères recevait un message tronqué sans jamais l'apprendre ; il reçoit maintenant un 400 qui dit la limite.
+  - ⚠️ **`chat.service.ts` n'a été allégé d'AUCUNE vérification**, et ne doit pas l'être : les mêmes fonctions servent le **chemin socket**, qui ne passe par aucun de ces schémas. Une borne qui a l'air en double ne l'est pas.
+  - `pin` et `role` n'ont volontairement pas de schéma : la route coerce déjà (`!!req.body.pinned`) et `setRole` valide son énumération.
 
 ### 🟢 [LOW] Divers
-- **Deux routeurs montés sur `/api/users`** (`profileRoutes` puis `userRoutes`) : une route ajoutée dans le second peut être silencieusement masquée par le premier, et `authenticate` s'exécute deux fois sur `/me/*`. Fusionner ou préfixer.
-- **`NHL_USE_MOCK` et `EMAIL_VERIFICATION_DISABLED` ne sont pas bridés en production.** Une variable posée par erreur sur Railway sert des données NHL fictives ou désactive la vérification e-mail. La bannière de démarrage les affiche (bien) mais rien ne les empêche. Forcer `false` quand `NODE_ENV === 'production'`.
-- **Aucun timeout sur les `fetch` du proxy odds** (`odds.routes.ts`), alors que `nhlApiClient`, `mlApiClient` et `llm.routes` en ont un. Un upstream lent bloque une connexion.
+- **Deux routeurs montés sur `/api/users`** (`profileRoutes` puis `userRoutes`) : une route ajoutée dans le second peut être silencieusement masquée par le premier, et `authenticate` s'exécute deux fois sur `/me/*`. Fusionner ou préfixer. ⬜ **Ouvert.**
+- ✅ **CORRIGÉ le 2026-09-08 — `NHL_USE_MOCK` bridé en production** (`services/nhlApiClient.ts`). Il servait des matchs, des équipes et des joueurs **inventés** à de vrais visiteurs sans qu'aucune réponse HTTP ne le dise — le même mode d'échec que les cotes fictives de `/api/odds/live`, et **ça s'est déjà produit** : le relevé du 2026-08-29 l'a trouvé à `true` en production.
+  - En production il faut désormais **deux** variables : `NHL_USE_MOCK=true` **et** `ALLOW_MOCK_IN_PRODUCTION=true`. Deux plutôt qu'un refus sec parce que le risque à couvrir est l'**erreur**, pas l'intention — le tir de charge B3 a besoin des données mockées et doit rester possible. Poser les deux n'est pas un geste de distraction.
+  - `NHL_USE_MOCK=true` ignoré écrit une ligne de niveau **erreur** au démarrage, en `console.error` (ce module est importé avant que le logger n'existe).
+  - La bannière `[Server] Réglages effectifs` affiche maintenant la valeur **effective**, pas la variable brute — même raison que pour `ENABLE_DEV_ROUTES`. C'est cette ligne que lit le préflight du tir de charge B3.
+  - ⬜ **`EMAIL_VERIFICATION_DISABLED` reste ouvert**, écarté de ce lot sur décision du user (2026-09-08). À brider de la même façon, ou à vérifier en console avant de soumettre.
+  - ⬜ **`ENABLE_DEV_ROUTES` n'est pas bridé, et c'est délibéré** : c'est un opt-in documenté, déjà gardé par `authenticate + requireRole('admin')`. Il reste une case de la checklist finale, pas un correctif.
+- ✅ **CORRIGÉ le 2026-09-08 — timeout de 8 s sur le proxy odds** (`ODDS_FETCH_TIMEOUT_MS`). C'était le seul `fetch` sortant du serveur sans borne de temps.
+  - ⚠️ **Le coût réel était plus élevé que « une connexion bloquée »** : ces routes passent par `TtlCache.wrap`, qui **dédoublonne les requêtes concurrentes sur une clé froide**. Tous les visiteurs demandant les mêmes cotes attendent la MÊME promesse — un seul amont pendu les gelait tous, et **aucun n'aurait jamais reçu le repli stale prévu**, puisque la promesse ne rejetait pas. Le délai est ce qui transforme cette panne muette en un rejet, donc en une réponse stale.
+  - 8 s : au-dessus du temps de réponse observé de The Odds API, sous les 15 s du client, pour que le repli stale parte avant que le navigateur n'abandonne.
+  - ⚠️ **Ne pas annoter le retour de `fetchOdds`** : ce fichier importe `Response` d'**Express**, donc `Promise<Response>` y désigne la réponse sortante et `tsc` rend six erreurs déroutantes. Le type inféré est le bon.
 
 ---
 
@@ -409,7 +436,7 @@ Le serveur refuse au-delà de 1000 caractères (`MAX_TEXT_LENGTH`) ; le client n
 - `GET /api/predict/markets/game/:id` **ignore complètement `:id`** et renvoie une constante — paramètre trompeur.
 - `ruleWeightsService.ts:64,71` : `localStorage.setItem` **sans try/catch**, alors que `tokenStore` protège soigneusement les siens. Lève en navigation privée Safari.
 - `RoomChat` teste `!e.shiftKey` sur un `<input>` simple ligne : Shift+Entrée n'y fait rien. Soit passer en `<textarea>`, soit retirer la condition.
-- `llmService.ts` déclare `const BASE = env.nhlServerUrl` qui **n'est jamais utilisé** (les appels passent par `authedFetch`, qui a sa propre base). Variable morte et trompeuse.
+- ✅ **CORRIGÉ le 2026-09-08** — `llmService.ts` déclarait `const BASE = env.nhlServerUrl`, jamais utilisé (les appels passent par `authedFetch`, qui a sa propre base). Parti avec le lot `taskType`, l'import `env` avec.
 
 ---
 
@@ -619,7 +646,11 @@ par le user : lots 1-9 (`357a458`, `816e547`), lot 10 (`a204a20`), lot 11
 | 11 | `validation/schemas.ts`, `middleware/rateLimit.middleware.ts`, `routes/ml.routes.ts`, `routes/ml.routes.test.ts` *(nouveau)*, `validation/schemas.test.ts` | `/api/predict/*` borné : six schémas zod et `predictLimiter` (60/min) sur les deux routes qui appellent le service Python |
 | 12 | `services/refereeStore.ts`, `services/refereeStore.test.ts` + `__fixtures__/str-2025-11-18.html` *(nouveaux)*, `manualData.service.ts`, `cleanup.service.ts`, `routes/manual.routes.ts`, `routes/manual.routes.test.ts` | Facteur arbitre : parseur réécrit (il **inventait** des noms), tendances auto-alimentées depuis STR, dénominateur mesuré au lieu du 6,2 en dur — et un relevé de couverture pour que quatre tables vides ne repassent plus inaperçues |
 
-`npx tsc --noEmit` passe sur le client **et** sur le serveur après ces changements, et la suite de tests serveur est verte : **326 tests, 27 fichiers** (dont 8 pour le câblage de `/api/predict/*`, 17 pour ses schémas, 10 pour le facteur arbitre contre un vrai billet, et 4 pour la couverture).
+| 13 | `services/llmPrompts.ts` *(nouveau)*, `routes/llm.routes.ts`, `routes/llm.routes.test.ts` *(nouveau)*, `routes/odds.routes.ts`, `routes/chat.routes.ts`, `routes/push.routes.ts`, `routes/subscription.routes.ts`, `validation/schemas.ts` + `.test.ts`, `services/nhlApiClient.ts`, `server.ts`, `client/.../llmService.ts`, `client/.../PredictionSheet.tsx` | **Lot sécurité serveur du 2026-09-08.** Invite système construite par le serveur depuis un `taskType` fermé (le chemin Pro n'est plus un proxy LLM généraliste) · zod complété sur le chat, `/push/subscribe` et `/subscription/redeem` · timeout de 8 s sur le proxy odds, le dernier `fetch` sortant sans borne · `NHL_USE_MOCK` ignoré en production sans second interrupteur |
+
+`npx tsc --noEmit` passe sur le client **et** sur le serveur après ces changements, et la suite de tests serveur est verte : **348 tests, 29 fichiers** (dont 8 pour le câblage de `/api/predict/*`, 30 pour ses schémas, 10 pour le facteur arbitre contre un vrai billet, 4 pour la couverture, et 5 qui lisent le corps réellement envoyé au fournisseur LLM).
+
+**Vérifié dans le conteneur cloud le 2026-09-08**, sur une installation Linux fraîche du lockfile — `tsc --noEmit` serveur et client, `vitest run` (348/348), `vite build` web **et** `VITE_TARGET=ios`. Les empreintes `md5sum` des 9 fichiers serveur modifiés ont été comparées des deux côtés avant de lancer quoi que ce soit, donc c'est bien le code du disque qui a tourné.
 
 ---
 
@@ -654,7 +685,19 @@ l'en-tête).
 
 ### 🟡 Améliorations recommandées
 
-~~Texte 8-10 px (351 occurrences)~~ ✅ plancher de 11 px, 283 classes + 6 règles CSS · `confirm()`/`alert()` système · `<label>` + `role="alert"` sur les formulaires · `<html lang>` et détection de langue · chat figé pour les invités · partage d'image qui échoue en silence · réglages tactiles iOS (`tap-highlight`, `user-select`, `overscroll`) · aller-retour réseau pour le parlay · rafraîchissement proactif du jeton · `.fuse_hidden…` versionné · `@figma/my-make-file` et react en peerDependency optionnelle · prix codé en dur · tu/vous · cache client des requêtes.
+~~Texte 8-10 px (351 occurrences)~~ ✅ plancher de 11 px, 283 classes + 6 règles CSS · ~~`systemPrompt` piloté par le client~~ ✅ · ~~validation zod partielle~~ ✅ · ~~timeout du proxy odds~~ ✅ · ~~`NHL_USE_MOCK` non bridé en production~~ ✅ · `confirm()`/`alert()` système · `<label>` + `role="alert"` sur les formulaires · `<html lang>` et détection de langue · chat figé pour les invités · partage d'image qui échoue en silence · réglages tactiles iOS (`tap-highlight`, `user-select`, `overscroll`) · aller-retour réseau pour le parlay · rafraîchissement proactif du jeton · `.fuse_hidden…` versionné · `@figma/my-make-file` et react en peerDependency optionnelle · prix codé en dur · tu/vous · cache client des requêtes.
+
+**Ce qui reste de 🟡 après le 2026-09-08 est entièrement côté CLIENT** — écran,
+clavier, ressenti au doigt — plus deux reliquats de scaffolding. **Le § 1
+« Sécurité » n'a plus d'item ouvert** hors les deux routeurs montés sur
+`/api/users` et `EMAIL_VERIFICATION_DISABLED`, écarté sur décision du user.
+
+⚠️ **`AppShell` (`w-screen h-screen overflow-hidden` → `100dvh`) et la gestion
+du clavier (`visualViewport`) sont mis de côté volontairement** (décision du
+2026-09-08) : c'est le seul changement encore *architectural*, il touche toutes
+les pages et peut déplacer les trois blocs calés sur la safe area du bas. À
+faire à part, avec une vérification à l'écran sur un vrai iPhone. **Le clavier
+reste non géré en v1.**
 
 ### 🟢 Ce qui est déjà très bien fait
 

@@ -35,6 +35,9 @@ import { logger } from '../logger';
 import {
   consumeProRequest, refundProRequest, getUsage, MONTHLY_QUOTA, MAX_OUTPUT_TOKENS,
 } from '../services/llmQuota.service';
+import {
+  LLM_TASK_TYPES, isLlmTaskType, resolveLocale, systemPromptFor,
+} from '../services/llmPrompts';
 
 const router = Router();
 
@@ -42,7 +45,9 @@ const router = Router();
 // Caps keep a single user (or a leaked token) from running up token-cost on the
 // operator's GitHub Models account or tying up connections indefinitely.
 const MAX_PROMPT_CHARS  = Number(process.env.LLM_MAX_PROMPT_CHARS)  || 8_000;   // ~2k tokens
-const MAX_SYSTEM_CHARS  = Number(process.env.LLM_MAX_SYSTEM_CHARS)  || 2_000;
+// `LLM_MAX_SYSTEM_CHARS` a disparu avec le `systemPrompt` du corps de requête :
+// l'invite système est maintenant écrite dans `services/llmPrompts.ts`, donc sa
+// taille est connue à la compilation et n'a plus à être bornée à l'exécution.
 const FETCH_TIMEOUT_MS  = Number(process.env.LLM_FETCH_TIMEOUT_MS)  || 30_000;
 /**
  * Quota journalier par utilisateur, en mémoire.
@@ -198,10 +203,11 @@ router.post('/', async (req: Request, res: Response) => {
   const userId = (req as any).user?.sub;
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { prompt, model, systemPrompt } = req.body as {
+  const { prompt, model, taskType, locale } = req.body as {
     prompt?: string;
     model?: string;
-    systemPrompt?: string;
+    taskType?: string;
+    locale?: string;
   };
 
   if (typeof prompt !== 'string' || !prompt.trim()) {
@@ -211,17 +217,41 @@ router.post('/', async (req: Request, res: Response) => {
   if (prompt.length > MAX_PROMPT_CHARS) {
     return res.status(413).json({ error: `prompt too long (max ${MAX_PROMPT_CHARS} characters)` });
   }
-  if (systemPrompt != null && (typeof systemPrompt !== 'string' || systemPrompt.length > MAX_SYSTEM_CHARS)) {
-    return res.status(413).json({ error: `systemPrompt too long (max ${MAX_SYSTEM_CHARS} characters)` });
-  }
   if (model != null && (typeof model !== 'string' || model.length > 100)) {
     return res.status(400).json({ error: 'invalid model' });
   }
 
+  /**
+   * ── L'invite système ne vient plus du client ──────────────────────────────
+   *
+   * Le corps portait un `systemPrompt` libre, relayé tel quel au fournisseur.
+   * Sur le chemin Pro, facturé à l'opérateur, cela faisait de cette route un
+   * proxy LLM généraliste : n'importe quel abonné pouvait y poser sa propre
+   * invite système et s'en servir à toute autre fin, dans la limite du quota.
+   *
+   * `taskType` est désormais pris dans une énumération FERMÉE et le texte vit
+   * dans `services/llmPrompts.ts`. Un `systemPrompt` encore présent dans le
+   * corps — ancien bundle client — est ignoré en silence : le refuser par un
+   * 400 casserait la fonctionnalité pendant la fenêtre de déploiement, alors
+   * que l'ignorer la dégrade au pire d'un choix de langue.
+   *
+   * `taskType` absent retombe sur la seule tâche existante, pour la même
+   * raison. Le jour où il y en aura deux, ce défaut devra devenir un 400 —
+   * deviner la tâche demandée n'aurait alors plus de sens.
+   */
+  if (taskType != null && !isLlmTaskType(taskType)) {
+    return res.status(400).json({
+      error: `unknown taskType (expected one of: ${LLM_TASK_TYPES.join(', ')})`,
+    });
+  }
+  const resolvedTask = isLlmTaskType(taskType) ? taskType : 'explain_bet';
+  const resolvedLocale = resolveLocale(locale, req.headers['accept-language']);
+
   // Build the shared message array once.
-  const messages: { role: string; content: string }[] = [];
-  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
-  messages.push({ role: 'user', content: prompt });
+  const messages: { role: string; content: string }[] = [
+    { role: 'system', content: systemPromptFor(resolvedTask, resolvedLocale) },
+    { role: 'user', content: prompt },
+  ];
 
   // ── Decide which path to use ──────────────────────────────────────────────
   const userIsPro = await isPro(userId);

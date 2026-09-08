@@ -39,6 +39,48 @@ const SPORTS_TTL = 60 * 60_000;
 /** Seuil d'alerte sur les crédits restants renvoyés par The Odds API. */
 const QUOTA_WARN = Number(process.env.ODDS_QUOTA_WARN ?? 100);
 
+/**
+ * Délai maximal d'un appel à The Odds API.
+ *
+ * C'était le seul `fetch` sortant du serveur sans borne de temps —
+ * `nhlApiClient`, `mlApiClient` et `llm.routes` en ont tous une. Un amont qui
+ * accepte la connexion puis ne répond jamais immobilisait donc une connexion
+ * Express indéfiniment.
+ *
+ * ⚠️ **Le coût réel était plus élevé que « une connexion bloquée »** : ces deux
+ * routes passent par `TtlCache.wrap`, qui **dédoublonne les requêtes
+ * concurrentes sur une clé froide**. Tous les visiteurs demandant les mêmes
+ * cotes attendent la MÊME promesse — un seul amont pendu les gelait tous, et
+ * aucun n'aurait jamais reçu le repli stale prévu plus bas, puisque la promesse
+ * ne rejetait pas. Le délai est ce qui transforme cette panne muette en un
+ * rejet, donc en une réponse stale.
+ *
+ * 8 s : au-dessus du temps de réponse observé de The Odds API, et bien en
+ * dessous des 15 s du client (`http.ts`), pour que le repli stale ait le temps
+ * de partir avant que le navigateur n'abandonne.
+ */
+const ODDS_FETCH_TIMEOUT_MS = Number(process.env.ODDS_FETCH_TIMEOUT_MS) || 8_000;
+
+/**
+ * `fetch` borné dans le temps. Lève une `AbortError` au-delà du délai.
+ *
+ * ⚠️ **Pas d'annotation de retour, volontairement.** Ce fichier importe
+ * `Response` d'Express : écrire `Promise<Response>` ici désigne la réponse
+ * HTTP sortante d'Express, pas celle de `fetch`, et `tsc` rend six erreurs
+ * déroutantes. Le type inféré est le bon.
+ */
+async function fetchOdds(url: string) {
+  // `AbortController` plutôt que `AbortSignal.timeout` : c'est le motif déjà
+  // employé dans `llm.routes.ts`, et il libère explicitement son minuteur.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ODDS_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const oddsCache  = new TtlCache<unknown>(ODDS_TTL, 50, 'odds');
 const sportsCache = new TtlCache<unknown>(SPORTS_TTL, 1, 'odds-sports');
 
@@ -105,7 +147,7 @@ router.get("/bet365/:sportKey", async (req: Request, res: Response) => {
 
   try {
     const data = await oddsCache.wrap(key, () => timeUpstream('odds', async () => {
-      const upstream = await fetch(`${ODDS_BASE}/sports/${sportKey}/odds?${params}`);
+      const upstream = await fetchOdds(`${ODDS_BASE}/sports/${sportKey}/odds?${params}`);
       trackQuota(upstream);
       if (!upstream.ok) {
         const body = await upstream.text().catch(() => "");
@@ -138,7 +180,7 @@ router.get("/sports", async (_req: Request, res: Response) => {
   if (!ODDS_KEY) return res.json([]);
   try {
     const data = await sportsCache.wrap("sports", () => timeUpstream('odds', async () => {
-      const upstream = await fetch(`${ODDS_BASE}/sports?apiKey=${ODDS_KEY}`);
+      const upstream = await fetchOdds(`${ODDS_BASE}/sports?apiKey=${ODDS_KEY}`);
       trackQuota(upstream);
       if (!upstream.ok) throw new Error(`upstream ${upstream.status}`);
       return upstream.json();

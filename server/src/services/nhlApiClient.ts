@@ -14,8 +14,40 @@ import { computeTravel, TravelGame, TravelFeatures } from './travel';
 import { TtlCache } from './ttlCache';
 import { timeUpstream } from '../metrics';
 
-/** When NHL_USE_MOCK=true, serve rich local mock data instead of the live NHL API. */
-const USE_MOCK = process.env.NHL_USE_MOCK === 'true';
+/**
+ * When NHL_USE_MOCK=true, serve rich local mock data instead of the live NHL API.
+ *
+ * ── Bridé en production ─────────────────────────────────────────────────────
+ *
+ * Cette variable posée par erreur sur Railway sert des matchs, des équipes et
+ * des joueurs INVENTÉS à de vrais visiteurs, sans qu'aucune réponse HTTP ne le
+ * dise. C'est le même mode d'échec que les cotes fictives de `/api/odds/live`
+ * (retirées le 2026-09-08) et que les prédictions mockées avant
+ * `PredictionUnavailableError` : sur une app de paris, un chiffre faux qui a
+ * l'air juste est pire que pas de chiffre. Ça s'est déjà produit — le relevé du
+ * 2026-08-29 a trouvé `NHL_USE_MOCK=true` en production.
+ *
+ * En production, `NHL_USE_MOCK` seul ne suffit donc PLUS : il faut poser en
+ * plus `ALLOW_MOCK_IN_PRODUCTION=true`. Deux variables au lieu d'une, parce que
+ * le risque à couvrir est l'erreur, pas l'intention — le tir de charge B3
+ * (`AUDIT_SCALABILITE_COUTS.md` §5) a besoin des données mockées et doit rester
+ * possible. Poser les deux est un geste qu'on ne fait pas par distraction.
+ */
+const MOCK_REQUESTED = process.env.NHL_USE_MOCK === 'true';
+const MOCK_ALLOWED_HERE =
+  process.env.NODE_ENV !== 'production' || process.env.ALLOW_MOCK_IN_PRODUCTION === 'true';
+export const USE_MOCK = MOCK_REQUESTED && MOCK_ALLOWED_HERE;
+
+if (MOCK_REQUESTED && !MOCK_ALLOWED_HERE) {
+  // `console.error` et non `logger` : ce module est importé AVANT que le
+  // logger ne soit configuré, et cette ligne ne doit pas pouvoir disparaître
+  // dans un ordre d'import. Elle est de niveau erreur parce qu'elle signale
+  // une variable de production posée par erreur — pas un réglage.
+  console.error(
+    '[nhlApiClient] NHL_USE_MOCK=true IGNORÉ : interdit en production. ' +
+    'Poser ALLOW_MOCK_IN_PRODUCTION=true pour un tir de charge, et le RETIRER après.',
+  );
+}
 
 const BASE = 'https://api-web.nhle.com/';
 // The player-search endpoint lives on a separate host from the main stats API.

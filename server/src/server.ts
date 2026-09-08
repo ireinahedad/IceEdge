@@ -12,6 +12,7 @@ import { startCleanupJob } from './services/cleanup.service';
 import { startOddsLogger, verifyOddsApiKey } from './services/oddsLogger.service';
 import { verifyAvatarStorage } from './services/avatarStorage';
 import { allowedOrigins } from './cors';
+import { USE_MOCK } from './services/nhlApiClient';
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -68,7 +69,12 @@ const DORMANT = process.env.DORMANT === 'true';
     // un serveur déjà démarré ne les verra jamais.
     logger.info(
       {
-        NHL_USE_MOCK:   process.env.NHL_USE_MOCK === 'true',
+        // La valeur EFFECTIVE, pas la variable brute — même raison que pour
+        // `ENABLE_DEV_ROUTES` plus bas : en production `NHL_USE_MOCK=true` est
+        // ignoré sans `ALLOW_MOCK_IN_PRODUCTION=true`, et la bannière doit dire
+        // ce que le serveur FAIT. C'est cette ligne que le préflight du tir de
+        // charge B3 lit pour savoir si le run mesure autre chose que prévu.
+        NHL_USE_MOCK:   USE_MOCK,
         NHL_TIMEOUT_MS: Number(process.env.NHL_TIMEOUT_MS) || 8_000,
         ML_DISABLED:    process.env.ML_DISABLED === 'true',
         ODDS_API_KEY:   process.env.ODDS_API_KEY ? 'présente (validité vérifiée par verifyOddsApiKey)' : 'ABSENTE (proxy → [])',

@@ -308,3 +308,99 @@ export const predictMlSchema = z.object({
   line:       betLine.optional(),
   selection:  selectionValue.optional(),
 });
+
+
+// ── Chat ────────────────────────────────────────────────────────────────────
+//
+// `chat.service.ts` borne DÉJÀ tout ce qui entre en base : `stripControlChars`,
+// `MAX_TEXT_LENGTH`, `MAX_NOTE_LENGTH`, `REPORT_REASONS`, et un `slice()` sur
+// chaque champ libre. Ces schémas ne le remplacent pas — ils refusent à la
+// FRONTIÈRE ce qui serait de toute façon tronqué plus loin, pour deux raisons :
+//
+//  1. **Un `slice()` accepte en silence.** Un client qui envoie 3 000
+//     caractères recevait un message tronqué sans jamais l'apprendre ; il reçoit
+//     maintenant un 400 qui dit la limite. (Côté client, l'input du chat n'a
+//     toujours pas de `maxLength` — c'est un point ouvert de l'audit, §3.)
+//  2. La défense en profondeur : le service reste la dernière ligne, il n'est
+//     PAS allégé par ces schémas. Retirer une de ses vérifications en croyant
+//     qu'elle fait doublon serait l'erreur à ne pas commettre — les mêmes
+//     fonctions servent le chemin SOCKET, qui ne passe par aucun de ces
+//     schémas.
+//
+// `pin` et `role` n'ont volontairement pas de schéma : la route coerce déjà
+// (`!!req.body.pinned`) et `setRole` valide son énumération en base.
+
+/** Aligné sur `MAX_TEXT_LENGTH` de `chat.service.ts`. Les deux doivent bouger ensemble. */
+const CHAT_MAX_TEXT = 1000;
+/** Aligné sur `MAX_NOTE_LENGTH` de `chat.service.ts`. */
+const CHAT_MAX_NOTE = 500;
+
+export const chatCreateRoomSchema = z.object({
+  name:        z.string().trim().min(1, 'name is required').max(100),
+  icon:        z.string().max(20).optional(),
+  description: z.string().trim().max(300).optional(),
+  isPrivate:   z.boolean().optional(),
+  // Le format est vérifié par `sanitizeColor` côté service (qui retombe sur
+  // null) : ici on ne borne que la taille, pour ne pas refuser une couleur que
+  // le service sait déjà normaliser.
+  color:       z.string().max(20).optional(),
+});
+
+export const chatJoinByCodeSchema = z.object({
+  code: z.string().trim().min(1, 'code is required').max(32),
+});
+
+export const chatSendMessageSchema = z.object({
+  text: z.string().min(1, 'text is required').max(CHAT_MAX_TEXT, `Message too long (max ${CHAT_MAX_TEXT} chars)`),
+  tag:  z.enum(['pick', 'analysis', 'hot']).optional(),
+  // Citation de réponse. Recopiée telle quelle en base (le service la tronque) :
+  // c'est du texte fourni par le client, pas une référence vérifiée à un
+  // message — le borner ici évite qu'une citation pèse plus lourd que le
+  // message qui la porte.
+  replyTo: z.object({
+    username: z.string().max(100).optional(),
+    text:     z.string().max(300).optional(),
+  }).optional(),
+});
+
+export const chatReactionSchema = z.object({
+  // 8 caractères : la limite du service. Un emoji composé (drapeau, famille,
+  // modificateur de teint) dépasse largement un « caractère ».
+  emoji: z.string().min(1, 'emoji is required').max(8),
+});
+
+export const chatReportSchema = z.object({
+  reason: z.enum(['spam', 'harassment', 'hate', 'sexual', 'other']),
+  note:   z.string().max(CHAT_MAX_NOTE).optional(),
+});
+
+// ── Web Push ────────────────────────────────────────────────────────────────
+//
+// `endpoint` est une URL fournie par le navigateur, écrite telle quelle en base
+// et RÉUTILISÉE comme clé unique (`ON CONFLICT (endpoint)`). C'était le seul
+// champ de l'API stocké sans aucune borne : rien n'empêchait un mégaoctet de
+// texte d'entrer dans un index. Le schéma la contraint à une URL https bornée.
+export const pushSubscribeSchema = z.object({
+  endpoint: z.string().url().startsWith('https://', 'endpoint must be https').max(2_000),
+  keys: z.object({
+    p256dh: z.string().min(1).max(256),
+    auth:   z.string().min(1).max(256),
+  }),
+});
+// NB : `sub.toJSON()` du navigateur porte aussi `expirationTime`. zod le retire
+// (mode « strip » par défaut) et personne ne le lit — c'est voulu.
+
+export const pushUnsubscribeSchema = z.object({
+  endpoint: z.string().url().max(2_000),
+});
+
+// ── Abonnement ──────────────────────────────────────────────────────────────
+//
+// Le code promo est comparé à un catalogue en mémoire après `trim().toUpperCase()`,
+// donc un code invalide ne touche jamais la base — mais il n'était borné ni en
+// taille ni en alphabet, et `redeemLimiter` (par compte) laisse passer assez de
+// tentatives pour que la taille compte.
+export const redeemPromoSchema = z.object({
+  code: z.string().trim().min(1, 'Code required').max(64)
+    .regex(/^[A-Za-z0-9_-]+$/, 'Invalid promo code'),
+});

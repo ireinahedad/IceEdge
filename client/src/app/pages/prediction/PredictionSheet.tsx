@@ -210,51 +210,16 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
                     `\nTreat the "App data" above as facts. ` +
                     `List the key off-the-stat-sheet factors and flag only what I must verify before betting.`;
 
-                const systemPrompt = isFr
-                  ? "Tu es un analyste de paris LNH pointu dont la valeur est le contexte qu'un modèle statistique manque. " +
-                    "Tu n'as AUCUNE donnée en temps réel et ta connaissance a une date limite — n'affirme jamais une blessure, " +
-                    "un alignement ou un gardien actuel comme un fait. " +
-                    "Quand des « Données de l'application » sont fournies, considère-les comme la vérité et fonde ton « Analyse » dessus. " +
-                    "Réponds EXACTEMENT dans ce format, sans introduction ni paragraphe :\n" +
-                    "Analyse :\n" +
-                    "- 2 à 5 points clés courts (≤ 12 mots), facteurs hors statistiques : forme, fatigue (matchs consécutifs), " +
-                    "voyage, style d'affrontement, motivation (course aux séries, tanking). " +
-                    "N'inclus QUE des points appuyés par les données ou tes connaissances; si une information est inconnue " +
-                    "ou non fournie, OMETS le point — n'écris JAMAIS « inconnu », « non précisé », « N/D » ni « non spécifié ». " +
-                    "Mieux vaut 2 bons points que 5 avec du remplissage.\n" +
-                    "\n" +
-                    "À vérifier :\n" +
-                    "- REGROUPE ICI UNIQUEMENT les éléments externes en temps réel que l'application n'a pas : " +
-                    "blessures/absences, gardien partant confirmé, changements d'alignement de dernière minute. " +
-                    "N'inclus JAMAIS l'historique OT, le voyage/calendrier, la forme récente ni la fatigue — " +
-                    "l'application fournit déjà ces données, sers-t'en dans « Analyse » au lieu de demander de les vérifier. " +
-                    "Un élément par point, ≤ 10 mots, formulé comme une chose vérifiable (ex. « Gardien partant de MTL confirmé ? »).\n" +
-                    "\n" +
-                    "Verdict : Bon pari / Avantage léger / À éviter — Confiance : faible, moyenne ou élevée " +
-                    "(choisis UN mot pour le verdict et UN pour la confiance)"
-                  : "You are a sharp NHL betting analyst whose value is the context a stats model misses. " +
-                    "You have NO live data and your knowledge has a cutoff — never state a current injury, lineup, or goalie " +
-                    "start as fact. " +
-                    "When 'App data' is provided, treat it as ground truth and base your 'Analysis' on it. " +
-                    "Reply in EXACTLY this format, with no intro and no paragraphs:\n" +
-                    "Analysis:\n" +
-                    "- 2-5 short key points (≤12 words), off-the-sheet factors: form, fatigue (back-to-back), travel, " +
-                    "style matchup, motivation (playoff race, tanking). " +
-                    "Include ONLY points backed by the data or your knowledge; if something is unknown or not provided, " +
-                    "OMIT that point — never write 'unknown', 'not specified', 'unclear' or 'N/A'. " +
-                    "Two solid points beat five with filler.\n" +
-                    "\n" +
-                    "To verify:\n" +
-                    "- GROUP HERE ONLY external live items the app does NOT have: " +
-                    "injuries/absences, confirmed starting goalie, last-minute lineup changes. " +
-                    "NEVER include OT history, travel/schedule, recent form or fatigue — the app already provides these, " +
-                    "so use them in 'Analysis' instead of asking to verify them. " +
-                    "One item per bullet, ≤10 words, phrased as a checkable question (e.g. 'MTL starting goalie confirmed?').\n" +
-                    "\n" +
-                    "Verdict: Good bet / Slight edge / Avoid — Confidence: low, medium or high " +
-                    "(pick ONE word for the verdict and ONE for the confidence)";
-
-                const text = await askLLM(userPrompt, { systemPrompt });
+                // L'invite système vit côté SERVEUR depuis le 2026-09-08
+                // (`server/src/services/llmPrompts.ts`). Elle arrivait d'ici,
+                // dans le corps de la requête, et le serveur la relayait telle
+                // quelle : sur le chemin Pro, facturé à l'opérateur, ça faisait
+                // de `/api/llm` un proxy LLM généraliste pour tout abonné. Le
+                // client ne dit plus QUE la tâche et la langue.
+                const text = await askLLM(userPrompt, {
+                  taskType: "explain_bet",
+                  locale: isFr ? "fr" : "en",
+                });
                 setLlmText(text);
                 setLlmOpen(true);            // ouvre la réponse fraîchement générée
                 saveLlmCache(llmId, text);   // persistée 24 h — pas de 2e question identique

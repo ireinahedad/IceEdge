@@ -2,6 +2,11 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { chatService } from '../services/chat.service';
 import { optionalAuthenticate } from '../middleware/auth.middleware';
 import { InMemoryRateLimitStore, RateLimitStore } from '../middleware/rateLimitStore';
+import { validateBody } from '../middleware/validate.middleware';
+import {
+  chatCreateRoomSchema, chatJoinByCodeSchema, chatSendMessageSchema,
+  chatReactionSchema, chatReportSchema,
+} from '../validation/schemas';
 import { io } from '../socket';
 import { sendError } from '../httpError';
 
@@ -54,10 +59,9 @@ router.get('/rooms', async (req: Request, res: Response) => {
 });
 
 // POST /api/chat/rooms — create (creator becomes admin) · max 5/5min
-router.post('/rooms', rateLimit('create', 5, 5 * 60_000), async (req: Request, res: Response) => {
+router.post('/rooms', rateLimit('create', 5, 5 * 60_000), validateBody(chatCreateRoomSchema), async (req: Request, res: Response) => {
   try {
     const { name, icon, description, isPrivate, color } = req.body;
-    if (!name) return res.status(400).json({ error: 'name is required' });
     res.status(201).json(await chatService.createRoom(uid(req), {
       name, icon: icon ?? '💬', description: description ?? '', isPrivate: !!isPrivate, color,
     }));
@@ -74,10 +78,9 @@ router.get('/rooms/lookup', rateLimit('code', 10, 60_000), async (req: Request, 
 });
 
 // POST /api/chat/rooms/join — join by code (public or private) · max 10/min (anti brute-force)
-router.post('/rooms/join', rateLimit('code', 10, 60_000), async (req: Request, res: Response) => {
+router.post('/rooms/join', rateLimit('code', 10, 60_000), validateBody(chatJoinByCodeSchema), async (req: Request, res: Response) => {
   try {
     const { code } = req.body;
-    if (!code) return res.status(400).json({ error: 'code is required' });
     res.json(await chatService.joinRoom(uid(req), { code }));
   } catch (err: any) { sendError(res, err); }
 });
@@ -142,11 +145,9 @@ router.get('/rooms/:roomId/messages', async (req: Request, res: Response) => {
 });
 
 // POST /api/chat/rooms/:roomId/messages — identity derived server-side · max 10/10s
-router.post('/rooms/:roomId/messages', rateLimit('msg', 10, 10_000), async (req: Request, res: Response) => {
+router.post('/rooms/:roomId/messages', rateLimit('msg', 10, 10_000), validateBody(chatSendMessageSchema), async (req: Request, res: Response) => {
   try {
     const { text, tag, replyTo } = req.body;
-    if (!text) return res.status(400).json({ error: 'text is required' });
-
     const msg = await chatService.sendMessage(req.params.roomId, uid(req), { text, tag, replyTo });
     res.status(201).json(msg);
     // Broadcast to all clients in the room (real-time)
@@ -181,10 +182,9 @@ router.delete('/rooms/:roomId/messages/:messageId', async (req: Request, res: Re
 });
 
 // POST /api/chat/rooms/:roomId/messages/:messageId/reactions · max 20/10s
-router.post('/rooms/:roomId/messages/:messageId/reactions', rateLimit('react', 20, 10_000), async (req: Request, res: Response) => {
+router.post('/rooms/:roomId/messages/:messageId/reactions', rateLimit('react', 20, 10_000), validateBody(chatReactionSchema), async (req: Request, res: Response) => {
   try {
     const { emoji } = req.body;
-    if (!emoji) return res.status(400).json({ error: 'emoji is required' });
     await chatService.toggleReaction(req.params.roomId, req.params.messageId, uid(req), emoji);
     res.status(204).send();
   } catch (err: any) { sendError(res, err); }
@@ -201,10 +201,9 @@ router.post('/rooms/:roomId/messages/:messageId/reactions', rateLimit('react', 2
 // La route reste fine : validation du motif, refus de l'auto-signalement et
 // masquage automatique vivent dans chat.service.ts, avec tous les autres
 // garde-fous de ce domaine.
-router.post('/rooms/:roomId/messages/:messageId/report', rateLimit('report', 10, 5 * 60_000), async (req: Request, res: Response) => {
+router.post('/rooms/:roomId/messages/:messageId/report', rateLimit('report', 10, 5 * 60_000), validateBody(chatReportSchema), async (req: Request, res: Response) => {
   try {
     const { reason, note } = req.body ?? {};
-    if (!reason) return res.status(400).json({ error: 'reason is required' });
     const result = await chatService.reportMessage(
       req.params.roomId, req.params.messageId, uid(req), { reason, note },
     );
