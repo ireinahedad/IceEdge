@@ -44,6 +44,7 @@ ml/data/raw/**/*.zip
 ml/data/raw/**/*.zip.zip
 ml/data/raw/**/*.xlsx
 ml/data/raw/**/*.parquet
+.claude-tmp/
 
 # Ensemble bootstrap du modèle de score (S1) : 20 membres, 8.9 Mo, régénérables
 # par `python train_score.py --ensemble 20`. σ n'est consommée par aucun code de
@@ -54,3 +55,10 @@ ml/models/score_ensemble/
 # Fichiers retirés du produit, gardés hors dépôt en attendant une suppression
 # manuelle (le bridge ne peut pas supprimer). Sortis de l'index le 2026-08-25.
 _to_delete/
+
+# Écrit par l'application de bureau Claude, jamais par le produit. Suivi par
+# git jusqu'au 2026-09-08 (3 fichiers, ~735 Ko : un témoin SEO en double et deux
+# captures), embarqué par un `git add -A` comme `.claude-tmp/` avant lui. Le
+# dossier peut être recréé à tout moment : c'est pour ça qu'il est ignoré et pas
+# seulement effacé.
+Claude outputs/

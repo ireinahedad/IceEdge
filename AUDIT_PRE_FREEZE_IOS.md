@@ -231,7 +231,7 @@ Trois défauts qui se cumulent, tous visibles dès le premier verrouillage d'éc
 
 **Vérifié — et cette fois par des tests, pas par relecture.** `client/` n'a aucun runner ; un banc d'essai jetable a été monté dans le conteneur (esbuild qui bundle le **vrai** `useChatSocket.ts`, avec `socket.io-client`, `authService` et `tokenStore` remplacés par des doublures, rendu dans Chromium par Playwright). **19 assertions, toutes vertes** : la 1re connexion ne resynchronise pas, la reconnexion oui, le retour au premier plan aussi et il rappelle `connect()` quand la socket est morte, l'onglet caché ne déclenche rien, une erreur réseau ne provoque aucun refresh, un jeton expiré en provoque exactement un, un second refus n'en relance pas et lève le bandeau, un `connect` réussi réarme le droit au refresh et efface le bandeau, `room_error` remonte, la fusion garde l'optimiste et trie, et le changement de salon remet le compteur à zéro. `typecheck` propre, `vite build` web et `VITE_TARGET=ios` passent.
 
-⚠️ **Le banc d'essai n'est PAS dans le dépôt** (ce serait ajouter un runner au client, décision à part). Rien n'est déployé ni essayé sur un vrai téléphone.
+⚠️ **Le banc a été supprimé le 2026-09-08 ; ce paragraphe est désormais la seule trace de son passage au vert.** Il vivait dans `.claude-tmp/banc-chat/`, rien ne le lançait, et le garder aurait fini par faire croire à un garde-fou qui ne tourne pas. Le décompte et la liste des 19 assertions ci-dessus disent ce qui a été prouvé, et à quelle date ; les refaire demande de remonter la recette esbuild + Playwright, pas de retrouver le dossier. Rien n'est déployé ni essayé sur un vrai téléphone.
 
 ### ✅ CORRIGÉ · [HIGH] Le coupon est perdu à chaque mise en arrière-plan
 **Fichier :** `client/src/app/context/BetContext.tsx`
@@ -256,7 +256,7 @@ Trois défauts qui se cumulent, tous visibles dès le premier verrouillage d'éc
 - **Aucun réessai automatique.** L'échec remonte tel quel et c'est l'utilisateur qui rejoue. Un réessai automatique transformerait une panne d'amont en troupeau — précisément ce que le tir S1 a coûté sur l'API de cotes facturée à l'appel.
 - **Le bouton, sur 5 écrans** via `ErrorState` (message + `AppButton variant="ghost"` + `.tap-44`) : Accueil, Calendrier, Stats, Ligue/classement, Mes coupons. Il ne connaît pas l'erreur — il reçoit un `onRetry`, et chaque écran sait ce que « recharger » veut dire chez lui.
 - **Trois états vides mensongers corrigés au passage**, parce qu'un bouton n'a nulle part où s'accrocher sans ça : l'accueil rendait un réseau coupé en « aucun match ce soir », le classement en classement vide (`.catch(() => [])`), et « Mes coupons » affichait la ligne rouge **et** l'état vide « aucun coupon » l'un sous l'autre.
-- **Vérifié au banc jetable** (esbuild + Node 22, doublure de `fetch` qui honore le signal ; pas de Playwright, `http.ts` ne touche ni au DOM ni au stockage) : **16 assertions vertes** — abandon **au** délai mesuré, budget porté par l'erreur, `timeoutMs` qui ne fuit pas dans le `RequestInit`, minuteur désarmé après succès, abandon de l'appelant qui reste un `AbortError`, signal déjà abandonné, `timeoutMs: 0`, erreur réseau non déguisée, écouteur retiré. Banc et mode d'emploi dans `.claude-tmp/banc-http/` — ⚠️ **rien ne le lance**. `typecheck` propre, builds web et `VITE_TARGET=ios` verts.
+- **Vérifié au banc jetable** (esbuild + Node 22, doublure de `fetch` qui honore le signal ; pas de Playwright, `http.ts` ne touche ni au DOM ni au stockage) : **16 assertions vertes** — abandon **au** délai mesuré, budget porté par l'erreur, `timeoutMs` qui ne fuit pas dans le `RequestInit`, minuteur désarmé après succès, abandon de l'appelant qui reste un `AbortError`, signal déjà abandonné, `timeoutMs: 0`, erreur réseau non déguisée, écouteur retiré. ⚠️ **Banc supprimé le 2026-09-08 ; la liste ci-dessus est la seule trace de son passage au vert.** Il vivait dans `.claude-tmp/banc-http/` et rien ne le lançait. `typecheck` propre, builds web et `VITE_TARGET=ios` verts.
 - ⚠️ **Connu :** le délai couvre l'attente des **en-têtes**, pas la lecture du corps — le minuteur est désarmé dès que `fetch` rend la main. Couvrir le corps demanderait de reconstruire la `Response` autour d'un flux surveillé, ce qui perd `url`/`redirected` et lève sur un 204. Les corps servis ici sont du JSON court, lu immédiatement.
 - ⚠️ **Non traité :** le socket du chat (socket.io a ses propres délais) et le « Réessayer » des écrans secondaires (graphiques, feuilles de prédiction, modération). Rien n'est déployé ni essayé sur un vrai téléphone.
 
@@ -416,6 +416,17 @@ Le serveur refuse au-delà de 1000 caractères (`MAX_TEXT_LENGTH`) ; le client n
 ## 4. Architecture / code
 
 ### 🟡 PARTIELLEMENT CORRIGÉ · [MEDIUM] Aucun test ni typecheck côté client dans la CI
+
+> **Où sont passés les bancs d'essai.** Trois vérifications de ce document
+> (19 assertions sur la reprise du socket de chat, 16 sur les délais de requête,
+> 13 sur le coupon persisté) ont été faites à des bancs jetables montés hors du
+> dépôt. **Tous supprimés le 2026-09-08**, à la demande du propriétaire et pour
+> une bonne raison : rien ne les lançait, et un banc qu'aucune CI n'exécute finit
+> par se lire comme un garde-fou alors qu'il n'en est pas un. Ce qu'ils ont
+> prouvé, et quand, est écrit dans les items correspondants — c'est la trace, et
+> elle vaut ce que vaut ce document. Le jour où `client/` aura un runner, ces
+> assertions sont la liste de ce qu'il faut y remettre.
+
 **✅ Le typecheck y est (2026-09-08)** — `npm run typecheck` placé AVANT `npm run build` dans le job client, pour échouer vite. `vite build` passe par esbuild, qui jette les annotations de type sans les contrôler : le build ne prouvait donc rien, et `typecheck`, seul garde-fou automatique du client, ne tournait que quand on y pensait.
 **⬜ Il n'y a toujours aucun test client** — `client/` n'a aucun runner, décision reportée après le gel.
 
