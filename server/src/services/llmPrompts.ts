@@ -6,7 +6,7 @@
  *
  * Jusqu'au 2026-09-08, `systemPrompt` arrivait dans le CORPS DE REQUÊTE et
  * était relayé tel quel au fournisseur. Sur le chemin Pro — le seul facturé à
- * l'opérateur (`GITHUB_MODELS_TOKEN`) — cela donnait à tout compte Pro, y
+ * l'opérateur (`OPENAI_API_KEY`) — cela donnait à tout compte Pro, y
  * compris un essai gratuit ou un code promo, un **proxy LLM généraliste aux
  * frais du projet** : il suffisait d'appeler l'API avec son propre système
  * d'invite pour s'en servir à toute autre fin.

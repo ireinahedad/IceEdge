@@ -59,7 +59,10 @@ async function llmApp() {
 beforeEach(() => {
   vi.clearAllMocks();
   sentBody = null;
-  process.env.GITHUB_MODELS_TOKEN = 'ghp-test';
+  // Clé OPÉRATEUR du chemin Pro. C'était `GITHUB_MODELS_TOKEN` jusqu'au
+  // 2026-09-08, date à laquelle le chemin Pro est passé à OpenAI (GitHub Models
+  // a été retiré le 30 juillet 2026).
+  process.env.OPENAI_API_KEY = 'sk-test';
   vi.stubGlobal('fetch', vi.fn(async (_url: string, init: any) => {
     sentBody = JSON.parse(init.body);
     return {

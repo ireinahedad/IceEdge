@@ -74,14 +74,24 @@ const PRO_PRICE = num('PRO_PRICE_MONTHLY', 5.99);
 const AI_BUDGET_SHARE = Math.min(num('LLM_BUDGET_SHARE', 0.30), 1);
 
 /**
- * Tarifs du modèle Pro, par million de tokens. Défauts = `gpt-4.1-mini`
- * (0,40 $ en entrée / 1,60 $ en sortie au 2026-07).
+ * Tarifs du modèle Pro, par million de tokens. Défauts = **gpt-5.6-luna**
+ * (0,20 $ en entrée / 1,20 $ en sortie au 2026-09-09).
  *
- * À vérifier à chaque changement de modèle : c'est le seul paramètre de ce
- * fichier dont la valeur est décidée par quelqu'un d'autre que toi.
+ * ⚠️⚠️ Ces deux nombres et `LLM_PRO_MODEL` (dans `llm.routes.ts`) décrivent le
+ * MÊME modèle. Changer l'un sans l'autre ne casse rien visiblement : le plafond
+ * continue d'être calculé, simplement sur le tarif d'un autre modèle — donc
+ * faux, et faux dans le sens coûteux si le nouveau modèle est plus cher.
+ *
+ * Historique : les défauts étaient 0,40 / 1,60, c'est-à-dire `gpt-4.1-mini`,
+ * un modèle qui **ne figure plus au catalogue OpenAI** (gamme 2026 :
+ * gpt-6-astra, gpt-5.6-sol / terra / luna). Le code décrivait donc le prix d'un
+ * modèle qu'il ne pouvait plus appeler.
+ *
+ * C'est le seul paramètre de ce fichier dont la valeur est décidée par
+ * quelqu'un d'autre que toi : à revérifier à chaque changement de modèle.
  */
-const PRICE_IN_PER_M  = num('LLM_PRICE_INPUT_PER_MTOK',  0.40);
-const PRICE_OUT_PER_M = num('LLM_PRICE_OUTPUT_PER_MTOK', 1.60);
+const PRICE_IN_PER_M  = num('LLM_PRICE_INPUT_PER_MTOK',  0.20);
+const PRICE_OUT_PER_M = num('LLM_PRICE_OUTPUT_PER_MTOK', 1.20);
 
 /**
  * Taille maximale d'une requête, reprise des plafonds que la route applique
@@ -115,18 +125,36 @@ export const WORST_CASE_COST_PER_REQUEST =
   );
 
 /**
- * Plafond mensuel de requêtes par abonné Pro.
+ * Le chiffre ROND qu'on promet à l'utilisateur : « 500 analyses par mois ».
  *
- * Surchargeable par `LLM_MONTHLY_QUOTA` quand tu veux fixer un chiffre rond
- * plutôt que de le laisser dériver du calcul — utile pour communiquer une
- * promesse simple (« 500 questions par mois ») ou lors d'une opération
- * commerciale. La surcharge n'invalide la garantie que si tu la montes
- * au-dessus du calcul ; le démarrage le signale alors explicitement.
+ * Une promesse commerciale doit être stable et mémorisable ; le calcul, lui,
+ * bouge dès qu'un prix ou un tarif change (757 aujourd'hui avec gpt-5.6-luna,
+ * 457 hier avec l'ancien modèle). Annoncer le résultat brut du calcul, c'est
+ * annoncer un nombre qui change tout seul — et c'est comme ça qu'une page de
+ * vente finit par mentir.
+ */
+export const PROMISED_MONTHLY_QUOTA = num('LLM_PROMISED_QUOTA', 500);
+
+/**
+ * Plafond mensuel de requêtes par abonné Pro — celui qui est RÉELLEMENT
+ * appliqué, affiché sur /pro et compté dans les Réglages.
+ *
+ * `min(calcul, promesse)` et pas la promesse seule : c'est ce `min` qui empêche
+ * la promesse de casser la garantie de coût. Si le calcul retombe un jour sous
+ * 500 — baisse de prix, modèle plus cher, part IA réduite — le plafond suit le
+ * calcul et le chiffre annoncé baisse avec lui, PARTOUT en même temps, parce
+ * que /pro et le compteur lisent tous deux cette constante. Aucun endroit du
+ * produit ne peut donc promettre plus que ce que l'abonnement finance.
+ *
+ * `LLM_MONTHLY_QUOTA` reste la surcharge explicite pour une opération
+ * commerciale ; elle court-circuite le `min`, donc elle PEUT dépasser le calcul
+ * — le démarrage le signale alors par un avertissement.
  */
 export const MONTHLY_QUOTA: number = (() => {
   const derived = Math.floor((PRO_PRICE * AI_BUDGET_SHARE) / WORST_CASE_COST_PER_REQUEST);
   const override = Number(process.env.LLM_MONTHLY_QUOTA);
-  return Number.isFinite(override) && override > 0 ? Math.floor(override) : Math.max(derived, 1);
+  if (Number.isFinite(override) && override > 0) return Math.floor(override);
+  return Math.max(Math.min(derived, PROMISED_MONTHLY_QUOTA), 1);
 })();
 
 /**
@@ -153,11 +181,21 @@ export const GLOBAL_MONTHLY_CAP = num('LLM_GLOBAL_MONTHLY_CAP', 10_000);
       aiBudgetPerUser: Number(budget.toFixed(2)),
       worstCaseCostPerRequest: Number(WORST_CASE_COST_PER_REQUEST.toFixed(5)),
       derivedQuota: derived,
+      promisedQuota: PROMISED_MONTHLY_QUOTA,
       effectiveQuota: MONTHLY_QUOTA,
       globalCap: GLOBAL_MONTHLY_CAP,
     },
     '[llmQuota] plafond mensuel par abonné Pro',
   );
+  // Le calcul ne finance plus la promesse : le produit annonce désormais moins
+  // que le chiffre rond prévu. Rien n'est cassé — le `min` a fait son travail —
+  // mais c'est une décision commerciale qui vient d'être prise par un tarif.
+  if (derived < PROMISED_MONTHLY_QUOTA) {
+    logger.warn(
+      { derivedQuota: derived, promisedQuota: PROMISED_MONTHLY_QUOTA, effectiveQuota: MONTHLY_QUOTA },
+      '[llmQuota] le budget ne finance plus la promesse ronde — le chiffre annoncé aux abonnés BAISSE',
+    );
+  }
   if (MONTHLY_QUOTA > derived) {
     logger.warn(
       { effectiveQuota: MONTHLY_QUOTA, derivedQuota: derived },

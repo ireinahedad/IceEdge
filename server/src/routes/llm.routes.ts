@@ -2,12 +2,15 @@
  * llm.routes.ts
  * POST /api/llm  — proxies a prompt to a chat model.
  *
- * Two billing paths, chosen by subscription tier:
- *   • PRO  users  → the app's own GitHub Models token (GITHUB_MODELS_TOKEN).
- *                   Costs/rate-limits are billed to the app operator's GitHub
- *                   account. Model defaults to `openai/gpt-5-mini`.
- *   • FREE users  → their own OpenAI key stored in user_profiles.openai_api_key.
- *                   Costs are billed to the user's OpenAI account.
+ * Deux chemins de facturation, choisis par le niveau d'abonnement. Les deux
+ * appellent le MÊME endpoint OpenAI ; seule la clé change, et donc qui paie :
+ *   • PRO  → la clé de l'opérateur (`OPENAI_API_KEY`), modèle imposé
+ *            (`LLM_PRO_MODEL`, défaut gpt-5.6-luna) et plafond mensuel.
+ *   • FREE → la clé OpenAI de l'utilisateur, rangée chiffrée dans
+ *            `user_profiles.openai_api_key`. Il choisit son modèle, il paie.
+ *
+ * (Le chemin Pro passait par GitHub Models jusqu'au 2026-09-08 ; ce service a
+ *  été retiré le 30 juillet 2026. Voir le bloc au-dessus de `OPENAI_CHAT_URL`.)
  *
  * ── PLAFOND DE COÛT (P1-6) ──────────────────────────────────────────────────
  *
@@ -133,16 +136,64 @@ async function fetchWithTimeoutRetry(
   throw lastErr;
 }
 
-// GitHub Models (personal inference endpoint). See:
-// https://docs.github.com/en/rest/models/inference
-const GITHUB_MODELS_URL = 'https://models.github.ai/inference/chat/completions';
-const GITHUB_API_VERSION = '2026-03-10';
-// GitHub Models require a publisher-prefixed id, e.g. "openai/gpt-4.1-mini".
-// NB: the gpt-5 family is gated (rate_limit_tier "custom") and returns
-// 400 unavailable_model on the free GitHub Models tier. Switch this to
-// "openai/gpt-5-mini" only once that model is enabled for the account.
-const DEFAULT_PRO_MODEL = 'openai/gpt-4.1-mini';
-const DEFAULT_FREE_MODEL = 'gpt-4o-mini';
+/**
+ * ── 2026-09-08 : GitHub Models est MORT, le chemin Pro passe par OpenAI ──────
+ *
+ * GitHub Models a été **définitivement retiré le 30 juillet 2026** (playground,
+ * catalogue, API d'inférence et endpoints BYOK). L'endpoint répondait depuis
+ * `{"error":{"code":"github_models_retirement_brownout"}}`, ce qui se traduisait
+ * en 502 côté client : l'analyse IA des abonnés était donc hors service depuis
+ * six semaines, sans que rien ne le dise.
+ *
+ * Le chemin Pro appelle désormais OpenAI directement — c'est-à-dire le MÊME
+ * endpoint que le chemin Free, à une différence près : la clé. Free utilise
+ * celle de l'utilisateur, Pro celle de l'opérateur (`OPENAI_API_KEY`). Ce
+ * n'est pas un raccourci : le calcul de plafond de `llmQuota.service` était
+ * déjà calibré sur les tarifs OpenAI de gpt-4.1-mini, donc la garantie de coût
+ * — jusqu'ici théorique, puisque GitHub Models ne facturait pas au token —
+ * devient enfin celle qu'on mesure réellement.
+ *
+ * ⚠️ Ne pas ressusciter `GITHUB_MODELS_TOKEN` : le service n'existe plus.
+ */
+const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions';
+
+/**
+ * Modèle du chemin Pro. Surchargeable par `LLM_PRO_MODEL`.
+ *
+ * ⚠️⚠️ **Doit rester cohérent avec `LLM_PRICE_INPUT_PER_MTOK` /
+ * `LLM_PRICE_OUTPUT_PER_MTOK`** dans `llmQuota.service`. Ces deux variables
+ * chiffrent le coût pire-cas d'une requête, donc le plafond mensuel : changer
+ * de modèle ici sans changer les tarifs là-bas fait mentir la garantie en
+ * silence, et dans le sens coûteux.
+ */
+const DEFAULT_PRO_MODEL = process.env.LLM_PRO_MODEL || 'gpt-5.6-luna';
+
+/**
+ * Modèle par défaut du chemin Free (clé de l'utilisateur, donc son argent).
+ *
+ * ⚠️ C'était `gpt-4o-mini`, qui ne figure plus au catalogue OpenAI — comme
+ * `gpt-4.1-mini` côté Pro. Deux identifiants morts, sur les deux chemins : la
+ * fonction IA n'aurait pas redémarré même avec la clé opérateur en place.
+ */
+const DEFAULT_FREE_MODEL = process.env.LLM_FREE_MODEL || 'gpt-5.6-luna';
+
+/**
+ * Effort de raisonnement demandé aux modèles qui en acceptent un.
+ *
+ * `none` par défaut, et c'est la décision de coût la plus importante de ce
+ * fichier : la gamme gpt-5.6 raisonne à l'effort `medium` par défaut, et les
+ * tokens de réflexion — invisibles pour l'utilisateur — sont facturés comme des
+ * tokens de SORTIE. Or « explique-moi ce pari » part de données déjà calculées
+ * et d'une invite système fixe : il n'y a rien à raisonner, seulement à
+ * rédiger. Laisser l'effort par défaut ferait payer une réflexion dont la
+ * réponse ne porte aucune trace.
+ *
+ * Surchargeable par `LLM_REASONING_EFFORT` (none | low | medium | high) si la
+ * qualité des explications se révèle insuffisante à l'usage — mais alors le
+ * budget de sortie ci-dessous doit être revu en même temps, puisque la
+ * réflexion s'y impute.
+ */
+const REASONING_EFFORT = process.env.LLM_REASONING_EFFORT || 'none';
 
 /**
  * Récupère la clé OpenAI personnelle de l'utilisateur, déchiffrée.
@@ -198,8 +249,15 @@ router.get('/usage', async (req: Request, res: Response) => {
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const userIsPro = await isPro(userId);
-    // Un utilisateur Free n'a pas de plafond de notre part : il paie ses tokens.
-    if (!userIsPro) return res.json({ pro: false, unlimited: true });
+    /**
+     * ⚠️ Renvoyait `{ pro: false, unlimited: true }`. C'était faux sur les deux
+     * mots : un compte Free a bien un plafond — `DAILY_QUOTA` requêtes par jour,
+     * qui protège nos ressources et non un budget — et il lui faut sa propre clé
+     * OpenAI pour que la fonction marche. Le champ n'était affiché nulle part,
+     * donc le mensonge n'atteignait personne ; il n'attendait qu'un écran.
+     * Corrigé le 2026-09-09, en même temps que le compteur des Réglages.
+     */
+    if (!userIsPro) return res.json({ pro: false, dailyLimit: DAILY_QUOTA });
 
     return res.json({ pro: true, ...(await getUsage(userId)) });
   } catch (err: any) {
@@ -340,11 +398,14 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
   });
 
   if (userIsPro) {
-    const token = process.env.GITHUB_MODELS_TOKEN;
+    const token = process.env.OPENAI_API_KEY?.trim();
     if (!token) {
-      return res.status(500).json({
-        error: 'config',
-        message: 'GITHUB_MODELS_TOKEN is not configured on the server.',
+      // Message générique : le client n'y peut rien, et nommer la variable
+      // décrirait la configuration du serveur. Le détail part dans les logs.
+      logger.error('[LLM] OPENAI_API_KEY (clé opérateur) absente — le chemin Pro est hors service');
+      return res.status(503).json({
+        error: 'La fonction IA est momentanément indisponible. Réessaie plus tard.',
+        code: 'unavailable',
       });
     }
 
@@ -355,15 +416,25 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
     if (verdict.allowed) {
       quotaConsumed = true;
       call = {
-        endpoint: GITHUB_MODELS_URL,
+        endpoint: OPENAI_CHAT_URL,
         apiKey: token,
-        // Accept a caller-supplied model only if it's already publisher-prefixed;
-        // otherwise fall back to the Pro default so we don't send an OpenAI-style id.
-        requestModel: model?.includes('/') ? model : DEFAULT_PRO_MODEL,
-        extraHeaders: {
-          'X-GitHub-Api-Version': GITHUB_API_VERSION,
-          Accept: 'application/vnd.github+json',
-        },
+        /**
+         * ⚠️⚠️ Le `model` envoyé par le client est IGNORÉ sur ce chemin, et
+         * c'est délibéré.
+         *
+         * Avant : `model?.includes('/') ? model : DEFAULT_PRO_MODEL` — un
+         * abonné pouvait donc choisir le modèle facturé à l'OPÉRATEUR. C'était
+         * déjà discutable sur GitHub Models ; sur une facturation OpenAI au
+         * token, c'est un trou de coût direct : demander `gpt-4o` ou `o1` au
+         * lieu de `gpt-4.1-mini` multiplie le prix d'une requête par un facteur
+         * à deux chiffres, et le plafond mensuel — calculé sur le tarif de
+         * gpt-4.1-mini — ne protège alors plus rien.
+         *
+         * Qui paie choisit le modèle : sur le chemin Free (`ownKeyCall`) le
+         * client garde ce choix, parce que c'est sa clé et son argent.
+         */
+        requestModel: DEFAULT_PRO_MODEL,
+        extraHeaders: {},
         billedTo: 'operator',
       };
     } else if (verdict.reason === 'db') {
@@ -440,16 +511,32 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
   }
 
   // ── Forward the request ───────────────────────────────────────────────────
-  // Reasoning models (gpt-5*, o1/o3/o4*) differ from chat models: they reject
-  // `max_tokens` (need `max_completion_tokens`) and only accept the default
-  // temperature. They also spend output tokens on hidden reasoning, so the
-  // budget must be generous or `content` comes back empty.
-  const isReasoning = /(^|\/)(gpt-5|o1|o3|o4)/.test(call.requestModel);
+  // Les modèles à raisonnement (gpt-5*, gpt-6*, o1/o3/o4*) diffèrent des modèles
+  // de chat : ils refusent `max_tokens` (il leur faut `max_completion_tokens`)
+  // et n'acceptent que la température par défaut.
+  const isReasoning = /(^|\/)(gpt-5|gpt-6|o1|o3|o4)/.test(call.requestModel);
 
   const body: Record<string, any> = { model: call.requestModel, messages };
   if (isReasoning) {
-    body.max_completion_tokens = 2048;
-    // no temperature — reasoning models only allow the default (1)
+    /**
+     * ⚠️⚠️ **Le budget de sortie est le MÊME que sur l'autre branche**, et ce
+     * n'est pas une simplification : c'est la correction d'une incohérence.
+     *
+     * Cette branche donnait 2048 en dur, quand `llmQuota.service` majore le coût
+     * d'une requête sur `MAX_OUTPUT_TOKENS` (512). Le plafond mensuel était donc
+     * calculé sur un quart du budget réellement accordé — la garantie « ne
+     * jamais payer plus que ce que l'utilisateur paie » ne tenait plus dès que le
+     * modèle Pro appartenait à la gamme gpt-5, ce qui est désormais le cas.
+     *
+     * Les 2048 se justifiaient par la réflexion cachée, qui s'impute sur ce
+     * budget. Avec `REASONING_EFFORT = 'none'` il n'y a plus de réflexion à
+     * loger, donc plus de raison de sur-provisionner. Si l'effort est remonté,
+     * `LLM_MAX_OUTPUT_TOKENS` doit l'être aussi — dans les DEUX endroits, ce qui
+     * est justement automatique puisqu'il n'y a plus qu'une constante.
+     */
+    body.max_completion_tokens = MAX_OUTPUT_TOKENS;
+    body.reasoning_effort = REASONING_EFFORT;
+    // pas de `temperature` — ces modèles n'acceptent que la valeur par défaut
   } else {
     // Doit rester aligné sur LLM_MAX_OUTPUT_TOKENS dans llmQuota.service, qui
     // s'en sert pour majorer le coût d'une requête. Les désynchroniser ferait

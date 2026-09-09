@@ -4,6 +4,7 @@ import { redeemLimiter } from '../middleware/rateLimit.middleware';
 import { validateBody } from '../middleware/validate.middleware';
 import { checkoutSchema, redeemPromoSchema } from '../validation/schemas';
 import * as Subscriptions from '../services/subscription.service';
+import { MONTHLY_QUOTA } from '../services/llmQuota.service';
 import { logger } from '../logger';
 import { sendError } from '../httpError';
 
@@ -11,14 +12,25 @@ const router = Router();
 
 // GET /subscription/me — current plan/status for the signed-in user.
 //
-// `periods` est ajouté ICI et non dans `getStatus` : c'est une propriété de la
-// configuration du serveur (quels IDs de tarif Stripe existent), pas de
-// l'abonnement de l'utilisateur. Le mettre dans le mapper de ligne mêlerait les
-// deux. La page /pro s'en sert pour n'afficher que les cadences achetables.
+// `periods` et `llmMonthlyQuota` sont ajoutés ICI et non dans `getStatus` : ce
+// sont des propriétés de la CONFIGURATION du serveur (quels IDs de tarif Stripe
+// existent, quel plafond IA le calcul produit), pas de l'abonnement de
+// l'utilisateur. Les mettre dans le mapper de ligne mêlerait les deux.
+//
+// `llmMonthlyQuota` est là pour que la page /pro annonce le VRAI chiffre plutôt
+// qu'un nombre recopié à la main dans une traduction. Le plafond est dérivé du
+// prix (`llmQuota.service`) : il change dès qu'on change `PRO_PRICE_MONTHLY`, et
+// une promesse commerciale écrite en dur deviendrait fausse ce jour-là sans que
+// personne ne s'en aperçoive. C'est exactement ce qui venait d'arriver avec
+// « analyse IA illimitée ».
 router.get('/me', authenticate, async (req: Request, res: Response) => {
   try {
     const status = await Subscriptions.getStatus(req.user!.sub);
-    return res.json({ ...status, periods: Subscriptions.availablePeriods() });
+    return res.json({
+      ...status,
+      periods: Subscriptions.availablePeriods(),
+      llmMonthlyQuota: MONTHLY_QUOTA,
+    });
   } catch (err: any) { return sendError(res, err); }
 });
 
