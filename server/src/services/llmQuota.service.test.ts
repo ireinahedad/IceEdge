@@ -71,7 +71,14 @@ const BASE_ENV = {
 };
 
 const ORIGINAL_ENV = { ...process.env };
-beforeEach(() => { process.env = { ...ORIGINAL_ENV }; delete process.env.LLM_MONTHLY_QUOTA; });
+beforeEach(() => {
+  process.env = { ...ORIGINAL_ENV };
+  // Les deux réglages qui court-circuitent ou bornent le calcul sont retirés par
+  // défaut : chaque test qui veut l'un des deux le pose lui-même, sinon on
+  // testerait la configuration de la machine au lieu du code.
+  delete process.env.LLM_MONTHLY_QUOTA;
+  delete process.env.LLM_PROMISED_QUOTA;
+});
 
 describe('dérivation du plafond', () => {
   // LE test de la garantie. Si le plafond × coût pire-cas dépassait le budget,
@@ -87,9 +94,15 @@ describe('dérivation du plafond', () => {
     expect(mod.MONTHLY_QUOTA).toBeGreaterThan(100);
   });
 
+  // `LLM_PROMISED_QUOTA` est volontairement mis hors de portée ici : ce test
+  // porte sur la DÉRIVATION, et depuis le 2026-09-09 le plafond effectif vaut
+  // `min(calcul, promesse)`. Avec la promesse à 500, les deux prix retomberaient
+  // sur 500 et le test ne mesurerait plus que le plafonnement — c'est d'ailleurs
+  // exactement comme ça qu'il a échoué. La promesse a ses propres tests plus bas.
   it('le plafond suit le prix : doubler le prix double le quota', async () => {
-    const cheap = await load({ ...BASE_ENV, PRO_PRICE_MONTHLY: '5.00' });
-    const dear  = await load({ ...BASE_ENV, PRO_PRICE_MONTHLY: '10.00' });
+    const NO_CEILING = { ...BASE_ENV, LLM_PROMISED_QUOTA: '100000' };
+    const cheap = await load({ ...NO_CEILING, PRO_PRICE_MONTHLY: '5.00' });
+    const dear  = await load({ ...NO_CEILING, PRO_PRICE_MONTHLY: '10.00' });
 
     expect(dear.mod.MONTHLY_QUOTA).toBeGreaterThan(cheap.mod.MONTHLY_QUOTA * 1.9);
   });
@@ -119,9 +132,44 @@ describe('dérivation du plafond', () => {
     expect(mod.WORST_CASE_COST_PER_REQUEST).toBeCloseTo(2 * oneAttempt, 6);
   });
 
-  it('respecte une surcharge explicite de quota', async () => {
-    const { mod } = await load({ ...BASE_ENV, LLM_MONTHLY_QUOTA: '500' });
+  // 900 et non 500 : 500 est aussi la valeur de la promesse, donc un test qui
+  // l'utilise ne prouve pas que la surcharge court-circuite quoi que ce soit.
+  // 900 dépasse ET la promesse (500) ET le calcul (763 ici) — c'est la seule
+  // façon de vérifier que cette porte de sortie existe vraiment.
+  it('respecte une surcharge explicite de quota, au-dessus de la promesse ET du calcul', async () => {
+    const { mod } = await load({ ...BASE_ENV, LLM_MONTHLY_QUOTA: '900' });
+    expect(mod.MONTHLY_QUOTA).toBe(900);
+  });
+});
+
+/**
+ * La promesse commerciale (« 500 analyses par mois »), ajoutée le 2026-09-09.
+ *
+ * Elle existe parce qu'un chiffre annoncé sur une page de vente doit être stable
+ * et mémorisable, alors que le calcul bouge à chaque changement de prix ou de
+ * tarif fournisseur. Le risque qu'elle introduit est évident : promettre plus
+ * que ce que l'abonnement finance. `min(calcul, promesse)` est ce qui l'écarte,
+ * et c'est ce `min` que ces deux tests gardent.
+ */
+describe('promesse commerciale', () => {
+  it('la promesse plafonne le calcul quand le budget en finance davantage', async () => {
+    const { mod } = await load({ ...BASE_ENV, LLM_PROMISED_QUOTA: '500' });
+
+    // Le budget finance 763 requêtes ; on n'en annonce et n'en accorde que 500.
     expect(mod.MONTHLY_QUOTA).toBe(500);
+  });
+
+  // LE test de la promesse. Si le budget se resserre — baisse de prix, modèle
+  // plus cher, part IA réduite — le chiffre annoncé doit BAISSER avec lui.
+  // L'inverse serait une promesse que l'abonnement ne paie pas.
+  it('quand le budget ne finance pas la promesse, c’est le budget qui gagne', async () => {
+    const { mod } = await load({
+      ...BASE_ENV, PRO_PRICE_MONTHLY: '2.00', LLM_PROMISED_QUOTA: '500',
+    });
+
+    expect(mod.MONTHLY_QUOTA).toBeLessThan(500);
+    expect(mod.MONTHLY_QUOTA * mod.WORST_CASE_COST_PER_REQUEST)
+      .toBeLessThanOrEqual(2.00 * 0.30);
   });
 });
 
