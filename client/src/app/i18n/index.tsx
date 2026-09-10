@@ -247,6 +247,9 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // ── Modération du chat — PRE_IOS_PLAN.md R4.3 ──
   "chat.messageActions": { en: "Message options",   fr: "Options du message" },
   "chat.report":       { en: "Report message",      fr: "Signaler le message" },
+  // Coupon joint à un message de salon (migration 036).
+  "chat.slipLegs":     { en: "{n} legs",              fr: "{n} sélections" },
+  "chat.slipMore":     { en: "+ {n} more",            fr: "+ {n} autres" },
   "chat.blockUser":    { en: "Block user",          fr: "Bloquer l'utilisateur" },
   "chat.guidelines":   { en: "Community guidelines", fr: "Règles de la communauté" },
 
@@ -360,6 +363,29 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.placeBet":     { en: "Place on {book} ↗", fr: "Parier sur {book} ↗" },
   "slip.xpEarned":     { en: "XP earned",       fr: "XP gagnés" },
   "slip.sharePhoto":   { en: "Share",           fr: "Partager" },
+
+  // ── Textes de l'IMAGE de partage (slipShareCanvas.ts) ──────────────────────
+  // Le rendu ne traduit rien lui-même : il ne connaît ni React ni `useI18n`.
+  // Ces clés sont composées dans MySlipsTab et passées au dessin.
+  "share.lockedOn":    { en: "Locked {date}",   fr: "Verrouillé le {date}" },
+  "share.settledOn":   { en: "Settled {date}",  fr: "Réglé le {date}" },
+  "share.combined":    { en: "COMBINED",        fr: "COMBINÉ" },
+  "share.summary":     { en: "{n} selections · implied odds {odds}", fr: "{n} sélections · cote implicite {odds}" },
+  "share.summaryOne":  { en: "1 selection · implied odds {odds}",    fr: "1 sélection · cote implicite {odds}" },
+  "share.moreLegs":    { en: "+ {n} more selections", fr: "+ {n} autres sélections" },
+  "share.disclaimer":  { en: "Model probabilities · not betting advice", fr: "Probabilités du modèle · pas un conseil de pari" },
+
+  // ── Envoyer un coupon dans une salle de chat ───────────────────────────────
+  "slip.shareToRoom":     { en: "Send to a room",   fr: "Envoyer en salle" },
+  "slip.pickRoom":        { en: "Which room?",      fr: "Dans quelle salle ?" },
+  "slip.noRooms":         { en: "You haven't joined a room yet", fr: "Tu n'as encore rejoint aucune salle" },
+  "slip.roomMembers":     { en: "{n} members",      fr: "{n} membres" },
+  // Le texte qui accompagne la carte. Il reste modifiable dans le salon comme
+  // n'importe quel message, et il passe le filtre de modération du serveur.
+  "slip.shareRoomMessage":{ en: "My slip · {n} legs · {pct} combined", fr: "Mon coupon · {n} sélections · {pct} combiné" },
+  "slip.sharedToRoom":    { en: "Shared in {room}",  fr: "Partagé dans {room}" },
+  "slip.openRoom":        { en: "Open",             fr: "Ouvrir" },
+  "slip.shareRoomFailed": { en: "Couldn't send it to that room", fr: "Impossible d'envoyer dans cette salle" },
   "slip.addToSee":     { en: "Add predictions to see probability", fr: "Ajoute des prédictions pour voir la probabilité" },
   "slip.gaugeAddLegs": { en: "Add legs",        fr: "Ajoute des paris" },
   "slip.gaugeStrong":  { en: "Strong",          fr: "Fort" },

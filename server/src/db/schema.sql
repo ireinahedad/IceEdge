@@ -295,7 +295,10 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   sent_at           TIMESTAMPTZ  DEFAULT NOW(),
   tag               VARCHAR(20),
   reply_to_username VARCHAR(100),
-  reply_to_text     TEXT
+  reply_to_text     TEXT,
+  -- Instantané facultatif joint au message (migration 036). Écrit par le
+  -- serveur à l'insertion, jamais relu ni rafraîchi.
+  attachment        JSONB
 );
 
 CREATE TABLE IF NOT EXISTS chat_reactions (

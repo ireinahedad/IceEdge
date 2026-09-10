@@ -361,6 +361,11 @@ export const chatSendMessageSchema = z.object({
     username: z.string().max(100).optional(),
     text:     z.string().max(300).optional(),
   }).optional(),
+  // Coupon joint au message. ⚠️ On ne reçoit qu'un IDENTIFIANT : la carte est
+  // reconstruite côté serveur depuis `bet_slips`, filtrée sur le propriétaire.
+  // Accepter ici le contenu de la carte laisserait n'importe qui afficher un
+  // « parlay à 96 % » qu'il n'a jamais verrouillé.
+  slipId: z.string().min(1).max(80).optional(),
 });
 
 export const chatReactionSchema = z.object({

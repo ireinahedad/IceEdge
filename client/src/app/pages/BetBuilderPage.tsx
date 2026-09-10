@@ -219,7 +219,7 @@ export function BetBuilderPage() {
           )}
 
           {legs.length === 0 ? (
-            <EmptySlip onAdd={() => setShowSheet(true)} />
+            <EmptySlip onBrowse={() => navigate("/stats")} />
           ) : (
             <div className="mb-4">
               <div className="flex items-center justify-between mb-3">

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useI18n } from "../../../i18n";
-import type { ChatMessage } from "../../../types/user";
+import type { ChatMessage, SlipAttachment } from "../../../types/user";
+import { legAccent } from "../../../data/teamEmoji";
 
 const TAG_STYLE = {
   pick:     "bg-green-500/15 text-green-400 border-green-500/30",
@@ -15,6 +16,98 @@ const TAG_LABEL = {
   analysis: "📊 Analysis",
   hot: "🔴 Live",
 } as const;
+
+/** L'échelle de probabilité du produit — la même que `SlipCard` et l'image de partage. */
+function probabilityColor(pct: number | null): string {
+  if (pct == null) return "#8a9ea6";
+  if (pct >= 65) return "#86d1ea";
+  if (pct >= 45) return "#90C9F0";
+  if (pct >= 25) return "#facc15";
+  return "#f87171";
+}
+
+/**
+ * Le coupon joint à un message.
+ *
+ * Rendu SOUS la bulle et non dedans : la bulle de ses propres messages est
+ * bleu clair avec du texte foncé, une carte sombre posée à l'intérieur y
+ * deviendrait illisible une fois sur deux. En dessous, elle a le même aspect
+ * pour tout le monde.
+ *
+ * ⚠️ Instantané figé — `outcome` est celui du moment du partage, il ne se met
+ * pas à jour quand le coupon est réglé. Ne pas y brancher une lecture live :
+ * c'est ce qui garantit qu'un partage n'ouvre aucune fenêtre sur le compte de
+ * son auteur (voir migration 036).
+ */
+function SlipAttachmentCard({ slip }: { slip: SlipAttachment }) {
+  const { t } = useI18n();
+  const color = probabilityColor(slip.combinedProbability);
+  // Trois lignes au maximum : la bulle fait 78 % de la largeur du salon, une
+  // liste complète y serait illisible. Le compte total reste affiché en tête.
+  const shown = slip.legs.slice(0, 3);
+  const rest  = Math.max(0, slip.legCount - shown.length);
+  const settled = slip.outcome !== "pending";
+
+  return (
+    <div className="chat-tile rounded-2xl overflow-hidden border border-white/10 w-full">
+      <div className="flex items-center justify-between px-3 pt-2 pb-1.5">
+        <span
+          className="text-[11px] font-bold tracking-[0.14em] text-[#86d1ea]"
+          style={{ fontFamily: "'Oswald','Arial Narrow',sans-serif" }}
+        >
+          ARAKICE
+        </span>
+        <div className="flex items-center gap-1.5">
+          {settled && (
+            <span
+              className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full border ${
+                slip.outcome === "win"
+                  ? "bg-green-500/15 text-green-400 border-green-500/30"
+                  : "bg-red-500/15 text-red-400 border-red-500/30"
+              }`}
+            >
+              {t(slip.outcome === "win" ? "slip.won" : "slip.lost")}
+            </span>
+          )}
+          <span className="text-[11px] text-white/40">
+            {t("chat.slipLegs", { n: slip.legCount })}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-baseline gap-1.5 px-3 pb-1.5">
+        <span
+          className="text-xl font-black leading-none"
+          style={{ color, fontFamily: "'Oswald','Arial Narrow',sans-serif" }}
+        >
+          {slip.combinedProbability != null ? `${slip.combinedProbability}%` : "—"}
+        </span>
+        <span className="text-[11px] text-white/40">{t("slip.combined")}</span>
+      </div>
+
+      <div className="px-3 pb-2 flex flex-col">
+        {shown.map((leg, i) => (
+          <div key={i} className="flex items-center gap-2 py-1 border-t border-white/[0.06] first:border-0">
+            <span
+              className="w-[3px] h-6 rounded-full flex-shrink-0"
+              style={{ background: legAccent(leg) }}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-[11px] font-medium truncate">{leg.subjectName}</p>
+              <p className="text-white/45 text-[11px] truncate">{leg.selection}</p>
+            </div>
+            <span className="text-[11px] font-bold flex-shrink-0 text-[#86d1ea]">{leg.probability}%</span>
+          </div>
+        ))}
+        {rest > 0 && (
+          <p className="text-white/35 text-[11px] pt-1.5 border-t border-white/[0.06]">
+            {t("chat.slipMore", { n: rest })}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function MessageBubble({
   msg,
@@ -162,6 +255,13 @@ export function MessageBubble({
             </div>
           )}
         </div>
+
+        {/* Coupon joint */}
+        {msg.attachment?.kind === "slip" && (
+          <div className="w-full max-w-[260px]">
+            <SlipAttachmentCard slip={msg.attachment} />
+          </div>
+        )}
 
         {/* Reactions */}
         {msg.reactions && msg.reactions.length > 0 && (

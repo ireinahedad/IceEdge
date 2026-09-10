@@ -6,28 +6,166 @@
  * seuls les imports et les mots-clés `export` ont été ajoutés.
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Lock, Share2, Clock, History, Trophy, AlertCircle, RefreshCw } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router";
+import { Lock, Share2, Clock, History, Trophy, AlertCircle, RefreshCw, MessageSquare, X } from "lucide-react";
+import { profileApiService } from "../../services/userService";
+import type { ChatRoom } from "../../types/user";
 import { getMySlips, settleMySlips } from "../../services/slipApiService";
 import { ErrorState } from "../../components/ErrorState";
 import type { BetSlip } from "../../services/slipApiService";
-import { shareNodeAsImage, ShareUnavailableError } from "../../services/shareImage";
+import { shareImageBlob, ShareUnavailableError } from "../../services/shareImage";
+import { renderSlipShareCard } from "../../services/slipShareCanvas";
+import type { SlipShareLabels } from "../../services/slipShareCanvas";
+import { toOddsLabel } from "./betParts";
 import { useI18n } from "../../i18n";
 import { toast } from "sonner";
 
 
+// ─── Textes de l'image de partage ─────────────────────────────────────────────
+
+/**
+ * `slipShareCanvas` ne traduit rien : c'est un module de dessin, sans React ni
+ * `useI18n` (et `translate` n'est pas exporté). Les textes de l'image sont donc
+ * composés ici, là où le hook existe, et passés au rendu.
+ */
+function shareLabels(
+  slip: BetSlip,
+  { t, lang }: Pick<ReturnType<typeof useI18n>, "t" | "lang">,
+): SlipShareLabels {
+  const settled = slip.outcome !== "pending";
+  const when    = new Date(settled && slip.resolvedAt ? slip.resolvedAt : slip.placedAt);
+  const date    = when.toLocaleDateString(lang === "fr" ? "fr-CA" : "en-US", { month: "long", day: "numeric" });
+  const n       = Array.isArray(slip.legs) ? slip.legs.length : 0;
+  const odds    = slip.combinedProbability != null ? toOddsLabel(slip.combinedProbability) : "—";
+
+  return {
+    dateLine:   t(settled ? "share.settledOn" : "share.lockedOn", { date }),
+    combined:   t("share.combined"),
+    summary:    t(n === 1 ? "share.summaryOne" : "share.summary", { n, odds }),
+    // L'issue est un mot, pas une couleur d'anneau : l'anneau garde l'échelle
+    // de probabilité, y compris sur un coupon gagné à 27 %.
+    outcome:    settled ? t(slip.outcome === "win" ? "slip.won" : "slip.lost").toLocaleUpperCase(lang) : null,
+    xp:         slip.xpAwarded > 0 ? `+${slip.xpAwarded} XP` : null,
+    disclaimer: t("share.disclaimer"),
+    moreLegs:   (k: number) => t("share.moreLegs", { n: k }),
+  };
+}
+
+// ─── Envoyer un coupon dans une salle ─────────────────────────────────────────
+
+/**
+ * Choisir la salle, puis envoyer — sans passer par l'écran du salon.
+ *
+ * ⚠️ Le message ne transporte que le `slipId` : c'est le SERVEUR qui reconstruit
+ * la carte depuis `bet_slips`, en filtrant sur le propriétaire (voir migration
+ * 036). Deux conséquences à ne pas défaire :
+ *   - on ne peut envoyer que SON coupon, et personne ne peut fabriquer une
+ *     carte de toutes pièces depuis le client ;
+ *   - ce chemin ne touche pas `show_slips`. Envoyer un coupon dans une salle ne
+ *     le rend PAS visible sur la page joueur, et avoir masqué sa page joueur
+ *     n'empêche pas de l'envoyer.
+ */
+function ShareToRoomSheet({ slip, onClose }: { slip: BetSlip; onClose: () => void }) {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const [rooms, setRooms] = useState<ChatRoom[] | null>(null);
+  const [sending, setSending] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    profileApiService.getChatRooms()
+      .then((r) => { if (alive) setRooms(r.filter((room) => room.isMember !== false)); })
+      .catch(() => { if (alive) setRooms([]); });
+    return () => { alive = false; };
+  }, []);
+
+  async function send(room: ChatRoom) {
+    setSending(room.id);
+    try {
+      await profileApiService.sendMessage(room.id, {
+        // Le texte reste MODÉRÉ et obligatoire côté serveur : la carte ne
+        // remplace pas le message, elle l'accompagne.
+        text:   t("slip.shareRoomMessage", {
+          n:   slip.legCount,
+          pct: slip.combinedProbability != null ? `${slip.combinedProbability}%` : "—",
+        }),
+        slipId: slip.id,
+      });
+      onClose();
+      toast.success(t("slip.sharedToRoom", { room: room.name }), {
+        action: { label: t("slip.openRoom"), onClick: () => navigate("/league") },
+      });
+    } catch (err: any) {
+      toast.error(err?.message ?? t("slip.shareRoomFailed"));
+    } finally {
+      setSending(null);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70" onClick={onClose}>
+      <div
+        className="icy-card bet-ink-black w-full max-w-[430px] rounded-t-3xl p-4 flex flex-col gap-3"
+        style={{ background: "#131A12", paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <p className="text-white text-sm font-bold">{t("slip.pickRoom")}</p>
+          <button onClick={onClose} aria-label={t("common.close")}
+            className="tap-44 w-7 h-7 rounded-full icy-tile flex items-center justify-center text-[#8a9ea6]">
+            <X size={12} />
+          </button>
+        </div>
+
+        {rooms === null ? (
+          <div className="flex flex-col gap-2">
+            {[1, 2, 3].map((i) => <div key={i} className="h-12 icy-tile rounded-xl animate-pulse" />)}
+          </div>
+        ) : rooms.length === 0 ? (
+          <p className="text-[#8a9ea6] text-xs py-6 text-center">{t("slip.noRooms")}</p>
+        ) : (
+          <div className="flex flex-col gap-1.5 max-h-[46vh] overflow-y-auto">
+            {rooms.map((room) => (
+              <button
+                key={room.id}
+                onClick={() => { void send(room); }}
+                disabled={sending !== null}
+                className="tap-44 flex items-center gap-3 px-3 py-2.5 rounded-xl icy-tile text-left active:scale-[0.98] transition-transform disabled:opacity-50"
+              >
+                <span className="text-base flex-shrink-0">{room.icon}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-white text-xs font-medium truncate">{room.name}</span>
+                  <span className="block text-[#8a9ea6] text-[11px]">
+                    {t("slip.roomMembers", { n: room.memberCount })}
+                  </span>
+                </span>
+                {sending === room.id && (
+                  <span className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin flex-shrink-0" />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Slip card (My Slips) ─────────────────────────────────────────────────────
 
 function SlipCard({ slip }: { slip: BetSlip }) {
-  const { t } = useI18n();
-  const cardRef = useRef<HTMLDivElement>(null);
+  const { t, lang } = useI18n();
   const [sharing, setSharing] = useState(false);
+  const [roomPicker, setRoomPicker] = useState(false);
 
   async function handleShare() {
-    if (!cardRef.current) return;
     setSharing(true);
     try {
-      await shareNodeAsImage(cardRef.current, `arakice-slip-${slip.id}.png`, "ArakIce");
+      // L'image est DESSINÉE, pas capturée : elle ne dépend donc plus de ce que
+      // cette carte-ci affiche, ni d'un logo tiers qui refuserait le CORS.
+      const png = await renderSlipShareCard(slip, shareLabels(slip, { t, lang }));
+      await shareImageBlob(png, `arakice-slip-${slip.id}.png`, "ArakIce");
     } catch (err) {
       // Avant : un `console.warn` seul. L'utilisateur touchait « Partager » et
       // il ne se passait rien — le pire mode d'échec possible, parce qu'il est
@@ -59,7 +197,7 @@ function SlipCard({ slip }: { slip: BetSlip }) {
     (slip.combinedProbability ?? 0) >= 25 ? "#facc15" : "#f87171";
 
   return (
-    <div ref={cardRef} className={`icy-card rounded-2xl overflow-hidden transition-all ${
+    <div className={`icy-card rounded-2xl overflow-hidden transition-all ${
       isPending ? "" : isWin ? "ring-1 ring-green-500/40" : "ring-1 ring-red-500/40"
     }`} style={{ background: "#131A12" }}>
       {/* Header row */}
@@ -97,22 +235,12 @@ function SlipCard({ slip }: { slip: BetSlip }) {
               ? <img
                   src={leg.subjectLogo}
                   alt=""
-                  // Sans ce mode, dessiner ce logo tiers dans le canvas de
-                  // `toPng` CONTAMINE le canvas et fait échouer tout le partage.
-                  crossOrigin="anonymous"
-                  // ⚠️ Et si le CDN ne renvoie pas d'en-tête CORS, la demande
-                  // en mode anonyme fait échouer le CHARGEMENT — le logo
-                  // disparaîtrait de l'écran pour sauver une capture. On
-                  // retombe donc sur un chargement ordinaire : le logo reste
-                  // visible, et c'est le partage qui échouera, proprement et
-                  // avec un message.
-                  onError={(e) => {
-                    const img = e.currentTarget;
-                    if (img.crossOrigin) {
-                      img.removeAttribute("crossorigin");
-                      img.src = leg.subjectLogo;
-                    }
-                  }}
+                  // Ce logo portait `crossOrigin="anonymous"` et un `onError`
+                  // qui le retirait : c'était pour que la CAPTURE DOM ne
+                  // contamine pas son canvas. Depuis que l'image de partage est
+                  // dessinée (`slipShareCanvas.ts`), elle ne charge plus aucun
+                  // logo — le mode CORS ne protégeait donc plus rien et coûtait
+                  // une requête refusée par logo sur les CDN sans en-tête.
                   className="w-5 h-5 object-contain flex-shrink-0"
                 />
               : <span className="text-sm flex-shrink-0">{leg.subjectLogo}</span>}
@@ -155,17 +283,29 @@ function SlipCard({ slip }: { slip: BetSlip }) {
           style={{ fontFamily: "'Oswald','Arial Narrow',sans-serif", color: "#86d1ea" }}>
           ARAKICE
         </span>
-        <button
-          data-noshot
-          onClick={handleShare}
-          disabled={sharing}
-          className="tap-44 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold disabled:opacity-50 active:scale-95 transition-transform"
-          style={{ background: "rgba(134,209,234,0.12)", color: "#86d1ea", border: "1px solid rgba(134,209,234,0.3)" }}
-        >
-          <Share2 size={11} />
-          {sharing ? "…" : t("slip.sharePhoto")}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setRoomPicker(true)}
+            aria-label={t("slip.shareToRoom")}
+            className="tap-44 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold active:scale-95 transition-transform"
+            style={{ background: "rgba(144,201,240,0.10)", color: "#90C9F0", border: "1px solid rgba(144,201,240,0.25)" }}
+          >
+            <MessageSquare size={11} />
+            {t("slip.shareToRoom")}
+          </button>
+          <button
+            onClick={handleShare}
+            disabled={sharing}
+            className="tap-44 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold disabled:opacity-50 active:scale-95 transition-transform"
+            style={{ background: "rgba(134,209,234,0.12)", color: "#86d1ea", border: "1px solid rgba(134,209,234,0.3)" }}
+          >
+            <Share2 size={11} />
+            {sharing ? "…" : t("slip.sharePhoto")}
+          </button>
+        </div>
       </div>
+
+      {roomPicker && <ShareToRoomSheet slip={slip} onClose={() => setRoomPicker(false)} />}
     </div>
   );
 }

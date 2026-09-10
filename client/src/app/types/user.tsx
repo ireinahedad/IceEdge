@@ -200,6 +200,31 @@ export interface PlayerSummary {
 
 // ─── Chat ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Coupon joint à un message de salon.
+ *
+ * ⚠️ C'est un INSTANTANÉ, écrit par le serveur à l'envoi et jamais rafraîchi :
+ * `outcome` restera « pending » dans le fil même une fois le coupon réglé. Ne
+ * pas le brancher sur une lecture live — c'est précisément ce découplage qui
+ * fait qu'un partage en salon n'expose rien de plus que ce qui a été montré.
+ */
+export interface SlipAttachment {
+  kind: "slip";
+  slipId: string;
+  placedAt: string;
+  legCount: number;
+  isParlay: boolean;
+  combinedProbability: number | null;
+  outcome: "pending" | "win" | "loss";
+  legs: {
+    subjectName: string;
+    selection: string;
+    probability: number;
+    subjectId?: string;
+    selectionValue?: string;
+  }[];
+}
+
 export interface ChatMessage {
   id: string;
   userId: string;
@@ -213,6 +238,8 @@ export interface ChatMessage {
   reactions?: { emoji: string; count: number; reacted: boolean }[];
   replyTo?: { username: string; text: string };
   tag?: "pick" | "analysis" | "hot";
+  /** Présent seulement sur un message qui porte un coupon. */
+  attachment?: SlipAttachment;
 }
 
 // ── Modération du chat — PRE_IOS_PLAN.md R4 ──────────────────────────────────

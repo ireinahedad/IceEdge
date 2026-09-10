@@ -80,3 +80,56 @@ export function teamColors(abbr: string): { primary: string; secondary: string }
 export function jerseyUrl(abbr: string): string {
   return `/jerseys/${abbr.toUpperCase()}.png`;
 }
+
+// ─── Couleur d'identité d'une jambe de coupon ─────────────────────────────────
+//
+// Vit ici et non dans `slipShareCanvas` : DEUX écrans en ont besoin — l'image
+// de partage et la carte de coupon jointe à un message de salon — et le second
+// n'a aucune raison de tirer tout un moteur de rendu derrière lui.
+
+/** Luminance relative approchée, pour juger si une couleur est trop sombre. */
+function luminance(hex: string): number {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return 1;
+  const n = parseInt(m[1], 16);
+  return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+}
+
+/**
+ * Éclaircit une couleur d'équipe trop sombre pour se voir sur la carte.
+ *
+ * Plusieurs clubs ont un bleu marine quasi noir (TOR #00205B, WPG #041E42) :
+ * posé tel quel sur un fond de glace de nuit, le liseré disparaît. On le mêle
+ * de blanc plutôt que d'aller chercher la couleur secondaire — celle-ci change
+ * carrément de teinte (le bordeaux du Colorado deviendrait bleu) et l'identité
+ * se perdrait.
+ */
+function liftIfDark(hex: string): string {
+  const l = luminance(hex);
+  if (l >= 0.20) return hex;
+  const mix = Math.min(0.45, (0.20 - l) * 2.2);
+  const n = parseInt(hex.replace('#', ''), 16);
+  const up = (c: number) => Math.round(c + (255 - c) * mix);
+  const r = up((n >> 16) & 255), g = up((n >> 8) & 255), b = up(n & 255);
+  return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+}
+
+export function legAccent(leg: {
+  subjectId?:      string;
+  selectionValue?: string;
+  subjectLogo?:    string;
+}): string {
+  const fromUrl = typeof leg.subjectLogo === 'string'
+    ? /\/([A-Z]{2,4})[_.]/.exec(leg.subjectLogo)?.[1]
+    : undefined;
+
+  const candidates = [leg.selectionValue, leg.subjectId, fromUrl];
+  for (const c of candidates) {
+    if (typeof c !== 'string') continue;
+    const abbr = c.toUpperCase();
+    if (!/^[A-Z]{2,4}$/.test(abbr)) continue;
+    const { primary } = teamColors(abbr);
+    if (primary !== '#1B2A33') return liftIfDark(primary);   // '#1B2A33' = le repli de teamColors
+  }
+  return '#3A4A55';   // ardoise, relevée : le repli doit rester visible lui aussi
+}

@@ -280,7 +280,10 @@ export const profileApiService = {
 
   sendMessage: (
     roomId: string,
-    payload: { text: string; tag?: string; replyTo?: { username: string; text: string } },
+    // `slipId` seulement : la carte du coupon est reconstruite par le serveur
+    // depuis la base, filtrée sur le propriétaire. Envoyer son contenu d'ici ne
+    // servirait qu'à permettre de le fabriquer.
+    payload: { text: string; tag?: string; replyTo?: { username: string; text: string }; slipId?: string },
   ): Promise<ChatMessage> =>
     post<ChatMessage>(`/chat/rooms/${roomId}/messages`, payload),
 

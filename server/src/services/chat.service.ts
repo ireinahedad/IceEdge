@@ -331,11 +331,71 @@ export interface RoomMessages {
  * ligne varierait d'un appel à l'autre. Les identifiants sont
  * `msg_<horodatage>_<hexa>`, donc leur ordre lexicographique suit le temps.
  */
+/** Au-delà, on coupe : l'instantané est STOCKÉ, il ne doit pas enfler. */
+const ATTACHMENT_MAX_LEGS = 12;
+
+/**
+ * L'instantané d'un coupon, tel qu'il voyagera DANS le message.
+ *
+ * ⚠️⚠️ Il est construit ICI, depuis la base, et JAMAIS reçu du client — celui-ci
+ * n'envoie qu'un `slipId` (voir `chatSendMessageSchema`). Accepter la carte
+ * toute faite laisserait n'importe qui afficher « parlay 8 jambes, 96 % » dans
+ * un salon sans avoir rien verrouillé.
+ *
+ * ⚠️ `WHERE user_id = $2` : on ne partage que SON PROPRE coupon. C'est aussi ce
+ * qui rend ce chemin étranger à `show_slips` — le réglage de visibilité de la
+ * page joueur n'est ni lu ni écrit ici. Partager un coupon dans une salle ne le
+ * rend donc pas visible sur le profil, et masquer son profil n'empêche pas de
+ * le partager. Les deux gestes sont indépendants, comme demandé.
+ *
+ * ⚠️ La requête est écrite ici plutôt qu'en appelant `slip.service.getSlip` :
+ * ce module tirerait alors `settlement.service` et `nhlApiClient` derrière lui,
+ * pour huit lignes de SQL. Si la RÈGLE DE PROPRIÉTÉ change là-bas, elle doit
+ * changer ici aussi.
+ *
+ * FIGÉ volontairement : rien ne relit ce coupon plus tard. Un coupon partagé
+ * « en attente » le reste dans le fil, même une fois réglé.
+ */
+async function buildSlipAttachment(slipId: string, userId: string) {
+  const { rows } = await pool.query(
+    `SELECT id, placed_at AS "placedAt", legs, leg_count AS "legCount",
+            is_parlay AS "isParlay", combined_probability AS "combinedProbability",
+            outcome
+       FROM bet_slips
+      WHERE id = $1 AND user_id = $2`,
+    [slipId, userId],
+  );
+  const slip = rows[0];
+  if (!slip) throw httpError('Slip not found', 404);
+
+  const legs: any[] = Array.isArray(slip.legs) ? slip.legs : [];
+
+  return {
+    kind:                'slip' as const,
+    slipId:              slip.id,
+    placedAt:            slip.placedAt,
+    legCount:            slip.legCount,
+    isParlay:            slip.isParlay,
+    combinedProbability: slip.combinedProbability,
+    outcome:             slip.outcome,
+    // Recopié champ par champ, borné, jamais étalé : une jambe porte aussi des
+    // identifiants de match qui n'ont rien à faire dans un salon.
+    legs: legs.slice(0, ATTACHMENT_MAX_LEGS).map((l) => ({
+      subjectName:    String(l?.subjectName ?? '').slice(0, 80),
+      selection:      String(l?.selection ?? l?.marketType ?? '').slice(0, 120),
+      probability:    Number(l?.probability) || 0,
+      // Servent uniquement à retrouver la couleur d'équipe à l'affichage.
+      subjectId:      l?.subjectId      ? String(l.subjectId).slice(0, 20)      : undefined,
+      selectionValue: l?.selectionValue ? String(l.selectionValue).slice(0, 20) : undefined,
+    })),
+  };
+}
+
 async function getMessages(roomId: string, viewerId: string | null): Promise<RoomMessages> {
   const { rows } = await pool.query(
     `SELECT * FROM (
        SELECT m.id, m.user_id AS "userId", m.username, m.display_name AS "displayName",
-              m.avatar, m.tier, m.text, m.sent_at AS "sentAt", m.tag,
+              m.avatar, m.tier, m.text, m.sent_at AS "sentAt", m.tag, m.attachment,
               m.reply_to_username AS "replyToUsername", m.reply_to_text AS "replyToText",
               COALESCE(up.avatar_url, u.avatar_url) AS "avatarUrl"
          FROM chat_messages m
@@ -372,6 +432,7 @@ async function getMessages(roomId: string, viewerId: string | null): Promise<Roo
     text:        row.text,
     sentAt:      row.sentAt,
     tag:         row.tag,
+    attachment:  row.attachment ?? undefined,
     replyTo:     row.replyToUsername
       ? { username: row.replyToUsername, text: row.replyToText }
       : undefined,
@@ -587,6 +648,8 @@ export const chatService = {
     text: string;
     tag?: string;
     replyTo?: { username: string; text: string };
+    /** Coupon à joindre. Seul l'identifiant traverse : voir `buildSlipAttachment`. */
+    slipId?: string;
   }) {
     const room = await getRoomRow(roomId);
     const member = await getMembership(roomId, userId);
@@ -623,13 +686,21 @@ export const chatService = {
 
     const sender = await getSenderIdentity(userId);
 
+    // Après le filtre de modération, avant l'INSERT : un coupon introuvable ou
+    // qui n'appartient pas à l'expéditeur fait échouer TOUT l'envoi (404), il ne
+    // dépose pas un message amputé de sa carte.
+    const attachment = payload.slipId
+      ? await buildSlipAttachment(String(payload.slipId), userId)
+      : null;
+
     const id = `msg_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
     await pool.query(
       `INSERT INTO chat_messages
-        (id, room_id, user_id, username, display_name, avatar, tier, text, tag, reply_to_username, reply_to_text)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        (id, room_id, user_id, username, display_name, avatar, tier, text, tag, reply_to_username, reply_to_text, attachment)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
       [id, roomId, sender.id, sender.username, sender.displayName,
-       sender.avatar, sender.tier, text, tag, replyUsername, replyText],
+       sender.avatar, sender.tier, text, tag, replyUsername, replyText,
+       attachment ? JSON.stringify(attachment) : null],
     );
 
     return {
@@ -643,6 +714,7 @@ export const chatService = {
       text,
       sentAt:      new Date().toISOString(),
       tag:         tag ?? undefined,
+      attachment:  attachment ?? undefined,
       reactions:   [],
       replyTo:     replyUsername ? { username: replyUsername, text: replyText ?? '' } : undefined,
     };

@@ -147,8 +147,8 @@ router.get('/rooms/:roomId/messages', async (req: Request, res: Response) => {
 // POST /api/chat/rooms/:roomId/messages — identity derived server-side · max 10/10s
 router.post('/rooms/:roomId/messages', rateLimit('msg', 10, 10_000), validateBody(chatSendMessageSchema), async (req: Request, res: Response) => {
   try {
-    const { text, tag, replyTo } = req.body;
-    const msg = await chatService.sendMessage(req.params.roomId, uid(req), { text, tag, replyTo });
+    const { text, tag, replyTo, slipId } = req.body;
+    const msg = await chatService.sendMessage(req.params.roomId, uid(req), { text, tag, replyTo, slipId });
     res.status(201).json(msg);
     // Broadcast to all clients in the room (real-time)
     //

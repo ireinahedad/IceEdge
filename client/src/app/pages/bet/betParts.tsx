@@ -161,7 +161,16 @@ export function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; 
 
 // ─── Empty builder state ──────────────────────────────────────────────────────
 
-export function EmptySlip({ onAdd }: { onAdd: () => void }) {
+/**
+ * `onBrowse` mène à la page Stats, pas à la feuille de sélection des marchés.
+ *
+ * Un coupon vide n'est pas un formulaire à remplir : la personne ne sait pas
+ * encore SUR QUOI parier. La feuille de sélection suppose l'inverse — elle
+ * demande de choisir un match puis un marché sans jamais montrer un chiffre.
+ * Le point d'entrée honnête est donc l'écran qui porte les données ; la feuille
+ * reste accessible par « Ajouter » une fois qu'il y a au moins une jambe.
+ */
+export function EmptySlip({ onBrowse }: { onBrowse: () => void }) {
   const { t } = useI18n();
   return (
     <div className="flex flex-col items-center justify-center py-10 gap-4">
@@ -178,7 +187,7 @@ export function EmptySlip({ onAdd }: { onAdd: () => void }) {
           {t("slip.emptyHint")}
         </p>
       </div>
-      <button onClick={onAdd}
+      <button onClick={onBrowse}
         className="bg-[#86d1ea] text-[#072E49] font-bold px-6 py-3 rounded-2xl text-sm flex items-center gap-2 active:scale-95 transition-transform">
         <Plus size={14} /> {t("slip.browse")}
       </button>
