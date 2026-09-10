@@ -15,6 +15,7 @@ import { useSubscription } from "../../context/SubscriptionContext";
 import { apiCancelSubscription } from "../../services/subscriptionService";
 import { profileApiService } from "./../../services/userService";
 import { enableValueBetPush, disableValueBetPush } from "./../../services/pushService";
+import { getLLMUsage, type LLMUsage } from "./../../services/llmService";
 import { DEFAULT_MIN_EDGE_PCT, type UserProfile } from "./../../types/user";
 import { ManualEntryCard } from "../../components/ManualEntryCard";
 import { useI18n } from "../../i18n";
@@ -65,6 +66,21 @@ export function SettingsTab({
   const { blocked, ensureLoaded, unblock, loading: blocksLoading, error: blocksError } = useBlocks();
   const [unblocking, setUnblocking] = useState<string | null>(null);
   useEffect(() => { ensureLoaded(); }, [ensureLoaded]);
+
+  // ── Compteur d'analyses IA ──────────────────────────────────────────────
+  // Chargé une fois à l'ouverture des Réglages. `null` = pas encore là,
+  // `llmUsageFailed` = on a essayé et échoué : deux états distincts, parce
+  // qu'afficher « 0 sur 500 » pendant le chargement ferait croire à un compteur
+  // remis à zéro.
+  const [llmUsage, setLlmUsage] = useState<LLMUsage | null>(null);
+  const [llmUsageFailed, setLlmUsageFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    getLLMUsage()
+      .then((u) => { if (alive) setLlmUsage(u); })
+      .catch(() => { if (alive) setLlmUsageFailed(true); });
+    return () => { alive = false; };
+  }, []);
 
   async function handleUnblock(userId: string, name: string) {
     setUnblocking(userId);
@@ -267,12 +283,16 @@ export function SettingsTab({
         </div>
       )}
 
-      {/* Format d'affichage des cotes.
+      {/* Format d'écriture des cotes de bookmaker.
+          ⚠️ Ne concerne QUE les prix venant d'un livre (bet365, Stake…). Les
+          probabilités du modèle restent en % partout — voir le commentaire de
+          `services/oddsFormat.ts`. L'aide sous la carte le dit à l'utilisateur,
+          sinon « j'ai choisi américain et je vois encore des % » se lit comme
+          un bug.
           Volontairement HORS du garde `features.bookmakerLinks` du bloc
           ci-dessus : celui-ci disparaît sur iOS (Guideline 5.3, aucun lien
-          sortant vers un livre), alors que lire ses probabilités en cote
-          américaine n'a rien à voir avec un lien sortant et doit rester
-          disponible partout.
+          sortant vers un livre), alors que les cotes elles-mêmes restent
+          affichées — c'est le lien sortant qui saute, pas le prix.
           L'exemple sous chaque nom fait le travail que l'étiquette ne fait pas :
           « Cote décimale » ne dit rien, « 1.47 » se reconnaît. */}
       <div className="icy-card rounded-lg px-3 py-2.5">
@@ -415,6 +435,58 @@ export function SettingsTab({
           <ToggleSwitch checked={isPublic} onChange={() => setIsPublic((v) => !v)} fontSize={12} />
         </div>
 
+      </div>
+
+      {/* Analyses IA — compteur du mois.
+          Un plafond dont on ne découvre l'existence qu'en le heurtant est vécu
+          comme une panne : la carte existe pour que le chiffre soit connu AVANT.
+          Le total vient du serveur (`limit`), jamais d'une constante d'ici — il
+          est dérivé du prix de l'abonnement et bouge avec lui. */}
+      <div className="icy-card rounded-2xl p-4 flex flex-col gap-2">
+        <p className="text-white text-xs font-medium">{t("profile.aiUsage")}</p>
+
+        {llmUsageFailed ? (
+          <p className="text-white/40 text-[11px]">{t("profile.aiUsageFailed")}</p>
+        ) : llmUsage === null ? (
+          <DotLoader />
+        ) : llmUsage.pro && llmUsage.limit ? (
+          <>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-white text-lg font-bold tabular-nums">
+                {llmUsage.used ?? 0}
+                <span className="text-white/40 text-xs font-medium"> / {llmUsage.limit}</span>
+              </span>
+              {llmUsage.resetsAt && (
+                <span className="text-white/40 text-[11px]">
+                  {t("profile.aiUsageReset", { date: new Date(llmUsage.resetsAt).toLocaleDateString() })}
+                </span>
+              )}
+            </div>
+
+            {/* La barre passe à l'ambre au-delà de 80 % : le seul moment où ce
+                compteur a quelque chose à dire est celui où il approche du bout. */}
+            {(() => {
+              const used = llmUsage.used ?? 0;
+              const limit = llmUsage.limit ?? 1;
+              const ratio = Math.min(used / limit, 1);
+              const color = ratio >= 1 ? "#f87171" : ratio >= 0.8 ? "#facc15" : "#86d1ea";
+              return (
+                <div className="bg-black/30 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${ratio * 100}%`, backgroundColor: color }}
+                  />
+                </div>
+              );
+            })()}
+
+            <p className="text-white/40 text-[11px]">{t("profile.aiUsageOver")}</p>
+          </>
+        ) : (
+          <p className="text-white/40 text-[11px]">
+            {t("profile.aiUsageFree", { n: llmUsage.dailyLimit ?? 0 })}
+          </p>
+        )}
       </div>
 
       {/* Notifications — value bets (Pro only) */}

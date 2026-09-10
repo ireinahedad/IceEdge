@@ -11,7 +11,6 @@ import { ChevronRight, Star } from "lucide-react";
 import { predictionApiService } from "../../services/predictionApiService";
 import type { BetLeg } from "../../types/bet";
 import { useBet } from "../../context/BetContext";
-import { useOddsFormat } from "../../context/OddsFormatContext";
 import { ProLock } from "../../components/ProLock";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
@@ -67,7 +66,6 @@ function impliedOdds(pct: number): number | null {
 function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource }) {
   const { addLeg, removeLeg, hasLeg } = useBet();
   const { t } = useI18n();
-  const { format, prob } = useOddsFormat();
   const inSlip = hasLeg(bet.id);
   const displayPct = sortSource === "ml" ? (bet.mlPct ?? bet.rulePct) : bet.rulePct;
   const risk = riskLabel(displayPct);
@@ -97,12 +95,9 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
           </div>
           <span className="text-[11px] font-bold flex-shrink-0 tabular-nums"
             style={{ color: isML ? "#a78bfa" : risk.color }}>
-            {sortSource === "ml" && bet.mlLoading ? "…" : prob(displayPct)}
+            {sortSource === "ml" && bet.mlLoading ? "…" : `${displayPct}%`}
           </span>
-          {/* La cote équitable en second ne s'affiche qu'à côté d'un % : dans
-              les formats « cote », le chiffre principal EST déjà cette cote —
-              la pastille écrirait deux fois la même chose. */}
-          {format === "percent" && odds != null && (
+          {odds != null && (
             <span
               title={t("home.oddsFairHint")}
               className="text-[11px] font-semibold flex-shrink-0 tabular-nums text-[#bfc8cc] bg-white/5 px-1.5 py-px rounded-full cursor-help">

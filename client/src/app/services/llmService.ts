@@ -62,18 +62,33 @@ export interface LLMAnswer {
 /** Consommation IA du mois, pour afficher un compteur AVANT d'atteindre la limite. */
 export interface LLMUsage {
   pro: boolean;
-  /** Vrai pour un utilisateur Free : il paie ses propres tokens, on ne le plafonne pas. */
-  unlimited?: boolean;
+  /**
+   * Compte FREE : plafond journalier, et rien de plus — ces requêtes partent sur
+   * la clé OpenAI de l'utilisateur, donc nous ne comptons pas sa dépense.
+   * (Le champ s'appelait `unlimited` et valait toujours `true` : c'était faux,
+   * un compte Free est bien plafonné. Corrigé le 2026-09-09.)
+   */
+  dailyLimit?: number;
+  /** Champs présents uniquement pour un abonné PRO. */
   used?: number;
   limit?: number;
   remaining?: number;
   resetsAt?: string;
 }
 
-// `getLLMUsage()` supprimée le 2026-08-10 : aucun écran n'affichait le compteur.
-// L'endpoint `/llm/usage` existe toujours côté serveur, et le type `LLMUsage`
-// ci-dessus reste utilisé par `askLLMFull` (l'avis de quota accompagne la
-// réponse). Refaire l'appel isolé est trivial si un jour un écran l'affiche.
+/**
+ * Consommation IA du mois en cours.
+ *
+ * Réintroduite le 2026-09-09 : elle avait été supprimée le 2026-08-10 faute
+ * d'écran pour l'afficher, l'écran existe maintenant (carte « Analyses IA » des
+ * Réglages). Un plafond dont on ne découvre l'existence qu'en le heurtant est
+ * vécu comme une panne — c'est précisément ce que ce compteur évite.
+ */
+export async function getLLMUsage(): Promise<LLMUsage> {
+  const res = await authedFetch('/llm/usage');
+  if (!res.ok) throw new Error('usage_unavailable');
+  return res.json();
+}
 
 /**
  * Variante renvoyant la réponse complète, avis de quota compris.
@@ -91,7 +106,21 @@ export async function askLLMDetailed(
       prompt,
       taskType: opts.taskType,
       locale: opts.locale,
-      model: opts?.model ?? 'gpt-4o-mini',
+      /**
+       * Aucun modèle par défaut ici, et c'est volontaire.
+       *
+       * Le champ portait `'gpt-4o-mini'` en dur — un identifiant qui a disparu
+       * du catalogue OpenAI sans que personne ne le remarque, parce qu'un
+       * bundle client déployé continue de l'envoyer pendant des mois. Le serveur
+       * connaît le bon modèle pour chaque chemin (`DEFAULT_PRO_MODEL` /
+       * `DEFAULT_FREE_MODEL`) et le chemin Pro IGNORE de toute façon ce champ.
+       * Le laisser au serveur, c'est un seul endroit à corriger le jour où la
+       * gamme change encore — et elle changera.
+       *
+       * `opts.model` reste transmis s'il est fourni : c'est la porte de sortie
+       * d'un utilisateur Free qui veut un autre modèle sur SA clé.
+       */
+      ...(opts?.model ? { model: opts.model } : {}),
     }),
   });
 

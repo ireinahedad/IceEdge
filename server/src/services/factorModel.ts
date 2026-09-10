@@ -28,6 +28,34 @@ function poissonOver(lambda: number, line: number): number {
 function lean(x: number, ref: number, spread: number): number {
   return clamp(1 / (1 + Math.exp(-(x - ref) / spread)));
 }
+/**
+ * Ramène les poids d'une famille à une somme de EXACTEMENT 100, en entiers.
+ *
+ * Pourquoi : le calcul est une moyenne pondérée, donc invariant d'échelle — la
+ * somme des poids n'a jamais compté ici. Mais la carte de règles du client
+ * présente ces poids comme un budget « X / 100 » que l'utilisateur répartit,
+ * et deux familles ne tenaient pas ce contrat : `totals` vaut 90 de base et
+ * grimpe à 106 avec les facteurs conditionnels (altitude, arbitrage), et
+ * `match` vaut de 50 à 100 selon les facteurs actifs (cote, blessures,
+ * alignement). L'écran affichait donc « Total : 106 / 100 » en rouge.
+ *
+ * Répartition au plus fort reste : les poids entiers somment à 100 pile, sans
+ * qu'un facteur non nul tombe à 0.
+ */
+export function normalizeWeights(factors: Factor[]): Factor[] {
+  const sum = factors.reduce((s, f) => s + f.weight, 0);
+  if (sum <= 0) return factors.map(f => ({ ...f }));
+
+  const scaled = factors.map(f => (f.weight / sum) * 100);
+  const out = factors.map((f, i) => ({ ...f, weight: Math.floor(scaled[i]) }));
+  let rest = 100 - out.reduce((s, f) => s + f.weight, 0);
+  const byFrac = scaled
+    .map((w, i) => ({ i, frac: w - Math.floor(w) }))
+    .sort((a, b) => b.frac - a.frac);
+  for (let k = 0; rest > 0 && k < byFrac.length; k++, rest--) out[byFrac[k].i].weight += 1;
+  return out;
+}
+
 /** Moyenne pondérée des facteurs → pourcentage entier borné. */
 export function blendPct(factors: Factor[]): number {
   const wsum = factors.reduce((s, f) => s + f.weight, 0) || 1;
@@ -212,9 +240,12 @@ function pkPerfectFactors(c: GameFactorCtx): Factor[] {
  */
 export function attachGameFactors(groups: any[], c: GameFactorCtx): void {
   const set = (o: any, group: string, factors: Factor[]) => {
-    o.factors = factors.map(f => ({ id: f.id, label: f.label, weight: f.weight, value: f.value }));
+    // Poids normalisés AVANT le blend : le client recalcule le score à partir
+    // des poids qu'il reçoit, donc les deux chiffres doivent partir des mêmes.
+    const norm = normalizeWeights(factors);
+    o.factors = norm.map(f => ({ id: f.id, label: f.label, weight: f.weight, value: f.value }));
     o.factorGroup = group;
-    o.rulePct = blendPct(factors);
+    o.rulePct = blendPct(norm);
   };
   for (const g of groups) {
     for (const o of g.options) {
@@ -371,9 +402,10 @@ function pimFactors(line: number, c: PlayerFactorCtx): Factor[] {
 
 export function attachPlayerFactors(groups: any[], c: PlayerFactorCtx): void {
   const set = (o: any, group: string, factors: Factor[]) => {
-    o.factors = factors.map(f => ({ ...f }));
+    const norm = normalizeWeights(factors);
+    o.factors = norm.map(f => ({ ...f }));
     o.factorGroup = group;
-    o.rulePct = blendPct(factors);
+    o.rulePct = blendPct(norm);
   };
   for (const g of groups) {
     for (const o of g.options) {
@@ -456,9 +488,10 @@ function poissonUnderF(lambda: number, line: number): number {
 
 export function attachGoalieFactors(groups: any[], c: GoalieFactorCtx): void {
   const set = (o: any, group: string, factors: Factor[]) => {
-    o.factors = factors.map(f => ({ ...f }));
+    const norm = normalizeWeights(factors);
+    o.factors = norm.map(f => ({ ...f }));
     o.factorGroup = group;
-    o.rulePct = blendPct(factors);
+    o.rulePct = blendPct(norm);
   };
   for (const g of groups) {
     for (const o of g.options) {

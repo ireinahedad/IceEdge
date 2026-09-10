@@ -11,7 +11,6 @@ import { useCallback, useEffect, useMemo, useState, createContext } from "react"
 import { nhlApiService } from "../../services/nhlApiService";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { pctColor } from "../../data/pctScale";
-import { useOddsFormat } from "../../context/OddsFormatContext";
 import { useI18n } from "../../i18n";
 import type { NHLGame } from "../../types/bet";
 import type { CalcFactor } from "../../services/predictionApiService";
@@ -28,7 +27,6 @@ export type RevealMode = "rules" | "ml";
 export const RevealModeCtx = createContext<RevealMode>("rules");
 /* ─── Circular gauge ─────────────────────────────── */
 function WinGauge({ pct, label, size = 140 }: { pct: number; label: string; size?: number }) {
-  const { format, prob } = useOddsFormat();
   const [displayed, setDisplayed] = useState(0);
   const radius = (size - 20) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -63,13 +61,7 @@ function WinGauge({ pct, label, size = 140 }: { pct: number; label: string; size
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        {/* Compteur animé en % seulement — cf. les jauges du coupon et de la
-            carte ML : une cote qui défile depuis sa borne se lit comme un bug. */}
-        {format === "percent" ? (
-          <span className="text-white text-3xl font-bold">{displayed}<span className="text-xl">%</span></span>
-        ) : (
-          <span className="text-white text-2xl font-bold font-mono">{prob(pct)}</span>
-        )}
+        <span className="text-white text-3xl font-bold">{displayed}<span className="text-xl">%</span></span>
         <span className="text-[#bfc8cc] text-[11px] mt-0.5 text-center px-2 leading-tight">{label}</span>
       </div>
     </div>
@@ -114,11 +106,6 @@ function CalculatedBreakdown({ basePct, factors, finalPct, accent }: {
   accent: string;
 }) {
   const { t } = useI18n();
-  // Seul le RÉSULTAT suit le format choisi. Les lignes au-dessus restent en % :
-  // ce bloc raconte une addition (base + écarts = total), et une addition dont
-  // les termes sont des points de pourcentage et le total une cote ne
-  // s'additionne plus à l'œil.
-  const { prob } = useOddsFormat();
   const [revealed, setRevealed] = useState(0);
 
   useEffect(() => {
@@ -161,7 +148,7 @@ function CalculatedBreakdown({ basePct, factors, finalPct, accent }: {
       <div className="px-4 py-4 flex items-center justify-between border-t-2" style={{ borderColor: accent }}>
         <div>
           <p className="text-[#bfc8cc] text-[11px] uppercase tracking-widest">{t("pred.aiPrediction")}</p>
-          <p className="text-white text-2xl font-black mt-0.5 tabular-nums">{prob(finalPct)}</p>
+          <p className="text-white text-2xl font-black mt-0.5">{finalPct}<span className="text-sm font-medium text-[#bfc8cc]">%</span></p>
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium"
           style={{ color: accent, borderColor: `${accent}40`, backgroundColor: `${accent}15` }}>

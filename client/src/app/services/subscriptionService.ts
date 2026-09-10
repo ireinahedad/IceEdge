@@ -26,6 +26,13 @@ export interface SubscriptionStatus {
    * et l'écran doit alors se comporter comme avant (mensuel seul).
    */
   periods?: BillingPeriod[];
+  /**
+   * Plafond mensuel de requêtes IA d'un abonné Pro, tel que le serveur le
+   * calcule. Optionnel : un serveur pas encore déployé ne renvoie pas le champ,
+   * et la page /pro doit alors se rabattre sur une formulation sans chiffre
+   * plutôt que d'en inventer un.
+   */
+  llmMonthlyQuota?: number;
 }
 
 export interface CheckoutResult {

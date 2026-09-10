@@ -56,9 +56,11 @@ export function SportSelector() {
 
 function OddsPill({ decimal, onBet }: { decimal: number; onBet: () => void }) {
   const { bookmaker } = useBookmaker();
-  // Vrai prix de bookmaker (décimal), pas une probabilité du modèle : converti
-  // par `odds()` et non par `prob()` — la première ne borne pas la valeur, parce
-  // qu'un prix affiché par le livre n'est pas une estimation à nous.
+  // ⚠️ Le SEUL endroit de l'app qui suit le réglage de format, et c'est normal :
+  // `game.bet365Home/Away` sont de vrais prix de bookmaker. Tout le reste de
+  // l'app affiche des probabilités du MODÈLE, qui restent en % — voir
+  // `services/oddsFormat.ts`. Si un jour un autre écran relaie de vraies cotes
+  // (page d'affiche, comparateur), c'est ici qu'il faut venir chercher le patron.
   const { odds } = useOddsFormat();
 
   // APPLE_PLAN §4 — Guideline 5.3. The price is information the prediction

@@ -7,7 +7,6 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { profileApiService, ApiError } from "../services/userService";
 import { useAuth } from "../context/AuthContext";
 import { useBlocks } from "../context/BlockContext";
-import { useOddsFormat } from "../context/OddsFormatContext";
 import { useI18n } from "../i18n";
 import "../components/rink-theme.css";
 import type { PlayerSummary, PublicSlip, PublicSlipLeg } from "../types/user";
@@ -67,7 +66,6 @@ function legMark(result: PublicSlipLeg["result"], slipPending: boolean): { icon:
 
 function SlipCard({ slip }: { slip: PublicSlip }) {
   const { t, lang } = useI18n();
-  const { prob } = useOddsFormat();
   const [open, setOpen] = useState(false);
 
   const locale  = lang === "fr" ? "fr-CA" : "en-US";
@@ -148,7 +146,7 @@ function SlipCard({ slip }: { slip: PublicSlip }) {
                   <p className="text-[11px] truncate" style={{ color: MUTED }}>{leg.subjectName}</p>
                 </div>
                 <span className="text-[11px] flex-shrink-0" style={{ color: MUTED }}>
-                  {prob(leg.probability, 0)}
+                  {Math.round(leg.probability)}%
                 </span>
               </div>
             );

@@ -12,7 +12,7 @@ Treat any secret that appeared in the repo, a chat, or a screenshot as burned. R
 | `JWT_SECRET` | Generate new: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` | `server/.env` (note: rotating invalidates all existing access tokens — users re-login) |
 | `GOOGLE_CLIENT_SECRET` | Google Cloud Console → Credentials → reset | `server/.env` |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard → Developers → API keys / Webhooks | `server/.env` |
-| `GITHUB_MODELS_TOKEN` | GitHub → Settings → Developer settings → PATs | `server/.env` |
+| `OPENAI_API_KEY` (operator key, Pro AI path) | https://platform.openai.com/api-keys → create new, then revoke the old one | `server/.env` + host env |
 | `RESEND_API_KEY` | Resend dashboard | `server/.env` |
 | `ODDS_API_KEY` | The Odds API dashboard | `server/.env` |
 | `VAPID_*` | Regenerate: `npx web-push generate-vapid-keys` (note: invalidates existing push subs) | `server/.env` + client public key |

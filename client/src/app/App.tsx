@@ -57,12 +57,13 @@ export default function App() {
           <BetProvider>
             <SportProvider>
               <BookmakerProvider>
-                {/* Format d'affichage des cotes (%, cote décimale, cote
-                    américaine). Réglage de LECTURE seulement : il ne touche
-                    aucun calcul. Placé ici parce qu'il est lu partout sous
-                    AppShell, et sous BookmakerProvider parce que les deux
-                    répondent à la même question — comment ce lecteur-là lit un
-                    prix. Voir context/OddsFormatContext.tsx. */}
+                {/* Format d'écriture des COTES DE BOOKMAKER (cote décimale,
+                    cote américaine, probabilité implicite). Réglage de LECTURE
+                    seulement : il ne touche aucun calcul, et il ne touche PAS
+                    les probabilités du modèle, qui restent en % partout. Sous
+                    BookmakerProvider parce que les deux répondent à la même
+                    question — comment ce lecteur-là lit un prix.
+                    Voir context/OddsFormatContext.tsx. */}
                 <OddsFormatProvider>
                   {/* R4.3d — la liste de blocage est partagée entre le chat et
                       les Paramètres. Elle ne charge rien au montage : voir

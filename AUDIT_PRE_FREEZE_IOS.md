@@ -146,7 +146,10 @@ migration 034 rejouée contre un Postgres 16 réel.
 ### ✅ CORRIGÉ · [MEDIUM] `systemPrompt` piloté par le client sur le chemin Pro
 **Fichiers :** `server/src/services/llmPrompts.ts` *(nouveau)*, `routes/llm.routes.ts`, `routes/llm.routes.test.ts` *(nouveau)*, `client/.../llmService.ts`, `client/.../PredictionSheet.tsx`
 
-- **Problème :** `prompt` **et** `systemPrompt` venaient du corps de requête, et le chemin Pro utilise `GITHUB_MODELS_TOKEN`, **facturé à toi**.
+- **Problème :** `prompt` **et** `systemPrompt` venaient du corps de requête, et le chemin Pro utilise le jeton de l'opérateur, **facturé à toi**.
+  > *Note 2026-09-09 :* ce jeton était alors `GITHUB_MODELS_TOKEN`. GitHub Models
+  > ayant fermé le 30 juillet 2026, le chemin Pro passe maintenant par
+  > `OPENAI_API_KEY`. Le problème décrit et sa correction restent inchangés.
 - **Impact :** tout compte Pro (y compris via essai gratuit ou code promo) disposait d'un proxy LLM généraliste à tes frais, dans la limite du quota mensuel. Le quota borne la dépense, pas l'usage détourné.
 - **Solution appliquée (2026-09-08) :** le client n'envoie plus qu'un `taskType` pris dans une **énumération fermée** (`LLM_TASK_TYPES`) et une langue. Le texte des invites est déplacé — **non réécrit** — du composant client vers `services/llmPrompts.ts`, qui devient leur seule définition.
   - **Le même verrou sur LES DEUX chemins**, pas seulement sur le chemin Pro. Sur la clé personnelle d'un utilisateur, une invite libre ne coûte rien à l'opérateur, donc « laisser passer » était défendable — mais c'était garder deux formes de la requête, dont une seule est testée. Une seule règle : l'invite système vient du serveur.

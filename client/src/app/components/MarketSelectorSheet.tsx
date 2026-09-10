@@ -1,8 +1,13 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { MARKET_DEFINITIONS, CATEGORY_LABELS, CATEGORY_ICONS } from "../data/betMarkets";
 import { predictionApiService, isPredictionUnavailable } from "../services/predictionApiService";
 import { useBet } from "../context/BetContext";
 import { useNHLData } from "../hooks/useNHLData";
+// `useUpcomingGames` est le hook des pages prédiction : UN appel /games/range sur
+// 14 jours, filtré sur l'équipe, matchs terminés exclus. Il remplace un filtre
+// sur `useNHLData().games`, qui ne porte que la soirée du jour et aurait donc
+// déclaré « aucun match » pour toute équipe qui ne joue pas ce soir.
+import { useUpcomingGames, type UpcomingGame } from "../pages/prediction/predictionShared";
 import { useI18n } from "../i18n";
 import type { BetLeg, BetMarketType } from "../types/bet";
 import type { MarketDefinition } from "../data/betMarkets";
@@ -41,6 +46,11 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
   const [selectedSelection, setSelectedSelection] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<Category>("match");
+  // Quel match ce pari d'équipe vise. Un sujet « équipe » n'en portait AUCUN :
+  // la jambe partait avec `gameId: undefined`, donc le règlement automatique
+  // (qui cherche le boxscore par gameId) ne pouvait jamais la clore, et la
+  // probabilité était calculée sans adversaire.
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   // Message affiché quand le modèle ne rend pas de probabilité : on refuse
   // d'inscrire une jambe au coupon plutôt que d'en inventer une.
@@ -78,6 +88,33 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
       };
     }),
   ], [teams, players, games, getTeamById]);
+
+  // ── Matchs à venir du sujet quand c'est une équipe ────────────────────────
+  // `null` = en cours de chargement (le hook n'est appelé que pour une équipe).
+  const upcoming = useUpcomingGames(
+    selectedSubject?.type === "team" ? selectedSubject.id : undefined
+  );
+  const gamesLoading = selectedSubject?.type === "team" && upcoming === null;
+  const subjectGames = useMemo<UpcomingGame[]>(() => upcoming ?? [], [upcoming]);
+
+  // Prochain match par défaut ; le choix survit au changement de marché, pas au
+  // changement d'équipe.
+  useEffect(() => {
+    if (selectedSubject?.type !== "team") { setSelectedGameId(null); return; }
+    setSelectedGameId((prev) =>
+      prev && subjectGames.some((g) => g.id === prev) ? prev : subjectGames[0]?.id ?? null
+    );
+  }, [selectedSubject, subjectGames]);
+
+  const selectedGame = useMemo(
+    () => subjectGames.find((g) => g.id === selectedGameId) ?? null,
+    [subjectGames, selectedGameId]
+  );
+
+  /** « vs BOS » / « @ BOS » — même formulation que le sélecteur des pages prédiction. */
+  function matchupLabel(g: UpcomingGame): string {
+    return `${g.isHome ? "vs" : "@"} ${g.opponentAbbr}`;
+  }
 
   const filteredSubjects = useMemo(() => {
     const q = searchQuery.toLowerCase();
@@ -156,9 +193,22 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
     const lineValue = selectedLine ?? selectedMarket.lineOptions?.[0];
     const playerGameId =
       selectedSubject.type === "player" ? getPlayerGameId(selectedSubject.id) : undefined;
+    // Équipe : l'affiche choisie donne l'adversaire et le côté, envoyés
+    // explicitement (le chemin « page stats » de resolveSubjects) en plus du
+    // gameId. Deux raisons de ne pas s'en remettre au seul gameId : le serveur
+    // n'y déduit l'équipe sujet que si la sélection EST une abréviation
+    // d'équipe — un « over » y ancrerait le calcul sur le côté domicile du
+    // match, pas sur l'équipe choisie — et sa lecture du match est dans un
+    // try/catch qui retombe silencieusement sur le corps de la requête.
+    const teamIsHome = selectedGame ? selectedGame.isHome : undefined;
+    const teamOpponentId = selectedGame ? selectedGame.opponentAbbr.toLowerCase() : undefined;
 
     // Build a unique and deterministic ID
-    const legId = `${selectedSubject.id}_${selectedMarket.type}_${selectionValue}_${lineValue ?? ""}`;
+    // Le match fait partie de l'identité d'un pari d'équipe : sans lui, la même
+    // équipe sur le même marché pour DEUX affiches donnait le même id, donc
+    // `hasLeg` refermait la feuille sans rien ajouter à la deuxième.
+    const legId = `${selectedSubject.id}_${selectedMarket.type}_${selectionValue}_${lineValue ?? ""}`
+      + (selectedSubject.type === "team" && selectedGameId ? `_${selectedGameId}` : "");
 
     if (hasLeg(legId)) {
       setAdding(false);
@@ -173,8 +223,15 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
     try {
       response = await predictionApiService.getSinglePrediction({
         marketType: selectedMarket.type as BetMarketType,
-        gameId: selectedSubject.type === "game" ? selectedSubject.id : undefined,
+        gameId:
+          selectedSubject.type === "game"
+            ? selectedSubject.id
+            : selectedSubject.type === "team"
+            ? selectedGameId ?? undefined
+            : undefined,
         teamId: selectedSubject.type === "team" ? selectedSubject.id : undefined,
+        opponentId: teamOpponentId,
+        isHome: teamIsHome,
         playerId: selectedSubject.type === "player" ? selectedSubject.id : undefined,
         line: lineValue,
         selection: selectionValue,
@@ -206,7 +263,9 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
       selectionShort: selectionLabel.short,
       probability: response.probability,
       line: lineValue,
-      gameInfo: selectedSubject.subtitle,
+      gameInfo: selectedGame
+        ? `${matchupLabel(selectedGame)} · ${selectedGame.date}${selectedGame.startTime ? ` · ${selectedGame.startTime}` : ""}`
+        : selectedSubject.subtitle,
       addedAt: new Date().toISOString(),
       // Machine-readable fields for automatic settlement
       gameId:
@@ -214,7 +273,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
           ? selectedSubject.id
           : selectedSubject.type === "player"
           ? playerGameId
-          : undefined,
+          : selectedGameId ?? undefined,
       selectionValue: selectionValue != null ? String(selectionValue) : undefined,
     } as BetLeg;
 
@@ -255,7 +314,9 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
   const canAdd =
     selectedMarket &&
     (!selectedMarket.requiresLine || selectedLine !== null || (selectedMarket.lineOptions?.length ?? 0) > 0) &&
-    (!selectedMarket.requiresSelection || selectedSelection !== null);
+    (!selectedMarket.requiresSelection || selectedSelection !== null) &&
+    // Un pari d'équipe sans match ne serait jamais réglé : on ne l'ajoute pas.
+    (selectedSubject?.type !== "team" || !!selectedGameId);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -363,6 +424,15 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
               </div>
             </div>
 
+            {/* Quel match — un pari d'équipe en exige un */}
+            {selectedSubject.type === "team" && (
+              <GamePickerRow
+                games={subjectGames} loading={gamesLoading} selectedId={selectedGameId}
+                onSelect={setSelectedGameId} label={t("mkt.gameFor")}
+                empty={t("mkt.noUpcomingGame")} matchupLabel={matchupLabel}
+              />
+            )}
+
             {/* Category tabs */}
             <div className="flex gap-1.5 px-4 pb-2 overflow-x-auto scrollbar-hide">
               {categoriesForSubject.map((cat) => (
@@ -389,9 +459,15 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                     onClick={() => {
                       setSelectedMarket(market);
                       setSelectedLine(market.lineOptions?.[Math.floor(market.lineOptions.length / 2)] ?? null);
+                      // Sujet « équipe » : l'équipe EST la sélection, elle est
+                      // déjà choisie par le bouton + qui a ouvert cette feuille.
+                      // La redemander pour un « First Team to Score » n'ajoutait
+                      // qu'un clic sur un bouton unique.
                       setSelectedSelection(
                         market.requiresSelection && !market.selectionOptions
-                          ? null
+                          ? selectedSubject.type === "team"
+                            ? selectedSubject.id
+                            : null
                           : market.selectionOptions?.[0]?.value ?? null
                       );
                       if (market.requiresLine || market.requiresSelection) {
@@ -427,6 +503,17 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
               {t("mkt.backToMarkets")}
             </button>
 
+            {/* Rappel du match visé, modifiable sans repasser par les marchés */}
+            {selectedSubject.type === "team" && (
+              <div className="-mx-4 mb-2">
+                <GamePickerRow
+                  games={subjectGames} loading={gamesLoading} selectedId={selectedGameId}
+                  onSelect={setSelectedGameId} label={t("mkt.gameFor")}
+                  empty={t("mkt.noUpcomingGame")} matchupLabel={matchupLabel}
+                />
+              </div>
+            )}
+
             {/* Market info */}
             <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4 mb-4">
               <p className="text-white font-bold text-sm mb-1">{selectedMarket.label}</p>
@@ -457,8 +544,10 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
               </div>
             )}
 
-            {/* Selection picker */}
-            {(selectedMarket.requiresSelection || selectedMarket.selectionOptions) && (
+            {/* Selection picker — masqué quand la seule option EST l'équipe du
+                sujet : elle est déjà sélectionnée, le bloc ne proposait rien. */}
+            {(selectedMarket.requiresSelection || selectedMarket.selectionOptions) &&
+             !(selectedSubject.type === "team" && !selectedMarket.selectionOptions) && (
               <div className="mb-6">
                 <p className="text-[#bfc8cc] text-xs uppercase tracking-wider mb-2">{t("mkt.selection")}</p>
                 <div className="flex flex-col gap-2">
@@ -502,6 +591,52 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Ligne des matchs à venir d'une équipe, en haut de la feuille. Le premier est
+ * présélectionné : dans le cas courant (une équipe n'a qu'un match à venir), il
+ * n'y a donc rien à faire, et le pari sait quand même sur quoi il porte.
+ */
+function GamePickerRow({ games, loading, selectedId, onSelect, label, empty, matchupLabel }: {
+  games: UpcomingGame[];
+  loading: boolean;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  label: string;
+  empty: string;
+  matchupLabel: (g: UpcomingGame) => string;
+}) {
+  return (
+    <div className="px-4 pb-2">
+      <p className="text-[#bfc8cc] text-[11px] uppercase tracking-wider mb-1.5">{label}</p>
+      {loading ? (
+        <div className="h-10 bg-[#131A12] rounded-xl animate-pulse" />
+      ) : games.length === 0 ? (
+        <p className="text-amber-300 text-[11px] leading-snug">{empty}</p>
+      ) : (
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+          {games.map((g) => {
+            const on = g.id === selectedId;
+            return (
+              <button
+                key={g.id}
+                onClick={() => onSelect(g.id)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-left transition-all ${
+                  on ? "bg-[#86d1ea] text-[#0A0E0C]" : "bg-[#131A12] border border-white/20 text-white"
+                }`}
+              >
+                <span className="block text-[11px] font-bold leading-tight">{matchupLabel(g)}</span>
+                <span className={`block text-[11px] leading-tight ${on ? "text-[#0A0E0C]/70" : "text-[#bfc8cc]"}`}>
+                  {g.date}{g.startTime ? ` · ${g.startTime}` : ""}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -110,11 +110,25 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // sont construites à partir de l'identifiant du format
   // (`profile.oddsFormat.${f}`) : renommer un identifiant dans
   // `services/oddsFormat.ts` sans renommer la clé ici afficherait la clé brute.
-  "profile.oddsFormat":          { en: "Odds display",   fr: "Affichage des cotes" },
-  "profile.oddsFormat.percent":  { en: "Percent",        fr: "Pourcentage" },
-  "profile.oddsFormat.decimal":  { en: "Decimal",        fr: "Cote décimale" },
-  "profile.oddsFormat.american": { en: "American",       fr: "Cote américaine" },
-  "profile.oddsFormatHint":      { en: "How every betting probability is written across the app. Stats (win rate, ROI, form) always stay in %.", fr: "Comment s'écrit chaque probabilité de pari dans l'app. Les statistiques (taux de victoire, ROI, forme) restent toujours en %." },
+  "profile.oddsFormat":          { en: "Bookmaker odds",  fr: "Cotes des bookmakers" },
+  "profile.oddsFormat.percent":  { en: "Implied %",       fr: "Probabilité implicite" },
+  "profile.oddsFormat.decimal":  { en: "Decimal",         fr: "Cote décimale" },
+  "profile.oddsFormat.american": { en: "American",        fr: "Cote américaine" },
+  // Le libellé DIT ce que le réglage ne touche pas, et ce n'est pas du zèle :
+  // sans cette phrase, quelqu'un qui choisit « cote américaine » et voit ensuite
+  // « 68 % » sur une prédiction croit que le réglage est cassé. Il ne l'est pas —
+  // ce 68 % n'est pas un prix mais la confiance du modèle, et la garder en %
+  // est exactement ce qui permet de la comparer à la cote du livre.
+  "profile.oddsFormatHint":      { en: "How bookmaker odds (bet365, Stake…) are written across the app. The model's own probabilities always stay in %.", fr: "Comment s'écrivent les cotes des bookmakers (bet365, Stake…) dans l'app. Les probabilités du modèle, elles, restent toujours en %." },
+  // Compteur d'analyses IA (carte des Réglages). Le TOTAL n'apparaît dans aucune
+  // de ces chaînes : il vient du serveur, qui le dérive du prix de l'abonnement.
+  // L'écrire ici le figerait, et c'est exactement comme ça que « analyse IA
+  // illimitée » a pu rester faux pendant des mois.
+  "profile.aiUsage":       { en: "AI analyses",        fr: "Analyses IA" },
+  "profile.aiUsageReset":  { en: "Resets on {date}",   fr: "Remise à zéro le {date}" },
+  "profile.aiUsageOver":   { en: "Past your monthly allowance, your requests use your own OpenAI key if you've added one.", fr: "Au-delà de ton forfait mensuel, tes requêtes utilisent ta propre clé OpenAI si tu en as ajouté une." },
+  "profile.aiUsageFree":   { en: "AI runs on your own OpenAI key, up to {n} requests a day. Go Pro to use the built-in model.", fr: "L'IA utilise ta propre clé OpenAI, dans la limite de {n} requêtes par jour. Passe à Pro pour utiliser le modèle intégré." },
+  "profile.aiUsageFailed": { en: "Counter unavailable right now.", fr: "Compteur indisponible pour l'instant." },
   "profile.dark":         { en: "Dark",          fr: "Sombre" },
   "profile.light":        { en: "Light",         fr: "Clair" },
   "profile.aiSettings":   { en: "AI Settings",   fr: "Paramètres IA" },
@@ -708,6 +722,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "mkt.backToMarkets": { en: "← Back to markets", fr: "← Retour aux marchés" },
   "mkt.line":          { en: "Line ({unit})",    fr: "Ligne ({unit})" },
   "mkt.selection":     { en: "Selection",        fr: "Sélection" },
+  "mkt.gameFor":       { en: "Game",             fr: "Match" },
+  "mkt.noUpcomingGame":{ en: "No upcoming game for this team — a team bet needs one.", fr: "Aucun match à venir pour cette équipe — un pari d'équipe en exige un." },
   "mkt.draw60":        { en: "Draw after 60 min", fr: "Nul après 60 min" },
   "mkt.addedSlip":     { en: "✓ Added to Slip!", fr: "✓ Ajouté au coupon !" },
   "mkt.adding":        { en: "Adding…",          fr: "Ajout…" },
@@ -806,7 +822,10 @@ const DICT: Record<string, { en: string; fr: string }> = {
 
   // ── Pro / subscription ──
   "pro.title":        { en: "Go ArakIce Pro",  fr: "Passe à ArakIce Pro" },
-  "pro.subtitle":     { en: "Unlock the full edge: every prediction, the value-bet finder, and unlimited AI analysis.", fr: "Débloque l'avantage complet : toutes les prédictions, le détecteur de value bets et l'analyse IA illimitée." },
+  // « illimitée » retiré ici aussi le 2026-09-08 : ce sous-titre s'affiche sur
+  // /pro ET dans la carte Abonnement des Réglages, donc corriger seulement le
+  // bloc d'avantages aurait laissé la promesse fausse à deux endroits.
+  "pro.subtitle":     { en: "Unlock the full edge: every prediction, the value-bet finder, and AI analysis.", fr: "Débloque l'avantage complet : toutes les prédictions, le détecteur de value bets et l'analyse IA." },
   "pro.included":     { en: "Included in Pro", fr: "Inclus dans Pro" },
   "pro.badge":        { en: "Pro",             fr: "Pro" },
   "pro.unlock":       { en: "Unlock with Pro", fr: "Débloquer avec Pro" },
@@ -858,8 +877,20 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pro.b.ev.d":       { en: "Automatically flags positive-EV bets where your edge beats the odds.", fr: "Repère automatiquement les paris à valeur positive (+EV) où ton edge dépasse la cote." },
   "pro.b.alerts.t":   { en: "Value-bet notifications",   fr: "Notifications value bets" },
   "pro.b.alerts.d":   { en: "Get alerted the moment a new +EV appears, before the odds move.", fr: "Reçois une alerte dès qu'un nouveau +EV apparaît, avant que la cote bouge." },
-  "pro.b.llm.t":      { en: "Unlimited AI analysis",     fr: "Analyse IA illimitée" },
-  "pro.b.llm.d":      { en: "The LLM's take on every game, with no daily limit.", fr: "L'avis du LLM sur tous les matchs, sans limite quotidienne." },
+  // ⚠️ Ce bloc annonçait « Analyse IA illimitée » / « no daily limit » alors
+  // qu'il existe un plafond MENSUEL par abonné, dérivé du prix
+  // (`llmQuota.service`). C'était faux à 763 requêtes et plus visiblement faux
+  // à 457. Corrigé le 2026-09-08 : on annonce le chiffre réel, et on dit ce qui
+  // se passe au-delà — le repli sur la clé perso est justement ce qui rend le
+  // plafond acceptable, donc le taire nuisait aussi à l'argumentaire.
+  //
+  // `{n}` est injecté depuis ProPage avec le plafond que le SERVEUR calcule
+  // (`llmMonthlyQuota`), jamais une constante recopiée : c'est ce qui empêche
+  // la promesse de redevenir fausse au prochain changement de prix.
+  // `pro.b.llm.dNoCount` sert quand le serveur ne renvoie pas encore le champ.
+  "pro.b.llm.t":        { en: "AI analysis included",     fr: "Analyse IA incluse" },
+  "pro.b.llm.d":        { en: "The model's take on every game — {n} analyses a month. Past that, your own OpenAI key takes over.", fr: "L'avis du modèle sur tous les matchs — {n} analyses par mois. Au-delà, ta propre clé OpenAI prend le relais." },
+  "pro.b.llm.dNoCount": { en: "The model's take on every game, within a generous monthly allowance. Past that, your own OpenAI key takes over.", fr: "L'avis du modèle sur tous les matchs, dans la limite d'un forfait mensuel confortable. Au-delà, ta propre clé OpenAI prend le relais." },
   "pro.b.markets.t":  { en: "All markets & full slate",  fr: "Tous les marchés & calendrier complet" },
   "pro.b.markets.d":  { en: "Beyond today's games: the full schedule and every bet365 market.", fr: "Au-delà des matchs du jour : tout le calendrier et chaque marché bet365." },
   "pro.b.others.t":   { en: "Other players' stats & bets", fr: "Stats & bets des autres joueurs" },

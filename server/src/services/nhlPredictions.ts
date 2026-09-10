@@ -315,7 +315,10 @@ function computeGameMarkets(
           injuries?.active ? `blessures : ${injuries.note}` : '',
           lineup?.active   ? `alignement : ${lineup.note}` : '',
         ].filter(Boolean).join('  ·  '),
-        factors: blend.lines.map(l => ({ id: l.id, label: l.label, weight: l.weight, value: l.value })),
+        // Poids sur 100, comme partout ailleurs (`blend.lines` les porte en
+        // fractions de 1). attachGameFactors réécrit ces deux options juste
+        // après, mais une échelle erronée ici finirait tôt ou tard à l'écran.
+        factors: blend.lines.map(l => ({ id: l.id, label: l.label, weight: Math.round(l.weight * 100), value: l.value })),
       },
       {
         id: 'ml-ot',
@@ -328,7 +331,7 @@ function computeGameMarkets(
         label: `${awayName} to Win`,
         rulePct: pct(mlAway),
         ruleNote: `Away win probability = 1 − home win = ${fmt(mlAway*100,0)}%`,
-        factors: blend.lines.map(l => ({ id: l.id, label: l.label, weight: l.weight, value: 1 - l.value })),
+        factors: blend.lines.map(l => ({ id: l.id, label: l.label, weight: Math.round(l.weight * 100), value: 1 - l.value })),
       },
     ],
   };

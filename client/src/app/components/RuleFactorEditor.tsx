@@ -66,7 +66,14 @@ export function RuleFactorEditor({
 
   const blended = blendFactors(factors, weights);
   const total = factors.reduce((s, f) => s + (weights[f.id] ?? f.weight), 0);
-  const overLimit = total > 100.0001;
+  // 100 est un repère de lecture, pas une contrainte : le score est une moyenne
+  // pondérée (`blendFactors` divise par la somme des poids), donc un total de 106
+  // donne exactement le même chiffre qu'un total de 100 aux mêmes proportions.
+  // Il ne bloque donc plus l'enregistrement — il ne le pouvait pas honnêtement :
+  // une famille peut gagner un facteur conditionnel (altitude, arbitrage) APRÈS
+  // que l'utilisateur a réglé et enregistré ses curseurs, et le total repasse
+  // au-dessus de 100 sans qu'il ait rien touché.
+  const offBudget = Math.abs(total - 100) > 0.5;
   const blendedColor = pctColor(blended);
 
   const slices = factors.map((f) => ({
@@ -132,7 +139,6 @@ export function RuleFactorEditor({
     });
   }
   function handleSave() {
-    if (overLimit) { toast.error(`La somme des poids (${Math.round(total)}) dépasse 100.`); return; }
     const store = saveFamilyWeights(factorGroup, weights);
     touchedRef.current = false;
     toast.success("Pondération enregistrée pour ce type de pari.");
@@ -202,13 +208,15 @@ export function RuleFactorEditor({
               })}
 
               <div className="flex items-center gap-2 flex-wrap mt-1">
-                <span className={`text-[11px] font-semibold tabular-nums ${overLimit ? "text-red-400" : "text-white/50"}`}>
-                  Total : {Math.round(total)} / 100
+                <span className={`text-[11px] font-semibold tabular-nums ${offBudget ? "text-white/70" : "text-white/50"}`}>
+                  {offBudget
+                    ? `Total : ${Math.round(total)} → ramené à 100`
+                    : `Total : ${Math.round(total)} / 100`}
                 </span>
                 <span className="flex-1" />
                 <button
-                  onClick={handleSave} disabled={overLimit}
-                  className="px-3 py-1.5 rounded-lg text-[11px] font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={handleSave}
+                  className="px-3 py-1.5 rounded-lg text-[11px] font-bold"
                   style={{ background: "#86d1ea", color: "#0A0E0C" }}
                 >
                   Enregistrer

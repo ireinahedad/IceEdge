@@ -7,7 +7,7 @@
  */
 
 import { useNavigate } from "react-router";
-import { Fragment, useEffect, useState, useContext } from "react";
+import { Fragment, useEffect, useMemo, useState, useContext } from "react";
 import { nhlApiService } from "../../services/nhlApiService";
 import { predictionApiService } from "../../services/predictionApiService";
 import { requestFromMLProps } from "../../services/predictionRequest";
@@ -21,8 +21,8 @@ import { RuleFactorEditor } from "../../components/RuleFactorEditor";
 import { FramedLabel } from "../../components/brand/FramedLabel";
 import { BetOpt, MLProps, MktGroup, RuleFactor, buildLLMDataContext, llmCacheId, loadLlmCache, saveLlmCache, settlementFields } from "./gameMarkets";
 import { pctColor } from "../../data/pctScale";
+import { blendFactors, getFamilyWeights } from "../../services/ruleWeightsService";
 import { RevealMode, RevealModeCtx } from "./predictionShared";
-import { useOddsFormat } from "../../context/OddsFormatContext";
 
 /* ─── Prediction bottom sheet ───────────────── */
 function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, factors, factorGroup, onClose }: {
@@ -288,6 +288,17 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
   const mode = useContext(RevealModeCtx);
   const [sheet, setSheet] = useState(false);
 
+  // Score de règles de la tuile = celui que la carte ouverte affichera, donc
+  // pondération de l'utilisateur comprise. Sans ça, la tuile montrait le blend
+  // par défaut et la carte le blend réglé : deux chiffres pour un même pari.
+  // `sheet` est dans les dépendances exprès : refermer la carte après avoir
+  // enregistré de nouveaux poids recalcule la tuile.
+  const rulePct = useMemo(() => (
+    opt.factors?.length && opt.factorGroup
+      ? blendFactors(opt.factors, getFamilyWeights(opt.factorGroup, opt.factors))
+      : opt.rulePct
+  ), [opt.factors, opt.factorGroup, opt.rulePct, sheet]);
+
   // Predictions are always shown. The toggle picks the source: ML model % when
   // "ml" is selected, otherwise the rule-based %.
   const source: "rules" | "ml" = mode === "ml" ? "ml" : "rules";
@@ -300,15 +311,14 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
     setMlPct(null);
     fetchMLProbability(
       { type: opt.mlProps.type, subjectId: opt.mlProps.subjectId, opponentId: opt.mlProps.opponentId, propType: opt.mlProps.propType, line: opt.mlProps.line },
-      opt.rulePct,
+      rulePct,
     ).then(p => { if (alive) setMlPct(p); });
     return () => { alive = false; };
-  }, [source, opt.mlProps, opt.rulePct]);
+  }, [source, opt.mlProps, rulePct]);
 
   const loadingMl = source === "ml" && !!opt.mlProps && mlPct === null;
-  const shownPct = source === "ml" ? (mlPct ?? opt.rulePct) : opt.rulePct;
+  const shownPct = source === "ml" ? (mlPct ?? rulePct) : rulePct;
   const shownColor = pctColor(shownPct);
-  const { prob } = useOddsFormat();
 
   return (
     <>
@@ -322,12 +332,12 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
           className="mt-2 px-3 py-0.5 rounded-full text-xs font-bold"
           style={{ background: shownColor + "22", color: shownColor, border: `1px solid ${shownColor}55` }}
         >
-          {loadingMl ? "…" : prob(shownPct)}
+          {loadingMl ? "…" : `${shownPct}%`}
         </span>
       </button>
       {sheet && (
         <PredictionSheet
-          label={opt.label} rulePct={opt.rulePct} ruleNote={opt.ruleNote}
+          label={opt.label} rulePct={rulePct} ruleNote={opt.ruleNote}
           accent={accent} mlProps={opt.mlProps} factors={opt.factors} factorGroup={opt.factorGroup} onClose={() => setSheet(false)}
         />
       )}

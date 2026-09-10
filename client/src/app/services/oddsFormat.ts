@@ -1,26 +1,33 @@
 // services/oddsFormat.ts
-// Comment un même chiffre s'écrit en %, en cote décimale ou en cote américaine.
+// Comment une COTE DE BOOKMAKER s'écrit : en cote décimale, en cote américaine,
+// ou en probabilité implicite.
 //
-// ── Ce que ce module convertit, et ce qu'il ne convertit PAS ────────────────
-// Il ne traite que des PROBABILITÉS DE PARI : la chance qu'une sélection passe
-// (le % du modèle) et le prix d'un bookmaker. Un taux de victoire, un ROI, un
-// pourcentage de forme ou un EV ne sont pas des probabilités de sélection : les
-// écrire « -713 » n'aurait aucun sens, et ces chiffres restent donc en %
-// partout dans l'app.
+// ── Ce que ce module convertit, et ce qu'il ne convertira JAMAIS ────────────
+//
+// Uniquement les **prix affichés par un livre** — bet365, Stake, ou tout autre
+// bookmaker dont l'app relaie les cotes. Un prix est une offre : le livre
+// s'engage à payer ce multiple. Il peut donc s'écrire indifféremment 1.47,
+// -213 ou 68 % — trois écritures du même engagement, et le lecteur choisit
+// celle qu'il lit le plus vite.
+//
+// ⚠️⚠️ **La probabilité du modèle n'est PAS un prix, et ne passe pas par ici.**
+// C'est une mesure de confiance : « d'après nos données, ce pari a telle chance
+// de passer ». Personne ne s'engage à payer quoi que ce soit dessus. L'écrire
+// « -213 » à côté des cotes du livre la ferait passer pour une offre concurrente
+// alors qu'elle n'en est pas une, et brouillerait précisément la comparaison qui
+// fait l'intérêt du produit : notre estimation FACE au prix du marché. Les
+// probabilités du modèle restent donc en % partout, quel que soit ce réglage —
+// jauges de prédiction, Best Bets, jambes de coupon, carte ML, page joueur.
+//
+// La seule exception historique est `toOddsLabel` dans `pages/bet/betParts.tsx`,
+// qui traduit une probabilité en cote américaine ÉQUIVALENTE : elle est figée en
+// américain et ne suit pas ce réglage, pour la même raison.
 //
 // ── Le choix est un réglage de LECTURE ─────────────────────────────────────
 // Il ne change aucun calcul, aucune donnée envoyée au serveur, aucun pari
-// enregistré : seulement la façon dont un nombre déjà calculé s'affiche. Il vit
-// donc en localStorage comme le bookmaker choisi (voir `bookmakers.ts`), pas en
-// base — c'est une préférence d'appareil, pas de compte.
-//
-// ── Les bornes ──────────────────────────────────────────────────────────────
-// `clampPct` reprend exactement les 5–95 % de l'ancien `toOddsLabel` de
-// betParts.tsx, dont ce module est l'extension. Ce n'est pas de la prudence
-// décorative : à 99 % la cote américaine vaut -9900 et la décimale 1,01, deux
-// nombres qui remplissent l'écran sans rien apprendre, et à 0 % la décimale
-// diverge. Les bornes sont ici pour que la valeur affichée reste lisible, pas
-// pour corriger le modèle.
+// enregistré : seulement la façon dont un prix déjà reçu s'affiche. Il vit donc
+// en localStorage comme le bookmaker choisi (voir `bookmakers.ts`), pas en base
+// — c'est une préférence d'appareil, pas de compte.
 
 export type OddsFormat = "percent" | "decimal" | "american";
 
@@ -35,13 +42,20 @@ export const ODDS_FORMAT_SAMPLE: Record<OddsFormat, string> = {
 };
 
 export const ODDS_FORMAT_STORAGE_KEY = "iceedge_odds_format";
-const DEFAULT_ODDS_FORMAT: OddsFormat = "percent";
+const DEFAULT_ODDS_FORMAT: OddsFormat = "decimal";
 
 export function isOddsFormat(v: unknown): v is OddsFormat {
   return typeof v === "string" && (ODDS_FORMAT_IDS as string[]).includes(v);
 }
 
-/** Lit le format choisi (repli sur le %, le seul qui ne demande rien au lecteur). */
+/**
+ * Lit le format choisi.
+ *
+ * Repli sur la cote **décimale** : c'est la forme sous laquelle les cotes
+ * arrivent du fournisseur et celle que l'app affichait avant ce réglage. Un
+ * défaut différent changerait l'écran de tous ceux qui n'ont jamais ouvert les
+ * Réglages, pour un choix qu'ils n'ont pas fait.
+ */
 export function getSelectedOddsFormat(): OddsFormat {
   try {
     const stored = localStorage.getItem(ODDS_FORMAT_STORAGE_KEY);
@@ -61,32 +75,23 @@ export function setSelectedOddsFormat(format: OddsFormat): void {
 }
 
 // ── Conversions ─────────────────────────────────────────────────────────────
-
-const MIN_PCT = 5;
-const MAX_PCT = 95;
-
-function clampPct(pct: number): number {
-  if (!Number.isFinite(pct)) return MIN_PCT;
-  return Math.max(MIN_PCT, Math.min(MAX_PCT, pct));
-}
-
-/** Probabilité (0-100) → cote décimale (ex. 68 % → 1.47). */
-export function pctToDecimal(pct: number): number {
-  return 100 / clampPct(pct);
-}
-
-/** Probabilité (0-100) → cote américaine signée (ex. 68 % → -213, 32 % → +213). */
-export function pctToAmerican(pct: number): number {
-  const p = clampPct(pct) / 100;
-  return p >= 0.5
-    ? -Math.round((p / (1 - p)) * 100)
-    : Math.round(((1 - p) / p) * 100);
-}
+//
+// Aucune borne ici, contrairement à `toOddsLabel` qui bride les probabilités du
+// modèle entre 5 et 95 %. La différence est de nature : borner une ESTIMATION
+// évite d'afficher une précision qu'on n'a pas, alors qu'un PRIX est un fait —
+// une cote à 1.02 vaut vraiment -5000, et l'écrêter afficherait un prix que le
+// livre ne propose pas.
 
 /** Cote décimale → probabilité implicite (0-100). Le vig n'est PAS retiré. */
 export function decimalToPct(decimal: number): number {
-  if (!Number.isFinite(decimal) || decimal <= 1) return 0;
   return 100 / decimal;
+}
+
+/** Cote décimale → cote américaine signée (2.13 → +113 ; 1.47 → -213). */
+export function decimalToAmerican(decimal: number): number {
+  return decimal >= 2
+    ? Math.round((decimal - 1) * 100)
+    : -Math.round(100 / (decimal - 1));
 }
 
 /** Le signe fait partie du format : une cote américaine sans « + » se lit mal. */
@@ -95,41 +100,17 @@ export function formatAmerican(value: number): string {
 }
 
 /**
- * Écrit une PROBABILITÉ DE SÉLECTION (0-100) dans le format choisi.
+ * Écrit une cote de bookmaker, reçue en décimal (ex. 1.85), dans le format choisi.
  *
- * `decimals` ne s'applique QU'AU %, et il est volontairement facultatif :
- * omis, le nombre part tel quel, exactement comme les `{pct}%` littéraux que
- * cette fonction remplace. Ce n'est pas un détail — la probabilité combinée
- * d'un coupon arrive du serveur arrondie au dixième (`ml.routes.ts`,
- * `adjustedProbability`), donc un `toFixed(0)` imposé ici transformerait
- * silencieusement « 12,3 % » en « 12 % » sur tous les coupons multiples.
- * Un écran qui VEUT arrondir le demande.
- *
- * Une cote, elle, se lit à deux décimales (décimale) ou en entier (américaine)
- * quel que soit l'appelant : laisser ce choix à chaque écran ferait diverger
- * l'écriture d'un même nombre d'une page à l'autre.
- */
-export function formatProbability(pct: number, format: OddsFormat, decimals?: number): string {
-  if (!Number.isFinite(pct)) return "—";
-  switch (format) {
-    case "decimal":  return pctToDecimal(pct).toFixed(2);
-    case "american": return formatAmerican(pctToAmerican(pct));
-    default:         return `${decimals == null ? pct : pct.toFixed(decimals)}%`;
-  }
-}
-
-/**
- * Écrit une COTE DE BOOKMAKER, reçue en décimal (ex. 1.85), dans le format choisi.
- *
- * Distinct de `formatProbability` par la borne : une cote réelle n'est pas
- * bridée à 5–95 % quand on l'affiche telle quelle (`decimal`), parce qu'elle
- * n'est pas une estimation à nous mais un prix affiché par le livre.
+ * `decimal <= 1` est refusé plutôt que converti : une cote de 1 ou moins n'est
+ * pas un prix (elle ne rembourse même pas la mise), c'est une valeur manquante
+ * ou une erreur du flux — et les formules ci-dessus y divisent par zéro.
  */
 export function formatDecimalOdds(decimal: number, format: OddsFormat): string {
   if (!Number.isFinite(decimal) || decimal <= 1) return "—";
   switch (format) {
     case "percent":  return `${Math.round(decimalToPct(decimal))}%`;
-    case "american": return formatAmerican(pctToAmerican(decimalToPct(decimal)));
+    case "american": return formatAmerican(decimalToAmerican(decimal));
     default:         return decimal.toFixed(2);
   }
 }

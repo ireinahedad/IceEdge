@@ -43,6 +43,17 @@ export class NHLService {
 
   async getTeamStats(id: string) {
     const t = await nhlApi.fetchTeamByAbbr(id);
+    // PP% / PK% : `standings` ne les porte PAS (powerPlayPctg/penaltyKillPctg y
+    // sont absents, d'où le 0 de fetchTeams), ils vivent dans team/summary. Sans
+    // cette fusion, la page d'une équipe affichait « PK% — » et calculait ses
+    // règles spéciales sur 0 % — le moteur de prédiction, lui, lisait déjà la
+    // bonne source, ce qui faisait dire deux chiffres différents au même écran.
+    // Le try/catch est là pour que le reste de la fiche sorte quand même si
+    // team/summary tombe (il expire au bout de 8 s comme les autres appels).
+    let summary: { ppPct: number; pkPct: number } | undefined;
+    try {
+      summary = (await nhlApi.fetchTeamSummaryStats())[t.abbreviation];
+    } catch { /* PP/PK indisponibles : on reste sur ce que porte le standings */ }
     return {
       teamId:              t.id,
       name:                t.name,
@@ -61,8 +72,8 @@ export class NHLService {
       goalsAgainst:        t.goalsAgainst,
       goalsForPerGame:     t.goalsForPerGame,
       goalsAgainstPerGame: t.goalsAgainstPerGame,
-      powerPlayPct:        t.ppPct,
-      penaltyKillPct:      t.pkPct,
+      powerPlayPct:        t.ppPct || summary?.ppPct || 0,
+      penaltyKillPct:      t.pkPct || summary?.pkPct || 0,
       homeRecord:          t.homeRecord,
       awayRecord:          t.awayRecord,
       streak:              t.streak,

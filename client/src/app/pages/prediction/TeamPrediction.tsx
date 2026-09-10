@@ -187,15 +187,24 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
       "t-pp-goal": "ppgoal","t-pk": "pk-perfect",
       "t-w1": "wm-1",       "t-w2": "wm-2",     "t-w3": "wm-3p",
     };
-    const byServerId: Record<string, { factors?: RuleFactor[]; factorGroup?: string }> = {};
+    // On reprend AUSSI le rulePct du serveur : la carte ouverte recalcule le
+    // score depuis les facteurs reçus, donc laisser le rulePct local sur la
+    // tuile faisait dire deux chiffres différents au même pari — visiblement sur
+    // « Kills All PKs », à 0 % en tuile (PK% local à 0) et à sa vraie valeur une
+    // fois la carte ouverte.
+    const byServerId: Record<string, { factors?: RuleFactor[]; factorGroup?: string; rulePct?: number }> = {};
     for (const g of apiGroups) for (const o of g.options as any[]) {
-      if (o.factors?.length) byServerId[o.id] = { factors: o.factors, factorGroup: o.factorGroup };
+      if (o.factors?.length) byServerId[o.id] = { factors: o.factors, factorGroup: o.factorGroup, rulePct: o.rulePct };
     }
     return teamGroups.map((g) => ({
       ...g,
       options: g.options.map((o) => {
         const src = TEAM_ID_MAP[o.id] ? byServerId[TEAM_ID_MAP[o.id]] : undefined;
-        return src ? { ...o, ...src } : o;
+        // `rulePct` du serveur seulement s'il est là : une option mappée sans
+        // score serveur garde le calcul local plutôt que de tomber à undefined.
+        return src
+          ? { ...o, ...src, rulePct: typeof src.rulePct === "number" ? src.rulePct : o.rulePct }
+          : o;
       }),
     }));
   })();

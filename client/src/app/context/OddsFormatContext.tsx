@@ -2,24 +2,26 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import {
   ODDS_FORMAT_IDS,
   formatDecimalOdds,
-  formatProbability,
   getSelectedOddsFormat,
   setSelectedOddsFormat,
   type OddsFormat,
 } from "../services/oddsFormat";
 
 /**
- * Le format d'affichage des cotes, partagé par toute l'app.
+ * Le format d'écriture des COTES DE BOOKMAKER, partagé par toute l'app.
  *
  * Calqué sur `BookmakerContext` : même forme (état + setter qui persiste), même
  * raison d'être en contexte plutôt qu'en lecture directe de localStorage — un
- * changement dans les Paramètres doit se voir immédiatement sur tous les écrans
+ * changement dans les Réglages doit se voir immédiatement sur tous les écrans
  * montés, sans rechargement.
  *
- * `prob` et `odds` sont exposés déjà liés au format courant pour que les écrans
- * n'aient jamais à faire un `switch` sur le format : un `switch` recopié dans
- * quinze fichiers finit par diverger, et c'est exactement ce que ce réglage doit
- * éviter. Voir `services/oddsFormat.ts` pour ce que chacun convertit.
+ * ⚠️⚠️ **Ce contexte n'expose délibérément AUCUN moyen de formater une
+ * probabilité du modèle.** Ce n'est pas un oubli : une probabilité de modèle est
+ * une mesure de confiance, pas un prix, et doit rester en % partout (voir le
+ * long commentaire de `services/oddsFormat.ts`). Une fonction `prob()` a existé
+ * ici et a été retirée le 2026-09-10 — elle rendait l'erreur facile, son absence
+ * la rend impossible. Si tu es en train d'en réécrire une, relis d'abord ce
+ * commentaire : ce que tu veux afficher est probablement un `{pct}%`.
  */
 interface OddsFormatContextType {
   /** Format actuellement choisi */
@@ -28,13 +30,7 @@ interface OddsFormatContextType {
   setFormat: (format: OddsFormat) => void;
   /** Tous les formats, pour dessiner un sélecteur */
   formats: OddsFormat[];
-  /**
-   * Écrit une probabilité de sélection (0-100) dans le format courant.
-   * `decimals` n'agit qu'en % ; omis, le nombre part tel quel (voir
-   * `formatProbability`).
-   */
-  prob: (pct: number, decimals?: number) => string;
-  /** Écrit une cote de bookmaker reçue en décimal dans le format courant */
+  /** Écrit une cote de bookmaker, reçue en décimal, dans le format courant */
   odds: (decimal: number) => string;
 }
 
@@ -48,15 +44,11 @@ export function OddsFormatProvider({ children }: { children: ReactNode }) {
     setSelectedOddsFormat(next);
   }, []);
 
-  const prob = useCallback(
-    (pct: number, decimals?: number) => formatProbability(pct, format, decimals),
-    [format],
-  );
   const odds = useCallback((decimal: number) => formatDecimalOdds(decimal, format), [format]);
 
   const value = useMemo<OddsFormatContextType>(
-    () => ({ format, setFormat, formats: ODDS_FORMAT_IDS, prob, odds }),
-    [format, setFormat, prob, odds],
+    () => ({ format, setFormat, formats: ODDS_FORMAT_IDS, odds }),
+    [format, setFormat, odds],
   );
 
   return <OddsFormatContext.Provider value={value}>{children}</OddsFormatContext.Provider>;

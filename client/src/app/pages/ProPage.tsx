@@ -32,13 +32,26 @@ const CURRENCY      = "CAD";
 // left out of this page.
 interface Benefit { title: string; desc: string; }
 
-function useBenefits(): Benefit[] {
+/**
+ * `llmMonthlyQuota` vient du serveur (`GET /subscription/me`) et non d'une
+ * constante d'ici : le plafond IA est dérivé du prix de l'abonnement, donc il
+ * bouge dès qu'on change le prix. Une page de vente qui annonce un chiffre figé
+ * finit par mentir — c'est ce qui s'était produit avec « Analyse IA illimitée ».
+ * Tant que le champ n'est pas là (serveur pas encore déployé), on prend la
+ * formulation sans chiffre plutôt que d'en inventer un.
+ */
+function useBenefits(llmMonthlyQuota?: number): Benefit[] {
   const { t } = useI18n();
   return [
     { title: t("pro.b.bestbets.t"), desc: t("pro.b.bestbets.d") },
     { title: t("pro.b.ev.t"),       desc: t("pro.b.ev.d") },
     { title: t("pro.b.alerts.t"),   desc: t("pro.b.alerts.d") },
-    { title: t("pro.b.llm.t"),      desc: t("pro.b.llm.d") },
+    {
+      title: t("pro.b.llm.t"),
+      desc: llmMonthlyQuota
+        ? t("pro.b.llm.d", { n: llmMonthlyQuota })
+        : t("pro.b.llm.dNoCount"),
+    },
     { title: t("pro.b.markets.t"),  desc: t("pro.b.markets.d") },
     { title: t("pro.b.others.t"),   desc: t("pro.b.others.d") },
   ];
@@ -87,12 +100,15 @@ export function ProPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { t } = useI18n();
-  const benefits = useBenefits();
   const backTo = useProBackTarget();
 
   const [sub,     setSub]     = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
+  // Déclaré APRÈS `sub` : la liste d'avantages a besoin du plafond IA que le
+  // serveur renvoie. L'ordre des hooks reste stable (aucun appel conditionnel),
+  // c'est la seule règle qui compte ici.
+  const benefits = useBenefits(sub?.llmMonthlyQuota);
   // Cadence choisie sur la carte de prix. Mensuel par défaut : c'est le moindre
   // engagement, donc le défaut honnête.
   const [period, setPeriod] = useState<BillingPeriod>("monthly");
