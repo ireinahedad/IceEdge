@@ -216,24 +216,78 @@ async function writePage(relPath, html) {
   await fs.writeFile(full, html, "utf-8");
 }
 
+// ── Chrome traduit ───────────────────────────────────────────────────────────
+// Le gabarit servait un en-tête, un pied de page et un avertissement écrits en
+// dur en anglais. Les pages de match (gameday-gen.mjs) existent dans les deux
+// langues ; la chaîne anglaise de chaque entrée est reproduite au caractère
+// près pour que les pages déjà indexées ne bougent pas d'un octet.
+//
+// L'avertissement français ne traduit PAS « 1-800-GAMBLER », qui est une ligne
+// américaine : le lecteur francophone visé est au Québec, où la ligne est
+// « Jeu : aide et référence » (1 800 461-0140, 24 h sur 24, gratuite et
+// anonyme). Donner un numéro que le lecteur ne peut pas composer ne vaut pas
+// mieux que ne rien donner.
+const CHROME = {
+  en: {
+    home: "ArakIce home",
+    openApp: "Open the app",
+    disclaimer:
+      "ArakIce provides statistical analysis and predictions for informational and entertainment purposes only. Nothing here is financial advice or a guarantee of results. Betting involves risk and you should never wager more than you can afford to lose. Must be of legal gambling age in your jurisdiction. If gambling stops being fun, help is available. In the US, call or text 1-800-GAMBLER.",
+    tagline: "Statistical edge for smarter sports bets.",
+    nav: [
+      { href: "/nhl-predictions-today", label: "NHL Predictions" },
+      { href: "/nhl-player-props", label: "Player Props" },
+      { href: "/nhl-matchups", label: "Matchups" },
+      { href: "/best-nhl-picks-today", label: "Best Picks" },
+    ],
+  },
+  fr: {
+    home: "Accueil ArakIce",
+    openApp: "Ouvrir l'application",
+    disclaimer:
+      "ArakIce publie des analyses statistiques et des projections à titre informatif et de divertissement seulement. Rien ici n'est un conseil financier ni une garantie de résultat. Parier comporte un risque : ne misez jamais plus que ce que vous pouvez perdre. Vous devez avoir l'âge légal pour parier dans votre juridiction. Si le jeu cesse d'être un plaisir, de l'aide existe. Au Québec, Jeu : aide et référence répond 24 h sur 24 au 1 800 461-0140, gratuitement et anonymement.",
+    tagline: "L'avantage statistique, pour parier plus intelligemment.",
+    nav: [
+      { href: "/fr/match", label: "Matchs du jour" },
+      { href: "/nhl-predictions-today", label: "Prédictions LNH" },
+      { href: "/nhl-matchups", label: "Confrontations" },
+    ],
+  },
+};
+
 // ── Shared HTML shell ─────────────────────────────────────────────────────────
 // `disclaimer` : l'avertissement de jeu responsable n'a de sens que sur une page
 // qui parle de pari ou de cotes. Les pages d'affiche n'en parlent plus (elles ne
 // servent que des statistiques de match) et le passent donc à false ; toutes les
 // autres pages le gardent.
-function layout({ title, desc, canonicalPath, jsonld, body, extraHead = "", disclaimer = true }) {
+//
+// `lang` / `alternates` : ajoutés pour les pages de match bilingues. Par défaut
+// (`"en"`, aucune alternative) la sortie est identique à l'octet près à ce que
+// ce fichier produisait avant — c'est la condition pour ne pas rejouer une
+// réindexation complète des pages qui rankent déjà.
+function layout({ title, desc, canonicalPath, jsonld, body, extraHead = "", disclaimer = true, lang = "en", alternates = null, ogLocale = null }) {
   const url = SITE + canonicalPath;
+  const T = CHROME[lang] || CHROME.en;
+  // hreflang : Google exige la réciprocité (chaque version pointe vers toutes
+  // les autres, elle-même comprise) et un `x-default`. Une paire incomplète est
+  // ignorée en silence, ce qui est pire qu'absente : on n'en écrit donc aucune
+  // tant que l'appelant ne fournit pas la liste complète.
+  const hreflang = alternates
+    ? Object.entries(alternates)
+        .map(([hl, p]) => `  <link rel="alternate" hreflang="${esc(hl)}" href="${SITE}${p}" />\n`)
+        .join("")
+    : "";
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${esc(lang === "fr" ? "fr-CA" : lang)}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${esc(title)}</title>
   <meta name="description" content="${esc(desc)}" />
   <link rel="canonical" href="${url}" />
-  <meta name="robots" content="index, follow, max-image-preview:large" />
+${hreflang}  <meta name="robots" content="index, follow, max-image-preview:large" />
   <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="ArakIce" />
+  <meta property="og:site_name" content="ArakIce" />${ogLocale ? `\n  <meta property="og:locale" content="${esc(ogLocale)}" />` : ""}
   <meta property="og:title" content="${esc(title)}" />
   <meta property="og:description" content="${esc(desc)}" />
   <meta property="og:url" content="${url}" />
@@ -260,28 +314,25 @@ ${jsonld ? `  <script type="application/ld+json">\n${JSON.stringify(jsonld, null
 <body>
   <header class="site-header">
     <div class="wrap">
-      <a class="brand" href="${SITE}/" aria-label="ArakIce home">
+      <a class="brand" href="${SITE}/" aria-label="${esc(T.home)}">
         <img class="brand-logo" src="/arakice-logo-80.png" alt="ArakIce" width="40" height="40" />
         <span class="brand-word">ArakIce</span>
       </a>
-      <a class="nav-cta" href="${SITE}/">Open the app</a>
+      <a class="nav-cta" href="${SITE}/">${esc(T.openApp)}</a>
     </div>
   </header>
   <main>
 ${body}
 ${disclaimer ? `    <div class="disclaimer">
-      <p>ArakIce provides statistical analysis and predictions for informational and entertainment purposes only. Nothing here is financial advice or a guarantee of results. Betting involves risk and you should never wager more than you can afford to lose. Must be of legal gambling age in your jurisdiction. If gambling stops being fun, help is available. In the US, call or text 1-800-GAMBLER.</p>
+      <p>${esc(T.disclaimer)}</p>
     </div>` : ""}
   </main>
   <footer class="site-footer">
     <div class="wrap">
       <nav>
-        <a href="${SITE}/nhl-predictions-today">NHL Predictions</a>
-        <a href="${SITE}/nhl-player-props">Player Props</a>
-        <a href="${SITE}/nhl-matchups">Matchups</a>
-        <a href="${SITE}/best-nhl-picks-today">Best Picks</a>
+${T.nav.map((n) => `        <a href="${SITE}${n.href}">${esc(n.label)}</a>`).join("\n")}
       </nav>
-      <span>&copy; ArakIce. Statistical edge for smarter sports bets.</span>
+      <span>&copy; ArakIce. ${esc(T.tagline)}</span>
     </div>
   </footer>
 </body>
@@ -847,3 +898,6 @@ if (RUN_DIRECTLY) {
 }
 
 export { layout, matchupPage, playerPage, propsHubPage, matchupHubPage, loadH2H, h2hStats, writeSitemap };
+// Réexports pour gameday-gen.mjs : il écrit des pages dans le même habillage et
+// doit donc partager exactement ces fonctions, pas des copies qui dérivent.
+export { slugify, esc, nhlLogo, getJSON, pMap, SITE, API, H2H_MIN_PCT, COMMON_LINE };

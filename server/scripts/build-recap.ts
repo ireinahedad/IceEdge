@@ -10,6 +10,8 @@
  *   npm run content:recap -- --game=all        un court + un long PAR match
  *   npm run content:recap -- --no-night        seulement le match, pas la soirée
  *   npm run content:recap -- --require-all     refuser de sortir si un match traîne
+ *   npm run content:recap -- --fixture=..\content\fixtures\night-2026-11-04.json
+ *                                              soirée inventée, hors saison
  *
  * Puis, sans rien coller nulle part :
  *   npm run content:render -- --date=<date>-recap
@@ -42,7 +44,10 @@
 
 import { promises as fs } from 'fs';
 import path from 'path';
-import { fetchGamesByDate, fetchGameDetail } from '../src/services/nhlApiClient';
+import {
+  fetchGamesByDate as apiGamesByDate,
+  fetchGameDetail as apiGameDetail,
+} from '../src/services/nhlApiClient';
 import { BANNED, findBanned } from './lib/compliance';
 
 const REPO_ROOT   = path.resolve(__dirname, '..', '..');
@@ -96,6 +101,74 @@ function arg(name: string): string | null {
   return found ? found.slice(name.length + 3) : null;
 }
 const flag = (name: string) => process.argv.slice(2).includes(`--${name}`);
+
+// ===========================================================================
+// Soirée inventée — `--fixture`
+// ===========================================================================
+
+/**
+ * Hors saison, l'API ne renvoie aucun match : de mai à octobre, le pipeline
+ * entier devient intestable. Le seul moment de l'année où l'on a le temps de
+ * revoir une carte est précisément celui où il n'y a rien à mettre dedans.
+ *
+ * `--fixture=<fichier>` substitue un JSON local aux deux appels réseau, ET RIEN
+ * D'AUTRE : le choix du match de la nuit, le barème des étoiles, le découpage
+ * des plans, les légendes et le contrôle de vocabulaire s'exécutent tels quels.
+ * Ce qui sort est un posts.json ordinaire, que render et video traitent sans
+ * savoir d'où il vient — c'est tout l'intérêt, sinon l'essai ne prouverait rien
+ * du chemin réel.
+ *
+ * Le drapeau est EXPLICITE et ne se déduit jamais d'un contexte : sans lui, pas
+ * une ligne de ce fichier ne change de comportement. La sortie porte la mention
+ * `fixture` dans posts.json et un bandeau dans la console, parce qu'un lot
+ * inventé ne doit pas pouvoir se confondre avec une vraie soirée au moment de
+ * publier.
+ */
+interface Fixture {
+  date?: string;
+  schedule: any[];
+  details: Record<string, any>;
+}
+
+let FIXTURE: Fixture | null = null;
+
+async function fetchGamesByDate(dateKey: string): Promise<any[]> {
+  return FIXTURE ? FIXTURE.schedule : apiGamesByDate(dateKey);
+}
+
+async function fetchGameDetail(id: string): Promise<any> {
+  if (!FIXTURE) return apiGameDetail(id);
+  const detail = FIXTURE.details?.[id];
+  if (!detail) {
+    throw new Error(
+      `fixture : aucun détail pour le match ${id}\n` +
+      `  Chaque entrée de "schedule" doit avoir sa clé dans "details".`,
+    );
+  }
+  return detail;
+}
+
+async function loadFixture(file: string): Promise<Fixture> {
+  // Résolu depuis le répertoire courant : les commandes se lancent depuis
+  // `server\`, un chemin relatif y est donc ce que l'on tape naturellement.
+  const full = path.isAbsolute(file) ? file : path.resolve(process.cwd(), file);
+  let raw: string;
+  try {
+    raw = await fs.readFile(full, 'utf8');
+  } catch {
+    throw new Error(`fixture introuvable : ${full}`);
+  }
+  let data: Fixture;
+  try {
+    data = JSON.parse(raw) as Fixture;
+  } catch (e: any) {
+    throw new Error(`fixture illisible (${full}) : ${e.message}`);
+  }
+  if (!Array.isArray(data.schedule) || !data.schedule.length) {
+    throw new Error(`fixture sans "schedule" utilisable : ${full}`);
+  }
+  return data;
+}
 
 /**
  * La soirée qui vient de se terminer, sans bibliothèque de fuseaux.
@@ -612,12 +685,21 @@ const TARGET = {
 };
 
 async function main() {
-  const dateKey = arg('date') ?? defaultDate();
+  const fixtureArg = arg('fixture');
+  if (fixtureArg) FIXTURE = await loadFixture(fixtureArg);
+
+  // La date de la fixture ne l'emporte jamais sur `--date=` : forcer une autre
+  // date sur une soirée inventée reste possible, et le dossier suit.
+  const dateKey = arg('date') ?? FIXTURE?.date ?? defaultDate();
   const gameArg = (arg('game') ?? '').trim();
   const outKey  = `${dateKey}-recap`;
   const dir     = path.join(OUTPUT_ROOT, outKey);
 
   console.log(`\nbuild-recap — soirée du ${dateKey}\n`);
+  if (FIXTURE) {
+    console.log(`  ⚠ SOIRÉE INVENTÉE — ${fixtureArg}`);
+    console.log(`    Aucun appel à l'API. Ne pas publier ce lot.\n`);
+  }
 
   const games = await loadGames(dateKey, flag('require-all'));
   console.log(`  ${games.length} match(s) terminé(s)`);
@@ -716,14 +798,18 @@ async function main() {
     );
   }
 
+  // Un lot inventé se reconnaît dans le fichier, pas seulement dans la console :
+  // le dossier reste ouvert longtemps après que le bandeau a défilé.
+  const SOURCE = FIXTURE ? `build-recap (fixture ${fixtureArg})` : 'build-recap';
+
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(
     path.join(dir, 'candidates.json'),
-    JSON.stringify({ date: outKey, source: 'build-recap', candidates }, null, 2), 'utf8',
+    JSON.stringify({ date: outKey, source: SOURCE, candidates }, null, 2), 'utf8',
   );
   await fs.writeFile(
     path.join(dir, 'posts.json'),
-    JSON.stringify({ date: outKey, retrospective: false, generated_by: 'build-recap', posts }, null, 2), 'utf8',
+    JSON.stringify({ date: outKey, retrospective: false, generated_by: SOURCE, posts }, null, 2), 'utf8',
   );
 
   console.log('');
@@ -734,6 +820,10 @@ async function main() {
   console.log(`\n  Suite :`);
   console.log(`    npm run content:render -- --date=${outKey}`);
   console.log(`    npm run content:video  -- --date=${outKey}\n`);
+  if (FIXTURE) {
+    console.log(`  ⚠ Lot inventé. Une fois regardé :`);
+    console.log(`    rmdir /s /q ..\\content\\output\\${outKey}\n`);
+  }
 }
 
 main().catch((e) => { console.error(`\n${e.message}\n`); process.exit(1); });

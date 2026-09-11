@@ -10,6 +10,9 @@
     "seo:gen": "node scripts/seo-gen.mjs",
     "seo:sample": "node scripts/seo-gen.mjs --sample",
     "seo:shells": "node scripts/route-shells.mjs",
+    "seo:games": "node scripts/gameday-gen.mjs",
+    "seo:games:dry": "node scripts/gameday-gen.mjs --dry",
+    "seo:h2h": "node scripts/h2h-export.mjs",
     "typecheck": "tsc --noEmit",
     "check:env": "node scripts/check-env.mjs",
     "check:env:dist": "node scripts/check-env.mjs --dist-only"

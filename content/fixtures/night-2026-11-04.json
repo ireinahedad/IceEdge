@@ -1,0 +1,159 @@
+{
+  "_comment": [
+    "Soiree INVENTEE, pour eprouver le rendu et le montage hors saison.",
+    "Aucun de ces matchs n'a eu lieu. Les chiffres sont coherents entre eux",
+    "(scores cumules, arrets = tirs - buts, ppGoals = buts en pp) parce qu'une",
+    "fixture incoherente ne teste que la tolerance du script aux donnees fausses.",
+    "",
+    "Ce que cette soiree exerce volontairement :",
+    "  - MTL@BOS : remontee de 2 buts gagnee en PROLONGATION, 9 buts au sommaire",
+    "    = exactement GOAL_ROWS_MAX, donc la carte summary_card a sa hauteur max.",
+    "  - VAN@SEA : BLANCHISSAGE, donc une etoile GARDIEN (line '28 SV - 1.000')",
+    "    et la branche goalieByName de starsOf.",
+    "  - Deux matchs => scoreboard_card a deux lignes, et les quatre videos.",
+    "  - night-long tombera SOUS sa cible (17 s pour [20,75]) : l'avertissement",
+    "    de build-video est attendu, il prouve que la cible est lue."
+  ],
+  "date": "2026-11-04",
+  "schedule": [
+    {
+      "id": "2026020199",
+      "gameDate": "2026-11-04",
+      "startTimeUTC": "2026-11-05T00:00:00Z",
+      "startTime": "7:00 PM ET",
+      "status": "final",
+      "gameType": "regular",
+      "venue": "TD Garden",
+      "awayTeam": { "id": "MTL", "abbreviation": "MTL", "name": "Canadiens", "score": 5 },
+      "homeTeam": { "id": "BOS", "abbreviation": "BOS", "name": "Bruins", "score": 4 }
+    },
+    {
+      "id": "2026020200",
+      "gameDate": "2026-11-04",
+      "startTimeUTC": "2026-11-05T03:00:00Z",
+      "startTime": "10:00 PM ET",
+      "status": "final",
+      "gameType": "regular",
+      "venue": "Climate Pledge Arena",
+      "awayTeam": { "id": "VAN", "abbreviation": "VAN", "name": "Canucks", "score": 0 },
+      "homeTeam": { "id": "SEA", "abbreviation": "SEA", "name": "Kraken", "score": 5 }
+    }
+  ],
+  "details": {
+    "2026020199": {
+      "id": "2026020199",
+      "gameDate": "2026-11-04",
+      "startTimeUTC": "2026-11-05T00:00:00Z",
+      "venue": "TD Garden",
+      "gameType": "regular",
+      "status": "final",
+      "lastPeriodType": "OT",
+      "away": { "abbr": "MTL", "name": "Montreal Canadiens", "score": 5, "sog": 34 },
+      "home": { "abbr": "BOS", "name": "Boston Bruins", "score": 4, "sog": 35 },
+      "periods": [
+        { "label": "1",  "away": 0, "home": 2 },
+        { "label": "2",  "away": 2, "home": 1 },
+        { "label": "3",  "away": 2, "home": 1 },
+        { "label": "OT", "away": 1, "home": 0 }
+      ],
+      "scoring": [
+        { "period": "1", "time": "04:12", "teamAbbr": "BOS", "scorer": "David Pastrnak",
+          "assists": ["Brad Marchand", "Charlie McAvoy"], "strength": "ev", "isHome": true,  "awayScore": 0, "homeScore": 1 },
+        { "period": "1", "time": "15:47", "teamAbbr": "BOS", "scorer": "Brad Marchand",
+          "assists": ["Pavel Zacha"], "strength": "pp", "isHome": true,  "awayScore": 0, "homeScore": 2 },
+        { "period": "2", "time": "06:33", "teamAbbr": "MTL", "scorer": "Cole Caufield",
+          "assists": ["Nick Suzuki", "Lane Hutson"], "strength": "ev", "isHome": false, "awayScore": 1, "homeScore": 2 },
+        { "period": "2", "time": "12:09", "teamAbbr": "MTL", "scorer": "Nick Suzuki",
+          "assists": ["Cole Caufield"], "strength": "ev", "isHome": false, "awayScore": 2, "homeScore": 2 },
+        { "period": "2", "time": "18:52", "teamAbbr": "BOS", "scorer": "Morgan Geekie",
+          "assists": ["Elias Lindholm"], "strength": "ev", "isHome": true,  "awayScore": 2, "homeScore": 3 },
+        { "period": "3", "time": "09:41", "teamAbbr": "MTL", "scorer": "Juraj Slafkovsky",
+          "assists": ["Nick Suzuki", "Mike Matheson"], "strength": "ev", "isHome": false, "awayScore": 3, "homeScore": 3 },
+        { "period": "3", "time": "14:26", "teamAbbr": "BOS", "scorer": "Pavel Zacha",
+          "assists": ["David Pastrnak"], "strength": "ev", "isHome": true,  "awayScore": 3, "homeScore": 4 },
+        { "period": "3", "time": "19:12", "teamAbbr": "MTL", "scorer": "Cole Caufield",
+          "assists": ["Lane Hutson", "Nick Suzuki"], "strength": "ev", "isHome": false, "awayScore": 4, "homeScore": 4 },
+        { "period": "OT", "time": "03:05", "teamAbbr": "MTL", "scorer": "Lane Hutson",
+          "assists": ["Nick Suzuki"], "strength": "ev", "isHome": false, "awayScore": 5, "homeScore": 4 }
+      ],
+      "threeStars": [
+        { "star": 1, "id": "8481540", "name": "Cole Caufield",  "teamAbbr": "MTL", "position": "R", "goals": 2, "assists": 1, "points": 3 },
+        { "star": 2, "id": "8480018", "name": "Nick Suzuki",    "teamAbbr": "MTL", "position": "C", "goals": 1, "assists": 4, "points": 5 },
+        { "star": 3, "id": "8477956", "name": "David Pastrnak", "teamAbbr": "BOS", "position": "R", "goals": 1, "assists": 1, "points": 2 }
+      ],
+      "teamStats": {
+        "away": { "sog": 34, "pim": 8, "hits": 22, "blockedShots": 14, "giveaways": 9,  "takeaways": 7, "ppGoals": 0 },
+        "home": { "sog": 35, "pim": 6, "hits": 27, "blockedShots": 18, "giveaways": 11, "takeaways": 6, "ppGoals": 1 }
+      },
+      "players": {
+        "away": {
+          "skaters": [],
+          "goalies": [
+            { "id": "8478470", "name": "Samuel Montembeault", "number": 35, "saves": 31, "shotsAgainst": 35,
+              "goalsAgainst": 4, "savePct": 0.886, "decision": "W", "starter": true, "toi": "63:05" }
+          ]
+        },
+        "home": {
+          "skaters": [],
+          "goalies": [
+            { "id": "8480280", "name": "Jeremy Swayman", "number": 1, "saves": 29, "shotsAgainst": 34,
+              "goalsAgainst": 5, "savePct": 0.853, "decision": "L", "starter": true, "toi": "62:48" }
+          ]
+        }
+      }
+    },
+    "2026020200": {
+      "id": "2026020200",
+      "gameDate": "2026-11-04",
+      "startTimeUTC": "2026-11-05T03:00:00Z",
+      "venue": "Climate Pledge Arena",
+      "gameType": "regular",
+      "status": "final",
+      "lastPeriodType": "REG",
+      "away": { "abbr": "VAN", "name": "Vancouver Canucks", "score": 0, "sog": 28 },
+      "home": { "abbr": "SEA", "name": "Seattle Kraken",    "score": 5, "sog": 38 },
+      "periods": [
+        { "label": "1", "away": 0, "home": 2 },
+        { "label": "2", "away": 0, "home": 1 },
+        { "label": "3", "away": 0, "home": 2 }
+      ],
+      "scoring": [
+        { "period": "1", "time": "08:21", "teamAbbr": "SEA", "scorer": "Matty Beniers",
+          "assists": ["Jordan Eberle", "Vince Dunn"], "strength": "ev", "isHome": true, "awayScore": 0, "homeScore": 1 },
+        { "period": "1", "time": "17:03", "teamAbbr": "SEA", "scorer": "Jordan Eberle",
+          "assists": ["Matty Beniers"], "strength": "pp", "isHome": true, "awayScore": 0, "homeScore": 2 },
+        { "period": "2", "time": "11:44", "teamAbbr": "SEA", "scorer": "Jared McCann",
+          "assists": ["Andre Burakovsky", "Vince Dunn"], "strength": "ev", "isHome": true, "awayScore": 0, "homeScore": 3 },
+        { "period": "3", "time": "02:18", "teamAbbr": "SEA", "scorer": "Vince Dunn",
+          "assists": ["Jared McCann"], "strength": "ev", "isHome": true, "awayScore": 0, "homeScore": 4 },
+        { "period": "3", "time": "16:57", "teamAbbr": "SEA", "scorer": "Eeli Tolvanen",
+          "assists": ["Matty Beniers", "Jordan Eberle"], "strength": "ev", "isHome": true, "awayScore": 0, "homeScore": 5 }
+      ],
+      "threeStars": [
+        { "star": 1, "id": "8478916", "name": "Joey Daccord",  "teamAbbr": "SEA", "position": "G", "goals": 0, "assists": 0, "points": 0 },
+        { "star": 2, "id": "8482665", "name": "Matty Beniers", "teamAbbr": "SEA", "position": "C", "goals": 1, "assists": 2, "points": 3 },
+        { "star": 3, "id": "8474586", "name": "Jordan Eberle", "teamAbbr": "SEA", "position": "R", "goals": 1, "assists": 2, "points": 3 }
+      ],
+      "teamStats": {
+        "away": { "sog": 28, "pim": 10, "hits": 19, "blockedShots": 12, "giveaways": 8, "takeaways": 5, "ppGoals": 0 },
+        "home": { "sog": 38, "pim": 8,  "hits": 24, "blockedShots": 15, "giveaways": 7, "takeaways": 9, "ppGoals": 1 }
+      },
+      "players": {
+        "away": {
+          "skaters": [],
+          "goalies": [
+            { "id": "8480947", "name": "Kevin Lankinen", "number": 32, "saves": 33, "shotsAgainst": 38,
+              "goalsAgainst": 5, "savePct": 0.868, "decision": "L", "starter": true, "toi": "58:42" }
+          ]
+        },
+        "home": {
+          "skaters": [],
+          "goalies": [
+            { "id": "8478916", "name": "Joey Daccord", "number": 35, "saves": 28, "shotsAgainst": 28,
+              "goalsAgainst": 0, "savePct": 1.0, "decision": "W", "starter": true, "toi": "60:00" }
+          ]
+        }
+      }
+    }
+  }
+}

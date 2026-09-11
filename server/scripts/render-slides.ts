@@ -27,10 +27,25 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 
-// La table des couleurs de club est celle du produit (client/src). Une seconde
-// table pour les vidéos serait une seconde vérité : le jour où une équipe change
+// La table des couleurs de club est celle du produit. Une seconde table pour
+// les vidéos serait une seconde vérité : le jour où une équipe change
 // d'identité, une seule des deux serait corrigée.
-import { teamColors } from '../../client/src/app/data/teamEmoji';
+//
+// Lue en JSON, et PAS en important teamEmoji.ts, qui exporte pourtant la même
+// chose : `client/package.json` déclare `"type": "module"`, donc tout .ts de ce
+// paquet est un module ES, que ts-node — CommonJS ici, voir server/tsconfig.json
+// — refuse de require(). L'import direct levait ERR_REQUIRE_ESM à chaque rendu.
+// Le JSON échappe à cette règle et se lit des deux côtés sans configuration.
+//
+// Ce fichier reste hors du build du serveur (`server/tsconfig.json` n'inclut que
+// `src/**/*`), il peut donc lire au-delà de `src` sans conséquence sur `dist`.
+import teamColorData from '../../client/src/app/data/team-colors.json';
+
+const TEAM_COLORS: Record<string, { primary: string; secondary: string }> = teamColorData.teams;
+
+/** Même repli que côté produit : une ardoise neutre pour un club inconnu. */
+const teamColors = (abbr: string) =>
+  TEAM_COLORS[abbr?.toUpperCase()] ?? { primary: '#1B2A33', secondary: '#0D1519' };
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const TEMPLATE_DIR = path.join(REPO_ROOT, 'content', 'templates');
@@ -475,6 +490,27 @@ function fill(template: string, vars: Record<string, string>): string {
  * qu'après la vidéo. `post.subject` reste possible pour les cas où le libellé
  * dérivé ne dit rien de lisible.
  */
+/**
+ * « Wednesday November 4 » à partir d'un nom d'entité qui contient une date ISO.
+ *
+ * Midi UTC et `timeZone: 'UTC'` pour la même raison qu'ailleurs : à minuit, un
+ * fuseau négatif renverrait la veille, et la machine qui rend est à UTC+8. La
+ * virgule d'`en-US` (« Wednesday, November 4 ») est évitée en composant les deux
+ * morceaux séparément plutôt qu'en la retirant après coup.
+ *
+ * Chaîne vide si aucune date n'est trouvée : l'appelant retombe alors sur 'NHL'
+ * plutôt que d'afficher « Invalid Date » sur toutes les cartes de la soirée.
+ */
+function nightLabel(name: string): string {
+  const m = /(\d{4}-\d{2}-\d{2})/.exec(name);
+  if (!m) return '';
+  const d = new Date(`${m[1]}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return '';
+  const weekday = d.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+  const dayPart = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
+  return `${weekday} ${dayPart}`;
+}
+
 function subjectOf(entity: any): string {
   if (!entity) return '';
   const name = String(entity.name ?? '').trim();
@@ -485,8 +521,14 @@ function subjectOf(entity: any): string {
     // (« jours loin de la maison = (3.0, 340.0] ») : illisible à l'écran, et
     // dans la mauvaise langue. Le sujet réel de ces angles est la ligue.
     case 'league':
-    case 'games':
       return 'NHL';
+    // Une soirée de récap porte sa DATE, pas le sigle de la ligue. « NHL » sur
+    // un tableau des scores n'apprend rien — on voit bien que c'est du hockey —
+    // alors que la date situe la soirée pour qui tombe sur la vidéo deux jours
+    // plus tard. Le nom de l'entité est « NHL <date ISO> », écrit par
+    // build-recap : la date est donc déjà là, il n'y a rien à recopier.
+    case 'games':
+      return nightLabel(name) || 'NHL';
     // Déjà des abréviations lisibles : « MTL vs FLA », « BOS 3-4 ANA ».
     case 'matchup':
     case 'teams':
