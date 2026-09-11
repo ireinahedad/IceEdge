@@ -7,6 +7,10 @@
  * Security: clients authenticate the socket with their JWT (auth.token).
  * join_room verifies room read-access (membership for private rooms) before
  * subscribing the socket, so private-room broadcasts never leak.
+ *
+ * Depuis le 2026-09-11, un handshake SANS jeton est accepté comme invité —
+ * lecture seule, salons publics uniquement. Voir le commentaire du middleware
+ * d'authentification plus bas pour ce que ça ouvre et ce que ça n'ouvre pas.
  */
 import { Server } from 'socket.io';
 import type { Server as HttpServer } from 'http';
@@ -91,11 +95,45 @@ export function initSocket(httpServer: HttpServer): Server {
     path: '/socket.io',
   });
 
-  // Authenticate every socket connection via JWT
+  /**
+   * Authentification du socket — avec, pour la première fois, un chemin invité.
+   *
+   * ── Ce que ça corrige ───────────────────────────────────────────────────────
+   * L'historique des salons publics est lisible sans compte via HTTP
+   * (`getPublicRoomMessages`), mais le socket exigeait un jeton. Un visiteur
+   * voyait donc les messages et **jamais les nouveaux**, avec « 0 en ligne » et
+   * un point gris : l'application avait l'air cassée. Pire, le refus de
+   * handshake ('Authentication required') contient « auth », donc le client
+   * tentait un refresh, échouait, et affichait « session expirée » à quelqu'un
+   * qui n'avait jamais eu de session. C'est aussi la première chose que voit un
+   * relecteur Apple, qui n'est pas connecté.
+   *
+   * ── La distinction qui compte : jeton ABSENT ≠ jeton INVALIDE ───────────────
+   * Un jeton absent, c'est un visiteur : on le laisse entrer en invité. Un
+   * jeton présent mais refusé, c'est une session expirée : on refuse, et le
+   * `connect_error` du client déclenche son refresh comme avant. Confondre les
+   * deux ferait retomber silencieusement un utilisateur connecté en invité au
+   * bout de 15 minutes — il perdrait ses salons privés sans un mot.
+   *
+   * ── Ce que ça ouvre, et ce que ça n'ouvre pas ──────────────────────────────
+   * Ça ouvre : un socket sans compte peut exister, donc consommer une connexion
+   * (il n'y a pas de plafond par IP ici ; c'est à l'hébergeur de le poser).
+   * Ça n'ouvre pas : ce socket n'a AUCUN chemin d'écriture — les messages
+   * partent en POST HTTP, qui exige toujours un compte —, il ne peut rejoindre
+   * qu'un salon public, et il n'y reçoit que ce que `GET /messages` lui sert
+   * déjà sans compte. Il n'y a donc pas une donnée de plus qui sorte.
+   */
   io.use((socket, next) => {
+    const token = socket.handshake.auth?.token as string | undefined;
+
+    // Invité : lecture seule, salons publics. `userId` reste null et c'est
+    // `join_room` qui applique la règle.
+    if (!token) {
+      (socket.data as any).userId = null;
+      return next();
+    }
+
     try {
-      const token = socket.handshake.auth?.token as string | undefined;
-      if (!token) return next(new Error('Authentication required'));
       const payload = verifyAccessToken(token);
       (socket.data as any).userId = payload.sub;
       next();
@@ -105,12 +143,16 @@ export function initSocket(httpServer: HttpServer): Server {
   });
 
   io.on('connection', (socket) => {
-    const userId = (socket.data as any).userId as string;
+    const userId = (socket.data as any).userId as string | null;
 
     // Client joins a chat room — only if allowed to read it
     socket.on('join_room', async (roomId: string) => {
       try {
-        const allowed = await chatService.canRead(roomId, userId);
+        // Un invité n'a pas d'appartenance à vérifier : la seule question est
+        // de savoir si le salon est public. Même règle que le chemin HTTP.
+        const allowed = userId
+          ? await chatService.canRead(roomId, userId)
+          : await chatService.isPublicRoom(roomId);
         if (!allowed) {
           socket.emit('room_error', { roomId, error: 'Access denied' });
           return;

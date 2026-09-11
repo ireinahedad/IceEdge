@@ -1013,4 +1013,21 @@ export const chatService = {
     try { await assertCanRead(roomId, userId); return true; }
     catch { return false; }
   },
+
+  /**
+   * Le pendant invité de `canRead`, pour le socket.
+   *
+   * Même règle que `getPublicRoomMessages` : un salon public est lisible sans
+   * compte, un salon privé ne l'est jamais. Les deux doivent rester d'accord —
+   * si l'un s'ouvrait sans l'autre, un invité verrait soit un historique qui ne
+   * bouge pas, soit des messages en direct dont il ne peut pas lire l'histoire.
+   *
+   * `false` en cas d'erreur (salon introuvable, base indisponible) : le refus
+   * est le défaut sûr, et le socket répond `room_error` comme pour tout autre
+   * refus.
+   */
+  async isPublicRoom(roomId: string): Promise<boolean> {
+    try { const room = await getRoomRow(roomId); return !room.isPrivate; }
+    catch { return false; }
+  },
 };

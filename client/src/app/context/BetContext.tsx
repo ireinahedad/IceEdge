@@ -1,12 +1,19 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from "react";
 import type { BetLeg } from "../types/bet";
-import { predictionApiService } from "../services/predictionApiService";
 
 interface BetContextValue {
   legs: BetLeg[];
   addLeg: (leg: BetLeg) => void;
   removeLeg: (id: string) => void;
   clearSlip: () => void;
+  /**
+   * Probabilité du coupon, en pourcentage.
+   *
+   * `null` ne veut plus dire « le service n'a pas répondu » (il n'y a plus de
+   * service, voir `combineLegs` plus bas) mais « au moins une jambe porte une
+   * probabilité inexploitable ». Les écrans qui affichaient « — » et
+   * `pred.unavailableParlay` continuent donc de dire quelque chose de vrai.
+   */
   combinedProbability: number | null;
   hasLeg: (legId: string) => boolean;
 }
@@ -70,25 +77,54 @@ function loadSlip(): BetLeg[] {
   }
 }
 
+// ─── Probabilité combinée ─────────────────────────────────────────────────────
+//
+// Jusqu'au 2026-09-11, chaque ajout ou retrait de jambe déclenchait un
+// `POST /api/predict/parlay`. Le commentaire d'alors disait que multiplier côté
+// client « supposerait l'indépendance des jambes » — or c'est exactement ce que
+// le serveur faisait, et rien d'autre (`server/src/routes/ml.routes.ts`) :
+//
+//     const combined = legs.reduce((acc, l) => acc * (l.probability / 100), 1) * 100;
+//     const adjusted = combined * 0.95;
+//
+// Aucune donnée n'était lue, aucune corrélation calculée. Le voyage réseau
+// n'achetait donc rien : même formule, plus la latence, plus la batterie, plus
+// un état de chargement — et sur iPhone un chiffre qui arrivait après le geste,
+// ou pas du tout en tunnel. (Audit pré-freeze iOS, § 5.)
+//
+// ⚠️ Ce qui suit est une COPIE de la formule du serveur, arrondi compris. La
+// route `/predict/parlay` reste en place et inchangée : si elle implémente un
+// jour une vraie corrélation — l'autre branche que l'audit laissait ouverte —
+// c'est ce bloc qu'il faudra rebasculer sur le réseau, pas son coefficient
+// qu'il faudra recopier ici.
+//
+// Le `0.95` reste ce qu'il était : un abattement forfaitaire, pas un modèle.
+
+const PARLAY_HAIRCUT = 0.95;
+
+function combineLegs(legs: BetLeg[]): number | null {
+  if (legs.length === 0) return 0;
+
+  // Une probabilité illisible (jambe relue d'un vieux coupon, carte à moitié
+  // chargée) doit donner « — » et non `NaN%` affiché en gros à l'écran.
+  if (legs.some((l) => !Number.isFinite(l.probability))) return null;
+
+  // Une jambe unique n'est pas un parlay : pas d'abattement, pas d'arrondi.
+  // C'est le comportement d'avant, qui court-circuitait déjà l'appel réseau.
+  if (legs.length === 1) return legs[0].probability;
+
+  const combined = legs.reduce((acc, l) => acc * (l.probability / 100), 1) * 100;
+  // L'arrondi porte sur le produit NON arrondi, comme côté serveur — arrondir
+  // en deux temps donnerait un chiffre différent du sien sur certains coupons.
+  return Math.round(combined * PARLAY_HAIRCUT * 10) / 10;
+}
+
 export function BetProvider({ children }: { children: React.ReactNode }) {
   // Initialiseur paresseux : la relecture n'a lieu qu'au premier rendu.
   const [legs, setLegs] = useState<BetLeg[]>(loadSlip);
-  // `null` = le service de parlay n'a pas répondu. Multiplier les jambes
-  // côté client supposerait leur indépendance et surestimerait le coupon.
-  const [combinedProbability, setCombined] = useState<number | null>(0); // ← useState, not useMemo
 
-  useEffect(() => {
-    if (legs.length === 0) { setCombined(0); return; }
-    if (legs.length === 1) { setCombined(legs[0].probability); return; }
-
-    let alive = true;
-    predictionApiService.getParlayPrediction({
-      legs: legs.map((l) => ({ marketType: l.marketType, probability: l.probability })),
-    })
-      .then((r) => { if (alive) setCombined(r.adjustedProbability); })
-      .catch(() => { if (alive) setCombined(null); });
-    return () => { alive = false; };
-  }, [legs]);
+  // Un calcul, pas un appel réseau. Voir `combineLegs`.
+  const combinedProbability = useMemo(() => combineLegs(legs), [legs]);
 
   // Un coupon vide n'est pas un coupon sauvegardé : on retire la clé plutôt
   // que d'y laisser un tableau vide qui survivrait au TTL.

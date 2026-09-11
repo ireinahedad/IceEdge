@@ -49,6 +49,26 @@ propriétaire. Envoyer un vrai mail et confirmer qu'il arrive, **avant**
 (`@capacitor/preferences`) — sans lui le build iOS perd la session toutes les
 15 minutes. La couture serveur est déjà prête.
 
+**Lot du 2026-09-11 — performance ressentie (§ 5).** Les deux 🟡 qui coûtaient
+un aller-retour réseau sont tombés. Le calcul du parlay revient dans
+`BetContext` : le serveur ne faisait qu'une multiplication, la formule est
+recopiée à l'identique, arrondi compris, et le chiffre s'affiche maintenant
+dans le même rendu que la jambe ajoutée. Et le jeton d'accès se renouvelle
+**avant** d'expirer (60 s de marge, vérifié à l'envoi et non par un minuteur —
+iOS suspend les minuteurs en arrière-plan), ce qui retire le 401 du premier
+appel au retour dans l'application ; le handshake du socket lit le même jeton
+frais. 🔴 **À relire en priorité :** ce lot change une ligne de la couche
+d'authentification — un refresh qui échoue *sans réponse du serveur* n'efface
+plus la session. Détails en § 5.
+
+**Lot du 2026-09-11 (2ᵉ passage) — le chat vu par quelqu'un qui n'a pas de
+compte (§ 6).** Le socket accepte désormais un handshake sans jeton, en lecture
+seule et sur les salons publics uniquement : un visiteur voit les messages
+arriver au lieu d'un historique figé à « 0 en ligne », et ne lit plus « session
+expirée » alors qu'il n'a jamais eu de session. Un jeton *présent mais refusé*
+reste refusé — c'est ce qui garde le refresh du socket vivant. Aucun changement
+côté client. C'est le premier écran d'un relecteur Apple non connecté.
+
 Tout ce qui touchait à la sécurité serveur est traité.
 
 **Comment lire les titres :**
@@ -540,14 +560,31 @@ Le texte d'origine :
 - **Impact :** ~1,5 Mo téléchargé au premier chargement pour peindre une vignette. Sur un forfait mobile, plusieurs secondes et autant de données. C'était de loin le plus gros poste de la page.
 - **Solution appliquée :** trois variantes générées (`arakice-mark-96/192/288.png` — **8 / 24 / 49 ko**), `srcSet` + `sizes` pour que le navigateur ne prenne que ce qu'il affiche (8 ko dans la barre de navigation), `decoding="async"`. Le master reste dans `public/` comme source. **Gain : ~1,48 Mo au premier chargement.**
 
-### 🟡 [MEDIUM] Un aller-retour réseau pour une multiplication
-`BetContext` appelle `POST /api/predict/parlay` **à chaque ajout ou retrait de jambe**. Le commentaire dit que multiplier côté client « supposerait l'indépendance des jambes » — or le serveur fait exactement ça : `legs.reduce((acc, leg) => acc * (leg.probability/100), 1) * 100 * 0.95`. Le voyage réseau n'achète donc rien : même formule, plus la latence, plus la batterie, plus un état de chargement à gérer. Soit calculer côté client, soit implémenter côté serveur une vraie corrélation qui justifie l'appel.
+### ✅ CORRIGÉ · [MEDIUM] Un aller-retour réseau pour une multiplication
+**Fichier :** `client/src/app/context/BetContext.tsx`
+
+- **Problème :** `BetContext` appelait `POST /api/predict/parlay` **à chaque ajout ou retrait de jambe**. Le commentaire disait que multiplier côté client « supposerait l'indépendance des jambes » — or le serveur faisait exactement ça : `legs.reduce((acc, leg) => acc * (leg.probability/100), 1) * 100 * 0.95`. Le voyage réseau n'achetait donc rien : même formule, plus la latence, plus la batterie, plus un état de chargement à gérer.
+- **Solution appliquée (2026-09-11) — la première des deux branches : calcul côté client.** `combineLegs()` reproduit la formule du serveur, **arrondi compris** : l'arrondi porte sur le produit non arrondi, comme dans `ml.routes.ts`, sinon certains coupons afficheraient un dixième de point d'écart avec le chiffre enregistré.
+  - **`useMemo`, plus `useState` + `useEffect`.** Le chiffre est désormais dans le même rendu que la jambe qu'on vient d'ajouter : plus d'état de chargement, plus de « — » qui clignote, et surtout plus de chiffre qui arrive après le geste — ou jamais, en tunnel.
+  - **Le cas à une jambe garde son comportement exact** : pas d'abattement, pas d'arrondi. Il court-circuitait déjà l'appel réseau ; le changer aurait été une modification visible déguisée en optimisation.
+  - **`null` change de sens et le type ne bouge pas.** Il ne veut plus dire « le service n'a pas répondu » mais « au moins une jambe porte une probabilité inexploitable » — une jambe relue d'un vieux coupon, par exemple. Les écrans qui affichaient « — » et `pred.unavailableParlay` disent donc toujours quelque chose de vrai, et aucun appelant n'a été touché.
+  - **La route `/api/predict/parlay` reste en place, inchangée.** Elle est validée et limitée, elle ne coûte rien, et c'est elle qu'il faudra reprendre le jour où l'autre branche — une vraie corrélation entre jambes — sera implémentée. Le commentaire du client le dit à l'endroit exact où quelqu'un serait tenté de recopier un coefficient.
+  - **Ce que ça ne corrige pas :** le `0.95` reste un abattement forfaitaire, pas un modèle. Le déplacer côté client ne le rend ni plus ni moins juste — il le rend seulement gratuit.
 
 ### 🟡 [MEDIUM] Aucune déduplication ni cache des requêtes côté client
 Pas de react-query / SWR : chaque page refait ses `fetch` au montage, et deux composants montés ensemble qui veulent la même donnée font deux appels. C'est partiellement absorbé par les en-têtes `Cache-Control` posés côté serveur (bien pensés), mais pas la déduplication en vol ni la revalidation en arrière-plan.
 
-### 🟡 [MEDIUM] Le premier appel après 15 minutes coûte 3 allers-retours
-Aucun rafraîchissement proactif du jeton : le premier appel après expiration prend un **401**, puis un refresh, puis un rejeu. Sur un réseau mobile, c'est un délai perceptible à chaque retour dans l'app. Rafraîchir en avance (à `exp - 60 s`) supprime le 401.
+### ✅ CORRIGÉ · [MEDIUM] Le premier appel après 15 minutes coûte 3 allers-retours
+**Fichiers :** `client/src/app/services/authService.ts`, `client/src/app/hooks/useChatSocket.ts`
+
+- **Problème :** aucun rafraîchissement proactif du jeton. Le premier appel après expiration prenait un **401**, puis un refresh, puis un rejeu — trois allers-retours, à chaque retour dans l'application, c'est-à-dire au geste le plus fréquent d'une app consultée entre deux périodes d'arrière-plan.
+- **Solution appliquée (2026-09-11) :** `getFreshAccessToken()` renouvelle le jeton **avant** l'envoi quand il expire dans moins de 60 s. Deux allers-retours au lieu de trois ; le 401 + refresh + rejeu reste en place, mais redevient un filet au lieu d'être le chemin normal.
+  - **Vérification à l'envoi, et non un minuteur à `exp - 60 s`**, contrairement à ce que cette ligne recommandait. iOS suspend les minuteurs d'une WKWebView en arrière-plan : celui-ci ne se déclencherait pas pendant l'absence, puis d'un coup au retour, en même temps que les appels de remontage — soit exactement la tempête que la coalescence R3bis.1 existe pour éteindre. Un contrôle à l'envoi ne dépend d'aucun minuteur et donne la bonne réponse au réveil comme à chaud.
+  - **Passe par `tryRefresh`**, donc par la coalescence R3bis.1 : le socket, une requête HTTP et le contrôle proactif ne peuvent pas lancer trois rotations concurrentes.
+  - **Le handshake du socket profite du même jeton.** `useChatSocket` lisait `tokenStore.getAccess()` : au retour d'un écran verrouillé il partait avec un jeton mort, se faisait refuser, et n'attendait le refresh que par `connect_error`. Il passe maintenant par `getFreshAccessToken()`.
+  - ⚠️ **Un garde d'horloge, parce que `exp` se lit avec l'horloge du téléphone.** Une horloge en avance de plus de 15 minutes rend *tout* jeton « bientôt expiré », y compris celui qui vient d'arriver : sans garde, chaque requête déclencherait une rotation — une tempête de refresh silencieuse chez le seul utilisateur concerné. Si le jeton tout neuf paraît encore expirer, le mécanisme se coupe pour ce chargement de page et on repasse au chemin 401, qui ne dépend d'aucune horloge locale.
+  - 🔴 **Un changement de comportement dans la couche d'authentification, à relire en priorité.** Le `catch` de `doRefresh` **n'efface plus la session**. Il ne s'atteint que quand le serveur n'a *rien* répondu — réseau coupé, DNS, délai dépassé —, donc quand il n'a pas refusé le jeton de rafraîchissement. Tant qu'on n'y arrivait qu'après un vrai 401, c'était sans conséquence ; le rafraîchissement proactif l'a rendu atteignable par un simple passage sous un tunnel, et déconnecter quelqu'un dont le jeton est valide parce que son métro est entré en station n'est pas une défense. Un **refus** du serveur (`!res.ok`) ferme toujours la session : l'intention de R3.8 — ne pas rester à afficher des 401 avec une session morte — est intacte.
+  - **Coût assumé :** quand le rafraîchissement proactif vient d'échouer et que la requête prend quand même un 401, un second refresh part. Deux appels au lieu d'un, sur un chemin déjà en train d'échouer.
 
 ### 🟢 [LOW]
 - Les messages du chat s'accumulent sans borne dans `useChatSocket` — plafonner à ~200 en mémoire.
@@ -580,8 +617,16 @@ Le décompte de 351 incluait les écrans internes. Hors ceux-là — `DevMLDashb
 - **`document.documentElement.lang = lang`** dans un effet — volontairement pas au rendu : muter le document pendant le rendu est un effet de bord que React se réserve le droit de rejouer. Sans ça, un lecteur d'écran lisait du français avec une voix anglaise et le correcteur du navigateur se trompait de dictionnaire.
 - **Détection initiale** via `navigator.languages` (l'ordre de préférence réel) avant `navigator.language`, tout ce qui commence par `fr` comptant. **Le choix explicite reste prioritaire** : quelqu'un qui a mis l'anglais sur un téléphone français le garde.
 
-### 🟡 [MEDIUM] Le chat public est figé pour les visiteurs non connectés
-Le middleware socket exige un JWT (`if (!token) return next(new Error(...))`), alors que l'historique des salons publics est lisible sans compte via HTTP. Un invité voit donc les messages **mais jamais les nouveaux**, avec « 0 en ligne » et un point gris — l'app a l'air cassée. Soit autoriser le socket en lecture seule pour les invités, soit afficher explicitement « Connecte-toi pour suivre en direct ».
+### ✅ CORRIGÉ · [MEDIUM] Le chat public est figé pour les visiteurs non connectés
+**Fichiers :** `server/src/socket.ts`, `server/src/services/chat.service.ts`
+
+- **Problème :** le middleware socket exigeait un JWT (`if (!token) return next(new Error(...))`), alors que l'historique des salons publics est lisible sans compte via HTTP (`getPublicRoomMessages`). Un invité voyait donc les messages **mais jamais les nouveaux**, avec « 0 en ligne » et un point gris — l'app avait l'air cassée. Et comme le refus de handshake dit « Authentication required », le client y lisait « auth », tentait un refresh, échouait, et affichait **« session expirée » à quelqu'un qui n'avait jamais eu de session**. C'est aussi le premier écran d'un relecteur Apple, qui n'est pas connecté.
+- **Solution appliquée (2026-09-11) — la première des deux branches : socket en lecture seule pour les invités.** Un handshake sans jeton passe, `userId` reste `null`, et `join_room` demande alors `chatService.isPublicRoom()` au lieu de `canRead()`.
+  - ⚠️ **Jeton ABSENT ≠ jeton INVALIDE, et c'est tout le correctif.** Un jeton absent, c'est un visiteur : il entre en invité. Un jeton présent mais refusé, c'est une session expirée : il est refusé, et le `connect_error` du client déclenche son refresh exactement comme avant. Confondre les deux ferait retomber un utilisateur connecté en invité au bout de 15 minutes — il perdrait ses salons privés sans un mot, et le chemin de refresh du socket (R3bis) deviendrait mort.
+  - **`isPublicRoom` suit la même règle que `getPublicRoomMessages`**, délibérément : si l'un s'ouvrait sans l'autre, un invité verrait soit un historique qui ne bouge pas, soit des messages en direct dont il ne peut pas lire l'histoire.
+  - **Aucun changement côté client n'a été nécessaire.** `RoomChat` montait déjà le socket pour tout le monde, l'envoi est déjà derrière `requireAuth`, et le compte « N en ligne » devient enfin vrai puisque les invités y comptent.
+  - **Ce que ça ouvre :** un socket sans compte peut exister, donc consommer une connexion — il n'y a pas de plafond par IP ici, c'est à l'hébergeur de le poser. **Ce que ça n'ouvre pas :** ce socket n'a aucun chemin d'écriture (les messages partent en POST HTTP, qui exige toujours un compte), il ne peut rejoindre qu'un salon public, et il n'y reçoit que ce que `GET /messages` sert déjà sans compte. Pas une donnée de plus ne sort.
+  - ⬜ **Reste à faire :** un test du handshake invité. Il n'en existe aucun pour `socket.ts` (il faudrait monter un serveur socket.io de test), et en écrire un sans pouvoir le lancer n'aurait rien prouvé — voir l'avertissement du § 9.
 
 ### 🟢 [LOW]
 - Français : mélange de tutoiement et de vouvoiement dans le dictionnaire (7 vs 6 occurrences). Choisir le tutoiement — il colle mieux au ton du reste.
@@ -704,6 +749,18 @@ par le user : lots 1-9 (`357a458`, `816e547`), lot 10 (`a204a20`), lot 11
 
 | 14 | `styles/theme.css`, `pages/league/chat/RoomChat.tsx`, `MembersModal.tsx`, `hooks/useChatSocket.ts`, `context/AuthContext.tsx`, `services/shareImage.ts`, `pages/bet/MySlipsTab.tsx`, `pages/profile/ProfilePage.tsx`, `i18n/index.tsx` | **Lot « ce que le doigt touche » du 2026-09-08.** Dialogues système → `ConfirmDialog`/`toast` (+ 14 clés i18n) · réglages tactiles iOS · `maxLength` + compteur sur le chat · partage d'image qui échoue visiblement · auto-scroll qui respecte la lecture · fusion de l'historique au montage · avatar rechargé au démarrage |
 
+| 15 | `context/BetContext.tsx`, `services/authService.ts`, `hooks/useChatSocket.ts` | **Lot performance du 2026-09-11.** Probabilité du coupon calculée côté client (`useMemo`), la formule du serveur recopiée à l'identique, route `/predict/parlay` laissée en place pour la corrélation future · jeton d'accès renouvelé à `exp - 60 s`, **vérifié à l'envoi** et partagé avec le handshake du socket · le `catch` de `doRefresh` n'efface plus la session quand le serveur n'a rien répondu |
+
+| 16 | `server/src/socket.ts`, `server/src/services/chat.service.ts` | **Lot invités du 2026-09-11.** Handshake socket sans jeton accepté comme invité (lecture seule, salons publics via `isPublicRoom`) ; un jeton présent mais invalide reste refusé, donc le refresh du socket est intact. Aucun changement client |
+
+⚠️ **Ni le 15ᵉ ni le 16ᵉ lot n'ont été vérifiés à la compilation** : la passerelle vers le
+poste Windows ne monte plus les fichiers depuis la mise à jour du 2026-09-08,
+donc ni `tsc --noEmit`, ni `vitest`, ni `vite build` n'ont pu tourner sur le
+code réellement écrit. Les cinq fichiers ont été relus isolément (syntaxe,
+imports, variables inutilisées) et rien d'autre. **À faire avant de committer :
+`npm run typecheck` dans `client/` et dans `server/`, `npm test` côté serveur,
+puis `npm run build`.**
+
 **Vérifié dans le conteneur cloud le 2026-09-08**, sur une installation Linux fraîche du lockfile — `tsc --noEmit` serveur et client, `vitest run` (348/348), `vite build` web **et** `VITE_TARGET=ios`. Les empreintes `md5sum` des 9 fichiers serveur modifiés ont été comparées des deux côtés avant de lancer quoi que ce soit, donc c'est bien le code du disque qui a tourné.
 
 ---
@@ -739,21 +796,23 @@ l'en-tête).
 
 ### 🟡 Améliorations recommandées
 
-~~Texte 8-10 px (351 occurrences)~~ ✅ plancher de 11 px, 283 classes + 6 règles CSS · ~~`systemPrompt` piloté par le client~~ ✅ · ~~validation zod partielle~~ ✅ · ~~timeout du proxy odds~~ ✅ · ~~`NHL_USE_MOCK` non bridé en production~~ ✅ · `confirm()`/`alert()` système · `<label>` + `role="alert"` sur les formulaires · `<html lang>` et détection de langue · chat figé pour les invités · partage d'image qui échoue en silence · réglages tactiles iOS (`tap-highlight`, `user-select`, `overscroll`) · aller-retour réseau pour le parlay · rafraîchissement proactif du jeton · `.fuse_hidden…` versionné · `@figma/my-make-file` et react en peerDependency optionnelle · prix codé en dur · tu/vous · cache client des requêtes.
+~~Texte 8-10 px (351 occurrences)~~ ✅ plancher de 11 px, 283 classes + 6 règles CSS · ~~`systemPrompt` piloté par le client~~ ✅ · ~~validation zod partielle~~ ✅ · ~~timeout du proxy odds~~ ✅ · ~~`NHL_USE_MOCK` non bridé en production~~ ✅ · ~~aller-retour réseau pour le parlay~~ ✅ · ~~rafraîchissement proactif du jeton~~ ✅ · `confirm()`/`alert()` système · `<label>` + `role="alert"` sur les formulaires · `<html lang>` et détection de langue · ~~chat figé pour les invités~~ ✅ · partage d'image qui échoue en silence · réglages tactiles iOS (`tap-highlight`, `user-select`, `overscroll`) · `.fuse_hidden…` versionné · `@figma/my-make-file` et react en peerDependency optionnelle · prix codé en dur · tu/vous · cache client des requêtes.
 
 **Après le 3ᵉ passage du 2026-09-08**, sept 🟡 de plus sont tombés :
 ~~`confirm()`/`alert()` système~~ ✅ · ~~réglages tactiles iOS~~ ✅ ·
 ~~`maxLength` du chat~~ ✅ · ~~partage d'image muet~~ ✅ · ~~auto-scroll~~ ✅ ·
 ~~course historique/socket~~ ✅ · ~~pseudo et avatar vides~~ ✅.
 
-**Ce qui reste ouvert tient en cinq lignes**, et rien n'y est de la sécurité :
-`AppShell`/clavier (mis de côté, voir ci-dessous) · chat figé pour les invités ·
-aller-retour réseau pour le parlay · rafraîchissement proactif du jeton · cache
-client des requêtes · `NHLPredictionsPage` qui transforme encore une erreur en
-état vide · les reliquats de scaffolding (`@figma/my-make-file`, react en
-peerDependency) · prix codé en dur · tu/vous · et le 🟢 « Divers » du § 1 (deux
-routeurs sur `/api/users`, `EMAIL_VERIFICATION_DISABLED` écarté sur décision du
-user).
+**Après les deux lots du 2026-09-11**, trois 🟡 de plus sont tombés :
+~~aller-retour réseau pour le parlay~~ ✅ · ~~rafraîchissement proactif du
+jeton~~ ✅ · ~~chat figé pour les invités~~ ✅.
+
+**Ce qui reste ouvert tient en trois lignes**, et rien n'y est de la sécurité :
+`AppShell`/clavier (mis de côté, voir ci-dessous) · cache client des requêtes ·
+`NHLPredictionsPage` qui transforme encore une erreur en état vide · les
+reliquats de scaffolding (`@figma/my-make-file`, react en peerDependency) · prix
+codé en dur · tu/vous · et le 🟢 « Divers » du § 1 (deux routeurs sur
+`/api/users`, `EMAIL_VERIFICATION_DISABLED` écarté sur décision du user).
 
 ⚠️ **`AppShell` (`w-screen h-screen overflow-hidden` → `100dvh`) et la gestion
 du clavier (`visualViewport`) sont mis de côté volontairement** (décision du

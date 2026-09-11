@@ -16,6 +16,7 @@
 
 import { env } from '../env';
 import { tokenStore } from './tokenStore';
+import { decodeJwtPayload } from './jwt';
 import { fetchWithTimeout, type TimedRequestInit } from './http';
 
 const BASE = env.profileApiUrl;
@@ -34,9 +35,20 @@ const NATIVE_CLIENT_HEADER = { 'X-Client': 'native' } as const;
  * Le rejeu après un 401 rearme son propre délai : deux allers-retours peuvent
  * donc prendre jusqu'à 2 × le budget, ce qui est voulu — le refresh est court
  * et l'utilisateur préfère une session rafraîchie à un abandon.
+ *
+ * Le jeton vient de `getFreshAccessToken()` et non plus de `tokenStore` : le
+ * 401 + refresh + rejeu ci-dessous reste le filet, il n'est plus le chemin
+ * normal du retour dans l'application.
+ *
+ * Conséquence assumée : quand le rafraîchissement proactif vient d'échouer et
+ * que la requête prend quand même un 401, un second refresh part. C'est deux
+ * appels au lieu d'un, sur un chemin déjà en train d'échouer — un refus du
+ * serveur a de toute façon fermé la session et l'écran part vers /login, et
+ * hors ligne les deux échouent immédiatement. Ça ne valait pas un drapeau de
+ * plus à porter à travers la fonction.
  */
 export async function authedFetch(path: string, init: TimedRequestInit = {}): Promise<Response> {
-  const token = await tokenStore.getAccess();
+  const token = await getFreshAccessToken();
   const res = await fetchWithTimeout(`${BASE}${path}`, {
     ...init,
     headers: {
@@ -98,9 +110,92 @@ async function doRefresh(): Promise<boolean> {
     await tokenStore.setTokens(data.access_token, data.refresh_token);
     return true;
   } catch {
-    await tokenStore.clear();
+    // Réseau coupé, DNS, délai dépassé : le serveur n'a RIEN répondu, donc il
+    // n'a pas refusé le jeton de rafraîchissement — on ne sait simplement pas.
+    //
+    // ⚠️ Ce `catch` effaçait la session jusqu'au 2026-09-11. C'était tenable
+    // tant qu'on n'arrivait ici qu'après un vrai 401 ; le rafraîchissement
+    // proactif ci-dessous l'a rendu atteignable par un simple passage sous un
+    // tunnel, et déconnecter quelqu'un dont le jeton est parfaitement valide
+    // parce que son métro est entré en station n'est pas une défense, c'est un
+    // bogue. On rend `false` : l'appel en cours échoue comme n'importe quel
+    // appel hors ligne, l'écran affiche son erreur réseau et son bouton
+    // « Réessayer », et le prochain essai repart avec la même session.
+    //
+    // Seul un REFUS du serveur (`!res.ok` ci-dessus) met fin à la session —
+    // c'est ce que R3.8 voulait dire par « ne pas rester à afficher des 401 ».
     return false;
   }
+}
+
+// --- Rafraîchissement proactif (audit pré-freeze, § 5) -----------------------
+
+/**
+ * Marge avant expiration. 60 s : largement au-dessus d'un aller-retour même
+ * sur un réseau mobile lent, largement en dessous des 15 min de durée de vie du
+ * jeton — donc au plus un refresh supplémentaire par quart d'heure d'usage.
+ */
+const REFRESH_MARGIN_MS = 60_000;
+
+/**
+ * Coupe-circuit d'horloge. Voir `getFreshAccessToken`.
+ *
+ * Volontairement à la portée du chargement de page : un téléphone dont
+ * l'horloge est remise à l'heure recharge de toute façon l'application.
+ */
+let skewGuardTripped = false;
+
+/** `true` si le jeton expire dans moins de `marginMs` — ou est déjà expiré. */
+function expiresWithin(token: string, marginMs: number): boolean {
+  const exp = decodeJwtPayload(token)?.exp;
+  // `exp` illisible : on ne devine pas, on laisse le 401 trancher comme avant.
+  if (typeof exp !== 'number') return false;
+  return Date.now() >= exp * 1000 - marginMs;
+}
+
+/**
+ * Le jeton d'accès, rafraîchi AVANT de partir s'il est sur le point d'expirer.
+ *
+ * ── Ce que ça supprime ──────────────────────────────────────────────────────
+ * Le premier appel après 15 minutes coûtait trois allers-retours : un 401, un
+ * refresh, un rejeu. Sur un réseau mobile c'est un délai visible à chaque
+ * retour dans l'application — et c'est le geste le plus fréquent d'une app
+ * consultée entre deux périodes d'arrière-plan. Ici le refresh part à la place
+ * du 401, pas après lui : deux allers-retours au lieu de trois, et le rejeu du
+ * chemin 401 ne sert plus que de filet.
+ *
+ * ── Pourquoi pas un minuteur à `exp - 60 s` ─────────────────────────────────
+ * Parce que iOS suspend les minuteurs d'une WKWebView en arrière-plan : il ne
+ * se déclencherait pas pendant l'absence, puis d'un coup au retour, en même
+ * temps que les appels de remontage — soit exactement la tempête que la
+ * coalescence R3bis.1 existe pour éteindre. Vérifier à l'envoi ne dépend
+ * d'aucun minuteur et donne la bonne réponse au réveil comme à chaud.
+ *
+ * ── Le garde d'horloge ──────────────────────────────────────────────────────
+ * `exp` est lu avec l'horloge du téléphone. Une horloge en avance de plus de
+ * 15 minutes rend TOUT jeton « bientôt expiré », y compris celui qui vient
+ * d'arriver : sans garde, chaque requête déclencherait une rotation, soit une
+ * tempête de refresh silencieuse chez le seul utilisateur concerné. Si le
+ * jeton tout neuf paraît encore expirer, on arrête les frais pour ce
+ * chargement et on repasse au chemin 401, qui ne dépend d'aucune horloge
+ * locale.
+ *
+ * Passe par `tryRefresh` (et non `doRefresh`) pour partager la coalescence
+ * R3bis.1 avec le chemin 401 et le socket.
+ */
+export async function getFreshAccessToken(): Promise<string | null> {
+  const token = await tokenStore.getAccess();
+  if (!token || skewGuardTripped) return token;
+  if (!expiresWithin(token, REFRESH_MARGIN_MS)) return token;
+
+  // Un échec ne se traite pas ici : soit le serveur a refusé et `doRefresh` a
+  // déjà fermé la session, soit le réseau est tombé et le jeton actuel reste
+  // le meilleur qu'on ait — dans les deux cas on rend ce que le magasin a.
+  await tryRefresh();
+
+  const renewed = await tokenStore.getAccess();
+  if (renewed && expiresWithin(renewed, REFRESH_MARGIN_MS)) skewGuardTripped = true;
+  return renewed;
 }
 
 /**

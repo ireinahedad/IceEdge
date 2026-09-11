@@ -42,8 +42,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io as socketIO, Socket } from 'socket.io-client';
 import type { ChatMessage } from '../types/user';
-import { tokenStore } from '../services/tokenStore';
-import { refreshSession } from '../services/authService';
+import { refreshSession, getFreshAccessToken } from '../services/authService';
 import { env } from '../env';
 
 const SOCKET_URL = env.socketUrl;
@@ -93,8 +92,15 @@ export function useChatSocket(roomId: string | null) {
       // Callback form, not a literal: reading the token is async since R3.6.
       // Socket.io calls this before each (re)connection, so a token refreshed
       // in the meantime is picked up instead of the one captured at mount.
+      //
+      // `getFreshAccessToken` plutôt que `tokenStore.getAccess` : au retour
+      // d'un écran verrouillé, le jeton capturé est souvent mort et le
+      // handshake partait pour se faire refuser, le temps d'un aller-retour,
+      // avant que `connect_error` ne déclenche enfin le refresh. Le jeton est
+      // désormais renouvelé AVANT le handshake, et `connect_error` redevient
+      // ce qu'il devrait être : le cas rare.
       auth: (cb: (data: object) => void) => {
-        tokenStore.getAccess().then((token) => cb({ token: token ?? '' }));
+        getFreshAccessToken().then((token) => cb({ token: token ?? '' }));
       },
     });
     socketRef.current = socket;
