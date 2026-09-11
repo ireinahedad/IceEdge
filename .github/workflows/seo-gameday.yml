@@ -1,0 +1,73 @@
+name: SEO — pages de match
+
+# Une page par match, datée, en français et en anglais. Le run du matin fait
+# deux choses d'un coup : il bascule les matchs de la veille en page de
+# résultat, et il publie l'avant-match de ceux du jour.
+#
+# 11:00 UTC = 7 h HAE / 6 h HNE. Les matchs de la veille se terminent au plus
+# tard vers 07:00 UTC, donc la feuille de match est toujours close à cette
+# heure-là, été comme hiver — c'est pour ça que l'heure n'est pas plus tôt.
+#
+# ⚠️ NE PAS mettre « [skip ci] » dans le message de commit : Vercel l'honore
+# aussi et sauterait le déploiement. Les pages seraient générées, commitées, et
+# jamais mises en ligne — une panne silencieuse. Le CI complet qui repart sur ce
+# commit est le prix à payer, et il est assumé.
+on:
+  schedule:
+    - cron: "0 11 * * *"
+  workflow_dispatch:
+    inputs:
+      days_back:
+        description: "Jours en arrière (rattrapage après un run manqué)"
+        required: false
+        default: "3"
+
+# Un seul run à la fois : deux générations concurrentes pousseraient sur la même
+# branche et la seconde échouerait au push.
+concurrency:
+  group: seo-gameday
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  gameday:
+    name: Générer et publier les pages de match
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Aucune dépendance npm : le générateur n'utilise que la bibliothèque
+      # standard de Node et `fetch`. Pas de `npm ci`, donc pas de lockfile à
+      # maintenir en phase pour une tâche qui tourne tous les jours.
+      - name: Générer
+        env:
+          MATCH_DAYS_BACK: ${{ github.event.inputs.days_back || '3' }}
+          MATCH_DAYS_AHEAD: "2"
+        run: node scripts/gameday-gen.mjs
+
+      - name: Commiter s'il y a du changement
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Chemins explicites : un `git add -A` embarquerait tout ce qui traîne
+          # dans le runner, ce que le dépôt a déjà payé une fois.
+          git add client/public/match client/public/fr/match client/public/sitemap-games.xml
+          if git diff --cached --quiet; then
+            echo "Rien à publier (hors saison, ou aucun match dans la fenêtre)."
+            exit 0
+          fi
+          git commit -m "SEO: pages de match du $(TZ=America/Toronto date +%F)"
+          # `--rebase` : si un humain a poussé pendant la génération, on se
+          # replace au-dessus de son commit au lieu d'échouer au push.
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
