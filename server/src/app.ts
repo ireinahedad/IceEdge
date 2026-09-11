@@ -93,6 +93,29 @@ app.use('/api', apiLimiter);
 app.use('/api/auth',          authLimiter, noStore, authRoutes);
 
 // Users: profile /me routes first (no auth), then admin CRUD (require JWT)
+//
+// ⚠️ DEUX routeurs sur le MÊME préfixe, et l'ordre est significatif (audit
+// pré-freeze iOS, § 1 « Divers »). `profileRoutes` gagne sur tout ce qu'il
+// déclare : `/search` et `/me` passent avant le `/:id` de `userRoutes`, ce qui
+// est voulu — un utilisateur nommé « me » ne peut pas détourner son propre
+// profil. Mais la conséquence l'est moins :
+//
+//   • une route ajoutée à `userRoutes` peut être **silencieusement masquée**
+//     par un motif plus général de `profileRoutes` (tout `/:id` ou `/:userId`),
+//     sans erreur au démarrage ni au build — seulement un 404 ou, pire, la
+//     mauvaise réponse ;
+//   • `authenticate` s'exécute **deux fois** sur `/me/blocks` : une fois par le
+//     `router.use('/me', authenticate)` de `profileRoutes`, une fois par le
+//     `router.use(authenticate)` de `userRoutes`. Sans conséquence (la
+//     vérification du JWT ne touche pas la base), mais c'est le symptôme.
+//
+// La fusion des deux routeurs — ou un préfixe distinct — est **reportée après
+// le freeze iOS** : elle déplace des URL publiques, donc elle demande de
+// retoucher le client et de retester l'authentification, et ce n'est pas un
+// risque à prendre pour un défaut qui ne se manifeste aujourd'hui dans aucun
+// parcours. **En attendant : toute nouvelle route `/api/users/...` se déclare
+// dans `profileRoutes`**, jamais dans `userRoutes`, pour ne pas dépendre de
+// l'ordre ci-dessous.
 app.use('/api/users',         noStore, profileRoutes);
 app.use('/api/users',         noStore, userRoutes);
 

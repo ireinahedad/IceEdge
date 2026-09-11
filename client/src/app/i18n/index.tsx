@@ -479,6 +479,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "nhl.askLLM":        { en: "✨ Ask LLM",          fr: "✨ Demander au LLM" },
   "nhl.today":         { en: "Today",              fr: "Aujourd'hui" },
   "nhl.marketsCount":  { en: "{n} markets",        fr: "{n} marchés" },
+  "nhl.noPredictions":     { en: "No predictions for these games", fr: "Aucune prédiction pour ces matchs" },
+  "nhl.noPredictionsHint": { en: "The model has no probability for them yet — try again closer to puck drop.", fr: "Le modèle n'a pas encore de probabilité pour eux — réessaie plus près du coup d'envoi." },
 
   // NHL rule notes
   "nhl.note.moneyline":       { en: "{abbr} home · historical win% vs opponent", fr: "{abbr} domicile · win% historique vs adversaire" },

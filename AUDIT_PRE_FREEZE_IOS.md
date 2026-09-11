@@ -69,6 +69,15 @@ expirée » alors qu'il n'a jamais eu de session. Un jeton *présent mais refus�
 reste refusé — c'est ce qui garde le refresh du socket vivant. Aucun changement
 côté client. C'est le premier écran d'un relecteur Apple non connecté.
 
+**Lot du 2026-09-11 (3ᵉ passage) — deux dettes de fond.** `NHLPredictionsPage`
+ne reste plus bloquée sur un squelette qui pulse : elle distingue échec,
+« aucun match » et « aucune probabilité », avec « Réessayer » sur les deux
+premiers (le défaut était plus grave que ce que l'audit décrivait — détails
+en § 3). Et `client/package.json` n'est plus `@figma/my-make-file` : `react` et
+`react-dom` sont en `dependencies`, `pnpm.overrides` est parti, le verrou a été
+mis d'accord à la main. ⚠️ **Lance `npm install` dans `client/`** pour confirmer
+que le verrou est juste.
+
 Tout ce qui touchait à la sécurité serveur est traité.
 
 **Comment lire les titres :**
@@ -201,7 +210,7 @@ migration 034 rejouée contre un Postgres 16 réel.
   - `pin` et `role` n'ont volontairement pas de schéma : la route coerce déjà (`!!req.body.pinned`) et `setRole` valide son énumération.
 
 ### 🟢 [LOW] Divers
-- **Deux routeurs montés sur `/api/users`** (`profileRoutes` puis `userRoutes`) : une route ajoutée dans le second peut être silencieusement masquée par le premier, et `authenticate` s'exécute deux fois sur `/me/*`. Fusionner ou préfixer. ⬜ **Ouvert.**
+- **Deux routeurs montés sur `/api/users`** (`profileRoutes` puis `userRoutes`) : une route ajoutée dans le second peut être silencieusement masquée par le premier, et `authenticate` s'exécute deux fois sur `/me/*`. Fusionner ou préfixer. ⬜ **Ouvert — et volontairement reporté après le freeze** (2026-09-11) : fusionner déplace des URL publiques, donc demande de retoucher le client et de retester l'authentification, pour un défaut qui ne se manifeste dans aucun parcours actuel. Ce qui a été fait à la place : la règle d'ordre et la règle de survie sont écrites **au point de montage** dans `app.ts` — toute nouvelle route `/api/users/...` se déclare dans `profileRoutes`, jamais dans `userRoutes`. Un défaut latent documenté là où on le rencontre vaut mieux qu'une refonte de routage trois jours avant un tag.
 - ✅ **CORRIGÉ le 2026-09-08 — `NHL_USE_MOCK` bridé en production** (`services/nhlApiClient.ts`). Il servait des matchs, des équipes et des joueurs **inventés** à de vrais visiteurs sans qu'aucune réponse HTTP ne le dise — le même mode d'échec que les cotes fictives de `/api/odds/live`, et **ça s'est déjà produit** : le relevé du 2026-08-29 l'a trouvé à `true` en production.
   - En production il faut désormais **deux** variables : `NHL_USE_MOCK=true` **et** `ALLOW_MOCK_IN_PRODUCTION=true`. Deux plutôt qu'un refus sec parce que le risque à couvrir est l'**erreur**, pas l'intention — le tir de charge B3 a besoin des données mockées et doit rester possible. Poser les deux n'est pas un geste de distraction.
   - `NHL_USE_MOCK=true` ignoré écrit une ligne de niveau **erreur** au démarrage, en `console.error` (ce module est importé avant que le logger n'existe).
@@ -485,7 +494,15 @@ Les deux défauts sont traités le 2026-09-08 :
 ### 🟡 PARTIELLEMENT CORRIGÉ · [MEDIUM] Les erreurs se transforment en états vides
 **✅ Trois écrans corrigés le 2026-09-06** avec le lot « Réessayer » : l'accueil (un réseau coupé s'affichait en « aucun match ce soir »), le classement de `LeaguePage` (le `.catch(() => [])` du classement ; celui des **salons** garde son repli à dessein — l'onglet Chat a sa propre gestion et le badge de non-lus ne doit pas bloquer le classement), et « Mes coupons » (qui affichait la ligne rouge **et** l'état vide l'un sous l'autre).
 
-**⬜ Reste `NHLPredictionsPage`** (`catch { /* use defaults */ }`) — non traité.
+**✅ `NHLPredictionsPage` traitée le 2026-09-11** — et le défaut réel était pire que « une erreur en état vide ».
+
+- **Ce qu'on trouve en ouvrant le fichier :** `loadingGames` part à `true`, et le premier effet fait `if (games.length === 0) return;` **sans jamais le remettre à `false`**. Un réseau coupé — mais aussi un simple jour sans match — laissait donc la page sur un **squelette qui pulse indéfiniment**. Pas un état vide : un chargement qui ne finit jamais, sans autre recours que de tuer l'application.
+- **La cause de fond :** la page déduisait son état de `games.length`, alors que `[]` veut dire aussi bien « en cours de chargement » que « échec » que « rien ce soir ». `useNHLData` expose pourtant `loading`, `error` **et** `reload` — les trois étaient ignorés.
+- **Solution appliquée :** l'effet lit `nhlLoading` et sort explicitement dans chaque cas ; un `.catch()` ferme la même panne côté `Promise.all` (qui rejette au premier échec non rattrapé) ; et l'écran distingue enfin **trois** situations :
+  1. **échec de chargement** → `ErrorState` avec « Réessayer » câblé sur `reload`, comme les cinq autres écrans du lot du 2026-09-06 ;
+  2. **aucun match** → « Aucun match prévu », sans sous-titre (`stats.noGamesHint` renvoie aux paris de saison « ci-dessous », qui n'existent pas ici) ;
+  3. **des matchs, mais aucune probabilité du backend** → message dédié (2 clés i18n) et « Réessayer ». **Cet écran-là était complètement vide** : ni squelette, ni message, ni bouton — `gameOptions` filtré à zéro par la garde `winPct1 == null` du 2026-08-29, et plus rien à afficher.
+- `setSelectedGame` est maintenant remis à `null` quand la liste est vide : sinon un match sélectionné la veille restait affiché avec ses cotes périmées.
 
 ### ✅ CORRIGÉ · [MEDIUM] Nom d'utilisateur vide après rechargement
 **Fichier :** `client/src/app/context/AuthContext.tsx`
@@ -534,8 +551,11 @@ Les deux défauts sont traités le 2026-09-08 :
 ### 🟡 [MEDIUM] Le serveur démarre même sans base de données
 `server.ts` : `catch (err) { logger.warn('PostgreSQL unavailable - DB features disabled') }` puis il écoute quand même. Un déploiement avec un mauvais `DATABASE_URL` **réussit** ; l'app démarre et toutes les routes auth/profil rendent des 500. La sonde `/health/ready` renvoie bien 503, ce qui limite les dégâts si l'hébergeur la lit — à vérifier sur Railway.
 
-### 🟡 [MEDIUM] Reliquats de scaffolding
-- `client/package.json` s'appelle toujours **`@figma/my-make-file`**, contient un bloc `pnpm.overrides` inutile (tu utilises npm), et déclare **`react` et `react-dom` en `peerDependencies` optionnelles** au lieu de `dependencies`. Ça marche aujourd'hui (le lockfile les contient bien en 18.3.1, non-dev), mais une régénération du lockfile ou un passage à pnpm peut les faire disparaître et casser le build de façon incompréhensible.
+### 🟡 PARTIELLEMENT CORRIGÉ · [MEDIUM] Reliquats de scaffolding
+- ✅ **`client/package.json` corrigé le 2026-09-11.** Le paquet s'appelle `iceedge-client`, le bloc `pnpm.overrides` est parti, et **`react` / `react-dom` sont passés en `dependencies`** (18.3.1, versions inchangées). Le texte d'origine : « ça marche aujourd'hui (le lockfile les contient bien en 18.3.1, non-dev), mais une régénération du lockfile ou un passage à pnpm peut les faire disparaître et casser le build de façon incompréhensible ».
+  - ⚠️ **`package-lock.json` a été modifié à la main, au même endroit et rien d'autre** : l'entrée racine (nom + `dependencies`, `peerDependencies`/`peerDependenciesMeta` retirés) et le drapeau `"peer": true` sur `node_modules/react` et `node_modules/react-dom`, que npm ne pose que pour un paquet installé *uniquement* comme pair. C'était nécessaire parce que `npm ci` refuse de tourner si le verrou et `package.json` divergent — le correctif aurait cassé le build Vercel qu'il est censé protéger.
+  - **À faire de ton côté : lancer `npm install` dans `client/` et vérifier qu'il ne change rien.** Si l'édition est juste, c'est un non-événement ; si elle ne l'est pas, npm réécrit le verrou proprement et le problème est réglé quand même. C'est la seule vérification qui vaille, et elle demande le réseau du poste.
+  - ⬜ `client/public/jerseys/` (dossier vide) et les restes NestJS de `server/dist/` sont laissés tels quels : ni l'un ni l'autre n'est versionné — `dist/` est ignoré et git ne suit pas les dossiers vides —, donc rien n'en part en production et il n'y a rien à committer.
 - `server/dist/` contient encore `app.controller.js`, `app.module.js`, `app.service.js` — des restes d'un squelette NestJS, exclus par `tsconfig.json` mais jamais nettoyés du `dist/` local. (Le Dockerfile repart de zéro, donc ils ne partent pas en prod.)
 - `client/public/jerseys/` est un dossier **vide**.
 
@@ -753,13 +773,18 @@ par le user : lots 1-9 (`357a458`, `816e547`), lot 10 (`a204a20`), lot 11
 
 | 16 | `server/src/socket.ts`, `server/src/services/chat.service.ts` | **Lot invités du 2026-09-11.** Handshake socket sans jeton accepté comme invité (lecture seule, salons publics via `isPublicRoom`) ; un jeton présent mais invalide reste refusé, donc le refresh du socket est intact. Aucun changement client |
 
-⚠️ **Ni le 15ᵉ ni le 16ᵉ lot n'ont été vérifiés à la compilation** : la passerelle vers le
+| 17 | `client/src/app/pages/NHLPredictionsPage.tsx`, `client/src/app/i18n/index.tsx`, `client/package.json`, `client/package-lock.json`, `server/src/app.ts` | **Lot dettes de fond du 2026-09-11.** `NHLPredictionsPage` : `loading`/`error`/`reload` du hook enfin lus, squelette infini fermé, trois états distincts + 2 clés i18n · `package.json` renommé, react/react-dom en `dependencies`, `pnpm.overrides` retiré, verrou aligné à la main · règle d'ordre des deux routeurs `/api/users` écrite au point de montage |
+
+⚠️ **Les lots 15 à 17 n'ont pas été vérifiés à la compilation** : la passerelle vers le
 poste Windows ne monte plus les fichiers depuis la mise à jour du 2026-09-08,
 donc ni `tsc --noEmit`, ni `vitest`, ni `vite build` n'ont pu tourner sur le
-code réellement écrit. Les cinq fichiers ont été relus isolément (syntaxe,
-imports, variables inutilisées) et rien d'autre. **À faire avant de committer :
-`npm run typecheck` dans `client/` et dans `server/`, `npm test` côté serveur,
-puis `npm run build`.**
+code réellement écrit. Les dix fichiers ont été relus isolément (syntaxe,
+imports, variables inutilisées) et rien d'autre ; le verrou npm a été vérifié
+par comparaison structurelle (aucune entrée modifiée hors la racine et les deux
+drapeaux `peer`), ce qui n'est pas la même chose qu'un `npm ci` qui passe.
+**À faire avant de committer : `npm install` dans `client/` (il doit être un
+non-événement), `npm run typecheck` dans `client/` et dans `server/`,
+`npm test` côté serveur, puis `npm run build` web **et** `VITE_TARGET=ios`.**
 
 **Vérifié dans le conteneur cloud le 2026-09-08**, sur une installation Linux fraîche du lockfile — `tsc --noEmit` serveur et client, `vitest run` (348/348), `vite build` web **et** `VITE_TARGET=ios`. Les empreintes `md5sum` des 9 fichiers serveur modifiés ont été comparées des deux côtés avant de lancer quoi que ce soit, donc c'est bien le code du disque qui a tourné.
 
@@ -796,7 +821,7 @@ l'en-tête).
 
 ### 🟡 Améliorations recommandées
 
-~~Texte 8-10 px (351 occurrences)~~ ✅ plancher de 11 px, 283 classes + 6 règles CSS · ~~`systemPrompt` piloté par le client~~ ✅ · ~~validation zod partielle~~ ✅ · ~~timeout du proxy odds~~ ✅ · ~~`NHL_USE_MOCK` non bridé en production~~ ✅ · ~~aller-retour réseau pour le parlay~~ ✅ · ~~rafraîchissement proactif du jeton~~ ✅ · `confirm()`/`alert()` système · `<label>` + `role="alert"` sur les formulaires · `<html lang>` et détection de langue · ~~chat figé pour les invités~~ ✅ · partage d'image qui échoue en silence · réglages tactiles iOS (`tap-highlight`, `user-select`, `overscroll`) · `.fuse_hidden…` versionné · `@figma/my-make-file` et react en peerDependency optionnelle · prix codé en dur · tu/vous · cache client des requêtes.
+~~Texte 8-10 px (351 occurrences)~~ ✅ plancher de 11 px, 283 classes + 6 règles CSS · ~~`systemPrompt` piloté par le client~~ ✅ · ~~validation zod partielle~~ ✅ · ~~timeout du proxy odds~~ ✅ · ~~`NHL_USE_MOCK` non bridé en production~~ ✅ · ~~aller-retour réseau pour le parlay~~ ✅ · ~~rafraîchissement proactif du jeton~~ ✅ · `confirm()`/`alert()` système · `<label>` + `role="alert"` sur les formulaires · `<html lang>` et détection de langue · ~~chat figé pour les invités~~ ✅ · partage d'image qui échoue en silence · réglages tactiles iOS (`tap-highlight`, `user-select`, `overscroll`) · `.fuse_hidden…` versionné · ~~`@figma/my-make-file` et react en peerDependency optionnelle~~ ✅ · prix codé en dur · tu/vous · cache client des requêtes.
 
 **Après le 3ᵉ passage du 2026-09-08**, sept 🟡 de plus sont tombés :
 ~~`confirm()`/`alert()` système~~ ✅ · ~~réglages tactiles iOS~~ ✅ ·
@@ -807,12 +832,15 @@ l'en-tête).
 ~~aller-retour réseau pour le parlay~~ ✅ · ~~rafraîchissement proactif du
 jeton~~ ✅ · ~~chat figé pour les invités~~ ✅.
 
-**Ce qui reste ouvert tient en trois lignes**, et rien n'y est de la sécurité :
+**Après le 3ᵉ lot du 2026-09-11**, deux 🟡 de plus sont tombés :
+~~`NHLPredictionsPage`~~ ✅ (le défaut était un squelette infini, pas un état
+vide) · ~~reliquats de scaffolding dans `client/package.json`~~ ✅.
+
+**Ce qui reste ouvert tient en deux lignes**, et rien n'y est de la sécurité :
 `AppShell`/clavier (mis de côté, voir ci-dessous) · cache client des requêtes ·
-`NHLPredictionsPage` qui transforme encore une erreur en état vide · les
-reliquats de scaffolding (`@figma/my-make-file`, react en peerDependency) · prix
-codé en dur · tu/vous · et le 🟢 « Divers » du § 1 (deux routeurs sur
-`/api/users`, `EMAIL_VERIFICATION_DISABLED` écarté sur décision du user).
+prix codé en dur · tu/vous · et le 🟢 « Divers » du § 1 (deux routeurs sur
+`/api/users`, reporté après le freeze avec la règle écrite dans `app.ts` ;
+`EMAIL_VERIFICATION_DISABLED` écarté sur décision du user).
 
 ⚠️ **`AppShell` (`w-screen h-screen overflow-hidden` → `100dvh`) et la gestion
 du clavier (`visualViewport`) sont mis de côté volontairement** (décision du

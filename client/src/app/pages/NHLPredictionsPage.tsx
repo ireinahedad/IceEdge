@@ -20,6 +20,7 @@ import {
 } from "../data/betMarkets";
 import type { BetMarketType } from "../types/bet";
 import { useI18n } from "../i18n";
+import { ErrorState } from "../components/ErrorState";
 import "../components/rink-theme.css";
 // MLSection used only in PredictionSheet (per-bet click), not here
 
@@ -375,7 +376,9 @@ export function NHLPredictionsPage() {
   const { theme } = useSport();
   const { t, lang } = useI18n();
   const accent = theme.accent;
-  const { games, getTeamById } = useNHLData();
+  // `loading`, `error` et `reload` étaient ignorés jusqu'au 2026-09-11 : voir le
+  // commentaire de l'effet ci-dessous, et l'audit pré-freeze § 3.
+  const { games, getTeamById, loading: nhlLoading, error: nhlError, reload } = useNHLData();
 
   const [gameOptions, setGameOptions] = useState<GameOption[]>([]);
   const [selectedGame, setSelectedGame] = useState<GameOption | null>(null);
@@ -384,8 +387,25 @@ export function NHLPredictionsPage() {
   const [activeCategory, setActiveCategory] = useState<MarketDefinition["category"]>("match");
 
   // ── Charger les stats des équipes pour calculer les règles ─────────────────
+  //
+  // ⚠️ Le `if (games.length === 0) return;` d'origine laissait `loadingGames` à
+  // `true` POUR TOUJOURS. Cette page ne montrait donc pas « une erreur en état
+  // vide », comme le disait l'audit, mais quelque chose de pire : un squelette
+  // qui pulse indéfiniment — sur un réseau coupé, et aussi les jours sans match.
+  // Le seul recours était de tuer l'application. D'où les deux sorties
+  // explicites ci-dessous, et le fait qu'on lise enfin `loading` du hook plutôt
+  // que de déduire l'état de la longueur d'un tableau, qui vaut `[]` aussi bien
+  // pendant le chargement qu'après un échec.
   useEffect(() => {
-    if (games.length === 0) return;
+    if (nhlLoading) { setLoadingGames(true); return; }
+
+    if (games.length === 0) {
+      setGameOptions([]);
+      setSelectedGame(null);
+      setLoadingGames(false);
+      return;
+    }
+
     setLoadingGames(true);
 
     Promise.all(
@@ -432,10 +452,16 @@ export function NHLPredictionsPage() {
     ).then((opts) => {
       const valid = opts.filter((o): o is GameOption => o !== null);
       setGameOptions(valid);
-      if (valid.length > 0) setSelectedGame(valid[0]);
+      setSelectedGame(valid.length > 0 ? valid[0] : null);
+      setLoadingGames(false);
+    }).catch(() => {
+      // `Promise.all` rejette au premier échec non rattrapé. Sans ce `catch`, le
+      // squelette reste — la panne exacte qu'on vient de fermer plus haut.
+      setGameOptions([]);
+      setSelectedGame(null);
       setLoadingGames(false);
     });
-  }, [games, getTeamById, lang]);
+  }, [games, getTeamById, lang, nhlLoading]);
 
   // ── Calculer les prédictions quand le match change ─────────────────────────
   useEffect(() => {
@@ -540,6 +566,35 @@ export function NHLPredictionsPage() {
               <div key={i} className="bg-[#131A12] rounded-2xl h-16 animate-pulse" />
             ))}
           </div>
+        )}
+
+        {/* Trois façons de n'avoir aucun match, et trois réponses différentes.
+            Les confondre est ce qui faisait dire « aucun match ce soir » à un
+            réseau coupé sur les autres écrans (lot « Réessayer » du 2026-09-06). */}
+
+        {/* 1. Le chargement a échoué → on le dit, et on propose de recommencer. */}
+        {!loadingGames && nhlError && gameOptions.length === 0 && (
+          <ErrorState onRetry={reload} error={nhlError} />
+        )}
+
+        {/* 2. Le chargement a réussi, il n'y a simplement pas de match. */}
+        {!loadingGames && !nhlError && games.length === 0 && (
+          <div className="flex flex-col items-center justify-center text-center py-14 px-6">
+            {/* Pas de sous-titre : `stats.noGamesHint` renvoie aux paris de
+                saison « ci-dessous », qui n'existent pas sur cette page. */}
+            <p className="text-white font-bold text-sm">{t("home.noGames")}</p>
+          </div>
+        )}
+
+        {/* 3. Il y a des matchs, mais aucun n'a de probabilité du backend — donc
+               aucun marché n'est calculable. Cet écran-là était VIDE : ni
+               squelette, ni message, ni bouton. */}
+        {!loadingGames && !nhlError && games.length > 0 && gameOptions.length === 0 && (
+          <ErrorState
+            onRetry={reload}
+            title={t("nhl.noPredictions")}
+            hint={t("nhl.noPredictionsHint")}
+          />
         )}
 
         {!loadingGames && selectedGame && (
