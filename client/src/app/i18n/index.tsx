@@ -243,6 +243,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "chat.createFailed": { en: "Could not create room",      fr: "Impossible de créer le salon" },
   "chat.showHidden":   { en: "Show {n} hidden room(s)",    fr: "Afficher {n} salon(s) masqué(s)" },
   "chat.copyCode":     { en: "Copy code",            fr: "Copier le code" },
+  "chat.codeCopied":   { en: "Join code copied",     fr: "Code d'accès copié" },
+  "chat.codeCopyFailed": { en: "Couldn't copy — the code is {code}", fr: "Copie impossible — le code est {code}" },
 
   // ── Modération du chat — PRE_IOS_PLAN.md R4.3 ──
   "chat.messageActions": { en: "Message options",   fr: "Options du message" },

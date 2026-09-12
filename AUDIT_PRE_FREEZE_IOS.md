@@ -3,13 +3,16 @@
 **Date :** 2026-09-04 · **Périmètre :** `client/` (52 k lignes TS/TSX), `server/` (TS/Express), `.github/`, config de build
 **Méthode :** lecture intégrale des routes, services, contextes et middlewares ; `tsc --noEmit` client + serveur (0 erreur) ; inspection de `dist/`, `public/`, CI, Dockerfile, CSP.
 
-## État — 2026-09-08
+## État — 2026-09-11
 
-**14 correctifs appliqués** (13 committés — le lot sécurité serveur est parti
-dans `f91f2ba` —, le 14ᵉ en attente de relecture), dont 3 des 4 findings
-CRITICAL. Sur les 11 blocants du § 10, **4 sont faits** ; les 7
-autres sont tous côté iOS / App Store. La migration `034` est appliquée en
-production.
+**18 lots de correctifs appliqués**, dont les 4 findings CRITICAL et tous les
+HIGH sauf un (le `tokenStore` natif, que l'audit range lui-même en phase 3).
+Les lots 1 à 14 sont committés ; **les lots 15 à 18, écrits le 2026-09-11, sont
+vérifiés mais en attente de relecture et de commit.** Sur les 11 blocants du
+§ 10, 10 sont faits. La migration `034` est appliquée en production.
+
+🔴 **Le seul verrou avant `git tag pre-ios-freeze` n'est pas du code : l'adresse
+de support rebondit.** Plus aucun 🔴 ni 🟠 ouvert côté code.
 
 **Mise à jour 2026-09-08.** Le CRITICAL qui restait (la barre de navigation sous
 l'indicateur d'accueil) est corrigé : **plus aucun CRITICAL ouvert**. Quatre
@@ -75,8 +78,20 @@ ne reste plus bloquée sur un squelette qui pulse : elle distingue échec,
 premiers (le défaut était plus grave que ce que l'audit décrivait — détails
 en § 3). Et `client/package.json` n'est plus `@figma/my-make-file` : `react` et
 `react-dom` sont en `dependencies`, `pnpm.overrides` est parti, le verrou a été
-mis d'accord à la main. ⚠️ **Lance `npm install` dans `client/`** pour confirmer
-que le verrou est juste.
+mis d'accord à la main (`npm install` l'a confirmé juste le jour même).
+
+**Lot du 2026-09-11 (4ᵉ passage) — finitions 🟢.** Plafond de 200 messages en
+mémoire dans `useChatSocket` (ils s'accumulaient sans borne) · `BottomNav` :
+contraste des onglets inactifs porté de **1,97:1 à ≈ 5,2:1**, plus
+`aria-current` et `type="button"` · la copie du code d'accès dit enfin si elle a
+marché, et redonne le code si elle échoue. ⚠️ Le changement de `BottomNav` est
+**visible** : à regarder à l'œil.
+
+✅ **Les quatre lots du 2026-09-11 sont vérifiés** (sur le poste, par la user,
+le jour même) : `npm install` client sans changement, `typecheck` client **et**
+serveur, suite serveur, `vite build` web **et** `VITE_TARGET=ios`. Tout est
+vert. Les quatorze fichiers avaient été écrits sans compilation possible — voir
+l'encadré du § 9 sur ce que ça implique pour les lots suivants.
 
 Tout ce qui touchait à la sécurité serveur est traité.
 
@@ -96,6 +111,9 @@ leurs fichiers.
 **348 tests, 29 fichiers** · `vite build` web et `VITE_TARGET=ios` · les trois
 règles tactiles **lues dans le CSS bâti**, à la bonne profondeur de couche ·
 migration 034 rejouée contre un Postgres 16 réel.
+
+Les lots 15 à 18 ont repassé cette séquence **sur le poste, le 2026-09-11**,
+`npm install` client compris (sans changement du verrou). Tout est vert.
 
 ---
 
@@ -554,7 +572,7 @@ Les deux défauts sont traités le 2026-09-08 :
 ### 🟡 PARTIELLEMENT CORRIGÉ · [MEDIUM] Reliquats de scaffolding
 - ✅ **`client/package.json` corrigé le 2026-09-11.** Le paquet s'appelle `iceedge-client`, le bloc `pnpm.overrides` est parti, et **`react` / `react-dom` sont passés en `dependencies`** (18.3.1, versions inchangées). Le texte d'origine : « ça marche aujourd'hui (le lockfile les contient bien en 18.3.1, non-dev), mais une régénération du lockfile ou un passage à pnpm peut les faire disparaître et casser le build de façon incompréhensible ».
   - ⚠️ **`package-lock.json` a été modifié à la main, au même endroit et rien d'autre** : l'entrée racine (nom + `dependencies`, `peerDependencies`/`peerDependenciesMeta` retirés) et le drapeau `"peer": true` sur `node_modules/react` et `node_modules/react-dom`, que npm ne pose que pour un paquet installé *uniquement* comme pair. C'était nécessaire parce que `npm ci` refuse de tourner si le verrou et `package.json` divergent — le correctif aurait cassé le build Vercel qu'il est censé protéger.
-  - **À faire de ton côté : lancer `npm install` dans `client/` et vérifier qu'il ne change rien.** Si l'édition est juste, c'est un non-événement ; si elle ne l'est pas, npm réécrit le verrou proprement et le problème est réglé quand même. C'est la seule vérification qui vaille, et elle demande le réseau du poste.
+  - ✅ **Vérifié le 2026-09-11 : `npm install` dans `client/` n'a rien changé.** C'était la seule vérification qui valait — l'édition manuelle du verrou est donc juste, et `npm ci` (le chemin du build Vercel et de la CI) part d'un verrou cohérent avec `package.json`.
   - ⬜ `client/public/jerseys/` (dossier vide) et les restes NestJS de `server/dist/` sont laissés tels quels : ni l'un ni l'autre n'est versionné — `dist/` est ignoré et git ne suit pas les dossiers vides —, donc rien n'en part en production et il n'y a rien à committer.
 - `server/dist/` contient encore `app.controller.js`, `app.module.js`, `app.service.js` — des restes d'un squelette NestJS, exclus par `tsconfig.json` mais jamais nettoyés du `dist/` local. (Le Dockerfile repart de zéro, donc ils ne partent pas en prod.)
 - `client/public/jerseys/` est un dossier **vide**.
@@ -607,8 +625,11 @@ Pas de react-query / SWR : chaque page refait ses `fetch` au montage, et deux co
   - **Coût assumé :** quand le rafraîchissement proactif vient d'échouer et que la requête prend quand même un 401, un second refresh part. Deux appels au lieu d'un, sur un chemin déjà en train d'échouer.
 
 ### 🟢 [LOW]
-- Les messages du chat s'accumulent sans borne dans `useChatSocket` — plafonner à ~200 en mémoire.
-- `backdrop-filter: blur(18px)` sur la barre `fixed` : coûteux à repeindre à chaque défilement sur iPhone.
+- ✅ **CORRIGÉ le 2026-09-11 — plafond de 200 messages en mémoire** (`useChatSocket`). Le serveur en sert 100 au chargement, puis chaque `new_message` en ajoutait un **sans borne** pour toute la durée de la session : un salon « live » laissé ouvert deux heures un soir de match finissait avec des milliers d'objets, et autant de nœuds DOM puisque `RoomChat` rend le tableau entier. Sur iPhone, c'est le genre de croissance que WKWebView règle en purgeant l'onglet.
+  - 200 et pas 100 : le double de ce que le serveur envoie, donc un resync ne tronque jamais ce qu'il vient de livrer.
+  - Le plafond est appliqué aux **quatre** points d'entrée (`new_message`, fusion de l'historique, message optimiste, confirmation) — n'en couvrir qu'un laissait la fuite ouverte par les trois autres.
+  - ⚠️ On coupe par le début, donc les plus anciens : quelqu'un qui lit tout en haut d'un salon très actif peut voir le sommet disparaître. Assumé — il n'y a pas de défilement infini ici, ces messages ne sont de toute façon plus rattrapables sans rouvrir le salon.
+- ⬜ `backdrop-filter: blur(18px)` sur la barre `fixed` : coûteux à repeindre à chaque défilement sur iPhone. **Ouvert** — c'est l'identité visuelle de la barre, ça ne se touche pas sans l'avoir mesuré sur un vrai appareil.
 
 ---
 
@@ -650,8 +671,12 @@ Le décompte de 351 incluait les écrans internes. Hors ceux-là — `DevMLDashb
 
 ### 🟢 [LOW]
 - Français : mélange de tutoiement et de vouvoiement dans le dictionnaire (7 vs 6 occurrences). Choisir le tutoiement — il colle mieux au ton du reste.
-- `BottomNav` : `opacity: 0.45` sur `#92A08A` par-dessus un fond translucide → contraste très en dessous de 4.5:1. Pas d'`aria-current="page"` sur l'onglet actif, pas de `type="button"`.
-- Copie du code d'invitation (`navigator.clipboard.writeText`) : aucun retour visuel alors que `sonner` est déjà en place.
+- ✅ **CORRIGÉ le 2026-09-11 — `BottomNav`.** `opacity: 0.45` sur `#92A08A` par-dessus le fond translucide donnait une couleur réelle d'environ `#5F6960` sur `#343C3D`, soit **1,97:1** là où WCAG AA demande 4,5:1 pour du texte de 11 px : quatre libellés de navigation sur cinq étaient illisibles.
+  - L'opacité disparaît — elle éteignait aussi l'icône — et la couleur inactive monte à `#A8B5A0`, ≈ **5,2:1**. La teinte sauge est conservée : c'est la valeur qui était fausse, pas le ton.
+  - `type="button"` et `aria-current="page"` posés. Sans le second, un lecteur d'écran annonce cinq onglets identiques et ne dit jamais où l'on est.
+  - Le contour de l'avatar garde son `#283323` : il borde une photo, il ne porte pas de texte, et l'éclaircir dessinerait un anneau clair autour d'un onglet inactif.
+  - ⚠️ **Changement visible, à vérifier à l'œil** : le contraste est calculé sur un fond *estimé*, la barre étant translucide sur une page qui change.
+- ✅ **CORRIGÉ le 2026-09-11 — copie du code d'accès.** L'appel était `navigator.clipboard?.writeText(...)` et rien d'autre : le menu se fermait, aucun retour, et le `?.` avalait en silence le cas où l'API n'existe pas. Sur iOS ça compte double — `writeText` échoue hors contexte sécurisé ou hors geste utilisateur. `toast.success` en cas de succès, et en cas d'échec un `toast.error` **qui redonne le code**, pour le recopier à la main plutôt que de se demander pourquoi le collage ne donne rien. 2 clés i18n.
 
 ---
 
@@ -775,16 +800,21 @@ par le user : lots 1-9 (`357a458`, `816e547`), lot 10 (`a204a20`), lot 11
 
 | 17 | `client/src/app/pages/NHLPredictionsPage.tsx`, `client/src/app/i18n/index.tsx`, `client/package.json`, `client/package-lock.json`, `server/src/app.ts` | **Lot dettes de fond du 2026-09-11.** `NHLPredictionsPage` : `loading`/`error`/`reload` du hook enfin lus, squelette infini fermé, trois états distincts + 2 clés i18n · `package.json` renommé, react/react-dom en `dependencies`, `pnpm.overrides` retiré, verrou aligné à la main · règle d'ordre des deux routeurs `/api/users` écrite au point de montage |
 
-⚠️ **Les lots 15 à 17 n'ont pas été vérifiés à la compilation** : la passerelle vers le
-poste Windows ne monte plus les fichiers depuis la mise à jour du 2026-09-08,
-donc ni `tsc --noEmit`, ni `vitest`, ni `vite build` n'ont pu tourner sur le
-code réellement écrit. Les dix fichiers ont été relus isolément (syntaxe,
-imports, variables inutilisées) et rien d'autre ; le verrou npm a été vérifié
-par comparaison structurelle (aucune entrée modifiée hors la racine et les deux
-drapeaux `peer`), ce qui n'est pas la même chose qu'un `npm ci` qui passe.
-**À faire avant de committer : `npm install` dans `client/` (il doit être un
-non-événement), `npm run typecheck` dans `client/` et dans `server/`,
-`npm test` côté serveur, puis `npm run build` web **et** `VITE_TARGET=ios`.**
+| 18 | `hooks/useChatSocket.ts`, `components/BottomNav.tsx`, `pages/league/chat/RoomChat.tsx`, `i18n/index.tsx` | **Lot finitions du 2026-09-11.** Plafond de 200 messages appliqué aux quatre points d'entrée · `BottomNav` : opacité retirée, couleur inactive `#A8B5A0` (≈ 5,2:1), `aria-current`, `type="button"` · copie du code d'accès avec `toast` de succès et d'échec (+ 2 clés i18n) |
+
+✅ **Lots 15 à 18 vérifiés sur le poste le 2026-09-11**, par la user :
+`npm install` dans `client/` (non-événement — le verrou édité à la main était
+juste), `npm run typecheck` **client et serveur**, `npm test` côté serveur,
+puis `npm run build` web **et** `VITE_TARGET=ios`. **Tout est vert.**
+
+⚠️ **Comment ces quatre lots ont été écrits, parce que ça change ce que « relu »
+veut dire.** La passerelle vers le poste Windows ne monte plus les fichiers
+depuis la mise à jour du 2026-09-08 : les quatorze fichiers ont été écrits à
+l'aveugle, sans qu'aucun `tsc`, `vitest` ou `vite build` puisse tourner pendant
+l'écriture. La relecture isolée (syntaxe, imports, variables inutilisées) et la
+comparaison structurelle du verrou npm n'étaient que des garde-fous — c'est la
+séquence ci-dessus qui a réellement prouvé quelque chose. **À refaire à
+l'identique pour tout lot écrit tant que la passerelle est cassée.**
 
 **Vérifié dans le conteneur cloud le 2026-09-08**, sur une installation Linux fraîche du lockfile — `tsc --noEmit` serveur et client, `vitest run` (348/348), `vite build` web **et** `VITE_TARGET=ios`. Les empreintes `md5sum` des 9 fichiers serveur modifiés ont été comparées des deux côtés avant de lancer quoi que ce soit, donc c'est bien le code du disque qui a tourné.
 
@@ -821,7 +851,7 @@ l'en-tête).
 
 ### 🟡 Améliorations recommandées
 
-~~Texte 8-10 px (351 occurrences)~~ ✅ plancher de 11 px, 283 classes + 6 règles CSS · ~~`systemPrompt` piloté par le client~~ ✅ · ~~validation zod partielle~~ ✅ · ~~timeout du proxy odds~~ ✅ · ~~`NHL_USE_MOCK` non bridé en production~~ ✅ · ~~aller-retour réseau pour le parlay~~ ✅ · ~~rafraîchissement proactif du jeton~~ ✅ · `confirm()`/`alert()` système · `<label>` + `role="alert"` sur les formulaires · `<html lang>` et détection de langue · ~~chat figé pour les invités~~ ✅ · partage d'image qui échoue en silence · réglages tactiles iOS (`tap-highlight`, `user-select`, `overscroll`) · `.fuse_hidden…` versionné · ~~`@figma/my-make-file` et react en peerDependency optionnelle~~ ✅ · prix codé en dur · tu/vous · cache client des requêtes.
+~~Texte 8-10 px (351 occurrences)~~ ✅ plancher de 11 px, 283 classes + 6 règles CSS · ~~`systemPrompt` piloté par le client~~ ✅ · ~~validation zod partielle~~ ✅ · ~~timeout du proxy odds~~ ✅ · ~~`NHL_USE_MOCK` non bridé en production~~ ✅ · ~~aller-retour réseau pour le parlay~~ ✅ · ~~rafraîchissement proactif du jeton~~ ✅ · `confirm()`/`alert()` système · `<label>` + `role="alert"` sur les formulaires · `<html lang>` et détection de langue · ~~chat figé pour les invités~~ ✅ · partage d'image qui échoue en silence · réglages tactiles iOS (`tap-highlight`, `user-select`, `overscroll`) · `.fuse_hidden…` versionné · ~~`@figma/my-make-file` et react en peerDependency optionnelle~~ ✅ · prix codé en dur · tu/vous · cache client des requêtes. Les 🟢 de `BottomNav` (contraste, `aria-current`, `type`), du plafond de messages et de la copie du code sont tombés le 2026-09-11.
 
 **Après le 3ᵉ passage du 2026-09-08**, sept 🟡 de plus sont tombés :
 ~~`confirm()`/`alert()` système~~ ✅ · ~~réglages tactiles iOS~~ ✅ ·
@@ -836,11 +866,16 @@ jeton~~ ✅ · ~~chat figé pour les invités~~ ✅.
 ~~`NHLPredictionsPage`~~ ✅ (le défaut était un squelette infini, pas un état
 vide) · ~~reliquats de scaffolding dans `client/package.json`~~ ✅.
 
+**Après le 4ᵉ lot du 2026-09-11** (finitions 🟢) : ~~plafond des messages du
+chat~~ ✅ · ~~contraste et sémantique de `BottomNav`~~ ✅ · ~~copie du code
+d'accès sans retour~~ ✅.
+
 **Ce qui reste ouvert tient en deux lignes**, et rien n'y est de la sécurité :
 `AppShell`/clavier (mis de côté, voir ci-dessous) · cache client des requêtes ·
-prix codé en dur · tu/vous · et le 🟢 « Divers » du § 1 (deux routeurs sur
-`/api/users`, reporté après le freeze avec la règle écrite dans `app.ts` ;
-`EMAIL_VERIFICATION_DISABLED` écarté sur décision du user).
+`backdrop-filter` de la barre · prix codé en dur · tu/vous · et le 🟢 « Divers »
+du § 1 (deux routeurs sur `/api/users`, reporté après le freeze avec la règle
+écrite dans `app.ts` ; `EMAIL_VERIFICATION_DISABLED` écarté sur décision du
+user).
 
 ⚠️ **`AppShell` (`w-screen h-screen overflow-hidden` → `100dvh`) et la gestion
 du clavier (`visualViewport`) sont mis de côté volontairement** (décision du

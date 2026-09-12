@@ -14,6 +14,26 @@ const navItems = [
 
 const ACCENT = "#86d1ea"; // ice blue — design system accent
 
+/**
+ * Couleur des onglets INACTIFS.
+ *
+ * Avant le 2026-09-11 : `#92A08A` porté par un conteneur en `opacity: 0.45`.
+ * Sur le fond translucide de la barre (≈ `#343C3D` une fois le dégradé
+ * composé sur le fond sombre de l'app), les 45 % ramenaient la couleur réelle
+ * à ≈ `#5F6960` — soit **1,97:1**, quand WCAG AA demande 4,5:1 pour du texte
+ * de 11 px. Quatre libellés de navigation sur cinq étaient donc illisibles,
+ * et c'est le genre de chose qu'une revue d'accessibilité voit tout de suite.
+ *
+ * Deux changements, pas un : l'opacité disparaît (elle éteignait aussi
+ * l'icône) et la couleur monte à `#A8B5A0`, ≈ **5,2:1** sur ce même fond. La
+ * teinte sauge est conservée — c'est la valeur qui était fausse, pas le ton.
+ *
+ * ⚠️ Le contraste est calculé sur un fond ESTIMÉ : la barre est translucide,
+ * donc son fond réel dépend de la page derrière. À vérifier à l'œil sur les
+ * écrans les plus clairs.
+ */
+const INACTIVE = "#A8B5A0";
+
 export function BottomNav() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -53,9 +73,13 @@ export function BottomNav() {
         return (
           <button
             key={key}
+            type="button"
             onClick={() => navigate(path)}
+            // `aria-current="page"` : sans lui, un lecteur d'écran annonce cinq
+            // onglets identiques et ne dit jamais où l'on se trouve. La couleur
+            // et l'épaisseur du trait le disent à l'œil, à personne d'autre.
+            aria-current={active ? "page" : undefined}
             className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all relative"
-            style={{ opacity: active ? 1 : 0.45 }}
           >
             <div className="relative">
               {isProfile && user?.avatar_url ? (
@@ -63,13 +87,16 @@ export function BottomNav() {
                   src={user.avatar_url}
                   alt="avatar"
                   className="w-5 h-5 rounded-full object-cover"
+                  // Le contour de l'avatar garde son `#283323` d'origine : il
+                  // borde une photo, il ne porte aucun texte, et l'éclaircir
+                  // dessinerait un anneau clair autour d'un onglet inactif.
                   style={{ border: `1.5px solid ${active ? ACCENT : "#283323"}` }}
                 />
               ) : (
                 <Icon
                   size={19}
                   strokeWidth={active ? 2.5 : 1.8}
-                  color={active ? ACCENT : "#92A08A"}
+                  color={active ? ACCENT : INACTIVE}
                 />
               )}
 
@@ -90,7 +117,7 @@ export function BottomNav() {
               )}
             </div>
 
-            <span className="text-[11px]" style={{ color: active ? ACCENT : "#92A08A" }}>
+            <span className="text-[11px]" style={{ color: active ? ACCENT : INACTIVE }}>
               {label}
             </span>
           </button>

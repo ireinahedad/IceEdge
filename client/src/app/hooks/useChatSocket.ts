@@ -47,6 +47,31 @@ import { env } from '../env';
 
 const SOCKET_URL = env.socketUrl;
 
+/**
+ * Plafond du tableau en mémoire.
+ *
+ * Sans lui, les messages s'accumulaient **sans borne** : le serveur en sert 100
+ * au chargement, puis chaque `new_message` en ajoutait un pour toute la durée de
+ * la session. Un salon « live » de soir de match laissé ouvert pendant deux
+ * heures finissait avec des milliers d'objets — et autant de nœuds DOM, puisque
+ * `RoomChat` rend le tableau entier. Sur iPhone, c'est le genre de croissance
+ * que WKWebView règle en purgeant l'onglet.
+ *
+ * 200 : le double de ce que le serveur envoie, donc un resync ne tronque jamais
+ * ce qu'il vient de livrer.
+ *
+ * ⚠️ On coupe par le DÉBUT, donc les plus anciens. Quelqu'un qui lit tout en
+ * haut pendant qu'un salon très actif défile peut voir le sommet disparaître.
+ * C'est assumé : il n'existe aucun défilement infini ici, ces messages-là ne
+ * sont déjà plus rattrapables autrement qu'en rouvrant le salon, et la seule
+ * alternative est de laisser la page grossir jusqu'à se faire tuer.
+ */
+const MAX_MESSAGES = 200;
+
+function capMessages(list: ChatMessage[]): ChatMessage[] {
+  return list.length <= MAX_MESSAGES ? list : list.slice(list.length - MAX_MESSAGES);
+}
+
 export function useChatSocket(roomId: string | null) {
   const socketRef = useRef<Socket | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -150,7 +175,7 @@ export function useChatSocket(roomId: string | null) {
       setMessages((prev) => {
         // Ignore if already present (own optimistic or duplicate)
         if (prev.some((m) => m.id === msg.id)) return prev;
-        return [...prev, msg];
+        return capMessages([...prev, msg]);
       });
     });
 
@@ -203,15 +228,15 @@ export function useChatSocket(roomId: string | null) {
     setMessages((prev) => {
       const byId = new Map(prev.map((m) => [m.id, m]));
       for (const m of msgs) byId.set(m.id, m);
-      return [...byId.values()].sort(
+      return capMessages([...byId.values()].sort(
         (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
-      );
+      ));
     });
   }, []);
 
   /** Optimistically add own message before the server confirms */
   const appendOptimistic = useCallback((msg: ChatMessage) => {
-    setMessages((prev) => [...prev, msg]);
+    setMessages((prev) => capMessages([...prev, msg]));
   }, []);
 
   /** Replace the optimistic message with the confirmed server version.
@@ -219,8 +244,9 @@ export function useChatSocket(roomId: string | null) {
    *  (race: socket fires before the HTTP await resolves → double message). */
   const confirmMessage = useCallback((tempId: string, confirmed: ChatMessage) => {
     setMessages((prev) =>
-      prev
-        .filter((m) => m.id !== confirmed.id && m.id !== tempId).concat(confirmed)
+      capMessages(
+        prev.filter((m) => m.id !== confirmed.id && m.id !== tempId).concat(confirmed)
+      )
     );
   }, []);
 

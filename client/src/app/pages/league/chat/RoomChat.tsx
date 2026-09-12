@@ -297,6 +297,31 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
     });
   }
 
+  /**
+   * Copie du code d'accès du salon.
+   *
+   * L'appel était `navigator.clipboard?.writeText(...)` et rien d'autre : le
+   * menu se fermait, **aucun retour visuel**, et on ne savait pas si ça avait
+   * marché. Sur iOS ça compte double — `writeText` échoue en dehors d'un geste
+   * utilisateur ou hors contexte sécurisé, et le `?.` avalait aussi le cas où
+   * l'API n'existe pas du tout, sans un mot. `sonner` était déjà branché dans
+   * ce fichier.
+   */
+  async function copyJoinCode() {
+    const code = room.joinCode ?? "";
+    setMenuOpen(false);
+    if (!code) return;
+    try {
+      if (!navigator.clipboard) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(code);
+      toast.success(t("chat.codeCopied"));
+    } catch {
+      // Le code reste affiché dans le menu : le dire permet de le recopier à la
+      // main plutôt que de se demander pourquoi le collage ne donne rien.
+      toast.error(t("chat.codeCopyFailed", { code }));
+    }
+  }
+
   async function handleReport(payload: { reason: ReportReason; note?: string }) {
     const target = reportTarget;
     if (!target) return;
@@ -430,7 +455,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
         <div className="chat-tile rounded-2xl mb-3 overflow-hidden flex-shrink-0">
           {room.joinCode && (
             <button
-              onClick={() => { navigator.clipboard?.writeText(room.joinCode ?? ""); setMenuOpen(false); }}
+              onClick={() => { void copyJoinCode(); }}
               className="w-full flex items-center justify-between px-4 py-3 text-left border-b border-white/5 active:bg-white/5"
             >
               <span className="text-white/80 text-xs">{t("chat.joinCode")}</span>
