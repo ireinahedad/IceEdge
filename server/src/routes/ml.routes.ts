@@ -323,7 +323,11 @@ async function computeProbability(body: PredictionRequest): Promise<ProbabilityR
     market === "period2_total_goals" ||
     market === "period3_total_goals"
   ) {
-    return plain(await predictPeriodTotalGoals(line, selection, teamId, opponentId));
+    // La période était perdue ici : les trois marchés appelaient la même
+    // fonction sans dire de laquelle il s'agissait, et recevaient donc le même
+    // chiffre. Le numéro est dans le nom du marché — il suffisait de le lire.
+    const period = Number(market[6]) as 1 | 2 | 3;
+    return plain(await predictPeriodTotalGoals(line, selection, teamId, opponentId, period));
   }
   if (
     market === "period1_winner" ||

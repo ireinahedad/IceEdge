@@ -78,10 +78,22 @@ export interface GameFeatures {
   away_goals_for_pg:   number;
   home_goals_against_pg: number;
   away_goals_against_pg: number;
-  home_pp_pct:         number;   // %
-  away_pp_pct:         number;
-  home_pk_pct:         number;
-  away_pk_pct:         number;
+  /**
+   * PP% / PK% (0-100), ou `undefined` quand on n'a AUCUNE donnée.
+   *
+   * Ces champs valaient auparavant 20 / 80 par défaut côté Node, et le service
+   * Python réécrivait ensuite « tout PK sous 50 % » en 80 %. Les deux couches
+   * comblaient le trou, si bien que le seuil Python ne pouvait plus frapper que
+   * des valeurs RÉELLES : une équipe qui a tué 1 pénalité sur 3 en octobre
+   * (33 %) était silencieusement promue à la moyenne de ligue.
+   *
+   * L'absence de donnée se dit maintenant par l'absence de champ, et une valeur
+   * basse est prise au sérieux.
+   */
+  home_pp_pct?:        number;   // %
+  away_pp_pct?:        number;
+  home_pk_pct?:        number;
+  away_pk_pct?:        number;
   home_last10_win_pct: number;   // 0–1 (from streak/last10 if available)
   away_last10_win_pct: number;
   // ── Nouvelles features (v2) — miroir de ml_service.py GameFeatures
@@ -248,10 +260,11 @@ export async function buildGameFeatures(
     home_goals_against_pg: home?.goalsAgainstPerGame || 3.0,
     away_goals_against_pg: away?.goalsAgainstPerGame || 3.0,
     // PP/PK depuis l'API stats (source fiable), fallback standings puis neutre
-    home_pp_pct:           homeSum?.ppPct ?? home?.ppPct ?? 20,
-    away_pp_pct:           awaySum?.ppPct ?? away?.ppPct ?? 20,
-    home_pk_pct:           homeSum?.pkPct ?? home?.pkPct ?? 80,
-    away_pk_pct:           awaySum?.pkPct ?? away?.pkPct ?? 80,
+    // Pas de repli à 20/80 ici : « inconnu » doit rester distinct de « faible ».
+    home_pp_pct:           homeSum?.ppPct ?? home?.ppPct,
+    away_pp_pct:           awaySum?.ppPct ?? away?.ppPct,
+    home_pk_pct:           homeSum?.pkPct ?? home?.pkPct,
+    away_pk_pct:           awaySum?.pkPct ?? away?.pkPct,
     home_last10_win_pct:   parseLastTen(home?.last10),
     away_last10_win_pct:   parseLastTen(away?.last10),
     // ── Nouvelles features (v2)

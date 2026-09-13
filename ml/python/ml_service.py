@@ -372,6 +372,39 @@ def _confidence_from_lambdas(dist: "ScoreDistribution | None") -> float | None:
     return _CONF_MIN + (_CONF_MAX - _CONF_MIN) * rank
 
 
+# Part du écart à la moyenne qu'un rating ELO conserve d'une saison à l'autre.
+#
+# POURQUOI ELLE EXISTE. `elo_ratings.json` est produit par un script hors ligne
+# et porte une date (`as_of_date`). Rien ne le régénère en cours de saison, et
+# rien ne le corrigeait entre deux saisons : les notes finales de l'an dernier
+# servaient telles quelles pour la suivante. Une équipe à 1600 restait à 1600
+# en septembre, quels que soient les départs, les arrivées et les blessures.
+#
+# La pratique établie en Elo sportif est de ramener les notes vers la moyenne
+# entre deux saisons : l'effectif a changé, une partie du signal ne vaut plus.
+# 2/3 conservés est la valeur usuelle pour le hockey. Appliquée une fois par
+# saison de retard, donc composée si le fichier a deux ans.
+#
+# Ce n'est PAS un substitut à la régénération du fichier : c'est le garde-fou
+# qui empêche des notes périmées d'être servies comme si elles étaient fraîches.
+ELO_CARRYOVER = 2.0 / 3.0
+
+
+def _season_start_year(d: "datetime | None" = None) -> int:
+    """Année de début de la saison NHL contenant `d` (saison à cheval oct.–juin)."""
+    d = d or datetime.now(timezone.utc)
+    return d.year if d.month >= 8 else d.year - 1
+
+
+def _seasons_elapsed_since(as_of_date: str) -> int:
+    """Nombre de saisons complètes entre `as_of_date` (AAAA-MM-JJ) et aujourd'hui."""
+    try:
+        d = datetime.strptime(as_of_date[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return 0
+    return max(0, _season_start_year() - _season_start_year(d))
+
+
 def _try_load_models():
     global _xgb_game, _game_importances
     global _GAME_FEAT_NAMES
@@ -425,8 +458,20 @@ def _try_load_models():
             _elo_ratings  = {k.upper(): float(v) for k, v in (elo.get("ratings") or {}).items()}
             _elo_base     = float(elo.get("base", 1500.0))
             _elo_home_adv = float(elo.get("home_adv", 50.0))
-            print(f"[ML] ✅ elo_ratings.json chargé ({len(_elo_ratings)} équipes, "
-                  f"as of {elo.get('as_of_date', '?')})")
+            as_of         = str(elo.get("as_of_date") or "")
+            seasons_old   = _seasons_elapsed_since(as_of)
+            if seasons_old > 0 and _elo_ratings:
+                keep = ELO_CARRYOVER ** seasons_old
+                _elo_ratings = {k: _elo_base + (v - _elo_base) * keep
+                                for k, v in _elo_ratings.items()}
+                spread = max(_elo_ratings.values()) - min(_elo_ratings.values())
+                print(f"[ML] ✅ elo_ratings.json chargé ({len(_elo_ratings)} équipes, "
+                      f"as of {as_of}) — {seasons_old} saison(s) de retard, "
+                      f"régression vers {_elo_base:.0f} à {keep:.0%} "
+                      f"(étendue ramenée à {spread:.0f} points)")
+            else:
+                print(f"[ML] ✅ elo_ratings.json chargé ({len(_elo_ratings)} équipes, "
+                      f"as of {as_of or '?'})")
         except Exception as e:
             print(f"[ML] ⚠️  elo_ratings.json : {e}")
 
@@ -528,6 +573,16 @@ def poisson_cdf(k: int, lam: float) -> float:
         term *= lam / (i + 1)
     return min(cdf, 1.0)
 
+# Moyennes de ligue des unités spéciales — servies UNIQUEMENT quand le backend
+# dit ne pas savoir (champ absent), jamais pour corriger une valeur mesurée.
+LEAGUE_PP_PCT = 20.0
+LEAGUE_PK_PCT = 80.0
+
+# Avantages numériques obtenus par une équipe sur un match, en moyenne NHL.
+# Même valeur que `predictionEngine.ts` et `nhlPredictions.ts`.
+PP_OPPORTUNITIES = 3.1
+
+
 class _NoEstimate(Exception):
     """Le service ne sait pas pricer ce marché avec ce qu'on lui a donné.
 
@@ -607,10 +662,18 @@ class GameFeatures(BaseModel):
     away_goals_for_pg: float = Field(3.0, ge=0)
     home_goals_against_pg: float = Field(3.0, ge=0)
     away_goals_against_pg: float = Field(3.0, ge=0)
-    home_pp_pct: float = Field(20.0, ge=0, le=100)   # power play %
-    away_pp_pct: float = Field(20.0, ge=0, le=100)
-    home_pk_pct: float = Field(80.0, ge=0, le=100)   # penalty kill % (0 = données manquantes → corrigé en Python)
-    away_pk_pct: float = Field(80.0, ge=0, le=100)
+    # `None` = le backend n'a AUCUNE donnée. Une valeur, même très basse, est
+    # une mesure et doit être prise telle quelle.
+    #
+    # Ces champs étaient des flottants par défaut (20 / 80) et le service
+    # réécrivait ensuite « tout PK sous 50 % » en 80 %. Comme le backend
+    # remplissait DÉJÀ 20/80 quand il ne savait pas, ce seuil ne pouvait plus
+    # frapper que des valeurs réelles : une équipe à 1 pénalité tuée sur 3 en
+    # octobre (33 %) se retrouvait promue à la moyenne de ligue, en silence.
+    home_pp_pct: Optional[float] = Field(None, ge=0, le=100)   # power play %
+    away_pp_pct: Optional[float] = Field(None, ge=0, le=100)
+    home_pk_pct: Optional[float] = Field(None, ge=0, le=100)   # penalty kill %
+    away_pk_pct: Optional[float] = Field(None, ge=0, le=100)
     home_last10_win_pct: float = Field(0.5, ge=0, le=1)
     away_last10_win_pct: float = Field(0.5, ge=0, le=1)
     # ── Nouvelles features (v2) — défauts neutres si le backend ne les envoie pas
@@ -710,8 +773,8 @@ class TeamFuturesFeatures(BaseModel):
     win_pct: float = Field(50.0, ge=0, le=100)
     goals_for_pg: float = Field(3.0, ge=0)
     goals_against_pg: float = Field(3.0, ge=0)
-    pp_pct: float = Field(20.0, ge=0, le=100)
-    pk_pct: float = Field(80.0, ge=0, le=100)
+    pp_pct: Optional[float] = Field(None, ge=0, le=100)
+    pk_pct: Optional[float] = Field(None, ge=0, le=100)
     conference_rank: int = Field(8, ge=1, le=16)
     prop_type: str = Field("playoff")  # "cup"|"conf"|"playoff"
 
@@ -911,6 +974,48 @@ def _p_highest_period(dist: "ScoreDistribution", period: str) -> float:
     if period == "tie":
         return clamp(1.0 - 3.0 * strict, 0.02, 0.98)
     return clamp(strict, 0.02, 0.98)
+
+
+def _has_evidence(team: str | None) -> bool:
+    """Dispose-t-on d'une observation quelconque sur cette équipe ?
+
+    Deux sources, et il en suffit d'une :
+      - `inference_state.json` — statistiques roulantes MoneyPuck, ce que les
+        22 features du modèle de score consomment réellement ;
+      - `elo_ratings.json` — la force d'équipe, seule feature qui survit quand
+        tout le reste manque.
+
+    Les statistiques que le backend envoie (win%, buts, unités spéciales) ne
+    comptent PAS : elles ont toutes une valeur par défaut, donc leur présence ne
+    prouve rien.
+    """
+    if not team:
+        return False
+    t = team.upper()
+    if (_inference_state.get("teams") or {}).get(t):
+        return True
+    return t in _elo_ratings
+
+
+def _require_evidence(f: GameFeatures) -> None:
+    """Refuse de pricer un match sur lequel le service ne sait rien.
+
+    Le seuil est volontairement BAS : une seule équipe reconnue suffit, parce
+    qu'un modèle qui connaît un des deux camps dit encore quelque chose. Ce
+    qu'on interdit, c'est la réponse construite à 100 % sur des défauts.
+    """
+    if _has_evidence(f.home_team) or _has_evidence(f.away_team):
+        return
+    named = " / ".join(x for x in (f.home_team, f.away_team) if x) or "aucune équipe nommée"
+    raise HTTPException(
+        status_code=422,
+        detail={
+            "error": "no_estimate",
+            "market": f.market_type,
+            "message": (f"No data for this matchup ({named}) — every feature would be "
+                        f"a default, so any number returned would be invented."),
+        },
+    )
 
 
 def _subject_view(dist: "ScoreDistribution", subject_is_home: bool) -> "ScoreDistribution":
@@ -1264,9 +1369,28 @@ def _apply_market(
         expl = f"Double chance (gagne reg + OT): {int(prob*100)}%."
 
     elif market == "team_pp_goals":
-        prob = clamp(0.40 + (f.home_pp_pct - 20.0) * 0.007, 0.18, 0.72)
+        # PP% est un taux PAR OCCASION. Sur ~3,1 occasions :
+        #   P(au moins un but en AN) = 1 − e^(−3.1 × PP%)
+        # `0.40 + (pp − 20) × 0.007` rendait 40 % à une équipe à 20 %, là où le
+        # calcul en donne 46 %. Mêmes formule et constante que
+        # `predictionEngine.ts` et `nhlPredictions.ts` : trois moteurs, un seul
+        # chiffre pour un même match.
+        pp = f.home_pp_pct if f.home_pp_pct is not None else LEAGUE_PP_PCT
+        prob = clamp(1.0 - math.exp(-PP_OPPORTUNITIES * (pp / 100.0)), 0.05, 0.95)
         conf = 0.70
-        expl = f"PP% domicile = {f.home_pp_pct:.1f}% → {int(prob*100)}% de marquer en avantage numérique."
+        expl = (f"PP {pp:.1f}% sur ~{PP_OPPORTUNITIES} occasions → "
+                f"{int(prob*100)}% de marquer en avantage numérique.")
+
+    elif market == "team_penalty_kill":
+        # Marché ABSENT de ce dispatcher : il tombait dans le `else`, qui
+        # servait la probabilité moneyline sous le nom « tue toutes ses
+        # pénalités ». Tuer UNE pénalité à 80 % ne fait pas une soirée parfaite
+        # à 80 % — il faut réussir les ~3,1 fois.
+        pk = f.home_pk_pct if f.home_pk_pct is not None else LEAGUE_PK_PCT
+        prob = clamp(math.pow(pk / 100.0, PP_OPPORTUNITIES), 0.05, 0.95)
+        conf = 0.70
+        expl = (f"PK {pk:.1f}% ^ {PP_OPPORTUNITIES} occasions = "
+                f"{int(prob*100)}% de tout tuer.")
 
     elif market == "clean_sheet":
         # P(away team scores 0) = Poisson CDF at k=0
@@ -1500,11 +1624,25 @@ def _build_score_ensemble(dist: "ScoreDistribution | None") -> "ScoreEnsemble | 
 
 @app.post("/predict/game", response_model=MLResponse, dependencies=_PROTECTED)
 def predict_game(f: GameFeatures) -> MLResponse:
+    # 0. A-t-on la moindre donnée sur ce match ?
+    #
+    # C'EST LE GARDE-FOU LE PLUS PROFOND DE CE FICHIER. Tous les champs de
+    # `GameFeatures` ont une valeur par défaut : un corps vide est un corps
+    # VALIDE, et le service répondait alors une probabilité et une confiance
+    # comme pour n'importe quel autre match. Sans `home_team`/`away_team`, la
+    # ligne de features du modèle de score ne contient que des défauts, et le
+    # modèle extrapole sur du vide — mesuré : 55 % avec 66 % de confiance, pour
+    # deux équipes qui n'ont pas de nom.
+    #
+    # Le service n'avait aucun moyen de dire « je ne sais pas ». Il en a un.
+    _require_evidence(f)
+
     # 1. Corriger les valeurs manquantes (0 = pas de données NHL API)
-    if f.home_pk_pct < 50: f.home_pk_pct = 80.0
-    if f.away_pk_pct < 50: f.away_pk_pct = 80.0
-    if f.home_pp_pct == 0: f.home_pp_pct = 20.0
-    if f.away_pp_pct == 0: f.away_pp_pct = 20.0
+    # Moyennes de ligue SEULEMENT là où la donnée manque vraiment.
+    if f.home_pk_pct is None: f.home_pk_pct = LEAGUE_PK_PCT
+    if f.away_pk_pct is None: f.away_pk_pct = LEAGUE_PK_PCT
+    if f.home_pp_pct is None: f.home_pp_pct = LEAGUE_PP_PCT
+    if f.away_pp_pct is None: f.away_pp_pct = LEAGUE_PP_PCT
 
     # 2. Features dérivées
     win_diff  = f.home_win_pct - f.away_win_pct
@@ -1924,8 +2062,8 @@ RANK_PRIORS: dict[str, list[float]] = {
 
 @app.post("/predict/team", response_model=MLResponse, dependencies=_PROTECTED)
 def predict_team(f: TeamFuturesFeatures) -> MLResponse:
-    if f.pk_pct < 50: f.pk_pct = 80.0
-    if f.pp_pct == 0: f.pp_pct = 20.0
+    if f.pk_pct is None: f.pk_pct = LEAGUE_PK_PCT
+    if f.pp_pct is None: f.pp_pct = LEAGUE_PP_PCT
     rank_idx = max(0, min(f.conference_rank - 1, 15))
     priors = RANK_PRIORS.get(f.prop_type, RANK_PRIORS["playoff"])
     base = priors[rank_idx]

@@ -389,8 +389,18 @@ export async function predictMoneyline(
 }
 
 /**
- * Over/Under total goals using combined Poisson.
- * λ = homeTeam.goalsForPerGame + awayTeam.goalsForPerGame
+ * Over/Under du total de buts.
+ *
+ * La cadence de chaque équipe tient compte de la DÉFENSE d'en face
+ * (`expectedGoals` = attaque × défense adverse / moyenne de ligue). L'ancienne
+ * version sommait les deux seules attaques : la meilleure attaque de la ligue
+ * face au meilleur gardien et la même face à la pire défense produisaient le
+ * MÊME total attendu. C'est la correction déjà appliquée à « les deux
+ * marquent » et au blanchissage ; ce marché était le dernier à additionner des
+ * attaques dans le vide.
+ *
+ * Sans statistiques exploitables, on retombe sur la moyenne de ligue par
+ * équipe plutôt que sur un 3.0 rond sorti de nulle part.
  */
 export async function predictTotalGoals(
   line: number,
@@ -403,10 +413,8 @@ export async function predictTotalGoals(
     opponentId ? getTeam(opponentId) : null,
   ]);
 
-  // League average is ~6.0 combined goals/game; use 3.0 per side as default
-  const homeGoals = team?.goalsForPerGame ?? 3.0;
-  const awayGoals = opp?.goalsForPerGame  ?? 3.0;
-  const lambda    = homeGoals + awayGoals;
+  const lambda = (expectedGoals(team, opp) ?? LEAGUE_AVG_GPG)
+               + (expectedGoals(opp, team) ?? LEAGUE_AVG_GPG);
 
   return pct(
     selection === 'over'
@@ -1111,19 +1119,41 @@ export async function predictPeriodWinner(
   return Math.max(20, Math.round(50 + (ml - 50) * 0.55));
 }
 
-/** O/U goals within a single period (~1/3 of full-game scoring). */
+/**
+ * Part des buts d'un match inscrite dans chaque période.
+ *
+ * Les trois périodes ne se valent PAS : la première est la plus prudente, la
+ * deuxième la plus ouverte (changements longs, l'équipe en défense est coincée
+ * dans sa zone). `nhlPredictions.ts` connaît déjà cette répartition et la
+ * nomme `PERIOD_DIST` — mêmes valeurs ici, volontairement, pour que les deux
+ * moteurs ne donnent pas deux totaux différents pour la même période.
+ *
+ * Diviser par 3 rendait P1, P2 et P3 STRICTEMENT identiques : trois tuiles, un
+ * seul chiffre, et le 2e sous-évalué de 10 % relatifs.
+ */
+const PERIOD_SHARE = [0.305, 0.365, 0.330] as const;
+
+/**
+ * O/U des buts d'UNE période.
+ *
+ * `period` est l'indice 1-3. L'appelant DOIT le fournir : sans lui il n'y a pas
+ * de question posée, seulement trois tuiles qui se ressemblent.
+ */
 export async function predictPeriodTotalGoals(
   line: number,
   selection: string,
   teamId?: string,
-  opponentId?: string
+  opponentId?: string,
+  period: 1 | 2 | 3 = 1
 ): Promise<number> {
   const [team, opp] = await Promise.all([
     teamId     ? getTeam(teamId)     : null,
     opponentId ? getTeam(opponentId) : null,
   ]);
-  const combined = (team?.goalsForPerGame ?? 3.0) + (opp?.goalsForPerGame ?? 3.0);
-  const lambda   = combined / 3;
+  // Même cadence que le total du match — défense adverse comprise.
+  const combined = (expectedGoals(team, opp) ?? LEAGUE_AVG_GPG)
+                 + (expectedGoals(opp, team) ?? LEAGUE_AVG_GPG);
+  const lambda   = combined * PERIOD_SHARE[period - 1];
   return pct(
     selection === 'under'
       ? poissonUnder(lambda, line)

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   predictBothTeamsScore,
+  predictTotalGoals,
+  predictPeriodTotalGoals,
   predictTeamPPGoal,
   predictPenaltyKill,
   predictOvertimeWinner,
@@ -547,5 +549,57 @@ describe('ot_winner — la prolongation est presque un pile ou face', () => {
 
   it('sans statistiques exploitables : pile ou face, pas un moneyline gonflé', async () => {
     expect(await predictOvertimeWinner('INCONNU', 'AUTRE', true)).toBe(50);
+  });
+});
+
+
+// ── Totaux : la défense d'en face, et les trois périodes ─────────────────────
+
+describe('predictTotalGoals — la défense adverse compte', () => {
+  beforeEach(() => { fetchTeams.mockImplementation(async () => TEAMS); });
+
+  it('la même attaque ne donne pas le même total selon l\'adversaire', async () => {
+    // ELI attaque à 3.8. Face à WEA (défense à 3.7) et face à WAL (défense à
+    // 2.1), l'ancien `GF + GF` rendait STRICTEMENT le même nombre : il ne
+    // regardait que les deux attaques.
+    const vsPorous = await predictTotalGoals(5.5, 'over', 'ELI', 'WEA');
+    const vsWall   = await predictTotalGoals(5.5, 'over', 'ELI', 'WAL');
+    expect(vsPorous).toBeGreaterThan(vsWall);
+  });
+
+  it('over et under restent complémentaires', async () => {
+    const over  = await predictTotalGoals(5.5, 'over',  'ELI', 'WEA');
+    const under = await predictTotalGoals(5.5, 'under', 'ELI', 'WEA');
+    expect(over + under).toBeCloseTo(100, 0);
+  });
+
+  it('une affiche ouverte dépasse une affiche fermée', async () => {
+    expect(await predictTotalGoals(5.5, 'over', 'WLA', 'WLB'))
+      .toBeGreaterThan(await predictTotalGoals(5.5, 'over', 'TGA', 'TGB'));
+  });
+});
+
+describe('predictPeriodTotalGoals — trois périodes, trois chiffres', () => {
+  beforeEach(() => { fetchTeams.mockImplementation(async () => TEAMS); });
+
+  it('la 2e période est la plus prolifique, la 1re la moins', async () => {
+    const [p1, p2, p3] = await Promise.all([1, 2, 3].map(
+      n => predictPeriodTotalGoals(1.5, 'over', 'ELI', 'WEA', n as 1 | 2 | 3)));
+    // Répartition réelle 30.5 / 36.5 / 33.0 — la même que `nhlPredictions.ts`.
+    // Diviser par 3 rendait les trois tuiles identiques.
+    expect(p2).toBeGreaterThan(p3);
+    expect(p3).toBeGreaterThan(p1);
+  });
+
+  it('les trois ne sont plus le même nombre', async () => {
+    const vals = await Promise.all([1, 2, 3].map(
+      n => predictPeriodTotalGoals(1.5, 'over', 'ELI', 'WEA', n as 1 | 2 | 3)));
+    expect(new Set(vals).size).toBe(3);
+  });
+
+  it('la défense adverse compte ici aussi', async () => {
+    const vsPorous = await predictPeriodTotalGoals(1.5, 'over', 'ELI', 'WEA', 2);
+    const vsWall   = await predictPeriodTotalGoals(1.5, 'over', 'ELI', 'WAL', 2);
+    expect(vsPorous).toBeGreaterThan(vsWall);
   });
 });
