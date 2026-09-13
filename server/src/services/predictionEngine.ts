@@ -44,6 +44,54 @@ function pct(p: number): number {
   return Math.round(Math.max(3, Math.min(97, p * 100)));
 }
 
+// ── Buts d'une équipe sur un match ────────────────────────────────────────────
+
+/** Buts/match moyens d'une équipe NHL. */
+const LEAGUE_AVG_GPG = 3.05;
+
+/** Taux de « les deux équipes marquent » observé en NHL, toutes affiches. */
+const LEAGUE_BTTS_RATE = 0.83;
+
+/** Part des équipe-matchs NHL terminés sans marquer. Cale GOALS_DISPERSION_K. */
+const LEAGUE_SHUTOUT_RATE = 0.085;
+
+/**
+ * Dispersion (paramètre `k` d'une binomiale négative) des buts d'UNE équipe sur
+ * UN match, calée sur le taux de blanchissage réel.
+ *
+ * POURQUOI PAS POISSON — à λ = 3.0, Poisson prédit e⁻³ = 5.0 % de
+ * blanchissages ; la NHL en observe ~8.5 %. Un blanchissage sur trois manquait,
+ * et comme BTTS multiplie les deux compléments, ce marché sortait à
+ * (1 − e⁻³)² ≈ 90 % POUR TOUS LES MATCHS — c'est le 90 % vu à l'écran.
+ *
+ * k = 6.5 recolle P(0) à l'observé :  (6.5 / 9.5)^6.5 = 8.5 %.
+ * k → ∞ redonnerait Poisson.
+ */
+const GOALS_DISPERSION_K = 6.5;
+
+/** P(une équipe de cadence λ marque au moins un but), binomiale négative. */
+function pScoresAtLeastOnce(lambda: number): number {
+  const lam = Math.max(0.05, lambda);
+  const k   = GOALS_DISPERSION_K;
+  return 1 - Math.pow(k / (k + lam), k);
+}
+
+/**
+ * Cadence de buts attendue d'une équipe FACE À CET ADVERSAIRE : son attaque
+ * pondérée par la défense d'en face, ramenée à l'échelle de la ligue.
+ * Retourne `null` quand une des deux stats manque ou qu'aucun match n'a encore
+ * été joué (intersaison, présaison) — l'appelant doit alors servir le prior de
+ * ligue plutôt qu'un chiffre fabriqué à partir de valeurs par défaut.
+ */
+function expectedGoals(attack: any | null, defense: any | null): number | null {
+  const gf = attack?.goalsForPerGame;
+  const ga = defense?.goalsAgainstPerGame;
+  const gpA = attack?.gamesPlayed  ?? 0;
+  const gpD = defense?.gamesPlayed ?? 0;
+  if (!gf || !ga || gf <= 0 || ga <= 0 || gpA < 1 || gpD < 1) return null;
+  return Math.max(0.8, Math.min(5.5, (gf * ga) / LEAGUE_AVG_GPG));
+}
+
 // ── Team lookup ───────────────────────────────────────────────────────────────
 
 export async function getTeam(id: string): Promise<any | null> {
@@ -76,6 +124,9 @@ export async function predictMoneyline(
     opponentId ? getTeam(opponentId) : null,
   ]);
 
+  // `?? 50` et non `|| 50` : une équipe réellement à 0 % de victoires doit
+  // rester à 0. `fetchTeams` renvoie maintenant `null` (et non 0) quand aucun
+  // match n'a été joué, ce qui est précisément ce que `??` rattrape.
   const wA = (team?.winPct ?? 50) / 100;
   const wB = (opp?.winPct  ?? 50) / 100;
 
@@ -288,7 +339,25 @@ export async function predictTeamToScore(
   return Math.round(50 + (ml - 50) * 0.6);
 }
 
-/** Both teams score: P(each side nets ≥1) using per-side Poisson. */
+/**
+ * Les deux équipes marquent : P(chaque camp inscrit ≥1 but).
+ *
+ * Deux corrections par rapport à la version Poisson :
+ *
+ *  1. **La cadence tient compte de l'adversaire.** On croisait la seule attaque
+ *     de chaque équipe ; une attaque médiocre face à une défense poreuse et la
+ *     même face au meilleur gardien de la ligue donnaient le même chiffre.
+ *  2. **La dispersion est calibrée** (cf. GOALS_DISPERSION_K) : Poisson
+ *     sous-estime les blanchissages d'un tiers, ce qui figeait ce marché à
+ *     ~90 % quelle que soit l'affiche.
+ *
+ * Sans stats exploitables (intersaison, présaison, équipe inconnue), on sert le
+ * taux de ligue plutôt qu'un nombre dérivé de λ = 3.0 par défaut : c'est le
+ * même aveu d'ignorance, mais avec la bonne valeur.
+ *
+ * La prolongation ne change rien : un 0–0 après 60 minutes finit 1–0, donc une
+ * équipe reste blanchie dans tous les cas.
+ */
 export async function predictBothTeamsScore(
   teamId?: string,
   opponentId?: string
@@ -297,10 +366,12 @@ export async function predictBothTeamsScore(
     teamId     ? getTeam(teamId)     : null,
     opponentId ? getTeam(opponentId) : null,
   ]);
-  const la = team?.goalsForPerGame ?? 3.0;
-  const lb = opp?.goalsForPerGame  ?? 3.0;
-  const p  = (1 - Math.exp(-la)) * (1 - Math.exp(-lb));
-  return pct(p);
+
+  const la = expectedGoals(team, opp);
+  const lb = expectedGoals(opp, team);
+  if (la === null || lb === null) return pct(LEAGUE_BTTS_RATE);
+
+  return pct(pScoresAtLeastOnce(la) * pScoresAtLeastOnce(lb));
 }
 
 /** Clean sheet: P(opponent scores 0). Uses opponent GF or, if unknown, team GA. */
@@ -312,9 +383,12 @@ export async function predictCleanSheet(
     teamId     ? getTeam(teamId)     : null,
     opponentId ? getTeam(opponentId) : null,
   ]);
-  const lambdaConceded =
-    opp?.goalsForPerGame ?? team?.goalsAgainstPerGame ?? 3.0;
-  return pct(Math.exp(-lambdaConceded));
+  // Même modèle de blanchissage que BTTS (binomiale négative) : sinon
+  // « blanchissage » et « les deux marquent » racontaient deux histoires
+  // différentes sur le même match.
+  const lambdaConceded = expectedGoals(opp, team);
+  if (lambdaConceded === null) return pct(LEAGUE_SHUTOUT_RATE);
+  return pct(1 - pScoresAtLeastOnce(lambdaConceded));
 }
 
 /** Team power-play goal (≥1 PP goal in the game), from season PP%. */
@@ -427,6 +501,17 @@ export async function buildRealFactors(
     if (type === 'team') {
       const team = await getTeam(id);
       if (!team) throw new Error('not found');
+
+      // Saison pas commencée : les taux valent `null` depuis `fetchTeams`, et
+      // les lire donnerait « Win rate: null% » et un différentiel NaN à l'écran.
+      // On dit ce qu'on sait — rien — plutôt que d'afficher des cases vides
+      // remplies de valeurs par défaut.
+      if ((team.gamesPlayed ?? 0) < 1) {
+        return [
+          { icon: '📅', label: 'Season not started — no team stats yet', delta: 0 },
+          { icon: '📊', label: 'Estimate based on league averages', delta: 0 },
+        ];
+      }
 
       const gfDiff = team.goalsForPerGame - team.goalsAgainstPerGame;
 

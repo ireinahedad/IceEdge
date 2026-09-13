@@ -29,6 +29,17 @@ export interface GameFeatureOpts {
   /** Absents confirmés (noms MoneyPuck). Défaut : lus dans scratches.json. */
   homeScratches?: string[];
   awayScratches?: string[];
+  /**
+   * Côté d'un marché BINAIRE servi sous un seul `market_type` : « yes » / « no »
+   * (BTTS, blanchissage, prolongation, but en AN, désavantage numérique…).
+   * Le service Python price toujours le côté « oui » puis prend le complément
+   * quand ce champ vaut « no ». Sans lui, les deux tuiles d'un même marché
+   * recevaient le MÊME pourcentage (BTTS 90 % / 90 %).
+   * Ignoré pour les marchés qui portent déjà leur côté dans le `market_type`
+   * (`total_goals_over` / `total_goals_under`) et pour les marchés d'équipe,
+   * où la sélection est une abréviation.
+   */
+  selection?: string;
 }
 
 // ── Feature types (mirror Python Pydantic models) ─────────────────────────────
@@ -76,6 +87,7 @@ export interface GameFeatures {
   home_team?:            string; // abréviation, ex. "TOR"
   away_team?:            string;
   market_type:         string;   // "moneyline" | "puck_line" | "total_goals_over" | "total_goals_under"
+  selection?:          string;   // côté d'un marché binaire : "yes" | "no"
   line?:               number;   // for total goals markets
   // ── v4 — cotes live du marché (décimal) → active le blend modèle⊕marché Python
   home_odds_decimal?:    number;
@@ -125,8 +137,8 @@ async function getTeam(id: string): Promise<any | null> {
   );
 }
 
-/** Parse last-10 string like "7-2-1" → win% */
-function parseLastTen(last10: string | undefined): number {
+/** Parse last-10 string like "7-2-1" → win%. `null` (saison pas commencée) → 0.5. */
+function parseLastTen(last10: string | null | undefined): number {
   if (!last10) return 0.5;
   const [w, , ] = last10.split('-').map(Number);
   return isNaN(w) ? 0.5 : Math.min(1, w / 10);
@@ -245,6 +257,7 @@ export async function buildGameFeatures(
     home_team:             homeAbbr.toUpperCase(),
     away_team:             awayAbbr.toUpperCase(),
     market_type:           marketType,
+    selection:             opts.selection,
     line,
     // ── v4 — cotes live (si dispo) → le service Python active le blend
     home_odds_decimal:     odds?.homeOdds,

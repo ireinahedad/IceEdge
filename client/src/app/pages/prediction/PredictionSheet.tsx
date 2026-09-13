@@ -120,6 +120,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
             opponentId={mlProps.opponentId}
             propType={mlProps.propType}
             line={mlProps.line}
+            selection={mlProps.selection}
             ruleBasedPct={rulePct}
             label={label}
             simple
@@ -310,7 +311,7 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
     let alive = true;
     setMlPct(null);
     fetchMLProbability(
-      { type: opt.mlProps.type, subjectId: opt.mlProps.subjectId, opponentId: opt.mlProps.opponentId, propType: opt.mlProps.propType, line: opt.mlProps.line },
+      { type: opt.mlProps.type, subjectId: opt.mlProps.subjectId, opponentId: opt.mlProps.opponentId, propType: opt.mlProps.propType, line: opt.mlProps.line, selection: opt.mlProps.selection },
       rulePct,
     ).then(p => { if (alive) setMlPct(p); });
     return () => { alive = false; };

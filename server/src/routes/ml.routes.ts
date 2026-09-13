@@ -143,6 +143,36 @@ const PLAYER_MARKET_TYPES: BetMarketType[] = [
 // --- Core prediction dispatcher ---
 
 /**
+ * Marchés BINAIRES servis sous UN SEUL `marketType` : le moteur ne sait calculer
+ * que le côté « oui », et les deux tuiles de l'UI (Oui / Non) envoyaient donc la
+ * même requête et recevaient le même pourcentage — d'où « les deux marquent
+ * 90 % » ET « les deux ne marquent pas 90 % » sur Blues–Stars du 19 sept. 2026.
+ *
+ * Le côté arrive maintenant dans `selection`, et le complément est pris ici.
+ *
+ * Les marchés dont le côté est DÉJÀ dans le nom (`total_goals_over` /
+ * `total_goals_under`) n'ont rien à faire dans cette liste : ils seraient
+ * inversés deux fois. Idem pour les marchés d'équipe, où `selection` porte une
+ * abréviation ("STL") et jamais un « no ».
+ */
+const BINARY_MARKETS = new Set([
+  "both_teams_score",
+  "clean_sheet",
+  "game_to_ot",
+  "puck_line",
+  "team_pp_goals",
+  "team_penalty_kill",
+]);
+
+/** Jetons qui désignent le côté négatif d'un marché binaire. */
+const NEGATIVE_SELECTIONS = new Set(["no", "non", "false", "0"]);
+
+function isNegativeSide(market: string, selection: string | undefined): boolean {
+  if (!BINARY_MARKETS.has(market)) return false;
+  return NEGATIVE_SELECTIONS.has((selection ?? "").trim().toLowerCase());
+}
+
+/**
  * Normalise ML-vocabulary aliases (sent by the stats page) into the canonical
  * { marketType, selection } used by the prediction engine. This is what keeps
  * the coupon and the stats page in sync: both funnel into the same markets.
@@ -204,6 +234,12 @@ async function resolveSubjects(body: PredictionRequest): Promise<{
 
 async function computeProbability(body: PredictionRequest): Promise<number> {
   const { market } = normalizeMarket(body.marketType, body.selection ?? "over");
+  // Le côté « non » est le complément exact du côté « oui » : aucun de ces
+  // marchés n'admet de push (pas de demi-issue), donc P(non) = 100 − P(oui).
+  if (isNegativeSide(market, body.selection)) {
+    const yes = await computeProbability({ ...body, selection: "yes" });
+    return Math.max(3, Math.min(97, 100 - yes));
+  }
   const line = body.line ?? 0.5;
   const { teamId, opponentId, isHome, selection } = await resolveSubjects({
     ...body,
@@ -392,7 +428,18 @@ router.post("/player-prop", validateBody(playerPropSchema), async (req: Request,
       const { fetchPlayerById } = await import("../services/nhlApiClient");
       const player = await fetchPlayerById(playerId);
 
-      const gp = player.gamesPlayed || 1;
+      // `player.gamesPlayed || 1` faisait passer un joueur à 0 match pour un
+      // joueur à 1 match sans point : `currentRate` tombait à 0, aucun seuil ne
+      // matchait et la route servait un « 28 % » qui n'était dérivé de rien.
+      // Avant le premier match il n'y a pas de cadence à extrapoler — on laisse
+      // la valeur neutre et on le dit dans la note.
+      const gp = player.gamesPlayed ?? 0;
+      if (gp < 1) {
+        // Avant le premier match il n'y a pas de cadence à extrapoler. On tombe
+        // à travers vers la réponse commune avec la valeur neutre (50) plutôt
+        // que de dupliquer la forme de la réponse ici.
+        betNote = `${player.name || playerName} has not played a game this season yet — no pace to project from.`;
+      } else {
       const remaining = Math.max(0, 82 - gp);
       const current =
         propType === "goals"   ? player.goals   :
@@ -418,6 +465,7 @@ router.post("/player-prop", validateBody(playerPropSchema), async (req: Request,
         { icon: "trending", label: `Averaging ${currentRate.toFixed(2)}/game`, delta: currentRate >= rateNeeded ? 6 : -4 },
       ];
       betNote = `${player.name || playerName} needs ${needed} more ${propType} in ${remaining} games (pace: ${pace.toFixed(0)}).`;
+      }
     }
 
     res.json({
@@ -483,7 +531,11 @@ router.post('/ml', predictLimiter, validateBody(predictMlSchema), async (req: Re
 
     if (type === 'game') {
       const marketType = propType ?? 'moneyline';
-      const features = await buildGameFeatures(subjectId, opponentId ?? subjectId, marketType, line);
+      // `selection` était ignoré ici : les deux côtés d'un marché binaire
+      // partaient vers le service Python avec un corps identique.
+      const features = await buildGameFeatures(
+        subjectId, opponentId ?? subjectId, marketType, line, { selection },
+      );
       result = await mlApiClient.predictGame(features);
     } else if (type === 'player') {
       const features = await buildPlayerPropFeatures(

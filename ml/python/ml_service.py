@@ -636,6 +636,12 @@ class GameFeatures(BaseModel):
     home_elo:  Optional[float] = None        # override explicite (sinon lookup)
     away_elo:  Optional[float] = None
     market_type: str = Field("moneyline")    # "moneyline"|"puck_line"|"total_goals_over"|"total_goals_under"
+    # Côté d'un marché BINAIRE servi sous un seul `market_type` : "yes" | "no".
+    # Le service price toujours le côté « oui » ; `_is_negative_side` prend le
+    # complément quand ce champ dit « non ». Sans ce champ, les deux tuiles d'un
+    # marché Oui/Non recevaient le MÊME pourcentage — c'est le bug BTTS
+    # 90 % / 90 % (Blues–Stars, 19 septembre 2026).
+    selection: Optional[str] = None
     line: Optional[float] = None             # for total goals
     # ── v4 — cotes du marché (The Odds API, format DÉCIMAL, ex. 1.87) ────────
     home_odds_decimal: Optional[float] = Field(None, gt=1.0)
@@ -716,6 +722,63 @@ def _game_moneyline(f: GameFeatures) -> tuple[float, float]:
     return prob, confidence
 
 
+# ── Marchés binaires ─────────────────────────────────────────────────────────
+#
+# Ces marchés ont DEUX issues complémentaires mais un seul `market_type` : le
+# prix calculé est toujours celui du côté « oui ». `selection` dit lequel des
+# deux est demandé, et le côté « non » est pris par complément — aucun de ces
+# marchés n'admet de push, donc P(non) = 1 − P(oui) exactement.
+#
+# `total_goals_over` / `total_goals_under` n'y figurent PAS : leur côté est déjà
+# dans le nom du marché, les inscrire ici les inverserait deux fois.
+_BINARY_MARKETS = {
+    "both_teams_score",
+    "clean_sheet",
+    "game_to_ot",
+    "puck_line",
+    "team_pp_goals",
+    "team_penalty_kill",
+    "team_score_every_period",
+}
+_NEGATIVE_SELECTIONS = {"no", "non", "false", "0"}
+
+
+def _is_negative_side(f: GameFeatures) -> bool:
+    """Vrai si l'appelant demande le côté « non » d'un marché binaire."""
+    if f.market_type not in _BINARY_MARKETS:
+        return False
+    return (f.selection or "").strip().lower() in _NEGATIVE_SELECTIONS
+
+
+def _p_both_score(dist: "ScoreDistribution") -> float:
+    """P(les deux équipes marquent ≥1), lue sur la matrice jointe des scores.
+
+    Inclusion-exclusion sur la première ligne et la première colonne de `M`
+    (ligne i = buts du domicile, colonne j = buts du visiteur) :
+
+        P(les deux marquent) = 1 − P(dom = 0) − P(ext = 0) + P(0–0)
+
+    Deux raisons de passer par `M` plutôt que par deux Poisson indépendantes :
+
+    1. **La corrélation.** Les deux λ viennent du même match ; un match fermé
+       déprime les deux. Les supposer indépendantes surestime le côté « oui ».
+       `M` porte en plus la correction de marge τ ajustée à l'entraînement.
+    2. **La sur-dispersion.** Les buts par équipe-match sont plus dispersés
+       qu'une Poisson : avec λ = 3.0, Poisson donne 5 % de blanchissages là où
+       la NHL en compte ~8.5 %. Le produit de deux Poisson indépendantes fixait
+       donc le marché à ~90 % pour TOUS les matchs — le chiffre que l'UI
+       affichait quelle que soit l'affiche.
+
+    La prolongation ne change rien : un 0–0 après 60 minutes se termine 1–0,
+    donc une équipe reste blanchie de toute façon. La formule vaut pour le
+    match complet telle quelle.
+    """
+    M = dist.M
+    p_home_blank = float(M[0, :].sum())
+    p_away_blank = float(M[:, 0].sum())
+    return float(1.0 - p_home_blank - p_away_blank + float(M[0, 0]))
+
+
 def _apply_score_model(market: str, f: GameFeatures,
                        dist: "ScoreDistribution") -> "tuple[float, float, str] | None":
     """Prix exact issu du modèle de score (P2), quand le marché est dérivable.
@@ -774,6 +837,12 @@ def _apply_score_model(market: str, f: GameFeatures,
         p = dist.p_regulation_tie()
         return p, 0.90, f"P(nul après 60 minutes) = {int(p * 100)}%."
 
+    if market == "both_teams_score":
+        p = _p_both_score(dist)
+        return p, 0.90, (f"Matrice jointe λ={lh:.2f}/{la:.2f} → les deux marquent : "
+                         f"{int(p * 100)}%. Blanchissage d'un côté ou de l'autre : "
+                         f"{int((1 - p) * 100)}%.")
+
     return None
 
 
@@ -807,6 +876,10 @@ def _score_market_fn(market: str, f: GameFeatures):
         return lambda d: float(d.M[d._margin > 0].sum())
     if market == "game_to_ot":
         return lambda d: d.p_regulation_tie()
+    if market == "both_teams_score":
+        # σ est invariant par complément (écart-type de 1−X = écart-type de X),
+        # donc la même fonction sert les deux côtés du marché.
+        return _p_both_score
     return None
 
 
@@ -892,9 +965,14 @@ def _apply_market(
         # P(both score) = 1 − P(home shutout) − P(away shutout) + P(double shutout)
         p_home_shutout = math.exp(-lam_away)  # away team scores 0
         p_away_shutout = math.exp(-lam_home)  # home team scores 0
+        # Plancher ramené de 0.40 à 0.05 : il n'existe que pour borner l'absurde,
+        # et à 0.40 le côté « non » (son complément) était plafonné à 60 % — une
+        # borne qui n'a aucun fondement. Ce repli ne sert que sans modèle de
+        # score chargé ; sinon `_apply_score_model` price BTTS sur la matrice
+        # jointe, corrélation et sur-dispersion comprises.
         prob = clamp(
             1.0 - p_home_shutout - p_away_shutout + p_home_shutout * p_away_shutout,
-            0.40, 0.95
+            0.05, 0.95
         )
         conf = 0.88
         expl = f"Poisson: λdom={lam_home:.1f}, λext={lam_away:.1f} → {int(prob*100)}% que les deux marquent."
@@ -1484,6 +1562,15 @@ def predict_game(f: GameFeatures) -> MLResponse:
         f.market_type, base_prob, f, win_diff, lam_home, lam_away, model_type,
         dist=score_dist,
     )
+
+    # 4quater. Côté « non » d'un marché binaire (cf. `_BINARY_MARKETS`). Le
+    #          complément est pris APRÈS `_apply_market`, donc après son clamp :
+    #          une probabilité déjà bornée à [0.05, 0.95] le reste une fois
+    #          inversée. La confiance, elle, ne change pas — c'est la même
+    #          question posée à l'envers, le modèle n'en sait ni plus ni moins.
+    if _is_negative_side(f):
+        prob = 1.0 - prob
+        explanation = f"Côté « non » = 100 − P(oui). {explanation}"
 
     # 5. Incertitude d'estimation (P4) — σ sur le marché effectivement servi
     prob_std = uncertainty = None

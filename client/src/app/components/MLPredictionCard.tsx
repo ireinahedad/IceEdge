@@ -443,7 +443,10 @@ export function mlPctFromResponse(data: Record<string, unknown>): number | null 
  * so a tile and the card the user opens always show the same number.
  */
 export async function fetchMLProbability(
-  req: { type: "game" | "player" | "team"; subjectId: string; opponentId?: string; propType?: string; line?: number },
+  // `selection` porte le CÔTÉ d'un marché binaire (« yes » / « no »). Il était
+  // absent de ce type, donc les deux tuiles d'un même marché envoyaient une
+  // requête identique et affichaient le même pourcentage des deux côtés.
+  req: { type: "game" | "player" | "team"; subjectId: string; opponentId?: string; propType?: string; line?: number; selection?: string },
   ruleBasedPct: number,
 ): Promise<number> {
   try {
@@ -471,6 +474,8 @@ interface MLSectionProps {
   opponentId?:  string;
   propType?:    string;
   line?:        number;
+  /** Côté d'un marché binaire servi sous un seul `propType` : « yes » | « no ». */
+  selection?:   string;
   ruleBasedPct?: number;
   label?:       string;
   simple?:      boolean;
@@ -535,7 +540,7 @@ function MLSkeleton() {
   );
 }
 
-export function MLSection({ type, subjectId, opponentId, propType, line, ruleBasedPct, label, simple, hero }: MLSectionProps) {
+export function MLSection({ type, subjectId, opponentId, propType, line, selection, ruleBasedPct, label, simple, hero }: MLSectionProps) {
   const { t, lang } = useI18n();
   const [result, setResult] = useState<MLPredictionResult | null>(null);
 
@@ -550,7 +555,7 @@ export function MLSection({ type, subjectId, opponentId, propType, line, ruleBas
     fetchWithTimeout(`${ML_BASE}/ml`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, subjectId, opponentId, propType, line }),
+      body: JSON.stringify({ type, subjectId, opponentId, propType, line, selection }),
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
@@ -562,7 +567,7 @@ export function MLSection({ type, subjectId, opponentId, propType, line, ruleBas
       .catch(() => { if (alive) setResult(fallbackResult(ruleBasedPct, propType, t)); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type, subjectId, opponentId, propType, line, ruleBasedPct, lang]);
+  }, [type, subjectId, opponentId, propType, line, selection, ruleBasedPct, lang]);
 
   if (!result) return <MLSkeleton />;
   return (

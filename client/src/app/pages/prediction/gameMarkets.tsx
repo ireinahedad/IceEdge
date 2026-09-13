@@ -69,8 +69,17 @@ export interface MktGroup { id: string; title: string; cols: 2 | 3; options: Bet
 
 export function buildGameGroups(home: string, away: string, hp: number, ou: number): MktGroup[] {
   const ap = 100 - hp;
-  const gml  = (propType: string, line?: number): MLProps => ({ type: "game", subjectId: home, opponentId: away, propType, line, isHome: true });
-  const gmla = (propType: string, line?: number): MLProps => ({ type: "game", subjectId: away, opponentId: home, propType, line, isHome: false });
+  // `selection` distingue les DEUX CÔTÉS d'un marché binaire servi sous un seul
+  // `propType` (BTTS oui/non, blanchissage oui/non…). Sans lui, les deux tuiles
+  // envoyaient une requête IDENTIQUE et recevaient donc le même pourcentage :
+  // c'est ainsi que « les deux marquent » et « non » ont tous deux affiché 90 %
+  // (Blues–Stars, 19 sept. 2026). Les marchés à un seul côté (moneyline, puck
+  // line, totaux — qui portent over/under dans le `propType` lui-même) le
+  // laissent undefined, exactement comme avant.
+  const gml  = (propType: string, line?: number, selection?: string): MLProps =>
+    ({ type: "game", subjectId: home, opponentId: away, propType, line, isHome: true,  selection });
+  const gmla = (propType: string, line?: number, selection?: string): MLProps =>
+    ({ type: "game", subjectId: away, opponentId: home, propType, line, isHome: false, selection });
   return [
     {
       id: "match", title: "Match Betting", cols: 3,
@@ -88,7 +97,12 @@ export function buildGameGroups(home: string, away: string, hp: number, ou: numb
       options: [
         { id: "pl-home", label: `${home} -1.5`, rulePct: Math.max(10, hp - 18), mlProps: gml("puck_line"),
           ruleNote: `Winning by 2+ is ~18% harder than a straight win. Calculated from historical goal-differential data.` },
-        { id: "pl-away", label: `${away} +1.5`, rulePct: Math.min(90, ap + 18), mlProps: gml("alt_puck_line"),
+        // +1.5 visiteur est EXACTEMENT le complément de −1.5 domicile (pas de
+        // push possible sur une demi-ligne), donc le même marché, côté « non ».
+        // Il pointait sur `alt_puck_line`, qui ne veut pas dire la même chose
+        // dans les deux moteurs (Node : « +1.5 couvre » ; Python : « gagne par
+        // ≥3 ») et se calculait de toute façon pour l'équipe à DOMICILE.
+        { id: "pl-away", label: `${away} +1.5`, rulePct: Math.min(90, ap + 18), mlProps: gml("puck_line", undefined, "no"),
           ruleNote: `Covering +1.5 means winning OR losing by exactly 1. Probability boosted ~18% vs moneyline.` },
       ],
     },
@@ -108,10 +122,10 @@ export function buildGameGroups(home: string, away: string, hp: number, ou: numb
     {
       id: "btts", title: "Both Teams to Score", cols: 2,
       options: [
-        { id: "btts-yes", label: "Yes", rulePct: Math.min(88, Math.round(hp * 0.42 + ap * 0.40 + 20)), mlProps: gml("both_teams_score"),
-          ruleNote: `Both offenses producing at least one goal. Very common in NHL (~75-80% of games).` },
-        { id: "btts-no",  label: "No",  rulePct: Math.max(12, 100 - Math.min(88, Math.round(hp * 0.42 + ap * 0.40 + 20))), mlProps: gml("both_teams_score"),
-          ruleNote: `Requires one team to be shut out — only ~15-25% of NHL games end this way.` },
+        { id: "btts-yes", label: "Yes", rulePct: Math.min(88, Math.round(hp * 0.42 + ap * 0.40 + 20)), mlProps: gml("both_teams_score", undefined, "yes"),
+          ruleNote: `Both offenses producing at least one goal. Very common in NHL (~83% of games).` },
+        { id: "btts-no",  label: "No",  rulePct: Math.max(12, 100 - Math.min(88, Math.round(hp * 0.42 + ap * 0.40 + 20))), mlProps: gml("both_teams_score", undefined, "no"),
+          ruleNote: `Requires one team to be shut out — only ~17% of NHL games end this way.` },
       ],
     },
     {
@@ -159,9 +173,12 @@ export function buildGameGroups(home: string, away: string, hp: number, ou: numb
     {
       id: "ot", title: "Extra Time", cols: 2,
       options: [
-        { id: "ot-yes", label: "Goes to OT",      rulePct: 22, mlProps: gml("game_to_ot"),
+        { id: "ot-yes", label: "Goes to OT",      rulePct: 22, mlProps: gml("game_to_ot", undefined, "yes"),
           ruleNote: `~22-24% of NHL games go to overtime, independent of the teams involved.` },
-        { id: "ot-no",  label: "Decided in Reg",  rulePct: 78, mlProps: gml("regulation_result"),
+        // « Réglé en 60 min » = complément de « va en prolongation ». Pointait
+        // sur `regulation_result`, qui est P(le DOMICILE gagne en 60 min) — une
+        // toute autre question, et un chiffre bien plus bas.
+        { id: "ot-no",  label: "Decided in Reg",  rulePct: 78, mlProps: gml("game_to_ot", undefined, "no"),
           ruleNote: `Most games (78%) are decided inside regulation time.` },
       ],
     },

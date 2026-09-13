@@ -308,7 +308,21 @@ export async function fetchTeams(): Promise<any[]> {
   const teams = (data.standings ?? []).map((s: any) => {
     const abbr: string = s.teamAbbrev?.default ?? '';
     const meta = TEAM_META[abbr] ?? { emoji: '🏒', color: '#86d1ea' };
-    const gp   = s.gamesPlayed || 1;
+
+    // `gp` était `s.gamesPlayed || 1`. Tant que `standings/now` renvoie la
+    // saison terminée, ça ne se voyait pas. Le jour où il bascule sur la
+    // nouvelle saison à 0 match joué, ce `|| 1` transformait CHAQUE moyenne en
+    // `0 / 1 = 0.00` — et un 0 qui veut dire « aucune donnée » traverse tous les
+    // replis en aval, parce qu'ils sont écrits `?? 3.0` (qui ne rattrape que
+    // null/undefined) et pas `|| 3.0`. Résultat : le modèle aurait servi des
+    // prédictions bâties sur une ligue où personne ne marque, sans une seule
+    // erreur dans les journaux.
+    //
+    // Les TOTAUX (buts, victoires, points) restent à 0 : à 0 match joué, c'est
+    // la vérité. Ce sont les TAUX qui passent à `null`, seule valeur qui dit
+    // « je ne sais pas » — et que les `??` en aval rattrapent correctement.
+    const gp     = s.gamesPlayed ?? 0;
+    const played = gp > 0;
     return {
       id:           abbr,
       name:         s.teamFullName?.default ?? s.teamName?.default ?? abbr,
@@ -323,20 +337,25 @@ export async function fetchTeams(): Promise<any[]> {
       losses:       s.losses   ?? 0,
       otLosses:     s.otLosses ?? 0,
       points:       s.points   ?? 0,
-      winPct:       Math.round((s.winPctg ?? 0) * 100),
+      winPct:       played ? Math.round((s.winPctg ?? 0) * 100) : null,
       homeRecord:   `${s.homeWins ?? 0}-${s.homeLosses ?? 0}-${s.homeOtLosses ?? 0}`,
       awayRecord:   `${s.roadWins ?? 0}-${s.roadLosses ?? 0}-${s.roadOtLosses ?? 0}`,
       streak:       s.streakCode && s.streakCount ? `${s.streakCode}${s.streakCount}` : '',
       goalsFor:            s.goalFor     ?? 0,
       goalsAgainst:        s.goalAgainst ?? 0,
-      goalsForPerGame:     +((s.goalFor     ?? 0) / gp).toFixed(2),
-      goalsAgainstPerGame: +((s.goalAgainst ?? 0) / gp).toFixed(2),
+      goalsForPerGame:     played ? +((s.goalFor     ?? 0) / gp).toFixed(2) : null,
+      goalsAgainstPerGame: played ? +((s.goalAgainst ?? 0) / gp).toFixed(2) : null,
       // NOTE: powerPlayPctg/penaltyKillPctg n'existent PAS dans standings —
       // les vrais PP/PK viennent de fetchTeamSummaryStats() (api.nhle.com/stats/rest)
-      ppPct: s.powerPlayPctg   != null ? Math.round(s.powerPlayPctg   * 1000) / 10 : 0,
-      pkPct: s.penaltyKillPctg != null ? Math.round(s.penaltyKillPctg * 1000) / 10 : 0,
-      // Forme récente L10 (ex: "7-2-1") — consommé par parseLastTen()
-      last10: `${s.l10Wins ?? 5}-${s.l10Losses ?? 4}-${s.l10OtLosses ?? 1}`,
+      // Le `: 0` de repli disait « 0 % en avantage numérique » là où il fallait
+      // dire « je ne sais pas » : `?? 20` en aval ne pouvait pas le rattraper.
+      ppPct: played && s.powerPlayPctg   != null ? Math.round(s.powerPlayPctg   * 1000) / 10 : null,
+      pkPct: played && s.penaltyKillPctg != null ? Math.round(s.penaltyKillPctg * 1000) / 10 : null,
+      // Forme récente L10 (ex: "7-2-1") — consommé par parseLastTen().
+      // À 0 match joué, l'API renvoie "0-0-0", que parseLastTen lisait comme
+      // 0 victoire sur 10 — une équipe en pleine déroute plutôt qu'une saison
+      // pas commencée. `null` déclenche le repli neutre.
+      last10: played ? `${s.l10Wins ?? 5}-${s.l10Losses ?? 4}-${s.l10OtLosses ?? 1}` : null,
       // Splits domicile / extérieur (win% simple)
       homeWinPct: _splitPct(s.homeWins, s.homeLosses, s.homeOtLosses),
       roadWinPct: _splitPct(s.roadWins, s.roadLosses, s.roadOtLosses),
@@ -1502,7 +1521,10 @@ export async function fetchTeamSeasonOfficial(abbr: string, season: string): Pro
       (t: any) => TEAM_NAME_TO_ABBR[t.teamFullName ?? ''] === upper,
     );
     if (row) {
-      const gp = row.gamesPlayed || 82;
+      // `row.gamesPlayed || 82` annonçait une saison complète pour une équipe
+      // qui n'a pas joué, et divisait les totaux par 82 → des moyennes à 0.00.
+      const gp     = row.gamesPlayed ?? 0;
+      const played = gp > 0;
       official = {
         gamesPlayed:         gp,
         wins:                row.wins   ?? 0,
@@ -1510,14 +1532,14 @@ export async function fetchTeamSeasonOfficial(abbr: string, season: string): Pro
         points:              row.points ?? 0,
         goalsFor:            row.goalsFor     ?? 0,
         goalsAgainst:        row.goalsAgainst ?? 0,
-        goalsForPerGame:     +(row.goalsForPerGame     ?? (row.goalsFor     ?? 0) / gp).toFixed(2),
-        goalsAgainstPerGame: +(row.goalsAgainstPerGame ?? (row.goalsAgainst ?? 0) / gp).toFixed(2),
-        ppPct:               Math.round((row.powerPlayPct   ?? 0) * 1000) / 10,
-        pkPct:               Math.round((row.penaltyKillPct ?? 0) * 1000) / 10,
-        pointPct:            Math.round((row.pointPct       ?? 0) * 1000) / 10,
-        faceoffPct:          Math.round((row.faceoffWinPct  ?? 0) * 1000) / 10,
-        shotsForPerGame:     +(row.shotsForPerGame     ?? 0).toFixed(2),
-        shotsAgainstPerGame: +(row.shotsAgainstPerGame ?? 0).toFixed(2),
+        goalsForPerGame:     played ? +(row.goalsForPerGame     ?? (row.goalsFor     ?? 0) / gp).toFixed(2) : null,
+        goalsAgainstPerGame: played ? +(row.goalsAgainstPerGame ?? (row.goalsAgainst ?? 0) / gp).toFixed(2) : null,
+        ppPct:               played ? Math.round((row.powerPlayPct   ?? 0) * 1000) / 10 : null,
+        pkPct:               played ? Math.round((row.penaltyKillPct ?? 0) * 1000) / 10 : null,
+        pointPct:            played ? Math.round((row.pointPct       ?? 0) * 1000) / 10 : null,
+        faceoffPct:          played ? Math.round((row.faceoffWinPct  ?? 0) * 1000) / 10 : null,
+        shotsForPerGame:     played ? +(row.shotsForPerGame     ?? 0).toFixed(2) : null,
+        shotsAgainstPerGame: played ? +(row.shotsAgainstPerGame ?? 0).toFixed(2) : null,
       };
     }
   } catch { /* summary unavailable → official stays null */ }
@@ -1784,6 +1806,11 @@ export async function fetchTeamSummaryStats(): Promise<Record<string, TeamSummar
   for (const t of data.data ?? []) {
     const abbr = TEAM_NAME_TO_ABBR[t.teamFullName ?? ''];
     if (!abbr) continue;
+    // Une ligne à 0 match joué porte des taux à 0 (PP 0 %, PK 0 %, 0 tir/match).
+    // L'ABSENCE de la clé fait retomber `featureEngineering` sur ses valeurs
+    // neutres ; sa PRÉSENCE à 0 les court-circuite, parce que le repli est
+    // écrit `??`. Mieux vaut ne rien dire que dire zéro.
+    if ((t.gamesPlayed ?? 0) < 1) continue;
     out[abbr] = {
       ppPct:          Math.round((t.powerPlayPct   ?? 0.20) * 1000) / 10,
       pkPct:          Math.round((t.penaltyKillPct ?? 0.80) * 1000) / 10,

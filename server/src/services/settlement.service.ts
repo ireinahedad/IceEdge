@@ -28,6 +28,8 @@
  *   - Team markets (via the same scoring summary): first_team_score,
  *     last_team_score, team_total_goals, team_pp_goals, clean_sheet,
  *     team_score_every_period.
+ *   - both_teams_score (via the final score) — see the block for why the final
+ *     score settles it correctly even after a shootout.
  *   - Period markets (via the same scoring summary): period1/2/3_winner,
  *     period1/2/3_total_goals, highest_scoring_period.
  *   Each leg needs gameId recorded at bet time, plus subjectId (player or
@@ -35,8 +37,7 @@
  *
  * Deliberately left pending (not auto-settled): everything else — game_to_ot,
  * ot_winner, alt_puck_line, winning_margin, regulation_result,
- * both_teams_score, total_penalties. Leaving a bet pending is
- * always safer than guessing wrong.
+ * total_penalties. Leaving a bet pending is always safer than guessing wrong.
  */
 
 import { pool } from '../db/connection';
@@ -278,6 +279,39 @@ async function settleLeg(
     const opponentScore = Number(sel === homeId ? game.awayTeam.score : game.homeTeam.score);
     if (!Number.isFinite(opponentScore)) return 'unknown';
     return opponentScore === 0 ? 'win' : 'loss';
+  }
+
+  if (leg.marketType === 'both_teams_score') {
+    const game = await getFinalGame(String(leg.gameId), cache);
+    if (!game) return 'unknown';
+
+    // Le côté du pari. Jusqu'au correctif BTTS de sept. 2026, `selectionValue`
+    // portait l'abréviation de l'équipe à domicile pour les DEUX tuiles (le
+    // côté n'existait pas) : ces paris-là sont indécidables et doivent rester
+    // en attente. D'où la comparaison stricte à 'yes' / 'no' — un défaut par
+    // « tout ce qui n'est pas no vaut yes » réglerait d'anciens paris à pile ou
+    // face.
+    const sel = String(leg.selectionValue ?? '').toLowerCase();
+    if (sel !== 'yes' && sel !== 'no') return 'unknown';
+
+    const homeScore = Number(game.homeTeam?.score);
+    const awayScore = Number(game.awayTeam?.score);
+    if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore)) return 'unknown';
+
+    // POURQUOI LE SCORE FINAL SUFFIT, TIRS DE BARRAGE COMPRIS.
+    //
+    // Les bookmakers règlent BTTS prolongation incluse mais fusillade exclue, et
+    // le but de fusillade est justement un but comptable, pas un vrai but. Or
+    // il ne peut CHANGER la réponse dans aucun cas :
+    //
+    //   · fusillade ⇒ égalité après prolongation, donc score k–k ;
+    //   · si k ≥ 1, les deux équipes ont déjà marqué → « oui » dans tous les cas ;
+    //   · si k = 0, la fusillade donne 1–0 → une équipe reste à zéro → « non ».
+    //
+    // Le score final et la règle « hors fusillade » donnent donc toujours le
+    // même verdict, et on peut se passer du détail des buts.
+    const bothScored = homeScore > 0 && awayScore > 0;
+    return (sel === 'yes') === bothScored ? 'win' : 'loss';
   }
 
   if (leg.marketType === 'team_score_every_period') {

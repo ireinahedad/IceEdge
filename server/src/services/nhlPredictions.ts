@@ -175,6 +175,29 @@ const REST_EDGE      = 0.010;  // avantage par jour de repos supplémentaire (ca
 /** Per-period goal fractions (empirical NHL averages) */
 const PERIOD_DIST = [0.305, 0.365, 0.330] as const;
 
+/**
+ * Dispersion (paramètre `k` d'une binomiale négative) des buts d'UNE équipe sur
+ * UN match. Sert uniquement à estimer P(l'équipe est blanchie).
+ *
+ * POURQUOI PAS POISSON — les buts par équipe-match sont nettement plus dispersés
+ * qu'une Poisson : à λ = 3.0, Poisson prédit e⁻³ = 5.0 % de blanchissages, la
+ * NHL en observe ~8.5 %. Un blanchissage sur trois manquait donc à l'appel, et
+ * comme « les deux marquent » multiplie les deux compléments, le marché BTTS
+ * sortait à ~90 % POUR TOUS LES MATCHS.
+ *
+ * k = 6.5 est la valeur qui recolle P(0) au taux observé :
+ *     (6.5 / (6.5 + 3.0))^6.5 = 8.5 %   →   BTTS ≈ (1 − 0.085)² ≈ 84 %
+ * ce qui est le taux réel (~83 %). k → ∞ redonnerait Poisson.
+ */
+const GOALS_DISPERSION_K = 6.5;
+
+/** P(une équipe de cadence λ marque au moins un but), binomiale négative. */
+function pScoresAtLeastOnce(lambda: number): number {
+  const lam = Math.max(0.05, lambda);
+  const k   = GOALS_DISPERSION_K;
+  return 1 - Math.pow(k / (k + lam), k);
+}
+
 /** Estimate OT probability based on how evenly matched the teams are */
 function otProb(homeWin: number): number {
   const balance = 1 - 2 * Math.abs(homeWin - 0.5); // 0=mismatch, 1=even
@@ -393,8 +416,10 @@ function computeGameMarkets(
   };
 
   // ── 4. Both Teams to Score ────────────────────────────────────────────────
-  const bttsH   = 1 - Math.exp(-lambdaH);  // P(home scores ≥1)
-  const bttsA   = 1 - Math.exp(-lambdaA);  // P(away scores ≥1)
+  // Binomiale négative, pas Poisson : cf. GOALS_DISPERSION_K. Avec exp(−λ) les
+  // deux tuiles sortaient ~90 % / ~10 % quel que soit le match.
+  const bttsH   = pScoresAtLeastOnce(lambdaH);  // P(home scores ≥1)
+  const bttsA   = pScoresAtLeastOnce(lambdaA);  // P(away scores ≥1)
   const bttsYes = bttsH * bttsA;
   const btts: MarketGroup = {
     id: 'btts', title: 'Both Teams to Score', cols: 2,
@@ -403,7 +428,7 @@ function computeGameMarkets(
         id: 'btts-yes',
         label: 'Yes',
         rulePct: pct(bttsYes),
-        ruleNote: `P(home≥1)=${fmt(bttsH*100,0)}% × P(away≥1)=${fmt(bttsA*100,0)}% = ${fmt(bttsYes*100,0)}%`,
+        ruleNote: `P(home≥1)=${fmt(bttsH*100,0)}% × P(away≥1)=${fmt(bttsA*100,0)}% = ${fmt(bttsYes*100,0)}% (buts par match : binomiale négative, k=${GOALS_DISPERSION_K})`,
       },
       {
         id: 'btts-no',
@@ -578,7 +603,7 @@ function computeGameMarkets(
 // ─── Public: game predictions ─────────────────────────────────────────────────
 
 /** Parse une chaîne L10 ("7-2-1") en win% 0–1. */
-function parseLastTen(last10: string | undefined, fallback: number): number {
+function parseLastTen(last10: string | null | undefined, fallback: number): number {
   if (!last10) return fallback;
   const [w] = last10.split('-').map(Number);
   return isNaN(w) ? fallback : Math.min(1, w / 10);
