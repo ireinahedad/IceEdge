@@ -1000,6 +1000,17 @@ def _apply_score_model(market: str, f: GameFeatures,
                          f"{int(p * 100)}%. Blanchissage d'un côté ou de l'autre : "
                          f"{int((1 - p) * 100)}%.")
 
+    if market == "ot_winner":
+        # `dist.p_ot_home` porte DÉJÀ la logistique ajustée sur 3 427
+        # prolongations (`p_ot_for`, coefficients dans score_report.json), et
+        # `_subject_view` l'a retournée si le sujet est le visiteur. Il n'y a
+        # rien à recalculer ici — seulement à cesser de l'ignorer.
+        p = dist.p_ot_home
+        return p, 0.72, (f"P(le sujet gagne la prolongation) = {int(p * 100)}% — "
+                         f"modèle ajusté sur l'écart de cadence "
+                         f"(λ {lh:.2f} vs {la:.2f}). Le 3 contre 3 puis les tirs "
+                         f"de barrage sont proches du pile ou face.")
+
     if market == "clean_sheet":
         # Lu sur la MÊME matrice que « les deux marquent », donc cohérent avec
         # lui par construction. L'heuristique `exp(-lam_away)` qu'il remplace
@@ -1059,6 +1070,10 @@ def _score_market_fn(market: str, f: GameFeatures):
         return lambda d: float(d.M[d._margin > 0].sum())
     if market == "game_to_ot":
         return lambda d: d.p_regulation_tie()
+    if market == "ot_winner":
+        # σ est invariant par complément, donc la même fonction sert les deux
+        # camps — les membres de l'ensemble restent orientés domicile.
+        return lambda d: d.p_ot_home
     if market == "both_teams_score":
         # σ est invariant par complément (écart-type de 1−X = écart-type de X),
         # donc la même fonction sert les deux côtés du marché.
@@ -1139,10 +1154,23 @@ def _apply_market(
         expl = f"Écart win% = {win_diff:+.2f} → P(OT/SO) = {int(prob*100)}%. Moyenne NHL: ~24%."
 
     elif market == "ot_winner":
-        # In OT: slight home advantage (52% base) + win% signal
-        prob = clamp(0.52 + win_diff * 0.28, 0.28, 0.72)
-        conf = 0.62
-        expl = f"En OT: avantage domicile 52% + force relative → {int(prob*100)}%."
+        # `0.52 + win_diff · 0.28` montait à 69 % pour un gros favori, alors que
+        # le modèle ajusté de CE MÊME service en donne ~55 % pour une équipe qui
+        # a un but par match d'avance. La pente était posée à la main ; celle-ci
+        # est mesurée. On l'utilise même sans modèle de score : `_p_ot_for`
+        # retombe sur le scalaire `_score_p_ot` si aucun modèle n'est chargé.
+        #
+        # Orientation : les λ reçus ici sont déjà ceux du SUJET (cf. le bloc
+        # `subject_is_home` de `predict_game`), mais l'ordonnée à l'origine du
+        # modèle vaut pour le DOMICILE. On évalue donc côté domicile, puis on
+        # complémente — inverser le signe de l'écart ne suffirait pas.
+        if f.subject_is_home:
+            prob = _p_ot_for(lam_home, lam_away)
+        else:
+            prob = 1.0 - _p_ot_for(lam_away, lam_home)
+        conf = 0.72
+        expl = (f"P(le sujet gagne la prolongation) = {int(prob*100)}% — modèle "
+                f"ajusté sur l'écart de cadence, pas une pente posée à la main.")
 
     elif market == "both_teams_score":
         # P(both score) = 1 − P(home shutout) − P(away shutout) + P(double shutout)
@@ -1229,7 +1257,8 @@ def _apply_market(
     elif market == "double_chance":
         # Home wins in reg OR goes to OT and home wins OT
         ot_rate = clamp(0.20 + max(0.0, 0.25 - abs(win_diff)) * 0.88, 0.08, 0.40)
-        ot_home = clamp(0.52 + win_diff * 0.28, 0.28, 0.72)
+        ot_home = (_p_ot_for(lam_home, lam_away) if f.subject_is_home
+                   else 1.0 - _p_ot_for(lam_away, lam_home))
         prob = clamp(base_prob * 0.85 + ot_rate * ot_home, 0.35, 0.92)
         conf = 0.88
         expl = f"Double chance (gagne reg + OT): {int(prob*100)}%."

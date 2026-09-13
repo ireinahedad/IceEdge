@@ -93,14 +93,33 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   const localGroups = finalPct == null
     ? []
     : buildGameGroups(home.abbr, away.abbr, finalPct, gameView.overUnder ?? 5.5);
-  // Inject mlProps from localGroups into apiGroups (server groups have better rulePct but no mlProps)
+  // ── Rattachement du marché ML aux tuiles du serveur ──────────────────────
+  //
+  // Le serveur ANNONCE désormais le marché de chaque tuile (`option.ml`). On le
+  // prend tel quel : c'est lui qui calcule la tuile, c'est lui qui sait ce
+  // qu'elle est.
+  //
+  // Ce bloc appariait auparavant les `mlProps` du client aux tuiles du serveur
+  // PAR IDENTIFIANT, alors que les deux fichiers n'ont jamais partagé le même
+  // vocabulaire : `ou-over` contre `o55`, `wm-h1` contre `wm-1`, `p1-over`
+  // contre `p1-o05`. 17 identifiants ne tombaient sur rien, donc Total Goals,
+  // Winning Margin, Goal Scorer et 1er Période Buts n'avaient aucune prédiction
+  // du modèle et le sélecteur ML restait sans effet dessus — en silence, parce
+  // qu'une correspondance ratée rend `undefined`, pas une erreur.
+  //
+  // La correspondance par identifiant reste en second recours, pour une tuile
+  // que le serveur n'annoncerait pas encore. Elle ne peut plus rien casser :
+  // elle ne fait qu'ajouter.
   const mergedGroups = apiGroups
     ? (() => {
-        const mlMap = new Map<string, MLProps>();
-        localGroups.forEach(g => g.options.forEach(o => { if (o.mlProps) mlMap.set(o.id, o.mlProps); }));
+        const byId = new Map<string, MLProps>();
+        localGroups.forEach(g => g.options.forEach(o => { if (o.mlProps) byId.set(o.id, o.mlProps); }));
         return apiGroups.map(g => ({
           ...g,
-          options: g.options.map(o => ({ ...o, mlProps: mlMap.get(o.id) })),
+          options: g.options.map(o => ({
+            ...o,
+            mlProps: (o as { ml?: MLProps }).ml ?? byId.get(o.id),
+          })),
         }));
       })()
     : localGroups;

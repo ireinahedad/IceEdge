@@ -12,7 +12,7 @@ import {
   predictPPPoint,
   predictPositionBasedProp,
   predictFutures,
-  predictDoubleChance,
+  predictOvertimeWinner,
   predictAltPuckLine,
   predictRegulationResult,
   predictTeamToScore,
@@ -309,7 +309,7 @@ async function computeProbability(body: PredictionRequest): Promise<ProbabilityR
   }
   if (market === "ot_winner") {
     if (!teamId) return unknown;
-    return plain(await predictDoubleChance(teamId, opponentId, isHome));
+    return plain(await predictOvertimeWinner(teamId, opponentId, isHome));
   }
   if (market === "regulation_result") {
     if (!teamId) return unknown;

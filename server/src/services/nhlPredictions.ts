@@ -30,11 +30,41 @@ import { attachGameFactors, attachPlayerFactors, attachGoalieFactors } from './f
 
 // ─── Shared interfaces ────────────────────────────────────────────────────────
 
+/**
+ * Descripteur du marché ML d'une tuile, produit PAR LE SERVEUR.
+ *
+ * POURQUOI IL EXISTE. La page match affiche les tuiles du serveur mais y
+ * rattachait les `mlProps` du client en faisant correspondre les IDENTIFIANTS
+ * (`GamePrediction.tsx`). Or les deux vocabulaires n'ont jamais été les mêmes :
+ * le client dit `ou-over`, le serveur `o55` ; `wm-h1` contre `wm-1` ;
+ * `p1-over` contre `p1-o05`. 17 identifiants côté client ne correspondaient à
+ * rien, donc Total Goals, Winning Margin, Goal Scorer et 1er Période Buts
+ * n'avaient AUCUNE prédiction du modèle — le sélecteur ML ne faisait rien sur
+ * ces tuiles, sans le moindre message.
+ *
+ * Le serveur sait déjà exactement quel marché il calcule pour chaque tuile :
+ * il l'annonce ici, et la correspondance par identifiant disparaît. Une tuile
+ * ajoutée côté serveur arrive avec son ML sans rien toucher au client.
+ */
+export interface BetMlProps {
+  type:             'game' | 'player' | 'team';
+  subjectId:        string;
+  opponentId?:      string;
+  propType?:        string;
+  line?:            number;
+  isHome?:          boolean;
+  selection?:       string;
+  settleMarket?:    string;
+  settleSelection?: string;
+}
+
 export interface BetOption {
   id:        string;
   label:     string;
   rulePct:   number;
   ruleNote:  string;
+  /** Marché ML de cette tuile. Absent = ce marché n'a pas d'équivalent modèle. */
+  ml?:       BetMlProps;
   /** Décomposition des facteurs — sert au pie chart & à l'éditeur de pondération. */
   factors?:  Array<{ id: string; label: string; weight: number; value: number }>;
   /** Famille de facteurs (match | totals | period | margin | ot | player_off | player_phys | goalie). */
@@ -249,6 +279,17 @@ function computeGameMarkets(
   teamExtras = false,                      // marchés propres à la vue équipe
   refPenaltyMult = 1,                      // volume de PP selon l'arbitrage (totaux)
 ): MarketGroup[] {
+  // Abréviations : ce que le service ML attend comme sujet.
+  const hAb: string = home.abbreviation ?? homeName;
+  const aAb: string = away.abbreviation ?? awayName;
+  /** Tuile vue du DOMICILE. */
+  const gm = (propType: string, line?: number, selection?: string): BetMlProps =>
+    ({ type: 'game', subjectId: hAb, opponentId: aAb, propType, line, isHome: true, selection });
+  /** Tuile vue de l'EXTÉRIEUR — `isHome: false`, sinon le service applique
+   *  l'avantage de la glace au visiteur (les deux tuiles totalisaient 110 %). */
+  const gma = (propType: string, line?: number, selection?: string): BetMlProps =>
+    ({ type: 'game', subjectId: aAb, opponentId: hAb, propType, line, isHome: false, selection });
+
   const wH  = (home.winPct ?? 50) / 100;
   const wA  = (away.winPct ?? 50) / 100;
   const gfH = home.goalsForPerGame     ?? LEAGUE_AVG_GPG;
@@ -331,6 +372,7 @@ function computeGameMarkets(
     options: [
       {
         id: 'ml-home',
+        ml: gm('moneyline'),
         label: `${homeName} to Win`,
         rulePct: pct(mlHome),
         ruleNote: [
@@ -345,12 +387,14 @@ function computeGameMarkets(
       },
       {
         id: 'ml-ot',
+        ml: gm('game_to_ot', undefined, 'yes'),
         label: 'OT / Shootout',
         rulePct: pct(ot),
         ruleNote: `NHL avg ~22.5% OT rate; closer matchup (+${fmt((ot-OT_BASE)*100,0)}%) based on win% spread`,
       },
       {
         id: 'ml-away',
+        ml: gma('moneyline'),
         label: `${awayName} to Win`,
         rulePct: pct(mlAway),
         ruleNote: `Away win probability = 1 − home win = ${fmt(mlAway*100,0)}%`,
@@ -369,12 +413,14 @@ function computeGameMarkets(
     options: [
       {
         id: 'pl-home',
+        ml: gm('puck_line'),
         label: `${homeName} −1.5`,
         rulePct: pct(plHome),
         ruleNote: `Skellam P(maison gagne de 2+) ${fmt(md.homeBy2plus*100,0)}% × régl. ${fmt(regAdj*100,0)}% = ${fmt(plHome*100,0)}%`,
       },
       {
         id: 'pl-away',
+        ml: gm('puck_line', undefined, 'no'),
         label: `${awayName} +1.5`,
         rulePct: pct(plAway),
         ruleNote: `Couvre sauf défaite visiteur de 2+ = ${fmt(plAway*100,0)}%`,
@@ -390,24 +436,28 @@ function computeGameMarkets(
     options: [
       {
         id: 'o55',
+        ml: gm('total_goals_over', 5.5),
         label: 'Over 5.5',
         rulePct: pct(over55),
         ruleNote: `Expected goals λ=${fmt(lambdaT)} (${fmt(lambdaH)}+${fmt(lambdaA)}) → Poisson P(>5.5)=${fmt(over55*100,0)}%`,
       },
       {
         id: 'u55',
+        ml: gm('total_goals_under', 5.5),
         label: 'Under 5.5',
         rulePct: pct(1 - over55),
         ruleNote: `P(<5.5) = ${fmt((1-over55)*100,0)}%`,
       },
       {
         id: 'o65',
+        ml: gm('total_goals_over', 6.5),
         label: 'Over 6.5',
         rulePct: pct(over65),
         ruleNote: `Poisson P(>6.5) = ${fmt(over65*100,0)}%`,
       },
       {
         id: 'u65',
+        ml: gm('total_goals_under', 6.5),
         label: 'Under 6.5',
         rulePct: pct(1 - over65),
         ruleNote: `P(<6.5) = ${fmt((1-over65)*100,0)}%`,
@@ -426,12 +476,14 @@ function computeGameMarkets(
     options: [
       {
         id: 'btts-yes',
+        ml: gm('both_teams_score', undefined, 'yes'),
         label: 'Yes',
         rulePct: pct(bttsYes),
         ruleNote: `P(home≥1)=${fmt(bttsH*100,0)}% × P(away≥1)=${fmt(bttsA*100,0)}% = ${fmt(bttsYes*100,0)}% (buts par match : binomiale négative, k=${GOALS_DISPERSION_K})`,
       },
       {
         id: 'btts-no',
+        ml: gm('both_teams_score', undefined, 'no'),
         label: 'No',
         rulePct: pct(1 - bttsYes),
         ruleNote: `At least one team is shut out = ${fmt((1-bttsYes)*100,0)}%`,
@@ -452,18 +504,24 @@ function computeGameMarkets(
       options: [
         {
           id:       `p${i+1}-home`,
+          ml:       gm(`period${i+1}_winner`),
           label:    `${homeName}`,
           rulePct:  pct(r.home),
           ruleNote: `λH=${fmt(lH)} vs λA=${fmt(lA)} → Skellam P(home>away)=${fmt(r.home*100,0)}%`,
         },
         {
           id:       `p${i+1}-draw`,
+          // Égalité après la 3e période = le match va en prolongation, un marché
+          // réel. Après la 1re ou la 2e, il n'y a pas de marché correspondant :
+          // pas de `ml`, et la tuile le dira plutôt que d'afficher autre chose.
+          ml:       i === 2 ? gm('game_to_ot', undefined, 'yes') : undefined,
           label:    'Draw',
           rulePct:  pct(r.draw),
           ruleNote: `P(equal goals in period) = ${fmt(r.draw*100,0)}%`,
         },
         {
           id:       `p${i+1}-away`,
+          ml:       gma(`period${i+1}_winner`),
           label:    `${awayName}`,
           rulePct:  pct(r.away),
           ruleNote: `P(away>home) = ${fmt(r.away*100,0)}%`,
@@ -479,18 +537,21 @@ function computeGameMarkets(
     options: [
       {
         id: 'p1-o05',
+        ml: gm('period1_total_goals', 0.5),
         label: 'Over 0.5',
         rulePct: pct(poissonOver(lP1, 0.5)),
         ruleNote: `P1 λ=${fmt(lP1)} → P(≥1 goal)=${fmt(poissonOver(lP1,0.5)*100,0)}%`,
       },
       {
         id: 'p1-o15',
+        ml: gm('period1_total_goals', 1.5),
         label: 'Over 1.5',
         rulePct: pct(poissonOver(lP1, 1.5)),
         ruleNote: `P(≥2 goals in P1)=${fmt(poissonOver(lP1,1.5)*100,0)}%`,
       },
       {
         id: 'p1-o25',
+        ml: gm('period1_total_goals', 2.5),
         label: 'Over 2.5',
         rulePct: pct(poissonOver(lP1, 2.5)),
         ruleNote: `P(≥3 goals in P1)=${fmt(poissonOver(lP1,2.5)*100,0)}%`,
@@ -504,12 +565,14 @@ function computeGameMarkets(
     options: [
       {
         id: 'ot-yes',
+        ml: gm('game_to_ot', undefined, 'yes'),
         label: 'Goes to OT',
         rulePct: pct(ot),
         ruleNote: `Balance factor from win% spread → ${fmt(ot*100,0)}% OT probability`,
       },
       {
         id: 'ot-no',
+        ml: gm('game_to_ot', undefined, 'no'),
         label: 'Decided in Regulation',
         rulePct: pct(1 - ot),
         ruleNote: `P(regulation finish) = ${fmt((1-ot)*100,0)}%`,
@@ -529,18 +592,21 @@ function computeGameMarkets(
     options: [
       {
         id: 'wm-1',
+        ml: gm('winning_margin', undefined, '1'),
         label: 'Win by 1',
         rulePct: pct(wm1),
         ruleNote: `Skellam marge 1 but ${fmt(md.winBy1/decisive*100,0)}% × régl. = ${fmt(wm1*100,0)}%`,
       },
       {
         id: 'wm-2',
+        ml: gm('winning_margin', undefined, '2'),
         label: 'Win by 2',
         rulePct: pct(wm2),
         ruleNote: `Skellam marge 2 buts ${fmt(md.winBy2/decisive*100,0)}% × régl. = ${fmt(wm2*100,0)}%`,
       },
       {
         id: 'wm-3p',
+        ml: gm('winning_margin', undefined, '3+'),
         label: 'Win by 3+',
         rulePct: pct(wm3p),
         ruleNote: `Skellam marge 3+ ${fmt(md.winBy3plus/decisive*100,0)}% × régl., λ=${fmt(lambdaT)}`,
@@ -572,14 +638,19 @@ function computeGameMarkets(
       id: 'teamx', title: 'Team Specials', cols: 2,
       options: [
         { id: 'tg-o25', label: `${homeName} Over 2.5`, rulePct: pct(tOver),
+          ml: gm('team_total_goals', 2.5, 'over'),
           ruleNote: `λ équipe=${fmt(lambdaH)} → Poisson P(>2.5)=${fmt(tOver*100,0)}%` },
         { id: 'tg-u25', label: `${homeName} Under 2.5`, rulePct: pct(1 - tOver),
+          ml: gm('team_total_goals', 2.5, 'under'),
           ruleNote: `P(<2.5) = ${fmt((1-tOver)*100,0)}%` },
         { id: 'cs-for', label: 'Clean Sheet (Shutout)', rulePct: pct(csFor),
+          ml: gm('clean_sheet', undefined, 'yes'),
           ruleNote: `P(0 but adverse) = e^(−${fmt(lambdaA)}) = ${fmt(csFor*100,0)}%` },
         { id: 'ppgoal', label: 'Scores a PP Goal', rulePct: pct(ppG),
+          ml: gm('team_pp_goals', undefined, 'yes'),
           ruleNote: `PP ${fmt(hPP,1)}% × ~${PP_OPPS} occasions → ${fmt(ppG*100,0)}%` },
         { id: 'pk-perfect', label: 'Kills All Penalties', rulePct: pct(pkAll),
+          ml: gm('team_penalty_kill', undefined, 'yes'),
           ruleNote: `PK ${fmt(hPK,1)}% ^ ${PP_OPPS} occasions = ${fmt(pkAll*100,0)}%` },
       ],
     });

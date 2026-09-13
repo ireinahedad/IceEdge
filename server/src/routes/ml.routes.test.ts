@@ -28,7 +28,7 @@ const engine = {
     prop === 'goalie_saves_ou'
       ? { probability: 55, playerSpecific: true }
       : { probability: 50, playerSpecific: false }),
-  predictFutures: vi.fn(async () => 20), predictDoubleChance: vi.fn(() => 50),
+  predictFutures: vi.fn(async () => 20), predictOvertimeWinner: vi.fn(async () => 53),
   predictAltPuckLine: vi.fn(() => 50), predictRegulationResult: vi.fn(() => 40),
   predictTeamToScore: vi.fn(() => 50), predictBothTeamsScore: vi.fn(() => 70),
   predictCleanSheet: vi.fn(() => 10), predictTeamPPGoal: vi.fn(() => 40),

@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   predictBothTeamsScore,
+  predictTeamPPGoal,
+  predictPenaltyKill,
+  predictOvertimeWinner,
   predictCleanSheet,
   predictMarginDistribution,
   predictWinningMargin,
@@ -472,5 +475,77 @@ describe('cohérence entre marchés — impossible par construction', () => {
         expect(clean).toBeLessThanOrEqual(100 - btts);
       }
     fetchTeams.mockImplementation(async () => TEAMS);
+  });
+});
+
+
+// ── Marchés dont le chiffre contredisait leur propre libellé ─────────────────
+
+describe('avantage numérique et désavantage — le libellé dit « toutes »', () => {
+  /** Équipes à unités spéciales moyennes : PP 20 %, PK 80 %. */
+  const SPECIAL = [
+    { id: 'sp', abbreviation: 'SP', gamesPlayed: 60, goalsForPerGame: 3.05,
+      goalsAgainstPerGame: 3.05, ppPct: 20, pkPct: 80 },
+  ];
+  beforeEach(() => { fetchTeams.mockResolvedValue(SPECIAL); });
+
+  it('« marque en avantage numérique » vaut ~46 %, pas 36 %', async () => {
+    // PP% est un taux PAR OCCASION. Sur ~3,1 occasions :
+    //   1 − e^(−3.1 × 0.20) = 46.2 %
+    // `ppPct * 1.8` donnait 36 % — dix points sous la définition du marché.
+    const p = await predictTeamPPGoal('SP');
+    expect(p).toBeGreaterThanOrEqual(44);
+    expect(p).toBeLessThanOrEqual(48);
+  });
+
+  it('« tue toutes ses pénalités » vaut ~48 %, pas 72 %', async () => {
+    // Tuer UNE pénalité à 80 % ne veut pas dire tuer la soirée à 80 % :
+    //   0.80 ^ 3.1 = 48.5 %
+    // `pkPct * 0.9` donnait 72 %, soit 24 points de trop pour un marché dont le
+    // libellé dit explicitement « toutes ».
+    const p = await predictPenaltyKill('SP');
+    expect(p).toBeGreaterThanOrEqual(46);
+    expect(p).toBeLessThanOrEqual(51);
+  });
+
+  it('les deux restent monotones dans le bon sens', async () => {
+    fetchTeams.mockResolvedValue([
+      { id: 'a', abbreviation: 'A', gamesPlayed: 60, goalsForPerGame: 3.05, goalsAgainstPerGame: 3.05, ppPct: 15, pkPct: 74 },
+      { id: 'b', abbreviation: 'B', gamesPlayed: 60, goalsForPerGame: 3.05, goalsAgainstPerGame: 3.05, ppPct: 27, pkPct: 86 },
+    ]);
+    expect(await predictTeamPPGoal('B')).toBeGreaterThan(await predictTeamPPGoal('A'));
+    expect(await predictPenaltyKill('B')).toBeGreaterThan(await predictPenaltyKill('A'));
+  });
+});
+
+describe('ot_winner — la prolongation est presque un pile ou face', () => {
+  // `mockResolvedValue` du bloc précédent survit à `clearAllMocks` (qui n'efface
+  // que les compteurs) : on rétablit explicitement le jeu d'équipes complet.
+  beforeEach(() => { fetchTeams.mockImplementation(async () => TEAMS); });
+
+  it('un gros favori ne dépasse pas les deux tiers', async () => {
+    // `moneyline + 14` donnait 92 % à ELI contre WEA. Le modèle ajusté sur
+    // 3 427 prolongations réelles (`score_report.json → p_ot_model`) dit que
+    // l'écart de niveau ne se transporte presque pas en 3 contre 3.
+    const p = await predictOvertimeWinner('ELI', 'WEA', true);
+    expect(p).toBeGreaterThan(50);
+    expect(p).toBeLessThan(70);
+  });
+
+  it('deux équipes identiques sont à pile ou face', async () => {
+    const p = await predictOvertimeWinner('TGA', 'TGB', true);
+    expect(p).toBeGreaterThanOrEqual(45);
+    expect(p).toBeLessThanOrEqual(55);
+  });
+
+  it('les deux camps du même match somment à 100', async () => {
+    const home = await predictOvertimeWinner('ELI', 'WEA', true);
+    const away = await predictOvertimeWinner('WEA', 'ELI', false);
+    expect(home + away).toBeGreaterThanOrEqual(99);
+    expect(home + away).toBeLessThanOrEqual(101);
+  });
+
+  it('sans statistiques exploitables : pile ou face, pas un moneyline gonflé', async () => {
+    expect(await predictOvertimeWinner('INCONNU', 'AUTRE', true)).toBe(50);
   });
 });

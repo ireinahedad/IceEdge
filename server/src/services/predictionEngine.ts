@@ -292,15 +292,39 @@ async function scoreDistribution(
 /**
  * P(le sujet gagne la prolongation | 60 minutes nulles).
  *
- * La 3-contre-3 puis les tirs de barrage se jouent à la mort subite : le
- * vainqueur est celui qui marque le prochain but, d'où la part de cadence
- * λ_sujet / (λ_sujet + λ_adverse). L'avantage de la glace survit à la
- * prolongation, avec la même amplitude qu'ailleurs dans ce fichier (3 points).
+ * Coefficients AJUSTÉS, pas supposés : ce sont ceux du modèle de score Python
+ * (`ml/models/score_report.json → p_ot_model`), une logistique sur l'écart de
+ * cadence, entraînée sur 3 427 prolongations réelles.
+ *
+ *     P(domicile gagne l'OT) = σ(0.264466 · (λ_dom − λ_ext) − 0.06097)
+ *
+ * CE QUE LES CHIFFRES DISENT. Le rapport d'entraînement donne log-loss 0.69142
+ * pour ce modèle contre 0.69315 pour une pièce truquée à 50 % : l'écart est
+ * minuscule, et c'est LE résultat. La prolongation à 3 contre 3 puis les tirs
+ * de barrage sont très proches du pile ou face, quelle que soit la différence
+ * de niveau. Une équipe avec un but par match d'avance ne gagne l'OT que
+ * 55 % du temps.
+ *
+ * C'est pour ça que l'ancien `moneyline + 14` était intenable : il donnait 92 %
+ * à un favori à 78 %, pour la phase du match où l'écart de talent compte le
+ * MOINS. Le modèle Python lui-même, avec son heuristique
+ * `0.52 + win_diff · 0.28`, monte encore à 69 % — trop haut aussi, et cette
+ * fonction-ci est maintenant la référence des deux.
  */
+const OT_WINNER_FIT = { slope: 0.264466, intercept: -0.06097 };
+
 function pWinsOvertime(d: ScoreDistribution, isHome: boolean): number {
-  const share = d.lambdaSubject / (d.lambdaSubject + d.lambdaOpponent);
-  const tilt  = isHome ? 0.03 : -0.03;
-  return Math.max(0.05, Math.min(0.95, share + tilt));
+  // Le modèle est orienté « domicile moins extérieur ». Quand le sujet est le
+  // visiteur, on évalue pour le domicile et on prend le complément — inverser
+  // le signe de l'écart ne suffirait pas, l'ordonnée à l'origine n'est pas
+  // symétrique.
+  const deltaHomeMinusAway = isHome
+    ? d.lambdaSubject - d.lambdaOpponent
+    : d.lambdaOpponent - d.lambdaSubject;
+
+  const z = OT_WINNER_FIT.slope * deltaHomeMinusAway + OT_WINNER_FIT.intercept;
+  const pHome = 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, z))));
+  return isHome ? pHome : 1 - pHome;
 }
 
 /**
@@ -700,18 +724,26 @@ export async function predictPositionBasedProp(
 // ── Additional game / team markets ────────────────────────────────────────────
 
 /**
- * Used for `ot_winner` (win probability if the game reaches OT): moneyline
- * lifted a bit, since a team already alive in OT is closer to a coinflip.
- * (Previously also backed the `double_chance` market, removed — draws aren't
- * a real outcome in the NHL, so "home or draw" made no sense for hockey.)
+ * `ot_winner` — qui gagne SI le match va en prolongation.
+ *
+ * Le marché suppose déjà qu'on est en prolongation : le moneyline n'y a pas sa
+ * place. L'ancienne formule était `min(92, moneyline + 14)`, qui donnait 92 % à
+ * un favori à 78 % pour la phase du match où l'écart de niveau compte le moins.
+ * Elle POUSSAIT le favori là où les données le ramènent vers 50 %.
+ *
+ * Sans cadences exploitables, 50 % — c'est la meilleure réponse possible pour
+ * un marché dont le modèle ajusté dit qu'il est presque un pile ou face.
+ * (Anciennement `predictDoubleChance` : ce nom venait d'un marché « domicile ou
+ * nul » retiré depuis, les nuls n'existant pas en NHL.)
  */
-export async function predictDoubleChance(
+export async function predictOvertimeWinner(
   teamId: string,
   opponentId?: string,
   isHome = true
 ): Promise<number> {
-  const ml = await predictMoneyline(teamId, opponentId, isHome);
-  return Math.min(92, ml + 14);
+  const d = await scoreDistribution(teamId, opponentId);
+  if (!d) return 50;
+  return pct(pWinsOvertime(d, isHome));
 }
 
 /** Alternate puck line (+1.5 underdog covers): moneyline boosted ~18pts. */
@@ -798,18 +830,50 @@ export async function predictCleanSheet(
   return pct(opponentMargin(d, 0));
 }
 
-/** Team power-play goal (≥1 PP goal in the game), from season PP%. */
+/**
+ * Avantages numériques obtenus par une équipe sur un match, en moyenne NHL.
+ *
+ * Même valeur que `nhlPredictions.ts`, volontairement : les deux moteurs
+ * répondent aux mêmes deux marchés et ne doivent pas se contredire sur le même
+ * match. `nhlPredictions` avait déjà les bonnes formules ; ce fichier ne les
+ * avait pas.
+ */
+const PP_OPPORTUNITIES = 3.1;
+
+/**
+ * L'équipe marque AU MOINS UN but en avantage numérique.
+ *
+ * PP% est un taux PAR OCCASION, pas une probabilité par match. Sur ~3,1
+ * occasions :
+ *
+ *     P(au moins un) = 1 − e^(−3.1 × PP%)
+ *
+ * `ppPct * 1.8` donnait 36 % à une équipe à 20 % de réussite, là où le calcul
+ * en donne 46 % — dix points sous la définition même du marché, et le
+ * multiplicateur 1,8 ne correspondait à aucune quantité.
+ */
 export async function predictTeamPPGoal(teamId?: string): Promise<number> {
   const team = teamId ? await getTeam(teamId) : null;
   const ppPct = team?.ppPct ?? 20;
-  return Math.round(Math.min(75, Math.max(8, ppPct * 1.8)));
+  return pct(1 - Math.exp(-PP_OPPORTUNITIES * (ppPct / 100)));
 }
 
-/** Team kills all penalties, from season PK%. */
+/**
+ * L'équipe tue TOUTES ses pénalités du match.
+ *
+ * Même confusion en sens inverse : tuer une pénalité à 80 % ne veut pas dire
+ * tuer la soirée à 80 %. Il faut réussir les ~3,1 fois :
+ *
+ *     P(toutes tuées) = PK% ^ 3.1
+ *
+ * Soit 48 % pour une équipe à 80 %, pas les 72 % que rendait `pkPct * 0.9`.
+ * L'ancienne formule était monotone dans le bon sens mais décrivait une seule
+ * pénalité, alors que le libellé de la tuile dit « toutes ».
+ */
 export async function predictPenaltyKill(teamId?: string): Promise<number> {
   const team = teamId ? await getTeam(teamId) : null;
   const pkPct = team?.pkPct ?? 80;
-  return Math.round(Math.min(80, Math.max(10, pkPct * 0.9)));
+  return pct(Math.pow(pkPct / 100, PP_OPPORTUNITIES));
 }
 
 // ── Écart de victoire ─────────────────────────────────────────────────────────

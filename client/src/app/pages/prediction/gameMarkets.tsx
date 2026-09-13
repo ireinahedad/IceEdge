@@ -64,7 +64,17 @@ export function settlementFields(mlProps: MLProps | undefined): { marketType?: s
   return {};
 }
 export interface RuleFactor { id: string; label: string; weight: number; value: number; }
-export interface BetOpt { id: string; label: string; rulePct: number; ruleNote: string; mlProps?: MLProps; factors?: RuleFactor[]; factorGroup?: string; }
+export interface BetOpt {
+  id: string; label: string; rulePct: number; ruleNote: string;
+  mlProps?: MLProps; factors?: RuleFactor[]; factorGroup?: string;
+  /**
+   * Marché ML annoncé PAR LE SERVEUR pour cette tuile (`BetMlProps` dans
+   * `nhlPredictions.ts`). `GamePrediction.tsx` le préfère à l'appariement par
+   * identifiant, qui ratait 17 tuiles parce que client et serveur n'ont jamais
+   * nommé les options pareil.
+   */
+  ml?: MLProps;
+}
 export interface MktGroup { id: string; title: string; cols: 2 | 3; options: BetOpt[]; }
 
 export function buildGameGroups(home: string, away: string, hp: number, ou: number): MktGroup[] {
