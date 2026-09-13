@@ -307,6 +307,11 @@ export const predictMlSchema = z.object({
   propType:   marketType.optional(),
   line:       betLine.optional(),
   selection:  selectionValue.optional(),
+  // Le sujet reçoit-il ? Sans ce champ, la route passait le sujet comme équipe
+  // à DOMICILE au service Python : les deux tuiles moneyline d'un même match
+  // recevaient chacune l'avantage de la glace et totalisaient 109–112 %.
+  // Optionnel, défaut `true`, pour que les corps déjà en circulation passent.
+  isHome:     z.boolean().optional(),
 });
 
 

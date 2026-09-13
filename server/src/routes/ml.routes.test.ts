@@ -21,16 +21,30 @@ import request from 'supertest';
 const engine = {
   predictMoneyline: vi.fn(() => 61), predictPuckLine: vi.fn(() => 40),
   predictTotalGoals: vi.fn(() => 55), predictAnytimeGoal: vi.fn(() => 45),
-  predictFirstGoalScorer: vi.fn(() => 12), predictShotsOU: vi.fn(() => 52),
+  predictFirstGoalScorer: vi.fn(async () => 12), predictShotsOU: vi.fn(() => 52),
   predictAssistsOU: vi.fn(() => 48), predictPointsOU: vi.fn(() => 50),
-  predictPPPoint: vi.fn(() => 33), predictPositionBasedProp: vi.fn(() => 50),
+  predictPPPoint: vi.fn(() => 33),
+  predictPositionBasedProp: vi.fn(async (_id: string, prop: string) =>
+    prop === 'goalie_saves_ou'
+      ? { probability: 55, playerSpecific: true }
+      : { probability: 50, playerSpecific: false }),
   predictFutures: vi.fn(async () => 20), predictDoubleChance: vi.fn(() => 50),
   predictAltPuckLine: vi.fn(() => 50), predictRegulationResult: vi.fn(() => 40),
   predictTeamToScore: vi.fn(() => 50), predictBothTeamsScore: vi.fn(() => 70),
   predictCleanSheet: vi.fn(() => 10), predictTeamPPGoal: vi.fn(() => 40),
-  predictPenaltyKill: vi.fn(() => 80), predictWinningMargin: vi.fn(() => 30),
+  predictPenaltyKill: vi.fn(() => 80),
   predictPeriodWinner: vi.fn(() => 38), predictPeriodTotalGoals: vi.fn(() => 45),
   buildRealFactors: vi.fn(async () => []),
+  // Marchés qui servaient une constante dans le routeur. Les doubles rendent
+  // `null` quand la sélection est illisible, comme le vrai moteur, parce que
+  // c'est CE comportement que les tests ci-dessous vérifient.
+  predictWinningMargin: vi.fn(async (_t?: string, _o?: string, _h?: boolean, sel?: string) =>
+    sel ? 30 : null),
+  predictGameToOvertime: vi.fn(async () => 21),
+  predictHighestScoringPeriod: vi.fn(async (_t?: string, _o?: string, sel?: string) =>
+    sel ? 34 : null),
+  predictLastGoalScorer: vi.fn(async () => 11),
+  predictGoalieSaves: vi.fn(async () => 55),
 };
 vi.mock('../services/predictionEngine', () => engine);
 
@@ -126,5 +140,95 @@ describe('/api/predict/* — les corps que le client envoie vraiment passent tou
     expect(res.status).toBe(200);
     expect(res.body.combinedProbability).toBe(30);
     expect(Number.isNaN(res.body.adjustedProbability)).toBe(false);
+  });
+});
+
+/**
+ * Ce que ce bloc prouve : `/api/predict/single` ne rend JAMAIS un chiffre qu'il
+ * n'a pas calculé, et dit ce qu'il faut savoir sur ceux qu'il rend.
+ *
+ * Avant, `computeProbability` finissait par `return 50` pour tout marché
+ * inconnu, servait `predictWinningMargin()` = 12 pour les six seaux d'écart, et
+ * répondait 24 / 38 en dur pour `game_to_ot` / `highest_scoring_period`. Aucun
+ * de ces chiffres ne se distinguait d'une vraie probabilité à l'écran.
+ */
+describe('/api/predict/single — pas de chiffre inventé, et les réserves sont dites', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  const post = async (body: Record<string, unknown>) =>
+    request(await predictApp()).post('/api/predict/single').send(body);
+
+  it('un marché que le moteur ne connaît pas : 422, plus jamais 50 %', async () => {
+    const res = await post({ marketType: 'corner_kicks', teamId: 'TOR', opponentId: 'MTL' });
+    expect(res.status).toBe(422);
+    expect(res.body.probability).toBeUndefined();
+    expect(res.body.error).toBe('no_estimate');
+  });
+
+  it('écart de victoire sans seau : 422 au lieu de la constante 12', async () => {
+    const res = await post({ marketType: 'winning_margin', teamId: 'TOR', opponentId: 'MTL' });
+    expect(res.status).toBe(422);
+  });
+
+  it('écart de victoire AVEC seau : le seau est transmis au moteur', async () => {
+    const res = await post({
+      marketType: 'winning_margin', teamId: 'TOR', opponentId: 'MTL', selection: '3+',
+    });
+    expect(res.status).toBe(200);
+    expect(engine.predictWinningMargin).toHaveBeenCalledWith('TOR', 'MTL', true, '3+');
+  });
+
+  it('game_to_ot passe par le moteur et non par un 24 écrit en dur', async () => {
+    const res = await post({ marketType: 'game_to_ot', teamId: 'TOR', opponentId: 'MTL' });
+    expect(res.status).toBe(200);
+    expect(engine.predictGameToOvertime).toHaveBeenCalledTimes(1);
+    expect(res.body.probability).toBe(21);
+  });
+
+  it('« décidé en 60 minutes » reste le complément exact de « va en prolongation »', async () => {
+    const yes = await post({ marketType: 'game_to_ot', teamId: 'TOR', opponentId: 'MTL', selection: 'yes' });
+    const no  = await post({ marketType: 'game_to_ot', teamId: 'TOR', opponentId: 'MTL', selection: 'no'  });
+    expect(yes.body.probability + no.body.probability).toBe(100);
+  });
+
+  it('highest_scoring_period sans période : 422 au lieu de la constante 38', async () => {
+    const res = await post({ marketType: 'highest_scoring_period', teamId: 'TOR', opponentId: 'MTL' });
+    expect(res.status).toBe(422);
+  });
+
+  it('highest_scoring_period avec période : le chiffre porte sa réserve', async () => {
+    const res = await post({
+      marketType: 'highest_scoring_period', teamId: 'TOR', opponentId: 'MTL', selection: 'P2',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.caveat).toBe('period_symmetric');
+  });
+
+  it('last_goal_scorer appelle SA fonction et annonce l\'estimateur partagé', async () => {
+    const res = await post({ marketType: 'last_goal_scorer', playerId: '8478402' });
+    expect(res.status).toBe(200);
+    // L'alias muet est parti : c'est un appel distinct, avec sa mise en garde.
+    expect(engine.predictLastGoalScorer).toHaveBeenCalledTimes(1);
+    expect(engine.predictFirstGoalScorer).not.toHaveBeenCalled();
+    expect(res.body.caveat).toBe('shared_with_first_goal');
+  });
+
+  it('first_goal_scorer, lui, ne porte aucune réserve', async () => {
+    const res = await post({ marketType: 'first_goal_scorer', playerId: '8478402' });
+    expect(res.status).toBe(200);
+    expect(res.body.caveat).toBeUndefined();
+  });
+
+  it('les mises en échec sont annoncées comme moyenne de ligue', async () => {
+    const res = await post({ marketType: 'hits_ou', playerId: '8478402', line: 1.5, selection: 'over' });
+    expect(res.status).toBe(200);
+    expect(res.body.probability).toBe(50);
+    expect(res.body.caveat).toBe('league_average');
+  });
+
+  it('les arrêts du gardien, eux, sont une vraie prédiction par joueur', async () => {
+    const res = await post({ marketType: 'goalie_saves_ou', playerId: '8471234', line: 27.5, selection: 'over' });
+    expect(res.status).toBe(200);
+    expect(res.body.caveat).toBeUndefined();
   });
 });

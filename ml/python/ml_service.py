@@ -22,6 +22,7 @@ Accès : /predict/*, /features et /reports exigent l'en-tête `X-ML-Token` (= ML
 """
 
 from __future__ import annotations
+import copy
 import hmac
 import json
 import math
@@ -527,6 +528,24 @@ def poisson_cdf(k: int, lam: float) -> float:
         term *= lam / (i + 1)
     return min(cdf, 1.0)
 
+class _NoEstimate(Exception):
+    """Le service ne sait pas pricer ce marché avec ce qu'on lui a donné.
+
+    C'est une réponse valide, pas un plantage : la route la traduit en 422 et
+    le client affiche un état « indisponible ». Un chiffre faux qui a l'air
+    juste est pire que pas de chiffre du tout — c'est la règle que
+    `predictionApiService.ts` applique déjà côté client.
+    """
+
+    def __init__(self, market: str):
+        super().__init__(f"no estimate available for market '{market}'")
+        self.market = market
+
+
+def poisson_pmf(k: int, lam: float) -> float:
+    return math.exp(-lam) * lam ** k / math.factorial(k)
+
+
 def poisson_over(line: float, lam: float) -> float:
     """P(X > line) — supports half-integer lines (e.g. 2.5)"""
     return 1.0 - poisson_cdf(math.floor(line), lam)
@@ -642,6 +661,16 @@ class GameFeatures(BaseModel):
     # marché Oui/Non recevaient le MÊME pourcentage — c'est le bug BTTS
     # 90 % / 90 % (Blues–Stars, 19 septembre 2026).
     selection: Optional[str] = None
+    # Le SUJET de la question est-il l'équipe à domicile ?
+    #
+    # `home_team`/`away_team` décrivent le MATCH (qui reçoit, d'où l'avantage de
+    # la glace, le voyage, l'altitude de l'aréna). Ce champ dit de quel côté se
+    # place la question posée. Sans lui, le backend passait le sujet en premier
+    # argument de `buildGameFeatures`, donc la tuile « extérieur » demandait
+    # « P(l'équipe visiteuse gagne CHEZ ELLE) » : les deux tuiles moneyline d'un
+    # même match recevaient toutes deux l'avantage de la glace et totalisaient
+    # 109–112 % au lieu de 100 %.
+    subject_is_home: bool = True
     line: Optional[float] = None             # for total goals
     # ── v4 — cotes du marché (The Odds API, format DÉCIMAL, ex. 1.87) ────────
     home_odds_decimal: Optional[float] = Field(None, gt=1.0)
@@ -669,6 +698,11 @@ class PlayerPropFeatures(BaseModel):
     line: float = Field(0.5, ge=0)
     prop_type: str = Field("goals")   # "goals"|"assists"|"points"|"shots"|"pp_point"
     selection: str = Field("over")    # "over"|"under"
+    # La cadence reçue est-elle une MOYENNE DE LIGUE plutôt qu'une mesure sur ce
+    # joueur ? Le backend le sait (il n'a pas de source par joueur pour les
+    # mises en échec ni les tirs bloqués) ; sans ce drapeau, l'explication
+    # affirmait « player averages 2.10 hits/game » pour n'importe qui.
+    rate_is_league_average: bool = False
 
 # ── Team futures features ─────────────────────────────────────────────────────
 
@@ -779,6 +813,129 @@ def _p_both_score(dist: "ScoreDistribution") -> float:
     return float(1.0 - p_home_blank - p_away_blank + float(M[0, 0]))
 
 
+# ── Écart de victoire / période la plus prolifique ────────────────────────────
+#
+# Ces deux marchés n'avaient AUCUN moyen de savoir ce qu'on leur demandait :
+# `GameFeatures` ne portait ni le seau d'écart ni la période. `winning_margin`
+# renvoyait donc `base_prob * 0.40` — le même 34 % pour les six tuiles — et
+# `highest_scoring_period` price ait toujours la 2e période, quelle que soit
+# celle demandée (P1, P2 et P3 sortaient toutes à 38 %, soit 114 % pour trois
+# issues qui s'excluent). Le côté demandé arrive maintenant dans `selection`.
+
+_NEGATIVE_MARGIN_SIZES = {"1": 1, "by_1": 1, "exactly_1": 1,
+                          "2": 2, "by_2": 2, "exactly_2": 2}
+
+
+def _parse_margin_bucket(selection: str | None, subject_is_home: bool) -> str | None:
+    """Seau d'écart demandé, exprimé DU POINT DE VUE DU SUJET.
+
+    Deux vocabulaires côté client, qui doivent tomber au même endroit :
+      - `gameMarkets.tsx` envoie la taille seule ("1", "2", "3+"), le côté étant
+        porté par le sujet de la requête ;
+      - `betMarkets.ts` envoie un couple explicite ("home_1", "away_2plus").
+    """
+    s = (selection or "").strip().lower().replace(" ", "_").replace("-", "_")
+    if not s:
+        return None
+
+    subject_wins = True
+    if s.startswith("home_") or s.startswith("away_"):
+        side_is_home = s.startswith("home_")
+        subject_wins = (side_is_home == subject_is_home)
+        s = s.split("_", 1)[1]
+
+    if s in ("2plus", "2+"):
+        return "win_2plus" if subject_wins else "lose_2plus"
+    if s in ("3", "3+", "3plus", "by_3", "3_plus"):
+        return "win_3plus" if subject_wins else "lose_3plus"
+    size = _NEGATIVE_MARGIN_SIZES.get(s)
+    if size is None:
+        return None
+    return (f"win_{size}" if subject_wins else f"lose_{size}")
+
+
+def _p_margin_bucket(dist: "ScoreDistribution", bucket: str) -> float:
+    """Probabilité d'un seau d'écart, lue sur la matrice jointe.
+
+    La masse de nul réglementaire bascule entièrement sur « par 1 » : un match
+    à égalité après 60 minutes se termine toujours par un but d'écart, en
+    prolongation ou en fusillade. C'est ce qui fait de « par 1 » l'écart le plus
+    fréquent du hockey, et aucun modèle qui l'ignore ne retrouve la forme réelle
+    de la distribution.
+    """
+    M, marg = dist.M, dist._margin
+    tie = float(M[dist._tie].sum())
+    p_ot = dist.p_ot_home
+
+    def decisive(lo: int, hi: int | None, side: int) -> float:
+        m = marg * side
+        sel = (m >= lo) if hi is None else ((m >= lo) & (m <= hi))
+        return float(M[sel].sum())
+
+    if bucket == "win_1":       return decisive(1, 1, 1) + tie * p_ot
+    if bucket == "lose_1":      return decisive(1, 1, -1) + tie * (1.0 - p_ot)
+    if bucket == "win_2":       return decisive(2, 2, 1)
+    if bucket == "lose_2":      return decisive(2, 2, -1)
+    if bucket == "win_3plus":   return decisive(3, None, 1)
+    if bucket == "lose_3plus":  return decisive(3, None, -1)
+    if bucket == "win_2plus":   return decisive(2, None, 1)
+    if bucket == "lose_2plus":  return decisive(2, None, -1)
+    return 0.0
+
+
+def _parse_period(selection: str | None) -> str | None:
+    s = (selection or "").strip().lower()
+    if s in ("p1", "1", "1st", "period1", "first"):  return "P1"
+    if s in ("p2", "2", "2nd", "period2", "second"): return "P2"
+    if s in ("p3", "3", "3rd", "period3", "third"):  return "P3"
+    if s in ("tie", "tied", "draw", "equal"):        return "tie"
+    return None
+
+
+def _p_highest_period(dist: "ScoreDistribution", period: str) -> float:
+    """P(la période demandée est la plus prolifique du match).
+
+    Les trois périodes sont supposées ÉQUIVALENTES, faute de données par
+    période. C'est délibérément conservateur : la NHL marque un peu plus au 3e
+    (fatigue, filets déserts, jeu ouvert par le score), mais inventer un
+    coefficient d'asymétrie reproduirait exactement le problème qu'on corrige.
+    Conséquence assumée : les trois périodes sortent au même prix, et l'égalité
+    est fréquente — ce qui est vrai.
+    """
+    lam = (dist.lam_home + dist.lam_away) / 3.0
+    pmf = [poisson_pmf(n, lam) for n in range(0, 16)]
+    strict = 0.0
+    for n, pn in enumerate(pmf):
+        below = sum(pmf[:n])
+        strict += pn * below * below      # les DEUX autres périodes sous n
+    if period == "tie":
+        return clamp(1.0 - 3.0 * strict, 0.02, 0.98)
+    return clamp(strict, 0.02, 0.98)
+
+
+def _subject_view(dist: "ScoreDistribution", subject_is_home: bool) -> "ScoreDistribution":
+    """La même distribution, vue du côté du SUJET.
+
+    `ScoreDistribution` est construite du point de vue du domicile : `M[i][j]` =
+    P(domicile marque i, extérieur j). La transposée est exactement la même loi
+    vue de l'extérieur, donc toutes les formules écrites « pour le domicile »
+    répondent pour le visiteur sans être réécrites — y compris celles qui ne
+    sont PAS des compléments (`team_total_goals`, `clean_sheet`), pour
+    lesquelles un simple `1 − p` serait faux.
+
+    `_margin`, `_total` et `_tie` ne dépendent que des indices : ils restent
+    valides tels quels. Seuls les λ et le côté qui gagne la prolongation
+    s'échangent.
+    """
+    if subject_is_home:
+        return dist
+    mirrored = copy.copy(dist)
+    mirrored.M = np.ascontiguousarray(dist.M.T)
+    mirrored.lam_home, mirrored.lam_away = dist.lam_away, dist.lam_home
+    mirrored.p_ot_home = 1.0 - dist.p_ot_home
+    return mirrored
+
+
 def _apply_score_model(market: str, f: GameFeatures,
                        dist: "ScoreDistribution") -> "tuple[float, float, str] | None":
     """Prix exact issu du modèle de score (P2), quand le marché est dérivable.
@@ -842,6 +999,32 @@ def _apply_score_model(market: str, f: GameFeatures,
         return p, 0.90, (f"Matrice jointe λ={lh:.2f}/{la:.2f} → les deux marquent : "
                          f"{int(p * 100)}%. Blanchissage d'un côté ou de l'autre : "
                          f"{int((1 - p) * 100)}%.")
+
+    if market == "clean_sheet":
+        # Lu sur la MÊME matrice que « les deux marquent », donc cohérent avec
+        # lui par construction. L'heuristique `exp(-lam_away)` qu'il remplace
+        # ignorait la défense d'en face et pouvait annoncer 10 % de blanchissage
+        # sur un match où BTTS disait 92 % — soit au plus 8 % possible.
+        p = float(dist.M[:, 0].sum())
+        return p, 0.88, (f"P(l'adversaire ne marque pas) = {int(p * 100)}%, "
+                         f"lu sur la matrice jointe (cohérent avec « les deux marquent »).")
+
+    if market == "winning_margin":
+        bucket = _parse_margin_bucket(f.selection, f.subject_is_home)
+        if bucket is None:
+            return None
+        p = _p_margin_bucket(dist, bucket)
+        return p, 0.78, (f"P({bucket.replace('_', ' ')}) = {int(p * 100)}% — "
+                         f"tout match nul après 60 minutes se finit à 1 but d'écart.")
+
+    if market == "highest_scoring_period":
+        period = _parse_period(f.selection)
+        if period is None:
+            return None
+        p = _p_highest_period(dist, period)
+        return p, 0.60, (f"P({period} est la période la plus prolifique) = {int(p*100)}%. "
+                         f"Modèle à trois périodes équivalentes — le service n'a pas "
+                         f"de données par période.")
 
     return None
 
@@ -1005,10 +1188,16 @@ def _apply_market(
         expl = f"Win% P3 (plus corrélé avec résultat final) → {int(prob*100)}%."
 
     elif market == "highest_scoring_period":
-        # P2 is NHL's highest-scoring period on average (~38%)
-        prob = clamp(0.38 + (total_lam - 6.0) * 0.025, 0.26, 0.50)
-        conf = 0.65
-        expl = f"P2 est la plus productive en NHL (38% avg) → {int(prob*100)}%."
+        period = _parse_period(f.selection)
+        if period is None:
+            raise _NoEstimate(market)
+        lam_p = total_lam / 3.0
+        pmf = [poisson_pmf(n, lam_p) for n in range(0, 16)]
+        strict = sum(pn * sum(pmf[:n]) ** 2 for n, pn in enumerate(pmf))
+        prob = clamp(1.0 - 3.0 * strict if period == "tie" else strict, 0.02, 0.98)
+        conf = 0.55
+        expl = (f"P({period} la plus prolifique) = {int(prob*100)}% — trois périodes "
+                f"supposées équivalentes, faute de données par période.")
 
     elif market == "period1_total_goals":
         p1_line = f.line if f.line is not None else 1.5
@@ -1032,10 +1221,10 @@ def _apply_market(
         expl = f"Poisson P3 λ={p3_lam:.2f} → OVER {p3_line}: {int(prob*100)}%."
 
     elif market == "winning_margin":
-        # P(home wins by exact margin): rough composite
-        prob = clamp(base_prob * 0.40, 0.04, 0.48)
-        conf = 0.58
-        expl = f"Marge exacte difficile à prédire → ~{int(prob*100)}%."
+        # Sans modèle de score il n'y a pas de loi jointe d'où tirer un seau
+        # d'écart. `base_prob * 0.40` rendait le même chiffre aux six tuiles,
+        # pour une partition exhaustive qui doit totaliser 100 %.
+        raise _NoEstimate(market)
 
     elif market == "double_chance":
         # Home wins in reg OR goes to OT and home wins OT
@@ -1064,15 +1253,14 @@ def _apply_market(
         expl = f"P(marquer en P1∩P2∩P3) = {p_per_period:.2f}³ = {int(prob*100)}%."
 
     elif market == "total_penalties":
-        prob = 0.52
-        conf = 0.52
-        expl = "Pénalités difficiles à modéliser → ~52% (proche du hasard)."
+        # 0.52 n'était dérivé de rien et se présentait comme une prédiction.
+        raise _NoEstimate(market)
 
     else:
-        # Unknown market: fall back to base moneyline
-        prob = base_prob
-        conf = 0.68
-        expl = f"{model_label}: {int(prob*100)}% (marché '{market}' → signal moneyline)."
+        # Marché inconnu. Renvoyer `base_prob` servait la probabilité MONEYLINE
+        # sous le nom du marché demandé : `corner_kicks` rendait 84 %, soit
+        # exactement le moneyline, présenté comme une prédiction de ce marché.
+        raise _NoEstimate(market)
 
     return clamp(prob, 0.05, 0.95), conf, expl
 
@@ -1558,10 +1746,28 @@ def predict_game(f: GameFeatures) -> MLResponse:
         # ni client.
         model_version = "score-nhl-v1.0"
 
-    prob, conf_mult, explanation = _apply_market(
-        f.market_type, base_prob, f, win_diff, lam_home, lam_away, model_type,
-        dist=score_dist,
-    )
+    # ── Point de vue du SUJET ────────────────────────────────────────────────
+    # `home_team`/`away_team` décrivent le match ; `subject_is_home` dit de quel
+    # côté est la question. Tout ce qui suit est exprimé pour le sujet : la
+    # matrice jointe est transposée, et les entrées des heuristiques (λ,
+    # probabilité de base, écart de win%) sont échangées avec elle.
+    if not f.subject_is_home:
+        score_dist = _subject_view(score_dist, False) if score_dist is not None else None
+        base_prob  = 1.0 - base_prob
+        win_diff   = -win_diff
+        lam_home, lam_away = lam_away, lam_home
+
+    try:
+        prob, conf_mult, explanation = _apply_market(
+            f.market_type, base_prob, f, win_diff, lam_home, lam_away, model_type,
+            dist=score_dist,
+        )
+    except _NoEstimate as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "no_estimate", "market": e.market,
+                    "message": "No estimate available for this market with the data provided"},
+        )
 
     # 4quater. Côté « non » d'un marché binaire (cf. `_BINARY_MARKETS`). Le
     #          complément est pris APRÈS `_apply_market`, donc après son clamp :
@@ -1598,7 +1804,7 @@ def predict_game(f: GameFeatures) -> MLResponse:
     confidence = int(clamp(base_conf * conf_mult, 0.38, 0.90) * 100)
 
     return MLResponse(
-        probability=int(prob * 100),
+        probability=round(prob * 100),
         confidence=confidence,
         feature_importances=fi_list[:5],
         model_version=model_version,
@@ -1630,7 +1836,16 @@ def predict_player(f: PlayerPropFeatures) -> MLResponse:
         "wins":     f.shots_per_game,
         "shutouts": f.shots_per_game,
     }
-    rate = rate_map.get(f.prop_type, f.goals_per_game)
+    if f.prop_type not in rate_map:
+        # `rate_map.get(..., f.goals_per_game)` servait la cadence de BUTS sous
+        # le nom du marché demandé. Un marché qu'on ne sait pas pricer n'a pas
+        # de chiffre, il a une absence de chiffre.
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "no_estimate", "market": f.prop_type,
+                    "message": "No estimate available for this prop type"},
+        )
+    rate = rate_map[f.prop_type]
 
     raw_over = poisson_over(f.line, rate)
     prob = raw_over if f.selection == "over" else 1.0 - raw_over
@@ -1642,7 +1857,10 @@ def predict_player(f: PlayerPropFeatures) -> MLResponse:
     pace_vs_line = (rate - f.line) / max(f.line, 0.1)
 
     importances = sorted([
-        FeatureImportance(name=f"{f.prop_type.capitalize()} rate/game", importance=round(rate, 3),           direction="positive" if rate > f.line else "negative"),
+        FeatureImportance(name=(f"{f.prop_type.capitalize()} rate/game (league avg)"
+                                if f.rate_is_league_average
+                                else f"{f.prop_type.capitalize()} rate/game"),
+                          importance=round(rate, 3), direction="positive" if rate > f.line else "negative"),
         FeatureImportance(name="Sample size (GP)",                       importance=round(f.games_played / 82, 3), direction="positive"),
         FeatureImportance(name="Pace vs line",                           importance=round(abs(pace_vs_line), 3),   direction="positive" if pace_vs_line > 0 else "negative"),
         FeatureImportance(name="Points/game",                            importance=round(f.points_per_game, 3),   direction="positive" if f.points_per_game > 0.5 else "negative"),
@@ -1650,13 +1868,21 @@ def predict_player(f: PlayerPropFeatures) -> MLResponse:
     ], key=lambda x: x.importance, reverse=True)
 
     over_under = f.selection.upper()
+    # Ne JAMAIS attribuer au joueur une cadence qu'on n'a pas mesurée sur lui.
+    if f.rate_is_league_average:
+        explanation = (f"Poisson model: NHL average is {rate:.2f} {f.prop_type}/game for this "
+                       f"position — no per-player data available for this stat, so every player "
+                       f"gets the same number; {over_under} {f.line} implied at {round(prob*100)}%.")
+    else:
+        explanation = (f"Poisson model: player averages {rate:.2f} {f.prop_type}/game; "
+                       f"{over_under} {f.line} implied at {round(prob*100)}%.")
     return MLResponse(
-        probability=int(prob * 100),
-        confidence=int(confidence * 100),
+        probability=round(prob * 100),
+        confidence=round(confidence * 100),
         feature_importances=importances[:5],
         model_version="poisson-v1.0",
         model_type="Poisson Distribution",
-        explanation=f"Poisson model: player averages {rate:.2f} {f.prop_type}/game; {over_under} {f.line} implied at {int(prob*100)}%.",
+        explanation=explanation,
     )
 
 # ── Team futures model ────────────────────────────────────────────────────────
@@ -1691,7 +1917,7 @@ def predict_team(f: TeamFuturesFeatures) -> MLResponse:
 
     prop_label = {"cup": "Stanley Cup", "conf": "Conference Final", "playoff": "Playoff berth"}.get(f.prop_type, f.prop_type)
     return MLResponse(
-        probability=int(prob * 100),
+        probability=round(prob * 100),
         confidence=confidence,
         feature_importances=importances[:5],
         model_version="rank-bayes-v1.0",

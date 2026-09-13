@@ -14,7 +14,7 @@ import { requestFromMLProps } from "../../services/predictionRequest";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { useBet } from "../../context/BetContext";
-import type { BetLeg } from "../../types/bet";
+import type { BetLeg, PredictionCaveat } from "../../types/bet";
 import { askLLM } from "../../services/llmService";
 import { MLSection, fetchMLProbability } from "../../components/MLPredictionCard";
 import { RuleFactorEditor } from "../../components/RuleFactorEditor";
@@ -39,13 +39,19 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
 
   // Fall back to fetching the server prediction if the parent hasn't yet.
   const [ownServerPct, setOwnServerPct] = useState<number | undefined>(serverPct);
+  // Réserve renvoyée avec la probabilité : moyenne de ligue faute de données par
+  // joueur, estimateur partagé avec un autre marché, périodes supposées
+  // équivalentes. Le chiffre est bon ; ce qu'il vaut n'est pas devinable en le
+  // regardant, donc on l'écrit sous la carte des règles.
+  const [caveat, setCaveat] = useState<PredictionCaveat | undefined>(undefined);
   useEffect(() => {
     if (serverPct !== undefined) { setOwnServerPct(serverPct); return; }
     if (!mlProps) return;
     let alive = true;
+    setCaveat(undefined);
     predictionApiService
       .getSinglePrediction(requestFromMLProps(mlProps))
-      .then(r => { if (alive) setOwnServerPct(r.probability); })
+      .then(r => { if (alive) { setOwnServerPct(r.probability); setCaveat(r.caveat); } })
       .catch(() => { /* keep undefined → falls back to rulePct */ });
     return () => { alive = false; };
   }, [serverPct, mlProps]);
@@ -121,11 +127,20 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
             propType={mlProps.propType}
             line={mlProps.line}
             selection={mlProps.selection}
+            isHome={mlProps.isHome}
             ruleBasedPct={rulePct}
             label={label}
             simple
           />
         ) : null}
+
+        {/* ── ⓘ Réserve sur le chiffre, quand il y en a une ── */}
+        {caveat && (
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl border border-[#facc15]/25 bg-[#facc15]/[0.07]">
+            <span className="text-[#facc15] text-[11px] leading-none mt-0.5 flex-shrink-0">ⓘ</span>
+            <p className="text-[#c9b87a] text-[11px] leading-relaxed">{t(`ml.caveat.${caveat}`)}</p>
+          </div>
+        )}
 
         {/* ── 📐 Règles — éditeur de facteurs par pari, ou note simple ── */}
         {factors && factors.length > 0 && factorGroup ? (
@@ -286,6 +301,7 @@ export function PredictionsRevealBar({ mode, onSelect }: { mode: RevealMode; onS
 
 /* ─── BetOption ─────────────────────────────── */
 function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
+  const { t } = useI18n();
   const mode = useContext(RevealModeCtx);
   const [sheet, setSheet] = useState(false);
 
@@ -305,21 +321,35 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
   const source: "rules" | "ml" = mode === "ml" ? "ml" : "rules";
 
   // ML % is fetched lazily, only while ML mode is active on this tile.
-  const [mlPct, setMlPct] = useState<number | null>(null);
+  //
+  // Trois valeurs, trois sens distincts — c'est tout l'objet de ce state :
+  //   `undefined` → requête en cours ;
+  //   `null`      → le modèle n'a pas répondu, la tuile n'a PAS de chiffre ML ;
+  //   un nombre   → une vraie probabilité du modèle.
+  //
+  // `null` valait « en attente » ici, et `fetchMLProbability` ne renvoyait
+  // jamais rien d'autre qu'un nombre : hors ligne, elle fabriquait `rulePct ± 3`
+  // et la tuile l'affichait comme une sortie de modèle. Retomber en silence sur
+  // `rulePct` serait le même mensonge, simplement plus discret : en mode ML on
+  // montre « — », et l'utilisateur peut basculer sur les règles pour un chiffre.
+  const [mlPct, setMlPct] = useState<number | null | undefined>(undefined);
   useEffect(() => {
     if (source !== "ml" || !opt.mlProps) return;
     let alive = true;
-    setMlPct(null);
+    setMlPct(undefined);
     fetchMLProbability(
-      { type: opt.mlProps.type, subjectId: opt.mlProps.subjectId, opponentId: opt.mlProps.opponentId, propType: opt.mlProps.propType, line: opt.mlProps.line, selection: opt.mlProps.selection },
-      rulePct,
+      { type: opt.mlProps.type, subjectId: opt.mlProps.subjectId, opponentId: opt.mlProps.opponentId, propType: opt.mlProps.propType, line: opt.mlProps.line, selection: opt.mlProps.selection, isHome: opt.mlProps.isHome },
     ).then(p => { if (alive) setMlPct(p); });
     return () => { alive = false; };
-  }, [source, opt.mlProps, rulePct]);
+  }, [source, opt.mlProps]);
 
-  const loadingMl = source === "ml" && !!opt.mlProps && mlPct === null;
-  const shownPct = source === "ml" ? (mlPct ?? rulePct) : rulePct;
-  const shownColor = pctColor(shownPct);
+  const mlMode      = source === "ml" && !!opt.mlProps;
+  const loadingMl   = mlMode && mlPct === undefined;
+  const mlMissing   = mlMode && mlPct === null;
+  const shownPct    = mlMode ? (mlPct ?? rulePct) : rulePct;
+  // Tuile sans chiffre : grise, pour qu'elle ne se lise pas comme une prédiction
+  // faible (un « — » coloré en rouge dirait quelque chose, et on ne sait rien).
+  const shownColor  = mlMissing ? "#4a5a60" : pctColor(shownPct);
 
   return (
     <>
@@ -332,8 +362,9 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
         <span
           className="mt-2 px-3 py-0.5 rounded-full text-xs font-bold"
           style={{ background: shownColor + "22", color: shownColor, border: `1px solid ${shownColor}55` }}
+          title={mlMissing ? t("ml.unavailable") : undefined}
         >
-          {loadingMl ? "…" : `${shownPct}%`}
+          {loadingMl ? "…" : mlMissing ? "—" : `${shownPct}%`}
         </span>
       </button>
       {sheet && (

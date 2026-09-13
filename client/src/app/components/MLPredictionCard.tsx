@@ -5,8 +5,22 @@
  *   - PredictionPage (team / player / game / futures handlers)
  *   - NHLPredictionsPage (per-market chip)
  *
- * If the Python ML service is down, the card is simply not rendered
- * (the parent MLSection component receives null and returns null).
+ * ⚠️ IL N'Y A PAS DE REPLI LOCAL, ET IL NE DOIT JAMAIS Y EN AVOIR.
+ * Quand le service ML Python ne répond pas, `MLSection` affiche un état
+ * « indisponible » — jamais un pourcentage.
+ *
+ * Pourquoi cette règle existe ici aussi : jusqu'au 2026-09-13 ce fichier
+ * portait `fallbackResult()`, qui fabriquait `rulePct ± 3`, l'étiquetait
+ * « Random Forest », lui attribuait une confiance de 62 % et le rendait
+ * exactement comme une vraie sortie de modèle. Son propre commentaire assumait
+ * que l'écart de ±3 existait « pour que ça ait l'air distinct du pourcentage de
+ * règles ». Le disjoncteur du client ML s'ouvrant après 5 échecs, une panne du
+ * service Python convertissait en silence CHAQUE tuile en chiffre inventé, sans
+ * le moindre état d'erreur.
+ *
+ * C'est la même règle que `services/predictionApiService.ts` applique déjà en
+ * tête de fichier, et pour la même raison : un chiffre faux qui a l'air juste
+ * est pire que pas de chiffre du tout.
  */
 import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
@@ -27,10 +41,22 @@ export interface MLFeatureImportance {
 
 export interface MLPredictionResult {
   probability:         number;
-  confidence:          number;
+  /**
+   * `null` quand le service n'a pas envoyé de confiance. Elle valait 0,7 par
+   * défaut (soit « 70 % de confiance » affiché à l'écran) pour toute réponse
+   * qui n'en portait pas, et 62 dans le repli fabriqué. On ne montre plus une
+   * confiance qu'on n'a pas reçue.
+   */
+  confidence:          number | null;
   feature_importances: MLFeatureImportance[];
-  model_version:       string;
-  model_type:          string;
+  /**
+   * Renseignés SEULEMENT si le service les a envoyés. Ils étaient auparavant
+   * remplis par défaut avec « Random Forest » / « 1.0.0 », ce qui nommait un
+   * modèle précis sous un chiffre dont on ignorait la provenance. Le rendu les
+   * omet quand ils manquent.
+   */
+  model_version?:      string;
+  model_type?:         string;
   explanation:         string;
 }
 
@@ -197,7 +223,7 @@ function MLSimpleCard({ result }: { result: MLPredictionResult; ruleBasedPct?: n
   }, [probability, open]);
 
   const probColor = pctColor(probability);
-  const confColor = pctColor(confidence);
+  const confColor = confidence === null ? null : pctColor(confidence);
 
   return (
     <div className="bg-[#0d0a1a] border border-[#a78bfa]/25 rounded-2xl overflow-hidden">
@@ -226,10 +252,12 @@ function MLSimpleCard({ result }: { result: MLPredictionResult; ruleBasedPct?: n
                 style={{ width: `${barWidth}%`, backgroundColor: probColor, boxShadow: `0 0 6px ${probColor}88` }} />
             </div>
           </div>
-          <div className="flex items-center gap-1.5 mt-2">
-            <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: confColor }} />
-            <span className="text-[11px] font-semibold" style={{ color: confColor }}>{t("ml.conf", { n: confidence })}</span>
-          </div>
+          {confidence !== null && confColor && (
+            <div className="flex items-center gap-1.5 mt-2">
+              <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: confColor }} />
+              <span className="text-[11px] font-semibold" style={{ color: confColor }}>{t("ml.conf", { n: confidence })}</span>
+            </div>
+          )}
           <p className="text-[#9a8ab8] text-[11px] leading-relaxed mt-2">{explanation}</p>
         </div>
       )}
@@ -253,7 +281,10 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
   const { probability, confidence, feature_importances, model_type, model_version, explanation } = result;
 
   const probColor = pctColor(probability);
-  const confColor = pctColor(confidence);
+  const confColor = confidence === null ? null : pctColor(confidence);
+
+  // Le service ne renvoie pas toujours de nom de modèle. On n'en invente pas un.
+  const modelLine = [model_type, model_version].filter(Boolean).join(" · ");
 
   // ── Compact badge ──────────────────────────────────────────────────────────
   if (compact) {
@@ -261,7 +292,7 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
       <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#1a1230] border border-[#a78bfa]/25">
         <span className="text-[11px] text-[#a78bfa] font-bold">🤖 ML</span>
         <span className="text-xs font-black" style={{ color: probColor }}>{probability}%</span>
-        <span className="text-[11px] text-[#4a4060]">{model_type.split(' ')[0]}</span>
+        {model_type && <span className="text-[11px] text-[#4a4060]">{model_type.split(' ')[0]}</span>}
       </div>
     );
   }
@@ -287,13 +318,15 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
             <p className="text-white text-sm font-bold">{t("ml.title")}</p>
             {label
               ? <p className="text-[#a78bfa] text-[11px] font-semibold truncate">↳ {label}</p>
-              : <p className="text-[#6b5a8a] text-[11px] truncate">{model_type} · {model_version}</p>
+              : modelLine ? <p className="text-[#6b5a8a] text-[11px] truncate">{modelLine}</p> : null
             }
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: confColor + "18", border: `1px solid ${confColor}40` }}>
-            <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: confColor }} />
-            <span className="text-[11px] font-semibold" style={{ color: confColor }}>{t("ml.conf", { n: confidence })}</span>
-          </div>
+          {confidence !== null && confColor && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: confColor + "18", border: `1px solid ${confColor}40` }}>
+              <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: confColor }} />
+              <span className="text-[11px] font-semibold" style={{ color: confColor }}>{t("ml.conf", { n: confidence })}</span>
+            </div>
+          )}
         </div>
 
         {/* ── Hero probability ── */}
@@ -359,12 +392,14 @@ export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero =
         <div className="w-7 h-7 rounded-lg bg-[#a78bfa]/15 border border-[#a78bfa]/30 flex items-center justify-center text-sm">🤖</div>
         <div className="flex-1">
           <p className="text-white text-xs font-bold">{t("ml.aiPrediction")}</p>
-          <p className="text-[#6b5a8a] text-[11px]">{model_type} · {model_version}</p>
+          {modelLine && <p className="text-[#6b5a8a] text-[11px]">{modelLine}</p>}
         </div>
-        <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/5 border border-white/10">
-          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: confColor }} />
-          <span className="text-[11px]" style={{ color: confColor }}>{t("ml.confidence", { n: confidence })}</span>
-        </div>
+        {confidence !== null && confColor && (
+          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/5 border border-white/10">
+            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: confColor }} />
+            <span className="text-[11px]" style={{ color: confColor }}>{t("ml.confidence", { n: confidence })}</span>
+          </div>
+        )}
       </div>
       <div className="p-4">
         <div className="flex items-center gap-4 mb-4">
@@ -439,33 +474,37 @@ export function mlPctFromResponse(data: Record<string, unknown>): number | null 
 /**
  * Fetch ONLY the ML probability (0-100) for a bet — used by the stats-page
  * tiles when the "ML" reveal mode is active. Uses the exact same extraction
- * (mlPctFromResponse) and offline fallback (fallbackResult) as the detail card,
- * so a tile and the card the user opens always show the same number.
+ * (mlPctFromResponse) as the detail card, so a tile and the card the user opens
+ * always show the same number.
+ *
+ * Retourne `null` quand le service ne donne pas de probabilité exploitable —
+ * hors ligne, 503, corps illisible, disjoncteur ouvert. La tuile doit alors dire
+ * « indisponible » ; elle ne doit NI fabriquer un chiffre, NI afficher
+ * discrètement le pourcentage de règles sous une étiquette « ML », ce qui
+ * revient au même mensonge en moins visible.
  */
 export async function fetchMLProbability(
   // `selection` porte le CÔTÉ d'un marché binaire (« yes » / « no »). Il était
   // absent de ce type, donc les deux tuiles d'un même marché envoyaient une
   // requête identique et affichaient le même pourcentage des deux côtés.
-  req: { type: "game" | "player" | "team"; subjectId: string; opponentId?: string; propType?: string; line?: number; selection?: string },
-  ruleBasedPct: number,
-): Promise<number> {
+  // `isHome` dit si le SUJET reçoit. Sans lui, le serveur passait le sujet comme
+  // équipe à domicile au service Python : les deux tuiles moneyline d'un même
+  // match recevaient chacune l'avantage de la glace et totalisaient 109–112 %.
+  req: { type: "game" | "player" | "team"; subjectId: string; opponentId?: string; propType?: string; line?: number; selection?: string; isHome?: boolean },
+): Promise<number | null> {
   try {
     const r = await fetchWithTimeout(`${ML_BASE}/ml`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
     });
-    if (r.ok) {
-      const data = await r.json();
-      if (data && typeof data === "object") {
-        const pct = mlPctFromResponse(data as Record<string, unknown>);
-        if (pct !== null) return pct;
-      }
-    }
-  } catch { /* server offline — use fallback below */ }
-  // Same variance as fallbackResult() so the offline ML value looks distinct
-  // from the rule pct without diverging from the card the user can open.
-  return Math.min(95, Math.max(5, ruleBasedPct + (ruleBasedPct > 50 ? 3 : -3)));
+    if (!r.ok) return null;
+    const data = await r.json();
+    if (!data || typeof data !== "object") return null;
+    return mlPctFromResponse(data as Record<string, unknown>);
+  } catch {
+    return null;
+  }
 }
 
 interface MLSectionProps {
@@ -476,52 +515,65 @@ interface MLSectionProps {
   line?:        number;
   /** Côté d'un marché binaire servi sous un seul `propType` : « yes » | « no ». */
   selection?:   string;
+  /** Le sujet reçoit-il ? Décide de quel côté le service applique la glace. */
+  isHome?:      boolean;
   ruleBasedPct?: number;
   label?:       string;
   simple?:      boolean;
   hero?:        boolean;
 }
 
-/** Normalise any server response shape into the MLPredictionResult the card expects. */
-function normalizeMLResponse(data: Record<string, unknown>, t: TFn): MLPredictionResult {
+/**
+ * Normalise any server response shape into the MLPredictionResult the card
+ * expects — ou `null` si la réponse ne porte pas de probabilité exploitable.
+ *
+ * Le `?? 50` qui occupait cette ligne transformait toute réponse inattendue en
+ * pile ou face parfaitement présentable, et les valeurs par défaut
+ * « Random Forest » / « 1.0.0 » lui collaient un nom de modèle par-dessus. La
+ * confiance n'est plus inventée non plus : absente, elle n'est pas affichée.
+ */
+function normalizeMLResponse(data: Record<string, unknown>): MLPredictionResult | null {
   // Same extraction/rounding the stats tile uses → identical ML % in both.
-  const pct = mlPctFromResponse(data) ?? 50;
-  if (typeof data.probability === "number" && Array.isArray(data.feature_importances)) {
-    const c = data.confidence as number ?? 0.7;
-    return {
-      probability:         pct,
-      confidence:          c > 1 ? Math.round(c) : Math.round(c * 100),
-      feature_importances: data.feature_importances as MLFeatureImportance[],
-      model_type:          (data.model_type as string) ?? "ML Model",
-      model_version:       (data.model_version as string) ?? "1.0.0",
-      explanation:         (data.explanation as string) ?? "",
-    };
-  }
-  const rawConf = (data.confidence as number) ?? 0.7;
-  const conf    = rawConf > 1 ? Math.round(rawConf) : Math.round(rawConf * 100);
+  const pct = mlPctFromResponse(data);
+  if (pct === null) return null;
+
+  const rawConf = typeof data.confidence === "number" ? data.confidence : null;
+  const conf    = rawConf === null ? null : rawConf > 1 ? Math.round(rawConf) : Math.round(rawConf * 100);
+
   return {
     probability:         pct,
     confidence:          conf,
-    feature_importances: [],
-    model_type:          "Random Forest",
-    model_version:       "1.0.0",
-    explanation:         t("ml.explainNorm", { pct }),
+    feature_importances: Array.isArray(data.feature_importances)
+      ? (data.feature_importances as MLFeatureImportance[])
+      : [],
+    model_type:          typeof data.model_type    === "string" ? data.model_type    : undefined,
+    model_version:       typeof data.model_version === "string" ? data.model_version : undefined,
+    explanation:         typeof data.explanation   === "string" ? data.explanation   : "",
   };
 }
 
-/** Build a fallback result when the ML server is offline, derived from rule-based pct. */
-function fallbackResult(ruleBasedPct: number | undefined, propType: string | undefined, t: TFn): MLPredictionResult {
-  const pct = ruleBasedPct ?? 50;
-  // Add a small ML-style variance so it looks distinct from the rule pct
-  const mlPct = Math.min(95, Math.max(5, pct + (pct > 50 ? 3 : -3)));
-  return {
-    probability:         mlPct,
-    confidence:          62,
-    feature_importances: [],
-    model_type:          "Random Forest",
-    model_version:       "1.0.0",
-    explanation:         t("ml.explainFallback", { market: propType ?? t("ml.thisMarket") }),
-  };
+/**
+ * État « le modèle n'a pas répondu » — le seul repli autorisé.
+ *
+ * Même cadre que la carte, pour que la mise en page ne saute pas, et un texte
+ * qui dit la vérité : pas de pourcentage, pas de jauge, pas de nom de modèle.
+ * L'utilisateur garde le score de règles, affiché juste en dessous sous sa
+ * propre étiquette — c'est un chiffre honnête, lui.
+ */
+function MLUnavailable({ t }: { t: TFn }) {
+  return (
+    <div className="bg-[#0d0a1a] border border-[#a78bfa]/15 rounded-2xl overflow-hidden">
+      <div className="flex items-center gap-2.5 px-4 py-3">
+        <FramedLabel text="ML" />
+        <div className="flex-1" />
+        <span className="text-[#6b5a8a] text-[11px] font-semibold">{t("ml.unavailable")}</span>
+        <span className="text-[#4a4060] text-xl font-black leading-none">—</span>
+      </div>
+      <div className="px-4 pb-3 -mt-1">
+        <p className="text-[#6b5a8a] text-[11px] leading-relaxed">{t("ml.unavailableHint")}</p>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -540,39 +592,52 @@ function MLSkeleton() {
   );
 }
 
-export function MLSection({ type, subjectId, opponentId, propType, line, selection, ruleBasedPct, label, simple, hero }: MLSectionProps) {
-  const { t, lang } = useI18n();
-  const [result, setResult] = useState<MLPredictionResult | null>(null);
+/**
+ * Trois états, et trois seulement : en attente, une vraie prédiction, ou
+ * « indisponible ». Il n'y a pas de quatrième état où l'on montre un chiffre
+ * que le modèle n'a pas produit.
+ */
+type MLState =
+  | { status: "loading" }
+  | { status: "ready";       result: MLPredictionResult }
+  | { status: "unavailable" };
+
+export function MLSection({ type, subjectId, opponentId, propType, line, selection, isHome, ruleBasedPct, label, simple, hero }: MLSectionProps) {
+  const { t } = useI18n();
+  const [state, setState] = useState<MLState>({ status: "loading" });
 
   useEffect(() => {
     let alive = true;
     // Aucun chiffre tant que le modèle n'a pas répondu. Jusqu'au 2026-09-04 la
     // carte affichait immédiatement le repli (rulePct ± 3) puis le remplaçait
     // par la vraie probabilité une seconde plus tard : le pourcentage sautait
-    // sous les yeux de l'utilisateur. Le repli ne sert plus qu'en cas d'échec.
-    setResult(null);
+    // sous les yeux de l'utilisateur. Depuis le 2026-09-13 le repli n'existe
+    // plus du tout — un échec donne l'état « indisponible ».
+    setState({ status: "loading" });
 
     fetchWithTimeout(`${ML_BASE}/ml`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, subjectId, opponentId, propType, line, selection }),
+      body: JSON.stringify({ type, subjectId, opponentId, propType, line, selection, isHome }),
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!alive) return;
-        setResult(data && typeof data === "object"
-          ? normalizeMLResponse(data as Record<string, unknown>, t)
-          : fallbackResult(ruleBasedPct, propType, t));
+        const result = data && typeof data === "object"
+          ? normalizeMLResponse(data as Record<string, unknown>)
+          : null;
+        setState(result ? { status: "ready", result } : { status: "unavailable" });
       })
-      .catch(() => { if (alive) setResult(fallbackResult(ruleBasedPct, propType, t)); });
+      .catch(() => { if (alive) setState({ status: "unavailable" }); });
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type, subjectId, opponentId, propType, line, selection, ruleBasedPct, lang]);
+  }, [type, subjectId, opponentId, propType, line, selection, isHome]);
 
-  if (!result) return <MLSkeleton />;
+  if (state.status === "loading")     return <MLSkeleton />;
+  if (state.status === "unavailable") return <MLUnavailable t={t} />;
+
   return (
     <MLPredictionCard
-      result={result}
+      result={state.result}
       ruleBasedPct={ruleBasedPct}
       label={label}
       simple={simple}

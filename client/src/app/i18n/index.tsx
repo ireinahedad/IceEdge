@@ -788,9 +788,30 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "ml.verdictPos":   { en: "Positive signal", fr: "Signal positif" },
   "ml.verdictNeutral":{ en: "Neutral signal", fr: "Signal neutre" },
   "ml.verdictWeak":  { en: "Weak signal ▼",   fr: "Signal faible ▼" },
-  "ml.explainNorm":  { en: "The model estimates a {pct}% probability based on stats and head-to-head records.", fr: "Le modèle estime {pct} % de probabilité basé sur les statistiques et confrontations." },
-  "ml.explainFallback": { en: "ML estimate based on season stats, head-to-head records and recent trends for {market}.", fr: "Estimation ML basée sur les statistiques de saison, confrontations directes et tendances récentes pour {market}." },
-  "ml.thisMarket":   { en: "this market",     fr: "ce marché" },
+  // ── Modèle indisponible ────────────────────────────────────────────────────
+  // `ml.explainFallback` a été retiré avec le repli qu'il habillait : il servait
+  // de légende à `rulePct ± 3` en le décrivant comme une « estimation ML basée
+  // sur les statistiques de saison ». La phrase était bien plus crédible que le
+  // chiffre.
+  "ml.unavailable":     { en: "Model unavailable", fr: "Modèle indisponible" },
+  "ml.unavailableHint": {
+    en: "The prediction service didn't answer, so there's no model number for this bet. The rule-based score below is unaffected.",
+    fr: "Le service de prédiction n'a pas répondu : il n'y a pas de chiffre du modèle pour ce pari. Le score de règles ci-dessous n'est pas affecté.",
+  },
+
+  // ── Mises en garde servies AVEC un chiffre (`caveat` de /api/predict/single) ─
+  "ml.caveat.league_average": {
+    en: "League average for this position — the NHL feed carries no per-player data for this stat, so every player at this position gets the same number.",
+    fr: "Moyenne de ligue pour ce poste — le flux NHL ne fournit aucune donnée par joueur pour cette statistique : tous les joueurs du même poste reçoivent le même chiffre.",
+  },
+  "ml.caveat.shared_with_first_goal": {
+    en: "Same estimate as first goal scorer: under this model every goal in the game is equally likely to be his, so first and last come out the same.",
+    fr: "Même estimation que « premier buteur » : sous ce modèle, chaque but du match a la même chance d'être le sien, donc premier et dernier donnent le même chiffre.",
+  },
+  "ml.caveat.period_symmetric": {
+    en: "Assumes all three periods score at the same rate — the app has no per-period data yet, so it can't model the busier third period.",
+    fr: "Suppose les trois périodes équivalentes — l'application n'a pas encore de données par période et ne peut donc pas modéliser un 3e plus prolifique.",
+  },
 
   // ── Last N games section ──
   "lastn.selectTeam":  { en: "Select a team",     fr: "Choisis une équipe" },

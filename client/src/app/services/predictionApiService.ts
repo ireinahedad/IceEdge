@@ -179,7 +179,16 @@ export const predictionApiService = {
 
   /**
    * Win/hit probability for a single bet market.
-   * Throws `PredictionUnavailableError` — there is no local estimation.
+   *
+   * Throws `PredictionUnavailableError` — there is no local estimation. Le
+   * serveur répond 422 quand son moteur ne sait pas calculer ce marché avec ce
+   * corps (écart de victoire sans seau, période non précisée, marché inconnu) :
+   * c'est un `reason: "http"` ici, donc un état « indisponible » à l'écran, et
+   * c'est exactement ce qu'on veut. Il servait 12, 24, 38 ou 50 avant.
+   *
+   * La réponse peut porter un `caveat` : le chiffre est bon, mais il y a
+   * quelque chose à dire dessus (moyenne de ligue, estimateur partagé…). Les
+   * appelants doivent l'afficher.
    */
   getSinglePrediction: (req: PredictionRequest): Promise<PredictionResponse> =>
     post<PredictionResponse>("/predict/single", req),

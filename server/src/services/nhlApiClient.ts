@@ -1179,6 +1179,14 @@ export async function fetchPlayerById(playerId: string): Promise<any> {
     shotPct:     cur.shootingPctg != null ? Math.round(cur.shootingPctg * 1000) / 10 : 0,
     ppPoints:    cur.powerPlayPoints ?? 0,
     gamesPlayed: gp,
+    // `pim` et `avgToi` sont dans `seasonTotals` depuis toujours — ce mapping ne
+    // les lisait simplement pas, et `predictionEngine` servait donc une moyenne
+    // de ligue (0,4 minute de pénalité, 16 ou 22 minutes de jeu) pour TOUS les
+    // joueurs sur ces deux marchés. `fetchTeamPlayerSeasons` les lit déjà un peu
+    // plus bas dans ce fichier, sur la même réponse.
+    penaltyMinutes: cur.pim ?? 0,
+    /** Temps de jeu moyen par match, en MINUTES décimales (l'API donne "18:42"). */
+    avgToi:         parseToiMinutes(cur.avgToi),
     lastFive:    [] as number[],
     winImpact:   Math.min(99, Math.round((pts / gp) * 100)),
     // Stats gardien (présentes uniquement si position === 'G' dans seasonTotals)
@@ -1837,6 +1845,52 @@ function todayET(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
 
+/**
+ * TTL d'un résultat NÉGATIF (repli, calendrier illisible, aucun match trouvé).
+ *
+ * POURQUOI IL EXISTE. `fetchTeamRestInfo` et `fetchTeamTravel` renvoyaient leur
+ * repli SANS le mettre en cache : seul le chemin qui trouve quelque chose
+ * appelait `setCached`. Conséquence, chaque requête qui tombait sur un cas vide
+ * refaisait l'appel calendrier — et le cas vide n'est pas rare, c'est le cas
+ * NORMAL en intersaison et en début de saison, quand `played.length === 0` pour
+ * les 32 équipes. La landing tire ~32 prédictions d'un coup : autant d'appels
+ * `club-schedule-season`, à chaque chargement, indéfiniment.
+ *
+ * Plus court que les 6 h du chemin nominal, parce qu'un négatif peut être
+ * transitoire (API en panne, calendrier pas encore publié) et qu'on ne veut pas
+ * rester aveugle une demi-journée après le premier match de la saison.
+ */
+const NEGATIVE_TTL_MS = 15 * 60_000;
+
+/**
+ * Calendrier de saison d'une équipe — UNE seule requête par équipe et par jour.
+ *
+ * `fetchTeamRestInfo` et `fetchTeamTravel` interrogent le même point d'entrée
+ * (`club-schedule-season/{TEAM}/now`) mais mettaient en cache leurs résultats
+ * DÉRIVÉS, sous deux clés différentes. Lancées ensemble — le cas de
+ * `Promise.allSettled` dans `buildGameFeatures` — la déduplication en vol de
+ * `fetchNHL` les fusionnait, donc le problème restait invisible. Lancées à des
+ * moments différents, la seconde repayait la requête : le repos met en cache
+ * `rest:TOR:…`, le voyage cherche `travel:TOR:TOR:…`, ne trouve rien, et
+ * rappelle la NHL pour une réponse déjà reçue.
+ *
+ * Mettre le calendrier BRUT en cache règle les deux cas d'un coup, et rend le
+ * voyage gratuit une fois le repos calculé.
+ */
+async function fetchTeamSeasonGames(abbr: string): Promise<any[]> {
+  const upper = abbr.toUpperCase();
+  const key   = `schedule:${upper}:${todayET()}`;
+  const cached = getCached<any[]>(key);
+  if (cached) return cached;
+
+  const data  = await fetchNHL<any>(`v1/club-schedule-season/${upper}/now`);
+  const games = (data.games ?? []) as any[];
+  // Même un calendrier vide est une réponse : la garder évite de rappeler la
+  // NHL à chaque prédiction en intersaison.
+  setCached(key, games, games.length ? 6 * 60 * 60_000 : NEGATIVE_TTL_MS);
+  return games;
+}
+
 /** Jours de repos depuis le dernier match joué (via le calendrier de saison). */
 export async function fetchTeamRestInfo(abbr: string): Promise<TeamRestInfo> {
   const upper = abbr.toUpperCase();
@@ -1846,9 +1900,9 @@ export async function fetchTeamRestInfo(abbr: string): Promise<TeamRestInfo> {
 
   const fallback: TeamRestInfo = { restDays: 2, b2b: 0, dense3in4: 0 };
   try {
-    const data  = await fetchNHL<any>(`v1/club-schedule-season/${upper}/now`);
+    const games = await fetchTeamSeasonGames(upper);
     const today = todayET();
-    const played = (data.games ?? [])
+    const played = games
       .filter((g: any) =>
         g.gameType === 2 &&
         ['OFF', 'FINAL', 'OVER'].includes(g.gameState) &&
@@ -1857,7 +1911,12 @@ export async function fetchTeamRestInfo(abbr: string): Promise<TeamRestInfo> {
       .map((g: any) => g.gameDate as string)
       .sort();
 
-    if (!played.length) return fallback;
+    // Aucun match joué : c'est une RÉPONSE (début de saison), pas un échec.
+    // On la garde, sinon chaque prédiction rappelle le calendrier.
+    if (!played.length) {
+      setCached(key, fallback, NEGATIVE_TTL_MS);
+      return fallback;
+    }
 
     const now      = new Date(today + 'T12:00:00');
     const lastDate = new Date(played[played.length - 1] + 'T12:00:00');
@@ -1875,6 +1934,9 @@ export async function fetchTeamRestInfo(abbr: string): Promise<TeamRestInfo> {
     setCached(key, info, 6 * 60 * 60_000);   // cache 6 h
     return info;
   } catch {
+    // Panne franche : on met aussi le repli en cache, brièvement. Sans ça, une
+    // API NHL en difficulté se prend la rafale entière de la landing.
+    setCached(key, fallback, NEGATIVE_TTL_MS);
     return fallback;
   }
 }
@@ -1895,13 +1957,17 @@ export async function fetchTeamTravel(
   const team  = abbr.toUpperCase();
   const venue = venueAbbr.toUpperCase();
   const key   = `travel:${team}:${venue}:${todayET()}`;
-  const cached = getCached<TravelFeatures>(key);
-  if (cached) return cached;
+  // Enveloppe volontaire : `getCached` rend `null` aussi bien pour « absent »
+  // que pour « présent et valant null ». Sans elle, un négatif mis en cache
+  // serait relu comme un défaut de cache et l'appel calendrier repartirait —
+  // exactement ce qu'on vient de corriger.
+  const cached = getCached<{ v: TravelFeatures | null }>(key);
+  if (cached) return cached.v;
 
   try {
-    const data  = await fetchNHL<any>(`v1/club-schedule-season/${team}/now`);
+    const seasonGames = await fetchTeamSeasonGames(team);
     const today = todayET();
-    const games = (data.games ?? [])
+    const games = seasonGames
       .filter((g: any) => g.gameType === 2 && g.gameDate)   // saison régulière
       .map((g: any) => ({
         date:     g.gameDate as string,
@@ -1910,7 +1976,10 @@ export async function fetchTeamTravel(
       }))
       .sort((a: any, b: any) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
-    if (!games.length) return null;
+    if (!games.length) {
+      setCached(key, { v: null }, NEGATIVE_TTL_MS);
+      return null;
+    }
 
     const seq: TravelGame[] = games.map((g: any) => ({
       date: g.date, venueAbbr: g.homeAbbr, isHome: g.homeAbbr === team,
@@ -1922,12 +1991,18 @@ export async function fetchTeamTravel(
         !['OFF', 'FINAL', 'OVER'].includes(g.state) && g.date >= today,
     );
     if (idx < 0) idx = games.findIndex((g: any) => g.homeAbbr === venue && g.date >= today);
-    if (idx < 0) return null;
+    // Aucun match à venir dans cet aréna : réponse stable pour la journée, pas
+    // un échec. Ne pas la garder faisait refetcher le calendrier à chaque appel.
+    if (idx < 0) {
+      setCached(key, { v: null }, NEGATIVE_TTL_MS);
+      return null;
+    }
 
     const info = computeTravel(seq, idx);
-    setCached(key, info, 6 * 60 * 60_000);   // cache 6 h
+    setCached(key, { v: info }, 6 * 60 * 60_000);   // cache 6 h
     return info;
   } catch {
+    setCached(key, { v: null }, NEGATIVE_TTL_MS);
     return null;
   }
 }

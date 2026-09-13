@@ -30,6 +30,33 @@ export interface GameFeatureOpts {
   homeScratches?: string[];
   awayScratches?: string[];
   /**
+   * Le SUJET de la question est-il l'équipe à domicile ? (défaut : true)
+   *
+   * `homeId`/`awayId` décrivent le MATCH — l'aréna, le voyage, l'avantage de la
+   * glace. Ce drapeau dit de quel côté se place la question. Les deux étaient
+   * confondus : la route `/ml` passait le sujet en `homeId`, donc la tuile
+   * « extérieur » demandait « P(le visiteur gagne chez lui) » et les deux tuiles
+   * moneyline d'un match totalisaient 109–112 %.
+   */
+  subjectIsHome?: boolean;
+  /**
+   * Calculer les features de voyage (distance, fuseaux, road-trip, altitude) ?
+   * Défaut : NON.
+   *
+   * MESURÉ le 2026-09-13 : aucune de ces valeurs ne change la sortie du service
+   * Python. Ses modèles entraînés consomment 15 features (`training_report.json`)
+   * qui sont toutes des statistiques MoneyPuck roulantes, de l'ELO, du repos et
+   * des cotes ; le repli en régression logistique n'utilise que win%, buts,
+   * PP et PK. Faire varier distance, fuseaux, jours d'absence, longueur de
+   * road-trip, get-away et altitude d'un extrême à l'autre laisse la probabilité
+   * servie strictement identique.
+   *
+   * `nhlPredictions.ts` les garde, LUI : son `fatigueFactor` les lit vraiment
+   * (`predictionFactors.ts`). C'est pour ça que le calcul reste en place plutôt
+   * que d'être supprimé — il est simplement désactivé là où il ne sert à rien.
+   */
+  includeTravel?: boolean;
+  /**
    * Côté d'un marché BINAIRE servi sous un seul `market_type` : « yes » / « no »
    * (BTTS, blanchissage, prolongation, but en AN, désavantage numérique…).
    * Le service Python price toujours le côté « oui » puis prend le complément
@@ -88,6 +115,8 @@ export interface GameFeatures {
   away_team?:            string;
   market_type:         string;   // "moneyline" | "puck_line" | "total_goals_over" | "total_goals_under"
   selection?:          string;   // côté d'un marché binaire : "yes" | "no"
+  /** Le sujet de la question reçoit-il ? Cf. `GameFeatureOpts.subjectIsHome`. */
+  subject_is_home?:    boolean;
   line?:               number;   // for total goals markets
   // ── v4 — cotes live du marché (décimal) → active le blend modèle⊕marché Python
   home_odds_decimal?:    number;
@@ -111,6 +140,8 @@ export interface PlayerPropFeatures {
   line:             number;
   prop_type:        string;  // "goals" | "assists" | "points" | "shots" | "pp_point"
   selection:        string;  // "over" | "under"
+  /** La cadence envoyée est-elle une moyenne de ligue plutôt qu'une mesure ? */
+  rate_is_league_average?: boolean;
 }
 
 export interface TeamFuturesFeatures {
@@ -153,7 +184,8 @@ export async function buildGameFeatures(
   line?: number,
   opts: GameFeatureOpts = {}
 ): Promise<GameFeatures> {
-  const includeOdds = opts.includeOdds !== false;   // défaut : true
+  const includeOdds   = opts.includeOdds !== false;    // défaut : true
+  const includeTravel = opts.includeTravel === true;   // défaut : false
   const [home, away] = await Promise.all([getTeam(homeId), getTeam(awayId)]);
 
   // Stats spéciales + tirs (PP/PK réels — absents des standings) et repos.
@@ -173,8 +205,9 @@ export async function buildGameFeatures(
     includeOdds ? fetchOddsImplied(homeName, awayName) : Promise.resolve(null),
     includeOdds ? fetchTotalsOdds(homeName, awayName)  : Promise.resolve(null),
     // Voyage : les deux équipes jouent dans l'aréna de l'équipe à domicile.
-    fetchTeamTravel(homeAbbr, homeAbbr),
-    fetchTeamTravel(awayAbbr, homeAbbr),
+    // Désactivé par défaut — cf. `GameFeatureOpts.includeTravel`.
+    includeTravel ? fetchTeamTravel(homeAbbr, homeAbbr) : Promise.resolve(null),
+    includeTravel ? fetchTeamTravel(awayAbbr, homeAbbr) : Promise.resolve(null),
     // Gardiens partants et absents du soir : en base depuis la migration 034
     // (les fichiers `ml/data/*.json` n'existaient pas dans le conteneur, donc
     // ces deux features étaient TOUJOURS vides en production). La journée
@@ -258,6 +291,7 @@ export async function buildGameFeatures(
     away_team:             awayAbbr.toUpperCase(),
     market_type:           marketType,
     selection:             opts.selection,
+    subject_is_home:       opts.subjectIsHome !== false,
     line,
     // ── v4 — cotes live (si dispo) → le service Python active le blend
     home_odds_decimal:     odds?.homeOdds,
@@ -287,18 +321,48 @@ export async function buildPlayerPropFeatures(
   const player = await fetchPlayerById(playerId);
   const gp = Math.max(player.gamesPlayed ?? 1, 1);
 
-  // For prop types not covered by the main stats (hits, blocks, pim, saves, wins, shutouts),
-  // inject a sensible per-game rate via shots_per_game so the Python Poisson model
-  // can use it via its extended rate_map.
-  const SPECIAL_RATES: Record<string, number> = {
+  // ── Cadences des marchés hors statistiques principales ────────────────────
+  //
+  // Ces marchés (mises en échec, tirs bloqués, pénalités, arrêts…) ne sont pas
+  // dans `goals/assists/points/shots` : leur cadence voyage vers le service
+  // Python par `shots_per_game`, que `rate_map` relit sous le bon nom.
+  //
+  // CE QU'IL Y AVAIT ICI : une table de constantes de ligue — `saves: 27.0`,
+  // `hits: 2.1`, `blocks: 0.5`, `pim: 0.50` — servie pour TOUS les joueurs. Deux
+  // gardiens qui voient réellement 30.1 et 22.1 tirs par match recevaient le
+  // même 44 %, et le service renvoyait « player averages 27.00 saves/game » en
+  // nommant le joueur. Un chiffre de ligue présenté comme une mesure sur lui.
+  //
+  // Ce qui EST par joueur l'est maintenant vraiment : `fetchPlayerById` remonte
+  // `shotsAgainst`/`goalsAgainst` (gardiens) et `penaltyMinutes` pour tout le
+  // monde. Le reste reste une moyenne de ligue, mais le dit.
+
+  /** Arrêts réellement effectués par CE gardien, par match. */
+  const goalieSaves = (): number | null => {
+    const sa = player.shotsAgainst, ga2 = player.goalsAgainst;
+    if (sa == null || ga2 == null || sa <= 0) return null;
+    const saves = Math.max(0, sa - ga2) / gp;
+    return saves > 0 ? saves : null;
+  };
+
+  const perPlayer: Record<string, () => number | null> = {
+    saves: goalieSaves,
+    pim:   () => (player.penaltyMinutes != null ? player.penaltyMinutes / gp : null),
+  };
+
+  /** Moyennes de ligue — aucune source par joueur dans l'API utilisée ici. */
+  const LEAGUE_AVERAGES: Record<string, number> = {
     hits:     2.1,   // skater average across positions
     blocks:   0.5,   // average blocked shots/game
-    pim:      0.50,  // average penalty min/game
-    saves:    27.0,  // league-avg goalie saves per start
+    saves:   27.0,   // repli quand le gardien n'a pas encore de saison
+    pim:      0.50,
     wins:     0.50,  // goalie wins ~50% of starts
     shutouts: 0.10,  // shutout ~10% of starts
   };
-  const specialRate = SPECIAL_RATES[propType];
+
+  const measured    = perPlayer[propType]?.() ?? null;
+  const leagueRate  = LEAGUE_AVERAGES[propType];
+  const specialRate = measured ?? leagueRate;
 
   return {
     goals_per_game:   (player.goals   ?? 0) / gp,
@@ -309,6 +373,10 @@ export async function buildPlayerPropFeatures(
     line,
     prop_type: propType,
     selection,
+    // Le service Python formule son explication au nom du joueur (« player
+    // averages X/game »). Ce drapeau lui dit quand il n'a pas le droit : la
+    // cadence est alors une moyenne de ligue, pas une mesure sur lui.
+    rate_is_league_average: leagueRate != null && measured === null,
   };
 }
 

@@ -174,10 +174,23 @@ export interface PredictionFactor {
   impact: "positive" | "negative" | "neutral";
 }
 
+/**
+ * Réserve attachée à une probabilité : le chiffre est calculé, mais il y a
+ * quelque chose que l'utilisateur ne peut pas deviner en le regardant.
+ * Traduites par les clés `ml.caveat.*`. Voir `PredictionCaveat` côté serveur
+ * (`routes/ml.routes.ts`) — les deux unions doivent bouger ensemble.
+ */
+export type PredictionCaveat =
+  | "league_average"
+  | "shared_with_first_goal"
+  | "period_symmetric";
+
 export interface PredictionResponse {
   probability: number; // 0-100
   confidence: "very_low" | "low" | "medium" | "high" | "very_high";
   factors: PredictionFactor[];
+  /** Présent seulement quand il y a une réserve à afficher AVEC le chiffre. */
+  caveat?: PredictionCaveat;
   modelVersion: string;
   generatedAt: string;
   disclaimer?: string;

@@ -5,6 +5,7 @@ import {
   predictTotalGoals,
   predictAnytimeGoal,
   predictFirstGoalScorer,
+  predictLastGoalScorer,
   predictShotsOU,
   predictAssistsOU,
   predictPointsOU,
@@ -20,6 +21,8 @@ import {
   predictTeamPPGoal,
   predictPenaltyKill,
   predictWinningMargin,
+  predictGameToOvertime,
+  predictHighestScoringPeriod,
   predictPeriodWinner,
   predictPeriodTotalGoals,
   buildRealFactors,
@@ -232,13 +235,48 @@ async function resolveSubjects(body: PredictionRequest): Promise<{
   return { teamId, opponentId, isHome, selection };
 }
 
-async function computeProbability(body: PredictionRequest): Promise<number> {
+/**
+ * Mises en garde qu'un marché peut porter AVEC son chiffre. Elles ne sont pas
+ * cosmétiques : chacune dit une limite que l'utilisateur ne peut pas deviner en
+ * regardant un pourcentage, et que la version précédente de ce fichier taisait.
+ *
+ *  - `league_average`         : moyenne de ligue par position, pas une
+ *                               prédiction sur ce joueur (mises en échec, tirs
+ *                               bloqués, temps de jeu, mises au jeu, pénalités).
+ *  - `shared_with_first_goal` : « dernier buteur » partage l'estimateur de
+ *                               « premier buteur » — même valeur, à dessein.
+ *  - `period_symmetric`       : « période la plus prolifique » suppose les trois
+ *                               périodes équivalentes, faute de données par
+ *                               période.
+ */
+export type PredictionCaveat =
+  | "league_average"
+  | "shared_with_first_goal"
+  | "period_symmetric";
+
+/**
+ * Résultat d'un calcul de probabilité.
+ *
+ * `probability: null` veut dire « ce moteur ne sait pas calculer ce marché avec
+ * ce qu'on lui a donné » — et c'est une réponse valide, pas un échec à masquer.
+ * Elle remplace les constantes que ce fichier servait pour `winning_margin`,
+ * `game_to_ot` et `highest_scoring_period` : un chiffre faux qui a l'air juste
+ * est pire que pas de chiffre du tout, et cette règle vaut ici autant que dans
+ * `predictionApiService.ts` côté client.
+ */
+export interface ProbabilityResult {
+  probability: number | null;
+  caveat?: PredictionCaveat;
+}
+
+async function computeProbability(body: PredictionRequest): Promise<ProbabilityResult> {
   const { market } = normalizeMarket(body.marketType, body.selection ?? "over");
   // Le côté « non » est le complément exact du côté « oui » : aucun de ces
   // marchés n'admet de push (pas de demi-issue), donc P(non) = 100 − P(oui).
   if (isNegativeSide(market, body.selection)) {
     const yes = await computeProbability({ ...body, selection: "yes" });
-    return Math.max(3, Math.min(97, 100 - yes));
+    if (yes.probability === null) return yes;
+    return { ...yes, probability: Math.max(3, Math.min(97, 100 - yes.probability)) };
   }
   const line = body.line ?? 0.5;
   const { teamId, opponentId, isHome, selection } = await resolveSubjects({
@@ -247,67 +285,98 @@ async function computeProbability(body: PredictionRequest): Promise<number> {
   });
   const playerId = body.playerId;
 
+  /** Sucre : une probabilité sans mise en garde. */
+  const plain = (p: number): ProbabilityResult => ({ probability: p });
+  /** Sucre : « je ne sais pas », qui est une réponse et pas un plantage. */
+  const unknown: ProbabilityResult = { probability: null };
+
   // ── Game / team markets ──────────────────────────────────────────────────
   if (market === "moneyline") {
-    if (!teamId) return 50;
-    return predictMoneyline(teamId, opponentId, isHome);
+    if (!teamId) return unknown;
+    return plain(await predictMoneyline(teamId, opponentId, isHome));
   }
   if (market === "first_team_score" || market === "last_team_score") {
-    if (!teamId) return 50;
-    return predictTeamToScore(teamId, opponentId, isHome);
+    if (!teamId) return unknown;
+    return plain(await predictTeamToScore(teamId, opponentId, isHome));
   }
   if (market === "puck_line") {
-    if (!teamId) return 28;
-    return predictPuckLine(teamId, opponentId, isHome);
+    if (!teamId) return unknown;
+    return plain(await predictPuckLine(teamId, opponentId, isHome));
   }
   if (market === "alt_puck_line") {
-    if (!teamId) return 50;
-    return predictAltPuckLine(teamId, opponentId, isHome);
+    if (!teamId) return unknown;
+    return plain(await predictAltPuckLine(teamId, opponentId, isHome));
   }
   if (market === "ot_winner") {
-    if (!teamId) return 50;
-    return predictDoubleChance(teamId, opponentId, isHome);
+    if (!teamId) return unknown;
+    return plain(await predictDoubleChance(teamId, opponentId, isHome));
   }
   if (market === "regulation_result") {
-    if (!teamId) return 40;
-    return predictRegulationResult(teamId, opponentId, isHome);
+    if (!teamId) return unknown;
+    return plain(await predictRegulationResult(teamId, opponentId, isHome));
   }
   if (market === "total_goals" || market === "team_total_goals") {
-    return predictTotalGoals(line, selection, teamId, opponentId);
+    return plain(await predictTotalGoals(line, selection, teamId, opponentId));
   }
   if (
     market === "period1_total_goals" ||
     market === "period2_total_goals" ||
     market === "period3_total_goals"
   ) {
-    return predictPeriodTotalGoals(line, selection, teamId, opponentId);
+    return plain(await predictPeriodTotalGoals(line, selection, teamId, opponentId));
   }
   if (
     market === "period1_winner" ||
     market === "period2_winner" ||
     market === "period3_winner"
   ) {
-    if (!teamId) return 38;
-    return predictPeriodWinner(teamId, opponentId, isHome);
+    if (!teamId) return unknown;
+    return plain(await predictPeriodWinner(teamId, opponentId, isHome));
   }
-  if (market === "both_teams_score")   return predictBothTeamsScore(teamId, opponentId);
-  if (market === "clean_sheet")        return predictCleanSheet(teamId, opponentId);
-  if (market === "team_pp_goals")      return predictTeamPPGoal(teamId);
-  if (market === "team_penalty_kill")  return predictPenaltyKill(teamId);
-  if (market === "winning_margin")     return predictWinningMargin();
-  if (market === "game_to_ot")         return 24;
-  if (market === "highest_scoring_period") return 38;
+  if (market === "both_teams_score")   return plain(await predictBothTeamsScore(teamId, opponentId));
+  if (market === "clean_sheet")        return plain(await predictCleanSheet(teamId, opponentId));
+  if (market === "team_pp_goals")      return plain(await predictTeamPPGoal(teamId));
+  if (market === "team_penalty_kill")  return plain(await predictPenaltyKill(teamId));
+
+  // `selection` porte le SEAU d'écart ("1", "2", "3+", ou "home_1"/"away_2plus"
+  // selon le vocabulaire de l'appelant). Sans lui, les six tuiles d'écart
+  // posaient la même question et recevaient la même constante — six fois 12 %
+  // pour une partition exhaustive qui totalisait 72 %.
+  if (market === "winning_margin") {
+    const p = await predictWinningMargin(teamId, opponentId, isHome, body.selection);
+    return p === null ? unknown : plain(p);
+  }
+
+  if (market === "game_to_ot") {
+    return plain(await predictGameToOvertime(teamId, opponentId));
+  }
+
+  if (market === "highest_scoring_period") {
+    const p = await predictHighestScoringPeriod(teamId, opponentId, body.selection);
+    return p === null ? unknown : { probability: p, caveat: "period_symmetric" };
+  }
 
   // ── Player markets ─────────────────────────────────────────────────────────
-  if (!playerId) return 50;
+  if (!playerId) return unknown;
 
-  if (market === "anytime_goal")     return predictAnytimeGoal(playerId);
-  if (market === "first_goal_scorer") return predictFirstGoalScorer(playerId);
-  if (market === "last_goal_scorer")  return predictFirstGoalScorer(playerId);
-  if (market === "shots_ou")         return predictShotsOU(playerId, line, selection);
-  if (market === "assists_ou")       return predictAssistsOU(playerId, line, selection);
-  if (market === "points_ou")        return predictPointsOU(playerId, line, selection);
-  if (market === "pp_point")         return predictPPPoint(playerId);
+  if (market === "anytime_goal")  return plain(await predictAnytimeGoal(playerId));
+  if (market === "shots_ou")      return plain(await predictShotsOU(playerId, line, selection));
+  if (market === "assists_ou")    return plain(await predictAssistsOU(playerId, line, selection));
+  if (market === "points_ou")     return plain(await predictPointsOU(playerId, line, selection));
+  if (market === "pp_point")      return plain(await predictPPPoint(playerId));
+
+  if (market === "first_goal_scorer") {
+    const p = await predictFirstGoalScorer(playerId, opponentId);
+    return p === null ? unknown : plain(p);
+  }
+
+  // Même estimateur que le premier buteur, et le dire : voir le commentaire de
+  // `predictLastGoalScorer`. Ce qui était un alias muet dans ce fichier est
+  // maintenant un appel distinct qui remonte sa mise en garde.
+  if (market === "last_goal_scorer") {
+    const p = await predictLastGoalScorer(playerId, opponentId);
+    return p === null ? unknown : { probability: p, caveat: "shared_with_first_goal" };
+  }
 
   if (
     market === "hits_ou" ||
@@ -317,10 +386,17 @@ async function computeProbability(body: PredictionRequest): Promise<number> {
     market === "penalty_minutes_ou" ||
     market === "goalie_saves_ou"
   ) {
-    return predictPositionBasedProp(playerId, market, line, selection);
+    const est = await predictPositionBasedProp(playerId, market, line, selection);
+    if (!est) return unknown;
+    return est.playerSpecific
+      ? plain(est.probability)
+      : { probability: est.probability, caveat: "league_average" };
   }
 
-  return 50;
+  // Marché inconnu du moteur. L'ancien `return 50` en faisait un pari à pile ou
+  // face parfaitement présentable à l'écran ; c'est simplement une question à
+  // laquelle ce moteur ne répond pas.
+  return unknown;
 }
 
 // --- Routes ---
@@ -328,8 +404,21 @@ async function computeProbability(body: PredictionRequest): Promise<number> {
 // POST /api/predict/single
 router.post("/single", validateBody(singlePredictionSchema), async (req: Request, res: Response) => {
   try {
-    const body        = req.body as PredictionRequest;
-    const probability = await computeProbability(body);
+    const body = req.body as PredictionRequest;
+    const { probability, caveat } = await computeProbability(body);
+
+    // Le moteur ne sait pas répondre à ce marché avec ce corps. On le DIT, avec
+    // un statut que `predictionApiService` transforme déjà en
+    // `PredictionUnavailableError` côté client, donc en état « indisponible » à
+    // l'écran. C'est le point de toute cette route : ne jamais rendre un
+    // chiffre qu'on n'a pas calculé.
+    if (probability === null) {
+      return res.status(422).json({
+        error: "no_estimate",
+        marketType: body.marketType,
+        message: "No estimate available for this market with the data provided",
+      });
+    }
 
     const confidence =
       probability >= 70 ? "very_high" :
@@ -347,6 +436,10 @@ router.post("/single", validateBody(singlePredictionSchema), async (req: Request
       probability,
       confidence,
       factors,
+      // Mise en garde à afficher AVEC le chiffre quand il y en a une : moyenne
+      // de ligue, estimateur partagé, périodes supposées équivalentes. Absente
+      // quand le chiffre est une vraie prédiction sur ce sujet.
+      ...(caveat ? { caveat } : {}),
       oddsLabel: probToOddsLabel(probability),
       modelVersion: "nhl-stats-v1.0",
       generatedAt: new Date().toISOString(),
@@ -514,13 +607,14 @@ router.post("/futures", validateBody(predictFuturesSchema), async (req: Request,
 
 router.post('/ml', predictLimiter, validateBody(predictMlSchema), async (req: Request, res: Response) => {
   try {
-    const { type, subjectId, opponentId, propType, line, selection } = req.body as {
+    const { type, subjectId, opponentId, propType, line, selection, isHome } = req.body as {
       type:        'game' | 'player' | 'team';
       subjectId:   string;
       opponentId?: string;
       propType?:   string;
       line?:       number;
       selection?:  string;
+      isHome?:     boolean;
     };
 
     if (!type || !subjectId) {
@@ -531,10 +625,25 @@ router.post('/ml', predictLimiter, validateBody(predictMlSchema), async (req: Re
 
     if (type === 'game') {
       const marketType = propType ?? 'moneyline';
-      // `selection` était ignoré ici : les deux côtés d'un marché binaire
-      // partaient vers le service Python avec un corps identique.
+
+      // `buildGameFeatures(homeId, awayId, …)` prend bien le DOMICILE en
+      // premier : c'est son aréna qui fixe l'altitude, le voyage et l'avantage
+      // de la glace. On lui passait `subjectId`, or la tuile « extérieur »
+      // envoie l'équipe VISITEUSE comme sujet — le service Python calculait
+      // donc « P(le visiteur gagne chez lui) ». Les deux tuiles moneyline d'un
+      // même match totalisaient 109–112 % au lieu de 100 %.
+      //
+      // Le match est décrit correctement ici, et `subject_is_home` dit de quel
+      // côté est la question. Défaut `true` : les appels qui ne portent pas
+      // `isHome` gardent le comportement d'avant pour la tuile domicile, qui
+      // était le seul correct.
+      const subjectIsHome = isHome !== false;
+      const homeId = subjectIsHome ? subjectId : (opponentId ?? subjectId);
+      const awayId = subjectIsHome ? (opponentId ?? subjectId) : subjectId;
+
       const features = await buildGameFeatures(
-        subjectId, opponentId ?? subjectId, marketType, line, { selection },
+        homeId, awayId, marketType, line,
+        { selection, subjectIsHome },
       );
       result = await mlApiClient.predictGame(features);
     } else if (type === 'player') {

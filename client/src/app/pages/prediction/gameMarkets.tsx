@@ -80,6 +80,24 @@ export function buildGameGroups(home: string, away: string, hp: number, ou: numb
     ({ type: "game", subjectId: home, opponentId: away, propType, line, isHome: true,  selection });
   const gmla = (propType: string, line?: number, selection?: string): MLProps =>
     ({ type: "game", subjectId: away, opponentId: home, propType, line, isHome: false, selection });
+
+  /**
+   * Tuile d'écart de victoire. `selection` porte la TAILLE de l'écart ("1", "2",
+   * "3+"), le sujet porte le côté.
+   *
+   * `settleSelection` est fixé explicitement parce que la sélection envoyée au
+   * moteur ne suffit plus à identifier le pari sur le coupon : « 1 » tout seul
+   * ne dit pas QUELLE équipe gagne par un but. `settlementFields` reprend ce
+   * couple verbatim quand `settleMarket` est posé, donc la jambe enregistrée
+   * reste lisible le jour où ce marché sera réglé automatiquement (il est
+   * volontairement « pending » aujourd'hui, cf. settlement.service.ts).
+   */
+  const margin = (team: string, atHome: boolean, size: "1" | "2" | "3+"): MLProps => ({
+    ...(atHome ? gml("winning_margin", undefined, size) : gmla("winning_margin", undefined, size)),
+    settleMarket:    "winning_margin",
+    settleSelection: `${team}_by_${size}`,
+  });
+
   return [
     {
       id: "match", title: "Match Betting", cols: 3,
@@ -185,17 +203,22 @@ export function buildGameGroups(home: string, away: string, hp: number, ou: numb
     {
       id: "margin", title: "Winning Margin", cols: 3,
       options: [
-        { id: "wm-h1", label: `${home} by 1`,  rulePct: Math.round(hp * 0.18), mlProps: gml("winning_margin"),
-          ruleNote: `One-goal wins are the most common margin in NHL hockey.` },
-        { id: "wm-h2", label: `${home} by 2`,  rulePct: Math.round(hp * 0.13), mlProps: gml("winning_margin"),
+        // Les six tuiles envoyaient `gml("winning_margin")` sans rien d'autre :
+        // six requêtes identiques côté domicile, six autres côté extérieur, et
+        // le moteur répondait la constante 12 à toutes. Six cases à 12 % pour
+        // une partition EXHAUSTIVE des issues — 72 % au total, pour des marchés
+        // qui doivent en faire 100.
+        { id: "wm-h1", label: `${home} by 1`,  rulePct: Math.round(hp * 0.18), mlProps: margin(home, true, "1"),
+          ruleNote: `One-goal wins are the most common margin in NHL hockey — every game tied after 60 minutes ends this way.` },
+        { id: "wm-h2", label: `${home} by 2`,  rulePct: Math.round(hp * 0.13), mlProps: margin(home, true, "2"),
           ruleNote: `Two-goal wins: comfortable but not a blowout.` },
-        { id: "wm-h3", label: `${home} by 3+`, rulePct: Math.round(hp * 0.09), mlProps: gml("winning_margin"),
+        { id: "wm-h3", label: `${home} by 3+`, rulePct: Math.round(hp * 0.09), mlProps: margin(home, true, "3+"),
           ruleNote: `Blowout win — less common but more likely for dominant home teams.` },
-        { id: "wm-a1", label: `${away} by 1`,  rulePct: Math.round(ap * 0.16), mlProps: gmla("winning_margin"),
+        { id: "wm-a1", label: `${away} by 1`,  rulePct: Math.round(ap * 0.16), mlProps: margin(away, false, "1"),
           ruleNote: `Narrow away win — common when teams are evenly matched.` },
-        { id: "wm-a2", label: `${away} by 2`,  rulePct: Math.round(ap * 0.11), mlProps: gmla("winning_margin"),
+        { id: "wm-a2", label: `${away} by 2`,  rulePct: Math.round(ap * 0.11), mlProps: margin(away, false, "2"),
           ruleNote: `Away win by two goals.` },
-        { id: "wm-a3", label: `${away} by 3+`, rulePct: Math.round(ap * 0.07), mlProps: gmla("winning_margin"),
+        { id: "wm-a3", label: `${away} by 3+`, rulePct: Math.round(ap * 0.07), mlProps: margin(away, false, "3+"),
           ruleNote: `Away blowout — rare but possible when visitors are heavily favored.` },
       ],
     },
