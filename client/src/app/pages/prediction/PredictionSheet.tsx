@@ -86,6 +86,10 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
       // simply stays pending instead of risking a wrong auto-settlement.
       gameId: mlProps?.gameId,
       selectionValue,
+      // Nécessaires au calcul de corrélation d'un coupon multi-jambes sur un
+      // même match (cf. `BetLeg.opponentId`).
+      opponentId: mlProps?.opponentId,
+      isHome: mlProps?.isHome,
     };
     addLeg(leg);
   }

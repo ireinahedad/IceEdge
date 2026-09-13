@@ -194,9 +194,24 @@ export const predictionApiService = {
     post<PredictionResponse>("/predict/single", req),
 
   /**
-   * Combined probability for a multi-leg parlay. The server accounts for
-   * correlated legs; multiplying client-side would assume independence and
-   * quietly overstate the parlay, so there is no fallback.
+   * Combined probability for a multi-leg parlay.
+   *
+   * ⚠️ CETTE DOCSTRING A MENTI. Elle affirmait « The server accounts for
+   * correlated legs », et le schéma acceptait même un champ `correlation` pour
+   * le faire croire. La route multipliait les jambes et appliquait 0,95 — rien
+   * d'autre. « Domicile gagne » + « Extérieur gagne » sur le même match
+   * répondait 22,8 % pour un événement impossible.
+   *
+   * Ce que la route fait VRAIMENT depuis le 2026-09-13 (`services/parlay.ts`) :
+   * elle reconnaît les jambes incompatibles (→ 0), les doublons et les
+   * implications, multiplie le reste, et signale par `assumesIndependence`
+   * quand des jambes d'un même match n'ont pas de relation logique connue —
+   * le seul cas où le chiffre reste approximatif.
+   *
+   * Le coupon de l'application n'appelle PLUS cette route : il calcule la même
+   * chose hors ligne via `parlayMath.ts`, qui est le miroir de `parlay.ts`.
+   * Cette méthode reste pour les appels externes.
+   *
    * Throws `PredictionUnavailableError`.
    */
   getParlayPrediction: (

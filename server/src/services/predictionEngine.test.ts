@@ -1,5 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
+  predictGameLegCorrelation,
+  predictExactGameParlay,
+  predictMoneyline,
   predictBothTeamsScore,
   predictTotalGoals,
   predictPeriodTotalGoals,
@@ -165,9 +168,19 @@ describe('predictWinningMargin — six seaux qui somment à 1, pas six fois 12 %
     const byOne = d.win_1 + d.lose_1;
     expect(byOne).toBeGreaterThan(d.win_2 + d.lose_2);
     expect(byOne).toBeGreaterThan(d.win_3plus + d.lose_3plus);
-    // Une affiche serrée envoie beaucoup de matchs en prolongation : la part des
-    // matchs à un but doit dépasser largement la moitié.
-    expect(byOne).toBeGreaterThan(0.5);
+    // Cette ligne demandait « plus de la moitié ». Elle était fausse, et c'est
+    // `games_spine.csv` qui le dit : sur 17 292 matchs rangés par niveau de buts
+    // attendu, AUCUNE tranche n'atteint 50 % de matchs à un but.
+    //
+    //     buts attendus   écart 1
+    //       4,37–5,34      49,3 %   ← la tranche la plus fermée de la ligue
+    //       5,53–5,69      44,3 %
+    //       6,37–7,30      40,3 %
+    //
+    // L'affiche TGA/TGB vit dans le bas de cette échelle : on exige donc la
+    // fourchette observée, pas un seuil rond.
+    expect(byOne).toBeGreaterThan(0.43);
+    expect(byOne).toBeLessThan(0.50);
   });
 
   it('le favori a plus de chances de gagner par 3+ que l\'outsider', async () => {
@@ -552,6 +565,109 @@ describe('ot_winner — la prolongation est presque un pile ou face', () => {
   });
 });
 
+// ── Un match, une loi ────────────────────────────────────────────────────────
+
+describe('les deux tuiles d\'un même match décrivent le MÊME match', () => {
+  /**
+   * Ce que ce bloc prouve : `gml` (domicile) et `gmla` (extérieur) lisent une
+   * seule et même loi jointe.
+   *
+   * Avant, chaque camp reconstruisait la sienne depuis son propre point de vue.
+   * Les deux constructions ne sont complémentaires que si rien ne les brise —
+   * or deux choses les brisaient : l'écrêtage des cadences à [0,8 ; 5,5] et la
+   * dichotomie qui étire la loi vers le moneyline mélangé, qui ne s'arrêtent pas
+   * au même endroit sur une affiche déséquilibrée. On mesurait 103 % pour les
+   * deux camps sur `ot_winner`, et `game_to_ot` répondait deux chiffres
+   * différents selon la tuile qui posait la question — pour un événement qui
+   * n'appartient à personne.
+   *
+   * La loi est désormais construite UNE fois, côté domicile ; la vue du visiteur
+   * en est la transposée. La grille ci-dessous balaie la vraie étendue NHL, y
+   * compris les affiches les plus déséquilibrées, là où l'écrêtage mordait.
+   */
+  const RATES = [2.4, 2.8, 3.05, 3.4, 3.9];
+
+  const pairs: Array<[number, number, number, number]> = [];
+  for (const agf of RATES) for (const aga of RATES)
+    for (const bgf of RATES) for (const bga of RATES) pairs.push([agf, aga, bgf, bga]);
+
+  const mount = (agf: number, aga: number, bgf: number, bga: number) =>
+    fetchTeams.mockResolvedValue([
+      { id: 'H', abbreviation: 'H', gamesPlayed: 60, winPct: 62,
+        goalsForPerGame: agf, goalsAgainstPerGame: aga },
+      { id: 'V', abbreviation: 'V', gamesPlayed: 60, winPct: 38,
+        goalsForPerGame: bgf, goalsAgainstPerGame: bga },
+    ]);
+
+  afterEach(() => { fetchTeams.mockImplementation(async () => TEAMS); });
+
+  it('moneyline et ot_winner : les deux camps somment à 100, sur toute la grille', async () => {
+    let worstMl = 0, worstOt = 0;
+    for (const p of pairs) {
+      mount(...p);
+      const [mlH, mlV, otH, otV] = await Promise.all([
+        predictMoneyline('H', 'V', true),  predictMoneyline('V', 'H', false),
+        predictOvertimeWinner('H', 'V', true), predictOvertimeWinner('V', 'H', false),
+      ]);
+      worstMl = Math.max(worstMl, Math.abs(mlH + mlV - 100));
+      worstOt = Math.max(worstOt, Math.abs(otH + otV - 100));
+    }
+    // 1 point : l'arrondi de chaque camp, et rien d'autre. C'était 3 sur
+    // `ot_winner` avant que la loi ne soit unique.
+    expect(worstMl).toBeLessThanOrEqual(1);
+    expect(worstOt).toBeLessThanOrEqual(1);
+  });
+
+  it('la prolongation n\'appartient à personne : le même chiffre des deux côtés', async () => {
+    for (const p of pairs) {
+      mount(...p);
+      const [h, v] = await Promise.all([
+        predictGameToOvertime('H', 'V', true),
+        predictGameToOvertime('V', 'H', false),
+      ]);
+      expect(v, `cadences ${p.join('/')}`).toBe(h);
+    }
+  });
+
+  it('« les deux marquent » ne dépend pas de qui pose la question', async () => {
+    for (const p of pairs) {
+      mount(...p);
+      const [h, v] = await Promise.all([
+        predictBothTeamsScore('H', 'V', true),
+        predictBothTeamsScore('V', 'H', false),
+      ]);
+      expect(v, `cadences ${p.join('/')}`).toBe(h);
+    }
+  });
+
+  it('les seaux d\'écart d\'un camp sont ceux de l\'autre, miroir', async () => {
+    for (const p of pairs) {
+      mount(...p);
+      const [h, v] = await Promise.all([
+        predictMarginDistribution('H', 'V', true),
+        predictMarginDistribution('V', 'H', false),
+      ]);
+      const tag = `cadences ${p.join('/')}`;
+      expect(v!.win_1,     tag).toBeCloseTo(h!.lose_1,     9);
+      expect(v!.win_2,     tag).toBeCloseTo(h!.lose_2,     9);
+      expect(v!.win_3plus, tag).toBeCloseTo(h!.lose_3plus, 9);
+      expect(v!.lose_1,    tag).toBeCloseTo(h!.win_1,      9);
+    }
+  });
+
+  it('un blanchissage vu d\'un camp est l\'autre camp blanchi', async () => {
+    for (const p of pairs) {
+      mount(...p);
+      // P(H blanchit V) + P(V marque) = 1 : le même événement, nommé deux fois.
+      const [csH, bttsH] = await Promise.all([
+        predictCleanSheet('H', 'V', true),
+        predictBothTeamsScore('H', 'V', true),
+      ]);
+      expect(csH, `cadences ${p.join('/')}`).toBeLessThanOrEqual(100 - bttsH);
+    }
+  });
+});
+
 
 // ── Totaux : la défense d'en face, et les trois périodes ─────────────────────
 
@@ -601,5 +717,82 @@ describe('predictPeriodTotalGoals — trois périodes, trois chiffres', () => {
     const vsPorous = await predictPeriodTotalGoals(1.5, 'over', 'ELI', 'WEA', 2);
     const vsWall   = await predictPeriodTotalGoals(1.5, 'over', 'ELI', 'WAL', 2);
     expect(vsPorous).toBeGreaterThan(vsWall);
+  });
+});
+
+// ── Corrélation entre jambes d'un même match ────────────────────────────────
+
+describe('predictGameLegCorrelation — la corrélation est calculée, pas supposée', () => {
+  /** Domicile qui marque plus et encaisse moins : affiche déséquilibrée. */
+  const MATCH = [
+    { id: 'HOM', abbreviation: 'HOM', gamesPlayed: 60, goalsForPerGame: 3.3,
+      goalsAgainstPerGame: 2.8, winPct: 50, ppPct: 20, pkPct: 80 },
+    { id: 'AWY', abbreviation: 'AWY', gamesPlayed: 60, goalsForPerGame: 2.8,
+      goalsAgainstPerGame: 3.2, winPct: 50, ppPct: 20, pkPct: 80 },
+  ];
+  const L = (market: string, o: Record<string, unknown> = {}) =>
+    ({ market, subjectIsHome: true, ...o }) as any;
+
+  beforeEach(() => { fetchTeams.mockResolvedValue(MATCH); });
+
+  it('des jambes incompatibles donnent un facteur nul', async () => {
+    // Aucune case de la loi jointe ne satisfait les deux : le facteur tombe à
+    // zéro TOUT SEUL. Aucune règle d'exclusion n'a eu à être écrite pour ce
+    // couple — c'est la différence entre calculer et énumérer des cas.
+    const r = await predictGameLegCorrelation('HOM', 'AWY', [
+      L('game_to_ot', { selection: 'yes' }),
+      L('regulation_result'),
+    ]);
+    expect(r!.factor).toBe(0);
+  });
+
+  it('« gagne » et « plus de buts » se renforcent — facteur > 1', async () => {
+    const r = await predictGameLegCorrelation('HOM', 'AWY', [
+      L('moneyline'),
+      L('total_goals_over', { line: 5.5 }),
+    ]);
+    // Une équipe qui gagne a souvent marqué : les multiplier sous-estimait.
+    expect(r!.factor).toBeGreaterThan(1);
+  });
+
+  it('« gagne » et « moins de buts » se gênent — facteur < 1', async () => {
+    const r = await predictGameLegCorrelation('HOM', 'AWY', [
+      L('moneyline'),
+      L('total_goals_under', { line: 5.5 }),
+    ]);
+    expect(r!.factor).toBeLessThan(1);
+  });
+
+  it('une implication sort du calcul sans être codée', async () => {
+    // « gagne par 2+ » ⊆ « gagne », donc P(les deux) = P(gagne par 2+) et le
+    // facteur vaut exactement 1 / P(gagne).
+    const both = await predictGameLegCorrelation('HOM', 'AWY',
+      [L('puck_line'), L('moneyline')]);
+    const pl   = await predictGameLegCorrelation('HOM', 'AWY', [L('puck_line')]);
+    expect(both!.joint).toBeCloseTo(pl!.joint, 6);
+  });
+
+  it('une jambe seule a un facteur de 1', async () => {
+    const r = await predictGameLegCorrelation('HOM', 'AWY', [L('moneyline')]);
+    expect(r!.factor).toBeCloseTo(1, 6);
+  });
+
+  it('les six seaux d\'écart somment toujours à 1 sur la loi jointe', async () => {
+    let total = 0;
+    for (const subjectIsHome of [true, false])
+      for (const selection of ['1', '2', '3+'])
+        total += (await predictExactGameParlay('HOM', 'AWY',
+          [L('winning_margin', { selection, subjectIsHome })]))!;
+    expect(total).toBeCloseTo(1, 6);
+  });
+
+  it('« va en prolongation » et son complément somment à 1', async () => {
+    const yes = await predictExactGameParlay('HOM', 'AWY', [L('game_to_ot', { selection: 'yes' })]);
+    const no  = await predictExactGameParlay('HOM', 'AWY', [L('game_to_ot', { selection: 'no'  })]);
+    expect(yes! + no!).toBeCloseTo(1, 6);
+  });
+
+  it('sans cadences exploitables : null, pas un facteur inventé', async () => {
+    expect(await predictGameLegCorrelation('INCONNU', 'AUTRE', [L('moneyline')])).toBeNull();
   });
 });

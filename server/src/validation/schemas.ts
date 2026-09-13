@@ -254,7 +254,28 @@ export const parlayPredictionSchema = z.object({
   legs: z.array(z.object({
     marketType,
     probability: z.number().finite().min(0).max(100),
-    correlation: z.number().finite().min(-1).max(1).optional(),
+    // `correlation` a été RETIRÉ. Il était accepté puis JAMAIS lu, et servait
+    // d'alibi à une docstring client qui promettait une gestion des
+    // corrélations inexistante. Un client ne connaît pas la corrélation de ses
+    // propres jambes : elle se déduit de leur IDENTITÉ, d'où les trois champs
+    // ci-dessous.
+    //
+    // ⚠️ zod RETIRE les clés non déclarées. Tant qu'elles n'étaient pas dans ce
+    // schéma, `gameId`, `selection` et `line` n'atteignaient jamais la route,
+    // même envoyées par le client — deux jambes du même match y arrivaient
+    // indiscernables.
+    //
+    // Optionnels : un coupon qui ne les porte pas est traité comme des jambes
+    // indépendantes, soit l'ancien comportement.
+    gameId:    z.string().trim().max(40).optional(),
+    selection: selectionValue.optional(),
+    line:      betLine.optional(),
+    // Équipes du match : ce qu'il faut pour construire la loi jointe des scores
+    // et chiffrer EXACTEMENT des jambes corrélées du même match. Sans elles, le
+    // coupon retombe sur le produit, qui sous-estime.
+    teamId:     nhlSubjectId.optional(),
+    opponentId: nhlSubjectId.optional(),
+    isHome:     z.boolean().optional(),
   })).min(1, 'legs array is required').max(30, 'too many legs'),
 });
 

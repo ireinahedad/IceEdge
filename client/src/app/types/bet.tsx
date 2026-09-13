@@ -200,13 +200,28 @@ export interface ParlayPredictionRequest {
   legs: {
     marketType: BetMarketType;
     probability: number;
-    correlation?: number; // Some bets are correlated (not independent)
+    /** Match concerné — sans lui, deux jambes du même match sont indiscernables. */
+    gameId?: string;
+    /** 'over' | 'under' | 'yes' | 'no' | abréviation d'équipe | seau d'écart. */
+    selectionValue?: string;
+    line?: number;
+    // `correlation` a été retiré : le champ était envoyé, jamais lu, et servait
+    // d'alibi à une docstring qui promettait une gestion des corrélations
+    // inexistante. La corrélation se déduit de l'identité des jambes.
   }[];
 }
 
 export interface ParlayPredictionResponse {
-  combinedProbability: number;
-  adjustedProbability: number; // Accounts for correlations between legs
+  /** `null` si une jambe porte une probabilité illisible. */
+  combinedProbability: number | null;
+  /** Égal à `combinedProbability` — l'abattement forfaitaire de 0,95 a disparu. */
+  adjustedProbability: number | null;
+  /** Vrai si deux jambes s'excluent : la combinaison vaut 0. */
+  impossible?: boolean;
+  /** Jambes retirées parce que dupliquées ou impliquées par une autre. */
+  redundantLegs?: number;
+  /** Vrai si des jambes partagent un match sans relation logique connue. */
+  assumesIndependence?: boolean;
   legs: {
     marketType: BetMarketType;
     probability: number;
@@ -237,4 +252,14 @@ export interface BetLeg {
   gameId?: string;
   /** 'over' | 'under' | 'yes' | team abbreviation, depending on the market. */
   selectionValue?: string;
+  /**
+   * Adversaire et côté de la glace.
+   *
+   * Servent à UNE chose : construire la loi jointe des scores du match quand le
+   * coupon porte plusieurs jambes dessus, et chiffrer leur corrélation au lieu
+   * de la supposer nulle. Sans l'adversaire, le serveur ne peut pas savoir de
+   * quel match il s'agit et retombe sur le produit.
+   */
+  opponentId?: string;
+  isHome?: boolean;
 }

@@ -35,6 +35,9 @@ import {
   buildTeamFuturesFeatures,
 } from "../services/featureEngineering";
 import { getBestBets } from "../services/bestBets.service";
+import { combineParlayLegs } from "../services/parlay";
+import type { ParlayLeg } from "../services/parlay";
+import { isScoreDerivable, predictGameLegCorrelation } from "../services/predictionEngine";
 import { logger } from "../logger";
 import { sendError } from "../httpError";
 import { validateBody } from "../middleware/validate.middleware";
@@ -337,8 +340,8 @@ async function computeProbability(body: PredictionRequest): Promise<ProbabilityR
     if (!teamId) return unknown;
     return plain(await predictPeriodWinner(teamId, opponentId, isHome));
   }
-  if (market === "both_teams_score")   return plain(await predictBothTeamsScore(teamId, opponentId));
-  if (market === "clean_sheet")        return plain(await predictCleanSheet(teamId, opponentId));
+  if (market === "both_teams_score")   return plain(await predictBothTeamsScore(teamId, opponentId, isHome));
+  if (market === "clean_sheet")        return plain(await predictCleanSheet(teamId, opponentId, isHome));
   if (market === "team_pp_goals")      return plain(await predictTeamPPGoal(teamId));
   if (market === "team_penalty_kill")  return plain(await predictPenaltyKill(teamId));
 
@@ -352,11 +355,11 @@ async function computeProbability(body: PredictionRequest): Promise<ProbabilityR
   }
 
   if (market === "game_to_ot") {
-    return plain(await predictGameToOvertime(teamId, opponentId));
+    return plain(await predictGameToOvertime(teamId, opponentId, isHome));
   }
 
   if (market === "highest_scoring_period") {
-    const p = await predictHighestScoringPeriod(teamId, opponentId, body.selection);
+    const p = await predictHighestScoringPeriod(teamId, opponentId, body.selection, isHome);
     return p === null ? unknown : { probability: p, caveat: "period_symmetric" };
   }
 
@@ -454,27 +457,127 @@ router.post("/single", validateBody(singlePredictionSchema), async (req: Request
 });
 
 // POST /api/predict/parlay
-router.post("/parlay", validateBody(parlayPredictionSchema), (req: Request, res: Response) => {
-  const { legs } = req.body as {
-    legs: Array<{ marketType: BetMarketType; probability: number }>;
-  };
+//
+// DEUX ÉTAGES, et c'est la structure qui compte.
+//
+//  1. `combineParlayLegs` règle ce qui est LOGIQUE — incompatibilité, doublon,
+//     implication — sans lire la moindre donnée, et pour tous les marchés.
+//  2. Ce qu'il en reste est groupé PAR MATCH. Les jambes lisibles sur le score
+//     final passent par la loi jointe (`predictExactGameParlay`) : leur
+//     corrélation n'est plus supposée, elle est calculée.
+//
+// Entre matchs différents, on multiplie — là, l'indépendance est vraie.
+// Les jambes qu'aucun des deux étages ne couvre (périodes, buteurs, props)
+// restent multipliées conditionnellement, et `assumesIndependence` le dit.
+router.post("/parlay", validateBody(parlayPredictionSchema), async (req: Request, res: Response) => {
+  try {
+    type WireLeg = ParlayLeg & { teamId?: string; opponentId?: string; isHome?: boolean };
+    const { legs } = req.body as { legs: WireLeg[] };
 
-  if (!Array.isArray(legs) || legs.length === 0) {
-    res.status(400).json({ error: "legs array required" });
-    return;
+    if (!Array.isArray(legs) || legs.length === 0) {
+      return res.status(400).json({ error: "legs array required" });
+    }
+
+    const naive = legs.reduce((acc, l) => acc * (l.probability / 100), 1) * 100;
+
+    // ── Étage 1 : relations logiques ─────────────────────────────────────────
+    const logical = combineParlayLegs(legs);
+    if (logical.impossible) {
+      return res.json({
+        combinedProbability: Math.round(naive * 10) / 10,
+        adjustedProbability: 0,
+        impossible: true,
+        redundantLegs: logical.redundantLegs,
+        exactLegs: 0,
+        assumesIndependence: false,
+        legs: legs.map((l) => ({ marketType: l.marketType, probability: l.probability })),
+      });
+    }
+    if (!Number.isFinite(logical.probability)) {
+      return res.json({
+        combinedProbability: null, adjustedProbability: null,
+        impossible: false, redundantLegs: logical.redundantLegs,
+        exactLegs: 0, assumesIndependence: false,
+        legs: legs.map((l) => ({ marketType: l.marketType, probability: l.probability })),
+      });
+    }
+
+    // ── Étage 2 : corrélation réelle, match par match ────────────────────────
+    const byGame = new Map<string, WireLeg[]>();
+    logical.legs.forEach((l, i) => {
+      // Une jambe sans match ne peut être corrélée à rien : groupe à elle seule.
+      const key = l.gameId ? `g:${l.gameId}` : `solo:${i}`;
+      const bucket = byGame.get(key);
+      if (bucket) bucket.push(l); else byGame.set(key, [l]);
+    });
+
+    let joint = 1;
+    let exactLegs = 0;
+    let assumesIndependence = false;
+
+    for (const group of byGame.values()) {
+      const derivable = group.filter(l => isScoreDerivable(
+        normalizeMarket(l.marketType, l.selection ?? "").market));
+      const others = group.filter(l => !derivable.includes(l));
+
+      // Marchés que le score final ne décide pas : produit conditionnel.
+      for (const l of others) joint *= l.probability / 100;
+      if (others.length > 0 && group.length > 1) assumesIndependence = true;
+
+      if (derivable.length === 0) continue;
+      if (derivable.length === 1) { joint *= derivable[0].probability / 100; continue; }
+
+      // Le match est décrit par la première jambe qui porte ses deux équipes.
+      const anchor = derivable.find(l => l.teamId && l.opponentId);
+      const anchorIsHome = anchor?.isHome !== false;
+      const homeId = anchor ? (anchorIsHome ? anchor.teamId : anchor.opponentId) : undefined;
+      const awayId = anchor ? (anchorIsHome ? anchor.opponentId : anchor.teamId) : undefined;
+
+      if (!homeId || !awayId) {
+        // Sans les équipes, pas de loi jointe. On multiplie et on le DIT.
+        for (const l of derivable) joint *= l.probability / 100;
+        assumesIndependence = true;
+        continue;
+      }
+
+      const corr = await predictGameLegCorrelation(homeId, awayId, derivable.map(l => {
+        const { market, selection } = normalizeMarket(l.marketType, l.selection ?? "");
+        return { market, selection, line: l.line, subjectIsHome: l.isHome !== false };
+      }));
+
+      // Le produit des probabilités AFFICHÉES reste la base : ce sont elles que
+      // l'utilisateur voit sur les tuiles. La loi jointe ne fournit que le
+      // facteur de corrélation, sans dimension — voir
+      // `predictGameLegCorrelation` pour pourquoi on ne sert pas sa
+      // probabilité brute.
+      const shown = derivable.reduce((acc, l) => acc * (l.probability / 100), 1);
+
+      if (corr === null) {
+        // Pas de cadences exploitables : on ne fabrique pas une corrélation.
+        joint *= shown;
+        assumesIndependence = true;
+      } else {
+        joint *= shown * corr.factor;
+        exactLegs += derivable.length;
+      }
+    }
+
+    res.json({
+      /** Produit naïf des jambes — conservé pour comparaison. */
+      combinedProbability: Math.round(naive * 10) / 10,
+      /** Ce que le nom promet depuis toujours : corrélations comprises. */
+      adjustedProbability: Math.round(joint * 1000) / 10,
+      impossible: false,
+      redundantLegs: logical.redundantLegs,
+      /** Nb de jambes dont la corrélation a réellement été calculée. */
+      exactLegs,
+      /** `true` = au moins un groupe est retombé sur l'indépendance. */
+      assumesIndependence,
+      legs: legs.map((l) => ({ marketType: l.marketType, probability: l.probability })),
+    });
+  } catch (err: any) {
+    sendError(res, err, { context: '[predict/parlay]', fallbackMessage: 'Parlay failed' });
   }
-
-  const combined = legs.reduce((acc, leg) => acc * (leg.probability / 100), 1) * 100;
-  const adjusted = combined * 0.95;
-
-  res.json({
-    combinedProbability: Math.round(combined * 10) / 10,
-    adjustedProbability: Math.round(adjusted * 10) / 10,
-    legs: legs.map((leg) => ({
-      marketType:  leg.marketType,
-      probability: leg.probability,
-    })),
-  });
 });
 
 // GET /api/predict/markets/game/:id

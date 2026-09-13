@@ -35,6 +35,10 @@ const engine = {
   predictPenaltyKill: vi.fn(() => 80),
   predictPeriodWinner: vi.fn(() => 38), predictPeriodTotalGoals: vi.fn(() => 45),
   buildRealFactors: vi.fn(async () => []),
+  // Corrélation du coupon : absentes de ce double, la route recevait
+  // `undefined` et rendait 500 sur /parlay.
+  isScoreDerivable: vi.fn(() => false),
+  predictGameLegCorrelation: vi.fn(async () => null),
   // Marchés qui servaient une constante dans le routeur. Les doubles rendent
   // `null` quand la sélection est illisible, comme le vrai moteur, parce que
   // c'est CE comportement que les tests ci-dessous vérifient.
