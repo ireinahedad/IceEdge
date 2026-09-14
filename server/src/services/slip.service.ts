@@ -211,9 +211,26 @@ export async function submitSlip(
   if (legs.length > 12) throw Object.assign(new Error('Max 12 legs per slip'), { status: 400 });
 
   const isParlay = legs.length > 1;
-  const combined =
+
+  // ⚠️⚠️ `bet_slips.combined_probability` est un **INT** (migration 003) et `pg`
+  // envoie le paramètre TEL QUEL, en texte : Postgres refuse « 37.7 » sur une
+  // colonne integer (22P02) et la soumission repart en 500 côté client.
+  // Depuis que la probabilité combinée est calculée localement par
+  // `parlayMath.ts` (2026-09-13), le client arrondit à UNE DÉCIMALE : tout
+  // coupon de deux jambes ou plus cassait donc l'insertion.
+  //
+  // L'arrondi est fait ICI et pas côté client à dessein : un bundle déjà
+  // déployé, un vieux build iOS ou n'importe quel autre appelant continueraient
+  // sinon à faire tomber la route. Ne pas « simplifier » en supprimant cet
+  // arrondi sous prétexte que le client envoie un entier.
+  //
+  // Le repli `null` (colonne nullable) couvre une jambe sans `probability`
+  // exploitable : `NaN` partirait sinon dans la même erreur 22P02.
+  // `xpForOutcome` traite déjà le `null` (→ 50 %).
+  const rawCombined =
     combinedProbability ??
-    Math.round(legs.reduce((acc, l) => acc * (l.probability / 100), 1) * 100);
+    legs.reduce((acc, l) => acc * (l.probability / 100), 1) * 100;
+  const combined = Number.isFinite(rawCombined) ? Math.round(rawCombined) : null;
 
   const locksAt = await resolveLocksAt(legs);
 
