@@ -13,7 +13,7 @@ import { useSport } from "../../context/SportContext";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { BetOpt, MktGroup, RuleFactor } from "./gameMarkets";
-import { GameSelector, LoadingSkeleton, NotFound, RecentFormCard, RevealMode, RevealModeCtx, useSelectedGame, useUpcomingGames } from "./predictionShared";
+import { GameSelector, LoadingSkeleton, NotFound, RecentFormCard, RevealMode, RevealModeCtx, StatsBanner, useSelectedGame, useUpcomingGames } from "./predictionShared";
 
 
 /* ─── Player Prediction ──────────────────────── */
@@ -319,6 +319,7 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
       {/* Recent form — shown above the markets */}
 
       {/* Market groups — local groups always used (they carry mlProps) */}
+      <StatsBanner type="player" id={playerId} />
       <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
       <RevealModeCtx.Provider value={revealMode}>
         {playerGroupsG.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}

@@ -20,8 +20,10 @@ import { useAuth } from "../context/AuthContext";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { BottomNav } from "../components/BottomNav";
 import { submitSlip } from "../services/slipApiService";
+import { isRequestTimeout } from "../services/http";
 import { useSport } from "../context/SportContext";
 import { useI18n } from "../i18n";
+import { toast } from "sonner";
 import "./bet-theme.css";
 import { MySlipsTab } from "./bet/MySlipsTab";
 import "../components/rink-theme.css";
@@ -50,6 +52,12 @@ export function BetBuilderPage() {
   // `message` vient du serveur ; il était jeté à la réception puis lu au rendu,
   // donc le sous-titre de l'écran de succès était vide depuis toujours.
   const [submitResult, setSubmitResult] = useState<{ slipId: string; message?: string } | null>(null);
+  // ⚠️ Cet état était ÉCRIT et jamais LU : aucune ligne du rendu ne le
+  // mentionnait. Un verrouillage raté — un délai dépassé sur un coupon de trois
+  // matchs, par exemple — laissait donc l'écran exactement comme avant le clic,
+  // ce qui ne se distingue pas d'un bouton mort. Il est maintenant passé à
+  // `LockSlipCTA`, c'est-à-dire là où le pouce se trouve déjà, ET doublé d'un
+  // toast pour le cas où le bloc serait hors champ.
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -118,7 +126,14 @@ export function BetBuilderPage() {
       setSubmitResult({ slipId, message });
       clearSlip();
     } catch (err: any) {
-      setSubmitError(err.message ?? "Submission failed. Try again.");
+      // Un délai dépassé n'est pas un refus : le coupon n'est pas invalide, le
+      // serveur a simplement mis trop longtemps. Le dire évite qu'on retire des
+      // paris en croyant que c'est le coupon qui pose problème.
+      const message = isRequestTimeout(err)
+        ? t("slip.lockTimeout")
+        : (err?.message || t("slip.lockFailed"));
+      setSubmitError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -271,6 +286,7 @@ export function BetBuilderPage() {
           onAdd={() => setShowSheet(true)}
           onLock={handleLock}
           isSubmitting={isSubmitting}
+          error={submitError}
           panelRef={ctaRef}
         />
       )}

@@ -12,6 +12,7 @@ import { nhlApiService } from "../../services/nhlApiService";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { pctColor } from "../../data/pctScale";
 import { useI18n } from "../../i18n";
+import { FramedLabel } from "../../components/brand/FramedLabel";
 import type { NHLGame } from "../../types/bet";
 import type { CalcFactor } from "../../services/predictionApiService";
 
@@ -640,6 +641,36 @@ export function PredictionLayout({
   );
 }
 
+
+/* ─── Entrée « Statistiques » ─────────────────────── */
+
+/**
+ * Le raccourci vers les graphiques du sujet, en bannière pleine largeur.
+ *
+ * Il vivait dans l'en-tête de `PredictionPage`, en pastille de 30 px collée à
+ * droite du titre : la cible était petite, et surtout elle était HORS du regard
+ * de quelqu'un qui fait défiler les paris. Il est posé ici, juste au-dessus de
+ * la barre des marchés — donc au-dessus de TOUS les paris de la page, quel que
+ * soit le sujet (match, équipe, joueur), les trois écrans rendant cette barre.
+ *
+ * Le libellé est `stats.statistics` et non `pred.chart` : la page Stats appelle
+ * déjà cette même destination « Statistiques », et deux noms pour une seule
+ * porte, c'est une porte de plus à chercher.
+ *
+ * La destination est inchangée : `/stats/chart/:type/:id`.
+ */
+export function StatsBanner({ type, id }: { type: "team" | "player" | "game"; id: string }) {
+  const navigate = useNavigate();
+  const { t } = useI18n();
+  if (!id) return null;
+  return (
+    <FramedLabel
+      className="framed-label--banner"
+      text={t("stats.statistics")}
+      onClick={() => navigate(`/stats/chart/${type}/${id}`)}
+    />
+  );
+}
 
 /* ─── Main PredictionPage ──────────────────────────── */
 

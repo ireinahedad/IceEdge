@@ -62,6 +62,22 @@
   letter-spacing: 0.1em;
 }
 
+/* Téléphone — même raison que les rondelles (rink-theme.css) : l'en-tête de la
+   page Stats est collant, chaque pixel qu'il prend est un pixel que le contenu
+   ne récupère jamais. 34 px reste au-dessus de la hauteur de frappe confortable
+   pour une bande pleine largeur, et le cadre animé garde ses proportions. */
+@media (max-width: 480px) {
+  .framed-label--banner {
+    height: 34px;
+    border-radius: 10px;
+  }
+
+  .framed-label--banner .framed-label__text {
+    font-size: 0.875rem;
+    letter-spacing: 0.08em;
+  }
+}
+
 /* Interactive variant — same frame, but behaves as a tappable chip. */
 .framed-label--button {
   border: 0;

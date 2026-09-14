@@ -20,7 +20,6 @@ import { BottomNav } from "../components/BottomNav";
 import { useSport } from "../context/SportContext";
 import "../components/rink-theme.css";
 import { useI18n } from "../i18n";
-import { FramedLabel } from "../components/brand/FramedLabel";
 import { GamePrediction } from "./prediction/GamePrediction";
 import { PlayerPrediction } from "./prediction/PlayerPrediction";
 import { TeamPrediction } from "./prediction/TeamPrediction";
@@ -54,15 +53,14 @@ export function PredictionPage() {
           <div className="px-4 pt-3 pb-3 flex items-center gap-3">
             <button onClick={() => navigate(-1)} className="tap-44 text-[#3a5060] text-lg">←</button>
             <h1 className="text-white text-base font-bold flex-1 uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("pred.title")}</h1>
-            {/* Le raccourci vers les graphiques vaut pour les trois sujets :
-                /stats/chart/game/:id existe déjà (GameCharts), seul le bouton
-                manquait sur un match. */}
-            {(type === "team" || type === "player" || type === "game") && id && (
-              <FramedLabel
-                text={t("pred.chart")}
-                onClick={() => navigate(`/stats/chart/${type}/${id}`)}
-              />
-            )}
+            {/* Le raccourci vers les graphiques était ICI, en pastille serrée à
+                droite du titre. Il est descendu dans le contenu, en bannière
+                pleine largeur juste au-dessus des marchés (`StatsBanner`,
+                predictionShared.tsx) : sur un téléphone, la cible est bien plus
+                grande et elle se trouve là où on regarde déjà — juste avant de
+                lire les paris. Il s'appelle désormais « Statistiques »
+                (`stats.statistics`) et non plus « Graphique » : c'est le mot
+                qu'emploie déjà la même entrée sur la page Stats. */}
           </div>
         </div>
 

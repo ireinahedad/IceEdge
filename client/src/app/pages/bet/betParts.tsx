@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, type Ref } from "react";
-import { Plus, X, Lock, Share2, ChevronRight } from "lucide-react";
+import { Plus, X, Lock, Share2, ChevronRight, AlertCircle } from "lucide-react";
 import type { BetLeg } from "../../types/bet";
 import { openBet } from "../../services/bookmakers";
 import { features } from "../../platform";
@@ -198,10 +198,15 @@ export function EmptySlip({ onBrowse }: { onBrowse: () => void }) {
 // ─── Lock CTA ─────────────────────────────────────────────────────────────────
 
 export function LockSlipCTA({
-  legs, combinedProbability, onAdd, onLock, isSubmitting, panelRef,
+  legs, combinedProbability, onAdd, onLock, isSubmitting, error, panelRef,
 }: {
   legs: BetLeg[]; combinedProbability: number | null;
   onAdd: () => void; onLock: () => void; isSubmitting: boolean;
+  /** Pourquoi le dernier verrouillage a échoué. Affiché ICI, contre le bouton
+   *  qui vient d'être touché : l'échec était jusqu'ici écrit dans un état que
+   *  rien ne rendait (cf. `BetBuilderPage.tsx`). Le bloc est mesuré par un
+   *  `ResizeObserver`, donc la marge basse de la page suit toute seule. */
+  error?: string | null;
   /** Posé sur le bloc flottant pour que la page puisse MESURER sa hauteur et
    *  se réserver autant de marge basse. Sans ça, la carte recouvre la fin du
    *  contenu, qu'aucun défilement ne peut faire remonter : le bloc est
@@ -237,6 +242,13 @@ export function LockSlipCTA({
             <p className="text-lg font-black" style={{ color }}>{combinedProbability != null ? `${combinedProbability}%` : "—"}</p>
           </div>
         </div>
+        {error && (
+          <div role="alert" className="flex items-start gap-2 mb-2.5 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/25">
+            <AlertCircle size={12} className="text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="text-red-300 text-[11px] leading-snug">{error}</p>
+          </div>
+        )}
+
         <div className="flex gap-2">
           <button onClick={onAdd} disabled={isSubmitting}
             className="flex items-center justify-center gap-1.5 flex-1 py-3 rounded-xl icy-tile text-[#90C9F0] text-xs font-bold active:scale-[0.97] transition-transform disabled:opacity-40">

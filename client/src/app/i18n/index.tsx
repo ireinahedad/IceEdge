@@ -400,6 +400,11 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.addLeg":       { en: "Add Leg",         fr: "Ajouter un pari" },
   "slip.submitting":   { en: "Submitting...",   fr: "Envoi..." },
   "slip.lockSlip":     { en: "Lock Slip",       fr: "Verrouiller le coupon" },
+  // Échec du verrouillage. Jusqu'au 2026-09-14 l'erreur était mise dans un état
+  // que RIEN n'affichait : le bouton revenait de « Envoi… » et il ne se passait
+  // rien — indiscernable d'un bouton mort.
+  "slip.lockFailed":   { en: "Couldn't lock the slip — try again", fr: "Impossible de verrouiller le coupon — réessaie" },
+  "slip.lockTimeout":  { en: "The server took too long — your slip wasn't locked. Try again.", fr: "Le serveur a mis trop de temps — le coupon n'a pas été verrouillé. Réessaie." },
   "slip.individualProb":{ en: "Individual prediction probability", fr: "Probabilité de prédiction individuelle" },
   "slip.howProbTitle": { en: "How probability works", fr: "Comment fonctionne la probabilité" },
   "slip.howProbBody":  { en: "Combined probability assumes each leg is independent. More legs means a lower combined chance but higher potential reward.", fr: "La probabilité combinée suppose que chaque pari est indépendant. Plus il y a de paris, plus la chance combinée est faible, mais plus la récompense potentielle est élevée." },

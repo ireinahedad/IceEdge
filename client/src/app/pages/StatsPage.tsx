@@ -195,18 +195,23 @@ export function StatsPage() {
           them, the way everything else on this app sits on the ice. */}
       <header className="bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
         <div className="rink-boards" aria-hidden />
-        <div className="px-4 pt-3 pb-3">
+        {/* Les marges verticales de ce bloc sont resserrées sous `md` : l'en-tête
+            est collant, donc tout ce qu'il prend, le contenu ne le récupère
+            jamais au défilement. Sur grand écran elles reprennent leur valeur
+            d'origine. Les tailles des rondelles et de la bannière, elles, sont
+            dans rink-theme.css / FramedLabel.css. */}
+        <div className="px-4 pt-3 pb-2 md:pb-3">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-white text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("stats.title")}</h1>
+              <h1 className="text-white text-lg md:text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("stats.title")}</h1>
               <p className="text-[#bfc8cc] text-xs">{t("stats.subtitle")}</p>
             </div>
             <HowItWorksButton accent={accent} onClick={() => setHowItWorks(true)} />
           </div>
         </div>
-        <div className="px-4 pb-3">
+        <div className="px-4 pb-2 md:pb-3">
           {/* Team / Game / Player as pucks. */}
-          <div className="flex items-center justify-center gap-2.5 mb-2.5">
+          <div className="flex items-center justify-center gap-2 md:gap-2.5 mb-2 md:mb-2.5">
             {filterTabKeys.map((tabKey, i) => (
               <button
                 key={tabKey}
@@ -221,11 +226,11 @@ export function StatsPage() {
           {/* L'entrée « Statistiques » : un bandeau pleine largeur sous les
               rondelles, plutôt qu'une pastille serrée à côté d'elles. */}
           <FramedLabel
-            className="framed-label--banner mb-3"
+            className="framed-label--banner mb-2 md:mb-3"
             text={t("stats.statistics")}
             onClick={() => navigate(activeFilter === 2 ? "/stats/chart/all-players" : "/stats/chart/all-teams")}
           />
-          <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2.5">
+          <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2 md:py-2.5">
             <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
             <input className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#bfc8cc]"
               placeholder={t("stats.search")} value={search} onChange={(e) => setSearch(e.target.value)} />

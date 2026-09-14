@@ -190,6 +190,26 @@
 
 .rink-puck:active { transform: translateY(1px); }
 
+/* Sur un téléphone, ces trois rondelles + la bannière « Statistiques » + la
+   barre de recherche mangeaient un gros tiers de l'écran AVANT la première
+   carte d'équipe : l'en-tête est collant, donc ce tiers ne remonte jamais au
+   défilement. On rétrécit la rondelle plutôt que de la remplacer par un
+   onglet plat — c'est l'identité de la page, et à 58 px le fraisage (7 px)
+   reste lisible et la cible reste bien au-dessus des 44 px d'Apple.
+   480 px : tous les iPhone passent dessous, aucune tablette. */
+@media (max-width: 480px) {
+  .rink-puck {
+    width: 58px;
+    height: 58px;
+    padding: 0 5px;
+  }
+
+  .rink-puck-label {
+    font-size: 10px;
+    letter-spacing: 0.06em;
+  }
+}
+
 /* ── Board ad ──────────────────────────────────────────────────── */
 /* The schedule entry, painted on the boards like a rink-side advert: saturated
    panel, headline over a kicker, a call-to-action in kickplate yellow, and the

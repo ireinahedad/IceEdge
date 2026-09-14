@@ -1,6 +1,7 @@
 import { pool } from '../db/connection';
 import { notifySlipPlaced } from './settlement.service';
 import { fetchGameById } from './nhlApiClient';
+import { mapLimit } from './concurrency';
 import { logger } from '../logger';
 
 // ─── XP & Tier config ─────────────────────────────────────────────────────────
@@ -107,6 +108,10 @@ export interface SlipLeg {
   selectionValue?: string;
 }
 
+/** Bornes de la résolution du verrou. Voir `resolveLocksAt` juste en dessous. */
+const LOCKS_AT_BUDGET_MS   = 6_000;
+const LOCKS_AT_CONCURRENCY = 6;
+
 /**
  * Heure de verrouillage d'un coupon = mise au jeu de son match le plus TÔT.
  *
@@ -122,29 +127,78 @@ export interface SlipLeg {
  * futures, API indisponible). Le NULL n'est pas « pas de verrou » : la lecture
  * le traite comme « masqué tant que le coupon est pending ». Une panne de
  * résolution doit rendre un coupon trop discret, pas le divulguer trop tôt.
+ *
+ * ⚠️ CE BLOC A ÉTÉ LA CAUSE D'UN COUPON DE 3 JAMBES IMPOSSIBLE À VERROUILLER
+ * (2026-09-14). Il bouclait en SÉQUENTIEL sur les matchs distincts, et
+ * `fetchGameById` non mis en cache attend jusqu'à `NHL_TIMEOUT_MS` (8 s) :
+ *
+ *   1 match  → ≤  8 s  · sous le délai client de 15 s (`http.ts`) ;
+ *   2 matchs → ≤ 16 s  · déjà à la limite ;
+ *   3 matchs → ≤ 24 s  · le client abandonne TOUJOURS avant la réponse.
+ *
+ * Le symptôme ne ressemblait pas à sa cause : le bouton « Verrouiller » partait
+ * en « Envoi… » et revenait sans rien dire (l'erreur était avalée côté client,
+ * voir `BetBuilderPage.tsx`), et le coupon, lui, finissait parfois par être
+ * inséré — donc « ça ne marche pas au-delà de 2 paris ».
+ *
+ * Deux verrous pour que ça ne puisse plus arriver :
+ *   - parallélisme BORNÉ (`mapLimit`, 6 de front) plutôt qu'une boucle : un
+ *     coupon de 12 matchs coûte désormais deux vagues, pas douze ;
+ *   - un BUDGET global. Passé ce délai, on insère avec ce qu'on a. L'insertion
+ *     du pari ne doit jamais être l'otage d'une API tierce lente.
+ *
+ * Résoudre une PARTIE des matchs reste sûr : le minimum d'un sous-ensemble est
+ * ≥ le vrai minimum, donc le coupon se dévoile plus TARD, jamais plus tôt —
+ * le même sens que le `null`.
  */
 async function resolveLocksAt(legs: SlipLeg[]): Promise<Date | null> {
   const gameIds = [...new Set(legs.map((l) => l.gameId).filter(Boolean) as string[])];
   if (!gameIds.length) return null;
 
-  // Séquentiel : un coupon plafonne à 12 jambes, donc à 12 matchs distincts, et
-  // `fetchGameById` est déjà mis en cache côté client NHL.
-  let earliest: number | null = null;
-  for (const id of gameIds) {
+  // Objet plutôt que deux `let` : l'analyse de flot de TypeScript réduirait un
+  // `let earliest: number | null = null` à `null` après la déclaration, sans
+  // savoir que la fermeture ci-dessous y écrit — et `new Date(earliest)` ne
+  // compilerait plus. Une propriété, elle, est « dé-narrowée » par tout appel.
+  const acc: { earliest: number | null; resolved: number } = { earliest: null, resolved: 0 };
+
+  const work = mapLimit(gameIds, LOCKS_AT_CONCURRENCY, async (id) => {
     try {
       const game = await fetchGameById(id);
       const ms = game?.startTimeUTC ? new Date(game.startTimeUTC).getTime() : NaN;
-      if (Number.isFinite(ms)) earliest = earliest == null ? ms : Math.min(earliest, ms);
+      if (Number.isFinite(ms)) {
+        acc.resolved++;
+        acc.earliest = acc.earliest == null ? ms : Math.min(acc.earliest, ms);
+      }
     } catch {
       // Un match non résolu ne doit pas faire échouer la soumission : le pari
       // de l'utilisateur passe avant l'exactitude du verrou.
     }
+  // `fn` n'échoue jamais (tout est attrapé au-dessus) ; ce `catch` n'est là que
+  // pour qu'un rejet imprévu, perdu par la course ci-dessous, ne remonte pas en
+  // `unhandledRejection` et ne tue pas le process.
+  }).catch(() => {});
+
+  let timer: NodeJS.Timeout | undefined;
+  const budget = new Promise<void>((r) => { timer = setTimeout(r, LOCKS_AT_BUDGET_MS); });
+  try {
+    await Promise.race([work, budget]);
+  } finally {
+    // Sans ça, le minuteur retient la boucle d'événements jusqu'à son terme
+    // alors que la réponse est déjà partie.
+    if (timer) clearTimeout(timer);
   }
 
-  if (earliest == null) {
+  if (acc.earliest == null) {
     logger.warn({ gameIds }, '[slip] locks_at non résolu — le coupon restera masqué aux tiers jusqu\'à son règlement');
+    return null;
   }
-  return earliest == null ? null : new Date(earliest);
+  if (acc.resolved < gameIds.length) {
+    logger.warn(
+      { gameIds, resolved: acc.resolved, budgetMs: LOCKS_AT_BUDGET_MS },
+      '[slip] locks_at partiel — verrou calculé sur les matchs résolus dans le budget (donc au plus tard, jamais au plus tôt)',
+    );
+  }
+  return new Date(acc.earliest);
 }
 
 export async function submitSlip(

@@ -15,7 +15,7 @@ import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { GamePlayersTable, MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { LiveGameView, MLProps, MktGroup, buildGameGroups } from "./gameMarkets";
-import { HeadToHead, NotFound, RevealMode, RevealModeCtx } from "./predictionShared";
+import { HeadToHead, NotFound, RevealMode, RevealModeCtx, StatsBanner } from "./predictionShared";
 
 
 export function GamePrediction({ gameId }: { gameId: string }) {
@@ -180,6 +180,7 @@ export function GamePrediction({ gameId }: { gameId: string }) {
       />
 
       {/* ── Market groups ── */}
+      <StatsBanner type="game" id={gameId} />
       <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
       <RevealModeCtx.Provider value={revealMode}>
         {groups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
