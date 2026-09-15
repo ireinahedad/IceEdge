@@ -34,28 +34,28 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
       color: "#a78bfa",
       title: fr ? "ML (modèle entraîné)" : "ML (trained model)",
       body: fr
-        ? "Un modèle d'apprentissage automatique (type Random Forest) entraîné côté serveur sur des caractéristiques du match (forme, différentiel de buts, avantage de la glace, etc.). Il renvoie sa propre probabilité et l'importance de chaque facteur, ce qui permet de voir POURQUOI il penche d'un côté. Utile pour confirmer ou nuancer la règle : quand ML et règles s'accordent, la confiance est plus forte."
-        : "A machine-learning model (Random Forest style) trained server-side on game features (form, goal differential, home-ice advantage, etc.). It returns its own probability and each factor's importance, so you can see WHY it leans one way. Useful to confirm or temper the rule: when ML and rules agree, confidence is higher.",
+        ? "Un modèle d'apprentissage automatique (gradient boosting XGBoost) entraîné côté serveur sur des milliers de matchs passés : force relative des équipes, qualité des chances créées et concédées, repos et matchs consécutifs, avantage de la glace. Il renvoie sa propre probabilité — recalibrée pour que « 60 % » veuille vraiment dire 60 % — et l'importance de chaque facteur, ce qui permet de voir POURQUOI il penche d'un côté. Utile pour confirmer ou nuancer la règle : quand ML et règles s'accordent, la confiance est plus forte."
+        : "A machine-learning model (XGBoost gradient boosting) trained server-side on thousands of past games: relative team strength, quality of chances created and conceded, rest and back-to-backs, home-ice advantage. It returns its own probability — recalibrated so that “60%” really means 60% — and each factor's importance, so you can see WHY it leans one way. Useful to confirm or temper the rule: when ML and rules agree, confidence is higher.",
     },
     {
       icon: "✨",
       color: "#c084fc",
       title: fr ? "LLM (Ask LLM)" : "LLM (Ask LLM)",
       body: fr
-        ? "Une analyse en langage naturel qui apporte le contexte que les chiffres ne captent pas : matchup de style, motivation, fatigue, et surtout ce qu'il faut VÉRIFIER avant de parier (blessures, gardien partant confirmé, changements d'alignement de dernière minute). Ce n'est pas une probabilité, mais un avis à recouper. En Pro, il passe par GitHub Models ; en gratuit, tu utilises ta propre clé OpenAI."
-        : "A natural-language analysis that adds the context numbers miss: style matchup, motivation, fatigue, and above all what to VERIFY before betting (injuries, confirmed starting goalie, last-minute lineup changes). It's not a probability but a second opinion to cross-check. On Pro it runs via GitHub Models; on Free you use your own OpenAI key.",
+        ? "Une analyse en langage naturel qui apporte le contexte que les chiffres ne captent pas : matchup de style, motivation, fatigue, et surtout ce qu'il faut VÉRIFIER avant de parier (blessures, gardien partant confirmé, changements d'alignement de dernière minute). Ce n'est pas une probabilité, mais un avis à recouper. En Pro, l'analyse tourne sur le modèle intégré, dans la limite d'un forfait mensuel ; au-delà — et sur un compte gratuit, où s'ajoute une limite quotidienne — c'est ta propre clé OpenAI qui prend le relais."
+        : "A natural-language analysis that adds the context numbers miss: style matchup, motivation, fatigue, and above all what to VERIFY before betting (injuries, confirmed starting goalie, last-minute lineup changes). It's not a probability but a second opinion to cross-check. On Pro the analysis runs on the built-in model within a monthly allowance; past that — and on a Free account, which also has a daily limit — your own OpenAI key takes over.",
     },
   ];
 
   const reading = fr
     ? [
-        "Le % est la probabilité estimée que le pari passe. La couleur va du vert (fort) au rouge (peu probable).",
-        "La jauge de confiance résume la solidité de l'estimation.",
+        "Le % est la probabilité estimée que le pari passe. Sur les écrans de prédiction, la couleur suit une seule échelle : bleu quand c'est probable, mauve autour de l'équilibre, rouge quand ça l'est peu.",
+        "La pastille de confiance résume l'estimation d'un mot : confiance élevée, modérée, match serré ou choix outsider.",
         "Touche un pari pour ouvrir le détail : règle + note explicative, carte ML avec ses facteurs, et le bouton Ask LLM.",
       ]
     : [
-        "The % is the estimated probability the bet hits. Colour runs from green (strong) to red (unlikely).",
-        "The confidence gauge sums up how solid the estimate is.",
+        "The % is the estimated probability the bet hits. On the prediction screens, colour follows one scale: blue when it's likely, purple around even, red when it isn't.",
+        "The confidence pill sums the estimate up in a word: high confidence, moderate, even match or underdog pick.",
         "Tap a bet to open the detail: rule + explanation note, ML card with its factors, and the Ask LLM button.",
       ];
 
@@ -63,13 +63,19 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
     ? [
         "Explore par équipe, par match ou par joueur avec les onglets en haut.",
         "Ajoute un pari au coupon avec le bouton « + » : la probabilité affichée est celle qui est enregistrée.",
-        "Empile plusieurs paris : le coupon calcule la probabilité combinée du parlay.",
+        "Empile plusieurs paris : le coupon calcule la probabilité combinée. Deux paris qui ne peuvent pas se réaliser ensemble tombent à 0, un pari en double ou déjà contenu dans un autre n'est compté qu'une fois, et deux paris d'un même match sont recalculés en tenant compte de leur lien.",
+        "Le coupon dit à l'écran ce qu'il a fait de tes paris : pourquoi la combinaison est impossible, quels paris ne comptent qu'une fois, et quand le chiffre reste une approximation. Rien ne disparaît du calcul en silence.",
+        "Rien ne t'est interdit pour autant : deux paris qui se contredisent peuvent rester au coupon et être verrouillés — la probabilité combinée affiche alors 0 %.",
+        "Sur l'accueil, « Meilleurs paris » classe les paris des matchs des 48 prochaines heures — la liste est donc vide quand il n'y a pas de match.",
         "Partage ton coupon en image.",
       ]
     : [
         "Explore by team, game or player with the tabs at the top.",
         "Add a bet to the coupon with the “+” button: the shown probability is the one stored.",
-        "Stack several bets: the coupon computes the parlay's combined probability.",
+        "Stack several bets: the coupon computes the combined probability. Two bets that cannot both happen drop to 0, a duplicate bet — or one already contained in another — is counted once, and two bets on the same game are recomputed with their link taken into account.",
+        "The coupon tells you on screen what it did with your bets: why a combination is impossible, which bets only count once, and when the number is still an approximation. Nothing leaves the calculation silently.",
+        "Nothing is forbidden either: two contradicting bets can stay on the slip and be locked — the combined probability then reads 0%.",
+        "On the home screen, “Best Bets” ranks bets from games in the next 48 hours — so the list is empty when no game is scheduled.",
         "Share your coupon as an image.",
       ];
 

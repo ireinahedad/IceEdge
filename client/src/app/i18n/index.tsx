@@ -406,8 +406,16 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.lockFailed":   { en: "Couldn't lock the slip — try again", fr: "Impossible de verrouiller le coupon — réessaie" },
   "slip.lockTimeout":  { en: "The server took too long — your slip wasn't locked. Try again.", fr: "Le serveur a mis trop de temps — le coupon n'a pas été verrouillé. Réessaie." },
   "slip.individualProb":{ en: "Individual prediction probability", fr: "Probabilité de prédiction individuelle" },
+  // Ce que la combinaison a changé — affiché par `SlipNotices`. Ces trois faits
+  // étaient calculés par `parlayMath` et jetés : un coupon impossible tombait à
+  // 0 % sans un mot, un doublon quittait le calcul en silence.
+  "slip.impossibleTitle": { en: "These bets can't all happen", fr: "Ces paris ne peuvent pas tous se réaliser" },
+  "slip.impossibleBody":  { en: "At least two of them contradict each other on the same game. You can keep them on the slip — the combined probability just reads 0%.", fr: "Au moins deux d'entre eux se contredisent sur le même match. Tu peux les garder au coupon — la probabilité combinée affiche simplement 0 %." },
+  "slip.redundantOne":    { en: "1 bet is a duplicate — or already contained in another one. It counts once in the combined probability.", fr: "1 pari est un doublon — ou est déjà contenu dans un autre. Il n'est compté qu'une fois dans la probabilité combinée." },
+  "slip.redundantMany":   { en: "{n} bets are duplicates — or already contained in another one. They count once in the combined probability.", fr: "{n} paris sont des doublons — ou sont déjà contenus dans un autre. Ils ne sont comptés qu'une fois dans la probabilité combinée." },
+  "slip.sameGameApprox":  { en: "Several bets are on the same game. Their link couldn't be computed, so the combined probability treats them as independent — read it as an approximation.", fr: "Plusieurs paris portent sur le même match. Leur lien n'a pas pu être calculé : la probabilité combinée les traite comme indépendants — à lire comme une approximation." },
   "slip.howProbTitle": { en: "How probability works", fr: "Comment fonctionne la probabilité" },
-  "slip.howProbBody":  { en: "Combined probability assumes each leg is independent. More legs means a lower combined chance but higher potential reward.", fr: "La probabilité combinée suppose que chaque pari est indépendant. Plus il y a de paris, plus la chance combinée est faible, mais plus la récompense potentielle est élevée." },
+  "slip.howProbBody":  { en: "Bets on different games are multiplied together. A duplicate — or a bet already contained in another — counts once, two bets that can't both happen drop the slip to 0, and bets on the same game are adjusted for their link. More bets means a lower combined chance but a higher potential reward.", fr: "Les paris sur des matchs différents se multiplient. Un doublon — ou un pari déjà contenu dans un autre — ne compte qu'une fois, deux paris qui ne peuvent pas se réaliser ensemble ramènent le coupon à 0, et les paris d'un même match sont ajustés selon leur lien. Plus il y a de paris, plus la chance combinée est faible, mais plus la récompense potentielle est élevée." },
 
   // ── Stats ──
   "stats.title":       { en: "Statistics",      fr: "Statistiques" },
@@ -442,7 +450,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "home.rules":          { en: "Rules",             fr: "Règles" },
   "home.safe":           { en: "↓ Safe",            fr: "↓ Sûrs" },
   "home.risky":          { en: "↑ Risky",           fr: "↑ Risqués" },
-  "home.noBets":         { en: "No bets available right now", fr: "Aucun pari disponible pour le moment" },
+  "home.noBets":         { en: "No bets right now — the list covers games in the next 48 hours", fr: "Aucun pari pour le moment — la liste couvre les matchs des 48 prochaines heures" },
   "home.liveNow":        { en: "Live Now",          fr: "En direct" },
   "home.live":           { en: "Live",              fr: "En direct" },
   "home.noGames":        { en: "No games scheduled", fr: "Aucun match prévu" },

@@ -27,7 +27,7 @@ import { toast } from "sonner";
 import "./bet-theme.css";
 import { MySlipsTab } from "./bet/MySlipsTab";
 import "../components/rink-theme.css";
-import { EmptySlip, LegCard, LockSlipCTA, ProbabilityGauge, toOddsLabel } from "./bet/betParts";
+import { EmptySlip, LegCard, LockSlipCTA, ProbabilityGauge, SlipNotices, toOddsLabel } from "./bet/betParts";
 
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
@@ -35,7 +35,7 @@ import { EmptySlip, LegCard, LockSlipCTA, ProbabilityGauge, toOddsLabel } from "
 type PageTab = "build" | "slips";
 
 export function BetBuilderPage() {
-  const { legs, removeLeg, clearSlip, combinedProbability } = useBet();
+  const { legs, removeLeg, clearSlip, combinedProbability, slipAnalysis } = useBet();
   const { user } = useAuth();
   const { sport } = useSport();
   const { t } = useI18n();
@@ -232,6 +232,10 @@ export function BetBuilderPage() {
             )}
           </div>
           )}
+
+          {/* Juste sous la jauge et AVANT les cartes : c'est là qu'on lit le
+              chiffre, donc là qu'il faut dire ce qui l'a produit. */}
+          {legs.length > 0 && <SlipNotices analysis={slipAnalysis} />}
 
           {legs.length === 0 ? (
             <EmptySlip onBrowse={() => navigate("/stats")} />

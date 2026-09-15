@@ -7,8 +7,9 @@
  */
 
 import { useState, useEffect, type Ref } from "react";
-import { Plus, X, Lock, Share2, ChevronRight, AlertCircle } from "lucide-react";
+import { Plus, X, Lock, Share2, ChevronRight, AlertCircle, Info } from "lucide-react";
 import type { BetLeg } from "../../types/bet";
+import type { SlipAnalysis } from "../../context/BetContext";
 import { openBet } from "../../services/bookmakers";
 import { features } from "../../platform";
 import { useBookmaker } from "../../context/BookmakerContext";
@@ -99,6 +100,72 @@ export function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: numb
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Ce que la combinaison a changé ───────────────────────────────────────────
+
+/**
+ * Les trois faits que `parlayMath` établissait sans que personne les montre.
+ *
+ * Sans ce bloc, le coupon mentait par omission dans deux cas :
+ *
+ *  • deux paris incompatibles affichaient une jauge à **0 %** et pas un mot —
+ *    indiscernable d'un bug, et la seule action utile (retirer un pari) n'était
+ *    suggérée nulle part ;
+ *  • un doublon — ou un pari déjà contenu dans un autre — sortait du calcul
+ *    **en silence**, donc le total ne correspondait plus aux cartes affichées
+ *    juste en dessous.
+ *
+ * Le troisième cas est l'inverse : le chiffre est là, mais on sait qu'il est
+ * approximatif (jambes d'un même match multipliées sans lien connu). Le dire
+ * coûte une ligne ; le taire, c'est vendre une précision qu'on n'a pas.
+ *
+ * ⚠️⚠️ **RÈGLE DU USER (2026-09-15)** : deux paris ont le DROIT de se
+ * contredire. On doit pouvoir faire ici ce qu'on fait chez un bookmaker —
+ * poser les deux et décider ensuite. Ce bloc INFORME, il n'interdit rien et il
+ * ne demande rien : pas de blocage de « Verrouiller », pas de rouge d'erreur,
+ * et surtout aucune injonction à retirer un pari. Une première version disait
+ * « retires-en un » : c'est exactement ce qu'il ne faut pas écrire.
+ */
+export function SlipNotices({ analysis }: { analysis: SlipAnalysis }) {
+  const { t } = useI18n();
+  const { impossible, redundantLegs, assumesIndependence } = analysis;
+  if (!impossible && redundantLegs === 0 && !assumesIndependence) return null;
+
+  return (
+    <div className="flex flex-col gap-2 mb-4">
+      {impossible && (
+        // `role="status"` et pas `alert` : l'annonce doit être polie, on ne
+        // signale pas une faute. L'ambre est là pour que la ligne se remarque
+        // au milieu des cartes, pas pour dire « interdit » — le rouge de ce
+        // fichier reste réservé à l'échec de verrouillage.
+        <div role="status" className="flex items-start gap-2 px-3 py-2.5 rounded-xl border"
+          style={{ backgroundColor: "#facc1514", borderColor: "#facc1540" }}>
+          <AlertCircle size={13} className="flex-shrink-0 mt-0.5" style={{ color: "#facc15" }} />
+          <div>
+            <p className="text-[11px] font-bold" style={{ color: "#facc15" }}>{t("slip.impossibleTitle")}</p>
+            <p className="text-[#bfc8cc] text-[11px] leading-snug mt-0.5">{t("slip.impossibleBody")}</p>
+          </div>
+        </div>
+      )}
+      {redundantLegs > 0 && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded-xl icy-tile">
+          <Info size={13} className="text-[#90C9F0] flex-shrink-0 mt-0.5" />
+          <p className="text-[#bfc8cc] text-[11px] leading-snug">
+            {redundantLegs === 1
+              ? t("slip.redundantOne")
+              : t("slip.redundantMany", { n: redundantLegs })}
+          </p>
+        </div>
+      )}
+      {assumesIndependence && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded-xl icy-tile">
+          <Info size={13} className="text-[#8a9ea6] flex-shrink-0 mt-0.5" />
+          <p className="text-[#8a9ea6] text-[11px] leading-snug">{t("slip.sameGameApprox")}</p>
+        </div>
+      )}
     </div>
   );
 }
