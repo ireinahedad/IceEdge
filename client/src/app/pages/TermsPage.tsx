@@ -1,5 +1,4 @@
-import { useNavigate } from "react-router";
-import { IceedgeLogo } from "../components/brand/IceedgeLogo";
+import { LegalDocument } from "../components/LegalPage";
 import { useI18n } from "../i18n";
 import { env } from "../env";
 
@@ -39,26 +38,6 @@ const CONTENT = {
 };
 
 export function TermsPage() {
-  const navigate = useNavigate();
   const { t, lang } = useI18n();
-  const c = CONTENT[lang];
-
-  return (
-    <div className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-14 pb-16" style={{ background: "#0A0E0C" }}>
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate(-1)} className="tap-44 text-[#bfc8cc] text-lg">←</button>
-        <button onClick={() => navigate("/")} aria-label="Accueil ArakIce"><IceedgeLogo size={28} wordmark={false} /></button>
-        <h1 className="text-white text-base font-bold flex-1">{t("legal.terms")}</h1>
-      </div>
-      <p className="text-[#8a9ea6] text-xs mb-6">{c.updated}</p>
-      <div className="flex flex-col gap-5">
-        {c.sections.map((s, i) => (
-          <div key={i}>
-            <p className="text-white text-sm font-semibold mb-1.5">{s.h}</p>
-            <p className="text-[#bfc8cc] text-xs leading-relaxed">{s.b}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  return <LegalDocument title={t("legal.terms")} content={CONTENT[lang]} />;
 }

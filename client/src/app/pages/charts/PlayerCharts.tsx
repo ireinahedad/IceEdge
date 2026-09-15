@@ -16,6 +16,7 @@ import { nhlApiService } from "../../services/nhlApiService";
 import type { TeamPlayerSeasons } from "../../services/nhlApiService";
 import type { NHLTeamInfo, NHLPlayerInfo } from "../../types/bet";
 import { FactorPie } from "../../components/FactorPie";
+import { CardsSkeleton, ChartMessage, TeamSelect } from "./ChartControls";
 import { buildGoalieExtraMetrics, buildGoalieMetrics, buildSkaterExtraMetrics, buildSkaterMetrics } from "./chartsMetrics";
 import { BG_CARD, BG_CELL, DASH, int, seasonLabel, selectCls } from "./chartsTheme";
 
@@ -200,20 +201,7 @@ export function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) 
           </div>
         )}
         <div className="flex flex-col gap-1.5 shrink-0">
-          <select
-            value={teamAbbr}
-            onChange={(e) => setTeamAbbr(e.target.value)}
-            className={selectCls}
-            style={{ background: BG_CELL, color: teamAbbr ? "#c8d3cc" : "#8a9ea6" }}
-            aria-label={t("chart.team")}
-          >
-            <option value="">{t("chart.noTeam")}</option>
-            {teamOptions.map((x) => (
-              <option key={x.abbreviation} value={x.abbreviation?.toLowerCase()}>
-                {x.abbreviation?.toUpperCase()}
-              </option>
-            ))}
-          </select>
+          <TeamSelect value={teamAbbr} onChange={setTeamAbbr} teams={teamOptions} />
           <select
             value={playerId}
             onChange={(e) => setPlayerId(e.target.value)}
@@ -249,23 +237,13 @@ export function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) 
       </div>
 
       {!teamAbbr ? (
-        <div className="rounded-2xl border border-white/10 p-8 text-center" style={{ background: BG_CARD }}>
-          <p className="text-[#8a9ea6] text-sm">{t("chart.choosePlayerPrompt")}</p>
-        </div>
+        <ChartMessage large>{t("chart.choosePlayerPrompt")}</ChartMessage>
       ) : loading ? (
-        <div className="flex flex-col gap-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 rounded-2xl animate-pulse" style={{ background: BG_CARD }} />
-          ))}
-        </div>
+        <CardsSkeleton />
       ) : error || !playerSeasons ? (
-        <div className="rounded-2xl border border-white/10 p-6 text-center" style={{ background: BG_CARD }}>
-          <p className="text-[#8a9ea6] text-sm">{t("chart.noData")}</p>
-        </div>
+        <ChartMessage>{t("chart.noData")}</ChartMessage>
       ) : !selected ? (
-        <div className="rounded-2xl border border-white/10 p-6 text-center" style={{ background: BG_CARD }}>
-          <p className="text-[#8a9ea6] text-sm">{t("chart.choosePlayerPrompt")}</p>
-        </div>
+        <ChartMessage>{t("chart.choosePlayerPrompt")}</ChartMessage>
       ) : (
         <>
           {/* Season picker */}

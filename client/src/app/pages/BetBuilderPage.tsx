@@ -18,6 +18,7 @@ import { Plus, Lightbulb, Trash2 } from "lucide-react";
 import { useBet } from "../context/BetContext";
 import { useAuth } from "../context/AuthContext";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { BottomNav } from "../components/BottomNav";
 import { submitSlip } from "../services/slipApiService";
 import { isRequestTimeout } from "../services/http";
@@ -93,12 +94,6 @@ export function BetBuilderPage() {
     legs.length > 0
       ? `calc(${Math.ceil(ctaHeight) + 68 + 16}px + env(safe-area-inset-bottom, 0px))`
       : "calc(112px + env(safe-area-inset-bottom, 0px))";
-
-  // Switch to My Slips after successful lock
-  function handleSuccessDone() {
-    setSubmitResult(null);
-    setTab("slips");
-  }
 
   async function handleLock() {
     if (!user) {
@@ -314,6 +309,17 @@ export function BetBuilderPage() {
           </div>
         </div>
       )}
+
+      {/* Confirmation avant de vider le coupon. Le bouton « Clear » posait
+          `showClearConfirm` sans que rien ne le lise : le clic ne faisait rien. */}
+      <ConfirmDialog
+        open={showClearConfirm}
+        title={t("slip.clearTitle")}
+        description={t("slip.clearBody")}
+        confirmLabel={t("slip.clearConfirm")}
+        onConfirm={() => { clearSlip(); setShowClearConfirm(false); }}
+        onCancel={() => setShowClearConfirm(false)}
+      />
 
       {/* Market selector sheet */}
       {showSheet && (

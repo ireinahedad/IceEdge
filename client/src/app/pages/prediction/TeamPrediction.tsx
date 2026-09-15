@@ -6,14 +6,14 @@
  * seuls les imports et les mots-clés `export` ont été ajoutés.
  */
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { nhlApiService } from "../../services/nhlApiService";
 import { useSport } from "../../context/SportContext";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar, TeamPlayersTable } from "./PredictionSheet";
 import { MLProps, MktGroup, RuleFactor } from "./gameMarkets";
-import { GameSelector, LoadingSkeleton, NotFound, RecentFormCard, RevealMode, RevealModeCtx, StatsBanner, useSelectedGame, useUpcomingGames } from "./predictionShared";
+import { GameSelector, LoadingSkeleton, NotFound, RevealMode, RevealModeCtx, StatsBanner, useSelectedGame, useUpcomingGames } from "./predictionShared";
 
 
 /* ─── Team Prediction ─────────────────────────── */

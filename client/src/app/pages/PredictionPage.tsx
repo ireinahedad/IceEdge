@@ -5,19 +5,20 @@
  * (`./prediction/`) sans toucher une ligne de code — seuls les imports et les
  * `export` ont été ajoutés. Il ne reste ici que l'aiguillage par type de sujet.
  *
- *   predictionShared.tsx   jauge, barres de raison, forme récente, H2H,
- *                          PredictionLayout, BetRec, NotFound, RevealModeCtx
+ *   predictionShared.tsx   H2H, sélecteur de match, bannière Statistiques,
+ *                          LoadingSkeleton, NotFound, RevealModeCtx
  *   gameMarkets.tsx        types de marché, construction des groupes, contexte LLM
  *   PredictionSheet.tsx    fiche de marché, BetOption, MarketGroup, alignements
- *   TeamPrediction · GamePrediction · PlayerPrediction ·
- *   NGamesPrediction · PlayerPropPrediction
+ *   TeamPrediction · GamePrediction · PlayerPrediction
+ *
+ * NGamesPrediction et PlayerPropPrediction ont été retirés le 2026-09-15 :
+ * aucune route ne les rendait.
  *
  * `PredictionPage` reste le seul export public : `routes.tsx` est inchangé.
  */
 
 import { useParams, useNavigate } from "react-router";
 import { BottomNav } from "../components/BottomNav";
-import { useSport } from "../context/SportContext";
 import "../components/rink-theme.css";
 import { useI18n } from "../i18n";
 import { GamePrediction } from "./prediction/GamePrediction";
@@ -29,9 +30,7 @@ import { NotFound, RevealModeCtx } from "./prediction/predictionShared";
 export function PredictionPage() {
   const { type, id } = useParams<{ type: string; id: string }>();
   const navigate = useNavigate();
-  const { theme } = useSport();
   const { t } = useI18n();
-  const accent = theme.accent;
 
   const renderContent = () => {
     if (!type || !id) return <NotFound />;

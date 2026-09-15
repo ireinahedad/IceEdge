@@ -51,8 +51,6 @@ const LAST_ALERT_KEY = 'valueBetScan:lastAlertKey';
 /** Un scan complet appelle getBestBets (jusqu'à 30 appels ML) puis price 10 matchs. */
 const LOCK_TTL_MS = 10 * 60 * 1000;
 
-let timer: NodeJS.Timeout | null = null;
-
 interface ValueBet {
   key: string;
   label: string;
@@ -250,7 +248,7 @@ export function startValueBetScan(): void {
     return;
   }
   const minutes = Number(process.env.PUSH_SCAN_INTERVAL_MIN) || 30;
-  timer = setInterval(tick, minutes * 60 * 1000);
+  setInterval(tick, minutes * 60 * 1000);
   // Kick off one scan shortly after boot.
   setTimeout(tick, 15_000);
 }

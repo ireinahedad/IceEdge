@@ -14,10 +14,10 @@ import { nhlApiService } from "../../services/nhlApiService";
 import type { PlayerSeasonStat, PlayerLeaders } from "../../services/nhlApiService";
 import { FactorPie } from "../../components/FactorPie";
 import type { PieSlice } from "../../components/FactorPie";
-import { PlayerSearchBox, SortHead } from "./ChartControls";
+import { BarSkeleton, MetricChips, PlayerSearchBox, RowsSkeleton, SeasonSelect, SortHead } from "./ChartControls";
 import { StackPart, StackRow, StackedTotalsBar } from "./ChartVisuals";
 import { buildGoalieExtraMetrics, buildGoalieMetrics, buildSkaterExtraMetrics, buildSkaterMetrics, naturalSortDir } from "./chartsMetrics";
-import { BG_CARD, BG_CELL, SERIES_COLORS, SortDir, View, currentSeasonId, int, seasonLabel, selectCls } from "./chartsTheme";
+import { BG_CARD, BG_CELL, SERIES_COLORS, SortDir, View, currentSeasonId, int } from "./chartsTheme";
 
 /* ── All players (league leaders) ───────────────────────────
  * Top N players for a season across the same metric set as the single-player
@@ -79,12 +79,6 @@ export function AllPlayersCharts() {
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [view, sortKey, season]);
-
-  // Six most recent seasons, counting back from the current one.
-  const seasonOptions = Array.from({ length: 6 }, (_, i) => {
-    const y = Math.floor(currentSeasonId / 10000) - i;
-    return Number(`${y}${y + 1}`);
-  });
 
   // Rows arrive already sorted by the server in the metric's natural direction,
   // so rank is just position here. Rank stays pinned to the player, meaning
@@ -162,17 +156,7 @@ export function AllPlayersCharts() {
               {t("chart.allPlayers.note", { n: LIMIT, metric: metric.label })}
             </p>
           </div>
-          <select
-            value={season}
-            onChange={(e) => setSeason(Number(e.target.value))}
-            className={selectCls}
-            style={{ background: BG_CELL, color: "#c8d3cc" }}
-            aria-label={t("chart.season")}
-          >
-            {seasonOptions.map((sid) => (
-              <option key={sid} value={sid}>{seasonLabel(sid)}</option>
-            ))}
-          </select>
+          <SeasonSelect season={season} onChange={setSeason} />
         </div>
 
         <PlayerSearchBox
@@ -201,34 +185,11 @@ export function AllPlayersCharts() {
       <div className="rounded-2xl border border-white/20 overflow-hidden" style={{ background: BG_CARD }}>
         <div className="px-4 pt-3 pb-2 border-b border-white/10">
           <p className="text-white text-sm font-semibold mb-2">{t("chart.playerStats")}</p>
-          <div className="flex flex-wrap gap-1.5">
-            {metrics.map((m) => {
-              const isActive = m.key === metric.key;
-              return (
-                <button
-                  key={m.key}
-                  onClick={() => toggleSort(m.key)}
-                  className="px-3 py-1 rounded-full text-[11px] font-semibold transition-colors"
-                  style={
-                    isActive
-                      ? { background: accent + "22", color: accent, border: `1px solid ${accent}66` }
-                      : { background: BG_CELL, color: "#8a9ea6", border: "1px solid transparent" }
-                  }
-                >
-                  {m.label}
-                  {isActive && <span className="ml-1 text-[11px]">{sortDir === "asc" ? "▲" : "▼"}</span>}
-                </button>
-              );
-            })}
-          </div>
+          <MetricChips metrics={metrics} activeKey={metric.key} dir={sortDir} onToggle={toggleSort} accent={accent} />
         </div>
 
         {loading ? (
-          <div className="px-4 py-6 flex flex-col gap-2">
-            {Array.from({ length: 8 }, (_, i) => (
-              <div key={i} className="h-6 rounded animate-pulse" style={{ background: BG_CELL }} />
-            ))}
-          </div>
+          <RowsSkeleton count={8} />
         ) : error || !data || data.players.length === 0 ? (
           <p className="px-4 py-6 text-center text-[#8a9ea6] text-sm">{t("chart.noData")}</p>
         ) : (
@@ -286,10 +247,7 @@ export function AllPlayersCharts() {
 
       {/* ── Stacked bars: what each top-10 player's total is made of ── */}
       {loading ? (
-        <div className="rounded-2xl border border-white/20 p-4" style={{ background: BG_CARD }}>
-          <div className="h-4 w-40 rounded animate-pulse mb-3" style={{ background: BG_CELL }} />
-          <div className="h-[280px] rounded-xl animate-pulse" style={{ background: BG_CELL }} />
-        </div>
+        <BarSkeleton />
       ) : (
         <StackedTotalsBar
           rows={barRows}

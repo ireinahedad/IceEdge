@@ -39,7 +39,7 @@
  * est l'IA, qui laisse 30 s à son amont : voir `LLM_TIMEOUT_MS` dans
  * `llmService.ts`.
  */
-export const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_TIMEOUT_MS = 15_000;
 
 /**
  * Délai dépassé — distinct d'une coupure réseau.
@@ -48,7 +48,7 @@ export const DEFAULT_TIMEOUT_MS = 15_000;
  * pas les distinguer d'un abandon volontaire (démontage d'un composant), ce qui
  * ferait clignoter un message d'erreur en quittant une page.
  */
-export class RequestTimeoutError extends Error {
+class RequestTimeoutError extends Error {
   readonly timeoutMs: number;
   constructor(timeoutMs: number, url: string) {
     super(`Request timed out after ${timeoutMs} ms: ${url}`);

@@ -67,10 +67,10 @@ export const BOOKMAKERS: Record<BookmakerId, Bookmaker> = {
 /** Ordered list for rendering selectors */
 export const BOOKMAKER_LIST: Bookmaker[] = [BET365, STAKE];
 
-export const BOOKMAKER_STORAGE_KEY = "iceedge_bookmaker";
+const BOOKMAKER_STORAGE_KEY = "iceedge_bookmaker";
 const DEFAULT_BOOKMAKER: BookmakerId = "bet365";
 
-export function isBookmakerId(v: unknown): v is BookmakerId {
+function isBookmakerId(v: unknown): v is BookmakerId {
   return typeof v === "string" && v in BOOKMAKERS;
 }
 
@@ -85,7 +85,7 @@ export function getSelectedBookmakerId(): BookmakerId {
   return DEFAULT_BOOKMAKER;
 }
 
-export function getSelectedBookmaker(): Bookmaker {
+function getSelectedBookmaker(): Bookmaker {
   return BOOKMAKERS[getSelectedBookmakerId()];
 }
 
@@ -98,7 +98,7 @@ export function setSelectedBookmakerId(id: BookmakerId): void {
 }
 
 /** Build a full URL for a book + path, appending the affiliate code if set. */
-export function buildBookmakerUrl(book: Bookmaker, path = ""): string {
+function buildBookmakerUrl(book: Bookmaker, path = ""): string {
   const affiliate = book.affiliateCode ? book.affiliateParam(book.affiliateCode) : "";
   return `${book.base}${path}${affiliate}`;
 }
@@ -117,8 +117,3 @@ export function openBet(sport: Sport): void {
   openUrl(buildBookmakerUrl(book, book.sectionPath(sport)));
 }
 
-/** Open the selected sportsbook's sign-up page in a new tab. */
-export function openSignup(): void {
-  const book = getSelectedBookmaker();
-  openUrl(buildBookmakerUrl(book, book.signupPath));
-}

@@ -13,8 +13,8 @@ import type { ParlayLeg } from './parlay';
  * corrélations étaient prises en compte.
  *
  * Les cas ci-dessous sont tous DÉMONTRABLES : aucun ne dépend d'un coefficient
- * ajusté à la main. C'est la condition pour que le miroir client
- * (`parlayMath.ts`) ne puisse pas diverger en silence.
+ * ajusté à la main. Le client importe ce même module (`BetContext.tsx`) : ces
+ * tests couvrent donc aussi le coupon de l'application.
  */
 
 const leg = (p: Partial<ParlayLeg> & { probability: number }): ParlayLeg => ({
@@ -189,34 +189,5 @@ describe('garde-fous', () => {
     // comportement est conservé plutôt que de deviner.
     expect(r.impossible).toBe(false);
     expect(r.probability).toBeCloseTo(30, 6);
-  });
-});
-
-// ── Le miroir client ─────────────────────────────────────────────────────────
-
-describe('parlayMath.ts (client) ne peut pas diverger de ce fichier', () => {
-  /**
-   * Le coupon se recalcule hors ligne à chaque geste, donc la logique existe en
-   * double : ici et dans `client/src/app/services/parlayMath.ts`. Une copie qui
-   * dérive redonnerait exactement la classe de bug qu'on vient de corriger —
-   * deux chiffres pour un même coupon selon qui l'a calculé.
-   *
-   * On compare le CODE, en-tête exclu (les deux commentaires diffèrent
-   * volontairement : chacun explique sa moitié de la duplication).
-   */
-  const body = (src: string) =>
-    src.slice(src.indexOf('export interface ParlayLeg'))
-       .replace(/\s+/g, ' ')
-       .trim();
-
-  it('les deux implémentations sont identiques', async () => {
-    const { readFile } = await import('node:fs/promises');
-    const { resolve } = await import('node:path');
-    // `__dirname` et non `import.meta` : le tsconfig du serveur est en commonjs.
-    const [srv, cli] = await Promise.all([
-      readFile(resolve(__dirname, 'parlay.ts'), 'utf8'),
-      readFile(resolve(__dirname, '../../../client/src/app/services/parlayMath.ts'), 'utf8'),
-    ]);
-    expect(body(cli)).toBe(body(srv));
   });
 });

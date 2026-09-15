@@ -323,6 +323,9 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.mySlips":      { en: "My Slips",        fr: "Mes coupons" },
   "slip.predictions":  { en: "Your Predictions", fr: "Tes prédictions" },
   "slip.add":          { en: "Add",             fr: "Ajouter" },
+  "slip.clearTitle":   { en: "Clear this slip?", fr: "Vider ce coupon ?" },
+  "slip.clearBody":    { en: "All the bets in the slip will be removed.", fr: "Tous les paris du coupon seront retirés." },
+  "slip.clearConfirm": { en: "Clear", fr: "Vider" },
   "slip.active":       { en: "Active",          fr: "Actifs" },
   "slip.history":      { en: "History",         fr: "Historique" },
   "slip.checkResults": { en: "Check results",   fr: "Vérifier les résultats" },
@@ -407,7 +410,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.lockTimeout":  { en: "The server took too long — your slip wasn't locked. Try again.", fr: "Le serveur a mis trop de temps — le coupon n'a pas été verrouillé. Réessaie." },
   "slip.individualProb":{ en: "Individual prediction probability", fr: "Probabilité de prédiction individuelle" },
   // Ce que la combinaison a changé — affiché par `SlipNotices`. Ces trois faits
-  // étaient calculés par `parlayMath` et jetés : un coupon impossible tombait à
+  // étaient calculés par `parlay.ts` et jetés : un coupon impossible tombait à
   // 0 % sans un mot, un doublon quittait le calcul en silence.
   "slip.impossibleTitle": { en: "These bets can't all happen", fr: "Ces paris ne peuvent pas tous se réaliser" },
   "slip.impossibleBody":  { en: "At least two of them contradict each other on the same game. You can keep them on the slip — the combined probability just reads 0%.", fr: "Au moins deux d'entre eux se contredisent sur le même match. Tu peux les garder au coupon — la probabilité combinée affiche simplement 0 %." },

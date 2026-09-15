@@ -22,7 +22,7 @@ export interface SportTheme {
   sportLabel: string;
 }
 
-export const SPORT_THEMES: Record<Sport, SportTheme> = {
+const SPORT_THEMES: Record<Sport, SportTheme> = {
   hockey: {
     bg: "#0A0E0C",
     accent: "#86d1ea",

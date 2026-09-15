@@ -97,14 +97,15 @@ function EdgeBadge({ edge }: { edge: number }) {
   );
 }
 
-// ─── Hockey live game card ─────────────────────────────────────────────────────
+// ─── Ajout rapide « domicile gagne » ───────────────────────────────────────────
 
-export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: () => void }) {
-  const { theme } = useSport();
-  const accent = theme.accent;
+/**
+ * Pari moneyline de l'équipe à domicile, ajouté d'un geste depuis l'accueil.
+ * Partagé par la carte de match en direct et la ligne de match à venir ;
+ * seul le suffixe de `gameInfo` change (« Live » ou l'heure du match).
+ */
+function useHomeMoneyline(game: DisplayGame, when: string | undefined) {
   const { addLeg, hasLeg } = useBet();
-  const { t } = useI18n();
-  const navigate = useNavigate();
 
   const legId = `${game.id}-moneyline-${game.team1.id}`;
   const isAdded = hasLeg(legId);
@@ -128,11 +129,23 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
       selection: `${game.team1.name} to win`,
       selectionShort: `${game.team1.abbr} ML`,
       probability: homePct,
-      gameInfo: `${game.team1.abbr} vs ${game.team2.abbr} · Live`,
+      gameInfo: `${game.team1.abbr} vs ${game.team2.abbr} · ${when}`,
       addedAt: new Date().toISOString(),
     };
     addLeg(leg);
   }
+
+  return { isAdded, homePct, awayPct, edge, quickAdd };
+}
+
+// ─── Hockey live game card ─────────────────────────────────────────────────────
+
+export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: () => void }) {
+  const { theme } = useSport();
+  const accent = theme.accent;
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const { isAdded, homePct, awayPct, edge, quickAdd } = useHomeMoneyline(game, "Live");
 
   return (
     <div
@@ -225,37 +238,9 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
 export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: () => void }) {
   const { theme } = useSport();
   const accent = theme.accent;
-  const { addLeg, hasLeg } = useBet();
   const { t } = useI18n();
   const navigate = useNavigate();
-
-  const legId = `${game.id}-moneyline-${game.team1.id}`;
-  const isAdded = hasLeg(legId);
-
-  const homePct = game.team1.winPct;
-  const awayPct = game.team2.winPct;
-  // Pas de probabilité modèle → pas d'edge, et pas d'ajout au coupon.
-  const edge = game.bet365Home != null && homePct != null ? calcEdge(homePct, game.bet365Home) : 0;
-
-  function quickAdd(e: React.MouseEvent) {
-    e.stopPropagation();
-    if (isAdded || homePct == null) return;
-    const leg: BetLeg = {
-      id: legId,
-      marketType: "moneyline",
-      marketLabel: "Moneyline",
-      subjectType: "game",
-      subjectId: game.id,
-      subjectName: `${game.team1.abbr} vs ${game.team2.abbr}`,
-      subjectLogo: game.team1.logo,
-      selection: `${game.team1.name} to win`,
-      selectionShort: `${game.team1.abbr} ML`,
-      probability: homePct,
-      gameInfo: `${game.team1.abbr} vs ${game.team2.abbr} · ${game.time}`,
-      addedAt: new Date().toISOString(),
-    };
-    addLeg(leg);
-  }
+  const { isAdded, homePct, awayPct, edge, quickAdd } = useHomeMoneyline(game, game.time);
 
   return (
     <div

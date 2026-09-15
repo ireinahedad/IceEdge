@@ -286,7 +286,7 @@ function eventToRow(ev: RawOddsEvent): Row | null {
  *             line seule, 1 crédit). Voir `SLOTS` pour le calendrier.
  * @returns nombre de lignes écrites ou mises à jour dans `odds_log`.
  */
-export async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
+async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
   // ── Deux garde-fous AVANT de dépenser le moindre crédit ───────────────────
   //
   // 1. La saison est-elle en cours ? L'endpoint /v4/sports est gratuit (il ne
@@ -385,23 +385,30 @@ export async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
        pl_home_price     = COALESCE(EXCLUDED.pl_home_price,     odds_log.pl_home_price),
        pl_away_price     = COALESCE(EXCLUDED.pl_away_price,     odds_log.pl_away_price),
        updated_at        = NOW()`,
-    [
-      rows.map((r) => r.date),
-      rows.map((r) => r.home),
-      rows.map((r) => r.away),
-      rows.map((r) => r.homeMl),
-      rows.map((r) => r.awayMl),
-      rows.map((r) => r.total),
-      rows.map((r) => r.totalOver),
-      rows.map((r) => r.totalUnder),
-      rows.map((r) => r.puckLineHome),
-      rows.map((r) => r.plHomePrice),
-      rows.map((r) => r.plAwayPrice),
-    ],
+    [...keyColumns(rows), ...priceColumns(rows)],
   );
 
   await insertSnapshots(rows, observedAt, kind);
   return res.rowCount ?? 0;
+}
+
+/** Colonnes d'identité d'un match pour `unnest` : date, domicile, extérieur. */
+function keyColumns(rows: Row[]) {
+  return [rows.map((r) => r.date), rows.map((r) => r.home), rows.map((r) => r.away)];
+}
+
+/** Colonnes de prix pour `unnest`, dans l'ordre commun à `odds_log` et `odds_snapshots`. */
+function priceColumns(rows: Row[]) {
+  return [
+    rows.map((r) => r.homeMl),
+    rows.map((r) => r.awayMl),
+    rows.map((r) => r.total),
+    rows.map((r) => r.totalOver),
+    rows.map((r) => r.totalUnder),
+    rows.map((r) => r.puckLineHome),
+    rows.map((r) => r.plHomePrice),
+    rows.map((r) => r.plAwayPrice),
+  ];
 }
 
 /**
@@ -438,20 +445,11 @@ async function insertSnapshots(
        )
        ON CONFLICT (game_date, home_team, away_team, observed_at) DO NOTHING`,
       [
-        rows.map((r) => r.date),
-        rows.map((r) => r.home),
-        rows.map((r) => r.away),
+        ...keyColumns(rows),
         rows.map(() => observedAt),
         rows.map((r) => r.commenceTime),
         rows.map(() => kind),
-        rows.map((r) => r.homeMl),
-        rows.map((r) => r.awayMl),
-        rows.map((r) => r.total),
-        rows.map((r) => r.totalOver),
-        rows.map((r) => r.totalUnder),
-        rows.map((r) => r.puckLineHome),
-        rows.map((r) => r.plHomePrice),
-        rows.map((r) => r.plAwayPrice),
+        ...priceColumns(rows),
       ],
     );
   } catch (err: any) {
@@ -661,17 +659,4 @@ export function startOddsLogger(): void {
       + 'à retirer après contrôle (3 crédits par démarrage).');
     setTimeout(() => void run('full'), 20_000).unref?.();
   }
-}
-
-/**
- * Arrête la boucle de collecte.
- *
- * **Aucun appelant aujourd'hui — gardée exprès** (décision du 2026-08-10). Sans
- * elle, un test qui démarre le collecteur laisse un `setTimeout` en vie et le
- * runner ne rend jamais la main. À brancher aussi dans l'arrêt gracieux le jour
- * où la collecte devient longue.
- */
-export function stopOddsLogger(): void {
-  if (timer) clearTimeout(timer);
-  timer = null;
 }

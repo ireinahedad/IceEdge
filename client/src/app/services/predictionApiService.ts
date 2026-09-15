@@ -18,7 +18,6 @@
  * Server endpoints:
  *   POST /api/predict/single       → PredictionResponse
  *   POST /api/predict/parlay       → ParlayPredictionResponse
- *   POST /api/predict/player-prop  → PlayerPropResponse
  *   GET  /api/predict/best-bets    → BestBetsResponse
  */
 
@@ -47,7 +46,7 @@ export type PredictionUnavailableReason =
  * say something true ("service indisponible" vs "hors ligne") without ever
  * needing to guess a value.
  */
-export class PredictionUnavailableError extends Error {
+class PredictionUnavailableError extends Error {
   readonly reason: PredictionUnavailableReason;
   readonly status?: number;
 
@@ -61,16 +60,6 @@ export class PredictionUnavailableError extends Error {
 
 export function isPredictionUnavailable(e: unknown): e is PredictionUnavailableError {
   return e instanceof PredictionUnavailableError;
-}
-
-/** i18n key describing a failure, for the UI to render. */
-export function predictionErrorKey(e: unknown): string {
-  if (!isPredictionUnavailable(e)) return "pred.unavailable";
-  switch (e.reason) {
-    case "not_configured": return "pred.unavailableNotConfigured";
-    case "network":        return "pred.unavailableOffline";
-    default:               return "pred.unavailable";
-  }
 }
 
 // ─── HTTP helpers ─────────────────────────────────────────────────────────────
@@ -209,7 +198,7 @@ export const predictionApiService = {
    * le seul cas où le chiffre reste approximatif.
    *
    * Le coupon de l'application n'appelle PLUS cette route : il calcule la même
-   * chose hors ligne via `parlayMath.ts`, qui est le miroir de `parlay.ts`.
+   * chose hors ligne en important `server/src/services/parlay.ts` directement.
    * Cette méthode reste pour les appels externes.
    *
    * Throws `PredictionUnavailableError`.
@@ -220,40 +209,3 @@ export const predictionApiService = {
     post<ParlayPredictionResponse>("/predict/parlay", req),
 };
 
-// ─── Factor / player-prop types ───────────────────────────────────────────────
-
-export interface CalcFactor {
-  icon: string;
-  label: string;
-  delta: number;
-}
-
-export interface PlayerPropRequest {
-  playerId: string;
-  playerName: string;
-  propType: "goals" | "points" | "assists" | "award";
-  line: number;
-  season: string;
-  currentGoals?: number;
-  currentPoints?: number;
-  currentAssists?: number;
-  gamesPlayed?: number;
-}
-
-export interface PlayerPropResponse {
-  probability: number;
-  /** Only present when the server has a real price to show. Never synthesised. */
-  oddsLabel?: string;
-  factors: CalcFactor[];
-  betNote: string;
-}
-
-export const factorsApiService = {
-  /**
-   * Season prop probability for a player.
-   * POST /api/predict/player-prop
-   * Throws `PredictionUnavailableError`.
-   */
-  getPlayerProp: (req: PlayerPropRequest): Promise<PlayerPropResponse> =>
-    post<PlayerPropResponse>("/predict/player-prop", req),
-};

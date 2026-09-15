@@ -45,15 +45,3 @@ export async function getStartingGoalies(dateISO?: string): Promise<GoalieDay> {
   const day = await getEntry<GoalieDay>('starting_goalies', dateISO ?? easternToday());
   return day && typeof day === 'object' ? day : {};
 }
-
-/**
- * Gardien partant confirmé pour une équipe, ou `undefined`.
- * @param abbr    abréviation d'équipe (ex. « TOR »)
- * @param dateISO date du match « YYYY-MM-DD » (défaut : aujourd'hui, heure Est)
- */
-export async function getStartingGoalie(abbr: string, dateISO?: string): Promise<string | undefined> {
-  if (!abbr) return undefined;
-  const day = await getStartingGoalies(dateISO);
-  const name = day[abbr.toUpperCase()];
-  return typeof name === 'string' && name.trim() ? name : undefined;
-}

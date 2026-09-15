@@ -40,7 +40,7 @@ import { legAccent } from '../data/teamEmoji';
 import type { BetSlip } from './slipApiService';
 
 /** Côté de l'image produite, en pixels. Carré, toujours. */
-export const SHARE_SIZE = 1080;
+const SHARE_SIZE = 1080;
 
 /**
  * Les textes de l'image.
@@ -68,7 +68,7 @@ export interface SlipShareLabels {
 }
 
 /** Levée quand le navigateur ne rend pas de contexte 2D ou refuse le blob. */
-export class ShareRenderError extends Error {
+class ShareRenderError extends Error {
   constructor(cause: string) { super(`share_render_failed: ${cause}`); this.name = 'ShareRenderError'; }
 }
 

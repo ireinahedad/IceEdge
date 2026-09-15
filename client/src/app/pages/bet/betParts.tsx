@@ -107,7 +107,7 @@ export function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: numb
 // ─── Ce que la combinaison a changé ───────────────────────────────────────────
 
 /**
- * Les trois faits que `parlayMath` établissait sans que personne les montre.
+ * Les trois faits que `parlay.ts` établissait sans que personne les montre.
  *
  * Sans ce bloc, le coupon mentait par omission dans deux cas :
  *

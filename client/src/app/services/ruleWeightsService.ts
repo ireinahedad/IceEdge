@@ -46,7 +46,7 @@ export function factorColor(id: string): string {
 export type FamilyStore = Record<string, Record<string, number>>;
 const FAMILY_KEY = 'iceedge.factorWeights';
 
-export function loadFamilyStore(): FamilyStore {
+function loadFamilyStore(): FamilyStore {
   try { return JSON.parse(localStorage.getItem(FAMILY_KEY) || '{}'); } catch { return {}; }
 }
 

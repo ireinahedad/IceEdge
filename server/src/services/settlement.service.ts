@@ -147,6 +147,29 @@ const PLAYER_STAT_MARKETS: Record<string, keyof BoxscorePlayerStats> = {
   time_on_ice_ou:     'toi',
 };
 
+/** Abréviations des deux équipes d'un match, en minuscules (forme de `selectionValue`). */
+function teamIds(game: any): { homeId: string; awayId: string } {
+  return {
+    homeId: String(game.homeTeam.abbreviation ?? '').toLowerCase(),
+    awayId: String(game.awayTeam.abbreviation ?? '').toLowerCase(),
+  };
+}
+
+/**
+ * Match terminé + équipe choisie par la jambe. `null` si le match n'est pas
+ * fini ou si `selectionValue` ne désigne aucune des deux équipes.
+ */
+async function teamPick(
+  leg: any, cache: GameCache,
+): Promise<{ game: any; homeId: string; awayId: string; sel: string } | null> {
+  const game = await getFinalGame(String(leg.gameId), cache);
+  if (!game) return null;
+  const { homeId, awayId } = teamIds(game);
+  const sel = String(leg.selectionValue).toLowerCase();
+  if (sel !== homeId && sel !== awayId) return null;
+  return { game, homeId, awayId, sel };
+}
+
 /** Decide a single leg from the final score (or, for player/team props, the boxscore / scoring summary). */
 async function settleLeg(
   leg: any, cache: GameCache, boxCache: BoxCache, scoringCache: ScoringCache, faceoffCache: FaceoffCache,
@@ -228,12 +251,9 @@ async function settleLeg(
 
   // ── Team markets ──────────────────────────────────────────────────────────
   if (leg.marketType === 'first_team_score' || leg.marketType === 'last_team_score') {
-    const game = await getFinalGame(String(leg.gameId), cache);
-    if (!game) return 'unknown';
-    const homeId = String(game.homeTeam.abbreviation ?? '').toLowerCase();
-    const awayId = String(game.awayTeam.abbreviation ?? '').toLowerCase();
-    const sel = String(leg.selectionValue).toLowerCase();
-    if (sel !== homeId && sel !== awayId) return 'unknown';
+    const pick = await teamPick(leg, cache);
+    if (!pick) return 'unknown';
+    const { homeId, awayId, sel } = pick;
     const goals = await getScoringPlays(String(leg.gameId), cache, scoringCache);
     if (!goals) return 'unknown';
     if (goals.length === 0) return 'unknown'; // no goals scored at all — can't verify either way
@@ -245,8 +265,7 @@ async function settleLeg(
   if (leg.marketType === 'team_total_goals' || leg.marketType === 'team_pp_goals') {
     const game = await getFinalGame(String(leg.gameId), cache);
     if (!game) return 'unknown';
-    const homeId = String(game.homeTeam.abbreviation ?? '').toLowerCase();
-    const awayId = String(game.awayTeam.abbreviation ?? '').toLowerCase();
+    const { homeId, awayId } = teamIds(game);
     const teamId = String(leg.subjectId ?? '').toLowerCase();
     if (teamId !== homeId && teamId !== awayId) return 'unknown';
     const line = Number(leg.line);
@@ -270,12 +289,9 @@ async function settleLeg(
   }
 
   if (leg.marketType === 'clean_sheet') {
-    const game = await getFinalGame(String(leg.gameId), cache);
-    if (!game) return 'unknown';
-    const homeId = String(game.homeTeam.abbreviation ?? '').toLowerCase();
-    const awayId = String(game.awayTeam.abbreviation ?? '').toLowerCase();
-    const sel = String(leg.selectionValue).toLowerCase();
-    if (sel !== homeId && sel !== awayId) return 'unknown';
+    const pick = await teamPick(leg, cache);
+    if (!pick) return 'unknown';
+    const { game, homeId, sel } = pick;
     const opponentScore = Number(sel === homeId ? game.awayTeam.score : game.homeTeam.score);
     if (!Number.isFinite(opponentScore)) return 'unknown';
     return opponentScore === 0 ? 'win' : 'loss';
@@ -315,12 +331,9 @@ async function settleLeg(
   }
 
   if (leg.marketType === 'team_score_every_period') {
-    const game = await getFinalGame(String(leg.gameId), cache);
-    if (!game) return 'unknown';
-    const homeId = String(game.homeTeam.abbreviation ?? '').toLowerCase();
-    const awayId = String(game.awayTeam.abbreviation ?? '').toLowerCase();
-    const sel = String(leg.selectionValue).toLowerCase();
-    if (sel !== homeId && sel !== awayId) return 'unknown';
+    const pick = await teamPick(leg, cache);
+    if (!pick) return 'unknown';
+    const { homeId, sel } = pick;
     const goals = await getScoringPlays(String(leg.gameId), cache, scoringCache);
     if (!goals) return 'unknown';
     const { home, away } = periodGoalCounts(goals);
@@ -332,12 +345,9 @@ async function settleLeg(
   const periodWinnerMatch = /^period([123])_winner$/.exec(String(leg.marketType));
   if (periodWinnerMatch) {
     const n = Number(periodWinnerMatch[1]);
-    const game = await getFinalGame(String(leg.gameId), cache);
-    if (!game) return 'unknown';
-    const homeId = String(game.homeTeam.abbreviation ?? '').toLowerCase();
-    const awayId = String(game.awayTeam.abbreviation ?? '').toLowerCase();
-    const sel = String(leg.selectionValue).toLowerCase();
-    if (sel !== homeId && sel !== awayId) return 'unknown';
+    const pick = await teamPick(leg, cache);
+    if (!pick) return 'unknown';
+    const { homeId, awayId, sel } = pick;
     const goals = await getScoringPlays(String(leg.gameId), cache, scoringCache);
     if (!goals) return 'unknown';
     const { home, away } = periodGoalCounts(goals);
@@ -397,8 +407,7 @@ async function settleLeg(
 
   const hs = Number(game.homeTeam.score);
   const as = Number(game.awayTeam.score);
-  const homeId = String(game.homeTeam.abbreviation ?? '').toLowerCase();
-  const awayId = String(game.awayTeam.abbreviation ?? '').toLowerCase();
+  const { homeId, awayId } = teamIds(game);
   const sel = String(leg.selectionValue).toLowerCase();
 
   switch (leg.marketType) {

@@ -46,17 +46,3 @@ export async function getScratchesDay(dateISO?: string): Promise<ScratchDay> {
   }
   return out;
 }
-
-/**
- * Liste des absents confirmés pour une équipe (noms MoneyPuck), ou un tableau
- * vide.
- * @param abbr    abréviation d'équipe (ex. « TOR »)
- * @param dateISO date du match « YYYY-MM-DD » (défaut : aujourd'hui, heure Est)
- */
-export async function getScratches(abbr: string, dateISO?: string): Promise<string[]> {
-  if (!abbr) return [];
-  const day = await getScratchesDay(dateISO);
-  return day[abbr.toUpperCase()] ?? [];
-}
-
-export { easternToday };

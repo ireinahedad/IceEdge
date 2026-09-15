@@ -105,18 +105,3 @@ export function saveLineups(
   });
 }
 
-// ── Arbitres (pas d'écran : une passe par saison, via API) ────────────────────
-
-export interface RefereeTendency { name: string; ppPerGame: number; note?: string }
-
-export function fetchReferees(): Promise<{ leagueAvgPpPerGame: number; referees: RefereeTendency[] }> {
-  return call('/referees');
-}
-
-/** Remplace la table entière (atomique côté serveur). */
-export function saveReferees(payload: {
-  leagueAvgPpPerGame?: number;
-  referees?: RefereeTendency[];
-}): Promise<{ ok: true; count: number | null }> {
-  return call('/referees', { method: 'PUT', body: JSON.stringify(payload) });
-}

@@ -41,10 +41,10 @@ export const ODDS_FORMAT_SAMPLE: Record<OddsFormat, string> = {
   american: "-213",
 };
 
-export const ODDS_FORMAT_STORAGE_KEY = "iceedge_odds_format";
+const ODDS_FORMAT_STORAGE_KEY = "iceedge_odds_format";
 const DEFAULT_ODDS_FORMAT: OddsFormat = "decimal";
 
-export function isOddsFormat(v: unknown): v is OddsFormat {
+function isOddsFormat(v: unknown): v is OddsFormat {
   return typeof v === "string" && (ODDS_FORMAT_IDS as string[]).includes(v);
 }
 
@@ -83,19 +83,19 @@ export function setSelectedOddsFormat(format: OddsFormat): void {
 // livre ne propose pas.
 
 /** Cote décimale → probabilité implicite (0-100). Le vig n'est PAS retiré. */
-export function decimalToPct(decimal: number): number {
+function decimalToPct(decimal: number): number {
   return 100 / decimal;
 }
 
 /** Cote décimale → cote américaine signée (2.13 → +113 ; 1.47 → -213). */
-export function decimalToAmerican(decimal: number): number {
+function decimalToAmerican(decimal: number): number {
   return decimal >= 2
     ? Math.round((decimal - 1) * 100)
     : -Math.round(100 / (decimal - 1));
 }
 
 /** Le signe fait partie du format : une cote américaine sans « + » se lit mal. */
-export function formatAmerican(value: number): string {
+function formatAmerican(value: number): string {
   return value > 0 ? `+${value}` : String(value);
 }
 

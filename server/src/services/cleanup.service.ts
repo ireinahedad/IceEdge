@@ -37,7 +37,7 @@ const STRIPE_EVENT_RETENTION_DAYS = Number(process.env.STRIPE_EVENT_RETENTION_DA
  */
 const MANUAL_DATED_RETENTION_DAYS = Number(process.env.MANUAL_DATED_RETENTION_DAYS) || 15;
 
-export async function runCleanup(): Promise<{ tokens: number; codes: number; stripeEvents: number; manualDated: number }> {
+async function runCleanup(): Promise<{ tokens: number; codes: number; stripeEvents: number; manualDated: number }> {
   const tokensRes = await pool.query(
     `DELETE FROM refresh_tokens
       WHERE expires_at < NOW()

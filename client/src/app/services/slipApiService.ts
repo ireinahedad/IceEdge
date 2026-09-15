@@ -28,13 +28,7 @@ export interface BetSlip {
   xpAwarded:           number;
 }
 
-export interface ResolveResult {
-  xpAwarded: number;
-  newXp:     number;
-  newTier:   string;
-  tieredUp:  boolean;
-  message:   string;
-}
+
 
 export async function submitSlip(
   legs:                SlipLeg[],
@@ -81,17 +75,4 @@ export async function settleMySlips(): Promise<SettlementSummary> {
   return res.json() as Promise<SettlementSummary>;
 }
 
-export async function resolveSlip(
-  slipId:  string,
-  outcome: 'win' | 'loss',
-): Promise<ResolveResult> {
-  const res = await authedFetch(`/slips/${slipId}/resolve`, {
-    method: 'PATCH',
-    body: JSON.stringify({ outcome }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? `Resolve failed (${res.status})`);
-  }
-  return res.json() as Promise<ResolveResult>;
-}
+

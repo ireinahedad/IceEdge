@@ -11,7 +11,7 @@ import { Search, X } from "lucide-react";
 import { useI18n } from "../../i18n";
 import { nhlApiService } from "../../services/nhlApiService";
 import type { NHLTeamInfo, NHLPlayerInfo } from "../../types/bet";
-import { BG_CELL, SortDir } from "./chartsTheme";
+import { BG_CARD, BG_CELL, SortDir, currentSeasonId, seasonLabel, selectCls } from "./chartsTheme";
 
 /* ── Opponent picker (lives in the vs-column header) ──────── */
 export function OpponentSelect({
@@ -109,23 +109,7 @@ export function PlayerSearchBox({
 
   return (
     <div className="relative">
-      <div
-        className="flex items-center gap-2 rounded-xl border border-white/15 px-3 py-2"
-        style={{ background: BG_CELL }}
-      >
-        <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={placeholder}
-          className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#5c6f63]"
-        />
-        {query && (
-          <button onClick={() => setQuery("")} className="tap-44 text-[#8a9ea6] hover:text-white transition-colors">
-            <X size={13} />
-          </button>
-        )}
-      </div>
+      <SearchInput value={query} onChange={setQuery} placeholder={placeholder} />
 
       {query.trim().length >= 2 && (
         <div
@@ -152,6 +136,169 @@ export function PlayerSearchBox({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Champ de recherche (loupe + effacer) ─────────────────── */
+export function SearchInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div
+      className="flex items-center gap-2 rounded-xl border border-white/15 px-3 py-2"
+      style={{ background: BG_CELL }}
+    >
+      <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#5c6f63]"
+      />
+      {value && (
+        <button onClick={() => onChange("")} className="tap-44 text-[#8a9ea6] hover:text-white transition-colors">
+          <X size={13} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Les six dernières saisons, en remontant depuis la saison courante. */
+const RECENT_SEASONS = Array.from({ length: 6 }, (_, i) => {
+  const y = Math.floor(currentSeasonId / 10000) - i;
+  return Number(`${y}${y + 1}`);
+});
+
+/* ── Sélecteur de saison (pages « toutes les équipes / tous les joueurs ») ── */
+export function SeasonSelect({ season, onChange }: { season: number; onChange: (season: number) => void }) {
+  const { t } = useI18n();
+  return (
+    <select
+      value={season}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className={selectCls}
+      style={{ background: BG_CELL, color: "#c8d3cc" }}
+      aria-label={t("chart.season")}
+    >
+      {RECENT_SEASONS.map((sid) => (
+        <option key={sid} value={sid}>{seasonLabel(sid)}</option>
+      ))}
+    </select>
+  );
+}
+
+/* ── Pastilles de tri au-dessus d'un tableau ──────────────── */
+export function MetricChips({
+  metrics,
+  activeKey,
+  dir,
+  onToggle,
+  accent,
+}: {
+  metrics: { key: string; label: ReactNode }[];
+  activeKey: string;
+  dir: SortDir;
+  onToggle: (key: string) => void;
+  accent: string;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {metrics.map((m) => {
+        const isActive = m.key === activeKey;
+        return (
+          <button
+            key={m.key}
+            onClick={() => onToggle(m.key)}
+            className="px-3 py-1 rounded-full text-[11px] font-semibold transition-colors"
+            style={
+              isActive
+                ? { background: accent + "22", color: accent, border: `1px solid ${accent}66` }
+                : { background: BG_CELL, color: "#8a9ea6", border: "1px solid transparent" }
+            }
+          >
+            {m.label}
+            {isActive && <span className="ml-1 text-[11px]">{dir === "asc" ? "▲" : "▼"}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Squelettes de chargement ─────────────────────────────── */
+export function RowsSkeleton({ count }: { count: number }) {
+  return (
+    <div className="px-4 py-6 flex flex-col gap-2">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="h-6 rounded animate-pulse" style={{ background: BG_CELL }} />
+      ))}
+    </div>
+  );
+}
+
+/** Emplacement du graphique à barres empilées pendant le chargement. */
+export function BarSkeleton() {
+  return (
+    <div className="rounded-2xl border border-white/20 p-4" style={{ background: BG_CARD }}>
+      <div className="h-4 w-40 rounded animate-pulse mb-3" style={{ background: BG_CELL }} />
+      <div className="h-[280px] rounded-xl animate-pulse" style={{ background: BG_CELL }} />
+    </div>
+  );
+}
+
+/* ── Sélecteur d'équipe (graphiques joueur et équipe) ─────── */
+export function TeamSelect({
+  value,
+  onChange,
+  teams,
+}: {
+  value: string;
+  onChange: (abbrLower: string) => void;
+  teams: NHLTeamInfo[];
+}) {
+  const { t } = useI18n();
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={selectCls}
+      style={{ background: BG_CELL, color: value ? "#c8d3cc" : "#8a9ea6" }}
+      aria-label={t("chart.team")}
+    >
+      <option value="">{t("chart.noTeam")}</option>
+      {teams.map((x) => (
+        <option key={x.abbreviation} value={x.abbreviation?.toLowerCase()}>
+          {x.abbreviation?.toUpperCase()}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** Carte de message centrée (invite à choisir, aucune donnée…). */
+export function ChartMessage({ children, large = false }: { children: ReactNode; large?: boolean }) {
+  return (
+    <div className={`rounded-2xl border border-white/10 ${large ? "p-8" : "p-6"} text-center`} style={{ background: BG_CARD }}>
+      <p className="text-[#8a9ea6] text-sm">{children}</p>
+    </div>
+  );
+}
+
+/** Trois cartes fantômes pendant le chargement d'une page de graphiques. */
+export function CardsSkeleton() {
+  return (
+    <div className="flex flex-col gap-3">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="h-24 rounded-2xl animate-pulse" style={{ background: BG_CARD }} />
+      ))}
     </div>
   );
 }

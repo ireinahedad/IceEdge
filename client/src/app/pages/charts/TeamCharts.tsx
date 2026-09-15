@@ -14,7 +14,7 @@ import { nhlLogoUrl } from "../../data/teamEmoji";
 import { nhlApiService } from "../../services/nhlApiService";
 import type { TeamPlayerSeasons, PlayerSeasons, PlayerSeasonStat, TeamOpponentSplits, OpponentSplit, TeamSeasonOfficial } from "../../services/nhlApiService";
 import type { NHLTeamInfo } from "../../types/bet";
-import { OpponentSelect, SortHead } from "./ChartControls";
+import { CardsSkeleton, ChartMessage, OpponentSelect, SortHead, TeamSelect } from "./ChartControls";
 import { PieBreakdowns, PlayerLineChart, TeamStatsTable, TeamTrendsTable } from "./ChartVisuals";
 import { buildGoalieMetrics, buildSkaterMetrics } from "./chartsMetrics";
 import { BG_CARD, BG_CELL, DASH, PosFilter, SortCol, SortDir, View, seasonLabel, selectCls } from "./chartsTheme";
@@ -189,20 +189,11 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
           </div>
         )}
         <div className="flex flex-col gap-1.5 shrink-0">
-          <select
+          <TeamSelect
             value={teamId ? teamId.toLowerCase() : ""}
-            onChange={(e) => navigate(e.target.value ? `/stats/chart/team/${e.target.value}` : "/stats/chart/team")}
-            className={selectCls}
-            style={{ background: BG_CELL, color: teamId ? "#c8d3cc" : "#8a9ea6" }}
-            aria-label={t("chart.team")}
-          >
-            <option value="">{t("chart.noTeam")}</option>
-            {teamOptions.map((x) => (
-              <option key={x.abbreviation} value={x.abbreviation?.toLowerCase()}>
-                {x.abbreviation?.toUpperCase()}
-              </option>
-            ))}
-          </select>
+            onChange={(abbr) => navigate(abbr ? `/stats/chart/team/${abbr}` : "/stats/chart/team")}
+            teams={teamOptions}
+          />
           <button
             onClick={() => navigate("/stats/chart/all-teams")}
             className={selectCls}
@@ -214,19 +205,11 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
       </div>
 
       {!teamId ? (
-        <div className="rounded-2xl border border-white/10 p-8 text-center" style={{ background: BG_CARD }}>
-          <p className="text-[#8a9ea6] text-sm">{t("chart.choosePrompt")}</p>
-        </div>
+        <ChartMessage large>{t("chart.choosePrompt")}</ChartMessage>
       ) : loading ? (
-        <div className="flex flex-col gap-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 rounded-2xl animate-pulse" style={{ background: BG_CARD }} />
-          ))}
-        </div>
+        <CardsSkeleton />
       ) : error || !playerSeasons ? (
-        <div className="rounded-2xl border border-white/10 p-6 text-center" style={{ background: BG_CARD }}>
-          <p className="text-[#8a9ea6] text-sm">{t("chart.noData")}</p>
-        </div>
+        <ChartMessage>{t("chart.noData")}</ChartMessage>
       ) : (
         <>
           {/* Controls: Skater/Goalie · Season · Position filter */}

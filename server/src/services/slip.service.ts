@@ -216,7 +216,7 @@ export async function submitSlip(
   // envoie le paramètre TEL QUEL, en texte : Postgres refuse « 37.7 » sur une
   // colonne integer (22P02) et la soumission repart en 500 côté client.
   // Depuis que la probabilité combinée est calculée localement par
-  // `parlayMath.ts` (2026-09-13), le client arrondit à UNE DÉCIMALE : tout
+  // `parlay.ts` côté client (2026-09-13), le client arrondit à UNE DÉCIMALE : tout
   // coupon de deux jambes ou plus cassait donc l'insertion.
   //
   // L'arrondi est fait ICI et pas côté client à dessein : un bundle déjà

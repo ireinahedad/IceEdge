@@ -203,6 +203,23 @@ export function LoginPage() {
   const inputCls = `w-full px-4 py-3 rounded-xl text-white text-sm placeholder-[#92A08A] focus:outline-none transition-all`;
   const inputStyle = { background: SURFACE, border: `1px solid ${BORDER}` };
   const inputFocusStyle = { borderColor: `${ACCENT}80`, background: ACCENT_BG };
+  // Surbrillance du champ actif — une seule définition pour tous les champs.
+  const focusHandlers = {
+    onFocus: (e: React.FocusEvent<HTMLInputElement>) => Object.assign(e.target.style, inputFocusStyle),
+    onBlur: (e: React.FocusEvent<HTMLInputElement>) => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE }),
+  };
+  // Champ du code à 6 chiffres — étapes « vérifier le courriel » et « réinitialiser ».
+  const codeInput = (
+    <input
+      type="text" inputMode="numeric" autoComplete="one-time-code"
+      aria-label={t("login.verifyBtn")}
+      maxLength={6} placeholder="______"
+      value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+      required
+      className={`${inputCls} text-center tracking-[0.5em] text-lg`}
+      style={inputStyle}
+      {...focusHandlers} />
+  );
 
   return (
     <div
@@ -286,8 +303,7 @@ export function LoginPage() {
           required className={inputCls} style={inputStyle}
           aria-label={t("login.email")}
           autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck={false}
-          onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
-          onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
+          {...focusHandlers} />
 
         {mode === "register" && (
           <>
@@ -295,14 +311,12 @@ export function LoginPage() {
               required minLength={3} className={inputCls} style={inputStyle}
               aria-label={t("login.username")}
               autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false}
-              onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
-              onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
+              {...focusHandlers} />
             <input type="text" placeholder={t("login.firstName")} value={firstName} onChange={(e) => setFirstName(e.target.value)}
               className={inputCls} style={inputStyle}
               aria-label={t("login.firstName")}
               autoComplete="given-name"
-              onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
-              onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
+              {...focusHandlers} />
           </>
         )}
 
@@ -315,8 +329,7 @@ export function LoginPage() {
             required minLength={8} className={`${inputCls} pr-11`} style={inputStyle}
             aria-label={t("login.password")}
             autoComplete={mode === "login" ? "current-password" : "new-password"}
-            onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
-            onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
+            {...focusHandlers} />
           <button type="button" onClick={() => setShowPwd(v => !v)}
             aria-label={showPwd ? "Hide password" : "Show password"}
             className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "#92A08A" }}>
@@ -329,8 +342,7 @@ export function LoginPage() {
             required minLength={8} className={inputCls} style={inputStyle}
             aria-label={t("login.confirmPassword")}
             autoComplete="new-password"
-            onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
-            onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
+            {...focusHandlers} />
         )}
 
         {mode === "login" && (
@@ -341,18 +353,7 @@ export function LoginPage() {
           </label>
         )}
 
-        {notice && (
-          /* `status` + `polite` : une confirmation ne doit pas couper la lecture
-             en cours, contrairement à l'erreur juste en dessous. */
-          <div role="status" aria-live="polite" className="text-xs text-center py-2 px-3 rounded-xl" style={{ color: ACCENT, background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>
-            {notice}
-          </div>
-        )}
-        {error && (
-          <div role="alert" className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20">
-            {error}
-          </div>
-        )}
+        <FormFeedback notice={notice} error={error} />
 
         <AppButton type="submit" disabled={loading} loading={loading} fullWidth size="lg">
           {mode === "login" ? t("login.signin") : t("login.signup")}
@@ -397,29 +398,9 @@ export function LoginPage() {
         </p>
         <p className="text-xs text-center mb-2" style={{ color: ACCENT }}>{email}</p>
 
-        <input
-          type="text" inputMode="numeric" autoComplete="one-time-code"
-          aria-label={t("login.verifyBtn")}
-          maxLength={6} placeholder="______"
-          value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-          required
-          className={`${inputCls} text-center tracking-[0.5em] text-lg`}
-          style={inputStyle}
-          onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
-          onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
+        {codeInput}
 
-        {notice && (
-          /* `status` + `polite` : une confirmation ne doit pas couper la lecture
-             en cours, contrairement à l'erreur juste en dessous. */
-          <div role="status" aria-live="polite" className="text-xs text-center py-2 px-3 rounded-xl" style={{ color: ACCENT, background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>
-            {notice}
-          </div>
-        )}
-        {error && (
-          <div role="alert" className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20">
-            {error}
-          </div>
-        )}
+        <FormFeedback notice={notice} error={error} />
 
         <AppButton type="submit" disabled={loading || code.length < 6} loading={loading} fullWidth size="lg">
           {t("login.verifyBtn")}
@@ -444,14 +425,9 @@ export function LoginPage() {
           required className={inputCls} style={inputStyle}
           aria-label={t("login.email")}
           autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck={false}
-          onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
-          onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
+          {...focusHandlers} />
 
-        {error && (
-          <div role="alert" className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20">
-            {error}
-          </div>
-        )}
+        <FormFeedback notice={null} error={error} />
 
         <AppButton type="submit" disabled={loading} loading={loading} fullWidth size="lg">
           {t("login.sendCode")}
@@ -468,36 +444,15 @@ export function LoginPage() {
         </p>
         <p className="text-xs text-center mb-2" style={{ color: ACCENT }}>{email}</p>
 
-        <input
-          type="text" inputMode="numeric" autoComplete="one-time-code"
-          aria-label={t("login.verifyBtn")}
-          maxLength={6} placeholder="______"
-          value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-          required
-          className={`${inputCls} text-center tracking-[0.5em] text-lg`}
-          style={inputStyle}
-          onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
-          onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
+        {codeInput}
 
         <input type="password" placeholder={t("login.newPassword")} value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
           required minLength={8} className={inputCls} style={inputStyle}
           aria-label={t("login.newPassword")}
           autoComplete="new-password"
-          onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
-          onBlur={e => Object.assign(e.target.style, { borderColor: BORDER, background: SURFACE })} />
+          {...focusHandlers} />
 
-        {notice && (
-          /* `status` + `polite` : une confirmation ne doit pas couper la lecture
-             en cours, contrairement à l'erreur juste en dessous. */
-          <div role="status" aria-live="polite" className="text-xs text-center py-2 px-3 rounded-xl" style={{ color: ACCENT, background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>
-            {notice}
-          </div>
-        )}
-        {error && (
-          <div role="alert" className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20">
-            {error}
-          </div>
-        )}
+        <FormFeedback notice={notice} error={error} />
 
         <AppButton type="submit" disabled={loading || code.length < 6 || newPassword.length < 8} loading={loading} fullWidth size="lg">
           {t("login.resetBtn")}
@@ -551,5 +506,25 @@ export function LoginPage() {
           browse signed-out — the page already reserves space via its bottom padding. */}
       <BottomNav />
     </div>
+  );
+}
+
+/** Confirmation (discrète) puis erreur (annoncée) sous un formulaire. */
+function FormFeedback({ notice, error }: { notice: string | null; error: string | null }) {
+  return (
+    <>
+      {notice && (
+        /* `status` + `polite` : une confirmation ne doit pas couper la lecture
+           en cours, contrairement à l'erreur juste en dessous. */
+        <div role="status" aria-live="polite" className="text-xs text-center py-2 px-3 rounded-xl" style={{ color: ACCENT, background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>
+          {notice}
+        </div>
+      )}
+      {error && (
+        <div role="alert" className="text-red-400 text-xs text-center py-2 px-3 rounded-xl bg-red-500/10 border border-red-500/20">
+          {error}
+        </div>
+      )}
+    </>
   );
 }

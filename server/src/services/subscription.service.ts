@@ -19,7 +19,7 @@ export function stripeConfigured(): boolean {
   return !!process.env.STRIPE_SECRET_KEY;
 }
 
-export function getStripe(): Stripe {
+function getStripe(): Stripe {
   if (!process.env.STRIPE_SECRET_KEY) {
     throw Object.assign(new Error('Stripe is not configured'), { status: 501 });
   }
@@ -98,7 +98,7 @@ const PRO_TTL_MS = Number(process.env.PRO_CACHE_TTL_MS) || 60_000;
 const proCache = new TtlCache<boolean>(PRO_TTL_MS, 20_000, 'isPro');
 
 /** Oublie l'entitlement mémorisé pour cet utilisateur. */
-export function invalidateProCache(userId: string): void {
+function invalidateProCache(userId: string): void {
   proCache.delete(userId);
 }
 
@@ -141,7 +141,7 @@ interface UpsertOpts {
 
 /** Inserts or updates a user's subscription. Call this from a Stripe webhook
  *  (mapping the event to these fields) or from the dev-activation path. */
-export async function upsert(userId: string, opts: UpsertOpts): Promise<SubscriptionStatus> {
+async function upsert(userId: string, opts: UpsertOpts): Promise<SubscriptionStatus> {
   const {
     plan,
     status = 'active',

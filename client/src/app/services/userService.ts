@@ -34,12 +34,16 @@ import { authedFetch } from './authService';
 
 // ---- HTTP helpers (authenticated) ------------------------------------------
 
+/** Transforme une réponse non-OK en `Error` portant le message du serveur. */
+async function throwIfNotOk(res: Response): Promise<void> {
+  if (res.ok) return;
+  const err = await res.json().catch(() => ({ error: res.statusText }));
+  throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await authedFetch(path);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
-  }
+  await throwIfNotOk(res);
   return res.json() as Promise<T>;
 }
 
@@ -73,24 +77,15 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     method: 'POST',
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
-  }
+  await throwIfNotOk(res);
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
-/**
- * DELETE authentifié. Les quatre suppressions plus bas répètent ce bloc en
- * ligne ; elles marchent, on n'y touche pas — les nouvelles passent par ici.
- */
+/** DELETE authentifié. */
 async function del(path: string): Promise<void> {
   const res = await authedFetch(path, { method: 'DELETE' });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
-  }
+  await throwIfNotOk(res);
 }
 
 async function patch<T>(path: string, body: unknown): Promise<T> {
@@ -98,10 +93,7 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
     method: 'PATCH',
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
-  }
+  await throwIfNotOk(res);
   return res.json() as Promise<T>;
 }
 
@@ -245,10 +237,7 @@ export const profileApiService = {
       method: 'POST',
       body: JSON.stringify({ avatarDataUrl: dataUrl }),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
-    }
+    await throwIfNotOk(res);
     const { avatarUrl } = await res.json() as { avatarUrl: string };
     return avatarUrl;
   },
@@ -301,10 +290,7 @@ export const profileApiService = {
 
   leaveRoom: async (roomId: string): Promise<void> => {
     const res = await authedFetch(`/chat/rooms/${roomId}/leave`, { method: 'POST', body: JSON.stringify({}) });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
-    }
+    await throwIfNotOk(res);
   },
 
   pinRoom: (roomId: string, pinned: boolean): Promise<ChatRoom> =>
@@ -313,35 +299,20 @@ export const profileApiService = {
   getRoomMembers: (roomId: string): Promise<ChatRoomMember[]> =>
     get<ChatRoomMember[]>(`/chat/rooms/${roomId}/members`),
 
-  kickMember: async (roomId: string, userId: string): Promise<void> => {
-    const res = await authedFetch(`/chat/rooms/${roomId}/members/${userId}`, { method: 'DELETE' });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
-    }
-  },
+  kickMember: (roomId: string, userId: string): Promise<void> =>
+    del(`/chat/rooms/${roomId}/members/${userId}`),
 
   setMemberRole: (roomId: string, userId: string, role: 'admin' | 'member'): Promise<unknown> =>
     post(`/chat/rooms/${roomId}/members/${userId}/role`, { role }),
 
-  deleteRoom: async (roomId: string): Promise<void> => {
-    const res = await authedFetch(`/chat/rooms/${roomId}`, { method: 'DELETE' });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
-    }
-  },
+  deleteRoom: (roomId: string): Promise<void> =>
+    del(`/chat/rooms/${roomId}`),
 
   toggleReaction: (roomId: string, messageId: string, emoji: string): Promise<unknown> =>
     post(`/chat/rooms/${roomId}/messages/${messageId}/reactions`, { emoji }),
 
-  deleteMessage: async (roomId: string, messageId: string): Promise<void> => {
-    const res = await authedFetch(`/chat/rooms/${roomId}/messages/${messageId}`, { method: 'DELETE' });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error((err as { error?: string }).error ?? `API ${res.status}`);
-    }
-  },
+  deleteMessage: (roomId: string, messageId: string): Promise<void> =>
+    del(`/chat/rooms/${roomId}/messages/${messageId}`),
 
   // ── Modération — PRE_IOS_PLAN.md R4 ───────────────────────────────────────
 

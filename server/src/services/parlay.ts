@@ -47,9 +47,15 @@
  * = B » se multiplient encore, et une jambe en double se multiplie par
  * elle-même.
  *
- * ⚠️ MIROIR : `client/src/app/services/parlayMath.ts` porte la même logique,
- * parce que le coupon se recalcule hors ligne à chaque geste (cf. le
- * commentaire de `BetContext.tsx`). Les deux fichiers doivent bouger ensemble.
+ * ⚠️ PARTAGÉ AVEC LE CLIENT. Le coupon se recalcule hors ligne à chaque geste
+ * (cf. le commentaire de `BetContext.tsx`), donc le client importe CE fichier
+ * directement (`../../../../server/src/services/parlay`). Il existait avant en
+ * double (`client/src/app/services/parlayMath.ts`, gardé identique par un
+ * test) ; la copie a été supprimée le 2026-09-15. Conséquences :
+ *   - aucun import ici — ni Node, ni `pg`, ni un autre module du serveur :
+ *     le bundle navigateur l'embarque tel quel ;
+ *   - `client/vite.config.ts` autorise ce fichier dans `server.fs.allow`, sans
+ *     quoi `vite dev` refuse de le servir (il est hors de la racine client).
  */
 
 export interface ParlayLeg {

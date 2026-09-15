@@ -30,7 +30,7 @@ export interface GameInjuries {
 export interface ManualFactors { injuries: ManualFactor; lineup: ManualFactor }
 
 /** Clé de saisie d'un match : « VISITEUR@MAISON », abréviations en majuscules. */
-export function injuryGameKey(homeAbbr: string, awayAbbr: string): string {
+function injuryGameKey(homeAbbr: string, awayAbbr: string): string {
   return `${awayAbbr.toUpperCase()}@${homeAbbr.toUpperCase()}`;
 }
 

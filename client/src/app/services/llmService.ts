@@ -95,7 +95,7 @@ export async function getLLMUsage(): Promise<LLMUsage> {
  * `askLLM` reste la porte d'entrée simple pour les appelants qui n'en ont pas
  * besoin.
  */
-export async function askLLMDetailed(
+async function askLLMDetailed(
   prompt: string,
   opts: { taskType: LLMTaskType; locale: 'fr' | 'en'; model?: string }
 ): Promise<LLMAnswer> {

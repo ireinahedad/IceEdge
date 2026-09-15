@@ -30,7 +30,7 @@ export interface TravelFeatures {
 const R_EARTH_KM = 6371;
 
 /** Distance grand-cercle entre deux arénas (km). 0 si l'un est inconnu. */
-export function haversine(aAbbr: string, bAbbr: string): number {
+function haversine(aAbbr: string, bAbbr: string): number {
   const a = getArena(aAbbr);
   const b = getArena(bAbbr);
   if (!a || !b) return 0;

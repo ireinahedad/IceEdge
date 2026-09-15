@@ -289,17 +289,6 @@ export async function getBestBets(opts: BestBetsOptions = {}): Promise<BestBetsR
   return bestBetsCache.wrap(key, () => computeBestBets(o));
 }
 
-/**
- * Invalidation manuelle (tests, job de préchauffage).
- *
- * **Aucun appelant aujourd'hui — gardée exprès** (décision du 2026-08-10). Un
- * test d'intégration sur `getBestBets` doit pouvoir repartir d'un cache froid ;
- * sans ce point d'entrée il devrait attendre le TTL ou réimporter le module.
- */
-export function clearBestBetsCache(): void {
-  bestBetsCache.clear();
-}
-
 async function computeBestBets(o: NormalizedOptions): Promise<BestBetsResult> {
   const { limit, source, days, maxPlayers, mlDepth } = o;
 

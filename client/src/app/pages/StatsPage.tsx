@@ -7,7 +7,6 @@ import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { HowItWorksSheet } from "../components/HowItWorksSheet";
 import { useSport } from "../context/SportContext";
 import { PlayersTab } from "../components/PlayersTab";
-import { LastNGamesSection } from "../components/LastNGamesSection";
 import { ScheduleContent } from "./SchedulePage";
 import { FramedLabel } from "../components/brand/FramedLabel";
 import { useI18n } from "../i18n";

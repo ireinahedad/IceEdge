@@ -13,7 +13,7 @@ import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { nhlApiService } from "../../services/nhlApiService";
 import type { NHLGame } from "../../types/bet";
-import { SortHead } from "./ChartControls";
+import { MetricChips, RowsSkeleton, SortHead } from "./ChartControls";
 import { BG_CARD, BG_CELL, DASH, SortDir, selectCls } from "./chartsTheme";
 
 /* ── All games (league schedule + results) ──────────────────
@@ -199,13 +199,7 @@ export function AllGamesCharts() {
       ? (cursor ? monthLabel(cursor) : "—")
       : range === "5d" ? t("chart.gm.next5") : t("chart.gm.next10");
 
-  const skeleton = (
-    <div className="px-4 py-6 flex flex-col gap-2">
-      {Array.from({ length: 6 }, (_, i) => (
-        <div key={i} className="h-6 rounded animate-pulse" style={{ background: BG_CELL }} />
-      ))}
-    </div>
-  );
+  const skeleton = <RowsSkeleton count={6} />;
 
   return (
     <div className="flex flex-col gap-4">
@@ -336,26 +330,7 @@ export function AllGamesCharts() {
           <div className="rounded-2xl border border-white/20 overflow-hidden" style={{ background: BG_CARD }}>
             <div className="px-4 pt-3 pb-2 border-b border-white/10">
               <p className="text-white text-sm font-semibold mb-2">{t("chart.gm.results")}</p>
-              <div className="flex flex-wrap gap-1.5">
-                {metrics.map((m) => {
-                  const isActive = m.key === metric.key;
-                  return (
-                    <button
-                      key={m.key}
-                      onClick={() => toggleSort(m.key)}
-                      className="px-3 py-1 rounded-full text-[11px] font-semibold transition-colors"
-                      style={
-                        isActive
-                          ? { background: accent + "22", color: accent, border: `1px solid ${accent}66` }
-                          : { background: BG_CELL, color: "#8a9ea6", border: "1px solid transparent" }
-                      }
-                    >
-                      {m.label}
-                      {isActive && <span className="ml-1 text-[11px]">{sort.dir === "asc" ? "▲" : "▼"}</span>}
-                    </button>
-                  );
-                })}
-              </div>
+              <MetricChips metrics={metrics} activeKey={metric.key} dir={sort.dir} onToggle={toggleSort} accent={accent} />
             </div>
 
             {loading ? skeleton : past.length === 0 ? (

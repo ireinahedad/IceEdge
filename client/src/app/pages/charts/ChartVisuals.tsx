@@ -241,6 +241,16 @@ export function PieBreakdowns({
   );
 }
 
+/** Props communes aux deux tableaux d'équipe (statistiques et tendances). */
+type TeamTableProps = {
+  title: string;
+  teamSeason: TeamSeasonOfficial | null;
+  opponent: string;
+  oppSelect: ReactNode;
+  accent: string;
+  t: (k: string, v?: Record<string, string | number>) => string;
+};
+
 /* ── Team stats table (rows = official metrics) ─────────── */
 export function TeamStatsTable({
   title,
@@ -249,14 +259,7 @@ export function TeamStatsTable({
   oppSelect,
   accent,
   t,
-}: {
-  title: string;
-  teamSeason: TeamSeasonOfficial | null;
-  opponent: string;
-  oppSelect: ReactNode;
-  accent: string;
-  t: (k: string, v?: Record<string, string | number>) => string;
-}) {
+}: TeamTableProps) {
   const o = teamSeason?.official ?? null;
   const vo = opponent ? teamSeason?.vsOpponent[opponent] : undefined;
 
@@ -272,45 +275,28 @@ export function TeamStatsTable({
     : [];
 
   return (
-    <div className="rounded-2xl border border-white/20 overflow-hidden" style={{ background: BG_CARD }}>
-      <div className="px-4 pt-3 pb-2 border-b border-white/10">
-        <p className="text-white text-sm font-semibold">{title}</p>
-      </div>
-      {!teamSeason ? (
-        <div className="px-4 py-6 flex flex-col gap-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-6 rounded animate-pulse" style={{ background: BG_CELL }} />
-          ))}
-        </div>
-      ) : rows.length === 0 ? (
-        <p className="px-4 py-6 text-center text-[#8a9ea6] text-sm">{t("chart.noData")}</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-xs">
-            <thead>
-              <tr className="text-[#8a9ea6]">
-                <th className="text-left font-semibold px-4 py-2 sticky left-0 z-10" style={{ background: BG_CARD }}>&nbsp;</th>
-                <th className="font-semibold px-3 py-2 text-center">{t("chart.col.total")}</th>
-                <th className="font-semibold px-3 py-2 text-center">{t("chart.col.perGame")}</th>
-                <th className="px-3 py-2 whitespace-nowrap">{oppSelect}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.label} className="border-t border-white/[0.06]">
-                  <td className="px-4 py-2.5 sticky left-0 z-10 whitespace-nowrap text-white font-medium" style={{ background: BG_CARD }}>
-                    {r.label}
-                  </td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-white">{r.total}</td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-[#c8d3cc]">{r.avg}</td>
-                  <td className="px-3 py-2.5 text-center tabular-nums" style={{ color: accent }}>{r.vs}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+    <TableCard title={title} loading={!teamSeason} empty={rows.length === 0} noData={t("chart.noData")}>
+      <thead>
+        <tr className="text-[#8a9ea6]">
+          <th className="text-left font-semibold px-4 py-2 sticky left-0 z-10" style={{ background: BG_CARD }}>&nbsp;</th>
+          <th className="font-semibold px-3 py-2 text-center">{t("chart.col.total")}</th>
+          <th className="font-semibold px-3 py-2 text-center">{t("chart.col.perGame")}</th>
+          <th className="px-3 py-2 whitespace-nowrap">{oppSelect}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.label} className="border-t border-white/[0.06]">
+            <td className="px-4 py-2.5 sticky left-0 z-10 whitespace-nowrap text-white font-medium" style={{ background: BG_CARD }}>
+              {r.label}
+            </td>
+            <td className="px-3 py-2.5 text-center tabular-nums text-white">{r.total}</td>
+            <td className="px-3 py-2.5 text-center tabular-nums text-[#c8d3cc]">{r.avg}</td>
+            <td className="px-3 py-2.5 text-center tabular-nums" style={{ color: accent }}>{r.vs}</td>
+          </tr>
+        ))}
+      </tbody>
+    </TableCard>
   );
 }
 
@@ -325,14 +311,7 @@ export function TeamTrendsTable({
   oppSelect,
   accent,
   t,
-}: {
-  title: string;
-  teamSeason: TeamSeasonOfficial | null;
-  opponent: string;
-  oppSelect: ReactNode;
-  accent: string;
-  t: (k: string, v?: Record<string, string | number>) => string;
-}) {
+}: TeamTableProps) {
   const o = teamSeason?.official ?? null;
   const rec = teamSeason?.record ?? null;
   const vo = opponent ? teamSeason?.vsOpponent[opponent] : undefined;
@@ -362,39 +341,60 @@ export function TeamTrendsTable({
   ];
 
   return (
+    <TableCard title={title} loading={!teamSeason} empty={rows.length === 0} noData={t("chart.noData")}>
+      <thead>
+        <tr className="text-[#8a9ea6]">
+          <th className="text-left font-semibold px-4 py-2 sticky left-0 z-10" style={{ background: BG_CARD }}>&nbsp;</th>
+          <th className="font-semibold px-3 py-2 text-center">{t("chart.col.season")}</th>
+          <th className="px-3 py-2 whitespace-nowrap">{oppSelect}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.label} className="border-t border-white/[0.06]">
+            <td className="px-4 py-2.5 sticky left-0 z-10 whitespace-nowrap text-white font-medium" style={{ background: BG_CARD }}>
+              {r.label}
+            </td>
+            <td className="px-3 py-2.5 text-center tabular-nums text-white">{r.season}</td>
+            <td className="px-3 py-2.5 text-center tabular-nums" style={{ color: accent }}>{r.vs}</td>
+          </tr>
+        ))}
+      </tbody>
+    </TableCard>
+  );
+}
+
+/* ── Carte de tableau : titre, squelette, état vide, défilement horizontal ── */
+function TableCard({
+  title,
+  loading,
+  empty,
+  noData,
+  children,
+}: {
+  title: string;
+  loading: boolean;
+  empty: boolean;
+  noData: string;
+  children: ReactNode;
+}) {
+  return (
     <div className="rounded-2xl border border-white/20 overflow-hidden" style={{ background: BG_CARD }}>
       <div className="px-4 pt-3 pb-2 border-b border-white/10">
         <p className="text-white text-sm font-semibold">{title}</p>
       </div>
-      {!teamSeason ? (
+      {loading ? (
         <div className="px-4 py-6 flex flex-col gap-2">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-6 rounded animate-pulse" style={{ background: BG_CELL }} />
           ))}
         </div>
-      ) : rows.length === 0 ? (
-        <p className="px-4 py-6 text-center text-[#8a9ea6] text-sm">{t("chart.noData")}</p>
+      ) : empty ? (
+        <p className="px-4 py-6 text-center text-[#8a9ea6] text-sm">{noData}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-xs">
-            <thead>
-              <tr className="text-[#8a9ea6]">
-                <th className="text-left font-semibold px-4 py-2 sticky left-0 z-10" style={{ background: BG_CARD }}>&nbsp;</th>
-                <th className="font-semibold px-3 py-2 text-center">{t("chart.col.season")}</th>
-                <th className="px-3 py-2 whitespace-nowrap">{oppSelect}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.label} className="border-t border-white/[0.06]">
-                  <td className="px-4 py-2.5 sticky left-0 z-10 whitespace-nowrap text-white font-medium" style={{ background: BG_CARD }}>
-                    {r.label}
-                  </td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-white">{r.season}</td>
-                  <td className="px-3 py-2.5 text-center tabular-nums" style={{ color: accent }}>{r.vs}</td>
-                </tr>
-              ))}
-            </tbody>
+            {children}
           </table>
         </div>
       )}

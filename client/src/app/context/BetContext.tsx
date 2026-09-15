@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from "react";
-import { combineParlayLegs } from "../services/parlayMath";
+// Même module que la route serveur, importé tel quel : voir l'en-tête de parlay.ts.
+import { combineParlayLegs } from "../../../../server/src/services/parlay";
 import { predictionApiService } from "../services/predictionApiService";
 import type { BetLeg } from "../types/bet";
 
@@ -18,7 +19,7 @@ interface BetContextValue {
    */
   combinedProbability: number | null;
   /**
-   * Ce que `parlayMath` a VU en combinant les jambes.
+   * Ce que `parlay.ts` a VU en combinant les jambes.
    *
    * Il le calculait déjà et on le jetait : l'écran n'avait aucun moyen de dire
    * pourquoi un coupon tombe à 0 %, ni qu'une jambe venait de disparaître du
@@ -114,7 +115,7 @@ function loadSlip(): BetLeg[] {
 //
 // Ce qui a changé le 2026-09-13 : la formule elle-même était fausse. Multiplier
 // « domicile gagne » par « extérieur gagne » sur le même match donnait 22,8 %
-// pour un événement impossible. Le calcul vit maintenant dans `parlayMath.ts`,
+// pour un événement impossible. Le calcul vit maintenant dans `server/src/services/parlay.ts`,
 // qui reconnaît les jambes incompatibles, dupliquées et impliquées.
 //
 // Il reste LOCAL : il ne raisonne que sur l'identité des jambes, sans lire une
@@ -147,7 +148,7 @@ function combineLegs(legs: BetLeg[]): number | null {
 }
 
 /** Détail des relations entre jambes — pour que le coupon puisse s'expliquer. */
-export function analyseSlip(legs: BetLeg[]) {
+function analyseSlip(legs: BetLeg[]) {
   return combineParlayLegs(legs.map((l) => ({
     marketType:     l.marketType,
     probability:    l.probability,

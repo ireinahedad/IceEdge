@@ -19,7 +19,7 @@ export interface Arena {
   alt: number;  // altitude (m)
 }
 
-export const ARENAS: Record<string, Arena> = {
+const ARENAS: Record<string, Arena> = {
   ANA: { name: 'Honda Center',            city: 'Anaheim',        lat: 33.8078,  lon: -117.8765, tz: -8, alt: 48 },
   BOS: { name: 'TD Garden',               city: 'Boston',         lat: 42.3662,  lon: -71.0621,  tz: -5, alt: 6 },
   BUF: { name: 'KeyBank Center',          city: 'Buffalo',        lat: 42.8750,  lon: -78.8765,  tz: -5, alt: 183 },

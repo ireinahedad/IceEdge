@@ -42,7 +42,7 @@ function lean(x: number, ref: number, spread: number): number {
  * Répartition au plus fort reste : les poids entiers somment à 100 pile, sans
  * qu'un facteur non nul tombe à 0.
  */
-export function normalizeWeights(factors: Factor[]): Factor[] {
+function normalizeWeights(factors: Factor[]): Factor[] {
   const sum = factors.reduce((s, f) => s + f.weight, 0);
   if (sum <= 0) return factors.map(f => ({ ...f }));
 
@@ -57,10 +57,21 @@ export function normalizeWeights(factors: Factor[]): Factor[] {
 }
 
 /** Moyenne pondérée des facteurs → pourcentage entier borné. */
-export function blendPct(factors: Factor[]): number {
+function blendPct(factors: Factor[]): number {
   const wsum = factors.reduce((s, f) => s + f.weight, 0) || 1;
   const p = factors.reduce((s, f) => s + f.weight * f.value, 0) / wsum;
   return Math.round(Math.max(3, Math.min(97, p * 100)));
+}
+/**
+ * Pose les facteurs sur une option (factors + factorGroup) et recale rulePct.
+ * Poids normalisés AVANT le blend : le client recalcule le score à partir des
+ * poids qu'il reçoit, donc les deux chiffres doivent partir des mêmes.
+ */
+function setFactors(o: any, group: string, factors: Factor[]): void {
+  const norm = normalizeWeights(factors);
+  o.factors = norm.map(f => ({ id: f.id, label: f.label, weight: f.weight, value: f.value }));
+  o.factorGroup = group;
+  o.rulePct = blendPct(norm);
 }
 function inv(factors: Factor[]): Factor[] { return factors.map(f => ({ ...f, value: clamp(1 - f.value) })); }
 
@@ -239,46 +250,38 @@ function pkPerfectFactors(c: GameFactorCtx): Factor[] {
  * (factors + factorGroup) et recale rulePct = blend(facteurs par défaut).
  */
 export function attachGameFactors(groups: any[], c: GameFactorCtx): void {
-  const set = (o: any, group: string, factors: Factor[]) => {
-    // Poids normalisés AVANT le blend : le client recalcule le score à partir
-    // des poids qu'il reçoit, donc les deux chiffres doivent partir des mêmes.
-    const norm = normalizeWeights(factors);
-    o.factors = norm.map(f => ({ id: f.id, label: f.label, weight: f.weight, value: f.value }));
-    o.factorGroup = group;
-    o.rulePct = blendPct(norm);
-  };
   for (const g of groups) {
     for (const o of g.options) {
       const id: string = o.id;
       // Résultat du match / puck line → famille "match"
-      if (id === 'ml-home') set(o, 'match', c.matchFactors);
-      else if (id === 'ml-away') set(o, 'match', inv(c.matchFactors));
-      else if (id === 'ml-ot' || id === 'ot-yes') set(o, 'ot', otFactors(c));
-      else if (id === 'ot-no') set(o, 'ot', inv(otFactors(c)));
-      else if (id === 'pl-home') set(o, 'match', c.matchFactors.map(f => ({ ...f, value: clamp(f.value - 0.15) })));
-      else if (id === 'pl-away') set(o, 'match', inv(c.matchFactors.map(f => ({ ...f, value: clamp(f.value - 0.15) }))));
+      if (id === 'ml-home') setFactors(o, 'match', c.matchFactors);
+      else if (id === 'ml-away') setFactors(o, 'match', inv(c.matchFactors));
+      else if (id === 'ml-ot' || id === 'ot-yes') setFactors(o, 'ot', otFactors(c));
+      else if (id === 'ot-no') setFactors(o, 'ot', inv(otFactors(c)));
+      else if (id === 'pl-home') setFactors(o, 'match', c.matchFactors.map(f => ({ ...f, value: clamp(f.value - 0.15) })));
+      else if (id === 'pl-away') setFactors(o, 'match', inv(c.matchFactors.map(f => ({ ...f, value: clamp(f.value - 0.15) }))));
       // Totaux
-      else if (id === 'o55') set(o, 'totals', totalsFactors(5.5, c));
-      else if (id === 'u55') set(o, 'totals', inv(totalsFactors(5.5, c)));
-      else if (id === 'o65') set(o, 'totals', totalsFactors(6.5, c));
-      else if (id === 'u65') set(o, 'totals', inv(totalsFactors(6.5, c)));
-      else if (id === 'btts-yes') set(o, 'totals', bttsFactors(c));
-      else if (id === 'btts-no') set(o, 'totals', inv(bttsFactors(c)));
-      else if (id === 'p1-o05' || id === 'p1-o15' || id === 'p1-o25') set(o, 'totals', totalsFactors(id === 'p1-o05' ? 0.5 : id === 'p1-o15' ? 1.5 : 2.5, { ...c, gfH: c.gfH * 0.305, gfA: c.gfA * 0.305, gaH: c.gaH * 0.305, gaA: c.gaA * 0.305, lambdaT: c.lambdaT * 0.305, hSF: c.hSF * 0.305, aSF: c.aSF * 0.305 }));
+      else if (id === 'o55') setFactors(o, 'totals', totalsFactors(5.5, c));
+      else if (id === 'u55') setFactors(o, 'totals', inv(totalsFactors(5.5, c)));
+      else if (id === 'o65') setFactors(o, 'totals', totalsFactors(6.5, c));
+      else if (id === 'u65') setFactors(o, 'totals', inv(totalsFactors(6.5, c)));
+      else if (id === 'btts-yes') setFactors(o, 'totals', bttsFactors(c));
+      else if (id === 'btts-no') setFactors(o, 'totals', inv(bttsFactors(c)));
+      else if (id === 'p1-o05' || id === 'p1-o15' || id === 'p1-o25') setFactors(o, 'totals', totalsFactors(id === 'p1-o05' ? 0.5 : id === 'p1-o15' ? 1.5 : 2.5, { ...c, gfH: c.gfH * 0.305, gfA: c.gfA * 0.305, gaH: c.gaH * 0.305, gaA: c.gaA * 0.305, lambdaT: c.lambdaT * 0.305, hSF: c.hSF * 0.305, aSF: c.aSF * 0.305 }));
       // Période
-      else if (/^p[123]-home$/.test(id)) set(o, 'period', periodFactors(o.rulePct / 100, c));
-      else if (/^p[123]-away$/.test(id)) set(o, 'period', inv(periodFactors(1 - o.rulePct / 100, c)));
-      else if (/^p[123]-draw$/.test(id)) set(o, 'period_draw', periodDrawFactors(o.rulePct / 100, c));
+      else if (/^p[123]-home$/.test(id)) setFactors(o, 'period', periodFactors(o.rulePct / 100, c));
+      else if (/^p[123]-away$/.test(id)) setFactors(o, 'period', inv(periodFactors(1 - o.rulePct / 100, c)));
+      else if (/^p[123]-draw$/.test(id)) setFactors(o, 'period_draw', periodDrawFactors(o.rulePct / 100, c));
       // Marge
-      else if (id === 'wm-1') set(o, 'margin', marginFactors(o.rulePct / 100, 'by1', c));
-      else if (id === 'wm-2') set(o, 'margin', marginFactors(o.rulePct / 100, 'by2', c));
-      else if (id === 'wm-3p') set(o, 'margin', marginFactors(o.rulePct / 100, 'by3', c));
+      else if (id === 'wm-1') setFactors(o, 'margin', marginFactors(o.rulePct / 100, 'by1', c));
+      else if (id === 'wm-2') setFactors(o, 'margin', marginFactors(o.rulePct / 100, 'by2', c));
+      else if (id === 'wm-3p') setFactors(o, 'margin', marginFactors(o.rulePct / 100, 'by3', c));
       // Extras équipe (vue équipe uniquement)
-      else if (id === 'tg-o25') set(o, 'team_totals', teamTotalFactors(c));
-      else if (id === 'tg-u25') set(o, 'team_totals', inv(teamTotalFactors(c)));
-      else if (id === 'cs-for') set(o, 'team_shutout', shutoutFactors(c));
-      else if (id === 'ppgoal') set(o, 'team_special', ppGoalFactors(c));
-      else if (id === 'pk-perfect') set(o, 'team_special', pkPerfectFactors(c));
+      else if (id === 'tg-o25') setFactors(o, 'team_totals', teamTotalFactors(c));
+      else if (id === 'tg-u25') setFactors(o, 'team_totals', inv(teamTotalFactors(c)));
+      else if (id === 'cs-for') setFactors(o, 'team_shutout', shutoutFactors(c));
+      else if (id === 'ppgoal') setFactors(o, 'team_special', ppGoalFactors(c));
+      else if (id === 'pk-perfect') setFactors(o, 'team_special', pkPerfectFactors(c));
     }
   }
 }
@@ -401,28 +404,22 @@ function pimFactors(line: number, c: PlayerFactorCtx): Factor[] {
 }
 
 export function attachPlayerFactors(groups: any[], c: PlayerFactorCtx): void {
-  const set = (o: any, group: string, factors: Factor[]) => {
-    const norm = normalizeWeights(factors);
-    o.factors = norm.map(f => ({ ...f }));
-    o.factorGroup = group;
-    o.rulePct = blendPct(norm);
-  };
   for (const g of groups) {
     for (const o of g.options) {
       const id: string = o.id;
       const line = lineFromId(id);
       if (g.id === 'goals') {
-        if (id === 'g-first') set(o, 'player_first_goal', firstGoalFactors(c));
-        else set(o, 'player_goals', goalFactors(id === 'g-2plus' ? 1.5 : 0.5, c));
+        if (id === 'g-first') setFactors(o, 'player_first_goal', firstGoalFactors(c));
+        else setFactors(o, 'player_goals', goalFactors(id === 'g-2plus' ? 1.5 : 0.5, c));
       }
-      else if (g.id === 'assists') set(o, 'player_assists', assistFactors(id === 'a-2plus' ? 1.5 : id === 'a-3plus' ? 2.5 : 0.5, c));
-      else if (g.id === 'points')  set(o, 'player_points', pointFactors(id === 'pts-2plus' ? 1.5 : id === 'pts-3plus' ? 2.5 : 0.5, c));
-      else if (g.id === 'shots'  && line != null) set(o, 'player_shots',  shotFactors(line, c));
-      else if (g.id === 'hits'   && line != null) set(o, 'player_hits',   hitFactors(line, c));
-      else if (g.id === 'blocks' && line != null) set(o, 'player_blocks', blockFactors(line, c));
-      else if (id === 'pp-point') set(o, 'player_pp', ppPointFactors(c));
-      else if (id === 'pp-goal')  set(o, 'player_pp', ppGoalPlayerFactors(c));
-      else if (g.id === 'pim'    && line != null) set(o, 'player_pim',    pimFactors(line, c));
+      else if (g.id === 'assists') setFactors(o, 'player_assists', assistFactors(id === 'a-2plus' ? 1.5 : id === 'a-3plus' ? 2.5 : 0.5, c));
+      else if (g.id === 'points')  setFactors(o, 'player_points', pointFactors(id === 'pts-2plus' ? 1.5 : id === 'pts-3plus' ? 2.5 : 0.5, c));
+      else if (g.id === 'shots'  && line != null) setFactors(o, 'player_shots',  shotFactors(line, c));
+      else if (g.id === 'hits'   && line != null) setFactors(o, 'player_hits',   hitFactors(line, c));
+      else if (g.id === 'blocks' && line != null) setFactors(o, 'player_blocks', blockFactors(line, c));
+      else if (id === 'pp-point') setFactors(o, 'player_pp', ppPointFactors(c));
+      else if (id === 'pp-goal')  setFactors(o, 'player_pp', ppGoalPlayerFactors(c));
+      else if (g.id === 'pim'    && line != null) setFactors(o, 'player_pim',    pimFactors(line, c));
     }
   }
 }
@@ -440,10 +437,15 @@ export interface GoalieFactorCtx {
 
 const LEAGUE_SAVE_PCT = 0.902;
 
+/** Save % situé autour de la moyenne de ligue (0-1) ; 0,5 si inconnu. */
+function saveEfficiency(c: GoalieFactorCtx): number {
+  return c.savePct > 0 ? lean(c.savePct, LEAGUE_SAVE_PCT, 0.012) : 0.5;
+}
+
 /** Arrêts O/U : charge de tirs + efficacité + tenue défensive de l'équipe. */
 function savesFactors(line: number, c: GoalieFactorCtx): Factor[] {
   const shotsFaced = c.savesPg + c.gaPg; // tirs cadrés subis / match
-  const eff = c.savePct > 0 ? lean(c.savePct, LEAGUE_SAVE_PCT, 0.012) : 0.5;
+  const eff = saveEfficiency(c);
   return [
     { id: 'workload',   label: 'Charge de tirs subie', weight: 60, value: poissonOver(shotsFaced * (c.savePct > 0 ? c.savePct : LEAGUE_SAVE_PCT), line) },
     { id: 'efficiency', label: 'Efficacité (save %)',  weight: 25, value: clamp(eff) },
@@ -453,7 +455,7 @@ function savesFactors(line: number, c: GoalieFactorCtx): Factor[] {
 
 /** Buts alloués O/U (côté over). */
 function gaFactors(line: number, c: GoalieFactorCtx): Factor[] {
-  const eff = c.savePct > 0 ? lean(c.savePct, LEAGUE_SAVE_PCT, 0.012) : 0.5;
+  const eff = saveEfficiency(c);
   return [
     { id: 'gaRate',     label: 'Buts alloués / match', weight: 55, value: poissonOver(c.gaPg, line) },
     { id: 'efficiency', label: 'Efficacité (save %)',  weight: 30, value: clamp(1 - eff) },
@@ -463,7 +465,7 @@ function gaFactors(line: number, c: GoalieFactorCtx): Factor[] {
 
 /** Victoire du gardien. */
 function goalieWinFactors(c: GoalieFactorCtx): Factor[] {
-  const eff = c.savePct > 0 ? lean(c.savePct, LEAGUE_SAVE_PCT, 0.012) : 0.5;
+  const eff = saveEfficiency(c);
   return [
     { id: 'teamStrength',  label: 'Force de l’équipe',   weight: 50, value: clamp(c.winPct) },
     { id: 'goalieQuality', label: 'Qualité du gardien',  weight: 30, value: clamp(eff) },
@@ -473,7 +475,7 @@ function goalieWinFactors(c: GoalieFactorCtx): Factor[] {
 
 /** Blanchissage. */
 function goalieShutoutFactors(c: GoalieFactorCtx): Factor[] {
-  const eff = c.savePct > 0 ? lean(c.savePct, LEAGUE_SAVE_PCT, 0.012) : 0.5;
+  const eff = saveEfficiency(c);
   const history = clamp(c.shutoutRate, 0.02, 0.4);
   return [
     { id: 'model',         label: 'Buts alloués attendus', weight: 45, value: clamp(Math.exp(-c.gaPg), 0.02, 0.6) },
@@ -487,25 +489,19 @@ function poissonUnderF(lambda: number, line: number): number {
 }
 
 export function attachGoalieFactors(groups: any[], c: GoalieFactorCtx): void {
-  const set = (o: any, group: string, factors: Factor[]) => {
-    const norm = normalizeWeights(factors);
-    o.factors = norm.map(f => ({ ...f }));
-    o.factorGroup = group;
-    o.rulePct = blendPct(norm);
-  };
   for (const g of groups) {
     for (const o of g.options) {
       const id: string = o.id;
       if (g.id === 'saves') {
         const line = id === 'sv-o245' ? 24.5 : id === 'sv-o275' ? 27.5 : 29.5;
-        set(o, 'goalie_saves', savesFactors(line, c));
+        setFactors(o, 'goalie_saves', savesFactors(line, c));
       } else if (g.id === 'ga') {
-        if (id === 'ga-u25') set(o, 'goalie_ga', inv(gaFactors(2.5, c)));
-        else set(o, 'goalie_ga', gaFactors(id === 'ga-o15' ? 1.5 : 2.5, c));
+        if (id === 'ga-u25') setFactors(o, 'goalie_ga', inv(gaFactors(2.5, c)));
+        else setFactors(o, 'goalie_ga', gaFactors(id === 'ga-o15' ? 1.5 : 2.5, c));
       } else if (id === 'gr-win') {
-        set(o, 'goalie_win', goalieWinFactors(c));
+        setFactors(o, 'goalie_win', goalieWinFactors(c));
       } else if (id === 'gr-shutout') {
-        set(o, 'goalie_shutout', goalieShutoutFactors(c));
+        setFactors(o, 'goalie_shutout', goalieShutoutFactors(c));
       }
     }
   }

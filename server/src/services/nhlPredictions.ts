@@ -194,13 +194,10 @@ function fmt(n: number, decimals = 2): string {
 
 // ─── League constants ─────────────────────────────────────────────────────────
 
-const HOME_ICE_ADJ   = 0.02;   // résidu d'avantage local (splits domicile/route captent le reste)
 const LEAGUE_AVG_GPG = 3.05;   // buts/match moyens par équipe (ligue)
 const LEAGUE_AVG_SOG = 30;     // tirs/match moyens (ligue)
 const OT_BASE        = 0.225;  // ~22.5% des matchs NHL vont en prolongation
-const B2B_WIN_PEN    = 0.05;   // pénalité de force pour un back-to-back
 const B2B_GOAL_PEN   = 0.04;   // baisse de λ pour un back-to-back
-const REST_EDGE      = 0.010;  // avantage par jour de repos supplémentaire (cap)
 
 /** Per-period goal fractions (empirical NHL averages) */
 const PERIOD_DIST = [0.305, 0.365, 0.330] as const;
@@ -252,15 +249,6 @@ function calibrateWin(p: number): number {
   const q = clamp(p, 1e-6, 1 - 1e-6);
   const z = Math.log(q / (1 - q));
   return clamp(1 / (1 + Math.exp(-(WIN_CAL_A * z + WIN_CAL_B))), 0.03, 0.97);
-}
-
-/**
- * Force d'équipe combinée : mélange win% saison + split (domicile/route) + forme L10,
- * puis pénalité back-to-back. Retourne une valeur 0–1.
- */
-function teamStrength(seasonWin: number, splitWin: number, last10: number, b2b: 0 | 1): number {
-  const blended = 0.55 * seasonWin + 0.25 * splitWin + 0.20 * last10;
-  return clamp(blended * (1 - B2B_WIN_PEN * b2b), 0.05, 0.95);
 }
 
 // ─── Game markets ─────────────────────────────────────────────────────────────

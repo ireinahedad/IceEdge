@@ -29,7 +29,7 @@
 /** Build-time target. 'web' unless the iOS build script sets VITE_TARGET=ios. */
 const TARGET: 'web' | 'ios' = import.meta.env.VITE_TARGET === 'ios' ? 'ios' : 'web';
 
-export const isWeb = TARGET === 'web';
+const isWeb = TARGET === 'web';
 export const isIOS = TARGET === 'ios';
 
 /** The single place where web and iOS are allowed to differ. */

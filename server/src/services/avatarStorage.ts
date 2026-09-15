@@ -63,7 +63,7 @@ const ALLOWED_TYPES: ReadonlyMap<string, string> = new Map([
   ['image/png',  'png'],
 ]);
 
-export const isAvatarStorageConfigured = Boolean(
+const isAvatarStorageConfigured = Boolean(
   ACCOUNT_ID && ACCESS_KEY && SECRET_KEY && BUCKET && PUBLIC_URL,
 );
 

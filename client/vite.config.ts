@@ -31,6 +31,16 @@ export default defineConfig({
     },
   },
 
+  server: {
+    fs: {
+      // `BetContext.tsx` importe `server/src/services/parlay.ts` (module pur,
+      // partagé avec la route). Il est hors de la racine client : sans cette
+      // liste, `vite dev` refuse de le servir. Poser `allow` remplace la valeur
+      // par défaut, d'où la racine client en premier.
+      allow: [__dirname, path.resolve(__dirname, '../server/src/services/parlay.ts')],
+    },
+  },
+
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
 

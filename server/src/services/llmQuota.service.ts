@@ -133,7 +133,7 @@ export const WORST_CASE_COST_PER_REQUEST =
  * annoncer un nombre qui change tout seul — et c'est comme ça qu'une page de
  * vente finit par mentir.
  */
-export const PROMISED_MONTHLY_QUOTA = num('LLM_PROMISED_QUOTA', 500);
+const PROMISED_MONTHLY_QUOTA = num('LLM_PROMISED_QUOTA', 500);
 
 /**
  * Plafond mensuel de requêtes par abonné Pro — celui qui est RÉELLEMENT
@@ -167,7 +167,7 @@ export const MONTHLY_QUOTA: number = (() => {
  * gêner un lancement, assez bas pour qu'une erreur d'un facteur 10 se voie
  * avant la facture.
  */
-export const GLOBAL_MONTHLY_CAP = num('LLM_GLOBAL_MONTHLY_CAP', 10_000);
+const GLOBAL_MONTHLY_CAP = num('LLM_GLOBAL_MONTHLY_CAP', 10_000);
 
 // Journalisé au démarrage : un plafond aberrant (0, ou 100 000) doit sauter aux
 // yeux dans les logs de déploiement, pas se découvrir sur un relevé bancaire.

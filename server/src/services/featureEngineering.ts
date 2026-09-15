@@ -16,6 +16,7 @@ import { getArena } from '../data/arenas';
 import { fetchOddsImplied, fetchTotalsOdds } from './oddsClient';
 import { getStartingGoalies } from './startingGoalies';
 import { getScratchesDay } from './scratches';
+import { getTeam } from './prediction/scoreModel';
 
 /** Options d'enrichissement pour buildGameFeatures (cotes live, lineup). */
 export interface GameFeatureOpts {
@@ -167,18 +168,6 @@ export interface TeamFuturesFeatures {
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
-
-async function getTeam(id: string): Promise<any | null> {
-  const teams = await fetchTeams();
-  const norm = id.toLowerCase();
-  return (
-    teams.find(
-      (t: any) =>
-        t.id?.toLowerCase() === norm ||
-        t.abbreviation?.toLowerCase() === norm
-    ) ?? null
-  );
-}
 
 /** Parse last-10 string like "7-2-1" → win%. `null` (saison pas commencée) → 0.5. */
 function parseLastTen(last10: string | null | undefined): number {

@@ -15,7 +15,7 @@ import { ruleWeightsSchema, type RuleWeightsMap } from '../validation/schemas';
  * zéro affiché dans les Réglages promettait simplement quelque chose que le
  * serveur ne fait pas. Le défaut de la colonne est posé par la migration 035.
  */
-export const DEFAULT_MIN_EDGE_PCT = 2;
+const DEFAULT_MIN_EDGE_PCT = 2;
 
 // ─── Statistiques de paris (agrégation partagée) ─────────────────────────────
 
@@ -678,17 +678,6 @@ const leaderboardCache = new TtlCache<LeaderboardEntry[]>(LEADERBOARD_TTL, 1, 'l
 
 export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
   return leaderboardCache.wrap('top20', computeLeaderboard);
-}
-
-/**
- * Invalidation manuelle (tests, règlement de paris).
- *
- * **Aucun appelant aujourd'hui — gardée exprès** (décision du 2026-08-10). Le
- * classement est caché 60 s ; un test qui vérifie qu'un pari réglé change le
- * rang a besoin de vider ce cache, sinon il mesure la valeur d'avant.
- */
-export function clearLeaderboardCache(): void {
-  leaderboardCache.clear();
 }
 
 async function computeLeaderboard(): Promise<LeaderboardEntry[]> {

@@ -276,7 +276,7 @@ interface MLPredictionCardProps {
   label?:          string;   // marché ciblé, ex. "Total Buts (O/U 22.5)"
 }
 
-export function MLPredictionCard({ result, ruleBasedPct, compact = false, hero = false, simple = false, label }: MLPredictionCardProps) {
+function MLPredictionCard({ result, ruleBasedPct, compact = false, hero = false, simple = false, label }: MLPredictionCardProps) {
   const { t } = useI18n();
   const { probability, confidence, feature_importances, model_type, model_version, explanation } = result;
 
@@ -463,7 +463,7 @@ const ML_BASE = `${env.nhlServerUrl}/api/predict`;
  * show two different ML numbers for the same bet. Returns null when the
  * response carries no usable probability.
  */
-export function mlPctFromResponse(data: Record<string, unknown>): number | null {
+function mlPctFromResponse(data: Record<string, unknown>): number | null {
   const raw =
     typeof data.probability === "number" ? data.probability :
     typeof data.homeWinProb  === "number" ? data.homeWinProb  : null;
