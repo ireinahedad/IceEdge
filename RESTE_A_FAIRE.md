@@ -22,26 +22,17 @@ Rien ici ne demande de conception ; tout demande **ta machine ou une console**.
 | B4 | Parcours critiques **F1, F2** + **étape 4 de I2** | prod (pas de staging) | F1 et F2 écrivent en base (comptes, essai Pro, session Stripe) et attendent une cible jetable. L'étape 4 de I2 est un `curl` sans en-tête `Origin`, à lancer depuis ta machine (commande dans `QA_TEST_PLAN.md` § « Runbooks B4 »). |
 | B5 | **C1** — parcours mobile iOS Safari (login → prédiction → paiement) | appareil réel | Safari iOS est la source n°1 de bugs cookies/`SameSite`/PWA. |
 
+- [ ] **Pousser le correctif de `useNHLData`** (boucle de rendu de
+      `/nhl-predictions`, ~500 `GET /api/nhl/teams/:id/stats` par seconde en
+      production par visiteur), puis vérifier sur le site que la page affiche
+      les matchs et ne fait plus que quelques appels.
+
 ### Cloudflare (compte d'origine, géré depuis `ireinahedad24@gmail.com`)
 
-- [ ] **R6 · Réglages SSL/TLS de la zone — corrigé le 2026-09-16.** Le plan
-      précédent (*Full (strict)* + *Always Use HTTPS*) aurait cassé la production :
-      - **Rester en *Full* sur la zone.** Railway déconseille explicitement
-        *Full (strict)* : pendant un renouvellement il sert un moment son
-        certificat par défaut `*.up.railway.app`, que *strict* refuse — l'API
-        tomberait à chaque renouvellement.
-        ([Railway — Troubleshooting SSL](https://docs.railway.com/networking/troubleshooting/ssl))
-      - **Ne pas activer *Always Use HTTPS*.** Vercel exige que
-        `http://…/.well-known/acme-challenge/*` ne soit pas redirigé vers HTTPS,
-        sinon il ne renouvelle plus le certificat de `arakice.com` et `www`. Et
-        c'est inutile : Vercel (308) et Railway redirigent déjà HTTP → HTTPS.
-        ([Vercel — Reverse Proxy](https://vercel.com/docs/security/reverse-proxy))
-      - **À faire : TLS minimum 1.2.** Côté visiteurs ↔ Cloudflare seulement, sans
-        effet sur les origines.
-      - *Option :* *Full (strict)* pour `arakice.com` et `www` seulement, par une
-        règle de configuration, `api` restant en *Full* — **après** avoir vu dans
-        Vercel (Settings → Domains) que le certificat se renouvelle bien derrière
-        le proxy.
+- [ ] **R6 (option) · *Full (strict)* pour `arakice.com` et `www` seulement**, par
+      une règle de configuration, `api` restant en *Full*. Seulement **après**
+      avoir vu dans Vercel (Settings → Domains) que le certificat se renouvelle
+      bien derrière le proxy.
 - [ ] **R1 · Adresse de récupération** du compte Google `ireinahedad24@gmail.com`
       à vérifier à la main (hors Cloudflare).
 - [ ] **R7 · `support@arakice.com`.** Envoyer un vrai mail **depuis une autre
@@ -49,11 +40,6 @@ Rien ici ne demande de conception ; tout demande **ta machine ou une console**.
       qui revient à son expéditeur). Puis trancher l'adresse publiée :
       `support.arakice@gmail.com` (celle de `AUDIT_PRE_FREEZE_IOS.md`) ou la
       nouvelle. **Poser un DMARC** avant d'envoyer du courrier depuis le domaine.
-- [ ] **R2 · Faire tourner le jeton R2 — recommandé, pas bloquant.** *Roll* du
-      `R2 Account Token` → nouvelles clés dans `R2_ACCESS_KEY_ID` /
-      `R2_SECRET_ACCESS_KEY` sur `IceEdge` → **Deploy** → lire
-      `[avatarStorage] ✅ R2 joignable` **avec l'endpoint `2216e2d9…`**.
-      `R2_ACCOUNT_ID`, `R2_BUCKET` et `R2_PUBLIC_URL` ne bougent pas.
 - [ ] **R8 · `cdn.arakice.com` (optionnel, pas avant le lancement).** Retire la
       limite de débit de `r2.dev`. ⚠️ Changer `R2_PUBLIC_URL` rend les avatars
       existants non supprimables (`deleteAvatarByUrl` compare au préfixe
@@ -68,10 +54,13 @@ Rien ici ne demande de conception ; tout demande **ta machine ou une console**.
       authentifie immédiatement avec une adresse non vérifiée. Sans doute
       délibéré (`RESEND_API_KEY` absente), mais **la récupération de mot de passe
       (F6) repose sur ce même canal absent**.
-- [ ] **`/nhl-predictions` reste bloquée sur ses squelettes hors saison.** Les
-      appels rendent 200 avec `[]` (pas de match), mais l'état vide est
-      **visuellement identique à une panne**. Une indisponibilité doit se dire
-      par « — » et un bandeau ; un état vide légitime, par un message.
+- [ ] **`/nhl-predictions` affiche des nombres inventés.** `computeRulePrediction`
+      sort des pourcentages codés en dur pour une vingtaine de marchés (30 %
+      buteur, 55 % tirs, 38 % période la plus prolifique…) ou dérivés par
+      coefficients arbitraires (`hw × 0.55`), et « Ask LLM » est un texte simulé
+      (`askLLMForMarket`, placeholder avec délai). Contredit la règle « pas de
+      nombre inventé ». Brancher sur le backend, retirer la page, ou la
+      masquer.
 - [ ] **Staging.** Il n'en existe aucun (Railway n'a que `production`). Soit on en
       crée un, soit chaque campagne du §4 marquée « en staging » choisit entre la
       production et rien.
@@ -336,6 +325,10 @@ jamais été joué) · documenter et tester une fois le rollback Railway/Vercel
   zone depuis un scan (il relève les IP anycast Cloudflare). **Ne jamais
   supprimer le TXT `google-site-verification`** : il porte la propriété Search
   Console.
+- **Cloudflare SSL/TLS : zone en *Full*, jamais *Full (strict)* pour `api`**
+  (Railway sert un moment `*.up.railway.app` pendant ses renouvellements), et
+  **jamais *Always Use HTTPS*** (bloque le challenge HTTP de Vercel ; Vercel et
+  Railway redirigent déjà). TLS minimum 1.2 depuis le 2026-09-16.
 - **Service ML `Unexposed`** : ne pas suivre la suggestion du panneau *Agent* de
   Railway (`ML_SERVICE_URL=${{ …RAILWAY_PUBLIC_DOMAIN }}`).
 - **Sentry** : ne pas suivre l'assistant « Configure Express SDK » (second
@@ -347,6 +340,9 @@ jamais été joué) · documenter et tester une fois le rollback Railway/Vercel
 **Code**
 - **Pas de repli local de prédiction, jamais** : en panne, « — » et un bandeau ;
   `MarketSelectorSheet` refuse d'ajouter la jambe.
+- **`useNHLData` renvoie des fonctions stables (`useCallback`)** : des pages les
+  mettent dans les dépendances d'effets réseau. Recréées à chaque rendu, elles
+  ont fait tourner `/nhl-predictions` en boucle (2026-09-16).
 - **Jamais un secret derrière `VITE_`** (inliné dans le bundle). **Ne jamais
   journaliser l'URL de The Odds API** (clé en query string).
 - **`ci.yml`** : ne pas retirer `master` des déclencheurs, ne pas élargir à

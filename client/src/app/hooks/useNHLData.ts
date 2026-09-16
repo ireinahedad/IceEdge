@@ -6,7 +6,7 @@
  * Game-date fallback: today → tomorrow → next 7 days
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { nhlApiService } from '../services/nhlApiService';
 import { nhlLogoUrl } from '../data/teamEmoji';
 
@@ -226,11 +226,17 @@ export function useNHLData(): NHLData {
     return () => { alive = false; };
   }, [reloadKey]);
 
-  const getTeamById   = (id: string) => teams.find(t => t.id === id);
-  const getGameById   = (id: string) => games.find(g => g.id === id);
-  const getPlayerById = (id: string) => players.find(p => p.id === id);
+  // ⚠️ Ces quatre fonctions DOIVENT garder la même identité d'un rendu à
+  // l'autre. `NHLPredictionsPage` met `getTeamById` dans les dépendances d'un
+  // effet qui fait des appels réseau puis un `setState` : recréée à chaque
+  // rendu, elle relançait l'effet sans fin — mesuré le 2026-09-16 en
+  // production à ~500 `GET /api/nhl/teams/:id/stats` par seconde dès que des
+  // matchs entraient dans la fenêtre. Ne pas retirer les `useCallback`.
+  const getTeamById   = useCallback((id: string) => teams.find(t => t.id === id), [teams]);
+  const getGameById   = useCallback((id: string) => games.find(g => g.id === id), [games]);
+  const getPlayerById = useCallback((id: string) => players.find(p => p.id === id), [players]);
 
-  const reload = () => setReloadKey(k => k + 1);
+  const reload = useCallback(() => setReloadKey(k => k + 1), []);
 
   return { teams, games, players, gamesLabel, loading, error, reload, getTeamById, getGameById, getPlayerById };
 }
