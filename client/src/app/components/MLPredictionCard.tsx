@@ -483,15 +483,66 @@ function mlPctFromResponse(data: Record<string, unknown>): number | null {
  * discrètement le pourcentage de règles sous une étiquette « ML », ce qui
  * revient au même mensonge en moins visible.
  */
-export async function fetchMLProbability(
+export type MLProbabilityRequest = {
   // `selection` porte le CÔTÉ d'un marché binaire (« yes » / « no »). Il était
   // absent de ce type, donc les deux tuiles d'un même marché envoyaient une
   // requête identique et affichaient le même pourcentage des deux côtés.
   // `isHome` dit si le SUJET reçoit. Sans lui, le serveur passait le sujet comme
   // équipe à domicile au service Python : les deux tuiles moneyline d'un même
   // match recevaient chacune l'avantage de la glace et totalisaient 109–112 %.
-  req: { type: "game" | "player" | "team"; subjectId: string; opponentId?: string; propType?: string; line?: number; selection?: string; isHome?: boolean },
-): Promise<number | null> {
+  type: "game" | "player" | "team"; subjectId: string; opponentId?: string; propType?: string; line?: number; selection?: string; isHome?: boolean;
+};
+
+/**
+ * Clé d'une demande de probabilité ML : exactement les champs envoyés au
+ * serveur, dans un ordre fixe. Sert au cache ci-dessous ET de dépendance
+ * d'effet aux tuiles (`BetOption`) — une chaîne est stable d'un rendu à
+ * l'autre, là où l'objet `mlProps` est recréé à chaque rendu du parent.
+ */
+export function mlProbabilityKey(req: MLProbabilityRequest): string {
+  return JSON.stringify([
+    req.type, req.subjectId, req.opponentId ?? null, req.propType ?? null,
+    req.line ?? null, req.selection ?? null, req.isHome ?? null,
+  ]);
+}
+
+/**
+ * Cache des probabilités ML, partagé par toutes les tuiles de l'application.
+ *
+ * Mesuré le 2026-09-16 : une page de match tirait 31 `POST /predict/ml` à la
+ * première bascule en mode ML, et 31 de plus à CHAQUE retour Règles → ML. Avec
+ * `predictLimiter` à 60/min par compte (par IP pour un invité), un seul
+ * aller-retour suffisait à prendre des 429 et à afficher « — » sur les tuiles.
+ * La page joueur envoyait en plus des corps identiques (12 appels, 7 distincts).
+ *
+ * On garde la PROMESSE, pas le résultat : deux tuiles qui demandent la même
+ * chose au même instant partagent un seul appel. Un `null` (hors ligne, 429,
+ * 503) n'est PAS conservé : la prochaine demande retente, sinon une panne
+ * passagère resterait affichée cinq minutes.
+ */
+const ML_PROB_TTL_MS = 5 * 60_000;
+const ML_PROB_MAX_ENTRIES = 300;
+const mlProbCache = new Map<string, { at: number; promise: Promise<number | null> }>();
+
+export function fetchMLProbability(req: MLProbabilityRequest): Promise<number | null> {
+  const key = mlProbabilityKey(req);
+  const hit = mlProbCache.get(key);
+  if (hit && Date.now() - hit.at < ML_PROB_TTL_MS) return hit.promise;
+
+  const entry = { at: Date.now(), promise: requestMLProbability(req) };
+  entry.promise.then((p) => {
+    if (p === null && mlProbCache.get(key) === entry) mlProbCache.delete(key);
+  });
+  mlProbCache.delete(key);
+  if (mlProbCache.size >= ML_PROB_MAX_ENTRIES) {
+    const oldest = mlProbCache.keys().next();
+    if (!oldest.done) mlProbCache.delete(oldest.value);
+  }
+  mlProbCache.set(key, entry);
+  return entry.promise;
+}
+
+async function requestMLProbability(req: MLProbabilityRequest): Promise<number | null> {
   try {
     const r = await fetchWithTimeout(`${ML_BASE}/ml`, {
       method: "POST",

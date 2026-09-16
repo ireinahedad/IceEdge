@@ -149,12 +149,20 @@ export function DevMLDashboard() {
   // Chargement paresseux par onglet : les rapports pèsent ~25 ko et
   // `/live-performance` agrège jusqu'à 50 000 jambes. Les tirer au montage
   // ferait payer les cinq onglets à qui n'en ouvre qu'un.
+  //
+  // ⚠️ La condition exclut l'ÉCHEC, et pas seulement « déjà chargé » / « en
+  // cours ». Sans `!reportsError` (etc.), un échec laissait `reports` à `null`
+  // et faisait repasser `reportsLoading` à `false` : la dépendance changeait,
+  // l'effet repartait, et ainsi de suite — mesuré le 2026-09-16 à 29 requêtes/s
+  // sur un 404 (routes dev non montées en prod) et 488 tentatives/s hors ligne,
+  // jusqu'à mettre tout le compte admin en 429. Après un échec, seul le bouton
+  // ↻ (`refreshCurrent`) réessaie : c'est la règle de `services/http.ts`.
   useEffect(() => {
-    if ((tab === "model" || tab === "backtest") && !reports && !reportsLoading) fetchReports();
-    if (tab === "data" && !health && !healthLoading) fetchHealth();
-    if (tab === "live" && !perf && !perfLoading) fetchPerf(perfDays);
-  }, [tab, reports, reportsLoading, health, healthLoading, perf, perfLoading,
-      fetchReports, fetchHealth, fetchPerf, perfDays]);
+    if ((tab === "model" || tab === "backtest") && !reports && !reportsLoading && !reportsError) fetchReports();
+    if (tab === "data" && !health && !healthLoading && !healthError) fetchHealth();
+    if (tab === "live" && !perf && !perfLoading && !perfError) fetchPerf(perfDays);
+  }, [tab, reports, reportsLoading, reportsError, health, healthLoading, healthError,
+      perf, perfLoading, perfError, fetchReports, fetchHealth, fetchPerf, perfDays]);
 
   /** Le bouton ↻ rafraîchit ce qui est à l'écran, pas tout. */
   function refreshCurrent() {

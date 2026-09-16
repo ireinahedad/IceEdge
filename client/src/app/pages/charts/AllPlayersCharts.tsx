@@ -7,7 +7,7 @@
  */
 
 import { useNavigate } from "react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSport } from "../../context/SportContext";
 import { useI18n } from "../../i18n";
 import { nhlApiService } from "../../services/nhlApiService";
@@ -33,6 +33,7 @@ export function AllPlayersCharts() {
   const accent = theme.accent;
 
   const LIMIT = 20;   // rows in the leaderboard table
+  const SORT_DEBOUNCE_MS = 150;
   const CHART_N = 10; // players fed into the bar chart + pies
   const [view, setView] = useState<View>("skater");
   // Skaters and goalies have disjoint metric sets, so each view remembers its
@@ -68,16 +69,34 @@ export function AllPlayersCharts() {
     : [...buildSkaterMetrics(t), ...buildSkaterExtraMetrics(t)];
   const metric = metrics.find((m) => m.key === sortKey) ?? metrics[0];
 
+  // Clics de tri rapprochés : 12 clics en 0,7 s faisaient 11 requêtes menées
+  // à terme (audit du 2026-09-16) — le garde `alive` évitait la course, pas
+  // l'appel. Désormais :
+  //  - anti-rebond de 150 ms, sauf au premier chargement (pas de délai perçu).
+  //    Le tableau reste affiché pendant l'attente : passer `loading` tout de
+  //    suite le remplaçait par le squelette, et le clic suivant tombait dans
+  //    le vide ;
+  //  - la requête d'un tri remplacé est ABANDONNÉE (AbortController), et son
+  //    `AbortError` n'affiche aucune erreur.
+  const loadedOnce = useRef(false);
   useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    setError(false);
-    nhlApiService
-      .getPlayerLeaders(view, sortKey, LIMIT, season)
-      .then((res) => { if (alive) setData(res); })
-      .catch((e) => { console.error("AllPlayersCharts load error", e); if (alive) setError(true); })
-      .finally(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
+    const controller = new AbortController();
+    const delay = loadedOnce.current ? SORT_DEBOUNCE_MS : 0;
+    loadedOnce.current = true;
+    const timer = setTimeout(() => {
+      setLoading(true);
+      setError(false);
+      nhlApiService
+        .getPlayerLeaders(view, sortKey, LIMIT, season, controller.signal)
+        .then((res) => { if (!controller.signal.aborted) setData(res); })
+        .catch((e) => {
+          if (controller.signal.aborted) return;
+          console.error("AllPlayersCharts load error", e);
+          setError(true);
+        })
+        .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    }, delay);
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [view, sortKey, season]);
 
   // Rows arrive already sorted by the server in the metric's natural direction,

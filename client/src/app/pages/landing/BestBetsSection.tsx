@@ -14,7 +14,6 @@ import { useBet } from "../../context/BetContext";
 import { ProLock } from "../../components/ProLock";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
-import { DisplayGame } from "./landingTypes";
 import { env } from "../../env";
 import { fetchWithTimeout } from "../../services/http";
 
@@ -122,12 +121,10 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
 }
 
 export function BestBetsSection({
-  games,
   accent,
   isLoading,
   locked = false,
 }: {
-  games: DisplayGame[];
   accent: string;
   isLoading: boolean;
   locked?: boolean;
@@ -197,7 +194,13 @@ export function BestBetsSection({
     })();
 
     return () => { cancelled = true; };
-  }, [games, lang, locked]);
+  // ⚠️ Plus de `games` ici (ni en prop). L'effet ne le lisait pas, mais
+  // l'accueil passait `[...liveGames, ...upcomingGames]` — un tableau neuf à
+  // chaque rendu — donc chaque rendu de l'accueil (feuille ouverte/fermée,
+  // cotes arrivées, abonnement rechargé) refaisait `GET /predict/best-bets` et
+  // écrasait la liste. Mesuré le 2026-09-16 : 2 appels par ouverture de
+  // « More bets ». best-bets est calculé côté serveur, indépendamment d'eux.
+  }, [lang, locked]);
 
   // Lazy ML fetch when ML tab selected
   useEffect(() => {

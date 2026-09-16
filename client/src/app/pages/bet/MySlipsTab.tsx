@@ -342,7 +342,9 @@ export function MySlipsTab({ user }: { user: any }) {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+    // `user?.id` et non `user` : AuthContext remplace l'objet quand le profil
+    // arrive, ce qui rechargeait les 100 coupons une seconde fois.
+  }, [user?.id]);
 
   useEffect(() => { load(); }, [load]);
 

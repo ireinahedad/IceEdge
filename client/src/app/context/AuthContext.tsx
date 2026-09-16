@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import {
   AuthUser, AuthResult, PendingVerification,
   apiLogin, apiRegister, apiLogout, apiLogoutAll, apiVerifyEmail,
@@ -146,8 +146,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null);
   }, []);
 
+  // Valeur mémoïsée : sans ça, chaque rendu du provider donnait un objet neuf à
+  // tous les `useAuth()` de l'application.
+  const value = useMemo(
+    () => ({ user, token, loading, login, register, verifyEmail, logout, logoutAll, setSession }),
+    [user, token, loading, login, register, verifyEmail, logout, logoutAll, setSession],
+  );
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, verifyEmail, logout, logoutAll, setSession }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

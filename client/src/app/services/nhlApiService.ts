@@ -196,10 +196,11 @@ export interface TeamSeasonOfficial {
   record: TeamRecord | null;
 }
 
-async function get<T>(path: string): Promise<T> {
+async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   if (!BASE_URL) throw new Error('VITE_NHL_API_URL is not configured');
   const res = await fetchWithTimeout(`${BASE_URL}${path}`, {
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    signal,
   });
   if (!res.ok) {
     const msg = await res.text().catch(() => res.statusText);
@@ -270,10 +271,13 @@ export const nhlApiService = {
     sort: string,
     limit = 20,
     season?: number | null,
+    // Abandon par l'appelant (changement de tri avant la réponse) : remonte
+    // en `AbortError`, jamais en `RequestTimeoutError` (voir `http.ts`).
+    signal?: AbortSignal,
   ): Promise<PlayerLeaders> => {
     const q = new URLSearchParams({ view, sort, limit: String(limit) });
     if (season != null) q.set('season', String(season));
-    return get<PlayerLeaders>(`/players/leaders?${q.toString()}`);
+    return get<PlayerLeaders>(`/players/leaders?${q.toString()}`, signal);
   },
 
   getAllPlayers: (): Promise<NHLPlayerInfo[]> =>

@@ -116,10 +116,12 @@ export function ProPage() {
   const [promoBusy,  setPromoBusy]  = useState(false);
   const [promoError, setPromoError] = useState<string | null>(null);
 
+  // `user?.id` et non `user` : l'objet est remplacé quand AuthContext enrichit
+  // le profil, ce qui relançait `GET /subscription/me` (audit du 2026-09-16).
   useEffect(() => {
     if (!user) return;
     apiGetSubscription().then(setSub).catch(() => {});
-  }, [user]);
+  }, [user?.id]);
 
   async function handleUpgrade() {
     // APPLE_PLAN §7 — Guideline 3.1.1: a paid upgrade on iOS must go through

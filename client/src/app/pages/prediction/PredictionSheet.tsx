@@ -16,7 +16,7 @@ import { nhlLogoUrl } from "../../data/teamEmoji";
 import { useBet } from "../../context/BetContext";
 import type { BetLeg, PredictionCaveat } from "../../types/bet";
 import { askLLM } from "../../services/llmService";
-import { MLSection, fetchMLProbability } from "../../components/MLPredictionCard";
+import { MLSection, fetchMLProbability, mlProbabilityKey, type MLProbabilityRequest } from "../../components/MLPredictionCard";
 import { RuleFactorEditor } from "../../components/RuleFactorEditor";
 import { FramedLabel } from "../../components/brand/FramedLabel";
 import { BetOpt, MLProps, MktGroup, RuleFactor, buildLLMDataContext, llmCacheId, loadLlmCache, saveLlmCache, settlementFields } from "./gameMarkets";
@@ -44,6 +44,10 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   // équivalentes. Le chiffre est bon ; ce qu'il vaut n'est pas devinable en le
   // regardant, donc on l'écrit sous la carte des règles.
   const [caveat, setCaveat] = useState<PredictionCaveat | undefined>(undefined);
+  // Dépendance = le CONTENU de `mlProps`, pas l'objet : les pages parentes le
+  // recréent à chaque rendu (`{ ...o.mlProps, gameId }`), ce qui rejouait
+  // `POST /predict/single` à chaque re-rendu tant que la carte était ouverte.
+  const mlPropsKey = mlProps ? JSON.stringify(mlProps) : null;
   useEffect(() => {
     if (serverPct !== undefined) { setOwnServerPct(serverPct); return; }
     if (!mlProps) return;
@@ -54,7 +58,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
       .then(r => { if (alive) { setOwnServerPct(r.probability); setCaveat(r.caveat); } })
       .catch(() => { /* keep undefined → falls back to rulePct */ });
     return () => { alive = false; };
-  }, [serverPct, mlProps]);
+  }, [serverPct, mlPropsKey]);
 
   // The probability stored in the coupon — identical to what the stats grid shows.
   const legPct = ownServerPct ?? rulePct;
@@ -337,15 +341,23 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
   // `rulePct` serait le même mensonge, simplement plus discret : en mode ML on
   // montre « — », et l'utilisateur peut basculer sur les règles pour un chiffre.
   const [mlPct, setMlPct] = useState<number | null | undefined>(undefined);
+  // ⚠️ Dépendances = `source` + une CLÉ texte, jamais l'objet `opt.mlProps` :
+  // GamePrediction / PlayerPrediction recréent cet objet à chaque rendu, donc
+  // l'effet repartait sur toutes les tuiles à chaque re-rendu de la page. Le
+  // cache de `fetchMLProbability` absorbe en plus les retours Règles → ML et
+  // les tuiles qui demandent la même chose (mesuré le 2026-09-16 : 31 appels
+  // par bascule sur une page de match, 429 dès le premier aller-retour).
+  const mlReq: MLProbabilityRequest | null = opt.mlProps
+    ? { type: opt.mlProps.type, subjectId: opt.mlProps.subjectId, opponentId: opt.mlProps.opponentId, propType: opt.mlProps.propType, line: opt.mlProps.line, selection: opt.mlProps.selection, isHome: opt.mlProps.isHome }
+    : null;
+  const mlKey = mlReq ? mlProbabilityKey(mlReq) : null;
   useEffect(() => {
-    if (source !== "ml" || !opt.mlProps) return;
+    if (source !== "ml" || !mlReq) return;
     let alive = true;
     setMlPct(undefined);
-    fetchMLProbability(
-      { type: opt.mlProps.type, subjectId: opt.mlProps.subjectId, opponentId: opt.mlProps.opponentId, propType: opt.mlProps.propType, line: opt.mlProps.line, selection: opt.mlProps.selection, isHome: opt.mlProps.isHome },
-    ).then(p => { if (alive) setMlPct(p); });
+    fetchMLProbability(mlReq).then(p => { if (alive) setMlPct(p); });
     return () => { alive = false; };
-  }, [source, opt.mlProps]);
+  }, [source, mlKey]);
 
   const mlMode      = source === "ml" && !!opt.mlProps;
   const loadingMl   = mlMode && mlPct === undefined;

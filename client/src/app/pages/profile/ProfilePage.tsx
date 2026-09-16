@@ -83,7 +83,10 @@ export function ProfilePage() {
     }).catch((e) => {
       setError(e.message ?? "Could not load profile");
     }).finally(() => setLoading(false));
-  }, [user]);
+    // `user?.id` et non `user` : AuthContext remplace l'objet quand il enrichit
+    // le profil, ce qui rejouait `getProfile` + `getBettingStats` (audit du
+    // 2026-09-16). Un changement de compte, lui, recharge bien.
+  }, [user?.id]);
 
   async function handleAvatarClick() {
     fileInputRef.current?.click();

@@ -112,44 +112,71 @@ export function HockeyLanding() {
   }, [liveGames, upcomingGames, t]);
 
   // Load NHL games + model predictions
+  //
+  // Les huit jours (J…J+7) arrivent en UNE requête `/games/range`, lancée en
+  // même temps que `/games/live`. Avant le 2026-09-16, la boucle demandait
+  // `/games?date=` jour par jour, en série : hors saison, 8 requêtes par visite
+  // de l'accueil — et la boucle continuait après qu'on avait quitté la page,
+  // faute de garde. `cancelled` ferme les deux.
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setLoadError(null);
     async function load() {
       try {
-        const live = await nhlApiService.getLiveGames();
-        let scheduled: typeof live = [];
-        let label = t("home.tonightGames");
         const locale = lang === "fr" ? "fr-CA" : "en-US";
-        for (let offset = 0; offset <= 7; offset++) {
+        const days = Array.from({ length: 8 }, (_, offset) => {
           const d = new Date();
           d.setDate(d.getDate() + offset);
-          const dateStr = d.toISOString().split("T")[0];
-          const all = await nhlApiService.getGamesByDate(dateStr);
-          scheduled = all.filter((g) => ["scheduled", "live", "preview"].includes(g.status));
+          return { offset, d, dateStr: d.toISOString().split("T")[0] };
+        });
+        const [live, range] = await Promise.all([
+          nhlApiService.getLiveGames(),
+          nhlApiService.getGamesRange(days[0].dateStr, days[days.length - 1].dateStr),
+        ]);
+        if (cancelled) return;
+
+        let scheduled: typeof live = [];
+        let label = t("home.tonightGames");
+        for (const { offset, d, dateStr } of days) {
+          scheduled = range.filter((g) =>
+            String(g.gameDate ?? "").slice(0, 10) === dateStr &&
+            ["scheduled", "live", "preview"].includes(g.status));
           if (scheduled.length > 0) {
             if (offset === 1) label = t("home.tomorrowGames");
             else if (offset > 1) label = t("home.gamesOn", { date: d.toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" }) });
             break;
           }
         }
-        const [liveDisplay, upcomingDisplay] = await Promise.all([
-          Promise.all(live.map(toDisplayGame)),
-          Promise.all(scheduled.map(toDisplayGame)),
-        ]);
-        setLiveGames(liveDisplay);
-        setUpcomingGames(upcomingDisplay);
+        // Un match EN DIRECT figure dans les deux listes (`scheduled` garde le
+        // statut "live" exprès, pour la liste du soir). Ses deux prédictions
+        // (`POST /predict/single` moneyline + total, non cacheables) partaient
+        // donc deux fois : 26 appels pour 18 matchs distincts, mesuré le
+        // 2026-09-16. On calcule chaque match UNE fois, puis on range le même
+        // résultat dans chaque liste — l'affichage ne change pas.
+        const unique = new Map<string, (typeof live)[number]>();
+        for (const g of [...live, ...scheduled]) if (!unique.has(g.id)) unique.set(g.id, g);
+        const displayed = new Map(
+          await Promise.all(
+            [...unique.values()].map(async (g) => [g.id, await toDisplayGame(g)] as const),
+          ),
+        );
+        if (cancelled) return;
+        setLiveGames(live.map((g) => displayed.get(g.id)!));
+        setUpcomingGames(scheduled.map((g) => displayed.get(g.id)!));
         setUpcomingLabel(label);
       } catch (err) {
+        if (cancelled) return;
         console.error("[HockeyLanding] Failed to load games:", err);
         setLiveGames([]);
         setUpcomingGames([]);
         setLoadError(err ?? new Error("landing load failed"));
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
     load();
+    return () => { cancelled = true; };
   }, [lang, reloadKey]);
 
   // Overlay real Bet365 odds — stored separately, does NOT overwrite model winPct
@@ -323,7 +350,6 @@ export function HockeyLanding() {
             {/* Best Bets — Pro only */}
             <LazySection minHeight={360}>
               <BestBetsSection
-                games={[...liveGames, ...upcomingGames]}
                 accent={accent}
                 isLoading={loading}
                 locked={!isPro}

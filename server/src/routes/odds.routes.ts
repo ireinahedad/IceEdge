@@ -84,6 +84,38 @@ async function fetchOdds(url: string) {
 const oddsCache  = new TtlCache<unknown>(ODDS_TTL, 50, 'odds');
 const sportsCache = new TtlCache<unknown>(SPORTS_TTL, 1, 'odds-sports');
 
+// ── Cache d'ÉCHEC ────────────────────────────────────────────────────────────
+//
+// `TtlCache` ne mémorise pas un échec (c'est voulu, et testé). Conséquence
+// mesurée le 2026-09-16 sur cette route : amont en panne ou quota épuisé,
+// 20 visiteurs successifs = 20 appels amont — chacun attendant jusqu'à
+// `ODDS_FETCH_TIMEOUT_MS` avant de servir le périmé ou un 502. La
+// déduplication en vol ne couvre que les visiteurs SIMULTANÉS.
+//
+// Après un échec, une clé n'est plus retentée pendant `ODDS_FAILURE_TTL_MS` :
+// on sert directement la dernière réponse connue, ou `[]` en 502. Un succès
+// efface la marque. Borné comme `oddsCache` (clés = sport × marchés).
+const FAILURE_TTL_MS = Number(process.env.ODDS_FAILURE_TTL_MS) || 60_000;
+const FAILURE_MAX_KEYS = 50;
+const recentFailures = new Map<string, number>();
+
+function failedRecently(key: string): boolean {
+  const at = recentFailures.get(key);
+  if (at === undefined) return false;
+  if (Date.now() - at < FAILURE_TTL_MS) return true;
+  recentFailures.delete(key);
+  return false;
+}
+
+function markFailure(key: string): void {
+  recentFailures.delete(key);
+  if (recentFailures.size >= FAILURE_MAX_KEYS) {
+    const oldest = recentFailures.keys().next();
+    if (!oldest.done) recentFailures.delete(oldest.value);
+  }
+  recentFailures.set(key, Date.now());
+}
+
 /**
  * Marchés autorisés. La valeur entre dans la clé de cache ET dans l'URL
  * upstream : une liste blanche évite qu'un appelant fasse exploser le nombre
@@ -145,6 +177,16 @@ router.get("/bet365/:sportKey", async (req: Request, res: Response) => {
   // TTL fixe de 5 min vaudrait à lui seul ~17 000 appels par mois.
   const ttl = oddsQuota.proxyTtlMs(ODDS_TTL);
 
+  // Échec récent et rien de frais : on ne rappelle pas l'amont (voir plus haut).
+  if (oddsCache.peekFresh(key) === null && failedRecently(key)) {
+    const stale = oddsCache.getStale(key);
+    if (stale !== null) {
+      res.set("Cache-Control", "public, max-age=30");
+      return res.json(stale);
+    }
+    return res.status(502).json([]);
+  }
+
   try {
     const data = await oddsCache.wrap(key, () => timeUpstream('odds', async () => {
       const upstream = await fetchOdds(`${ODDS_BASE}/sports/${sportKey}/odds?${params}`);
@@ -156,12 +198,14 @@ router.get("/bet365/:sportKey", async (req: Request, res: Response) => {
       }
       return upstream.json();
     }), ttl);
+    recentFailures.delete(key);
 
     // 60 s navigateur/CDN + 5 min de stale-while-revalidate : la vague
     // d'arrivée est absorbée en amont du serveur.
     res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
     res.json(data);
   } catch (err: any) {
+    markFailure(key);
     // Filet de sécurité : plutôt servir des cotes un peu datées qu'une page vide
     // (typiquement quand le quota mensuel est épuisé).
     const stale = oddsCache.getStale(key);
@@ -178,6 +222,10 @@ router.get("/bet365/:sportKey", async (req: Request, res: Response) => {
 // GET /api/odds/sports — available sports/tournaments
 router.get("/sports", async (_req: Request, res: Response) => {
   if (!ODDS_KEY) return res.json([]);
+  // Même cache d'échec que `/bet365/:sportKey`.
+  if (sportsCache.peekFresh("sports") === null && failedRecently("sports")) {
+    return res.json(sportsCache.getStale("sports") ?? []);
+  }
   try {
     const data = await sportsCache.wrap("sports", () => timeUpstream('odds', async () => {
       const upstream = await fetchOdds(`${ODDS_BASE}/sports?apiKey=${ODDS_KEY}`);
@@ -185,9 +233,11 @@ router.get("/sports", async (_req: Request, res: Response) => {
       if (!upstream.ok) throw new Error(`upstream ${upstream.status}`);
       return upstream.json();
     }));
+    recentFailures.delete("sports");
     res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
     res.json(data);
   } catch {
+    markFailure("sports");
     res.json(sportsCache.getStale("sports") ?? []);
   }
 });

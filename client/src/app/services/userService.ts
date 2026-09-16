@@ -31,6 +31,7 @@ import type {
 } from '../types/user';
 
 import { authedFetch } from './authService';
+import { tokenStore, onSessionCleared } from './tokenStore';
 
 // ---- HTTP helpers (authenticated) ------------------------------------------
 
@@ -63,6 +64,49 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Lecture PARTAGÉE : les appels identiques lancés à moins de `SHARED_GET_TTL_MS`
+ * d'écart n'en font qu'un.
+ *
+ * Mesuré le 2026-09-16 : `/users/me` partait deux fois sur `/league` et
+ * `/profile` (AuthContext + la page), `/chat/rooms` deux fois sur `/league`
+ * (badge de non-lus de LeaguePage + ChatTab). Tous `no-store`, donc tous en base.
+ *
+ * - On partage le TEXTE de la réponse et chaque appelant fait son propre
+ *   `JSON.parse` : personne ne reçoit un objet qu'un autre écran pourrait muter.
+ * - La clé contient le jeton : un changement de compte ne relit jamais le
+ *   profil du précédent. `onSessionCleared` vide tout en plus.
+ * - Toute écriture de ce service (POST/PATCH/DELETE) vide le cache : après
+ *   « rejoindre un salon » ou « changer d'avatar », la relecture est fraîche.
+ * - Un échec n'est pas gardé.
+ *
+ * Délai court exprès : il ne sert qu'à fusionner les lectures d'un même
+ * chargement d'écran, pas à servir des données datées.
+ */
+const SHARED_GET_TTL_MS = 3_000;
+const sharedGets = new Map<string, { at: number; text: Promise<string> }>();
+function invalidateSharedGets(): void { sharedGets.clear(); }
+onSessionCleared(invalidateSharedGets);
+
+async function getShared<T>(path: string): Promise<T> {
+  const token = await tokenStore.getAccess();
+  const key = `${token ?? ''}|${path}`;
+  const hit = sharedGets.get(key);
+  if (hit && Date.now() - hit.at < SHARED_GET_TTL_MS) return JSON.parse(await hit.text) as T;
+
+  const entry = {
+    at: Date.now(),
+    text: (async () => {
+      const res = await authedFetch(path);
+      await throwIfNotOk(res);
+      return res.text();
+    })(),
+  };
+  entry.text.catch(() => { if (sharedGets.get(key) === entry) sharedGets.delete(key); });
+  sharedGets.set(key, entry);
+  return JSON.parse(await entry.text) as T;
+}
+
 async function getOrThrow<T>(path: string): Promise<T> {
   const res = await authedFetch(path);
   if (!res.ok) {
@@ -73,6 +117,7 @@ async function getOrThrow<T>(path: string): Promise<T> {
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
+  invalidateSharedGets();
   const res = await authedFetch(path, {
     method: 'POST',
     body: JSON.stringify(body),
@@ -84,11 +129,13 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
 /** DELETE authentifié. */
 async function del(path: string): Promise<void> {
+  invalidateSharedGets();
   const res = await authedFetch(path, { method: 'DELETE' });
   await throwIfNotOk(res);
 }
 
 async function patch<T>(path: string, body: unknown): Promise<T> {
+  invalidateSharedGets();
   const res = await authedFetch(path, {
     method: 'PATCH',
     body: JSON.stringify(body),
@@ -184,7 +231,7 @@ async function resizeAvatar(file: File): Promise<string> {
 
 export const profileApiService = {
   getProfile: (): Promise<UserProfile> =>
-    get<UserProfile>('/users/me'),
+    getShared<UserProfile>('/users/me'),
 
   getBetHistory: (): Promise<BetRecord[]> =>
     get<BetRecord[]>('/users/me/bets'),
@@ -232,6 +279,7 @@ export const profileApiService = {
     // leaderboard read. 256×256 WebP is ~20 kB and visually identical at the
     // sizes an avatar is actually displayed.
     const dataUrl = await resizeAvatar(file);
+    invalidateSharedGets();
 
     const res = await authedFetch('/users/me/avatar', {
       method: 'POST',
@@ -244,7 +292,7 @@ export const profileApiService = {
 
   // ---- Chat -----------------------------------------------
   getChatRooms: (): Promise<ChatRoom[]> =>
-    get<ChatRoom[]>('/chat/rooms'),
+    getShared<ChatRoom[]>('/chat/rooms'),
 
   /**
    * Room history.
@@ -289,6 +337,7 @@ export const profileApiService = {
     post<ChatRoom>(`/chat/rooms/${roomId}/join`, {}),
 
   leaveRoom: async (roomId: string): Promise<void> => {
+    invalidateSharedGets();
     const res = await authedFetch(`/chat/rooms/${roomId}/leave`, { method: 'POST', body: JSON.stringify({}) });
     await throwIfNotOk(res);
   },

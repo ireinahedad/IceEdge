@@ -3,7 +3,12 @@
  * Fetches teams, games and players from the API and normalises
  * them into the flat shape that the existing components expect.
  *
- * Game-date fallback: today → tomorrow → next 7 days
+ * Game-date fallback: today → tomorrow → next 7 days (une seule requête
+ * `/games/range`, voir `fetchGamesWithFallback`).
+ *
+ * Les données sont PARTAGÉES entre tous les composants qui appellent le hook
+ * (Stats, Prédictions NHL, feuille « More bets ») et gardées 5 min : voir
+ * `loadShared`.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -139,6 +144,100 @@ function shiftDate(dateStr: string, days: number): string {
   return d.toISOString().split('T')[0];
 }
 
+// ─── Chargement partagé ───────────────────────────────────────────────────────
+
+/**
+ * Premier jour qui a des matchs, sur UNE seule requête.
+ *
+ * Avant le 2026-09-16 : `/games?date=` jour par jour — aujourd'hui, demain, puis
+ * six appels pour J+2…J+7. Hors saison (l'état réel de septembre) chaque visite
+ * de Stats ou de Prédictions NHL coûtait 8 requêtes, et chaque `catch {}`
+ * transformait une panne de l'API en « Aucun match », sans bouton Réessayer.
+ * `/games/range` existe et le serveur la sert depuis ses semaines en cache.
+ *
+ * ⚠️ Une erreur REMONTE désormais : elle fait échouer le chargement, et l'écran
+ * affiche son erreur et son bouton au lieu d'un état vide mensonger.
+ */
+async function fetchGamesWithFallback(): Promise<{ games: UIGame[]; label: string }> {
+  const today = new Date().toISOString().split('T')[0];
+  const raw = await nhlApiService.getGamesRange(today, shiftDate(today, 7));
+
+  const byDay = new Map<string, any[]>();
+  for (const g of raw) {
+    const day = String(g.gameDate ?? '').slice(0, 10);
+    const list = byDay.get(day);
+    if (list) list.push(g); else byDay.set(day, [g]);
+  }
+
+  const todayGames = byDay.get(today) ?? [];
+  if (todayGames.length > 0) return { games: todayGames.map(toUIGame), label: "Aujourd'hui" };
+
+  const tomorrowGames = byDay.get(shiftDate(today, 1)) ?? [];
+  if (tomorrowGames.length > 0) return { games: tomorrowGames.map(toUIGame), label: "Demain" };
+
+  const week = [2, 3, 4, 5, 6, 7].flatMap((n) => byDay.get(shiftDate(today, n)) ?? []);
+  if (week.length > 0) return { games: week.map(toUIGame), label: "Cette semaine" };
+
+  return { games: [], label: "Aucun match" };
+}
+
+interface SharedData {
+  teams:      UITeam[];
+  games:      UIGame[];
+  players:    UIPlayer[];
+  gamesLabel: string;
+}
+
+/**
+ * Un seul chargement pour toute l'application, gardé `SHARED_TTL_MS`.
+ *
+ * Avant le 2026-09-16 chaque composant qui appelait `useNHLData()` refaisait
+ * ses propres appels — dont `/nhl/players`, la plus grosse charge utile de
+ * l'API. La feuille « More bets » monte le hook à CHAQUE ouverture : 5
+ * ouvertures = 5 × équipes + matchs + joueurs (25 requêtes serveur une fois le
+ * cache HTTP expiré).
+ *
+ * On garde la PROMESSE (deux composants montés ensemble partagent l'appel en
+ * vol) et les tableaux DÉJÀ NORMALISÉS : rendre les mêmes références à chaque
+ * lecteur est ce qui garde `getTeamById` stable (voir l'avertissement du hook).
+ * Un échec vide l'entrée : le prochain montage ou `reload()` retente.
+ */
+const SHARED_TTL_MS = 5 * 60_000;
+let shared: { at: number; promise: Promise<SharedData>; value?: SharedData } | null = null;
+
+function freshShared(): SharedData | undefined {
+  return shared?.value && Date.now() - shared.at < SHARED_TTL_MS ? shared.value : undefined;
+}
+
+function loadShared(force: boolean): Promise<SharedData> {
+  if (!force && shared && (shared.value === undefined || Date.now() - shared.at < SHARED_TTL_MS)) {
+    return shared.promise;
+  }
+  const entry = { at: Date.now() } as { at: number; promise: Promise<SharedData>; value?: SharedData };
+  entry.promise = Promise.all([
+    nhlApiService.getAllTeams(),
+    fetchGamesWithFallback(),
+    nhlApiService.getAllPlayers(),
+  ]).then(
+    ([rawTeams, { games, label }, rawPlayers]) => {
+      const value: SharedData = {
+        teams:      rawTeams.map(toUITeam),
+        games,
+        players:    rawPlayers.map(toUIPlayer),
+        gamesLabel: label,
+      };
+      entry.value = value;
+      return value;
+    },
+    (err) => {
+      if (shared === entry) shared = null;
+      throw err;
+    },
+  );
+  shared = entry;
+  return entry.promise;
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 interface NHLData {
@@ -161,63 +260,37 @@ interface NHLData {
 }
 
 export function useNHLData(): NHLData {
-  const [teams,      setTeams]      = useState<UITeam[]>([]);
-  const [games,      setGames]      = useState<UIGame[]>([]);
-  const [gamesLabel, setGamesLabel] = useState<string>("Aujourd'hui");
-  const [players,    setPlayers]    = useState<UIPlayer[]>([]);
-  const [loading,    setLoading]    = useState(true);
+  // Données déjà chargées par un autre écran : rendues au premier rendu, sans
+  // squelette ni requête.
+  const [initial] = useState(freshShared);
+  const [teams,      setTeams]      = useState<UITeam[]>(initial?.teams ?? []);
+  const [games,      setGames]      = useState<UIGame[]>(initial?.games ?? []);
+  const [gamesLabel, setGamesLabel] = useState<string>(initial?.gamesLabel ?? "Aujourd'hui");
+  const [players,    setPlayers]    = useState<UIPlayer[]>(initial?.players ?? []);
+  const [loading,    setLoading]    = useState(!initial);
   const [error,      setError]      = useState<string | null>(null);
   const [reloadKey,  setReloadKey]  = useState(0);
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
+    // `reload()` force un nouvel appel ; un montage simple lit le partagé.
+    const force = reloadKey > 0;
+    if (force || !freshShared()) setLoading(true);
 
-    const today = new Date().toISOString().split('T')[0];
-
-    async function fetchGamesWithFallback(): Promise<{ games: UIGame[]; label: string }> {
-      // 1 — Today
-      try {
-        const raw = await nhlApiService.getGamesByDate(today);
-        if (raw.length > 0) return { games: raw.map(toUIGame), label: "Aujourd'hui" };
-      } catch { /* fall through */ }
-
-      // 2 — Tomorrow
-      try {
-        const raw = await nhlApiService.getGamesByDate(shiftDate(today, 1));
-        if (raw.length > 0) return { games: raw.map(toUIGame), label: "Demain" };
-      } catch { /* fall through */ }
-
-      // 3 — Next 7 days (days +2 to +7)
-      try {
-        const weekRaw = await Promise.all(
-          [2, 3, 4, 5, 6, 7].map(n =>
-            nhlApiService.getGamesByDate(shiftDate(today, n)).catch(() => [] as any[])
-          )
-        );
-        const combined = weekRaw.flat().map(toUIGame);
-        if (combined.length > 0) return { games: combined, label: "Cette semaine" };
-      } catch { /* fall through */ }
-
-      return { games: [], label: "Aucun match" };
-    }
-
-    Promise.all([
-      nhlApiService.getAllTeams(),
-      fetchGamesWithFallback(),
-      nhlApiService.getAllPlayers(),
-    ])
-      .then(([rawTeams, { games: uiGames, label }, rawPlayers]) => {
+    loadShared(force)
+      .then((data) => {
         if (!alive) return;
-        setTeams(rawTeams.map(toUITeam));
-        setGames(uiGames);
-        setGamesLabel(label);
-        setPlayers(rawPlayers.map(toUIPlayer));
+        // Mêmes références que le partagé : un setState identique ne re-rend
+        // pas, et `getTeamById` garde son identité.
+        setTeams(data.teams);
+        setGames(data.games);
+        setGamesLabel(data.gamesLabel);
+        setPlayers(data.players);
         setError(null);
       })
       .catch((err) => {
         if (!alive) return;
-        setError(err.message ?? 'Failed to load NHL data');
+        setError(err?.message ?? 'Failed to load NHL data');
       })
       .finally(() => {
         if (alive) setLoading(false);

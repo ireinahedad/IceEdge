@@ -28,6 +28,9 @@ type TFn = (key: string, params?: Record<string, string | number>) => string;
 
 // ─── Types locaux ──────────────────────────────────────────────────────────────
 
+/** Statuts d'un match qu'on ne propose pas (valeurs NHL minuscules, cf. `parseGameState`). */
+const UNPLAYABLE_STATUS = new Set(["ppd", "postponed", "cncl", "cancelled", "canceled", "susp", "suspended"]);
+
 interface GameOption {
   id: string;
   label: string;
@@ -406,33 +409,54 @@ export function NHLPredictionsPage() {
       return;
     }
 
+    // ── Tri AVANT tout appel réseau ──────────────────────────────────────────
+    //
+    // Sans probabilité du backend, le match n'est pas proposé : tout ce que
+    // cette page calcule ensuite (`computeRulePrediction`) en dérive, donc un
+    // repli fabriqué ici contaminerait chaque marché affiché. Avant le
+    // 2026-08-29 la ligne était `g.winPct1 || <50 + (winPct saison − 50)×0,8>`.
+    //
+    // Ces tests se faisaient APRÈS les deux `getTeamStats` : un match masqué
+    // coûtait quand même ses deux requêtes (10 pour 0 match affiché sans
+    // probabilité, 12 pour 6 matchs reportés — mesuré le 2026-09-16). Un match
+    // reporté ou annulé n'est pas proposé non plus : il n'a rien à parier.
+    const playable = games.filter((g) => {
+      if (UNPLAYABLE_STATUS.has(String(g.status ?? "").toLowerCase())) return false;
+      if (g.winPct1 == null) {
+        console.warn("[NHLPredictions] pas de probabilité pour", g.id, "— match masqué");
+        return false;
+      }
+      return !!getTeamById(g.team1Id) && !!getTeamById(g.team2Id);
+    }).slice(0, 8);
+
+    if (playable.length === 0) {
+      setGameOptions([]);
+      setSelectedGame(null);
+      setLoadingGames(false);
+      return;
+    }
+
     setLoadingGames(true);
+    let alive = true;
+
+    // Une équipe peut revenir deux fois dans la fenêtre « Cette semaine » :
+    // une seule requête par équipe.
+    const statsByTeam = new Map<string, Promise<number>>();
+    const goalsPerGame = (teamId: string) => {
+      let p = statsByTeam.get(teamId);
+      if (!p) {
+        p = nhlApiService.getTeamStats(teamId).then((s) => s.goalsForPerGame || 3.0, () => 3.0);
+        statsByTeam.set(teamId, p);
+      }
+      return p;
+    };
 
     Promise.all(
-      games.slice(0, 8).map(async (g) => {
-        const t1 = getTeamById(g.team1Id);
-        const t2 = getTeamById(g.team2Id);
-        if (!t1 || !t2) return null;
-
-        let hgf = 3.0, agf = 3.0;
-        try {
-          const [s1, s2] = await Promise.all([
-            nhlApiService.getTeamStats(t1.id),
-            nhlApiService.getTeamStats(t2.id),
-          ]);
-          hgf = s1.goalsForPerGame || 3.0;
-          agf = s2.goalsForPerGame || 3.0;
-        } catch { /* use defaults */ }
-
-        // Sans probabilité du backend, le match n'est pas proposé : tout ce que
-        // cette page calcule ensuite (`computeRulePrediction`) en dérive, donc un
-        // repli fabriqué ici contaminerait chaque marché affiché. Avant le
-        // 2026-08-29 la ligne était `g.winPct1 || <50 + (winPct saison − 50)×0,8>`.
-        const hw = g.winPct1;
-        if (hw == null) {
-          console.warn("[NHLPredictions] pas de probabilité pour", g.id, "— match masqué");
-          return null;
-        }
+      playable.map(async (g) => {
+        const t1 = getTeamById(g.team1Id)!;
+        const t2 = getTeamById(g.team2Id)!;
+        const [hgf, agf] = await Promise.all([goalsPerGame(t1.id), goalsPerGame(t2.id)]);
+        const hw = g.winPct1!;
         const aw = 100 - hw;
 
         return {
@@ -442,7 +466,9 @@ export function NHLPredictionsPage() {
           awayAbbr: t2.abbr,
           homeLogo: t1.logo || nhlLogoUrl(t1.abbr),
           awayLogo: t2.logo || nhlLogoUrl(t2.abbr),
-          time: g.time || t("nhl.today"),
+          // Vide si le backend ne l'a pas fourni : le libellé de repli est posé
+          // au rendu, pour suivre la langue sans recharger les stats.
+          time: g.time || "",
           homeWinPct: hw,
           awayWinPct: aw,
           homeGoalsPerGame: hgf,
@@ -450,18 +476,23 @@ export function NHLPredictionsPage() {
         } as GameOption;
       })
     ).then((opts) => {
+      if (!alive) return;
       const valid = opts.filter((o): o is GameOption => o !== null);
       setGameOptions(valid);
       setSelectedGame(valid.length > 0 ? valid[0] : null);
       setLoadingGames(false);
     }).catch(() => {
+      if (!alive) return;
       // `Promise.all` rejette au premier échec non rattrapé. Sans ce `catch`, le
       // squelette reste — la panne exacte qu'on vient de fermer plus haut.
       setGameOptions([]);
       setSelectedGame(null);
       setLoadingGames(false);
     });
-  }, [games, getTeamById, lang, nhlLoading]);
+    return () => { alive = false; };
+    // `lang` n'y est plus : il ne servait qu'au libellé de repli de l'heure,
+    // désormais posé au rendu. Changer de langue relançait 16 `getTeamStats`.
+  }, [games, getTeamById, nhlLoading]);
 
   // ── Calculer les prédictions quand le match change ─────────────────────────
   useEffect(() => {
@@ -607,7 +638,7 @@ export function NHLPredictionsPage() {
                 <span className="text-xs font-bold" style={{ color: accent }}>{selectedGame.homeWinPct}%</span>
               </div>
               <div className="flex flex-col items-center gap-1 px-4">
-                <span className="text-[#4a6068] text-xs">{selectedGame.time}</span>
+                <span className="text-[#4a6068] text-xs">{selectedGame.time || t("nhl.today")}</span>
                 <span className="text-white font-bold">VS</span>
               </div>
               <div className="flex-1 flex flex-col items-center gap-1">
