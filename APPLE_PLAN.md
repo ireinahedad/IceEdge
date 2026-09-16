@@ -239,7 +239,8 @@ Do §2 in week 1 even if no code is written.
 ## 2. Phase 0 — Accounts and identity (week 1, do this first)
 
 - [ ] **0.1** Pick the Apple Account you will use *forever*. Not `arakice.support@gmail.com`
-      — you already lost control of that one and it cost you the Cloudflare account.
+      — you already lost control of that one and it cost you the Cloudflare account
+      (recovered 2026-09-16, now on `ireinahedad24@gmail.com` — still not a reason to reuse it).
       Use an address on a domain **you** control, with recovery you can actually reach.
 - [ ] **0.2** Turn on two-factor auth on it. Save the recovery key somewhere real.
 - [ ] **0.3** Enroll in the Apple Developer Program ($99/yr), **Individual**.
@@ -668,8 +669,11 @@ runs-on: macos-15          # must provide Xcode 26 — verify the image's Xcode 
 
 ## 14. Open questions to resolve before Phase 3
 
-1. Is `arakice.com` back under your control? (Cloudflare account recovery — the App Store
-   listing needs a live privacy policy URL and universal links need the domain.)
+1. ~~Is `arakice.com` back under your control?~~ **Yes — 2026-09-16.** The original
+   Cloudflare account (zone, registration and production R2) was recovered and is managed
+   from `ireinahedad24@gmail.com`. The domain is usable for the privacy policy URL, universal
+   links; `support@arakice.com` forwards to that Gmail since the same day.
+   Follow-ups: `RESTE_A_FAIRE.md` §1, R1–R9.
 2. Individual or company enrollment? Individual = your legal name is public on the listing.
 3. Does anyone you know have an iPhone for TestFlight? You need at least one real device.
 4. Are you willing to launch iOS without affiliate revenue? (§4 Option A assumes yes.)

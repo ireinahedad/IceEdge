@@ -663,6 +663,11 @@ network call to render a `mailto:` link.
 - ⚠️ **It is a Gmail, not an address on the domain.** That is fine for Apple as long as it is
   monitored, but it means there is still no `@arakice.com` mail route, so a future
   `support@arakice.com` on a business card or an invoice would bounce.
+  **Route created 2026-09-16:** the Cloudflare account holding the zone is recovered, and
+  Email Routing now forwards `support@arakice.com` → `ireinahedad24@gmail.com`
+  (`RESTE_A_FAIRE.md` §1, R7). The published address is still `support.arakice@gmail.com`;
+  switching to the domain address is a separate decision, and either one still has to be
+  proven with a real mail.
 - 🔴 **The one thing still owed: prove it delivers.** Send a real mail and confirm it arrives —
   and confirm you can sign in to that mailbox. This whole item exists because the previous
   address was one nobody could open.

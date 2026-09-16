@@ -186,6 +186,11 @@ base64 dans Postgres : ~27 ko par utilisateur dans la base *et* dans chaque
 payload de chat et de leaderboard. R2 offre 10 Go gratuits et **aucun frais
 d'egress**, contrairement au stockage Neon qui est le plus cher de la stack.
 
+> **Compte de production (2026-09-16) :** le compte Cloudflare d'origine, géré depuis
+> `ireinahedad24@gmail.com` — identifiant `2216e2d9…`, le même qui porte la zone
+> `arakice.com` et l'enregistrement du domaine. Le compte `Ireinahedad@icloud.com's
+> Account` a été abandonné : ne rien y recréer.
+
 ### Créer le bucket
 1. https://dash.cloudflare.com → **R2** → *Create bucket* → nom : `arakice-avatars`
 2. Bucket → **Settings → Public access** : activer le sous-domaine `r2.dev`

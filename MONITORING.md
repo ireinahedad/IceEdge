@@ -63,7 +63,7 @@ reste le temps de comprendre d'où vient la consommation.
 | **Provider LLM** (OpenAI / GitHub Models) | console du provider → *Usage limits* : soft à l'email, **hard limit mensuel** | hard limit = **part IA prévue × nombre d'abonnés + 30 %** | Le plafond par utilisateur (`llmQuota.service.ts`) rend ce dépassement théoriquement impossible : s'il se déclenche, c'est que le calcul du plafond a été contourné ou qu'un tarif a changé. À traiter comme un incident, pas comme une croissance |
 | **Stripe** | Developers → Webhooks : alerte sur le **taux d'échec** de l'endpoint | > 1 % d'échecs sur 24 h | Stripe désactive un endpoint qui échoue de façon répétée, et un endpoint désactivé = des abonnés qui paient sans passer Pro. C'est la seule ligne de ce tableau où l'alerte protège une recette, pas une dépense |
 | **Sentry** | Settings → Subscription → *Spend caps* | cap à **1× le quota inclus** (pas de dépassement facturé) | Le tracing de performance est échantillonné à 1 % en production par défaut (`instrument.ts`). Si le quota saute quand même, quelqu'un a posé `SENTRY_TRACES_SAMPLE_RATE` à la main et ne l'a pas retiré |
-| **Cloudflare R2** | Dashboard → R2 → Usage | alerte à **5 Go** (sur 10 Go gratuits) | Les avatars ne sont pas redimensionnés, ou rien ne supprime les anciens objets à chaque changement d'avatar |
+| **Cloudflare R2** | Dashboard → R2 → Usage · **alerte posée le 2026-09-16** : « Billing Budget Alert », 5 $ de dépense totale, sur le compte d'origine (`2216e2d9…`) | alerte à **5 Go** (sur 10 Go gratuits) — la console ne sait l'exprimer qu'en dollars | Les avatars ne sont pas redimensionnés, ou rien ne supprime les anciens objets à chaque changement d'avatar |
 
 **Deux règles pour que ces alertes servent à quelque chose :**
 
