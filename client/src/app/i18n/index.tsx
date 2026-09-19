@@ -752,6 +752,22 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pred.noUpcoming":     { en: "No game scheduled in the next 14 days", fr: "Aucun match prévu dans les 14 prochains jours" },
   "pred.playersTable":   { en: "Players",               fr: "Joueurs" },
   "pred.seasonStats":    { en: "Season stats",          fr: "Stats de la saison" },
+  "pred.viewRoster":     { en: "View full roster stats →", fr: "Voir les stats de l'effectif →" },
+  "pred.bookOdds":       { en: "Book odds",             fr: "Cote du livre" },
+
+  // ── Grilles de paris joueur (buts / passes / tirs bloqués) ──────────────
+  "prop.goals":          { en: "Goals",                 fr: "Buts" },
+  "prop.assists":        { en: "Assists",               fr: "Passes" },
+  "prop.blocks":         { en: "Blocked shots",         fr: "Tirs bloqués" },
+  "prop.top5":           { en: "Top 5",                 fr: "Top 5" },
+  "prop.allPlayers":     { en: "All players",           fr: "Tous les joueurs" },
+  "prop.showMore":       { en: "See more ({n}) ▼",      fr: "Voir plus ({n}) ▼" },
+  "prop.showLess":       { en: "See less ▲",            fr: "Voir moins ▲" },
+  "prop.noStat":         { en: "No data for this stat yet this season.", fr: "Pas encore de données pour cette statistique cette saison." },
+  "prop.note":           {
+    en: "Poisson model: {name} averages {rate} {metric}/game ({total} in {gp} games) → probability of {k}+ in a single game.",
+    fr: "Modèle de Poisson : {name} tourne à {rate} {metric}/match ({total} en {gp} matchs) → probabilité de {k}+ sur un match.",
+  },
   "pred.playerCharts":   { en: "Stats",                 fr: "Stats" },
   "pred.playerTeam":     { en: "Team",                  fr: "Équipe" },
   "pred.playerPreds":    { en: "Predictions",           fr: "Prédictions" },

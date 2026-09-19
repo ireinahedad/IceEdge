@@ -7,18 +7,22 @@
  */
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { nhlApiService } from "../../services/nhlApiService";
 import { useSport } from "../../context/SportContext";
+import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
-import { MarketGroup, PredictionsRevealBar, TeamPlayersTable } from "./PredictionSheet";
+import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
+import { PlayerPropGrid } from "./PlayerPropGrid";
 import { MLProps, MktGroup, RuleFactor } from "./gameMarkets";
-import { GameSelector, LoadingSkeleton, NotFound, RevealMode, RevealModeCtx, StatsBanner, useSelectedGame, useUpcomingGames } from "./predictionShared";
+import { BetOddsCtx, GameSelector, LoadingSkeleton, NotFound, RevealMode, RevealModeCtx, StatsBanner, useGameOdds, useSelectedGame, useUpcomingGames } from "./predictionShared";
 
 
 /* ─── Team Prediction ─────────────────────────── */
 export function TeamPrediction({ teamId }: { teamId: string }) {
   const { theme } = useSport();
+  const { t } = useI18n();
+  const navigate = useNavigate();
   const accent = theme.accent;
   const [data, setData] = useState<{
     name: string; abbr: string; logo: string; conf: string; pts: number;
@@ -29,6 +33,11 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [revealMode, setRevealMode] = useState<RevealMode>("rules");
+  // Abréviation → nom complet, pour tout le circuit. Le flux de cotes nomme ses
+  // issues « Edmonton Oilers » ; sans le nom de l'ADVERSAIRE, impossible
+  // d'identifier le match avec certitude, et un appariement approximatif
+  // collerait le prix d'une autre affiche du même soir.
+  const [teamNames, setTeamNames] = useState<Record<string, string>>({});
 
   // Which game these bets are for. Defaults to the team's next game, switchable
   // from the dropdown, and overridden by a `?game=` param. The id is stamped on
@@ -44,6 +53,11 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
           nhlApiService.getAllTeams(),
           nhlApiService.getTeamStats(teamId),
         ]);
+        setTeamNames(Object.fromEntries(
+          teams
+            .filter(t => t.abbreviation && t.name)
+            .map(t => [t.abbreviation!.toUpperCase(), t.name!]),
+        ));
         const info = teams.find(t => t.abbreviation?.toLowerCase() === teamId.toLowerCase());
         const abbr = info?.abbreviation ?? teamId.toUpperCase();
         const winPct = stats.wins + stats.losses + stats.otLosses > 0
@@ -65,6 +79,21 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
     }
     load();
   }, [teamId]);
+
+  // Cotes du match sélectionné, chez le livre réglé.
+  //
+  // Les deux noms complets sont nécessaires : `useGameOdds` n'apparie un
+  // événement que si les DEUX côtés tombent juste, faute de quoi le prix d'une
+  // autre affiche du même soir pourrait s'afficher ici. `teamNames` arrive du
+  // même appel `getAllTeams` que l'en-tête de la page ; tant qu'il est vide, le
+  // hook rend simplement « pas de cotes ».
+  //
+  // ⚠️ Avant les retours anticipés : c'est un hook.
+  const oppAbbr = selectedGame?.opponentAbbr?.toUpperCase() ?? "";
+  const odds = useGameOdds(
+    data ? { abbr: data.abbr, name: teamNames[data.abbr.toUpperCase()] ?? data.name } : undefined,
+    oppAbbr && teamNames[oppAbbr] ? { abbr: oppAbbr, name: teamNames[oppAbbr] } : undefined,
+  );
 
   if (loading) return <LoadingSkeleton />;
   if (!data) return <NotFound />;
@@ -192,9 +221,28 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
     // tuile faisait dire deux chiffres différents au même pari — visiblement sur
     // « Kills All PKs », à 0 % en tuile (PK% local à 0) et à sa vraie valeur une
     // fois la carte ouverte.
+    //
+    // ⚠️ `pctScale` est DÉFAIT ici, il n'est pas recopié.
+    //
+    // Depuis le passage du marché Match Betting du serveur à quatre tuiles,
+    // `ml-home` ne vaut plus « gagne » mais « gagne en temps réglementaire » :
+    // son `rulePct` est le mélange des facteurs multiplié par `pctScale`, la
+    // part hors prolongation. Or la tuile d'équipe en face s'appelle
+    // « {ÉQUIPE} Wins (ML) » — victoire toutes issues confondues, prolongations
+    // comprises. Recopier le score tel quel aurait retiré ~10 points à un pari
+    // qui ne les perd pas, en silence et sur toutes les pages d'équipe.
+    //
+    // On divise donc par l'échelle pour retrouver la question large, qui est
+    // celle que pose cette page. Les FACTEURS, eux, se recopient sans
+    // retouche : ils décrivent « qui gagne ? » dans les deux cas.
     const byServerId: Record<string, { factors?: RuleFactor[]; factorGroup?: string; rulePct?: number }> = {};
     for (const g of apiGroups) for (const o of g.options as any[]) {
-      if (o.factors?.length) byServerId[o.id] = { factors: o.factors, factorGroup: o.factorGroup, rulePct: o.rulePct };
+      if (!o.factors?.length) continue;
+      const scale = typeof o.pctScale === "number" && o.pctScale > 0 ? o.pctScale : 1;
+      const unscaled = typeof o.rulePct === "number"
+        ? Math.round(Math.max(3, Math.min(97, o.rulePct / scale)))
+        : undefined;
+      byServerId[o.id] = { factors: o.factors, factorGroup: o.factorGroup, rulePct: unscaled };
     }
     return teamGroups.map((g) => ({
       ...g,
@@ -242,19 +290,26 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
       {/* Market groups — reveal-all toggle */}
       <StatsBanner type="team" id={teamId} />
       <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
-      <RevealModeCtx.Provider value={revealMode}>
-        {teamGroupsF.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
-      </RevealModeCtx.Provider>
+      <BetOddsCtx.Provider value={odds}>
+        <RevealModeCtx.Provider value={revealMode}>
+          {teamGroupsF.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
 
-      {/* Effectif — même tableau que sur la page d'un match, un seul club ici.
-          Le match sélectionné suit le joueur pour que ses props soient ceux de
-          cette affiche. */}
-      <TeamPlayersTable
-        abbr={data.abbr}
-        name={data.name}
-        gameId={selectedGame?.id}
-        accent={accent}
-      />
+          {/* Paris joueur du club, en grille — le match sélectionné les suit,
+              pour qu'ils se règlent sur cette affiche. */}
+          <PlayerPropGrid metric="goals"   sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
+          <PlayerPropGrid metric="assists" sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
+          <PlayerPropGrid metric="blocks"  sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
+        </RevealModeCtx.Provider>
+      </BetOddsCtx.Provider>
+
+      {/* Les lignes de saison complètes vivent sur la page Statistiques. */}
+      <button
+        onClick={() => navigate(`/stats/chart/team/${teamId}`)}
+        className="w-full py-3 rounded-2xl text-xs font-semibold border transition-transform active:scale-[0.98]"
+        style={{ background: accent + "14", color: accent, borderColor: accent + "44" }}
+      >
+        {t("pred.viewRoster")}
+      </button>
     </div>
   );
 }

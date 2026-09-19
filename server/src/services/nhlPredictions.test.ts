@@ -101,6 +101,42 @@ describe('buildGameMarkets — chaque tuile porte son marché ML', () => {
     expect(away.opponentId).toBe(home.subjectId);
   });
 
+  /**
+   * Le marché Match Betting est une PARTITION.
+   *
+   * Ce qu'il remplace ne l'était pas : « maison gagne », « OT/SO », « visiteur
+   * gagne » se recoupaient (une victoire en prolongation compte dans la
+   * première ET la deuxième), et les trois pourcentages totalisaient ~122 %
+   * sous la forme d'un marché à trois voies — où l'on choisit UNE issue.
+   *
+   * Les quatre tuiles doivent totaliser 100. La tolérance ne couvre que les
+   * arrondis à l'entier (quatre tuiles, ±0,5 chacune) et l'écrêtage de `pct`
+   * à [3, 97], qui mord sur une affiche très déséquilibrée.
+   */
+  it('les quatre tuiles de Match Betting partitionnent les issues', async () => {
+    const groups = await buildGameMarkets('2026020001');
+    const match = groups.find(g => g.id === 'match')!;
+    expect(match.options.map(o => o.id)).toEqual(
+      ['ml-home', 'ml-away', 'ml-home-ot', 'ml-away-ot'],
+    );
+    const sum = match.options.reduce((s, o) => s + o.rulePct, 0);
+    expect(sum).toBeGreaterThanOrEqual(96);
+    expect(sum).toBeLessThanOrEqual(104);
+  });
+
+  it('les tuiles réglementaires valent moins que la victoire totale', async () => {
+    const groups = await buildGameMarkets('2026020001');
+    const byId = new Map(groups.flatMap(g => g.options.map(o => [o.id, o] as const)));
+    const reg = byId.get('ml-home')!.rulePct;
+    const ot  = byId.get('ml-home-ot')!.rulePct;
+    // « gagne en 60 min » + « gagne en OT/SO » = « gagne ». La tuile
+    // réglementaire seule doit donc être strictement plus basse : c'est
+    // exactement ce que `pctScale` garantit, et ce qu'un recalage naïf des
+    // facteurs (`setFactors` écrase `rulePct`) détruisait.
+    expect(ot).toBeGreaterThan(0);
+    expect(reg).toBeLessThan(reg + ot);
+  });
+
   it('chaque seau d\'écart demande SA taille', async () => {
     const groups = await buildGameMarkets('2026020001');
     const byId = new Map(groups.flatMap(g => g.options.map(o => [o.id, o] as const)));

@@ -1,0 +1,346 @@
+
+═══ B1 · Multiplication des requêtes — 1 requête HTTP, cache froid ═══
+
+ endpoint     │ HTTP │ appels │ dont distincts │ gaspillage │ nhl │ odds │ ml │ sql
+──────────────┼──────┼────────┼────────────────┼────────────┼─────┼──────┼────┼────
+ best-bets   │  200 │     51 │             51 │          0 │  34 │    1 │ 16 │   3
+ games-live  │  200 │      1 │              1 │          0 │   1 │    0 │  0 │   0
+ games-date  │  200 │      1 │              1 │          0 │   1 │    0 │  0 │   0
+ odds-h2h    │  200 │      1 │              1 │          0 │   0 │    1 │  0 │   1
+ odds-totals │  200 │      1 │              1 │          0 │   0 │    1 │  0 │   1
+ leaderboard │  200 │      0 │              0 │          0 │   0 │    0 │  0 │   2
+ teams       │  200 │      1 │              1 │          0 │   1 │    0 │  0 │   0
+ standings   │  200 │      1 │              1 │          0 │   1 │    0 │  0 │   0
+ players     │  200 │      2 │              2 │          0 │   2 │    0 │  0 │   0
+ pred-game   │  200 │      3 │              3 │          0 │   3 │    0 │  0 │   0
+
+  ✓ aucun appel émis deux fois dans une même requête (gaspillage = 0 partout)
+
+═══ B2 · Absence de cache — 20 requêtes identiques dans le TTL ═══
+
+ endpoint     │ appels 1re │ appels 2→R │ sql 1re │ sql 2→R │ Cache-Control renvoyé
+──────────────┼────────────┼────────────┼─────────┼─────────┼──────────────────────
+ best-bets   │         51 │          0 │       3 │       0 │ public, max-age=60, stale-while-revalidate=300
+ games-live  │          1 │          0 │       0 │       0 │ public, max-age=30, stale-while-revalidate=60
+ games-date  │          1 │          0 │       0 │       0 │ public, max-age=30, stale-while-revalidate=60
+ odds-h2h    │          1 │          0 │       1 │       0 │ public, max-age=60, stale-while-revalidate=300
+ odds-totals │          1 │          0 │       1 │       0 │ public, max-age=60, stale-while-revalidate=300
+ leaderboard │          0 │          0 │       2 │       0 │ public, max-age=60, stale-while-revalidate=300
+ teams       │          1 │          0 │       0 │       0 │ public, max-age=300, stale-while-revalidate=600
+ standings   │          1 │          0 │       0 │       0 │ public, max-age=300, stale-while-revalidate=600
+ players     │          2 │          0 │       0 │       0 │ public, max-age=600, stale-while-revalidate=1200
+ pred-game   │          3 │          0 │       0 │       0 │ public, max-age=300, stale-while-revalidate=600
+
+  ✓ cache mémoire : 0 appel sortant sur les 19 requêtes suivantes, partout
+
+═══ B3 · Déduplication en vol — N requêtes simultanées sur cache froid ═══
+
+ endpoint     │   N │ exécutions │ lues sur     │ cache.misses │ dedup │ appels amont │ p95 ms │ err
+──────────────┼─────┼────────────┼──────────────┼──────────────┼───────┼──────────────┼────────┼────
+ best-bets   │   10│          1 │ cache best-bets │            1 │     9 │           51 │    588 │   0
+ best-bets   │   50│          1 │ cache best-bets │            1 │    49 │           51 │    616 │   0
+ best-bets   │  200│          1 │ cache best-bets │            1 │   199 │           51 │    692 │   0
+ odds-h2h    │   10│          1 │ cache odds   │            1 │     9 │            1 │    188 │   0
+ odds-h2h    │   50│          1 │ cache odds   │            1 │    49 │            1 │    201 │   0
+ odds-h2h    │  200│          1 │ cache odds   │            1 │   199 │            1 │    257 │   0
+ teams       │   10│          1 │ appels amont │            — │     — │            1 │    176 │   0
+ teams       │   50│          1 │ appels amont │            — │     — │            1 │    227 │   0
+ teams       │  200│          1 │ appels amont │            — │     — │            1 │    301 │   0
+ games-date  │   10│          1 │ appels amont │            — │     — │            1 │    192 │   0
+ games-date  │   50│          1 │ appels amont │            — │     — │            1 │    266 │   0
+ games-date  │  200│          1 │ appels amont │            — │     — │            1 │    390 │   0
+
+  ✓ 1 seule exécution par clé froide à tous les paliers — la protection anti-troupeau tient
+  · `cache.misses` à N sur les lignes NHL n'est PAS une anomalie : `nhlApiClient`
+    déduplique sous le cache, dans `fetchNHL`. La vérité pour lui est « appels amont ».
+
+═══ B4 · Requêtes N+1 — requêtes SQL par requête HTTP ═══
+
+ endpoint     │   froid 5 lignes │ froid 100 lignes │   chaud 5 lignes │ chaud 100 lignes
+──────────────┼──────────────────┼───────────────────┼──────────────────┼──────────────────
+ leaderboard │                2 │                2 │                0 │                0
+ best-bets   │                3 │                3 │                0 │                0
+ odds-h2h    │                1 │                1 │                0 │                0
+ auth/me     │                0 │                0 │                0 │                0
+ auth/login  │                2 │                2 │                2 │                2
+
+  ✓ nombre de requêtes SQL constant de 5 à 100 lignes — pas de N+1 sur ces chemins
+
+  Détail à 100 lignes (requêtes émises à froid) :
+    leaderboard →
+          1×  SELECT u.id AS "userId", u.username, up.display_name AS "displayName", up.avatar, up.tier,
+          1×  SELECT user_id AS "userId", COUNT(*) FILTER (WHERE outcome <> 'pending') AS decided, COUNT
+    best-bets →
+          2×  SELECT payload FROM manual_data WHERE kind = $1 AND entry_key = $2
+          1×  UPDATE odds_quota_state SET remaining = $1, used = $2, observed_at = NOW() WHERE id = 1
+    odds-h2h →
+          1×  UPDATE odds_quota_state SET remaining = $1, used = $2, observed_at = NOW() WHERE id = 1
+    auth/me → aucune requête SQL
+    auth/login →
+          1×  SELECT * FROM users WHERE email = $1 AND is_active = TRUE
+          1×  INSERT INTO refresh_tokens (user_id, token, expires_at, remember) VALUES ($1, $2, $3, $4)
+
+═══ B5 · Croissance avec la taille de la ligue — 1 exécution froide de best-bets ═══
+
+ équipes │ matchs │ joueurs │ candidats │ nhl │ ml │ odds │ sql │ appels │ appels/sujet │ ms
+─────────┼────────┼─────────┼───────────┼─────┼────┼──────┼─────┼────────┼──────────────┼─────
+       8 │      4 │      10 │        80 │  25 │ 15 │    1 │   3 │     41 │         2.93 │   77
+      16 │      8 │      20 │       140 │  34 │ 16 │    1 │   3 │     51 │         1.82 │  116
+      24 │     12 │      30 │       180 │  36 │ 16 │    1 │   3 │     53 │         1.26 │  130
+      32 │     16 │      50 │       220 │  40 │ 17 │    1 │   3 │     58 │         0.88 │  142
+
+  Sujets ×4.7  →  appels sortants ×1.4
+  ✓ croissance au plus linéaire en nombre de sujets.
+  ✓ inférences ML plafonnées (max observé : 17, stables).
+  ✓ appels The Odds API : 1 / 1 / 1 / 1 — une passe par exécution, quel que soit le calendrier.
+
+═══ B8 · Clé de cache pilotable depuis la query string (caches NHL chauds) ═══
+
+même URL, 20 fois                  requêtes= 20  exécutions(best-bets.misses)=  0  hits= 20  appels amont=   0  ml=  0  sql=  0  32 ms
+limit=1..20 (20 URL)               requêtes= 20  exécutions(best-bets.misses)=  0  hits= 20  appels amont=   0  ml=  0  sql=  0  17 ms
+players=1..20 (20 URL)             requêtes= 20  exécutions(best-bets.misses)=  1  hits= 19  appels amont=  16  ml=  8  sql=  0  72 ms
+days=1..7 (7 URL)                  requêtes=  7  exécutions(best-bets.misses)=  2  hits=  5  appels amont=   1  ml=  0  sql=  0  68 ms
+limit hors bornes 51..70 (20 URL)  requêtes= 20  exécutions(best-bets.misses)=  0  hits= 20  appels amont=   0  ml=  0  sql=  0  20 ms
+
+  cache best-bets : 4 / 50 entrées, 0 éviction(s)
+
+  ✓ `limit` n'entre pas dans la clé de cache.
+  ✓ `days` et `players` restent bornés par la liste blanche (2 et 1 exécutions sur un balayage complet).
+      Ils changent le calcul, donc leur place dans la clé est justifiée ; c'est le NOMBRE
+      de valeurs joignables qui devait être fermé, et il l'est.
+  · `limit` hors bornes (51..70) → 0 recalcul : `normalizeOptions` borne bien
+    l'espace des clés. C'est le plafond qui tient, pas l'absence de trou.
+
+(B6 — charge concurrente, en cours…)
+
+═══ B6 · Concurrence — 40 utilisateurs virtuels, 30 s par phase ═══
+
+                          │  phase A (lectures) │  phase B (+ connexions)
+──────────────────────────┼─────────────────────┼────────────────────────
+ itérations               │                4682 │                    4684
+ requêtes HTTP            │               28092 │                   28104
+ erreurs                  │          0 (0.00 %) │              0 (0.00 %)
+ 429 (limiteur)           │                   0 │                       0
+ p50 lectures (ms)        │                   3 │                       3
+ p95 lectures (ms)        │                   9 │                      10
+ max lectures (ms)        │                 148 │                     145
+ appels amont             │                   1 │                       1
+ appels / itération       │                0.00 │                    0.00
+ requêtes SQL             │                   0 │                     123
+ event loop p99 (ms)      │                5.96 │                    5.65
+ event loop max (ms)      │               43.65 │                   43.12
+ RSS (Mo)                 │               388.5 │                   437.9
+
+  (le plancher d'`event loop` est la résolution d'échantillonnage de `metrics.ts`,
+   soit ~1 ms : une valeur de cet ordre au repos est normale, pas un blocage.)
+
+ Connexions : 60 tentées, 0 en erreur, p50 157 ms, p95 201 ms, max 244 ms
+
+  ✓ le coût amont NE SUIT PAS le trafic : 1 appels pour 4682 itérations (0.00/itération).
+  ✓ les lectures tiennent pendant la vague de connexions (p95 ×1.11).
+  ✓ event loop p99 à 5.65 ms sous charge mixte.
+
+ Détail par endpoint (phase B) :
+ endpoint     │   n │ p50 │ p95 │ max │ err
+──────────────┼─────┼─────┼─────┼─────┼────
+ best-bets   │ 4684│   3 │   9 │  97 │   0
+ games-live  │ 4684│   3 │  10 │ 145 │   0
+ games-date  │ 4684│   3 │   9 │  98 │   0
+ odds-h2h    │ 4684│   3 │   9 │  98 │   0
+ odds-totals │ 4684│   3 │  10 │  99 │   0
+ leaderboard │ 4684│   3 │  10 │  99 │   0
+
+ Caches en fin de phase B :
+   leaderboard      hits  4676  misses    1  dedup    7  taux 99.8 %
+   nhl              hits  9687  misses   27  dedup    0  taux 99.7 %
+   manual           hits    30  misses    0  dedup    0  taux 100.0 %
+   odds-client      hits    30  misses    0  dedup    0  taux 100.0 %
+   odds             hits  9368  misses    0  dedup    0  taux 100.0 %
+   best-bets        hits  4683  misses    1  dedup    0  taux 100.0 %
+
+═══ B10 · Chemins authentifiés — requêtes SQL par requête HTTP ═══
+
+ endpoint          │  froid 5 lignes │ froid 100 lignes │  chaud 5 lignes │ chaud 100 lignes
+───────────────────┼─────────────────┼──────────────────┼─────────────────┼─────────────────
+ subscription/me  │               1 │               1 │               1 │               1
+ slips            │               1 │               1 │               1 │               1
+ users/me         │               2 │               2 │               2 │               2
+ users/me/bets    │               1 │               1 │               1 │               1
+ users/me/stats   │               1 │               1 │               1 │               1
+ summary (Pro)    │               3 │               3 │               2 │               2
+ slips (Pro)      │               2 │               2 │               2 │               2
+ chat/rooms       │               1 │               1 │               1 │               1
+ chat/messages    │               3 │               3 │               2 │               2
+ chat/members     │               2 │               2 │               2 │               2
+
+  ✓ nombre de requêtes SQL constant de 5 à 100 lignes — pas de N+1
+  ✓ ouvrir un salon de 100 messages coûte 3 requêtes Neon — le critère S4 (« ~1, pas ~100 ») est tenu.
+  ✓ cache `isPro` : 0 lecture(s) en base pour 30 requêtes Pro (30 hits, 0 dédoublonnées).
+
+  Détail à 100 lignes (requêtes émises à froid) :
+    subscription/me →
+          1×  SELECT * FROM subscriptions WHERE user_id = $1
+    slips →
+          1×  SELECT id, placed_at AS "placedAt", sport, legs, leg_count AS "legCount", is_parlay AS "is
+    users/me →
+          1×  SELECT u.id, u.username, up.display_name AS "displayName", up.avatar, up.avatar_url AS "av
+          1×  SELECT badge_id AS "id", label, description, icon, earned_at AS "earnedAt", tier FROM user
+    users/me/bets →
+          1×  SELECT id, placed_at AS "placedAt", market_type AS "marketType", market_label AS "marketLa
+    users/me/stats →
+          1×  SELECT outcome, market_type AS "marketType", probability, is_parlay AS "isParlay", placed_
+    summary (Pro) →
+          1×  SELECT * FROM subscriptions WHERE user_id = $1
+          1×  SELECT u.id AS "userId", u.username, COALESCE(up.display_name, u.username) AS "displayName
+          1×  SELECT COUNT(*) FILTER (WHERE outcome <> 'pending') AS settled, COUNT(*) FILTER (WHERE out
+    slips (Pro) →
+          1×  SELECT up.show_slips AS "showSlips" FROM user_profiles up WHERE up.user_id = $1
+          1×  SELECT id, placed_at AS "placedAt", sport, legs, leg_count AS "legCount", is_parlay AS "is
+    chat/rooms →
+          1×  SELECT r.id, r.name, r.icon, r.description, r.color, r.is_live AS "isLive", r.is_private A
+    chat/messages →
+          1×  SELECT id, name, icon, description, color, is_live AS "isLive", is_pinned AS "isPinned", i
+          1×  SELECT * FROM ( SELECT m.id, m.user_id AS "userId", m.username, m.display_name AS "display
+          1×  SELECT message_id AS "messageId", emoji, count FROM chat_reactions WHERE message_id = ANY(
+    chat/members →
+          1×  SELECT role, pinned FROM chat_room_members WHERE room_id = $1 AND user_id = $2
+          1×  SELECT m.user_id AS "userId", m.role, m.joined_at AS "joinedAt", u.username, COALESCE(up.d
+
+═══ B11 · Socket.io — arrivée simultanée dans un même salon (S4) ═══
+    coalescence du compte de présence : 1000 ms · observation : 3500 ms
+
+ sockets │ connexion │ trames room_users │ /arrivée │ SQL tempête │ /arrivée │ msg diffusé │ EL p99 │ RSS
+─────────┼───────────┼───────────────────┼──────────┼─────────────┼──────────┼─────────────┼────────┼──────
+      25 │     67 ms │                50 │        2 │           1 │     0.04 │          25 │   1.24 │ 264.7
+     100 │    192 ms │               200 │        2 │           1 │     0.01 │         100 │   1.21 │ 262.2
+     300 │    459 ms │               600 │        2 │           1 │        0 │         300 │   1.52 │ 264.2
+
+  Sockets ×12  →  trames room_users ×12.0
+  ✓ le fan-out du compte de présence est LINÉAIRE en nombre de sockets (2 → 2 trames par arrivée).
+    La coalescence de `scheduleRoomCount` tient : pas de tempête quadratique au coup d'envoi.
+  ✓ ouverture de salon : 0 requête Neon par arrivée à 300 sockets — le critère S4 (« ~1, pas ~100 ») est tenu.
+    Requêtes de la tempête :
+           1×  SELECT id, name, icon, description, color, is_live AS "isLive", is_pinned AS "isPinned", i
+  ✓ un message posté atteint bien tous les sockets du salon (300/300), pour 3 requêtes SQL.
+  · event loop p99 pendant la tempête : 25→1.24 ms, 100→1.21 ms, 300→1.52 ms (plancher = résolution de metrics.ts).
+
+  Rappel : tout ceci est MONO-INSTANCE. `room_users` compte les sockets de CE process,
+  et la coalescence est locale. Le verrou architectural que l'audit signale (ligne D) —
+  Socket.io sans adaptateur Redis — n'est pas testable ici : il ne se manifeste qu'à
+  partir de la deuxième instance, où deux visiteurs du même salon cessent de se voir.
+
+═══ B14 · Soirée de règlement — tickets en attente sur 10 matchs (S6) ═══
+
+ tickets │ matchs finaux │ examinés │ réglés │ G/P      │ vidée │ durée   │ débit/s │ appels NHL │ SQL/réglé
+─────────┼───────────────┼──────────┼────────┼──────────┼───────┼─────────┼─────────┼────────────┼──────────
+     200 │           oui │      200 │    200 │  100/100 │   oui │   3.7 s │    53.8 │         10 │      3.02
+    1000 │           oui │     1000 │   1000 │  500/500 │   oui │  13.7 s │    72.9 │         10 │      3.01
+     200 │ NON (contrôle) │      200 │      0 │      0/0 │   oui │   1.2 s │       0 │         10 │         0
+
+  ✓ la file est VIDÉE à tous les paliers (`exhausted` vrai, 0 ticket restant).
+  · au débit mesuré (72.9 tickets/s), les 2 000 tickets de S6 prendraient ~0.5 min — critère : < 10 min.
+    À lire comme un ORDRE DE GRANDEUR : la base et l'API NHL sont bouchonnées avec des
+    latences fixes, donc ce débit décrit le coût CPU et le nombre d'allers-retours, pas
+    ce que fera Neon un soir de match.
+  ✓ appels NHL constants quel que soit le nombre de tickets (200→10, 1000→10) :
+    10 récupérations pour 1000 tickets sur 10 matchs. Les caches de passe tiennent.
+  · 3.01 requêtes SQL par ticket réglé (3012 au total). C'est ce chiffre qui décide du débit
+    réel quand la base est distante.
+    Répartition :
+         1000×  UPDATE bet_slips SET outcome = $1, resolved_at = NOW(), xp_awarded = $2, legs = $3::jsonb 
+         1000×  SELECT xp, tier FROM user_profiles WHERE user_id = $1
+         1000×  UPDATE user_profiles SET xp = $1, tier = $2, performance_score = $1 WHERE user_id = $3
+           11×  SELECT id, user_id AS "userId", legs, placed_at AS "placedAt", combined_probability AS "co
+            1×  INSERT INTO user_profiles (user_id, xp, tier, performance_score) SELECT id, 0, 'rookie', 0
+  ✓ contrôle : matchs non terminés → 200 tickets examinés, 0 réglé.
+    Le banc sait donc distinguer « tout réglé » de « rien à régler ».
+
+(B13 — endurance, en cours…)
+
+═══ B13 · Endurance — 12 boucles, 90 s, clés de cache toutes différentes ═══
+    20736 itérations · 0 erreur(s) · ramasse-miettes forcé : oui
+
+ t (s) │  RSS (Mo) │ heap (Mo) │ caches (taille/plafond, évictions)
+───────┼───────────┼───────────┼───────────────────────────────────
+     0 │     273.3 │      61.3 │ leaderboard 1/1  nhl 58/500  manual 2/400  odds-client 1/1  mlPredictions 23/2000  best-bets 1/50
+    10 │     403.2 │      64.9 │ leaderboard 1/1  nhl 500/500 év.1510  manual 2/400  odds-client 1/1  mlPredictions 23/2000  best-bets 3/50
+    20 │       406 │      65.6 │ leaderboard 1/1  nhl 500/500 év.3681  manual 2/400  odds-client 1/1  mlPredictions 23/2000  best-bets 3/50
+    30 │     425.1 │      64.4 │ leaderboard 1/1  nhl 500/500 év.5865  manual 2/400  odds-client 1/1  mlPredictions 23/2000  best-bets 3/50
+    41 │       423 │      60.4 │ leaderboard 1/1  nhl 500/500 év.8074  manual 2/400  odds-client 1/1  mlPredictions 23/2000  best-bets 3/50
+    51 │     423.6 │      61.2 │ leaderboard 1/1  nhl 500/500 év.10307  manual 2/400  odds-client 1/1  mlPredictions 23/2000  best-bets 3/50
+    61 │     423.6 │        62 │ leaderboard 1/1  nhl 500/500 év.12526  manual 2/400  odds-client 1/1  mlPredictions 23/2000  best-bets 3/50
+    71 │     423.6 │      62.4 │ leaderboard 1/1  nhl 500/500 év.14698  manual 2/400  odds-client 1/1  mlPredictions 23/2000  best-bets 3/50
+    81 │       424 │        63 │ leaderboard 1/1  nhl 500/500 év.16916  manual 2/400  odds-client 1/1  mlPredictions 23/2000  best-bets 3/50
+    90 │     424.3 │      63.4 │ leaderboard 1/1  nhl 500/500 év.18890  manual 2/400  odds-client 1/1  mlPredictions 23/2000  best-bets 3/50
+
+  RSS : 273.3 → 424.3 Mo  ·  en régime établi (après 20 s) : +18.3 Mo en 1.2 min, soit +8.9 Mo/min (heap -1.1)
+  · bruit du relevé : ±0.4 Mo entre deux points → ce tir ne sait pas distinguer une pente inférieure à ~1.0 Mo/min.
+  ✓ MARCHE puis plateau, pas une fuite : +18.3 Mo sur la fenêtre, mais le dernier
+    tiers est à +2.2 Mo/min et le tas à -1.1 Mo/min (plat).
+    C'est l'allocateur qui réserve par blocs sans rendre à l'OS — le code, lui, ne retient rien.
+  · caches qui évincent (donc bornés, donc c'est bien EUX qui tiennent le plateau) :
+      nhl — 500/500, 18890 évictions, 33.7 % de hits
+  ⚠ nhl au plafond : le taux de hit s'effondre quand le cache
+    se vide lui-même. Relever le plafond coûte de la mémoire ; ne pas le relever coûte
+    de l'amont. C'est un arbitrage, pas un défaut — mais il se décide avec ce chiffre.
+
+  Rappel : S5 demande 2 à 4 h. Ceci attrape une fuite FRANCHE, pas une fuite lente
+  de quelques mégaoctets par heure — pour celle-là, relever `memory.rssMb` sur
+  `/api/dev/metrics` en préproduction pendant une vraie soirée de matchs.
+
+═══ B12 · Deux instances — un message traverse-t-il ? (ligne D) ═══
+
+  POST du message sur l'instance A → 201
+
+ lecteur branché sur │ trames `new_message` reçues │ « N en ligne » annoncé
+─────────────────────┼─────────────────────────────┼───────────────────────
+ instance A          │                           1 │                     1
+ instance B          │                           0 │                     1
+
+  ✗ CONFIRMÉ — le message reste dans l'instance qui l'a reçu.
+    `io.to(room).emit()` ne parle qu'aux sockets de son propre processus.
+
+    En production, à partir de la deuxième instance : deux personnes du même salon
+    ne se voient que si le répartiteur les a posées sur le même conteneur. Le symptôme
+    n'est pas une erreur — c'est un chat qui « marche une fois sur deux », invisible
+    tant qu'on ne tourne qu'à une instance.
+
+    Le compte de présence le dit aussi : chaque instance annonce SES sockets
+    (1 et 1), jamais le total du salon.
+
+    Ce n'est pas un défaut à corriger dans ce dépôt : c'est une décision
+    d'infrastructure (un adaptateur Redis, donc un Redis à héberger). Ce banc
+    passera au vert tout seul le jour où elle sera prise.
+
+═══ B7 · Contrôle négatif — déduplication neutralisée, N=50 ═══
+
+ endpoint     │ code sain            │ déduplication cassée │ verdict
+──────────────┼──────────────────────┼──────────────────────┼────────
+ best-bets   │ 1 exéc. / 51 appels  │ 3034 appels          │ ✓ détecté
+ odds-h2h    │ 1 exéc. / 1 appels   │ 50 appels            │ ✓ détecté
+
+  ✓ le banc B3 sait échouer : neutraliser la déduplication multiplie les appels, et ça se voit.
+    Les « ✓ » des autres bancs mesurent donc quelque chose.
+
+═══ B9 · Sensibilité du compteur d'event loop ═══
+
+ (résolution en vigueur dans metrics.ts : 1 ms)
+
+ résolution │ au repos (mean / p99) │ BLOQUÉ (mean / p99 / max) │ écart p99
+────────────┼───────────────────────┼───────────────────────────┼──────────
+         20 │         20.06 / 20.96 │      20.81 / 26.43 / 59.7 │ ×1.3
+         10 │          10.2 / 11.07 │     10.53 / 13.11 / 13.43 │ ×1.2
+          5 │           5.15 / 5.63 │      8.49 / 10.26 / 14.13 │ ×1.8
+          1 │            1.1 / 1.21 │        1.88 / 5.48 / 11.4 │ ×4.5 ←
+
+  ✓ à la résolution 1 ms — celle en vigueur — un blocage réel ressort
+    ×4.5 par rapport au repos. Le critère S2 mesure quelque chose.
+
+  Rappel de lecture : la valeur AU REPOS est toujours ≈ la résolution. Une moyenne
+  de 20 ms avec `resolution: 20` ne veut pas dire « 20 ms de retard », elle veut dire
+  « rien à signaler ». C'est ce qui a fait conclure à tort à un event loop chargé sur
+  le tir Windows du 2026-08-03 (README §5).
+
+───
+Résultats bruts : /home/claude/iceedge/loadtest/bench-results.json
+Durée totale : 378 s

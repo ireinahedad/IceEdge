@@ -104,10 +104,10 @@ function ShareToRoomSheet({ slip, onClose }: { slip: BetSlip; onClose: () => voi
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70" onClick={onClose}>
       <div
-        className="icy-card bet-ink-black w-full max-w-[430px] rounded-t-3xl p-4 flex flex-col gap-3"
-        style={{ background: "#131A12", paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))" }}
+        className="icy-card bet-ink-black w-full max-w-[430px] rounded-t-3xl p-4 pb-nav-safe flex flex-col gap-3"
+        style={{ background: "#131A12" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">

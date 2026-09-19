@@ -1,0 +1,129 @@
+/**
+ * B11 — SOCKET.IO : LE COUP D'ENVOI (scénario S4 de l'audit)
+ *
+ * LA SITUATION REPRODUITE : le salon « live » d'un match, à la mise au jeu.
+ * Tout le monde arrive dans la même seconde, dans le même salon. C'est le pire
+ * cas, et c'est aussi le seul moment où les deux défauts que ce banc cherche
+ * deviennent visibles.
+ *
+ * DEUX QUESTIONS, celles que l'audit pose pour S4 :
+ *
+ *  1. **L'amplification `room_users`.** Chaque arrivée met à jour le compte de
+ *     présence affiché. Si ce compte est émis à TOUS les membres à CHAQUE
+ *     arrivée, N arrivées produisent N²/2 trames sortantes : à 500 personnes,
+ *     125 000 messages pour afficher un nombre. Le coût devient quadratique au
+ *     moment précis où l'event loop a autre chose à faire — servir les vrais
+ *     messages. La colonne qui décide est **trames par arrivée** : elle doit
+ *     rester plate quand N est multiplié par douze.
+ *
+ *  2. **Le coût Neon d'une ouverture de salon.** `join_room` vérifie le droit
+ *     de lecture avant d'abonner le socket. Si cette vérification part en base
+ *     à chaque arrivée, N arrivées = N lectures de la MÊME ligne, immuable, sur
+ *     un pool qui compte dix connexions. L'audit fixe le critère : « ~1, pas
+ *     ~100 ». La colonne est **requêtes SQL par arrivée**.
+ *
+ * POURQUOI LE BALAYAGE EN N EST LE CONTRÔLE. Contrairement à B7, ce banc n'a
+ * pas besoin qu'on casse quelque chose pour savoir s'il mesure : une grandeur
+ * qui doit rester constante quand N est multiplié par douze est falsifiable par
+ * construction. Si les deux colonnes sont plates, la coalescence et le cache
+ * font leur travail ; si elles suivent N, le banc l'aura dit sans qu'on ait à
+ * l'aider.
+ *
+ * PRÉREQUIS : `socket.io-client`, devDependency ajoutée pour ce banc.
+ *   cd server && npm install
+ */
+
+import { runChild } from './spawn';
+
+const PALIERS = (process.env.BENCH_SOCKET_LEVELS ?? '25,100,300').split(',').map(Number);
+
+export interface B11Row {
+  n: number; intervalMs: number; observationMs: number;
+  msPourConnecter: number; erreursSalon: number;
+  sqlTempete: number; sqlParJoin: number;
+  detailTempete: Array<{ sql: string; n: number }>;
+  framesRoomUsers: number; framesParJoin: number;
+  statusEnvoi: number; sqlMessage: number; framesNewMessage: number;
+  eventLoop: { meanMs: number; p50Ms: number; p99Ms: number; maxMs: number };
+  rssMb: number;
+}
+
+export function runB11(): B11Row[] {
+  return PALIERS.map((n) => runChild<B11Row>('b11-rung', { BENCH_SOCKETS: String(n) }));
+}
+
+export function printB11(rows: B11Row[]): void {
+  const r0 = rows[0];
+  console.log(
+    `\n═══ B11 · Socket.io — arrivée simultanée dans un même salon (S4) ═══\n` +
+    `    coalescence du compte de présence : ${r0.intervalMs} ms · observation : ${r0.observationMs} ms\n`,
+  );
+  console.log(' sockets │ connexion │ trames room_users │ /arrivée │ SQL tempête │ /arrivée │ msg diffusé │ EL p99 │ RSS');
+  console.log('─────────┼───────────┼───────────────────┼──────────┼─────────────┼──────────┼─────────────┼────────┼──────');
+  for (const r of rows) {
+    console.log(
+      ` ${String(r.n).padStart(7)} │ ${String(r.msPourConnecter + ' ms').padStart(9)} │` +
+      ` ${String(r.framesRoomUsers).padStart(17)} │ ${String(r.framesParJoin).padStart(8)} │` +
+      ` ${String(r.sqlTempete).padStart(11)} │ ${String(r.sqlParJoin).padStart(8)} │` +
+      ` ${String(r.framesNewMessage).padStart(11)} │ ${String(r.eventLoop.p99Ms).padStart(6)} │ ${r.rssMb}`,
+    );
+  }
+
+  const premier = rows[0];
+  const dernier = rows[rows.length - 1];
+  const facteurN = dernier.n / premier.n;
+
+  // ── 1. Amplification ────────────────────────────────────────────────────
+  const facteurFrames = premier.framesRoomUsers ? dernier.framesRoomUsers / premier.framesRoomUsers : 0;
+  console.log(`\n  Sockets ×${facteurN.toFixed(0)}  →  trames room_users ×${facteurFrames.toFixed(1)}`);
+  console.log(
+    facteurFrames <= facteurN * 1.5
+      ? `  ✓ le fan-out du compte de présence est LINÉAIRE en nombre de sockets` +
+        ` (${premier.framesParJoin} → ${dernier.framesParJoin} trames par arrivée).\n` +
+        '    La coalescence de `scheduleRoomCount` tient : pas de tempête quadratique au coup d\'envoi.'
+      : `  ✗ le fan-out croît PLUS VITE que le nombre de sockets (×${facteurFrames.toFixed(1)} pour ×${facteurN.toFixed(0)}) —` +
+        ' c\'est le comportement quadratique que la coalescence doit empêcher.',
+  );
+
+  // ── 2. Coût Neon par ouverture ──────────────────────────────────────────
+  console.log(
+    dernier.sqlParJoin <= 0.2
+      ? `  ✓ ouverture de salon : ${dernier.sqlParJoin} requête Neon par arrivée à ${dernier.n} sockets —` +
+        ' le critère S4 (« ~1, pas ~100 ») est tenu.'
+      : `  ✗ ouverture de salon : ${dernier.sqlParJoin} requête Neon PAR ARRIVÉE (${dernier.sqlTempete} pour ${dernier.n} sockets).\n` +
+        '    La même ligne de salon, immuable, est relue une fois par arrivant. Au coup d\'envoi d\'un\n' +
+        '    match, c\'est une rafale de lectures identiques sur un pool qui compte dix connexions.',
+  );
+  if (dernier.detailTempete.length) {
+    console.log('    Requêtes de la tempête :');
+    for (const d of dernier.detailTempete) console.log(`        ${String(d.n).padStart(4)}×  ${d.sql}`);
+  }
+
+  // ── 3. Diffusion d'un message ───────────────────────────────────────────
+  const diffusionOk = rows.every((r) => r.framesNewMessage >= r.n * 0.9 && r.statusEnvoi < 400);
+  console.log(
+    diffusionOk
+      ? `  ✓ un message posté atteint bien tous les sockets du salon` +
+        ` (${dernier.framesNewMessage}/${dernier.n}), pour ${dernier.sqlMessage} requêtes SQL.`
+      : `  ⚠ diffusion incomplète : ${dernier.framesNewMessage}/${dernier.n} trames,` +
+        ` statut d'envoi ${dernier.statusEnvoi}.`,
+  );
+
+  const erreurs = rows.reduce((a, r) => a + r.erreursSalon, 0);
+  if (erreurs) console.log(`  ⚠ ${erreurs} socket(s) refusé(s) ou en erreur — la mesure porte sur les autres.`);
+
+  console.log(
+    `  · event loop p99 pendant la tempête : ${rows.map((r) => `${r.n}→${r.eventLoop.p99Ms} ms`).join(', ')}` +
+    ` (plancher = résolution de metrics.ts).`,
+  );
+  console.log(
+    '\n  Rappel : tout ceci est MONO-INSTANCE. `room_users` compte les sockets de CE process,\n' +
+    '  et la coalescence est locale. Le verrou architectural que l\'audit signale (ligne D) —\n' +
+    '  Socket.io sans adaptateur Redis — n\'est pas testable ici : il ne se manifeste qu\'à\n' +
+    '  partir de la deuxième instance, où deux visiteurs du même salon cessent de se voir.',
+  );
+}
+
+export function main(): void {
+  printB11(runB11());
+}

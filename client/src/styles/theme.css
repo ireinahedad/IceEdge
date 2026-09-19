@@ -331,3 +331,31 @@
     html, body { overscroll-behavior-y: none; }
   }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * `.pb-nav-safe` — le dégagement sous un panneau collé en bas
+ * ──────────────────────────────────────────────────────────────────────────
+ * `BottomNav` est `fixed`, haute d'environ 56 px, posée à `0.75rem` du bas plus
+ * l'encoche du bas de l'iPhone. Une feuille qui s'ouvre par le bas — création
+ * de salon, membres, profil du classement, partage d'un coupon — se termine,
+ * elle, au bord de l'écran : ses DEUX boutons d'action se retrouvaient sous la
+ * barre. Visibles à moitié, et surtout intouchables : le tap partait sur
+ * l'onglet de navigation derrière.
+ *
+ * Deux choses réparent ça, et il faut les deux :
+ *   1. cette classe, qui pousse le contenu au-dessus de la zone de la barre ;
+ *   2. un `z-index` au-dessus de `z-50` sur l'enveloppe de la feuille (`z-[70]`
+ *      est la valeur utilisée par `UserSheet` et `ReportModal`). Sans elle, la
+ *      barre — rendue APRÈS la feuille dans l'arbre de chaque page — gagne
+ *      l'égalité de `z-50` et se repose par-dessus.
+ *
+ * 6rem = les ~56 px de la barre + son écart de 12 px + de l'air sous le dernier
+ * bouton. `env(safe-area-inset-bottom)` s'y AJOUTE, comme dans `BottomNav` :
+ * l'indicateur d'accueil ne remplace pas l'écart, il le décale.
+ *
+ * Hors `@layer` : les utilitaires Tailwind (`p-6`, `py-4`) sont en couche, donc
+ * cette règle l'emporte sur leur `padding-bottom` sans `!important`.
+ */
+.pb-nav-safe {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+}

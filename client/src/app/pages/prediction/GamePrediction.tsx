@@ -13,9 +13,10 @@ import { predictionApiService, isPredictionUnavailable } from "../../services/pr
 import { useSport } from "../../context/SportContext";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
-import { GamePlayersTable, MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
+import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
+import { PlayerPropGrid } from "./PlayerPropGrid";
 import { LiveGameView, MLProps, MktGroup, buildGameGroups } from "./gameMarkets";
-import { HeadToHead, NotFound, RevealMode, RevealModeCtx, StatsBanner } from "./predictionShared";
+import { BetOddsCtx, HeadToHead, NotFound, RevealMode, RevealModeCtx, StatsBanner, useGameOdds } from "./predictionShared";
 
 
 export function GamePrediction({ gameId }: { gameId: string }) {
@@ -129,6 +130,16 @@ export function GamePrediction({ gameId }: { gameId: string }) {
     }));
   }, [gameView, apiGroups, gameId]);
 
+  // Cotes du livre réglé, chargées une fois pour toute la page et distribuées
+  // par contexte : le flux est servi PAR MATCH, donc une requête par tuile
+  // serait cinquante appels pour une seule réponse.
+  //
+  // ⚠️ Avant les retours anticipés : c'est un hook.
+  const odds = useGameOdds(
+    gameView ? { abbr: gameView.home.abbr, name: gameView.home.name } : undefined,
+    gameView ? { abbr: gameView.away.abbr, name: gameView.away.name } : undefined,
+  );
+
   if (loading) return (
     <div className="flex flex-col gap-3">
       {[1,2,3,4].map(i => <div key={i} className="h-16 bg-[#131A12] rounded-2xl animate-pulse" />)}
@@ -192,18 +203,47 @@ export function GamePrediction({ gameId }: { gameId: string }) {
       {/* ── Market groups ── */}
       <StatsBanner type="game" id={gameId} />
       <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
-      <RevealModeCtx.Provider value={revealMode}>
-        {groups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
-      </RevealModeCtx.Provider>
+      <BetOddsCtx.Provider value={odds}>
+        <RevealModeCtx.Provider value={revealMode}>
+          {groups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
 
-      {/* Players — last block on the page. A row opens that player's own
-          prediction page with THIS game pre-selected. */}
-      <GamePlayersTable
-        gameId={gameId}
-        home={{ abbr: home.abbr, name: home.name }}
-        away={{ abbr: away.abbr, name: away.name }}
-        accent={accent}
-      />
+          {/* ── Paris joueur, en grille ────────────────────────────────────
+              Ils remplacent le tableau de statistiques qui fermait la page.
+              Celui-ci ne montrait que des nombres à lire : pour miser sur les
+              buts d'un joueur il fallait toucher sa ligne, ouvrir sa page,
+              y retrouver le bon groupe — et la comparaison entre joueurs, qui
+              est la raison de regarder un effectif, se perdait en chemin.
+              Ici chaque case est le pari. */}
+          <PlayerPropGrid
+            metric="goals"
+            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
+            gameId={gameId}
+            accent={accent}
+          />
+          <PlayerPropGrid
+            metric="assists"
+            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
+            gameId={gameId}
+            accent={accent}
+          />
+          <PlayerPropGrid
+            metric="blocks"
+            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
+            gameId={gameId}
+            accent={accent}
+          />
+        </RevealModeCtx.Provider>
+      </BetOddsCtx.Provider>
+
+      {/* Les lignes de saison complètes vivent sur la page Statistiques, qui
+          est faite pour ça — pas un tableau de plus en bas des paris. */}
+      <button
+        onClick={() => navigate(`/stats/chart/game/${gameId}`)}
+        className="w-full py-3 rounded-2xl text-xs font-semibold border transition-transform active:scale-[0.98]"
+        style={{ background: accent + "14", color: accent, borderColor: accent + "44" }}
+      >
+        {t("pred.viewRoster")}
+      </button>
     </div>
   );
 }

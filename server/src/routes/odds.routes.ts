@@ -31,6 +31,45 @@ const router = Router();
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_KEY  = process.env.ODDS_API_KEY;
 
+/**
+ * Livre et région interrogés chez The Odds API.
+ *
+ * ⚠️ Ces deux valeurs étaient écrites EN DUR : `regions=eu` et
+ * `bookmakers=bet365`. Or The Odds API ne publie aucune clé « bet365 » en
+ * région EU — le seul identifiant bet365 de son catalogue est `bet365_au`
+ * (région `au`, offre payante). La paire demandée ne désigne donc aucun livre
+ * existant : l'amont répondait bien 200 avec la liste des matchs, mais chaque
+ * événement arrivait avec `bookmakers: []`, `extractH2HOdds` rendait `null`, et
+ * l'app n'a jamais affiché la moindre cote. Un échec parfaitement silencieux :
+ * pas d'erreur, pas de log, juste des cartes sans prix.
+ *
+ * Les deux valeurs se règlent maintenant par l'environnement, pour qu'un
+ * changement de fournisseur ou d'offre ne demande pas un déploiement de code :
+ *
+ *   ODDS_BOOKMAKERS=pinnacle,williamhill
+ *   ODDS_REGIONS=eu,uk
+ *
+ * `bookmakers` accepte une liste ; The Odds API renvoie alors chaque livre dans
+ * `event.bookmakers`, et le client choisit celui que l'utilisateur a réglé.
+ *
+ * ⚠️ Le défaut reste `bet365`/`eu`, c'est-à-dire le comportement actuel — donc
+ * toujours zéro cote tant que l'environnement n'est pas posé. C'est voulu :
+ * choisir un autre livre à la place de l'exploitant, en silence, afficherait
+ * des prix qu'il n'a pas choisi de relayer et que ses liens d'affiliation ne
+ * mènent nulle part. Le journal ci-dessous le dit au démarrage.
+ */
+const ODDS_BOOKMAKERS = (process.env.ODDS_BOOKMAKERS ?? "bet365").trim();
+const ODDS_REGIONS    = (process.env.ODDS_REGIONS ?? "eu").trim();
+
+if (ODDS_KEY && ODDS_BOOKMAKERS === "bet365" && ODDS_REGIONS === "eu") {
+  logger.warn(
+    { bookmakers: ODDS_BOOKMAKERS, regions: ODDS_REGIONS },
+    "[odds proxy] `bet365` n'existe pas en région `eu` chez The Odds API " +
+    "(seul `bet365_au` existe, en région `au`) : aucune cote ne sera renvoyée. " +
+    "Poser ODDS_BOOKMAKERS / ODDS_REGIONS.",
+  );
+}
+
 /** Même TTL que `services/oddsClient.ts` — les cotes bougent lentement. */
 const ODDS_TTL   = 5 * 60_000;
 /** La liste des sports ne change quasiment jamais (et ne coûte pas de crédit). */
@@ -165,8 +204,8 @@ router.get("/bet365/:sportKey", async (req: Request, res: Response) => {
 
   const params = new URLSearchParams({
     apiKey,
-    regions:    "eu",
-    bookmakers: "bet365",
+    regions:    ODDS_REGIONS,
+    bookmakers: ODDS_BOOKMAKERS,
     markets,
     oddsFormat: "decimal",
   });

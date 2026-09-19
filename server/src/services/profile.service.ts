@@ -3,6 +3,7 @@ import { pool } from '../db/connection';
 // La seule lecture du clair vit dans `llm.routes.ts`, au moment de s'en servir.
 import { encryptSecret } from './crypto.util';
 import { TtlCache } from './ttlCache';
+import { profileAlreadyEnsured, markProfileEnsured } from './profileEnsured';
 import { logger } from '../logger';
 import { ruleWeightsSchema, type RuleWeightsMap } from '../validation/schemas';
 
@@ -77,13 +78,24 @@ function hitRateOf(s: BetStats): number {
 
 export async function getProfileById(userId: string) {
   // Auto-create a profile row if one doesn't exist yet (e.g. for new registrations)
-  await pool.query(
-    `INSERT INTO user_profiles (user_id, display_name, avatar, tier, performance_score, is_public, joined_at)
-     SELECT id, COALESCE(first_name, username), '👤', 'rookie', 0, TRUE, NOW()
-     FROM users WHERE id = $1
-     ON CONFLICT (user_id) DO NOTHING`,
-    [userId],
-  );
+  //
+  // …mais UNE SEULE FOIS par compte et par heure. Cette écriture partait à
+  // CHAQUE lecture de `GET /api/users/me`, c'est-à-dire à chaque chargement de
+  // l'application — trouvée par le banc `b10-authentifie.ts` le 2026-09-18, qui
+  // l'a vue dans le détail des requêtes alors que le compte total (3) n'avait
+  // rien d'alarmant. C'est le même défaut que sur le chemin de connexion, et la
+  // même mémoire partagée le couvre : voir `profileEnsured.ts` pour ce que le
+  // raccourci garantit et ce qu'il ne garantit pas.
+  if (!profileAlreadyEnsured(userId)) {
+    await pool.query(
+      `INSERT INTO user_profiles (user_id, display_name, avatar, tier, performance_score, is_public, joined_at)
+       SELECT id, COALESCE(first_name, username), '👤', 'rookie', 0, TRUE, NOW()
+       FROM users WHERE id = $1
+       ON CONFLICT (user_id) DO NOTHING`,
+      [userId],
+    );
+    markProfileEnsured(userId);
+  }
 
   const { rows } = await pool.query(
     `SELECT u.id, u.username, up.display_name AS "displayName", up.avatar,

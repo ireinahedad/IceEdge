@@ -139,9 +139,35 @@ export function registerCache(source: CacheStatsSource): void {
  * synchrone qui bloque le process (hachage, `JSON.parse` d'un gros corps,
  * sérialisation d'une réponse volumineuse) — invisible autrement.
  *
- * `resolution: 20` = échantillonnage toutes les 20 ms, coût négligeable.
+ * ⚠️ LA RÉSOLUTION EST LE PLANCHER DE MESURE, et c'est tout l'enjeu de ce
+ * réglage. `monitorEventLoopDelay` échantillonne toutes les `resolution` ms :
+ * un retard plus court que l'intervalle d'échantillonnage ne peut pas
+ * apparaître, et la valeur AU REPOS est donc toujours ≈ `resolution`.
+ *
+ * Ce module était réglé à 20 ms. Mesuré (banc `loadtest/bench/b9-eventloop.ts`,
+ * 2026-09-18), en bloquant délibérément le process 30 à 60 ms par tour de
+ * boucle :
+ *
+ *     resolution 20 ms → repos p99 22,7  |  BLOQUÉ p99 27,7   → ×1,2
+ *     resolution  5 ms → repos p99  6,9  |  BLOQUÉ p99 13,8   → ×2,0
+ *     resolution  1 ms → repos p99  2,0  |  BLOQUÉ p99  8,4   → ×4,2
+ *
+ * À 20 ms, un process RÉELLEMENT bloqué ne se distinguait du repos que d'un
+ * facteur 1,2 : dans le bruit. Le critère du scénario S2 de l'audit —
+ * « `eventLoop.p99Ms` ne doit pas grimper pendant une vague de connexions » —
+ * était donc impossible à rater, ce qui n'est pas la même chose qu'un critère
+ * tenu. C'est aussi ce qui a fait lire « mean 30,5 / p99 34,4 » comme un event
+ * loop chargé sur le tir du 2026-08-03 : c'était surtout le plancher.
+ *
+ * `resolution: 1` — le coût est un timer libuv interne, négligeable, et sans
+ * commune mesure avec celui d'un blocage qu'on ne verrait pas.
  */
-const loopDelay = monitorEventLoopDelay({ resolution: 20 });
+/** Résolution effective, EXPORTÉE : le banc `b9-eventloop.ts` la lit pour dire
+ *  si le réglage en vigueur sépare un blocage du repos, au lieu de comparer à
+ *  une valeur codée en dur qui se périmerait au premier changement ici. */
+export const EVENT_LOOP_RESOLUTION_MS = Number(process.env.EVENT_LOOP_RESOLUTION_MS) || 1;
+
+const loopDelay = monitorEventLoopDelay({ resolution: EVENT_LOOP_RESOLUTION_MS });
 loopDelay.enable();
 
 export interface EventLoopStats {

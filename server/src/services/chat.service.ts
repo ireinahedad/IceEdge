@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { pool } from '../db/connection';
 import { containsProhibited } from './moderation.service';
+import { TtlCache } from './ttlCache';
 
 /**
  * Chat service — public & private rooms with membership.
@@ -132,16 +133,62 @@ async function getMembership(roomId: string, userId: string) {
   return rows[0] ?? null;
 }
 
+/**
+ * Cache des lignes de salon — TTL court, invalidation à la suppression.
+ *
+ * LE DÉFAUT MESURÉ (banc `loadtest/bench/b11-socket.ts`, 2026-09-18)
+ *
+ * `join_room` vérifie le droit de lecture avant d'abonner un socket, et cette
+ * vérification passe par ici. 300 sockets rejoignant le salon « live » d'un
+ * match émettaient donc **300 requêtes Neon identiques** — 1 par arrivée, pour
+ * la MÊME ligne. Au coup d'envoi, tout le monde arrive dans la même seconde :
+ * c'est une rafale de lectures identiques sur un pool qui compte dix
+ * connexions, au moment précis où il faut servir les vrais messages.
+ *
+ * POURQUOI C'EST SÛR ICI, alors qu'un cache sur une donnée d'autorisation
+ * demande normalement de la méfiance : **une ligne de salon ne se modifie
+ * jamais**. Le code n'émet aucun `UPDATE chat_rooms` — un salon est créé, puis
+ * supprimé. Le seul changement possible est donc la disparition, et les deux
+ * chemins de suppression invalident explicitement (voir `forgetRoom`).
+ *
+ * Si un `UPDATE chat_rooms` apparaît un jour — passer un salon en privé, par
+ * exemple — il DEVRA appeler `forgetRoom`, sinon un ancien membre garderait
+ * l'accès pendant tout le TTL. C'est la seule chose à retenir de ce commentaire.
+ *
+ * TTL de 5 s, et pas 5 minutes : la rafale à couvrir est simultanée, donc même
+ * quelques secondes la ramènent à une seule lecture. Au-delà, on n'achèterait
+ * plus rien de mesurable et on allongerait la fenêtre où une suppression faite
+ * par une AUTRE instance n'est pas encore vue.
+ *
+ * `wrap` déduplique en prime les appels EN VOL : sur un cache froid, les 300
+ * arrivées simultanées partagent une seule requête au lieu d'en lancer 300 —
+ * c'est même là que l'essentiel se joue au coup d'envoi.
+ *
+ * Un salon introuvable n'est PAS mémorisé : `wrap` ne met rien en cache quand
+ * `fn` rejette. Le sens de la panne est choisi — on ne veut pas qu'un 404
+ * transitoire se fige, et une rafale sur un salon inexistant reste protégée par
+ * la déduplication en vol.
+ */
+const ROOM_TTL_MS = Number(process.env.CHAT_ROOM_CACHE_TTL_MS) || 5_000;
+const roomCache = new TtlCache<any>(ROOM_TTL_MS, 500, 'chatRoom');
+
+/** Oublie une ligne de salon. À appeler après toute écriture qui la change. */
+function forgetRoom(roomId: string): void {
+  roomCache.delete(roomId);
+}
+
 async function getRoomRow(roomId: string) {
-  const { rows } = await pool.query(
-    `SELECT id, name, icon, description, color, is_live AS "isLive", is_pinned AS "isPinned",
-            is_private AS "isPrivate", join_code AS "joinCode", created_by AS "createdBy",
-            created_at AS "createdAt"
-     FROM chat_rooms WHERE id = $1`,
-    [roomId],
-  );
-  if (!rows[0]) throw httpError('Room not found', 404);
-  return rows[0];
+  return roomCache.wrap(roomId, async () => {
+    const { rows } = await pool.query(
+      `SELECT id, name, icon, description, color, is_live AS "isLive", is_pinned AS "isPinned",
+              is_private AS "isPrivate", join_code AS "joinCode", created_by AS "createdBy",
+              created_at AS "createdAt"
+       FROM chat_rooms WHERE id = $1`,
+      [roomId],
+    );
+    if (!rows[0]) throw httpError('Room not found', 404);
+    return rows[0];
+  });
 }
 
 /** Throws 403 unless the user may READ the room (member, or public room). */
@@ -558,6 +605,7 @@ export const chatService = {
       const room = await getRoomRow(roomId);
       if (remaining === 0 && room.isPrivate) {
         await pool.query('DELETE FROM chat_rooms WHERE id = $1', [roomId]);
+        forgetRoom(roomId);
       }
     }
   },
@@ -635,6 +683,7 @@ export const chatService = {
   async deleteRoom(roomId: string, adminId: string) {
     await assertAdmin(roomId, adminId);
     await pool.query('DELETE FROM chat_rooms WHERE id = $1', [roomId]);
+    forgetRoom(roomId);
   },
 
   /** Messages — private rooms require membership. */

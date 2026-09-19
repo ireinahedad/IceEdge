@@ -12,6 +12,8 @@ import { nhlApiService } from "../../services/nhlApiService";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { useI18n } from "../../i18n";
 import { FramedLabel } from "../../components/brand/FramedLabel";
+import { useBookmaker } from "../../context/BookmakerContext";
+import { loadGameOdds, type OddsTable } from "../../services/gameOdds";
 import type { NHLGame } from "../../types/bet";
 
 /**
@@ -22,6 +24,69 @@ import type { NHLGame } from "../../types/bet";
  */
 export type RevealMode = "rules" | "ml";
 export const RevealModeCtx = createContext<RevealMode>("rules");
+
+/* ─── Cotes du livre, partagées par toutes les tuiles d'une page ─────────────
+ *
+ * Une page de prédiction rend jusqu'à une cinquantaine de tuiles. Chacune
+ * interrogeant le flux pour son compte, c'est cinquante requêtes pour UNE
+ * réponse — le flux est servi par match, pas par marché. La page charge donc
+ * la table une fois et la passe par contexte, exactement comme `RevealModeCtx`
+ * passe la source du pourcentage.
+ *
+ * Valeur par défaut = pas de cotes. Les écrans qui ne fournissent pas ce
+ * contexte (page joueur : le fournisseur ne cote aucun pari joueur) affichent
+ * leurs tuiles telles qu'aujourd'hui, sans rien de cassé.
+ */
+export interface BetOddsValue {
+  /** `null` = pas encore chargé ou indisponible ; une table (même vide) sinon. */
+  table: OddsTable | null;
+  /** Le livre qui a fourni ces prix — affiché pour que l'utilisateur sache où parier. */
+  bookTitle: string | null;
+  /** Abréviation → nom complet : le flux nomme ses issues « Edmonton Oilers ». */
+  nameByAbbr: Record<string, string>;
+}
+export const BetOddsCtx = createContext<BetOddsValue>({ table: null, bookTitle: null, nameByAbbr: {} });
+
+/**
+ * Charge les cotes d'un match chez le livre réglé par l'utilisateur.
+ *
+ * Rend la valeur neutre tant que les noms d'équipe manquent (la page charge
+ * encore) : la table est alors `null`, et les tuiles n'affichent aucun prix
+ * plutôt qu'un prix faux.
+ */
+export function useGameOdds(
+  home: { abbr: string; name: string } | undefined,
+  away: { abbr: string; name: string } | undefined,
+): BetOddsValue {
+  const { bookmakerId } = useBookmaker();
+  const [state, setState] = useState<{ table: OddsTable | null; bookTitle: string | null }>(
+    { table: null, bookTitle: null },
+  );
+
+  const homeName = home?.name ?? "";
+  const awayName = away?.name ?? "";
+
+  useEffect(() => {
+    if (!homeName || !awayName) { setState({ table: null, bookTitle: null }); return; }
+    let alive = true;
+    loadGameOdds(homeName, awayName, bookmakerId)
+      .then((r) => { if (alive) setState({ table: r.table, bookTitle: r.bookTitle }); })
+      // Un flux de cotes en panne ne doit pas retirer les prédictions de
+      // l'écran : on retombe sur « pas de prix », l'état normal de la plupart
+      // des marchés de toute façon.
+      .catch(() => { if (alive) setState({ table: null, bookTitle: null }); });
+    return () => { alive = false; };
+  }, [homeName, awayName, bookmakerId]);
+
+  const nameByAbbr = useMemo(() => {
+    const m: Record<string, string> = {};
+    if (home?.abbr) m[home.abbr.toUpperCase()] = home.name;
+    if (away?.abbr) m[away.abbr.toUpperCase()] = away.name;
+    return m;
+  }, [home?.abbr, home?.name, away?.abbr, away?.name]);
+
+  return { table: state.table, bookTitle: state.bookTitle, nameByAbbr };
+}
 
 /** Head-to-head — the two teams' most recent meetings this season, with scores. */
 interface H2HMeeting { date: string; homeAbbr: string; awayAbbr: string; homeScore: number; awayScore: number; }

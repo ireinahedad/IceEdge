@@ -403,3 +403,49 @@ S2 à S7 ne sont pas encore scriptés. Les compteurs les servent déjà tous :
   sont partagés).
 - **S7** (budget) → `upstream.*.calls` sur 24 h, extrapolé à 30 jours et comparé
   aux quotas des plans.
+
+---
+
+## 8. Bancs instrumentés — `bench/`
+
+Les scénarios ci-dessus demandent une cible : un serveur démarré, une base, des
+clés. `bench/` répond aux mêmes questions de coût **sans cible du tout**, sur le
+vrai code du serveur, avec `fetch` et `pg` bouchonnés et comptés.
+
+```bash
+cd server
+node ../loadtest/bench/run.js all        # les quatorze bancs, ~12 min
+node ../loadtest/bench/run.js smoke      # vérification à blanc, ~5 s
+```
+
+| # | Question | Critère |
+|---|---|---|
+| B1 | Une requête froide émet-elle deux fois le même appel sortant ? | gaspillage = 0 |
+| B2 | R requêtes identiques dans le TTL ? | 0 appel après la première |
+| B3 | N requêtes simultanées sur clé froide ? (= S3) | 1 exécution, quel que soit N |
+| B4 | Le nombre de requêtes SQL suit-il le nombre de lignes ? | constant |
+| B5 | Le coût suit-il le nombre de matchs/équipes/joueurs ? | au plus linéaire |
+| B6 | Le coût amont suit-il le nombre de visiteurs ? (= S1, S2) | ≈ 0 appel/itération |
+| B8 | L'appelant peut-il choisir la clé de cache depuis la query string ? | non |
+| B7 | **Les six premiers savent-ils échouer ?** | oui |
+| B9 | **Le compteur d'event loop sait-il voir un blocage ?** | oui |
+| B10 | Chemins authentifiés : N+1, ouverture de salon, cache `isPro` | SQL constant |
+| B11 | Socket.io, arrivée simultanée (= S4 mono-instance) | fan-out linéaire |
+| B12 | Deux instances : un message traverse-t-il ? (ligne D) | **non — décision d'infra** |
+| B13 | Endurance / fuite mémoire (= S5) | plateau |
+| B14 | Soirée de règlement (= S6) | file vidée |
+
+Ce qu'ils remplacent : rien. k6 mesure ce que voit le client contre une vraie
+cible ; ces bancs mesurent ce que le serveur **émet et recalcule**, et ils le
+font sans consommer un crédit ni démarrer quoi que ce soit — donc on peut les
+lancer à chaque modification plutôt qu'une fois par trimestre.
+
+Ce qu'ils NE mesurent pas : les latences réelles (l'amont est bouchonné), la
+qualité du SQL, Socket.io (S4), l'endurance (S5) et le règlement de soirée (S6).
+
+Les sept scénarios S1-S7 sont couverts par ces bancs, à une exception près qui
+n'est pas testable en process : le multi-instance de S4, que B12 mesure et
+laisse ouvert (voir `RAPPORT_TESTS_CHARGE_2026-09-18.md`, addendum 3).
+
+Détail, pièges et façon de lire : **`bench/README.md`**.
+Dernier passage complet : `RAPPORT_TESTS_CHARGE_2026-09-18.md` (racine du dépôt).

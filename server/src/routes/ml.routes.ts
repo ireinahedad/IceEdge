@@ -77,13 +77,45 @@ const router = Router();
 // Top individual bets across all markets (team + player props),
 // ranked by prediction score. ML-first with rule fallback.
 // Query: ?limit=15&source=ml|rules&days=3&players=15
+/**
+ * Valeurs ADMISES pour les deux paramètres qui entrent dans la clé de cache de
+ * `getBestBets` — donc les deux qui décident d'un recalcul complet.
+ *
+ * POURQUOI UNE LISTE BLANCHE ET PAS UN SIMPLE INTERVALLE. `normalizeOptions`
+ * borne déjà `days` à 1-7 et `players` à 0-40, ce qui empêche une clé
+ * arbitraire mais laisse quand même 7 × 41 = 287 clés joignables depuis l'URL,
+ * chacune coûtant un calcul complet (banc `b8-clecache.ts` : `?days=1..7` →
+ * 6 recalculs et 5 appels NHL pour 7 requêtes). Un intervalle borne la MÉMOIRE
+ * du cache ; il ne borne pas le TRAVAIL qu'un appelant peut commander.
+ *
+ * Le client n'envoie aucun des deux — `BestBetsSection` appelle
+ * `limit=30&source=ml`. Ces valeurs couvrent donc les usages réels et tout
+ * l'espace utile, en ramenant le nombre de calculs distincts joignables à
+ * 3 × 3 × 2 = 18.
+ *
+ * Une valeur hors liste est ramenée à la plus proche admise plutôt que refusée,
+ * comme le fait déjà `normalizeOptions` pour `limit=70` → 50 : le comportement
+ * reste cohérent, et aucune URL existante ne casse.
+ */
+const BEST_BETS_DAYS    = [1, 2, 3];
+const BEST_BETS_PLAYERS = [0, 15, 30];
+
+function plusProche(valeurs: number[], brut: unknown, dflt: number): number {
+  const n = parseInt(String(brut), 10);
+  if (!Number.isFinite(n)) return dflt;
+  return valeurs.reduce((a, b) => (Math.abs(b - n) < Math.abs(a - n) ? b : a));
+}
+
 router.get("/best-bets", async (req: Request, res: Response) => {
   try {
     const source = req.query.source === "rules" ? "rules" : "ml";
     const result = await getBestBets({
+      // `limit` reste libre : depuis le 2026-09-18 il n'entre plus dans la clé
+      // de cache (il ne fait que tronquer une liste déjà calculée), donc il ne
+      // commande aucun travail supplémentaire. Voir `bestBets.service.ts`.
       limit:      req.query.limit   ? parseInt(String(req.query.limit), 10)   : undefined,
-      days:       req.query.days    ? parseInt(String(req.query.days), 10)    : undefined,
-      maxPlayers: req.query.players ? parseInt(String(req.query.players), 10) : undefined,
+      days:       req.query.days    !== undefined ? plusProche(BEST_BETS_DAYS,    req.query.days,    2)  : undefined,
+      maxPlayers: req.query.players !== undefined ? plusProche(BEST_BETS_PLAYERS, req.query.players, 15) : undefined,
       source,
     });
     // Même TTL que le cache serveur : navigateur et CDN absorbent les

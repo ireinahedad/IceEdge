@@ -12,14 +12,14 @@
  * prédiction. Sans cache, la page d'accueil d'un soir à douze matchs ferait
  * quelques dizaines de requêtes pour lire trois lignes qui ne bougent pas.
  *
- * Le TTL est de 30 s, exactement comme la revérification de mtime que faisaient
- * `scratches.ts` et `startingGoalies.ts` : une saisie faite depuis la carte
- * admin est visible au plus tard 30 s après, sans redémarrage. C'est ce qui
+ * Le TTL est de 90 s (30 s jusqu'au 2026-09-18 — voir `TTL_MS` plus bas pour
+ * la mesure qui a motivé le changement) : une saisie faite depuis la carte
+ * admin est visible au plus tard 90 s après, sans redémarrage. C'est ce qui
  * permet à la routine « 1-2 h avant la mise au jeu » de rester utilisable.
  *
  * Une écriture invalide immédiatement les entrées concernées SUR CETTE
  * INSTANCE ; les autres attendent l'expiration. Différence sans conséquence
- * pratique ici (une seule personne saisit, et 30 s de retard sur un facteur de
+ * pratique ici (une seule personne saisit, et 90 s de retard sur un facteur de
  * blessure ne changent rien) — mais il faut la connaître.
  *
  * ── Les absences sont mises en cache, elles aussi ───────────────────────────
@@ -75,7 +75,33 @@ export interface ManualRow<T = unknown> {
 
 // ── Cache ────────────────────────────────────────────────────────────────────
 
-const TTL_MS = Number(process.env.MANUAL_DATA_TTL_MS) || 30_000;
+/**
+ * 90 s, et pas 30. La valeur n'est pas « alignée » sur le TTL de `best-bets`
+ * (60 s) : elle lui est STRICTEMENT SUPÉRIEURE, et c'est la seule chose qui
+ * marche.
+ *
+ * MESURÉ (banc `b6-concurrence.ts`, 2026-09-18) : sur une charge soutenue, ce
+ * cache affichait **0 hit** — `hits 0 / misses 2 / dedup 28`. Avec 30 s de TTL
+ * et un recalcul de `best-bets` toutes les 60 s, chaque lecture retombait
+ * exactement dans la fenêtre où l'entrée venait d'expirer : le cache ne servait
+ * jamais, il ne faisait que dédoublonner les appels simultanés d'une même
+ * passe. Deux requêtes SQL payées par recalcul, pour rien.
+ *
+ * VÉRIFIÉ APRÈS CORRECTION, sur deux passes espacées de 65 s : le second
+ * recalcul de `best-bets` émet **0 requête `manual_data`** (contre 2), et le
+ * cache passe de 0 à 30 hits.
+ *
+ * Un TTL de cache n'a pas de valeur « naturelle » : il vaut ce qu'il vaut par
+ * rapport à la CADENCE DE SON APPELANT. Et l'égalité ne suffit pas — à 60 s
+ * contre 60 s, l'entrée expire à l'instant même où la passe suivante la
+ * demande : c'est un tirage au sort, pas un cache. Il faut la marge.
+ *
+ * Contrepartie assumée : une saisie manuelle (gardien partant, absent de
+ * dernière minute) met jusqu'à 90 s au lieu de 30 à se voir dans les
+ * prédictions. Les écritures invalident déjà explicitement leurs clés, donc le
+ * délai ne concerne que les autres instances.
+ */
+const TTL_MS = Number(process.env.MANUAL_DATA_TTL_MS) || 90_000;
 
 /**
  * Plafond volontairement large au regard du volume réel (une poignée de matchs

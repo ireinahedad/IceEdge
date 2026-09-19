@@ -3,6 +3,7 @@ import { notifySlipPlaced } from './settlement.service';
 import { fetchGameById } from './nhlApiClient';
 import { mapLimit } from './concurrency';
 import { logger } from '../logger';
+import { profileAlreadyEnsured, markProfileEnsured } from './profileEnsured';
 
 // ─── XP & Tier config ─────────────────────────────────────────────────────────
 
@@ -48,12 +49,30 @@ export async function applyXpDelta(
   userId: string,
   delta: number,
 ): Promise<{ newXp: number; newTier: Tier; tieredUp: boolean }> {
-  await pool.query(
-    `INSERT INTO user_profiles (user_id, xp, tier, performance_score)
-     SELECT id, 0, 'rookie', 0 FROM users WHERE id = $1
-     ON CONFLICT (user_id) DO NOTHING`,
-    [userId],
-  );
+  // Filet de création du profil — UNE FOIS par compte, pas à chaque règlement.
+  //
+  // C'est la TROISIÈME occurrence du même `INSERT … ON CONFLICT DO NOTHING`
+  // inutile (après la connexion et la lecture de profil), et de loin la plus
+  // coûteuse : elle partait une fois par TICKET RÉGLÉ. Mesuré par le banc
+  // `loadtest/bench/b14-reglement.ts` le 2026-09-19 — 600 de ces écritures pour
+  // 600 tickets, soit un quart des 4,01 requêtes SQL par règlement.
+  //
+  // Un soir de 2 000 tickets, c'est 2 000 allers-retours Neon et 2 000 places
+  // prises dans un pool qui en compte dix, pour n'insérer aucune ligne — au
+  // moment exact où la file doit se vider vite.
+  //
+  // La mémoire partagée (`profileEnsured.ts`) dit ce que le raccourci garantit
+  // et ce qu'il ne garantit pas ; le `ON CONFLICT DO NOTHING` reste le filet
+  // réel, et au pire on repaie une écriture inutile après un redémarrage.
+  if (!profileAlreadyEnsured(userId)) {
+    await pool.query(
+      `INSERT INTO user_profiles (user_id, xp, tier, performance_score)
+       SELECT id, 0, 'rookie', 0 FROM users WHERE id = $1
+       ON CONFLICT (user_id) DO NOTHING`,
+      [userId],
+    );
+    markProfileEnsured(userId);
+  }
 
   const { rows: profileRows } = await pool.query<{ xp: number; tier: string }>(
     `SELECT xp, tier FROM user_profiles WHERE user_id = $1`,

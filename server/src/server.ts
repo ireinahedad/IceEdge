@@ -12,6 +12,7 @@ import { startCleanupJob } from './services/cleanup.service';
 import { startOddsLogger, verifyOddsApiKey } from './services/oddsLogger.service';
 import { verifyAvatarStorage } from './services/avatarStorage';
 import { verifyEncryptionKey } from './services/crypto.util';
+import { getBestBets } from './services/bestBets.service';
 import { allowedOrigins } from './cors';
 import { USE_MOCK } from './services/nhlApiClient';
 
@@ -113,6 +114,29 @@ const DORMANT = process.env.DORMANT === 'true';
     // d'environnement dont l'absence ne se voit qu'au premier geste d'un
     // utilisateur, et sous la forme d'un 500 au message masqué.
     verifyEncryptionKey();
+
+    // Réchauffage de `best-bets` — OPT-IN, et volontairement pas par défaut.
+    //
+    // CE QUE ÇA ACHÈTE : un cache froid coûte ~51 appels sortants et fait
+    // attendre ~600 ms le premier visiteur (mesuré, `loadtest/bench/`, B1 et
+    // B3). Ce coût est payé UNE fois par redéploiement, pas par minute — les
+    // caches NHL sous-jacents ont des TTL de 10 min à 6 h, donc un recalcul
+    // suivant ne coûte qu'un appel. Le réchauffage déplace donc cette attente
+    // du premier visiteur vers le démarrage.
+    //
+    // CE QUE ÇA COÛTE : 1 crédit The Odds API par déploiement, et une passe NHL.
+    // À vingt déploiements par mois sur une clé gratuite de 500 crédits, ce
+    // n'est pas gratuit — d'où le drapeau plutôt qu'un comportement imposé.
+    // `DORMANT` l'emporte : en veille, rien ne doit réveiller quoi que ce soit.
+    if (process.env.BEST_BETS_WARMUP === 'true' && !DORMANT) {
+      // Sans `await`, comme les sondes ci-dessus : le réchauffage ne doit ni
+      // retarder l'écoute ni pouvoir empêcher le démarrage. Un échec est sans
+      // conséquence — le premier visiteur paiera le cache froid, c'est-à-dire
+      // exactement le comportement sans réchauffage.
+      void getBestBets({ limit: 30, source: 'ml' })
+        .then((r) => logger.info({ bets: r.bets.length, scanned: r.meta.scanned }, '[Server] best-bets réchauffé'))
+        .catch((err: any) => logger.warn({ err: err?.message }, '[Server] réchauffage best-bets échoué (sans conséquence)'));
+    }
   });
 
   registerGracefulShutdown(httpServer);

@@ -26,6 +26,7 @@ import { useSport } from "../context/SportContext";
 import { useSubscription } from "../context/SubscriptionContext";
 import { useI18n } from "../i18n";
 import { fetchBet365Odds, extractH2HOdds, ODDS_SPORT_KEYS } from "../services/oddsApiService";
+import { findOddsEvent } from "../services/gameOdds";
 import "../components/home-theme.css";
 import "../components/rink-theme.css";
 import { BestBetsSection } from "./landing/BestBetsSection";
@@ -184,13 +185,23 @@ export function HockeyLanding() {
     fetchBet365Odds(ODDS_SPORT_KEYS.hockey).then((events) => {
       if (!events.length) return;
 
+      // ⚠️ L'appariement se faisait sur « domicile OU extérieur », et par
+      // `includes` d'ABRÉVIATION dans le nom complet. Deux défauts distincts :
+      //
+      //   • le OU suffisait à apparier deux affiches différentes du même soir —
+      //     il suffisait que l'un des deux côtés corresponde — et collait alors
+      //     le prix du mauvais match sur la carte ;
+      //   • le `includes` ne marchait que par accident : « tor » se trouve dans
+      //     « toronto », mais « nyr » n'est dans aucun mot de « New York
+      //     Rangers », « tbl » dans aucun de « Tampa Bay Lightning », « vgk »
+      //     dans aucun de « Vegas Golden Knights ». Ces équipes-là n'ont jamais
+      //     reçu de cote, en silence.
+      //
+      // `findOddsEvent` compare les noms complets, des deux côtés, et refuse le
+      // reste — mieux vaut pas de prix qu'un prix qui n'est pas celui du match.
       function applyOdds(prev: DisplayGame[]): DisplayGame[] {
         return prev.map((g) => {
-          const ev = events.find(
-            (e) =>
-              e.homeTeam?.toLowerCase().includes(g.team1.abbr.toLowerCase()) ||
-              e.awayTeam?.toLowerCase().includes(g.team2.abbr.toLowerCase())
-          );
+          const ev = findOddsEvent(events, g.team1.name, g.team2.name);
           if (!ev) return g;
           const odds = extractH2HOdds(ev);
           if (!odds) return g;

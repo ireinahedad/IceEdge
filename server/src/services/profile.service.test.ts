@@ -35,6 +35,7 @@ vi.mock('../logger', () => ({
 }));
 
 import { getProfileById, updateProfile } from './profile.service';
+import { forgetProfileEnsured } from './profileEnsured';
 
 /** Une ligne telle que la renvoie la requête de profil après le correctif. */
 const ROW = {
@@ -64,6 +65,12 @@ const ROW = {
  * `getProfileById`, il faut donc empiler l'UPDATE d'abord (cf.
  * `mockUpdateThenReads`), sinon les lectures de profil servent l'UPDATE et le
  * profil revient vide.
+ *
+ * ⚠️ L'INSERT n'est plus émis qu'UNE FOIS par compte (mémoire `profileEnsured`,
+ * cf. le dernier bloc de ce fichier). Chaque test oublie donc le compte dans
+ * son `beforeEach` : sans ça, le premier test consommerait l'INSERT et tous les
+ * suivants liraient une file décalée d'un cran — des échecs incompréhensibles
+ * ailleurs que là où est la cause.
  */
 function mockProfileReads(row: Record<string, unknown> = ROW) {
   query
@@ -78,7 +85,7 @@ function mockUpdateThenReads() {
   mockProfileReads();
 }
 
-beforeEach(() => { query.mockReset(); connect.mockReset(); });
+beforeEach(() => { query.mockReset(); connect.mockReset(); forgetProfileEnsured('u1'); });
 
 describe('getProfileById — la clé ne sort pas', () => {
   it('rend `hasOpenaiKey` et aucun champ portant la clé', async () => {
@@ -172,5 +179,55 @@ describe('updateProfile — la clé ne s\'efface pas toute seule', () => {
     expect(update).toBeDefined();
     expect(update).toContain('bio =');
     expect(update).not.toContain('openai_api_key');
+  });
+});
+
+/**
+ * L'écriture inutile à chaque lecture de profil — verrouillée.
+ *
+ * `getProfileById` émettait `INSERT INTO user_profiles … ON CONFLICT DO NOTHING`
+ * à CHAQUE appel, donc à chaque chargement de l'application. Ce n'est pas un
+ * N+1 : c'est une écriture par requête qui n'insère rien, et qui prend quand
+ * même le chemin d'écriture de Postgres et une place dans le pool Neon.
+ * Trouvée par `loadtest/bench/b10-authentifie.ts` le 2026-09-18.
+ *
+ * Le filet reste le `ON CONFLICT DO NOTHING` ; la mémoire ne fait que sauter
+ * l'appel quand on sait déjà que la ligne existe. Ce test verrouille les deux
+ * moitiés : l'INSERT part la première fois, et plus après.
+ */
+describe('getProfileById — le filet de création ne repart pas à chaque lecture', () => {
+  const estInsert = (q: unknown) => String(q).includes('INSERT INTO user_profiles');
+
+  it('émet l\'INSERT idempotent au premier appel', async () => {
+    mockProfileReads();
+    await getProfileById('u1');
+    expect(query.mock.calls.filter((c) => estInsert(c[0]))).toHaveLength(1);
+  });
+
+  it('ne l\'émet plus au second appel pour le même compte', async () => {
+    mockProfileReads();
+    await getProfileById('u1');
+    query.mockReset();
+
+    // Deuxième lecture : profil + badges, et RIEN d'autre.
+    query
+      .mockResolvedValueOnce({ rows: [ROW] })
+      .mockResolvedValueOnce({ rows: [] });
+    await getProfileById('u1');
+
+    expect(query.mock.calls.filter((c) => estInsert(c[0]))).toHaveLength(0);
+    expect(query.mock.calls).toHaveLength(2);
+  });
+
+  it('le réémet pour un compte jamais vu', async () => {
+    mockProfileReads();
+    await getProfileById('u1');
+    query.mockReset();
+
+    mockProfileReads();
+    await getProfileById('u2');
+    expect(query.mock.calls.filter((c) => estInsert(c[0]))).toHaveLength(1);
+
+    forgetProfileEnsured('u2');
   });
 });

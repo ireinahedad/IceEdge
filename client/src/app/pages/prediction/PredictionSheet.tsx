@@ -6,9 +6,7 @@
  * seuls les imports et les mots-clés `export` ont été ajoutés.
  */
 
-import { useNavigate } from "react-router";
-import { Fragment, useEffect, useMemo, useState, useContext } from "react";
-import { nhlApiService } from "../../services/nhlApiService";
+import { useEffect, useMemo, useState, useContext } from "react";
 import { predictionApiService } from "../../services/predictionApiService";
 import { requestFromMLProps } from "../../services/predictionRequest";
 import { useI18n } from "../../i18n";
@@ -19,17 +17,42 @@ import { askLLM } from "../../services/llmService";
 import { MLSection, fetchMLProbability, mlProbabilityKey, type MLProbabilityRequest } from "../../components/MLPredictionCard";
 import { RuleFactorEditor } from "../../components/RuleFactorEditor";
 import { FramedLabel } from "../../components/brand/FramedLabel";
-import { BetOpt, MLProps, MktGroup, RuleFactor, buildLLMDataContext, llmCacheId, loadLlmCache, saveLlmCache, settlementFields } from "./gameMarkets";
+import { BetOpt, MLProps, MktGroup, RuleFactor, buildLLMDataContext, llmCacheId, loadLlmCache, saveLlmCache, scaledRulePct, settlementFields } from "./gameMarkets";
 import { pctColor } from "../../data/pctScale";
 import { blendFactors, getFamilyWeights } from "../../services/ruleWeightsService";
-import { RevealMode, RevealModeCtx } from "./predictionShared";
+import { BetOddsCtx, RevealMode, RevealModeCtx } from "./predictionShared";
+import { priceForBet } from "../../services/gameOdds";
+import { useOddsFormat } from "../../context/OddsFormatContext";
+
+/* ─── Identifiant de la jambe de coupon ──────────────────────────────────────
+ *
+ * Il vivait DANS `PredictionSheet`, donc seule la fiche ouverte savait si un
+ * pari était déjà au coupon. La tuile, elle, ne pouvait pas le savoir — et
+ * c'est précisément ce qu'on veut lui faire dire (encadré vert). Recalculer la
+ * même chaîne à deux endroits, c'est garantir qu'elles finiront par diverger :
+ * la fiche retirerait alors une jambe que la tuile croit absente.
+ *
+ * ⚠️ `rulePct` entre dans l'identifiant des paris SANS `mlProps` (il n'y a rien
+ * d'autre pour les distinguer). La tuile doit donc passer le MÊME `rulePct` que
+ * celui qu'elle transmet à la fiche — c'est-à-dire le score pondéré par
+ * l'utilisateur, pas `opt.rulePct` brut.
+ */
+export function betLegId(label: string, mlProps: MLProps | undefined, rulePct: number): string {
+  const slug = label.replace(/\s+/g, "-").toLowerCase().slice(0, 24);
+  return mlProps
+    ? `${mlProps.subjectId}-${mlProps.propType ?? "bet"}-${slug}`
+    : `rule-${slug}-${rulePct}`;
+}
 
 /* ─── Prediction bottom sheet ───────────────── */
-function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, factors, factorGroup, onClose }: {
+function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, factors, factorGroup, pctScale, onClose }: {
   label: string; rulePct: number; serverPct?: number; ruleNote: string; accent: string;
-  mlProps?: MLProps; factors?: RuleFactor[]; factorGroup?: string; onClose: () => void;
+  mlProps?: MLProps; factors?: RuleFactor[]; factorGroup?: string; pctScale?: number; onClose: () => void;
 }) {
   const { t, lang } = useI18n();
+  const { odds } = useOddsFormat();
+  const { table: oddsTable, bookTitle, nameByAbbr } = useContext(BetOddsCtx);
+  const bookPrice = priceForBet(oddsTable, mlProps, nameByAbbr);
   const llmId = llmCacheId(label, mlProps, lang);
   const [llmText, setLlmText]     = useState(() => loadLlmCache(llmId)); // réponse en cache si déjà générée
   const [llmOpen, setLlmOpen]     = useState(false); // repliée par défaut pour ne pas cacher les autres cartes
@@ -64,9 +87,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   const legPct = ownServerPct ?? rulePct;
 
   const { addLeg, removeLeg, hasLeg } = useBet();
-  const legId = mlProps
-    ? `${mlProps.subjectId}-${mlProps.propType ?? "bet"}-${label.replace(/\s+/g, "-").toLowerCase().slice(0, 24)}`
-    : `rule-${label.replace(/\s+/g, "-").toLowerCase().slice(0, 24)}-${rulePct}`;
+  const legId = betLegId(label, mlProps, rulePct);
   const inSlip = hasLeg(legId);
 
   function handleSlip() {
@@ -100,13 +121,13 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col justify-end"
+      className="fixed inset-0 z-[70] flex flex-col justify-end"
       style={{ background: "rgba(0,0,0,0.75)" }}
       onClick={onClose}
     >
       <div
         className="bg-[#0A0E0C] rounded-t-3xl flex flex-col gap-3 max-h-[90vh] overflow-y-auto"
-        style={{ padding: "20px 16px 44px" }}
+        style={{ padding: "20px 16px calc(6rem + env(safe-area-inset-bottom, 0px))" }}
         onClick={e => e.stopPropagation()}
       >
         {/* Handle */}
@@ -125,6 +146,22 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
             {inSlip ? t("pred.slipShort") : t("pred.slipAddShort")}
           </button>
         </div>
+
+        {/* ── 💰 Le PRIX du livre, quand il en propose un ──────────────────
+            Séparé de tout ce qui suit, et étiqueté du nom du livre : ce n'est
+            pas une sortie de nos modèles mais une offre extérieure. Absent
+            partout où le fournisseur ne cote pas le marché — c'est-à-dire
+            presque partout hors vainqueur / totaux / handicap. */}
+        {bookPrice != null && (
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-[#4ade80]/25 bg-[#4ade80]/[0.07]">
+            <span className="text-[#4ade80] text-[11px] font-semibold uppercase tracking-wider">
+              {bookTitle ?? t("pred.bookOdds")}
+            </span>
+            <span className="ml-auto text-[#4ade80] text-lg font-black tabular-nums">
+              {odds(bookPrice)}
+            </span>
+          </div>
+        )}
 
         {/* ── 🤖 ML — prédiction du modèle ── */}
         {mlProps ? (
@@ -152,7 +189,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
 
         {/* ── 📐 Règles — éditeur de facteurs par pari, ou note simple ── */}
         {factors && factors.length > 0 && factorGroup ? (
-          <RuleFactorEditor factors={factors} factorGroup={factorGroup} label={t("pred.rules")} />
+          <RuleFactorEditor factors={factors} factorGroup={factorGroup} pctScale={pctScale} label={t("pred.rules")} />
         ) : (
           <div className="bg-[#0d1519] border border-white/[0.07] rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/[0.05]">
@@ -307,10 +344,21 @@ export function PredictionsRevealBar({ mode, onSelect }: { mode: RevealMode; onS
   );
 }
 
-/* ─── BetOption ─────────────────────────────── */
-function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
+/* ─── BetOption ─────────────────────────────────────────────────────────────
+ *
+ * `compact` rend la MÊME tuile, en case de tableau : sans l'étiquette (la
+ * grille la porte déjà en en-tête de colonne et en tête de ligne) et sans
+ * hauteur minimale. Tout le reste est identique — état coupon, bascule
+ * Règles/ML, prix du livre, fiche à l'ouverture — parce qu'une case de grille
+ * EST un pari, et qu'un second composant qui se contenterait d'y ressembler
+ * finirait par diverger sur l'un de ces quatre points.
+ */
+export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accent: string; compact?: boolean }) {
   const { t } = useI18n();
   const mode = useContext(RevealModeCtx);
+  const { odds } = useOddsFormat();
+  const { table: oddsTable, nameByAbbr } = useContext(BetOddsCtx);
+  const { hasLeg } = useBet();
   const [sheet, setSheet] = useState(false);
 
   // Score de règles de la tuile = celui que la carte ouverte affichera, donc
@@ -318,11 +366,28 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
   // par défaut et la carte le blend réglé : deux chiffres pour un même pari.
   // `sheet` est dans les dépendances exprès : refermer la carte après avoir
   // enregistré de nouveaux poids recalcule la tuile.
+  //
+  // `pctScale` : une tuile qui pose une question plus étroite que ses facteurs
+  // (« gagne en temps réglementaire » vs « gagne ») en porte la fraction. Sans
+  // elle, repondérer les facteurs ramenait la tuile réglementaire à
+  // P(victoire, prolongations comprises) — le chiffre du marché voisin.
   const rulePct = useMemo(() => (
     opt.factors?.length && opt.factorGroup
-      ? blendFactors(opt.factors, getFamilyWeights(opt.factorGroup, opt.factors))
+      ? scaledRulePct(blendFactors(opt.factors, getFamilyWeights(opt.factorGroup, opt.factors)), opt.pctScale)
       : opt.rulePct
-  ), [opt.factors, opt.factorGroup, opt.rulePct, sheet]);
+  ), [opt.factors, opt.factorGroup, opt.rulePct, opt.pctScale, sheet]);
+
+  // Ce pari est-il DÉJÀ au coupon ? La tuile le dit d'un liseré vert, pour
+  // qu'on le voie sans ouvrir la fiche — c'est toute la question quand on
+  // parcourt cinquante marchés d'affilée.
+  //
+  // ⚠️ `rulePct` (pondéré) et non `opt.rulePct` : l'identifiant d'un pari sans
+  // `mlProps` en dépend, et la fiche reçoit cette même valeur. Voir `betLegId`.
+  const inSlip = hasLeg(betLegId(opt.label, opt.mlProps, rulePct));
+
+  // Le prix du livre, s'il en cote un pour ce marché. Presque toujours absent :
+  // le fournisseur ne sert que vainqueur, totaux et handicap.
+  const bookPrice = priceForBet(oddsTable, opt.mlProps, nameByAbbr);
 
   // Predictions are always shown. The toggle picks the source: ML model % when
   // "ml" is selected, otherwise the rule-based %.
@@ -371,22 +436,57 @@ function BetOption({ opt, accent }: { opt: BetOpt; accent: string }) {
     <>
       <button
         onClick={() => setSheet(true)}
-        className="flex flex-col items-center justify-between p-3 rounded-xl border transition-all active:scale-[0.97] w-full"
-        style={{ minHeight: 64, background: "#131A12", borderColor: shownColor + "55" }}
+        aria-pressed={inSlip}
+        aria-label={compact ? opt.label : undefined}
+        title={compact ? opt.label : undefined}
+        className={`relative flex flex-col items-center justify-between rounded-xl border transition-all active:scale-[0.97] w-full ${compact ? "p-1.5" : "p-3"}`}
+        style={inSlip
+          // Vert franc et fond teinté : à côté d'une tuile ordinaire bordée de
+          // la couleur du pourcentage, un vert pâle ne se lirait pas comme un
+          // état mais comme une nuance de plus.
+          ? { minHeight: compact ? 0 : 64, background: "#132116", borderColor: "#4ade80", borderWidth: 2 }
+          : { minHeight: compact ? 0 : 64, background: "#131A12", borderColor: shownColor + "55" }}
       >
-        <span className="text-white text-[11px] font-medium text-center leading-tight">{opt.label}</span>
+        {/* La coche dit CE QUE le vert veut dire. Un liseré seul se devine ;
+            une couleur seule ne se voit pas non plus en vision daltonienne. */}
+        {inSlip && (
+          <span
+            aria-hidden
+            className="absolute top-1 right-1.5 text-[#4ade80] text-[10px] font-black leading-none"
+          >
+            ✓
+          </span>
+        )}
+        {/* En grille, l'étiquette est portée par la ligne et la colonne — la
+            répéter dans chaque case rendrait le tableau illisible. Elle reste
+            accessible par `aria-label` et l'infobulle. */}
+        {!compact && (
+          <span className="text-white text-[11px] font-medium text-center leading-tight">{opt.label}</span>
+        )}
         <span
-          className="mt-2 px-3 py-0.5 rounded-full text-xs font-bold"
+          className={`${compact ? "" : "mt-2 px-3"} py-0.5 rounded-full text-xs font-bold`}
+          data-compact={compact || undefined}
           style={{ background: shownColor + "22", color: shownColor, border: `1px solid ${shownColor}55` }}
           title={mlMissing ? t("ml.unavailable") : undefined}
         >
           {loadingMl ? "…" : mlMissing ? "—" : `${shownPct}%`}
         </span>
+        {/* Le prix du livre, sous le pourcentage et visiblement à part : ce
+            sont deux choses différentes — notre estimation, et une offre. Rien
+            ne s'affiche quand le livre ne cote pas ce marché ; pas de tiret,
+            qui ferait croire à une donnée manquante alors que c'est l'état
+            normal de la quasi-totalité des marchés. */}
+        {bookPrice != null && (
+          <span className="mt-1 text-[#4ade80] text-[10px] font-bold tabular-nums leading-none">
+            {odds(bookPrice)}
+          </span>
+        )}
       </button>
       {sheet && (
         <PredictionSheet
           label={opt.label} rulePct={rulePct} ruleNote={opt.ruleNote}
-          accent={accent} mlProps={opt.mlProps} factors={opt.factors} factorGroup={opt.factorGroup} onClose={() => setSheet(false)}
+          accent={accent} mlProps={opt.mlProps} factors={opt.factors} factorGroup={opt.factorGroup}
+          pctScale={opt.pctScale} onClose={() => setSheet(false)}
         />
       )}
     </>
@@ -420,225 +520,24 @@ export function MarketGroup({ group, accent }: { group: MktGroup; accent: string
   );
 }
 
-/* ─── Players table (game and team prediction pages) ───────────────────────
- * One table at a time, showing each player's season line. On a game there are
- * two sides and a home/away switch; on a team page there is a single side and
- * no switch.
+/* ─── Tableau d'effectif — RETIRÉ le 2026-09-19 ──────────────────────────────
  *
- * A row no longer navigates on its own (2026-09-04): tapping it fades the line
- * and offers the three destinations — the player's charts, his club, his own
- * predictions — plus a × that brings the season line back.
+ * `PlayersStatsTable`, `GamePlayersTable`, `TeamPlayersTable` et
+ * `PlayerRowActions` fermaient les pages de prédiction d'un match et d'une
+ * équipe avec la ligne de saison de chaque joueur.
+ *
+ * Ils partent parce que la page a désormais mieux au même endroit :
+ * `PlayerPropGrid` montre les mêmes joueurs, classés par la statistique qui
+ * nous intéresse, et chaque case y EST un pari. L'ancien tableau ne donnait que
+ * des nombres à lire ; pour miser sur les buts d'un joueur, il fallait toucher
+ * sa ligne, ouvrir sa page, y retrouver le bon groupe de marchés — et la
+ * comparaison entre coéquipiers, qui est la raison même de regarder un
+ * effectif, se perdait au premier changement d'écran.
+ *
+ * Les lignes de saison complètes n'ont pas disparu du produit : elles vivent
+ * sur la page Statistiques (`/stats/chart/...`), vers laquelle les deux pages
+ * pointent maintenant par un bouton en pied de page.
+ *
+ * Aucun autre appelant : `grep` sur les quatre noms ne rend plus que ce
+ * commentaire.
  */
-
-type PlayerSide = { key: string; abbr: string; name: string };
-
-/** The destinations offered for the tapped player, and the way back. */
-function PlayerRowActions({ playerId, abbr, gameId, accent, showTeam, onClose }: {
-  playerId: string; abbr: string; gameId?: string; accent: string; showTeam: boolean; onClose: () => void;
-}) {
-  const { t } = useI18n();
-  const navigate = useNavigate();
-  // Le match suit le joueur et le club, pour que la page d'arrivée parle de
-  // CETTE affiche plutôt que du prochain match par défaut.
-  const suffix = gameId ? `?game=${gameId}` : "";
-  const act = (label: string, to: string) => (
-    <button
-      onClick={(e) => { e.stopPropagation(); navigate(to); }}
-      className="flex-1 min-w-0 px-2 py-2 rounded-lg text-[11px] font-semibold truncate transition-transform active:scale-95"
-      style={{ background: accent + "1a", color: accent, border: `1px solid ${accent}44` }}
-    >
-      {label}
-    </button>
-  );
-  return (
-    <div className="flex items-center gap-1.5 px-3 py-2">
-      {act(t("pred.playerCharts"), `/stats/chart/player/${playerId}`)}
-      {/* Sur la page prédiction de l'équipe elle-même, ce bouton pointait vers
-          la page où l'on se trouve déjà : il ne se passait rien. Il n'y est
-          plus (2026-09-04). */}
-      {showTeam && act(t("pred.playerTeam"), `/stats/prediction/team/${abbr.toLowerCase()}${suffix}`)}
-      {act(t("pred.playerPreds"),  `/stats/prediction/player/${playerId}${suffix}`)}
-      <button
-        onClick={(e) => { e.stopPropagation(); onClose(); }}
-        aria-label={t("pred.playerBackToStats")}
-        title={t("pred.playerBackToStats")}
-        className="tap-44 w-8 h-8 flex-shrink-0 rounded-lg text-sm font-bold text-[#8a9ea6] bg-[#0A0E0C] border border-white/15 transition-transform active:scale-95"
-      >
-        ×
-      </button>
-    </div>
-  );
-}
-
-function PlayersStatsTable({ sides, gameId, accent, showTeamAction = true }: {
-  sides: PlayerSide[];
-  gameId?: string;
-  accent: string;
-  /** false sur la page d'une équipe : le bouton mènerait à la page courante. */
-  showTeamAction?: boolean;
-}) {
-  const { t } = useI18n();
-  const [sideKey, setSideKey] = useState(sides[0]?.key ?? "");
-  const [rosters, setRosters] = useState<Record<string, any[]>>({});
-  const [loading, setLoading] = useState(false);
-  const [openPlayer, setOpenPlayer] = useState<string | null>(null);
-
-  const side = sides.find(s => s.key === sideKey) ?? sides[0];
-  const activeAbbr = side?.abbr ?? "";
-
-  useEffect(() => {
-    if (!activeAbbr || rosters[activeAbbr]) return;
-    let alive = true;
-    setLoading(true);
-    nhlApiService.getTeamRoster(activeAbbr.toUpperCase())
-      .then((roster: any[]) => { if (alive) setRosters(prev => ({ ...prev, [activeAbbr]: roster })); })
-      .catch(() => { if (alive) setRosters(prev => ({ ...prev, [activeAbbr]: [] })); })
-      .finally(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
-  }, [activeAbbr]);
-
-  // Changer de côté ferme la ligne ouverte : elle appartenait à l'autre club.
-  useEffect(() => { setOpenPlayer(null); }, [activeAbbr]);
-
-  // Server already sorts by points, but a re-sort keeps the order stable if a
-  // future endpoint stops doing so.
-  const players = [...(rosters[activeAbbr] ?? [])].sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
-
-  const head = (label: string) => (
-    <th className="font-semibold px-2 py-2 text-center whitespace-nowrap">{label}</th>
-  );
-  const cell = (value: number | string) => (
-    <td className="px-2 py-2 text-center tabular-nums text-[#c8d3cc]">{value}</td>
-  );
-
-  return (
-    <div className="bg-[#131A12] border border-white/20 rounded-2xl overflow-hidden">
-      <div className="px-4 pt-3 pb-2 flex items-center gap-2">
-        <span className="text-white text-sm font-medium">{t("pred.playersTable")}</span>
-        {sides.length === 1 && side && (
-          <span className="text-[#8a9ea6] text-[11px]">· {side.name}</span>
-        )}
-        <span className="text-[#8a9ea6] text-[11px] ml-auto">{t("pred.seasonStats")}</span>
-      </div>
-
-      {/* Team tabs — only when there are two clubs to switch between */}
-      {sides.length > 1 && (
-        <div className="px-4 pb-3">
-          <div className="flex gap-1.5 bg-[#0A0E0C] rounded-xl p-1">
-            {sides.map(o => (
-              <button
-                key={o.key}
-                onClick={() => setSideKey(o.key)}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all"
-                style={sideKey === o.key ? { background: accent, color: "#0A0E0C" } : { color: "#8a9ea6" }}
-              >
-                <img src={nhlLogoUrl(o.abbr)} alt={o.abbr} className="w-4 h-4 object-contain" />
-                {o.abbr}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {loading && players.length === 0 ? (
-        <div className="px-4 pb-4 flex flex-col gap-2">
-          {[1, 2, 3, 4].map(i => <div key={i} className="h-9 bg-[#0A0E0C] rounded-lg animate-pulse" />)}
-        </div>
-      ) : players.length === 0 ? (
-        <p className="text-[#8a9ea6] text-xs text-center py-6">{t("players.none", { abbr: activeAbbr })}</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-xs">
-            <thead>
-              <tr className="text-[#8a9ea6]">
-                <th className="text-left font-semibold px-3 py-2 sticky left-0 z-10" style={{ background: "#131A12" }}>
-                  {t("chart.player")}
-                </th>
-                {head("GP")}{head("G")}{head("A")}{head("P")}{head("+/-")}{head("SOG")}{head("PP")}
-              </tr>
-            </thead>
-            <tbody>
-              {players.map((p: any) => {
-                const id = String(p.id);
-                const name = p.name ?? p.fullName ?? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim();
-                const number = p.number ?? p.jerseyNumber ?? p.sweaterNumber ?? 0;
-                const pm = p.plusMinus ?? 0;
-                const open = openPlayer === id;
-                return (
-                  <Fragment key={id}>
-                    <tr
-                      onClick={() => setOpenPlayer(open ? null : id)}
-                      aria-expanded={open}
-                      className="border-t border-white/[0.06] cursor-pointer hover:bg-white/[0.04] transition-colors"
-                      style={open ? { opacity: 0.45 } : undefined}
-                    >
-                      <td className="px-3 py-2 sticky left-0 z-10 whitespace-nowrap" style={{ background: "#131A12" }}>
-                        <span className="text-[#5c6f63] tabular-nums mr-1.5">{number}</span>
-                        <span className="text-white font-medium">{name}</span>
-                        <span className="text-[#5c6f63] ml-1.5">{p.position ?? "—"}</span>
-                      </td>
-                      {cell(p.gamesPlayed ?? 0)}
-                      {cell(p.goals ?? 0)}
-                      {cell(p.assists ?? 0)}
-                      <td className="px-2 py-2 text-center tabular-nums font-semibold" style={{ color: accent }}>{p.points ?? 0}</td>
-                      {cell(pm > 0 ? `+${pm}` : String(pm))}
-                      {cell(p.shots ?? 0)}
-                      {cell(p.ppPoints ?? 0)}
-                    </tr>
-                    {open && (
-                      <tr>
-                        <td colSpan={8} className="p-0" style={{ background: "#0F160E" }}>
-                          <PlayerRowActions
-                            playerId={id}
-                            abbr={activeAbbr}
-                            gameId={gameId}
-                            accent={accent}
-                            showTeam={showTeamAction}
-                            onClose={() => setOpenPlayer(null)}
-                          />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Both rosters of a match, with a home/away switch. */
-export function GamePlayersTable({ gameId, home, away, accent }: {
-  gameId: string;
-  home: { abbr: string; name: string };
-  away: { abbr: string; name: string };
-  accent: string;
-}) {
-  return (
-    <PlayersStatsTable
-      sides={[{ key: "home", ...home }, { key: "away", ...away }]}
-      gameId={gameId}
-      accent={accent}
-    />
-  );
-}
-
-/** A single club's roster, for the team prediction page. */
-export function TeamPlayersTable({ abbr, name, gameId, accent }: {
-  abbr: string;
-  name: string;
-  gameId?: string;
-  accent: string;
-}) {
-  return (
-    <PlayersStatsTable
-      sides={[{ key: "team", abbr, name }]}
-      gameId={gameId}
-      accent={accent}
-      showTeamAction={false}
-    />
-  );
-}

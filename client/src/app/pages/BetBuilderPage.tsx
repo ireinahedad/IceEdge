@@ -24,6 +24,7 @@ import { submitSlip } from "../services/slipApiService";
 import { isRequestTimeout } from "../services/http";
 import { useSport } from "../context/SportContext";
 import { useI18n } from "../i18n";
+import { readMode, type AppearanceMode } from "../appearance";
 import { toast } from "sonner";
 import "./bet-theme.css";
 import { MySlipsTab } from "./bet/MySlipsTab";
@@ -43,11 +44,8 @@ export function BetBuilderPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState<PageTab>(searchParams.get("tab") === "slips" ? "slips" : "build");
-  // Dark / light appearance — shared, persisted setting (set from the profile page)
-  const [mode] = useState<"dark" | "light">(() => {
-    try { return localStorage.getItem("iceedge_mode") === "light" ? "light" : "dark"; }
-    catch { return "dark"; }
-  });
+  // Apparence sombre / claire — réglage partagé, cf. `appearance.ts`.
+  const [mode] = useState<AppearanceMode>(readMode);
   const [showSheet, setShowSheet] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // `message` vient du serveur ; il était jeté à la réception puis lu au rendu,
@@ -292,7 +290,7 @@ export function BetBuilderPage() {
 
       {/* Success overlay */}
       {submitResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-6 bg-black/80">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center px-6 bg-black/80">
           <div className="icy-card bet-ink-black rounded-3xl p-8 text-center max-w-[300px] w-full">
             <div className="text-5xl mb-4">✅</div>
             <p className="text-white font-bold text-lg mb-2">Slip Locked!</p>

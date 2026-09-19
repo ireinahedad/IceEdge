@@ -155,10 +155,21 @@ export class NHLService {
       powerPlayGoals:   null,
       powerPlayPoints:  p.ppPoints,
       shortHandedGoals: null,
-      penaltyMinutes:   null,
-      blockedShots:     null,
-      hits:             null,
-      timeOnIce:        null,
+      // ⚠️ Ces quatre champs étaient écrits `null` EN DUR, alors que
+      // `fetchPlayerById` les remonte (`penaltyMinutes`, `avgToi`) ou les
+      // remonte depuis le câblage du rapport `realtime` (`blockedShots`,
+      // `hits`). Ce DTO les jetait juste avant la sortie.
+      //
+      // Conséquence à l'écran : `PlayerPrediction` garde ses groupes de marchés
+      // « Blocked Shots », « Hits » et « Penalty Minutes » derrière un `> 0`
+      // sur ces valeurs. `null ?? 0` valant 0, la garde était toujours fausse —
+      // trois groupes de paris écrits et jamais rendus une seule fois. Le
+      // commentaire de `fetchPlayerById` explique même que `pim` et `avgToi`
+      // avaient été ajoutés exprès ; ils n'ont jamais traversé cette couche.
+      penaltyMinutes:   p.penaltyMinutes ?? null,
+      blockedShots:     p.blockedShots ?? null,
+      hits:             p.hits ?? null,
+      timeOnIce:        p.avgToi ?? null,
       faceoffWinPct:    null,
       lastFive:         p.lastFive,
       winImpact:        p.winImpact,

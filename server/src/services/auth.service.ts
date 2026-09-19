@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import { pool } from '../db/connection';
 import { logger } from '../logger';
 import { sendVerificationCode, sendPasswordResetCode } from './email.service';
+import { profileAlreadyEnsured, markProfileEnsured } from './profileEnsured';
 import {
   UserRow, UserPublic, RegisterBody, LoginBody,
   AuthTokens, AuthResponse, JwtPayload, RefreshTokenRow,
@@ -128,6 +129,14 @@ async function issueTokens(user: UserRow, remember = false): Promise<AuthTokens>
 // Creates a user_profiles row if one doesn't already exist for this user.
 // Accepts an optional executor so it can run inside a caller's transaction.
 async function ensureUserProfile(userId: string, displayName: string, avatarUrl?: string | null, db: Db = pool) {
+  // Le raccourci ne s'applique QUE hors transaction. Dans un `BEGIN` (création
+  // de compte, rattachement Google), la ligne n'est pas encore validée : la
+  // mémoriser avant le `COMMIT` la ferait considérer comme acquise alors qu'un
+  // `ROLLBACK` peut encore l'effacer.
+  const horsTransaction = db === pool;
+
+  if (horsTransaction && profileAlreadyEnsured(userId) && !avatarUrl) return;
+
   await db.query(
     `INSERT INTO user_profiles
        (user_id, display_name, avatar, tier, performance_score, is_public, joined_at)
@@ -139,6 +148,8 @@ async function ensureUserProfile(userId: string, displayName: string, avatarUrl?
   if (avatarUrl) {
     await db.query('UPDATE users SET avatar_url = $1 WHERE id = $2 AND avatar_url IS NULL', [avatarUrl, userId]);
   }
+
+  if (horsTransaction) markProfileEnsured(userId);
 }
 
 // ---- One-time codes (email verification + password reset) ------------------

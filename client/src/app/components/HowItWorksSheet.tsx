@@ -113,7 +113,7 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Body */}
-        <div className="overflow-y-auto px-5 py-4 flex flex-col gap-4">
+        <div className="overflow-y-auto px-5 py-4 pb-nav-safe flex flex-col gap-4">
           <p className="text-[#bfc8cc] text-[13px] leading-relaxed">{intro}</p>
 
           <div>

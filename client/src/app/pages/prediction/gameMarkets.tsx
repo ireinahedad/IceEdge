@@ -74,8 +74,100 @@ export interface BetOpt {
    * nommé les options pareil.
    */
   ml?: MLProps;
+  /**
+   * Fraction appliquée au mélange des facteurs, pour une tuile qui n'est pas
+   * exactement la question que ses facteurs décrivent.
+   *
+   * Le cas qui l'a fait naître : « ${équipe} en temps réglementaire ». Ses
+   * facteurs sont ceux de « qui gagne ? » — c'est bien la même question — mais
+   * la tuile en exclut les prolongations. Sans ce facteur d'échelle, l'éditeur
+   * de pondération recalculait le score depuis les facteurs et la tuile
+   * remontait à P(victoire, prolongations comprises) : le chiffre du marché
+   * voisin, sur une tuile qui dit le contraire.
+   *
+   * Posée par le serveur (`nhlPredictions.ts`), appliquée APRÈS le mélange, donc
+   * une repondération par l'utilisateur la traverse. Absente = 1.
+   */
+  pctScale?: number;
 }
 export interface MktGroup { id: string; title: string; cols: 2 | 3; options: BetOpt[]; }
+
+/**
+ * Le score de règles d'une tuile, facteurs et échelle compris.
+ *
+ * Une seule fonction pour la tuile ET pour la fiche ouverte : les deux la
+ * calculaient séparément, et c'est exactement ainsi qu'un pari finit par
+ * afficher deux pourcentages différents selon qu'on le regarde ou qu'on
+ * l'ouvre.
+ */
+export function scaledRulePct(blended: number, pctScale?: number): number {
+  if (!pctScale || pctScale === 1 || !Number.isFinite(pctScale)) return blended;
+  return Math.round(Math.max(3, Math.min(97, blended * pctScale)));
+}
+
+/**
+ * Match Betting — QUATRE tuiles, pas trois.
+ *
+ * Les trois précédentes (« maison gagne », « OT/SO », « visiteur gagne ») ne
+ * partitionnaient rien : « maison gagne » inclut les victoires en prolongation,
+ * donc la tuile du milieu recoupait ses deux voisines et les pourcentages
+ * totalisaient ~122 %. Présenté sous la forme d'un marché à trois voies — où
+ * l'on choisit UNE issue — c'était trompeur.
+ *
+ * Les quatre tuiles ci-dessous sont exhaustives et disjointes. Leur somme fait
+ * 100 par construction : chaque équipe est cotée séparément en temps
+ * réglementaire et en prolongation/fusillade.
+ *
+ * ⚠️ Ce calcul est le JUMEAU de celui de `nhlPredictions.ts` côté serveur, qui
+ * est celui qui parle en pratique : `GamePrediction` préfère les groupes du
+ * serveur dès qu'ils arrivent. Celui-ci ne sert que le premier rendu et le mode
+ * dégradé. Les deux doivent partager la même règle de partage de la
+ * prolongation, sinon le chiffre saute sous les yeux de l'utilisateur au moment
+ * où la réponse du serveur arrive.
+ */
+function matchBettingGroup(home: string, away: string, hp: number): MktGroup {
+  const ap = 100 - hp;
+  // Probabilité de prolongation : ~22,5 % de base, jusqu'à ~28 % sur une
+  // affiche serrée. Même forme que `otProb()` côté serveur.
+  const balance = 1 - 2 * Math.abs(hp / 100 - 0.5);
+  const ot = 22.5 + 6 * balance;
+  // La prolongation efface une grande partie de l'écart de talent (3-contre-3
+  // puis fusillade) : on ne reporte qu'un quart de l'avantage, borné à ±10 pts.
+  const shareHome = Math.max(0.40, Math.min(0.60, 0.5 + 0.25 * (hp / 100 - 0.5)));
+  const homeOt = Math.round(ot * shareHome);
+  const awayOt = Math.round(ot * (1 - shareHome));
+  const homeReg = Math.max(3, Math.round(hp - homeOt));
+  const awayReg = Math.max(3, Math.round(ap - awayOt));
+  const otNote = `OT/SO in ~${Math.round(ot)}% of games, split ${Math.round(shareHome * 100)}/${Math.round((1 - shareHome) * 100)} — overtime erases much of the talent gap.`;
+
+  const gml  = (propType: string, line?: number, selection?: string): MLProps =>
+    ({ type: "game", subjectId: home, opponentId: away, propType, line, isHome: true,  selection });
+  const gmla = (propType: string, line?: number, selection?: string): MLProps =>
+    ({ type: "game", subjectId: away, opponentId: home, propType, line, isHome: false, selection });
+
+  return {
+    id: "match", title: "Match Betting", cols: 2,
+    options: [
+      // Le marché ML reste `moneyline` : c'est la victoire toutes issues
+      // confondues que le modèle sait estimer, et le règlement automatique n'a
+      // pas de marché « victoire en 60 minutes ». L'étiquette de la tuile dit
+      // laquelle des deux questions elle pose ; `pctScale` fait le lien.
+      { id: "ml-home", label: `${home} in Reg`, rulePct: homeReg, mlProps: gml("moneyline"),
+        pctScale: hp > 0 ? homeReg / hp : 1,
+        ruleNote: `Regulation win = win probability ${hp}% minus the ${homeOt}% that plays out in OT/SO.` },
+      { id: "ml-away", label: `${away} in Reg`, rulePct: awayReg, mlProps: gmla("moneyline"),
+        pctScale: ap > 0 ? awayReg / ap : 1,
+        ruleNote: `Regulation win = win probability ${ap}% minus the ${awayOt}% that plays out in OT/SO.` },
+      // Identifiants NEUFS : l'ancien `ml-ot` valait « le match va en
+      // prolongation », sans vainqueur. Le réutiliser pour l'une des deux
+      // moitiés rattacherait des paris déjà enregistrés au mauvais marché.
+      { id: "ml-home-ot", label: `${home} in OT/SO`, rulePct: homeOt, mlProps: gml("game_to_ot", undefined, "yes"),
+        pctScale: shareHome, ruleNote: otNote },
+      { id: "ml-away-ot", label: `${away} in OT/SO`, rulePct: awayOt, mlProps: gmla("game_to_ot", undefined, "yes"),
+        pctScale: 1 - shareHome, ruleNote: otNote },
+    ],
+  };
+}
 
 export function buildGameGroups(home: string, away: string, hp: number, ou: number): MktGroup[] {
   const ap = 100 - hp;
@@ -109,17 +201,7 @@ export function buildGameGroups(home: string, away: string, hp: number, ou: numb
   });
 
   return [
-    {
-      id: "match", title: "Match Betting", cols: 3,
-      options: [
-        { id: "ml-home",  label: `${home} to Win`,   rulePct: hp,   mlProps: gml("moneyline"),
-          ruleNote: `Win probability based on season stats: ${hp}%. Home ice advantage is included in the calculation.` },
-        { id: "ml-ot",    label: "OT / Shootout",     rulePct: 22,   mlProps: gml("game_to_ot"),
-          ruleNote: `~22-24% of NHL games go to OT or shootout, regardless of team strength.` },
-        { id: "ml-away",  label: `${away} to Win`,   rulePct: ap,   mlProps: gmla("moneyline"),
-          ruleNote: `Inverse of home probability: ${ap}%. Visitors carry a slight systemic disadvantage.` },
-      ],
-    },
+    matchBettingGroup(home, away, hp),
     {
       id: "puckline", title: "Puck Line", cols: 2,
       options: [

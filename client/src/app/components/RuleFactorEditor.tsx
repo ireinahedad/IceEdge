@@ -21,14 +21,24 @@ import {
   ensureFamilyWeightsHydrated,
   pushFamilyWeights,
 } from "../services/ruleWeightsService";
+import { scaledRulePct } from "../pages/prediction/gameMarkets";
 
 export function RuleFactorEditor({
   factors,
   factorGroup,
+  pctScale,
   label,
 }: {
   factors: SimpleFactor[];
   factorGroup: string;
+  /**
+   * Fraction appliquée au mélange, pour un pari plus étroit que la question
+   * que ses facteurs décrivent — « gagne en temps réglementaire » se mesure
+   * avec les facteurs de « gagne », amputés de la part jouée en prolongation.
+   * Sans elle, la carte affichait ici le score de la question LARGE, pendant
+   * que la tuile affichait celui du pari : deux chiffres pour un même pari.
+   */
+  pctScale?: number;
   label: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -64,7 +74,7 @@ export function RuleFactorEditor({
     }
   }, [open]);
 
-  const blended = blendFactors(factors, weights);
+  const blended = scaledRulePct(blendFactors(factors, weights), pctScale);
   const total = factors.reduce((s, f) => s + (weights[f.id] ?? f.weight), 0);
   // 100 est un repère de lecture, pas une contrainte : le score est une moyenne
   // pondérée (`blendFactors` divise par la somme des poids), donc un total de 106

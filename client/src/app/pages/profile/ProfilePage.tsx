@@ -26,6 +26,7 @@ import { profileApiService } from "./../../services/userService";
 import { applyServerFamilyWeights } from "./../../services/ruleWeightsService";
 import type { UserProfile, UserBettingStats } from "./../../types/user";
 import { useI18n } from "../../i18n";
+import { readMode, writeMode, type AppearanceMode } from "../../appearance";
 import { toast } from "sonner";
 import "./profile-settings.css";
 import { OverviewTab, ProfileHeader, Skeleton, Tab } from "./ProfileParts";
@@ -58,14 +59,14 @@ export function ProfilePage() {
     }
   }, [searchParams]);
 
-  // Dark / light appearance chosen by the user (persisted)
-  const [mode, setModeState] = useState<"dark" | "light">(() => {
-    try { return localStorage.getItem("iceedge_mode") === "light" ? "light" : "dark"; }
-    catch { return "dark"; }
-  });
-  const setMode = (m: "dark" | "light") => {
+  // Apparence sombre / claire. La lecture et l'écriture vivent dans
+  // `appearance.ts` : tant que le mode clair y est désactivé, `mode` vaut
+  // "dark" et les branches `profile-light` ci-dessous ne s'allument jamais —
+  // elles restent en place pour le jour où le réglage revient.
+  const [mode, setModeState] = useState<AppearanceMode>(readMode);
+  const setMode = (m: AppearanceMode) => {
     setModeState(m);
-    try { localStorage.setItem("iceedge_mode", m); } catch { /* ignore */ }
+    writeMode(m);
   };
 
   useEffect(() => {

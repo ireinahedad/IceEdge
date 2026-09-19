@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
+import { LIGHT_MODE_ENABLED, type AppearanceMode } from "../../appearance";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useAuth } from "../../context/AuthContext";
 import { useSubscription } from "../../context/SubscriptionContext";
@@ -42,8 +43,8 @@ export function SettingsTab({
   onSaved: (updated: UserProfile) => void;
   onAvatarClick: () => void;
   avatarUploading: boolean;
-  mode: "dark" | "light";
-  setMode: (m: "dark" | "light") => void;
+  mode: AppearanceMode;
+  setMode: (m: AppearanceMode) => void;
 }) {
   const { t, lang, setLang } = useI18n();
   const { isPro, status: subStatus, refresh: refreshSub } = useSubscription();
@@ -248,11 +249,18 @@ export function SettingsTab({
           <ToggleSwitch checked={lang === "fr"} onChange={() => setLang(lang === "fr" ? "en" : "fr")} fontSize={11} />
           <span className={`text-[11px] font-bold transition-colors ${lang === "fr" ? "text-[#90C9F0]" : "text-white/40"}`}>FR</span>
         </div>
-        <div className="inline-flex items-center gap-2 icy-card rounded-lg px-2.5 py-1.5">
-          <span className={`text-[11px] font-bold transition-colors ${mode === "dark" ? "text-[#90C9F0]" : "text-white/40"}`}>🌙 {t("profile.dark")}</span>
-          <ToggleSwitch checked={mode === "light"} onChange={() => setMode(mode === "light" ? "dark" : "light")} fontSize={11} />
-          <span className={`text-[11px] font-bold transition-colors ${mode === "light" ? "text-[#90C9F0]" : "text-white/40"}`}>{t("profile.light")} ☀️</span>
-        </div>
+        {/* Sombre / clair — retiré de l'écran le 2026-09-18 : le thème clair
+            n'habillait que le profil et le constructeur de coupon, tout le
+            reste de l'app restant sombre. Le basculement revient en passant
+            `LIGHT_MODE_ENABLED` à `true` dans `appearance.ts` — rien d'autre
+            n'a été supprimé, ni ici ni dans les feuilles de style. */}
+        {LIGHT_MODE_ENABLED && (
+          <div className="inline-flex items-center gap-2 icy-card rounded-lg px-2.5 py-1.5">
+            <span className={`text-[11px] font-bold transition-colors ${mode === "dark" ? "text-[#90C9F0]" : "text-white/40"}`}>🌙 {t("profile.dark")}</span>
+            <ToggleSwitch checked={mode === "light"} onChange={() => setMode(mode === "light" ? "dark" : "light")} fontSize={11} />
+            <span className={`text-[11px] font-bold transition-colors ${mode === "light" ? "text-[#90C9F0]" : "text-white/40"}`}>{t("profile.light")} ☀️</span>
+          </div>
+        )}
       </div>
 
       {/* Sportsbook selector — which betting site the "Place bet" buttons open */}

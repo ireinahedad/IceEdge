@@ -67,11 +67,32 @@ function blendPct(factors: Factor[]): number {
  * Poids normalisés AVANT le blend : le client recalcule le score à partir des
  * poids qu'il reçoit, donc les deux chiffres doivent partir des mêmes.
  */
+/**
+ * Pose les facteurs d'une tuile ET recale son pourcentage sur leur mélange.
+ *
+ * ── `pctScale` : une tuile qui n'est pas exactement la question des facteurs ──
+ *
+ * Ce recalage écrase `rulePct`. C'est voulu — la fiche ouverte recalcule le
+ * score depuis les facteurs, donc un `rulePct` posé en amont ferait dire deux
+ * chiffres différents au même pari. Mais certaines tuiles sont une FRACTION
+ * connue de la question que décrivent leurs facteurs, pas cette question même :
+ * « gagne en temps réglementaire » se mesure avec les facteurs de « gagne »,
+ * amputés de la part qui se joue en prolongation.
+ *
+ * `o.pctScale` porte cette fraction. Elle est appliquée APRÈS le mélange, donc
+ * elle survit à une repondération par l'utilisateur : alourdir la forme récente
+ * déplace la probabilité de victoire, et la part réglementaire suit.
+ *
+ * Absente, rien ne change — c'est le cas de l'écrasante majorité des tuiles.
+ */
 function setFactors(o: any, group: string, factors: Factor[]): void {
   const norm = normalizeWeights(factors);
   o.factors = norm.map(f => ({ id: f.id, label: f.label, weight: f.weight, value: f.value }));
   o.factorGroup = group;
-  o.rulePct = blendPct(norm);
+  const scale = typeof o.pctScale === 'number' && o.pctScale > 0 ? o.pctScale : 1;
+  o.rulePct = scale === 1
+    ? blendPct(norm)
+    : Math.round(Math.max(3, Math.min(97, blendPct(norm) * scale)));
 }
 function inv(factors: Factor[]): Factor[] { return factors.map(f => ({ ...f, value: clamp(1 - f.value) })); }
 
@@ -256,7 +277,12 @@ export function attachGameFactors(groups: any[], c: GameFactorCtx): void {
       // Résultat du match / puck line → famille "match"
       if (id === 'ml-home') setFactors(o, 'match', c.matchFactors);
       else if (id === 'ml-away') setFactors(o, 'match', inv(c.matchFactors));
-      else if (id === 'ml-ot' || id === 'ot-yes') setFactors(o, 'ot', otFactors(c));
+      // `ml-ot` a disparu avec le passage du marché Match Betting à quatre
+      // tuiles : il valait « le match va en prolongation », sans vainqueur. Les
+      // deux moitiés qui l'ont remplacé portent les MÊMES facteurs (la question
+      // « va-t-on en prolongation ? » est commune) et se distinguent par leur
+      // `pctScale`, qui est la part de prolongation revenant à chaque équipe.
+      else if (id === 'ml-home-ot' || id === 'ml-away-ot' || id === 'ot-yes') setFactors(o, 'ot', otFactors(c));
       else if (id === 'ot-no') setFactors(o, 'ot', inv(otFactors(c)));
       else if (id === 'pl-home') setFactors(o, 'match', c.matchFactors.map(f => ({ ...f, value: clamp(f.value - 0.15) })));
       else if (id === 'pl-away') setFactors(o, 'match', inv(c.matchFactors.map(f => ({ ...f, value: clamp(f.value - 0.15) }))));

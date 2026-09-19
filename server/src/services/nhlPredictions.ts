@@ -69,6 +69,13 @@ export interface BetOption {
   factors?:  Array<{ id: string; label: string; weight: number; value: number }>;
   /** Famille de facteurs (match | totals | period | margin | ot | player_off | player_phys | goalie). */
   factorGroup?: string;
+  /**
+   * Fraction appliquée au mélange des facteurs, pour une tuile qui n'est pas
+   * exactement la question que ses facteurs décrivent (« gagne en temps
+   * réglementaire » contre « gagne »). Voir `setFactors` dans `factorModel.ts`.
+   * Absente = 1.
+   */
+  pctScale?: number;
 }
 
 export interface MarketGroup {
@@ -355,15 +362,59 @@ function computeGameMarkets(
   const md = marginDistribution(lambdaH, lambdaA);
 
   // ── 1. Match Betting ──────────────────────────────────────────────────────
+  //
+  // QUATRE tuiles, et non trois : chaque équipe est cotée séparément en temps
+  // réglementaire et en prolongation/fusillade.
+  //
+  // ── Pourquoi ce n'est pas un ajout cosmétique ───────────────────────────
+  //
+  // Les trois tuiles précédentes — « maison gagne », « OT/SO », « visiteur
+  // gagne » — ne partitionnaient rien : « maison gagne » INCLUT les victoires
+  // en prolongation, donc la tuile OT recoupait les deux autres et les trois
+  // pourcentages totalisaient ~122 %. Le lecteur y voyait un choix exclusif
+  // (c'est la forme d'un marché à trois voies) là où il n'y en avait pas.
+  //
+  // Les quatre tuiles ci-dessous sont EXHAUSTIVES et DISJOINTES : leur somme
+  // fait 1 par construction. C'est le marché « 3-way + OT » que cotent les
+  // livres.
+  //
+  // ── Le partage de la prolongation ────────────────────────────────────────
+  //
+  // P(victoire) contient déjà les prolongations ; il faut donc en retirer la
+  // part qui s'y joue. La prolongation est beaucoup plus équilibrée que le
+  // match : 3-contre-3 puis fusillade effacent une grande partie de l'écart de
+  // talent, et la fusillade est proche du pile ou face. On ne reporte donc
+  // qu'un QUART de l'avantage sur le partage de l'OT, borné à ±10 points —
+  // au-delà, on prétendrait savoir quelque chose que la fusillade dément.
+  const otShareHome = clamp(0.5 + 0.25 * (mlHome - 0.5), 0.40, 0.60);
+  const homeOt  = ot * otShareHome;
+  const awayOt  = ot * (1 - otShareHome);
+  // `Math.max(0, …)` : sur un match très déséquilibré, P(victoire) du faible
+  // peut descendre sous sa part de prolongation. Un négatif traverserait `pct`
+  // (qui borne à 3 %) sans bruit et ferait mentir la somme.
+  const homeReg = Math.max(0, mlHome - homeOt);
+  const awayReg = Math.max(0, mlAway - awayOt);
+
+  const otNote = `OT/SO ${fmt(ot*100,0)}% du temps (ligue ~22.5%), partagé ${fmt(otShareHome*100,0)}/${fmt((1-otShareHome)*100,0)} — la prolongation efface une partie de l'écart de talent`;
+
   const matchBetting: MarketGroup = {
-    id: 'match', title: 'Match Betting', cols: 3,
+    id: 'match', title: 'Match Betting', cols: 2,
     options: [
       {
         id: 'ml-home',
+        // Part réglementaire de la victoire. `attachGameFactors` mélange les
+        // facteurs « qui gagne ? » puis applique ce facteur — voir `setFactors`.
+        pctScale: mlHome > 0 ? homeReg / mlHome : 1,
+        // ⚠️ Le marché ML reste `moneyline` : c'est la victoire TOUTES ISSUES
+        // CONFONDUES que le modèle sait estimer, et le règlement automatique
+        // n'a pas de marché « victoire en 60 minutes ». La tuile porte donc un
+        // pourcentage de règles qui, lui, exclut la prolongation. Les deux
+        // chiffres diffèrent volontairement et l'étiquette le dit.
         ml: gm('moneyline'),
-        label: `${homeName} to Win`,
-        rulePct: pct(mlHome),
+        label: `${homeName} in Reg`,
+        rulePct: pct(homeReg),
         ruleNote: [
+          `Victoire en temps réglementaire = P(victoire) ${fmt(mlHome*100,0)}% − part OT ${fmt(homeOt*100,0)}% = ${fmt(homeReg*100,0)}%`,
           mlBreakdown,
           injuries?.active ? `blessures : ${injuries.note}` : '',
           lineup?.active   ? `alignement : ${lineup.note}` : '',
@@ -374,19 +425,35 @@ function computeGameMarkets(
         factors: blend.lines.map(l => ({ id: l.id, label: l.label, weight: Math.round(l.weight * 100), value: l.value })),
       },
       {
-        id: 'ml-ot',
-        ml: gm('game_to_ot', undefined, 'yes'),
-        label: 'OT / Shootout',
-        rulePct: pct(ot),
-        ruleNote: `NHL avg ~22.5% OT rate; closer matchup (+${fmt((ot-OT_BASE)*100,0)}%) based on win% spread`,
+        id: 'ml-away',
+        pctScale: mlAway > 0 ? awayReg / mlAway : 1,
+        ml: gma('moneyline'),
+        label: `${awayName} in Reg`,
+        rulePct: pct(awayReg),
+        ruleNote: `Victoire en temps réglementaire = P(victoire) ${fmt(mlAway*100,0)}% − part OT ${fmt(awayOt*100,0)}% = ${fmt(awayReg*100,0)}%`,
+        factors: blend.lines.map(l => ({ id: l.id, label: l.label, weight: Math.round(l.weight * 100), value: 1 - l.value })),
       },
       {
-        id: 'ml-away',
-        ml: gma('moneyline'),
-        label: `${awayName} to Win`,
-        rulePct: pct(mlAway),
-        ruleNote: `Away win probability = 1 − home win = ${fmt(mlAway*100,0)}%`,
-        factors: blend.lines.map(l => ({ id: l.id, label: l.label, weight: Math.round(l.weight * 100), value: 1 - l.value })),
+        // `ml-home-ot` / `ml-away-ot` sont des identifiants NEUFS. L'ancien
+        // `ml-ot` disparaît : il désignait « le match va en prolongation »,
+        // sans vainqueur, et le réutiliser pour l'une des deux moitiés
+        // rattacherait des paris déjà enregistrés au mauvais marché.
+        id: 'ml-home-ot',
+        // Les facteurs de cette tuile répondent « va-t-on en prolongation ? ».
+        // La part qui revient au domicile est ce facteur d'échelle.
+        pctScale: otShareHome,
+        ml: gm('game_to_ot', undefined, 'yes'),
+        label: `${homeName} in OT/SO`,
+        rulePct: pct(homeOt),
+        ruleNote: otNote,
+      },
+      {
+        id: 'ml-away-ot',
+        pctScale: 1 - otShareHome,
+        ml: gma('game_to_ot', undefined, 'yes'),
+        label: `${awayName} in OT/SO`,
+        rulePct: pct(awayOt),
+        ruleNote: otNote,
       },
     ],
   };

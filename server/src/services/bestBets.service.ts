@@ -283,10 +283,50 @@ function normalizeOptions(opts: BestBetsOptions): NormalizedOptions {
 const BEST_BETS_TTL = 60_000;
 const bestBetsCache = new TtlCache<BestBetsResult>(BEST_BETS_TTL, 50, 'best-bets');
 
+/** Plafond de `limit` (cf. `normalizeOptions`) : c'est à cette profondeur que
+ *  l'on calcule et met en cache, une fois pour toutes les valeurs demandées. */
+const LIMIT_MAX = 50;
+
+/**
+ * `limit` N'ENTRE PAS DANS LA CLÉ DE CACHE, et c'est le point de cette fonction.
+ *
+ * LE DÉFAUT QUE ÇA CORRIGE (banc `loadtest/bench/b8-clecache.ts`, 2026-09-18)
+ *
+ * La version précédente construisait sa clé avec `limit|days|maxPlayers|source|
+ * mlDepth`. Or `limit` ne change pas le calcul : `computeBestBets` trie la
+ * liste complète puis la TRONQUE en dernière ligne. Le mettre dans la clé
+ * transformait donc 50 façons de demander la même chose en 50 calculs
+ * distincts — dans un cache qui n'a que 50 entrées.
+ *
+ * Mesuré : `?limit=1`, `?limit=2`… `?limit=20` → **19 recalculs complets pour
+ * 20 requêtes**, à ~40 ms de CPU chacun, contre ~2 ms servies depuis le cache.
+ * Et `best-bets` n'est pas sous `predictLimiter`, seulement sous `apiLimiter`
+ * (300 req/min/IP en production) : une seule adresse pouvait donc imposer
+ * 300 recalculs par minute et contourner intégralement la protection
+ * anti-troupeau que `TtlCache.wrap` apporte — celle-ci ne protège qu'UNE clé,
+ * et l'appelant choisissait la sienne.
+ *
+ * LA RÈGLE GÉNÉRALE, qui vaut au-delà d'ici : un paramètre qui change la
+ * PRÉSENTATION d'un résultat n'a rien à faire dans la clé du cache ; seuls
+ * ceux qui changent le CALCUL y ont leur place. `days`, `maxPlayers`, `source`
+ * et `mlDepth` changent le calcul — ils restent dans la clé.
+ *
+ * On calcule donc au plafond (`LIMIT_MAX`), on met CELA en cache, et on tranche
+ * à la sortie. Les réponses sont identiques à l'octet près pour tout
+ * `limit ≤ 50`, et l'espace des clés est divisé par 50.
+ *
+ * L'objet en cache ne doit pas être muté : `slice` en construit un nouveau, et
+ * l'enveloppe retournée est également neuve. `meta` est partagée, en lecture
+ * seule comme avant.
+ */
 export async function getBestBets(opts: BestBetsOptions = {}): Promise<BestBetsResult> {
   const o = normalizeOptions(opts);
-  const key = `${o.limit}|${o.days}|${o.maxPlayers}|${o.source}|${o.mlDepth}`;
-  return bestBetsCache.wrap(key, () => computeBestBets(o));
+  const key = `${o.days}|${o.maxPlayers}|${o.source}|${o.mlDepth}`;
+
+  const complet = await bestBetsCache.wrap(key, () => computeBestBets({ ...o, limit: LIMIT_MAX }));
+
+  if (complet.bets.length <= o.limit) return complet;
+  return { bets: complet.bets.slice(0, o.limit), meta: complet.meta };
 }
 
 async function computeBestBets(o: NormalizedOptions): Promise<BestBetsResult> {
