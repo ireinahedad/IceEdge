@@ -1,0 +1,34 @@
+-- 037_bet_outcome_void.sql
+-- Une quatrième issue pour un coupon : `void`.
+--
+-- POURQUOI. Le règlement automatique ne sait pas trancher tous les marchés que
+-- la page match propose, et il n'avait jusqu'ici que deux réponses : « gagné »,
+-- « perdu », ou rien. « Rien » veut dire que la jambe reste indécise — et comme
+-- un parlay exige que TOUTES ses jambes soient gagnées, une seule jambe indécise
+-- laissait le coupon entier en `pending`. Pour toujours : les matchs étaient
+-- finis, les résultats connus, le coupon ne bougeait plus et aucun compteur ne
+-- s'en plaignait. C'est un silence, pas une erreur, donc rien ne le signalait.
+--
+-- Trois familles produisaient ça (« X in OT/SO », Winning Margin, « Kills All
+-- Penalties »), et elles sont maintenant réglées. Mais la panne n'était pas
+-- « ces trois marchés-là » : c'était qu'AUCUN chemin ne menait un coupon hors de
+-- `pending`. Ajouter un marché à la page sans l'ajouter au règlement suffisait à
+-- la recréer, en silence, exactement pareil.
+--
+-- CE QUE `void` CHANGE. Une jambe que le règlement ne peut pas trancher alors
+-- que son match est FINAL est désormais annulée : elle sort du calcul, et le
+-- coupon se règle sur les jambes restantes — la règle des books. Un coupon dont
+-- TOUTES les jambes sont annulées prend cette issue-ci, sans XP dans un sens ni
+-- dans l'autre.
+--
+-- Une jambe dont le match n'est pas encore fini, ou dont l'API n'a rien dit,
+-- reste indécise et le coupon reste `pending` : c'est la distinction qui compte,
+-- et elle est faite dans `settlement.service.ts`, pas ici.
+--
+-- Retour arrière : aucun `DROP VALUE` n'existe en PostgreSQL. Pour revenir, il
+-- faut recréer le type sans `void` après avoir requalifié les lignes concernées
+-- (`UPDATE bet_slips SET outcome = 'pending' WHERE outcome = 'void'`).
+--
+-- Safe to re-run.
+
+ALTER TYPE bet_outcome ADD VALUE IF NOT EXISTS 'void';

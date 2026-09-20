@@ -52,7 +52,7 @@ export interface GameParlayLeg {
 const SCORE_DERIVABLE = new Set([
   'moneyline', 'puck_line', 'alt_puck_line', 'regulation_result',
   'total_goals', 'total_goals_over', 'total_goals_under', 'team_total_goals',
-  'both_teams_score', 'clean_sheet', 'game_to_ot', 'winning_margin',
+  'both_teams_score', 'clean_sheet', 'game_to_ot', 'ot_so_winner', 'winning_margin',
 ]);
 
 export function isScoreDerivable(market: string): boolean {
@@ -80,6 +80,17 @@ function legWins(leg: GameParlayLeg, o: FinalOutcome): boolean {
     case 'alt_puck_line':      return margin >= 3;
     case 'regulation_result':  return margin > 0 && !o.ot;
     case 'game_to_ot':         return yes(o.ot);
+    /**
+     * « Gagne en OT/SO » — inconditionnel, contrairement à `ot_winner` qui n'est
+     * pas dans cette liste. Les deux conditions se lisent directement sur
+     * l'issue : le match est allé au-delà de 60 minutes, ET le sujet l'a gagné.
+     *
+     * C'est bien ce qui rend celui-ci dérivable du score final alors que
+     * `ot_winner` ne l'est pas : `ot_winner` est annulé quand le match se règle
+     * en 60 minutes, donc l'issue ne suffit pas à dire s'il est gagné, perdu ou
+     * sans objet. Ici, pas de prolongation = perdu, tout simplement.
+     */
+    case 'ot_so_winner':       return o.ot && margin > 0;
     case 'both_teams_score':   return yes(o.home >= 1 && o.away >= 1);
     case 'clean_sheet':        return yes(yours === 0);
 

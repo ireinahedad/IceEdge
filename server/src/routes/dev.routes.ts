@@ -193,7 +193,8 @@ router.get('/data-health', async (_req: Request, res: Response) => {
       pool.query(
         `SELECT COUNT(*)::int                                                  AS total,
                 COUNT(*) FILTER (WHERE outcome = 'pending')::int               AS pending,
-                COUNT(*) FILTER (WHERE outcome <> 'pending')::int              AS settled,
+                -- 'void' exclu : un coupon annulé ne calibre rien.
+                COUNT(*) FILTER (WHERE outcome IN ('win', 'loss'))::int        AS settled,
                 MAX(placed_at)                                                 AS last_placed,
                 MAX(resolved_at)                                               AS last_resolved,
                 -- Tickets en attente dont le dernier match est joué depuis
@@ -251,7 +252,7 @@ router.get('/data-health', async (_req: Request, res: Response) => {
 //
 // Ce que le modèle vaut EN PRODUCTION, par opposition aux backtests. Source :
 // les jambes réglées de `bet_slips`, qui portent depuis le lot du 2026-08-09 un
-// `result` par jambe ('win' | 'loss' | 'unknown') en plus de l'outcome du
+// `result` par jambe ('win' | 'loss' | 'void' | 'unknown') en plus de l'outcome du
 // ticket. Sans ce détail, un parlay perdu ne dirait rien de chacune de ses
 // jambes ; avec lui, chaque jambe est une observation.
 //
@@ -322,7 +323,7 @@ router.get('/live-performance', async (req: Request, res: Response) => {
               leg->>'result'      AS result
          FROM bet_slips s,
               LATERAL jsonb_array_elements(s.legs) AS leg
-        WHERE s.outcome <> 'pending'
+        WHERE s.outcome IN ('win', 'loss')
           -- Garde-fou : jsonb_array_elements lève sur un JSONB qui n'est pas
           -- un tableau, et une seule ligne malformée ferait échouer TOUTE la
           -- mesure. Le filtre la saute au lieu de rendre un 500.

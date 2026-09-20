@@ -19,6 +19,7 @@ import { renderSlipShareCard } from "../../services/slipShareCanvas";
 import type { SlipShareLabels } from "../../services/slipShareCanvas";
 import { toOddsLabel } from "./betParts";
 import { useI18n } from "../../i18n";
+import { outcomeKey } from "../../services/slipOutcome";
 import { toast } from "sonner";
 
 
@@ -45,7 +46,10 @@ function shareLabels(
     summary:    t(n === 1 ? "share.summaryOne" : "share.summary", { n, odds }),
     // L'issue est un mot, pas une couleur d'anneau : l'anneau garde l'échelle
     // de probabilité, y compris sur un coupon gagné à 27 %.
-    outcome:    settled ? t(slip.outcome === "win" ? "slip.won" : "slip.lost").toLocaleUpperCase(lang) : null,
+    // Trois issues possibles une fois réglé, pas deux : un coupon `void`
+    // affiché « PERDU » accuserait le joueur d'avoir raté un pari que le
+    // serveur n'a jamais jugé.
+    outcome:    settled ? t(outcomeKey(slip.outcome)).toLocaleUpperCase(lang) : null,
     xp:         slip.xpAwarded > 0 ? `+${slip.xpAwarded} XP` : null,
     disclaimer: t("share.disclaimer"),
     moreLegs:   (k: number) => t("share.moreLegs", { n: k }),
@@ -183,13 +187,17 @@ function SlipCard({ slip }: { slip: BetSlip }) {
 
   const isPending = slip.outcome === "pending";
   const isWin = slip.outcome === "win";
+  const isVoid = slip.outcome === "void";
   const date = new Date(slip.placedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   const time = new Date(slip.placedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
-  const outcomeColor = isPending ? "#8a9ea6" : isWin ? "#86d1ea" : "#f87171";
-  const outcomeBg    = isPending ? "bg-white/5 border-white/10" : isWin ? "bg-green-500/10 border-green-500/20" : "bg-red-500/10 border-red-500/20";
-  const outcomeLabel = isPending ? t("slip.pending") : isWin ? t("slip.won") : t("slip.lost");
-  const OutcomeIcon  = isPending ? Clock : isWin ? Trophy : AlertCircle;
+  // Un coupon annulé se lit comme « en attente » : gris, neutre, sans anneau
+  // de couleur. C'est un non-événement, pas une défaite.
+  const isNeutral    = isPending || isVoid;
+  const outcomeColor = isNeutral ? "#8a9ea6" : isWin ? "#86d1ea" : "#f87171";
+  const outcomeBg    = isNeutral ? "bg-white/5 border-white/10" : isWin ? "bg-green-500/10 border-green-500/20" : "bg-red-500/10 border-red-500/20";
+  const outcomeLabel = t(outcomeKey(slip.outcome));
+  const OutcomeIcon  = isNeutral ? Clock : isWin ? Trophy : AlertCircle;
 
   const combinedColor =
     (slip.combinedProbability ?? 0) >= 65 ? "#86d1ea" :
@@ -198,7 +206,7 @@ function SlipCard({ slip }: { slip: BetSlip }) {
 
   return (
     <div className={`icy-card rounded-2xl overflow-hidden transition-all ${
-      isPending ? "" : isWin ? "ring-1 ring-green-500/40" : "ring-1 ring-red-500/40"
+      isNeutral ? "" : isWin ? "ring-1 ring-green-500/40" : "ring-1 ring-red-500/40"
     }`} style={{ background: "#131A12" }}>
       {/* Header row */}
       <div className="flex items-center justify-between px-4 pt-3 pb-2">

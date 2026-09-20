@@ -111,7 +111,7 @@ export interface BetRecord {
   probability: number;
   isParlay: boolean;
   parlayLegs?: number;
-  outcome: "win" | "loss" | "pending";
+  outcome: "win" | "loss" | "pending" | "void";
   gameInfo?: string;
 }
 
@@ -162,7 +162,7 @@ export interface PublicSlip {
   legCount: number;
   isParlay: boolean;
   combinedProbability: number | null;
-  outcome: "win" | "loss" | "pending";
+  outcome: "win" | "loss" | "pending" | "void";
   resolvedAt: string | null;
   xpAwarded: number;
   /** Mise au jeu du premier match. `null` = horaire inconnu. */
@@ -215,7 +215,7 @@ export interface SlipAttachment {
   legCount: number;
   isParlay: boolean;
   combinedProbability: number | null;
-  outcome: "pending" | "win" | "loss";
+  outcome: "pending" | "win" | "loss" | "void";
   legs: {
     subjectName: string;
     selection: string;

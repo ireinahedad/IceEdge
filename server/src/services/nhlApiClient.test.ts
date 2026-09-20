@@ -386,6 +386,26 @@ describe('nhlApiClient — cache de fetchGameById', () => {
 describe('nhlApiClient — cache de fetchPlayerById', () => {
   beforeEach(() => { vi.unstubAllGlobals(); });
 
+  /**
+   * Ce qu'on compte, et pourquoi pas tous les appels.
+   *
+   * `fetchPlayerById` fait DEUX requêtes amont, pas une : la fiche du joueur
+   * (`v1/player/:id/landing`) et le rapport `skater/realtime` de l'autre hôte,
+   * qui porte les tirs bloqués et les mises en échec absents de `landing`.
+   *
+   * Le rapport `realtime` a sa propre mise en cache (30 min, toute la ligue en
+   * une réponse), mais il ne met PAS en cache une réponse vide — c'est
+   * délibéré : en avant-saison la saison en cours se remplit au premier match.
+   * Ici le `fetch` bouchonné rend la fiche joueur pour n'importe quelle URL,
+   * donc `realtime` reçoit une réponse sans `data`, la juge vide et repart à
+   * chaque fois.
+   *
+   * Compter les appels bruts mesurerait donc ce comportement-là et non le
+   * cache qu'on teste. On ne compte que les `landing`, qui sont exactement les
+   * requêtes que le cache de `fetchPlayerById` doit économiser.
+   */
+  const landings = (calls: string[]) => calls.filter(u => u.includes('/landing')).length;
+
   async function loadWithPlayer() {
     vi.resetModules();
     process.env.NHL_USE_MOCK = 'false';
@@ -418,7 +438,7 @@ describe('nhlApiClient — cache de fetchPlayerById', () => {
     const a = await mod.fetchPlayerById('8478402');
     const b = await mod.fetchPlayerById('8478402');
 
-    expect(calls.length).toBe(1);
+    expect(landings(calls)).toBe(1);
     expect(b.points).toBe(a.points);
     expect(a.name).toBe('Connor McDavid');
   });
@@ -431,11 +451,11 @@ describe('nhlApiClient — cache de fetchPlayerById', () => {
       await mod.fetchPlayerById('8478402');
       vi.advanceTimersByTime(9 * 60_000);
       await mod.fetchPlayerById('8478402');
-      expect(calls.length).toBe(1);
+      expect(landings(calls)).toBe(1);
 
       vi.advanceTimersByTime(2 * 60_000);   // total 11 min
       await mod.fetchPlayerById('8478402');
-      expect(calls.length).toBe(2);
+      expect(landings(calls)).toBe(2);
     } finally {
       vi.useRealTimers();
     }

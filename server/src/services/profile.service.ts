@@ -49,7 +49,13 @@ async function fetchBetStats(userIds: string[]): Promise<Map<string, BetStats>> 
 
   const { rows } = await pool.query(
     `SELECT user_id AS "userId",
-            COUNT(*) FILTER (WHERE outcome <> 'pending') AS decided,
+            -- IN ('win','loss') et non <> 'pending' : depuis la migration 037
+            -- un coupon peut sortir en 'void' (toutes ses jambes annulées).
+            -- Il n'a été ni gagné ni perdu, donc le compter comme jugé ferait
+            -- baisser le taux de réussite sans qu'aucun pari ait été perdu.
+            -- (Pas d'accent grave dans ce commentaire : il vit dans un
+            -- template literal, où un accent grave fermerait la chaîne.)
+            COUNT(*) FILTER (WHERE outcome IN ('win', 'loss')) AS decided,
             COUNT(*) FILTER (WHERE outcome = 'win')      AS wins,
             COUNT(*)                                     AS total
        FROM user_bets
@@ -337,7 +343,9 @@ export async function getBettingStats(userId: string) {
   const marketMap: Record<string, { wins: number; total: number }> = {};
   for (const b of bets) {
     if (!marketMap[b.marketType]) marketMap[b.marketType] = { wins: 0, total: 0 };
-    if (b.outcome !== 'pending') {
+    // Un coupon annulé (`void`) ne compte ni au numérateur ni au
+    // dénominateur de la réussite par marché.
+    if (b.outcome === 'win' || b.outcome === 'loss') {
       marketMap[b.marketType].total++;
       if (b.outcome === 'win') marketMap[b.marketType].wins++;
     }
@@ -613,9 +621,12 @@ export async function getPlayerSummary(targetUserId: string, viewerId: string) {
 
   const { rows } = await pool.query(
     `SELECT
-       COUNT(*) FILTER (WHERE outcome <> 'pending')                            AS settled,
+       -- Voir fetchBetStats : un coupon 'void' n'est ni gagné ni perdu, donc
+       -- pas un coupon jugé. (Aucun accent grave ici : ce commentaire vit dans
+       -- un template literal, où il fermerait la chaîne.)
+       COUNT(*) FILTER (WHERE outcome IN ('win', 'loss'))                      AS settled,
        COUNT(*) FILTER (WHERE outcome  = 'win')                                AS wins,
-       COUNT(*) FILTER (WHERE outcome <> 'pending' AND placed_at >= $3)        AS "settledWindow",
+       COUNT(*) FILTER (WHERE outcome IN ('win', 'loss') AND placed_at >= $3)  AS "settledWindow",
        COUNT(*) FILTER (WHERE outcome  = 'win'     AND placed_at >= $3)        AS "winsWindow"
      FROM bet_slips
      WHERE user_id = $1 AND placed_at >= $2`,

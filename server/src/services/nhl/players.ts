@@ -152,14 +152,55 @@ async function realtimeForSeason(season: string): Promise<Map<string, RealtimeLi
 
 // --- Players --------------------------------------------------------------
 
+/**
+ * Meilleurs joueurs de la ligue.
+ *
+ * ── Le 404 d'avant-saison ───────────────────────────────────────────────────
+ *
+ * `v1/skater-stats-leaders/:season/2` ne rend pas un classement vide pour une
+ * saison qui n'a pas commencé : il rend **404**. Depuis que `currentSeason()`
+ * bascule en septembre, il y a donc six semaines par an où cet appel échoue,
+ * et l'erreur remontait telle quelle jusqu'à l'écran :
+ *
+ *     NHL API 404 for v1/skater-stats-leaders/20262027/2?categories=points&limit=50
+ *
+ * La page d'équipe entière tombait avec — « Impossible de charger ça » — alors
+ * que tout le reste de ses données était disponible.
+ *
+ * ── Le repli ────────────────────────────────────────────────────────────────
+ *
+ * Même bascule que partout ailleurs dans ce fichier (`pickSeasonRow`,
+ * `fetchSkaterRealtime`) : la saison en cours, et à défaut la dernière
+ * complète. Chaque entrée porte `statsSeason`, pour que l'écran puisse écrire
+ * « 2025-26 » à côté d'un total plutôt que de le laisser passer pour celui du
+ * calendrier en cours.
+ *
+ * Un `Promise.allSettled` plutôt qu'un `Promise.all` : les deux catégories
+ * (points, buts) ne basculent pas forcément le même jour au premier match de
+ * la saison, et une seule des deux suffit à remplir la liste.
+ *
+ * Une liste vide n'est PAS mise en cache : la saison en cours se remplit au
+ * premier match, et on ne veut pas la déclarer vide pour les dix minutes qui
+ * suivent.
+ */
 export async function fetchTopPlayers(): Promise<any[]> {
   if (USE_MOCK) return MOCK_TOP_PLAYERS as any[];
   const cached = getCached<any[]>('players');
   if (cached) return cached;
 
-  const season = currentSeason();
+  for (const season of [currentSeason(), previousSeason()]) {
+    const players = await topPlayersForSeason(season);
+    if (players.length > 0) {
+      setCached('players', players, 10 * 60_000);
+      return players;
+    }
+  }
+  return [];
+}
 
-  const [pointsRes, goalsRes] = await Promise.all([
+/** Une saison précise du classement des meneurs. Liste vide = rien reçu. */
+async function topPlayersForSeason(season: string): Promise<any[]> {
+  const [pointsRes, goalsRes] = await Promise.allSettled([
     fetchNHL<any>(`v1/skater-stats-leaders/${season}/2?categories=points&limit=50`),
     fetchNHL<any>(`v1/skater-stats-leaders/${season}/2?categories=goals&limit=25`),
   ]);
@@ -183,6 +224,8 @@ export async function fetchTopPlayers(): Promise<any[]> {
       shotPct:     p.shootingPctg != null ? Math.round(p.shootingPctg * 1000) / 10 : 0,
       ppPoints:    p.powerPlayPoints ?? 0,
       gamesPlayed: gp,
+      /** Saison de ces totaux — voir `pickSeasonRow`, même contrat. */
+      statsSeason: season,
       lastFive:    [] as number[],
       winImpact:   Math.min(99, Math.round((pts / gp) * 100)),
     };
@@ -190,12 +233,10 @@ export async function fetchTopPlayers(): Promise<any[]> {
     if (!existing || pts > existing.points) map.set(p.id, entry);
   }
 
-  for (const p of (pointsRes?.points ?? [])) merge(p);
-  for (const p of (goalsRes?.goals   ?? [])) merge(p);
+  if (pointsRes.status === 'fulfilled') for (const p of (pointsRes.value?.points ?? [])) merge(p);
+  if (goalsRes.status  === 'fulfilled') for (const p of (goalsRes.value?.goals   ?? [])) merge(p);
 
-  const players = [...map.values()].sort((a, b) => b.points - a.points);
-  setCached('players', players, 10 * 60_000);
-  return players;
+  return [...map.values()].sort((a, b) => b.points - a.points);
 }
 
 /** Compteurs de saison communs à la fiche joueur et à l'effectif (`seasonTotals` NHL). */
@@ -340,21 +381,53 @@ export async function searchPlayers(q: string): Promise<any[]> {
 }
 
 /** Fetch the full roster for a team (abbr like "EDM") with current-season stats */
+/**
+ * Effectif d'une équipe, avec la même bascule d'avant-saison que le reste du
+ * fichier.
+ *
+ * `v1/roster/:abbr/:season` se comporte comme le classement des meneurs : pour
+ * une saison que la LNH n'a pas encore ouverte, il rend **404**, pas un
+ * effectif vide. Aujourd'hui il répond — les effectifs 2026-27 sont publiés —
+ * mais la date de publication n'est pas un contrat, et un 404 ici ferait
+ * tomber la page d'équipe entière exactement comme le faisait
+ * `fetchTopPlayers`.
+ *
+ * ⚠️ Le repli n'est PAS équivalent ici, et c'est pour ça qu'il est écrit.
+ * L'effectif de la saison écoulée n'est pas celui de la saison à venir : des
+ * joueurs ont été échangés, d'autres ont pris leur retraite. On le sert quand
+ * même parce qu'une liste à un mois près vaut mieux qu'une page morte — mais
+ * chaque joueur porte déjà `statsSeason`, qui dit de quelle saison viennent
+ * ses totaux, donc l'écran n'a pas à deviner.
+ */
+async function rosterListFor(upper: string): Promise<any[]> {
+  for (const season of [currentSeason(), previousSeason()]) {
+    try {
+      const d = await fetchNHL<any>(`v1/roster/${upper}/${season}`);
+      const players = [
+        ...(d.forwards   ?? []),
+        ...(d.defensemen ?? []),
+        ...(d.goalies    ?? []),
+      ];
+      if (players.length > 0) return players;
+    } catch {
+      // 404 d'avant-saison, ou amont momentanément muet : on tente la saison
+      // précédente. Un échec sur les DEUX rend une liste vide, que
+      // `fetchTeamRoster` ne met pas en cache.
+    }
+  }
+  return [];
+}
+
 export async function fetchTeamRoster(abbr: string): Promise<any[]> {
   const upper = abbr.toUpperCase();
   const cacheKey = `roster_${upper}`;
   const cached = getCached<any[]>(cacheKey);
   if (cached) return cached;
 
-  const season = currentSeason();
-
-  // Roster list
-  const rosterData = await fetchNHL<any>(`v1/roster/${upper}/${season}`);
-  const allPlayers: any[] = [
-    ...(rosterData.forwards  ?? []),
-    ...(rosterData.defensemen ?? []),
-    ...(rosterData.goalies   ?? []),
-  ];
+  const allPlayers = await rosterListFor(upper);
+  // Rien reçu : on rend une liste vide SANS la mettre en cache — l'effectif de
+  // la saison en cours peut être publié dans l'heure qui suit.
+  if (allPlayers.length === 0) return [];
 
   // Fetch stats for every player in parallel (capped to avoid hammering API)
   // `realtime` part en même temps : un seul appel pour toute l'équipe, qui

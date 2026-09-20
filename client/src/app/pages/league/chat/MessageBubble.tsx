@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useI18n } from "../../../i18n";
 import type { ChatMessage, SlipAttachment } from "../../../types/user";
 import { legAccent } from "../../../data/teamEmoji";
+import { outcomeKey, isNeutralOutcome } from "../../../services/slipOutcome";
 
 const TAG_STYLE = {
   pick:     "bg-green-500/15 text-green-400 border-green-500/30",
@@ -63,10 +64,12 @@ function SlipAttachmentCard({ slip }: { slip: SlipAttachment }) {
               className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full border ${
                 slip.outcome === "win"
                   ? "bg-green-500/15 text-green-400 border-green-500/30"
+                  : isNeutralOutcome(slip.outcome)
+                  ? "bg-white/10 text-white/50 border-white/20"
                   : "bg-red-500/15 text-red-400 border-red-500/30"
               }`}
             >
-              {t(slip.outcome === "win" ? "slip.won" : "slip.lost")}
+              {t(outcomeKey(slip.outcome))}
             </span>
           )}
           <span className="text-[11px] text-white/40">

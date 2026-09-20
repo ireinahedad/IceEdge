@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildGameMarkets } from './nhlPredictions';
+import { buildGameMarkets, marginDistribution } from './nhlPredictions';
 
 /**
  * Ce que ce fichier prouve : CHAQUE tuile de la page match annonce le marché ML
@@ -145,5 +145,69 @@ describe('buildGameMarkets — chaque tuile porte son marché ML', () => {
     // question du tout.
     expect(new Set(sizes).size).toBe(3);
     expect(sizes).toEqual(['1', '2', '3+']);
+  });
+});
+
+/**
+ * La loi des écarts est une PARTITION, et son camp compte.
+ *
+ * Ce que ce bloc ferme : les trois tuiles « Winning Margin » comptaient
+ * « quelqu'un gagne par N », les deux camps confondus, puis retiraient les
+ * matchs allant en prolongation (`× regAdj`). Le moteur qui fournit le
+ * pourcentage affiché — `prediction/marginPeriods.ts` — répond tout autre
+ * chose : « LE SUJET gagne par N », prolongation COMPRISE, puisqu'un nul après
+ * 60 minutes se termine toujours par un but d'écart. Les deux se
+ * contredisaient, sur une tuile dont le libellé ne disait même pas de quelle
+ * équipe il parlait.
+ *
+ * Rien ne le signalait : `PredictionSheet` remplace `rulePct` par la réponse du
+ * moteur, donc l'écart ne se voyait que dans la grille avant ouverture et en
+ * repli quand l'appel échoue.
+ */
+describe('marginDistribution — la loi des écarts', () => {
+  it('les six seaux et le nul réglementaire somment à 1', () => {
+    const m = marginDistribution(3.54, 2.55);
+    const total = m.tie
+      + m.homeBy1 + m.homeBy2 + m.homeBy3plus
+      + m.awayBy1 + m.awayBy2 + m.awayBy3plus;
+    // Cinq décimales, et pas plus : la grille s'arrête à 15 buts par équipe, et
+    // la queue de Poisson au-delà pèse ~1e-6 à ces cadences. Ce n'est pas du
+    // bruit d'arrondi qu'on tolère, c'est une troncature assumée — aucune équipe
+    // n'a jamais marqué seize buts dans un match de la LNH.
+    expect(total).toBeCloseTo(1, 5);
+  });
+
+  it('le nul réglementaire est rendu, pas jeté', () => {
+    // C'est LA masse qui manquait : elle appartient à « par 1 » une fois la
+    // prolongation jouée, et c'est elle qui fait de « par 1 » l'écart le plus
+    // fréquent du hockey. L'ancienne version la laissait tomber au sol.
+    const m = marginDistribution(3.0, 3.0);
+    expect(m.tie).toBeGreaterThan(0.1);
+  });
+
+  it('« par 2+ » est bien la somme de « par 2 » et « par 3+ »', () => {
+    const m = marginDistribution(3.54, 2.55);
+    expect(m.homeBy2plus).toBeCloseTo(m.homeBy2 + m.homeBy3plus, 12);
+  });
+
+  it('les seaux penchent du côté de la meilleure cadence', () => {
+    const m = marginDistribution(4.2, 2.0);
+    expect(m.homeBy3plus).toBeGreaterThan(m.awayBy3plus);
+    expect(m.homeBy1 + m.homeBy2 + m.homeBy3plus)
+      .toBeGreaterThan(m.awayBy1 + m.awayBy2 + m.awayBy3plus);
+  });
+});
+
+describe('les tuiles d\'écart disent de QUI elles parlent', () => {
+  it('chaque libellé porte l\'équipe sujet', async () => {
+    const groups = await buildGameMarkets('2026020001');
+    const margin = groups.find(g => g.id === 'margin')!;
+    // « Win by 1 » ne disait pas qui gagne, alors que le pari porte sur le
+    // domicile depuis toujours (`gm(...)` met l'abréviation locale en sujet).
+    for (const o of margin.options) {
+      expect(o.label, `tuile ${o.id}`).toMatch(/^TOR by (1|2|3\+)$/);
+    }
+    const subjects = margin.options.map(o => o.ml?.subjectId);
+    expect(new Set(subjects)).toEqual(new Set(['TOR']));
   });
 });

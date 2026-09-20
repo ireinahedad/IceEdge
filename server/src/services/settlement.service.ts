@@ -35,9 +35,25 @@
  *   Each leg needs gameId recorded at bet time, plus subjectId (player or
  *   team id) for the markets that need one.
  *
- * Deliberately left pending (not auto-settled): everything else — game_to_ot,
- * ot_winner, alt_puck_line, winning_margin, regulation_result,
- * total_penalties. Leaving a bet pending is always safer than guessing wrong.
+ *   - Les marchés de match restants, ajoutés en sept. 2026 après l'audit qui a
+ *     trouvé des coupons figés : game_to_ot, ot_so_winner (« gagne en OT/SO »,
+ *     inconditionnel), ot_winner (CONDITIONNEL — annulé sans prolongation, comme
+ *     chez les books), regulation_result, alt_puck_line, winning_margin,
+ *     team_penalty_kill, total_penalties.
+ *
+ * Plus AUCUN marché proposé à l'écran n'est sans règle ici. C'est une propriété
+ * à tenir, pas un état de fait : le `default` de `decideLeg` annule désormais
+ * une jambe dont le marché est inconnu (au lieu de la laisser figer le coupon),
+ * et le compteur `voided` de `SettlementSummary` grimpe quand ça arrive. Un
+ * marché ajouté à l'écran sans règle ici se signale donc tout seul.
+ *
+ * ── Où est l'équipe d'un pari ───────────────────────────────────────────────
+ *
+ * À deux endroits selon l'écran qui l'a posé — `selectionValue` depuis la page
+ * match, `subjectId` depuis le sélecteur de marché (qui met `"yes"` dans
+ * `selectionValue` par défaut). `pickTeam` lit les deux, plus les littéraux
+ * `home` / `away` d'`alt_puck_line`. Ne lire que le premier écartait en silence
+ * tous les paris posés depuis le sélecteur.
  */
 
 import { pool } from '../db/connection';
@@ -49,8 +65,15 @@ import { applyXpDelta, xpForOutcome } from './slip.service';
 import { logger } from '../logger';
 import { withJobLock } from './jobLock';
 import { mapLimit } from './concurrency';
+import { parseMarginBucket } from './prediction/marginPeriods';
 
-type LegResult = 'win' | 'loss' | 'unknown';
+/**
+ * `void` : la jambe ne sera JAMAIS décidable — marché sans règle de règlement,
+ * champ manquant à la prise du pari, égalité sur la ligne. Elle sort du calcul
+ * du coupon au lieu de le figer. `unknown` reste « pas encore » : match non
+ * terminé, ou amont muet. Voir `settleLeg` pour le passage de l'un à l'autre.
+ */
+type LegResult = 'win' | 'loss' | 'void' | 'unknown';
 
 // Small per-run cache so a slip with 5 legs on the same game fetches it once
 type GameCache     = Map<string, any | null>;
@@ -156,25 +179,80 @@ function teamIds(game: any): { homeId: string; awayId: string } {
 }
 
 /**
+ * L'équipe sur laquelle porte une jambe, d'où qu'elle vienne.
+ *
+ * ── Deux vocabulaires, une seule lecture ────────────────────────────────────
+ *
+ * L'équipe d'un pari est enregistrée à DEUX endroits selon l'écran qui l'a
+ * posé, et le règlement n'en lisait qu'un :
+ *
+ *   · page match — `settlementFields` retombe sur le sujet quand la tuile n'a
+ *     pas de sélection propre, donc `selectionValue` contient l'abréviation ;
+ *   · sélecteur de marché — `selectionValue` vaut la sélection du marché, et
+ *     pour un marché qui n'en propose aucune elle vaut `"yes"` par défaut
+ *     (`MarketSelectorSheet`). L'équipe n'est QUE dans `subjectId`.
+ *
+ * Résultat : un simple « moneyline » ajouté depuis le sélecteur arrivait ici
+ * avec `selectionValue = "yes"`, ne correspondait à aucune des deux équipes, et
+ * n'était jamais réglé. Le marché le plus courant de l'application, par le
+ * chemin le plus courant.
+ *
+ * On lit donc les deux, dans cet ordre : une sélection explicite l'emporte (elle
+ * est plus précise — elle peut désigner l'adversaire du sujet), le sujet sert de
+ * repli.
+ */
+function pickTeam(leg: any, game: any): { homeId: string; awayId: string; sel: string } | null {
+  const { homeId, awayId } = teamIds(game);
+  for (const candidate of [leg?.selectionValue, leg?.subjectId]) {
+    if (candidate == null) continue;
+    const v = String(candidate).trim().toLowerCase();
+    if (v === homeId || v === awayId) return { homeId, awayId, sel: v };
+    // `alt_puck_line` désigne son camp par « home » / « away » plutôt que par
+    // une abréviation (`betMarkets.ts`). C'est un troisième vocabulaire, et il
+    // ne coûte que ces deux lignes.
+    if (v === 'home') return { homeId, awayId, sel: homeId };
+    if (v === 'away') return { homeId, awayId, sel: awayId };
+  }
+  return null;
+}
+
+/**
+ * Le côté « oui / non » d'un marché binaire, traduit en over/under.
+ *
+ * Même histoire que `pickTeam` : la tuile « Scores a PP Goal » annonce `yes`,
+ * le sélecteur de marché annonce `over` — c'est le même pari. Le règlement ne
+ * comprenait que le second.
+ */
+function overUnderSide(selectionValue: unknown): 'over' | 'under' | null {
+  const v = String(selectionValue ?? '').trim().toLowerCase();
+  if (v === 'over'  || v === 'yes') return 'over';
+  if (v === 'under' || v === 'no')  return 'under';
+  return null;
+}
+
+/**
  * Match terminé + équipe choisie par la jambe. `null` si le match n'est pas
- * fini ou si `selectionValue` ne désigne aucune des deux équipes.
+ * fini ou si ni la sélection ni le sujet ne désignent une des deux équipes.
  */
 async function teamPick(
   leg: any, cache: GameCache,
 ): Promise<{ game: any; homeId: string; awayId: string; sel: string } | null> {
   const game = await getFinalGame(String(leg.gameId), cache);
   if (!game) return null;
-  const { homeId, awayId } = teamIds(game);
-  const sel = String(leg.selectionValue).toLowerCase();
-  if (sel !== homeId && sel !== awayId) return null;
-  return { game, homeId, awayId, sel };
+  const pick = pickTeam(leg, game);
+  return pick ? { game, ...pick } : null;
 }
 
 /** Decide a single leg from the final score (or, for player/team props, the boxscore / scoring summary). */
-async function settleLeg(
+async function decideLeg(
   leg: any, cache: GameCache, boxCache: BoxCache, scoringCache: ScoringCache, faceoffCache: FaceoffCache,
 ): Promise<LegResult> {
-  if (!leg?.gameId || leg?.selectionValue == null) return 'unknown';
+  // `gameId` est indispensable — sans lui on ne sait même pas quel match lire.
+  // `selectionValue`, NON : « le joueur marque », « l'équipe blanchit », « le
+  // match va en prolongation » n'ont pas de sélection, et la refuser d'entrée
+  // écartait ces paris avant même d'atteindre leur règle. Chaque branche vérifie
+  // ce dont ELLE a besoin.
+  if (!leg?.gameId) return 'unknown';
 
   if (leg.marketType === 'faceoff_wins_ou') {
     if (!leg.subjectId) return 'unknown';
@@ -265,12 +343,31 @@ async function settleLeg(
   if (leg.marketType === 'team_total_goals' || leg.marketType === 'team_pp_goals') {
     const game = await getFinalGame(String(leg.gameId), cache);
     if (!game) return 'unknown';
-    const { homeId, awayId } = teamIds(game);
-    const teamId = String(leg.subjectId ?? '').toLowerCase();
-    if (teamId !== homeId && teamId !== awayId) return 'unknown';
-    const line = Number(leg.line);
-    if (!Number.isFinite(line)) return 'unknown';
-    const sel = String(leg.selectionValue).toLowerCase();
+    const pick = pickTeam(leg, game);
+    if (!pick) return 'void';
+    const { homeId } = pick;
+    const teamId = pick.sel;
+
+    /**
+     * Ligne implicite pour « Scores a PP Goal ».
+     *
+     * La tuile de la page match annonce `team_pp_goals` + `yes`, sans ligne :
+     * « marque au moins un but en avantage numérique », c'est-à-dire plus de
+     * 0,5. Le sélecteur de marché, lui, envoie une ligne explicite. Sans ce
+     * défaut, la tuile — le chemin le plus utilisé — était refusée faute de
+     * ligne, alors que son sens ne laisse aucune place au doute.
+     *
+     * `team_total_goals` n'a PAS de défaut : « plus de combien ? » n'a pas de
+     * réponse évidente, et en inventer une réglerait un pari sur une ligne que
+     * le joueur n'a jamais vue.
+     */
+    const line = Number.isFinite(Number(leg.line))
+      ? Number(leg.line)
+      : (leg.marketType === 'team_pp_goals' ? 0.5 : NaN);
+    if (!Number.isFinite(line)) return 'void';
+
+    const side = overUnderSide(leg.selectionValue);
+    if (!side) return 'void';
 
     let value: number;
     if (leg.marketType === 'team_total_goals') {
@@ -282,19 +379,24 @@ async function settleLeg(
       value = goals.filter((g) => g.strength === 'pp' && g.isHome === isHomeTeam).length;
     }
     if (!Number.isFinite(value)) return 'unknown';
-    if (value === line) return 'unknown'; // push
-    if (sel === 'over')  return value > line ? 'win' : 'loss';
-    if (sel === 'under') return value < line ? 'win' : 'loss';
-    return 'unknown';
+    if (value === line) return 'void'; // égalité sur la ligne
+    return side === 'over'
+      ? (value > line ? 'win' : 'loss')
+      : (value < line ? 'win' : 'loss');
   }
 
   if (leg.marketType === 'clean_sheet') {
     const pick = await teamPick(leg, cache);
-    if (!pick) return 'unknown';
+    if (!pick) return 'void';
     const { game, homeId, sel } = pick;
     const opponentScore = Number(sel === homeId ? game.awayTeam.score : game.homeTeam.score);
     if (!Number.isFinite(opponentScore)) return 'unknown';
-    return opponentScore === 0 ? 'win' : 'loss';
+    // La tuile n'offre que le côté « oui », mais le sélecteur de marché peut
+    // offrir « non ». `null` (aucune sélection lisible) = le côté « oui », qui
+    // est le sens du marché quand personne ne dit le contraire.
+    const shutout = opponentScore === 0;
+    const side = overUnderSide(leg.selectionValue);
+    return (side === 'under') === !shutout ? 'win' : 'loss';
   }
 
   if (leg.marketType === 'both_teams_score') {
@@ -412,10 +514,14 @@ async function settleLeg(
 
   switch (leg.marketType) {
     case 'moneyline': {
-      if (sel !== homeId && sel !== awayId) return 'unknown';
-      if (hs === as) return 'unknown'; // no ties in the NHL, safety only
-      const winner = hs > as ? homeId : awayId;
-      return sel === winner ? 'win' : 'loss';
+      // `pickTeam` et non `sel` : depuis le sélecteur de marché, l'équipe est
+      // dans `subjectId` et `selectionValue` vaut `"yes"`. Comparer `sel` aux
+      // deux abréviations écartait donc tous les moneylines posés par ce
+      // chemin — le marché le plus courant, par le chemin le plus courant.
+      const pick = pickTeam(leg, game);
+      if (!pick) return 'void';
+      if (hs === as) return 'void'; // pas de nul en NHL — garde-fou
+      return pick.sel === (hs > as ? homeId : awayId) ? 'win' : 'loss';
     }
 
     case 'total_goals': {
@@ -428,20 +534,297 @@ async function settleLeg(
       return 'unknown';
     }
 
+    /**
+     * Puck line.
+     *
+     * Trois formes de jambe arrivent ici, et deux étaient refusées :
+     *
+     *  1. « domicile −1,5 » — sujet et sélection portent l'équipe, mais la
+     *     LIGNE n'est nulle part : elle est dans le libellé de la tuile, pas
+     *     dans `leg.line`. Sans elle, `Number.isFinite` refusait le pari.
+     *  2. « visiteur +1,5 » — la tuile est le complément exact de la première
+     *     (pas d'égalité possible sur une demi-ligne), donc elle annonce le même
+     *     marché côté « non », avec le DOMICILE pour sujet. `sel` valait `"no"`,
+     *     qui n'est aucune des deux équipes.
+     *  3. sélecteur de marché — l'équipe est dans `subjectId`, `selectionValue`
+     *     vaut `"yes"`, et la ligne peut manquer (ce marché n'offre pas de
+     *     choix de ligne).
+     *
+     * −1,5 comme défaut : c'est la seule puck line du hockey, et c'est ce que
+     * les trois écrans affichent. `negative` renverse le verdict pour la forme 2.
+     */
     case 'puck_line': {
-      const line = Number(leg.line);
-      if (!Number.isFinite(line)) return 'unknown';
-      if (sel !== homeId && sel !== awayId) return 'unknown';
-      const teamScore = sel === homeId ? hs : as;
-      const oppScore  = sel === homeId ? as : hs;
+      const pick = pickTeam(leg, game);
+      if (!pick) return 'void';
+      const negative = String(leg.selectionValue ?? '').trim().toLowerCase() === 'no';
+      const line = Number.isFinite(Number(leg.line)) ? Number(leg.line) : -1.5;
+      const teamScore = pick.sel === homeId ? hs : as;
+      const oppScore  = pick.sel === homeId ? as : hs;
       const adjusted  = teamScore + line;
-      if (adjusted === oppScore) return 'unknown'; // push
+      if (adjusted === oppScore) return 'void'; // égalité sur la ligne
+      const covers = adjusted > oppScore;
+      return (negative ? !covers : covers) ? 'win' : 'loss';
+    }
+
+    /**
+     * « L'équipe gagne en prolongation ou en fusillade » — les tuiles
+     * `ml-home-ot` / `ml-away-ot` de Match Betting.
+     *
+     * Ce marché s'appelait `game_to_ot` jusqu'au correctif de sept. 2026, avec
+     * la sélection `yes` — donc exactement ce qu'annonçait la tuile « Goes to
+     * OT » juste à côté. Les deux paris étaient indiscernables une fois
+     * enregistrés, et c'est pour ça qu'aucun des deux n'était réglé : trancher
+     * l'un aurait crédité l'autre. `nhlPredictions.ts` leur donne désormais un
+     * marché à eux, et la sélection porte l'abréviation de l'équipe.
+     *
+     * ⚠️ Les jambes ANTÉRIEURES au correctif portent encore `game_to_ot` + `yes`
+     * et restent ambiguës : rien ici ne peut les distinguer. Elles tombent donc
+     * dans `game_to_ot` ci-dessous, qui les règle comme « le match va en
+     * prolongation » — ce qui est le sens de ce nom de marché, et ce que le
+     * script `settle:stuck` montre avant d'écrire quoi que ce soit.
+     */
+    case 'ot_so_winner': {
+      const pick = pickTeam(leg, game);
+      if (!pick) return 'void';
+      const past = await wentPastRegulation(game, String(leg.gameId), cache, scoringCache);
+      if (past == null) return 'unknown';
+      if (!past) return 'loss';              // réglé en 60 min → la tuile perd
+      if (hs === as) return 'void';          // impossible sur un match final
+      return pick.sel === (hs > as ? homeId : awayId) ? 'win' : 'loss';
+    }
+
+    /** « Le match va en prolongation » — les tuiles `ot-yes` / `ot-no`. */
+    case 'game_to_ot': {
+      if (sel !== 'yes' && sel !== 'no') return 'void';
+      const past = await wentPastRegulation(game, String(leg.gameId), cache, scoringCache);
+      if (past == null) return 'unknown';
+      return (sel === 'yes') === past ? 'win' : 'loss';
+    }
+
+    /**
+     * Écart de victoire.
+     *
+     * Le seau est lu par `parseMarginBucket`, la MÊME fonction que le moteur de
+     * probabilité (`marginPeriods.ts`) et que le calcul de corrélation d'un
+     * coupon (`gameParlay.ts`). C'est ce qui garantit que le chiffre annoncé et
+     * le règlement parlent du même pari : l'UI a deux vocabulaires ("1" / "3+"
+     * côté tuiles, "home_1" / "away_2plus" côté sélecteur de marché) et les
+     * réconcilier une deuxième fois ici les aurait fait diverger tôt ou tard.
+     *
+     * L'écart est compté du point de vue du SUJET, et la prolongation ne
+     * l'annule pas — c'est la convention de `gameParlay.legWins`, qui est la
+     * référence puisque c'est elle qui chiffre le coupon.
+     */
+    case 'winning_margin': {
+      // Ici le sujet est la référence du seau, pas la sélection : « home_1 »
+      // veut dire « le DOMICILE gagne par 1 », que le sujet soit l'un ou
+      // l'autre — c'est `parseMarginBucket` qui fait la bascule, à partir de
+      // `isHome`. D'où `subjectId` et non `pickTeam`, qui préférerait la
+      // sélection.
+      const subjectId = String(leg.subjectId ?? '').toLowerCase();
+      if (subjectId !== homeId && subjectId !== awayId) return 'void';
+      const subjectIsHome = typeof leg.isHome === 'boolean'
+        ? leg.isHome
+        : subjectId === homeId;
+      const bucket = parseMarginBucket(String(leg.selectionValue ?? ''), subjectIsHome);
+      if (!bucket) return 'void';
+      const margin = subjectIsHome ? hs - as : as - hs;
+      switch (bucket) {
+        case 'win_1':      return margin ===  1 ? 'win' : 'loss';
+        case 'win_2':      return margin ===  2 ? 'win' : 'loss';
+        case 'win_3plus':  return margin >=  3 ? 'win' : 'loss';
+        case 'win_2plus':  return margin >=  2 ? 'win' : 'loss';
+        case 'lose_1':     return margin === -1 ? 'win' : 'loss';
+        case 'lose_2':     return margin === -2 ? 'win' : 'loss';
+        case 'lose_3plus': return margin <= -3 ? 'win' : 'loss';
+        case 'lose_2plus': return margin <= -2 ? 'win' : 'loss';
+        default:           return 'void';
+      }
+    }
+
+    /**
+     * « Kills All Penalties » — l'équipe ne concède aucun but en infériorité.
+     *
+     * Compté sur les buts en avantage numérique de l'ADVERSAIRE, la même source
+     * que `team_pp_goals` juste au-dessus. Une équipe qui n'a pris aucune
+     * pénalité gagne cette tuile : c'est la convention des books (« a tué
+     * toutes ses pénalités » est vrai quand il n'y en avait aucune), et c'est
+     * aussi ce que le modèle chiffre — `pkAll = (PK%)^occasions` tend vers 1
+     * quand les occasions tendent vers 0.
+     */
+    case 'team_penalty_kill': {
+      const teamId = String(leg.subjectId ?? '').toLowerCase();
+      if (teamId !== homeId && teamId !== awayId) return 'void';
+      if (sel !== 'yes' && sel !== 'no') return 'void';
+      const goals = await getScoringPlays(String(leg.gameId), cache, scoringCache);
+      if (!goals) return 'unknown';
+      const oppIsHome = teamId !== homeId;
+      const ppAgainst = goals.filter((g) => g.strength === 'pp' && g.isHome === oppIsHome).length;
+      return (sel === 'yes') === (ppAgainst === 0) ? 'win' : 'loss';
+    }
+
+    /** Vainqueur après 60 minutes. Le miroir exact de `ot_so_winner`. */
+    case 'regulation_result': {
+      const pick = pickTeam(leg, game);
+      if (!pick) return 'void';
+      const past = await wentPastRegulation(game, String(leg.gameId), cache, scoringCache);
+      if (past == null) return 'unknown';
+      if (past) return 'loss';               // allé en prolongation → personne ne gagne « en 60 »
+      if (hs === as) return 'void';
+      return pick.sel === (hs > as ? homeId : awayId) ? 'win' : 'loss';
+    }
+
+    /**
+     * Vainqueur de la prolongation — CONDITIONNEL, contrairement à
+     * `ot_so_winner`.
+     *
+     * Pas de prolongation = pari sans objet, donc `void` : c'est la règle des
+     * books, et c'est aussi pourquoi `gameParlay.SCORE_DERIVABLE` l'exclut. Le
+     * compter perdu ferait payer au joueur une issue sur laquelle il n'a jamais
+     * parié.
+     */
+    case 'ot_winner': {
+      const pick = pickTeam(leg, game);
+      if (!pick) return 'void';
+      const past = await wentPastRegulation(game, String(leg.gameId), cache, scoringCache);
+      if (past == null) return 'unknown';
+      if (!past) return 'void';
+      if (hs === as) return 'void';
+      return pick.sel === (hs > as ? homeId : awayId) ? 'win' : 'loss';
+    }
+
+    /** Puck line alternative (−2,5 / +2,5…). Même arithmétique que `puck_line`. */
+    case 'alt_puck_line': {
+      const pick = pickTeam(leg, game);
+      if (!pick) return 'void';
+      const line = Number(leg.line);
+      if (!Number.isFinite(line)) return 'void';   // pas de défaut : la ligne EST le pari
+      const teamScore = pick.sel === homeId ? hs : as;
+      const oppScore  = pick.sel === homeId ? as : hs;
+      const adjusted  = teamScore + line;
+      if (adjusted === oppScore) return 'void';
       return adjusted > oppScore ? 'win' : 'loss';
     }
 
+    /**
+     * Minutes de pénalité du match, les deux équipes confondues.
+     *
+     * La feuille de match porte `pim` par joueur — c'est déjà la source des
+     * props « minutes de pénalité » d'un joueur. Les additionner donne le total
+     * du match, et ce marché cesse d'être le dernier de la liste à n'avoir
+     * aucune règle.
+     */
+    case 'total_penalties': {
+      const side = overUnderSide(leg.selectionValue);
+      const line = Number(leg.line);
+      if (!side || !Number.isFinite(line)) return 'void';
+      if (!boxCache.has(String(leg.gameId))) {
+        let box: Map<string, BoxscorePlayerStats> | null = null;
+        try { box = await fetchGameBoxscore(String(leg.gameId)); } catch { box = null; }
+        boxCache.set(String(leg.gameId), box);
+      }
+      const box = boxCache.get(String(leg.gameId));
+      if (!box) return 'unknown';
+      let total = 0;
+      for (const st of box.values()) total += Number(st.pim ?? 0);
+      if (total === line) return 'void';
+      return side === 'over'
+        ? (total > line ? 'win' : 'loss')
+        : (total < line ? 'win' : 'loss');
+    }
+
     default:
-      return 'unknown'; // game_to_ot, winning_margin, etc. — not auto-settled yet
+      // Marché sans règle de règlement. Le match est FINAL ici (on est passé
+      // par `getFinalGame`), donc l'attente ne donnera rien de plus : la jambe
+      // est annulée et sort du coupon plutôt que de le figer.
+      return 'void';
   }
+}
+
+/**
+ * Le match est-il allé au-delà des 60 minutes ?
+ *
+ * `null` = on ne sait pas encore (rien d'exploitable dans la fiche ET résumé
+ * des buts indisponible) — surtout pas `false`, qui ferait perdre une tuile OT
+ * sur un silence de l'amont.
+ *
+ * Deux sources, parce qu'aucune n'est suffisante seule : `periodDescriptor` est
+ * la réponse directe mais peut manquer sur une fiche partielle, et le résumé des
+ * buts porte `periodType` sur chaque but mais ne dit rien d'un 0–0 réglé en
+ * fusillade — cas où le but de fusillade est justement présent et tranche.
+ */
+async function wentPastRegulation(
+  game: any,
+  gameId: string,
+  cache: GameCache,
+  scoringCache: ScoringCache,
+): Promise<boolean | null> {
+  // ⚠️ `Number(null)` vaut 0, et 0 est fini. Sans ce test explicite, une fiche
+  // sans `periodDescriptor` — le cas même qu'on veut traiter — passerait pour
+  // « période 0 connue », donc pour un match réglé en 60 minutes, et une tuile
+  // OT gagnante serait déclarée perdue sur une donnée absente.
+  const period = game?.period == null ? NaN : Number(game.period);
+  if (Number.isFinite(period) && period >= 4) return true;
+
+  const goals = await getScoringPlays(gameId, cache, scoringCache);
+  if (!goals) return Number.isFinite(period) ? false : null;
+  if (goals.some((g) => g.periodType && g.periodType !== 'REG')) return true;
+
+  // La fiche donne une période finale, et elle est < 4 : c'est une réponse, pas
+  // une absence de réponse.
+  if (Number.isFinite(period)) return false;
+
+  // Ni période, ni but hors temps réglementaire. Des buts qui sont TOUS en
+  // 'REG' disent que le match s'est réglé en 60 minutes ; zéro but ne dit rien
+  // du tout (un 0–0 se règle en fusillade), d'où le `null`.
+  return goals.length > 0 ? false : null;
+}
+
+/**
+ * Combien de temps on laisse une jambe indécise avant de l'annuler.
+ *
+ * `decideLeg` rend `unknown` pour deux raisons opposées : le match n'est pas
+ * fini (légitime, il faut attendre), ou l'amont n'a rien voulu dire (une panne,
+ * qui se répare). Les distinguer champ par champ demanderait de classer une
+ * quarantaine de points de sortie, et une erreur de classement annulerait un
+ * vrai pari sur un hoquet passager de l'API.
+ *
+ * Le temps les sépare mieux : la passe de règlement tourne toutes les 2 à 15
+ * minutes, plus un filet horaire. Une jambe encore indécise 24 h après le début
+ * du match ne l'est pas par accident — c'est structurel, et attendre davantage
+ * ne fera que prolonger un coupon figé.
+ */
+const VOID_AFTER_MS = Number(process.env.SETTLEMENT_VOID_AFTER_H || 24) * 3_600_000;
+
+/** Début du match, en millisecondes. `null` si la fiche ne le dit pas. */
+function gameStartMs(game: any): number | null {
+  const iso = game?.startTimeUTC ?? (game?.gameDate ? `${game.gameDate}T00:00:00Z` : null);
+  if (!iso) return null;
+  const t = Date.parse(String(iso));
+  return Number.isFinite(t) ? t : null;
+}
+
+/**
+ * Décide une jambe, puis convertit une indécision DURABLE en annulation.
+ *
+ * C'est ici que « le coupon ne peut plus se figer » est garanti, et pas dans les
+ * quarante `return` de `decideLeg` : quelle que soit la raison de l'indécision —
+ * marché inconnu, champ absent, égalité sur la ligne, ancienne jambe ambiguë,
+ * amont définitivement muet — passé le délai, la jambe sort du coupon.
+ */
+async function settleLeg(
+  leg: any, cache: GameCache, boxCache: BoxCache, scoringCache: ScoringCache, faceoffCache: FaceoffCache,
+): Promise<LegResult> {
+  const result = await decideLeg(leg, cache, boxCache, scoringCache, faceoffCache);
+  if (result !== 'unknown') return result;
+
+  if (!leg?.gameId) return 'unknown';           // rien à dater — le filet d'âge du coupon s'en charge
+  const game = await getFinalGame(String(leg.gameId), cache);
+  if (!game) return 'unknown';                  // match pas encore final : attendre est la bonne réponse
+
+  const start = gameStartMs(game);
+  if (start == null) return 'unknown';
+  return Date.now() - start >= VOID_AFTER_MS ? 'void' : 'unknown';
 }
 
 export interface SettlementSummary {
@@ -449,6 +832,10 @@ export interface SettlementSummary {
   settled:  number;
   wins:     number;
   losses:   number;
+  /** Coupons dont TOUTES les jambes ont été annulées. Un compteur qui grimpe
+   *  est le signal qu'un marché proposé à l'écran n'a pas de règle de
+   *  règlement — voir le `default` de `decideLeg`. */
+  voided:   number;
   /** Faux quand la passe s'est arrêtée sur son plafond ou son budget temps —
    *  il reste donc des tickets réglables. Une valeur durablement fausse est LE
    *  signal que la file se remplit plus vite qu'elle ne se vide. */
@@ -497,13 +884,43 @@ const LEG_CONCURRENCY = Number(process.env.SETTLEMENT_LEG_CONCURRENCY) || 4;
  * l'essentiel du bénéfice du « regroupement par match » de l'audit, sans en
  * réorganiser la boucle.
  */
+/**
+ * Règles du parlay, jambes annulées comprises. `null` = le coupon reste en
+ * attente.
+ *
+ * Une jambe `void` sort du calcul — comme chez les books, qui retirent du
+ * coupon une jambe annulée au lieu de la compter perdue. L'ordre n'est pas
+ * indifférent :
+ *
+ *   1. une seule jambe perdue fait tomber le coupon, MÊME s'il reste des jambes
+ *      indécises : le résultat ne peut plus changer, donc attendre ne ferait que
+ *      retarder le règlement ;
+ *   2. sinon, une jambe encore indécise laisse le coupon en attente — la
+ *      distinction `void` / `unknown` est faite dans `settleLeg`, et c'est elle
+ *      qui garantit qu'« en attente » veut toujours dire « pas encore », jamais
+ *      « plus jamais » ;
+ *   3. toutes les jambes décidées et gagnées → gagné ;
+ *   4. toutes annulées → `void`, sans XP dans un sens ni dans l'autre.
+ *
+ * Exporté parce que `scripts/settle-stuck-slips.ts` doit annoncer EXACTEMENT ce
+ * que la passe écrira. Deux implémentations de cette règle, c'est la garantie
+ * qu'un jour l'aperçu et l'écriture ne diront plus la même chose.
+ */
+export function resolveSlipOutcome(results: LegResult[]): 'win' | 'loss' | 'void' | null {
+  if (results.length === 0) return null;
+  if (results.includes('loss')) return 'loss';
+  if (results.includes('unknown')) return null;
+  if (results.some((r) => r === 'win')) return 'win';
+  return 'void';
+}
+
 export async function settlePendingSlips(userId?: string, opts: SettleOptions = {}): Promise<SettlementSummary> {
   const max      = opts.max      ?? SETTLE_MAX_DEFAULT;
   const budgetMs = opts.budgetMs ?? SETTLE_BUDGET_DEFAULT_MS;
   const batch    = Math.max(1, opts.batch ?? SETTLE_BATCH);
   const deadline = Date.now() + budgetMs;
 
-  const summary: SettlementSummary = { checked: 0, settled: 0, wins: 0, losses: 0, exhausted: true };
+  const summary: SettlementSummary = { checked: 0, settled: 0, wins: 0, losses: 0, voided: 0, exhausted: true };
   const cache: GameCache = new Map();
   const boxCache: BoxCache = new Map();
   const scoringCache: ScoringCache = new Map();
@@ -547,23 +964,33 @@ export async function settlePendingSlips(userId?: string, opts: SettleOptions = 
       const results: LegResult[] = await mapLimit(legs, LEG_CONCURRENCY,
         (leg) => settleLeg(leg, cache, boxCache, scoringCache, faceoffCache));
 
-      // Parlay semantics: one lost leg loses the slip;
-      // a win requires EVERY leg to be settled and won.
-      let outcome: 'win' | 'loss' | null = null;
-      if (results.includes('loss')) outcome = 'loss';
-      else if (results.length > 0 && results.every((r) => r === 'win')) outcome = 'win';
-      if (!outcome) continue; // stays pending
+      const outcome = resolveSlipOutcome(results);
+      if (!outcome) continue;                 // au moins une jambe encore indécise
+      // Jambes qui FONT partie du pari — tout sauf les annulées. Une jambe
+      // encore indécise en fait partie (le coupon n'est réglé ici que parce
+      // qu'une autre est perdue, celle-là aurait pu être gagnée) ; une jambe
+      // annulée, non.
+      const inPlay = results.filter((r) => r !== 'void').length;
 
       let xp: number;
-      if (outcome === 'win') {
+      if (outcome === 'void') {
+        // Aucune jambe n'a été jugée : ni gain ni pénalité. Le coupon quitte la
+        // file, ce qui est le seul but — le compter perdu punirait le joueur
+        // pour un marché que le serveur ne sait pas régler.
+        xp = 0;
+      } else if (outcome === 'win') {
         xp = xpForOutcome('win', slip.combinedProbability);
       } else {
         // Loss penalty scales with HOW MANY legs were lost:
         // losing 1 leg out of 4 costs a quarter of the full penalty,
         // losing them all costs the full risk-based penalty.
+        //
+        // Le dénominateur exclut les jambes ANNULÉES : elles ne font pas partie
+        // du pari, donc les garder diluerait la pénalité — perdre sa seule
+        // jambe valide coûterait un quart si trois autres avaient été annulées.
         const lostLegs = results.filter((r) => r === 'loss').length;
         const fullPenalty = Math.abs(xpForOutcome('loss', slip.combinedProbability));
-        xp = -Math.max(3, Math.round(fullPenalty * (lostLegs / legs.length)));
+        xp = -Math.max(3, Math.round(fullPenalty * (lostLegs / Math.max(1, inPlay))));
       }
 
       // Résultat de CHAQUE jambe, conservé.
@@ -594,7 +1021,8 @@ export async function settlePendingSlips(userId?: string, opts: SettleOptions = 
 
       summary.settled++;
       if (outcome === 'win') summary.wins++;
-      else summary.losses++;
+      else if (outcome === 'loss') summary.losses++;
+      else summary.voided++;
     }
 
     // Budget vérifié entre deux lots, jamais au milieu : un ticket entamé va
@@ -609,6 +1037,77 @@ export async function settlePendingSlips(userId?: string, opts: SettleOptions = 
     logger.warn(summary, '[Settlement] passe interrompue (budget ou plafond) — des tickets restent en attente');
   }
   return summary;
+}
+
+/**
+ * Ce que la prochaine passe ferait des coupons en attente, SANS rien écrire.
+ *
+ * Sert au script `settle:stuck`, dont tout l'intérêt est de montrer avant
+ * d'agir : un règlement est irréversible (l'XP est appliquée, `outcome` ne
+ * revient jamais à `pending`), donc la personne qui le déclenche doit pouvoir
+ * lire jambe par jambe ce qui va être décidé.
+ *
+ * Passe par les mêmes `settleLeg` et `resolveSlipOutcome` que la passe réelle —
+ * c'est la seule façon que l'aperçu ne mente pas.
+ */
+export interface SlipLegPreview {
+  label:          string;
+  marketType:     string;
+  selectionValue: string | null;
+  subjectId:      string | null;
+  gameId:         string | null;
+  result:         LegResult;
+}
+
+export interface SlipPreview {
+  id:       string;
+  userId:   string;
+  placedAt: string;
+  legs:     SlipLegPreview[];
+  /** `null` = resterait en attente. */
+  outcome:  'win' | 'loss' | 'void' | null;
+}
+
+export async function previewPendingSlips(userId?: string, limit = 200): Promise<SlipPreview[]> {
+  const params: unknown[] = [limit];
+  let where = `outcome = 'pending'`;
+  if (userId) { where += ` AND user_id = $2`; params.push(userId); }
+
+  const { rows: slips } = await pool.query(
+    `SELECT id, user_id AS "userId", legs, placed_at AS "placedAt"
+       FROM bet_slips
+      WHERE ${where}
+      ORDER BY placed_at ASC
+      LIMIT $1`,
+    params,
+  );
+
+  const cache: GameCache = new Map();
+  const boxCache: BoxCache = new Map();
+  const scoringCache: ScoringCache = new Map();
+  const faceoffCache: FaceoffCache = new Map();
+
+  const out: SlipPreview[] = [];
+  for (const slip of slips) {
+    const legs: any[] = Array.isArray(slip.legs) ? slip.legs : [];
+    const results: LegResult[] = await mapLimit(legs, LEG_CONCURRENCY,
+      (leg) => settleLeg(leg, cache, boxCache, scoringCache, faceoffCache));
+    out.push({
+      id:       String(slip.id),
+      userId:   String(slip.userId),
+      placedAt: slip.placedAt instanceof Date ? slip.placedAt.toISOString() : String(slip.placedAt),
+      legs: legs.map((leg, i) => ({
+        label:          String(leg?.marketLabel ?? leg?.selection ?? leg?.marketType ?? '?'),
+        marketType:     String(leg?.marketType ?? '?'),
+        selectionValue: leg?.selectionValue != null ? String(leg.selectionValue) : null,
+        subjectId:      leg?.subjectId      != null ? String(leg.subjectId)      : null,
+        gameId:         leg?.gameId         != null ? String(leg.gameId)         : null,
+        result:         results[i] ?? 'unknown',
+      })),
+      outcome: resolveSlipOutcome(results),
+    });
+  }
+  return out;
 }
 
 // ── Event-driven background job ──────────────────────────────────────────────

@@ -201,14 +201,53 @@ function periodDrawFactors(pModel: number, c: GameFactorCtx): Factor[] {
   ];
 }
 
-/** Prolongation — P(va en OT). */
+/**
+ * Prolongation — P(va en OT).
+ *
+ * ── Pourquoi un recentrage sur `c.ot` ───────────────────────────────────────
+ *
+ * Cette famille était la SEULE du fichier à ne pas être ancrée sur la valeur du
+ * modèle. `periodDrawFactors` porte un facteur `drawModel`, `marginFactors`
+ * mélange `pModel` dans ses deux facteurs — `otFactors` ne lisait que `mlHome`
+ * et `lambdaT`, et jamais `c.ot`, qui est pourtant dans le contexte.
+ *
+ * Comme `setFactors` ÉCRASE `rulePct` par le mélange des facteurs, le
+ * pourcentage affiché n'était plus celui du modèle : sur un match équilibré à
+ * total moyen, le mélange sortait ~36 % là où `otProb` dit ~28 %. Deux dégâts,
+ * pas un :
+ *
+ *   • la tuile `ot-yes` annonçait une prolongation une fois sur trois, soit
+ *     huit points au-dessus du taux de la ligue ;
+ *   • les quatre tuiles de Match Betting cessaient de partitionner. Les deux
+ *     moitiés OT valent ce mélange × leur part (`pctScale`), les deux tuiles
+ *     réglementaires valent 1 − P(OT) du modèle ; avec deux P(OT) différents
+ *     de chaque côté, la somme montait à ~109 % au lieu de 100.
+ *
+ * ── Ce que fait le recentrage ───────────────────────────────────────────────
+ *
+ * Les deux facteurs gardent leur RÔLE (l'équilibre des forces pèse 65, le
+ * faible total 35) et leur ÉCART relatif — c'est lui qui fait bouger la tuile
+ * quand l'utilisateur repondère. Seul leur point d'ancrage change : la moyenne
+ * pondérée aux poids par défaut vaut désormais exactement `c.ot`. `k` rétrécit
+ * l'écart uniquement si le recentrage poussait une valeur hors de [2 %, 98 %],
+ * ce qui n'arrive que sur un P(OT) extrême.
+ */
 function otFactors(c: GameFactorCtx): Factor[] {
   const balance = 1 - 2 * Math.abs(c.mlHome - 0.5);          // 0..1
   const balanceV = clamp(0.15 + 0.30 * balance, 0.08, 0.5);
   const lowTotalV = clamp(0.15 + 0.25 * lean(6.0 - c.lambdaT, 0, 0.8), 0.08, 0.5);
+
+  const W_BAL = 65, W_TOT = 35;
+  const base  = (W_BAL * balanceV + W_TOT * lowTotalV) / (W_BAL + W_TOT);
+  const model = clamp(c.ot, 0.02, 0.98);
+  const span  = Math.max(Math.abs(balanceV - base), Math.abs(lowTotalV - base));
+  const room  = Math.min(model - 0.02, 0.98 - model);
+  const k     = span > 0 ? Math.min(1, room / span) : 1;
+  const at    = (v: number) => clamp(model + (v - base) * k, 0.02, 0.98);
+
   return [
-    { id: 'balance',  label: 'Équilibre des forces', weight: 65, value: balanceV },
-    { id: 'lowTotal', label: 'Faible total attendu', weight: 35, value: lowTotalV },
+    { id: 'balance',  label: 'Équilibre des forces', weight: W_BAL, value: at(balanceV) },
+    { id: 'lowTotal', label: 'Faible total attendu', weight: W_TOT, value: at(lowTotalV) },
   ];
 }
 

@@ -38,6 +38,7 @@
 
 import { legAccent } from '../data/teamEmoji';
 import type { BetSlip } from './slipApiService';
+import { isNeutralOutcome } from './slipOutcome';
 
 /** Côté de l'image produite, en pixels. Carré, toujours. */
 const SHARE_SIZE = 1080;
@@ -280,12 +281,12 @@ function paintCard(ctx: CanvasRenderingContext2D, outcome: BetSlip['outcome']): 
   ctx.restore();
 
   // Le liseré porte l'ISSUE — pas l'anneau. Vert si gagné, rouge si perdu,
-  // blanc translucide tant que le coupon est en attente.
+  // blanc translucide tant que le coupon est en attente ou s'il a été annulé.
   roundRectPath(ctx, CARD.x, CARD.y, CARD.w, CARD.h, CARD.r);
   ctx.strokeStyle = outcome === 'win'  ? 'rgba(74,222,128,0.45)'
                   : outcome === 'loss' ? 'rgba(248,113,113,0.45)'
                   : 'rgba(255,255,255,0.40)';
-  ctx.lineWidth = outcome === 'pending' ? 1 : 2;
+  ctx.lineWidth = isNeutralOutcome(outcome) ? 1 : 2;
   ctx.stroke();
 }
 
@@ -407,7 +408,9 @@ export async function renderSlipShareCard(slip: BetSlip, labels: SlipShareLabels
 
   // ── Issue + XP ─────────────────────────────────────────────────────────────
   if (labels.outcome || labels.xp) {
+    // `void` n'est pas une défaite : il se peint comme « en attente ».
     const won = slip.outcome === 'win';
+    const neutral = isNeutralOutcome(slip.outcome);
     ctx.font = `700 21px ${INTER}`;
     const wOutcome = labels.outcome ? ctx.measureText(labels.outcome).width + 40 : 0;
     const wXp      = labels.xp      ? ctx.measureText(labels.xp).width      + 40 : 0;
@@ -417,9 +420,9 @@ export async function renderSlipShareCard(slip: BetSlip, labels: SlipShareLabels
 
     if (labels.outcome) {
       px += paintPill(ctx, px, py, labels.outcome,
-        won ? INK.win : INK.loss,
-        won ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)',
-        won ? 'rgba(74,222,128,0.35)' : 'rgba(248,113,113,0.35)') + gap;
+        neutral ? INK.muted : won ? INK.win : INK.loss,
+        neutral ? 'rgba(255,255,255,0.08)' : won ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)',
+        neutral ? 'rgba(255,255,255,0.25)' : won ? 'rgba(74,222,128,0.35)' : 'rgba(248,113,113,0.35)') + gap;
     }
     if (labels.xp) {
       paintPill(ctx, px, py, labels.xp, INK.xp, 'rgba(250,204,21,0.10)', 'rgba(250,204,21,0.30)');

@@ -19,7 +19,12 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
-  CREATE TYPE bet_outcome AS ENUM ('win', 'loss', 'pending');
+  -- `void` : coupon dont toutes les jambes ont été annulées (marché non
+  -- réglable automatiquement, ou égalité sur la ligne). Voir la migration
+  -- 037 et `settlement.service.ts`. Ajouté après coup, d'où sa place ici en
+  -- dernier : l'ordre des valeurs d'un ENUM PostgreSQL est celui de leur
+  -- déclaration, et une base déjà migrée l'a reçu par `ALTER TYPE`.
+  CREATE TYPE bet_outcome AS ENUM ('win', 'loss', 'pending', 'void');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 

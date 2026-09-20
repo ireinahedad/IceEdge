@@ -196,8 +196,21 @@ export function buildGameGroups(home: string, away: string, hp: number, ou: numb
    */
   const margin = (team: string, atHome: boolean, size: "1" | "2" | "3+"): MLProps => ({
     ...(atHome ? gml("winning_margin", undefined, size) : gmla("winning_margin", undefined, size)),
-    settleMarket:    "winning_margin",
-    settleSelection: `${team}_by_${size}`,
+    settleMarket: "winning_margin",
+    /**
+     * Vocabulaire `home_*` / `away_*`, et non `${team}_by_${size}`.
+     *
+     * `parseMarginBucket` (server/src/services/prediction/marginPeriods.ts) est
+     * la SEULE lecture de ce champ — côté moteur de probabilité comme côté
+     * règlement. Elle connaît deux vocabulaires : l'écart seul ("1", "3+"), le
+     * côté venant alors du sujet, et le couple explicite ("home_1",
+     * "away_2plus"). `TOR_by_3+` n'est ni l'un ni l'autre : elle rendait `null`,
+     * et la jambe n'était donc réglable d'aucune façon.
+     *
+     * Le nom d'équipe n'y apportait rien de toute façon — le sujet le porte
+     * déjà, et c'est lui que le règlement lit.
+     */
+    settleSelection: `${atHome ? "home" : "away"}_${size === "3+" ? "3plus" : size}`,
   });
 
   return [
@@ -252,9 +265,15 @@ export function buildGameGroups(home: string, away: string, hp: number, ou: numb
     {
       id: "p1goals", title: "1st Period Goals", cols: 2,
       options: [
-        { id: "p1-over", label: "Over 1.5",  rulePct: 37, mlProps: gml("period1_total_goals", 1.5),
+        // `"over"` / `"under"` EXPLICITES. Sans sélection, `settlementFields`
+        // retombe sur le sujet et la jambe part avec l'abréviation de l'équipe —
+        // que le règlement ne peut lire d'aucun côté. Le libellé le dit, mais un
+        // libellé n'est pas une donnée lisible par machine.
+        { id: "p1-over", label: "Over 1.5",  rulePct: 37, mlProps: gml("period1_total_goals", 1.5, "over"),
           ruleNote: `~37% of NHL games see 2+ goals in the first period.` },
-        { id: "p1-under",label: "Under 1.5", rulePct: 63,
+        // La tuile « under » n'avait AUCUN `mlProps` : ni probabilité du modèle,
+        // ni marché, donc impossible à régler par construction.
+        { id: "p1-under",label: "Under 1.5", rulePct: 63, mlProps: gml("period1_total_goals", 1.5, "under"),
           ruleNote: `First periods often start cautiously — under 1.5 hits ~63% of the time.` },
       ],
     },
@@ -274,7 +293,10 @@ export function buildGameGroups(home: string, away: string, hp: number, ou: numb
       options: [
         { id: "p3-home", label: `${home} leads`, rulePct: Math.round(hp * 0.48 + 6), mlProps: gml("period3_winner"),
           ruleNote: `Leading after P3 strongly correlates with the final result.` },
-        { id: "p3-draw", label: "Tied → OT",      rulePct: 20, mlProps: gml("game_to_ot"),
+        // `"yes"` explicite : sans sélection, la jambe partait avec l'abréviation
+        // de l'équipe, que le règlement de `game_to_ot` ne peut lire ni comme
+        // « oui » ni comme « non ».
+        { id: "p3-draw", label: "Tied → OT",      rulePct: 20, mlProps: gml("game_to_ot", undefined, "yes"),
           ruleNote: `Tied after regulation forces OT/SO — happens in ~20-22% of games.` },
         { id: "p3-away", label: `${away} leads`, rulePct: Math.round(ap * 0.44 + 5), mlProps: gmla("period3_winner"),
           ruleNote: `Away team ahead heading into OT or winning in regulation.` },

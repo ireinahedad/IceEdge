@@ -10,6 +10,7 @@ import { useBlocks } from "../context/BlockContext";
 import { useI18n } from "../i18n";
 import "../components/rink-theme.css";
 import type { PlayerSummary, PublicSlip, PublicSlipLeg } from "../types/user";
+import { outcomeKey } from "../services/slipOutcome";
 
 const ACCENT = "#86d1ea";
 const WIN    = "#4ade80";
@@ -43,6 +44,7 @@ function initials(name: string): string {
 }
 
 function outcomeColor(outcome: PublicSlip["outcome"]): string {
+  // `void` retombe sur MUTED avec `pending` : un coupon annulé n'est pas rouge.
   return outcome === "win" ? WIN : outcome === "loss" ? LOSS : MUTED;
 }
 
@@ -71,7 +73,7 @@ function SlipCard({ slip }: { slip: PublicSlip }) {
   const locale  = lang === "fr" ? "fr-CA" : "en-US";
   const color   = outcomeColor(slip.outcome);
   const pending = slip.outcome === "pending";
-  const label   = slip.outcome === "win" ? t("slip.won") : slip.outcome === "loss" ? t("slip.lost") : t("slip.pending");
+  const label   = t(outcomeKey(slip.outcome));
 
   const date = new Date(slip.placedAt).toLocaleDateString(locale, { month: "short", day: "numeric" });
   const kind = slip.isParlay ? t("player.parlayLegs", { n: String(slip.legCount) }) : t("player.single");

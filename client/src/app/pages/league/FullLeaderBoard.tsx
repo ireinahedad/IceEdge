@@ -9,6 +9,7 @@ import { useSubscription } from "../../context/SubscriptionContext";
 import { useAuth } from "../../context/AuthContext";
 import { useI18n } from "../../i18n";
 import type { LeaderboardEntry, PublicSlip } from "../../types/user";
+import { outcomeKey } from "../../services/slipOutcome";
 
 // Initials fallback shown when a user has no photo avatar (no emoji avatars).
 function initials(name: string): string {
@@ -123,7 +124,7 @@ function UserProfileModal({ entry, onClose }: {
             <div className="flex flex-col gap-2">
               {slips.slice(0, 6).map((s) => {
                 const color = s.outcome === "win" ? "#4ade80" : s.outcome === "loss" ? "#f87171" : "#8a9ea6";
-                const label = s.outcome === "win" ? t("slip.won") : s.outcome === "loss" ? t("slip.lost") : t("slip.pending");
+                const label = t(outcomeKey(s.outcome));
                 const first = s.legs?.[0];
                 // Coupon pas encore commencé : le serveur n'envoie pas les
                 // sélections. On annonce le cadenas plutôt qu'un « Slip » muet.

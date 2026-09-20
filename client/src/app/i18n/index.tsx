@@ -336,6 +336,10 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.pending":      { en: "Pending",         fr: "En attente" },
   "slip.won":          { en: "Won",             fr: "Gagné" },
   "slip.lost":         { en: "Lost",            fr: "Perdu" },
+  // Coupon dont toutes les jambes ont été annulées — marché sans règle de
+  // règlement automatique. Ni gagné ni perdu, et sans XP. Voir la migration
+  // 037 côté serveur.
+  "slip.void":         { en: "Void",            fr: "Annulé" },
 
   // ── Page joueur (coupons d'un autre membre — réservé aux abonnés Pro) ──────
   "player.title":         { en: "Player",  fr: "Joueur" },

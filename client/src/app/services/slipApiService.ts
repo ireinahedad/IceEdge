@@ -23,7 +23,8 @@ export interface BetSlip {
   legCount:            number;
   isParlay:            boolean;
   combinedProbability: number | null;
-  outcome:             'pending' | 'win' | 'loss';
+  /** `void` : toutes les jambes annulées (voir `slipOutcome.ts`). */
+  outcome:             'pending' | 'win' | 'loss' | 'void';
   resolvedAt:          string | null;
   xpAwarded:           number;
 }

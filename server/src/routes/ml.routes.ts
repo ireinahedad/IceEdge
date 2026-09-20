@@ -134,7 +134,7 @@ type BetMarketType =
   | "period1_winner" | "period2_winner" | "period3_winner"
   | "period1_total_goals" | "period2_total_goals" | "period3_total_goals"
   | "game_to_ot" | "both_teams_score" | "winning_margin"
-  | "alt_puck_line" | "ot_winner"
+  | "alt_puck_line" | "ot_winner" | "ot_so_winner"
   | "first_team_score" | "last_team_score" | "team_total_goals"
   | "team_pp_goals" | "team_penalty_kill" | "clean_sheet"
   | "highest_scoring_period"
@@ -168,7 +168,7 @@ function probToOddsLabel(pct: number): string {
 const GAME_MARKET_TYPES: BetMarketType[] = [
   "moneyline", "puck_line", "total_goals", "regulation_result",
   "period1_winner", "period2_winner", "period3_winner",
-  "game_to_ot", "both_teams_score", "winning_margin",
+  "game_to_ot", "ot_so_winner", "both_teams_score", "winning_margin",
   "first_team_score", "team_total_goals", "highest_scoring_period",
 ];
 
@@ -345,6 +345,30 @@ async function computeProbability(body: PredictionRequest): Promise<ProbabilityR
   if (market === "ot_winner") {
     if (!teamId) return unknown;
     return plain(await predictOvertimeWinner(teamId, opponentId, isHome));
+  }
+  /**
+   * « Gagne en prolongation ou en fusillade », SANS condition — la tuile
+   * `ml-home-ot` / `ml-away-ot` de Match Betting.
+   *
+   * À ne pas confondre avec `ot_winner` juste au-dessus, qui répond « qui
+   * gagne SI le match va en prolongation » et vaut donc autour de 54 % sur une
+   * affiche équilibrée. Celui-ci y ajoute la condition d'y aller, et vaut
+   * autour de 15 %.
+   *
+   * P(gagne en OT/SO) = P(prolongation) × P(gagne | prolongation). Les deux
+   * facteurs sortent des fonctions existantes : aucun modèle nouveau, et les
+   * quatre tuiles de Match Betting continuent de partitionner, puisque les deux
+   * moitiés OT somment exactement à P(prolongation).
+   *
+   * Les deux fonctions rendent des entiers 0–100, d'où la division.
+   */
+  if (market === "ot_so_winner") {
+    if (!teamId) return unknown;
+    const [toOt, winsOt] = await Promise.all([
+      predictGameToOvertime(teamId, opponentId, isHome),
+      predictOvertimeWinner(teamId, opponentId, isHome),
+    ]);
+    return plain(Math.round((toOt / 100) * (winsOt / 100) * 100));
   }
   if (market === "regulation_result") {
     if (!teamId) return unknown;

@@ -161,32 +161,57 @@ function skellamPeriod(lambdaH: number, lambdaA: number): { home: number; draw: 
  * Retourne les probabilités dérivées directement du modèle plutôt que de
  * constantes forfaitaires (utilisé pour la puck line et la marge de victoire).
  */
-function marginDistribution(lambdaH: number, lambdaA: number): {
-  homeBy1: number; homeBy2plus: number;      // maison gagne de 1 / de 2+
-  awayBy1: number; awayBy2plus: number;      // visiteur gagne de 1 / de 2+
-  winBy1: number;  winBy2: number; winBy3plus: number; // marge, tout vainqueur
+/**
+ * Loi des écarts RÉGLEMENTAIRES, seau par seau et camp par camp.
+ *
+ * `tie` — la masse de l'égalité après 60 minutes — est rendue au lieu d'être
+ * jetée. C'est elle qui fait toute la forme de la distribution : un match nul
+ * en temps réglementaire se termine TOUJOURS par un but d'écart, en
+ * prolongation ou en fusillade. L'appelant la reverse donc dans « par 1 », des
+ * deux côtés, selon la part de prolongation qui revient à chacun — et c'est ce
+ * qui fait de « par 1 » l'écart le plus fréquent du hockey.
+ *
+ * C'est aussi ce que fait `predictMarginDistribution` dans
+ * `prediction/marginPeriods.ts`, qui est le moteur de référence : ses six seaux
+ * somment à 1 par construction. Les deux doivent répondre la même chose, sans
+ * quoi la tuile et la fiche qu'on ouvre en cliquant dessus se contredisent.
+ */
+export function marginDistribution(lambdaH: number, lambdaA: number): {
+  tie: number;                                            // nul après 60 min
+  homeBy1: number; homeBy2: number; homeBy3plus: number;  // maison gagne de 1 / 2 / 3+
+  homeBy2plus: number;                                    // maison gagne de 2+ (puck line)
+  awayBy1: number; awayBy2: number; awayBy3plus: number;  // visiteur, mêmes seaux
 } {
   const MAX_K = 15;
   const ph: number[] = [], pa: number[] = [];
   for (let k = 0; k <= MAX_K; k++) { ph[k] = poissonPmf(lambdaH, k); pa[k] = poissonPmf(lambdaA, k); }
 
-  let homeBy1 = 0, homeBy2plus = 0, awayBy1 = 0, awayBy2plus = 0;
-  let winBy1 = 0, winBy2 = 0, winBy3plus = 0;
+  let tie = 0;
+  let homeBy1 = 0, homeBy2 = 0, homeBy3plus = 0;
+  let awayBy1 = 0, awayBy2 = 0, awayBy3plus = 0;
   for (let h = 0; h <= MAX_K; h++) {
     for (let a = 0; a <= MAX_K; a++) {
       const joint = ph[h] * pa[a];
       if (joint < 1e-12) continue;
       const diff = h - a;
-      if (diff === 0) continue;                 // égalité → réglée en prolongation
+      if (diff === 0) { tie += joint; continue; }
       const m = Math.abs(diff);
-      if (diff > 0) { if (m === 1) homeBy1 += joint; else homeBy2plus += joint; }
-      else          { if (m === 1) awayBy1 += joint; else awayBy2plus += joint; }
-      if      (m === 1) winBy1 += joint;
-      else if (m === 2) winBy2 += joint;
-      else              winBy3plus += joint;
+      if (diff > 0) {
+        if      (m === 1) homeBy1     += joint;
+        else if (m === 2) homeBy2     += joint;
+        else              homeBy3plus += joint;
+      } else {
+        if      (m === 1) awayBy1     += joint;
+        else if (m === 2) awayBy2     += joint;
+        else              awayBy3plus += joint;
+      }
     }
   }
-  return { homeBy1, homeBy2plus, awayBy1, awayBy2plus, winBy1, winBy2, winBy3plus };
+  return {
+    tie,
+    homeBy1, homeBy2, homeBy3plus, homeBy2plus: homeBy2 + homeBy3plus,
+    awayBy1, awayBy2, awayBy3plus,
+  };
 }
 
 /** Clamp and round to integer percentage */
@@ -335,7 +360,12 @@ function computeGameMarkets(
   const mlAway = 1 - mlHome;
   const mlBreakdown = formatBreakdown(blend);
   const ot     = otProb(mlHome);
-  const regAdj = 1 - ot;
+  // `regAdj = 1 - ot` vivait ici et servait à trois endroits — Match Betting,
+  // puck line, écart de victoire. Il n'en reste qu'un : Match Betting, qui
+  // soustrait la part de prolongation explicitement (`homeReg`, `awayReg`).
+  // Les deux autres l'appliquaient à des seaux qui excluaient DÉJÀ la
+  // prolongation, ou qui devaient au contraire l'inclure — voir les blocs
+  // « Puck Line » et « Winning Margin ».
 
   // ── Buts attendus (λ) — ratio attaque × défense relatif à la ligue ─────────
   // λH = force offensive maison × faiblesse défensive visiteur, échelle ligue.
@@ -442,7 +472,37 @@ function computeGameMarkets(
         // Les facteurs de cette tuile répondent « va-t-on en prolongation ? ».
         // La part qui revient au domicile est ce facteur d'échelle.
         pctScale: otShareHome,
-        ml: gm('game_to_ot', undefined, 'yes'),
+        /**
+         * `ot_so_winner`, et surtout PAS `game_to_ot`.
+         *
+         * Ces deux tuiles annonçaient `game_to_ot` + sélection `yes` — soit
+         * exactement ce qu'annonce la tuile « Goes to OT » du groupe OT. Deux
+         * dégâts, et le commentaire de `MLProps.settleMarket` décrit
+         * précisément le premier :
+         *
+         *  1. RÈGLEMENT. Une fois la jambe enregistrée, « le domicile gagne en
+         *     prolongation » et « le match va en prolongation » étaient
+         *     INDISCERNABLES : même marché, même sélection, même sujet. Le
+         *     règlement ne pouvait donc trancher ni l'un ni l'autre sans risquer
+         *     de créditer le mauvais pari, et les laissait tous les deux
+         *     indécis — ce qui figeait le coupon entier (voir la migration 037).
+         *
+         *  2. POURCENTAGE. `PredictionSheet` remplace `rulePct` par la réponse
+         *     de `/api/predict/single` pour le marché annoncé. La tuile
+         *     demandait donc P(prolongation) ≈ 28 % et l'affichait — puis
+         *     l'enregistrait dans le coupon — sur une tuile qui vaut
+         *     P(prolongation) × part du domicile ≈ 15 %. Le chiffre du marché
+         *     voisin, sur une tuile qui dit autre chose.
+         *
+         * `ot_so_winner` est inconditionnel (« gagne en OT/SO », ≈ 15 %) et se
+         * distingue de `ot_winner`, qui est CONDITIONNEL à une prolongation
+         * (« gagne SI on y va », ≈ 54 %) et que les books annulent quand le
+         * match se règle en 60 minutes.
+         *
+         * Sans `selection` : `settlementFields` retombe alors sur `subjectId`,
+         * donc l'abréviation de l'équipe — la forme que `teamPick` attend.
+         */
+        ml: gm('ot_so_winner'),
         label: `${homeName} in OT/SO`,
         rulePct: pct(homeOt),
         ruleNote: otNote,
@@ -450,7 +510,7 @@ function computeGameMarkets(
       {
         id: 'ml-away-ot',
         pctScale: 1 - otShareHome,
-        ml: gma('game_to_ot', undefined, 'yes'),
+        ml: gma('ot_so_winner'),
         label: `${awayName} in OT/SO`,
         rulePct: pct(awayOt),
         ruleNote: otNote,
@@ -461,7 +521,12 @@ function computeGameMarkets(
   // ── 2. Puck Line ──────────────────────────────────────────────────────────
   // Home −1.5 : la maison gagne de 2+ (en réglementaire), dérivé du modèle Skellam.
   // Away +1.5 : couvre si la maison ne gagne PAS de 2+ (donc le complément).
-  const plHome = md.homeBy2plus * regAdj;
+  // PAS de `× regAdj` ici non plus. « La maison gagne de 2+ » exclut DÉJÀ la
+  // prolongation par construction : un match qui va au-delà de 60 minutes se
+  // termine par un but d'écart, jamais par deux. `md.homeBy2plus` est donc la
+  // réponse complète, et la multiplier par la part réglementaire retirait une
+  // seconde fois des matchs que ce seau ne contenait pas.
+  const plHome = md.homeBy2plus;
   const plAway = 1 - plHome;
   const puckLine: MarketGroup = {
     id: 'puckline', title: 'Puck Line', cols: 2,
@@ -471,7 +536,7 @@ function computeGameMarkets(
         ml: gm('puck_line'),
         label: `${homeName} −1.5`,
         rulePct: pct(plHome),
-        ruleNote: `Skellam P(maison gagne de 2+) ${fmt(md.homeBy2plus*100,0)}% × régl. ${fmt(regAdj*100,0)}% = ${fmt(plHome*100,0)}%`,
+        ruleNote: `Skellam P(maison gagne de 2+) = ${fmt(plHome*100,0)}% (un écart de 2+ exclut déjà la prolongation)`,
       },
       {
         id: 'pl-away',
@@ -592,21 +657,26 @@ function computeGameMarkets(
     options: [
       {
         id: 'p1-o05',
-        ml: gm('period1_total_goals', 0.5),
+        // `'over'` EXPLICITE. Sans lui, `settlementFields` retombe sur le sujet et la
+        // jambe part avec l'abréviation de l'équipe comme sélection — que le
+        // règlement ne peut lire ni comme « over » ni comme « under ». Les trois
+        // tuiles sont des « plus de », leur libellé le dit, mais le libellé n'est
+        // pas une donnée lisible par machine.
+        ml: gm('period1_total_goals', 0.5, 'over'),
         label: 'Over 0.5',
         rulePct: pct(poissonOver(lP1, 0.5)),
         ruleNote: `P1 λ=${fmt(lP1)} → P(≥1 goal)=${fmt(poissonOver(lP1,0.5)*100,0)}%`,
       },
       {
         id: 'p1-o15',
-        ml: gm('period1_total_goals', 1.5),
+        ml: gm('period1_total_goals', 1.5, 'over'),
         label: 'Over 1.5',
         rulePct: pct(poissonOver(lP1, 1.5)),
         ruleNote: `P(≥2 goals in P1)=${fmt(poissonOver(lP1,1.5)*100,0)}%`,
       },
       {
         id: 'p1-o25',
-        ml: gm('period1_total_goals', 2.5),
+        ml: gm('period1_total_goals', 2.5, 'over'),
         label: 'Over 2.5',
         rulePct: pct(poissonOver(lP1, 2.5)),
         ruleNote: `P(≥3 goals in P1)=${fmt(poissonOver(lP1,2.5)*100,0)}%`,
@@ -636,35 +706,64 @@ function computeGameMarkets(
   };
 
   // ── 11. Winning Margin ────────────────────────────────────────────────────
-  // Marges dérivées de la distribution Skellam complète, renormalisées sur les
-  // matchs réglés en réglementaire (une victoire par 1/2/3+ exclut la prolongation).
-  const decisive = md.winBy1 + md.winBy2 + md.winBy3plus || 1;
-  const wm1  = (md.winBy1     / decisive) * regAdj;
-  const wm2  = (md.winBy2     / decisive) * regAdj;
-  const wm3p = (md.winBy3plus / decisive) * regAdj;
+  //
+  // Les trois tuiles portent l'écart DU DOMICILE — `gm(...)` met `hAb` en
+  // sujet, et c'est ce sujet que `predictWinningMargin` lit pour répondre. Le
+  // moteur (`prediction/marginPeriods.ts`) est la référence ; ce bloc doit dire
+  // la même chose que lui, sans quoi la tuile et la fiche qu'on ouvre en
+  // cliquant dessus se contredisent.
+  //
+  // ── Ce que ce calcul disait avant ──────────────────────────────────────────
+  //
+  // Deux écarts avec le moteur, dans la même ligne :
+  //
+  //  1. **Le camp.** `winBy1` comptait « quelqu'un gagne par 1 », les deux
+  //     camps confondus, puis renormalisait sur les matchs décisifs. Le moteur
+  //     répond « LE SUJET gagne par 1 ». Sur une affiche déséquilibrée, les deux
+  //     nombres n'ont aucun rapport — celui de la tuile vaut presque le double.
+  //
+  //  2. **La prolongation.** `× regAdj` retirait les matchs qui vont au-delà de
+  //     60 minutes. C'est l'inverse de ce qu'il faut faire : un match nul après
+  //     60 minutes se termine TOUJOURS par un but d'écart. Cette masse-là
+  //     appartient à « par 1 », et l'écarter enlevait précisément ce qui fait de
+  //     « par 1 » l'écart le plus fréquent du hockey.
+  //
+  // Le pourcentage affiché venait du moteur (`PredictionSheet` remplace
+  // `rulePct` par la réponse de `/api/predict/single`), donc l'erreur ne se
+  // voyait que dans la grille avant ouverture, en repli quand l'appel échoue —
+  // et dans `marginFactors`, qui prend ce `rulePct` comme valeur du modèle.
+  //
+  // `otShareHome` est la part de prolongation revenant au domicile, déjà
+  // calculée pour Match Betting ; c'est l'analogue local de `pWinsOvertime`,
+  // que le moteur utilise pour la même répartition.
+  const wm1  = md.homeBy1 + md.tie * otShareHome;
+  const wm2  = md.homeBy2;
+  const wm3p = md.homeBy3plus;
   const margin: MarketGroup = {
     id: 'margin', title: 'Winning Margin', cols: 3,
     options: [
       {
         id: 'wm-1',
         ml: gm('winning_margin', undefined, '1'),
-        label: 'Win by 1',
+        // Le camp est DANS le libellé. « Win by 1 » ne disait pas qui gagne,
+        // alors que le pari, lui, porte sur le domicile depuis toujours.
+        label: `${hAb} by 1`,
         rulePct: pct(wm1),
-        ruleNote: `Skellam marge 1 but ${fmt(md.winBy1/decisive*100,0)}% × régl. = ${fmt(wm1*100,0)}%`,
+        ruleNote: `Skellam maison par 1 ${fmt(md.homeBy1*100,0)}% + nul réglementaire ${fmt(md.tie*100,0)}% × part OT ${fmt(otShareHome*100,0)}% = ${fmt(wm1*100,0)}%`,
       },
       {
         id: 'wm-2',
         ml: gm('winning_margin', undefined, '2'),
-        label: 'Win by 2',
+        label: `${hAb} by 2`,
         rulePct: pct(wm2),
-        ruleNote: `Skellam marge 2 buts ${fmt(md.winBy2/decisive*100,0)}% × régl. = ${fmt(wm2*100,0)}%`,
+        ruleNote: `Skellam maison par exactement 2 buts = ${fmt(wm2*100,0)}% (un match qui va en prolongation ne peut pas finir sur cet écart)`,
       },
       {
         id: 'wm-3p',
         ml: gm('winning_margin', undefined, '3+'),
-        label: 'Win by 3+',
+        label: `${hAb} by 3+`,
         rulePct: pct(wm3p),
-        ruleNote: `Skellam marge 3+ ${fmt(md.winBy3plus/decisive*100,0)}% × régl., λ=${fmt(lambdaT)}`,
+        ruleNote: `Skellam maison par 3 buts ou plus = ${fmt(wm3p*100,0)}%, λ=${fmt(lambdaT)}`,
       },
     ],
   };
