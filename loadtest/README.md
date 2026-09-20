@@ -431,7 +431,7 @@ node ../loadtest/bench/run.js smoke      # vérification à blanc, ~5 s
 | B9 | **Le compteur d'event loop sait-il voir un blocage ?** | oui |
 | B10 | Chemins authentifiés : N+1, ouverture de salon, cache `isPro` | SQL constant |
 | B11 | Socket.io, arrivée simultanée (= S4 mono-instance) | fan-out linéaire |
-| B12 | Deux instances : un message traverse-t-il ? (ligne D) | **non — décision d'infra** |
+| B12 | Deux instances : un message traverse-t-il ? (ligne D) | sans `REDIS_URL` : non · avec : **oui** |
 | B13 | Endurance / fuite mémoire (= S5) | plateau |
 | B14 | Soirée de règlement (= S6) | file vidée |
 
@@ -443,9 +443,11 @@ lancer à chaque modification plutôt qu'une fois par trimestre.
 Ce qu'ils NE mesurent pas : les latences réelles (l'amont est bouchonné), la
 qualité du SQL, Socket.io (S4), l'endurance (S5) et le règlement de soirée (S6).
 
-Les sept scénarios S1-S7 sont couverts par ces bancs, à une exception près qui
-n'est pas testable en process : le multi-instance de S4, que B12 mesure et
-laisse ouvert (voir `RAPPORT_TESTS_CHARGE_2026-09-18.md`, addendum 3).
+Les sept scénarios S1-S7 sont couverts par ces bancs, multi-instance de S4
+compris : B12 démarre deux applications complètes dans deux processus. Il rend
+✗ sans `REDIS_URL` — le comportement correct à une instance — et ✓ avec, depuis
+que l'adaptateur Redis est livré (2026-09-19 ; voir
+`RAPPORT_TESTS_CHARGE_2026-09-18.md`, addenda 3 et 5).
 
 Détail, pièges et façon de lire : **`bench/README.md`**.
 Dernier passage complet : `RAPPORT_TESTS_CHARGE_2026-09-18.md` (racine du dépôt).

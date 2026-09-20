@@ -29,11 +29,13 @@ export {
 } from './nhl/teamsAndGames';
 export {
   fetchGameBoxscore,
+  fetchGameBoxscoreFull,
   fetchGameScoringPlays,
   fetchGameFaceoffWins,
 } from './nhl/gameEvents';
 export type {
   BoxscorePlayerStats,
+  GameBoxscore,
   ScoringGoal,
 } from './nhl/gameEvents';
 export {

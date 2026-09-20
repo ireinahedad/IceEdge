@@ -173,6 +173,7 @@ Settings → Variables → ajouter :
 | `CORS_ORIGIN` | `https://iceedge.vercel.app` |
 | `ML_SERVICE_URL` | **Réseau privé** : `http://<nom-du-service-ml>.railway.internal:8000` (étape 3 — pas de domaine public) |
 | `ML_API_TOKEN` | Secret partagé avec le service ML : `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `REDIS_URL` | **À ne poser qu'à partir de la 2ᵉ instance** — étape 2 ter. Absente : adaptateur Socket.io en mémoire, ce qui est le bon choix à une instance |
 
 ### Domaine
 Settings → Networking → **Generate Domain** → noter l'URL (ex: `iceedge-backend.railway.app`)
@@ -227,6 +228,86 @@ L'ancien objet est supprimé automatiquement lors d'un remplacement.
   remplacés par une URL au prochain changement d'avatar de chaque utilisateur.
 - Le CSP du client (`client/vercel.json`) autorise déjà `img-src … https:`,
   aucun changement à prévoir.
+
+---
+
+## 2 ter. Redis — diffusion du chat entre instances
+
+> **À sauter tant que le backend tourne à une seule instance.** Sans `REDIS_URL`,
+> le serveur utilise l'adaptateur Socket.io en mémoire : c'est le comportement
+> historique, il est correct à une instance, et il ne coûte rien. Cette étape
+> n'existe que pour le jour où l'on passe à deux conteneurs.
+
+### Pourquoi
+
+`io.to(salon).emit(...)` ne parle qu'aux sockets du process qui l'exécute. À
+deux instances derrière le répartiteur Railway, deux personnes du même salon ne
+se voient que si elles ont atterri sur le même conteneur — une fois sur deux.
+**Le symptôme n'est pas une erreur** : ni log, ni 500, juste un chat qui
+« marche mal ». C'est la ligne D de `AUDIT_SCALABILITE_COUTS.md`, et le banc
+`loadtest/bench/b12-multiinstance.ts` la reproduit en local, sans rien déployer.
+
+### Créer le service
+
+1. Railway → **même projet et même environnement** que le backend →
+   **+ New → Database → Add Redis**.
+2. Railway expose la variable `REDIS_URL` du service Redis. Dans le service
+   **Node.js**, l'ajouter par référence (Variables → *Add Variable Reference*)
+   plutôt qu'en la recopiant : une rotation du mot de passe côté Redis suit
+   alors toute seule.
+3. Prendre l'URL du **réseau privé** (`redis://default:…@<service>.railway.internal:6379`),
+   pour la même raison qu'au §3 pour le service ML : inclus, **0 €**, aucun
+   egress facturé, et le trafic ne quitte pas le projet. Les trois conditions
+   du réseau privé (même projet, même environnement, runtime seulement)
+   s'appliquent à l'identique.
+4. Redéployer le backend et vérifier la bannière de démarrage :
+
+   ```
+   [Server] Réglages effectifs   SOCKET_ADAPTER: "redis (diffusion partagée entre instances)"
+                                 REDIS_URL: "présente"
+   ```
+
+   `mémoire (diffusion LOCALE — une seule instance supportée)` signifie que la
+   variable n'est pas arrivée jusqu'au process : c'est exactement le cas qu'on
+   ne peut **pas** détecter en observant le produit à une instance.
+
+### Upstash, si l'on préfère
+
+Fonctionne aussi, avec une précaution : prendre l'endpoint **Redis/TCP**
+(`rediss://…`), **jamais** l'URL REST. L'adaptateur repose sur le pub/sub, qui
+exige une connexion persistante (`SUBSCRIBE` qui reste ouvert) ; les clients
+« serverless » en HTTP, dont `@upstash/redis`, ne savent pas faire ça. Le trafic
+sort alors du réseau Railway — donc de l'egress facturé et quelques
+millisecondes de plus par diffusion.
+
+### Pas de sticky sessions — et pourquoi ce n'est pas un problème
+
+Les guides Socket.io réclament l'affinité de session en plus de l'adaptateur.
+**Railway n'en propose pas.** C'est pourquoi le client est fixé sur
+`transports: ['websocket']` (`client/src/app/hooks/useChatSocket.ts`) : une
+connexion WebSocket est négociée une fois et reste sur son conteneur, alors que
+le repli HTTP long-polling fait une requête par échange — et c'est lui, pas le
+WebSocket, qui exige l'affinité. **Ne pas rétablir `'polling'` dans cette
+liste** à partir de deux instances : la poignée de main échouerait par
+intermittence (`Session ID unknown`). Ce que ce choix coûte : plus de repli
+automatique derrière un proxy d'entreprise qui bloque le WebSocket.
+
+### Si Redis tombe
+
+Le serveur **ne tombe pas avec lui**. Les erreurs de connexion sont journalisées
+en `warn` (`[Redis] connexion en erreur — mode dégradé`), `ioredis` retente
+indéfiniment en espaçant, et la diffusion redevient locale en attendant : le
+chat régresse au comportement mono-instance, il ne s'arrête pas. Le sens de la
+panne est choisi — dégradé, jamais mort.
+
+### Ce que Redis ne fait PAS encore ici
+
+Le limiteur de débit du chat compte toujours **en mémoire de process**
+(`InMemoryRateLimitStore`), comme les limiteurs `express-rate-limit`. À N
+instances, l'autorisation réelle est donc N× celle annoncée. Ce n'est pas une
+régression introduite par cette étape — c'est le reliquat de la ligne D, à
+traiter avant de monter en instances si le débit du chat compte. Le quota LLM,
+lui, est en base depuis la migration 024 : il est déjà partagé.
 
 ---
 
@@ -651,6 +732,7 @@ délibérément gardé la visibilité.
 | Neon | **Launch — payant, aucun plan gratuit** | aucune allocation incluse : **0,106 $/CU-h**, **0,35 $/Go-mois**, 500 Go de transfert public inclus puis 0,10 $/Go. **Aucun plafond dur** — seulement une alerte de dépense, armée à 6 $. Scale-to-zero à 5 min, désactivable : ne pas y toucher |
 | Cloudflare R2 | Free tier | 10 Go, **egress gratuit** |
 | Railway | Hobby ($5/mo) | 512 MB RAM × 2 services |
+| Redis (Railway) | — | **Non provisionné tant qu'on tourne à une instance** (étape 2 ter). Facturé à l'usage comme les autres services du projet : l'adaptateur Socket.io ne transporte que des messages de chat, donc quelques Mo de RAM et un trafic négligeable — 0-10 €/mois |
 | Vercel | Hobby (gratuit) | 100 GB bandwidth |
 
 > **Railway** : le plan Hobby est nécessaire pour les services persistants (Hobby = $5/mois crédits inclus).

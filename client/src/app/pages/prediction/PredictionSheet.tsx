@@ -39,9 +39,39 @@ import { useOddsFormat } from "../../context/OddsFormatContext";
  */
 export function betLegId(label: string, mlProps: MLProps | undefined, rulePct: number): string {
   const slug = label.replace(/\s+/g, "-").toLowerCase().slice(0, 24);
-  return mlProps
-    ? `${mlProps.subjectId}-${mlProps.propType ?? "bet"}-${slug}`
-    : `rule-${slug}-${rulePct}`;
+  if (!mlProps) return `rule-${slug}-${rulePct}`;
+  /**
+   * ⚠️ La LIGNE fait partie de l'identifiant, et doit y être.
+   *
+   * Sans elle, deux paris ne se distinguaient que par leur étiquette tronquée à
+   * 24 caractères. Sur les tuiles de marché, l'étiquette est courte et le seuil
+   * tombe toujours dans les 24 premiers caractères — ça tenait par chance.
+   *
+   * Les grilles de paris joueur ont supprimé cette chance : leurs étiquettes
+   * commencent par le NOM du joueur (« Pierre-Olivier Joseph · 2+ Tirs
+   * bloqués »), et pour un nom d'au moins 21 caractères le seuil est coupé.
+   * Les trois colonnes d'une même ligne partageaient alors un seul
+   * identifiant : ajouter « 2+ » marquait « 1+ » en vert, et le retirer
+   * enlevait la mauvaise jambe du coupon.
+   *
+   * `line` est précisément ce qui sépare ces paris — c'est le seuil lui-même.
+   */
+  const line = mlProps.line != null ? `-${mlProps.line}` : "";
+  const sel  = mlProps.selection ? `-${mlProps.selection}` : "";
+  /**
+   * `settleMarket` aussi, et pour la même raison que `line`.
+   *
+   * Deux paris peuvent partager sujet, marché ML ET ligne tout en étant des
+   * questions différentes. Le cas concret : dans la grille des buts d'un match,
+   * « premier buteur » et « 1+ but » sont tous deux `goals` à la ligne 0,5 —
+   * seul le marché de RÈGLEMENT les sépare (`first_goal_scorer` contre
+   * `anytime_goal`). Leurs étiquettes aussi, mais elles commencent par le nom
+   * du joueur et sont tronquées à 24 caractères : « Pierre-Olivier Joseph · »
+   * remplit la troncature à lui seul, et les deux paris se retrouvaient sous un
+   * même identifiant.
+   */
+  const mkt = mlProps.settleMarket ? `-${mlProps.settleMarket}` : "";
+  return `${mlProps.subjectId}-${mlProps.propType ?? "bet"}${mkt}${line}${sel}-${slug}`;
 }
 
 /* ─── Prediction bottom sheet ───────────────── */

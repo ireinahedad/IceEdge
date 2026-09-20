@@ -4,7 +4,7 @@
  */
 
 import { MOCK_TEAMS_FULL, MOCK_GAMES_FULL } from '../../data/mockNhl';
-import { TEAM_META, USE_MOCK, fetchNHL, getCached, parseToiMinutes, setCached } from './core';
+import { TEAM_META, USE_MOCK, currentSeason, fetchNHL, getCached, parseToiMinutes, setCached } from './core';
 
 // --- Teams / Standings ----------------------------------------------------
 
@@ -19,7 +19,29 @@ export async function fetchTeams(): Promise<any[]> {
   if (cached) return cached;
 
   const data = await fetchNHL<any>('v1/standings/now');
+  const season = currentSeason();
   const teams = (data.standings ?? []).map((s: any) => {
+    /**
+     * ⚠️ `standings/now` ne rend PAS forcément la saison en cours.
+     *
+     * Entre la fin des séries et le premier match d'octobre, la LNH continue de
+     * servir le classement FINAL de la saison écoulée sous cette URL. L'app
+     * l'affichait tel quel : au 19 septembre, la fiche d'une équipe annonçait
+     * « 48-22-8 » pour une saison où elle n'a pas joué une minute, sans que
+     * rien à l'écran ne dise de quelle année il s'agissait. Le chiffre était
+     * vrai, la phrase qu'il formait ne l'était pas.
+     *
+     * On compare donc le `seasonId` de la ligne à la saison en cours. S'il est
+     * antérieur, l'équipe est traitée comme n'ayant pas encore joué : totaux à
+     * zéro (c'est la vérité) et TAUX à `null` (« je ne sais pas »), exactement
+     * l'état que les `??` en aval savent déjà rattraper — c'est le même
+     * traitement que `gamesPlayed === 0`, et il est déjà éprouvé.
+     *
+     * `seasonId` absent d'une réponse : on ne conclut rien et on garde la ligne
+     * telle quelle, plutôt que de vider toutes les fiches sur un champ manquant.
+     */
+    const rowSeason = s.seasonId != null ? String(s.seasonId) : null;
+    const stale     = rowSeason != null && rowSeason < season;
     const abbr: string = s.teamAbbrev?.default ?? '';
     const meta = TEAM_META[abbr] ?? { emoji: '🏒', color: '#86d1ea' };
 
@@ -35,8 +57,10 @@ export async function fetchTeams(): Promise<any[]> {
     // Les TOTAUX (buts, victoires, points) restent à 0 : à 0 match joué, c'est
     // la vérité. Ce sont les TAUX qui passent à `null`, seule valeur qui dit
     // « je ne sais pas » — et que les `??` en aval rattrapent correctement.
-    const gp     = s.gamesPlayed ?? 0;
+    const gp     = stale ? 0 : (s.gamesPlayed ?? 0);
     const played = gp > 0;
+    /** Un total de la saison écoulée n'est pas un total de la saison en cours. */
+    const n = (v: unknown): number => (stale ? 0 : ((v as number) ?? 0));
     return {
       id:           abbr,
       name:         s.teamFullName?.default ?? s.teamName?.default ?? abbr,
@@ -47,16 +71,16 @@ export async function fetchTeams(): Promise<any[]> {
       emoji:        meta.emoji,
       color:        meta.color,
       gamesPlayed:  gp,
-      wins:         s.wins     ?? 0,
-      losses:       s.losses   ?? 0,
-      otLosses:     s.otLosses ?? 0,
-      points:       s.points   ?? 0,
+      wins:         n(s.wins),
+      losses:       n(s.losses),
+      otLosses:     n(s.otLosses),
+      points:       n(s.points),
       winPct:       played ? Math.round((s.winPctg ?? 0) * 100) : null,
-      homeRecord:   `${s.homeWins ?? 0}-${s.homeLosses ?? 0}-${s.homeOtLosses ?? 0}`,
-      awayRecord:   `${s.roadWins ?? 0}-${s.roadLosses ?? 0}-${s.roadOtLosses ?? 0}`,
-      streak:       s.streakCode && s.streakCount ? `${s.streakCode}${s.streakCount}` : '',
-      goalsFor:            s.goalFor     ?? 0,
-      goalsAgainst:        s.goalAgainst ?? 0,
+      homeRecord:   `${n(s.homeWins)}-${n(s.homeLosses)}-${n(s.homeOtLosses)}`,
+      awayRecord:   `${n(s.roadWins)}-${n(s.roadLosses)}-${n(s.roadOtLosses)}`,
+      streak:       !stale && s.streakCode && s.streakCount ? `${s.streakCode}${s.streakCount}` : '',
+      goalsFor:            n(s.goalFor),
+      goalsAgainst:        n(s.goalAgainst),
       goalsForPerGame:     played ? +((s.goalFor     ?? 0) / gp).toFixed(2) : null,
       goalsAgainstPerGame: played ? +((s.goalAgainst ?? 0) / gp).toFixed(2) : null,
       // NOTE: powerPlayPctg/penaltyKillPctg n'existent PAS dans standings —
@@ -71,10 +95,13 @@ export async function fetchTeams(): Promise<any[]> {
       // pas commencée. `null` déclenche le repli neutre.
       last10: played ? `${s.l10Wins ?? 5}-${s.l10Losses ?? 4}-${s.l10OtLosses ?? 1}` : null,
       // Splits domicile / extérieur (win% simple)
-      homeWinPct: _splitPct(s.homeWins, s.homeLosses, s.homeOtLosses),
-      roadWinPct: _splitPct(s.roadWins, s.roadLosses, s.roadOtLosses),
+      // `_splitPct` rend déjà 0.5 — « je ne sais pas » — sur zéro match joué.
+      homeWinPct: _splitPct(n(s.homeWins), n(s.homeLosses), n(s.homeOtLosses)),
+      roadWinPct: _splitPct(n(s.roadWins), n(s.roadLosses), n(s.roadOtLosses)),
       // Série signée : W3 → +3, L2 → -2
-      streakSigned: (s.streakCode === 'W' ? 1 : -1) * (s.streakCount ?? 0),
+      streakSigned: stale ? 0 : (s.streakCode === 'W' ? 1 : -1) * (s.streakCount ?? 0),
+      /** La saison à laquelle se rapporte cette fiche — l'écran peut la dater. */
+      statsSeason: rowSeason ?? season,
     };
   });
 

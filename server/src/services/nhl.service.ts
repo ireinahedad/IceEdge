@@ -134,6 +134,26 @@ export class NHLService {
     return nhlApi.fetchPlayerLeaders(season, view, sort, limit);
   }
 
+  /**
+   * Feuille de match en direct : les compteurs de CHAQUE joueur pour CE match.
+   *
+   * Sert les grilles de paris joueur pendant la partie — un pari « 2+ buts »
+   * n'a pas le même sens quand le joueur en a déjà un. La `Map` interne devient
+   * un objet indexé, parce qu'une `Map` ne survit pas à `JSON.stringify`.
+   *
+   * `state` accompagne les lignes : c'est lui qui décide du `Cache-Control` de
+   * la route (30 s en direct, 6 h une fois terminé), et l'écran s'en sert pour
+   * n'afficher un compteur « en direct » que lorsqu'il l'est vraiment.
+   */
+  async getGameBoxscore(gameId: string) {
+    const full = await nhlApi.fetchGameBoxscoreFull(gameId);
+    if (!full) return { state: 'unknown' as const, players: {} };
+    return {
+      state: full.state,
+      players: Object.fromEntries(full.players),
+    };
+  }
+
   async getPlayer(id: string) {
     return nhlApi.fetchPlayerById(id);
   }
@@ -144,7 +164,13 @@ export class NHLService {
       playerId:         p.id,
       fullName:         p.name,
       teamAbbr:         p.teamAbbr,
-      season:           null,
+      // `season` était `null` en dur. C'est la saison de ces chiffres, et elle
+      // n'est plus devinable : en avant-saison, les totaux sont ceux de la
+      // dernière saison complète (voir `pickSeasonRow`). L'écran doit pouvoir
+      // la dater — « 32 buts » sans année, sur une page qui parle du match de
+      // ce soir, se lit comme « 32 buts cette saison ».
+      season:           p.statsSeason ?? null,
+      statsSeason:      p.statsSeason ?? null,
       gamesPlayed:      p.gamesPlayed,
       goals:            p.goals,
       assists:          p.assists,

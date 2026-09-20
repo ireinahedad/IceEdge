@@ -1,19 +1,19 @@
 {
-  "genere": "2026-09-19T00:18:43.257Z",
-  "dureeMs": 378449,
+  "genere": "2026-09-19T03:18:42.908Z",
+  "dureeMs": 691208,
   "resultats": {
     "b1_amplification": [
       {
         "id": "best-bets",
         "status": 200,
-        "ms": 142,
+        "ms": 550,
         "cacheControl": "public, max-age=60, stale-while-revalidate=300",
-        "nhl": 34,
+        "nhl": 35,
         "odds": 1,
         "ml": 16,
         "sql": 3,
-        "appelsDistincts": 51,
-        "appels": 51,
+        "appelsDistincts": 52,
+        "appels": 52,
         "gaspillage": 0,
         "pires": [
           {
@@ -32,7 +32,7 @@
         "caches": {
           "nhl": {
             "h": 45,
-            "m": 267,
+            "m": 327,
             "d": 0
           },
           "manual": {
@@ -61,7 +61,7 @@
       {
         "id": "games-live",
         "status": 200,
-        "ms": 67,
+        "ms": 95,
         "cacheControl": "public, max-age=30, stale-while-revalidate=60",
         "nhl": 1,
         "odds": 0,
@@ -88,7 +88,7 @@
       {
         "id": "games-date",
         "status": 200,
-        "ms": 60,
+        "ms": 119,
         "cacheControl": "public, max-age=30, stale-while-revalidate=60",
         "nhl": 1,
         "odds": 0,
@@ -115,7 +115,7 @@
       {
         "id": "odds-h2h",
         "status": 200,
-        "ms": 39,
+        "ms": 98,
         "cacheControl": "public, max-age=60, stale-while-revalidate=300",
         "nhl": 0,
         "odds": 1,
@@ -142,7 +142,7 @@
       {
         "id": "odds-totals",
         "status": 200,
-        "ms": 37,
+        "ms": 67,
         "cacheControl": "public, max-age=60, stale-while-revalidate=300",
         "nhl": 0,
         "odds": 1,
@@ -169,7 +169,7 @@
       {
         "id": "leaderboard",
         "status": 200,
-        "ms": 16,
+        "ms": 56,
         "cacheControl": "public, max-age=60, stale-while-revalidate=300",
         "nhl": 0,
         "odds": 0,
@@ -191,7 +191,7 @@
       {
         "id": "teams",
         "status": 200,
-        "ms": 40,
+        "ms": 85,
         "cacheControl": "public, max-age=300, stale-while-revalidate=600",
         "nhl": 1,
         "odds": 0,
@@ -218,7 +218,7 @@
       {
         "id": "standings",
         "status": 200,
-        "ms": 50,
+        "ms": 69,
         "cacheControl": "public, max-age=300, stale-while-revalidate=600",
         "nhl": 1,
         "odds": 0,
@@ -245,7 +245,7 @@
       {
         "id": "players",
         "status": 200,
-        "ms": 30,
+        "ms": 79,
         "cacheControl": "public, max-age=600, stale-while-revalidate=1200",
         "nhl": 2,
         "odds": 0,
@@ -276,7 +276,7 @@
       {
         "id": "pred-game",
         "status": 200,
-        "ms": 72,
+        "ms": 434,
         "cacheControl": "public, max-age=300, stale-while-revalidate=600",
         "nhl": 3,
         "odds": 0,
@@ -314,12 +314,12 @@
         "id": "best-bets",
         "repeats": 20,
         "cacheControl": "public, max-age=60, stale-while-revalidate=300",
-        "premier": 51,
+        "premier": 52,
         "suivants": 0,
         "sqlPremier": 3,
         "sqlSuivants": 0,
         "parAppel": [
-          51,
+          52,
           0,
           0,
           0,
@@ -639,19 +639,19 @@
         "errors": 0,
         "errorRate": 0,
         "rateLimited": 0,
-        "p50": 587,
-        "p95": 588,
-        "max": 588,
-        "nhl": 34,
+        "p50": 891,
+        "p95": 895,
+        "max": 895,
+        "nhl": 35,
         "odds": 1,
         "ml": 16,
         "sql": 3,
-        "appels": 51,
-        "appelsDistincts": 51,
+        "appels": 52,
+        "appelsDistincts": 52,
         "caches": {
           "nhl": {
             "h": 45,
-            "m": 267,
+            "m": 327,
             "d": 0
           },
           "manual": {
@@ -683,19 +683,19 @@
         "errors": 0,
         "errorRate": 0,
         "rateLimited": 0,
-        "p50": 614,
-        "p95": 616,
-        "max": 616,
-        "nhl": 34,
+        "p50": 1029,
+        "p95": 1031,
+        "max": 1032,
+        "nhl": 35,
         "odds": 1,
         "ml": 16,
         "sql": 3,
-        "appels": 51,
-        "appelsDistincts": 51,
+        "appels": 52,
+        "appelsDistincts": 52,
         "caches": {
           "nhl": {
             "h": 45,
-            "m": 267,
+            "m": 327,
             "d": 0
           },
           "manual": {
@@ -727,19 +727,19 @@
         "errors": 0,
         "errorRate": 0,
         "rateLimited": 0,
-        "p50": 687,
-        "p95": 692,
-        "max": 695,
-        "nhl": 34,
+        "p50": 1316,
+        "p95": 1329,
+        "max": 1331,
+        "nhl": 35,
         "odds": 1,
         "ml": 16,
         "sql": 3,
-        "appels": 51,
-        "appelsDistincts": 51,
+        "appels": 52,
+        "appelsDistincts": 52,
         "caches": {
           "nhl": {
             "h": 45,
-            "m": 267,
+            "m": 327,
             "d": 0
           },
           "manual": {
@@ -771,9 +771,9 @@
         "errors": 0,
         "errorRate": 0,
         "rateLimited": 0,
-        "p50": 186,
-        "p95": 188,
-        "max": 188,
+        "p50": 219,
+        "p95": 222,
+        "max": 222,
         "nhl": 0,
         "odds": 1,
         "ml": 0,
@@ -795,9 +795,9 @@
         "errors": 0,
         "errorRate": 0,
         "rateLimited": 0,
-        "p50": 199,
-        "p95": 201,
-        "max": 201,
+        "p50": 325,
+        "p95": 326,
+        "max": 327,
         "nhl": 0,
         "odds": 1,
         "ml": 0,
@@ -819,9 +819,9 @@
         "errors": 0,
         "errorRate": 0,
         "rateLimited": 0,
-        "p50": 252,
-        "p95": 257,
-        "max": 257,
+        "p50": 671,
+        "p95": 678,
+        "max": 679,
         "nhl": 0,
         "odds": 1,
         "ml": 0,
@@ -843,9 +843,9 @@
         "errors": 0,
         "errorRate": 0,
         "rateLimited": 0,
-        "p50": 173,
-        "p95": 176,
-        "max": 176,
+        "p50": 247,
+        "p95": 248,
+        "max": 248,
         "nhl": 1,
         "odds": 0,
         "ml": 0,
@@ -867,9 +867,9 @@
         "errors": 0,
         "errorRate": 0,
         "rateLimited": 0,
-        "p50": 225,
-        "p95": 227,
-        "max": 228,
+        "p50": 333,
+        "p95": 334,
+        "max": 339,
         "nhl": 1,
         "odds": 0,
         "ml": 0,
@@ -891,9 +891,9 @@
         "errors": 0,
         "errorRate": 0,
         "rateLimited": 0,
-        "p50": 294,
-        "p95": 301,
-        "max": 302,
+        "p50": 705,
+        "p95": 719,
+        "max": 720,
         "nhl": 1,
         "odds": 0,
         "ml": 0,
@@ -915,9 +915,9 @@
         "errors": 0,
         "errorRate": 0,
         "rateLimited": 0,
-        "p50": 190,
-        "p95": 192,
-        "max": 192,
+        "p50": 307,
+        "p95": 308,
+        "max": 308,
         "nhl": 1,
         "odds": 0,
         "ml": 0,
@@ -939,9 +939,9 @@
         "errors": 0,
         "errorRate": 0,
         "rateLimited": 0,
-        "p50": 264,
-        "p95": 266,
-        "max": 266,
+        "p50": 449,
+        "p95": 450,
+        "max": 451,
         "nhl": 1,
         "odds": 0,
         "ml": 0,
@@ -963,9 +963,9 @@
         "errors": 0,
         "errorRate": 0,
         "rateLimited": 0,
-        "p50": 379,
-        "p95": 390,
-        "max": 391,
+        "p50": 1015,
+        "p95": 1024,
+        "max": 1025,
         "nhl": 1,
         "odds": 0,
         "ml": 0,
@@ -1143,14 +1143,14 @@
         "games": 4,
         "players": 10,
         "status": 200,
-        "ms": 77,
+        "ms": 183,
         "scanned": 80,
         "bets": 15,
-        "nhl": 25,
+        "nhl": 26,
         "odds": 1,
         "ml": 15,
         "sql": 3,
-        "appels": 41,
+        "appels": 42,
         "gaspillage": 0,
         "mlMisses": 15,
         "mlDedup": 15
@@ -1160,14 +1160,14 @@
         "games": 8,
         "players": 20,
         "status": 200,
-        "ms": 116,
+        "ms": 238,
         "scanned": 140,
         "bets": 15,
-        "nhl": 34,
+        "nhl": 35,
         "odds": 1,
         "ml": 16,
         "sql": 3,
-        "appels": 51,
+        "appels": 52,
         "gaspillage": 0,
         "mlMisses": 16,
         "mlDedup": 14
@@ -1177,14 +1177,14 @@
         "games": 12,
         "players": 30,
         "status": 200,
-        "ms": 130,
+        "ms": 240,
         "scanned": 180,
         "bets": 15,
-        "nhl": 36,
+        "nhl": 37,
         "odds": 1,
         "ml": 16,
         "sql": 3,
-        "appels": 53,
+        "appels": 54,
         "gaspillage": 0,
         "mlMisses": 16,
         "mlDedup": 14
@@ -1194,69 +1194,69 @@
         "games": 16,
         "players": 50,
         "status": 200,
-        "ms": 142,
+        "ms": 279,
         "scanned": 220,
         "bets": 15,
-        "nhl": 40,
+        "nhl": 41,
         "odds": 1,
         "ml": 17,
         "sql": 3,
-        "appels": 58,
+        "appels": 59,
         "gaspillage": 0,
         "mlMisses": 17,
         "mlDedup": 13
       }
     ],
-    "b8_clecache": "\n═══ B8 · Clé de cache pilotable depuis la query string (caches NHL chauds) ═══\n\nmême URL, 20 fois                  requêtes= 20  exécutions(best-bets.misses)=  0  hits= 20  appels amont=   0  ml=  0  sql=  0  32 ms\nlimit=1..20 (20 URL)               requêtes= 20  exécutions(best-bets.misses)=  0  hits= 20  appels amont=   0  ml=  0  sql=  0  17 ms\nplayers=1..20 (20 URL)             requêtes= 20  exécutions(best-bets.misses)=  1  hits= 19  appels amont=  16  ml=  8  sql=  0  72 ms\ndays=1..7 (7 URL)                  requêtes=  7  exécutions(best-bets.misses)=  2  hits=  5  appels amont=   1  ml=  0  sql=  0  68 ms\nlimit hors bornes 51..70 (20 URL)  requêtes= 20  exécutions(best-bets.misses)=  0  hits= 20  appels amont=   0  ml=  0  sql=  0  20 ms\n\n  cache best-bets : 4 / 50 entrées, 0 éviction(s)\n\n  ✓ `limit` n'entre pas dans la clé de cache.\n  ✓ `days` et `players` restent bornés par la liste blanche (2 et 1 exécutions sur un balayage complet).\n      Ils changent le calcul, donc leur place dans la clé est justifiée ; c'est le NOMBRE\n      de valeurs joignables qui devait être fermé, et il l'est.\n  · `limit` hors bornes (51..70) → 0 recalcul : `normalizeOptions` borne bien\n    l'espace des clés. C'est le plafond qui tient, pas l'absence de trou.",
+    "b8_clecache": "\n═══ B8 · Clé de cache pilotable depuis la query string (caches NHL chauds) ═══\n\nmême URL, 20 fois                  requêtes= 20  exécutions(best-bets.misses)=  0  hits= 20  appels amont=   0  ml=  0  sql=  0  52 ms\nlimit=1..20 (20 URL)               requêtes= 20  exécutions(best-bets.misses)=  0  hits= 20  appels amont=   0  ml=  0  sql=  0  36 ms\nplayers=1..20 (20 URL)             requêtes= 20  exécutions(best-bets.misses)=  1  hits= 19  appels amont=  16  ml=  8  sql=  0  115 ms\ndays=1..7 (7 URL)                  requêtes=  7  exécutions(best-bets.misses)=  2  hits=  5  appels amont=   1  ml=  0  sql=  0  133 ms\nlimit hors bornes 51..70 (20 URL)  requêtes= 20  exécutions(best-bets.misses)=  0  hits= 20  appels amont=   0  ml=  0  sql=  0  40 ms\n\n  cache best-bets : 4 / 50 entrées, 0 éviction(s)\n\n  ✓ `limit` n'entre pas dans la clé de cache.\n  ✓ `days` et `players` restent bornés par la liste blanche (2 et 1 exécutions sur un balayage complet).\n      Ils changent le calcul, donc leur place dans la clé est justifiée ; c'est le NOMBRE\n      de valeurs joignables qui devait être fermé, et il l'est.\n  · `limit` hors bornes (51..70) → 0 recalcul : `normalizeOptions` borne bien\n    l'espace des clés. C'est le plafond qui tient, pas l'absence de trou.",
     "b6_concurrence": {
       "vus": 40,
-      "dureeMsParPhase": 30000,
+      "dureeMsParPhase": 45000,
       "phaseA": {
-        "n": 28092,
+        "n": 33840,
         "errors": 0,
         "errorRate": 0,
         "rateLimited": 0,
-        "p50": 3,
-        "p95": 9,
-        "max": 148,
-        "iterations": 4682,
+        "p50": 40,
+        "p95": 97,
+        "max": 543,
+        "iterations": 5640,
         "appels": 1,
         "sql": 0,
         "eventLoop": {
-          "meanMs": 1.54,
-          "p50Ms": 1.1,
-          "p99Ms": 5.96,
-          "maxMs": 43.65
+          "meanMs": 22.27,
+          "p50Ms": 16.47,
+          "p99Ms": 84.34,
+          "maxMs": 238.68
         },
-        "rssMb": 388.5
+        "rssMb": 404.4
       },
       "phaseB": {
-        "n": 28104,
+        "n": 29964,
         "errors": 0,
         "errorRate": 0,
         "rateLimited": 0,
-        "p50": 3,
-        "p95": 10,
-        "max": 145,
-        "iterations": 4684,
-        "appels": 1,
+        "p50": 62,
+        "p95": 212,
+        "max": 467,
+        "iterations": 4994,
+        "appels": 2,
         "sql": 123,
         "eventLoop": {
-          "meanMs": 1.49,
-          "p50Ms": 1.1,
-          "p99Ms": 5.65,
-          "maxMs": 43.12
+          "meanMs": 33.03,
+          "p50Ms": 23.99,
+          "p99Ms": 138.41,
+          "maxMs": 234.62
         },
-        "rssMb": 437.9
+        "rssMb": 473.1
       },
       "connexions": {
         "n": 60,
         "errors": 0,
         "errorRate": 0,
         "rateLimited": 0,
-        "p50": 157,
-        "p95": 201,
-        "max": 244
+        "p50": 387,
+        "p95": 638,
+        "max": 792
       },
       "caches": {
         "profileEnsured": {
@@ -1278,22 +1278,22 @@
           "hitRate": 0
         },
         "leaderboard": {
-          "hits": 4676,
+          "hits": 4979,
           "misses": 1,
-          "dedup": 7,
+          "dedup": 14,
           "evictions": 0,
           "size": 1,
           "maxEntries": 1,
-          "hitRate": 0.998
+          "hitRate": 0.997
         },
         "nhl": {
-          "hits": 9687,
-          "misses": 27,
+          "hits": 10288,
+          "misses": 46,
           "dedup": 0,
           "evictions": 0,
-          "size": 49,
+          "size": 50,
           "maxEntries": 500,
-          "hitRate": 0.997
+          "hitRate": 0.996
         },
         "manual": {
           "hits": 30,
@@ -1323,7 +1323,7 @@
           "hitRate": 0
         },
         "odds": {
-          "hits": 9368,
+          "hits": 9988,
           "misses": 0,
           "dedup": 0,
           "evictions": 0,
@@ -1350,7 +1350,7 @@
           "hitRate": 0
         },
         "best-bets": {
-          "hits": 4683,
+          "hits": 4993,
           "misses": 1,
           "dedup": 0,
           "evictions": 0,
@@ -1382,7 +1382,7 @@
             "statusChaud": 200,
             "sqlFroid": 1,
             "sqlChaud": 1,
-            "ms": 5,
+            "ms": 9,
             "detail": [
               {
                 "sql": "SELECT * FROM subscriptions WHERE user_id = $1",
@@ -1399,7 +1399,7 @@
             "statusChaud": 200,
             "sqlFroid": 1,
             "sqlChaud": 1,
-            "ms": 3,
+            "ms": 15,
             "detail": [
               {
                 "sql": "SELECT id, placed_at AS \"placedAt\", sport, legs, leg_count AS \"legCount\", is_parlay AS \"is",
@@ -1416,7 +1416,7 @@
             "statusChaud": 200,
             "sqlFroid": 2,
             "sqlChaud": 2,
-            "ms": 5,
+            "ms": 14,
             "detail": [
               {
                 "sql": "SELECT u.id, u.username, up.display_name AS \"displayName\", up.avatar, up.avatar_url AS \"av",
@@ -1437,7 +1437,7 @@
             "statusChaud": 200,
             "sqlFroid": 1,
             "sqlChaud": 1,
-            "ms": 3,
+            "ms": 15,
             "detail": [
               {
                 "sql": "SELECT id, placed_at AS \"placedAt\", market_type AS \"marketType\", market_label AS \"marketLa",
@@ -1454,7 +1454,7 @@
             "statusChaud": 200,
             "sqlFroid": 1,
             "sqlChaud": 1,
-            "ms": 3,
+            "ms": 5,
             "detail": [
               {
                 "sql": "SELECT outcome, market_type AS \"marketType\", probability, is_parlay AS \"isParlay\", placed_",
@@ -1471,7 +1471,7 @@
             "statusChaud": 200,
             "sqlFroid": 3,
             "sqlChaud": 2,
-            "ms": 6,
+            "ms": 46,
             "detail": [
               {
                 "sql": "SELECT * FROM subscriptions WHERE user_id = $1",
@@ -1496,7 +1496,7 @@
             "statusChaud": 200,
             "sqlFroid": 2,
             "sqlChaud": 2,
-            "ms": 4,
+            "ms": 31,
             "detail": [
               {
                 "sql": "SELECT up.show_slips AS \"showSlips\" FROM user_profiles up WHERE up.user_id = $1",
@@ -1517,7 +1517,7 @@
             "statusChaud": 200,
             "sqlFroid": 1,
             "sqlChaud": 1,
-            "ms": 2,
+            "ms": 16,
             "detail": [
               {
                 "sql": "SELECT r.id, r.name, r.icon, r.description, r.color, r.is_live AS \"isLive\", r.is_private A",
@@ -1534,7 +1534,7 @@
             "statusChaud": 200,
             "sqlFroid": 3,
             "sqlChaud": 2,
-            "ms": 6,
+            "ms": 44,
             "detail": [
               {
                 "sql": "SELECT id, name, icon, description, color, is_live AS \"isLive\", is_pinned AS \"isPinned\", i",
@@ -1559,7 +1559,7 @@
             "statusChaud": 200,
             "sqlFroid": 2,
             "sqlChaud": 2,
-            "ms": 4,
+            "ms": 31,
             "detail": [
               {
                 "sql": "SELECT role, pinned FROM chat_room_members WHERE room_id = $1 AND user_id = $2",
@@ -1596,7 +1596,7 @@
             "statusChaud": 200,
             "sqlFroid": 1,
             "sqlChaud": 1,
-            "ms": 6,
+            "ms": 23,
             "detail": [
               {
                 "sql": "SELECT * FROM subscriptions WHERE user_id = $1",
@@ -1613,7 +1613,7 @@
             "statusChaud": 200,
             "sqlFroid": 1,
             "sqlChaud": 1,
-            "ms": 4,
+            "ms": 18,
             "detail": [
               {
                 "sql": "SELECT id, placed_at AS \"placedAt\", sport, legs, leg_count AS \"legCount\", is_parlay AS \"is",
@@ -1630,7 +1630,7 @@
             "statusChaud": 200,
             "sqlFroid": 2,
             "sqlChaud": 2,
-            "ms": 5,
+            "ms": 30,
             "detail": [
               {
                 "sql": "SELECT u.id, u.username, up.display_name AS \"displayName\", up.avatar, up.avatar_url AS \"av",
@@ -1651,7 +1651,7 @@
             "statusChaud": 200,
             "sqlFroid": 1,
             "sqlChaud": 1,
-            "ms": 3,
+            "ms": 5,
             "detail": [
               {
                 "sql": "SELECT id, placed_at AS \"placedAt\", market_type AS \"marketType\", market_label AS \"marketLa",
@@ -1668,7 +1668,7 @@
             "statusChaud": 200,
             "sqlFroid": 1,
             "sqlChaud": 1,
-            "ms": 3,
+            "ms": 17,
             "detail": [
               {
                 "sql": "SELECT outcome, market_type AS \"marketType\", probability, is_parlay AS \"isParlay\", placed_",
@@ -1685,7 +1685,7 @@
             "statusChaud": 200,
             "sqlFroid": 3,
             "sqlChaud": 2,
-            "ms": 6,
+            "ms": 47,
             "detail": [
               {
                 "sql": "SELECT * FROM subscriptions WHERE user_id = $1",
@@ -1710,7 +1710,7 @@
             "statusChaud": 200,
             "sqlFroid": 2,
             "sqlChaud": 2,
-            "ms": 5,
+            "ms": 32,
             "detail": [
               {
                 "sql": "SELECT up.show_slips AS \"showSlips\" FROM user_profiles up WHERE up.user_id = $1",
@@ -1731,7 +1731,7 @@
             "statusChaud": 200,
             "sqlFroid": 1,
             "sqlChaud": 1,
-            "ms": 3,
+            "ms": 16,
             "detail": [
               {
                 "sql": "SELECT r.id, r.name, r.icon, r.description, r.color, r.is_live AS \"isLive\", r.is_private A",
@@ -1748,7 +1748,7 @@
             "statusChaud": 200,
             "sqlFroid": 3,
             "sqlChaud": 2,
-            "ms": 6,
+            "ms": 49,
             "detail": [
               {
                 "sql": "SELECT id, name, icon, description, color, is_live AS \"isLive\", is_pinned AS \"isPinned\", i",
@@ -1773,7 +1773,7 @@
             "statusChaud": 200,
             "sqlFroid": 2,
             "sqlChaud": 2,
-            "ms": 4,
+            "ms": 30,
             "detail": [
               {
                 "sql": "SELECT role, pinned FROM chat_room_members WHERE room_id = $1 AND user_id = $2",
@@ -1804,7 +1804,7 @@
         "n": 25,
         "intervalMs": 1000,
         "observationMs": 3500,
-        "msPourConnecter": 67,
+        "msPourConnecter": 201,
         "erreursSalon": 0,
         "sqlTempete": 1,
         "sqlParJoin": 0.04,
@@ -1820,18 +1820,18 @@
         "sqlMessage": 3,
         "framesNewMessage": 25,
         "eventLoop": {
-          "meanMs": 1.1,
-          "p50Ms": 1.09,
-          "p99Ms": 1.24,
-          "maxMs": 7.97
+          "meanMs": 15.19,
+          "p50Ms": 15.52,
+          "p99Ms": 31.2,
+          "maxMs": 43.09
         },
-        "rssMb": 264.7
+        "rssMb": 314.5
       },
       {
         "n": 100,
         "intervalMs": 1000,
         "observationMs": 3500,
-        "msPourConnecter": 192,
+        "msPourConnecter": 702,
         "erreursSalon": 0,
         "sqlTempete": 1,
         "sqlParJoin": 0.01,
@@ -1847,19 +1847,19 @@
         "sqlMessage": 3,
         "framesNewMessage": 100,
         "eventLoop": {
-          "meanMs": 1.1,
-          "p50Ms": 1.09,
-          "p99Ms": 1.21,
-          "maxMs": 6.28
+          "meanMs": 16.87,
+          "p50Ms": 15.51,
+          "p99Ms": 97.06,
+          "maxMs": 113.57
         },
-        "rssMb": 262.2
+        "rssMb": 308.6
       },
       {
         "n": 300,
         "intervalMs": 1000,
         "observationMs": 3500,
-        "msPourConnecter": 459,
-        "erreursSalon": 0,
+        "msPourConnecter": 1477,
+        "erreursSalon": 68,
         "sqlTempete": 1,
         "sqlParJoin": 0,
         "detailTempete": [
@@ -1868,18 +1868,18 @@
             "n": 1
           }
         ],
-        "framesRoomUsers": 600,
-        "framesParJoin": 2,
+        "framesRoomUsers": 464,
+        "framesParJoin": 1.55,
         "statusEnvoi": 201,
         "sqlMessage": 3,
-        "framesNewMessage": 300,
+        "framesNewMessage": 232,
         "eventLoop": {
-          "meanMs": 1.11,
-          "p50Ms": 1.09,
-          "p99Ms": 1.52,
-          "maxMs": 13.5
+          "meanMs": 18.34,
+          "p50Ms": 15.52,
+          "p99Ms": 116.46,
+          "maxMs": 133.1
         },
-        "rssMb": 264.2
+        "rssMb": 311.1
       }
     ],
     "b14_reglement": [
@@ -1888,7 +1888,7 @@
         "matchs": 10,
         "matchsTermines": true,
         "budgetMs": 120000,
-        "dureeMs": 3715,
+        "dureeMs": 10567,
         "resume": {
           "checked": 200,
           "settled": 200,
@@ -1928,14 +1928,14 @@
             "n": 1
           }
         ],
-        "debitParSeconde": 53.8
+        "debitParSeconde": 18.9
       },
       {
         "tickets": 1000,
         "matchs": 10,
         "matchsTermines": true,
         "budgetMs": 120000,
-        "dureeMs": 13717,
+        "dureeMs": 47995,
         "resume": {
           "checked": 1000,
           "settled": 1000,
@@ -1975,14 +1975,14 @@
             "n": 1
           }
         ],
-        "debitParSeconde": 72.9
+        "debitParSeconde": 20.8
       },
       {
         "tickets": 200,
         "matchs": 10,
         "matchsTermines": false,
         "budgetMs": 120000,
-        "dureeMs": 1239,
+        "dureeMs": 1333,
         "resume": {
           "checked": 200,
           "settled": 0,
@@ -2010,17 +2010,17 @@
       }
     ],
     "b13_endurance": {
-      "dureeMs": 90000,
+      "dureeMs": 120000,
       "pasMs": 10000,
       "vus": 12,
-      "iterations": 20736,
+      "iterations": 13870,
       "erreurs": 0,
       "gcForce": true,
       "releves": [
         {
-          "tMs": 90,
-          "rssMb": 273.3,
-          "heapMb": 61.3,
+          "tMs": 65,
+          "rssMb": 316.1,
+          "heapMb": 62.8,
           "caches": {
             "leaderboard": {
               "size": 1,
@@ -2029,10 +2029,10 @@
               "hitRate": 0
             },
             "nhl": {
-              "size": 58,
+              "size": 59,
               "maxEntries": 500,
               "evictions": 0,
-              "hitRate": 0.185
+              "hitRate": 0.323
             },
             "manual": {
               "size": 2,
@@ -2061,9 +2061,52 @@
           }
         },
         {
-          "tMs": 10184,
-          "rssMb": 403.2,
-          "heapMb": 64.9,
+          "tMs": 10159,
+          "rssMb": 314.5,
+          "heapMb": 59.1,
+          "caches": {
+            "leaderboard": {
+              "size": 1,
+              "maxEntries": 1,
+              "evictions": 0,
+              "hitRate": 0.999
+            },
+            "nhl": {
+              "size": 500,
+              "maxEntries": 500,
+              "evictions": 607,
+              "hitRate": 0.643
+            },
+            "manual": {
+              "size": 2,
+              "maxEntries": 400,
+              "evictions": 0,
+              "hitRate": 0.682
+            },
+            "odds-client": {
+              "size": 1,
+              "maxEntries": 1,
+              "evictions": 0,
+              "hitRate": 0.682
+            },
+            "mlPredictions": {
+              "size": 23,
+              "maxEntries": 2000,
+              "evictions": 0,
+              "hitRate": 0
+            },
+            "best-bets": {
+              "size": 3,
+              "maxEntries": 50,
+              "evictions": 0,
+              "hitRate": 0.992
+            }
+          }
+        },
+        {
+          "tMs": 20299,
+          "rssMb": 315.9,
+          "heapMb": 59.5,
           "caches": {
             "leaderboard": {
               "size": 1,
@@ -2074,8 +2117,94 @@
             "nhl": {
               "size": 500,
               "maxEntries": 500,
-              "evictions": 1510,
-              "hitRate": 0.396
+              "evictions": 1433,
+              "hitRate": 0.585
+            },
+            "manual": {
+              "size": 2,
+              "maxEntries": 400,
+              "evictions": 0,
+              "hitRate": 0.682
+            },
+            "odds-client": {
+              "size": 1,
+              "maxEntries": 1,
+              "evictions": 0,
+              "hitRate": 0.682
+            },
+            "mlPredictions": {
+              "size": 23,
+              "maxEntries": 2000,
+              "evictions": 0,
+              "hitRate": 0
+            },
+            "best-bets": {
+              "size": 3,
+              "maxEntries": 50,
+              "evictions": 0,
+              "hitRate": 0.996
+            }
+          }
+        },
+        {
+          "tMs": 30457,
+          "rssMb": 316.6,
+          "heapMb": 60,
+          "caches": {
+            "leaderboard": {
+              "size": 1,
+              "maxEntries": 1,
+              "evictions": 0,
+              "hitRate": 1
+            },
+            "nhl": {
+              "size": 500,
+              "maxEntries": 500,
+              "evictions": 2534,
+              "hitRate": 0.587
+            },
+            "manual": {
+              "size": 2,
+              "maxEntries": 400,
+              "evictions": 0,
+              "hitRate": 0.682
+            },
+            "odds-client": {
+              "size": 1,
+              "maxEntries": 1,
+              "evictions": 0,
+              "hitRate": 0.682
+            },
+            "mlPredictions": {
+              "size": 23,
+              "maxEntries": 2000,
+              "evictions": 0,
+              "hitRate": 0
+            },
+            "best-bets": {
+              "size": 3,
+              "maxEntries": 50,
+              "evictions": 0,
+              "hitRate": 0.997
+            }
+          }
+        },
+        {
+          "tMs": 40553,
+          "rssMb": 317.6,
+          "heapMb": 60.3,
+          "caches": {
+            "leaderboard": {
+              "size": 1,
+              "maxEntries": 1,
+              "evictions": 0,
+              "hitRate": 1
+            },
+            "nhl": {
+              "size": 500,
+              "maxEntries": 500,
+              "evictions": 3588,
+              "hitRate": 0.589
             },
             "manual": {
               "size": 2,
@@ -2104,9 +2233,9 @@
           }
         },
         {
-          "tMs": 20355,
-          "rssMb": 406,
-          "heapMb": 65.6,
+          "tMs": 50718,
+          "rssMb": 318.1,
+          "heapMb": 60.9,
           "caches": {
             "leaderboard": {
               "size": 1,
@@ -2117,8 +2246,8 @@
             "nhl": {
               "size": 500,
               "maxEntries": 500,
-              "evictions": 3681,
-              "hitRate": 0.359
+              "evictions": 4686,
+              "hitRate": 0.593
             },
             "manual": {
               "size": 2,
@@ -2141,39 +2270,39 @@
             "best-bets": {
               "size": 3,
               "maxEntries": 50,
+              "evictions": 0,
+              "hitRate": 0.998
+            }
+          }
+        },
+        {
+          "tMs": 60819,
+          "rssMb": 318.3,
+          "heapMb": 61.5,
+          "caches": {
+            "leaderboard": {
+              "size": 1,
+              "maxEntries": 1,
               "evictions": 0,
               "hitRate": 0.999
-            }
-          }
-        },
-        {
-          "tMs": 30445,
-          "rssMb": 425.1,
-          "heapMb": 64.4,
-          "caches": {
-            "leaderboard": {
-              "size": 1,
-              "maxEntries": 1,
-              "evictions": 0,
-              "hitRate": 1
             },
             "nhl": {
               "size": 500,
               "maxEntries": 500,
-              "evictions": 5865,
-              "hitRate": 0.338
+              "evictions": 5823,
+              "hitRate": 0.598
             },
             "manual": {
               "size": 2,
               "maxEntries": 400,
               "evictions": 0,
-              "hitRate": 0.682
+              "hitRate": 0.841
             },
             "odds-client": {
               "size": 1,
               "maxEntries": 1,
               "evictions": 0,
-              "hitRate": 0.682
+              "hitRate": 0.841
             },
             "mlPredictions": {
               "size": 23,
@@ -2184,39 +2313,39 @@
             "best-bets": {
               "size": 3,
               "maxEntries": 50,
+              "evictions": 0,
+              "hitRate": 0.997
+            }
+          }
+        },
+        {
+          "tMs": 70889,
+          "rssMb": 345.1,
+          "heapMb": 61.6,
+          "caches": {
+            "leaderboard": {
+              "size": 1,
+              "maxEntries": 1,
               "evictions": 0,
               "hitRate": 0.999
-            }
-          }
-        },
-        {
-          "tMs": 40550,
-          "rssMb": 423,
-          "heapMb": 60.4,
-          "caches": {
-            "leaderboard": {
-              "size": 1,
-              "maxEntries": 1,
-              "evictions": 0,
-              "hitRate": 1
             },
             "nhl": {
               "size": 500,
               "maxEntries": 500,
-              "evictions": 8074,
-              "hitRate": 0.34
+              "evictions": 6997,
+              "hitRate": 0.603
             },
             "manual": {
               "size": 2,
               "maxEntries": 400,
               "evictions": 0,
-              "hitRate": 0.682
+              "hitRate": 0.841
             },
             "odds-client": {
               "size": 1,
               "maxEntries": 1,
               "evictions": 0,
-              "hitRate": 0.682
+              "hitRate": 0.841
             },
             "mlPredictions": {
               "size": 23,
@@ -2228,69 +2357,26 @@
               "size": 3,
               "maxEntries": 50,
               "evictions": 0,
-              "hitRate": 0.999
+              "hitRate": 0.997
             }
           }
         },
         {
-          "tMs": 50669,
-          "rssMb": 423.6,
-          "heapMb": 61.2,
-          "caches": {
-            "leaderboard": {
-              "size": 1,
-              "maxEntries": 1,
-              "evictions": 0,
-              "hitRate": 1
-            },
-            "nhl": {
-              "size": 500,
-              "maxEntries": 500,
-              "evictions": 10307,
-              "hitRate": 0.335
-            },
-            "manual": {
-              "size": 2,
-              "maxEntries": 400,
-              "evictions": 0,
-              "hitRate": 0.682
-            },
-            "odds-client": {
-              "size": 1,
-              "maxEntries": 1,
-              "evictions": 0,
-              "hitRate": 0.682
-            },
-            "mlPredictions": {
-              "size": 23,
-              "maxEntries": 2000,
-              "evictions": 0,
-              "hitRate": 0
-            },
-            "best-bets": {
-              "size": 3,
-              "maxEntries": 50,
-              "evictions": 0,
-              "hitRate": 1
-            }
-          }
-        },
-        {
-          "tMs": 60764,
-          "rssMb": 423.6,
+          "tMs": 81002,
+          "rssMb": 318.7,
           "heapMb": 62,
           "caches": {
             "leaderboard": {
               "size": 1,
               "maxEntries": 1,
               "evictions": 0,
-              "hitRate": 1
+              "hitRate": 0.999
             },
             "nhl": {
               "size": 500,
               "maxEntries": 500,
-              "evictions": 12526,
-              "hitRate": 0.34
+              "evictions": 8083,
+              "hitRate": 0.602
             },
             "manual": {
               "size": 2,
@@ -2319,21 +2405,21 @@
           }
         },
         {
-          "tMs": 70887,
-          "rssMb": 423.6,
-          "heapMb": 62.4,
+          "tMs": 91078,
+          "rssMb": 345.2,
+          "heapMb": 62.6,
           "caches": {
             "leaderboard": {
               "size": 1,
               "maxEntries": 1,
               "evictions": 0,
-              "hitRate": 1
+              "hitRate": 0.999
             },
             "nhl": {
               "size": 500,
               "maxEntries": 500,
-              "evictions": 14698,
-              "hitRate": 0.337
+              "evictions": 9256,
+              "hitRate": 0.601
             },
             "manual": {
               "size": 2,
@@ -2362,21 +2448,21 @@
           }
         },
         {
-          "tMs": 81000,
-          "rssMb": 424,
-          "heapMb": 63,
+          "tMs": 101169,
+          "rssMb": 348,
+          "heapMb": 63.1,
           "caches": {
             "leaderboard": {
               "size": 1,
               "maxEntries": 1,
               "evictions": 0,
-              "hitRate": 1
+              "hitRate": 0.999
             },
             "nhl": {
               "size": 500,
               "maxEntries": 500,
-              "evictions": 16916,
-              "hitRate": 0.338
+              "evictions": 10386,
+              "hitRate": 0.601
             },
             "manual": {
               "size": 2,
@@ -2405,33 +2491,76 @@
           }
         },
         {
-          "tMs": 90109,
-          "rssMb": 424.3,
+          "tMs": 111286,
+          "rssMb": 349.4,
+          "heapMb": 63.5,
+          "caches": {
+            "leaderboard": {
+              "size": 1,
+              "maxEntries": 1,
+              "evictions": 0,
+              "hitRate": 0.999
+            },
+            "nhl": {
+              "size": 500,
+              "maxEntries": 500,
+              "evictions": 11516,
+              "hitRate": 0.601
+            },
+            "manual": {
+              "size": 2,
+              "maxEntries": 400,
+              "evictions": 0,
+              "hitRate": 0.841
+            },
+            "odds-client": {
+              "size": 1,
+              "maxEntries": 1,
+              "evictions": 0,
+              "hitRate": 0.841
+            },
+            "mlPredictions": {
+              "size": 23,
+              "maxEntries": 2000,
+              "evictions": 0,
+              "hitRate": 0
+            },
+            "best-bets": {
+              "size": 3,
+              "maxEntries": 50,
+              "evictions": 0,
+              "hitRate": 0.998
+            }
+          }
+        },
+        {
+          "tMs": 120176,
+          "rssMb": 347.1,
           "heapMb": 63.4,
           "caches": {
             "leaderboard": {
               "size": 1,
               "maxEntries": 1,
               "evictions": 0,
-              "hitRate": 1
+              "hitRate": 0.999
             },
             "nhl": {
               "size": 500,
               "maxEntries": 500,
-              "evictions": 18890,
-              "hitRate": 0.337
+              "evictions": 12592,
+              "hitRate": 0.6
             },
             "manual": {
               "size": 2,
               "maxEntries": 400,
               "evictions": 0,
-              "hitRate": 0.841
+              "hitRate": 0.725
             },
             "odds-client": {
               "size": 1,
               "maxEntries": 1,
               "evictions": 0,
-              "hitRate": 0.841
+              "hitRate": 0.863
             },
             "mlPredictions": {
               "size": 23,
@@ -2460,19 +2589,19 @@
           "errors": 0,
           "errorRate": 0,
           "rateLimited": 0,
-          "p50": 618,
-          "p95": 620,
-          "max": 620,
-          "nhl": 34,
+          "p50": 1027,
+          "p95": 1031,
+          "max": 1032,
+          "nhl": 35,
           "odds": 1,
           "ml": 16,
           "sql": 3,
-          "appels": 51,
-          "appelsDistincts": 51,
+          "appels": 52,
+          "appelsDistincts": 52,
           "caches": {
             "nhl": {
               "h": 45,
-              "m": 267,
+              "m": 327,
               "d": 0
             },
             "manual": {
@@ -2504,19 +2633,19 @@
           "errors": 0,
           "errorRate": 0,
           "rateLimited": 0,
-          "p50": 2123,
-          "p95": 2133,
-          "max": 2133,
-          "nhl": 34,
+          "p50": 5138,
+          "p95": 5172,
+          "max": 5173,
+          "nhl": 35,
           "odds": 1500,
           "ml": 1500,
           "sql": 3000,
-          "appels": 3034,
-          "appelsDistincts": 51,
+          "appels": 3035,
+          "appelsDistincts": 52,
           "caches": {
             "nhl": {
               "h": 2250,
-              "m": 13350,
+              "m": 16350,
               "d": 0
             }
           }
@@ -2531,9 +2660,9 @@
           "errors": 0,
           "errorRate": 0,
           "rateLimited": 0,
-          "p50": 206,
-          "p95": 207,
-          "max": 208,
+          "p50": 381,
+          "p95": 385,
+          "max": 386,
           "nhl": 0,
           "odds": 1,
           "ml": 0,
@@ -2555,9 +2684,9 @@
           "errors": 0,
           "errorRate": 0,
           "rateLimited": 0,
-          "p50": 208,
-          "p95": 210,
-          "max": 210,
+          "p50": 363,
+          "p95": 372,
+          "max": 373,
           "nhl": 0,
           "odds": 50,
           "ml": 0,
@@ -2568,6 +2697,6 @@
         }
       }
     ],
-    "b9_eventloop": "\n═══ B9 · Sensibilité du compteur d'event loop ═══\n\n (résolution en vigueur dans metrics.ts : 1 ms)\n\n résolution │ au repos (mean / p99) │ BLOQUÉ (mean / p99 / max) │ écart p99\n────────────┼───────────────────────┼───────────────────────────┼──────────\n         20 │         20.06 / 20.96 │      20.81 / 26.43 / 59.7 │ ×1.3\n         10 │          10.2 / 11.07 │     10.53 / 13.11 / 13.43 │ ×1.2\n          5 │           5.15 / 5.63 │      8.49 / 10.26 / 14.13 │ ×1.8\n          1 │            1.1 / 1.21 │        1.88 / 5.48 / 11.4 │ ×4.5 ←\n\n  ✓ à la résolution 1 ms — celle en vigueur — un blocage réel ressort\n    ×4.5 par rapport au repos. Le critère S2 mesure quelque chose.\n\n  Rappel de lecture : la valeur AU REPOS est toujours ≈ la résolution. Une moyenne\n  de 20 ms avec `resolution: 20` ne veut pas dire « 20 ms de retard », elle veut dire\n  « rien à signaler ». C'est ce qui a fait conclure à tort à un event loop chargé sur\n  le tir Windows du 2026-08-03 (README §5)."
+    "b9_eventloop": "\n═══ B9 · Sensibilité du compteur d'event loop ═══\n\n (résolution en vigueur dans metrics.ts : 1 ms)\n\n résolution │ au repos (mean / p99) │ BLOQUÉ (mean / p99 / max) │ écart p99\n────────────┼───────────────────────┼───────────────────────────┼──────────\n         20 │          30.9 / 38.96 │     26.12 / 31.77 / 35.72 │ ×0.8\n         10 │         15.59 / 19.71 │     15.48 / 17.53 / 17.84 │ ×0.9\n          5 │          15.5 / 16.91 │     15.52 / 17.91 / 18.09 │ ×1.1\n          1 │         13.63 / 17.37 │      7.74 / 12.99 / 13.37 │ ×0.7 ←\n\n  ✗ à la résolution 1 ms — celle de `metrics.ts` — un process réellement\n    bloqué ne se distingue du repos que d'un facteur ×0.7. C'est dans le bruit :\n    le critère S2 « eventLoop.p99 ne grimpe pas » est intenable À RATER, ce qui n'est pas\n    la même chose qu'un critère tenu.\n    À la résolution 5 ms, le même blocage ressort ×1.1.\n    Correctif : `EVENT_LOOP_RESOLUTION_MS` dans `server/src/metrics.ts`.\n\n  Rappel de lecture : la valeur AU REPOS est toujours ≈ la résolution. Une moyenne\n  de 20 ms avec `resolution: 20` ne veut pas dire « 20 ms de retard », elle veut dire\n  « rien à signaler ». C'est ce qui a fait conclure à tort à un event loop chargé sur\n  le tir Windows du 2026-08-03 (README §5)."
   }
 }

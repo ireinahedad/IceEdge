@@ -30,10 +30,9 @@ cd C:\Users\irein\dev\ICEEDGE\server
 node ..\loadtest\bench\run.js all
 ```
 
-Un seul prérequis, et seulement pour B11 : `socket.io-client`, ajouté aux
-devDependencies du serveur — `cd server && npm install`. Pour le reste, rien :
-ni k6, ni Postgres, ni service ML, ni clé API, ni serveur démarré. **Rien ne
-sort de la machine** — c'est le point : un tir contre la
+Aucun prérequis au-delà d'un `npm install` dans `server/` : `socket.io-client`
+(devDependency, pour B11) y est déclaré. Ni k6, ni Postgres, ni service ML, ni
+clé API, ni serveur démarré. **Rien ne sort de la machine** — c'est le point : un tir contre la
 production viderait le quota The Odds API en quelques secondes.
 
 `all` écrit aussi `loadtest/bench-results.json` (résultats bruts, pour comparer
@@ -54,6 +53,7 @@ deux exécutions).
 | `BENCH_ENDURANCE_SECONDS` | 180 (120 via `all`) | durée de B13 |
 | `BENCH_SLIP_LEVELS` | `200,1000` | nombre de tickets en attente, pour B14 |
 | `BENCH_GAMES_FINAL` | 10 | matchs sur lesquels portent les tickets de B14 |
+| `REDIS_URL` | absente | **lue par le serveur, pas par le banc** : posée, elle fait basculer B12 sur l'adaptateur Redis — voir plus bas |
 
 ---
 
@@ -72,7 +72,7 @@ deux exécutions).
 | **B11** | Socket.io : arrivée simultanée dans un salon (S4) — amplification et coût Neon | fan-out linéaire ; ~0 requête par arrivée |
 | **B14** | Soirée de règlement (S6) — la file se vide-t-elle, et à quel coût ? | `exhausted` vrai ; appels NHL = nb de matchs |
 | **B13** | Endurance / fuite mémoire (S5) — le RSS atteint-il un plateau ? | plateau, dans le bruit du relevé |
-| **B12** | Deux instances : un message traverse-t-il ? (ligne D) | **non aujourd'hui — c'est le point** |
+| **B12** | Deux instances : un message traverse-t-il ? (ligne D) | sans `REDIS_URL` : **non** · avec : **oui** |
 | **B7** | **Les six premiers savent-ils échouer ?** | oui |
 | **B9** | **Le compteur d'event loop sait-il voir un blocage ?** | oui |
 
@@ -81,13 +81,50 @@ est bien cachée et bien dédoublonnée — et elle l'est. Mais un cache parfait
 chaque clé ne protège de rien si l'appelant choisit la clé : il lui suffit d'en
 demander une nouvelle à chaque requête. Le cache reste intact, et inutile.
 
-**B12 est le seul banc qui reste rouge, et c'est voulu.** Il ne teste pas du code
-à corriger : il mesure une décision d'infrastructure qui n'est pas prise (un
-adaptateur Redis pour Socket.io, donc un Redis à héberger). L'audit classe cette
-ligne 🔴 « le dernier verrou architectural » sur la foi d'une lecture de code ;
-B12 la transforme en expérience — deux instances, un lecteur sur chacune, un
-message qui ne traverse pas. Le jour où l'adaptateur arrive, ce banc passe au
-vert sans être retouché.
+**B12 a deux modes, et c'est le même banc.** Il démarre deux applications
+complètes dans deux processus, branche un lecteur sur chacune, et poste un
+message sur la première. Ce qu'il rend dépend d'une seule variable
+d'environnement, lue par le **serveur** :
+
+| | `REDIS_URL` absente | `REDIS_URL` posée |
+|---|---|---|
+| trames reçues sur A / sur B | 1 / **0** | 1 / **1** |
+| « N en ligne » annoncé par A / par B | 1 / 1 | **2 / 2** |
+| verdict | ✗ attendu — adaptateur mémoire | ✓ non-régression |
+
+Sans Redis, ce ✗ n'est pas un défaut de ce dépôt : c'est le comportement correct
+d'un déploiement à une instance. **La suite `all` tourne sans Redis**, donc B12
+y compte pour le seul ✗ — volontairement.
+
+Pour le voir passer au vert, il faut un Redis joignable :
+
+```bash
+# un Redis local quelconque suffit — rien n'y est écrit de durable
+redis-server --port 6399 --daemonize yes
+cd server && REDIS_URL=redis://127.0.0.1:6399 node ../loadtest/bench/run.js b12-multiinstance
+```
+
+```powershell
+# PowerShell
+cd C:\Users\irein\dev\ICEEDGE\server
+$env:REDIS_URL = 'redis://127.0.0.1:6399'
+node ..\loadtest\bench\run.js b12-multiinstance
+Remove-Item Env:REDIS_URL
+```
+
+C'est ce banc, et lui seul, qui prouve que l'adaptateur fait son travail : la
+bannière de démarrage dit quel adaptateur est **chargé**, pas qu'un message
+**traverse**. Deux pièges qu'il a déjà attrapés, et qui expliquent sa forme :
+
+- **La colonne « N en ligne » est mesurée séparément de la diffusion**, parce que
+  les deux ne viennent pas du même mécanisme. `io.in(salon).allSockets()` et
+  `adapter.sockets()` restent **locaux** même avec un adaptateur ; seul
+  `fetchSockets()` interroge le cluster. Un message qui traverse pendant que le
+  compte reste à 1 est donc un état possible — et c'est celui qui a été trouvé,
+  puis corrigé, le 2026-09-19.
+- **`harness.close()` ferme les clients Redis.** Sans ça, ils gardent l'event
+  loop ouverte : le banc se termine, affiche son verdict, et le processus reste
+  en vie — un orchestrateur qui attend sa sortie attend pour toujours.
 
 **B7 et B9 sont les deux contrôles, et ils closent la série.** Les autres
 rendent « ✓ » ; un banc qui ne peut pas échouer ne prouve rien, et un « ✓ » veut

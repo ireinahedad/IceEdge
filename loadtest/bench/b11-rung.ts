@@ -59,12 +59,30 @@ export async function main() {
   const sockets: any[] = [];
   const debut = Date.now();
 
-  await Promise.all(Array.from({ length: n }, () => new Promise<void>((resolve) => {
+  /**
+   * Connexions par VAGUES, et non toutes à la microseconde.
+   *
+   * POURQUOI — le pilote et le serveur partagent le même processus. Ouvrir 300
+   * poignées de main WebSocket au même instant sature le CLIENT avant le
+   * serveur : sur une machine plus lente que celle où ce banc a été écrit, une
+   * soixantaine de sockets se voyaient refuser la connexion, et le banc
+   * concluait à une diffusion incomplète — un défaut du pilote lu comme un
+   * défaut du serveur, exactement ce qu'un banc ne doit jamais faire.
+   *
+   * Les vagues restent largement assez serrées pour ce qu'on mesure : la
+   * fenêtre de coalescence du compte de présence dure une seconde, et toutes
+   * les arrivées tiennent dedans. Le « coup d'envoi » reste un coup d'envoi.
+   */
+  const TAILLE_VAGUE = envInt('BENCH_SOCKET_WAVE', 50);
+  const PAUSE_VAGUE_MS = envInt('BENCH_SOCKET_WAVE_MS', 120);
+
+  const brancherUn = () => new Promise<void>((resolve) => {
     const s = io(base, {
       auth: { token },
       transports: ['websocket'],
       forceNew: true,
       reconnection: false,
+      timeout: 20_000,
     });
     sockets.push(s);
     s.on('room_users', () => { framesRoomUsers += 1; });
@@ -77,7 +95,13 @@ export async function main() {
       // ferait dépendre la mesure de ce qu'on est en train de mesurer.
       resolve();
     });
-  })));
+  });
+
+  for (let depart = 0; depart < n; depart += TAILLE_VAGUE) {
+    const taille = Math.min(TAILLE_VAGUE, n - depart);
+    await Promise.all(Array.from({ length: taille }, brancherUn));
+    if (depart + taille < n) await sleep(PAUSE_VAGUE_MS);
+  }
 
   const msPourConnecter = Date.now() - debut;
 
@@ -111,11 +135,16 @@ export async function main() {
     observationMs,
     msPourConnecter,
     erreursSalon,
+    /** Sockets réellement dans le salon : c'est la base de comparaison des
+     *  trames, pas `n`, quand le pilote n'a pas pu tous les connecter. */
+    socketsActifs: n - erreursSalon,
     sqlTempete,
-    sqlParJoin: +(sqlTempete / n).toFixed(2),
+    // Rapporté aux sockets réellement entrés, pas à `n` : sinon une poignée
+    // de main refusée par le pilote améliorerait artificiellement le chiffre.
+    sqlParJoin: +(sqlTempete / Math.max(1, n - erreursSalon)).toFixed(2),
     detailTempete,
     framesRoomUsers: framesApresArrivee,
-    framesParJoin: +(framesApresArrivee / n).toFixed(2),
+    framesParJoin: +(framesApresArrivee / Math.max(1, n - erreursSalon)).toFixed(2),
     statusEnvoi: envoi.status,
     sqlMessage,
     framesNewMessage,

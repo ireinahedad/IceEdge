@@ -13,10 +13,13 @@
  * d'authentification plus bas pour ce que ça ouvre et ce que ça n'ouvre pas.
  */
 import { Server } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
 import type { Server as HttpServer } from 'http';
 import { verifyAccessToken } from './services/auth.service';
 import { chatService } from './services/chat.service';
 import { corsOriginCallback } from './cors';
+import { socketRedisClients } from './redis';
+import { logger } from './logger';
 
 export let io: Server;
 
@@ -35,6 +38,12 @@ export let io: Server;
 // Le coût d'une tempête de connexions devient linéaire en nombre de salons, et
 // non plus quadratique en nombre de sockets.
 const ROOM_COUNT_INTERVAL_MS = Number(process.env.ROOM_COUNT_INTERVAL_MS) || 3_000;
+
+/** Vrai quand la diffusion traverse les instances. Lu par la bannière de
+ *  démarrage — un réglage qui change silencieusement ce que le serveur fait
+ *  doit être visible sans avoir à le déduire — et par `compterSalon`, qui
+ *  n'interroge le cluster que s'il y en a un. */
+export let socketAdapter: 'memory' | 'redis' = 'memory';
 
 /** Salons dont une émission de compte est déjà programmée. */
 const roomCountTimers = new Map<string, NodeJS.Timeout>();
@@ -55,9 +64,9 @@ function scheduleRoomCount(roomId: string): void {
     // reprogrammer une émission, sinon le compte se fige.
     roomCountTimers.delete(roomId);
     try {
-      const sockets = await io.in(roomId).allSockets();
+      const total = await compterSalon(roomId);
       // Salon vide → plus personne à qui émettre ; on évite un aller-retour inutile.
-      if (sockets.size > 0) io.to(roomId).emit('room_users', sockets.size);
+      if (total > 0) io.to(roomId).emit('room_users', total);
     } catch {
       // Adaptateur indisponible / salon disparu : le compte est cosmétique,
       // on n'escalade pas.
@@ -70,6 +79,39 @@ function scheduleRoomCount(roomId: string): void {
 }
 
 /**
+ * Combien de personnes dans ce salon, sur TOUTES les instances.
+ *
+ * ⚠️ `io.in(room).allSockets()` NE COUVRE PAS LE CLUSTER, contrairement à ce
+ * que ce fichier a longtemps affirmé. Mesuré le 2026-09-19, deux instances
+ * reliées par `@socket.io/redis-adapter`, un socket sur chacune :
+ *
+ *     serverCount()      = 2   ← l'adaptateur voit bien les deux nœuds
+ *     emit()             → traverse  ← la diffusion, elle, est partagée
+ *     allSockets()       = 1   ← LOCAL
+ *     adapter.sockets()  = 1   ← LOCAL
+ *     fetchSockets()     = 2   ← cluster
+ *
+ * Autrement dit, brancher l'adaptateur répare la diffusion mais PAS ce compte :
+ * il aurait continué à annoncer « 1 en ligne » à chacun, sans erreur nulle
+ * part. C'est le genre de demi-correction qu'on ne découvre qu'en production.
+ *
+ * `fetchSockets()` rapatrie des descripteurs de socket, pas un entier : sur un
+ * salon de 2 000 personnes, ça traverse Redis à chaque émission groupée. C'est
+ * tenable PARCE QUE l'émission est coalescée à une par salon et par
+ * `ROOM_COUNT_INTERVAL_MS` (3 s par défaut) — sans cette coalescence, ce serait
+ * une mauvaise idée. Si le coût devenait visible, le levier est l'intervalle,
+ * pas le retour à un compte local qui serait faux.
+ *
+ * Sans adaptateur (mono-instance), on garde le compte local : même résultat,
+ * sans le moindre aller-retour.
+ */
+async function compterSalon(roomId: string): Promise<number> {
+  if (socketAdapter === 'memory') return localRoomSize(roomId);
+  const sockets = await io.in(roomId).fetchSockets();
+  return sockets.length;
+}
+
+/**
  * Compte local du salon, sans allocation ni parcours : `adapter.rooms` est une
  * Map de Sets, donc `.size` est en O(1).
  *
@@ -78,9 +120,9 @@ function scheduleRoomCount(roomId: string): void {
  * message sortant, vers un seul destinataire : c'est le fan-out qu'on limite,
  * pas la mesure.
  *
- * NB : local à l'instance. Le jour où l'adaptateur Redis arrive (multi-instance),
- * ce chiffre initial sous-estimera le total jusqu'à la première émission
- * groupée, qui elle passe par `allSockets()` et couvre le cluster.
+ * NB : local à l'instance, et il le reste. L'arrivant voit donc d'abord les
+ * personnes de SON conteneur, puis le total du salon à la première émission
+ * groupée — celle-ci passe par `compterSalon`, qui interroge le cluster.
  */
 function localRoomSize(roomId: string): number {
   return io.sockets.adapter.rooms.get(roomId)?.size ?? 0;
@@ -94,6 +136,38 @@ export function initSocket(httpServer: HttpServer): Server {
     cors: { origin: corsOriginCallback, credentials: true },
     path: '/socket.io',
   });
+
+  /**
+   * ── Diffusion entre instances (audit, ligne D) ────────────────────────────
+   *
+   * Sans adaptateur, `io.to(room).emit()` ne touche que les sockets de CE
+   * process : à deux instances, deux personnes du même salon ne se voient que
+   * si le répartiteur les a posées sur le même conteneur. Silencieusement.
+   *
+   * L'adaptateur Redis relaie chaque diffusion aux autres instances par
+   * pub/sub. Branché seulement si `REDIS_URL` est posé — sans lui, le
+   * comportement est EXACTEMENT celui d'avant, ce qui reste correct à une
+   * instance.
+   *
+   * ⚠️ IL NE SUFFIT PAS SEUL. L'adaptateur règle la DIFFUSION ; il ne règle pas
+   * le HANDSHAKE. Une poignée de main en HTTP long-polling s'étale sur
+   * plusieurs requêtes qui doivent toutes atteindre la même instance, faute de
+   * quoi le client reçoit des 400. La parade habituelle est l'affinité de
+   * session côté répartiteur — que **Railway ne propose pas et n'a pas prévu**.
+   * D'où le client réglé sur `transports: ['websocket']` (voir
+   * `client/src/app/hooks/useChatSocket.ts`) : une seule connexion TCP, donc
+   * plus rien à faire suivre. Les deux changements vont ensemble ; brancher
+   * celui-ci sans l'autre produirait des erreurs 400 intermittentes à la
+   * deuxième instance.
+   */
+  const clients = socketRedisClients();
+  if (clients) {
+    io.adapter(createAdapter(clients.pub, clients.sub));
+    socketAdapter = 'redis';
+    logger.info('[Socket] adaptateur Redis actif — diffusion partagée entre instances');
+  } else {
+    logger.info('[Socket] adaptateur mémoire — diffusion LOCALE à cette instance (mono-instance uniquement)');
+  }
 
   /**
    * Authentification du socket — avec, pour la première fois, un chemin invité.

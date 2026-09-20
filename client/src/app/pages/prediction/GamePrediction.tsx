@@ -221,6 +221,18 @@ export function GamePrediction({ gameId }: { gameId: string }) {
             accent={accent}
           />
           <PlayerPropGrid
+            metric="points"
+            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
+            gameId={gameId}
+            accent={accent}
+          />
+          <PlayerPropGrid
+            metric="shots"
+            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
+            gameId={gameId}
+            accent={accent}
+          />
+          <PlayerPropGrid
             metric="assists"
             sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
             gameId={gameId}
@@ -228,6 +240,21 @@ export function GamePrediction({ gameId }: { gameId: string }) {
           />
           <PlayerPropGrid
             metric="blocks"
+            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
+            gameId={gameId}
+            accent={accent}
+          />
+          <PlayerPropGrid
+            metric="hits"
+            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
+            gameId={gameId}
+            accent={accent}
+          />
+          {/* Les gardiens sont sortis des grilles de patineurs (ils n'ont ni
+              but ni passe) : sans celle-ci, ils n'auraient plus aucun marché
+              sur cette page depuis le retrait du tableau d'effectif. */}
+          <PlayerPropGrid
+            metric="saves"
             sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
             gameId={gameId}
             accent={accent}

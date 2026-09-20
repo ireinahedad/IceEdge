@@ -39,7 +39,7 @@ const PALIERS = (process.env.BENCH_SOCKET_LEVELS ?? '25,100,300').split(',').map
 
 export interface B11Row {
   n: number; intervalMs: number; observationMs: number;
-  msPourConnecter: number; erreursSalon: number;
+  msPourConnecter: number; erreursSalon: number; socketsActifs: number;
   sqlTempete: number; sqlParJoin: number;
   detailTempete: Array<{ sql: string; n: number }>;
   framesRoomUsers: number; framesParJoin: number;
@@ -74,14 +74,25 @@ export function printB11(rows: B11Row[]): void {
   const facteurN = dernier.n / premier.n;
 
   // ── 1. Amplification ────────────────────────────────────────────────────
+  //
+  // Le critère porte sur les trames PAR ARRIVÉE, pas sur le total. Le total
+  // dépend aussi de la fenêtre d'observation et de l'étalement des vagues de
+  // connexion — deux choses qui appartiennent au banc, pas au serveur. Le
+  // rapport par arrivée, lui, ne dépend que du serveur : quadratique, il suit
+  // N ; coalescé, il reste une petite constante.
   const facteurFrames = premier.framesRoomUsers ? dernier.framesRoomUsers / premier.framesRoomUsers : 0;
-  console.log(`\n  Sockets ×${facteurN.toFixed(0)}  →  trames room_users ×${facteurFrames.toFixed(1)}`);
+  const facteurParArrivee = premier.framesParJoin ? dernier.framesParJoin / premier.framesParJoin : 0;
   console.log(
-    facteurFrames <= facteurN * 1.5
-      ? `  ✓ le fan-out du compte de présence est LINÉAIRE en nombre de sockets` +
-        ` (${premier.framesParJoin} → ${dernier.framesParJoin} trames par arrivée).\n` +
-        '    La coalescence de `scheduleRoomCount` tient : pas de tempête quadratique au coup d\'envoi.'
-      : `  ✗ le fan-out croît PLUS VITE que le nombre de sockets (×${facteurFrames.toFixed(1)} pour ×${facteurN.toFixed(0)}) —` +
+    `\n  Sockets ×${facteurN.toFixed(0)}  →  trames room_users ×${facteurFrames.toFixed(1)}` +
+    `  ·  PAR ARRIVÉE : ${premier.framesParJoin} → ${dernier.framesParJoin} (×${facteurParArrivee.toFixed(2)})`,
+  );
+  console.log(
+    facteurParArrivee <= 3
+      ? `  ✓ le fan-out du compte de présence est LINÉAIRE en nombre de sockets :` +
+        ` ${dernier.framesParJoin} trames par arrivée à ${dernier.n} sockets contre ${premier.framesParJoin} à ${premier.n}.\n` +
+        '    La coalescence de `scheduleRoomCount` tient : pas de tempête quadratique au coup d\'envoi.\n' +
+        `    (Quadratique, ce rapport vaudrait ~×${facteurN.toFixed(0)}.)`
+      : `  ✗ les trames PAR ARRIVÉE suivent le nombre de sockets (×${facteurParArrivee.toFixed(1)} pour ×${facteurN.toFixed(0)}) —` +
         ' c\'est le comportement quadratique que la coalescence doit empêcher.',
   );
 
@@ -100,17 +111,28 @@ export function printB11(rows: B11Row[]): void {
   }
 
   // ── 3. Diffusion d'un message ───────────────────────────────────────────
-  const diffusionOk = rows.every((r) => r.framesNewMessage >= r.n * 0.9 && r.statusEnvoi < 400);
+  // La référence est le nombre de sockets RÉELLEMENT dans le salon. Comparer à
+  // `n` ferait passer une limite du pilote (poignées de main refusées sur une
+  // machine lente) pour une diffusion incomplète côté serveur.
+  const actifs = (r: B11Row) => r.socketsActifs ?? r.n;
+  const diffusionOk = rows.every((r) => r.framesNewMessage >= actifs(r) * 0.95 && r.statusEnvoi < 400);
   console.log(
     diffusionOk
       ? `  ✓ un message posté atteint bien tous les sockets du salon` +
-        ` (${dernier.framesNewMessage}/${dernier.n}), pour ${dernier.sqlMessage} requêtes SQL.`
-      : `  ⚠ diffusion incomplète : ${dernier.framesNewMessage}/${dernier.n} trames,` +
+        ` (${dernier.framesNewMessage}/${actifs(dernier)}), pour ${dernier.sqlMessage} requêtes SQL.`
+      : `  ⚠ diffusion incomplète : ${dernier.framesNewMessage}/${actifs(dernier)} trames,` +
         ` statut d'envoi ${dernier.statusEnvoi}.`,
   );
 
   const erreurs = rows.reduce((a, r) => a + r.erreursSalon, 0);
-  if (erreurs) console.log(`  ⚠ ${erreurs} socket(s) refusé(s) ou en erreur — la mesure porte sur les autres.`);
+  if (erreurs) {
+    console.log(
+      `  ⚠ ${erreurs} poignée(s) de main refusée(s) par le PILOTE (pas par le serveur) — il partage\n` +
+      '    le processus du serveur, donc au-delà de quelques centaines de sockets simultanés c\'est\n' +
+      '    lui qui sature en premier. La mesure porte sur les sockets réellement connectés ;\n' +
+      '    `BENCH_SOCKET_WAVE` règle la taille des vagues de connexion.',
+    );
+  }
 
   console.log(
     `  · event loop p99 pendant la tempête : ${rows.map((r) => `${r.n}→${r.eventLoop.p99Ms} ms`).join(', ')}` +

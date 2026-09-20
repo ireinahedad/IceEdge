@@ -5,7 +5,7 @@ import type { Server as HttpServer } from 'http';
 import app, { devRoutesEnabled } from './app';
 import { logger } from './logger';
 import { pool, connectDB } from './db/connection';
-import { initSocket, io } from './socket';
+import { initSocket, io, socketAdapter } from './socket';
 import { startSettlementJob } from './services/settlement.service';
 import { startValueBetScan } from './services/valueBetScan.service';
 import { startCleanupJob } from './services/cleanup.service';
@@ -14,6 +14,7 @@ import { verifyAvatarStorage } from './services/avatarStorage';
 import { verifyEncryptionKey } from './services/crypto.util';
 import { getBestBets } from './services/bestBets.service';
 import { allowedOrigins } from './cors';
+import { closeRedis, redisEnabled } from './redis';
 import { USE_MOCK } from './services/nhlApiClient';
 
 const PORT = Number(process.env.PORT) || 3001;
@@ -90,6 +91,16 @@ const DORMANT = process.env.DORMANT === 'true';
         CORS_ORIGIN:    allowedOrigins,
         EMAIL_VERIFICATION_DISABLED: process.env.EMAIL_VERIFICATION_DISABLED === 'true',
         ENABLE_DEV_ROUTES: devRoutesEnabled ? 'routes /api/dev MONTÉES' : 'routes /api/dev NON montées',
+        // Le réglage qui décide si l'application peut tourner à plus d'une
+        // instance. `memory` n'est pas une panne — c'est le bon choix à une
+        // instance — mais c'est une information qu'on ne peut PAS déduire du
+        // comportement observable tant qu'on n'a qu'un conteneur. D'où sa
+        // place ici, avec les autres variables qui changent en silence ce que
+        // le serveur fait.
+        SOCKET_ADAPTER: socketAdapter === 'redis'
+          ? 'redis (diffusion partagée entre instances)'
+          : 'mémoire (diffusion LOCALE — une seule instance supportée)',
+        REDIS_URL: redisEnabled ? 'présente' : 'ABSENTE',
       },
       '[Server] Réglages effectifs',
     );
@@ -162,6 +173,11 @@ function registerGracefulShutdown(httpServer: HttpServer): void {
       logger.error('[Server] Forced exit after shutdown timeout');
       process.exit(1);
     }, SHUTDOWN_TIMEOUT_MS);
+
+    // Les connexions Redis se ferment avec le reste : une instance qui part en
+    // laissant un abonné ouvert garde une connexion comptée côté service, et
+    // les offres gratuites plafonnent le nombre de connexions simultanées.
+    await closeRedis().catch(() => {});
     forceExit.unref();
 
     try {

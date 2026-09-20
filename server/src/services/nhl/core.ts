@@ -279,10 +279,37 @@ export const TEAM_META: Record<string, { emoji: string; color: string }> = {
 
 // --- Current season helper ------------------------------------------------
 
+/**
+ * La saison LNH en cours, au format `20262027`.
+ *
+ * ── La bascule est en SEPTEMBRE, pas en octobre ─────────────────────────────
+ *
+ * `getMonth() >= 9` (octobre) laissait tout le mois de septembre pointer sur la
+ * saison PRÉCÉDENTE. Ce n'était pas visible comme un bogue — les chiffres
+ * étaient vrais — mais c'étaient ceux de l'an dernier, présentés sans date sur
+ * une page qui parle du match de ce soir : la fiche d'une équipe affichait
+ * « 48-22-8 » en préparation d'une saison où elle n'a pas encore joué.
+ *
+ * Septembre est le mois des camps, des matchs préparatoires et des premiers
+ * paris ; c'est là que l'app doit avoir basculé. `getMonth() >= 8` = septembre.
+ *
+ * ⚠️ Conséquence à assumer, et gérée en aval : de septembre à la première
+ * rondelle, la saison en cours n'a AUCUNE donnée. `fetchTeams` met alors la
+ * fiche à zéro plutôt que de servir celle de l'an dernier, et les statistiques
+ * de joueur retombent sur la dernière saison complète EN LE DISANT
+ * (`statsSeason`) — une cadence de buts par match ne s'invente pas, mais elle
+ * ne doit pas non plus se faire passer pour celle de la saison en cours.
+ */
 export function currentSeason(): string {
   const now  = new Date();
-  const year = now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1;
+  const year = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
   return `${year}${year + 1}`;
+}
+
+/** La saison juste avant `currentSeason()` — la dernière complète, en avant-saison. */
+export function previousSeason(): string {
+  const cur = Number(currentSeason().slice(0, 4)) - 1;
+  return `${cur}${cur + 1}`;
 }
 
 /** Parses NHL's "MM:SS" time-on-ice string into decimal minutes. */

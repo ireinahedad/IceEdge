@@ -94,6 +94,22 @@ export interface PlayerLeaders {
   players: PlayerLeader[];
 }
 
+// ── Feuille de match en direct ──────────────────────────────────────────────
+/** Ce qu'un joueur a accumulé DANS CE MATCH — pas sur la saison. */
+export interface BoxscoreLine {
+  playerId: string;
+  goals: number; assists: number; points: number; shots: number;
+  hits: number; blockedShots: number; pim: number; toi: number;
+  /** Gardiens seulement. */
+  saves?: number; shotsAgainst?: number; goalsAgainst?: number; decision?: string;
+}
+export interface GameBoxscoreResponse {
+  /** `unknown` = feuille indisponible (match à venir, amont muet, mode mock). */
+  state: "scheduled" | "live" | "final" | "unknown";
+  /** Indexé par identifiant de joueur. */
+  players: Record<string, BoxscoreLine>;
+}
+
 // ── Single game detail (game charts page) ───────────────────────────────────
 export interface GameSide {
   abbr: string; name: string; score: number | null; sog: number | null;
@@ -241,6 +257,16 @@ export const nhlApiService = {
 
   getTeamLastNGamesStats: (teamId: string, n: number): Promise<NHLTeamStats> =>
     get<NHLTeamStats>(`/teams/${teamId}/last/${n}`),
+
+  /**
+   * Feuille de match EN DIRECT — les compteurs de chaque joueur pour ce match.
+   *
+   * Sert les grilles de paris joueur pendant la partie. Le serveur cache 30 s
+   * tant que le match est en cours, 6 h une fois terminé ; inutile d'ajouter un
+   * cache ici, il masquerait la fraîcheur qu'on vient d'obtenir.
+   */
+  getGameBoxscore: (gameId: string): Promise<GameBoxscoreResponse> =>
+    get<GameBoxscoreResponse>(`/games/${gameId}/boxscore`),
 
   getTeamRoster: (abbr: string): Promise<NHLPlayerInfo[]> =>
     get<NHLPlayerInfo[]>(`/teams/${abbr}/roster`),

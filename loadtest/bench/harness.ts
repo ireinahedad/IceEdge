@@ -114,6 +114,14 @@ export async function boot(opts: BootOptions = {}): Promise<Booted> {
     async close() {
       if (io) await new Promise<void>((resolve) => io!.close(() => resolve()));
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      // Les clients Redis, quand `REDIS_URL` est posé : ils gardent l'event
+      // loop ouvert, donc sans ça le banc se termine mais le PROCESSUS reste
+      // en vie — et un orchestrateur qui attend sa sortie attend pour toujours.
+      // C'est exactement ce qui est arrivé au premier essai de B12 avec Redis.
+      try {
+        const { closeRedis } = await import('../../server/src/redis');
+        await closeRedis();
+      } catch { /* module absent ou déjà fermé : rien à faire */ }
       booted = null;
     },
   };

@@ -105,6 +105,23 @@ router.get('/games/:id/detail', publicCache(TTL.LIVE), async (req, res) => {
   catch (err: any) { sendError(res, err); }
 });
 
+// Feuille de match en direct — compteurs par joueur pour CE match.
+//
+// `publicCache(TTL.LIVE)` = 30 s, et on remonte à 6 h dès que le match est
+// terminé : c'est exactement la distinction que `fetchGameBoxscoreFull` fait
+// côté serveur, et la perdre ici cacherait 30 s des feuilles définitives de la
+// saison dernière (ou, pire, figerait 6 h un match en cours si on inversait).
+//
+// Avant `/games/:id`, sinon « boxscore » serait capturé comme un identifiant.
+router.get('/games/:id/boxscore', publicCache(TTL.LIVE), async (req, res) => {
+  try {
+    const box = await nhl.getGameBoxscore(req.params.id);
+    if (box.state === 'final') res.set('Cache-Control', publicPolicy(TTL.FINAL));
+    res.json(box);
+  }
+  catch (err: any) { sendError(res, err); }
+});
+
 // Contrairement aux autres, `fetchGameById` n'a AUCUN cache serveur : chaque
 // appel part vers l'API NHL (seule la déduplication en vol de `fetchNHL` le
 // protège d'une rafale simultanée). L'en-tête HTTP est donc ici le seul cache

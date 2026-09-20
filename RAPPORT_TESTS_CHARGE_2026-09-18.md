@@ -1,6 +1,16 @@
-# Tests de charge légère — endpoints critiques ARAKICE / ICEEDGE
+# Tests de charge — ARAKICE / ICEEDGE
 
-**Date :** 2026-09-18 · **Cible :** aucune. Tout a tourné sur le vrai code du
+> **État au 2026-09-19 — campagne terminée, et le dernier ✗ est fermé.**
+> 14 bancs, les sept scénarios S1-S7 de l'audit couverts, **27 ✓ / 1 ✗** au
+> dernier passage complet sur le poste de développement — le ✗ étant B12
+> (multi-instance), qui attendait une décision d'infrastructure et non un
+> correctif de code. **Cette décision a été prise le jour même** : l'adaptateur
+> Redis est livré, et B12 rend ✓ dès que `REDIS_URL` est posée — sans avoir été
+> retouché. Huit défauts de production trouvés et corrigés au total.
+> **Le détail final est dans les addenda 4 et 5, en fin de document** — ce qui
+> suit est le journal de la campagne, dans l'ordre où elle s'est faite.
+
+**Date du premier passage :** 2026-09-18 · **Cible :** aucune. Tout a tourné sur le vrai code du
 serveur, en mémoire, avec l'amont et Postgres bouchonnés. **Zéro requête vers la
 production, zéro crédit The Odds API consommé, zéro notification push envoyée.**
 
@@ -414,8 +424,7 @@ fois, plus après, et repart pour un compte jamais vu).
 ## B11 · Socket.io — le coup d'envoi (scénario S4)
 
 N sockets rejoignant le salon « live » dans la même seconde, un processus par
-palier. `socket.io-client` est ajouté aux devDependencies — **`cd server && npm
-install`** avant de lancer ce banc.
+palier. `socket.io-client` est aux devDependencies du serveur (installé).
 
 | sockets | trames `room_users` | /arrivée | SQL | /arrivée |
 |---|---|---|---|---|
@@ -577,3 +586,208 @@ Ce qui reste hors de portée d'un banc en process, et le restera :
   préproduction.
 
 Sortie complète : `loadtest/bench-sortie-2026-09-19.txt`.
+
+---
+
+# Addendum 4 — validé sur la machine cible, 2026-09-19
+
+La suite complète a été exécutée sur le poste de développement (Windows,
+`C:\Users\irein\dev\ICEEDGE`) : **14 bancs, 691 s**. Ce n'est plus une mesure
+faite ailleurs et rapportée ici — c'est le résultat de la machine.
+
+## Ce que le passage confirme
+
+| banc | critère | résultat sur la machine |
+|---|---|---|
+| B1 | gaspillage = 0 | **0** sur les 10 endpoints |
+| B2 | 0 appel après la 1re | **0**, partout |
+| B3 | 1 exécution quel que soit N | **1** à N=10/50/200 ; `best-bets` reste à 52 appels |
+| B4 | SQL constant de 5 à 100 lignes | **constant** ; `auth/login` à 2 |
+| B5 | croissance au plus linéaire | sujets ×4,7 → appels **×1,4** ; odds **1** partout |
+| B6 | coût amont ≠ trafic | **1 appel pour 5 640 itérations** (33 840 requêtes, 0 erreur) |
+| B10 | pas de N+1, `isPro` caché | constant ; **0 lecture** pour 30 requêtes Pro |
+| B11 | fan-out linéaire, ~0 SQL/arrivée | 2 trames/arrivée ; **1 requête** pour 300 sockets |
+| B13 | plateau mémoire | plateau (~316 Mo), cache `nhl` à 60 % de hits |
+| B14 | file vidée | **1 000 tickets réglés**, `exhausted` vrai, **10 appels NHL** |
+| B7 · B9 | les bancs savent échouer | oui |
+| B12 | — | rouge, voir addendum 3 |
+
+`B14` sur 1 000 tickets : 48 s, 3,01 requêtes SQL par ticket réglé. Extrapolé
+aux 2 000 de S6, on reste très loin des dix minutes du critère.
+
+## Trois choses que ce passage a apprises, et qui sont corrigées
+
+**1. Un banc cassé que la suite complète ne pouvait pas voir.** `b6-concurrence`
+lancé SEUL plantait sur `Maximum call stack size exceeded` : une réécriture
+automatique avait transformé son `console.log` en appel récursif à lui-même.
+Invisible dans `run.js all`, qui exécute B6 en mode silencieux via `b6-emit` —
+donc le seul chemin où le bogue vivait était celui qu'on emprunte pour déboguer
+un résultat surprenant. Corrigé.
+
+**2. B11 accusait le serveur d'un défaut du pilote.** À 300 sockets sur cette
+machine, 68 poignées de main étaient refusées — par le CLIENT, qui tourne dans
+le même processus que le serveur et sature le premier. Le banc lisait
+« 232 trames pour 300 sockets » comme une diffusion incomplète. Deux correctifs :
+les connexions partent désormais par **vagues** (toutes les 300 se connectent),
+et la diffusion est comparée aux sockets **réellement entrés**, pas à `n`. Le
+critère d'amplification porte maintenant sur les trames **par arrivée** et non
+sur le total, qui dépendait de l'étalement des vagues — donc du banc.
+
+**3. Les latences de B6 décrivent le poste, pas le serveur.** Sur cette machine,
+l'event loop affiche 84 ms de p99 en **lectures seules**, sans aucune connexion :
+le pilote — 40 boucles, leurs timers, le parsing de 34 000 réponses — charge la
+boucle avant le serveur. B6 le dit maintenant explicitement et bascule sur le
+**rapport** phase B / phase A quand le repos n'est pas propre, au lieu de rendre
+un « ✗ » qui accuse le serveur. Même chose pour la latence des lectures : un
+écart au-dessus du seuil renvoie vers `BENCH_VUS` plus bas ou vers
+`/api/dev/metrics` en préproduction, où le pilote n'est pas dans le processus.
+
+C'est la limite structurelle de ces bancs, déjà écrite dans leur README : **les
+compteurs sont exacts, les latences ne le sont pas**. Le passage sur la machine
+l'a rendue concrète plutôt que théorique.
+
+## État final
+
+Suite complète après ces trois correctifs : **27 ✓ / 1 ✗**. Le ✗ est B12 —
+le multi-instance, qui attend une décision d'infrastructure et non un correctif
+de code (addendum 3).
+
+Tous les défauts trouvés au fil de la campagne sont corrigés :
+
+1. clé de cache de `best-bets` pilotable depuis l'URL ;
+2. résolution du compteur d'event loop trop grossière pour voir un blocage ;
+3. écriture inutile à chaque connexion ;
+4. la même à chaque lecture de profil ;
+5. la même à chaque ticket réglé ;
+6. cache `manual` dont le TTL ne dépassait jamais la cadence de son appelant ;
+7. une lecture Neon par socket entrant dans un salon ;
+8. plus les trois défauts de bancs ci-dessus.
+
+Sortie du dernier passage : `loadtest/bench-sortie-2026-09-19.txt`.
+
+---
+
+# Addendum 5 — la ligne D fermée, 2026-09-19
+
+B12 était le seul ✗ de la campagne, et le rapport disait qu'il attendait une
+décision d'infrastructure plutôt qu'un correctif. **La décision a été prise.**
+Ce qui suit est ce qu'elle a coûté, ce qu'elle a révélé, et ce qu'elle laisse
+en suspens.
+
+## Le correctif, en trois pièces
+
+| # | Pièce | Où |
+|---|---|---|
+| 1 | Un Redis — plugin Railway dans le même projet (réseau privé), ou Upstash en endpoint **Redis/TCP** et non REST | à provisionner, étape 2 ter de `DEPLOYMENT.md` |
+| 2 | `@socket.io/redis-adapter` + `ioredis`, derrière `REDIS_URL` | `server/src/redis.ts` (nouveau), `server/src/socket.ts` |
+| 3 | `transports: ['websocket']` côté client | `client/src/app/hooks/useChatSocket.ts` |
+
+**`REDIS_URL` absente ⇒ rien ne change.** Aucune connexion ouverte, adaptateur
+mémoire, comportement d'avant strictement identique. C'est ce qui permet de
+livrer le code **avant** de payer le service, et de garder le développement
+local sans dépendance de plus. La bannière de démarrage annonce lequel des deux
+est actif — `SOCKET_ADAPTER: redis` ou `mémoire` — pour la même raison que les
+autres lignes de ce bloc : c'est un réglage qui change en silence ce que le
+serveur fait, et qu'on ne peut pas déduire de son comportement à une instance.
+
+**Pourquoi pas de sticky sessions.** L'audit les prévoyait ; **Railway n'en
+propose pas**. Le WebSocket n'en a pas besoin — une connexion négociée une fois
+reste sur son conteneur — alors que le repli HTTP long-polling de Socket.io
+fait une requête par échange et exige, lui, l'affinité. D'où la pièce 3. Ce
+qu'elle coûte : plus de repli automatique derrière un proxy qui bloque le
+WebSocket.
+
+## Ce que B12 rend maintenant
+
+Sans `REDIS_URL` — inchangé, et c'est le bon comportement à une instance :
+
+| lecteur branché sur | trames `new_message` | « N en ligne » |
+|---|---|---|
+| instance A | 1 | 1 |
+| instance B | **0** | 1 |
+
+Avec `REDIS_URL` :
+
+| lecteur branché sur | trames `new_message` | « N en ligne » |
+|---|---|---|
+| instance A | 1 | **2** |
+| instance B | **1** | **2** |
+
+> ✓ le message a traversé les deux instances : un adaptateur relie les
+> Socket.io. La ligne D de l'audit n'est plus ouverte — ce banc sert désormais
+> de non-régression.
+
+Le banc n'a pas été retouché pour ça : c'était sa raison d'être, écrite dans son
+en-tête avant que le correctif existe.
+
+## Le défaut que ce passage a trouvé — un commentaire faux
+
+Avec l'adaptateur actif, le message traversait **mais le compte de présence
+restait à 1 de chaque côté**. Un commentaire de `socket.ts` affirmait que
+`io.in(room).allSockets()` « couvre le cluster dès qu'un adaptateur est
+branché ». Un test isolé — deux serveurs, un adaptateur, les trois appels côte
+à côte — dit le contraire :
+
+| appel | portée réelle avec adaptateur |
+|---|---|
+| `io.serverCount()` | **2** — voit bien les deux nœuds |
+| `io.to(room).emit()` | **traverse** |
+| `io.in(room).allSockets()` | **1** — local |
+| `io.of('/').adapter.sockets(room)` | **1** — local |
+| `io.in(room).fetchSockets()` | **2** — cluster |
+
+`scheduleRoomCount` utilisait `allSockets()`. Corrigé par un `compterSalon()`
+qui garde le chemin local rapide sans adaptateur et passe par `fetchSockets()`
+avec — et le commentaire faux a été remplacé par le tableau ci-dessus.
+
+**Ce défaut n'était visible d'aucune autre façon.** La bannière disait
+« adaptateur Redis actif », les logs étaient propres, les messages arrivaient.
+Seul un banc qui compte les trames et lit le compte annoncé **séparément**
+pouvait le voir. C'est l'argument de toute la campagne, appliqué à son propre
+correctif.
+
+## Un défaut de banc, aussi
+
+Premier essai avec Redis : B12 affichait son verdict… et le processus ne
+rendait jamais la main. `harness.close()` fermait le serveur HTTP et Socket.io,
+pas les clients Redis — qui gardent l'event loop ouverte. Un banc qui se termine
+sans que son processus sorte bloque n'importe quel orchestrateur qui attend sa
+sortie. `close()` ferme maintenant les connexions Redis avant de rendre la main.
+
+## Ce qui reste de la ligne D
+
+**Le limiteur de débit est toujours par process.** `InMemoryRateLimitStore` pour
+le chat, aucun `store:` configuré sur les limiteurs `express-rate-limit` : à N
+instances, l'autorisation réelle est N× celle annoncée. Ce n'est pas une
+régression — c'était déjà vrai — mais c'est désormais **la seule** mémoire de
+process qui compte vraiment, le Redis étant là pour l'accueillir. Deux nuances
+que la ligne D de l'audit annonçait mal, et qui sont corrigées dans l'audit :
+`RedisRateLimitStore` n'est **pas** déjà écrit (seule l'interface existe), et le
+quota LLM n'est plus concerné — il est en base depuis la migration 024.
+
+**Ce qui n'est pas mesuré par B12** : la latence ajoutée par un aller-retour
+Redis réel (le banc en interroge un en local, sur la boucle locale), le comportement sous coupure
+prolongée du service, et la consommation mémoire du Redis lui-même en soirée de
+match. Le sens de la panne, lui, est choisi et lisible dans le code : erreurs en
+`warn`, reconnexion indéfinie, diffusion qui redevient locale en attendant —
+dégradé, jamais mort.
+
+## À faire sur la machine cible
+
+Deux nouvelles dépendances dans `server/package.json`
+(`@socket.io/redis-adapter`, `ioredis`) : **`cd server && npm install`** avant le
+prochain passage des bancs. Le `package-lock.json` n'a volontairement pas été
+modifié ici — il doit être résolu sur la machine qui déploie.
+
+Pour voir B12 au vert en local, il faut un Redis joignable — n'importe lequel,
+rien n'y est écrit de durable :
+
+```powershell
+cd C:\Users\irein\dev\ICEEDGE\server
+$env:REDIS_URL = 'redis://127.0.0.1:6399'
+node ..\loadtest\bench\run.js b12-multiinstance
+Remove-Item Env:REDIS_URL
+```
+
+Sans Redis, `all` reste à **27 ✓ / 1 ✗** — et ce ✗ dit désormais
+« adaptateur mémoire », pas « décision non prise ».

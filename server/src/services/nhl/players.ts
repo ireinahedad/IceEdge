@@ -7,6 +7,7 @@ import { MOCK_TOP_PLAYERS, MOCK_PLAYER_BY_ID } from '../../data/mockNhl';
 import {
   USE_MOCK,
   currentSeason,
+  previousSeason,
   fetchNHL,
   fetchNHLSearch,
   fetchStats,
@@ -14,6 +15,42 @@ import {
   parseToiMinutes,
   setCached,
 } from './core';
+
+/* ─── Quelle saison porte les statistiques d'un joueur ───────────────────────
+ *
+ * `seasonTotals` était lu par `seasons[seasons.length - 1]` — la dernière ligne
+ * du tableau, quelle qu'elle soit. Tant que la bascule de `currentSeason()`
+ * était en octobre, ça tombait juste par accident. Depuis qu'elle est en
+ * septembre, la dernière ligne EST la saison écoulée pendant six semaines,
+ * et ces totaux se seraient affichés comme ceux de la saison en cours.
+ *
+ * On choisit donc explicitement, et on DIT lequel des deux cas s'applique :
+ *
+ *   • la saison en cours existe et compte au moins un match → on la prend ;
+ *   • sinon → la dernière saison complète, avec `statsSeason` qui porte son
+ *     identifiant, pour que l'écran puisse écrire « 2025-26 » à côté.
+ *
+ * Pourquoi ne pas simplement rendre des zéros en avant-saison : une cadence de
+ * buts par match est la SEULE base des prédictions joueur. À zéro, toutes les
+ * tuiles tombent au plancher de 3 % et la page ne dit plus rien. La dernière
+ * saison complète est la meilleure estimation disponible — à condition d'être
+ * datée, ce qu'elle n'était pas.
+ */
+export function pickSeasonRow(seasonTotals: any[]): { cur: any; statsSeason: string } {
+  const season = currentSeason();
+  const nhl = (seasonTotals ?? []).filter(
+    (s: any) => s.leagueAbbrev === 'NHL' && s.gameTypeId === 2,
+  );
+  const inSeason = nhl.find((s: any) => String(s.seasonId) === season);
+  if (inSeason && (inSeason.gamesPlayed ?? 0) > 0) {
+    return { cur: inSeason, statsSeason: season };
+  }
+  const last = nhl[nhl.length - 1];
+  return {
+    cur: last ?? {},
+    statsSeason: last?.seasonId != null ? String(last.seasonId) : previousSeason(),
+  };
+}
 
 /* ─── Tirs bloqués et mises en échec ─────────────────────────────────────────
  *
@@ -64,8 +101,23 @@ export interface RealtimeLine { blockedShots: number; hits: number }
  * L'échec n'est PAS mis en cache : un amont momentanément muet ne doit pas
  * condamner ces marchés pour la demi-heure qui suit.
  */
-export async function fetchSkaterRealtime(): Promise<Map<string, RealtimeLine>> {
-  const season = currentSeason();
+export async function fetchSkaterRealtime(season?: string): Promise<Map<string, RealtimeLine>> {
+  // Sans saison demandée : la saison en cours, et à défaut la dernière
+  // complète. En avant-saison la première est vide — retomber sur la seconde
+  // garde les marchés « tirs bloqués » et « mises en échec » alignés sur les
+  // totaux de buts et de passes, qui font la même bascule (`pickSeasonRow`).
+  // Mêler les deux donnerait une ligne aux buts de 2025-26 et aux blocs de
+  // 2026-27.
+  const wanted = season ? [season] : [currentSeason(), previousSeason()];
+  for (const sid of wanted) {
+    const table = await realtimeForSeason(sid);
+    if (table.size > 0) return table;
+  }
+  return new Map();
+}
+
+/** Une saison précise du rapport `realtime`. Table vide = rien reçu. */
+async function realtimeForSeason(season: string): Promise<Map<string, RealtimeLine>> {
   const cacheKey = `realtime_${season}`;
   const cached = getCached<Map<string, RealtimeLine>>(cacheKey);
   if (cached) return cached;
@@ -91,7 +143,10 @@ export async function fetchSkaterRealtime(): Promise<Map<string, RealtimeLine>> 
     return out;
   }
 
-  setCached(cacheKey, out, 30 * 60_000);
+  // Une réponse vide n'est PAS mise en cache : en avant-saison, la saison en
+  // cours se remplit au premier match, et on ne veut pas la déclarer vide pour
+  // la demi-heure qui suit.
+  if (out.size > 0) setCached(cacheKey, out, 30 * 60_000);
   return out;
 }
 
@@ -153,6 +208,23 @@ function seasonCounts(cur: any) {
     shots:     cur.shots     ?? 0,
     shotPct:   cur.shootingPctg != null ? Math.round(cur.shootingPctg * 1000) / 10 : 0,
     ppPoints:  cur.powerPlayPoints ?? 0,
+    /**
+     * Lignes de GARDIEN — `undefined` pour un patineur, et c'est ce qui les
+     * distingue en aval.
+     *
+     * `seasonTotals` les porte depuis toujours ; seul `fetchPlayerById` les
+     * lisait, et `fetchTeamRoster` ne les a jamais remontées. Conséquence :
+     * l'effectif d'une équipe arrivait au client avec ses gardiens réduits à
+     * des lignes de zéros, et rien côté écran ne pouvait proposer un marché
+     * d'arrêts sans aller chercher chaque gardien un par un.
+     *
+     * `shotsAgainst` et `goalsAgainst` plutôt que « arrêts » directement :
+     * l'API ne donne pas les arrêts, c'est une soustraction — et la faire ici
+     * l'enfermerait, alors que les deux nombres bruts servent aussi au % d'arrêts.
+     */
+    shotsAgainst: cur.shotsAgainst ?? undefined,
+    goalsAgainst: cur.goalsAgainst ?? undefined,
+    savePct:      cur.savePctg     ?? undefined,
   };
 }
 
@@ -174,11 +246,8 @@ export async function fetchPlayerById(playerId: string): Promise<any> {
   const cached = getCached<any>(key);
   if (cached) return cached;
 
-  const data    = await fetchNHL<any>(`v1/player/${playerId}/landing`);
-  const seasons = (data.seasonTotals ?? []).filter(
-    (s: any) => s.leagueAbbrev === 'NHL' && s.gameTypeId === 2
-  );
-  const cur  = seasons[seasons.length - 1] ?? {};
+  const data = await fetchNHL<any>(`v1/player/${playerId}/landing`);
+  const { cur, statsSeason } = pickSeasonRow(data.seasonTotals);
   const abbr = data.currentTeamAbbrev ?? '';
   const pts  = cur.points ?? 0;
   const gp   = cur.gamesPlayed ?? 1;
@@ -189,7 +258,7 @@ export async function fetchPlayerById(playerId: string): Promise<any> {
   // Un gardien n'y figure pas (rapport « skater ») : la table rend `undefined`,
   // ce qui est correct — un gardien ne bloque pas de tirs au sens de cette
   // statistique.
-  const realtime = await fetchSkaterRealtime().catch(() => new Map<string, RealtimeLine>());
+  const realtime = await fetchSkaterRealtime(statsSeason).catch(() => new Map<string, RealtimeLine>());
   const rt = realtime.get(String(data.playerId));
 
   const player = {
@@ -216,6 +285,15 @@ export async function fetchPlayerById(playerId: string): Promise<any> {
      */
     blockedShots:   rt?.blockedShots,
     hits:           rt?.hits,
+    /**
+     * La saison à laquelle se rapportent TOUS les nombres ci-dessus.
+     *
+     * En avant-saison, ce n'est pas `currentSeason()` — c'est la dernière
+     * saison complète (voir `pickSeasonRow`). L'écran doit l'écrire : « 32 buts »
+     * sans année, sur une page qui parle du match de ce soir, se lit comme
+     * « 32 buts cette saison ».
+     */
+    statsSeason,
     /** Temps de jeu moyen par match, en MINUTES décimales (l'API donne "18:42"). */
     avgToi:         parseToiMinutes(cur.avgToi),
     lastFive:    [] as number[],
@@ -285,6 +363,8 @@ export async function fetchTeamRoster(abbr: string): Promise<any[]> {
     Promise.allSettled(
       allPlayers.map(p => fetchNHL<any>(`v1/player/${p.id}/landing`))
     ),
+    // Sans argument : saison en cours, à défaut la dernière complète — la
+    // même bascule que `pickSeasonRow` fait sur les totaux de chaque joueur.
     fetchSkaterRealtime(),
   ]);
 
@@ -293,11 +373,8 @@ export async function fetchTeamRoster(abbr: string): Promise<any[]> {
     const roster = allPlayers[i];
     const res    = statsResults[i];
     if (res.status === 'rejected') continue;
-    const data   = res.value as any;
-    const seasons = (data.seasonTotals ?? []).filter(
-      (s: any) => s.leagueAbbrev === 'NHL' && s.gameTypeId === 2
-    );
-    const cur  = seasons[seasons.length - 1] ?? {};
+    const data = res.value as any;
+    const { cur, statsSeason } = pickSeasonRow(data.seasonTotals);
     const pts  = cur.points ?? 0;
     const gp   = Math.max(cur.gamesPlayed ?? 1, 1);
     out.push({
@@ -312,6 +389,8 @@ export async function fetchTeamRoster(abbr: string): Promise<any[]> {
       // `fetchSkaterRealtime`. Un zéro se lirait « n'a rien bloqué ».
       blockedShots: realtime.get(String(roster.id))?.blockedShots,
       hits:         realtime.get(String(roster.id))?.hits,
+      /** Saison de ces totaux — la grille de paris l'affiche en en-tête. */
+      statsSeason,
       gamesPlayed: gp,
       lastFive:    [] as number[],
       winImpact:   Math.min(99, Math.round((pts / gp) * 100)),

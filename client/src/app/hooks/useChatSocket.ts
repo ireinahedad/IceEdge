@@ -112,7 +112,27 @@ export function useChatSocket(roomId: string | null) {
     let refreshTried = false;
 
     const socket = socketIO(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
+      /**
+       * WebSocket SEULEMENT — et ce n'est pas une optimisation.
+       *
+       * Une poignée de main en HTTP long-polling s'étale sur PLUSIEURS requêtes
+       * qui doivent toutes atteindre la MÊME instance : sinon le serveur qui
+       * reçoit la deuxième ne connaît pas la session ouverte par la première et
+       * répond 400. La parade habituelle est l'affinité de session côté
+       * répartiteur — que **Railway ne propose pas, et n'a pas prévu de
+       * proposer**.
+       *
+       * En WebSocket, tout tient dans une seule connexion TCP longue : il n'y a
+       * plus rien à faire suivre, donc plus besoin d'affinité. C'est ce qui rend
+       * la 2ᵉ instance possible, avec l'adaptateur Redis côté serveur
+       * (`server/src/redis.ts`). Les deux vont ensemble.
+       *
+       * Contrepartie : un réseau qui bloque les WebSockets n'a plus de repli.
+       * En pratique c'est très rare aujourd'hui, et le chat est déjà inutilisable
+       * sans temps réel — un repli en polling qui ne reçoit jamais les nouveaux
+       * messages ne vaut pas mieux qu'une absence de connexion.
+       */
+      transports: ['websocket'],
       path: '/socket.io',
       // Callback form, not a literal: reading the token is async since R3.6.
       // Socket.io calls this before each (re)connection, so a token refreshed

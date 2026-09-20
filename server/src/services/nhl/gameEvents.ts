@@ -73,15 +73,56 @@ function normalizeGoalie(p: any): BoxscorePlayerStats {
 }
 
 /**
- * Fetches the final boxscore for a game and returns a Map of playerId → stats,
- * for both rosters combined. Returns null if the boxscore can't be fetched or
- * parsed — callers must treat that as "can't settle yet", never as zero stats.
+ * L'état d'un match tel que l'annonce le boxscore lui-même.
+ *
+ * Même table que `parseGameState` dans `teamsAndGames.ts` — dupliquée plutôt
+ * qu'importée pour ne pas faire dépendre ce module de celui-là pour six lignes
+ * (les deux sont des feuilles du même dossier, et `teamsAndGames` est le plus
+ * lourd des deux).
  */
-export async function fetchGameBoxscore(gameId: string): Promise<Map<string, BoxscorePlayerStats> | null> {
+function boxscoreState(raw: unknown): 'scheduled' | 'live' | 'final' {
+  const MAP: Record<string, 'scheduled' | 'live' | 'final'> = {
+    FUT: 'scheduled', PRE: 'scheduled',
+    LIVE: 'live',     CRIT: 'live',
+    FINAL: 'final',   OVER: 'final', OFF: 'final',
+  };
+  return MAP[String(raw ?? '')] ?? 'scheduled';
+}
+
+/**
+ * Feuille de match d'une partie : playerId → statistiques, les deux formations
+ * réunies. `null` quand le boxscore ne peut être ni récupéré ni lu — les
+ * appelants doivent le traiter comme « on ne sait pas encore », JAMAIS comme
+ * des statistiques à zéro.
+ *
+ * ── Le cache dépend de l'état du match ──────────────────────────────────────
+ *
+ * Il était de 6 heures, sans condition, sous le commentaire « Final boxscores
+ * never change ». C'était vrai de l'unique appelant de l'époque — le règlement
+ * des paris, qui ne lit un match qu'une fois terminé — et faux de l'endpoint :
+ * `v1/gamecenter/:id/boxscore` se met à jour PENDANT la partie. La première
+ * lecture d'un match en cours gelait donc ses chiffres pour six heures, c'est-
+ * à-dire pour tout le match et une bonne partie de la soirée.
+ *
+ * Trois régimes, alignés sur ceux que `nhlApiClient` applique déjà ailleurs :
+ *
+ *   • `final`     → 6 h. Un match terminé ne change effectivement plus.
+ *   • `live`      → 30 s. Les grilles de paris joueur affichent ces compteurs
+ *                   en direct ; au-delà d'une demi-minute, l'écran ment.
+ *   • `scheduled` → AUCUN cache. Le boxscore d'un match à venir est une coquille
+ *                   vide ; la mettre en cache ferait démarrer le match avec des
+ *                   zéros figés, et 30 s de retard sur le premier but.
+ */
+export interface GameBoxscore {
+  state: 'scheduled' | 'live' | 'final';
+  players: Map<string, BoxscorePlayerStats>;
+}
+
+export async function fetchGameBoxscoreFull(gameId: string): Promise<GameBoxscore | null> {
   if (USE_MOCK) return null; // no boxscore data in mock mode — player props stay pending
 
   const cacheKey = `box:${gameId}`;
-  const cached = getCached<Map<string, BoxscorePlayerStats>>(cacheKey);
+  const cached = getCached<GameBoxscore>(cacheKey);
   if (cached) return cached;
 
   let data: any;
@@ -94,27 +135,40 @@ export async function fetchGameBoxscore(gameId: string): Promise<Map<string, Box
   const stats = data?.playerByGameStats;
   if (!stats) return null;
 
-  const out = new Map<string, BoxscorePlayerStats>();
+  const players = new Map<string, BoxscorePlayerStats>();
   try {
     for (const side of [stats.awayTeam, stats.homeTeam]) {
       if (!side) continue;
       for (const p of [...(side.forwards ?? []), ...(side.defense ?? [])]) {
         const s = normalizeSkater(p);
-        out.set(s.playerId, s);
+        players.set(s.playerId, s);
       }
       for (const p of side.goalies ?? []) {
         const s = normalizeGoalie(p);
-        out.set(s.playerId, s);
+        players.set(s.playerId, s);
       }
     }
   } catch {
     return null; // unexpected shape → don't guess, let settlement stay pending
   }
 
-  if (out.size === 0) return null;
-  // Final boxscores never change — cache for a long time.
-  setCached(cacheKey, out, 6 * 60 * 60_000);
+  if (players.size === 0) return null;
+
+  const out: GameBoxscore = { state: boxscoreState(data.gameState), players };
+  if (out.state === 'final')     setCached(cacheKey, out, 6 * 60 * 60_000);
+  else if (out.state === 'live') setCached(cacheKey, out, 30_000);
+  // `scheduled` : rien en cache — voir l'en-tête ci-dessus.
+
   return out;
+}
+
+/**
+ * La feuille seule — signature d'origine, conservée pour le règlement des
+ * paris, qui n'a que faire de l'état (il ne lit que des matchs terminés).
+ */
+export async function fetchGameBoxscore(gameId: string): Promise<Map<string, BoxscorePlayerStats> | null> {
+  const full = await fetchGameBoxscoreFull(gameId);
+  return full?.players ?? null;
 }
 
 // --- Scoring plays (goal order + strength state, used for first/last goal

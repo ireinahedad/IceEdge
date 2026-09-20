@@ -297,8 +297,13 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
           {/* Paris joueur du club, en grille — le match sélectionné les suit,
               pour qu'ils se règlent sur cette affiche. */}
           <PlayerPropGrid metric="goals"   sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
+          <PlayerPropGrid metric="points"  sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
+          <PlayerPropGrid metric="shots"   sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
           <PlayerPropGrid metric="assists" sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
           <PlayerPropGrid metric="blocks"  sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
+          <PlayerPropGrid metric="hits"    sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
+          {/* Gardiens — seule grille où ils apparaissent. */}
+          <PlayerPropGrid metric="saves"   sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
         </RevealModeCtx.Provider>
       </BetOddsCtx.Provider>
 
