@@ -29,10 +29,20 @@ vi.mock('../logger', () => ({
 }));
 vi.mock('./jobLock', () => ({ withJobLock: vi.fn() }));
 
-const applyXpDelta = vi.fn(async () => {});
+/**
+ * Le rest parameter n'est pas décoratif : `vi.fn(async () => {})` donne au
+ * bouchon une signature à ZÉRO paramètre, et l'indirection ci-dessous lui
+ * transmet un `unknown[]` — d'où TS2556. L'indirection, elle, est obligatoire :
+ * les fabriques de `vi.mock` sont remontées au-dessus des `const`, donc
+ * référencer `applyXpDelta` directement dedans le prendrait dans sa zone morte.
+ */
+const applyXpDelta = vi.fn(async (..._args: unknown[]) => {});
 vi.mock('./slip.service', () => ({
   applyXpDelta: (...a: unknown[]) => applyXpDelta(...a),
-  xpForOutcome: (outcome: string) => (outcome === 'win' ? 100 : -40),
+  // Même signature que le vrai `xpForOutcome`, pour que le bouchon ne dérive
+  // pas du module qu'il remplace.
+  xpForOutcome: (outcome: 'win' | 'loss', _combinedProbability: number | null) =>
+    (outcome === 'win' ? 100 : -40),
 }));
 
 const fetchGameById         = vi.fn();
