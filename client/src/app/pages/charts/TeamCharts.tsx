@@ -324,7 +324,17 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
                   {rows.map(({ p, s, vsObj }) => (
                     <tr
                       key={p.id}
-                      onClick={() => navigate(`/stats/chart/player/${p.id}`)}
+                      onClick={() =>
+                        navigate(
+                          // On est chez un club : sa fiche joueur reste chez
+                          // lui (`?player=`), pour garder les couleurs de
+                          // l'en-tête et un retour qui remonte au club. Sans
+                          // club (sélecteur vide), la fiche ligue fait foi.
+                          teamId
+                            ? `/stats/chart/team/${teamId.toLowerCase()}/players?player=${p.id}`
+                            : `/stats/chart/player/${p.id}`,
+                        )
+                      }
                       className="border-t border-white/[0.06] cursor-pointer hover:bg-white/[0.04] transition-colors"
                     >
                       <td className="px-4 py-2.5 sticky left-0 z-10 whitespace-nowrap" style={{ background: BG_CARD }}>

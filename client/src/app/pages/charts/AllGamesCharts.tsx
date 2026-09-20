@@ -10,7 +10,7 @@ import { useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 import { useSport } from "../../context/SportContext";
 import { useI18n } from "../../i18n";
-import { nhlLogoUrl } from "../../data/teamEmoji";
+import { nhlLogoUrl, teamAccent } from "../../data/teamEmoji";
 import { nhlApiService } from "../../services/nhlApiService";
 import type { NHLGame } from "../../types/bet";
 import { MetricChips, RowsSkeleton, SortHead } from "./ChartControls";
@@ -23,6 +23,16 @@ import { BG_CARD, BG_CELL, DASH, SortDir, selectCls } from "./chartsTheme";
  * Scoped to one month at a time — a full season is ~1300 games, which is a lot
  * of rows to fetch and render at once when the useful view is "what happened
  * recently". The month list is built from the season bounds the NHL reports.
+ *
+ * `teamSpace` réutilise cette même page comme section « matchs » de l'espace
+ * d'un club (`/stats/chart/team/mtl/games`). Rien n'est dupliqué : le filtre
+ * par équipe existait déjà, il est simplement tenu par l'URL au lieu de l'être
+ * par le sélecteur. Deux conséquences, et ce sont les seules :
+ *   - changer d'équipe dans le sélecteur CHANGE D'ESPACE (on navigue) au lieu
+ *     de filtrer sur place, sinon la barre colorée de l'en-tête annoncerait un
+ *     club et le tableau en montrerait un autre ;
+ *   - un match ouvert d'ici emporte `state.fromTeam`, pour que son fil
+ *     d'Ariane remonte chez le club et non vers « tous les matchs ».
  */
 type GMetric = {
   key: string;
@@ -53,7 +63,7 @@ function addDaysIso(iso: string, n: number): string {
 
 type GameRange = "5d" | "10d" | "month";
 
-export function AllGamesCharts() {
+export function AllGamesCharts({ teamSpace }: { teamSpace?: string }) {
   const { t, lang } = useI18n();
   const { theme } = useSport();
   const navigate = useNavigate();
@@ -63,8 +73,16 @@ export function AllGamesCharts() {
   const [today, setToday] = useState<string>("");
   const [months, setMonths] = useState<{ y: number; m: number }[]>([]);
   const [cursor, setCursor] = useState<{ y: number; m: number } | null>(null);
-  const [range, setRange] = useState<GameRange>("5d");
-  const [team, setTeam] = useState<string>("");
+  // Cinq jours suffisent pour la ligue entière — trente-deux clubs jouent tous
+  // les soirs. Pour UN club, la même fenêtre ne montre souvent qu'un match et
+  // aucun résultat : l'espace d'une équipe s'ouvre donc sur le mois.
+  const [range, setRange] = useState<GameRange>(teamSpace ? "month" : "5d");
+  // Le club de l'espace courant, s'il y en a un. DÉRIVÉ de l'URL plutôt que
+  // recopié dans l'état : passer d'un club à l'autre ne remonte pas ce
+  // composant, un `useState` initial resterait bloqué sur le premier.
+  const scopedTeam = (teamSpace ?? "").toUpperCase();
+  const [pickedTeam, setPickedTeam] = useState<string>("");
+  const team = scopedTeam || pickedTeam;
   // Full league list, so the picker stays stable when the range changes — a
   // team derived only from the loaded games would vanish and blank the select.
   const [teamOptions, setTeamOptions] = useState<string[]>([]);
@@ -201,6 +219,10 @@ export function AllGamesCharts() {
 
   const skeleton = <RowsSkeleton count={6} />;
 
+  // Ouvert depuis un club : la fiche du match doit savoir d'où l'on vient. Son
+  // URL est la même partout, elle ne peut pas le déduire seule.
+  const openState = scopedTeam ? { state: { fromTeam: scopedTeam.toLowerCase() } } : undefined;
+
   return (
     <div className="flex flex-col gap-4">
       {/* Header + range + team filter */}
@@ -209,6 +231,7 @@ export function AllGamesCharts() {
           <p className="text-white font-bold text-base">{t("chart.allGames.title")}</p>
           <p className="text-[#8a9ea6] text-xs">
             {t("chart.allGames.note", { n: games.length, month: rangeLabel })}
+            {scopedTeam && <span style={{ color: teamAccent(scopedTeam) }}> · {t("chart.teamSpace.only")}</span>}
           </p>
         </div>
 
@@ -251,10 +274,15 @@ export function AllGamesCharts() {
             </select>
           )}
 
-          {/* Filters what's already loaded — no refetch. */}
+          {/* Filters what's already loaded — no refetch. Dans l'espace d'un
+              club, le même sélecteur change d'espace : voir l'en-tête. */}
           <select
             value={team}
-            onChange={(e) => setTeam(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (!scopedTeam) { setPickedTeam(next); return; }
+              navigate(next ? `/stats/chart/team/${next.toLowerCase()}/games` : "/stats/chart/all-games");
+            }}
             className={selectCls}
             style={{ background: BG_CELL, color: team ? accent : "#8a9ea6" }}
             aria-label={t("chart.team")}
@@ -299,7 +327,7 @@ export function AllGamesCharts() {
                     {upcoming.map((g) => (
                       <tr
                         key={g.id}
-                        onClick={() => navigate(`/stats/chart/game/${g.id}`)}
+                        onClick={() => navigate(`/stats/chart/game/${g.id}`, openState)}
                         className="border-t border-white/[0.06] cursor-pointer hover:bg-white/[0.04] transition-colors"
                       >
                         {matchupCell(g)}
@@ -360,7 +388,7 @@ export function AllGamesCharts() {
                     {past.map((g) => (
                       <tr
                         key={g.id}
-                        onClick={() => navigate(`/stats/chart/game/${g.id}`)}
+                        onClick={() => navigate(`/stats/chart/game/${g.id}`, openState)}
                         className="border-t border-white/[0.06] cursor-pointer hover:bg-white/[0.04] transition-colors"
                       >
                         {matchupCell(g)}

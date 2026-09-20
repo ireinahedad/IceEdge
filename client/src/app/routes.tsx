@@ -125,7 +125,17 @@ export const router = createBrowserRouter([
       { path: "/stats",                              element: withSuspense(<StatsPage />)                    },
       { path: "/schedule",                           element: withSuspense(<SchedulePage />)                 },
       { path: "/stats/prediction/:type/:id",         element: withSuspense(<PredictionPage />)               },
+      // La section Statistiques, sur trois routes qui mènent toutes à ChartPage :
+      //   /stats/chart                     son accueil — les trois entrées
+      //   /stats/chart/:type/:id?          les vues ligue et les fiches
+      //   /stats/chart/:type/:id/:section  l'espace d'un club (ses matchs, ses joueurs)
+      // La troisième a un segment de plus que la deuxième : elles ne peuvent
+      // pas se disputer une URL. Son premier segment reste `:type` et non le
+      // littéral « team » : ChartPage aiguille sur `type`, et un littéral ne
+      // remplit pas ce paramètre — la page retomberait sur son accueil.
+      { path: "/stats/chart",                        element: withSuspense(<ChartPage />)                    },
       { path: "/stats/chart/:type/:id?",             element: withSuspense(<ChartPage />)                    },
+      { path: "/stats/chart/:type/:id/:section",     element: withSuspense(<ChartPage />)                    },
       { path: "/bet",                                element: withSuspense(<BetBuilderPage />)               },
       { path: "/league",                             element: withSuspense(<LeaguePage />)                   },
       { path: "/nhl-predictions",                    element: withSuspense(<NHLPredictionsPage />)           },

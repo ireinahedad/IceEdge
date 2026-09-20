@@ -223,11 +223,15 @@ export function StatsPage() {
             ))}
           </div>
           {/* L'entrée « Statistiques » : un bandeau pleine largeur sous les
-              rondelles, plutôt qu'une pastille serrée à côté d'elles. */}
+              rondelles, plutôt qu'une pastille serrée à côté d'elles.
+              Il menait droit à « toutes les équipes » ou « tous les joueurs »
+              selon l'onglet ouvert ici ; depuis que la section a un accueil,
+              il y mène — les trois entrées y sont côte à côte et expliquées,
+              et c'est de là que part aussi l'espace d'un club. */}
           <FramedLabel
             className="framed-label--banner mb-2 md:mb-3"
             text={t("stats.statistics")}
-            onClick={() => navigate(activeFilter === 2 ? "/stats/chart/all-players" : "/stats/chart/all-teams")}
+            onClick={() => navigate("/stats/chart")}
           />
           <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2 md:py-2.5">
             <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />

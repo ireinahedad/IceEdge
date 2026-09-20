@@ -708,6 +708,30 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "chart.allPlayers.title":  { en: "Top Players",       fr: "Meilleurs joueurs" },
   "chart.allPlayers.note":   { en: "Top {n} by {metric}", fr: "Top {n} par {metric}" },
   "chart.rank":              { en: "#",                 fr: "#" },
+
+  // ── Page d'accueil des statistiques (/stats/chart) ──
+  // Les trois mêmes entrées que les pastilles de l'en-tête, en grand : c'est
+  // le point de départ de la section, et le seul endroit où elles sont
+  // expliquées. Les mêmes libellés servent aux pastilles (`chart.team`,
+  // `chart.game`, `chart.player`) — un bouton ne doit pas changer de nom
+  // entre l'accueil et l'en-tête.
+  "chart.home":              { en: "Statistics home",   fr: "Accueil statistiques" },
+  "chart.home.subtitle":     { en: "Pick where to start — then dig into a single club, game or player.",
+                               fr: "Choisis par où commencer — puis entre dans un club, un match ou un joueur." },
+  "chart.home.teamsDesc":    { en: "Standings, goal differential and special teams for all 32 clubs.",
+                               fr: "Classement, différentiel de buts et unités spéciales des 32 clubs." },
+  "chart.home.gamesDesc":    { en: "Results and upcoming games, with totals and margins.",
+                               fr: "Résultats et matchs à venir, avec totaux et écarts." },
+  "chart.home.playersDesc":  { en: "League leaders season by season, skaters and goalies.",
+                               fr: "Meneurs de la ligue saison par saison, patineurs et gardiens." },
+  "chart.home.pickTeam":     { en: "Or go straight into a club", fr: "Ou entre directement dans un club" },
+  "chart.home.pickTeamNote": { en: "Its games and its players stay inside that club's colours.",
+                               fr: "Ses matchs et ses joueurs restent aux couleurs du club." },
+
+  // ── Espace d'une équipe (/stats/chart/team/:abbr/…) ──
+  "chart.teamSpace.games":   { en: "{team} · games",    fr: "{team} · matchs" },
+  "chart.teamSpace.players": { en: "{team} · players",  fr: "{team} · joueurs" },
+  "chart.teamSpace.only":    { en: "This club only",    fr: "Ce club seulement" },
   "pred.llmAnalysis":    { en: "LLM Analysis",          fr: "Analyse LLM" },
   "pred.markets":        { en: "Markets",               fr: "Marchés" },
   "pred.hideAll":        { en: "👁 Hide all",           fr: "👁 Masquer tout" },

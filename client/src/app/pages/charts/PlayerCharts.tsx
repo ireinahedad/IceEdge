@@ -27,15 +27,33 @@ import { BG_CARD, BG_CELL, DASH, int, seasonLabel, selectCls } from "./chartsThe
  * stat line in for a side-by-side comparison, plus a points-share pie chart.
  * Reuses the team charts' player-seasons endpoint for both the main player and
  * whoever is picked to compare against.
+ *
+ * `teamSpace` réutilise cette même page comme section « joueurs » de l'espace
+ * d'un club (`/stats/chart/team/mtl/players`). L'équipe n'est alors plus un
+ * choix mais l'espace où l'on se trouve : elle vient de l'URL, et en changer
+ * fait changer d'espace. Le joueur regardé, lui, reste un choix — il vit dans
+ * `?player=`, une query string plutôt qu'un segment de chemin, pour que l'URL
+ * continue d'être celle du club : c'est elle qui donne à l'en-tête ses
+ * couleurs et au fil d'Ariane son point de remontée.
  */
-export function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) {
+export function PlayerCharts({
+  initialPlayerId,
+  teamSpace,
+}: {
+  initialPlayerId?: string;
+  teamSpace?: string;
+}) {
   const { t } = useI18n();
   const { theme } = useSport();
   const navigate = useNavigate();
   const accent = theme.accent;
 
   const [teams, setTeams] = useState<NHLTeamInfo[]>([]);
-  const [teamAbbr, setTeamAbbr] = useState<string>("");
+  // DÉRIVÉE de l'URL dans l'espace d'un club : passer de Montréal à Toronto ne
+  // remonte pas ce composant, un état initial resterait bloqué sur le premier.
+  const scopedTeam = (teamSpace ?? "").toLowerCase();
+  const [pickedTeam, setPickedTeam] = useState<string>("");
+  const teamAbbr = scopedTeam || pickedTeam;
   const [playerSeasons, setPlayerSeasons] = useState<TeamPlayerSeasons | null>(null);
   const [playerId, setPlayerId] = useState<string>(initialPlayerId ?? "");
   const [season, setSeason] = useState<number | null>(null);
@@ -64,12 +82,14 @@ export function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) 
   useEffect(() => {
     if (bootRef.current) return;
     bootRef.current = true;
-    if (!initialPlayerId) return;
+    // Dans l'espace d'un club, l'équipe est déjà connue : l'aller-retour
+    // serait une requête pour rien, et sa réponse écraserait l'espace courant.
+    if (!initialPlayerId || scopedTeam) return;
     nhlApiService
       .getPlayer(initialPlayerId)
-      .then((info) => { if (info?.teamAbbr) setTeamAbbr(info.teamAbbr.toLowerCase()); })
+      .then((info) => { if (info?.teamAbbr) setPickedTeam(info.teamAbbr.toLowerCase()); })
       .catch(() => {});
-  }, [initialPlayerId]);
+  }, [initialPlayerId, scopedTeam]);
 
   // Roster seasons for the chosen team → drives the player + season dropdowns.
   useEffect(() => {
@@ -97,9 +117,17 @@ export function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) 
   }, [teamAbbr]);
 
   // Keep the URL in sync so a chosen player is shareable / refresh-safe.
+  // Dans l'espace d'un club l'URL reste CELLE DU CLUB — sinon l'en-tête
+  // perdrait ses couleurs et le retour ne saurait plus où remonter.
   useEffect(() => {
-    if (playerId) navigate(`/stats/chart/player/${playerId}`, { replace: true });
-  }, [playerId, navigate]);
+    if (!playerId) return;
+    navigate(
+      scopedTeam
+        ? `/stats/chart/team/${scopedTeam}/players?player=${playerId}`
+        : `/stats/chart/player/${playerId}`,
+      { replace: true },
+    );
+  }, [playerId, scopedTeam, navigate]);
 
   const skaters = playerSeasons?.skaters ?? [];
   const goalies = playerSeasons?.goalies ?? [];
@@ -201,7 +229,14 @@ export function PlayerCharts({ initialPlayerId }: { initialPlayerId?: string }) 
           </div>
         )}
         <div className="flex flex-col gap-1.5 shrink-0">
-          <TeamSelect value={teamAbbr} onChange={setTeamAbbr} teams={teamOptions} />
+          <TeamSelect
+            value={teamAbbr}
+            onChange={(next) => {
+              if (!scopedTeam) { setPickedTeam(next); return; }
+              navigate(next ? `/stats/chart/team/${next}/players` : "/stats/chart/all-players");
+            }}
+            teams={teamOptions}
+          />
           <select
             value={playerId}
             onChange={(e) => setPlayerId(e.target.value)}

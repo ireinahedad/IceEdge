@@ -74,6 +74,25 @@ function liftIfDark(hex: string): string {
   return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
 }
 
+/**
+ * Couleur d'identité d'une ÉQUIPE, utilisable comme accent d'interface.
+ *
+ * Même règle que `legAccent` — la primaire du club, relevée si elle est trop
+ * sombre pour se voir sur la glace de nuit — mais prise par abréviation plutôt
+ * qu'en fouillant une jambe de coupon. C'est ce que la barre de navigation de
+ * l'espace d'une équipe (page Statistiques) peint sur ses trois pastilles :
+ * les mêmes boutons qu'en accueil, aux couleurs du club où l'on se trouve.
+ *
+ * Le repli (`#3A4A55`) est identique à celui de `legAccent` : une ardoise
+ * relevée, pour qu'une abréviation inconnue reste lisible au lieu de disparaître.
+ */
+export function teamAccent(abbr?: string): string {
+  if (!abbr) return '#3A4A55';
+  const { primary } = teamColors(abbr);
+  if (primary === '#1B2A33') return '#3A4A55';   // repli de teamColors
+  return liftIfDark(primary);
+}
+
 export function legAccent(leg: {
   subjectId?:      string;
   selectionValue?: string;
