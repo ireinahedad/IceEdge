@@ -13,6 +13,15 @@ export interface SlipLeg {
   gameId?:         string;
   /** Machine-readable selection ('over' | 'under' | team abbr…) — required for automatic settlement. */
   selectionValue?: string;
+  /**
+   * Issue de CETTE sélection, posée par le serveur au fil des matchs.
+   *
+   * Absente tant que le match n'est pas terminé — y compris sur un pari en
+   * cours dont d'autres sélections sont déjà décidées. Le serveur n'écrit
+   * jamais `unknown` et n'efface jamais un résultat déjà posé
+   * (`settlement.service.ts`), donc « absente » se lit toujours « pas encore ».
+   */
+  result?: 'win' | 'loss' | 'void';
 }
 
 export interface BetSlip {

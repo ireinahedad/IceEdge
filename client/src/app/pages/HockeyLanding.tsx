@@ -137,12 +137,24 @@ export function HockeyLanding() {
         ]);
         if (cancelled) return;
 
+        // Mise au jeu la plus PROCHE en premier. L'ordre venait de l'amont
+        // (trié par date puis par identifiant de match) : à l'intérieur d'une
+        // journée, un match de 22 h pouvait passer devant celui de 19 h.
+        const byFaceoff = (a: (typeof live)[number], b: (typeof live)[number]) => {
+          const ms = (g: (typeof live)[number]) => {
+            const iso = g.startTimeUTC ? new Date(g.startTimeUTC).getTime() : NaN;
+            return Number.isFinite(iso) ? iso : Number.MAX_SAFE_INTEGER;
+          };
+          const d = ms(a) - ms(b);
+          return d !== 0 ? d : String(a.id).localeCompare(String(b.id));
+        };
+
         let scheduled: typeof live = [];
         let label = t("home.tonightGames");
         for (const { offset, d, dateStr } of days) {
           scheduled = range.filter((g) =>
             String(g.gameDate ?? "").slice(0, 10) === dateStr &&
-            ["scheduled", "live", "preview"].includes(g.status));
+            ["scheduled", "live", "preview"].includes(g.status)).sort(byFaceoff);
           if (scheduled.length > 0) {
             if (offset === 1) label = t("home.tomorrowGames");
             else if (offset > 1) label = t("home.gamesOn", { date: d.toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" }) });

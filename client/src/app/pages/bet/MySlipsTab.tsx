@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
-import { Lock, Share2, Clock, History, Trophy, AlertCircle, RefreshCw, MessageSquare, X } from "lucide-react";
+import { Lock, Share2, Clock, History, Trophy, AlertCircle, RefreshCw, MessageSquare, X, Check, Minus } from "lucide-react";
 import { profileApiService } from "../../services/userService";
 import type { ChatRoom } from "../../types/user";
 import { getMySlips, settleMySlips } from "../../services/slipApiService";
@@ -156,6 +156,72 @@ function ShareToRoomSheet({ slip, onClose }: { slip: BetSlip; onClose: () => voi
   );
 }
 
+// ─── Issue d'une sélection ────────────────────────────────────────────────────
+
+/**
+ * Le ✓ / ✗ posé à côté d'UNE sélection.
+ *
+ * Il apparaît aussi sur un pari EN COURS : le serveur décide chaque sélection
+ * au fur et à mesure que son match se termine et conserve le résultat sans
+ * régler le ticket (`settlement.service.ts`). Un parlay de trois matchs dont
+ * deux sont joués se lit donc ligne par ligne, au lieu de trois lignes
+ * identiques jusqu'au dernier coup de sifflet.
+ *
+ * La pastille garde sa place même sans résultat — un cercle vide plutôt que
+ * rien — sinon les lignes se décalent latéralement dès qu'un match se termine.
+ */
+function LegResultMark({ result, slipPending }: { result?: string; slipPending: boolean }) {
+  const { t } = useI18n();
+
+  if (result === "win") {
+    return (
+      <span title={t("slip.legWon")} aria-label={t("slip.legWon")} role="img"
+        className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+        style={{ background: "rgba(34,197,94,0.16)", border: "1px solid rgba(34,197,94,0.45)" }}>
+        <Check size={10} className="text-green-400" strokeWidth={3} />
+      </span>
+    );
+  }
+  if (result === "loss") {
+    return (
+      <span title={t("slip.legLost")} aria-label={t("slip.legLost")} role="img"
+        className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+        style={{ background: "rgba(248,113,113,0.16)", border: "1px solid rgba(248,113,113,0.45)" }}>
+        <X size={10} className="text-red-400" strokeWidth={3} />
+      </span>
+    );
+  }
+  if (result === "void") {
+    return (
+      <span title={t("slip.legVoid")} aria-label={t("slip.legVoid")} role="img"
+        className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+        style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.18)" }}>
+        <Minus size={10} className="text-[#8a9ea6]" strokeWidth={3} />
+      </span>
+    );
+  }
+  // Sans résultat, deux situations différentes — et les confondre ferait passer
+  // une sélection jamais jugée pour une sélection encore en jeu :
+  //   · pari en cours  → cercle vide, « pas encore décidée » ;
+  //   · pari déjà réglé → tiret, « non évaluée » (marché sans règle de
+  //     règlement, ou ticket antérieur à la conservation du détail).
+  if (!slipPending) {
+    return (
+      <span title={t("slip.legUnknown")} aria-label={t("slip.legUnknown")} role="img"
+        className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+        style={{ background: "rgba(255,255,255,0.04)" }}>
+        <Minus size={10} className="text-[#4a6068]" strokeWidth={3} />
+      </span>
+    );
+  }
+  return (
+    <span title={t("slip.legPending")} aria-label={t("slip.legPending")} role="img"
+      className="w-4 h-4 rounded-full flex-shrink-0"
+      style={{ border: "1px dashed rgba(255,255,255,0.20)" }}
+    />
+  );
+}
+
 // ─── Slip card (My Slips) ─────────────────────────────────────────────────────
 
 function SlipCard({ slip }: { slip: BetSlip }) {
@@ -259,6 +325,7 @@ function SlipCard({ slip }: { slip: BetSlip }) {
             <span className="text-[11px] font-bold flex-shrink-0" style={{ color: combinedColor }}>
               {leg.probability}%
             </span>
+            <LegResultMark result={leg.result} slipPending={isPending} />
           </div>
         ))}
       </div>
@@ -364,11 +431,15 @@ export function MySlipsTab({ user }: { user: any }) {
       if (summary.settled > 0) {
         setError(`TIER_UP:${summary.settled} slip${summary.settled > 1 ? "s" : ""} settled — ${summary.wins} won, ${summary.losses} lost`);
         setTimeout(() => setError(null), 4000);
-        await load();
       } else {
         setError("TIER_UP:No finished games yet — check back later");
         setTimeout(() => setError(null), 3000);
       }
+      // Rechargement INCONDITIONNEL : même sans ticket réglé, la passe vient
+      // peut-être de décider une sélection d'un pari en cours (le ✓ ligne par
+      // ligne). Ne recharger que sur `settled > 0` laissait l'écran figé alors
+      // que le serveur avait du neuf à montrer.
+      await load();
     } catch (err: any) {
       setError(err.message ?? "Failed to check results");
       setTimeout(() => setError(null), 3000);

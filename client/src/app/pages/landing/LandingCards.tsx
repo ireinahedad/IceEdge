@@ -8,9 +8,7 @@
 
 import { useNavigate } from "react-router";
 import { IceedgeLogo } from "../../components/brand/IceedgeLogo";
-import type { BetLeg } from "../../types/bet";
 import { useSport } from "../../context/SportContext";
-import { useBet } from "../../context/BetContext";
 import { useI18n } from "../../i18n";
 import { openBet } from "../../services/bookmakers";
 import { features } from "../../platform";
@@ -97,45 +95,59 @@ function EdgeBadge({ edge }: { edge: number }) {
   );
 }
 
-// ─── Ajout rapide « domicile gagne » ───────────────────────────────────────────
+// ─── Étiquette de jour d'un match ─────────────────────────────────────────────
 
 /**
- * Pari moneyline de l'équipe à domicile, ajouté d'un geste depuis l'accueil.
- * Partagé par la carte de match en direct et la ligne de match à venir ;
- * seul le suffixe de `gameInfo` change (« Live » ou l'heure du match).
+ * « Auj. », « Demain », sinon « mar. 22 sept. ».
+ *
+ * Lue sur `startTimeUTC` — l'INSTANT de la mise au jeu, ramené au fuseau de la
+ * personne — et non sur `gameDate`, qui est le jour NHL : un match du mardi
+ * 19 h ET porte déjà la date du mercredi en UTC. `gameDate` ne sert que de
+ * repli, et il est découpé à la main plutôt que passé à `new Date()`, qui
+ * lirait « 2026-09-22 » comme minuit UTC et pourrait reculer d'un jour.
  */
-function useHomeMoneyline(game: DisplayGame, when: string | undefined) {
-  const { addLeg, hasLeg } = useBet();
+function gameDayLabel(game: DisplayGame, lang: string): string | null {
+  const locale = lang === "fr" ? "fr-CA" : "en-US";
+  let d: Date | null = null;
+  if (game.startTimeUTC) {
+    const parsed = new Date(game.startTimeUTC);
+    if (!Number.isNaN(parsed.getTime())) d = parsed;
+  }
+  if (!d && game.gameDate) {
+    const [y, m, day] = game.gameDate.slice(0, 10).split("-").map(Number);
+    if (y && m && day) d = new Date(y, m - 1, day);
+  }
+  if (!d) return null;
 
-  const legId = `${game.id}-moneyline-${game.team1.id}`;
-  const isAdded = hasLeg(legId);
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOfDay(d) - startOfDay(new Date())) / 86_400_000);
+  if (days === 0) return lang === "fr" ? "Auj." : "Today";
+  if (days === 1) return lang === "fr" ? "Demain" : "Tmrw";
+  return d.toLocaleDateString(locale, { weekday: "short", month: "short", day: "numeric" });
+}
 
+// ─── Probabilités et edge d'une carte de match ────────────────────────────────
+
+/**
+ * Ce que les deux cartes de l'accueil affichent d'un match : les deux
+ * probabilités du modèle et l'écart avec le prix du book.
+ *
+ * ── Ce bloc portait aussi l'AJOUT RAPIDE, retiré le 2026-09-20 ──────────────
+ *
+ * Un « + » sur la ligne de match (et son jumeau « Ajouter » sur la carte en
+ * direct) inscrivait d'un geste le moneyline de l'équipe à DOMICILE, puis
+ * passait au ✓ vert. Deux problèmes : rien à l'écran ne disait quelle
+ * sélection venait d'être posée — on croyait ouvrir le match, on repartait
+ * avec un pari — et le ✓ ne se défaisait pas depuis l'accueil, il fallait
+ * aller le retirer dans le pari. « Plus de paris » reste le chemin, et il
+ * montre ce qu'on choisit.
+ */
+function useGameEdge(game: DisplayGame) {
   const homePct = game.team1.winPct;
   const awayPct = game.team2.winPct;
-  // Pas de probabilité modèle → pas d'edge, et pas d'ajout au coupon.
+  // Pas de probabilité modèle → pas d'edge à afficher.
   const edge = game.bet365Home != null && homePct != null ? calcEdge(homePct, game.bet365Home) : 0;
-
-  function quickAdd(e: React.MouseEvent) {
-    e.stopPropagation();
-    if (isAdded || homePct == null) return;
-    const leg: BetLeg = {
-      id: legId,
-      marketType: "moneyline",
-      marketLabel: "Moneyline",
-      subjectType: "game",
-      subjectId: game.id,
-      subjectName: `${game.team1.abbr} vs ${game.team2.abbr}`,
-      subjectLogo: game.team1.logo,
-      selection: `${game.team1.name} to win`,
-      selectionShort: `${game.team1.abbr} ML`,
-      probability: homePct,
-      gameInfo: `${game.team1.abbr} vs ${game.team2.abbr} · ${when}`,
-      addedAt: new Date().toISOString(),
-    };
-    addLeg(leg);
-  }
-
-  return { isAdded, homePct, awayPct, edge, quickAdd };
+  return { homePct, awayPct, edge };
 }
 
 // ─── Hockey live game card ─────────────────────────────────────────────────────
@@ -145,7 +157,7 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
   const accent = theme.accent;
   const { t } = useI18n();
   const navigate = useNavigate();
-  const { isAdded, homePct, awayPct, edge, quickAdd } = useHomeMoneyline(game, "Live");
+  const { homePct, awayPct, edge } = useGameEdge(game);
 
   return (
     <div
@@ -160,16 +172,6 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
         </span>
         <div className="flex items-center gap-1.5 min-w-0">
           <EdgeBadge edge={edge} />
-          <button
-            onClick={quickAdd}
-            className={`text-[11px] px-2.5 py-0.5 rounded-full border font-medium flex-shrink-0 transition-colors ${
-              isAdded
-                ? "bg-green-500/15 border-green-500/30 text-green-400"
-                : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
-            }`}
-          >
-            {isAdded ? t("home.added") : t("home.add")}
-          </button>
           <button
             onClick={(e) => { e.stopPropagation(); onOpenSheet(); }}
             className="text-[11px] text-[#bfc8cc] border border-white/20 px-2 py-0.5 rounded-full flex-shrink-0 active:bg-white/5"
@@ -238,9 +240,10 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
 export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: () => void }) {
   const { theme } = useSport();
   const accent = theme.accent;
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const navigate = useNavigate();
-  const { isAdded, homePct, awayPct, edge, quickAdd } = useHomeMoneyline(game, game.time);
+  const { homePct, awayPct, edge } = useGameEdge(game);
+  const day = gameDayLabel(game, lang);
 
   return (
     <div
@@ -249,8 +252,11 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
     >
       <div className="flex items-center gap-3">
 
-        {/* Time column */}
-        <div className="flex flex-col items-center min-w-[38px] flex-shrink-0">
+        {/* Colonne date + heure.
+            La date manquait : la section de l'accueil peut porter les matchs
+            de demain ou d'après-demain, et « 19:00 » seul ne dit pas lequel. */}
+        <div className="flex flex-col items-center min-w-[52px] flex-shrink-0">
+          {day && <span className="text-[#bfc8cc] text-[11px] whitespace-nowrap">{day}</span>}
           <span className="text-xs font-medium" style={{ color: accent }}>{game.time}</span>
           <span className="text-[#bfc8cc] text-[11px]">ET</span>
         </div>
@@ -279,20 +285,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
 
         {/* Actions column */}
         <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-          <div className="flex items-center gap-1.5">
-            {edge >= 8 && <EdgeBadge edge={edge} />}
-            <button
-              onClick={quickAdd}
-              className={`tap-44 w-8 h-8 rounded-xl border flex items-center justify-center text-sm font-bold transition-colors ${
-                isAdded
-                  ? "bg-green-500/15 border-green-500/30 text-green-400"
-                  : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
-              }`}
-              title={isAdded ? t("home.addedSlip") : t("home.addToSlip", { name: game.team1.abbr })}
-            >
-              {isAdded ? "✓" : "+"}
-            </button>
-          </div>
+          {edge >= 8 && <EdgeBadge edge={edge} />}
           {/* O/U info */}
           {game.overUnder && (
             <div className="text-right">

@@ -914,6 +914,52 @@ export function resolveSlipOutcome(results: LegResult[]): 'win' | 'loss' | 'void
   return 'void';
 }
 
+/**
+ * Résultats de jambe d'un ticket qui RESTE en attente.
+ *
+ * POURQUOI. `results` n'était conservé que lorsque le ticket se réglait. Un
+ * pari en cours dont deux matchs sur trois sont terminés n'avait donc RIEN à
+ * montrer : l'écran affichait trois lignes identiques, alors que le serveur
+ * venait de décider deux d'entre elles et les jetait. C'est l'information la
+ * plus regardée d'un pari en cours — « est-ce que ça tient toujours ? ».
+ *
+ * Deux règles, et elles comptent :
+ *
+ *   · on n'écrit JAMAIS `unknown`. Une jambe indécise n'a pas de résultat ; le
+ *     mot dans le JSON ferait une écriture par passe pour ne rien dire.
+ *   · on ne RETIRE jamais un résultat déjà posé. Un amont momentanément muet
+ *     (NHL API en panne, match introuvable) redonne `unknown` : effacer le ✓
+ *     de la veille ferait clignoter l'écran sans qu'aucun fait n'ait changé.
+ *
+ * L'écriture est donc rare — au plus une par jambe et par ticket, le jour où
+ * son match devient final — et le `WHERE outcome = 'pending'` empêche d'écraser
+ * les jambes d'un ticket qu'une passe concurrente vient de régler.
+ */
+async function persistPartialLegResults(
+  slipId:  string,
+  legs:    any[],
+  results: LegResult[],
+): Promise<void> {
+  let changed = false;
+  const next = legs.map((leg, i) => {
+    const r = results[i] ?? 'unknown';
+    if (r === 'unknown' || leg?.result === r) return leg;
+    changed = true;
+    return { ...leg, result: r };
+  });
+  if (!changed) return;
+
+  try {
+    await pool.query(
+      `UPDATE bet_slips SET legs = $1::jsonb WHERE id = $2 AND outcome = 'pending'`,
+      [JSON.stringify(next), slipId],
+    );
+  } catch (err: any) {
+    // Le détail d'affichage ne doit jamais faire tomber la passe de règlement.
+    logger.warn({ err: err?.message, slipId }, '[Settlement] résultats partiels non enregistrés');
+  }
+}
+
 export async function settlePendingSlips(userId?: string, opts: SettleOptions = {}): Promise<SettlementSummary> {
   const max      = opts.max      ?? SETTLE_MAX_DEFAULT;
   const budgetMs = opts.budgetMs ?? SETTLE_BUDGET_DEFAULT_MS;
@@ -965,7 +1011,13 @@ export async function settlePendingSlips(userId?: string, opts: SettleOptions = 
         (leg) => settleLeg(leg, cache, boxCache, scoringCache, faceoffCache));
 
       const outcome = resolveSlipOutcome(results);
-      if (!outcome) continue;                 // au moins une jambe encore indécise
+      if (!outcome) {
+        // Au moins une jambe encore indécise : le ticket reste en attente,
+        // mais les jambes DÉJÀ décidées sont conservées pour l'écran
+        // (voir `persistPartialLegResults`).
+        await persistPartialLegResults(slip.id, legs, results);
+        continue;
+      }
       // Jambes qui FONT partie du pari — tout sauf les annulées. Une jambe
       // encore indécise en fait partie (le coupon n'est réglé ici que parce
       // qu'une autre est perdue, celle-là aurait pu être gagnée) ; une jambe

@@ -297,12 +297,18 @@ export function BetBuilderPage() {
             {submitResult.message && (
               <p className="text-[#92A08A] text-sm mb-6">{submitResult.message}</p>
             )}
+            {/* Verrouiller un pari mène au pari, pas à l'accueil.
+                Avant : « Back to Home ». On venait de poser un ticket et
+                l'écran renvoyait à la page d'accueil — il fallait revenir ici
+                puis changer d'onglet pour voir ce qu'on venait de verrouiller.
+                Le bouton bascule maintenant sur l'onglet des paris en cours,
+                où le ticket apparaît en tête de liste. */}
             <button
-              onClick={() => { clearSlip(); navigate("/"); }}
+              onClick={() => { setSubmitResult(null); setTab("slips"); }}
               className="w-full py-3 rounded-2xl font-bold text-sm"
               style={{ background: "#86d1ea", color: "#072E49" }}
             >
-              Back to Home
+              {t("slip.seeActive")}
             </button>
           </div>
         </div>

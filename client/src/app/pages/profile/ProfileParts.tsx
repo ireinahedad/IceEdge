@@ -7,7 +7,7 @@
  */
 
 import type { UserProfile, UserBettingStats } from "./../../types/user";
-import { ScoreRing, HitRateChart, MarketBreakdown, CalibrationCard } from "./ProfileComponents";
+import { ScoreRing, HitRateChart, MarketBreakdown } from "./ProfileComponents";
 import { FrozenName } from "../../components/brand/FrozenName";
 import { useI18n } from "../../i18n";
 
@@ -227,7 +227,6 @@ export function OverviewTab({ profile, stats }: { profile: UserProfile; stats: U
         </div>
       </div>
       <HitRateChart stats={stats} />
-      <CalibrationCard stats={stats} />
       <MarketBreakdown stats={stats} />
       <div className="flex items-center justify-center gap-2 py-2">
         <span className="text-white/70 text-[11px]">

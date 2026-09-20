@@ -66,6 +66,25 @@ export function ScoreRing({
 
 // ─── Monthly hit-rate sparkline ───────────────────────────────────────────────
 
+const CHART_H = 56;
+const CHART_W = 280;
+
+/**
+ * Courbe du taux de réussite mensuel.
+ *
+ * ⚠️ DEUX CAS QUI CASSAIENT CE COMPOSANT, et qui ne sont pas théoriques : ils
+ * sont l'état NORMAL d'un compte neuf. Tant que les statistiques sortaient
+ * d'une table vide, personne ne les voyait.
+ *
+ *   0 mois — `Math.max(...[])` vaut `-Infinity`, `min` vaut `Infinity`, chaque
+ *            `y` part en `NaN` et le `step` se calcule sur `length - 1 = -1`.
+ *            Le `<path>` reçoit `d="MNaN,NaN"`, que le navigateur ignore en
+ *            silence : une carte vide, aucune erreur en console.
+ *   1 mois — `step = W / 0 = Infinity`. Même silence.
+ *
+ * D'où la sortie anticipée ci-dessous, et le `span` pour le point unique : un
+ * seul mois n'est pas une tendance, on l'affiche comme une valeur.
+ */
 export function HitRateChart({
   stats,
 }: {
@@ -73,40 +92,53 @@ export function HitRateChart({
 }) {
   const { t } = useI18n();
   const months = stats.monthlyStats;
-  const max = Math.max(...months.map((m) => m.hitRate));
-  const min = Math.min(...months.map((m) => m.hitRate)) - 5;
-  const H = 56;
-  const W = 280;
-  const step = W / (months.length - 1);
 
-  const pts = months.map((m, i) => {
-    const x = i * step;
-    const y =
-      H - ((m.hitRate - min) / (max - min)) * H;
-    return `${x},${y}`;
-  });
+  const header = (
+    <div className="flex items-center justify-between mb-3">
+      <p className="text-white text-xs font-medium">
+        {t("profile.hitRateTrend")}
+      </p>
+      <span className="text-[#90C9F0] text-xs font-bold">
+        {stats.hitRate}% season avg
+      </span>
+    </div>
+  );
 
-  const area = `M${pts.join(" L")} L${
-    (months.length - 1) * step
-  },${H} L0,${H} Z`;
+  if (months.length === 0) {
+    return (
+      <div className="icy-card rounded-2xl p-4">
+        {header}
+        <p className="text-white/40 text-[11px] leading-relaxed">
+          {t("profile.noTrendYet")}
+        </p>
+      </div>
+    );
+  }
 
+  // Échelle verticale. Le `- 5` garde une amplitude non nulle quand tous les
+  // mois affichent le même taux : sans lui, `(hitRate - min) / (max - min)`
+  // diviserait par zéro sur une courbe parfaitement plate.
+  const max  = Math.max(...months.map((m) => m.hitRate));
+  const min  = Math.min(...months.map((m) => m.hitRate)) - 5;
+  const span = max - min || 1;
+
+  // Un seul mois : pas de segment à tracer, on pose le point au centre.
+  const step = months.length > 1 ? CHART_W / (months.length - 1) : 0;
+  const xAt  = (i: number) => (months.length > 1 ? i * step : CHART_W / 2);
+  const yAt  = (hitRate: number) => CHART_H - ((hitRate - min) / span) * CHART_H;
+
+  const pts  = months.map((m, i) => `${xAt(i)},${yAt(m.hitRate)}`);
   const line = `M${pts.join(" L")}`;
+  const area = `${line} L${xAt(months.length - 1)},${CHART_H} L${xAt(0)},${CHART_H} Z`;
 
   return (
     <div className="icy-card rounded-2xl p-4">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-white text-xs font-medium">
-          {t("profile.hitRateTrend")}
-        </p>
-        <span className="text-[#90C9F0] text-xs font-bold">
-          {stats.hitRate}% season avg
-        </span>
-      </div>
+      {header}
 
       <svg
-        viewBox={`0 0 ${W} ${H}`}
+        viewBox={`0 0 ${CHART_W} ${CHART_H}`}
         className="w-full"
-        style={{ height: H }}
+        style={{ height: CHART_H }}
       >
         <defs>
           <linearGradient
@@ -129,31 +161,32 @@ export function HitRateChart({
           </linearGradient>
         </defs>
 
-        <path d={area} fill="url(#chartFill)" />
-        <path
-          d={line}
-          fill="none"
-          stroke="#90C9F0"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        {months.length > 1 && (
+          <>
+            <path d={area} fill="url(#chartFill)" />
+            <path
+              d={line}
+              fill="none"
+              stroke="#90C9F0"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </>
+        )}
 
         {months.map((m, i) => (
           <circle
             key={i}
-            cx={i * step}
-            cy={
-              H -
-              ((m.hitRate - min) / (max - min)) * H
-            }
+            cx={xAt(i)}
+            cy={yAt(m.hitRate)}
             r="3"
             fill="#90C9F0"
           />
         ))}
       </svg>
 
-      <div className="flex justify-between mt-2">
+      <div className={`flex mt-2 ${months.length > 1 ? "justify-between" : "justify-center"}`}>
         {months.map((m, i) => (
           <span key={i} className="text-white/70 text-[11px]">
             {m.month}
@@ -177,6 +210,12 @@ export function MarketBreakdown({
       <p className="text-white text-xs font-medium mb-3">
         {t("profile.perfByMarket")}
       </p>
+
+      {stats.marketBreakdown.length === 0 && (
+        <p className="text-white/40 text-[11px] leading-relaxed">
+          {t("profile.noMarketYet")}
+        </p>
+      )}
 
       <div className="flex flex-col gap-2.5">
         {stats.marketBreakdown.map((m) => (
@@ -212,69 +251,6 @@ export function MarketBreakdown({
             </div>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Calibration indicator ────────────────────────────────────────────────────
-
-export function CalibrationCard({
-  stats,
-}: {
-  stats: UserBettingStats;
-}) {
-  const { t } = useI18n();
-  const score = stats.calibrationScore;
-  const color =
-    score >= 80
-      ? "#86d1ea"
-      : score >= 65
-      ? "#90C9F0"
-      : "#facc15";
-
-  const label =
-    score >= 80
-      ? t("profile.calWell")
-      : score >= 65
-      ? t("profile.calDecent")
-      : t("profile.calNeedsWork");
-
-  const desc =
-    score >= 80
-      ? t("profile.calDescHigh")
-      : score >= 65
-      ? t("profile.calDescMid")
-      : t("profile.calDescLow");
-
-  return (
-    <div className="icy-card rounded-2xl p-4">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-white text-xs font-medium">
-          {t("profile.modelCalibration")}
-        </p>
-        <span className="text-xs font-bold" style={{ color }}>
-          {score}/100 · {label}
-        </span>
-      </div>
-
-      <div className="w-full bg-white/5 rounded-full h-2 mb-2">
-        <div
-          className="h-2 rounded-full transition-all duration-700"
-          style={{
-            width: `${score}%`,
-            backgroundColor: color,
-          }}
-        />
-      </div>
-
-      <p className="text-white/70 text-[11px] leading-relaxed">
-        {desc}
-      </p>
-
-      <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/20">
-             <span className="text-white/40 text-[11px]">{t("profile.calibration")}</span>
-        <span className="text-xs font-bold" style={{ color }}>{score}/100</span>
       </div>
     </div>
   );

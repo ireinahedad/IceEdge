@@ -49,14 +49,22 @@ export function ProfilePage() {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Scroll vers la section pondération quand on arrive depuis le bouton des règles.
+  // Défilement vers une section précise des paramètres quand on arrive depuis
+  // un raccourci : le bouton des règles (`focus=weights`) et, depuis
+  // l'accueil, « Réglages des alertes » (`focus=notifications`).
+  //
+  // L'onglet est FORCÉ ici : arriver sur l'aperçu puis chercher à faire défiler
+  // vers un élément qui n'est pas monté ne fait rien du tout, en silence.
   useEffect(() => {
-    if (searchParams.get("focus") === "weights") {
-      const t = setTimeout(() => {
-        document.getElementById("rules-weights")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 300);
-      return () => clearTimeout(t);
-    }
+    const target = { weights: "rules-weights", notifications: "notifications" }[
+      searchParams.get("focus") ?? ""
+    ];
+    if (!target) return;
+    setTab("settings");
+    const timer = setTimeout(() => {
+      document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 300);
+    return () => clearTimeout(timer);
   }, [searchParams]);
 
   // Apparence sombre / claire. La lecture et l'écriture vivent dans

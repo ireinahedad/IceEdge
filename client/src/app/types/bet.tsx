@@ -36,6 +36,12 @@ export interface NHLGame {
   id: string;
   gameDate: string;
   startTime: string;
+  /**
+   * Mise au jeu en ISO/UTC — le serveur l'envoie depuis toujours
+   * (`teamsAndGames.ts`), le type ne la déclarait pas. `startTime` est déjà
+   * localisée et ne se trie pas ; c'est ce champ-ci qui sert de clé de tri.
+   */
+  startTimeUTC?: string | null;
   status: "scheduled" | "live" | "final";
   period?: number;
   clock?: string;

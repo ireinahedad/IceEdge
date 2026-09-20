@@ -64,9 +64,13 @@ export function EvSection({ isPro, items, isLoading, accent }: {
       <div className="flex items-center gap-2 mb-3">
         <Zap size={13} style={{ color: accent }} />
         <span className="text-white text-sm font-medium">{t("home.evTitle")}</span>
+        {/* « Réglages des alertes » ouvrait /profile, c'est-à-dire l'onglet
+            Aperçu : il fallait ensuite trouver Paramètres, puis faire défiler
+            jusqu'aux notifications. Le lien porte maintenant l'onglet ET la
+            section (`ProfilePage` lit `focus=notifications`). */}
         {isPro && (
           <button
-            onClick={() => navigate("/profile")}
+            onClick={() => navigate("/profile?tab=settings&focus=notifications")}
             aria-label={t("home.evSettings")}
             title={t("home.evSettings")}
             className="ml-auto flex items-center gap-1 text-white/50 hover:text-white transition-colors"

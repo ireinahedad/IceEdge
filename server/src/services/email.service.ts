@@ -125,25 +125,25 @@ export async function sendSlipsVisibilityNotice(
 ): Promise<void> {
   const { firstName, liveDate, settingsUrl } = opts;
   const hello = firstName ? `Bonjour ${firstName},` : 'Bonjour,';
-  const subject = 'Vos coupons ArakIce deviennent visibles aux membres Pro';
+  const subject = 'Vos paris ArakIce deviennent visibles aux membres Pro';
 
   const html = `
   <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#0A0E0C;color:#F3F7F0;border-radius:16px">
     <h1 style="font-size:20px;letter-spacing:0.16em;text-transform:uppercase;color:#9BF019;margin:0 0 24px">ARAKICE</h1>
     <p style="margin:0 0 16px;color:#F3F7F0">${hello}</p>
-    <p style="margin:0 0 16px;color:#B7C4AD">À partir du <strong style="color:#F3F7F0">${liveDate}</strong>, les membres Pro pourront consulter les coupons des autres joueurs, pari par pari, sur une page de profil. Vos coupons en feront partie.</p>
+    <p style="margin:0 0 16px;color:#B7C4AD">À partir du <strong style="color:#F3F7F0">${liveDate}</strong>, les membres Pro pourront consulter les paris des autres joueurs, sélection par sélection, sur une page de profil. Vos paris en feront partie.</p>
 
     <div style="margin:0 0 20px;padding:16px;background:#131A12;border:1px solid #283323;border-radius:12px">
       <p style="margin:0 0 10px;color:#9BF019;font-size:13px;font-weight:700">Ce qui ne change pas</p>
       <p style="margin:0 0 8px;color:#B7C4AD;font-size:13px">— <strong style="color:#F3F7F0">Rien de ce que vous avez déposé avant cette date ne deviendra visible.</strong> Votre historique antérieur reste privé, de façon permanente.</p>
-      <p style="margin:0 0 8px;color:#B7C4AD;font-size:13px">— Les sélections d'un coupon restent cachées jusqu'au début du premier match. Avant la mise au jeu, les autres voient seulement qu'un coupon existe.</p>
+      <p style="margin:0 0 8px;color:#B7C4AD;font-size:13px">— Les sélections d'un pari restent cachées jusqu'au début du premier match. Avant la mise au jeu, les autres voient seulement qu'un pari existe.</p>
       <p style="margin:0;color:#B7C4AD;font-size:13px">— Aucun montant misé n'est affiché : nous n'en collectons pas.</p>
     </div>
 
-    <p style="margin:0 0 16px;color:#B7C4AD">Si vous préférez garder vos coupons pour vous, vous pouvez vous retirer dès maintenant, en un geste. Cela masque tout votre historique d'un coup et <strong style="color:#F3F7F0">n'affecte pas votre rang au classement</strong>.</p>
+    <p style="margin:0 0 16px;color:#B7C4AD">Si vous préférez garder vos paris pour vous, vous pouvez vous retirer dès maintenant, en un geste. Cela masque tout votre historique d'un coup et <strong style="color:#F3F7F0">n'affecte pas votre rang au classement</strong>.</p>
 
     <p style="margin:0 0 24px">
-      <a href="${settingsUrl}" style="display:inline-block;padding:12px 20px;background:#9BF019;color:#0A0E0C;font-weight:700;font-size:14px;text-decoration:none;border-radius:10px">Gérer la visibilité de mes coupons</a>
+      <a href="${settingsUrl}" style="display:inline-block;padding:12px 20px;background:#9BF019;color:#0A0E0C;font-weight:700;font-size:14px;text-decoration:none;border-radius:10px">Gérer la visibilité de mes paris</a>
     </p>
 
     <p style="margin:0;color:#92A08A;font-size:13px">Vous pouvez changer d'avis à tout moment dans Paramètres → Confidentialité. Une question&nbsp;? Écrivez-nous à ${SUPPORT_EMAIL}.</p>
@@ -151,12 +151,12 @@ export async function sendSlipsVisibilityNotice(
 
   const text =
     `${hello}\n\n` +
-    `À partir du ${liveDate}, les membres Pro pourront consulter les coupons des autres joueurs, pari par pari. Vos coupons en feront partie.\n\n` +
+    `À partir du ${liveDate}, les membres Pro pourront consulter les paris des autres joueurs, sélection par sélection. Vos paris en feront partie.\n\n` +
     `CE QUI NE CHANGE PAS\n` +
     `- Rien de ce que vous avez déposé avant cette date ne deviendra visible. Votre historique antérieur reste privé, de façon permanente.\n` +
-    `- Les sélections d'un coupon restent cachées jusqu'au début du premier match.\n` +
+    `- Les sélections d'un pari restent cachées jusqu'au début du premier match.\n` +
     `- Aucun montant misé n'est affiché : nous n'en collectons pas.\n\n` +
-    `Si vous préférez garder vos coupons pour vous, vous pouvez vous retirer dès maintenant. Cela masque tout votre historique d'un coup et n'affecte pas votre rang au classement :\n` +
+    `Si vous préférez garder vos paris pour vous, vous pouvez vous retirer dès maintenant. Cela masque tout votre historique d'un coup et n'affecte pas votre rang au classement :\n` +
     `${settingsUrl}\n\n` +
     `Vous pouvez changer d'avis à tout moment dans Paramètres → Confidentialité.\n` +
     `Une question ? ${SUPPORT_EMAIL}`;

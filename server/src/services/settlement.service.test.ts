@@ -79,7 +79,7 @@ function goal(isHome: boolean, periodType = 'REG', strength = 'ev') {
 }
 
 /** Règle un unique coupon fait de ces jambes, et rend ce qui a été écrit. */
-async function settleOne(legs: any[]): Promise<{ outcome?: string; xp?: number; legs?: any[] }> {
+async function settleOne(legs: any[]): Promise<{ outcome?: string; xp?: number; legs?: any[]; partialLegs?: any[] }> {
   let written: any = {};
   query.mockReset();
   query.mockImplementation(async (sql: string, params: any[]) => {
@@ -96,6 +96,14 @@ async function settleOne(legs: any[]): Promise<{ outcome?: string; xp?: number; 
       };
     }
     if (String(sql).includes('UPDATE bet_slips')) {
+      // Deux écritures possibles, et elles n'ont pas les mêmes paramètres :
+      //   · le RÈGLEMENT          → (outcome, xp, legs, id) ;
+      //   · les résultats PARTIELS d'un ticket qui reste en attente → (legs, id).
+      // Les confondre faisait exploser `JSON.parse(params[2])` sur la seconde.
+      if (params.length === 2) {
+        written.partialLegs = JSON.parse(params[0]);
+        return { rowCount: 1 };
+      }
       written.outcome = params[0];
       written.xp      = params[1];
       written.legs    = JSON.parse(params[2]);
@@ -154,6 +162,24 @@ describe('un marché sans règle de règlement ne fige plus le coupon', () => {
     // « En attente » doit continuer de vouloir dire « pas encore ». C'est
     // l'autre moitié du correctif : sans elle, on réglerait des matchs en cours.
     expect(w.outcome).toBeUndefined();
+  });
+
+  it('un pari encore en attente conserve le résultat de ses jambes DÉJÀ décidées', async () => {
+    // Deux matchs : l'un fini, l'autre en cours. Le ticket ne peut pas être
+    // réglé — mais la première jambe EST décidée, et l'écran doit pouvoir
+    // l'afficher (✓) sans attendre le dernier coup de sifflet.
+    const LIVE_ID = '2026020002';
+    fetchGameById.mockImplementation(async (id: string) =>
+      String(id) === LIVE_ID ? { ...finalGame(1, 0), id: LIVE_ID, status: 'live' } : finalGame(4, 2));
+
+    const w = await settleOne([
+      ML_TOR,
+      { gameId: LIVE_ID, marketType: 'moneyline', selectionValue: 'tor', subjectId: 'TOR' },
+    ]);
+
+    expect(w.outcome).toBeUndefined();                        // toujours en attente
+    expect(w.partialLegs?.[0].result).toBe('win');            // décidée → conservée
+    expect(w.partialLegs?.[1].result).toBeUndefined();        // indécise → rien d'écrit
   });
 
   it('la pénalité d\'un coupon perdu se rapporte aux jambes JUGÉES', async () => {

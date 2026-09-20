@@ -147,7 +147,18 @@ function shiftDate(dateStr: string, days: number): string {
 // ─── Chargement partagé ───────────────────────────────────────────────────────
 
 /**
- * Premier jour qui a des matchs, sur UNE seule requête.
+ * Les matchs des DEUX PROCHAINS JOURS, sur UNE seule requête.
+ *
+ * Avant : « le premier jour qui a des matchs », et à défaut la semaine entière
+ * d'un coup — la page Stats pouvait donc afficher sept jours de calendrier
+ * dans une liste censée montrer ce qui se joue maintenant. La fenêtre est
+ * désormais fixe : aujourd'hui + demain, triés par mise au jeu.
+ *
+ * Le repli reste, et il est nécessaire : de juin à septembre ces deux jours
+ * sont vides, et rendre une liste vide viderait aussi la feuille « Plus de
+ * paris », qui se sert de la même donnée. On montre alors la PROCHAINE journée
+ * qui a des matchs dans les sept jours, avec sa date en étiquette — jamais
+ * plus d'une journée à la fois.
  *
  * Avant le 2026-09-16 : `/games?date=` jour par jour — aujourd'hui, demain, puis
  * six appels pour J+2…J+7. Hors saison (l'état réel de septembre) chaque visite
@@ -169,14 +180,42 @@ async function fetchGamesWithFallback(): Promise<{ games: UIGame[]; label: strin
     if (list) list.push(g); else byDay.set(day, [g]);
   }
 
-  const todayGames = byDay.get(today) ?? [];
-  if (todayGames.length > 0) return { games: todayGames.map(toUIGame), label: "Aujourd'hui" };
+  // Mise au jeu la plus proche en premier. `startTimeUTC` est un instant ;
+  // `startTime` est déjà localisée (« 7:00 PM ») et ne se trie pas.
+  const byFaceoff = (a: any, b: any) => {
+    const ms = (g: any) => {
+      const t = g?.startTimeUTC ? new Date(g.startTimeUTC).getTime() : NaN;
+      return Number.isFinite(t) ? t : Number.MAX_SAFE_INTEGER;
+    };
+    const d = ms(a) - ms(b);
+    return d !== 0 ? d : String(a?.id).localeCompare(String(b?.id));
+  };
 
+  const todayGames    = byDay.get(today) ?? [];
   const tomorrowGames = byDay.get(shiftDate(today, 1)) ?? [];
-  if (tomorrowGames.length > 0) return { games: tomorrowGames.map(toUIGame), label: "Demain" };
+  const twoDays       = [...todayGames, ...tomorrowGames].sort(byFaceoff);
 
-  const week = [2, 3, 4, 5, 6, 7].flatMap((n) => byDay.get(shiftDate(today, n)) ?? []);
-  if (week.length > 0) return { games: week.map(toUIGame), label: "Cette semaine" };
+  if (twoDays.length > 0) {
+    const label =
+      todayGames.length > 0 && tomorrowGames.length > 0 ? "Aujourd'hui et demain"
+      : todayGames.length > 0                           ? "Aujourd'hui"
+      :                                                   "Demain";
+    return { games: twoDays.map(toUIGame), label };
+  }
+
+  // Hors-saison : la prochaine journée qui a des matchs, elle seule.
+  for (const n of [2, 3, 4, 5, 6, 7]) {
+    const day   = shiftDate(today, n);
+    const games = byDay.get(day) ?? [];
+    if (games.length === 0) continue;
+    const [y, m, d] = day.split('-').map(Number);
+    return {
+      games: [...games].sort(byFaceoff).map(toUIGame),
+      label: new Date(y, m - 1, d).toLocaleDateString('fr-CA', {
+        weekday: 'short', month: 'short', day: 'numeric',
+      }),
+    };
+  }
 
   return { games: [], label: "Aucun match" };
 }

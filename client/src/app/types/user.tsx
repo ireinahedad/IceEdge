@@ -87,11 +87,11 @@ export interface UserBettingStats {
   pending: number;
   hitRate: number;
   avgProbability: number;
-  calibrationScore: number;
   currentStreak: number;
   longestWinStreak: number;
   parlayRecord: { wins: number; losses: number };
-  bestMarketType: BetMarketType;
+  /** `null` tant qu'aucun marché n'atteint le plancher d'échantillon du serveur. */
+  bestMarketType: BetMarketType | null;
   bestMarketHitRate: number;
   monthlyStats: { month: string; bets: number; hitRate: number }[];
   marketBreakdown: { marketType: BetMarketType; label: string; bets: number; hitRate: number }[];

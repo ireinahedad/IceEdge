@@ -14,7 +14,9 @@ import {
   getCached,
   parseToiMinutes,
   setCached,
+  TEAM_META,
 } from './core';
+import { mapLimit } from '../concurrency';
 
 /* ─── Quelle saison porte les statistiques d'un joueur ───────────────────────
  *
@@ -150,6 +152,107 @@ async function realtimeForSeason(season: string): Promise<Map<string, RealtimeLi
   return out;
 }
 
+
+/* ─── Qui joue CETTE saison ──────────────────────────────────────────────────
+ *
+ * LE PROBLÈME. Les meneurs de la ligue (`fetchTopPlayers`) et la recherche
+ * retombent sur la DERNIÈRE saison complète tant que la saison en cours n'a pas
+ * commencé — c'est voulu, une cadence de buts ne s'invente pas. Mais le
+ * classement de l'an dernier contient des joueurs qui ont pris leur retraite,
+ * qui ont changé de club ou qui ne sont plus dans la LNH. L'application les
+ * proposait donc partout — accueil, stats, recherche, marchés de paris — avec
+ * en prime l'équipe de l'an dernier à côté du nom. On peut miser sur un joueur
+ * qui ne jouera pas.
+ *
+ * CE QU'ON FAIT. Un index des effectifs PUBLIÉS pour la saison en cours, toutes
+ * équipes confondues. Il sert à deux choses, et à deux seulement :
+ *   · écarter un joueur qui n'est dans aucun effectif ;
+ *   · corriger l'équipe, le numéro et la position, qui sont ceux d'aujourd'hui
+ *     et non ceux du classement d'où vient la ligne.
+ * Les TOTAUX ne sont pas touchés : ils restent ceux de la dernière saison
+ * jouée, datés par `statsSeason`, exactement comme avant.
+ *
+ * LE FILET. Une table VIDE — avant-saison sans effectifs publiés, ou amont
+ * muet — ne filtre RIEN. Le pire qu'une panne puisse faire est de laisser
+ * passer un ancien joueur ; elle ne doit jamais vider l'application.
+ *
+ * LE COÛT. 32 appels, mis en cache six heures (un effectif bouge par
+ * transaction, pas par minute), six de front. C'est la même dépense qu'UNE
+ * consultation de page d'équipe, une fois par demi-journée, pour toute la
+ * ligue. L'échec n'est pas mis en cache.
+ */
+
+export interface RosterEntry {
+  teamAbbr: string;
+  position: string;
+  number:   number;
+}
+
+const ROSTER_INDEX_TTL_MS = 6 * 60 * 60_000;
+const ROSTER_INDEX_CONCURRENCY = 6;
+
+export async function fetchActiveRosterIndex(): Promise<Map<string, RosterEntry>> {
+  if (USE_MOCK) return new Map();
+
+  const cached = getCached<[string, RosterEntry][]>('roster_index');
+  if (cached) return new Map(cached);
+
+  const season = currentSeason();
+  const teams  = Object.keys(TEAM_META);
+
+  const perTeam = await mapLimit(teams, ROSTER_INDEX_CONCURRENCY, async (abbr) => {
+    try {
+      const d = await fetchNHL<any>(`v1/roster/${abbr}/${season}`);
+      const players = [...(d.forwards ?? []), ...(d.defensemen ?? []), ...(d.goalies ?? [])];
+      return players.map((pl: any) => [String(pl.id), {
+        teamAbbr: abbr,
+        position: pl.positionCode ?? 'F',
+        number:   pl.sweaterNumber ?? 0,
+      }] as [string, RosterEntry]);
+    } catch {
+      // 404 d'avant-saison ou amont muet : cette équipe manque, les autres
+      // restent. Voir plus bas pourquoi un index partiel n'est pas utilisé.
+      return null;
+    }
+  });
+
+  const ok = perTeam.filter(Boolean) as [string, RosterEntry][][];
+
+  // Un index PARTIEL est pire que pas d'index : filtrer avec 20 équipes sur 32
+  // effacerait les joueurs des 12 autres, ce qui ressemble à un bogue de
+  // données et pas à une panne. On exige donc la ligue entière, ou rien.
+  if (ok.length < teams.length) return new Map();
+
+  const index = new Map<string, RosterEntry>(ok.flat());
+  if (index.size > 0) setCached('roster_index', [...index.entries()], ROSTER_INDEX_TTL_MS);
+  return index;
+}
+
+/**
+ * Écarte les joueurs absents des effectifs de la saison en cours et remet
+ * l'équipe / le numéro / la position à jour sur ceux qui restent.
+ *
+ * Table vide → la liste passe telle quelle (voir le filet ci-dessus).
+ */
+function keepActive<T extends { id: string; teamId?: string; number?: number; position?: string }>(
+  players: T[],
+  index:   Map<string, RosterEntry>,
+): T[] {
+  if (index.size === 0) return players;
+  const out: T[] = [];
+  for (const p of players) {
+    const cur = index.get(String(p.id));
+    if (!cur) continue;                       // retraité, sans contrat, hors LNH
+    out.push({
+      ...p,
+      teamId:   cur.teamAbbr.toLowerCase(),   // l'équipe d'AUJOURD'HUI
+      number:   cur.number   || p.number,
+      position: cur.position || p.position,
+    });
+  }
+  return out;
+}
+
 // --- Players --------------------------------------------------------------
 
 /**
@@ -188,11 +291,21 @@ export async function fetchTopPlayers(): Promise<any[]> {
   const cached = getCached<any[]>('players');
   if (cached) return cached;
 
+  // L'index part EN MÊME TEMPS que le classement : il est mis en cache six
+  // heures, donc il ne coûte rien la plupart du temps, et l'attendre en série
+  // ajouterait sa latence à celle du classement.
+  const indexPromise = fetchActiveRosterIndex();
+
   for (const season of [currentSeason(), previousSeason()]) {
     const players = await topPlayersForSeason(season);
     if (players.length > 0) {
-      setCached('players', players, 10 * 60_000);
-      return players;
+      const index    = await indexPromise;
+      const filtered = keepActive(players, index);
+      // Un classement entier écarté n'est pas un effectif à jour, c'est une
+      // anomalie : on rend la liste brute plutôt qu'un écran vide.
+      const list = filtered.length > 0 ? filtered : players;
+      setCached('players', list, 10 * 60_000);
+      return list;
     }
   }
   return [];
@@ -361,7 +474,7 @@ export async function searchPlayers(q: string): Promise<any[]> {
       `v1/search/player?culture=en-us&limit=20&q=${encodeURIComponent(q)}&active=true`
     );
     const results: any[] = Array.isArray(data) ? data : (data?.players ?? []);
-    return results.map((p: any) => ({
+    const mapped = results.map((p: any) => ({
       id:       String(p.playerId ?? p.id),
       name:     p.name ?? [p.firstName, p.lastName].filter(Boolean).join(' '),
       teamId:   (p.teamAbbrev ?? p.teamAbbreviation ?? '').toLowerCase(),
@@ -371,7 +484,13 @@ export async function searchPlayers(q: string): Promise<any[]> {
       plusMinus: 0, shots: 0, shotPct: 0, ppPoints: 0,
       gamesPlayed: 0, lastFive: [] as number[], winImpact: 0,
     }));
+    // `active=true` de la LNH garde aussi les espoirs et les joueurs de ligue
+    // mineure : on ne peut pas parier sur eux. L'index des effectifs de la
+    // saison en cours est le seul critère qui le dise.
+    return keepActive(mapped, await fetchActiveRosterIndex());
   } catch {
+    // `fetchTopPlayers` est DÉJÀ filtré sur les effectifs de la saison en
+    // cours : le repli hérite du même contrat que le chemin nominal.
     const lower = q.toLowerCase();
     const all   = await fetchTopPlayers();
     return all.filter(p =>

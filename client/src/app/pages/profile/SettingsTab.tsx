@@ -500,8 +500,10 @@ export function SettingsTab({
       {/* Notifications — value bets (Pro only) */}
       {/* R6 — this whole card drives the Web Push API. iOS notifications go through
           APNs and get their own card when APPLE_PLAN R6 lands. */}
+      {/* `id="notifications"` = la cible de `focus=notifications`, le raccourci
+          « Réglages des alertes » de l'accueil (voir `ProfilePage`). */}
       {features.webPush && (
-        <div className="icy-card rounded-2xl p-4 flex flex-col gap-3">
+        <div id="notifications" className="icy-card rounded-2xl p-4 flex flex-col gap-3">
           <p className="text-white text-xs font-medium">{t("profile.notifications")}</p>
 
           <div className="flex items-center gap-3 py-1">

@@ -43,7 +43,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // ── Navigation ──
   "nav.home":    { en: "Home",    fr: "Accueil" },
   "nav.stats":   { en: "Stats",   fr: "Stats" },
-  "nav.slip":    { en: "Slip",    fr: "Coupon" },
+  "nav.slip":    { en: "Slip",    fr: "Pari" },
   "nav.league":  { en: "League",  fr: "Ligue" },
   "nav.profile": { en: "Profile", fr: "Profil" },
 
@@ -101,8 +101,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // délibéré. Les anciennes clés showSlips/showSlipsHint sont retirées avec le
   // toggle opt-in qu'elles servaient.
   "profile.privacy":      { en: "Privacy", fr: "Confidentialité" },
-  "profile.hideSlips":    { en: "Hide my slips from other players", fr: "Masquer mes coupons aux autres joueurs" },
-  "profile.hideSlipsHint":{ en: "Pro members can browse your settled slips. Turning this on hides all of them — your leaderboard rank is unaffected.", fr: "Les membres Pro peuvent consulter tes coupons réglés. Activer ceci les masque tous — ton rang au classement n'est pas touché." },
+  "profile.hideSlips":    { en: "Hide my slips from other players", fr: "Masquer mes paris aux autres joueurs" },
+  "profile.hideSlipsHint":{ en: "Pro members can browse your settled slips. Turning this on hides all of them — your leaderboard rank is unaffected.", fr: "Les membres Pro peuvent consulter tes paris réglés. Activer ceci les masque tous — ton rang au classement n'est pas touché." },
   "profile.language":     { en: "Language",      fr: "Langue" },
   "profile.bookmaker":    { en: "Sportsbook",    fr: "Site de paris" },
   "profile.bookmakerHint":{ en: "Which site the “Place bet” buttons open", fr: "Le site que les boutons « Parier » ouvrent" },
@@ -147,21 +147,15 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "profile.keyNotShown":   { en: "For your security it is never displayed again — replace it or remove it.", fr: "Par sécurité elle n'est jamais réaffichée — remplace-la ou retire-la." },
   "profile.keyPendingRemoval": { en: "The key will be removed when you save.", fr: "La clé sera retirée à l'enregistrement." },
   "profile.removeKey":    { en: "Remove key",    fr: "Supprimer la clé" },
-  "profile.calibration":  { en: "Calibration",   fr: "Calibrage" },
   "profile.hitRateTrend": { en: "Hit Rate Trend", fr: "Tendance du taux de réussite" },
   "profile.perfByMarket": { en: "Performance by Market", fr: "Performance par marché" },
+  "profile.noTrendYet":   { en: "No settled slips yet — the trend appears once your first bets are graded.", fr: "Aucun pari réglé — la tendance apparaît dès que tes premières sélections sont tranchées." },
+  "profile.noMarketYet":  { en: "No settled slips yet — each market appears once you have a graded bet on it.", fr: "Aucun pari réglé — chaque marché apparaît dès qu'une sélection y a été tranchée." },
   "profile.betHistory":   { en: "Bet History",    fr: "Historique des paris" },
   "profile.filterAll":    { en: "All",            fr: "Tous" },
   "profile.filterWins":   { en: "Wins",           fr: "Gagnés" },
   "profile.filterLosses": { en: "Losses",         fr: "Perdus" },
   "profile.filterLive":   { en: "Live",           fr: "En direct" },
-  "profile.calWell":      { en: "Well Calibrated", fr: "Bien calibré" },
-  "profile.calDecent":    { en: "Decent",         fr: "Correct" },
-  "profile.calNeedsWork": { en: "Needs Work",     fr: "À améliorer" },
-  "profile.modelCalibration": { en: "Model Calibration", fr: "Calibrage du modèle" },
-  "profile.calDescHigh":  { en: "Your picks align closely with model probabilities — a sign of sharp judgment.", fr: "Tes choix collent de près aux probabilités du modèle — signe d'un bon jugement." },
-  "profile.calDescMid":   { en: "Your hit rate roughly matches model predictions with some variance.", fr: "Ton taux de réussite correspond globalement aux prédictions du modèle, avec quelques écarts." },
-  "profile.calDescLow":   { en: "Your selections often diverge from model predictions. Try sticking to higher-confidence picks.", fr: "Tes sélections s'écartent souvent des prédictions du modèle. Essaie de privilégier les choix à forte confiance." },
 
   // ── League / leaderboard ──
   "league.rankings":   { en: "Rankings",             fr: "Classement" },
@@ -174,9 +168,9 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "league.hitRate":    { en: "Hit Rate",             fr: "Réussite" },
   "league.volume":     { en: "Volume",               fr: "Volume" },
   "league.player":     { en: "Player",               fr: "Joueur" },
-  "league.recentSlips":{ en: "Recent slips",         fr: "Coupons récents" },
-  "league.slipsPrivate": { en: "🔒 This player keeps their slips private", fr: "🔒 Ce joueur garde ses coupons privés" },
-  "league.noSlips":    { en: "No slips yet",         fr: "Aucun coupon pour l'instant" },
+  "league.recentSlips":{ en: "Recent slips",         fr: "Paris récents" },
+  "league.slipsPrivate": { en: "🔒 This player keeps their slips private", fr: "🔒 Ce joueur garde ses paris privés" },
+  "league.noSlips":    { en: "No slips yet",         fr: "Aucun pari pour l'instant" },
   "league.you":        { en: "you",                  fr: "toi" },
   "league.bets":       { en: "Bets",                 fr: "Paris" },
   "chat.noRoomsYet":   { en: "No rooms yet",         fr: "Aucun salon" },
@@ -320,18 +314,19 @@ const DICT: Record<string, { en: string; fr: string }> = {
 
   // ── Slips / builder ──
   "slip.build":        { en: "Build",           fr: "Créer" },
-  "slip.mySlips":      { en: "My Slips",        fr: "Mes coupons" },
+  "slip.mySlips":      { en: "My Slips",        fr: "Mes paris" },
   "slip.predictions":  { en: "Your Predictions", fr: "Tes prédictions" },
   "slip.add":          { en: "Add",             fr: "Ajouter" },
-  "slip.clearTitle":   { en: "Clear this slip?", fr: "Vider ce coupon ?" },
-  "slip.clearBody":    { en: "All the bets in the slip will be removed.", fr: "Tous les paris du coupon seront retirés." },
+  "slip.clearTitle":   { en: "Clear this slip?", fr: "Vider ce pari ?" },
+  "slip.clearBody":    { en: "All the bets in the slip will be removed.", fr: "Toutes les sélections du pari seront retirées." },
   "slip.clearConfirm": { en: "Clear", fr: "Vider" },
   "slip.active":       { en: "Active",          fr: "Actifs" },
   "slip.history":      { en: "History",         fr: "Historique" },
   "slip.checkResults": { en: "Check results",   fr: "Vérifier les résultats" },
+  "slip.seeActive":    { en: "See my open bets", fr: "Voir mes paris en cours" },
   "slip.visibilityNotice": {
     en: "Once settled, your slips are visible to Pro members — picks stay hidden until puck drop. You can hide them in Settings.",
-    fr: "Une fois réglés, tes coupons sont visibles aux membres Pro — les sélections restent cachées jusqu'à la mise au jeu. Tu peux les masquer dans Paramètres.",
+    fr: "Une fois réglés, tes paris sont visibles aux membres Pro — les sélections restent cachées jusqu'à la mise au jeu. Tu peux les masquer dans Paramètres.",
   },
   "slip.pending":      { en: "Pending",         fr: "En attente" },
   "slip.won":          { en: "Won",             fr: "Gagné" },
@@ -341,6 +336,15 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // 037 côté serveur.
   "slip.void":         { en: "Void",            fr: "Annulé" },
 
+  // Issue d'UNE sélection à l'intérieur d'un pari — ✓ / ✗ posés ligne par ligne
+  // par `settlement.service.ts`, y compris sur un pari encore en cours. Sert
+  // d'étiquette accessible : l'icône seule ne dit rien à un lecteur d'écran.
+  "slip.legWon":       { en: "Pick won",        fr: "Sélection réussie" },
+  "slip.legLost":      { en: "Pick lost",       fr: "Sélection manquée" },
+  "slip.legVoid":      { en: "Pick voided",     fr: "Sélection annulée" },
+  "slip.legPending":   { en: "Not settled yet", fr: "Pas encore décidée" },
+  "slip.legUnknown":   { en: "Not evaluated",  fr: "Non évaluée" },
+
   // ── Page joueur (coupons d'un autre membre — réservé aux abonnés Pro) ──────
   "player.title":         { en: "Player",  fr: "Joueur" },
   "player.viewAll":       { en: "See all their bets →", fr: "Voir tous ses paris →" },
@@ -348,26 +352,26 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "player.parlayLegs":    { en: "Parlay · {n} legs", fr: "Combiné · {n} paris" },
   "player.unlocksAt":     { en: "Picks revealed at {time}", fr: "Sélections dévoilées à {time}" },
   "player.unlocksAtStart":{ en: "Picks revealed at puck drop", fr: "Sélections dévoilées à la mise au jeu" },
-  "player.noLegDetail":   { en: "No breakdown available for this slip", fr: "Aucun détail disponible pour ce coupon" },
+  "player.noLegDetail":   { en: "No breakdown available for this slip", fr: "Aucun détail disponible pour ce pari" },
   "player.formLine":      { en: "of {settled} bets won this month", fr: "des {settled} paris gagnés ce mois-ci" },
   "player.formTooFew":    { en: "{settled} bets this month — too few to rate", fr: "{settled} paris ce mois-ci — échantillon insuffisant" },
   "player.overallLine":   { en: "{settled} bets in total", fr: "{settled} paris au total" },
   "player.since":         { en: "since {date}", fr: "depuis le {date}" },
   "player.proTitle":      { en: "See other players' bets", fr: "Voir les paris des autres" },
-  "player.proDesc":       { en: "Pro members can browse any player's slips, bet by bet.", fr: "Les membres Pro consultent les coupons de n'importe quel joueur, pari par pari." },
-  "player.hiddenTitle":   { en: "This player hides their slips", fr: "Ce joueur masque ses coupons" },
+  "player.proDesc":       { en: "Pro members can browse any player's slips, bet by bet.", fr: "Les membres Pro consultent les paris de n'importe quel joueur, sélection par sélection." },
+  "player.hiddenTitle":   { en: "This player hides their slips", fr: "Ce joueur masque ses paris" },
   "player.hiddenDesc":    { en: "Nothing to do with your subscription — they chose to stay private.", fr: "Rien à voir avec ton abonnement — il a choisi de rester discret." },
   "player.notFound":      { en: "Player not found", fr: "Joueur introuvable" },
   "player.errorTitle":    { en: "Couldn't load this player", fr: "Impossible de charger ce joueur" },
-  "player.noSlipsYet":    { en: "No slips yet", fr: "Aucun coupon pour l'instant" },
+  "player.noSlipsYet":    { en: "No slips yet", fr: "Aucun pari pour l'instant" },
   "slip.autoSettle":   { en: "Settled automatically when games finish — riskier bets earn more XP", fr: "Réglé automatiquement à la fin des matchs — plus le pari est risqué, plus il rapporte d'XP" },
-  "slip.noSlips":      { en: "No slips yet",    fr: "Aucun coupon" },
+  "slip.noSlips":      { en: "No slips yet",    fr: "Aucun pari" },
   "slip.noSlipsHint":  { en: "Lock your first prediction to see it here", fr: "Verrouille ta première prédiction pour la voir ici" },
   "slip.empty":        { en: "No predictions yet", fr: "Aucune prédiction" },
   "slip.emptyHint":    { en: "Add predictions from the Stats page or tap below to browse all markets", fr: "Ajoute des prédictions depuis la page Stats ou explore les marchés ci-dessous" },
   "slip.browse":       { en: "Browse Markets",  fr: "Explorer les marchés" },
-  "slip.signin":       { en: "Sign in to see your slips", fr: "Connecte-toi pour voir tes coupons" },
-  "slip.signinHint":   { en: "Your locked slips and history will appear here", fr: "Tes coupons verrouillés et ton historique apparaîtront ici" },
+  "slip.signin":       { en: "Sign in to see your slips", fr: "Connecte-toi pour voir tes paris" },
+  "slip.signinHint":   { en: "Your locked slips and history will appear here", fr: "Tes paris verrouillés et ton historique apparaîtront ici" },
   "slip.placeBet365":  { en: "Place on Bet365 ↗", fr: "Parier sur Bet365 ↗" },
   "slip.placeBet":     { en: "Place on {book} ↗", fr: "Parier sur {book} ↗" },
   "slip.xpEarned":     { en: "XP earned",       fr: "XP gagnés" },
@@ -391,7 +395,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.roomMembers":     { en: "{n} members",      fr: "{n} membres" },
   // Le texte qui accompagne la carte. Il reste modifiable dans le salon comme
   // n'importe quel message, et il passe le filtre de modération du serveur.
-  "slip.shareRoomMessage":{ en: "My slip · {n} legs · {pct} combined", fr: "Mon coupon · {n} sélections · {pct} combiné" },
+  "slip.shareRoomMessage":{ en: "My slip · {n} legs · {pct} combined", fr: "Mon pari · {n} sélections · {pct} combiné" },
   "slip.sharedToRoom":    { en: "Shared in {room}",  fr: "Partagé dans {room}" },
   "slip.openRoom":        { en: "Open",             fr: "Ouvrir" },
   "slip.shareRoomFailed": { en: "Couldn't send it to that room", fr: "Impossible d'envoyer dans cette salle" },
@@ -406,23 +410,23 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.combined":     { en: "Combined",        fr: "Combiné" },
   "slip.addLeg":       { en: "Add Leg",         fr: "Ajouter un pari" },
   "slip.submitting":   { en: "Submitting...",   fr: "Envoi..." },
-  "slip.lockSlip":     { en: "Lock Slip",       fr: "Verrouiller le coupon" },
+  "slip.lockSlip":     { en: "Lock Slip",       fr: "Verrouiller le pari" },
   // Échec du verrouillage. Jusqu'au 2026-09-14 l'erreur était mise dans un état
   // que RIEN n'affichait : le bouton revenait de « Envoi… » et il ne se passait
   // rien — indiscernable d'un bouton mort.
-  "slip.lockFailed":   { en: "Couldn't lock the slip — try again", fr: "Impossible de verrouiller le coupon — réessaie" },
-  "slip.lockTimeout":  { en: "The server took too long — your slip wasn't locked. Try again.", fr: "Le serveur a mis trop de temps — le coupon n'a pas été verrouillé. Réessaie." },
+  "slip.lockFailed":   { en: "Couldn't lock the slip — try again", fr: "Impossible de verrouiller le pari — réessaie" },
+  "slip.lockTimeout":  { en: "The server took too long — your slip wasn't locked. Try again.", fr: "Le serveur a mis trop de temps — le pari n'a pas été verrouillé. Réessaie." },
   "slip.individualProb":{ en: "Individual prediction probability", fr: "Probabilité de prédiction individuelle" },
   // Ce que la combinaison a changé — affiché par `SlipNotices`. Ces trois faits
   // étaient calculés par `parlay.ts` et jetés : un coupon impossible tombait à
   // 0 % sans un mot, un doublon quittait le calcul en silence.
   "slip.impossibleTitle": { en: "These bets can't all happen", fr: "Ces paris ne peuvent pas tous se réaliser" },
-  "slip.impossibleBody":  { en: "At least two of them contradict each other on the same game. You can keep them on the slip — the combined probability just reads 0%.", fr: "Au moins deux d'entre eux se contredisent sur le même match. Tu peux les garder au coupon — la probabilité combinée affiche simplement 0 %." },
+  "slip.impossibleBody":  { en: "At least two of them contradict each other on the same game. You can keep them on the slip — the combined probability just reads 0%.", fr: "Au moins deux d'entre elles se contredisent sur le même match. Tu peux les garder au pari — la probabilité combinée affiche simplement 0 %." },
   "slip.redundantOne":    { en: "1 bet is a duplicate — or already contained in another one. It counts once in the combined probability.", fr: "1 pari est un doublon — ou est déjà contenu dans un autre. Il n'est compté qu'une fois dans la probabilité combinée." },
   "slip.redundantMany":   { en: "{n} bets are duplicates — or already contained in another one. They count once in the combined probability.", fr: "{n} paris sont des doublons — ou sont déjà contenus dans un autre. Ils ne sont comptés qu'une fois dans la probabilité combinée." },
   "slip.sameGameApprox":  { en: "Several bets are on the same game. Their link couldn't be computed, so the combined probability treats them as independent — read it as an approximation.", fr: "Plusieurs paris portent sur le même match. Leur lien n'a pas pu être calculé : la probabilité combinée les traite comme indépendants — à lire comme une approximation." },
   "slip.howProbTitle": { en: "How probability works", fr: "Comment fonctionne la probabilité" },
-  "slip.howProbBody":  { en: "Bets on different games are multiplied together. A duplicate — or a bet already contained in another — counts once, two bets that can't both happen drop the slip to 0, and bets on the same game are adjusted for their link. More bets means a lower combined chance but a higher potential reward.", fr: "Les paris sur des matchs différents se multiplient. Un doublon — ou un pari déjà contenu dans un autre — ne compte qu'une fois, deux paris qui ne peuvent pas se réaliser ensemble ramènent le coupon à 0, et les paris d'un même match sont ajustés selon leur lien. Plus il y a de paris, plus la chance combinée est faible, mais plus la récompense potentielle est élevée." },
+  "slip.howProbBody":  { en: "Bets on different games are multiplied together. A duplicate — or a bet already contained in another — counts once, two bets that can't both happen drop the slip to 0, and bets on the same game are adjusted for their link. More bets means a lower combined chance but a higher potential reward.", fr: "Les sélections sur des matchs différents se multiplient. Un doublon — ou une sélection déjà contenue dans une autre — ne compte qu'une fois, deux sélections qui ne peuvent pas se réaliser ensemble ramènent le pari à 0, et les sélections d'un même match sont ajustées selon leur lien. Plus il y a de sélections, plus la chance combinée est faible, mais plus la récompense potentielle est élevée." },
 
   // ── Stats ──
   "stats.title":       { en: "Statistics",      fr: "Statistiques" },
@@ -439,7 +443,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "stats.loadingNHL":  { en: "Loading NHL data...", fr: "Chargement des données LNH..." },
   "stats.matches":     { en: "{n} matches", fr: "{n} matchs" },
   "stats.players":     { en: "Players",   fr: "Joueurs" },
-  "stats.tapToAdd":    { en: "Tap + to add to slip", fr: "Touche + pour ajouter au coupon" },
+  "stats.tapToAdd":    { en: "Tap + to add to slip", fr: "Touche + pour ajouter au pari" },
   "stats.loadingTeamsHint": { en: "The stats service is not responding. Try again in a moment.", fr: "Le service de statistiques ne répond pas. Réessaie dans un instant." },
   "stats.noGamesHint": { en: "Check back on game nights, or explore season futures below", fr: "Reviens les soirs de match, ou explore les paris de saison ci-dessous" },
   "stats.loadingStandings": { en: "Loading standings data...", fr: "Chargement du classement..." },
@@ -466,13 +470,12 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "home.tonightGames":   { en: "Tonight's Games",   fr: "Matchs de ce soir" },
   "home.tomorrowGames":  { en: "Tomorrow's Games",  fr: "Matchs de demain" },
   "home.gamesOn":        { en: "{date} Games",      fr: "Matchs du {date}" },
-  "home.added":          { en: "✓ Added",           fr: "✓ Ajouté" },
-  "home.add":            { en: "+ Add",             fr: "+ Ajouter" },
+  // `home.add` / `home.added` / `home.addToSlip` / `home.addedSlip` retirés le
+  // 2026-09-20 avec l'ajout rapide des cartes de l'accueil : on ajoute une
+  // sélection depuis « Plus de paris », qui montre ce qu'on choisit.
   "home.more":           { en: "More",              fr: "Plus" },
   "home.moreBets":       { en: "More bets",         fr: "Plus de paris" },
   "home.betOn":          { en: "Place a bet →",   fr: "Parier →" },
-  "home.addedSlip":      { en: "✓ Added to slip",   fr: "✓ Ajouté au coupon" },
-  "home.addToSlip":      { en: "+ Add {name} to slip", fr: "+ Ajouter {name} au coupon" },
   "home.edge":           { en: "+{edge}% edge",     fr: "+{edge}% avantage" },
   "home.game":           { en: "Game",              fr: "Match" },
   "home.nhlGame":        { en: "NHL Game",          fr: "Match LNH" },
@@ -714,7 +717,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pred.tap":            { en: "Tap",                   fr: "Toucher" },
   "pred.today":          { en: "Today",                 fr: "Aujourd'hui" },
   "pred.recommendedBet": { en: "Recommended Bet",       fr: "Pari recommandé" },
-  "pred.goToBuilder":    { en: "Go to Bet Builder →",   fr: "Aller au créateur de coupon →" },
+  "pred.goToBuilder":    { en: "Go to Bet Builder →",   fr: "Aller au créateur de pari →" },
   "pred.recentForm":     { en: "Recent Form",           fr: "Forme récente" },
   "pred.h2hTitle":       { en: "Head-to-head",          fr: "Confrontations directes" },
   "pred.h2hNone":        { en: "No meetings yet this season", fr: "Aucune confrontation cette saison" },
@@ -726,10 +729,10 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pred.notFound":       { en: "Not Found",             fr: "Introuvable" },
   "pred.notExist":       { en: "This prediction doesn't exist.", fr: "Cette prédiction n'existe pas." },
   "pred.goBack":         { en: "Go Back",               fr: "Retour" },
-  "pred.slipShort":      { en: "✓ Slip",                fr: "✓ Coupon" },
-  "pred.slipAddShort":   { en: "+ Slip",                fr: "+ Coupon" },
-  "pred.addToSlip":      { en: "+ Add to slip",         fr: "+ Ajouter au coupon" },
-  "pred.addedToSlip":    { en: "✓ Added to slip",       fr: "✓ Ajouté au coupon" },
+  "pred.slipShort":      { en: "✓ Slip",                fr: "✓ Pari" },
+  "pred.slipAddShort":   { en: "+ Slip",                fr: "+ Pari" },
+  "pred.addToSlip":      { en: "+ Add to slip",         fr: "+ Ajouter au pari" },
+  "pred.addedToSlip":    { en: "✓ Added to slip",       fr: "✓ Ajouté au pari" },
   "pred.lastN":          { en: "Last {n}",              fr: "{n} derniers" },
   "pred.formOverLast":   { en: "Form over last {n} games · {wl}", fr: "Forme sur les {n} derniers matchs · {wl}" },
   "pred.winRateL":       { en: "Win Rate (L{n})",       fr: "Taux de victoire (L{n})" },
@@ -804,9 +807,9 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "mkt.gameFor":       { en: "Game",             fr: "Match" },
   "mkt.noUpcomingGame":{ en: "No upcoming game for this team — a team bet needs one.", fr: "Aucun match à venir pour cette équipe — un pari d'équipe en exige un." },
   "mkt.draw60":        { en: "Draw after 60 min", fr: "Nul après 60 min" },
-  "mkt.addedSlip":     { en: "✓ Added to Slip!", fr: "✓ Ajouté au coupon !" },
+  "mkt.addedSlip":     { en: "✓ Added to Slip!", fr: "✓ Ajouté au pari !" },
   "mkt.adding":        { en: "Adding…",          fr: "Ajout…" },
-  "mkt.addToSlip":     { en: "Add to Prediction Slip", fr: "Ajouter au coupon de prédiction" },
+  "mkt.addToSlip":     { en: "Add to Prediction Slip", fr: "Ajouter au pari de prédiction" },
 
   // ── ML prediction card ──
   "ml.title":        { en: "ML Prediction",   fr: "Prédiction ML" },
@@ -917,7 +920,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "login.feat1Body": { en: "Model-driven win probabilities on every market.", fr: "Probabilités de victoire par modèle sur chaque marché." },
   "login.feat2Title": { en: "Best bets & edges", fr: "Meilleurs paris & edges" },
   "login.feat2Body": { en: "Pre-ranked value picks across live and upcoming games.", fr: "Sélections de valeur classées pour les matchs en direct et à venir." },
-  "login.feat3Title": { en: "Build & track slips", fr: "Créez & suivez vos coupons" },
+  "login.feat3Title": { en: "Build & track slips", fr: "Créez & suivez vos paris" },
   "login.feat3Body": { en: "Combine legs, lock slips and follow your results.", fr: "Combinez vos sélections, verrouillez et suivez vos résultats." },
 
   // ── Pro / subscription ──
@@ -1032,7 +1035,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
 
   // ── League: Pro lock on other players' bets ──
   "league.othersProTitle": { en: "See their bets with Pro", fr: "Vois leurs paris avec Pro" },
-  "league.othersProDesc":  { en: "Viewing other players' bet slips is a Pro feature.", fr: "Voir les coupons des autres joueurs est réservé aux Pro." },
+  "league.othersProDesc":  { en: "Viewing other players' bet slips is a Pro feature.", fr: "Voir les paris des autres joueurs est réservé aux Pro." },
 
   // ── Home: rink layout (jersey carousel + centre-ice live zone) ──
   "home.allTeams":     { en: "All Teams",   fr: "Toutes les équipes" },

@@ -17,8 +17,8 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
   const fr = lang === "fr";
 
   const intro = fr
-    ? "ArakIce estime la probabilité de chaque pari à partir de trois moteurs complémentaires. La même probabilité est affichée dans les stats et enregistrée dans ton coupon — elle vient toujours de la même source, donc les chiffres concordent partout."
-    : "ArakIce estimates the probability of each bet from three complementary engines. The same probability is shown in the stats and stored in your coupon — it always comes from the same source, so the numbers match everywhere.";
+    ? "ArakIce estime la probabilité de chaque pari à partir de trois moteurs complémentaires. La même probabilité est affichée dans les stats et enregistrée dans ton pari — elle vient toujours de la même source, donc les chiffres concordent partout."
+    : "ArakIce estimates the probability of each bet from three complementary engines. The same probability is shown in the stats and stored in your slip — it always comes from the same source, so the numbers match everywhere.";
 
   const sections: Section[] = [
     {
@@ -62,21 +62,21 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
   const actions = fr
     ? [
         "Explore par équipe, par match ou par joueur avec les onglets en haut.",
-        "Ajoute un pari au coupon avec le bouton « + » : la probabilité affichée est celle qui est enregistrée.",
-        "Empile plusieurs paris : le coupon calcule la probabilité combinée. Deux paris qui ne peuvent pas se réaliser ensemble tombent à 0, un pari en double ou déjà contenu dans un autre n'est compté qu'une fois, et deux paris d'un même match sont recalculés en tenant compte de leur lien.",
-        "Le coupon dit à l'écran ce qu'il a fait de tes paris : pourquoi la combinaison est impossible, quels paris ne comptent qu'une fois, et quand le chiffre reste une approximation. Rien ne disparaît du calcul en silence.",
-        "Rien ne t'est interdit pour autant : deux paris qui se contredisent peuvent rester au coupon et être verrouillés — la probabilité combinée affiche alors 0 %.",
+        "Ajoute une sélection au pari avec le bouton « + » : la probabilité affichée est celle qui est enregistrée.",
+        "Empile plusieurs sélections : le pari calcule la probabilité combinée. Deux sélections qui ne peuvent pas se réaliser ensemble tombent à 0, une sélection en double ou déjà contenue dans une autre n'est comptée qu'une fois, et deux sélections d'un même match sont recalculées en tenant compte de leur lien.",
+        "Le pari dit à l'écran ce qu'il a fait de tes sélections : pourquoi la combinaison est impossible, quelles sélections ne comptent qu'une fois, et quand le chiffre reste une approximation. Rien ne disparaît du calcul en silence.",
+        "Rien ne t'est interdit pour autant : deux sélections qui se contredisent peuvent rester au pari et être verrouillées — la probabilité combinée affiche alors 0 %.",
         "Sur l'accueil, « Meilleurs paris » classe les paris des matchs des 48 prochaines heures — la liste est donc vide quand il n'y a pas de match.",
-        "Partage ton coupon en image.",
+        "Partage ton pari en image.",
       ]
     : [
         "Explore by team, game or player with the tabs at the top.",
-        "Add a bet to the coupon with the “+” button: the shown probability is the one stored.",
-        "Stack several bets: the coupon computes the combined probability. Two bets that cannot both happen drop to 0, a duplicate bet — or one already contained in another — is counted once, and two bets on the same game are recomputed with their link taken into account.",
-        "The coupon tells you on screen what it did with your bets: why a combination is impossible, which bets only count once, and when the number is still an approximation. Nothing leaves the calculation silently.",
+        "Add a bet to the slip with the “+” button: the shown probability is the one stored.",
+        "Stack several bets: the slip computes the combined probability. Two bets that cannot both happen drop to 0, a duplicate bet — or one already contained in another — is counted once, and two bets on the same game are recomputed with their link taken into account.",
+        "The slip tells you on screen what it did with your bets: why a combination is impossible, which bets only count once, and when the number is still an approximation. Nothing leaves the calculation silently.",
         "Nothing is forbidden either: two contradicting bets can stay on the slip and be locked — the combined probability then reads 0%.",
         "On the home screen, “Best Bets” ranks bets from games in the next 48 hours — so the list is empty when no game is scheduled.",
-        "Share your coupon as an image.",
+        "Share your slip as an image.",
       ];
 
   return (

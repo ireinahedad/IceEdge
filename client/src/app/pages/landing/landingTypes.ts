@@ -19,6 +19,18 @@ export interface DisplayGame {
   id: string;
   period?: string;
   time?: string;
+  /**
+   * Jour du match, tel que la LNH le date (`YYYY-MM-DD`), et l'instant exact
+   * de la mise au jeu.
+   *
+   * Les deux manquaient : la carte ne connaissait que `time` (« 7:00 PM »),
+   * donc l'accueil ne pouvait NI afficher de quel jour parlait cette heure, NI
+   * trier deux matchs entre eux. `startTimeUTC` est la clé de tri (un instant,
+   * pas une chaîne localisée) ; `gameDate` reste le repli quand l'amont ne le
+   * donne pas.
+   */
+  gameDate?: string;
+  startTimeUTC?: string | null;
   overUnder?: number;
   totalPct?: number | null;
   // bet365 decimal odds — only populated when VITE_ODDS_API_KEY is set
@@ -55,6 +67,8 @@ export async function toDisplayGame(game: NHLGame): Promise<DisplayGame> {
     id: game.id,
     period: game.period ? `${game.period}P • ${game.clock}` : undefined,
     time: game.startTime,
+    gameDate: game.gameDate,
+    startTimeUTC: game.startTimeUTC ?? null,
     overUnder: 5.5,
     totalPct,
     team1: { id: game.homeTeam.abbreviation.toLowerCase(), abbr: game.homeTeam.abbreviation, name: game.homeTeam.name, score: game.homeTeam.score, logo: nhlLogoUrl(game.homeTeam.abbreviation), winPct: homePct },

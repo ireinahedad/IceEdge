@@ -27,10 +27,17 @@ const EMPTY_BET_STATS: BetStats = { decided: 0, wins: 0, total: 0 };
 /**
  * Compte les paris de PLUSIEURS utilisateurs en une seule requête agrégée.
  *
- * Remplace le N+1 qui faisait une requête `SELECT outcome FROM user_bets
+ * Remplace le N+1 qui faisait une requête `SELECT outcome FROM bet_slips
  * WHERE user_id = $1` par utilisateur affiché, puis comptait en JavaScript :
  * 21 allers-retours Postgres pour un leaderboard de 20, et tout l'historique
  * de paris rapatrié à chaque appel pour produire deux entiers.
+ *
+ * ⚠️ SOURCE CORRIGÉE LE 2026-09-20. Cet agrégat lisait `user_bets`, que plus
+ * aucun chemin d'écriture n'alimente (seul `db/seed.ts` y insère encore, pour
+ * le compte de démonstration). Le leaderboard et la recherche de joueurs
+ * classaient donc TOUT LE MONDE à 0 pari et 0 % de réussite, sans que rien ne
+ * le signale : une table vide n'est pas une erreur SQL. Les coupons réels
+ * vivent dans `bet_slips` depuis `submitSlip`.
  *
  * Ici le comptage est fait par Postgres et seule une ligne par utilisateur
  * transite. Sert le leaderboard et la recherche de joueurs.
@@ -58,7 +65,7 @@ async function fetchBetStats(userIds: string[]): Promise<Map<string, BetStats>> 
             COUNT(*) FILTER (WHERE outcome IN ('win', 'loss')) AS decided,
             COUNT(*) FILTER (WHERE outcome = 'win')      AS wins,
             COUNT(*)                                     AS total
-       FROM user_bets
+       FROM bet_slips
       WHERE user_id = ANY($1::uuid[])
       GROUP BY user_id`,
     [userIds],
@@ -307,81 +314,298 @@ export async function updateProfile(userId: string, updates: {
 
 // ─── Bets ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Libellés d'affichage des marchés. Partagé par l'historique et le détail par
+ * marché — deux copies de cette table finiraient par diverger, et c'est le même
+ * mot qui s'affiche des deux côtés de l'écran Profil.
+ */
+const MARKET_LABELS: Record<string, string> = {
+  moneyline:    'Moneyline',
+  total_goals:  'Totals',
+  shots_ou:     'Shots O/U',
+  anytime_goal: 'Goal Scorer',
+  puck_line:    'Puck Line',
+  assists_ou:   'Assists O/U',
+};
+
+/** Une jambe telle qu'elle est stockée dans `bet_slips.legs` (cf. `SlipLeg`). */
+interface StoredLeg {
+  marketType?:  string;
+  subjectName?: string;
+  subjectLogo?: string;
+  selection?:   string;
+  line?:        number;
+  probability?: number;
+  oddsLabel?:   string;
+}
+
+/**
+ * Historique de paris, dans la forme `BetRecord` que sert `GET /api/users/me/bets`.
+ *
+ * ⚠️ LA SOURCE A CHANGÉ (2026-09-20). Cette fonction lisait `user_bets`, une
+ * table que plus rien n'alimente : la seule écriture qui reste dans tout le
+ * dépôt est `db/seed.ts`, pour le compte de démonstration `jdupont`. Les vrais
+ * coupons partent dans `bet_slips` depuis `submitSlip`. Tout compte créé après
+ * la bascule recevait donc un historique VIDE — pas une erreur, pas un log,
+ * juste un tableau vide au-dessus de coupons bien présents en base.
+ *
+ * `BetRecord` décrit UN pari, alors qu'un coupon en porte jusqu'à douze. La
+ * projection tient en deux cas :
+ *   - coupon simple : la jambe EST le pari, reportée telle quelle ;
+ *   - parlay : les champs de sujet résument le coupon et `parlayLegs` porte le
+ *     compte. Le détail des jambes n'entre pas dans cette forme, et n'a pas à y
+ *     entrer : `GET /api/slips` le sert déjà complet, et c'est lui qu'utilise
+ *     l'écran « Mes coupons ».
+ */
 export async function getBetHistory(userId: string) {
-  const { rows } = await pool.query(
-    `SELECT id, placed_at AS "placedAt", market_type AS "marketType",
-            market_label AS "marketLabel", selection, selection_short AS "selectionShort",
-            subject_name AS "subjectName", subject_logo AS "subjectLogo",
-            probability, is_parlay AS "isParlay", parlay_legs AS "parlayLegs",
-            outcome, game_info AS "gameInfo"
-     FROM user_bets
-     WHERE user_id = $1
-     ORDER BY placed_at DESC`,
-    [userId]
+  const { rows } = await pool.query<{
+    id:                  string;
+    placedAt:            Date;
+    legs:                StoredLeg[] | null;
+    legCount:            number;
+    isParlay:            boolean;
+    combinedProbability: number | null;
+    outcome:             string;
+  }>(
+    `SELECT id, placed_at AS "placedAt", legs,
+            leg_count            AS "legCount",
+            is_parlay            AS "isParlay",
+            combined_probability AS "combinedProbability",
+            outcome
+       FROM bet_slips
+      WHERE user_id = $1
+      ORDER BY placed_at DESC`,
+    [userId],
   );
-  return rows;
+
+  return rows.map((slip) => {
+    const first      = slip.legs?.[0] ?? {};
+    const marketType = first.marketType ?? 'moneyline';
+    const legLabel   = [first.selection, first.line].filter((v) => v != null).join(' ').trim();
+
+    return {
+      id:             slip.id,
+      placedAt:       slip.placedAt,
+      marketType,
+      marketLabel:    MARKET_LABELS[marketType] ?? marketType,
+      selection:      slip.isParlay ? `Parlay · ${slip.legCount} legs` : (legLabel || first.subjectName || ''),
+      selectionShort: slip.isParlay ? `${slip.legCount}-leg parlay`    : (first.oddsLabel ?? legLabel),
+      subjectName:    slip.isParlay ? `${slip.legCount}-leg parlay`    : (first.subjectName ?? ''),
+      subjectLogo:    slip.isParlay ? '🎟️'                             : (first.subjectLogo ?? '🏒'),
+      // La probabilité du COUPON quand elle existe : c'est elle qui a servi à
+      // calculer l'XP, donc celle que l'utilisateur a vue en verrouillant.
+      probability:    slip.combinedProbability ?? first.probability ?? 0,
+      isParlay:       slip.isParlay,
+      parlayLegs:     slip.isParlay ? slip.legCount : undefined,
+      outcome:        slip.outcome,
+    };
+  });
 }
 
 // ─── Betting Stats ────────────────────────────────────────────────────────────
 
+/** Nombre de mois civils que renvoie `monthlyStats` (ce qu'affiche le graphe). */
+const MONTHLY_WINDOW = 6;
+
+/**
+ * Jambes tranchées minimum avant qu'un marché puisse être élu « meilleur ».
+ *
+ * Sans plancher, un marché joué UNE fois et gagné sort à 100 % et passe devant
+ * un marché joué cinquante fois à 62 %. Sous le plancher pour tous les marchés,
+ * `bestMarketType` vaut `null` : aucun marché ne mérite encore le titre, et le
+ * dire est plus honnête que de couronner un coup de chance.
+ */
+const BEST_MARKET_MIN_LEGS = 5;
+
+/**
+ * Statistiques de paris du propriétaire du compte.
+ *
+ * ⚠️ DEUX CORRECTIFS DU 2026-09-20, à ne pas défaire séparément.
+ *
+ * **1. La source.** Comme `getBetHistory` ci-dessus, cette fonction agrégeait
+ * `user_bets`, que plus aucun chemin d'écriture n'alimente. Tous les compteurs
+ * de l'écran Profil — coupons, W-L, taux de réussite, détail par marché,
+ * parlays — sortaient donc à zéro pour un compte réel.
+ *
+ * **2. Les trois constantes.** `calibrationScore: 81`, `currentStreak: 4` et
+ * `longestWinStreak: 11` étaient écrits en dur dans le retour. Le premier
+ * peignait « 81/100 · bien calibré » sur le profil de TOUS les utilisateurs, y
+ * compris un compte sans un seul coupon réglé. Les séries sont désormais
+ * calculées ; la calibration est SUPPRIMÉE de la réponse plutôt que devinée —
+ * la mesurer vraiment demande de confronter probabilité annoncée et fréquence
+ * réalisée sur un échantillon qui n'existe pas encore, et un chiffre inventé
+ * sur un écran qui sert à juger un modèle est pire que pas de chiffre.
+ *
+ * Tri ASC et non DESC : les séries se lisent en un seul passage sur l'ordre
+ * chronologique, sans retrier en mémoire.
+ */
 export async function getBettingStats(userId: string) {
-  const { rows: bets } = await pool.query(
-    `SELECT outcome, market_type AS "marketType", probability, is_parlay AS "isParlay",
-            placed_at AS "placedAt"
-     FROM user_bets
-     WHERE user_id = $1`,
-    [userId]
+  // `legs` est un JSONB qui porte le sujet, la cote et le libellé de chaque
+  // jambe — des kilo-octets par coupon, dont ce calcul n'utilise QUE
+  // `marketType`. Postgres le déplie donc ici et n'envoie qu'un tableau de
+  // chaînes : un historique de mille coupons ne fait pas transiter mille
+  // documents JSON pour produire une dizaine d'entiers.
+  const { rows: slips } = await pool.query<{
+    outcome:             'win' | 'loss' | 'pending' | 'void';
+    isParlay:            boolean;
+    combinedProbability: number | null;
+    placedAt:            Date;
+    marketTypes:         string[];
+  }>(
+    `SELECT outcome,
+            is_parlay            AS "isParlay",
+            combined_probability AS "combinedProbability",
+            placed_at            AS "placedAt",
+            COALESCE(
+              (SELECT array_agg(leg->>'marketType')
+                 FROM jsonb_array_elements(legs) AS leg
+                WHERE leg->>'marketType' IS NOT NULL),
+              '{}'::text[]
+            )                    AS "marketTypes"
+       FROM bet_slips
+      WHERE user_id = $1
+      ORDER BY placed_at ASC`,
+    [userId],
   );
 
-  const wins    = bets.filter(b => b.outcome === 'win').length;
-  const losses  = bets.filter(b => b.outcome === 'loss').length;
-  const pending = bets.filter(b => b.outcome === 'pending').length;
-  const total   = bets.length;
-  const hitRate = total > 0 ? Math.round((wins / (wins + losses || 1)) * 1000) / 10 : 0;
+  const wins    = slips.filter((s) => s.outcome === 'win').length;
+  const losses  = slips.filter((s) => s.outcome === 'loss').length;
+  const pending = slips.filter((s) => s.outcome === 'pending').length;
+  const total   = slips.length;
 
-  // Market breakdown
-  const marketMap: Record<string, { wins: number; total: number }> = {};
-  for (const b of bets) {
-    if (!marketMap[b.marketType]) marketMap[b.marketType] = { wins: 0, total: 0 };
-    // Un coupon annulé (`void`) ne compte ni au numérateur ni au
-    // dénominateur de la réussite par marché.
-    if (b.outcome === 'win' || b.outcome === 'loss') {
-      marketMap[b.marketType].total++;
-      if (b.outcome === 'win') marketMap[b.marketType].wins++;
+  // `decided` et non `total` au dénominateur : un coupon `void` (migration 037)
+  // n'a été ni gagné ni perdu, et un coupon `pending` n'a pas encore eu lieu.
+  // Les compter ferait baisser le taux sans qu'aucun pari ait été perdu.
+  const decided = wins + losses;
+  const hitRate = decided > 0 ? Math.round((wins / decided) * 1000) / 10 : 0;
+
+  // Moyenne des probabilités RENSEIGNÉES. `combined_probability` est nullable
+  // (migration 003) et l'ancien calcul divisait par le nombre total de paris :
+  // un coupon sans probabilité exploitable tirait la moyenne vers le bas au
+  // lieu d'en être exclu.
+  const probs = slips
+    .map((s) => s.combinedProbability)
+    .filter((p): p is number => p != null);
+  const avgProbability = probs.length > 0
+    ? Math.round((probs.reduce((sum, p) => sum + p, 0) / probs.length) * 10) / 10
+    : 0;
+
+  // ── Séries ──
+  //
+  // Seuls les coupons TRANCHÉS forment la suite. Un `void` ou un `pending` ne
+  // compte pas comme une victoire, mais ne COUPE pas non plus la série : le
+  // trou qu'il laisse dans la chronologie ne doit pas transformer huit
+  // victoires d'affilée en deux séries de quatre.
+  const settled = slips
+    .filter((s) => s.outcome === 'win' || s.outcome === 'loss')
+    .map((s) => s.outcome as 'win' | 'loss');
+
+  let longestWinStreak = 0;
+  let run = 0;
+  for (const outcome of settled) {
+    run = outcome === 'win' ? run + 1 : 0;
+    if (run > longestWinStreak) longestWinStreak = run;
+  }
+
+  // Série en cours, SIGNÉE : +3 = trois victoires de suite, −2 = deux défaites
+  // de suite, 0 = aucun coupon tranché. Le signe évite à l'appelant de
+  // redemander la dernière issue pour savoir s'il affiche « W3 » ou « L2 ».
+  let currentStreak = 0;
+  for (let i = settled.length - 1; i >= 0; i--) {
+    const isWin = settled[i] === 'win';
+    if (i === settled.length - 1)          currentStreak = isWin ? 1 : -1;
+    else if (isWin  && currentStreak > 0)  currentStreak++;
+    else if (!isWin && currentStreak < 0)  currentStreak--;
+    else break;
+  }
+
+  // ── Détail par marché ──
+  //
+  // Une ligne par marché, obtenue en dépliant les jambes de chaque coupon
+  // tranché. Un même marché joué deux fois dans un parlay compte deux fois :
+  // ce sont deux paris.
+  //
+  // ⚠️ L'ISSUE ATTRIBUÉE À UNE JAMBE EST CELLE DU COUPON. Pour un coupon simple
+  // c'est exact. Pour un parlay PERDU ça ne l'est pas : le coupon tombe dès
+  // qu'une seule jambe échoue, et les autres — peut-être gagnantes — sont
+  // comptées perdantes ici. Le taux par marché d'un joueur qui joue surtout des
+  // parlays est donc tiré vers le BAS.
+  //
+  // C'est un choix, pas un oubli. L'autre découpage possible (ne retenir que
+  // les parlays gagnants, dont on SAIT que toutes les jambes ont gagné)
+  // biaiserait vers le HAUT, ce qui est pire sur un écran dont le seul usage
+  // est de décider où l'on est bon. Une attribution exacte demanderait de
+  // régler chaque jambe individuellement, ce que `settlement.service.ts` ne
+  // stocke pas aujourd'hui.
+  const marketMap = new Map<string, { wins: number; decided: number }>();
+  for (const slip of slips) {
+    if (slip.outcome !== 'win' && slip.outcome !== 'loss') continue;
+    for (const marketType of slip.marketTypes) {
+      const bucket = marketMap.get(marketType) ?? { wins: 0, decided: 0 };
+      bucket.decided++;
+      if (slip.outcome === 'win') bucket.wins++;
+      marketMap.set(marketType, bucket);
     }
   }
 
-  const marketLabels: Record<string, string> = {
-    moneyline: 'Moneyline', total_goals: 'Totals', shots_ou: 'Shots O/U',
-    anytime_goal: 'Goal Scorer', puck_line: 'Puck Line', assists_ou: 'Assists O/U',
-  };
+  // Trié par VOLUME décroissant : le graphe à barres se lit du marché le plus
+  // joué au moins joué, un ordre stable d'un chargement à l'autre. L'ancien
+  // code, lui, renvoyait le tableau trié par taux — effet de bord du `.sort()`
+  // en place qui servait à élire le meilleur marché juste après.
+  const marketBreakdown = [...marketMap.entries()]
+    .map(([marketType, d]) => ({
+      marketType,
+      label:   MARKET_LABELS[marketType] ?? marketType,
+      bets:    d.decided,
+      hitRate: Math.round((d.wins / d.decided) * 100),
+    }))
+    .sort((a, b) => b.bets - a.bets || a.label.localeCompare(b.label));
 
-  const marketBreakdown = Object.entries(marketMap).map(([type, data]) => ({
-    marketType:  type,
-    label:       marketLabels[type] ?? type,
-    bets:        data.total,
-    hitRate:     data.total > 0 ? Math.round((data.wins / data.total) * 100) : 0,
-  }));
+  const bestMarket = marketBreakdown
+    .filter((m) => m.bets >= BEST_MARKET_MIN_LEGS)
+    .sort((a, b) => b.hitRate - a.hitRate || b.bets - a.bets)[0] ?? null;
 
-  const bestMarket = marketBreakdown.sort((a, b) => b.hitRate - a.hitRate)[0];
-
-  // Monthly stats (last 6 months)
-  const monthlyMap: Record<string, { bets: number; wins: number }> = {};
-  for (const b of bets) {
-    const month = new Date(b.placedAt).toLocaleString('en', { month: 'short' });
-    if (!monthlyMap[month]) monthlyMap[month] = { bets: 0, wins: 0 };
-    monthlyMap[month].bets++;
-    if (b.outcome === 'win') monthlyMap[month].wins++;
+  // ── Historique mensuel ──
+  //
+  // Clé ANNÉE-mois, et fenêtre réellement bornée. L'ancien regroupement passait
+  // par `toLocaleString('en', { month: 'short' })`, donc sans année : avril 2025
+  // et avril 2026 tombaient dans le même seau. Et le « last 6 months » du
+  // commentaire n'était borné nulle part — un compte de deux saisons produisait
+  // douze points mélangés sur un graphe qui en attend six.
+  const monthlyMap = new Map<string, { bets: number; wins: number; decided: number }>();
+  for (const slip of slips) {
+    const at  = new Date(slip.placedAt);
+    const key = `${at.getUTCFullYear()}-${String(at.getUTCMonth() + 1).padStart(2, '0')}`;
+    const bucket = monthlyMap.get(key) ?? { bets: 0, wins: 0, decided: 0 };
+    bucket.bets++;
+    if (slip.outcome === 'win' || slip.outcome === 'loss') {
+      bucket.decided++;
+      if (slip.outcome === 'win') bucket.wins++;
+    }
+    monthlyMap.set(key, bucket);
   }
-  const monthlyStats = Object.entries(monthlyMap).map(([month, data]) => ({
-    month,
-    bets:    data.bets,
-    hitRate: data.bets > 0 ? Math.round((data.wins / data.bets) * 100) : 0,
-  }));
 
-  // Parlay record
-  const parlayBets = bets.filter(b => b.isParlay);
-  const parlayWins = parlayBets.filter(b => b.outcome === 'win').length;
+  const monthlyStats = [...monthlyMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-MONTHLY_WINDOW)
+    .map(([key, d]) => ({
+      month: new Date(`${key}-01T00:00:00Z`).toLocaleString('en', { month: 'short', timeZone: 'UTC' }),
+      bets:  d.bets,
+      // Même définition qu'en haut du fichier : tranchés / tranchés. L'ancien
+      // calcul divisait par les paris POSÉS, donc un mois encore plein de
+      // coupons en attente s'affichait à un taux artificiellement bas.
+      hitRate: d.decided > 0 ? Math.round((d.wins / d.decided) * 100) : 0,
+    }));
+
+  // ── Parlays ──
+  //
+  // Les défaites sont COMPTÉES, pas déduites. L'ancien `parlayBets.length -
+  // parlayWins` rangeait dans les défaites tout parlay encore en attente ou
+  // annulé : un joueur qui venait de poser trois parlays voyait « 0 - 3 » avant
+  // le premier coup de patin.
+  const parlays      = slips.filter((s) => s.isParlay);
+  const parlayWins   = parlays.filter((s) => s.outcome === 'win').length;
+  const parlayLosses = parlays.filter((s) => s.outcome === 'loss').length;
 
   return {
     totalBets:         total,
@@ -389,12 +613,11 @@ export async function getBettingStats(userId: string) {
     losses,
     pending,
     hitRate,
-    avgProbability:    total > 0 ? Math.round(bets.reduce((s, b) => s + b.probability, 0) / total * 10) / 10 : 0,
-    calibrationScore:  81,
-    currentStreak:     4,
-    longestWinStreak:  11,
-    parlayRecord:      { wins: parlayWins, losses: parlayBets.length - parlayWins },
-    bestMarketType:    bestMarket?.marketType ?? 'moneyline',
+    avgProbability,
+    currentStreak,
+    longestWinStreak,
+    parlayRecord:      { wins: parlayWins, losses: parlayLosses },
+    bestMarketType:    bestMarket?.marketType ?? null,
     bestMarketHitRate: bestMarket?.hitRate    ?? 0,
     monthlyStats,
     marketBreakdown,
@@ -581,10 +804,12 @@ export async function getPublicSlips(targetUserId: string, viewerId: string, lim
  * En-tête de la page joueur : identité + forme récente.
  *
  * Les compteurs sont calculés sur les coupons RÉELLEMENT VISIBLES par
- * `viewerId`, jamais sur `user_bets`. Afficher « 64 % sur 128 paris » au-dessus
- * d'une liste qui n'en montre que 12 recréerait exactement l'allégation
- * invérifiable que cette page est censée remplacer. Le classement, lui, continue
- * d'agréger `user_bets` : deux chiffres, deux questions.
+ * `viewerId`, et sur eux seuls. Afficher « 64 % sur 128 paris » au-dessus d'une
+ * liste qui n'en montre que 12 recréerait exactement l'allégation invérifiable
+ * que cette page est censée remplacer. Le classement, lui, agrège l'historique
+ * ENTIER via `fetchBetStats` : deux chiffres, deux questions. Depuis le
+ * 2026-09-20 les deux lisent la même table (`bet_slips`) — c'est le filtre de
+ * visibilité qui les sépare, plus la source.
  */
 export async function getPlayerSummary(targetUserId: string, viewerId: string) {
   const isOwner = targetUserId === viewerId;
