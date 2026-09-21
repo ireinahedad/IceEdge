@@ -22,6 +22,8 @@ import {
   pushFamilyWeights,
 } from "../services/ruleWeightsService";
 import { scaledRulePct } from "../pages/prediction/gameMarkets";
+import { factorDescription } from "../data/factorDescriptions";
+import { useI18n } from "../i18n";
 
 export function RuleFactorEditor({
   factors,
@@ -41,6 +43,7 @@ export function RuleFactorEditor({
   pctScale?: number;
   label: string;
 }) {
+  const { lang } = useI18n();
   const [open, setOpen] = useState(false);
   const [weights, setWeights] = useState<Record<string, number>>(() => getFamilyWeights(factorGroup, factors));
   const sectionRef = useRef<HTMLDivElement>(null);
@@ -198,8 +201,10 @@ export function RuleFactorEditor({
               {factors.map((f) => {
                 const w = weights[f.id] ?? f.weight;
                 const on = w > 0;
+                const desc = factorDescription(factorGroup, f.id, lang);
                 return (
-                  <div key={f.id} className={`flex items-center gap-2 ${on ? "" : "opacity-40"}`}>
+                  <div key={f.id} className={on ? "" : "opacity-40"}>
+                  <div className="flex items-center gap-2">
                     <input type="checkbox" checked={on} onChange={() => toggleFactor(f)} className="accent-[#86d1ea] flex-shrink-0" />
                     <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: factorColor(f.id) }} />
                     <span className="text-white/80 text-[11px] flex-1 truncate">{f.label}</span>
@@ -213,6 +218,10 @@ export function RuleFactorEditor({
                       onChange={(e) => setW(f.id, Number(e.target.value))}
                       className="w-11 flex-shrink-0 bg-black/20 border border-white/25 rounded px-1 py-0.5 text-[11px] text-white text-right outline-none focus:border-[#90C9F0]/60"
                     />
+                  </div>
+                  {desc && (
+                    <p className="text-white/40 text-[10px] leading-snug mt-0.5 pl-[42px]">{desc}</p>
+                  )}
                   </div>
                 );
               })}

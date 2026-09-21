@@ -62,3 +62,6 @@ _to_delete/
 # dossier peut être recréé à tout moment : c'est pour ça qu'il est ignoré et pas
 # seulement effacé.
 Claude outputs/
+
+# Sauvegardes de purge:stale (données joueurs)
+server/.purge-backups/

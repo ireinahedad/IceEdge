@@ -25,7 +25,8 @@
     "moderation:dry-run": "ts-node scripts/moderation-dry-run.ts",
     "content:render": "ts-node scripts/render-slides.ts",
     "content:video": "ts-node scripts/build-video.ts",
-    "settle:stuck": "ts-node scripts/settle-stuck-slips.ts"
+    "settle:stuck": "ts-node scripts/settle-stuck-slips.ts",
+    "purge:stale": "ts-node scripts/purge-stale-slips.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.665.0",
