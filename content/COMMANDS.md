@@ -213,7 +213,7 @@ npm run content:render -- --only=suzuki       :: un seul post
 npm run content:render -- --date=<date>-recap :: le lot de récaps de la soirée
 ```
 
-Les cartes de récap (score, tableau, carte de match, feuille de match, totaux d'équipe)
+Les cartes de récap (ouverture, carte de match, étoiles)
 passent par le même rendu, avec les logos déposés par `content:recap`. `--preview`
 les affiche aussi : c'est le moyen le plus rapide de vérifier qu'une soirée
 chargée ne fait pas déborder un plan.

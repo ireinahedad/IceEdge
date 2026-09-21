@@ -296,14 +296,13 @@ function buildSvg(kind: string, rows: ChartRow[]): string {
 // ===========================================================================
 //
 // Même statut que le SVG des graphiques : ce sont des blocs GÉNÉRÉS, pas des
-// gabarits. Le nombre de lignes d'un tableau de scores dépend du nombre de
-// matchs de la nuit et ne peut pas vivre dans un fichier .html figé. Le style,
+// gabarits. Le nombre de lignes de marqueurs dépend du match et le nombre
+// d'affiches de la soirée : ni l'un ni l'autre ne vit dans un .html figé. Le style,
 // lui, reste entièrement dans _shared.css — c'est là qu'on règle le rendu.
 
 /** Les gabarits dont le contenu est un bloc généré (variable {{block}}). */
 const RECAP_TEMPLATES = [
-  'score_card', 'scoreboard_card', 'stars_card', 'summary_card', 'teamstats_card',
-  'matchcard_card', 'intro_card',
+  'intro_card', 'matchcard_card', 'stars_card',
 ];
 
 /**
@@ -334,50 +333,6 @@ const logoImg = (uri: string) => (uri ? `<img class="tlogo" src="${uri}" alt="">
 /** Couleur principale du club, pour le liseré des cartes. */
 const clubColor = (abbr: unknown) => teamColors(String(abbr ?? '')).primary;
 
-/** score_card — le score final d'un match, avec la ligne des périodes. */
-async function scoreBlock(game: any): Promise<string> {
-  if (!game) return '';
-  const rows: string[] = [];
-  for (const t of [game.away, game.home]) {
-    rows.push(
-      `<div class="score-row${t.win ? ' win' : ''}" style="--c:${clubColor(t.abbr)}">`
-      + logoImg(await teamLogo(t.abbr))
-      + `<div class="tname"><b>${esc(t.nick)}</b><span>${esc(t.abbr)}</span></div>`
-      + `<div class="tscore">${esc(t.score)}</div>`
-      + `</div>`,
-    );
-  }
-  const periods: any[] = game.periods ?? [];
-  // La colonne T ferme la ligne : sans total, l'œil additionne les périodes
-  // pour vérifier le score qu'il vient de lire juste au-dessus.
-  const cells = (side: 'away' | 'home', team: any) =>
-    `<tr><td class="ab">${esc(team.abbr)}</td>`
-    + periods.map((p) => `<td>${esc(p[side])}</td>`).join('')
-    + `<td>${esc(team.score)}</td></tr>`;
-  const table = periods.length
-    ? `<table class="periods">`
-      + `<tr><th class="ab"></th>${periods.map((p) => `<th>${esc(p.label)}</th>`).join('')}<th>T</th></tr>`
-      + cells('away', game.away) + cells('home', game.home)
-      + `</table>`
-    : '';
-  return `<div class="final-tag">${esc(game.ending)}</div>`
-    + `<div class="score-rows">${rows.join('')}</div>${table}`;
-}
-
-/**
- * matchcard_card — une carte par match dans night-long.
- *
- * Deux moitiés en miroir (visiteur à gauche, local à droite), chacune teintée
- * de sa couleur de club : logo + fiche de la saison (V-D-DP), score, tirs ; puis un
- * tableau des marqueurs « nom | B A P | B A P | nom », comme la maquette Canva.
- * Les en-têtes sont en anglais (G A P) pour rester dans la langue des vidéos.
- */
-/**
- * Couleur d'une moitié de carte de match. La teinte remplit une surface
- * entière, pas un liseré : un primaire presque noir (PIT, SEA, TOR, EDM…)
- * y disparaît dans le fond. Sous ce seuil de luminance, le secondaire du club
- * prend le relais — toujours une couleur du club, jamais une couleur inventée.
- */
 /**
  * Clubs dont le logo (foncé) se perd sur leur propre teinte : on prend la
  * couleur la plus PÂLE du club. Le Lightning est bleu et blanc — le bleu du
@@ -478,26 +433,6 @@ async function introBlock(intro: any): Promise<string> {
     + `<div class="in-rows ${size}">${rows.join('')}</div>`;
 }
 
-/** scoreboard_card — plusieurs matchs, une ligne chacun. */
-async function boardBlock(games: any[]): Promise<string> {
-  const rows: string[] = [];
-  for (const g of games ?? []) {
-    rows.push(
-      `<div class="board-row">`
-      + logoImg(await teamLogo(g.away.abbr))
-      + `<span class="ab">${esc(g.away.abbr)}</span>`
-      + `<span class="sc${g.away.win ? ' win' : ''}">${esc(g.away.score)}</span>`
-      + `<span class="dash">&#8211;</span>`
-      + `<span class="sc${g.home.win ? ' win' : ''}">${esc(g.home.score)}</span>`
-      + `<span class="ab right">${esc(g.home.abbr)}</span>`
-      + logoImg(await teamLogo(g.home.abbr))
-      + (g.tag ? `<span class="tag">${esc(g.tag)}</span>` : '')
-      + `</div>`,
-    );
-  }
-  return `<div class="board-rows">${rows.join('')}</div>`;
-}
-
 /** stars_card — les étoiles désignées par la ligue. */
 async function starsBlock(stars: any[]): Promise<string> {
   const rows: string[] = [];
@@ -514,74 +449,16 @@ async function starsBlock(stars: any[]): Promise<string> {
   return `<div class="star-rows">${rows.join('')}</div>`;
 }
 
-/** summary_card — les buts dans l'ordre, avec le score courant. */
-async function goalsBlock(goals: any[]): Promise<string> {
-  const rows: string[] = [];
-  for (const g of goals ?? []) {
-    rows.push(
-      `<div class="goal-row" style="--c:${clubColor(g.abbr)}">`
-      + `<div class="when">${esc(g.when)}</div>`
-      + logoImg(await teamLogo(g.abbr))
-      + `<div class="who">${esc(g.scorer)}${g.assists ? `<i>${esc(g.assists)}</i>` : ''}</div>`
-      + (g.strength ? `<div class="str">${esc(g.strength)}</div>` : '')
-      + `<div class="run">${esc(g.run)}</div>`
-      + `</div>`,
-    );
-  }
-  return `<div class="goal-rows">${rows.join('')}</div>`;
-}
-
-/** teamstats_card — totaux d'équipe en barres, puis la ligne des gardiens. */
-async function statsBlock(stats: any): Promise<string> {
-  if (!stats) return '';
-  const cAway = clubColor(stats.away?.abbr);
-  const cHome = clubColor(stats.home?.abbr);
-  const head = `<div class="stat-head">`
-    + `<div class="side">${logoImg(await teamLogo(stats.away?.abbr))}${esc(stats.away?.abbr)}</div>`
-    + `<div class="side">${esc(stats.home?.abbr)}${logoImg(await teamLogo(stats.home?.abbr))}</div>`
-    + `</div>`;
-
-  // La barre partage 100 % entre les deux équipes. À 0-0 (aucun but en
-  // supériorité, par exemple), la moitié-moitié est la lecture juste : personne
-  // n'a dominé cette ligne.
-  const rows = (stats.rows ?? []).map((r: any) => {
-    const total = Number(r.away) + Number(r.home);
-    const pct = total > 0 ? (Number(r.away) / total) * 100 : 50;
-    return `<div class="stat-line">`
-      + `<div class="top"><span>${esc(r.away)}</span><em>${esc(r.label)}</em><span>${esc(r.home)}</span></div>`
-      + `<div class="stat-bar">`
-      + `<i style="width:${pct.toFixed(1)}%;background:${cAway}"></i>`
-      + `<i style="width:${(100 - pct).toFixed(1)}%;background:${cHome}"></i>`
-      + `</div></div>`;
-  }).join('');
-
-  // Pas de logo sur la ligne des gardiens : le liseré de couleur suffit à dire
-  // le camp, et une troisième taille d'image sur la même carte fait du bruit.
-  const goalies = (stats.goalies ?? []).map((k: any) =>
-    `<div class="goalie-row" style="--c:${clubColor(k.abbr)}">`
-    + `<b>${esc(k.name)}</b> ${esc(k.abbr)}${k.decision ? ` (${esc(k.decision)})` : ''}`
-    + `<span class="line">${esc(k.line)}</span>`
-    + `</div>`).join('');
-
-  return head + `<div class="stat-rows">${rows}</div>`
-    + (goalies ? `<div class="goalie-rows">${goalies}</div>` : '');
-}
-
 /** Aiguillage : un plan de récap, son bloc. */
 async function buildRecapBlock(slide: any): Promise<string> {
   // Le titre coiffe le bloc au lieu de le suivre. « Three stars » lu après les
   // trois noms n'apprend plus rien ; lu avant, il dit comment lire la carte.
-  // score_card fait exception : son titre est l'état du match (FINAL / OT), qui
-  // appartient au bloc lui-même.
+  // La carte de match porte son propre titre (FINAL / OT), dans son bloc.
   const head = slide.title ? `<div class="final-tag">${esc(slide.title)}</div>` : '';
   switch (slide.template) {
-    case 'score_card':      return scoreBlock(slide.game);
     case 'matchcard_card':  return matchBlock(slide.match);
     case 'intro_card':      return introBlock(slide.intro);
-    case 'scoreboard_card': return head + await boardBlock(slide.games);
     case 'stars_card':      return head + await starsBlock(slide.stars);
-    case 'summary_card':    return head + await goalsBlock(slide.goals);
-    case 'teamstats_card':  return head + await statsBlock(slide.stats);
     default:                return '';
   }
 }

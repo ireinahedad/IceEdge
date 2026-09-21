@@ -70,7 +70,6 @@ const HASHTAGS    = path.join(REPO_ROOT, 'content', 'library', 'hashtags.md');
  * but, un peu plus court, une seconde.
  */
 const D = {
-  hook:       2.0,   // identique au pipeline quotidien : une amorce, pas une lecture
   intro:      2.0,   // carte d'ouverture des shorts : jour, date, affiches…
   introRow:   0.15,  // … plus un souffle par affiche quand la soirée est chargée
   matchBase:  1.0,   // carte de match : score, fiches, tirs…
@@ -414,15 +413,13 @@ function featured(games: Game[]): Game {
 // Étoiles
 // ===========================================================================
 
-interface Star { rank: number; name: string; abbr: string; line: string; meta: string; weight: number; }
+interface Star { rank: number; name: string; abbr: string; line: string; meta: string; }
 
 /**
  * Les trois étoiles d'un match sont celles de la LNH, telles quelles.
  *
  * Elles ont leur plan dans <match>-short (stars_card, « Three stars »), pas
  * dans night-long.
- * `weight` reste calculé (3 par but, 2 par passe ; arrêts / 12 + 3 pour un
- * blanchissage) au cas où un classement de la nuit reviendrait.
  */
 function starsOf(g: Game): Star[] {
   const goalieByName = new Map<string, any>();
@@ -434,16 +431,12 @@ function starsOf(g: Game): Star[] {
     const line = gk
       ? `${gk.saves} SV${savePct(gk.savePct) ? ` · ${savePct(gk.savePct)}` : ''}`
       : statLine(Number(s.goals ?? 0), Number(s.assists ?? 0));
-    const weight = gk
-      ? gk.saves / 12 + (Number(gk.goalsAgainst ?? 1) === 0 ? 3 : 0)
-      : 3 * Number(s.goals ?? 0) + 2 * Number(s.assists ?? 0);
     return {
       rank: Number(s.star ?? 0),
       name: String(s.name ?? ''),
       abbr: String(s.teamAbbr ?? ''),
       line,
       meta: `${s.position ?? ''} · ${s.teamAbbr ?? ''}`.replace(/^ · /, ''),
-      weight,
     };
   }).filter((s: Star) => s.name);
 }
@@ -662,7 +655,6 @@ function gameHook(g: Game): string {
 
 // ===========================================================================
 // Les deux variantes : night-long (la soirée) et <match>-short (un match).
-// night-short et <match>-long ne sont plus produits.
 // ===========================================================================
 
 const monthDay = (iso: string) =>
@@ -782,8 +774,8 @@ async function main() {
     picked = [featured(games)];
   }
 
-  // Une seule affiche dans la soirée : le tableau des scores et le récap du
-  // match diraient la même chose, avec une carte de moins pour le second.
+  // Une seule affiche dans la soirée : night-long et le short du match
+  // diraient la même chose ; seul le short sort.
   const withNight = games.length > 1 && !flag('no-night');
 
   const posts: any[] = [];

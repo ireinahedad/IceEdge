@@ -201,14 +201,14 @@ body::before {
 .anim-line { stroke-linecap: round; }
 
 /* --- Récaps de matchs finis ------------------------------------------------
-   Cinq gabarits supplémentaires (score, tableau, étoiles, feuille de match,
-   totaux d'équipe) alimentés par build-recap.ts. Leur bloc central est du HTML
-   généré par render-slides.ts — comme le SVG de chart_card — parce que le
-   nombre de lignes dépend de la soirée et ne peut pas vivre dans un gabarit.
+   Trois gabarits (ouverture, carte de match, étoiles) alimentés par
+   build-recap.ts. Leur bloc central est du HTML généré par render-slides.ts —
+   comme le SVG de chart_card — parce que le nombre de lignes dépend du match
+   et ne peut pas vivre dans un gabarit.
 
    Contraintes de dimension retenues : 888 px de large utiles (1080 moins les
    deux gouttières) et environ 1345 px de haut entre les deux zones de sécurité.
-   Les plafonds de lignes de build-recap.ts (6 matchs, 9 buts) en découlent :
+   Le plafond de 11 lignes de marqueurs par carte (build-recap.ts) en découle :
    au-delà, le bloc dépasse et Playwright coupe sans prévenir.
    --------------------------------------------------------------------------- */
 
@@ -226,58 +226,6 @@ body::before {
   color: var(--alert);
   text-transform: uppercase;
 }
-
-/* --- score_card : un match --- */
-.score-rows { display: flex; flex-direction: column; gap: 24px; }
-.score-row {
-  display: flex;
-  align-items: center;
-  gap: 32px;
-  background: var(--surface);
-  border: 2px solid rgba(144, 201, 240, 0.14);
-  border-left: 14px solid var(--c, var(--accent));
-  border-radius: 28px;
-  padding: 26px 36px;
-}
-.score-row.win { border-color: rgba(144, 201, 240, 0.40); border-left-color: var(--c, var(--accent)); }
-.score-row .tlogo { width: 110px; height: 110px; }
-.score-row .tname { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.score-row .tname b {
-  font-size: 56px; font-weight: 800; color: #fff;
-  letter-spacing: -1px; text-transform: uppercase; line-height: 1.05;
-}
-.score-row .tname span { font-size: 30px; font-weight: 600; color: var(--muted); letter-spacing: 4px; }
-.score-row .tscore { font-size: 128px; font-weight: 900; line-height: 0.9; letter-spacing: -6px; color: var(--muted); }
-.score-row.win .tscore { color: #fff; }
-
-.periods { width: 100%; border-collapse: collapse; }
-.periods th {
-  font-size: 32px; font-weight: 600; color: var(--muted);
-  letter-spacing: 4px; padding: 10px 0; text-align: center;
-}
-.periods th.ab, .periods td.ab { text-align: left; width: 200px; }
-.periods td { text-align: center; font-size: 44px; font-weight: 700; color: #fff; padding: 12px 0; }
-.periods td.ab { font-size: 34px; font-weight: 700; color: var(--muted); letter-spacing: 4px; }
-.periods tr + tr td { border-top: 2px solid rgba(144, 201, 240, 0.10); }
-
-/* --- scoreboard_card : la soirée --- */
-.board-rows { display: flex; flex-direction: column; gap: 18px; }
-.board-row {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  background: var(--surface);
-  border: 2px solid rgba(144, 201, 240, 0.12);
-  border-radius: 22px;
-  padding: 18px 26px;
-}
-.board-row .tlogo { width: 72px; height: 72px; }
-.board-row .ab { font-size: 42px; font-weight: 800; letter-spacing: 2px; color: #fff; width: 120px; }
-.board-row .ab.right { text-align: right; }
-.board-row .sc { font-size: 58px; font-weight: 900; color: var(--muted); width: 74px; text-align: center; }
-.board-row .sc.win { color: var(--accent); }
-.board-row .dash { font-size: 40px; color: var(--muted); }
-.board-row .tag { margin-left: auto; font-size: 28px; font-weight: 800; letter-spacing: 3px; color: var(--alert); }
 
 /* --- stars_card : les étoiles --- */
 .star-rows { display: flex; flex-direction: column; gap: 24px; }
@@ -301,55 +249,6 @@ body::before {
 }
 .star-row .who span { font-size: 32px; font-weight: 600; color: var(--muted); letter-spacing: 2px; }
 .star-row .line { font-size: 42px; font-weight: 800; color: var(--accent); text-align: right; }
-
-/* --- summary_card : la feuille de match --- */
-.goal-rows { display: flex; flex-direction: column; gap: 14px; }
-.goal-row {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  background: var(--surface);
-  border-radius: 18px;
-  border-left: 10px solid var(--c, var(--accent));
-  padding: 14px 22px;
-}
-.goal-row .when { font-size: 30px; font-weight: 700; color: var(--muted); letter-spacing: 2px; width: 148px; }
-.goal-row .tlogo { width: 56px; height: 56px; }
-/* Une ligne = une hauteur. « Jean-Gabriel Pageau » passait sur deux lignes et
-   faisait grandir la carte ; à neuf buts, le bas sortait du cadre sans que rien
-   ne le signale. On coupe plutôt que de déborder. */
-.goal-row .who {
-  flex: 1; min-width: 0; font-size: 38px; font-weight: 700; color: #fff; line-height: 1.15;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.goal-row .who i {
-  display: block; font-style: normal; font-weight: 500; font-size: 30px; color: var(--muted);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.goal-row .str { font-size: 26px; font-weight: 800; letter-spacing: 2px; color: var(--alert); }
-.goal-row .run { font-size: 38px; font-weight: 800; color: var(--accent); width: 126px; text-align: right; }
-
-/* --- teamstats_card : totaux d'équipe + gardiens --- */
-.stat-head { display: flex; align-items: center; justify-content: space-between; }
-.stat-head .side { display: flex; align-items: center; gap: 16px; font-size: 38px; font-weight: 800; color: #fff; letter-spacing: 2px; }
-.stat-head .tlogo { width: 72px; height: 72px; }
-.stat-rows { display: flex; flex-direction: column; gap: 24px; }
-.stat-line .top { display: flex; justify-content: space-between; align-items: baseline; font-size: 44px; font-weight: 800; color: #fff; }
-.stat-line .top em {
-  font-style: normal; font-size: 28px; font-weight: 600;
-  letter-spacing: 3px; color: var(--muted); text-transform: uppercase;
-}
-.stat-bar { display: flex; height: 16px; border-radius: 8px; overflow: hidden; margin-top: 12px; background: rgba(255, 255, 255, 0.06); }
-.stat-bar i { display: block; height: 100%; }
-.goalie-rows { display: flex; flex-direction: column; gap: 14px; }
-.goalie-row {
-  display: flex; align-items: center; gap: 18px;
-  background: var(--surface); border-radius: 18px; padding: 18px 24px;
-  border-left: 10px solid var(--c, var(--accent));
-  font-size: 36px; color: var(--muted);
-}
-.goalie-row b { color: #fff; font-weight: 800; }
-.goalie-row .line { margin-left: auto; font-weight: 800; color: var(--accent); }
 
 /* --- matchcard_card : une carte par match (night-long) ---
    Maquette Canva : deux moitiés en miroir, le tableau des marqueurs dessous.
