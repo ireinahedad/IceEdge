@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
-import { Lock, Share2, Clock, History, Trophy, AlertCircle, RefreshCw, MessageSquare, X, Check, Minus } from "lucide-react";
+import { Lock, Share2, Clock, History, Trophy, AlertCircle, RefreshCw, MessageSquare, X, Check, Minus, ChevronDown } from "lucide-react";
 import { profileApiService } from "../../services/userService";
 import type { ChatRoom } from "../../types/user";
 import { getMySlips, settleMySlips } from "../../services/slipApiService";
@@ -222,6 +222,37 @@ function LegResultMark({ result, slipPending }: { result?: string; slipPending: 
   );
 }
 
+// ─── Lignes d'une sélection ───────────────────────────────────────────────────
+
+/**
+ * Ce que la carte écrit pour une sélection : une ligne forte, une ligne pâle.
+ *
+ * Pari de match ou d'équipe : le sujet (« MTL vs TOR »), puis la sélection.
+ * Pari JOUEUR : le sujet n'est plus que l'équipe du joueur (« MTL ») — la
+ * ligne forte est alors ce qui a été parié, l'équipe passe dessous.
+ *
+ * Les coupons placés avant ce changement portent l'identifiant NHL du joueur
+ * comme sujet (« 8478402 ») et un logo introuvable construit à partir de lui.
+ * Ils sont en base, on ne les réécrit pas : le code est simplement tu, et le
+ * logo masqué (voir `isPlayerIdLogo`).
+ */
+const PLAYER_ID = /^\d{5,}$/;
+const TEAM_ONLY = /^[A-Za-z]{2,3}$/;
+
+function legLines(leg: { subjectName?: string; selection?: string; marketType?: string }): {
+  primary: string;
+  secondary: string | null;
+} {
+  const name = (leg.subjectName ?? "").trim();
+  const bet  = leg.selection ?? leg.marketType ?? "";
+  if (!name || PLAYER_ID.test(name)) return { primary: bet, secondary: null };
+  if (TEAM_ONLY.test(name))          return { primary: bet, secondary: name.toUpperCase() };
+  return { primary: name, secondary: bet };
+}
+
+/** Logo NHL fabriqué à partir d'un identifiant de joueur (anciens coupons). */
+const isPlayerIdLogo = (url: string) => /\/\d{5,}_light\.svg$/.test(url);
+
 // ─── Slip card (My Slips) ─────────────────────────────────────────────────────
 
 function SlipCard({ slip }: { slip: BetSlip }) {
@@ -303,9 +334,11 @@ function SlipCard({ slip }: { slip: BetSlip }) {
 
       {/* Legs */}
       <div className="px-4 pb-3 flex flex-col gap-1.5">
-        {(slip.legs as any[]).map((leg, i) => (
+        {(slip.legs as any[]).map((leg, i) => {
+          const lines = legLines(leg);
+          return (
           <div key={i} className="flex items-center gap-2 py-1.5 border-t border-white/[0.05] first:border-0">
-            {leg.subjectLogo?.startsWith("http")
+            {leg.subjectLogo?.startsWith("http") && !isPlayerIdLogo(leg.subjectLogo)
               ? <img
                   src={leg.subjectLogo}
                   alt=""
@@ -317,17 +350,24 @@ function SlipCard({ slip }: { slip: BetSlip }) {
                   // une requête refusée par logo sur les CDN sans en-tête.
                   className="w-5 h-5 object-contain flex-shrink-0"
                 />
-              : <span className="text-sm flex-shrink-0">{leg.subjectLogo}</span>}
+              : leg.subjectLogo?.startsWith("http")
+                // Ancien coupon joueur : on garde la place du logo pour que
+                // les lignes restent alignées, sans image cassée.
+                ? <span className="w-5 h-5 flex-shrink-0" />
+                : <span className="text-sm flex-shrink-0">{leg.subjectLogo}</span>}
             <div className="flex-1 min-w-0">
-              <p className="text-white text-[11px] font-medium truncate">{leg.subjectName}</p>
-              <p className="text-[#8a9ea6] text-[11px] truncate">{leg.selection ?? leg.marketType}</p>
+              <p className="text-white text-[11px] font-medium truncate">{lines.primary}</p>
+              {lines.secondary && (
+                <p className="text-[#8a9ea6] text-[11px] truncate">{lines.secondary}</p>
+              )}
             </div>
             <span className="text-[11px] font-bold flex-shrink-0" style={{ color: combinedColor }}>
               {leg.probability}%
             </span>
             <LegResultMark result={leg.result} slipPending={isPending} />
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* XP awarded / deducted */}
@@ -403,6 +443,10 @@ export function MySlipsTab({ user }: { user: any }) {
    * remplacer la liste plutôt que de la doubler.
    */
   const [loadError, setLoadError] = useState<unknown>(null);
+  // L'historique est replié par défaut : jusqu'à 100 coupons réglés
+  // repoussaient les paris en cours hors de l'écran. Le bouton garde le
+  // compte visible, pour qu'on sache ce qu'il y a derrière sans l'ouvrir.
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -533,15 +577,28 @@ export function MySlipsTab({ user }: { user: any }) {
           {/* History */}
           {resolved.length > 0 && (
             <div>
-              <div className="flex items-center gap-1.5 mb-2">
-                <History size={12} className="text-[#4a6068]" />
-                <p className="text-[#8a9ea6] text-[11px] uppercase tracking-wider font-medium">{t("slip.history")} · {resolved.length}</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {resolved.map((s) => (
-                  <SlipCard key={s.id} slip={s} />
-                ))}
-              </div>
+              <button
+                onClick={() => setHistoryOpen((o) => !o)}
+                aria-expanded={historyOpen}
+                className="tap-44 w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl icy-tile active:scale-[0.99] transition-transform"
+              >
+                <span className="flex items-center gap-1.5">
+                  <History size={12} className="text-[#8a9ea6]" />
+                  <span className="text-[#8a9ea6] text-[11px] uppercase tracking-wider font-medium">{t("slip.history")} · {resolved.length}</span>
+                </span>
+                <ChevronDown
+                  size={14}
+                  className="text-[#8a9ea6] transition-transform duration-200"
+                  style={{ transform: historyOpen ? "rotate(180deg)" : "none" }}
+                />
+              </button>
+              {historyOpen && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                  {resolved.map((s) => (
+                    <SlipCard key={s.id} slip={s} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </>

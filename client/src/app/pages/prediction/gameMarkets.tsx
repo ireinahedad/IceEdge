@@ -37,6 +37,18 @@ export interface MLProps {
    */
   settleMarket?: string;
   settleSelection?: string;
+  /**
+   * Pari JOUEUR seulement — ce que le coupon affiche, jamais ce qu'il règle.
+   *
+   * `subjectId` d'un joueur est son identifiant NHL (« 8478402 ») : posé tel
+   * quel dans `subjectName`, c'est ce code qui s'affichait dans le coupon, et
+   * `nhlLogoUrl(subjectId)` y cherchait le logo d'une « équipe » 8478402.
+   * Le coupon montre désormais l'ÉQUIPE du joueur (logo + abréviation) et, à la
+   * place du code, ce qui a été parié — nom du joueur compris. `subjectId`
+   * reste l'identifiant : c'est lui que le règlement lit.
+   */
+  teamAbbr?: string;
+  playerName?: string;
 }
 
 /**

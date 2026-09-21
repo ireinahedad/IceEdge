@@ -31,7 +31,8 @@ import "../components/home-theme.css";
 import "../components/rink-theme.css";
 import { BestBetsSection } from "./landing/BestBetsSection";
 import { EvItem, EvSection } from "./landing/EvSection";
-import { LiveGameCard, SportSelector, UpcomingGameRow } from "./landing/LandingCards";
+import { LiveGameCard, SportSelector, UpcomingGameRow, gameIsoDay } from "./landing/LandingCards";
+import { dayHeading, groupByDay } from "../data/gameDay";
 import { TeamCarousel } from "./landing/TeamCarousel";
 import { AddSheetState, DisplayGame, calcEdge, toDisplayGame } from "./landing/landingTypes";
 
@@ -236,13 +237,10 @@ export function HockeyLanding() {
   // pleine largeur — sur grand écran elle se lisait comme un autre produit.
   return (
     <div className="flex flex-col min-h-screen pb-[calc(6rem+env(safe-area-inset-bottom,0px))] max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: "#0A0E0C" }}>
-      {/* Header — the boards are the very first thing on the page: nothing sits
-          above them. The only top padding is env(safe-area-inset-top), which is
-          0 in a browser and only grows on a notched device, where the boards
-          would otherwise be hidden under the status bar. */}
+      {/* Header — the only top padding is env(safe-area-inset-top), which is 0
+          in a browser and only grows on a notched device. */}
       <div className="sticky top-0 z-40"
         style={{ background: "rgba(10,14,12,0.88)", backdropFilter: "blur(16px)", paddingTop: "env(safe-area-inset-top, 0px)" }}>
-        <div className="rink-boards" aria-hidden />
         <div className="px-4 pt-3 pb-3">
           <SportSelector />
         </div>
@@ -275,9 +273,21 @@ export function HockeyLanding() {
                    direct compris — d'où l'absence d'un second bouton plus bas. */
                 <ErrorState error={loadError} onRetry={() => setReloadKey((k) => k + 1)} compact />
               ) : upcomingGames.length > 0 ? (
-                <div className="flex flex-col gap-2">
-                  {upcomingGames.map((g) => (
-                    <UpcomingGameRow key={g.id} game={g} onOpenSheet={() => openGameSheet(g.id)} />
+                /* Un titre par journée au-dessus de ses matchs : la section
+                   peut porter aujourd'hui ET demain, et l'heure seule ne dit
+                   pas de quel soir on parle. */
+                <div className="flex flex-col gap-4">
+                  {groupByDay(upcomingGames, gameIsoDay).map(({ day, items }) => (
+                    <div key={day || "unknown"} className="flex flex-col gap-2">
+                      {day && (
+                        <h3 className="text-[#bfc8cc] text-[11px] font-bold uppercase tracking-wider">
+                          {dayHeading(day, lang)}
+                        </h3>
+                      )}
+                      {items.map((g) => (
+                        <UpcomingGameRow key={g.id} game={g} onOpenSheet={() => openGameSheet(g.id)} />
+                      ))}
+                    </div>
                   ))}
                 </div>
               ) : (

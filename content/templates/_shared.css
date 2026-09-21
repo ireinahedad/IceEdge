@@ -351,5 +351,88 @@ body::before {
 .goalie-row b { color: #fff; font-weight: 800; }
 .goalie-row .line { margin-left: auto; font-weight: 800; color: var(--accent); }
 
+/* --- matchcard_card : une carte par match (night-long) ---
+   Maquette Canva : deux moitiés en miroir, le tableau des marqueurs dessous.
+   --c = couleur principale du club, posée par render-slides sur chaque moitié
+   et sur chaque cellule de chiffres. */
+.mc-tag { text-align: center; }
+.mc-head { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.mc-half {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 34px 24px 30px;
+  border-radius: 28px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c) var(--tint, 38%), var(--surface)), var(--surface) 85%);
+  border: 2px solid rgba(144, 201, 240, 0.10);
+  border-top: 14px solid var(--c, var(--accent));
+}
+.mc-top { display: flex; align-items: center; justify-content: center; gap: 22px; width: 100%; }
+.mc-logo { width: 150px; height: 150px; display: flex; align-items: center; justify-content: center; }
+.mc-logo .tlogo { width: 150px; height: 150px; }
+.mc-logo b { font-size: 52px; font-weight: 900; color: #fff; letter-spacing: 2px; }
+.mc-per { font-size: 40px; font-weight: 700; color: var(--text); letter-spacing: 2px; }
+.mc-score { font-size: 170px; font-weight: 900; line-height: 0.95; letter-spacing: -6px; color: var(--muted); }
+.mc-half.win .mc-score { color: #fff; }
+.mc-abbr { font-size: 30px; font-weight: 800; letter-spacing: 6px; color: var(--muted); }
+.mc-sog { font-size: 28px; font-weight: 600; letter-spacing: 3px; color: var(--muted); text-transform: uppercase; }
+
+.mc-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+.mc-table th {
+  font-size: 30px; font-weight: 800; color: #fff; padding: 12px 0;
+  background: color-mix(in srgb, var(--c) 70%, #000);
+}
+.mc-table th.nm { background: none; width: 262px; }
+.mc-table th:nth-child(2) { border-top-left-radius: 14px; }
+.mc-table th:nth-child(4) { border-top-right-radius: 14px; }
+.mc-table th:nth-child(5) { border-top-left-radius: 14px; }
+.mc-table th:nth-child(7) { border-top-right-radius: 14px; }
+.mc-table th:nth-child(5) { border-left: 12px solid var(--bg); }
+.mc-table td { font-size: 36px; padding: 9px 0; border-bottom: 2px solid rgba(144, 201, 240, 0.10); }
+.mc-table td.nm {
+  font-size: 34px; font-weight: 700; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mc-table td.nm.l { padding-right: 14px; }
+.mc-table td.nm.r { padding-left: 14px; text-align: right; }
+.mc-table td.n {
+  text-align: center; font-weight: 700; color: var(--text);
+  background: color-mix(in srgb, var(--c) 16%, transparent);
+}
+.mc-table td.n.pt { font-weight: 900; color: #fff; }
+.mc-table td:nth-child(5) { border-left: 12px solid var(--bg); }
+
+/* Mise en page FIXE : la carte part toujours du haut de la zone utile, les
+   deux carrés de score ont une hauteur imposée, et les lignes de marqueurs
+   s'ajoutent vers le bas sans rien déplacer au-dessus. */
+.slide:has(.mc) { justify-content: flex-start; }
+.mc { display: flex; flex-direction: column; gap: 26px; }
+.mc-half { height: 470px; justify-content: center; }
+.mc-per:empty { display: none; }
+/* Carré à teinte pâle (Lightning) : la fiche passe en encre foncée pour rester lisible. */
+.mc-half.pale .mc-per { color: #0A0E0C; }
+
+/* --- intro_card : ouverture des shorts --- */
+.in-day { font-size: 96px; font-weight: 900; color: #fff; letter-spacing: -2px; line-height: 1; text-transform: uppercase; }
+.in-date { font-size: 44px; font-weight: 700; color: var(--accent); letter-spacing: 2px; margin-top: -8px; }
+.in-rows { display: grid; gap: 14px; margin-top: 16px; }
+.in-rows.two { grid-template-columns: 1fr 1fr; gap: 12px 20px; }
+.in-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--surface); border: 2px solid rgba(144, 201, 240, 0.10);
+  border-radius: 20px; padding: 12px 22px;
+}
+.in-team { display: flex; align-items: center; gap: 16px; border-bottom: 6px solid var(--c, var(--accent)); padding-bottom: 4px; }
+.in-team b { font-size: 46px; font-weight: 900; color: #fff; letter-spacing: 2px; }
+.in-team .tlogo { width: 72px; height: 72px; }
+.in-rows.two .in-row { padding: 10px 14px; }
+.in-rows.two .in-team { gap: 8px; }
+.in-rows.two .in-team b { font-size: 34px; }
+.in-rows.two .in-team .tlogo { width: 52px; height: 52px; }
+.in-rows.single .in-row { padding: 44px 40px; }
+.in-rows.single .in-team { flex-direction: column; gap: 14px; border-bottom-width: 10px; padding-bottom: 10px; }
+.in-rows.single .in-team.r { flex-direction: column-reverse; }
+.in-rows.single .in-team b { font-size: 72px; }
+.in-rows.single .in-team .tlogo { width: 220px; height: 220px; }
+
 /* Le plan de récap n'a pas toujours une ligne de commentaire sous son bloc. */
 .recap + .sub:empty { display: none; }

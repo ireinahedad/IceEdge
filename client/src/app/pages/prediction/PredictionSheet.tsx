@@ -123,16 +123,27 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   function handleSlip() {
     if (inSlip) { removeLeg(legId); return; }
     const { marketType, selectionValue } = settlementFields(mlProps);
+    // Pari joueur : le coupon porte l'ÉQUIPE du joueur comme sujet, et ce qui a
+    // été parié — nom compris — comme sélection. Plus jamais l'identifiant NHL.
+    // Les grilles de joueurs ont déjà le nom dans l'étiquette ; les tuiles de
+    // la page joueur (« Anytime Goal Scorer ») non : on le préfixe alors.
+    const isPlayer = mlProps?.type === "player";
+    const playerTeam = isPlayer ? (mlProps?.teamAbbr ?? "").toUpperCase() : "";
+    const betText = isPlayer && mlProps?.playerName && !label.startsWith(mlProps.playerName)
+      ? `${mlProps.playerName} · ${label}`
+      : label;
     const leg: BetLeg = {
       id: legId,
       marketType: (marketType ?? mlProps?.propType ?? "moneyline") as BetLeg["marketType"],
       marketLabel: label,
       subjectType: mlProps?.type === "player" ? "player" : mlProps?.type === "team" ? "team" : "game",
       subjectId: mlProps?.subjectId ?? legId,
-      subjectName: mlProps?.subjectId ?? label,
-      subjectLogo: mlProps?.subjectId ? nhlLogoUrl(mlProps.subjectId) : "",
-      selection: label,
-      selectionShort: label.slice(0, 14),
+      subjectName: isPlayer ? playerTeam : (mlProps?.subjectId ?? label),
+      subjectLogo: isPlayer
+        ? (playerTeam ? nhlLogoUrl(playerTeam) : "")
+        : (mlProps?.subjectId ? nhlLogoUrl(mlProps.subjectId) : ""),
+      selection: betText,
+      selectionShort: betText.slice(0, 14),
       probability: legPct,
       line: mlProps?.line,
       addedAt: new Date().toISOString(),

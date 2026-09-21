@@ -33,9 +33,6 @@ export function LeagueHeader({
       className="rink-header-glass sticky top-0 z-40"
       style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
     >
-      {/* Plinthe en bleu glace plutôt qu'en jaune : c'est la couleur de
-          l'aréna sur cette page (voir `.rink-boards--ice`). */}
-      <div className="rink-boards rink-boards--ice" aria-hidden />
       <div className="px-4 pt-3 pb-3 flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">

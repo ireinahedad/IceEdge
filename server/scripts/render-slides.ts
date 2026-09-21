@@ -303,6 +303,7 @@ function buildSvg(kind: string, rows: ChartRow[]): string {
 /** Les gabarits dont le contenu est un bloc généré (variable {{block}}). */
 const RECAP_TEMPLATES = [
   'score_card', 'scoreboard_card', 'stars_card', 'summary_card', 'teamstats_card',
+  'matchcard_card', 'intro_card',
 ];
 
 /**
@@ -361,6 +362,120 @@ async function scoreBlock(game: any): Promise<string> {
     : '';
   return `<div class="final-tag">${esc(game.ending)}</div>`
     + `<div class="score-rows">${rows.join('')}</div>${table}`;
+}
+
+/**
+ * matchcard_card — une carte par match dans night-long.
+ *
+ * Deux moitiés en miroir (visiteur à gauche, local à droite), chacune teintée
+ * de sa couleur de club : logo + fiche de la saison (V-D-DP), score, tirs ; puis un
+ * tableau des marqueurs « nom | B A P | B A P | nom », comme la maquette Canva.
+ * Les en-têtes sont en anglais (G A P) pour rester dans la langue des vidéos.
+ */
+/**
+ * Couleur d'une moitié de carte de match. La teinte remplit une surface
+ * entière, pas un liseré : un primaire presque noir (PIT, SEA, TOR, EDM…)
+ * y disparaît dans le fond. Sous ce seuil de luminance, le secondaire du club
+ * prend le relais — toujours une couleur du club, jamais une couleur inventée.
+ */
+/**
+ * Clubs dont le logo (foncé) se perd sur leur propre teinte : on prend la
+ * couleur la plus PÂLE du club. Le Lightning est bleu et blanc — le bleu du
+ * logo disparaissait sur le gris du secondaire.
+ */
+const MATCH_COLOR_OVERRIDE: Record<string, string> = { TBL: '#FFFFFF' };
+
+function hexLum(hex: string): number {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return 1;
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const c = parseInt(h.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Encre des en-têtes G A P : foncée sur une couleur pâle, blanche sinon. */
+const inkOn = (color: string) => (hexLum(color) > 0.45 ? '#0A0E0C' : '#FFFFFF');
+
+function matchColor(abbr: unknown): string {
+  const key = String(abbr ?? '').toUpperCase();
+  if (MATCH_COLOR_OVERRIDE[key]) return MATCH_COLOR_OVERRIDE[key];
+  const { primary, secondary } = teamColors(key);
+  const lum = (hex: string) => {
+    const h = hex.replace('#', '');
+    if (h.length !== 6) return 1;
+    const [r, g, b] = [0, 2, 4].map((i) => {
+      const c = parseInt(h.slice(i, i + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  return lum(primary) < 0.03 && lum(secondary) > lum(primary) ? secondary : primary;
+}
+
+async function matchBlock(m: any): Promise<string> {
+  if (!m) return '';
+  const half = async (t: any, side: 'away' | 'home') => {
+    const per = `<div class="mc-per">${t.record ? esc(t.record) : ''}</div>`;
+    const logo = `<div class="mc-logo">${logoImg(await teamLogo(t.abbr)) || `<b>${esc(t.abbr)}</b>`}</div>`;
+    // Couleur pâle forcée (MATCH_COLOR_OVERRIDE) : teinte plus franche en haut
+    // du carré, là où se trouve le logo.
+    const pale = !!MATCH_COLOR_OVERRIDE[String(t.abbr ?? '').toUpperCase()];
+    return `<div class="mc-half ${side}${t.win ? ' win' : ''}${pale ? ' pale' : ''}" style="--c:${matchColor(t.abbr)}${pale ? ';--tint:58%' : ''}">`
+      + `<div class="mc-top">${side === 'away' ? logo + per : per + logo}</div>`
+      + `<div class="mc-score">${esc(t.score)}</div>`
+      + `<div class="mc-abbr">${esc(t.abbr)}</div>`
+      + (t.sog !== null && t.sog !== undefined ? `<div class="mc-sog">${esc(t.sog)} shots</div>` : '')
+      + `</div>`;
+  };
+  const a: any[] = m.away?.players ?? [];
+  const h: any[] = m.home?.players ?? [];
+  const n = Math.max(a.length, h.length);
+  const cA = matchColor(m.away?.abbr);
+  const cH = matchColor(m.home?.abbr);
+  const trio = (p: any, c: string) => ['g', 'a', 'p']
+    .map((k) => `<td class="n${k === 'p' ? ' pt' : ''}" style="--c:${c}">${p ? esc(p[k]) : ''}</td>`).join('');
+  let body = '';
+  for (let i = 0; i < n; i++) {
+    body += `<tr><td class="nm l">${a[i] ? esc(a[i].name) : ''}</td>`
+      + trio(a[i], cA) + trio(h[i], cH)
+      + `<td class="nm r">${h[i] ? esc(h[i].name) : ''}</td></tr>`;
+  }
+  const head3 = (c: string) => ['G', 'A', 'P'].map((x) => `<th style="--c:${c};color:${inkOn(c)}">${x}</th>`).join('');
+  const table = n
+    ? `<table class="mc-table"><tr><th class="nm"></th>${head3(cA)}${head3(cH)}<th class="nm"></th></tr>${body}</table>`
+    : '';
+  // Mise en page fixe : l'en-tête ne bouge jamais, les lignes s'ajoutent vers
+  // le bas. build-recap coupe au-delà de ce qui tient (MATCH_ROWS_PER_CARD).
+  const tag = m.part ? `${m.ending} · ${m.part}` : m.ending;
+  return `<div class="mc">`
+    + `<div class="final-tag mc-tag">${esc(tag)}</div>`
+    + `<div class="mc-head">${await half(m.away, 'away')}${await half(m.home, 'home')}</div>`
+    + table + `</div>`;
+}
+
+/**
+ * intro_card — première carte des vidéos de récap : jour, date, puis les
+ * affiches. Pas de bandeau en haut (la date y serait deux fois), pas de « @ ».
+ * Une affiche seule s'affiche en grand ; au-delà de 8, deux colonnes.
+ */
+async function introBlock(intro: any): Promise<string> {
+  if (!intro) return '';
+  const games: any[] = intro.games ?? [];
+  const size = games.length === 1 ? 'single' : games.length > 8 ? 'two' : 'one';
+  const rows: string[] = [];
+  for (const g of games) {
+    rows.push(
+      `<div class="in-row">`
+      + `<span class="in-team" style="--c:${matchColor(g.away)}">${logoImg(await teamLogo(g.away))}<b>${esc(g.away)}</b></span>`
+      + `<span class="in-team r" style="--c:${matchColor(g.home)}"><b>${esc(g.home)}</b>${logoImg(await teamLogo(g.home))}</span>`
+      + `</div>`,
+    );
+  }
+  return `<div class="in-day">${esc(intro.weekday)}</div>`
+    + `<div class="in-date">${esc(intro.date)}</div>`
+    + `<div class="in-rows ${size}">${rows.join('')}</div>`;
 }
 
 /** scoreboard_card — plusieurs matchs, une ligne chacun. */
@@ -461,6 +576,8 @@ async function buildRecapBlock(slide: any): Promise<string> {
   const head = slide.title ? `<div class="final-tag">${esc(slide.title)}</div>` : '';
   switch (slide.template) {
     case 'score_card':      return scoreBlock(slide.game);
+    case 'matchcard_card':  return matchBlock(slide.match);
+    case 'intro_card':      return introBlock(slide.intro);
     case 'scoreboard_card': return head + await boardBlock(slide.games);
     case 'stars_card':      return head + await starsBlock(slide.stars);
     case 'summary_card':    return head + await goalsBlock(slide.goals);

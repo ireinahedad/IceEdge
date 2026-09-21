@@ -232,12 +232,9 @@ export function GamePrediction({ gameId }: { gameId: string }) {
             gameId={gameId}
             accent={accent}
           />
-          <PlayerPropGrid
-            metric="assists"
-            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
-            gameId={gameId}
-            accent={accent}
-          />
+          {/* Grille des passes retirée de la page d'un match (2026-09-21) : les
+              passes sont déjà comptées dans les points, juste au-dessus. Elle
+              reste sur la page d'une équipe (TeamPrediction). */}
           <PlayerPropGrid
             metric="blocks"
             sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}

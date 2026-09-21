@@ -335,6 +335,8 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
           const line = k - 0.5;
           const mlProps: MLProps = {
             type: "player", subjectId: p.id, propType: spec.propType, line,
+            // L'effectif affiché est celui de `abbr` : c'est l'équipe du joueur.
+            teamAbbr: abbr.toUpperCase(), playerName: p.name,
             settleMarket: spec.settleMarket,
             // « anytime_goal » se règle sur `buts > ligne`, donc la ligne porte
             // déjà le seuil ; la sélection reste « oui ». Les marchés en
@@ -378,6 +380,7 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
               }),
               mlProps: {
                 type: "player", subjectId: p.id, propType: spec.propType, line: 0.5,
+                teamAbbr: abbr.toUpperCase(), playerName: p.name,
                 settleMarket: spec.leading.settleMarket, settleSelection: "yes", gameId,
               } as MLProps,
             } as BetOpt

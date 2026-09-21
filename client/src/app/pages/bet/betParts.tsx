@@ -192,9 +192,26 @@ export function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; 
             : <span className="text-base">{leg.subjectLogo}</span>}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-white text-xs font-bold">{leg.subjectName}</p>
-          <p className="text-[#90C9F0] text-[11px] font-medium">{leg.marketLabel}</p>
-          <p className="text-[#8a9ea6] text-[11px] mt-0.5 leading-relaxed">{leg.selection}</p>
+          {leg.subjectType === "player" ? (
+            // Pari joueur : ce qui a été parié en tête, puis l'équipe du joueur
+            // — son seul « sujet » affiché (voir MLProps.teamAbbr). Le libellé
+            // de marché n'est pas répété quand il EST déjà la sélection.
+            <>
+              <p className="text-white text-xs font-bold">{leg.selection}</p>
+              {leg.marketLabel && !leg.selection.includes(leg.marketLabel) && (
+                <p className="text-[#90C9F0] text-[11px] font-medium">{leg.marketLabel}</p>
+              )}
+              {leg.subjectName && !/^\d+$/.test(leg.subjectName) && (
+                <p className="text-[#8a9ea6] text-[11px] mt-0.5">{leg.subjectName.toUpperCase()}</p>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="text-white text-xs font-bold">{leg.subjectName}</p>
+              <p className="text-[#90C9F0] text-[11px] font-medium">{leg.marketLabel}</p>
+              <p className="text-[#8a9ea6] text-[11px] mt-0.5 leading-relaxed">{leg.selection}</p>
+            </>
+          )}
           {leg.gameInfo && <p className="text-[#4a6068] text-[11px] mt-0.5">{leg.gameInfo}</p>}
           <div className="mt-2 flex items-center gap-2">
             <div className="flex-1 bg-[#0A0E0C] rounded-full h-1.5">

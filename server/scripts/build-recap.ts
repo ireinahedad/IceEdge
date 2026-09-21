@@ -7,7 +7,7 @@
  *   npm run content:recap                      la nuit qui vient de finir
  *   npm run content:recap -- --date=2026-11-04 forcer la date de la soirée
  *   npm run content:recap -- --game=MTL        cadrer sur un match précis
- *   npm run content:recap -- --game=all        un court + un long PAR match
+ *   npm run content:recap -- --game=all        un short PAR match
  *   npm run content:recap -- --no-night        seulement le match, pas la soirée
  *   npm run content:recap -- --require-all     refuser de sortir si un match traîne
  *   npm run content:recap -- --fixture=..\content\fixtures\night-2026-11-04.json
@@ -48,6 +48,7 @@ import {
   fetchGamesByDate as apiGamesByDate,
   fetchGameDetail as apiGameDetail,
 } from '../src/services/nhlApiClient';
+import { fetchNHL } from '../src/services/nhl/core';
 import { BANNED, findBanned } from './lib/compliance';
 
 const REPO_ROOT   = path.resolve(__dirname, '..', '..');
@@ -70,25 +71,24 @@ const HASHTAGS    = path.join(REPO_ROOT, 'content', 'library', 'hashtags.md');
  */
 const D = {
   hook:       2.0,   // identique au pipeline quotidien : une amorce, pas une lecture
-  score:      5.0,   // le score final, format long
-  scoreNight: 3.5,   // le même plan dans l'enchaînement de la nuit
-  boardRow:   1.4,
-  boardBase:  1.6,
-  goalRow:    1.2,
-  goalBase:   2.0,
-  stats:      7.0,
-  stars3:     5.5,
-  star1:      3.5,
+  intro:      2.0,   // carte d'ouverture des shorts : jour, date, affiches…
+  introRow:   0.15,  // … plus un souffle par affiche quand la soirée est chargée
+  matchBase:  1.0,   // carte de match : score, fiches, tirs…
+  matchRow:   0.35,  // … plus une ligne de marqueurs, lue d'un coup d'œil…
+  matchMax:   3.0,   // … sans jamais dépasser trois secondes par carte
+  stars3:     5.5,   // les trois étoiles d'un match
   cta:        2.5,
 };
 
 /**
- * Plafonds de lignes par plan. Ce ne sont pas des préférences : au-delà, le bloc
- * dépasse la hauteur utile (1345 px entre les deux zones de sécurité) et
- * Playwright coupe le bas de l'image sans rien signaler. Voir _shared.css.
+ * Lignes de marqueurs par carte de match. TOUS les joueurs à un point ou plus
+ * sont listés ; au-delà de ce plafond, le match se poursuit sur une seconde
+ * carte (même en-tête, tableau continué) plutôt que de déborder. La carte a
+ * une mise en page FIXE : en-tête toujours à la même hauteur, les lignes
+ * s'ajoutent vers le bas. Le plafond est ce qui tient avant la zone de sécurité
+ * du bas — voir matchBlock dans render-slides.ts et _shared.css.
  */
-const BOARD_ROWS_MAX = 6;
-const GOAL_ROWS_MAX  = 9;
+const MATCH_ROWS_PER_CARD = 11;
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -128,6 +128,8 @@ interface Fixture {
   date?: string;
   schedule: any[];
   details: Record<string, any>;
+  /** Fiches APRÈS le match, « 12-5-2 » par abréviation. Facultatif. */
+  records?: Record<string, string>;
 }
 
 let FIXTURE: Fixture | null = null;
@@ -195,10 +197,6 @@ const lastName = (full: string): string => {
   const i = s.indexOf(' ');
   return i === -1 ? s : s.slice(i + 1);
 };
-
-const periodLabel = (label: string): string =>
-  label === 'OT' || label === 'SO' ? label
-    : label === '1' ? '1ST' : label === '2' ? '2ND' : label === '3' ? '3RD' : `${label}TH`;
 
 /** `.939` — la forme lue sur toutes les feuilles de match. */
 function savePct(v: unknown): string {
@@ -303,6 +301,35 @@ function toTeam(side: any, nick: string, other: any): Team {
   };
 }
 
+/**
+ * Comment le match s'est terminé : REG, OT ou SO.
+ *
+ * `gameOutcome.lastPeriodType` manque sur certaines feuilles (vu en
+ * préparatoire : une victoire de Boston en fusillade sortait « FINAL »). On
+ * recoupe donc, dans l'ordre : le champ officiel, le type de la dernière
+ * période, les colonnes de périodes, puis le numéro de la dernière période
+ * (4 = prolongation, 5 et plus = fusillade hors séries).
+ */
+function lastPeriodOf(detail: any): string {
+  // Un champ présent (« REG » compris) fait foi ; seul un champ absent passe
+  // la main au suivant.
+  const norm = (v: unknown) => {
+    const t = String(v ?? '').toUpperCase();
+    return t === 'SO' || t === 'OT' || t === 'REG' ? t : '';
+  };
+  const official = norm(detail.lastPeriodType);
+  if (official) return official;
+  const current = norm(detail.periodType);
+  if (current) return current;
+  const labels = (detail.periods ?? []).map((p: any) => String(p.label));
+  if (labels.includes('SO') || (detail.scoring ?? []).some((x: any) => String(x.period) === 'SO')) return 'SO';
+  const num = Number(detail.period ?? 0);
+  const playoff = detail.gameType === 'playoff';
+  if (!playoff && num >= 5) return 'SO';
+  if (labels.includes('OT') || num >= 4) return 'OT';
+  return 'REG';
+}
+
 async function loadGames(dateKey: string, requireAll: boolean): Promise<Game[]> {
   const schedule = await fetchGamesByDate(dateKey);
   if (!schedule.length) throw new Error(`aucun match au calendrier le ${dateKey}`);
@@ -328,7 +355,7 @@ async function loadGames(dateKey: string, requireAll: boolean): Promise<Game[]> 
     const away = toTeam(detail.away, s.awayTeam?.name, detail.home);
     const home = toTeam(detail.home, s.homeTeam?.name, detail.away);
     const [winner, loser] = away.win ? [away, home] : [home, away];
-    const last = String(detail.lastPeriodType ?? 'REG');
+    const last = lastPeriodOf(detail);
     games.push({
       id: String(s.id),
       away, home, winner, loser, detail,
@@ -392,13 +419,10 @@ interface Star { rank: number; name: string; abbr: string; line: string; meta: s
 /**
  * Les trois étoiles d'un match sont celles de la LNH, telles quelles.
  *
- * Pour la NUIT, il faut en revanche classer entre elles des étoiles de matchs
- * différents, ce que la ligue ne fait pas. Le barème ci-dessous est volontairement
- * primaire : trois points par but, deux par passe pour un patineur ; pour un
- * gardien, un point par tranche de douze arrêts plus un bonus de blanchissage,
- * ce qui place un blanchissage à 35 arrêts au niveau d'un tour du chapeau.
- * Il est faux dans les cas limites — mais il est stable, et lisible dans le
- * fichier plutôt que dans une intuition.
+ * Elles ont leur plan dans <match>-short (stars_card, « Three stars »), pas
+ * dans night-long.
+ * `weight` reste calculé (3 par but, 2 par passe ; arrêts / 12 + 3 pour un
+ * blanchissage) au cas où un classement de la nuit reviendrait.
  */
 function starsOf(g: Game): Star[] {
   const goalieByName = new Map<string, any>();
@@ -422,14 +446,6 @@ function starsOf(g: Game): Star[] {
       weight,
     };
   }).filter((s: Star) => s.name);
-}
-
-function nightStars(games: Game[], count: number): Star[] {
-  const all = games.flatMap((g) => starsOf(g));
-  return all
-    .sort((a, b) => b.weight - a.weight || a.rank - b.rank || a.name.localeCompare(b.name))
-    .slice(0, count)
-    .map((s, i) => ({ ...s, rank: i + 1 }));
 }
 
 // ===========================================================================
@@ -456,36 +472,146 @@ function sideOf(t: Team) {
   return { abbr: t.abbr, nick: t.nick, full: t.full, score: t.score, win: t.win };
 }
 
-function scoreSlide(g: Game, n: number, seconds: number, text: string) {
-  return {
-    n,
-    template: 'score_card',
-    duration: seconds,
-    text,
-    game: {
-      away: sideOf(g.away),
-      home: sideOf(g.home),
-      ending: g.ending,
-      periods: (g.detail.periods ?? []).map((p: any) => ({
-        label: String(p.label), away: Number(p.away ?? 0), home: Number(p.home ?? 0),
-      })),
-    },
+/**
+ * Carte de match — gabarit `matchcard_card`, UN match par carte, partout où un
+ * score est montré (night-long, <match>-short).
+ *
+ * Deux moitiés en miroir, une par équipe : logo, fiche de la saison
+ * (V-D-DP), score, tirs, puis les marqueurs avec buts / passes / points. Les points sont comptés
+ * depuis la feuille de buts elle-même (`scoring`), pas depuis la liste des
+ * patineurs : c'est la seule source présente à la fois dans l'API et dans les
+ * fixtures, et elle ne peut pas contredire le score affiché au-dessus. Les buts
+ * de fusillade n'y entrent pas — ils ne comptent pour personne.
+ */
+interface Pointer { name: string; g: number; a: number; p: number; }
+
+function pointersOf(g: Game): { away: Pointer[]; home: Pointer[] } {
+  const bySide = { away: new Map<string, Pointer>(), home: new Map<string, Pointer>() };
+  const bump = (side: 'away' | 'home', full: string, key: 'g' | 'a') => {
+    const name = String(full ?? '').trim();
+    if (!name) return;
+    const row = bySide[side].get(name) ?? { name, g: 0, a: 0, p: 0 };
+    row[key] += 1;
+    row.p += 1;
+    bySide[side].set(name, row);
   };
+  for (const x of g.detail.scoring ?? []) {
+    if (String(x.period) === 'SO') continue;
+    const side = String(x.teamAbbr ?? '') === g.home.abbr ? 'home' : 'away';
+    bump(side, x.scorer, 'g');
+    for (const a of x.assists ?? []) bump(side, a, 'a');
+  }
+  const sorted = (m: Map<string, Pointer>) => [...m.values()]
+    .sort((a, b) => b.p - a.p || b.g - a.g || lastName(a.name).localeCompare(lastName(b.name)));
+  return { away: sorted(bySide.away), home: sorted(bySide.home) };
 }
 
-/** Le meneur du match, en une ligne : le premier patineur puis le gardien vainqueur. */
-function heroLine(g: Game): string {
-  const stars = starsOf(g);
-  const first = stars[0];
-  const gk = (['home', 'away'] as const)
-    .flatMap((s) => g.detail.players?.[s]?.goalies ?? [])
-    .find((k: any) => k.decision === 'W');
-  const bits: string[] = [];
-  if (first) bits.push(`${first.name} ${first.line}`);
-  if (gk && (!first || lastName(first.name) !== lastName(gk.name))) {
-    bits.push(`${gk.name} ${gk.saves} SV`);
+/**
+ * Les cartes d'un match : une seule le plus souvent, deux (ou plus) qui se
+ * suivent quand les marqueurs dépassent MATCH_ROWS_PER_CARD. Le découpage est
+ * équilibré (13 lignes → 7 + 6, pas 12 + 1) et coupe les deux colonnes au même
+ * rang, pour que la seconde carte se lise comme la suite exacte de la première.
+ */
+function matchSlides(g: Game, from: number, records: Map<string, string | null>) {
+  const pts = pointersOf(g);
+  const rows = Math.max(pts.away.length, pts.home.length);
+  const sog = (side: 'away' | 'home') => {
+    const v = g.detail.teamStats?.[side]?.sog ?? g.detail[side]?.sog;
+    return v === null || v === undefined ? null : Number(v);
+  };
+  const ranges = rows
+    ? chunk([...Array(rows).keys()], MATCH_ROWS_PER_CARD).map((ix) => [ix[0], ix[ix.length - 1] + 1])
+    : [[0, 0]];
+  return ranges.map(([lo, hi], i) => {
+    const half = (t: Team, side: 'away' | 'home') => ({
+      ...sideOf(t),
+      record: records.get(t.abbr) ?? null,
+      sog: sog(side),
+      players: pts[side].slice(lo, hi).map((p) => ({ name: lastName(p.name), g: p.g, a: p.a, p: p.p })),
+    });
+    return {
+      n: from + i,
+      template: 'matchcard_card',
+      duration: round1(Math.min(D.matchMax, D.matchBase + D.matchRow * (hi - lo))),
+      text: '',
+      match: {
+        ending: g.ending,
+        part: ranges.length > 1 ? `${i + 1}/${ranges.length}` : '',
+        away: half(g.away, 'away'),
+        home: half(g.home, 'home'),
+      },
+    };
+  });
+}
+
+// ===========================================================================
+// Fiches de la saison (V-D-DP)
+// ===========================================================================
+
+/**
+ * La fiche d'une équipe APRÈS le match affiché, calculée et non lue.
+ *
+ * `standings/<date>` donnerait un chiffre, mais sans garantie qu'il inclue déjà
+ * les matchs de la soirée. On recompte donc depuis le calendrier du club
+ * (`club-schedule-season`, le même que teamSeasons.ts) : les matchs du même
+ * type joués AVANT la date, puis le match du soir d'après notre propre feuille,
+ * qui ne peut pas contredire le score de la carte.
+ *
+ * Toujours TROIS chiffres, V-D-DP, zéros compris : une défaite en prolongation
+ * OU en fusillade compte en DP, quel que soit le type de match (préparatoire,
+ * saison, séries). Seuls les matchs du même type que celui affiché comptent.
+ *
+ * Un échec réseau ne bloque rien : la carte s'affiche sans fiche.
+ */
+const scheduleCache = new Map<string, Promise<any[]>>();
+
+function clubSchedule(abbr: string, season: string): Promise<any[]> {
+  const key = `${abbr}:${season}`;
+  let hit = scheduleCache.get(key);
+  if (!hit) {
+    hit = fetchNHL<any>(`v1/club-schedule-season/${abbr}/${season}`).then((d) => d?.games ?? []);
+    scheduleCache.set(key, hit);
   }
-  return bits.join(' · ');
+  return hit;
+}
+
+async function teamRecord(t: Team, g: Game, dateKey: string): Promise<string | null> {
+  if (FIXTURE) return FIXTURE.records?.[t.abbr] ?? null;
+  const id = g.id;
+  if (!/^\d{10}$/.test(id)) return null;
+  const season = `${id.slice(0, 4)}${Number(id.slice(0, 4)) + 1}`;
+  const type = Number(id.slice(4, 6));
+  const games = await clubSchedule(t.abbr, season);
+  let w = 0, l = 0, otl = 0;
+  for (const x of games) {
+    if (Number(x.gameType) !== type) continue;
+    if (String(x.id) === id || !(String(x.gameDate ?? '') < dateKey)) continue;
+    const hs = x.homeTeam?.score, as = x.awayTeam?.score;
+    if (hs == null || as == null) continue;
+    const isHome = x.homeTeam?.abbrev === t.abbr;
+    const gf = isHome ? hs : as, ga = isHome ? as : hs;
+    // Même précaution que lastPeriodOf : le champ officiel manque parfois.
+    const last = x.gameOutcome?.lastPeriodType ?? x.periodDescriptor?.periodType
+      ?? (Number(x.periodDescriptor?.number ?? 0) >= 5 ? 'SO' : Number(x.periodDescriptor?.number ?? 0) === 4 ? 'OT' : 'REG');
+    if (gf > ga) w++; else if (last === 'OT' || last === 'SO') otl++; else l++;
+  }
+  if (t.win) w++; else if (g.endingTag) otl++; else l++;
+  return `${w}-${l}-${otl}`;
+}
+
+async function loadRecords(games: Game[], dateKey: string): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>();
+  for (const g of games) {
+    for (const t of [g.away, g.home]) {
+      try {
+        out.set(t.abbr, await teamRecord(t, g, dateKey));
+      } catch (e: any) {
+        console.log(`    ⚠ fiche ${t.abbr} indisponible (${e.message}) — carte sans fiche`);
+        out.set(t.abbr, null);
+      }
+    }
+  }
+  return out;
 }
 
 function starsSlide(stars: Star[], n: number, seconds: number, title = '') {
@@ -501,68 +627,26 @@ function starsSlide(stars: Star[], n: number, seconds: number, title = '') {
   };
 }
 
-function summarySlides(g: Game, from: number): any[] {
-  const goals = (g.detail.scoring ?? []).map((x: any) => ({
-    when: `${periodLabel(String(x.period))} ${x.time}`,
-    abbr: String(x.teamAbbr ?? ''),
-    scorer: String(x.scorer ?? ''),
-    assists: (x.assists ?? []).map(lastName).join(', '),
-    strength: x.strength === 'pp' ? 'PP' : x.strength === 'sh' ? 'SH' : '',
-    run: `${x.awayScore ?? ''}-${x.homeScore ?? ''}`,
-  })).filter((x: any) => x.scorer);
+const ctaSlide = (n: number) => ({ n, template: 'cta_card', duration: D.cta, text: 'arakice.com' });
 
-  // Une fusillade n'a pas de feuille de buts lisible : le seul but compté est
-  // celui du tableau d'affichage, et il n'appartient à personne en particulier.
-  const listed = goals.filter((x: any) => !x.when.startsWith('SO'));
-  if (!listed.length) return [];
-
-  return chunk(listed, GOAL_ROWS_MAX).map((rows, i) => ({
-    n: from + i,
-    template: 'summary_card',
-    duration: round1(D.goalBase + D.goalRow * rows.length),
-    text: '',
-    goals: rows,
-  }));
-}
-
-function statsSlide(g: Game, n: number): any | null {
-  const ts = g.detail.teamStats;
-  if (!ts) return null;
-  const row = (label: string, key: string) => ({
-    label, away: Number(ts.away?.[key] ?? 0), home: Number(ts.home?.[key] ?? 0),
-  });
-  const goalies = (['away', 'home'] as const).flatMap((side) =>
-    (g.detail.players?.[side]?.goalies ?? [])
-      .filter((k: any) => Number(k.shotsAgainst ?? 0) > 0)
-      .map((k: any) => ({
-        abbr: side === 'away' ? g.away.abbr : g.home.abbr,
-        name: k.name,
-        decision: k.decision ?? '',
-        line: `${k.saves}/${k.shotsAgainst}${savePct(k.savePct) ? ` · ${savePct(k.savePct)}` : ''}`,
-      })));
-
+/**
+ * Carte d'ouverture des SHORTS : le jour, la date et les affiches de la soirée
+ * (ou l'affiche du match), logos compris. La phrase d'amorce reste dessous.
+ */
+function introSlide(dateKey: string, games: Game[], text: string) {
+  const d = new Date(`${dateKey}T12:00:00Z`);
   return {
-    n,
-    template: 'teamstats_card',
-    duration: D.stats,
-    text: '',
-    stats: {
-      away: { abbr: g.away.abbr },
-      home: { abbr: g.home.abbr },
-      rows: [
-        row('Shots', 'sog'),
-        row('Hits', 'hits'),
-        row('Blocks', 'blockedShots'),
-        row('Power-play goals', 'ppGoals'),
-        row('Penalty minutes', 'pim'),
-      ],
-      goalies,
+    n: 1,
+    template: 'intro_card',
+    duration: round1(D.intro + (games.length > 1 ? D.introRow * games.length : 0)),
+    text,
+    intro: {
+      weekday: d.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }),
+      date: d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }),
+      games: games.map((g) => ({ away: g.away.abbr, home: g.home.abbr })),
     },
   };
 }
-
-const ctaSlide = (n: number) => ({ n, template: 'cta_card', duration: D.cta, text: 'arakice.com' });
-const hookSlide = (text: string) => ({ n: 1, template: 'hook_card', duration: D.hook, text });
 
 /** Le hook d'un match : la seule phrase du récap, et elle décrit un fait. */
 function gameHook(g: Game): string {
@@ -577,58 +661,32 @@ function gameHook(g: Game): string {
 }
 
 // ===========================================================================
-// Les quatre variantes
+// Les deux variantes : night-long (la soirée) et <match>-short (un match).
+// night-short et <match>-long ne sont plus produits.
 // ===========================================================================
 
 const monthDay = (iso: string) =>
   new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
 
-function nightShort(dateKey: string, games: Game[]) {
-  const slides: any[] = [hookSlide(`${games.length} games. Here is how the night ended.`)];
+function nightLong(dateKey: string, games: Game[], records: Map<string, string | null>) {
+  const slides: any[] = [introSlide(dateKey, games, '')];
   let n = 2;
-  chunk(games, BOARD_ROWS_MAX).forEach((rows, i) => {
-    slides.push({
-      n: n++,
-      template: 'scoreboard_card',
-      duration: round1(D.boardBase + D.boardRow * rows.length),
-      text: '',
-      title: i === 0 ? `${monthDay(dateKey)} · every final` : '',
-      games: rows.map((g) => ({ away: sideOf(g.away), home: sideOf(g.home), tag: g.endingTag })),
-    });
-  });
-  slides.push(starsSlide(nightStars(games, 1), n++, D.star1, 'Star of the night'));
+  for (const g of games) {
+    const cards = matchSlides(g, n, records);
+    slides.push(...cards);
+    n += cards.length;
+  }
   slides.push(ctaSlide(n));
   return slides;
 }
 
-function nightLong(dateKey: string, games: Game[]) {
-  const slides: any[] = [hookSlide(`${games.length} games. Every final score.`)];
+function gameShort(dateKey: string, g: Game, records: Map<string, string | null>) {
+  const slides: any[] = [introSlide(dateKey, [g], gameHook(g))];
   let n = 2;
-  for (const g of games) slides.push(scoreSlide(g, n++, D.scoreNight, heroLine(g)));
-  slides.push(starsSlide(nightStars(games, 3), n++, D.stars3, 'Three stars of the night'));
-  slides.push(ctaSlide(n));
-  return slides;
-}
-
-function gameShort(g: Game) {
-  const slides: any[] = [hookSlide(gameHook(g))];
-  let n = 2;
-  slides.push(scoreSlide(g, n++, D.score, heroLine(g)));
-  const stars = starsOf(g);
-  if (stars.length) slides.push(starsSlide(stars.slice(0, 3), n++, D.stars3, 'Three stars'));
-  slides.push(ctaSlide(n));
-  return slides;
-}
-
-function gameLong(g: Game) {
-  const slides: any[] = [hookSlide(gameHook(g))];
-  let n = 2;
-  slides.push(scoreSlide(g, n++, D.score, heroLine(g)));
-  const summary = summarySlides(g, n);
-  slides.push(...summary);
-  n += summary.length;
-  const stats = statsSlide(g, n);
-  if (stats) { slides.push(stats); n += 1; }
+  const cards = matchSlides(g, n, records);
+  slides.push(...cards);
+  n += cards.length;
+  // Les trois étoiles du match, désignées par la LNH — comme avant la refonte.
   const stars = starsOf(g);
   if (stars.length) slides.push(starsSlide(stars.slice(0, 3), n++, D.stars3, 'Three stars'));
   slides.push(ctaSlide(n));
@@ -678,10 +736,8 @@ function totalSeconds(slides: any[]): number {
  * avertissement qui se déclenche toujours cesse d'être lu.
  */
 const TARGET = {
-  night_short: [12, 32] as [number, number],   // douze matchs font deux tableaux
-  night_long:  [20, 75] as [number, number],
+  night_long:  [8, 70] as [number, number],    // ~2-4 s par carte de match
   game_short:  [10, 20] as [number, number],
-  game_long:   [22, 60] as [number, number],
 };
 
 async function main() {
@@ -706,6 +762,7 @@ async function main() {
 
   await ensureLogos(games.flatMap((g) => [g.away.abbr, g.home.abbr]));
   const teamTags = await loadTeamTags();
+  const records = await loadRecords(games, dateKey);
 
   // Quels matchs reçoivent leur propre paire de vidéos.
   let picked: Game[];
@@ -757,8 +814,7 @@ async function main() {
     };
     const entity = { type: 'games', name: `NHL ${dateKey}`, team: null };
     const caps = nightCaptions(dateKey, games);
-    push('night-short', 'recap_night', entity, facts, nightShort(dateKey, games), caps, TARGET.night_short);
-    push('night-long', 'recap_night', entity, facts, nightLong(dateKey, games), caps, TARGET.night_long);
+    push('night-long', 'recap_night', entity, facts, nightLong(dateKey, games, records), caps, TARGET.night_long);
   }
 
   for (const g of picked) {
@@ -774,8 +830,7 @@ async function main() {
     };
     const entity = { type: 'matchup', name: `${g.away.abbr} VS ${g.home.abbr}`, team: g.winner.abbr };
     const caps = gameCaptions(g, teamTags);
-    push(`${slug}-short`, 'recap_game', entity, facts, gameShort(g), caps, TARGET.game_short);
-    push(`${slug}-long`, 'recap_game', entity, facts, gameLong(g), caps, TARGET.game_long);
+    push(`${slug}-short`, 'recap_game', entity, facts, gameShort(dateKey, g, records), caps, TARGET.game_short);
   }
 
   // --- Le seul contrôle qui reste : le vocabulaire ------------------------

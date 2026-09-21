@@ -55,6 +55,9 @@
 /* ── Dasher boards ─────────────────────────────────────────────── */
 /* Read top-to-bottom: glass shine, white board face, shadowed base,
    then the yellow kickplate that meets the ice. */
+/* Plus posée sous les en-têtes depuis le 2026-09-21 (bande blanche et jaune
+   retirée de toutes les barres de navigation) ; reste au pied de l'accueil
+   via .rink-boards--bottom. */
 .rink-boards {
   position: relative;
   height: 30px;

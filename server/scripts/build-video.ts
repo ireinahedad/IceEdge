@@ -26,8 +26,16 @@
  * et l'assemblage final ne fait que recopier des flux déjà conformes. Une vidéo
  * qui déraille se diagnostique en ouvrant son segment.
  *
- * PAS DE FONDUS. Coupes franches entre les plans : le rythme sec convient au
- * format court et se cale sur la musique ajoutée à l'envoi.
+ * COUPES FRANCHES pour les posts du jour : le rythme sec convient au format
+ * court et se cale sur la musique ajoutée à l'envoi.
+ *
+ * TRANSITION pour les récaps (`<date>-recap`) : un glissement court entre les
+ * cartes, qui enchaînent des matchs à la même mise en page — sans lui, une
+ * carte chasse l'autre et l'œil croit à un saut d'image. La transition MORD sur
+ * le plan suivant au lieu d'allonger la vidéo : chaque segment (sauf le
+ * dernier) est prolongé de sa durée, et la durée totale reste la somme des plans.
+ *   --transition=fade        changer l'effet (tout nom xfade de ffmpeg)
+ *   --transition=none        revenir aux coupes franches
  */
 
 import { promises as fs } from 'fs';
@@ -58,6 +66,10 @@ const PRESET = 'medium';
  * toujours ne se lit plus. C'est une cible, pas une limite : les bornes dures
  * sont celles de check-posts, plus larges.
  */
+/** Durée et effet de la transition des récaps, en secondes. */
+const TRANSITION_SECONDS = 0.3;
+const TRANSITION_DEFAULT = 'smoothleft';
+
 const MIN_SECONDS = 8;
 const MAX_SECONDS = 15;
 
@@ -189,14 +201,16 @@ const VIDEO_ARGS = [
   '-pix_fmt', 'yuv420p', '-r', String(FPS),
 ];
 
-async function buildSegment(slideDir: string, slide: ManifestSlide, out: string): Promise<void> {
+async function buildSegment(slideDir: string, slide: ManifestSlide, out: string, extra = 0): Promise<void> {
+  // `extra` : prolongation pour la transition qui mordra sur ce plan.
+  const seconds = slide.duration + extra;
   if (!slide.animated) {
     const png = path.join(slideDir, slide.file!);
     await fs.access(png);
     await run(FFMPEG, [
       '-y', '-loglevel', 'error',
       '-loop', '1', '-framerate', String(FPS), '-i', png,
-      '-t', slide.duration.toFixed(2),
+      '-t', seconds.toFixed(3),
       '-vf', 'format=yuv420p,setsar=1',
       ...VIDEO_ARGS, out,
     ]);
@@ -206,7 +220,7 @@ async function buildSegment(slideDir: string, slide: ManifestSlide, out: string)
   const frameDir = path.join(slideDir, slide.dir!);
   await fs.access(path.join(frameDir, 'f0000.png'));
   const srcFps = slide.fps ?? FPS;
-  const hold = slide.hold_seconds ?? 0;
+  const hold = (slide.hold_seconds ?? 0) + extra;
 
   /**
    * L'arrêt sur la dernière image est produit par tpad plutôt que par un second
@@ -222,7 +236,7 @@ async function buildSegment(slideDir: string, slide: ManifestSlide, out: string)
     '-framerate', String(srcFps), '-start_number', '0',
     '-i', path.join(frameDir, 'f%04d.png'),
     '-vf', filters,
-    '-t', slide.duration.toFixed(3),
+    '-t', seconds.toFixed(3),
     ...VIDEO_ARGS, out,
   ]);
 }
@@ -235,6 +249,7 @@ async function buildPost(
   postDir: string,
   music: string | null,
   keepSegments: boolean,
+  transition: string | null = null,
 ): Promise<{ file: string; expected: number; actual: number | null } | null> {
   const slideDir = path.join(postDir, 'slides');
   let manifest: Manifest;
@@ -251,10 +266,11 @@ async function buildPost(
   await fs.rm(segDir, { recursive: true, force: true });
   await fs.mkdir(segDir, { recursive: true });
 
+  const fade = transition && slides.length > 1 ? TRANSITION_SECONDS : 0;
   const segments: string[] = [];
-  for (const slide of slides) {
+  for (const [i, slide] of slides.entries()) {
     const seg = path.join(segDir, `${String(slide.n).padStart(2, '0')}.mp4`);
-    await buildSegment(slideDir, slide, seg);
+    await buildSegment(slideDir, slide, seg, i < slides.length - 1 ? fade : 0);
     segments.push(seg);
   }
 
@@ -270,6 +286,35 @@ async function buildPost(
 
   const expected = slides.reduce((sum, s) => sum + s.duration, 0);
   const outFile = path.join(postDir, 'video.mp4');
+
+  if (fade) {
+    // xfade en chaîne : le plan i commence à la somme des durées des plans
+    // précédents, exactement comme sans transition.
+    const args = ['-y', '-loglevel', 'error'];
+    for (const seg of segments) args.push('-i', seg);
+    const parts: string[] = [];
+    let prev = '[0:v]';
+    let offset = 0;
+    for (let i = 1; i < segments.length; i++) {
+      offset += slides[i - 1].duration;
+      const label = i === segments.length - 1 ? '[vout]' : `[v${i}]`;
+      parts.push(`${prev}[${i}:v]xfade=transition=${transition}:duration=${fade}:offset=${offset.toFixed(3)}${label}`);
+      prev = label;
+    }
+    args.push('-filter_complex', parts.join(';'), '-map', '[vout]');
+    if (music) {
+      args.push('-stream_loop', '-1', '-i', music, '-map', `${segments.length}:a:0`);
+      const fadeOut = Math.max(0, expected - 0.8);
+      args.push('-af', `afade=t=in:st=0:d=0.4,afade=t=out:st=${fadeOut.toFixed(2)}:d=0.8`);
+      args.push('-c:a', 'aac', '-b:a', '192k', '-shortest');
+    } else {
+      args.push('-an');
+    }
+    args.push(...VIDEO_ARGS, '-t', expected.toFixed(3), '-movflags', '+faststart', outFile);
+    await run(FFMPEG, args);
+    if (!keepSegments) await fs.rm(segDir, { recursive: true, force: true });
+    return { file: outFile, expected, actual: await probeDuration(outFile) };
+  }
 
   const args = ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', listFile];
   if (music) {
@@ -570,6 +615,12 @@ async function main() {
   const dateKey = arg('date') ?? new Date().toISOString().slice(0, 10);
   const only = arg('only');
   const keepSegments = process.argv.slice(2).includes('--keep-segments');
+  // Transition : par défaut pour les récaps seulement, jamais pour le quotidien
+  // sauf demande explicite.
+  const transArg = arg('transition');
+  const transition = transArg === 'none'
+    ? null
+    : transArg ?? (dateKey.endsWith('-recap') ? TRANSITION_DEFAULT : null);
 
   let music: string | null = null;
   const musicArg = arg('music');
@@ -611,12 +662,15 @@ async function main() {
       if (Array.isArray(t) && t.length === 2) targets.set(post.candidate_id, [Number(t[0]), Number(t[1])]);
     }
   } catch { /* pas de posts.json : cible par défaut pour tout le monde */ }
-  console.log(`\n  Montage — ${dateKey}${music ? ` · musique ${path.basename(music)}` : ' · muet'}\n`);
+  console.log(`\n  Montage — ${dateKey}${music ? ` · musique ${path.basename(music)}` : ' · muet'}${transition ? ` · transition ${transition}` : ''}\n`);
 
   let built = 0;
   for (const name of entries) {
     if (only && !name.includes(only)) continue;
-    const result = await buildPost(path.join(dir, name), music, keepSegments);
+    // Un dossier que posts.json ne liste plus (ex. un ancien <match>-long d'une
+    // exécution précédente) n'est pas remonté.
+    if (targets.size && !targets.has(name)) continue;
+    const result = await buildPost(path.join(dir, name), music, keepSegments, transition);
     if (!result) continue;
 
     const shown = result.actual ?? result.expected;

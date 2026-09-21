@@ -133,7 +133,6 @@ export function ProfilePage() {
           WebkitBackdropFilter: "blur(16px)",
           paddingTop: "env(safe-area-inset-top, 0px)",
         }}>
-        <div className="rink-boards" aria-hidden />
         <div className="px-4 pt-3 pb-3 flex items-center justify-between">
           <h1 className="text-white text-lg font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("profile.title")}</h1>
           <div className="flex items-center gap-2">

@@ -37,7 +37,7 @@ la lecture ; le reste s'enchaîne.
 
 ## Le récap d'après-match
 
-Une soirée de hockey finie, quatre vidéos. Rien à coller nulle part : le récap
+Une soirée de hockey finie, deux vidéos. Rien à coller nulle part : le récap
 ne passe pas par un modèle de langage — le score est le score.
 
 ```bat
@@ -52,14 +52,31 @@ npm run content:video  -- --date=<date>-recap :: 3. assembler les mp4
 La date exacte s'affiche à la fin de `content:recap` : les deux commandes
 suivantes sont écrites en clair, à recopier.
 
-**Quatre vidéos par soirée**, en deux formats :
+**Deux vidéos par soirée**, au format court :
 
 | Vidéo | Contenu | Durée |
 |---|---|---|
-| `night-short` | tous les scores finaux, l'étoile de la nuit | 15-30 s |
-| `night-long` | une carte par match, les trois étoiles de la nuit | 30-55 s |
-| `<match>-short` | score + périodes, les trois étoiles | ~15 s |
-| `<match>-long` | score, tous les buts, totaux d'équipe et gardiens, étoiles | ~30-40 s |
+| `night-long` | ouverture (jour, date, affiches), puis une carte par match : logos, fiche V-D-DP, score, tirs, marqueurs G/A/P | ≤ 3 s par match |
+| `<match>-short` | ouverture (jour, date, affiche), la carte du match, les trois étoiles | ~10-12 s |
+
+`night-short` et `<match>-long` ne sont plus produits.
+
+**La carte d'ouverture** n'a pas de bandeau en haut (la date y serait deux
+fois) ni de « @ » entre les équipes.
+
+**La carte de match** (gabarit `matchcard_card`) montre toujours UN seul match,
+avec une mise en page fixe : les deux carrés de score sont toujours à la même
+hauteur, au même endroit, et les lignes de marqueurs s'ajoutent vers le bas.
+Sous chaque logo, la fiche de la saison APRÈS le match (victoires-défaites-
+défaites en prolongation ou fusillade), recomptée depuis le calendrier du
+club, toujours en trois chiffres (zéros compris). Tous les joueurs à un point ou plus sont listés ; au-delà de 11 lignes, le
+match continue sur une seconde carte (`1/2`, `2/2`). Durée : 1 s + 0,35 s par
+ligne, 3 s au maximum. Les trois étoiles n'apparaissent que dans `<match>-short`.
+
+**Transition** : les récaps enchaînent leurs cartes par un glissement de 0,3 s
+(`smoothleft`), sans allonger la vidéo. Les posts du jour gardent leurs coupes
+franches. `content:video -- --transition=fade` change l'effet,
+`--transition=none` revient aux coupes franches.
 
 Le match retenu est **celui de la nuit**, choisi par barème : prolongation,
 fusillade, un but d'écart, remontée de deux buts, blanchissage, match à sept
@@ -70,7 +87,7 @@ but — la même soirée donne toujours le même choix.
 npm run content:recap                         :: la nuit qui vient de finir
 npm run content:recap -- --date=2026-11-04    :: forcer la soirée
 npm run content:recap -- --game=MTL           :: cadrer sur un match précis
-npm run content:recap -- --game=all           :: un court + un long PAR match
+npm run content:recap -- --game=all           :: un short PAR match
 npm run content:recap -- --no-night           :: le match seul, sans la soirée
 npm run content:recap -- --require-all        :: refuser de sortir si un match traîne
 ```
@@ -152,7 +169,7 @@ S'arrête si une source dépasse 3 jours — relance alors `refresh-insights.cmd
 npm run content:recap
 npm run content:recap -- --date=2026-11-04    :: forcer la soirée
 npm run content:recap -- --game=MTL           :: cadrer sur un match précis
-npm run content:recap -- --game=all           :: un court + un long PAR match
+npm run content:recap -- --game=all           :: un short PAR match
 npm run content:recap -- --no-night           :: le match seul, sans la soirée
 npm run content:recap -- --require-all        :: refuser de sortir si un match traîne
 ```
@@ -168,7 +185,7 @@ de tourner, contrairement à `content:insights`. Les matchs encore en cours sont
 Le dossier est **séparé** de celui du jour : un récap ne peut donc pas écraser le
 `posts.json` du pipeline quotidien, même les soirs où les deux tournent.
 
-Voir la section « Le récap d'après-match » plus haut pour le contenu des quatre
+Voir la section « Le récap d'après-match » plus haut pour le contenu des deux
 vidéos et le choix du match.
 
 ### `npm run content:check` — le garde-fou
@@ -196,7 +213,7 @@ npm run content:render -- --only=suzuki       :: un seul post
 npm run content:render -- --date=<date>-recap :: le lot de récaps de la soirée
 ```
 
-Les cartes de récap (score, tableau, étoiles, feuille de match, totaux d'équipe)
+Les cartes de récap (score, tableau, carte de match, feuille de match, totaux d'équipe)
 passent par le même rendu, avec les logos déposés par `content:recap`. `--preview`
 les affiche aussi : c'est le moyen le plus rapide de vérifier qu'une soirée
 chargée ne fait pas déborder un plan.
@@ -236,7 +253,7 @@ donc aussi bien, mais elle suppose winget ou Chocolatey.
 Lit `slides\manifest.json` et écrit `video.mp4` à côté : H.264, 1080×1920,
 30 fps, coupes franches. Un avertissement signale une vidéo hors de la cible
 12-15 s — sans bloquer. Les récaps portent leur propre cible dans `posts.json`
-(un récap de nuit dure 30 à 55 s) : l'avertissement se règle sur elle, sinon il
+(un récap de nuit dure environ 2 à 4 s par match) : l'avertissement se règle sur elle, sinon il
 se déclencherait sur chacun d'eux et cesserait d'être lu.
 
 **Écrit aussi `index.html`, la page du jour.** Une carte par post : la vidéo se

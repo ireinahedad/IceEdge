@@ -40,6 +40,8 @@ export interface UITeam {
 export interface UIGame {
   id: string;
   date: string;       // "Apr 27"
+  /** Journée LNH du match, `YYYY-MM-DD` — pour le jour de semaine et les titres par jour. */
+  gameDate: string;
   time: string;       // "7:00 PM ET"
   status: string;
   team1Id: string;    // home, abbr lowercase
@@ -104,6 +106,7 @@ function toUIGame(g: any): UIGame {
   return {
     id:        g.id,
     date:      formatDate(g.gameDate),
+    gameDate:  String(g.gameDate ?? '').slice(0, 10),
     time:      g.startTime,
     status:    g.status,
     team1Id:   g.homeTeam?.abbreviation?.toLowerCase() ?? '',

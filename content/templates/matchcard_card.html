@@ -1,0 +1,17 @@
+<!doctype html>
+<!-- Récap — la carte d'un match dans night-long (une par match de la soirée).
+     Deux moitiés aux couleurs des clubs : logo, buts par période, score, tirs,
+     puis le tableau des marqueurs « nom | G A P | G A P | nom ».
+     Bloc généré par render-slides.ts (matchBlock) à partir du champ `match`
+     du plan ; le style se règle dans _shared.css, section matchcard_card. -->
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="_shared.css"></head>
+<body>
+  <div class="slide">
+    <div class="topbar">
+      <div class="subject">{{subject}}</div>
+      <div class="season-label">{{season_label}}</div>
+    </div>
+    <div class="recap">{{block}}</div>
+    <div class="sub">{{text}}</div>
+  </div>
+</body></html>

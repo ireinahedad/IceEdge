@@ -251,15 +251,25 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
       lineValue
     );
 
+    // Pari joueur : le coupon porte l'ÉQUIPE du joueur comme sujet, et ce qui
+    // a été parié — nom du joueur compris — comme sélection (même règle que
+    // PredictionSheet). « Over 2.5 Shots » seul ne dirait pas de qui il s'agit.
+    const isPlayer = selectedSubject.type === "player";
+    const playerTeamAbbr = isPlayer
+      ? (getTeamById(players.find((p) => p.id === selectedSubject.id)?.teamId ?? "")?.abbr ?? "")
+      : "";
+    const withName = (txt: string) =>
+      isPlayer && !txt.startsWith(selectedSubject.name) ? `${selectedSubject.name} · ${txt}` : txt;
+
     const leg = {
       id: legId,
       marketType: selectedMarket.type as BetMarketType,
       marketLabel: selectedMarket.label,
       subjectType: selectedSubject.type,
       subjectId: selectedSubject.id,
-      subjectName: selectedSubject.name,
+      subjectName: isPlayer ? playerTeamAbbr : selectedSubject.name,
       subjectLogo: selectedSubject.logo,
-      selection: selectionLabel.full,
+      selection: withName(selectionLabel.full),
       selectionShort: selectionLabel.short,
       probability: response.probability,
       line: lineValue,

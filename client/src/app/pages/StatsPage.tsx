@@ -12,6 +12,7 @@ import { FramedLabel } from "../components/brand/FramedLabel";
 import { useI18n } from "../i18n";
 import { ErrorState } from "../components/ErrorState";
 import { teamColors } from "../data/teamEmoji";
+import { dayHeading, groupByDay, weekdayShort } from "../data/gameDay";
 import "../components/rink-theme.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -102,7 +103,8 @@ function TeamCard({ team, onClick, onAdd, accent }: { team: UITeam; onClick: () 
 }
 
 function GameCard({ game, getTeamById, onClick, accent }: { game: UIGame; getTeamById: (id: string) => UITeam | undefined; onClick: () => void; accent: string }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const weekday = weekdayShort(game.gameDate, lang);
   const team1 = getTeamById(game.team1Id);
   const team2 = getTeamById(game.team2Id);
   if (!team1 || !team2) return null;
@@ -113,7 +115,7 @@ function GameCard({ game, getTeamById, onClick, accent }: { game: UIGame; getTea
       style={{ background: gameCardBackground(team1.abbr, team2.abbr) }}
     >
       <div className="flex items-center justify-between mb-3">
-        <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: accent }}>{game.date} · {game.time}</span>
+        <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: accent }}>{weekday ? `${weekday} ` : ""}{game.date} · {game.time}</span>
         <span className="text-[#bfc8cc] text-[11px] bg-black/40 px-2 py-0.5 rounded-full">NHL</span>
       </div>
       <div className="flex items-center gap-2 mb-3">
@@ -148,7 +150,7 @@ function GameCard({ game, getTeamById, onClick, accent }: { game: UIGame; getTea
 
 export function StatsPage() {
   const { theme } = useSport();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const accent = theme.accent;
   const [activeFilter, setActiveFilter] = useState(0);
   const [search, setSearch] = useState("");
@@ -190,10 +192,8 @@ export function StatsPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] md:max-w-5xl mx-auto relative z-10 w-full">
-      {/* Header — the boards close the title block, then the controls sit below
-          them, the way everything else on this app sits on the ice. */}
+      {/* Header — title block, then the controls below it. */}
       <header className="bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
-        <div className="rink-boards" aria-hidden />
         {/* Les marges verticales de ce bloc sont resserrées sous `md` : l'en-tête
             est collant, donc tout ce qu'il prend, le contenu ne le récupère
             jamais au défilement. Sur grand écran elles reprennent leur valeur
@@ -284,13 +284,26 @@ export function StatsPage() {
         {activeFilter === 1 && (
           <div className="flex flex-col gap-3">
             {filteredGames.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {filteredGames.map((game) => {
-                  const t1 = getTeamById(game.team1Id); const t2 = getTeamById(game.team2Id);
-                  if (!t1 || !t2) return null;
-                  return <GameCard key={game.id} game={game} accent={accent} getTeamById={getTeamById}
-                    onClick={() => navigate(`/stats/prediction/game/${game.id}`)} />;
-                })}
+              /* Un titre par journée au-dessus de ses matchs (aujourd'hui,
+                 demain…), comme sur l'accueil et le calendrier. */
+              <div className="flex flex-col gap-4">
+                {groupByDay(filteredGames, (g) => g.gameDate).map(({ day, items }) => (
+                  <div key={day || "unknown"} className="flex flex-col gap-2">
+                    {day && (
+                      <h3 className="text-[#bfc8cc] text-[11px] font-bold uppercase tracking-wider">
+                        {dayHeading(day, lang)}
+                      </h3>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {items.map((game) => {
+                        const t1 = getTeamById(game.team1Id); const t2 = getTeamById(game.team2Id);
+                        if (!t1 || !t2) return null;
+                        return <GameCard key={game.id} game={game} accent={accent} getTeamById={getTeamById}
+                          onClick={() => navigate(`/stats/prediction/game/${game.id}`)} />;
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2 py-5">

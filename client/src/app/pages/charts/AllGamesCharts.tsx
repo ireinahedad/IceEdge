@@ -200,7 +200,7 @@ export function AllGamesCharts({ teamSpace }: { teamSpace?: string }) {
   const monthLabel = (x: { y: number; m: number }) =>
     new Date(Date.UTC(x.y, x.m - 1, 1)).toLocaleDateString(locale, { month: "long", year: "numeric", timeZone: "UTC" });
   const dayLabel = (iso: string) =>
-    new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale, { month: "short", day: "numeric", timeZone: "UTC" });
+    new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale, { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 
   const matchupCell = (g: NHLGame) => (
     <td className="px-3 py-2.5 sticky left-0 z-10 whitespace-nowrap" style={{ background: BG_CARD }}>

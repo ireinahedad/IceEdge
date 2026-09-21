@@ -6,6 +6,7 @@
  * seuls les imports et les mots-clés `export` ont été ajoutés.
  */
 
+import { weekdayShort } from "../../data/gameDay";
 import { useNavigate } from "react-router";
 import { IceedgeLogo } from "../../components/brand/IceedgeLogo";
 import { useSport } from "../../context/SportContext";
@@ -106,6 +107,11 @@ function EdgeBadge({ edge }: { edge: number }) {
  * repli, et il est découpé à la main plutôt que passé à `new Date()`, qui
  * lirait « 2026-09-22 » comme minuit UTC et pourrait reculer d'un jour.
  */
+/** La journée LNH d'un match (`YYYY-MM-DD`) : `gameDate`, sinon l'instant UTC. */
+export function gameIsoDay(game: DisplayGame): string | undefined {
+  return game.gameDate?.slice(0, 10) || game.startTimeUTC?.slice(0, 10) || undefined;
+}
+
 function gameDayLabel(game: DisplayGame, lang: string): string | null {
   const locale = lang === "fr" ? "fr-CA" : "en-US";
   let d: Date | null = null;
@@ -243,7 +249,9 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
   const { t, lang } = useI18n();
   const navigate = useNavigate();
   const { homePct, awayPct, edge } = useGameEdge(game);
-  const day = gameDayLabel(game, lang);
+  // Le jour de semaine, toujours : le titre de la journée est au-dessus, mais
+  // une carte doit se lire seule (capture d'écran, défilement rapide).
+  const day = weekdayShort(gameIsoDay(game), lang) || gameDayLabel(game, lang);
 
   return (
     <div

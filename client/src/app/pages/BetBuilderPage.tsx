@@ -147,7 +147,6 @@ export function BetBuilderPage() {
         className="rink-header-glass sticky top-0 z-40 bet-ink-black"
         style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
       >
-        <div className="rink-boards" aria-hidden />
         <div className="px-4 pt-3 pb-3 flex items-center justify-between">
           <div>
             <h1 className="text-white text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>

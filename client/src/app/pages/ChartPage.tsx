@@ -187,7 +187,6 @@ export function ChartPage() {
           borderBottom: inTeamSpace ? `2px solid ${teamAccent(id)}` : undefined,
         }}
       >
-        <div className="rink-boards" aria-hidden />
         <div className="px-4 pt-3 pb-3">
         <div className="flex items-center gap-2">
           <button onClick={goBack} className="tap-44 text-[#3a5060] text-lg shrink-0" aria-label={t("stats.title")}>

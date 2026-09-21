@@ -280,13 +280,19 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
     }));
   })();
 
-  // Stamp the resolved game id onto every option's mlProps.
-  const playerGroupsG: MktGroup[] = playerGameId
-    ? playerGroupsF.map(g => ({
-        ...g,
-        options: g.options.map(o => (o.mlProps ? { ...o, mlProps: { ...o.mlProps, gameId: playerGameId } } : o)),
-      }))
-    : playerGroupsF;
+  // Stamp the resolved game id onto every option's mlProps — plus the player's
+  // team and name, which the slip shows instead of the raw player id.
+  const playerGroupsG: MktGroup[] = playerGroupsF.map(g => ({
+    ...g,
+    options: g.options.map(o => (o.mlProps
+      ? { ...o, mlProps: {
+          ...o.mlProps,
+          ...(playerGameId ? { gameId: playerGameId } : {}),
+          teamAbbr: data.team || undefined,
+          playerName: data.name,
+        } }
+      : o)),
+  }));
 
   return (
     <div className="flex flex-col gap-3">
