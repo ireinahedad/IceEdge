@@ -126,6 +126,7 @@ export type BetMarketType =
   | "alt_puck_line"          // Alternate puck lines (-2.5 / +2.5)
   | "ot_winner"              // Winner IF the game goes to OT (conditional)
   | "ot_so_winner"           // Wins in OT/SO — unconditional (Match Betting tile)
+  | "correct_score"          // Final score, home–away ("3-1"), or home_other / away_other
   // ── NHL: Period markets ───────────────────────────────────────────────────
   | "period1_winner"
   | "period2_winner"

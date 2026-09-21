@@ -103,6 +103,21 @@ export interface BoxscoreLine {
   /** Gardiens seulement. */
   saves?: number; shotsAgainst?: number; goalsAgainst?: number; decision?: string;
 }
+export type RateStat = "goals" | "assists" | "points" | "shots" | "hits" | "blocks" | "saves";
+export interface PlayerRatesResponse {
+  gameId?: string;
+  /** `k` de la binomiale négative par statistique ; `null` = Poisson. */
+  dispersion: Record<RateStat, number | null>;
+  players: Record<string, {
+    team: string; position: "F" | "D" | "G"; gp: number;
+    rates: Partial<Record<RateStat, number>>;
+    /** P(ouvre le score), 0–1. */
+    firstGoal?: number;
+    /** Buts attendus dans le match, les deux équipes. */
+    gameGoals?: number;
+  }>;
+}
+
 export interface GameBoxscoreResponse {
   /** `unknown` = feuille indisponible (match à venir, amont muet, mode mock). */
   state: "scheduled" | "live" | "final" | "unknown";
@@ -267,6 +282,17 @@ export const nhlApiService = {
    */
   getGameBoxscore: (gameId: string): Promise<GameBoxscoreResponse> =>
     get<GameBoxscoreResponse>(`/games/${gameId}/boxscore`),
+
+  /**
+   * Cadences des paris joueur (mode ML), pour les deux alignements d'un match
+   * ou pour un club seul. Une requête par page — voir `playerRates.ts`.
+   */
+  getPlayerRates: (scope: "game" | "team", id: string): Promise<PlayerRatesResponse> =>
+    get<PlayerRatesResponse>(`/predictions/player-rates/${scope}/${encodeURIComponent(id)}`),
+
+  /** Gardiens partants saisis pour un match : `{ TOR: "Joseph Woll", MTL: null }`. */
+  getStartingGoalies: (gameId: string): Promise<Record<string, string | null>> =>
+    get<Record<string, string | null>>(`/games/${gameId}/starting-goalies`),
 
   getTeamRoster: (abbr: string): Promise<NHLPlayerInfo[]> =>
     get<NHLPlayerInfo[]>(`/teams/${abbr}/roster`),

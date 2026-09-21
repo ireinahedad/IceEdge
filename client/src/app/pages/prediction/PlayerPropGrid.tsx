@@ -22,8 +22,10 @@
  * navigation, pas de fiche : la page ne bouge pas sous les doigts.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { nhlApiService, type BoxscoreLine, type GameBoxscoreResponse } from "../../services/nhlApiService";
+import { useContext, useEffect, useMemo, useState } from "react";
+import { nhlApiService, type BoxscoreLine, type GameBoxscoreResponse, type PlayerRatesResponse, type RateStat } from "../../services/nhlApiService";
+import type { MLPredictionResult } from "../../components/MLPredictionCard";
+import { RevealModeCtx } from "./predictionShared";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { BetOption } from "./PredictionSheet";
@@ -37,6 +39,8 @@ interface MetricSpec {
   field: "goals" | "assists" | "points" | "shots" | "hits" | "blockedShots" | "saves";
   /** Seuils proposés en colonnes. « 1+ » veut dire ligne 0,5. */
   thresholds: number[];
+  /** Statistique des cadences ML (`/predictions/player-rates`). */
+  rateStat: RateStat;
   /** Marché envoyé au moteur de probabilité. */
   propType: string;
   /** Marché canonique pour le règlement automatique du coupon. */
@@ -95,7 +99,7 @@ interface MetricSpec {
  */
 const SPECS: Record<PropMetric, MetricSpec> = {
   goals: {
-    field: "goals", thresholds: [1, 2, 3], liveField: "goals",
+    field: "goals", thresholds: [1, 2, 3], liveField: "goals", rateStat: "goals",
     propType: "goals", settleMarket: "anytime_goal", titleKey: "prop.goals",
     leading: {
       titleKey: "prop.firstGoal",
@@ -114,39 +118,45 @@ const SPECS: Record<PropMetric, MetricSpec> = {
        * Plancher à 3 % comme partout : en dessous, on afficherait une précision
        * qu'une moyenne de saison ne porte pas.
        */
-      pct: (lambda) => Math.max(3, Math.round(poissonAtLeast(lambda, 1) / 6)),
+      pct: (lambda) => Math.max(1, Math.round(poissonAtLeast(lambda, 1) / 6)),
     },
   },
+  // Jusqu'à 4+ : un premier centre à quatre passes est rare, mais c'est un
+  // marché que les livres cotent, et Poisson sur la moyenne le chiffre encore.
   assists: {
-    field: "assists", thresholds: [1, 2], liveField: "assists",
+    field: "assists", thresholds: [1, 2, 3, 4], liveField: "assists", rateStat: "assists",
     propType: "assists", settleMarket: "assists_ou", titleKey: "prop.assists",
   },
   // Points = buts + passes. Plus fréquent que chacun pris à part, donc un
   // seuil de plus : le match à trois points existe pour un premier trio.
   points: {
-    field: "points", thresholds: [1, 2, 3], liveField: "points",
+    field: "points", thresholds: [1, 2, 3], liveField: "points", rateStat: "points",
     propType: "points", settleMarket: "points_ou", titleKey: "prop.points",
   },
   // Tirs au but : le prop joueur le plus liquide chez les livres. Un attaquant
   // de premier trio en met trois ou quatre, d'où des seuils qui montent plus
   // haut que pour les buts.
   shots: {
-    field: "shots", thresholds: [1, 2, 3, 4], liveField: "shots",
+    field: "shots", thresholds: [1, 2, 3, 4], liveField: "shots", rateStat: "shots",
     propType: "shots", settleMarket: "shots_ou", titleKey: "prop.shots",
   },
+  // Mises en échec et tirs bloqués : 1+, 3+, 5+, 7+. Un joueur physique en
+  // distribue trois ou quatre par match, un défenseur défensif bloque autant de
+  // tirs : des colonnes 1/2/3 plafonnaient toute la grille. Les colonnes du
+  // haut sont rares — Poisson les chiffre, et le plancher à 3 % le dit.
   hits: {
-    field: "hits", thresholds: [1, 2, 3], liveField: "hits",
+    field: "hits", thresholds: [1, 3, 5, 7], liveField: "hits", rateStat: "hits",
     propType: "hits", settleMarket: "hits_ou", titleKey: "prop.hits",
   },
   blocks: {
-    field: "blockedShots", thresholds: [1, 2, 3], liveField: "blockedShots",
+    field: "blockedShots", thresholds: [1, 3, 5, 7], liveField: "blockedShots", rateStat: "blocks",
     propType: "blocks", settleMarket: "blocked_shots_ou", titleKey: "prop.blocks",
   },
   // Arrêts — seuls marchés de gardien de cette grille, et seuls seuils
   // relatifs : voir `relative` ci-dessus. Les trois colonnes encadrent la
   // moyenne du gardien pour que la grille dise quelque chose dans les deux sens.
   saves: {
-    field: "saves", thresholds: [-3, 0, 3], goalies: true, relative: true, liveField: "saves",
+    field: "saves", thresholds: [-3, 0, 3], goalies: true, relative: true, liveField: "saves", rateStat: "saves",
     propType: "saves", settleMarket: "goalie_saves_ou", titleKey: "prop.saves",
   },
 };
@@ -169,7 +179,58 @@ function poissonAtLeast(lambda: number, k: number): number {
     term *= lam / i;
     cdf += term;                        // P(X ≤ k-1)
   }
-  return Math.min(92, Math.max(3, Math.round((1 - cdf) * 100)));
+  // Plancher à 1 et non plus 3 : sous 3 %, la case affiche « <3% »
+  // (`belowFloor`). Remonter tout le monde à 3 rendait égaux des paris qui ne
+  // le sont pas — et le coupon enregistrait ce 3 comme une vraie probabilité.
+  return Math.min(92, Math.max(1, Math.round((1 - cdf) * 100)));
+}
+
+/**
+ * P(X ≥ k) pour une binomiale négative de moyenne λ, dispersion `disp`
+ * (`null` = Poisson). Sert au mode ML : une cadence par joueur, tous les
+ * seuils de la ligne en découlent.
+ */
+function nbAtLeast(lambda: number, k: number, disp: number | null): number {
+  if (k <= 0) return 1;
+  const lam = Math.max(1e-6, lambda);
+  let term: number, cdf: number;
+  if (disp == null || !Number.isFinite(disp)) {
+    term = Math.exp(-lam); cdf = term;
+    for (let i = 1; i < k; i++) { term *= lam / i; cdf += term; }
+  } else {
+    const q = lam / (disp + lam);
+    term = Math.pow(disp / (disp + lam), disp); cdf = term;
+    for (let n = 0; n < k - 1; n++) { term *= ((n + disp) / (n + 1)) * q; cdf += term; }
+  }
+  return Math.max(0, 1 - cdf);
+}
+
+/**
+ * Cadences ML d'un match / d'un club — UNE requête partagée par toutes les
+ * grilles de la page (sept grilles, deux alignements). La promesse est gardée
+ * 5 min ; un échec n'est pas conservé.
+ */
+const RATES_TTL = 5 * 60_000;
+const ratesCache = new Map<string, { at: number; p: Promise<PlayerRatesResponse | null> }>();
+function loadPlayerRates(scope: "game" | "team", id: string): Promise<PlayerRatesResponse | null> {
+  const key = `${scope}:${id}`;
+  const hit = ratesCache.get(key);
+  if (hit && Date.now() - hit.at < RATES_TTL) return hit.p;
+  const entry = {
+    at: Date.now(),
+    p: nhlApiService.getPlayerRates(scope, id).catch(() => null),
+  };
+  entry.p.then(r => { if (r === null && ratesCache.get(key) === entry) ratesCache.delete(key); });
+  ratesCache.set(key, entry);
+  return entry.p;
+}
+
+/** Sous ce pourcentage, une case de grille affiche « <3% ». */
+const BELOW_FLOOR = 3;
+
+/** Nom comparable : sans accents, sans casse, espaces réduits. */
+function normName(n: string | undefined): string {
+  return (n ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 type RosterRow = {
@@ -240,6 +301,7 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
 }) {
   const { t, lang } = useI18n();
   const spec = SPECS[metric];
+  const mode = useContext(RevealModeCtx);
 
   const [sideKey, setSideKey] = useState(sides[0]?.key ?? "");
   const [rosters, setRosters] = useState<Record<string, RosterRow[]>>({});
@@ -305,6 +367,79 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
   /** `true` seulement quand le serveur dit que le match est en cours. */
   const isLive = box?.state === "live";
 
+  /**
+   * Cadences ML — chargées SEULEMENT en mode ML, et une fois pour toute la
+   * page (`loadPlayerRates`). Match connu : les deux alignements, ajustés à
+   * l'adversaire. Sinon : le club seul.
+   *
+   * `undefined` = pas demandé ou en cours ; `null` = indisponible.
+   */
+  const [rates, setRates] = useState<PlayerRatesResponse | null | undefined>(undefined);
+  const ratesScope: ["game" | "team", string] | null =
+    gameId ? ["game", gameId] : abbr ? ["team", abbr.toUpperCase()] : null;
+  const ratesKey = ratesScope ? ratesScope.join(":") : "";
+  useEffect(() => {
+    if (mode !== "ml" || !ratesScope) return;
+    let alive = true;
+    loadPlayerRates(ratesScope[0], ratesScope[1]).then(r => { if (alive) setRates(r); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, ratesKey]);
+
+  /**
+   * Gardiens partants saisis pour ce match (`{ TOR: "Joseph Woll" }`).
+   *
+   * Seulement pour la grille des arrêts d'un match précis : ailleurs, « qui
+   * joue ce soir » n'a pas de sens.
+   */
+  const [starterNames, setStarterNames] = useState<Record<string, string | null>>({});
+  useEffect(() => {
+    if (!spec.goalies || !gameId) { setStarterNames({}); return; }
+    let alive = true;
+    nhlApiService.getStartingGoalies(gameId)
+      .then(r => { if (alive) setStarterNames(r ?? {}); })
+      .catch(() => { if (alive) setStarterNames({}); });
+    return () => { alive = false; };
+  }, [gameId, spec.goalies]);
+
+  /**
+   * LE gardien de ce match, et d'où on le sait.
+   *
+   * Un pari sur les arrêts du gardien qui ne joue pas n'est pas un pari : la
+   * grille ne montre donc que celui qui garde le filet ce soir. Par ordre de
+   * certitude :
+   *   1. `played`    — match en cours ou terminé : le(s) gardien(s) qui ont
+   *                    joué, lus sur la feuille de match (un gardien relevé en
+   *                    cours de match garde sa ligne, son pari existe) ;
+   *   2. `confirmed` — partant saisi pour la date du match (carte admin) ;
+   *   3. `probable`  — sinon, le gardien le plus utilisé de la saison.
+   *
+   * `null` = pas de filtre (grille de patineurs, ou pas de match choisi).
+   */
+  const goalieFilter = useMemo((): { ids: Set<string>; source: "played" | "confirmed" | "probable" } | null => {
+    if (!spec.goalies || !gameId) return null;
+    const goalies = (rosters[abbr] ?? []).filter(p => (p.position ?? "") === "G");
+    if (goalies.length === 0) return null;
+
+    if (box && (box.state === "live" || box.state === "final")) {
+      const played = goalies.filter(g => {
+        const l = box.players?.[g.id];
+        return !!l && ((l.toi ?? 0) > 0 || (l.shotsAgainst ?? 0) > 0);
+      });
+      if (played.length) return { ids: new Set(played.map(g => g.id)), source: "played" };
+    }
+
+    const wanted = starterNames[abbr.toUpperCase()];
+    if (wanted) {
+      const key = normName(wanted);
+      const hit = goalies.find(g => normName(g.name) === key);
+      if (hit) return { ids: new Set([hit.id]), source: "confirmed" };
+    }
+
+    const busiest = goalies.reduce((a, b) => ((b.gamesPlayed ?? 0) > (a.gamesPlayed ?? 0) ? b : a));
+    return { ids: new Set([busiest.id]), source: "probable" };
+  }, [spec.goalies, gameId, rosters, abbr, box, starterNames]);
+
   const rows: GridRow[] = useMemo(() => {
     const roster = rosters[abbr] ?? [];
     return roster
@@ -312,6 +447,8 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
       // patineur n'a pas d'arrêt. Mélanger les deux dans une grille ne
       // remplirait jamais qu'une moitié des lignes, quel que soit le tri.
       .filter(p => ((p.position ?? "F") === "G") === !!spec.goalies)
+      // Arrêts d'un match : seulement le gardien qui joue — voir `goalieFilter`.
+      .filter(p => !goalieFilter || goalieFilter.ids.has(p.id))
       .map((p) => {
         const gp = Math.max(1, p.gamesPlayed ?? 0);
         const total = seasonTotal(p, spec.field) ?? 0;
@@ -330,6 +467,23 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
         // marqué » ne s'affichent pas pareil.
         const liveLine: BoxscoreLine | undefined = isLive ? box?.players?.[p.id] : undefined;
         const liveCount = liveLine ? Number(liveLine[spec.liveField] ?? 0) : undefined;
+
+        // ── Chiffre ML de chaque case, depuis la cadence du joueur ──────────
+        // `undefined` tant que les cadences ne sont pas là (la case attend,
+        // `mlExternal`), `null` si ce joueur n'a pas de cadence pour cette
+        // statistique (« — »).
+        const playerRates = rates?.players?.[p.id];
+        const mlRate = rates === undefined ? undefined
+          : rates === null ? null
+          : (playerRates?.rates?.[spec.rateStat] ?? null);
+        const disp = rates?.dispersion?.[spec.rateStat] ?? null;
+        const preset = (pctValue: number, note: string): MLPredictionResult => ({
+          probability: pctValue,
+          confidence: null,
+          feature_importances: [],
+          model_type: t("prop.mlModel"),
+          explanation: note,
+        });
 
         const opts: BetOpt[] = seuils.map((k, i) => {
           const line = k - 0.5;
@@ -357,6 +511,17 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
               rate: lambda.toFixed(2), total: String(total), gp: String(gp),
             }),
             mlProps,
+            belowFloor: BELOW_FLOOR,
+            mlExternal: true,
+            mlPreset: mlRate === undefined ? undefined
+              : mlRate === null ? null
+              : (() => {
+                  const pv = Math.min(97, Math.round(nbAtLeast(mlRate, k, disp) * 100));
+                  return preset(pv, t("prop.mlNote", {
+                    rate: mlRate.toFixed(2), gp: String(playerRates?.gp ?? 0),
+                    k: disp == null ? "∞" : String(disp), label: `${k}+`, pct: String(pv),
+                  }));
+                })(),
           };
         });
         // ── Colonne de tête : le premier buteur ──────────────────────────
@@ -383,6 +548,19 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
                 teamAbbr: abbr.toUpperCase(), playerName: p.name,
                 settleMarket: spec.leading.settleMarket, settleSelection: "yes", gameId,
               } as MLProps,
+              belowFloor: BELOW_FLOOR,
+              mlExternal: true,
+              // 1er buteur : SA probabilité (part des buts du match), plus la
+              // requête « 1+ but » qu'il envoyait en mode ML.
+              mlPreset: rates === undefined ? undefined
+                : playerRates?.firstGoal == null ? null
+                : (() => {
+                    const pv = Math.round(playerRates.firstGoal! * 100);
+                    return preset(pv, t("prop.mlFirstNote", {
+                      rate: (playerRates.rates.goals ?? 0).toFixed(2),
+                      game: (playerRates.gameGoals ?? 6).toFixed(1), pct: String(pv),
+                    }));
+                  })(),
             } as BetOpt
           : null;
 
@@ -404,7 +582,7 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
     // de marché (31 appels de prédiction par bascule, 429 dès le premier
     // aller-retour). `lang` est la seule chose dont dépendent les libellés.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rosters, abbr, metric, gameId, lang, spec, isLive, box]);
+  }, [rosters, abbr, metric, gameId, lang, spec, isLive, box, goalieFilter, rates]);
 
   // Tirs bloqués non câblés pour cette équipe (amont muet, ou saison à zéro
   // match) : la grille entière vaudrait « 3 % » sur chaque case, ce qui n'est
@@ -443,7 +621,9 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
           </span>
         )}
         <span className="text-[#8a9ea6] text-[11px] ml-auto">
-          {expanded ? t("prop.allPlayers") : t("prop.top5")}
+          {goalieFilter
+            ? t(goalieFilter.source === "probable" ? "prop.starterProbable" : "prop.starterConfirmed")
+            : expanded ? t("prop.allPlayers") : t("prop.top5")}
         </span>
       </div>
 

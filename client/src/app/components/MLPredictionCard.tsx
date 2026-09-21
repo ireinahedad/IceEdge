@@ -572,6 +572,11 @@ interface MLSectionProps {
   label?:       string;
   simple?:      boolean;
   hero?:        boolean;
+  /**
+   * Résultat déjà calculé (grilles de paris joueur) : affiché tel quel, SANS
+   * appel au service. `null` = indisponible. Absent = on interroge le modèle.
+   */
+  preset?:      MLPredictionResult | null;
 }
 
 /**
@@ -653,11 +658,18 @@ type MLState =
   | { status: "ready";       result: MLPredictionResult }
   | { status: "unavailable" };
 
-export function MLSection({ type, subjectId, opponentId, propType, line, selection, isHome, ruleBasedPct, label, simple, hero }: MLSectionProps) {
+export function MLSection({ type, subjectId, opponentId, propType, line, selection, isHome, ruleBasedPct, label, simple, hero, preset }: MLSectionProps) {
   const { t } = useI18n();
-  const [state, setState] = useState<MLState>({ status: "loading" });
+  const [state, setState] = useState<MLState>(() =>
+    preset === undefined ? { status: "loading" }
+    : preset === null    ? { status: "unavailable" }
+    : { status: "ready", result: preset });
 
   useEffect(() => {
+    if (preset !== undefined) {
+      setState(preset === null ? { status: "unavailable" } : { status: "ready", result: preset });
+      return;
+    }
     let alive = true;
     // Aucun chiffre tant que le modèle n'a pas répondu. Jusqu'au 2026-09-04 la
     // carte affichait immédiatement le repli (rulePct ± 3) puis le remplaçait
@@ -681,7 +693,7 @@ export function MLSection({ type, subjectId, opponentId, propType, line, selecti
       })
       .catch(() => { if (alive) setState({ status: "unavailable" }); });
     return () => { alive = false; };
-  }, [type, subjectId, opponentId, propType, line, selection, isHome]);
+  }, [type, subjectId, opponentId, propType, line, selection, isHome, preset]);
 
   if (state.status === "loading")     return <MLSkeleton />;
   if (state.status === "unavailable") return <MLUnavailable t={t} />;

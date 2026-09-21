@@ -211,3 +211,131 @@ describe('les tuiles d\'écart disent de QUI elles parlent', () => {
     expect(new Set(subjects)).toEqual(new Set(['TOR']));
   });
 });
+
+/**
+ * Tableaux de la page match (sept. 2026) — les chiffres des RÈGLES doivent se
+ * tenir entre eux. Ce que chaque test ferme :
+ *   · deux côtés d'une même ligne (Over/Under, Yes/No, −x / +x adverse) qui ne
+ *     totalisent pas 100 ;
+ *   · une partition (score exact, qui mène après une période) qui ne fait pas
+ *     100 — l'ancienne carte de période totalisait ~125 % ;
+ *   · des lignes qui ne décroissent pas (−2.5 plus probable que −1.5) ;
+ *   · la carte de la 3e période qui contredit Match Betting.
+ */
+describe('tableaux de la page match — cohérence des règles', () => {
+  const load = async () => {
+    const groups = await buildGameMarkets('2026020001');
+    const byId = new Map(groups.flatMap(g => g.options.map(o => [o.id, o] as const)));
+    const pctOf = (id: string) => { const o = byId.get(id); expect(o, id).toBeDefined(); return o!.rulePct; };
+    return { groups, byId, pctOf };
+  };
+
+  it('chaque case de tableau pointe vers une option existante', async () => {
+    const { groups } = await load();
+    for (const g of groups) {
+      const ids = new Set(g.options.map(o => o.id));
+      for (const t of g.tables ?? []) for (const r of t.rows) {
+        expect(r.cells.length, `${g.id} ${r.label}`).toBe(t.columns.length);
+        for (const c of r.cells) if (c) expect(ids.has(c), `${g.id} → ${c}`).toBe(true);
+      }
+    }
+  });
+
+  it('total du match : 2.5 → 7.5, Over + Under = 100, Over décroît', async () => {
+    const { pctOf } = await load();
+    let prev = 101;
+    for (const tag of ['25', '35', '45', '55', '65', '75']) {
+      expect(pctOf(`o${tag}`) + pctOf(`u${tag}`), tag).toBeGreaterThanOrEqual(99);
+      expect(pctOf(`o${tag}`) + pctOf(`u${tag}`), tag).toBeLessThanOrEqual(101);
+      expect(pctOf(`o${tag}`)).toBeLessThanOrEqual(prev);
+      prev = pctOf(`o${tag}`);
+    }
+  });
+
+  it('puck line : −x domicile + +x visiteur = 100 (et inversement), −x décroît', async () => {
+    const { pctOf, byId } = await load();
+    let prevH = 101, prevA = 101;
+    for (const tag of ['15', '25', '35']) {
+      const s1 = pctOf(`pl-home-m${tag}`) + pctOf(`pl-away-p${tag}`);
+      const s2 = pctOf(`pl-away-m${tag}`) + pctOf(`pl-home-p${tag}`);
+      expect(s1).toBeGreaterThanOrEqual(99); expect(s1).toBeLessThanOrEqual(101);
+      expect(s2).toBeGreaterThanOrEqual(99); expect(s2).toBeLessThanOrEqual(101);
+      expect(pctOf(`pl-home-m${tag}`)).toBeLessThanOrEqual(prevH);
+      expect(pctOf(`pl-away-m${tag}`)).toBeLessThanOrEqual(prevA);
+      prevH = pctOf(`pl-home-m${tag}`); prevA = pctOf(`pl-away-m${tag}`);
+    }
+    // −1.5 ne dépasse jamais la victoire du même camp (tuiles Match Betting).
+    const homeWin = pctOf('ml-home') + pctOf('ml-home-ot');
+    expect(pctOf('pl-home-m15')).toBeLessThanOrEqual(homeWin);
+    // La ligne voyage dans le marché, pas seulement dans le libellé.
+    expect(byId.get('pl-home-m25')!.ml).toMatchObject({ propType: 'puck_line', line: -2.5, subjectId: 'TOR' });
+    expect(byId.get('pl-away-p25')!.ml).toMatchObject({ propType: 'puck_line', line: -2.5, subjectId: 'TOR', selection: 'no' });
+  });
+
+  it('les deux marquent 1+/2+/3+ : Yes + No = 100, Yes décroît', async () => {
+    const { pctOf, byId } = await load();
+    let prev = 101;
+    for (const [y, n] of [['btts-yes', 'btts-no'], ['btts2-yes', 'btts2-no'], ['btts3-yes', 'btts3-no']]) {
+      expect(pctOf(y) + pctOf(n)).toBeGreaterThanOrEqual(99);
+      expect(pctOf(y) + pctOf(n)).toBeLessThanOrEqual(101);
+      expect(pctOf(y)).toBeLessThan(prev);
+      prev = pctOf(y);
+    }
+    expect(byId.get('btts-yes')!.ml!.line).toBeUndefined();
+    expect(byId.get('btts3-no')!.ml).toMatchObject({ line: 2.5, selection: 'no' });
+  });
+
+  it('buts par équipe : Over + Under = 100 pour chaque camp et chaque ligne', async () => {
+    const { pctOf } = await load();
+    for (const side of ['home', 'away']) for (const tag of ['05', '15', '25', '35', '45']) {
+      const s = pctOf(`tt-${side}-o${tag}`) + pctOf(`tt-${side}-u${tag}`);
+      expect(s, `${side} ${tag}`).toBeGreaterThanOrEqual(99);
+      expect(s, `${side} ${tag}`).toBeLessThanOrEqual(101);
+    }
+  });
+
+  it('score exact : les cases d\'un camp somment à sa victoire, le tableau à 100', async () => {
+    const { groups, pctOf } = await load();
+    const cs = groups.find(g => g.id === 'correctscore')!;
+    const home = cs.options.filter(o => o.id.startsWith('sc-home')).reduce((s, o) => s + o.rulePct, 0);
+    const away = cs.options.filter(o => o.id.startsWith('sc-away')).reduce((s, o) => s + o.rulePct, 0);
+    expect(home + away).toBeGreaterThan(98.5);
+    expect(home + away).toBeLessThan(101.5);
+    // Tolérance : arrondis au dixième de 11 cases, et arrondis entiers des
+    // quatre tuiles Match Betting.
+    expect(Math.abs(home - (pctOf('ml-home') + pctOf('ml-home-ot')))).toBeLessThan(2);
+    // Pas de plancher à 3 % : un blanchissage 4-0 du visiteur vaut bien moins.
+    expect(pctOf('sc-away-4-0')).toBeLessThan(3);
+    // Sélection en ordre domicile–visiteur.
+    expect(cs.options.find(o => o.id === 'sc-away-3-1')!.ml).toMatchObject({ propType: 'correct_score', selection: '1-3' });
+  });
+
+  it('périodes 1 et 2 : domicile + égalité + visiteur = 100', async () => {
+    const { pctOf } = await load();
+    for (const n of [1, 2]) {
+      const s = pctOf(`p${n}-home`) + pctOf(`p${n}-draw`) + pctOf(`p${n}-away`);
+      expect(s, `P${n}`).toBeGreaterThanOrEqual(97);
+      expect(s, `P${n}`).toBeLessThanOrEqual(103);
+    }
+    // Moins d'égalités après deux périodes qu'après une (buts cumulés).
+    expect(pctOf('p2-draw')).toBeLessThan(pctOf('p1-draw'));
+  });
+
+  it('période 3 = Match Betting : mener après 60 min = gagner en temps réglementaire', async () => {
+    const { pctOf, groups } = await load();
+    expect(pctOf('p3-home')).toBe(pctOf('ml-home'));
+    expect(pctOf('p3-away')).toBe(pctOf('ml-away'));
+    expect(pctOf('p3-draw')).toBe(pctOf('ot-yes'));
+    // Les buts de la 1re période vivent dans la carte de la 1re période.
+    const p1 = groups.find(g => g.id === 'p1')!;
+    expect(p1.options.map(o => o.id)).toEqual(expect.arrayContaining(['p1-o05', 'p1-o15', 'p1-o25']));
+    expect(groups.find(g => g.id === 'p1goals')).toBeUndefined();
+  });
+
+  it('écart de victoire : par 1 + par 2 + par 3+ = victoire ; par 2 + par 3+ = −1.5', async () => {
+    const { pctOf } = await load();
+    const sum = pctOf('wm-1') + pctOf('wm-2') + pctOf('wm-3p');
+    expect(Math.abs(sum - (pctOf('ml-home') + pctOf('ml-home-ot')))).toBeLessThanOrEqual(2);
+    expect(Math.abs(pctOf('wm-2') + pctOf('wm-3p') - pctOf('pl-home-m15'))).toBeLessThanOrEqual(1);
+  });
+});

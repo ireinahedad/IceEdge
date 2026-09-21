@@ -804,6 +804,17 @@ const DICT: Record<string, { en: string; fr: string }> = {
     fr: "{name} marque dans {any} % de ses matchs. Environ un but sur six est le premier du match, donc ouvrir le score est bien plus rare que marquer. Cadence de saison : {rate} but/match.",
   },
   "prop.top5":           { en: "Top 5",                 fr: "Top 5" },
+  "prop.mlNote":         {
+    en: "Adjusted rate {rate}/game (season shrunk toward the position average over {gp} GP, adjusted for the opponent), spread k={k} → P({label}) = {pct}%.",
+    fr: "Cadence ajustée {rate}/match (saison ramenée vers la moyenne du poste sur {gp} MJ, ajustée à l'adversaire), dispersion k={k} → P({label}) = {pct} %.",
+  },
+  "prop.mlFirstNote":    {
+    en: "Share of the game's goals ({rate}/game of ~{game} expected) × chance of at least one goal → {pct}%.",
+    fr: "Part des buts du match ({rate}/match sur ~{game} attendus) × chance qu'il y ait au moins un but → {pct} %.",
+  },
+  "prop.mlModel":        { en: "Adjusted rate", fr: "Cadence ajustée" },
+  "prop.starterConfirmed": { en: "Tonight's goalie",    fr: "Gardien du match" },
+  "prop.starterProbable":  { en: "Probable starter",    fr: "Partant probable" },
   "prop.allPlayers":     { en: "All players",           fr: "Tous les joueurs" },
   "prop.showMore":       { en: "See more ({n}) ▼",      fr: "Voir plus ({n}) ▼" },
   "prop.showLess":       { en: "See less ▲",            fr: "Voir moins ▲" },

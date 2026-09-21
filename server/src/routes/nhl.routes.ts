@@ -5,6 +5,8 @@ import { FactorWeights } from '../services/predictionFactors';
 import { publicCache, privateCache, publicPolicy, TTL } from '../middleware/httpCache.middleware';
 import { staleFallback } from '../middleware/staleFallback.middleware';
 import { sendError } from '../httpError';
+import { getStartingGoalies } from '../services/startingGoalies';
+import { playerRatesForGame, playerRatesForTeam } from '../services/prediction/playerRates';
 
 const router = Router();
 const nhl    = new NHLService();
@@ -118,6 +120,28 @@ router.get('/games/:id/boxscore', publicCache(TTL.LIVE), async (req, res) => {
     const box = await nhl.getGameBoxscore(req.params.id);
     if (box.state === 'final') res.set('Cache-Control', publicPolicy(TTL.FINAL));
     res.json(box);
+  }
+  catch (err: any) { sendError(res, err); }
+});
+
+// Gardiens partants d'un match — la saisie manuelle du jour du match
+// (`startingGoalies.ts`, carte admin). `{ TOR: "Joseph Woll", MTL: null }` :
+// `null` = rien de saisi, et le client retombe sur le gardien le plus utilisé.
+// Sert à la grille « Arrêts » de la page match, qui ne montre que le gardien
+// qui jouera.
+//
+// Avant `/games/:id`, sinon « starting-goalies » serait capturé comme un
+// identifiant.
+router.get('/games/:id/starting-goalies', publicCache(TTL.SHORT), async (req, res) => {
+  try {
+    const game = await nhl.getGame(req.params.id);
+    const home = String(game?.homeTeam?.abbreviation ?? '').toUpperCase();
+    const away = String(game?.awayTeam?.abbreviation ?? '').toUpperCase();
+    const day  = await getStartingGoalies(game?.gameDate || undefined);
+    const out: Record<string, string | null> = {};
+    if (home) out[home] = day[home] ?? null;
+    if (away) out[away] = day[away] ?? null;
+    res.json(out);
   }
   catch (err: any) { sendError(res, err); }
 });
@@ -279,6 +303,20 @@ router.get('/predictions/game/:gameId', publicCache(TTL.SHORT), async (req, res)
 
 router.get('/predictions/team/:abbr', publicCache(TTL.SHORT), async (req, res) => {
   try { res.json(await buildTeamMarkets(req.params.abbr)); }
+  catch (err: any) { sendError(res, err); }
+});
+
+// Cadences des paris joueur pour le mode ML — UNE requête par page au lieu
+// d'une par case, zéro appel au service Python. Voir
+// `prediction/playerRates.ts`. Même réponse pour tout le monde : cachable.
+router.get('/predictions/player-rates/game/:gameId', publicCache(TTL.SHORT), async (req, res) => {
+  if (!/^\d{6,12}$/.test(req.params.gameId)) return res.status(400).json({ error: 'invalid gameId' });
+  try { res.json(await playerRatesForGame(req.params.gameId)); }
+  catch (err: any) { sendError(res, err); }
+});
+router.get('/predictions/player-rates/team/:abbr', publicCache(TTL.SHORT), async (req, res) => {
+  if (!/^[A-Za-z]{2,4}$/.test(req.params.abbr)) return res.status(400).json({ error: 'invalid team' });
+  try { res.json(await playerRatesForTeam(req.params.abbr)); }
   catch (err: any) { sendError(res, err); }
 });
 

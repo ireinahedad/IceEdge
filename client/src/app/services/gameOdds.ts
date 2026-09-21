@@ -181,11 +181,17 @@ export function priceForBet(
     case "total_goals_under":
       return line == null ? undefined : table.get(`totals|under|${line}`);
 
-    // Puck line : −1.5 côté favori. `selection === "no"` est le +1.5 de
-    // l'adversaire, que le flux cote sous SON nom — pas sous celui du sujet.
+    // Puck line. `line` est le handicap du sujet (−1.5 par défaut, comme au
+    // règlement). `selection === "no"` est le « +x » de l'ADVERSAIRE du sujet —
+    // le flux le cote sous le nom de cet adversaire, à la ligne opposée.
     case "puck_line": {
+      const l = line ?? -1.5;
+      if (selection === "no") {
+        const oppName = norm(nameByAbbr[(mlProps.opponentId ?? "").toUpperCase()] ?? "");
+        return oppName ? table.get(`spreads|${oppName}|${-l}`) : undefined;
+      }
       if (!teamName) return undefined;
-      return selection === "no" ? undefined : table.get(`spreads|${teamName}|-1.5`);
+      return table.get(`spreads|${teamName}|${l}`);
     }
 
     default:

@@ -428,7 +428,14 @@ async function decideLeg(
     //
     // Le score final et la règle « hors fusillade » donnent donc toujours le
     // même verdict, et on peut se passer du détail des buts.
-    const bothScored = homeScore > 0 && awayScore > 0;
+    //
+    // SEUIL. « Les deux marquent 2+ / 3+ » (tableau de la page match) porte sa
+    // ligne dans `leg.line` (1.5, 2.5). Sans ligne = 1+, la tuile historique.
+    // Le même raisonnement vaut à tout seuil j : une fusillade transforme k–k
+    // en (k+1)–k, et le perdant reste à k — le verdict « les deux ≥ j » ne
+    // change donc jamais.
+    const line = Number.isFinite(Number(leg.line)) ? Number(leg.line) : 0.5;
+    const bothScored = homeScore > line && awayScore > line;
     return (sel === 'yes') === bothScored ? 'win' : 'loss';
   }
 
@@ -444,20 +451,35 @@ async function decideLeg(
   }
 
   // ── Period markets ────────────────────────────────────────────────────────
+  /**
+   * « Qui mène après la période N » — buts CUMULÉS jusqu'à la fin de la
+   * période N. C'est un marché à TROIS issues depuis que la carte de chaque
+   * période propose aussi « égalité » (sélection `draw`).
+   *
+   * Une égalité rendait `unknown` : la jambe restait « en attente » à jamais,
+   * et figeait le coupon entier. Face à une tuile « égalité » offerte à côté,
+   * l'égalité est une issue comme une autre — le pari sur une équipe est perdu.
+   */
   const periodWinnerMatch = /^period([123])_winner$/.exec(String(leg.marketType));
   if (periodWinnerMatch) {
     const n = Number(periodWinnerMatch[1]);
-    const pick = await teamPick(leg, cache);
-    if (!pick) return 'unknown';
-    const { homeId, awayId, sel } = pick;
+    const isDraw = String(leg.selectionValue ?? '').trim().toLowerCase() === 'draw';
+    const game = await getFinalGame(String(leg.gameId), cache);
+    if (!game) return 'unknown';
+    // `draw` avant `pickTeam` : celui-ci retomberait sur `subjectId` et lirait
+    // un pari « égalité » comme un pari sur l'équipe à domicile.
+    const pick = isDraw ? null : pickTeam(leg, game);
+    if (!isDraw && !pick) return 'void';
     const goals = await getScoringPlays(String(leg.gameId), cache, scoringCache);
     if (!goals) return 'unknown';
     const { home, away } = periodGoalCounts(goals);
     const homeCum = home.slice(0, n).reduce((a, b) => a + b, 0);
     const awayCum = away.slice(0, n).reduce((a, b) => a + b, 0);
-    if (homeCum === awayCum) return 'unknown'; // tied through this period — push
+    if (isDraw) return homeCum === awayCum ? 'win' : 'loss';
+    if (homeCum === awayCum) return 'loss';
+    const { homeId, awayId } = teamIds(game);
     const winner = homeCum > awayCum ? homeId : awayId;
-    return sel === winner ? 'win' : 'loss';
+    return pick!.sel === winner ? 'win' : 'loss';
   }
 
   const periodTotalMatch = /^period([123])_total_goals$/.exec(String(leg.marketType));
@@ -591,6 +613,24 @@ async function decideLeg(
       if (!past) return 'loss';              // réglé en 60 min → la tuile perd
       if (hs === as) return 'void';          // impossible sur un match final
       return pick.sel === (hs > as ? homeId : awayId) ? 'win' : 'loss';
+    }
+
+    /**
+     * Score exact — score FINAL (but de prolongation / fusillade compris),
+     * celui de `game.homeTeam.score` / `game.awayTeam.score`.
+     *
+     * Sélection dans l'ordre DOMICILE–VISITEUR (« 1-3 » = le visiteur gagne
+     * 3–1), ou `home_other` / `away_other` : ce camp gagne en marquant 5 buts
+     * ou plus — la ligne « Other » du tableau, qui regroupe tout ce que les
+     * lignes 1-0 … 4-3 ne couvrent pas.
+     */
+    case 'correct_score': {
+      if (!Number.isFinite(hs) || !Number.isFinite(as)) return 'unknown';
+      const m = /^(\d{1,2})-(\d{1,2})$/.exec(sel);
+      if (m) return hs === Number(m[1]) && as === Number(m[2]) ? 'win' : 'loss';
+      if (sel === 'home_other') return hs > as && hs >= 5 ? 'win' : 'loss';
+      if (sel === 'away_other') return as > hs && as >= 5 ? 'win' : 'loss';
+      return 'void';
     }
 
     /** « Le match va en prolongation » — les tuiles `ot-yes` / `ot-no`. */

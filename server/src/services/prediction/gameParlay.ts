@@ -53,6 +53,7 @@ const SCORE_DERIVABLE = new Set([
   'moneyline', 'puck_line', 'alt_puck_line', 'regulation_result',
   'total_goals', 'total_goals_over', 'total_goals_under', 'team_total_goals',
   'both_teams_score', 'clean_sheet', 'game_to_ot', 'ot_so_winner', 'winning_margin',
+  'correct_score',
 ]);
 
 export function isScoreDerivable(market: string): boolean {
@@ -76,7 +77,9 @@ function legWins(leg: GameParlayLeg, o: FinalOutcome): boolean {
 
   switch (leg.market) {
     case 'moneyline':          return margin > 0;
-    case 'puck_line':          return yes(margin >= 2);
+    // La ligne est le handicap du sujet (−1.5, −2.5, −3.5 ; −1.5 par défaut,
+    // comme au règlement). « +x » est déclaré comme le « −x » adverse, côté non.
+    case 'puck_line':          return yes(margin + (leg.line ?? -1.5) > 0);
     case 'alt_puck_line':      return margin >= 3;
     case 'regulation_result':  return margin > 0 && !o.ot;
     case 'game_to_ot':         return yes(o.ot);
@@ -91,7 +94,16 @@ function legWins(leg: GameParlayLeg, o: FinalOutcome): boolean {
      * sans objet. Ici, pas de prolongation = perdu, tout simplement.
      */
     case 'ot_so_winner':       return o.ot && margin > 0;
-    case 'both_teams_score':   return yes(o.home >= 1 && o.away >= 1);
+    // Seuil 1+ par défaut ; `line` 1.5 / 2.5 pour « les deux marquent 2+ / 3+ ».
+    case 'both_teams_score':   return yes(o.home > (leg.line ?? 0.5) && o.away > (leg.line ?? 0.5));
+    /** Score exact, ordre domicile–visiteur ; `home_other` = domicile gagne avec 5+. */
+    case 'correct_score': {
+      const m = /^(\d{1,2})-(\d{1,2})$/.exec(sel);
+      if (m) return o.home === Number(m[1]) && o.away === Number(m[2]);
+      if (sel === 'home_other') return o.home > o.away && o.home >= 5;
+      if (sel === 'away_other') return o.away > o.home && o.away >= 5;
+      return false;
+    }
     case 'clean_sheet':        return yes(yours === 0);
 
     case 'total_goals_over':   return total > (leg.line ?? 5.5);

@@ -104,7 +104,7 @@ const BINARY_MARKETS = new Set([
  * les deux dans le match. C'est la différence entre « le premier » et « un ».
  */
 const PARTITION_MARKETS = new Set([
-  'winning_margin', 'highest_scoring_period',
+  'winning_margin', 'highest_scoring_period', 'correct_score',
   'first_goal_scorer', 'last_goal_scorer',
   'first_team_score', 'last_team_score',
 ]);
@@ -146,8 +146,10 @@ function mutuallyExclusive(a: ParlayLeg, b: ParlayLeg): boolean {
   const va = norm(a.selection), vb = norm(b.selection);
   if (!va || !vb) return false;
 
-  // Oui contre non sur un marché binaire.
-  if (BINARY_MARKETS.has(a.marketType)) {
+  // Oui contre non sur un marché binaire — À LA MÊME LIGNE. « Les deux
+  // marquent 1+ » et « les deux marquent 2+ : non » coexistent très bien ; les
+  // puck lines ±1.5 / ±2.5 / ±3.5 partagent aussi leur marché.
+  if (BINARY_MARKETS.has(a.marketType) && (a.line ?? null) === (b.line ?? null)) {
     if ((POSITIVE.has(va) && NEGATIVE.has(vb)) || (NEGATIVE.has(va) && POSITIVE.has(vb))) return true;
   }
 

@@ -26,7 +26,10 @@ import { getManualFactors } from './injuryStore';
 import {
   blendHomeProb, formatBreakdown, homeIceFactor, fatigueFactor, ManualFactor, FactorWeights,
 } from './predictionFactors';
-import { attachGameFactors, attachPlayerFactors, attachGoalieFactors } from './factorModel';
+import { attachGameFactors, attachPlayerFactors, attachGoalieFactors, PuckLineSpec, PeriodSpec } from './factorModel';
+import {
+  finalScoreGrid, winByAtLeastShare, exactScoreShare, totalOver, teamOver, nbAtLeast,
+} from './prediction/finalScore';
 
 // ─── Shared interfaces ────────────────────────────────────────────────────────
 
@@ -78,11 +81,36 @@ export interface BetOption {
   pctScale?: number;
 }
 
+/**
+ * Mise en TABLEAU d'un groupe de marchés.
+ *
+ * Les cases référencent des options du groupe PAR IDENTIFIANT : `options` reste
+ * la liste plate et complète des paris — c'est elle que lisent les facteurs
+ * (`attachGameFactors`), l'appariement ML du client et le coupon. Le tableau
+ * ne dit que OÙ poser chaque pari à l'écran : une ligne par seuil, une colonne
+ * par côté. Une carte peut porter plusieurs tableaux (une période : qui mène,
+ * puis les buts de la période).
+ *
+ * Absent = la carte garde sa grille de tuiles (`cols`), comme avant.
+ */
+export interface MarketTable {
+  /** Sous-titre du tableau dans la carte. */
+  title?:        string;
+  /** En-tête de la colonne des lignes. Toutes les étiquettes vides = pas de colonne de lignes. */
+  rowHeader?:    string;
+  /** Bandeau au-dessus des colonnes (ex. une équipe sur deux colonnes Over | Under). */
+  columnGroups?: Array<{ label: string; span: number }>;
+  columns:       string[];
+  /** `cells[i]` = identifiant d'option de la colonne i, ou `null` pour une case vide. */
+  rows:          Array<{ label: string; cells: Array<string | null> }>;
+}
+
 export interface MarketGroup {
   id:    string;
   title: string;
   cols:  2 | 3;
   options: BetOption[];
+  tables?: MarketTable[];
 }
 
 /**
@@ -388,8 +416,6 @@ function computeGameMarkets(
   lambdaA = clamp(lambdaA, 1.5, 5.0);
   const lambdaT = lambdaH + lambdaA;  // total expected goals
 
-  // Distribution des marges (match complet) — sert puck line & marge de victoire.
-  const md = marginDistribution(lambdaH, lambdaA);
 
   // ── 1. Match Betting ──────────────────────────────────────────────────────
   //
@@ -518,171 +544,358 @@ function computeGameMarkets(
     ],
   };
 
-  // ── 2. Puck Line ──────────────────────────────────────────────────────────
-  // Home −1.5 : la maison gagne de 2+ (en réglementaire), dérivé du modèle Skellam.
-  // Away +1.5 : couvre si la maison ne gagne PAS de 2+ (donc le complément).
-  // PAS de `× regAdj` ici non plus. « La maison gagne de 2+ » exclut DÉJÀ la
-  // prolongation par construction : un match qui va au-delà de 60 minutes se
-  // termine par un but d'écart, jamais par deux. `md.homeBy2plus` est donc la
-  // réponse complète, et la multiplier par la part réglementaire retirait une
-  // seconde fois des matchs que ce seau ne contenait pas.
-  const plHome = md.homeBy2plus;
-  const plAway = 1 - plHome;
+  // ── Loi du score FINAL (prolongation/fusillade comprises) ─────────────────
+  //
+  // Une seule grille pour tous les marchés qui se règlent sur le score final :
+  // puck lines, total du match, total par équipe, score exact. Construite sur
+  // les mêmes λ que le reste de la page et sur la même part de prolongation
+  // (`otShareHome`) que Match Betting. Voir `prediction/finalScore.ts`.
+  const grid = finalScoreGrid(lambdaH, lambdaA, otShareHome);
+
+  /** Tuiles posées dans les tableaux, indexées pour leurs facteurs. */
+  const puckSpecs: Record<string, PuckLineSpec> = {};
+
+  // ── 2. Puck Line — ±1.5 / ±2.5 / ±3.5, pour les DEUX équipes ──────────────
+  //
+  // « −x » = le camp gagne par ⌈x⌉ buts ou plus. « +x » = le camp ne perd PAS
+  // par ⌈x⌉ ou plus, c'est-à-dire le complément EXACT du « −x » adverse (pas
+  // d'égalité possible sur une demi-ligne). D'où, pour chaque ligne :
+  //
+  //     domicile −x  +  visiteur +x  = 100 %
+  //     visiteur −x  +  domicile +x  = 100 %
+  //
+  // Et c'est ainsi que les tuiles « +x » sont DÉCLARÉES : même marché que le
+  // « −x » adverse, côté « non ». Le règlement (`puck_line`, sélection `no`)
+  // renverse le verdict, et la ligne voyage dans `line` — c'est elle qui fait
+  // la différence entre −1.5 et −2.5, pas le libellé.
+  //
+  // La probabilité de « −x » est P(victoire) × P(gagne par ⌈x⌉+ | gagne) :
+  // le rapport vient de la grille, la victoire du mélange de facteurs, comme
+  // la tuile Match Betting. Une puck line ne peut donc jamais dépasser la
+  // victoire du même camp, et « −1.5 ≥ −2.5 ≥ −3.5 » tient par construction.
+  const PL_LINES = [1.5, 2.5, 3.5];
+  const plOptions: BetOption[] = [];
+  const plRows: MarketTable['rows'] = [];
+  for (const x of PL_LINES) {
+    const n   = x + 0.5;
+    const tag = String(Math.round(x * 10));
+    const rH  = winByAtLeastShare(grid, 'home', n);
+    const rA  = winByAtLeastShare(grid, 'away', n);
+    const hMinus = mlHome * rH;
+    const aMinus = mlAway * rA;
+    const ids = { hm: `pl-home-m${tag}`, hp: `pl-home-p${tag}`, am: `pl-away-m${tag}`, ap: `pl-away-p${tag}` };
+    puckSpecs[ids.hm] = { side: 'home', minus: true,  rHome: rH, rAway: rA };
+    puckSpecs[ids.hp] = { side: 'home', minus: false, rHome: rH, rAway: rA };
+    puckSpecs[ids.am] = { side: 'away', minus: true,  rHome: rH, rAway: rA };
+    puckSpecs[ids.ap] = { side: 'away', minus: false, rHome: rH, rAway: rA };
+    plOptions.push(
+      {
+        id: ids.hm, ml: gm('puck_line', -x),
+        label: `${homeName} −${x}`, rulePct: pct(hMinus),
+        ruleNote: `P(victoire) ${fmt(mlHome*100,0)}% × P(gagne par ${n}+ | gagne) ${fmt(rH*100,0)}% = ${fmt(hMinus*100,0)}% (score final, prolongation comprise)`,
+      },
+      {
+        id: ids.hp, ml: gma('puck_line', -x, 'no'),
+        label: `${homeName} +${x}`, rulePct: pct(1 - aMinus),
+        ruleNote: `Couvre sauf défaite par ${n}+ : 100% − ${awayName} −${x} (${fmt(aMinus*100,0)}%) = ${fmt((1-aMinus)*100,0)}%`,
+      },
+    );
+    if (!teamExtras) {
+      plOptions.push(
+        {
+          id: ids.am, ml: gma('puck_line', -x),
+          label: `${awayName} −${x}`, rulePct: pct(aMinus),
+          ruleNote: `P(victoire) ${fmt(mlAway*100,0)}% × P(gagne par ${n}+ | gagne) ${fmt(rA*100,0)}% = ${fmt(aMinus*100,0)}% (score final, prolongation comprise)`,
+        },
+        {
+          id: ids.ap, ml: gm('puck_line', -x, 'no'),
+          label: `${awayName} +${x}`, rulePct: pct(1 - hMinus),
+          ruleNote: `Couvre sauf défaite par ${n}+ : 100% − ${homeName} −${x} (${fmt(hMinus*100,0)}%) = ${fmt((1-hMinus)*100,0)}%`,
+        },
+      );
+    }
+    plRows.push({ label: `${x}`, cells: teamExtras ? [ids.hm, ids.hp] : [ids.hm, ids.hp, ids.am, ids.ap] });
+  }
   const puckLine: MarketGroup = {
     id: 'puckline', title: 'Puck Line', cols: 2,
-    options: [
-      {
-        id: 'pl-home',
-        ml: gm('puck_line'),
-        label: `${homeName} −1.5`,
-        rulePct: pct(plHome),
-        ruleNote: `Skellam P(maison gagne de 2+) = ${fmt(plHome*100,0)}% (un écart de 2+ exclut déjà la prolongation)`,
-      },
-      {
-        id: 'pl-away',
-        ml: gm('puck_line', undefined, 'no'),
-        label: `${awayName} +1.5`,
-        rulePct: pct(plAway),
-        ruleNote: `Couvre sauf défaite visiteur de 2+ = ${fmt(plAway*100,0)}%`,
-      },
-    ],
+    options: plOptions,
+    tables: [{
+      rowHeader: 'Line',
+      columnGroups: teamExtras ? undefined : [{ label: hAb, span: 2 }, { label: aAb, span: 2 }],
+      columns: teamExtras ? [`${hAb} −`, `${hAb} +`] : ['−', '+', '−', '+'],
+      rows: plRows,
+    }],
   };
 
-  // ── 3. Totals ─────────────────────────────────────────────────────────────
-  const over55  = poissonOver(lambdaT, 5.5);
-  const over65  = poissonOver(lambdaT, 6.5);
+  // ── 3. Total Goals — 2.5 à 7.5, colonnes Over | Under ─────────────────────
+  //
+  // Score FINAL : un nul 3–3 après 60 minutes se règle 4–3, donc « plus de
+  // 6.5 » est gagné. Over et Under d'une même ligne sont des compléments
+  // exacts (demi-ligne, pas de push). Les pourcentages affichés sont ceux du
+  // mélange de facteurs (`totalsFactors`), qui prend en compte le même but de
+  // prolongation.
+  const TOTAL_LINES = [2.5, 3.5, 4.5, 5.5, 6.5, 7.5];
+  const totOptions: BetOption[] = [];
+  const totRows: MarketTable['rows'] = [];
+  for (const L of TOTAL_LINES) {
+    const tag = String(Math.round(L * 10));
+    const over = totalOver(grid, L);
+    totOptions.push(
+      {
+        id: `o${tag}`, ml: gm('total_goals_over', L), label: `Over ${L}`, rulePct: pct(over),
+        ruleNote: `Buts attendus λ=${fmt(lambdaT)} (${fmt(lambdaH)}+${fmt(lambdaA)}) → P(total final > ${L}) = ${fmt(over*100,0)}% (prolongation comprise)`,
+      },
+      {
+        id: `u${tag}`, ml: gm('total_goals_under', L), label: `Under ${L}`, rulePct: pct(1 - over),
+        ruleNote: `P(total final < ${L}) = ${fmt((1-over)*100,0)}%`,
+      },
+    );
+    totRows.push({ label: `${L}`, cells: [`o${tag}`, `u${tag}`] });
+  }
   const totals: MarketGroup = {
     id: 'totals', title: 'Total Goals', cols: 2,
-    options: [
-      {
-        id: 'o55',
-        ml: gm('total_goals_over', 5.5),
-        label: 'Over 5.5',
-        rulePct: pct(over55),
-        ruleNote: `Expected goals λ=${fmt(lambdaT)} (${fmt(lambdaH)}+${fmt(lambdaA)}) → Poisson P(>5.5)=${fmt(over55*100,0)}%`,
-      },
-      {
-        id: 'u55',
-        ml: gm('total_goals_under', 5.5),
-        label: 'Under 5.5',
-        rulePct: pct(1 - over55),
-        ruleNote: `P(<5.5) = ${fmt((1-over55)*100,0)}%`,
-      },
-      {
-        id: 'o65',
-        ml: gm('total_goals_over', 6.5),
-        label: 'Over 6.5',
-        rulePct: pct(over65),
-        ruleNote: `Poisson P(>6.5) = ${fmt(over65*100,0)}%`,
-      },
-      {
-        id: 'u65',
-        ml: gm('total_goals_under', 6.5),
-        label: 'Under 6.5',
-        rulePct: pct(1 - over65),
-        ruleNote: `P(<6.5) = ${fmt((1-over65)*100,0)}%`,
-      },
-    ],
+    options: totOptions,
+    tables: [{ rowHeader: 'Line', columns: ['Over', 'Under'], rows: totRows }],
   };
 
-  // ── 4. Both Teams to Score ────────────────────────────────────────────────
+  // ── 3b. Buts par équipe — 0.5 à 4.5, Over | Under pour chaque camp ────────
+  //
+  // Le vainqueur d'une prolongation prend un but de plus au score final — c'est
+  // ce score que règle `team_total_goals`, donc c'est lui qu'on chiffre.
+  const TEAM_LINES = [0.5, 1.5, 2.5, 3.5, 4.5];
+  const ttOptions: BetOption[] = [];
+  const ttRows: MarketTable['rows'] = [];
+  for (const L of TEAM_LINES) {
+    const tag = String(Math.round(L * 10)).padStart(2, '0');
+    const hOver = teamOver(grid, 'home', L);
+    const aOver = teamOver(grid, 'away', L);
+    ttOptions.push(
+      {
+        id: `tt-home-o${tag}`, ml: gm('team_total_goals', L, 'over'), label: `${homeName} Over ${L}`, rulePct: pct(hOver),
+        ruleNote: `λ ${hAb}=${fmt(lambdaH)} → P(${hAb} > ${L} buts, score final) = ${fmt(hOver*100,0)}%`,
+      },
+      {
+        id: `tt-home-u${tag}`, ml: gm('team_total_goals', L, 'under'), label: `${homeName} Under ${L}`, rulePct: pct(1 - hOver),
+        ruleNote: `P(${hAb} < ${L} buts) = ${fmt((1-hOver)*100,0)}%`,
+      },
+    );
+    if (!teamExtras) {
+      ttOptions.push(
+        {
+          id: `tt-away-o${tag}`, ml: gma('team_total_goals', L, 'over'), label: `${awayName} Over ${L}`, rulePct: pct(aOver),
+          ruleNote: `λ ${aAb}=${fmt(lambdaA)} → P(${aAb} > ${L} buts, score final) = ${fmt(aOver*100,0)}%`,
+        },
+        {
+          id: `tt-away-u${tag}`, ml: gma('team_total_goals', L, 'under'), label: `${awayName} Under ${L}`, rulePct: pct(1 - aOver),
+          ruleNote: `P(${aAb} < ${L} buts) = ${fmt((1-aOver)*100,0)}%`,
+        },
+      );
+    }
+    ttRows.push({
+      label: `${L}`,
+      cells: teamExtras
+        ? [`tt-home-o${tag}`, `tt-home-u${tag}`]
+        : [`tt-home-o${tag}`, `tt-home-u${tag}`, `tt-away-o${tag}`, `tt-away-u${tag}`],
+    });
+  }
+  const teamTotals: MarketGroup = {
+    id: 'teamtotals', title: 'Team Total Goals', cols: 2,
+    options: ttOptions,
+    tables: [{
+      rowHeader: 'Line',
+      columnGroups: teamExtras ? undefined : [{ label: hAb, span: 2 }, { label: aAb, span: 2 }],
+      columns: teamExtras ? [`${hAb} Over`, `${hAb} Under`] : ['Over', 'Under', 'Over', 'Under'],
+      rows: ttRows,
+    }],
+  };
+
+  // ── 4. Both Teams to Score — 1+, 2+, 3+ ; colonnes Yes | No ──────────────
   // Binomiale négative, pas Poisson : cf. GOALS_DISPERSION_K. Avec exp(−λ) les
-  // deux tuiles sortaient ~90 % / ~10 % quel que soit le match.
-  const bttsH   = pScoresAtLeastOnce(lambdaH);  // P(home scores ≥1)
-  const bttsA   = pScoresAtLeastOnce(lambdaA);  // P(away scores ≥1)
-  const bttsYes = bttsH * bttsA;
+  // deux tuiles sortaient ~90 % / ~10 % quel que soit le match. « 2+ » et
+  // « 3+ » sont la même loi à un seuil plus haut ; « oui » et « non » d'une
+  // même ligne sont des compléments exacts.
+  const bttsOptions: BetOption[] = [];
+  const bttsRows: MarketTable['rows'] = [];
+  for (const j of [1, 2, 3]) {
+    const pH  = nbAtLeast(lambdaH, j, GOALS_DISPERSION_K);
+    const pA  = nbAtLeast(lambdaA, j, GOALS_DISPERSION_K);
+    const yes = pH * pA;
+    // `btts-yes` / `btts-no` gardent leur identifiant (et leur marché SANS
+    // ligne) : ce sont les tuiles d'avant, et les coupons déjà enregistrés les
+    // référencent. Les seuils supérieurs portent la ligne j − 0.5.
+    const idY = j === 1 ? 'btts-yes' : `btts${j}-yes`;
+    const idN = j === 1 ? 'btts-no'  : `btts${j}-no`;
+    const line = j === 1 ? undefined : j - 0.5;
+    bttsOptions.push(
+      {
+        id: idY, ml: gm('both_teams_score', line, 'yes'),
+        label: j === 1 ? 'Both Teams Score' : `Both Teams Score ${j}+`, rulePct: pct(yes),
+        ruleNote: `P(${hAb}≥${j})=${fmt(pH*100,0)}% × P(${aAb}≥${j})=${fmt(pA*100,0)}% = ${fmt(yes*100,0)}% (buts par match : binomiale négative, k=${GOALS_DISPERSION_K})`,
+      },
+      {
+        id: idN, ml: gm('both_teams_score', line, 'no'),
+        label: j === 1 ? 'Both Teams Score — No' : `Both Teams Score ${j}+ — No`, rulePct: pct(1 - yes),
+        ruleNote: `Au moins une équipe sous ${j} but${j > 1 ? 's' : ''} = ${fmt((1-yes)*100,0)}%`,
+      },
+    );
+    bttsRows.push({ label: `${j}+`, cells: [idY, idN] });
+  }
   const btts: MarketGroup = {
     id: 'btts', title: 'Both Teams to Score', cols: 2,
-    options: [
-      {
-        id: 'btts-yes',
-        ml: gm('both_teams_score', undefined, 'yes'),
-        label: 'Yes',
-        rulePct: pct(bttsYes),
-        ruleNote: `P(home≥1)=${fmt(bttsH*100,0)}% × P(away≥1)=${fmt(bttsA*100,0)}% = ${fmt(bttsYes*100,0)}% (buts par match : binomiale négative, k=${GOALS_DISPERSION_K})`,
-      },
-      {
-        id: 'btts-no',
-        ml: gm('both_teams_score', undefined, 'no'),
-        label: 'No',
-        rulePct: pct(1 - bttsYes),
-        ruleNote: `At least one team is shut out = ${fmt((1-bttsYes)*100,0)}%`,
-      },
-    ],
+    options: bttsOptions,
+    tables: [{ rowHeader: 'Goals', columns: ['Yes', 'No'], rows: bttsRows }],
   };
 
-  // ── 6–8. Period Results (Skellam) ─────────────────────────────────────────
-  const periodGroups: MarketGroup[] = ['1st', '2nd', '3rd'].map((name, i) => {
-    const f  = PERIOD_DIST[i];
-    const lH = lambdaH * f;
-    const lA = lambdaA * f;
-    const r  = skellamPeriod(lH, lA);
-    return {
-      id:    `p${i+1}`,
-      title: `${name} Period Result`,
-      cols:  3,
-      options: [
-        {
-          id:       `p${i+1}-home`,
-          ml:       gm(`period${i+1}_winner`),
-          label:    `${homeName}`,
-          rulePct:  pct(r.home),
-          ruleNote: `λH=${fmt(lH)} vs λA=${fmt(lA)} → Skellam P(home>away)=${fmt(r.home*100,0)}%`,
-        },
-        {
-          id:       `p${i+1}-draw`,
-          // Égalité après la 3e période = le match va en prolongation, un marché
-          // réel. Après la 1re ou la 2e, il n'y a pas de marché correspondant :
-          // pas de `ml`, et la tuile le dira plutôt que d'afficher autre chose.
-          ml:       i === 2 ? gm('game_to_ot', undefined, 'yes') : undefined,
-          label:    'Draw',
-          rulePct:  pct(r.draw),
-          ruleNote: `P(equal goals in period) = ${fmt(r.draw*100,0)}%`,
-        },
-        {
-          id:       `p${i+1}-away`,
-          ml:       gma(`period${i+1}_winner`),
-          label:    `${awayName}`,
-          rulePct:  pct(r.away),
-          ruleNote: `P(away>home) = ${fmt(r.away*100,0)}%`,
-        },
-      ],
+  // ── 5. Score exact (score FINAL) ──────────────────────────────────────────
+  //
+  // Une ligne par score « vainqueur–perdant », une colonne par vainqueur. Le
+  // score d'un match allé en prolongation est le score final (3–2 après un
+  // 2–2), comme au règlement ; il n'y a donc pas de « 2–2 ».
+  //
+  // Chaque case vaut P(le camp gagne) × P(ce score | il gagne) : les cases d'un
+  // camp, « Other » compris, somment EXACTEMENT à sa probabilité de victoire
+  // (tuiles Match Betting), et le tableau entier à 100 %. « Other » = le
+  // vainqueur marque 5 buts ou plus.
+  //
+  // Précision au dixième, et pas de plancher à 3 % : un 4–3 vaut ~1 %, et
+  // `pct` l'aurait triplé.
+  const SCORES: Array<[number, number]> = [[1,0],[2,0],[2,1],[3,0],[3,1],[3,2],[4,0],[4,1],[4,2],[4,3]];
+  const pct1 = (p: number) => Math.max(0.1, Math.round(p * 1000) / 10);
+  const csOptions: BetOption[] = [];
+  const csRows: MarketTable['rows'] = [];
+  let homeListed = 0, awayListed = 0;
+  for (const [w, l] of SCORES) {
+    const sH = exactScoreShare(grid, 'home', w, l);
+    const sA = exactScoreShare(grid, 'away', w, l);
+    homeListed += sH; awayListed += sA;
+    const idH = `sc-home-${w}-${l}`, idA = `sc-away-${w}-${l}`;
+    csOptions.push(
+      {
+        id: idH, ml: gm('correct_score', undefined, `${w}-${l}`),
+        label: `${homeName} ${w}-${l}`, rulePct: pct1(mlHome * sH),
+        ruleNote: `P(${hAb} gagne) ${fmt(mlHome*100,0)}% × P(${w}-${l} | ${hAb} gagne) ${fmt(sH*100,1)}% = ${fmt(mlHome*sH*100,1)}% (score final)`,
+      },
+      {
+        // Sélection dans l'ordre DOMICILE–VISITEUR, comme le score de l'API :
+        // le visiteur qui gagne 3–1 se règle sur « 1-3 ».
+        id: idA, ml: gma('correct_score', undefined, `${l}-${w}`),
+        label: `${awayName} ${w}-${l}`, rulePct: pct1(mlAway * sA),
+        ruleNote: `P(${aAb} gagne) ${fmt(mlAway*100,0)}% × P(${w}-${l} | ${aAb} gagne) ${fmt(sA*100,1)}% = ${fmt(mlAway*sA*100,1)}% (score final)`,
+      },
+    );
+    csRows.push({ label: `${w}-${l}`, cells: [idH, idA] });
+  }
+  const otherH = mlHome * Math.max(0, 1 - homeListed);
+  const otherA = mlAway * Math.max(0, 1 - awayListed);
+  csOptions.push(
+    {
+      id: 'sc-home-other', ml: gm('correct_score', undefined, 'home_other'),
+      label: `${homeName} wins, other score`, rulePct: pct1(otherH),
+      ruleNote: `${hAb} gagne en marquant 5 buts ou plus = ${fmt(otherH*100,1)}%`,
+    },
+    {
+      id: 'sc-away-other', ml: gma('correct_score', undefined, 'away_other'),
+      label: `${awayName} wins, other score`, rulePct: pct1(otherA),
+      ruleNote: `${aAb} gagne en marquant 5 buts ou plus = ${fmt(otherA*100,1)}%`,
+    },
+  );
+  csRows.push({ label: 'Winner 5+', cells: ['sc-home-other', 'sc-away-other'] });
+  const correctScore: MarketGroup = {
+    id: 'correctscore', title: 'Correct Score', cols: 2,
+    options: csOptions,
+    tables: [{ rowHeader: 'Score', columns: [hAb, aAb], rows: csRows }],
+  };
+
+  // ── 6–8. Périodes — UNE carte par période ─────────────────────────────────
+  //
+  // « Qui MÈNE après la période N », pas « qui gagne la période N » : c'est ce
+  // que règle `periodN_winner` (buts CUMULÉS jusqu'à la fin de la période), et
+  // ce que les tuiles disaient déjà. Le calcul, lui, prenait les buts de la
+  // SEULE période — pour la 2e et la 3e, une autre question.
+  //
+  //   · P1 / P2 — Skellam sur les cadences cumulées (30.5 % puis 67 % du
+  //     match). Les trois tuiles partitionnent : domicile et visiteur se
+  //     partagent (1 − nul) selon leurs facteurs, via `pctScale` ; le nul est
+  //     ancré sur le modèle. Somme = 100 %.
+  //   · P3 — mener après la 3e = gagner en temps réglementaire ; égalité = le
+  //     match va en prolongation. Ce sont EXACTEMENT les tuiles « in Reg » et
+  //     « Goes to OT » : mêmes chiffres, mêmes facteurs, par construction.
+  const periodSpecs: Record<string, PeriodSpec> = {};
+  const PERIOD_NAMES = ['1st', '2nd', '3rd'];
+  const periodGroups: MarketGroup[] = PERIOD_NAMES.map((name, i) => {
+    const n = i + 1;
+    let home: BetOption, draw: BetOption, away: BetOption;
+    if (n < 3) {
+      const f  = n === 1 ? PERIOD_DIST[0] : PERIOD_DIST[0] + PERIOD_DIST[1];
+      const lH = lambdaH * f;
+      const lA = lambdaA * f;
+      const r  = skellamPeriod(lH, lA);
+      const decisive = Math.max(1e-9, r.home + r.away);
+      periodSpecs[String(n)] = { q: r.home / decisive, draw: r.draw, lambdaP: lH + lA };
+      home = {
+        id: `p${n}-home`, ml: gm(`period${n}_winner`), pctScale: 1 - r.draw,
+        label: `${homeName} leads after P${n}`, rulePct: pct(r.home),
+        ruleNote: `Buts cumulés λH=${fmt(lH)} vs λA=${fmt(lA)} → Skellam P(${hAb} mène)=${fmt(r.home*100,0)}%`,
+      };
+      draw = {
+        id: `p${n}-draw`, ml: gm(`period${n}_winner`, undefined, 'draw'),
+        label: `Tied after P${n}`, rulePct: pct(r.draw),
+        ruleNote: `P(égalité après ${name} période) = ${fmt(r.draw*100,0)}%`,
+      };
+      away = {
+        id: `p${n}-away`, ml: gma(`period${n}_winner`), pctScale: 1 - r.draw,
+        label: `${awayName} leads after P${n}`, rulePct: pct(r.away),
+        ruleNote: `Skellam P(${aAb} mène)=${fmt(r.away*100,0)}%`,
+      };
+    } else {
+      home = {
+        id: 'p3-home', ml: gm('period3_winner'), pctScale: mlHome > 0 ? homeReg / mlHome : 1,
+        label: `${homeName} leads after P3`, rulePct: pct(homeReg),
+        ruleNote: `Mène après 60 min = victoire en temps réglementaire : ${fmt(mlHome*100,0)}% − part OT ${fmt(homeOt*100,0)}% = ${fmt(homeReg*100,0)}%`,
+      };
+      draw = {
+        id: 'p3-draw', ml: gm('game_to_ot', undefined, 'yes'),
+        label: 'Tied after P3 (OT)', rulePct: pct(ot),
+        ruleNote: `Égalité après 60 min = prolongation : ${fmt(ot*100,0)}%`,
+      };
+      away = {
+        id: 'p3-away', ml: gma('period3_winner'), pctScale: mlAway > 0 ? awayReg / mlAway : 1,
+        label: `${awayName} leads after P3`, rulePct: pct(awayReg),
+        ruleNote: `Mène après 60 min = victoire en temps réglementaire : ${fmt(mlAway*100,0)}% − part OT ${fmt(awayOt*100,0)}% = ${fmt(awayReg*100,0)}%`,
+      };
+    }
+    const group: MarketGroup = {
+      id: `p${n}`, title: `${name} Period`, cols: 3,
+      options: [home, draw, away],
+      tables: [{
+        title: n === 3 ? 'Lead after 3rd (regulation)' : `Lead after ${name}`,
+        columns: [hAb, 'Tie', aAb],
+        rows: [{ label: '', cells: [home.id, draw.id, away.id] }],
+      }],
     };
-  });
 
-  // ── 9. 1st Period Goals O/U ───────────────────────────────────────────────
-  const lP1 = lambdaT * PERIOD_DIST[0];
-  const p1Goals: MarketGroup = {
-    id: 'p1goals', title: '1st Period Goals', cols: 3,
-    options: [
-      {
-        id: 'p1-o05',
-        // `'over'` EXPLICITE. Sans lui, `settlementFields` retombe sur le sujet et la
-        // jambe part avec l'abréviation de l'équipe comme sélection — que le
-        // règlement ne peut lire ni comme « over » ni comme « under ». Les trois
-        // tuiles sont des « plus de », leur libellé le dit, mais le libellé n'est
-        // pas une donnée lisible par machine.
-        ml: gm('period1_total_goals', 0.5, 'over'),
-        label: 'Over 0.5',
-        rulePct: pct(poissonOver(lP1, 0.5)),
-        ruleNote: `P1 λ=${fmt(lP1)} → P(≥1 goal)=${fmt(poissonOver(lP1,0.5)*100,0)}%`,
-      },
-      {
-        id: 'p1-o15',
-        ml: gm('period1_total_goals', 1.5, 'over'),
-        label: 'Over 1.5',
-        rulePct: pct(poissonOver(lP1, 1.5)),
-        ruleNote: `P(≥2 goals in P1)=${fmt(poissonOver(lP1,1.5)*100,0)}%`,
-      },
-      {
-        id: 'p1-o25',
-        ml: gm('period1_total_goals', 2.5, 'over'),
-        label: 'Over 2.5',
-        rulePct: pct(poissonOver(lP1, 2.5)),
-        ruleNote: `P(≥3 goals in P1)=${fmt(poissonOver(lP1,2.5)*100,0)}%`,
-      },
-    ],
-  };
+    // Buts de la 1re période — dans SA carte. Mêmes tuiles qu'avant.
+    if (n === 1) {
+      const lP1 = lambdaT * PERIOD_DIST[0];
+      const p1Lines = [0.5, 1.5, 2.5];
+      const p1Opts: BetOption[] = p1Lines.map(L => ({
+        id: `p1-o${String(Math.round(L * 10)).padStart(2, '0')}`,
+        // `'over'` EXPLICITE : sans lui, `settlementFields` retombe sur le sujet
+        // et la jambe part avec l'abréviation de l'équipe comme sélection.
+        ml: gm('period1_total_goals', L, 'over'),
+        label: `P1 Over ${L}`,
+        rulePct: pct(poissonOver(lP1, L)),
+        ruleNote: `P1 λ=${fmt(lP1)} → P(> ${L} buts en 1re)=${fmt(poissonOver(lP1, L)*100,0)}%`,
+      }));
+      group.options.push(...p1Opts);
+      group.tables!.push({
+        title: '1st Period Goals',
+        columns: p1Lines.map(L => `Over ${L}`),
+        rows: [{ label: '', cells: p1Opts.map(o => o.id) }],
+      });
+    }
+    return group;
+  });
 
   // ── 10. Overtime ──────────────────────────────────────────────────────────
   const overtime: MarketGroup = {
@@ -736,9 +949,22 @@ function computeGameMarkets(
   // `otShareHome` est la part de prolongation revenant au domicile, déjà
   // calculée pour Match Betting ; c'est l'analogue local de `pWinsOvertime`,
   // que le moteur utilise pour la même répartition.
-  const wm1  = md.homeBy1 + md.tie * otShareHome;
-  const wm2  = md.homeBy2;
-  const wm3p = md.homeBy3plus;
+  //
+  // ── Sept. 2026 : sur la loi du score FINAL, comme la puck line ─────────────
+  //
+  // Les trois tuiles sont maintenant P(victoire) × P(cet écart | victoire),
+  // rapports lus sur la même grille que la puck line. Deux conséquences
+  // voulues : les trois somment EXACTEMENT à la victoire du domicile (tuiles
+  // Match Betting), et « par 2 » + « par 3+ » = « −1.5 ». Leurs facteurs sont
+  // ceux de Match Betting, transportés (voir `margins` dans `attachGameFactors`)
+  // — l'ancien mélange `marginFactors` faisait totaliser ~120 % de la
+  // victoire aux trois tuiles.
+  const r2 = winByAtLeastShare(grid, 'home', 2);
+  const r3 = winByAtLeastShare(grid, 'home', 3);
+  const marginShares: Record<string, number> = { 'wm-1': 1 - r2, 'wm-2': r2 - r3, 'wm-3p': r3 };
+  const wm1  = mlHome * marginShares['wm-1'];
+  const wm2  = mlHome * marginShares['wm-2'];
+  const wm3p = mlHome * marginShares['wm-3p'];
   const margin: MarketGroup = {
     id: 'margin', title: 'Winning Margin', cols: 3,
     options: [
@@ -749,54 +975,52 @@ function computeGameMarkets(
         // alors que le pari, lui, porte sur le domicile depuis toujours.
         label: `${hAb} by 1`,
         rulePct: pct(wm1),
-        ruleNote: `Skellam maison par 1 ${fmt(md.homeBy1*100,0)}% + nul réglementaire ${fmt(md.tie*100,0)}% × part OT ${fmt(otShareHome*100,0)}% = ${fmt(wm1*100,0)}%`,
+        ruleNote: `P(victoire) ${fmt(mlHome*100,0)}% × P(par 1 | victoire) ${fmt(marginShares['wm-1']*100,0)}% = ${fmt(wm1*100,0)}% — toutes les victoires en prolongation finissent par 1 but`,
       },
       {
         id: 'wm-2',
         ml: gm('winning_margin', undefined, '2'),
         label: `${hAb} by 2`,
         rulePct: pct(wm2),
-        ruleNote: `Skellam maison par exactement 2 buts = ${fmt(wm2*100,0)}% (un match qui va en prolongation ne peut pas finir sur cet écart)`,
+        ruleNote: `P(victoire) ${fmt(mlHome*100,0)}% × P(par 2 | victoire) ${fmt(marginShares['wm-2']*100,0)}% = ${fmt(wm2*100,0)}%`,
       },
       {
         id: 'wm-3p',
         ml: gm('winning_margin', undefined, '3+'),
         label: `${hAb} by 3+`,
         rulePct: pct(wm3p),
-        ruleNote: `Skellam maison par 3 buts ou plus = ${fmt(wm3p*100,0)}%, λ=${fmt(lambdaT)}`,
+        ruleNote: `P(victoire) ${fmt(mlHome*100,0)}% × P(par 3+ | victoire) ${fmt(marginShares['wm-3p']*100,0)}% = ${fmt(wm3p*100,0)}%, λ=${fmt(lambdaT)}`,
       },
     ],
   };
 
-  const groups = [
+  // Ordre d'affichage. Le score exact n'a pas de sens contre un « adversaire
+  // moyen » (vue équipe) : il n'y est pas.
+  const groups: MarketGroup[] = [
     matchBetting,
     puckLine,
     totals,
+    teamTotals,
     btts,
+    ...(teamExtras ? [] : [correctScore]),
     ...periodGroups,
-    p1Goals,
     overtime,
     margin,
   ];
 
   // ── 12. Extras équipe (vue équipe uniquement) ─────────────────────────────
-  // Buts de l'équipe O/U 2.5, blanchissage, but en PP, PK parfait — les valeurs
-  // sont recalculées par attachGameFactors (facteurs dédiés).
+  // Blanchissage, but en PP, PK parfait — les valeurs sont recalculées par
+  // attachGameFactors (facteurs dédiés). « Buts de l'équipe O/U 2.5 » en est
+  // sorti : le tableau « Team Total Goals » (0.5 → 4.5) le couvre, avec le
+  // même marché et la même ligne.
   if (teamExtras) {
     const PP_OPPS = 3.1;
-    const tOver   = poissonOver(lambdaH, 2.5);
     const csFor   = Math.exp(-lambdaA);
     const ppG     = 1 - Math.exp(-PP_OPPS * (hPP / 100));
     const pkAll   = Math.pow(hPK / 100, PP_OPPS);
     groups.push({
       id: 'teamx', title: 'Team Specials', cols: 2,
       options: [
-        { id: 'tg-o25', label: `${homeName} Over 2.5`, rulePct: pct(tOver),
-          ml: gm('team_total_goals', 2.5, 'over'),
-          ruleNote: `λ équipe=${fmt(lambdaH)} → Poisson P(>2.5)=${fmt(tOver*100,0)}%` },
-        { id: 'tg-u25', label: `${homeName} Under 2.5`, rulePct: pct(1 - tOver),
-          ml: gm('team_total_goals', 2.5, 'under'),
-          ruleNote: `P(<2.5) = ${fmt((1-tOver)*100,0)}%` },
         { id: 'cs-for', label: 'Clean Sheet (Shutout)', rulePct: pct(csFor),
           ml: gm('clean_sheet', undefined, 'yes'),
           ruleNote: `P(0 but adverse) = e^(−${fmt(lambdaA)}) = ${fmt(csFor*100,0)}%` },
@@ -820,6 +1044,11 @@ function computeGameMarkets(
     homeIce: fHomeIce, fatigue: fFatigue,
     mlHome, ot,
     matchFactors: blend.lines.map(l => ({ id: l.id, label: l.label, weight: Math.round(l.weight * 100), value: l.value })),
+    otShareHome,
+    bttsK: GOALS_DISPERSION_K,
+    puckLines: puckSpecs,
+    margins: marginShares,
+    periods: periodSpecs,
   });
 
   return groups;
@@ -924,7 +1153,11 @@ export async function buildTeamMarkets(teamAbbr: string): Promise<MarketGroup[]>
 
   // Build league-average pseudo-team
   const n   = all.length || 1;
+  // `abbreviation: 'OPP'` : c'est le sujet des tuiles qui portent sur
+  // l'adversaire (et l'en-tête de leurs colonnes). `TeamPrediction.tsx` le
+  // remplace par l'adversaire réel du match choisi avant tout pari.
   const avg = {
+    abbreviation:       'OPP',
     winPct:             all.reduce((s: number, t: any) => s + (t.winPct ?? 50), 0) / n,
     goalsForPerGame:    all.reduce((s: number, t: any) => s + (t.goalsForPerGame ?? 3.0), 0) / n,
     goalsAgainstPerGame:all.reduce((s: number, t: any) => s + (t.goalsAgainstPerGame ?? 3.0), 0) / n,

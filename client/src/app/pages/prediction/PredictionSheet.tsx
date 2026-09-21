@@ -17,7 +17,7 @@ import { askLLM } from "../../services/llmService";
 import { MLSection, fetchMLProbability, mlProbabilityKey, type MLProbabilityRequest } from "../../components/MLPredictionCard";
 import { RuleFactorEditor } from "../../components/RuleFactorEditor";
 import { FramedLabel } from "../../components/brand/FramedLabel";
-import { BetOpt, MLProps, MktGroup, RuleFactor, buildLLMDataContext, llmCacheId, loadLlmCache, saveLlmCache, scaledRulePct, settlementFields } from "./gameMarkets";
+import { BetOpt, MLProps, MktGroup, MktTable, RuleFactor, buildLLMDataContext, llmCacheId, loadLlmCache, saveLlmCache, scaledRulePct, settlementFields } from "./gameMarkets";
 import { pctColor } from "../../data/pctScale";
 import { blendFactors, getFamilyWeights } from "../../services/ruleWeightsService";
 import { BetOddsCtx, RevealMode, RevealModeCtx } from "./predictionShared";
@@ -75,9 +75,10 @@ export function betLegId(label: string, mlProps: MLProps | undefined, rulePct: n
 }
 
 /* ─── Prediction bottom sheet ───────────────── */
-function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, factors, factorGroup, pctScale, onClose }: {
+function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, factors, factorGroup, pctScale, mlPreset, onClose }: {
   label: string; rulePct: number; serverPct?: number; ruleNote: string; accent: string;
-  mlProps?: MLProps; factors?: RuleFactor[]; factorGroup?: string; pctScale?: number; onClose: () => void;
+  mlProps?: MLProps; factors?: RuleFactor[]; factorGroup?: string; pctScale?: number;
+  mlPreset?: BetOpt["mlPreset"]; onClose: () => void;
 }) {
   const { t, lang } = useI18n();
   const { odds } = useOddsFormat();
@@ -217,6 +218,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
             ruleBasedPct={rulePct}
             label={label}
             simple
+            preset={mlPreset}
           />
         ) : null}
 
@@ -459,11 +461,17 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
   const mlKey = mlReq ? mlProbabilityKey(mlReq) : null;
   useEffect(() => {
     if (source !== "ml" || !mlReq) return;
+    // Chiffre ML fourni avec la tuile (grilles joueur) : aucun appel.
+    if (opt.mlPreset !== undefined) {
+      setMlPct(opt.mlPreset === null ? null : opt.mlPreset.probability);
+      return;
+    }
+    if (opt.mlExternal) { setMlPct(undefined); return; }
     let alive = true;
     setMlPct(undefined);
     fetchMLProbability(mlReq).then(p => { if (alive) setMlPct(p); });
     return () => { alive = false; };
-  }, [source, mlKey]);
+  }, [source, mlKey, opt.mlPreset, opt.mlExternal]);
 
   const mlMode      = source === "ml" && !!opt.mlProps;
   const loadingMl   = mlMode && mlPct === undefined;
@@ -472,6 +480,9 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
   // Tuile sans chiffre : grise, pour qu'elle ne se lise pas comme une prédiction
   // faible (un « — » coloré en rouge dirait quelque chose, et on ne sait rien).
   const shownColor  = mlMissing ? "#4a5a60" : pctColor(shownPct);
+  // « <3% » plutôt qu'un plancher qui rendrait tous les petits paris égaux.
+  const below       = opt.belowFloor != null && shownPct < opt.belowFloor;
+  const shownText   = below ? `<${opt.belowFloor}%` : `${shownPct}%`;
 
   return (
     <>
@@ -510,7 +521,7 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
           style={{ background: shownColor + "22", color: shownColor, border: `1px solid ${shownColor}55` }}
           title={mlMissing ? t("ml.unavailable") : undefined}
         >
-          {loadingMl ? "…" : mlMissing ? "—" : `${shownPct}%`}
+          {loadingMl ? "…" : mlMissing ? "—" : shownText}
         </span>
         {/* Le prix du livre, sous le pourcentage et visiblement à part : ce
             sont deux choses différentes — notre estimation, et une offre. Rien
@@ -527,7 +538,9 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
         <PredictionSheet
           label={opt.label} rulePct={rulePct} ruleNote={opt.ruleNote}
           accent={accent} mlProps={opt.mlProps} factors={opt.factors} factorGroup={opt.factorGroup}
-          pctScale={opt.pctScale} onClose={() => setSheet(false)}
+          pctScale={opt.pctScale}
+          mlPreset={opt.mlPreset !== undefined ? opt.mlPreset : opt.mlExternal ? null : undefined}
+          onClose={() => setSheet(false)}
         />
       )}
     </>
@@ -547,7 +560,13 @@ export function MarketGroup({ group, accent }: { group: MktGroup; accent: string
         <span className="text-[#c0cdd4] text-xs font-semibold uppercase tracking-wider">{group.title}</span>
         <span className="text-[#3a5060] text-xs">{open ? "▲" : "▼"}</span>
       </button>
-      {open && (
+      {open && (group.tables?.length ? (
+        <div className="p-3 flex flex-col gap-3">
+          {group.tables.map((tb, i) => (
+            <MarketTableView key={i} table={tb} options={group.options} accent={accent} />
+          ))}
+        </div>
+      ) : (
         <div
           className="p-3 grid gap-2"
           style={{ gridTemplateColumns: `repeat(${group.cols}, 1fr)` }}
@@ -556,7 +575,69 @@ export function MarketGroup({ group, accent }: { group: MktGroup; accent: string
             <BetOption key={opt.id} opt={opt} accent={accent} />
           ))}
         </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── MarketTableView ────────────────────────────────────────────────────────
+ *
+ * Un groupe mis en tableau : une ligne par seuil (« 5.5 », « 2+ », « 3-1 »),
+ * une colonne par côté (Over | Under, Yes | No, une équipe…). Chaque case est
+ * la MÊME tuile `BetOption` qu'ailleurs, en version compacte — état coupon,
+ * bascule Règles/ML, prix du livre et fiche à l'ouverture compris.
+ *
+ * Les cases pointent vers `options` par identifiant : une case dont l'option
+ * n'existe pas (marché absent de la réponse) reste vide plutôt que de casser la
+ * grille.
+ */
+function MarketTableView({ table, options, accent }: { table: MktTable; options: BetOpt[]; accent: string }) {
+  const byId = useMemo(() => new Map(options.map(o => [o.id, o] as const)), [options]);
+  const hasRowLabels = table.rows.some(r => r.label) || !!table.rowHeader;
+  return (
+    <div>
+      {table.title && (
+        <p className="text-[#8a9ea6] text-[10px] font-semibold uppercase tracking-wider mb-1.5 px-0.5">{table.title}</p>
       )}
+      <table className="w-full border-collapse text-xs table-fixed">
+        <thead>
+          {table.columnGroups && (
+            <tr className="text-[#c0cdd4]">
+              {hasRowLabels && <th />}
+              {table.columnGroups.map((g, i) => (
+                <th key={i} colSpan={g.span} className="font-bold px-1 pt-0.5 text-center border-b border-white/[0.06]">
+                  {g.label}
+                </th>
+              ))}
+            </tr>
+          )}
+          <tr className="text-[#8a9ea6]">
+            {hasRowLabels && (
+              <th className="text-left font-semibold px-1 py-1.5 w-14">{table.rowHeader ?? ""}</th>
+            )}
+            {table.columns.map((c, i) => (
+              <th key={i} className="font-semibold px-1 py-1.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">{c}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {table.rows.map((r, ri) => (
+            <tr key={ri} className={ri > 0 ? "border-t border-white/[0.04]" : undefined}>
+              {hasRowLabels && (
+                <td className="px-1 py-1 text-white font-semibold tabular-nums whitespace-nowrap">{r.label}</td>
+              )}
+              {r.cells.map((id, ci) => {
+                const opt = id ? byId.get(id) : undefined;
+                return (
+                  <td key={ci} className="px-1 py-1 align-middle">
+                    {opt ? <BetOption opt={opt} accent={accent} compact /> : null}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -304,8 +304,28 @@ export interface ProbabilityResult {
   caveat?: PredictionCaveat;
 }
 
+/**
+ * Variantes de la page match que le moteur ML ne sait PAS encore chiffrer.
+ *
+ * Le moteur les recevait sans les distinguer de la variante de base, et
+ * répondait donc pour une autre question :
+ *  · puck line ±2.5 / ±3.5 — `predictPuckLine` ne connaît que ±1.5 ;
+ *  · « les deux marquent 2+ / 3+ » — `predictBothTeamsScore` ne connaît que 1+ ;
+ *  · « égalité après la période » — `predictPeriodWinner` ne cote qu'une équipe.
+ *
+ * « Je ne sais pas » (422 → « — » à l'écran) plutôt qu'un chiffre faux. Les
+ * règles, elles, les chiffrent (`nhlPredictions.ts`).
+ */
+function mlUnsupportedVariant(market: string, body: PredictionRequest): boolean {
+  if (market === "puck_line" && body.line != null && Math.abs(body.line) !== 1.5) return true;
+  if (market === "both_teams_score" && body.line != null && body.line > 0.5) return true;
+  if (/^period[123]_winner$/.test(market) && (body.selection ?? "").trim().toLowerCase() === "draw") return true;
+  return false;
+}
+
 async function computeProbability(body: PredictionRequest): Promise<ProbabilityResult> {
   const { market } = normalizeMarket(body.marketType, body.selection ?? "over");
+  if (mlUnsupportedVariant(market, body)) return { probability: null };
   // Le côté « non » est le complément exact du côté « oui » : aucun de ces
   // marchés n'admet de push (pas de demi-issue), donc P(non) = 100 − P(oui).
   if (isNegativeSide(market, body.selection)) {

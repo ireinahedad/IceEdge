@@ -15,7 +15,58 @@ When continuing this project:
 - Verify that what you are implementing is secure
 - At the end of each session, update PROJECT_CONTEXT.md.
 
-Last updated: 2026-08-09
+Last updated: 2026-09-21
+
+## Session 2026-09-21 — Page match : tableaux de paris + cohérence des règles
+
+Chiffres des RÈGLES seulement ; le ML n'est pas touché (les variantes qu'il ne
+sait pas chiffrer rendent « — », voir `mlUnsupportedVariant` dans `ml.routes.ts`).
+
+1. **`MarketGroup.tables`** (serveur `nhlPredictions.ts` ↔ client `MktTable`) :
+   un groupe peut se rendre en tableau (lignes = seuils, colonnes = côtés).
+   Les cases référencent `options` par id ; `options` reste la liste plate lue
+   par les facteurs, le ML et le coupon. Rendu : `MarketTableView` (PredictionSheet).
+2. **Loi du score FINAL** (`prediction/finalScore.ts`) : Poisson + but de
+   prolongation/fusillade (nul k–k → k+1–k selon `otShareHome`). Sert puck
+   lines, totaux, buts par équipe, score exact, écart de victoire.
+3. **Nouveaux tableaux** : puck line ±1.5/2.5/3.5 (2 équipes), total 2.5→7.5,
+   buts par équipe 0.5→4.5, BTTS 1+/2+/3+, score exact (1-0 … 4-3 + « vainqueur
+   5+ »). Cases d'un camp = P(victoire) × P(score | victoire) → somment à la
+   victoire de Match Betting.
+4. **Une carte par période** : « qui mène APRÈS la période » (buts cumulés, ce
+   que règle `periodN_winner`) + égalité. P1/P2 partitionnent à 100 (pctScale =
+   1 − nul) ; P3 = tuiles « in Reg » + « Goes to OT ». Buts de la 1re dans la
+   carte P1. Avant : ~125 % par période.
+5. **Corrections de règles** : écart de victoire (sommait ~120 % de la victoire),
+   puck line (`v − 0.15` identique à toutes les lignes), BTTS (facteurs en
+   Poisson), totaux (sans le but de prolongation), `invExact` pour over/under.
+6. **Règlement** : `correct_score`, BTTS avec `line`, période `draw` + égalité
+   = perdu (était `unknown` → coupon figé). `gameParlay` / `parlay` suivent.
+7. **Joueurs** : passes 1+→4+ (de retour sur la page match), tirs bloqués et
+   mises en échec 1+/3+/5+/7+, arrêts = seulement le gardien du match
+   (feuille de match > saisie manuelle `GET /games/:id/starting-goalies` > plus utilisé).
+8. **Page équipe** : ses tableaux puck line / totaux / BTTS / périodes sont
+   remplacés par ceux du serveur (adversaire moyen `OPP` → adversaire réel du
+   match choisi).
+
+9. **Mode ML des grilles joueur, sans Python** (`prediction/playerRates.ts`,
+   `GET /predictions/player-rates/game/:id` et `/team/:abbr`). `/predict/player`
+   n'était qu'une Poisson de saison bornée à 5 % (Demidov = Danault sur 2+
+   buts), appelée case par case (~120 requêtes par équipe). Maintenant : UNE
+   requête par page (cache 5 min côté client, `publicCache` côté HTTP), une
+   cadence par joueur et par statistique = saison rétrécie vers un a priori de
+   poste (`PSEUDO_GAMES`) × ajustement adversaire (±15 %), binomiale négative à
+   dispersion fixée à la main (`DISPERSION`). Tous les seuils en découlent côté
+   client. `BetOpt.mlPreset` / `mlExternal` : la tuile et sa fiche n'appellent
+   plus `/predict/ml`. Affichage « <3% » sous 3 % (`belowFloor`) ; plancher des
+   règles de la grille ramené de 3 à 1. Premier buteur en ML = part des buts du
+   match × P(au moins un but), au lieu de la requête « 1+ but ».
+   Reste à faire : tuiles de la page JOUEUR (toujours par appel), requête unique
+   par match pour les marchés d'équipe.
+
+Vérifié en sandbox Linux : `tsc` serveur + client, `vite build`, vitest 38/38
+fichiers (tests ajoutés dans `nhlPredictions.test.ts` et `settlement.service.test.ts`).
+Le repli client `buildGameGroups` (avant réponse serveur) garde l'ancien format.
 
 ## Session 2026-08-09 — Coupons publics réservés aux abonnés Pro
 

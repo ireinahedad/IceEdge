@@ -220,6 +220,13 @@ export function GamePrediction({ gameId }: { gameId: string }) {
             gameId={gameId}
             accent={accent}
           />
+          {/* Passes — de retour sur la page d'un match, colonnes 1+ → 4+. */}
+          <PlayerPropGrid
+            metric="assists"
+            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
+            gameId={gameId}
+            accent={accent}
+          />
           <PlayerPropGrid
             metric="points"
             sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
@@ -232,9 +239,6 @@ export function GamePrediction({ gameId }: { gameId: string }) {
             gameId={gameId}
             accent={accent}
           />
-          {/* Grille des passes retirée de la page d'un match (2026-09-21) : les
-              passes sont déjà comptées dans les points, juste au-dessus. Elle
-              reste sur la page d'une équipe (TeamPrediction). */}
           <PlayerPropGrid
             metric="blocks"
             sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
@@ -247,9 +251,9 @@ export function GamePrediction({ gameId }: { gameId: string }) {
             gameId={gameId}
             accent={accent}
           />
-          {/* Les gardiens sont sortis des grilles de patineurs (ils n'ont ni
-              but ni passe) : sans celle-ci, ils n'auraient plus aucun marché
-              sur cette page depuis le retrait du tableau d'effectif. */}
+          {/* Arrêts — SEULEMENT le gardien qui joue ce match (feuille de
+              match, sinon partant saisi, sinon le plus utilisé), avec trois
+              colonnes calées sur sa moyenne. */}
           <PlayerPropGrid
             metric="saves"
             sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}

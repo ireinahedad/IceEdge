@@ -257,6 +257,60 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
     }));
   })();
 
+  // ── Tableaux du serveur qui REMPLACENT ceux de la page ────────────────────
+  //
+  // Puck line (±1.5/2.5/3.5), total du match (2.5 → 7.5), buts de l'équipe
+  // (0.5 → 4.5), les deux marquent (1+/2+/3+) et les trois cartes de période
+  // sont les MÊMES tableaux que sur la page d'un match, calculés par le même
+  // code serveur (`computeGameMarkets`, vue équipe = contre un adversaire
+  // moyen). Les tuiles locales qu'ils remplacent étaient des constantes et des
+  // règles de pouce (« −1.5 = victoire − 18 % »).
+  //
+  // Le serveur désigne l'adversaire moyen par `OPP`. Un pari posé depuis cette
+  // page se règle sur le match CHOISI dans le sélecteur : `OPP` y devient donc
+  // l'adversaire réel, et le côté domicile/extérieur celui du vrai match. Sans
+  // match choisi, les tuiles qui portent sur l'adversaire n'ont pas de sujet —
+  // elles s'affichent, mais sans marché (pas de ML, pas de règlement).
+  const SERVER_TABLES = ["puckline", "totals", "teamtotals", "btts", "p1", "p2", "p3"];
+  const adaptMl = (ml: MLProps | undefined): MLProps | undefined => {
+    if (!ml) return undefined;
+    const opp = selectedGame?.opponentAbbr?.toUpperCase();
+    const onOpp = ml.subjectId === "OPP";
+    const subjectId = onOpp ? opp : ml.subjectId;
+    if (!subjectId) return undefined;
+    const teamIsHome = selectedGame ? selectedGame.isHome : ml.isHome;
+    return {
+      ...ml,
+      subjectId,
+      opponentId: onOpp ? data.abbr : (opp ?? undefined),
+      isHome: onOpp ? (teamIsHome == null ? undefined : !teamIsHome) : teamIsHome,
+      gameId: selectedGame?.id,
+    };
+  };
+  const serverTables: MktGroup[] = (apiGroups ?? [])
+    .filter(g => SERVER_TABLES.includes(g.id) && g.tables?.length)
+    .map(g => ({
+      ...g,
+      options: g.options.map(o => ({ ...o, mlProps: adaptMl((o as { ml?: MLProps }).ml) })),
+    }));
+  const byServerGroup = new Map(serverTables.map(g => [g.id, g] as const));
+
+  const shownGroups: MktGroup[] = serverTables.length === 0
+    ? teamGroupsF
+    : teamGroupsF.flatMap((g): MktGroup[] => {
+        const take = (...ids: string[]) => ids.map(id => byServerGroup.get(id)).filter((x): x is MktGroup => !!x);
+        if (g.id === "puckline") return take("puckline").length ? take("puckline") : [g];
+        if (g.id === "totals")   return take("totals", "teamtotals").length ? take("totals", "teamtotals") : [g];
+        if (g.id === "period")   return take("p1", "p2", "p3").length ? take("p1", "p2", "p3") : [g];
+        if (g.id === "clean") {
+          // Le blanchissage reste une tuile ; « les deux marquent » passe au tableau.
+          const btts = take("btts");
+          if (!btts.length) return [g];
+          return [{ ...g, title: "Clean Sheet", options: g.options.filter(o => o.id !== "t-btts") }, ...btts];
+        }
+        return [g];
+      });
+
   return (
     <div className="flex flex-col gap-3">
       {/* Which game these bets are for — next game by default */}
@@ -292,7 +346,7 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
       <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
       <BetOddsCtx.Provider value={odds}>
         <RevealModeCtx.Provider value={revealMode}>
-          {teamGroupsF.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
+          {shownGroups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
 
           {/* Paris joueur du club, en grille — le match sélectionné les suit,
               pour qu'ils se règlent sur cette affiche. */}

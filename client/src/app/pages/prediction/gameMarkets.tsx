@@ -8,6 +8,7 @@
 
 import { nhlApiService } from "../../services/nhlApiService";
 import { normalizeMarket } from "../../services/predictionRequest";
+import type { MLPredictionResult } from "../../components/MLPredictionCard";
 
 
 /* ─── Game Prediction ──────────────── */
@@ -101,8 +102,42 @@ export interface BetOpt {
    * une repondération par l'utilisateur la traverse. Absente = 1.
    */
   pctScale?: number;
+  /**
+   * Résultat ML DÉJÀ CALCULÉ pour cette tuile — la tuile et sa fiche l'affichent
+   * sans appeler `/predict/ml`. Posé par les grilles de paris joueur, qui
+   * reçoivent les cadences de tout l'alignement en une requête
+   * (`/predictions/player-rates/...`). `null` = pas de chiffre ML pour cette
+   * case (statistique non publiée) ; absent = la tuile interroge le modèle
+   * comme avant.
+   */
+  mlPreset?: MLPredictionResult | null;
+  /**
+   * Le chiffre ML de cette tuile vient de son CONTENEUR (`mlPreset`), jamais
+   * d'un appel `/predict/ml`. Tant que `mlPreset` est absent, la tuile attend
+   * (« … ») au lieu de partir interroger le modèle case par case.
+   */
+  mlExternal?: boolean;
+  /**
+   * Sous ce pourcentage, la tuile affiche « <3% » au lieu du chiffre. Une
+   * grille de joueurs est pleine de 0,4 % et de 1,8 % : les écrire donnerait
+   * une précision qu'une moyenne de saison n'a pas, les remonter à 3 % (ou à
+   * 5 %) rendait Demidov et Danault identiques sur « 2+ buts ».
+   */
+  belowFloor?: number;
 }
-export interface MktGroup { id: string; title: string; cols: 2 | 3; options: BetOpt[]; }
+/**
+ * Mise en tableau d'un groupe — le jumeau de `MarketTable` côté serveur
+ * (`nhlPredictions.ts`). Les cases référencent les options du groupe par
+ * identifiant ; `options` reste la liste plate de tous les paris.
+ */
+export interface MktTable {
+  title?: string;
+  rowHeader?: string;
+  columnGroups?: { label: string; span: number }[];
+  columns: string[];
+  rows: { label: string; cells: (string | null)[] }[];
+}
+export interface MktGroup { id: string; title: string; cols: 2 | 3; options: BetOpt[]; tables?: MktTable[]; }
 
 /**
  * Le score de règles d'une tuile, facteurs et échelle compris.

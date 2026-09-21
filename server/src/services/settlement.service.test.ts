@@ -403,3 +403,43 @@ describe('un pari reste décidable quelle que soit la page qui l\'a posé', () =
     expect(w.outcome).toBe('win');
   });
 });
+
+/**
+ * Marchés des tableaux de la page match (sept. 2026) : score exact, les deux
+ * marquent 2+/3+, puck lines ±2.5/±3.5, « égalité après la période ».
+ */
+describe('tableaux de la page match — règlement', () => {
+  it('score exact : ordre domicile–visiteur, prolongation comprise', async () => {
+    fetchGameById.mockResolvedValue(finalGame(3, 2, 4));
+    expect((await settleOne([{ gameId: GAME_ID, marketType: 'correct_score', selectionValue: '3-2', subjectId: 'TOR' }])).outcome).toBe('win');
+    expect((await settleOne([{ gameId: GAME_ID, marketType: 'correct_score', selectionValue: '2-3', subjectId: 'MTL' }])).outcome).toBe('loss');
+  });
+
+  it('score exact « vainqueur 5+ »', async () => {
+    fetchGameById.mockResolvedValue(finalGame(2, 5));
+    expect((await settleOne([{ gameId: GAME_ID, marketType: 'correct_score', selectionValue: 'away_other', subjectId: 'MTL' }])).outcome).toBe('win');
+    expect((await settleOne([{ gameId: GAME_ID, marketType: 'correct_score', selectionValue: 'home_other', subjectId: 'TOR' }])).outcome).toBe('loss');
+  });
+
+  it('les deux marquent 2+ lit la ligne ; sans ligne = 1+', async () => {
+    fetchGameById.mockResolvedValue(finalGame(4, 1));
+    expect((await settleOne([{ gameId: GAME_ID, marketType: 'both_teams_score', selectionValue: 'yes', subjectId: 'TOR' }])).outcome).toBe('win');
+    expect((await settleOne([{ gameId: GAME_ID, marketType: 'both_teams_score', selectionValue: 'yes', subjectId: 'TOR', line: 1.5 }])).outcome).toBe('loss');
+    expect((await settleOne([{ gameId: GAME_ID, marketType: 'both_teams_score', selectionValue: 'no',  subjectId: 'TOR', line: 1.5 }])).outcome).toBe('win');
+  });
+
+  it('puck line −2.5 et « +2.5 » déclaré comme le −2.5 adverse côté non', async () => {
+    fetchGameById.mockResolvedValue(finalGame(4, 2));
+    // TOR gagne par 2 : −2.5 perdu, donc MTL +2.5 gagné.
+    expect((await settleOne([{ gameId: GAME_ID, marketType: 'puck_line', selectionValue: 'tor', subjectId: 'TOR', line: -2.5 }])).outcome).toBe('loss');
+    expect((await settleOne([{ gameId: GAME_ID, marketType: 'puck_line', selectionValue: 'no',  subjectId: 'TOR', line: -2.5 }])).outcome).toBe('win');
+  });
+
+  it('qui mène après la 1re : égalité tranchée, plus jamais « en attente »', async () => {
+    // 1–1 après la 1re (les deux buts de `goal()` sont en 1re période).
+    fetchGameScoringPlays.mockResolvedValue([goal(true), goal(false)]);
+    fetchGameById.mockResolvedValue(finalGame(1, 1 + 1, 3));
+    expect((await settleOne([{ gameId: GAME_ID, marketType: 'period1_winner', selectionValue: 'draw', subjectId: 'TOR' }])).outcome).toBe('win');
+    expect((await settleOne([{ gameId: GAME_ID, marketType: 'period1_winner', selectionValue: 'tor',  subjectId: 'TOR' }])).outcome).toBe('loss');
+  });
+});
