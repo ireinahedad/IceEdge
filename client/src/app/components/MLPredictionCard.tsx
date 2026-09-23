@@ -558,6 +558,54 @@ async function requestMLProbability(req: MLProbabilityRequest): Promise<number |
   }
 }
 
+/* ─── Paquet ML d'un match ──────────────────────────────────────────────────
+ *
+ * Toutes les tuiles d'une page de match en UNE requête
+ * (`GET /api/predict/game/:id/bundle`), au lieu d'un `POST /predict/ml` par
+ * tuile — ~95 appels, et des 429 dès la première bascule en mode ML.
+ *
+ * Résultat : `{ [identifiant de tuile]: résultat | null }`, ou `null` si le
+ * paquet entier est indisponible. La promesse est partagée 5 min ; un échec
+ * n'est pas conservé (la prochaine bascule retente).
+ */
+export interface GameMlBundle {
+  /** Par identifiant de tuile de la page match. */
+  byId:  Record<string, MLPredictionResult | null>;
+  /** Par question (`mlBundleKey`) — pages équipe et joueur. */
+  byKey: Record<string, MLPredictionResult | null>;
+}
+const BUNDLE_TTL_MS = 5 * 60_000;
+const bundleCache = new Map<string, { at: number; promise: Promise<GameMlBundle | null> }>();
+
+export function fetchGameMlBundle(gameId: string): Promise<GameMlBundle | null> {
+  const hit = bundleCache.get(gameId);
+  if (hit && Date.now() - hit.at < BUNDLE_TTL_MS) return hit.promise;
+  const entry = {
+    at: Date.now(),
+    promise: (async (): Promise<GameMlBundle | null> => {
+      try {
+        const r = await fetchWithTimeout(`${ML_BASE}/game/${encodeURIComponent(gameId)}/bundle`);
+        if (!r.ok) return null;
+        const data = await r.json() as { results?: Record<string, unknown>; byKey?: Record<string, unknown> };
+        if (!data?.results || typeof data.results !== "object") return null;
+        const norm = (m: Record<string, unknown> | undefined) => {
+          const out: Record<string, MLPredictionResult | null> = {};
+          for (const [id, v] of Object.entries(m ?? {})) {
+            out[id] = v && typeof v === "object" ? normalizeMLResponse(v as Record<string, unknown>) : null;
+          }
+          return out;
+        };
+        return { byId: norm(data.results), byKey: norm(data.byKey) };
+      } catch {
+        return null;
+      }
+    })(),
+  };
+  entry.promise.then(b => { if (b === null && bundleCache.get(gameId) === entry) bundleCache.delete(gameId); });
+  bundleCache.set(gameId, entry);
+  return entry.promise;
+}
+
 interface MLSectionProps {
   type:         "game" | "player" | "team";
   subjectId:    string;

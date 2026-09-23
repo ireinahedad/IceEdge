@@ -251,9 +251,24 @@ async function mlPost<T>(path: string, body: unknown): Promise<T> {
   }
 }
 
+/** Réponse de `/predict/game/bundle` : `null` = marché que le modèle ne price pas. */
+export interface GameBundleResult {
+  results:      Record<string, MLPredictionResult | null>;
+  lambda_home?: number | null;
+  lambda_away?: number | null;
+  player_rates?:       Record<string, Record<string, number>>;
+  player_dispersion?:  Record<string, number | null>;
+  player_model_as_of?: string | null;
+}
+
 export const mlApiClient = {
   /** Game-outcome prediction (moneyline / puck-line / totals) */
   predictGame:   (features: unknown) => mlPost<MLPredictionResult>('/predict/game',   features),
+  /**
+   * TOUS les marchés d'un match en une requête : un contexte (features,
+   * modèles, λ), N lectures. Voir `gameMlBundle.ts` et `/predict/game/bundle`.
+   */
+  predictGameBundle: (body: unknown) => mlPost<GameBundleResult>('/predict/game/bundle', body),
   /** Player prop prediction (goals / assists / points / shots / pp_point) */
   predictPlayer: (features: unknown) => mlPost<MLPredictionResult>('/predict/player', features),
   /** Team futures prediction (cup / conf / playoff) */

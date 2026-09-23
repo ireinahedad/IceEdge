@@ -8,11 +8,14 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
-import { nhlApiService } from "../../services/nhlApiService";
+import { nhlApiService, type PlayerRatesResponse, type RateStat } from "../../services/nhlApiService";
+import { fetchGameMlBundle, type GameMlBundle, type MLPredictionResult } from "../../components/MLPredictionCard";
+import { useI18n } from "../../i18n";
+import { BELOW_FLOOR, dispersionFor, presetResult, rateLabels, ratePct } from "./rateMath";
 import { useSport } from "../../context/SportContext";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
-import { BetOpt, MktGroup, RuleFactor } from "./gameMarkets";
+import { BetOpt, MktGroup, RuleFactor, mlBundleKey } from "./gameMarkets";
 import { GameSelector, LoadingSkeleton, NotFound, RevealMode, RevealModeCtx, StatsBanner, useSelectedGame, useUpcomingGames } from "./predictionShared";
 
 
@@ -75,6 +78,36 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
     }
     load();
   }, [playerId]);
+
+  // ── Mode ML, sans un appel par tuile ─────────────────────────────────────
+  //
+  // Les tuiles de cette page appelaient `/predict/ml` une par une, et le
+  // service Python n'y faisait qu'une Poisson de saison bornée à 5 %. Ici,
+  // DEUX requêtes au plus, à la bascule en mode ML :
+  //   · les cadences de CE joueur (`/predictions/player-rates/player/:id`),
+  //     ajustées à l'adversaire du match choisi — tous les seuils en découlent ;
+  //   · pour un gardien, le paquet ML du match (victoire, blanchissage).
+  const { t } = useI18n();
+  const [rates, setRates] = useState<PlayerRatesResponse | null | undefined>(undefined);
+  const [bundle, setBundle] = useState<GameMlBundle | null | undefined>(undefined);
+  useEffect(() => {
+    if (revealMode !== "ml") return;
+    let alive = true;
+    setRates(undefined);
+    nhlApiService.getPlayerRates("player", playerId, playerGameId)
+      .then(r => { if (alive) setRates(r); })
+      .catch(() => { if (alive) setRates(null); });
+    return () => { alive = false; };
+  }, [revealMode, playerId, playerGameId]);
+  const isGoaliePage = data?.position === "G";
+  useEffect(() => {
+    if (revealMode !== "ml" || !isGoaliePage) return;
+    if (!playerGameId) { setBundle(null); return; }
+    let alive = true;
+    setBundle(undefined);
+    fetchGameMlBundle(playerGameId).then(b => { if (alive) setBundle(b); });
+    return () => { alive = false; };
+  }, [revealMode, isGoaliePage, playerGameId]);
 
   if (loading) return <LoadingSkeleton />;
   if (!data) return <NotFound />;
@@ -280,18 +313,67 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
     }));
   })();
 
+  // ── Chiffre ML de chaque tuile ────────────────────────────────────────────
+  // `undefined` = pas encore là (la tuile attend), `null` = pas de chiffre.
+  const row = rates?.players?.[playerId];
+  const STAT: Record<string, RateStat> = {
+    goals: "goals", assists: "assists", points: "points", shots: "shots",
+    hits: "hits", blocks: "blocks", saves: "saves", pim: "pim",
+  };
+  const mlFor = (o: BetOpt): MLPredictionResult | null | undefined => {
+    const m = o.mlProps;
+    if (!m) return null;
+    const settle = m.settleMarket ?? "";
+    // Gardien : victoire et blanchissage sont des questions de MATCH.
+    if (settle === "goalie_win" || settle === "goalie_shutout") {
+      if (bundle === undefined) return undefined;
+      if (bundle === null || !selectedGame) return null;
+      const key = settle === "goalie_win"
+        ? mlBundleKey("moneyline", null, null, selectedGame.isHome)
+        : mlBundleKey("clean_sheet", null, "yes", selectedGame.isHome);
+      return bundle.byKey[key] ?? null;
+    }
+    if (rates === undefined) return undefined;
+    if (rates === null || !row) return null;
+    if (settle === "first_goal_scorer") {
+      if (row.firstGoal == null) return null;
+      const pv = Math.round(row.firstGoal * 100);
+      return presetResult(pv, t(rateLabels(row.source).model), t("prop.mlFirstNote", {
+        rate: (row.rates.goals ?? 0).toFixed(2), game: (row.gameGoals ?? 6).toFixed(1), pct: String(pv),
+      }));
+    }
+    // Buts en avantage numérique : aucune cadence par joueur — pas de chiffre.
+    if (settle === "pp_goal") return null;
+    const stat: RateStat | undefined = settle === "pp_point" ? "ppPoints" : STAT[m.propType ?? ""];
+    const rate = stat ? row.rates[stat] : undefined;
+    if (!stat || rate == null || m.line == null) return null;
+    const disp = dispersionFor(rates, row.source, stat);
+    const labels = rateLabels(row.source);
+    const side = (m.settleSelection ?? "over") === "under" ? "under" : "over";
+    const pv = ratePct(rate, m.line, disp, side);
+    return presetResult(pv, t(labels.model), t(labels.note, {
+      rate: rate.toFixed(2), gp: String(row.gp), k: disp == null ? "∞" : String(disp),
+      label: `${side === "under" ? "<" : ">"} ${m.line}`, pct: String(pv),
+    }));
+  };
+
   // Stamp the resolved game id onto every option's mlProps — plus the player's
   // team and name, which the slip shows instead of the raw player id.
   const playerGroupsG: MktGroup[] = playerGroupsF.map(g => ({
     ...g,
-    options: g.options.map(o => (o.mlProps
-      ? { ...o, mlProps: {
-          ...o.mlProps,
-          ...(playerGameId ? { gameId: playerGameId } : {}),
-          teamAbbr: data.team || undefined,
-          playerName: data.name,
-        } }
-      : o)),
+    options: g.options.map(o => ({
+      ...(o.mlProps
+        ? { ...o, mlProps: {
+            ...o.mlProps,
+            ...(playerGameId ? { gameId: playerGameId } : {}),
+            teamAbbr: data.team || undefined,
+            playerName: data.name,
+          } }
+        : o),
+      mlExternal: true,
+      mlPreset: mlFor(o),
+      belowFloor: BELOW_FLOOR,
+    })),
   }));
 
   return (

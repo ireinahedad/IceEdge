@@ -6,7 +6,7 @@ import { publicCache, privateCache, publicPolicy, TTL } from '../middleware/http
 import { staleFallback } from '../middleware/staleFallback.middleware';
 import { sendError } from '../httpError';
 import { getStartingGoalies } from '../services/startingGoalies';
-import { playerRatesForGame, playerRatesForTeam } from '../services/prediction/playerRates';
+import { playerRatesForGame, playerRatesForPlayer, playerRatesForTeam } from '../services/prediction/playerRates';
 
 const router = Router();
 const nhl    = new NHLService();
@@ -312,6 +312,13 @@ router.get('/predictions/team/:abbr', publicCache(TTL.SHORT), async (req, res) =
 router.get('/predictions/player-rates/game/:gameId', publicCache(TTL.SHORT), async (req, res) => {
   if (!/^\d{6,12}$/.test(req.params.gameId)) return res.status(400).json({ error: 'invalid gameId' });
   try { res.json(await playerRatesForGame(req.params.gameId)); }
+  catch (err: any) { sendError(res, err); }
+});
+router.get('/predictions/player-rates/player/:playerId', publicCache(TTL.SHORT), async (req, res) => {
+  const game = typeof req.query.game === 'string' ? req.query.game : undefined;
+  if (!/^\d{5,10}$/.test(req.params.playerId)) return res.status(400).json({ error: 'invalid player' });
+  if (game != null && !/^\d{6,12}$/.test(game)) return res.status(400).json({ error: 'invalid gameId' });
+  try { res.json(await playerRatesForPlayer(req.params.playerId, game)); }
   catch (err: any) { sendError(res, err); }
 });
 router.get('/predictions/player-rates/team/:abbr', publicCache(TTL.SHORT), async (req, res) => {

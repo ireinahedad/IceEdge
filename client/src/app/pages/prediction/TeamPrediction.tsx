@@ -14,7 +14,8 @@ import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { PlayerPropGrid } from "./PlayerPropGrid";
-import { MLProps, MktGroup, RuleFactor } from "./gameMarkets";
+import { BetOpt, MLProps, MktGroup, RuleFactor, mlBundleKey } from "./gameMarkets";
+import { fetchGameMlBundle, type GameMlBundle, type MLPredictionResult } from "../../components/MLPredictionCard";
 import { BetOddsCtx, GameSelector, LoadingSkeleton, NotFound, RevealMode, RevealModeCtx, StatsBanner, useGameOdds, useSelectedGame, useUpcomingGames } from "./predictionShared";
 
 
@@ -94,6 +95,21 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
     data ? { abbr: data.abbr, name: teamNames[data.abbr.toUpperCase()] ?? data.name } : undefined,
     oppAbbr && teamNames[oppAbbr] ? { abbr: oppAbbr, name: teamNames[oppAbbr] } : undefined,
   );
+
+  // Paquet ML du match choisi — UNE requête pour toutes les tuiles de la page,
+  // à la bascule en mode ML (`GET /api/predict/game/:id/bundle`, partagé avec
+  // la page du match). Sans match choisi, il n'y a pas d'adversaire : aucune
+  // tuile de match n'a de chiffre ML.
+  const [mlBundle, setMlBundle] = useState<GameMlBundle | null | undefined>(undefined);
+  const bundleGameId = selectedGame?.id;
+  useEffect(() => {
+    if (revealMode !== "ml") return;
+    if (!bundleGameId) { setMlBundle(null); return; }
+    let alive = true;
+    setMlBundle(undefined);
+    fetchGameMlBundle(bundleGameId).then(b => { if (alive) setMlBundle(b); });
+    return () => { alive = false; };
+  }, [revealMode, bundleGameId]);
 
   if (loading) return <LoadingSkeleton />;
   if (!data) return <NotFound />;
@@ -311,6 +327,52 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
         return [g];
       });
 
+  // ── Chiffre ML de chaque tuile, lu dans le paquet par la QUESTION posée ──
+  //
+  // Les tuiles de cette page ne sont pas celles de la page match : on les
+  // retrouve par leur marché (`mlBundleKey`), pas par leur identifiant. Les
+  // tuiles locales disent explicitement la question qu'elles posent ; les
+  // tableaux venus du serveur la portent dans leur `mlProps`, déjà recalé sur
+  // le vrai match (`adaptMl`).
+  const teamHome = selectedGame?.isHome ?? true;
+  const LOCAL_KEYS: Record<string, [string, number | null, string | null, boolean]> = {
+    "t-win":        ["moneyline", null, null, teamHome],
+    "t-lose":       ["moneyline", null, null, !teamHome],
+    "t-ml-ot":      ["game_to_ot", null, "yes", true],
+    "t-cs":         ["clean_sheet", null, "yes", teamHome],
+    "t-btts":       ["both_teams_score", null, "yes", true],
+    "t-pp-goal":    ["team_pp_goals", null, "yes", teamHome],
+    "t-pk":         ["team_penalty_kill", null, "yes", teamHome],
+    "t-w1":         ["winning_margin", null, "1", teamHome],
+    "t-w2":         ["winning_margin", null, "2", teamHome],
+    "t-w3":         ["winning_margin", null, "3+", teamHome],
+    "t-pl-fav":     ["puck_line", -1.5, null, teamHome],
+    "t-pl-dog":     ["puck_line", -1.5, "no", !teamHome],
+    "t-team-over":  ["team_total_goals", 2.5, "over", teamHome],
+    "t-team-under": ["team_total_goals", 2.5, "under", teamHome],
+    "t-p1":         ["period1_winner", null, null, teamHome],
+    "t-p2":         ["period2_winner", null, null, teamHome],
+    "t-p3":         ["period3_winner", null, null, teamHome],
+  };
+  const mlFor = (o: BetOpt): MLPredictionResult | null | undefined => {
+    if (mlBundle === undefined) return undefined;
+    if (mlBundle === null) return null;
+    const local = LOCAL_KEYS[o.id];
+    if (local) return mlBundle.byKey[mlBundleKey(...local)] ?? null;
+    const m = o.mlProps;
+    if (!m?.propType || m.type !== "game") return null;
+    return mlBundle.byKey[mlBundleKey(m.propType, m.line, m.selection, m.isHome !== false)] ?? null;
+  };
+  const groupsWithMl: MktGroup[] = shownGroups.map(g => ({
+    ...g,
+    options: g.options.map(o => {
+      // `mlBundleKey` lit un résultat de TUILE : un pari « +x » est déclaré
+      // comme le « −x » adverse côté « non ». Le paquet renvoie déjà le côté
+      // demandé — rien à inverser ici.
+      return { ...o, mlExternal: true, mlPreset: mlFor(o) };
+    }),
+  }));
+
   return (
     <div className="flex flex-col gap-3">
       {/* Which game these bets are for — next game by default */}
@@ -346,7 +408,7 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
       <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
       <BetOddsCtx.Provider value={odds}>
         <RevealModeCtx.Provider value={revealMode}>
-          {shownGroups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
+          {groupsWithMl.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
 
           {/* Paris joueur du club, en grille — le match sélectionné les suit,
               pour qu'ils se règlent sur cette affiche. */}

@@ -16,6 +16,7 @@ import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { PlayerPropGrid } from "./PlayerPropGrid";
 import { LiveGameView, MLProps, MktGroup, buildGameGroups } from "./gameMarkets";
+import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
 import { BetOddsCtx, HeadToHead, NotFound, RevealMode, RevealModeCtx, StatsBanner, useGameOdds } from "./predictionShared";
 
 
@@ -31,6 +32,17 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [revealMode, setRevealMode] = useState<RevealMode>("rules");
+
+  // Prédictions ML de TOUTES les tuiles du match, en une requête — chargées à
+  // la première bascule en mode ML seulement. `undefined` = pas encore là,
+  // `null` = indisponible. Voir `fetchGameMlBundle`.
+  const [mlBundle, setMlBundle] = useState<GameMlBundle | null | undefined>(undefined);
+  useEffect(() => {
+    if (revealMode !== "ml") return;
+    let alive = true;
+    fetchGameMlBundle(gameId).then(b => { if (alive) setMlBundle(b); });
+    return () => { alive = false; };
+  }, [revealMode, gameId]);
 
   useEffect(() => {
     async function load() {
@@ -124,11 +136,22 @@ export function GamePrediction({ gameId }: { gameId: string }) {
       : localGroups;
     // Stamp the game id onto every option's mlProps — without it, a bet placed
     // from this page can never be looked up for automatic settlement.
+    //
+    // Chiffre ML : celui du PAQUET du match, jamais un appel par tuile
+    // (`mlExternal`). Tuile absente du paquet — repli client avant la réponse
+    // du serveur, ou marché que le modèle ne price pas — → « — ».
+    const mlPresetFor = (id: string) =>
+      mlBundle === undefined ? undefined : mlBundle === null ? null : (mlBundle.byId[id] ?? null);
     return mergedGroups.map(g => ({
       ...g,
-      options: g.options.map(o => (o.mlProps ? { ...o, mlProps: { ...o.mlProps, gameId } } : o)),
+      options: g.options.map(o => ({
+        ...o,
+        ...(o.mlProps ? { mlProps: { ...o.mlProps, gameId } } : {}),
+        mlExternal: true,
+        mlPreset: mlPresetFor(o.id),
+      })),
     }));
-  }, [gameView, apiGroups, gameId]);
+  }, [gameView, apiGroups, gameId, mlBundle]);
 
   // Cotes du livre réglé, chargées une fois pour toute la page et distribuées
   // par contexte : le flux est servi PAR MATCH, donc une requête par tuile

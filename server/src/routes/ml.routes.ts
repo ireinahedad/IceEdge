@@ -28,6 +28,7 @@ import {
   buildRealFactors,
 } from "../services/predictionEngine";
 import { mlApiClient } from "../services/mlApiClient";
+import { getGameMlBundle } from "../services/gameMlBundle";
 import { fetchGameById } from "../services/nhlApiClient";
 import {
   buildGameFeatures,
@@ -854,6 +855,29 @@ router.post('/ml', predictLimiter, validateBody(predictMlSchema), async (req: Re
     // masque simplement la section sur un 503 — et le message complet part
     // maintenant dans les journaux, où il sert vraiment.
     logger.warn({ err: err.message }, '[predict/ml] ML service unavailable');
+    res.status(503).json({ error: 'ML service unavailable' });
+  }
+});
+
+// GET /api/predict/game/:gameId/bundle
+//
+// Les prédictions ML de TOUTES les tuiles d'un match, en une requête. Remplace,
+// sur la page d'un match, les ~95 `POST /predict/ml` qu'y tirait le mode ML (et
+// les 429 qui s'ensuivaient). Calcul mis en cache 10 min par match, pour tout
+// le monde — voir `gameMlBundle.ts`. Même réponse pour tout visiteur : un cache
+// partagé (CDN) peut la servir.
+router.get('/game/:gameId/bundle', predictLimiter, async (req: Request, res: Response) => {
+  const { gameId } = req.params;
+  if (!/^\d{6,12}$/.test(gameId)) return res.status(400).json({ error: 'invalid gameId' });
+  try {
+    const bundle = await getGameMlBundle(gameId);
+    res.set('Cache-Control', 'public, max-age=120, stale-while-revalidate=600');
+    res.json(bundle);
+  } catch (err: any) {
+    if (err?.status === 404) return res.status(404).json({ error: 'Game not found' });
+    // Service ML en panne, disjoncteur ouvert, ou match sans aucune donnée
+    // (422 du service) : le client affiche « — » sur les tuiles.
+    logger.warn({ err: err?.message, gameId }, '[predict/game/bundle] ML bundle unavailable');
     res.status(503).json({ error: 'ML service unavailable' });
   }
 });

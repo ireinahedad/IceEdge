@@ -23,6 +23,7 @@ Accès : /predict/*, /features et /reports exigent l'en-tête `X-ML-Token` (= ML
 
 from __future__ import annotations
 import copy
+import re
 import hmac
 import json
 import math
@@ -548,6 +549,49 @@ def _try_load_models():
 
 _try_load_models()
 
+
+# ── Modèle JOUEUR (train_player.py) ───────────────────────────────────────────
+#
+# Un booster `count:poisson` par statistique de patineur, et l'état de chaque
+# joueur après son dernier match (`player_state.json`). Absents = le service
+# ne renvoie simplement pas de cadences joueur, et Node garde sa règle.
+_player_models: dict[str, "xgb.Booster"] = {}
+_player_feats: list[str] = []
+_player_k: dict[str, float | None] = {}
+_player_state: dict = {}
+_PLAYER_TEAM_COLS = ["gf_s", "ga_s", "xgf60_s", "xga60_s", "sog_f_s", "sog_a_s", "ev_xgf60_s",
+                     "ev_xga60_s", "pp_xgf60_s", "pk_xga60_s", "goalie_svpct", "goalie_gsax60", "win_s"]
+
+
+def _load_player_model() -> None:
+    global _player_models, _player_feats, _player_k, _player_state
+    rep_path = os.path.join(MODELS_DIR, "player_report.json")
+    st_path = os.path.join(MODELS_DIR, "player_state.json")
+    if not (os.path.exists(rep_path) and os.path.exists(st_path)):
+        print("[ML] ℹ️  Pas de modèle joueur — lance : python train_player.py")
+        return
+    try:
+        with open(rep_path) as fh:
+            rep = json.load(fh)
+        models = {}
+        for stat in rep["stats"]:
+            b = xgb.Booster()
+            b.load_model(os.path.join(MODELS_DIR, "player", f"{stat}.json"))
+            models[stat] = b
+        with open(st_path) as fh:
+            state = json.load(fh)
+        _player_models, _player_feats, _player_state = models, list(rep["features"]), state
+        # k « infini » (≥ 1e4) = Poisson : `None` côté API.
+        _player_k = {s: (None if v["k"] >= 1e4 else float(v["k"])) for s, v in rep["stats"].items()}
+        print(f"[ML] ✅ modèle joueur : {len(models)} stats, "
+              f"{len(state.get('players', {}))} joueurs (état au {state.get('as_of')})")
+    except Exception as e:
+        _player_models, _player_feats, _player_k, _player_state = {}, [], {}, {}
+        print(f"[ML] ⚠️  modèle joueur illisible : {e} — cadences joueur désactivées")
+
+
+_load_player_model()
+
 # Set once the model-load attempt has completed. The readiness probe gates on
 # this so the orchestrator only routes traffic after init (models loaded, or
 # fallback confirmed). Load is synchronous at import, so this is True by the
@@ -847,7 +891,7 @@ def _is_negative_side(f: GameFeatures) -> bool:
     return (f.selection or "").strip().lower() in _NEGATIVE_SELECTIONS
 
 
-def _p_both_score(dist: "ScoreDistribution") -> float:
+def _p_both_score(dist: "ScoreDistribution", line: float = 0.5) -> float:
     """P(les deux équipes marquent ≥1), lue sur la matrice jointe des scores.
 
     Inclusion-exclusion sur la première ligne et la première colonne de `M`
@@ -871,9 +915,55 @@ def _p_both_score(dist: "ScoreDistribution") -> float:
     match complet telle quelle.
     """
     M = dist.M
+    if line > 0.5:
+        # « Les deux marquent 2+ / 3+ » : les deux indices au-dessus de la
+        # ligne. Même remarque pour la prolongation : un nul k–k finit
+        # (k+1)–k, le perdant reste à k — le verdict ne change pas.
+        idx = np.arange(M.shape[0])
+        return float(M[np.ix_(idx > line, idx > line)].sum())
     p_home_blank = float(M[0, :].sum())
     p_away_blank = float(M[:, 0].sum())
     return float(1.0 - p_home_blank - p_away_blank + float(M[0, 0]))
+
+
+def _final_grid(dist: "ScoreDistribution") -> np.ndarray:
+    """Loi du score FINAL vue du sujet : chaque nul k–k après 60 minutes
+    devient (k+1)–k ou k–(k+1) selon qui gagne la prolongation. C'est le score
+    que règle `game.homeTeam.score`."""
+    M = dist.M
+    n = M.shape[0]
+    F = np.zeros((n + 1, n + 1))
+    F[:n, :n] = np.where(dist._tie, 0.0, M)
+    p = dist.p_ot_home
+    for k in range(n):
+        F[k + 1, k] += M[k, k] * p
+        F[k, k + 1] += M[k, k] * (1.0 - p)
+    return F
+
+
+def _p_cover(dist: "ScoreDistribution", handicap: float) -> float:
+    """P(sujet + handicap > adversaire), score final — puck line à toute ligne."""
+    F = _final_grid(dist)
+    idx = np.arange(F.shape[0])
+    margin = idx[:, None] - idx[None, :]
+    return float(F[margin + handicap > 0].sum())
+
+
+def _skellam_lead(lam_s: float, lam_o: float) -> tuple[float, float]:
+    """(P(le sujet mène), P(égalité)) pour deux Poisson indépendantes."""
+    ps = [poisson_pmf(k, lam_s) for k in range(16)]
+    po = [poisson_pmf(k, lam_o) for k in range(16)]
+    lead = draw = 0.0
+    for i, a in enumerate(ps):
+        for j, b in enumerate(po):
+            if i > j:    lead += a * b
+            elif i == j: draw += a * b
+    return lead, draw
+
+
+# Part CUMULÉE des buts d'un match à la fin de chaque période (moyennes NHL,
+# mêmes constantes que `PERIOD_DIST` côté Node).
+_PERIOD_CUM = {1: 0.305, 2: 0.67}
 
 
 # ── Écart de victoire / période la plus prolifique ────────────────────────────
@@ -1058,6 +1148,63 @@ def _apply_score_model(market: str, f: GameFeatures,
     """
     lh, la = dist.lam_home, dist.lam_away
 
+    # ── Variantes des tableaux de la page match (sept. 2026) ────────────────
+    #
+    # Toutes lues sur la loi jointe, vue du SUJET (`dist` est déjà tournée).
+
+    # Puck line à une autre ligne que −1.5 (−2.5, −3.5). `line` = handicap du
+    # sujet, comme au règlement.
+    if market == "puck_line" and f.line is not None and abs(f.line + 1.5) > 1e-9:
+        p = _p_cover(dist, f.line)
+        return p, 0.85, (f"P(sujet {f.line:+.1f} couvre) = {int(p * 100)}% sur le score "
+                         f"final (λ={lh:.2f}/{la:.2f}).")
+
+    # Les deux marquent 2+ / 3+.
+    if market == "both_teams_score" and f.line is not None and f.line > 0.5:
+        p = _p_both_score(dist, f.line)
+        return p, 0.85, (f"Matrice jointe λ={lh:.2f}/{la:.2f} → les deux marquent "
+                         f"{int(f.line + 0.5)}+ : {int(p * 100)}%.")
+
+    # Score exact. `selection` = « h-a » dans l'ordre DOMICILE–VISITEUR du
+    # match, ou `home_other` / `away_other` (ce camp gagne avec 5 buts ou plus).
+    if market == "correct_score":
+        sel = (f.selection or "").strip().lower()
+        F = _final_grid(dist)                  # vue du sujet
+        m = re.match(r"^(\d{1,2})-(\d{1,2})$", sel)
+        if m:
+            h, a = int(m.group(1)), int(m.group(2))
+            s_goals, o_goals = (h, a) if f.subject_is_home else (a, h)
+            if s_goals >= F.shape[0] or o_goals >= F.shape[0]:
+                return 0.0, 0.70, "Score hors de la grille du modèle."
+            p = float(F[s_goals, o_goals])
+            return p, 0.70, (f"Score final {h}-{a} : {p * 100:.1f}% "
+                             f"(λ={lh:.2f}/{la:.2f}, prolongation comprise).")
+        if sel in ("home_other", "away_other"):
+            winner_is_subject = (sel == "home_other") == f.subject_is_home
+            idx = np.arange(F.shape[0])
+            s_i, o_i = idx[:, None], idx[None, :]
+            mask = ((s_i > o_i) & (s_i >= 5)) if winner_is_subject else ((o_i > s_i) & (o_i >= 5))
+            p = float(F[mask].sum())
+            return p, 0.70, f"Victoire avec 5 buts ou plus : {p * 100:.1f}%."
+        return None
+
+    # Qui MÈNE après la période N (buts cumulés), ou égalité (`draw`).
+    # 3e période = résultat en 60 minutes, égalité = prolongation.
+    pm = re.match(r"^period([123])_winner$", market)
+    if pm:
+        n = int(pm.group(1))
+        is_draw = (f.selection or "").strip().lower() in ("draw", "tie")
+        if n == 3:
+            p_draw = dist.p_regulation_tie()
+            p_lead = float(dist.M[dist._margin > 0].sum())
+        else:
+            frac = _PERIOD_CUM[n]
+            p_lead, p_draw = _skellam_lead(lh * frac, la * frac)
+        p = p_draw if is_draw else p_lead
+        what = "égalité" if is_draw else "le sujet mène"
+        return p, 0.74, (f"Après la période {n} ({what}) : {int(p * 100)}% — buts "
+                         f"cumulés, λ du modèle de score ({lh:.2f}/{la:.2f}).")
+
     if market == "moneyline":
         p = dist.p_home_win()
         return p, 1.00, (f"Modèle de score λ={lh:.2f}/{la:.2f} → domicile "
@@ -1098,6 +1245,15 @@ def _apply_score_model(market: str, f: GameFeatures,
     if market == "game_to_ot":
         p = dist.p_regulation_tie()
         return p, 0.90, f"P(nul après 60 minutes) = {int(p * 100)}%."
+
+    if market == "ot_so_winner":
+        # « Le sujet gagne en prolongation ou en fusillade », SANS condition :
+        # P(nul après 60 min) × P(le sujet gagne la prolongation). Les tuiles
+        # « in OT/SO » de Match Betting ; leurs deux moitiés somment à
+        # `game_to_ot`.
+        p = dist.p_regulation_tie() * dist.p_ot_home
+        return p, 0.80, (f"P(nul après 60 min) {dist.p_regulation_tie():.0%} × "
+                         f"P(le sujet gagne la prolongation) {dist.p_ot_home:.0%} = {int(p * 100)}%.")
 
     if market == "both_teams_score":
         p = _p_both_score(dist)
@@ -1159,6 +1315,8 @@ def _score_market_fn(market: str, f: GameFeatures):
     if market == "moneyline":
         return lambda d: d.p_home_win()
     if market == "puck_line":
+        if line is not None and abs(line + 1.5) > 1e-9:
+            return lambda d: _p_cover(d, line)
         return lambda d: d.p_home_cover_minus_15()
     if market == "alt_puck_line":
         return lambda d: float(d.M[d._margin >= 3].sum())
@@ -1175,6 +1333,8 @@ def _score_market_fn(market: str, f: GameFeatures):
         return lambda d: float(d.M[d._margin > 0].sum())
     if market == "game_to_ot":
         return lambda d: d.p_regulation_tie()
+    if market == "ot_so_winner":
+        return lambda d: d.p_regulation_tie() * d.p_ot_home
     if market == "ot_winner":
         # σ est invariant par complément, donc la même fonction sert les deux
         # camps — les membres de l'ensemble restent orientés domicile.
@@ -1182,6 +1342,8 @@ def _score_market_fn(market: str, f: GameFeatures):
     if market == "both_teams_score":
         # σ est invariant par complément (écart-type de 1−X = écart-type de X),
         # donc la même fonction sert les deux côtés du marché.
+        if line is not None and line > 0.5:
+            return lambda d: _p_both_score(d, line)
         return _p_both_score
     return None
 
@@ -1208,7 +1370,10 @@ def _apply_market(
         exact = _apply_score_model(market, f, dist)
         if exact is not None:
             p, conf, expl = exact
-            return clamp(p, 0.02, 0.98), conf, expl
+            # Score exact : une case vaut souvent moins de 2 % — le plancher
+            # habituel la triplerait et la ligne ne sommerait plus à 100.
+            lo = 0.0 if market == "correct_score" else 0.02
+            return clamp(p, lo, 0.98), conf, expl
 
     total_lam = lam_home + lam_away
     line = f.line if f.line is not None else 5.5
@@ -1375,7 +1540,10 @@ def _apply_market(
         # calcul en donne 46 %. Mêmes formule et constante que
         # `predictionEngine.ts` et `nhlPredictions.ts` : trois moteurs, un seul
         # chiffre pour un même match.
-        pp = f.home_pp_pct if f.home_pp_pct is not None else LEAGUE_PP_PCT
+        # Le PP% du SUJET — `home_pp_pct` pour tous les sujets donnait au
+        # visiteur l'avantage numérique de l'équipe à domicile.
+        pp_raw = f.home_pp_pct if f.subject_is_home else f.away_pp_pct
+        pp = pp_raw if pp_raw is not None else LEAGUE_PP_PCT
         prob = clamp(1.0 - math.exp(-PP_OPPORTUNITIES * (pp / 100.0)), 0.05, 0.95)
         conf = 0.70
         expl = (f"PP {pp:.1f}% sur ~{PP_OPPORTUNITIES} occasions → "
@@ -1386,7 +1554,8 @@ def _apply_market(
         # servait la probabilité moneyline sous le nom « tue toutes ses
         # pénalités ». Tuer UNE pénalité à 80 % ne fait pas une soirée parfaite
         # à 80 % — il faut réussir les ~3,1 fois.
-        pk = f.home_pk_pct if f.home_pk_pct is not None else LEAGUE_PK_PCT
+        pk_raw = f.home_pk_pct if f.subject_is_home else f.away_pk_pct
+        pk = pk_raw if pk_raw is not None else LEAGUE_PK_PCT
         prob = clamp(math.pow(pk / 100.0, PP_OPPORTUNITIES), 0.05, 0.95)
         conf = 0.70
         expl = (f"PK {pk:.1f}% ^ {PP_OPPORTUNITIES} occasions = "
@@ -1622,8 +1791,18 @@ def _build_score_ensemble(dist: "ScoreDistribution | None") -> "ScoreEnsemble | 
         return None
 
 
-@app.post("/predict/game", response_model=MLResponse, dependencies=_PROTECTED)
-def predict_game(f: GameFeatures) -> MLResponse:
+def _game_context(f: GameFeatures) -> dict:
+    """Tout ce qui ne dépend QUE du match — features, modèles, λ, P(victoire).
+
+    Séparé du prix d'un marché (`_price_game_market`) pour que le paquet d'un
+    match (`/predict/game/bundle`) ne construise les features et ne fasse
+    tourner les modèles qu'UNE fois pour ses ~95 marchés. `predict_game` fait
+    exactement les deux étapes à la suite : sa réponse est inchangée.
+
+    Rien ici ne lit `market_type`, `line`, `selection` ni `subject_is_home`
+    (hors message d'erreur de `_require_evidence`) : le contexte est commun à
+    tous les marchés du match.
+    """
     # 0. A-t-on la moindre donnée sur ce match ?
     #
     # C'EST LE GARDE-FOU LE PLUS PROFOND DE CE FICHIER. Tous les champs de
@@ -1913,6 +2092,48 @@ def predict_game(f: GameFeatures) -> MLResponse:
         # ni client.
         model_version = "score-nhl-v1.0"
 
+    return {
+        "feat_values": feat_values,
+        "score_dist": score_dist, "base_prob": base_prob, "win_diff": win_diff,
+        "gf_diff": gf_diff, "form_diff": form_diff,
+        "lam_home": lam_home, "lam_away": lam_away,
+        "model_type": model_type, "model_version": model_version, "fi_list": fi_list,
+        "p_score_model": p_score_model, "p_clf": p_clf,
+        # Ensemble bootstrap construit à la demande, UNE fois, orienté domicile.
+        "_ens": None, "_ens_built": False,
+    }
+
+
+def _home_ensemble(ctx: dict):
+    """Ensemble bootstrap du match, orienté DOMICILE, construit une seule fois.
+
+    L'ancien code le reconstruisait à chaque requête à partir de la
+    distribution DÉJÀ tournée vers le sujet : pour un sujet visiteur, les λ des
+    membres restaient orientés domicile alors que `p_ot_home` était inversé, et
+    σ mesurait un mélange des deux orientations. Ici les membres restent côté
+    domicile, et chaque marché est lu à travers `_subject_view`.
+    """
+    if not ctx["_ens_built"]:
+        ctx["_ens"] = _build_score_ensemble(ctx["score_dist"])
+        ctx["_ens_built"] = True
+    return ctx["_ens"]
+
+
+def _price_game_market(ctx: dict, f: GameFeatures) -> MLResponse:
+    """Prix d'UN marché à partir du contexte du match."""
+    score_dist    = ctx["score_dist"]
+    base_prob     = ctx["base_prob"]
+    win_diff      = ctx["win_diff"]
+    gf_diff       = ctx["gf_diff"]
+    form_diff     = ctx["form_diff"]
+    lam_home      = ctx["lam_home"]
+    lam_away      = ctx["lam_away"]
+    model_type    = ctx["model_type"]
+    model_version = ctx["model_version"]
+    fi_list       = ctx["fi_list"]
+    p_score_model = ctx["p_score_model"]
+    p_clf         = ctx["p_clf"]
+
     # ── Point de vue du SUJET ────────────────────────────────────────────────
     # `home_team`/`away_team` décrivent le match ; `subject_is_home` dit de quel
     # côté est la question. Tout ce qui suit est exprimé pour le sujet : la
@@ -1937,33 +2158,24 @@ def predict_game(f: GameFeatures) -> MLResponse:
         )
 
     # 4quater. Côté « non » d'un marché binaire (cf. `_BINARY_MARKETS`). Le
-    #          complément est pris APRÈS `_apply_market`, donc après son clamp :
-    #          une probabilité déjà bornée à [0.05, 0.95] le reste une fois
-    #          inversée. La confiance, elle, ne change pas — c'est la même
-    #          question posée à l'envers, le modèle n'en sait ni plus ni moins.
+    #          complément est pris APRÈS `_apply_market`, donc après son clamp.
     if _is_negative_side(f):
         prob = 1.0 - prob
         explanation = f"Côté « non » = 100 − P(oui). {explanation}"
 
-    # 5. Incertitude d'estimation (P4) — σ sur le marché effectivement servi
+    # 5. Incertitude d'estimation (P4) — σ sur le marché effectivement servi,
+    #    lu sur les membres de l'ensemble vus du côté du sujet.
     prob_std = uncertainty = None
-    ens = _build_score_ensemble(score_dist)
-    market_fn = _score_market_fn(f.market_type, f) if ens is not None else None
+    market_fn = _score_market_fn(f.market_type, f) if score_dist is not None else None
+    ens = _home_ensemble(ctx) if market_fn is not None else None
     if ens is not None and market_fn is not None:
-        _, sd = ens.spread(market_fn)
+        fn = market_fn if f.subject_is_home else (lambda d, _fn=market_fn: _fn(_subject_view(d, False)))
+        _, sd = ens.spread(fn)
         if np.isfinite(sd):
             prob_std = round(sd * 100.0, 2)      # en points de pourcentage
             uncertainty = round(min(1.0, sd / _score_sigma_max), 4)
 
-    # 6. Confidence = force du signal × multiplicateur du marché
-    #    Depuis S4 ③, la force vient de |λ_dom − λ_ext| replacé dans la
-    #    distribution d'entraînement ; les trois écarts de statistiques
-    #    d'équipe ne servent plus que de repli. Voir `_confidence_from_lambdas`
-    #    pour le raisonnement, et pourquoi c'est sans effet sur le tri des paris.
-    #
-    #    σ (incertitude d'ESTIMATION du prix) reste un champ à part,
-    #    `probability_std` / `uncertainty` : ce n'est pas la même grandeur et
-    #    elle n'entre toujours pas dans cette jauge.
+    # 6. Confidence = force du signal × multiplicateur du marché (cf. S4 ③).
     base_conf = _confidence_from_lambdas(score_dist)
     if base_conf is None:
         magnitude = abs(win_diff) * 2 + abs(gf_diff) / 3 + abs(form_diff)
@@ -1983,6 +2195,123 @@ def predict_game(f: GameFeatures) -> MLResponse:
                                  else int(round(p_score_model * 100))),
         probability_classifier=(None if p_clf is None
                                 else int(round(p_clf * 100))),
+    )
+
+
+@app.post("/predict/game", response_model=MLResponse, dependencies=_PROTECTED)
+def predict_game(f: GameFeatures) -> MLResponse:
+    return _price_game_market(_game_context(f), f)
+
+
+# ── Paquet d'un match : tous ses marchés en UNE requête ───────────────────────
+#
+# La page d'un match affiche ~95 tuiles. Chacune faisait sa requête : Node
+# reconstruisait les features du match, ce service refaisait tourner le
+# classifieur, le modèle de score et l'ensemble bootstrap — pour les MÊMES λ à
+# chaque fois, seule la dernière ligne (la lecture du marché) changeant. Avec
+# 2 workers et une limite de 60 requêtes/minute côté Node, la moitié des tuiles
+# finissait en 429 et en « — ».
+#
+# Ici : un contexte, N lectures. Un marché qu'on ne sait pas pricer rend `null`
+# pour SA case, sans faire échouer le paquet.
+
+def _player_rates(ctx: dict, f: GameFeatures, home_ids: list[str], away_ids: list[str]) -> dict:
+    """Cadence par match de chaque joueur des deux alignements, pour CE match.
+
+    L'état du joueur (rôle, talent, coéquipiers) vient de `player_state.json` ;
+    le contexte (forces des deux équipes, gardiens, repos) vient des MÊMES
+    features que le modèle de score, déjà calculées pour le paquet. Aucun appel,
+    aucune lecture en plus : un DMatrix de ~40 lignes par statistique.
+
+    Un joueur absent de l'état (recrue sans match LNH) est simplement omis —
+    Node lui garde la règle.
+    """
+    if not _player_models or not _player_state:
+        return {}
+    fv = ctx.get("feat_values") or {}
+    players = _player_state.get("players", {})
+    ids, rows = [], []
+    for side, other, pids in (("home", "away", home_ids), ("away", "home", away_ids)):
+        for pid in pids:
+            st = players.get(str(pid))
+            if not st:
+                continue
+            row = dict(st["f"])
+            row["is_home"] = 1 if side == "home" else 0
+            row["is_D"] = 1 if st.get("pos") == "D" else 0
+            row["b2b"] = float(getattr(f, f"{side}_b2b", 0) or 0)
+            row["days_rest"] = float(getattr(f, f"{side}_rest_days", 2) or 2)
+            for c in _PLAYER_TEAM_COLS:
+                row[f"tm_{c}"] = fv.get(f"{side}_{c}")
+                row[f"opp_{c}"] = fv.get(f"{other}_{c}")
+            ids.append(str(pid))
+            rows.append([np.nan if row.get(n) is None else float(row[n]) for n in _player_feats])
+    if not rows:
+        return {}
+    dmat = xgb.DMatrix(np.array(rows, dtype=np.float32), feature_names=_player_feats, missing=np.nan)
+    out: dict[str, dict[str, float]] = {i: {} for i in ids}
+    for stat, bst in _player_models.items():
+        for i, mu in zip(ids, bst.predict(dmat)):
+            out[i][stat] = round(float(mu), 4)
+    return out
+
+
+class BundlePlayers(BaseModel):
+    home: List[str] = Field(default_factory=list, max_length=60)
+    away: List[str] = Field(default_factory=list, max_length=60)
+
+
+class BundleMarket(BaseModel):
+    id: str = Field(..., max_length=64)
+    market_type: str = Field(..., max_length=40)
+    line: Optional[float] = None
+    selection: Optional[str] = Field(None, max_length=40)
+    subject_is_home: bool = True
+
+
+class GameBundleRequest(BaseModel):
+    features: GameFeatures
+    markets: List[BundleMarket] = Field(..., max_length=300)
+    # Identifiants NHL des deux effectifs : le paquet renvoie alors aussi les
+    # cadences du modèle joueur, dans la MÊME réponse.
+    players: Optional[BundlePlayers] = None
+
+
+class GameBundleResponse(BaseModel):
+    results: dict[str, Optional[MLResponse]]
+    lambda_home: Optional[float] = None
+    lambda_away: Optional[float] = None
+    # { playerId: { stat: cadence par match } } — modèle joueur.
+    player_rates: dict[str, dict[str, float]] = Field(default_factory=dict)
+    # k de la binomiale négative par stat ; `null` = Poisson.
+    player_dispersion: dict[str, Optional[float]] = Field(default_factory=dict)
+    player_model_as_of: Optional[str] = None
+
+
+@app.post("/predict/game/bundle", response_model=GameBundleResponse, dependencies=_PROTECTED)
+def predict_game_bundle(req: GameBundleRequest) -> GameBundleResponse:
+    ctx = _game_context(req.features)     # 422 si aucune donnée sur le match
+    results: dict[str, Optional[MLResponse]] = {}
+    for m in req.markets:
+        f = req.features.model_copy(update={
+            "market_type": m.market_type, "line": m.line,
+            "selection": m.selection, "subject_is_home": m.subject_is_home,
+        })
+        try:
+            results[m.id] = _price_game_market(ctx, f)
+        except HTTPException:
+            results[m.id] = None
+    dist = ctx["score_dist"]
+    rates = {}
+    if req.players is not None:
+        rates = _player_rates(ctx, req.features, req.players.home, req.players.away)
+    return GameBundleResponse(
+        results=results,
+        lambda_home=None if dist is None else round(dist.lam_home, 4),
+        lambda_away=None if dist is None else round(dist.lam_away, 4),
+        player_rates=rates,
+        player_dispersion=dict(_player_k) if rates else {},
+        player_model_as_of=_player_state.get("as_of") if rates else None,
     )
 
 # ── Player prop model ─────────────────────────────────────────────────────────

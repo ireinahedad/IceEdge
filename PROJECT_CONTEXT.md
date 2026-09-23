@@ -61,11 +61,69 @@ sait pas chiffrer rendent « — », voir `mlUnsupportedVariant` dans `ml.routes
    plus `/predict/ml`. Affichage « <3% » sous 3 % (`belowFloor`) ; plancher des
    règles de la grille ramené de 3 à 1. Premier buteur en ML = part des buts du
    match × P(au moins un but), au lieu de la requête « 1+ but ».
-   Reste à faire : tuiles de la page JOUEUR (toujours par appel), requête unique
-   par match pour les marchés d'équipe.
+   Reste à faire : tuiles de la page JOUEUR (toujours par appel).
+10. **Paquet ML d'un match** — `GET /api/predict/game/:id/bundle`
+   (`gameMlBundle.ts` → Python `POST /predict/game/bundle`). Toutes les tuiles
+   de la page match en UNE requête, calcul mis en cache 10 min par match pour
+   tout le monde (`TtlCache.wrap`, anti-stampede), `Cache-Control` public.
+   Python : `predict_game` scindé en `_game_context` (features + modèles, une
+   fois) et `_price_game_market` (lecture d'un marché) — réponse de
+   `/predict/game` inchangée, vérifiée identique au paquet sur 57 marchés.
+   Nouveaux marchés Python (loi jointe) : puck line à toute ligne, BTTS 2+/3+,
+   score exact, qui mène après P1/P2/P3 + égalité, `ot_so_winner`. Les tuiles
+   « in Reg » demandent `regulation_result` au modèle. σ lu sur l'ensemble
+   construit une fois, orienté domicile (corrige σ des sujets visiteurs).
+   Client : `GamePrediction` charge le paquet à la bascule ML, toutes les tuiles
+   `mlExternal` — plus aucun `/predict/ml` depuis la page match.
+   Déploiement : Python ET Node ensemble (le Node appelle `/predict/game/bundle`).
+11. **Pages équipe et joueur, même principe** — plus aucun `/predict/ml` par
+   tuile sur les trois pages de prédiction.
+   · Paquet de match : réponse `byKey` en plus de `results` (par tuile). Clé =
+     `mlBundleKey(marché, ligne, sélection, côté)` — JUMELLE client
+     (`gameMarkets.tsx`) / serveur (`gameMlBundle.ts`). Marchés « sans côté »
+     (totaux, BTTS, prolongation, score exact, égalité) toujours côté domicile.
+     Questions en double pricées une fois ; extras hors page match : victoire
+     toutes issues, blanchissage, AN, PK, écart du visiteur.
+   · Page équipe : paquet du match choisi, tuiles retrouvées par clé
+     (`LOCAL_KEYS` pour les tuiles locales ; « {équipe} Loses » = victoire de
+     l'adversaire, elle demandait la victoire de l'équipe). Sans match : « — ».
+   · Page joueur : `GET /predictions/player-rates/player/:id?game=` (fiche du
+     joueur : + minutes de pénalité, points en AN), seuils via `rateMath.ts`
+     (partagé avec les grilles). Gardien : victoire / blanchissage lus dans le
+     paquet du match. But en AN : pas de cadence par joueur → « — ».
+   · Python : `team_pp_goals` / `team_penalty_kill` lisent le PP%/PK% du SUJET
+     (le visiteur recevait ceux du domicile).
 
-Vérifié en sandbox Linux : `tsc` serveur + client, `vite build`, vitest 38/38
-fichiers (tests ajoutés dans `nhlPredictions.test.ts` et `settlement.service.test.ts`).
+12. **Modèle joueur** (`ml/python/train_player.py` → `ml/models/player/*.json`,
+   `player_state.json`, `player_report.json`). Un XGBoost `count:poisson` par
+   statistique de patineur (buts, passes, points, tirs, mises en échec, tirs
+   bloqués, minutes de pénalité, points en AN), entraîné sur les patineur-matchs
+   MoneyPuck 2010-2021, arrêt précoce sur 2022, test 2023-2025. Features
+   PRÉ-MATCH : temps de glace (5/10/30 matchs), temps en AN, production /60
+   (10/30/carrière, les 8 stats), xG individuel, xG des COÉQUIPIERS à 5c5 (proxy
+   des trios — MoneyPuck ne publie pas les trios par match), forces des deux
+   équipes + gardiens (mêmes colonnes que le modèle de score), domicile, repos.
+   Bat la règle sur les 8 stats (log-vraisemblance et Brier P(≥1), la règle
+   ayant son k optimal), calibré par décile (buts : 3.4 % prédit / 3.6 %
+   observé … 34.7 / 35.0). Vérifié : les features de `player_state.json`
+   (shift=0) sont IDENTIQUES à celles du match suivant à l'entraînement
+   (shift=1) — 40 joueurs testés, 0 écart.
+   · Servi par `/predict/game/bundle` (champ `players` → `player_rates`), donc
+     dans le paquet déjà chargé par la page : AUCUN appel en plus (~33 ms pour
+     71 joueurs). `playerRates.ts` remplace la règle joueur par joueur
+     (`source: 'model'`, dispersion `modelDispersion`).
+   · Règle conservée : gardiens, joueurs inconnus du modèle, page équipe sans
+     match choisi, service ML en panne.
+   · Dispersion de la RÈGLE recalée par vraisemblance (`k_rules`) : elle était
+     posée à la main et bien trop forte (buts 3 → 40), ce qui gonflait 2+ et 3+.
+   · ⚠️ L'état joueur date du dernier `fetch_data_v4.py` (2026-04-16, comme
+     `inference_state.json`). Après chaque mise à jour des données :
+     `python train_player.py --state-only` (quelques secondes ; entraînement
+     complet ~5 min).
+
+Vérifié en sandbox Linux : `tsc` serveur + client, `vite build`, vitest 39/39
+fichiers, 542 tests (ajouts : `nhlPredictions.test.ts`, `settlement.service.test.ts`,
+`gameMlBundle.test.ts`, `prediction/playerRates.test.ts`).
 Le repli client `buildGameGroups` (avant réponse serveur) garde l'ancien format.
 
 ## Session 2026-08-09 — Coupons publics réservés aux abonnés Pro

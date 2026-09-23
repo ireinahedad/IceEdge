@@ -26,6 +26,7 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { nhlApiService, type BoxscoreLine, type GameBoxscoreResponse, type PlayerRatesResponse, type RateStat } from "../../services/nhlApiService";
 import type { MLPredictionResult } from "../../components/MLPredictionCard";
 import { RevealModeCtx } from "./predictionShared";
+import { BELOW_FLOOR, dispersionFor, nbAtLeast, rateLabels } from "./rateMath";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { BetOption } from "./PredictionSheet";
@@ -186,26 +187,6 @@ function poissonAtLeast(lambda: number, k: number): number {
 }
 
 /**
- * P(X ≥ k) pour une binomiale négative de moyenne λ, dispersion `disp`
- * (`null` = Poisson). Sert au mode ML : une cadence par joueur, tous les
- * seuils de la ligne en découlent.
- */
-function nbAtLeast(lambda: number, k: number, disp: number | null): number {
-  if (k <= 0) return 1;
-  const lam = Math.max(1e-6, lambda);
-  let term: number, cdf: number;
-  if (disp == null || !Number.isFinite(disp)) {
-    term = Math.exp(-lam); cdf = term;
-    for (let i = 1; i < k; i++) { term *= lam / i; cdf += term; }
-  } else {
-    const q = lam / (disp + lam);
-    term = Math.pow(disp / (disp + lam), disp); cdf = term;
-    for (let n = 0; n < k - 1; n++) { term *= ((n + disp) / (n + 1)) * q; cdf += term; }
-  }
-  return Math.max(0, 1 - cdf);
-}
-
-/**
  * Cadences ML d'un match / d'un club — UNE requête partagée par toutes les
  * grilles de la page (sept grilles, deux alignements). La promesse est gardée
  * 5 min ; un échec n'est pas conservé.
@@ -225,8 +206,7 @@ function loadPlayerRates(scope: "game" | "team", id: string): Promise<PlayerRate
   return entry.p;
 }
 
-/** Sous ce pourcentage, une case de grille affiche « <3% ». */
-const BELOW_FLOOR = 3;
+
 
 /** Nom comparable : sans accents, sans casse, espaces réduits. */
 function normName(n: string | undefined): string {
@@ -476,12 +456,13 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
         const mlRate = rates === undefined ? undefined
           : rates === null ? null
           : (playerRates?.rates?.[spec.rateStat] ?? null);
-        const disp = rates?.dispersion?.[spec.rateStat] ?? null;
+        const disp = rates ? dispersionFor(rates, playerRates?.source, spec.rateStat) : null;
+        const labels = rateLabels(playerRates?.source);
         const preset = (pctValue: number, note: string): MLPredictionResult => ({
           probability: pctValue,
           confidence: null,
           feature_importances: [],
-          model_type: t("prop.mlModel"),
+          model_type: t(labels.model),
           explanation: note,
         });
 
@@ -517,7 +498,7 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
               : mlRate === null ? null
               : (() => {
                   const pv = Math.min(97, Math.round(nbAtLeast(mlRate, k, disp) * 100));
-                  return preset(pv, t("prop.mlNote", {
+                  return preset(pv, t(labels.note, {
                     rate: mlRate.toFixed(2), gp: String(playerRates?.gp ?? 0),
                     k: disp == null ? "∞" : String(disp), label: `${k}+`, pct: String(pv),
                   }));

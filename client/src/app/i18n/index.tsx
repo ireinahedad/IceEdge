@@ -813,6 +813,11 @@ const DICT: Record<string, { en: string; fr: string }> = {
     fr: "Part des buts du match ({rate}/match sur ~{game} attendus) × chance qu'il y ait au moins un but → {pct} %.",
   },
   "prop.mlModel":        { en: "Adjusted rate", fr: "Cadence ajustée" },
+  "prop.playerModel":    { en: "Player model", fr: "Modèle joueur" },
+  "prop.playerModelNote": {
+    en: "Player model (ice time, power-play time, linemates' xG, per-60 production, opponent): {rate}/game, k={k} → P({label}) = {pct}%.",
+    fr: "Modèle joueur (temps de glace, temps en avantage numérique, xG des coéquipiers, production par 60 min, adversaire) : {rate}/match, k={k} → P({label}) = {pct} %.",
+  },
   "prop.starterConfirmed": { en: "Tonight's goalie",    fr: "Gardien du match" },
   "prop.starterProbable":  { en: "Probable starter",    fr: "Partant probable" },
   "prop.allPlayers":     { en: "All players",           fr: "Tous les joueurs" },

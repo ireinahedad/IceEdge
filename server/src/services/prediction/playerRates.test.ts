@@ -23,6 +23,7 @@ const { roster } = vi.hoisted(() => ({
 }));
 
 vi.mock('../nhlApiClient', () => ({
+  fetchPlayerById: vi.fn(async () => ({ id: '1', name: 'Scorer', teamAbbr: 'MTL', position: 'R', gamesPlayed: 60, goals: 24, assists: 30, points: 54, shots: 170, hits: 40, blockedShots: 20, penaltyMinutes: 30, ppPoints: 15 })),
   fetchGameById: vi.fn(async () => ({ homeTeam: { abbreviation: 'MTL' }, awayTeam: { abbreviation: 'BOS' } })),
   fetchTeamRoster: vi.fn(async (a: string) => roster(a)),
   fetchTeamByAbbr: vi.fn(async (a: string) => (a === 'MTL'
@@ -31,7 +32,14 @@ vi.mock('../nhlApiClient', () => ({
   fetchTeamSummaryStats: vi.fn(async () => ({ MTL: { shotsForPg: 29, shotsAgainstPg: 31 }, BOS: { shotsForPg: 33, shotsAgainstPg: 28 } })),
 }));
 
-import { playerRatesForGame, DISPERSION } from './playerRates';
+// Paquet ML du match : le modèle joueur ne connaît que le joueur 2 (« Checker »).
+const bundle = vi.hoisted(() => ({ value: null as any }));
+vi.mock('../gameMlBundle', () => ({ getGameMlBundle: vi.fn(async () => {
+  if (!bundle.value) throw new Error('ML down');
+  return bundle.value;
+}) }));
+
+import { playerRatesForGame, playerRatesForPlayer, DISPERSION } from './playerRates';
 
 /** P(X ≥ k), binomiale négative — la même formule que le client. */
 function atLeast(lam: number, k: number, d: number | null): number {
@@ -80,5 +88,43 @@ describe('playerRatesForGame', () => {
     const s = r.players['1'];
     expect(s.firstGoal!).toBeLessThan(atLeast(s.rates.goals!, 1, DISPERSION.goals));
     expect(s.firstGoal!).toBeGreaterThan(r.players['2'].firstGoal!);
+  });
+
+  it('page joueur : pénalités et points en AN, adversaire du match choisi', async () => {
+    const withGame = await playerRatesForPlayer('1', '2026020001');
+    const noGame   = await playerRatesForPlayer('1');
+    const r = withGame.players['1'];
+    expect(r.rates.pim).toBeGreaterThan(0);
+    expect(r.rates.ppPoints).toBeGreaterThan(0);
+    // BOS concède 3.4 buts/match : ajusté au-dessus de la version sans match.
+    expect(r.rates.goals!).toBeGreaterThan(noGame.players['1'].rates.goals!);
+    expect(withGame.gameId).toBe('2026020001');
+    expect(noGame.gameId).toBeUndefined();
+  });
+
+  it('modèle joueur : remplace la règle pour les joueurs qu\'il connaît, pas pour les autres', async () => {
+    bundle.value = {
+      playerRates: { '2': { goals: 0.31, assists: 0.2, points: 0.5, shots: 2.2, hits: 1.4, blocks: 0.6, pim: 0.4, ppPoints: 0.05 },
+                     '5': { goals: 9 } },   // un gardien : ignoré
+      playerDispersion: { goals: null, shots: 20 }, playerModelAsOf: '2026-04-16',
+    };
+    const r = await playerRatesForGame('2026020001');
+    bundle.value = null;
+    expect(r.players['2'].source).toBe('model');
+    expect(r.players['2'].rates.goals).toBe(0.31);
+    expect(r.players['2'].rates.pim).toBe(0.4);           // absent de l'effectif, fourni par le modèle
+    expect(r.players['1'].source).toBe('rules');
+    expect(r.players['5'].source).toBe('rules');
+    expect(r.players['5'].rates.goals).toBeUndefined();
+    expect(r.modelDispersion).toEqual({ goals: null, shots: 20 });
+    // Premier buteur recalculé sur la cadence du modèle.
+    expect(r.players['2'].firstGoal!).toBeGreaterThan(0);
+  });
+
+  it('service ML en panne : la règle seule, sans erreur', async () => {
+    bundle.value = null;
+    const r = await playerRatesForGame('2026020001');
+    expect(Object.values(r.players).every(p => p.source === 'rules')).toBe(true);
+    expect(r.modelDispersion).toBeUndefined();
   });
 });

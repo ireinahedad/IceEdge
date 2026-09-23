@@ -103,12 +103,18 @@ export interface BoxscoreLine {
   /** Gardiens seulement. */
   saves?: number; shotsAgainst?: number; goalsAgainst?: number; decision?: string;
 }
-export type RateStat = "goals" | "assists" | "points" | "shots" | "hits" | "blocks" | "saves";
+export type RateStat = "goals" | "assists" | "points" | "shots" | "hits" | "blocks" | "saves" | "pim" | "ppPoints";
 export interface PlayerRatesResponse {
   gameId?: string;
   /** `k` de la binomiale négative par statistique ; `null` = Poisson. */
   dispersion: Record<RateStat, number | null>;
+  /** k du modèle joueur — pour les lignes `source: "model"`. `null` = Poisson. */
+  modelDispersion?: Partial<Record<RateStat, number | null>>;
+  /** Date des dernières données du modèle joueur. */
+  modelAsOf?: string | null;
   players: Record<string, {
+    /** `model` = modèle joueur (temps de glace, AN, coéquipiers, adversaire) ; `rules` = règle. */
+    source?: "model" | "rules";
     team: string; position: "F" | "D" | "G"; gp: number;
     rates: Partial<Record<RateStat, number>>;
     /** P(ouvre le score), 0–1. */
@@ -287,8 +293,9 @@ export const nhlApiService = {
    * Cadences des paris joueur (mode ML), pour les deux alignements d'un match
    * ou pour un club seul. Une requête par page — voir `playerRates.ts`.
    */
-  getPlayerRates: (scope: "game" | "team", id: string): Promise<PlayerRatesResponse> =>
-    get<PlayerRatesResponse>(`/predictions/player-rates/${scope}/${encodeURIComponent(id)}`),
+  getPlayerRates: (scope: "game" | "team" | "player", id: string, gameId?: string): Promise<PlayerRatesResponse> =>
+    get<PlayerRatesResponse>(`/predictions/player-rates/${scope}/${encodeURIComponent(id)}${
+      gameId ? `?game=${encodeURIComponent(gameId)}` : ""}`),
 
   /** Gardiens partants saisis pour un match : `{ TOR: "Joseph Woll", MTL: null }`. */
   getStartingGoalies: (gameId: string): Promise<Record<string, string | null>> =>

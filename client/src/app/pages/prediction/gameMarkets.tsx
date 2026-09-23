@@ -140,6 +140,27 @@ export interface MktTable {
 export interface MktGroup { id: string; title: string; cols: 2 | 3; options: BetOpt[]; tables?: MktTable[]; }
 
 /**
+ * Clé d'une QUESTION posée au modèle ML sur un match : marché, ligne,
+ * sélection, côté du sujet. Sert à retrouver un chiffre dans le paquet ML du
+ * match (`byKey`) depuis une page qui a ses propres tuiles (équipe, joueur).
+ *
+ * ⚠️ Jumelle de `mlBundleKey` côté serveur (`gameMlBundle.ts`) — même chaîne.
+ * Les marchés « sans côté » (totaux, les deux marquent, prolongation, score
+ * exact, égalité) prennent toujours le côté domicile.
+ */
+const SIDELESS = new Set([
+  "total_goals", "total_goals_over", "total_goals_under", "both_teams_score",
+  "game_to_ot", "period1_total_goals", "period2_total_goals", "period3_total_goals",
+  "correct_score",
+]);
+export function mlBundleKey(market: string, line: number | null | undefined,
+                            selection: string | null | undefined, subjectIsHome: boolean): string {
+  const sel = (selection ?? "").trim().toLowerCase();
+  const side = SIDELESS.has(market) || sel === "draw" ? "h" : (subjectIsHome ? "h" : "a");
+  return `${market}|${line ?? ""}|${sel}|${side}`;
+}
+
+/**
  * Le score de règles d'une tuile, facteurs et échelle compris.
  *
  * Une seule fonction pour la tuile ET pour la fiche ouverte : les deux la
