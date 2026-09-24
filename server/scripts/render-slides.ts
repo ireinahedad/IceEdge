@@ -414,6 +414,8 @@ async function matchBlock(m: any): Promise<string> {
  * intro_card — première carte des vidéos de récap : jour, date, puis les
  * affiches. Pas de bandeau en haut (la date y serait deux fois), pas de « @ ».
  * Une affiche seule s'affiche en grand ; au-delà de 8, deux colonnes.
+ * Une affiche qui porte `score` (night-long) montre le score final au centre,
+ * le vainqueur en blanc, OT / SO en petit dessous.
  */
 async function introBlock(intro: any): Promise<string> {
   if (!intro) return '';
@@ -421,9 +423,18 @@ async function introBlock(intro: any): Promise<string> {
   const size = games.length === 1 ? 'single' : games.length > 8 ? 'two' : 'one';
   const rows: string[] = [];
   for (const g of games) {
+    const sc = g.score;
+    const mid = sc
+      ? `<span class="in-score">`
+        + `<span class="in-nums"><em class="${sc.away > sc.home ? 'w' : ''}">${esc(sc.away)}</em>`
+        + `<i>-</i><em class="${sc.home > sc.away ? 'w' : ''}">${esc(sc.home)}</em></span>`
+        + (sc.tag ? `<small>${esc(sc.tag)}</small>` : '')
+        + `</span>`
+      : '';
     rows.push(
-      `<div class="in-row">`
+      `<div class="in-row${sc ? ' scored' : ''}">`
       + `<span class="in-team" style="--c:${matchColor(g.away)}">${logoImg(await teamLogo(g.away))}<b>${esc(g.away)}</b></span>`
+      + mid
       + `<span class="in-team r" style="--c:${matchColor(g.home)}"><b>${esc(g.home)}</b>${logoImg(await teamLogo(g.home))}</span>`
       + `</div>`,
     );

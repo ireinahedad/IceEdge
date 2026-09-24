@@ -16,7 +16,7 @@ import { useSport } from "../../context/SportContext";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { BetOpt, MktGroup, RuleFactor, mlBundleKey } from "./gameMarkets";
-import { GameSelector, LoadingSkeleton, NotFound, RevealMode, RevealModeCtx, StatsBanner, useSelectedGame, useUpcomingGames } from "./predictionShared";
+import { GameSelector, LoadingSkeleton, NotFound, RevealMode, RevealModeCtx, ServerGroupsPending, StatsBanner, useSelectedGame, useServerGroups, useUpcomingGames } from "./predictionShared";
 
 
 /* ─── Player Prediction ──────────────────────── */
@@ -30,7 +30,10 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
     ptsPerGame: number; ppPoints: number; shots: number; hits: number;
     blocks: number; toi: number; faceoffPct: number; penaltyMin: number;
   } | null>(null);
-  const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
+  // Marchés du moteur de règles, calculés par le serveur — les SEULS pourcentages
+  // « règles » de la page (voir `playerGroupsF`).
+  const { groups: apiGroups, failed: apiFailed, retry: retryApi } =
+    useServerGroups(() => nhlApiService.getPlayerPredictions(playerId), playerId);
   const [loading, setLoading] = useState(true);
   const [revealMode, setRevealMode] = useState<RevealMode>("rules");
 
@@ -69,7 +72,6 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
           faceoffPct: stats.faceoffWinPct ?? 0,
           penaltyMin: stats.penaltyMinutes ?? 0,
         });
-        nhlApiService.getPlayerPredictions(playerId).then(setApiGroups).catch(() => {});
         // The game itself is resolved by useUpcomingGames(data.team) above —
         // it looks 14 days ahead and feeds the dropdown, so this loader only
         // has to publish the player's team.
@@ -112,206 +114,83 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
   if (loading) return <LoadingSkeleton />;
   if (!data) return <NotFound />;
 
-  const gp  = data.gamesPlayed;
-  const gpg = data.goalsPerGame;
-  const apg = data.assistsPerGame;
-  const ppg = data.ptsPerGame;
-  const spg = data.shots / gp;
-  const hpg = data.hits  / gp;
-  const bpg = data.blocks / gp;
-  const isGoalie = data.position === "G";
+  // ── Tuiles = marchés du SERVEUR ──────────────────────────────────────────
+  //
+  // Jusqu'au 2026-09-24 la page construisait ses tuiles dans le navigateur,
+  // avec des lignes calées sur la moyenne du joueur et des pourcentages écrits
+  // en dur (tirs 52/48 et 38/62, mises en échec 52/48, arrêts 62/38 et 44/56,
+  // victoire du gardien 50, blanchissage 10). Le serveur n'y injectait que ses
+  // facteurs, jamais son chiffre.
+  //
+  // Désormais les tuiles SONT les options du serveur (`buildPlayerMarkets`),
+  // mêmes lignes, même pourcentage. Cette table n'ajoute que ce que le serveur
+  // ne porte pas : le libellé, le marché ML (cadences de `rateMath`, qui
+  // chiffrent n'importe quelle ligne) et le marché de règlement. Les paris
+  // over/under reçoivent leur côté « under », qui est le complément exact.
+  // Une option serveur absente de la table n'est pas affichée (ex. buts
+  // accordés du gardien : aucun marché de règlement).
+  const TILE: Record<string, {
+    label: string; propType: string; line: number;
+    settleMarket: string; settleSelection: "yes" | "over"; withUnder?: boolean;
+  }> = {
+    "g-anytime":  { label: "Anytime Goal Scorer", propType: "goals",    line: 0.5,  settleMarket: "anytime_goal",       settleSelection: "yes" },
+    "g-first":    { label: "First Goal Scorer",   propType: "goals",    line: 0.5,  settleMarket: "first_goal_scorer",  settleSelection: "yes" },
+    // anytime_goal se règle sur goals > line : la ligne 1.5 exige bien 2 buts.
+    "g-2plus":    { label: "Goals Over 1.5",      propType: "goals",    line: 1.5,  settleMarket: "anytime_goal",       settleSelection: "yes" },
+    "a-1plus":    { label: "Assists Over 0.5",    propType: "assists",  line: 0.5,  settleMarket: "assists_ou",         settleSelection: "over" },
+    "a-2plus":    { label: "Assists Over 1.5",    propType: "assists",  line: 1.5,  settleMarket: "assists_ou",         settleSelection: "over" },
+    "a-3plus":    { label: "Assists Over 2.5",    propType: "assists",  line: 2.5,  settleMarket: "assists_ou",         settleSelection: "over" },
+    "pts-1plus":  { label: "Points Over 0.5",     propType: "points",   line: 0.5,  settleMarket: "points_ou",          settleSelection: "over" },
+    "pts-2plus":  { label: "Points Over 1.5",     propType: "points",   line: 1.5,  settleMarket: "points_ou",          settleSelection: "over" },
+    "pts-3plus":  { label: "Points Over 2.5",     propType: "points",   line: 2.5,  settleMarket: "points_ou",          settleSelection: "over" },
+    "sog-o25":    { label: "Shots Over 2.5",      propType: "shots",    line: 2.5,  settleMarket: "shots_ou",           settleSelection: "over", withUnder: true },
+    "sog-o35":    { label: "Shots Over 3.5",      propType: "shots",    line: 3.5,  settleMarket: "shots_ou",           settleSelection: "over", withUnder: true },
+    "sog-o45":    { label: "Shots Over 4.5",      propType: "shots",    line: 4.5,  settleMarket: "shots_ou",           settleSelection: "over", withUnder: true },
+    "hits-o15":   { label: "Hits Over 1.5",       propType: "hits",     line: 1.5,  settleMarket: "hits_ou",            settleSelection: "over", withUnder: true },
+    "hits-o25":   { label: "Hits Over 2.5",       propType: "hits",     line: 2.5,  settleMarket: "hits_ou",            settleSelection: "over", withUnder: true },
+    "hits-o35":   { label: "Hits Over 3.5",       propType: "hits",     line: 3.5,  settleMarket: "hits_ou",            settleSelection: "over", withUnder: true },
+    "blk-o05":    { label: "Blocks Over 0.5",     propType: "blocks",   line: 0.5,  settleMarket: "blocked_shots_ou",   settleSelection: "over", withUnder: true },
+    "blk-o15":    { label: "Blocks Over 1.5",     propType: "blocks",   line: 1.5,  settleMarket: "blocked_shots_ou",   settleSelection: "over", withUnder: true },
+    "pp-point":   { label: "PP Point",            propType: "points",   line: 0.5,  settleMarket: "pp_point",           settleSelection: "yes" },
+    "pp-goal":    { label: "PP Goal",             propType: "goals",    line: 0.5,  settleMarket: "pp_goal",            settleSelection: "yes" },
+    "pim-o05":    { label: "PIM Over 0.5",        propType: "pim",      line: 0.5,  settleMarket: "penalty_minutes_ou", settleSelection: "over", withUnder: true },
+    "pim-o15":    { label: "PIM Over 1.5",        propType: "pim",      line: 1.5,  settleMarket: "penalty_minutes_ou", settleSelection: "over", withUnder: true },
+    "sv-o245":    { label: "Over 24.5 Saves",     propType: "saves",    line: 24.5, settleMarket: "goalie_saves_ou",    settleSelection: "over", withUnder: true },
+    "sv-o275":    { label: "Over 27.5 Saves",     propType: "saves",    line: 27.5, settleMarket: "goalie_saves_ou",    settleSelection: "over", withUnder: true },
+    "sv-o295":    { label: "Over 29.5 Saves",     propType: "saves",    line: 29.5, settleMarket: "goalie_saves_ou",    settleSelection: "over", withUnder: true },
+    "gr-win":     { label: "Goalie Win",          propType: "wins",     line: 0.5,  settleMarket: "goalie_win",         settleSelection: "yes" },
+    "gr-shutout": { label: "Shutout",             propType: "shutouts", line: 0.5,  settleMarket: "goalie_shutout",     settleSelection: "yes" },
+  };
+  const invert = (f: RuleFactor): RuleFactor => ({ ...f, value: Math.max(0.05, Math.min(0.95, 1 - f.value)) });
 
-  // Poisson helper: P(X >= 1)
-  const poi = (lambda: number) => Math.min(92, Math.max(5, Math.round((1 - Math.exp(-lambda)) * 100)));
-
-  const playerGroups: MktGroup[] = isGoalie ? [
-    {
-      id: "goalie-saves", title: "Saves", cols: 2,
-      options: [
-        { id: "g-saves-over", label: "Over 25.5 Saves", rulePct: 62,
-          ruleNote: "Goalies face ~28-32 shots per game on average. Saving 26+ is likely in most games.",
-          mlProps: { type: "player", subjectId: playerId, propType: "saves", line: 25.5, settleMarket: "goalie_saves_ou", settleSelection: "over" } },
-        { id: "g-saves-under",label: "Under 25.5 Saves",rulePct: 38,
-          ruleNote: "Fewer than 26 saves usually means a lower-shot game or an early pull.",
-          mlProps: { type: "player", subjectId: playerId, propType: "saves", line: 25.5, settleMarket: "goalie_saves_ou", settleSelection: "under" } },
-        { id: "g-saves-over2", label: "Over 28.5 Saves", rulePct: 44,
-          ruleNote: "Higher threshold — requires above-average shot volume against.",
-          mlProps: { type: "player", subjectId: playerId, propType: "saves", line: 28.5, settleMarket: "goalie_saves_ou", settleSelection: "over" } },
-        { id: "g-saves-under2",label: "Under 28.5 Saves",rulePct: 56,
-          ruleNote: "More common line — under 29 saves covers most average-shot games.",
-          mlProps: { type: "player", subjectId: playerId, propType: "saves", line: 28.5, settleMarket: "goalie_saves_ou", settleSelection: "under" } },
-      ],
-    },
-    {
-      id: "goalie-result", title: "Game Result", cols: 2,
-      options: [
-        { id: "g-win",    label: "Goalie Win",   rulePct: 50,
-          ruleNote: "Winning goalie probability based on team win rate.",
-          mlProps: { type: "player", subjectId: playerId, propType: "wins", line: 0.5, settleMarket: "goalie_win", settleSelection: "yes" } },
-        { id: "g-shutout",label: "Shutout",      rulePct: 10,
-          ruleNote: "Complete shutouts happen in ~10-15% of NHL starts.",
-          mlProps: { type: "player", subjectId: playerId, propType: "shutouts", line: 0.5, settleMarket: "goalie_shutout", settleSelection: "yes" } },
-      ],
-    },
-  ] : [
-    {
-      id: "scoring", title: "Goal Scoring", cols: 2,
-      options: [
-        { id: "p-anytime", label: "Anytime Goal Scorer", rulePct: poi(gpg),
-          ruleNote: `Poisson model: ${gpg.toFixed(3)} goals/game → P(≥1 goal) = ${poi(gpg)}%. Based on ${data.goals} goals in ${gp} games.`,
-          mlProps: { type: "player", subjectId: playerId, propType: "goals", line: 0.5, settleMarket: "anytime_goal", settleSelection: "yes" } },
-        { id: "p-first",   label: "First Goal Scorer",   rulePct: Math.max(3, Math.round(poi(gpg) / 6)),
-          ruleNote: `Being the first scorer is rare (~5-10% per player). Scaled from anytime probability of ${poi(gpg)}%.`,
-          mlProps: { type: "player", subjectId: playerId, propType: "goals", line: 0.5, settleMarket: "first_goal_scorer", settleSelection: "yes" } },
-        { id: "p-over05",  label: "Goals Over 0.5",      rulePct: poi(gpg),
-          ruleNote: `Same as anytime scorer — probability of scoring at least 1 goal.`,
-          mlProps: { type: "player", subjectId: playerId, propType: "goals", line: 0.5, settleMarket: "anytime_goal", settleSelection: "yes" } },
-        { id: "p-over15",  label: "Goals Over 1.5",      rulePct: poi(gpg * 2) - poi(gpg),
-          ruleNote: `Scoring 2+ goals in a game. Based on extended Poisson with rate ${gpg.toFixed(3)}/game.`,
-          // anytime_goal settlement checks goals > line, so line 1.5 correctly
-          // requires 2+ goals here (not just >=1).
-          mlProps: { type: "player", subjectId: playerId, propType: "goals", line: 1.5, settleMarket: "anytime_goal", settleSelection: "yes" } },
-      ],
-    },
-    {
-      id: "assists", title: "Assists", cols: 2,
-      options: [
-        { id: "p-assist",      label: "Any Assist",          rulePct: poi(apg),
-          ruleNote: `Poisson model: ${apg.toFixed(3)} assists/game → P(≥1 assist) = ${poi(apg)}%. Based on ${data.assists} assists in ${gp} games.`,
-          mlProps: { type: "player", subjectId: playerId, propType: "assists", line: 0.5, settleMarket: "assists_ou", settleSelection: "over" } },
-        { id: "p-assist-over", label: "Assists Over 0.5",    rulePct: poi(apg),
-          ruleNote: `Probability of recording at least one assist.`,
-          mlProps: { type: "player", subjectId: playerId, propType: "assists", line: 0.5, settleMarket: "assists_ou", settleSelection: "over" } },
-        { id: "p-point",       label: "Any Point (G or A)",  rulePct: poi(ppg),
-          ruleNote: `Poisson model: ${ppg.toFixed(3)} pts/game → P(≥1 point) = ${poi(ppg)}%. Based on ${data.points} points in ${gp} games.`,
-          mlProps: { type: "player", subjectId: playerId, propType: "points", line: 0.5, settleMarket: "points_ou", settleSelection: "over" } },
-        { id: "p-multi-point", label: "Multi-Point Game",    rulePct: Math.min(60, Math.round(poi(ppg) * 0.35)),
-          ruleNote: `Recording 2+ points in one game. Less common — roughly 1/3 of point games.`,
-          mlProps: { type: "player", subjectId: playerId, propType: "points", line: 1.5, settleMarket: "points_ou", settleSelection: "over" } },
-      ],
-    },
-    ...(data.shots > 0 ? [{
-      id: "shots", title: "Shots on Goal", cols: 2,
-      options: [
-        { id: "p-shots-over",  label: `Shots Over ${Math.floor(spg + 0.5)}.5`,  rulePct: 52,
-          ruleNote: `${data.name} averages ${spg.toFixed(1)} shots/game. The line is close to their average.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "shots", line: Math.floor(spg + 0.5) + 0.5, settleMarket: "shots_ou", settleSelection: "over" } },
-        { id: "p-shots-under", label: `Shots Under ${Math.floor(spg + 0.5)}.5`, rulePct: 48,
-          ruleNote: `Shooting below their ${spg.toFixed(1)}/game average is possible in any matchup.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "shots", line: Math.floor(spg + 0.5) + 0.5, settleMarket: "shots_ou", settleSelection: "under" } },
-        { id: "p-shots-over2", label: `Shots Over ${Math.ceil(spg + 1)}.5`,      rulePct: 38,
-          ruleNote: `Higher threshold — requires an active game for ${data.name}.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "shots", line: Math.ceil(spg + 1) + 0.5, settleMarket: "shots_ou", settleSelection: "over" } },
-        { id: "p-shots-under2",label: `Shots Under ${Math.ceil(spg + 1)}.5`,     rulePct: 62,
-          ruleNote: `Easier to hit — any quiet game keeps ${data.name} under this threshold.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "shots", line: Math.ceil(spg + 1) + 0.5, settleMarket: "shots_ou", settleSelection: "under" } },
-      ],
-    } as MktGroup] : []),
-    ...(data.hits > 0 ? [{
-      id: "hits", title: "Hits", cols: 2,
-      options: [
-        { id: "p-hits-over",  label: `Hits Over ${Math.floor(hpg)}.5`,  rulePct: 52,
-          ruleNote: `${data.name} averages ${hpg.toFixed(1)} hits/game.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "hits", line: Math.floor(hpg) + 0.5, settleMarket: "hits_ou", settleSelection: "over" } },
-        { id: "p-hits-under", label: `Hits Under ${Math.floor(hpg)}.5`, rulePct: 48,
-          ruleNote: `Below-average hit game for ${data.name}.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "hits", line: Math.floor(hpg) + 0.5, settleMarket: "hits_ou", settleSelection: "under" } },
-      ],
-    } as MktGroup] : []),
-    ...(data.blocks > 0 ? [{
-      id: "blocks", title: "Blocked Shots", cols: 2,
-      options: [
-        { id: "p-blocks-over",  label: `Blocks Over ${Math.floor(bpg)}.5`,  rulePct: 50,
-          ruleNote: `${data.name} averages ${bpg.toFixed(1)} blocked shots/game.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "blocks", line: Math.floor(bpg) + 0.5, settleMarket: "blocked_shots_ou", settleSelection: "over" } },
-        { id: "p-blocks-under", label: `Blocks Under ${Math.floor(bpg)}.5`, rulePct: 50,
-          ruleNote: `Blocked shots are highly situational depending on the game flow.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "blocks", line: Math.floor(bpg) + 0.5, settleMarket: "blocked_shots_ou", settleSelection: "under" } },
-      ],
-    } as MktGroup] : []),
-    ...(data.ppPoints > 0 ? [{
-      id: "pp", title: "Power Play", cols: 2,
-      options: [
-        { id: "p-pp-point", label: "PP Point",         rulePct: Math.min(70, Math.round((data.ppPoints / gp) * 200)),
-          ruleNote: `${data.name} has ${data.ppPoints} PP points in ${gp} games (${(data.ppPoints/gp).toFixed(2)}/game).`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "points", line: 0.5, settleMarket: "pp_point", settleSelection: "yes" } },
-        { id: "p-pp-goal",  label: "PP Goal",          rulePct: Math.min(50, Math.round((data.ppPoints / gp) * 100)),
-          ruleNote: `PP goals are less common than PP assists. Scaled from PP point probability.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "goals", line: 0.5, settleMarket: "pp_goal", settleSelection: "yes" } },
-      ],
-    } as MktGroup] : []),
-    ...(data.penaltyMin > 0 ? [{
-      id: "pim", title: "Penalty Minutes", cols: 2,
-      options: [
-        { id: "p-pim-over",  label: `PIM Over 0.5`,   rulePct: Math.min(70, Math.round((data.penaltyMin / gp) * 100)),
-          ruleNote: `${data.name} averages ${(data.penaltyMin/gp).toFixed(2)} penalty minutes/game.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "pim", line: 0.5, settleMarket: "penalty_minutes_ou", settleSelection: "over" } },
-        { id: "p-pim-under", label: `PIM Under 0.5`,  rulePct: Math.max(30, 100 - Math.min(70, Math.round((data.penaltyMin / gp) * 100))),
-          ruleNote: `Staying out of the penalty box — common for disciplined players.`,
-          mlProps: { type: "player" as const, subjectId: playerId, propType: "pim", line: 0.5, settleMarket: "penalty_minutes_ou", settleSelection: "under" } },
-      ],
-    } as MktGroup] : []),
-  ];
-
-  // ── Injecte les facteurs serveur dans les paris locaux (table de mapping ids) ──
-  const playerGroupsF: MktGroup[] = (() => {
-    if (!apiGroups) return playerGroups;
-    const byId: Record<string, { factors?: RuleFactor[]; factorGroup?: string }> = {};
-    for (const g of apiGroups) for (const o of g.options as any[]) {
-      if (o.factors?.length) byId[o.id] = { factors: o.factors, factorGroup: o.factorGroup };
-    }
-    // Choisit l'id serveur dont la ligne est la plus proche de celle du pari local.
-    const nearest = (ids: string[], lines: number[], line?: number): string => {
-      if (line == null) return ids[0];
-      let best = 0, bestD = Infinity;
-      lines.forEach((l, i) => { const d = Math.abs(l - line); if (d < bestD) { bestD = d; best = i; } });
-      return ids[best];
-    };
-    // [id serveur, inverser (paris "under")]
-    const resolve = (o: BetOpt): [string, boolean] | null => {
-      const line = o.mlProps?.line;
-      switch (o.id) {
-        case "p-anytime": case "p-over05": return ["g-anytime", false];
-        case "p-first":                    return ["g-first", false];
-        case "p-over15":                   return ["g-2plus", false];
-        case "p-assist": case "p-assist-over": return ["a-1plus", false];
-        case "p-point":                    return ["pts-1plus", false];
-        case "p-multi-point":              return ["pts-2plus", false];
-        case "p-shots-over":  case "p-shots-over2":
-          return [nearest(["sog-o25","sog-o35","sog-o45"], [2.5,3.5,4.5], line), false];
-        case "p-shots-under": case "p-shots-under2":
-          return [nearest(["sog-o25","sog-o35","sog-o45"], [2.5,3.5,4.5], line), true];
-        case "p-hits-over":  return [nearest(["hits-o15","hits-o25","hits-o35"], [1.5,2.5,3.5], line), false];
-        case "p-hits-under": return [nearest(["hits-o15","hits-o25","hits-o35"], [1.5,2.5,3.5], line), true];
-        case "p-blocks-over":  return [nearest(["blk-o05","blk-o15"], [0.5,1.5], line), false];
-        case "p-blocks-under": return [nearest(["blk-o05","blk-o15"], [0.5,1.5], line), true];
-        case "p-pp-point": return ["pp-point", false];
-        case "p-pp-goal":  return ["pp-goal", false];
-        case "p-pim-over":  return ["pim-o05", false];
-        case "p-pim-under": return ["pim-o05", true];
-        // Gardien
-        case "g-saves-over":   case "g-saves-over2":
-          return [nearest(["sv-o245","sv-o275","sv-o295"], [24.5,27.5,29.5], line), false];
-        case "g-saves-under":  case "g-saves-under2":
-          return [nearest(["sv-o245","sv-o275","sv-o295"], [24.5,27.5,29.5], line), true];
-        case "g-win":     return ["gr-win", false];
-        case "g-shutout": return ["gr-shutout", false];
-        default: return null;
+  const playerGroupsF: MktGroup[] = (apiGroups ?? []).flatMap((g): MktGroup[] => {
+    const options: BetOpt[] = [];
+    for (const o of g.options) {
+      const tile = TILE[o.id];
+      if (!tile || typeof o.rulePct !== "number") continue;
+      const base = {
+        type: "player" as const, subjectId: playerId,
+        propType: tile.propType, line: tile.line, settleMarket: tile.settleMarket,
+      };
+      options.push({
+        id: o.id, label: tile.label, rulePct: o.rulePct, ruleNote: o.ruleNote,
+        factors: o.factors, factorGroup: o.factorGroup,
+        mlProps: { ...base, settleSelection: tile.settleSelection },
+      });
+      if (tile.withUnder) {
+        const under = 100 - o.rulePct;
+        options.push({
+          id: `${o.id}-u`, label: tile.label.replace("Over", "Under"), rulePct: under,
+          ruleNote: `Complement of "${tile.label}": 100 − ${o.rulePct}% = ${under}%. ${o.ruleNote}`,
+          factors: o.factors?.map(invert), factorGroup: o.factorGroup,
+          mlProps: { ...base, settleSelection: "under" },
+        });
       }
-    };
-    return playerGroups.map((g) => ({
-      ...g,
-      options: g.options.map((o) => {
-        const r = resolve(o);
-        const src = r ? byId[r[0]] : undefined;
-        if (!src?.factors) return o;
-        const factors = r![1]
-          ? src.factors.map(f => ({ ...f, value: Math.max(0.05, Math.min(0.95, 1 - f.value)) }))
-          : src.factors;
-        return { ...o, factors, factorGroup: src.factorGroup };
-      }),
-    }));
-  })();
+    }
+    if (options.length === 0) return [];
+    // Over | Under côte à côte quand le groupe a gagné ses « under ».
+    return [{ ...g, cols: options.length > g.options.length ? 2 : g.cols, options }];
+  });
 
   // ── Chiffre ML de chaque tuile ────────────────────────────────────────────
   // `undefined` = pas encore là (la tuile attend), `null` = pas de chiffre.
@@ -406,11 +285,13 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
       </div>
       {/* Recent form — shown above the markets */}
 
-      {/* Market groups — local groups always used (they carry mlProps) */}
+      {/* Market groups — server options, with their ML and settlement markets (`TILE`) */}
       <StatsBanner type="player" id={playerId} />
       <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
       <RevealModeCtx.Provider value={revealMode}>
-        {playerGroupsG.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
+        {apiGroups == null
+          ? <ServerGroupsPending failed={apiFailed} onRetry={retryApi} />
+          : playerGroupsG.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
       </RevealModeCtx.Provider>
 
     </div>

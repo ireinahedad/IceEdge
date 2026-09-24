@@ -1209,7 +1209,7 @@ et aussi celle d'une vraie compétence. Indiscernables dans la sortie brute.
 
 - [x] **Mesuré le 2026-08-23** — 9 saisons, 19 644 paris moneyline. Résultat
       dans le tableau des acquis en tête de document, détail dans
-      `../models/backtest_clv_report.json` et `RESTE_A_FAIRE.md` §2.
+      `../models/backtest_clv_report.json` et `STATUS.md` §3.5.
       Trois enseignements : le CLV moneyline est **réel** (placebo +0,0002) ;
       il **annule tout juste la marge** (la clôture valorise ces paris à −0,25 %
       à edge ≥4 %, +0,44 % à ≥5 %) ; et le +4,30 % réalisé est **au-dessus de ce
@@ -1355,7 +1355,7 @@ moyenne.
       premier, donc l'xG glissant ne subsume pas l'ELO. Le repère théorique
       annonçait ≈ 1,89 faux GARDER sur 21 : **6 gardées se distinguent du
       hasard, mais ~2 d'entre elles sont probablement chanceuses.**
-      Tableau complet : `RESTE_A_FAIRE.md` §2.
+      Tableau complet : `STATUS.md` §3.5.
 - [x] **Élagage en deux paliers, 2026-08-23.** Parce que l'ablation est
       marginale et l'élagage collectif : les trois mesures de tir attaquant
       corrélées se partagent le crédit et sortent faibles ensemble, et

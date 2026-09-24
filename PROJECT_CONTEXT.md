@@ -356,7 +356,7 @@ Permet aux utilisateurs de consulter des prédictions basées sur des règles st
 - **Real-time:** Socket.io (WebSocket pour le chat)
 - **ML Service:** Python 3.14 + FastAPI + XGBoost (port 8000, processus séparé)
 - **API externe:** NHL Stats API (`api-web.nhle.com/v1`), The Odds API (Bet365)
-- **Hosting:** Local dev — pas encore déployé
+- **Hosting:** Production sur arakice.com — Vercel (front) + Railway (Node + ML Python) + Neon (PostgreSQL) + Cloudflare R2. Voir `DEPLOYMENT.md`
 
 ---
 
@@ -494,7 +494,9 @@ ICEEDGE/
 
 ## 🚧 En cours
 
-### ML Frontend Connection
+> **Obsolète (2026-09-24)** — ce débogage date de juin ; le service ML est déployé et branché. Ce qui est en cours et ce qui reste est dans **`STATUS.md`**.
+
+### ML Frontend Connection (historique)
 Problème actuel : `MLSection` affiche une erreur rouge "ML indisponible" quand le service Python retourne une erreur.
 
 Étapes pour déboguer :
@@ -515,8 +517,9 @@ Erreurs déjà corrigées :
 > a depuis été retiré entièrement, le 2026-08-24), et la Section 8 est couverte
 > par les audits.
 >
-> **Le seul inventaire à jour de ce qui reste est `RESTE_A_FAIRE.md`**, à la
-> racine. Ne pas rouvrir de todo ici : deux listes divergent toujours.
+> **Le seul inventaire à jour de ce qui est fait et de ce qui reste est `STATUS.md`**,
+> à la racine (il remplace `RESTE_A_FAIRE.md`, supprimé le 2026-09-16 dans `4d1cbcd`).
+> Ne pas rouvrir de todo ici : deux listes divergent toujours.
 
 ---
 
@@ -727,6 +730,8 @@ npm run seed              # (optionnel) données de test
 ---
 
 # Next Session Prompt
+
+> **Obsolète (2026-09-24)** — le prompt ci-dessous date de juillet (modèle déjà entraîné, app déjà déployée). Commencer par lire `STATUS.md`.
 
 ```
 Contexte : Application ARAKICE (mobile-first NHL prediction app).

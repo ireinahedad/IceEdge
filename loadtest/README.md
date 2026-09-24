@@ -383,6 +383,9 @@ appels au lieu d'1).
 
 ## 7. Scénarios restants
 
+> **Dépassé (2026-09-24)** : S2 à S7 sont couverts par les bancs de `bench/` (§ 8) — voir
+> `RAPPORT_TESTS_CHARGE_2026-09-18.md`. Seul reste hors banc : S1 contre une préproduction.
+
 S2 à S7 ne sont pas encore scriptés. Les compteurs les servent déjà tous :
 
 - **S2** (vague de connexions) → `eventLoop.p99Ms` pendant le tir.

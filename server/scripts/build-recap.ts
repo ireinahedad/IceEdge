@@ -72,6 +72,7 @@ const HASHTAGS    = path.join(REPO_ROOT, 'content', 'library', 'hashtags.md');
 const D = {
   intro:      2.0,   // carte d'ouverture des shorts : jour, date, affiches…
   introRow:   0.15,  // … plus un souffle par affiche quand la soirée est chargée
+  introScore: 0.35,  // … ou plus, quand l'affiche porte son score final (night-long)
   matchBase:  1.0,   // carte de match : score, fiches, tirs…
   matchRow:   0.35,  // … plus une ligne de marqueurs, lue d'un coup d'œil…
   matchMax:   3.0,   // … sans jamais dépasser trois secondes par carte
@@ -80,8 +81,14 @@ const D = {
 };
 
 /**
- * Lignes de marqueurs par carte de match. TOUS les joueurs à un point ou plus
- * sont listés ; au-delà de ce plafond, le match se poursuit sur une seconde
+ * Joueurs listés par équipe sur la carte de match : les NEUF meilleurs
+ * pointeurs (points, puis buts, puis nom). Au-delà, la liste devient un mur
+ * qu'on ne lit plus en trois secondes ; un 7-5 garde ainsi une seule carte.
+ */
+const MAX_PLAYERS_PER_TEAM = 9;
+
+/**
+ * Lignes de marqueurs par carte de match (après le plafond ci-dessus). Au-delà, le match se poursuit sur une seconde
  * carte (même en-tête, tableau continué) plutôt que de déborder. La carte a
  * une mise en page FIXE : en-tête toujours à la même hauteur, les lignes
  * s'ajoutent vers le bas. Le plafond est ce qui tient avant la zone de sécurité
@@ -195,6 +202,13 @@ const lastName = (full: string): string => {
   const s = String(full ?? '').trim();
   const i = s.indexOf(' ');
   return i === -1 ? s : s.slice(i + 1);
+};
+
+/** « C. Caufield » : l'initiale du prénom, puis le nom — la forme des cartes de match. */
+const shortName = (full: string): string => {
+  const s = String(full ?? '').trim();
+  const i = s.indexOf(' ');
+  return i === -1 ? s : `${s[0]}. ${s.slice(i + 1)}`;
 };
 
 /** `.939` — la forme lue sur toutes les feuilles de match. */
@@ -495,7 +509,8 @@ function pointersOf(g: Game): { away: Pointer[]; home: Pointer[] } {
     for (const a of x.assists ?? []) bump(side, a, 'a');
   }
   const sorted = (m: Map<string, Pointer>) => [...m.values()]
-    .sort((a, b) => b.p - a.p || b.g - a.g || lastName(a.name).localeCompare(lastName(b.name)));
+    .sort((a, b) => b.p - a.p || b.g - a.g || lastName(a.name).localeCompare(lastName(b.name)))
+    .slice(0, MAX_PLAYERS_PER_TEAM);
   return { away: sorted(bySide.away), home: sorted(bySide.home) };
 }
 
@@ -520,7 +535,7 @@ function matchSlides(g: Game, from: number, records: Map<string, string | null>)
       ...sideOf(t),
       record: records.get(t.abbr) ?? null,
       sog: sog(side),
-      players: pts[side].slice(lo, hi).map((p) => ({ name: lastName(p.name), g: p.g, a: p.a, p: p.p })),
+      players: pts[side].slice(lo, hi).map((p) => ({ name: shortName(p.name), g: p.g, a: p.a, p: p.p })),
     });
     return {
       n: from + i,
@@ -623,20 +638,27 @@ function starsSlide(stars: Star[], n: number, seconds: number, title = '') {
 const ctaSlide = (n: number) => ({ n, template: 'cta_card', duration: D.cta, text: 'arakice.com' });
 
 /**
- * Carte d'ouverture des SHORTS : le jour, la date et les affiches de la soirée
- * (ou l'affiche du match), logos compris. La phrase d'amorce reste dessous.
+ * Carte d'ouverture : le jour, la date et les affiches de la soirée (ou
+ * l'affiche du match), logos compris. La phrase d'amorce reste dessous.
+ * `withScores` (night-long) ajoute le score final de chaque affiche, avec OT /
+ * SO : la première page donne déjà tous les résultats de la soirée.
  */
-function introSlide(dateKey: string, games: Game[], text: string) {
+function introSlide(dateKey: string, games: Game[], text: string, withScores = false) {
   const d = new Date(`${dateKey}T12:00:00Z`);
+  const perRow = withScores ? D.introScore : D.introRow;
   return {
     n: 1,
     template: 'intro_card',
-    duration: round1(D.intro + (games.length > 1 ? D.introRow * games.length : 0)),
+    duration: round1(D.intro + (games.length > 1 ? perRow * games.length : 0)),
     text,
     intro: {
       weekday: d.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }),
       date: d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }),
-      games: games.map((g) => ({ away: g.away.abbr, home: g.home.abbr })),
+      games: games.map((g) => ({
+        away: g.away.abbr,
+        home: g.home.abbr,
+        ...(withScores ? { score: { away: g.away.score, home: g.home.score, tag: g.endingTag } } : {}),
+      })),
     },
   };
 }
@@ -661,7 +683,7 @@ const monthDay = (iso: string) =>
   new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
 
 function nightLong(dateKey: string, games: Game[], records: Map<string, string | null>) {
-  const slides: any[] = [introSlide(dateKey, games, '')];
+  const slides: any[] = [introSlide(dateKey, games, '', true)];
   let n = 2;
   for (const g of games) {
     const cards = matchSlides(g, n, records);

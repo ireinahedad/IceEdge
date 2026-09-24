@@ -16,7 +16,7 @@ import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { PlayerPropGrid } from "./PlayerPropGrid";
 import { BetOpt, MLProps, MktGroup, RuleFactor, mlBundleKey } from "./gameMarkets";
 import { fetchGameMlBundle, type GameMlBundle, type MLPredictionResult } from "../../components/MLPredictionCard";
-import { BetOddsCtx, GameSelector, LoadingSkeleton, NotFound, RevealMode, RevealModeCtx, StatsBanner, useGameOdds, useSelectedGame, useUpcomingGames } from "./predictionShared";
+import { BetOddsCtx, GameSelector, LoadingSkeleton, NotFound, RevealMode, RevealModeCtx, ServerGroupsPending, StatsBanner, useGameOdds, useSelectedGame, useServerGroups, useUpcomingGames } from "./predictionShared";
 
 
 /* ─── Team Prediction ─────────────────────────── */
@@ -31,7 +31,6 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
     winPct: number; ppPct: number; pkPct: number;
     goalsFor: number; goalsAgainst: number;
   } | null>(null);
-  const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [revealMode, setRevealMode] = useState<RevealMode>("rules");
   // Abréviation → nom complet, pour tout le circuit. Le flux de cotes nomme ses
@@ -46,6 +45,12 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
   const [searchParams] = useSearchParams();
   const games = useUpcomingGames(data?.abbr || undefined, searchParams.get("game") ?? undefined);
   const { selected: selectedGame, select: selectGame } = useSelectedGame(games);
+
+  // Marchés du moteur de règles, calculés par le serveur — les SEULS pourcentages
+  // affichés. Chargés dès que l'abréviation de l'équipe est connue.
+  const teamAbbr = data?.abbr;
+  const { groups: apiGroups, failed: apiFailed, retry: retryApi } =
+    useServerGroups(() => nhlApiService.getTeamPredictions(teamAbbr ?? ""), teamAbbr);
 
   useEffect(() => {
     async function load() {
@@ -73,8 +78,6 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
           ppPct: stats.powerPlayPct ?? 0, pkPct: stats.penaltyKillPct ?? 0,
           goalsFor: stats.goalsForPerGame ?? 0, goalsAgainst: stats.goalsAgainstPerGame ?? 0,
         });
-        // Fetch rule-based predictions from backend
-        nhlApiService.getTeamPredictions(abbr).then(setApiGroups).catch(() => {});
       } catch (e) { console.error("TeamPrediction load error", e); }
       finally { setLoading(false); }
     }
@@ -118,6 +121,12 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
   const ou = parseFloat(((data.goalsFor + data.goalsAgainst)).toFixed(1)) || 5.5;
 
   // ── build team-level bet groups ──────────────────────────────────────────
+  //
+  // ⚠️ Ces tuiles ne donnent que la FORME d'un pari (libellé, marché ML,
+  // règlement). Leurs `rulePct` locaux sont des constantes et des règles de
+  // pouce : ils sont TOUS remplacés par le chiffre du serveur plus bas
+  // (`teamGroupsF`), et une tuile sans chiffre serveur n'est pas affichée.
+  // Jamais un pourcentage calculé ici ne doit atteindre l'écran (2026-09-24).
   const tml = (propType: string, line?: number): MLProps =>
     ({ type: "team", subjectId: data.abbr, propType, line, gameId: selectedGame?.id });
 
@@ -219,13 +228,16 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
   // Injecte la décomposition en facteurs (données serveur) dans les paris
   // victoire/défaite locaux → affiche le pie chart des règles.
   const teamGroupsF: MktGroup[] = (() => {
-    if (!apiGroups) return teamGroups;
+    if (!apiGroups) return [];
     // Table de correspondance ids locaux (vue équipe) → ids serveur.
     const TEAM_ID_MAP: Record<string, string> = {
       "t-win": "ml-home",   "t-lose": "ml-away",
       "t-ml-ot": "ot-yes",  "t-dc": "dc-home",
       "t-pl-fav": "pl-home","t-pl-dog": "pl-away",
-      "t-over": ou >= 6 ? "o65" : "o55", "t-under": ou >= 6 ? "u65" : "u55",
+      // `t-over` / `t-under` n'ont PAS d'équivalent : leur ligne (buts pour +
+      // contre de l'équipe) ne tombe jamais pile sur une ligne du serveur, et
+      // leur donner le chiffre de o55/o65 afficherait la probabilité d'une autre
+      // ligne que celle du libellé. Le tableau « totals » du serveur les remplace.
       "t-team-over": "tg-o25", "t-team-under": "tg-u25",
       "t-cs": "cs-for",     "t-btts": "btts-yes",
       "t-p1": "p1-home",    "t-p2": "p2-home",  "t-p3": "p3-home",
@@ -253,24 +265,27 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
     // retouche : ils décrivent « qui gagne ? » dans les deux cas.
     const byServerId: Record<string, { factors?: RuleFactor[]; factorGroup?: string; rulePct?: number }> = {};
     for (const g of apiGroups) for (const o of g.options as any[]) {
-      if (!o.factors?.length) continue;
+      if (typeof o.rulePct !== "number") continue;
       const scale = typeof o.pctScale === "number" && o.pctScale > 0 ? o.pctScale : 1;
       const unscaled = typeof o.rulePct === "number"
         ? Math.round(Math.max(3, Math.min(97, o.rulePct / scale)))
         : undefined;
-      byServerId[o.id] = { factors: o.factors, factorGroup: o.factorGroup, rulePct: unscaled };
+      byServerId[o.id] = {
+        ...(o.factors?.length ? { factors: o.factors, factorGroup: o.factorGroup } : {}),
+        rulePct: unscaled,
+      };
     }
-    return teamGroups.map((g) => ({
-      ...g,
-      options: g.options.map((o) => {
-        const src = TEAM_ID_MAP[o.id] ? byServerId[TEAM_ID_MAP[o.id]] : undefined;
-        // `rulePct` du serveur seulement s'il est là : une option mappée sans
-        // score serveur garde le calcul local plutôt que de tomber à undefined.
-        return src
-          ? { ...o, ...src, rulePct: typeof src.rulePct === "number" ? src.rulePct : o.rulePct }
-          : o;
-      }),
-    }));
+    // Une tuile sans chiffre serveur DISPARAÎT, elle ne garde pas son calcul
+    // local ; un groupe vidé disparaît avec elle.
+    return teamGroups
+      .map((g) => ({
+        ...g,
+        options: g.options.flatMap((o) => {
+          const src = TEAM_ID_MAP[o.id] ? byServerId[TEAM_ID_MAP[o.id]] : undefined;
+          return src && typeof src.rulePct === "number" ? [{ ...o, ...src, rulePct: src.rulePct }] : [];
+        }),
+      }))
+      .filter((g) => g.options.length > 0);
   })();
 
   // ── Tableaux du serveur qui REMPLACENT ceux de la page ────────────────────
@@ -311,21 +326,26 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
     }));
   const byServerGroup = new Map(serverTables.map(g => [g.id, g] as const));
 
-  const shownGroups: MktGroup[] = serverTables.length === 0
-    ? teamGroupsF
-    : teamGroupsF.flatMap((g): MktGroup[] => {
-        const take = (...ids: string[]) => ids.map(id => byServerGroup.get(id)).filter((x): x is MktGroup => !!x);
-        if (g.id === "puckline") return take("puckline").length ? take("puckline") : [g];
-        if (g.id === "totals")   return take("totals", "teamtotals").length ? take("totals", "teamtotals") : [g];
-        if (g.id === "period")   return take("p1", "p2", "p3").length ? take("p1", "p2", "p3") : [g];
-        if (g.id === "clean") {
-          // Le blanchissage reste une tuile ; « les deux marquent » passe au tableau.
-          const btts = take("btts");
-          if (!btts.length) return [g];
-          return [{ ...g, title: "Clean Sheet", options: g.options.filter(o => o.id !== "t-btts") }, ...btts];
-        }
-        return [g];
-      });
+  // On parcourt l'ordre des groupes LOCAUX (non filtrés) : un groupe local vidé
+  // faute de chiffre serveur doit quand même laisser sa place au tableau du
+  // serveur qui le remplace.
+  const filteredById = new Map(teamGroupsF.map(g => [g.id, g] as const));
+  const shownGroups: MktGroup[] = teamGroups.flatMap((local): MktGroup[] => {
+    const g = filteredById.get(local.id);
+    const own = g ? [g] : [];
+    const take = (...ids: string[]) => ids.map(id => byServerGroup.get(id)).filter((x): x is MktGroup => !!x);
+    if (local.id === "puckline") return take("puckline").length ? take("puckline") : own;
+    if (local.id === "totals")   return take("totals", "teamtotals").length ? take("totals", "teamtotals") : own;
+    if (local.id === "period")   return take("p1", "p2", "p3").length ? take("p1", "p2", "p3") : own;
+    if (local.id === "clean") {
+      // Le blanchissage reste une tuile ; « les deux marquent » passe au tableau.
+      const btts = take("btts");
+      if (!btts.length) return own;
+      const cs = g ? g.options.filter(o => o.id !== "t-btts") : [];
+      return [...(cs.length ? [{ ...local, title: "Clean Sheet", options: cs }] : []), ...btts];
+    }
+    return own;
+  });
 
   // ── Chiffre ML de chaque tuile, lu dans le paquet par la QUESTION posée ──
   //
@@ -408,7 +428,9 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
       <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
       <BetOddsCtx.Provider value={odds}>
         <RevealModeCtx.Provider value={revealMode}>
-          {groupsWithMl.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
+          {apiGroups == null
+            ? <ServerGroupsPending failed={apiFailed} onRetry={retryApi} />
+            : groupsWithMl.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
 
           {/* Paris joueur du club, en grille — le match sélectionné les suit,
               pour qu'ils se règlent sur cette affiche. */}

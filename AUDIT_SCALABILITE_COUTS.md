@@ -5,7 +5,7 @@
 **Contrainte :** infrastructure peu coûteuse, pas de refonte, réutilisation de l'architecture existante
 **Méthode :** inspection directe du code (`server/src`, `client/src`, `ml/python`, `server/src/db`, Dockerfiles, `vercel.json`, `.env.example`). Chaque constat cite un fichier réel.
 
-> Complémentaire de `PRODUCTION_READINESS_AUDIT.md` (2026-07-20), qui traitait la sécurité. **Ce document n'y revient pas.** Il regarde une seule chose : *qu'est-ce qui casse ou explose en coût quand le nombre d'utilisateurs est multiplié par 10 ?*
+> Complémentaire de `PRODUCTION_READINESS_AUDIT.md` (2026-07-20, retiré le 2026-09-24 : entièrement livré ou repris ici — voir `STATUS.md`), qui traitait la sécurité. **Ce document n'y revient pas.** Il regarde une seule chose : *qu'est-ce qui casse ou explose en coût quand le nombre d'utilisateurs est multiplié par 10 ?*
 
 > **Sur les chiffres.** Les montants sont des **ordres de grandeur** ; les prix changent, vérifie avant d'engager une dépense. Ce qui compte n'est pas le montant mais la **forme de la courbe** : coût *constant* (cache partagé) contre coût *linéaire au nombre d'utilisateurs* (appel non caché). Les seuils « à partir de N utilisateurs » sont des estimations dérivées du code, pas des mesures — le plan de tests de charge (§5) sert à les valider.
 

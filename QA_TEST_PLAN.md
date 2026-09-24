@@ -239,7 +239,7 @@ Audit statique (serveur + client). Légende : ✅ conforme · ⚠️ améliorati
 
 *Écrits le 2026-08-30, depuis le code (`auth.routes.ts`, `subscription.routes.ts`,
 `ml.routes.ts`, `dev.routes.ts`, `cors.ts`, `mlApiClient.ts`). Ces quatre
-parcours sont la ligne **B4** de `RESTE_A_FAIRE.md` §1 : bloquants avant
+parcours sont la ligne **B4** de `STATUS.md` §3.1 : bloquants avant
 lancement. Le but de cette section est qu'exécuter la campagne ne demande plus
 aucune décision — seulement de lire et de comparer.*
 

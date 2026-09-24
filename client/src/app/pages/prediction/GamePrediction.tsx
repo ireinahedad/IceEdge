@@ -17,7 +17,7 @@ import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { PlayerPropGrid } from "./PlayerPropGrid";
 import { LiveGameView, MLProps, MktGroup, buildGameGroups } from "./gameMarkets";
 import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
-import { BetOddsCtx, HeadToHead, NotFound, RevealMode, RevealModeCtx, StatsBanner, useGameOdds } from "./predictionShared";
+import { BetOddsCtx, HeadToHead, NotFound, RevealMode, RevealModeCtx, ServerGroupsPending, StatsBanner, useGameOdds, useServerGroups } from "./predictionShared";
 
 
 export function GamePrediction({ gameId }: { gameId: string }) {
@@ -29,7 +29,10 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   // defaulting to the club's next one.
   const openTeam = (abbr: string) => navigate(`/stats/prediction/team/${abbr.toLowerCase()}?game=${gameId}`);
   const [gameView, setGameView] = useState<LiveGameView | null>(null);
-  const [apiGroups, setApiGroups] = useState<MktGroup[] | null>(null);
+  // Marchés du moteur de règles, calculés par le serveur — les SEULS pourcentages
+  // « règles » de la page. `null` = pas encore là (ou échec, voir `apiFailed`).
+  const { groups: apiGroups, failed: apiFailed, retry: retryApi } =
+    useServerGroups(() => nhlApiService.getGamePredictions(gameId), gameId);
   const [loading, setLoading] = useState(true);
   const [revealMode, setRevealMode] = useState<RevealMode>("rules");
 
@@ -87,8 +90,6 @@ export function GamePrediction({ gameId }: { gameId: string }) {
       setLoading(false);
     }
     load();
-    // Fetch rule-based predictions from backend (parallel, non-blocking)
-    nhlApiService.getGamePredictions(gameId).then(setApiGroups).catch(() => {});
   }, [gameId]);
 
   // ⚠️ Mémoïsé : `groups` porte les `mlProps` de chaque tuile. Recalculé à
@@ -101,6 +102,11 @@ export function GamePrediction({ gameId }: { gameId: string }) {
     // Sans probabilité du modèle il n'y a pas de marchés dérivés à construire :
     // on ne garde que les groupes du moteur de règles, servis par le backend.
     const finalPct = home.winPct == null ? null : Math.min(85, Math.max(15, home.winPct));
+    // ⚠️ `localGroups` ne sert PLUS qu'à la table de repli des `mlProps`
+    // ci-dessous : ses `rulePct` sont des constantes et des règles de pouce
+    // (over 54 %, −1.5 = victoire − 18 %…) et ne doivent jamais s'afficher.
+    // Tant que le serveur n'a pas répondu, la page montre un squelette ; s'il
+    // échoue, une erreur avec « Réessayer » (2026-09-24).
     const localGroups = finalPct == null
       ? []
       : buildGameGroups(home.abbr, away.abbr, finalPct, gameView.overUnder ?? 5.5);
@@ -133,7 +139,7 @@ export function GamePrediction({ gameId }: { gameId: string }) {
             })),
           }));
         })()
-      : localGroups;
+      : [];
     // Stamp the game id onto every option's mlProps — without it, a bet placed
     // from this page can never be looked up for automatic settlement.
     //
@@ -228,7 +234,9 @@ export function GamePrediction({ gameId }: { gameId: string }) {
       <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
       <BetOddsCtx.Provider value={odds}>
         <RevealModeCtx.Provider value={revealMode}>
-          {groups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
+          {apiGroups == null
+            ? <ServerGroupsPending failed={apiFailed} onRetry={retryApi} />
+            : groups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
 
           {/* ── Paris joueur, en grille ────────────────────────────────────
               Ils remplacent le tableau de statistiques qui fermait la page.

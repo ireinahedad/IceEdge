@@ -280,7 +280,7 @@ body::before {
   font-size: 30px; font-weight: 800; color: #fff; padding: 12px 0;
   background: color-mix(in srgb, var(--c) 70%, #000);
 }
-.mc-table th.nm { background: none; width: 262px; }
+.mc-table th.nm { background: none; width: 292px; } /* « N. MacKinnon » tient sans ellipse */
 .mc-table th:nth-child(2) { border-top-left-radius: 14px; }
 .mc-table th:nth-child(4) { border-top-right-radius: 14px; }
 .mc-table th:nth-child(5) { border-top-left-radius: 14px; }
@@ -288,7 +288,7 @@ body::before {
 .mc-table th:nth-child(5) { border-left: 12px solid var(--bg); }
 .mc-table td { font-size: 36px; padding: 9px 0; border-bottom: 2px solid rgba(144, 201, 240, 0.10); }
 .mc-table td.nm {
-  font-size: 34px; font-weight: 700; color: #fff;
+  font-size: 32px; font-weight: 700; color: #fff;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .mc-table td.nm.l { padding-right: 14px; }
@@ -332,6 +332,19 @@ body::before {
 .in-rows.single .in-team.r { flex-direction: column-reverse; }
 .in-rows.single .in-team b { font-size: 72px; }
 .in-rows.single .in-team .tlogo { width: 220px; height: 220px; }
+
+/* Score final au centre de l'affiche (night-long). Le vainqueur en blanc. */
+.in-row.scored .in-team { flex: 1; }
+.in-row.scored .in-team.r { justify-content: flex-end; }
+.in-score { display: flex; flex-direction: column; align-items: center; min-width: 170px; line-height: 1; }
+.in-nums { display: flex; align-items: baseline; gap: 12px; font-size: 56px; font-weight: 900; }
+.in-nums em { font-style: normal; color: var(--muted); }
+.in-nums em.w { color: #fff; }
+.in-nums i { font-style: normal; color: var(--muted); font-size: 0.7em; }
+.in-score small { font-size: 22px; font-weight: 800; letter-spacing: 3px; color: var(--accent); margin-top: 4px; }
+.in-rows.two .in-score { min-width: 104px; }
+.in-rows.two .in-nums { font-size: 38px; gap: 6px; }
+.in-rows.two .in-score small { font-size: 18px; letter-spacing: 2px; }
 
 /* Le plan de récap n'a pas toujours une ligne de commentaire sous son bloc. */
 .recap + .sub:empty { display: none; }

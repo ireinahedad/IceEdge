@@ -1,6 +1,13 @@
 # APPLE_PLAN.md — Shipping IceEdge / Arakice to the Apple App Store
 
-**Owner:** Ireina · **Created:** 2026-09-03 · **Status:** draft, not started
+**Owner:** Ireina · **Created:** 2026-09-03 · **Status:** not started — gate still closed (2026-09-24)
+
+> **Status 2026-09-24.** The web-side risks of §-1 are handled: R2 (no Google on iOS), R3
+> (server native token path), R4 (moderation), R5/B3 (no Stripe and no Pro on iOS v1), R6
+> (SW/web push flagged off), R7 (env), R13 (safe areas), R17 (dev routes). Still open for
+> Phase 3: native `tokenStore`, R9 (`build:ios` without SEO pages), R10 (site framing),
+> R11/R12 (share on device), R14/R15 (`100dvh` + keyboard), R16 (CSP meta), B4 (in-app
+> account deletion — server route exists, no UI). Live checklist: **`STATUS.md` §3.4**.
 **Target:** iOS app live on the App Store (iPhone first, iPad later)
 
 ---
@@ -15,7 +22,7 @@ Finish what you want to finish on arakice.com, then freeze.
 
 **Freeze checklist — tick all four before Phase 0:**
 
-- [ ] **G1** Feature work on the web app is done. `RESTE_A_FAIRE.md` has nothing left that
+- [ ] **G1** Feature work on the web app is done. `STATUS.md` has nothing left that
       would change screens, routes, or the data shape the client consumes.
 - [ ] **G2** `npm run typecheck` and the CI in `.github/workflows/ci.yml` are green.
 - [ ] **G3** The production API is stable — no endpoint renames planned.
@@ -673,7 +680,7 @@ runs-on: macos-15          # must provide Xcode 26 — verify the image's Xcode 
    Cloudflare account (zone, registration and production R2) was recovered and is managed
    from `ireinahedad24@gmail.com`. The domain is usable for the privacy policy URL, universal
    links; `support@arakice.com` forwards to that Gmail since the same day.
-   Follow-ups: `RESTE_A_FAIRE.md` §1, R1–R9.
+   Follow-ups: `STATUS.md` §3.9.
 2. Individual or company enrollment? Individual = your legal name is public on the listing.
 3. Does anyone you know have an iPhone for TestFlight? You need at least one real device.
 4. Are you willing to launch iOS without affiliate revenue? (§4 Option A assumes yes.)

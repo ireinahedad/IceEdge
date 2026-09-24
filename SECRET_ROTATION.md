@@ -33,6 +33,10 @@ cd server && npm run db:encrypt-keys
 
 ## 3. Purge the old secret from git history
 
+> **Decision (see `STATUS.md` §4): purge abandoned — do not reopen.** Private repo, dead keys,
+> and a rewrite would break every commit SHA cited in the docs. The leaked DB password was for
+> the local database only (`QA_TEST_PLAN.md`, CFG-4).
+
 Scrubbing the file only removes it from the current commit. To remove it from history (recommended, since the repo may be shared or pushed):
 
 ```bash

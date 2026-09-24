@@ -1,5 +1,11 @@
 # PRE_IOS_PLAN.md — Web-side work to do before touching Capacitor
 
+> **✅ COMPLETED — kept as a design record (2026-09-24).** R7, R2, R3, R3bis and R4 are
+> shipped. About twenty source files cite this document for the reasoning behind the auth
+> and moderation code, which is why it stays. The only open items (prove the support
+> mailbox, then `git tag pre-ios-freeze`) are tracked in **`STATUS.md` §3.1**. Do not add
+> new work here.
+
 **Companion to `APPLE_PLAN.md`.** Everything here ships to **arakice.com first**, makes the
 web app better on its own merits, and removes the four things that would otherwise blow up
 during the iOS port.
@@ -665,7 +671,7 @@ network call to render a `mailto:` link.
   `support@arakice.com` on a business card or an invoice would bounce.
   **Route created 2026-09-16:** the Cloudflare account holding the zone is recovered, and
   Email Routing now forwards `support@arakice.com` → `ireinahedad24@gmail.com`
-  (`RESTE_A_FAIRE.md` §1, R7). The published address is still `support.arakice@gmail.com`;
+  (`STATUS.md` §3.9). The published address is still `support.arakice@gmail.com`;
   switching to the domain address is a separate decision, and either one still has to be
   proven with a real mail.
 - 🔴 **The one thing still owed: prove it delivers.** Send a real mail and confirm it arrives —

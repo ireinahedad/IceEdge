@@ -62,16 +62,19 @@ suivantes sont écrites en clair, à recopier.
 `night-short` et `<match>-long` ne sont plus produits.
 
 **La carte d'ouverture** n'a pas de bandeau en haut (la date y serait deux
-fois) ni de « @ » entre les équipes.
+fois) ni de « @ » entre les équipes. Dans `night-long`, elle donne le **score final**
+de chaque match de la soirée (vainqueur en blanc, OT / SO dessous) ; elle reste
+à l'écran 2 s + 0,35 s par match.
 
 **La carte de match** (gabarit `matchcard_card`) montre toujours UN seul match,
 avec une mise en page fixe : les deux carrés de score sont toujours à la même
 hauteur, au même endroit, et les lignes de marqueurs s'ajoutent vers le bas.
 Sous chaque logo, la fiche de la saison APRÈS le match (victoires-défaites-
 défaites en prolongation ou fusillade), recomptée depuis le calendrier du
-club, toujours en trois chiffres (zéros compris). Tous les joueurs à un point ou plus sont listés ; au-delà de 11 lignes, le
-match continue sur une seconde carte (`1/2`, `2/2`). Durée : 1 s + 0,35 s par
-ligne, 3 s au maximum. Les trois étoiles n'apparaissent que dans `<match>-short`.
+club, toujours en trois chiffres (zéros compris). Les joueurs s'affichent avec
+l'initiale du prénom (`C. Caufield`), **9 au maximum par équipe** : les meilleurs
+pointeurs (points, puis buts), le reste est coupé (`MAX_PLAYERS_PER_TEAM` dans
+`build-recap.ts`). Durée : 1 s + 0,35 s par ligne, 3 s au maximum. Les trois étoiles n'apparaissent que dans `<match>-short`.
 
 **Transition** : les récaps enchaînent leurs cartes par un glissement de 0,3 s
 (`smoothleft`), sans allonger la vidéo. Les posts du jour gardent leurs coupes
@@ -114,6 +117,33 @@ Trois choses à savoir :
   `content\assets\logos\` au premier récap qui en a besoin. `content:render`,
   lui, continue de tourner sans réseau. Un logo manquant ne bloque rien : la
   carte tombe sur l'abréviation seule.
+
+---
+
+## Le récap en automatique, chaque jour à midi
+
+```bat
+content\daily-recap.cmd                         :: la soirée qui vient de finir
+content\daily-recap.cmd 2026-09-20              :: forcer la soirée
+```
+
+Enchaîne `content:recap --require-all`, `content:render` et `content:video`,
+puis copie les mp4 dans `G:\My Drive\ICEEDGE\recaps\<date>\<post>.mp4`
+(ou le dossier de la variable `ICEEDGE_DRIVE`).
+
+- **La date** est calculée par le script (heure locale − 36 h) : lancé entre
+  midi J+1 et midi J+2, il vise toujours la soirée J.
+- **Un match encore en cours** : nouvel essai toutes les 30 min, 5 tentatives
+  (12 h → 14 h). **Soir sans match** : sortie propre, rien produit.
+- **Journal** : `content\daily-recap.log`.
+
+Tâche planifiée, à installer une fois (sans admin) :
+
+```bat
+powershell -ExecutionPolicy Bypass -File C:\Users\irein\dev\ICEEDGE\content\install-daily-recap.ps1
+```
+
+Si le PC dort à midi, la tâche part au réveil.
 
 ---
 

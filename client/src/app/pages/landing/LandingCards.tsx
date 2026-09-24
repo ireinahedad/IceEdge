@@ -148,12 +148,29 @@ function gameDayLabel(game: DisplayGame, lang: string): string | null {
  * aller le retirer dans le pari. « Plus de paris » reste le chemin, et il
  * montre ce qu'on choisit.
  */
+/**
+ * ⏸️ Probabilités du modèle MASQUÉES sur les cartes de match de l'accueil
+ * (2026-09-24), jusqu'au début de la saison régulière NHL 2026-27.
+ *
+ * En pré-saison le modèle sort des chiffres serrés (53 % – 47 %) sur des
+ * alignements qui ne sont pas ceux de la saison : affichés à côté de chaque
+ * match, ils intriguent plus qu'ils n'aident. Masqué : le pourcentage des deux
+ * équipes, la barre de la carte en direct, le % du O/U et le badge d'edge (il
+ * se calcule sur ce même chiffre). Le reste de l'app (page du match, meilleurs
+ * paris) n'est pas touché.
+ *
+ * ▶ Au début de la saison : repasser à `true`, rien d'autre à faire.
+ *   Suivi dans `STATUS.md` § 3.2.
+ */
+const SHOW_MODEL_PCT_ON_HOME = false;
+
 function useGameEdge(game: DisplayGame) {
+  if (!SHOW_MODEL_PCT_ON_HOME) return { homePct: null, awayPct: null, edge: 0, showPct: false };
   const homePct = game.team1.winPct;
   const awayPct = game.team2.winPct;
   // Pas de probabilité modèle → pas d'edge à afficher.
   const edge = game.bet365Home != null && homePct != null ? calcEdge(homePct, game.bet365Home) : 0;
-  return { homePct, awayPct, edge };
+  return { homePct, awayPct, edge, showPct: true };
 }
 
 // ─── Hockey live game card ─────────────────────────────────────────────────────
@@ -163,7 +180,7 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
   const accent = theme.accent;
   const { t } = useI18n();
   const navigate = useNavigate();
-  const { homePct, awayPct, edge } = useGameEdge(game);
+  const { homePct, awayPct, edge, showPct } = useGameEdge(game);
 
   return (
     <div
@@ -208,14 +225,14 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
       </div>
 
       {/* Model probability bar */}
-      <div className="flex items-center gap-2 mb-2">
+      {showPct && <div className="flex items-center gap-2 mb-2">
         <span className="text-[11px] font-bold w-7 flex-shrink-0" style={{ color: accent }}>{homePct != null ? `${homePct}%` : "—"}</span>
         <div className="flex-1 bg-[#0A0E0C] rounded-full h-2 overflow-hidden flex">
           <div className="h-full rounded-l-full transition-all duration-500" style={{ width: `${homePct ?? 0}%`, backgroundColor: accent }} />
           <div className="h-full bg-[#1B2419] flex-1" />
         </div>
         <span className="text-[#bfc8cc] text-[11px] font-bold w-7 text-right flex-shrink-0">{awayPct != null ? `${awayPct}%` : "—"}</span>
-      </div>
+      </div>}
 
       {/* bet365 odds row — only shown when API has real odds */}
       {game.bet365Home && game.bet365Away ? (
@@ -248,7 +265,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
   const accent = theme.accent;
   const { t, lang } = useI18n();
   const navigate = useNavigate();
-  const { homePct, awayPct, edge } = useGameEdge(game);
+  const { homePct, awayPct, edge, showPct } = useGameEdge(game);
   // Le jour de semaine, toujours : le titre de la journée est au-dessus, mais
   // une carte doit se lire seule (capture d'écran, défilement rapide).
   const day = weekdayShort(gameIsoDay(game), lang) || gameDayLabel(game, lang);
@@ -275,7 +292,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
           <div className="flex items-center gap-1.5 mb-1.5">
             <img src={game.team1.logo} alt={game.team1.abbr} className="w-5 h-5 object-contain flex-shrink-0" />
             <span className="text-white text-xs font-medium flex-1 truncate">{game.team1.abbr}</span>
-            <span className="text-[11px] font-bold tabular-nums" style={{ color: accent }}>{homePct != null ? `${homePct}%` : "—"}</span>
+            {showPct && <span className="text-[11px] font-bold tabular-nums" style={{ color: accent }}>{homePct != null ? `${homePct}%` : "—"}</span>}
             {game.bet365Home && (
               <OddsPill decimal={game.bet365Home} onBet={() => openBet("hockey")} />
             )}
@@ -284,7 +301,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
           <div className="flex items-center gap-1.5">
             <img src={game.team2.logo} alt={game.team2.abbr} className="w-5 h-5 object-contain flex-shrink-0" />
             <span className="text-white text-xs font-medium flex-1 truncate">{game.team2.abbr}</span>
-            <span className="text-[#bfc8cc] text-[11px] font-bold tabular-nums">{awayPct != null ? `${awayPct}%` : "—"}</span>
+            {showPct && <span className="text-[#bfc8cc] text-[11px] font-bold tabular-nums">{awayPct != null ? `${awayPct}%` : "—"}</span>}
             {game.bet365Away && (
               <OddsPill decimal={game.bet365Away} onBet={() => openBet("hockey")} />
             )}
@@ -298,7 +315,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
           {game.overUnder && (
             <div className="text-right">
               <span className="text-[11px] text-[#bfc8cc]">O/U {game.overUnder}</span>
-              {game.totalPct != null && <span className="text-[11px] text-[#90C9F0] ml-1">{game.totalPct}%</span>}
+              {showPct && game.totalPct != null && <span className="text-[11px] text-[#90C9F0] ml-1">{game.totalPct}%</span>}
             </div>
           )}
           <button

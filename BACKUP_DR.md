@@ -67,4 +67,5 @@ Do a **restore drill** once before launch and quarterly after: restore the lates
 ## 6. Related risks tracked in the audit
 
 - `ENCRYPTION_KEY` loss = permanent loss of stored OpenAI keys (users just re-enter them; not catastrophic, but note it).
-- No migration ledger yet (audit item M2) — after a restore, re-running `db:migrate:all` relies on idempotent `IF NOT EXISTS` guards. Adopt a tracking table to make restores deterministic.
+- Migration ledger: done — `migrate-all.ts` records applied files in `schema_migrations`, so re-running `db:migrate:all` after a restore only applies what is missing.
+- **The restore drill (§5) has never been run.** Tracked in `STATUS.md` §3.1.

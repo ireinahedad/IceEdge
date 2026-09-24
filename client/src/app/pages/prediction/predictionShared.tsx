@@ -15,6 +15,8 @@ import { FramedLabel } from "../../components/brand/FramedLabel";
 import { useBookmaker } from "../../context/BookmakerContext";
 import { loadGameOdds, type OddsTable } from "../../services/gameOdds";
 import type { NHLGame } from "../../types/bet";
+import type { MktGroup } from "./gameMarkets";
+import { ErrorState } from "../../components/ErrorState";
 
 /**
  * Prediction source shown by every BetOption on the page. Predictions are
@@ -416,6 +418,57 @@ export function NotFound() {
       <p className="text-white font-bold text-lg mb-2">{t("pred.notFound")}</p>
       <p className="text-[#8a9ea6] text-sm mb-6">{t("pred.notExist")}</p>
       <button onClick={() => navigate(-1)} className="px-6 py-2 rounded-xl bg-[#86d1ea]/10 border border-[#86d1ea]/30 text-[#86d1ea] text-sm">{t("pred.goBack")}</button>
+    </div>
+  );
+}
+
+/* ─── Marchés du serveur — seule source des pourcentages « règles » ─────────
+ *
+ * Les pages match, équipe et joueur affichaient jusqu'au 2026-09-24 des tuiles
+ * construites dans le navigateur, avec des pourcentages écrits en dur (54 % sur
+ * l'over, 22 % de prolongation, 52 % sur les tirs…) tant que le serveur n'avait
+ * pas répondu — et POUR TOUJOURS s'il ne répondait pas (`.catch(() => {})`).
+ * Désormais : pas de réponse = squelette, échec = écran d'erreur avec
+ * « Réessayer ». Jamais un chiffre local.
+ *
+ * `key` identifie ce qui est chargé (id du match, de l'équipe, du joueur) : le
+ * changer relance la requête. `load` n'est pas une dépendance — il est recréé à
+ * chaque rendu par l'appelant, et c'est `key` qui dit si la question a changé.
+ */
+export function useServerGroups(
+  load: () => Promise<MktGroup[]>,
+  key: string | undefined,
+): { groups: MktGroup[] | null; failed: boolean; retry: () => void } {
+  const [groups, setGroups] = useState<MktGroup[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!key) return;
+    let alive = true;
+    setGroups(null);
+    setFailed(false);
+    load()
+      .then((g) => { if (alive) setGroups(Array.isArray(g) ? g : []); })
+      .catch((e: unknown) => {
+        console.warn("[prediction] marchés du serveur indisponibles :", e);
+        if (alive) setFailed(true);
+      });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, attempt]);
+  const retry = useCallback(() => setAttempt((a) => a + 1), []);
+  return { groups, failed, retry };
+}
+
+/** À la place des marchés tant qu'ils ne sont pas là : squelette, ou erreur + « Réessayer ». */
+export function ServerGroupsPending({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
+  const { t } = useI18n();
+  if (failed) {
+    return <ErrorState onRetry={onRetry} title={t("pred.rulesUnavailable")} hint={t("pred.unavailableHint")} compact />;
+  }
+  return (
+    <div className="flex flex-col gap-3" aria-busy="true">
+      {[1, 2, 3].map((i) => <div key={i} className="h-20 bg-[#131A12] rounded-2xl animate-pulse" />)}
     </div>
   );
 }
