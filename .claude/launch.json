@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "client-prodapi",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--mode", "production", "--port", "5199", "--strictPort"],
+      "cwd": "client",
+      "port": 5199
+    }
+  ]
+}

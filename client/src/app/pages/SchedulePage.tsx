@@ -16,7 +16,10 @@ import { useNavigate } from "react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
 import { nhlApiService } from "../services/nhlApiService";
-import type { NHLGame } from "../types/bet";
+import type { NHLGame, NHLTeamStats } from "../types/bet";
+import { predictionApiService, type ApiBestBet } from "../services/predictionApiService";
+import { useSubscription } from "../context/SubscriptionContext";
+import { nhlLogoUrl } from "../data/teamEmoji";
 import { useI18n } from "../i18n";
 import { ErrorState } from "../components/ErrorState";
 import "../components/rink-theme.css";
@@ -151,6 +154,49 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
   const [reloadKey, setReloadKey] = useState(0);
 
   const weeks = useMemo(() => buildWeeks(cursor.y, cursor.m), [cursor.y, cursor.m]);
+
+  // Accroches des cartes de match. DEUX requêtes pour toute la page, jamais
+  // une par match, et toutes deux déjà mises en cache côté serveur :
+  //   • `/standings`         → fiche, série, forme sur 10 de chaque équipe ;
+  //   • `/predict/best-bets` → même appel que l'accueil (`limit` n'entre pas
+  //     dans la clé de cache serveur), donc aucun calcul ML en plus. Il ne
+  //     couvre que ce soir + demain : les matchs plus loin n'ont pas de pari.
+  // Best-bets est réservé Pro sur l'accueil : même règle ici — les gratuits
+  // voient un cadenas sur les matchs qui ont un pari, jamais le pari.
+  const { isPro } = useSubscription();
+  const [teamStats, setTeamStats] = useState<Map<string, NHLTeamStats>>(new Map());
+  const [bestByGame, setBestByGame] = useState<Map<string, ApiBestBet>>(new Map());
+
+  useEffect(() => {
+    let alive = true;
+    nhlApiService.getStandings()
+      .then((groups) => {
+        if (!alive) return;
+        const m = new Map<string, NHLTeamStats>();
+        for (const g of groups) for (const row of g.teams) m.set(row.team.abbreviation, row.stats);
+        setTeamStats(m);
+      })
+      .catch(() => { /* accroche seulement — la carte reste lisible sans */ });
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    predictionApiService.getBestBets({ limit: 50, source: "ml" })
+      .then(({ bets }) => {
+        if (!alive) return;
+        const best = new Map<string, ApiBestBet>();
+        for (const b of bets) {
+          if (!b.gameId) continue;
+          const id = String(b.gameId);
+          const cur = best.get(id);
+          if (!cur || b.score > cur.score) best.set(id, b);
+        }
+        setBestByGame(best);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   const minIdx = monthIndex(bounds.first.y, bounds.first.m);
   const maxIdx = monthIndex(bounds.last.y, bounds.last.m);
@@ -307,7 +353,17 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
                 </h2>
                 <div className="flex flex-col gap-2">
                   {dayGames.map((g) => (
-                    <GameRow key={g.id} game={g} onOpen={() => navigate(`/stats/prediction/game/${g.id}`)} t={t} />
+                    <GameRow
+                      key={g.id}
+                      game={g}
+                      onOpen={() => navigate(`/stats/prediction/game/${g.id}`)}
+                      awayStats={teamStats.get(g.awayTeam.abbreviation)}
+                      homeStats={teamStats.get(g.homeTeam.abbreviation)}
+                      bestBet={isPro ? bestByGame.get(String(g.id)) : undefined}
+                      bestLocked={!isPro && bestByGame.has(String(g.id))}
+                      onUpgrade={() => navigate("/pro")}
+                      fr={lang === "fr"}
+                    />
                   ))}
                 </div>
               </section>
@@ -319,54 +375,151 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
   );
 }
 
+const record = (s?: NHLTeamStats) => (s ? `${s.wins}-${s.losses}-${s.otLosses}` : "");
+
+/** « W4 » → 4, « L3 » → -3, le reste (OT, vide) → 0. */
+function streakValue(s?: NHLTeamStats): number {
+  const m = /^([WL])(\d+)$/i.exec(s?.streak ?? "");
+  if (!m) return 0;
+  return (m[1].toUpperCase() === "W" ? 1 : -1) * Number(m[2]);
+}
+
+/**
+ * UNE accroche par match, la plus parlante, tirée du classement déjà chargé :
+ * série de victoires ≥ 3, sinon série de défaites ≥ 4 (l'équipe en panne),
+ * sinon forme brûlante sur 10 matchs (≥ 7 victoires). Rien sinon — une carte
+ * sans accroche vaut mieux qu'une accroche creuse.
+ */
+function insightFor(game: NHLGame, away: NHLTeamStats | undefined, home: NHLTeamStats | undefined, fr: boolean): { hot: boolean; text: string } | null {
+  const teams = [
+    { abbr: game.awayTeam.abbreviation, s: away, v: streakValue(away) },
+    { abbr: game.homeTeam.abbreviation, s: home, v: streakValue(home) },
+  ];
+  const hot = [...teams].sort((a, b) => b.v - a.v)[0];
+  if (hot.v >= 3) return { hot: true, text: fr ? `${hot.abbr} : ${hot.v} victoires de suite` : `${hot.abbr} on a ${hot.v}-game win streak` };
+  const cold = [...teams].sort((a, b) => a.v - b.v)[0];
+  if (cold.v <= -4) return { hot: false, text: fr ? `${cold.abbr} : ${-cold.v} défaites de suite` : `${cold.abbr} has lost ${-cold.v} straight` };
+  const form = teams
+    .map((t) => ({ ...t, w: Number((t.s?.last10 ?? "").split("-")[0]) || 0 }))
+    .sort((a, b) => b.w - a.w)[0];
+  if (form.w >= 7) return { hot: true, text: fr ? `${form.abbr} : ${form.s!.last10} sur 10 matchs` : `${form.abbr} ${form.s!.last10} in last 10` };
+  return null;
+}
+
+function TeamLine({ abbr, name, stats, score, showScore, dim }: {
+  abbr: string; name: string; stats?: NHLTeamStats; score?: number; showScore: boolean; dim: boolean;
+}) {
+  return (
+    <div className={`flex items-center gap-2 ${dim ? "opacity-50" : ""}`}>
+      <img src={nhlLogoUrl(abbr)} alt="" className="w-6 h-6 object-contain flex-shrink-0" loading="lazy" />
+      <span className="text-white text-sm font-bold tabular-nums w-10">{abbr}</span>
+      <span className="text-[#8a9ea6] text-[11px] truncate flex-1 min-w-0">
+        {stats ? record(stats) : name}
+      </span>
+      {showScore && <span className="text-white text-base font-bold tabular-nums">{score ?? 0}</span>}
+    </div>
+  );
+}
+
 function GameRow({
   game,
   onOpen,
-  t,
+  awayStats,
+  homeStats,
+  bestBet,
+  bestLocked,
+  onUpgrade,
+  fr,
 }: {
   game: NHLGame;
   onOpen: () => void;
-  t: (k: string) => string;
+  awayStats?: NHLTeamStats;
+  homeStats?: NHLTeamStats;
+  bestBet?: ApiBestBet;
+  bestLocked: boolean;
+  onUpgrade: () => void;
+  fr: boolean;
 }) {
   const isFinal = game.status === "final";
   const isLive = game.status === "live";
+  const showScore = isFinal || isLive;
+  const a = game.awayTeam.score ?? 0;
+  const h = game.homeTeam.score ?? 0;
+  const insight = !isFinal ? insightFor(game, awayStats, homeStats, fr) : null;
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
-      className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl icy-tile text-left active:scale-[0.99] transition-transform"
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
+      className="w-full flex flex-col gap-2 px-4 py-3 rounded-2xl icy-tile text-left cursor-pointer active:scale-[0.99] transition-transform"
     >
-      {/* Équipes */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 text-white text-sm font-bold">
-          <span className="tabular-nums">{game.awayTeam.abbreviation}</span>
-          <span className="text-[#4a6068] font-normal">{t("schedule.at")}</span>
-          <span className="tabular-nums">{game.homeTeam.abbreviation}</span>
+      <div className="flex items-center gap-3">
+        {/* Équipes — visiteur en haut, domicile en bas, sans « @ » */}
+        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+          <TeamLine abbr={game.awayTeam.abbreviation} name={game.awayTeam.name} stats={awayStats} score={game.awayTeam.score} showScore={showScore} dim={isFinal && a < h} />
+          <TeamLine abbr={game.homeTeam.abbreviation} name={game.homeTeam.name} stats={homeStats} score={game.homeTeam.score} showScore={showScore} dim={isFinal && h < a} />
         </div>
-        <p className="text-[#8a9ea6] text-[11px] truncate">
-          {game.awayTeam.name} {t("schedule.at")} {game.homeTeam.name}
-        </p>
+
+        {/* Heure / statut */}
+        <div className="flex-shrink-0 text-right pl-3 border-l border-white/10 min-w-[64px]">
+          {isLive ? (
+            <>
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: "#f8717122", color: "#f87171" }}>
+                LIVE
+              </span>
+              {(game.period || game.clock) && (
+                <div className="text-[#8a9ea6] text-[11px] mt-1 tabular-nums">
+                  {game.period ? `P${game.period}` : ""} {game.clock ?? ""}
+                </div>
+              )}
+            </>
+          ) : isFinal ? (
+            <div className="text-[#4a6068] text-[11px] font-bold uppercase">Final</div>
+          ) : (
+            <>
+              <div className="text-sm font-bold tabular-nums" style={{ color: ACCENT }}>{game.startTime}</div>
+              {game.gameType === "playoff" && (
+                <div className="text-[10px] font-bold uppercase mt-0.5" style={{ color: "#fbbf24" }}>
+                  {fr ? "Séries" : "Playoffs"}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Heure / statut */}
-      <div className="flex-shrink-0 text-right">
-        {isLive ? (
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: "#f8717122", color: "#f87171" }}>
-            LIVE
-          </span>
-        ) : isFinal ? (
-          <>
-            <div className="text-white text-sm font-bold tabular-nums">
-              {game.awayTeam.score}–{game.homeTeam.score}
-            </div>
-            <div className="text-[#4a6068] text-[11px] uppercase">Final</div>
-          </>
-        ) : (
-          <div className="text-sm font-bold tabular-nums" style={{ color: ACCENT }}>
-            {game.startTime}
-          </div>
-        )}
-      </div>
-    </button>
+      {/* Accroches — meilleur pari du modèle, puis tendance d'équipe */}
+      {!isFinal && (bestBet || bestLocked || insight) && (
+        <div className="flex flex-wrap gap-1.5">
+          {bestBet ? (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg max-w-full"
+              style={{ background: "rgba(134,209,234,0.12)", color: ACCENT, border: "1px solid rgba(134,209,234,0.3)" }}
+            >
+              <span className="truncate">{bestBet.label}</span>
+              <span className="font-bold tabular-nums text-white">{Math.round(bestBet.score)}%</span>
+            </span>
+          ) : bestLocked ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); onUpgrade(); }}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg"
+              style={{ background: "rgba(251,191,36,0.10)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.3)" }}
+            >
+              {fr ? "Meilleur pari du modèle · Pro" : "Model's best bet · Pro"}
+            </button>
+          ) : null}
+          {insight && (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg bg-white/5 max-w-full"
+              style={{ color: insight.hot ? "#fb923c" : "#8a9ea6" }}
+            >
+              <span className="truncate">{insight.text}</span>
+            </span>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

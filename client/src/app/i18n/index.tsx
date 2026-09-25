@@ -44,7 +44,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "nav.home":    { en: "Home",    fr: "Accueil" },
   "nav.stats":   { en: "Stats",   fr: "Stats" },
   "nav.slip":    { en: "Slip",    fr: "Pari" },
-  "nav.league":  { en: "League",  fr: "Ligue" },
+  "nav.league":  { en: "Community",  fr: "Communauté" },
   "nav.profile": { en: "Profile", fr: "Profil" },
 
   // ── Common ──
