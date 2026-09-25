@@ -50,34 +50,38 @@ function AppShell() {
 }
 
 export default function App() {
+  // Filet extérieur : une erreur dans un provider (auth, abonnement…) casse
+  // tout ce qui est en dessous, y compris la boundary d'AppShell.
   return (
-    <LanguageProvider>
-      <AuthProvider>
-        <SubscriptionProvider>
-          <BetProvider>
-            <SportProvider>
-              <BookmakerProvider>
-                {/* Format d'écriture des COTES DE BOOKMAKER (cote décimale,
-                    cote américaine, probabilité implicite). Réglage de LECTURE
-                    seulement : il ne touche aucun calcul, et il ne touche PAS
-                    les probabilités du modèle, qui restent en % partout. Sous
-                    BookmakerProvider parce que les deux répondent à la même
-                    question — comment ce lecteur-là lit un prix.
-                    Voir context/OddsFormatContext.tsx. */}
-                <OddsFormatProvider>
-                  {/* R4.3d — la liste de blocage est partagée entre le chat et
-                      les Paramètres. Elle ne charge rien au montage : voir
-                      BlockContext, `ensureLoaded`. Sous AuthProvider, dont elle
-                      lit l'utilisateur courant. */}
-                  <BlockProvider>
-                    <AppShell />
-                  </BlockProvider>
-                </OddsFormatProvider>
-              </BookmakerProvider>
-            </SportProvider>
-          </BetProvider>
-        </SubscriptionProvider>
-      </AuthProvider>
-    </LanguageProvider>
+    <ErrorBoundary>
+      <LanguageProvider>
+        <AuthProvider>
+          <SubscriptionProvider>
+            <BetProvider>
+              <SportProvider>
+                <BookmakerProvider>
+                  {/* Format d'écriture des COTES DE BOOKMAKER (cote décimale,
+                      cote américaine, probabilité implicite). Réglage de LECTURE
+                      seulement : il ne touche aucun calcul, et il ne touche PAS
+                      les probabilités du modèle, qui restent en % partout. Sous
+                      BookmakerProvider parce que les deux répondent à la même
+                      question — comment ce lecteur-là lit un prix.
+                      Voir context/OddsFormatContext.tsx. */}
+                  <OddsFormatProvider>
+                    {/* R4.3d — la liste de blocage est partagée entre le chat et
+                        les Paramètres. Elle ne charge rien au montage : voir
+                        BlockContext, `ensureLoaded`. Sous AuthProvider, dont elle
+                        lit l'utilisateur courant. */}
+                    <BlockProvider>
+                      <AppShell />
+                    </BlockProvider>
+                  </OddsFormatProvider>
+                </BookmakerProvider>
+              </SportProvider>
+            </BetProvider>
+          </SubscriptionProvider>
+        </AuthProvider>
+      </LanguageProvider>
+    </ErrorBoundary>
   );
 }

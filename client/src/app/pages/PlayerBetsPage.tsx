@@ -266,7 +266,7 @@ export function PlayerBetsPage() {
   // Réservé à l'état `ok` : le blocage optimiste a besoin du pseudo et de
   // l'avatar pour dessiner la ligne dans les Réglages, et un profil masqué ou
   // verrouillé par le mur Pro ne les fournit pas.
-  const isSelf = !!user && !!userId && user.id === userId;
+  const isSelf = !!user && !!userId && user.id.toLowerCase() === userId.toLowerCase();
   const blocked = isBlocked(userId);
 
   async function handleBlock() {

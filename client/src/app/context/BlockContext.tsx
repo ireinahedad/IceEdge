@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { profileApiService } from "../services/userService";
 import { useAuth } from "./AuthContext";
+import { useI18n } from "../i18n";
 import type { BlockedUser } from "../types/user";
 
 /**
@@ -44,6 +45,7 @@ const BlockContext = createContext<BlockContextType | null>(null);
 
 export function BlockProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const { t } = useI18n();
   const [blocked, setBlocked] = useState<BlockedUser[]>([]);
   const [blockedIds, setBlockedIds] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(false);
@@ -107,6 +109,14 @@ export function BlockProvider({ children }: { children: ReactNode }) {
    * pour faire disparaître quelqu'un qu'on vient de bloquer.
    */
   const block = useCallback<BlockContextType["block"]>(async (u) => {
+    // Garde centrale : les écrans masquent déjà le bouton sur son propre compte,
+    // mais une seule condition oubliée ailleurs suffirait. Sans elle, l'ajout
+    // optimiste plus bas masquait un instant ses propres messages avant que le
+    // 400 du serveur ne le défasse. Comparaison insensible à la casse : un UUID
+    // tapé en majuscules dans /player/:userId reste le même compte.
+    if (user && u.id.toLowerCase() === user.id.toLowerCase()) {
+      throw new Error(t("block.self"));
+    }
     const optimistic: BlockedUser = {
       id: u.id,
       username: u.username,
@@ -123,7 +133,7 @@ export function BlockProvider({ children }: { children: ReactNode }) {
       apply(previous);
       throw e;
     }
-  }, [blocked, apply]);
+  }, [blocked, apply, user, t]);
 
   const unblock = useCallback(async (userId: string) => {
     const previous = blocked;

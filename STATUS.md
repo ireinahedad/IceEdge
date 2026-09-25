@@ -1,6 +1,6 @@
 # ArakIce / ICEEDGE — Project status
 
-**Single source of truth for what is done and what remains. Updated 2026-09-24 (evening).**
+**Single source of truth for what is done and what remains. Updated 2026-09-25.**
 
 Built by reading every planning doc in the repo (plus the deleted `RESTE_A_FAIRE.md`,
 recovered from Git) and checking each claim against the code and the Git log.
@@ -276,6 +276,46 @@ try/catch · tennis bets stuck "pending" in the DB (manual SQL) · server starts
 - [ ] Re-read TikTok/Instagram rules on betting-related content before the first post.
 - [ ] Check `#utahmammoth` against the franchise's official account.
 - [ ] Add `faceoffs_taken` to `build-content-insights.ts`.
+
+### 3.12 Real bet365 odds + Best Bets ranking (added 2026-09-25)
+
+Context: **The Odds API has no bet365 for the NHL.** Its only bet365 key is `bet365_au`
+(Australia, AFL/NRL only). So `oddsClient.ts` never finds `bet365` and `pickBookmaker` falls back
+to *the first book in the list* — the odds behind EV and value-bet alerts come from an arbitrary
+book that can change per game. The client proxy (`odds.routes.ts`) returns zero odds while
+`ODDS_BOOKMAKERS` / `ODDS_REGIONS` are unset.
+
+Cheapest providers with bet365 (approx., converted at ~1 £ ≈ 1.35 US$, ~1 US$ ≈ 1.37 CA$ — check at checkout):
+
+| Provider | Plan | ≈ US$/mo | ≈ CA$/mo | bet365 NHL + props |
+|---|---|---|---|---|
+| odds-api.io | Solo (2 books) | 65 | ~89 | **yes — confirmed 2026-09-25** |
+| SharpAPI | Hobby (5 books) | 79 | ~108 | NHL yes, props not stated |
+| SportsGameOdds | Pro | 299 | ~410 | yes (7-day trial) |
+
+- [x] **Email odds-api.io** — answered 2026-09-25 (support bot), and checked against their public
+      coverage sheet (tab "Coverage", row `Bet365 | Ice Hockey | Player Props: Yes | Pre-match: Yes |
+      Live: Yes | All markets on sportsbook`). Solo = **65 US$/mo (£49)**, 2 books, bet365 counts as one.
+      Region: bet365 is a single **"global"** feed — the sheet has no Canada/Ontario bet365 variant.
+- [ ] **Test with the free key first** (odds-api.io/dashboard, no card; 2 books, 100 req/h,
+      pre-match only — live needs a paid plan): pick bet365 + a second book, pull one NHL event,
+      check the moneyline / puck line / totals / player-prop keys and compare a few prices with
+      bet365.ca by hand (the "global" feed may differ from Canadian prices).
+- [ ] Choose the 2nd book. The sheet also lists **`bet365 NJ`** (US feed) with the exact NHL
+      markets we use (Anytime Goalscorer, Points O/U, Shots on Goal O/U, Power Play Points O/U) —
+      useful if the "global" `Bet365` prop keys turn out messy. No Pinnacle in their catalogue;
+      the sharp option for NHL is **Circa** (ML / spread / totals, pre-match only).
+- [ ] Subscribe to Solo, then replace The Odds API in `server/src/services/oddsClient.ts` and
+      `server/src/routes/odds.routes.ts` (keep the cache / quota / stale-fallback behaviour).
+- [ ] Make `pickBookmaker` deterministic (one configured book, never "first in list") and
+      expose which book priced each bet.
+- [ ] **Best Bets ranking**: once real odds exist on every market, rank by expected value
+      (`probability × real odds`) and show the real bet365 odds instead of the fair odds
+      (`100 / pct`). Update the explanation line (`home.bbExplainMl` / `home.bbExplainRules`).
+      Until then the list stays ranked by probability.
+- [ ] Commit the Best Bets UX rework (2026-09-25, `BestBetsSection.tsx` + i18n — *not yet
+      committed*): one exclusive tier selector, new rows, translated labels, max 2 bets per
+      game, Rules / AI toggle. Check it on the live site with a Pro account.
 
 ---
 

@@ -1,5 +1,6 @@
-import { createBrowserRouter, Navigate, Outlet, useLocation, useRouteError } from "react-router";
-import { lazy, Suspense, useEffect, type ReactNode } from "react";
+import { createBrowserRouter, isRouteErrorResponse, Navigate, Outlet, useLocation, useRouteError } from "react-router";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { ErrorScreen, reportError } from "./components/ErrorScreen";
 import { useAuth } from "./context/AuthContext";
 import { AuthGateProvider } from "./context/AuthGateContext";
 import { features } from "./platform";
@@ -108,26 +109,20 @@ function RootLayout() {
  * de react-router. Cas typique : un chunk d'un ancien build introuvable après
  * un déploiement ; le filet `vite:preloadError` de main.tsx recharge déjà une
  * fois, ceci couvre ce qui passe au travers (et toute autre erreur de rendu).
+ * Le dessin et le rapport Sentry vivent dans ErrorScreen, partagé avec
+ * l'ErrorBoundary d'App.tsx.
  */
 function RouteError() {
   const error = useRouteError();
-  const isChunkError =
-    error instanceof Error &&
-    /dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(error.message);
-  useEffect(() => { console.error("[route] error:", error); }, [error]);
-  return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#0A0E0C", color: "#E6EDE9", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: 16, textAlign: "center", fontFamily: "system-ui, sans-serif" }}>
-      <p style={{ margin: 0, fontSize: 18 }}>
-        {isChunkError ? "Une nouvelle version d'ArakIce est disponible." : "Oups, quelque chose s'est mal passé."}
-      </p>
-      <button
-        onClick={() => window.location.reload()}
-        style={{ padding: "10px 20px", borderRadius: 8, border: "none", backgroundColor: "#2F9E6E", color: "#fff", fontSize: 16, cursor: "pointer" }}
-      >
-        Recharger la page
-      </button>
-    </div>
-  );
+  const [eventId, setEventId] = useState<string>();
+  const notFound = isRouteErrorResponse(error) && error.status === 404;
+  useEffect(() => {
+    if (notFound) return;
+    console.error("[route] error:", error);
+    setEventId(reportError(error));
+  }, [error, notFound]);
+  if (notFound) return withSuspense(<NotFoundPage />);
+  return <ErrorScreen error={error} eventId={eventId} />;
 }
 
 export const router = createBrowserRouter([

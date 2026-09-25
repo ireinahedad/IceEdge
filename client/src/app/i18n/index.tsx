@@ -293,6 +293,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "block.confirm":     { en: "Block",               fr: "Bloquer" },
   "block.done":        { en: "{name} is blocked.",  fr: "{name} est bloqué." },
   "block.failed":      { en: "Could not block this user", fr: "Impossible de bloquer cet utilisateur" },
+  "block.self":        { en: "You can't block yourself.", fr: "Tu ne peux pas te bloquer toi-même." },
   "block.unblockDone": { en: "{name} is unblocked.", fr: "{name} est débloqué." },
   "block.unblockFailed": { en: "Could not unblock", fr: "Impossible de débloquer" },
 
@@ -488,8 +489,12 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "home.show":           { en: "Show",              fr: "Afficher" },
   "home.hide":           { en: "Hide",              fr: "Masquer" },
   "home.rules":          { en: "Rules",             fr: "Règles" },
-  "home.safe":           { en: "↓ Safe",            fr: "↓ Sûrs" },
-  "home.risky":          { en: "↑ Risky",           fr: "↑ Risqués" },
+  "home.ai":             { en: "AI",                fr: "IA" },
+  "home.noBetsTier":     { en: "No “{tier}” bets right now — try another tab.", fr: "Aucun pari « {tier} » pour le moment — essaie un autre onglet." },
+  "home.bbExplainMl":    { en: "Ranked by win chance according to our AI model.", fr: "Classés selon leur chance de passer d'après notre modèle IA." },
+  "home.bbExplainRules": { en: "Ranked by win chance according to our analysis rules.", fr: "Classés selon leur chance de passer d'après nos règles d'analyse." },
+  "home.chance":         { en: "chance",            fr: "de chance" },
+  "home.odds":           { en: "odds {odds}",       fr: "cote {odds}" },
   "home.noBets":         { en: "No bets right now — the list covers games in the next 48 hours", fr: "Aucun pari pour le moment — la liste couvre les matchs des 48 prochaines heures" },
   "home.liveNow":        { en: "Live Now",          fr: "En direct" },
   "home.live":           { en: "Live",              fr: "En direct" },
@@ -508,14 +513,13 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "home.edge":           { en: "+{edge}% edge",     fr: "+{edge}% avantage" },
   "home.game":           { en: "Game",              fr: "Match" },
   "home.nhlGame":        { en: "NHL Game",          fr: "Match LNH" },
-  "home.oddsApprox":     { en: "≈{odds}",           fr: "≈{odds}" },
   "home.oddsFairHint":   { en: "Fair odds implied by our model — not a bookmaker price.", fr: "Cote équitable déduite de notre modèle — ce n'est pas un prix de bookmaker." },
 
-  // ── Risk labels ──
-  "risk.safe":     { en: "Safe",      fr: "Sûr" },
-  "risk.moderate": { en: "Moderate",  fr: "Modéré" },
-  "risk.risky":    { en: "Risky",     fr: "Risqué" },
-  "risk.high":     { en: "High risk", fr: "Risque élevé" },
+  // ── Best bets tiers (sélecteur exclusif) ──
+  "tier.all":      { en: "All",       fr: "Tous" },
+  "tier.safe":     { en: "Safe",      fr: "Sûrs" },
+  "tier.balanced": { en: "Balanced",  fr: "Équilibrés" },
+  "tier.longshot": { en: "Big odds",  fr: "Grosses cotes" },
 
   // ── Best bets labels ──
   "bb.teamWin":   { en: "{abbr} to win",    fr: "Victoire de {abbr}" },
@@ -523,6 +527,20 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "bb.over":      { en: "Over {line} goals", fr: "Plus de {line} buts" },
   "bb.under":     { en: "Under {line} goals", fr: "Moins de {line} buts" },
   "bb.vs":        { en: "vs {opp}",         fr: "contre {opp}" },
+  "bb.puckLine":      { en: "{abbr} wins by 2+ goals",       fr: "{abbr} gagne par 2 buts ou plus" },
+  "bb.anytimeGoal":   { en: "{name} scores a goal",          fr: "{name} marque un but" },
+  "bb.shotsAtLeast":  { en: "{name}: {n}+ shots on goal",    fr: "{name} : au moins {n} tirs au but" },
+  "bb.pointsAtLeast": { en: "{name}: {n}+ point(s)",         fr: "{name} : au moins {n} point(s)" },
+  "bb.ppPoint":       { en: "{name}: power-play point",      fr: "{name} : point en avantage numérique" },
+
+  // ── Noms de marchés (Meilleurs paris) ──
+  "market.moneyline":    { en: "Game winner",   fr: "Vainqueur du match" },
+  "market.total_goals":  { en: "Total goals",   fr: "Total de buts" },
+  "market.puck_line":    { en: "Puck line",     fr: "Écart (puck line)" },
+  "market.anytime_goal": { en: "Goal scorer",   fr: "Buteur" },
+  "market.shots_ou":     { en: "Shots on goal", fr: "Tirs au but" },
+  "market.points_ou":    { en: "Points",        fr: "Points" },
+  "market.pp_point":     { en: "Power play",    fr: "Avantage numérique" },
 
   // ── NHL predictions page ──
   "nhl.title":         { en: "🏒 NHL Predictions", fr: "🏒 Prédictions NHL" },
@@ -1050,6 +1068,16 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // ── 404 ──
   "notFound.title": { en: "Page not found", fr: "Page introuvable" },
   "notFound.body":  { en: "This page doesn't exist or has moved.", fr: "Cette page n'existe pas ou a été déplacée." },
+
+  // ── Écran d'erreur (components/ErrorScreen.tsx) ──
+  "error.title":        { en: "Something went wrong", fr: "Oups, quelque chose s'est mal passé" },
+  "error.body":         { en: "An unexpected error occurred. Try again, or head back to the home page.", fr: "Une erreur inattendue est survenue. Réessaie, ou reviens à l'accueil." },
+  "error.offlineTitle": { en: "You're offline", fr: "Tu es hors ligne" },
+  "error.offlineBody":  { en: "Check your connection, then try again.", fr: "Vérifie ta connexion, puis réessaie." },
+  "error.updateTitle":  { en: "A new version of ArakIce is available", fr: "Une nouvelle version d'ArakIce est disponible" },
+  "error.updateBody":   { en: "Reload to get the latest version.", fr: "Recharge pour obtenir la dernière version." },
+  "error.reload":       { en: "Reload", fr: "Recharger" },
+  "error.code":         { en: "Error code: {id}", fr: "Code d'erreur : {id}" },
 
   // ── League: Pro lock on other players' bets ──
   "league.othersProTitle": { en: "See their bets with Pro", fr: "Vois leurs paris avec Pro" },

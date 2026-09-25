@@ -2,25 +2,23 @@
  * BestBetsSection.tsx
  *
  * Extrait de HockeyLanding.tsx le 2026-08-10.
- * Découpage mécanique : le corps du code est identique à l'original,
- * seuls les imports et les mots-clés `export` ont été ajoutés.
+ * Refonte UX le 2026-09-25 : un seul sélecteur exclusif de palier, lignes
+ * « pari / contexte — % de chance / cote », libellés traduits côté client.
  */
 
 import { useState, useEffect, useMemo } from "react";
 import { ChevronRight, Star } from "lucide-react";
-import { predictionApiService } from "../../services/predictionApiService";
+import { predictionApiService, type ApiBestBet } from "../../services/predictionApiService";
 import type { BetLeg } from "../../types/bet";
 import { useBet } from "../../context/BetContext";
 import { ProLock } from "../../components/ProLock";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
-import { env } from "../../env";
-import { fetchWithTimeout } from "../../services/http";
 
 
 // ─── Best Bets ─────────────────────────────────────────────────────────────────
 
-const BB_BASE = env.predictionApiUrl;
+type TFn = (key: string, params?: Record<string, string | number>) => string;
 
 interface BestBet {
   id: string;
@@ -29,37 +27,67 @@ interface BestBet {
   logo: string;
   rulePct: number;
   mlPct: number | null;
-  mlLoading: boolean;
   leg: BetLeg;
   gameId?: string;
-  teamId?: string;
 }
 
 type SortSource = "rules" | "ml";
-type RiskTier   = "safe" | "moderate" | "risky" | "high";
-type SortOrder  = "safest" | "riskiest";
+type RiskTier   = "safe" | "balanced" | "longshot";
+type TierFilter = RiskTier | "all";
 
+// Trois paliers aux couleurs franchement distinctes : la couleur du % sur chaque
+// ligne est la même que celle de l'onglet du sélecteur, qui sert donc de légende.
 const RISK_TIERS: { tier: RiskTier; key: string; color: string }[] = [
-  { tier: "safe",     key: "risk.safe",     color: "#86d1ea" },
-  { tier: "moderate", key: "risk.moderate", color: "#90C9F0" },
-  { tier: "risky",    key: "risk.risky",    color: "#facc15" },
-  { tier: "high",     key: "risk.high",     color: "#f87171" },
+  { tier: "safe",     key: "tier.safe",     color: "#86d1ea" },
+  { tier: "balanced", key: "tier.balanced", color: "#facc15" },
+  { tier: "longshot", key: "tier.longshot", color: "#f87171" },
 ];
+
+/** Au plus N paris par match : sans ça, un seul match (ML + puck line + over de
+ *  la même équipe) pouvait occuper la moitié de la liste. */
+const MAX_PER_GAME = 2;
 
 function riskLabel(pct: number): { tier: RiskTier; key: string; color: string } {
   if (pct >= 70) return RISK_TIERS[0];
   if (pct >= 55) return RISK_TIERS[1];
-  if (pct >= 40) return RISK_TIERS[2];
-  return RISK_TIERS[3];
+  return RISK_TIERS[2];
 }
 
 /** Cote **équitable** déduite de la probabilité du modèle — sans marge, et sans
  * rapport avec un prix de bookmaker. Affichée pour donner un ordre de grandeur du
- * gain sur les marchés que bet365 ne couvre pas tous. Le `≈` seul ne suffisait pas
- * à le dire : la pastille porte désormais une infobulle explicite. */
+ * gain sur les marchés que bet365 ne couvre pas tous. L'infobulle le précise. */
 function impliedOdds(pct: number): number | null {
   if (pct <= 0 || pct >= 100) return null;
   return Math.round((100 / pct) * 100) / 100;
+}
+
+/**
+ * Libellé lisible et traduit, reconstruit depuis les champs structurés du
+ * serveur (marketType, selectionValue, line). Le `label` serveur est en anglais
+ * en dur (« BOS to win ») : on ne s'en sert plus qu'en repli, pour un marché
+ * inconnu. Les lignes « .5 » sont dites en entier (« au moins 3 tirs ») —
+ * plus parlant que « plus de 2.5 tirs ».
+ */
+function betLabel(b: ApiBestBet, t: TFn): string {
+  const abbr = b.teamAbbr ?? b.selectionValue.toUpperCase();
+  const name = b.subjectName;
+  const atLeast = (line: number | null, dflt: number) => Math.ceil(line ?? dflt);
+  switch (b.marketType) {
+    case "moneyline":   return t("bb.teamWin",    { abbr });
+    case "puck_line":   return t("bb.puckLine",   { abbr });
+    case "total_goals": return t(b.selectionValue === "under" ? "bb.under" : "bb.over", { line: b.line ?? 5.5 });
+    case "anytime_goal":return t("bb.anytimeGoal",{ name });
+    case "shots_ou":    return t("bb.shotsAtLeast",  { name, n: atLeast(b.line, 2.5) });
+    case "points_ou":   return t("bb.pointsAtLeast", { name, n: atLeast(b.line, 0.5) });
+    case "pp_point":    return t("bb.ppPoint",    { name });
+    default:            return b.label;
+  }
+}
+
+function marketName(b: ApiBestBet, t: TFn): string {
+  const key = `market.${b.marketType}`;
+  const out = t(key);
+  return out === key ? b.marketLabel : out;   // clé absente → libellé serveur
 }
 
 function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource }) {
@@ -69,41 +97,32 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
   const displayPct = sortSource === "ml" ? (bet.mlPct ?? bet.rulePct) : bet.rulePct;
   const risk = riskLabel(displayPct);
   const odds = impliedOdds(displayPct);
-  const isML = sortSource === "ml" && bet.mlPct != null;
 
+  // Gauche : le pari en gros, le contexte dessous. Droite : le chiffre clé avec
+  // son libellé en toutes lettres — rien ne dépend d'une infobulle (mobile).
   return (
-    <div className="flex items-center gap-2.5 icy-card rounded-xl px-2.5 py-1.5">
+    <div className="flex items-center gap-2.5 icy-card rounded-xl px-3 py-2">
       {bet.logo?.startsWith("http")
-        ? <img src={bet.logo} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
-        : <span className="text-base flex-shrink-0">{bet.logo}</span>}
+        ? <img src={bet.logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
+        : <span className="text-lg flex-shrink-0">{bet.logo}</span>}
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {/* Full bet title always visible — no truncation, wraps if long */}
-          <span className="text-white text-[11px] font-medium">{bet.label}</span>
-          <span className="text-[11px] px-1 py-px rounded-full flex-shrink-0 font-medium"
-            style={{ color: risk.color, backgroundColor: `${risk.color}18`, border: `1px solid ${risk.color}44` }}>
-            {t(risk.key)}
-          </span>
-          <span className="text-[#8a9ea6] text-[11px] truncate">· {bet.context}</span>
+        <div className="text-white text-[13px] font-semibold leading-tight">{bet.label}</div>
+        <div className="text-[#8a9ea6] text-[11px] truncate mt-0.5">
+          {bet.context} · {bet.leg.marketLabel}
         </div>
-        <div className="flex items-center gap-2 mt-1">
-          <div className="flex-1 bg-[#0A0E0C] rounded-full h-1 overflow-hidden">
-            <div className="h-full rounded-full transition-all duration-500"
-              style={{ width: `${displayPct}%`, backgroundColor: isML ? "#a78bfa" : risk.color }} />
-          </div>
-          <span className="text-[11px] font-bold flex-shrink-0 tabular-nums"
-            style={{ color: isML ? "#a78bfa" : risk.color }}>
-            {sortSource === "ml" && bet.mlLoading ? "…" : `${displayPct}%`}
-          </span>
-          {odds != null && (
-            <span
-              title={t("home.oddsFairHint")}
-              className="text-[11px] font-semibold flex-shrink-0 tabular-nums text-[#bfc8cc] bg-white/5 px-1.5 py-px rounded-full cursor-help">
-              {t("home.oddsApprox", { odds: odds.toFixed(2) })}
-            </span>
-          )}
+      </div>
+
+      <div className="flex flex-col items-end flex-shrink-0 leading-tight">
+        <div className="tabular-nums" style={{ color: risk.color }}>
+          <span className="text-[15px] font-bold">{displayPct} %</span>
+          <span className="text-[10px] font-medium ml-1">{t("home.chance")}</span>
         </div>
+        {odds != null && (
+          <span title={t("home.oddsFairHint")} className="text-[11px] text-[#bfc8cc] tabular-nums">
+            {t("home.odds", { odds: odds.toFixed(2) })}
+          </span>
+        )}
       </div>
 
       <button
@@ -120,6 +139,16 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
   );
 }
 
+/** Lignes factices de l'aperçu flouté (utilisateurs gratuits) — même gabarit
+ *  que les vraies lignes, pour montrer ce qu'on obtient en passant Pro. */
+const lockedPreview = (t: TFn): { label: string; context: string; pct: number }[] => [
+  { label: t("bb.teamWin",       { abbr: "TOR" }),              context: "TOR vs BOS · 19:00", pct: 74 },
+  { label: t("bb.over",          { line: 5.5 }),                context: "EDM vs CGY · 21:00", pct: 66 },
+  { label: t("bb.pointsAtLeast", { name: "Connor McDavid", n: 1 }), context: "EDM vs CGY · 21:00", pct: 61 },
+  { label: t("bb.puckLine",      { abbr: "BOS" }),              context: "BOS vs MTL · 19:30", pct: 52 },
+  { label: t("bb.under",         { line: 6.5 }),                context: "NYR vs NJD · 19:00", pct: 47 },
+];
+
 export function BestBetsSection({
   accent,
   isLoading,
@@ -131,18 +160,11 @@ export function BestBetsSection({
 }) {
   const { t, lang } = useI18n();
   const [sortSource, setSortSource] = useState<SortSource>("ml");
-  const [sortOrder,  setSortOrder]  = useState<SortOrder>("safest");
-  // Risk-tier filters are combinable (multi-select) instead of an exclusive
-  // toggle, so users can view e.g. "risky" and "high" payout picks together,
-  // or leave everything selected to see safe and risky bets side by side.
-  const [riskFilter, setRiskFilter] = useState<Set<RiskTier>>(new Set(["safe", "moderate", "risky", "high"]));
-  const toggleRisk = (tier: RiskTier) => setRiskFilter(prev => {
-    const next = new Set(prev);
-    if (next.has(tier)) next.delete(tier); else next.add(tier);
-    return next;
-  });
+  // Un seul sélecteur exclusif (Tous / Sûrs / Équilibrés / Grosses cotes).
+  // Il remplace l'ancien trio bouton de tri + 4 pastilles multi-sélection, où
+  // cliquer « Sûr » masquait les paris sûrs au lieu de n'afficher qu'eux.
+  const [tierFilter, setTierFilter] = useState<TierFilter>("all");
   const [bets, setBets]             = useState<BestBet[]>([]);
-  const [mlFetched,  setMlFetched]  = useState(false);
   const [collapsed,  setCollapsed]  = useState<boolean>(() => {
     try { return localStorage.getItem("iceedge_bestbets_collapsed") === "1"; }
     catch { return false; }
@@ -157,27 +179,32 @@ export function BestBetsSection({
   // Construit la liste : l'endpoint best-bets du serveur (tous marchés, règles +
   // ML, déjà trié). Le repli « hors-saison » sur des matchs de tennis est parti
   // avec le tennis, le 2026-08-24 : hors saison, la section est simplement vide.
+  // Les scores ML arrivent avec la réponse : l'ancien chargement ML paresseux,
+  // ligne par ligne, ne se déclenchait plus et a été retiré le 2026-09-25.
   useEffect(() => {
     if (locked) return;             // don't fetch Pro-only data for free users
     let cancelled = false;
 
-    // Hockey → backend best-bets endpoint (all markets, rules + ML, pre-sorted)
     (async () => {
       try {
-        // Fetch a larger pool (both rule + ML scores) so the Rules/ML toggle
+        // Fetch a larger pool (both rule + ML scores) so the Rules/AI toggle
         // re-ranks honestly client-side; the list itself still shows the top 15.
         const { bets: apiBets } = await predictionApiService.getBestBets({ limit: 30, source: "ml" });
         if (cancelled) return;
         const mapped: BestBet[] = apiBets.map((b) => {
-          const logo = b.teamAbbr ? nhlLogoUrl(b.teamAbbr) : b.subjectLogo;
+          const logo   = b.teamAbbr ? nhlLogoUrl(b.teamAbbr) : b.subjectLogo;
+          const label  = betLabel(b, t);
+          const market = marketName(b, t);
           return {
-            id: b.id, label: b.label, context: b.context, logo,
-            rulePct: b.rulePct, mlPct: b.mlPct, mlLoading: false,
-            gameId: b.gameId ?? undefined, teamId: b.teamId ?? undefined,
+            id: b.id, label, context: b.context, logo,
+            rulePct: b.rulePct, mlPct: b.mlPct,
+            gameId: b.gameId ?? undefined,
             leg: {
-              id: b.id, marketType: b.marketType, marketLabel: b.marketLabel,
+              // `selection` / `marketLabel` sont purement affichés (coupon,
+              // partage) : le règlement automatique lit `selectionValue`.
+              id: b.id, marketType: b.marketType, marketLabel: market,
               subjectType: b.subjectType, subjectId: b.subjectId, subjectName: b.subjectName,
-              subjectLogo: logo, selection: b.selection, selectionShort: b.selectionShort,
+              subjectLogo: logo, selection: label, selectionShort: b.selectionShort,
               probability: b.score, line: b.line ?? undefined,
               gameInfo: b.context, addedAt: new Date().toISOString(),
               // Machine-readable fields for automatic settlement.
@@ -187,9 +214,8 @@ export function BestBetsSection({
           };
         });
         setBets(mapped);
-        setMlFetched(true); // scores already include ML — skip the lazy per-bet fetch
       } catch {
-        if (!cancelled) { setBets([]); setMlFetched(true); }
+        if (!cancelled) setBets([]);
       }
     })();
 
@@ -200,42 +226,27 @@ export function BestBetsSection({
   // cotes arrivées, abonnement rechargé) refaisait `GET /predict/best-bets` et
   // écrasait la liste. Mesuré le 2026-09-16 : 2 appels par ouverture de
   // « More bets ». best-bets est calculé côté serveur, indépendamment d'eux.
+  // `t` suit `lang` : `lang` suffit à retraduire les libellés.
   }, [lang, locked]);
-
-  // Lazy ML fetch when ML tab selected
-  useEffect(() => {
-    if (locked || sortSource !== "ml" || mlFetched || bets.length === 0 || !BB_BASE) return;
-    setMlFetched(true);
-    setBets(prev => prev.map(b => ({ ...b, mlLoading: true })));
-
-    bets.slice(0, 20).forEach(async (bet) => {
-      try {
-        const body: Record<string, unknown> = { type: "game", subjectId: bet.teamId ?? bet.gameId ?? bet.id };
-        if (bet.teamId) body.opponentId = bet.gameId;
-        const res = await fetchWithTimeout(`${BB_BASE}/predict/ml`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-        if (res.ok) {
-          const data = await res.json() as { probability?: number };
-          setBets(prev => prev.map(b => b.id === bet.id ? { ...b, mlPct: Math.round(data.probability ?? bet.rulePct), mlLoading: false } : b));
-        } else {
-          setBets(prev => prev.map(b => b.id === bet.id ? { ...b, mlLoading: false } : b));
-        }
-      } catch {
-        setBets(prev => prev.map(b => b.id === bet.id ? { ...b, mlLoading: false } : b));
-      }
-    });
-  }, [sortSource, mlFetched, bets]);
 
   const sorted = useMemo(() => {
     const src = (b: BestBet) => sortSource === "ml" ? (b.mlPct ?? b.rulePct) : b.rulePct;
-    // Empty selection = no filter applied (show every risk tier), so users
-    // can never accidentally hide the whole list by deselecting every chip.
-    const filtered = riskFilter.size === 0
+    const filtered = tierFilter === "all"
       ? bets
-      : bets.filter(b => riskFilter.has(riskLabel(src(b)).tier));
-    return [...filtered]
-      .sort((a, b) => sortOrder === "safest" ? src(b) - src(a) : src(a) - src(b))
-      .slice(0, 15);
-  }, [bets, sortSource, sortOrder, riskFilter]);
+      : bets.filter(b => riskLabel(src(b)).tier === tierFilter);
+    const perGame = new Map<string, number>();
+    const out: BestBet[] = [];
+    for (const b of [...filtered].sort((a, b) => src(b) - src(a))) {
+      if (b.gameId) {
+        const n = perGame.get(b.gameId) ?? 0;
+        if (n >= MAX_PER_GAME) continue;
+        perGame.set(b.gameId, n + 1);
+      }
+      out.push(b);
+      if (out.length === 15) break;
+    }
+    return out;
+  }, [bets, sortSource, tierFilter]);
 
   // Pro-only: free users see the section title but the picks are locked/blurred.
   if (locked) {
@@ -247,21 +258,34 @@ export function BestBetsSection({
         </div>
         <ProLock locked title={t("home.bestBets")} description={t("home.bestBetsLockDesc")}>
           <div className="flex flex-col gap-1.5">
-            {["TOR ML", "Over 5.5", "McDavid 2+ pts", "BOS ML", "Under 6.5"].map((label, i) => (
-              <div key={i} className="flex items-center gap-2.5 icy-card rounded-xl px-2.5 py-2">
-                <span className="text-base flex-shrink-0">🏒</span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-white text-[11px] font-medium">{label}</div>
-                  <div className="h-1 mt-1 rounded-full" style={{ width: `${70 - i * 6}%`, background: accent, opacity: 0.6 }} />
+            {lockedPreview(t).map(({ label, context, pct }, i) => {
+              const risk = riskLabel(pct);
+              return (
+                <div key={i} className="flex items-center gap-2.5 icy-card rounded-xl px-3 py-2">
+                  <span className="text-lg flex-shrink-0">🏒</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-white text-[13px] font-semibold leading-tight">{label}</div>
+                    <div className="text-[#8a9ea6] text-[11px] truncate mt-0.5">{context}</div>
+                  </div>
+                  <div className="flex flex-col items-end flex-shrink-0 leading-tight">
+                    <div className="tabular-nums" style={{ color: risk.color }}>
+                      <span className="text-[15px] font-bold">{pct} %</span>
+                      <span className="text-[10px] font-medium ml-1">{t("home.chance")}</span>
+                    </div>
+                    <span className="text-[11px] text-[#bfc8cc] tabular-nums">
+                      {t("home.odds", { odds: (100 / pct).toFixed(2) })}
+                    </span>
+                  </div>
                 </div>
-                <span className="text-[11px] font-bold" style={{ color: accent }}>{72 - i * 5}%</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </ProLock>
       </section>
     );
   }
+
+  const activeTier = RISK_TIERS.find(r => r.tier === tierFilter);
 
   return (
     <section className="px-4 mb-6">
@@ -283,45 +307,47 @@ export function BestBetsSection({
         </button>
         {!collapsed && (
         <div className="flex items-center gap-1.5">
-          {/* Source toggle — which score (rules vs ML) drives display + filtering */}
+          {/* Source toggle — which score (rules vs AI) drives display + filtering */}
           <div className="flex icy-tile rounded-full p-0.5 gap-0.5">
             {(["rules", "ml"] as SortSource[]).map((s) => (
               <button key={s} onClick={() => setSortSource(s)}
                 className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${sortSource === s ? "text-[#072E49] font-bold" : "text-[#8a9ea6]"}`}
                 style={sortSource === s ? { backgroundColor: s === "ml" ? "#a78bfa" : "#86d1ea" } : {}}>
-                {s === "ml" ? "ML" : t("home.rules")}
+                {s === "ml" ? t("home.ai") : t("home.rules")}
               </button>
             ))}
           </div>
-          {/* Sort order — only reorders the (already-filtered) list, never hides anything */}
-          <button onClick={() => setSortOrder(o => o === "safest" ? "riskiest" : "safest")}
-            className="px-2.5 py-1 rounded-full icy-tile text-[11px] text-[#8a9ea6] hover:text-white transition-all whitespace-nowrap">
-            {sortOrder === "safest" ? t("home.safe") : t("home.risky")}
-          </button>
         </div>
         )}
       </div>
 
-      {/* Risk-tier filters — combinable checkboxes, not exclusive tabs, so
-          safe and risky (higher-payout) bets can be viewed together. */}
       {!collapsed && (
-        <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-          {RISK_TIERS.map(({ tier, key, color }) => {
-            const active = riskFilter.size === 0 || riskFilter.has(tier);
-            return (
-              <button
-                key={tier}
-                onClick={() => toggleRisk(tier)}
-                className="px-2 py-1 rounded-full text-[11px] font-semibold transition-all border"
-                style={active
-                  ? { color, backgroundColor: `${color}1a`, borderColor: `${color}55` }
-                  : { color: "#5a6660", backgroundColor: "transparent", borderColor: "rgba(255,255,255,0.08)" }}
-              >
-                {t(key)}
-              </button>
-            );
-          })}
-        </div>
+        <>
+          <p className="text-[#8a9ea6] text-[11px] mb-2">
+            {t(sortSource === "ml" ? "home.bbExplainMl" : "home.bbExplainRules")}
+          </p>
+          {/* Sélecteur exclusif : un onglet actif à la fois. Ses couleurs sont
+              celles des % sur les lignes — il sert aussi de légende. */}
+          <div role="tablist" className="flex icy-tile rounded-full p-0.5 gap-0.5 mb-3">
+            {([{ tier: "all" as const, key: "tier.all", color: "#ffffff" }, ...RISK_TIERS]).map(({ tier, key, color }) => {
+              const active = tierFilter === tier;
+              return (
+                <button
+                  key={tier}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setTierFilter(tier)}
+                  className="flex-1 px-2 py-1 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap"
+                  style={active
+                    ? { color, backgroundColor: `${color}22` }
+                    : { color: tier === "all" ? "#8a9ea6" : `${color}99` }}
+                >
+                  {t(key)}
+                </button>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {!collapsed && (isLoading ? (
@@ -329,7 +355,13 @@ export function BestBetsSection({
           {[1,2,3,4,5].map(i => <div key={i} className="h-12 icy-tile rounded-xl animate-pulse" />)}
         </div>
       ) : sorted.length === 0 ? (
-        <div className="py-8 text-center text-[#bfc8cc] text-xs">{t("home.noBets")}</div>
+        // Onglet vide alors que la liste ne l'est pas : le dire, plutôt que
+        // « aucun pari dans les 48 h », qui serait faux.
+        <div className="py-8 text-center text-[#bfc8cc] text-xs">
+          {activeTier && bets.length > 0
+            ? t("home.noBetsTier", { tier: t(activeTier.key) })
+            : t("home.noBets")}
+        </div>
       ) : (
         <div className="flex flex-col gap-1.5">
           {sorted.map(bet => <BestBetRow key={bet.id} bet={bet} sortSource={sortSource} />)}
