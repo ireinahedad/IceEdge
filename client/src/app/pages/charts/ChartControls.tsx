@@ -12,6 +12,7 @@ import { useI18n } from "../../i18n";
 import { nhlApiService } from "../../services/nhlApiService";
 import type { NHLTeamInfo, NHLPlayerInfo } from "../../types/bet";
 import { BG_CARD, BG_CELL, SortDir, currentSeasonId, seasonLabel, selectCls } from "./chartsTheme";
+import { DIVISIONS, divisionLabelKey, divisionOf, divisionShortKey, type Division } from "../../data/nhlDivisions";
 
 /* ── Opponent picker (lives in the vs-column header) ──────── */
 export function OpponentSelect({
@@ -265,6 +266,11 @@ export function TeamSelect({
   teams: NHLTeamInfo[];
 }) {
   const { t } = useI18n();
+  const opt = (x: NHLTeamInfo) => (
+    <option key={x.abbreviation} value={x.abbreviation?.toLowerCase()}>
+      {x.abbreviation?.toUpperCase()}
+    </option>
+  );
   return (
     <select
       value={value}
@@ -274,11 +280,18 @@ export function TeamSelect({
       aria-label={t("chart.team")}
     >
       <option value="">{t("chart.noTeam")}</option>
-      {teams.map((x) => (
-        <option key={x.abbreviation} value={x.abbreviation?.toLowerCase()}>
-          {x.abbreviation?.toUpperCase()}
-        </option>
-      ))}
+      {/* Regroupées par division (2026-09-25), dans l'ordre de `DIVISIONS` ; un
+          club absent de la table (abréviation inattendue) reste choisissable. */}
+      {DIVISIONS.map((d) => {
+        const inDiv = teams.filter((x) => divisionOf(x.abbreviation) === d.key);
+        if (inDiv.length === 0) return null;
+        return (
+          <optgroup key={d.key} label={t(divisionLabelKey(d.key))}>
+            {inDiv.map(opt)}
+          </optgroup>
+        );
+      })}
+      {teams.filter((x) => !divisionOf(x.abbreviation)).map(opt)}
     </select>
   );
 }
@@ -300,5 +313,67 @@ export function CardsSkeleton() {
         <div key={i} className="h-24 rounded-2xl animate-pulse" style={{ background: BG_CARD }} />
       ))}
     </div>
+  );
+}
+
+/* ── Filtre par division ───────────────────────────────────
+ * Accueil Statistiques et « toutes les équipes » (2026-09-25). `null` = toutes.
+ * Les puces suivent l'ordre de `DIVISIONS` : Est (ATL, MÉT) puis Ouest (CEN,
+ * PAC), un léger écart entre les deux conférences.
+ */
+export function DivisionFilter({
+  value,
+  onChange,
+  accent,
+}: {
+  value: Division | null;
+  onChange: (d: Division | null) => void;
+  accent: string;
+}) {
+  const { t } = useI18n();
+  const chip = (key: string, label: string, active: boolean, onClick: () => void, extra = "") => (
+    <button
+      key={key}
+      onClick={onClick}
+      aria-pressed={active}
+      className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-colors ${extra}`}
+      style={
+        active
+          ? { background: accent + "22", color: accent, border: `1px solid ${accent}66` }
+          : { background: BG_CELL, color: "#8a9ea6", border: "1px solid transparent" }
+      }
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={t("div.filter")}>
+      {chip("all", t("div.all"), value == null, () => onChange(null))}
+      {DIVISIONS.map((d, i) =>
+        chip(
+          d.key,
+          t(divisionLabelKey(d.key)),
+          value === d.key,
+          () => onChange(value === d.key ? null : d.key),
+          // Petit écart entre la dernière division de l'Est et la première de l'Ouest.
+          i > 0 && DIVISIONS[i - 1].conference !== d.conference ? "ml-2" : "",
+        ),
+      )}
+    </div>
+  );
+}
+
+/** Étiquette de division à côté d'un club — affichée quand aucune division n'est filtrée. */
+export function DivisionTag({ abbr }: { abbr?: string }) {
+  const { t } = useI18n();
+  const d = divisionOf(abbr);
+  if (!d) return null;
+  return (
+    <span
+      className="inline-block rounded px-1 py-px text-[9px] font-bold tracking-wider leading-none border border-white/15 text-[#8a9ea6] align-middle"
+      title={t(divisionLabelKey(d))}
+    >
+      {t(divisionShortKey(d))}
+    </span>
   );
 }

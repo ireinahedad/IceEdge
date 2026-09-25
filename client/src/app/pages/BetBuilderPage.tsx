@@ -29,7 +29,8 @@ import { toast } from "sonner";
 import "./bet-theme.css";
 import { MySlipsTab } from "./bet/MySlipsTab";
 import "../components/rink-theme.css";
-import { EmptySlip, LegCard, LockSlipCTA, ProbabilityGauge, SlipNotices, toOddsLabel } from "./bet/betParts";
+import { EmptySlip, LegCard, LockSlipCTA, ProbabilityGauge, SlipNotices, impliedDecimal, toOddsLabel } from "./bet/betParts";
+import { useOddsFormat } from "../context/OddsFormatContext";
 
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
@@ -41,6 +42,8 @@ export function BetBuilderPage() {
   const { user } = useAuth();
   const { sport } = useSport();
   const { t } = useI18n();
+  // Cote équivalente sous la jauge : suit le format des Réglages (voir `impliedDecimal`).
+  const { odds } = useOddsFormat();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState<PageTab>(searchParams.get("tab") === "slips" ? "slips" : "build");
@@ -205,7 +208,7 @@ export function BetBuilderPage() {
                 </p>
                 {combinedProbability != null && (
                   <div className="mt-2 px-4 py-1.5 rounded-full icy-tile">
-                    <span className="text-white font-bold text-sm font-mono">{toOddsLabel(combinedProbability)}</span>
+                    <span className="text-white font-bold text-sm font-mono">{odds(impliedDecimal(combinedProbability))}</span>
                     <span className="text-[#4a6068] text-[11px] ml-1.5">implied odds</span>
                   </div>
                 )}
@@ -216,7 +219,7 @@ export function BetBuilderPage() {
                 <p className="text-[#4a6068] text-[11px] text-center mt-2">{t("slip.individualProb")}</p>
                 {combinedProbability != null && (
                   <div className="mt-2 px-4 py-1.5 rounded-full icy-tile">
-                    <span className="text-white font-bold text-sm font-mono">{toOddsLabel(combinedProbability)}</span>
+                    <span className="text-white font-bold text-sm font-mono">{odds(impliedDecimal(combinedProbability))}</span>
                     <span className="text-[#4a6068] text-[11px] ml-1.5">implied odds</span>
                   </div>
                 )}

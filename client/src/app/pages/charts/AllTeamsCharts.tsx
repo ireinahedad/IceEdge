@@ -13,7 +13,8 @@ import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { nhlApiService } from "../../services/nhlApiService";
 import type { TeamSeasonRow, AllTeamsSeason } from "../../services/nhlApiService";
-import { BarSkeleton, MetricChips, RowsSkeleton, SearchInput, SeasonSelect, SortHead } from "./ChartControls";
+import { BarSkeleton, DivisionFilter, DivisionTag, MetricChips, RowsSkeleton, SearchInput, SeasonSelect, SortHead } from "./ChartControls";
+import { divisionOf, type Division } from "../../data/nhlDivisions";
 import { StackPart, StackRow, StackedTotalsBar } from "./ChartVisuals";
 import { TFn } from "./chartsMetrics";
 import { BG_CARD, SortDir, currentSeasonId, int, num2, sign } from "./chartsTheme";
@@ -66,6 +67,7 @@ export function AllTeamsCharts() {
   const [error, setError] = useState(false);
   const [sort, setSort] = useState<{ key: string; dir: SortDir }>({ key: "points", dir: "desc" });
   const [query, setQuery] = useState("");
+  const [division, setDivision] = useState<Division | null>(null);
 
   const metrics = buildTeamMetrics(t);
   const metric = metrics.find((m) => m.key === sort.key) ?? metrics[0];
@@ -91,10 +93,14 @@ export function AllTeamsCharts() {
 
   // Sorted first (so rank reflects the metric), then filtered for display —
   // searching must not renumber the standings.
-  const sorted = [...(data?.teams ?? [])].sort((a, b) => {
-    const d = metric.num(a) - metric.num(b);
-    return sort.dir === "asc" ? d : -d;
-  });
+  // La division, elle, s'applique AVANT le rang : filtrée, la table devient le
+  // classement de la division (1 à 8), pas une tranche du classement de ligue.
+  const sorted = (data?.teams ?? [])
+    .filter((r) => !division || divisionOf(r.abbr) === division)
+    .sort((a, b) => {
+      const d = metric.num(a) - metric.num(b);
+      return sort.dir === "asc" ? d : -d;
+    });
   const ranked = sorted.map((r, i) => ({ ...r, rank: i + 1 }));
 
   const q = query.trim().toLowerCase();
@@ -134,6 +140,7 @@ export function AllTeamsCharts() {
 
         {/* All 32 teams are already loaded, so this filters locally. */}
         <SearchInput value={query} onChange={setQuery} placeholder={t("chart.searchTeam")} />
+        <DivisionFilter value={division} onChange={setDivision} accent={accent} />
       </div>
 
       {/* Standings table */}
@@ -182,6 +189,7 @@ export function AllTeamsCharts() {
                       <span className="text-[#5c6f63] tabular-nums mr-2">{r.rank}</span>
                       <img src={nhlLogoUrl(r.abbr)} alt={r.abbr} className="w-4 h-4 object-contain inline-block mr-1.5 align-text-bottom" />
                       <span className="text-white font-medium">{r.name}</span>
+                      {!division && <span className="ml-1.5"><DivisionTag abbr={r.abbr} /></span>}
                     </td>
                     <td className="px-3 py-2.5 text-center tabular-nums text-[#c8d3cc]">{int(r.gamesPlayed)}</td>
                     {metrics.map((m) => (

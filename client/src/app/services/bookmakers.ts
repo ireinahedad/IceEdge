@@ -30,6 +30,13 @@ export interface Bookmaker {
   sectionPath: (sport: Sport) => string;
   /** Path to the sign-up / register page */
   signupPath: string;
+  /**
+   * Couleurs du bouton « Parier chez … » — celles du LIVRE, pour qu'on
+   * reconnaisse d'un coup d'œil où le bouton envoie. Le bouton était peint aux
+   * couleurs de bet365 quel que soit le livre choisi, donc « Stake » s'affichait
+   * en vert et or (corrigé 2026-09-25).
+   */
+  colors: { bg: string; bgHover: string; fg: string; badgeBg: string; badgeFg: string };
 }
 
 const BET365: Bookmaker = {
@@ -43,6 +50,7 @@ const BET365: Bookmaker = {
   // the in-play section for the sport.
   sectionPath: () => "/#/IP/B18",
   signupPath: "/#/OA/E/",
+  colors: { bg: "#126e51", bgHover: "#0f5c44", fg: "#ffd700", badgeBg: "#ffd700", badgeFg: "#126e51" },
 };
 
 const STAKE: Bookmaker = {
@@ -57,6 +65,8 @@ const STAKE: Bookmaker = {
   affiliateParam: (code) => `?c=${code}`,
   sectionPath: () => "/sports/ice-hockey",
   signupPath: "/?tab=register",
+  // Bleu nuit de l'interface Stake, texte blanc, pastille au bleu de ses boutons.
+  colors: { bg: "#1a2c38", bgHover: "#213743", fg: "#ffffff", badgeBg: "#1475e1", badgeFg: "#ffffff" },
 };
 
 export const BOOKMAKERS: Record<BookmakerId, Bookmaker> = {

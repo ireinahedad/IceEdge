@@ -14,7 +14,7 @@ import { nhlLogoUrl } from "../../data/teamEmoji";
 import { nhlApiService } from "../../services/nhlApiService";
 import type { TeamPlayerSeasons, PlayerSeasons, PlayerSeasonStat, TeamOpponentSplits, OpponentSplit, TeamSeasonOfficial } from "../../services/nhlApiService";
 import type { NHLTeamInfo } from "../../types/bet";
-import { CardsSkeleton, ChartMessage, OpponentSelect, SortHead, TeamSelect } from "./ChartControls";
+import { CardsSkeleton, ChartMessage, DivisionTag, OpponentSelect, SortHead, TeamSelect } from "./ChartControls";
 import { PieBreakdowns, PlayerLineChart, TeamStatsTable, TeamTrendsTable } from "./ChartVisuals";
 import { buildGoalieMetrics, buildSkaterMetrics } from "./chartsMetrics";
 import { BG_CARD, BG_CELL, DASH, PosFilter, SortCol, SortDir, View, seasonLabel, selectCls } from "./chartsTheme";
@@ -179,7 +179,10 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
             <img src={nhlLogoUrl(abbr)} alt={teamName} className="w-12 h-12 object-contain" />
             <div className="flex-1 min-w-0">
               <p className="text-white font-bold text-base truncate">{teamName}</p>
-              <p className="text-[#8a9ea6] text-xs">{t("chart.last6")}</p>
+              <p className="text-[#8a9ea6] text-xs flex items-center gap-1.5">
+                <DivisionTag abbr={abbr} />
+                <span className="truncate">{t("chart.last6")}</span>
+              </p>
             </div>
           </>
         ) : (
@@ -212,24 +215,11 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
         <ChartMessage>{t("chart.noData")}</ChartMessage>
       ) : (
         <>
-          {/* Controls: Skater/Goalie · Season · Position filter */}
+          {/* Saison — elle pilote les tables d'équipe ET celle des joueurs.
+              Patineurs/Gardiens et la position ne touchent que les joueurs :
+              ils vivent dans la carte « Stats des joueurs », au-dessus des
+              puces de métrique (demande du 2026-09-25). */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-full p-0.5 border border-white/15" style={{ background: BG_CELL }}>
-              {(["skater", "goalie"] as View[]).map((v) => {
-                const active = view === v;
-                return (
-                  <button
-                    key={v}
-                    onClick={() => setView(v)}
-                    className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors"
-                    style={active ? { background: accent, color: "#0A0E0C" } : { color: "#8a9ea6" }}
-                  >
-                    {v === "skater" ? t("chart.skaters") : t("chart.goalies")}
-                  </button>
-                );
-              })}
-            </div>
-
             <select
               value={season ?? ""}
               onChange={(e) => setSeason(Number(e.target.value))}
@@ -243,20 +233,6 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
                 </option>
               ))}
             </select>
-
-            {view === "skater" && (
-              <select
-                value={posFilter}
-                onChange={(e) => setPosFilter(e.target.value as PosFilter)}
-                className={selectCls}
-                style={{ background: BG_CELL, color: posFilter === "all" ? "#8a9ea6" : accent }}
-                aria-label={t("chart.position")}
-              >
-                <option value="all">{t("chart.pos.all")}</option>
-                <option value="forwards">{t("chart.pos.forwards")}</option>
-                <option value="defense">{t("chart.pos.defense")}</option>
-              </select>
-            )}
           </div>
 
           {/* ── Team Stats table (per-game counting stats) ── */}
@@ -283,6 +259,39 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
           <div className="rounded-2xl border border-white/20 overflow-hidden" style={{ background: BG_CARD }}>
             <div className="px-4 pt-3 pb-2 border-b border-white/10">
               <p className="text-white text-sm font-semibold mb-2">{t("chart.playerStats")}</p>
+              {/* Patineurs / Gardiens, posé AU-DESSUS des puces de métrique :
+                  c'est lui qui décide quelles puces existent. */}
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <div className="inline-flex rounded-full p-0.5 border border-white/15" style={{ background: BG_CELL }}>
+                  {(["skater", "goalie"] as View[]).map((v) => {
+                    const active = view === v;
+                    return (
+                      <button
+                        key={v}
+                        onClick={() => setView(v)}
+                        aria-pressed={active}
+                        className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors"
+                        style={active ? { background: accent, color: "#0A0E0C" } : { color: "#8a9ea6" }}
+                      >
+                        {v === "skater" ? t("chart.skaters") : t("chart.goalies")}
+                      </button>
+                    );
+                  })}
+                </div>
+                {view === "skater" && (
+                  <select
+                    value={posFilter}
+                    onChange={(e) => setPosFilter(e.target.value as PosFilter)}
+                    className={selectCls}
+                    style={{ background: BG_CELL, color: posFilter === "all" ? "#8a9ea6" : accent }}
+                    aria-label={t("chart.position")}
+                  >
+                    <option value="all">{t("chart.pos.all")}</option>
+                    <option value="forwards">{t("chart.pos.forwards")}</option>
+                    <option value="defense">{t("chart.pos.defense")}</option>
+                  </select>
+                )}
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 {metrics.map((m) => {
                   const active = m.key === metric.key;

@@ -6,38 +6,52 @@
  * seuls les imports et les mots-clés `export` ont été ajoutés.
  */
 
-import { useState, useEffect, type Ref } from "react";
+import { useState, useEffect, type CSSProperties, type Ref } from "react";
 import { Plus, X, Lock, Share2, ChevronRight, AlertCircle, Info } from "lucide-react";
 import type { BetLeg } from "../../types/bet";
 import type { SlipAnalysis } from "../../context/BetContext";
 import { openBet } from "../../services/bookmakers";
 import { features } from "../../platform";
 import { useBookmaker } from "../../context/BookmakerContext";
+import { useOddsFormat } from "../../context/OddsFormatContext";
 import { useI18n } from "../../i18n";
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Probabilité du modèle → cote américaine ÉQUIVALENTE.
+ * Probabilité du modèle → cote américaine ÉQUIVALENTE, en format FIGÉ.
  *
- * ⚠️⚠️ Ne PAS brancher cette fonction sur le format choisi dans les Réglages.
- * Ce réglage ne concerne que les cotes des BOOKMAKERS (bet365, Stake…), c'est-
- * à-dire de vrais prix. Ce que produit `toOddsLabel`, c'est la traduction d'une
- * probabilité du modèle — une mesure de confiance, pas un prix — et la laisser
- * changer de format avec les cotes du livre reviendrait à faire passer notre
- * estimation pour une offre de pari. Elle reste donc en américain, toujours,
- * exactement comme la probabilité qui l'accompagne reste en %.
- *
- * Sert aussi à remplir le champ `oddsLabel` du pari ENREGISTRÉ (voir
+ * Sert à remplir le champ `oddsLabel` du pari ENREGISTRÉ (voir
  * `BetBuilderPage`), relu des mois plus tard sur un autre appareil : une donnée
- * archivée doit de toute façon avoir un format fixe.
+ * archivée doit avoir un format fixe. Elle sert aussi à l'image de partage.
+ *
+ * ⚠️ Pour l'AFFICHAGE dans l'app, ne plus l'utiliser : passer par
+ * `impliedDecimal()` + `odds()` de `useOddsFormat`, qui suivent le format
+ * choisi dans les Réglages (voir plus bas).
  */
 export function toOddsLabel(pct: number): string {
   const p = Math.max(5, Math.min(95, pct)) / 100;
   return p >= 0.5
     ? `-${Math.round((p / (1 - p)) * 100)}`
     : `+${Math.round(((1 - p) / p) * 100)}`;
+}
+
+/**
+ * Probabilité du modèle → cote décimale équivalente (« implied odds »), à
+ * écrire avec `odds()` de `useOddsFormat` pour suivre le format des Réglages.
+ *
+ * 🔁 Décision du user du 2026-09-25 : la cote affichée À CÔTÉ d'un pourcentage
+ * (jambes du coupon, pastille « implied odds » sous la jauge) suit le format
+ * choisi — il avait choisi décimal et voyait encore « -213 ». Le POURCENTAGE du
+ * modèle, lui, reste en % partout (règle du 2026-09-10, inchangée) : seule sa
+ * traduction en cote change d'écriture.
+ *
+ * Même borne 5–95 % que `toOddsLabel`, pour que les deux disent la même cote.
+ */
+export function impliedDecimal(pct: number): number {
+  const p = Math.max(5, Math.min(95, pct)) / 100;
+  return 1 / p;
 }
 
 // ─── Probability gauge ────────────────────────────────────────────────────────
@@ -175,6 +189,7 @@ export function SlipNotices({ analysis }: { analysis: SlipAnalysis }) {
 export function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; onRemove: () => void }) {
   const { t } = useI18n();
   const { bookmaker } = useBookmaker();
+  const { odds } = useOddsFormat();
   const barColor =
     leg.probability >= 65 ? "#86d1ea" :
     leg.probability >= 50 ? "#90C9F0" :
@@ -219,17 +234,27 @@ export function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; 
                 style={{ width: `${leg.probability}%`, backgroundColor: barColor }} />
             </div>
             <span className="text-xs font-bold flex-shrink-0" style={{ color: barColor }}>{leg.probability}%</span>
-            <span className="text-[11px] text-[#4a6068] flex-shrink-0 font-mono">{toOddsLabel(leg.probability)}</span>
+            <span className="text-[11px] text-[#4a6068] flex-shrink-0 font-mono">{odds(impliedDecimal(leg.probability))}</span>
           </div>
           {/* APPLE_PLAN §4 — Guideline 5.3: the leg keeps its price, the link out
               to the sportsbook does not ship on iOS. */}
           {features.bookmakerLinks && (
             <button
               onClick={() => openBet("hockey")}
-              className="mt-2 inline-flex items-center gap-1.5 bg-[#126e51] hover:bg-[#0f5c44] text-[#ffd700] text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-colors"
+              // Couleurs du livre choisi (services/bookmakers.ts). Le survol passe
+              // par une variable CSS : une couleur inline ne peut pas porter `:hover`.
+              className="mt-2 inline-flex items-center gap-1.5 bg-[var(--book-bg)] hover:bg-[var(--book-bg-hover)] text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-colors"
+              style={{
+                "--book-bg": bookmaker.colors.bg,
+                "--book-bg-hover": bookmaker.colors.bgHover,
+                color: bookmaker.colors.fg,
+              } as CSSProperties}
               title={`${bookmaker.label} — ${t("slip.placeBet")}`}
             >
-              <span className="bg-[#ffd700] text-[#126e51] rounded px-1 py-0.5 text-[11px] font-black leading-none">{bookmaker.badge}</span>
+              <span
+                className="rounded px-1 py-0.5 text-[11px] font-black leading-none"
+                style={{ background: bookmaker.colors.badgeBg, color: bookmaker.colors.badgeFg }}
+              >{bookmaker.badge}</span>
               {t("slip.placeBet", { book: bookmaker.label })}
             </button>
           )}

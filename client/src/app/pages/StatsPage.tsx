@@ -13,6 +13,7 @@ import { useI18n } from "../i18n";
 import { ErrorState } from "../components/ErrorState";
 import { teamColors } from "../data/teamEmoji";
 import { dayHeading, groupByDay, weekdayShort } from "../data/gameDay";
+import { CONFERENCES, DIVISIONS, conferenceLabelKey, divisionLabelKey, divisionOf } from "../data/nhlDivisions";
 import "../components/rink-theme.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -159,6 +160,11 @@ export function StatsPage() {
   const navigate = useNavigate();
 
   function openAdd(subject: Subject) { setAddSheet({ open: true, subject }); }
+  const renderTeamCard = (team: UITeam) => (
+    <TeamCard key={team.id} team={team} accent={accent}
+      onClick={() => navigate(`/stats/prediction/team/${team.id}`)}
+      onAdd={() => openAdd({ id: team.id, type: "team", name: team.name, logo: team.logo, subtitle: team.record })} />
+  );
   const { teams, games, gamesLabel, loading, error, reload, getTeamById } = useNHLData();
 
   const filteredTeams = teams.filter((t) =>
@@ -263,11 +269,37 @@ export function StatsPage() {
         {activeFilter === 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
             {filteredTeams.length > 0 ? (
-              filteredTeams.map((team) => (
-                <TeamCard key={team.id} team={team} accent={accent}
-                  onClick={() => navigate(`/stats/prediction/team/${team.id}`)}
-                  onAdd={() => openAdd({ id: team.id, type: "team", name: team.name, logo: team.logo, subtitle: team.record })} />
-              ))
+              /* Par conférence, puis par division (2026-09-25) : Est =
+                 Atlantique + Métropolitaine, Ouest = Centrale + Pacifique.
+                 Une recherche garde ce découpage et masque les groupes vides.
+                 Un club absent de la table (data/nhlDivisions) tombe à la fin,
+                 sans titre, plutôt que de disparaître. */
+              <>
+                {CONFERENCES.map((conf) => {
+                  const divs = DIVISIONS.filter((d) => d.conference === conf)
+                    .map((d) => ({ d, items: filteredTeams.filter((tm) => divisionOf(tm.abbr) === d.key) }))
+                    .filter((x) => x.items.length > 0);
+                  if (divs.length === 0) return null;
+                  return (
+                    <section key={conf} className="col-span-full flex flex-col gap-3 mb-2">
+                      <h2 className="text-white text-sm font-bold uppercase tracking-wider" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>
+                        {t(conferenceLabelKey(conf))}
+                      </h2>
+                      {divs.map(({ d, items }) => (
+                        <div key={d.key} className="flex flex-col gap-2">
+                          <h3 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: accent }}>
+                            {t(divisionLabelKey(d.key))}
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                            {items.map(renderTeamCard)}
+                          </div>
+                        </div>
+                      ))}
+                    </section>
+                  );
+                })}
+                {filteredTeams.filter((tm) => !divisionOf(tm.abbr)).map(renderTeamCard)}
+              </>
             ) : (
               <div className="col-span-full flex flex-col items-center justify-center py-12 gap-3">
                 <div className="w-12 h-12 rounded-full bg-[#131A12] border border-white/20 flex items-center justify-center">

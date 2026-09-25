@@ -19,9 +19,12 @@
 // probabilités du modèle restent donc en % partout, quel que soit ce réglage —
 // jauges de prédiction, Best Bets, jambes de coupon, carte ML, page joueur.
 //
-// La seule exception historique est `toOddsLabel` dans `pages/bet/betParts.tsx`,
-// qui traduit une probabilité en cote américaine ÉQUIVALENTE : elle est figée en
-// américain et ne suit pas ce réglage, pour la même raison.
+// 🔁 Exception décidée par le user le 2026-09-25 : la cote ÉQUIVALENTE écrite à
+// côté d'un pourcentage (jambes du coupon, pastille « implied odds » sous la
+// jauge du coupon) suit ce réglage — via `impliedDecimal()` de
+// `pages/bet/betParts.tsx`. Le pourcentage lui-même reste en %. `toOddsLabel`,
+// figée en américain, ne sert plus qu'aux données ENREGISTRÉES et à l'image de
+// partage.
 //
 // ── Le choix est un réglage de LECTURE ─────────────────────────────────────
 // Il ne change aucun calcul, aucune donnée envoyée au serveur, aucun pari

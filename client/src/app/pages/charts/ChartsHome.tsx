@@ -24,7 +24,8 @@ import { useI18n } from "../../i18n";
 import { nhlLogoUrl, teamAccent } from "../../data/teamEmoji";
 import { nhlApiService } from "../../services/nhlApiService";
 import type { NHLTeamInfo } from "../../types/bet";
-import { SearchInput } from "./ChartControls";
+import { DivisionFilter, DivisionTag, SearchInput } from "./ChartControls";
+import { divisionOf, type Division } from "../../data/nhlDivisions";
 import { BG_CARD, BG_CELL } from "./chartsTheme";
 
 /* ── Une des trois entrées ─────────────────────────────────
@@ -70,6 +71,7 @@ export function ChartsHome() {
 
   const [teams, setTeams] = useState<NHLTeamInfo[]>([]);
   const [query, setQuery] = useState("");
+  const [division, setDivision] = useState<Division | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -92,7 +94,8 @@ export function ChartsHome() {
       !q ||
       (x.name ?? "").toLowerCase().includes(q) ||
       (x.abbreviation ?? "").toLowerCase().includes(q)
-    );
+    )
+    .filter((x) => !division || divisionOf(x.abbreviation) === division);
 
   return (
     <div className="flex flex-col gap-4">
@@ -124,6 +127,7 @@ export function ChartsHome() {
         </div>
 
         <SearchInput value={query} onChange={setQuery} placeholder={t("chart.searchTeam")} />
+        <DivisionFilter value={division} onChange={setDivision} accent={accent} />
 
         {teams.length === 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
@@ -148,7 +152,11 @@ export function ChartsHome() {
                   <img src={nhlLogoUrl(abbr)} alt={x.name} className="w-7 h-7 object-contain shrink-0" />
                   <span className="min-w-0 flex-1">
                     <span className="block text-white text-xs font-medium truncate">{x.name}</span>
-                    <span className="block text-[11px] font-bold tracking-wider" style={{ color: clr }}>{abbr}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-bold tracking-wider" style={{ color: clr }}>{abbr}</span>
+                      {/* Filtrée, la division est déjà dite par la puce active. */}
+                      {!division && <DivisionTag abbr={abbr} />}
+                    </span>
                   </span>
                 </button>
               );

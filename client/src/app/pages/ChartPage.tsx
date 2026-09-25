@@ -33,6 +33,7 @@
  */
 
 import { useParams, useNavigate, useLocation, useSearchParams } from "react-router";
+import { ChevronLeft } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
 import { FramedLabel } from "../components/brand/FramedLabel";
 import { useSport } from "../context/SportContext";
@@ -188,28 +189,50 @@ export function ChartPage() {
         }}
       >
         <div className="px-4 pt-3 pb-3">
-        <div className="flex items-center gap-2">
-          <button onClick={goBack} className="tap-44 text-[#3a5060] text-lg shrink-0" aria-label={t("stats.title")}>
-            ←
-          </button>
-          <FramedLabel text={t("chart.title")} />
-          {inTeamSpace ? <TeamSpaceNav abbr={id} section={section} /> : <ChartNav type={type} />}
-        </div>
-
-        {(parent || inTeamSpace) && (
-          <div className="mt-2 flex items-center justify-between gap-2">
-            {parent ? (
-              <button
-                onClick={() => navigate(parent.to)}
-                className="flex items-center gap-1.5 text-[11px] font-semibold text-[#8a9ea6] hover:text-white transition-colors min-w-0"
-              >
-                <span className="text-sm leading-none shrink-0">←</span>
-                <span className="truncate">{parent.label}</span>
-              </button>
-            ) : <span />}
+        {/* Rangée 1 (2026-09-25) — deux boutons DISTINCTS, qui ne font pas la
+            même chose :
+              ‹  Retour        la page d'avant, d'où qu'on vienne (goBack) ;
+              STATISTIQUES     l'accueil de la section, toujours (/stats/chart).
+            Ils étaient collés l'un à l'autre et la flèche, minuscule, portait
+            l'étiquette « Statistiques » : on ne savait pas lequel faisait quoi.
+            Le titre est centré par une grille 1fr · auto · 1fr — la colonne de
+            droite (identité du club, ou vide) équilibre celle de la flèche. */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <div className="flex justify-start">
+            <button
+              onClick={goBack}
+              className="w-11 h-11 rounded-xl border border-white/15 bg-white/[0.06] text-white flex items-center justify-center active:scale-95 transition-transform"
+              aria-label={t("common.back")}
+              title={t("common.back")}
+            >
+              <ChevronLeft size={24} strokeWidth={2.5} />
+            </button>
+          </div>
+          <FramedLabel
+            text={t("chart.title")}
+            onClick={() => navigate("/stats/chart")}
+            ariaLabel={t("chart.home")}
+          />
+          <div className="flex justify-end min-w-0">
             {inTeamSpace && <TeamSpaceIdentity abbr={id} />}
           </div>
-        )}
+        </div>
+
+        {/* Rangée 2 — le fil d'Ariane (un cran vers le haut) et les pastilles
+            Équipe · Match · Joueur, sorties de la rangée du titre pour lui
+            laisser le centre. */}
+        <div className="mt-2 flex items-center justify-between gap-2">
+          {parent ? (
+            <button
+              onClick={() => navigate(parent.to)}
+              className="flex items-center gap-1.5 text-[11px] font-semibold text-[#8a9ea6] hover:text-white transition-colors min-w-0"
+            >
+              <span className="text-sm leading-none shrink-0">←</span>
+              <span className="truncate">{parent.label}</span>
+            </button>
+          ) : <span />}
+          {inTeamSpace ? <TeamSpaceNav abbr={id} section={section} /> : <ChartNav type={type} />}
+        </div>
         </div>
       </div>
 
