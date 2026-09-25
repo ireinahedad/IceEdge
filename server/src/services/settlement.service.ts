@@ -836,6 +836,46 @@ async function wentPastRegulation(
  */
 const VOID_AFTER_MS = Number(process.env.SETTLEMENT_VOID_AFTER_H || 24) * 3_600_000;
 
+/**
+ * Filet des jambes SANS `gameId` (anciens clients, chemin d'ajout oublié).
+ * Rien à dater côté NHL : on date par le coupon. Une semaine couvre largement
+ * un match posé à l'avance ; au-delà, la jambe ne sera jamais réglée.
+ */
+const NO_GAME_VOID_AFTER_MS = Number(process.env.SETTLEMENT_NO_GAME_VOID_AFTER_H || 168) * 3_600_000;
+
+/** Identifiant de match NHL : saison (4) + type (2) + numéro (4). */
+const NHL_GAME_ID = /^\d{10}$/;
+
+/** Marchés over/under : sans ligne ni côté, `decideLeg` ne peut que les annuler. */
+const OVER_UNDER_MARKETS = new Set<string>([
+  'total_goals', 'faceoff_wins_ou', 'goalie_saves_ou', 'alt_puck_line', 'total_penalties',
+  'period1_total_goals', 'period2_total_goals', 'period3_total_goals',
+  ...Object.keys(PLAYER_STAT_MARKETS),
+]);
+
+/**
+ * Ce qui empêcherait une jambe d'être réglée automatiquement, vérifié AU DÉPÔT
+ * du coupon. `null` = la jambe est réglable.
+ *
+ * Le règlement sait annuler une jambe indécidable une fois le match terminé,
+ * mais une jambe sans match n'a pas de « fin de match » : elle figeait le coupon
+ * en attente pour toujours. La refuser ici, c'est attraper TOUT chemin d'ajout
+ * — présent ou futur — qui oublierait ces champs, au lieu de le découvrir des
+ * jours plus tard sur un coupon bloqué.
+ */
+export function legSettlementProblem(leg: any): string | null {
+  const gameId = leg?.gameId == null ? '' : String(leg.gameId).trim();
+  if (!NHL_GAME_ID.test(gameId)) return 'missing or invalid gameId';
+  if (!leg?.marketType) return 'missing marketType';
+  if (OVER_UNDER_MARKETS.has(String(leg.marketType))) {
+    if (!Number.isFinite(Number(leg.line)) || leg.line == null) return 'missing line';
+    if (String(leg.marketType) !== 'alt_puck_line' && !overUnderSide(leg.selectionValue)) {
+      return 'missing over/under selection';
+    }
+  }
+  return null;
+}
+
 /** Début du match, en millisecondes. `null` si la fiche ne le dit pas. */
 function gameStartMs(game: any): number | null {
   const iso = game?.startTimeUTC ?? (game?.gameDate ? `${game.gameDate}T00:00:00Z` : null);
@@ -854,11 +894,16 @@ function gameStartMs(game: any): number | null {
  */
 async function settleLeg(
   leg: any, cache: GameCache, boxCache: BoxCache, scoringCache: ScoringCache, faceoffCache: FaceoffCache,
+  placedAt?: Date | string,
 ): Promise<LegResult> {
   const result = await decideLeg(leg, cache, boxCache, scoringCache, faceoffCache);
   if (result !== 'unknown') return result;
 
-  if (!leg?.gameId) return 'unknown';           // rien à dater — le filet d'âge du coupon s'en charge
+  if (!leg?.gameId) {
+    // Rien à dater côté NHL : l'âge du coupon sert de filet.
+    const placed = placedAt == null ? NaN : new Date(placedAt).getTime();
+    return Number.isFinite(placed) && Date.now() - placed >= NO_GAME_VOID_AFTER_MS ? 'void' : 'unknown';
+  }
   const game = await getFinalGame(String(leg.gameId), cache);
   if (!game) return 'unknown';                  // match pas encore final : attendre est la bonne réponse
 
@@ -1048,7 +1093,7 @@ export async function settlePendingSlips(userId?: string, opts: SettleOptions = 
       // Jambes en parallèle borné : un ticket de 6 jambes sur 6 matchs
       // différents prenait 6 allers-retours NHL en série.
       const results: LegResult[] = await mapLimit(legs, LEG_CONCURRENCY,
-        (leg) => settleLeg(leg, cache, boxCache, scoringCache, faceoffCache));
+        (leg) => settleLeg(leg, cache, boxCache, scoringCache, faceoffCache, slip.placedAt));
 
       const outcome = resolveSlipOutcome(results);
       if (!outcome) {
@@ -1183,7 +1228,7 @@ export async function previewPendingSlips(userId?: string, limit = 200): Promise
   for (const slip of slips) {
     const legs: any[] = Array.isArray(slip.legs) ? slip.legs : [];
     const results: LegResult[] = await mapLimit(legs, LEG_CONCURRENCY,
-      (leg) => settleLeg(leg, cache, boxCache, scoringCache, faceoffCache));
+      (leg) => settleLeg(leg, cache, boxCache, scoringCache, faceoffCache, slip.placedAt));
     out.push({
       id:       String(slip.id),
       userId:   String(slip.userId),

@@ -178,7 +178,8 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
         {/* Title + Add to slip */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <p className="text-white font-bold text-base leading-snug flex-1">{label}</p>
-          <button
+          {/* Sans match connu, le pari ne pourrait jamais être réglé : pas de bouton. */}
+          {(inSlip || mlProps?.gameId) && <button
             onClick={handleSlip}
             className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95"
             style={inSlip
@@ -186,7 +187,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
               : { background: accent + "22", color: accent, border: `1px solid ${accent}55` }}
           >
             {inSlip ? t("pred.slipShort") : t("pred.slipAddShort")}
-          </button>
+          </button>}
         </div>
 
         {/* ── 💰 Le PRIX du livre, quand il en propose un ──────────────────

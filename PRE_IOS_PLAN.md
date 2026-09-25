@@ -2,8 +2,8 @@
 
 > **✅ COMPLETED — kept as a design record (2026-09-24).** R7, R2, R3, R3bis and R4 are
 > shipped. About twenty source files cite this document for the reasoning behind the auth
-> and moderation code, which is why it stays. The only open items (prove the support
-> mailbox, then `git tag pre-ios-freeze`) are tracked in **`STATUS.md` §3.1**. Do not add
+> and moderation code, which is why it stays. The support mailbox is recovered (2026-09-25).
+> The only open item (`git tag pre-ios-freeze`) is tracked in **`STATUS.md` §3.1**. Do not add
 > new work here.
 
 **Companion to `APPLE_PLAN.md`.** Everything here ships to **arakice.com first**, makes the
@@ -19,7 +19,7 @@ normal Vercel deploy. That is the whole point: debug it where you can actually d
 | **R7** ✅ | Fail loudly on missing/invalid env URLs | 0.5 day | Fixes a real production bug: a missing Vercel env var currently makes the app silently call `localhost` |
 | **R2** ✅ | Platform flag layer (prepares "no Google login on iOS") | 0.5 day | Zero visible change on web; one honest seam instead of `if (iOS)` scattered later |
 | **R3** ✅ | Token transport abstraction | 1 day | Shipped, plus R3bis (the refresh stampede) in both halves |
-| **R4** ✅ | Chat moderation: report, block, filter | 3–5 days | Shipped 2026-09-04. 🔴 One piece left: the published support address still bounces (R4.0) |
+| **R4** ✅ | Chat moderation: report, block, filter | 3–5 days | Shipped 2026-09-04. Support address recovered 2026-09-25 (R4.0) |
 
 **Total: 5–7 working days.** Do them in this order — each one is independently shippable.
 
@@ -576,14 +576,10 @@ message never renders, and the admin queue reports → hides correctly.
 
 ### The only thing left before the tag
 
-🔴 **Prove the support address delivers.** `support.arakice@gmail.com` is in the code as of
-2026-09-04 and is served on Support, Privacy and Terms whether or not the environment variables
-are set. What has *not* been done is the only test that matters: **send a real mail to it and
-confirm it arrives, and that you can open the mailbox.** The address this replaced failed
-exactly that test — published for months, readable by nobody. See R4.0, which also records the
-separate developer-contact address for App Store Connect.
+✅ **Support address done (2026-09-25).** `support.arakice@gmail.com` is in the code and the
+mailbox is recovered. See R4.0 for the separate developer-contact address for App Store Connect.
 
-Then `git tag pre-ios-freeze` and open `APPLE_PLAN.md` at Phase 0.
+`git tag pre-ios-freeze` and open `APPLE_PLAN.md` at Phase 0.
 
 ### Still open on purpose, and not blocking the tag
 
@@ -637,7 +633,7 @@ walked on the live site; the fourth is the one still open.
 | A filter for objectionable material | ✅ verified — a slur is refused with a visible reason; `great assist by Suzuki` posts |
 | A way to report content | ✅ verified — report → admin queue → hide, end to end |
 | A way to block abusive users | ✅ verified — including a live socket message that never renders |
-| Published contact info | ✅ `support.arakice@gmail.com` is in the code and served — **one thing left, see R4.0** |
+| Published contact info | ✅ `support.arakice@gmail.com` — in the code, mailbox recovered 2026-09-25 |
 
 Unblock was walked too (2026-09-04). The one case never seen on screen is **auto-hide at
 three distinct reporters** — it needs a third account. It is covered by tests and was proven
@@ -674,9 +670,7 @@ network call to render a `mailto:` link.
   (`STATUS.md` §3.9). The published address is still `support.arakice@gmail.com`;
   switching to the domain address is a separate decision, and either one still has to be
   proven with a real mail.
-- 🔴 **The one thing still owed: prove it delivers.** Send a real mail and confirm it arrives —
-  and confirm you can sign in to that mailbox. This whole item exists because the previous
-  address was one nobody could open.
+- ✅ **Mailbox recovered 2026-09-25.** Done.
 
 ### What shipped
 
@@ -824,7 +818,5 @@ Do not start these until `APPLE_PLAN.md` Phase 3:
       Verified absent from the built bundle too.
 - [x] The published support address is a real one — `support.arakice@gmail.com`, in the code
       2026-09-04, so it works with or without the environment variables.
-- [ ] 🔴 **Prove it delivers.** Send a real mail to `support.arakice@gmail.com` and confirm it
-      arrives *and* that you can open the mailbox. The previous address failed this exact test
-      — it was published for months and nobody could read it. **The last item of this plan.**
+- [x] **The mailbox is recovered** (2026-09-25).
 - [ ] `git tag pre-ios-freeze` — then open `APPLE_PLAN.md` at Phase 0

@@ -242,6 +242,12 @@ export function BetProvider({ children }: { children: React.ReactNode }) {
   }, [legs]);
 
   const addLeg = useCallback((leg: BetLeg) => {
+    // Sans match, le serveur refuse le coupon (`legSettlementProblem`) : mieux
+    // vaut que le chemin fautif se signale ici, à l'ajout, qu'au dépôt.
+    if (!leg.gameId) {
+      console.error("[BetContext] jambe refusée : pas de gameId, elle ne pourrait jamais être réglée", leg);
+      return;
+    }
     setLegs((prev) => {
       if (prev.some((l) => l.id === leg.id)) return prev;
       return [...prev, leg];

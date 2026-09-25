@@ -55,7 +55,7 @@ vi.mock('./nhlApiClient', () => ({
   fetchGameFaceoffWins:  vi.fn(async () => new Map()),
 }));
 
-import { settlePendingSlips, resolveSlipOutcome } from './settlement.service';
+import { settlePendingSlips, resolveSlipOutcome, legSettlementProblem } from './settlement.service';
 
 const GAME_ID = '2026020001';
 
@@ -79,7 +79,7 @@ function goal(isHome: boolean, periodType = 'REG', strength = 'ev') {
 }
 
 /** Règle un unique coupon fait de ces jambes, et rend ce qui a été écrit. */
-async function settleOne(legs: any[]): Promise<{ outcome?: string; xp?: number; legs?: any[]; partialLegs?: any[] }> {
+async function settleOne(legs: any[], placedAt = new Date('2026-09-19T00:00:00Z')): Promise<{ outcome?: string; xp?: number; legs?: any[]; partialLegs?: any[] }> {
   let written: any = {};
   query.mockReset();
   query.mockImplementation(async (sql: string, params: any[]) => {
@@ -90,7 +90,7 @@ async function settleOne(legs: any[]): Promise<{ outcome?: string; xp?: number; 
       return {
         rows: [{
           id: 's1', userId: 'u1', legs,
-          placedAt: new Date('2026-09-19T00:00:00Z'),
+          placedAt,
           combinedProbability: 50,
         }],
       };
@@ -441,5 +441,44 @@ describe('tableaux de la page match — règlement', () => {
     fetchGameById.mockResolvedValue(finalGame(1, 1 + 1, 3));
     expect((await settleOne([{ gameId: GAME_ID, marketType: 'period1_winner', selectionValue: 'draw', subjectId: 'TOR' }])).outcome).toBe('win');
     expect((await settleOne([{ gameId: GAME_ID, marketType: 'period1_winner', selectionValue: 'tor',  subjectId: 'TOR' }])).outcome).toBe('loss');
+  });
+});
+
+/**
+ * Le seul coupon réellement figé en prod (sept. 2026) portait une jambe SANS
+ * `gameId`, posée par l'ancien « ajout rapide » des cartes de match. Sans match,
+ * pas de « fin de match » : le délai d'annulation ne s'appliquait jamais.
+ */
+describe('jambe sans match', () => {
+  const NO_GAME = { marketType: 'moneyline', subjectId: '2026010007', selection: 'Canadiens to win' };
+  const DAY = 24 * 3_600_000;
+
+  it('reste en attente tant que le coupon est récent', async () => {
+    const w = await settleOne([ML_TOR, NO_GAME], new Date(Date.now() - 2 * DAY));
+    expect(w.outcome).toBeUndefined();
+  });
+
+  it('est annulée passé une semaine, et le coupon se règle sur les autres', async () => {
+    const w = await settleOne([ML_TOR, NO_GAME], new Date(Date.now() - 8 * DAY));
+    expect(w.legs?.map((l: any) => l.result)).toEqual(['win', 'void']);
+    expect(w.outcome).toBe('win');
+  });
+});
+
+describe('legSettlementProblem — refus au dépôt', () => {
+  it('accepte une jambe complète', () => {
+    expect(legSettlementProblem(ML_TOR)).toBeNull();
+    expect(legSettlementProblem({ gameId: GAME_ID, marketType: 'anytime_goal', subjectId: '8478402' })).toBeNull();
+    expect(legSettlementProblem({ gameId: GAME_ID, marketType: 'shots_ou', line: 2.5, selectionValue: 'over' })).toBeNull();
+  });
+
+  it('refuse une jambe sans gameId, ou avec un id hors format NHL', () => {
+    expect(legSettlementProblem({ marketType: 'moneyline', selectionValue: 'tor' })).toMatch(/gameId/);
+    expect(legSettlementProblem({ gameId: 'TOR', marketType: 'moneyline' })).toMatch(/gameId/);
+  });
+
+  it('refuse un over/under sans ligne ou sans côté', () => {
+    expect(legSettlementProblem({ gameId: GAME_ID, marketType: 'total_goals', selectionValue: 'over' })).toMatch(/line/);
+    expect(legSettlementProblem({ gameId: GAME_ID, marketType: 'points_ou', line: 0.5 })).toMatch(/over.under/);
   });
 });

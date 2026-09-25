@@ -23,8 +23,8 @@ recovered from Git) and checking each claim against the code and the Git log.
   (Postgres), Cloudflare R2 (avatars), Cloudflare DNS/proxy. 📄
 - **All the pre-iOS web work is shipped** (env hardening, platform flags, token transport,
   refresh stampede fix, chat moderation, 18 batches of pre-freeze fixes). ✔
-- **iOS has not started.** Two things stand between you and Phase 0: prove the support
-  mailbox receives mail, then tag `pre-ios-freeze`. The tag does not exist. ✔
+- **iOS has not started.** One thing stands between you and Phase 0: tag `pre-ios-freeze`.
+  The tag does not exist. The support mailbox is recovered (2026-09-25). ✔
 - **The NHL 2026-27 season starts in early October.** Several tasks are tied to it (§3.2),
   including turning on public slips (the docs target `2026-10-07`).
 
@@ -115,7 +115,6 @@ recovered from Git) and checking each claim against the code and the Git log.
 
 | Item | What is done | What is missing |
 |---|---|---|
-| **Support address** (Apple 1.2 contact) | `support.arakice@gmail.com` is in the code (✔ `env.ts`, `email.service.ts`); `support@arakice.com` routing created 📄 | Send a real mail **from another address**, see it arrive, confirm you can log in. Decide which address is published. Add DMARC before sending from the domain. |
 | **Account deletion** (Apple 5.1.1(v), Loi 25) | ✔ Server route `DELETE /users/:id` (owner or admin) | No button in the app; the Support page still says "contact us". Needed before iOS submission. |
 | **Redis / multi-instance** | ✔ Socket.io adapter shipped | `RedisRateLimitStore` not written; rate limiters are per process. Needed only before a 2nd instance. |
 | **Public slips (Pro)** | ✔ Code + migrations | Switch-on procedure (§3.2). |
@@ -135,7 +134,7 @@ recovered from Git) and checking each claim against the code and the Git log.
 
 ### 3.1 Before the iOS freeze / before launch — blocking
 
-- [ ] **Prove the support mailbox** (see §2). This is the last item of `PRE_IOS_PLAN.md`.
+- [x] **Support mailbox** — `support.arakice@gmail.com` recovered 2026-09-25; it is the published address.
 - [ ] **`git tag pre-ios-freeze && git push --tags`** — then open `APPLE_PLAN.md` at Phase 0.
 - [ ] **Commit and deploy the hard-coded-percentage fix**, then look at `/nhl-predictions`,
       one match page, one team page, one skater and one goalie page on the live site.
@@ -308,7 +307,7 @@ Everything that lives outside the repo: what is set in Railway / Vercel / Neon /
 Sentry / Stripe consoles; which migrations are applied to Neon; whether the latest commits are
 deployed (this clone has no remote-tracking branches); whether CI is green right now (the
 local `node_modules` are Windows-only, so tests and builds were not run for this review);
-whether the support mailboxes receive mail; how the rebuilt prediction pages look with real data (built and type-checked, but not
+how the rebuilt prediction pages look with real data (built and type-checked, but not
 opened in a browser — there is no pre-prod and this session cannot reach the API); Search Console state; results of the 2026-09-22
 odds-logger check.
 

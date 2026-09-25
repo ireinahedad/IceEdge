@@ -3,7 +3,7 @@ import { authenticate } from '../middleware/auth.middleware';
 import { validateBody } from '../middleware/validate.middleware';
 import { slipSubmitSchema } from '../validation/schemas';
 import * as SlipService from '../services/slip.service';
-import { settlePendingSlips } from '../services/settlement.service';
+import { settlePendingSlips, legSettlementProblem } from '../services/settlement.service';
 import { logger } from '../logger';
 import { sendError } from '../httpError';
 
@@ -45,6 +45,17 @@ router.post('/', validateBody(slipSubmitSchema), async (req: Request, res: Respo
     if (!Array.isArray(legs) || legs.length === 0) {
       res.status(400).json({ error: 'legs array is required' });
       return;
+    }
+
+    // Une jambe que le règlement ne saura jamais décider figerait le coupon en
+    // attente : on la refuse ici plutôt que de la découvrir des jours plus tard.
+    for (let i = 0; i < legs.length; i++) {
+      const problem = legSettlementProblem(legs[i]);
+      if (problem) {
+        logger.warn({ userId, leg: i, marketType: legs[i]?.marketType, problem }, '[POST /api/slips] jambe non réglable refusée');
+        res.status(400).json({ error: `Leg ${i + 1} (${legs[i]?.selection ?? legs[i]?.marketType}) cannot be settled: ${problem}` });
+        return;
+      }
     }
 
     const slipId = await SlipService.submitSlip(userId, legs, sport, combinedProbability ?? null);
