@@ -39,8 +39,8 @@ import "../../components/rink-theme.css";
 export function ProfilePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, logout } = useAuth();
-  const { t } = useI18n();
+  const { user, logout, updateUser } = useAuth();
+  const { t, lang } = useI18n();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<UserBettingStats | null>(null);
   const [tab, setTab] = useState<Tab>(searchParams.get("tab") === "settings" ? "settings" : "overview");
@@ -97,6 +97,14 @@ export function ProfilePage() {
     // 2026-09-16). Un changement de compte, lui, recharge bien.
   }, [user?.id]);
 
+  // La barre de navigation (et tout ce qui lit `useAuth().user`) garde sa
+  // propre copie de la photo et du pseudo : sans ce relais, une nouvelle photo
+  // ou un drapeau n'apparaissait nulle part ailleurs avant un rechargement.
+  useEffect(() => {
+    if (!profile) return;
+    updateUser({ avatar_url: profile.avatarUrl ?? null, ...(profile.username ? { username: profile.username } : {}) });
+  }, [profile?.avatarUrl, profile?.username, updateUser]);
+
   async function handleAvatarClick() {
     fileInputRef.current?.click();
   }
@@ -125,37 +133,53 @@ export function ProfilePage() {
     <div className={`flex flex-col min-h-screen pb-[calc(6rem+env(safe-area-inset-bottom,0px))] max-w-[430px] md:max-w-5xl mx-auto w-full ${mode === "light" ? "profile-light" : "profile-dark"}`} style={{ background: mode === "light" ? "#D4FFEE" : "#0A0E0C" }}>
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
 
-      {/* Header */}
-      <div className="sticky top-0 z-40 profile-ink-black"
-        style={{
-          background: "linear-gradient(160deg, rgba(220,245,255,0.22), rgba(150,205,240,0.12) 45%, rgba(235,250,255,0.20))",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          paddingTop: "env(safe-area-inset-top, 0px)",
-        }}>
-        <div className="px-4 pt-3 pb-3 flex items-center justify-between">
-          <h1 className="text-white text-lg font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("profile.title")}</h1>
-          <div className="flex items-center gap-2">
+      {/* Header — même bandeau que la page Ligue (`LeagueHeader`) : verre
+          dépoli `.rink-header-glass`, titre Oswald éclairé, sous-titre, et le
+          commutateur à rondelle `.puck-tabs` pour les onglets. */}
+      <header
+        className="rink-header-glass sticky top-0 z-40 profile-ink-black"
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+      >
+        <div className="px-4 pt-3 pb-3 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h1
+              className="text-white text-xl font-bold uppercase"
+              style={{
+                fontFamily: "'Oswald', 'Arial Narrow', sans-serif",
+                textShadow: "0 0 18px rgba(134,209,234,0.35)",
+              }}
+            >
+              {t("profile.title")}
+            </h1>
+            <p className="text-white/50 text-xs truncate">
+              {lang === "fr" ? "Statistiques et paramètres" : "Stats & settings"}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button onClick={() => navigate("/support")} className="text-white/40 text-xs border border-white/10 px-3 py-1.5 rounded-xl">{t("legal.support")}</button>
             <button onClick={logout} className="text-white/40 text-xs border border-white/10 px-3 py-1.5 rounded-xl">{t("profile.signout")}</button>
           </div>
         </div>
 
         {!loading && profile && (
-          <div className="flex gap-1 mx-4 mb-3 bg-white/5 rounded-xl p-1">
+          <div
+            className="puck-tabs mx-4 mb-4"
+            style={{ "--puck-count": 2, "--puck-index": tab === "overview" ? 0 : 1 } as React.CSSProperties}
+          >
+            <span className="puck-tabs-thumb" aria-hidden />
             {(["overview", "settings"] as Tab[]).map((tabKey) => (
               <button
                 key={tabKey}
                 onClick={() => setTab(tabKey)}
-                className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all"
-                style={tab === tabKey ? { background: "#90C9F0", color: "#072E49" } : { color: "#92A08A" }}
+                className={`puck-tab${tab === tabKey ? " is-active" : ""}`}
+                aria-pressed={tab === tabKey}
               >
-                {tabKey === "overview" ? t("profile.overview") : t("profile.settings")}
+                <span>{tabKey === "overview" ? t("profile.overview") : t("profile.settings")}</span>
               </button>
             ))}
           </div>
         )}
-      </div>
+      </header>
 
       <div className={`flex-1 overflow-y-auto px-4 py-4 profile-ink-black ${mode === "light" ? "profile-light" : "profile-dark"}`}>
         {loading ? (

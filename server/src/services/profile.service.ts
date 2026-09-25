@@ -204,6 +204,13 @@ export async function updateProfile(userId: string, updates: {
   /** Store de pondération du client : famille → { idFacteur → poids 0-100 }. */
   ruleWeights?: RuleWeightsMap | null;
 }) {
+  // Le classement (cache 60 s) affiche pseudo, nom et photo : sans ça, une
+  // nouvelle photo n'y apparaissait qu'une minute plus tard.
+  if (updates.username !== undefined || updates.displayName !== undefined
+      || updates.avatar !== undefined || updates.avatarUrl !== undefined) {
+    leaderboardCache.clear();
+  }
+
   // Username lives on the users table — handle it separately, with a uniqueness check
   if (updates.username !== undefined) {
     const username = String(updates.username).trim().toLowerCase();

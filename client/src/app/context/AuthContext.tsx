@@ -17,6 +17,8 @@ interface AuthContextValue {
   logout:      () => Promise<void>;
   logoutAll:   () => Promise<void>;            // revoke every device's session
   setSession:  (result: AuthResult) => void;   // used by AuthCallback after Google OAuth
+  /** Pousse une modif de profil (photo, pseudo) vers tout ce qui lit `user`. */
+  updateUser:  (patch: Partial<Pick<AuthUser, 'username' | 'avatar_url'>>) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -115,6 +117,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(result.user);
   }, []);
 
+  const updateUser = useCallback((patch: Partial<Pick<AuthUser, 'username' | 'avatar_url'>>) => {
+    setUser((u) => {
+      if (!u) return u;
+      const changed = (Object.keys(patch) as (keyof typeof patch)[]).some((k) => patch[k] !== u[k]);
+      return changed ? { ...u, ...patch } : u;
+    });
+  }, []);
+
   const login = useCallback(async (email: string, password: string, remember = false) => {
     const result = await apiLogin(email, password, remember);
     setSession(result);
@@ -149,8 +159,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Valeur mémoïsée : sans ça, chaque rendu du provider donnait un objet neuf à
   // tous les `useAuth()` de l'application.
   const value = useMemo(
-    () => ({ user, token, loading, login, register, verifyEmail, logout, logoutAll, setSession }),
-    [user, token, loading, login, register, verifyEmail, logout, logoutAll, setSession],
+    () => ({ user, token, loading, login, register, verifyEmail, logout, logoutAll, setSession, updateUser }),
+    [user, token, loading, login, register, verifyEmail, logout, logoutAll, setSession, updateUser],
   );
 
   return (
