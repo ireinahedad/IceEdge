@@ -229,6 +229,35 @@ async function resizeAvatar(file: File): Promise<string> {
 
 // ---- Service ----------------------------------------------------------------
 
+/** Méthode de reconfirmation exigée avant la suppression du compte. */
+export type ReauthMethod = 'password' | 'code';
+
+/**
+ * Suppression de compte, en deux temps (voir `server/src/routes/user.routes.ts`).
+ * Les échecs sont des `ApiError` : l'écran distingue « mauvais mot de passe »
+ * (403 REAUTH_FAILED), « mauvais code » (400) et « Stripe indisponible » (502)
+ * par le code, pas par le texte anglais du serveur.
+ */
+async function sendOrThrow<T>(path: string, init: RequestInit): Promise<T> {
+  invalidateSharedGets();
+  const res = await authedFetch(path, init);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string; code?: string };
+    throw new ApiError(body.error ?? `API ${res.status}`, res.status, body.code);
+  }
+  return (res.status === 204 ? undefined : await res.json()) as T;
+}
+
+export const accountApiService = {
+  /** Ouvre la suppression ; pour un compte Google, le code part par courriel. */
+  startDeletion: (): Promise<{ method: ReauthMethod }> =>
+    sendOrThrow('/users/me/deletion', { method: 'POST', body: '{}' }),
+
+  /** Définitif. Le compte, ses coupons, ses messages et sa clé IA disparaissent. */
+  deleteAccount: (proof: { password: string } | { code: string }): Promise<void> =>
+    sendOrThrow('/users/me', { method: 'DELETE', body: JSON.stringify(proof) }),
+};
+
 export const profileApiService = {
   getProfile: (): Promise<UserProfile> =>
     getShared<UserProfile>('/users/me'),

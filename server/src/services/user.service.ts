@@ -200,18 +200,3 @@ export async function getBlockedUsers(blockerId: string): Promise<BlockedUser[]>
   );
   return rows as BlockedUser[];
 }
-
-// -------------------------------------------------------
-//  Delete user
-// -------------------------------------------------------
-
-export async function deleteUser(id: string): Promise<void> {
-  const { rowCount } = await pool.query(
-    'DELETE FROM users WHERE id = $1',
-    [id],
-  );
-
-  if (!rowCount) {
-    throw Object.assign(new Error('User not found'), { status: 404 });
-  }
-}

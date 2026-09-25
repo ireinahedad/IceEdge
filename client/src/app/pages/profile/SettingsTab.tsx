@@ -27,6 +27,7 @@ import { useBlocks } from "../../context/BlockContext";
 import { UserRow } from "../../components/UserIdentity";
 import { features } from "../../platform";
 import { DotLoader, InputBox, ToggleSwitch, UserAvatar } from "./ProfileParts";
+import { DeleteAccountSheet } from "./DeleteAccountSheet";
 
 
 // ── Settings Tab ──────────────────────────────────────────────────────────────
@@ -60,6 +61,7 @@ export function SettingsTab({
   const [cancelingSub, setCancelingSub] = useState(false);
   const [confirmCancelSub, setConfirmCancelSub] = useState(false);
   const [confirmLogoutAll, setConfirmLogoutAll] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   // ── Utilisateurs bloqués (R4.3e) ────────────────────────────────────────
   // L'état vit dans BlockContext, partagé avec le chat : débloquer ici fait
@@ -769,6 +771,17 @@ export function SettingsTab({
         >
           {signingOutAll ? "..." : t("profile.signoutAll")}
         </button>
+        {/* Guideline 5.1.1(v) : la suppression doit être possible DANS l'app,
+            pas seulement « écrivez au support ». */}
+        <div className="border-t border-white/10 mt-2 pt-3 flex flex-col gap-2">
+          <p className="text-white/50 text-[11px]">{t("account.deleteDesc")}</p>
+          <button
+            onClick={() => setDeletingAccount(true)}
+            className="self-start text-red-400 text-[11px] font-semibold border border-red-400/30 rounded-lg px-3 py-1.5 hover:text-red-300 hover:border-red-300/50 transition-colors"
+          >
+            {t("account.delete")}
+          </button>
+        </div>
       </div>
 
       {/* La description n'est pas décorative : sans elle, « Annuler
@@ -793,6 +806,7 @@ export function SettingsTab({
         onConfirm={handleLogoutAll}
         onCancel={() => setConfirmLogoutAll(false)}
       />
+      <DeleteAccountSheet open={deletingAccount} onClose={() => setDeletingAccount(false)} />
     </div>
   );
 }

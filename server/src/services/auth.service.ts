@@ -8,7 +8,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { pool } from '../db/connection';
 import { logger } from '../logger';
-import { sendVerificationCode, sendPasswordResetCode } from './email.service';
+import { sendVerificationCode, sendPasswordResetCode, sendAccountDeletionCode } from './email.service';
 import { profileAlreadyEnsured, markProfileEnsured } from './profileEnsured';
 import {
   UserRow, UserPublic, RegisterBody, LoginBody,
@@ -154,7 +154,7 @@ async function ensureUserProfile(userId: string, displayName: string, avatarUrl?
 
 // ---- One-time codes (email verification + password reset) ------------------
 
-type CodePurpose = 'email_verify' | 'password_reset';
+type CodePurpose = 'email_verify' | 'password_reset' | 'account_delete';
 
 /** Generates a fresh 6-digit code for a given purpose, stores its hash, and
  *  invalidates any earlier unused codes of the same purpose. Returns the
@@ -347,6 +347,61 @@ export async function resetPassword(email: string, code: string, newPassword: st
 
   // Invalidate every existing refresh token — force re-login everywhere.
   await pool.query('UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1', [user.id]);
+}
+
+// ---- Reconfirmation d'identité (suppression de compte) ---------------------
+//
+// Un jeton d'accès valide ne suffit pas pour une action définitive : il peut
+// provenir d'un appareil oublié déverrouillé ou d'une session volée. On exige
+// donc une preuve fraîche. Un compte à mot de passe retape son mot de passe ;
+// un compte Google n'en a pas, il reçoit un code par courriel — c'est la même
+// preuve de contrôle de la boîte que la réinitialisation de mot de passe.
+
+export type ReauthMethod = 'password' | 'code';
+
+async function activeUserById(userId: string): Promise<UserRow> {
+  const { rows } = await pool.query<UserRow>(
+    'SELECT * FROM users WHERE id = $1 AND is_active = TRUE',
+    [userId],
+  );
+  if (!rows[0]) throw Object.assign(new Error('User not found'), { status: 404 });
+  return rows[0];
+}
+
+/**
+ * Ouvre une reconfirmation : indique la méthode attendue et, pour un compte
+ * sans mot de passe, envoie le code. Le code est écrit avant de répondre, seul
+ * l'envoi du courriel est différé (même raisonnement que issueVerificationCode).
+ */
+export async function startReauth(userId: string): Promise<{ method: ReauthMethod }> {
+  const user = await activeUserById(userId);
+  if (user.password_hash) return { method: 'password' };
+
+  const code = await createCode(user, 'account_delete');
+  fireAndForget(sendAccountDeletionCode(user.email, code, user.first_name), 'account deletion email');
+  return { method: 'code' };
+}
+
+/**
+ * Vérifie la preuve fraîche. Lève 403 si elle est fausse ou absente — pas 401 :
+ * côté client, `authedFetch` lit un 401 comme « jeton expiré » et rejoue la
+ * requête après rafraîchissement, ce qui compterait chaque faute de frappe deux
+ * fois. Un code erroné garde le 400 de `consumeCode` (et son compteur d'essais).
+ */
+export async function confirmIdentity(
+  userId: string,
+  proof: { password?: string; code?: string },
+): Promise<void> {
+  const user = await activeUserById(userId);
+
+  if (user.password_hash) {
+    const ok = !!proof.password && await verifyPassword(proof.password, user.password_hash);
+    if (!ok) throw Object.assign(new Error('Incorrect password'), { status: 403, code: 'REAUTH_FAILED' });
+    return;
+  }
+
+  if (!proof.code) throw Object.assign(new Error('Confirmation code required'), { status: 403, code: 'REAUTH_FAILED' });
+  await consumeCode(user.id, proof.code, 'account_delete');
 }
 
 // ---- Login -----------------------------------------------------------------

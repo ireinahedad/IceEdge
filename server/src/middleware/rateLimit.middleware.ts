@@ -141,6 +141,18 @@ export const passwordResetLimiter = rateLimit({
   message: { error: 'Too many requests. Please try again later.' },
 });
 
+/** Dedicated — account deletion. Both steps are covered: starting one may send
+ *  an email, and confirming one checks a password, which must not become a
+ *  guessing oracle for someone holding a stolen access token. 10 rather than
+ *  5: a single honest attempt already uses two (start + confirm). */
+export const accountDeletionLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,       // 1 hour
+  limit:    isProd ? 10 : 100,
+  standardHeaders: 'draft-7',
+  legacyHeaders:   false,
+  message: { error: 'Too many requests. Please try again later.' },
+});
+
 /** Dedicated — LLM proxy. The Pro path bills the operator's GitHub Models
  *  account, so it needs its own tight, per-user limit independent of the broad
  *  apiLimiter. Keyed by user id (route is authenticated) with an IP fallback. */

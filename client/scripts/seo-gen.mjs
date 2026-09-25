@@ -234,6 +234,8 @@ const CHROME = {
     disclaimer:
       "ArakIce provides statistical analysis and predictions for informational and entertainment purposes only. Nothing here is financial advice or a guarantee of results. Betting involves risk and you should never wager more than you can afford to lose. Must be of legal gambling age in your jurisdiction. If gambling stops being fun, help is available. In the US, call or text 1-800-GAMBLER.",
     tagline: "Statistical edge for smarter sports bets.",
+    // Mention de non-affiliation : noms d'équipes et de ligue cités, logos jamais.
+    notAffiliated: "Not affiliated with or endorsed by the NHL or its teams. NHL and team names are trademarks of their respective owners.",
     nav: [
       { href: "/nhl-predictions-today", label: "NHL Predictions" },
       { href: "/nhl-player-props", label: "Player Props" },
@@ -247,6 +249,7 @@ const CHROME = {
     disclaimer:
       "ArakIce publie des analyses statistiques et des projections à titre informatif et de divertissement seulement. Rien ici n'est un conseil financier ni une garantie de résultat. Parier comporte un risque : ne misez jamais plus que ce que vous pouvez perdre. Vous devez avoir l'âge légal pour parier dans votre juridiction. Si le jeu cesse d'être un plaisir, de l'aide existe. Au Québec, Jeu : aide et référence répond 24 h sur 24 au 1 800 461-0140, gratuitement et anonymement.",
     tagline: "L'avantage statistique, pour parier plus intelligemment.",
+    notAffiliated: "Non affilié à la LNH ni à ses équipes, et non approuvé par elles. LNH et les noms d'équipes sont des marques de leurs propriétaires respectifs.",
     nav: [
       { href: "/fr/match", label: "Matchs du jour" },
       { href: "/nhl-predictions-today", label: "Prédictions LNH" },
@@ -332,7 +335,7 @@ ${disclaimer ? `    <div class="disclaimer">
       <nav>
 ${T.nav.map((n) => `        <a href="${SITE}${n.href}">${esc(n.label)}</a>`).join("\n")}
       </nav>
-      <span>&copy; ArakIce. ${esc(T.tagline)}</span>
+      <span>&copy; ArakIce. ${esc(T.tagline)} ${esc(T.notAffiliated)}</span>
     </div>
   </footer>
 </body>

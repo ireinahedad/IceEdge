@@ -295,6 +295,45 @@ export async function cancel(userId: string): Promise<SubscriptionStatus> {
   return toStatus(rows[0]);
 }
 
+/**
+ * Suppression de compte : annule l'abonnement Stripe IMMÉDIATEMENT (pas en fin
+ * de période — il n'y aura plus de compte pour en profiter).
+ *
+ * Appelé AVANT d'effacer quoi que ce soit, et c'est l'ordre qui compte : si
+ * Stripe refuse, on lève une erreur et le compte reste intact. L'ordre inverse
+ * laisserait un abonnement qui continue de facturer une personne dont on vient
+ * de détruire le compte, sans plus aucun moyen pour elle de l'annuler depuis
+ * l'application.
+ */
+export async function cancelStripeForAccountDeletion(userId: string): Promise<void> {
+  const { rows } = await pool.query<Pick<SubscriptionRow, 'stripe_subscription_id'>>(
+    'SELECT stripe_subscription_id FROM subscriptions WHERE user_id = $1',
+    [userId],
+  );
+  const subId = rows[0]?.stripe_subscription_id;
+  if (!subId) return;
+  if (!stripeConfigured()) {
+    logger.warn({ userId, subId }, '[subscription] suppression de compte : Stripe non configuré, abonnement non annulé');
+    return;
+  }
+
+  const stripe = getStripe();
+  try {
+    const sub = await stripe.subscriptions.retrieve(subId);
+    // Déjà terminé : rien à annuler (Stripe refuserait d'annuler deux fois).
+    if (sub.status === 'canceled' || sub.status === 'incomplete_expired') return;
+    await stripe.subscriptions.cancel(subId);
+  } catch (err: any) {
+    // Supprimé côté Stripe entre-temps : c'est le résultat voulu.
+    if (err?.code === 'resource_missing') return;
+    logger.error({ err: err?.message, userId, subId }, '[subscription] suppression de compte : annulation Stripe échouée');
+    throw Object.assign(
+      new Error("Impossible d'annuler ton abonnement pour le moment. Ton compte n'a pas été supprimé — réessaie dans quelques minutes."),
+      { status: 502, code: 'STRIPE_CANCEL_FAILED' },
+    );
+  }
+}
+
 // ─── Stripe checkout + webhook ────────────────────────────────────────────────
 
 /** Maps a Stripe subscription status onto our narrower SubStatus enum. */
@@ -409,6 +448,15 @@ async function syncSubscription(sub: Stripe.Subscription, eventCreatedAt: Date |
   const userId = await resolveUserId(sub);
   if (!userId) {
     logger.warn({ subscriptionId: sub.id }, '[subscription] webhook: could not resolve userId for subscription');
+    return;
+  }
+  // Compte supprimé : l'annulation qu'on a faite déclenche elle-même un
+  // `customer.subscription.deleted` qui porte encore l'userId en métadonnée.
+  // Sans ce test, l'INSERT viole la clé étrangère, le webhook répond 500 et
+  // Stripe le rejoue pendant trois jours.
+  const { rowCount } = await pool.query('SELECT 1 FROM users WHERE id = $1', [userId]);
+  if (!rowCount) {
+    logger.info({ subscriptionId: sub.id }, '[subscription] webhook: compte supprimé, événement ignoré');
     return;
   }
   const status = mapStripeStatus(sub.status);

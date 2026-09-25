@@ -479,6 +479,9 @@ export function LoginPage() {
         <span>·</span>
         <button onClick={() => navigate("/support")} className="underline underline-offset-2">{t("legal.support")}</button>
       </div>
+      <p className="text-center text-[10px] mt-3 px-6" style={{ color: "#92A08A", opacity: 0.5 }}>
+        {t("legal.notAffiliated")}
+      </p>
 
       {/* SEO guides — plain <a> (full navigation) so crawlers reach the static
           prerendered marketing pages in /public, which React Router does not own. */}

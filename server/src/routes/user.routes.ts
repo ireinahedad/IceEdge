@@ -1,5 +1,8 @@
 import { Router, Request, Response } from 'express';
 import * as UserService from '../services/user.service';
+import * as AuthService from '../services/auth.service';
+import { deleteAccount } from '../services/accountDeletion.service';
+import { accountDeletionLimiter } from '../middleware/rateLimit.middleware';
 import {
   authenticate,
   requireRole,
@@ -69,6 +72,41 @@ router.delete('/:userId/block', async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------
+//  Suppression de son propre compte — Guideline 5.1.1(v)
+// -------------------------------------------------------
+//
+// Deux temps, parce qu'un jeton d'accès ne suffit pas pour une action
+// définitive (voir `confirmIdentity`) :
+//   1. POST   /users/me/deletion → { method: 'password' | 'code' } ; pour un
+//      compte Google, le code part par courriel à ce moment-là ;
+//   2. DELETE /users/me { password } ou { code } → 204, tout est effacé.
+//
+// La cible est TOUJOURS `req.user.sub`. Aucun identifiant n'est lu dans la
+// requête : il n'existe aucun moyen de désigner le compte de quelqu'un d'autre.
+
+router.post('/me/deletion', accountDeletionLimiter, async (req: Request, res: Response) => {
+  try {
+    return res.json(await AuthService.startReauth(req.user!.sub));
+  } catch (err: any) {
+    return sendError(res, err);
+  }
+});
+
+router.delete('/me', accountDeletionLimiter, async (req: Request, res: Response) => {
+  try {
+    const { password, code } = req.body ?? {};
+    await AuthService.confirmIdentity(req.user!.sub, {
+      password: typeof password === 'string' ? password : undefined,
+      code:     typeof code === 'string' ? code.trim() : undefined,
+    });
+    await deleteAccount(req.user!.sub);
+    return res.status(204).send();
+  } catch (err: any) {
+    return sendError(res, err);
+  }
+});
+
+// -------------------------------------------------------
 //  GET /users/:id
 // -------------------------------------------------------
 
@@ -124,12 +162,16 @@ router.patch(
 );
 
 // -------------------------------------------------------
-//  DELETE /users/:id  —  admin only (or self)
+//  DELETE /users/:id  —  admin only
 // -------------------------------------------------------
+//
+// Était « admin ou soi-même ». Le soi-même passe désormais par `DELETE /me`,
+// qui exige une reconfirmation : laisser cette porte ouverte au propriétaire
+// permettrait de la contourner avec un simple jeton d'accès.
 
-router.delete('/:id', requireOwnerOrAdmin, async (req: Request, res: Response) => {
+router.delete('/:id', requireRole('admin'), async (req: Request, res: Response) => {
   try {
-    await UserService.deleteUser(req.params.id);
+    await deleteAccount(req.params.id);
     return res.status(204).send();
   } catch (err: any) {
     return sendError(res, err);

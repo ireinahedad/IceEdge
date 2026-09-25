@@ -81,6 +81,22 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "profile.signoutAll":   { en: "Log out of all devices", fr: "Se déconnecter de tous les appareils" },
   "profile.signoutAllDesc": { en: "Ends your session everywhere — you'll need to sign in again on each device.", fr: "Met fin à votre session partout — vous devrez vous reconnecter sur chaque appareil." },
   "profile.signoutAllConfirm": { en: "Log out of all devices?", fr: "Se déconnecter de tous les appareils ?" },
+  "account.delete":        { en: "Delete my account", fr: "Supprimer mon compte" },
+  "account.deleteDesc":    { en: "Permanently erases your account, slips, chat messages and AI key. This cannot be undone.", fr: "Efface définitivement votre compte, vos coupons, vos messages de chat et votre clé IA. C'est irréversible." },
+  "account.deleteTitle":   { en: "Delete your account?", fr: "Supprimer votre compte ?" },
+  "account.deleteWhat":    { en: "Deletion is immediate and permanent. Your account, slips, chat messages, AI key and settings are erased. There is no recovery.", fr: "La suppression est immédiate et définitive. Votre compte, vos coupons, vos messages de chat, votre clé IA et vos réglages sont effacés. Aucune récupération possible." },
+  "account.deleteSub":     { en: "Your Pro subscription will be cancelled right away, with no further charge.", fr: "Votre abonnement Pro sera annulé immédiatement, sans autre prélèvement." },
+  "account.deleteContinue":{ en: "Continue", fr: "Continuer" },
+  "account.passwordPrompt":{ en: "Enter your password to confirm.", fr: "Entrez votre mot de passe pour confirmer." },
+  "account.codePrompt":    { en: "We emailed you a 6-digit code. Enter it to confirm.", fr: "Nous vous avons envoyé un code à 6 chiffres par courriel. Entrez-le pour confirmer." },
+  "account.password":      { en: "Password", fr: "Mot de passe" },
+  "account.code":          { en: "Code", fr: "Code" },
+  "account.deleteForever": { en: "Delete permanently", fr: "Supprimer définitivement" },
+  "account.deleting":      { en: "Deleting…", fr: "Suppression…" },
+  "account.wrongPassword": { en: "Incorrect password.", fr: "Mot de passe incorrect." },
+  "account.wrongCode":     { en: "Invalid or expired code.", fr: "Code invalide ou expiré." },
+  "account.deleted":       { en: "Your account has been deleted.", fr: "Votre compte a été supprimé." },
+  "account.deleteFailed":  { en: "Deletion failed. Nothing was deleted — please try again.", fr: "La suppression a échoué. Rien n'a été supprimé — réessayez." },
   "profile.photo":        { en: "Profile Photo", fr: "Photo de profil" },
   "profile.changePhoto":  { en: "Change photo",  fr: "Changer la photo" },
   "profile.uploading":    { en: "Uploading…",    fr: "Envoi…" },
@@ -1027,6 +1043,9 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "legal.terms":   { en: "Terms",         fr: "CGU" },
   "legal.privacy": { en: "Privacy",       fr: "Confidentialité" },
   "legal.support": { en: "Support",       fr: "Support" },
+  // Une seule source pour la mention de non-affiliation dans l'app ; les pages
+  // SEO statiques portent la même dans client/scripts/seo-gen.mjs.
+  "legal.notAffiliated": { en: "Not affiliated with or endorsed by the NHL or its teams. NHL and team names are trademarks of their respective owners.", fr: "Non affilié à la LNH ni à ses équipes, et non approuvé par elles. LNH et les noms d'équipes sont des marques de leurs propriétaires respectifs." },
 
   // ── 404 ──
   "notFound.title": { en: "Page not found", fr: "Page introuvable" },

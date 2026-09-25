@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { IceedgeLogo } from "./brand/IceedgeLogo";
+import { useI18n } from "../i18n";
 
 /**
  * Coquille commune des pages Confidentialité, Conditions et Support :
@@ -8,6 +9,7 @@ import { IceedgeLogo } from "./brand/IceedgeLogo";
  */
 export function LegalPage({ title, children }: { title: string; children: ReactNode }) {
   const navigate = useNavigate();
+  const { t } = useI18n();
   return (
     <div className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-14 pb-16" style={{ background: "#0A0E0C" }}>
       <div className="flex items-center gap-3 mb-6">
@@ -16,6 +18,7 @@ export function LegalPage({ title, children }: { title: string; children: ReactN
         <h1 className="text-white text-base font-bold flex-1">{title}</h1>
       </div>
       {children}
+      <p className="text-[#8a9ea6] text-[10px] leading-relaxed mt-10">{t("legal.notAffiliated")}</p>
     </div>
   );
 }
@@ -35,7 +38,7 @@ export function LegalDocument({
         {content.sections.map((s, i) => (
           <div key={i}>
             <p className="text-white text-sm font-semibold mb-1.5">{s.h}</p>
-            <p className="text-[#bfc8cc] text-xs leading-relaxed">{s.b}</p>
+            <p className="text-[#bfc8cc] text-xs leading-relaxed whitespace-pre-line">{s.b}</p>
           </div>
         ))}
       </div>

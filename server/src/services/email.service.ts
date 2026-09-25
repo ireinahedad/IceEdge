@@ -184,3 +184,24 @@ export async function sendPasswordResetCode(to: string, code: string, firstName?
 
   await sendEmail({ to, subject, html, text });
 }
+
+/** Code à 6 chiffres qui confirme la suppression d'un compte sans mot de passe (Google). */
+export async function sendAccountDeletionCode(to: string, code: string, firstName?: string | null): Promise<void> {
+  const hello = firstName ? `Bonjour ${firstName},` : 'Bonjour,';
+  const subject = `Suppression de votre compte ArakIce : ${code}`;
+
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#0A0E0C;color:#F3F7F0;border-radius:16px">
+    <h1 style="font-size:20px;letter-spacing:0.16em;text-transform:uppercase;color:#9BF019;margin:0 0 24px">ARAKICE</h1>
+    <p style="margin:0 0 16px;color:#F3F7F0">${hello}</p>
+    <p style="margin:0 0 24px;color:#B7C4AD">Voici votre code pour confirmer la suppression définitive de votre compte&nbsp;:</p>
+    <div style="font-size:34px;font-weight:700;letter-spacing:10px;text-align:center;padding:20px;background:#131A12;border:1px solid #283323;border-radius:12px;color:#9BF019">${code}</div>
+    <p style="margin:24px 0 0;color:#92A08A;font-size:13px">Ce code expire dans 15 minutes. Si vous n'avez pas demandé la suppression de votre compte, ignorez ce courriel — rien ne sera supprimé — et écrivez-nous à ${SUPPORT_EMAIL}.</p>
+  </div>`;
+
+  const text =
+    `${hello}\n\nVotre code pour confirmer la suppression de votre compte ArakIce est : ${code}\n` +
+    `Ce code expire dans 15 minutes.\n\nSi vous n'avez pas demandé cette suppression, ignorez ce courriel et écrivez-nous à ${SUPPORT_EMAIL}.`;
+
+  await sendEmail({ to, subject, html, text });
+}
