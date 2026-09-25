@@ -100,6 +100,21 @@ function renderConfigError(err: unknown): void {
   rootEl.replaceChildren(box);
 }
 
+// Après un déploiement, un onglet ouvert avant garde l'ancien index.html et
+// réclame des chunks hachés qui n'existent plus (« Failed to fetch dynamically
+// imported module »). Vite émet `vite:preloadError` pour tout import() raté :
+// on recharge la page pour récupérer le nouveau build. Garde-fou de 10 s en
+// sessionStorage pour ne pas boucler si le chunk manque vraiment (panne réseau).
+window.addEventListener("vite:preloadError", (event) => {
+  const KEY = "arakice:chunk-reload-at";
+  let last = 0;
+  try { last = Number(sessionStorage.getItem(KEY)) || 0; } catch { /* stockage bloqué */ }
+  if (Date.now() - last < 10_000) return; // déjà rechargé : laisser l'erreur remonter
+  try { sessionStorage.setItem(KEY, String(Date.now())); } catch { /* idem */ }
+  event.preventDefault();
+  window.location.reload();
+});
+
 try {
   // Throws when a required variable is missing or not https in production.
   // The check lives in a function rather than at import time on purpose: a
