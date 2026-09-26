@@ -182,16 +182,22 @@ function registerGracefulShutdown(httpServer: HttpServer): void {
 
     try {
       // Stop taking new WebSocket + HTTP connections, drain existing ones.
-      await new Promise<void>((resolve) => io?.close(() => resolve()));
-      await new Promise<void>((resolve, reject) =>
-        httpServer.close((err) => (err ? reject(err) : resolve())),
-      );
+      await new Promise<void>((resolve) => (io ? io.close(() => resolve()) : resolve()));
+      // `io.close()` ferme DÉJÀ le serveur HTTP attaché (et attend son drain).
+      // Le refermer ici levait ERR_SERVER_NOT_RUNNING : `pool.end()` n'était
+      // jamais atteint et chaque déploiement finissait en exit(1) avec « Error
+      // during shutdown » — trouvé par la QA dynamique du 2026-09-26 (R5).
+      if (httpServer.listening) {
+        await new Promise<void>((resolve, reject) =>
+          httpServer.close((err) => (err ? reject(err) : resolve())),
+        );
+      }
       await pool.end();
       logger.info('[Server] Clean shutdown complete');
       clearTimeout(forceExit);
       process.exit(0);
     } catch (err: any) {
-      logger.error('[Server] Error during shutdown:', err?.message);
+      logger.error({ err: err?.message, code: err?.code }, '[Server] Error during shutdown');
       process.exit(1);
     }
   };

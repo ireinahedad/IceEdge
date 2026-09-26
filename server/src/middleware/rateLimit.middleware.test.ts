@@ -60,3 +60,23 @@ describe('userOrIpKey', () => {
     expect(key).toBe('u:du-middleware');
   });
 });
+
+describe('writeLimiter', () => {
+  // QA dynamique 2026-09-26 (P5) : monté en préfixe sur /api/slips et /api/chat,
+  // il comptait les GET — la liste des coupons renvoyait 429 à la 31e lecture.
+  it('ne compte pas les lectures, compte les écritures', async () => {
+    const { default: express } = await import('express');
+    const { default: request } = await import('supertest');
+    const { writeLimiter } = await import('./rateLimit.middleware');
+    const app = express();
+    app.use('/w', writeLimiter, (_req, res) => { res.status(200).end(); });
+    const limit = Number((await request(app).post('/w')).headers['ratelimit-limit'] ?? 500);
+
+    for (let i = 0; i < limit + 5; i++) {
+      expect((await request(app).get('/w')).status).toBe(200);
+    }
+    let last = 0;
+    for (let i = 0; i < limit; i++) last = (await request(app).post('/w')).status;
+    expect(last).toBe(429);
+  });
+});

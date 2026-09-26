@@ -90,8 +90,10 @@ function makeFakePool() {
 
     // ── « la session vit-elle encore ? » ────────────────────────────────────
     if (sql.includes('SELECT 1 FROM refresh_tokens')) {
+      const since: Date = params[1];
       const alive = tokens.some(
-        (t) => t.user_id === params[0] && !t.revoked && t.expires_at.getTime() > now,
+        (t) => t.user_id === params[0] && !t.revoked && t.expires_at.getTime() > now
+          && t.created_at.getTime() >= since.getTime(),
       );
       return { rowCount: alive ? 1 : 0, rows: alive ? [{ '?column?': 1 }] : [] };
     }
@@ -244,6 +246,36 @@ describe('refreshTokens — rotation atomique (R3bis.2)', () => {
     await logoutAll(USER.id);      // tout est révoqué
 
     await expect(refreshTokens('raw-1')).rejects.toMatchObject({ status: 401 });
+  });
+
+  /**
+   * QA dynamique 2026-09-26 (S2.4). Deux appareils : l'appareil 1 tourne son
+   * jeton puis se déconnecte ; l'appareil 2 reste connecté. L'ancien jeton de
+   * l'appareil 1, rejoué dans la fenêtre, ne doit rien obtenir — le jeton vivant
+   * de l'appareil 2 ne prouve pas que CETTE session-là est ouverte.
+   */
+  it('logout d’un appareil : son jeton tourné reste mort même si un autre appareil est connecté', async () => {
+    const { refreshTokens, logout } = await loadAuth(fake);
+    fake.insert(hashed('device-2'));          // l'autre appareil, connecté avant
+    fake.advance(1_000);
+    fake.insert(hashed('device-1'));
+
+    const next = await refreshTokens('device-1');
+    await logout(next.refresh_token);         // l'appareil 1 se déconnecte
+
+    await expect(refreshTokens('device-1')).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('même chose après perte du cache (redémarrage) : le repli base applique la même règle', async () => {
+    const first = await loadAuth(fake);
+    fake.insert(hashed('device-2'));
+    fake.advance(1_000);
+    fake.insert(hashed('device-1'));
+    const next = await first.refreshTokens('device-1');
+    await first.logout(next.refresh_token);
+
+    const restarted = await loadAuth(fake);   // nouveau module = cache vide
+    await expect(restarted.refreshTokens('device-1')).rejects.toMatchObject({ status: 401 });
   });
 
   it('la persistance « remember me » survit à la rotation', async () => {

@@ -1,5 +1,5 @@
 # ── Stage 1 : build TypeScript ────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ COPY src ./src
 RUN npm run build
 
 # ── Stage 2 : image de production ─────────────────────────────────────────────
-FROM node:20-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 

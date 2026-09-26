@@ -611,10 +611,10 @@ const REFRESH_GRACE_MS = 10_000;
  * perdu au redémarrage. Ce n'est pas un défaut caché, c'est pourquoi le repli
  * plus bas existe et pourquoi il doit rester correct sans ce cache.
  */
-const recentRotations = new Map<string, { promise: Promise<AuthTokens>; userId: string; at: number }>();
+const recentRotations = new Map<string, { promise: Promise<AuthTokens>; userId: string; rotatedAt: Date; at: number }>();
 
-function rememberRotation(hash: string, userId: string, promise: Promise<AuthTokens>): void {
-  recentRotations.set(hash, { promise, userId, at: Date.now() });
+function rememberRotation(hash: string, userId: string, rotatedAt: Date, promise: Promise<AuthTokens>): void {
+  recentRotations.set(hash, { promise, userId, rotatedAt, at: Date.now() });
   // Une rotation qui échoue ne doit pas empoisonner la fenêtre : on retire
   // l'entrée pour que le prochain appel reparte proprement.
   promise.catch(() => { recentRotations.delete(hash); });
@@ -626,7 +626,7 @@ function rememberRotation(hash: string, userId: string, promise: Promise<AuthTok
   }
 }
 
-function recallRotation(hash: string): { promise: Promise<AuthTokens>; userId: string } | null {
+function recallRotation(hash: string): { promise: Promise<AuthTokens>; userId: string; rotatedAt: Date } | null {
   const hit = recentRotations.get(hash);
   if (!hit) return null;
   if (Date.now() - hit.at > REFRESH_GRACE_MS) {
@@ -645,11 +645,23 @@ function recallRotation(hash: string): { promise: Promise<AuthTokens>; userId: s
  * les appareils » ne déconnecterait alors pas tout le monde. Un seul jeton encore
  * vivant suffit à prouver que la session n'a pas été fermée, et l'index
  * `idx_refresh_user_id` sert cette recherche.
+ *
+ * « Encore vivant » veut dire : un jeton NÉ DEPUIS cette rotation (`created_at >=
+ * rotated_at`) — c'est-à-dire le successeur, ou le successeur du successeur. La
+ * première version acceptait N'IMPORTE QUEL jeton vivant du compte : l'appareil 1
+ * tourne son jeton puis se déconnecte, l'appareil 2 est toujours connecté, et
+ * l'ancien jeton de l'appareil 1 rejoué dans les 10 s obtenait un jeton d'accès
+ * neuf de 15 min — une déconnexion qui ne déconnectait pas. Trouvé par la QA
+ * dynamique du 2026-09-26 (QA_TEST_PLAN.md, S2.4). Le jeton de l'appareil 2 est
+ * plus ancien que la rotation, il ne compte plus.
  */
-async function sessionStillAlive(userId: string): Promise<boolean> {
+async function sessionStillAlive(userId: string, rotatedAt: Date): Promise<boolean> {
   const { rowCount } = await pool.query(
-    'SELECT 1 FROM refresh_tokens WHERE user_id = $1 AND revoked = FALSE AND expires_at > NOW() LIMIT 1',
-    [userId],
+    `SELECT 1 FROM refresh_tokens
+      WHERE user_id = $1 AND revoked = FALSE AND expires_at > NOW()
+        AND created_at >= $2
+      LIMIT 1`,
+    [userId, rotatedAt],
   );
   return (rowCount ?? 0) > 0;
 }
@@ -690,7 +702,7 @@ export async function refreshTokens(rawToken: string): Promise<AuthTokens> {
     // Preserve the persistence choice across rotation.
     return issueTokens(user, stored.remember);
   })();
-  rememberRotation(hash, stored.user_id, issuing);
+  rememberRotation(hash, stored.user_id, stored.rotated_at!, issuing);
   return issuing;
 }
 
@@ -710,7 +722,7 @@ async function refreshAfterRotation(hash: string): Promise<AuthTokens> {
   const cached = recallRotation(hash);
   if (cached) {
     const tokens = await cached.promise;
-    if (!(await sessionStillAlive(cached.userId))) throw invalidRefresh();
+    if (!(await sessionStillAlive(cached.userId, cached.rotatedAt))) throw invalidRefresh();
     return tokens;
   }
 
@@ -725,7 +737,7 @@ async function refreshAfterRotation(hash: string): Promise<AuthTokens> {
   );
   const rotated = rows[0];
   if (!rotated) throw invalidRefresh();
-  if (!(await sessionStillAlive(rotated.user_id))) throw invalidRefresh();
+  if (!(await sessionStillAlive(rotated.user_id, rotated.rotated_at!))) throw invalidRefresh();
 
   // ⚠️ Ici on émet une paire NEUVE, donc un deuxième jeton vivant pour cette
   // session. C'est un choix, pas un accident : l'alternative était un 401, donc
@@ -738,7 +750,7 @@ async function refreshAfterRotation(hash: string): Promise<AuthTokens> {
     const user = await activeUser(rotated.user_id);
     return issueTokens(user, rotated.remember);
   })();
-  rememberRotation(hash, rotated.user_id, issuing);
+  rememberRotation(hash, rotated.user_id, rotated.rotated_at!, issuing);
   return issuing;
 }
 

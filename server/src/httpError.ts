@@ -54,6 +54,7 @@
 
 import type { Response } from 'express';
 import { logger } from './logger';
+import * as Sentry from '@sentry/node';
 
 const GENERIC_5XX = 'Internal server error';
 
@@ -135,6 +136,18 @@ export function sendError(res: Response, err: unknown, opts: SendErrorOptions = 
       { err: (err as any)?.message ?? err, stack: (err as any)?.stack },
       opts.context ?? 'request failed',
     );
+    // Un handler qui répond lui-même n'appelle jamais `next(err)`, donc
+    // `Sentry.setupExpressErrorHandler` ne voyait AUCUNE de ces erreurs : un 500
+    // sur une panne Postgres partait dans les journaux et nulle part ailleurs
+    // (QA dynamique du 2026-09-26). 501 et 503 sont exclus : ce sont des
+    // indisponibilités annoncées (Stripe non configuré, service ML coupé,
+    // disjoncteur ouvert) — les remonter enverrait un événement par requête
+    // pendant toute la panne et viderait le quota. No-op sans SENTRY_DSN.
+    if (status !== 501 && status !== 503) {
+      Sentry.captureException(err instanceof Error ? err : new Error(String((err as any)?.message ?? err)), {
+        tags: { handled_by: 'sendError', ...(opts.context ? { context: opts.context } : {}) },
+      });
+    }
   }
 
   return res.status(status).json(errorBody(err, opts));

@@ -2445,7 +2445,11 @@ def health():
         },
         "elo_teams_loaded": len(_elo_ratings),
         "calibrated":       _platt_a is not None,
-        "tip": "Lance fetch_data.py puis train.py pour activer XGBoost (models/*.json).",
+        # Seulement quand il manque vraiment un modèle : affiché en jaune sur
+        # /dev/ml, il poussait à relancer un entraînement alors que XGBoost était
+        # chargé (QA_TEST_PLAN.md, observation du 2026-08-31).
+        "tip": (None if (_xgb_game is not None and _xgb_score is not None)
+                else "Lance fetch_data.py puis train.py pour activer XGBoost (models/*.json)."),
     }
 
 @app.get("/health/ready")

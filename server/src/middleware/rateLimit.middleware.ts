@@ -125,6 +125,13 @@ export const writeLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders:   false,
   keyGenerator: userOrIpKey,
+  // Les LECTURES ne sont pas des écritures. Monté en préfixe sur `/api/slips`,
+  // `/api/chat` et `/api/manual`, ce limiteur comptait aussi les GET : ouvrir le
+  // chat (salons + messages + membres), revenir au premier plan et relire ses
+  // coupons consommait les 30 « écritures » par minute, et la liste des coupons
+  // renvoyait 429 à 30 lectures. QA dynamique du 2026-09-26 (P5). Les lectures
+  // restent sous `apiLimiter`.
+  skip: (req) => req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS',
   message: { error: 'Too many actions, please slow down.' },
 });
 

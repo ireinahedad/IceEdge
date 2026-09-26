@@ -30,11 +30,14 @@ vi.mock('./logger', () => ({
   },
 }));
 
+const captureException = vi.fn();
+vi.mock('@sentry/node', () => ({ captureException: (...args: unknown[]) => captureException(...args) }));
+
 import { errorStatus, errorBody, sendError } from './httpError';
 
 const ORIGINAL_ENV = process.env.NODE_ENV;
 afterEach(() => { process.env.NODE_ENV = ORIGINAL_ENV; });
-beforeEach(() => { logError.mockClear(); });
+beforeEach(() => { logError.mockClear(); captureException.mockClear(); });
 
 const prod = () => { process.env.NODE_ENV = 'production'; };
 
@@ -176,5 +179,27 @@ describe('la fuite d\'origine', () => {
     prod();
     await request(app()).get('/games').expect(500);
     expect(logError.mock.calls[0][0].err).toContain('https://api-web.nhle.com/v1/score/2026-01-15');
+  });
+});
+
+describe('sendError → Sentry', () => {
+  // QA dynamique 2026-09-26 : les handlers qui répondent eux-mêmes n'appellent
+  // jamais next(err), donc Sentry ne voyait aucun de leurs 500.
+  function fakeRes() {
+    const res: any = { req: {}, status: vi.fn(() => res), json: vi.fn(() => res) };
+    return res;
+  }
+
+  it('un 500 part à Sentry', () => {
+    sendError(fakeRes(), new Error('connect ECONNREFUSED'));
+    expect(captureException).toHaveBeenCalledTimes(1);
+    expect((captureException.mock.calls[0][0] as Error).message).toBe('connect ECONNREFUSED');
+  });
+
+  it('un 4xx, un 501 et un 503 n’y partent pas', () => {
+    sendError(fakeRes(), Object.assign(new Error('bad'), { status: 400 }));
+    sendError(fakeRes(), Object.assign(new Error('stripe off'), { status: 501 }));
+    sendError(fakeRes(), Object.assign(new Error('ML down'), { status: 503 }));
+    expect(captureException).not.toHaveBeenCalled();
   });
 });

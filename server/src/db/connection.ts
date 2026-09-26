@@ -1,5 +1,6 @@
 import { Pool, PoolConfig } from 'pg';
 import { logger } from '../logger';
+import { pinSslMode } from './pgUrl';
 
 // Managed Postgres (Neon, Railway, Render…) exposes a single DATABASE_URL.
 // Prefer it when present; otherwise fall back to discrete DB_* vars for local dev.
@@ -9,7 +10,8 @@ const useSsl = process.env.DB_SSL === 'true';
 
 const config: PoolConfig = process.env.DATABASE_URL
   ? {
-      connectionString: process.env.DATABASE_URL,
+      // sslmode pinned to verify-full — see pgUrl.ts (pg v9 changes `require`).
+      connectionString: pinSslMode(process.env.DATABASE_URL),
       max: Number(process.env.DB_POOL_MAX) || 10,
       ssl: useSsl ? { rejectUnauthorized: false } : undefined,
       idleTimeoutMillis: 30_000,

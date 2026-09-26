@@ -39,11 +39,11 @@ jobs:
       run:
         working-directory: client
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
 
       # Aucune dépendance npm : le générateur n'utilise que la bibliothèque
       # standard de Node et `fetch`. Pas de `npm ci`, donc pas de lockfile à

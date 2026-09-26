@@ -10,6 +10,8 @@ import {
 } from '../middleware/auth.middleware';
 import { UpdateUserBody, UpdatePasswordBody } from '../types/user.type';
 import { sendError } from '../httpError';
+import { validateBody } from '../middleware/validate.middleware';
+import { adminUpdateUserSchema } from '../validation/schemas';
 
 const router = Router();
 
@@ -120,17 +122,29 @@ router.get('/:id', requireOwnerOrAdmin, async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------
-//  PATCH /users/:id
+//  PATCH /users/:id  —  admin only
 // -------------------------------------------------------
+//
+// Était « admin ou soi-même », sans validation, et le client ne s'en sert plus
+// (le profil passe par `PATCH /users/me`, profile.routes.ts). Ouverte au
+// propriétaire, elle changeait l'`email` du compte SANS vérification : un jeton
+// d'accès volé (15 min) suffisait à poser l'adresse de l'attaquant, puis
+// « mot de passe oublié » lui envoyait le code — prise de compte durable. Même
+// raisonnement que `DELETE /users/:id` plus bas. Un doublon d'email ou de pseudo
+// renvoie 409 au lieu d'un 500. QA dynamique du 2026-09-26 (S1.5).
 
 router.patch(
   '/:id',
-  requireOwnerOrAdmin,
+  requireRole('admin'),
+  validateBody(adminUpdateUserSchema),
   async (req: Request<{ id: string }, {}, UpdateUserBody>, res: Response) => {
     try {
       const updated = await UserService.updateUser(req.params.id, req.body);
       return res.json(updated);
     } catch (err: any) {
+      if (err?.code === '23505') {
+        return res.status(409).json({ error: 'Email or username already in use' });
+      }
       return sendError(res, err);
     }
   },

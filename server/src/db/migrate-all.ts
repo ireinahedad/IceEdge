@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { Pool } from 'pg';
+import { pinSslMode } from './pgUrl';
 
 // Applies the base schema then every incremental migration, in order.
 //
@@ -33,7 +34,7 @@ const useSsl = process.env.DB_SSL === 'true';
 const CONNECT_TIMEOUT_MS = Number(process.env.DB_CONNECT_TIMEOUT_MS) || 60_000;
 
 const pool = new Pool({
-  connectionString: url,
+  connectionString: pinSslMode(url),
   ssl: useSsl ? { rejectUnauthorized: false } : undefined,
   connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
 });

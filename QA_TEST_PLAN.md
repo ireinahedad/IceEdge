@@ -599,3 +599,89 @@ aucune page où une probabilité puisse s'afficher. Le modèle, lui, répond —
   en code mais **pas encore dans le modèle déployé** — elle s'activera au
   prochain `train_score.py`, comme prévu. Rien d'anormal, mais c'est la preuve
   visible qu'il reste un entraînement à lancer.
+
+---
+
+# Exécution du 2026-09-26 — QA dynamique sur stack locale
+
+**Où.** Pas en production : une stack montée dans le conteneur cloud — PostgreSQL 16 jetable
+(migrations 001→037 appliquées par `db:migrate:all`), l'API compilée en `NODE_ENV=production`
+sur **Node 24** avec **Sentry 10**, le service ML FastAPI avec les vrais modèles, un faux
+récepteur Sentry, le mock NHL (le conteneur n'atteint pas `api-web.nhle.com`). Script
+rejouable : `loadtest/qa-dynamic/` (README). Résultat final : **90 / 90**, après les six
+correctifs ci-dessous.
+
+## Ce qui est passé du premier coup
+
+| # | Vérifié |
+|---|---|
+| F1 | register → cookie `HttpOnly; Secure; SameSite=None; Path=/api/auth`, pas de refresh dans le JSON, refresh = rotation, logout = 204 + cookie effacé, refresh après logout = 401, mode natif refusé depuis une Origin navigateur. Mauvais mot de passe et compte inconnu : même réponse. |
+| F6 | forgot-password : même réponse compte connu / inconnu ; code faux 400, bon code 200, usage unique, ancien mot de passe refusé, sessions antérieures révoquées, 5 essais faux ⇒ 429 même avec le bon code. *Le courriel lui-même n'est pas testé (pas de `RESEND_API_KEY`).* |
+| S1 | Deux comptes. B ne peut ni lire, ni régler, ni modifier les coupons / le compte / le mot de passe de A, ni lister les utilisateurs, ni ouvrir `/api/dev/*` ou `/api/manual/*`, ni lire / écrire / rejoindre / purger le salon privé de A. `role: admin` dans le corps : ignoré. |
+| S2 | JWT forgés (payload modifié, `alg=none`, secret deviné, expiré, signé avec le secret REFRESH, déchets) : 401 partout. Jeton en query string ignoré. `logout-all` tue aussi le jeton tourné dans la fenêtre de grâce. Rejeu après 10 s : 401. |
+| F2 / I3 | Compte gratuit : 402 sur la route Pro. Code promo inconnu : 400. Webhook sans signature / mauvaise signature : 400. `subscription.updated` signé ⇒ Pro, la route s'ouvre. Rejeu du même événement : 200, une seule ligne `stripe_events`. Événement plus ancien arrivé après : ignoré. `subscription.deleted` ⇒ retour gratuit. *Le checkout Stripe réel n'est pas testé (clé factice).* |
+| F3 | Coupon 2 jambes enregistré et relu ; jambes non réglables refusées (sans `gameId`, O/U sans ligne, 31 jambes) ; sans compte 401 ; se déclarer gagnant 403. *Le règlement réel dépend de l'API NHL : couvert par les tests unitaires.* |
+| I1 | Front → Node → FastAPI : `/api/predict/ml` renvoie `model_version: score-nhl-v1.0`, λ 3.18/2.90. |
+| I5 | Socket avec jeton forgé refusé ; invité accepté en lecture ; invité et non-membre refusés sur un salon privé ; un message posté en HTTP arrive au membre, à personne d'autre. |
+| P3 | 15 échecs de login / 15 min / IP puis 429 propre avec `RateLimit` + `Retry-After: 900` ; une autre IP n'est pas touchée. |
+| P5 | 600 lectures authentifiées, 60 en parallèle, pool `max 10` : 0 erreur, ~450 req/s, p95 ~200 ms, 11 connexions Postgres. *Machine locale — ne dit rien de la latence Neon.* |
+| R1 | ML coupé : 503 `ML service unavailable` en 5 ms, aucun chiffre inventé ; disjoncteur ouvert à 5 échecs, refermé seul au retour ; les pages « règles » continuent ; readiness reste 200 (voulu). |
+| R3 | Postgres coupé : 500 générique, pas de fuite ; retour automatique dès que la base revient. Readiness mise en cache 10 min (voulu, `READINESS_DB_TTL_MS`). |
+| Modération | Les deux cas jamais vus : masquage automatique au **3ᵉ** signaleur distinct (un doublon ne compte pas ; masqué aussi pour l'auteur), l'auteur ne peut pas se signaler, bloquer / débloquer rend les messages. 3 lignes dans la file admin. |
+| Restauration (répétition locale) | `pg_dump -Fc` → `pg_restore --no-owner --clean --if-exists` dans une base neuve : mêmes comptes, coupons, 37 migrations ; `db:migrate:all` relancé = tout « already applied » ; l'API sur la base restaurée répond et un login passe. **Ce n'est pas l'exercice Neon** (voir STATUS §3.1). |
+| C4 (statique) | 214 pages de `client/public` : toutes ont `<title>` unique, description, canonical `https://arakice.com…`, OpenGraph, Twitter card, aucune `noindex`. Pas de `hreflang` dans le `<head>` (seulement en lien dans le corps des pages de match). *Rendu réel sur le domaine non vérifié : ni le conteneur ni le poste n'atteignent arakice.com.* |
+
+## Ce qui a échoué — et a été corrigé le même jour
+
+1. **Refresh rejouable après logout (S2.4).** Appareil 1 tourne son jeton puis se déconnecte ;
+   appareil 2 reste connecté ; l'ancien jeton de l'appareil 1, rejoué dans les 10 s, obtenait un
+   jeton d'accès neuf. `sessionStillAlive` acceptait *n'importe quel* jeton vivant du compte ; il
+   exige maintenant un jeton **né depuis la rotation** (`created_at >= rotated_at`). Deux tests
+   ajoutés à `authRefresh.test.ts` (cache vivant et repli base).
+2. **`PATCH /users/:id` ouvert au propriétaire, sans validation (S1.5).** Changeait l'email sans
+   vérification — jeton d'accès volé ⇒ email de l'attaquant ⇒ « mot de passe oublié » ⇒ prise de
+   compte durable. Et un email déjà pris faisait un 500. Le client ne s'en sert pas (il utilise
+   `PATCH /users/me`) : la route est passée **admin seulement**, schéma zod `.strict()`, 409 sur
+   doublon. `userPatch.routes.test.ts`.
+3. **`writeLimiter` comptait les lectures (P5).** Monté en préfixe sur `/api/slips`, `/api/chat`,
+   `/api/manual` : la 31ᵉ lecture de la minute recevait 429. Les GET/HEAD/OPTIONS sont exclus
+   (ils restent sous `apiLimiter`). Test ajouté.
+4. **Sentry ne voyait aucun 500 des handlers (R3).** 93 handlers répondent via `sendError`, qui
+   n'appelle jamais `next(err)` : `setupExpressErrorHandler` ne voyait rien, contrairement à ce
+   qu'affirme le commentaire de la readiness. `sendError` envoie maintenant les 5xx à Sentry,
+   sauf 501/503 (indisponibilités annoncées — un événement par requête pendant toute une panne
+   viderait le quota).
+5. **Secrets dans les événements Sentry.** Une fois les 500 remontés : les événements portaient
+   `authorization: Bearer …` et `cookie: ice_refresh=…` — **le refresh token, 7 à 30 jours**.
+   `sendDefaultPii: false` ne retire pas les en-têtes. `beforeSend` / `beforeSendTransaction`
+   filtrent désormais `authorization`, `cookie`, `set-cookie`, `x-ml-token`,
+   `stripe-signature`… Vérifié sur le faux récepteur : 0 occurrence. (La query string était déjà
+   filtrée.)
+6. **Arrêt « propre » en exit(1) à chaque déploiement (R5).** `io.close()` ferme déjà le serveur
+   HTTP ; le refermer levait `ERR_SERVER_NOT_RUNNING`, `pool.end()` n'était jamais atteint, et le
+   journal disait « Error during shutdown » sans message (mauvaise signature pino). Le drain, lui,
+   marchait : SIGTERM sous 20 clients ⇒ 0 réponse 5xx. Maintenant : « Clean shutdown complete ».
+
+## P4 — Lighthouse mobile (build local, `vite preview`)
+
+Le chunk `charts` (recharts + d3, ~154 ko gzip) était **préchargé sur toutes les pages** :
+`manualChunks` ne classait pas React, et Rollup rangeait react / react-dom / scheduler *dans*
+`charts` — l'entrée importait donc React depuis `charts`. React a maintenant son chunk.
+
+| Page | Avant | Après |
+|---|---|---|
+| `/` | score 79 · LCP 4,0 s · 337 Kio | score 84 · LCP 3,5 s · 230 Kio |
+| `/nhl-predictions` | score 80 · LCP 3,9 s · 335 Kio | score 85 · LCP 3,5 s · 228 Kio |
+
+`charts` ne se charge plus que sur `/stats/chart…` (vérifié : aucune erreur de page sur 8 routes).
+LCP reste > 2,5 s en 4G lente simulée, sans CDN : à remesurer sur arakice.com.
+
+## Ce qui reste à jouer — hors d'atteinte d'ici
+
+- **C1 / C2 / C3** : vrais appareils (iPhone Safari, Android, navigateurs desktop, push PWA).
+- **I4** Google OAuth (Google Console + domaine réel), **I6** avec la vraie API NHL.
+- **F1 étape « email vérifié requis »** : dépend de la décision `EMAIL_VERIFICATION_DISABLED` /
+  `RESEND_API_KEY` (STATUS §3.1).
+- **I2 étape 4**, **P1/P2** contre Railway, **P5** contre Neon (vérifier `-pooler` d'abord).
+- **Exercice de restauration Neon** (branche depuis l'historique), **rollback** Railway / Vercel.
+- `npm run moderation:dry-run` une fois que le chat a du vrai trafic.

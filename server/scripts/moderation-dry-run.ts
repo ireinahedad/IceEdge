@@ -18,6 +18,7 @@
  */
 import 'dotenv/config';
 import { Pool } from 'pg';
+import { pinSslMode } from '../src/db/pgUrl';
 import { inspect } from '../src/services/moderation.service';
 
 const url = process.env.DATABASE_URL;
@@ -27,7 +28,7 @@ if (!url) {
 }
 
 const pool = new Pool({
-  connectionString: url,
+  connectionString: pinSslMode(url),
   ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
   connectionTimeoutMillis: 15_000,
 });

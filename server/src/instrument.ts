@@ -50,6 +50,37 @@ const tracesSampleRate =
 // sortie -- rien -- et « Sentry est branche » devient une croyance invérifiable.
 // `console` et non `logger` : ce fichier doit s'executer AVANT tout le reste
 // (cf. l'en-tete), donc avant que le logger n'existe.
+/**
+ * EN-TÊTES SECRETS — retirés de chaque événement avant l'envoi.
+ *
+ * `sendDefaultPii: false` ne suffit pas : le SDK joint quand même les en-têtes
+ * de la requête, et la QA dynamique du 2026-09-26 a trouvé dans les événements
+ * `authorization: Bearer <jeton d'accès>` et surtout `cookie: ice_refresh=…` —
+ * le refresh token, valable 7 à 30 jours. Quiconque lit le projet Sentry pouvait
+ * ouvrir la session de l'utilisateur. La query string, elle, était déjà filtrée
+ * (`access_token=[Filtered]`).
+ *
+ * Liste de refus plutôt que d'autorisation : un en-tête inconnu reste utile au
+ * débogage, et ceux qui portent un secret sont peu nombreux et connus.
+ */
+const SECRET_HEADERS = new Set([
+  'authorization', 'proxy-authorization', 'cookie', 'set-cookie',
+  'x-ml-token', 'stripe-signature', 'x-api-key',
+]);
+
+export function scrubEvent<T extends { request?: any }>(event: T): T {
+  const req = event.request;
+  if (req) {
+    if (req.headers && typeof req.headers === 'object') {
+      for (const k of Object.keys(req.headers)) {
+        if (SECRET_HEADERS.has(k.toLowerCase())) req.headers[k] = '[Filtered]';
+      }
+    }
+    if (req.cookies) req.cookies = {};
+  }
+  return event;
+}
+
 if (process.env.SENTRY_DSN) {
   try {
     Sentry.init({
@@ -58,6 +89,8 @@ if (process.env.SENTRY_DSN) {
       tracesSampleRate,
       // Don't send PII by default.
       sendDefaultPii: false,
+      beforeSend: (event) => scrubEvent(event),
+      beforeSendTransaction: (event) => scrubEvent(event),
     });
     console.log(
       `[Sentry] ✅ armé — environment=${process.env.NODE_ENV || 'development'}, ` +

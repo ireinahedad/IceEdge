@@ -42,6 +42,16 @@ export const slipSubmitSchema = z.object({
   combinedProbability: z.number().min(0).max(100).nullable().optional(),
 });
 
+// `PATCH /users/:id` (admin). `.strict()` : un champ inconnu (`role`, `password_hash`…)
+// est refusé plutôt qu'ignoré en silence.
+export const adminUpdateUserSchema = z.object({
+  email:      z.string().trim().email().max(254).optional(),
+  username:   z.string().trim().min(1).max(50).optional(),
+  first_name: z.string().trim().max(100).nullable().optional(),
+  last_name:  z.string().trim().max(100).nullable().optional(),
+  is_active:  z.boolean().optional(),
+}).strict();
+
 // ── Profile ─────────────────────────────────────────────────────────────────
 // L'avatar est stocké en base64 dans Postgres (user_profiles.avatar_url) et
 // renvoyé dans les payloads du chat et du leaderboard : chaque octet accepté ici

@@ -65,21 +65,55 @@ recovered from Git) and checking each claim against the code and the Git log.
   Watch Stats → Usage: once the monthly quota is spent, new errors are dropped until the reset.
 - ✔ Moderation queue (`arakice.com/dev/moderation`) opened and emptied — 2026-09-26.
 - ✔ Admin card shows "a key is saved", and it survives a bio edit (034 regression check) — 2026-09-26.
-- ✔ `npm audit fix` in `server/` (2026-09-26, *lockfile not yet committed*): express 4.22.3,
-  body-parser 1.20.8, qs 6.16.0; `package.json` unchanged; 608/608 tests, typecheck clean. What
-  remains is vitest/vite (dev-only) and `@sentry/node` 8 (§3.8).
+- ✔ `npm audit fix` in `server/` (2026-09-26, commit `c5c261f`): express 4.22.3,
+  body-parser 1.20.8, qs 6.16.0. With the Sentry bump below, `npm audit --omit=dev` = **0**.
+- ✔ Decision 2026-09-26: **no staging environment**. QA F1/F2 run on production with throwaway accounts.
 - ✔ `pre-ios-freeze` tag pushed (on `1244bac`), 2026-09-26.
 - ✔ Railway checked on the running banner (2026-09-26): Node and ML on the same commit (bundle +
   player model live), `NHL_USE_MOCK` false, `ML_DISABLED` false, `API_RATE_LIMIT` default,
   `NODE_ENV=production`, `CORS_ORIGIN` correct, no `DORMANT`, probes OK, healthcheck
   `/health/ready`. `ENABLE_DEV_ROUTES=true` **on purpose** (see §6). `EMAIL_VERIFICATION_DISABLED=true` (§3.1).
 
+### Technical deadlines + dynamic QA (2026-09-26, *not yet committed or deployed*)
+- ✔ **Node 24** everywhere: `server/Dockerfile` (`node:24-alpine`, both stages), CI and the SEO
+  Action. 623/623 server tests, client typecheck + build pass under Node 24.21.
+- ✔ **GitHub Actions** `checkout@v7`, `setup-node@v7`, `gitleaks-action@v3` (Node 24 runtimes; no
+  input changes). Triggers untouched.
+- ✔ **`@sentry/node` 8 → 10.75** (not 11: v10 already clears the OpenTelemetry advisories, and 11.0.0
+  had just shipped with a data-collection default that sends bodies, cookies and SQL). Same API
+  (`init`, `setupExpressErrorHandler`); an event was received end to end by a local Sentry stub.
+- ✔ **`pg` v9 ready**: `pinSslMode()` (`db/pgUrl.ts`) rewrites `sslmode=require|prefer|verify-ca` to
+  `verify-full` in the three pools — exactly today's behaviour, kept after pg v9, and pg's boot
+  SECURITY WARNING goes away. No Railway change needed.
+- ✔ **Dynamic QA campaign on a local production-mode stack** — 90/90 after fixes, script in
+  `loadtest/qa-dynamic/`, report in `QA_TEST_PLAN.md` § « Exécution du 2026-09-26 ». Covered: F1,
+  F2 (webhook path), F3, F6, S1 IDOR with two accounts, S2 tampered JWT / refresh replay, I1, I3,
+  I5, P3, P5, R1 (ML killed), R3 (Postgres killed), R5 (SIGTERM under traffic), the two moderation
+  cases never walked, a local backup/restore rehearsal, static SEO meta on 214 pages, Lighthouse.
+- ✔ Six defects found and fixed, each with a test:
+  1. a logged-out device's rotated refresh token could be replayed for 10 s while another device
+     was signed in (`sessionStillAlive` now requires a token born after the rotation);
+  2. `PATCH /users/:id` let the owner change their email with no verification (stolen access
+     token → attacker's email → "forgot password" → takeover) and 500'd on duplicates — now
+     admin-only, strict zod schema, 409;
+  3. `writeLimiter` counted reads — the 31st `GET /api/slips` in a minute got 429;
+  4. Sentry never saw the 500s of the 93 handlers that answer through `sendError` — now reported
+     (except 501/503, announced outages that would drain the Developer-plan quota);
+  5. once reported, events carried `authorization` and the `ice_refresh` **cookie** (7–30-day
+     refresh token) — scrubbed in `beforeSend`;
+  6. every deploy ended in `exit(1)` "Error during shutdown" (`io.close()` already closes the HTTP
+     server) and never closed the pool.
+- ✔ **Landing no longer downloads recharts + d3.** React had been bundled *inside* the `charts`
+  chunk, so every page preloaded it. React now has its own chunk: `/` 337 → 230 KiB, Lighthouse
+  mobile 79 → 84, LCP 4.0 → 3.5 s (local build, simulated slow 4G).
+- ✔ `/dev/ml` yellow "run fetch_data.py then train.py" tip now appears only when a model is
+  really missing (it came from the ML service's `/health`, not from the client).
+
 ### Security
 - ✔ In-app account deletion (Apple 5.1.1(v), Loi 25): `DeleteAccountSheet` in Settings, re-auth,
   `accountDeletion.service.ts` + tests (`1244bac`, 2026-09-25).
-- ✔ `npm audit` 2026-09-26: `client/` 0. `server/` 27 (1 critical, 1 high) — all critical/high are
-  vitest/vite, dev-only, not shipped. Runtime: `qs` via express (moderate, `npm audit fix`, no
-  major — §3.1) and `@sentry/node` 8 → OpenTelemetry (moderate, needs v11 — §3.8).
+- ✔ `npm audit` 2026-09-26: `client/` 0. `server/` runtime (`--omit=dev`) **0** after `qs` and
+  Sentry 10. What remains is vitest/vite — dev-only, not shipped.
 - ✔ Pre-freeze security batch closed: Vercel preview CORS regex, internal error leaks
   (`httpError.ts`, 93 handlers), OpenAI key no longer returned by `/users/me`, Google
   `email_verified` check, push unsubscribe IDOR, zod on `/api/predict/*` + limiter,
@@ -144,7 +178,7 @@ recovered from Git) and checking each claim against the code and the Git log.
 | **Cloudflare in front of the API** | 📄 Proxy and cache headers in place | Check that it actually caches what the headers allow. |
 | **Budget alerts** | ✔ Thresholds written in `MONITORING.md` | Set them in each console (Railway, Neon, Odds API, LLM, Stripe, Sentry, R2). |
 | **Load testing** | ✔ In-process benches, all green | Real visitor latency against a pre-prod (`loadtest/s1-landing.js`) never run — there is no pre-prod. |
-| **QA** | ✔ I1, I2 (6/7), static security/resilience | F1–F6, I2 step 4, I3–I6, P1–P5, C1–C4, dynamic security, restore drill (§3.7). |
+| **QA** | ✔ I1, I2 (6/7), static campaigns; ✔ dynamic campaign on a local stack (2026-09-26, 90/90) | What needs the real world: devices (C1–C3), Google (I4), the NHL API (I6), Railway/Neon latency (P1, P2, P5), Neon restore drill (§3.7). |
 | **Client tests** | ✔ `typecheck` in CI | No test runner in `client/`. The socket block filter (`visibleMessages` in `RoomChat`) has no guard. |
 | **Google auth token in URL** | ✔ Fragment + Sentry scrubbing | ✔ The `?access_token=` fallback in `AuthCallback.tsx` is still there; remove it now that the deploy window is over. |
 | **SEO match pages** | ✔ Generated and deployed daily | Link `/match` from the app (✔ nothing links to it), submit `sitemap-games.xml` in Search Console, translate `/matchup/`, `/props/` and hubs to French. |
@@ -157,26 +191,32 @@ recovered from Git) and checking each claim against the code and the Git log.
 
 ### 3.1 Before the iOS freeze / before launch — blocking
 
-- [ ] **Commit and deploy the player-prop fix** (2026-09-26, *not yet committed*):
+- [ ] **Deploy the player-prop fix** (committed in `c5c261f`, 2026-09-26):
       `server/src/services/factorModel.ts` + `factorModel.player.test.ts`. Rules mode inflated every
       skater's high lines — the tendency factors (shot volume, PP, finishing…) are line-independent
       and pulled the blend toward 50 % (Ovechkin 2+ goals 34 % for a Poisson of 6 %, 3+ assists
       22 % for 2 %). Now anchored on the rate like `periodDrawFactors`. 608/608 server tests,
       typecheck clean; the new test fails on the old code. After deploy: reopen
       `/stats/prediction/player/8471214` — 2+ goals ≈ 6 %, 3+ points ≈ 4 %.
-- [ ] **Turn email verification on**: `EMAIL_VERIFICATION_DISABLED=false` on Railway, deploy, sign up
+- [ ] **Turn email verification on** (decided 2026-09-26): `EMAIL_VERIFICATION_DISABLED=false` on Railway, deploy, sign up
       with a throwaway address and check the code arrives. Resend is live since 2026-09-26, so nothing
       else blocks it. Accounts created while it was off were marked verified at sign-up (`auth.service.ts`),
       so nobody gets locked out; an older unverified account gets in through "forgot password".
       Also confirm the `_dmarc` TXT exists (`p=none`, reports to `support.arakice@gmail.com`).
-- [ ] **Staging decision**: create one, or accept that F1/F2 run on production with throwaway accounts.
 - [ ] **Critical QA**: F1 (full auth cycle), F2 (Pro gating end to end), C1 (iOS Safari:
-      login → prediction → payment on a real iPhone). Runbooks in `QA_TEST_PLAN.md`.
-- [ ] **Backups**: run one real restore drill (`BACKUP_DR.md` has never been played);
-      confirm Neon history retention ≥ 7 days; test a Railway/Vercel rollback once.
-- [ ] **Secrets hygiene**: if the Odds API key that once sat in `DEPLOYMENT.md` was real,
-      revoke and regenerate it. (The DB password that leaked was a local one — no rotation
-      needed; history purge was abandoned on purpose.)
+      login → prediction → payment on a real iPhone). Runbooks in `QA_TEST_PLAN.md`. **On production**
+      with 2–3 throwaway accounts (no staging, §6); F2 gets Pro through a promo code, not a real payment.
+      ✔ 2026-09-26: F1, F2 (webhook path), F6 and the dynamic security checks already pass on a local
+      production-mode stack (§3.7) — on production only the real-world parts remain (sign-up code,
+      promo redeem, C1).
+- [ ] **Backups** — *next session*: run one real restore drill (`BACKUP_DR.md` has never been played);
+      confirm Neon history retention ≥ 7 days; test a Railway/Vercel rollback once. The
+      `pg_dump`/`pg_restore` + `db:migrate:all` path was rehearsed locally on 2026-09-26 and works.
+- [ ] **Rotate the Odds API key — 2026-09-29, when the paid plan is bought.** The key that once sat in
+      `DEPLOYMENT.md` (still in Git history) **is the live one** (confirmed 2026-09-26). Regenerate it in
+      the dashboard, paste the new one in Railway, Deploy, and check the banner line
+      `ODDS_API_KEY acceptée`. (The DB password that leaked was a local one — no rotation needed;
+      history purge was abandoned on purpose.)
 
 ### 3.2 At the start of the NHL 2026-27 season (early October)
 
@@ -249,31 +289,54 @@ recovered from Git) and checking each claim against the code and the Git log.
 | 7 bis | Neon: scale-to-zero vs always-on — decide | off-season |
 | R, S, T, V, W | per-user API limiter, cache keys, LLM prompt cache, log sampling, Tailwind purge | see audit |
 
-Open question: `writeLimiter` is per IP (mobile NAT). Per account would weaken anti-spam. Decide.
+~~Open question: `writeLimiter` per IP.~~ Settled: it is keyed per account since 2026-08-24
+(`userOrIpKey`), and since 2026-09-26 it no longer counts reads.
 
 ### 3.7 QA campaigns still to run — `QA_TEST_PLAN.md`
 
-Functional F1–F6 · Integration I3 (Stripe webhook replay), I4 (Google OAuth), I5 (socket.io),
-I6 (data pipeline) · Performance P1–P5 (check `DATABASE_URL` uses `-pooler` first) ·
-Compatibility C1–C4 · Dynamic security (IDOR with 2 accounts, tampered JWT, refresh not
-replayable after logout) · Resilience (kill ML, kill Odds API, redeploy under traffic) ·
-Restore drill. Two moderation cases never seen on screen: auto-hide at 3 reporters, unblock
-(covered by tests). Re-run `npm run moderation:dry-run` once the chat has real traffic.
+✔ Everything that can run without the real world passed on 2026-09-26 (see §1). What is left
+needs a device, a third party or production:
+
+- [ ] **After deploying the 2026-09-26 batch**: log in, refresh, log out on arakice.com (the
+      rotation change); open `/stats/chart` once (new `react` chunk); check the Railway deploy log
+      ends with `Clean shutdown complete`; trigger one 500 and check the Sentry event shows
+      `authorization: [Filtered]` and `cookie: [Filtered]`.
+- [ ] **C1–C3** on real devices: iPhone Safari, Android Chrome, desktop browsers, PWA push.
+- [ ] **I4** Google OAuth end to end on the real domain; **I6** once the NHL API has games.
+- [ ] **P1 / P2 / P5 against Railway + Neon** (check `DATABASE_URL` uses `-pooler` first);
+      **Lighthouse on arakice.com** — local LCP is still 3.5 s on simulated slow 4G.
+- [ ] **Neon restore drill** and one rollback (§3.1).
+- [ ] Re-run `npm run moderation:dry-run` once the chat has real traffic.
 
 ### 3.8 Technical deadlines
 
-- [ ] **`@sentry/node` 8 → 11** (clears the OpenTelemetry advisories from `npm audit`). Major bump —
-      read the migration guide; do not run the "Configure Express SDK" wizard (§6).
-- [ ] **Node ≥ 22 before January 2027** (✔ Dockerfile is still `node:20-alpine`; the AWS SDK v3 used for R2 will require it).
-- [ ] **GitHub Actions**: bump `actions/checkout@v4`, `setup-node@v4`, `gitleaks-action@v2` (✔ still v4/v2) — do not touch the triggers.
-- [ ] **`pg` v9 / `pg-connection-string` v3**: SSL modes `prefer`/`require`/`verify-ca` will change meaning.
+✔ Code side done on 2026-09-26 (§1): Node 24, Actions v7/v7/v3, Sentry 10, `pg` sslmode pinned.
+Left, in consoles:
 
-### 3.9 Cloudflare / accounts
+- [ ] **Vercel → Settings → Build and Deployment → Node.js Version: 24.x** (the client builds and
+      type-checks on 24; Vercel ignores the Dockerfile and CI).
+- [ ] After the Railway deploy: the running banner shows Node 24 (`node -v` in the deploy log, or
+      `process.version`), and `[Sentry] ✅ armé` still prints.
+- [ ] `@sentry/node` 11 — later, not before its first patch releases. Its `dataCollection`
+      default sends request bodies, cookies and SQL: set it explicitly when upgrading.
 
-- [ ] R1 · Check the recovery address of `ireinahedad24@gmail.com`.
-- [ ] R6 (optional) · *Full (strict)* for `arakice.com` and `www` only, after checking Vercel renews its certificate behind the proxy. Never for `api`.
-- [ ] R8 (optional, not before launch) · `cdn.arakice.com` for R2 — together with an `UPDATE` of `avatar_url`, or not at all.
-- [ ] R9 · Close the old `Ireinahedad@icloud.com's Account` (irreversible, manual).
+### 3.9 Cloudflare / accounts — all manual, in your own sessions
+
+- [ ] R1 · `ireinahedad24@gmail.com` → myaccount.google.com → Security → *Recovery email* and
+      *Recovery phone*: both must be ones you control today (not the dead iCloud / support
+      addresses). Also note the backup codes (2-Step Verification → Backup codes).
+- [ ] R6 (optional) · *Full (strict)* for `arakice.com` and `www` only. First check that Vercel's
+      certificate is valid behind the proxy: Vercel → Project → Settings → Domains shows both with
+      a valid certificate, and `curl -vI https://arakice.com` shows a Let's Encrypt/Vercel cert
+      issued < 90 days ago. Then Cloudflare → Rules → Configuration Rules → hostname
+      `arakice.com` or `www.arakice.com` → SSL *Strict*. Leave the zone default on *Full*.
+      **Never** for `api` (Railway).
+- [ ] R8 (optional, not before launch) · `cdn.arakice.com` for R2 — together with an `UPDATE` of
+      `avatar_url`, or not at all.
+- [ ] R9 · Close the old `Ireinahedad@icloud.com's Account` on Cloudflare (irreversible). Before:
+      it must own no zone, no R2 bucket, no Workers and no billing — check each tab, then
+      delete it from the account settings (if the option is missing, Cloudflare support does it
+      on request from that account's email).
 
 ### 3.10 Low-priority code polish (post-freeze)
 
@@ -363,7 +426,7 @@ Cheapest providers with bet365 (approx., converted at ~1 £ ≈ 1.35 US$, ~1 US$
 | "Cloudflare in front of Railway postponed" (audit line 11) | The proxy is in place; only cache verification remains. |
 | `loadtest/README.md` §7 "S2–S7 not scripted" | Covered by the in-process benches (`loadtest/bench/`). |
 | Supabase | Production database is Neon. |
-| `/dev/ml` "run fetch_data.py then train.py" warning | ✔ No longer in the code. |
+| `/dev/ml` "run fetch_data.py then train.py" warning | Came from the ML service's `/health`; now only shown when a model is missing (2026-09-26). |
 
 ---
 
@@ -392,10 +455,13 @@ Carried over from `RESTE_A_FAIRE.md`, `PRE_IOS_PLAN.md` and the pre-freeze audit
 - Cloudflare: zone in *Full*, never *Full (strict)* for `api`, never *Always Use HTTPS*.
 - ML service stays *Unexposed* (no public domain); ignore Railway's agent suggestion.
 - Sentry: do not follow the "Configure Express SDK" wizard; `SENTRY_TRACES_SAMPLE_RATE` absent on purpose.
+  Keep `beforeSend: scrubEvent` in `instrument.ts` — without it events carry the refresh cookie.
 - `db:migrate:all` applies the whole backlog — check the target line and `PUBLIC_SLIPS_SINCE` first.
 - `ENABLE_DEV_ROUTES=true` in production is **intentional** (decided 2026-09-26): the moderation
   queue (`/api/dev/reports`) and `/dev/ml` live under `/api/dev`. Every route there requires
   `authenticate` + `requireRole('admin')`. Turning it off breaks moderation.
+- No staging (decided 2026-09-26): QA on production uses throwaway accounts, and Pro is granted by
+  promo code, never by a real payment. Delete the throwaway accounts afterwards (Settings → delete).
 - Test auth on the real domain, not on a `*.vercel.app` preview (third-party cookie there).
 - The support Gmail is `support.arakice@gmail.com`; the dead one was `arakice.support@gmail.com`. Do not "fix" one into the other.
 
@@ -405,6 +471,13 @@ Carried over from `RESTE_A_FAIRE.md`, `PRE_IOS_PLAN.md` and the pre-freeze audit
   server number is hidden; add new markets in `nhlPredictions.ts`, never as a client list.
 - `useNHLData` must return stable functions (`useCallback`) — unstable ones caused the `/nhl-predictions` loop.
 - Never put a secret behind `VITE_`; never log the Odds API URL (key in query string).
+- `sendError` reports 5xx to Sentry except 501/503 — do not add 503 (one event per request
+  during an outage). `writeLimiter` skips GET/HEAD/OPTIONS on purpose.
+- `PATCH /users/:id` is admin-only: an owner email change without verification is an account
+  takeover path. Profile edits go through `PATCH /users/me`.
+- `vite.config.ts`: React keeps its own chunk, listed before `charts` — otherwise Rollup puts
+  React inside `charts` and every page downloads recharts.
+- Grace-window liveness means "a token born after this rotation", not "any live token".
 - `ci.yml`: keep `master` in the triggers, do not widen to all branches.
 - Removing a route does not remove its chunk: use `const X = flag ? lazy(...) : null`.
 - Refresh-token rotation: the grace window is three mechanisms (in-flight promise, DB
@@ -423,6 +496,10 @@ Carried over from `RESTE_A_FAIRE.md`, `PRE_IOS_PLAN.md` and the pre-freeze audit
 **Repo**
 - `git config core.autocrlf input`; `npm ci`, never `npm install`.
 - Tests/builds run in a fresh Linux install (cloud container), not through the bridge.
+- Through the bridge, use `git --no-optional-locks status`: a plain `git status` writes
+  `.git/index.lock`, and the bridge cannot delete it — your next Windows `git` then fails.
+- Dynamic QA: `loadtest/qa-dynamic/` against a local stack only (the script refuses Neon /
+  arakice.com).
 
 ---
 
@@ -437,6 +514,7 @@ Carried over from `RESTE_A_FAIRE.md`, `PRE_IOS_PLAN.md` and the pre-freeze audit
 | `PRE_IOS_PLAN.md` | Completed web plan, kept because ~20 source files cite its decisions | completed (design record) |
 | `AUDIT_SCALABILITE_COUTS.md`, `QA_TEST_PLAN.md`, `ml/REFACTOR_PLAN.md` | Detailed plans behind §3.5–3.7 | live |
 | `RAPPORT_TESTS_CHARGE_2026-09-18.md`, `loadtest/*` | Load-test report and procedure | reference |
+| `loadtest/qa-dynamic/` | Dynamic QA script (local stack) behind §3.7 | live |
 | `content/*` | Content engine docs | live |
 | `AUDIT_PRE_FREEZE_IOS.md`, `PRODUCTION_READINESS_AUDIT.md` | Deleted 2026-09-24 (still in Git history); open items transferred here | removed |
 | `RESTE_A_FAIRE.md` | Deleted 2026-09-16 in `4d1cbcd`; content transferred here | replaced by this file |

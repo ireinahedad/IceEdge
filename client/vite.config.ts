@@ -53,6 +53,13 @@ export default defineConfig({
         // visited — cutting first-paint payload on mobile.
         manualChunks(id) {
           if (!id.includes('node_modules')) return;
+          // React d'abord, dans son propre chunk. Sans cette ligne, Rollup rangeait
+          // react, react-dom et scheduler DANS `charts` (dépendances communes d'un
+          // chunk manuel) : l'entrée importait alors React depuis `charts`, et
+          // chaque page — landing comprise — préchargeait recharts + d3 (~154 ko
+          // gzip, ~100 ko inutilisés selon Lighthouse). M1 ne servait à rien.
+          // QA P4 du 2026-09-26.
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react';
           if (id.includes('recharts') || id.includes('/d3-')) return 'charts';
           if (id.includes('/motion/') || id.includes('framer-motion')) return 'motion';
           if (id.includes('/ogl') || id.includes('/three')) return 'gfx';
