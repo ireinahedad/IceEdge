@@ -1,6 +1,6 @@
 # ArakIce / ICEEDGE — Project status
 
-**Single source of truth for what is done and what remains. Updated 2026-09-25.**
+**Single source of truth for what is done and what remains. Updated 2026-09-26.**
 
 Built by reading every planning doc in the repo (plus the deleted `RESTE_A_FAIRE.md`,
 recovered from Git) and checking each claim against the code and the Git log.
@@ -23,8 +23,8 @@ recovered from Git) and checking each claim against the code and the Git log.
   (Postgres), Cloudflare R2 (avatars), Cloudflare DNS/proxy. 📄
 - **All the pre-iOS web work is shipped** (env hardening, platform flags, token transport,
   refresh stampede fix, chat moderation, 18 batches of pre-freeze fixes). ✔
-- **iOS has not started.** One thing stands between you and Phase 0: tag `pre-ios-freeze`.
-  The tag does not exist. The support mailbox is recovered (2026-09-25). ✔
+- **iOS has not started.** Nothing blocks Phase 0 any more: support mailbox recovered
+  (2026-09-25), tag `pre-ios-freeze` pushed (on `1244bac`, 2026-09-26). ✔
 - **The NHL 2026-27 season starts in early October.** Several tasks are tied to it (§3.2),
   including turning on public slips (the docs target `2026-10-07`).
 
@@ -55,7 +55,31 @@ recovered from Git) and checking each claim against the code and the Git log.
 - 📄 All migrations (through 037) applied to Neon — confirmed by you on 2026-09-24. Cloudflare account recovered (2026-09-16), TLS 1.2
   minimum, `www` → apex redirect in place, `support@arakice.com` forwards to Gmail.
 
+- ✔ Live-site walk (2026-09-26): `/nhl-predictions`, team (WSH), skater (Ovechkin), goalie
+  (Thompson) all served by the server, match/team numbers consistent (52 = 38 + 14). Found the
+  player-prop inflation (§3.1).
+- ✔ Transactional email via Resend on `arakice.com` (2026-09-26): password reset received and
+  used on production. Covers the reset code (F6), the sign-up code, and the account-deletion code
+  for Google-only accounts (no password to re-authenticate with).
+- ✔ Sentry fell back to the **Developer** (free) plan after the Business trial — checked 2026-09-26.
+  Watch Stats → Usage: once the monthly quota is spent, new errors are dropped until the reset.
+- ✔ Moderation queue (`arakice.com/dev/moderation`) opened and emptied — 2026-09-26.
+- ✔ Admin card shows "a key is saved", and it survives a bio edit (034 regression check) — 2026-09-26.
+- ✔ `npm audit fix` in `server/` (2026-09-26, *lockfile not yet committed*): express 4.22.3,
+  body-parser 1.20.8, qs 6.16.0; `package.json` unchanged; 608/608 tests, typecheck clean. What
+  remains is vitest/vite (dev-only) and `@sentry/node` 8 (§3.8).
+- ✔ `pre-ios-freeze` tag pushed (on `1244bac`), 2026-09-26.
+- ✔ Railway checked on the running banner (2026-09-26): Node and ML on the same commit (bundle +
+  player model live), `NHL_USE_MOCK` false, `ML_DISABLED` false, `API_RATE_LIMIT` default,
+  `NODE_ENV=production`, `CORS_ORIGIN` correct, no `DORMANT`, probes OK, healthcheck
+  `/health/ready`. `ENABLE_DEV_ROUTES=true` **on purpose** (see §6). `EMAIL_VERIFICATION_DISABLED=true` (§3.1).
+
 ### Security
+- ✔ In-app account deletion (Apple 5.1.1(v), Loi 25): `DeleteAccountSheet` in Settings, re-auth,
+  `accountDeletion.service.ts` + tests (`1244bac`, 2026-09-25).
+- ✔ `npm audit` 2026-09-26: `client/` 0. `server/` 27 (1 critical, 1 high) — all critical/high are
+  vitest/vite, dev-only, not shipped. Runtime: `qs` via express (moderate, `npm audit fix`, no
+  major — §3.1) and `@sentry/node` 8 → OpenTelemetry (moderate, needs v11 — §3.8).
 - ✔ Pre-freeze security batch closed: Vercel preview CORS regex, internal error leaks
   (`httpError.ts`, 93 handlers), OpenAI key no longer returned by `/users/me`, Google
   `email_verified` check, push unsubscribe IDOR, zod on `/api/predict/*` + limiter,
@@ -115,7 +139,6 @@ recovered from Git) and checking each claim against the code and the Git log.
 
 | Item | What is done | What is missing |
 |---|---|---|
-| **Account deletion** (Apple 5.1.1(v), Loi 25) | ✔ Server route `DELETE /users/:id` (owner or admin) | No button in the app; the Support page still says "contact us". Needed before iOS submission. |
 | **Redis / multi-instance** | ✔ Socket.io adapter shipped | `RedisRateLimitStore` not written; rate limiters are per process. Needed only before a 2nd instance. |
 | **Public slips (Pro)** | ✔ Code + migrations | Switch-on procedure (§3.2). |
 | **Cloudflare in front of the API** | 📄 Proxy and cache headers in place | Check that it actually caches what the headers allow. |
@@ -134,28 +157,23 @@ recovered from Git) and checking each claim against the code and the Git log.
 
 ### 3.1 Before the iOS freeze / before launch — blocking
 
-- [x] **Support mailbox** — `support.arakice@gmail.com` recovered 2026-09-25; it is the published address.
-- [ ] **`git tag pre-ios-freeze && git push --tags`** — then open `APPLE_PLAN.md` at Phase 0.
-- [ ] **Commit and deploy the hard-coded-percentage fix**, then look at `/nhl-predictions`,
-      one match page, one team page, one skater and one goalie page on the live site.
-- [ ] **`EMAIL_VERIFICATION_DISABLED=true` in production** — sign-ups are authenticated with an
-      unverified address, and password recovery (F6) relies on the same missing email channel
-      (`RESEND_API_KEY`). Decide and configure.
-- [ ] **Deploy Python and Node together** for the ML bundle (`/predict/game/bundle`, player model).
-- [ ] **Railway variables** — check on the running container's `[Server] Réglages effectifs`
-      banner: `NHL_USE_MOCK`, `EMAIL_VERIFICATION_DISABLED`, `API_RATE_LIMIT`, `DORMANT`
-      absent or false; `ENABLE_DEV_ROUTES` not true; `CORS_ORIGIN` correct; Railway reads
-      `/health/ready`.
-- [ ] **Sentry**: the Business trial was due to end around 2026-09-12. Check which plan it fell back to.
+- [ ] **Commit and deploy the player-prop fix** (2026-09-26, *not yet committed*):
+      `server/src/services/factorModel.ts` + `factorModel.player.test.ts`. Rules mode inflated every
+      skater's high lines — the tendency factors (shot volume, PP, finishing…) are line-independent
+      and pulled the blend toward 50 % (Ovechkin 2+ goals 34 % for a Poisson of 6 %, 3+ assists
+      22 % for 2 %). Now anchored on the rate like `periodDrawFactors`. 608/608 server tests,
+      typecheck clean; the new test fails on the old code. After deploy: reopen
+      `/stats/prediction/player/8471214` — 2+ goals ≈ 6 %, 3+ points ≈ 4 %.
+- [ ] **Turn email verification on**: `EMAIL_VERIFICATION_DISABLED=false` on Railway, deploy, sign up
+      with a throwaway address and check the code arrives. Resend is live since 2026-09-26, so nothing
+      else blocks it. Accounts created while it was off were marked verified at sign-up (`auth.service.ts`),
+      so nobody gets locked out; an older unverified account gets in through "forgot password".
+      Also confirm the `_dmarc` TXT exists (`p=none`, reports to `support.arakice@gmail.com`).
 - [ ] **Staging decision**: create one, or accept that F1/F2 run on production with throwaway accounts.
 - [ ] **Critical QA**: F1 (full auth cycle), F2 (Pro gating end to end), C1 (iOS Safari:
       login → prediction → payment on a real iPhone). Runbooks in `QA_TEST_PLAN.md`.
 - [ ] **Backups**: run one real restore drill (`BACKUP_DR.md` has never been played);
       confirm Neon history retention ≥ 7 days; test a Railway/Vercel rollback once.
-- [ ] **Moderation queue**: open it and empty it. Apple asks about the process.
-- [ ] After the 034 deploy: the admin card (Profile → Settings → Manual input) shows "a key is
-      saved", and editing your bio does not erase the OpenAI key.
-- [ ] `npm audit` on `client/` and `server/`.
 - [ ] **Secrets hygiene**: if the Odds API key that once sat in `DEPLOYMENT.md` was real,
       revoke and regenerate it. (The DB password that leaked was a local one — no rotation
       needed; history purge was abandoned on purpose.)
@@ -183,6 +201,7 @@ recovered from Git) and checking each claim against the code and the Git log.
 ### 3.3 At the first sale
 
 - [ ] Vercel Pro (Hobby forbids commercial use).
+- [ ] Sentry: move off the Developer plan if the monthly error quota gets close (Stats → Usage).
 - [ ] Raise Railway's hard limit (25 $) and the GitHub Models budget (0 $ blocks Pro LLM calls).
 - [ ] Verify Cloudflare caching in front of `api.arakice.com`.
 - [ ] After launch: empty `PRO_PROMO_CODES`, redeploy, check an old code returns 400.
@@ -205,7 +224,7 @@ recovered from Git) and checking each claim against the code and the Git log.
 - [ ] Phase 4 — native features (APNs push first, share sheet, offline, haptics, universal links).
 - [ ] Phase 5 — IAP (deferred: v1 ships without Pro on iOS). Decide before submitting whether
       locked Pro sections without a call-to-action are acceptable.
-- [ ] Phase 6 — in-app account deletion (see §2).
+- [ ] Phase 6 — in-app account deletion: ✔ built on the web (`1244bac`); check it in the iOS shell.
 - [ ] Phases 7–9 — cloud macOS CI, store assets, TestFlight, submission.
 
 ### 3.5 ML — `ml/REFACTOR_PLAN.md`
@@ -243,6 +262,8 @@ Restore drill. Two moderation cases never seen on screen: auto-hide at 3 reporte
 
 ### 3.8 Technical deadlines
 
+- [ ] **`@sentry/node` 8 → 11** (clears the OpenTelemetry advisories from `npm audit`). Major bump —
+      read the migration guide; do not run the "Configure Express SDK" wizard (§6).
 - [ ] **Node ≥ 22 before January 2027** (✔ Dockerfile is still `node:20-alpine`; the AWS SDK v3 used for R2 will require it).
 - [ ] **GitHub Actions**: bump `actions/checkout@v4`, `setup-node@v4`, `gitleaks-action@v2` (✔ still v4/v2) — do not touch the triggers.
 - [ ] **`pg` v9 / `pg-connection-string` v3**: SSL modes `prefer`/`require`/`verify-ca` will change meaning.
@@ -262,6 +283,11 @@ Restore drill. Two moderation cases never seen on screen: auto-hide at 3 reporte
 - `buildGameGroups` (`gameMarkets.tsx`) and the local tiles of `TeamPrediction.tsx` still carry
   placeholder `rulePct` values in the source. They are never displayed any more (overwritten by
   the server or dropped), but could be stripped.
+
+- Live match view: the 7 `PlayerPropGrid`s (3 on the team page) each fetch the roster and each run
+  their own 30 s boxscore poll — 7 identical requests per tick per viewer. Share one in-flight
+  request in `nhlApiService` (`getGameBoxscore`, `getTeamRoster`). Far from the 300/min limiter.
+- Goalie page header shows skater stats (G / A / PTS / +/-, and "1 A · 0 PTS"): show GAA / SV% / W.
 
 Two routers on `/api/users` (rule written in `app.ts`) · hard-coded Pro price in `ProPage.tsx`
 (✔ now `5,99 $`, not localised) · tu/vous mix in French strings · `backdrop-filter` on the nav
@@ -367,6 +393,9 @@ Carried over from `RESTE_A_FAIRE.md`, `PRE_IOS_PLAN.md` and the pre-freeze audit
 - ML service stays *Unexposed* (no public domain); ignore Railway's agent suggestion.
 - Sentry: do not follow the "Configure Express SDK" wizard; `SENTRY_TRACES_SAMPLE_RATE` absent on purpose.
 - `db:migrate:all` applies the whole backlog — check the target line and `PUBLIC_SLIPS_SINCE` first.
+- `ENABLE_DEV_ROUTES=true` in production is **intentional** (decided 2026-09-26): the moderation
+  queue (`/api/dev/reports`) and `/dev/ml` live under `/api/dev`. Every route there requires
+  `authenticate` + `requireRole('admin')`. Turning it off breaks moderation.
 - Test auth on the real domain, not on a `*.vercel.app` preview (third-party cookie there).
 - The support Gmail is `support.arakice@gmail.com`; the dead one was `arakice.support@gmail.com`. Do not "fix" one into the other.
 

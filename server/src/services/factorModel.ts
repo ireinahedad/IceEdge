@@ -536,96 +536,125 @@ function lineFromId(id: string): number | null {
   return m ? Number(m[1]) + Number(m[2]) / 10 : null;
 }
 
+/*
+ * ── Ancrage des props joueur sur leur taux (2026-09-26) ─────────────────────
+ *
+ * Chaque famille ci-dessous mélange UN facteur qui dépend de la ligne (le taux
+ * Poisson : P(X > 1.5 | λ)…) et des facteurs de TENDANCE (volume de tirs,
+ * finition, PP…) qui sont des sigmoïdes centrées sur 0,5 et IDENTIQUES d'une
+ * ligne à l'autre. `setFactors` écrase `rulePct` par ce mélange : sur les
+ * lignes hautes, les tendances tiraient donc la tuile vers 0,5. Mesuré en
+ * production sur Ovechkin (λ buts 0,39) : « 2+ buts » affiché 34 % pour un
+ * Poisson de 6 %, « 3+ passes » 22 % pour 2 %, « 3+ points » 29 % pour 4 % —
+ * alors que le mode ML (7 %, < 3 %, 4 %) et la note de la tuile disaient vrai.
+ *
+ * Même remède que `periodDrawFactors` : `anchorFactors` recentre la famille
+ * pour que sa moyenne aux poids PAR DÉFAUT vaille exactement le taux, en
+ * gardant l'écart relatif des tendances — c'est lui qui fait bouger la tuile
+ * quand l'utilisateur repondère. Sur une ligne rare (2 %), la marge est mince
+ * et la tuile bouge peu : c'est le comportement honnête.
+ */
+
 /** Buts : taux de marquage + volume de tirs + finition + production PP. */
 function goalFactors(line: number, c: PlayerFactorCtx): Factor[] {
   const finishing = c.shotPct > 0 ? lean(c.shotPct, LEAGUE_SHOT_PCT, 3.5) : 0.5;
-  return [
+  const raw: Factor[] = [
     { id: 'scoringRate', label: 'Taux de buts',        weight: 45, value: poissonOver(c.gpg, line) },
     { id: 'shotVolume',  label: 'Volume de tirs',      weight: 25, value: clamp(lean(c.spg, 2.6, 1.0)) },
     { id: 'finishing',   label: 'Finition (tir %)',    weight: 15, value: clamp(finishing) },
     { id: 'ppUsage',     label: 'Production en PP',    weight: 15, value: clamp(lean(c.pppg, 0.35, 0.25)) },
   ];
+  return anchorFactors(raw, raw[0].value);
 }
 
 /** Premier buteur : part du menace-anytime + part des tirs d'équipe + PP. */
 function firstGoalFactors(c: PlayerFactorCtx): Factor[] {
   const anytime = 1 - Math.exp(-c.gpg);
-  return [
+  const raw: Factor[] = [
     { id: 'anytimeShare', label: 'Menace de but (÷ buteurs)', weight: 55, value: clamp(anytime / 5.2, 0.01, 0.35) },
     { id: 'shotShare',    label: 'Part des tirs d’équipe',    weight: 30, value: clamp(c.spg / 30, 0.01, 0.3) },
     { id: 'ppUsage',      label: 'Déploiement en PP',         weight: 15, value: clamp(0.03 + 0.25 * lean(c.pppg, 0.35, 0.25) * 0.4, 0.01, 0.3) },
   ];
+  return anchorFactors(raw, raw[0].value);
 }
 
 /** Assists : taux + part de passes + environnement offensif + PP. */
 function assistFactors(line: number, c: PlayerFactorCtx): Factor[] {
   const playShare = c.ppg > 0 ? c.apg / c.ppg : 0.5; // part des points qui sont des passes
-  return [
+  const raw: Factor[] = [
     { id: 'assistRate', label: 'Taux d’assists',        weight: 50, value: poissonOver(c.apg, line) },
     { id: 'playmaking', label: 'Profil de passeur',     weight: 20, value: clamp(lean(playShare, 0.55, 0.15)) },
     { id: 'offenseEnv', label: 'Production offensive',  weight: 15, value: clamp(lean(c.ppg, 0.8, 0.4)) },
     { id: 'ppUsage',    label: 'Production en PP',      weight: 15, value: clamp(lean(c.pppg, 0.35, 0.25)) },
   ];
+  return anchorFactors(raw, raw[0].value);
 }
 
 /** Points : taux + volume de tirs + PP + équilibre buts/passes. */
 function pointFactors(line: number, c: PlayerFactorCtx): Factor[] {
   const balance = Math.max(c.gpg, c.apg) > 0 ? Math.min(c.gpg, c.apg) / Math.max(c.gpg, c.apg) : 0.5;
-  return [
+  const raw: Factor[] = [
     { id: 'pointsRate', label: 'Taux de points',        weight: 55, value: poissonOver(c.ppg, line) },
     { id: 'shotVolume', label: 'Volume de tirs',        weight: 20, value: clamp(lean(c.spg, 2.6, 1.0)) },
     { id: 'ppUsage',    label: 'Production en PP',      weight: 15, value: clamp(lean(c.pppg, 0.35, 0.25)) },
     { id: 'balance',    label: 'Équilibre buts/passes', weight: 10, value: clamp(lean(balance, 0.5, 0.25)) },
   ];
+  return anchorFactors(raw, raw[0].value);
 }
 
 /** Tirs au but : taux + rôle de tireur + menace offensive. */
 function shotFactors(line: number, c: PlayerFactorCtx): Factor[] {
-  return [
+  const raw: Factor[] = [
     { id: 'shotRate',   label: 'Taux de tirs',      weight: 60, value: poissonOver(c.spg, line) },
     { id: 'shooterRole',label: 'Rôle de tireur',    weight: 25, value: clamp(lean(c.spg, LEAGUE_SPG, 1.0)) },
     { id: 'goalThreat', label: 'Menace de but',     weight: 15, value: clamp(lean(c.gpg, 0.30, 0.20)) },
   ];
+  return anchorFactors(raw, raw[0].value);
 }
 
 /** Mises en échec : taux (moyenne de position à défaut) + rôle physique. */
 function hitFactors(line: number, c: PlayerFactorCtx): Factor[] {
   const physRole = c.pos === 'D' ? 0.58 : clamp(lean(c.hitsPg, 2.1, 0.8));
-  return [
+  const raw: Factor[] = [
     { id: 'hitRate',      label: 'Taux de mises en échec', weight: 70, value: poissonOver(c.hitsPg, line) },
     { id: 'physicalRole', label: 'Rôle physique',          weight: 30, value: clamp(physRole) },
   ];
+  return anchorFactors(raw, raw[0].value);
 }
 
 /** Tirs bloqués : taux + rôle défensif (les D bloquent bien plus). */
 function blockFactors(line: number, c: PlayerFactorCtx): Factor[] {
-  return [
+  const raw: Factor[] = [
     { id: 'blockRate',     label: 'Taux de blocs',   weight: 70, value: poissonOver(c.blocksPg, line) },
     { id: 'defensiveRole', label: 'Rôle défensif',   weight: 30, value: c.pos === 'D' ? 0.7 : 0.35 },
   ];
+  return anchorFactors(raw, raw[0].value);
 }
 
 /** Point / but en avantage numérique. */
 function ppPointFactors(c: PlayerFactorCtx): Factor[] {
-  return [
+  const raw: Factor[] = [
     { id: 'ppRate',     label: 'Taux de points en PP', weight: 65, value: clamp(1 - Math.exp(-c.pppg)) },
     { id: 'offenseEnv', label: 'Production offensive', weight: 35, value: clamp(lean(c.ppg, 0.8, 0.4)) },
   ];
+  return anchorFactors(raw, raw[0].value);
 }
 function ppGoalPlayerFactors(c: PlayerFactorCtx): Factor[] {
   const finishing = c.shotPct > 0 ? lean(c.shotPct, LEAGUE_SHOT_PCT, 3.5) : 0.5;
-  return [
+  const raw: Factor[] = [
     { id: 'ppRate',    label: 'Taux de buts en PP', weight: 65, value: clamp(1 - Math.exp(-c.pppg * 0.45)) },
     { id: 'finishing', label: 'Finition (tir %)',   weight: 35, value: clamp(finishing) },
   ];
+  return anchorFactors(raw, raw[0].value);
 }
 
 /** Minutes de pénalité : taux + style de jeu physique. */
 function pimFactors(line: number, c: PlayerFactorCtx): Factor[] {
-  return [
+  const raw: Factor[] = [
     { id: 'pimRate',     label: 'Taux de pénalités', weight: 70, value: poissonOver(c.pimPg, line) },
     { id: 'physicality', label: 'Jeu physique',      weight: 30, value: clamp(lean(c.hitsPg, 2.1, 0.8)) },
   ];
+  return anchorFactors(raw, raw[0].value);
 }
 
 export function attachPlayerFactors(groups: any[], c: PlayerFactorCtx): void {
