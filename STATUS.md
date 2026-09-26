@@ -1,6 +1,6 @@
 # ArakIce / ICEEDGE — Project status
 
-**Single source of truth for what is done and what remains. Updated 2026-09-26.**
+**Single source of truth for what is done and what remains. Updated 2026-09-26 (afternoon).**
 
 Built by reading every planning doc in the repo (plus the deleted `RESTE_A_FAIRE.md`,
 recovered from Git) and checking each claim against the code and the Git log.
@@ -71,10 +71,32 @@ recovered from Git) and checking each claim against the code and the Git log.
 - ✔ `pre-ios-freeze` tag pushed (on `1244bac`), 2026-09-26.
 - ✔ Railway checked on the running banner (2026-09-26): Node and ML on the same commit (bundle +
   player model live), `NHL_USE_MOCK` false, `ML_DISABLED` false, `API_RATE_LIMIT` default,
-  `NODE_ENV=production`, `CORS_ORIGIN` correct, no `DORMANT`, probes OK, healthcheck
-  `/health/ready`. `ENABLE_DEV_ROUTES=true` **on purpose** (see §6). `EMAIL_VERIFICATION_DISABLED=true` (§3.1).
+  `NODE_ENV=production`, `CORS_ORIGIN` correct, no `DORMANT`, probes OK. `ENABLE_DEV_ROUTES=true`
+  **on purpose** (see §6). *(Correction 2026-09-26, afternoon: the service had **no** healthcheck path
+  set — added then, see below.)*
+- ✔ **Backups & rollback drill** (2026-09-26, `BACKUP_DR.md` §5.3):
+  - Neon history window 6 h → **1 day** (your choice; 7 days would cost ~0.005 $/month). Production
+    branch now **protected** (can't be deleted or reset by mistake).
+  - Neon restore drill: branch `drill-2026-09-26` from production as of 1 h earlier, forked in 0.62 s,
+    fingerprint (`server/scripts/restore-drill.sql`) identical to production on every user table —
+    10 users, 8 slips, 22 chat messages, 3 Pro, 37 migrations. ~2 min end to end. The branch
+    auto-deletes on 2026-09-27 14:05 WITA.
+  - Railway rollback `d269448` → `c5c261f` → `d269448`: each switch active in < 10 s, **0 failed**
+    `/health/ready` probes out of 234 (1/s).
+  - Vercel Instant Rollback `d269448` → `c5c261f` → Promote `d269448`: ~8 s each way, 0 errors out
+    of 211 probes on arakice.com, auto-promotion of `master` back on. (Hobby has no "Undo Rollback"
+    button: Deployments → newest → ⋯ → Promote.)
+  - Railway settings: healthcheck `/health/ready`, teardown draining **15 s** (was 0 s: old
+    containers were killed on SIGTERM, before any shutdown log). Next deploy logged `SIGTERM received`
+    → `Clean shutdown complete`, 0 failed probes out of 152.
+- ✔ **2026-09-26 batch deployed** (`d269448`, Railway auto-deploys `master`): built from
+  `server/Dockerfile` on `node:24-alpine`, `[Sentry] ✅ armé`, `ODDS_API_KEY acceptée`, R2 and Redis OK.
+  Player-prop fix live: Ovechkin 2+ goals **6 %**, 3+ points **4 %**, 3+ assists 3 %
+  (`/api/nhl/predictions/player/8471214`).
+- ✔ Running banner shows `EMAIL_VERIFICATION_DISABLED: false` and `SOCKET_ADAPTER: redis`
+  (`REDIS_URL` set — a Redis service runs in the Railway project).
 
-### Technical deadlines + dynamic QA (2026-09-26, *not yet committed or deployed*)
+### Technical deadlines + dynamic QA (2026-09-26, deployed in `d269448`)
 - ✔ **Node 24** everywhere: `server/Dockerfile` (`node:24-alpine`, both stages), CI and the SEO
   Action. 623/623 server tests, client typecheck + build pass under Node 24.21.
 - ✔ **GitHub Actions** `checkout@v7`, `setup-node@v7`, `gitleaks-action@v3` (Node 24 runtimes; no
@@ -173,7 +195,7 @@ recovered from Git) and checking each claim against the code and the Git log.
 
 | Item | What is done | What is missing |
 |---|---|---|
-| **Redis / multi-instance** | ✔ Socket.io adapter shipped | `RedisRateLimitStore` not written; rate limiters are per process. Needed only before a 2nd instance. |
+| **Redis / multi-instance** | ✔ Socket.io adapter shipped and **active** (Redis service on Railway, `REDIS_URL` set — checked 2026-09-26) | `RedisRateLimitStore` not written; rate limiters are per process. Needed only before a 2nd instance. |
 | **Public slips (Pro)** | ✔ Code + migrations | Switch-on procedure (§3.2). |
 | **Cloudflare in front of the API** | 📄 Proxy and cache headers in place | Check that it actually caches what the headers allow. |
 | **Budget alerts** | ✔ Thresholds written in `MONITORING.md` | Set them in each console (Railway, Neon, Odds API, LLM, Stripe, Sentry, R2). |
@@ -191,15 +213,8 @@ recovered from Git) and checking each claim against the code and the Git log.
 
 ### 3.1 Before the iOS freeze / before launch — blocking
 
-- [ ] **Deploy the player-prop fix** (committed in `c5c261f`, 2026-09-26):
-      `server/src/services/factorModel.ts` + `factorModel.player.test.ts`. Rules mode inflated every
-      skater's high lines — the tendency factors (shot volume, PP, finishing…) are line-independent
-      and pulled the blend toward 50 % (Ovechkin 2+ goals 34 % for a Poisson of 6 %, 3+ assists
-      22 % for 2 %). Now anchored on the rate like `periodDrawFactors`. 608/608 server tests,
-      typecheck clean; the new test fails on the old code. After deploy: reopen
-      `/stats/prediction/player/8471214` — 2+ goals ≈ 6 %, 3+ points ≈ 4 %.
-- [ ] **Turn email verification on** (decided 2026-09-26): `EMAIL_VERIFICATION_DISABLED=false` on Railway, deploy, sign up
-      with a throwaway address and check the code arrives. Resend is live since 2026-09-26, so nothing
+- [ ] **Email verification — test it** (decided 2026-09-26): ✔ `EMAIL_VERIFICATION_DISABLED=false` is already
+      in the running banner. Left: sign up with a throwaway address and check the code arrives. Resend is live since 2026-09-26, so nothing
       else blocks it. Accounts created while it was off were marked verified at sign-up (`auth.service.ts`),
       so nobody gets locked out; an older unverified account gets in through "forgot password".
       Also confirm the `_dmarc` TXT exists (`p=none`, reports to `support.arakice@gmail.com`).
@@ -209,9 +224,6 @@ recovered from Git) and checking each claim against the code and the Git log.
       ✔ 2026-09-26: F1, F2 (webhook path), F6 and the dynamic security checks already pass on a local
       production-mode stack (§3.7) — on production only the real-world parts remain (sign-up code,
       promo redeem, C1).
-- [ ] **Backups** — *next session*: run one real restore drill (`BACKUP_DR.md` has never been played);
-      confirm Neon history retention ≥ 7 days; test a Railway/Vercel rollback once. The
-      `pg_dump`/`pg_restore` + `db:migrate:all` path was rehearsed locally on 2026-09-26 and works.
 - [ ] **Rotate the Odds API key — 2026-09-29, when the paid plan is bought.** The key that once sat in
       `DEPLOYMENT.md` (still in Git history) **is the live one** (confirmed 2026-09-26). Regenerate it in
       the dashboard, paste the new one in Railway, Deploy, and check the banner line
@@ -297,15 +309,17 @@ recovered from Git) and checking each claim against the code and the Git log.
 ✔ Everything that can run without the real world passed on 2026-09-26 (see §1). What is left
 needs a device, a third party or production:
 
-- [ ] **After deploying the 2026-09-26 batch**: log in, refresh, log out on arakice.com (the
-      rotation change); open `/stats/chart` once (new `react` chunk); check the Railway deploy log
-      ends with `Clean shutdown complete`; trigger one 500 and check the Sentry event shows
+- [ ] **After deploying the 2026-09-26 batch** (deployed; ✔ `Clean shutdown complete` in the Railway
+      log since draining = 15 s): log in, refresh, log out on arakice.com (the rotation change); open
+      `/stats/chart` once (new `react` chunk); trigger one 500 and check the Sentry event shows
       `authorization: [Filtered]` and `cookie: [Filtered]`.
 - [ ] **C1–C3** on real devices: iPhone Safari, Android Chrome, desktop browsers, PWA push.
 - [ ] **I4** Google OAuth end to end on the real domain; **I6** once the NHL API has games.
 - [ ] **P1 / P2 / P5 against Railway + Neon** (check `DATABASE_URL` uses `-pooler` first);
       **Lighthouse on arakice.com** — local LCP is still 3.5 s on simulated slow 4G.
-- [ ] **Neon restore drill** and one rollback (§3.1).
+- [x] **Neon restore drill** and Railway + Vercel rollbacks — 2026-09-26 (§1).
+- [ ] **UptimeRobot** probes `HEAD https://api.arakice.com/` every few minutes and gets **404** (seen in
+      the Railway log). Point the monitor at `/health/ready` (expects 200) or it reports the API down.
 - [ ] Re-run `npm run moderation:dry-run` once the chat has real traffic.
 
 ### 3.8 Technical deadlines
@@ -315,8 +329,7 @@ Left, in consoles:
 
 - [ ] **Vercel → Settings → Build and Deployment → Node.js Version: 24.x** (the client builds and
       type-checks on 24; Vercel ignores the Dockerfile and CI).
-- [ ] After the Railway deploy: the running banner shows Node 24 (`node -v` in the deploy log, or
-      `process.version`), and `[Sentry] ✅ armé` still prints.
+- [x] Railway: build log `FROM node:24-alpine`, `[Sentry] ✅ armé` prints — 2026-09-26.
 - [ ] `@sentry/node` 11 — later, not before its first patch releases. Its `dataCollection`
       default sends request bodies, cookies and SQL: set it explicitly when upgrading.
 
@@ -454,6 +467,15 @@ Carried over from `RESTE_A_FAIRE.md`, `PRE_IOS_PLAN.md` and the pre-freeze audit
   zone from a scan; never delete the `google-site-verification` TXT.
 - Cloudflare: zone in *Full*, never *Full (strict)* for `api`, never *Always Use HTTPS*.
 - ML service stays *Unexposed* (no public domain); ignore Railway's agent suggestion.
+- Where things are: Neon project **ArakIce** is in the **llgarage** organization; Railway project
+  **harmonious-perception** (services `IceEdge`, `courageous-analysis`, Redis) is in the
+  **ireinahedad's Projects** workspace. Other Neon/Railway accounts you see are not ArakIce.
+- Railway `IceEdge`: keep healthcheck `/health/ready` and teardown draining 15 s. A **Rollback**
+  restores the image *and the variables* of that deployment.
+- Vercel: after any Instant Rollback, **Promote** the newest deployment again, or `master` pushes
+  (and the daily SEO pages) stop going live.
+- Neon production branch is **protected**: an in-place Restore may require unprotecting it first
+  (Settings → General); re-protect afterwards.
 - Sentry: do not follow the "Configure Express SDK" wizard; `SENTRY_TRACES_SAMPLE_RATE` absent on purpose.
   Keep `beforeSend: scrubEvent` in `instrument.ts` — without it events carry the refresh cookie.
 - `db:migrate:all` applies the whole backlog — check the target line and `PUBLIC_SLIPS_SINCE` first.
