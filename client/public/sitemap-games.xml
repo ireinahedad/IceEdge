@@ -2,10 +2,50 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://arakice.com/fr/match</loc>
-    <lastmod>2026-09-26</lastmod>
+    <lastmod>2026-09-27</lastmod>
+  </url>
+  <url>
+    <loc>https://arakice.com/fr/match/2026-09-29/blackhawks-vs-golden-knights</loc>
+    <lastmod>2026-09-27</lastmod>
+  </url>
+  <url>
+    <loc>https://arakice.com/fr/match/2026-09-29/canadiens-vs-maple-leafs</loc>
+    <lastmod>2026-09-27</lastmod>
+  </url>
+  <url>
+    <loc>https://arakice.com/fr/match/2026-09-29/canucks-vs-oilers</loc>
+    <lastmod>2026-09-27</lastmod>
+  </url>
+  <url>
+    <loc>https://arakice.com/fr/match/2026-09-29/panthers-vs-hurricanes</loc>
+    <lastmod>2026-09-27</lastmod>
+  </url>
+  <url>
+    <loc>https://arakice.com/fr/match/2026-09-29/rangers-vs-bruins</loc>
+    <lastmod>2026-09-27</lastmod>
   </url>
   <url>
     <loc>https://arakice.com/match</loc>
-    <lastmod>2026-09-26</lastmod>
+    <lastmod>2026-09-27</lastmod>
+  </url>
+  <url>
+    <loc>https://arakice.com/match/2026-09-29/blackhawks-vs-golden-knights</loc>
+    <lastmod>2026-09-27</lastmod>
+  </url>
+  <url>
+    <loc>https://arakice.com/match/2026-09-29/canadiens-vs-maple-leafs</loc>
+    <lastmod>2026-09-27</lastmod>
+  </url>
+  <url>
+    <loc>https://arakice.com/match/2026-09-29/canucks-vs-oilers</loc>
+    <lastmod>2026-09-27</lastmod>
+  </url>
+  <url>
+    <loc>https://arakice.com/match/2026-09-29/panthers-vs-hurricanes</loc>
+    <lastmod>2026-09-27</lastmod>
+  </url>
+  <url>
+    <loc>https://arakice.com/match/2026-09-29/rangers-vs-bruins</loc>
+    <lastmod>2026-09-27</lastmod>
   </url>
 </urlset>
