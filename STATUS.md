@@ -23,8 +23,9 @@ recovered from Git) and checking each claim against the code and the Git log.
   (Postgres), Cloudflare R2 (avatars), Cloudflare DNS/proxy. 📄
 - **All the pre-iOS web work is shipped** (env hardening, platform flags, token transport,
   refresh stampede fix, chat moderation, 18 batches of pre-freeze fixes). ✔
-- **iOS has not started.** Nothing blocks Phase 0 any more: support mailbox recovered
-  (2026-09-25), tag `pre-ios-freeze` pushed (on `1244bac`, 2026-09-26). ✔
+- **iOS has not started, and the web is NOT frozen.** Support mailbox recovered (2026-09-25).
+  The `pre-ios-freeze` tag (put on `1244bac` on 2026-09-26) was **removed on 2026-09-28**: web
+  work continues freely until iOS actually starts; re-tag the freeze point at that moment.
 - **The NHL 2026-27 season starts in early October.** Several tasks are tied to it (§3.2),
   including turning on public slips (the docs target `2026-10-07`).
 
@@ -68,7 +69,7 @@ recovered from Git) and checking each claim against the code and the Git log.
 - ✔ `npm audit fix` in `server/` (2026-09-26, commit `c5c261f`): express 4.22.3,
   body-parser 1.20.8, qs 6.16.0. With the Sentry bump below, `npm audit --omit=dev` = **0**.
 - ✔ Decision 2026-09-26: **no staging environment**. QA F1/F2 run on production with throwaway accounts.
-- ✔ `pre-ios-freeze` tag pushed (on `1244bac`), 2026-09-26.
+- ✔ `pre-ios-freeze` tag pushed (on `1244bac`), 2026-09-26 — **removed 2026-09-28** (decision: web not frozen yet).
 - ✔ Railway checked on the running banner (2026-09-26): Node and ML on the same commit (bundle +
   player model live), `NHL_USE_MOCK` false, `ML_DISABLED` false, `API_RATE_LIMIT` default,
   `NODE_ENV=production`, `CORS_ORIGIN` correct, no `DORMANT`, probes OK. `ENABLE_DEV_ROUTES=true`

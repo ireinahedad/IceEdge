@@ -341,7 +341,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
         <span className="text-white text-xs font-medium truncate">{side.abbr}</span>
       </div>
       {/* Handicap */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5">
         <span className="text-[#bfc8cc] text-[11px] font-semibold tabular-nums w-[26px] flex-shrink-0">
           {line > 0 ? "+1.5" : "−1.5"}
         </span>
@@ -349,7 +349,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
         {plPrice != null && <BookPricePill price={plPrice} />}
       </div>
       {/* Vainqueur */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5">
         <MlPct value={win} loading={mlLoading} />
         {winPrice != null && <BookPricePill price={winPrice} />}
       </div>
@@ -376,8 +376,10 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
             Remplace les pastilles à côté des équipes et le O/U : deux colonnes
             collées aux équipes, sans bordure de tableau. Chaque case = le % du
             modèle ML (violet) + la cote du livre quand il la propose (vert). */}
+        {/* Centré dans l'espace entre l'heure et « Plus de paris » (2026-09-28). */}
+        <div className="flex-1 min-w-0 flex justify-center">
         <div
-          className="grid items-center gap-x-2.5 gap-y-1.5 flex-shrink-0"
+          className="grid items-center gap-x-4 gap-y-2"
           style={{ gridTemplateColumns: "auto auto auto" }}
         >
           <span />
@@ -386,9 +388,10 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
           {teamRow(game.team1, lineHome, plHome, priceHome, winHome, game.bookHome)}
           {teamRow(game.team2, lineAway, plAway, priceAway, winAway, game.bookAway)}
         </div>
+        </div>
 
         {/* Actions column */}
-        <div className="flex flex-col items-end gap-1.5 flex-1 min-w-0">
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0 max-w-[60px]">
           {edge >= 8 && <EdgeBadge edge={edge} />}
           <button
             onClick={(e) => { e.stopPropagation(); onOpenSheet(); }}

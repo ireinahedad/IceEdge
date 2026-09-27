@@ -99,9 +99,11 @@ export function EvSection({ isPro, items, isLoading, accent }: {
           style={{ background: "rgba(74,222,128,0.06)", border: "1px solid rgba(74,222,128,0.18)" }}>
           <Lightbulb size={14} className="flex-shrink-0 mt-0.5 text-green-400" />
           <div className="text-[11px] leading-relaxed text-[#bfc8cc]">
-            <p><span className="font-bold text-white">{t("home.evWhatTitle")}</span> {t("home.evWhat")}</p>
-            <p className="mt-1 text-[#8a9ea6]">{t("home.evExample")}</p>
-            <p className="mt-1 text-[#8a9ea6]">{t("home.evHowToRead")}</p>
+            <p className="font-bold text-white">{t("home.evWhatTitle")}</p>
+            <p>{t("home.evWhat")}</p>
+            <p>{t("home.evWhat2")}</p>
+            <p>{t("home.evWhat3")}</p>
+            <p className="mt-1"><span className="font-bold text-white">{t("home.evExampleLabel")}</span>: {t("home.evExample")}</p>
           </div>
         </div>
       )}

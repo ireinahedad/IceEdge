@@ -294,16 +294,6 @@ export function HockeyLanding() {
 
           {/* ── Offensive zone: teams + tonight's slate ────────────────── */}
           <div className="px-4 py-4 flex flex-col gap-6">
-            {/* Aucun argent réel (2026-09-27) : dit d'entrée, en une ligne. */}
-            <div className="flex items-start gap-2 rounded-xl px-3 py-2 -mb-2"
-              style={{ background: "rgba(134,209,234,0.08)", border: "1px solid rgba(134,209,234,0.22)" }}>
-              <Gamepad2 size={14} className="flex-shrink-0 mt-px" style={{ color: "#86d1ea" }} />
-              <p className="text-[11px] leading-snug text-[#bfc8cc]">
-                <span className="font-bold text-white">{t("home.noRealMoney")}</span>{" "}
-                {t("home.noRealMoneyHint")}
-              </p>
-            </div>
-
             {/* All 32 teams — square tiles, arrows + swipe + slow auto-scroll */}
             <TeamCarousel />
 
@@ -437,10 +427,21 @@ export function HockeyLanding() {
                 </LazySection>
               </>
             ) : (
-              <LazySection minHeight={420}>
+              <LazySection minHeight={300}>
                 <ProUpsell accent={accent} />
               </LazySection>
             )}
+          </div>
+
+          {/* Aucun argent réel — tout en bas de la page (2026-09-28). */}
+          <div className="px-4 pb-4 flex justify-center">
+            <p className="flex items-start gap-2 text-[11px] leading-snug text-[#8a9ea6] max-w-[420px]">
+              <Gamepad2 size={14} className="flex-shrink-0 mt-px" style={{ color: "#86d1ea" }} />
+              <span>
+                <span className="font-bold text-[#bfc8cc]">{t("home.noRealMoney")}</span>{" "}
+                {t("home.noRealMoneyHint")}
+              </span>
+            </p>
           </div>
 
           {/* Foot of the page: the boards close the rink */}

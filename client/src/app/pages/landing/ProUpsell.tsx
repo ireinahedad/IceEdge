@@ -23,13 +23,13 @@ function Feature({ icon, title, desc, children }: {
   icon: ReactNode; title: string; desc: string; children: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl icy-tile p-3">
-      <div className="flex items-center gap-2 mb-1">
+    <div>
+      <div className="flex items-center gap-2 mb-0.5">
         {icon}
         <span className="text-white text-sm font-bold">{title}</span>
-        <Lock size={12} className="ml-auto text-[#8a9ea6]" />
+        <Lock size={12} className="text-[#8a9ea6]" />
       </div>
-      <p className="text-[#bfc8cc] text-[11px] leading-snug mb-2.5">{desc}</p>
+      <p className="text-[#bfc8cc] text-[11px] leading-snug mb-2">{desc}</p>
       {/* Aperçu flouté, non interactif — la forme, pas le contenu. */}
       <div className="pointer-events-none select-none" style={{ filter: "blur(4px)", opacity: 0.55 }} aria-hidden>
         {children}
@@ -49,69 +49,64 @@ export function ProUpsell({ accent }: { accent: string }) {
     { label: t("bb.puckLine", { abbr: "BOS" }), context: "BOS vs MTL · 19:30", pct: 52, color: "#f2c744" },
   ];
 
+  // 2026-09-28 : plus compact, et SANS cadre autour de l'ensemble — les deux
+  // aperçus restent groupés sous un même titre, mais sans carte englobante.
   return (
-    <section
-      className="rounded-3xl p-[1.5px]"
-      style={{ background: `linear-gradient(135deg, ${accent}, #a78bfa 55%, #4ade80)` }}
-    >
-      <div
-        className="rounded-[22px] px-4 pt-5 pb-4"
-        style={{ background: "linear-gradient(180deg, #0f1a22 0%, #0A0E0C 100%)" }}
-      >
-        <div className="flex items-center justify-center gap-1.5 mb-2">
-          <Crown size={14} style={{ color: "#f2c744" }} />
-          <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: "#f2c744" }}>
-            ArakIce Pro
-          </span>
-        </div>
-        <h2 className="text-white text-center text-2xl font-black leading-tight">{t("home.proHeadline")}</h2>
-        <p className="text-center text-[#bfc8cc] text-xs mt-1.5 mb-4 max-w-[340px] mx-auto">{t("home.proSub")}</p>
+    <section>
+      <div className="flex items-center gap-1.5 mb-1">
+        <Crown size={13} style={{ color: "#f2c744" }} />
+        <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: "#f2c744" }}>
+          ArakIce Pro
+        </span>
+      </div>
+      <p className="text-[#bfc8cc] text-xs mb-3">{t("home.proSub")}</p>
 
-        <div className="flex flex-col gap-3">
-          <Feature
-            icon={<Star size={14} style={{ color: accent }} />}
-            title={t("home.bestBets")}
-            desc={t("home.proBestBetsDesc")}
-          >
-            <div className="flex flex-col gap-1.5">
-              {bestPreview.map((r, i) => (
-                <div key={i} className="flex items-center gap-2.5 icy-card rounded-xl px-3 py-2">
-                  <span className="text-base flex-shrink-0">🏒</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-white text-[13px] font-semibold leading-tight truncate">{r.label}</div>
-                    <div className="text-[#8a9ea6] text-[11px] truncate mt-0.5">{r.context}</div>
-                  </div>
-                  <span className="text-[15px] font-bold tabular-nums" style={{ color: r.color }}>{r.pct} %</span>
+      <div className="flex flex-col gap-4">
+        <Feature
+          icon={<Star size={14} style={{ color: accent }} />}
+          title={t("home.bestBets")}
+          desc={t("home.proBestBetsDesc")}
+        >
+          <div className="flex flex-col gap-1.5">
+            {bestPreview.slice(0, 2).map((r, i) => (
+              <div key={i} className="flex items-center gap-2.5 icy-card rounded-xl px-3 py-1.5">
+                <span className="text-sm flex-shrink-0">🏒</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-white text-xs font-semibold leading-tight truncate">{r.label}</div>
+                  <div className="text-[#8a9ea6] text-[11px] truncate">{r.context}</div>
                 </div>
-              ))}
-            </div>
-          </Feature>
+                <span className="text-sm font-bold tabular-nums" style={{ color: r.color }}>{r.pct} %</span>
+              </div>
+            ))}
+          </div>
+        </Feature>
 
-          <Feature
-            icon={<Zap size={14} className="text-green-400" />}
-            title={t("home.evTitle")}
-            desc={t("home.proEvDesc")}
-          >
-            <div className="flex flex-col gap-1.5">
-              {EV_SAMPLE.map((i) => <EvRow key={i.id} item={i} />)}
-            </div>
-          </Feature>
-        </div>
+        <Feature
+          icon={<Zap size={14} className="text-green-400" />}
+          title={t("home.evTitle")}
+          desc={t("home.proEvDesc")}
+        >
+          <div className="flex flex-col gap-1.5">
+            {EV_SAMPLE.slice(0, 2).map((i) => <EvRow key={i.id} item={i} />)}
+          </div>
+        </Feature>
+      </div>
 
-        {features.proUpgrade ? (
-          /* `state.from` : /pro ne peut pas revenir par l'historique, Stripe
-             Checkout y est empilé. Voir `useProBackTarget` dans ProPage. */
+      {features.proUpgrade ? (
+        /* `state.from` : /pro ne peut pas revenir par l'historique, Stripe
+           Checkout y est empilé. Voir `useProBackTarget` dans ProPage. */
+        <div className="flex justify-center mt-3">
           <button
             onClick={() => navigate("/pro", { state: { from: location.pathname + location.search } })}
-            className="w-full mt-4 py-4 rounded-2xl text-base font-black uppercase tracking-wider active:scale-[0.98] transition-transform"
-            style={{ background: accent, color: "#0A0E0C", boxShadow: `0 8px 28px ${accent}55` }}
+            className="tap-44 px-4 py-1.5 rounded-full text-xs font-bold active:scale-[0.97] transition-transform"
+            style={{ background: accent, color: "#0A0E0C" }}
           >
             {t("pro.cta")}
           </button>
-        ) : (
-          <p className="text-center text-[11px] text-[#8a9ea6] mt-4">{t("home.proOnly")}</p>
-        )}
-      </div>
+        </div>
+      ) : (
+        <p className="text-center text-[11px] text-[#8a9ea6] mt-3">{t("home.proOnly")}</p>
+      )}
     </section>
   );
 }
