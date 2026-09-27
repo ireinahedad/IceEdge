@@ -21,7 +21,8 @@
 // Sans clé The Odds API (ODDS_API_KEY) le job se désactive proprement.
 
 import { pool } from '../db/connection';
-import { fetchRawOdds, fetchSpreadsOnly, type RawOddsEvent } from './oddsClient';
+import { fetchCollectorOdds, ODDS_COLLECT_BOOKMAKERS, type RawOddsEvent } from './oddsClient';
+import { toAbbr } from './oddsTeamNames';
 import { logger } from '../logger';
 import { withJobLock } from './jobLock';
 import * as oddsQuota from './oddsQuota';
@@ -32,13 +33,21 @@ const LOCK_TTL_MS = 5 * 60 * 1000;
 /**
  * Coût d'une passe, en crédits The Odds API : 1 par marché et par région.
  *
- * `full` demande h2h + spreads + totals ; `spreads` ne demande que la puck
- * line. C'est ce qui rend le calendrier d'A3 finançable — voir `SLOTS`.
+ * `full` demande h2h + spreads + totals ; `close` demande h2h + spreads (les
+ * totaux sont clos). Jusqu'au 2026-09-27 la passe du soir s'appelait `spreads`
+ * et ne prenait que la puck line (1 crédit), contrainte du quota gratuit.
+ * Voir `SLOTS`.
  */
-const COLLECT_COST: Record<PassKind, number> = { full: 3, spreads: 1 };
+const COLLECT_COST: Record<PassKind, number> = { full: 3, close: 2 };
+
+/** Marchés demandés à The Odds API pour chaque passe. */
+const PASS_MARKETS: Record<PassKind, string> = {
+  full: 'h2h,spreads,totals',
+  close: 'h2h,spreads',
+};
 
 /** Quels marchés une passe demande. Stocké tel quel dans `odds_snapshots`. */
-export type PassKind = 'full' | 'spreads';
+export type PassKind = 'full' | 'close';
 
 /** L'état `active` d'une ligue change au plus une fois par jour. */
 let seasonCache: { active: boolean; at: number } | null = null;
@@ -157,35 +166,22 @@ const HEADER =
   'total_open,total_close,total_open_over,total_open_under,' +
   'total_close_over,total_close_under,puck_line_home,pl_home_price,pl_away_price,source';
 
-// The Odds API renvoie les noms complets → abréviations NHL (= celles du spine).
-const NAME_TO_ABBR: Record<string, string> = {
-  'anaheim ducks': 'ANA', 'arizona coyotes': 'UTA', 'utah hockey club': 'UTA',
-  'utah mammoth': 'UTA', 'boston bruins': 'BOS', 'buffalo sabres': 'BUF',
-  'calgary flames': 'CGY', 'carolina hurricanes': 'CAR', 'chicago blackhawks': 'CHI',
-  'colorado avalanche': 'COL', 'columbus blue jackets': 'CBJ', 'dallas stars': 'DAL',
-  'detroit red wings': 'DET', 'edmonton oilers': 'EDM', 'florida panthers': 'FLA',
-  'los angeles kings': 'LAK', 'minnesota wild': 'MIN', 'montreal canadiens': 'MTL',
-  'montréal canadiens': 'MTL', 'nashville predators': 'NSH', 'new jersey devils': 'NJD',
-  'new york islanders': 'NYI', 'new york rangers': 'NYR', 'ottawa senators': 'OTT',
-  'philadelphia flyers': 'PHI', 'pittsburgh penguins': 'PIT', 'san jose sharks': 'SJS',
-  'seattle kraken': 'SEA', 'st louis blues': 'STL', 'st. louis blues': 'STL',
-  'tampa bay lightning': 'TBL', 'toronto maple leafs': 'TOR', 'vancouver canucks': 'VAN',
-  'vegas golden knights': 'VGK', 'washington capitals': 'WSH', 'winnipeg jets': 'WPG',
-};
-
-function toAbbr(name: string): string | null {
-  return NAME_TO_ABBR[(name || '').toLowerCase().trim()] ?? null;
-}
-
 /** Date locale (Est) du match au format YYYY-MM-DD — cohérent avec le spine NHL. */
 function easternDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
 
+/** Ordre de préférence du livre de collecte (`ODDS_COLLECT_BOOKMAKERS`). */
+const COLLECT_BOOKS = ODDS_COLLECT_BOOKMAKERS.split(',').map((b) => b.trim()).filter(Boolean);
+
 function pickBook(ev: RawOddsEvent, market: string) {
   const withMkt = ev.bookmakers.filter((b) => b.markets.some((m) => m.key === market));
   if (!withMkt.length) return null;
-  return withMkt.find((b) => b.key === 'bet365') ?? withMkt[0];
+  for (const key of COLLECT_BOOKS) {
+    const hit = withMkt.find((b) => b.key === key);
+    if (hit) return hit;
+  }
+  return withMkt[0];
 }
 
 interface Row {
@@ -204,6 +200,13 @@ interface Row {
   totalOver: number | null; totalUnder: number | null;
   puckLineHome: number | null;
   plHomePrice: number | null; plAwayPrice: number | null;
+  /**
+   * Livre qui a fourni le prix (moneyline, sinon puck line, sinon total).
+   * Archivé dans `odds_snapshots.bookmaker` (migration 038) : sans lui, un
+   * changement de `ODDS_COLLECT_BOOKMAKERS` en cours de saison mélangerait
+   * deux sources dans la série du CLV sans que rien ne le montre.
+   */
+  bookmaker: string | null;
 }
 
 /** Convertit un événement en ligne loggable (cotes de clôture). */
@@ -252,14 +255,15 @@ function eventToRow(ev: RawOddsEvent): Row | null {
     }
   }
 
-  // Une passe `spreads` ne ramène ni moneyline ni total : refuser la ligne sur
-  // l'absence des deux jetterait exactement ce qu'on est venu chercher.
+  // Une passe `close` ne ramène pas de total : refuser la ligne sur l'absence
+  // d'un seul marché jetterait ce qu'on est venu chercher.
   if (homeMl == null && total == null && puckLineHome == null) return null;
   return {
     date: easternDate(ev.commence_time), home, away,
     commenceTime: ev.commence_time,
     homeMl, awayMl, total,
     totalOver, totalUnder, puckLineHome, plHomePrice, plAwayPrice,
+    bookmaker: (h2hBook ?? spBook ?? totBook)?.key ?? null,
   };
 }
 
@@ -282,8 +286,8 @@ function eventToRow(ev: RawOddsEvent): Row | null {
  * est ce que le CLV réclame, et elle ne coûte aucun crédit supplémentaire —
  * l'appel ramenait déjà ces prix, le collecteur les jetait.
  *
- * @param kind `full` (h2h + spreads + totals, 3 crédits) ou `spreads` (puck
- *             line seule, 1 crédit). Voir `SLOTS` pour le calendrier.
+ * @param kind `full` (h2h + spreads + totals, 3 crédits) ou `close` (h2h +
+ *             spreads, 2 crédits). Voir `SLOTS` pour le calendrier.
  * @returns nombre de lignes écrites ou mises à jour dans `odds_log`.
  */
 async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
@@ -309,7 +313,7 @@ async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
     return 0;
   }
 
-  const events = kind === 'spreads' ? await fetchSpreadsOnly() : await fetchRawOdds();
+  const events = await fetchCollectorOdds(PASS_MARKETS[kind]);
   if (!events.length) return 0;
 
   // Un seul horodatage pour toute la passe, calculé ici et non par `NOW()`
@@ -363,8 +367,8 @@ async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
        -- gauche gagne) — mais elle se remplit si elle était nulle. Deux cas
        -- réels le demandent : un book qui n'a pas encore affiché un marché lors
        -- de la première passe, et une journée dont la première passe est une
-       -- passe 'spreads' (démarrage du serveur en soirée), qui ne rapporte ni
-       -- moneyline ni total. Sans ce rattrapage, ces colonnes restaient nulles
+       -- passe 'close' (démarrage du serveur en soirée), qui ne rapporte pas
+       -- de total. Sans ce rattrapage, ces colonnes restaient nulles
        -- pour toujours, puisque seules les colonnes de clôture étaient mises à
        -- jour.
        home_ml_open      = COALESCE(odds_log.home_ml_open,      EXCLUDED.home_ml_open),
@@ -435,13 +439,15 @@ async function insertSnapshots(
                                    observed_at, commence_time, markets,
                                    home_ml, away_ml, total,
                                    total_over, total_under,
-                                   puck_line_home, pl_home_price, pl_away_price)
+                                   puck_line_home, pl_home_price, pl_away_price,
+                                   bookmaker)
        SELECT * FROM unnest(
          $1::date[], $2::text[], $3::text[],
          $4::timestamptz[], $5::timestamptz[], $6::text[],
          $7::numeric[], $8::numeric[], $9::numeric[],
          $10::numeric[], $11::numeric[],
-         $12::numeric[], $13::numeric[], $14::numeric[]
+         $12::numeric[], $13::numeric[], $14::numeric[],
+         $15::text[]
        )
        ON CONFLICT (game_date, home_team, away_team, observed_at) DO NOTHING`,
       [
@@ -450,6 +456,7 @@ async function insertSnapshots(
         rows.map((r) => r.commenceTime),
         rows.map(() => kind),
         ...priceColumns(rows),
+        rows.map((r) => r.bookmaker),
       ],
     );
   } catch (err: any) {
@@ -499,20 +506,15 @@ export async function exportOddsLogCsv(): Promise<string> {
 // faussée dans le sens optimiste (une ligne qui a moins bougé paraît plus
 // souvent du bon côté).
 //
-// LE BUDGET COMMANDE LA FORME. Quota gratuit 500 crédits/mois, dont 150
-// réservés aux visiteurs (`ODDS_USER_RESERVE`) : il reste 350 pour la collecte.
-// Quatre passes complètes par jour en coûtaient 12, soit 360 — au-dessus du
-// budget, la collecte s'arrêtait donc vers la fin de chaque mois de saison.
+// LE BUDGET COMMANDE LA FORME. Plan 20K depuis le 2026-09-27 (avant : quota
+// gratuit de 500, d'où une passe du soir réduite à la seule puck line). Répartition
+// retenue : ~15 000 backfill, ~4 500 affichage, et la collecte ci-dessous.
 //
-// Ici : deux passes complètes + quatre passes `spreads` = **10 crédits/jour,
-// 300/mois**, sous le budget pour la première fois, avec deux fois plus
-// d'observations. C'est possible parce que The Odds API facture au marché et
-// que la puck line est le seul marché encore vivant (A2 : le moneyline est
-// clos, les totaux sont condamnés à −2.75 % de ROI).
-//
-// CE QU'ON PERD, ASSUMÉ : le moneyline et les totaux n'ont plus de clôture
-// stricte, leur dernier prix est celui de 17 h. Ils gardent leur ouverture, ce
-// qui suffit à mesurer le mouvement — et aucune stratégie vivante ne les price.
+// Ici : deux passes complètes (3 crédits) + quatre passes de clôture
+// h2h + spreads (2 crédits) = **14 crédits/jour, ~430/mois**. Le moneyline
+// retrouve une vraie clôture (son CLV est réel, A3) ; la puck line garde la
+// sienne (règle A2). Les totaux n'ont que les passes de 11 h et 17 h : ils sont
+// clos, aucune stratégie vivante ne les price.
 //
 // LES HEURES. 11 h ET : les lignes du soir sont affichées, c'est l'ouverture
 // utile. 17 h ET : dernière passe complète avant les matchs. 18 h 45 / 19 h 45 :
@@ -521,10 +523,10 @@ export async function exportOddsLogCsv(): Promise<string> {
 const SLOTS: Array<{ hour: number; minute: number; kind: PassKind }> = [
   { hour: 11, minute: 0,  kind: 'full'    },
   { hour: 17, minute: 0,  kind: 'full'    },
-  { hour: 18, minute: 45, kind: 'spreads' },
-  { hour: 19, minute: 45, kind: 'spreads' },
-  { hour: 21, minute: 45, kind: 'spreads' },
-  { hour: 22, minute: 45, kind: 'spreads' },
+  { hour: 18, minute: 45, kind: 'close'   },
+  { hour: 19, minute: 45, kind: 'close'   },
+  { hour: 21, minute: 45, kind: 'close'   },
+  { hour: 22, minute: 45, kind: 'close'   },
 ];
 
 const ET = 'America/New_York';
@@ -617,9 +619,25 @@ export function startOddsLogger(): void {
   // peut encore corriger. Celui-ci parle au premier déploiement.
   //
   // Le `to_regclass` ne lit aucune ligne et ne verrouille rien.
+  //
+  // 038 (2026-09-27) : `insertSnapshots` écrit maintenant la colonne
+  // `bookmaker`. Sans la migration, CHAQUE insertion échouerait — et serait
+  // avalée comme ci-dessus. Le contrôle porte donc sur la colonne, pas
+  // seulement sur la table.
   void pool
-    .query(`SELECT to_regclass('public.odds_snapshots') AS t`)
+    .query(`SELECT to_regclass('public.odds_snapshots') AS t,
+                   EXISTS (SELECT 1 FROM information_schema.columns
+                            WHERE table_name = 'odds_snapshots'
+                              AND column_name = 'bookmaker') AS has_book`)
     .then(({ rows }) => {
+      if (rows[0]?.t && !rows[0]?.has_book) {
+        logger.error(
+          '[OddsLogger] ⛔ `odds_snapshots.bookmaker` INTROUVABLE — migration 038 '
+          + 'non appliquée. Chaque snapshot échouera EN SILENCE et la série du '
+          + 'CLV sera perdue. Lancer `npm run db:migrate:all`.',
+        );
+        return;
+      }
       if (rows[0]?.t) {
         // Ligne de SUCCÈS, et pas seulement d'échec. Un contrôle muet quand
         // tout va bien ne se distingue pas d'un contrôle qui n'a pas tourné :

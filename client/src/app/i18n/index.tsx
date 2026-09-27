@@ -122,6 +122,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "profile.language":     { en: "Language",      fr: "Langue" },
   "profile.bookmaker":    { en: "Sportsbook",    fr: "Site de paris" },
   "profile.bookmakerHint":{ en: "Which site the “Place bet” buttons open", fr: "Le site que les boutons « Parier » ouvrent" },
+  "profile.oddsSource":   { en: "Odds shown in the app come from Betano (Ontario). Tapping a price opens the site chosen above, where the odds may differ.", fr: "Les cotes affichées dans l'app viennent de Betano (Ontario). Toucher une cote ouvre le site choisi ci-dessus, où la cote peut être différente." },
   // Format d'affichage des cotes. Les clés `.percent` / `.decimal` / `.american`
   // sont construites à partir de l'identifiant du format
   // (`profile.oddsFormat.${f}`) : renommer un identifiant dans
@@ -135,7 +136,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // « 68 % » sur une prédiction croit que le réglage est cassé. Il ne l'est pas —
   // ce 68 % n'est pas un prix mais la confiance du modèle, et la garder en %
   // est exactement ce qui permet de la comparer à la cote du livre.
-  "profile.oddsFormatHint":      { en: "How bookmaker odds (bet365, Stake…) are written across the app. The model's own probabilities always stay in %.", fr: "Comment s'écrivent les cotes des bookmakers (bet365, Stake…) dans l'app. Les probabilités du modèle, elles, restent toujours en %." },
+  "profile.oddsFormatHint":      { en: "How bookmaker odds are written across the app. The model's own probabilities always stay in %.", fr: "Comment s'écrivent les cotes des bookmakers dans l'app. Les probabilités du modèle, elles, restent toujours en %." },
   // Compteur d'analyses IA (carte des Réglages). Le TOTAL n'apparaît dans aucune
   // de ces chaînes : il vient du serveur, qui le dérive du prix de l'abonnement.
   // L'écrire ici le figerait, et c'est exactement comme ça que « analyse IA
@@ -392,6 +393,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.signinHint":   { en: "Your locked slips and history will appear here", fr: "Tes paris verrouillés et ton historique apparaîtront ici" },
   "slip.placeBet365":  { en: "Place on Bet365 ↗", fr: "Parier sur Bet365 ↗" },
   "slip.placeBet":     { en: "Place on {book} ↗", fr: "Parier sur {book} ↗" },
+  "slip.bookCombined": { en: "Book parlay odds", fr: "Cote combinée du livre" },
   "slip.xpEarned":     { en: "XP earned",       fr: "XP gagnés" },
   "slip.sharePhoto":   { en: "Share",           fr: "Partager" },
 

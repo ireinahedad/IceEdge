@@ -289,11 +289,15 @@ export function SettingsTab({
             ))}
           </div>
           <p className="text-[11px] text-white/35 mt-1.5">{t("profile.bookmakerHint")}</p>
+          {/* Décision du user (2026-09-27) : la source des prix est dite ICI,
+              une fois, plutôt que sur chaque pastille. Dans ce bloc parce qu'il
+              nomme un livre : il disparaît sur iOS (Guideline 5.3). */}
+          <p className="text-[11px] text-white/55 mt-1.5">{t("profile.oddsSource")}</p>
         </div>
       )}
 
       {/* Format d'écriture des cotes de bookmaker.
-          ⚠️ Ne concerne QUE les prix venant d'un livre (bet365, Stake…). Les
+          ⚠️ Ne concerne QUE les prix venant d'un livre (Betano Ontario). Les
           probabilités du modèle restent en % partout — voir le commentaire de
           `services/oddsFormat.ts`. L'aide sous la carte le dit à l'utilisateur,
           sinon « j'ai choisi américain et je vois encore des % » se lit comme

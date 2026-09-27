@@ -10,6 +10,7 @@ import { startSettlementJob } from './services/settlement.service';
 import { startValueBetScan } from './services/valueBetScan.service';
 import { startCleanupJob } from './services/cleanup.service';
 import { startOddsLogger, verifyOddsApiKey } from './services/oddsLogger.service';
+import { ODDS_BOOKMAKERS, ODDS_COLLECT_BOOKMAKERS } from './services/oddsClient';
 import { verifyAvatarStorage } from './services/avatarStorage';
 import { verifyEncryptionKey } from './services/crypto.util';
 import { getBestBets } from './services/bestBets.service';
@@ -81,6 +82,12 @@ const DORMANT = process.env.DORMANT === 'true';
         NHL_TIMEOUT_MS: Number(process.env.NHL_TIMEOUT_MS) || 8_000,
         ML_DISABLED:    process.env.ML_DISABLED === 'true',
         ODDS_API_KEY:   process.env.ODDS_API_KEY ? 'présente (validité vérifiée par verifyOddsApiKey)' : 'ABSENTE (proxy → [])',
+        // Les valeurs RÉSOLUES (défauts compris) : deux livres différents par
+        // conception — affichage canadien, collecte = livre du backfill. Un
+        // changement ici en cours de saison coupe la série du CLV en deux.
+        ODDS_BOOKMAKERS: ODDS_BOOKMAKERS,
+        ODDS_COLLECT_BOOKMAKERS: ODDS_COLLECT_BOOKMAKERS,
+        ODDS_CACHE_TTL_MIN: process.env.ODDS_CACHE_TTL_MIN ?? '30 (défaut)',
         API_RATE_LIMIT: process.env.API_RATE_LIMIT ?? 'défaut',
         // Les quatre du préflight B4 (`QA_TEST_PLAN.md`, § Runbooks B4). Même
         // critère que les lignes ci-dessus : chacune casse quelque chose en

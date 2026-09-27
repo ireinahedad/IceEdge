@@ -103,11 +103,121 @@ describe('oddsClient — déduplication des requêtes en vol', () => {
     // plutôt que de perdre le meilleur prédicteur dont il dispose.
     healthy = false;
     vi.useFakeTimers();
-    vi.setSystemTime(Date.now() + 6 * 60_000);
+    // Au-delà du TTL par défaut (30 min, `ODDS_CACHE_TTL_MIN`).
+    vi.setSystemTime(Date.now() + 31 * 60_000);
     const stale = await mod.fetchOddsImplied('Montreal Canadiens', 'Boston Bruins');
     vi.useRealTimers();
 
     expect(stale).not.toBeNull();
     expect(stale?.homeProb).toBeCloseTo(0.5, 2);
+  });
+});
+
+/**
+ * Livres demandés (2026-09-27). The Odds API ne cote pas Bet365 sur la NHL :
+ * la paire `bet365`/`eu` écrite en dur ne rendait aucun prix. Ces tests tiennent
+ * les deux livres distincts — affichage canadien, collecte = livre du backfill.
+ */
+describe('oddsClient — livres demandés', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.ODDS_BOOKMAKERS;
+    delete process.env.ODDS_COLLECT_BOOKMAKERS;
+  });
+
+  it('affichage : demande `betano_ca_on` par `bookmakers`, jamais par `regions`', async () => {
+    const { mod, calls } = await load({ latencyMs: 0 });
+    await mod.fetchOddsImplied('Montreal Canadiens', 'Boston Bruins');
+    const url = new URL(calls[0]);
+    expect(url.searchParams.get('bookmakers')).toBe('betano_ca_on');
+    expect(url.searchParams.has('regions')).toBe(false);
+    expect(url.searchParams.get('markets')).toBe('h2h,spreads,totals');
+  });
+
+  it('collecte : livre `draftkings`, marchés demandés, et AUCUN cache', async () => {
+    const { mod, calls } = await load({ latencyMs: 0 });
+    await mod.fetchCollectorOdds('h2h,spreads');
+    await mod.fetchCollectorOdds('h2h,spreads');
+    expect(calls.length).toBe(2);   // deux créneaux = deux observations
+    const url = new URL(calls[0]);
+    expect(url.searchParams.get('bookmakers')).toBe('draftkings');
+    expect(url.searchParams.get('markets')).toBe('h2h,spreads');
+  });
+
+  it('la collecte ne pollue pas le cache d’affichage (autre livre)', async () => {
+    const { mod, calls } = await load({ latencyMs: 0 });
+    await mod.fetchCollectorOdds('h2h,spreads,totals');
+    await mod.fetchOddsImplied('Montreal Canadiens', 'Boston Bruins');
+    expect(calls.length).toBe(2);
+    expect(new URL(calls[1]).searchParams.get('bookmakers')).toBe('betano_ca_on');
+  });
+
+  it('les variables d’environnement remplacent les défauts', async () => {
+    process.env.ODDS_BOOKMAKERS = 'playnow_ca,betano_ca_on';
+    process.env.ODDS_COLLECT_BOOKMAKERS = 'fanduel';
+    const { mod, calls } = await load({ latencyMs: 0 });
+    await mod.fetchOddsImplied('Montreal Canadiens', 'Boston Bruins');
+    await mod.fetchCollectorOdds('h2h');
+    expect(new URL(calls[0]).searchParams.get('bookmakers')).toBe('playnow_ca,betano_ca_on');
+    expect(new URL(calls[1]).searchParams.get('bookmakers')).toBe('fanduel');
+    delete process.env.ODDS_BOOKMAKERS;
+    delete process.env.ODDS_COLLECT_BOOKMAKERS;
+  });
+});
+
+describe('priceForSelection — prix d’une sélection précise', () => {
+  const FULL = {
+    home_team: 'Montreal Canadiens', away_team: 'Boston Bruins',
+    commence_time: '2026-10-08T23:00:00Z',
+    bookmakers: [{
+      key: 'betano_ca_on', title: 'Betano (Ontario)',
+      markets: [
+        { key: 'h2h', outcomes: [{ name: 'Montreal Canadiens', price: 2.1 },
+                                 { name: 'Boston Bruins', price: 1.8 }] },
+        { key: 'spreads', outcomes: [{ name: 'Montreal Canadiens', price: 1.4, point: 1.5 },
+                                     { name: 'Boston Bruins', price: 2.9, point: -1.5 }] },
+        { key: 'totals', outcomes: [{ name: 'Over', price: 1.95, point: 6.5 },
+                                    { name: 'Under', price: 1.85, point: 6.5 }] },
+      ],
+    }],
+  };
+
+  async function mod() {
+    vi.resetModules();
+    process.env.ODDS_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', async () => ({ ok: true, status: 200, json: async () => [FULL] }));
+    return import('./oddsClient');
+  }
+  beforeEach(() => { vi.unstubAllGlobals(); });
+
+  it('moneyline : par abréviation, dans les deux sens, avec le nom du livre', async () => {
+    const m = await mod();
+    expect(await m.priceForSelection({ homeAbbr: 'MTL', awayAbbr: 'BOS', marketType: 'moneyline', selectionValue: 'bos' }))
+      .toEqual({ price: 1.8, bookmaker: 'betano_ca_on', bookTitle: 'Betano (Ontario)' });
+    // Domicile/extérieur inversés côté appelant : même match, même prix.
+    expect((await m.priceForSelection({ homeAbbr: 'BOS', awayAbbr: 'MTL', marketType: 'moneyline', selectionValue: 'mtl' }))?.price)
+      .toBe(2.1);
+  });
+
+  it('puck line : exige le MÊME handicap', async () => {
+    const m = await mod();
+    expect((await m.priceForSelection({ homeAbbr: 'MTL', awayAbbr: 'BOS', marketType: 'puck_line', selectionValue: 'bos', line: -1.5 }))?.price)
+      .toBe(2.9);
+    expect(await m.priceForSelection({ homeAbbr: 'MTL', awayAbbr: 'BOS', marketType: 'puck_line', selectionValue: 'mtl', line: -1.5 }))
+      .toBeNull();   // le livre cote MTL +1.5, pas −1.5
+  });
+
+  it('total : exige la MÊME ligne, sinon pas de prix', async () => {
+    const m = await mod();
+    expect((await m.priceForSelection({ homeAbbr: 'MTL', awayAbbr: 'BOS', marketType: 'total_goals', selectionValue: 'under', line: 6.5 }))?.price)
+      .toBe(1.85);
+    expect(await m.priceForSelection({ homeAbbr: 'MTL', awayAbbr: 'BOS', marketType: 'total_goals', selectionValue: 'over', line: 5.5 }))
+      .toBeNull();
+  });
+
+  it('autre match, ou marché non coté → null', async () => {
+    const m = await mod();
+    expect(await m.priceForSelection({ homeAbbr: 'TOR', awayAbbr: 'BOS', marketType: 'moneyline', selectionValue: 'tor' })).toBeNull();
+    expect(await m.priceForSelection({ homeAbbr: 'MTL', awayAbbr: 'BOS', marketType: 'anytime_goal', selectionValue: 'yes' })).toBeNull();
   });
 });

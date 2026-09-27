@@ -3,6 +3,10 @@ import { TtlCache } from "../services/ttlCache";
 import { timeUpstream } from "../metrics";
 import { logger } from "../logger";
 import * as oddsQuota from "../services/oddsQuota";
+import { fetchRawOddsStrict, priceForSelection, type RawOddsEvent } from "../services/oddsClient";
+import { z } from "zod";
+import { validateBody } from "../middleware/validate.middleware";
+import { fetchGameById } from "../services/nhlApiClient";
 
 const router = Router();
 
@@ -31,46 +35,17 @@ const router = Router();
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_KEY  = process.env.ODDS_API_KEY;
 
+// Livre et région : définis UNE fois, dans `services/oddsClient.ts`
+// (`ODDS_BOOKMAKERS`, défaut `betano_ca_on`). L'ancienne paire écrite ici,
+// `bet365`/`eu`, ne désignait aucun livre chez The Odds API — d'où zéro cote
+// affichée, jamais. Voir le commentaire de `ODDS_BOOKMAKERS`.
+
 /**
- * Livre et région interrogés chez The Odds API.
- *
- * ⚠️ Ces deux valeurs étaient écrites EN DUR : `regions=eu` et
- * `bookmakers=bet365`. Or The Odds API ne publie aucune clé « bet365 » en
- * région EU — le seul identifiant bet365 de son catalogue est `bet365_au`
- * (région `au`, offre payante). La paire demandée ne désigne donc aucun livre
- * existant : l'amont répondait bien 200 avec la liste des matchs, mais chaque
- * événement arrivait avec `bookmakers: []`, `extractH2HOdds` rendait `null`, et
- * l'app n'a jamais affiché la moindre cote. Un échec parfaitement silencieux :
- * pas d'erreur, pas de log, juste des cartes sans prix.
- *
- * Les deux valeurs se règlent maintenant par l'environnement, pour qu'un
- * changement de fournisseur ou d'offre ne demande pas un déploiement de code :
- *
- *   ODDS_BOOKMAKERS=pinnacle,williamhill
- *   ODDS_REGIONS=eu,uk
- *
- * `bookmakers` accepte une liste ; The Odds API renvoie alors chaque livre dans
- * `event.bookmakers`, et le client choisit celui que l'utilisateur a réglé.
- *
- * ⚠️ Le défaut reste `bet365`/`eu`, c'est-à-dire le comportement actuel — donc
- * toujours zéro cote tant que l'environnement n'est pas posé. C'est voulu :
- * choisir un autre livre à la place de l'exploitant, en silence, afficherait
- * des prix qu'il n'a pas choisi de relayer et que ses liens d'affiliation ne
- * mènent nulle part. Le journal ci-dessous le dit au démarrage.
+ * TTL du cache de la route. Court : la vraie fenêtre de facturation est celle
+ * du cache de `oddsClient` (`ODDS_CACHE_TTL_MIN`, 30 min), que cette route lit.
+ * Celui-ci ne fait que servir la réponse filtrée par marchés sans refaire le
+ * filtrage à chaque visiteur, et porter le repli périmé.
  */
-const ODDS_BOOKMAKERS = (process.env.ODDS_BOOKMAKERS ?? "bet365").trim();
-const ODDS_REGIONS    = (process.env.ODDS_REGIONS ?? "eu").trim();
-
-if (ODDS_KEY && ODDS_BOOKMAKERS === "bet365" && ODDS_REGIONS === "eu") {
-  logger.warn(
-    { bookmakers: ODDS_BOOKMAKERS, regions: ODDS_REGIONS },
-    "[odds proxy] `bet365` n'existe pas en région `eu` chez The Odds API " +
-    "(seul `bet365_au` existe, en région `au`) : aucune cote ne sera renvoyée. " +
-    "Poser ODDS_BOOKMAKERS / ODDS_REGIONS.",
-  );
-}
-
-/** Même TTL que `services/oddsClient.ts` — les cotes bougent lentement. */
 const ODDS_TTL   = 5 * 60_000;
 /** La liste des sports ne change quasiment jamais (et ne coûte pas de crédit). */
 const SPORTS_TTL = 60 * 60_000;
@@ -190,30 +165,49 @@ function trackQuota(upstream: { headers: { get(name: string): string | null } })
   }
 }
 
+/**
+ * Ne garde, dans chaque livre, que les marchés demandés.
+ *
+ * L'appel amont prend toujours les trois marchés (c'est ce qui permet un seul
+ * appel partagé avec le moteur de paris) ; la réponse, elle, reste celle que
+ * le client a demandée.
+ */
+function keepMarkets(events: RawOddsEvent[], markets: string): RawOddsEvent[] {
+  const wanted = new Set(markets.split(","));
+  return events.map((ev) => ({
+    ...ev,
+    bookmakers: (ev.bookmakers ?? []).map((b) => ({
+      ...b,
+      markets: (b.markets ?? []).filter((m) => wanted.has(m.key)),
+    })),
+  }));
+}
+
 // GET /api/odds/bet365/:sportKey?markets=h2h,totals
+//
+// Le nom de route garde « bet365 » par compatibilité avec les clients déjà
+// déployés ; le livre réellement servi est `ODDS_BOOKMAKERS` et chaque
+// événement porte son `key`/`title`, que le client affiche.
+//
+// UN SEUL APPEL AMONT PARTAGÉ (2026-09-27). Cette route appelait The Odds API
+// elle-même, en plus de l'appel du moteur de paris (`oddsClient`) : deux
+// fenêtres de 5 min, soit jusqu'à ~26 000 crédits/mois en trafic continu, plus
+// que le plan 20K entier. Elle lit maintenant le cache de `oddsClient`.
 router.get("/bet365/:sportKey", async (req: Request, res: Response) => {
-  const apiKey = ODDS_KEY;
-  if (!apiKey) return res.json([]);
+  if (!ODDS_KEY) return res.json([]);
 
   const sportKey = String(req.params.sportKey).toLowerCase();
   if (!SPORT_KEY_RE.test(sportKey)) {
     return res.status(400).json({ error: "invalid sportKey" });
   }
+  // `oddsClient` ne connaît que la NHL, seul sport du produit (le tennis est
+  // retiré). Un autre sport n'a rien à servir : pas d'appel facturé pour rien.
+  if (sportKey !== "icehockey_nhl") return res.json([]);
+
   const markets = parseMarkets(req.query.markets);
   const key = `${sportKey}|${markets}`;
 
-  const params = new URLSearchParams({
-    apiKey,
-    regions:    ODDS_REGIONS,
-    bookmakers: ODDS_BOOKMAKERS,
-    markets,
-    oddsFormat: "decimal",
-  });
-
-  // TTL adaptatif : 5 min tant que les crédits abondent, jusqu'à 24 h quand il
-  // n'en reste plus. Le visiteur voit alors des cotes un peu datées plutôt
-  // qu'une page vide — c'est le compromis voulu sur une clé gratuite, où un
-  // TTL fixe de 5 min vaudrait à lui seul ~17 000 appels par mois.
+  // TTL adaptatif : allongé quand le solde baisse (voir `oddsQuota`).
   const ttl = oddsQuota.proxyTtlMs(ODDS_TTL);
 
   // Échec récent et rien de frais : on ne rappelle pas l'amont (voir plus haut).
@@ -227,16 +221,8 @@ router.get("/bet365/:sportKey", async (req: Request, res: Response) => {
   }
 
   try {
-    const data = await oddsCache.wrap(key, () => timeUpstream('odds', async () => {
-      const upstream = await fetchOdds(`${ODDS_BASE}/sports/${sportKey}/odds?${params}`);
-      trackQuota(upstream);
-      if (!upstream.ok) {
-        const body = await upstream.text().catch(() => "");
-        logger.error({ status: upstream.status, body }, "[odds proxy]");
-        throw new Error(`upstream ${upstream.status}`);
-      }
-      return upstream.json();
-    }), ttl);
+    const data = await oddsCache.wrap(key, () => timeUpstream('odds', async () =>
+      keepMarkets(await fetchRawOddsStrict(), markets)), ttl);
     recentFailures.delete(key);
 
     // 60 s navigateur/CDN + 5 min de stale-while-revalidate : la vague
@@ -256,6 +242,51 @@ router.get("/bet365/:sportKey", async (req: Request, res: Response) => {
     logger.error({ err: err?.message }, "[odds proxy] fetch error");
     res.status(502).json([]);
   }
+});
+
+// POST /api/odds/legs — le prix du livre d'affichage pour chaque jambe d'un coupon.
+//
+// Pourquoi une route et pas le client : une jambe ne connaît que son `gameId`
+// NHL et sa sélection. Retrouver les deux équipes demande le calendrier NHL
+// (côté serveur, en cache), et l'appariement au flux de cotes se fait sur les
+// ABRÉVIATIONS (`oddsTeamNames.ts`), que seul le serveur tient.
+//
+// Coût : ZÉRO crédit de plus — `priceForSelection` lit le cache partagé. Le
+// corps est borné (20 jambes, champs typés) et la route passe sous `apiLimiter`
+// comme tout `/api`. Une jambe sans prix n'est simplement pas dans la réponse.
+const legsSchema = z.object({
+  legs: z.array(z.object({
+    id:             z.string().min(1).max(120),
+    gameId:         z.string().regex(/^\d{6,12}$/),
+    marketType:     z.enum(["moneyline", "puck_line", "total_goals"]),
+    selectionValue: z.string().min(1).max(12),
+    line:           z.number().finite().min(-20).max(20).nullable().optional(),
+  })).max(20),
+});
+
+router.post("/legs", validateBody(legsSchema), async (req: Request, res: Response) => {
+  res.set("Cache-Control", "no-store");
+  if (!ODDS_KEY) return res.json({ prices: {} });
+  const { legs } = req.body as z.infer<typeof legsSchema>;
+
+  const prices: Record<string, { price: number; bookTitle: string }> = {};
+  await Promise.all(legs.map(async (leg) => {
+    try {
+      const game = await fetchGameById(leg.gameId);
+      const home = game?.homeTeam?.abbreviation;
+      const away = game?.awayTeam?.abbreviation;
+      if (!home || !away) return;
+      // Un match commencé n'a plus de cote d'avant-match : ne pas afficher un
+      // prix figé comme s'il était encore offert.
+      if (game.status !== "scheduled") return;
+      const p = await priceForSelection({
+        homeAbbr: home, awayAbbr: away, marketType: leg.marketType,
+        selectionValue: leg.selectionValue, line: leg.line ?? null,
+      });
+      if (p) prices[leg.id] = { price: p.price, bookTitle: p.bookTitle };
+    } catch { /* jambe sans prix */ }
+  }));
+  res.json({ prices });
 });
 
 // GET /api/odds/sports — available sports/tournaments

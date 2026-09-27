@@ -31,6 +31,8 @@ import { MySlipsTab } from "./bet/MySlipsTab";
 import "../components/rink-theme.css";
 import { EmptySlip, LegCard, LockSlipCTA, ProbabilityGauge, SlipNotices, impliedDecimal, toOddsLabel } from "./bet/betParts";
 import { useOddsFormat } from "../context/OddsFormatContext";
+import { fetchLegPrices } from "../services/oddsApiService";
+import { BookPricePill } from "../components/BookPricePill";
 
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
@@ -50,6 +52,8 @@ export function BetBuilderPage() {
   // Apparence sombre / claire — réglage partagé, cf. `appearance.ts`.
   const [mode] = useState<AppearanceMode>(readMode);
   const [showSheet, setShowSheet] = useState(false);
+  // Vrais prix Betano Ontario des jambes, par id — voir `POST /api/odds/legs`.
+  const [legPrices, setLegPrices] = useState<Record<string, { price: number; bookTitle: string }>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   // `message` vient du serveur ; il était jeté à la réception puis lu au rendu,
   // donc le sous-titre de l'écran de succès était vide depuis toujours.
@@ -62,6 +66,37 @@ export function BetBuilderPage() {
   // toast pour le cas où le bloc serait hors champ.
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  // ── Vrais prix des jambes ─────────────────────────────────────────────────
+  // Rechargés quand la COMPOSITION du coupon change (pas à chaque rendu). Un
+  // échec rend `{}` : les jambes restent sans prix, rien d'autre ne bouge.
+  const legsKey = legs.map((l) => `${l.id}|${l.gameId ?? ""}|${l.selectionValue ?? ""}|${l.line ?? ""}`).join(",");
+  useEffect(() => {
+    let alive = true;
+    fetchLegPrices(legs.map((l) => ({
+      id: l.id, gameId: l.gameId ?? "", marketType: l.marketType,
+      selectionValue: l.selectionValue ?? "", line: l.line ?? null,
+    }))).then((p) => { if (alive) setLegPrices(p); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [legsKey]);
+
+  // Cote combinée RÉELLE : produit des prix, mais seulement si TOUTES les
+  // jambes sont cotées et portent sur des matchs DIFFÉRENTS. Deux jambes du
+  // même match sont corrélées, et un livre ne paie pas leur produit — il
+  // refuserait ou reprixerait le combiné. Dans ce cas, rien plutôt qu'un faux.
+  const bookCombined = (() => {
+    if (legs.length < 2) return null;
+    const games = new Set(legs.map((l) => l.gameId));
+    if (games.size !== legs.length || games.has(undefined)) return null;
+    let prod = 1;
+    for (const l of legs) {
+      const p = legPrices[l.id]?.price;
+      if (!p) return null;
+      prod *= p;
+    }
+    return Math.round(prod * 100) / 100;
+  })();
 
   // ── Nombre de coupons EN COURS, affiché sur l'onglet « Mes paris » ─────────
   // La page le lit elle-même : `MySlipsTab` n'est monté que lorsque son onglet
@@ -240,6 +275,12 @@ export function BetBuilderPage() {
                     <span className="text-[#4a6068] text-[11px] ml-1.5">implied odds</span>
                   </div>
                 )}
+                {bookCombined != null && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-[#4a6068] text-[11px]">{t("slip.bookCombined")}</span>
+                    <BookPricePill price={bookCombined} size="md" />
+                  </div>
+                )}
               </>
             )}
             {legs.length === 1 && (
@@ -273,7 +314,8 @@ export function BetBuilderPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {legs.map((leg, i) => (
-                  <LegCard key={leg.id} leg={leg} index={i} onRemove={() => removeLeg(leg.id)} />
+                  <LegCard key={leg.id} leg={leg} index={i} onRemove={() => removeLeg(leg.id)}
+                    bookPrice={legPrices[leg.id]?.price} />
                 ))}
               </div>
             </div>

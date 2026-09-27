@@ -1,0 +1,23 @@
+-- 038_odds_snapshots_bookmaker.sql
+-- Le LIVRE qui a fourni chaque prix de la série temporelle du CLV.
+--
+-- POURQUOI (2026-09-27). Jusqu'ici la collecte demandait `bet365`/`eu`, un
+-- couple qui ne désigne aucun livre chez The Odds API (Bet365 n'y est coté que
+-- pour l'AFL et la NRL), et prenait donc « le premier livre venu », match par
+-- match. La collecte suit désormais un livre FIXE (`ODDS_COLLECT_BOOKMAKERS`,
+-- défaut `draftkings`), le même que le backfill historique 2023-2026, dont le
+-- fichier `odds_snapshots_hist.csv` porte déjà une colonne `source`.
+--
+-- Sans cette colonne, un changement de livre en cours de saison mélangerait
+-- deux sources dans la série — deux marges, deux façons de bouger la ligne — et
+-- rien dans la table ne permettrait de le voir ni de les séparer. Un ROI ou un
+-- CLV qui n'apparaîtrait que d'un côté serait un artefact de source (P7).
+--
+-- Nullable : les lignes antérieures n'ont pas l'information, et un défaut
+-- inventé serait pire qu'un vide.
+--
+-- `markets` change aussi de vocabulaire (pas de schéma) : la passe du soir
+-- s'appelle `close` (h2h + spreads, 2 crédits) au lieu de `spreads` (puck line
+-- seule, 1 crédit). Les deux valeurs peuvent coexister dans la table.
+
+ALTER TABLE odds_snapshots ADD COLUMN IF NOT EXISTS bookmaker TEXT;

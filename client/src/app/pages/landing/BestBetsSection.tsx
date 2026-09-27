@@ -14,6 +14,7 @@ import { useBet } from "../../context/BetContext";
 import { ProLock } from "../../components/ProLock";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
+import { BookPricePill } from "../../components/BookPricePill";
 
 
 // ─── Best Bets ─────────────────────────────────────────────────────────────────
@@ -29,6 +30,8 @@ interface BestBet {
   mlPct: number | null;
   leg: BetLeg;
   gameId?: string;
+  /** Vrai prix Betano Ontario, quand le livre cote ce pari (voir serveur). */
+  bookPrice: number | null;
 }
 
 type SortSource = "rules" | "ml";
@@ -68,8 +71,9 @@ function riskLabel(pct: number): { tier: RiskTier; key: string; color: string } 
 }
 
 /** Cote **équitable** déduite de la probabilité du modèle — sans marge, et sans
- * rapport avec un prix de bookmaker. Affichée pour donner un ordre de grandeur du
- * gain sur les marchés que bet365 ne couvre pas tous. L'infobulle le précise. */
+ * rapport avec un prix de bookmaker. Affichée SEULEMENT quand le livre ne cote
+ * pas ce pari (presque tous les marchés joueurs) ; sinon c'est le vrai prix qui
+ * s'affiche. L'infobulle le précise. */
 function impliedOdds(pct: number): number | null {
   if (pct <= 0 || pct >= 100) return null;
   return Math.round((100 / pct) * 100) / 100;
@@ -136,7 +140,9 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
           <span className="text-[15px] font-bold">{displayPct} %</span>
           <span className="text-[10px] font-medium ml-1">{t("home.chance")}</span>
         </div>
-        {odds != null && (
+        {bet.bookPrice != null ? (
+          <span className="mt-0.5"><BookPricePill price={bet.bookPrice} /></span>
+        ) : odds != null && (
           <span title={t("home.oddsFairHint")} className="text-[11px] text-[#bfc8cc] tabular-nums">
             {t("home.odds", { odds: odds.toFixed(2) })}
           </span>
@@ -226,6 +232,7 @@ export function BestBetsSection({
             id: b.id, label, context: b.context, logo,
             rulePct: b.rulePct, mlPct: b.mlPct,
             gameId: b.gameId ?? undefined,
+            bookPrice: b.bookPrice ?? null,
             leg: {
               // `selection` / `marketLabel` sont purement affichés (coupon,
               // partage) : le règlement automatique lit `selectionValue`.

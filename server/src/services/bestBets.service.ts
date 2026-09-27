@@ -29,6 +29,7 @@ import {
   buildPlayerPropFeatures,
 } from './featureEngineering';
 import { mlApiClient } from './mlApiClient';
+import { priceForSelection } from './oddsClient';
 import { TtlCache } from './ttlCache';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -57,9 +58,18 @@ export interface BestBet {
   score:          number;   // display score = mlPct ?? rulePct
   source:         'ml' | 'rules';
   confidence:     'very_high' | 'high' | 'medium' | 'low' | 'very_low';
+  /**
+   * Vrai prix du livre d'affichage (Betano Ontario par défaut) pour ce pari,
+   * ou `null` quand le livre ne le cote pas — presque tous les marchés joueurs.
+   * Jamais déduit du modèle : voir `priceForSelection`.
+   */
+  bookPrice:      number | null;
+  bookTitle:      string | null;
 }
 
-interface Candidate extends Omit<BestBet, 'mlPct' | 'score' | 'source' | 'confidence'> {
+interface Candidate extends Omit<BestBet, 'mlPct' | 'score' | 'source' | 'confidence' | 'bookPrice' | 'bookTitle'> {
+  /** Domicile / extérieur, pour retrouver le prix du livre. Paris de match seulement. */
+  teams?: { home: string; away: string };
   // how to build ML features for this candidate
   ml:
     | { kind: 'game'; homeId: string; awayId: string; marketType: string; line?: number }
@@ -137,6 +147,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       subjectId: g.id, subjectName: matchup, subjectLogo: g.homeTeam?.emoji ?? '🏒', teamAbbr: home,
       label: `${home} to win`, selection: `${home} to win`, selectionValue: homeLc, selectionShort: `${home} ML`,
       context: ctxHome, line: null, gameId: g.id, teamId: homeLc, playerId: null, rulePct: homeMl,
+      teams: { home, away },
       ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'moneyline' },
     },
     {
@@ -144,6 +155,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       subjectId: g.id, subjectName: matchup, subjectLogo: g.awayTeam?.emoji ?? '🏒', teamAbbr: away,
       label: `${away} to win`, selection: `${away} to win`, selectionValue: awayLc, selectionShort: `${away} ML`,
       context: ctxAway, line: null, gameId: g.id, teamId: awayLc, playerId: null, rulePct: awayMl,
+      teams: { home, away },
       ml: { kind: 'game', homeId: awayLc, awayId: homeLc, marketType: 'moneyline' },
     },
     {
@@ -151,6 +163,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       subjectId: g.id, subjectName: matchup, subjectLogo: '📈', teamAbbr: null,
       label: `Over ${line}`, selection: `Over ${line}`, selectionValue: 'over', selectionShort: `O${line}`,
       context: matchup, line, gameId: g.id, teamId: null, playerId: null, rulePct: overPct,
+      teams: { home, away },
       ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'total_goals_over', line },
     },
     {
@@ -158,6 +171,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       subjectId: g.id, subjectName: matchup, subjectLogo: '📉', teamAbbr: null,
       label: `Under ${line}`, selection: `Under ${line}`, selectionValue: 'under', selectionShort: `U${line}`,
       context: matchup, line, gameId: g.id, teamId: null, playerId: null, rulePct: underPct,
+      teams: { home, away },
       ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'total_goals_under', line },
     },
     {
@@ -165,6 +179,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       subjectId: g.id, subjectName: matchup, subjectLogo: g.homeTeam?.emoji ?? '🏒', teamAbbr: home,
       label: `${home} -1.5`, selection: `${home} -1.5`, selectionValue: homeLc, selectionShort: `${home} -1.5`,
       context: ctxHome, line: -1.5, gameId: g.id, teamId: homeLc, playerId: null, rulePct: pl,
+      teams: { home, away },
       ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'puck_line', line: -1.5 },
     },
   ];
@@ -383,21 +398,40 @@ async function computeBestBets(o: NormalizedOptions): Promise<BestBetsResult> {
     const mlPct = mlById.has(c.id) ? mlById.get(c.id)! : null;
     const useMl = source === 'ml' && mlPct != null;
     const score = useMl ? mlPct : c.rulePct;
-    const { ml, ...rest } = c;
+    const { ml, teams, ...rest } = c;
     return {
       ...rest,
       mlPct,
       score,
       source: useMl ? 'ml' : 'rules',
       confidence: confidenceFor(score),
+      bookPrice: null,
+      bookTitle: null,
     };
   });
 
   // 5. Sort by final display score (best prediction first) and trim
   bets.sort((a, b) => b.score - a.score);
+  const kept = bets.slice(0, limit);
+
+  // 6. Vrais prix du livre d'affichage, pour les seuls paris de match gardés.
+  //    Aucun crédit de plus : un seul appel en cache sert toutes les lignes.
+  //    Un flux de cotes en panne ne retire aucun pari — il reste sans prix.
+  const teamsById = new Map(candidates.map((c) => [c.id, c.teams]));
+  await Promise.all(kept.map(async (b) => {
+    const teams = teamsById.get(b.id);
+    if (!teams) return;
+    try {
+      const p = await priceForSelection({
+        homeAbbr: teams.home, awayAbbr: teams.away, marketType: b.marketType,
+        selectionValue: b.selectionValue, line: b.line,
+      });
+      if (p) { b.bookPrice = p.price; b.bookTitle = p.bookTitle; }
+    } catch { /* sans prix */ }
+  }));
 
   return {
-    bets: bets.slice(0, limit),
+    bets: kept,
     meta: {
       generatedAt: new Date().toISOString(),
       source,

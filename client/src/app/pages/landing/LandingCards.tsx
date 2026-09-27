@@ -13,8 +13,7 @@ import { useSport } from "../../context/SportContext";
 import { useI18n } from "../../i18n";
 import { openBet } from "../../services/bookmakers";
 import { features } from "../../platform";
-import { useBookmaker } from "../../context/BookmakerContext";
-import { useOddsFormat } from "../../context/OddsFormatContext";
+import { BookPricePill } from "../../components/BookPricePill";
 import { DisplayGame, calcEdge } from "./landingTypes";
 
 
@@ -47,39 +46,6 @@ export function SportSelector() {
       >
         ARAKICE
       </span>
-    </button>
-  );
-}
-
-// ─── Odds pill ─────────────────────────────────────────────────────────────────
-
-function OddsPill({ decimal, onBet }: { decimal: number; onBet: () => void }) {
-  const { bookmaker } = useBookmaker();
-  // ⚠️ Le SEUL endroit de l'app qui suit le réglage de format, et c'est normal :
-  // `game.bet365Home/Away` sont de vrais prix de bookmaker. Tout le reste de
-  // l'app affiche des probabilités du MODÈLE, qui restent en % — voir
-  // `services/oddsFormat.ts`. Si un jour un autre écran relaie de vraies cotes
-  // (page d'affiche, comparateur), c'est ici qu'il faut venir chercher le patron.
-  const { odds } = useOddsFormat();
-
-  // APPLE_PLAN §4 — Guideline 5.3. The price is information the prediction
-  // pages lean on, so it stays; what goes is the tap that opens a sportsbook
-  // and the book's name next to it. Same pill, no handler.
-  if (!features.bookmakerLinks) {
-    return (
-      <span className="flex items-center gap-1 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5">
-        <span className="text-[11px] font-bold text-green-400 tabular-nums">{odds(decimal)}</span>
-      </span>
-    );
-  }
-
-  return (
-    <button
-      onClick={(e) => { e.stopPropagation(); onBet(); }}
-      className="flex items-center gap-1 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5 active:bg-green-500/20 transition-colors"
-    >
-      <span className="text-[11px] text-[#bfc8cc]">{bookmaker.label}</span>
-      <span className="text-[11px] font-bold text-green-400 tabular-nums">{odds(decimal)}</span>
     </button>
   );
 }
@@ -169,7 +135,7 @@ function useGameEdge(game: DisplayGame) {
   const homePct = game.team1.winPct;
   const awayPct = game.team2.winPct;
   // Pas de probabilité modèle → pas d'edge à afficher.
-  const edge = game.bet365Home != null && homePct != null ? calcEdge(homePct, game.bet365Home) : 0;
+  const edge = game.bookHome != null && homePct != null ? calcEdge(homePct, game.bookHome) : 0;
   return { homePct, awayPct, edge, showPct: true };
 }
 
@@ -234,16 +200,16 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
         <span className="text-[#bfc8cc] text-[11px] font-bold w-7 text-right flex-shrink-0">{awayPct != null ? `${awayPct}%` : "—"}</span>
       </div>}
 
-      {/* bet365 odds row — only shown when API has real odds */}
-      {game.bet365Home && game.bet365Away ? (
+      {/* Ligne des vrais prix — seulement quand le livre en propose */}
+      {game.bookHome && game.bookAway ? (
         <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
-          <OddsPill decimal={game.bet365Home} onBet={() => openBet("hockey")} />
+          <BookPricePill price={game.bookHome} />
           <span className="text-[11px] text-[#bfc8cc]">Moneyline</span>
-          <OddsPill decimal={game.bet365Away} onBet={() => openBet("hockey")} />
+          <BookPricePill price={game.bookAway} />
           {/* Moneyline is a universal betting term, kept as-is */}
         </div>
       ) : features.bookmakerLinks ? (
-        /* No API key — show a subtle link to bet365 instead.
+        /* Pas de prix — un simple lien vers le livre réglé.
            Nothing to show on iOS: no odds and no link out (Guideline 5.3). */
         <div className="flex items-center justify-end mt-1">
           <button
@@ -293,8 +259,8 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
             <img src={game.team1.logo} alt={game.team1.abbr} className="w-5 h-5 object-contain flex-shrink-0" />
             <span className="text-white text-xs font-medium flex-1 truncate">{game.team1.abbr}</span>
             {showPct && <span className="text-[11px] font-bold tabular-nums" style={{ color: accent }}>{homePct != null ? `${homePct}%` : "—"}</span>}
-            {game.bet365Home && (
-              <OddsPill decimal={game.bet365Home} onBet={() => openBet("hockey")} />
+            {game.bookHome && (
+              <BookPricePill price={game.bookHome} />
             )}
           </div>
           {/* Team 2 */}
@@ -302,8 +268,8 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
             <img src={game.team2.logo} alt={game.team2.abbr} className="w-5 h-5 object-contain flex-shrink-0" />
             <span className="text-white text-xs font-medium flex-1 truncate">{game.team2.abbr}</span>
             {showPct && <span className="text-[#bfc8cc] text-[11px] font-bold tabular-nums">{awayPct != null ? `${awayPct}%` : "—"}</span>}
-            {game.bet365Away && (
-              <OddsPill decimal={game.bet365Away} onBet={() => openBet("hockey")} />
+            {game.bookAway && (
+              <BookPricePill price={game.bookAway} />
             )}
           </div>
         </div>

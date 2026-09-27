@@ -15,12 +15,87 @@ import { logger } from '../logger';
 import { recordUpstream } from '../metrics';
 import { TtlCache } from './ttlCache';
 import * as oddsQuota from './oddsQuota';
+import { toAbbr } from './oddsTeamNames';
 
 const ODDS_BASE = 'https://api.the-odds-api.com/v4';
 const ODDS_KEY  = process.env.ODDS_API_KEY;
 const SPORT_KEY = 'icehockey_nhl';
 
-const TTL = 5 * 60_000; // 5 min
+/**
+ * Durée de vie du cache des cotes, en minutes — `ODDS_CACHE_TTL_MIN`, 30 par
+ * défaut. **C'est LE levier du budget d'affichage.**
+ *
+ * Ce cache est désormais le SEUL chemin vers The Odds API pour l'affichage :
+ * le moteur de paris le lit, et le proxy public `/api/odds` aussi (avant le
+ * 2026-09-27, le proxy avait son propre appel amont). Un appel = 3 marchés ×
+ * 1 région = 3 crédits. Pire cas, trafic continu en saison :
+ *
+ *   5 min  → 864 crédits/jour → ~26 000/mois (plus que tout le plan 20K)
+ *   30 min → 144 crédits/jour →  ~4 500/mois
+ *
+ * Plan 20K (2026-09-27) : ~4 500 affichage + ~450 collecte + ~15 000 backfill.
+ * Les cotes NHL bougent lentement ; la collecte (`oddsLogger`) a ses propres
+ * appels, chez un autre livre, et ne passe pas par ce cache.
+ *
+ * Lecture durcie pour la même raison que `ODDS_USER_RESERVE` : la variable se
+ * pose à la main dans Railway, et `Number('')` vaut 0 — un TTL nul viderait le
+ * quota en quelques heures.
+ */
+const TTL = ((): number => {
+  const raw = process.env.ODDS_CACHE_TTL_MIN;
+  const DEFAULT_MIN = 30;
+  if (raw === undefined || raw.trim() === '') return DEFAULT_MIN * 60_000;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1) {
+    logger.warn({ raw, fallback: DEFAULT_MIN },
+      '[oddsClient] ODDS_CACHE_TTL_MIN illisible ou < 1 — défaut appliqué.');
+    return DEFAULT_MIN * 60_000;
+  }
+  return Math.round(n * 60_000);
+})();
+
+/**
+ * Livre(s) et région demandés à The Odds API — UNE seule définition pour tout
+ * le serveur (proxy, moteur, collecte).
+ *
+ * ⚠️ The Odds API ne cote NI Bet365 NI Stake sur la NHL (`bet365_au` ne couvre
+ * que l'AFL et la NRL, vérifié le 2026-09-27). Le couple `bet365`/`eu` écrit en
+ * dur jusque-là ne désignait aucun livre : chaque événement revenait avec
+ * `bookmakers: []`, et la collecte prenait « le premier livre venu » — une
+ * source qui pouvait changer d'un jour à l'autre, ce que le CLV ne tolère pas.
+ *
+ * Décision du user (2026-09-27) : l'app affiche un livre CANADIEN, sous son
+ * vrai nom. Défaut `betano_ca_on` : seul livre canadien à coter 33 matchs sur
+ * 33 en moneyline ET en puck line au sondage du 2026-09-27
+ * (`ml/python/probe_odds_books.py`). Le livre est envoyé en paramètre
+ * `bookmakers`, jamais `regions` (même coût : jusqu'à 10 livres = 1 région).
+ * Une liste est acceptée, dans l'ordre de préférence. `ODDS_REGIONS` n'est
+ * plus lu depuis le 2026-09-27.
+ */
+export const ODDS_BOOKMAKERS = (process.env.ODDS_BOOKMAKERS ?? '').trim() || 'betano_ca_on';
+const PREFERRED_BOOKS = ODDS_BOOKMAKERS.split(',').map((b) => b.trim()).filter(Boolean);
+
+/** Paramètre de sélection des livres, commun à tous les appels. */
+export function bookParams(): Record<string, string> {
+  return { bookmakers: ODDS_BOOKMAKERS };
+}
+
+/**
+ * Délai maximal d'un appel — même valeur et même raison que dans le proxy
+ * (`ODDS_FETCH_TIMEOUT_MS`) : un amont qui accepte la connexion puis se tait
+ * gèlerait tous les appelants dédoublonnés derrière la même promesse.
+ */
+const FETCH_TIMEOUT_MS = Number(process.env.ODDS_FETCH_TIMEOUT_MS) || 8_000;
+
+async function fetchOdds(url: string) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 interface OddsOutcome { name: string; price: number; point?: number }
 interface OddsEvent {
@@ -29,6 +104,8 @@ interface OddsEvent {
   commence_time: string;
   bookmakers: Array<{
     key: string;
+    /** Nom lisible du livre (« Betano (Ontario) »), fourni par The Odds API. */
+    title?: string;
     markets: Array<{ key: string; outcomes: OddsOutcome[] }>;
   }>;
 }
@@ -47,58 +124,70 @@ export interface TotalsOdds {
   bookmaker: string;
 }
 
-/** Événement brut de The Odds API (exposé pour le logger de cotes). */
+/** Événement brut de The Odds API (exposé pour le logger de cotes et le proxy). */
 export type RawOddsEvent = OddsEvent;
 
-/** Récupère tous les événements NHL bruts (h2h + totals). Pour oddsLogger. */
-export async function fetchRawOdds(): Promise<RawOddsEvent[]> {
-  return fetchAllOdds();
-}
+/**
+ * Livre de la COLLECTE (série de cotes du ML : `odds_log`, `odds_snapshots`,
+ * puis CLV et backfill) — distinct du livre d'AFFICHAGE.
+ *
+ * Pourquoi deux livres (2026-09-27). Le sondage `probe_odds_books.py` a montré
+ * que les livres canadiens n'ont quasiment AUCUN historique chez The Odds API
+ * (rien en 2023, 5 matchs sur 17 en 2024). Or la collecte live doit prolonger
+ * EXACTEMENT la série que le backfill 2023-2026 reconstruit, sinon le CLV
+ * compare deux livres différents selon la saison. Le livre d'affichage, lui,
+ * doit être un livre où le visiteur canadien peut réellement parier.
+ *
+ * Défaut `draftkings` : au sondage du 2026-09-27, seul livre complet en
+ * moneyline ET puck line sur les trois saisons à backfiller (13/16, 17/17,
+ * 18/18 matchs aux dates testées) et 33/33 en direct. Pinnacle plafonnait à
+ * 11-13 matchs. **Doit rester identique à `--odds-api-book` du backfill.**
+ */
+export const ODDS_COLLECT_BOOKMAKERS =
+  (process.env.ODDS_COLLECT_BOOKMAKERS ?? '').trim() || 'draftkings';
 
 /**
- * Récupère UNIQUEMENT la puck line — **1 crédit au lieu de 3** (A3).
+ * Cotes pour la COLLECTE, chez le livre de collecte, **sans cache**.
  *
- * The Odds API facture un crédit par marché et par région. Une passe complète
- * en coûte donc trois, alors que le seul marché encore vivant est la puck line
- * (A2 : le moneyline est clos, les totaux sont condamnés à −2.75 % de ROI).
- * Cette version permet quatre observations rapprochées de la mise au jeu pour
- * un tiers du prix d'une passe complète — c'est ce qui donne au CLV une vraie
- * clôture par créneau de match au lieu d'un prix vieux de plusieurs heures.
+ * `markets` : `h2h,spreads,totals` pour une passe complète (3 crédits),
+ * `h2h,spreads` pour une passe de clôture (2 crédits) — les totaux sont clos
+ * pour de bon (leur CLV est sous leur propre placebo, 2026-08-23), le
+ * moneyline a un CLV réel et la puck line porte la règle A2.
  *
- * **NE PASSE VOLONTAIREMENT PAS PAR `oddsCache`.** Le cache est partagé avec le
- * proxy public : y déposer une réponse dépourvue de `h2h` et de `totals`
- * priverait les visiteurs de leurs cotes pendant tout le TTL. Le troupeau que
- * `TtlCache` corrige n'existe pas ici — un seul appelant, une fois par créneau.
+ * **NE PASSE VOLONTAIREMENT PAS PAR `oddsCache`.** Ce cache sert l'affichage,
+ * chez un autre livre : y déposer la réponse de la collecte afficherait aux
+ * visiteurs un livre où ils ne peuvent pas parier. Un seul appelant, une fois
+ * par créneau : il n'y a pas de troupeau à dédoublonner.
  *
  * Pas de repli sur des cotes périmées non plus : un collecteur qui rate un
  * cycle perd un point de mesure, ce qui est sans gravité, là où réécrire un
  * snapshot avec un prix ancien fabriquerait un faux mouvement de ligne.
  */
-export async function fetchSpreadsOnly(): Promise<RawOddsEvent[]> {
+export async function fetchCollectorOdds(markets: string): Promise<RawOddsEvent[]> {
   if (!ODDS_KEY) return [];
 
   const params = new URLSearchParams({
     apiKey:     ODDS_KEY,
-    regions:    'eu',
-    markets:    'spreads',
+    bookmakers: ODDS_COLLECT_BOOKMAKERS,
+    markets,
     oddsFormat: 'decimal',
   });
 
   const started = Date.now();
   try {
-    const res = await fetch(`${ODDS_BASE}/sports/${SPORT_KEY}/odds?${params}`);
+    const res = await fetchOdds(`${ODDS_BASE}/sports/${SPORT_KEY}/odds?${params}`);
     recordUpstream('odds', Date.now() - started, res.ok);
     // Y compris en erreur : un 429 porte le solde, et c'est le moment où il
     // compte le plus.
     oddsQuota.observe(res.headers);
     if (!res.ok) {
-      logger.error({ status: res.status }, '[oddsClient] spreads');
+      logger.error({ status: res.status, markets }, '[oddsClient] collecte');
       return [];
     }
     return (await res.json()) as OddsEvent[];
   } catch (err: any) {
     recordUpstream('odds', Date.now() - started, false);
-    logger.error({ err: err?.message }, '[oddsClient] spreads fetch error');
+    logger.error({ err: err?.message, markets }, '[oddsClient] collecte fetch error');
     return [];
   }
 }
@@ -148,12 +237,12 @@ const ODDS_CACHE_KEY = SPORT_KEY;
  * plan payant. Quand les crédits se raréfient, le TTL s'allonge plutôt que le
  * service ne s'arrête.
  */
-async function fetchAllOdds(): Promise<OddsEvent[]> {
+async function loadAllOdds(): Promise<OddsEvent[]> {
   if (!ODDS_KEY) return [];
 
   const params = new URLSearchParams({
     apiKey:     ODDS_KEY,
-    regions:    'eu',
+    ...bookParams(),
     markets:    'h2h,spreads,totals',
     oddsFormat: 'decimal',
   });
@@ -163,35 +252,51 @@ async function fetchAllOdds(): Promise<OddsEvent[]> {
   // même que ce module a été écrit pour corriger.
   const ttl = oddsQuota.proxyTtlMs(TTL);
 
-  try {
-    // Deuxième consommateur du quota The Odds API, à côté du proxy de
-    // `routes/odds.routes.ts`. Il doit être compté lui aussi, sinon le critère
-    // « ≤ 2 appels Odds API » du scénario S1 mesure la moitié de la réalité.
-    return await oddsCache.wrap(ODDS_CACHE_KEY, async () => {
-      const started = Date.now();
-      try {
-        const res = await fetch(`${ODDS_BASE}/sports/${SPORT_KEY}/odds?${params}`);
-        recordUpstream('odds', Date.now() - started, res.ok);
-        // Y COMPRIS en erreur : un 429 porte le solde, et c'est justement le
-        // moment où l'information compte.
-        oddsQuota.observe(res.headers);
-        if (!res.ok) {
-          logger.error({ status: res.status }, '[oddsClient]');
-          // LEVER et non renvoyer `[]` : une réponse vide mise en cache 5 minutes
-          // priverait le moteur de cotes bien après le rétablissement. Rien n'est
-          // mémorisé quand `fn` rejette.
-          throw new Error(`odds upstream ${res.status}`);
-        }
-        return (await res.json()) as OddsEvent[];
-      } catch (err: any) {
-        recordUpstream('odds', Date.now() - started, false);
-        throw err;
+  // Deuxième consommateur du quota The Odds API, à côté du proxy de
+  // `routes/odds.routes.ts`. Il doit être compté lui aussi, sinon le critère
+  // « ≤ 2 appels Odds API » du scénario S1 mesure la moitié de la réalité.
+  return oddsCache.wrap(ODDS_CACHE_KEY, async () => {
+    const started = Date.now();
+    try {
+      const res = await fetchOdds(`${ODDS_BASE}/sports/${SPORT_KEY}/odds?${params}`);
+      recordUpstream('odds', Date.now() - started, res.ok);
+      // Y COMPRIS en erreur : un 429 porte le solde, et c'est justement le
+      // moment où l'information compte.
+      oddsQuota.observe(res.headers);
+      if (!res.ok) {
+        logger.error({ status: res.status }, '[oddsClient]');
+        // LEVER et non renvoyer `[]` : une réponse vide mise en cache
+        // priverait le moteur de cotes bien après le rétablissement. Rien n'est
+        // mémorisé quand `fn` rejette.
+        throw new Error(`odds upstream ${res.status}`);
       }
-    }, ttl);
+      return (await res.json()) as OddsEvent[];
+    } catch (err: any) {
+      recordUpstream('odds', Date.now() - started, false);
+      throw err;
+    }
+  }, ttl);
+}
+
+/**
+ * Toutes les cotes NHL, en LEVANT sur échec — pour le proxy public.
+ *
+ * Le proxy a son propre repli (réponse périmée + cache d'échec, testés dans
+ * `odds.routes.test.ts`) : il doit donc voir l'échec, pas un `[]` qu'il
+ * prendrait pour « aucun match ». Même cache que le moteur, donc un seul appel
+ * amont par fenêtre pour les deux.
+ */
+export function fetchRawOddsStrict(): Promise<RawOddsEvent[]> {
+  return loadAllOdds();
+}
+
+async function fetchAllOdds(): Promise<OddsEvent[]> {
+  try {
+    return await loadAllOdds();
   } catch (err: any) {
     // Repli sur les dernières cotes connues, même expirées — comme le fait déjà
-    // le proxy. Des cotes de dix minutes valent mieux qu'aucun facteur marché,
-    // et c'est le meilleur prédicteur dont dispose le moteur.
+    // le proxy. Des cotes un peu anciennes valent mieux qu'aucun facteur
+    // marché, et c'est le meilleur prédicteur dont dispose le moteur.
     const stale = oddsCache.getStale(ODDS_CACHE_KEY);
     if (stale) {
       logger.warn({ err: err?.message }, '[oddsClient] upstream KO — cotes périmées servies');
@@ -218,11 +323,18 @@ function findEvent(events: OddsEvent[], homeName: string, awayName: string): Odd
   return ev && ev.bookmakers?.length ? ev : null;
 }
 
-/** Sélectionne le book préféré (Bet365 sinon le premier) qui expose le marché demandé. */
+/**
+ * Sélectionne le livre qui expose le marché demandé : le premier de
+ * `ODDS_BOOKMAKERS` dans l'ordre donné, sinon le premier disponible.
+ */
 function pickBookmaker(ev: OddsEvent, marketKey: string): OddsEvent['bookmakers'][number] | null {
   const withMarket = ev.bookmakers.filter(b => b.markets.some(m => m.key === marketKey));
   if (!withMarket.length) return null;
-  return withMarket.find(b => b.key === 'bet365') ?? withMarket[0];
+  for (const key of PREFERRED_BOOKS) {
+    const hit = withMarket.find(b => b.key === key);
+    if (hit) return hit;
+  }
+  return withMarket[0];
 }
 
 /**
@@ -302,3 +414,74 @@ export async function fetchTotalsOdds(
     bookmaker: bk.key,
   };
 }
+
+// ─── Prix d'UNE sélection, pour les Meilleurs paris et les jambes de coupon ───
+
+/** Un prix de livre, avec le nom du livre qui le propose. */
+export interface BookPrice {
+  price: number;        // cote décimale
+  bookmaker: string;    // clé The Odds API (`betano_ca_on`)
+  bookTitle: string;    // nom lisible (« Betano (Ontario) »)
+}
+
+export interface SelectionQuery {
+  homeAbbr: string;
+  awayAbbr: string;
+  /** `moneyline` | `puck_line` | `total_goals` — les seuls marchés cotés. */
+  marketType: string;
+  /** Abréviation d'équipe (ML, puck line) ou `over` / `under` (total). */
+  selectionValue: string;
+  /** Handicap de l'équipe choisie (puck line, −1.5 par défaut) ou ligne du total. */
+  line?: number | null;
+}
+
+/**
+ * Le prix d'une sélection précise chez le livre d'affichage, ou `null`.
+ *
+ * Aucun crédit de plus : lit le même cache que le proxy et le moteur.
+ *
+ * ⚠️ Étroit par construction, comme `priceForBet` côté client : un prix n'est
+ * rendu que si la correspondance est CERTAINE. Le match s'apparie sur les
+ * abréviations des deux équipes (jamais un `includes` de noms), un total exige
+ * la même ligne que le pari, une puck line le même handicap. Dans le doute,
+ * pas de prix — un prix faux ferait croire à un edge qui n'existe pas.
+ */
+export async function priceForSelection(q: SelectionQuery): Promise<BookPrice | null> {
+  const home = q.homeAbbr.toUpperCase();
+  const away = q.awayAbbr.toUpperCase();
+  const events = await fetchAllOdds();
+  const ev = events.find((e) => {
+    const eh = toAbbr(e.home_team), ea = toAbbr(e.away_team);
+    return (eh === home && ea === away) || (eh === away && ea === home);
+  });
+  if (!ev) return null;
+
+  const marketKey = q.marketType === 'moneyline' ? 'h2h'
+    : q.marketType === 'puck_line' ? 'spreads'
+    : q.marketType === 'total_goals' ? 'totals'
+    : null;
+  if (!marketKey) return null;
+
+  const bk = pickBookmaker(ev, marketKey);
+  const market = bk?.markets.find((m) => m.key === marketKey);
+  if (!bk || !market) return null;
+
+  const sel = q.selectionValue.toUpperCase();
+  let outcome: OddsOutcome | undefined;
+  if (marketKey === 'h2h') {
+    outcome = market.outcomes.find((o) => toAbbr(o.name) === sel);
+  } else if (marketKey === 'spreads') {
+    const line = q.line ?? -1.5;
+    outcome = market.outcomes.find((o) =>
+      toAbbr(o.name) === sel && typeof o.point === 'number' && Math.abs(o.point - line) < 1e-9);
+  } else {
+    if (q.line == null) return null;
+    const side = sel === 'OVER' ? /over/i : sel === 'UNDER' ? /under/i : null;
+    if (!side) return null;
+    outcome = market.outcomes.find((o) =>
+      side.test(o.name) && typeof o.point === 'number' && Math.abs(o.point - Number(q.line)) < 1e-9);
+  }
+  if (!outcome || !(outcome.price > 1)) return null;
+  return { price: outcome.price, bookmaker: bk.key, bookTitle: bk.title ?? bk.key };
+}
+

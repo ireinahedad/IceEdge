@@ -14,6 +14,7 @@ import { openBet } from "../../services/bookmakers";
 import { features } from "../../platform";
 import { useBookmaker } from "../../context/BookmakerContext";
 import { useOddsFormat } from "../../context/OddsFormatContext";
+import { BookPricePill } from "../../components/BookPricePill";
 import { useI18n } from "../../i18n";
 
 
@@ -186,7 +187,11 @@ export function SlipNotices({ analysis }: { analysis: SlipAnalysis }) {
 
 // ─── Single leg card (builder) ────────────────────────────────────────────────
 
-export function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; onRemove: () => void }) {
+export function LegCard({ leg, index, onRemove, bookPrice }: {
+  leg: BetLeg; index: number; onRemove: () => void;
+  /** Vrai prix Betano Ontario de cette jambe, si le livre la cote. */
+  bookPrice?: number;
+}) {
   const { t } = useI18n();
   const { bookmaker } = useBookmaker();
   const { odds } = useOddsFormat();
@@ -238,12 +243,17 @@ export function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; 
           </div>
           {/* APPLE_PLAN §4 — Guideline 5.3: the leg keeps its price, the link out
               to the sportsbook does not ship on iOS. */}
+          {bookPrice != null && !features.bookmakerLinks && (
+            <div className="mt-2"><BookPricePill price={bookPrice} /></div>
+          )}
           {features.bookmakerLinks && (
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+            {bookPrice != null && <BookPricePill price={bookPrice} />}
             <button
               onClick={() => openBet("hockey")}
               // Couleurs du livre choisi (services/bookmakers.ts). Le survol passe
               // par une variable CSS : une couleur inline ne peut pas porter `:hover`.
-              className="mt-2 inline-flex items-center gap-1.5 bg-[var(--book-bg)] hover:bg-[var(--book-bg-hover)] text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-colors"
+              className="inline-flex items-center gap-1.5 bg-[var(--book-bg)] hover:bg-[var(--book-bg-hover)] text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-colors"
               style={{
                 "--book-bg": bookmaker.colors.bg,
                 "--book-bg-hover": bookmaker.colors.bgHover,
@@ -257,6 +267,7 @@ export function LegCard({ leg, index, onRemove }: { leg: BetLeg; index: number; 
               >{bookmaker.badge}</span>
               {t("slip.placeBet", { book: bookmaker.label })}
             </button>
+            </div>
           )}
         </div>
         <button onClick={onRemove}

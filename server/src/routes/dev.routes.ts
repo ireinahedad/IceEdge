@@ -216,7 +216,7 @@ router.get('/data-health', async (_req: Request, res: Response) => {
       //    saison trop tard.
       //
       //    `passes_today` est le chiffre qui compte : il doit atteindre 6 en
-      //    fin de journée de saison (2 `full` + 4 `spreads`). S'il plafonne à 1
+      //    fin de journée de saison (2 `full` + 4 `close`). S'il plafonne à 1
       //    ou 2, le calendrier ne se replanifie pas — l'instance redémarre.
       pool.query(
         `SELECT COUNT(*)::int                                    AS rows,
@@ -228,10 +228,13 @@ router.get('/data-health', async (_req: Request, res: Response) => {
                 MAX(game_date)                                   AS last_date,
                 MAX(observed_at)                                 AS last_observed,
                 COUNT(*) FILTER (WHERE markets = 'full')::int    AS rows_full,
-                COUNT(*) FILTER (WHERE markets = 'spreads')::int AS rows_spreads,
-                -- Une puck line absente partout = les passes 'spreads'
-                -- ramenent des lignes vides, donc 4 credits/jour perdus.
-                COUNT(*) FILTER (WHERE pl_home_price IS NOT NULL)::int AS with_puckline
+                COUNT(*) FILTER (WHERE markets = 'close')::int   AS rows_close,
+                COUNT(*) FILTER (WHERE markets = 'spreads')::int AS rows_spreads_legacy,
+                -- Une puck line absente partout = le livre de collecte ne la
+                -- cote pas, donc des credits payes pour rien.
+                COUNT(*) FILTER (WHERE pl_home_price IS NOT NULL)::int AS with_puckline,
+                -- Plus d'une valeur = deux livres melanges dans la serie du CLV.
+                array_agg(DISTINCT bookmaker) FILTER (WHERE bookmaker IS NOT NULL) AS bookmakers
            FROM odds_snapshots`,
       ).catch(() => null),
     ]);
@@ -239,7 +242,7 @@ router.get('/data-health', async (_req: Request, res: Response) => {
     res.json({
       odds_log:  oddsLog?.rows[0] ?? { error: 'table indisponible (migration 027/028 ?)' },
       odds_quota: quota?.rows[0]  ?? { error: 'table indisponible (migration 028 ?)' },
-      odds_snapshots: snapshots?.rows[0] ?? { error: 'table indisponible (migration 031 ?)' },
+      odds_snapshots: snapshots?.rows[0] ?? { error: 'table ou colonne indisponible (migrations 031 / 038 ?)' },
       slips:     slips?.rows[0]   ?? { error: 'table indisponible' },
       retrieved_at: new Date().toISOString(),
     });

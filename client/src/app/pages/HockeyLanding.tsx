@@ -25,8 +25,8 @@ import { nhlApiService } from "../services/nhlApiService";
 import { useSport } from "../context/SportContext";
 import { useSubscription } from "../context/SubscriptionContext";
 import { useI18n } from "../i18n";
-import { fetchBet365Odds, extractH2HOdds, ODDS_SPORT_KEYS } from "../services/oddsApiService";
-import { findOddsEvent } from "../services/gameOdds";
+import { extractH2HOdds } from "../services/oddsApiService";
+import { fetchHockeyOdds, findOddsEvent } from "../services/gameOdds";
 import "../components/home-theme.css";
 import "../components/rink-theme.css";
 import { BestBetsSection } from "./landing/BestBetsSection";
@@ -93,7 +93,7 @@ export function HockeyLanding() {
   const [upcomingLabel, setUpcomingLabel] = useState(() => t("home.tonightGames"));
 
   // Value bets (+EV): model probability beats the bookmaker's implied probability.
-  // Only meaningful when real bet365 odds are present (VITE_ODDS_API_KEY set).
+  // Only meaningful when real bookmaker odds are present.
   const evItems: EvItem[] = useMemo(() => {
     const out: EvItem[] = [];
     for (const g of [...liveGames, ...upcomingGames]) {
@@ -101,12 +101,12 @@ export function HockeyLanding() {
         // est simplement absent de la liste +EV.
         const homePct = g.team1.winPct;
         const awayPct = g.team2.winPct;
-        if (g.bet365Home && homePct != null) {
-          const edge = calcEdge(homePct, g.bet365Home);
+        if (g.bookHome && homePct != null) {
+          const edge = calcEdge(homePct, g.bookHome);
           if (edge >= 5) out.push({ id: `ev-${g.id}-h`, logo: g.team1.logo, label: `${g.team1.abbr} ML vs ${g.team2.abbr}`, context: t("home.evSpot"), pct: homePct, edge });
         }
-        if (g.bet365Away && awayPct != null) {
-          const edge = calcEdge(awayPct, g.bet365Away);
+        if (g.bookAway && awayPct != null) {
+          const edge = calcEdge(awayPct, g.bookAway);
           if (edge >= 5) out.push({ id: `ev-${g.id}-a`, logo: g.team2.logo, label: `${g.team2.abbr} ML vs ${g.team1.abbr}`, context: t("home.evSpot"), pct: awayPct, edge });
         }
       }
@@ -193,9 +193,11 @@ export function HockeyLanding() {
     return () => { cancelled = true; };
   }, [lang, reloadKey]);
 
-  // Overlay real Bet365 odds — stored separately, does NOT overwrite model winPct
+  // Vrais prix du livre relayé (voir `oddsApiService`) — stockés à part, ils
+  // n'écrasent JAMAIS la probabilité du modèle. `fetchHockeyOdds` partage sa
+  // requête avec les pages Prédiction : une seule clé de cache côté proxy.
   useEffect(() => {
-    fetchBet365Odds(ODDS_SPORT_KEYS.hockey).then((events) => {
+    fetchHockeyOdds().then((events) => {
       if (!events.length) return;
 
       // ⚠️ L'appariement se faisait sur « domicile OU extérieur », et par
@@ -218,7 +220,7 @@ export function HockeyLanding() {
           if (!ev) return g;
           const odds = extractH2HOdds(ev);
           if (!odds) return g;
-          return { ...g, bet365Home: odds.home, bet365Away: odds.away };
+          return { ...g, bookHome: odds.home, bookAway: odds.away };
         });
       }
 

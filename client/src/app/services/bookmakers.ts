@@ -46,9 +46,11 @@ const BET365: Bookmaker = {
   base: "https://www.bet365.com",
   affiliateCode: env.bet365AffiliateCode,
   affiliateParam: (code) => `?affiliate=${code}`,
-  // Bet365 doesn't expose clean per-match deep links publicly, so we link to
-  // the in-play section for the sport.
-  sectionPath: () => "/#/IP/B18",
+  // Bet365 n'expose pas de lien par match stable : on ouvre la page du SPORT.
+  // ⚠️ Corrigé le 2026-09-27 : l'ancien chemin `/#/IP/B18` ouvrait le direct du
+  // BASKETBALL (B18) — le hockey sur glace est B17 chez Bet365. `AS` = la page
+  // du sport (avant-match), pas le seul direct, qui est vide hors des matchs.
+  sectionPath: () => "/#/AS/B17/",
   signupPath: "/#/OA/E/",
   colors: { bg: "#126e51", bgHover: "#0f5c44", fg: "#ffd700", badgeBg: "#ffd700", badgeFg: "#126e51" },
 };
@@ -63,7 +65,10 @@ const STAKE: Bookmaker = {
   affiliateCode: env.stakeAffiliateCode,
   // Stake tracks referrals with a campaign code: ?c=CODE
   affiliateParam: (code) => `?c=${code}`,
-  sectionPath: () => "/sports/ice-hockey",
+  // Page NHL (vérifiée le 2026-09-27 : liste les matchs de la ligue). Les
+  // pages par match portent un identifiant Stake (`/nhl/46728042-…`) que
+  // rien ne nous donne : on s'arrête à la ligue.
+  sectionPath: () => "/sports/ice-hockey/usa/nhl",
   signupPath: "/?tab=register",
   // Bleu nuit de l'interface Stake, texte blanc, pastille au bleu de ses boutons.
   colors: { bg: "#1a2c38", bgHover: "#213743", fg: "#ffffff", badgeBg: "#1475e1", badgeFg: "#ffffff" },
