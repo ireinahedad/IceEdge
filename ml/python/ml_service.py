@@ -1791,6 +1791,39 @@ def _build_score_ensemble(dist: "ScoreDistribution | None") -> "ScoreEnsemble | 
         return None
 
 
+# ── Gardien de relève (modèle de score v2, 2026-09-27) ───────────────────────
+#
+# Même définition qu'à l'entraînement (`build_dataset.GOALIE_BACKUP_*`) : le
+# partant a commencé moins de 40 % des 10 derniers matchs de son équipe. L'état
+# d'inférence porte cette part par gardien (`share_last10`). Constante recopiée
+# plutôt qu'importée : build_dataset lit des CSV au chargement et n'a rien à
+# faire dans l'image du service.
+_GOALIE_BACKUP_SHARE = 0.40
+
+
+def _goalie_backup_flag(goalies: list[dict], goalie_name: str | None) -> float:
+    """1.0 relève, 0.0 titulaire, pour le partant du soir.
+
+    • Partant nommé et connu : son drapeau exact.
+    • Partant nommé mais absent des deux gardiens suivis : un troisième gardien
+      (rappelé, réserviste) — relève.
+    • Partant inconnu : le drapeau du partant le PLUS PROBABLE (plus grande part
+      des 10 derniers départs). Pas l'espérance du drapeau : le modèle a appris
+      sur des 0 et des 1, et un arbre coupe précisément entre les deux — une
+      espérance de 0,5 serait routée tout entière d'un côté.
+    • État d'inférence antérieur à la v2 (pas de `share_last10`) : NaN.
+    """
+    if not goalies or any("share_last10" not in g for g in goalies):
+        return float("nan")
+    if goalie_name:
+        named = [g for g in goalies if g["name"].lower() == goalie_name.lower()]
+        if named:
+            return float(named[0]["share_last10"] < _GOALIE_BACKUP_SHARE)
+        return 1.0
+    usual = max(goalies, key=lambda g: float(g["share_last10"]))
+    return float(float(usual["share_last10"]) < _GOALIE_BACKUP_SHARE)
+
+
 def _game_context(f: GameFeatures) -> dict:
     """Tout ce qui ne dépend QUE du match — features, modèles, λ, P(victoire).
 
@@ -1908,6 +1941,8 @@ def _game_context(f: GameFeatures) -> dict:
                         g["gsax60"] * g["recent_start_share"] for g in goalies) / tot
                     feat_values[f"{side}_goalie_svpct"] = sum(
                         g["svpct"] * g["recent_start_share"] for g in goalies) / tot
+                feat_values[f"{side}_goalie_backup"] = _goalie_backup_flag(
+                    goalies, goalie_name)
             st = stars_st.get(team) or {}
             scratch_set = {s.strip().lower() for s in (scratches or []) if s and s.strip()}
             if st.get("top5"):

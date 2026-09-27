@@ -1129,14 +1129,16 @@
     "recent_start_share": 0.667,
     "gsax60": 0.1044,
     "svpct": 0.8978,
-    "career_starts": 161
+    "career_starts": 161,
+    "share_last10": 0.7
    },
    {
     "name": "Ville Husso",
     "recent_start_share": 0.333,
     "gsax60": -0.0257,
     "svpct": 0.9005,
-    "career_starts": 153
+    "career_starts": 153,
+    "share_last10": 0.3
    }
   ],
   "BOS": [
@@ -1145,14 +1147,16 @@
     "recent_start_share": 0.667,
     "gsax60": 0.2841,
     "svpct": 0.9085,
-    "career_starts": 236
+    "career_starts": 236,
+    "share_last10": 0.6
    },
    {
     "name": "Joonas Korpisalo",
     "recent_start_share": 0.333,
     "gsax60": -0.1015,
     "svpct": 0.9001,
-    "career_starts": 307
+    "career_starts": 307,
+    "share_last10": 0.4
    }
   ],
   "BUF": [
@@ -1161,14 +1165,16 @@
     "recent_start_share": 0.6,
     "gsax60": 0.0749,
     "svpct": 0.8989,
-    "career_starts": 181
+    "career_starts": 181,
+    "share_last10": 0.6
    },
    {
     "name": "Alex Lyon",
     "recent_start_share": 0.2,
     "gsax60": 0.1666,
     "svpct": 0.9028,
-    "career_starts": 133
+    "career_starts": 133,
+    "share_last10": 0.1
    }
   ],
   "CAR": [
@@ -1177,14 +1183,16 @@
     "recent_start_share": 0.533,
     "gsax60": 0.1915,
     "svpct": 0.9103,
-    "career_starts": 527
+    "career_starts": 527,
+    "share_last10": 0.5
    },
    {
     "name": "Brandon Bussi",
     "recent_start_share": 0.467,
     "gsax60": 0.0311,
     "svpct": 0.8995,
-    "career_starts": 39
+    "career_starts": 39,
+    "share_last10": 0.5
    }
   ],
   "CBJ": [
@@ -1193,14 +1201,16 @@
     "recent_start_share": 0.8,
     "gsax60": 0.3021,
     "svpct": 0.9095,
-    "career_starts": 76
+    "career_starts": 76,
+    "share_last10": 0.8
    },
    {
     "name": "Elvis Merzlikins",
     "recent_start_share": 0.2,
     "gsax60": -0.0922,
     "svpct": 0.9008,
-    "career_starts": 254
+    "career_starts": 254,
+    "share_last10": 0.2
    }
   ],
   "CGY": [
@@ -1209,14 +1219,16 @@
     "recent_start_share": 0.467,
     "gsax60": 0.1941,
     "svpct": 0.904,
-    "career_starts": 34
+    "career_starts": 34,
+    "share_last10": 0.4
    },
    {
     "name": "Dustin Wolf",
     "recent_start_share": 0.467,
     "gsax60": 0.0684,
     "svpct": 0.9041,
-    "career_starts": 122
+    "career_starts": 122,
+    "share_last10": 0.5
    }
   ],
   "CHI": [
@@ -1225,14 +1237,16 @@
     "recent_start_share": 0.667,
     "gsax60": 0.0779,
     "svpct": 0.899,
-    "career_starts": 142
+    "career_starts": 142,
+    "share_last10": 0.7
    },
    {
     "name": "Arvid Soderblom",
     "recent_start_share": 0.333,
     "gsax60": -0.1608,
     "svpct": 0.8899,
-    "career_starts": 106
+    "career_starts": 106,
+    "share_last10": 0.3
    }
   ],
   "COL": [
@@ -1241,14 +1255,16 @@
     "recent_start_share": 0.6,
     "gsax60": 0.0752,
     "svpct": 0.9013,
-    "career_starts": 271
+    "career_starts": 271,
+    "share_last10": 0.5
    },
    {
     "name": "Scott Wedgewood",
     "recent_start_share": 0.4,
     "gsax60": 0.1089,
     "svpct": 0.9076,
-    "career_starts": 184
+    "career_starts": 184,
+    "share_last10": 0.5
    }
   ],
   "DAL": [
@@ -1257,14 +1273,16 @@
     "recent_start_share": 0.667,
     "gsax60": 0.1189,
     "svpct": 0.9066,
-    "career_starts": 291
+    "career_starts": 291,
+    "share_last10": 0.7
    },
    {
     "name": "Casey DeSmith",
     "recent_start_share": 0.333,
     "gsax60": 0.1612,
     "svpct": 0.9063,
-    "career_starts": 205
+    "career_starts": 205,
+    "share_last10": 0.3
    }
   ],
   "DET": [
@@ -1273,14 +1291,16 @@
     "recent_start_share": 0.8,
     "gsax60": 0.0674,
     "svpct": 0.9068,
-    "career_starts": 545
+    "career_starts": 545,
+    "share_last10": 0.7
    },
    {
     "name": "Cam Talbot",
     "recent_start_share": 0.2,
     "gsax60": 0.096,
     "svpct": 0.9072,
-    "career_starts": 533
+    "career_starts": 533,
+    "share_last10": 0.3
    }
   ],
   "EDM": [
@@ -1289,14 +1309,16 @@
     "recent_start_share": 0.8,
     "gsax60": 0.086,
     "svpct": 0.9042,
-    "career_starts": 125
+    "career_starts": 125,
+    "share_last10": 0.8
    },
    {
     "name": "Tristan Jarry",
     "recent_start_share": 0.2,
     "gsax60": 0.0495,
     "svpct": 0.9074,
-    "career_starts": 301
+    "career_starts": 301,
+    "share_last10": 0.2
    }
   ],
   "FLA": [
@@ -1305,14 +1327,16 @@
     "recent_start_share": 0.667,
     "gsax60": -0.0576,
     "svpct": 0.8973,
-    "career_starts": 92
+    "career_starts": 92,
+    "share_last10": 0.7
    },
    {
     "name": "Sergei Bobrovsky",
     "recent_start_share": 0.333,
     "gsax60": 0.1685,
     "svpct": 0.9107,
-    "career_starts": 773
+    "career_starts": 773,
+    "share_last10": 0.3
    }
   ],
   "LAK": [
@@ -1321,14 +1345,16 @@
     "recent_start_share": 0.533,
     "gsax60": 0.1477,
     "svpct": 0.91,
-    "career_starts": 462
+    "career_starts": 462,
+    "share_last10": 0.4
    },
    {
     "name": "Anton Forsberg",
     "recent_start_share": 0.467,
     "gsax60": 0.1295,
     "svpct": 0.9054,
-    "career_starts": 201
+    "career_starts": 201,
+    "share_last10": 0.6
    }
   ],
   "MIN": [
@@ -1337,14 +1363,16 @@
     "recent_start_share": 0.533,
     "gsax60": 0.1467,
     "svpct": 0.9074,
-    "career_starts": 211
+    "career_starts": 211,
+    "share_last10": 0.5
    },
    {
     "name": "Jesper Wallstedt",
     "recent_start_share": 0.467,
     "gsax60": 0.0131,
     "svpct": 0.9058,
-    "career_starts": 38
+    "career_starts": 38,
+    "share_last10": 0.5
    }
   ],
   "MTL": [
@@ -1353,14 +1381,16 @@
     "recent_start_share": 0.667,
     "gsax60": 0.2829,
     "svpct": 0.9026,
-    "career_starts": 56
+    "career_starts": 56,
+    "share_last10": 0.7
    },
    {
     "name": "Jacob Fowler",
     "recent_start_share": 0.333,
     "gsax60": 0.1065,
     "svpct": 0.9051,
-    "career_starts": 17
+    "career_starts": 17,
+    "share_last10": 0.3
    }
   ],
   "NJD": [
@@ -1369,14 +1399,16 @@
     "recent_start_share": 0.467,
     "gsax60": 0.0537,
     "svpct": 0.9054,
-    "career_starts": 467
+    "career_starts": 467,
+    "share_last10": 0.5
    },
    {
     "name": "Jacob Markstrom",
     "recent_start_share": 0.4,
     "gsax60": 0.0219,
     "svpct": 0.9046,
-    "career_starts": 550
+    "career_starts": 550,
+    "share_last10": 0.3
    }
   ],
   "NSH": [
@@ -1385,14 +1417,16 @@
     "recent_start_share": 0.533,
     "gsax60": 0.2269,
     "svpct": 0.909,
-    "career_starts": 447
+    "career_starts": 447,
+    "share_last10": 0.6
    },
    {
     "name": "Justus Annunen",
     "recent_start_share": 0.467,
     "gsax60": 0.0778,
     "svpct": 0.8997,
-    "career_starts": 74
+    "career_starts": 74,
+    "share_last10": 0.4
    }
   ],
   "NYI": [
@@ -1401,14 +1435,16 @@
     "recent_start_share": 0.933,
     "gsax60": 0.3009,
     "svpct": 0.9103,
-    "career_starts": 302
+    "career_starts": 302,
+    "share_last10": 0.9
    },
    {
     "name": "David Rittich",
     "recent_start_share": 0.067,
     "gsax60": 0.0001,
     "svpct": 0.9013,
-    "career_starts": 231
+    "career_starts": 231,
+    "share_last10": 0.1
    }
   ],
   "NYR": [
@@ -1417,14 +1453,16 @@
     "recent_start_share": 0.6,
     "gsax60": 0.3771,
     "svpct": 0.9122,
-    "career_starts": 315
+    "career_starts": 315,
+    "share_last10": 0.6
    },
    {
     "name": "Jonathan Quick",
     "recent_start_share": 0.2,
     "gsax60": 0.1408,
     "svpct": 0.909,
-    "career_starts": 793
+    "career_starts": 793,
+    "share_last10": 0.2
    }
   ],
   "OTT": [
@@ -1433,14 +1471,16 @@
     "recent_start_share": 0.6,
     "gsax60": 0.1254,
     "svpct": 0.9115,
-    "career_starts": 326
+    "career_starts": 326,
+    "share_last10": 0.6
    },
    {
     "name": "James Reimer",
     "recent_start_share": 0.4,
     "gsax60": 0.0826,
     "svpct": 0.906,
-    "career_starts": 495
+    "career_starts": 495,
+    "share_last10": 0.4
    }
   ],
   "PHI": [
@@ -1449,14 +1489,16 @@
     "recent_start_share": 0.6,
     "gsax60": -0.0124,
     "svpct": 0.8995,
-    "career_starts": 147
+    "career_starts": 147,
+    "share_last10": 0.6
    },
    {
     "name": "Samuel Ersson",
     "recent_start_share": 0.4,
     "gsax60": -0.1528,
     "svpct": 0.8881,
-    "career_starts": 132
+    "career_starts": 132,
+    "share_last10": 0.4
    }
   ],
   "PIT": [
@@ -1465,14 +1507,16 @@
     "recent_start_share": 0.6,
     "gsax60": 0.1034,
     "svpct": 0.8996,
-    "career_starts": 216
+    "career_starts": 216,
+    "share_last10": 0.6
    },
    {
     "name": "Arturs Silovs",
     "recent_start_share": 0.4,
     "gsax60": -0.1492,
     "svpct": 0.8952,
-    "career_starts": 54
+    "career_starts": 54,
+    "share_last10": 0.4
    }
   ],
   "SEA": [
@@ -1481,14 +1525,16 @@
     "recent_start_share": 0.4,
     "gsax60": 0.0999,
     "svpct": 0.9044,
-    "career_starts": 163
+    "career_starts": 163,
+    "share_last10": 0.3
    },
    {
     "name": "Philipp Grubauer",
     "recent_start_share": 0.333,
     "gsax60": 0.0647,
     "svpct": 0.908,
-    "career_starts": 368
+    "career_starts": 368,
+    "share_last10": 0.3
    }
   ],
   "SJS": [
@@ -1497,14 +1543,16 @@
     "recent_start_share": 0.6,
     "gsax60": -0.0155,
     "svpct": 0.8985,
-    "career_starts": 205
+    "career_starts": 205,
+    "share_last10": 0.5
    },
    {
     "name": "Yaroslav Askarov",
     "recent_start_share": 0.4,
     "gsax60": -0.066,
     "svpct": 0.8945,
-    "career_starts": 56
+    "career_starts": 56,
+    "share_last10": 0.5
    }
   ],
   "STL": [
@@ -1513,14 +1561,16 @@
     "recent_start_share": 0.667,
     "gsax60": 0.1938,
     "svpct": 0.9086,
-    "career_starts": 106
+    "career_starts": 106,
+    "share_last10": 0.7
    },
    {
     "name": "Jordan Binnington",
     "recent_start_share": 0.333,
     "gsax60": 0.0311,
     "svpct": 0.902,
-    "career_starts": 364
+    "career_starts": 364,
+    "share_last10": 0.3
    }
   ],
   "TBL": [
@@ -1529,14 +1579,16 @@
     "recent_start_share": 0.733,
     "gsax60": 0.2402,
     "svpct": 0.913,
-    "career_starts": 587
+    "career_starts": 587,
+    "share_last10": 0.7
    },
    {
     "name": "Jonas Johansson",
     "recent_start_share": 0.2,
     "gsax60": -0.2557,
     "svpct": 0.8951,
-    "career_starts": 94
+    "career_starts": 94,
+    "share_last10": 0.2
    }
   ],
   "TOR": [
@@ -1545,14 +1597,16 @@
     "recent_start_share": 0.533,
     "gsax60": 0.1707,
     "svpct": 0.9059,
-    "career_starts": 115
+    "career_starts": 115,
+    "share_last10": 0.5
    },
    {
     "name": "Anthony Stolarz",
     "recent_start_share": 0.267,
     "gsax60": 0.1853,
     "svpct": 0.9096,
-    "career_starts": 145
+    "career_starts": 145,
+    "share_last10": 0.2
    }
   ],
   "UTA": [
@@ -1561,14 +1615,16 @@
     "recent_start_share": 0.733,
     "gsax60": 0.091,
     "svpct": 0.8992,
-    "career_starts": 248
+    "career_starts": 248,
+    "share_last10": 0.8
    },
    {
     "name": "Vitek Vanecek",
     "recent_start_share": 0.267,
     "gsax60": -0.0597,
     "svpct": 0.9003,
-    "career_starts": 198
+    "career_starts": 198,
+    "share_last10": 0.2
    }
   ],
   "VAN": [
@@ -1577,14 +1633,16 @@
     "recent_start_share": 0.667,
     "gsax60": -0.1793,
     "svpct": 0.8959,
-    "career_starts": 200
+    "career_starts": 200,
+    "share_last10": 0.5
    },
    {
     "name": "Nikita Tolopilo",
     "recent_start_share": 0.333,
     "gsax60": -0.0637,
     "svpct": 0.9001,
-    "career_starts": 19
+    "career_starts": 19,
+    "share_last10": 0.5
    }
   ],
   "VGK": [
@@ -1593,14 +1651,16 @@
     "recent_start_share": 0.467,
     "gsax60": 0.0591,
     "svpct": 0.9043,
-    "career_starts": 194
+    "career_starts": 194,
+    "share_last10": 0.4
    },
    {
     "name": "Carter Hart",
     "recent_start_share": 0.4,
     "gsax60": 0.0569,
     "svpct": 0.9037,
-    "career_starts": 228
+    "career_starts": 228,
+    "share_last10": 0.6
    }
   ],
   "WPG": [
@@ -1609,14 +1669,16 @@
     "recent_start_share": 0.8,
     "gsax60": 0.3084,
     "svpct": 0.9132,
-    "career_starts": 609
+    "career_starts": 609,
+    "share_last10": 0.8
    },
    {
     "name": "Eric Comrie",
     "recent_start_share": 0.2,
     "gsax60": -0.0039,
     "svpct": 0.9001,
-    "career_starts": 95
+    "career_starts": 95,
+    "share_last10": 0.2
    }
   ],
   "WSH": [
@@ -1625,14 +1687,16 @@
     "recent_start_share": 0.867,
     "gsax60": 0.2706,
     "svpct": 0.9099,
-    "career_starts": 198
+    "career_starts": 198,
+    "share_last10": 0.8
    },
    {
     "name": "Charlie Lindgren",
     "recent_start_share": 0.067,
     "gsax60": 0.0517,
     "svpct": 0.9014,
-    "career_starts": 161
+    "career_starts": 161,
+    "share_last10": 0.1
    }
   ]
  },

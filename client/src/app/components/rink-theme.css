@@ -327,9 +327,9 @@
 
 /* ═══════════════════════════════════════════════════════════════
    MARQUEE — the shared right → left scroll
-   Used by the jersey carousel and by the centre-ice live row. Both
-   render their list twice; one loop is half the track plus half a
-   gutter, so the seam never shows. Overflow is hidden, which is also
+   Used by the centre-ice live row (the jersey carousel scrolls in JS
+   since 2026-09-27). The list is rendered twice; one loop is half the
+   track plus half a gutter, so the seam never shows. Overflow is hidden, which is also
    what removes the scrollbar.
    ═══════════════════════════════════════════════════════════════ */
 
@@ -360,55 +360,98 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   JERSEY CAROUSEL — 6 teams visible, scrolling right → left
-   `--jersey-w` and `--jersey-duration` are measured in JS and set
-   inline on .jersey-viewport (a percentage would resolve against the
-   max-content track, which is circular).
+   JERSEY CAROUSEL — square team tiles, arrows + swipe + slow auto-scroll
+   Refait le 2026-09-27 : la piste n'est plus animée en CSS. Le bandeau
+   (`.jersey-viewport`) est un vrai conteneur défilant, barre masquée ;
+   le défilement automatique est piloté en JS sur `scrollLeft`
+   (TeamCarousel.tsx). `--jersey-w` est posé ICI, plus mesuré en JS.
    ═══════════════════════════════════════════════════════════════ */
 
-.jersey-viewport {
+.jersey-carousel {
+  --jersey-w: 72px;
   --marquee-gap: 8px;
   position: relative;
-  overflow: hidden;
+}
+@media (min-width: 768px) {
+  .jersey-carousel { --jersey-w: 88px; }
 }
 
-/* Fade the tiles into the boards at both ends. */
-.jersey-viewport::before,
-.jersey-viewport::after {
+/* Fade the tiles into the boards at both ends — sur le cadre, pas dans le
+   conteneur défilant (un pseudo-élément y défilerait avec les tuiles). */
+.jersey-carousel::before,
+.jersey-carousel::after {
   content: "";
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 28px;
+  width: 36px;
   z-index: 2;
   pointer-events: none;
 }
-.jersey-viewport::before { left: 0;  background: linear-gradient(90deg, #09141d, transparent); }
-.jersey-viewport::after  { right: 0; background: linear-gradient(270deg, #09141d, transparent); }
+.jersey-carousel::before { left: 0;  background: linear-gradient(90deg, #09141d, transparent); }
+.jersey-carousel::after  { right: 0; background: linear-gradient(270deg, #09141d, transparent); }
+
+.jersey-viewport {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.jersey-viewport::-webkit-scrollbar { display: none; }
 
 .jersey-track {
   display: flex;
   gap: var(--marquee-gap);
   width: max-content;
-  animation: ice-marquee var(--jersey-duration, 60s) linear infinite;
 }
 
-.jersey-viewport:hover .jersey-track,
-.jersey-viewport[data-paused="true"] .jersey-track {
-  animation-play-state: paused;
+/* Flèches : une zone tactile de 44 × 44 (HIG) centrée sur un rond de 28 px.
+   Pas de `.tap-44` ici : sa règle tactile pose `position: relative`, qui
+   écraserait l'`absolute` des flèches. */
+.jersey-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  width: 44px;
+  height: 44px;
+  margin-top: -22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
 }
+.jersey-arrow--prev { left: -6px; }
+.jersey-arrow--next { right: -6px; }
 
-@media (prefers-reduced-motion: reduce) {
-  .jersey-track { animation: none; }
+.jersey-arrow-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #eaf6fb;
+  background: rgba(10, 20, 26, 0.85);
+  border: 1px solid rgba(134, 209, 234, 0.45);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.jersey-arrow:active .jersey-arrow-dot { transform: scale(0.92); background: rgba(134, 209, 234, 0.25); }
+@media (hover: hover) {
+  .jersey-arrow:hover .jersey-arrow-dot { background: rgba(134, 209, 234, 0.22); }
 }
 
 /* ── One team tile ─────────────────────────────────────────────── */
 .jersey-tile {
   position: relative;
-  flex: 0 0 var(--jersey-w, 96px);
-  width: var(--jersey-w, 96px);
-  aspect-ratio: 3 / 4;
-  border-radius: 14px;
+  flex: 0 0 var(--jersey-w, 72px);
+  width: var(--jersey-w, 72px);
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
   overflow: hidden;
   isolation: isolate;
   cursor: pointer;
@@ -435,7 +478,7 @@
   height: 100%;
   font-family: "Oswald", "Arial Narrow", sans-serif;
   font-weight: 700;
-  font-size: calc(var(--jersey-w, 96px) * 0.24);
+  font-size: calc(var(--jersey-w, 72px) * 0.24);
   letter-spacing: 0.06em;
   color: rgba(255, 255, 255, 0.94);
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
@@ -466,8 +509,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 6px;
+  gap: 4px;
+  padding: 5px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.18s ease;
@@ -493,12 +536,13 @@
 
 .jersey-choice {
   width: 100%;
-  padding: 4px 2px;
-  border-radius: 8px;
+  padding: 3px 2px;
+  border-radius: 7px;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  /* Tuile carrée de 72 px : en capitales espacées, « PRÉDICTION » débordait. */
+  letter-spacing: 0;
+  white-space: nowrap;
   color: #eaf6fb;
   background: rgba(10, 20, 26, 0.72);
   border: 1px solid rgba(134, 209, 234, 0.45);

@@ -1,0 +1,141 @@
+{
+  "protocol": {
+    "split": "aleatoire dans la saison, 75% entrainement / 25% test",
+    "draws": 3,
+    "caveat": "le modele apprend sur des matchs posterieurs a ceux qu'il predit : plafond optimiste",
+    "adopt_if": "z <= -2.24 ET gain sur >= 70% des saisons ET moneyline z < +2 (sur la moyenne des tirages)",
+    "seasons": [
+      2012,
+      2013,
+      2014,
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ]
+  },
+  "draws": {
+    "1": {
+      "puckline": {
+        "n": 4172,
+        "delta": -0.000641,
+        "se": 0.000379,
+        "z": -1.69
+      },
+      "moneyline": {
+        "n": 4172,
+        "delta": -0.000872,
+        "se": 0.000453,
+        "z": -1.93
+      },
+      "deviance": {
+        "n": 4172,
+        "delta": -0.001001,
+        "se": 0.000852,
+        "z": -1.18
+      },
+      "seasons_better": [
+        2012,
+        2013,
+        2014,
+        2016,
+        2017,
+        2019,
+        2021,
+        2022,
+        2023,
+        2024
+      ]
+    },
+    "2": {
+      "puckline": {
+        "n": 4172,
+        "delta": -0.000202,
+        "se": 0.000392,
+        "z": -0.52
+      },
+      "moneyline": {
+        "n": 4172,
+        "delta": -0.000324,
+        "se": 0.000461,
+        "z": -0.7
+      },
+      "deviance": {
+        "n": 4172,
+        "delta": -0.00146,
+        "se": 0.00087,
+        "z": -1.68
+      },
+      "seasons_better": [
+        2012,
+        2014,
+        2015,
+        2016,
+        2017,
+        2021,
+        2022,
+        2024
+      ]
+    },
+    "3": {
+      "puckline": {
+        "n": 4172,
+        "delta": -0.000176,
+        "se": 0.000397,
+        "z": -0.44
+      },
+      "moneyline": {
+        "n": 4172,
+        "delta": -0.0005,
+        "se": 0.000455,
+        "z": -1.1
+      },
+      "deviance": {
+        "n": 4172,
+        "delta": -0.001465,
+        "se": 0.00087,
+        "z": -1.68
+      },
+      "seasons_better": [
+        2012,
+        2013,
+        2014,
+        2017,
+        2021,
+        2022,
+        2023,
+        2024
+      ]
+    }
+  },
+  "summary": {
+    "d_puckline_mean": -0.00034,
+    "z_puckline_mean": -0.88,
+    "d_moneyline_mean": -0.000565,
+    "z_moneyline_mean": -1.24,
+    "d_deviance_mean": -0.001309,
+    "share_seasons_better": 0.619,
+    "verdict": "NON TRANCHABLE"
+  },
+  "market": {
+    "oddsapi:draftkings": {
+      "n": 328,
+      "ll_frozen": 0.67612,
+      "ll_in_season": 0.67747,
+      "ll_market": 0.6756
+    },
+    "sbro": {
+      "n": 2459,
+      "ll_frozen": 0.67018,
+      "ll_in_season": 0.66946,
+      "ll_market": 0.66721
+    }
+  }
+}

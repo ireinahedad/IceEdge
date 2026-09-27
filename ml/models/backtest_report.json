@@ -1,0 +1,63 @@
+{
+  "n_test_games": 1311,
+  "period": [
+    "2025-10-07",
+    "2026-04-16"
+  ],
+  "probas": "blend",
+  "log_loss": {
+    "model": 0.6843,
+    "market": 0.6822
+  },
+  "strategies": [
+    {
+      "edge_threshold": 0.01,
+      "n_bets": 1021,
+      "hit_rate": 55.53,
+      "roi_flat_pct": -2.8,
+      "roi_kelly_pct": -2.55
+    },
+    {
+      "edge_threshold": 0.02,
+      "n_bets": 765,
+      "hit_rate": 57.25,
+      "roi_flat_pct": -0.71,
+      "roi_kelly_pct": -2.67
+    },
+    {
+      "edge_threshold": 0.03,
+      "n_bets": 514,
+      "hit_rate": 56.81,
+      "roi_flat_pct": -2.86,
+      "roi_kelly_pct": -3.78
+    },
+    {
+      "edge_threshold": 0.04,
+      "n_bets": 312,
+      "hit_rate": 56.41,
+      "roi_flat_pct": -4.53,
+      "roi_kelly_pct": -4.24
+    },
+    {
+      "edge_threshold": 0.05,
+      "n_bets": 172,
+      "hit_rate": 56.4,
+      "roi_flat_pct": -5.06,
+      "roi_kelly_pct": -3.99
+    },
+    {
+      "edge_threshold": 0.06,
+      "n_bets": 76,
+      "hit_rate": 60.53,
+      "roi_flat_pct": -0.89,
+      "roi_kelly_pct": 0.5
+    },
+    {
+      "edge_threshold": 0.08,
+      "n_bets": 12,
+      "hit_rate": 50.0,
+      "roi_flat_pct": -23.0,
+      "roi_kelly_pct": -13.46
+    }
+  ]
+}

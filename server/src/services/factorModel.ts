@@ -449,6 +449,11 @@ export function attachGameFactors(groups: any[], c: GameFactorCtx): void {
       const id: string = o.id;
       // Résultat du match / puck line → famille "match"
       if (id === 'ml-home') setFactors(o, 'match', c.matchFactors);
+      // Moneyline (vainqueur, prolongation comprise) : les facteurs « qui
+      // gagne ? » sans échelle. `invExact` et non `inv` : l'écrêtage de `inv`
+      // casserait le complément, et les deux tuiles doivent faire 100 %.
+      else if (id === 'mw-home') setFactors(o, 'match', c.matchFactors);
+      else if (id === 'mw-away') setFactors(o, 'match', invExact(c.matchFactors));
       else if (id === 'ml-away') setFactors(o, 'match', inv(c.matchFactors));
       // `ml-ot` a disparu avec le passage du marché Match Betting à quatre
       // tuiles : il valait « le match va en prolongation », sans vainqueur. Les

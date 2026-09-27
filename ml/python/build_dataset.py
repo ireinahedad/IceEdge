@@ -61,6 +61,17 @@ GOALIE_PRIOR_HOURS = 50.0
 GOALIE_PRIOR_SVPCT = 0.906        # % d'arrêts moyen de la ligue
 GOALIE_PRIOR_STARTS = 50          # pseudo-départs pour la régression du sv%
 
+# ── Gardien de relève (2026-09-27) ───────────────────────────────────────────
+# Le partant a-t-il commencé moins de 40 % des 10 matchs précédents de son
+# équipe ? Ses stats de carrière, régressées vers la moyenne, font ressembler un
+# réserviste à un titulaire ; l'analyse de l'écart au marché (`--market-gap`) a
+# mesuré que ce drapeau porte une information absente du modèle (z −3,9). Même
+# définition dans l'état d'inférence (`share_last10`), pour que le service
+# calcule le drapeau du partant confirmé exactement comme à l'entraînement.
+GOALIE_BACKUP_WINDOW = 10
+GOALIE_BACKUP_SHARE = 0.40
+GOALIE_BACKUP_MIN_HISTORY = 5
+
 # ── Alignement : projection bottom-up (P3) ───────────────────────────────────
 # Somme, sur les patineurs réellement habillés, de leur taux de xG individuel
 # passé × leur temps de glace projeté. Remplace avantageusement les proxys
@@ -106,7 +117,50 @@ def need_cols(df: pd.DataFrame, cols: list[str], src: str) -> None:
 # 1. Features équipe (MoneyPuck, par situation)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def build_team_features() -> tuple[pd.DataFrame, dict]:
+def _season_prior_ewm(x: pd.Series, seas: pd.Series, hl: float,
+                      k: float) -> pd.Series:
+    """Moyenne mobile qui repart à chaque saison, amorcée par la précédente.
+
+    Variante « saison d'abord » des EWMA continus, pour le mode `--recency` de
+    backtest_walkforward.py. L'EWMA continu ignore le changement de saison : au
+    10e match d'octobre, sa version longue (hl=20) repose encore à ~70 % sur la
+    saison précédente, c'est-à-dire sur l'effectif d'avant l'été.
+
+    Ici, pour le match N d'une saison :
+
+        cur   = EWMA(hl) des matchs antérieurs de la MÊME saison
+        prior = moyenne de la saison précédente complète de l'équipe
+        n     = nombre de ces matchs antérieurs
+        valeur = (n·cur + k·prior) / (n + k)
+
+    La saison précédente vaut donc k matchs : elle domine en ouverture, puis
+    s'efface (k=5 : 50 % au 5e match, 25 % au 15e). Sans saison précédente
+    (équipe d'expansion), même plancher que l'original : 3 matchs.
+
+    Aucune fuite : `prior` ne contient que des saisons terminées avant le
+    match, `cur` que des matchs antérieurs (décalage d'un match).
+    """
+    prev = x.groupby(seas).shift(1)
+    cur = prev.groupby(seas).transform(
+        lambda s: s.ewm(halflife=hl, min_periods=1).mean())
+    n = prev.notna().astype(float).groupby(seas).cumsum()
+    season_mean = x.groupby(seas).mean().sort_index()
+    prior = seas.map(season_mean.shift(1))
+    blended = (n * cur + k * prior) / (n + k)
+    out = blended.where(prior.notna(), cur.where(n >= 3))
+    # Premier match de la saison : `cur` est vide, seule la saison passée parle.
+    return out.where(~(prior.notna() & (n == 0)), prior)
+
+
+def build_team_features(season_prior_k: float | None = None
+                        ) -> tuple[pd.DataFrame, dict]:
+    """Features d'équipe roulantes et état d'inférence.
+
+    `season_prior_k=None` (défaut) : EWMA continus, comportement historique.
+    Une valeur k : variante « saison d'abord » (`_season_prior_ewm`), utilisée
+    UNIQUEMENT par la mesure `--recency`. L'état d'inférence reste calculé à
+    l'ancienne dans les deux cas : la variante n'est pas servie.
+    """
     print("📊 Features équipe (MoneyPuck) …")
     mp = pd.read_csv(f"{DATA_DIR}/mp_team_games.csv", low_memory=False)
     need_cols(mp, ["playerTeam", "opposingTeam", "home_or_away", "gameDate", "gameId",
@@ -165,10 +219,20 @@ def build_team_features() -> tuple[pd.DataFrame, dict]:
         g = g.sort_values(["date", "gameId"]).reset_index(drop=True)
         block = {"team": team, "date": g["date"], "gameId": g["gameId"],
                  "team_gp": np.arange(len(g))}
+        # Saison NHL lue dans l'identifiant de match (2008020001 → 2008) et
+        # non dans la date : les séries de la bulle 2020 se sont jouées en
+        # août-septembre et tomberaient sinon dans la saison suivante.
+        seas = ((g["gameId"].astype("int64") // 1_000_000).astype(int)
+                if season_prior_k is not None else None)
         for c in raw_cols:
-            shifted = g[c].shift(1)
-            block[f"{c}_s"] = shifted.ewm(halflife=SHORT_HL, min_periods=3).mean()
-            block[f"{c}_l"] = shifted.ewm(halflife=LONG_HL, min_periods=3).mean()
+            if season_prior_k is None:
+                shifted = g[c].shift(1)
+                block[f"{c}_s"] = shifted.ewm(halflife=SHORT_HL, min_periods=3).mean()
+                block[f"{c}_l"] = shifted.ewm(halflife=LONG_HL, min_periods=3).mean()
+            else:
+                for suf, hl in (("_s", SHORT_HL), ("_l", LONG_HL)):
+                    block[f"{c}{suf}"] = _season_prior_ewm(g[c], seas, hl,
+                                                           season_prior_k)
         feats.append(pd.DataFrame(block))
         # État final pour l'inférence (inclut le dernier match joué)
         state[team] = {f"{c}_s": round(float(g[c].ewm(halflife=SHORT_HL).mean().iloc[-1]), 4)
@@ -227,8 +291,21 @@ def build_goalie_features() -> tuple[pd.DataFrame, dict]:
         / (n_prev + GOALIE_PRIOR_STARTS))
     starters["goalie_starts"] = n_prev
 
+    # Relève : part des GOALIE_BACKUP_WINDOW matchs précédents de l'ÉQUIPE
+    # commencés par ce partant (décalé : le match du soir n'y est pas).
+    starters = starters.sort_values(["team", "date", "gameId"]).reset_index(drop=True)
+    backup = np.full(len(starters), np.nan)
+    for _, g in starters.groupby("team", sort=False):
+        pid = g["playerId"].to_numpy()
+        for j, i in enumerate(g.index):
+            prev = pid[max(0, j - GOALIE_BACKUP_WINDOW):j]
+            if len(prev) >= GOALIE_BACKUP_MIN_HISTORY:
+                backup[i] = float(np.mean(prev == pid[j]) < GOALIE_BACKUP_SHARE)
+    starters["goalie_backup"] = backup
+
     out = starters[["team", "gameId", "date", "name",
-                    "goalie_gsax60", "goalie_svpct", "goalie_starts"]].copy()
+                    "goalie_gsax60", "goalie_svpct", "goalie_starts",
+                    "goalie_backup"]].copy()
 
     # État d'inférence : pour chaque équipe, les 2 gardiens les plus utilisés récemment.
     # Les estimations reposent sur la carrière COMPLÈTE du gardien (toutes équipes
@@ -246,6 +323,8 @@ def build_goalie_features() -> tuple[pd.DataFrame, dict]:
     for team, g in starters.groupby("team"):
         recent = g.sort_values("date").tail(15)
         usage = recent["name"].value_counts(normalize=True)
+        last10 = g.sort_values("date").tail(GOALIE_BACKUP_WINDOW)["name"] \
+                  .value_counts(normalize=True)
         goalies = []
         for gname, share in usage.head(2).items():
             pid = g.loc[g["name"] == gname, "playerId"].iloc[-1]
@@ -255,6 +334,9 @@ def build_goalie_features() -> tuple[pd.DataFrame, dict]:
                 "gsax60": round(float(c["gsax60"]), 4),
                 "svpct":  round(float(c["svpct"]), 4),
                 "career_starts": int(c["n"]),
+                # Part des 10 derniers départs de l'équipe : le service en tire
+                # `goalie_backup` pour le partant confirmé (< 0,40 = relève).
+                "share_last10": round(float(last10.get(gname, 0.0)), 3),
             })
         state[team] = goalies
     print(f"   ✅ {len(out)} départs de gardien qualifiés")

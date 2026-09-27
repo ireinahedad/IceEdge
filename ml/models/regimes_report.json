@@ -1,0 +1,287 @@
+{
+  "protocol": {
+    "baseline": "fige, tout l'historique, un entrainement par saison",
+    "window_seasons": 6,
+    "weekly": "reentraine chaque lundi sur tout ce qui precede",
+    "adopt_if": "z <= -2.39 ET gain sur >= 70% des saisons ET moneyline z < +2",
+    "seasons": [
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ]
+  },
+  "baseline": {
+    "ll_puckline": 0.583465,
+    "ll_moneyline": 0.667996,
+    "n_games": 13502
+  },
+  "regimes": {
+    "fige_6s": {
+      "puckline": {
+        "n": 13502,
+        "delta": 0.000432,
+        "se": 0.00036,
+        "z": 1.2
+      },
+      "moneyline": {
+        "n": 13502,
+        "delta": 0.000363,
+        "se": 0.000421,
+        "z": 0.86
+      },
+      "deviance": {
+        "n": 13502,
+        "delta": 0.000956,
+        "se": 0.000783,
+        "z": 1.22
+      },
+      "seasons_better": [
+        2021,
+        2022,
+        2023,
+        2024
+      ],
+      "share_seasons_better": 0.364,
+      "by_season": [
+        {
+          "season": 2015,
+          "d_puckline": 0.00033,
+          "d_moneyline": 1.9e-05
+        },
+        {
+          "season": 2016,
+          "d_puckline": 0.001129,
+          "d_moneyline": 0.002472
+        },
+        {
+          "season": 2017,
+          "d_puckline": 0.000513,
+          "d_moneyline": 0.001059
+        },
+        {
+          "season": 2018,
+          "d_puckline": 0.001088,
+          "d_moneyline": -3.9e-05
+        },
+        {
+          "season": 2019,
+          "d_puckline": 0.000371,
+          "d_moneyline": -7.8e-05
+        },
+        {
+          "season": 2020,
+          "d_puckline": 0.002261,
+          "d_moneyline": 0.002069
+        },
+        {
+          "season": 2021,
+          "d_puckline": -0.000868,
+          "d_moneyline": -0.001141
+        },
+        {
+          "season": 2022,
+          "d_puckline": -0.00102,
+          "d_moneyline": -0.002157
+        },
+        {
+          "season": 2023,
+          "d_puckline": -0.000292,
+          "d_moneyline": 0.001191
+        },
+        {
+          "season": 2024,
+          "d_puckline": -6.3e-05,
+          "d_moneyline": 0.000187
+        },
+        {
+          "season": 2025,
+          "d_puckline": 0.001969,
+          "d_moneyline": 0.001033
+        }
+      ],
+      "verdict": "NON TRANCHABLE"
+    },
+    "hebdo": {
+      "puckline": {
+        "n": 13502,
+        "delta": -0.000157,
+        "se": 0.000172,
+        "z": -0.92
+      },
+      "moneyline": {
+        "n": 13502,
+        "delta": -0.000228,
+        "se": 0.000204,
+        "z": -1.12
+      },
+      "deviance": {
+        "n": 13502,
+        "delta": -0.000735,
+        "se": 0.000386,
+        "z": -1.91
+      },
+      "seasons_better": [
+        2015,
+        2017,
+        2018,
+        2021,
+        2023,
+        2024,
+        2025
+      ],
+      "share_seasons_better": 0.636,
+      "by_season": [
+        {
+          "season": 2015,
+          "d_puckline": -0.000749,
+          "d_moneyline": -0.001
+        },
+        {
+          "season": 2016,
+          "d_puckline": 0.000346,
+          "d_moneyline": 0.000198
+        },
+        {
+          "season": 2017,
+          "d_puckline": -0.000327,
+          "d_moneyline": 9.8e-05
+        },
+        {
+          "season": 2018,
+          "d_puckline": -0.000258,
+          "d_moneyline": -0.000802
+        },
+        {
+          "season": 2019,
+          "d_puckline": 0.000457,
+          "d_moneyline": 0.00057
+        },
+        {
+          "season": 2020,
+          "d_puckline": 0.000244,
+          "d_moneyline": 0.000139
+        },
+        {
+          "season": 2021,
+          "d_puckline": -0.001232,
+          "d_moneyline": -0.001509
+        },
+        {
+          "season": 2022,
+          "d_puckline": 0.000745,
+          "d_moneyline": -0.000121
+        },
+        {
+          "season": 2023,
+          "d_puckline": -0.000322,
+          "d_moneyline": 0.000465
+        },
+        {
+          "season": 2024,
+          "d_puckline": -0.000404,
+          "d_moneyline": -0.000809
+        },
+        {
+          "season": 2025,
+          "d_puckline": -9e-06,
+          "d_moneyline": 0.000493
+        }
+      ],
+      "verdict": "NON TRANCHABLE"
+    },
+    "hebdo_6s": {
+      "puckline": {
+        "n": 13502,
+        "delta": 5.5e-05,
+        "se": 0.000386,
+        "z": 0.14
+      },
+      "moneyline": {
+        "n": 13502,
+        "delta": -4.2e-05,
+        "se": 0.000451,
+        "z": -0.09
+      },
+      "deviance": {
+        "n": 13502,
+        "delta": -0.000336,
+        "se": 0.000834,
+        "z": -0.4
+      },
+      "seasons_better": [
+        2017,
+        2021,
+        2022,
+        2023,
+        2024
+      ],
+      "share_seasons_better": 0.455,
+      "by_season": [
+        {
+          "season": 2015,
+          "d_puckline": 0.00019,
+          "d_moneyline": -0.0007
+        },
+        {
+          "season": 2016,
+          "d_puckline": 0.001368,
+          "d_moneyline": 0.001889
+        },
+        {
+          "season": 2017,
+          "d_puckline": -0.000411,
+          "d_moneyline": -0.000133
+        },
+        {
+          "season": 2018,
+          "d_puckline": 5.3e-05,
+          "d_moneyline": -0.000725
+        },
+        {
+          "season": 2019,
+          "d_puckline": 9e-05,
+          "d_moneyline": -0.0002
+        },
+        {
+          "season": 2020,
+          "d_puckline": 0.002581,
+          "d_moneyline": 0.002897
+        },
+        {
+          "season": 2021,
+          "d_puckline": -0.000897,
+          "d_moneyline": -0.002031
+        },
+        {
+          "season": 2022,
+          "d_puckline": -0.001137,
+          "d_moneyline": -0.001114
+        },
+        {
+          "season": 2023,
+          "d_puckline": -0.001099,
+          "d_moneyline": 0.000295
+        },
+        {
+          "season": 2024,
+          "d_puckline": -0.000255,
+          "d_moneyline": -0.00079
+        },
+        {
+          "season": 2025,
+          "d_puckline": 0.001058,
+          "d_moneyline": 0.001166
+        }
+      ],
+      "verdict": "NON TRANCHABLE"
+    }
+  }
+}

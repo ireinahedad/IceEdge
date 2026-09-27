@@ -51,9 +51,10 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 
-from score_model import (MAX_GOALS, ScoreDistribution, ScoreEnsemble,
-                         apply_logistic, apply_margin_correction, fit_logistic,
-                         fit_margin_correction, joint_matrix, logit)
+from score_model import (GAMMA_MAX, GAMMA_MIN, MAX_GOALS, ScoreDistribution,
+                         ScoreEnsemble, apply_logistic, apply_margin_correction,
+                         fit_logistic, fit_margin_correction, joint_matrix, logit,
+                         stretch_lambdas)
 
 DATA_V4 = "../data/nhl_games_v4.csv"
 MODELS_DIR = "../models"
@@ -108,9 +109,18 @@ ATK_COLS = ["xgf60_s", "xgf60_l", "ev_xgf60_s", "ev_xgf_pct_s", "gf_s",
             # Mesuré : déviance de validation 1.05500 → 1.05232 et log-loss
             # moneyline 0.6687 → 0.6675. Complémentaire de `star_power`, qui
             # reste utile (le retirer dégrade : 1.05339).
-            "lineup_xg", "lineup_pts"]
+            "lineup_xg", "lineup_pts",
+            # v2 (2026-09-27) : possession xG à 5 c. 5 sur le long terme.
+            "ev_xgf_pct_l"]
 DEF_COLS = ["xga60_s", "xga60_l", "ev_xga60_s", "ga_s",
-            "pk_xga60_s", "goalie_gsax60", "goalie_svpct"]
+            "pk_xga60_s", "goalie_gsax60", "goalie_svpct",
+            # v2 (2026-09-27) : fatigue de l'équipe qui DÉFEND (le modèle ne
+            # connaissait que celle de l'attaque) et gardien adverse de relève.
+            # Mesuré par `backtest_walkforward.py --score-v2` sur 14 saisons :
+            # moneyline −0,00112 (z −3,20, 12/14 saisons), puck line −0,00078
+            # (z −2,92), déviance −0,00203 (z −3,45) ; écart au marché +0,0027
+            # → +0,0012. Critère fixé avant le run, cf. `run_score_v2`.
+            "b2b", "rest_days", "goalie_backup"]
 
 SEARCH_SPACE = {
     "max_depth":        [3, 4, 5],
@@ -122,20 +132,28 @@ SEARCH_SPACE = {
 }
 
 
-def stacked_features() -> list[str]:
-    return ([f"atk_{c}" for c in ATK_COLS] + [f"def_{c}" for c in DEF_COLS]
+def stacked_features(atk_cols: list[str] | None = None,
+                     def_cols: list[str] | None = None) -> list[str]:
+    """Noms des features empilées. Sans argument : ATK_COLS / DEF_COLS du module.
+    Les listes explicites servent aux mesures de variantes (`--score-v2`)."""
+    atk_cols = ATK_COLS if atk_cols is None else atk_cols
+    def_cols = DEF_COLS if def_cols is None else def_cols
+    return ([f"atk_{c}" for c in atk_cols] + [f"def_{c}" for c in def_cols]
             + ["is_home", "elo_atk_minus_def"])
 
 
-def stack(df: pd.DataFrame) -> pd.DataFrame:
+def stack(df: pd.DataFrame, atk_cols: list[str] | None = None,
+          def_cols: list[str] | None = None) -> pd.DataFrame:
     """Un match → deux lignes équipe-match, features orientées attaque/défense."""
+    atk_cols = ATK_COLS if atk_cols is None else atk_cols
+    def_cols = DEF_COLS if def_cols is None else def_cols
     out = []
     for atk, dfn, is_home, target in [("home", "away", 1, "home_reg_score"),
                                       ("away", "home", 0, "away_reg_score")]:
         d = pd.DataFrame(index=df.index)
-        for c in ATK_COLS:
+        for c in atk_cols:
             d[f"atk_{c}"] = df[f"{atk}_{c}"] if f"{atk}_{c}" in df.columns else np.nan
-        for c in DEF_COLS:
+        for c in def_cols:
             d[f"def_{c}"] = df[f"{dfn}_{c}"] if f"{dfn}_{c}" in df.columns else np.nan
         d["is_home"] = float(is_home)
         d["elo_atk_minus_def"] = df[f"{atk}_elo"] - df[f"{dfn}_elo"]
@@ -390,6 +408,46 @@ def confidence_calibration(lam_h, lam_a) -> dict | None:
 
 _OT_MIN_GAMES = 500        # sous cet effectif, on garde le scalaire
 _OT_LEVEL_TOL = 0.02       # écart de NIVEAU toléré avec la constante mesurée
+
+
+def fit_gamma(lam_h, lam_a, y_home_win, p_ot_home: float,
+              lo: float = GAMMA_MIN, hi: float = GAMMA_MAX, iters: int = 40) -> float:
+    """γ qui minimise la log-loss moneyline, par section dorée sur [lo, hi].
+
+    À appeler sur des λ HORS ÉCHANTILLON (tranche d'arrêt précoce ou de
+    validation) : sur l'entraînement, les λ sont déjà sur-ajustés — trop
+    dispersés — et γ y serait tiré sous 1, à l'opposé de la correction voulue.
+    τ n'intervient pas (la prolongation est une constante ici) : γ corrige la
+    forme de la distribution des intensités, τ la forme des écarts, ajusté ensuite.
+    """
+    lh, la = np.asarray(lam_h, float), np.asarray(lam_a, float)
+    y = np.asarray(y_home_win, float)
+    ok = np.isfinite(lh) & np.isfinite(la) & (lh > 0) & (la > 0)
+    lh, la, y = lh[ok], la[ok], y[ok]
+
+    def loss(g):
+        h, a = stretch_lambdas(lh, la, g)
+        p = np.array([ScoreDistribution(x, z, p_ot_home).p_home_win()
+                      for x, z in zip(h, a)])
+        p = np.clip(p, 1e-7, 1 - 1e-7)
+        return float(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p)))
+
+    phi = (np.sqrt(5) - 1) / 2
+    a, b = lo, hi
+    c, d = b - phi * (b - a), a + phi * (b - a)
+    fc, fd = loss(c), loss(d)
+    for _ in range(iters):
+        if fc < fd:
+            b, d, fd = d, c, fc
+            c = b - phi * (b - a)
+            fc = loss(c)
+        else:
+            a, c, fc = c, d, fd
+            d = a + phi * (b - a)
+            fd = loss(d)
+        if b - a < 1e-3:
+            break
+    return float((a + b) / 2)
 
 
 def fit_ot_model(train_df, lam_h, lam_a, p_ot_home) -> dict | None:

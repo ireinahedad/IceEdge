@@ -8,6 +8,7 @@
 
 import { predictionApiService, isPredictionUnavailable } from "../../services/predictionApiService";
 import type { NHLGame } from "../../types/bet";
+import type { OddsEvent } from "../../services/oddsApiService";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 
 
@@ -38,6 +39,12 @@ export interface DisplayGame {
   // dite dans les Réglages ; voir `components/BookPricePill`.
   bookHome?: number;
   bookAway?: number;
+  /**
+   * Handicap (puck line ±1.5) du même livre, quand il le cote. `point` est la
+   * ligne du côté (−1.5 pour le favori du livre, +1.5 pour l'autre). Voir
+   * `extractSpreadOdds`.
+   */
+  bookSpread?: { home?: { point: number; price: number }; away?: { point: number; price: number } };
   // `null` = le modèle n'a pas répondu. Jamais un nombre de repli : voir
   // l'entête de `predictionApiService.ts`.
   team1: { id: string; abbr: string; name: string; score?: number; logo: string; winPct: number | null };
@@ -61,10 +68,12 @@ async function pctOrNull(
 }
 
 export async function toDisplayGame(game: NHLGame): Promise<DisplayGame> {
-  const [homePct, totalPct] = await Promise.all([
-    pctOrNull({ marketType: "moneyline", gameId: game.id, teamId: game.homeTeam.abbreviation.toLowerCase() }),
-    pctOrNull({ marketType: "total_goals", gameId: game.id, selection: "over", line: 5.5 }),
-  ]);
+  // Le % du O/U 5.5 (`total_goals`) n'est plus demandé : la ligne de match de
+  // l'accueil ne l'affiche plus depuis le 2026-09-27 (remplacé par le tableau
+  // Handicap / Vainqueur, qui lit le paquet ML du match). Un appel de moins par
+  // match sur `predictLimiter`.
+  const homePct = await pctOrNull({ marketType: "moneyline", gameId: game.id, teamId: game.homeTeam.abbreviation.toLowerCase() });
+  const totalPct = null;
   return {
     id: game.id,
     period: game.period ? `${game.period}P • ${game.clock}` : undefined,
@@ -100,4 +109,40 @@ export interface AddSheetState {
    *  mentait sur la forme réelle de l'état. */
   gameId?: string;
   subject?: { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
+}
+
+// ─── Handicap (puck line ±1.5) du livre ──────────────────────────────────────
+
+function normName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9 ]/g, "")
+    .trim();
+}
+
+/**
+ * Le handicap ±1.5 d'un événement, rangé par équipe du MATCH (et non par
+ * domicile/extérieur du flux : `findOddsEvent` accepte un flux inversé).
+ * Seules les lignes ±1.5 sont gardées — c'est la seule que montre l'accueil.
+ */
+export function extractSpreadOdds(
+  event: OddsEvent,
+  homeName: string,
+  awayName: string,
+): DisplayGame["bookSpread"] {
+  const book = event.bookmakers.find((b) => b.markets.some((m) => m.key === "spreads"));
+  const market = book?.markets.find((m) => m.key === "spreads");
+  if (!market) return undefined;
+  const pick = (name: string) => {
+    const o = market.outcomes.find((x) => normName(x.name ?? "") === normName(name)) as
+      | { price: number; point?: number }
+      | undefined;
+    if (!o || !Number.isFinite(o.price) || o.price <= 1) return undefined;
+    if (typeof o.point !== "number" || Math.abs(Math.abs(o.point) - 1.5) > 1e-9) return undefined;
+    return { point: o.point, price: o.price };
+  };
+  const home = pick(homeName);
+  const away = pick(awayName);
+  return home || away ? { home, away } : undefined;
 }

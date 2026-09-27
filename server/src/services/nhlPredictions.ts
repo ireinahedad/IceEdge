@@ -417,6 +417,36 @@ function computeGameMarkets(
   const lambdaT = lambdaH + lambdaA;  // total expected goals
 
 
+  // ── 0. Moneyline — qui gagne le match, prolongation et fusillade comprises ─
+  //
+  // Ajouté le 2026-09-27 à la demande de l'utilisatrice : le choix DIRECT entre
+  // les deux équipes, sans le découpage réglementaire / prolongation de Match
+  // Betting. C'est le marché `h2h` à deux issues des livres, et celui que règle
+  // `moneyline` au coupon. Les deux tuiles sont COMPLÉMENTAIRES : leur somme
+  // fait 100 % (recalée après `attachGameFactors`, voir plus bas).
+  const moneyline: MarketGroup = {
+    id: 'moneyline', title: 'Moneyline', cols: 2,
+    options: [
+      {
+        id: 'mw-home',
+        ml: gm('moneyline'),
+        label: `${homeName} wins`,
+        rulePct: pct(mlHome),
+        ruleNote: [
+          `Victoire (prolongation et fusillade comprises) = ${fmt(mlHome*100,0)}%`,
+          mlBreakdown,
+        ].filter(Boolean).join('  ·  '),
+      },
+      {
+        id: 'mw-away',
+        ml: gma('moneyline'),
+        label: `${awayName} wins`,
+        rulePct: 100 - pct(mlHome),
+        ruleNote: `Victoire (prolongation et fusillade comprises) = 100% − ${homeName} ${fmt(mlHome*100,0)}% = ${fmt(mlAway*100,0)}%`,
+      },
+    ],
+  };
+
   // ── 1. Match Betting ──────────────────────────────────────────────────────
   //
   // QUATRE tuiles, et non trois : chaque équipe est cotée séparément en temps
@@ -997,6 +1027,7 @@ function computeGameMarkets(
   // Ordre d'affichage. Le score exact n'a pas de sens contre un « adversaire
   // moyen » (vue équipe) : il n'y est pas.
   const groups: MarketGroup[] = [
+    moneyline,
     matchBetting,
     puckLine,
     totals,
@@ -1050,6 +1081,14 @@ function computeGameMarkets(
     margins: marginShares,
     periods: periodSpecs,
   });
+
+  // Moneyline : les deux côtés totalisent EXACTEMENT 100 %. Chacun est recalculé
+  // depuis ses facteurs (complément exact l'un de l'autre), mais deux arrondis
+  // indépendants pourraient encore faire 101 sur un « x,5 ».
+  {
+    const [mwH, mwA] = moneyline.options;
+    mwA.rulePct = 100 - mwH.rulePct;
+  }
 
   return groups;
 }

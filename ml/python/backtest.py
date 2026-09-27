@@ -67,6 +67,8 @@ def _sigmoid(z):
 # Aucune dépendance nouvelle : tables console + JSON, comme `sigma_report`.
 
 MIN_BIN_DEFAULT = 50          # sous cet effectif, un bin ne dit rien
+# Features du classifieur tirées des cotes, masquées par `_p_classifier`.
+MARKET_FEATURES = ("market_home_p_open", "market_home_p_close")
 RELIABILITY_OUT = f"{MODELS}/reliability_report.json"
 
 
@@ -133,7 +135,7 @@ def _test_slice():
             test_sc.reset_index(drop=True))
 
 
-def _p_classifier(test):
+def _p_classifier(test, mask_market: bool = True):
     """P(dom) du classifieur, calibrée Platt — telle que `ml_service` la sert.
 
     Sans blend marché : `training_report.json → baselines.market.blend_weights`
@@ -148,7 +150,24 @@ def _p_classifier(test):
     gr = rep["game_model"]
     b = xgb.Booster()
     b.load_model(f"{MODELS}/game_model.json")
-    p_raw = b.predict(xgb.DMatrix(test[feats].values.astype(np.float32),
+    # Les features de marché sont MASQUÉES (2026-09-27). Depuis le backfill
+    # The Odds API, les 1 311 matchs 2025-26 du test portent une clôture
+    # DraftKings mais pas d'ouverture (colonnes `*_open` vides pour les lignes
+    # API, volontairement) : une combinaison que le classifieur n'a jamais vue
+    # à l'entraînement, et qui n'est pas non plus ce que `ml_service` lui passe
+    # (le prix courant dans les deux colonnes). Surtout, le modèle de score,
+    # lui, ne voit jamais le marché : comparer les deux calibrations n'a de
+    # sens qu'à information égale. Masquer reproduit les conditions de la
+    # mesure du 2026-08-26, où le test ne contenait aucune cote.
+    #
+    # `mask_market=False` pour la VALIDATION : Platt y a été ajusté AVEC les
+    # cotes SBRO, la pente de contrôle doit y rester à 1 par construction.
+    X = test[feats].copy()
+    if mask_market:
+        for c in MARKET_FEATURES:
+            if c in X.columns:
+                X[c] = np.nan
+    p_raw = b.predict(xgb.DMatrix(X.values.astype(np.float32),
                                   feature_names=feats, missing=np.nan))
     cal = gr["calibration"]
     p = _sigmoid(cal["a"] * _logit(p_raw) + cal["b"])
@@ -432,6 +451,55 @@ def _ece(rows, n_total, min_bin):
     return ece, mce, worst
 
 
+def _decile_bins(y, p, min_bin, n_bins: int = 10):
+    """Bins d'EFFECTIF ÉGAL sur la prédiction du modèle lui-même (déciles).
+
+    Complément des bins de largeur fixe : ceux-là laissent les queues presque
+    vides (12 matchs sous 0,3 pour le modèle de score), si bien que l'écart des
+    11 points sur les affiches déséquilibrées n'y était jamais testé avec un
+    effectif décent. Ici le premier et le dernier décile — les affiches les
+    plus tranchées de CHAQUE modèle — portent ~430 matchs chacun. Chaque modèle
+    est découpé sur SES probabilités : c'est le seul test de calibration qui ne
+    dépende pas de l'autre modèle.
+    """
+    order = np.argsort(p, kind="mergesort")
+    rows = []
+    for i, idx in enumerate(np.array_split(order, n_bins)):
+        n = int(len(idx))
+        if n == 0:
+            continue
+        k = int(y[idx].sum())
+        c_lo, c_hi = _wilson(k, n)
+        pred, obs = float(p[idx].mean()), k / n
+        rows.append({"decile": i + 1,
+                     "lo": round(float(p[idx].min()), 4),
+                     "hi": round(float(p[idx].max()), 4), "n": n,
+                     "p_predicted": round(pred, 4), "p_observed": round(obs, 4),
+                     "gap": round(obs - pred, 4),
+                     "ci95": [round(c_lo, 4), round(c_hi, 4)],
+                     "calibrated": bool(c_lo <= pred <= c_hi),
+                     "thin": bool(n < min_bin)})
+    return rows
+
+
+def _print_deciles(rows_s, rows_c):
+    print("\n   -- Diagramme de fiabilite PAR DECILE (effectif egal, chaque "
+          "modele sur ses propres probabilites) --")
+    print(f"   {'dec':>3} | {'score : plage':>15} {'predit':>7} {'observe':>8} "
+          f"{'ecart':>7} {'':>4} | {'classifieur : plage':>19} {'predit':>7} "
+          f"{'observe':>8} {'ecart':>7}")
+    for a, b in zip(rows_s, rows_c):
+        fa = "ok" if a["calibrated"] else "HORS"
+        fb = "ok" if b["calibrated"] else "HORS"
+        print(f"   {a['decile']:>3} | {a['lo']:.3f}-{a['hi']:.3f}   "
+              f"{a['p_predicted']:>7.4f} {a['p_observed']:>8.4f} "
+              f"{a['gap']:>+7.4f} {fa:>4} | {b['lo']:.3f}-{b['hi']:.3f}       "
+              f"{b['p_predicted']:>7.4f} {b['p_observed']:>8.4f} "
+              f"{b['gap']:>+7.4f} {fb}")
+    print("   ok = le predit est dans l'IC 95 % (Wilson) de l'observe ; "
+          "HORS = il en sort.")
+
+
 def _oriented(y, p_s, p_c, mask):
     """Vue « côté favori » — la seule qui ne s'annule pas en moyenne.
 
@@ -526,8 +594,9 @@ def reliability(min_bin: int = MIN_BIN_DEFAULT, n_boot: int = 200, top: int = 10
         print("   ⚠️  Un blend marché existe dans training_report.json — cette mesure "
               "porte sur le classifieur NU + Platt, celui que sert `ml_service`.")
     else:
-        print("   Classifieur = XGBoost + Platt, sans blend marché : la tranche de "
-              "test ne contient aucune cote (SBRO s'arrête en 2022-23).")
+        print("   Classifieur = XGBoost + Platt, sans blend marché.")
+    print("   Features de marché du classifieur MASQUÉES : information égale avec "
+          "le modèle\n   de score, qui ne voit jamais les cotes (cf. `_p_classifier`).")
 
     edges = [i / 10 for i in range(11)]
     rows_s = _bins(y, p_s, edges, min_bin)
@@ -567,6 +636,29 @@ def reliability(min_bin: int = MIN_BIN_DEFAULT, n_boot: int = 200, top: int = 10
 
     _print_bins(rows_s, "modèle de score (λ → distribution jointe → τ)")
     _print_bins(rows_c, "classifieur + Platt")
+
+    # ── Déciles : les queues avec un effectif qui permet de conclure ─────────
+    dec_s = _decile_bins(y, p_s, min_bin)
+    dec_c = _decile_bins(y, p_c, min_bin)
+    _print_deciles(dec_s, dec_c)
+    dec_summary = {}
+    for key, rows in (("score_model", dec_s), ("classifier", dec_c)):
+        out_ci = [r["decile"] for r in rows if not r["calibrated"]]
+        ece_d = sum(r["n"] / len(y) * abs(r["gap"]) for r in rows)
+        dec_summary[key] = {
+            "hors_ic": out_ci, "ece_deciles": round(ece_d, 5),
+            # Pente « observé contre prédit » entre les deux déciles extrêmes :
+            # < 1 = modèle trop prudent dans les queues (compression), > 1 =
+            # trop tranché. C'est la forme chiffrée de l'écart des 11 points.
+            "spread_predicted": round(rows[-1]["p_predicted"] - rows[0]["p_predicted"], 4),
+            "spread_observed": round(rows[-1]["p_observed"] - rows[0]["p_observed"], 4)}
+        d = dec_summary[key]
+        d["spread_ratio"] = (round(d["spread_observed"] / d["spread_predicted"], 3)
+                             if d["spread_predicted"] else None)
+        lab = "modele de score" if key == "score_model" else "classifieur    "
+        print(f"   {lab} : {len(out_ci)}/10 deciles hors IC {out_ci or ''} · "
+              f"ECE {ece_d:.4f} · ecart D10-D1 predit {d['spread_predicted']:.3f}, "
+              f"observe {d['spread_observed']:.3f} (ratio {d['spread_ratio']})")
 
     # ── Les extrêmes, côté favori ────────────────────────────────────────────
     print(f"\n   ── Les extrêmes, orientés côté favori ──")
@@ -665,7 +757,7 @@ def reliability(min_bin: int = MIN_BIN_DEFAULT, n_boot: int = 200, top: int = 10
     print("   a > 1 : probabilités écrasées vers 50 %, à étirer · a ≈ 1 : calibré")
     print("   Ajustée sur la VALIDATION (hors test), puis re-mesurée sur le test :")
     print("   si les deux tombent au même endroit, la correction est stable.")
-    pv_c, _ = _p_classifier(val)
+    pv_c, _ = _p_classifier(val, mask_market=False)
     pv = _p_score(val)
     pv_s, pv_pl = pv["moneyline"], pv["puckline"]
     yv = val["home_win"].values.astype(float)
@@ -871,6 +963,9 @@ def reliability(min_bin: int = MIN_BIN_DEFAULT, n_boot: int = 200, top: int = 10
         "sharpness": sharp,
         "bins": {"score_model": rows_s, "classifier": rows_c,
                  "score_model_puckline": rows_pl},
+        "deciles": {"score_model": dec_s, "classifier": dec_c,
+                    "summary": dec_summary},
+        "classifier_market_features_masked": True,
         "puck_line": {"p_mean": round(float(p_pl.mean()), 4),
                       "observed": round(float(y_pl.mean()), 4),
                       "log_loss": round(float(_ll_each(y_pl, p_pl).mean()), 5),

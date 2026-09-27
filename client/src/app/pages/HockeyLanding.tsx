@@ -17,7 +17,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
-import { ChevronRight, CalendarDays } from "lucide-react";
+import { ChevronRight, CalendarDays, Gamepad2 } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { ErrorState } from "../components/ErrorState";
@@ -34,7 +34,8 @@ import { EvItem, EvSection } from "./landing/EvSection";
 import { LiveGameCard, SportSelector, UpcomingGameRow, gameIsoDay } from "./landing/LandingCards";
 import { dayHeading, groupByDay } from "../data/gameDay";
 import { TeamCarousel } from "./landing/TeamCarousel";
-import { AddSheetState, DisplayGame, calcEdge, toDisplayGame } from "./landing/landingTypes";
+import { ProUpsell } from "./landing/ProUpsell";
+import { AddSheetState, DisplayGame, calcEdge, extractSpreadOdds, toDisplayGame } from "./landing/landingTypes";
 
 
 // ─── Lazy section ───────────────────────────────────────────────────────────
@@ -91,6 +92,29 @@ export function HockeyLanding() {
   const [loadError, setLoadError] = useState<unknown>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [upcomingLabel, setUpcomingLabel] = useState(() => t("home.tonightGames"));
+
+  // En-tête qui se réduit au défilement (2026-09-27). Ce n'est pas la fenêtre
+  // qui défile mais le conteneur de `App.tsx` : on écoute donc TOUS les
+  // défilements en phase de capture, et on ne garde que celui d'un ancêtre de
+  // l'en-tête (le bandeau des équipes, qui défile à l'horizontale, est ignoré).
+  // Deux seuils (56 / 8 px) : réduire l'en-tête remonte la page, un seuil
+  // unique la ferait osciller.
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [compactHeader, setCompactHeader] = useState(false);
+  useEffect(() => {
+    const onScroll = (e: Event) => {
+      const target = e.target;
+      const header = headerRef.current;
+      let y: number | null = null;
+      if (target === document || target === document.documentElement) y = window.scrollY || 0;
+      else if (target instanceof Element && header && target.contains(header)) y = target.scrollTop;
+      if (y == null) return;
+      const top = y;
+      setCompactHeader((c) => (c ? top > 8 : top > 56));
+    };
+    document.addEventListener("scroll", onScroll, { passive: true, capture: true });
+    return () => document.removeEventListener("scroll", onScroll, { capture: true });
+  }, []);
 
   // Value bets (+EV): model probability beats the bookmaker's implied probability.
   // Only meaningful when real bookmaker odds are present.
@@ -219,8 +243,14 @@ export function HockeyLanding() {
           const ev = findOddsEvent(events, g.team1.name, g.team2.name);
           if (!ev) return g;
           const odds = extractH2HOdds(ev);
-          if (!odds) return g;
-          return { ...g, bookHome: odds.home, bookAway: odds.away };
+          // Handicap ±1.5 du livre, pour la colonne « Handicap » de la ligne.
+          const bookSpread = extractSpreadOdds(ev, g.team1.name, g.team2.name);
+          if (!odds && !bookSpread) return g;
+          return {
+            ...g,
+            ...(odds ? { bookHome: odds.home, bookAway: odds.away } : {}),
+            ...(bookSpread ? { bookSpread } : {}),
+          };
         });
       }
 
@@ -241,10 +271,17 @@ export function HockeyLanding() {
     <div className="flex flex-col min-h-screen pb-[calc(6rem+env(safe-area-inset-bottom,0px))] max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: "#0A0E0C" }}>
       {/* Header — the only top padding is env(safe-area-inset-top), which is 0
           in a browser and only grows on a notched device. */}
-      <div className="sticky top-0 z-40"
+      <div ref={headerRef} className="sticky top-0 z-40"
         style={{ background: "rgba(10,14,12,0.88)", backdropFilter: "blur(16px)", paddingTop: "env(safe-area-inset-top, 0px)" }}>
-        <div className="px-4 pt-3 pb-3">
-          <SportSelector />
+        <div
+          className="px-4"
+          style={{
+            paddingTop: compactHeader ? 6 : 12,
+            paddingBottom: compactHeader ? 6 : 12,
+            transition: "padding 0.25s ease",
+          }}
+        >
+          <SportSelector compact={compactHeader} />
         </div>
       </div>
 
@@ -257,7 +294,17 @@ export function HockeyLanding() {
 
           {/* ── Offensive zone: teams + tonight's slate ────────────────── */}
           <div className="px-4 py-4 flex flex-col gap-6">
-            {/* All 32 teams — jerseys scrolling right → left, 6 at a time */}
+            {/* Aucun argent réel (2026-09-27) : dit d'entrée, en une ligne. */}
+            <div className="flex items-start gap-2 rounded-xl px-3 py-2 -mb-2"
+              style={{ background: "rgba(134,209,234,0.08)", border: "1px solid rgba(134,209,234,0.22)" }}>
+              <Gamepad2 size={14} className="flex-shrink-0 mt-px" style={{ color: "#86d1ea" }} />
+              <p className="text-[11px] leading-snug text-[#bfc8cc]">
+                <span className="font-bold text-white">{t("home.noRealMoney")}</span>{" "}
+                {t("home.noRealMoneyHint")}
+              </p>
+            </div>
+
+            {/* All 32 teams — square tiles, arrows + swipe + slow auto-scroll */}
             <TeamCarousel />
 
             {/* Upcoming Games */}
@@ -376,20 +423,24 @@ export function HockeyLanding() {
           <div className="rink-line rink-line--blue" aria-hidden />
 
           {/* ── Defensive zone: the model's picks ──────────────────────── */}
+          {/* 2026-09-27 : pour un abonné, Meilleurs paris PUIS Value bets. Pour
+              les autres, UN seul gros bloc « Passer à Pro » qui regroupe les
+              deux, au lieu de deux sections floutées l'une sous l'autre. */}
           <div className="px-4 py-4 flex flex-col gap-6">
-            {/* Value Bets (EV) — Pro only */}
-            <LazySection minHeight={180}>
-              <EvSection isPro={isPro} items={evItems} isLoading={loading} accent={accent} />
-            </LazySection>
-
-            {/* Best Bets — Pro only */}
-            <LazySection minHeight={360}>
-              <BestBetsSection
-                accent={accent}
-                isLoading={loading}
-                locked={!isPro}
-              />
-            </LazySection>
+            {isPro ? (
+              <>
+                <LazySection minHeight={360}>
+                  <BestBetsSection accent={accent} isLoading={loading} locked={false} />
+                </LazySection>
+                <LazySection minHeight={180}>
+                  <EvSection isPro items={evItems} isLoading={loading} accent={accent} />
+                </LazySection>
+              </>
+            ) : (
+              <LazySection minHeight={420}>
+                <ProUpsell accent={accent} />
+              </LazySection>
+            )}
           </div>
 
           {/* Foot of the page: the boards close the rink */}

@@ -1,33 +1,39 @@
 /**
  * TeamCarousel.tsx — bandeau des 32 équipes, en haut de la glace.
  *
- * Ajouté le 2026-08-21. Six tuiles visibles à la fois, défilement continu
- * droite → gauche, mis en pause au survol (ou quand une tuile est ouverte au
- * toucher). Chaque tuile montre le maillot de l'équipe sur un fond aux couleurs
- * du club ; au survol (desktop) ou au clic (mobile), le maillot se floute et
- * laisse apparaître deux destinations : Stats (Charts) ou Prédiction.
+ * Ajouté le 2026-08-21 (marquee CSS continu, tuiles 3:4, sans navigation
+ * manuelle). Refait le 2026-09-27 à la demande de l'utilisatrice :
+ *
+ *   • tuiles CARRÉES et plus petites (72 px, 88 px sur grand écran — taille
+ *     posée en CSS par `--jersey-w` sur `.jersey-carousel`) ;
+ *   • FLÈCHES gauche / droite pour naviguer, et le glissement au doigt marche
+ *     aussi : le bandeau est maintenant un vrai conteneur défilant
+ *     (`overflow-x: auto`, barre masquée) et non plus une piste animée ;
+ *   • le défilement automatique droite → gauche est conservé, piloté en JS
+ *     (`requestAnimationFrame` sur `scrollLeft`). Il se met en pause au survol,
+ *     quand une tuile est ouverte, et quelques secondes après chaque geste
+ *     (flèche, doigt, molette), puis reprend là où la personne l'a laissé.
+ *
+ * La liste est rendue deux fois : quand la position dépasse la première copie,
+ * on recule d'une copie (`half`) — le contenu est identique, le saut invisible.
  *
  * Les visuels de maillots vivent dans `client/public/jerseys/<ABBR>.png` et ne
- * viennent PAS de l'API NHL. Tant qu'un fichier manque, `onError` bascule sur le
- * logo officiel : la page reste correcte sans aucun asset.
- *
- * `--jersey-w` / `--jersey-duration` sont mesurés ici plutôt qu'en CSS : la piste
- * est en `max-content`, donc un pourcentage CSS s'y résoudrait circulairement.
+ * viennent PAS de l'API NHL. Tant qu'un fichier manque, `onError` bascule sur
+ * l'abréviation : la page reste correcte sans aucun asset.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { nhlApiService } from "../../services/nhlApiService";
 import { jerseyUrl, teamColors } from "../../data/teamEmoji";
 import { useI18n } from "../../i18n";
 import type { NHLTeamInfo } from "../../types/bet";
 
-/** Tuiles visibles simultanément (demandé : 6). */
-const VISIBLE = 6;
-/** Largeur plancher : en dessous, les deux boutons du survol deviennent intapables. */
-const MIN_TILE = 84;
-/** Vitesse de défilement, en pixels par seconde. */
-const SPEED_PX_S = 34;
+/** Vitesse du défilement automatique, en pixels par seconde. */
+const SPEED_PX_S = 28;
+/** Pause du défilement automatique après un geste de la personne. */
+const RESUME_AFTER_MS = 5000;
 
 function TeamTile({
   team,
@@ -100,8 +106,18 @@ export function TeamCarousel() {
   const { t } = useI18n();
   const viewportRef = useRef<HTMLDivElement>(null);
   const [teams, setTeams] = useState<NHLTeamInfo[]>([]);
-  const [tileW, setTileW] = useState(MIN_TILE);
   const [openAbbr, setOpenAbbr] = useState<string | null>(null);
+
+  // État du défilement automatique, lu par la boucle d'animation sans la
+  // relancer : des refs, pas des états.
+  const hovering = useRef(false);
+  const pausedUntil = useRef(0);
+  const openRef = useRef<string | null>(null);
+  openRef.current = openAbbr;
+  /** Position flottante : `scrollLeft` s'arrondit, 0,5 px par image s'y perdrait. */
+  const pos = useRef(0);
+  /** Fin de l'animation d'une flèche : le recalage de `onScroll` l'interromprait. */
+  const animUntil = useRef(0);
 
   // Liste des équipes — même source que le reste de l'app.
   useEffect(() => {
@@ -119,32 +135,73 @@ export function TeamCarousel() {
     };
   }, []);
 
-  // Largeur d'une tuile = (largeur visible − 5 espaces) / 6, avec un plancher.
+  const pause = () => {
+    pausedUntil.current = performance.now() + RESUME_AFTER_MS;
+  };
+
+  // Défilement automatique droite → gauche.
   useEffect(() => {
     const el = viewportRef.current;
-    if (!el) return;
-    const gap = parseFloat(getComputedStyle(el).getPropertyValue("--marquee-gap")) || 8;
-    const measure = () => {
-      const w = el.clientWidth;
-      if (!w) return;
-      setTileW(Math.max(MIN_TILE, Math.round((w - (VISIBLE - 1) * gap) / VISIBLE)));
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", measure);
-      return () => window.removeEventListener("resize", measure);
-    }
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+    if (!el || !teams.length) return;
+    const reduced = typeof window.matchMedia === "function"
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) return;
 
-  // Une boucle = la moitié de la piste. Durée = distance / vitesse, pour que la
-  // vitesse perçue reste constante quelle que soit la taille des tuiles.
-  const duration = useMemo(() => {
-    if (!teams.length) return 60;
-    return Math.round((teams.length * (tileW + 8)) / SPEED_PX_S);
-  }, [teams.length, tileW]);
+    let raf = 0;
+    let last = performance.now();
+    pos.current = el.scrollLeft;
+    const tick = (now: number) => {
+      const dt = Math.min(64, now - last);
+      last = now;
+      // La personne a bougé le bandeau (flèche, doigt) : on repart de là.
+      if (Math.abs(el.scrollLeft - pos.current) > 2) pos.current = el.scrollLeft;
+      const half = el.scrollWidth / 2;
+      const idle = !hovering.current && !openRef.current && now >= pausedUntil.current;
+      if (idle && half > el.clientWidth) {
+        pos.current += (SPEED_PX_S * dt) / 1000;
+        if (pos.current >= half) pos.current -= half;
+        el.scrollLeft = pos.current;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [teams.length]);
+
+  // Boucle aussi pour le défilement MANUEL : au-delà de la première copie, on
+  // recule d'une copie.
+  const onScroll = () => {
+    const el = viewportRef.current;
+    if (!el || performance.now() < animUntil.current) return;
+    const half = el.scrollWidth / 2;
+    if (half > 0 && el.scrollLeft >= half) {
+      el.scrollLeft -= half;
+      pos.current = el.scrollLeft;
+    }
+  };
+
+  /** Une « page » = autant de tuiles entières que le bandeau en montre. */
+  const step = (el: HTMLDivElement) => {
+    const tile = el.querySelector<HTMLElement>(".jersey-tile");
+    const track = el.firstElementChild as HTMLElement | null;
+    const gap = (track && parseFloat(getComputedStyle(track).columnGap)) || 8;
+    const unit = (tile?.offsetWidth ?? 72) + gap;
+    return Math.max(1, Math.floor(el.clientWidth / unit)) * unit;
+  };
+
+  const go = (dir: -1 | 1) => {
+    const el = viewportRef.current;
+    if (!el) return;
+    pause();
+    const half = el.scrollWidth / 2;
+    const s = step(el);
+    // Recaler AVANT l'animation, pour ne jamais buter sur un bord.
+    if (dir < 0 && el.scrollLeft - s < 0) el.scrollLeft += half;
+    if (dir > 0 && el.scrollLeft + s >= half) el.scrollLeft -= half;
+    pos.current = el.scrollLeft;
+    animUntil.current = performance.now() + 800;
+    el.scrollBy({ left: dir * s, behavior: "smooth" });
+  };
 
   // Refermer le choix quand on touche ailleurs (mobile : pas de "mouse leave").
   useEffect(() => {
@@ -157,10 +214,9 @@ export function TeamCarousel() {
   }, [openAbbr]);
 
   if (!teams.length) {
-    return <div className="h-[124px] rounded-2xl icy-tile animate-pulse" aria-hidden />;
+    return <div className="h-[100px] rounded-2xl icy-tile animate-pulse" aria-hidden />;
   }
 
-  // La liste est rendue deux fois : le défilement boucle sans coupure visible.
   const loop = [...teams, ...teams];
 
   return (
@@ -169,31 +225,51 @@ export function TeamCarousel() {
         {t("home.allTeams")}
       </h2>
       <div
-        ref={viewportRef}
-        className="jersey-viewport"
-        data-paused={openAbbr ? "true" : "false"}
-        style={
-          {
-            "--jersey-w": `${tileW}px`,
-            "--jersey-duration": `${duration}s`,
-          } as React.CSSProperties
-        }
+        className="jersey-carousel"
+        onMouseEnter={() => { hovering.current = true; }}
+        onMouseLeave={() => { hovering.current = false; }}
       >
-        <div className="jersey-track">
-          {loop.map((team, i) => {
-            const abbr = (team.abbreviation ?? "").toUpperCase();
-            return (
-              <TeamTile
-                key={`${abbr}-${i}`}
-                team={team}
-                isOpen={openAbbr === `${abbr}-${i}`}
-                onToggle={() =>
-                  setOpenAbbr((cur) => (cur === `${abbr}-${i}` ? null : `${abbr}-${i}`))
-                }
-              />
-            );
-          })}
+        <div
+          ref={viewportRef}
+          className="jersey-viewport"
+          onScroll={onScroll}
+          onPointerDown={pause}
+          onTouchStart={pause}
+          onWheel={pause}
+        >
+          <div className="jersey-track">
+            {loop.map((team, i) => {
+              const abbr = (team.abbreviation ?? "").toUpperCase();
+              const key = `${abbr}-${i}`;
+              return (
+                <TeamTile
+                  key={key}
+                  team={team}
+                  isOpen={openAbbr === key}
+                  onToggle={() => setOpenAbbr((cur) => (cur === key ? null : key))}
+                />
+              );
+            })}
+          </div>
         </div>
+
+        {/* Flèches : 44 px de zone tactile, 28 px de rond visible. */}
+        <button
+          type="button"
+          className="jersey-arrow jersey-arrow--prev"
+          aria-label={t("home.teamsPrev")}
+          onClick={() => go(-1)}
+        >
+          <span className="jersey-arrow-dot"><ChevronLeft size={16} /></span>
+        </button>
+        <button
+          type="button"
+          className="jersey-arrow jersey-arrow--next"
+          aria-label={t("home.teamsNext")}
+          onClick={() => go(1)}
+        >
+          <span className="jersey-arrow-dot"><ChevronRight size={16} /></span>
+        </button>
       </div>
     </section>
   );

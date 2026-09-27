@@ -148,7 +148,7 @@ export function GamePrediction({ gameId }: { gameId: string }) {
     // du serveur, ou marché que le modèle ne price pas — → « — ».
     const mlPresetFor = (id: string) =>
       mlBundle === undefined ? undefined : mlBundle === null ? null : (mlBundle.byId[id] ?? null);
-    return mergedGroups.map(g => ({
+    const stamped = mergedGroups.map(g => ({
       ...g,
       options: g.options.map(o => ({
         ...o,
@@ -157,6 +157,25 @@ export function GamePrediction({ gameId }: { gameId: string }) {
         mlPreset: mlPresetFor(o.id),
       })),
     }));
+    // Moneyline (ajouté le 2026-09-27) : les deux équipes totalisent 100 %,
+    // en règles comme en ML. Le serveur recale déjà les règles ; le chiffre ML
+    // du visiteur est le complément de celui du domicile — deux arrondis
+    // indépendants pourraient sinon afficher 49 % + 52 %.
+    return stamped.map(g => {
+      if (g.id !== "moneyline") return g;
+      const h = g.options.find(o => o.id === "mw-home");
+      if (!h) return g;
+      return {
+        ...g,
+        options: g.options.map(o => o.id !== "mw-away" ? o : {
+          ...o,
+          rulePct: 100 - h.rulePct,
+          mlPreset: h.mlPreset && o.mlPreset
+            ? { ...o.mlPreset, probability: 100 - h.mlPreset.probability }
+            : o.mlPreset,
+        }),
+      };
+    });
   }, [gameView, apiGroups, gameId, mlBundle]);
 
   // Cotes du livre réglé, chargées une fois pour toute la page et distribuées

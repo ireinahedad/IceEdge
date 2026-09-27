@@ -1050,7 +1050,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
 
   // ── Home: value bets (EV) + locked sections ──
   "home.evTitle":     { en: "Value Bets (EV)",  fr: "Value Bets (EV)" },
-  "home.evSpot":      { en: "Value spot · model edge", fr: "Opportunité · edge du modèle" },
+  "home.evSpot":      { en: "Our model rates it higher than the odds", fr: "Le modèle y croit plus que la cote" },
   "home.evEmpty":     { en: "No value bets right now — check back soon.", fr: "Aucun value bet pour l'instant — reviens bientôt." },
   "home.evLockDesc":  { en: "The detector flags bets where our model's probability beats the bookmaker's odds (+EV). Pro only.", fr: "Le détecteur repère les paris où la probabilité de notre modèle dépasse la cote (+EV). Réservé aux Pro." },
   "home.evSettings":  { en: "Alert settings", fr: "Réglages des alertes" },
@@ -1097,6 +1097,25 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "home.teamOptions":  { en: "Open {team}", fr: "Ouvrir {team}" },
   "home.noLiveGames":  { en: "No game in progress", fr: "Aucun match en cours" },
   "home.scheduleCta":  { en: "View",           fr: "Voir" },
+
+  // ── Home: refonte du 2026-09-27 (carrousel, tableau des matchs, Pro) ──
+  "home.teamsPrev":    { en: "Previous teams", fr: "Équipes précédentes" },
+  "home.teamsNext":    { en: "Next teams",     fr: "Équipes suivantes" },
+  "home.colSpread":    { en: "Puck line",      fr: "Handicap" },
+  "home.colWinner":    { en: "Winner",         fr: "Vainqueur" },
+  "home.noRealMoney":  { en: "No real money involved.", fr: "Aucun argent réel en jeu." },
+  "home.noRealMoneyHint": { en: "ArakIce is an analytics tool: the bets in your slip are virtual, for fun and the leaderboard.", fr: "ArakIce est un outil d'analyse : les paris de ton coupon sont virtuels, pour le plaisir et le classement." },
+  "home.proHeadline":  { en: "Go Pro",         fr: "Passe à Pro" },
+  "home.proSub":       { en: "The model's best picks of the day and the value bets it spots, in one place.", fr: "Les meilleurs paris du jour et les value bets repérés par le modèle, réunis au même endroit." },
+  "home.proBestBetsDesc": { en: "The day's strongest picks across every market, rated by the model.", fr: "Les paris les plus solides du jour, tous marchés confondus, notés par le modèle." },
+  "home.proEvDesc":    { en: "Bets where our model sees a better chance than the bookmaker's odds imply.", fr: "Les paris où notre modèle voit plus de chances que ce que suppose la cote du bookmaker." },
+  "home.proOnly":      { en: "Available to Pro subscribers.", fr: "Réservé aux abonnés Pro." },
+  "home.evWhatTitle":  { en: "What's a value bet?", fr: "C'est quoi, un value bet ?" },
+  "home.evWhat":       { en: "A bet where our model gives a better chance of winning than the bookmaker's odds suggest. The odds are too generous — that gap is the \"value\".", fr: "Un pari où notre modèle donne plus de chances de gagner que ce que la cote du bookmaker laisse croire. La cote est trop généreuse : cet écart, c'est la « valeur »." },
+  "home.evExample":    { en: "Example: odds of 2.50 imply a 40% chance. If the model sees 48%, that's +8 pts of value.", fr: "Exemple : une cote de 2.50 suppose 40 % de chances. Si le modèle en voit 48 %, ça fait +8 pts de valeur." },
+  "home.evHowToRead":  { en: "On each line: the gap in green, then our chance vs the bookmaker's. A value bet isn't a sure win — it's a bet that pays better than it should, over the long run.", fr: "Sur chaque ligne : l'écart en vert, puis notre chance face à celle du bookmaker. Un value bet n'est pas gagné d'avance : c'est un pari mieux payé qu'il ne devrait l'être, sur la durée." },
+  "home.evEdge":       { en: "+{edge} pts value", fr: "+{edge} pts de valeur" },
+  "home.evVs":         { en: "Model {model}% vs book {book}%", fr: "Modèle {model} % vs livre {book} %" },
 };
 
 type TParams = Record<string, string | number>;

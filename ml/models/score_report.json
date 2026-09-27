@@ -14,6 +14,7 @@
     "atk_b2b",
     "atk_lineup_xg",
     "atk_lineup_pts",
+    "atk_ev_xgf_pct_l",
     "def_xga60_s",
     "def_xga60_l",
     "def_ev_xga60_s",
@@ -21,32 +22,35 @@
     "def_pk_xga60_s",
     "def_goalie_gsax60",
     "def_goalie_svpct",
+    "def_b2b",
+    "def_rest_days",
+    "def_goalie_backup",
     "is_home",
     "elo_atk_minus_def"
   ],
   "params": {
-    "max_depth": 3,
-    "learning_rate": 0.03,
-    "subsample": 0.9,
+    "max_depth": 4,
+    "learning_rate": 0.02,
+    "subsample": 0.7,
     "colsample_bytree": 0.6,
-    "min_child_weight": 10,
-    "reg_lambda": 1.0
+    "min_child_weight": 20,
+    "reg_lambda": 10.0
   },
-  "best_iteration": 370,
+  "best_iteration": 459,
   "tau_margin": {
-    "-6": 0.66018,
-    "-5": 0.75401,
-    "-4": 0.9292,
-    "-3": 1.39814,
-    "-2": 0.91129,
-    "-1": 0.70584,
-    "0": 1.36199,
-    "1": 0.72815,
-    "2": 0.92122,
-    "3": 1.42564,
-    "4": 1.0226,
-    "5": 0.84594,
-    "6": 0.83352
+    "-6": 0.65421,
+    "-5": 0.74912,
+    "-4": 0.92511,
+    "-3": 1.39433,
+    "-2": 0.91003,
+    "-1": 0.70563,
+    "0": 1.36277,
+    "1": 0.72906,
+    "2": 0.92278,
+    "3": 1.42815,
+    "4": 1.02399,
+    "5": 0.84629,
+    "6": 0.83252
   },
   "p_ot_home": 0.49956,
   "p_ot_model": {
@@ -54,30 +58,45 @@
     "source": "train",
     "n": 3427,
     "w": [
-      0.264466,
-      -0.06097
+      0.283351,
+      -0.063953
     ],
     "mean_fitted": 0.49956,
     "logloss_const": 0.69315,
-    "logloss_model": 0.69142
+    "logloss_model": 0.69113
   },
-  "blend": null,
+  "blend": {
+    "weights": [
+      0.606254,
+      0.670754,
+      -0.078242
+    ],
+    "market_column": "market_home_p_close",
+    "n_val_with_odds": 1980,
+    "n_test_with_odds": 1311,
+    "logloss_score_only": 0.6847,
+    "logloss_market_only": 0.68222,
+    "logloss_blend": 0.68418,
+    "brier_score_only": 0.24592,
+    "brier_market_only": 0.24465,
+    "brier_blend": 0.24565
+  },
   "confidence": {
     "signal": "abs_lambda_diff",
     "source": "train",
     "n": 14631,
     "deciles": [
-      2e-05,
-      0.0671,
-      0.13652,
-      0.20651,
-      0.27986,
-      0.36246,
-      0.45362,
-      0.55706,
-      0.68615,
-      0.87261,
-      1.99671
+      4e-05,
+      0.06591,
+      0.13702,
+      0.20824,
+      0.28124,
+      0.36231,
+      0.45502,
+      0.55844,
+      0.69197,
+      0.89322,
+      2.15226
     ]
   },
   "n_train": 14631,
@@ -85,24 +104,24 @@
   "test": {
     "raw": {
       "label": "Poisson sans correction",
-      "mae_total": 1.8771,
-      "logloss_moneyline": 0.6636,
-      "tie_predicted": 0.1575,
+      "mae_total": 1.8703,
+      "logloss_moneyline": 0.6627,
+      "tie_predicted": 0.1584,
       "tie_observed": 0.221,
-      "home_-1.5_predicted": 0.3131,
+      "home_-1.5_predicted": 0.3121,
       "home_-1.5_observed": 0.332,
-      "home_win_predicted": 0.5432,
+      "home_win_predicted": 0.5436,
       "home_win_observed": 0.54
     },
     "corrected": {
       "label": "Poisson + correction \u03c4",
-      "mae_total": 1.8823,
-      "logloss_moneyline": 0.6637,
-      "tie_predicted": 0.2136,
+      "mae_total": 1.8749,
+      "logloss_moneyline": 0.6628,
+      "tie_predicted": 0.215,
       "tie_observed": 0.221,
-      "home_-1.5_predicted": 0.3329,
+      "home_-1.5_predicted": 0.3323,
       "home_-1.5_observed": 0.332,
-      "home_win_predicted": 0.5496,
+      "home_win_predicted": 0.5506,
       "home_win_observed": 0.54
     },
     "baseline_mae_total": 1.8996
@@ -111,91 +130,107 @@
   "feature_importances": [
     {
       "name": "elo_atk_minus_def",
-      "importance": 0.1302
-    },
-    {
-      "name": "def_xga60_l",
-      "importance": 0.0929
+      "importance": 0.0893
     },
     {
       "name": "is_home",
-      "importance": 0.0917
+      "importance": 0.0886
+    },
+    {
+      "name": "def_xga60_l",
+      "importance": 0.063
     },
     {
       "name": "atk_lineup_pts",
-      "importance": 0.0817
+      "importance": 0.0578
     },
     {
       "name": "atk_lineup_xg",
-      "importance": 0.074
+      "importance": 0.057
+    },
+    {
+      "name": "def_goalie_backup",
+      "importance": 0.0552
     },
     {
       "name": "atk_xgf60_l",
-      "importance": 0.0631
+      "importance": 0.0385
     },
     {
       "name": "def_goalie_svpct",
-      "importance": 0.0453
+      "importance": 0.0385
     },
     {
       "name": "atk_star_power",
-      "importance": 0.0429
+      "importance": 0.0376
     },
     {
       "name": "def_ev_xga60_s",
-      "importance": 0.0358
-    },
-    {
-      "name": "atk_xgf60_s",
-      "importance": 0.034
-    },
-    {
-      "name": "def_ga_s",
-      "importance": 0.0328
+      "importance": 0.0346
     },
     {
       "name": "def_xga60_s",
-      "importance": 0.0314
+      "importance": 0.0337
+    },
+    {
+      "name": "def_ga_s",
+      "importance": 0.0318
+    },
+    {
+      "name": "atk_b2b",
+      "importance": 0.0304
+    },
+    {
+      "name": "atk_xgf60_s",
+      "importance": 0.0291
     },
     {
       "name": "atk_ev_xgf60_s",
-      "importance": 0.0311
+      "importance": 0.0291
+    },
+    {
+      "name": "atk_rest_days",
+      "importance": 0.0289
     },
     {
       "name": "def_goalie_gsax60",
-      "importance": 0.0274
+      "importance": 0.0285
     },
     {
       "name": "atk_ev_xgf_pct_s",
+      "importance": 0.0281
+    },
+    {
+      "name": "atk_ev_xgf_pct_l",
+      "importance": 0.0272
+    },
+    {
+      "name": "atk_finishing_s",
+      "importance": 0.0256
+    },
+    {
+      "name": "def_b2b",
       "importance": 0.0254
     },
     {
       "name": "atk_stars_out_weight",
-      "importance": 0.0244
+      "importance": 0.0253
     },
     {
-      "name": "atk_rest_days",
-      "importance": 0.0239
-    },
-    {
-      "name": "atk_finishing_s",
-      "importance": 0.0238
+      "name": "def_rest_days",
+      "importance": 0.0253
     },
     {
       "name": "def_pk_xga60_s",
-      "importance": 0.0238
+      "importance": 0.0249
     },
     {
       "name": "atk_gf_s",
-      "importance": 0.0231
-    },
-    {
-      "name": "atk_b2b",
-      "importance": 0.0216
+      "importance": 0.024
     },
     {
       "name": "atk_pp_xgf60_s",
-      "importance": 0.0197
+      "importance": 0.0224
     }
   ]
 }

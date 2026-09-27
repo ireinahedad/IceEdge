@@ -230,6 +230,36 @@ def p_ot_for(w: list[float] | None, lam_home: float, lam_away: float,
     return float(1.0 / (1.0 + np.exp(-z)))
 
 
+# ── γ : étirer l'écart entre les deux intensités (2026-09-27) ───────────────
+#
+# Le modèle de score est trop prudent dans les extrêmes (déciles de
+# `backtest.py --reliability`, pente de recalibration > 1 contre la clôture
+# dans `backtest_walkforward.py --market-gap`). γ corrige la forme, pas le
+# niveau : la somme S = λ_dom + λ_ext est conservée (totaux intacts), et
+# l'écart δ = log λ_dom − log λ_ext devient γ·δ. Un seul paramètre, qui
+# s'applique à tous les marchés dérivés de la distribution — ils restent
+# cohérents entre eux, contrairement à une recalibration du seul moneyline.
+# γ = 1 rend exactement les λ d'entrée.
+#
+# NON ADOPTÉ (2026-09-27) : ajusté par fold sur la tranche d'arrêt précoce, γ
+# tombe entre 1,06 et 1,47 mais ne tient pas hors échantillon (moneyline
+# +0,00024, 6/14 saisons, `--score-v2`). La prudence mesurée venait des
+# informations manquantes (v2), pas de la forme de la distribution. Sert
+# uniquement à la mesure ; le service ne l'applique pas.
+GAMMA_MIN, GAMMA_MAX = 0.5, 3.0
+
+
+def stretch_lambdas(lam_home, lam_away, gamma: float):
+    """(λ_dom, λ_ext) après étirement de l'écart par γ ; somme conservée."""
+    lh = np.asarray(lam_home, dtype=float)
+    la = np.asarray(lam_away, dtype=float)
+    if gamma == 1.0:
+        return lh, la
+    tot = lh + la
+    r = np.exp(gamma * np.log(lh / la))
+    return tot * r / (1.0 + r), tot / (1.0 + r)
+
+
 class ScoreDistribution:
     """Distribution complète d'un match à partir de (λ_dom, λ_ext).
 

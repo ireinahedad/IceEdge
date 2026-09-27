@@ -130,16 +130,31 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
   const tml = (propType: string, line?: number): MLProps =>
     ({ type: "team", subjectId: data.abbr, propType, line, gameId: selectedGame?.id });
 
+  // Moneyline : le choix direct entre les deux équipes (2026-09-27). La tuile
+  // « perd » est le pari sur l'ADVERSAIRE — sujet = l'adversaire, pour que le
+  // coupon le règle comme sa victoire et que la cote affichée soit la sienne.
+  // Elle pointait sur `tml("moneyline")`, c'est-à-dire sur la victoire de
+  // l'équipe de la page : un pari « perd » s'enregistrait en pari « gagne ».
+  // Sans match choisi, il n'y a pas d'adversaire, donc pas de marché.
+  const oppMl: MLProps | undefined = oppAbbr
+    ? { type: "team", subjectId: oppAbbr, opponentId: data.abbr, propType: "moneyline", gameId: selectedGame?.id }
+    : undefined;
+
   const teamGroups: MktGroup[] = [
     {
-      id: "match", title: "Match Betting", cols: 2,
+      id: "moneyline", title: "Moneyline", cols: 2,
       options: [
-        { id: "t-win",  label: `${data.abbr} Wins (ML)`,       rulePct: hp,
+        { id: "t-win",  label: `${data.abbr} wins`,            rulePct: hp,
           ruleNote: `Season win rate of ${hp}% based on ${data.pts} pts, record ${data.homeRecord} home / ${data.awayRecord} away.`,
           mlProps: tml("moneyline") },
-        { id: "t-lose", label: `${data.abbr} Loses (ML)`,      rulePct: 100 - hp,
+        { id: "t-lose", label: oppAbbr ? `${oppAbbr} wins` : `${data.abbr} loses`, rulePct: 100 - hp,
           ruleNote: `Inverse of win probability: ${100 - hp}%. Current streak: ${data.streak || "—"}.`,
-          mlProps: tml("moneyline") },
+          mlProps: oppMl },
+      ],
+    },
+    {
+      id: "match", title: "Overtime", cols: 2,
+      options: [
         { id: "t-ml-ot",label: "Match Goes to OT",             rulePct: 22,
           ruleNote: "~22-24% of NHL games go to OT/SO regardless of team strength.",
           mlProps: tml("game_to_ot") },
@@ -285,6 +300,15 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
           return src && typeof src.rulePct === "number" ? [{ ...o, ...src, rulePct: src.rulePct }] : [];
         }),
       }))
+      // Moneyline : les deux côtés font 100 % — le dé-scaling de `ml-away`
+      // arrondit de son côté et pouvait donner 101.
+      .map((g) => {
+        if (g.id !== "moneyline") return g;
+        const win = g.options.find((o) => o.id === "t-win");
+        return win
+          ? { ...g, options: g.options.map((o) => o.id === "t-lose" ? { ...o, rulePct: 100 - win.rulePct } : o) }
+          : g;
+      })
       .filter((g) => g.options.length > 0);
   })();
 
@@ -383,15 +407,23 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
     if (!m?.propType || m.type !== "game") return null;
     return mlBundle.byKey[mlBundleKey(m.propType, m.line, m.selection, m.isHome !== false)] ?? null;
   };
-  const groupsWithMl: MktGroup[] = shownGroups.map(g => ({
-    ...g,
-    options: g.options.map(o => {
+  const groupsWithMl: MktGroup[] = shownGroups.map(g => {
+    const options = g.options.map(o => {
       // `mlBundleKey` lit un résultat de TUILE : un pari « +x » est déclaré
       // comme le « −x » adverse côté « non ». Le paquet renvoie déjà le côté
       // demandé — rien à inverser ici.
       return { ...o, mlExternal: true, mlPreset: mlFor(o) };
-    }),
-  }));
+    });
+    if (g.id !== "moneyline") return { ...g, options };
+    // Moneyline : le chiffre ML de l'adversaire est le complément exact.
+    const win = options.find(o => o.id === "t-win")?.mlPreset;
+    return {
+      ...g,
+      options: options.map(o => o.id === "t-lose" && win && o.mlPreset
+        ? { ...o, mlPreset: { ...o.mlPreset, probability: 100 - win.probability } }
+        : o),
+    };
+  });
 
   return (
     <div className="flex flex-col gap-3">

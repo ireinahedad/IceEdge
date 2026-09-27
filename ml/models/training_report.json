@@ -15,10 +15,10 @@
     "n_train": 14631,
     "n_val": 2582,
     "n_test": 4304,
-    "accuracy": 0.5922,
-    "brier_score": 0.2366,
-    "log_loss": 0.6653,
-    "skill_score": 0.0477,
+    "accuracy": 0.5943,
+    "brier_score": 0.2367,
+    "log_loss": 0.6656,
+    "skill_score": 0.0472,
     "val_log_loss": 0.6514,
     "home_win_rate": 0.5459,
     "baselines": {
@@ -29,14 +29,33 @@
         "log_loss": 0.6702,
         "brier": 0.2389
       },
-      "market": {}
+      "market": {
+        "n_with_odds": 1311,
+        "market_accuracy": 0.553,
+        "market_log_loss": 0.6822,
+        "market_brier": 0.2447,
+        "blend_accuracy": 0.5545,
+        "blend_log_loss": 0.6843,
+        "blend_brier": 0.2456,
+        "blend_weights": [
+          0.564,
+          0.6344,
+          -0.0557
+        ]
+      }
     },
     "calibration": {
       "method": "platt",
       "a": 1.100919,
       "b": -0.078121
     },
-    "blend": null,
+    "blend": {
+      "weights": [
+        0.564017,
+        0.634359,
+        -0.055664
+      ]
+    },
     "feature_importances": [
       {
         "name": "elo_diff",

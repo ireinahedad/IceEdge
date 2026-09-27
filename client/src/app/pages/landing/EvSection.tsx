@@ -7,7 +7,7 @@
  */
 
 import { useNavigate } from "react-router";
-import { Zap, Settings } from "lucide-react";
+import { Zap, Settings, Lightbulb } from "lucide-react";
 import { ProLock } from "../../components/ProLock";
 import { useI18n } from "../../i18n";
 
@@ -25,13 +25,22 @@ export interface EvItem {
 
 // Static, realistic-looking rows shown (blurred) to non-Pro users so they can
 // see what the feature looks like without exposing real value bets.
-const EV_SAMPLE: EvItem[] = [
+// (Le tennis est sorti du produit le 2026-08-24 : plus de ligne tennis ici.)
+export const EV_SAMPLE: EvItem[] = [
   { id: "ev-s1", logo: "🏒", label: "TOR ML vs MTL",       context: "Value spot", pct: 58, edge: 11 },
   { id: "ev-s2", logo: "🏒", label: "Over 5.5 · BOS–FLA",  context: "Value spot", pct: 63, edge: 9 },
-  { id: "ev-s3", logo: "🎾", label: "Sinner to win",       context: "Value spot", pct: 71, edge: 8 },
+  { id: "ev-s3", logo: "🏒", label: "EDM ML vs CGY",       context: "Value spot", pct: 61, edge: 8 },
 ];
 
-function EvRow({ item }: { item: EvItem }) {
+/**
+ * Une ligne de value bet, lisible sans connaître le jargon (2026-09-27) :
+ * « +11 pts » en vert = l'écart, et dessous les deux chances qui le font —
+ * celle du modèle contre celle que suppose la cote du bookmaker. La chance du
+ * livre se déduit de l'écart (`edge = modèle − implicite`, `calcEdge`).
+ */
+export function EvRow({ item }: { item: EvItem }) {
+  const { t } = useI18n();
+  const bookPct = item.pct - item.edge;
   return (
     <div className="flex items-center gap-2.5 icy-card rounded-xl px-2.5 py-2">
       {item.logo?.startsWith("http")
@@ -42,8 +51,10 @@ function EvRow({ item }: { item: EvItem }) {
         <div className="text-[#8a9ea6] text-[11px] truncate">{item.context}</div>
       </div>
       <div className="text-right flex-shrink-0">
-        <div className="text-green-400 text-[11px] font-bold tabular-nums">+{item.edge}% EV</div>
-        <div className="text-[#bfc8cc] text-[11px] tabular-nums">{item.pct}% {"" /* model */}</div>
+        <div className="text-green-400 text-[11px] font-bold tabular-nums">{t("home.evEdge", { edge: item.edge })}</div>
+        <div className="text-[#bfc8cc] text-[11px] tabular-nums">
+          {t("home.evVs", { model: item.pct, book: bookPct })}
+        </div>
       </div>
     </div>
   );
@@ -80,6 +91,20 @@ export function EvSection({ isPro, items, isLoading, accent }: {
           </button>
         )}
       </div>
+
+      {/* Ce qu'est un value bet, pour quelqu'un qui n'a jamais parié
+          (2026-09-27). Toujours visible : c'est la clé de lecture des lignes. */}
+      {isPro && (
+        <div className="flex gap-2 rounded-xl px-3 py-2.5 mb-3"
+          style={{ background: "rgba(74,222,128,0.06)", border: "1px solid rgba(74,222,128,0.18)" }}>
+          <Lightbulb size={14} className="flex-shrink-0 mt-0.5 text-green-400" />
+          <div className="text-[11px] leading-relaxed text-[#bfc8cc]">
+            <p><span className="font-bold text-white">{t("home.evWhatTitle")}</span> {t("home.evWhat")}</p>
+            <p className="mt-1 text-[#8a9ea6]">{t("home.evExample")}</p>
+            <p className="mt-1 text-[#8a9ea6]">{t("home.evHowToRead")}</p>
+          </div>
+        </div>
+      )}
 
       {isPro ? (
         isLoading ? (

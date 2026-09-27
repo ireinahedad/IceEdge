@@ -1,0 +1,222 @@
+{
+  "protocol": {
+    "split": "chronologique, coupures entre deux journees",
+    "cuts": [
+      0.25,
+      0.5,
+      0.75
+    ],
+    "adopt_if": "z <= -2.24 ET gain sur >= 70% des saisons ET moneyline z < +2",
+    "seasons": [
+      2012,
+      2013,
+      2014,
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ]
+  },
+  "split_75_25": {
+    "puckline": {
+      "n": 4131,
+      "delta": -0.000282,
+      "se": 0.000382,
+      "z": -0.74
+    },
+    "moneyline": {
+      "n": 4131,
+      "delta": -0.0004,
+      "se": 0.000452,
+      "z": -0.88
+    },
+    "deviance": {
+      "n": 4131,
+      "delta": -0.000998,
+      "se": 0.000867,
+      "z": -1.15
+    },
+    "seasons_better": [
+      2012,
+      2013,
+      2014,
+      2015,
+      2016,
+      2017,
+      2018,
+      2020,
+      2023,
+      2024
+    ],
+    "share_seasons_better": 0.714,
+    "verdict": "NON TRANCHABLE"
+  },
+  "quarterly": {
+    "puckline": {
+      "n": 12471,
+      "delta": -0.000153,
+      "se": 0.000201,
+      "z": -0.76
+    },
+    "moneyline": {
+      "n": 12471,
+      "delta": -0.000202,
+      "se": 0.000237,
+      "z": -0.85
+    },
+    "deviance": {
+      "n": 12471,
+      "delta": -0.000885,
+      "se": 0.000448,
+      "z": -1.98
+    },
+    "seasons_better": [
+      2012,
+      2013,
+      2014,
+      2015,
+      2016,
+      2018,
+      2020,
+      2021,
+      2024,
+      2025
+    ],
+    "share_seasons_better": 0.714,
+    "verdict": "NON TRANCHABLE"
+  },
+  "by_quarter": {
+    "Q2": {
+      "puckline": {
+        "n": 4191,
+        "delta": 0.000168,
+        "se": 0.000287,
+        "z": 0.59
+      },
+      "moneyline": {
+        "n": 4191,
+        "delta": 5.7e-05,
+        "se": 0.00035,
+        "z": 0.16
+      },
+      "deviance": {
+        "n": 4191,
+        "delta": 2.1e-05,
+        "se": 0.00064,
+        "z": 0.03
+      },
+      "seasons_better": [
+        2012,
+        2014,
+        2016,
+        2018,
+        2020,
+        2021,
+        2022
+      ],
+      "share_seasons_better": 0.5,
+      "verdict": "NON TRANCHABLE"
+    },
+    "Q3": {
+      "puckline": {
+        "n": 4149,
+        "delta": -0.00035,
+        "se": 0.000369,
+        "z": -0.95
+      },
+      "moneyline": {
+        "n": 4149,
+        "delta": -0.000267,
+        "se": 0.000425,
+        "z": -0.63
+      },
+      "deviance": {
+        "n": 4149,
+        "delta": -0.001688,
+        "se": 0.000807,
+        "z": -2.09
+      },
+      "seasons_better": [
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2020,
+        2021,
+        2022,
+        2024,
+        2025
+      ],
+      "share_seasons_better": 0.714,
+      "verdict": "NON TRANCHABLE"
+    },
+    "Q4": {
+      "puckline": {
+        "n": 4131,
+        "delta": -0.000282,
+        "se": 0.000382,
+        "z": -0.74
+      },
+      "moneyline": {
+        "n": 4131,
+        "delta": -0.0004,
+        "se": 0.000452,
+        "z": -0.88
+      },
+      "deviance": {
+        "n": 4131,
+        "delta": -0.000998,
+        "se": 0.000867,
+        "z": -1.15
+      },
+      "seasons_better": [
+        2012,
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2020,
+        2023,
+        2024
+      ],
+      "share_seasons_better": 0.714,
+      "verdict": "NON TRANCHABLE"
+    }
+  },
+  "market": {
+    "oddsapi:draftkings": {
+      "n": 982,
+      "ll_frozen": 0.6844,
+      "ll_in_season": 0.68497,
+      "ll_market": 0.68107,
+      "gap_frozen_minus_market": {
+        "n": 982,
+        "delta": 0.00333,
+        "se": 0.002606,
+        "z": 1.28
+      }
+    },
+    "sbro": {
+      "n": 7104,
+      "ll_frozen": 0.66677,
+      "ll_in_season": 0.66627,
+      "ll_market": 0.66286,
+      "gap_frozen_minus_market": {
+        "n": 7104,
+        "delta": 0.003906,
+        "se": 0.00117,
+        "z": 3.34
+      }
+    }
+  }
+}
