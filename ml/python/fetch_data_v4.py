@@ -30,8 +30,14 @@ Backfill des cotes 2023-24 → 2025-26 (The Odds API) :
     export ODDS_API_KEY=...          # PowerShell : $env:ODDS_API_KEY = '...'
     python fetch_data_v4.py --only odds --odds-api-dry-run \
         --odds-api-from 2023-10-01 --odds-api-to 2024-06-30      # chiffre le coût
-    python fetch_data_v4.py --only odds --odds-api-book draftkings \
-        --odds-api-from 2023-10-01 --odds-api-to 2024-06-30      # récupère
+    python fetch_data_v4.py --only odds --from-local --odds-api-book draftkings \
+        --odds-api-from 2023-10-01 --odds-api-to 2024-04-30 \
+        --odds-api-budget 15000                                   # récupère
+
+    Livre : `draftkings` (décidé le 2026-09-27, sondage probe_odds_books.py) —
+    le MÊME que ODDS_COLLECT_BOOKMAKERS côté serveur, sinon le CLV compare deux
+    livres. `--from-local` est obligatoire : la partie SBRO ne se télécharge
+    plus, et sans lui le garde-fou refuse d'écrire odds.csv.
 
 Les snapshots sont mis en cache dans data/raw/odds/oddsapi/ : relancer la même
 plage ne coûte plus rien. Faire d'abord une saison de RECOUVREMENT (2021-22 par
@@ -618,9 +624,33 @@ def _oddsapi_key() -> str | None:
 
 
 # Coût d'un appel, en crédits : 10 par marché et par région pour l'endpoint
-# HISTORIQUE, contre 1 par marché et par région pour l'endpoint live. Avec nos
-# 3 marchés sur une région : 30 crédits l'appel historique, 3 en live.
-ODDS_API_HIST_COST = 10 * 3      # h2h + spreads + totals, une région
+# HISTORIQUE, contre 1 par marché et par région pour l'endpoint live. Un
+# paramètre `bookmakers` compte comme une région par tranche de 10 livres.
+#
+# Marchés par défaut depuis le 2026-09-27 : h2h + spreads, SANS les totaux.
+# Les totaux sont clos pour de bon (CLV sous leur propre placebo, 2026-08-23) :
+# les payer coûtait un tiers du backfill (66 630 → ~44 400 crédits) pour une
+# donnée qu'aucune stratégie ne lit. `--odds-api-markets` les remet au besoin.
+ODDS_API_MARKETS_DEFAULT = "h2h,spreads"
+ODDS_API_HIST_COST = 10 * 2      # recalculé par `_set_hist_cost` à chaque run
+
+
+def _set_hist_cost(markets: str, regions: str, book: str | None) -> int:
+    """Fixe le coût d'un appel historique pour ce run, et le rend.
+
+    Une constante module est gardée (et non un paramètre de plus partout) parce
+    que trois endroits la lisent : le garde-fou de solde de `_oddsapi_get`, le
+    budget de `fetch_odds_api` et le chiffrage `--dry-run`. Un coût faux dans
+    l'un d'eux ferait dépasser `--odds-api-budget` sans prévenir.
+    """
+    global ODDS_API_HIST_COST
+    n_mk = len([m for m in markets.split(",") if m.strip()])
+    if book:
+        n_sel = -(-len([b for b in book.split(",") if b.strip()]) // 10)
+    else:
+        n_sel = len([r for r in regions.split(",") if r.strip()])
+    ODDS_API_HIST_COST = 10 * max(n_mk, 1) * max(n_sel, 1)
+    return ODDS_API_HIST_COST
 
 
 class _OddsApiStop(Exception):
@@ -670,11 +700,27 @@ def _oddsapi_get(path: str, params: dict, key: str) -> dict | list | None:
         return None
 
 
-def _oddsapi_cache_path(ts: str, regions: str) -> str:
-    return f"{ODDS_API_CACHE}/{regions}_{ts.replace(':', '').replace('-', '')}.json"
+def _oddsapi_cache_path(ts: str, regions: str,
+                        markets: str = "h2h,spreads,totals",
+                        book: str | None = None) -> str:
+    """Chemin du snapshot en cache.
+
+    Le nom porte TOUT ce qui change le contenu de la réponse : sélection des
+    livres et marchés. Sans ça, un snapshot pris avec `bookmakers=draftkings`
+    serait resservi à un run qui demande `regions=eu` — un prix du mauvais
+    livre, gratuit, et invisible. L'ancien nom (`<regions>_<ts>`, trois marchés,
+    sans livre) est conservé tel quel pour ne pas perdre un cache déjà payé.
+    """
+    stamp = ts.replace(':', '').replace('-', '')
+    if not book and markets == "h2h,spreads,totals":
+        return f"{ODDS_API_CACHE}/{regions}_{stamp}.json"
+    sel = f"bk-{book.replace(',', '+')}" if book else regions.replace(',', '+')
+    return f"{ODDS_API_CACHE}/{sel}_{markets.replace(',', '+')}_{stamp}.json"
 
 
-def _oddsapi_snapshot(ts: str, key: str, regions: str, use_cache: bool = True):
+def _oddsapi_snapshot(ts: str, key: str, regions: str, use_cache: bool = True,
+                      markets: str = ODDS_API_MARKETS_DEFAULT,
+                      book: str | None = None):
     """Un snapshot horodaté, mis en cache sur disque.
 
     Le cache n'est pas une optimisation de confort : chaque appel historique
@@ -683,7 +729,7 @@ def _oddsapi_snapshot(ts: str, key: str, regions: str, use_cache: bool = True):
     immuable par construction.
     """
     os.makedirs(ODDS_API_CACHE, exist_ok=True)
-    path = _oddsapi_cache_path(ts, regions)
+    path = _oddsapi_cache_path(ts, regions, markets, book)
     if use_cache and os.path.exists(path):
         try:
             with open(path, encoding="utf-8") as fh:
@@ -692,8 +738,10 @@ def _oddsapi_snapshot(ts: str, key: str, regions: str, use_cache: bool = True):
             pass
     data = _oddsapi_get(
         f"/historical/sports/{ODDS_API_SPORT}/odds",
-        {"regions": regions, "markets": "h2h,spreads,totals",
-         "oddsFormat": "decimal", "date": ts}, key)
+        # Un livre nommé part en `bookmakers` (The Odds API ignore alors
+        # `regions`) : la réponse ne contient que lui, même coût.
+        {**({"bookmakers": book} if book else {"regions": regions}),
+         "markets": markets, "oddsFormat": "decimal", "date": ts}, key)
     if data is None:
         return None
     try:
@@ -858,7 +906,8 @@ def _oddsapi_snapshot_row(event: dict, bk: dict, snap_ts: str) -> dict | None:
 
 def fetch_odds_api(start: str, end: str, book: str | None, regions: str,
                    dry_run: bool = False, use_cache: bool = True,
-                   budget: int | None = None) -> list[dict]:
+                   budget: int | None = None,
+                   markets: str = ODDS_API_MARKETS_DEFAULT) -> list[dict]:
     """Historique The Odds API entre deux dates (AAAA-MM-JJ incluses).
 
     **Comment on approxime la cote de clôture.** Un snapshot renvoie tous les
@@ -890,6 +939,7 @@ def fetch_odds_api(start: str, end: str, book: str | None, regions: str,
     reprise gratuite. Un appel servi par le cache ne coûte rien et n'est donc
     pas décompté.
     """
+    _set_hist_cost(markets, regions, book)
     key = None if dry_run else _oddsapi_key()
     if key is None and not dry_run:
         return []
@@ -935,13 +985,14 @@ def fetch_odds_api(start: str, end: str, book: str | None, regions: str,
             seen_ts.add(ts)
             # Un snapshot déjà en cache ne coûte rien : on ne le décompte pas
             # du budget, sinon une simple reprise le consommerait à vide.
-            cached = _oddsapi_cache_path(ts, regions)
+            cached = _oddsapi_cache_path(ts, regions, markets, book)
             billable = not (use_cache and os.path.exists(cached))
             if billable and budget is not None and spent + ODDS_API_HIST_COST > budget:
                 stopped = f"budget atteint ({spent}/{budget} crédits)"
                 break
             try:
-                snap = _oddsapi_snapshot(ts, key, regions, use_cache)
+                snap = _oddsapi_snapshot(ts, key, regions, use_cache,
+                                         markets, book)
             except _OddsApiStop as e:
                 stopped = str(e)
                 break
@@ -1080,7 +1131,8 @@ def _write_odds_csv(df: pd.DataFrame, allow_shrink: bool = False) -> bool:
 def fetch_odds(from_local: bool = False, api_range: tuple | None = None,
                book: str | None = None, regions: str = "us",
                dry_run: bool = False, api_cache: bool = True,
-               budget: int | None = None, allow_shrink: bool = False) -> None:
+               budget: int | None = None, allow_shrink: bool = False,
+               markets: str = ODDS_API_MARKETS_DEFAULT) -> None:
     print("💰 Cotes historiques (sportsbookreviewsonline) …")
     all_rows = []
 
@@ -1091,12 +1143,15 @@ def fetch_odds(from_local: bool = False, api_range: tuple | None = None,
     # n'est pas faite, la série historique reste homogène.
     if api_range or dry_run:
         s, e = api_range or ("2023-10-01", "2024-04-30")
+        cost = _set_hist_cost(markets, regions, book)
         print(f"   The Odds API {s} → {e} "
-              f"(book={book or 'premier disponible'}, regions={regions})")
+              f"(book={book or 'premier disponible'}, regions={regions}, "
+              f"markets={markets}, {cost} crédits/appel)")
         if budget is not None:
             print(f"   Budget dur : {budget:,} crédits "
                   f"({budget // ODDS_API_HIST_COST} appels au maximum)")
-        api_rows = fetch_odds_api(s, e, book, regions, dry_run, api_cache, budget)
+        api_rows = fetch_odds_api(s, e, book, regions, dry_run, api_cache, budget,
+                                  markets)
         if dry_run:
             return
         all_rows.extend(api_rows)
@@ -1200,6 +1255,10 @@ def main():
     p.add_argument("--odds-api-regions", default="us",
                    help="Régions de bookmakers (us, us2, uk, eu, au). "
                         "'eu' pour Pinnacle. Défaut : us")
+    p.add_argument("--odds-api-markets", default=ODDS_API_MARKETS_DEFAULT,
+                   help="Marchés demandés (h2h, spreads, totals). Défaut : "
+                        "h2h,spreads — les totaux sont clos et coûteraient un "
+                        "tiers de plus. 10 crédits par marché et par appel")
     p.add_argument("--odds-api-dry-run", action="store_true",
                    help="Chiffre le coût en crédits sans appeler l'API")
     p.add_argument("--odds-api-no-cache", action="store_true",
@@ -1237,7 +1296,8 @@ def main():
                    dry_run=args.odds_api_dry_run,
                    api_cache=not args.odds_api_no_cache,
                    budget=args.odds_api_budget,
-                   allow_shrink=args.allow_shrink)
+                   allow_shrink=args.allow_shrink,
+                   markets=args.odds_api_markets)
     print(f"\n🏁 Terminé en {(time.time() - t0) / 60:.1f} min. "
           f"Prochaine étape : python build_dataset.py")
 
