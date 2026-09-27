@@ -68,3 +68,8 @@ server/.purge-backups/
 # Snapshots The Odds API (backfill payant, 2026-09-27) : ~40 Mo par saison,
 # PAYÉS et irremplaçables sans repayer — à sauvegarder hors Git, pas à supprimer.
 ml/data/raw/odds/oddsapi/
+
+# Sauvegardes automatiques (ex. odds.csv.bak posé par fetch_data_v4.py,
+# odds.csv.backup-2026-08-23). Pas BACKUP_DR.md : le motif exige le point.
+*.bak
+*.backup-*

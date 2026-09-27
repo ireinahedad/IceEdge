@@ -170,3 +170,22 @@ export async function fetchLegPrices(
   }
 }
 
+/**
+ * Marchés de match SUPPLÉMENTAIRES d'un match (résultat en 60 min, par période,
+ * totaux alternatifs…), chez le livre d'affichage. Même forme que
+ * `event.bookmakers`. `[]` sur tout échec : ce n'est qu'un enrichissement.
+ */
+export async function fetchGameExtras(homeAbbr: string, awayAbbr: string): Promise<OddsEvent["bookmakers"]> {
+  if (!/^[A-Za-z]{2,3}$/.test(homeAbbr) || !/^[A-Za-z]{2,3}$/.test(awayAbbr)) return [];
+  try {
+    const res = await fetchWithTimeout(
+      `${API_BASE}/odds/extras/${encodeURIComponent(homeAbbr)}/${encodeURIComponent(awayAbbr)}`,
+    );
+    if (!res.ok) return [];
+    const body = await res.json();
+    return normalizeEvent({ bookmakers: body?.bookmakers ?? [] }).bookmakers;
+  } catch {
+    return [];
+  }
+}
+

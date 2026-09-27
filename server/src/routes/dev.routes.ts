@@ -25,6 +25,7 @@ import {
 import { snapshotMetrics, resetMetrics } from '../metrics';
 import { chatService } from '../services/chat.service';
 import { pool } from '../db/connection';
+import { extrasBudgetState } from '../services/oddsClient';
 import { sendError } from '../httpError';
 
 const router = Router();
@@ -243,6 +244,8 @@ router.get('/data-health', async (_req: Request, res: Response) => {
       odds_log:  oddsLog?.rows[0] ?? { error: 'table indisponible (migration 027/028 ?)' },
       odds_quota: quota?.rows[0]  ?? { error: 'table indisponible (migration 028 ?)' },
       odds_snapshots: snapshots?.rows[0] ?? { error: 'table ou colonne indisponible (migrations 031 / 038 ?)' },
+      // Marchés de match par événement : crédits dépensés aujourd'hui / plafond.
+      odds_extras: extrasBudgetState(),
       slips:     slips?.rows[0]   ?? { error: 'table indisponible' },
       retrieved_at: new Date().toISOString(),
     });

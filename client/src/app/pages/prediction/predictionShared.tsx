@@ -67,18 +67,21 @@ export function useGameOdds(
 
   const homeName = home?.name ?? "";
   const awayName = away?.name ?? "";
+  const homeAbbr = home?.abbr ?? "";
+  const awayAbbr = away?.abbr ?? "";
 
   useEffect(() => {
     if (!homeName || !awayName) { setState({ table: null, bookTitle: null }); return; }
     let alive = true;
-    loadGameOdds(homeName, awayName, bookmakerId)
+    loadGameOdds(homeName, awayName, bookmakerId,
+      homeAbbr && awayAbbr ? { home: homeAbbr, away: awayAbbr } : undefined)
       .then((r) => { if (alive) setState({ table: r.table, bookTitle: r.bookTitle }); })
       // Un flux de cotes en panne ne doit pas retirer les prédictions de
       // l'écran : on retombe sur « pas de prix », l'état normal de la plupart
       // des marchés de toute façon.
       .catch(() => { if (alive) setState({ table: null, bookTitle: null }); });
     return () => { alive = false; };
-  }, [homeName, awayName, bookmakerId]);
+  }, [homeName, awayName, homeAbbr, awayAbbr, bookmakerId]);
 
   const nameByAbbr = useMemo(() => {
     const m: Record<string, string> = {};

@@ -25,7 +25,7 @@
  * flux, pas un trou d'implémentation : ne pas « compléter » ce vide.
  */
 
-import { fetchBet365Odds, ODDS_SPORT_KEYS, type OddsEvent } from "./oddsApiService";
+import { fetchBet365Odds, fetchGameExtras, ODDS_SPORT_KEYS, type OddsEvent } from "./oddsApiService";
 import type { BookmakerId } from "./bookmakers";
 import type { MLProps } from "../pages/prediction/gameMarkets";
 
@@ -98,17 +98,28 @@ function tableFor(event: OddsEvent, preferred: BookmakerId): { table: OddsTable;
   if (!book) return null;
 
   const table: OddsTable = new Map();
-  for (const market of book.markets ?? []) {
+  addMarkets(table, book.markets ?? []);
+  return { table, title: book.title ?? book.key };
+}
+
+/**
+ * Verse les marchés d'un livre dans la table.
+ *
+ * `point` porte la ligne (`totals` 5.5, `spreads` -1.5). `description` porte
+ * l'équipe sur les totaux d'équipe (`team_totals` : « Over 3.5 » de QUI ?) : elle
+ * entre dans la clé, sinon les deux équipes s'écraseraient l'une l'autre. Ni
+ * l'un ni l'autre n'est déclaré par le type public d'`OddsOutcome`.
+ */
+function addMarkets(table: OddsTable, markets: OddsEvent["bookmakers"][number]["markets"]): void {
+  for (const market of markets) {
     for (const o of market.outcomes ?? []) {
-      // `point` porte la ligne sur `totals` (5.5) et `spreads` (-1.5). Le type
-      // public d'`OddsOutcome` ne le déclare pas — il vient tel quel du flux.
-      const point = (o as { point?: number }).point;
+      const { point, description } = o as { point?: number; description?: string };
       const sel = norm(o.name ?? "");
-      const key = point == null ? `${market.key}|${sel}` : `${market.key}|${sel}|${point}`;
+      const who = description ? `${norm(description)}|` : "";
+      const key = point == null ? `${market.key}|${who}${sel}` : `${market.key}|${who}${sel}|${point}`;
       if (Number.isFinite(o.price) && o.price > 1) table.set(key, o.price);
     }
   }
-  return { table, title: book.title ?? book.key };
 }
 
 /* ─── Cache mémoire ──────────────────────────────────────────────────────────
@@ -133,18 +144,34 @@ export async function fetchHockeyOdds(): Promise<OddsEvent[]> {
   return inflight;
 }
 
-/** Les prix d'un match précis, chez le livre réglé. */
+/**
+ * Les prix d'un match précis, chez le livre réglé.
+ *
+ * Deux sources fusionnées : le flux de la ligue (vainqueur, handicap, total —
+ * un appel pour tous les matchs) et, quand les abréviations sont connues, les
+ * marchés SUPPLÉMENTAIRES du match (résultat en 60 min, par période, totaux
+ * alternatifs… — `GET /api/odds/extras`, facturés au match côté serveur). Les
+ * deux requêtes partent en parallèle ; l'échec de l'une n'enlève rien à
+ * l'autre.
+ */
 export async function loadGameOdds(
   homeName: string,
   awayName: string,
   preferred: BookmakerId,
+  abbrs?: { home: string; away: string },
 ): Promise<GameOdds> {
-  const events = await fetchHockeyOdds();
+  const [events, extras] = await Promise.all([
+    fetchHockeyOdds(),
+    abbrs ? fetchGameExtras(abbrs.home, abbrs.away) : Promise.resolve([]),
+  ]);
   const ev = findOddsEvent(events, homeName, awayName);
-  if (!ev) return { table: new Map(), bookTitle: null };
-  const built = tableFor(ev, preferred);
-  if (!built) return { table: new Map(), bookTitle: null };
-  return { table: built.table, bookTitle: built.title };
+  const built = ev ? tableFor(ev, preferred) : null;
+  const table: OddsTable = built?.table ?? new Map();
+  // Même livre que le flux principal quand il est là ; sinon le premier.
+  const extraBook = extras.find((b) => b.key === ev?.bookmakers.find((x) => x.title === built?.title)?.key)
+    ?? extras[0];
+  if (extraBook) addMarkets(table, extraBook.markets ?? []);
+  return { table, bookTitle: built?.title ?? extraBook?.title ?? null };
 }
 
 /* ─── Du pari au prix ────────────────────────────────────────────────────────
@@ -161,11 +188,30 @@ export function priceForBet(
   table: OddsTable | null,
   mlProps: MLProps | undefined,
   nameByAbbr: Record<string, string>,
+  /** Identifiant de la TUILE (`gameMarkets.tsx`) — voir le cas `moneyline`. */
+  optId?: string,
 ): number | undefined {
   if (!table || !mlProps) return undefined;
   const { propType, line, subjectId, selection } = mlProps;
   const teamName = norm(nameByAbbr[(subjectId ?? "").toUpperCase()] ?? "");
   if (!propType) return undefined;
+
+  // ── Tuiles dont le marché ML ne dit pas la question posée ────────────────
+  //
+  // « MTL in Reg » envoie `moneyline` (c'est la victoire toutes issues que le
+  // modèle sait estimer, mise à l'échelle par `pctScale`), mais la tuile
+  // demande la victoire en 60 MINUTES. Le prix `h2h` à deux issues, prolongation
+  // comprise, n'est pas celui de ce pari : il s'affichait à tort jusqu'au
+  // 2026-09-27. Son prix est l'issue d'équipe du 3 issues `h2h_3_way`.
+  if (optId === "ml-home" || optId === "ml-away") {
+    return teamName ? table.get(`h2h_3_way|${teamName}`) : undefined;
+  }
+  // « Va en prolongation » = le « nul » du 3 issues en 60 min. SEULEMENT pour
+  // ces deux tuiles : « MTL in OT/SO » envoie aussi `game_to_ot` + « yes »,
+  // mais demande QUI gagne la prolongation — un marché que le flux ne cote pas.
+  if (optId === "ot-yes" || optId === "p3-draw") {
+    return table.get("h2h_3_way|draw");
+  }
 
   switch (propType) {
     // Vainqueur du match, temps réglementaire compris — le `h2h` du flux est un
@@ -176,10 +222,34 @@ export function priceForBet(
     case "moneyline":
       return teamName ? table.get(`h2h|${teamName}`) : undefined;
 
+    // Ligne principale d'abord, puis les lignes alternatives (`ou + 1`).
     case "total_goals_over":
-      return line == null ? undefined : table.get(`totals|over|${line}`);
+      return line == null ? undefined
+        : table.get(`totals|over|${line}`) ?? table.get(`alternate_totals|over|${line}`);
     case "total_goals_under":
-      return line == null ? undefined : table.get(`totals|under|${line}`);
+      return line == null ? undefined
+        : table.get(`totals|under|${line}`) ?? table.get(`alternate_totals|under|${line}`);
+
+    // Vainqueur d'UNE période : le règlement compte les buts de CETTE période
+    // (`periodGoalCounts`, settlement.service.ts), c'est le 3 issues de la
+    // période chez le livre — et non « mène après N périodes ».
+    case "period1_winner":
+    case "period2_winner":
+    case "period3_winner": {
+      const n = propType.charAt(6);
+      return teamName ? table.get(`h2h_3_way_p${n}|${teamName}`) : undefined;
+    }
+
+    case "period1_total_goals":
+    case "period2_total_goals":
+    case "period3_total_goals": {
+      const n = propType.charAt(6);
+      if (line == null || (selection !== "over" && selection !== "under")) return undefined;
+      return table.get(`totals_p${n}|${selection}|${line}`);
+    }
+
+    case "both_teams_score":
+      return selection === "yes" || selection === "no" ? table.get(`btts|${selection}`) : undefined;
 
     // Puck line. `line` est le handicap du sujet (−1.5 par défaut, comme au
     // règlement). `selection === "no"` est le « +x » de l'ADVERSAIRE du sujet —

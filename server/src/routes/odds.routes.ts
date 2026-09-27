@@ -3,7 +3,7 @@ import { TtlCache } from "../services/ttlCache";
 import { timeUpstream } from "../metrics";
 import { logger } from "../logger";
 import * as oddsQuota from "../services/oddsQuota";
-import { fetchRawOddsStrict, priceForSelection, type RawOddsEvent } from "../services/oddsClient";
+import { fetchGameExtras, fetchRawOddsStrict, priceForSelection, type RawOddsEvent } from "../services/oddsClient";
 import { z } from "zod";
 import { validateBody } from "../middleware/validate.middleware";
 import { fetchGameById } from "../services/nhlApiClient";
@@ -241,6 +241,28 @@ router.get("/bet365/:sportKey", async (req: Request, res: Response) => {
     }
     logger.error({ err: err?.message }, "[odds proxy] fetch error");
     res.status(502).json([]);
+  }
+});
+
+// GET /api/odds/extras/:home/:away — marchés de match supplémentaires.
+//
+// Résultat en 60 min, résultat et total par période, totaux alternatifs…,
+// chez le livre d'affichage, pour UN match. Coût maîtrisé côté service
+// (`fetchGameExtras` : cache par match, plafond quotidien, réserve visiteurs) ;
+// la route ne fait que valider et relayer. Réponse : la liste des livres, même
+// forme que `event.bookmakers` du flux principal, pour que le client la fusionne.
+const ABBR_RE = /^[A-Za-z]{2,3}$/;
+router.get("/extras/:home/:away", async (req: Request, res: Response) => {
+  const { home, away } = req.params;
+  if (!ABBR_RE.test(home) || !ABBR_RE.test(away)) {
+    return res.status(400).json({ error: "invalid team" });
+  }
+  try {
+    const bookmakers = await fetchGameExtras(home, away);
+    res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=600");
+    res.json({ bookmakers });
+  } catch {
+    res.json({ bookmakers: [] });
   }
 });
 

@@ -49,17 +49,64 @@ def tally(events: list, label: str) -> None:
               f"   puck line +-1.5 {pl.get(book, 0):>3}/{n}")
 
 
+# Marchés de MATCH hors des trois de base, servis seulement par l'endpoint
+# par événement (/events/{id}/odds). Coût : 1 crédit par marché RENVOYÉ et par
+# région (10 livres = 1 région) — un marché que le livre ne cote pas ne coûte rien.
+EXTRA_MARKETS = ",".join([
+    "h2h_3_way", "alternate_spreads", "alternate_totals", "team_totals",
+    "alternate_team_totals", "btts", "draw_no_bet",
+    "h2h_p1", "h2h_p2", "h2h_p3", "h2h_3_way_p1", "h2h_3_way_p2", "h2h_3_way_p3",
+    "spreads_p1", "spreads_p2", "spreads_p3", "totals_p1", "totals_p2", "totals_p3",
+    "team_totals_p1", "team_totals_p2", "team_totals_p3",
+])
+
+
+def probe_event(key: str, books: str, markets: str) -> None:
+    """Un match à venir : quels marchés supplémentaires chaque livre cote-t-il ?"""
+    events = _oddsapi_get(f"/sports/{ODDS_API_SPORT}/events", {}, key)   # gratuit
+    if not events:
+        print("Aucun match à venir.")
+        return
+    ev = events[0]
+    print(f"\nMatch sondé : {ev.get('away_team')} @ {ev.get('home_team')} "
+          f"({ev.get('commence_time')})")
+    data = _oddsapi_get(f"/sports/{ODDS_API_SPORT}/events/{ev['id']}/odds",
+                        {"bookmakers": books, "markets": markets,
+                         "oddsFormat": "decimal"}, key)
+    if not isinstance(data, dict):
+        print("Réponse vide (marché inconnu ? voir le message d'erreur plus haut).")
+        return
+    for bk in data.get("bookmakers") or []:
+        print(f"\n   {bk['key']}")
+        for m in bk.get("markets") or []:
+            outs = m.get("outcomes") or []
+            sample = ", ".join(
+                f"{o.get('name')}{'' if o.get('point') is None else ' ' + str(o.get('point'))}"
+                f"{'' if not o.get('description') else ' [' + o['description'] + ']'}"
+                f"={o.get('price')}" for o in outs[:4])
+            print(f"      {m['key']:<24} {len(outs):>3} issues   {sample}")
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--regions", default="ca")
     p.add_argument("--dates", default=DEFAULT_DATES)
     p.add_argument("--no-live", action="store_true")
+    p.add_argument("--event", action="store_true",
+                   help="Sonde les marchés supplémentaires d'UN match à venir "
+                        "(coût : 1 crédit par marché renvoyé)")
+    p.add_argument("--books", default="betano_ca_on,playnow_ca,bet99_ca_on")
+    p.add_argument("--markets", default=EXTRA_MARKETS)
     a = p.parse_args()
 
     key = _oddsapi_key()
     if not key:
         return
     try:
+        if a.event:
+            probe_event(key, a.books, a.markets)
+            print(f"\nCredits restants : {getattr(_oddsapi_get, 'remaining', '?')}")
+            return
         if not a.no_live:
             live = _oddsapi_get(f"/sports/{ODDS_API_SPORT}/odds",
                                 {"regions": a.regions, "markets": "h2h,spreads",

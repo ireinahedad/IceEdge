@@ -99,6 +99,8 @@ async function fetchOdds(url: string) {
 
 interface OddsOutcome { name: string; price: number; point?: number }
 interface OddsEvent {
+  /** Identifiant The Odds API de l'événement — clé de l'endpoint par match. */
+  id?: string;
   home_team: string;
   away_team: string;
   commence_time: string;
@@ -483,5 +485,135 @@ export async function priceForSelection(q: SelectionQuery): Promise<BookPrice | 
   }
   if (!outcome || !(outcome.price > 1)) return null;
   return { price: outcome.price, bookmaker: bk.key, bookTitle: bk.title ?? bk.key };
+}
+
+// ─── Marchés de MATCH supplémentaires (endpoint par événement) ───────────────
+//
+// Les trois marchés de base (vainqueur, handicap, total) arrivent pour toute la
+// ligue en UN appel. Tout le reste — résultat en 60 min, résultat et total par
+// période, totaux alternatifs… — n'est servi que match par match, par
+// `/events/{id}/odds`, facturé **1 crédit par marché RENVOYÉ** (un marché que le
+// livre ne cote pas ne coûte rien).
+//
+// D'où trois garde-fous, parce que ce coût-là suit le TRAFIC (un appel par
+// match ouvert) et non un calendrier :
+//   1. un cache PAR MATCH (`ODDS_EXTRAS_TTL_MIN`, 120 min) avec dédoublonnage
+//      en vol et repli sur la dernière réponse ;
+//   2. un plafond QUOTIDIEN (`ODDS_EXTRAS_DAILY_BUDGET`, 80 crédits ≈ 2 400/mois
+//      tant que le backfill tourne ; à relever après) — au-delà, on sert le
+//      périmé ou rien, jamais un appel de plus ;
+//   3. la réserve visiteurs de `oddsQuota`, comme la collecte : ce n'est pas
+//      une page vide qu'on évite ici, c'est un enrichissement.
+// Seuls les matchs pas encore commencés et à moins de 48 h sont interrogés.
+
+function readPositive(name: string, dflt: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return dflt;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) {
+    logger.warn({ name, raw, fallback: dflt }, '[oddsClient] variable illisible — défaut appliqué.');
+    return dflt;
+  }
+  return n;
+}
+
+/**
+ * Marchés demandés par match.
+ *
+ * Liste LARGE à dessein : l'endpoint facture les marchés RENVOYÉS, pas ceux
+ * demandés — un marché que le livre ne cote pas ne coûte rien. Au sondage du
+ * 2026-09-27 (pré-saison, CAR–FLA), Betano n'en renvoyait AUCUN et PlayNow le
+ * seul `alternate_spreads` : les livres canadiens publient peu de marchés
+ * annexes via The Odds API, du moins hors saison. À re-sonder une fois la
+ * saison lancée (`probe_odds_books.py --event`), sans rien changer ici.
+ */
+export const ODDS_EXTRA_MARKETS = (process.env.ODDS_EXTRA_MARKETS ?? '').trim()
+  || [
+    'h2h_3_way', 'alternate_totals', 'alternate_spreads', 'btts',
+    'h2h_3_way_p1', 'h2h_3_way_p2', 'h2h_3_way_p3',
+    'totals_p1', 'totals_p2', 'totals_p3',
+  ].join(',');
+/**
+ * Coût supposé d'un premier appel sur un match, avant d'avoir vu le vrai
+ * (`x-requests-last`). Prendre la longueur de la liste serait très pessimiste
+ * puisque le livre en renvoie peu : le plafond bloquerait après deux matchs.
+ */
+const FIRST_CALL_ESTIMATE = 5;
+const EXTRAS_TTL_MS = readPositive('ODDS_EXTRAS_TTL_MIN', 120) * 60_000;
+const EXTRAS_DAILY_BUDGET = readPositive('ODDS_EXTRAS_DAILY_BUDGET', 80);
+const EXTRAS_HORIZON_MS = 48 * 60 * 60_000;
+
+const extrasCache = new TtlCache<OddsEvent['bookmakers']>(EXTRAS_TTL_MS, 64, 'odds-extras');
+let extrasDay = '';
+let extrasSpent = 0;
+/** Dernier coût observé par match : l'estimation du prochain appel. */
+const lastCost = new Map<string, number>();
+
+function spendToday(): number {
+  const day = new Date().toISOString().slice(0, 10);
+  if (day !== extrasDay) { extrasDay = day; extrasSpent = 0; }
+  return extrasSpent;
+}
+
+/**
+ * Livres (avec leurs marchés supplémentaires) d'UN match, chez le livre
+ * d'affichage. `[]` quand rien n'est disponible — jamais une erreur.
+ */
+export async function fetchGameExtras(homeAbbr: string, awayAbbr: string): Promise<OddsEvent['bookmakers']> {
+  if (!ODDS_KEY || !ODDS_EXTRA_MARKETS) return [];
+  const home = homeAbbr.toUpperCase(), away = awayAbbr.toUpperCase();
+  const events = await fetchAllOdds();
+  const ev = events.find((e) => {
+    const eh = toAbbr(e.home_team), ea = toAbbr(e.away_team);
+    return (eh === home && ea === away) || (eh === away && ea === home);
+  });
+  if (!ev?.id) return [];
+  const start = Date.parse(ev.commence_time);
+  const now = Date.now();
+  if (!Number.isFinite(start) || start <= now || start - now > EXTRAS_HORIZON_MS) {
+    return extrasCache.getStale(ev.id) ?? [];
+  }
+
+  const key = ev.id;
+  const fresh = extrasCache.peekFresh(key);
+  if (fresh) return fresh;
+
+  const estimate = lastCost.get(key) ?? FIRST_CALL_ESTIMATE;
+  if (spendToday() + estimate > EXTRAS_DAILY_BUDGET
+      || !(await oddsQuota.collectorMaySpend(estimate))) {
+    return extrasCache.getStale(key) ?? [];
+  }
+
+  try {
+    return await extrasCache.wrap(key, async () => {
+      const params = new URLSearchParams({
+        apiKey: ODDS_KEY, ...bookParams(), markets: ODDS_EXTRA_MARKETS, oddsFormat: 'decimal',
+      });
+      const started = Date.now();
+      const res = await fetchOdds(`${ODDS_BASE}/sports/${SPORT_KEY}/events/${encodeURIComponent(key)}/odds?${params}`);
+      recordUpstream('odds', Date.now() - started, res.ok);
+      oddsQuota.observe(res.headers);
+      // Coût RÉEL de l'appel, renvoyé par le fournisseur ; à défaut, l'estimation.
+      const last = Number(res.headers?.get?.('x-requests-last'));
+      const cost = Number.isFinite(last) && last >= 0 ? last : estimate;
+      spendToday();
+      extrasSpent += cost;
+      lastCost.set(key, Math.max(1, cost));
+      if (!res.ok) {
+        logger.warn({ status: res.status }, '[oddsClient] extras');
+        throw new Error(`odds extras ${res.status}`);
+      }
+      const body = (await res.json()) as { bookmakers?: OddsEvent['bookmakers'] };
+      return body?.bookmakers ?? [];
+    });
+  } catch {
+    return extrasCache.getStale(key) ?? [];
+  }
+}
+
+/** État du budget des marchés supplémentaires — pour `/api/dev/data-health`. */
+export function extrasBudgetState() {
+  return { day: extrasDay || null, spent: spendToday(), budget: EXTRAS_DAILY_BUDGET,
+           markets: ODDS_EXTRA_MARKETS, ttlMin: EXTRAS_TTL_MS / 60_000 };
 }
 

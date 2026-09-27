@@ -77,7 +77,9 @@ export function betLegId(label: string, mlProps: MLProps | undefined, rulePct: n
 }
 
 /* ─── Prediction bottom sheet ───────────────── */
-function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, factors, factorGroup, pctScale, mlPreset, onClose }: {
+function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, factors, factorGroup, pctScale, mlPreset, optId, onClose }: {
+  /** Identifiant de la tuile — certaines ne se cotent qu'avec lui (voir `priceForBet`). */
+  optId?: string;
   label: string; rulePct: number; serverPct?: number; ruleNote: string; accent: string;
   mlProps?: MLProps; factors?: RuleFactor[]; factorGroup?: string; pctScale?: number;
   mlPreset?: BetOpt["mlPreset"]; onClose: () => void;
@@ -85,7 +87,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   const { t, lang } = useI18n();
   const { odds } = useOddsFormat();
   const { table: oddsTable, bookTitle, nameByAbbr } = useContext(BetOddsCtx);
-  const bookPrice = priceForBet(oddsTable, mlProps, nameByAbbr);
+  const bookPrice = priceForBet(oddsTable, mlProps, nameByAbbr, optId);
   const llmId = llmCacheId(label, mlProps, lang);
   const [llmText, setLlmText]     = useState(() => loadLlmCache(llmId)); // réponse en cache si déjà générée
   const [llmOpen, setLlmOpen]     = useState(false); // repliée par défaut pour ne pas cacher les autres cartes
@@ -438,7 +440,7 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
 
   // Le prix du livre, s'il en cote un pour ce marché. Presque toujours absent :
   // le fournisseur ne sert que vainqueur, totaux et handicap.
-  const bookPrice = priceForBet(oddsTable, opt.mlProps, nameByAbbr);
+  const bookPrice = priceForBet(oddsTable, opt.mlProps, nameByAbbr, opt.id);
 
   // Predictions are always shown. The toggle picks the source: ML model % when
   // "ml" is selected, otherwise the rule-based %.
@@ -544,7 +546,7 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
       </button>
       {sheet && (
         <PredictionSheet
-          label={opt.label} rulePct={rulePct} ruleNote={opt.ruleNote}
+          label={opt.label} rulePct={rulePct} ruleNote={opt.ruleNote} optId={opt.id}
           accent={accent} mlProps={opt.mlProps} factors={opt.factors} factorGroup={opt.factorGroup}
           pctScale={opt.pctScale}
           mlPreset={opt.mlPreset !== undefined ? opt.mlPreset : opt.mlExternal ? null : undefined}

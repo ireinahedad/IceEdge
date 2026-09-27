@@ -221,3 +221,72 @@ describe('priceForSelection — prix d’une sélection précise', () => {
     expect(await m.priceForSelection({ homeAbbr: 'MTL', awayAbbr: 'BOS', marketType: 'anytime_goal', selectionValue: 'yes' })).toBeNull();
   });
 });
+
+/**
+ * Marchés supplémentaires — l'endpoint PAR MATCH, facturé au marché renvoyé.
+ * Son coût suit le trafic : ces tests tiennent les trois garde-fous (cache par
+ * match, plafond quotidien, horizon de 48 h).
+ */
+describe('fetchGameExtras — marchés de match supplémentaires', () => {
+  const soon = new Date(Date.now() + 6 * 60 * 60_000).toISOString();
+  const far  = new Date(Date.now() + 5 * 24 * 60 * 60_000).toISOString();
+  const LIST = [
+    { id: 'ev1', home_team: 'Montreal Canadiens', away_team: 'Boston Bruins', commence_time: soon, bookmakers: [] },
+    { id: 'ev2', home_team: 'Toronto Maple Leafs', away_team: 'Ottawa Senators', commence_time: far, bookmakers: [] },
+  ];
+  const EXTRAS = { id: 'ev1', bookmakers: [{ key: 'betano_ca_on', title: 'Betano', markets: [
+    { key: 'h2h_3_way', outcomes: [{ name: 'Montreal Canadiens', price: 2.6 }, { name: 'Boston Bruins', price: 2.3 }, { name: 'Draw', price: 4.1 }] },
+  ] }] };
+
+  async function load(budget?: string, cost = '4') {
+    vi.resetModules();
+    process.env.ODDS_API_KEY = 'test-key';
+    if (budget === undefined) delete process.env.ODDS_EXTRAS_DAILY_BUDGET;
+    else process.env.ODDS_EXTRAS_DAILY_BUDGET = budget;
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      calls.push(String(url));
+      const isEvent = String(url).includes('/events/');
+      const headers = new Headers({ 'x-requests-last': isEvent ? cost : '3', 'x-requests-remaining': '10000' });
+      return { ok: true, status: 200, headers, json: async () => (isEvent ? EXTRAS : LIST) };
+    });
+    // La réserve visiteurs n'est pas le sujet ici : la collecte peut dépenser.
+    vi.doMock('./oddsQuota', () => ({
+      observe: vi.fn(), proxyTtlMs: (b: number) => b, collectorMaySpend: async () => true,
+    }));
+    const mod = await import('./oddsClient');
+    return { mod, calls };
+  }
+  beforeEach(() => { vi.unstubAllGlobals(); vi.doUnmock('./oddsQuota'); });
+
+  it('un match proche : un appel par match, puis le cache', async () => {
+    const { mod, calls } = await load();
+    const a = await mod.fetchGameExtras('MTL', 'BOS');
+    const b = await mod.fetchGameExtras('bos', 'mtl');
+    expect(a[0].markets[0].key).toBe('h2h_3_way');
+    expect(b).toEqual(a);
+    const eventCalls = calls.filter((u) => u.includes('/events/ev1/odds'));
+    expect(eventCalls.length).toBe(1);
+    expect(new URL(eventCalls[0]).searchParams.get('bookmakers')).toBe('betano_ca_on');
+  });
+
+  it('match à plus de 48 h ou inconnu : aucun appel facturé', async () => {
+    const { mod, calls } = await load();
+    expect(await mod.fetchGameExtras('TOR', 'OTT')).toEqual([]);
+    expect(await mod.fetchGameExtras('EDM', 'CGY')).toEqual([]);
+    expect(calls.filter((u) => u.includes('/events/')).length).toBe(0);
+  });
+
+  it('plafond quotidien atteint : plus aucun appel, et le coût RÉEL est compté', async () => {
+    const { mod, calls } = await load('3', '4');
+    await mod.fetchGameExtras('MTL', 'BOS');                 // estimation 5 > 3 → refusé
+    expect(calls.filter((u) => u.includes('/events/')).length).toBe(0);
+    expect(mod.extrasBudgetState().spent).toBe(0);
+  });
+
+  it('le compteur additionne x-requests-last', async () => {
+    const { mod } = await load('100', '4');
+    await mod.fetchGameExtras('MTL', 'BOS');
+    expect(mod.extrasBudgetState().spent).toBe(4);
+  });
+});

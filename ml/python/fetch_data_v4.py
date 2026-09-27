@@ -907,7 +907,8 @@ def _oddsapi_snapshot_row(event: dict, bk: dict, snap_ts: str) -> dict | None:
 def fetch_odds_api(start: str, end: str, book: str | None, regions: str,
                    dry_run: bool = False, use_cache: bool = True,
                    budget: int | None = None,
-                   markets: str = ODDS_API_MARKETS_DEFAULT) -> list[dict]:
+                   markets: str = ODDS_API_MARKETS_DEFAULT,
+                   close_window_min: int = 60) -> list[dict]:
     """Historique The Odds API entre deux dates (AAAA-MM-JJ incluses).
 
     **Comment on approxime la cote de clôture.** Un snapshot renvoie tous les
@@ -1002,7 +1003,11 @@ def fetch_odds_api(start: str, end: str, book: str | None, regions: str,
             if not snap:
                 continue
             snap_ts = str(snap.get("timestamp") or ts)
-            for ev in snap.get("data") or []:
+            # Par heure de début croissante : le regroupement des clôtures
+            # (plus bas) doit voir le match le plus TÔT d'abord, sinon il
+            # garderait la mauvaise heure du groupe selon l'ordre du flux.
+            for ev in sorted(snap.get("data") or [],
+                             key=lambda e: str(e.get("commence_time") or "")):
                 ct = str(ev.get("commence_time") or "")
                 if ct <= snap_ts:
                     continue                        # match déjà commencé
@@ -1018,11 +1023,32 @@ def fetch_odds_api(start: str, end: str, book: str | None, regions: str,
                 sr = _oddsapi_snapshot_row(ev, bk, snap_ts)
                 if sr is not None:
                     snaps[(gid, snap_ts)] = sr
-                # Programme un snapshot juste avant CE coup d'envoi.
+                # Programme un snapshot juste avant CE coup d'envoi…
                 close_ts = (pd.Timestamp(ct) - pd.Timedelta(minutes=8)) \
                     .strftime("%Y-%m-%dT%H:%M:%SZ")
-                if close_ts > snap_ts and close_ts not in seen_ts:
-                    pending.append(close_ts)
+                if close_ts <= snap_ts or close_ts in seen_ts or close_ts in pending:
+                    continue
+                # … SAUF si un snapshot déjà pris ou prévu tombe dans les
+                # `close_window_min` minutes qui précèdent (décision du user,
+                # 2026-09-27). Une soirée à 19 h, 19 h 30, 22 h, 22 h 30 coûte
+                # alors 2 appels de clôture au lieu de 4 ; le match de 19 h 30
+                # prend sa « clôture » à 18 h 52. Le prix de ~1/3 des crédits :
+                # une clôture jusqu'à une heure trop tôt pour certains matchs —
+                # mesurable, puisque chaque observation garde `observed_at` et
+                # `commence_time` dans `odds_snapshots_hist.csv`.
+                #
+                # Un snapshot DÉJÀ EN CACHE ne coûte rien : on le reprend
+                # toujours, pour ne pas dégrader les jours backfillés avant le
+                # regroupement.
+                cached_free = use_cache and os.path.exists(
+                    _oddsapi_cache_path(close_ts, regions, markets, book))
+                if close_window_min > 0 and not cached_free:
+                    lo = (pd.Timestamp(close_ts)
+                          - pd.Timedelta(minutes=close_window_min)) \
+                        .strftime("%Y-%m-%dT%H:%M:%SZ")
+                    if any(lo <= t <= close_ts for t in (*seen_ts, *pending)):
+                        continue
+                pending.append(close_ts)
             pending.sort()
         if day_rows:
             print(f"   {d}: {day_rows} maj  ({n_calls} appels, {spent} crédits)",
@@ -1132,9 +1158,33 @@ def fetch_odds(from_local: bool = False, api_range: tuple | None = None,
                book: str | None = None, regions: str = "us",
                dry_run: bool = False, api_cache: bool = True,
                budget: int | None = None, allow_shrink: bool = False,
-               markets: str = ODDS_API_MARKETS_DEFAULT) -> None:
+               markets: str = ODDS_API_MARKETS_DEFAULT,
+               close_window_min: int = 60) -> None:
     print("💰 Cotes historiques (sportsbookreviewsonline) …")
     all_rows = []
+
+    # ── Les lignes The Odds API DÉJÀ dans odds.csv sont reprises ─────────────
+    #
+    # LE BUG QUE ÇA CORRIGE (2026-09-27). Le fichier était reconstruit à partir
+    # des SEULES dates du run en cours : backfiller mars-avril 2026 a remplacé
+    # les 951 matchs d'octobre-février par les 394 de mars-avril. La baisse
+    # (−4,8 %) passait sous le garde-fou des 10 %. Un simple `--from-local`
+    # sans plage API aurait même effacé TOUTES les lignes backfillées — des
+    # crédits payés. Les lignes `oddsapi:<livre>` existantes sont donc reprises
+    # en tête : un run qui re-récupère le même match l'écrase (`keep="last"`),
+    # les autres restent. `oddsapi:live` n'est pas repris ici : il est relu
+    # depuis `odds_live_log.csv` plus bas.
+    odds_csv = f"{DATA_DIR}/odds.csv"
+    if os.path.exists(odds_csv):
+        try:
+            prev = pd.read_csv(odds_csv)
+            src = prev.get("source", pd.Series(dtype=str)).astype(str)
+            keep = prev[src.str.startswith("oddsapi:") & (src != "oddsapi:live")]
+            if len(keep):
+                all_rows.extend(keep.to_dict("records"))
+                print(f"   ↺ {len(keep)} lignes The Odds API déjà présentes, reprises")
+        except Exception as e:
+            print(f"   [WARN] odds.csv illisible, lignes API non reprises ({e})")
 
     # The Odds API — seule source pour 2023-24 et au-delà (SBRO s'arrête à
     # 2022-23 et ne sera plus mis à jour). Traité en premier pour que le
@@ -1151,7 +1201,7 @@ def fetch_odds(from_local: bool = False, api_range: tuple | None = None,
             print(f"   Budget dur : {budget:,} crédits "
                   f"({budget // ODDS_API_HIST_COST} appels au maximum)")
         api_rows = fetch_odds_api(s, e, book, regions, dry_run, api_cache, budget,
-                                  markets)
+                                  markets, close_window_min)
         if dry_run:
             return
         all_rows.extend(api_rows)
@@ -1259,6 +1309,11 @@ def main():
                    help="Marchés demandés (h2h, spreads, totals). Défaut : "
                         "h2h,spreads — les totaux sont clos et coûteraient un "
                         "tiers de plus. 10 crédits par marché et par appel")
+    p.add_argument("--odds-api-close-window", type=int, default=60, metavar="MIN",
+                   help="Regroupe les clôtures : pas de nouvel appel si un "
+                        "snapshot tombe dans les MIN minutes avant ce coup "
+                        "d'envoi. ~1/3 de crédits en moins. 0 = un appel par "
+                        "heure de début (ancien comportement)")
     p.add_argument("--odds-api-dry-run", action="store_true",
                    help="Chiffre le coût en crédits sans appeler l'API")
     p.add_argument("--odds-api-no-cache", action="store_true",
@@ -1297,7 +1352,8 @@ def main():
                    api_cache=not args.odds_api_no_cache,
                    budget=args.odds_api_budget,
                    allow_shrink=args.allow_shrink,
-                   markets=args.odds_api_markets)
+                   markets=args.odds_api_markets,
+                   close_window_min=args.odds_api_close_window)
     print(f"\n🏁 Terminé en {(time.time() - t0) / 60:.1f} min. "
           f"Prochaine étape : python build_dataset.py")
 
