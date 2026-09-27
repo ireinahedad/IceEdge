@@ -105,3 +105,25 @@ export function saveLineups(
   });
 }
 
+
+// ── Blessés de longue durée ──────────────────────────────────────────────────
+
+/**
+ * Un joueur absent jusqu'à nouvel ordre. Le SERVEUR l'ajoute tout seul aux
+ * absents du jour (IA) et au facteur Blessures (règles) de chaque match de son
+ * équipe : rien à ressaisir tant qu'on ne le retire pas.
+ */
+export interface LongInjury { player: string; impact: number; since?: string }
+
+/** Toutes les équipes : { ABBR: [LongInjury, …] }. */
+export function fetchLongInjuries(): Promise<Record<string, LongInjury[]>> {
+  return call<Record<string, LongInjury[]>>('/long-injuries');
+}
+
+/** Remplace la liste d'une équipe. Liste vide = plus aucun blessé longue durée. */
+export function saveLongInjuries(abbr: string, players: LongInjury[]): Promise<{ players: LongInjury[] }> {
+  return call<{ players: LongInjury[] }>(`/long-injuries/${encodeURIComponent(abbr)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ players }),
+  });
+}

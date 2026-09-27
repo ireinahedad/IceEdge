@@ -163,6 +163,15 @@ export const injuriesEntrySchema = z.object({
   lineupNote: z.string().trim().max(200).optional(),
 });
 
+/** Blessés de longue durée d'UNE équipe. Liste vide = on retire tout. */
+export const longInjuriesSchema = z.object({
+  players: z.array(z.object({
+    player: manualPlayer,
+    impact: injuryPlayerSchema.shape.impact,
+    since:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  })).max(20),
+});
+
 /**
  * Une journée de gardiens partants et/ou d'absents.
  *

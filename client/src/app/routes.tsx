@@ -46,6 +46,10 @@ const ModerationQueuePage   = features.devRoutes
 const DevIndexPage          = features.devRoutes
   ? lazy(() => import("./pages/DevIndexPage").then(m => ({ default: m.DevIndexPage })))
   : null;
+// La saisie d'avant-match (ex-carte des Réglages), même liaison conditionnelle.
+const ManualEntryPage       = features.devRoutes
+  ? lazy(() => import("./pages/ManualEntryPage").then(m => ({ default: m.ManualEntryPage })))
+  : null;
 // Guideline 3.1.1 — le build iOS v1 n'a aucun chemin vers Pro. MÊME liaison
 // conditionnelle que AuthCallback : retirer les deux routes plus bas ne
 // suffirait pas, `lazy()` s'exécute au niveau du module et les deux chunks
@@ -183,11 +187,12 @@ export const router = createBrowserRouter([
           ]
         : []),
       // R17 — the ML dashboard is a developer tool, not a shippable screen.
-      ...(features.devRoutes && DevMLDashboard && ModerationQueuePage && DevIndexPage
+      ...(features.devRoutes && DevMLDashboard && ModerationQueuePage && DevIndexPage && ManualEntryPage
         ? [
             { path: "/dev",                           element: withSuspense(<Protected><DevIndexPage /></Protected>) },
             { path: "/dev/ml",                        element: withSuspense(<Protected><DevMLDashboard /></Protected>) },
             { path: "/dev/moderation",                element: withSuspense(<Protected><ModerationQueuePage /></Protected>) },
+            { path: "/dev/saisie",                    element: withSuspense(<Protected><ManualEntryPage /></Protected>) },
           ]
         : []),
 

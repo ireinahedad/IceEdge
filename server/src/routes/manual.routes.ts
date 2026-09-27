@@ -28,6 +28,7 @@ import { authenticate, requireRole } from '../middleware/auth.middleware';
 import { validateBody } from '../middleware/validate.middleware';
 import {
   injuriesEntrySchema, lineupsEntrySchema, refereesTableSchema, refAssignmentSchema,
+  longInjuriesSchema,
 } from '../validation/schemas';
 import * as Manual from '../services/manualData.service';
 import { fetchGamesByDate } from '../services/nhlApiClient';
@@ -35,6 +36,7 @@ import { normalizeRefName } from '../services/refereeStore';
 import type { GameInjuries } from '../services/injuryStore';
 import type { GoalieDay } from '../services/startingGoalies';
 import type { ScratchDay } from '../services/scratches';
+import type { LongInjury, LongInjuryEntry } from '../services/longInjuries';
 
 const router = Router();
 
@@ -185,6 +187,38 @@ router.delete('/injuries/:key', async (req: Request, res: Response) => {
 // la même passe, sur le même écran. Ils restent DEUX lignes en base : le modèle
 // les consomme séparément (gardien → feature ML dédiée, absents → dérivation
 // `stars_missing`), et les fusionner obligerait chaque lecture à trier.
+
+/**
+ * GET /api/manual/long-injuries — `{ "TOR": [{ player, impact, since }] }`.
+ *
+ * Lecture BRUTE de la table (pas `getLongInjuries`) : l'écran doit voir ce qui
+ * est enregistré, tel quel, pour pouvoir le corriger.
+ */
+router.get('/long-injuries', async (_req: Request, res: Response) => {
+  const rows = await Manual.mapEntries<LongInjuryEntry>('long_injuries');
+  const out: Record<string, LongInjury[]> = {};
+  for (const [abbr, entry] of Object.entries(rows)) out[abbr] = entry?.players ?? [];
+  res.json(out);
+});
+
+/** PUT /api/manual/long-injuries/:abbr — remplace la liste d'une équipe. Vide = suppression. */
+router.put('/long-injuries/:abbr', validateBody(longInjuriesSchema), async (req: Request, res: Response) => {
+  const abbr = String(req.params.abbr ?? '').trim().toUpperCase();
+  if (!/^[A-Z]{2,4}$/.test(abbr)) {
+    return res.status(400).json({ error: 'abréviation d\'équipe invalide (ex. TOR)' });
+  }
+  const seen = new Set<string>();
+  const players: LongInjury[] = (req.body as LongInjuryEntry).players
+    .map((p) => ({ ...p, player: p.player.trim() }))
+    .filter((p) => !seen.has(p.player.toLowerCase()) && !!seen.add(p.player.toLowerCase()));
+
+  if (players.length === 0) {
+    await Manual.deleteEntry('long_injuries', abbr);
+    return res.json({ ok: true, abbr, players: [] });
+  }
+  await Manual.setEntry('long_injuries', abbr, { players }, actor(req));
+  return res.json({ ok: true, abbr, players });
+});
 
 /** GET /api/manual/lineups?date=YYYY-MM-DD (défaut : aujourd'hui, heure Est). */
 router.get('/lineups', async (req: Request, res: Response) => {

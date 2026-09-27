@@ -24,6 +24,12 @@ import { useAuth } from "../context/AuthContext";
 /** Les écrans internes, dans l'ordre où on les ouvre le plus souvent. */
 const DEV_LINKS: { path: string; title: string; blurb: string; icon: string }[] = [
   {
+    path:  "/dev/saisie",
+    title: "Saisie d'avant-match",
+    blurb: "Gardiens partants et joueurs absents, match par match. À faire 1 à 2 h avant le match.",
+    icon:  "📝",
+  },
+  {
     path:  "/dev/moderation",
     title: "Moderation queue",
     blurb: "Signalements de chat ouverts, groupés par message. Masquer ou rejeter.",

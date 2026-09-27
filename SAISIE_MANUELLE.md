@@ -16,12 +16,23 @@ altitude) se rafraîchit seul.
 > la saisie se fait maintenant depuis l'app (Profil → Paramètres → **Saisie
 > manuelle**), donc **depuis ton téléphone**, et elle survit aux
 > redéploiements.
+>
+> **Mise à jour 2026-09-27** : la saisie a sa propre page, **`/dev/saisie`**
+> (lien aussi dans `/dev` et dans les Paramètres admin). Les onglets
+> « Blessures » et « Compos du soir » décrits plus bas n'existent plus : un
+> absent se saisit UNE fois par équipe, avec son importance, et
+> l'enregistrement écrit à la fois `injuries` (règles) et `scratches` (IA).
+>
+> **Blessés longue durée** : case « Blessé longue durée » sur un absent. Le
+> joueur est rangé par équipe (`manual_data`, kind `long_injuries`) et le
+> serveur l'ajoute TOUT SEUL aux absents du jour (IA) et au facteur Blessures
+> (règles) de chaque match de son équipe, jusqu'au clic « Revenu au jeu ».
 
 | # | Quoi | Où | Fréquence | Temps |
 |---|---|---|---|---|
-| 1 | Gardiens partants (exceptions) | UI : Profil → Saisie manuelle → **Compos du soir** | chaque jour de match, 1-2 h avant | 2 min |
-| 2 | Absents confirmés | UI : Profil → Saisie manuelle → **Compos du soir** | chaque jour de match, 1-2 h avant | 2 min |
-| 3 | Blessures / alignement (facteur) | UI : Profil → Saisie manuelle → **Blessures** | chaque jour de match, 2 passes | 5-10 min |
+| 1 | Gardiens partants (exceptions) | UI : **/dev/saisie** → « Qui garde le but ce soir ? » | chaque jour de match, 1-2 h avant | 2 min |
+| 2 | Absents confirmés | UI : **/dev/saisie** → « Qui ne joue pas ce soir ? » | chaque jour de match, 1-2 h avant | 2 min |
+| 3 | Blessures / alignement (facteur) | UI : **/dev/saisie** → même liste d'absents (poids = importance) + « Options avancées » | chaque jour de match, 2 passes | 5-10 min |
 | 4 | Tendance PP des arbitres | API `PUT /api/manual/referees` | 1× en début de saison + 1 rafraîchissement mi-saison | 30 min |
 | 5 | Assignation d'arbitres (secours) | API `PUT /api/manual/ref-assignments/:cle` | seulement si le scraper Scouting the Refs casse | 1 min/jour |
 | 6 | Patinoires | `ml\data\arenas.json` + `server\src\data\arenas.ts` | 1× par saison, ou déménagement/rénovation | 10 min |

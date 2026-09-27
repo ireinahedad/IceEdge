@@ -22,6 +22,7 @@
 
 import { getEntry } from './manualData.service';
 import { easternToday } from './startingGoalies';
+import { getLongInjuries, mergeNames } from './longInjuries';
 
 /** Une journée d'absents : { ABBR: ["Nom complet MoneyPuck", …] }. */
 export type ScratchDay = Record<string, string[]>;
@@ -37,12 +38,20 @@ function cleanNames(list: unknown): string[] {
  * `getStartingGoalies` : un match a deux équipes, une seule ligne les porte.
  */
 export async function getScratchesDay(dateISO?: string): Promise<ScratchDay> {
-  const day = await getEntry<ScratchDay>('scratches', dateISO ?? easternToday());
-  if (!day || typeof day !== 'object') return {};
+  const [day, long] = await Promise.all([
+    getEntry<ScratchDay>('scratches', dateISO ?? easternToday()),
+    getLongInjuries(),
+  ]);
   const out: ScratchDay = {};
-  for (const [abbr, list] of Object.entries(day)) {
-    const names = cleanNames(list);
-    if (names.length) out[abbr.toUpperCase()] = names;
+  if (day && typeof day === 'object') {
+    for (const [abbr, list] of Object.entries(day)) {
+      const names = cleanNames(list);
+      if (names.length) out[abbr.toUpperCase()] = names;
+    }
+  }
+  // Blessés de longue durée : absents TOUS les jours, sans ressaisie.
+  for (const [abbr, players] of Object.entries(long)) {
+    out[abbr] = mergeNames(out[abbr] ?? [], players.map((p) => p.player));
   }
   return out;
 }

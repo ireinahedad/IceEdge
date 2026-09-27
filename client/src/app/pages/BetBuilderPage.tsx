@@ -12,7 +12,7 @@
  * `BetBuilderPage` reste le seul export public : `routes.tsx` est inchangé.
  */
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Plus, Lightbulb, Trash2 } from "lucide-react";
 import { useBet } from "../context/BetContext";
@@ -20,7 +20,7 @@ import { useAuth } from "../context/AuthContext";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { BottomNav } from "../components/BottomNav";
-import { submitSlip } from "../services/slipApiService";
+import { getMySlips, submitSlip } from "../services/slipApiService";
 import { isRequestTimeout } from "../services/http";
 import { useSport } from "../context/SportContext";
 import { useI18n } from "../i18n";
@@ -62,6 +62,27 @@ export function BetBuilderPage() {
   // toast pour le cas où le bloc serait hors champ.
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  // ── Nombre de coupons EN COURS, affiché sur l'onglet « Mes paris » ─────────
+  // La page le lit elle-même : `MySlipsTab` n'est monté que lorsque son onglet
+  // est ouvert, or c'est justement depuis l'onglet « Créer » qu'on a besoin du
+  // chiffre. Une fois l'onglet ouvert, c'est `MySlipsTab` qui le tient à jour
+  // (règlement, rechargement) via `onPendingCount` — pas de second appel.
+  // `null` = inconnu (déconnecté, ou chargement raté) : pas de pastille plutôt
+  // qu'un « 0 » faux.
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
+  // Incrémenté après un verrouillage réussi : un coupon de plus est en cours.
+  const [slipsVersion, setSlipsVersion] = useState(0);
+
+  useEffect(() => {
+    if (!user) { setPendingCount(null); return; }
+    let alive = true;
+    getMySlips(100)
+      .then((all) => { if (alive) setPendingCount(all.filter((s) => s.outcome === "pending").length); })
+      .catch(() => { /* la pastille reste sur sa dernière valeur connue */ });
+    return () => { alive = false; };
+    // `user?.id` et non `user` : même raison que dans MySlipsTab.
+  }, [user?.id, slipsVersion]);
 
   // ── Marge basse sous le bloc « prêts à verrouiller » ────────────────────────
   // Ce bloc est `fixed` : il ne pousse rien et recouvrait la fin de l'onglet
@@ -121,6 +142,7 @@ export function BetBuilderPage() {
       const { slipId, message } = await submitSlip(slipLegs, sport, combinedProbability);
       setSubmitResult({ slipId, message });
       clearSlip();
+      setSlipsVersion((v) => v + 1);
     } catch (err: any) {
       // Un délai dépassé n'est pas un refus : le coupon n'est pas invalide, le
       // serveur a simplement mis trop longtemps. Le dire évite qu'on retire des
@@ -185,8 +207,14 @@ export function BetBuilderPage() {
               aria-pressed={tab === key}
             >
               {label}
-              {key === "slips" && user && tab !== "slips" && legs.length === 0 && (
-                <span className="ml-1 text-[11px] opacity-60">history</span>
+              {key === "slips" && pendingCount != null && pendingCount > 0 && (
+                <span
+                  className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[11px] font-bold leading-none tabular-nums"
+                  style={{ background: "#86d1ea", color: "#072E49" }}
+                  aria-label={t("slip.pendingCount", { n: pendingCount })}
+                >
+                  {pendingCount}
+                </span>
               )}
             </button>
           ))}
@@ -273,7 +301,7 @@ export function BetBuilderPage() {
       {tab === "slips" && (
         <div className={`relative z-10 flex-1 px-4 overflow-y-auto bet-ink-black ${mode === "light" ? "bet-light" : "bet-dark"}`}
           style={{ paddingBottom: "calc(112px + env(safe-area-inset-bottom, 0px))" }}>
-          <MySlipsTab user={user} />
+          <MySlipsTab user={user} onPendingCount={setPendingCount} />
         </div>
       )}
 

@@ -18,7 +18,6 @@ import { profileApiService } from "./../../services/userService";
 import { enableValueBetPush, disableValueBetPush } from "./../../services/pushService";
 import { getLLMUsage, type LLMUsage } from "./../../services/llmService";
 import { DEFAULT_MIN_EDGE_PCT, type UserProfile } from "./../../types/user";
-import { ManualEntryCard } from "../../components/ManualEntryCard";
 import { useI18n } from "../../i18n";
 import { useBookmaker } from "../../context/BookmakerContext";
 import { useOddsFormat } from "../../context/OddsFormatContext";
@@ -51,7 +50,7 @@ export function SettingsTab({
   const { isPro, status: subStatus, refresh: refreshSub } = useSubscription();
   const { bookmakerId, setBookmakerId, bookmakers } = useBookmaker();
   const { format: oddsFormat, setFormat: setOddsFormat, formats: oddsFormats } = useOddsFormat();
-  const { logoutAll } = useAuth();
+  const { logoutAll, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   // /pro ne peut pas revenir par l'historique (Stripe Checkout y est empilé) :
@@ -640,9 +639,22 @@ export function SettingsTab({
         </div>
       )}
 
-      {/* Saisie admin des blessures/alignement.
-          (La pondération des règles est désormais dans chaque carte de règle, par type de pari.) */}
-      <ManualEntryCard />
+      {/* La saisie d'avant-match a sa propre page depuis le 2026-09-27
+          (/dev/saisie). Il n'en reste ici qu'un raccourci, pour les admins et
+          seulement là où les routes /dev existent (pas dans le build iOS). */}
+      {features.devRoutes && user?.role === "admin" && (
+        <button
+          onClick={() => navigate("/dev/saisie")}
+          className="icy-card rounded-2xl p-4 flex items-center gap-3 text-left active:scale-[0.99] transition-transform"
+        >
+          <span className="text-xl leading-none" aria-hidden>📝</span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-white text-xs font-medium">Saisie d'avant-match</span>
+            <span className="block text-[#86d1ea] text-[11px] font-bold uppercase tracking-wider mt-0.5">admin</span>
+          </span>
+          <span className="text-[#bfc8cc] text-lg" aria-hidden>→</span>
+        </button>
+      )}
 
       {/* Save */}
       {saving ? (

@@ -43,6 +43,20 @@ const RISK_TIERS: { tier: RiskTier; key: string; color: string }[] = [
   { tier: "longshot", key: "tier.longshot", color: "#f87171" },
 ];
 
+/**
+ * Le % affiché selon la source choisie.
+ *
+ * ⚠️ PAS de repli sur les règles quand l'IA n'a pas de score. C'était
+ * `mlPct ?? rulePct` : dès que le service ML ne répondait pas (disjoncteur
+ * ouvert, délai de 5 s, ou pari hors des 30 premiers enrichis par le serveur),
+ * la ligne affichait le chiffre des RÈGLES sous l'étiquette « IA » — et les
+ * deux onglets montraient exactement les mêmes nombres. Un pari sans score IA
+ * n'apparaît donc tout simplement pas dans l'onglet IA.
+ */
+function pctFor(b: BestBet, source: SortSource): number | null {
+  return source === "ml" ? b.mlPct : b.rulePct;
+}
+
 /** Au plus N paris par match : sans ça, un seul match (ML + puck line + over de
  *  la même équipe) pouvait occuper la moitié de la liste. */
 const MAX_PER_GAME = 2;
@@ -94,7 +108,11 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
   const { addLeg, removeLeg, hasLeg } = useBet();
   const { t } = useI18n();
   const inSlip = hasLeg(bet.id);
-  const displayPct = sortSource === "ml" ? (bet.mlPct ?? bet.rulePct) : bet.rulePct;
+  // `sorted` n'envoie ici que des paris qui ONT un score pour cette source.
+  const displayPct = pctFor(bet, sortSource) ?? bet.rulePct;
+  // L'autre source, en petit : c'est ce qui rend l'écart règles / IA visible
+  // ligne par ligne au lieu de devoir basculer d'onglet pour comparer.
+  const otherPct = sortSource === "ml" ? bet.rulePct : bet.mlPct;
   const risk = riskLabel(displayPct);
   const odds = impliedOdds(displayPct);
 
@@ -121,6 +139,11 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
         {odds != null && (
           <span title={t("home.oddsFairHint")} className="text-[11px] text-[#bfc8cc] tabular-nums">
             {t("home.odds", { odds: odds.toFixed(2) })}
+          </span>
+        )}
+        {otherPct != null && (
+          <span className="text-[10px] text-[#8a9ea6] tabular-nums">
+            {t(sortSource === "ml" ? "home.vsRules" : "home.vsAi", { pct: otherPct })}
           </span>
         )}
       </div>
@@ -165,6 +188,9 @@ export function BestBetsSection({
   // cliquer « Sûr » masquait les paris sûrs au lieu de n'afficher qu'eux.
   const [tierFilter, setTierFilter] = useState<TierFilter>("all");
   const [bets, setBets]             = useState<BestBet[]>([]);
+  // `meta.mlAvailable` du serveur : faux quand AUCUN pari n'a reçu de score IA
+  // (service ML en panne ou désactivé). Sert à dire pourquoi l'onglet IA est vide.
+  const [mlAvailable, setMlAvailable] = useState(true);
   const [collapsed,  setCollapsed]  = useState<boolean>(() => {
     try { return localStorage.getItem("iceedge_bestbets_collapsed") === "1"; }
     catch { return false; }
@@ -189,8 +215,9 @@ export function BestBetsSection({
       try {
         // Fetch a larger pool (both rule + ML scores) so the Rules/AI toggle
         // re-ranks honestly client-side; the list itself still shows the top 15.
-        const { bets: apiBets } = await predictionApiService.getBestBets({ limit: 30, source: "ml" });
+        const { bets: apiBets, meta } = await predictionApiService.getBestBets({ limit: 30, source: "ml" });
         if (cancelled) return;
+        setMlAvailable(meta?.mlAvailable !== false && apiBets.some((b) => b.mlPct != null));
         const mapped: BestBet[] = apiBets.map((b) => {
           const logo   = b.teamAbbr ? nhlLogoUrl(b.teamAbbr) : b.subjectLogo;
           const label  = betLabel(b, t);
@@ -230,10 +257,11 @@ export function BestBetsSection({
   }, [lang, locked]);
 
   const sorted = useMemo(() => {
-    const src = (b: BestBet) => sortSource === "ml" ? (b.mlPct ?? b.rulePct) : b.rulePct;
+    const src = (b: BestBet) => pctFor(b, sortSource) ?? 0;
+    const scored   = bets.filter((b) => pctFor(b, sortSource) != null);
     const filtered = tierFilter === "all"
-      ? bets
-      : bets.filter(b => riskLabel(src(b)).tier === tierFilter);
+      ? scored
+      : scored.filter(b => riskLabel(src(b)).tier === tierFilter);
     const perGame = new Map<string, number>();
     const out: BestBet[] = [];
     for (const b of [...filtered].sort((a, b) => src(b) - src(a))) {
@@ -358,7 +386,18 @@ export function BestBetsSection({
         // Onglet vide alors que la liste ne l'est pas : le dire, plutôt que
         // « aucun pari dans les 48 h », qui serait faux.
         <div className="py-8 text-center text-[#bfc8cc] text-xs">
-          {activeTier && bets.length > 0
+          {sortSource === "ml" && bets.length > 0 && !mlAvailable ? (
+            <>
+              <p>{t("home.aiUnavailable")}</p>
+              <button
+                onClick={() => setSortSource("rules")}
+                className="tap-44 mt-2 px-3 py-1.5 rounded-full text-[11px] font-bold"
+                style={{ background: "#86d1ea", color: "#072E49" }}
+              >
+                {t("home.showRules")}
+              </button>
+            </>
+          ) : activeTier && bets.length > 0
             ? t("home.noBetsTier", { tier: t(activeTier.key) })
             : t("home.noBets")}
         </div>

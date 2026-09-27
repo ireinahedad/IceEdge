@@ -332,6 +332,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // ── Slips / builder ──
   "slip.build":        { en: "Build",           fr: "Créer" },
   "slip.mySlips":      { en: "My Slips",        fr: "Mes paris" },
+  "slip.pendingCount": { en: "{n} open slips",  fr: "{n} coupons en cours" },
   "slip.predictions":  { en: "Your Predictions", fr: "Tes prédictions" },
   "slip.add":          { en: "Add",             fr: "Ajouter" },
   "slip.clearTitle":   { en: "Clear this slip?", fr: "Vider ce pari ?" },
@@ -490,6 +491,10 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "home.hide":           { en: "Hide",              fr: "Masquer" },
   "home.rules":          { en: "Rules",             fr: "Règles" },
   "home.ai":             { en: "AI",                fr: "IA" },
+  "home.vsRules":        { en: "rules {pct} %",     fr: "règles {pct} %" },
+  "home.vsAi":           { en: "AI {pct} %",        fr: "IA {pct} %" },
+  "home.aiUnavailable":  { en: "The AI model isn't answering right now, so there's no AI score to show.", fr: "Le modèle IA ne répond pas pour le moment, il n'y a donc aucun score IA à afficher." },
+  "home.showRules":      { en: "See the rules picks", fr: "Voir les paris des règles" },
   "home.noBetsTier":     { en: "No “{tier}” bets right now — try another tab.", fr: "Aucun pari « {tier} » pour le moment — essaie un autre onglet." },
   "home.bbExplainMl":    { en: "Ranked by win chance according to our AI model.", fr: "Classés selon leur chance de passer d'après notre modèle IA." },
   "home.bbExplainRules": { en: "Ranked by win chance according to our analysis rules.", fr: "Classés selon leur chance de passer d'après nos règles d'analyse." },

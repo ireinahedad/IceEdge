@@ -50,6 +50,13 @@ export type ManualKind =
   | 'starting_goalies'
   /** clé = 'YYYY-MM-DD' (heure Est) — { ABBR: ["Nom MoneyPuck", …] } */
   | 'scratches'
+  /**
+   * clé = ABBR — { players: [{ player, impact, since }] }. Blessés de longue
+   * durée : ajoutés AUTOMATIQUEMENT aux absents du jour (`scratches.ts`) et au
+   * facteur Blessures de chaque match de l'équipe (`injuryStore.ts`), jusqu'à
+   * ce qu'on les retire. Voir `longInjuries.ts`.
+   */
+  | 'long_injuries'
   /** clé = nom d'arbitre normalisé — { name, ppPerGame, note? }, SAISI À LA MAIN */
   | 'ref_tendency'
   /**

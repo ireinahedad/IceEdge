@@ -18,6 +18,7 @@
  */
 import type { ManualFactor } from './predictionFactors';
 import { getEntry } from './manualData.service';
+import { getLongInjuries } from './longInjuries';
 
 export interface InjuryEntry { player: string; role?: string; status?: string; impact: number }
 export interface GameInjuries {
@@ -44,8 +45,26 @@ const NEUTRAL: ManualFactor = { active: false, homeProb: 0.5, note: 'non renseig
 /** Facteurs manuels (blessures + alignement) pour un match. Tolérant aux pannes. */
 export async function getManualFactors(homeAbbr: string, awayAbbr: string): Promise<ManualFactors> {
   // `getEntry` ne lève jamais : base injoignable → null → neutre, journalisé.
-  const entry = await getEntry<GameInjuries>('injuries', injuryGameKey(homeAbbr, awayAbbr));
-  if (!entry) return { injuries: { ...NEUTRAL }, lineup: { ...NEUTRAL } };
+  const [saisie, long] = await Promise.all([
+    getEntry<GameInjuries>('injuries', injuryGameKey(homeAbbr, awayAbbr)),
+    getLongInjuries(),
+  ]);
+  // Blessés de longue durée des deux équipes, ajoutés à la saisie du match. Un
+  // joueur présent des deux côtés garde le poids saisi pour le match.
+  const withLong = (list: InjuryEntry[] | undefined, abbr: string): InjuryEntry[] => {
+    const own  = list ?? [];
+    const seen = new Set(own.map((e) => e.player.trim().toLowerCase()));
+    const add  = (long[abbr.toUpperCase()] ?? [])
+      .filter((p) => !seen.has(p.player.toLowerCase()))
+      .map((p) => ({ player: p.player, impact: p.impact, status: 'long' }));
+    return [...own, ...add];
+  };
+  const home = withLong(saisie?.home, homeAbbr);
+  const away = withLong(saisie?.away, awayAbbr);
+  if (!saisie && home.length === 0 && away.length === 0) {
+    return { injuries: { ...NEUTRAL }, lineup: { ...NEUTRAL } };
+  }
+  const entry: GameInjuries = { ...(saisie ?? {}), home, away };
 
   // ── Facteur blessures ──
   const homeHit = sumImpact(entry.home);

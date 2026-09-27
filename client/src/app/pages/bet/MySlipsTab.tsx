@@ -427,7 +427,14 @@ function SlipCard({ slip }: { slip: BetSlip }) {
 
 // ─── My Slips tab ─────────────────────────────────────────────────────────────
 
-export function MySlipsTab({ user }: { user: any }) {
+export function MySlipsTab({
+  user,
+  onPendingCount,
+}: {
+  user: any;
+  /** Remonte le nombre de coupons en cours à la page (pastille de l'onglet). */
+  onPendingCount?: (n: number) => void;
+}) {
   const { t } = useI18n();
   const [slips, setSlips] = useState<BetSlip[]>([]);
   const [loading, setLoading] = useState(false);
@@ -456,6 +463,7 @@ export function MySlipsTab({ user }: { user: any }) {
     try {
       const data = await getMySlips(100);
       setSlips(data);
+      onPendingCount?.(data.filter((s) => s.outcome === "pending").length);
     } catch (err: any) {
       setLoadError(err ?? new Error("Could not load slips"));
     } finally {

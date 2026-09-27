@@ -180,6 +180,44 @@ describe('compos du soir', () => {
   });
 });
 
+describe('blessés longue durée', () => {
+  it('écrit la liste d\'une équipe, abréviation en majuscules, doublons retirés', async () => {
+    await request(await app())
+      .put('/api/manual/long-injuries/tor')
+      .send({ players: [
+        { player: 'Auston Matthews', impact: 0.06, since: '2026-10-01' },
+        { player: 'auston matthews', impact: 0.03 },
+      ] })
+      .expect(200);
+    expect(Manual.setEntry).toHaveBeenCalledWith(
+      'long_injuries', 'TOR',
+      { players: [{ player: 'Auston Matthews', impact: 0.06, since: '2026-10-01' }] },
+      ADMIN.sub);
+  });
+
+  it('une liste vide SUPPRIME la ligne — c\'est ainsi qu\'un joueur revient au jeu', async () => {
+    await request(await app()).put('/api/manual/long-injuries/TOR').send({ players: [] }).expect(200);
+    expect(Manual.deleteEntry).toHaveBeenCalledWith('long_injuries', 'TOR');
+    expect(Manual.setEntry).not.toHaveBeenCalled();
+  });
+
+  it('refuse une équipe invalide et un poids absurde', async () => {
+    await request(await app()).put('/api/manual/long-injuries/T0R1X').send({ players: [] }).expect(400);
+    await request(await app())
+      .put('/api/manual/long-injuries/TOR')
+      .send({ players: [{ player: 'Auston Matthews', impact: 5 }] })
+      .expect(400);
+    expect(Manual.setEntry).not.toHaveBeenCalled();
+  });
+
+  it('GET rend { ABBR: [joueurs] }', async () => {
+    Manual.mapEntries.mockResolvedValueOnce({ TOR: { players: [{ player: 'Auston Matthews', impact: 0.06 }] } });
+    const res = await request(await app()).get('/api/manual/long-injuries').expect(200);
+    expect(res.body).toEqual({ TOR: [{ player: 'Auston Matthews', impact: 0.06 }] });
+    expect(Manual.mapEntries).toHaveBeenCalledWith('long_injuries');
+  });
+});
+
 describe('arbitres', () => {
   it('remplace la table en une fois, avec des clés normalisées', async () => {
     await request(await app())
