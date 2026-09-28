@@ -8,10 +8,12 @@
  *      tout le mois d'un coup.
  *
  * Un clic sur un match ouvre sa page de prédiction (/stats/prediction/game/:id).
+ * Chaque match à venir porte la barre moneyline du modèle ML, avec la cote du
+ * livre à chaque bout quand il la propose (2026-09-29).
  * Bornes/mois par défaut ancrés à la date réelle de l'API (getScheduleAnchor),
  * pas à l'horloge locale.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
@@ -22,6 +24,9 @@ import { useSubscription } from "../context/SubscriptionContext";
 import { nhlLogoUrl } from "../data/teamEmoji";
 import { useI18n } from "../i18n";
 import { ErrorState } from "../components/ErrorState";
+import { extractH2HOdds, type OddsEvent } from "../services/oddsApiService";
+import { fetchHockeyOdds, findOddsEvent } from "../services/gameOdds";
+import { MoneylineBar, useGameMl } from "./landing/LandingCards";
 import "../components/rink-theme.css";
 
 const ACCENT = "#86d1ea";
@@ -198,6 +203,25 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
     return () => { alive = false; };
   }, []);
 
+  // Vrais prix moneyline du livre relayé, posés aux deux bouts de la barre ML
+  // (2026-09-29). Même requête que l'accueil et la page du match
+  // (`fetchHockeyOdds`, une seule clé de cache). Le livre ne cote que les
+  // prochains jours : les matchs plus loin n'ont pas de prix, seulement la barre.
+  const [oddsEvents, setOddsEvents] = useState<OddsEvent[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetchHockeyOdds()
+      .then((ev) => { if (alive) setOddsEvents(ev); })
+      .catch(() => { /* la barre reste lisible sans les cotes */ });
+    return () => { alive = false; };
+  }, []);
+  // Appariement sur les NOMS COMPLETS des deux équipes (`findOddsEvent`) :
+  // pas de prix plutôt que le prix d'un autre match.
+  const bookFor = (g: NHLGame) => {
+    const ev = findOddsEvent(oddsEvents, g.homeTeam.name, g.awayTeam.name);
+    return (ev && extractH2HOdds(ev)) || undefined;
+  };
+
   const minIdx = monthIndex(bounds.first.y, bounds.first.m);
   const maxIdx = monthIndex(bounds.last.y, bounds.last.m);
   const curIdx = monthIndex(cursor.y, cursor.m);
@@ -361,6 +385,7 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
                       homeStats={teamStats.get(g.homeTeam.abbreviation)}
                       bestBet={isPro ? bestByGame.get(String(g.id)) : undefined}
                       bestLocked={!isPro && bestByGame.has(String(g.id))}
+                      book={bookFor(g)}
                       onUpgrade={() => navigate("/pro")}
                       fr={lang === "fr"}
                     />
@@ -430,6 +455,7 @@ function GameRow({
   bestLocked,
   onUpgrade,
   fr,
+  book,
 }: {
   game: NHLGame;
   onOpen: () => void;
@@ -439,6 +465,8 @@ function GameRow({
   bestLocked: boolean;
   onUpgrade: () => void;
   fr: boolean;
+  /** Cotes moneyline du livre (décimales), quand il cote ce match. */
+  book?: { home: number; away: number };
 }) {
   const isFinal = game.status === "final";
   const isLive = game.status === "live";
@@ -447,8 +475,27 @@ function GameRow({
   const h = game.homeTeam.score ?? 0;
   const insight = !isFinal ? insightFor(game, awayStats, homeStats, fr) : null;
 
+  // Le paquet ML n'est demandé qu'à l'approche du viewport (voir `useGameMl`) :
+  // une semaine compte ~50 matchs et la route est plafonnée à 60/min.
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!el || seen || isFinal) return;
+    if (typeof IntersectionObserver === "undefined") { setSeen(true); return; }
+    const io = new IntersectionObserver(
+      (entries) => { if (entries.some((e) => e.isIntersecting)) { setSeen(true); io.disconnect(); } },
+      { rootMargin: "200px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [seen, isFinal]);
+  const ml = useGameMl(String(game.id), seen && !isFinal);
+  const homeWin = ml?.homeWin ?? null;
+
   return (
     <div
+      ref={rowRef}
       role="button"
       tabIndex={0}
       onClick={onOpen}
@@ -489,6 +536,17 @@ function GameRow({
           )}
         </div>
       </div>
+
+      {/* Moneyline du modèle ML (2026-09-29) : la part de chaque équipe, le
+          visiteur à gauche comme il est en haut de la carte, la cote du livre
+          au bout de son équipe quand il la propose. Rien sur un match fini. */}
+      {!isFinal && (
+        <MoneylineBar
+          left={{ abbr: game.awayTeam.abbreviation, pct: homeWin == null ? null : 100 - homeWin, price: book?.away }}
+          right={{ abbr: game.homeTeam.abbreviation, pct: homeWin, price: book?.home }}
+          loading={ml === undefined}
+        />
+      )}
 
       {/* Accroches — meilleur pari du modèle, puis tendance d'équipe */}
       {!isFinal && (bestBet || bestLocked || insight) && (

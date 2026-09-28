@@ -48,6 +48,7 @@ import { PlayerCharts } from "./charts/PlayerCharts";
 import { TeamCharts } from "./charts/TeamCharts";
 import { TeamSpaceIdentity, TeamSpaceNav, teamSectionPath, toTeamSection, useTeamName } from "./charts/teamSpace";
 import { BG_HEADER, BG_PAGE } from "./charts/chartsTheme";
+import { StatsHubHeader } from "./StatsPage";
 import "../components/rink-theme.css";
 
 /* ── Section nav (Team / Game / Player) ────────────────────
@@ -177,6 +178,10 @@ export function ChartPage() {
 
   return (
     <div className="flex flex-col min-h-screen pb-[calc(6rem+env(safe-area-inset-bottom,0px))] max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: BG_PAGE }}>
+      {/* L'accueil de la section (`/stats/chart`) est l'onglet « Statistiques »
+          de Stats & prédiction (2026-09-29) : même en-tête que /stats, titre et
+          rondelle seulement. Les vues de détail gardent l'en-tête ci-dessous. */}
+      {!type ? <StatsHubHeader active={1} /> : (
       <div
         className="sticky top-0 z-40"
         style={{
@@ -235,6 +240,7 @@ export function ChartPage() {
         </div>
         </div>
       </div>
+      )}
 
       <div className="flex-1 overflow-y-auto px-4 py-4">{content}</div>
 

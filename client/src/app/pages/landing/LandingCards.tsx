@@ -19,6 +19,7 @@ import { features } from "../../platform";
 import { BookPricePill } from "../../components/BookPricePill";
 import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
 import { mlBundleKey } from "../prediction/gameMarkets";
+import { teamAccent } from "../../data/teamEmoji";
 import { DisplayGame, calcEdge } from "./landingTypes";
 
 
@@ -153,8 +154,9 @@ function gameDayLabel(game: DisplayGame, lang: string): string | null {
  * ▶ Au début de la saison : repasser à `true`, rien d'autre à faire.
  *   Suivi dans `STATUS.md` § 3.2.
  *
- * ⚠️ Le tableau Handicap / Vainqueur des matchs à venir (2026-09-27) affiche
- * le % du modèle ML À LA DEMANDE de l'utilisatrice : il ne lit PAS ce drapeau.
+ * ⚠️ Le tableau Handicap / Vainqueur des matchs à venir (2026-09-27) et sa
+ * barre moneyline (2026-09-29) affichent le % du modèle ML À LA DEMANDE de
+ * l'utilisatrice : ils ne lisent PAS ce drapeau.
  * Celui-ci ne masque plus que la barre de la carte en direct et le badge
  * d'edge.
  */
@@ -265,6 +267,11 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
  * Chaque paire totalise 100 % PAR CONSTRUCTION : on lit un seul côté et on
  * prend le complément (pas de push sur une demi-ligne, pas de nul au
  * moneyline). `undefined` = en cours, `null` = modèle indisponible.
+ *
+ * `enabled` (2026-09-29) : le calendrier ne le lève qu'à l'approche du
+ * viewport. Une semaine y compte ~50 matchs, et `predictLimiter` plafonne la
+ * route à 60 requêtes/min par compte en prod — tout demander d'un coup
+ * ferait tomber les derniers en 429.
  */
 interface HomeMl {
   homeWin: number | null;
@@ -272,14 +279,15 @@ interface HomeMl {
   homeMinus: number | null;
   awayMinus: number | null;
 }
-function useHomeMl(gameId: string): HomeMl | null | undefined {
+export function useGameMl(gameId: string, enabled = true): HomeMl | null | undefined {
   const [bundle, setBundle] = useState<GameMlBundle | null | undefined>(undefined);
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     setBundle(undefined);
     fetchGameMlBundle(gameId).then((b) => { if (alive) setBundle(b); });
     return () => { alive = false; };
-  }, [gameId]);
+  }, [gameId, enabled]);
   if (bundle === undefined) return undefined;
   if (bundle === null) return null;
   const p = (k: string) => {
@@ -299,6 +307,64 @@ function MlPct({ value, loading }: { value: number | null; loading: boolean }) {
     <span className="text-[11px] font-bold tabular-nums w-[30px] text-right flex-shrink-0" style={{ color: "#c4b5fd" }}>
       {loading ? "…" : value != null ? `${value}%` : "—"}
     </span>
+  );
+}
+
+// ─── Barre moneyline du modèle (2026-09-29) ──────────────────────────────────
+
+/** Un bout de la barre : l'équipe, sa probabilité ML, la cote du livre s'il en a une. */
+export interface MlBarSide { abbr: string; pct: number | null; price?: number }
+
+/**
+ * La prédiction moneyline en un coup d'œil : une barre partagée entre les deux
+ * équipes, chacune à sa couleur de club, la favorite pleine et l'autre
+ * estompée. Les chiffres, eux, restent en blanc / gris : plusieurs clubs
+ * (TOR, NYR, EDM) ont une couleur trop sombre pour un texte de 11 px sur fond
+ * de nuit — mesuré à l'écran le 2026-09-29. Sert à l'accueil (sous le tableau) et au calendrier (avec la cote
+ * du livre à chaque bout).
+ *
+ * Les pourcentages sont des probabilités du modèle : toujours en %, jamais au
+ * format de cote. Seule la cote du livre (`price`, via `BookPricePill`) suit
+ * le réglage de format — la règle « prix vs estimation ».
+ *
+ * Pastilles en `link={false}` : la barre vit dans une carte qui ouvre la page
+ * du match ; un bouton vers le livre caché dans la barre surprendrait.
+ *
+ * Sans probabilité (modèle indisponible) la barre disparaît : jamais de 50/50
+ * de repli.
+ */
+export function MoneylineBar({ left, right, loading, className = "" }: {
+  left: MlBarSide;
+  right: MlBarSide;
+  loading: boolean;
+  className?: string;
+}) {
+  if (!loading && (left.pct == null || right.pct == null)) return null;
+  const lc = teamAccent(left.abbr);
+  const rc = teamAccent(right.abbr);
+  const lp = left.pct ?? 50;
+  const leftFav = lp >= 50;
+  const pctCls = "text-[11px] font-bold tabular-nums w-[30px] flex-shrink-0";
+  return (
+    <div className={`flex items-center gap-2 ${className}`}>
+      {left.price != null && <BookPricePill price={left.price} link={false} />}
+      <span className={pctCls} style={{ color: loading || leftFav ? "#fff" : "#8a9ea6" }}>{loading ? "…" : `${left.pct}%`}</span>
+      <div
+        className={`flex-1 min-w-[40px] h-2 rounded-full overflow-hidden flex bg-white/10${loading ? " animate-pulse" : ""}`}
+        role={loading ? undefined : "img"}
+        aria-label={loading ? undefined : `Moneyline ML : ${left.abbr} ${left.pct}% – ${right.abbr} ${right.pct}%`}
+      >
+        {!loading && (
+          <>
+            <div className="h-full transition-[width] duration-500" style={{ width: `${lp}%`, background: lc, opacity: leftFav ? 1 : 0.6 }} />
+            <div className="h-full w-[2px] flex-shrink-0 bg-[#0A0E0C]" aria-hidden />
+            <div className="h-full flex-1" style={{ background: rc, opacity: leftFav ? 0.6 : 1 }} />
+          </>
+        )}
+      </div>
+      <span className={`${pctCls} text-right`} style={{ color: loading || !leftFav ? "#fff" : "#8a9ea6" }}>{loading ? "…" : `${right.pct}%`}</span>
+      {right.price != null && <BookPricePill price={right.price} link={false} />}
+    </div>
   );
 }
 
@@ -464,7 +530,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
   const { t, lang } = useI18n();
   const navigate = useNavigate();
   const { edge } = useGameEdge(game);
-  const ml = useHomeMl(game.id);
+  const ml = useGameMl(game.id);
   const mlLoading = ml === undefined;
   // Le jour de semaine, toujours : le titre de la journée est au-dessus, mais
   // une carte doit se lire seule (capture d'écran, défilement rapide).
@@ -591,6 +657,16 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
           </button>
         </div>
       </div>
+
+      {/* Barre moneyline (2026-09-29) : la prédiction ML en un coup d'œil,
+          domicile à gauche comme il est en haut du tableau. Les cotes sont
+          déjà dans le tableau : pas de pastilles ici. */}
+      <MoneylineBar
+        className="mt-3"
+        left={{ abbr: game.team1.abbr, pct: winHome }}
+        right={{ abbr: game.team2.abbr, pct: winAway }}
+        loading={mlLoading}
+      />
     </div>
   );
 }

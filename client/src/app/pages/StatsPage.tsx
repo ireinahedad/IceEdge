@@ -1,6 +1,6 @@
 import { Search, HelpCircle } from "lucide-react";
-import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 import { useNHLData, UITeam, UIGame } from "../hooks/useNHLData";
 import { BottomNav } from "../components/BottomNav";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
@@ -8,7 +8,6 @@ import { HowItWorksSheet } from "../components/HowItWorksSheet";
 import { useSport } from "../context/SportContext";
 import { PlayersTab } from "../components/PlayersTab";
 import { ScheduleContent } from "./SchedulePage";
-import { FramedLabel } from "../components/brand/FramedLabel";
 import { useI18n } from "../i18n";
 import { ErrorState } from "../components/ErrorState";
 import { teamColors } from "../data/teamEmoji";
@@ -148,6 +147,67 @@ function GameCard({ game, getTeamById, onClick, accent }: { game: UIGame; getTea
   );
 }
 
+// ─── En-tête partagé Stats & prédiction ──────────────────────────────────────
+
+/**
+ * En-tête commun aux deux onglets de la section (2026-09-29) : le titre et le
+ * commutateur à rondelle (`.puck-tabs`, le même que Coupon, League, Profil),
+ * rien d'autre.
+ *
+ *   Prédiction    → /stats        (cette page)
+ *   Statistiques  → /stats/chart  (accueil des graphiques, ChartPage)
+ *
+ * Les onglets sont deux ROUTES et non un état local : les liens existants vers
+ * /stats/chart (fil d'Ariane et retour des graphiques) restent valides. Changer
+ * d'onglet change donc de page ; pour que la rondelle GLISSE quand même,
+ * l'onglet de départ voyage dans l'état de navigation (`hubFrom`) : le nouvel
+ * en-tête se peint d'abord à cet index, puis passe au sien deux images plus
+ * tard, et la transition CSS de `.puck-tabs-thumb` fait le reste.
+ * `replace` : passer d'un onglet à l'autre n'empile pas l'historique.
+ */
+const HUB_TABS = [
+  { key: "stats.tabPrediction", path: "/stats" },
+  { key: "stats.statistics",    path: "/stats/chart" },
+];
+
+export function StatsHubHeader({ active }: { active: 0 | 1 }) {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { hubFrom?: number } | null)?.hubFrom;
+  const [puck, setPuck] = useState<number>(from === 0 || from === 1 ? from : active);
+  useEffect(() => {
+    // Deux images : la première peint l'index de départ, la seconde lance la glisse.
+    let second = 0;
+    const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => setPuck(active)); });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
+  }, [active]);
+
+  return (
+    <header className="bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+      <div className="px-4 pt-3 pb-2">
+        <h1 className="text-white text-lg md:text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("stats.title")}</h1>
+      </div>
+      <div
+        className="puck-tabs mx-4 mb-3"
+        style={{ "--puck-count": HUB_TABS.length, "--puck-index": puck } as React.CSSProperties}
+      >
+        <span className="puck-tabs-thumb" aria-hidden />
+        {HUB_TABS.map((tab, i) => (
+          <button
+            key={tab.path}
+            onClick={() => { if (i !== active) navigate(tab.path, { replace: true, state: { hubFrom: active } }); }}
+            className={`puck-tab${active === i ? " is-active" : ""}`}
+            aria-pressed={active === i}
+          >
+            {t(tab.key)}
+          </button>
+        ))}
+      </div>
+    </header>
+  );
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export function StatsPage() {
@@ -178,12 +238,19 @@ export function StatsPage() {
     return [t1.name, t2.name, t1.abbr, t2.abbr].some((s) => s.toLowerCase().includes(search.toLowerCase()));
   });
 
+  // L'en-tête partagé reste là pendant le chargement et en cas d'erreur :
+  // l'onglet Statistiques doit rester joignable.
+  const shell = "flex flex-col min-h-screen bg-transparent text-white max-w-[430px] md:max-w-5xl mx-auto relative z-10 w-full";
+
   if (loading) return (
-    <div className="flex flex-col min-h-screen bg-transparent text-white items-center justify-center max-w-[430px] md:max-w-5xl mx-auto relative z-10 w-full">
-      <div className="w-12 h-12 rounded-full bg-[#131A12] border border-white/20 flex items-center justify-center">
-        <div className="w-5 h-5 rounded-full bg-[#86d1ea]/20 border border-[#86d1ea]/40 animate-pulse" />
+    <div className={shell}>
+      <StatsHubHeader active={0} />
+      <div className="flex-1 flex flex-col items-center justify-center">
+        <div className="w-12 h-12 rounded-full bg-[#131A12] border border-white/20 flex items-center justify-center">
+          <div className="w-5 h-5 rounded-full bg-[#86d1ea]/20 border border-[#86d1ea]/40 animate-pulse" />
+        </div>
+        <p className="text-[#bfc8cc] text-sm mt-3">{t("stats.loadingNHL")}</p>
       </div>
-      <p className="text-[#bfc8cc] text-sm mt-3">{t("stats.loadingNHL")}</p>
       <BottomNav />
     </div>
   );
@@ -191,70 +258,52 @@ export function StatsPage() {
   // Le message du serveur (`error`) partait seul à l'écran, sans recours : il
   // sert maintenant de sous-titre sous un titre lisible et un bouton.
   if (error) return (
-    <div className="flex flex-col min-h-screen bg-transparent text-white items-center justify-center max-w-[430px] md:max-w-5xl mx-auto relative z-10 w-full">
-      <ErrorState onRetry={reload} hint={error} />
+    <div className={shell}>
+      <StatsHubHeader active={0} />
+      <div className="flex-1 flex flex-col items-center justify-center">
+        <ErrorState onRetry={reload} hint={error} />
+      </div>
       <BottomNav />
     </div>
   );
 
   return (
-    <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] md:max-w-5xl mx-auto relative z-10 w-full">
-      {/* Header — title block, then the controls below it. */}
-      <header className="bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
-        {/* Les marges verticales de ce bloc sont resserrées sous `md` : l'en-tête
-            est collant, donc tout ce qu'il prend, le contenu ne le récupère
-            jamais au défilement. Sur grand écran elles reprennent leur valeur
-            d'origine. Les tailles des rondelles et de la bannière, elles, sont
-            dans rink-theme.css / FramedLabel.css. */}
-        <div className="px-4 pt-3 pb-2 md:pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-white text-lg md:text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("stats.title")}</h1>
-              <p className="text-[#bfc8cc] text-xs">{t("stats.subtitle")}</p>
-            </div>
-            <HowItWorksButton accent={accent} onClick={() => setHowItWorks(true)} />
-          </div>
-        </div>
-        <div className="px-4 pb-2 md:pb-3">
-          {/* Team / Game / Player as pucks. */}
-          <div className="flex items-center justify-center gap-2 md:gap-2.5 mb-2 md:mb-2.5">
-            {filterTabKeys.map((tabKey, i) => (
-              <button
-                key={tabKey}
-                onClick={() => setActiveFilter(i)}
-                className={`rink-puck${activeFilter === i ? " is-active" : ""}`}
-                aria-pressed={activeFilter === i}
-              >
-                <span className="rink-puck-label">{t(tabKey)}</span>
-              </button>
-            ))}
-          </div>
-          {/* L'entrée « Statistiques » : un bandeau pleine largeur sous les
-              rondelles, plutôt qu'une pastille serrée à côté d'elles.
-              Il menait droit à « toutes les équipes » ou « tous les joueurs »
-              selon l'onglet ouvert ici ; depuis que la section a un accueil,
-              il y mène — les trois entrées y sont côte à côte et expliquées,
-              et c'est de là que part aussi l'espace d'un club. */}
-          <FramedLabel
-            className="framed-label--banner mb-2 md:mb-3"
-            text={t("stats.statistics")}
-            onClick={() => navigate("/stats/chart")}
-          />
-          <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2 md:py-2.5">
-            <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
-            <input className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#bfc8cc]"
-              placeholder={t("stats.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
-            {search && <button onClick={() => setSearch("")} className="tap-44 text-[#bfc8cc] text-xs">×</button>}
-          </div>
-        </div>
-      </header>
+    <div className={shell}>
+      <StatsHubHeader active={0} />
 
       <div className="flex-1 px-4 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] pt-3 overflow-y-auto">
+        {/* Ce qui était dans l'en-tête collant de la page est descendu ici le
+            2026-09-29 (demande du user) : il défile avec la page, donc les
+            trois rondelles disparaissent quand on descend. Le bandeau
+            « Statistiques » est parti — c'est maintenant l'onglet du haut. */}
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <p className="text-[#bfc8cc] text-xs">{t("stats.subtitle")}</p>
+          <HowItWorksButton accent={accent} onClick={() => setHowItWorks(true)} />
+        </div>
+        {/* Team / Game / Player as pucks. */}
+        <div className="flex items-center justify-center gap-2 md:gap-2.5 mb-3">
+          {filterTabKeys.map((tabKey, i) => (
+            <button
+              key={tabKey}
+              onClick={() => setActiveFilter(i)}
+              className={`rink-puck${activeFilter === i ? " is-active" : ""}`}
+              aria-pressed={activeFilter === i}
+            >
+              <span className="rink-puck-label">{t(tabKey)}</span>
+            </button>
+          ))}
+        </div>
+        <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2 md:py-2.5 mb-3">
+          <Search size={14} className="text-[#8a9ea6] flex-shrink-0" />
+          <input className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#bfc8cc]"
+            placeholder={t("stats.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
+          {search && <button onClick={() => setSearch("")} className="tap-44 text-[#bfc8cc] text-xs">×</button>}
+        </div>
         {/* Au-dessus des trois onglets (décision du user, 2026-09-28). */}
         <div className="mb-3">
           <SlipCommandLauncher variant="block" />
         </div>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center mb-3">
           <span className="text-[#bfc8cc] text-xs">
             {activeFilter === 0 && `${filteredTeams.length} ${t("stats.teams")}`}
             {activeFilter === 1 && (
@@ -265,9 +314,6 @@ export function StatsPage() {
             )}
             {activeFilter === 2 && t("stats.players")}
           </span>
-          {activeFilter < 2 && (
-            <span className="text-xs" style={{ color: accent }}>{t("stats.tapToAdd")}</span>
-          )}
         </div>
 
         {/* ── By Team ── */}

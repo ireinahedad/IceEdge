@@ -78,10 +78,8 @@
 
 /* Les tuyaux — ils font le tour de la page : montant gauche, montant
    droit, et pas de barre inférieure, parce qu'un but s'ouvre sur la
-   glace. Le haut n'est pas dessiné ici : c'est la plinthe de la bande
-   du bandeau qui est peinte en rouge (`.rink-boards--goal` plus bas),
-   pour que le cadre se poursuive sans couture derrière l'en-tête, qui
-   recouvrirait de toute façon une bordure posée ici.
+   glace. Le haut n'est pas dessiné : l'en-tête collant recouvrirait de
+   toute façon une bordure posée ici.
 
    Le rouge est celui d'un tube peint, pas d'un néon : le halo reste
    sous 0.3. Un premier essai en arche centrale à 7 px et halo 0.45
@@ -98,22 +96,6 @@
   /* Les montants se dissolvent au ras du sol, comme la maille. */
   -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 86%, transparent 100%);
           mask-image: linear-gradient(180deg, #000 0%, #000 86%, transparent 100%);
-}
-
-/* La plinthe de la bande, repeinte en rouge : c'est la barre du haut du
-   but. `.rink-boards` (rink-theme.css) est partagée par toutes les pages,
-   donc la couleur est changée par un modificateur posé uniquement sur la
-   page Coupon — surtout ne pas toucher la règle de base. */
-.rink-boards--goal {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.72) 0 2px,
-    #eef4f7 2px 10px,
-    #cfdae1 10px 19px,
-    #a4b3bc 19px 24px,
-    #cb2e44 24px 30px
-  );
-  box-shadow: 0 3px 16px rgba(203, 46, 68, 0.35);
 }
 
 /* Mode clair : sur le fond menthe, une corde blanche est invisible —

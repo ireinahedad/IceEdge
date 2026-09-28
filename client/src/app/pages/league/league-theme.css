@@ -194,7 +194,9 @@
 
 /* ── Panneau publicitaire de bord de bande ─────────────────────── */
 /* Les salons publics. Même langage que `.rink-signboard` (rink-theme.css) :
-   panneau saturé, joints de bande qui traversent l'image, plinthe jaune.
+   panneau saturé, joints de bande qui traversent l'image. La plinthe
+   jaune du bas est retirée depuis le 2026-09-29 (plus aucune bordure
+   jaune dans l'app, demande du user).
    La différence est qu'ici c'est une rangée de liste, pas un bouton
    pleine largeur — d'où le rythme de joints plus serré (44 px) qui
    garde plusieurs panneaux visibles dans la hauteur d'une rangée. */
@@ -206,7 +208,6 @@
     repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px 3px),
     linear-gradient(100deg, #0a2637 0%, #114f6e 38%, #17708f 64%, #0a2637 100%);
   border-top: 2px solid rgba(255, 255, 255, 0.5);
-  border-bottom: 5px solid #f2c744;
   box-shadow:
     inset 0 -10px 20px rgba(0, 0, 0, 0.25),
     0 6px 18px rgba(0, 0, 0, 0.45);
@@ -606,22 +607,3 @@
   .arena-doors { display: none; }
 }
 
-/* ── Plinthe de bande, version aréna ───────────────────────────────── */
-/* Le jaune de `.rink-boards` (rink-theme.css) est la couleur de kickplate
-   d'une patinoire, mais sur cette page il était la seule note chaude au
-   milieu d'un bol entièrement bleu glace — il lisait comme un accident.
-   Ce modificateur ne repeint QUE la plinthe, et il est posé uniquement
-   sur l'en-tête de League. La règle `.rink-boards` de base ne bouge pas :
-   elle est partagée par toutes les pages. Même mécanique que
-   `.rink-boards--goal` sur la page Coupon. */
-.rink-boards--ice {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.72) 0 2px,
-    #eef4f7 2px 10px,
-    #cfdae1 10px 19px,
-    #a4b3bc 19px 24px,
-    #86d1ea 24px 30px
-  );
-  box-shadow: 0 3px 16px rgba(134, 209, 234, 0.4);
-}

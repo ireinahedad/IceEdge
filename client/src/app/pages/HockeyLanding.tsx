@@ -444,8 +444,6 @@ export function HockeyLanding() {
             </p>
           </div>
 
-          {/* Foot of the page: the boards close the rink */}
-          <div className="rink-boards rink-boards--bottom" aria-hidden />
           </div>
       </div>
 

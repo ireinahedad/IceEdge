@@ -15,11 +15,9 @@
    white sheet would have broken every text colour on the page.
 
    Vertical order on the page:
-     .rink-boards            dasher boards under the sticky header
      .rink-ice               the sheet itself
        └ .rink-line--blue    blue line
        └ .rink-line--red     centre red line, crossing .rink-faceoff
-     .rink-boards--bottom    dasher boards at the foot of the page
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── The sheet ─────────────────────────────────────────────────── */
@@ -50,39 +48,6 @@
 .rink-ice > * {
   position: relative;
   z-index: 1;
-}
-
-/* ── Dasher boards ─────────────────────────────────────────────── */
-/* Read top-to-bottom: glass shine, white board face, shadowed base,
-   then the yellow kickplate that meets the ice. */
-/* Plus posée sous les en-têtes depuis le 2026-09-21 (bande blanche et jaune
-   retirée de toutes les barres de navigation) ; reste au pied de l'accueil
-   via .rink-boards--bottom. */
-.rink-boards {
-  position: relative;
-  height: 30px;
-  flex: none;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.72) 0 2px,
-    #eef4f7 2px 10px,
-    #cfdae1 10px 19px,
-    #a4b3bc 19px 24px,
-    #f2c744 24px 30px
-  );
-}
-
-/* Panel seams. */
-.rink-boards::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 62px);
-}
-
-/* Foot of the page: same boards, flipped so the kickplate faces the ice. */
-.rink-boards--bottom {
-  transform: scaleY(-1);
 }
 
 /* ── Ice lines ─────────────────────────────────────────────────── */
@@ -229,7 +194,6 @@
   color: #fff;
   background: linear-gradient(100deg, #0b3a51 0%, #146a8f 38%, #1f93c4 68%, #0b3a51 100%);
   border-top: 2px solid rgba(255, 255, 255, 0.8);
-  border-bottom: 7px solid #f2c744;
   box-shadow:
     inset 0 -12px 22px rgba(0, 0, 0, 0.20),
     0 6px 18px rgba(0, 0, 0, 0.4);
@@ -249,7 +213,7 @@
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
 }
 
-/* Panel seams, same rhythm as .rink-boards. */
+/* Panel seams, one every 62 px. */
 .rink-signboard::after {
   content: "";
   position: absolute;

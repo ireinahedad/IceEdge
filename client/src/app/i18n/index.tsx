@@ -455,7 +455,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.howProbBody":  { en: "Bets on different games are multiplied together. A duplicate — or a bet already contained in another — counts once, two bets that can't both happen drop the slip to 0, and bets on the same game are adjusted for their link. More bets means a lower combined chance but a higher potential reward.", fr: "Les sélections sur des matchs différents se multiplient. Un doublon — ou une sélection déjà contenue dans une autre — ne compte qu'une fois, deux sélections qui ne peuvent pas se réaliser ensemble ramènent le pari à 0, et les sélections d'un même match sont ajustées selon leur lien. Plus il y a de sélections, plus la chance combinée est faible, mais plus la récompense potentielle est élevée." },
 
   // ── Stats ──
-  "stats.title":       { en: "Statistics",      fr: "Statistiques" },
+  "stats.title":       { en: "Stats & Predictions", fr: "Stats & prédiction" },
   "stats.subtitle":    { en: "AI-powered predictions", fr: "Prédictions par IA" },
   "stats.search":      { en: "Search team, player, game...", fr: "Cherche une équipe, un joueur, un match..." },
   "stats.teams":       { en: "teams",           fr: "équipes" },
@@ -466,10 +466,10 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "stats.byGame":      { en: "By Game",   fr: "Par match" },
   "stats.byPlayer":    { en: "By Player", fr: "Par joueur" },
   "stats.statistics":  { en: "Statistics", fr: "Statistiques" },
+  "stats.tabPrediction": { en: "Prediction", fr: "Prédiction" },
   "stats.loadingNHL":  { en: "Loading NHL data...", fr: "Chargement des données LNH..." },
   "stats.matches":     { en: "{n} matches", fr: "{n} matchs" },
   "stats.players":     { en: "Players",   fr: "Joueurs" },
-  "stats.tapToAdd":    { en: "Tap + to add to slip", fr: "Touche + pour ajouter au pari" },
   "stats.loadingTeamsHint": { en: "The stats service is not responding. Try again in a moment.", fr: "Le service de statistiques ne répond pas. Réessaie dans un instant." },
   "stats.noGamesHint": { en: "Check back on game nights, or explore season futures below", fr: "Reviens les soirs de match, ou explore les paris de saison ci-dessous" },
   "stats.loadingStandings": { en: "Loading standings data...", fr: "Chargement du classement..." },
