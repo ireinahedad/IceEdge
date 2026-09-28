@@ -11,25 +11,12 @@
  * ce qui marche et on signale le reste (doublon, probabilité indisponible).
  */
 
-import {
-  SLIP_COMMAND_MARKETS,
-  type SlipContext, type SlipIntent,
-} from "../../../../server/src/services/slipCommand";
+import type { SlipIntent } from "../../../../server/src/services/slipCommand";
 import { MARKET_DEFINITIONS, type MarketDefinition } from "../data/betMarkets";
 import { toUIGame, type UIPlayer, type UITeam } from "../hooks/useNHLData";
 import { toUpcoming } from "../pages/prediction/predictionShared";
 import { buildLeg, teamSubject, playerSubject, gameSubject, type BuildLegInput } from "./buildLeg";
 import type { BetLeg, NHLGame } from "../types/bet";
-
-/** Les lignes autorisées par marché plus/moins, tirées de `MARKET_DEFINITIONS`. */
-export function slipCommandLines(): SlipContext["lines"] {
-  const lines: SlipContext["lines"] = {};
-  for (const type of SLIP_COMMAND_MARKETS) {
-    const def = MARKET_DEFINITIONS.find((m) => m.type === type);
-    if (def?.lineOptions) lines[type] = def.lineOptions;
-  }
-  return lines;
-}
 
 export interface SlipCommandData {
   /** Matchs de la fenêtre (`fetchUpcomingWindow`), tels que l'API les rend. */

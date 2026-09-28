@@ -308,7 +308,7 @@ export function EmptySlip({ onBrowse }: { onBrowse: () => void }) {
           {t("slip.emptyHint")}
         </p>
       </div>
-      {/* « Construire un pari avec l'IA » au-dessus de « Browse markets » (décision du user, 2026-09-28). */}
+      {/* « Bet builder IA » au-dessus de « Browse markets » (décision du user, 2026-09-28). */}
       <div className="w-full max-w-[280px]">
         <SlipCommandLauncher variant="block" />
       </div>

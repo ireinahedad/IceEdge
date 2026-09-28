@@ -103,6 +103,12 @@ const CHARS_PER_TOKEN = 3.5;
 const MAX_PROMPT_CHARS = num('LLM_MAX_PROMPT_CHARS', 8_000);
 const MAX_SYSTEM_CHARS = num('LLM_MAX_SYSTEM_CHARS', 2_000);
 /**
+ * Taille d'entrée (invite système + message) sur laquelle le coût pire-cas
+ * est calculé. Toute tâche qui construit une invite plus grande casserait la
+ * garantie : `parse_bet_command` s'y borne (voir `llm.routes.ts`).
+ */
+export const PROMPT_BUDGET_CHARS = MAX_PROMPT_CHARS + MAX_SYSTEM_CHARS;
+/**
  * Budget de sortie envoyé au fournisseur. Exporté et consommé par `llm.routes`
  * comme `max_tokens` : c'est la même valeur des deux côtés PAR CONSTRUCTION.
  * Deux constantes séparées finiraient par diverger, et une divergence ici fait
@@ -240,6 +246,16 @@ export interface QuotaVerdict {
  * pour les caches, et c'est délibéré : ici, échouer en laissant passer, c'est
  * dépenser de l'argent sans pouvoir le compter.
  */
+/** Le disjoncteur global du chemin Pro (le gratuit a le sien : `FREE_GLOBAL_TAKE_SQL`). */
+const GLOBAL_TAKE_SQL =
+  `INSERT INTO llm_usage_global (month, count, updated_at)
+       VALUES ($1, 1, NOW())
+       ON CONFLICT (month) DO UPDATE
+          SET count = llm_usage_global.count + 1, updated_at = NOW()
+        WHERE llm_usage_global.count < $2
+       RETURNING count`;
+const GLOBAL_RELEASE_SQL = `UPDATE llm_usage_global SET count = GREATEST(count - 1, 0) WHERE month = $1`;
+
 export async function consumeProRequest(userId: string): Promise<QuotaVerdict> {
   const month = currentMonth();
   const resetsAt = nextResetISO();
@@ -247,15 +263,7 @@ export async function consumeProRequest(userId: string): Promise<QuotaVerdict> {
   try {
     // 1. Disjoncteur global. Vérifié en premier : s'il a sauté, inutile de
     //    toucher au compteur individuel.
-    const g = await pool.query(
-      `INSERT INTO llm_usage_global (month, count, updated_at)
-       VALUES ($1, 1, NOW())
-       ON CONFLICT (month) DO UPDATE
-          SET count = llm_usage_global.count + 1, updated_at = NOW()
-        WHERE llm_usage_global.count < $2
-       RETURNING count`,
-      [month, GLOBAL_MONTHLY_CAP],
-    );
+    const g = await pool.query(GLOBAL_TAKE_SQL, [month, GLOBAL_MONTHLY_CAP]);
     if ((g.rowCount ?? 0) === 0) {
       logger.error(
         { month, cap: GLOBAL_MONTHLY_CAP },
@@ -279,10 +287,8 @@ export async function consumeProRequest(userId: string): Promise<QuotaVerdict> {
       // Plafond atteint. Le compteur global a été incrémenté juste au-dessus
       // pour une requête qui ne partira pas : on le rend, sinon le disjoncteur
       // dériverait à la hausse à cause de requêtes jamais envoyées.
-      await pool.query(
-        `UPDATE llm_usage_global SET count = GREATEST(count - 1, 0) WHERE month = $1`,
-        [month],
-      ).catch(() => { /* best-effort : au pire le disjoncteur est un peu pessimiste */ });
+      await pool.query(GLOBAL_RELEASE_SQL, [month])
+        .catch(() => { /* best-effort : au pire le disjoncteur est un peu pessimiste */ });
 
       return { allowed: false, reason: 'user', used: MONTHLY_QUOTA, limit: MONTHLY_QUOTA, resetsAt };
     }
@@ -309,10 +315,7 @@ export async function refundProRequest(userId: string): Promise<void> {
       `UPDATE llm_usage SET count = GREATEST(count - 1, 0) WHERE user_id = $1 AND month = $2`,
       [userId, month],
     );
-    await pool.query(
-      `UPDATE llm_usage_global SET count = GREATEST(count - 1, 0) WHERE month = $1`,
-      [month],
-    );
+    await pool.query(GLOBAL_RELEASE_SQL, [month]);
   } catch (err: any) {
     logger.warn({ err: err?.message, userId }, '[llmQuota] remboursement échoué');
   }
@@ -332,4 +335,130 @@ export async function getUsage(userId: string): Promise<{ used: number; limit: n
     logger.warn({ err: err?.message, userId }, '[llmQuota] lecture de consommation échouée');
   }
   return { used, limit: MONTHLY_QUOTA, remaining: Math.max(MONTHLY_QUOTA - used, 0), resetsAt: nextResetISO() };
+}
+
+// ── Appels gratuits du Bet builder IA (migration 039) ───────────────────────
+
+/**
+ * Appels LLM offerts par jour à un compte GRATUIT pour `parse_bet_command` —
+ * le Bet builder IA —, sur la clé de l'opérateur (décision du user,
+ * 2026-09-28 — D4 du plan).
+ *
+ * C'est le PREMIER usage gratuit payé par l'opérateur : le compteur est donc en
+ * base (`llm_free_daily`), comme le plafond Pro — un compteur en mémoire se
+ * remettrait à zéro à chaque redéploiement et se multiplierait par le nombre
+ * d'instances. Ils ont leur PROPRE disjoncteur mensuel
+ * (`FREE_GLOBAL_MONTHLY_CAP`), séparé de celui de Pro.
+ *
+ * ⚠️ Ne jamais recopier ce nombre dans une traduction : `/api/llm/usage` et la
+ * réponse 429 le renvoient, l'écran l'affiche.
+ */
+export const FREE_PARSE_DAILY = Math.floor(num('LLM_FREE_PARSE_DAILY', 2));
+
+/**
+ * Disjoncteur mensuel des appels GRATUITS, toutes personnes confondues.
+ *
+ * SÉPARÉ de `GLOBAL_MONTHLY_CAP` (décision du user, 2026-09-29). Avec un
+ * disjoncteur commun, ~170 comptes gratuits utilisant leurs 2 appels chaque
+ * jour suffisaient à atteindre les 10 000 du mois — et l'IA se coupait alors
+ * AUSSI pour les abonnés Pro, ceux qui paient. Le gratuit ne peut désormais
+ * épuiser que sa propre enveloppe, et Pro n'y touche pas non plus.
+ *
+ * 5 000 par défaut, soit ~11,85 $/mois au coût pire-cas actuel (0,00237 $).
+ * Réglable par `LLM_FREE_GLOBAL_MONTHLY_CAP`, sans toucher au code.
+ */
+export const FREE_GLOBAL_MONTHLY_CAP = Math.floor(num('LLM_FREE_GLOBAL_MONTHLY_CAP', 5_000));
+
+const FREE_GLOBAL_TAKE_SQL =
+  `INSERT INTO llm_free_global (month, count, updated_at)
+       VALUES ($1, 1, NOW())
+       ON CONFLICT (month) DO UPDATE
+          SET count = llm_free_global.count + 1, updated_at = NOW()
+        WHERE llm_free_global.count < $2
+       RETURNING count`;
+const FREE_GLOBAL_RELEASE_SQL = `UPDATE llm_free_global SET count = GREATEST(count - 1, 0) WHERE month = $1`;
+
+// Journalisé au démarrage, comme le plafond Pro plus haut : la dépense maximale
+// du gratuit doit se lire dans les logs de déploiement.
+logger.info(
+  {
+    freeParseDaily: FREE_PARSE_DAILY,
+    freeGlobalCap: FREE_GLOBAL_MONTHLY_CAP,
+    freeWorstCaseMonthly: Number((FREE_GLOBAL_MONTHLY_CAP * WORST_CASE_COST_PER_REQUEST).toFixed(2)),
+  },
+  '[llmQuota] Bet builder IA — appels gratuits (disjoncteur séparé de Pro)',
+);
+
+/** Jour calendaire UTC, 'YYYY-MM-DD' — comme le compteur journalier en mémoire de la route. */
+export function currentDay(d: Date = new Date()): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** Minuit UTC suivant. */
+export function nextDayResetISO(d: Date = new Date()): string {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1)).toISOString();
+}
+
+/**
+ * Consomme un appel gratuit du jour, si possible. Même construction que
+ * `consumeProRequest` : disjoncteur (celui du GRATUIT) d'abord, puis
+ * l'incrément et le contrôle dans le MÊME énoncé, et refus si la base ne
+ * répond pas. Le disjoncteur de Pro n'est jamais touché.
+ */
+export async function consumeFreeParse(userId: string): Promise<QuotaVerdict> {
+  const month = currentMonth();
+  const day = currentDay();
+  const resetsAt = nextDayResetISO();
+  try {
+    const g = await pool.query(FREE_GLOBAL_TAKE_SQL, [month, FREE_GLOBAL_MONTHLY_CAP]);
+    if ((g.rowCount ?? 0) === 0) {
+      logger.error({ month, cap: FREE_GLOBAL_MONTHLY_CAP }, '[llmQuota] DISJONCTEUR DU GRATUIT déclenché (Bet builder IA) — Pro n\'est pas touché');
+      return { allowed: false, reason: 'global', used: FREE_PARSE_DAILY, limit: FREE_PARSE_DAILY, resetsAt };
+    }
+    const u = await pool.query(
+      `INSERT INTO llm_free_daily (user_id, day, count, updated_at)
+       VALUES ($1, $2, 1, NOW())
+       ON CONFLICT (user_id, day) DO UPDATE
+          SET count = llm_free_daily.count + 1, updated_at = NOW()
+        WHERE llm_free_daily.count < $3
+       RETURNING count`,
+      [userId, day, FREE_PARSE_DAILY],
+    );
+    if ((u.rowCount ?? 0) === 0) {
+      await pool.query(FREE_GLOBAL_RELEASE_SQL, [month]).catch(() => { /* best-effort */ });
+      return { allowed: false, reason: 'user', used: FREE_PARSE_DAILY, limit: FREE_PARSE_DAILY, resetsAt };
+    }
+    return { allowed: true, used: u.rows[0].count, limit: FREE_PARSE_DAILY, resetsAt };
+  } catch (err: any) {
+    logger.error({ err: err?.message, userId }, '[llmQuota] comptage gratuit impossible — requête refusée');
+    return { allowed: false, reason: 'db', used: 0, limit: FREE_PARSE_DAILY, resetsAt };
+  }
+}
+
+/** Rend un appel gratuit (le fournisseur n'a rien facturé), et sa place au disjoncteur du gratuit. */
+export async function refundFreeParse(userId: string): Promise<void> {
+  try {
+    await pool.query(
+      `UPDATE llm_free_daily SET count = GREATEST(count - 1, 0) WHERE user_id = $1 AND day = $2`,
+      [userId, currentDay()],
+    );
+    await pool.query(FREE_GLOBAL_RELEASE_SQL, [currentMonth()]);
+  } catch (err: any) {
+    logger.warn({ err: err?.message, userId }, '[llmQuota] remboursement gratuit échoué');
+  }
+}
+
+/** Appels gratuits du jour, sans rien consommer. Pour le compteur de la feuille. */
+export async function getFreeParseUsage(userId: string): Promise<{ used: number; limit: number; remaining: number; resetsAt: string }> {
+  let used = 0;
+  try {
+    const { rows } = await pool.query(
+      'SELECT count FROM llm_free_daily WHERE user_id = $1 AND day = $2',
+      [userId, currentDay()],
+    );
+    used = rows[0]?.count ?? 0;
+  } catch (err: any) {
+    logger.warn({ err: err?.message, userId }, '[llmQuota] lecture du compteur gratuit échouée');
+  }
+  return { used, limit: FREE_PARSE_DAILY, remaining: Math.max(FREE_PARSE_DAILY - used, 0), resetsAt: nextDayResetISO() };
 }

@@ -23,15 +23,22 @@
  * davantage se ferait là-bas, pas ici.
  */
 
-/** Les tâches que le proxy accepte. Toute nouvelle valeur s'ajoute ICI. */
-export const LLM_TASK_TYPES = ['explain_bet'] as const;
+/**
+ * Les tâches que le proxy accepte. Toute nouvelle valeur s'ajoute ICI.
+ *
+ *   - `explain_bet`        — « Analyse IA » d'un pari (`PredictionSheet`) ;
+ *   - `parse_bet_command`  — le « Bet builder IA » (≠ Analyse LLM ci-dessus) : traduit une
+ *     phrase en intentions (SLIP_COMMANDE_PLAN.md § 5). Son invite n'est PAS
+ *     ici : elle embarque les matchs et joueurs du moment, elle est donc
+ *     construite à chaque appel par `slipCommandLlm.buildParsePrompt`.
+ */
+export const LLM_TASK_TYPES = ['explain_bet', 'parse_bet_command'] as const;
 export type LlmTaskType = typeof LLM_TASK_TYPES[number];
 
 export type LlmLocale = 'fr' | 'en';
 
 /**
- * `explain_bet` est la SEULE tâche câblée aujourd'hui : c'est l'unique appelant
- * du client (`PredictionSheet`, bouton « Analyse IA »). Le texte est celui qui
+ * Invite d'`explain_bet` (`PredictionSheet`, bouton « Analyse IA »). Le texte est celui qui
  * vivait dans `client/src/app/pages/prediction/PredictionSheet.tsx`, déplacé
  * sans être réécrit — le format de réponse attendu ne change donc pas.
  */
@@ -82,7 +89,8 @@ const EXPLAIN_BET: Record<LlmLocale, string> = {
     "(pick ONE word for the verdict and ONE for the confidence)",
 };
 
-const PROMPTS: Record<LlmTaskType, Record<LlmLocale, string>> = {
+/** Les invites FIXES. `parse_bet_command` n'y est pas : voir `LLM_TASK_TYPES`. */
+const PROMPTS: Record<'explain_bet', Record<LlmLocale, string>> = {
   explain_bet: EXPLAIN_BET,
 };
 
@@ -106,7 +114,7 @@ export function resolveLocale(bodyLocale: unknown, acceptLanguage?: string): Llm
   return acceptLanguage?.toLowerCase().startsWith('fr') ? 'fr' : 'en';
 }
 
-/** L'invite système de la tâche, dans la langue demandée. */
-export function systemPromptFor(taskType: LlmTaskType, locale: LlmLocale): string {
+/** L'invite système d'une tâche à invite FIXE, dans la langue demandée. */
+export function systemPromptFor(taskType: 'explain_bet', locale: LlmLocale): string {
   return PROMPTS[taskType][locale];
 }

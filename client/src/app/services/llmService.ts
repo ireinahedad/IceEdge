@@ -5,6 +5,7 @@
  */
 
 import { authedFetch } from './authService';
+import type { SlipIntent } from '../../../../server/src/services/slipCommand';
 
 /**
  * Les tâches que le proxy `/api/llm` accepte.
@@ -16,7 +17,7 @@ import { authedFetch } from './authService';
  * un proxy LLM généraliste. Ajouter une tâche se fait donc côté serveur
  * d'abord, ici ensuite.
  */
-export type LLMTaskType = 'explain_bet';
+export type LLMTaskType = 'explain_bet' | 'parse_bet_command';
 
 /**
  * 45 s — la seule requête du client qui dépasse le défaut de 15 s d'`http.ts`.
@@ -31,9 +32,9 @@ export type LLMTaskType = 'explain_bet';
 const LLM_TIMEOUT_MS = 45_000;
 
 export interface LLMError {
-  type: 'no_api_key' | 'openai_error' | 'network' | 'unknown' | 'monthly_quota';
+  type: 'no_api_key' | 'openai_error' | 'network' | 'unknown' | 'monthly_quota' | 'free_parse_quota';
   message: string;
-  /** Renseignés pour type 'monthly_quota' : plafond et date de remise à zéro. */
+  /** Renseignés pour 'monthly_quota' et 'free_parse_quota' : plafond et date de remise à zéro. */
   limit?: number;
   resetsAt?: string;
 }
@@ -69,6 +70,10 @@ export interface LLMUsage {
    * un compte Free est bien plafonné. Corrigé le 2026-09-09.)
    */
   dailyLimit?: number;
+  /** Compte FREE : a-t-il sa propre clé OpenAI ? Alors le Bet builder IA passe par elle. */
+  ownKey?: boolean;
+  /** Compte FREE : appels offerts du jour pour le Bet builder IA. */
+  freeParse?: { used: number; limit: number; remaining: number; resetsAt: string };
   /** Champs présents uniquement pour un abonné PRO. */
   used?: number;
   limit?: number;
@@ -88,6 +93,50 @@ export async function getLLMUsage(): Promise<LLMUsage> {
   const res = await authedFetch('/llm/usage');
   if (!res.ok) throw new Error('usage_unavailable');
   return res.json();
+}
+
+/**
+ * Traduit une réponse d'erreur de `/api/llm` en `LLMError`, et la lance.
+ * Partagé par les deux tâches : mêmes codes, mêmes messages.
+ */
+async function throwLLMError(res: Response): Promise<never> {
+  const body = await res.json().catch(() => ({})) as {
+    error?: string; message?: string; code?: string; limit?: number; resetsAt?: string;
+  };
+
+  // Appels IA offerts du jour épuisés (compte gratuit, Bet builder IA).
+  if (res.status === 429 && body.error === 'free_parse_quota') {
+    const err: LLMError = { type: 'free_parse_quota', message: 'free_parse_quota', limit: body.limit, resetsAt: body.resetsAt };
+    throw Object.assign(new Error(err.message), err);
+  }
+  // Plafond mensuel atteint ET pas de clé personnelle pour prendre le relais.
+  // Message distinct des autres 429 : ici, réessayer plus tard dans la minute
+  // ne sert à rien — c'est un compteur mensuel.
+  if (res.status === 429 && body.error === 'monthly_quota_reached') {
+    const err: LLMError = {
+      type: 'monthly_quota',
+      message: body.message ?? 'Tu as atteint ton maximum de requêtes IA pour ce mois-ci.',
+      limit: body.limit,
+      resetsAt: body.resetsAt,
+    };
+    throw Object.assign(new Error(err.message), err);
+  }
+  if (res.status === 422 && body.error === 'no_api_key') {
+    const err: LLMError = { type: 'no_api_key', message: body.message ?? 'Add your OpenAI API key in Settings.' };
+    throw Object.assign(new Error(err.message), err);
+  }
+  // Clé OpenAI invalide. Reconnue par son CODE et non par un statut 401 : le
+  // serveur rend désormais un 502 dans ce cas, précisément pour qu'un 401 de
+  // cette API ne veuille plus dire qu'une chose, « session expirée ».
+  // `authedFetch` intercepte les 401 avant nous et lance un refresh — un 401
+  // relayé ici finissait par déconnecter l'utilisateur d'ArakIce à cause
+  // d'une mauvaise clé OpenAI.
+  if (body.code === 'invalid_api_key') {
+    const err: LLMError = { type: 'openai_error', message: 'Invalid OpenAI API key. Check your key in Settings → AI Settings.' };
+    throw Object.assign(new Error(err.message), err);
+  }
+  const err: LLMError = { type: 'openai_error', message: body.error ?? `LLM error ${res.status}` };
+  throw Object.assign(new Error(err.message), err);
 }
 
 /**
@@ -124,40 +173,7 @@ async function askLLMDetailed(
     }),
   });
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as {
-      error?: string; message?: string; code?: string; limit?: number; resetsAt?: string;
-    };
-
-    // Plafond mensuel atteint ET pas de clé personnelle pour prendre le relais.
-    // Message distinct des autres 429 : ici, réessayer plus tard dans la minute
-    // ne sert à rien — c'est un compteur mensuel.
-    if (res.status === 429 && body.error === 'monthly_quota_reached') {
-      const err: LLMError = {
-        type: 'monthly_quota',
-        message: body.message ?? 'Tu as atteint ton maximum de requêtes IA pour ce mois-ci.',
-        limit: body.limit,
-        resetsAt: body.resetsAt,
-      };
-      throw Object.assign(new Error(err.message), err);
-    }
-    if (res.status === 422 && body.error === 'no_api_key') {
-      const err: LLMError = { type: 'no_api_key', message: body.message ?? 'Add your OpenAI API key in Settings.' };
-      throw Object.assign(new Error(err.message), err);
-    }
-    // Clé OpenAI invalide. Reconnue par son CODE et non par un statut 401 : le
-    // serveur rend désormais un 502 dans ce cas, précisément pour qu'un 401 de
-    // cette API ne veuille plus dire qu'une chose, « session expirée ».
-    // `authedFetch` intercepte les 401 avant nous et lance un refresh — un 401
-    // relayé ici finissait par déconnecter l'utilisateur d'ArakIce à cause
-    // d'une mauvaise clé OpenAI.
-    if (body.code === 'invalid_api_key') {
-      const err: LLMError = { type: 'openai_error', message: 'Invalid OpenAI API key. Check your key in Settings → AI Settings.' };
-      throw Object.assign(new Error(err.message), err);
-    }
-    const err: LLMError = { type: 'openai_error', message: body.error ?? `LLM error ${res.status}` };
-    throw Object.assign(new Error(err.message), err);
-  }
+  if (!res.ok) await throwLLMError(res);
 
   return await res.json() as LLMAnswer;
 }
@@ -167,4 +183,31 @@ export async function askLLM(
   opts: { taskType: LLMTaskType; locale: 'fr' | 'en'; model?: string }
 ): Promise<string> {
   return (await askLLMDetailed(prompt, opts)).text;
+}
+
+// ── Bet builder IA (tâche `parse_bet_command`) ────────────────────────────────
+
+/** Ce que l'appel a consommé — pour mettre le compteur de la feuille à jour sans le recharger. */
+export type ParseUsage =
+  | { kind: 'free' | 'pro'; used: number; limit: number; resetsAt: string }
+  | { kind: 'own_key' };
+
+export type ParseCommandResult =
+  | { ok: true; intents: SlipIntent[]; usage: ParseUsage; quota?: LLMQuotaNotice }
+  /** `clarification` absente = réponse inutilisable : afficher un message générique. */
+  | { ok: false; clarification?: string; usage: ParseUsage; quota?: LLMQuotaNotice };
+
+/**
+ * Envoie au LLM une phrase que l'analyseur local n'a pas comprise. Le serveur
+ * construit l'invite avec ses propres matchs et joueurs, impose un schéma JSON
+ * et repasse chaque intention par `validateIntent` avant de répondre.
+ */
+export async function askParseCommand(text: string, locale: 'fr' | 'en'): Promise<ParseCommandResult> {
+  const res = await authedFetch('/llm', {
+    method: 'POST',
+    timeoutMs: LLM_TIMEOUT_MS,
+    body: JSON.stringify({ prompt: text, taskType: 'parse_bet_command', locale }),
+  });
+  if (!res.ok) await throwLLMError(res);
+  return await res.json() as ParseCommandResult;
 }

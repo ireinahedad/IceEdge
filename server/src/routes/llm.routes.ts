@@ -24,6 +24,20 @@
  * repart par le chemin Free, à ses frais. Ce n'est pas seulement plus aimable
  * qu'un blocage — cela retire la seule raison qu'aurait un abonné d'exiger un
  * plafond plus haut, donc cela rend le plafond tenable.
+ *
+ * ── TÂCHE `parse_bet_command` (2026-09-28, SLIP_COMMANDE_PLAN.md § 5) ────────
+ *
+ * Le « Bet builder IA » (à ne pas confondre avec l'« Analyse LLM » d'un pari,
+ * `explain_bet`) : le client n'appelle cette tâche que quand
+ * son analyseur local n'a pas compris la phrase. Trois différences :
+ *   • l'invite embarque les matchs et joueurs du moment, construits ICI
+ *     (`buildServerSlipContext`) — le serveur ne croit rien du client ;
+ *   • la réponse est imposée par un schéma JSON, puis CHAQUE intention repasse
+ *     par `validateIntent` (`readParseResponse`) avant d'être renvoyée ;
+ *   • un compte GRATUIT sans clé perso a droit à `FREE_PARSE_DAILY` appels par
+ *     jour sur la clé de l'opérateur (compteur en base, migration 039, et
+ *     disjoncteur mensuel PROPRE au gratuit — celui de Pro n'est pas touché).
+ *     Avec sa clé perso, il passe par elle.
  */
 
 import { Router, Request, Response } from 'express';
@@ -38,10 +52,17 @@ import { logger } from '../logger';
 import { sendError } from '../httpError';
 import {
   consumeProRequest, refundProRequest, getUsage, MONTHLY_QUOTA, MAX_OUTPUT_TOKENS,
+  consumeFreeParse, refundFreeParse, getFreeParseUsage, PROMPT_BUDGET_CHARS,
+  type QuotaVerdict,
 } from '../services/llmQuota.service';
 import {
   LLM_TASK_TYPES, isLlmTaskType, resolveLocale, systemPromptFor,
 } from '../services/llmPrompts';
+import { SLIP_COMMAND_MAX_LENGTH, type SlipContext } from '../services/slipCommand';
+import {
+  buildParsePrompt, readParseResponse, PARSE_RESPONSE_FORMAT, PARSE_MAX_SYSTEM_CHARS,
+} from '../services/slipCommandLlm';
+import { buildServerSlipContext } from '../services/slipCommandContext';
 
 const router = Router();
 
@@ -257,7 +278,14 @@ router.get('/usage', async (req: Request, res: Response) => {
      * donc le mensonge n'atteignait personne ; il n'attendait qu'un écran.
      * Corrigé le 2026-09-09, en même temps que le compteur des Réglages.
      */
-    if (!userIsPro) return res.json({ pro: false, dailyLimit: DAILY_QUOTA });
+    if (!userIsPro) {
+      // `freeParse` : les appels offerts du jour pour le Bet builder IA
+      // (2026-09-28). `ownKey` : avec sa clé, ces appels passent par
+      // elle et ce compteur ne s'applique pas — l'écran le dit.
+      let ownKey = false;
+      try { ownKey = Boolean(await personalOpenAiKey(userId)); } catch { /* colonne ou clé illisible : pas de clé */ }
+      return res.json({ pro: false, dailyLimit: DAILY_QUOTA, ownKey, freeParse: await getFreeParseUsage(userId) });
+    }
 
     return res.json({ pro: true, ...(await getUsage(userId)) });
   } catch (err: any) {
@@ -341,23 +369,49 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
    * 400 casserait la fonctionnalité pendant la fenêtre de déploiement, alors
    * que l'ignorer la dégrade au pire d'un choix de langue.
    *
-   * `taskType` absent retombe sur la seule tâche existante, pour la même
-   * raison. Le jour où il y en aura deux, ce défaut devra devenir un 400 —
-   * deviner la tâche demandée n'aurait alors plus de sens.
+   * ⚠️ `taskType` est OBLIGATOIRE depuis le 2026-09-28. Il retombait sur
+   * `explain_bet` pendant la fenêtre de déploiement du 2026-09-08 ; il y a
+   * maintenant DEUX tâches, et deviner laquelle est demandée n'a plus de sens.
+   * Vérifié avant : le client en production (commit bb71c6f) l'envoie
+   * toujours — `askLLM` l'exige depuis le 2026-09-08.
    */
-  if (taskType != null && !isLlmTaskType(taskType)) {
+  if (!isLlmTaskType(taskType)) {
     return res.status(400).json({
-      error: `unknown taskType (expected one of: ${LLM_TASK_TYPES.join(', ')})`,
+      error: `taskType is required (expected one of: ${LLM_TASK_TYPES.join(', ')})`,
     });
   }
-  const resolvedTask = isLlmTaskType(taskType) ? taskType : 'explain_bet';
+  const isParse = taskType === 'parse_bet_command';
+  if (isParse && prompt.length > SLIP_COMMAND_MAX_LENGTH) {
+    return res.status(413).json({ error: `prompt too long (max ${SLIP_COMMAND_MAX_LENGTH} characters)` });
+  }
   const resolvedLocale = resolveLocale(locale, req.headers['accept-language']);
 
   // Build the shared message array once.
-  const messages: { role: string; content: string }[] = [
-    { role: 'system', content: systemPromptFor(resolvedTask, resolvedLocale) },
-    { role: 'user', content: prompt },
-  ];
+  // `parse_bet_command` : l'invite porte le contexte du moment, construit ici
+  // AVANT tout décompte de quota — un calendrier injoignable ne coûte rien.
+  let parseCtx: SlipContext | null = null;
+  let messages: { role: string; content: string }[];
+  if (isParse) {
+    try {
+      parseCtx = await buildServerSlipContext();
+    } catch (err: any) {
+      logger.warn({ err: err?.message }, '[LLM] contexte de la commande indisponible (calendrier LNH)');
+      return res.status(503).json({
+        error: 'Le calendrier LNH est momentanément indisponible. Réessaie plus tard.',
+        code: 'schedule_unavailable',
+      });
+    }
+    // Bornée pour que le coût pire-cas reste celui sur lequel le plafond est
+    // calculé (voir PARSE_MAX_SYSTEM_CHARS).
+    const maxSystem = Math.min(PARSE_MAX_SYSTEM_CHARS, PROMPT_BUDGET_CHARS - SLIP_COMMAND_MAX_LENGTH);
+    const p = buildParsePrompt(prompt, parseCtx, resolvedLocale, maxSystem);
+    messages = [{ role: 'system', content: p.system }, { role: 'user', content: p.user }];
+  } else {
+    messages = [
+      { role: 'system', content: systemPromptFor('explain_bet', resolvedLocale) },
+      { role: 'user', content: prompt },
+    ];
+  }
 
   // ── Decide which path to use ──────────────────────────────────────────────
   const userIsPro = await isPro(userId);
@@ -385,6 +439,15 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
   let call: ProviderCall;
   /** Vrai si une requête a été décomptée du quota Pro — donc à rembourser en cas d'échec. */
   let quotaConsumed = false;
+  /** Verdict du quota Pro décompté — sert au compteur renvoyé par `parse_bet_command`. */
+  let proVerdict: QuotaVerdict | null = null;
+  /** Renseigné quand un appel GRATUIT (`parse_bet_command`, clé opérateur) a été décompté. */
+  let freeVerdict: QuotaVerdict | null = null;
+  /** Rend ce qui a été décompté, quand le fournisseur n'a rien facturé. */
+  const refund = async () => {
+    if (quotaConsumed) await refundProRequest(userId);
+    if (freeVerdict) await refundFreeParse(userId);
+  };
   /** Renseigné quand le plafond mensuel est atteint : sert à informer le client. */
   let quotaNotice: { limit: number; resetsAt: string; message: string; billedTo: 'user' } | null = null;
 
@@ -415,6 +478,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
 
     if (verdict.allowed) {
       quotaConsumed = true;
+      proVerdict = verdict;
       call = {
         endpoint: OPENAI_CHAT_URL,
         apiKey: token,
@@ -501,13 +565,43 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
       throw err;
     }
 
-    if (!userKey) {
+    if (userKey) {
+      call = ownKeyCall(userKey);
+    } else if (!isParse) {
       return res.status(422).json({
         error: 'no_api_key',
         message: 'Add your OpenAI API key in Settings → AI Settings, or upgrade to Pro to use the built-in model.',
       });
+    } else {
+      // `parse_bet_command` sans clé perso : la clé de l'OPÉRATEUR, dans la
+      // limite des appels offerts du jour (décision du user, D4 du plan).
+      const token = process.env.OPENAI_API_KEY?.trim();
+      if (!token) {
+        logger.error('[LLM] OPENAI_API_KEY (clé opérateur) absente — appels gratuits de la commande hors service');
+        return res.status(503).json({
+          error: 'La fonction IA est momentanément indisponible. Réessaie plus tard.',
+          code: 'unavailable',
+        });
+      }
+      const verdict = await consumeFreeParse(userId);
+      if (!verdict.allowed) {
+        if (verdict.reason === 'user') {
+          // L'écran propose alors Pro (via `features.proUpgrade`) ; l'analyseur
+          // local, lui, continue de marcher.
+          return res.status(429).json({ error: 'free_parse_quota', limit: verdict.limit, resetsAt: verdict.resetsAt });
+        }
+        // 'db' (fail-closed) ou 'global' (disjoncteur) : rien que l'utilisateur
+        // puisse corriger, et rien à lui vendre.
+        return res.status(503).json({
+          error: 'La fonction IA est momentanément indisponible. Réessaie plus tard.',
+          code: verdict.reason === 'db' ? 'quota_unavailable' : 'unavailable',
+        });
+      }
+      freeVerdict = verdict;
+      // Clé de l'opérateur, donc modèle de l'opérateur : le plafond de coût
+      // est calculé sur ses tarifs (voir la note sur DEFAULT_PRO_MODEL).
+      call = { endpoint: OPENAI_CHAT_URL, apiKey: token, requestModel: DEFAULT_PRO_MODEL, extraHeaders: {}, billedTo: 'operator' };
     }
-    call = ownKeyCall(userKey);
   }
 
   // ── Forward the request ───────────────────────────────────────────────────
@@ -542,8 +636,11 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
     // s'en sert pour majorer le coût d'une requête. Les désynchroniser ferait
     // sous-estimer la dépense pire-cas, donc surestimer le plafond.
     body.max_tokens = MAX_OUTPUT_TOKENS;
-    body.temperature = 0.7;
+    // De l'extraction pour `parse_bet_command` : aucune créativité voulue.
+    body.temperature = isParse ? 0 : 0.7;
   }
+  // `parse_bet_command` : réponse imposée par un schéma (structured outputs).
+  if (isParse) body.response_format = PARSE_RESPONSE_FORMAT;
 
   // Node 18+ global fetch returns a Response-like object typed loosely as `any`.
   // Bounded by a hard timeout with one retry on transient failure, so a hung
@@ -563,7 +660,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
     // Le fournisseur n'a jamais été atteint : rien n'a été facturé, donc le
     // quota du mois ne doit pas être amputé. Sans ce remboursement, une panne
     // réseau consommerait le quota de l'utilisateur sans rien lui rendre.
-    if (quotaConsumed) await refundProRequest(userId);
+    await refund();
     const timedOut = err?.name === 'AbortError';
     // `detail: err?.message` retiré : sur un échec réseau, `err.message` est du
     // type « fetch failed for https://models.inference.ai.azure.com/… », donc
@@ -589,7 +686,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
     // (modèle inconnu, entrée invalide, authentification), donc rien n'a été
     // facturé. Sur 5xx, le modèle a pu tourner avant d'échouer — on ne rembourse
     // pas, par prudence : la garantie doit pencher du côté du plafond.
-    if (quotaConsumed && status >= 400 && status < 500) await refundProRequest(userId);
+    if (status >= 400 && status < 500) await refund();
 
     // Log the FULL upstream error to the server console for debugging.
     logger.error(
@@ -663,6 +760,19 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
   }
 
   const text: string = data?.choices?.[0]?.message?.content ?? '';
+
+  if (isParse && parseCtx) {
+    // Chaque intention repasse par `validateIntent` ; une seule invalide et la
+    // réponse entière est rejetée (`{ ok: false }` sans question : l'écran
+    // affiche alors son propre message). L'appel reste décompté : le modèle
+    // a tourné, et le rembourser ferait d'une phrase absurde un appel gratuit.
+    const outcome = readParseResponse(text, parseCtx);
+    const usage =
+      freeVerdict ? { kind: 'free' as const, used: freeVerdict.used, limit: freeVerdict.limit, resetsAt: freeVerdict.resetsAt }
+      : proVerdict ? { kind: 'pro' as const, used: proVerdict.used, limit: proVerdict.limit, resetsAt: proVerdict.resetsAt }
+      : { kind: 'own_key' as const };
+    return res.json(quotaNotice ? { ...outcome, usage, quota: quotaNotice } : { ...outcome, usage });
+  }
 
   // `quotaNotice` n'est présent que le mois où le plafond est atteint : le
   // client affiche alors le message pendant que la réponse arrive quand même.

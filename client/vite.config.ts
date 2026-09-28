@@ -44,6 +44,8 @@ export default defineConfig({
         path.resolve(__dirname, '../server/src/services/parlay.ts'),
         path.resolve(__dirname, '../server/src/services/slipCommand.ts'),
         path.resolve(__dirname, '../server/src/services/oddsTeamNames.ts'),
+        // Lignes des marchés plus/moins, partagées avec le serveur (marketLines.ts).
+        path.resolve(__dirname, '../server/src/services/marketLines.ts'),
       ],
     },
   },

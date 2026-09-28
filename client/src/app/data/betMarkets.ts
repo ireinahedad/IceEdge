@@ -1,4 +1,7 @@
 import type { BetMarketType } from "../types/bet";
+// Lignes des six marchés plus/moins : source unique partagée avec le serveur
+// (validation du Bet builder IA). Voir l'en-tête de marketLines.ts.
+import { MARKET_LINES } from "../../../../server/src/services/marketLines";
 
 export interface MarketDefinition {
   type: BetMarketType;
@@ -41,7 +44,7 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
     description: "Combined goals in the game over or under the line",
     requiresLine: true,
     requiresSelection: true,
-    lineOptions: [4.5, 5.0, 5.5, 6.0, 6.5, 7.0],
+    lineOptions: [...MARKET_LINES.total_goals],
     lineUnit: "goals",
     selectionOptions: [
       { label: "Over", value: "over" },
@@ -231,7 +234,7 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
     description: "One team's goals over or under the line",
     requiresLine: true,
     requiresSelection: true,
-    lineOptions: [1.5, 2.0, 2.5, 3.0, 3.5],
+    lineOptions: [...MARKET_LINES.team_total_goals],
     lineUnit: "goals",
     selectionOptions: [
       { label: "Over", value: "over" },
@@ -322,7 +325,7 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
     description: "Player shots on goal over or under the line",
     requiresLine: true,
     requiresSelection: true,
-    lineOptions: [1.5, 2.5, 3.5, 4.5, 5.5],
+    lineOptions: [...MARKET_LINES.shots_ou],
     lineUnit: "shots",
     selectionOptions: [
       { label: "Over", value: "over" },
@@ -337,7 +340,7 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
     description: "Player total assists over or under the line",
     requiresLine: true,
     requiresSelection: true,
-    lineOptions: [0.5, 1.5, 2.5],
+    lineOptions: [...MARKET_LINES.assists_ou],
     lineUnit: "assists",
     selectionOptions: [
       { label: "Over", value: "over" },
@@ -352,7 +355,7 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
     description: "Player total points (G+A) over or under the line",
     requiresLine: true,
     requiresSelection: true,
-    lineOptions: [0.5, 1.5, 2.5, 3.5],
+    lineOptions: [...MARKET_LINES.points_ou],
     lineUnit: "points",
     selectionOptions: [
       { label: "Over", value: "over" },
@@ -376,7 +379,7 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
     description: "Goalie total saves over or under the line",
     requiresLine: true,
     requiresSelection: true,
-    lineOptions: [20.5, 22.5, 24.5, 26.5, 28.5, 30.5],
+    lineOptions: [...MARKET_LINES.goalie_saves_ou],
     lineUnit: "saves",
     selectionOptions: [
       { label: "Over", value: "over" },

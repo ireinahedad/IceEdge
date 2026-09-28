@@ -12,7 +12,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { SlipContext } from "../../../../server/src/services/slipCommand";
 import { fetchUpcomingWindow } from "../pages/prediction/predictionShared";
-import { slipCommandLines, type SlipCommandData } from "../services/slipCommandLegs";
+import { MARKET_LINES } from "../../../../server/src/services/marketLines";
+import type { SlipCommandData } from "../services/slipCommandLegs";
 import { useNHLData } from "./useNHLData";
 import type { NHLGame } from "../types/bet";
 
@@ -53,7 +54,7 @@ export function useSlipCommandData(): SlipCommandState {
       players: players
         .filter((p) => playing.has(p.teamId.toUpperCase()))
         .map((p) => ({ id: p.id, name: p.name, teamAbbr: p.teamId.toUpperCase(), position: p.position })),
-      lines: slipCommandLines(),
+      lines: MARKET_LINES,
     };
   }, [win, players, nhlLoading]);
 

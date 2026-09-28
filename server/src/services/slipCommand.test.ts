@@ -4,6 +4,7 @@ import {
   TEAM_ALIASES, TEAM_ALIAS_INDEX, SLIP_COMMAND_MAX_LENGTH, SLIP_COMMAND_MAX_PARTS,
 } from './slipCommand';
 import type { SlipContext, SlipGame, SlipPlayer, SlipParseResult, SlipIntent } from './slipCommand';
+import { MARKET_LINES } from './marketLines';
 
 /**
  * Ce que ce fichier prouve : une phrase devient la BONNE intention, ou un
@@ -49,15 +50,8 @@ const players: SlipPlayer[] = [
   { id: '15', name: 'Dylan Larkin', teamAbbr: 'DET', position: 'C' },
 ];
 
-// Lignes de `client/src/app/data/betMarkets.ts` (MARKET_DEFINITIONS).
-const lines: SlipContext['lines'] = {
-  total_goals: [4.5, 5.0, 5.5, 6.0, 6.5, 7.0],
-  team_total_goals: [1.5, 2.0, 2.5, 3.0, 3.5],
-  shots_ou: [1.5, 2.5, 3.5, 4.5, 5.5],
-  assists_ou: [0.5, 1.5, 2.5],
-  points_ou: [0.5, 1.5, 2.5, 3.5],
-  goalie_saves_ou: [20.5, 22.5, 24.5, 26.5, 28.5, 30.5],
-};
+// Les lignes réelles, celles de l'écran (source unique : marketLines.ts).
+const lines: SlipContext['lines'] = MARKET_LINES;
 
 const ctx: SlipContext = { games, players, today: TODAY, lines };
 

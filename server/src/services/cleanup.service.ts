@@ -6,6 +6,7 @@
  *   • refresh_tokens          — expired, OR revoked more than a grace window ago
  *   • email_verification_codes — consumed, OR expired
  *   • manual_data (datés)      — gardiens partants et absents des jours passés
+ *   • llm_free_daily           — compteurs d'appels IA gratuits des jours passés
  *
  * Runs once shortly after boot and then daily. Best-effort: a failed run is
  * logged and retried on the next tick, never crashes the process.
@@ -37,7 +38,13 @@ const STRIPE_EVENT_RETENTION_DAYS = Number(process.env.STRIPE_EVENT_RETENTION_DA
  */
 const MANUAL_DATED_RETENTION_DAYS = Number(process.env.MANUAL_DATED_RETENTION_DAYS) || 15;
 
-async function runCleanup(): Promise<{ tokens: number; codes: number; stripeEvents: number; manualDated: number }> {
+/**
+ * Compteurs journaliers des appels IA gratuits (migration 039). Une ligne ne
+ * sert que le jour même ; sept jours laissent de quoi relire une semaine.
+ */
+const LLM_FREE_DAILY_RETENTION_DAYS = Number(process.env.LLM_FREE_DAILY_RETENTION_DAYS) || 7;
+
+async function runCleanup(): Promise<{ tokens: number; codes: number; stripeEvents: number; manualDated: number; llmFreeDaily: number }> {
   const tokensRes = await pool.query(
     `DELETE FROM refresh_tokens
       WHERE expires_at < NOW()
@@ -61,6 +68,11 @@ async function runCleanup(): Promise<{ tokens: number; codes: number; stripeEven
     .toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
   const manualDated = await purgeDatedBefore(cutoff);
 
+  // Compteurs d'appels IA gratuits (migration 039). Clé 'YYYY-MM-DD' en UTC :
+  // comparaison de chaînes, comme pour les saisies datées.
+  const freeCutoff = new Date(Date.now() - LLM_FREE_DAILY_RETENTION_DAYS * DAY_MS).toISOString().slice(0, 10);
+  const freeRes = await pool.query(`DELETE FROM llm_free_daily WHERE day < $1`, [freeCutoff]);
+
   // Relevé de couverture : voir `coverage()`. Il ne nettoie rien — il est ici
   // parce que c'est le seul rendez-vous quotidien du serveur, et parce qu'une
   // ligne par jour dans les journaux est exactement la bonne dose pour une
@@ -80,7 +92,7 @@ async function runCleanup(): Promise<{ tokens: number; codes: number; stripeEven
 
   const tokens = tokensRes.rowCount ?? 0;
   const codes  = codesRes.rowCount ?? 0;
-  return { tokens, codes, stripeEvents: stripeRes.rowCount ?? 0, manualDated };
+  return { tokens, codes, stripeEvents: stripeRes.rowCount ?? 0, manualDated, llmFreeDaily: freeRes.rowCount ?? 0 };
 }
 
 /** Schedules the cleanup: once ~1 min after boot, then every 24h. Returns the

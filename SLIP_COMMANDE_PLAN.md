@@ -1,11 +1,9 @@
 # SLIP_COMMANDE_PLAN — ajouter au coupon en langage naturel
 
 > Rédigé le 2026-09-28. Décisions du user prises le même jour (§ 1).
-> **Avancement :** étape 1 livrée le 2026-09-28 (`server/src/services/slipCommand.ts` +
-> `slipCommand.test.ts`, 243 tests verts). Étape 2 livrée le 2026-09-28
-> (`client/src/app/services/buildLeg.ts`, feuille branchée dessus, 0 écart sur 20 cas).
-> Étape 3 livrée le 2026-09-28 (bouton « Construire un pari avec l'IA », analyseur seul,
-> vérifiée dans un navigateur headless). Étapes 4 et 5 à faire.
+> **Avancement :** étapes 1 à 5 écrites et vérifiées le 2026-09-28 (l'étape 5, messages de
+> quota et bouton Pro, s'est faite avec la 4). Étape 4 NON commitée, NON déployée :
+> voir « Mise en service » à la fin du § 5.
 
 Le joueur tape « Canadien gagne ce soir », « Suzuki over 2.5 tirs » ou « Habs ML et over 6.5 »,
 et la jambe apparaît dans son coupon. Il ne fait que confirmer, puis verrouiller comme d'habitude.
@@ -246,6 +244,88 @@ sous celui d'`explain_bet`. `LLM_REASONING_EFFORT=none` suffit : c'est de l'extr
 
 ---
 
+### 5.5 Livré (2026-09-28) — décisions du user
+
+- **Relais AUTOMATIQUE** : dès que l'analyseur local rend `unknown` (et SEULEMENT ce cas :
+  une ambiguïté a déjà ses choix cliquables), la phrase part au LLM, pour un compte connecté.
+  Visiteur non connecté : pas d'appel, message local.
+- **Ligne de quota discrète** dans la feuille : « Analyses IA gratuites restantes
+  aujourd'hui : n sur 2 » / « Analyses IA ce mois-ci : n sur 500 » (Pro) / « L'IA utilise
+  ta clé OpenAI. » Mise à jour par la réponse elle-même (`usage`), sans recharger `/usage`
+  (qui partage `llmLimiter`, 10 req/min).
+- **Quota gratuit épuisé** : la phrase du user « … Passe Pro pour que l'IA comprenne des
+  paris plus complexes » **partout**, le bouton vers /pro seulement si
+  `features.proUpgrade` (iOS : même phrase, sans bouton — comme `ProLock`).
+- **Lignes partagées** : `server/src/services/marketLines.ts` (6 marchés plus/moins) ;
+  `betMarkets.ts`, l'analyseur (client) et la validation serveur la lisent.
+
+Fichiers : `slipCommandLlm.ts` (candidats, invite, schéma strict, relecture),
+`slipCommandContext.ts` (contexte serveur : mêmes sources que le client — anchor,
+`/games/range` 14 j, `fetchTopPlayers`), `llmQuota.service.ts` (`consumeFreeParse`,
+`refundFreeParse`, `getFreeParseUsage`, `FREE_PARSE_DAILY`, `PROMPT_BUDGET_CHARS`),
+`039_llm_free_daily.sql`, purge à 7 jours dans `cleanup.service.ts`, `llm.routes.ts`,
+`llmPrompts.ts`, `llmService.ts`, `SlipCommandSheet.tsx`, i18n `cmd.ai*`, `.env.example`.
+
+Points de conception :
+- `taskType` **obligatoire** (400). Vérifié avant : le client en production (commit
+  `bb71c6f`) l'envoie toujours.
+- Le serveur ne croit rien du client : il construit son propre contexte, impose un schéma
+  JSON strict, et repasse chaque intention par `validateIntent` ; une seule invalide →
+  toute la réponse rejetée. Le client revalide contre SON contexte.
+- Invite : matchs des équipes nommées (≤ 15) et joueurs des équipes nommées + ceux dont
+  le nom ressemble à un mot de la phrase (fautes de frappe, inversions) (≤ 60). La phrase
+  reste dans le message UTILISATEUR ; la question de précision est bornée à 200 caractères.
+- **Coût** : l'invite est bornée à `min(7 000, PROMPT_BUDGET_CHARS − 200)` caractères, donc
+  jamais au-delà du pire cas sur lequel le plafond mensuel est calculé (5 800 avec les
+  4 000 + 2 000 de `.env.example`). Même budget de sortie qu'`explain_bet`.
+- Remboursement de l'appel gratuit sur panne réseau et 4xx du fournisseur ; PAS sur 5xx
+  (le modèle a pu tourner), PAS sur une réponse inutilisable (sinon une phrase absurde
+  deviendrait un appel gratuit illimité).
+- Compte gratuit avec sa clé perso : sa clé, sans compteur de 2 ; `explain_bet` sans clé
+  reste un 422, inchangé.
+
+Vérifié : suite serveur complète **962 tests / 49 fichiers** verts (919 avant) ; typecheck
+serveur et client ; builds web et iOS (le texte de l'invite n'apparaît dans aucun bundle) ;
+migration 039 jouée après `schema.sql` + les 38 autres dans un PostgreSQL 16 jetable, avec
+le VRAI `llmQuota.service` : 2 puis refus, 10 appels simultanés → exactement 2 passent,
+remboursement, disjoncteur partagé avec Pro, cascade à la suppression du compte,
+`CHECK count >= 0`, purge, rejeu idempotent ; banc Playwright de la feuille (12 scénarios).
+Non vérifié : un vrai appel OpenAI (pas de clé ici) — la route est testée fournisseur simulé.
+
+### 5.6 Mise en service — dans cet ordre
+
+1. `npm run db:migrate:all` sur Neon (migration 039) **avant** de déployer le serveur :
+   sans la table, les appels gratuits échouent fermés (503) et la purge quotidienne
+   journalise une erreur.
+2. Déployer le **serveur** (Railway), puis le **client** (Vercel). Dans l'autre ordre, le
+   client enverrait `parse_bet_command` à un serveur qui ne la connaît pas (« IA
+   indisponible », sans casse).
+3. Facultatif : `LLM_FREE_PARSE_DAILY` (défaut 2). ⚠️ Piège Railway : une variable modifiée
+   reste EN ATTENTE derrière le bouton Deploy.
+4. ✅ **Disjoncteur séparé (décision du user, 2026-09-29)** : les appels gratuits ont leur
+   propre plafond mensuel global, `LLM_FREE_GLOBAL_MONTHLY_CAP` (5 000 par défaut, ~11,85 $
+   au pire cas), table `llm_free_global` dans la migration 039. Ils ne touchent plus
+   `llm_usage_global` : le gratuit ne peut plus couper l'IA aux abonnés Pro, et l'inverse.
+   Vérifié en vrai PostgreSQL (gratuit plein à 5 000 → refusé, Pro passe toujours).
+
+### 5.7 Nom affiché : « Bet builder IA » (décision du user, 2026-09-29)
+
+Pour ne jamais le confondre avec l'« Analyse LLM » d'un pari individuel (`PredictionSheet`,
+`explain_bet`), la fonction s'appelle **« Bet builder IA »** (« AI bet builder ») partout :
+boutons des pages Stats et Coupon, titre de la feuille, compteur (« Essais gratuits restants
+du Bet builder IA aujourd'hui : n sur 2 »), messages (« Le Bet builder IA lit ton pari… »,
+« … indisponible… », « Tu as utilisé tes 2 essais gratuits du Bet builder IA aujourd'hui.
+Passe Pro pour que l'IA comprenne des paris plus complexes. »). Pour un abonné Pro, le
+compteur dit que le quota est **partagé** : « Quota IA du mois, partagé avec l'Analyse
+LLM : n sur 500 ». Commentaires du code alignés ; les identifiants internes
+(`SlipCommandSheet`, clés `cmd.*`, `parse_bet_command`) restent inchangés.
+La carte des Réglages (`SettingsTab`) est alignée : titre « Analyse LLM et Bet builder IA » ;
+Pro : « Un seul quota pour l'Analyse LLM et le Bet builder IA. » ; gratuit : la phrase de la
+clé OpenAI est préfixée « Analyse LLM : », suivie des essais restants du Bet builder IA (ou
+« Le Bet builder IA utilise ta clé OpenAI. » avec une clé perso). Vérifié : 964
+tests serveur, builds web + iOS (l'ancien nom n'est plus dans aucun bundle), banc
+navigateur 11/11 en français et en anglais.
+
 ## 6. Étape D — interface
 
 - Champ « Ajoute un pari… » sur la page Coupon (`BetBuilderPage`), à côté du bouton qui ouvre la
@@ -300,12 +380,28 @@ sous celui d'`explain_bet`. `LLM_REASONING_EFFORT=none` suffit : c'est de l'extr
 4. **Navigateur** : 6 phrases réelles (équipe, total, joueur, gardien, phrase double, phrase que
    seul le LLM comprend) et le contrôle de non-régression du § 4.
 
+### 7.1 État des vérifications (2026-09-29)
+
+1. ✅ Serveur : typecheck + vitest (964 tests, dont `slipCommand`, `slipCommandLlm`, route LLM,
+   compteur gratuit et disjoncteur séparé).
+2. ✅ Migration 039 jouée dans un PostgreSQL 16 jetable après `schema.sql` + les 38 autres,
+   avec le vrai `llmQuota.service`. ⏳ Reste : `npm run db:migrate:all` sur Neon.
+3. ✅ Builds web et `VITE_TARGET=ios`, **vérifiés dans le bundle bâti** : le chunk
+   `SlipCommandSheet` web contient le bouton Pro gardé par `proUpgrade` ; le chunk iOS ne
+   contient NI `"/pro"` NI le libellé du bouton (branche éliminée à la compilation), et
+   aucun `ProPage-*.js` n'est émis. La phrase « Passe Pro pour que l'IA… » est dans les
+   deux, comme décidé.
+4. ✅ Navigateur (Playwright, API simulée) : feuille, relais IA, compteurs, carte des
+   Réglages, contrôle « feuille contre commande » du § 4. ⏳ **Reste, après déploiement** :
+   les 6 phrases réelles avec le VRAI modèle (équipe, total, joueur, gardien, phrase double,
+   phrase que seul le LLM comprend, ex. « Suzuki 3+ tirs »).
+
 ## 8. Ordre de livraison
 
 1. `slipCommand.ts` + tests (analyseur et validateur).
 2. Extraction de `buildLeg` + contrôle de non-régression de la feuille.
 3. Champ sur la page Coupon, branché sur l'analyseur seul (utilisable tel quel).
 4. Renfort LLM : tâche, migration 039, compteur gratuit, 400 sur `taskType` absent.
-5. Messages de quota et bouton Pro.
+5. Messages de quota et bouton Pro. ✅ Fait avec l'étape 4 (§ 5.5, § 5.7, § 7.1).
 
 Chaque étape est livrable seule ; l'étape 3 donne déjà une fonctionnalité complète sans LLM.

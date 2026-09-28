@@ -231,7 +231,7 @@ export function toUpcoming(g: NHLGame, teamAbbr: string): UpcomingGame {
 /**
  * Le jour LNH (`/schedule/anchor`) et les matchs non terminés des
  * {@link UPCOMING_DAYS} jours suivants — UN appel `/games/range` pour toutes
- * les équipes. Partagé par `useUpcomingGames` et la commande du coupon.
+ * les équipes. Partagé par `useUpcomingGames` et le Bet builder IA.
  */
 export async function fetchUpcomingWindow(): Promise<{ today: string; games: NHLGame[] }> {
   const anchor = await nhlApiService.getScheduleAnchor().catch(() => null);

@@ -141,10 +141,15 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // de ces chaînes : il vient du serveur, qui le dérive du prix de l'abonnement.
   // L'écrire ici le figerait, et c'est exactement comme ça que « analyse IA
   // illimitée » a pu rester faux pendant des mois.
-  "profile.aiUsage":       { en: "AI analyses",        fr: "Analyses IA" },
+  "profile.aiUsage":       { en: "LLM Analysis & AI bet builder", fr: "Analyse LLM et Bet builder IA" },
   "profile.aiUsageReset":  { en: "Resets on {date}",   fr: "Remise à zéro le {date}" },
   "profile.aiUsageOver":   { en: "Past your monthly allowance, your requests use your own OpenAI key if you've added one.", fr: "Au-delà de ton forfait mensuel, tes requêtes utilisent ta propre clé OpenAI si tu en as ajouté une." },
-  "profile.aiUsageFree":   { en: "AI runs on your own OpenAI key, up to {n} requests a day. Go Pro to use the built-in model.", fr: "L'IA utilise ta propre clé OpenAI, dans la limite de {n} requêtes par jour. Passe à Pro pour utiliser le modèle intégré." },
+  "profile.aiUsageFree":   { en: "LLM Analysis: runs on your own OpenAI key, up to {n} requests a day. Go Pro to use the built-in model.", fr: "Analyse LLM : ta propre clé OpenAI, dans la limite de {n} requêtes par jour. Passe à Pro pour utiliser le modèle intégré." },
+  // Un SEUL quota Pro pour les deux fonctions IA (Analyse LLM d'un pari et
+  // Bet builder IA) : la carte le dit, pour qu'un abonné ne croie pas avoir
+  // deux enveloppes. Côté gratuit, les essais du Bet builder IA réutilisent
+  // les textes de la feuille (`cmd.aiFreeLeft`, `cmd.aiOwnKey`).
+  "profile.aiUsageShared": { en: "One allowance for LLM Analysis and the AI bet builder.", fr: "Un seul quota pour l'Analyse LLM et le Bet builder IA." },
   "profile.aiUsageFailed": { en: "Counter unavailable right now.", fr: "Compteur indisponible pour l'instant." },
   "profile.dark":         { en: "Dark",          fr: "Sombre" },
   "profile.light":        { en: "Light",         fr: "Clair" },
@@ -848,9 +853,10 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "mkt.gameFor":       { en: "Game",             fr: "Match" },
   "mkt.noUpcomingGame":{ en: "No upcoming game for this team — a team bet needs one.", fr: "Aucun match à venir pour cette équipe — un pari d'équipe en exige un." },
   "mkt.noUpcomingGamePlayer":{ en: "No upcoming game for this player's team — a player bet needs one.", fr: "Aucun match à venir pour l'équipe de ce joueur — un pari joueur en exige un." },
-  // ── Construire un pari avec l'IA (SlipCommandSheet, 2026-09-28) ──
-  "cmd.open":          { en: "Build a bet with AI", fr: "Construire un pari avec l'IA" },
-  "cmd.title":         { en: "Build a bet with AI", fr: "Construire un pari avec l'IA" },
+  // ── Bet builder IA (SlipCommandSheet, 2026-09-28) — à ne JAMAIS confondre
+  //    avec l'« Analyse LLM » d'un pari individuel (PredictionSheet, explain_bet). ──
+  "cmd.open":          { en: "AI bet builder", fr: "Bet builder IA" },
+  "cmd.title":         { en: "AI bet builder", fr: "Bet builder IA" },
   "cmd.close":         { en: "Close", fr: "Fermer" },
   "cmd.placeholder":   { en: "e.g. Habs win tonight", fr: "ex. Canadien gagne ce soir" },
   "cmd.submit":        { en: "Add", fr: "Ajouter" },
@@ -882,6 +888,13 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "cmd.position":      { en: "That market doesn't fit this player (saves are for goalies).", fr: "Ce marché ne va pas à ce joueur (les arrêts, c'est pour un gardien)." },
   "cmd.tooLong":       { en: "Too long: {max} characters at most.", fr: "Trop long : {max} caractères au maximum." },
   "cmd.tooMany":       { en: "{max} bets at most per sentence.", fr: "{max} paris au maximum par phrase." },
+  "cmd.aiWorking":     { en: "The AI bet builder is reading your bet…", fr: "Le Bet builder IA lit ton pari…" },
+  "cmd.aiUnclear":     { en: "The AI bet builder couldn't read that sentence either.", fr: "Le Bet builder IA n'a pas su lire cette phrase non plus." },
+  "cmd.aiError":       { en: "The AI bet builder is unavailable right now. The reader without AI still works.", fr: "Le Bet builder IA est indisponible pour le moment. La lecture sans IA reste disponible." },
+  "cmd.aiFreeQuota":   { en: "You've used your {limit} free AI bet builder tries for today. Go Pro so the AI can understand more complex bets.", fr: "Tu as utilisé tes {limit} essais gratuits du Bet builder IA aujourd'hui. Passe Pro pour que l'IA comprenne des paris plus complexes." },
+  "cmd.aiFreeLeft":    { en: "AI bet builder free tries left today: {n} of {limit}", fr: "Essais gratuits restants du Bet builder IA aujourd'hui : {n} sur {limit}" },
+  "cmd.aiProUsed":     { en: "Monthly AI allowance, shared with LLM Analysis: {used} of {limit}", fr: "Quota IA du mois, partagé avec l'Analyse LLM : {used} sur {limit}" },
+  "cmd.aiOwnKey":      { en: "The AI bet builder uses your OpenAI key.", fr: "Le Bet builder IA utilise ta clé OpenAI." },
   "mkt.draw60":        { en: "Draw after 60 min", fr: "Nul après 60 min" },
   "mkt.addedSlip":     { en: "✓ Added to Slip!", fr: "✓ Ajouté au pari !" },
   "mkt.adding":        { en: "Adding…",          fr: "Ajout…" },

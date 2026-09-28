@@ -450,7 +450,7 @@ export function SettingsTab({
 
       </div>
 
-      {/* Analyses IA — compteur du mois.
+      {/* Analyse LLM et Bet builder IA — compteur du mois (Pro), essais du jour (gratuit).
           Un plafond dont on ne découvre l'existence qu'en le heurtant est vécu
           comme une panne : la carte existe pour que le chiffre soit connu AVANT.
           Le total vient du serveur (`limit`), jamais d'une constante d'ici — il
@@ -493,12 +493,24 @@ export function SettingsTab({
               );
             })()}
 
+            <p className="text-white/40 text-[11px]">{t("profile.aiUsageShared")}</p>
             <p className="text-white/40 text-[11px]">{t("profile.aiUsageOver")}</p>
           </>
         ) : (
-          <p className="text-white/40 text-[11px]">
-            {t("profile.aiUsageFree", { n: llmUsage.dailyLimit ?? 0 })}
-          </p>
+          <>
+            <p className="text-white/40 text-[11px]">
+              {t("profile.aiUsageFree", { n: llmUsage.dailyLimit ?? 0 })}
+            </p>
+            {/* Bet builder IA : sur la clé perso si elle existe, sinon les essais
+                offerts du jour (compteur serveur, `freeParse`). */}
+            {llmUsage.ownKey ? (
+              <p className="text-white/40 text-[11px]">{t("cmd.aiOwnKey")}</p>
+            ) : llmUsage.freeParse ? (
+              <p className="text-white/40 text-[11px]">
+                {t("cmd.aiFreeLeft", { n: llmUsage.freeParse.remaining, limit: llmUsage.freeParse.limit })}
+              </p>
+            ) : null}
+          </>
         )}
       </div>
 

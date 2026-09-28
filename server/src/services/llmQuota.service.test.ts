@@ -12,8 +12,41 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 function makeFakePool() {
   const perUser = new Map<string, number>();
   const global = new Map<string, number>();
+  const freeDaily = new Map<string, number>();
+  const freeGlobal = new Map<string, number>();
 
   const query = vi.fn(async (sql: string, params: any[] = []) => {
+    if (sql.includes('INSERT INTO llm_free_global')) {
+      const [month, cap] = params;
+      const cur = freeGlobal.get(month) ?? 0;
+      if (cur >= Number(cap)) return { rowCount: 0, rows: [] };
+      freeGlobal.set(month, cur + 1);
+      return { rowCount: 1, rows: [{ count: cur + 1 }] };
+    }
+    if (sql.includes('UPDATE llm_free_global')) {
+      const [month] = params;
+      freeGlobal.set(month, Math.max((freeGlobal.get(month) ?? 0) - 1, 0));
+      return { rowCount: 1, rows: [] };
+    }
+    if (sql.includes('INSERT INTO llm_free_daily')) {
+      const [userId, day, limit] = params;
+      const key = `${userId}|${day}`;
+      const cur = freeDaily.get(key) ?? 0;
+      if (cur >= Number(limit)) return { rowCount: 0, rows: [] };
+      freeDaily.set(key, cur + 1);
+      return { rowCount: 1, rows: [{ count: cur + 1 }] };
+    }
+    if (sql.includes('UPDATE llm_free_daily')) {
+      const [userId, day] = params;
+      const key = `${userId}|${day}`;
+      freeDaily.set(key, Math.max((freeDaily.get(key) ?? 0) - 1, 0));
+      return { rowCount: 1, rows: [] };
+    }
+    if (sql.includes('SELECT count FROM llm_free_daily')) {
+      const [userId, day] = params;
+      const c = freeDaily.get(`${userId}|${day}`);
+      return { rowCount: c == null ? 0 : 1, rows: c == null ? [] : [{ count: c }] };
+    }
     if (sql.includes('INSERT INTO llm_usage_global')) {
       const [month, cap] = params;
       const cur = global.get(month) ?? 0;
@@ -48,7 +81,7 @@ function makeFakePool() {
     throw new Error(`SQL non bouchonné : ${sql}`);
   });
 
-  return { query, perUser, global };
+  return { query, perUser, global, freeDaily, freeGlobal };
 }
 
 async function load(env: Record<string, string>, fake = makeFakePool()) {
@@ -300,5 +333,92 @@ describe('bornes du mois', () => {
 
     expect(mod.nextResetISO(new Date('2026-07-15T10:00:00Z'))).toBe('2026-08-01T00:00:00.000Z');
     expect(mod.nextResetISO(new Date('2026-12-20T10:00:00Z'))).toBe('2027-01-01T00:00:00.000Z');
+  });
+});
+
+// ── Appels gratuits de la commande du coupon (D4 du plan) ───────────────────
+
+describe('consumeFreeParse — 2 appels par jour aux frais de l\'opérateur', () => {
+  beforeEach(() => { delete process.env.LLM_FREE_PARSE_DAILY; delete process.env.LLM_FREE_GLOBAL_MONTHLY_CAP; });
+
+  it('2 par défaut, puis refus avec la date de remise à zéro (minuit UTC)', async () => {
+    const { mod } = await load(BASE_ENV);
+    expect(mod.FREE_PARSE_DAILY).toBe(2);
+    expect((await mod.consumeFreeParse('u1')).allowed).toBe(true);
+    expect((await mod.consumeFreeParse('u1')).used).toBe(2);
+    const over = await mod.consumeFreeParse('u1');
+    expect(over).toMatchObject({ allowed: false, reason: 'user', limit: 2 });
+    expect(over.resetsAt).toMatch(/^\d{4}-\d{2}-\d{2}T00:00:00\.000Z$/);
+  });
+
+  it('réglable par LLM_FREE_PARSE_DAILY', async () => {
+    const { mod } = await load({ ...BASE_ENV, LLM_FREE_PARSE_DAILY: '5' });
+    expect(mod.FREE_PARSE_DAILY).toBe(5);
+  });
+
+  it('deux appels simultanés ne franchissent pas la limite', async () => {
+    const { mod } = await load({ ...BASE_ENV, LLM_FREE_PARSE_DAILY: '1' });
+    const [a, b] = await Promise.all([mod.consumeFreeParse('u1'), mod.consumeFreeParse('u1')]);
+    expect([a.allowed, b.allowed].filter(Boolean)).toHaveLength(1);
+  });
+
+  it('compte dans le disjoncteur DU GRATUIT (pas celui de Pro), et lui rend sa place quand la limite du jour bloque', async () => {
+    const { mod, fake } = await load({ ...BASE_ENV, LLM_FREE_PARSE_DAILY: '1' });
+    await mod.consumeFreeParse('u1');
+    expect(fake.freeGlobal.get(mod.currentMonth())).toBe(1);
+    expect(fake.global.get(mod.currentMonth())).toBeUndefined();
+    await mod.consumeFreeParse('u1');                 // refusée : limite du jour
+    expect(fake.freeGlobal.get(mod.currentMonth())).toBe(1);
+  });
+
+  it('5 000 par défaut, réglable par LLM_FREE_GLOBAL_MONTHLY_CAP', async () => {
+    expect((await load(BASE_ENV)).mod.FREE_GLOBAL_MONTHLY_CAP).toBe(5000);
+    expect((await load({ ...BASE_ENV, LLM_FREE_GLOBAL_MONTHLY_CAP: '300' })).mod.FREE_GLOBAL_MONTHLY_CAP).toBe(300);
+  });
+
+  // LA raison du disjoncteur séparé (décision du user, 2026-09-29).
+  it('le gratuit qui épuise SON enveloppe ne coupe pas l\'IA aux abonnés Pro', async () => {
+    const { mod } = await load({ ...BASE_ENV, LLM_FREE_GLOBAL_MONTHLY_CAP: '2', LLM_GLOBAL_MONTHLY_CAP: '2' });
+    expect((await mod.consumeFreeParse('f1')).allowed).toBe(true);
+    expect((await mod.consumeFreeParse('f2')).allowed).toBe(true);
+    expect(await mod.consumeFreeParse('f3')).toMatchObject({ allowed: false, reason: 'global' });
+    expect((await mod.consumeProRequest('pro1')).allowed).toBe(true);
+    expect((await mod.consumeProRequest('pro2')).allowed).toBe(true);
+  });
+
+  it('et l\'inverse : Pro qui épuise son disjoncteur ne coupe pas le gratuit', async () => {
+    const { mod } = await load({ ...BASE_ENV, LLM_GLOBAL_MONTHLY_CAP: '1' });
+    expect((await mod.consumeProRequest('pro')).allowed).toBe(true);
+    expect((await mod.consumeProRequest('pro2')).reason).toBe('global');
+    expect((await mod.consumeFreeParse('free')).allowed).toBe(true);
+  });
+
+  it('refuse quand la base est injoignable (fail-closed)', async () => {
+    const fake = makeFakePool();
+    const { mod } = await load(BASE_ENV, fake);
+    fake.query.mockRejectedValueOnce(new Error('DB down'));
+    expect(await mod.consumeFreeParse('u1')).toMatchObject({ allowed: false, reason: 'db' });
+  });
+
+  it('remboursement : l\'appel et sa place au disjoncteur du gratuit reviennent', async () => {
+    const { mod, fake } = await load({ ...BASE_ENV, LLM_FREE_PARSE_DAILY: '1' });
+    await mod.consumeFreeParse('u1');
+    await mod.refundFreeParse('u1');
+    expect(fake.freeGlobal.get(mod.currentMonth())).toBe(0);
+    expect((await mod.consumeFreeParse('u1')).allowed).toBe(true);
+  });
+
+  it('getFreeParseUsage lit sans consommer', async () => {
+    const { mod } = await load(BASE_ENV);
+    await mod.consumeFreeParse('u1');
+    expect(await mod.getFreeParseUsage('u1')).toMatchObject({ used: 1, limit: 2, remaining: 1 });
+    expect(await mod.getFreeParseUsage('u1')).toMatchObject({ used: 1 });
+  });
+
+  it('le jour bascule à minuit UTC', async () => {
+    const { mod } = await load(BASE_ENV);
+    expect(mod.currentDay(new Date('2026-10-10T23:59:59Z'))).toBe('2026-10-10');
+    expect(mod.currentDay(new Date('2026-10-11T00:00:00Z'))).toBe('2026-10-11');
+    expect(mod.nextDayResetISO(new Date('2026-12-31T12:00:00Z'))).toBe('2027-01-01T00:00:00.000Z');
   });
 });

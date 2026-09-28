@@ -1,10 +1,25 @@
 /**
- * SlipCommandSheet.tsx — « Construire un pari avec l'IA » (SLIP_COMMANDE_PLAN.md, étape 3).
+ * SlipCommandSheet.tsx — le « Bet builder IA » (SLIP_COMMANDE_PLAN.md, étape 3).
+ *
+ * ⚠️ Nom affiché : « Bet builder IA » (« AI bet builder »), PARTOUT — bouton,
+ * titre, compteur, messages (décision du user, 2026-09-29). À ne pas confondre
+ * avec l'« Analyse LLM » d'un pari individuel (`PredictionSheet`,
+ * `explain_bet`), qui partage le quota Pro mais pas la fonction.
  *
  * Le joueur tape « Canadien gagne ce soir » ; l'analyseur LOCAL
  * (`server/src/services/slipCommand.ts`, sans réseau, gratuit) en tire des
  * intentions, `buildLeg` les chiffre avec le modèle et elles entrent au
- * coupon. Aucun appel au LLM à cette étape (il viendra en renfort, étape 4).
+ * coupon.
+ *
+ * Renfort LLM (étape 4, décisions du user du 2026-09-28) : quand l'analyseur
+ * local rend `unknown` — et seulement là, une ambiguïté a déjà ses choix —,
+ * la phrase part AUTOMATIQUEMENT au LLM (`askParseCommand`) pour un compte
+ * connecté. Les intentions rendues ont déjà été validées par le serveur ; elles
+ * le sont une seconde fois ici contre le contexte de l'écran, puis suivent le
+ * même chemin (`addIntents` → `buildLeg`). Une ligne discrète affiche le quota
+ * IA restant ; au quota gratuit épuisé, la phrase du user « Passe Pro pour que
+ * l'IA comprenne des paris plus complexes » s'affiche partout, et le bouton
+ * vers /pro seulement si `features.proUpgrade` (décision 3.1.1, iOS).
  *
  * Décisions du user (2026-09-28) :
  *   - un bouton sur la page Stats (au-dessus des trois onglets) et sur la page
@@ -17,9 +32,10 @@
  *     est signalé.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 import {
-  parseSlipCommand, SLIP_COMMAND_MAX_LENGTH,
+  parseSlipCommand, validateIntent, SLIP_COMMAND_MAX_LENGTH,
   type SlipChoice, type SlipFailure,
 } from "../../../../server/src/services/slipCommand";
 import { useBet } from "../context/BetContext";
@@ -27,6 +43,9 @@ import { useI18n } from "../i18n";
 import { useSlipCommandData } from "../hooks/useSlipCommandData";
 import { addIntents, type CommandLegResult } from "../services/slipCommandLegs";
 import { UPCOMING_DAYS } from "../pages/prediction/predictionShared";
+import { useAuth } from "../context/AuthContext";
+import { features } from "../platform";
+import { askParseCommand, getLLMUsage, type LLMError, type ParseUsage } from "../services/llmService";
 
 type T = ReturnType<typeof useI18n>["t"];
 
@@ -64,18 +83,58 @@ function choiceLabel(c: SlipChoice, f: SlipFailure, t: T, teamName: (abbr: strin
   }
 }
 
+/** Le quota IA tel que la ligne discrète l'affiche. */
+type AiQuota =
+  | { kind: "free"; remaining: number; limit: number }
+  | { kind: "pro"; used: number; limit: number }
+  | { kind: "own_key" };
+
+/** Ce que le renfort LLM a dit de la dernière phrase incomprise. */
+type AiNote =
+  | { kind: "working" }
+  | { kind: "clarify"; text: string }
+  | { kind: "unclear" }
+  | { kind: "free_quota"; limit: number }
+  | { kind: "error"; message: string };
+
+function quotaFromUsage(u: ParseUsage): AiQuota {
+  if (u.kind === "own_key") return u;
+  return u.kind === "free" ? { kind: "free", remaining: Math.max(u.limit - u.used, 0), limit: u.limit } : { kind: "pro", used: u.used, limit: u.limit };
+}
+
 type Row =
   | { key: string; kind: "added"; legId: string; label: string; removed: boolean }
   | { key: string; kind: "duplicate" | "unavailable" | "missing"; label: string };
 
 export function SlipCommandSheet({ onClose }: { onClose: () => void }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { addLeg, removeLeg, hasLeg } = useBet();
   const { ctx, data, loading, error } = useSlipCommandData();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<SlipFailure | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [aiQuota, setAiQuota] = useState<AiQuota | null>(null);
+  const [aiNote, setAiNote] = useState<AiNote | null>(null);
+
+  // Quota IA restant, lu une fois à l'ouverture (compte connecté seulement).
+  // Un échec laisse la ligne absente : elle informe, elle ne conditionne rien.
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    getLLMUsage()
+      .then((u) => {
+        if (!alive) return;
+        if (u.pro && u.limit != null) setAiQuota({ kind: "pro", used: u.used ?? 0, limit: u.limit });
+        else if (u.ownKey) setAiQuota({ kind: "own_key" });
+        else if (u.freeParse) setAiQuota({ kind: "free", remaining: u.freeParse.remaining, limit: u.freeParse.limit });
+      })
+      .catch(() => { /* ligne absente */ });
+    return () => { alive = false; };
+  }, [user]);
 
   const noGames = !!ctx && ctx.games.length === 0;
   const ready = !!ctx && !noGames && !busy;
@@ -84,12 +143,53 @@ export function SlipCommandSheet({ onClose }: { onClose: () => void }) {
 
   async function submit(command: string) {
     if (!ctx || busy || !command.trim()) return;
+    setAiNote(null);
     const parsed = parseSlipCommand(command, ctx);
-    if (!parsed.ok) { setFailure(parsed); return; }
+    if (!parsed.ok) {
+      setFailure(parsed);
+      // Renfort LLM : seulement pour une phrase INCOMPRISE, et pour un compte
+      // connecté (l'appel est authentifié et décompté).
+      if (parsed.reason === "unknown" && parsed.chunk && user) await askAi(command);
+      return;
+    }
     setFailure(null);
+    await addAll(parsed.intents);
+  }
+
+  async function askAi(command: string) {
+    if (!ctx) return;
+    setBusy(true);
+    setAiNote({ kind: "working" });
+    try {
+      const r = await askParseCommand(command, lang);
+      setAiQuota(quotaFromUsage(r.usage));
+      // Le serveur a validé contre SON contexte ; on revalide contre celui de
+      // l'écran, qui fournira les matchs et joueurs à `buildLeg`.
+      if (r.ok && r.intents.every((i) => validateIntent(i, ctx).ok)) {
+        setAiNote(null);
+        setFailure(null);
+        setBusy(false);
+        await addAll(r.intents);
+        return;
+      }
+      setAiNote(!r.ok && r.clarification ? { kind: "clarify", text: r.clarification } : { kind: "unclear" });
+    } catch (e) {
+      const err = e as Partial<LLMError>;
+      if (err.type === "free_parse_quota") {
+        setAiNote({ kind: "free_quota", limit: err.limit ?? 0 });
+        setAiQuota((q) => (q?.kind === "free" ? { ...q, remaining: 0 } : q));
+      } else {
+        setAiNote({ kind: "error", message: err.type === "monthly_quota" && err.message ? err.message : t("cmd.aiError") });
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addAll(intents: Parameters<typeof addIntents>[0]) {
     setBusy(true);
     try {
-      const results: CommandLegResult[] = await addIntents(parsed.intents, data, { hasLeg, addLeg });
+      const results: CommandLegResult[] = await addIntents(intents, data, { hasLeg, addLeg });
       const stamp = Date.now();
       setRows(results.map((r, i): Row => r.status === "added"
         ? { key: `${stamp}-${i}`, kind: "added", legId: r.leg.id, label: `${r.leg.selection} · ${r.leg.gameInfo ?? ""}`, removed: false }
@@ -157,8 +257,40 @@ export function SlipCommandSheet({ onClose }: { onClose: () => void }) {
           {error && <p className="text-amber-300 text-xs">{t("cmd.loadError")}</p>}
           {noGames && <p className="text-[#bfc8cc] text-xs">{t("cmd.noGames", { days: UPCOMING_DAYS })}</p>}
 
-          {/* Échec de l'analyse, avec ses choix cliquables */}
-          {failure && (
+          {/* Quota IA restant — une ligne discrète, qui informe sans rien conditionner. */}
+          {aiQuota && (
+            <p className="text-[#bfc8cc] text-[11px]">
+              {aiQuota.kind === "free" ? t("cmd.aiFreeLeft", { n: aiQuota.remaining, limit: aiQuota.limit })
+                : aiQuota.kind === "pro" ? t("cmd.aiProUsed", { used: aiQuota.used, limit: aiQuota.limit })
+                : t("cmd.aiOwnKey")}
+            </p>
+          )}
+
+          {/* Ce que l'IA a dit d'une phrase que l'analyseur local n'a pas comprise */}
+          {aiNote && (
+            <div className="bg-[#131A12] border border-amber-300/30 rounded-2xl px-3 py-2.5" role="status">
+              <p className={`text-xs font-semibold ${aiNote.kind === "working" ? "text-[#86d1ea]" : "text-amber-300"}`}>
+                {aiNote.kind === "working" ? t("cmd.aiWorking")
+                  : aiNote.kind === "clarify" ? aiNote.text
+                  : aiNote.kind === "unclear" ? t("cmd.aiUnclear")
+                  : aiNote.kind === "free_quota" ? t("cmd.aiFreeQuota", { limit: aiNote.limit })
+                  : aiNote.message}
+              </p>
+              {aiNote.kind === "free_quota" && features.proUpgrade && (
+                /* `state.from` : /pro ne peut pas revenir par l'historique (voir ProLock). */
+                <button
+                  onClick={() => navigate("/pro", { state: { from: location.pathname + location.search } })}
+                  className="tap-44 mt-2 px-3 py-1.5 rounded-full text-xs font-bold bg-[#86d1ea] text-[#0A0E0C] active:scale-95 transition-transform"
+                >
+                  {t("home.proHeadline")}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Échec de l'analyse, avec ses choix cliquables — remplacé par la note
+              de l'IA dès que celle-ci a pris le relais. */}
+          {failure && !aiNote && (
             <div className="bg-[#131A12] border border-amber-300/30 rounded-2xl px-3 py-2.5">
               <p className="text-amber-300 text-xs font-semibold">{failureText(failure, t)}</p>
               {failure.choices && failure.choices.length > 0 && (
@@ -230,7 +362,7 @@ export function SlipCommandSheet({ onClose }: { onClose: () => void }) {
 }
 
 /**
- * Le bouton « Construire un pari avec l'IA » et sa feuille. `pill` : à côté de
+ * Le bouton « Bet builder IA » et sa feuille. `pill` : à côté de
  * « + Ajouter » ; `block` : pleine largeur (Stats, coupon vide).
  */
 export function SlipCommandLauncher({ variant }: { variant: "pill" | "block" }) {
