@@ -558,7 +558,10 @@ router.post("/parlay", validateBody(parlayPredictionSchema), async (req: Request
     const naive = legs.reduce((acc, l) => acc * (l.probability / 100), 1) * 100;
 
     // ── Étage 1 : relations logiques ─────────────────────────────────────────
-    const logical = combineParlayLegs(legs);
+    // `teamId` est le sujet de la jambe (le `subjectId` du coupon) : sans lui,
+    // « MTL −1.5 » + « TOR +1.5 » (= « MTL −1.5, non ») ne se reconnaissaient
+    // pas comme incompatibles. Voir `ParlayLeg.subject`.
+    const logical = combineParlayLegs(legs.map((l) => ({ ...l, subject: l.teamId })));
     if (logical.impossible) {
       return res.json({
         combinedProbability: Math.round(naive * 10) / 10,

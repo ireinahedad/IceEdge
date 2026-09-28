@@ -191,3 +191,106 @@ describe('garde-fous', () => {
     expect(r.probability).toBeCloseTo(30, 6);
   });
 });
+
+// ─── Vainqueur / handicap avec l'équipe transmise (2026-09-28) ───────────────
+//
+// « T +1.5 » est déclaré « adversaire −1.5, non » (tuile de la page du match,
+// case du tableau de l'accueil) : la sélection vaut `no` et SEUL le sujet dit
+// de quelle équipe on parle. Chaque cas ci-dessous se vérifie à la main sur
+// les écarts finaux (jamais nuls en LNH).
+describe('vainqueur et handicap — l\'équipe transmise, jamais de chiffre bidon', () => {
+  const mtlMinus  = leg({ gameId: G, marketType: 'puck_line', selection: 'mtl', subject: 'mtl', line: -1.5, probability: 31 });
+  const torMinus  = leg({ gameId: G, marketType: 'puck_line', selection: 'tor', subject: 'tor', line: -1.5, probability: 22 });
+  const torPlus   = leg({ gameId: G, marketType: 'puck_line', selection: 'no',  subject: 'mtl', line: -1.5, probability: 69 });
+  const mtlPlus   = leg({ gameId: G, marketType: 'puck_line', selection: 'no',  subject: 'tor', line: -1.5, probability: 78 });
+  const mtlWin    = leg({ gameId: G, marketType: 'moneyline', selection: 'mtl', subject: 'mtl', probability: 58 });
+  const torWin    = leg({ gameId: G, marketType: 'moneyline', selection: 'tor', subject: 'tor', probability: 42 });
+
+  it('MTL −1.5 + TOR +1.5 : impossible (c\'était 21 %)', () => {
+    expect(combineParlayLegs([mtlMinus, torPlus]).impossible).toBe(true);
+  });
+
+  it('MTL −1.5 + TOR −1.5 : impossible', () => {
+    expect(combineParlayLegs([mtlMinus, torMinus]).impossible).toBe(true);
+  });
+
+  it('MTL −1.5 + TOR gagne : impossible', () => {
+    expect(combineParlayLegs([mtlMinus, torWin]).impossible).toBe(true);
+  });
+
+  it('MTL gagne implique MTL +1.5 : le coupon vaut P(MTL gagne)', () => {
+    const r = combineParlayLegs([mtlWin, mtlPlus]);
+    expect(r.impossible).toBe(false);
+    expect(r.probability).toBeCloseTo(58, 6);
+    expect(r.redundantLegs).toBe(1);
+  });
+
+  it('TOR gagne implique TOR +1.5, dans les deux ordres', () => {
+    expect(combineParlayLegs([torPlus, torWin]).probability).toBeCloseTo(42, 6);
+    expect(combineParlayLegs([torWin, torPlus]).probability).toBeCloseTo(42, 6);
+  });
+
+  it('MTL −1.5 implique MTL +1.5 ET MTL gagne : P(MTL −1.5)', () => {
+    const r = combineParlayLegs([mtlPlus, mtlWin, mtlMinus]);
+    expect(r.probability).toBeCloseTo(31, 6);
+    expect(r.redundantLegs).toBe(2);
+  });
+
+  it('MTL +1.5 + TOR +1.5 : compatible (match à un but) — produit ET drapeau', () => {
+    const r = combineParlayLegs([mtlPlus, torPlus]);
+    expect(r.impossible).toBe(false);
+    expect(r.probability).toBeCloseTo(78 * 69 / 100, 6);
+    expect(r.assumesIndependence).toBe(true);
+  });
+
+  it('le « yes » du sélecteur de marché est le même pari que la case MTL', () => {
+    const yes = leg({ gameId: G, marketType: 'moneyline', selection: 'yes', subject: 'MTL', probability: 58 });
+    const r = combineParlayLegs([mtlWin, yes]);
+    // Avant : `yes` contre `mtl` passait pour deux équipes différentes → 0 %.
+    expect(r.impossible).toBe(false);
+    expect(r.probability).toBeCloseTo(58, 6);
+    expect(r.redundantLegs).toBe(1);
+  });
+
+  it('« TOR +1.5 » écrit avec une ligne positive = « MTL −1.5, non »', () => {
+    const plus = leg({ gameId: G, marketType: 'puck_line', selection: 'tor', subject: 'tor', line: 1.5, probability: 69 });
+    const r = combineParlayLegs([torPlus, plus]);
+    expect(r.probability).toBeCloseTo(69, 6);
+    expect(r.redundantLegs).toBe(1);
+  });
+
+  it('matchs différents : aucune relation, même équipes', () => {
+    const r = combineParlayLegs([mtlMinus, { ...torPlus, gameId: H }]);
+    expect(r.impossible).toBe(false);
+    expect(r.probability).toBeCloseTo(31 * 69 / 100, 6);
+  });
+});
+
+describe('props de deux joueurs différents', () => {
+  it('Suzuki plus de 2.5 tirs + Caufield moins de 2.5 tirs : compatibles', () => {
+    const r = combineParlayLegs([
+      leg({ gameId: G, marketType: 'shots_ou', selection: 'over',  line: 2.5, subject: '8480018', subjectType: 'player', probability: 55 }),
+      leg({ gameId: G, marketType: 'shots_ou', selection: 'under', line: 2.5, subject: '8481540', subjectType: 'player', probability: 40 }),
+    ]);
+    // Avant : même marché, même ligne, côtés opposés → « impossible », 0 %.
+    expect(r.impossible).toBe(false);
+    expect(r.probability).toBeCloseTo(22, 6);
+  });
+
+  it('deux joueurs, même prop : deux paris, pas un doublon', () => {
+    const r = combineParlayLegs([
+      leg({ gameId: G, marketType: 'shots_ou', selection: 'over', line: 2.5, subject: '8480018', subjectType: 'player', probability: 50 }),
+      leg({ gameId: G, marketType: 'shots_ou', selection: 'over', line: 2.5, subject: '8481540', subjectType: 'player', probability: 50 }),
+    ]);
+    expect(r.redundantLegs).toBe(0);
+    expect(r.probability).toBeCloseTo(25, 6);
+  });
+
+  it('le MÊME joueur, côtés opposés : toujours impossible', () => {
+    const r = combineParlayLegs([
+      leg({ gameId: G, marketType: 'shots_ou', selection: 'over',  line: 2.5, subject: '8480018', subjectType: 'player', probability: 55 }),
+      leg({ gameId: G, marketType: 'shots_ou', selection: 'under', line: 2.5, subject: '8480018', subjectType: 'player', probability: 45 }),
+    ]);
+    expect(r.impossible).toBe(true);
+  });
+});

@@ -20,7 +20,12 @@ import { useOddsFormat } from "../context/OddsFormatContext";
 import { openBet } from "../services/bookmakers";
 import { features } from "../platform";
 
-export function BookPricePill({ price, size = "sm" }: { price: number; size?: "sm" | "md" }) {
+/**
+ * `link={false}` : la pastille n'est qu'un affichage. Sert dans le tableau de
+ * l'accueil (2026-09-28), où toute la case ajoute au coupon — décision du
+ * user : là, le toucher sur la cote ajoute le pari au lieu d'ouvrir le livre.
+ */
+export function BookPricePill({ price, size = "sm", link = true }: { price: number; size?: "sm" | "md"; link?: boolean }) {
   const { odds } = useOddsFormat();
   const text = size === "md" ? "text-sm" : "text-[11px]";
   const inner = (
@@ -28,7 +33,7 @@ export function BookPricePill({ price, size = "sm" }: { price: number; size?: "s
   );
   const cls = "inline-flex items-center gap-1 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5";
 
-  if (!features.bookmakerLinks) return <span className={cls}>{inner}</span>;
+  if (!link || !features.bookmakerLinks) return <span className={cls}>{inner}</span>;
   return (
     <button
       type="button"

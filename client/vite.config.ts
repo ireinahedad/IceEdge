@@ -37,7 +37,14 @@ export default defineConfig({
       // partagé avec la route). Il est hors de la racine client : sans cette
       // liste, `vite dev` refuse de le servir. Poser `allow` remplace la valeur
       // par défaut, d'où la racine client en premier.
-      allow: [__dirname, path.resolve(__dirname, '../server/src/services/parlay.ts')],
+      // Même règle pour l'analyseur de commandes du coupon (`slipCommand.ts`)
+      // et la table de noms qu'il importe (`oddsTeamNames.ts`).
+      allow: [
+        __dirname,
+        path.resolve(__dirname, '../server/src/services/parlay.ts'),
+        path.resolve(__dirname, '../server/src/services/slipCommand.ts'),
+        path.resolve(__dirname, '../server/src/services/oddsTeamNames.ts'),
+      ],
     },
   },
 

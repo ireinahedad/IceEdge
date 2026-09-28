@@ -7,10 +7,12 @@
  */
 
 import { weekdayShort } from "../../data/gameDay";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { IceedgeLogo } from "../../components/brand/IceedgeLogo";
 import { useSport } from "../../context/SportContext";
+import { useBet } from "../../context/BetContext";
+import type { BetLeg } from "../../types/bet";
 import { useI18n } from "../../i18n";
 import { openBet } from "../../services/bookmakers";
 import { features } from "../../platform";
@@ -130,6 +132,12 @@ function gameDayLabel(game: DisplayGame, lang: string): string | null {
  * avec un pari — et le ✓ ne se défaisait pas depuis l'accueil, il fallait
  * aller le retirer dans le pari. « Plus de paris » reste le chemin, et il
  * montre ce qu'on choisit.
+ *
+ * ▶ Revenu le 2026-09-28 sous une autre forme, à la demande du user : chaque
+ *   case du tableau Handicap / Vainqueur est une sélection précise (toucher =
+ *   ajout, case entourée de vert ; double toucher = retrait). Les deux reproches
+ *   ci-dessus y trouvent leur réponse : on voit QUELLE case est prise, et elle
+ *   se défait sur place. Voir `PickCell` plus bas.
  */
 /**
  * ⏸️ Probabilités du modèle MASQUÉES sur les cartes de match de l'accueil
@@ -294,6 +302,162 @@ function MlPct({ value, loading }: { value: number | null; loading: boolean }) {
   );
 }
 
+// ─── Sélection au toucher du tableau Handicap / Vainqueur (2026-09-28) ───────
+
+/**
+ * Une case du tableau = UNE sélection, écrite sous la forme EXACTE que pose la
+ * page du match (`nhlPredictions.ts`, fonctions `gm` / `gma`) — c'est ce qui
+ * permet au règlement (`settlement.service.ts`) et au calcul du coupon
+ * (`parlay.ts`) de la reconnaître sans rien leur apprendre :
+ *
+ *   vainqueur T  → moneyline, sélection T
+ *   T −1.5       → puck_line, sujet T, sélection T, ligne −1.5
+ *   U +1.5       → puck_line, sujet = l'adversaire T, sélection « no », ligne −1.5
+ *                  (le complément exact du −1.5 adverse : pas d'égalité possible
+ *                  sur une demi-ligne — même déclaration que la tuile « +x »)
+ *
+ * Toutes les équipes sont en minuscules, comme `DisplayGame.team*.id`.
+ */
+interface HomePick {
+  marketType: "moneyline" | "puck_line";
+  /** Équipe sur laquelle porte la jambe CÔTÉ RÈGLEMENT. */
+  subject: string;
+  opponent: string;
+  subjectIsHome: boolean;
+  /** « no » pour un +1.5, sinon l'équipe elle-même. */
+  selectionValue: string;
+  line?: number;
+}
+
+/**
+ * La jambe du coupon correspond-elle à cette case, d'où qu'elle vienne ?
+ *
+ * Comparaison sur le SENS du pari, pas sur l'identifiant : une case prise
+ * depuis la page du match, les meilleurs paris ou le sélecteur de marché
+ * s'allume aussi en vert ici, et le double toucher la retire. Sans ça, on
+ * pouvait poser deux fois le même pari sans le voir.
+ *
+ * Le sélecteur de marché écrit l'équipe dans `subjectId` et « yes » en
+ * sélection, parfois sans ligne (−1.5 par défaut, comme le règlement).
+ */
+function legMatchesPick(leg: BetLeg, gameId: string, p: HomePick): boolean {
+  if (leg.gameId !== gameId || leg.marketType !== p.marketType) return false;
+  const sel = String(leg.selectionValue ?? "").trim().toLowerCase();
+  const subj = String(leg.subjectId ?? "").trim().toLowerCase();
+  const teamPicked = sel === p.subject || ((sel === "" || sel === "yes") && subj === p.subject);
+  if (p.marketType === "moneyline") return teamPicked;
+  if ((leg.line ?? -1.5) !== -1.5) return false;
+  if (p.selectionValue === "no") return sel === "no" && subj === p.subject;
+  return teamPicked;
+}
+
+/** Heure de mise au jeu prévue atteinte — la même règle que le serveur. */
+function gameStarted(game: DisplayGame): boolean {
+  const ms = game.startTimeUTC ? new Date(game.startTimeUTC).getTime() : NaN;
+  return Number.isFinite(ms) && ms <= Date.now();
+}
+
+/** Deux touchers plus rapprochés que ça = un double toucher. */
+const DOUBLE_TAP_MS = 350;
+
+/**
+ * Une case sélectionnable : toucher = ajoute au coupon (entourée de vert),
+ * double toucher = retire.
+ *
+ * ⚠️ Le double toucher est détecté À LA MAIN, pas par `onDoubleClick` : iOS
+ * (WKWebView) ne livre pas `dblclick` de façon fiable au toucher, et le premier
+ * `click` d'un double part de toute façon. D'où la règle : le 1er toucher
+ * ajoute (sans effet si déjà pris), le 2e rapproché retire. Un double toucher
+ * sur une case vide la laisse donc vide — neutre, pas surprenant.
+ *
+ * Sans probabilité du modèle (en cours ou indisponible), la case ne pose rien :
+ * une jambe garde sa probabilité jusqu'au règlement, un chiffre inventé ici
+ * lui survivrait. Elle peut encore RETIRER une jambe posée ailleurs.
+ *
+ * TOUTE la case ajoute, cote comprise : la pastille y est posée en
+ * `link={false}` (décision du user, 2026-09-28) — sinon la moitié de la case
+ * Vainqueur ouvrait le livre au lieu d'ajouter le pari.
+ *
+ * Pas de pari en direct (décision du user, 2026-09-28) : la mise au jeu prévue
+ * passée, la case ne pose plus rien, même si la ligne n'a pas encore glissé
+ * dans la section « En direct ». Le serveur refuse de toute façon au
+ * verrouillage (`GAME_STARTED`) ; ici on évite juste de laisser poser un pari
+ * qu'il refusera.
+ */
+function PickCell({ game, pick, probability, team, label, short, children }: {
+  game: DisplayGame;
+  pick: HomePick;
+  probability: number | null;
+  /** L'équipe AFFICHÉE dans la case (celle du +1.5 n'est pas le sujet). */
+  team: { abbr: string; logo: string };
+  label: string;
+  short: string;
+  children: ReactNode;
+}) {
+  const { t, lang } = useI18n();
+  const { legs, addLeg, removeLeg } = useBet();
+  const lastTap = useRef(0);
+  const matches = legs.filter((l) => legMatchesPick(l, game.id, pick));
+  const selected = matches.length > 0;
+
+  const tap = () => {
+    const now = Date.now();
+    const isDouble = now - lastTap.current < DOUBLE_TAP_MS;
+    // Remis à zéro après un double : un triple toucher ne retire pas deux fois.
+    lastTap.current = isDouble ? 0 : now;
+    if (isDouble) { matches.forEach((l) => removeLeg(l.id)); return; }
+    if (selected || probability == null || gameStarted(game)) return;
+    const day = weekdayShort(gameIsoDay(game), lang) || gameDayLabel(game, lang);
+    const leg: BetLeg = {
+      id: `home-${game.id}-${pick.marketType}-${pick.subject}${pick.selectionValue === "no" ? "-no" : ""}`,
+      marketType: pick.marketType,
+      marketLabel: pick.marketType === "moneyline" ? "Moneyline" : "Puck Line",
+      // « game » comme la page du match : le sujet est une équipe DU match.
+      subjectType: "game",
+      subjectId: pick.subject,
+      subjectName: team.abbr,
+      subjectLogo: team.logo,
+      selection: label,
+      selectionShort: short,
+      probability,
+      line: pick.line,
+      gameInfo: [`${game.team1.abbr} vs ${game.team2.abbr}`, day, game.time ? `${game.time} ET` : null]
+        .filter(Boolean).join(" · "),
+      addedAt: new Date().toISOString(),
+      gameId: game.id,
+      selectionValue: pick.selectionValue,
+      opponentId: pick.opponent,
+      isHome: pick.subjectIsHome,
+    };
+    addLeg(leg);
+  };
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+      aria-label={`${label} — ${t("home.pickHint")}`}
+      title={t("home.pickHint")}
+      onClick={(e) => { e.stopPropagation(); tap(); }}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault(); e.stopPropagation(); tap();
+      }}
+      className="flex items-center gap-1.5 rounded-lg px-1.5 py-1 -mx-1.5 -my-1 cursor-pointer select-none transition-colors"
+      style={{
+        // Bordure toujours présente (transparente) : la case ne bouge pas
+        // d'un pixel quand elle s'allume.
+        border: `1.5px solid ${selected ? "#4ade80" : "transparent"}`,
+        background: selected ? "rgba(74,222,128,0.10)" : undefined,
+        touchAction: "manipulation",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: () => void }) {
   const { theme } = useSport();
   const accent = theme.accent;
@@ -330,31 +494,50 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
   const priceHome = spread?.home && spread.home.point === lineHome ? spread.home.price : undefined;
   const priceAway = spread?.away && spread.away.point === lineAway ? spread.away.price : undefined;
 
+  // Chaque case est sélectionnable (`PickCell`) : voir `HomePick` pour la
+  // forme exacte de la jambe posée.
   const teamRow = (
-    side: { logo: string; abbr: string },
+    side: { id: string; logo: string; abbr: string },
+    other: { id: string },
+    isHome: boolean,
     line: number, pl: number | null, plPrice: number | undefined,
     win: number | null, winPrice: number | undefined,
-  ) => (
-    <>
-      <div className="flex items-center gap-1.5 min-w-0">
-        <img src={side.logo} alt={side.abbr} className="w-5 h-5 object-contain flex-shrink-0" />
-        <span className="text-white text-xs font-medium truncate">{side.abbr}</span>
-      </div>
-      {/* Handicap */}
-      <div className="flex items-center gap-1.5">
-        <span className="text-[#bfc8cc] text-[11px] font-semibold tabular-nums w-[26px] flex-shrink-0">
-          {line > 0 ? "+1.5" : "−1.5"}
-        </span>
-        <MlPct value={pl} loading={mlLoading} />
-        {plPrice != null && <BookPricePill price={plPrice} />}
-      </div>
-      {/* Vainqueur */}
-      <div className="flex items-center gap-1.5">
-        <MlPct value={win} loading={mlLoading} />
-        {winPrice != null && <BookPricePill price={winPrice} />}
-      </div>
-    </>
-  );
+  ) => {
+    const plPick: HomePick = line < 0
+      ? { marketType: "puck_line", subject: side.id, opponent: other.id, subjectIsHome: isHome, selectionValue: side.id, line: -1.5 }
+      : { marketType: "puck_line", subject: other.id, opponent: side.id, subjectIsHome: !isHome, selectionValue: "no", line: -1.5 };
+    const winPick: HomePick =
+      { marketType: "moneyline", subject: side.id, opponent: other.id, subjectIsHome: isHome, selectionValue: side.id };
+    return (
+      <>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <img src={side.logo} alt={side.abbr} className="w-5 h-5 object-contain flex-shrink-0" />
+          <span className="text-white text-xs font-medium truncate">{side.abbr}</span>
+        </div>
+        {/* Handicap */}
+        <PickCell
+          game={game} pick={plPick} probability={pl} team={side}
+          label={line < 0 ? t("bb.puckLine", { abbr: side.abbr }) : t("home.plPlus", { abbr: side.abbr })}
+          short={`${side.abbr} ${line < 0 ? "-1.5" : "+1.5"}`}
+        >
+          <span className="text-[#bfc8cc] text-[11px] font-semibold tabular-nums w-[26px] flex-shrink-0">
+            {line > 0 ? "+1.5" : "−1.5"}
+          </span>
+          <MlPct value={pl} loading={mlLoading} />
+          {plPrice != null && <BookPricePill price={plPrice} link={false} />}
+        </PickCell>
+        {/* Vainqueur */}
+        <PickCell
+          game={game} pick={winPick} probability={win} team={side}
+          label={t("bb.teamWin", { abbr: side.abbr })}
+          short={`${side.abbr} ML`}
+        >
+          <MlPct value={win} loading={mlLoading} />
+          {winPrice != null && <BookPricePill price={winPrice} link={false} />}
+        </PickCell>
+      </>
+    );
+  };
 
   return (
     <div
@@ -376,8 +559,10 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
             Remplace les pastilles à côté des équipes et le O/U : deux colonnes
             collées aux équipes, sans bordure de tableau. Chaque case = le % du
             modèle ML (violet) + la cote du livre quand il la propose (vert). */}
-        {/* Centré dans l'espace entre l'heure et « Plus de paris » (2026-09-28). */}
-        <div className="flex-1 min-w-0 flex justify-center">
+        {/* Collé à DROITE, juste avant « Plus de paris » (demande du user,
+            2026-09-28 — il était centré). Sur mobile, où « Plus de paris » est
+            masqué, il va donc jusqu'au bord de la carte. */}
+        <div className="flex-1 min-w-0 flex justify-end">
         <div
           className="grid items-center gap-x-4 gap-y-2"
           style={{ gridTemplateColumns: "auto auto auto" }}
@@ -385,17 +570,22 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
           <span />
           <span className="text-[#8a9ea6] text-[11px] font-semibold">{t("home.colSpread")}</span>
           <span className="text-[#8a9ea6] text-[11px] font-semibold">{t("home.colWinner")}</span>
-          {teamRow(game.team1, lineHome, plHome, priceHome, winHome, game.bookHome)}
-          {teamRow(game.team2, lineAway, plAway, priceAway, winAway, game.bookAway)}
+          {teamRow(game.team1, game.team2, true, lineHome, plHome, priceHome, winHome, game.bookHome)}
+          {teamRow(game.team2, game.team1, false, lineAway, plAway, priceAway, winAway, game.bookAway)}
         </div>
         </div>
 
-        {/* Actions column */}
-        <div className="flex flex-col items-end gap-1.5 flex-shrink-0 max-w-[60px]">
+        {/* Actions column.
+            « Plus de paris » MASQUÉ sous 768 px (décision du user, 2026-09-28) :
+            sur un téléphone, ses 60 px écrasaient la colonne des équipes et
+            les abréviations (MTL, TOR) tombaient à 0 px de large. Toucher la
+            carte ouvre la page du match, qui porte tous les marchés. La colonne
+            reste là si elle a un badge d'edge à montrer. */}
+        <div className={`${edge >= 8 ? "flex" : "hidden md:flex"} flex-col items-end gap-1.5 flex-shrink-0 max-w-[60px]`}>
           {edge >= 8 && <EdgeBadge edge={edge} />}
           <button
             onClick={(e) => { e.stopPropagation(); onOpenSheet(); }}
-            className="text-[11px] text-[#bfc8cc] underline underline-offset-2 text-right leading-tight"
+            className="hidden md:block text-[11px] text-[#bfc8cc] underline underline-offset-2 text-right leading-tight"
           >
             {t("home.moreBets")}
           </button>

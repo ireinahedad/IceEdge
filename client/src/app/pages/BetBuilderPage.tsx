@@ -18,6 +18,7 @@ import { Plus, Lightbulb, Trash2 } from "lucide-react";
 import { useBet } from "../context/BetContext";
 import { useAuth } from "../context/AuthContext";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
+import { SlipCommandLauncher } from "../components/SlipCommandSheet";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { BottomNav } from "../components/BottomNav";
 import { getMySlips, submitSlip } from "../services/slipApiService";
@@ -182,8 +183,13 @@ export function BetBuilderPage() {
       // Un délai dépassé n'est pas un refus : le coupon n'est pas invalide, le
       // serveur a simplement mis trop longtemps. Le dire évite qu'on retire des
       // paris en croyant que c'est le coupon qui pose problème.
+      // Un match du coupon a déjà commencé : le serveur refuse (pas de pari en
+      // direct, voir `resolveLocksAt` côté serveur). Le dire en clair, avec
+      // quoi faire.
       const message = isRequestTimeout(err)
         ? t("slip.lockTimeout")
+        : err?.code === "GAME_STARTED"
+        ? t("slip.gameStarted")
         : (err?.message || t("slip.lockFailed"));
       setSubmitError(message);
       toast.error(message);
@@ -307,10 +313,13 @@ export function BetBuilderPage() {
             <div className="mb-4">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-white text-sm font-medium">{t("slip.predictions")}</p>
-                <button onClick={() => setShowSheet(true)}
-                  className="tap-44 flex items-center gap-1 text-[#90C9F0] text-xs bg-[#90C9F0]/10 border border-[#90C9F0]/25 rounded-full px-3 py-1.5 active:scale-95 transition-transform">
-                  <Plus size={10} /> {t("slip.add")}
-                </button>
+                <div className="flex items-center gap-2">
+                  <SlipCommandLauncher variant="pill" />
+                  <button onClick={() => setShowSheet(true)}
+                    className="tap-44 flex items-center gap-1 text-[#90C9F0] text-xs bg-[#90C9F0]/10 border border-[#90C9F0]/25 rounded-full px-3 py-1.5 active:scale-95 transition-transform">
+                    <Plus size={10} /> {t("slip.add")}
+                  </button>
+                </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {legs.map((leg, i) => (

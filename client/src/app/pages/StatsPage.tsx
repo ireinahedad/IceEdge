@@ -15,6 +15,7 @@ import { teamColors } from "../data/teamEmoji";
 import { dayHeading, groupByDay, weekdayShort } from "../data/gameDay";
 import { CONFERENCES, DIVISIONS, conferenceLabelKey, divisionLabelKey, divisionOf } from "../data/nhlDivisions";
 import "../components/rink-theme.css";
+import { SlipCommandLauncher } from "../components/SlipCommandSheet";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -249,6 +250,10 @@ export function StatsPage() {
       </header>
 
       <div className="flex-1 px-4 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] pt-3 overflow-y-auto">
+        {/* Au-dessus des trois onglets (décision du user, 2026-09-28). */}
+        <div className="mb-3">
+          <SlipCommandLauncher variant="block" />
+        </div>
         <div className="flex items-center justify-between mb-3">
           <span className="text-[#bfc8cc] text-xs">
             {activeFilter === 0 && `${filteredTeams.length} ${t("stats.teams")}`}

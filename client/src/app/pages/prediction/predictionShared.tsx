@@ -203,7 +203,7 @@ export interface UpcomingGame {
 }
 
 /** How far ahead the dropdown looks. One range call covers every team. */
-const UPCOMING_DAYS = 14;
+export const UPCOMING_DAYS = 14;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const shiftIso = (date: string, days: number) => {
@@ -212,7 +212,7 @@ const shiftIso = (date: string, days: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-function toUpcoming(g: NHLGame, teamAbbr: string): UpcomingGame {
+export function toUpcoming(g: NHLGame, teamAbbr: string): UpcomingGame {
   const homeAbbr = (g.homeTeam.abbreviation ?? "").toUpperCase();
   const awayAbbr = (g.awayTeam.abbreviation ?? "").toUpperCase();
   const isHome = homeAbbr === teamAbbr.toUpperCase();
@@ -226,6 +226,20 @@ function toUpcoming(g: NHLGame, teamAbbr: string): UpcomingGame {
     isHome,
     status: g.status,
   };
+}
+
+/**
+ * Le jour LNH (`/schedule/anchor`) et les matchs non terminés des
+ * {@link UPCOMING_DAYS} jours suivants — UN appel `/games/range` pour toutes
+ * les équipes. Partagé par `useUpcomingGames` et la commande du coupon.
+ */
+export async function fetchUpcomingWindow(): Promise<{ today: string; games: NHLGame[] }> {
+  const anchor = await nhlApiService.getScheduleAnchor().catch(() => null);
+  const today = anchor?.today && ISO_DATE.test(anchor.today)
+    ? anchor.today
+    : new Date().toISOString().slice(0, 10);
+  const all = await nhlApiService.getGamesRange(today, shiftIso(today, UPCOMING_DAYS));
+  return { today, games: all.filter(g => g.status !== "final") };
 }
 
 /**
@@ -249,13 +263,8 @@ export function useUpcomingGames(teamAbbr: string | undefined, pinnedId?: string
     (async () => {
       const abbr = teamAbbr.toUpperCase();
       try {
-        const anchor = await nhlApiService.getScheduleAnchor().catch(() => null);
-        const start = anchor?.today && ISO_DATE.test(anchor.today)
-          ? anchor.today
-          : new Date().toISOString().slice(0, 10);
-        const all = await nhlApiService.getGamesRange(start, shiftIso(start, UPCOMING_DAYS));
-        const list = all
-          .filter(g => g.status !== "final")
+        const { games } = await fetchUpcomingWindow();
+        const list = games
           .filter(g => [g.homeTeam.abbreviation, g.awayTeam.abbreviation]
             .some(a => (a ?? "").toUpperCase() === abbr))
           .map(g => toUpcoming(g, abbr));

@@ -16,6 +16,7 @@ import { useBookmaker } from "../../context/BookmakerContext";
 import { useOddsFormat } from "../../context/OddsFormatContext";
 import { BookPricePill } from "../../components/BookPricePill";
 import { useI18n } from "../../i18n";
+import { SlipCommandLauncher } from "../../components/SlipCommandSheet";
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -306,6 +307,10 @@ export function EmptySlip({ onBrowse }: { onBrowse: () => void }) {
         <p className="text-[#8a9ea6] text-xs leading-relaxed max-w-[220px]">
           {t("slip.emptyHint")}
         </p>
+      </div>
+      {/* « Construire un pari avec l'IA » au-dessus de « Browse markets » (décision du user, 2026-09-28). */}
+      <div className="w-full max-w-[280px]">
+        <SlipCommandLauncher variant="block" />
       </div>
       <button onClick={onBrowse}
         className="bg-[#86d1ea] text-[#072E49] font-bold px-6 py-3 rounded-2xl text-sm flex items-center gap-2 active:scale-95 transition-transform">

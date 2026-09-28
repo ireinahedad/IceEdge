@@ -295,6 +295,9 @@ export const parlayPredictionSchema = z.object({
     teamId:     nhlSubjectId.optional(),
     opponentId: nhlSubjectId.optional(),
     isHome:     z.boolean().optional(),
+    // Joueur / équipe / match : deux props de joueurs DIFFÉRENTS ne doivent
+    // pas passer pour contradictoires (`parlay.ts`, `differentPlayers`).
+    subjectType: z.enum(['team', 'player', 'game']).optional(),
   })).min(1, 'legs array is required').max(30, 'too many legs'),
 });
 

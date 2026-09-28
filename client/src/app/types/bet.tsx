@@ -210,9 +210,18 @@ export interface ParlayPredictionRequest {
     probability: number;
     /** Match concerné — sans lui, deux jambes du même match sont indiscernables. */
     gameId?: string;
-    /** 'over' | 'under' | 'yes' | 'no' | abréviation d'équipe | seau d'écart. */
-    selectionValue?: string;
+    /**
+     * 'over' | 'under' | 'yes' | 'no' | abréviation d'équipe | seau d'écart.
+     * `selection` et non `selectionValue` : c'est le nom que lit le serveur
+     * (le type disait `selectionValue`, le code envoyait déjà `selection`).
+     */
+    selection?: string;
     line?: number;
+    /** Sujet de la jambe (`BetLeg.subjectId`) — l'équipe pour vainqueur/handicap. */
+    teamId?: string;
+    opponentId?: string;
+    isHome?: boolean;
+    subjectType?: "team" | "player" | "game";
     // `correlation` a été retiré : le champ était envoyé, jamais lu, et servait
     // d'alibi à une docstring qui promettait une gestion des corrélations
     // inexistante. La corrélation se déduit de l'identité des jambes.

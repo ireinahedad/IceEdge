@@ -116,8 +116,8 @@ export interface SlipContext {
 export type SlipWindow = 'today' | 'tomorrow' | 'next';
 
 export type SlipFailureDetail =
-  | { kind: 'team'; candidates: string[] }
-  | { kind: 'player'; candidates: { id: string; name: string; teamAbbr: string }[] }
+  | { kind: 'team'; alias: string; candidates: string[] }
+  | { kind: 'player'; alias: string; candidates: { id: string; name: string; teamAbbr: string }[] }
   | { kind: 'line_missing'; market: SlipMarket; options: number[] }
   | { kind: 'game_missing' }
   | { kind: 'no_game'; subject: string; window: SlipWindow }
@@ -130,12 +130,25 @@ export type SlipFailureDetail =
 
 export type SlipFailureReason = 'unknown' | 'ambiguous' | 'no_game' | 'unsupported';
 
+/**
+ * Une réponse cliquable à une ambiguïté. `text` est la commande ENTIÈRE,
+ * réécrite pour lever l'ambiguïté : l'écran la renvoie telle quelle à
+ * `parseSlipCommand`. Le vocabulaire reste donc ici, pas dans l'interface.
+ */
+export type SlipChoice =
+  | { kind: 'team'; abbr: string; text: string }
+  | { kind: 'player'; id: string; name: string; teamAbbr: string; text: string }
+  | { kind: 'line'; market: SlipMarket; line: number; text: string }
+  | { kind: 'game_total'; line: number; text: string };
+
 export interface SlipFailure {
   ok: false;
   reason: SlipFailureReason;
   /** Le morceau de phrase qui a échoué (normalisé). */
   chunk: string;
   detail?: SlipFailureDetail;
+  /** Réponses cliquables, quand l'échec en admet (ambiguïté, ligne). */
+  choices?: SlipChoice[];
 }
 
 export type SlipParseResult = { ok: true; intents: SlipIntent[] } | SlipFailure;
@@ -496,18 +509,18 @@ function parseChunk(chunk: string, ctx: SlipContext, carry: Carry | null): Chunk
   const teams: string[] = [];
   for (const h of teamHits) {
     const abbrs = TEAM_ALIAS_INDEX.get(h.key) ?? [];
-    if (abbrs.length !== 1) return fail('ambiguous', { kind: 'team', candidates: [...abbrs] });
+    if (abbrs.length !== 1) return fail('ambiguous', { kind: 'team', alias: h.key, candidates: [...abbrs] });
     if (!teams.includes(abbrs[0])) teams.push(abbrs[0]);
   }
   if (teams.length > 2) return fail('unknown');
 
   // Un nom partagé se tranche par l'équipe nommée à côté (« Aho des Hurricanes »).
   const playerGroups = [
-    ...fullHits.map((h) => pidx.full.get(h.key) ?? []),
-    ...surnameHits.map((h) => pidx.surname.get(h.key) ?? []),
+    ...fullHits.map((h) => ({ key: h.key, group: pidx.full.get(h.key) ?? [] })),
+    ...surnameHits.map((h) => ({ key: h.key, group: pidx.surname.get(h.key) ?? [] })),
   ];
   const players: SlipPlayer[] = [];
-  for (const group of playerGroups) {
+  for (const { key, group } of playerGroups) {
     let cands = group;
     if (cands.length > 1) {
       const byTeam = cands.filter((p) => teams.includes(p.teamAbbr.toUpperCase()));
@@ -516,6 +529,7 @@ function parseChunk(chunk: string, ctx: SlipContext, carry: Carry | null): Chunk
     if (cands.length !== 1) {
       return fail('ambiguous', {
         kind: 'player',
+        alias: key,
         candidates: cands.map((p) => ({ id: p.id, name: p.name, teamAbbr: p.teamAbbr.toUpperCase() })),
       });
     }
@@ -688,6 +702,60 @@ function parseChunk(chunk: string, ctx: SlipContext, carry: Carry | null): Chunk
   };
 }
 
+// ── Choix cliquables ────────────────────────────────────────────────────────
+
+/** Un alias qui ne désigne QUE cette équipe (« nyr », « carolina »…). */
+function uniqueAlias(abbr: string): string {
+  const up = abbr.toUpperCase();
+  const cands = [up.toLowerCase(), ...(TEAM_ALIASES[up] ?? [])];
+  return cands.find((a) => TEAM_ALIAS_INDEX.get(a)?.length === 1) ?? up.toLowerCase();
+}
+
+/** Remplace le mot (ou groupe de mots) `key` dans le morceau. */
+const replaceWord = (chunk: string, key: string, by: string) =>
+  ` ${chunk} `.replace(` ${key} `, ` ${by} `).trim();
+
+const OU_WITH_LINE = /((?:^| )(?:over|under|plus de|moins de|au dessus de|en dessous de) )(\d{1,2}(?:\.\d{1,2})?)(?= |$)/;
+const OU_WITHOUT_LINE = /((?:^| )(?:over|under|plus de|moins de))(?= |$)/;
+
+/**
+ * Les réponses possibles à un échec, chacune sous forme de commande
+ * réécrite. Seuls les échecs qui ADMETTENT une réponse en ont : équipe ou
+ * joueur ambigu, ligne manquante ou refusée, total du match ou de l'équipe.
+ */
+function choicesFor(f: SlipFailure, chunks: readonly string[], i: number, ctx: SlipContext): SlipChoice[] {
+  const chunk = chunks[i];
+  const withChunk = (c: string) => chunks.map((x, j) => (j === i ? c : x)).join(' et ');
+  const lineChoices = (market: SlipMarket, re: RegExp, lines: readonly number[]): SlipChoice[] =>
+    lines.map((line) => ({ kind: 'line' as const, market, line, text: withChunk(chunk.replace(re, (_m, pre: string) => `${pre}${re === OU_WITHOUT_LINE ? ' ' : ''}${line}`)) }));
+  const d = f.detail;
+  if (!d) return [];
+  switch (d.kind) {
+    case 'team':
+      return d.candidates.map((abbr) => ({ kind: 'team' as const, abbr, text: withChunk(replaceWord(chunk, d.alias, uniqueAlias(abbr))) }));
+    case 'player':
+      return d.candidates.map((p) => ({
+        kind: 'player' as const, ...p,
+        text: withChunk(replaceWord(chunk, d.alias, `${normalizeName(p.name)} ${uniqueAlias(p.teamAbbr)}`)),
+      }));
+    case 'line_missing':
+      return lineChoices(d.market, OU_WITHOUT_LINE, d.options);
+    case 'line':
+      return lineChoices(d.market, OU_WITH_LINE, d.options);
+    case 'total_scope': {
+      const g = ctx.games.find((x) => x.id === d.gameId);
+      if (!g) return [];
+      const opp = g.homeAbbr.toUpperCase() === d.team.toUpperCase() ? g.awayAbbr : g.homeAbbr;
+      return [
+        { kind: 'game_total', line: d.line, text: withChunk(`${chunk} ${uniqueAlias(opp)}`) },
+        ...lineChoices('team_total_goals', OU_WITH_LINE, ctx.lines.team_total_goals ?? []),
+      ];
+    }
+    default:
+      return [];
+  }
+}
+
 /**
  * Analyse une commande complète. Tout ou rien : si un morceau échoue, la
  * phrase entière échoue (on n'ajoute pas la moitié d'une demande), avec la
@@ -711,9 +779,12 @@ export function parseSlipCommand(text: string, ctx: SlipContext): SlipParseResul
   const intents: SlipIntent[] = [];
   const seen = new Set<string>();
   let carry: Carry | null = null;
-  for (const chunk of chunks) {
+  for (const [i, chunk] of chunks.entries()) {
     const r = parseChunk(chunk, ctx, carry);
-    if (!r.ok) return r;
+    if (!r.ok) {
+      const choices = choicesFor(r, chunks, i, ctx);
+      return choices.length ? { ...r, choices } : r;
+    }
     const key = [r.intent.subjectType, r.intent.subjectId, r.intent.marketType, r.intent.selection, r.intent.line ?? '', r.intent.gameId].join('|');
     if (!seen.has(key)) { seen.add(key); intents.push(r.intent); }
     carry = r.carry;

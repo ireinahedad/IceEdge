@@ -51,7 +51,9 @@ export async function submitSlip(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? `Submit failed (${res.status})`);
+    // `code` porté sur l'erreur : l'écran traduit les refus qu'il connaît
+    // (`GAME_STARTED`) au lieu d'afficher le message anglais du serveur.
+    throw Object.assign(new Error(err.error ?? `Submit failed (${res.status})`), { code: err.code });
   }
   return res.json();
 }

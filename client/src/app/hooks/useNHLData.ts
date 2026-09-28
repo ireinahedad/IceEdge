@@ -102,7 +102,7 @@ function toUITeam(t: any): UITeam {
   };
 }
 
-function toUIGame(g: any): UIGame {
+export function toUIGame(g: any): UIGame {
   return {
     id:        g.id,
     date:      formatDate(g.gameDate),

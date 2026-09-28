@@ -2,7 +2,10 @@
 
 > Rédigé le 2026-09-28. Décisions du user prises le même jour (§ 1).
 > **Avancement :** étape 1 livrée le 2026-09-28 (`server/src/services/slipCommand.ts` +
-> `slipCommand.test.ts`, 243 tests verts, non commitée). Étapes 2 à 5 à faire.
+> `slipCommand.test.ts`, 243 tests verts). Étape 2 livrée le 2026-09-28
+> (`client/src/app/services/buildLeg.ts`, feuille branchée dessus, 0 écart sur 20 cas).
+> Étape 3 livrée le 2026-09-28 (bouton « Construire un pari avec l'IA », analyseur seul,
+> vérifiée dans un navigateur headless). Étapes 4 et 5 à faire.
 
 Le joueur tape « Canadien gagne ce soir », « Suzuki over 2.5 tirs » ou « Habs ML et over 6.5 »,
 et la jambe apparaît dans son coupon. Il ne fait que confirmer, puis verrouiller comme d'habitude.
@@ -171,6 +174,30 @@ Aujourd'hui, la construction d'une jambe vit **dans** `MarketSelectorSheet.tsx`
 - **Contrôle de non-régression** : ajouter à la main puis par commande la même jambe (équipe,
   match, joueur) et comparer les deux objets `BetLeg` champ par champ.
 
+**Livré (2026-09-28) — décisions du user :**
+- Le doublon est contrôlé **dans** `buildLeg` (`deps.hasLeg`), avant l'appel au modèle :
+  `{ ok: false, reason: 'duplicate' }` sans appel réseau. Signature :
+  `buildLeg({ subject, market, selection, line, game, playerGameId? }, { players, games, getTeamById, hasLeg })`.
+- **Match d'un pari joueur — corrigé le 2026-09-28** (décisions du user). Avant, la feuille
+  le cherchait dans `useNHLData().games`, qui ne porte que la soirée du jour : un joueur qui
+  jouait demain partait sans `gameId` et sa jambe ne se réglait jamais. Désormais un pari
+  joueur se traite comme un pari d'équipe :
+  - la feuille affiche le même sélecteur de match (14 jours, `useUpcomingGames` sur
+    l'équipe du joueur), présélectionné sur le prochain ;
+  - sans match à venir, « Ajouter au coupon » est désactivé (clé i18n
+    `mkt.noUpcomingGamePlayer`) ;
+  - le match entre dans l'id de la jambe (Suzuki ce soir ≠ Suzuki demain), dans son
+    `gameId` et dans sa ligne d'affiche (« vs TOR · date · heure ») ;
+  - la requête au modèle d'un pari joueur est INCHANGÉE (ni adversaire ni côté).
+  Signature finale : `buildLeg({ subject, market, selection, line, game }, { players, getTeamById, hasLeg })`
+  — `game` sert à l'équipe ET au joueur ; plus de `playerGameId` ni de `deps.games`. La
+  commande (étape 3) fournira donc un `UpcomingGame` pour les deux.
+- Non-régression vérifiée hors navigateur : l'ancien `handleAdd`, collé tel quel, et le
+  nouveau tournent sur 20 cas (équipe, match, joueur, doublon, prédiction indisponible)
+  avec un modèle simulé : jambes, requêtes au modèle, fermeture et message identiques.
+  Un bug volontaire (côté domicile inversé) est bien attrapé (7 écarts). La comparaison
+  « feuille contre commande » se fera à l'étape 3.
+
 ---
 
 ## 5. Étape B — renfort LLM
@@ -230,6 +257,35 @@ sous celui d'`explain_bet`. `LLM_REASONING_EFFORT=none` suffit : c'est de l'extr
   jambe déjà dans le coupon.
 - Toutes les chaînes en i18n fr / en. Aucun chiffre en dur dans les traductions.
 - Hors saison : sans match à venir, le champ affiche un état vide clair au lieu d'échouer.
+
+**Livré (2026-09-28) — décisions du user :**
+- Pas de champ permanent : un bouton **« Construire un pari avec l'IA »** (sans emoji) qui
+  ouvre une feuille (`components/SlipCommandSheet.tsx`, même gabarit que « + Ajouter »).
+  Il est placé :
+  - en haut de la page **Stats**, sur les trois onglets ;
+  - sur **Coupon** : au-dessus de « Browse markets » quand le coupon est vide
+    (`EmptySlip`), puis à côté de « + Ajouter » une fois le coupon rempli.
+- Chaque jambe ajoutée laisse une ligne « ✓ … Annuler » sous le champ, jusqu'à la
+  commande suivante.
+- **Choix cliquables** pour les ambiguïtés. C'est l'analyseur qui les fournit
+  (`SlipFailure.choices`, `SlipChoice.text` = commande réécrite à ré-analyser) : équipe
+  (`New York` → Rangers / Islanders), joueur (`Hughes` → 3 boutons, passage par la ville,
+  « carolina », quand l'abréviation est un mot courant), ligne manquante ou refusée,
+  total du match ou de l'équipe.
+- Phrase à plusieurs paris : **ce qui marche est ajouté**, le reste est signalé (doublon,
+  probabilité indisponible).
+- Données : `hooks/useSlipCommandData.ts`, chargé à l'ouverture de la feuille ; un seul
+  appel `/games/range` sur 14 jours via `fetchUpcomingWindow()` (partagé avec
+  `useUpcomingGames`, même comportement). Intention → jambe : `services/slipCommandLegs.ts`,
+  qui passe par `teamSubject` / `playerSubject` / `gameSubject` + `buildLeg`, exactement
+  comme la feuille.
+- `vite.config.ts` autorise `slipCommand.ts` et `oddsTeamNames.ts` dans `server.fs.allow`.
+- Vérifié : 251 tests serveur (dont 8 sur les choix cliquables) ; typecheck client ;
+  builds web et iOS ; banc Playwright sur la vraie feuille, avec API LNH simulée
+  (14 contrôles : ajout, Annuler, phrase double, Hughes, total du match, doublon,
+  pari indisponible, négation, pas de match ce soir, ligne manquante, 16 px) ; et le
+  contrôle du § 4 : feuille « + Ajouter » contre commande, **jambes identiques champ
+  par champ** (équipe ce soir, joueur ce soir, joueur demain).
 
 ---
 

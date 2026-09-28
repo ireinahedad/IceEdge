@@ -66,6 +66,19 @@ export interface ParlayLeg {
   /** 'over' | 'under' | 'yes' | 'no' | abréviation d'équipe | seau d'écart. */
   selection?: string;
   line?:           number;
+  /**
+   * Sur QUOI porte la jambe : l'abréviation de l'équipe, l'identifiant du
+   * joueur… (le `subjectId` du coupon). Ajouté le 2026-09-28.
+   *
+   * La sélection seule ne le dit pas toujours. « MTL +1.5 » est déclaré comme
+   * « TOR −1.5, non » (voir `nhlPredictions.ts`) : sa sélection vaut `no`, et
+   * sans l'équipe, « MTL −1.5 » + « TOR +1.5 » passaient pour deux paris sans
+   * rapport (21 % affichés pour une combinaison impossible). Même chose pour
+   * le « yes » du sélecteur de marché.
+   */
+  subject?: string;
+  /** Joueur, équipe ou match — sert à ne pas confondre deux joueurs. */
+  subjectType?: 'team' | 'player' | 'game';
 }
 
 export interface ParlayResult<L extends ParlayLeg = ParlayLeg> {
@@ -85,7 +98,14 @@ export interface ParlayResult<L extends ParlayLeg = ParlayLeg> {
   assumesIndependence: boolean;
 }
 
-/** Marchés binaires oui/non : les deux côtés s'excluent. */
+/**
+ * Marchés binaires oui/non : les deux côtés s'excluent.
+ *
+ * `puck_line` y reste pour les jambes SANS équipe connue (anciens coupons,
+ * appelants qui n'envoient pas `subject`). Dès que les deux jambes nomment
+ * leur équipe, c'est `teamMargin` qui tranche — et lui ne confond pas « MTL
+ * −1.5, oui » avec « TOR −1.5, non », qui sont compatibles.
+ */
 const BINARY_MARKETS = new Set([
   'both_teams_score', 'clean_sheet', 'game_to_ot',
   'puck_line', 'team_pp_goals', 'team_penalty_kill',
@@ -124,6 +144,104 @@ function overUnderSide(leg: ParlayLeg): 'over' | 'under' | null {
   return null;
 }
 
+// ─── Vainqueur et handicap : une seule forme, l'écart final ─────────────────
+//
+// Moneyline et puck line (±1.5, ±2.5…) se règlent sur le score FINAL,
+// prolongation comprise (`settlement.service.ts`). Chaque jambe est donc un
+// ensemble d'écarts finaux d'UNE équipe pour lesquels elle gagne :
+//
+//     « T gagne »          → écart de T ≥ 1
+//     « T −1.5 »           → écart de T ≥ 2
+//     « T −1.5, non »      → écart de T ≤ 1   (= l'adversaire +1.5)
+//     « T +1.5 »           → écart de T ≥ −1
+//
+// Vue depuis l'adversaire, l'écart change de signe. Deux jambes du même match
+// se comparent donc exactement : ensembles disjoints → incompatibles, l'un
+// inclus dans l'autre → implication, égaux → même pari. Un écart final n'est
+// jamais nul en LNH (la fusillade départage), d'où le retrait du 0.
+//
+// Rien n'est deviné : sans équipe lisible, sans demi-ligne (une ligne entière
+// peut faire « push »), ou avec plus de deux équipes sur un même match (donnée
+// incohérente), la jambe n'a pas de forme et les règles d'origine s'appliquent.
+
+interface TeamMargin { team: string; lo: number; hi: number }
+
+const NOT_A_TEAM = new Set(['yes', 'no', 'oui', 'non', 'true', 'false', 'over', 'under', 'draw', 'home', 'away']);
+
+/** L'équipe nommée par la jambe : la sélection si c'en est une, sinon le sujet. */
+function legTeam(leg: ParlayLeg): string | null {
+  const isTeam = (v: string) => /^[a-z]{2,4}$/.test(v) && !NOT_A_TEAM.has(v);
+  const sel = norm(leg.selection);
+  if (isTeam(sel)) return sel;
+  if (sel && !POSITIVE.has(sel) && !NEGATIVE.has(sel)) return null;
+  const subj = norm(leg.subject);
+  return isTeam(subj) ? subj : null;
+}
+
+function teamMargin(leg: ParlayLeg): TeamMargin | null {
+  if (leg.marketType !== 'moneyline' && leg.marketType !== 'puck_line') return null;
+  const team = legTeam(leg);
+  if (!team) return null;
+  const negative = NEGATIVE.has(norm(leg.selection));
+  if (leg.marketType === 'moneyline') {
+    return negative ? null : { team, lo: 1, hi: Infinity };
+  }
+  const line = leg.line ?? -1.5;               // −1.5 par défaut, comme au règlement
+  if (!Number.isFinite(line) || Math.abs(line % 1) !== 0.5) return null;
+  const k = Math.floor(-line) + 1;             // couvre ⇔ écart ≥ k
+  return negative ? { team, lo: -Infinity, hi: k - 1 } : { team, lo: k, hi: Infinity };
+}
+
+/** Écarts entiers [lo, hi], le 0 retiré des bornes. `null` si vide. */
+function interval(lo: number, hi: number): { lo: number; hi: number } | null {
+  if (lo === 0) lo = 1;
+  if (hi === 0) hi = -1;
+  return lo <= hi ? { lo, hi } : null;
+}
+
+/** `b` exprimé dans l'écart de l'équipe de `a`. */
+function alignTo(a: TeamMargin, b: TeamMargin): { lo: number; hi: number } {
+  return a.team === b.team ? { lo: b.lo, hi: b.hi } : { lo: -b.hi, hi: -b.lo };
+}
+
+function marginsExclusive(a: TeamMargin, b: TeamMargin): boolean {
+  const bb = alignTo(a, b);
+  return interval(Math.max(a.lo, bb.lo), Math.min(a.hi, bb.hi)) === null;
+}
+
+/** a ⊆ b */
+function marginImplies(a: TeamMargin, b: TeamMargin): boolean {
+  const A = interval(a.lo, a.hi);
+  const B = interval(alignTo(a, b).lo, alignTo(a, b).hi);
+  return !!A && !!B && A.lo >= B.lo && A.hi <= B.hi;
+}
+
+/**
+ * Deux joueurs DIFFÉRENTS : leurs props ne se touchent pas. « Suzuki plus de
+ * 2,5 tirs » et « Caufield moins de 2,5 tirs » partagent marché, ligne et
+ * match — sans le sujet, ils passaient pour contradictoires (coupon à 0 %).
+ */
+function differentPlayers(a: ParlayLeg, b: ParlayLeg): boolean {
+  return a.subjectType === 'player' && b.subjectType === 'player'
+      && !!a.subject && !!b.subject && norm(a.subject) !== norm(b.subject);
+}
+
+/** Forme « écart » de chaque jambe, neutralisée sur un match à plus de deux équipes. */
+function marginsOf(legs: ParlayLeg[]): Map<ParlayLeg, TeamMargin> {
+  const out = new Map<ParlayLeg, TeamMargin>();
+  const teams = new Map<string, Set<string>>();
+  for (const l of legs) {
+    const m = l.gameId ? teamMargin(l) : null;
+    if (!m) continue;
+    out.set(l, m);
+    const set = teams.get(l.gameId!) ?? new Set<string>();
+    set.add(m.team);
+    teams.set(l.gameId!, set);
+  }
+  for (const [l] of out) if ((teams.get(l.gameId!)?.size ?? 0) > 2) out.delete(l);
+  return out;
+}
+
 /** Nom du marché sans le suffixe de côté, pour comparer deux jambes O/U. */
 function baseMarket(m: string): string {
   return m.replace(/_(over|under)$/, '');
@@ -133,8 +251,12 @@ function baseMarket(m: string): string {
  * Les deux jambes portent-elles sur des issues qui ne peuvent pas coexister ?
  * Seules les exclusions DÉMONTRABLES figurent ici — pas d'intuition.
  */
-function mutuallyExclusive(a: ParlayLeg, b: ParlayLeg): boolean {
+function mutuallyExclusive(a: ParlayLeg, b: ParlayLeg, m: Map<ParlayLeg, TeamMargin>): boolean {
   if (!a.gameId || a.gameId !== b.gameId) return false;
+  if (differentPlayers(a, b)) return false;
+
+  const ma = m.get(a), mb = m.get(b);
+  if (ma && mb) return marginsExclusive(ma, mb);
 
   // Même ligne O/U, côtés opposés : l'un est la négation de l'autre.
   const sa = overUnderSide(a), sb = overUnderSide(b);
@@ -154,7 +276,10 @@ function mutuallyExclusive(a: ParlayLeg, b: ParlayLeg): boolean {
   }
 
   // Deux équipes différentes sur un marché à vainqueur unique.
-  if (a.marketType === 'moneyline' || a.marketType === 'regulation_result' ||
+  // `moneyline` n'y est plus : deux équipes lisibles sont tranchées plus haut
+  // par `teamMargin`, et sans équipe lisible (« yes » sans sujet) comparer les
+  // sélections affichait 0 % pour « yes » contre « tor » — le même pari.
+  if (a.marketType === 'regulation_result' ||
       a.marketType === 'ot_winner' || /^period[123]_winner$/.test(a.marketType)) {
     return va !== vb;
   }
@@ -174,8 +299,11 @@ function mutuallyExclusive(a: ParlayLeg, b: ParlayLeg): boolean {
  * jambes anonymes sont donc traitées comme distinctes : c'est le comportement
  * prudent, et l'ancien.
  */
-function sameLeg(a: ParlayLeg, b: ParlayLeg): boolean {
+function sameLeg(a: ParlayLeg, b: ParlayLeg, m: Map<ParlayLeg, TeamMargin>): boolean {
   if (!a.gameId || a.gameId !== b.gameId) return false;
+  if (differentPlayers(a, b)) return false;
+  const ma = m.get(a), mb = m.get(b);
+  if (ma && mb) return marginImplies(ma, mb) && marginImplies(mb, ma);
   return a.marketType === b.marketType
       && norm(a.selection) === norm(b.selection)
       && a.line === b.line;
@@ -188,14 +316,25 @@ function sameLeg(a: ParlayLeg, b: ParlayLeg): boolean {
  *  - gagner par 2+ buts implique gagner ; gagner en 60 minutes implique gagner ;
  *  - un total « plus de 6,5 » implique « plus de 5,5 ».
  */
-function implies(a: ParlayLeg, b: ParlayLeg): boolean {
+function implies(a: ParlayLeg, b: ParlayLeg, m: Map<ParlayLeg, TeamMargin>): boolean {
   if (!a.gameId || a.gameId !== b.gameId) return false;
+  if (differentPlayers(a, b)) return false;
   const va = norm(a.selection), vb = norm(b.selection);
 
+  // Vainqueur / handicap entre eux : l'inclusion des écarts, rien d'autre.
+  const ma = m.get(a), mb = m.get(b);
+  if (ma && mb) return marginImplies(ma, mb);
+
+  // Gagner en réglementaire, c'est gagner — l'équipe lue par `legTeam`, pour
+  // qu'un « yes » du sélecteur de marché se reconnaisse aussi.
+  if (b.marketType === 'moneyline' && a.marketType === 'regulation_result') {
+    const ta = legTeam(a), tb = legTeam(b);
+    if (ta && ta === tb) return true;
+  }
+
   if (b.marketType === 'moneyline' && va && va === vb) {
-    // Couvrir −1,5 ou gagner en réglementaire, c'est gagner.
+    // Chemin des jambes sans équipe lisible (anciens coupons).
     if (a.marketType === 'puck_line' && !NEGATIVE.has(va)) return true;
-    if (a.marketType === 'regulation_result') return true;
   }
 
   const sa = overUnderSide(a), sb = overUnderSide(b);
@@ -225,10 +364,12 @@ export function combineParlayLegs<L extends ParlayLeg>(legs: L[]): ParlayResult<
     return { ...none, legs, probability: NaN };
   }
 
+  const m = marginsOf(legs);
+
   // 1. Incompatibilité — la seule réponse est zéro.
   for (let i = 0; i < legs.length; i++) {
     for (let j = i + 1; j < legs.length; j++) {
-      if (mutuallyExclusive(legs[i], legs[j])) {
+      if (mutuallyExclusive(legs[i], legs[j], m)) {
         return { legs: [], probability: 0, impossible: true, redundantLegs: 0, assumesIndependence: false };
       }
     }
@@ -238,11 +379,11 @@ export function combineParlayLegs<L extends ParlayLeg>(legs: L[]): ParlayResult<
   const kept: L[] = [];
   let redundant = 0;
   for (const leg of legs) {
-    const dupe = kept.findIndex(k => sameLeg(k, leg));
+    const dupe = kept.findIndex(k => sameLeg(k, leg, m));
     if (dupe >= 0) { redundant++; continue; }
-    const implied = kept.findIndex(k => implies(leg, k));
+    const implied = kept.findIndex(k => implies(leg, k, m));
     if (implied >= 0) { kept[implied] = leg; redundant++; continue; }
-    if (kept.some(k => implies(k, leg))) { redundant++; continue; }
+    if (kept.some(k => implies(k, leg, m))) { redundant++; continue; }
     kept.push(leg);
   }
 

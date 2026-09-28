@@ -331,7 +331,7 @@ describe('lignes autorisées', () => {
     expect(parse('Montembeault over 27.5 arrets')).toMatchObject({ ok: false, reason: 'unsupported', detail: { kind: 'line', line: 27.5 } });
   });
   it('« Habs over 6.5 » : ligne du total du MATCH sur une équipe → on demande lequel (décision du 2026-09-28)', () => {
-    expect(parse('Habs over 6.5')).toEqual({
+    expect(parse('Habs over 6.5')).toMatchObject({
       ok: false, reason: 'ambiguous', chunk: 'habs over 6.5',
       detail: { kind: 'total_scope', team: 'MTL', line: 6.5, gameId: 'g-mtl-tor' },
     });
@@ -481,6 +481,76 @@ describe('validateIntent', () => {
     ];
     for (const text of phrases) {
       for (const i of intents(parse(text))) expect(validateIntent(i, ctx)).toEqual({ ok: true, intent: i });
+    }
+  });
+});
+
+// ── Choix cliquables (étape 3) ──────────────────────────────────────────────
+
+describe('choix cliquables : chaque choix, ré-analysé, lève l\'ambiguïté', () => {
+  const choicesOf = (text: string) => {
+    const r = parse(text);
+    if (r.ok) throw new Error('échec attendu');
+    return r.choices ?? [];
+  };
+
+  it('« Hughes » : un choix par Hughes, chacun donne SON joueur', () => {
+    const cs = choicesOf('Hughes over 0.5 passes');
+    expect(cs.map((c) => c.kind === 'player' && c.id).sort()).toEqual(['6', '7', '8']);
+    for (const c of cs) {
+      if (c.kind !== 'player') throw new Error(c.kind);
+      expect(one(c.text)).toMatchObject({ subjectType: 'player', subjectId: c.id, marketType: 'assists_ou', line: 0.5 });
+    }
+  });
+
+  it('« Sebastian Aho » : le choix de Carolina passe par « carolina », pas par « car »', () => {
+    const cs = choicesOf('Sebastian Aho marque');
+    const car = cs.find((c) => c.kind === 'player' && c.teamAbbr === 'CAR')!;
+    expect(car.text).toContain('carolina');
+    expect(one(car.text).subjectId).toBe('9');
+    const nyi = cs.find((c) => c.kind === 'player' && c.teamAbbr === 'NYI')!;
+    expect(one(nyi.text).subjectId).toBe('10');
+  });
+
+  it('« New York gagne » : Rangers ou Islanders', () => {
+    const cs = choicesOf('New York gagne');
+    expect(cs.map((c) => c.kind === 'team' && c.abbr).sort()).toEqual(['NYI', 'NYR']);
+    const nyr = cs.find((c) => c.kind === 'team' && c.abbr === 'NYR')!;
+    expect(one(nyr.text)).toMatchObject({ subjectId: 'nyr', marketType: 'moneyline', gameId: 'g-bos-nyr' });
+  });
+
+  it('ligne manquante : une ligne par option, chacune valide', () => {
+    const cs = choicesOf('Suzuki over tirs');
+    expect(cs.map((c) => c.kind === 'line' && c.line)).toEqual([1.5, 2.5, 3.5, 4.5, 5.5]);
+    for (const c of cs) expect(one(c.text)).toMatchObject({ marketType: 'shots_ou', selection: 'over', line: (c as { line: number }).line });
+  });
+
+  it('ligne refusée : les lignes permises, qui passent', () => {
+    const cs = choicesOf('Montembeault over 27.5 arrets');
+    expect(cs).toHaveLength(6);
+    expect(one(cs[2].text)).toMatchObject({ marketType: 'goalie_saves_ou', line: 24.5 });
+  });
+
+  it('« Habs over 6.5 » : total du match, ou une ligne du total des Canadiens', () => {
+    const cs = choicesOf('Habs over 6.5');
+    expect(cs[0]).toMatchObject({ kind: 'game_total', line: 6.5 });
+    expect(one(cs[0].text)).toMatchObject({ subjectType: 'game', marketType: 'total_goals', line: 6.5, gameId: 'g-mtl-tor' });
+    const teamLines = cs.slice(1);
+    expect(teamLines.map((c) => c.kind === 'line' && c.line)).toEqual([1.5, 2.0, 2.5, 3.0, 3.5]);
+    expect(one(teamLines[2].text)).toMatchObject({ subjectType: 'team', marketType: 'team_total_goals', selection: 'over', line: 2.5 });
+  });
+
+  it('dans une phrase double, le choix garde l\'autre morceau', () => {
+    const cs = choicesOf('Habs ML et Hughes marque');
+    const quinn = cs.find((c) => c.kind === 'player' && c.id === '8')!;
+    expect(intents(parse(quinn.text)).map((i) => [i.marketType, i.subjectId])).toEqual([['moneyline', 'mtl'], ['anytime_goal', '8']]);
+  });
+
+  it('pas de choix quand il n\'y a rien à choisir', () => {
+    for (const text of ['Dallas gagne', 'over 6.5', 'Suzuki over 26.5 arrets', 'bonjour']) {
+      const r = parse(text);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.choices).toBeUndefined();
     }
   });
 });

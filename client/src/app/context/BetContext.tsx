@@ -139,8 +139,18 @@ function combineLegs(legs: BetLeg[]): number | null {
     marketType:     l.marketType,
     probability:    l.probability,
     gameId:         l.gameId,
-    selectionValue: l.selectionValue,
+    // ⚠️ `parlay.ts` lit `selection`, pas `selectionValue` (corrigé le
+    // 2026-09-28). Sous l'ancien nom, le champ n'arrivait jamais : toutes les
+    // jambes d'un même match, d'un même marché et d'une même ligne passaient
+    // pour DOUBLONS — « MTL gagne » + « TOR gagne » affichait 58 % au lieu de
+    // « impossible », et « plus de 5,5 » + « moins de 5,5 » pareil.
+    selection:      l.selectionValue,
     line:           l.line,
+    // L'équipe (ou le joueur) du pari : « MTL +1.5 » est déclaré « TOR −1.5,
+    // non », la sélection seule ne dit pas de qui on parle. Voir
+    // `ParlayLeg.subject` dans parlay.ts.
+    subject:        l.subjectId,
+    subjectType:    l.subjectType,
   })));
 
   if (!Number.isFinite(r.probability)) return null;
@@ -153,8 +163,15 @@ function analyseSlip(legs: BetLeg[]) {
     marketType:     l.marketType,
     probability:    l.probability,
     gameId:         l.gameId,
-    selectionValue: l.selectionValue,
+    // ⚠️ `parlay.ts` lit `selection`, pas `selectionValue` (corrigé le
+    // 2026-09-28). Sous l'ancien nom, le champ n'arrivait jamais : toutes les
+    // jambes d'un même match, d'un même marché et d'une même ligne passaient
+    // pour DOUBLONS — « MTL gagne » + « TOR gagne » affichait 58 % au lieu de
+    // « impossible », et « plus de 5,5 » + « moins de 5,5 » pareil.
+    selection:      l.selectionValue,
     line:           l.line,
+    subject:        l.subjectId,
+    subjectType:    l.subjectType,
   })));
 }
 
@@ -209,6 +226,7 @@ export function BetProvider({ children }: { children: React.ReactNode }) {
           teamId: l.subjectId,
           opponentId: l.opponentId,
           isHome: l.isHome,
+          subjectType: l.subjectType,
         })),
       })
       // Le serveur peut dire « je n'ai pas pu » : on garde alors le local.

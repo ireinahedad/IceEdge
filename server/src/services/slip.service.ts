@@ -169,10 +169,38 @@ const LOCKS_AT_CONCURRENCY = 6;
  * Résoudre une PARTIE des matchs reste sûr : le minimum d'un sous-ensemble est
  * ≥ le vrai minimum, donc le coupon se dévoile plus TARD, jamais plus tôt —
  * le même sens que le `null`.
+ *
+ * ── Matchs déjà commencés (2026-09-28) ─────────────────────────────────────
+ *
+ * La même lecture dit aussi quels matchs ont COMMENCÉ, et `submitSlip` refuse
+ * alors le coupon. Sans ça, une jambe posée en plein match gardait sa
+ * probabilité d'AVANT-match : « MTL gagne » à 40 % quand MTL mène 4-0 en 3e
+ * rapportait (100 − 40) × 2 = 120 XP presque à coup sûr (`xpForOutcome`).
+ * Décision du user : pas de pari en direct, et le refus vit ICI, au serveur,
+ * pour fermer aussi les autres chemins (page du match, requête forgée).
+ *
+ * « Commencé » = heure de mise au jeu PRÉVUE atteinte, ou statut live/final.
+ * L'heure prévue et non le vrai coup d'envoi (quelques minutes plus tard) :
+ * c'est déjà l'instant où `locks_at` dévoile le coupon, les deux règles
+ * parlent donc du même moment.
+ *
+ * ⚠️ Ouvert en cas de panne, À DESSEIN : un match non résolu dans le budget
+ * n'est pas refusé — même principe que plus haut, l'insertion n'est pas
+ * l'otage de l'API NHL. La fenêtre qui reste (API NHL en panne pendant un
+ * match) est étroite ; la fermer bloquerait tous les coupons pendant la panne.
  */
-async function resolveLocksAt(legs: SlipLeg[]): Promise<Date | null> {
+function gameHasStarted(game: any, now: number): boolean {
+  const status = String(game?.status ?? '').toLowerCase();
+  if (status === 'live' || status === 'final') return true;
+  const ms = game?.startTimeUTC ? new Date(game.startTimeUTC).getTime() : NaN;
+  return Number.isFinite(ms) && ms <= now;
+}
+
+async function resolveLocksAt(legs: SlipLeg[]): Promise<{ locksAt: Date | null; startedGameIds: string[] }> {
   const gameIds = [...new Set(legs.map((l) => l.gameId).filter(Boolean) as string[])];
-  if (!gameIds.length) return null;
+  if (!gameIds.length) return { locksAt: null, startedGameIds: [] };
+  const now = Date.now();
+  const startedGameIds: string[] = [];
 
   // Objet plutôt que deux `let` : l'analyse de flot de TypeScript réduirait un
   // `let earliest: number | null = null` à `null` après la déclaration, sans
@@ -183,6 +211,7 @@ async function resolveLocksAt(legs: SlipLeg[]): Promise<Date | null> {
   const work = mapLimit(gameIds, LOCKS_AT_CONCURRENCY, async (id) => {
     try {
       const game = await fetchGameById(id);
+      if (gameHasStarted(game, now)) startedGameIds.push(id);
       const ms = game?.startTimeUTC ? new Date(game.startTimeUTC).getTime() : NaN;
       if (Number.isFinite(ms)) {
         acc.resolved++;
@@ -209,7 +238,7 @@ async function resolveLocksAt(legs: SlipLeg[]): Promise<Date | null> {
 
   if (acc.earliest == null) {
     logger.warn({ gameIds }, '[slip] locks_at non résolu — le coupon restera masqué aux tiers jusqu\'à son règlement');
-    return null;
+    return { locksAt: null, startedGameIds };
   }
   if (acc.resolved < gameIds.length) {
     logger.warn(
@@ -217,7 +246,7 @@ async function resolveLocksAt(legs: SlipLeg[]): Promise<Date | null> {
       '[slip] locks_at partiel — verrou calculé sur les matchs résolus dans le budget (donc au plus tard, jamais au plus tôt)',
     );
   }
-  return new Date(acc.earliest);
+  return { locksAt: new Date(acc.earliest), startedGameIds };
 }
 
 export async function submitSlip(
@@ -251,7 +280,20 @@ export async function submitSlip(
     legs.reduce((acc, l) => acc * (l.probability / 100), 1) * 100;
   const combined = Number.isFinite(rawCombined) ? Math.round(rawCombined) : null;
 
-  const locksAt = await resolveLocksAt(legs);
+  const { locksAt, startedGameIds } = await resolveLocksAt(legs);
+
+  // Pas de pari sur un match commencé — voir l'en-tête de `resolveLocksAt`.
+  // `code` traverse `sendError` : le client le traduit (`slip.gameStarted`).
+  if (startedGameIds.length) {
+    const started = new Set(startedGameIds);
+    const names = legs
+      .filter((l) => l.gameId && started.has(l.gameId))
+      .map((l) => l.selection ?? l.marketType);
+    throw Object.assign(
+      new Error(`Game already started: ${names.join(', ')}`),
+      { status: 409, code: 'GAME_STARTED' },
+    );
+  }
 
   const { rows } = await pool.query<{ id: string }>(
     `INSERT INTO bet_slips
