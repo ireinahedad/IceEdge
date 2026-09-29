@@ -13,7 +13,8 @@ import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { nhlApiService } from "../../services/nhlApiService";
 import type { AllTeamsSeason, GameDetail, GameSide, GameTeamStats, GameSkaterLine, GameGoalieLine } from "../../services/nhlApiService";
-import { BG_CARD, BG_CELL, DASH, sign, svpct } from "./chartsTheme";
+import { BG_CARD, sign, svpct } from "./chartsTheme";
+import { COMPARE_B_COLOR, CompareRow } from "./ChartVisuals";
 
 /* ── Single game ────────────────────────────────────────────
  * Header tells you at a glance whether it's done (FINAL, with OT/SO noted) or
@@ -21,38 +22,6 @@ import { BG_CARD, BG_CELL, DASH, sign, svpct } from "./chartsTheme";
  * that hasn't started has no boxscore, so it falls back to a season comparison
  * of the two clubs rather than a page of dashes.
  */
-function StatCompareRow({
-  label,
-  away,
-  home,
-  accent,
-}: {
-  label: string;
-  away: number | null;
-  home: number | null;
-  accent: string;
-}) {
-  const a = away ?? 0;
-  const h = home ?? 0;
-  const sum = a + h;
-  // Split the bar by share of the combined total; 50/50 when neither recorded any.
-  const awayPct = sum > 0 ? (a / sum) * 100 : 50;
-
-  return (
-    <div className="px-4 py-2 border-t border-white/[0.06]">
-      <div className="flex items-center justify-between text-xs mb-1">
-        <span className="tabular-nums font-semibold" style={{ color: "#facc15" }}>{away ?? DASH}</span>
-        <span className="text-[#8a9ea6]">{label}</span>
-        <span className="tabular-nums font-semibold" style={{ color: accent }}>{home ?? DASH}</span>
-      </div>
-      <div className="flex h-1.5 rounded-full overflow-hidden" style={{ background: BG_CELL }}>
-        <div style={{ width: `${awayPct}%`, background: "#facc15" }} />
-        <div style={{ width: `${100 - awayPct}%`, background: accent }} />
-      </div>
-    </div>
-  );
-}
-
 export function GameCharts({ gameId }: { gameId?: string }) {
   const { t, lang } = useI18n();
   const { theme } = useSport();
@@ -347,12 +316,11 @@ export function GameCharts({ gameId }: { gameId?: string }) {
             </span>
           </div>
           {teamStatRows.map((r) => (
-            <StatCompareRow
+            <CompareRow
               key={r.key}
-              label={r.label}
-              away={data.teamStats!.away[r.key]}
-              home={data.teamStats!.home[r.key]}
-              accent={accent}
+              item={{ key: r.key, label: r.label, left: data.teamStats!.away[r.key], right: data.teamStats!.home[r.key] }}
+              leftColor={COMPARE_B_COLOR}
+              rightColor={accent}
             />
           ))}
         </div>
@@ -428,12 +396,12 @@ export function GameCharts({ gameId }: { gameId?: string }) {
             <p className="px-4 py-6 text-center text-[#8a9ea6] text-sm">{t("chart.gm.notStarted")}</p>
           ) : (
             <>
-              <StatCompareRow label={t("chart.tm.points")}       away={awaySeason.points}       home={homeSeason.points}       accent={accent} />
-              <StatCompareRow label={t("chart.tm.wins")}         away={awaySeason.wins}         home={homeSeason.wins}         accent={accent} />
-              <StatCompareRow label={t("chart.tm.goalsFor")}     away={awaySeason.goalsFor}     home={homeSeason.goalsFor}     accent={accent} />
-              <StatCompareRow label={t("chart.tm.goalsAgainst")} away={awaySeason.goalsAgainst} home={homeSeason.goalsAgainst} accent={accent} />
-              <StatCompareRow label={t("chart.tm.ppPct")}        away={awaySeason.ppPct}        home={homeSeason.ppPct}        accent={accent} />
-              <StatCompareRow label={t("chart.tm.pkPct")}        away={awaySeason.pkPct}        home={homeSeason.pkPct}        accent={accent} />
+              <CompareRow item={{ key: "points", label: t("chart.tm.points"), left: awaySeason.points, right: homeSeason.points }} leftColor={COMPARE_B_COLOR} rightColor={accent} />
+              <CompareRow item={{ key: "wins", label: t("chart.tm.wins"), left: awaySeason.wins, right: homeSeason.wins }} leftColor={COMPARE_B_COLOR} rightColor={accent} />
+              <CompareRow item={{ key: "goalsFor", label: t("chart.tm.goalsFor"), left: awaySeason.goalsFor, right: homeSeason.goalsFor }} leftColor={COMPARE_B_COLOR} rightColor={accent} />
+              <CompareRow item={{ key: "goalsAgainst", label: t("chart.tm.goalsAgainst"), left: awaySeason.goalsAgainst, right: homeSeason.goalsAgainst }} leftColor={COMPARE_B_COLOR} rightColor={accent} />
+              <CompareRow item={{ key: "ppPct", label: t("chart.tm.ppPct"), left: awaySeason.ppPct, right: homeSeason.ppPct }} leftColor={COMPARE_B_COLOR} rightColor={accent} />
+              <CompareRow item={{ key: "pkPct", label: t("chart.tm.pkPct"), left: awaySeason.pkPct, right: homeSeason.pkPct }} leftColor={COMPARE_B_COLOR} rightColor={accent} />
             </>
           )}
         </div>

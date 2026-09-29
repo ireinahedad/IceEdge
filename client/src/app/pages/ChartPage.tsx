@@ -14,6 +14,7 @@
  *   teamSpace.tsx       navigation à l'intérieur d'un club
  *   TeamCharts · PlayerCharts · GameCharts                  vues unitaires
  *   AllTeamsCharts · AllPlayersCharts · AllGamesCharts      vues ligue
+ *   CompareCharts       joueur contre joueur, équipe contre équipe (2026-09-29)
  *
  * `ChartPage` reste le seul export public : trois routes y mènent
  * (`/stats/chart`, `/stats/chart/:type/:id?`, `/stats/chart/team/:id/:section`).
@@ -43,6 +44,7 @@ import { AllGamesCharts } from "./charts/AllGamesCharts";
 import { AllPlayersCharts } from "./charts/AllPlayersCharts";
 import { AllTeamsCharts } from "./charts/AllTeamsCharts";
 import { ChartsHome } from "./charts/ChartsHome";
+import { ComparePlayersCharts, CompareTeamsCharts } from "./charts/CompareCharts";
 import { GameCharts } from "./charts/GameCharts";
 import { PlayerCharts } from "./charts/PlayerCharts";
 import { TeamCharts } from "./charts/TeamCharts";
@@ -155,6 +157,10 @@ export function ChartPage() {
       <AllTeamsCharts />
     ) : type === "all-games" ? (
       <AllGamesCharts />
+    ) : type === "compare-players" ? (
+      <ComparePlayersCharts />
+    ) : type === "compare-teams" ? (
+      <CompareTeamsCharts />
     ) : type === "game" ? (
       <GameCharts gameId={id} />
     ) : type === "player" ? (

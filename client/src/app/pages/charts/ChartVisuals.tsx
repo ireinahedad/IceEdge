@@ -364,6 +364,107 @@ export function TeamTrendsTable({
   );
 }
 
+/* ── Comparaison face à face ──────────────────────────────
+ * Une ligne par statistique : valeur A · barre partagée · valeur B. La barre
+ * se coupe à la part de chacun dans le total des deux. Sert à la page d'un
+ * match (visiteur / domicile) et aux comparaisons joueur-joueur et
+ * équipe-équipe (2026-09-29).
+ */
+export type CompareItem = {
+  key: string;
+  label: string;
+  left: number | null;
+  right: number | null;
+  /** Texte affiché (formaté) ; à défaut, la valeur brute. */
+  leftText?: string;
+  rightText?: string;
+  /** Plus bas = meilleur (BC, MOY, défaites) : ne décide que qui est mis en avant. */
+  lowBetter?: boolean;
+};
+
+/** La couleur du côté B d'une comparaison — celle de la colonne « Comparer ». */
+export const COMPARE_B_COLOR = "#facc15";
+
+export function CompareRow({
+  item,
+  leftColor,
+  rightColor,
+  highlightBetter = false,
+}: {
+  item: CompareItem;
+  leftColor: string;
+  rightColor: string;
+  /** Estompe le moins bon des deux (comparaisons) ; la page d'un match ne juge pas. */
+  highlightBetter?: boolean;
+}) {
+  const { left: a, right: b } = item;
+  // Une valeur négative (+/-, différentiel) casserait la part : on décale les
+  // deux pour que la plus basse parte de 0. Sans effet sur des valeurs ≥ 0.
+  const floor = Math.min(0, a ?? 0, b ?? 0);
+  const av = (a ?? 0) - floor;
+  const bv = (b ?? 0) - floor;
+  const sum = av + bv;
+  // Part de chacun ; 50/50 quand aucun des deux n'a rien.
+  const leftPct = sum > 0 ? (av / sum) * 100 : 50;
+  const better =
+    !highlightBetter || a == null || b == null || a === b
+      ? null
+      : (item.lowBetter ? a < b : a > b) ? "left" : "right";
+  const dim = (side: "left" | "right") => (better && better !== side ? 0.55 : 1);
+
+  return (
+    <div className="px-4 py-2 border-t border-white/[0.06]">
+      <div className="flex items-center justify-between text-xs mb-1 gap-2">
+        <span className="tabular-nums font-semibold" style={{ color: leftColor, opacity: dim("left") }}>
+          {item.leftText ?? a ?? DASH}
+        </span>
+        <span className="text-[#8a9ea6] text-center truncate">{item.label}</span>
+        <span className="tabular-nums font-semibold" style={{ color: rightColor, opacity: dim("right") }}>
+          {item.rightText ?? b ?? DASH}
+        </span>
+      </div>
+      <div className="flex h-1.5 rounded-full overflow-hidden" style={{ background: BG_CELL }}>
+        <div style={{ width: `${leftPct}%`, background: leftColor, opacity: dim("left") }} />
+        <div style={{ width: `${100 - leftPct}%`, background: rightColor, opacity: dim("right") }} />
+      </div>
+    </div>
+  );
+}
+
+/** Carte de comparaison : titre, « A / B » en couleur, une `CompareRow` par stat. */
+export function CompareBars({
+  title,
+  leftLabel,
+  rightLabel,
+  items,
+  leftColor,
+  rightColor = COMPARE_B_COLOR,
+}: {
+  title: string;
+  leftLabel: string;
+  rightLabel: string;
+  items: CompareItem[];
+  leftColor: string;
+  rightColor?: string;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="rounded-2xl border border-white/20 overflow-hidden" style={{ background: BG_CARD }}>
+      <div className="px-4 pt-3 pb-2 border-b border-white/10 flex items-center justify-between gap-2">
+        <p className="text-white text-sm font-semibold shrink-0">{title}</p>
+        <span className="text-[11px] font-semibold min-w-0 truncate">
+          <span style={{ color: leftColor }}>{leftLabel}</span>
+          <span className="text-[#5c6f63] mx-1">/</span>
+          <span style={{ color: rightColor }}>{rightLabel}</span>
+        </span>
+      </div>
+      {items.map((it) => (
+        <CompareRow key={it.key} item={it} leftColor={leftColor} rightColor={rightColor} highlightBetter />
+      ))}
+    </div>
+  );
+}
+
 /* ── Carte de tableau : titre, squelette, état vide, défilement horizontal ── */
 function TableCard({
   title,

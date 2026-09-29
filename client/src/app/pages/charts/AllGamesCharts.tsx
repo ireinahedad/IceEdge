@@ -15,6 +15,7 @@ import { nhlApiService } from "../../services/nhlApiService";
 import type { NHLGame } from "../../types/bet";
 import { MetricChips, RowsSkeleton, SortHead } from "./ChartControls";
 import { BG_CARD, BG_CELL, DASH, SortDir, selectCls } from "./chartsTheme";
+import { formatRecord, useTeamRecords } from "./teamSpace";
 
 /* ── All games (league schedule + results) ──────────────────
  * Same shell as the other overview pages: header card with a period picker and
@@ -33,6 +34,11 @@ import { BG_CARD, BG_CELL, DASH, SortDir, selectCls } from "./chartsTheme";
  *     club et le tableau en montrerait un autre ;
  *   - un match ouvert d'ici emporte `state.fromTeam`, pour que son fil
  *     d'Ariane remonte chez le club et non vers « tous les matchs ».
+ *
+ * 2026-09-29 (demande du user) : l'équipe à DOMICILE est toujours la première
+ * de l'affiche, sous un « H » en tête de colonne, et le score suit le même
+ * ordre. La colonne Aréna est remplacée par la fiche (V-D-DP) de la saison en
+ * cours des deux clubs, dans le même ordre.
  */
 type GMetric = {
   key: string;
@@ -90,6 +96,7 @@ export function AllGamesCharts({ teamSpace }: { teamSpace?: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [sort, setSort] = useState<{ key: string; dir: SortDir }>({ key: "date", dir: "desc" });
+  const records = useTeamRecords();
 
   useEffect(() => {
     let alive = true;
@@ -202,13 +209,31 @@ export function AllGamesCharts({ teamSpace }: { teamSpace?: string }) {
   const dayLabel = (iso: string) =>
     new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale, { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 
+  // Domicile d'abord (le « H » de l'en-tête), visiteur ensuite.
   const matchupCell = (g: NHLGame) => (
     <td className="px-3 py-2.5 sticky left-0 z-10 whitespace-nowrap" style={{ background: BG_CARD }}>
-      <img src={nhlLogoUrl(g.awayTeam.abbreviation)} alt={g.awayTeam.abbreviation} className="w-4 h-4 object-contain inline-block mr-1 align-text-bottom" />
-      <span className="text-white font-medium">{g.awayTeam.abbreviation}</span>
-      <span className="text-[#5c6f63] mx-1.5">{t("schedule.at")}</span>
       <img src={nhlLogoUrl(g.homeTeam.abbreviation)} alt={g.homeTeam.abbreviation} className="w-4 h-4 object-contain inline-block mr-1 align-text-bottom" />
       <span className="text-white font-medium">{g.homeTeam.abbreviation}</span>
+      <span className="text-[#5c6f63] mx-1.5">vs</span>
+      <img src={nhlLogoUrl(g.awayTeam.abbreviation)} alt={g.awayTeam.abbreviation} className="w-4 h-4 object-contain inline-block mr-1 align-text-bottom" />
+      <span className="text-white font-medium">{g.awayTeam.abbreviation}</span>
+    </td>
+  );
+  const matchupHead = (
+    <th
+      className="text-left font-semibold px-3 py-2 sticky left-0 z-10"
+      style={{ background: BG_CARD }}
+      title={t("home.homeTeam")}
+    >
+      H
+    </th>
+  );
+  // Fiches de la saison en cours, domicile · visiteur (même ordre que l'affiche).
+  const recordsCell = (g: NHLGame) => (
+    <td className="px-3 py-2.5 text-left text-[#8a9ea6] whitespace-nowrap tabular-nums">
+      {formatRecord(records, g.homeTeam.abbreviation)}
+      <span className="text-[#5c6f63] mx-1.5">·</span>
+      {formatRecord(records, g.awayTeam.abbreviation)}
     </td>
   );
 
@@ -314,13 +339,11 @@ export function AllGamesCharts({ teamSpace }: { teamSpace?: string }) {
                 <table className="w-full border-collapse text-xs">
                   <thead>
                     <tr className="text-[#8a9ea6]">
-                      <th className="text-left font-semibold px-3 py-2 sticky left-0 z-10" style={{ background: BG_CARD }}>
-                        {t("chart.gm.matchup")}
-                      </th>
+                      {matchupHead}
                       <th className="font-semibold px-3 py-2 text-center">{t("chart.gm.date")}</th>
                       <th className="font-semibold px-3 py-2 text-center">{t("chart.gm.time")}</th>
                       <th className="font-semibold px-3 py-2 text-center">{t("chart.gm.status")}</th>
-                      <th className="font-semibold px-3 py-2 text-left whitespace-nowrap">{t("chart.gm.venue")}</th>
+                      <th className="font-semibold px-3 py-2 text-left whitespace-nowrap">{t("chart.gm.records")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -345,7 +368,7 @@ export function AllGamesCharts({ teamSpace }: { teamSpace?: string }) {
                             {statusLabel(g)}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 text-left text-[#8a9ea6] whitespace-nowrap max-w-[12rem] truncate">{g.venue || DASH}</td>
+                        {recordsCell(g)}
                       </tr>
                     ))}
                   </tbody>
@@ -368,9 +391,7 @@ export function AllGamesCharts({ teamSpace }: { teamSpace?: string }) {
                 <table className="w-full border-collapse text-xs">
                   <thead>
                     <tr className="text-[#8a9ea6]">
-                      <th className="text-left font-semibold px-3 py-2 sticky left-0 z-10" style={{ background: BG_CARD }}>
-                        {t("chart.gm.matchup")}
-                      </th>
+                      {matchupHead}
                       <th className="px-3 py-2 whitespace-nowrap">
                         <SortHead label={t("chart.gm.date")} active={metric.key === "date"} dir={sort.dir} onClick={() => toggleSort("date")} accent={accent} />
                       </th>
@@ -381,7 +402,7 @@ export function AllGamesCharts({ teamSpace }: { teamSpace?: string }) {
                       <th className="px-3 py-2 whitespace-nowrap">
                         <SortHead label={t("chart.gm.diff")} active={metric.key === "margin"} dir={sort.dir} onClick={() => toggleSort("margin")} accent={accent} />
                       </th>
-                      <th className="font-semibold px-3 py-2 text-left whitespace-nowrap">{t("chart.gm.venue")}</th>
+                      <th className="font-semibold px-3 py-2 text-left whitespace-nowrap">{t("chart.gm.records")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -399,7 +420,7 @@ export function AllGamesCharts({ teamSpace }: { teamSpace?: string }) {
                           {dayLabel(g.gameDate)}
                         </td>
                         <td className="px-3 py-2.5 text-center tabular-nums text-white whitespace-nowrap">
-                          {g.awayTeam.score} – {g.homeTeam.score}
+                          {g.homeTeam.score} – {g.awayTeam.score}
                         </td>
                         <td className="px-3 py-2.5 text-center tabular-nums" style={metric.key === "total" ? { color: accent, fontWeight: 600 } : { color: "#fff" }}>
                           {totalOf(g) ?? DASH}
@@ -407,7 +428,7 @@ export function AllGamesCharts({ teamSpace }: { teamSpace?: string }) {
                         <td className="px-3 py-2.5 text-center tabular-nums" style={metric.key === "margin" ? { color: accent, fontWeight: 600 } : { color: "#fff" }}>
                           {marginOf(g) ?? DASH}
                         </td>
-                        <td className="px-3 py-2.5 text-left text-[#8a9ea6] whitespace-nowrap max-w-[12rem] truncate">{g.venue || DASH}</td>
+                        {recordsCell(g)}
                       </tr>
                     ))}
                   </tbody>

@@ -6,7 +6,7 @@
  * seuls les imports et les mots-clés `export` ont été ajoutés.
  */
 
-import type { PlayerSeasonStat, OpponentSplit, SeriesGame } from "../../services/nhlApiService";
+import type { PlayerSeasonStat, OpponentSplit, SeriesGame, TeamSeasonRow } from "../../services/nhlApiService";
 import { DASH, SortDir, int, num2, pct1, per, sign, snum2, svpct, toiFmt } from "./chartsTheme";
 
 /* ── Metric model (player table) ───────────────────────────
@@ -210,4 +210,44 @@ export function buildGoalieExtraMetrics(t: TFn): PMetric[] {
  *  so the table only has to reverse them when the user asks for the opposite. */
 export function naturalSortDir(key: string): SortDir {
   return key === "gaa" ? "asc" : "desc";
+}
+
+/** Stats de joueur où PLUS BAS vaut mieux (comparaisons, 2026-09-29). */
+export function playerLowBetter(key: string): boolean {
+  return key === "gaa" || key === "losses" || key === "otLosses";
+}
+
+/* ── Metric model (team tables) ────────────────────────────
+ * Déplacé ici depuis AllTeamsCharts.tsx le 2026-09-29 : la comparaison
+ * équipe-équipe (CompareCharts.tsx) lit les mêmes statistiques.
+ */
+export type TMetric = {
+  key: string;
+  label: string;
+  fmt: (r: TeamSeasonRow) => string;
+  num: (r: TeamSeasonRow) => number;
+  /** Lower is better (sorts ascending by default). */
+  lowBetter?: boolean;
+};
+
+export function buildTeamMetrics(t: TFn): TMetric[] {
+  const pct = (v: number) => `${v.toFixed(1)}%`;
+  return [
+    { key: "points",       label: t("chart.tm.points"),       fmt: (r) => int(r.points),       num: (r) => r.points },
+    { key: "wins",         label: t("chart.tm.wins"),         fmt: (r) => int(r.wins),         num: (r) => r.wins },
+    { key: "losses",       label: t("chart.tm.losses"),       fmt: (r) => int(r.losses),       num: (r) => r.losses, lowBetter: true },
+    { key: "otLosses",     label: t("chart.tm.otLosses"),     fmt: (r) => int(r.otLosses),     num: (r) => r.otLosses, lowBetter: true },
+    { key: "pointPct",     label: t("chart.tm.pointPct"),     fmt: (r) => pct(r.pointPct),     num: (r) => r.pointPct },
+    { key: "goalsFor",     label: t("chart.tm.goalsFor"),     fmt: (r) => int(r.goalsFor),     num: (r) => r.goalsFor },
+    { key: "goalsAgainst", label: t("chart.tm.goalsAgainst"), fmt: (r) => int(r.goalsAgainst), num: (r) => r.goalsAgainst, lowBetter: true },
+    { key: "goalDiff",     label: t("chart.tm.goalDiff"),     fmt: (r) => sign(r.goalDiff),    num: (r) => r.goalDiff },
+    { key: "gfPerGame",    label: `${t("chart.tm.goalsFor")}/G`,     fmt: (r) => num2(r.goalsForPerGame),     num: (r) => r.goalsForPerGame },
+    { key: "gaPerGame",    label: `${t("chart.tm.goalsAgainst")}/G`, fmt: (r) => num2(r.goalsAgainstPerGame), num: (r) => r.goalsAgainstPerGame, lowBetter: true },
+    { key: "ppPct",        label: t("chart.tm.ppPct"),        fmt: (r) => pct(r.ppPct),        num: (r) => r.ppPct },
+    { key: "pkPct",        label: t("chart.tm.pkPct"),        fmt: (r) => pct(r.pkPct),        num: (r) => r.pkPct },
+    { key: "shotsFor",     label: t("chart.tm.shots"),        fmt: (r) => num2(r.shotsForPerGame),     num: (r) => r.shotsForPerGame },
+    { key: "shotsAgainst", label: t("chart.tm.shotsAgainst"), fmt: (r) => num2(r.shotsAgainstPerGame), num: (r) => r.shotsAgainstPerGame, lowBetter: true },
+    { key: "faceoffPct",   label: t("chart.tm.faceoffPct"),   fmt: (r) => pct(r.faceoffPct),   num: (r) => r.faceoffPct },
+    { key: "shutouts",     label: t("chart.tm.shutouts"),     fmt: (r) => int(r.shutouts),     num: (r) => r.shutouts },
+  ];
 }

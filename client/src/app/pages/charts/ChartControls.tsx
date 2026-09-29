@@ -84,9 +84,12 @@ export function SortHead({
 export function PlayerSearchBox({
   placeholder,
   onPick,
+  filter,
 }: {
   placeholder: string;
   onPick: (p: NHLPlayerInfo) => void;
+  /** Garde seulement certains résultats (comparaison : même type de joueur). */
+  filter?: (p: NHLPlayerInfo) => boolean;
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
@@ -108,6 +111,10 @@ export function PlayerSearchBox({
     return () => { alive = false; clearTimeout(handle); };
   }, [query]);
 
+  // Filtré au rendu et non dans l'effet : `filter` change d'identité à chaque
+  // rendu de l'appelant, il relancerait la recherche en boucle.
+  const shown = filter ? results.filter(filter) : results;
+
   return (
     <div className="relative">
       <SearchInput value={query} onChange={setQuery} placeholder={placeholder} />
@@ -119,8 +126,8 @@ export function PlayerSearchBox({
         >
           {searching ? (
             <p className="text-[#5c6f63] text-[11px] text-center py-3">…</p>
-          ) : results.length > 0 ? (
-            results.map((p) => (
+          ) : shown.length > 0 ? (
+            shown.map((p) => (
               <button
                 key={String(p.id)}
                 onClick={() => { onPick(p); setQuery(""); setResults([]); }}

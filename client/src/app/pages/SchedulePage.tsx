@@ -8,8 +8,8 @@
  *      tout le mois d'un coup.
  *
  * Un clic sur un match ouvre sa page de prédiction (/stats/prediction/game/:id).
- * Chaque match à venir porte la barre moneyline du modèle ML, avec la cote du
- * livre à chaque bout quand il la propose (2026-09-29).
+ * Chaque match à venir porte la barre du vainqueur prédit par le modèle ML
+ * (2026-09-29), glissée sous l'heure : la carte garde sa taille.
  * Bornes/mois par défaut ancrés à la date réelle de l'API (getScheduleAnchor),
  * pas à l'horloge locale.
  */
@@ -24,8 +24,6 @@ import { useSubscription } from "../context/SubscriptionContext";
 import { nhlLogoUrl } from "../data/teamEmoji";
 import { useI18n } from "../i18n";
 import { ErrorState } from "../components/ErrorState";
-import { extractH2HOdds, type OddsEvent } from "../services/oddsApiService";
-import { fetchHockeyOdds, findOddsEvent } from "../services/gameOdds";
 import { MoneylineBar, useGameMl } from "./landing/LandingCards";
 import "../components/rink-theme.css";
 
@@ -203,25 +201,6 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
     return () => { alive = false; };
   }, []);
 
-  // Vrais prix moneyline du livre relayé, posés aux deux bouts de la barre ML
-  // (2026-09-29). Même requête que l'accueil et la page du match
-  // (`fetchHockeyOdds`, une seule clé de cache). Le livre ne cote que les
-  // prochains jours : les matchs plus loin n'ont pas de prix, seulement la barre.
-  const [oddsEvents, setOddsEvents] = useState<OddsEvent[]>([]);
-  useEffect(() => {
-    let alive = true;
-    fetchHockeyOdds()
-      .then((ev) => { if (alive) setOddsEvents(ev); })
-      .catch(() => { /* la barre reste lisible sans les cotes */ });
-    return () => { alive = false; };
-  }, []);
-  // Appariement sur les NOMS COMPLETS des deux équipes (`findOddsEvent`) :
-  // pas de prix plutôt que le prix d'un autre match.
-  const bookFor = (g: NHLGame) => {
-    const ev = findOddsEvent(oddsEvents, g.homeTeam.name, g.awayTeam.name);
-    return (ev && extractH2HOdds(ev)) || undefined;
-  };
-
   const minIdx = monthIndex(bounds.first.y, bounds.first.m);
   const maxIdx = monthIndex(bounds.last.y, bounds.last.m);
   const curIdx = monthIndex(cursor.y, cursor.m);
@@ -385,7 +364,6 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
                       homeStats={teamStats.get(g.homeTeam.abbreviation)}
                       bestBet={isPro ? bestByGame.get(String(g.id)) : undefined}
                       bestLocked={!isPro && bestByGame.has(String(g.id))}
-                      book={bookFor(g)}
                       onUpgrade={() => navigate("/pro")}
                       fr={lang === "fr"}
                     />
@@ -431,13 +409,16 @@ function insightFor(game: NHLGame, away: NHLTeamStats | undefined, home: NHLTeam
   return null;
 }
 
-function TeamLine({ abbr, name, stats, score, showScore, dim }: {
+function TeamLine({ abbr, name, stats, score, showScore, dim, home = false }: {
   abbr: string; name: string; stats?: NHLTeamStats; score?: number; showScore: boolean; dim: boolean;
+  /** Petit « H » à côté de l'équipe à domicile (2026-09-29). */
+  home?: boolean;
 }) {
   return (
     <div className={`flex items-center gap-2 ${dim ? "opacity-50" : ""}`}>
       <img src={nhlLogoUrl(abbr)} alt="" className="w-6 h-6 object-contain flex-shrink-0" loading="lazy" />
       <span className="text-white text-sm font-bold tabular-nums w-10">{abbr}</span>
+      <span className="text-[#8a9ea6] text-[10px] font-bold w-2 flex-shrink-0">{home ? "H" : ""}</span>
       <span className="text-[#8a9ea6] text-[11px] truncate flex-1 min-w-0">
         {stats ? record(stats) : name}
       </span>
@@ -455,7 +436,6 @@ function GameRow({
   bestLocked,
   onUpgrade,
   fr,
-  book,
 }: {
   game: NHLGame;
   onOpen: () => void;
@@ -465,8 +445,6 @@ function GameRow({
   bestLocked: boolean;
   onUpgrade: () => void;
   fr: boolean;
-  /** Cotes moneyline du livre (décimales), quand il cote ce match. */
-  book?: { home: number; away: number };
 }) {
   const isFinal = game.status === "final";
   const isLive = game.status === "live";
@@ -481,7 +459,7 @@ function GameRow({
   const [seen, setSeen] = useState(false);
   useEffect(() => {
     const el = rowRef.current;
-    if (!el || seen || isFinal) return;
+    if (!el || seen || isFinal || isLive) return;
     if (typeof IntersectionObserver === "undefined") { setSeen(true); return; }
     const io = new IntersectionObserver(
       (entries) => { if (entries.some((e) => e.isIntersecting)) { setSeen(true); io.disconnect(); } },
@@ -489,8 +467,9 @@ function GameRow({
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [seen, isFinal]);
-  const ml = useGameMl(String(game.id), seen && !isFinal);
+  }, [seen, isFinal, isLive]);
+  // Seulement avant la mise au jeu : la barre ne s'affiche que sous l'heure.
+  const ml = useGameMl(String(game.id), seen && !isFinal && !isLive);
   const homeWin = ml?.homeWin ?? null;
 
   return (
@@ -506,7 +485,7 @@ function GameRow({
         {/* Équipes — visiteur en haut, domicile en bas, sans « @ » */}
         <div className="flex-1 min-w-0 flex flex-col gap-1.5">
           <TeamLine abbr={game.awayTeam.abbreviation} name={game.awayTeam.name} stats={awayStats} score={game.awayTeam.score} showScore={showScore} dim={isFinal && a < h} />
-          <TeamLine abbr={game.homeTeam.abbreviation} name={game.homeTeam.name} stats={homeStats} score={game.homeTeam.score} showScore={showScore} dim={isFinal && h < a} />
+          <TeamLine abbr={game.homeTeam.abbreviation} name={game.homeTeam.name} stats={homeStats} score={game.homeTeam.score} showScore={showScore} dim={isFinal && h < a} home />
         </div>
 
         {/* Heure / statut */}
@@ -527,6 +506,17 @@ function GameRow({
           ) : (
             <>
               <div className="text-sm font-bold tabular-nums" style={{ color: ACCENT }}>{game.startTime}</div>
+              {/* Le vainqueur prédit par le modèle ML (2026-09-29) : un trait
+                  fin sous l'heure, bleu pâle du côté de la favorite (gauche =
+                  visiteur, en haut ; droite = domicile). Sans chiffre ni cote,
+                  et dans une place déjà là : la carte ne grandit pas. */}
+              <MoneylineBar
+                className="mt-1.5 ml-auto w-[64px]"
+                awayPct={homeWin == null ? null : 100 - homeWin}
+                loading={ml === undefined}
+                awayAbbr={game.awayTeam.abbreviation}
+                homeAbbr={game.homeTeam.abbreviation}
+              />
               {game.gameType === "playoff" && (
                 <div className="text-[10px] font-bold uppercase mt-0.5" style={{ color: "#fbbf24" }}>
                   {fr ? "Séries" : "Playoffs"}
@@ -536,17 +526,6 @@ function GameRow({
           )}
         </div>
       </div>
-
-      {/* Moneyline du modèle ML (2026-09-29) : la part de chaque équipe, le
-          visiteur à gauche comme il est en haut de la carte, la cote du livre
-          au bout de son équipe quand il la propose. Rien sur un match fini. */}
-      {!isFinal && (
-        <MoneylineBar
-          left={{ abbr: game.awayTeam.abbreviation, pct: homeWin == null ? null : 100 - homeWin, price: book?.away }}
-          right={{ abbr: game.homeTeam.abbreviation, pct: homeWin, price: book?.home }}
-          loading={ml === undefined}
-        />
-      )}
 
       {/* Accroches — meilleur pari du modèle, puis tendance d'équipe */}
       {!isFinal && (bestBet || bestLocked || insight) && (

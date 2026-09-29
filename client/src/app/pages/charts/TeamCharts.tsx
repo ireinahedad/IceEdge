@@ -15,9 +15,10 @@ import { nhlApiService } from "../../services/nhlApiService";
 import type { TeamPlayerSeasons, PlayerSeasons, PlayerSeasonStat, TeamOpponentSplits, OpponentSplit, TeamSeasonOfficial } from "../../services/nhlApiService";
 import type { NHLTeamInfo } from "../../types/bet";
 import { CardsSkeleton, ChartMessage, DivisionTag, OpponentSelect, SortHead, TeamSelect } from "./ChartControls";
-import { PieBreakdowns, PlayerLineChart, TeamStatsTable, TeamTrendsTable } from "./ChartVisuals";
+import { COMPARE_B_COLOR, PieBreakdowns, PlayerLineChart, TeamStatsTable, TeamTrendsTable } from "./ChartVisuals";
 import { buildGoalieMetrics, buildSkaterMetrics } from "./chartsMetrics";
-import { BG_CARD, BG_CELL, DASH, PosFilter, SortCol, SortDir, View, seasonLabel, selectCls } from "./chartsTheme";
+import { BG_CARD, BG_CELL, DASH, PosFilter, SortCol, SortDir, View, currentSeasonId, seasonLabel, selectCls } from "./chartsTheme";
+import { formatRecord, useTeamRecords } from "./teamSpace";
 
 export function TeamCharts({ teamId }: { teamId?: string }) {
   const { t } = useI18n();
@@ -41,6 +42,8 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
   const [splits, setSplits] = useState<TeamOpponentSplits | null>(null);
   const [splitsLoading, setSplitsLoading] = useState(false);
   const [teamSeason, setTeamSeason] = useState<TeamSeasonOfficial | null>(null);
+  // Fiche V-D-DP de la saison en cours, sous le nom du club (2026-09-29).
+  const records = useTeamRecords();
 
   // Team list (for the picker + opponent dropdown) — fetched once.
   useEffect(() => {
@@ -183,6 +186,11 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
                 <DivisionTag abbr={abbr} />
                 <span className="truncate">{t("chart.last6")}</span>
               </p>
+              <p className="text-xs mt-0.5 leading-snug">
+                <span className="text-[#8a9ea6]">{t("chart.recordSeason", { season: seasonLabel(currentSeasonId) })} </span>
+                <span className="text-white font-bold tabular-nums whitespace-nowrap">{formatRecord(records, abbr)}</span>
+                <span className="text-[#5c6f63] ml-1">{t("chart.recordLegend")}</span>
+              </p>
             </div>
           </>
         ) : (
@@ -203,6 +211,14 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
             style={{ background: BG_CELL, color: accent, borderColor: accent + "66" }}
           >
             {t("chart.allTeams")}
+          </button>
+          {/* Vers la comparaison équipe-équipe, ce club déjà posé à gauche. */}
+          <button
+            onClick={() => navigate(`/stats/chart/compare-teams${teamId ? `?a=${teamId.toLowerCase()}` : ""}`)}
+            className={selectCls}
+            style={{ background: BG_CELL, color: COMPARE_B_COLOR, borderColor: COMPARE_B_COLOR + "66" }}
+          >
+            {t("chart.compare.cta")}
           </button>
         </div>
       </div>

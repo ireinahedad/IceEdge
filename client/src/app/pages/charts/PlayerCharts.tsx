@@ -17,7 +17,8 @@ import type { TeamPlayerSeasons } from "../../services/nhlApiService";
 import type { NHLTeamInfo, NHLPlayerInfo } from "../../types/bet";
 import { FactorPie } from "../../components/FactorPie";
 import { CardsSkeleton, ChartMessage, TeamSelect } from "./ChartControls";
-import { buildGoalieExtraMetrics, buildGoalieMetrics, buildSkaterExtraMetrics, buildSkaterMetrics } from "./chartsMetrics";
+import { buildGoalieExtraMetrics, buildGoalieMetrics, buildSkaterExtraMetrics, buildSkaterMetrics, playerLowBetter } from "./chartsMetrics";
+import { COMPARE_B_COLOR, CompareBars } from "./ChartVisuals";
 import { BG_CARD, BG_CELL, DASH, int, seasonLabel, selectCls } from "./chartsTheme";
 
 /* ── Player charts ─────────────────────────────────────────
@@ -268,6 +269,14 @@ export function PlayerCharts({
           >
             {t("chart.allPlayers")}
           </button>
+          {/* Vers la comparaison joueur-joueur, ce joueur déjà posé à gauche. */}
+          <button
+            onClick={() => navigate(`/stats/chart/compare-players${playerId ? `?a=${playerId}` : ""}`)}
+            className={selectCls}
+            style={{ background: BG_CELL, color: COMPARE_B_COLOR, borderColor: COMPARE_B_COLOR + "66" }}
+          >
+            {t("chart.compare.cta")}
+          </button>
         </div>
       </div>
 
@@ -403,8 +412,29 @@ export function PlayerCharts({
             )}
           </div>
 
+          {/* ── Comparaison (2026-09-29) : un joueur choisi dans la colonne
+              « Comparer » remplace le diagramme du joueur seul par un face à
+              face des deux, stat par stat. ── */}
+          {compareSelected && stat && compareStat && (
+            <CompareBars
+              title={t("chart.compare.chart")}
+              leftLabel={selected.name}
+              rightLabel={compareSelected.name}
+              leftColor={accent}
+              items={metrics.map((m) => ({
+                key: m.key,
+                label: m.label,
+                left: m.totalNum(stat),
+                right: m.totalNum(compareStat),
+                leftText: m.total(stat),
+                rightText: m.total(compareStat),
+                lowBetter: playerLowBetter(m.key),
+              }))}
+            />
+          )}
+
           {/* ── Points breakdown (skaters only): share of points from goals vs assists ── */}
-          {!isGoalie && stat && (stat.points ?? 0) > 0 && (
+          {!(compareSelected && compareStat) && !isGoalie && stat && (stat.points ?? 0) > 0 && (
             <div className="rounded-2xl border border-white/20 p-4" style={{ background: BG_CARD }}>
               <p className="text-white text-sm font-semibold mb-3">{t("chart.pie.pointsBreakdown")}</p>
               <div className="rounded-xl p-3" style={{ background: BG_CELL }}>

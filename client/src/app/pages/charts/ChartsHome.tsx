@@ -27,6 +27,7 @@ import type { NHLTeamInfo } from "../../types/bet";
 import { DivisionFilter, DivisionTag, SearchInput } from "./ChartControls";
 import { divisionOf, type Division } from "../../data/nhlDivisions";
 import { BG_CARD, BG_CELL } from "./chartsTheme";
+import { COMPARE_B_COLOR } from "./ChartVisuals";
 
 /* ── Une des trois entrées ─────────────────────────────────
  * Volontairement plus grande et plus bavarde que la pastille correspondante de
@@ -116,6 +117,23 @@ export function ChartsHome() {
               onClick={() => navigate(s.to)}
             />
           ))}
+        </div>
+
+        {/* Comparaisons (2026-09-29) : deux entrées directes, en jaune — la
+            couleur du côté B partout dans les comparaisons. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <SectionTile
+            label={t("chart.compare.players")}
+            desc={t("chart.compare.playersDesc")}
+            accent={COMPARE_B_COLOR}
+            onClick={() => navigate("/stats/chart/compare-players")}
+          />
+          <SectionTile
+            label={t("chart.compare.teams")}
+            desc={t("chart.compare.teamsDesc")}
+            accent={COMPARE_B_COLOR}
+            onClick={() => navigate("/stats/chart/compare-teams")}
+          />
         </div>
       </div>
 

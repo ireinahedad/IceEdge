@@ -24,6 +24,8 @@ import { useI18n } from "../../i18n";
 import { nhlLogoUrl, teamAccent } from "../../data/teamEmoji";
 import { nhlApiService } from "../../services/nhlApiService";
 import type { NHLTeamInfo } from "../../types/bet";
+import type { TeamSeasonRow } from "../../services/nhlApiService";
+import { DASH, currentSeasonId } from "./chartsTheme";
 
 /** Les trois sections d'un espace d'équipe. */
 export type TeamSection = "overview" | "games" | "players";
@@ -71,6 +73,44 @@ export function useTeamName(abbr?: string): string {
   if (!abbr) return "";
   const up = abbr.toUpperCase();
   return teams.find((x) => (x.abbreviation ?? "").toUpperCase() === up)?.name ?? up;
+}
+
+/* ── Fiche de la saison en cours (V-D-DP) ──────────────────
+ * Une seule requête pour les 32 clubs (`/teams/season-summary`, déjà en cache
+ * côté serveur), gardée ici pour toute la section : la page d'un club et le
+ * tableau de ses matchs la lisent sans la redemander (2026-09-29).
+ *
+ * « Saison en cours » = `currentSeasonId` du client : la saison ne bascule
+ * qu'en octobre, donc en avant-saison c'est la fiche finale de la précédente.
+ */
+let recordsPromise: Promise<Map<string, TeamSeasonRow>> | null = null;
+
+function loadTeamRecords(): Promise<Map<string, TeamSeasonRow>> {
+  if (!recordsPromise) {
+    recordsPromise = nhlApiService
+      .getAllTeamsSeason(currentSeasonId)
+      .then((res) => new Map(res.teams.map((r) => [r.abbr.toUpperCase(), r] as const)))
+      .catch((e) => { recordsPromise = null; throw e; });
+  }
+  return recordsPromise;
+}
+
+/** Les fiches de la saison en cours par abréviation ; `null` le temps du chargement ou en cas d'échec. */
+export function useTeamRecords(): Map<string, TeamSeasonRow> | null {
+  const [records, setRecords] = useState<Map<string, TeamSeasonRow> | null>(null);
+  useEffect(() => {
+    let alive = true;
+    loadTeamRecords().then((m) => { if (alive) setRecords(m); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  return records;
+}
+
+/** « 10-5-2 » (victoires-défaites-défaites en prolongation). Un club sans ligne a 0-0-0. */
+export function formatRecord(records: Map<string, TeamSeasonRow> | null, abbr: string): string {
+  if (!records) return DASH;
+  const r = records.get(abbr.toUpperCase());
+  return r ? `${r.wins}-${r.losses}-${r.otLosses}` : "0-0-0";
 }
 
 /* ── Les trois pastilles, aux couleurs du club ─────────────

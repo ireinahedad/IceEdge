@@ -7,7 +7,7 @@
  */
 
 import { weekdayShort } from "../../data/gameDay";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { IceedgeLogo } from "../../components/brand/IceedgeLogo";
 import { useSport } from "../../context/SportContext";
@@ -19,7 +19,6 @@ import { features } from "../../platform";
 import { BookPricePill } from "../../components/BookPricePill";
 import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
 import { mlBundleKey } from "../prediction/gameMarkets";
-import { teamAccent } from "../../data/teamEmoji";
 import { DisplayGame, calcEdge } from "./landingTypes";
 
 
@@ -155,7 +154,7 @@ function gameDayLabel(game: DisplayGame, lang: string): string | null {
  *   Suivi dans `STATUS.md` § 3.2.
  *
  * ⚠️ Le tableau Handicap / Vainqueur des matchs à venir (2026-09-27) et sa
- * barre moneyline (2026-09-29) affichent le % du modèle ML À LA DEMANDE de
+ * barre du vainqueur (2026-09-29) affichent le % du modèle ML À LA DEMANDE de
  * l'utilisatrice : ils ne lisent PAS ce drapeau.
  * Celui-ci ne masque plus que la barre de la carte en direct et le badge
  * d'edge.
@@ -312,58 +311,45 @@ function MlPct({ value, loading }: { value: number | null; loading: boolean }) {
 
 // ─── Barre moneyline du modèle (2026-09-29) ──────────────────────────────────
 
-/** Un bout de la barre : l'équipe, sa probabilité ML, la cote du livre s'il en a une. */
-export interface MlBarSide { abbr: string; pct: number | null; price?: number }
+/** Le bleu pâle de l'app (accent), le même que les onglets et les liens. */
+const ML_BAR_BLUE = "#86d1ea";
 
 /**
- * La prédiction moneyline en un coup d'œil : une barre partagée entre les deux
- * équipes, chacune à sa couleur de club, la favorite pleine et l'autre
- * estompée. Les chiffres, eux, restent en blanc / gris : plusieurs clubs
- * (TOR, NYR, EDM) ont une couleur trop sombre pour un texte de 11 px sur fond
- * de nuit — mesuré à l'écran le 2026-09-29. Sert à l'accueil (sous le tableau) et au calendrier (avec la cote
- * du livre à chaque bout).
+ * Le vainqueur prédit, en un trait. Une ligne fine, sans chiffre : seule la
+ * part de la FAVORITE est peinte en bleu pâle, et elle part de son côté —
+ * à gauche pour le visiteur (l'équipe du haut), à droite pour le domicile.
+ * Décisions du user (2026-09-29) : pas les couleurs des clubs, pas de % aux
+ * bouts, et la barre ne doit pas grandir la carte — elle se glisse dans une
+ * place déjà là (la case vide d'en-tête du tableau de l'accueil, la colonne
+ * de l'heure du calendrier). Les chiffres sont déjà dans le tableau.
  *
- * Les pourcentages sont des probabilités du modèle : toujours en %, jamais au
- * format de cote. Seule la cote du livre (`price`, via `BookPricePill`) suit
- * le réglage de format — la règle « prix vs estimation ».
- *
- * Pastilles en `link={false}` : la barre vit dans une carte qui ouvre la page
- * du match ; un bouton vers le livre caché dans la barre surprendrait.
- *
- * Sans probabilité (modèle indisponible) la barre disparaît : jamais de 50/50
- * de repli.
+ * `awayPct` est une probabilité du modèle ML (0–100). Sans elle (modèle
+ * indisponible), rien — jamais de 50/50 de repli.
  */
-export function MoneylineBar({ left, right, loading, className = "" }: {
-  left: MlBarSide;
-  right: MlBarSide;
+export function MoneylineBar({ awayPct, loading, awayAbbr, homeAbbr, className = "" }: {
+  awayPct: number | null;
   loading: boolean;
+  awayAbbr: string;
+  homeAbbr: string;
   className?: string;
 }) {
-  if (!loading && (left.pct == null || right.pct == null)) return null;
-  const lc = teamAccent(left.abbr);
-  const rc = teamAccent(right.abbr);
-  const lp = left.pct ?? 50;
-  const leftFav = lp >= 50;
-  const pctCls = "text-[11px] font-bold tabular-nums w-[30px] flex-shrink-0";
+  if (!loading && awayPct == null) return null;
+  const away = awayPct ?? 50;
+  const awayFav = away > 50;
+  const fav = awayFav ? away : 100 - away;
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      {left.price != null && <BookPricePill price={left.price} link={false} />}
-      <span className={pctCls} style={{ color: loading || leftFav ? "#fff" : "#8a9ea6" }}>{loading ? "…" : `${left.pct}%`}</span>
-      <div
-        className={`flex-1 min-w-[40px] h-2 rounded-full overflow-hidden flex bg-white/10${loading ? " animate-pulse" : ""}`}
-        role={loading ? undefined : "img"}
-        aria-label={loading ? undefined : `Moneyline ML : ${left.abbr} ${left.pct}% – ${right.abbr} ${right.pct}%`}
-      >
-        {!loading && (
-          <>
-            <div className="h-full transition-[width] duration-500" style={{ width: `${lp}%`, background: lc, opacity: leftFav ? 1 : 0.6 }} />
-            <div className="h-full w-[2px] flex-shrink-0 bg-[#0A0E0C]" aria-hidden />
-            <div className="h-full flex-1" style={{ background: rc, opacity: leftFav ? 0.6 : 1 }} />
-          </>
-        )}
-      </div>
-      <span className={`${pctCls} text-right`} style={{ color: loading || !leftFav ? "#fff" : "#8a9ea6" }}>{loading ? "…" : `${right.pct}%`}</span>
-      {right.price != null && <BookPricePill price={right.price} link={false} />}
+    <div
+      className={`relative h-[3px] rounded-full overflow-hidden bg-white/10${loading ? " animate-pulse" : ""} ${className}`}
+      role={loading ? undefined : "img"}
+      aria-label={loading ? undefined : `ML : ${awayAbbr} ${away}% – ${homeAbbr} ${100 - away}%`}
+      title={loading ? undefined : `${awayAbbr} ${away}% · ${homeAbbr} ${100 - away}%`}
+    >
+      {!loading && (
+        <div
+          className="absolute inset-y-0 rounded-full transition-[width] duration-500"
+          style={{ width: `${fav}%`, background: ML_BAR_BLUE, [awayFav ? "left" : "right"]: 0 }}
+        />
+      )}
     </div>
   );
 }
@@ -423,18 +409,11 @@ function gameStarted(game: DisplayGame): boolean {
   return Number.isFinite(ms) && ms <= Date.now();
 }
 
-/** Deux touchers plus rapprochés que ça = un double toucher. */
-const DOUBLE_TAP_MS = 350;
-
 /**
- * Une case sélectionnable : toucher = ajoute au coupon (entourée de vert),
- * double toucher = retire.
- *
- * ⚠️ Le double toucher est détecté À LA MAIN, pas par `onDoubleClick` : iOS
- * (WKWebView) ne livre pas `dblclick` de façon fiable au toucher, et le premier
- * `click` d'un double part de toute façon. D'où la règle : le 1er toucher
- * ajoute (sans effet si déjà pris), le 2e rapproché retire. Un double toucher
- * sur une case vide la laisse donc vide — neutre, pas surprenant.
+ * Une case sélectionnable, en bascule : toucher une case libre l'ajoute au
+ * coupon (entourée de vert), toucher une case prise la retire (le vert
+ * disparaît). Demande du user du 2026-09-29 ; remplace le double toucher du
+ * 2026-09-28, qui obligeait à deux touchers rapprochés pour retirer.
  *
  * Sans probabilité du modèle (en cours ou indisponible), la case ne pose rien :
  * une jambe garde sa probabilité jusqu'au règlement, un chiffre inventé ici
@@ -462,17 +441,13 @@ function PickCell({ game, pick, probability, team, label, short, children }: {
 }) {
   const { t, lang } = useI18n();
   const { legs, addLeg, removeLeg } = useBet();
-  const lastTap = useRef(0);
   const matches = legs.filter((l) => legMatchesPick(l, game.id, pick));
   const selected = matches.length > 0;
 
   const tap = () => {
-    const now = Date.now();
-    const isDouble = now - lastTap.current < DOUBLE_TAP_MS;
-    // Remis à zéro après un double : un triple toucher ne retire pas deux fois.
-    lastTap.current = isDouble ? 0 : now;
-    if (isDouble) { matches.forEach((l) => removeLeg(l.id)); return; }
-    if (selected || probability == null || gameStarted(game)) return;
+    // Case prise → on la libère, où que la jambe ait été posée.
+    if (selected) { matches.forEach((l) => removeLeg(l.id)); return; }
+    if (probability == null || gameStarted(game)) return;
     const day = weekdayShort(gameIsoDay(game), lang) || gameDayLabel(game, lang);
     const leg: BetLeg = {
       id: `home-${game.id}-${pick.marketType}-${pick.subject}${pick.selectionValue === "no" ? "-no" : ""}`,
@@ -579,6 +554,8 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
         <div className="flex items-center gap-1.5 min-w-0">
           <img src={side.logo} alt={side.abbr} className="w-5 h-5 object-contain flex-shrink-0" />
           <span className="text-white text-xs font-medium truncate">{side.abbr}</span>
+          {/* Petit « H » : l'équipe à domicile (2026-09-29). */}
+          {isHome && <span className="text-[#8a9ea6] text-[10px] font-bold leading-none flex-shrink-0" title={t("home.homeTeam")}>H</span>}
         </div>
         {/* Handicap */}
         <PickCell
@@ -633,11 +610,17 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
           className="grid items-center gap-x-4 gap-y-2"
           style={{ gridTemplateColumns: "auto auto auto" }}
         >
-          <span />
+          {/* La case d'en-tête au-dessus des équipes porte la barre du
+              vainqueur (2026-09-29) : aucune hauteur de plus pour la carte. */}
+          <div className="self-center min-w-0">
+            <MoneylineBar awayPct={winAway} loading={mlLoading} awayAbbr={game.team2.abbr} homeAbbr={game.team1.abbr} />
+          </div>
           <span className="text-[#8a9ea6] text-[11px] font-semibold">{t("home.colSpread")}</span>
           <span className="text-[#8a9ea6] text-[11px] font-semibold">{t("home.colWinner")}</span>
-          {teamRow(game.team1, game.team2, true, lineHome, plHome, priceHome, winHome, game.bookHome)}
+          {/* Visiteur TOUJOURS en haut, domicile en bas avec son « H »
+              (demande du user, 2026-09-29) — l'ordre de toute l'app. */}
           {teamRow(game.team2, game.team1, false, lineAway, plAway, priceAway, winAway, game.bookAway)}
+          {teamRow(game.team1, game.team2, true, lineHome, plHome, priceHome, winHome, game.bookHome)}
         </div>
         </div>
 
@@ -658,15 +641,6 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
         </div>
       </div>
 
-      {/* Barre moneyline (2026-09-29) : la prédiction ML en un coup d'œil,
-          domicile à gauche comme il est en haut du tableau. Les cotes sont
-          déjà dans le tableau : pas de pastilles ici. */}
-      <MoneylineBar
-        className="mt-3"
-        left={{ abbr: game.team1.abbr, pct: winHome }}
-        right={{ abbr: game.team2.abbr, pct: winAway }}
-        loading={mlLoading}
-      />
     </div>
   );
 }

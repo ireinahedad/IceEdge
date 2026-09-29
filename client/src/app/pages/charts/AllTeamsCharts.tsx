@@ -12,49 +12,18 @@ import { useSport } from "../../context/SportContext";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { nhlApiService } from "../../services/nhlApiService";
-import type { TeamSeasonRow, AllTeamsSeason } from "../../services/nhlApiService";
+import type { AllTeamsSeason } from "../../services/nhlApiService";
 import { BarSkeleton, DivisionFilter, DivisionTag, MetricChips, RowsSkeleton, SearchInput, SeasonSelect, SortHead } from "./ChartControls";
 import { divisionOf, type Division } from "../../data/nhlDivisions";
 import { StackPart, StackRow, StackedTotalsBar } from "./ChartVisuals";
-import { TFn } from "./chartsMetrics";
-import { BG_CARD, SortDir, currentSeasonId, int, num2, sign } from "./chartsTheme";
+import { buildTeamMetrics } from "./chartsMetrics";
+import { BG_CARD, SortDir, currentSeasonId, int } from "./chartsTheme";
 
 /* ── All teams (league-wide team performance) ───────────────
  * Every team's season summary in one table. Unlike the player leaders page,
  * all 32 rows arrive in a single call, so sorting is done locally — which also
  * lets derived columns like goal differential be sortable.
  */
-type TMetric = {
-  key: string;
-  label: string;
-  fmt: (r: TeamSeasonRow) => string;
-  num: (r: TeamSeasonRow) => number;
-  /** Lower is better (sorts ascending by default). */
-  lowBetter?: boolean;
-};
-
-function buildTeamMetrics(t: TFn): TMetric[] {
-  const pct = (v: number) => `${v.toFixed(1)}%`;
-  return [
-    { key: "points",       label: t("chart.tm.points"),       fmt: (r) => int(r.points),       num: (r) => r.points },
-    { key: "wins",         label: t("chart.tm.wins"),         fmt: (r) => int(r.wins),         num: (r) => r.wins },
-    { key: "losses",       label: t("chart.tm.losses"),       fmt: (r) => int(r.losses),       num: (r) => r.losses, lowBetter: true },
-    { key: "otLosses",     label: t("chart.tm.otLosses"),     fmt: (r) => int(r.otLosses),     num: (r) => r.otLosses, lowBetter: true },
-    { key: "pointPct",     label: t("chart.tm.pointPct"),     fmt: (r) => pct(r.pointPct),     num: (r) => r.pointPct },
-    { key: "goalsFor",     label: t("chart.tm.goalsFor"),     fmt: (r) => int(r.goalsFor),     num: (r) => r.goalsFor },
-    { key: "goalsAgainst", label: t("chart.tm.goalsAgainst"), fmt: (r) => int(r.goalsAgainst), num: (r) => r.goalsAgainst, lowBetter: true },
-    { key: "goalDiff",     label: t("chart.tm.goalDiff"),     fmt: (r) => sign(r.goalDiff),    num: (r) => r.goalDiff },
-    { key: "gfPerGame",    label: `${t("chart.tm.goalsFor")}/G`,     fmt: (r) => num2(r.goalsForPerGame),     num: (r) => r.goalsForPerGame },
-    { key: "gaPerGame",    label: `${t("chart.tm.goalsAgainst")}/G`, fmt: (r) => num2(r.goalsAgainstPerGame), num: (r) => r.goalsAgainstPerGame, lowBetter: true },
-    { key: "ppPct",        label: t("chart.tm.ppPct"),        fmt: (r) => pct(r.ppPct),        num: (r) => r.ppPct },
-    { key: "pkPct",        label: t("chart.tm.pkPct"),        fmt: (r) => pct(r.pkPct),        num: (r) => r.pkPct },
-    { key: "shotsFor",     label: t("chart.tm.shots"),        fmt: (r) => num2(r.shotsForPerGame),     num: (r) => r.shotsForPerGame },
-    { key: "shotsAgainst", label: t("chart.tm.shotsAgainst"), fmt: (r) => num2(r.shotsAgainstPerGame), num: (r) => r.shotsAgainstPerGame, lowBetter: true },
-    { key: "faceoffPct",   label: t("chart.tm.faceoffPct"),   fmt: (r) => pct(r.faceoffPct),   num: (r) => r.faceoffPct },
-    { key: "shutouts",     label: t("chart.tm.shutouts"),     fmt: (r) => int(r.shutouts),     num: (r) => r.shutouts },
-  ];
-}
-
 export function AllTeamsCharts() {
   const { t } = useI18n();
   const { theme } = useSport();
