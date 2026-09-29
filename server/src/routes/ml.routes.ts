@@ -30,6 +30,7 @@ import {
 import { mlApiClient } from "../services/mlApiClient";
 import { getGameMlBundle } from "../services/gameMlBundle";
 import { fetchGameById } from "../services/nhlApiClient";
+import { currentSeason } from "../services/nhl/core";
 import {
   buildGameFeatures,
   buildPlayerPropFeatures,
@@ -690,6 +691,16 @@ router.post("/factors", predictLimiter, validateBody(predictFactorsSchema), asyn
   }
 });
 
+/**
+ * Longueur de la saison régulière, en matchs par équipe.
+ *
+ * La LNH est repassée à 84 matchs en 2026-27 (82 depuis 1995-96). Le « 82 »
+ * codé en dur annonçait 2 matchs restants de trop peu à chaque joueur et
+ * projetait une cadence sur une saison qui n'existe plus.
+ * ⚠️ À revoir si la ligue change encore de format.
+ */
+const REGULAR_SEASON_GAMES = 84;
+
 // POST /api/predict/player-prop  (season-long prop)
 router.post("/player-prop", validateBody(playerPropSchema), async (req: Request, res: Response) => {
   try {
@@ -713,20 +724,26 @@ router.post("/player-prop", validateBody(playerPropSchema), async (req: Request,
       // matchait et la route servait un « 28 % » qui n'était dérivé de rien.
       // Avant le premier match il n'y a pas de cadence à extrapoler — on laisse
       // la valeur neutre et on le dit dans la note.
-      const gp = player.gamesPlayed ?? 0;
+      //
+      // ⚠️ En début de saison, `fetchPlayerById` rend les totaux de la saison
+      // PRÉCÉDENTE tant que le joueur n'a pas joué (`pickSeasonRow`, daté par
+      // `statsSeason`). Les lire ici faisait d'un joueur à 82 matchs l'an
+      // dernier un joueur à « 2 matchs restants » cette saison. Un pari de
+      // saison ne se projette que sur la saison en cours.
+      const gp = player.statsSeason === currentSeason() ? (player.gamesPlayed ?? 0) : 0;
       if (gp < 1) {
         // Avant le premier match il n'y a pas de cadence à extrapoler. On tombe
         // à travers vers la réponse commune avec la valeur neutre (50) plutôt
         // que de dupliquer la forme de la réponse ici.
         betNote = `${player.name || playerName} has not played a game this season yet — no pace to project from.`;
       } else {
-      const remaining = Math.max(0, 82 - gp);
+      const remaining = Math.max(0, REGULAR_SEASON_GAMES - gp);
       const current =
         propType === "goals"   ? player.goals   :
         propType === "points"  ? player.points  :
         propType === "assists" ? player.assists  : 0;
 
-      const pace        = (current / gp) * 82;
+      const pace        = (current / gp) * REGULAR_SEASON_GAMES;
       const needed      = line - current;
       const currentRate = current / gp;
       const rateNeeded  = remaining > 0 ? needed / remaining : Infinity;

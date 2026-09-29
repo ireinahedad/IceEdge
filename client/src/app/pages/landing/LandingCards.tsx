@@ -150,8 +150,9 @@ function gameDayLabel(game: DisplayGame, lang: string): string | null {
  * se calcule sur ce même chiffre). Le reste de l'app (page du match, meilleurs
  * paris) n'est pas touché.
  *
- * ▶ Au début de la saison : repasser à `true`, rien d'autre à faire.
- *   Suivi dans `STATUS.md` § 3.2.
+ * ✔ Repassé à `true` le 2026-09-30 : la saison régulière 2026-27 a commencé
+ *   le 29 septembre (heure de l'Est). Pour la prochaine pré-saison, remettre
+ *   `false` vers la mi-septembre et le rallumer au premier match de saison.
  *
  * ⚠️ Le tableau Handicap / Vainqueur des matchs à venir (2026-09-27) et sa
  * barre du vainqueur (2026-09-29) affichent le % du modèle ML À LA DEMANDE de
@@ -159,7 +160,7 @@ function gameDayLabel(game: DisplayGame, lang: string): string | null {
  * Celui-ci ne masque plus que la barre de la carte en direct et le badge
  * d'edge.
  */
-const SHOW_MODEL_PCT_ON_HOME = false;
+const SHOW_MODEL_PCT_ON_HOME = true;
 
 function useGameEdge(game: DisplayGame) {
   if (!SHOW_MODEL_PCT_ON_HOME) return { homePct: null, awayPct: null, edge: 0, showPct: false };

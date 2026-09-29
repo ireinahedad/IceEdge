@@ -1,216 +1,148 @@
 # Plan de saisie manuelle
 
-Tout ce qui n'est pas automatique dans ICEEDGE, où le saisir, et à quelle
-fréquence. Le reste (stats équipes/joueurs/gardiens, cotes, calendrier, voyage,
-altitude) se rafraîchit seul.
+Ce qui reste à faire à la main dans ICEEDGE, où, et à quelle fréquence. Tout le
+reste se remplit seul (voir § 5).
 
 ---
 
 ## 1. Récapitulatif
 
-> **Changement du 2026-09-04 — tout est en base, plus dans des fichiers.**
-> Les quatre tables manuelles vivaient dans des `.json` que le build ne copiait
-> jamais dans l'image du serveur : elles étaient **mortes en production**, en
-> silence, et l'écriture admin répondait 500. Voir la migration
-> `server/src/db/migrations/034_manual_data.sql`. Concrètement, pour toi :
-> la saisie se fait maintenant depuis l'app (Profil → Paramètres → **Saisie
-> manuelle**), donc **depuis ton téléphone**, et elle survit aux
-> redéploiements.
->
-> **Mise à jour 2026-09-27** : la saisie a sa propre page, **`/dev/saisie`**
-> (lien aussi dans `/dev` et dans les Paramètres admin). Les onglets
-> « Blessures » et « Compos du soir » décrits plus bas n'existent plus : un
-> absent se saisit UNE fois par équipe, avec son importance, et
-> l'enregistrement écrit à la fois `injuries` (règles) et `scratches` (IA).
->
-> **Blessés longue durée** : case « Blessé longue durée » sur un absent. Le
-> joueur est rangé par équipe (`manual_data`, kind `long_injuries`) et le
-> serveur l'ajoute TOUT SEUL aux absents du jour (IA) et au facteur Blessures
-> (règles) de chaque match de son équipe, jusqu'au clic « Revenu au jeu ».
->
-> **Mise à jour 2026-09-29 — synchro des blessés** : `npm run injuries:sync`
-> (dans `server/`, depuis le poste du user, jamais sur Railway) lit la 1re page
-> de la liste de PoolExpert (≈ 150 notes récentes ; les pages suivantes sont
-> refusées aux robots, 403 mesuré le 2026-09-30, on ne les demande pas), garde
-> la DERNIÈRE note de chaque joueur, décide « absent ou non,
-> et jusqu'à quand », puis range les absents dans `long_injuries` en entrées
-> `source: 'auto'` avec une date de fin `until`. Rien de la note n'est stocké.
-> Simulation par défaut ; `npm run injuries:sync -- --apply` écrit. Rappel
-> par tâche planifiée à 11 h 55 (heure de l'Est) les jours de match.
->
-> - **Ce qu'elle ne touche jamais** : les entrées saisies à la main.
-> - **Un joueur absent de la page n'est pas « revenu »** : son entrée synchro
->   est gardée jusqu'à sa date de fin. Elle n'est remplacée ou retirée que par
->   une NOUVELLE note sur la page (ou à sa date de fin). Le rapport liste les
->   « gardés » et les « retirés ».
-> - **« Revenu au jeu » sur une entrée synchro** : le serveur s'en souvient
->   (`dismissed`) et la synchro ne la remet pas pour la même note. Une NOUVELLE
->   note de la source (autre date) la remet.
-> - **Changer l'importance d'une entrée synchro** la rend manuelle : la synchro
->   ne l'écrase plus, et c'est au collègue de la retirer.
-> - **Ce qu'elle n'écrit pas, et liste** : incertains (au jour le jour, décision
->   avant le match), notes non reconnues, joueurs introuvables dans la LNH,
->   joueurs dont l'équipe diffère entre la source et la LNH. À trancher ici.
-> - **Importance** (décision du user) : attaquant = points par match
->   (0.02 + 0.05 × pts/m, borné 0.02-0.08) ; défenseur = temps de glace
->   (0.03 + 0.005 × (min − 16), borné 0.02-0.08) ; gardien = part des départs
->   de l'équipe (0.12 × part / 0.6, borné 0.03-0.12). Saison en cours dès
->   10 matchs, sinon la précédente ; moins de 10 matchs LNH → 0.03.
-> - **Pièges mesurés le 2026-09-29** : le HTML brut met les attributs entre
->   apostrophes (`class='resRow'`) ; les effectifs LNH (`v1/roster/…/current`)
->   n'incluent PAS les blessés, d'où le repli sur la recherche LNH ; la liste
->   remonte à un an (≈ 570 notes pour ≈ 100 joueurs), d'où le classement.
->   Code : `server/src/services/injurySync.ts`, règles lisibles dans
->   `classifyNote` et les durées par défaut dans `HORIZONS`.
-
-| # | Quoi | Où | Fréquence | Temps |
+| # | Quoi | Où | Quand | Temps |
 |---|---|---|---|---|
-| 1 | Gardiens partants (exceptions) | UI : **/dev/saisie** → « Qui garde le but ce soir ? » | chaque jour de match, 1-2 h avant | 2 min |
-| 2 | Absents confirmés | UI : **/dev/saisie** → « Qui ne joue pas ce soir ? » | chaque jour de match, 1-2 h avant | 2 min |
-| 3 | Blessures / alignement (facteur) | UI : **/dev/saisie** → même liste d'absents (poids = importance) + « Options avancées » | chaque jour de match, 2 passes | 5-10 min |
-| 4 | Tendance PP des arbitres | API `PUT /api/manual/referees` | 1× en début de saison + 1 rafraîchissement mi-saison | 30 min |
-| 5 | Assignation d'arbitres (secours) | API `PUT /api/manual/ref-assignments/:cle` | seulement si le scraper Scouting the Refs casse | 1 min/jour |
-| 6 | Patinoires | `ml\data\arenas.json` + `server\src\data\arenas.ts` | 1× par saison, ou déménagement/rénovation | 10 min |
-| 7 | Rafraîchissement des données contenu | `content\refresh-insights.cmd` | tous les 3 jours (tâche planifiée) + `WITH_ADVANCED` 1×/saison | automatique |
+| 1 | Synchro des blessés | `npm run injuries:sync` dans `server/`, sur le poste | chaque jour de match, au rappel de 11 h 55 (heure de l'Est) | 2 min |
+| 2 | Trancher ce que la synchro n'écrit pas | **/dev/saisie** → « Qui ne joue pas ce soir ? » | juste après la synchro | 2-5 min |
+| 3 | Gardiens partants (exceptions) | **/dev/saisie** → « Qui garde le but ce soir ? » | 1-2 h avant la mise au jeu | 2 min |
+| 4 | Absents de dernière minute | **/dev/saisie** → même liste d'absents | 1-2 h avant la mise au jeu | 2 min |
+| 5 | Alignement (`lineupAdj`) | **/dev/saisie** → « Options avancées » | rarement | — |
+| 6 | Patinoires | `ml\data\arenas.json` + `server\src\data\arenas.ts` | 1× par saison, ou changement d'aréna | 10 min |
+| 7 | Données contenu | `content\refresh-insights.cmd` | automatique (tâche Windows) + `WITH_ADVANCED` 1×/saison | — |
 
-**Si tu n'as que 5 minutes :** lignes 1 et 2. Le gardien partant est l'information
-qui déplace le plus les probabilités.
+**Si tu n'as que 5 minutes :** lignes 1 et 3. Le gardien partant est
+l'information qui déplace le plus les probabilités.
 
 ---
 
-## 2. Chaque jour de match
+## 2. La synchro des blessés
 
-### Le matin (9 h-11 h) — première passe
+```
+cd C:\Users\irein\dev\ICEEDGE\server
+npm run injuries:sync              ← simulation : montre ce qui serait écrit
+npm run injuries:sync -- --apply   ← écrit
+```
 
-- Ouvre la liste des matchs du jour dans la carte admin (Profil → « Blessures /
-  Alignement », compte admin requis).
-- Pour chaque match où tu comptes parier : saisis les blessés **déjà connus**
-  (IR/LTIR). Sources : rapport de blessures NHL.com, DailyFaceoff (Line
-  Combinations), TSN/Sportsnet.
-- **Ne devine pas les gardiens.** Laisse vide.
+Lancée depuis le poste du user, jamais sur Railway. Une tâche planifiée envoie
+la commande à 11 h 55 (heure de l'Est) les jours de match.
 
-Barème d'impact (0-1, désavantage infligé à SON équipe) :
+**Ce qu'elle fait.** Elle lit la 1re page de la liste des blessés de PoolExpert
+(≈ 150 notes récentes ; les pages suivantes sont refusées aux robots, 403
+mesuré le 2026-09-30, on ne les demande pas). Elle garde la dernière note de
+chaque joueur, décide « absent ou non, et jusqu'à quand », retrouve le joueur
+dans la LNH, calcule son importance, et le range dans les **blessés longue
+durée** (`long_injuries`, `source: 'auto'`, date de fin `until`). Rien de la
+note n'est stocké. Le serveur ajoute ensuite ces joueurs tout seul aux absents
+du jour (IA) et au facteur Blessures (règles) de chaque match de leur équipe,
+jusqu'à leur date de fin.
 
-| Situation | Impact |
-|---|---|
-| Gardien partant absent / backup qui débute | **0.12** |
-| Joueur clé absent (top-6 att., top-4 D, ~20 min) | **0.06** |
-| Role player absent (3e-4e trio, 3e paire) | **0.03** |
-| Trios remaniés, retour intégré, gardien confirmé favorable | `lineupAdj` ±0.02 à 0.05 |
+**Ce qu'elle ne touche jamais :** les entrées saisies à la main.
 
-### Après les morning skates (12 h-15 h) — mise à jour ciblée
+**Ce qu'elle n'écrit pas, et liste dans son rapport** (à trancher dans
+/dev/saisie) :
+- les **incertains** (au jour le jour, décision avant le match) ;
+- les **notes non reconnues** ;
+- les **introuvables** dans la LNH (espoirs, invités au camp) ;
+- les joueurs dont **l'équipe diffère** entre la source et la LNH.
 
-- DailyFaceoff publie les gardiens probables. Si un **backup** débute, ajoute le
-  titulaire absent à 0.12 côté de son équipe.
-- Game-time decisions annoncés → ajoute/retire les joueurs concernés.
+**Les règles à connaître :**
+- **Un joueur absent de la page n'est pas « revenu »** : son entrée est gardée
+  jusqu'à sa date de fin, et n'est remplacée ou retirée que par une nouvelle
+  note. Le rapport liste les « gardés » et les « retirés ».
+- **« Revenu au jeu » sur une entrée synchro** : le serveur s'en souvient et la
+  synchro ne la remet pas pour la même note. Une nouvelle note la remet.
+- **Changer l'importance d'une entrée synchro** la rend manuelle : la synchro
+  ne l'écrase plus, et c'est à toi de la retirer.
+
+**Importance** (décision du user), sur le barème du § 3 :
+- attaquant : points par match, 0.02 + 0.05 × pts/m, borné 0.02-0.08 ;
+- défenseur : temps de glace, 0.03 + 0.005 × (min − 16), borné 0.02-0.08 ;
+- gardien : part des départs de l'équipe, 0.12 × part / 0.6, borné 0.03-0.12 ;
+- saison en cours dès 10 matchs, sinon la précédente ; moins de 10 matchs LNH → 0.03.
+
+**Pièges mesurés le 2026-09-29.** Le HTML brut met les attributs entre
+apostrophes (`class='resRow'`). Les effectifs LNH (`v1/roster/…/current`)
+n'incluent PAS les blessés, d'où le repli sur la recherche LNH. La liste
+remonte à un an, d'où le classement des notes. Code :
+`server/src/services/injurySync.ts` (règles dans `classifyNote`, durées par
+défaut dans `HORIZONS`) et `server/scripts/sync-injuries.ts`.
+
+---
+
+## 3. Chaque jour de match — /dev/saisie
+
+Page admin, aussi accessible depuis `/dev` et les Paramètres. Une carte par
+match, une liste d'absents par équipe. Chaque enregistrement écrit à la fois le
+facteur Blessures (règles) et les absents du soir (IA). La saisie est prise en
+compte au plus tard 90 s après.
+
+### Juste après la synchro
+
+- La carte **« Blessés longue durée »** montre tout ce qui compte à chaque
+  match, marqué « synchro » avec sa date de fin quand il vient de la synchro.
+  **« Revenu au jeu »** retire un joueur tout de suite.
+- Tranche les listes du rapport (incertains, introuvables, équipe à vérifier) :
+  ajoute l'absent au match du soir si tu es sûr, sinon laisse.
 
 ### 1-2 h avant la mise au jeu — passe finale (la plus importante)
 
-C'est ici que se remplit l'onglet **Compos du soir**, une fois les compos
-confirmées. Il liste toutes les équipes qui jouent ce jour-là, groupées par
-match, avec deux champs par équipe. La date est en **heure de l'Est** et la
-saisie est relue automatiquement dans les 30 s (aucun redémarrage).
+- **Gardien partant** — uniquement les **exceptions** (backup qui part, n° 1
+  blessé). Laisse vide sinon : le modèle retombe sur sa moyenne pondérée par
+  l'usage récent, ce qui est le bon défaut. Confirme-le (annonces officielles,
+  warmup) avant de parier.
+- **Absents de dernière minute** (game-time decisions, scratch au warmup) :
+  ajoute-les avec leur importance. Prends le nom dans l'autocomplétion ; un nom
+  hors effectif est signalé.
+- **Blessé pour plusieurs matchs ?** Coche « Blessé longue durée » : il restera
+  absent à chaque match, sans rien retaper.
+- Vider une saisie et réenregistrer la **retire** : c'est ainsi qu'on corrige
+  un gardien annoncé qui ne part finalement pas.
 
-- **Gardien partant** — uniquement les **exceptions** (backup qui part, n°1
-  blessé). Laisse vide sinon : le modèle retombe alors sur sa moyenne de
-  gardiens pondérée par l'usage récent, ce qui est le bon défaut.
-- **Absents** — séparés par des virgules : `Auston Matthews, Kaiden Guhle`.
+Barème d'importance (désavantage infligé à SON équipe) :
 
-Vider un champ et réenregistrer **retire** la saisie : c'est ainsi qu'on corrige
-un gardien annoncé qui ne part finalement pas.
-
-> **Le nom doit être l'orthographe MoneyPuck** — le service Python matche par
-> nom exact (insensible à la casse) contre son pool de joueurs clés (top-6
-> attaquants + top-4 défenseurs). Un nom mal orthographié est ignoré en silence.
-
-> Depuis un poste plutôt que le téléphone, la même chose en une commande :
-> ```bash
-> curl -X PUT https://api.arakice.com/api/manual/lineups/2026-01-15 \
->   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
->   -d '{"goalies":{"TOR":"Joseph Woll"},"scratches":{"MTL":["Kaiden Guhle"]}}'
-> ```
-
-- Confirme les gardiens partants (annonces officielles / warmup). **Ne parie pas
-  avant de l'avoir confirmé.**
-- Trios remaniés ou retour majeur → `lineupAdj` avec une note courte
-  (ex. « McDavid revient, 1er trio reformé »).
+| Bouton | Situation | Impact |
+|---|---|---|
+| Gardien n° 1 | Gardien partant absent / backup qui débute | **0.12** |
+| Joueur clé | Top-6 att., top-4 D, ~20 min | **0.06** |
+| Joueur de soutien | 3e-4e trio, 3e paire | **0.03** |
+| Options avancées | Trios remaniés, retour intégré | `lineupAdj` ±0.02 à 0.05 |
 
 ### Après le match
 
-Rien. Les entrées datées deviennent inertes, et le job de nettoyage quotidien
-purge celles de plus de 15 jours (`MANUAL_DATED_RETENTION_DAYS`) — il n'y a plus
-de fichier à ranger à la main. Supprime une entrée de blessures seulement si elle
-était fausse.
+Rien. Les saisies du soir deviennent inertes et se purgent seules après 15 jours
+(`MANUAL_DATED_RETENTION_DAYS`) ; les entrées synchro s'arrêtent à leur date de
+fin.
 
 ### Règles de jugement
 
 - **N'entre que ce qui change réellement le match.** Un 4e trio absent des deux
   côtés ≈ neutre : ignore.
+- **Ne ressaisis pas un joueur déjà listé en « Blessés longue durée »** : il
+  compte déjà.
 - **Cumul :** les impacts s'additionnent — 2 joueurs clés (0.06 + 0.06) pèsent
   déjà comme un gardien.
 - **Doute sur l'impact :** prends le préréglage inférieur. Sur-pondérer les
   blessures fait plus de dégâts que les ignorer.
 - **`lineupAdj`** sert aux effets d'alignement *hors blessures* (chimie des
   trios, fatigue cachée). Ne double-compte pas un blessé déjà saisi.
+- **En séries**, les équipes cachent les blessures : fie-toi aux absences
+  constatées au warmup et saisis tard.
 
 ---
 
-## 3. Saisonnier et occasionnel
-
-### Arbitres — `PUT /api/manual/referees` (début de saison)
-
-⚠️ **La table est VIDE — le facteur arbitre est donc inerte.** Elle l'était déjà
-avant : l'ancien `referees.json` ne contenait que 6 placeholders tous posés à la
-moyenne exacte (6.2), donc un multiplicateur de 1.0 et aucun effet. Ils n'ont
-volontairement pas été repris en base : une table qui a l'air remplie sans l'être
-est pire que vide. Tant que les vrais chiffres n'y sont pas, ce facteur n'apporte
-rien.
-
-- Source : scoutingtherefs.com, section *Referee Stats* (moyennes de saison).
-- `ppPerGame` = occasions de power-play accordées par match (deux équipes
-  cumulées) sous cet arbitre ; `leagueAvgPpPerGame` = la moyenne de la ligue.
-- Un arbitre absent de la table retombe sur la moyenne (multiplicateur 1.0,
-  aucun effet) — inutile de viser l'exhaustivité, commence par les 20-25
-  arbitres les plus utilisés.
-- L'appel **remplace la table entière** (transaction) : envoie toujours la liste
-  complète. C'est voulu — une table à moitié à jour est pire qu'une table
-  ancienne mais cohérente.
-- **Fréquence :** une passe en début de saison avec les chiffres de la saison
-  précédente, une révision vers Noël avec les chiffres de la saison en cours.
-
-```bash
-curl -X PUT https://api.arakice.com/api/manual/referees \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{
-    "leagueAvgPpPerGame": 6.2,
-    "referees": [
-      { "name": "Wes McCauley",     "ppPerGame": 6.9 },
-      { "name": "Kelly Sutherland", "ppPerGame": 5.6 }
-    ]
-  }'
-```
-
-### Assignation d'arbitres — `PUT /api/manual/ref-assignments/:cle` (secours)
-
-Normalement **automatique** : `refereeStore.ts` scrape Scouting the Refs via son
-API WordPress. La saisie manuelle (clé `VISITEUR@MAISON`) est vide et n'est à
-remplir que si le scraper cesse de parser (changement de format du site). En cas
-d'échec, tout retombe en neutre — aucune prédiction n'est cassée, le facteur
-disparaît simplement.
-
-```bash
-curl -X PUT https://api.arakice.com/api/manual/ref-assignments/TOR@BOS \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"refs":["Wes McCauley","Garrett Rank"]}'
-```
-
-> Le parser n'a **jamais été validé sur du vrai HTML** (site injoignable depuis
-> le sandbox). À vérifier une fois lors d'une vraie journée de match.
+## 4. Saisonnier et occasionnel
 
 ### Patinoires — `ml\data\arenas.json` + `server\src\data\arenas.ts`
 
-Table quasi statique (fuseau, altitude, coordonnées) qui alimente les features de
-voyage. À revoir en début de saison ou quand une équipe change d'aréna.
+Table quasi statique (fuseau, altitude, coordonnées) qui alimente les features
+de voyage. À revoir en début de saison ou quand une équipe change d'aréna.
 **`arenas.ts` est un miroir typé de `arenas.json` : modifie toujours les deux.**
 
 ### Données contenu — `content\refresh-insights.cmd`
@@ -226,61 +158,37 @@ conditions à surveiller :
 `content:mine` s'arrête de lui-même si une source dépasse 3 jours : c'est le
 signal que la tâche planifiée n'a pas tourné.
 
+### Arbitres — rien à faire, sauf panne
+
+Les deux se remplissent seuls depuis les billets Scouting the Refs
+(`refereeStore.ts`) : les **assignations** du soir, et la **tendance PP** de
+chaque arbitre (colonne carrière, `ref_tendency_auto`). Deux secours, par l'API
+seulement (plus d'écran) :
+
+- **Le relevé ne trouve plus les assignations** (le site a changé de gabarit) :
+  `PUT /api/manual/ref-assignments/VISITEUR@MAISON` avec `{"refs":["…","…"]}`,
+  prioritaire sur le relevé. Sans rien, le facteur retombe simplement en neutre.
+- **Corriger la tendance d'un arbitre** : `PUT /api/manual/referees`. Une saisie
+  manuelle gagne toujours sur le relevé automatique, et l'appel **remplace toute
+  la table manuelle** : envoie la liste complète.
+
 ---
 
-## 4. Ce qui n'a rien à saisir
+## 5. Ce qui n'a rien à saisir
 
-Stats d'équipes, de joueurs et de gardiens · calendrier · cotes (The Odds API,
-clé posée une fois dans l'env) · voyage / fuseaux / altitude / road-trips ·
-back-to-backs · repos · PP%/PK% (défauts gérés en début de saison, quand l'API
-renvoie 0) · règlement des paris.
-
-En séries : les équipes cachent les blessures. Fie-toi aux absences constatées au
-warmup et saisis tard.
+Blessés listés par la source (synchro, § 2) · arbitres (§ 4) · stats d'équipes,
+de joueurs et de gardiens · calendrier · cotes (The Odds API, clé posée une fois
+dans l'env) · voyage / fuseaux / altitude / road-trips · back-to-backs · repos ·
+PP%/PK% (défauts gérés en début de saison, quand l'API renvoie 0) · règlement
+des paris.
 
 ---
 
-## 5. État des deux points bloquants
+## 6. Point ouvert : un gardien absent peut compter double
 
-**a) Les quatre tables manuelles étaient mortes en production — RÉGLÉ le 2026-09-04.**
-
-Le diagnostic du 2026-08-11 était juste, et pire que prévu : `server\Dockerfile`
-ne copie que `dist/`, `tsc` n'émet pas les `.json` de `src/data/`, et le dossier
-`ml/` n'est pas dans l'image. Vérifié dans le `dist/` réel : il ne contenait que
-les `.js`. Conséquence, silencieuse dans les quatre cas :
-
-| Fichier | Comportement en prod |
-|---|---|
-| `referees.json` | absent → tous les arbitres neutres, facteur mort |
-| `injuries.json` | lecture → `{}` ; `PUT /api/injuries` écrivait dans un `dist/data/` inexistant → **500**, et de toute façon effacé à chaque redéploiement |
-| `starting_goalies.json` / `scratches.json` | chemin `cwd/../ml/data` inexistant → zéro absent, zéro gardien |
-
-**Option retenue : les quatre tables en base** (migration
-`034_manual_data.sql`). C'est la seule qui règle les trois problèmes à la fois —
-présence dans l'image, persistance au redéploiement, partage entre instances.
-Copier les JSON dans l'image n'aurait réglé que la lecture : le système de
-fichiers d'un conteneur est éphémère, donc toute saisie faite depuis la carte
-admin aurait disparu au déploiement suivant.
-
-Ce qui change pour toi :
-
-- La saisie se fait dans l'app (Profil → Paramètres → **Saisie manuelle**), donc
-  **depuis le téléphone**, ce qui rend enfin faisable la passe de 1-2 h avant la
-  mise au jeu — les matchs sont le soir en Amérique.
-- Les anciens `.json` ont été supprimés du dépôt : il n'y a plus deux sources de
-  vérité possibles.
-- Les entrées datées se purgent toutes seules après 15 jours.
-- Les variables `SCRATCHES_PATH` et `STARTING_GOALIES_PATH` n'existent plus.
-
-⚠️ **La migration doit être appliquée en production** (`npm run db:migrate:all`
-avec le `DATABASE_URL` de prod) avant le déploiement du serveur, sinon toutes les
-lectures échouent et retombent en neutre — avec, cette fois, un `warn` dans les
-logs.
-
-**b) Un gardien absent se saisit toujours à deux endroits.** — NON RÉGLÉ.
-
-L'onglet **Blessures** (impact 0.12, facteur glass-box) et l'onglet **Compos du
-soir** (feature ML) alimentent tous deux la prédiction finale. Le passage en base
-n'a rien changé à ce point : c'est une question de modèle, pas de stockage. À
-mesurer sur un cas réel avant de s'y fier — un gardien saisi des deux côtés peut
-compter double.
+Un gardien absent ajouté à la liste d'absents (0.12, facteur Blessures des
+règles) et son remplaçant saisi dans « Qui garde le but ce soir ? » (feature
+ML) alimentent tous deux la prédiction finale. La synchro ajoute le même cas
+tout seul : un n° 1 blessé y entre à 0.12, alors que le modèle ML voit déjà son
+remplaçant par l'usage récent. C'est une question de modèle, pas de saisie. À
+mesurer sur un cas réel avant de s'y fier.

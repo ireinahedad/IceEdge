@@ -1,6 +1,6 @@
 # ArakIce / ICEEDGE — Project status
 
-**Single source of truth for what is done and what remains. Updated 2026-09-26 (afternoon).**
+**Single source of truth for what is done and what remains. Updated 2026-09-30 (season start).**
 
 Built by reading every planning doc in the repo (plus the deleted `RESTE_A_FAIRE.md`,
 recovered from Git) and checking each claim against the code and the Git log.
@@ -26,8 +26,9 @@ recovered from Git) and checking each claim against the code and the Git log.
 - **iOS has not started, and the web is NOT frozen.** Support mailbox recovered (2026-09-25).
   The `pre-ios-freeze` tag (put on `1244bac` on 2026-09-26) was **removed on 2026-09-28**: web
   work continues freely until iOS actually starts; re-tag the freeze point at that moment.
-- **The NHL 2026-27 season starts in early October.** Several tasks are tied to it (§3.2),
-  including turning on public slips (the docs target `2026-10-07`).
+- **The NHL 2026-27 regular season started on 2026-09-29** (84 games per team, back from 82;
+  preseason ran 09-19 → 09-26). The season-start tasks are in §3.2; what is left there is
+  console work (Railway) and checks on the live site.
 
 ---
 
@@ -231,17 +232,28 @@ recovered from Git) and checking each claim against the code and the Git log.
       `ODDS_API_KEY acceptée`. (The DB password that leaked was a local one — no rotation needed;
       history purge was abandoned on purpose.)
 
-### 3.2 At the start of the NHL 2026-27 season (early October)
+### 3.2 At the start of the NHL 2026-27 season (started 2026-09-29)
 
-- [ ] **Show the model % again on the home page game cards**: set `SHOW_MODEL_PCT_ON_HOME = true`
-      in `client/src/app/pages/landing/LandingCards.tsx` (hidden on 2026-09-24 during pre-season —
-      covers both teams' %, the live-card bar, the O/U % and the edge badge).
-- [ ] **Turn on public slips** — `DEPLOYMENT.md` §7: migrations 029/030 applied, notify players
-      by email (`npm run notify:slips`, dry run then `--send`), set
-      `PUBLIC_SLIPS_SINCE=2026-10-07T00:00:00Z` on Railway, redeploy, run the checks.
-- [ ] **Refresh ML data**: `fetch_data_v4.py` → `build_dataset.py` → `train_player.py --state-only`
-      (player and inference state date from 2026-04-16); run `train_score.py` so the
-      per-matchup overtime share goes live (`/dev/ml` still shows `P(OT home) 0.500`).
+- [x] **Model % back on the home page game cards** — `SHOW_MODEL_PCT_ON_HOME = true` in
+      `LandingCards.tsx` (2026-09-30, *not yet committed or deployed*). Only the live-card bar and
+      the edge badge still read that flag.
+- [x] **84-game season** — `POST /api/predict/player-prop` (season-long props) projected pace and
+      "games remaining" on 82, and read LAST season's totals as this season's for any player
+      who had not played yet (`pickSeasonRow` falls back to the previous season): a player
+      with 82 GP last year showed "2 games remaining". Now `REGULAR_SEASON_GAMES = 84` and only
+      `statsSeason === currentSeason()` counts (`ml.routes.ts`, 2026-09-30, *not yet committed*).
+      Left on 82 on purpose: the GP-based confidence scale in `ml_service.py` (heuristic, capped).
+- [x] **ML data** — dataset, `inference_state.json` and `player_state.json` go to 2026-04-16, the
+      last day of 2025-26 (✔ `games_spine.csv` ends on game `2025021312`); score model v2 retrained
+      2026-09-27 with the per-matchup OT share (`p_ot_model`). Nothing newer exists until 2026-27
+      games are played → next step is the monthly retrain (§3.5).
+- [ ] **Turn on public slips** — decided 2026-09-30: open **today**, no real users yet (test
+      accounts only). Migrations 029/030 ✔ already on Neon (everything through 037). Left, on your
+      side: `npm run notify:slips -- --date 2026-09-30` (dry run only — if it lists only test
+      accounts, no `--send`), then Railway → Node service →
+      `PUBLIC_SLIPS_SINCE=2026-09-30T00:00:00Z` → Deploy, then the checks of `DEPLOYMENT.md` §7.
+- [ ] **`DORMANT` off** — check the Railway banner has no `DORMANT=true` (`DEPLOYMENT.md` §1):
+      with it on, bets placed since the season opener are not settled and the odds logger sleeps.
 - [ ] **Odds logger (A1bis)**: check the banner (`ODDS_API_KEY acceptée`, `slots: 6`, no
       `DORMANT=true`), then `/dev/ml` → Data → "Série temporelle des cotes": `passes_today = 6`,
       `with_puckline > 0`. Scheduled check-ins were set for 2026-09-22 and 2026-10-13 — read

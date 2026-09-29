@@ -683,9 +683,17 @@ du choix de la date, et ça rend la bascule réversible en une variable.
    > est vue par tous ceux qui déposent un coupon, donc par tous ceux qui sont
    > concernés.
 4. **Poser la variable** sur Railway (service Node), au format ISO 8601 :
-   `PUBLIC_SLIPS_SINCE=2026-10-07T00:00:00Z`
+   `PUBLIC_SLIPS_SINCE=2026-09-30T00:00:00Z`
    Viser le **début de saison NHL** : allumer en septembre donnerait des pages
    vides pendant trois semaines.
+
+   > **Décidé le 2026-09-30** : la saison 2026-27 a commencé le 29 septembre
+   > (pas début octobre comme prévu) et il n'y a **pas encore de vrais
+   > utilisateurs** — seulement des comptes de test. Date d'ouverture : le
+   > **2026-09-30**, sans préavis d'une semaine. L'étape 3 se limite à la
+   > simulation : si elle ne liste que des comptes de test, **pas de `--send`**.
+   > Dès qu'il y aura de vrais comptes, toute nouvelle date suit la procédure
+   > complète (courriel d'abord, variable ensuite).
 5. **Redéployer** le service Node (Railway relance sur changement de variable).
 
 ### Vérifications après allumage
