@@ -1,82 +1,134 @@
+import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
+import { useAuth } from "../context/AuthContext";
+import { apiGetSubscription } from "../services/subscriptionService";
 
 /**
- * "How it works" guide — explains the three prediction sources (Rules, ML, LLM)
- * and how to use the app. Bilingual (FR/EN) via the app language.
+ * « Comment ça marche » : le guide de la page Stats (bouton « ? »).
+ *
+ * Réécrit le 2026-09-29 à la demande du user : phrases courtes, pas de tirets,
+ * pas d'émojis, une idée par ligne ; puis détaillé (règles utilisées, saisons
+ * du ML, fonctionnement et coût du LLM).
+ *
+ * ⚠️ Faits à garder vrais si on retouche :
+ *   - Règles : `server/src/services/nhlPredictions.ts` (`computeGameMarkets`) :
+ *     force = 70 % fiche de saison + 30 % 10 derniers matchs, Log5, glace,
+ *     fatigue (repos, matchs consécutifs, voyage, fuseaux, altitude), cotes,
+ *     blessures et alignement ; totaux et joueurs par Poisson.
+ *   - ML : `ml/models/training_report.json` (modèle du vainqueur). ⚠️ Les
+ *     saisons et le nombre de matchs sont RECOPIÉS ici : à mettre à jour après
+ *     un réentraînement (`python train.py`). Les hyperparamètres ne sont PAS
+ *     affichés (décision du user, 2026-09-29).
+ *   - LLM : le plafond Pro n'est JAMAIS écrit en dur ; il vient du serveur
+ *     (`llmMonthlyQuota` de `GET /subscription/me`), comme sur /pro.
+ *   - Couleurs des % : bleu → mauve → rouge, écrans de prédiction seulement.
  */
 
 interface Section {
-  icon: string;
   title: string;
   color: string;
-  body: string;
+  /** `null` = ligne masquée (ex. plafond Pro inconnu). */
+  lines: (string | null)[];
 }
 
 export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
   const { lang } = useI18n();
+  const { user } = useAuth();
   const fr = lang === "fr";
 
+  // Plafond IA Pro, tel que le serveur le calcule. Absent (hors connexion,
+  // erreur) : la ligne Pro n'est pas affichée du tout (décision du user,
+  // 2026-09-29) plutôt que d'inventer un chiffre.
+  const [quota, setQuota] = useState<number | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    apiGetSubscription()
+      .then((s) => { if (alive && s.llmMonthlyQuota) setQuota(s.llmMonthlyQuota); })
+      .catch(() => { /* phrase sans chiffre */ });
+    return () => { alive = false; };
+  }, [user]);
+
   const intro = fr
-    ? "ArakIce estime la probabilité de chaque pari à partir de trois moteurs complémentaires. La même probabilité est affichée dans les stats et enregistrée dans ton pari — elle vient toujours de la même source, donc les chiffres concordent partout."
-    : "ArakIce estimates the probability of each bet from three complementary engines. The same probability is shown in the stats and stored in your slip — it always comes from the same source, so the numbers match everywhere.";
+    ? "Chaque pari affiche sa chance de passer, en %. C'est ce chiffre qui est enregistré dans ton coupon."
+    : "Every bet shows its chance of hitting, in %. That number is the one saved in your slip.";
+
+  const proLine = !quota ? null : fr
+    ? `Avec Pro : jusqu'à ${quota} requêtes par mois, incluses.`
+    : `With Pro: up to ${quota} requests a month, included.`;
 
   const sections: Section[] = [
     {
-      icon: "📐",
       color: "#86d1ea",
-      title: fr ? "Règles (statistiques)" : "Rules (statistics)",
-      body: fr
-        ? "Le moteur de base. Il calcule une probabilité avec des formules mathématiques appliquées aux vraies stats de la saison : Log5 (force relative des équipes) pour les vainqueurs, et distribution de Poisson (rythme de buts/tirs/points par match) pour les totaux et les props de joueurs. Rapide, transparent et déterministe : le même contexte donne toujours le même chiffre. C'est la source qui couvre tous les marchés."
-        : "The base engine. It computes a probability with math formulas applied to real season stats: Log5 (relative team strength) for winners, and a Poisson distribution (goals/shots/points-per-game rate) for totals and player props. Fast, transparent and deterministic: the same context always gives the same number. It's the source that covers every market.",
+      title: fr ? "Règles" : "Rules",
+      lines: fr
+        ? [
+            "Vainqueur : la force des deux équipes (70 % fiche de la saison, 30 % 10 derniers matchs), comparée avec la formule Log5.",
+            "Ajustée par l'avantage de la glace et la fatigue : jours de repos, matchs consécutifs, voyage, fuseaux horaires, altitude.",
+            "Les cotes du marché, les blessures et l'alignement s'ajoutent quand on les a.",
+            "Totaux et paris joueurs : on estime la moyenne attendue de buts, tirs ou points, puis la loi de Poisson donne la chance de dépasser la ligne.",
+            "Tu peux changer le poids de chaque facteur.",
+          ]
+        : [
+            "Winner: both teams' strength (70% season record, 30% last 10 games), compared with the Log5 formula.",
+            "Adjusted for home ice and fatigue: rest days, back-to-backs, travel, time zones, altitude.",
+            "Market odds, injuries and lineups are added when we have them.",
+            "Totals and player bets: we estimate the expected goals, shots or points, then a Poisson distribution gives the chance of clearing the line.",
+            "You can change the weight of each factor.",
+          ],
     },
     {
-      icon: "🤖",
       color: "#a78bfa",
-      title: fr ? "ML (modèle entraîné)" : "ML (trained model)",
-      body: fr
-        ? "Un modèle d'apprentissage automatique (gradient boosting XGBoost) entraîné côté serveur sur des milliers de matchs passés : force relative des équipes, qualité des chances créées et concédées, repos et matchs consécutifs, avantage de la glace. Il renvoie sa propre probabilité — recalibrée pour que « 60 % » veuille vraiment dire 60 % — et l'importance de chaque facteur, ce qui permet de voir POURQUOI il penche d'un côté. Utile pour confirmer ou nuancer la règle : quand ML et règles s'accordent, la confiance est plus forte."
-        : "A machine-learning model (XGBoost gradient boosting) trained server-side on thousands of past games: relative team strength, quality of chances created and conceded, rest and back-to-backs, home-ice advantage. It returns its own probability — recalibrated so that “60%” really means 60% — and each factor's importance, so you can see WHY it leans one way. Useful to confirm or temper the rule: when ML and rules agree, confidence is higher.",
+      title: "ML",
+      lines: fr
+        ? [
+            "Un modèle XGBoost entraîné sur les anciennes saisons, de 2008-2009 à 2025-2026 : environ 21 500 matchs.",
+            "Les matchs les plus anciens servent à l'entraîner et à le régler ; les 20 % les plus récents servent seulement à le tester.",
+            "Il regarde entre autres l'Elo, les chances de marquer créées et accordées, les gardiens, les joueurs clés absents, le repos et les cotes.",
+            "Ses probabilités sont recalibrées : un 60 % passe environ 6 fois sur 10.",
+          ]
+        : [
+            "An XGBoost model trained on past seasons, from 2008-09 to 2025-26: about 21,500 games.",
+            "The oldest games train and tune it; the most recent 20% are only used to test it.",
+            "It looks at Elo, scoring chances created and allowed, goalies, missing key players, rest and odds, among others.",
+            "Its probabilities are recalibrated: a 60% hits about 6 times out of 10.",
+          ],
     },
     {
-      icon: "✨",
       color: "#c084fc",
-      title: fr ? "LLM (Ask LLM)" : "LLM (Ask LLM)",
-      body: fr
-        ? "Une analyse en langage naturel qui apporte le contexte que les chiffres ne captent pas : matchup de style, motivation, fatigue, et surtout ce qu'il faut VÉRIFIER avant de parier (blessures, gardien partant confirmé, changements d'alignement de dernière minute). Ce n'est pas une probabilité, mais un avis à recouper. En Pro, l'analyse tourne sur le modèle intégré, dans la limite d'un forfait mensuel ; au-delà — et sur un compte gratuit, où s'ajoute une limite quotidienne — c'est ta propre clé OpenAI qui prend le relais."
-        : "A natural-language analysis that adds the context numbers miss: style matchup, motivation, fatigue, and above all what to VERIFY before betting (injuries, confirmed starting goalie, last-minute lineup changes). It's not a probability but a second opinion to cross-check. On Pro the analysis runs on the built-in model within a monthly allowance; past that — and on a Free account, which also has a daily limit — your own OpenAI key takes over.",
+      title: "LLM",
+      lines: fr
+        ? [
+            "Il lit les données du pari et ajoute ce que les chiffres ne voient pas : forme, fatigue, voyage, style de jeu, motivation.",
+            "Il liste ce qu'il faut vérifier avant de parier : blessures, gardien partant, alignement.",
+            "Il finit par un verdict et un niveau de confiance. Tu peux ensuite lui poser d'autres questions sur le pari.",
+            proLine,
+            "Sans Pro : il utilise ta propre clé OpenAI (Réglages), à tes frais. Chaque question compte pour une requête.",
+          ]
+        : [
+            "It reads the bet's data and adds what the numbers miss: form, fatigue, travel, playing style, motivation.",
+            "It lists what to check before betting: injuries, starting goalie, lineup.",
+            "It ends with a verdict and a confidence level. You can then ask it more questions about the bet.",
+            proLine,
+            "Without Pro: it uses your own OpenAI key (Settings), at your cost. Each question counts as one request.",
+          ],
     },
   ];
 
-  const reading = fr
+  const tips = fr
     ? [
-        "Le % est la probabilité estimée que le pari passe. Sur les écrans de prédiction, la couleur suit une seule échelle : bleu quand c'est probable, mauve autour de l'équilibre, rouge quand ça l'est peu.",
-        "La pastille de confiance résume l'estimation d'un mot : confiance élevée, modérée, match serré ou choix outsider.",
-        "Touche un pari pour ouvrir le détail : règle + note explicative, carte ML avec ses facteurs, et le bouton Ask LLM.",
+        "Bleu : probable. Mauve : serré. Rouge : peu probable.",
+        "Touche un pari pour voir le détail et l'ajouter au coupon.",
+        "Plusieurs paris ? Le coupon calcule la chance que tout passe.",
+        "Deux paris contraires sont permis. Le total tombe alors à 0 %.",
+        "Meilleurs paris, sur l'accueil : les matchs des 48 prochaines heures.",
       ]
     : [
-        "The % is the estimated probability the bet hits. On the prediction screens, colour follows one scale: blue when it's likely, purple around even, red when it isn't.",
-        "The confidence pill sums the estimate up in a word: high confidence, moderate, even match or underdog pick.",
-        "Tap a bet to open the detail: rule + explanation note, ML card with its factors, and the Ask LLM button.",
-      ];
-
-  const actions = fr
-    ? [
-        "Explore par équipe, par match ou par joueur avec les onglets en haut.",
-        "Ajoute une sélection au pari avec le bouton « + » : la probabilité affichée est celle qui est enregistrée.",
-        "Empile plusieurs sélections : le pari calcule la probabilité combinée. Deux sélections qui ne peuvent pas se réaliser ensemble tombent à 0, une sélection en double ou déjà contenue dans une autre n'est comptée qu'une fois, et deux sélections d'un même match sont recalculées en tenant compte de leur lien.",
-        "Le pari dit à l'écran ce qu'il a fait de tes sélections : pourquoi la combinaison est impossible, quelles sélections ne comptent qu'une fois, et quand le chiffre reste une approximation. Rien ne disparaît du calcul en silence.",
-        "Rien ne t'est interdit pour autant : deux sélections qui se contredisent peuvent rester au pari et être verrouillées — la probabilité combinée affiche alors 0 %.",
-        "Sur l'accueil, « Meilleurs paris » classe les paris des matchs des 48 prochaines heures — la liste est donc vide quand il n'y a pas de match.",
-        "Partage ton pari en image.",
-      ]
-    : [
-        "Explore by team, game or player with the tabs at the top.",
-        "Add a bet to the slip with the “+” button: the shown probability is the one stored.",
-        "Stack several bets: the slip computes the combined probability. Two bets that cannot both happen drop to 0, a duplicate bet — or one already contained in another — is counted once, and two bets on the same game are recomputed with their link taken into account.",
-        "The slip tells you on screen what it did with your bets: why a combination is impossible, which bets only count once, and when the number is still an approximation. Nothing leaves the calculation silently.",
-        "Nothing is forbidden either: two contradicting bets can stay on the slip and be locked — the combined probability then reads 0%.",
-        "On the home screen, “Best Bets” ranks bets from games in the next 48 hours — so the list is empty when no game is scheduled.",
-        "Share your slip as an image.",
+        "Blue: likely. Purple: close. Red: unlikely.",
+        "Tap a bet to see the detail and add it to your slip.",
+        "Several bets? The slip works out the chance they all hit.",
+        "Opposite bets are allowed. The total then drops to 0%.",
+        "Best Bets, on the home screen: games in the next 48 hours.",
       ];
 
   return (
@@ -96,16 +148,12 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-1 pb-3 border-b border-white/10 flex-shrink-0">
-          <div>
-            <h2 className="text-white font-bold text-lg" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>
-              {fr ? "Comment ça marche" : "How it works"}
-            </h2>
-            <p className="text-[#8a9ea6] text-xs mt-0.5">
-              {fr ? "Le guide des prédictions ArakIce" : "The ArakIce prediction guide"}
-            </p>
-          </div>
+          <h2 className="text-white font-bold text-lg" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>
+            {fr ? "Comment ça marche" : "How it works"}
+          </h2>
           <button
             onClick={onClose}
+            aria-label={fr ? "Fermer" : "Close"}
             className="tap-44 w-8 h-8 rounded-full bg-[#1B2419] flex items-center justify-center text-[#bfc8cc] flex-shrink-0"
           >
             ✕
@@ -116,61 +164,33 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
         <div className="overflow-y-auto px-5 py-4 pb-nav-safe flex flex-col gap-4">
           <p className="text-[#bfc8cc] text-[13px] leading-relaxed">{intro}</p>
 
-          <div>
-            <p className="text-[#4a6070] text-[11px] font-semibold uppercase tracking-wider mb-2">
-              {fr ? "Les 3 sources de prédiction" : "The 3 prediction sources"}
-            </p>
-            <div className="flex flex-col gap-2.5">
-              {sections.map((s) => (
-                <div
-                  key={s.title}
-                  className="bg-[#131A12] border border-white/10 rounded-2xl p-4"
-                  style={{ borderLeft: `3px solid ${s.color}` }}
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-lg">{s.icon}</span>
-                    <span className="text-white text-sm font-bold" style={{ color: s.color }}>
-                      {s.title}
-                    </span>
-                  </div>
-                  <p className="text-[#bfc8cc] text-[12.5px] leading-relaxed">{s.body}</p>
-                </div>
-              ))}
-            </div>
+          <div className="flex flex-col gap-2">
+            {sections.map((s) => (
+              <div
+                key={s.title}
+                className="bg-[#131A12] border border-white/10 rounded-2xl px-4 py-3"
+                style={{ borderLeft: `3px solid ${s.color}` }}
+              >
+                <p className="text-sm font-bold mb-1" style={{ color: s.color }}>{s.title}</p>
+                <ul className="flex flex-col gap-1">
+                  {s.lines.filter((line): line is string => line !== null).map((line) => (
+                    <li key={line} className="text-[#bfc8cc] text-[12.5px] leading-relaxed">{line}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
 
-          <div>
-            <p className="text-[#4a6070] text-[11px] font-semibold uppercase tracking-wider mb-2">
-              {fr ? "Lire une prédiction" : "Reading a prediction"}
-            </p>
-            <div className="bg-[#131A12] border border-white/10 rounded-2xl p-4 flex flex-col gap-2">
-              {reading.map((r, i) => (
-                <div key={i} className="flex gap-2.5">
-                  <span className="text-[#86d1ea] text-xs mt-0.5 flex-shrink-0">→</span>
-                  <span className="text-[#bfc8cc] text-[12.5px] leading-relaxed">{r}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <p className="text-[#4a6070] text-[11px] font-semibold uppercase tracking-wider mb-2">
-              {fr ? "Ce que tu peux faire" : "What you can do"}
-            </p>
-            <div className="bg-[#131A12] border border-white/10 rounded-2xl p-4 flex flex-col gap-2">
-              {actions.map((a, i) => (
-                <div key={i} className="flex gap-2.5">
-                  <span className="text-green-400 text-xs mt-0.5 flex-shrink-0">✓</span>
-                  <span className="text-[#bfc8cc] text-[12.5px] leading-relaxed">{a}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <ul className="bg-[#131A12] border border-white/10 rounded-2xl px-4 py-3 flex flex-col gap-1.5">
+            {tips.map((tip) => (
+              <li key={tip} className="text-[#bfc8cc] text-[12.5px] leading-relaxed">{tip}</li>
+            ))}
+          </ul>
 
           <p className="text-[#5a6a72] text-[11px] leading-relaxed text-center pt-1 pb-2">
             {fr
-              ? "Les probabilités sont des estimations d'aide à la décision, pas des garanties. Parie de façon responsable."
-              : "Probabilities are decision-support estimates, not guarantees. Bet responsibly."}
+              ? "Ce sont des estimations, pas des garanties. Joue de façon responsable."
+              : "These are estimates, not guarantees. Bet responsibly."}
           </p>
         </div>
       </div>

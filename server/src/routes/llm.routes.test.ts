@@ -125,6 +125,23 @@ describe('POST /api/llm — l\'invite système est construite par le serveur', (
     expect(consumeProRequest).not.toHaveBeenCalled();
   });
 
+  it('ask_followup : sa propre invite serveur, et le quota Pro décompté comme une analyse', async () => {
+    const res = await request(await llmApp()).post('/api/llm')
+      .send({ prompt: 'Question : et si le gardien partant change ?', taskType: 'ask_followup', locale: 'fr' });
+    expect(res.status).toBe(200);
+    const system = sentBody.messages.filter((m: any) => m.role === 'system');
+    expect(system).toHaveLength(1);
+    expect(system[0].content).toContain('question de suivi');
+    expect(system[0].content).not.toContain('Verdict');
+    expect(consumeProRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('ask_followup en anglais', async () => {
+    await request(await llmApp()).post('/api/llm')
+      .send({ prompt: 'x', taskType: 'ask_followup', locale: 'en' });
+    expect(sentBody.messages[0].content).toContain('follow-up question');
+  });
+
   it('le chemin Free (clé de l\'utilisateur) reçoit la MÊME invite serveur', async () => {
     isPro.mockResolvedValueOnce(false);
     await request(await llmApp()).post('/api/llm')
@@ -302,6 +319,13 @@ describe('POST /api/llm — parse_bet_command', () => {
     it('explain_bet sans clé perso : toujours 422 (inchangé)', async () => {
       await userHasNoKey();
       const res = await request(await llmApp()).post('/api/llm').send({ prompt: 'x', taskType: 'explain_bet', locale: 'fr' });
+      expect(res.status).toBe(422);
+      expect(consumeFreeParse).not.toHaveBeenCalled();
+    });
+
+    it('ask_followup sans clé perso : 422 aussi — pas d\'appel offert sur la clé de l\'opérateur', async () => {
+      await userHasNoKey();
+      const res = await request(await llmApp()).post('/api/llm').send({ prompt: 'x', taskType: 'ask_followup', locale: 'fr' });
       expect(res.status).toBe(422);
       expect(consumeFreeParse).not.toHaveBeenCalled();
     });

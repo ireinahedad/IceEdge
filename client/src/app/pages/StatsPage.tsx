@@ -18,7 +18,13 @@ import { SlipCommandLauncher } from "../components/SlipCommandSheet";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-const filterTabKeys = ["stats.byTeam", "stats.byGame", "stats.byPlayer"];
+// « Par match » en premier, et ouvert par défaut (demande du user, 2026-09-29).
+type Filter = "game" | "team" | "player";
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: "game",   label: "stats.byGame" },
+  { key: "team",   label: "stats.byTeam" },
+  { key: "player", label: "stats.byPlayer" },
+];
 
 type Subject = { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 interface AddSheetState { open: boolean; subject?: Subject }
@@ -58,7 +64,7 @@ function HowItWorksButton({ onClick, accent }: { onClick: () => void; accent: st
   return (
     <button
       onClick={onClick}
-      className="tap-44 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold flex-shrink-0 transition-all active:scale-95"
+      className="tap-44 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold flex-shrink-0 transition-all active:scale-95"
       style={{ color: accent, borderColor: `${accent}4d`, backgroundColor: `${accent}1a`, border: `1px solid ${accent}4d` }}
     >
       <HelpCircle size={13} />
@@ -214,7 +220,7 @@ export function StatsPage() {
   const { theme } = useSport();
   const { t, lang } = useI18n();
   const accent = theme.accent;
-  const [activeFilter, setActiveFilter] = useState(0);
+  const [activeFilter, setActiveFilter] = useState<Filter>("game");
   const [search, setSearch] = useState("");
   const [addSheet, setAddSheet] = useState<AddSheetState>({ open: false });
   const [howItWorks, setHowItWorks] = useState(false);
@@ -276,20 +282,26 @@ export function StatsPage() {
             2026-09-29 (demande du user) : il défile avec la page, donc les
             trois rondelles disparaissent quand on descend. Le bandeau
             « Statistiques » est parti — c'est maintenant l'onglet du haut. */}
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <p className="text-[#bfc8cc] text-xs">{t("stats.subtitle")}</p>
-          <HowItWorksButton accent={accent} onClick={() => setHowItWorks(true)} />
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <p className="text-[#bfc8cc] text-xs pt-2">{t("stats.subtitle")}</p>
+          {/* « Bet builder IA » sous « Comment ça marche », même taille
+              (demande du user, 2026-09-29) — il était un bandeau pleine
+              largeur sous la recherche. */}
+          <div className="flex flex-col items-stretch gap-1.5 shrink-0">
+            <HowItWorksButton accent={accent} onClick={() => setHowItWorks(true)} />
+            <SlipCommandLauncher variant="chip" />
+          </div>
         </div>
         {/* Team / Game / Player as pucks. */}
         <div className="flex items-center justify-center gap-2 md:gap-2.5 mb-3">
-          {filterTabKeys.map((tabKey, i) => (
+          {FILTERS.map((f) => (
             <button
-              key={tabKey}
-              onClick={() => setActiveFilter(i)}
-              className={`rink-puck${activeFilter === i ? " is-active" : ""}`}
-              aria-pressed={activeFilter === i}
+              key={f.key}
+              onClick={() => setActiveFilter(f.key)}
+              className={`rink-puck${activeFilter === f.key ? " is-active" : ""}`}
+              aria-pressed={activeFilter === f.key}
             >
-              <span className="rink-puck-label">{t(tabKey)}</span>
+              <span className="rink-puck-label">{t(f.label)}</span>
             </button>
           ))}
         </div>
@@ -299,25 +311,21 @@ export function StatsPage() {
             placeholder={t("stats.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
           {search && <button onClick={() => setSearch("")} className="tap-44 text-[#bfc8cc] text-xs">×</button>}
         </div>
-        {/* Au-dessus des trois onglets (décision du user, 2026-09-28). */}
-        <div className="mb-3">
-          <SlipCommandLauncher variant="block" />
-        </div>
         <div className="flex items-center mb-3">
           <span className="text-[#bfc8cc] text-xs">
-            {activeFilter === 0 && `${filteredTeams.length} ${t("stats.teams")}`}
-            {activeFilter === 1 && (
+            {activeFilter === "team" && `${filteredTeams.length} ${t("stats.teams")}`}
+            {activeFilter === "game" && (
               <span className="flex items-center gap-2">
                 <span>{t("stats.matches", { n: filteredGames.length })}</span>
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#1B2419] text-[#bfc8cc]">{gamesLabel}</span>
               </span>
             )}
-            {activeFilter === 2 && t("stats.players")}
+            {activeFilter === "player" && t("stats.players")}
           </span>
         </div>
 
         {/* ── By Team ── */}
-        {activeFilter === 0 && (
+        {activeFilter === "team" && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
             {filteredTeams.length > 0 ? (
               /* Par conférence, puis par division (2026-09-25) : Est =
@@ -364,7 +372,7 @@ export function StatsPage() {
         )}
 
         {/* ── By Game ── */}
-        {activeFilter === 1 && (
+        {activeFilter === "game" && (
           <div className="flex flex-col gap-3">
             {filteredGames.length > 0 ? (
               /* Un titre par journée au-dessus de ses matchs (aujourd'hui,
@@ -406,7 +414,7 @@ export function StatsPage() {
         )}
 
         {/* ── By Player ── */}
-        {activeFilter === 2 && (
+        {activeFilter === "player" && (
           <PlayersTab teams={teams} accent={accent} />
         )}
 

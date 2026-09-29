@@ -27,6 +27,41 @@ altitude) se rafraîchit seul.
 > joueur est rangé par équipe (`manual_data`, kind `long_injuries`) et le
 > serveur l'ajoute TOUT SEUL aux absents du jour (IA) et au facteur Blessures
 > (règles) de chaque match de son équipe, jusqu'au clic « Revenu au jeu ».
+>
+> **Mise à jour 2026-09-29 — synchro des blessés** : `npm run injuries:sync`
+> (dans `server/`, depuis le poste du user, jamais sur Railway) lit la 1re page
+> de la liste de PoolExpert (≈ 150 notes récentes ; les pages suivantes sont
+> refusées aux robots, 403 mesuré le 2026-09-30, on ne les demande pas), garde
+> la DERNIÈRE note de chaque joueur, décide « absent ou non,
+> et jusqu'à quand », puis range les absents dans `long_injuries` en entrées
+> `source: 'auto'` avec une date de fin `until`. Rien de la note n'est stocké.
+> Simulation par défaut ; `npm run injuries:sync -- --apply` écrit. Rappel
+> par tâche planifiée à 11 h 55 (heure de l'Est) les jours de match.
+>
+> - **Ce qu'elle ne touche jamais** : les entrées saisies à la main.
+> - **Un joueur absent de la page n'est pas « revenu »** : son entrée synchro
+>   est gardée jusqu'à sa date de fin. Elle n'est remplacée ou retirée que par
+>   une NOUVELLE note sur la page (ou à sa date de fin). Le rapport liste les
+>   « gardés » et les « retirés ».
+> - **« Revenu au jeu » sur une entrée synchro** : le serveur s'en souvient
+>   (`dismissed`) et la synchro ne la remet pas pour la même note. Une NOUVELLE
+>   note de la source (autre date) la remet.
+> - **Changer l'importance d'une entrée synchro** la rend manuelle : la synchro
+>   ne l'écrase plus, et c'est au collègue de la retirer.
+> - **Ce qu'elle n'écrit pas, et liste** : incertains (au jour le jour, décision
+>   avant le match), notes non reconnues, joueurs introuvables dans la LNH,
+>   joueurs dont l'équipe diffère entre la source et la LNH. À trancher ici.
+> - **Importance** (décision du user) : attaquant = points par match
+>   (0.02 + 0.05 × pts/m, borné 0.02-0.08) ; défenseur = temps de glace
+>   (0.03 + 0.005 × (min − 16), borné 0.02-0.08) ; gardien = part des départs
+>   de l'équipe (0.12 × part / 0.6, borné 0.03-0.12). Saison en cours dès
+>   10 matchs, sinon la précédente ; moins de 10 matchs LNH → 0.03.
+> - **Pièges mesurés le 2026-09-29** : le HTML brut met les attributs entre
+>   apostrophes (`class='resRow'`) ; les effectifs LNH (`v1/roster/…/current`)
+>   n'incluent PAS les blessés, d'où le repli sur la recherche LNH ; la liste
+>   remonte à un an (≈ 570 notes pour ≈ 100 joueurs), d'où le classement.
+>   Code : `server/src/services/injurySync.ts`, règles lisibles dans
+>   `classifyNote` et les durées par défaut dans `HORIZONS`.
 
 | # | Quoi | Où | Fréquence | Temps |
 |---|---|---|---|---|

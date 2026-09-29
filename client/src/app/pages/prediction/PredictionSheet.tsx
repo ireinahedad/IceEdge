@@ -76,6 +76,25 @@ export function betLegId(label: string, mlProps: MLProps | undefined, rulePct: n
   return `${mlProps.subjectId}-${mlProps.propType ?? "bet"}${mkt}${line}${sel}-${slug}`;
 }
 
+/* ─── Questions de suivi après l'Analyse LLM (2026-09-29) ───────────────────
+ *
+ * Une fois l'analyse affichée, la personne peut poser d'autres questions sur
+ * le pari (tâche serveur `ask_followup` : même quota et même clé que
+ * l'analyse, une question = une requête). Les échanges vivent dans l'état de
+ * la fiche seulement : ils disparaissent à sa fermeture, contrairement à
+ * l'analyse elle-même, mise en cache 24 h.
+ *
+ * Chaque question renvoie le contexte ENTIER (données du pari, analyse, trois
+ * derniers échanges) : le serveur ne garde aucune conversation. Le tout doit
+ * tenir sous `LLM_MAX_PROMPT_CHARS` (8 000 côté serveur) ; on retire d'abord
+ * les échanges les plus anciens, puis les données, plutôt qu'essuyer un 413.
+ */
+const FOLLOWUP_MAX_CHARS = 300;
+const FOLLOWUP_HISTORY = 3;
+const FOLLOWUP_PROMPT_BUDGET = 7_500;
+
+interface Followup { q: string; a: string; failed?: boolean }
+
 /* ─── Prediction bottom sheet ───────────────── */
 function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, factors, factorGroup, pctScale, mlPreset, optId, onClose }: {
   /** Identifiant de la tuile — certaines ne se cotent qu'avec lui (voir `priceForBet`). */
@@ -93,6 +112,12 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   const [llmOpen, setLlmOpen]     = useState(false); // repliée par défaut pour ne pas cacher les autres cartes
   const [llmLoading, setLlmLoading] = useState(false);
   const [copied, setCopied]       = useState(false);
+  const [followups, setFollowups] = useState<Followup[]>([]);
+  const [question, setQuestion]   = useState("");
+  const [asking, setAsking]       = useState(false);
+  // Une erreur d'analyse s'affiche à la place du texte (préfixes posés plus
+  // bas) : pas de question de suivi sur une analyse qui n'existe pas.
+  const llmFailed = llmText.startsWith("❌") || llmText.startsWith("⚙️");
   const ruleColor = pctColor(rulePct);
 
   // Fall back to fetching the server prediction if the parent hasn't yet.
@@ -165,6 +190,48 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
     addLeg(leg);
   }
 
+  async function askFollowup() {
+    const q = question.trim().slice(0, FOLLOWUP_MAX_CHARS);
+    if (!q || asking || !llmText || llmFailed) return;
+    setAsking(true);
+    const isFr = lang === "fr";
+    try {
+      const subject = mlProps?.subjectId ?? label;
+      const dataContext = await buildLLMDataContext(mlProps, isFr);
+      const build = (history: Followup[], data: string) =>
+        (isFr
+          ? `Pari : "${label}"\n` +
+            `Probabilité du modèle : ${rulePct}%\n` +
+            `Raisonnement du modèle : ${ruleNote}\n` +
+            (mlProps ? `Marché : ${mlProps.propType ?? "vainqueur"} · Sujet : ${subject}\n` : "")
+          : `Bet: "${label}"\n` +
+            `Model probability: ${rulePct}%\n` +
+            `Model rationale: ${ruleNote}\n` +
+            (mlProps ? `Market: ${mlProps.propType ?? "moneyline"} · Subject: ${subject}\n` : "")) +
+        (data ? `\n${data}\n` : "") +
+        `\n${isFr ? "Ton analyse précédente" : "Your previous analysis"} :\n${llmText}\n` +
+        history.map((f) => `\nQuestion : ${f.q}\n${isFr ? "Ta réponse" : "Your answer"} : ${f.a}\n`).join("") +
+        `\n${isFr ? "Nouvelle question" : "New question"} : ${q}`;
+
+      let history = followups.filter((f) => !f.failed).slice(-FOLLOWUP_HISTORY);
+      let prompt = build(history, dataContext);
+      while (prompt.length > FOLLOWUP_PROMPT_BUDGET && history.length) {
+        history = history.slice(1);
+        prompt = build(history, dataContext);
+      }
+      if (prompt.length > FOLLOWUP_PROMPT_BUDGET) prompt = build([], "");
+
+      const a = await askLLM(prompt, { taskType: "ask_followup", locale: isFr ? "fr" : "en" });
+      setFollowups((fs) => [...fs, { q, a }]);
+      setQuestion("");
+    } catch (err: any) {
+      const prefix = err?.type === "no_api_key" ? "⚙️ " : "❌ ";
+      setFollowups((fs) => [...fs, { q, a: prefix + (err?.message ?? "LLM error"), failed: true }]);
+    } finally {
+      setAsking(false);
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-[70] flex flex-col justify-end"
@@ -179,20 +246,23 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
         {/* Handle */}
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-1 flex-shrink-0" />
 
-        {/* Title + Add to slip */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <p className="text-white font-bold text-base leading-snug flex-1">{label}</p>
-          {/* Sans match connu, le pari ne pourrait jamais être réglé : pas de bouton. */}
-          {(inSlip || mlProps?.gameId) && <button
+        {/* « + Pari » en grand, centré en haut (demande du user, 2026-09-29) :
+            c'est l'action principale de la fiche, elle passe avant le titre. */}
+        {/* Sans match connu, le pari ne pourrait jamais être réglé : pas de bouton. */}
+        {(inSlip || mlProps?.gameId) && (
+          <button
             onClick={handleSlip}
-            className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95"
+            className="flex-shrink-0 self-center w-full max-w-[280px] flex items-center justify-center px-6 py-3.5 rounded-2xl text-lg font-black transition-all active:scale-95"
             style={inSlip
-              ? { background: "#4ade8033", color: "#4ade80", border: "1px solid #4ade8055" }
-              : { background: accent + "22", color: accent, border: `1px solid ${accent}55` }}
+              ? { background: "#4ade8033", color: "#4ade80", border: "1.5px solid #4ade8066" }
+              : { background: accent + "26", color: accent, border: `1.5px solid ${accent}66` }}
           >
             {inSlip ? t("pred.slipShort") : t("pred.slipAddShort")}
-          </button>}
-        </div>
+          </button>
+        )}
+
+        {/* Title */}
+        <p className="text-white font-bold text-base leading-snug text-center flex-shrink-0">{label}</p>
 
         {/* ── 💰 Le PRIX du livre, quand il en propose un ──────────────────
             Séparé de tout ce qui suit, et étiqueté du nom du livre : ce n'est
@@ -289,6 +359,47 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
             </div>
             {llmOpen && (
               <p className="text-[#bfc8cc] text-xs leading-relaxed whitespace-pre-line px-4 pb-4">{llmText}</p>
+            )}
+            {/* Questions de suivi — voir FOLLOWUP_* en tête de fichier. */}
+            {llmOpen && !llmFailed && (
+              <div className="flex flex-col gap-2.5 px-4 pb-4 pt-3 border-t border-purple-500/20">
+                {followups.map((f, i) => (
+                  <div key={i} className="flex flex-col gap-1.5">
+                    <p className="self-end max-w-[85%] bg-purple-500/20 text-purple-100 text-xs leading-relaxed rounded-2xl rounded-br-md px-3 py-2 whitespace-pre-line">
+                      {f.q}
+                    </p>
+                    <p className={`text-xs leading-relaxed whitespace-pre-line ${f.failed ? "text-amber-300" : "text-[#bfc8cc]"}`}>
+                      {f.a}
+                    </p>
+                  </div>
+                ))}
+                {/* Champ en 16 px : iOS zoome sur tout champ plus petit. */}
+                <form
+                  className="flex items-center gap-2"
+                  onSubmit={(e) => { e.preventDefault(); void askFollowup(); }}
+                >
+                  <input
+                    className="flex-1 min-w-0 bg-[#131A12] border border-purple-400/30 rounded-2xl px-3 py-2 text-white text-base outline-none placeholder:text-[#8a9ea6] disabled:opacity-60"
+                    placeholder={t("pred.followupPlaceholder")}
+                    value={question}
+                    maxLength={FOLLOWUP_MAX_CHARS}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    disabled={asking}
+                    enterKeyHint="send"
+                    autoComplete="off"
+                  />
+                  <button
+                    type="submit"
+                    disabled={asking || !question.trim()}
+                    className="tap-44 flex-shrink-0 flex items-center justify-center px-4 py-2 rounded-2xl text-sm font-bold text-white disabled:opacity-50 active:scale-95 transition-transform"
+                    style={{ background: "linear-gradient(135deg,#7c3aed,#a855f7)" }}
+                  >
+                    {asking
+                      ? <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin inline-block" />
+                      : t("pred.followupSend")}
+                  </button>
+                </form>
+              </div>
             )}
           </div>
         ) : (

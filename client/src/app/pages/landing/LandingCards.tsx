@@ -319,18 +319,23 @@ const ML_BAR_BLUE = "#86d1ea";
  * part de la FAVORITE est peinte en bleu pâle, et elle part de son côté —
  * à gauche pour le visiteur (l'équipe du haut), à droite pour le domicile.
  * Décisions du user (2026-09-29) : pas les couleurs des clubs, pas de % aux
- * bouts, et la barre ne doit pas grandir la carte — elle se glisse dans une
- * place déjà là (la case vide d'en-tête du tableau de l'accueil, la colonne
- * de l'heure du calendrier). Les chiffres sont déjà dans le tableau.
+ * bouts — les chiffres sont déjà dans le tableau.
+ *
+ * Deux formes :
+ *   - trait fin (défaut), glissé sous l'heure dans le calendrier ;
+ *   - `band` (2026-09-30) : bandeau pleine largeur en haut de la carte d'un
+ *     match de l'accueil, ~20 % de sa hauteur, sans arrondi (la carte, en
+ *     `overflow-hidden`, lui donne ses coins).
  *
  * `awayPct` est une probabilité du modèle ML (0–100). Sans elle (modèle
  * indisponible), rien — jamais de 50/50 de repli.
  */
-export function MoneylineBar({ awayPct, loading, awayAbbr, homeAbbr, className = "" }: {
+export function MoneylineBar({ awayPct, loading, awayAbbr, homeAbbr, band = false, className = "" }: {
   awayPct: number | null;
   loading: boolean;
   awayAbbr: string;
   homeAbbr: string;
+  band?: boolean;
   className?: string;
 }) {
   if (!loading && awayPct == null) return null;
@@ -339,14 +344,14 @@ export function MoneylineBar({ awayPct, loading, awayAbbr, homeAbbr, className =
   const fav = awayFav ? away : 100 - away;
   return (
     <div
-      className={`relative h-[3px] rounded-full overflow-hidden bg-white/10${loading ? " animate-pulse" : ""} ${className}`}
+      className={`relative overflow-hidden ${band ? "h-[22px] bg-white/[0.07]" : "h-[3px] rounded-full bg-white/10"}${loading ? " animate-pulse" : ""} ${className}`}
       role={loading ? undefined : "img"}
       aria-label={loading ? undefined : `ML : ${awayAbbr} ${away}% – ${homeAbbr} ${100 - away}%`}
       title={loading ? undefined : `${awayAbbr} ${away}% · ${homeAbbr} ${100 - away}%`}
     >
       {!loading && (
         <div
-          className="absolute inset-y-0 rounded-full transition-[width] duration-500"
+          className={`absolute inset-y-0 transition-[width] duration-500${band ? "" : " rounded-full"}`}
           style={{ width: `${fav}%`, background: ML_BAR_BLUE, [awayFav ? "left" : "right"]: 0 }}
         />
       )}
@@ -585,9 +590,13 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
   return (
     <div
       onClick={() => navigate(`/stats/prediction/game/${game.id}`)}
-      className="icy-card rounded-2xl p-3.5 cursor-pointer active:scale-[0.99] transition-transform"
+      className="icy-card rounded-2xl overflow-hidden cursor-pointer active:scale-[0.99] transition-transform"
     >
-      <div className="flex items-center gap-3">
+      {/* Le vainqueur prédit : bandeau pleine largeur en haut de la carte
+          (demande du user, 2026-09-30), visiteur à gauche, domicile à droite
+          — le même ordre que le tableau, de haut en bas. */}
+      <MoneylineBar band awayPct={winAway} loading={mlLoading} awayAbbr={game.team2.abbr} homeAbbr={game.team1.abbr} />
+      <div className="flex items-center gap-3 p-3.5">
 
         {/* Colonne date + heure.
             La date manquait : la section de l'accueil peut porter les matchs
@@ -610,11 +619,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
           className="grid items-center gap-x-4 gap-y-2"
           style={{ gridTemplateColumns: "auto auto auto" }}
         >
-          {/* La case d'en-tête au-dessus des équipes porte la barre du
-              vainqueur (2026-09-29) : aucune hauteur de plus pour la carte. */}
-          <div className="self-center min-w-0">
-            <MoneylineBar awayPct={winAway} loading={mlLoading} awayAbbr={game.team2.abbr} homeAbbr={game.team1.abbr} />
-          </div>
+          <span />
           <span className="text-[#8a9ea6] text-[11px] font-semibold">{t("home.colSpread")}</span>
           <span className="text-[#8a9ea6] text-[11px] font-semibold">{t("home.colWinner")}</span>
           {/* Visiteur TOUJOURS en haut, domicile en bas avec son « H »

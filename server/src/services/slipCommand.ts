@@ -15,6 +15,12 @@
  *     ET à celle du LLM (§ 5) : une intention qu'il refuse n'atteint jamais le
  *     coupon, d'où qu'elle vienne.
  *
+ * FAUTES DE FRAPPE (2026-09-29, demande du user) : un nom de joueur ou
+ * d'équipe mal écrit (« Suzuky », « Canadeins », « Torronto ») n'est JAMAIS
+ * corrigé en silence. L'analyseur rend un échec `ambiguous` de type
+ * `spelling`, avec les noms proches en choix cliquables — la même mécanique
+ * que « quel Hughes ? ». Voir `findSpellingFixes`.
+ *
  * RÈGLE D'OR : dans le doute, on ne devine pas. Un nom qui désigne deux équipes
  * (« New York »), deux joueurs (« Hughes ») ou une phrase qui porte deux
  * marchés sans séparateur rendent un échec explicite — jamais un choix au
@@ -126,7 +132,17 @@ export type SlipFailureDetail =
   /** « Habs over 6.5 » : ligne du total du MATCH sur une seule équipe — on demande lequel. */
   | { kind: 'total_scope'; team: string; line: number; gameId: string }
   | { kind: 'too_long'; max: number }
-  | { kind: 'too_many'; max: number };
+  | { kind: 'too_many'; max: number }
+  /** Un nom mal écrit : `word` tel que tapé (normalisé), `fixes` les noms proches. */
+  | { kind: 'spelling'; word: string; fixes: SpellingFix[] };
+
+/**
+ * Une correction proposée pour un nom mal écrit. `chunk` est le morceau de
+ * phrase réécrit avec le bon nom ; `choicesFor` en fait une commande entière.
+ */
+export type SpellingFix =
+  | { kind: 'team'; abbr: string; chunk: string }
+  | { kind: 'player'; id: string; name: string; teamAbbr: string; chunk: string };
 
 export type SlipFailureReason = 'unknown' | 'ambiguous' | 'no_game' | 'unsupported';
 
@@ -495,7 +511,7 @@ interface Carry { gameId: string; teamAbbr?: string; playerId?: string }
 
 type ChunkResult = { ok: true; intent: SlipIntent; carry: Carry } | SlipFailure;
 
-function parseChunk(chunk: string, ctx: SlipContext, carry: Carry | null): ChunkResult {
+function parseChunkExact(chunk: string, ctx: SlipContext, carry: Carry | null): ChunkResult {
   const fail = (reason: SlipFailureReason, detail?: SlipFailureDetail): SlipFailure =>
     detail ? { ok: false, reason, chunk, detail } : { ok: false, reason, chunk };
   const w: Work = { rest: ` ${chunk} ` };
@@ -742,6 +758,10 @@ function choicesFor(f: SlipFailure, chunks: readonly string[], i: number, ctx: S
       return lineChoices(d.market, OU_WITHOUT_LINE, d.options);
     case 'line':
       return lineChoices(d.market, OU_WITH_LINE, d.options);
+    case 'spelling':
+      return d.fixes.map((fx): SlipChoice => (fx.kind === 'team'
+        ? { kind: 'team', abbr: fx.abbr, text: withChunk(fx.chunk) }
+        : { kind: 'player', id: fx.id, name: fx.name, teamAbbr: fx.teamAbbr, text: withChunk(fx.chunk) }));
     case 'total_scope': {
       const g = ctx.games.find((x) => x.id === d.gameId);
       if (!g) return [];
@@ -754,6 +774,234 @@ function choicesFor(f: SlipFailure, chunks: readonly string[], i: number, ctx: S
     default:
       return [];
   }
+}
+
+// ── Fautes de frappe (2026-09-29) ───────────────────────────────────────────
+
+/**
+ * Distance d'édition de Damerau-Levenshtein restreinte : une lettre ajoutée,
+ * retirée, remplacée, ou deux lettres voisines inversées (« Caufeild ») comptent
+ * chacune pour 1. Au-delà de `max`, rend `max + 1` sans calculer.
+ */
+export function editDistance(a: string, b: string, max: number): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  const m = b.length;
+  let prev2: number[] = [];
+  let prev: number[] = Array.from({ length: m + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur: number[] = [i];
+    for (let j = 1; j <= m; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, prev2[j - 2] + 1);
+      cur[j] = v;
+    }
+    prev2 = prev;
+    prev = cur;
+  }
+  return Math.min(prev[m], max + 1);
+}
+
+/**
+ * Fautes tolérées selon la longueur du mot tapé (lettres seules) : aucune
+ * sous 4 lettres — « Aho », « ny », « oil » se tapent sans faute ou pas du
+ * tout —, 1 jusqu'à 5, 2 jusqu'à 8, 3 au-delà.
+ */
+const typoBudget = (len: number) => (len < 4 ? 0 : len <= 5 ? 1 : len <= 8 ? 2 : 3);
+
+/**
+ * Mots de remplissage qu'on ne tente JAMAIS de corriger en nom : « ajoute
+ * les Habs », « mets-moi Suzuki », « contre Toronto ».
+ */
+const FILLER_WORDS = new Set([
+  ...SURNAME_STOPWORDS,
+  'ajoute', 'ajouter', 'ajouts', 'add', 'mets', 'met', 'mettre', 'moi', 'me', 'my', 'mon', 'ma', 'mes',
+  'je', 'veux', 'voudrais', 'want', 'i', 'please', 'pls', 'svp', 'stp', 'merci', 'thanks',
+  'contre', 'against', 'avec', 'with', 'dans', 'in', 'a', 'un', 'une', 'on', 'at', 'for', 'of', 'to',
+  'match', 'matchs', 'game', 'games', 'partie', 'equipe', 'team', 'joueur', 'player',
+  'pari', 'paris', 'bet', 'bets', 'parlay', 'combine', 'coupon', 'slip',
+  'prochain', 'prochaine', 'next', 'soiree', 'nuit', 'night', 'cette', 'this', 'is', 'est', 'va', 'vont', 'will',
+  'total', 'totals', 'plus', 'yes', 'oui',
+  // Mots courants à une lettre d'un surnom : « sans » / Sens, « stats » / Stars,
+  // « leads » / Leafs, « cars » / Caps.
+  'sans', 'stats', 'stat', 'start', 'starts', 'lead', 'leads', 'cars', 'blue', 'king', 'leaf', 'will', 'mild',
+]);
+
+interface NameTarget {
+  /** Le nom tel qu'indexé, sans espaces (« redwings », « nicksuzuki »). */
+  compact: string;
+  team?: readonly string[];
+  players?: readonly SlipPlayer[];
+}
+
+const targetsCache = new WeakMap<readonly SlipPlayer[], NameTarget[]>();
+
+/**
+ * Tout ce qu'un mot mal écrit peut viser : surnoms d'équipe d'au moins
+ * 4 lettres (les abréviations sont trop courtes pour être corrigées sans
+ * risque), noms complets et noms de famille des joueurs du contexte.
+ */
+function nameTargets(players: readonly SlipPlayer[]): NameTarget[] {
+  const cached = targetsCache.get(players);
+  if (cached) return cached;
+  const out: NameTarget[] = [];
+  const compact = (k: string) => k.replace(/ /g, '');
+  for (const [key, abbrs] of TEAM_ALIAS_INDEX) {
+    if (compact(key).length >= 4) out.push({ compact: compact(key), team: abbrs });
+  }
+  const pidx = playerIndex(players);
+  for (const [key, group] of pidx.full) out.push({ compact: compact(key), players: group });
+  for (const [key, group] of pidx.surname) out.push({ compact: compact(key), players: group });
+  targetsCache.set(players, out);
+  return out;
+}
+
+/**
+ * Les groupes de mots que l'analyseur n'a PAS reconnus, dans l'ordre : les noms
+ * exacts, les mots-clés, les nombres et le remplissage sont blanchis ; deux
+ * mots restent voisins seulement si rien n'a été blanchi entre eux.
+ */
+function unrecognizedRuns(chunk: string, ctx: SlipContext): string[][] {
+  const w: Work = { rest: ` ${chunk} ` };
+  const pidx = playerIndex(ctx.players);
+  extractKeys(w, pidx.fullKeys);
+  extractKeys(w, TEAM_ALIAS_KEYS);
+  extractKeys(w, pidx.surnameKeys);
+  for (const re of [RE.negation, RE.today, RE.tomorrow, RE.btts, RE.firstGoal, RE.regulation, RE.ot, RE.puck,
+    RE.over, RE.under, RE.ouWord, RE.shots, RE.points, RE.assists, RE.saves, RE.scoreVerb, RE.goalNoun, RE.win]) {
+    takeFlag(w, re);
+  }
+  const runs: string[][] = [];
+  let run: string[] = [];
+  let lastEnd = -2;
+  const tokRe = /\S+/g;
+  for (let m = tokRe.exec(w.rest); m; m = tokRe.exec(w.rest)) {
+    const tok = m[0];
+    const usable = !HAS_DIGIT.test(tok) && !FILLER_WORDS.has(tok);
+    // Un seul espace depuis le mot précédent = voisins ; plus = quelque chose a été blanchi entre eux.
+    if (!usable || m.index !== lastEnd + 1) {
+      if (run.length) runs.push(run);
+      run = [];
+    }
+    if (usable) run.push(tok);
+    lastEnd = m.index + tok.length;
+  }
+  if (run.length) runs.push(run);
+  return runs;
+}
+
+/** Même pari ? Sert à ne pas poser de question dont la réponse ne change rien. */
+const sameIntent = (a: SlipIntent, b: SlipIntent) =>
+  a.subjectType === b.subjectType && a.subjectId === b.subjectId && a.marketType === b.marketType
+  && a.selection === b.selection && (a.line ?? null) === (b.line ?? null) && a.gameId === b.gameId;
+
+/** Nombre maximal de noms proposés pour un mot mal écrit. */
+const MAX_SPELLING_FIXES = 5;
+
+/**
+ * Cherche un nom mal écrit dans le morceau et rend les corrections plausibles.
+ *
+ * Chaque correction est VÉRIFIÉE : le morceau réécrit est ré-analysé, et elle
+ * n'est gardée que s'il avance — `need: 'progress'` : il cesse d'être
+ * incompris (un « ne joue pas ce soir » est une vraie réponse) ; `need: 'ok'` :
+ * il devient un pari valide — et, si le morceau passait déjà, un pari
+ * DIFFÉRENT de `current` : sinon la question ne changerait rien. Un mot sans voisin plausible ne rend rien — la phrase suit alors son
+ * chemin normal (LLM compris).
+ *
+ * `strict` (le morceau a déjà été compris) : la première lettre doit
+ * correspondre, pour ne pas questionner le joueur sur un mot de remplissage.
+ */
+function findSpellingFixes(
+  chunk: string, ctx: SlipContext, carry: Carry | null,
+  opts: { strict: boolean; need: 'ok' | 'progress'; current?: SlipIntent },
+): { word: string; fixes: SpellingFix[] } | null {
+  const targets = nameTargets(ctx.players);
+  const pidx = playerIndex(ctx.players);
+
+  // Chaque groupe d'1 à 3 mots voisins non reconnus, avec ses noms proches.
+  type Hit = { d: number; target: NameTarget };
+  const phrases: { phrase: string; score: number; hits: Hit[] }[] = [];
+  for (const run of unrecognizedRuns(chunk, ctx)) {
+    for (let n = 1; n <= 3; n++) {
+      for (let i = 0; i + n <= run.length; i++) {
+        const phrase = run.slice(i, i + n).join(' ');
+        const typed = phrase.replace(/ /g, '');
+        // Morceau déjà compris : au moins 5 lettres, une seule faute tolérée
+        // jusqu'à 8 — on dérange le joueur seulement pour un nom très probable.
+        const budget = !opts.strict ? typoBudget(typed.length)
+          : typed.length < 5 ? 0 : Math.min(typoBudget(typed.length), typed.length <= 8 ? 1 : 2);
+        if (!budget) continue;
+        const hits: Hit[] = [];
+        for (const target of targets) {
+          if (opts.strict && target.compact[0] !== typed[0]) continue;
+          const d = editDistance(typed, target.compact, budget);
+          if (d <= budget) hits.push({ d, target });
+        }
+        if (!hits.length) continue;
+        const best = Math.min(...hits.map((h) => h.d));
+        // Les plus proches seulement ; un cran de plus pour un mot long, où
+        // deux fautes restent plausibles (« Vasilevsky », « Kucheruv »).
+        const spread = typed.length >= 8 ? 1 : 0;
+        phrases.push({ phrase, score: best / typed.length, hits: hits.filter((h) => h.d <= best + spread) });
+      }
+    }
+  }
+  // Le groupe le plus proche d'un nom d'abord ; à égalité, le plus long.
+  phrases.sort((a, b) => a.score - b.score || b.phrase.length - a.phrase.length);
+
+  for (const { phrase, hits } of phrases) {
+    hits.sort((a, b) => a.d - b.d);
+    const fixes: SpellingFix[] = [];
+    const seen = new Set<string>();
+    const tryFix = (fix: SpellingFix, key: string) => {
+      if (seen.has(key) || fixes.length >= MAX_SPELLING_FIXES) return;
+      seen.add(key);
+      const r = parseChunkExact(fix.chunk, ctx, carry);
+      if (opts.need === 'ok' ? !r.ok : !r.ok && r.reason === 'unknown') return;
+      if (r.ok && opts.current && sameIntent(r.intent, opts.current)) return;
+      fixes.push(fix);
+    };
+    for (const { target } of hits) {
+      for (const abbr of target.team ?? []) {
+        tryFix({ kind: 'team', abbr, chunk: replaceWord(chunk, phrase, uniqueAlias(abbr)) }, `t:${abbr}`);
+      }
+      for (const p of target.players ?? []) {
+        const full = normalizeName(p.name);
+        // Deux joueurs du même nom (« Sebastian Aho ») : l'équipe tranche.
+        const name = (pidx.full.get(full)?.length ?? 0) > 1 ? `${full} ${uniqueAlias(p.teamAbbr)}` : full;
+        tryFix({ kind: 'player', id: p.id, name: p.name, teamAbbr: p.teamAbbr.toUpperCase(), chunk: replaceWord(chunk, phrase, name) }, `p:${p.id}`);
+      }
+    }
+    if (fixes.length) return { word: phrase, fixes };
+  }
+  return null;
+}
+
+/** Échecs où un nom mal écrit peut être la cause : phrase incomprise, match introuvable. */
+const SPELLING_CAN_EXPLAIN = (f: SlipFailure) =>
+  f.reason === 'unknown' || f.reason === 'no_game' || f.detail?.kind === 'game_missing';
+
+/**
+ * Analyse un morceau, puis cherche un nom mal écrit :
+ *   - morceau en échec : un nom proche qui le rend lisible est proposé ;
+ *   - morceau compris : un mot resté inconnu qui ressemble à un nom
+ *     (« Habs gagne contre Torronto ») est signalé plutôt qu'ignoré, parce
+ *     qu'il change le pari (le match contre Toronto, pas le prochain match).
+ */
+function parseChunk(chunk: string, ctx: SlipContext, carry: Carry | null): ChunkResult {
+  const r = parseChunkExact(chunk, ctx, carry);
+  if (!r.ok && !SPELLING_CAN_EXPLAIN(r)) return r;
+  // Morceau compris : on ne questionne que si la correction mène à un AUTRE
+  // pari valide (« Habs gagne contre Torronto » : le match contre Toronto, pas
+  // le prochain match des Habs). Morceau « pas de match » : la correction doit
+  // aboutir à un vrai pari, sinon la question n'avance à rien (« Oilers gagne
+  // au Canada » ne doit pas proposer les Ducks — « canards »).
+  const opts = r.ok ? { strict: true, need: 'ok' as const, current: r.intent }
+    : r.reason === 'no_game' ? { strict: false, need: 'ok' as const }
+    : { strict: false, need: 'progress' as const };
+  const found = findSpellingFixes(chunk, ctx, carry, opts);
+  if (!found) return r;
+  return { ok: false, reason: 'ambiguous', chunk, detail: { kind: 'spelling', word: found.word, fixes: found.fixes } };
 }
 
 /**

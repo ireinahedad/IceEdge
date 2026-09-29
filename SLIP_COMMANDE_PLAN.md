@@ -326,6 +326,28 @@ clé OpenAI est préfixée « Analyse LLM : », suivie des essais restants du Be
 tests serveur, builds web + iOS (l'ancien nom n'est plus dans aucun bundle), banc
 navigateur 11/11 en français et en anglais.
 
+### 5.8 Noms mal écrits et ligne des essais gratuits (demande du user, 2026-09-29)
+
+- **Fautes de frappe** — `findSpellingFixes` dans `slipCommand.ts`. Un nom de joueur ou
+  d'équipe mal écrit n'est JAMAIS corrigé en silence : échec `ambiguous`, détail
+  `spelling` (`word` + `fixes`), et les noms proches en choix cliquables, comme
+  « quel Hughes ? ». Comme c'est un `ambiguous`, la phrase ne part PAS au LLM : aucun
+  essai consommé.
+- Distance de Damerau-Levenshtein (une lettre inversée = 1 faute). Fautes tolérées :
+  0 sous 4 lettres, 1 jusqu'à 5, 2 jusqu'à 8, 3 au-delà. Cibles : surnoms d'équipe de
+  4 lettres et plus, noms complets et noms de famille des joueurs du contexte.
+- Chaque correction est **ré-analysée** avant d'être proposée ; elle n'est gardée que si
+  elle fait avancer la phrase.
+- Phrase **déjà comprise** (« Habs gagne contre Otawa ») : on ne demande que si la
+  correction mène à un AUTRE pari valide ; 5 lettres minimum, première lettre identique,
+  1 faute jusqu'à 8 lettres. Mots courants proches d'un surnom (« sans »/Sens,
+  « stats »/Stars…) dans `FILLER_WORDS`.
+- Vérifié sur les 678 joueurs réels de `content_insight_*.csv` : 0 fausse question sur
+  4 470 phrases correctes ; 12 tests ajoutés (263 au total).
+- **Ligne « essais gratuits restants »** retirée de la feuille : un compte Free n'y voit
+  plus de compteur (le message au quota épuisé reste). La ligne Pro / clé perso reste,
+  et le compteur Free reste dans les Réglages.
+
 ## 6. Étape D — interface
 
 - Champ « Ajoute un pari… » sur la page Coupon (`BetBuilderPage`), à côté du bouton qui ouvre la

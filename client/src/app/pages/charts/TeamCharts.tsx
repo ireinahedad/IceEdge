@@ -212,16 +212,19 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
           >
             {t("chart.allTeams")}
           </button>
-          {/* Vers la comparaison équipe-équipe, ce club déjà posé à gauche. */}
-          <button
-            onClick={() => navigate(`/stats/chart/compare-teams${teamId ? `?a=${teamId.toLowerCase()}` : ""}`)}
-            className={selectCls}
-            style={{ background: BG_CELL, color: COMPARE_B_COLOR, borderColor: COMPARE_B_COLOR + "66" }}
-          >
-            {t("chart.compare.cta")}
-          </button>
         </div>
       </div>
+
+      {/* Vers la comparaison équipe-équipe, ce club déjà posé à gauche (2026-09-29).
+          Pleine largeur sous la carte : dans la colonne des sélecteurs, son
+          libellé écrasait le nom. Remplace l'ancienne colonne « Comparer ». */}
+      <button
+        onClick={() => navigate(`/stats/chart/compare-teams${teamId ? `?a=${teamId.toLowerCase()}` : ""}`)}
+        className={`${selectCls} w-full py-2`}
+        style={{ background: BG_CELL, color: COMPARE_B_COLOR, borderColor: COMPARE_B_COLOR + "66" }}
+      >
+        {t("chart.compare.ctaTeam")}
+      </button>
 
       {!teamId ? (
         <ChartMessage large>{t("chart.choosePrompt")}</ChartMessage>

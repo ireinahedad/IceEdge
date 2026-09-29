@@ -25,6 +25,13 @@
  * qu'un blocage — cela retire la seule raison qu'aurait un abonné d'exiger un
  * plafond plus haut, donc cela rend le plafond tenable.
  *
+ * ── TÂCHE `ask_followup` (2026-09-29) ─────────────────────────────────────────
+ *
+ * Question de suivi posée après une « Analyse LLM » (`explain_bet`), dans la
+ * fiche du pari. Aucune différence de traitement avec `explain_bet` hormis
+ * l'invite système : même chemin (Pro = quota mensuel, gratuit = clé perso
+ * obligatoire), même plafond de taille, une requête décomptée par question.
+ *
  * ── TÂCHE `parse_bet_command` (2026-09-28, SLIP_COMMANDE_PLAN.md § 5) ────────
  *
  * Le « Bet builder IA » (à ne pas confondre avec l'« Analyse LLM » d'un pari,
@@ -407,8 +414,9 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
     const p = buildParsePrompt(prompt, parseCtx, resolvedLocale, maxSystem);
     messages = [{ role: 'system', content: p.system }, { role: 'user', content: p.user }];
   } else {
+    const fixedTask = taskType === 'ask_followup' ? 'ask_followup' : 'explain_bet';
     messages = [
-      { role: 'system', content: systemPromptFor('explain_bet', resolvedLocale) },
+      { role: 'system', content: systemPromptFor(fixedTask, resolvedLocale) },
       { role: 'user', content: prompt },
     ];
   }

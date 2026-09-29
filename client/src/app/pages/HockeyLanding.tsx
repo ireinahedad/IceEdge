@@ -336,28 +336,6 @@ export function HockeyLanding() {
               )}
             </section>
 
-            {/* Game calendar — a board ad panel, not a frosted tile: it is
-                navigation, and must not read as one more game card. Full-bleed
-                (-mx-4 + the matching width) so it closes the offensive zone. */}
-            <LazySection minHeight={72}>
-              <button
-                onClick={() => navigate("/schedule")}
-                className="rink-signboard -mx-4"
-                style={{ width: "calc(100% + 2rem)" }}
-              >
-                <span className="rink-signboard-icon">
-                  <CalendarDays size={18} />
-                </span>
-                <span className="rink-signboard-text">
-                  <span className="rink-signboard-kicker">{t("schedule.subtitle")}</span>
-                  <span className="rink-signboard-label">{t("home.schedule")}</span>
-                </span>
-                <span className="rink-signboard-cta">
-                  {t("home.scheduleCta")}
-                  <ChevronRight size={13} />
-                </span>
-              </button>
-            </LazySection>
           </div>
 
           <div className="rink-line rink-line--blue" aria-hidden />
@@ -409,6 +387,33 @@ export function HockeyLanding() {
               )}
             </div>
           </section>
+
+          {/* Calendrier — un panneau de bande, pas une tuile givrée : c'est de
+              la navigation, il ne doit pas se lire comme une carte de match de
+              plus. Déplacé SOUS les matchs en direct et resserré dans la
+              gouttière de la page, bouton en bleu pâle (demande du user,
+              2026-09-30) ; il courait avant d'un bord à l'autre, sous les
+              matchs à venir. */}
+          <div className="px-4 pb-8">
+            <LazySection minHeight={72}>
+              <button
+                onClick={() => navigate("/schedule")}
+                className="rink-signboard rounded-2xl w-full"
+              >
+                <span className="rink-signboard-icon">
+                  <CalendarDays size={18} />
+                </span>
+                <span className="rink-signboard-text">
+                  <span className="rink-signboard-kicker">{t("schedule.subtitle")}</span>
+                  <span className="rink-signboard-label">{t("home.schedule")}</span>
+                </span>
+                <span className="rink-signboard-cta">
+                  {t("home.scheduleCta")}
+                  <ChevronRight size={13} />
+                </span>
+              </button>
+            </LazySection>
+          </div>
 
           <div className="rink-line rink-line--blue" aria-hidden />
 

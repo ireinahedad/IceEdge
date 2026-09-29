@@ -348,8 +348,18 @@ export async function fetchLiveGames(): Promise<any[]> {
   const cached = getCached<any[]>('live');
   if (cached) return cached;
 
-  const data  = await fetchNHL<any>('v1/scoreboard/now');
-  const games = (data.games ?? [])
+  // ⚠️ 2026-09-29 : on lisait `v1/scoreboard/now`, dont les matchs sont rangés
+  // sous `gamesByDate[].games` — `data.games` n'y existe PAS, donc la liste
+  // était TOUJOURS vide et la section « En direct » de l'accueil n'a jamais
+  // rien montré (constaté le soir de l'ouverture : FLA-CAR et MTL-TOR en
+  // direct, accueil vide). `v1/score/now` a bien un `games` au premier niveau,
+  // avec la période et l'horloge de chaque match. Les deux formes sont lues,
+  // pour qu'un changement de l'API ne vide plus la section en silence.
+  const data  = await fetchNHL<any>('v1/score/now');
+  const all: any[] = Array.isArray(data.games)
+    ? data.games
+    : (data.gamesByDate ?? []).flatMap((d: any) => d.games ?? []);
+  const games = all
     .filter((g: any) => g.gameState === 'LIVE' || g.gameState === 'CRIT')
     .map((g: any) => formatGame(g));
 

@@ -35,6 +35,13 @@
  * serveur qui l'ajoute à chaque match de l'équipe, jusqu'à ce qu'on le retire.
  * Le ranger aussi dans les deux autres tables le ferait survivre à son retrait.
  *
+ * ── Blessés posés par la synchro (ajout du 2026-09-29) ─────────────────────
+ * `npm run injuries:sync` range des blessés longue durée `source: 'auto'` avec
+ * une date de fin (`until`). L'écran les montre marqués « synchro » ; passé leur
+ * date de fin, ils ne comptent plus et ne sont pas repris dans les cartes. Les
+ * retirer (« Revenu au jeu ») ou changer leur importance, c'est le serveur qui
+ * s'en souvient : la synchro suivante ne les remet pas / ne les écrase pas.
+ *
  * Les champs font 16 px : en dessous, iOS zoome à chaque focus.
  */
 
@@ -77,7 +84,7 @@ const ACCENT = "#86d1ea";
 // ─── Types et helpers ─────────────────────────────────────────────────────────
 
 type Side = "home" | "away";
-interface Absent { player: string; impact: number; longTerm?: boolean; since?: string }
+interface Absent { player: string; impact: number; longTerm?: boolean; since?: string; until?: string; auto?: boolean }
 interface TeamDraft { goalie: string; absents: Absent[] }
 interface GameDraft { away: TeamDraft; home: TeamDraft; lineupAdj: number; lineupNote: string }
 interface Day { goalies: GoalieDay; scratches: ScratchDay }
@@ -94,15 +101,23 @@ function easternDate(offsetDays = 0): string {
   return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
 
+/** Un blessé longue durée compte-t-il ce jour-là ? Sans date de fin, toujours. */
+const activeOn = (p: LongInjury, date: string) => !p.until || p.until >= date;
+
 function buildTeam(
   abbr: string, side: Side, key: string, day: Day,
-  injuries: Record<string, GameInjuries>, long: Record<string, LongInjury[]>,
+  injuries: Record<string, GameInjuries>, long: Record<string, LongInjury[]>, date: string,
 ): TeamDraft {
   const byName = new Map<string, Absent>();
   // Les blessés longue durée d'abord : s'ils traînent aussi dans une ancienne
-  // saisie du soir, c'est leur statut « longue durée » qui l'emporte.
+  // saisie du soir, c'est leur statut « longue durée » qui l'emporte. Ceux dont
+  // la date de fin est passée ne comptent plus — le serveur les ignore aussi.
   for (const p of long[abbr] ?? []) {
-    if (p.player?.trim()) byName.set(norm(p.player), { player: p.player.trim(), impact: p.impact, longTerm: true, since: p.since });
+    if (!p.player?.trim() || !activeOn(p, date)) continue;
+    byName.set(norm(p.player), {
+      player: p.player.trim(), impact: p.impact, longTerm: true, since: p.since,
+      ...(p.until ? { until: p.until } : {}), ...(p.source === "auto" ? { auto: true } : {}),
+    });
   }
   for (const p of injuries[key]?.[side] ?? []) {
     if (byName.has(norm(p.player ?? ""))) continue;
@@ -115,12 +130,12 @@ function buildTeam(
 }
 
 function buildDraft(
-  g: NHLGame, day: Day, injuries: Record<string, GameInjuries>, long: Record<string, LongInjury[]>,
+  g: NHLGame, day: Day, injuries: Record<string, GameInjuries>, long: Record<string, LongInjury[]>, date: string,
 ): GameDraft {
   const key = keyOf(g);
   return {
-    away: buildTeam(abbrOf(g.awayTeam), "away", key, day, injuries, long),
-    home: buildTeam(abbrOf(g.homeTeam), "home", key, day, injuries, long),
+    away: buildTeam(abbrOf(g.awayTeam), "away", key, day, injuries, long, date),
+    home: buildTeam(abbrOf(g.homeTeam), "home", key, day, injuries, long, date),
     lineupAdj:  injuries[key]?.lineupAdj ?? 0,
     lineupNote: injuries[key]?.lineupNote ?? "",
   };
@@ -183,7 +198,7 @@ export function ManualEntryPage() {
       const nextDrafts: Record<string, GameDraft> = {};
       const nextSaved: Record<string, string> = {};
       for (const game of sortedGames) {
-        const draft = buildDraft(game, dayState, inj, longInj);
+        const draft = buildDraft(game, dayState, inj, longInj, d);
         nextDrafts[keyOf(game)] = draft;
         nextSaved[keyOf(game)]  = JSON.stringify(draft);
       }
@@ -271,7 +286,9 @@ export function ManualEntryPage() {
     };
     const tonight = (t: TeamDraft) => t.absents.filter((a) => !a.longTerm);
     const toLong  = (t: TeamDraft): LongInjury[] =>
-      t.absents.filter((a) => a.longTerm).map((a) => ({ player: a.player, impact: a.impact, since: a.since ?? date }));
+      t.absents.filter((a) => a.longTerm).map((a) => ({
+        player: a.player, impact: a.impact, since: a.since ?? date, ...(a.until ? { until: a.until } : {}),
+      }));
     const entry: GameInjuries = {
       away: tonight(away).map((a) => keep("away", a)),
       home: tonight(home).map((a) => keep("home", a)),
@@ -282,21 +299,30 @@ export function ManualEntryPage() {
 
     setSavingKey(key);
     try {
-      const awayLong = toLong(away);
-      const homeLong = toLong(home);
-      const [, savedDay] = await Promise.all([
+      // Les blessés expirés ne sont pas dans les cartes, mais ils restent en
+      // base : on les renvoie tels quels, sinon le serveur les lirait comme
+      // « retirés à la main ».
+      const expired = (abbr: string) => (long[abbr] ?? []).filter((p) => !activeOn(p, date));
+      const awayLong = [...toLong(away), ...expired(abbrOf(g.awayTeam))];
+      const homeLong = [...toLong(home), ...expired(abbrOf(g.homeTeam))];
+      const [, savedDay, awaySaved, homeSaved] = await Promise.all([
         saveInjuries(key, entry),
         saveLineups(date, nextDay),
         saveLongInjuries(abbrOf(g.awayTeam), awayLong),
         saveLongInjuries(abbrOf(g.homeTeam), homeLong),
       ]);
+      // La réponse du SERVEUR fait foi : c'est lui qui décide si une entrée de
+      // la synchro le reste (importance inchangée) ou devient manuelle.
+      const awayNow = awaySaved?.players ?? awayLong;
+      const homeNow = homeSaved?.players ?? homeLong;
       setLong((all) => {
         const next = { ...all };
-        for (const [abbr, list] of [[abbrOf(g.awayTeam), awayLong], [abbrOf(g.homeTeam), homeLong]] as const) {
+        for (const [abbr, list] of [[abbrOf(g.awayTeam), awayNow], [abbrOf(g.homeTeam), homeNow]] as const) {
           if (list.length) next[abbr] = list; else delete next[abbr];
         }
         return next;
       });
+      const autoNames = new Set([...awayNow, ...homeNow].filter((p) => p.source === "auto").map((p) => norm(p.player)));
       const empty = !entry.away?.length && !entry.home?.length && !entry.lineupAdj && !entry.lineupNote;
       setInjuries((all) => {
         const next = { ...all };
@@ -307,7 +333,12 @@ export function ManualEntryPage() {
       // `since` renseigné sur les nouveaux blessés longue durée, pour que la
       // carte ne se relise pas « modifiée » juste après l'enregistrement.
       const stamp = (t: TeamDraft): TeamDraft => ({
-        ...t, absents: t.absents.map((a) => (a.longTerm ? { ...a, since: a.since ?? date } : { ...a, since: undefined })),
+        ...t,
+        absents: t.absents.map((a) => {
+          if (!a.longTerm) return { ...a, since: undefined, until: undefined, auto: undefined };
+          const { auto: _auto, ...rest } = a;
+          return { ...rest, since: a.since ?? date, ...(autoNames.has(norm(a.player)) ? { auto: true } : {}) };
+        }),
       });
       const clean: GameDraft = { ...d, away: stamp(away), home: stamp(home), lineupNote: entry.lineupNote ?? "" };
       setDrafts((all) => ({ ...all, [key]: clean }));
@@ -334,7 +365,7 @@ export function ManualEntryPage() {
       delete nextInj[key];
       // « Tout effacer » vise la saisie du SOIR : les blessés longue durée
       // restent (ils se retirent un par un, « Revenu au jeu »).
-      const empty = buildDraft(g, nextDay, nextInj, long);
+      const empty = buildDraft(g, nextDay, nextInj, long, date);
       setInjuries(nextInj);
       setDay(nextDay);
       setDrafts((all) => ({ ...all, [key]: empty }));
@@ -407,7 +438,7 @@ export function ManualEntryPage() {
         <p className="text-white/45 text-[12px] mt-2">Heure de l'Est (Montréal, Toronto, New York).</p>
       </section>
 
-      <LongInjuriesCard long={long} onRecovered={(abbr, p) => void handleRecovered(abbr, p)} />
+      <LongInjuriesCard long={long} date={date} onRecovered={(abbr, p) => void handleRecovered(abbr, p)} />
 
       {/* ── 2. Les matchs ── */}
       {loadError && (
@@ -506,10 +537,20 @@ function formatSince(iso?: string): string {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("fr-CA", { day: "numeric", month: "short" });
 }
 
+/** « synchro · jusqu'au 12 oct. », « depuis le 3 oct. », « expiré le 1 oct. ». */
+function longInjuryDetail(p: LongInjury, date: string): string {
+  const parts: string[] = [];
+  if (p.source === "auto") parts.push("synchro");
+  if (p.until) parts.push(activeOn(p, date) ? `jusqu'au ${formatSince(p.until)}` : `expiré le ${formatSince(p.until)}`);
+  else if (p.since && p.source !== "auto") parts.push(`depuis le ${formatSince(p.since)}`);
+  return parts.join(" · ");
+}
+
 function LongInjuriesCard({
-  long, onRecovered,
+  long, date, onRecovered,
 }: {
   long: Record<string, LongInjury[]>;
+  date: string;
   onRecovered: (abbr: string, player: string) => void;
 }) {
   const teams = Object.keys(long).sort();
@@ -520,7 +561,9 @@ function LongInjuriesCard({
       <p className="text-white text-[14px] font-bold">Blessés longue durée ({total})</p>
       <p className="text-white/50 text-[12px] mt-0.5 mb-3 leading-relaxed">
         Comptés comme absents à CHAQUE match de leur équipe, sans rien ressaisir.
-        Quand un joueur revient, appuie sur « Revenu au jeu ».
+        Quand un joueur revient, appuie sur « Revenu au jeu ». Ceux marqués
+        « synchro » viennent de la mise à jour automatique : ils s'effacent
+        seuls à leur date de fin.
       </p>
       <div className="flex flex-col gap-1.5">
         {teams.flatMap((abbr) => long[abbr].map((p) => (
@@ -529,7 +572,7 @@ function LongInjuriesCard({
             <span className="flex-1 min-w-0">
               <span className="block text-white text-[14px] truncate">{p.player}</span>
               <span className="block text-white/40 text-[11px]">
-                {abbr}{p.since ? ` · depuis le ${formatSince(p.since)}` : ""}
+                {abbr}{longInjuryDetail(p, date) ? ` · ${longInjuryDetail(p, date)}` : ""}
               </span>
             </span>
             <button
@@ -778,7 +821,9 @@ function TeamBlock({
                 Blessé longue durée
                 {a.longTerm && (
                   <span className="text-white/40">
-                    {a.since ? ` · depuis le ${formatSince(a.since)}` : " · restera absent jusqu'à ce qu'on le retire"}
+                    {a.auto
+                      ? ` · synchro${a.until ? `, jusqu'au ${formatSince(a.until)}` : ""}`
+                      : a.since ? ` · depuis le ${formatSince(a.since)}` : " · restera absent jusqu'à ce qu'on le retire"}
                   </span>
                 )}
               </span>

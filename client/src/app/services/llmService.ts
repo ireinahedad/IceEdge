@@ -17,7 +17,7 @@ import type { SlipIntent } from '../../../../server/src/services/slipCommand';
  * un proxy LLM généraliste. Ajouter une tâche se fait donc côté serveur
  * d'abord, ici ensuite.
  */
-export type LLMTaskType = 'explain_bet' | 'parse_bet_command';
+export type LLMTaskType = 'explain_bet' | 'ask_followup' | 'parse_bet_command';
 
 /**
  * 45 s — la seule requête du client qui dépasse le défaut de 15 s d'`http.ts`.

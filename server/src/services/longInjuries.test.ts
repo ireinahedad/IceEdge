@@ -67,3 +67,94 @@ describe('getManualFactors', () => {
     expect(f.lineup.active).toBe(false);
   });
 });
+
+describe('date de fin (`until`)', () => {
+  it('une entrée expirée ne compte plus, ni pour l\'IA ni pour les règles', async () => {
+    rows.long_injuries = { TOR: { players: [
+      { player: 'Auston Matthews', impact: 0.06, until: '2026-10-09', source: 'auto' },
+      { player: 'Joseph Woll', impact: 0.12, until: '2026-10-10', source: 'auto' },
+    ] } };
+    const { getScratchesDay } = await import('./scratches');
+    // Le 10 : Matthews est expiré (fin le 9), Woll compte encore (fin le 10, incluse).
+    expect(await getScratchesDay('2026-10-10')).toEqual({ TOR: ['Joseph Woll'] });
+    const { getManualFactors } = await import('./injuryStore');
+    const f = await getManualFactors('TOR', 'BOS');
+    expect(f.injuries.homeProb).toBeCloseTo(0.38, 5);
+  });
+
+  it('getScratchesDay expire à la date DEMANDÉE, pas à aujourd\'hui', async () => {
+    rows.long_injuries = { TOR: { players: [{ player: 'Auston Matthews', impact: 0.06, until: '2026-10-12' }] } };
+    const { getScratchesDay } = await import('./scratches');
+    expect(await getScratchesDay('2026-10-13')).toEqual({});
+    expect(await getScratchesDay('2026-10-12')).toEqual({ TOR: ['Auston Matthews'] });
+  });
+});
+
+describe('mergeManualSave — ce que l\'écran d\'admin envoie', () => {
+  const auto = { player: 'Auston Matthews', impact: 0.06, since: '2026-09-28', until: '2026-10-20', source: 'auto' as const };
+
+  it('une entrée auto renvoyée telle quelle reste auto, même par un vieux client sans `source`', async () => {
+    const { mergeManualSave } = await import('./longInjuries');
+    expect(mergeManualSave({ players: [auto] }, [{ player: 'Auston Matthews', impact: 0.06, since: '2026-09-28' }]))
+      .toEqual({ players: [auto] });
+  });
+
+  it('une importance changée à la main en fait une entrée manuelle', async () => {
+    const { mergeManualSave } = await import('./longInjuries');
+    expect(mergeManualSave({ players: [auto] }, [{ player: 'Auston Matthews', impact: 0.03, since: '2026-09-28' }]))
+      .toEqual({ players: [{ player: 'Auston Matthews', impact: 0.03, since: '2026-09-28' }] });
+  });
+
+  it('une entrée auto retirée est notée dans `dismissed`, une manuelle non', async () => {
+    const { mergeManualSave } = await import('./longInjuries');
+    const manual = { player: 'Joseph Woll', impact: 0.12 };
+    expect(mergeManualSave({ players: [auto, manual] }, []))
+      .toEqual({ players: [], dismissed: [{ player: 'Auston Matthews', since: '2026-09-28' }] });
+  });
+});
+
+describe('mergeAutoSync — la synchro d\'une équipe', () => {
+  const a = (player: string, since = '2026-09-28') => ({ player, impact: 0.05, since, until: '2026-10-20', source: 'auto' as const });
+
+  it('ne touche jamais une entrée manuelle, même pour le même joueur', async () => {
+    const { mergeAutoSync } = await import('./longInjuries');
+    const manual = { player: 'Auston Matthews', impact: 0.03, since: '2026-09-20' };
+    expect(mergeAutoSync({ players: [manual] }, [a('auston matthews'), a('Joseph Woll')]))
+      .toEqual({ players: [manual, a('Joseph Woll')] });
+  });
+
+  it('remplace ses propres entrées : un joueur que la source ne liste plus disparaît', async () => {
+    const { mergeAutoSync } = await import('./longInjuries');
+    expect(mergeAutoSync({ players: [a('Auston Matthews')] }, [a('Joseph Woll')])).toEqual({ players: [a('Joseph Woll')] });
+    expect(mergeAutoSync({ players: [a('Auston Matthews')] }, [])).toBeNull();
+  });
+
+  it('ne remet pas un joueur retiré à la main pour la MÊME blessure, le remet pour une nouvelle', async () => {
+    const { mergeAutoSync } = await import('./longInjuries');
+    const existing = { players: [], dismissed: [{ player: 'Auston Matthews', since: '2026-09-28' }] };
+    expect(mergeAutoSync(existing, [a('Auston Matthews')]))
+      .toEqual({ players: [], dismissed: [{ player: 'Auston Matthews', since: '2026-09-28' }] });
+    // Nouvelle note (autre date) : il revient, et le rejet périmé est élagué.
+    expect(mergeAutoSync(existing, [a('Auston Matthews', '2026-10-05')]))
+      .toEqual({ players: [a('Auston Matthews', '2026-10-05')] });
+  });
+});
+
+describe('mergeAutoSync — joueur hors de la page lue', () => {
+  const a = (player: string, until: string) => ({ player, impact: 0.05, since: '2026-09-17', until, source: 'auto' as const });
+
+  it('garde une entrée auto que le prédicat protège (note sortie de la page, fin pas passée)', async () => {
+    const { mergeAutoSync } = await import('./longInjuries');
+    const existing = { players: [a('Nick Bjugstad', '2027-03-16'), a('Joueur Revenu', '2026-10-20')] };
+    const unseen = new Set(['nick bjugstad']);
+    expect(mergeAutoSync(existing, [], (p) => unseen.has(p.player.toLowerCase())))
+      .toEqual({ players: [a('Nick Bjugstad', '2027-03-16')] });
+  });
+
+  it('une nouvelle note sur la page remplace l\'ancienne entrée, le prédicat n\'y change rien', async () => {
+    const { mergeAutoSync } = await import('./longInjuries');
+    const fresh = { ...a('Nick Bjugstad', '2026-10-05'), since: '2026-09-30' };
+    expect(mergeAutoSync({ players: [a('Nick Bjugstad', '2027-03-16')] }, [fresh], () => true))
+      .toEqual({ players: [fresh] });
+  });
+});

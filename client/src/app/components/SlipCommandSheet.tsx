@@ -17,9 +17,16 @@
  * connecté. Les intentions rendues ont déjà été validées par le serveur ; elles
  * le sont une seconde fois ici contre le contexte de l'écran, puis suivent le
  * même chemin (`addIntents` → `buildLeg`). Une ligne discrète affiche le quota
- * IA restant ; au quota gratuit épuisé, la phrase du user « Passe Pro pour que
- * l'IA comprenne des paris plus complexes » s'affiche partout, et le bouton
- * vers /pro seulement si `features.proUpgrade` (décision 3.1.1, iOS).
+ * IA d'un compte Pro ou sur clé perso — PAS les essais gratuits restants d'un
+ * compte Free (retirée à la demande du user, 2026-09-29 ; le compteur reste
+ * dans les Réglages). Au quota gratuit épuisé, la phrase du user « Passe Pro
+ * pour que l'IA comprenne des paris plus complexes » s'affiche partout, et le
+ * bouton vers /pro seulement si `features.proUpgrade` (décision 3.1.1, iOS).
+ *
+ * Fautes de frappe (2026-09-29) : un nom de joueur ou d'équipe mal écrit rend
+ * un échec `spelling` avec les noms proches en choix cliquables (« Suzuky » →
+ * Nick Suzuki). C'est un `ambiguous`, donc il ne part PAS au LLM : le choix
+ * est gratuit et ne consomme aucun essai.
  *
  * Décisions du user (2026-09-28) :
  *   - un bouton sur la page Stats (au-dessus des trois onglets) et sur la page
@@ -34,6 +41,7 @@
 
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
+import { Sparkles } from "lucide-react";
 import {
   parseSlipCommand, validateIntent, SLIP_COMMAND_MAX_LENGTH,
   type SlipChoice, type SlipFailure,
@@ -58,6 +66,7 @@ function failureText(f: SlipFailure, t: T): string {
   switch (d?.kind) {
     case "team":         return t("cmd.whichTeam", { alias: titleCase(d.alias) });
     case "player":       return t("cmd.whichPlayer", { alias: titleCase(d.alias) });
+    case "spelling":     return t("cmd.didYouMean", { word: titleCase(d.word) });
     case "line_missing": return t("cmd.whichLine");
     case "line":         return t("cmd.lineNotOffered", { line: d.line });
     case "total_scope":  return t("cmd.whichTotal", { team: d.team });
@@ -83,9 +92,8 @@ function choiceLabel(c: SlipChoice, f: SlipFailure, t: T, teamName: (abbr: strin
   }
 }
 
-/** Le quota IA tel que la ligne discrète l'affiche. */
+/** Le quota IA tel que la ligne discrète l'affiche (jamais pour un compte Free). */
 type AiQuota =
-  | { kind: "free"; remaining: number; limit: number }
   | { kind: "pro"; used: number; limit: number }
   | { kind: "own_key" };
 
@@ -97,9 +105,9 @@ type AiNote =
   | { kind: "free_quota"; limit: number }
   | { kind: "error"; message: string };
 
-function quotaFromUsage(u: ParseUsage): AiQuota {
+function quotaFromUsage(u: ParseUsage): AiQuota | null {
   if (u.kind === "own_key") return u;
-  return u.kind === "free" ? { kind: "free", remaining: Math.max(u.limit - u.used, 0), limit: u.limit } : { kind: "pro", used: u.used, limit: u.limit };
+  return u.kind === "free" ? null : { kind: "pro", used: u.used, limit: u.limit };
 }
 
 type Row =
@@ -120,7 +128,8 @@ export function SlipCommandSheet({ onClose }: { onClose: () => void }) {
   const [aiQuota, setAiQuota] = useState<AiQuota | null>(null);
   const [aiNote, setAiNote] = useState<AiNote | null>(null);
 
-  // Quota IA restant, lu une fois à l'ouverture (compte connecté seulement).
+  // Quota IA, lu une fois à l'ouverture (compte connecté seulement). Rien pour
+  // un compte Free : ses essais restants ne s'affichent plus ici.
   // Un échec laisse la ligne absente : elle informe, elle ne conditionne rien.
   useEffect(() => {
     if (!user) return;
@@ -130,7 +139,6 @@ export function SlipCommandSheet({ onClose }: { onClose: () => void }) {
         if (!alive) return;
         if (u.pro && u.limit != null) setAiQuota({ kind: "pro", used: u.used ?? 0, limit: u.limit });
         else if (u.ownKey) setAiQuota({ kind: "own_key" });
-        else if (u.freeParse) setAiQuota({ kind: "free", remaining: u.freeParse.remaining, limit: u.freeParse.limit });
       })
       .catch(() => { /* ligne absente */ });
     return () => { alive = false; };
@@ -177,7 +185,6 @@ export function SlipCommandSheet({ onClose }: { onClose: () => void }) {
       const err = e as Partial<LLMError>;
       if (err.type === "free_parse_quota") {
         setAiNote({ kind: "free_quota", limit: err.limit ?? 0 });
-        setAiQuota((q) => (q?.kind === "free" ? { ...q, remaining: 0 } : q));
       } else {
         setAiNote({ kind: "error", message: err.type === "monthly_quota" && err.message ? err.message : t("cmd.aiError") });
       }
@@ -257,12 +264,10 @@ export function SlipCommandSheet({ onClose }: { onClose: () => void }) {
           {error && <p className="text-amber-300 text-xs">{t("cmd.loadError")}</p>}
           {noGames && <p className="text-[#bfc8cc] text-xs">{t("cmd.noGames", { days: UPCOMING_DAYS })}</p>}
 
-          {/* Quota IA restant — une ligne discrète, qui informe sans rien conditionner. */}
+          {/* Quota IA (Pro ou clé perso) — une ligne discrète, qui informe sans rien conditionner. */}
           {aiQuota && (
             <p className="text-[#bfc8cc] text-[11px]">
-              {aiQuota.kind === "free" ? t("cmd.aiFreeLeft", { n: aiQuota.remaining, limit: aiQuota.limit })
-                : aiQuota.kind === "pro" ? t("cmd.aiProUsed", { used: aiQuota.used, limit: aiQuota.limit })
-                : t("cmd.aiOwnKey")}
+              {aiQuota.kind === "pro" ? t("cmd.aiProUsed", { used: aiQuota.used, limit: aiQuota.limit }) : t("cmd.aiOwnKey")}
             </p>
           )}
 
@@ -365,17 +370,23 @@ export function SlipCommandSheet({ onClose }: { onClose: () => void }) {
  * Le bouton « Bet builder IA » et sa feuille. `pill` : à côté de
  * « + Ajouter » ; `block` : pleine largeur (Stats, coupon vide).
  */
-export function SlipCommandLauncher({ variant }: { variant: "pill" | "block" }) {
+/**
+ * `chip` (2026-09-29) : même gabarit que « Comment ça marche » de la page
+ * Prédiction, posé juste en dessous — même taille, même bordure accent.
+ */
+const LAUNCHER_CLS: Record<"pill" | "block" | "chip", string> = {
+  pill:  "tap-44 flex items-center gap-1 text-[#90C9F0] text-xs bg-[#90C9F0]/10 border border-[#90C9F0]/25 rounded-full px-3 py-1.5 active:scale-95 transition-transform",
+  block: "tap-44 w-full text-[#86d1ea] text-sm font-bold bg-[#86d1ea]/10 border border-[#86d1ea]/30 rounded-2xl px-4 py-3 active:scale-95 transition-transform",
+  chip:  "tap-44 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold text-[#86d1ea] bg-[#86d1ea]/10 border border-[#86d1ea]/30 active:scale-95 transition-all",
+};
+
+export function SlipCommandLauncher({ variant }: { variant: "pill" | "block" | "chip" }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className={variant === "pill"
-          ? "tap-44 flex items-center gap-1 text-[#90C9F0] text-xs bg-[#90C9F0]/10 border border-[#90C9F0]/25 rounded-full px-3 py-1.5 active:scale-95 transition-transform"
-          : "tap-44 w-full text-[#86d1ea] text-sm font-bold bg-[#86d1ea]/10 border border-[#86d1ea]/30 rounded-2xl px-4 py-3 active:scale-95 transition-transform"}
-      >
+      <button onClick={() => setOpen(true)} className={LAUNCHER_CLS[variant]}>
+        {variant === "chip" && <Sparkles size={13} />}
         {t("cmd.open")}
       </button>
       {open && <SlipCommandSheet onClose={() => setOpen(false)} />}

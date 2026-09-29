@@ -11,10 +11,13 @@
  *
  * Sous les sélecteurs : un tableau A | B de toutes les statistiques, puis le
  * diagramme face à face (`CompareBars`) sur les principales.
+ *
+ * Chaque côté choisi mène ailleurs (2026-09-29) : son NOM ouvre sa page de
+ * statistiques individuelle, et le bouton « Prédiction » sa page de prédiction.
  */
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { X } from "lucide-react";
 import { useSport } from "../../context/SportContext";
 import { useI18n } from "../../i18n";
@@ -90,7 +93,10 @@ function CompareTable({
   );
 }
 
-/** La case d'un côté une fois choisi : visuel, nom, sous-titre, et la croix pour le retirer. */
+/**
+ * La case d'un côté une fois choisi : visuel, nom (lien vers ses statistiques),
+ * sous-titre, bouton vers sa prédiction, et la croix pour le retirer.
+ */
 function PickedSlot({
   img,
   fallbackImg,
@@ -99,6 +105,8 @@ function PickedSlot({
   color,
   onClear,
   clearLabel,
+  statsTo,
+  predictionTo,
 }: {
   img: string;
   fallbackImg: string;
@@ -107,7 +115,13 @@ function PickedSlot({
   color: string;
   onClear: () => void;
   clearLabel: string;
+  /** Page de statistiques individuelle (le nom y mène). */
+  statsTo: string;
+  /** Page de prédiction (le bouton « Prédiction » y mène). */
+  predictionTo: string;
 }) {
+  const navigate = useNavigate();
+  const { t } = useI18n();
   return (
     <div className="rounded-xl border p-2.5 flex items-center gap-2.5 min-w-0" style={{ background: BG_CELL, borderColor: `${color}66` }}>
       <img
@@ -117,9 +131,22 @@ function PickedSlot({
         onError={(e) => { (e.currentTarget as HTMLImageElement).src = fallbackImg; }}
       />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-bold truncate" style={{ color }}>{name}</p>
+        <button
+          onClick={() => navigate(statsTo)}
+          className="block max-w-full text-left text-sm font-bold truncate hover:underline underline-offset-2"
+          style={{ color }}
+        >
+          {name} <span className="text-[#5c6f63]">›</span>
+        </button>
         <p className="text-[#8a9ea6] text-[11px] truncate">{sub}</p>
       </div>
+      <button
+        onClick={() => navigate(predictionTo)}
+        className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold border transition-colors active:scale-95"
+        style={{ color, borderColor: `${color}66`, background: `${color}14` }}
+      >
+        {t("pred.title")}
+      </button>
       <button onClick={onClear} className="tap-44 text-[#8a9ea6] hover:text-white transition-colors shrink-0" aria-label={clearLabel}>
         <X size={14} />
       </button>
@@ -203,6 +230,8 @@ export function ComparePlayersCharts() {
           color={color}
           onClear={() => set(key, "")}
           clearLabel={t("chart.compare.clear")}
+          statsTo={`/stats/chart/player/${id}`}
+          predictionTo={`/stats/prediction/player/${id}`}
         />
       )
     ) : (
@@ -354,6 +383,8 @@ export function CompareTeamsCharts() {
         color={color}
         onClear={() => set(key, "")}
         clearLabel={t("chart.compare.clear")}
+        statsTo={`/stats/chart/team/${abbr.toLowerCase()}`}
+        predictionTo={`/stats/prediction/team/${abbr.toLowerCase()}`}
       />
     ) : (
       <TeamSelect

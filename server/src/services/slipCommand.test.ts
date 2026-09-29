@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  parseSlipCommand, validateIntent, normalizeCommand,
+  parseSlipCommand, validateIntent, normalizeCommand, editDistance,
   TEAM_ALIASES, TEAM_ALIAS_INDEX, SLIP_COMMAND_MAX_LENGTH, SLIP_COMMAND_MAX_PARTS,
 } from './slipCommand';
 import type { SlipContext, SlipGame, SlipPlayer, SlipParseResult, SlipIntent } from './slipCommand';
@@ -545,6 +545,98 @@ describe('choix cliquables : chaque choix, ré-analysé, lève l\'ambiguïté', 
       const r = parse(text);
       expect(r.ok).toBe(false);
       if (!r.ok) expect(r.choices).toBeUndefined();
+    }
+  });
+});
+
+describe('fautes de frappe : un nom mal écrit est proposé, jamais corrigé en silence', () => {
+  /** L'échec « spelling » attendu : le mot fautif et ses choix. */
+  const spelling = (text: string) => {
+    const r = parse(text);
+    if (r.ok) throw new Error(`échec attendu : ${text}`);
+    expect(r.reason).toBe('ambiguous');
+    if (r.detail?.kind !== 'spelling') throw new Error(`spelling attendu : ${JSON.stringify(r.detail)}`);
+    return { word: r.detail.word, choices: r.choices ?? [] };
+  };
+
+  it('distance : une lettre inversée, ajoutée, retirée ou remplacée vaut 1', () => {
+    expect(editDistance('caufeild', 'caufield', 3)).toBe(1);
+    expect(editDistance('suzki', 'suzuki', 3)).toBe(1);
+    expect(editDistance('suzukii', 'suzuki', 3)).toBe(1);
+    expect(editDistance('suzuky', 'suzuki', 3)).toBe(1);
+    expect(editDistance('abcdef', 'uvwxyz', 2)).toBe(3); // plafonné à max + 1
+  });
+
+  it('joueur : « Suzuky plus de 2,5 tirs » propose Suzuki, et le choix passe', () => {
+    const { word, choices } = spelling('Suzuky plus de 2,5 tirs');
+    expect(word).toBe('suzuky');
+    expect(choices).toEqual([expect.objectContaining({ kind: 'player', id: '1', name: 'Nick Suzuki', teamAbbr: 'MTL' })]);
+    expect(one(choices[0].text)).toMatchObject({ subjectId: '1', marketType: 'shots_ou', selection: 'over', line: 2.5 });
+  });
+
+  it('prénom et nom : « Cole Caufeild marque » (lettres inversées)', () => {
+    const { word, choices } = spelling('Cole Caufeild marque');
+    expect(word).toBe('cole caufeild');
+    expect(one(choices[0].text)).toMatchObject({ subjectId: '2', marketType: 'anytime_goal' });
+  });
+
+  it('équipe : « Canadeins gagne ce soir » propose Montréal', () => {
+    const { choices } = spelling('Canadeins gagne ce soir');
+    expect(choices).toEqual([expect.objectContaining({ kind: 'team', abbr: 'MTL' })]);
+    expect(one(choices[0].text)).toEqual(moneylineMtl);
+  });
+
+  it('plusieurs noms proches : un choix par joueur, chacun le sien', () => {
+    const { choices } = spelling('Hughs marque');
+    expect(choices.map((c) => c.kind === 'player' && c.id).sort()).toEqual(['6', '7', '8']);
+    for (const c of choices) expect(one(c.text).subjectId).toBe((c as { id: string }).id);
+  });
+
+  it('homonymes mal écrits : « Sebastian Ahoo » — l\'équipe tranche dans le choix', () => {
+    const { choices } = spelling('Sebastian Ahoo marque');
+    expect(choices.map((c) => c.kind === 'player' && c.teamAbbr).sort()).toEqual(['CAR', 'NYI']);
+    for (const c of choices) expect(one(c.text).subjectId).toBe((c as { id: string }).id);
+  });
+
+  it('surnom partagé mal écrit : « new yorck gagne » — Rangers ou Islanders', () => {
+    const { choices } = spelling('new yorck gagne');
+    expect(choices.map((c) => c.kind === 'team' && c.abbr).sort()).toEqual(['NYI', 'NYR']);
+  });
+
+  it('phrase comprise mais adversaire mal écrit : on demande, car le match change', () => {
+    // Sans correction : le prochain match des Habs (ce soir contre Toronto).
+    // Avec : le match contre Ottawa, demain.
+    const { word, choices } = spelling('Habs gagne contre Otawa');
+    expect(word).toBe('otawa');
+    expect(choices).toEqual([expect.objectContaining({ kind: 'team', abbr: 'OTT' })]);
+    expect(one(choices[0].text)).toMatchObject({ subjectId: 'mtl', gameId: 'g-ott-mtl' });
+  });
+
+  it('phrase comprise, correction sans effet : pas de question', () => {
+    // « Torronto » corrigé désigne le même match que « Habs gagne » seul.
+    expect(one('Habs gagne contre Torronto')).toEqual(moneylineMtl);
+  });
+
+  it('dans une phrase double, le choix garde l\'autre morceau', () => {
+    const { choices } = spelling('Leafs ML et Suzuky marque');
+    expect(intents(parse(choices[0].text)).map((i) => [i.marketType, i.subjectId])).toEqual([['moneyline', 'tor'], ['anytime_goal', '1']]);
+  });
+
+  it('pas de fausse question sur une phrase correcte ou du remplissage', () => {
+    for (const text of [
+      'Canadien gagne ce soir svp merci', 'ajoute les Habs qui gagnent ce soir', 'mets moi Suzuki qui marque',
+      'Canadien gagne ce soir sans', 'Leafs ML stats', 'Canadien gagne facilement ce soir', 'Habs gagne le match',
+    ]) {
+      const r = parse(text);
+      expect(r.ok, text).toBe(true);
+    }
+  });
+
+  it('un charabia sans nom proche reste « unknown » (et part au LLM)', () => {
+    for (const text of ['xyzzy qwerty', 'bonjour']) {
+      const r = parse(text);
+      expect(r.ok).toBe(false);
+      if (!r.ok) { expect(r.reason).toBe('unknown'); expect(r.choices).toBeUndefined(); }
     }
   });
 });

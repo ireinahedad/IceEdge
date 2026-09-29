@@ -148,7 +148,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // Un SEUL quota Pro pour les deux fonctions IA (Analyse LLM d'un pari et
   // Bet builder IA) : la carte le dit, pour qu'un abonné ne croie pas avoir
   // deux enveloppes. Côté gratuit, les essais du Bet builder IA réutilisent
-  // les textes de la feuille (`cmd.aiFreeLeft`, `cmd.aiOwnKey`).
+  // les textes de la feuille (`cmd.aiFreeLeft`, `cmd.aiOwnKey`) ; depuis le
+  // 2026-09-29, `cmd.aiFreeLeft` n'est plus affiché QUE dans les Réglages.
   "profile.aiUsageShared": { en: "One allowance for LLM Analysis and the AI bet builder.", fr: "Un seul quota pour l'Analyse LLM et le Bet builder IA." },
   "profile.aiUsageFailed": { en: "Counter unavailable right now.", fr: "Compteur indisponible pour l'instant." },
   "profile.dark":         { en: "Dark",          fr: "Sombre" },
@@ -649,11 +650,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "chart.m.otLosses":    { en: "OT Losses",             fr: "Défaites Prol." },
   "chart.pie.pointsBreakdown": { en: "Points Breakdown", fr: "Répartition des points" },
   "chart.pie.pts":       { en: "PTS",                   fr: "PTS" },
-  "chart.compare.title":     { en: "Compare Players",   fr: "Comparer les joueurs" },
-  "chart.compare.search":    { en: "Search a player to compare…", fr: "Rechercher un joueur à comparer…" },
-  "chart.compare.noResults": { en: "No players found",  fr: "Aucun joueur trouvé" },
-  "chart.compare.column":    { en: "Compare",           fr: "Comparer" },
-  "chart.compare.cta":       { en: "Compare",           fr: "Comparer" },
+  "chart.compare.ctaPlayer": { en: "Compare to another player", fr: "Comparer à un autre joueur" },
+  "chart.compare.ctaTeam":   { en: "Compare to another team",   fr: "Comparer à une autre équipe" },
   "chart.compare.chart":     { en: "Head to head",      fr: "Face à face" },
   "chart.compare.players":   { en: "Compare players",   fr: "Comparer des joueurs" },
   "chart.compare.teams":     { en: "Compare teams",     fr: "Comparer des équipes" },
@@ -774,6 +772,9 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pred.slipAddShort":   { en: "+ Slip",                fr: "+ Pari" },
   "pred.addToSlip":      { en: "+ Add to slip",         fr: "+ Ajouter au pari" },
   "pred.addedToSlip":    { en: "✓ Added to slip",       fr: "✓ Ajouté au pari" },
+  // Question de suivi après l'Analyse LLM (tâche serveur `ask_followup`, 2026-09-29).
+  "pred.followupPlaceholder": { en: "Ask the AI another question…", fr: "Pose une autre question à l'IA…" },
+  "pred.followupSend":   { en: "Ask",                   fr: "Envoyer" },
   "pred.lastN":          { en: "Last {n}",              fr: "{n} derniers" },
   "pred.formOverLast":   { en: "Form over last {n} games · {wl}", fr: "Forme sur les {n} derniers matchs · {wl}" },
   "pred.winRateL":       { en: "Win Rate (L{n})",       fr: "Taux de victoire (L{n})" },
@@ -889,6 +890,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "cmd.unknown":       { en: "I didn't understand “{chunk}”.", fr: "Je n'ai pas compris « {chunk} »." },
   "cmd.whichTeam":     { en: "“{alias}”: which team?", fr: "« {alias} » : quelle équipe ?" },
   "cmd.whichPlayer":   { en: "Which {alias}?", fr: "Quel {alias} ?" },
+  "cmd.didYouMean":    { en: "“{word}”: did you mean…", fr: "« {word} » : tu voulais dire…" },
   "cmd.whichLine":     { en: "Which line?", fr: "Quelle ligne ?" },
   "cmd.lineNotOffered":{ en: "Line {line} isn't offered. Pick one:", fr: "La ligne {line} n'est pas offerte. Choisis :" },
   "cmd.whichTotal":    { en: "Game total or {team} total?", fr: "Total du match ou total de {team} ?" },

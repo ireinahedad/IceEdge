@@ -38,9 +38,11 @@ function cleanNames(list: unknown): string[] {
  * `getStartingGoalies` : un match a deux équipes, une seule ligne les porte.
  */
 export async function getScratchesDay(dateISO?: string): Promise<ScratchDay> {
+  const date = dateISO ?? easternToday();
+  // La même date sert à l'expiration des blessés longue durée (`until`).
   const [day, long] = await Promise.all([
-    getEntry<ScratchDay>('scratches', dateISO ?? easternToday()),
-    getLongInjuries(),
+    getEntry<ScratchDay>('scratches', date),
+    getLongInjuries(date),
   ]);
   const out: ScratchDay = {};
   if (day && typeof day === 'object') {

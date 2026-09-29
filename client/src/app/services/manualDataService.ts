@@ -112,8 +112,13 @@ export function saveLineups(
  * Un joueur absent jusqu'à nouvel ordre. Le SERVEUR l'ajoute tout seul aux
  * absents du jour (IA) et au facteur Blessures (règles) de chaque match de son
  * équipe : rien à ressaisir tant qu'on ne le retire pas.
+ *
+ * `source: 'auto'` : posé par la synchro des blessés (`npm run injuries:sync`),
+ * avec une date de fin estimée `until` (incluse). Le client ne décide jamais
+ * de `source` — le serveur l'écarte à l'envoi et le déduit de ce qu'il a en
+ * base (voir server/src/services/longInjuries.ts).
  */
-export interface LongInjury { player: string; impact: number; since?: string }
+export interface LongInjury { player: string; impact: number; since?: string; until?: string; source?: 'auto' }
 
 /** Toutes les équipes : { ABBR: [LongInjury, …] }. */
 export function fetchLongInjuries(): Promise<Record<string, LongInjury[]>> {

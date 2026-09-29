@@ -36,7 +36,7 @@ import { normalizeRefName } from '../services/refereeStore';
 import type { GameInjuries } from '../services/injuryStore';
 import type { GoalieDay } from '../services/startingGoalies';
 import type { ScratchDay } from '../services/scratches';
-import type { LongInjury, LongInjuryEntry } from '../services/longInjuries';
+import { mergeManualSave, type LongInjury, type LongInjuryEntry } from '../services/longInjuries';
 
 const router = Router();
 
@@ -201,23 +201,34 @@ router.get('/long-injuries', async (_req: Request, res: Response) => {
   res.json(out);
 });
 
-/** PUT /api/manual/long-injuries/:abbr — remplace la liste d'une équipe. Vide = suppression. */
+/**
+ * PUT /api/manual/long-injuries/:abbr — remplace la liste d'une équipe.
+ *
+ * La liste envoyée est fusionnée avec la ligne en base par `mergeManualSave` :
+ * l'écran ne connaît pas `dismissed`, et c'est au serveur de décider si une
+ * entrée automatique le reste (voir `longInjuries.ts`). La ligne n'est effacée
+ * que si elle ne porte plus NI joueur NI rejet : effacer les rejets ferait
+ * revenir dès la synchro suivante un joueur que l'admin vient de retirer.
+ */
 router.put('/long-injuries/:abbr', validateBody(longInjuriesSchema), async (req: Request, res: Response) => {
   const abbr = String(req.params.abbr ?? '').trim().toUpperCase();
   if (!/^[A-Z]{2,4}$/.test(abbr)) {
     return res.status(400).json({ error: 'abréviation d\'équipe invalide (ex. TOR)' });
   }
   const seen = new Set<string>();
-  const players: LongInjury[] = (req.body as LongInjuryEntry).players
+  const incoming: LongInjury[] = (req.body as LongInjuryEntry).players
     .map((p) => ({ ...p, player: p.player.trim() }))
     .filter((p) => !seen.has(p.player.toLowerCase()) && !!seen.add(p.player.toLowerCase()));
 
-  if (players.length === 0) {
+  const existing = await Manual.getEntry<LongInjuryEntry>('long_injuries', abbr);
+  const next = mergeManualSave(existing, incoming);
+
+  if (next.players.length === 0 && !next.dismissed?.length) {
     await Manual.deleteEntry('long_injuries', abbr);
     return res.json({ ok: true, abbr, players: [] });
   }
-  await Manual.setEntry('long_injuries', abbr, { players }, actor(req));
-  return res.json({ ok: true, abbr, players });
+  await Manual.setEntry('long_injuries', abbr, next, actor(req));
+  return res.json({ ok: true, abbr, players: next.players });
 });
 
 /** GET /api/manual/lineups?date=YYYY-MM-DD (défaut : aujourd'hui, heure Est). */

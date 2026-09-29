@@ -27,12 +27,15 @@
  * Les tâches que le proxy accepte. Toute nouvelle valeur s'ajoute ICI.
  *
  *   - `explain_bet`        — « Analyse IA » d'un pari (`PredictionSheet`) ;
+ *   - `ask_followup`       — question de suivi posée APRÈS cette analyse, dans
+ *     la même fiche (demande du user, 2026-09-29). Même chemin de clé et même
+ *     quota qu'`explain_bet` : un appel = une requête ;
  *   - `parse_bet_command`  — le « Bet builder IA » (≠ Analyse LLM ci-dessus) : traduit une
  *     phrase en intentions (SLIP_COMMANDE_PLAN.md § 5). Son invite n'est PAS
  *     ici : elle embarque les matchs et joueurs du moment, elle est donc
  *     construite à chaque appel par `slipCommandLlm.buildParsePrompt`.
  */
-export const LLM_TASK_TYPES = ['explain_bet', 'parse_bet_command'] as const;
+export const LLM_TASK_TYPES = ['explain_bet', 'ask_followup', 'parse_bet_command'] as const;
 export type LlmTaskType = typeof LLM_TASK_TYPES[number];
 
 export type LlmLocale = 'fr' | 'en';
@@ -89,9 +92,43 @@ const EXPLAIN_BET: Record<LlmLocale, string> = {
     "(pick ONE word for the verdict and ONE for the confidence)",
 };
 
-/** Les invites FIXES. `parse_bet_command` n'y est pas : voir `LLM_TASK_TYPES`. */
-const PROMPTS: Record<'explain_bet', Record<LlmLocale, string>> = {
+/**
+ * Invite d'`ask_followup` : la personne a lu l'analyse d'`explain_bet` et pose
+ * une question dessus. Le message utilisateur porte les données du pari,
+ * l'analyse précédente, les derniers échanges et la question (construit par
+ * `PredictionSheet`).
+ *
+ * Le cadre est le même que pour l'analyse (pas de données en direct, les
+ * « Données de l'application » font foi) ; le format, lui, est libre et
+ * court. Une question hors sujet est déclinée en une phrase : cette tâche
+ * tourne sur la clé de l'opérateur pour un compte Pro, elle ne doit pas
+ * devenir un assistant généraliste (voir l'en-tête de ce fichier).
+ */
+const ASK_FOLLOWUP: Record<LlmLocale, string> = {
+  fr:
+    "Tu es un analyste de paris LNH. Tu as déjà donné ton analyse d'un pari ; la personne te pose une question de suivi. " +
+    "Tu n'as AUCUNE donnée en temps réel et ta connaissance a une date limite : n'affirme jamais une blessure, " +
+    "un alignement ou un gardien actuel comme un fait. " +
+    "Les « Données de l'application » fournies sont la vérité ; appuie-toi dessus et sur ton analyse précédente. " +
+    "Réponds directement, en 2 à 5 phrases courtes, sans introduction ni formule de politesse, en texte simple. " +
+    "Si la question ne porte pas sur ce pari, ce match, ces équipes, ces joueurs ou les paris LNH, " +
+    "dis-le en une phrase et n'y réponds pas.",
+  en:
+    "You are an NHL betting analyst. You already gave your analysis of a bet; the person asks a follow-up question. " +
+    "You have NO live data and your knowledge has a cutoff: never state a current injury, lineup or goalie start as fact. " +
+    "The 'App data' provided is ground truth; rely on it and on your previous analysis. " +
+    "Answer directly, in 2 to 5 short sentences, with no intro or pleasantries, in plain text. " +
+    "If the question is not about this bet, this game, these teams, these players or NHL betting, " +
+    "say so in one sentence and do not answer it.",
+};
+
+/** Les tâches à invite FIXE. `parse_bet_command` n'y est pas : voir `LLM_TASK_TYPES`. */
+export type FixedPromptTask = Exclude<LlmTaskType, 'parse_bet_command'>;
+
+/** Les invites FIXES. */
+const PROMPTS: Record<FixedPromptTask, Record<LlmLocale, string>> = {
   explain_bet: EXPLAIN_BET,
+  ask_followup: ASK_FOLLOWUP,
 };
 
 /** Garde de type : vrai seulement pour une valeur de `LLM_TASK_TYPES`. */
@@ -115,6 +152,6 @@ export function resolveLocale(bodyLocale: unknown, acceptLanguage?: string): Llm
 }
 
 /** L'invite système d'une tâche à invite FIXE, dans la langue demandée. */
-export function systemPromptFor(taskType: 'explain_bet', locale: LlmLocale): string {
+export function systemPromptFor(taskType: FixedPromptTask, locale: LlmLocale): string {
   return PROMPTS[taskType][locale];
 }

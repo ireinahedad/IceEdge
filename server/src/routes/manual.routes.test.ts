@@ -210,6 +210,29 @@ describe('blessés longue durée', () => {
     expect(Manual.setEntry).not.toHaveBeenCalled();
   });
 
+  it('une entrée de la synchro retirée à la main est gardée en « rejet » — la ligne n\'est PAS effacée', async () => {
+    Manual.getEntry.mockResolvedValueOnce({ players: [
+      { player: 'Auston Matthews', impact: 0.06, since: '2026-09-28', until: '2026-10-20', source: 'auto' },
+    ] });
+    await request(await app()).put('/api/manual/long-injuries/TOR').send({ players: [] }).expect(200);
+    expect(Manual.deleteEntry).not.toHaveBeenCalled();
+    expect(Manual.setEntry).toHaveBeenCalledWith(
+      'long_injuries', 'TOR',
+      { players: [], dismissed: [{ player: 'Auston Matthews', since: '2026-09-28' }] },
+      ADMIN.sub);
+  });
+
+  it('le client ne peut pas se déclarer « auto » : `source` est écarté', async () => {
+    await request(await app())
+      .put('/api/manual/long-injuries/TOR')
+      .send({ players: [{ player: 'Auston Matthews', impact: 0.06, source: 'auto', until: '2026-10-20' }] })
+      .expect(200);
+    expect(Manual.setEntry).toHaveBeenCalledWith(
+      'long_injuries', 'TOR',
+      { players: [{ player: 'Auston Matthews', impact: 0.06, until: '2026-10-20' }] },
+      ADMIN.sub);
+  });
+
   it('GET rend { ABBR: [joueurs] }', async () => {
     Manual.mapEntries.mockResolvedValueOnce({ TOR: { players: [{ player: 'Auston Matthews', impact: 0.06 }] } });
     const res = await request(await app()).get('/api/manual/long-injuries').expect(200);
