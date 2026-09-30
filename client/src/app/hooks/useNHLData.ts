@@ -43,6 +43,8 @@ export interface UIGame {
   /** Journée LNH du match, `YYYY-MM-DD` — pour le jour de semaine et les titres par jour. */
   gameDate: string;
   time: string;       // "7:00 PM ET"
+  /** Mise au jeu, instant ISO — sert à dire « match en cours » sur le coupon. */
+  startTimeUTC: string | null;
   status: string;
   team1Id: string;    // home, abbr lowercase
   team2Id: string;    // away, abbr lowercase
@@ -108,6 +110,7 @@ export function toUIGame(g: any): UIGame {
     date:      formatDate(g.gameDate),
     gameDate:  String(g.gameDate ?? '').slice(0, 10),
     time:      g.startTime,
+    startTimeUTC: g.startTimeUTC ?? null,
     status:    g.status,
     team1Id:   g.homeTeam?.abbreviation?.toLowerCase() ?? '',
     team2Id:   g.awayTeam?.abbreviation?.toLowerCase() ?? '',

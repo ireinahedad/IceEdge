@@ -409,8 +409,10 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "share.lockedOn":    { en: "Locked {date}",   fr: "Verrouillé le {date}" },
   "share.settledOn":   { en: "Settled {date}",  fr: "Réglé le {date}" },
   "share.combined":    { en: "COMBINED",        fr: "COMBINÉ" },
-  "share.summary":     { en: "{n} selections · implied odds {odds}", fr: "{n} sélections · cote implicite {odds}" },
-  "share.summaryOne":  { en: "1 selection · implied odds {odds}",    fr: "1 sélection · cote implicite {odds}" },
+  "share.summary":     { en: "{n} selections · odds {odds}", fr: "{n} sélections · cote {odds}" },
+  "share.summaryOne":  { en: "1 selection · odds {odds}",    fr: "1 sélection · cote {odds}" },
+  "share.summaryNoOdds":    { en: "{n} selections", fr: "{n} sélections" },
+  "share.summaryOneNoOdds": { en: "1 selection",    fr: "1 sélection" },
   "share.moreLegs":    { en: "+ {n} more selections", fr: "+ {n} autres sélections" },
   "share.disclaimer":  { en: "Model probabilities · not betting advice", fr: "Probabilités du modèle · pas un conseil de pari" },
 
@@ -443,6 +445,14 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.lockFailed":   { en: "Couldn't lock the slip — try again", fr: "Impossible de verrouiller le pari — réessaie" },
   "slip.lockTimeout":  { en: "The server took too long — your slip wasn't locked. Try again.", fr: "Le serveur a mis trop de temps — le pari n'a pas été verrouillé. Réessaie." },
   "slip.gameStarted":  { en: "A game in your slip has already started — remove those bets to lock it.", fr: "Un match de ton coupon a déjà commencé — retire ces paris pour le verrouiller." },
+  "slip.chance":      { en: "chance",          fr: "de chance" },
+  "slip.oddsWord":    { en: "odds",            fr: "cote" },
+  "slip.noBookOdds":  { en: "no book odds",    fr: "pas de cote" },
+  "slip.noBookCombined": { en: "Book odds unavailable for this combination", fr: "Cote du livre indisponible pour ce combiné" },
+  "slip.liveTitle":   { en: "Game in progress", fr: "Match en cours" },
+  "slip.liveBody":    { en: "Live betting isn't available: a game in your slip has already started. Remove those bets to lock it.", fr: "Les paris en direct ne sont pas disponibles : un match de ton coupon a déjà commencé. Retire ces paris pour le verrouiller." },
+  "slip.legLive":     { en: "Game in progress — can't be locked", fr: "Match en cours — impossible à verrouiller" },
+  "slip.liveBlocked": { en: "This game has already started — live betting isn't available.", fr: "Ce match a déjà commencé — les paris en direct ne sont pas disponibles." },
   "slip.individualProb":{ en: "Individual prediction probability", fr: "Probabilité de prédiction individuelle" },
   // Ce que la combinaison a changé — affiché par `SlipNotices`. Ces trois faits
   // étaient calculés par `parlay.ts` et jetés : un coupon impossible tombait à

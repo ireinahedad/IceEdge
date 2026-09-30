@@ -17,7 +17,8 @@ import type { BetSlip } from "../../services/slipApiService";
 import { shareImageBlob, ShareUnavailableError } from "../../services/shareImage";
 import { renderSlipShareCard } from "../../services/slipShareCanvas";
 import type { SlipShareLabels } from "../../services/slipShareCanvas";
-import { toOddsLabel } from "./betParts";
+import { PROB_COLOR, bookParlayPrice } from "./betParts";
+import { useOddsFormat } from "../../context/OddsFormatContext";
 import { useI18n } from "../../i18n";
 import { outcomeKey } from "../../services/slipOutcome";
 import { toast } from "sonner";
@@ -33,17 +34,25 @@ import { toast } from "sonner";
 function shareLabels(
   slip: BetSlip,
   { t, lang }: Pick<ReturnType<typeof useI18n>, "t" | "lang">,
+  fmtOdds: (decimal: number) => string,
 ): SlipShareLabels {
   const settled = slip.outcome !== "pending";
   const when    = new Date(settled && slip.resolvedAt ? slip.resolvedAt : slip.placedAt);
   const date    = when.toLocaleDateString(lang === "fr" ? "fr-CA" : "en-US", { month: "long", day: "numeric" });
   const n       = Array.isArray(slip.legs) ? slip.legs.length : 0;
-  const odds    = slip.combinedProbability != null ? toOddsLabel(slip.combinedProbability) : "—";
+  // Cote du LIVRE figée au verrouillage (`bookPrice`, depuis le 2026-09-30).
+  // Les anciens coupons n'ont que la cote du modèle : pas de cote affichée
+  // plutôt qu'une cote de modèle présentée comme celle du livre.
+  const legsArr = Array.isArray(slip.legs) ? slip.legs : [];
+  const price   = bookParlayPrice(legsArr as { gameId?: string; bookPrice?: number }[]);
+  const odds    = price != null ? fmtOdds(price) : null;
 
   return {
     dateLine:   t(settled ? "share.settledOn" : "share.lockedOn", { date }),
     combined:   t("share.combined"),
-    summary:    t(n === 1 ? "share.summaryOne" : "share.summary", { n, odds }),
+    summary:    odds != null
+      ? t(n === 1 ? "share.summaryOne" : "share.summary", { n, odds })
+      : t(n === 1 ? "share.summaryOneNoOdds" : "share.summaryNoOdds", { n }),
     // L'issue est un mot, pas une couleur d'anneau : l'anneau garde l'échelle
     // de probabilité, y compris sur un coupon gagné à 27 %.
     // Trois issues possibles une fois réglé, pas deux : un coupon `void`
@@ -257,6 +266,7 @@ const isPlayerIdLogo = (url: string) => /\/\d{5,}_light\.svg$/.test(url);
 
 function SlipCard({ slip }: { slip: BetSlip }) {
   const { t, lang } = useI18n();
+  const { odds } = useOddsFormat();
   const [sharing, setSharing] = useState(false);
   const [roomPicker, setRoomPicker] = useState(false);
 
@@ -265,7 +275,7 @@ function SlipCard({ slip }: { slip: BetSlip }) {
     try {
       // L'image est DESSINÉE, pas capturée : elle ne dépend donc plus de ce que
       // cette carte-ci affiche, ni d'un logo tiers qui refuserait le CORS.
-      const png = await renderSlipShareCard(slip, shareLabels(slip, { t, lang }));
+      const png = await renderSlipShareCard(slip, shareLabels(slip, { t, lang }, odds));
       await shareImageBlob(png, `arakice-slip-${slip.id}.png`, "ArakIce");
     } catch (err) {
       // Avant : un `console.warn` seul. L'utilisateur touchait « Partager » et
@@ -296,10 +306,8 @@ function SlipCard({ slip }: { slip: BetSlip }) {
   const outcomeLabel = t(outcomeKey(slip.outcome));
   const OutcomeIcon  = isNeutral ? Clock : isWin ? Trophy : AlertCircle;
 
-  const combinedColor =
-    (slip.combinedProbability ?? 0) >= 65 ? "#86d1ea" :
-    (slip.combinedProbability ?? 0) >= 45 ? "#90C9F0" :
-    (slip.combinedProbability ?? 0) >= 25 ? "#facc15" : "#f87171";
+  // Même couleur de % partout sur la page du coupon (cf. PROB_COLOR).
+  const combinedColor = PROB_COLOR;
 
   return (
     <div className={`icy-card rounded-2xl overflow-hidden transition-all ${
@@ -326,7 +334,7 @@ function SlipCard({ slip }: { slip: BetSlip }) {
           <p className="text-[11px] text-[#4a6068]">{date} · {time}</p>
           {slip.combinedProbability != null && (
             <p className="text-sm font-black" style={{ color: combinedColor }}>
-              {slip.combinedProbability}%
+              {slip.combinedProbability}% <span className="text-[11px] font-medium">{t("slip.chance")}</span>
             </p>
           )}
         </div>
@@ -362,7 +370,7 @@ function SlipCard({ slip }: { slip: BetSlip }) {
               )}
             </div>
             <span className="text-[11px] font-bold flex-shrink-0" style={{ color: combinedColor }}>
-              {leg.probability}%
+              {leg.probability}% <span className="font-medium">{t("slip.chance")}</span>
             </span>
             <LegResultMark result={leg.result} slipPending={isPending} />
           </div>

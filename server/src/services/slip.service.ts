@@ -120,7 +120,11 @@ export interface SlipLeg {
   selection?:   string;
   line?:        number;
   probability:  number;
-  oddsLabel:    string;
+  /** Prix AMÉRICAIN du livre au verrouillage ; absent si le livre ne cotait
+   *  pas la jambe. Avant le 2026-09-30 : cote déduite du modèle. */
+  oddsLabel?:   string;
+  /** Prix DÉCIMAL du livre au verrouillage (depuis le 2026-09-30). */
+  bookPrice?:   number;
   /** NHL game id — required for automatic settlement */
   gameId?:      string;
   /** Machine-readable selection (team id, 'over', 'under'…) */

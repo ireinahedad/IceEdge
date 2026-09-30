@@ -14,7 +14,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { Plus, Lightbulb, Trash2 } from "lucide-react";
+import { Plus, Lightbulb, Trash2, Radio } from "lucide-react";
 import { useBet } from "../context/BetContext";
 import { useAuth } from "../context/AuthContext";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
@@ -30,10 +30,10 @@ import { toast } from "sonner";
 import "./bet-theme.css";
 import { MySlipsTab } from "./bet/MySlipsTab";
 import "../components/rink-theme.css";
-import { EmptySlip, LegCard, LockSlipCTA, ProbabilityGauge, SlipNotices, impliedDecimal, toOddsLabel } from "./bet/betParts";
+import { EmptySlip, LegCard, LockSlipCTA, ProbabilityGauge, SlipNotices, ODDS_COLOR, bookParlayPrice, decimalToAmericanLabel } from "./bet/betParts";
+import { useNHLData } from "../hooks/useNHLData";
 import { useOddsFormat } from "../context/OddsFormatContext";
 import { fetchLegPrices } from "../services/oddsApiService";
-import { BookPricePill } from "../components/BookPricePill";
 
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
@@ -68,6 +68,21 @@ export function BetBuilderPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
+  // ── Matchs déjà commencés ─────────────────────────────────────────────────
+  // Pas de pari en direct : le serveur refuse le coupon (`GAME_STARTED`). On
+  // le dit AVANT le clic, jambe par jambe, au lieu de le découvrir au refus.
+  // Même règle que le serveur : mise au jeu passée (ou statut live/final).
+  const { getGameById } = useNHLData();
+  const startedLegIds = new Set(
+    legs.filter((l) => {
+      const g = l.gameId ? getGameById(l.gameId) : undefined;
+      if (!g) return false;
+      if (g.status === "live" || g.status === "final") return true;
+      const ms = g.startTimeUTC ? new Date(g.startTimeUTC).getTime() : NaN;
+      return Number.isFinite(ms) && ms <= Date.now();
+    }).map((l) => l.id),
+  );
+
   // ── Vrais prix des jambes ─────────────────────────────────────────────────
   // Rechargés quand la COMPOSITION du coupon change (pas à chaque rendu). Un
   // échec rend `{}` : les jambes restent sans prix, rien d'autre ne bouge.
@@ -86,18 +101,13 @@ export function BetBuilderPage() {
   // jambes sont cotées et portent sur des matchs DIFFÉRENTS. Deux jambes du
   // même match sont corrélées, et un livre ne paie pas leur produit — il
   // refuserait ou reprixerait le combiné. Dans ce cas, rien plutôt qu'un faux.
-  const bookCombined = (() => {
-    if (legs.length < 2) return null;
-    const games = new Set(legs.map((l) => l.gameId));
-    if (games.size !== legs.length || games.has(undefined)) return null;
-    let prod = 1;
-    for (const l of legs) {
-      const p = legPrices[l.id]?.price;
-      if (!p) return null;
-      prod *= p;
-    }
-    return Math.round(prod * 100) / 100;
-  })();
+  const bookCombined = legs.length < 2
+    ? null
+    : bookParlayPrice(legs.map((l) => ({ gameId: l.gameId, bookPrice: legPrices[l.id]?.price })));
+
+  // Cote affichée sous la jauge : prix du livre de la jambe seule, ou le
+  // combiné du livre. `null` = le livre ne cote pas ce coupon.
+  const bookOdds = legs.length === 1 ? (legPrices[legs[0].id]?.price ?? null) : bookCombined;
 
   // ── Nombre de coupons EN COURS, affiché sur l'onglet « Mes paris » ─────────
   // La page le lit elle-même : `MySlipsTab` n'est monté que lorsque son onglet
@@ -161,7 +171,12 @@ export function BetBuilderPage() {
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      const slipLegs = legs.map((l) => ({
+      const slipLegs = legs.map((l) => {
+        // Vrai prix du livre au verrouillage (décision du user, 2026-09-30).
+        // Pas de prix → pas d'`oddsLabel` : le ROI dev compte la jambe comme
+        // « sans prix » au lieu d'un chiffre inventé.
+        const bookPrice = legPrices[l.id]?.price;
+        return {
         marketType:     l.marketType,
         subjectId:      l.subjectId,
         subjectName:    l.subjectName,
@@ -169,12 +184,13 @@ export function BetBuilderPage() {
         selection:      l.selection,
         line:           l.line,
         probability:    l.probability,
-        oddsLabel:      toOddsLabel(l.probability),
+        ...(bookPrice ? { oddsLabel: decimalToAmericanLabel(bookPrice), bookPrice } : {}),
         // Machine-readable fields — without these the slip can never be
         // auto-settled and stays "pending" forever, even for simple markets.
         gameId:         l.gameId,
         selectionValue: l.selectionValue,
-      }));
+      };
+      });
       const { slipId, message } = await submitSlip(slipLegs, sport, combinedProbability);
       setSubmitResult({ slipId, message });
       clearSlip();
@@ -268,37 +284,23 @@ export function BetBuilderPage() {
           {legs.length > 0 && (
           <div className="flex flex-col items-center py-6">
             <ProbabilityGauge pct={combinedProbability ?? 0} size={180} />
-            {legs.length > 1 && (
-              <>
-                <p className="text-[#4a6068] text-[11px] text-center mt-2 max-w-[240px]">
-                  {combinedProbability == null
-                    ? t("pred.unavailableParlay")
-                    : `Combined probability all ${legs.length} predictions hit`}
-                </p>
-                {combinedProbability != null && (
-                  <div className="mt-2 px-4 py-1.5 rounded-full icy-tile">
-                    <span className="text-white font-bold text-sm font-mono">{odds(impliedDecimal(combinedProbability))}</span>
-                    <span className="text-[#4a6068] text-[11px] ml-1.5">implied odds</span>
-                  </div>
-                )}
-                {bookCombined != null && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <span className="text-[#4a6068] text-[11px]">{t("slip.bookCombined")}</span>
-                    <BookPricePill price={bookCombined} size="md" />
-                  </div>
-                )}
-              </>
-            )}
-            {legs.length === 1 && (
-              <>
-                <p className="text-[#4a6068] text-[11px] text-center mt-2">{t("slip.individualProb")}</p>
-                {combinedProbability != null && (
-                  <div className="mt-2 px-4 py-1.5 rounded-full icy-tile">
-                    <span className="text-white font-bold text-sm font-mono">{odds(impliedDecimal(combinedProbability))}</span>
-                    <span className="text-[#4a6068] text-[11px] ml-1.5">implied odds</span>
-                  </div>
-                )}
-              </>
+            <p className="text-[#4a6068] text-[11px] text-center mt-2 max-w-[240px]">
+              {legs.length === 1
+                ? t("slip.individualProb")
+                : combinedProbability == null
+                ? t("pred.unavailableParlay")
+                : `Combined probability all ${legs.length} predictions hit`}
+            </p>
+            {/* Cote = VRAI prix du livre (décision du user, 2026-09-30) :
+                le prix de la jambe seule, ou le produit des prix pour un
+                combiné sur des matchs différents (`bookCombined`). */}
+            {bookOdds != null ? (
+              <div className="mt-2 px-4 py-1.5 rounded-full bg-green-500/10 border border-green-500/20">
+                <span className="font-bold text-sm font-mono" style={{ color: ODDS_COLOR }}>{odds(bookOdds)}</span>
+                <span className="text-[11px] font-medium ml-1.5" style={{ color: ODDS_COLOR }}>{t("slip.oddsWord")}</span>
+              </div>
+            ) : (
+              <p className="mt-2 text-[#4a6068] text-[11px] text-center max-w-[240px]">{t("slip.noBookCombined")}</p>
             )}
           </div>
           )}
@@ -306,6 +308,17 @@ export function BetBuilderPage() {
           {/* Juste sous la jauge et AVANT les cartes : c'est là qu'on lit le
               chiffre, donc là qu'il faut dire ce qui l'a produit. */}
           {legs.length > 0 && <SlipNotices analysis={slipAnalysis} />}
+
+          {startedLegIds.size > 0 && (
+            <div role="status" className="flex items-start gap-2 px-3 py-2.5 mb-4 rounded-xl border"
+              style={{ backgroundColor: "#facc1514", borderColor: "#facc1540" }}>
+              <Radio size={13} className="flex-shrink-0 mt-0.5" style={{ color: "#facc15" }} />
+              <div>
+                <p className="text-[11px] font-bold" style={{ color: "#facc15" }}>{t("slip.liveTitle")}</p>
+                <p className="text-[#bfc8cc] text-[11px] leading-snug mt-0.5">{t("slip.liveBody")}</p>
+              </div>
+            </div>
+          )}
 
           {legs.length === 0 ? (
             <EmptySlip onBrowse={() => navigate("/stats")} />
@@ -324,7 +337,7 @@ export function BetBuilderPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {legs.map((leg, i) => (
                   <LegCard key={leg.id} leg={leg} index={i} onRemove={() => removeLeg(leg.id)}
-                    bookPrice={legPrices[leg.id]?.price} />
+                    bookPrice={legPrices[leg.id]?.price} started={startedLegIds.has(leg.id)} />
                 ))}
               </div>
             </div>
@@ -361,8 +374,8 @@ export function BetBuilderPage() {
         <LockSlipCTA
           legs={legs}
           combinedProbability={combinedProbability}
-          onAdd={() => setShowSheet(true)}
           onLock={handleLock}
+          isSignedIn={!!user}
           isSubmitting={isSubmitting}
           error={submitError}
           panelRef={ctaRef}

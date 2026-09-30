@@ -7,19 +7,30 @@
  */
 
 import { useState, useEffect, type CSSProperties, type Ref } from "react";
-import { Plus, X, Lock, Share2, ChevronRight, AlertCircle, Info } from "lucide-react";
+import { Plus, X, Lock, ChevronRight, AlertCircle, Info, Radio } from "lucide-react";
 import type { BetLeg } from "../../types/bet";
 import type { SlipAnalysis } from "../../context/BetContext";
 import { openBet } from "../../services/bookmakers";
 import { features } from "../../platform";
 import { useBookmaker } from "../../context/BookmakerContext";
 import { useOddsFormat } from "../../context/OddsFormatContext";
-import { BookPricePill } from "../../components/BookPricePill";
 import { useI18n } from "../../i18n";
 import { SlipCommandLauncher } from "../../components/SlipCommandSheet";
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * 🎨 Décision du user (2026-09-30) : sur la page du coupon, UNE couleur pour le
+ * % du modèle et UNE couleur pour la cote, partout — pour qu'on reconnaisse
+ * d'un coup d'œil ce qui est une chance et ce qui est une cote. La couleur ne
+ * dit plus « fort / risqué » (le libellé de la jauge le dit en mots).
+ *
+ * La cote prend le vert des pastilles de prix du livre (`BookPricePill`) :
+ * cote du modèle et cote du livre se lisent ainsi comme la même famille.
+ */
+export const PROB_COLOR = "#86d1ea";
+export const ODDS_COLOR = "#4ade80"; // = text-green-400 de BookPricePill
 
 /**
  * Probabilité du modèle → cote américaine ÉQUIVALENTE, en format FIGÉ.
@@ -37,6 +48,38 @@ export function toOddsLabel(pct: number): string {
   return p >= 0.5
     ? `-${Math.round((p / (1 - p)) * 100)}`
     : `+${Math.round(((1 - p) / p) * 100)}`;
+}
+
+/**
+ * Prix décimal du livre → prix américain FIGÉ (« -150 », « +120 »), pour le
+ * champ `oddsLabel` archivé avec le pari. Depuis le 2026-09-30 (décision du
+ * user), `oddsLabel` porte le VRAI prix du livre au moment du verrouillage, et
+ * plus la cote déduite du modèle — le ROI du tableau de bord dev
+ * (`americanToProfit`) se calcule donc enfin sur un prix réel.
+ */
+export function decimalToAmericanLabel(decimal: number): string {
+  if (!(decimal > 1)) return "";
+  return decimal >= 2
+    ? `+${Math.round((decimal - 1) * 100)}`
+    : `-${Math.round(100 / (decimal - 1))}`;
+}
+
+/**
+ * Cote combinée du LIVRE : produit des prix, seulement si TOUTES les jambes
+ * sont cotées et portent sur des matchs DIFFÉRENTS (deux jambes d'un même
+ * match sont corrélées : un livre ne paie pas leur produit). Une seule jambe
+ * cotée → son prix. `null` sinon : rien plutôt qu'un faux.
+ */
+export function bookParlayPrice(legs: { gameId?: string; bookPrice?: number | null }[]): number | null {
+  if (legs.length === 0) return null;
+  const games = new Set(legs.map((l) => l.gameId));
+  if (legs.length > 1 && (games.size !== legs.length || games.has(undefined))) return null;
+  let prod = 1;
+  for (const l of legs) {
+    if (!l.bookPrice || !(l.bookPrice > 1)) return null;
+    prod *= l.bookPrice;
+  }
+  return Math.round(prod * 100) / 100;
 }
 
 /**
@@ -65,10 +108,7 @@ export function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: numb
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - displayed / 100);
 
-  const color =
-    pct >= 65 ? "#86d1ea" :
-    pct >= 45 ? "#90C9F0" :
-    pct >= 25 ? "#facc15" : "#f87171";
+  const color = PROB_COLOR;
 
   useEffect(() => {
     setDisplayed(0);
@@ -106,8 +146,9 @@ export function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: numb
           <>
             {/* Toujours en % : c'est la probabilité du modèle, pas un prix.
                 Voir `toOddsLabel` plus haut. */}
-            <span className="text-white text-4xl font-bold">{displayed}<span className="text-2xl">%</span></span>
-            <span className="text-xs mt-0.5 font-medium" style={{ color }}>{label}</span>
+            <span className="text-4xl font-bold leading-none" style={{ color }}>{displayed}<span className="text-2xl">%</span></span>
+            <span className="text-[11px] mt-1 font-medium" style={{ color }}>{t("slip.chance")}</span>
+            <span className="text-[11px] mt-0.5 font-medium text-[#8a9ea6]">{label}</span>
           </>
         ) : (
           <>
@@ -188,21 +229,20 @@ export function SlipNotices({ analysis }: { analysis: SlipAnalysis }) {
 
 // ─── Single leg card (builder) ────────────────────────────────────────────────
 
-export function LegCard({ leg, index, onRemove, bookPrice }: {
+export function LegCard({ leg, index, onRemove, bookPrice, started }: {
   leg: BetLeg; index: number; onRemove: () => void;
   /** Vrai prix Betano Ontario de cette jambe, si le livre la cote. */
   bookPrice?: number;
+  /** Le match de cette jambe a commencé : le serveur refusera le coupon. */
+  started?: boolean;
 }) {
   const { t } = useI18n();
   const { bookmaker } = useBookmaker();
   const { odds } = useOddsFormat();
-  const barColor =
-    leg.probability >= 65 ? "#86d1ea" :
-    leg.probability >= 50 ? "#90C9F0" :
-    leg.probability >= 35 ? "#facc15" : "#f87171";
+  const barColor = PROB_COLOR;
 
   return (
-    <div className="icy-card rounded-2xl p-4">
+    <div className="icy-card rounded-2xl p-4" style={started ? { boxShadow: "inset 0 0 0 1px #facc1560" } : undefined}>
       <div className="flex items-start gap-3">
         <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
           <div className="w-7 h-7 rounded-full bg-[#90C9F0]/10 border border-[#90C9F0]/25 flex items-center justify-center text-[11px] font-bold text-[#90C9F0]">
@@ -239,17 +279,30 @@ export function LegCard({ leg, index, onRemove, bookPrice }: {
               <div className="h-1.5 rounded-full transition-all duration-500"
                 style={{ width: `${leg.probability}%`, backgroundColor: barColor }} />
             </div>
-            <span className="text-xs font-bold flex-shrink-0" style={{ color: barColor }}>{leg.probability}%</span>
-            <span className="text-[11px] text-[#4a6068] flex-shrink-0 font-mono">{odds(impliedDecimal(leg.probability))}</span>
+            <span className="text-xs font-bold flex-shrink-0" style={{ color: PROB_COLOR }}>
+              {leg.probability}% <span className="text-[11px] font-medium">{t("slip.chance")}</span>
+            </span>
+            {/* Cote = VRAI prix du livre (Betano Ontario), plus la cote tirée
+                du modèle (décision du user, 2026-09-30). Pas de prix → on le
+                dit, sans inventer de chiffre. */}
+            {bookPrice != null ? (
+              <span className="text-[11px] font-bold flex-shrink-0 font-mono" style={{ color: ODDS_COLOR }}>
+                {odds(bookPrice)} <span className="font-sans font-medium">{t("slip.oddsWord")}</span>
+              </span>
+            ) : (
+              <span className="text-[11px] flex-shrink-0 text-[#4a6068]">{t("slip.noBookOdds")}</span>
+            )}
           </div>
+          {started && (
+            <p className="mt-1.5 flex items-center gap-1 text-[11px] font-medium" style={{ color: "#facc15" }}>
+              <Radio size={11} /> {t("slip.legLive")}
+            </p>
+          )}
           {/* APPLE_PLAN §4 — Guideline 5.3: the leg keeps its price, the link out
               to the sportsbook does not ship on iOS. */}
-          {bookPrice != null && !features.bookmakerLinks && (
-            <div className="mt-2"><BookPricePill price={bookPrice} /></div>
-          )}
+          {/* La cote du livre est déjà sur la ligne du % : plus de pastille ici. */}
           {features.bookmakerLinks && (
             <div className="mt-2 flex items-center gap-2 flex-wrap">
-            {bookPrice != null && <BookPricePill price={bookPrice} />}
             <button
               onClick={() => openBet("hockey")}
               // Couleurs du livre choisi (services/bookmakers.ts). Le survol passe
@@ -323,10 +376,12 @@ export function EmptySlip({ onBrowse }: { onBrowse: () => void }) {
 // ─── Lock CTA ─────────────────────────────────────────────────────────────────
 
 export function LockSlipCTA({
-  legs, combinedProbability, onAdd, onLock, isSubmitting, error, panelRef,
+  legs, combinedProbability, onLock, isSubmitting, error, panelRef, isSignedIn,
 }: {
   legs: BetLeg[]; combinedProbability: number | null;
-  onAdd: () => void; onLock: () => void; isSubmitting: boolean;
+  onLock: () => void; isSubmitting: boolean;
+  /** Connecté : on ne rappelle pas « connexion requise ». */
+  isSignedIn: boolean;
   /** Pourquoi le dernier verrouillage a échoué. Affiché ICI, contre le bouton
    *  qui vient d'être touché : l'échec était jusqu'ici écrit dans un état que
    *  rien ne rendait (cf. `BetBuilderPage.tsx`). Le bloc est mesuré par un
@@ -342,11 +397,8 @@ export function LockSlipCTA({
 }) {
   const { t } = useI18n();
   if (legs.length === 0) return null;
-  const color =
-    combinedProbability == null ? "#8a9ea6" :
-    combinedProbability >= 65 ? "#86d1ea" :
-    combinedProbability >= 45 ? "#90C9F0" :
-    combinedProbability >= 25 ? "#facc15" : "#f87171";
+  // Bouton = cyan primaire (cf. AppButton) ; le % = PROB_COLOR, comme partout.
+  const color = PROB_COLOR;
 
   return (
     <div ref={panelRef} className="fixed bottom-[calc(68px+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 max-w-[430px] md:max-w-5xl w-full px-4 z-40">
@@ -359,12 +411,15 @@ export function LockSlipCTA({
             </div>
             <div>
               <p className="text-white text-xs font-bold">{t("slip.legsReady", { n: legs.length })}</p>
-              <p className="text-[#4a6068] text-[11px]">{t("slip.signinRequired")}</p>
+              {!isSignedIn && <p className="text-[#4a6068] text-[11px]">{t("slip.signinRequired")}</p>}
             </div>
           </div>
           <div className="text-right">
             <p className="text-[11px] text-[#8a9ea6]">{t("slip.combined")}</p>
-            <p className="text-lg font-black" style={{ color }}>{combinedProbability != null ? `${combinedProbability}%` : "—"}</p>
+            <p className="text-lg font-black leading-tight" style={{ color: combinedProbability != null ? PROB_COLOR : "#8a9ea6" }}>
+              {combinedProbability != null ? `${combinedProbability}%` : "—"}
+              {combinedProbability != null && <span className="text-[11px] font-medium ml-1">{t("slip.chance")}</span>}
+            </p>
           </div>
         </div>
         {error && (
@@ -375,12 +430,10 @@ export function LockSlipCTA({
         )}
 
         <div className="flex gap-2">
-          <button onClick={onAdd} disabled={isSubmitting}
-            className="flex items-center justify-center gap-1.5 flex-1 py-3 rounded-xl icy-tile text-[#90C9F0] text-xs font-bold active:scale-[0.97] transition-transform disabled:opacity-40">
-            <Plus size={13} /> {t("slip.addLeg")}
-          </button>
+          {/* « Add Leg » retiré (décision du user, 2026-09-30) : « Ajouter »
+              existe déjà au-dessus des cartes. */}
           <button onClick={onLock} disabled={isSubmitting}
-            className="flex items-center justify-center gap-2 flex-[2] py-3 rounded-xl text-[#072E49] text-sm font-bold active:scale-[0.97] transition-transform disabled:opacity-60"
+            className="relative flex items-center justify-center gap-2 flex-1 py-3 rounded-xl text-[#072E49] text-sm font-bold active:scale-[0.97] transition-transform disabled:opacity-60"
             style={{ backgroundColor: color }}>
             {isSubmitting ? (
               <>
@@ -389,30 +442,13 @@ export function LockSlipCTA({
               </>
             ) : (
               <>
-                <Share2 size={14} />
                 {t("slip.lockSlip")}
-                <ChevronRight size={14} className="ml-auto" />
+                <ChevronRight size={14} className="absolute right-3" />
               </>
             )}
           </button>
         </div>
 
-        {/*
-          Divulgation de visibilité, au moment de la collecte.
-
-          C'est CETTE ligne qui rend le consentement éclairé, pas les CGU : la
-          personne apprend ce qu'il adviendra de son coupon à l'instant où elle
-          le dépose, pas dans un document qu'elle n'ouvrira jamais.
-
-          Formulée comme la RÈGLE et non comme l'état du compte : afficher le
-          réglage réel imposerait de charger le profil dans un CTA collant, avec
-          le mode de panne qui va avec. Le texte mentionne l'opt-out, il reste
-          donc vrai pour qui s'est retiré — et l'imprécision, s'il en reste une,
-          va dans le sens de la sur-information.
-        */}
-        <p className="text-[#4a6068] text-[11px] leading-snug mt-2.5 text-center">
-          {t("slip.visibilityNotice")}
-        </p>
       </div>
     </div>
   );

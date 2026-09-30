@@ -15,6 +15,7 @@ import { useSport } from "../../context/SportContext";
 import { useBet } from "../../context/BetContext";
 import type { BetLeg } from "../../types/bet";
 import { useI18n } from "../../i18n";
+import { toast } from "sonner";
 import { BookPricePill } from "../../components/BookPricePill";
 import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
 import { mlBundleKey } from "../prediction/gameMarkets";
@@ -504,7 +505,10 @@ function PickCell({ game, pick, probability, team, label, short, children }: {
   const tap = () => {
     // Case prise → on la libère, où que la jambe ait été posée.
     if (selected) { matches.forEach((l) => removeLeg(l.id)); return; }
-    if (probability == null || gameStarted(game)) return;
+    // Match commencé : on le dit au lieu d'ignorer le toucher en silence
+    // (demande du user, 2026-09-30).
+    if (gameStarted(game)) { toast.info(t("slip.liveBlocked")); return; }
+    if (probability == null) return;
     const day = weekdayShort(gameIsoDay(game), lang) || gameDayLabel(game, lang);
     const leg: BetLeg = {
       id: `home-${game.id}-${pick.marketType}-${pick.subject}${pick.selectionValue === "no" ? "-no" : ""}`,
