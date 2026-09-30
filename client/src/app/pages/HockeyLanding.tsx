@@ -31,7 +31,7 @@ import "../components/home-theme.css";
 import "../components/rink-theme.css";
 import { BestBetsSection } from "./landing/BestBetsSection";
 import { EvItem, EvSection } from "./landing/EvSection";
-import { LiveGameCard, SportSelector, UpcomingGameRow, gameIsoDay } from "./landing/LandingCards";
+import { LiveGamesRow, SportSelector, UpcomingGameRow, gameIsoDay } from "./landing/LandingCards";
 import { dayHeading, groupByDay } from "../data/gameDay";
 import { TeamCarousel } from "./landing/TeamCarousel";
 import { ProUpsell } from "./landing/ProUpsell";
@@ -355,24 +355,9 @@ export function HockeyLanding() {
               </div>
 
               {liveGames.length > 0 ? (
-                /* Same right → left marquee as the jersey carousel: no
-                   scrollbar, pauses on hover. Cards are 280px + a 12px gutter,
-                   scrolled at ~34px/s, with a floor so a single game doesn't
-                   whip past. */
-                <div
-                  className="ice-marquee -mx-4"
-                  style={
-                    {
-                      "--ice-duration": `${Math.max(18, Math.round((liveGames.length * 292) / 34))}s`,
-                    } as React.CSSProperties
-                  }
-                >
-                  <div className="ice-marquee-track">
-                    {[...liveGames, ...liveGames].map((g, i) => (
-                      <LiveGameCard key={`${g.id}-${i}`} game={g} onOpenSheet={() => openGameSheet(g.id)} />
-                    ))}
-                  </div>
-                </div>
+                /* Flèches + glissement au doigt (2026-09-30), comme le
+                   bandeau des équipes — voir `LiveGamesRow`. */
+                <LiveGamesRow games={liveGames} />
               ) : (
                 <div className="flex flex-col items-center gap-3 py-14">
                   <span className="rink-faceoff-dot" />

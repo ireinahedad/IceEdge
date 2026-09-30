@@ -7,19 +7,19 @@
  */
 
 import { weekdayShort } from "../../data/gameDay";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { IceedgeLogo } from "../../components/brand/IceedgeLogo";
 import { useSport } from "../../context/SportContext";
 import { useBet } from "../../context/BetContext";
 import type { BetLeg } from "../../types/bet";
 import { useI18n } from "../../i18n";
-import { openBet } from "../../services/bookmakers";
-import { features } from "../../platform";
 import { BookPricePill } from "../../components/BookPricePill";
 import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
 import { mlBundleKey } from "../prediction/gameMarkets";
 import { DisplayGame, calcEdge } from "./landingTypes";
+import { formatRecord, useTeamRecords } from "../charts/teamSpace";
 
 
 // ─── Brand header (logo always returns home) ───────────────────────────────────
@@ -173,33 +173,36 @@ function useGameEdge(game: DisplayGame) {
 
 // ─── Hockey live game card ─────────────────────────────────────────────────────
 
-export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: () => void }) {
+/**
+ * Carte d'un match en direct.
+ *
+ * 2026-09-30 (demande du user) : plus de bouton « Plus », plus de « Parier » ;
+ * sous le score, la fiche V-D-DP de la saison en cours de chaque équipe au
+ * lieu du O/U ; et en bas deux boutons, Statistiques (page du match dans les
+ * graphiques) et Prédiction (page de prédiction du match).
+ */
+export function LiveGameCard({ game }: { game: DisplayGame }) {
   const { theme } = useSport();
   const accent = theme.accent;
   const { t } = useI18n();
   const navigate = useNavigate();
   const { homePct, awayPct, edge, showPct } = useGameEdge(game);
+  const records = useTeamRecords();
+  const go = (e: React.MouseEvent, to: string) => { e.stopPropagation(); navigate(to); };
 
   return (
     <div
+      data-live-card
       onClick={() => navigate(`/stats/prediction/game/${game.id}`)}
-      className="min-w-[280px] icy-card rounded-2xl p-4 flex-shrink-0 cursor-pointer active:scale-[0.99] transition-transform"
+      className="w-[280px] icy-card rounded-2xl p-4 flex-shrink-0 cursor-pointer active:scale-[0.99] transition-transform"
     >
 
-      {/* Header: live badge + edge + buttons */}
+      {/* Header: live badge + edge */}
       <div className="flex items-center justify-between mb-3 gap-2">
         <span className="text-[11px] text-red-400 font-medium uppercase tracking-wide flex items-center gap-1 flex-shrink-0">
           <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />{game.period}
         </span>
-        <div className="flex items-center gap-1.5 min-w-0">
-          <EdgeBadge edge={edge} />
-          <button
-            onClick={(e) => { e.stopPropagation(); onOpenSheet(); }}
-            className="text-[11px] text-[#bfc8cc] border border-white/20 px-2 py-0.5 rounded-full flex-shrink-0 active:bg-white/5"
-          >
-            {t("home.more")}
-          </button>
-        </div>
+        <EdgeBadge edge={edge} />
       </div>
 
       {/* Teams + score */}
@@ -207,18 +210,17 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
         <div className="flex flex-col items-center gap-1">
           <img src={game.team1.logo} alt={game.team1.abbr} className="w-8 h-8 object-contain" />
           <span className="text-white text-xs font-bold">{game.team1.abbr}</span>
+          <span className="text-[#8a9ea6] text-[11px] tabular-nums" title={t("chart.recordLegend")}>{formatRecord(records, game.team1.abbr)}</span>
         </div>
-        <div className="flex flex-col items-center gap-0.5">
-          <div className="flex items-center gap-2.5">
-            <span className="text-white text-3xl font-bold tabular-nums">{game.team1.score}</span>
-            <span className="text-[#bfc8cc] text-lg">–</span>
-            <span className="text-white text-3xl font-bold tabular-nums">{game.team2.score}</span>
-          </div>
-          {game.overUnder && <span className="text-[#bfc8cc] text-[11px]">O/U {game.overUnder}</span>}
+        <div className="flex items-center gap-2.5">
+          <span className="text-white text-3xl font-bold tabular-nums">{game.team1.score}</span>
+          <span className="text-[#bfc8cc] text-lg">–</span>
+          <span className="text-white text-3xl font-bold tabular-nums">{game.team2.score}</span>
         </div>
         <div className="flex flex-col items-center gap-1">
           <img src={game.team2.logo} alt={game.team2.abbr} className="w-8 h-8 object-contain" />
           <span className="text-white text-xs font-bold">{game.team2.abbr}</span>
+          <span className="text-[#8a9ea6] text-[11px] tabular-nums" title={t("chart.recordLegend")}>{formatRecord(records, game.team2.abbr)}</span>
         </div>
       </div>
 
@@ -240,18 +242,62 @@ export function LiveGameCard({ game, onOpenSheet }: { game: DisplayGame; onOpenS
           <BookPricePill price={game.bookAway} />
           {/* Moneyline is a universal betting term, kept as-is */}
         </div>
-      ) : features.bookmakerLinks ? (
-        /* Pas de prix — un simple lien vers le livre réglé.
-           Nothing to show on iOS: no odds and no link out (Guideline 5.3). */
-        <div className="flex items-center justify-end mt-1">
-          <button
-            onClick={(e) => { e.stopPropagation(); openBet("hockey"); }}
-            className="text-[11px] text-green-400 border border-green-500/20 bg-green-500/8 px-2 py-1 rounded-full"
-          >
-            {t("home.betOn")}
-          </button>
-        </div>
       ) : null}
+
+      {/* Statistiques · Prédiction du match (remplacent « Parier », 2026-09-30). */}
+      <div className="grid grid-cols-2 gap-2 mt-2">
+        <button
+          onClick={(e) => go(e, `/stats/chart/game/${game.id}`)}
+          className="tap-44 text-[11px] font-semibold rounded-full px-3 py-1.5 border active:scale-95 transition-transform"
+          style={{ color: accent, borderColor: `${accent}4d`, background: `${accent}1a` }}
+        >
+          {t("home.teamStats")}
+        </button>
+        <button
+          onClick={(e) => go(e, `/stats/prediction/game/${game.id}`)}
+          className="tap-44 text-[11px] font-semibold rounded-full px-3 py-1.5 border active:scale-95 transition-transform"
+          style={{ color: "#c4b5fd", borderColor: "#c4b5fd4d", background: "#c4b5fd1a" }}
+        >
+          {t("home.teamPrediction")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * La rangée « En direct » (2026-09-30) : un vrai conteneur défilant, au doigt
+ * et avec les mêmes flèches que le bandeau des équipes (`.jersey-arrow`). Elle
+ * remplace le défilement automatique en boucle, qui dupliquait les cartes —
+ * avec deux matchs en direct on voyait quatre cartes. Chaque flèche avance
+ * d'une carte ; l'aimantation (`scroll-snap`) garde une carte bien cadrée.
+ */
+export function LiveGamesRow({ games }: { games: DisplayGame[] }) {
+  const { t } = useI18n();
+  const viewport = useRef<HTMLDivElement>(null);
+  const go = (dir: -1 | 1) => {
+    const el = viewport.current;
+    if (!el) return;
+    const card = el.querySelector<HTMLElement>("[data-live-card]");
+    el.scrollBy({ left: dir * ((card?.offsetWidth ?? 280) + 12), behavior: "smooth" });
+  };
+  return (
+    <div className="live-carousel -mx-4">
+      <div ref={viewport} className="live-viewport">
+        <div className="live-track">
+          {games.map((g) => <LiveGameCard key={g.id} game={g} />)}
+        </div>
+      </div>
+      {games.length > 1 && (
+        <>
+          <button type="button" className="jersey-arrow jersey-arrow--prev" aria-label={t("home.livePrev")} onClick={() => go(-1)}>
+            <span className="jersey-arrow-dot"><ChevronLeft size={16} /></span>
+          </button>
+          <button type="button" className="jersey-arrow jersey-arrow--next" aria-label={t("home.liveNext")} onClick={() => go(1)}>
+            <span className="jersey-arrow-dot"><ChevronRight size={16} /></span>
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -325,8 +371,11 @@ const ML_BAR_BLUE = "#86d1ea";
  * Deux formes :
  *   - trait fin (défaut), glissé sous l'heure dans le calendrier ;
  *   - `band` (2026-09-30) : bandeau pleine largeur en haut de la carte d'un
- *     match de l'accueil, ~20 % de sa hauteur, sans arrondi (la carte, en
- *     `overflow-hidden`, lui donne ses coins).
+ *     match de l'accueil, posé DERRIÈRE la rangée d'en-tête du tableau
+ *     (« Handicap · Vainqueur ») — la carte ne grandit pas. Sans arrondi : la
+ *     carte, en `overflow-hidden`, lui donne ses coins. Son fond non rempli
+ *     est un gris clair et non sombre, pour que les libellés foncés posés
+ *     dessus se lisent aussi bien sur le gris que sur le bleu.
  *
  * `awayPct` est une probabilité du modèle ML (0–100). Sans elle (modèle
  * indisponible), rien — jamais de 50/50 de repli.
@@ -339,13 +388,15 @@ export function MoneylineBar({ awayPct, loading, awayAbbr, homeAbbr, band = fals
   band?: boolean;
   className?: string;
 }) {
-  if (!loading && awayPct == null) return null;
+  // Sans probabilité : rien — jamais de 50/50 de repli. Le bandeau garde
+  // pourtant son fond, sur lequel sont écrits les libellés de l'en-tête.
+  if (!loading && awayPct == null) return band ? <div className="absolute inset-x-0 top-0 h-7 bg-white/40" aria-hidden /> : null;
   const away = awayPct ?? 50;
   const awayFav = away > 50;
   const fav = awayFav ? away : 100 - away;
   return (
     <div
-      className={`relative overflow-hidden ${band ? "h-[22px] bg-white/[0.07]" : "h-[3px] rounded-full bg-white/10"}${loading ? " animate-pulse" : ""} ${className}`}
+      className={`${band ? "absolute inset-x-0 top-0 h-7 bg-white/40" : "relative h-[3px] rounded-full bg-white/10"} overflow-hidden${loading ? " animate-pulse" : ""} ${className}`}
       role={loading ? undefined : "img"}
       aria-label={loading ? undefined : `ML : ${awayAbbr} ${away}% – ${homeAbbr} ${100 - away}%`}
       title={loading ? undefined : `${awayAbbr} ${away}% · ${homeAbbr} ${100 - away}%`}
@@ -591,18 +642,18 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
   return (
     <div
       onClick={() => navigate(`/stats/prediction/game/${game.id}`)}
-      className="icy-card rounded-2xl overflow-hidden cursor-pointer active:scale-[0.99] transition-transform"
+      className="relative icy-card rounded-2xl overflow-hidden cursor-pointer active:scale-[0.99] transition-transform"
     >
-      {/* Le vainqueur prédit : bandeau pleine largeur en haut de la carte
-          (demande du user, 2026-09-30), visiteur à gauche, domicile à droite
-          — le même ordre que le tableau, de haut en bas. */}
+      {/* Le vainqueur prédit : bandeau pleine largeur derrière la rangée
+          d'en-tête du tableau (demande du user, 2026-09-30), visiteur à
+          gauche, domicile à droite — le même ordre que le tableau. */}
       <MoneylineBar band awayPct={winAway} loading={mlLoading} awayAbbr={game.team2.abbr} homeAbbr={game.team1.abbr} />
-      <div className="flex items-center gap-3 p-3.5">
+      <div className="relative flex items-stretch gap-3 px-3.5 pb-3.5">
 
         {/* Colonne date + heure.
             La date manquait : la section de l'accueil peut porter les matchs
             de demain ou d'après-demain, et « 19:00 » seul ne dit pas lequel. */}
-        <div className="flex flex-col items-center min-w-[44px] flex-shrink-0">
+        <div className="flex flex-col items-center justify-center min-w-[44px] flex-shrink-0 pt-8">
           {day && <span className="text-[#bfc8cc] text-[11px] whitespace-nowrap">{day}</span>}
           <span className="text-xs font-medium" style={{ color: accent }}>{game.time}</span>
           <span className="text-[#bfc8cc] text-[11px]">ET</span>
@@ -620,9 +671,11 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
           className="grid items-center gap-x-4 gap-y-2"
           style={{ gridTemplateColumns: "auto auto auto" }}
         >
-          <span />
-          <span className="text-[#8a9ea6] text-[11px] font-semibold">{t("home.colSpread")}</span>
-          <span className="text-[#8a9ea6] text-[11px] font-semibold">{t("home.colWinner")}</span>
+          {/* Rangée d'en-tête = la hauteur du bandeau (h-7), libellés foncés
+              pour se lire sur le bleu pâle comme sur le gris. */}
+          <span className="h-7" />
+          <span className="h-7 flex items-center text-[#0b1f2a] text-[11px] font-bold">{t("home.colSpread")}</span>
+          <span className="h-7 flex items-center text-[#0b1f2a] text-[11px] font-bold">{t("home.colWinner")}</span>
           {/* Visiteur TOUJOURS en haut, domicile en bas avec son « H »
               (demande du user, 2026-09-29) — l'ordre de toute l'app. */}
           {teamRow(game.team2, game.team1, false, lineAway, plAway, priceAway, winAway, game.bookAway)}
@@ -636,7 +689,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
             les abréviations (MTL, TOR) tombaient à 0 px de large. Toucher la
             carte ouvre la page du match, qui porte tous les marchés. La colonne
             reste là si elle a un badge d'edge à montrer. */}
-        <div className={`${edge >= 8 ? "flex" : "hidden md:flex"} flex-col items-end gap-1.5 flex-shrink-0 max-w-[60px]`}>
+        <div className={`${edge >= 8 ? "flex" : "hidden md:flex"} flex-col items-end justify-center gap-1.5 flex-shrink-0 max-w-[60px] pt-8`}>
           {edge >= 8 && <EdgeBadge edge={edge} />}
           <button
             onClick={(e) => { e.stopPropagation(); onOpenSheet(); }}

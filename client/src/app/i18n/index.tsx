@@ -521,9 +521,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // `home.add` / `home.added` / `home.addToSlip` / `home.addedSlip` retirés le
   // 2026-09-20 avec l'ajout rapide des cartes de l'accueil : on ajoute une
   // sélection depuis « Plus de paris », qui montre ce qu'on choisit.
-  "home.more":           { en: "More",              fr: "Plus" },
   "home.moreBets":       { en: "More bets",         fr: "Plus de paris" },
-  "home.betOn":          { en: "Place a bet →",   fr: "Parier →" },
   "home.edge":           { en: "+{edge}% edge",     fr: "+{edge}% avantage" },
   "home.game":           { en: "Game",              fr: "Match" },
   "home.nhlGame":        { en: "NHL Game",          fr: "Match LNH" },
@@ -1164,6 +1162,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // ── Home: refonte du 2026-09-27 (carrousel, tableau des matchs, Pro) ──
   "home.teamsPrev":    { en: "Previous teams", fr: "Équipes précédentes" },
   "home.teamsNext":    { en: "Next teams",     fr: "Équipes suivantes" },
+  "home.livePrev":     { en: "Previous live game", fr: "Match en direct précédent" },
+  "home.liveNext":     { en: "Next live game",     fr: "Match en direct suivant" },
   "home.colSpread":    { en: "Puck line",      fr: "Handicap" },
   "home.colWinner":    { en: "Winner",         fr: "Vainqueur" },
   "home.plPlus":       { en: "{abbr} +1.5 (doesn't lose by 2+)", fr: "{abbr} +1,5 (ne perd pas par 2 buts ou plus)" },

@@ -291,38 +291,43 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   MARQUEE — the shared right → left scroll
-   Used by the centre-ice live row (the jersey carousel scrolls in JS
-   since 2026-09-27). The list is rendered twice; one loop is half the
-   track plus half a gutter, so the seam never shows. Overflow is hidden, which is also
-   what removes the scrollbar.
+   LIVE ROW — the centre-ice « En direct » cards
+   Remplacé le 2026-09-30 : ce n'est plus un marquee CSS en boucle (il
+   dupliquait les cartes), mais un conteneur défilant, barre masquée, avec
+   aimantation par carte et les flèches du bandeau des équipes
+   (`.jersey-arrow`, plus bas). Voir `LiveGamesRow` (LandingCards.tsx).
    ═══════════════════════════════════════════════════════════════ */
 
-@keyframes ice-marquee {
-  from { transform: translate3d(0, 0, 0); }
-  to   { transform: translate3d(calc(-50% - (var(--marquee-gap) / 2)), 0, 0); }
-}
-
-.ice-marquee {
-  --marquee-gap: 12px;
+.live-carousel {
   position: relative;
-  overflow: hidden;
 }
 
-.ice-marquee-track {
+.live-viewport {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 16px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.live-viewport::-webkit-scrollbar { display: none; }
+
+/* `margin-inline: auto` centre un match seul ; au-delà, la piste déborde et
+   défile. Le padding garde la gouttière de la page aux deux bouts. */
+.live-track {
   display: flex;
-  gap: var(--marquee-gap);
+  gap: 12px;
   width: max-content;
-  animation: ice-marquee var(--ice-duration, 45s) linear infinite;
+  margin-inline: auto;
+  padding-inline: 16px;
 }
+.live-track > * { scroll-snap-align: center; }
 
-.ice-marquee:hover .ice-marquee-track {
-  animation-play-state: paused;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ice-marquee-track { animation: none; }
-}
+/* Rond de 28 px posé dans la gouttière de 16 px : il déborde à peine sur la
+   carte et laisse libre son contenu (padding de 16 px). */
+.live-carousel .jersey-arrow--prev { left: -8px; }
+.live-carousel .jersey-arrow--next { right: -8px; }
 
 /* ═══════════════════════════════════════════════════════════════
    JERSEY CAROUSEL — square team tiles, arrows + swipe + slow auto-scroll

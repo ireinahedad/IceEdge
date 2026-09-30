@@ -38,12 +38,13 @@ export function seasonLabel(id: number): string {
   return s.length === 8 ? `${s.slice(2, 4)}/${s.slice(6, 8)}` : s;
 }
 
-/** Current NHL season id (e.g. 20252026). Mirrors the server's rollover rule:
- *  a new season starts in October, so months before that belong to the
- *  previous season's id. */
+/** Current NHL season id (e.g. 20252026). Same rollover as the server's
+ *  `currentSeason()` (services/nhl/core.ts): the new season id starts in
+ *  SEPTEMBER. It used to be October here, which kept the app on 25/26 while
+ *  2026-27 had already opened on 2026-09-29 (fixed 2026-09-30). */
 export const currentSeasonId = (() => {
   const now = new Date();
-  const y = now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1;
+  const y = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
   return Number(`${y}${y + 1}`);
 })();
 
