@@ -24,6 +24,14 @@
  * binomiale négative de `pScoresAtLeastOnce` reste réservée à « les deux
  * marquent » : elle corrige le taux de blanchissage, pas la variance du total —
  * appliquée au total du match, elle le rendrait nettement trop dispersé.
+ *
+ * ── En direct (`live`) ──────────────────────────────────────────────────────
+ *
+ * Même grille, décalée du score actuel : score final = score actuel + buts
+ * restants, chaque équipe à λ × f (f = part du match qui reste). Un nul à 60
+ * minutes est toujours tranché par `otShareHome` ; en prolongation, il ne
+ * reste que ce partage. Informatif seulement : les coupons sont fermés dès la
+ * mise au jeu (`slip.service.ts`), le règlement n'en dépend pas.
  */
 
 const MAX_K = 14;
@@ -41,22 +49,86 @@ function poissonPmfs(lambda: number): number[] {
 export interface FinalScoreGrid {
   /** p[h][a] = P(score final h–a). Somme ≈ 1 (troncature à MAX_K buts). */
   p: number[][];
-  /** Taille de la grille (MAX_K + 2 : un nul à MAX_K peut finir MAX_K+1). */
+  /**
+   * Taille de la grille (MAX_K + 2 : un nul à MAX_K peut finir MAX_K+1). En
+   * direct, décalée du plus gros score actuel.
+   */
   size: number;
+  /**
+   * Issue après 60 minutes, AVANT le partage de la prolongation : le domicile
+   * mène, le visiteur mène, égalité. Somme = 1. C'est ce que règlent « in
+   * Reg », « qui mène après la 3e » et « va en prolongation ».
+   */
+  regHome: number;
+  regAway: number;
+  regTie:  number;
 }
 
-export function finalScoreGrid(lambdaH: number, lambdaA: number, otShareHome: number): FinalScoreGrid {
-  const ph = poissonPmfs(Math.max(0.05, lambdaH));
-  const pa = poissonPmfs(Math.max(0.05, lambdaA));
-  const size = MAX_K + 2;
+/**
+ * État d'un match EN COURS, vu par la loi du score final.
+ *
+ * Score final = score actuel + buts restants ; les buts restants de chaque
+ * équipe suivent une Poisson de cadence λ × f, où f est la part du match
+ * réglementaire qui reste à jouer. Les λ d'avant-match restent la mesure de la
+ * force des équipes : seul le temps disponible change.
+ */
+export interface LiveState {
+  homeScore:      number;
+  awayScore:      number;
+  /** Secondes de temps RÉGLEMENTAIRE restantes (0 en prolongation). */
+  secondsLeftReg: number;
+  /** Prolongation ou fusillade en cours : le vainqueur se tire directement à `otShareHome`. */
+  inOvertime:     boolean;
+  /**
+   * Part des buts du match qui reste à marquer (0–1). L'appelant la pondère
+   * par période (`PERIOD_DIST` dans `nhlPredictions.ts`) ; absente, on prend
+   * le temps restant / 3600.
+   */
+  f?:             number;
+  /**
+   * Multiplie la masse des NULS à 60 minutes (≥ 1, défaut 1). Deux Poisson
+   * indépendantes sous-estiment les nuls du hockey : ~16 % à λT ≈ 6, quand la
+   * ligue en compte ~23 %. L'appelant le cale pour qu'à 0–0 avec 60 minutes à
+   * jouer, P(nul) vaille le P(prolongation) d'avant-match. En fin de match, il
+   * gonfle aussi l'égalisation d'une équipe menée d'un but (gardien retiré).
+   */
+  tieBoost?:      number;
+}
+
+/** Part des buts restants : f explicite, sinon le temps réglementaire restant. */
+export function liveFraction(live: LiveState): number {
+  if (live.inOvertime) return 0;
+  const f = live.f ?? live.secondsLeftReg / 3600;
+  return Number.isFinite(f) ? Math.max(0, Math.min(1, f)) : 0;
+}
+
+export function finalScoreGrid(
+  lambdaH: number, lambdaA: number, otShareHome: number, live?: LiveState,
+): FinalScoreGrid {
+  // Avant-match : plancher 0.05, grille depuis 0–0. En direct : les buts
+  // RESTANTS, sans plancher — à f = 0 il n'en reste aucun, et `poissonPmfs(0)`
+  // rend exactement [1, 0, 0…].
+  const f  = live ? liveFraction(live) : 1;
+  const h0 = live ? Math.max(0, Math.floor(live.homeScore)) : 0;
+  const a0 = live ? Math.max(0, Math.floor(live.awayScore)) : 0;
+  const ph = poissonPmfs(live ? Math.max(0, lambdaH) * f : Math.max(0.05, lambdaH));
+  const pa = poissonPmfs(live ? Math.max(0, lambdaA) * f : Math.max(0.05, lambdaA));
+  // Carrée : les lecteurs (`gridSum`…) parcourent `size` dans les deux sens.
+  const size = Math.max(h0, a0) + MAX_K + 2;
   const p: number[][] = Array.from({ length: size }, () => new Array(size).fill(0));
   const share = Math.max(0, Math.min(1, otShareHome));
-  for (let h = 0; h <= MAX_K; h++) {
-    for (let a = 0; a <= MAX_K; a++) {
-      const joint = ph[h] * pa[a];
+  const boost = live?.tieBoost != null && live.tieBoost > 0 ? live.tieBoost : 1;
+  let regHome = 0, regAway = 0, regTie = 0;
+  for (let i = 0; i <= MAX_K; i++) {
+    for (let j = 0; j <= MAX_K; j++) {
+      let joint = ph[i] * pa[j];
       if (joint < 1e-14) continue;
-      if (h !== a) { p[h][a] += joint; continue; }
+      const h = h0 + i, a = a0 + j;
+      if (h > a) { p[h][a] += joint; regHome += joint; continue; }
+      if (h < a) { p[h][a] += joint; regAway += joint; continue; }
       // Nul réglementaire : un but de plus pour le vainqueur de la prolongation.
+      joint *= boost;
+      regTie += joint;
       p[h + 1][a] += joint * share;
       p[h][a + 1] += joint * (1 - share);
     }
@@ -65,7 +137,8 @@ export function finalScoreGrid(lambdaH: number, lambdaA: number, otShareHome: nu
   let total = 0;
   for (const row of p) for (const v of row) total += v;
   if (total > 0) for (const row of p) for (let a = 0; a < size; a++) row[a] /= total;
-  return { p, size };
+  const reg = regHome + regAway + regTie || 1;
+  return { p, size, regHome: regHome / reg, regAway: regAway / reg, regTie: regTie / reg };
 }
 
 /** Somme des cases qui vérifient `pred(h, a)`. */
@@ -172,4 +245,26 @@ export function nbAtLeast(lambda: number, j: number, k: number): number {
     cdf += p;
   }
   return Math.max(0, 1 - cdf);
+}
+
+/**
+ * « L'équipe finit avec au moins `need` buts DE PLUS » en direct — même
+ * binomiale négative que `nbAtLeast`, sur le temps restant.
+ *
+ * Une somme de binomiales négatives de même q est une binomiale négative dont
+ * les dispersions s'additionnent : sur une part f du match, moyenne λ·f et
+ * dispersion k·f. À f = 1 on retrouve exactement la loi d'avant-match.
+ */
+export function nbAtLeastLive(lambda: number, need: number, k: number, f: number): number {
+  if (need <= 0) return 1;
+  if (!(f > 0) || !(lambda > 0)) return 0;
+  const lam = lambda * f, kk = k * f;
+  const q = lam / (kk + lam);
+  let p = Math.pow(kk / (kk + lam), kk);
+  let cdf = p;
+  for (let n = 0; n < need - 1; n++) {
+    p *= ((n + kk) / (n + 1)) * q;
+    cdf += p;
+  }
+  return Math.max(0, Math.min(1, 1 - cdf));
 }

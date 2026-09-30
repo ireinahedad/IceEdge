@@ -20,7 +20,7 @@ import { FramedLabel } from "../../components/brand/FramedLabel";
 import { BetOpt, MLProps, MktGroup, MktTable, RuleFactor, buildLLMDataContext, llmCacheId, loadLlmCache, saveLlmCache, scaledRulePct, settlementFields } from "./gameMarkets";
 import { pctColor } from "../../data/pctScale";
 import { blendFactors, getFamilyWeights } from "../../services/ruleWeightsService";
-import { BetOddsCtx, RevealMode, RevealModeCtx } from "./predictionShared";
+import { BetOddsCtx, GameLiveCtx, RevealMode, RevealModeCtx } from "./predictionShared";
 import { priceForBet } from "../../services/gameOdds";
 import { useOddsFormat } from "../../context/OddsFormatContext";
 import { openBet } from "../../services/bookmakers";
@@ -119,6 +119,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   // bas) : pas de question de suivi sur une analyse qui n'existe pas.
   const llmFailed = llmText.startsWith("❌") || llmText.startsWith("⚙️");
   const ruleColor = pctColor(rulePct);
+  const gameLive = useContext(GameLiveCtx);
 
   // Fall back to fetching the server prediction if the parent hasn't yet.
   const [ownServerPct, setOwnServerPct] = useState<number | undefined>(serverPct);
@@ -285,8 +286,10 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
           </button>
         )}
 
-        {/* ── 🤖 ML — prédiction du modèle ── */}
-        {mlProps ? (
+        {/* ── 🤖 ML — prédiction du modèle ──
+            Masquée pendant un match en cours : c'est un modèle d'avant-match,
+            son chiffre ignorerait le score (voir `GameLiveCtx`). */}
+        {mlProps && !gameLive ? (
           <MLSection
             type={mlProps.type}
             subjectId={mlProps.subjectId}
@@ -482,15 +485,21 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
 }
 
 /* ─── Reveal-all toggle bar ────────────────────── */
-export function PredictionsRevealBar({ mode, onSelect }: { mode: RevealMode; onSelect: (m: RevealMode) => void }) {
+export function PredictionsRevealBar({ mode, onSelect, mlDisabled = false }: {
+  mode: RevealMode; onSelect: (m: RevealMode) => void;
+  /** Match en cours : le ML est un modèle d'avant-match, seul « Règles » suit le score. */
+  mlDisabled?: boolean;
+}) {
   const { t } = useI18n();
   // Two-segment toggle: Rules | ML. Predictions are always shown; this only
   // switches which source's % every tile displays.
-  const seg = (m: RevealMode, label: string, activeColor: string) => (
+  const seg = (m: RevealMode, label: string, activeColor: string, disabled = false) => (
     <button
-      onClick={() => onSelect(m)}
-      className="px-3 py-1 rounded-full text-[11px] font-semibold transition-all active:scale-95"
-      style={mode === m
+      onClick={() => { if (!disabled) onSelect(m); }}
+      disabled={disabled}
+      title={disabled ? t("pred.mlPrematchOnly") : undefined}
+      className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all ${disabled ? "opacity-40 cursor-not-allowed" : "active:scale-95"}`}
+      style={mode === m && !disabled
         ? { background: activeColor + "22", color: activeColor, border: `1px solid ${activeColor}44` }
         : { background: "transparent", color: "#8a9ea6", border: "1px solid transparent" }}
     >
@@ -498,12 +507,16 @@ export function PredictionsRevealBar({ mode, onSelect }: { mode: RevealMode; onS
     </button>
   );
   return (
-    <div className="flex items-center justify-between px-1">
-      <span className="text-[#4a6070] text-[11px] font-semibold uppercase tracking-wider">{t("pred.markets")}</span>
-      <div className="flex items-center gap-0.5 p-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
-        {seg("rules", `📐 ${t("pred.rules")}`, "#86d1ea")}
-        {seg("ml", "🤖 ML", "#a78bfa")}
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between px-1">
+        <span className="text-[#4a6070] text-[11px] font-semibold uppercase tracking-wider">{t("pred.markets")}</span>
+        <div className="flex items-center gap-0.5 p-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          {seg("rules", `📐 ${t("pred.rules")}`, "#86d1ea")}
+          {seg("ml", "🤖 ML", "#a78bfa", mlDisabled)}
+        </div>
       </div>
+      {/* L'infobulle ne s'affiche pas au doigt : le pourquoi est écrit. */}
+      {mlDisabled && <p className="px-1 text-[10px] text-[#8a9ea6] text-right">{t("pred.mlPrematchOnly")}</p>}
     </div>
   );
 }

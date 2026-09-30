@@ -9,6 +9,7 @@
 
 import {
   fetchGameById,
+  fetchGameDetail,
   fetchTeams,
   fetchTeamByAbbr,
   fetchPlayerById,
@@ -29,7 +30,9 @@ import {
 import { attachGameFactors, attachPlayerFactors, attachGoalieFactors, PuckLineSpec, PeriodSpec } from './factorModel';
 import {
   finalScoreGrid, winByAtLeastShare, exactScoreShare, totalOver, teamOver, nbAtLeast,
+  nbAtLeastLive, liveFraction, LiveState,
 } from './prediction/finalScore';
+import { TtlCache } from './ttlCache';
 
 // ─── Shared interfaces ────────────────────────────────────────────────────────
 
@@ -156,6 +159,15 @@ function poissonOver(lambda: number, line: number): number {
   return Math.max(0.02, Math.min(0.98, 1 - cdf));
 }
 
+/** Poisson P(X ≥ need), sans bornes — en direct, 0 et 1 sont de vraies réponses. */
+function poissonAtLeast(lambda: number, need: number): number {
+  if (need <= 0) return 1;
+  if (!(lambda > 0)) return 0;
+  let cdf = 0, term = Math.exp(-lambda);
+  for (let i = 0; i < need; i++) { cdf += term; term = (term * lambda) / (i + 1); }
+  return Math.max(0, Math.min(1, 1 - cdf));
+}
+
 /** Poisson P(X < line) — equivalent to 1 - P(X >= ceil(line)) */
 function poissonUnder(lambda: number, line: number): number {
   return Math.max(0.02, Math.min(0.98, 1 - poissonOver(lambda, line - 1)));
@@ -164,8 +176,11 @@ function poissonUnder(lambda: number, line: number): number {
 /**
  * Skellam-based 3-way period result.
  * Returns { home, draw, away } as fractions summing to ~1.
+ *
+ * `diff` (en direct) : avance ACTUELLE du domicile, ajoutée aux buts restants.
+ * À λ = 0 (période terminée), la réponse est l'avance elle-même : 1/0/0.
  */
-function skellamPeriod(lambdaH: number, lambdaA: number): { home: number; draw: number; away: number } {
+function skellamPeriod(lambdaH: number, lambdaA: number, diff = 0): { home: number; draw: number; away: number } {
   const MAX_K = 12;
   let home = 0, draw = 0, away = 0;
   for (let h = 0; h <= MAX_K; h++) {
@@ -175,9 +190,9 @@ function skellamPeriod(lambdaH: number, lambdaA: number): { home: number; draw: 
       const pa = poissonPmf(lambdaA, a);
       if (pa < 1e-9) continue;
       const joint = ph * pa;
-      if      (h > a) home += joint;
-      else if (h < a) away += joint;
-      else            draw += joint;
+      if      (h + diff > a) home += joint;
+      else if (h + diff < a) away += joint;
+      else                   draw += joint;
     }
   }
   const total = home + draw + away || 1;
@@ -247,6 +262,18 @@ function pct(p: number): number {
   return Math.round(Math.max(3, Math.min(97, p * 100)));
 }
 
+/**
+ * Pourcentage EN DIRECT : 0 ou 100 seulement pour une issue déjà acquise ou
+ * impossible (période terminée, Over déjà atteint…), sinon borné à [1, 99].
+ * Le plancher de 3 % de `pct` dit « le modèle n'est pas sûr » ; en direct, un
+ * but de plus que le seuil rend l'issue certaine, et le cacher mentirait.
+ */
+function pctLive(p: number): number {
+  if (p <= 1e-9) return 0;
+  if (p >= 1 - 1e-9) return 100;
+  return Math.round(Math.max(1, Math.min(99, p * 100)));
+}
+
 /** Format a goals-per-game rate for display */
 function fmt(n: number, decimals = 2): string {
   return n.toFixed(decimals);
@@ -311,6 +338,143 @@ function calibrateWin(p: number): number {
   return clamp(1 / (1 + Math.exp(-(WIN_CAL_A * z + WIN_CAL_B))), 0.03, 0.97);
 }
 
+// ─── Match en cours ───────────────────────────────────────────────────────────
+//
+// Les prédictions en direct sont INFORMATIVES : les coupons sont refusés dès la
+// mise au jeu (`gameHasStarted` dans `slip.service.ts`) et le règlement lit le
+// score officiel. Rien ici ne touche à l'un ou à l'autre.
+
+/** État d'un match en cours (ou terminé), tel que `computeGameMarkets` le lit. */
+export interface LiveGameCtx {
+  /** Pour la grille du score final : score actuel, temps restant, f. */
+  state:        LiveState;
+  /** Période en cours (1–3 ; 4+ = prolongation des séries). */
+  period:       number;
+  /** Secondes restantes dans la période (0 en entracte). */
+  clockSec:     number;
+  /** Buts de chaque période réglementaire, P1 → P3. */
+  periodGoals:  Array<{ home: number; away: number }>;
+  final:        boolean;
+  /** Match terminé en prolongation / fusillade : vainqueur connu. */
+  otWinnerHome?: boolean;
+  /** Pour les notes : « 2–1, 2e, 12:34 restantes ». */
+  label:        string;
+}
+
+const ORD = ['1re', '2e', '3e'];
+
+/** « MM:SS » → secondes (0 si illisible). */
+function parseClock(clock: unknown): number {
+  if (typeof clock !== 'string' || !clock.includes(':')) return 0;
+  const [m, sec] = clock.split(':').map(Number);
+  return Number.isFinite(m) && Number.isFinite(sec) ? Math.max(0, m * 60 + sec) : 0;
+}
+
+/**
+ * Part des buts du match qui reste à marquer d'ici la fin de la période `n`,
+ * pondérée par `PERIOD_DIST` (la 2e période compte plus de buts que la 1re).
+ * C'est la même répartition que les cartes de période d'avant-match : à la
+ * mise au jeu, la 1re vaut λ × 0.305 dans les deux calculs, sans saut.
+ */
+function remainingShareUntil(period: number, clockSec: number, n: number): number {
+  if (period > n) return 0;
+  let f = (Math.min(1200, clockSec) / 1200) * PERIOD_DIST[period - 1];
+  for (let k = period; k < n; k++) f += PERIOD_DIST[k];
+  return clamp(f, 0, 1);
+}
+
+/**
+ * Feuille de match (`fetchGameDetail`) → état en direct. `null` = le match n'a
+ * pas commencé (ou l'état est illisible) : la page garde l'avant-match.
+ *
+ * `fetchGameById` ne suffit pas : il n'a ni `periodType`, ni `inIntermission`,
+ * ni les buts par période. `gameEvents.ts` non plus : ses buts sont gardés 6 h,
+ * écrits pour les matchs terminés.
+ */
+export function liveCtxFromDetail(d: any): LiveGameCtx | null {
+  const status = d?.status;
+  if (status !== 'live' && status !== 'final') return null;
+  const period = Number(d.period);
+  const home = Number(d.home?.score), away = Number(d.away?.score);
+  if (!Number.isFinite(period) || period < 1 || !Number.isFinite(home) || !Number.isFinite(away)) return null;
+
+  const periodGoals = [1, 2, 3].map(n => {
+    const row = (Array.isArray(d.periods) ? d.periods : []).find((x: any) => x?.label === String(n));
+    return { home: Number(row?.home) || 0, away: Number(row?.away) || 0 };
+  });
+  const periodType = String(d.periodType ?? 'REG').toUpperCase();
+
+  if (status === 'final') {
+    // Terminé en prolongation / fusillade : la grille part du nul à 60 minutes
+    // et le partage de la prolongation est le vainqueur réel. « Mène après la
+    // 3e » vaut alors égalité, comme au règlement. Si les buts par période ne
+    // recollent pas au nul (donnée incomplète), on retombe sur le score final.
+    const lastType = String(d.lastPeriodType ?? periodType).toUpperCase();
+    const regH = periodGoals.reduce((t, x) => t + x.home, 0);
+    const regA = periodGoals.reduce((t, x) => t + x.away, 0);
+    // Cohérence exigée : nul à 60 minutes ET vainqueur à un seul but de plus
+    // (le but de prolongation, ou le but « comptable » de la fusillade).
+    const wentOt = (lastType === 'OT' || lastType === 'SO') && regH === regA
+      && Math.max(home, away) === regH + 1 && Math.min(home, away) === regH;
+    return {
+      state: wentOt
+        ? { homeScore: regH, awayScore: regA, secondsLeftReg: 0, inOvertime: true, f: 0 }
+        : { homeScore: home, awayScore: away, secondsLeftReg: 0, inOvertime: false, f: 0 },
+      period: Math.max(3, period), clockSec: 0, periodGoals, final: true,
+      otWinnerHome: wentOt ? home > away : undefined,
+      label: `score final ${home}–${away}${wentOt ? ` (${lastType})` : ''}`,
+    };
+  }
+
+  const inOvertime = periodType === 'OT' || periodType === 'SO' || period > 3;
+  // En entracte, l'horloge affiche le décompte de la pause : la période est finie.
+  const clockSec = d.inIntermission ? 0 : parseClock(d.clock);
+  const secondsLeftReg = inOvertime ? 0 : Math.max(0, (3 - period) * 1200 + clockSec);
+  const f = inOvertime ? 0 : remainingShareUntil(period, clockSec, 3);
+  const when = inOvertime
+    ? (periodType === 'SO' ? 'fusillade' : 'prolongation')
+    : d.inIntermission
+      ? `entracte après la ${ORD[period - 1]}`
+      : `${ORD[period - 1]}, ${d.clock ?? '?'} restantes`;
+  return {
+    state: { homeScore: home, awayScore: away, secondsLeftReg, inOvertime, f },
+    period, clockSec, periodGoals, final: false,
+    label: `${home}–${away}, ${when}`,
+  };
+}
+
+/**
+ * Calage de la grille en direct sur l'AVANT-MATCH : λ domicile, λ visiteur,
+ * gonflement des nuls.
+ *
+ * La grille Poisson tirée des λ bruts ne donne ni la même victoire que le
+ * mélange de facteurs (qui compte la cote, les blessures, la fatigue…), ni le
+ * même P(prolongation) qu'`otProb` (~16 % contre ~25 %) : sans calage, les
+ * tuiles Moneyline, Match Betting et « Goes to OT » sauteraient à la mise au
+ * jeu. On garde donc le total λT et on cherche, par bissection, le partage
+ * domicile/visiteur qui rend `targetHome` une fois les nuls ramenés à
+ * `targetTie` ; le facteur de nuls (`tieBoost`) s'en déduit. À 0–0 avec 60
+ * minutes à jouer, ces tuiles disent exactement ce que disait l'avant-match.
+ */
+function liveCalibration(
+  lambdaT: number, targetHome: number, targetTie: number, otShareHome: number,
+): { lambdaH: number; lambdaA: number; tieBoost: number } {
+  const tie = clamp(targetTie, 0.01, 0.9);
+  const win = (s: number) => {
+    const g = finalScoreGrid(lambdaT * s, lambdaT * (1 - s), otShareHome);
+    return (g.regHome / Math.max(1e-9, 1 - g.regTie)) * (1 - tie) + tie * otShareHome;
+  };
+  let lo = 0.05, hi = 0.95;
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    if (win(mid) < targetHome) lo = mid; else hi = mid;
+  }
+  const s = (lo + hi) / 2;
+  const t = finalScoreGrid(lambdaT * s, lambdaT * (1 - s), otShareHome).regTie;
+  const tieBoost = t > 0 && t < 1 ? (tie * (1 - t)) / (t * (1 - tie)) : 1;
+  return { lambdaH: lambdaT * s, lambdaA: lambdaT * (1 - s), tieBoost };
+}
+
 // ─── Game markets ─────────────────────────────────────────────────────────────
 
 function computeGameMarkets(
@@ -326,6 +490,7 @@ function computeGameMarkets(
   weights?: FactorWeights,                 // poids personnalisés (paramètres user)
   teamExtras = false,                      // marchés propres à la vue équipe
   refPenaltyMult = 1,                      // volume de PP selon l'arbitrage (totaux)
+  live: LiveGameCtx | null = null,         // match en cours : score actuel + temps restant
 ): MarketGroup[] {
   // Abréviations : ce que le service ML attend comme sujet.
   const hAb: string = home.abbreviation ?? homeName;
@@ -384,16 +549,12 @@ function computeGameMarkets(
     quality: fQuality, homeIce: fHomeIce, fatigue: fFatigue,
     odds: oddsImplied, injuries, lineup,
   }, weights);
-  const mlHome = blend.homeProb;
-  const mlAway = 1 - mlHome;
-  const mlBreakdown = formatBreakdown(blend);
-  const ot     = otProb(mlHome);
-  // `regAdj = 1 - ot` vivait ici et servait à trois endroits — Match Betting,
-  // puck line, écart de victoire. Il n'en reste qu'un : Match Betting, qui
-  // soustrait la part de prolongation explicitement (`homeReg`, `awayReg`).
-  // Les deux autres l'appliquaient à des seaux qui excluaient DÉJÀ la
-  // prolongation, ou qui devaient au contraire l'inclure — voir les blocs
-  // « Puck Line » et « Winning Margin ».
+  // Victoire d'avant-match. En direct, la victoire affichée (`mlHome`) est
+  // relue plus bas sur la grille du score final ; celle-ci reste la mesure de
+  // la force des équipes (partage de la prolongation, ancrage des λ).
+  const preHome = blend.homeProb;
+  // En direct, la décomposition d'avant-match ne décrit plus le chiffre.
+  const mlBreakdown = live ? '' : formatBreakdown(blend);
 
   // ── Buts attendus (λ) — ratio attaque × défense relatif à la ligue ─────────
   // λH = force offensive maison × faiblesse défensive visiteur, échelle ligue.
@@ -416,6 +577,46 @@ function computeGameMarkets(
   lambdaA = clamp(lambdaA, 1.5, 5.0);
   const lambdaT = lambdaH + lambdaA;  // total expected goals
 
+  // Part de la prolongation qui revient au domicile — voir « Le partage de la
+  // prolongation » dans Match Betting. Calculée ICI parce que la grille en
+  // direct en a besoin avant les tuiles. Match terminé en prolongation : le
+  // vainqueur est connu, la part vaut 1 ou 0.
+  const preShare = clamp(0.5 + 0.25 * (preHome - 0.5), 0.40, 0.60);
+  const otShareHome = live?.otWinnerHome != null ? (live.otWinnerHome ? 1 : 0) : preShare;
+
+  // ── Loi du score FINAL (prolongation/fusillade comprises) ─────────────────
+  //
+  // Une seule grille pour tous les marchés qui se règlent sur le score final :
+  // puck lines, total du match, total par équipe, score exact. Construite sur
+  // les mêmes λ que le reste de la page et sur la même part de prolongation
+  // (`otShareHome`) que Match Betting. Voir `prediction/finalScore.ts`.
+  //
+  // En direct : grille décalée du score actuel, buts restants à λ × f, calée
+  // sur la victoire et le P(prolongation) d'avant-match (`liveCalibration`).
+  const liveF = live ? liveFraction(live.state) : 1;
+  const cal = live ? liveCalibration(lambdaT, preHome, otProb(preHome), preShare) : null;
+  const gH = cal ? cal.lambdaH : lambdaH;
+  const gA = cal ? cal.lambdaA : lambdaA;
+  const grid = finalScoreGrid(gH, gA, otShareHome, live && cal ? { ...live.state, tieBoost: cal.tieBoost } : undefined);
+  const h0 = live?.state.homeScore ?? 0;
+  const a0 = live?.state.awayScore ?? 0;
+
+  // Victoire (prolongation comprise). En direct, lue sur la grille : P(mène à
+  // 60 min) + P(nul) × part OT — sinon une équipe menée 4–0 garderait ~55 %.
+  const mlHome = live ? grid.regHome + grid.regTie * otShareHome : preHome;
+  const mlAway = 1 - mlHome;
+  const ot     = live ? grid.regTie : otProb(preHome);
+  // `regAdj = 1 - ot` vivait ici et servait à trois endroits — Match Betting,
+  // puck line, écart de victoire. Il n'en reste qu'un : Match Betting, qui
+  // soustrait la part de prolongation explicitement (`homeReg`, `awayReg`).
+  // Les deux autres l'appliquaient à des seaux qui excluaient DÉJÀ la
+  // prolongation, ou qui devaient au contraire l'inclure — voir les blocs
+  // « Puck Line » et « Winning Margin ».
+
+  /** Pourcentage affiché : borné [3, 97] avant-match, 0/100 possibles en direct. */
+  const pctOf = live ? pctLive : pct;
+  /** Buts restants en direct, pour les notes. */
+  const lamLeft = (lam: number) => fmt(lam * liveF);
 
   // ── 0. Moneyline — qui gagne le match, prolongation et fusillade comprises ─
   //
@@ -431,9 +632,10 @@ function computeGameMarkets(
         id: 'mw-home',
         ml: gm('moneyline'),
         label: `${homeName} wins`,
-        rulePct: pct(mlHome),
+        rulePct: pctOf(mlHome),
         ruleNote: [
           `Victoire (prolongation et fusillade comprises) = ${fmt(mlHome*100,0)}%`,
+          live ? `P(mène à 60 min) ${fmt(grid.regHome*100,0)}% + P(nul) ${fmt(grid.regTie*100,0)}% × part OT ${fmt(otShareHome*100,0)}%` : '',
           mlBreakdown,
         ].filter(Boolean).join('  ·  '),
       },
@@ -441,7 +643,7 @@ function computeGameMarkets(
         id: 'mw-away',
         ml: gma('moneyline'),
         label: `${awayName} wins`,
-        rulePct: 100 - pct(mlHome),
+        rulePct: 100 - pctOf(mlHome),
         ruleNote: `Victoire (prolongation et fusillade comprises) = 100% − ${homeName} ${fmt(mlHome*100,0)}% = ${fmt(mlAway*100,0)}%`,
       },
     ],
@@ -472,16 +674,19 @@ function computeGameMarkets(
   // talent, et la fusillade est proche du pile ou face. On ne reporte donc
   // qu'un QUART de l'avantage sur le partage de l'OT, borné à ±10 points —
   // au-delà, on prétendrait savoir quelque chose que la fusillade dément.
-  const otShareHome = clamp(0.5 + 0.25 * (mlHome - 0.5), 0.40, 0.60);
+  // (`otShareHome` est calculée plus haut, avec la grille.)
   const homeOt  = ot * otShareHome;
   const awayOt  = ot * (1 - otShareHome);
   // `Math.max(0, …)` : sur un match très déséquilibré, P(victoire) du faible
   // peut descendre sous sa part de prolongation. Un négatif traverserait `pct`
   // (qui borne à 3 %) sans bruit et ferait mentir la somme.
-  const homeReg = Math.max(0, mlHome - homeOt);
-  const awayReg = Math.max(0, mlAway - awayOt);
+  // En direct : lu sur la grille — les quatre tuiles somment à 1 par construction.
+  const homeReg = live ? grid.regHome : Math.max(0, mlHome - homeOt);
+  const awayReg = live ? grid.regAway : Math.max(0, mlAway - awayOt);
 
-  const otNote = `OT/SO ${fmt(ot*100,0)}% du temps (ligue ~22.5%), partagé ${fmt(otShareHome*100,0)}/${fmt((1-otShareHome)*100,0)} — la prolongation efface une partie de l'écart de talent`;
+  const otNote = live
+    ? `Égalité à 60 min ${fmt(ot*100,0)}% (score actuel + buts restants), partagée ${fmt(otShareHome*100,0)}/${fmt((1-otShareHome)*100,0)} en prolongation`
+    : `OT/SO ${fmt(ot*100,0)}% du temps (ligue ~22.5%), partagé ${fmt(otShareHome*100,0)}/${fmt((1-otShareHome)*100,0)} — la prolongation efface une partie de l'écart de talent`;
 
   const matchBetting: MarketGroup = {
     id: 'match', title: 'Match Betting', cols: 2,
@@ -498,12 +703,12 @@ function computeGameMarkets(
         // chiffres diffèrent volontairement et l'étiquette le dit.
         ml: gm('moneyline'),
         label: `${homeName} in Reg`,
-        rulePct: pct(homeReg),
+        rulePct: pctOf(homeReg),
         ruleNote: [
           `Victoire en temps réglementaire = P(victoire) ${fmt(mlHome*100,0)}% − part OT ${fmt(homeOt*100,0)}% = ${fmt(homeReg*100,0)}%`,
           mlBreakdown,
-          injuries?.active ? `blessures : ${injuries.note}` : '',
-          lineup?.active   ? `alignement : ${lineup.note}` : '',
+          !live && injuries?.active ? `blessures : ${injuries.note}` : '',
+          !live && lineup?.active   ? `alignement : ${lineup.note}` : '',
         ].filter(Boolean).join('  ·  '),
         // Poids sur 100, comme partout ailleurs (`blend.lines` les porte en
         // fractions de 1). attachGameFactors réécrit ces deux options juste
@@ -515,7 +720,7 @@ function computeGameMarkets(
         pctScale: mlAway > 0 ? awayReg / mlAway : 1,
         ml: gma('moneyline'),
         label: `${awayName} in Reg`,
-        rulePct: pct(awayReg),
+        rulePct: pctOf(awayReg),
         ruleNote: `Victoire en temps réglementaire = P(victoire) ${fmt(mlAway*100,0)}% − part OT ${fmt(awayOt*100,0)}% = ${fmt(awayReg*100,0)}%`,
         factors: blend.lines.map(l => ({ id: l.id, label: l.label, weight: Math.round(l.weight * 100), value: 1 - l.value })),
       },
@@ -560,7 +765,7 @@ function computeGameMarkets(
          */
         ml: gm('ot_so_winner'),
         label: `${homeName} in OT/SO`,
-        rulePct: pct(homeOt),
+        rulePct: pctOf(homeOt),
         ruleNote: otNote,
       },
       {
@@ -568,19 +773,13 @@ function computeGameMarkets(
         pctScale: 1 - otShareHome,
         ml: gma('ot_so_winner'),
         label: `${awayName} in OT/SO`,
-        rulePct: pct(awayOt),
+        rulePct: pctOf(awayOt),
         ruleNote: otNote,
       },
     ],
   };
 
-  // ── Loi du score FINAL (prolongation/fusillade comprises) ─────────────────
-  //
-  // Une seule grille pour tous les marchés qui se règlent sur le score final :
-  // puck lines, total du match, total par équipe, score exact. Construite sur
-  // les mêmes λ que le reste de la page et sur la même part de prolongation
-  // (`otShareHome`) que Match Betting. Voir `prediction/finalScore.ts`.
-  const grid = finalScoreGrid(lambdaH, lambdaA, otShareHome);
+  // (La loi du score final, `grid`, est construite plus haut.)
 
   /** Tuiles posées dans les tableaux, indexées pour leurs facteurs. */
   const puckSpecs: Record<string, PuckLineSpec> = {};
@@ -621,12 +820,12 @@ function computeGameMarkets(
     plOptions.push(
       {
         id: ids.hm, ml: gm('puck_line', -x),
-        label: `${homeName} −${x}`, rulePct: pct(hMinus),
+        label: `${homeName} −${x}`, rulePct: pctOf(hMinus),
         ruleNote: `P(victoire) ${fmt(mlHome*100,0)}% × P(gagne par ${n}+ | gagne) ${fmt(rH*100,0)}% = ${fmt(hMinus*100,0)}% (score final, prolongation comprise)`,
       },
       {
         id: ids.hp, ml: gma('puck_line', -x, 'no'),
-        label: `${homeName} +${x}`, rulePct: pct(1 - aMinus),
+        label: `${homeName} +${x}`, rulePct: pctOf(1 - aMinus),
         ruleNote: `Couvre sauf défaite par ${n}+ : 100% − ${awayName} −${x} (${fmt(aMinus*100,0)}%) = ${fmt((1-aMinus)*100,0)}%`,
       },
     );
@@ -634,12 +833,12 @@ function computeGameMarkets(
       plOptions.push(
         {
           id: ids.am, ml: gma('puck_line', -x),
-          label: `${awayName} −${x}`, rulePct: pct(aMinus),
+          label: `${awayName} −${x}`, rulePct: pctOf(aMinus),
           ruleNote: `P(victoire) ${fmt(mlAway*100,0)}% × P(gagne par ${n}+ | gagne) ${fmt(rA*100,0)}% = ${fmt(aMinus*100,0)}% (score final, prolongation comprise)`,
         },
         {
           id: ids.ap, ml: gm('puck_line', -x, 'no'),
-          label: `${awayName} +${x}`, rulePct: pct(1 - hMinus),
+          label: `${awayName} +${x}`, rulePct: pctOf(1 - hMinus),
           ruleNote: `Couvre sauf défaite par ${n}+ : 100% − ${homeName} −${x} (${fmt(hMinus*100,0)}%) = ${fmt((1-hMinus)*100,0)}%`,
         },
       );
@@ -672,11 +871,13 @@ function computeGameMarkets(
     const over = totalOver(grid, L);
     totOptions.push(
       {
-        id: `o${tag}`, ml: gm('total_goals_over', L), label: `Over ${L}`, rulePct: pct(over),
-        ruleNote: `Buts attendus λ=${fmt(lambdaT)} (${fmt(lambdaH)}+${fmt(lambdaA)}) → P(total final > ${L}) = ${fmt(over*100,0)}% (prolongation comprise)`,
+        id: `o${tag}`, ml: gm('total_goals_over', L), label: `Over ${L}`, rulePct: pctOf(over),
+        ruleNote: live
+          ? `Score actuel ${h0 + a0} but${h0 + a0 > 1 ? 's' : ''} + buts restants λ×f=${lamLeft(gH + gA)} → P(total final > ${L}) = ${fmt(over*100,0)}% (prolongation comprise)`
+          : `Buts attendus λ=${fmt(lambdaT)} (${fmt(lambdaH)}+${fmt(lambdaA)}) → P(total final > ${L}) = ${fmt(over*100,0)}% (prolongation comprise)`,
       },
       {
-        id: `u${tag}`, ml: gm('total_goals_under', L), label: `Under ${L}`, rulePct: pct(1 - over),
+        id: `u${tag}`, ml: gm('total_goals_under', L), label: `Under ${L}`, rulePct: pctOf(1 - over),
         ruleNote: `P(total final < ${L}) = ${fmt((1-over)*100,0)}%`,
       },
     );
@@ -701,22 +902,26 @@ function computeGameMarkets(
     const aOver = teamOver(grid, 'away', L);
     ttOptions.push(
       {
-        id: `tt-home-o${tag}`, ml: gm('team_total_goals', L, 'over'), label: `${homeName} Over ${L}`, rulePct: pct(hOver),
-        ruleNote: `λ ${hAb}=${fmt(lambdaH)} → P(${hAb} > ${L} buts, score final) = ${fmt(hOver*100,0)}%`,
+        id: `tt-home-o${tag}`, ml: gm('team_total_goals', L, 'over'), label: `${homeName} Over ${L}`, rulePct: pctOf(hOver),
+        ruleNote: live
+          ? `${hAb} : ${h0} + buts restants λ×f=${lamLeft(gH)} → P(${hAb} > ${L} buts, score final) = ${fmt(hOver*100,0)}%`
+          : `λ ${hAb}=${fmt(lambdaH)} → P(${hAb} > ${L} buts, score final) = ${fmt(hOver*100,0)}%`,
       },
       {
-        id: `tt-home-u${tag}`, ml: gm('team_total_goals', L, 'under'), label: `${homeName} Under ${L}`, rulePct: pct(1 - hOver),
+        id: `tt-home-u${tag}`, ml: gm('team_total_goals', L, 'under'), label: `${homeName} Under ${L}`, rulePct: pctOf(1 - hOver),
         ruleNote: `P(${hAb} < ${L} buts) = ${fmt((1-hOver)*100,0)}%`,
       },
     );
     if (!teamExtras) {
       ttOptions.push(
         {
-          id: `tt-away-o${tag}`, ml: gma('team_total_goals', L, 'over'), label: `${awayName} Over ${L}`, rulePct: pct(aOver),
-          ruleNote: `λ ${aAb}=${fmt(lambdaA)} → P(${aAb} > ${L} buts, score final) = ${fmt(aOver*100,0)}%`,
+          id: `tt-away-o${tag}`, ml: gma('team_total_goals', L, 'over'), label: `${awayName} Over ${L}`, rulePct: pctOf(aOver),
+          ruleNote: live
+            ? `${aAb} : ${a0} + buts restants λ×f=${lamLeft(gA)} → P(${aAb} > ${L} buts, score final) = ${fmt(aOver*100,0)}%`
+            : `λ ${aAb}=${fmt(lambdaA)} → P(${aAb} > ${L} buts, score final) = ${fmt(aOver*100,0)}%`,
         },
         {
-          id: `tt-away-u${tag}`, ml: gma('team_total_goals', L, 'under'), label: `${awayName} Under ${L}`, rulePct: pct(1 - aOver),
+          id: `tt-away-u${tag}`, ml: gma('team_total_goals', L, 'under'), label: `${awayName} Under ${L}`, rulePct: pctOf(1 - aOver),
           ruleNote: `P(${aAb} < ${L} buts) = ${fmt((1-aOver)*100,0)}%`,
         },
       );
@@ -746,9 +951,11 @@ function computeGameMarkets(
   // même ligne sont des compléments exacts.
   const bttsOptions: BetOption[] = [];
   const bttsRows: MarketTable['rows'] = [];
+  // En direct : même loi sur le temps restant (`nbAtLeastLive`), en partant des
+  // buts déjà marqués — 100 % dès que les deux équipes ont leurs j buts.
   for (const j of [1, 2, 3]) {
-    const pH  = nbAtLeast(lambdaH, j, GOALS_DISPERSION_K);
-    const pA  = nbAtLeast(lambdaA, j, GOALS_DISPERSION_K);
+    const pH  = live ? nbAtLeastLive(gH, j - h0, GOALS_DISPERSION_K, liveF) : nbAtLeast(lambdaH, j, GOALS_DISPERSION_K);
+    const pA  = live ? nbAtLeastLive(gA, j - a0, GOALS_DISPERSION_K, liveF) : nbAtLeast(lambdaA, j, GOALS_DISPERSION_K);
     const yes = pH * pA;
     // `btts-yes` / `btts-no` gardent leur identifiant (et leur marché SANS
     // ligne) : ce sont les tuiles d'avant, et les coupons déjà enregistrés les
@@ -759,12 +966,14 @@ function computeGameMarkets(
     bttsOptions.push(
       {
         id: idY, ml: gm('both_teams_score', line, 'yes'),
-        label: j === 1 ? 'Both Teams Score' : `Both Teams Score ${j}+`, rulePct: pct(yes),
-        ruleNote: `P(${hAb}≥${j})=${fmt(pH*100,0)}% × P(${aAb}≥${j})=${fmt(pA*100,0)}% = ${fmt(yes*100,0)}% (buts par match : binomiale négative, k=${GOALS_DISPERSION_K})`,
+        label: j === 1 ? 'Both Teams Score' : `Both Teams Score ${j}+`, rulePct: pctOf(yes),
+        ruleNote: live
+          ? `P(${hAb} finit ≥${j}, a ${h0})=${fmt(pH*100,0)}% × P(${aAb} finit ≥${j}, a ${a0})=${fmt(pA*100,0)}% = ${fmt(yes*100,0)}% (buts restants : binomiale négative, k=${GOALS_DISPERSION_K}×f)`
+          : `P(${hAb}≥${j})=${fmt(pH*100,0)}% × P(${aAb}≥${j})=${fmt(pA*100,0)}% = ${fmt(yes*100,0)}% (buts par match : binomiale négative, k=${GOALS_DISPERSION_K})`,
       },
       {
         id: idN, ml: gm('both_teams_score', line, 'no'),
-        label: j === 1 ? 'Both Teams Score — No' : `Both Teams Score ${j}+ — No`, rulePct: pct(1 - yes),
+        label: j === 1 ? 'Both Teams Score — No' : `Both Teams Score ${j}+ — No`, rulePct: pctOf(1 - yes),
         ruleNote: `Au moins une équipe sous ${j} but${j > 1 ? 's' : ''} = ${fmt((1-yes)*100,0)}%`,
       },
     );
@@ -790,7 +999,11 @@ function computeGameMarkets(
   // Précision au dixième, et pas de plancher à 3 % : un 4–3 vaut ~1 %, et
   // `pct` l'aurait triplé.
   const SCORES: Array<[number, number]> = [[1,0],[2,0],[2,1],[3,0],[3,1],[3,2],[4,0],[4,1],[4,2],[4,3]];
-  const pct1 = (p: number) => Math.max(0.1, Math.round(p * 1000) / 10);
+  // En direct, un score déjà dépassé vaut 0 exactement (et le seul score
+  // encore possible, 100).
+  const pct1 = (p: number) => live
+    ? (p <= 1e-9 ? 0 : p >= 1 - 1e-9 ? 100 : Math.min(99.9, Math.max(0.1, Math.round(p * 1000) / 10)))
+    : Math.max(0.1, Math.round(p * 1000) / 10);
   const csOptions: BetOption[] = [];
   const csRows: MarketTable['rows'] = [];
   let homeListed = 0, awayListed = 0;
@@ -856,41 +1069,58 @@ function computeGameMarkets(
     const n = i + 1;
     let home: BetOption, draw: BetOption, away: BetOption;
     if (n < 3) {
-      const f  = n === 1 ? PERIOD_DIST[0] : PERIOD_DIST[0] + PERIOD_DIST[1];
-      const lH = lambdaH * f;
-      const lA = lambdaA * f;
-      const r  = skellamPeriod(lH, lA);
+      // En direct : score cumulé ACTUEL + buts restants jusqu'à la fin de la
+      // période n. Période terminée → plus aucun but à venir (f = 0) et le
+      // score à la fin de la période, lu dans les buts par période : 100/0/0.
+      const f  = live
+        ? remainingShareUntil(live.period, live.clockSec, n)
+        : n === 1 ? PERIOD_DIST[0] : PERIOD_DIST[0] + PERIOD_DIST[1];
+      const lH = (live ? gH : lambdaH) * f;
+      const lA = (live ? gA : lambdaA) * f;
+      const cum = !live ? { home: 0, away: 0 }
+        : live.period > n
+          ? live.periodGoals.slice(0, n).reduce((t, x) => ({ home: t.home + x.home, away: t.away + x.away }), { home: 0, away: 0 })
+          : { home: h0, away: a0 };
+      const r  = skellamPeriod(lH, lA, cum.home - cum.away);
       const decisive = Math.max(1e-9, r.home + r.away);
       periodSpecs[String(n)] = { q: r.home / decisive, draw: r.draw, lambdaP: lH + lA };
+      const decided = live && f <= 0
+        ? `Décidé : ${hAb} ${cum.home}–${cum.away} ${aAb} après la ${ORD[n - 1]} période`
+        : '';
+      const liveHead = live && !decided
+        ? `Score actuel ${hAb} ${cum.home}–${cum.away} ${aAb} + buts restants d'ici la fin de la ${ORD[n - 1]} λH=${fmt(lH)} vs λA=${fmt(lA)}`
+        : '';
       home = {
         id: `p${n}-home`, ml: gm(`period${n}_winner`), pctScale: 1 - r.draw,
-        label: `${homeName} leads after P${n}`, rulePct: pct(r.home),
-        ruleNote: `Buts cumulés λH=${fmt(lH)} vs λA=${fmt(lA)} → Skellam P(${hAb} mène)=${fmt(r.home*100,0)}%`,
+        label: `${homeName} leads after P${n}`, rulePct: pctOf(r.home),
+        ruleNote: decided || (liveHead
+          ? `${liveHead} → Skellam P(${hAb} mène)=${fmt(r.home*100,0)}%`
+          : `Buts cumulés λH=${fmt(lH)} vs λA=${fmt(lA)} → Skellam P(${hAb} mène)=${fmt(r.home*100,0)}%`),
       };
       draw = {
         id: `p${n}-draw`, ml: gm(`period${n}_winner`, undefined, 'draw'),
-        label: `Tied after P${n}`, rulePct: pct(r.draw),
-        ruleNote: `P(égalité après ${name} période) = ${fmt(r.draw*100,0)}%`,
+        label: `Tied after P${n}`, rulePct: pctOf(r.draw),
+        ruleNote: decided || `P(égalité après ${name} période) = ${fmt(r.draw*100,0)}%`,
       };
       away = {
         id: `p${n}-away`, ml: gma(`period${n}_winner`), pctScale: 1 - r.draw,
-        label: `${awayName} leads after P${n}`, rulePct: pct(r.away),
-        ruleNote: `Skellam P(${aAb} mène)=${fmt(r.away*100,0)}%`,
+        label: `${awayName} leads after P${n}`, rulePct: pctOf(r.away),
+        ruleNote: decided || `Skellam P(${aAb} mène)=${fmt(r.away*100,0)}%`,
       };
     } else {
       home = {
         id: 'p3-home', ml: gm('period3_winner'), pctScale: mlHome > 0 ? homeReg / mlHome : 1,
-        label: `${homeName} leads after P3`, rulePct: pct(homeReg),
+        label: `${homeName} leads after P3`, rulePct: pctOf(homeReg),
         ruleNote: `Mène après 60 min = victoire en temps réglementaire : ${fmt(mlHome*100,0)}% − part OT ${fmt(homeOt*100,0)}% = ${fmt(homeReg*100,0)}%`,
       };
       draw = {
         id: 'p3-draw', ml: gm('game_to_ot', undefined, 'yes'),
-        label: 'Tied after P3 (OT)', rulePct: pct(ot),
+        label: 'Tied after P3 (OT)', rulePct: pctOf(ot),
         ruleNote: `Égalité après 60 min = prolongation : ${fmt(ot*100,0)}%`,
       };
       away = {
         id: 'p3-away', ml: gma('period3_winner'), pctScale: mlAway > 0 ? awayReg / mlAway : 1,
-        label: `${awayName} leads after P3`, rulePct: pct(awayReg),
+        label: `${awayName} leads after P3`, rulePct: pctOf(awayReg),
         ruleNote: `Mène après 60 min = victoire en temps réglementaire : ${fmt(mlAway*100,0)}% − part OT ${fmt(awayOt*100,0)}% = ${fmt(awayReg*100,0)}%`,
       };
     }
@@ -905,18 +1135,27 @@ function computeGameMarkets(
     };
 
     // Buts de la 1re période — dans SA carte. Mêmes tuiles qu'avant.
+    // En direct : buts déjà marqués en 1re + ceux qui restent à y marquer.
     if (n === 1) {
-      const lP1 = lambdaT * PERIOD_DIST[0];
+      const lP1 = live
+        ? (gH + gA) * remainingShareUntil(live.period, live.clockSec, 1)
+        : lambdaT * PERIOD_DIST[0];
+      const g1 = !live ? 0 : live.period > 1 ? live.periodGoals[0].home + live.periodGoals[0].away : h0 + a0;
       const p1Lines = [0.5, 1.5, 2.5];
-      const p1Opts: BetOption[] = p1Lines.map(L => ({
-        id: `p1-o${String(Math.round(L * 10)).padStart(2, '0')}`,
-        // `'over'` EXPLICITE : sans lui, `settlementFields` retombe sur le sujet
-        // et la jambe part avec l'abréviation de l'équipe comme sélection.
-        ml: gm('period1_total_goals', L, 'over'),
-        label: `P1 Over ${L}`,
-        rulePct: pct(poissonOver(lP1, L)),
-        ruleNote: `P1 λ=${fmt(lP1)} → P(> ${L} buts en 1re)=${fmt(poissonOver(lP1, L)*100,0)}%`,
-      }));
+      const p1Opts: BetOption[] = p1Lines.map(L => {
+        const over = live ? poissonAtLeast(lP1, Math.floor(L) + 1 - g1) : poissonOver(lP1, L);
+        return {
+          id: `p1-o${String(Math.round(L * 10)).padStart(2, '0')}`,
+          // `'over'` EXPLICITE : sans lui, `settlementFields` retombe sur le sujet
+          // et la jambe part avec l'abréviation de l'équipe comme sélection.
+          ml: gm('period1_total_goals', L, 'over'),
+          label: `P1 Over ${L}`,
+          rulePct: pctOf(over),
+          ruleNote: live
+            ? `${g1} but${g1 > 1 ? 's' : ''} en 1re + restants λ=${fmt(lP1)} → P(> ${L} buts en 1re)=${fmt(over*100,0)}%`
+            : `P1 λ=${fmt(lP1)} → P(> ${L} buts en 1re)=${fmt(over*100,0)}%`,
+        };
+      });
       group.options.push(...p1Opts);
       group.tables!.push({
         title: '1st Period Goals',
@@ -935,14 +1174,16 @@ function computeGameMarkets(
         id: 'ot-yes',
         ml: gm('game_to_ot', undefined, 'yes'),
         label: 'Goes to OT',
-        rulePct: pct(ot),
-        ruleNote: `Balance factor from win% spread → ${fmt(ot*100,0)}% OT probability`,
+        rulePct: pctOf(ot),
+        ruleNote: live
+          ? `Égalité après 60 min (score actuel + buts restants) = ${fmt(ot*100,0)}%`
+          : `Balance factor from win% spread → ${fmt(ot*100,0)}% OT probability`,
       },
       {
         id: 'ot-no',
         ml: gm('game_to_ot', undefined, 'no'),
         label: 'Decided in Regulation',
-        rulePct: pct(1 - ot),
+        rulePct: pctOf(1 - ot),
         ruleNote: `P(regulation finish) = ${fmt((1-ot)*100,0)}%`,
       },
     ],
@@ -1004,21 +1245,21 @@ function computeGameMarkets(
         // Le camp est DANS le libellé. « Win by 1 » ne disait pas qui gagne,
         // alors que le pari, lui, porte sur le domicile depuis toujours.
         label: `${hAb} by 1`,
-        rulePct: pct(wm1),
+        rulePct: pctOf(wm1),
         ruleNote: `P(victoire) ${fmt(mlHome*100,0)}% × P(par 1 | victoire) ${fmt(marginShares['wm-1']*100,0)}% = ${fmt(wm1*100,0)}% — toutes les victoires en prolongation finissent par 1 but`,
       },
       {
         id: 'wm-2',
         ml: gm('winning_margin', undefined, '2'),
         label: `${hAb} by 2`,
-        rulePct: pct(wm2),
+        rulePct: pctOf(wm2),
         ruleNote: `P(victoire) ${fmt(mlHome*100,0)}% × P(par 2 | victoire) ${fmt(marginShares['wm-2']*100,0)}% = ${fmt(wm2*100,0)}%`,
       },
       {
         id: 'wm-3p',
         ml: gm('winning_margin', undefined, '3+'),
         label: `${hAb} by 3+`,
-        rulePct: pct(wm3p),
+        rulePct: pctOf(wm3p),
         ruleNote: `P(victoire) ${fmt(mlHome*100,0)}% × P(par 3+ | victoire) ${fmt(marginShares['wm-3p']*100,0)}% = ${fmt(wm3p*100,0)}%, λ=${fmt(lambdaT)}`,
       },
     ],
@@ -1052,17 +1293,41 @@ function computeGameMarkets(
     groups.push({
       id: 'teamx', title: 'Team Specials', cols: 2,
       options: [
-        { id: 'cs-for', label: 'Clean Sheet (Shutout)', rulePct: pct(csFor),
+        { id: 'cs-for', label: 'Clean Sheet (Shutout)', rulePct: pctOf(csFor),
           ml: gm('clean_sheet', undefined, 'yes'),
           ruleNote: `P(0 but adverse) = e^(−${fmt(lambdaA)}) = ${fmt(csFor*100,0)}%` },
-        { id: 'ppgoal', label: 'Scores a PP Goal', rulePct: pct(ppG),
+        { id: 'ppgoal', label: 'Scores a PP Goal', rulePct: pctOf(ppG),
           ml: gm('team_pp_goals', undefined, 'yes'),
           ruleNote: `PP ${fmt(hPP,1)}% × ~${PP_OPPS} occasions → ${fmt(ppG*100,0)}%` },
-        { id: 'pk-perfect', label: 'Kills All Penalties', rulePct: pct(pkAll),
+        { id: 'pk-perfect', label: 'Kills All Penalties', rulePct: pctOf(pkAll),
           ml: gm('team_penalty_kill', undefined, 'yes'),
           ruleNote: `PK ${fmt(hPK,1)}% ^ ${PP_OPPS} occasions = ${fmt(pkAll*100,0)}%` },
       ],
     });
+  }
+
+  if (live) {
+    // ── En direct : PAS de facteurs ─────────────────────────────────────────
+    //
+    // `attachGameFactors` écrase `rulePct` par le mélange des facteurs
+    // d'avant-match, et le client recompose la tuile à partir de `factors` et
+    // des poids de l'utilisateur (`BetOption` dans `PredictionSheet.tsx`). Les
+    // deux effaceraient le score du match. Sans `factors` ni `pctScale`, le
+    // client affiche `rulePct` tel quel. `ml` et les identifiants restent : le
+    // paquet ML, les tableaux et le coupon en dépendent.
+    for (const g of groups) {
+      for (const o of g.options) {
+        delete o.factors;
+        delete o.factorGroup;
+        delete o.pctScale;
+        o.ruleNote = o.rulePct === 0 || o.rulePct === 100
+          ? `${o.ruleNote}  ·  décidé (${live.label})`
+          : `${o.ruleNote}  ·  en direct (${live.label})`;
+      }
+    }
+    const [mwH, mwA] = moneyline.options;
+    mwA.rulePct = 100 - mwH.rulePct;
+    return groups;
   }
 
   // Décompose chaque marché en facteurs ajustables (met à jour rulePct + factors).
@@ -1127,8 +1392,37 @@ function makeCtx(
   };
 }
 
+/** Marchés d'un match + son état, pour que la route règle son cache dessus. */
+export interface GameMarketsResult {
+  groups: MarketGroup[];
+  /**
+   * Statut qui règle le cache HTTP : `scheduled` | `live` | `final`. `final`
+   * seulement si l'état final a bien été calculé (tout est décidé, plus rien
+   * ne bougera).
+   */
+  status: string;
+}
+
+/**
+ * 30 s par match (et par jeu de poids) — le rythme de la feuille de match en
+ * direct. Surtout un anti-rafale : N visiteurs qui rafraîchissent en même
+ * temps ne déclenchent qu'un calcul (`TtlCache.wrap`), comme `gameMlBundle.ts`.
+ * ⚠️ Le résultat est PARTAGÉ entre appelants : ne jamais le modifier.
+ */
+const gameMarketsCache = new TtlCache<GameMarketsResult>(30_000, 500, 'gamePredictions');
+
+export async function buildGameMarketsWithStatus(gameId: string, weights?: FactorWeights): Promise<GameMarketsResult> {
+  const key = `${gameId}|${weights ? JSON.stringify(weights) : ''}`;
+  return gameMarketsCache.wrap(key, () => computeGameMarketsFor(gameId, weights));
+}
+
 export async function buildGameMarkets(gameId: string, weights?: FactorWeights): Promise<MarketGroup[]> {
+  return (await buildGameMarketsWithStatus(gameId, weights)).groups;
+}
+
+async function computeGameMarketsFor(gameId: string, weights?: FactorWeights): Promise<GameMarketsResult> {
   const game = await fetchGameById(gameId);
+  const status: string = game.status ?? 'scheduled';
   const homeAbbr = game.homeTeam?.abbreviation ?? game.homeTeam?.abbrev ?? '';
   const awayAbbr = game.awayTeam?.abbreviation ?? game.awayTeam?.abbrev ?? '';
 
@@ -1142,7 +1436,7 @@ export async function buildGameMarkets(gameId: string, weights?: FactorWeights):
 
   // Sources enrichies, tolérantes aux pannes (fallback neutre par source).
   const [summaryRes, homeRestRes, awayRestRes, oddsRes,
-         homeTravelRes, awayTravelRes, refFactorRes, manualRes] = await Promise.allSettled([
+         homeTravelRes, awayTravelRes, refFactorRes, manualRes, detailRes] = await Promise.allSettled([
     fetchTeamSummaryStats(),
     fetchTeamRestInfo(homeAbbr),
     fetchTeamRestInfo(awayAbbr),
@@ -1155,6 +1449,9 @@ export async function buildGameMarkets(gameId: string, weights?: FactorWeights):
     // bloc : elle est asynchrone maintenant, et l'attendre en série aurait
     // ajouté un aller-retour à chaque prédiction pour rien.
     getManualFactors(homeAbbr, awayAbbr),
+    // Match commencé : la feuille de match (période, horloge, entracte, buts
+    // par période). Cache de 30 s partagé avec la page du match.
+    status === 'live' || status === 'final' ? fetchGameDetail(gameId) : Promise.resolve(null),
   ]);
   const summary  = summaryRes.status  === 'fulfilled' ? summaryRes.value  : {};
   const homeRest = homeRestRes.status === 'fulfilled' ? homeRestRes.value : { restDays: 2, b2b: 0 as 0 | 1, dense3in4: 0 };
@@ -1171,7 +1468,10 @@ export async function buildGameMarkets(gameId: string, weights?: FactorWeights):
     : { injuries: { active: false, homeProb: 0.5, note: 'non renseigné' },
         lineup:   { active: false, homeProb: 0.5, note: 'non renseigné' } };
 
-  return computeGameMarkets(
+  // Feuille indisponible : repli sur l'avant-match plutôt qu'une erreur.
+  const live = detailRes.status === 'fulfilled' ? liveCtxFromDetail(detailRes.value) : null;
+
+  const groups = computeGameMarkets(
     homeTeam, awayTeam,
     homeName, awayName,
     makeCtx(homeTeam, summary, homeRest, homeTravel),
@@ -1182,7 +1482,11 @@ export async function buildGameMarkets(gameId: string, weights?: FactorWeights):
     weights,
     false,
     refFactor?.multiplier ?? 1,
+    live,
   );
+  // Match terminé mais feuille manquante : servi en avant-match, donc surtout
+  // pas figé 6 h — on le redemande au rythme d'un match en cours.
+  return { groups, status: status === 'final' && !live ? 'live' : status };
 }
 
 // ─── Public: team predictions (vs league-average opponent) ────────────────────

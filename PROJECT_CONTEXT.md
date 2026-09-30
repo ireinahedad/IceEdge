@@ -15,7 +15,72 @@ When continuing this project:
 - Verify that what you are implementing is secure
 - At the end of each session, update PROJECT_CONTEXT.md.
 
-Last updated: 2026-09-21
+Last updated: 2026-09-30
+
+## Session 2026-09-30 — Prédictions en direct (Phase 1)
+
+Pendant un match, les marchés « règles » de la page match partent du **score
+actuel et du temps restant**, rafraîchis toutes les 30 s. Informatif seulement :
+le refus des coupons après la mise au jeu (`slip.service.ts`), `locks_at` et le
+règlement ne sont pas touchés. **Pas de Python, pas de migration.** Déploiement :
+Node (Railway) d'abord — même forme de réponse — puis le client (Vercel).
+
+1. **`prediction/finalScore.ts`** — `LiveState { homeScore, awayScore,
+   secondsLeftReg, inOvertime, f?, tieBoost? }`, paramètre optionnel `live` de
+   `finalScoreGrid`. Grille décalée du score actuel, buts restants ~ Poisson(λ·f)
+   sans plancher, taille `max(score) + 16`, prolongation en cours → partage
+   `otShareHome` direct. Nouveaux champs `regHome/regAway/regTie` (issue à 60 min,
+   avant le partage de la prolongation). **Sans `live`, sortie identique** (vérifié
+   octet pour octet sur `buildGameMarkets` + `buildTeamMarkets`). `nbAtLeastLive` :
+   binomiale négative du BTTS sur le temps restant (moyenne λ·f, dispersion k·f).
+2. **`nhlPredictions.ts`** —
+   · `liveCtxFromDetail(detail)` lit **`fetchGameDetail`** (et non `fetchGameById`,
+     qui n'a ni `periodType`, ni `inIntermission`, ni buts par période ;
+     `gameEvents.ts` est gardé 6 h, écrit pour les matchs terminés). Entracte =
+     fin de période ; OT/SO ou période > 3 = prolongation.
+   · **f pondéré par `PERIOD_DIST`** (0.305/0.365/0.330), pas temps/3600 : les
+     cartes de période ne sautent pas à la mise au jeu.
+   · **Calage sur l'avant-match** (`liveCalibration`) : λT gardé, partage
+     domicile/visiteur choisi par bissection et nuls à 60 min gonflés (`tieBoost`)
+     pour qu'à 0–0 avec 60 min à jouer, Moneyline, Match Betting, « Goes to OT » et
+     P3 valent l'avant-match. Sans lui, P(prolongation) tombait de ~28 à ~16 %
+     (deux Poisson indépendantes sous-estiment les nuls). Les autres cartes
+     (puck line, écart, P1/P2) peuvent bouger de quelques points à la mise au jeu :
+     l'avant-match les mélange à des facteurs, le direct les lit sur la grille.
+   · En direct, `mlHome = regHome + regTie × otShareHome` lu sur la grille ; les 4
+     tuiles de Match Betting = `regHome/regAway/regTie × part` (somme 1). Puck lines,
+     score exact, écart de victoire, totaux : grille. P1/P2 : Skellam décalé de
+     l'écart cumulé (`skellamPeriod(…, diff)`), période terminée → 100/0/0 lu dans
+     les buts par période. Buts de la 1re : déjà marqués + restants.
+   · `pctLive` : 0/100 seulement si l'issue est acquise, sinon [1, 99]. Score exact : 0 exact.
+   · **Pas d'`attachGameFactors` en direct**, et `factors`/`factorGroup`/`pctScale`
+     retirés : sinon le client recompose chaque tuile depuis les facteurs
+     d'avant-match. Notes suffixées « en direct (…) » / « décidé (…) ».
+   · **Match terminé** : état final décidé (tout à 0/100), OT/SO → nul à 60 min +
+     vainqueur connu (`otShareHome` 1 ou 0), avec contrôle de cohérence ; feuille
+     illisible → avant-match mais statut `live` (jamais figé 6 h).
+   · `buildGameMarketsWithStatus` → `{ groups, status }`, `TtlCache` 30 s
+     (`gamePredictions`, clé `gameId|poids`). `buildGameMarkets` inchangé en signature.
+3. **Route** `/predictions/game/:gameId` : 30 s en direct, 6 h terminé, 5 min sinon.
+   La réponse reste un tableau.
+4. **Client** — `GamePrediction` : `isLive` = `status === 'live'` (`!!period` était
+   vrai aussi pour un match terminé) ; en-tête et marchés rafraîchis toutes les
+   30 s (`useServerGroups(load, key, pollMs)` : remplacement silencieux, pas de
+   squelette, un échec garde les chiffres) ; au coup de sifflet final, deux
+   rechargements différés (+35 s, +100 s) pour passer les caches. **ML en direct :
+   option (b)** — bouton ML grisé avec « le modèle ML est d'avant-match », section ML
+   de la fiche masquée (`GameLiveCtx`). `nhlApiService.sharedGet` : les 7
+   `PlayerPropGrid` partagent la feuille de match (mémo 5 s) et l'effectif (5 min).
+5. Limites connues : un match qui commence pendant que la page est ouverte ne
+   passe en direct qu'au rechargement ; le CDN (`stale-while-revalidate=60`) peut
+   servir des chiffres vieux de 60–90 s ; les grilles joueur restent d'avant-match
+   (Phase 2). Phase 2 esquissée dans `STATUS.md` §3.5.
+
+Tests : `prediction/finalScore.test.ts` (nouveau, 13), `nhlPredictions.test.ts`
+(+15 : état du match, direct, décidés, partitions, pas de facteurs, terminé),
+`nhl.routes.test.ts` (+5 : cache par statut). Serveur 51 fichiers / 1053 tests,
+`tsc` serveur + client, `npm run build` client. L'API NHL est bloquée dans le
+sandbox : pas d'essai sur un vrai match.
 
 ## Session 2026-09-21 — Page match : tableaux de paris + cohérence des règles
 

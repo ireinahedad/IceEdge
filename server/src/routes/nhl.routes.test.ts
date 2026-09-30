@@ -29,6 +29,13 @@ vi.mock('../services/nhl.service', () => ({
   NHLService: class { constructor() { return mockService as any; } },
 }));
 
+const mockPredictions = vi.hoisted(() => ({
+  buildGameMarketsWithStatus: vi.fn(),
+  buildTeamMarkets:           vi.fn(),
+  buildPlayerMarkets:         vi.fn(),
+}));
+vi.mock('../services/nhlPredictions', () => mockPredictions);
+
 async function nhlApp() {
   const { default: routes } = await import('./nhl.routes');
   const a = express();
@@ -115,6 +122,47 @@ describe('en-têtes de cache des routes NHL', () => {
   it('ne cache pas une plage de dates invalide', async () => {
     const res = await request(await nhlApp()).get('/api/nhl/games/range?start=zz&end=zz');
     expect(res.status).toBe(400);
+    expect(res.headers['cache-control']).toBe('private, no-store');
+  });
+});
+
+// Prédictions d'un match : leurs chiffres partent du score et du temps restant
+// dès la mise au jeu. Cachées 5 min comme avant, elles resteraient figées sur
+// un score dépassé ; une fois tout décidé, elles ne bougeront plus jamais.
+describe('cache des prédictions d’un match', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  const groups = [{ id: 'moneyline', title: 'Moneyline', cols: 2, options: [] }];
+
+  it('match en cours : 30 s', async () => {
+    mockPredictions.buildGameMarketsWithStatus.mockResolvedValue({ groups, status: 'live' });
+    const res = await request(await nhlApp()).get('/api/nhl/predictions/game/2026020001');
+    expect(res.headers['cache-control']).toBe(LIVE);
+    expect(res.body).toEqual(groups);   // toujours un tableau pour le client
+  });
+
+  it('match terminé : 6 h', async () => {
+    mockPredictions.buildGameMarketsWithStatus.mockResolvedValue({ groups, status: 'final' });
+    const res = await request(await nhlApp()).get('/api/nhl/predictions/game/2026020001');
+    expect(res.headers['cache-control']).toBe(SIX_HOURS);
+  });
+
+  it('match à venir : 5 min, comme avant', async () => {
+    mockPredictions.buildGameMarketsWithStatus.mockResolvedValue({ groups, status: 'scheduled' });
+    const res = await request(await nhlApp()).get('/api/nhl/predictions/game/2026020001');
+    expect(res.headers['cache-control']).toBe('public, max-age=300, stale-while-revalidate=600');
+  });
+
+  it('les poids personnalisés passent au calcul', async () => {
+    mockPredictions.buildGameMarketsWithStatus.mockResolvedValue({ groups, status: 'scheduled' });
+    await request(await nhlApp()).get('/api/nhl/predictions/game/2026020001?wQuality=50&wHomeIce=10');
+    expect(mockPredictions.buildGameMarketsWithStatus).toHaveBeenCalledWith(
+      '2026020001', expect.objectContaining({ quality: 50, homeIce: 10 }));
+  });
+
+  it('ne cache pas une erreur', async () => {
+    mockPredictions.buildGameMarketsWithStatus.mockRejectedValue(Object.assign(new Error('Game not found'), { status: 404 }));
+    const res = await request(await nhlApp()).get('/api/nhl/predictions/game/2026020001');
+    expect(res.status).toBe(404);
     expect(res.headers['cache-control']).toBe('private, no-store');
   });
 });

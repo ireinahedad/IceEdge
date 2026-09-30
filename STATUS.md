@@ -190,6 +190,11 @@ recovered from Git) and checking each claim against the code and the Git log.
 - ✔ ML research items closed: S1, S2, S3, S5, A2 (measured), A3 (CLV tooling + moneyline
   measure), A5 (closed, inconclusive), A1bis (live odds collection code).
 - ✔ Content engine (mine → check → render → video → log) and daily recap script.
+- ✔ **Live match predictions, phase 1** (2026-09-30, *committed, not yet deployed*): during a
+  game the match page's rule markets start from the current score and the time left
+  (`finalScoreGrid(…, live)`, `liveCtxFromDetail`, `computeGameMarkets(…, live)`), refreshed
+  every 30 s; decided markets show 100/0; finished games show the decided final state (6 h cache).
+  ML toggle disabled while live. The 7 `PlayerPropGrid`s share one boxscore/roster request.
 
 ---
 
@@ -302,6 +307,17 @@ recovered from Git) and checking each claim against the code and the Git log.
 - [ ] A4 (goalie confirmation window) and A6 (team totals, OT, ±2.5) — after A1/A2.
 - [ ] Re-train monthly during the season.
 
+- [ ] **Live predictions, phase 2** (phase 1 shipped 2026-09-30, see `PROJECT_CONTEXT.md`):
+      score effects (trailing ×~1.15, leading ×~0.90, goalie pulled at −1/−2 late — values to
+      CALIBRATE), power play in progress (`situationCode`), live player props
+      (P(≥ N − already done) on the ice time left), and a replay of past games (end of P1, end of
+      P2, 5 min left) measuring Brier at each moment. Phase 1 already inflates regulation ties
+      (`tieBoost`, calibrated on the pre-game OT probability), which covers part of the late
+      empty-net effect — measure before stacking score effects on top.
+- [ ] Deploy live predictions phase 1: **Node (Railway) first, then client (Vercel)**. No Python,
+      no migration. Check on the live site during a game: numbers move every 30 s, a finished
+      period shows 100/0, ML toggle greyed out.
+
 ### 3.6 Scalability — only on trigger (`AUDIT_SCALABILITE_COUTS.md` §3)
 
 | # | What | Trigger |
@@ -373,9 +389,6 @@ Left, in consoles:
   placeholder `rulePct` values in the source. They are never displayed any more (overwritten by
   the server or dropped), but could be stripped.
 
-- Live match view: the 7 `PlayerPropGrid`s (3 on the team page) each fetch the roster and each run
-  their own 30 s boxscore poll — 7 identical requests per tick per viewer. Share one in-flight
-  request in `nhlApiService` (`getGameBoxscore`, `getTeamRoster`). Far from the 300/min limiter.
 - Goalie page header shows skater stats (G / A / PTS / +/-, and "1 A · 0 PTS"): show GAA / SV% / W.
 
 Two routers on `/api/users` (rule written in `app.ts`) · hard-coded Pro price in `ProPage.tsx`
@@ -504,6 +517,11 @@ Carried over from `RESTE_A_FAIRE.md`, `PRE_IOS_PLAN.md` and the pre-freeze audit
 - No local prediction fallback, ever: on failure show "—" and a banner.
 - Rule percentages come from the server only (`/predictions/game|team|player`). A tile with no
   server number is hidden; add new markets in `nhlPredictions.ts`, never as a client list.
+- Live game markets carry NO `factors` / `pctScale`: the client would otherwise recompute every
+  tile from pre-game factors and user weights, erasing the score. A new game market must handle
+  the `live` branch of `computeGameMarkets` (value from the live grid, 0/100 when decided).
+- Live predictions are informational only: never let them touch settlement, `locks_at` or the
+  started-game refusal in `slip.service.ts`.
 - `useNHLData` must return stable functions (`useCallback`) — unstable ones caused the `/nhl-predictions` loop.
 - Never put a secret behind `VITE_`; never log the Odds API URL (key in query string).
 - `sendError` reports 5xx to Sentry except 501/503 — do not add 503 (one event per request

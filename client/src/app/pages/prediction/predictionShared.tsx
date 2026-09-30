@@ -7,7 +7,7 @@
  */
 
 import { useNavigate, useSearchParams } from "react-router";
-import { useCallback, useEffect, useMemo, useState, createContext } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, createContext } from "react";
 import { nhlApiService } from "../../services/nhlApiService";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { useI18n } from "../../i18n";
@@ -26,6 +26,14 @@ import { ErrorState } from "../../components/ErrorState";
  */
 export type RevealMode = "rules" | "ml";
 export const RevealModeCtx = createContext<RevealMode>("rules");
+
+/**
+ * `true` pendant un match EN COURS. Les chiffres des règles partent alors du
+ * score et du temps restant ; le ML, lui, reste un modèle d'avant-match — la
+ * fiche d'un pari masque donc sa section ML plutôt que de montrer un chiffre
+ * qui ignore le score.
+ */
+export const GameLiveCtx = createContext<boolean>(false);
 
 /* ─── Cotes du livre, partagées par toutes les tuiles d'une page ─────────────
  *
@@ -450,8 +458,18 @@ export function NotFound() {
 export function useServerGroups(
   load: () => Promise<MktGroup[]>,
   key: string | undefined,
-): { groups: MktGroup[] | null; failed: boolean; retry: () => void } {
+  /**
+   * Rafraîchissement périodique (match en cours). Les rappels remplacent les
+   * marchés SEULEMENT en cas de succès, sans repasser par le squelette ni par
+   * l'erreur : la page ne clignote pas, et un échec passager garde les chiffres
+   * affichés. `undefined` = pas de rappel (arrêt au coup de sifflet final).
+   */
+  pollMs?: number,
+): { groups: MktGroup[] | null; failed: boolean; retry: () => void; refresh: () => void } {
   const [groups, setGroups] = useState<MktGroup[] | null>(null);
+  // Dernier `load` reçu, pour `refresh` (l'appelant le recrée à chaque rendu).
+  const loadRef = useRef(load);
+  loadRef.current = load;
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -468,8 +486,28 @@ export function useServerGroups(
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, attempt]);
+  useEffect(() => {
+    if (!key || !pollMs) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = () => {
+      load()
+        .then((g) => { if (alive && Array.isArray(g)) { setGroups(g); setFailed(false); } })
+        .catch(() => { /* on garde les derniers chiffres ; prochain essai au tick suivant */ })
+        .finally(() => { if (alive) timer = setTimeout(tick, pollMs); });
+    };
+    timer = setTimeout(tick, pollMs);
+    return () => { alive = false; if (timer) clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, pollMs]);
   const retry = useCallback(() => setAttempt((a) => a + 1), []);
-  return { groups, failed, retry };
+  /** Rechargement silencieux (ex. dernier état au coup de sifflet final). */
+  const refresh = useCallback(() => {
+    loadRef.current()
+      .then((g) => { if (Array.isArray(g)) { setGroups(g); setFailed(false); } })
+      .catch(() => { /* on garde les chiffres affichés */ });
+  }, []);
+  return { groups, failed, retry, refresh };
 }
 
 /** À la place des marchés tant qu'ils ne sont pas là : squelette, ou erreur + « Réessayer ». */

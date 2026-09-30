@@ -577,6 +577,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pred.aiPrediction":   { en: "AI Prediction",         fr: "Prédiction IA" },
   "pred.liveModel":      { en: "Live Model",            fr: "Modèle en direct" },
   "pred.rules":          { en: "Rules",                 fr: "Règles" },
+  "pred.mlPrematchOnly": { en: "Live: rules follow the score — the ML model is pre-game only.", fr: "En direct : les règles suivent le score — le modèle ML est d'avant-match." },
   "pred.chart":          { en: "Chart",                 fr: "Graphique" },
   // ── Charts page ──
   "chart.title":         { en: "Statistics",            fr: "Statistiques" },

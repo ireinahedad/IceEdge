@@ -21,6 +21,8 @@ export interface LiveGameView {
   home: { abbr: string; name: string; logo: string; score?: number; winPct: number | null };
   away: { abbr: string; name: string; logo: string; score?: number; winPct: number | null };
   period?: string; time?: string; overUnder: number;
+  /** `scheduled` | `live` | `final` — c'est lui qui dit si le match est en cours, pas `period`. */
+  status?: string;
 }
 
 /* ─── Bet types & market groups ─────────────── */

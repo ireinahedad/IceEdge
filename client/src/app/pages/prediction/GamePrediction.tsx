@@ -7,7 +7,7 @@
  */
 
 import { useNavigate } from "react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { nhlApiService } from "../../services/nhlApiService";
 import { predictionApiService, isPredictionUnavailable } from "../../services/predictionApiService";
 import { useSport } from "../../context/SportContext";
@@ -17,7 +17,10 @@ import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { PlayerPropGrid } from "./PlayerPropGrid";
 import { LiveGameView, MLProps, MktGroup, buildGameGroups } from "./gameMarkets";
 import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
-import { BetOddsCtx, HeadToHead, NotFound, RevealMode, RevealModeCtx, ServerGroupsPending, StatsBanner, useGameOdds, useServerGroups } from "./predictionShared";
+import { BetOddsCtx, GameLiveCtx, HeadToHead, NotFound, RevealMode, RevealModeCtx, ServerGroupsPending, StatsBanner, useGameOdds, useServerGroups } from "./predictionShared";
+
+/** Rythme des rappels pendant un match : celui de la feuille de match côté serveur. */
+const LIVE_POLL_MS = 30_000;
 
 
 export function GamePrediction({ gameId }: { gameId: string }) {
@@ -29,23 +32,68 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   // defaulting to the club's next one.
   const openTeam = (abbr: string) => navigate(`/stats/prediction/team/${abbr.toLowerCase()}?game=${gameId}`);
   const [gameView, setGameView] = useState<LiveGameView | null>(null);
+  // Match EN COURS selon le statut reçu. (`!!gameView.period` servait avant de
+  // test, mais `period` est aussi renseignée pour un match terminé.)
+  const isLive = gameView?.status === "live";
   // Marchés du moteur de règles, calculés par le serveur — les SEULS pourcentages
   // « règles » de la page. `null` = pas encore là (ou échec, voir `apiFailed`).
-  const { groups: apiGroups, failed: apiFailed, retry: retryApi } =
-    useServerGroups(() => nhlApiService.getGamePredictions(gameId), gameId);
+  // Pendant un match, redemandés toutes les 30 s : ils partent du score actuel
+  // et du temps restant (voir `computeGameMarkets`, serveur).
+  const { groups: apiGroups, failed: apiFailed, retry: retryApi, refresh: refreshApi } =
+    useServerGroups(() => nhlApiService.getGamePredictions(gameId), gameId, isLive ? LIVE_POLL_MS : undefined);
   const [loading, setLoading] = useState(true);
   const [revealMode, setRevealMode] = useState<RevealMode>("rules");
+  // Le ML est un modèle d'avant-match : pendant le match, seules les règles
+  // suivent le score, donc seules elles s'affichent.
+  const shownMode: RevealMode = isLive ? "rules" : revealMode;
 
   // Prédictions ML de TOUTES les tuiles du match, en une requête — chargées à
   // la première bascule en mode ML seulement. `undefined` = pas encore là,
   // `null` = indisponible. Voir `fetchGameMlBundle`.
   const [mlBundle, setMlBundle] = useState<GameMlBundle | null | undefined>(undefined);
   useEffect(() => {
-    if (revealMode !== "ml") return;
+    if (shownMode !== "ml") return;
     let alive = true;
     fetchGameMlBundle(gameId).then(b => { if (alive) setMlBundle(b); });
     return () => { alive = false; };
-  }, [revealMode, gameId]);
+  }, [shownMode, gameId]);
+
+  // En-tête (score, période, horloge) rafraîchi au même rythme que les marchés
+  // tant que le match est en cours. Au coup de sifflet final, plus aucun rappel
+  // (voir juste après pour le dernier état).
+  useEffect(() => {
+    if (!isLive) return;
+    let alive = true;
+    const timer = setInterval(async () => {
+      try {
+        const g = await nhlApiService.getGame(gameId);
+        if (!alive) return;
+        setGameView(v => v && {
+          ...v,
+          status: g.status,
+          period: g.period ? g.period + "P • " + g.clock : undefined,
+          home: { ...v.home, score: g.homeTeam.score },
+          away: { ...v.away, score: g.awayTeam.score },
+        });
+      } catch { /* en-tête inchangé ; nouvel essai au prochain tick */ }
+    }, LIVE_POLL_MS);
+    return () => { alive = false; clearInterval(timer); };
+  }, [isLive, gameId]);
+
+  // Match terminé SOUS NOS YEUX : les marchés passent à l'état final (tout
+  // décidé). Pas tout de suite — les prédictions sont gardées 30 s par le
+  // serveur et 30 s (+ 60 s de `stale-while-revalidate`) par le CDN, donc une
+  // requête immédiate rendrait encore l'état « en direct » et la page resterait
+  // figée dessus. Deux rechargements silencieux, au-delà de chaque cache.
+  const wasLive = useRef(false);
+  useEffect(() => { if (isLive) wasLive.current = true; }, [isLive]);
+  const isFinal = gameView?.status === "final";
+  useEffect(() => {
+    if (!isFinal || !wasLive.current) return;
+    const t1 = setTimeout(refreshApi, LIVE_POLL_MS + 5_000);
+    const t2 = setTimeout(refreshApi, 100_000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [isFinal, refreshApi]);
 
   useEffect(() => {
     async function load() {
@@ -83,6 +131,7 @@ export function GamePrediction({ gameId }: { gameId: string }) {
           period: nhlGame.period ? nhlGame.period + "P • " + nhlGame.clock : undefined,
           time: nhlGame.startTime,
           overUnder: 5.5,
+          status: nhlGame.status,
         });
       } catch (e) {
         console.error("GamePrediction fetch error", e);
@@ -196,7 +245,6 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   if (!gameView) return <NotFound />;
 
   const { home, away } = gameView;
-  const isLive = !!gameView.period;
   const finalPct = home.winPct == null ? null : Math.min(85, Math.max(15, home.winPct));
 
   return (
@@ -226,7 +274,9 @@ export function GamePrediction({ gameId }: { gameId: string }) {
             {home.score !== undefined && <span className="text-white text-3xl font-black">{home.score}</span>}
           </button>
           <div className="flex flex-col items-center gap-1 px-2">
-            {!isLive && <span className="text-[#8a9ea6] text-xs">{gameView.time ?? t("pred.today")}</span>}
+            {!isLive && <span className="text-[#8a9ea6] text-xs">
+              {gameView.status === "final" ? t("chart.gm.final") : gameView.time ?? t("pred.today")}
+            </span>}
             <span className="text-[#8a9ea6] font-bold text-base">VS</span>
             <span className="text-[#4a6070] text-[11px]">O/U {gameView.overUnder}</span>
           </div>
@@ -250,9 +300,10 @@ export function GamePrediction({ gameId }: { gameId: string }) {
 
       {/* ── Market groups ── */}
       <StatsBanner type="game" id={gameId} />
-      <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
+      <PredictionsRevealBar mode={shownMode} onSelect={setRevealMode} mlDisabled={isLive} />
+      <GameLiveCtx.Provider value={isLive}>
       <BetOddsCtx.Provider value={odds}>
-        <RevealModeCtx.Provider value={revealMode}>
+        <RevealModeCtx.Provider value={shownMode}>
           {apiGroups == null
             ? <ServerGroupsPending failed={apiFailed} onRetry={retryApi} />
             : groups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
@@ -312,6 +363,7 @@ export function GamePrediction({ gameId }: { gameId: string }) {
           />
         </RevealModeCtx.Provider>
       </BetOddsCtx.Provider>
+      </GameLiveCtx.Provider>
 
       {/* Les lignes de saison complètes vivent sur la page Statistiques, qui
           est faite pour ça — pas un tableau de plus en bas des paris. */}
