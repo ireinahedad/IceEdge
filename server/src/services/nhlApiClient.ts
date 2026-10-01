@@ -51,9 +51,11 @@ export {
   fetchPlayerLeaders,
   fetchAllTeamsSeason,
   fetchTeamSummaryStats,
+  fetchHeadToHead,
 } from './nhl/teamSeasons';
 export type {
   TeamSummaryStats,
+  HeadToHeadGame,
 } from './nhl/teamSeasons';
 export {
   fetchTeamRestInfo,

@@ -194,7 +194,19 @@ recovered from Git) and checking each claim against the code and the Git log.
   game the match page's rule markets start from the current score and the time left
   (`finalScoreGrid(…, live)`, `liveCtxFromDetail`, `computeGameMarkets(…, live)`), refreshed
   every 30 s; decided markets show 100/0; finished games show the decided final state (6 h cache).
-  ML toggle disabled while live. The 7 `PlayerPropGrid`s share one boxscore/roster request.
+  The 7 `PlayerPropGrid`s share one boxscore/roster request.
+- ✔ **Live predictions, phase 2 part 1** (2026-10-01, *committed, not yet deployed*):
+  · **ML live**: the ML bundle runs the model's own pre-game numbers (home win, P(OT), λ) through
+    the same score + time-left grid (`buildLiveModelMarkets`, `gameMlBundle.applyLive`, 30 s cache).
+    ML toggle is back during games.
+  · **Live player props** (rules + ML): reached thresholds = 100, otherwise P(≥ k − done) on the
+    time left (`box.live.f`, `boxscoreLiveInfo`); first scorer settled from the first goal;
+    players not on the game sheet hidden.
+  · **No fake values**: a started game whose state cannot be read → 503 (no pre-game fallback, no
+    `staleFallback` copy — `res.locals.noStaleFallback`), client keeps the last real numbers with a
+    "data unavailable since HH:MM" banner after 90 s; tiles with no honest number show "—"
+    (`BetOpt.unavailable`; OT player props, ML inputs missing). `X-Stale-Response` now exposed by CORS.
+  · `fetchHeadToHead` (data only — its weight is not measured yet).
 
 ---
 
@@ -307,16 +319,26 @@ recovered from Git) and checking each claim against the code and the Git log.
 - [ ] A4 (goalie confirmation window) and A6 (team totals, OT, ±2.5) — after A1/A2.
 - [ ] Re-train monthly during the season.
 
-- [ ] **Live predictions, phase 2** (phase 1 shipped 2026-09-30, see `PROJECT_CONTEXT.md`):
-      score effects (trailing ×~1.15, leading ×~0.90, goalie pulled at −1/−2 late — values to
-      CALIBRATE), power play in progress (`situationCode`), live player props
-      (P(≥ N − already done) on the ice time left), and a replay of past games (end of P1, end of
-      P2, 5 min left) measuring Brier at each moment. Phase 1 already inflates regulation ties
-      (`tieBoost`, calibrated on the pre-game OT probability), which covers part of the late
-      empty-net effect — measure before stacking score effects on top.
-- [ ] Deploy live predictions phase 1: **Node (Railway) first, then client (Vercel)**. No Python,
-      no migration. Check on the live site during a game: numbers move every 30 s, a finished
-      period shows 100/0, ML toggle greyed out.
+- [ ] **Live predictions, phase 2 part 2 — BLOCKED on network**: the cloud environment must allow
+      `moneypuck.com`, `api-web.nhle.com`, `api.nhle.com` (Environment → Edit → Network access;
+      still denied on 2026-10-01 — a new session may be needed). Rule agreed with the owner: **no
+      constant that is not measured on real games, nothing activated unless a replay shows a gain.**
+      1. MoneyPuck shot files → goals with time/score/empty net (`ml/python/fetch_live_goals.py`).
+      2. Score effects measured per (score gap × period, fine late-P3 slices) by exposure maximum
+         likelihood (observed / expected goals in each state — captures the pulled goalie without
+         modelling it), shrunk to 1 for rare cells → `server/src/services/prediction/liveEffects.json`.
+         Power play from the teams' real PP%/PK%. Check `situationCode` on a real game.
+      3. Engine: `evolveLiveScore` (dynamic programming on the score, 10 s steps) for the final grid,
+         P1/P2 cards and the player-props team factor; `liveCalibration` through the same engine.
+      4. Replay with the real Node engine (`server/scripts/replay-live.ts`): puck drop, end of P1,
+         end of P2, 5 min left, test seasons 2023-24 / 2024-25; Brier + log-loss phase 1 vs phase 2.
+      5. Head-to-head: measured weight in the rules (λ adjustment + win factor) and ML features
+         `h2h_*` (build_dataset + ml_service + featureEngineering via `fetchHeadToHead`), ML retrained
+         with and without, kept only if `backtest_walkforward.py` improves. Python + Node deploy.
+- [ ] Deploy live predictions (phase 1 + phase 2 part 1): merge `claude/laughing-davinci-3ver59`
+      into `master` — Railway (Node) and Vercel redeploy from GitHub. No Python, no migration.
+      Check on the live site during a game: numbers move every 30 s (rules AND ML), a finished
+      period shows 100/0, player cells drop to what is left to reach.
 
 ### 3.6 Scalability — only on trigger (`AUDIT_SCALABILITE_COUTS.md` §3)
 
@@ -522,6 +544,8 @@ Carried over from `RESTE_A_FAIRE.md`, `PRE_IOS_PLAN.md` and the pre-freeze audit
   the `live` branch of `computeGameMarkets` (value from the live grid, 0/100 when decided).
 - Live predictions are informational only: never let them touch settlement, `locks_at` or the
   started-game refusal in `slip.service.ts`.
+- No fake live values (owner's rule, 2026-10-01): a started game with unreadable state is a 503 /
+  "—", never pre-game numbers or a `staleFallback` copy; no new constant that is not measured.
 - `useNHLData` must return stable functions (`useCallback`) — unstable ones caused the `/nhl-predictions` loop.
 - Never put a secret behind `VITE_`; never log the Odds API URL (key in query string).
 - `sendError` reports 5xx to Sentry except 501/503 — do not add 503 (one event per request

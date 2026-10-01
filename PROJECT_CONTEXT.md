@@ -15,7 +15,55 @@ When continuing this project:
 - Verify that what you are implementing is secure
 - At the end of each session, update PROJECT_CONTEXT.md.
 
-Last updated: 2026-09-30
+Last updated: 2026-10-01
+
+## Session 2026-10-01 — Prédictions en direct, Phase 2 (partie 1)
+
+Règle posée par la propriétaire : **aucune valeur fausse ou bidon**, ni en règles
+ni en ML. Sans données en temps réel, pas de chiffre ; aucune nouvelle constante
+qui ne soit mesurée sur de vrais matchs. Les « valeurs de départ » des effets de
+score sont donc abandonnées. La partie 2 (effets de score mesurés, face-à-face,
+rejeu) attend l'ouverture du réseau (`STATUS.md` §3.5).
+
+1. **ML en direct** — le modèle ML est d'avant-match ; ce qui bouge, c'est le
+   score et le temps. `gameMlBundle.applyLive` fait passer SES chiffres
+   d'avant-match (victoire domicile `moneyline|h`, P(prolongation)
+   `game_to_ot|yes|h`, λ domicile + visiteur) dans la grille des règles :
+   `computeGameMarkets(…, live, model)` / `buildLiveModelMarkets`. Pré-match en
+   cache 10 min, direct 30 s (`mlGameBundlesLive`). Un seul chiffre du modèle
+   manquant → toutes les tuiles ML à « — ». Questions que la grille ne recalcule
+   pas (blanchissage, PP…) → `null` en direct. `probability_scale: 'pct'` : en
+   direct 0 et 1 % sont de vraies valeurs, et `mlPctFromResponse` lisait « 1 »
+   comme une fraction. Route : 30 s en direct, 6 h terminé. La liste des tuiles
+   du paquet vient de `buildPrematchGameMarkets` (ne lit jamais l'état du match).
+   Client : bouton ML réactivé, paquet redemandé toutes les 30 s (cache client
+   25 s en direct), « — » après 90 s sans succès ; la fiche n'appelle plus
+   `/predict/ml` pendant un match (preset `null`).
+2. **Paris joueur en direct** — `getGameBoxscore` renvoie `live: { f, label,
+   firstScorerId }` (`boxscoreLiveInfo`, via `fetchGameDetail`, qui gagne
+   `scoring[].playerId` et `situation`). `PlayerPropGrid` : seuil atteint → 100 ;
+   sinon P(≥ k − déjà fait) sur cadence × f (règles : Poisson ; ML : binomiale
+   négative, dispersion × f) ; premier buteur tranché au premier but ; f = 0 →
+   0 ; prolongation (f inconnu) → « — » ; joueurs hors feuille masqués. Aussi
+   pour un match terminé (tout décidé).
+3. **Jamais de faux chiffre** — `computeGameMarketsFor` : match commencé (statut
+   OU heure de mise au jeu passée) et feuille illisible → **503**, plus de repli
+   sur l'avant-match ; feuille « pas commencé » → avant-match au cache court
+   (0–0, 60 min : c'est le même chiffre). La route pose
+   `res.locals.noStaleFallback` : `staleFallback` ne ressert plus une vieille
+   réponse dans ce cas. CORS expose `X-Stale-Response` (le client est sur un
+   autre domaine : l'en-tête était invisible). `getGamePredictions(id, live)`
+   refuse une réponse de repli ; `useServerGroups` rend `staleSince` → bandeau
+   « Données du match indisponibles — ces chiffres datent de HH:MM ».
+   `BetOpt.unavailable` → tuile « — », sans fiche.
+4. **Face-à-face (donnée seule)** — `fetchHeadToHead(team, opp)` dans
+   `nhl/teamSeasons.ts` (saisons en cours et précédente, saison + séries, matchs
+   joués). Son poids sera mesuré avant tout usage.
+
+Tests : +17 (nhlPredictions : 503, heure de mise au jeu, ML en direct,
+`boxscoreLiveInfo` ; gameMlBundle : direct, entrée manquante, 503 ; routes :
+cache du paquet, pas de repli sur 503 ; face-à-face). Serveur 1071 tests, `tsc`
+serveur + client, `npm run build`. Avant-match identique octet pour octet.
 
 ## Session 2026-09-30 — Prédictions en direct (Phase 1)
 

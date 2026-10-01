@@ -28,7 +28,7 @@
  */
 
 import { TtlCache } from './ttlCache';
-import { buildGameMarkets } from './nhlPredictions';
+import { buildPrematchGameMarkets, buildLiveModelMarkets } from './nhlPredictions';
 import { buildGameFeatures } from './featureEngineering';
 import { fetchGameById, fetchTeamRoster } from './nhlApiClient';
 import { mlApiClient, type MLPredictionResult } from './mlApiClient';
@@ -55,6 +55,11 @@ export interface GameMlBundle {
   /** k de la binomiale négative par stat du modèle joueur ; `null` = Poisson. */
   playerDispersion: Record<string, number | null>;
   playerModelAsOf:  string | null;
+  /**
+   * Match commencé : les chiffres des tuiles sont ceux du modèle ML conditionnés
+   * par le score et le temps restant (voir `applyLive`). Absent = avant-match.
+   */
+  live?: { label: string; final: boolean };
 }
 
 /**
@@ -114,7 +119,9 @@ function modelMarket(optionId: string, propType: string | undefined): string {
 }
 
 async function computeBundle(gameId: string): Promise<GameMlBundle> {
-  const [groups, game] = await Promise.all([buildGameMarkets(gameId), fetchGameById(gameId)]);
+  // Les tuiles d'AVANT-MATCH : seule leur liste compte ici, et l'état du match
+  // (feuille momentanément illisible…) ne doit pas bloquer le modèle.
+  const [groups, game] = await Promise.all([buildPrematchGameMarkets(gameId), fetchGameById(gameId)]);
   const home = String(game?.homeTeam?.abbreviation ?? '');
   const away = String(game?.awayTeam?.abbreviation ?? '');
   if (!home || !away) throw Object.assign(new Error('Game not found'), { status: 404 });
@@ -173,6 +180,89 @@ async function computeBundle(gameId: string): Promise<GameMlBundle> {
   };
 }
 
-export function getGameMlBundle(gameId: string): Promise<GameMlBundle> {
-  return bundleCache.wrap(gameId, () => computeBundle(gameId));
+// ─── En direct ────────────────────────────────────────────────────────────────
+//
+// Le modèle ML est un modèle d'AVANT-MATCH : ses features (forme, gardien,
+// absents…) ne bougent pas pendant la partie. Ce qui bouge, c'est le score et
+// le temps restant. On fait donc passer SES chiffres d'avant-match — victoire du
+// domicile, P(prolongation), buts attendus λ — dans la même grille « score
+// actuel + buts restants » que les règles (`buildLiveModelMarkets`). Résultat :
+// le modèle ML conditionné par l'état du match, pas une valeur inventée.
+//
+// S'il manque un seul de ces trois chiffres, AUCUNE tuile ML n'a de valeur en
+// direct (« — ») : mieux vaut rien qu'un chiffre d'avant-match présenté comme
+// actuel. Même règle pour les questions que la grille ne sait pas recalculer
+// (blanchissage, avantage numérique… des pages équipe et joueur).
+
+const LIVE_TTL_MS = 30_000;
+const liveCache = new TtlCache<GameMlBundle>(LIVE_TTL_MS, 500, 'mlGameBundlesLive');
+
+/** Probabilité 0–1 d'une question du paquet, ou null. */
+function probOf(b: GameMlBundle, key: string): number | null {
+  const p = b.byKey[key]?.probability;
+  return typeof p === 'number' && Number.isFinite(p) ? p / 100 : null;
+}
+
+async function applyLive(gameId: string, pre: GameMlBundle): Promise<GameMlBundle> {
+  // Match à venir (et heure de mise au jeu pas atteinte) : rien à recalculer.
+  const game = await fetchGameById(gameId);
+  const startMs = game?.startTimeUTC ? Date.parse(game.startTimeUTC) : NaN;
+  const started = game?.status === 'live' || game?.status === 'final'
+    || (Number.isFinite(startMs) && startMs <= Date.now());
+  if (!started) return pre;
+
+  const preHome = probOf(pre, mlBundleKey('moneyline', null, null, true));
+  const ot      = probOf(pre, mlBundleKey('game_to_ot', null, 'yes', true));
+  const lambdaT = pre.lambdaHome != null && pre.lambdaAway != null ? pre.lambdaHome + pre.lambdaAway : null;
+
+  // L'état du match passe en premier : un match pas encore commencé garde ses
+  // chiffres d'avant-match, et une feuille illisible lève 503 (pas de repli).
+  // Si une entrée du modèle manque, le calcul ne sert qu'à connaître l'état du
+  // match : ses chiffres sont jetés plus bas et toutes les tuiles valent « — ».
+  const res = await buildLiveModelMarkets(gameId, {
+    preHome: preHome ?? 0.5, ot: ot ?? 0.25, lambdaT: lambdaT ?? 6,
+  });
+  if (!res.liveLabel) return pre;
+
+  const nulls = (m: Record<string, unknown>) => Object.fromEntries(Object.keys(m).map(k => [k, null]));
+  const base: GameMlBundle = {
+    ...pre,
+    generatedAt: new Date().toISOString(),
+    results: nulls(pre.results) as Record<string, MLPredictionResult | null>,
+    byKey:   nulls(pre.byKey) as Record<string, MLPredictionResult | null>,
+    live: { label: res.liveLabel, final: res.status === 'final' },
+  };
+  if (preHome == null || ot == null || lambdaT == null) return base;
+
+  // Clé de chaque tuile, pour remplir aussi `byKey` (pages équipe et joueur).
+  const keyOf: Record<string, string> = {};
+  for (const g of res.groups) for (const o of g.options) {
+    if (!o.ml || o.ml.type !== 'game') continue;
+    keyOf[o.id] = mlBundleKey(modelMarket(o.id, o.ml.propType), o.ml.line ?? null,
+                              o.ml.selection ?? null, o.ml.isHome !== false);
+  }
+  const preMoney = Math.round(preHome * 100);
+  for (const g of res.groups) for (const o of g.options) {
+    const prev = pre.results[o.id];
+    if (!(o.id in pre.results) || !prev) continue;   // le modèle ne price pas cette tuile
+    const r: MLPredictionResult = {
+      ...prev,
+      probability: o.rulePct,
+      probability_scale: 'pct',
+      // L'incertitude bootstrap était celle de l'avant-match : elle ne dit plus rien.
+      probability_std: null,
+      uncertainty: null,
+      explanation: `Modèle ML (avant-match : victoire domicile ${preMoney}%, λ=${lambdaT.toFixed(2)}) `
+        + `+ état du match (${res.liveLabel}) — score actuel + buts restants.`,
+    };
+    base.results[o.id] = r;
+    const k = keyOf[o.id];
+    if (k && k in base.byKey) base.byKey[k] = r;
+  }
+  return base;
+}
+
+export async function getGameMlBundle(gameId: string): Promise<GameMlBundle> {
+  const pre = await bundleCache.wrap(gameId, () => computeBundle(gameId));
+  return liveCache.wrap(gameId, () => applyLive(gameId, pre));
 }

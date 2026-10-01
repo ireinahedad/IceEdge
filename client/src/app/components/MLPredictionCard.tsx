@@ -468,6 +468,8 @@ function mlPctFromResponse(data: Record<string, unknown>): number | null {
     typeof data.probability === "number" ? data.probability :
     typeof data.homeWinProb  === "number" ? data.homeWinProb  : null;
   if (raw === null) return null;
+  // Paquet ML en direct : toujours en points, où 0 et 1 % sont de vraies valeurs.
+  if (data.probability_scale === "pct") return Math.round(raw);
   return raw > 1 ? Math.round(raw) : Math.round(raw * 100);
 }
 
@@ -573,20 +575,28 @@ export interface GameMlBundle {
   byId:  Record<string, MLPredictionResult | null>;
   /** Par question (`mlBundleKey`) — pages équipe et joueur. */
   byKey: Record<string, MLPredictionResult | null>;
+  /** Match commencé : chiffres du modèle conditionnés par le score (serveur). */
+  live?: { label: string; final: boolean };
 }
 const BUNDLE_TTL_MS = 5 * 60_000;
-const bundleCache = new Map<string, { at: number; promise: Promise<GameMlBundle | null> }>();
+/** Match en cours : le serveur recalcule toutes les 30 s, on ne garde pas plus. */
+const LIVE_BUNDLE_TTL_MS = 25_000;
+const bundleCache = new Map<string, { at: number; promise: Promise<GameMlBundle | null>; live?: boolean }>();
 
 export function fetchGameMlBundle(gameId: string): Promise<GameMlBundle | null> {
   const hit = bundleCache.get(gameId);
-  if (hit && Date.now() - hit.at < BUNDLE_TTL_MS) return hit.promise;
-  const entry = {
+  const ttl = hit?.live ? LIVE_BUNDLE_TTL_MS : BUNDLE_TTL_MS;
+  if (hit && Date.now() - hit.at < ttl) return hit.promise;
+  const entry: { at: number; promise: Promise<GameMlBundle | null>; live?: boolean } = {
     at: Date.now(),
     promise: (async (): Promise<GameMlBundle | null> => {
       try {
         const r = await fetchWithTimeout(`${ML_BASE}/game/${encodeURIComponent(gameId)}/bundle`);
         if (!r.ok) return null;
-        const data = await r.json() as { results?: Record<string, unknown>; byKey?: Record<string, unknown> };
+        const data = await r.json() as {
+          results?: Record<string, unknown>; byKey?: Record<string, unknown>;
+          live?: { label?: unknown; final?: unknown };
+        };
         if (!data?.results || typeof data.results !== "object") return null;
         const norm = (m: Record<string, unknown> | undefined) => {
           const out: Record<string, MLPredictionResult | null> = {};
@@ -595,13 +605,20 @@ export function fetchGameMlBundle(gameId: string): Promise<GameMlBundle | null> 
           }
           return out;
         };
-        return { byId: norm(data.results), byKey: norm(data.byKey) };
+        const live = data.live && typeof data.live.label === "string"
+          ? { label: data.live.label, final: data.live.final === true }
+          : undefined;
+        return { byId: norm(data.results), byKey: norm(data.byKey), ...(live ? { live } : {}) };
       } catch {
         return null;
       }
     })(),
   };
-  entry.promise.then(b => { if (b === null && bundleCache.get(gameId) === entry) bundleCache.delete(gameId); });
+  entry.promise.then(b => {
+    if (b === null && bundleCache.get(gameId) === entry) bundleCache.delete(gameId);
+    // Match en cours : la promesse ne sert que 25 s (voir `LIVE_BUNDLE_TTL_MS`).
+    if (b?.live && !b.live.final) entry.live = true;
+  });
   bundleCache.set(gameId, entry);
   return entry.promise;
 }

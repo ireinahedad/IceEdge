@@ -126,6 +126,11 @@ export interface BetOpt {
    * 5 %) rendait Demidov et Danault identiques sur « 2+ buts ».
    */
   belowFloor?: number;
+  /**
+   * Aucun chiffre honnête à montrer (match en cours dont l'état est illisible,
+   * prolongation…) : la tuile affiche « — » en gris, en règles comme en ML.
+   */
+  unavailable?: boolean;
 }
 /**
  * Mise en tableau d'un groupe — le jumeau de `MarketTable` côté serveur

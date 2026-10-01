@@ -64,7 +64,14 @@ export interface MLFeatureImportance {
 }
 
 export interface MLPredictionResult {
-  probability:          number;   // integer, 5–95
+  probability:          number;   // integer, 5–95 (en direct : 0–100, voir `probability_scale`)
+  /**
+   * `'pct'` = `probability` est TOUJOURS en points de pourcentage, même ≤ 1.
+   * Posé par le paquet ML en direct (`gameMlBundle.ts`), où 0 % et 1 % sont
+   * de vraies réponses : sans lui, le client lirait « 1 » comme une fraction
+   * (100 %). Absent = réponse du service Python (5–95, sans ambiguïté).
+   */
+  probability_scale?:   'pct';
   confidence:           number;   // integer, 40–95
   feature_importances:  MLFeatureImportance[];
   model_version:        string;

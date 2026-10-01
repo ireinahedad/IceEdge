@@ -44,7 +44,10 @@ app.use(httpLogger);
 // ./cors, partagée avec socket.ts pour que HTTP et WebSocket ne puissent pas
 // diverger — c'était le cas, et le WebSocket cassait dès qu'on configurait
 // deux origines.
-app.use(cors({ origin: corsOriginCallback, credentials: true }));
+// `X-Stale-Response` exposé : le client est sur un AUTRE domaine (Vercel), et
+// le navigateur cache tout en-tête non listé. Sans lui, une réponse de repli
+// (`staleFallback`) — un vieux score pendant un match — passerait pour fraîche.
+app.use(cors({ origin: corsOriginCallback, credentials: true, exposedHeaders: ['X-Stale-Response'] }));
 app.use(cookieParser());
 
 // Stripe webhook — MUST receive the raw body to verify the signature, so it is

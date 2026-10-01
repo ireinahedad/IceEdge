@@ -5,6 +5,7 @@
  */
 
 import * as nhlApi from './nhlApiClient';
+import { boxscoreLiveInfo } from './nhlPredictions';
 
 export class NHLService {
 
@@ -148,9 +149,17 @@ export class NHLService {
   async getGameBoxscore(gameId: string) {
     const full = await nhlApi.fetchGameBoxscoreFull(gameId);
     if (!full) return { state: 'unknown' as const, players: {} };
+    // Match commencé : temps restant et premier buteur, pour que les grilles
+    // recalculent leurs seuils (« 2+ buts » quand le joueur en a déjà un).
+    // Feuille du match illisible → pas de `live`, et la grille affiche « — ».
+    let live: ReturnType<typeof boxscoreLiveInfo> = null;
+    if (full.state === 'live' || full.state === 'final') {
+      try { live = boxscoreLiveInfo(await nhlApi.fetchGameDetail(gameId)); } catch { live = null; }
+    }
     return {
       state: full.state,
       players: Object.fromEntries(full.players),
+      ...(live ? { live } : {}),
     };
   }
 

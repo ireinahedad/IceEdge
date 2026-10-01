@@ -308,7 +308,12 @@ router.get('/predictions/game/:gameId', publicCache(TTL.SHORT), async (req, res)
     if (status === 'final') res.set('Cache-Control', publicPolicy(TTL.FINAL));
     res.json(groups);
   }
-  catch (err: any) { sendError(res, err); }
+  catch (err: any) {
+    // 503 = match commencé dont l'état est illisible. Pas de vieille réponse
+    // en repli (`staleFallback`) : ce serait un score dépassé servi comme frais.
+    if (err?.status === 503) res.locals.noStaleFallback = true;
+    sendError(res, err);
+  }
 });
 
 router.get('/predictions/team/:abbr', publicCache(TTL.SHORT), async (req, res) => {

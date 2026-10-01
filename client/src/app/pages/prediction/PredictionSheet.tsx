@@ -286,10 +286,8 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
           </button>
         )}
 
-        {/* ── 🤖 ML — prédiction du modèle ──
-            Masquée pendant un match en cours : c'est un modèle d'avant-match,
-            son chiffre ignorerait le score (voir `GameLiveCtx`). */}
-        {mlProps && !gameLive ? (
+        {/* ── 🤖 ML — prédiction du modèle ── */}
+        {mlProps ? (
           <MLSection
             type={mlProps.type}
             subjectId={mlProps.subjectId}
@@ -301,7 +299,10 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
             ruleBasedPct={rulePct}
             label={label}
             simple
-            preset={mlPreset}
+            // Match en cours : SEUL le chiffre du paquet (recalculé sur le
+            // score) est valable. Sans lui, « indisponible » — jamais l'appel
+            // `/predict/ml`, qui rendrait l'avant-match sous l'étiquette ML.
+            preset={gameLive && mlPreset === undefined ? null : mlPreset}
           />
         ) : null}
 
@@ -485,21 +486,15 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
 }
 
 /* ─── Reveal-all toggle bar ────────────────────── */
-export function PredictionsRevealBar({ mode, onSelect, mlDisabled = false }: {
-  mode: RevealMode; onSelect: (m: RevealMode) => void;
-  /** Match en cours : le ML est un modèle d'avant-match, seul « Règles » suit le score. */
-  mlDisabled?: boolean;
-}) {
+export function PredictionsRevealBar({ mode, onSelect }: { mode: RevealMode; onSelect: (m: RevealMode) => void }) {
   const { t } = useI18n();
   // Two-segment toggle: Rules | ML. Predictions are always shown; this only
   // switches which source's % every tile displays.
-  const seg = (m: RevealMode, label: string, activeColor: string, disabled = false) => (
+  const seg = (m: RevealMode, label: string, activeColor: string) => (
     <button
-      onClick={() => { if (!disabled) onSelect(m); }}
-      disabled={disabled}
-      title={disabled ? t("pred.mlPrematchOnly") : undefined}
-      className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all ${disabled ? "opacity-40 cursor-not-allowed" : "active:scale-95"}`}
-      style={mode === m && !disabled
+      onClick={() => onSelect(m)}
+      className="px-3 py-1 rounded-full text-[11px] font-semibold transition-all active:scale-95"
+      style={mode === m
         ? { background: activeColor + "22", color: activeColor, border: `1px solid ${activeColor}44` }
         : { background: "transparent", color: "#8a9ea6", border: "1px solid transparent" }}
     >
@@ -507,16 +502,12 @@ export function PredictionsRevealBar({ mode, onSelect, mlDisabled = false }: {
     </button>
   );
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between px-1">
-        <span className="text-[#4a6070] text-[11px] font-semibold uppercase tracking-wider">{t("pred.markets")}</span>
-        <div className="flex items-center gap-0.5 p-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
-          {seg("rules", `📐 ${t("pred.rules")}`, "#86d1ea")}
-          {seg("ml", "🤖 ML", "#a78bfa", mlDisabled)}
-        </div>
+    <div className="flex items-center justify-between px-1">
+      <span className="text-[#4a6070] text-[11px] font-semibold uppercase tracking-wider">{t("pred.markets")}</span>
+      <div className="flex items-center gap-0.5 p-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        {seg("rules", `📐 ${t("pred.rules")}`, "#86d1ea")}
+        {seg("ml", "🤖 ML", "#a78bfa")}
       </div>
-      {/* L'infobulle ne s'affiche pas au doigt : le pourquoi est écrit. */}
-      {mlDisabled && <p className="px-1 text-[10px] text-[#8a9ea6] text-right">{t("pred.mlPrematchOnly")}</p>}
     </div>
   );
 }
@@ -611,9 +602,11 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
   const loadingMl   = mlMode && mlPct === undefined;
   const mlMissing   = mlMode && mlPct === null;
   const shownPct    = mlMode ? (mlPct ?? rulePct) : rulePct;
+  // Pas de chiffre honnête (match en cours illisible…) : « — », en règles comme en ML.
+  const noValue     = !!opt.unavailable && (!mlMode || mlPct == null);
   // Tuile sans chiffre : grise, pour qu'elle ne se lise pas comme une prédiction
   // faible (un « — » coloré en rouge dirait quelque chose, et on ne sait rien).
-  const shownColor  = mlMissing ? "#4a5a60" : pctColor(shownPct);
+  const shownColor  = mlMissing || noValue ? "#4a5a60" : pctColor(shownPct);
   // « <3% » plutôt qu'un plancher qui rendrait tous les petits paris égaux.
   const below       = opt.belowFloor != null && shownPct < opt.belowFloor;
   const shownText   = below ? `<${opt.belowFloor}%` : `${shownPct}%`;
@@ -621,7 +614,8 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
   return (
     <>
       <button
-        onClick={() => setSheet(true)}
+        // Sans chiffre, pas de fiche : elle afficherait un pourcentage.
+        onClick={() => { if (!noValue) setSheet(true); }}
         aria-pressed={inSlip}
         aria-label={compact ? opt.label : undefined}
         title={compact ? opt.label : undefined}
@@ -655,7 +649,7 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
           style={{ background: shownColor + "22", color: shownColor, border: `1px solid ${shownColor}55` }}
           title={mlMissing ? t("ml.unavailable") : undefined}
         >
-          {loadingMl ? "…" : mlMissing ? "—" : shownText}
+          {loadingMl ? "…" : mlMissing || noValue ? "—" : shownText}
         </span>
         {/* Le prix du livre, sous le pourcentage et visiblement à part : ce
             sont deux choses différentes — notre estimation, et une offre. Rien

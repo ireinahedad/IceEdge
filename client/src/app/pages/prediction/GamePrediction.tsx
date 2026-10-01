@@ -21,6 +21,8 @@ import { BetOddsCtx, GameLiveCtx, HeadToHead, NotFound, RevealMode, RevealModeCt
 
 /** Rythme des rappels pendant un match : celui de la feuille de match côté serveur. */
 const LIVE_POLL_MS = 30_000;
+/** Paquet ML en direct non rafraîchi depuis ce délai : ses tuiles passent à « — ». */
+const ML_STALE_MS = 90_000;
 
 
 export function GamePrediction({ gameId }: { gameId: string }) {
@@ -39,24 +41,36 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   // « règles » de la page. `null` = pas encore là (ou échec, voir `apiFailed`).
   // Pendant un match, redemandés toutes les 30 s : ils partent du score actuel
   // et du temps restant (voir `computeGameMarkets`, serveur).
-  const { groups: apiGroups, failed: apiFailed, retry: retryApi, refresh: refreshApi } =
-    useServerGroups(() => nhlApiService.getGamePredictions(gameId), gameId, isLive ? LIVE_POLL_MS : undefined);
+  // En direct, une réponse de repli du serveur (vieux score) est refusée :
+  // `staleSince` signale alors des chiffres datés au lieu de les faire passer
+  // pour actuels.
+  const { groups: apiGroups, failed: apiFailed, retry: retryApi, refresh: refreshApi, staleSince } =
+    useServerGroups(() => nhlApiService.getGamePredictions(gameId, isLive), gameId, isLive ? LIVE_POLL_MS : undefined);
   const [loading, setLoading] = useState(true);
   const [revealMode, setRevealMode] = useState<RevealMode>("rules");
-  // Le ML est un modèle d'avant-match : pendant le match, seules les règles
-  // suivent le score, donc seules elles s'affichent.
-  const shownMode: RevealMode = isLive ? "rules" : revealMode;
 
   // Prédictions ML de TOUTES les tuiles du match, en une requête — chargées à
   // la première bascule en mode ML seulement. `undefined` = pas encore là,
   // `null` = indisponible. Voir `fetchGameMlBundle`.
+  //
+  // Pendant un match, le serveur les recalcule à partir du score et du temps
+  // restant (`gameMlBundle.ts`) : on les redemande au rythme des règles. Un
+  // échec passager garde les derniers chiffres ; au-delà de 90 s sans succès,
+  // les tuiles ML passent à « — » plutôt que d'afficher un état dépassé.
   const [mlBundle, setMlBundle] = useState<GameMlBundle | null | undefined>(undefined);
   useEffect(() => {
-    if (shownMode !== "ml") return;
+    if (revealMode !== "ml") return;
     let alive = true;
-    fetchGameMlBundle(gameId).then(b => { if (alive) setMlBundle(b); });
-    return () => { alive = false; };
-  }, [shownMode, gameId]);
+    let lastOk = Date.now();
+    const load = () => fetchGameMlBundle(gameId).then(b => {
+      if (!alive) return;
+      if (b) { lastOk = Date.now(); setMlBundle(b); }
+      else if (!isLive || Date.now() - lastOk >= ML_STALE_MS) setMlBundle(null);
+    });
+    load();
+    const timer = isLive ? setInterval(load, LIVE_POLL_MS) : undefined;
+    return () => { alive = false; if (timer) clearInterval(timer); };
+  }, [revealMode, gameId, isLive]);
 
   // En-tête (score, période, horloge) rafraîchi au même rythme que les marchés
   // tant que le match est en cours. Au coup de sifflet final, plus aucun rappel
@@ -300,10 +314,19 @@ export function GamePrediction({ gameId }: { gameId: string }) {
 
       {/* ── Market groups ── */}
       <StatsBanner type="game" id={gameId} />
-      <PredictionsRevealBar mode={shownMode} onSelect={setRevealMode} mlDisabled={isLive} />
+      <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
+      {/* Chiffres datés : le rafraîchissement échoue depuis plus de 90 s.
+          On garde les derniers VRAIS chiffres, mais on dit de quand ils sont. */}
+      {isLive && staleSince != null && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+          <p className="text-amber-300 text-[11px] font-semibold">
+            {t("pred.liveStale", { time: new Date(staleSince).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) })}
+          </p>
+        </div>
+      )}
       <GameLiveCtx.Provider value={isLive}>
       <BetOddsCtx.Provider value={odds}>
-        <RevealModeCtx.Provider value={shownMode}>
+        <RevealModeCtx.Provider value={revealMode}>
           {apiGroups == null
             ? <ServerGroupsPending failed={apiFailed} onRetry={retryApi} />
             : groups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}

@@ -444,6 +444,28 @@ export function liveCtxFromDetail(d: any): LiveGameCtx | null {
 }
 
 /**
+ * Ce qu'il faut aux grilles de paris joueur pendant un match (servi avec la
+ * feuille de match, `GET /games/:id/boxscore`).
+ *
+ *   · `f` — part des buts du match qui reste à marquer (même pondération par
+ *     période que les marchés du match). `null` en PROLONGATION : il reste au
+ *     plus un but, dont la probabilité n'est pas mesurée ici — la grille montre
+ *     alors « — » plutôt qu'un chiffre inventé (les seuils déjà atteints restent
+ *     acquis). En fusillade et match terminé : 0, plus aucun but ne compte.
+ *   · `firstScorerId` — premier but hors fusillade, ou null s'il n'y en a pas.
+ *
+ * `null` = état illisible : la grille montre « — », pas la saison.
+ */
+export function boxscoreLiveInfo(detail: any): { f: number | null; label: string; firstScorerId: string | null } | null {
+  const c = liveCtxFromDetail(detail);
+  if (!c) return null;
+  const periodType = String(detail?.periodType ?? '').toUpperCase();
+  const f = c.final || periodType === 'SO' ? 0 : c.state.inOvertime ? null : liveFraction(c.state);
+  const first = (Array.isArray(detail?.scoring) ? detail.scoring : []).find((g: any) => g?.period !== 'SO');
+  return { f, label: c.label, firstScorerId: first?.playerId ? String(first.playerId) : null };
+}
+
+/**
  * Calage de la grille en direct sur l'AVANT-MATCH : λ domicile, λ visiteur,
  * gonflement des nuls.
  *
@@ -491,6 +513,7 @@ function computeGameMarkets(
   teamExtras = false,                      // marchés propres à la vue équipe
   refPenaltyMult = 1,                      // volume de PP selon l'arbitrage (totaux)
   live: LiveGameCtx | null = null,         // match en cours : score actuel + temps restant
+  model: ModelInputs | null = null,        // en direct : chiffres d'avant-match du MODÈLE ML
 ): MarketGroup[] {
   // Abréviations : ce que le service ML attend comme sujet.
   const hAb: string = home.abbreviation ?? homeName;
@@ -581,7 +604,12 @@ function computeGameMarkets(
   // prolongation » dans Match Betting. Calculée ICI parce que la grille en
   // direct en a besoin avant les tuiles. Match terminé en prolongation : le
   // vainqueur est connu, la part vaut 1 ou 0.
-  const preShare = clamp(0.5 + 0.25 * (preHome - 0.5), 0.40, 0.60);
+  // En direct avec `model` (paquet ML), la grille part des chiffres d'avant-match
+  // du modèle ML au lieu de ceux des règles : c'est le modèle ML conditionné par
+  // le score et le temps restant. Voir `buildLiveModelMarkets`.
+  const anchor = live && model ? model : null;
+  const basePre = anchor ? clamp(anchor.preHome, 0.01, 0.99) : preHome;
+  const preShare = clamp(0.5 + 0.25 * (basePre - 0.5), 0.40, 0.60);
   const otShareHome = live?.otWinnerHome != null ? (live.otWinnerHome ? 1 : 0) : preShare;
 
   // ── Loi du score FINAL (prolongation/fusillade comprises) ─────────────────
@@ -594,7 +622,9 @@ function computeGameMarkets(
   // En direct : grille décalée du score actuel, buts restants à λ × f, calée
   // sur la victoire et le P(prolongation) d'avant-match (`liveCalibration`).
   const liveF = live ? liveFraction(live.state) : 1;
-  const cal = live ? liveCalibration(lambdaT, preHome, otProb(preHome), preShare) : null;
+  const cal = live
+    ? liveCalibration(anchor ? anchor.lambdaT : lambdaT, basePre, anchor ? anchor.ot : otProb(preHome), preShare)
+    : null;
   const gH = cal ? cal.lambdaH : lambdaH;
   const gA = cal ? cal.lambdaA : lambdaA;
   const grid = finalScoreGrid(gH, gA, otShareHome, live && cal ? { ...live.state, tieBoost: cal.tieBoost } : undefined);
@@ -1392,6 +1422,13 @@ function makeCtx(
   };
 }
 
+/**
+ * Chiffres d'avant-match du MODÈLE ML (paquet `gameMlBundle.ts`) : victoire du
+ * domicile, P(prolongation), buts attendus du match. En direct, ils remplacent
+ * ceux des règles comme point de départ de la grille du score final.
+ */
+export interface ModelInputs { preHome: number; ot: number; lambdaT: number }
+
 /** Marchés d'un match + son état, pour que la route règle son cache dessus. */
 export interface GameMarketsResult {
   groups: MarketGroup[];
@@ -1401,6 +1438,8 @@ export interface GameMarketsResult {
    * ne bougera).
    */
   status: string;
+  /** Match commencé : « 2–1, 2e, 12:34 restantes ». */
+  liveLabel?: string;
 }
 
 /**
@@ -1420,9 +1459,42 @@ export async function buildGameMarkets(gameId: string, weights?: FactorWeights):
   return (await buildGameMarketsWithStatus(gameId, weights)).groups;
 }
 
-async function computeGameMarketsFor(gameId: string, weights?: FactorWeights): Promise<GameMarketsResult> {
+/**
+ * Les tuiles d'AVANT-MATCH, sans jamais lire l'état du match. Pour le paquet
+ * ML, qui n'en lit que la liste et le marché de chaque tuile : un match en
+ * cours dont la feuille est momentanément illisible ne doit pas l'empêcher.
+ */
+export async function buildPrematchGameMarkets(gameId: string): Promise<MarketGroup[]> {
+  return (await computeGameMarketsFor(gameId, undefined, { prematch: true })).groups;
+}
+
+/**
+ * Marchés EN DIRECT calculés à partir des chiffres du modèle ML (`model`) : même
+ * grille que les règles, autre point de départ. `liveLabel` absent = le match
+ * n'a pas commencé (le paquet ML garde alors ses chiffres d'avant-match).
+ * Feuille de match illisible → erreur 503, jamais un chiffre d'avant-match.
+ */
+export async function buildLiveModelMarkets(gameId: string, model: ModelInputs): Promise<GameMarketsResult> {
+  return computeGameMarketsFor(gameId, undefined, { model });
+}
+
+/** Match commencé mais état illisible : on n'invente rien, la route répond 503. */
+function liveUnavailable(): Error {
+  return Object.assign(new Error('Données du match indisponibles'), { status: 503 });
+}
+
+async function computeGameMarketsFor(
+  gameId: string, weights?: FactorWeights,
+  opts: { prematch?: boolean; model?: ModelInputs } = {},
+): Promise<GameMarketsResult> {
   const game = await fetchGameById(gameId);
-  const status: string = game.status ?? 'scheduled';
+  const listed: string = game.status ?? 'scheduled';
+  // Commencé : selon le statut, OU l'heure de mise au jeu passée. Un match
+  // « à venir » reste en cache 5 min dans `fetchGameById` : sans l'heure, ses
+  // premières minutes seraient servies en avant-match.
+  const startMs = game.startTimeUTC ? Date.parse(game.startTimeUTC) : NaN;
+  const started = listed === 'live' || listed === 'final' || (Number.isFinite(startMs) && startMs <= Date.now());
+  const wantDetail = !opts.prematch && started;
   const homeAbbr = game.homeTeam?.abbreviation ?? game.homeTeam?.abbrev ?? '';
   const awayAbbr = game.awayTeam?.abbreviation ?? game.awayTeam?.abbrev ?? '';
 
@@ -1451,7 +1523,7 @@ async function computeGameMarketsFor(gameId: string, weights?: FactorWeights): P
     getManualFactors(homeAbbr, awayAbbr),
     // Match commencé : la feuille de match (période, horloge, entracte, buts
     // par période). Cache de 30 s partagé avec la page du match.
-    status === 'live' || status === 'final' ? fetchGameDetail(gameId) : Promise.resolve(null),
+    wantDetail ? fetchGameDetail(gameId) : Promise.resolve(null),
   ]);
   const summary  = summaryRes.status  === 'fulfilled' ? summaryRes.value  : {};
   const homeRest = homeRestRes.status === 'fulfilled' ? homeRestRes.value : { restDays: 2, b2b: 0 as 0 | 1, dense3in4: 0 };
@@ -1468,8 +1540,27 @@ async function computeGameMarketsFor(gameId: string, weights?: FactorWeights): P
     : { injuries: { active: false, homeProb: 0.5, note: 'non renseigné' },
         lineup:   { active: false, homeProb: 0.5, note: 'non renseigné' } };
 
-  // Feuille indisponible : repli sur l'avant-match plutôt qu'une erreur.
-  const live = detailRes.status === 'fulfilled' ? liveCtxFromDetail(detailRes.value) : null;
+  // ── État du match ─────────────────────────────────────────────────────────
+  //
+  // Match commencé et feuille illisible → 503. Pas de repli sur l'avant-match :
+  // pendant une partie, ce serait un chiffre faux présenté comme actuel. (Le
+  // client garde ses derniers vrais chiffres et le signale ; voir
+  // `GamePrediction.tsx`.)
+  //
+  // Seule exception : la feuille dit que la partie n'a PAS commencé (heure de
+  // mise au jeu passée, match retardé, ou caches décalés d'une minute). 0–0 avec
+  // 60 minutes à jouer, c'est exactement l'avant-match — servi avec le cache
+  // court d'un match en cours.
+  let live: LiveGameCtx | null = null;
+  let status = listed;
+  if (wantDetail) {
+    if (detailRes.status !== 'fulfilled' || !detailRes.value) throw liveUnavailable();
+    const d = detailRes.value;
+    live = liveCtxFromDetail(d);
+    if (live) status = live.final ? 'final' : 'live';
+    else if (d.status === 'live' || d.status === 'final') throw liveUnavailable();
+    else status = 'live';
+  }
 
   const groups = computeGameMarkets(
     homeTeam, awayTeam,
@@ -1483,10 +1574,9 @@ async function computeGameMarketsFor(gameId: string, weights?: FactorWeights): P
     false,
     refFactor?.multiplier ?? 1,
     live,
+    opts.model ?? null,
   );
-  // Match terminé mais feuille manquante : servi en avant-match, donc surtout
-  // pas figé 6 h — on le redemande au rythme d'un match en cours.
-  return { groups, status: status === 'final' && !live ? 'live' : status };
+  return { groups, status, ...(live ? { liveLabel: live.label } : {}) };
 }
 
 // ─── Public: team predictions (vs league-average opponent) ────────────────────

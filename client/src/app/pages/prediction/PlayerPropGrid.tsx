@@ -187,6 +187,19 @@ function poissonAtLeast(lambda: number, k: number): number {
 }
 
 /**
+ * P(atteindre encore `need`) sur la part restante du match, en % entiers.
+ *
+ * `need ≤ 0` : déjà acquis (100). Cadence restante nulle : plus rien ne peut
+ * arriver (0). Sinon borné à 99 : tant qu'il reste du temps, rien n'est sûr.
+ * `disp` : binomiale négative (`null` = Poisson), comme `nbAtLeast`.
+ */
+function livePct(lambdaLeft: number, need: number, disp: number | null): number {
+  if (need <= 0) return 100;
+  if (!(lambdaLeft > 0)) return 0;
+  return Math.max(0, Math.min(99, Math.round(nbAtLeast(lambdaLeft, need, disp) * 100)));
+}
+
+/**
  * Cadences ML d'un match / d'un club — UNE requête partagée par toutes les
  * grilles de la page (sept grilles, deux alignements). La promesse est gardée
  * 5 min ; un échec n'est pas conservé.
@@ -346,6 +359,13 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
 
   /** `true` seulement quand le serveur dit que le match est en cours. */
   const isLive = box?.state === "live";
+  /**
+   * Match commencé (en cours OU terminé) : les cases partent de ce que le
+   * joueur a déjà fait ce soir et du temps qui reste (`box.live.f`). Sans
+   * `box.live` (état du match illisible), « — » plutôt que la saison.
+   */
+  const inGame = box?.state === "live" || box?.state === "final";
+  const liveInfo = inGame ? box?.live : undefined;
 
   /**
    * Cadences ML — chargées SEULEMENT en mode ML, et une fois pour toute la
@@ -429,6 +449,9 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
       .filter(p => ((p.position ?? "F") === "G") === !!spec.goalies)
       // Arrêts d'un match : seulement le gardien qui joue — voir `goalieFilter`.
       .filter(p => !goalieFilter || goalieFilter.ids.has(p.id))
+      // Match commencé : seulement les joueurs de la feuille de match. Un
+      // joueur hors alignement n'a pas de pari vivant.
+      .filter(p => !inGame || !box?.players || Object.keys(box.players).length === 0 || !!box.players[p.id])
       .map((p) => {
         const gp = Math.max(1, p.gamesPlayed ?? 0);
         const total = seasonTotal(p, spec.field) ?? 0;
@@ -445,8 +468,11 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
         // Ce que le joueur a DÉJÀ accumulé ce soir. `undefined` hors match en
         // cours — et `undefined` n'est pas 0 : « pas de match » et « rien
         // marqué » ne s'affichent pas pareil.
-        const liveLine: BoxscoreLine | undefined = isLive ? box?.players?.[p.id] : undefined;
+        const liveLine: BoxscoreLine | undefined = inGame ? box?.players?.[p.id] : undefined;
         const liveCount = liveLine ? Number(liveLine[spec.liveField] ?? 0) : undefined;
+        // Part du match qui reste (0 = terminé ou fusillade ; `null` = inconnue).
+        const f = liveInfo ? liveInfo.f : null;
+        const done = liveCount ?? 0;
 
         // ── Chiffre ML de chaque case, depuis la cadence du joueur ──────────
         // `undefined` tant que les cadences ne sont pas là (la case attend,
@@ -468,6 +494,16 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
 
         const opts: BetOpt[] = seuils.map((k, i) => {
           const line = k - 0.5;
+          // ── En match : ce qu'il a déjà fait + ce qui reste à jouer ──────────
+          // Seuil atteint → acquis (100). Sinon P(atteindre k − déjà fait) sur la
+          // part restante du match : cadence × f. Temps restant inconnu
+          // (prolongation, état illisible) → « — », jamais la saison.
+          const reachedK = inGame && done >= k;
+          const liveRulePct = !inGame ? null
+            : reachedK ? 100
+            : f == null ? null
+            : livePct(lambda * f, k - done, null);
+          const liveUnavailable = inGame && liveRulePct == null;
           const mlProps: MLProps = {
             type: "player", subjectId: p.id, propType: spec.propType, line,
             // L'effectif affiché est celui de `abbr` : c'est l'équipe du joueur.
@@ -486,16 +522,35 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
             // clé React comme leur jambe de coupon.
             id: `${metric}-${p.id}-${i}`,
             label: `${p.name} · ${k}+ ${t(spec.titleKey)}`,
-            rulePct: poissonAtLeast(lambda, k),
-            ruleNote: t("prop.note", {
-              name: p.name, k: String(k), metric: t(spec.titleKey).toLowerCase(),
-              rate: lambda.toFixed(2), total: String(total), gp: String(gp),
-            }),
+            rulePct: liveRulePct ?? (inGame ? 0 : poissonAtLeast(lambda, k)),
+            ruleNote: inGame && liveRulePct != null && !reachedK
+              ? t("prop.liveNote", {
+                  name: p.name, done: String(done), k: String(k),
+                  left: (lambda * (f ?? 0)).toFixed(2), pct: String(liveRulePct),
+                })
+              : t("prop.note", {
+                  name: p.name, k: String(k), metric: t(spec.titleKey).toLowerCase(),
+                  rate: lambda.toFixed(2), total: String(total), gp: String(gp),
+                }),
             mlProps,
             belowFloor: BELOW_FLOOR,
             mlExternal: true,
+            ...(liveUnavailable ? { unavailable: true } : {}),
             mlPreset: mlRate === undefined ? undefined
               : mlRate === null ? null
+              : inGame
+                ? (reachedK ? preset(100, t("prop.reached"))
+                  : f == null ? null
+                  : (() => {
+                      // Même loi que l'avant-match, sur la part restante : la
+                      // dispersion d'une binomiale négative s'additionne avec
+                      // le temps (moyenne × f, dispersion × f).
+                      const pv = livePct(mlRate * f, k - done, disp == null ? null : disp * f);
+                      return preset(pv, t("prop.liveNote", {
+                        name: p.name, done: String(done), k: String(k),
+                        left: (mlRate * f).toFixed(2), pct: String(pv),
+                      }));
+                    })())
               : (() => {
                   const pv = Math.min(97, Math.round(nbAtLeast(mlRate, k, disp) * 100));
                   return preset(pv, t(labels.note, {
@@ -515,11 +570,33 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
         // apparaît alors à juste titre — c'est le même pari, sur le même match,
         // et il portera le même identifiant de règlement. Sans match choisi,
         // elle disparaît plutôt que de coter une question sans objet.
+        // En match : tranché dès le premier but (100 pour son auteur, 0 pour
+        // les autres). Avant lui, même formule sur la part restante du match ;
+        // temps restant inconnu → « — ».
+        const firstScorer = liveInfo?.firstScorerId ?? null;
+        const leadLive: { rule: number | null; ml: (() => number | null) } | null = !inGame ? null
+          : !liveInfo ? { rule: null, ml: () => null }
+          : firstScorer ? { rule: firstScorer === p.id ? 100 : 0, ml: () => (firstScorer === p.id ? 100 : 0) }
+          : f == null ? { rule: null, ml: () => null }
+          // Plus aucun but à venir (fusillade, match terminé) : personne n'ouvre
+          // le score. `pct` a un plancher à 1 %, d'où ce cas à part.
+          : f === 0 ? { rule: 0, ml: () => 0 }
+          : {
+              rule: spec.leading ? spec.leading.pct(lambda * f) : null,
+              // Part du joueur parmi les buts × P(au moins un but d'ici la fin),
+              // rapportée à celle d'avant-match (G = buts attendus du match, modèle).
+              ml: () => {
+                const g = playerRates?.gameGoals, fg = playerRates?.firstGoal;
+                if (g == null || fg == null || !(g > 0)) return null;
+                return Math.round(fg * ((1 - Math.exp(-g * f)) / (1 - Math.exp(-g))) * 100);
+              },
+            };
         const lead = spec.leading && gameId
           ? {
               id: `${metric}-${p.id}-first`,
               label: `${p.name} · ${t(spec.leading.titleKey)}`,
-              rulePct: spec.leading.pct(lambda),
+              rulePct: leadLive ? (leadLive.rule ?? 0) : spec.leading.pct(lambda),
+              ...(leadLive && leadLive.rule == null ? { unavailable: true } : {}),
               ruleNote: t("prop.firstNote", {
                 name: p.name, rate: lambda.toFixed(2),
                 any: String(poissonAtLeast(lambda, 1)),
@@ -535,6 +612,10 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
               // requête « 1+ but » qu'il envoyait en mode ML.
               mlPreset: rates === undefined ? undefined
                 : playerRates?.firstGoal == null ? null
+                : leadLive ? (() => {
+                    const pv = leadLive.ml();
+                    return pv == null ? null : preset(pv, liveInfo?.label ?? "");
+                  })()
                 : (() => {
                     const pv = Math.round(playerRates.firstGoal! * 100);
                     return preset(pv, t("prop.mlFirstNote", {
@@ -563,7 +644,7 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
     // de marché (31 appels de prédiction par bascule, 429 dès le premier
     // aller-retour). `lang` est la seule chose dont dépendent les libellés.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rosters, abbr, metric, gameId, lang, spec, isLive, box, goalieFilter, rates]);
+  }, [rosters, abbr, metric, gameId, lang, spec, inGame, liveInfo, box, goalieFilter, rates]);
 
   // Tirs bloqués non câblés pour cette équipe (amont muet, ou saison à zéro
   // match) : la grille entière vaudrait « 3 % » sur chaque case, ce qui n'est
@@ -648,7 +729,7 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
                       est posée entre le nom et les paris, parce qu'elle change
                       la lecture de toutes les cases qui suivent : « 2+ buts »
                       ne veut pas dire la même chose selon qu'il en a déjà un. */}
-                  {isLive && (
+                  {inGame && (
                     <th className="font-semibold px-2 py-2 text-center whitespace-nowrap text-red-400">
                       {t("prop.tonight")}
                     </th>
@@ -671,7 +752,7 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
                           40 matchs et l'autre sur 3. */}
                       <span className="text-[#5c6f63] ml-1.5 tabular-nums">({r.total})</span>
                     </td>
-                    {isLive && (
+                    {inGame && (
                       <td className="px-2 py-1.5 text-center tabular-nums font-bold"
                           style={{ color: (r.liveCount ?? 0) > 0 ? "#f87171" : "#5c6f63" }}>
                         {r.liveCount ?? "—"}

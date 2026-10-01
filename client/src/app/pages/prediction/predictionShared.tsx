@@ -28,10 +28,9 @@ export type RevealMode = "rules" | "ml";
 export const RevealModeCtx = createContext<RevealMode>("rules");
 
 /**
- * `true` pendant un match EN COURS. Les chiffres des règles partent alors du
- * score et du temps restant ; le ML, lui, reste un modèle d'avant-match — la
- * fiche d'un pari masque donc sa section ML plutôt que de montrer un chiffre
- * qui ignore le score.
+ * `true` pendant un match EN COURS. Règles et ML partent alors du score et du
+ * temps restant (serveur). La fiche d'un pari n'accepte plus que le chiffre ML
+ * du paquet recalculé : sans lui, « indisponible », jamais l'avant-match.
  */
 export const GameLiveCtx = createContext<boolean>(false);
 
@@ -465,8 +464,19 @@ export function useServerGroups(
    * affichés. `undefined` = pas de rappel (arrêt au coup de sifflet final).
    */
   pollMs?: number,
-): { groups: MktGroup[] | null; failed: boolean; retry: () => void; refresh: () => void } {
+): {
+  groups: MktGroup[] | null; failed: boolean; retry: () => void; refresh: () => void;
+  /**
+   * Rafraîchissement périodique en échec depuis au moins `STALE_AFTER_MS` :
+   * l'heure du dernier succès (les chiffres affichés datent de là). `null` =
+   * chiffres à jour. Pendant un match, la page le dit au lieu de laisser croire
+   * que de vieux chiffres sont actuels.
+   */
+  staleSince: number | null;
+} {
   const [groups, setGroups] = useState<MktGroup[] | null>(null);
+  const [lastOkAt, setLastOkAt] = useState<number | null>(null);
+  const [lastErrAt, setLastErrAt] = useState<number | null>(null);
   // Dernier `load` reçu, pour `refresh` (l'appelant le recrée à chaque rendu).
   const loadRef = useRef(load);
   loadRef.current = load;
@@ -478,7 +488,7 @@ export function useServerGroups(
     setGroups(null);
     setFailed(false);
     load()
-      .then((g) => { if (alive) setGroups(Array.isArray(g) ? g : []); })
+      .then((g) => { if (alive) { setGroups(Array.isArray(g) ? g : []); setLastOkAt(Date.now()); } })
       .catch((e: unknown) => {
         console.warn("[prediction] marchés du serveur indisponibles :", e);
         if (alive) setFailed(true);
@@ -492,8 +502,9 @@ export function useServerGroups(
     let timer: ReturnType<typeof setTimeout> | undefined;
     const tick = () => {
       load()
-        .then((g) => { if (alive && Array.isArray(g)) { setGroups(g); setFailed(false); } })
-        .catch(() => { /* on garde les derniers chiffres ; prochain essai au tick suivant */ })
+        .then((g) => { if (alive && Array.isArray(g)) { setGroups(g); setFailed(false); setLastOkAt(Date.now()); } })
+        // On garde les derniers chiffres (vrais, mais datés) ; `staleSince` le dira.
+        .catch(() => { if (alive) setLastErrAt(Date.now()); })
         .finally(() => { if (alive) timer = setTimeout(tick, pollMs); });
     };
     timer = setTimeout(tick, pollMs);
@@ -504,11 +515,16 @@ export function useServerGroups(
   /** Rechargement silencieux (ex. dernier état au coup de sifflet final). */
   const refresh = useCallback(() => {
     loadRef.current()
-      .then((g) => { if (Array.isArray(g)) { setGroups(g); setFailed(false); } })
-      .catch(() => { /* on garde les chiffres affichés */ });
+      .then((g) => { if (Array.isArray(g)) { setGroups(g); setFailed(false); setLastOkAt(Date.now()); } })
+      .catch(() => { setLastErrAt(Date.now()); });
   }, []);
-  return { groups, failed, retry, refresh };
+  const staleSince = lastOkAt != null && lastErrAt != null && lastErrAt > lastOkAt
+    && lastErrAt - lastOkAt >= STALE_AFTER_MS ? lastOkAt : null;
+  return { groups, failed, retry, refresh, staleSince };
 }
+
+/** Au-delà, des chiffres « en direct » non rafraîchis sont signalés comme datés. */
+const STALE_AFTER_MS = 90_000;
 
 /** À la place des marchés tant qu'ils ne sont pas là : squelette, ou erreur + « Réessayer ». */
 export function ServerGroupsPending({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
