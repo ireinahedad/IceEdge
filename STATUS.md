@@ -320,7 +320,7 @@ recovered from Git) and checking each claim against the code and the Git log.
 - [ ] A4 (goalie confirmation window) and A6 (team totals, OT, ±2.5) — after A1/A2.
 - [ ] Re-train monthly during the season.
 
-- [ ] **Live predictions, phase 2 part 2 — BLOCKED on network**: the cloud environment must allow
+- [ ] **Live predictions, phase 2 part 2 — BLOCKED on network** (detail: `LIVE_PREDICTIONS_PLAN.md`): the cloud environment must allow
       `moneypuck.com`, `api-web.nhle.com`, `api.nhle.com` (Environment → Edit → Network access;
       still denied on 2026-10-01 — a new session may be needed). Rule agreed with the owner: **no
       constant that is not measured on real games, nothing activated unless a replay shows a gain.**
@@ -591,7 +591,7 @@ Carried over from `RESTE_A_FAIRE.md`, `PRE_IOS_PLAN.md` and the pre-freeze audit
 | `DEPLOYMENT.md`, `MONITORING.md`, `BACKUP_DR.md`, `SECRET_ROTATION.md`, `SAISIE_MANUELLE.md` | Runbooks | live |
 | `APPLE_PLAN.md` | iOS roadmap | live, not started |
 | `PRE_IOS_PLAN.md` | Completed web plan, kept because ~20 source files cite its decisions | completed (design record) |
-| `AUDIT_SCALABILITE_COUTS.md`, `QA_TEST_PLAN.md`, `ml/REFACTOR_PLAN.md` | Detailed plans behind §3.5–3.7 | live |
+| `AUDIT_SCALABILITE_COUTS.md`, `QA_TEST_PLAN.md`, `ml/REFACTOR_PLAN.md`, `LIVE_PREDICTIONS_PLAN.md` | Detailed plans behind §3.5–3.7 | live |
 | `RAPPORT_TESTS_CHARGE_2026-09-18.md`, `loadtest/*` | Load-test report and procedure | reference |
 | `loadtest/qa-dynamic/` | Dynamic QA script (local stack) behind §3.7 | live |
 | `content/*` | Content engine docs | live |
