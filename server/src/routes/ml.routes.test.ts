@@ -71,6 +71,9 @@ const features = {
 vi.mock('../services/featureEngineering', () => features);
 vi.mock('../services/bestBets.service', () => ({ getBestBets: vi.fn(async () => ({ bets: [], meta: {} })) }));
 
+const getGameMlBundle = vi.fn();
+vi.mock('../services/gameMlBundle', () => ({ getGameMlBundle: (id: string) => getGameMlBundle(id) }));
+
 async function predictApp() {
   const { default: routes } = await import('./ml.routes');
   const a = express();
@@ -234,5 +237,36 @@ describe('/api/predict/single — pas de chiffre inventé, et les réserves sont
     const res = await post({ marketType: 'goalie_saves_ou', playerId: '8471234', line: 27.5, selection: 'over' });
     expect(res.status).toBe(200);
     expect(res.body.caveat).toBeUndefined();
+  });
+});
+
+// Paquet ML d'un match : en direct, ses chiffres suivent le score (recalcul
+// toutes les 30 s côté serveur) ; une fois le match terminé, ils sont figés.
+describe('GET /api/predict/game/:id/bundle — cache selon l\'état du match', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  const bundle = { gameId: '2026020001', results: {}, byKey: {} };
+
+  it('avant-match : 2 min', async () => {
+    getGameMlBundle.mockResolvedValue(bundle);
+    const res = await request(await predictApp()).get('/api/predict/game/2026020001/bundle');
+    expect(res.headers['cache-control']).toBe('public, max-age=120, stale-while-revalidate=600');
+  });
+
+  it('en direct : 30 s', async () => {
+    getGameMlBundle.mockResolvedValue({ ...bundle, live: { label: '1–0', final: false } });
+    const res = await request(await predictApp()).get('/api/predict/game/2026020001/bundle');
+    expect(res.headers['cache-control']).toBe('public, max-age=30, stale-while-revalidate=30');
+  });
+
+  it('terminé : 6 h', async () => {
+    getGameMlBundle.mockResolvedValue({ ...bundle, live: { label: 'final', final: true } });
+    const res = await request(await predictApp()).get('/api/predict/game/2026020001/bundle');
+    expect(res.headers['cache-control']).toBe('public, max-age=21600, stale-while-revalidate=43200');
+  });
+
+  it('état du match illisible : 503, le client affiche « — »', async () => {
+    getGameMlBundle.mockRejectedValue(Object.assign(new Error('Données du match indisponibles'), { status: 503 }));
+    const res = await request(await predictApp()).get('/api/predict/game/2026020001/bundle');
+    expect(res.status).toBe(503);
   });
 });

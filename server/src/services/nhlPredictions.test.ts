@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildGameMarkets, marginDistribution } from './nhlPredictions';
+import {
+  buildGameMarkets, buildGameMarketsWithStatus, buildLiveModelMarkets, buildPrematchGameMarkets,
+  boxscoreLiveInfo, liveCtxFromDetail, marginDistribution,
+} from './nhlPredictions';
 
 /**
  * Ce que ce fichier prouve : CHAQUE tuile de la page match annonce le marché ML
@@ -31,7 +34,9 @@ import { buildGameMarkets, marginDistribution } from './nhlPredictions';
 // déclarations, donc un `const` ordinaire serait dans sa zone morte au moment
 // où la fabrique s'exécute. (Le tsconfig est en commonjs — pas de `await`
 // de premier niveau pour contourner.)
-const { TEAM } = vi.hoisted(() => ({
+const { TEAM, DETAILS } = vi.hoisted(() => ({
+  /** Feuilles de match des scénarios en direct, par identifiant de match. */
+  DETAILS: {} as Record<string, any>,
   TEAM: (abbr: string, gf: number, ga: number, win: number) => ({
     id: abbr.toLowerCase(), abbreviation: abbr, name: `${abbr} Club`,
     winPct: win, gamesPlayed: 60, goalsForPerGame: gf, goalsAgainstPerGame: ga,
@@ -41,11 +46,18 @@ const { TEAM } = vi.hoisted(() => ({
 }));
 
 vi.mock('./nhlApiClient', () => ({
-  fetchGameById: vi.fn(async () => ({
-    id: '2026020001',
+  fetchGameById: vi.fn(async (id: string) => ({
+    id,
+    // Sans feuille de match : pas de statut, comme avant (avant-match).
+    ...(DETAILS[id] ? { status: DETAILS[id].listed ?? DETAILS[id].status } : {}),
+    ...(DETAILS[id]?.startTimeUTC ? { startTimeUTC: DETAILS[id].startTimeUTC } : {}),
     homeTeam: { abbreviation: 'TOR', name: 'Toronto' },
     awayTeam: { abbreviation: 'MTL', name: 'Montreal' },
   })),
+  fetchGameDetail: vi.fn(async (id: string) => {
+    if (!DETAILS[id]) throw new Error('not found');
+    return DETAILS[id];
+  }),
   fetchTeamByAbbr: vi.fn(async (a: string) =>
     a === 'TOR' ? TEAM('TOR', 3.3, 2.8, 58) : TEAM('MTL', 2.8, 3.2, 44)),
   fetchTeamSummaryStats: vi.fn(async () => ({})),
@@ -337,5 +349,234 @@ describe('tableaux de la page match — cohérence des règles', () => {
     const sum = pctOf('wm-1') + pctOf('wm-2') + pctOf('wm-3p');
     expect(Math.abs(sum - (pctOf('ml-home') + pctOf('ml-home-ot')))).toBeLessThanOrEqual(2);
     expect(Math.abs(pctOf('wm-2') + pctOf('wm-3p') - pctOf('pl-home-m15'))).toBeLessThanOrEqual(1);
+  });
+});
+
+// ─── Match en cours ───────────────────────────────────────────────────────────
+
+/** Feuille de match minimale, au format de `fetchGameDetail`. */
+function detail(
+  status: 'live' | 'final', period: number, clock: string, home: number, away: number,
+  byPeriod: Array<[number, number]>, extra: Record<string, unknown> = {},
+) {
+  return {
+    status, period, clock, periodType: period > 3 ? 'OT' : 'REG', inIntermission: false,
+    home: { score: home }, away: { score: away },
+    periods: byPeriod.map(([h, a], i) => ({ label: String(i + 1), home: h, away: a })),
+    ...extra,
+  };
+}
+
+describe('liveCtxFromDetail — état du match', () => {
+  it('pas commencé → null (la page garde l\'avant-match)', () => {
+    expect(liveCtxFromDetail({ status: 'scheduled', period: null })).toBeNull();
+    expect(liveCtxFromDetail({ status: 'live', period: null, home: { score: 0 }, away: { score: 0 } })).toBeNull();
+    expect(liveCtxFromDetail(null)).toBeNull();
+  });
+
+  it('temps restant : (3 − période) × 1200 + horloge ; f pondéré par période', () => {
+    const c = liveCtxFromDetail(detail('live', 2, '10:00', 1, 0, [[1, 0], [0, 0]]))!;
+    expect(c.state.secondsLeftReg).toBe(1200 + 600);
+    expect(c.state.inOvertime).toBe(false);
+    // Moitié de la 2e (0.365 / 2) + toute la 3e (0.330).
+    expect(c.state.f).toBeCloseTo(0.365 / 2 + 0.330, 10);
+    // À la mise au jeu : tout reste à jouer.
+    expect(liveCtxFromDetail(detail('live', 1, '20:00', 0, 0, []))!.state.f).toBeCloseTo(1, 10);
+  });
+
+  it('entracte = fin de période (l\'horloge y affiche la pause)', () => {
+    const c = liveCtxFromDetail(detail('live', 1, '17:45', 1, 1, [[1, 1]], { inIntermission: true }))!;
+    expect(c.clockSec).toBe(0);
+    expect(c.state.secondsLeftReg).toBe(2400);
+    expect(c.label).toContain('entracte');
+  });
+
+  it('prolongation, fusillade, prolongation des séries', () => {
+    expect(liveCtxFromDetail(detail('live', 4, '03:00', 2, 2, [[1, 0], [0, 1], [1, 1]]))!.state)
+      .toMatchObject({ inOvertime: true, secondsLeftReg: 0, f: 0 });
+    expect(liveCtxFromDetail(detail('live', 5, '00:00', 2, 2, [[1, 0], [0, 1], [1, 1]], { periodType: 'SO' }))!.label)
+      .toContain('fusillade');
+    expect(liveCtxFromDetail(detail('live', 6, '12:00', 1, 1, [[1, 0], [0, 1], [0, 0]]))!.state.inOvertime).toBe(true);
+  });
+
+  it('match terminé en prolongation : nul à 60 minutes, vainqueur connu', () => {
+    const c = liveCtxFromDetail(detail('final', 4, '00:00', 3, 2, [[1, 0], [0, 1], [1, 1]], { lastPeriodType: 'OT' }))!;
+    expect(c.final).toBe(true);
+    expect(c.state).toMatchObject({ homeScore: 2, awayScore: 2, inOvertime: true });
+    expect(c.otWinnerHome).toBe(true);
+  });
+
+  it('match terminé, buts par période incohérents : repli sur le score final', () => {
+    const c = liveCtxFromDetail(detail('final', 4, '00:00', 3, 2, [], { lastPeriodType: 'SO' }))!;
+    expect(c.state).toMatchObject({ homeScore: 3, awayScore: 2, inOvertime: false });
+    expect(c.otWinnerHome).toBeUndefined();
+  });
+});
+
+describe('buildGameMarkets — en direct', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  /** Un identifiant par scénario : le cache de 30 s est indexé par match. */
+  const load = async (id: string, d: any) => {
+    DETAILS[id] = d;
+    const { groups, status } = await buildGameMarketsWithStatus(id);
+    const byId = new Map(groups.flatMap(g => g.options.map(o => [o.id, o] as const)));
+    const pctOf = (oid: string) => { const o = byId.get(oid); expect(o, oid).toBeDefined(); return o!.rulePct; };
+    return { groups, status, byId, pctOf };
+  };
+
+  it('mené 4–0 en 3e, 5 minutes à jouer : la victoire suit le score', async () => {
+    const { pctOf, status } = await load('L-4-0', detail('live', 3, '05:00', 0, 4, [[0, 2], [0, 1], [0, 1]]));
+    expect(status).toBe('live');
+    expect(pctOf('mw-away')).toBeGreaterThanOrEqual(95);
+    expect(pctOf('mw-home')).toBeLessThanOrEqual(5);
+  });
+
+  it('0–0 à la mise au jeu : Moneyline, Match Betting et prolongation = avant-match', async () => {
+    const pre = new Map((await buildGameMarkets('2026020001')).flatMap(g => g.options.map(o => [o.id, o.rulePct] as const)));
+    const { pctOf } = await load('L-start', detail('live', 1, '20:00', 0, 0, []));
+    for (const id of ['mw-home', 'mw-away', 'ml-home', 'ml-away', 'ml-home-ot', 'ml-away-ot', 'ot-yes', 'p3-draw']) {
+      expect(Math.abs(pctOf(id) - pre.get(id)!), id).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('marchés décidés : période terminée, BTTS acquis, Over atteint', async () => {
+    const { pctOf } = await load('L-decided', detail('live', 2, '12:34', 2, 1, [[1, 0], [1, 1]]));
+    // 1–0 après la 1re.
+    expect([pctOf('p1-home'), pctOf('p1-draw'), pctOf('p1-away')]).toEqual([100, 0, 0]);
+    expect(pctOf('btts-yes')).toBe(100);
+    expect(pctOf('btts-no')).toBe(0);
+    expect(pctOf('o25')).toBe(100);
+    expect(pctOf('u25')).toBe(0);
+    // Un seul but en 1re : Over 0.5 gagné, Over 1.5 perdu.
+    expect(pctOf('p1-o05')).toBe(100);
+    expect(pctOf('p1-o15')).toBe(0);
+    // Un score déjà dépassé ne peut plus sortir.
+    expect(pctOf('sc-home-1-0')).toBe(0);
+    expect(pctOf('tt-home-o15')).toBe(100);
+  });
+
+  it('partitions à 100 en direct', async () => {
+    const { groups, pctOf } = await load('L-partition', detail('live', 2, '08:00', 1, 1, [[0, 1], [1, 0]]));
+    const near100 = (x: number, tol: number, what: string) => {
+      expect(x, what).toBeGreaterThanOrEqual(100 - tol);
+      expect(x, what).toBeLessThanOrEqual(100 + tol);
+    };
+    near100(pctOf('ml-home') + pctOf('ml-away') + pctOf('ml-home-ot') + pctOf('ml-away-ot'), 2, 'Match Betting');
+    near100(pctOf('mw-home') + pctOf('mw-away'), 0, 'Moneyline');
+    near100(pctOf('p2-home') + pctOf('p2-draw') + pctOf('p2-away'), 2, 'P2');
+    near100(pctOf('p3-home') + pctOf('p3-draw') + pctOf('p3-away'), 2, 'P3');
+    for (const tag of ['15', '25', '35']) {
+      near100(pctOf(`pl-home-m${tag}`) + pctOf(`pl-away-p${tag}`), 1, `puck ${tag}`);
+      near100(pctOf(`pl-away-m${tag}`) + pctOf(`pl-home-p${tag}`), 1, `puck ${tag}`);
+    }
+    for (const tag of ['25', '35', '45', '55', '65', '75']) near100(pctOf(`o${tag}`) + pctOf(`u${tag}`), 1, `total ${tag}`);
+    const cs = groups.find(g => g.id === 'correctscore')!;
+    near100(cs.options.reduce((s, o) => s + o.rulePct, 0), 1.5, 'score exact');
+    // −1.5 ≤ victoire ; P3 = Match Betting.
+    expect(pctOf('pl-home-m15')).toBeLessThanOrEqual(pctOf('ml-home') + pctOf('ml-home-ot'));
+    expect(pctOf('p3-draw')).toBe(pctOf('ot-yes'));
+  });
+
+  it('aucune tuile en direct ne porte de facteurs (le client afficherait l\'avant-match)', async () => {
+    const { groups } = await load('L-nofactors', detail('live', 1, '15:00', 1, 0, [[1, 0]]));
+    const withFactors = groups.flatMap(g => g.options).filter(o => o.factors || o.pctScale != null || o.factorGroup);
+    expect(withFactors.map(o => o.id)).toEqual([]);
+    // Le ML et les notes restent.
+    expect(groups.flatMap(g => g.options).every(o => o.id.endsWith('-draw') || o.ml)).toBe(true);
+    expect(groups.find(g => g.id === 'moneyline')!.options[0].ruleNote).toContain('en direct');
+  });
+
+  it('prolongation en cours : plus de victoire en temps réglementaire', async () => {
+    const { pctOf } = await load('L-ot', detail('live', 4, '03:00', 2, 2, [[1, 0], [0, 1], [1, 1]]));
+    expect(pctOf('ml-home')).toBe(0);
+    expect(pctOf('ml-away')).toBe(0);
+    expect(pctOf('ot-yes')).toBe(100);
+    expect(pctOf('ml-home-ot') + pctOf('ml-away-ot')).toBe(100);
+    expect(pctOf('mw-home')).toBe(pctOf('ml-home-ot'));
+  });
+
+  it('match terminé : tout est décidé, statut final', async () => {
+    const { groups, status, pctOf } = await load('F-ot', detail('final', 4, '00:00', 3, 2, [[1, 0], [0, 1], [1, 1]], { lastPeriodType: 'OT' }));
+    expect(status).toBe('final');
+    const undecided = groups.flatMap(g => g.options).filter(o => o.rulePct !== 0 && o.rulePct !== 100);
+    expect(undecided.map(o => o.id)).toEqual([]);
+    expect(pctOf('ml-home-ot')).toBe(100);
+    expect(pctOf('p3-draw')).toBe(100);
+    expect(pctOf('sc-home-3-2')).toBe(100);
+    expect(pctOf('wm-1')).toBe(100);
+  });
+
+  it('match commencé, feuille illisible : erreur 503, JAMAIS l\'avant-match', async () => {
+    DETAILS['F-nodetail'] = { status: 'final' };   // statut lu, feuille illisible
+    await expect(buildGameMarketsWithStatus('F-nodetail')).rejects.toMatchObject({ status: 503 });
+    DETAILS['L-nodetail'] = { status: 'live', period: 2 };   // pas de score
+    await expect(buildGameMarketsWithStatus('L-nodetail')).rejects.toMatchObject({ status: 503 });
+  });
+
+  it('heure de mise au jeu passée, feuille « pas commencé » : avant-match au cache court', async () => {
+    DETAILS['S-late'] = { listed: 'scheduled', status: 'scheduled', startTimeUTC: '2026-01-01T00:00:00Z' };
+    const { status, liveLabel } = await buildGameMarketsWithStatus('S-late');
+    expect(status).toBe('live');
+    expect(liveLabel).toBeUndefined();
+  });
+
+  it('heure de mise au jeu passée : la feuille est lue même si le statut dit « à venir »', async () => {
+    DETAILS['S-started'] = { ...detail('live', 1, '12:00', 1, 0, [[1, 0]]), listed: 'scheduled', startTimeUTC: '2026-01-01T00:00:00Z' };
+    const { status, liveLabel } = await buildGameMarketsWithStatus('S-started');
+    expect(status).toBe('live');
+    expect(liveLabel).toContain('1–0');
+  });
+
+  it('la liste d\'avant-match du paquet ML ne dépend pas de l\'état du match', async () => {
+    DETAILS['F-prematch'] = { status: 'final' };   // feuille illisible
+    const groups = await buildPrematchGameMarkets('F-prematch');
+    expect(groups.find(g => g.id === 'moneyline')!.options[0].factors).toBeDefined();
+  });
+});
+
+describe('buildLiveModelMarkets — le ML en direct', () => {
+  it('mise au jeu : les chiffres du modèle ML, tels quels', async () => {
+    DETAILS['M-start'] = detail('live', 1, '20:00', 0, 0, []);
+    const { groups, liveLabel } = await buildLiveModelMarkets('M-start', { preHome: 0.62, ot: 0.21, lambdaT: 6.2 });
+    const byId = new Map(groups.flatMap(g => g.options.map(o => [o.id, o.rulePct] as const)));
+    expect(liveLabel).toBeDefined();
+    expect(Math.abs(byId.get('mw-home')! - 62)).toBeLessThanOrEqual(1);
+    expect(Math.abs(byId.get('ot-yes')! - 21)).toBeLessThanOrEqual(1);
+  });
+
+  it('mené 0–3 à 5 minutes de la fin : le favori du modèle ne l\'est plus', async () => {
+    DETAILS['M-late'] = detail('live', 3, '05:00', 0, 3, [[0, 1], [0, 1], [0, 1]]);
+    const { groups } = await buildLiveModelMarkets('M-late', { preHome: 0.7, ot: 0.22, lambdaT: 6.2 });
+    const home = groups.find(g => g.id === 'moneyline')!.options[0].rulePct;
+    expect(home).toBeLessThanOrEqual(3);
+  });
+
+  it('match pas commencé : pas d\'état, le paquet garde l\'avant-match', async () => {
+    const res = await buildLiveModelMarkets('2026020001', { preHome: 0.6, ot: 0.2, lambdaT: 6 });
+    expect(res.liveLabel).toBeUndefined();
+  });
+});
+
+describe('boxscoreLiveInfo — ce que reçoivent les grilles joueur', () => {
+  it('part restante, premier buteur hors fusillade', () => {
+    const d = {
+      ...detail('live', 2, '10:00', 1, 1, [[1, 0], [0, 1]]),
+      scoring: [{ period: '1', playerId: '8478402' }, { period: '2', playerId: '8471675' }],
+    };
+    const info = boxscoreLiveInfo(d)!;
+    expect(info.f).toBeCloseTo(0.365 / 2 + 0.330, 10);
+    expect(info.firstScorerId).toBe('8478402');
+  });
+
+  it('prolongation : temps restant inconnu (null) ; fusillade et match terminé : 0', () => {
+    expect(boxscoreLiveInfo(detail('live', 4, '03:00', 2, 2, [[1, 0], [0, 1], [1, 1]]))!.f).toBeNull();
+    expect(boxscoreLiveInfo({ ...detail('live', 5, '00:00', 2, 2, [[1, 0], [0, 1], [1, 1]]), periodType: 'SO' })!.f).toBe(0);
+    expect(boxscoreLiveInfo(detail('final', 3, '00:00', 3, 1, [[1, 0], [1, 1], [1, 0]]))!.f).toBe(0);
+  });
+
+  it('pas de but : pas de premier buteur ; feuille illisible : null', () => {
+    expect(boxscoreLiveInfo(detail('live', 1, '15:00', 0, 0, []))!.firstScorerId).toBeNull();
+    expect(boxscoreLiveInfo({ status: 'live' })).toBeNull();
   });
 });

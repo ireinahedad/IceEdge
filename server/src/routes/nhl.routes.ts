@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { NHLService } from '../services/nhl.service';
-import { buildGameMarkets, buildTeamMarkets, buildPlayerMarkets } from '../services/nhlPredictions';
+import { buildGameMarketsWithStatus, buildTeamMarkets, buildPlayerMarkets } from '../services/nhlPredictions';
 import { FactorWeights } from '../services/predictionFactors';
 import { publicCache, privateCache, publicPolicy, TTL } from '../middleware/httpCache.middleware';
 import { staleFallback } from '../middleware/staleFallback.middleware';
@@ -296,9 +296,24 @@ function parseWeights(q: any): FactorWeights | undefined {
 // l'URL, donc de la clé de cache). Le cache HTTP est ici le SEUL — ces trois
 // routes recalculent tout à chaque appel, y compris les prédictions dérivées.
 // 5 min : les données sources (équipes, joueurs) ne bougent pas plus vite.
+//
+// Sauf pour un match COMMENCÉ, dont les chiffres partent du score et du temps
+// restant : 30 s en direct (rythme de la feuille de match), 6 h une fois tout
+// décidé. Même mécanique que `cacheByGameStatus` — en-tête posé avant
+// `res.json`, donc prioritaire sur le middleware. La réponse reste un tableau.
 router.get('/predictions/game/:gameId', publicCache(TTL.SHORT), async (req, res) => {
-  try { res.json(await buildGameMarkets(req.params.gameId, parseWeights(req.query))); }
-  catch (err: any) { sendError(res, err); }
+  try {
+    const { groups, status } = await buildGameMarketsWithStatus(req.params.gameId, parseWeights(req.query));
+    if (status === 'live')  res.set('Cache-Control', publicPolicy(TTL.LIVE));
+    if (status === 'final') res.set('Cache-Control', publicPolicy(TTL.FINAL));
+    res.json(groups);
+  }
+  catch (err: any) {
+    // 503 = match commencé dont l'état est illisible. Pas de vieille réponse
+    // en repli (`staleFallback`) : ce serait un score dépassé servi comme frais.
+    if (err?.status === 503) res.locals.noStaleFallback = true;
+    sendError(res, err);
+  }
 });
 
 router.get('/predictions/team/:abbr', publicCache(TTL.SHORT), async (req, res) => {

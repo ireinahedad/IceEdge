@@ -7,7 +7,7 @@
  */
 
 import { useNavigate, useSearchParams } from "react-router";
-import { useCallback, useEffect, useMemo, useState, createContext } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, createContext } from "react";
 import { nhlApiService } from "../../services/nhlApiService";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { useI18n } from "../../i18n";
@@ -26,6 +26,13 @@ import { ErrorState } from "../../components/ErrorState";
  */
 export type RevealMode = "rules" | "ml";
 export const RevealModeCtx = createContext<RevealMode>("rules");
+
+/**
+ * `true` pendant un match EN COURS. Règles et ML partent alors du score et du
+ * temps restant (serveur). La fiche d'un pari n'accepte plus que le chiffre ML
+ * du paquet recalculé : sans lui, « indisponible », jamais l'avant-match.
+ */
+export const GameLiveCtx = createContext<boolean>(false);
 
 /* ─── Cotes du livre, partagées par toutes les tuiles d'une page ─────────────
  *
@@ -450,8 +457,29 @@ export function NotFound() {
 export function useServerGroups(
   load: () => Promise<MktGroup[]>,
   key: string | undefined,
-): { groups: MktGroup[] | null; failed: boolean; retry: () => void } {
+  /**
+   * Rafraîchissement périodique (match en cours). Les rappels remplacent les
+   * marchés SEULEMENT en cas de succès, sans repasser par le squelette ni par
+   * l'erreur : la page ne clignote pas, et un échec passager garde les chiffres
+   * affichés. `undefined` = pas de rappel (arrêt au coup de sifflet final).
+   */
+  pollMs?: number,
+): {
+  groups: MktGroup[] | null; failed: boolean; retry: () => void; refresh: () => void;
+  /**
+   * Rafraîchissement périodique en échec depuis au moins `STALE_AFTER_MS` :
+   * l'heure du dernier succès (les chiffres affichés datent de là). `null` =
+   * chiffres à jour. Pendant un match, la page le dit au lieu de laisser croire
+   * que de vieux chiffres sont actuels.
+   */
+  staleSince: number | null;
+} {
   const [groups, setGroups] = useState<MktGroup[] | null>(null);
+  const [lastOkAt, setLastOkAt] = useState<number | null>(null);
+  const [lastErrAt, setLastErrAt] = useState<number | null>(null);
+  // Dernier `load` reçu, pour `refresh` (l'appelant le recrée à chaque rendu).
+  const loadRef = useRef(load);
+  loadRef.current = load;
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -460,7 +488,7 @@ export function useServerGroups(
     setGroups(null);
     setFailed(false);
     load()
-      .then((g) => { if (alive) setGroups(Array.isArray(g) ? g : []); })
+      .then((g) => { if (alive) { setGroups(Array.isArray(g) ? g : []); setLastOkAt(Date.now()); } })
       .catch((e: unknown) => {
         console.warn("[prediction] marchés du serveur indisponibles :", e);
         if (alive) setFailed(true);
@@ -468,9 +496,35 @@ export function useServerGroups(
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, attempt]);
+  useEffect(() => {
+    if (!key || !pollMs) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = () => {
+      load()
+        .then((g) => { if (alive && Array.isArray(g)) { setGroups(g); setFailed(false); setLastOkAt(Date.now()); } })
+        // On garde les derniers chiffres (vrais, mais datés) ; `staleSince` le dira.
+        .catch(() => { if (alive) setLastErrAt(Date.now()); })
+        .finally(() => { if (alive) timer = setTimeout(tick, pollMs); });
+    };
+    timer = setTimeout(tick, pollMs);
+    return () => { alive = false; if (timer) clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, pollMs]);
   const retry = useCallback(() => setAttempt((a) => a + 1), []);
-  return { groups, failed, retry };
+  /** Rechargement silencieux (ex. dernier état au coup de sifflet final). */
+  const refresh = useCallback(() => {
+    loadRef.current()
+      .then((g) => { if (Array.isArray(g)) { setGroups(g); setFailed(false); setLastOkAt(Date.now()); } })
+      .catch(() => { setLastErrAt(Date.now()); });
+  }, []);
+  const staleSince = lastOkAt != null && lastErrAt != null && lastErrAt > lastOkAt
+    && lastErrAt - lastOkAt >= STALE_AFTER_MS ? lastOkAt : null;
+  return { groups, failed, retry, refresh, staleSince };
 }
+
+/** Au-delà, des chiffres « en direct » non rafraîchis sont signalés comme datés. */
+const STALE_AFTER_MS = 90_000;
 
 /** À la place des marchés tant qu'ils ne sont pas là : squelette, ou erreur + « Réessayer ». */
 export function ServerGroupsPending({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {

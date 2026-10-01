@@ -3,7 +3,7 @@
  * officielles, leaders et résumé des équipes. Point d'entrée public : `../nhlApiClient.ts`.
  */
 
-import { currentSeason, fetchNHL, fetchStats, getCached, parseToiMinutes, setCached } from './core';
+import { currentSeason, previousSeason, fetchNHL, fetchStats, getCached, parseToiMinutes, setCached } from './core';
 
 /**
  * Last 6 NHL regular seasons of per-player stats for a team — powers the
@@ -220,6 +220,58 @@ export async function fetchTeamOpponentSplits(abbr: string, season: string): Pro
   };
   setCached(cacheKey, out, 30 * 60_000);
   return out;
+}
+
+/** Un match déjà joué entre deux équipes, vu du club demandé (`team`). */
+export interface HeadToHeadGame {
+  gameId:   string;
+  date:     string;
+  isHome:   boolean;
+  goalsFor: number;
+  goalsAgainst: number;
+  /** `REG` | `OT` | `SO`. */
+  lastPeriodType: string;
+}
+
+/**
+ * Les derniers matchs JOUÉS entre `team` et `opp` (saison en cours puis
+ * précédente, saison régulière et séries), du plus récent au plus ancien, vus
+ * de `team`. Source : le calendrier du club (`club-schedule-season`), déjà lu
+ * par `fetchTeamSeasonOfficial`.
+ *
+ * Donnée seule pour l'instant : son poids dans les règles et le modèle ML sera
+ * MESURÉ sur l'historique avant d'être utilisé (voir `STATUS.md`). Une saison
+ * illisible est simplement absente ; aucune valeur n'est inventée.
+ */
+export async function fetchHeadToHead(team: string, opp: string, limit = 10): Promise<HeadToHeadGame[]> {
+  const t = team.toUpperCase(), o = opp.toUpperCase();
+  const cacheKey = `h2h_${t}_${o}`;
+  const cached = getCached<HeadToHeadGame[]>(cacheKey);
+  if (cached) return cached;
+
+  const out: HeadToHeadGame[] = [];
+  for (const season of [currentSeason(), previousSeason()]) {
+    try {
+      const sched = await fetchNHL<any>(`v1/club-schedule-season/${t}/${season}`);
+      for (const g of sched.games ?? []) {
+        if (g.gameType !== 2 && g.gameType !== 3) continue;
+        const home = g.homeTeam?.abbrev, away = g.awayTeam?.abbrev;
+        if (!((home === t && away === o) || (home === o && away === t))) continue;
+        const hs = g.homeTeam?.score, as = g.awayTeam?.score;
+        if (hs == null || as == null) continue;   // pas encore joué
+        const isHome = home === t;
+        out.push({
+          gameId: String(g.id), date: String(g.gameDate ?? ''), isHome,
+          goalsFor: isHome ? hs : as, goalsAgainst: isHome ? as : hs,
+          lastPeriodType: String(g.gameOutcome?.lastPeriodType ?? 'REG'),
+        });
+      }
+    } catch { /* saison illisible : absente */ }
+  }
+  out.sort((a, b) => b.date.localeCompare(a.date));
+  const recent = out.slice(0, limit);
+  setCached(cacheKey, recent, 30 * 60_000);
+  return recent;
 }
 
 /**

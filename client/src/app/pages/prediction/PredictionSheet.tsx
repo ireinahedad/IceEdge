@@ -20,7 +20,7 @@ import { FramedLabel } from "../../components/brand/FramedLabel";
 import { BetOpt, MLProps, MktGroup, MktTable, RuleFactor, buildLLMDataContext, llmCacheId, loadLlmCache, saveLlmCache, scaledRulePct, settlementFields } from "./gameMarkets";
 import { pctColor } from "../../data/pctScale";
 import { blendFactors, getFamilyWeights } from "../../services/ruleWeightsService";
-import { BetOddsCtx, RevealMode, RevealModeCtx } from "./predictionShared";
+import { BetOddsCtx, GameLiveCtx, RevealMode, RevealModeCtx } from "./predictionShared";
 import { priceForBet } from "../../services/gameOdds";
 import { useOddsFormat } from "../../context/OddsFormatContext";
 import { openBet } from "../../services/bookmakers";
@@ -119,6 +119,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   // bas) : pas de question de suivi sur une analyse qui n'existe pas.
   const llmFailed = llmText.startsWith("❌") || llmText.startsWith("⚙️");
   const ruleColor = pctColor(rulePct);
+  const gameLive = useContext(GameLiveCtx);
 
   // Fall back to fetching the server prediction if the parent hasn't yet.
   const [ownServerPct, setOwnServerPct] = useState<number | undefined>(serverPct);
@@ -298,7 +299,10 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
             ruleBasedPct={rulePct}
             label={label}
             simple
-            preset={mlPreset}
+            // Match en cours : SEUL le chiffre du paquet (recalculé sur le
+            // score) est valable. Sans lui, « indisponible » — jamais l'appel
+            // `/predict/ml`, qui rendrait l'avant-match sous l'étiquette ML.
+            preset={gameLive && mlPreset === undefined ? null : mlPreset}
           />
         ) : null}
 
@@ -598,9 +602,11 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
   const loadingMl   = mlMode && mlPct === undefined;
   const mlMissing   = mlMode && mlPct === null;
   const shownPct    = mlMode ? (mlPct ?? rulePct) : rulePct;
+  // Pas de chiffre honnête (match en cours illisible…) : « — », en règles comme en ML.
+  const noValue     = !!opt.unavailable && (!mlMode || mlPct == null);
   // Tuile sans chiffre : grise, pour qu'elle ne se lise pas comme une prédiction
   // faible (un « — » coloré en rouge dirait quelque chose, et on ne sait rien).
-  const shownColor  = mlMissing ? "#4a5a60" : pctColor(shownPct);
+  const shownColor  = mlMissing || noValue ? "#4a5a60" : pctColor(shownPct);
   // « <3% » plutôt qu'un plancher qui rendrait tous les petits paris égaux.
   const below       = opt.belowFloor != null && shownPct < opt.belowFloor;
   const shownText   = below ? `<${opt.belowFloor}%` : `${shownPct}%`;
@@ -608,7 +614,8 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
   return (
     <>
       <button
-        onClick={() => setSheet(true)}
+        // Sans chiffre, pas de fiche : elle afficherait un pourcentage.
+        onClick={() => { if (!noValue) setSheet(true); }}
         aria-pressed={inSlip}
         aria-label={compact ? opt.label : undefined}
         title={compact ? opt.label : undefined}
@@ -642,7 +649,7 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
           style={{ background: shownColor + "22", color: shownColor, border: `1px solid ${shownColor}55` }}
           title={mlMissing ? t("ml.unavailable") : undefined}
         >
-          {loadingMl ? "…" : mlMissing ? "—" : shownText}
+          {loadingMl ? "…" : mlMissing || noValue ? "—" : shownText}
         </span>
         {/* Le prix du livre, sous le pourcentage et visiblement à part : ce
             sont deux choses différentes — notre estimation, et une offre. Rien

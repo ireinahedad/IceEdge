@@ -891,7 +891,13 @@ router.get('/game/:gameId/bundle', predictLimiter, async (req: Request, res: Res
   if (!/^\d{6,12}$/.test(gameId)) return res.status(400).json({ error: 'invalid gameId' });
   try {
     const bundle = await getGameMlBundle(gameId);
-    res.set('Cache-Control', 'public, max-age=120, stale-while-revalidate=600');
+    // En direct, les chiffres suivent le score (recalculés toutes les 30 s) ;
+    // une fois le match terminé, ils ne bougeront plus.
+    res.set('Cache-Control', bundle.live?.final
+      ? 'public, max-age=21600, stale-while-revalidate=43200'
+      : bundle.live
+        ? 'public, max-age=30, stale-while-revalidate=30'
+        : 'public, max-age=120, stale-while-revalidate=600');
     res.json(bundle);
   } catch (err: any) {
     if (err?.status === 404) return res.status(404).json({ error: 'Game not found' });

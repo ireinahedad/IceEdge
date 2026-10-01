@@ -577,6 +577,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pred.aiPrediction":   { en: "AI Prediction",         fr: "Prédiction IA" },
   "pred.liveModel":      { en: "Live Model",            fr: "Modèle en direct" },
   "pred.rules":          { en: "Rules",                 fr: "Règles" },
+  "pred.liveStale":      { en: "Live game data unavailable — these numbers date from {time}.", fr: "Données du match indisponibles — ces chiffres datent de {time}." },
   "pred.chart":          { en: "Chart",                 fr: "Graphique" },
   // ── Charts page ──
   "chart.title":         { en: "Statistics",            fr: "Statistiques" },
@@ -826,6 +827,10 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "prop.live":           { en: "LIVE",                  fr: "EN DIRECT" },
   "prop.tonight":        { en: "Tonight",               fr: "Ce soir" },
   "prop.reached":        { en: "Already reached this game", fr: "Déjà atteint dans ce match" },
+  "prop.liveNote":       {
+    en: "Live: {name} already has {done} tonight; {left} expected over the time left → P({k}+) = {pct}%.",
+    fr: "En direct : {name} en a déjà {done} ce soir ; {left} attendus sur le temps restant → P({k}+) = {pct} %.",
+  },
   "prop.firstNote":      {
     en: "{name} scores in a game {any}% of the time. Roughly one goal in six is the game's first, so opening the scoring is far rarer than scoring at all. Season rate: {rate} goals/game.",
     fr: "{name} marque dans {any} % de ses matchs. Environ un but sur six est le premier du match, donc ouvrir le score est bien plus rare que marquer. Cadence de saison : {rate} but/match.",

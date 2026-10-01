@@ -485,6 +485,9 @@ export async function fetchGameDetail(gameId: string): Promise<any> {
       time:     g?.timeInPeriod ?? '',
       teamAbbr: g?.teamAbbrev?.default ?? '',
       scorer:   g?.name?.default ?? '',
+      // Identifiant NHL du buteur : c'est lui qui tranche « premier buteur »
+      // pendant le match (le nom seul ne se compare pas sûrement à l'effectif).
+      playerId: g?.playerId != null ? String(g.playerId) : null,
       assists:  (g?.assists ?? []).map((a: any) => a?.name?.default ?? '').filter(Boolean),
       strength: g?.strength ?? 'ev',
       isHome:   !!g?.isHome,
@@ -578,6 +581,12 @@ export async function fetchGameDetail(gameId: string): Promise<any> {
     periodType: L.periodDescriptor?.periodType ?? null,
     clock: L.clock?.timeRemaining ?? null,
     inIntermission: !!L.clock?.inIntermission,
+    // Situation EN COURS (avantage numérique, gardien retiré) : `situationCode`
+    // = gardien visiteur, patineurs visiteur, patineurs domicile, gardien
+    // domicile (« 1451 » = avantage domicile à 5 contre 4). Absente hors direct.
+    situation: L.situation
+      ? { code: String(L.situation.situationCode ?? ''), secondsRemaining: Number(L.situation.secondsRemaining ?? NaN) }
+      : null,
     lastPeriodType: L.gameOutcome?.lastPeriodType ?? null,
     home,
     away,

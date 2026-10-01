@@ -129,6 +129,12 @@ export interface GameBoxscoreResponse {
   state: "scheduled" | "live" | "final" | "unknown";
   /** Indexé par identifiant de joueur. */
   players: Record<string, BoxscoreLine>;
+  /**
+   * Match commencé (serveur, `boxscoreLiveInfo`) : part des buts du match qui
+   * reste à jouer (`f`, `null` en prolongation), et premier buteur. Absent =
+   * état du match illisible — la grille affiche « — », pas la saison.
+   */
+  live?: { f: number | null; label: string; firstScorerId: string | null };
 }
 
 // ── Single game detail (game charts page) ───────────────────────────────────
@@ -246,6 +252,51 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/**
+ * Comme `get`, mais refuse une réponse de REPLI (`X-Stale-Response`, posé par
+ * `staleFallback` côté serveur quand l'amont est tombé). Pour un match en
+ * cours, une vieille réponse est un score dépassé : l'appelant doit le savoir
+ * plutôt que l'afficher comme actuel.
+ */
+async function getFresh<T>(path: string): Promise<T> {
+  if (!BASE_URL) throw new Error('VITE_NHL_API_URL is not configured');
+  const res = await fetchWithTimeout(`${BASE_URL}${path}`, {
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    const msg = await res.text().catch(() => res.statusText);
+    throw new Error(`NHL API ${res.status}: ${msg}`);
+  }
+  if (res.headers.get('X-Stale-Response')) throw new Error('NHL API: réponse de repli (données non à jour)');
+  return res.json() as Promise<T>;
+}
+
+/**
+ * GET partagé : les appels simultanés sur le même chemin attendent UNE requête,
+ * et la réponse sert encore `memoMs` après son arrivée.
+ *
+ * Pourquoi : sur la page d'un match, les sept `PlayerPropGrid` demandent chacune
+ * la feuille de match (toutes les 30 s en direct) et l'effectif — sept requêtes
+ * identiques par tick et par visiteur. Leurs minuteurs restent alignés, puisque
+ * toutes se résolvent sur la même promesse. Un échec n'est jamais mémorisé.
+ */
+const shared = new Map<string, { promise: Promise<unknown>; until: number }>();
+function sharedGet<T>(path: string, memoMs: number): Promise<T> {
+  const now = Date.now();
+  for (const [k, e] of shared) if (e.until < now) shared.delete(k);
+  const hit = shared.get(path);
+  if (hit) return hit.promise as Promise<T>;
+  const promise = get<T>(path);
+  // En vol : jamais expiré tant qu'elle n'a pas répondu.
+  const entry = { promise, until: Infinity };
+  shared.set(path, entry);
+  promise.then(
+    () => { entry.until = Date.now() + memoMs; },
+    () => { if (shared.get(path) === entry) shared.delete(path); },
+  );
+  return promise;
+}
+
 export const nhlApiService = {
   getGamesByDate: (date?: string): Promise<NHLGame[]> => {
     const d = date || new Date().toISOString().split('T')[0];
@@ -286,8 +337,9 @@ export const nhlApiService = {
    * tant que le match est en cours, 6 h une fois terminé ; inutile d'ajouter un
    * cache ici, il masquerait la fraîcheur qu'on vient d'obtenir.
    */
+  // Partagée entre les grilles de la page (5 s : bien sous le rappel de 30 s).
   getGameBoxscore: (gameId: string): Promise<GameBoxscoreResponse> =>
-    get<GameBoxscoreResponse>(`/games/${gameId}/boxscore`),
+    sharedGet<GameBoxscoreResponse>(`/games/${gameId}/boxscore`, 5_000),
 
   /**
    * Cadences des paris joueur (mode ML), pour les deux alignements d'un match
@@ -301,8 +353,9 @@ export const nhlApiService = {
   getStartingGoalies: (gameId: string): Promise<Record<string, string | null>> =>
     get<Record<string, string | null>>(`/games/${gameId}/starting-goalies`),
 
+  // Partagé entre les grilles ; un effectif ne bouge pas en cours de page.
   getTeamRoster: (abbr: string): Promise<NHLPlayerInfo[]> =>
-    get<NHLPlayerInfo[]>(`/teams/${abbr}/roster`),
+    sharedGet<NHLPlayerInfo[]>(`/teams/${abbr}/roster`, 5 * 60_000),
 
   // Bet365-style charts — last 6 seasons of per-player stats (skaters + goalies).
   getTeamPlayerSeasons: (abbr: string): Promise<TeamPlayerSeasons> =>
@@ -352,7 +405,9 @@ export const nhlApiService = {
     get<NHLStandings[]>('/standings'),
 
   // ── Predictions (rule-based market groups from backend) ──────────────────
-  getGamePredictions:   (gameId: string)   => get<any[]>(`/predictions/game/${gameId}${weightsQuery()}`),
+  /** `live` : match en cours — une réponse de repli est refusée (voir `getFresh`). */
+  getGamePredictions:   (gameId: string, live = false) =>
+    (live ? getFresh : get)<any[]>(`/predictions/game/${gameId}${weightsQuery()}`),
   getTeamPredictions:   (teamAbbr: string) => get<any[]>(`/predictions/team/${teamAbbr}`),
   getPlayerPredictions: (playerId: string) => get<any[]>(`/predictions/player/${playerId}`),
 };

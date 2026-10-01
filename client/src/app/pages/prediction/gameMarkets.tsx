@@ -21,6 +21,8 @@ export interface LiveGameView {
   home: { abbr: string; name: string; logo: string; score?: number; winPct: number | null };
   away: { abbr: string; name: string; logo: string; score?: number; winPct: number | null };
   period?: string; time?: string; overUnder: number;
+  /** `scheduled` | `live` | `final` — c'est lui qui dit si le match est en cours, pas `period`. */
+  status?: string;
 }
 
 /* ─── Bet types & market groups ─────────────── */
@@ -124,6 +126,11 @@ export interface BetOpt {
    * 5 %) rendait Demidov et Danault identiques sur « 2+ buts ».
    */
   belowFloor?: number;
+  /**
+   * Aucun chiffre honnête à montrer (match en cours dont l'état est illisible,
+   * prolongation…) : la tuile affiche « — » en gris, en règles comme en ML.
+   */
+  unavailable?: boolean;
 }
 /**
  * Mise en tableau d'un groupe — le jumeau de `MarketTable` côté serveur
