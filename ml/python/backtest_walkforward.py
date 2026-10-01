@@ -3499,6 +3499,81 @@ def run_score_v2(df, seasons, search_trials: int, use_cache: bool = True):
     return out
 
 
+# ── Recalibration de la pente, ajustée sur le PASSÉ seulement (2026-10-01) ──
+#
+# `--market-gap` mesure encore une pente > 1 après la v2 (1,28 ± 0,06) : le
+# modèle reste trop prudent. γ (forme cohérente, étirer l'écart des λ) a échoué
+# hors échantillon le 2026-09-27. Ce mode teste la forme la plus simple, en
+# walk-forward STRICT : pour chaque saison S, logit p' = a + b·logit p, avec
+# (a, b) ajustés sur les prédictions hors échantillon des saisons < S
+# uniquement (au moins RECAL_MIN_SEASONS saisons), puis appliqués à S.
+# Prédictions telles que le service les produit (`_eval_v2` : τ, prolongation
+# dépendante de l'affiche, features par défaut du module).
+# Critère fixé AVANT le run : log-loss moneyline z <= −2 et gain sur >= 70 %
+# des saisons. Même adoptée, elle ne toucherait que le moneyline : les prix
+# de puck line et de totaux sortiraient d'une distribution non recalibrée.
+
+RECAL_MIN_SEASONS = 3
+RECAL_REPORT = f"{MODELS}/recal_report.json"
+
+
+def run_recal(df, seasons, search_trials: int, use_cache: bool = True):
+    need = ["home_reg_score", "away_reg_score", "went_to_ot", "total_goals"]
+    atk, dfn = list(TS.ATK_COLS), list(TS.DEF_COLS)
+    base = base_score_params(search_trials)
+    P = {}
+    for s in seasons:
+        prior = df[df["season"] < s].dropna(subset=need).reset_index(drop=True)
+        cur = df[df["season"] == s].dropna(subset=need).reset_index(drop=True)
+        if len(cur) < 50 or len(prior) < 800:
+            continue
+        cut_p = int(len(prior) * 0.85)
+        params = search_params_fold(prior.iloc[:cut_p].reset_index(drop=True),
+                                    TS.stacked_features(atk, dfn), base, search_trials,
+                                    seed=42, season=s, use_cache=use_cache,
+                                    atk=atk, dfn=dfn)
+        r = _eval_v2(prior, cur, atk, dfn, params, use_gamma=False)
+        P[s] = (r["p_ml"], cur["home_win"].to_numpy(float))
+        print(f"   {s}-{str(s + 1)[2:]:<2} {len(cur):>6} matchs predits")
+
+    ll = lambda y, p: -(y * np.log(np.clip(p, 1e-6, 1)) + (1 - y) * np.log(np.clip(1 - p, 1e-6, 1)))
+    ks = sorted(P)
+    out = {"protocol": {"fit": f"(a, b) sur les saisons < S, au moins {RECAL_MIN_SEASONS}",
+                        "adopt_if": "log-loss moneyline z <= -2 ET gain sur >= 70 % des saisons"},
+           "by_season": []}
+    d_all, s_all = [], []
+    print(f"\n   {'saison':>8} {'n':>6} {'a':>7} {'b':>6} {'LL brut':>9} {'LL recal':>9} {'delta':>9}")
+    for i, s in enumerate(ks):
+        past = ks[:i]
+        if len(past) < RECAL_MIN_SEASONS:
+            continue
+        p_tr = np.concatenate([P[x][0] for x in past])
+        y_tr = np.concatenate([P[x][1] for x in past])
+        b, _ = _logistic_offset(y_tr, _logit(p_tr).reshape(-1, 1), np.zeros(len(y_tr)))
+        p, y = P[s]
+        p2 = 1 / (1 + np.exp(-(b[0] + b[1] * _logit(p))))
+        d = ll(y, p2) - ll(y, p)
+        d_all.append(d)
+        s_all.append(np.full(len(d), s))
+        out["by_season"].append({"season": int(s), "a": round(float(b[0]), 4),
+                                 "b": round(float(b[1]), 4),
+                                 "ll_raw": round(float(ll(y, p).mean()), 5),
+                                 "ll_recal": round(float(ll(y, p2).mean()), 5)})
+        print(f"   {s}-{str(s + 1)[2:]:<2} {len(y):>6} {b[0]:>+7.3f} {b[1]:>6.3f} "
+              f"{ll(y, p).mean():>9.5f} {ll(y, p2).mean():>9.5f} {d.mean():>+9.5f}")
+    D, S = np.concatenate(d_all), np.concatenate(s_all)
+    pr = _paired(D)
+    better = [int(x) for x in np.unique(S) if D[S == x].mean() < 0]
+    share = len(better) / len(np.unique(S))
+    verdict = ("ADOPTER" if pr["z"] <= -2 and share >= RECENCY_SEASON_SHARE
+               else "PIRE" if pr["z"] >= 2 else "NON TRANCHABLE")
+    out.update({"moneyline": pr, "seasons_better": better,
+                "share_seasons_better": round(share, 3), "verdict": verdict})
+    print(f"\n   recalibration - brut : {pr['delta']:+.5f} (z {pr['z']:+.2f}), "
+          f"{len(better)}/{len(np.unique(S))} saisons -> {verdict}")
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--min-season", type=int, default=2012)
@@ -3573,6 +3648,10 @@ def main():
                     help="Modèle de score v2 contre l'actuel : features de fatigue "
                          "adverse, gardien de relève, xG%% long terme (F), étirement "
                          "gamma des intensites (G), et les deux (FG). N'écrit qu'un rapport")
+    ap.add_argument("--recal", action="store_true",
+                    help="Recalibration de la pente du moneyline, ajustee sur les "
+                         "saisons passees seulement (walk-forward strict). "
+                         "N'ecrit qu'un rapport")
     ap.add_argument("--no-param-cache", action="store_true",
                     help="Ignore le cache des hyperparamètres par fold "
                          "(fold_params_cache.json)")
@@ -3584,6 +3663,19 @@ def main():
     # A5 ne regarde que la qualité des λ — aucun prix n'intervient. Il passe donc
     # AVANT le garde sur les cotes, sinon un dataset sans cotes interdirait une
     # mesure qui n'en a pas besoin.
+    if args.recal:
+        rseasons = [s for s in sorted(df["season"].unique())
+                    if s >= args.min_season and (df["season"] < s).sum() >= 800
+                    and df.loc[df["season"] == s, "home_reg_score"].notna().sum() >= 50]
+        print(f"   Recalibration de la pente — {len(rseasons)} saisons predites")
+        res = run_recal(df, rseasons, args.search_trials,
+                        use_cache=not args.no_param_cache)
+        if res:
+            with open(RECAL_REPORT, "w", encoding="utf-8") as fh:
+                json.dump(res, fh, indent=2)
+            print(f"\nOK {RECAL_REPORT.split('/')[-1]} -> {MODELS}/")
+        return
+
     if args.score_v2:
         vseasons = [s for s in sorted(df["season"].unique())
                     if s >= args.min_season and (df["season"] < s).sum() >= 800
