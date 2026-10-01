@@ -159,18 +159,6 @@ describe('cache des prédictions d’un match', () => {
       '2026020001', expect.objectContaining({ quality: 50, homeIce: 10 }));
   });
 
-  // Un match commencé dont l'état est illisible : le client doit recevoir le
-  // 503 — pas la dernière réponse connue, qui serait un score dépassé.
-  it('match commencé, état illisible : 503, sans repli sur une vieille réponse', async () => {
-    const app = await nhlApp();
-    mockPredictions.buildGameMarketsWithStatus.mockResolvedValue({ groups, status: 'live' });
-    await request(app).get('/api/nhl/predictions/game/2026020777');   // mémorisée par le repli
-    mockPredictions.buildGameMarketsWithStatus.mockRejectedValue(Object.assign(new Error('Données du match indisponibles'), { status: 503 }));
-    const res = await request(app).get('/api/nhl/predictions/game/2026020777');
-    expect(res.status).toBe(503);
-    expect(res.headers['x-stale-response']).toBeUndefined();
-  });
-
   it('ne cache pas une erreur', async () => {
     mockPredictions.buildGameMarketsWithStatus.mockRejectedValue(Object.assign(new Error('Game not found'), { status: 404 }));
     const res = await request(await nhlApp()).get('/api/nhl/predictions/game/2026020001');

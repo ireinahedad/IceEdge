@@ -40,9 +40,6 @@
  *    un mensonge, pas une dégradation.
  *  - **Il ne rend jamais une réponse d'erreur périmée.** Seules les réponses
  *    2xx sont mémorisées, donc le repli ne peut pas servir un 500 d'hier.
- *  - **Il ne ressert pas ce qu'une route refuse.** `res.locals.noStaleFallback`
- *    (prédictions d'un match en cours dont l'état est illisible) : l'appelant
- *    reçoit le 503 et sait qu'il n'a pas de chiffre frais.
  *  - **Il ne prolonge pas indéfiniment.** Passé `STALE_TTL_MS`, l'entrée est
  *    oubliée et la route redevient franche : mieux vaut une erreur qu'un
  *    calendrier vieux d'une journée présenté comme courant.
@@ -91,10 +88,8 @@ export function staleFallback(req: Request, res: Response, next: NextFunction): 
       return originalJson(body);
     }
 
-    // 5xx seulement : l'amont a échoué, pas l'appelant. Sauf refus explicite
-    // de la route (`res.locals.noStaleFallback`) : pour un match EN COURS, une
-    // vieille réponse serait un score dépassé présenté comme actuel.
-    if (status >= 500 && !res.locals?.noStaleFallback) {
+    // 5xx seulement : l'amont a échoué, pas l'appelant.
+    if (status >= 500) {
       const stale = lastGood.getStale(key);
       if (stale !== null && stale !== undefined) {
         logger.warn({ key, status }, '[staleFallback] amont KO — dernière réponse connue servie');

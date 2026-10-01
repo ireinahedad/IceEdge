@@ -72,6 +72,8 @@ export interface MLPredictionResult {
    * (100 %). Absent = réponse du service Python (5–95, sans ambiguïté).
    */
   probability_scale?:   'pct';
+  /** `true` = recalculé sur l'état du match en cours (blanc opaque à l'écran). */
+  live?:                boolean;
   confidence:           number;   // integer, 40–95
   feature_importances:  MLFeatureImportance[];
   model_version:        string;

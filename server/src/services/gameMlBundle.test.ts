@@ -104,15 +104,17 @@ describe('getGameMlBundle — en direct', () => {
     expect(b.live).toEqual({ label: '0–3, 3e, 05:00 restantes', final: false });
     // Entrées = les chiffres d'avant-match du MODÈLE (42 % partout dans ce bouchon).
     expect(buildLiveModelMarkets).toHaveBeenCalledWith('2026020444', { preHome: 0.42, ot: 0.42, lambdaT: 3.1 + 2.8 });
-    expect(b.results['ml-home']).toMatchObject({ probability: 1, probability_scale: 'pct' });
+    expect(b.results['ml-home']).toMatchObject({ probability: 1, probability_scale: 'pct', live: true });
     expect(b.results['pl-home-m25']).toMatchObject({ probability: 0 });
     // Même chiffre par question (pages équipe et joueur)…
     expect(b.byKey[mlBundleKey('regulation_result', null, null, true)]?.probability).toBe(1);
-    // … et « — » pour ce que la grille ne recalcule pas : jamais l'avant-match.
-    expect(b.byKey[mlBundleKey('clean_sheet', null, 'yes', true)]).toBeNull();
+    // … et l'avant-match, SANS le drapeau `live` (pâle), pour ce que la grille
+    // ne recalcule pas.
+    expect(b.byKey[mlBundleKey('clean_sheet', null, 'yes', true)]).toMatchObject({ probability: 42 });
+    expect(b.byKey[mlBundleKey('clean_sheet', null, 'yes', true)]?.live).toBeUndefined();
   });
 
-  it('un chiffre du modèle manque : toutes les tuiles ML à « — »', async () => {
+  it('un chiffre du modèle manque : les tuiles gardent l\'avant-match, sans drapeau `live`', async () => {
     STATUS['2026020555'] = 'live';
     predictGameBundle.mockImplementationOnce(async (body: any) => ({
       results: Object.fromEntries(body.markets.map((m: any) => [m.id, { probability: 42 }])),
@@ -120,12 +122,14 @@ describe('getGameMlBundle — en direct', () => {
     }) as any);
     const b = await getGameMlBundle('2026020555');
     expect(b.live).toBeDefined();
-    expect(Object.values(b.results).every(r => r === null)).toBe(true);
+    expect(Object.values(b.results).every(r => r?.probability === 42 && !r.live)).toBe(true);
   });
 
-  it('état du match illisible : erreur, pas l\'avant-match', async () => {
+  it('recalcul impossible : le paquet d\'avant-match, tel quel', async () => {
     STATUS['2026020666'] = 'live';
-    buildLiveModelMarkets.mockRejectedValueOnce(Object.assign(new Error('Données du match indisponibles'), { status: 503 }));
-    await expect(getGameMlBundle('2026020666')).rejects.toMatchObject({ status: 503 });
+    buildLiveModelMarkets.mockRejectedValueOnce(new Error('boom'));
+    const b = await getGameMlBundle('2026020666');
+    expect(b.live).toBeUndefined();
+    expect(b.results['ml-home']).toMatchObject({ probability: 42 });
   });
 });

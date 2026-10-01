@@ -202,10 +202,11 @@ recovered from Git) and checking each claim against the code and the Git log.
   · **Live player props** (rules + ML): reached thresholds = 100, otherwise P(≥ k − done) on the
     time left (`box.live.f`, `boxscoreLiveInfo`); first scorer settled from the first goal;
     players not on the game sheet hidden.
-  · **No fake values**: a started game whose state cannot be read → 503 (no pre-game fallback, no
-    `staleFallback` copy — `res.locals.noStaleFallback`), client keeps the last real numbers with a
-    "data unavailable since HH:MM" banner after 90 s; tiles with no honest number show "—"
-    (`BetOpt.unavailable`; OT player props, ML inputs missing). `X-Stale-Response` now exposed by CORS.
+  · **Live vs pre-game display** (owner's choice): during a game, numbers recalculated on the game
+    state carry `live: true` and show in **solid white**; everything else (game state unreadable,
+    player props in OT, ML inputs missing, bookmaker odds, numbers not refreshed for 90 s) shows the
+    **pre-game value, paler**, under a note at the top of the page. No "data unavailable" banner.
+    `X-Stale-Response` now exposed by CORS; a stale copy is refused while live.
   · `fetchHeadToHead` (data only — its weight is not measured yet).
 
 ---
@@ -319,7 +320,7 @@ recovered from Git) and checking each claim against the code and the Git log.
 - [ ] A4 (goalie confirmation window) and A6 (team totals, OT, ±2.5) — after A1/A2.
 - [ ] Re-train monthly during the season.
 
-- [ ] **Live predictions, phase 2 part 2 — BLOCKED on network**: the cloud environment must allow
+- [ ] **Live predictions, phase 2 part 2 — BLOCKED on network** (detail: `LIVE_PREDICTIONS_PLAN.md`): the cloud environment must allow
       `moneypuck.com`, `api-web.nhle.com`, `api.nhle.com` (Environment → Edit → Network access;
       still denied on 2026-10-01 — a new session may be needed). Rule agreed with the owner: **no
       constant that is not measured on real games, nothing activated unless a replay shows a gain.**
@@ -544,8 +545,9 @@ Carried over from `RESTE_A_FAIRE.md`, `PRE_IOS_PLAN.md` and the pre-freeze audit
   the `live` branch of `computeGameMarkets` (value from the live grid, 0/100 when decided).
 - Live predictions are informational only: never let them touch settlement, `locks_at` or the
   started-game refusal in `slip.service.ts`.
-- No fake live values (owner's rule, 2026-10-01): a started game with unreadable state is a 503 /
-  "—", never pre-game numbers or a `staleFallback` copy; no new constant that is not measured.
+- Live display rule (owner, 2026-10-01): a number recalculated on the game state = `live: true` =
+  solid white; anything computed before the game is shown paler under the top-of-page note —
+  never passed off as live. No new model constant that is not measured on real games.
 - `useNHLData` must return stable functions (`useCallback`) — unstable ones caused the `/nhl-predictions` loop.
 - Never put a secret behind `VITE_`; never log the Odds API URL (key in query string).
 - `sendError` reports 5xx to Sentry except 501/503 — do not add 503 (one event per request
@@ -589,7 +591,7 @@ Carried over from `RESTE_A_FAIRE.md`, `PRE_IOS_PLAN.md` and the pre-freeze audit
 | `DEPLOYMENT.md`, `MONITORING.md`, `BACKUP_DR.md`, `SECRET_ROTATION.md`, `SAISIE_MANUELLE.md` | Runbooks | live |
 | `APPLE_PLAN.md` | iOS roadmap | live, not started |
 | `PRE_IOS_PLAN.md` | Completed web plan, kept because ~20 source files cite its decisions | completed (design record) |
-| `AUDIT_SCALABILITE_COUTS.md`, `QA_TEST_PLAN.md`, `ml/REFACTOR_PLAN.md` | Detailed plans behind §3.5–3.7 | live |
+| `AUDIT_SCALABILITE_COUTS.md`, `QA_TEST_PLAN.md`, `ml/REFACTOR_PLAN.md`, `LIVE_PREDICTIONS_PLAN.md` | Detailed plans behind §3.5–3.7 | live |
 | `RAPPORT_TESTS_CHARGE_2026-09-18.md`, `loadtest/*` | Load-test report and procedure | reference |
 | `loadtest/qa-dynamic/` | Dynamic QA script (local stack) behind §3.7 | live |
 | `content/*` | Content engine docs | live |

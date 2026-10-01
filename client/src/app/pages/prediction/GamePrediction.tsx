@@ -21,7 +21,7 @@ import { BetOddsCtx, GameLiveCtx, HeadToHead, NotFound, RevealMode, RevealModeCt
 
 /** Rythme des rappels pendant un match : celui de la feuille de match côté serveur. */
 const LIVE_POLL_MS = 30_000;
-/** Paquet ML en direct non rafraîchi depuis ce délai : ses tuiles passent à « — ». */
+/** Paquet ML en direct non rafraîchi depuis ce délai : ses chiffres s'affichent pâles. */
 const ML_STALE_MS = 90_000;
 
 
@@ -41,9 +41,9 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   // « règles » de la page. `null` = pas encore là (ou échec, voir `apiFailed`).
   // Pendant un match, redemandés toutes les 30 s : ils partent du score actuel
   // et du temps restant (voir `computeGameMarkets`, serveur).
-  // En direct, une réponse de repli du serveur (vieux score) est refusée :
-  // `staleSince` signale alors des chiffres datés au lieu de les faire passer
-  // pour actuels.
+  // En direct, une réponse de repli du serveur (vieux score) est refusée, et
+  // passé 90 s sans rafraîchissement (`staleSince`) les chiffres affichés
+  // perdent leur drapeau `live` : ils restent à l'écran, mais pâles.
   const { groups: apiGroups, failed: apiFailed, retry: retryApi, refresh: refreshApi, staleSince } =
     useServerGroups(() => nhlApiService.getGamePredictions(gameId, isLive), gameId, isLive ? LIVE_POLL_MS : undefined);
   const [loading, setLoading] = useState(true);
@@ -55,17 +55,19 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   //
   // Pendant un match, le serveur les recalcule à partir du score et du temps
   // restant (`gameMlBundle.ts`) : on les redemande au rythme des règles. Un
-  // échec passager garde les derniers chiffres ; au-delà de 90 s sans succès,
-  // les tuiles ML passent à « — » plutôt que d'afficher un état dépassé.
+  // échec garde les derniers chiffres ; au-delà de 90 s sans succès, ils ne
+  // sont plus « en direct » (`mlStale`) et s'affichent pâles.
   const [mlBundle, setMlBundle] = useState<GameMlBundle | null | undefined>(undefined);
+  const [mlStale, setMlStale] = useState(false);
   useEffect(() => {
     if (revealMode !== "ml") return;
     let alive = true;
     let lastOk = Date.now();
     const load = () => fetchGameMlBundle(gameId).then(b => {
       if (!alive) return;
-      if (b) { lastOk = Date.now(); setMlBundle(b); }
-      else if (!isLive || Date.now() - lastOk >= ML_STALE_MS) setMlBundle(null);
+      if (b) { lastOk = Date.now(); setMlBundle(b); setMlStale(false); }
+      else if (!isLive) setMlBundle(null);
+      else if (Date.now() - lastOk >= ML_STALE_MS) setMlStale(true);
     });
     load();
     const timer = isLive ? setInterval(load, LIVE_POLL_MS) : undefined;
@@ -209,13 +211,21 @@ export function GamePrediction({ gameId }: { gameId: string }) {
     // Chiffre ML : celui du PAQUET du match, jamais un appel par tuile
     // (`mlExternal`). Tuile absente du paquet — repli client avant la réponse
     // du serveur, ou marché que le modèle ne price pas — → « — ».
-    const mlPresetFor = (id: string) =>
-      mlBundle === undefined ? undefined : mlBundle === null ? null : (mlBundle.byId[id] ?? null);
+    //
+    // Chiffres plus rafraîchis depuis 90 s (règles : `staleSince`, ML :
+    // `mlStale`) : ils perdent leur drapeau `live` et s'affichent pâles.
+    const mlPresetFor = (id: string) => {
+      if (mlBundle === undefined) return undefined;
+      if (mlBundle === null) return null;
+      const r = mlBundle.byId[id] ?? null;
+      return r && mlStale && r.live ? { ...r, live: false } : r;
+    };
     const stamped = mergedGroups.map(g => ({
       ...g,
       options: g.options.map(o => ({
         ...o,
         ...(o.mlProps ? { mlProps: { ...o.mlProps, gameId } } : {}),
+        ...(staleSince != null ? { live: false } : {}),
         mlExternal: true,
         mlPreset: mlPresetFor(o.id),
       })),
@@ -239,7 +249,7 @@ export function GamePrediction({ gameId }: { gameId: string }) {
         }),
       };
     });
-  }, [gameView, apiGroups, gameId, mlBundle]);
+  }, [gameView, apiGroups, gameId, mlBundle, mlStale, staleSince]);
 
   // Cotes du livre réglé, chargées une fois pour toute la page et distribuées
   // par contexte : le flux est servi PAR MATCH, donc une requête par tuile
@@ -263,6 +273,13 @@ export function GamePrediction({ gameId }: { gameId: string }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Partie en cours : ce que veulent dire le blanc et le pâle. */}
+      {isLive && (
+        <div className="rounded-2xl border border-white/20 bg-white/[0.04] px-3 py-2 flex items-start gap-2">
+          <span className="mt-1 w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+          <p className="text-[#c0cdd4] text-[11px] leading-relaxed">{t("pred.liveNote")}</p>
+        </div>
+      )}
       {finalPct == null && (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
           <p className="text-amber-300 text-[11px] font-semibold">{t("pred.unavailable")}</p>
@@ -315,15 +332,6 @@ export function GamePrediction({ gameId }: { gameId: string }) {
       {/* ── Market groups ── */}
       <StatsBanner type="game" id={gameId} />
       <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
-      {/* Chiffres datés : le rafraîchissement échoue depuis plus de 90 s.
-          On garde les derniers VRAIS chiffres, mais on dit de quand ils sont. */}
-      {isLive && staleSince != null && (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
-          <p className="text-amber-300 text-[11px] font-semibold">
-            {t("pred.liveStale", { time: new Date(staleSince).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) })}
-          </p>
-        </div>
-      )}
       <GameLiveCtx.Provider value={isLive}>
       <BetOddsCtx.Provider value={odds}>
         <RevealModeCtx.Provider value={revealMode}>

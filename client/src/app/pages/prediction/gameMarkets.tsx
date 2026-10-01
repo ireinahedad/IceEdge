@@ -127,10 +127,11 @@ export interface BetOpt {
    */
   belowFloor?: number;
   /**
-   * Aucun chiffre honnête à montrer (match en cours dont l'état est illisible,
-   * prolongation…) : la tuile affiche « — » en gris, en règles comme en ML.
+   * `true` = chiffre recalculé sur l'état du match en cours (serveur, ou grille
+   * joueur). Pendant une partie : blanc opaque ; sans lui, chiffre d'avant-match
+   * affiché plus pâle (voir `BetOption`).
    */
-  unavailable?: boolean;
+  live?: boolean;
 }
 /**
  * Mise en tableau d'un groupe — le jumeau de `MarketTable` côté serveur

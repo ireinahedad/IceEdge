@@ -41,6 +41,8 @@ export interface MLFeatureImportance {
 
 export interface MLPredictionResult {
   probability:         number;
+  /** Recalculé sur l'état du match en cours (paquet ML en direct). */
+  live?:               boolean;
   /**
    * `null` quand le service n'a pas envoyé de confiance. Elle valait 0,7 par
    * défaut (soit « 70 % de confiance » affiché à l'écran) pour toute réponse
@@ -670,6 +672,8 @@ function normalizeMLResponse(data: Record<string, unknown>): MLPredictionResult 
     model_type:          typeof data.model_type    === "string" ? data.model_type    : undefined,
     model_version:       typeof data.model_version === "string" ? data.model_version : undefined,
     explanation:         typeof data.explanation   === "string" ? data.explanation   : "",
+    // Recalculé sur l'état du match en cours (paquet ML) : blanc opaque à l'écran.
+    ...(data.live === true ? { live: true } : {}),
   };
 }
 
