@@ -518,6 +518,27 @@ export function PredictionsRevealBar({ mode, onSelect }: { mode: RevealMode; onS
   );
 }
 
+/**
+ * Pari TRANCHÉ pendant le match : son chiffre recalculé sur l'état du match
+ * (`live`) vaut exactement 0 ou 100 — c'est arrivé, ou ça ne peut plus
+ * arriver. Il n'y a plus rien à parier : la tuile disparaît (case vide dans un
+ * tableau, ligne retirée si toute la ligne l'est, groupe retiré s'il ne reste
+ * rien). N'est appelé que pendant un match en cours (`GameLiveCtx`) : un match
+ * terminé garde son état final à l'écran.
+ *
+ * Exactement 0 ou 100 n'arrive qu'au tranché : les chiffres en direct encore
+ * ouverts ont un plancher à 1 et un plafond à 99 (`pctLive` côté serveur,
+ * `livePct` dans les grilles joueur). Le chiffre des RÈGLES fait foi quand il
+ * est en direct ; sinon celui du modèle, s'il l'est. Un chiffre d'avant-match
+ * (pâle) ne masque jamais rien.
+ */
+export function isDecidedLive(opt: BetOpt): boolean {
+  if (opt.live) return opt.rulePct === 0 || opt.rulePct === 100;
+  const ml = opt.mlPreset;
+  if (!ml?.live || typeof ml.probability !== "number") return false;
+  return ml.probability === 0 || ml.probability === 100;
+}
+
 /* ─── BetOption ─────────────────────────────────────────────────────────────
  *
  * `compact` rend la MÊME tuile, en case de tableau : sans l'étiquette (la
@@ -628,6 +649,10 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
     ? { background: "rgba(255,255,255,0.10)", color: "#ffffff", border: "1px solid rgba(255,255,255,0.45)" }
     : { background: shownColor + "22", color: shownColor, border: `1px solid ${shownColor}55` };
 
+  // Pari déjà tranché pendant le match : plus rien à afficher (après tous les
+  // hooks, dont l'ordre doit rester stable d'un rendu à l'autre).
+  if (gameLive && isDecidedLive(opt)) return null;
+
   return (
     <>
       <button
@@ -695,6 +720,14 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
 /* ─── MarketGroup ───────────────────────────── */
 export function MarketGroup({ group, accent }: { group: MktGroup; accent: string }) {
   const [open, setOpen] = useState(true);
+  const gameLive = useContext(GameLiveCtx);
+  // Pendant le match, les paris tranchés disparaissent ; un groupe qui n'a
+  // plus que ça disparaît avec eux plutôt que de rester en titre vide.
+  const options = gameLive ? group.options.filter(o => !isDecidedLive(o)) : group.options;
+  if (!options.length) return null;
+  const tables = gameLive
+    ? (group.tables ?? []).filter(tb => tb.rows.some(r => r.cells.some(id => id && options.some(o => o.id === id))))
+    : group.tables;
   return (
     <div className="bg-[#0A0E0C] border border-white/[0.07] rounded-2xl overflow-hidden">
       <button
@@ -705,9 +738,9 @@ export function MarketGroup({ group, accent }: { group: MktGroup; accent: string
         <span className="text-[#c0cdd4] text-xs font-semibold uppercase tracking-wider">{group.title}</span>
         <span className="text-[#3a5060] text-xs">{open ? "▲" : "▼"}</span>
       </button>
-      {open && (group.tables?.length ? (
+      {open && (tables?.length ? (
         <div className="p-3 flex flex-col gap-3">
-          {group.tables.map((tb, i) => (
+          {tables.map((tb, i) => (
             <MarketTableView key={i} table={tb} options={group.options} accent={accent} />
           ))}
         </div>
@@ -716,7 +749,7 @@ export function MarketGroup({ group, accent }: { group: MktGroup; accent: string
           className="p-3 grid gap-2"
           style={{ gridTemplateColumns: `repeat(${group.cols}, 1fr)` }}
         >
-          {group.options.map(opt => (
+          {options.map(opt => (
             <BetOption key={opt.id} opt={opt} accent={accent} />
           ))}
         </div>
@@ -738,6 +771,12 @@ export function MarketGroup({ group, accent }: { group: MktGroup; accent: string
  */
 function MarketTableView({ table, options, accent }: { table: MktTable; options: BetOpt[]; accent: string }) {
   const byId = useMemo(() => new Map(options.map(o => [o.id, o] as const)), [options]);
+  const gameLive = useContext(GameLiveCtx);
+  // Pendant le match : une case tranchée reste vide (la grille garde ses
+  // colonnes), une ligne dont aucune case n'est plus pariable disparaît.
+  const rows = gameLive
+    ? table.rows.filter(r => r.cells.some(id => { const o = id ? byId.get(id) : undefined; return o && !isDecidedLive(o); }))
+    : table.rows;
   const hasRowLabels = table.rows.some(r => r.label) || !!table.rowHeader;
   return (
     <div>
@@ -766,7 +805,7 @@ function MarketTableView({ table, options, accent }: { table: MktTable; options:
           </tr>
         </thead>
         <tbody>
-          {table.rows.map((r, ri) => (
+          {rows.map((r, ri) => (
             <tr key={ri} className={ri > 0 ? "border-t border-white/[0.04]" : undefined}>
               {hasRowLabels && (
                 <td className="px-1 py-1 text-white font-semibold tabular-nums whitespace-nowrap">{r.label}</td>

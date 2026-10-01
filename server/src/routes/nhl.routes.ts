@@ -7,6 +7,7 @@ import { staleFallback } from '../middleware/staleFallback.middleware';
 import { sendError } from '../httpError';
 import { getStartingGoalies } from '../services/startingGoalies';
 import { playerRatesForGame, playerRatesForPlayer, playerRatesForTeam } from '../services/prediction/playerRates';
+import { currentSeason, previousSeason } from '../services/nhl/core';
 
 const router = Router();
 const nhl    = new NHLService();
@@ -260,6 +261,31 @@ router.get('/teams/:abbr/season-official/:season', publicCache(TTL.LONG), async 
     return;
   }
   try { res.json(await nhl.getTeamSeasonOfficial(req.params.abbr, req.params.season)); }
+  catch (err: any) { sendError(res, err); }
+});
+
+// Face-à-face sur UNE saison entière (page match : liste « Cette saison », et
+// section dépliable « Saison précédente » chargée seulement à l'ouverture).
+// `:season` = id à 8 chiffres, `current` ou `previous` (résolus ici avec la
+// même bascule de septembre que le reste du serveur, pour que le client n'ait
+// pas à la recalculer).
+const TEAM_ABBR = /^[A-Za-z]{2,3}$/;
+router.get('/teams/:abbr/head-to-head/:opp/:season', publicCache(TTL.LONG), async (req, res) => {
+  const { abbr, opp } = req.params;
+  const raw     = req.params.season;
+  const keyword = raw === 'previous' || raw === 'current';
+  const season  = raw === 'previous' ? previousSeason() : raw === 'current' ? currentSeason() : raw;
+  if (!TEAM_ABBR.test(abbr) || !TEAM_ABBR.test(opp) || !SEASON_ID.test(season)) {
+    res.status(400).json({ error: 'Invalid team or season (expected e.g. /teams/TOR/head-to-head/MTL/20252026)' });
+    return;
+  }
+  try {
+    const out = await nhl.getHeadToHeadSeason(abbr, opp, season);
+    // Saison terminée, demandée par son id : figée. Les mots-clés gardent le
+    // TTL court, sinon la bascule de septembre resterait 6 h en cache.
+    if (!keyword && season < currentSeason()) res.set('Cache-Control', publicPolicy(TTL.FINAL));
+    res.json(out);
+  }
   catch (err: any) { sendError(res, err); }
 });
 

@@ -23,6 +23,7 @@ const mockService = {
   getTeams:        vi.fn(),
   getStandings:    vi.fn(),
   searchPlayers:   vi.fn(),
+  getHeadToHeadSeason: vi.fn(),
 };
 
 vi.mock('../services/nhl.service', () => ({
@@ -164,5 +165,45 @@ describe('cache des prédictions d’un match', () => {
     const res = await request(await nhlApp()).get('/api/nhl/predictions/game/2026020001');
     expect(res.status).toBe(404);
     expect(res.headers['cache-control']).toBe('private, no-store');
+  });
+});
+
+describe('face-à-face sur une saison', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('fige 6 h une saison passée demandée par son id', async () => {
+    mockService.getHeadToHeadSeason.mockResolvedValue({ season: '20202021', games: [] });
+    const res = await request(await nhlApp()).get('/api/nhl/teams/TOR/head-to-head/MTL/20202021');
+    expect(res.status).toBe(200);
+    expect(mockService.getHeadToHeadSeason).toHaveBeenCalledWith('TOR', 'MTL', '20202021');
+    expect(res.headers['cache-control']).toBe(SIX_HOURS);
+  });
+
+  // `previous` est résolu par le serveur, et ne doit pas rester 6 h en cache
+  // au moment de la bascule de septembre.
+  it('résout `previous` côté serveur sans le figer', async () => {
+    const { previousSeason } = await import('../services/nhl/core');
+    mockService.getHeadToHeadSeason.mockResolvedValue({ season: previousSeason(), games: [] });
+    const res = await request(await nhlApp()).get('/api/nhl/teams/TOR/head-to-head/MTL/previous');
+    expect(res.status).toBe(200);
+    expect(mockService.getHeadToHeadSeason).toHaveBeenCalledWith('TOR', 'MTL', previousSeason());
+    expect(res.headers['cache-control']).not.toBe(SIX_HOURS);
+  });
+
+  it('résout `current` sur la saison en cours, en TTL court', async () => {
+    const { currentSeason } = await import('../services/nhl/core');
+    mockService.getHeadToHeadSeason.mockResolvedValue({ season: currentSeason(), games: [] });
+    const res = await request(await nhlApp()).get('/api/nhl/teams/TOR/head-to-head/MTL/current');
+    expect(res.status).toBe(200);
+    expect(mockService.getHeadToHeadSeason).toHaveBeenCalledWith('TOR', 'MTL', currentSeason());
+    expect(res.headers['cache-control']).toBe('public, max-age=1800, stale-while-revalidate=3600');
+  });
+
+  it('refuse un club ou une saison mal formés', async () => {
+    const a = await nhlApp();
+    expect((await request(a).get('/api/nhl/teams/TORONTO/head-to-head/MTL/20252026')).status).toBe(400);
+    expect((await request(a).get('/api/nhl/teams/TOR/head-to-head/MTL/2025')).status).toBe(400);
+    expect((await request(a).get('/api/nhl/teams/TOR/head-to-head/MTL/next')).status).toBe(400);
+    expect(mockService.getHeadToHeadSeason).not.toHaveBeenCalled();
   });
 });

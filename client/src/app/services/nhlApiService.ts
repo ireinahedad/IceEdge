@@ -233,6 +233,24 @@ export interface TeamRecord {
   oneGoal: RecordSplit;
   streak: string;
 }
+/** Une rencontre jouée entre deux clubs (face-à-face d'une saison). */
+export interface HeadToHeadSeasonGame {
+  gameId: string;
+  date: string;
+  homeAbbr: string;
+  awayAbbr: string;
+  homeScore: number;
+  awayScore: number;
+  /** 2 = saison régulière, 3 = séries. */
+  gameType: 2 | 3;
+  /** `REG` | `OT` | `SO`. */
+  lastPeriodType: string;
+}
+export interface HeadToHeadSeason {
+  /** Id NHL à 8 chiffres, ex. `20252026`. */
+  season: string;
+  games: HeadToHeadSeasonGame[];
+}
 export interface TeamSeasonOfficial {
   teamAbbr: string;
   season: number;
@@ -370,6 +388,14 @@ export const nhlApiService = {
   // Charts — official team stats for a season + per-opponent GF/GA/W.
   getTeamSeasonOfficial: (abbr: string, season: number | string): Promise<TeamSeasonOfficial> =>
     get<TeamSeasonOfficial>(`/teams/${abbr}/season-official/${season}`),
+
+  /**
+   * Toutes les rencontres jouées entre deux clubs sur une saison (régulière +
+   * séries). `season` : id à 8 chiffres, `"current"` ou `"previous"` (résolus
+   * par le serveur).
+   */
+  getHeadToHeadSeason: (abbr: string, opp: string, season: string): Promise<HeadToHeadSeason> =>
+    get<HeadToHeadSeason>(`/teams/${encodeURIComponent(abbr)}/head-to-head/${encodeURIComponent(opp)}/${encodeURIComponent(season)}`),
 
   // Charts — every team's season summary (All Teams page).
   getAllTeamsSeason: (season?: number | null): Promise<AllTeamsSeason> =>

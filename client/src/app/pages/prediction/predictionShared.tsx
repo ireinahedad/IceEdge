@@ -7,7 +7,8 @@
  */
 
 import { useNavigate, useSearchParams } from "react-router";
-import { useCallback, useEffect, useMemo, useRef, useState, createContext } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, createContext } from "react";
+import { ChevronDown } from "lucide-react";
 import { nhlApiService } from "../../services/nhlApiService";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { useI18n } from "../../i18n";
@@ -15,6 +16,7 @@ import { FramedLabel } from "../../components/brand/FramedLabel";
 import { useBookmaker } from "../../context/BookmakerContext";
 import { loadGameOdds, type OddsTable } from "../../services/gameOdds";
 import type { NHLGame } from "../../types/bet";
+import type { HeadToHeadSeasonGame } from "../../services/nhlApiService";
 import type { MktGroup } from "./gameMarkets";
 import { ErrorState } from "../../components/ErrorState";
 
@@ -100,8 +102,82 @@ export function useGameOdds(
   return { table: state.table, bookTitle: state.bookTitle, nameByAbbr };
 }
 
-/** Head-to-head — the two teams' most recent meetings this season, with scores. */
-interface H2HMeeting { date: string; homeAbbr: string; awayAbbr: string; homeScore: number; awayScore: number; }
+/**
+ * Head-to-head — the two teams' meetings this season (5 most recent), plus a
+ * collapsible "Last season" section. Both come from the same route (one call
+ * to the club's season schedule on the server). Last season is fetched only
+ * the first time the user opens it, then kept for the rest of the visit;
+ * closing it does not refetch.
+ */
+interface H2HMeeting {
+  date: string;
+  homeAbbr: string;
+  awayAbbr: string;
+  homeScore: number;
+  awayScore: number;
+  /** Séries éliminatoires. */
+  playoffs?: boolean;
+  /** `OT` | `SO` ; absent ou `REG` = temps réglementaire. */
+  decidedIn?: string;
+}
+
+function toMeeting(g: HeadToHeadSeasonGame): H2HMeeting {
+  return {
+    date: g.date,
+    homeAbbr: g.homeAbbr.toUpperCase(),
+    awayAbbr: g.awayAbbr.toUpperCase(),
+    homeScore: g.homeScore,
+    awayScore: g.awayScore,
+    playoffs: g.gameType === 3,
+    decidedIn: g.lastPeriodType,
+  };
+}
+
+type PrevSeasonState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "ok"; season: string; meetings: H2HMeeting[] };
+
+/** `20252026` → `2025-26`. */
+function seasonLabel(id: string): string {
+  return /^\d{8}$/.test(id) ? `${id.slice(0, 4)}-${id.slice(6)}` : id;
+}
+
+function H2HRow({ m, locale, tags }: { m: H2HMeeting; locale: string; tags?: string[] }) {
+  const homeWon = m.homeScore > m.awayScore;
+  return (
+    <div className="flex items-center gap-3 text-xs bg-[#0A0E0C] rounded-lg px-3 py-2">
+      <span className="text-[#8a9ea6] w-14 flex-shrink-0 tabular-nums">
+        {new Date(`${m.date}T00:00:00`).toLocaleDateString(locale, { day: "numeric", month: "short" })}
+      </span>
+      <div className="flex-1 flex items-center justify-center gap-2">
+        <span className={`font-bold tabular-nums ${!homeWon ? "text-white" : "text-[#8a9ea6]"}`}>{m.awayAbbr}</span>
+        <span className="text-white font-black tabular-nums">{m.awayScore}</span>
+        <span className="text-[#4a6070]">–</span>
+        <span className="text-white font-black tabular-nums">{m.homeScore}</span>
+        <span className={`font-bold tabular-nums ${homeWon ? "text-white" : "text-[#8a9ea6]"}`}>{m.homeAbbr}</span>
+      </div>
+      {/* Colonne présente seulement quand on la demande, de même largeur que
+          la date, pour que le score reste centré. */}
+      {tags && (
+        <span className="w-14 flex-shrink-0 flex flex-col items-end gap-0.5">
+          {tags.map((tag) => (
+            <span key={tag} className="text-[10px] text-[#8a9ea6] border border-white/15 rounded px-1 leading-4">{tag}</span>
+          ))}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function H2HSkeleton({ rows }: { rows: number }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {Array.from({ length: rows }, (_, i) => <div key={i} className="h-9 bg-[#0A0E0C] rounded-lg animate-pulse" />)}
+    </div>
+  );
+}
 
 export function HeadToHead({ home, away }: {
   home: { abbr: string; logo: string };
@@ -109,79 +185,157 @@ export function HeadToHead({ home, away }: {
 }) {
   const { t, lang } = useI18n();
   const locale = lang === "fr" ? "fr-CA" : "en-US";
-  const [meetings, setMeetings] = useState<H2HMeeting[] | null>(null);
+  /** Les 5 rencontres les plus récentes de la saison en cours ; `null` = en cours de chargement. */
+  const [meetings, setMeetings] = useState<H2HMeeting[] | "error" | null>(null);
+  const curReq = useRef(0);
+
+  // Même route que la saison précédente : le calendrier du club, en UN appel.
+  // L'ancienne version balayait `/games/range` depuis le début de saison, plage
+  // que le serveur plafonne à 45 jours : passé la mi-novembre, les rencontres
+  // plus récentes disparaissaient.
+  const loadCurrent = useCallback(() => {
+    const id = ++curReq.current;
+    setMeetings(null);
+    nhlApiService.getHeadToHeadSeason(home.abbr.toUpperCase(), away.abbr.toUpperCase(), "current")
+      .then((r) => { if (curReq.current === id) setMeetings(r.games.slice(0, 5).map(toMeeting)); })
+      .catch(() => { if (curReq.current === id) setMeetings("error"); });
+  }, [home.abbr, away.abbr]);
 
   useEffect(() => {
-    let alive = true;
-    setMeetings(null);
-    (async () => {
-      try {
-        const isoRe = /^\d{4}-\d{2}-\d{2}$/;
-        const anchor = await nhlApiService.getScheduleAnchor().catch(() => null);
-        const end = anchor?.today && isoRe.test(anchor.today)
-          ? anchor.today
-          : new Date().toISOString().slice(0, 10);
-        const start = anchor?.seasonStart && isoRe.test(anchor.seasonStart)
-          ? anchor.seasonStart
-          : `${Number(end.slice(0, 4)) - 1}-09-01`;
+    loadCurrent();
+    return () => { curReq.current++; };
+  }, [loadCurrent]);
 
-        const games = await nhlApiService.getGamesRange(start, end);
-        const A = home.abbr.toUpperCase();
-        const B = away.abbr.toUpperCase();
-        const found = games
-          .filter((g) => g.status === "final")
-          .filter((g) => {
-            const h = g.homeTeam.abbreviation.toUpperCase();
-            const a = g.awayTeam.abbreviation.toUpperCase();
-            return (h === A && a === B) || (h === B && a === A);
-          })
-          .map((g) => ({
-            date: g.gameDate,
-            homeAbbr: g.homeTeam.abbreviation.toUpperCase(),
-            awayAbbr: g.awayTeam.abbreviation.toUpperCase(),
-            homeScore: g.homeTeam.score ?? 0,
-            awayScore: g.awayTeam.score ?? 0,
-          }))
-          .sort((x, y) => y.date.localeCompare(x.date))
-          .slice(0, 5);
-        if (alive) setMeetings(found);
-      } catch {
-        if (alive) setMeetings([]);
-      }
-    })();
-    return () => { alive = false; };
+  // ── Saison précédente : repliée par défaut, chargée à la première ouverture ──
+  const prevPanelId = useId();
+  const [prevOpen, setPrevOpen] = useState(false);
+  const [prev, setPrev] = useState<PrevSeasonState>({ status: "idle" });
+  // Numéro de la dernière requête : une réponse arrivée après un changement
+  // d'affiche (ou un nouvel essai) est ignorée au lieu d'écraser la bonne.
+  const prevReq = useRef(0);
+
+  useEffect(() => {
+    prevReq.current++;
+    setPrevOpen(false);
+    setPrev({ status: "idle" });
   }, [home.abbr, away.abbr]);
+
+  const loadPrev = useCallback(() => {
+    const id = ++prevReq.current;
+    setPrev({ status: "loading" });
+    nhlApiService.getHeadToHeadSeason(home.abbr.toUpperCase(), away.abbr.toUpperCase(), "previous")
+      .then((r) => {
+        if (prevReq.current !== id) return;
+        setPrev({
+          status: "ok",
+          season: r.season,
+          meetings: r.games.map(toMeeting),
+        });
+      })
+      .catch(() => { if (prevReq.current === id) setPrev({ status: "error" }); });
+  }, [home.abbr, away.abbr]);
+
+  const togglePrev = () => {
+    const next = !prevOpen;
+    setPrevOpen(next);
+    if (next && (prev.status === "idle" || prev.status === "error")) loadPrev();
+  };
+
+  /** Victoires de chaque club sur la saison précédente (séries comprises). */
+  const prevRecord = useMemo(() => {
+    if (prev.status !== "ok" || prev.meetings.length === 0) return null;
+    const winsOf = (abbr: string) => prev.meetings.filter(
+      (m) => (m.homeScore > m.awayScore ? m.homeAbbr : m.awayAbbr) === abbr.toUpperCase(),
+    ).length;
+    return { away: winsOf(away.abbr), home: winsOf(home.abbr) };
+  }, [prev, home.abbr, away.abbr]);
+
+  const tagsOf = (m: H2HMeeting): string[] => {
+    const out: string[] = [];
+    if (m.playoffs) out.push(t("pred.h2hPlayoffs"));
+    if (m.decidedIn === "OT") out.push(t("pred.h2hOT"));
+    if (m.decidedIn === "SO") out.push(t("pred.h2hSO"));
+    return out;
+  };
 
   return (
     <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
-      <p className="text-white text-sm font-medium mb-3">{t("pred.h2hTitle")}</p>
+      <div className="flex items-baseline justify-between mb-3">
+        <p className="text-white text-sm font-medium">{t("pred.h2hTitle")}</p>
+        <span className="text-[#8a9ea6] text-[11px]">{t("pred.h2hThisSeason")}</span>
+      </div>
       {meetings === null ? (
-        <div className="flex flex-col gap-2">
-          {[1, 2, 3].map((i) => <div key={i} className="h-9 bg-[#0A0E0C] rounded-lg animate-pulse" />)}
+        <H2HSkeleton rows={3} />
+      ) : meetings === "error" ? (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[#8a9ea6] text-xs">{t("pred.h2hError")}</p>
+          <button
+            type="button"
+            onClick={loadCurrent}
+            className="text-xs text-white border border-white/20 rounded-lg px-2 py-1 hover:bg-white/5"
+          >
+            {t("common.retry")}
+          </button>
         </div>
       ) : meetings.length === 0 ? (
         <p className="text-[#8a9ea6] text-xs">{t("pred.h2hNone")}</p>
       ) : (
         <div className="flex flex-col gap-2">
-          {meetings.map((m, i) => {
-            const homeWon = m.homeScore > m.awayScore;
-            return (
-              <div key={i} className="flex items-center gap-3 text-xs bg-[#0A0E0C] rounded-lg px-3 py-2">
-                <span className="text-[#8a9ea6] w-14 flex-shrink-0 tabular-nums">
-                  {new Date(`${m.date}T00:00:00`).toLocaleDateString(locale, { day: "numeric", month: "short" })}
-                </span>
-                <div className="flex-1 flex items-center justify-center gap-2">
-                  <span className={`font-bold tabular-nums ${!homeWon ? "text-white" : "text-[#8a9ea6]"}`}>{m.awayAbbr}</span>
-                  <span className="text-white font-black tabular-nums">{m.awayScore}</span>
-                  <span className="text-[#4a6070]">–</span>
-                  <span className="text-white font-black tabular-nums">{m.homeScore}</span>
-                  <span className={`font-bold tabular-nums ${homeWon ? "text-white" : "text-[#8a9ea6]"}`}>{m.homeAbbr}</span>
-                </div>
-              </div>
-            );
-          })}
+          {meetings.map((m, i) => <H2HRow key={i} m={m} locale={locale} tags={tagsOf(m)} />)}
         </div>
       )}
+
+      {/* ── Saison précédente (dépliable) ── */}
+      <div className="mt-3 pt-3 border-t border-white/10">
+        <button
+          type="button"
+          onClick={togglePrev}
+          aria-expanded={prevOpen}
+          aria-controls={prevPanelId}
+          className="w-full flex items-center justify-between gap-3 text-xs text-[#8a9ea6] hover:text-white transition-colors"
+        >
+          <span className="font-medium">
+            {t("pred.h2hPrev")}
+            {prev.status === "ok" && <span className="ml-1 tabular-nums">· {seasonLabel(prev.season)}</span>}
+          </span>
+          <span className="flex items-center gap-2">
+            {prevRecord && (
+              <span className="tabular-nums text-white/80">
+                {away.abbr.toUpperCase()} {prevRecord.away}–{prevRecord.home} {home.abbr.toUpperCase()}
+              </span>
+            )}
+            <ChevronDown
+              aria-hidden
+              className={`w-4 h-4 transition-transform ${prevOpen ? "rotate-180" : ""}`}
+            />
+          </span>
+        </button>
+
+        {prevOpen && (
+          <div id={prevPanelId} className="mt-3">
+            {prev.status === "idle" || prev.status === "loading" ? (
+              <H2HSkeleton rows={4} />
+            ) : prev.status === "error" ? (
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[#8a9ea6] text-xs">{t("pred.h2hPrevError")}</p>
+                <button
+                  type="button"
+                  onClick={loadPrev}
+                  className="text-xs text-white border border-white/20 rounded-lg px-2 py-1 hover:bg-white/5"
+                >
+                  {t("common.retry")}
+                </button>
+              </div>
+            ) : prev.meetings.length === 0 ? (
+              <p className="text-[#8a9ea6] text-xs">{t("pred.h2hPrevNone")}</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {prev.meetings.map((m, i) => <H2HRow key={i} m={m} locale={locale} tags={tagsOf(m)} />)}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

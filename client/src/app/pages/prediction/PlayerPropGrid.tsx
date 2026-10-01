@@ -203,7 +203,10 @@ function poissonAtLeast(lambda: number, k: number): number {
 function livePct(lambdaLeft: number, need: number, disp: number | null): number {
   if (need <= 0) return 100;
   if (!(lambdaLeft > 0)) return 0;
-  return Math.max(0, Math.min(99, Math.round(nbAtLeast(lambdaLeft, need, disp) * 100)));
+  // Plancher à 1 et non 0 : 0 veut dire « ne peut plus arriver », et la case
+  // disparaît alors pendant le match (`isDecidedLive`). Affichage inchangé —
+  // tout ce qui est sous BELOW_FLOOR s'écrit « <3% ».
+  return Math.max(1, Math.min(99, Math.round(nbAtLeast(lambdaLeft, need, disp) * 100)));
 }
 
 /**
@@ -615,7 +618,8 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
               ml: () => {
                 const g = playerRates?.gameGoals, fg = playerRates?.firstGoal;
                 if (g == null || fg == null || !(g > 0)) return null;
-                return Math.round(fg * ((1 - Math.exp(-g * f)) / (1 - Math.exp(-g))) * 100);
+                // Plancher à 1 : un but reste possible (f > 0), 0 est réservé au tranché.
+                return Math.max(1, Math.round(fg * ((1 - Math.exp(-g * f)) / (1 - Math.exp(-g))) * 100));
               },
             };
         const lead = spec.leading && gameId

@@ -122,6 +122,10 @@ export class NHLService {
     return nhlApi.fetchTeamSeasonOfficial(abbr, season);
   }
 
+  async getHeadToHeadSeason(abbr: string, opp: string, season: string) {
+    return nhlApi.fetchHeadToHeadSeason(abbr, opp, season);
+  }
+
   async getAllTeamsSeason(season?: string) {
     return nhlApi.fetchAllTeamsSeason(season);
   }

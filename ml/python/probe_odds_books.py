@@ -61,22 +61,38 @@ EXTRA_MARKETS = ",".join([
 ])
 
 
-def probe_event(key: str, books: str, markets: str) -> None:
-    """Un match à venir : quels marchés supplémentaires chaque livre cote-t-il ?"""
+from datetime import datetime, timedelta, timezone
+
+
+def _ts(s: str) -> datetime:
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+
+def probe_event(key: str, books: str, markets: str, lead_h: float = 2.0) -> None:
+    """Un match qui commence dans au moins lead_h heures : quels marchés
+    supplémentaires chaque livre cote-t-il ? (/events renvoie aussi les
+    matchs EN COURS : sans ce filtre on sonde du live.)"""
     events = _oddsapi_get(f"/sports/{ODDS_API_SPORT}/events", {}, key)   # gratuit
-    if not events:
-        print("Aucun match à venir.")
+    now = datetime.now(timezone.utc)
+    upcoming = [e for e in events or []
+                if e.get("commence_time")
+                and _ts(e["commence_time"]) > now + timedelta(hours=lead_h)]
+    if not upcoming:
+        print(f"Aucun match qui commence dans plus de {lead_h:g} h.")
         return
-    ev = events[0]
-    print(f"\nMatch sondé : {ev.get('away_team')} @ {ev.get('home_team')} "
-          f"({ev.get('commence_time')})")
+    ev = min(upcoming, key=lambda e: _ts(e["commence_time"]))
+    dh = (_ts(ev["commence_time"]) - now).total_seconds() / 3600
+    print(f"\nMatch sonde : {ev.get('away_team')} @ {ev.get('home_team')} "
+          f"({ev.get('commence_time')}, dans {dh:.1f} h)")
     data = _oddsapi_get(f"/sports/{ODDS_API_SPORT}/events/{ev['id']}/odds",
                         {"bookmakers": books, "markets": markets,
                          "oddsFormat": "decimal"}, key)
     if not isinstance(data, dict):
-        print("Réponse vide (marché inconnu ? voir le message d'erreur plus haut).")
+        print("Reponse vide (marche inconnu ? voir le message d'erreur plus haut).")
         return
+    seen = set()
     for bk in data.get("bookmakers") or []:
+        seen.add(bk["key"])
         print(f"\n   {bk['key']}")
         for m in bk.get("markets") or []:
             outs = m.get("outcomes") or []
@@ -85,7 +101,10 @@ def probe_event(key: str, books: str, markets: str) -> None:
                 f"{'' if not o.get('description') else ' [' + o['description'] + ']'}"
                 f"={o.get('price')}" for o in outs[:4])
             print(f"      {m['key']:<24} {len(outs):>3} issues   {sample}")
-
+    # L'API omet un livre qui ne cote aucun des marchés demandés : on le dit.
+    for b in [x.strip() for x in books.split(",") if x.strip()]:
+        if b not in seen:
+            print(f"\n   {b:<26} aucun marche supplementaire sur ce match")
 
 def main() -> None:
     p = argparse.ArgumentParser()
@@ -96,15 +115,19 @@ def main() -> None:
                    help="Sonde les marchés supplémentaires d'UN match à venir "
                         "(coût : 1 crédit par marché renvoyé)")
     p.add_argument("--books", default="betano_ca_on,playnow_ca,bet99_ca_on")
+    p.add_argument("--lead", type=float, default=2.0,
+                       help="--event : heures minimum avant la mise au jeu")
     p.add_argument("--markets", default=EXTRA_MARKETS)
     a = p.parse_args()
+
+
 
     key = _oddsapi_key()
     if not key:
         return
     try:
         if a.event:
-            probe_event(key, a.books, a.markets)
+            probe_event(key, a.books, a.markets, a.lead)
             print(f"\nCredits restants : {getattr(_oddsapi_get, 'remaining', '?')}")
             return
         if not a.no_live:

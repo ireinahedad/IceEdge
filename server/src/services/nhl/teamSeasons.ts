@@ -274,6 +274,75 @@ export async function fetchHeadToHead(team: string, opp: string, limit = 10): Pr
   return recent;
 }
 
+/** Une rencontre jouée entre deux clubs, telle qu'affichée (domicile / visiteur). */
+export interface HeadToHeadSeasonGame {
+  gameId:    string;
+  date:      string;
+  homeAbbr:  string;
+  awayAbbr:  string;
+  homeScore: number;
+  awayScore: number;
+  /** 2 = saison régulière, 3 = séries. */
+  gameType:  2 | 3;
+  /** `REG` | `OT` | `SO`. */
+  lastPeriodType: string;
+}
+
+export interface HeadToHeadSeason {
+  /** Id NHL à 8 chiffres, ex. `20252026`. */
+  season: string;
+  games:  HeadToHeadSeasonGame[];
+}
+
+/**
+ * TOUTES les rencontres jouées entre `team` et `opp` sur UNE saison (régulière
+ * + séries), de la plus récente à la plus ancienne. Sert la section dépliable
+ * « Saison précédente » du face-à-face de la page match : un seul appel au
+ * calendrier du club, au lieu de balayer la saison semaine par semaine.
+ *
+ * Contrairement à `fetchHeadToHead`, une erreur de l'amont REMONTE : le client
+ * doit pouvoir afficher « impossible de charger » plutôt que « aucune
+ * rencontre », qui serait une affirmation fausse. Seul un 404 (club absent de
+ * cette saison, ex. une franchise relocalisée) vaut liste vide.
+ */
+export async function fetchHeadToHeadSeason(team: string, opp: string, season: string): Promise<HeadToHeadSeason> {
+  const t = team.toUpperCase(), o = opp.toUpperCase();
+  // Même liste quel que soit le sens de la demande : TOR/MTL = MTL/TOR.
+  const [a, b] = [t, o].sort();
+  const cacheKey = `h2h_season_${a}_${b}_${season}`;
+  const cached = getCached<HeadToHeadSeason>(cacheKey);
+  if (cached) return cached;
+
+  let sched: any;
+  try {
+    sched = await fetchNHL<any>(`v1/club-schedule-season/${t}/${season}`);
+  } catch (err: any) {
+    if (err?.status !== 404) throw err;
+    sched = { games: [] };
+  }
+
+  const games: HeadToHeadSeasonGame[] = [];
+  for (const g of sched?.games ?? []) {
+    if (g.gameType !== 2 && g.gameType !== 3) continue;
+    const home = g.homeTeam?.abbrev, away = g.awayTeam?.abbrev;
+    if (!((home === t && away === o) || (home === o && away === t))) continue;
+    const hs = g.homeTeam?.score, as = g.awayTeam?.score;
+    if (hs == null || as == null) continue;   // pas encore joué
+    games.push({
+      gameId: String(g.id), date: String(g.gameDate ?? ''),
+      homeAbbr: home, awayAbbr: away, homeScore: hs, awayScore: as,
+      gameType: g.gameType,
+      lastPeriodType: String(g.gameOutcome?.lastPeriodType ?? 'REG'),
+    });
+  }
+  games.sort((x, y) => y.date.localeCompare(x.date));
+
+  const out: HeadToHeadSeason = { season, games };
+  // Une saison terminée ne bougera plus ; la saison en cours, si.
+  setCached(cacheKey, out, season < currentSeason() ? 6 * 60 * 60_000 : 30 * 60_000);
+  return out;
+}
+
 /**
  * Official team stats for a given season (NHL stats API team/summary) plus
  * per-opponent goals-for / goals-against / wins derived from that season's
