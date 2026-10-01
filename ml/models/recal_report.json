@@ -1,0 +1,99 @@
+{
+  "protocol": {
+    "fit": "(a, b) sur les saisons < S, au moins 3",
+    "adopt_if": "log-loss moneyline z <= -2 ET gain sur >= 70 % des saisons"
+  },
+  "by_season": [
+    {
+      "season": 2015,
+      "a": -0.0669,
+      "b": 1.2928,
+      "ll_raw": 0.67669,
+      "ll_recal": 0.67677
+    },
+    {
+      "season": 2016,
+      "a": -0.0729,
+      "b": 1.2364,
+      "ll_raw": 0.66742,
+      "ll_recal": 0.66671
+    },
+    {
+      "season": 2017,
+      "a": -0.0582,
+      "b": 1.2634,
+      "ll_raw": 0.66891,
+      "ll_recal": 0.6691
+    },
+    {
+      "season": 2018,
+      "a": -0.0359,
+      "b": 1.2375,
+      "ll_raw": 0.67284,
+      "ll_recal": 0.67309
+    },
+    {
+      "season": 2019,
+      "a": -0.041,
+      "b": 1.211,
+      "ll_raw": 0.68027,
+      "ll_recal": 0.68124
+    },
+    {
+      "season": 2020,
+      "a": -0.0385,
+      "b": 1.1745,
+      "ll_raw": 0.65436,
+      "ll_recal": 0.65224
+    },
+    {
+      "season": 2021,
+      "a": -0.0463,
+      "b": 1.2034,
+      "ll_raw": 0.64306,
+      "ll_recal": 0.63957
+    },
+    {
+      "season": 2022,
+      "a": -0.0587,
+      "b": 1.2538,
+      "ll_raw": 0.66081,
+      "ll_recal": 0.66175
+    },
+    {
+      "season": 2023,
+      "a": -0.06,
+      "b": 1.2132,
+      "ll_raw": 0.65767,
+      "ll_recal": 0.65713
+    },
+    {
+      "season": 2024,
+      "a": -0.058,
+      "b": 1.2058,
+      "ll_raw": 0.66078,
+      "ll_recal": 0.66102
+    },
+    {
+      "season": 2025,
+      "a": -0.0477,
+      "b": 1.1986,
+      "ll_raw": 0.68477,
+      "ll_recal": 0.68725
+    }
+  ],
+  "moneyline": {
+    "n": 13502,
+    "delta": -0.000108,
+    "se": 0.000372,
+    "z": -0.29
+  },
+  "seasons_better": [
+    2016,
+    2020,
+    2021,
+    2023
+  ],
+  "share_seasons_better": 0.364,
+  "verdict": "NON TRANCHABLE"
+}

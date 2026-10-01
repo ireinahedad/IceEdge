@@ -98,6 +98,13 @@ interface MetricSpec {
  * pour faire nombre. Les passes montent plus haut (elles sont plus fréquentes),
  * les tirs bloqués aussi (un défenseur en bloque deux ou trois par match).
  */
+/**
+ * Statistiques nées des BUTS : en direct, elles suivent la part restante de
+ * l'équipe avec les effets de score mesurés (`box.live.fTeam`). Les autres
+ * (tirs, mises en échec, tirs bloqués, arrêts) n'ont pas été mesurées : `f`.
+ */
+const GOAL_STATS = new Set<MetricSpec["field"]>(["goals", "assists", "points"]);
+
 const SPECS: Record<PropMetric, MetricSpec> = {
   goals: {
     field: "goals", thresholds: [1, 2, 3], liveField: "goals", rateStat: "goals",
@@ -484,7 +491,10 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
         const liveLine: BoxscoreLine | undefined = inGame ? box?.players?.[p.id] : undefined;
         const liveCount = liveLine ? Number(liveLine[spec.liveField] ?? 0) : undefined;
         // Part du match qui reste (0 = terminé ou fusillade ; `null` = inconnue).
-        const f = liveInfo ? liveInfo.f : null;
+        // Buts, passes, points : celle de l'équipe du joueur, avec les effets
+        // de score mesurés (menée ou devant en fin de match, elle marque plus).
+        const fTeam = GOAL_STATS.has(spec.field) ? liveInfo?.fTeam?.[abbr.toUpperCase()] : undefined;
+        const f = liveInfo ? (liveInfo.f != null && fTeam != null ? fTeam : liveInfo.f) : null;
         const done = liveCount ?? 0;
 
         // ── Chiffre ML de chaque case, depuis la cadence du joueur ──────────

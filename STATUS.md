@@ -208,6 +208,19 @@ recovered from Git) and checking each claim against the code and the Git log.
     **pre-game value, paler**, under a note at the top of the page. No "data unavailable" banner.
     `X-Stale-Response` now exposed by CORS; a stale copy is refused while live.
   · `fetchHeadToHead` (data only — its weight is not measured yet).
+- ✔ **Live predictions, phase 2 part 2** (2026-10-01, local session, *committed, not yet deployed*):
+  · **Measured score effects**: MoneyPuck shot files → 106 198 timed regulation goals
+    (`fetch_live_goals.py`), out-of-sample pre-game λ (`live_pregame.py`), exposure maximum likelihood
+    per (score gap × time slice, fine late P3), shrinkage chosen by leave-one-season-out
+    (`calibrate_live.py` → `prediction/liveEffects.json`, trained 2012-13 → 2022-23). Last minute: team
+    up one ×7.35 (empty net), down one ×2.61, tied ×0.64.
+  · **Engine** `evolveLiveScore` (score DP, 10 s steps) behind `finalScoreGrid` and `liveCalibration`;
+    player props get `box.live.fTeam` for goals/assists/points.
+  · **Replay** (`server/scripts/replay-live.ts`, real engine, 3 903 games 2023-26, 5 moments, 10
+    questions): log-loss −2.19 %, 23 cells better / 2 worse of 50; at 2 min left puck line −27 %, total
+    −21 %. The 2 worse are puck-drop totals (+0.1–0.2 %, pre-game λ bias). → **Activated** (`LIVE_EFFECTS`).
+  · **Head-to-head measured, not kept** (`measure_h2h.py`: moneyline log-loss +0.00006, deviance better
+    on 64 % of seasons < 70 % rule). Nothing wired, ML or rules.
 
 ---
 
@@ -320,26 +333,20 @@ recovered from Git) and checking each claim against the code and the Git log.
 - [ ] A4 (goalie confirmation window) and A6 (team totals, OT, ±2.5) — after A1/A2.
 - [ ] Re-train monthly during the season.
 
-- [ ] **Live predictions, phase 2 part 2 — BLOCKED on network** (detail: `LIVE_PREDICTIONS_PLAN.md`): the cloud environment must allow
-      `moneypuck.com`, `api-web.nhle.com`, `api.nhle.com` (Environment → Edit → Network access;
-      still denied on 2026-10-01 — a new session may be needed). Rule agreed with the owner: **no
-      constant that is not measured on real games, nothing activated unless a replay shows a gain.**
-      1. MoneyPuck shot files → goals with time/score/empty net (`ml/python/fetch_live_goals.py`).
-      2. Score effects measured per (score gap × period, fine late-P3 slices) by exposure maximum
-         likelihood (observed / expected goals in each state — captures the pulled goalie without
-         modelling it), shrunk to 1 for rare cells → `server/src/services/prediction/liveEffects.json`.
-         Power play from the teams' real PP%/PK%. Check `situationCode` on a real game.
-      3. Engine: `evolveLiveScore` (dynamic programming on the score, 10 s steps) for the final grid,
-         P1/P2 cards and the player-props team factor; `liveCalibration` through the same engine.
-      4. Replay with the real Node engine (`server/scripts/replay-live.ts`): puck drop, end of P1,
-         end of P2, 5 min left, test seasons 2023-24 / 2024-25; Brier + log-loss phase 1 vs phase 2.
-      5. Head-to-head: measured weight in the rules (λ adjustment + win factor) and ML features
-         `h2h_*` (build_dataset + ml_service + featureEngineering via `fetchHeadToHead`), ML retrained
-         with and without, kept only if `backtest_walkforward.py` improves. Python + Node deploy.
-- [ ] Deploy live predictions (phase 1 + phase 2 part 1): merge `claude/laughing-davinci-3ver59`
-      into `master` — Railway (Node) and Vercel redeploy from GitHub. No Python, no migration.
-      Check on the live site during a game: numbers move every 30 s (rules AND ML), a finished
-      period shows 100/0, player cells drop to what is left to reach.
+- [ ] **Live predictions — power play in progress** (not done, nothing invented): MoneyPuck shot files
+      have no time-on-PP, so the PP multiplier cannot be measured from them. Needs penalties from the NHL
+      play-by-play (`v1/gamecenter/{id}/play-by-play`, ~1 300 games/season), then the same exposure
+      likelihood as `calibrate_live.py` and a replay. `situationCode` is checked (2026-09-30) and the game
+      sheet already carries `situation.secondsRemaining`. Also not through the engine yet: P1/P2 cards,
+      BTTS. Detail: `LIVE_PREDICTIONS_PLAN.md`.
+- [ ] **Pre-game score model level drift** (found 2026-10-01): observed regulation goals / λ = 0.96 on
+      2022-25 (λ ~4 % too high), 1.03 on 2017-21. Pre-game "over" totals run high (P(>5.5) 60 % predicted,
+      56 % observed on 2023-26). Fix on the pre-game side (in-season level recalibration), then re-measure.
+- [ ] Deploy live predictions (phase 1 + phase 2): merge `claude/laughing-davinci-3ver59`
+      into `master` — Railway (Node) and Vercel redeploy from GitHub. No Python, no migration
+      (`liveEffects.json` ships with the Node code). Check on the live site during a game: numbers
+      move every 30 s (rules AND ML), a finished period shows 100/0, player cells drop to what is left
+      to reach, and late in P3 with a one-goal gap the puck line / totals rise (pulled goalie).
 
 ### 3.6 Scalability — only on trigger (`AUDIT_SCALABILITE_COUTS.md` §3)
 

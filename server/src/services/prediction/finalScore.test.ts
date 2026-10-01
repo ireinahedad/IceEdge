@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { finalScoreGrid, gridSum, liveFraction, nbAtLeast, nbAtLeastLive } from './finalScore';
+import {
+  finalScoreGrid, gridSum, liveFraction, nbAtLeast, nbAtLeastLive, evolveLiveScore, LiveEffects,
+} from './finalScore';
+import measured from './liveEffects.json';
 
 /**
  * Ce que ce fichier prouve : la grille du score final sait partir d'un match
@@ -97,5 +100,47 @@ describe('nbAtLeastLive — « les deux marquent » sur le temps restant', () =>
   });
   it('moins de temps → moins de chances', () => {
     expect(nbAtLeastLive(3.1, 1, 6.5, 0.2)).toBeLessThan(nbAtLeastLive(3.1, 1, 6.5, 0.6));
+  });
+});
+
+describe('evolveLiveScore — effets de score mesurés', () => {
+  const FLAT: LiveEffects = {
+    slices: [[0, 1200], [1200, 2400], [2400, 3600]], diffs: [-3, -2, -1, 0, 1, 2, 3],
+    m: [1, 2, 3].map(() => new Array(7).fill(1)), periodDist: [0.305, 0.365, 0.330],
+  };
+  const FX = measured as LiveEffects;
+  const sum = (r: number[][]) => r.reduce((t, row) => t + row.reduce((a, b) => a + b, 0), 0);
+
+  it('m ≡ 1 : on retrouve les deux Poisson de la phase 1', () => {
+    const live = { homeScore: 1, awayScore: 0, secondsLeftReg: 1500, inOvertime: false };
+    // f de la phase 1 avec la même pondération par période que le moteur.
+    const f = (300 / 1200) * 0.365 + 0.330;
+    const p1 = finalScoreGrid(3.1, 2.8, 0.5, { ...live, f });
+    const p2 = finalScoreGrid(3.1, 2.8, 0.5, { ...live, effects: FLAT });
+    for (let h = 0; h < p1.size; h++) {
+      for (let a = 0; a < p1.size; a++) expect(p2.p[h][a]).toBeCloseTo(p1.p[h][a], 4);
+    }
+  });
+
+  it('la masse est conservée, et rien ne bouge une fois les 60 minutes jouées', () => {
+    expect(sum(evolveLiveScore(3.2, 2.9, 0, 0, 0, FX))).toBeCloseTo(1, 9);
+    const end = evolveLiveScore(3.2, 2.9, 2, 1, 3600, FX);
+    expect(end[0][0]).toBe(1);
+  });
+
+  it("menée d'un but en fin de match : l'égalisation est plus probable qu'à cadence fixe", () => {
+    const live = { homeScore: 2, awayScore: 1, secondsLeftReg: 120, inOvertime: false };
+    const flat = finalScoreGrid(3.0, 3.0, 0.5, { ...live, f: (120 / 1200) * 0.330 });
+    const fx = finalScoreGrid(3.0, 3.0, 0.5, { ...live, effects: FX });
+    expect(fx.regTie).toBeGreaterThan(flat.regTie * 1.5);
+    // … et le but dans le filet désert aussi : le domicile gagne plus souvent par 2+.
+    expect(gridSum(fx, (h, a) => h - a >= 2)).toBeGreaterThan(gridSum(flat, (h, a) => h - a >= 2));
+  });
+
+  it('prolongation en cours : les effets ne changent rien (partage direct)', () => {
+    const live = { homeScore: 2, awayScore: 2, secondsLeftReg: 0, inOvertime: true };
+    const a = finalScoreGrid(3.0, 3.0, 0.55, live);
+    const b = finalScoreGrid(3.0, 3.0, 0.55, { ...live, effects: FX });
+    expect(b.p[3][2]).toBeCloseTo(a.p[3][2], 12);
   });
 });
