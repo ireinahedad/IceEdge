@@ -3,8 +3,8 @@
  *
  * Règles du user (2026-09-27), à ne pas défaire :
  *
- *   • Les prix affichés viennent de Betano (Ontario), le seul livre canadien que
- *     The Odds API cote complètement sur la NHL (Bet365 et Stake n'y sont pas).
+ *   • Les prix affichés viennent de BetRivers, le livre de The Odds API le plus
+ *     proche de Bet365 (2026-10-02) — Bet365 et Stake n'y sont pas cotés.
  *     La source est dite UNE fois, dans les Réglages (« Cotes affichées »),
  *     pas sur chaque pastille.
  *   • Le toucher ouvre le livre CHOISI dans les Réglages (Bet365 ou Stake), même

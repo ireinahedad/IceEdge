@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useParams, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { BottomNav } from "../components/BottomNav";
@@ -12,6 +12,7 @@ import "../components/rink-theme.css";
 import type { PlayerSummary, PublicSlip, PublicSlipLeg } from "../types/user";
 import { outcomeKey } from "../services/slipOutcome";
 
+import { Ban, Check, X, Clock, Lock, EyeOff } from "lucide-react";
 const ACCENT = "#86d1ea";
 const WIN    = "#4ade80";
 const LOSS   = "#f87171";
@@ -57,10 +58,18 @@ function outcomeColor(outcome: PublicSlip["outcome"]): string {
  * perdu fausserait la lecture d'un bilan, ce qui est exactement ce que cette
  * page est censée rendre fiable.
  */
-function legMark(result: PublicSlipLeg["result"], slipPending: boolean): { icon: string; color: string } {
-  if (result === "win")  return { icon: "✅", color: WIN };
-  if (result === "loss") return { icon: "❌", color: LOSS };
-  if (slipPending)       return { icon: "⏳", color: MUTED };
+function legMark(result: PublicSlipLeg["result"], slipPending: boolean): { icon: ReactNode; color: string } {
+  // Icônes, plus d'emoji (2026-10-01) — même pastille que l'historique de ses
+  // propres coupons (`LegResultMark`, MySlipsTab).
+  const dot = (Icon: typeof Check, color: string) => (
+    <span className="w-4 h-4 rounded-full flex items-center justify-center"
+      style={{ background: color + "29", border: `1px solid ${color}73` }}>
+      <Icon size={10} strokeWidth={3} style={{ color }} />
+    </span>
+  );
+  if (result === "win")  return { icon: dot(Check, WIN), color: WIN };
+  if (result === "loss") return { icon: dot(X, LOSS), color: LOSS };
+  if (slipPending)       return { icon: <Clock size={13} />, color: MUTED };
   return { icon: "—", color: MUTED };
 }
 
@@ -87,7 +96,7 @@ function SlipCard({ slip }: { slip: PublicSlip }) {
     return (
       <div className="rounded-2xl px-3.5 py-3" style={{ background: "#111a1f" }}>
         <div className="flex items-center gap-2.5">
-          <span className="text-sm">🔒</span>
+          <Lock size={14} className="text-white/60 flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-white text-[12px] font-medium">{date} · {kind}</p>
             <p className="text-[11px]" style={{ color: MUTED }}>
@@ -326,7 +335,7 @@ export function PlayerBetsPage() {
 
         {state.kind === "hidden" && (
           <div className="rounded-2xl px-4 py-6 text-center" style={{ background: "#111a1f" }}>
-            <p className="text-2xl mb-2">🙈</p>
+            <div className="mb-2 flex justify-center text-white/50"><EyeOff size={24} /></div>
             <p className="text-white text-sm font-semibold mb-1">{t("player.hiddenTitle")}</p>
             <p className="text-[11px]" style={{ color: MUTED }}>{t("player.hiddenDesc")}</p>
           </div>
@@ -378,7 +387,7 @@ export function PlayerBetsPage() {
                     disabled={blocking}
                     className="flex-1 py-2.5 rounded-2xl border border-red-400/30 text-red-400 text-xs font-semibold disabled:opacity-50"
                   >
-                    🚫 {t("chat.blockUser")}
+                    <Ban size={13} className="inline mr-1.5 -mt-0.5" />{t("chat.blockUser")}
                   </button>
                 )}
               </div>

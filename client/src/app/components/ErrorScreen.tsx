@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/react";
 import { useI18n } from "../i18n";
 import { env } from "../env";
 
+import { WifiOff, RefreshCw, AlertTriangle } from "lucide-react";
 /**
  * ErrorScreen — l'écran unique affiché quand un rendu plante.
  *
@@ -53,7 +54,7 @@ export function ErrorScreen({ error, eventId }: { error: unknown; eventId?: stri
       className="flex flex-col items-center justify-center min-h-screen text-white max-w-[430px] mx-auto px-6 text-center"
       style={{ background: "#0A0E0C" }}
     >
-      <p className="text-5xl mb-4" aria-hidden="true">{variant === "offline" ? "📡" : variant === "update" ? "✨" : "🧊"}</p>
+      <div className="mb-4 text-[#86d1ea]" aria-hidden="true">{variant === "offline" ? <WifiOff size={44} /> : variant === "update" ? <RefreshCw size={44} /> : <AlertTriangle size={44} />}</div>
       <h1 className="text-white font-bold text-lg mb-2">{title}</h1>
       <p className="text-[#92A08A] text-sm mb-8">{body}</p>
 

@@ -231,7 +231,7 @@ export function SlipNotices({ analysis }: { analysis: SlipAnalysis }) {
 
 export function LegCard({ leg, index, onRemove, bookPrice, started }: {
   leg: BetLeg; index: number; onRemove: () => void;
-  /** Vrai prix Betano Ontario de cette jambe, si le livre la cote. */
+  /** Vrai prix BetRivers de cette jambe, si le livre la cote. */
   bookPrice?: number;
   /** Le match de cette jambe a commencé : le serveur refusera le coupon. */
   started?: boolean;
@@ -250,7 +250,7 @@ export function LegCard({ leg, index, onRemove, bookPrice, started }: {
           </div>
           {leg.subjectLogo?.startsWith("http")
             ? <img src={leg.subjectLogo} alt="" className="w-6 h-6 object-contain" />
-            : <span className="text-base">{leg.subjectLogo}</span>}
+            : <span className="w-6 h-6 rounded-full bg-white/5" />}
         </div>
         <div className="flex-1 min-w-0">
           {leg.subjectType === "player" ? (
@@ -282,7 +282,7 @@ export function LegCard({ leg, index, onRemove, bookPrice, started }: {
             <span className="text-xs font-bold flex-shrink-0" style={{ color: PROB_COLOR }}>
               {leg.probability}% <span className="text-[11px] font-medium">{t("slip.chance")}</span>
             </span>
-            {/* Cote = VRAI prix du livre (Betano Ontario), plus la cote tirée
+            {/* Cote = VRAI prix du livre (BetRivers), plus la cote tirée
                 du modèle (décision du user, 2026-09-30). Pas de prix → on le
                 dit, sans inventer de chiffre. */}
             {bookPrice != null ? (

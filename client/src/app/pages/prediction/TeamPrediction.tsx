@@ -32,7 +32,8 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
     goalsFor: number; goalsAgainst: number;
   } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [revealMode, setRevealMode] = useState<RevealMode>("rules");
+  // 2026-10-01 : ML partout ; les règles ne se voient que dans la fiche d'un pari.
+  const revealMode: RevealMode = "ml";
   // Abréviation → nom complet, pour tout le circuit. Le flux de cotes nomme ses
   // issues « Edmonton Oilers » ; sans le nom de l'ADVERSAIRE, impossible
   // d'identifier le match avec certitude, et un appariement approximatif
@@ -457,7 +458,7 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
 
       {/* Market groups — reveal-all toggle */}
       <StatsBanner type="team" id={teamId} />
-      <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
+      <PredictionsRevealBar />
       <BetOddsCtx.Provider value={odds}>
         <RevealModeCtx.Provider value={revealMode}>
           {apiGroups == null

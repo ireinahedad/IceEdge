@@ -611,7 +611,7 @@ function GameCard({
   const status = dirty
     ? { label: "Pas enregistré", bg: "rgba(250,204,21,0.15)", fg: "#facc15" }
     : filled
-      ? { label: "Rempli ✓", bg: "rgba(74,222,128,0.15)", fg: "#4ade80" }
+      ? { label: "Rempli", bg: "rgba(74,222,128,0.15)", fg: "#4ade80" }
       : { label: "À faire", bg: "rgba(255,255,255,0.08)", fg: "#bfc8cc" };
   const [advanced, setAdvanced] = useState(!!draft.lineupAdj || !!draft.lineupNote);
 

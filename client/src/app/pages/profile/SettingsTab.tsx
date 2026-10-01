@@ -29,6 +29,7 @@ import { DotLoader, InputBox, ToggleSwitch, UserAvatar } from "./ProfileParts";
 import { DeleteAccountSheet } from "./DeleteAccountSheet";
 
 
+import { Globe, Moon, Sun, Target, Hash, Lock, FileText } from "lucide-react";
 // ── Settings Tab ──────────────────────────────────────────────────────────────
 
 export function SettingsTab({
@@ -245,7 +246,7 @@ export function SettingsTab({
       {/* Language + appearance */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex items-center gap-2 icy-card rounded-lg px-2.5 py-1.5">
-          <span className="text-[11px]">🌐</span>
+          <Globe size={12} className="text-white/60" />
           <span className={`text-[11px] font-bold transition-colors ${lang === "en" ? "text-[#90C9F0]" : "text-white/40"}`}>EN</span>
           <ToggleSwitch checked={lang === "fr"} onChange={() => setLang(lang === "fr" ? "en" : "fr")} fontSize={11} />
           <span className={`text-[11px] font-bold transition-colors ${lang === "fr" ? "text-[#90C9F0]" : "text-white/40"}`}>FR</span>
@@ -257,9 +258,9 @@ export function SettingsTab({
             n'a été supprimé, ni ici ni dans les feuilles de style. */}
         {LIGHT_MODE_ENABLED && (
           <div className="inline-flex items-center gap-2 icy-card rounded-lg px-2.5 py-1.5">
-            <span className={`text-[11px] font-bold transition-colors ${mode === "dark" ? "text-[#90C9F0]" : "text-white/40"}`}>🌙 {t("profile.dark")}</span>
+            <span className={`text-[11px] font-bold transition-colors ${mode === "dark" ? "text-[#90C9F0]" : "text-white/40"}`}><Moon size={11} className="inline -mt-0.5 mr-1" />{t("profile.dark")}</span>
             <ToggleSwitch checked={mode === "light"} onChange={() => setMode(mode === "light" ? "dark" : "light")} fontSize={11} />
-            <span className={`text-[11px] font-bold transition-colors ${mode === "light" ? "text-[#90C9F0]" : "text-white/40"}`}>{t("profile.light")} ☀️</span>
+            <span className={`text-[11px] font-bold transition-colors ${mode === "light" ? "text-[#90C9F0]" : "text-white/40"}`}>{t("profile.light")}<Sun size={11} className="inline -mt-0.5 ml-1" /></span>
           </div>
         )}
       </div>
@@ -270,7 +271,7 @@ export function SettingsTab({
       {features.bookmakerLinks && (
         <div className="icy-card rounded-lg px-3 py-2.5">
           <div className="flex items-center gap-1.5 mb-1.5">
-            <span className="text-[11px]">🎯</span>
+            <Target size={12} className="text-white/60" />
             <span className="text-[11px] font-bold text-white/80">{t("profile.bookmaker")}</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -297,7 +298,7 @@ export function SettingsTab({
       )}
 
       {/* Format d'écriture des cotes de bookmaker.
-          ⚠️ Ne concerne QUE les prix venant d'un livre (Betano Ontario). Les
+          ⚠️ Ne concerne QUE les prix venant d'un livre (BetRivers). Les
           probabilités du modèle restent en % partout — voir le commentaire de
           `services/oddsFormat.ts`. L'aide sous la carte le dit à l'utilisateur,
           sinon « j'ai choisi américain et je vois encore des % » se lit comme
@@ -310,7 +311,7 @@ export function SettingsTab({
           « Cote décimale » ne dit rien, « 1.47 » se reconnaît. */}
       <div className="icy-card rounded-lg px-3 py-2.5">
         <div className="flex items-center gap-1.5 mb-1.5">
-          <span className="text-[11px]">🔢</span>
+          <Hash size={12} className="text-white/60" />
           <span className="text-[11px] font-bold text-white/80">{t("profile.oddsFormat")}</span>
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -587,7 +588,7 @@ export function SettingsTab({
           {keyStored && !editingKey && !removeKey ? (
             <div className="flex flex-col gap-1.5">
               <span className="text-[#90C9F0] text-[11px] font-semibold">
-                🔒 {t("profile.keyStored")}
+                <Lock size={11} className="inline -mt-0.5 mr-1" />{t("profile.keyStored")}
               </span>
               <p className="text-white/40 text-[11px] leading-relaxed">{t("profile.keyNotShown")}</p>
               <div className="flex items-center gap-4 mt-0.5">
@@ -663,7 +664,7 @@ export function SettingsTab({
           onClick={() => navigate("/dev/saisie")}
           className="icy-card rounded-2xl p-4 flex items-center gap-3 text-left active:scale-[0.99] transition-transform"
         >
-          <span className="text-xl leading-none" aria-hidden>📝</span>
+          <FileText size={20} className="text-white/70" aria-hidden />
           <span className="flex-1 min-w-0">
             <span className="block text-white text-xs font-medium">Saisie d'avant-match</span>
             <span className="block text-[#86d1ea] text-[11px] font-bold uppercase tracking-wider mt-0.5">admin</span>

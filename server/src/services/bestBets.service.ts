@@ -59,7 +59,7 @@ export interface BestBet {
   source:         'ml' | 'rules';
   confidence:     'very_high' | 'high' | 'medium' | 'low' | 'very_low';
   /**
-   * Vrai prix du livre d'affichage (Betano Ontario par défaut) pour ce pari,
+   * Vrai prix du livre d'affichage (BetRivers par défaut) pour ce pari,
    * ou `null` quand le livre ne le cote pas — presque tous les marchés joueurs.
    * Jamais déduit du modèle : voir `priceForSelection`.
    */
@@ -144,7 +144,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
   return [
     {
       id: `bb-${g.id}-ml-home`, subjectType: 'game', marketType: 'moneyline', marketLabel: 'Moneyline',
-      subjectId: g.id, subjectName: matchup, subjectLogo: g.homeTeam?.emoji ?? '🏒', teamAbbr: home,
+      subjectId: g.id, subjectName: matchup, subjectLogo: '', teamAbbr: home,
       label: `${home} to win`, selection: `${home} to win`, selectionValue: homeLc, selectionShort: `${home} ML`,
       context: ctxHome, line: null, gameId: g.id, teamId: homeLc, playerId: null, rulePct: homeMl,
       teams: { home, away },
@@ -152,7 +152,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
     },
     {
       id: `bb-${g.id}-ml-away`, subjectType: 'game', marketType: 'moneyline', marketLabel: 'Moneyline',
-      subjectId: g.id, subjectName: matchup, subjectLogo: g.awayTeam?.emoji ?? '🏒', teamAbbr: away,
+      subjectId: g.id, subjectName: matchup, subjectLogo: '', teamAbbr: away,
       label: `${away} to win`, selection: `${away} to win`, selectionValue: awayLc, selectionShort: `${away} ML`,
       context: ctxAway, line: null, gameId: g.id, teamId: awayLc, playerId: null, rulePct: awayMl,
       teams: { home, away },
@@ -160,7 +160,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
     },
     {
       id: `bb-${g.id}-over`, subjectType: 'game', marketType: 'total_goals', marketLabel: 'Total Goals O/U',
-      subjectId: g.id, subjectName: matchup, subjectLogo: '📈', teamAbbr: null,
+      subjectId: g.id, subjectName: matchup, subjectLogo: '', teamAbbr: null,
       label: `Over ${line}`, selection: `Over ${line}`, selectionValue: 'over', selectionShort: `O${line}`,
       context: matchup, line, gameId: g.id, teamId: null, playerId: null, rulePct: overPct,
       teams: { home, away },
@@ -168,7 +168,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
     },
     {
       id: `bb-${g.id}-under`, subjectType: 'game', marketType: 'total_goals', marketLabel: 'Total Goals O/U',
-      subjectId: g.id, subjectName: matchup, subjectLogo: '📉', teamAbbr: null,
+      subjectId: g.id, subjectName: matchup, subjectLogo: '', teamAbbr: null,
       label: `Under ${line}`, selection: `Under ${line}`, selectionValue: 'under', selectionShort: `U${line}`,
       context: matchup, line, gameId: g.id, teamId: null, playerId: null, rulePct: underPct,
       teams: { home, away },
@@ -176,7 +176,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
     },
     {
       id: `bb-${g.id}-pl-home`, subjectType: 'game', marketType: 'puck_line', marketLabel: 'Puck Line',
-      subjectId: g.id, subjectName: matchup, subjectLogo: g.homeTeam?.emoji ?? '🏒', teamAbbr: home,
+      subjectId: g.id, subjectName: matchup, subjectLogo: '', teamAbbr: home,
       label: `${home} -1.5`, selection: `${home} -1.5`, selectionValue: homeLc, selectionShort: `${home} -1.5`,
       context: ctxHome, line: -1.5, gameId: g.id, teamId: homeLc, playerId: null, rulePct: pl,
       teams: { home, away },
@@ -192,7 +192,7 @@ async function buildPlayerCandidates(
   const pid  = String(p.id);
   const name = p.name ?? 'Player';
   const abbr = (p.teamId ?? '').toUpperCase() || null;
-  const logo = '🏒';
+  const logo = '';
   const ctx  = `${game.matchup}${game.when ? ` · ${game.when}` : ''}`;
 
   const [atg, shots, points, pp] = await Promise.all([

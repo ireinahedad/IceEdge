@@ -12,6 +12,7 @@ import { FrozenName } from "../../components/brand/FrozenName";
 import { useI18n } from "../../i18n";
 
 
+import { User as UserIcon, Camera } from "lucide-react";
 // ── Uiverse-styled settings helpers ────────────────────────────────────────
 
 /** Toggle switch (Uiverse .switch/.slider) */
@@ -123,7 +124,7 @@ export function UserAvatar({
     />
   ) : (
     <div className={`${dim} rounded-2xl bg-white/5 backdrop-blur-md border border-white/20 flex items-center justify-center`}>
-      {avatar ?? "👤"}
+      {avatar && avatar !== "👤" ? avatar : <UserIcon size={20} className="text-white/60" />}
     </div>
   );
 
@@ -135,7 +136,7 @@ export function UserAvatar({
       <div className="absolute inset-0 rounded-2xl bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
         {uploading
           ? <div className="w-4 h-4 border-2 border-white/60 border-t-white rounded-full animate-spin" />
-          : <span className="text-white text-lg">📷</span>
+          : <Camera size={18} className="text-white" />
         }
       </div>
     </div>

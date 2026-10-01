@@ -27,9 +27,9 @@ export interface EvItem {
 // see what the feature looks like without exposing real value bets.
 // (Le tennis est sorti du produit le 2026-08-24 : plus de ligne tennis ici.)
 export const EV_SAMPLE: EvItem[] = [
-  { id: "ev-s1", logo: "🏒", label: "TOR ML vs MTL",       context: "Value spot", pct: 58, edge: 11 },
-  { id: "ev-s2", logo: "🏒", label: "Over 5.5 · BOS–FLA",  context: "Value spot", pct: 63, edge: 9 },
-  { id: "ev-s3", logo: "🏒", label: "EDM ML vs CGY",       context: "Value spot", pct: 61, edge: 8 },
+  { id: "ev-s1", logo: "", label: "TOR ML vs MTL",       context: "Value spot", pct: 58, edge: 11 },
+  { id: "ev-s2", logo: "", label: "Over 5.5 · BOS–FLA",  context: "Value spot", pct: 63, edge: 9 },
+  { id: "ev-s3", logo: "", label: "EDM ML vs CGY",       context: "Value spot", pct: 61, edge: 8 },
 ];
 
 /**
@@ -45,7 +45,7 @@ export function EvRow({ item }: { item: EvItem }) {
     <div className="flex items-center gap-2.5 icy-card rounded-xl px-2.5 py-2">
       {item.logo?.startsWith("http")
         ? <img src={item.logo} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
-        : <span className="text-base flex-shrink-0">{item.logo}</span>}
+        : <span className="w-5 h-5 rounded-full bg-white/5 flex-shrink-0" />}
       <div className="flex-1 min-w-0">
         <div className="text-white text-[11px] font-medium truncate">{item.label}</div>
         <div className="text-[#8a9ea6] text-[11px] truncate">{item.context}</div>

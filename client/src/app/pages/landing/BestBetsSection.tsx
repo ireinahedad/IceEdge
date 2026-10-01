@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, useMemo } from "react";
-import { ChevronRight, Star } from "lucide-react";
+import { ChevronRight, Star, Check, Plus } from "lucide-react";
 import { predictionApiService, type ApiBestBet } from "../../services/predictionApiService";
 import type { BetLeg } from "../../types/bet";
 import { useBet } from "../../context/BetContext";
@@ -30,7 +30,7 @@ interface BestBet {
   mlPct: number | null;
   leg: BetLeg;
   gameId?: string;
-  /** Vrai prix Betano Ontario, quand le livre cote ce pari (voir serveur). */
+  /** Vrai prix BetRivers, quand le livre cote ce pari (voir serveur). */
   bookPrice: number | null;
 }
 
@@ -113,10 +113,7 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
   const { t } = useI18n();
   const inSlip = hasLeg(bet.id);
   // `sorted` n'envoie ici que des paris qui ONT un score pour cette source.
-  const displayPct = pctFor(bet, sortSource) ?? bet.rulePct;
-  // L'autre source, en petit : c'est ce qui rend l'écart règles / IA visible
-  // ligne par ligne au lieu de devoir basculer d'onglet pour comparer.
-  const otherPct = sortSource === "ml" ? bet.rulePct : bet.mlPct;
+  const displayPct = pctFor(bet, sortSource) ?? 0;
   const risk = riskLabel(displayPct);
   const odds = impliedOdds(displayPct);
 
@@ -126,7 +123,7 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
     <div className="flex items-center gap-2.5 icy-card rounded-xl px-3 py-2">
       {bet.logo?.startsWith("http")
         ? <img src={bet.logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
-        : <span className="text-lg flex-shrink-0">{bet.logo}</span>}
+        : <span className="w-6 h-6 rounded-full bg-white/5 flex-shrink-0" />}
 
       <div className="flex-1 min-w-0">
         <div className="text-white text-[13px] font-semibold leading-tight">{bet.label}</div>
@@ -147,11 +144,6 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
             {t("home.odds", { odds: odds.toFixed(2) })}
           </span>
         )}
-        {otherPct != null && (
-          <span className="text-[10px] text-[#8a9ea6] tabular-nums">
-            {t(sortSource === "ml" ? "home.vsRules" : "home.vsAi", { pct: otherPct })}
-          </span>
-        )}
       </div>
 
       <button
@@ -162,7 +154,7 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
             : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
         }`}
       >
-        {inSlip ? "✓" : "+"}
+        {inSlip ? <Check size={14} strokeWidth={3} /> : <Plus size={14} strokeWidth={3} />}
       </button>
     </div>
   );
@@ -188,7 +180,9 @@ export function BestBetsSection({
   locked?: boolean;
 }) {
   const { t, lang } = useI18n();
-  const [sortSource, setSortSource] = useState<SortSource>("ml");
+  // 2026-10-01 (demande du user) : ML seulement. Plus de bascule Règles / IA
+  // ici — le score des règles ne se voit que dans la fiche d'un pari.
+  const sortSource: SortSource = "ml";
   // Un seul sélecteur exclusif (Tous / Sûrs / Équilibrés / Grosses cotes).
   // Il remplace l'ancien trio bouton de tri + 4 pastilles multi-sélection, où
   // cliquer « Sûr » masquait les paris sûrs au lieu de n'afficher qu'eux.
@@ -297,7 +291,7 @@ export function BestBetsSection({
               const risk = riskLabel(pct);
               return (
                 <div key={i} className="flex items-center gap-2.5 icy-card rounded-xl px-3 py-2">
-                  <span className="text-lg flex-shrink-0">🏒</span>
+                  <span className="w-6 h-6 rounded-full bg-white/5 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="text-white text-[13px] font-semibold leading-tight">{label}</div>
                     <div className="text-[#8a9ea6] text-[11px] truncate mt-0.5">{context}</div>
@@ -340,26 +334,12 @@ export function BestBetsSection({
           <span className="text-white text-sm font-medium">{t("home.bestBets")}</span>
           {!isLoading && <span className="text-[11px] text-[#bfc8cc] icy-tile px-1.5 py-0.5 rounded-full">{t("home.top", { n: sorted.length })}</span>}
         </button>
-        {!collapsed && (
-        <div className="flex items-center gap-1.5">
-          {/* Source toggle — which score (rules vs AI) drives display + filtering */}
-          <div className="flex icy-tile rounded-full p-0.5 gap-0.5">
-            {(["rules", "ml"] as SortSource[]).map((s) => (
-              <button key={s} onClick={() => setSortSource(s)}
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${sortSource === s ? "text-[#072E49] font-bold" : "text-[#8a9ea6]"}`}
-                style={sortSource === s ? { backgroundColor: s === "ml" ? "#a78bfa" : "#86d1ea" } : {}}>
-                {s === "ml" ? t("home.ai") : t("home.rules")}
-              </button>
-            ))}
-          </div>
-        </div>
-        )}
       </div>
 
       {!collapsed && (
         <>
           <p className="text-[#8a9ea6] text-[11px] mb-2">
-            {t(sortSource === "ml" ? "home.bbExplainMl" : "home.bbExplainRules")}
+            {t("home.bbExplainMl")}
           </p>
           {/* Sélecteur exclusif : un onglet actif à la fois. Ses couleurs sont
               celles des % sur les lignes — il sert aussi de légende. */}
@@ -396,13 +376,6 @@ export function BestBetsSection({
           {sortSource === "ml" && bets.length > 0 && !mlAvailable ? (
             <>
               <p>{t("home.aiUnavailable")}</p>
-              <button
-                onClick={() => setSortSource("rules")}
-                className="tap-44 mt-2 px-3 py-1.5 rounded-full text-[11px] font-bold"
-                style={{ background: "#86d1ea", color: "#072E49" }}
-              >
-                {t("home.showRules")}
-              </button>
             </>
           ) : activeTier && bets.length > 0
             ? t("home.noBetsTier", { tier: t(activeTier.key) })

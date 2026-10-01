@@ -32,6 +32,7 @@ import { nhlLogoUrl } from "../../data/teamEmoji";
 import { BetOption } from "./PredictionSheet";
 import type { BetOpt, MLProps } from "./gameMarkets";
 
+import { Check } from "lucide-react";
 /** Les statistiques qu'on peut miser en grille. */
 export type PropMetric = "goals" | "assists" | "points" | "shots" | "hits" | "blocks" | "saves";
 
@@ -807,7 +808,7 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
                           {reached && (
                             <div className="text-[#f87171] text-[9px] text-center leading-none mb-0.5 font-bold"
                                  title={t("prop.reached")}>
-                              ✓
+                              <Check size={9} strokeWidth={3.5} className="mx-auto" />
                             </div>
                           )}
                           <BetOption opt={o} accent={accent} compact />

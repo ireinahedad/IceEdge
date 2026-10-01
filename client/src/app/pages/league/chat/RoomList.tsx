@@ -6,6 +6,7 @@ import { useI18n } from "../../../i18n";
 import { AppButton } from "../../../components/AppButton";
 import type { ChatRoom } from "../../../types/user";
 
+import { Lock, Pin, Search } from "lucide-react";
 // ─── Room list ────────────────────────────────────────────────────────────────
 // Single page (no tabs): a "Public" section (all public rooms) and a "Private"
 // section (private rooms the user belongs to). Each section is collapsible.
@@ -135,7 +136,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
               ) : (
                 <span className="text-white text-xs font-bold truncate">{room.name}</span>
               )}
-              {room.isPrivate && <span className="text-[11px] flex-shrink-0">🔒</span>}
+              {room.isPrivate && <Lock size={11} className="text-white/60 flex-shrink-0" />}
               {room.role === "admin" && (
                 <span className="text-[11px] text-[#90C9F0] border border-[#90C9F0]/40 rounded-full px-1.5 py-0.5 flex-shrink-0">admin</span>
               )}
@@ -158,7 +159,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
               className={`tap-44 text-sm transition-opacity ${room.isPinned ? "opacity-100" : "opacity-30"}`}
               title={room.isPinned ? t("chat.unpinRoom") : t("chat.pinRoom")}
             >
-              📌
+              <Pin size={13} />
             </button>
           </div>
         ) : (
@@ -202,7 +203,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
     <div className="flex flex-col gap-4 overflow-y-auto">
       {/* Search / join by code (no clear button — keeps the keyboard-free view calm) */}
       <div className="chat-tile rounded-2xl flex items-center gap-2 px-3 py-2.5">
-        <span className="text-white/40 text-sm">🔎</span>
+        <Search size={14} className="text-white/40 flex-shrink-0" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -220,7 +221,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-white text-xs font-bold truncate">{codeResult.name}</span>
-              {codeResult.isPrivate && <span className="text-[11px]">🔒</span>}
+              {codeResult.isPrivate && <Lock size={11} className="text-white/60 flex-shrink-0" />}
             </div>
             <p className="text-white/50 text-[11px]">{codeResult.memberCount} {t("common.members")}</p>
           </div>

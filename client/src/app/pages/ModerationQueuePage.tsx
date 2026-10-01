@@ -23,6 +23,7 @@ import { useAuth } from "../context/AuthContext";
 import { profileApiService } from "../services/userService";
 import type { ModerationQueueItem } from "../types/user";
 
+import { CheckCircle2 } from "lucide-react";
 const REASON_STYLE: Record<string, string> = {
   spam:       "bg-white/5 text-white/60 border-white/10",
   harassment: "bg-orange-500/15 text-orange-400 border-orange-500/30",
@@ -117,7 +118,7 @@ export function ModerationQueuePage() {
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-2">
-          <span className="text-3xl">✅</span>
+          <CheckCircle2 size={30} className="text-[#4ade80]" />
           <p className="text-white text-sm font-medium">Nothing to review</p>
           <p className="text-white/40 text-[11px]">No open reports right now.</p>
         </div>

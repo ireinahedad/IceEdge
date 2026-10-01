@@ -6,6 +6,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { useBlocks } from "../context/BlockContext";
 import { useI18n } from "../i18n";
 
+import { Ban } from "lucide-react";
 /**
  * UserSheet — la fiche d'un compte, la même d'où qu'on l'ouvre.
  *
@@ -116,7 +117,7 @@ export function UserSheet({
                   disabled={busy}
                   className="w-full py-3 rounded-2xl border border-red-400/30 text-red-400 text-sm font-semibold disabled:opacity-50"
                 >
-                  🚫 {t("chat.blockUser")}
+                  <Ban size={13} className="inline mr-1.5 -mt-0.5" />{t("chat.blockUser")}
                 </button>
               )
             )}

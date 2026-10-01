@@ -219,7 +219,6 @@ export function DevMLDashboard() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-lg">🤖</span>
               <span className="text-white font-bold text-base">ML Dashboard</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#a78bfa]/15 border border-[#a78bfa]/30 text-[#a78bfa] font-medium">DEV ONLY</span>
             </div>

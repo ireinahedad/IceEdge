@@ -33,16 +33,18 @@ const LOCK_TTL_MS = 5 * 60 * 1000;
 /**
  * Coût d'une passe, en crédits The Odds API : 1 par marché et par région.
  *
- * `full` demande h2h + spreads + totals ; `close` demande h2h + spreads (les
- * totaux sont clos). Jusqu'au 2026-09-27 la passe du soir s'appelait `spreads`
+ * `full` et `close` demandent tous deux h2h + spreads depuis le 2026-10-01
+ * (avant : `full` ajoutait les totaux, clos pour de bon). Jusqu'au 2026-09-27 la passe du soir s'appelait `spreads`
  * et ne prenait que la puck line (1 crédit), contrainte du quota gratuit.
  * Voir `SLOTS`.
  */
-const COLLECT_COST: Record<PassKind, number> = { full: 3, close: 2 };
+const COLLECT_COST: Record<PassKind, number> = { full: 2, close: 2 };
 
 /** Marchés demandés à The Odds API pour chaque passe. */
 const PASS_MARKETS: Record<PassKind, string> = {
-  full: 'h2h,spreads,totals',
+  // Depuis le 2026-10-01 (décision du user) : moneyline + puck line ±1.5
+  // seulement, sur tous les matchs. Les totaux ne sont plus collectés.
+  full: 'h2h,spreads',
   close: 'h2h,spreads',
 };
 
@@ -286,8 +288,8 @@ function eventToRow(ev: RawOddsEvent): Row | null {
  * est ce que le CLV réclame, et elle ne coûte aucun crédit supplémentaire —
  * l'appel ramenait déjà ces prix, le collecteur les jetait.
  *
- * @param kind `full` (h2h + spreads + totals, 3 crédits) ou `close` (h2h +
- *             spreads, 2 crédits). Voir `SLOTS` pour le calendrier.
+ * @param kind `full` ou `close` — h2h + spreads, 2 crédits chacune depuis le
+ *             2026-10-01. Voir `SLOTS` pour le calendrier.
  * @returns nombre de lignes écrites ou mises à jour dans `odds_log`.
  */
 async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
@@ -510,11 +512,12 @@ export async function exportOddsLogCsv(): Promise<string> {
 // gratuit de 500, d'où une passe du soir réduite à la seule puck line). Répartition
 // retenue : ~15 000 backfill, ~4 500 affichage, et la collecte ci-dessous.
 //
-// Ici : deux passes complètes (3 crédits) + quatre passes de clôture
-// h2h + spreads (2 crédits) = **14 crédits/jour, ~430/mois**. Le moneyline
+// Ici : six passes h2h + spreads (2 crédits) = **12 crédits/jour, ~370/mois**
+// (14/jour avant le 2026-10-01, quand les deux passes `full` prenaient aussi
+// les totaux). Le moneyline
 // retrouve une vraie clôture (son CLV est réel, A3) ; la puck line garde la
-// sienne (règle A2). Les totaux n'ont que les passes de 11 h et 17 h : ils sont
-// clos, aucune stratégie vivante ne les price.
+// sienne (règle A2). Les totaux ne sont plus collectés : ils sont clos, aucune
+// stratégie vivante ne les price.
 //
 // LES HEURES. 11 h ET : les lignes du soir sont affichées, c'est l'ouverture
 // utile. 17 h ET : dernière passe complète avant les matchs. 18 h 45 / 19 h 45 :

@@ -228,7 +228,7 @@ export function LiveGameCard({ game }: { game: DisplayGame }) {
       {/* Model probability bar */}
       {showPct && <div className="flex items-center gap-2 mb-2">
         <span className="text-[11px] font-bold w-7 flex-shrink-0" style={{ color: accent }}>{homePct != null ? `${homePct}%` : "—"}</span>
-        <div className="flex-1 bg-[#0A0E0C] rounded-full h-2 overflow-hidden flex">
+        <div className="flex-1 bg-[#0A0E0C] rounded-full h-1 overflow-hidden flex">
           <div className="h-full rounded-l-full transition-all duration-500" style={{ width: `${homePct ?? 0}%`, backgroundColor: accent }} />
           <div className="h-full bg-[#1B2419] flex-1" />
         </div>
@@ -391,13 +391,13 @@ export function MoneylineBar({ awayPct, loading, awayAbbr, homeAbbr, band = fals
 }) {
   // Sans probabilité : rien — jamais de 50/50 de repli. Le bandeau garde
   // pourtant son fond, sur lequel sont écrits les libellés de l'en-tête.
-  if (!loading && awayPct == null) return band ? <div className="absolute inset-x-0 top-0 h-7 bg-white/40" aria-hidden /> : null;
+  if (!loading && awayPct == null) return band ? <div className="absolute inset-x-0 top-0 h-5 bg-white/40" aria-hidden /> : null;
   const away = awayPct ?? 50;
   const awayFav = away > 50;
   const fav = awayFav ? away : 100 - away;
   return (
     <div
-      className={`${band ? "absolute inset-x-0 top-0 h-7 bg-white/40" : "relative h-[3px] rounded-full bg-white/10"} overflow-hidden${loading ? " animate-pulse" : ""} ${className}`}
+      className={`${band ? "absolute inset-x-0 top-0 h-5 bg-white/40" : "relative h-[3px] rounded-full bg-white/10"} overflow-hidden${loading ? " animate-pulse" : ""} ${className}`}
       role={loading ? undefined : "img"}
       aria-label={loading ? undefined : `ML : ${awayAbbr} ${away}% – ${homeAbbr} ${100 - away}%`}
       title={loading ? undefined : `${awayAbbr} ${away}% · ${homeAbbr} ${100 - away}%`}
@@ -657,7 +657,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
         {/* Colonne date + heure.
             La date manquait : la section de l'accueil peut porter les matchs
             de demain ou d'après-demain, et « 19:00 » seul ne dit pas lequel. */}
-        <div className="flex flex-col items-center justify-center min-w-[44px] flex-shrink-0 pt-8">
+        <div className="flex flex-col items-center justify-center min-w-[44px] flex-shrink-0 pt-6">
           {day && <span className="text-[#bfc8cc] text-[11px] whitespace-nowrap">{day}</span>}
           <span className="text-xs font-medium" style={{ color: accent }}>{game.time}</span>
           <span className="text-[#bfc8cc] text-[11px]">ET</span>
@@ -675,11 +675,11 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
           className="grid items-center gap-x-4 gap-y-2"
           style={{ gridTemplateColumns: "auto auto auto" }}
         >
-          {/* Rangée d'en-tête = la hauteur du bandeau (h-7), libellés foncés
+          {/* Rangée d'en-tête = la hauteur du bandeau (h-5, abaissé le 2026-10-01), libellés foncés
               pour se lire sur le bleu pâle comme sur le gris. */}
-          <span className="h-7" />
-          <span className="h-7 flex items-center text-[#0b1f2a] text-[11px] font-bold">{t("home.colSpread")}</span>
-          <span className="h-7 flex items-center text-[#0b1f2a] text-[11px] font-bold">{t("home.colWinner")}</span>
+          <span className="h-5" />
+          <span className="h-5 flex items-center text-[#0b1f2a] text-[10px] font-bold">{t("home.colSpread")}</span>
+          <span className="h-5 flex items-center text-[#0b1f2a] text-[10px] font-bold">{t("home.colWinner")}</span>
           {/* Visiteur TOUJOURS en haut, domicile en bas avec son « H »
               (demande du user, 2026-09-29) — l'ordre de toute l'app. */}
           {teamRow(game.team2, game.team1, false, lineAway, plAway, priceAway, winAway, game.bookAway)}
@@ -693,7 +693,7 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
             les abréviations (MTL, TOR) tombaient à 0 px de large. Toucher la
             carte ouvre la page du match, qui porte tous les marchés. La colonne
             reste là si elle a un badge d'edge à montrer. */}
-        <div className={`${edge >= 8 ? "flex" : "hidden md:flex"} flex-col items-end justify-center gap-1.5 flex-shrink-0 max-w-[60px] pt-8`}>
+        <div className={`${edge >= 8 ? "flex" : "hidden md:flex"} flex-col items-end justify-center gap-1.5 flex-shrink-0 max-w-[60px] pt-6`}>
           {edge >= 8 && <EdgeBadge edge={edge} />}
           <button
             onClick={(e) => { e.stopPropagation(); onOpenSheet(); }}

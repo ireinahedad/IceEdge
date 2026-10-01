@@ -43,7 +43,7 @@ export function PredictionPage() {
   };
 
   return (
-    <RevealModeCtx.Provider value="rules">
+    <RevealModeCtx.Provider value="ml">
       <div className="flex flex-col min-h-screen pb-[calc(6rem+env(safe-area-inset-bottom,0px))] max-w-[430px] md:max-w-5xl mx-auto w-full" style={{ background: "#0A0E0C" }}>
         {/* Header */}
         <div className="sticky top-0 z-40"

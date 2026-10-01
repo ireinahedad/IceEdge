@@ -11,6 +11,7 @@ import { useI18n } from "../../i18n";
 import type { LeaderboardEntry, PublicSlip } from "../../types/user";
 import { outcomeKey } from "../../services/slipOutcome";
 
+import { Medal, Crown } from "lucide-react";
 // Initials fallback shown when a user has no photo avatar (no emoji avatars).
 function initials(name: string): string {
   const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
@@ -35,7 +36,7 @@ function UserProfileModal({ entry, onClose }: {
   const { user } = useAuth();
   const isSelf = user?.id === entry.userId;
   const canViewBets = isPro || isSelf;   // viewing others' bets is Pro-only
-  const medal = entry.rank === 1 ? "🥇" : entry.rank === 2 ? "🥈" : entry.rank === 3 ? "🥉" : null;
+  const medal: MedalTier | null = entry.rank === 1 ? "gold" : entry.rank === 2 ? "silver" : entry.rank === 3 ? "bronze" : null;
   const [slips, setSlips] = useState<PublicSlip[] | "private" | "loading">("loading");
 
   useEffect(() => {
@@ -67,7 +68,7 @@ function UserProfileModal({ entry, onClose }: {
           </div>
           {medal && (
             <div className="text-center flex-shrink-0">
-              <p className="text-2xl">{medal}</p>
+              <MedalIcon tier={medal} size={26} />
               <p className="text-white/40 text-[11px]">Rank #{entry.rank}</p>
             </div>
           )}
@@ -129,7 +130,7 @@ function UserProfileModal({ entry, onClose }: {
                 // Coupon pas encore commencé : le serveur n'envoie pas les
                 // sélections. On annonce le cadenas plutôt qu'un « Slip » muet.
                 const title = s.locked
-                  ? `🔒 ${s.isParlay ? t("player.parlayLegs", { n: String(s.legCount) }) : t("player.single")}`
+                  ? `${s.isParlay ? t("player.parlayLegs", { n: String(s.legCount) }) : t("player.single")}`
                   : (first?.selection ?? first?.subjectName ?? "Slip");
                 return (
                   <div key={s.id} className="flex items-center gap-2.5 icy-tile rounded-xl px-3 py-2.5">
@@ -212,8 +213,8 @@ export function FullLeaderboard({ entries, search = "", remoteResults = [] }: {
   const podium = sorted.slice(0, 3);
 
   // Medal tier by rank: 1–3 gold, 4–10 silver, 11–50 bronze
-  const medalFor = (rank: number): string | null =>
-    rank <= 3 ? "🥇" : rank <= 10 ? "🥈" : rank <= 50 ? "🥉" : null;
+  const medalFor = (rank: number): MedalTier | null =>
+    rank <= 3 ? "gold" : rank <= 10 ? "silver" : rank <= 50 ? "bronze" : null;
 
   // Show the top 50 — but keep every match visible while searching
   const visibleRows = q ? sorted : sorted.slice(0, 50);
@@ -229,13 +230,13 @@ export function FullLeaderboard({ entries, search = "", remoteResults = [] }: {
   // 1er des deux autres — c'est le seul écart entre les trois colonnes.
   function PodiumSlot({ entry, place }: { entry: LeaderboardEntry; place: 1 | 2 | 3 }) {
     const first = place === 1;
-    const medal = place === 1 ? "🥇" : place === 2 ? "🥈" : "🥉";
+    const medal: MedalTier = place === 1 ? "gold" : place === 2 ? "silver" : "bronze";
     return (
       <button
         onClick={() => setSelectedUser(entry)}
         className={`flex flex-col items-center gap-1 px-1 ${first ? "pb-1" : "pb-3"} active:scale-95 transition-transform min-w-0`}
       >
-        <span className={first ? "text-base leading-none" : "text-xs leading-none"}>{medal}</span>
+        <MedalIcon tier={medal} size={first ? 16 : 12} />
         {entry.avatarUrl
           ? <img src={entry.avatarUrl} alt="" className={`${first ? "w-12 h-12" : "w-9 h-9"} rounded-full object-cover border border-[#86d1ea]/35`} />
           : <span className={`${first ? "w-12 h-12 text-sm" : "w-9 h-9 text-[11px]"} rounded-full bg-white/8 border border-[#86d1ea]/25 flex items-center justify-center font-bold text-white/80`}>{initials(entry.displayName)}</span>}
@@ -317,7 +318,7 @@ export function FullLeaderboard({ entries, search = "", remoteResults = [] }: {
                   }`}
                 >
                   <div className="w-8 flex-shrink-0 flex flex-col items-center justify-center leading-none">
-                    {medal && <span className="text-[11px]">{medal}</span>}
+                    {medal && <MedalIcon tier={medal} size={12} />}
                     <span className="scoreboard-digit scoreboard-digit--cool text-[11px] mt-0.5">{entry.displayRank}</span>
                   </div>
 
@@ -327,7 +328,7 @@ export function FullLeaderboard({ entries, search = "", remoteResults = [] }: {
 
                   <div className="flex-1 min-w-0 py-1">
                     <div className="flex items-center gap-1.5">
-                      {showCrown && <span className="text-sm flex-shrink-0">👑</span>}
+                      {showCrown && <Crown size={13} className="flex-shrink-0 text-[#F5C451]" />}
                       <FrozenName name={entry.displayName} score={entry.performanceScore} size={12} />
                       {entry.isCurrentUser && (
                         <span className="text-[11px] text-[#ffd257] border border-[#ffd257]/40 rounded-full px-1 flex-shrink-0">
@@ -355,4 +356,11 @@ export function FullLeaderboard({ entries, search = "", remoteResults = [] }: {
       )}
     </>
   );
+}
+
+/* ─── Médailles (icône, plus d'emoji depuis le 2026-10-01) ─────────────────── */
+type MedalTier = "gold" | "silver" | "bronze";
+const MEDAL_COLOR: Record<MedalTier, string> = { gold: "#F5C451", silver: "#C0C7CE", bronze: "#CD7F32" };
+function MedalIcon({ tier, size }: { tier: MedalTier; size: number }) {
+  return <Medal size={size} className="flex-shrink-0" style={{ color: MEDAL_COLOR[tier] }} aria-label={tier} />;
 }

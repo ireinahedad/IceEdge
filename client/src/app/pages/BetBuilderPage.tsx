@@ -14,7 +14,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { Plus, Lightbulb, Trash2, Radio } from "lucide-react";
+import { Plus, Lightbulb, Trash2, Radio, CheckCircle2 } from "lucide-react";
 import { useBet } from "../context/BetContext";
 import { useAuth } from "../context/AuthContext";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
@@ -53,7 +53,7 @@ export function BetBuilderPage() {
   // Apparence sombre / claire — réglage partagé, cf. `appearance.ts`.
   const [mode] = useState<AppearanceMode>(readMode);
   const [showSheet, setShowSheet] = useState(false);
-  // Vrais prix Betano Ontario des jambes, par id — voir `POST /api/odds/legs`.
+  // Vrais prix BetRivers des jambes, par id — voir `POST /api/odds/legs`.
   const [legPrices, setLegPrices] = useState<Record<string, { price: number; bookTitle: string }>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   // `message` vient du serveur ; il était jeté à la réception puis lu au rendu,
@@ -386,7 +386,7 @@ export function BetBuilderPage() {
       {submitResult && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center px-6 bg-black/80">
           <div className="icy-card bet-ink-black rounded-3xl p-8 text-center max-w-[300px] w-full">
-            <div className="text-5xl mb-4">✅</div>
+            <div className="mb-4 flex justify-center text-[#4ade80]"><CheckCircle2 size={48} /></div>
             <p className="text-white font-bold text-lg mb-2">Slip Locked!</p>
             {submitResult.message && (
               <p className="text-[#92A08A] text-sm mb-6">{submitResult.message}</p>

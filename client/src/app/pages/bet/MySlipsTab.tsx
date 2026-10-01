@@ -362,7 +362,7 @@ function SlipCard({ slip }: { slip: BetSlip }) {
                 // Ancien coupon joueur : on garde la place du logo pour que
                 // les lignes restent alignées, sans image cassée.
                 ? <span className="w-5 h-5 flex-shrink-0" />
-                : <span className="text-sm flex-shrink-0">{leg.subjectLogo}</span>}
+                : <span className="w-5 h-5 rounded-full bg-white/5 flex-shrink-0" />}
             <div className="flex-1 min-w-0">
               <p className="text-white text-[11px] font-medium truncate">{lines.primary}</p>
               {lines.secondary && (

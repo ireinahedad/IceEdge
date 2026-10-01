@@ -16,6 +16,7 @@ import type { AllTeamsSeason, GameDetail, GameSide, GameTeamStats, GameSkaterLin
 import { BG_CARD, sign, svpct } from "./chartsTheme";
 import { COMPARE_B_COLOR, CompareRow } from "./ChartVisuals";
 
+import { Star } from "lucide-react";
 /* ── Single game ────────────────────────────────────────────
  * Header tells you at a glance whether it's done (FINAL, with OT/SO noted) or
  * when it starts. Everything below only renders once there's real data: a game
@@ -370,7 +371,7 @@ export function GameCharts({ gameId }: { gameId?: string }) {
               onClick={() => s.id && navigate(`/stats/chart/player/${s.id}`)}
               className="w-full px-4 py-2.5 border-t border-white/[0.06] flex items-center gap-3 text-left hover:bg-white/[0.04] transition-colors"
             >
-              <span className="text-base" style={{ color: accent }}>{"★".repeat(Math.max(1, 4 - s.star))}</span>
+              <span className="flex items-center gap-0.5 shrink-0" style={{ color: accent }}>{Array.from({ length: Math.max(1, 4 - s.star) }, (_, k) => <Star key={k} size={12} fill="currentColor" strokeWidth={0} />)}</span>
               <img src={nhlLogoUrl(s.teamAbbr)} alt={s.teamAbbr} className="w-4 h-4 object-contain shrink-0" />
               <span className="text-white text-xs font-medium flex-1 truncate">{s.name}</span>
               <span className="text-[#8a9ea6] text-[11px] tabular-nums shrink-0">

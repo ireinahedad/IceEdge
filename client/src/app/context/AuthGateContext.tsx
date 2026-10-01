@@ -5,6 +5,7 @@ import { useAuth } from "./AuthContext";
 import { useI18n } from "../i18n";
 import { AppButton } from "../components/AppButton";
 
+import { Lock } from "lucide-react";
 /**
  * AuthGate — lets signed-out visitors browse the app while blocking any action
  * that writes data (posting a message, creating/joining a room, reacting, …).
@@ -66,7 +67,7 @@ export function AuthGateProvider({ children }: { children: ReactNode }) {
             className="relative w-full max-w-[360px] icy-card rounded-3xl p-6 text-center"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="text-3xl mb-3">🔒</div>
+            <div className="mb-3 flex justify-center text-[#86d1ea]"><Lock size={28} /></div>
             <p className="text-white font-bold text-base mb-1">{t("gate.title")}</p>
             <p className="text-white/60 text-xs mb-5">
               {t("gate.message", { action: t(actionKey) })}

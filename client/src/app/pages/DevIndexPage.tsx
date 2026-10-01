@@ -21,25 +21,26 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 
+import { FileText, Shield, BarChart3, type LucideIcon } from "lucide-react";
 /** Les écrans internes, dans l'ordre où on les ouvre le plus souvent. */
-const DEV_LINKS: { path: string; title: string; blurb: string; icon: string }[] = [
+const DEV_LINKS: { path: string; title: string; blurb: string; icon: LucideIcon }[] = [
   {
     path:  "/dev/saisie",
     title: "Saisie d'avant-match",
     blurb: "Gardiens partants et joueurs absents, match par match. À faire 1 à 2 h avant le match.",
-    icon:  "📝",
+    icon:  FileText,
   },
   {
     path:  "/dev/moderation",
     title: "Moderation queue",
     blurb: "Signalements de chat ouverts, groupés par message. Masquer ou rejeter.",
-    icon:  "🛡️",
+    icon:  Shield,
   },
   {
     path:  "/dev/ml",
     title: "ML dashboard",
     blurb: "Modèles, calibration, facteurs et suivi des prédictions.",
-    icon:  "📊",
+    icon:  BarChart3,
   },
 ];
 
@@ -69,13 +70,13 @@ export function DevIndexPage() {
       </p>
 
       <div className="flex flex-col gap-3">
-        {DEV_LINKS.map(({ path, title, blurb, icon }) => (
+        {DEV_LINKS.map(({ path, title, blurb, icon: Icon }) => (
           <button
             key={path}
             onClick={() => navigate(path)}
             className="icy-card rounded-2xl p-4 flex items-center gap-3.5 text-left active:scale-[0.99] transition-transform"
           >
-            <span className="text-2xl leading-none" aria-hidden>{icon}</span>
+            <Icon size={22} className="text-[#86d1ea] flex-shrink-0" aria-hidden />
             <span className="flex-1 min-w-0">
               <span className="block text-white text-xs font-bold">{title}</span>
               <span className="block text-white/45 text-[10px] mt-0.5 leading-relaxed">{blurb}</span>

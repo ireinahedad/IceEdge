@@ -64,15 +64,15 @@ const TTL = ((): number => {
  * `bookmakers: []`, et la collecte prenait « le premier livre venu » — une
  * source qui pouvait changer d'un jour à l'autre, ce que le CLV ne tolère pas.
  *
- * Décision du user (2026-09-27) : l'app affiche un livre CANADIEN, sous son
- * vrai nom. Défaut `betano_ca_on` : seul livre canadien à coter 33 matchs sur
- * 33 en moneyline ET en puck line au sondage du 2026-09-27
- * (`ml/python/probe_odds_books.py`). Le livre est envoyé en paramètre
+ * Décision du user (2026-10-02) : défaut `betrivers`, le livre le plus proche
+ * de Bet365 (où le user parie) à la comparaison `ml/python/compare_bet365.py`
+ * sur NJD–PHI. Avant : `betano_ca_on` (2026-09-27), seul livre canadien à
+ * coter 33/33 matchs en moneyline et puck line. Le livre est envoyé en paramètre
  * `bookmakers`, jamais `regions` (même coût : jusqu'à 10 livres = 1 région).
  * Une liste est acceptée, dans l'ordre de préférence. `ODDS_REGIONS` n'est
  * plus lu depuis le 2026-09-27.
  */
-export const ODDS_BOOKMAKERS = (process.env.ODDS_BOOKMAKERS ?? '').trim() || 'betano_ca_on';
+export const ODDS_BOOKMAKERS = (process.env.ODDS_BOOKMAKERS ?? '').trim() || 'betrivers';
 const PREFERRED_BOOKS = ODDS_BOOKMAKERS.split(',').map((b) => b.trim()).filter(Boolean);
 
 /** Paramètre de sélection des livres, commun à tous les appels. */
@@ -106,7 +106,7 @@ interface OddsEvent {
   commence_time: string;
   bookmakers: Array<{
     key: string;
-    /** Nom lisible du livre (« Betano (Ontario) »), fourni par The Odds API. */
+    /** Nom lisible du livre (« BetRivers »), fourni par The Odds API. */
     title?: string;
     markets: Array<{ key: string; outcomes: OddsOutcome[] }>;
   }>;
@@ -423,7 +423,7 @@ export async function fetchTotalsOdds(
 export interface BookPrice {
   price: number;        // cote décimale
   bookmaker: string;    // clé The Odds API (`betano_ca_on`)
-  bookTitle: string;    // nom lisible (« Betano (Ontario) »)
+  bookTitle: string;    // nom lisible (« BetRivers »)
 }
 
 export interface SelectionQuery {

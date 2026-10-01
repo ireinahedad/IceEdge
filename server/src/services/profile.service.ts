@@ -398,7 +398,7 @@ export async function getBetHistory(userId: string) {
       selection:      slip.isParlay ? `Parlay · ${slip.legCount} legs` : (legLabel || first.subjectName || ''),
       selectionShort: slip.isParlay ? `${slip.legCount}-leg parlay`    : (first.oddsLabel ?? legLabel),
       subjectName:    slip.isParlay ? `${slip.legCount}-leg parlay`    : (first.subjectName ?? ''),
-      subjectLogo:    slip.isParlay ? '🎟️'                             : (first.subjectLogo ?? '🏒'),
+      subjectLogo:    slip.isParlay ? ''                               : (first.subjectLogo ?? ''),
       // La probabilité du COUPON quand elle existe : c'est elle qui a servi à
       // calculer l'XP, donc celle que l'utilisateur a vue en verrouillant.
       probability:    slip.combinedProbability ?? first.probability ?? 0,

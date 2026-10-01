@@ -76,8 +76,41 @@ export function HockeyLanding() {
   const { isPro } = useSubscription();
   const accent = theme.accent;
   const [addSheet, setAddSheet] = useState<AddSheetState>({ open: false });
-  const [liveGames, setLiveGames] = useState<DisplayGame[]>([]);
-  const [upcomingGames, setUpcomingGames] = useState<DisplayGame[]>([]);
+  // Matchs SANS cotes ; les cotes sont posées au rendu (voir `oddsEvents`).
+  const [liveGamesRaw, setLiveGames] = useState<DisplayGame[]>([]);
+  const [upcomingGamesRaw, setUpcomingGames] = useState<DisplayGame[]>([]);
+
+  // Vrais prix du livre relayé (voir `oddsApiService`) — stockés à part, ils
+  // n'écrasent JAMAIS la probabilité du modèle. `fetchHockeyOdds` partage sa
+  // requête avec les pages Prédiction : une seule clé de cache côté proxy.
+  // ⚠️ 2026-10-01 : les cotes sont gardées en état et posées AU RENDU. Avant,
+  // l'effet les collait une fois sur les listes du moment — or les cotes
+  // arrivent presque toujours AVANT les matchs (qui attendent le modèle) : on
+  // les collait sur une liste vide, puis les matchs arrivaient sans elles, et
+  // la colonne Vainqueur restait sans cote. Même perte à chaque rechargement
+  // des matchs (langue, réessai).
+  const [oddsEvents, setOddsEvents] = useState<Awaited<ReturnType<typeof fetchHockeyOdds>>>([]);
+  useEffect(() => {
+    let alive = true;
+    fetchHockeyOdds().then((events) => { if (alive && events.length) setOddsEvents(events); });
+    return () => { alive = false; };
+  }, []);
+  // ⚠️ L'appariement se faisait sur « domicile OU extérieur », et par
+  // `includes` d'ABRÉVIATION dans le nom complet. Deux défauts distincts :
+  //
+  //   • le OU suffisait à apparier deux affiches différentes du même soir —
+  //     il suffisait que l'un des deux côtés corresponde — et collait alors
+  //     le prix du mauvais match sur la carte ;
+  //   • le `includes` ne marchait que par accident : « tor » se trouve dans
+  //     « toronto », mais « nyr » n'est dans aucun mot de « New York
+  //     Rangers », « tbl » dans aucun de « Tampa Bay Lightning », « vgk »
+  //     dans aucun de « Vegas Golden Knights ». Ces équipes-là n'ont jamais
+  //     reçu de cote, en silence.
+  //
+  // `findOddsEvent` compare les noms complets, des deux côtés, et refuse le
+  // reste — mieux vaut pas de prix qu'un prix qui n'est pas celui du match.
+  const liveGames = useMemo(() => applyOdds(liveGamesRaw, oddsEvents), [liveGamesRaw, oddsEvents]);
+  const upcomingGames = useMemo(() => applyOdds(upcomingGamesRaw, oddsEvents), [upcomingGamesRaw, oddsEvents]);
   // `topPredictions` supprimé le 2026-08-29 : cet état était alimenté mais
   // JAMAIS rendu, et il portait un `trend: "+2%"` écrit en dur — une variation
   // inventée qui n'attendait qu'un composant pour s'afficher.
@@ -216,49 +249,6 @@ export function HockeyLanding() {
     load();
     return () => { cancelled = true; };
   }, [lang, reloadKey]);
-
-  // Vrais prix du livre relayé (voir `oddsApiService`) — stockés à part, ils
-  // n'écrasent JAMAIS la probabilité du modèle. `fetchHockeyOdds` partage sa
-  // requête avec les pages Prédiction : une seule clé de cache côté proxy.
-  useEffect(() => {
-    fetchHockeyOdds().then((events) => {
-      if (!events.length) return;
-
-      // ⚠️ L'appariement se faisait sur « domicile OU extérieur », et par
-      // `includes` d'ABRÉVIATION dans le nom complet. Deux défauts distincts :
-      //
-      //   • le OU suffisait à apparier deux affiches différentes du même soir —
-      //     il suffisait que l'un des deux côtés corresponde — et collait alors
-      //     le prix du mauvais match sur la carte ;
-      //   • le `includes` ne marchait que par accident : « tor » se trouve dans
-      //     « toronto », mais « nyr » n'est dans aucun mot de « New York
-      //     Rangers », « tbl » dans aucun de « Tampa Bay Lightning », « vgk »
-      //     dans aucun de « Vegas Golden Knights ». Ces équipes-là n'ont jamais
-      //     reçu de cote, en silence.
-      //
-      // `findOddsEvent` compare les noms complets, des deux côtés, et refuse le
-      // reste — mieux vaut pas de prix qu'un prix qui n'est pas celui du match.
-      function applyOdds(prev: DisplayGame[]): DisplayGame[] {
-        return prev.map((g) => {
-          const ev = findOddsEvent(events, g.team1.name, g.team2.name);
-          if (!ev) return g;
-          const odds = extractH2HOdds(ev);
-          // Handicap ±1.5 du livre, pour la colonne « Handicap » de la ligne.
-          const bookSpread = extractSpreadOdds(ev, g.team1.name, g.team2.name);
-          if (!odds && !bookSpread) return g;
-          return {
-            ...g,
-            ...(odds ? { bookHome: odds.home, bookAway: odds.away } : {}),
-            ...(bookSpread ? { bookSpread } : {}),
-          };
-        });
-      }
-
-      setLiveGames(applyOdds);
-      setUpcomingGames(applyOdds);
-
-    });
-  }, []);
 
   function openGameSheet(gameId: string) {
     setAddSheet({ open: true, gameId });
@@ -458,4 +448,22 @@ export function HockeyLanding() {
       <BottomNav />
     </div>
   );
+}
+
+/** Pose les prix du livre sur les matchs, sans toucher aux probabilités du modèle. */
+function applyOdds(games: DisplayGame[], events: Awaited<ReturnType<typeof fetchHockeyOdds>>): DisplayGame[] {
+  if (!events.length) return games;
+  return games.map((g) => {
+    const ev = findOddsEvent(events, g.team1.name, g.team2.name);
+    if (!ev) return g;
+    const odds = extractH2HOdds(ev);
+    // Handicap ±1.5 du livre, pour la colonne « Handicap » de la ligne.
+    const bookSpread = extractSpreadOdds(ev, g.team1.name, g.team2.name);
+    if (!odds && !bookSpread) return g;
+    return {
+      ...g,
+      ...(odds ? { bookHome: odds.home, bookAway: odds.away } : {}),
+      ...(bookSpread ? { bookSpread } : {}),
+    };
+  });
 }

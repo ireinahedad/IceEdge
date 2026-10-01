@@ -5,6 +5,13 @@
  * d'ABORD le pie de décomposition (voir la pondération), puis les curseurs
  * (la modifier). Poids propres à chaque famille, persistés en localStorage et
  * rattachés au compte quand une session existe (cf. `ruleWeightsService`).
+ *
+ * Ligne « Ta règle » (2026-10-01, demande du user) : sous les facteurs, une
+ * ligne vide où l'utilisateur pose SA propre règle — un nom, sa probabilité
+ * pour ce pari, et un poids. Elle entre dans la moyenne pondérée comme un
+ * facteur de plus. Contrairement aux poids (propres à une famille), elle est
+ * propre au PARI (`betKey`) : une probabilité n'a de sens que pour une
+ * question donnée. Gardée sur cet appareil seulement (localStorage).
  */
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
@@ -25,11 +32,43 @@ import { scaledRulePct } from "../pages/prediction/gameMarkets";
 import { factorDescription } from "../data/factorDescriptions";
 import { useI18n } from "../i18n";
 
+/* ─── Règle personnelle, par pari ─────────────────────────────────────────── */
+interface UserRule { label: string; pct: number | null; weight: number }
+const USER_RULES_KEY = "iceedge.userRules";
+const USER_RULE_ID = "userRule";
+const USER_RULE_COLOR = "#FFFFFF";
+const USER_RULE_DEFAULT_WEIGHT = 20;
+const EMPTY_RULE: UserRule = { label: "", pct: null, weight: 0 };
+
+function loadUserRules(): Record<string, UserRule> {
+  try { return JSON.parse(localStorage.getItem(USER_RULES_KEY) || "{}") || {}; } catch { return {}; }
+}
+function loadUserRule(betKey?: string): UserRule {
+  if (!betKey) return EMPTY_RULE;
+  const r = loadUserRules()[betKey];
+  if (!r || typeof r !== "object") return EMPTY_RULE;
+  return {
+    label: typeof r.label === "string" ? r.label.slice(0, 40) : "",
+    pct: typeof r.pct === "number" && Number.isFinite(r.pct) ? Math.max(0, Math.min(100, r.pct)) : null,
+    weight: typeof r.weight === "number" && Number.isFinite(r.weight) ? Math.max(0, Math.min(100, r.weight)) : 0,
+  };
+}
+function storeUserRule(betKey: string | undefined, rule: UserRule | null) {
+  if (!betKey) return;
+  try {
+    const all = loadUserRules();
+    if (rule && (rule.label.trim() || rule.pct != null)) all[betKey] = rule;
+    else delete all[betKey];
+    localStorage.setItem(USER_RULES_KEY, JSON.stringify(all));
+  } catch { /* stockage indisponible : la règle vit le temps de la fiche */ }
+}
+
 export function RuleFactorEditor({
   factors,
   factorGroup,
   pctScale,
   label,
+  betKey,
 }: {
   factors: SimpleFactor[];
   factorGroup: string;
@@ -42,10 +81,13 @@ export function RuleFactorEditor({
    */
   pctScale?: number;
   label: string;
+  /** Identifiant stable du pari — clé de la règle personnelle (« Ta règle »). */
+  betKey?: string;
 }) {
   const { lang } = useI18n();
   const [open, setOpen] = useState(false);
   const [weights, setWeights] = useState<Record<string, number>>(() => getFamilyWeights(factorGroup, factors));
+  const [userRule, setUserRule] = useState<UserRule>(() => loadUserRule(betKey));
   const sectionRef = useRef<HTMLDivElement>(null);
   // Une modification en cours ne doit pas être écrasée par l'arrivée tardive des
   // poids du compte : c'est le seul rôle de ce drapeau.
@@ -77,8 +119,21 @@ export function RuleFactorEditor({
     }
   }, [open]);
 
-  const blended = scaledRulePct(blendFactors(factors, weights), pctScale);
-  const total = factors.reduce((s, f) => s + (weights[f.id] ?? f.weight), 0);
+  // La règle personnelle compte dès qu'elle a une probabilité et un poids. Sa
+  // probabilité porte sur LE PARI : on la ramène à l'échelle des facteurs
+  // (÷ `pctScale`) pour que le score affiché, re-multiplié, retombe juste.
+  const userActive = userRule.pct != null && userRule.weight > 0;
+  const userFactor: SimpleFactor | null = userActive
+    ? {
+        id: USER_RULE_ID,
+        label: userRule.label.trim() || (lang === "fr" ? "Ta règle" : "Your rule"),
+        weight: userRule.weight,
+        value: Math.max(0, Math.min(1, (userRule.pct as number) / 100 / (pctScale && pctScale > 0 ? pctScale : 1))),
+      }
+    : null;
+  const allFactors = userFactor ? [...factors, userFactor] : factors;
+  const blended = scaledRulePct(blendFactors(allFactors, weights), pctScale);
+  const total = factors.reduce((s, f) => s + (weights[f.id] ?? f.weight), 0) + (userFactor ? userFactor.weight : 0);
   // 100 est un repère de lecture, pas une contrainte : le score est une moyenne
   // pondérée (`blendFactors` divise par la somme des poids), donc un total de 106
   // donne exactement le même chiffre qu'un total de 100 aux mêmes proportions.
@@ -89,12 +144,21 @@ export function RuleFactorEditor({
   const offBudget = Math.abs(total - 100) > 0.5;
   const blendedColor = pctColor(blended);
 
-  const slices = factors.map((f) => ({
+  const slices = allFactors.map((f) => ({
     label: f.label,
     value: (weights[f.id] ?? f.weight) * f.value,
-    color: factorColor(f.id),
-    sub: `${Math.round(f.value * 100)}%`,
+    color: f.id === USER_RULE_ID ? USER_RULE_COLOR : factorColor(f.id),
+    sub: f.id === USER_RULE_ID ? `${userRule.pct}%` : `${Math.round(f.value * 100)}%`,
   }));
+
+  function patchUserRule(p: Partial<UserRule>) {
+    setUserRule((r) => {
+      const next = { ...r, ...p };
+      // Taper une probabilité sur une ligne encore éteinte l'allume.
+      if (p.pct != null && r.weight === 0 && p.weight == null) next.weight = USER_RULE_DEFAULT_WEIGHT;
+      return next;
+    });
+  }
 
   function setW(id: string, v: number) {
     touchedRef.current = true;
@@ -153,6 +217,7 @@ export function RuleFactorEditor({
   }
   function handleSave() {
     const store = saveFamilyWeights(factorGroup, weights);
+    storeUserRule(betKey, userRule);
     touchedRef.current = false;
     toast.success("Pondération enregistrée pour ce type de pari.");
     syncToAccount(store);
@@ -162,6 +227,8 @@ export function RuleFactorEditor({
     const def: Record<string, number> = {};
     factors.forEach((f) => (def[f.id] = f.weight));
     setWeights(def);
+    setUserRule(EMPTY_RULE);
+    storeUserRule(betKey, null);
     touchedRef.current = false;
     toast.success("Pondération réinitialisée.");
     syncToAccount(store);
@@ -225,6 +292,60 @@ export function RuleFactorEditor({
                   </div>
                 );
               })}
+
+              {/* ── Ligne vide : la règle de l'utilisateur ── */}
+              <div className={`pt-2 border-t border-dashed border-white/[0.10] ${userActive ? "" : "opacity-70"}`}>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={userRule.weight > 0}
+                    disabled={userRule.pct == null}
+                    onChange={() => patchUserRule({ weight: userRule.weight > 0 ? 0 : USER_RULE_DEFAULT_WEIGHT })}
+                    className="accent-[#86d1ea] flex-shrink-0"
+                    aria-label={lang === "fr" ? "Inclure ta règle" : "Include your rule"}
+                  />
+                  <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0 border border-white/40" style={{ background: userActive ? USER_RULE_COLOR : "transparent" }} />
+                  <input
+                    type="text"
+                    value={userRule.label}
+                    maxLength={40}
+                    onChange={(e) => patchUserRule({ label: e.target.value })}
+                    placeholder={lang === "fr" ? "Ta règle…" : "Your rule…"}
+                    className="flex-1 min-w-0 bg-black/20 border border-dashed border-white/25 rounded px-1.5 py-0.5 text-[11px] text-white outline-none placeholder:text-white/35 focus:border-[#90C9F0]/60"
+                  />
+                  <input
+                    type="range" min={0} max={100} step={1} value={userRule.weight}
+                    disabled={userRule.pct == null}
+                    onChange={(e) => patchUserRule({ weight: Number(e.target.value) })}
+                    className="w-14 accent-[#86d1ea] flex-shrink-0 disabled:opacity-40"
+                  />
+                  <input
+                    type="number" min={0} max={100} step={1} value={userRule.weight}
+                    disabled={userRule.pct == null}
+                    onChange={(e) => patchUserRule({ weight: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+                    className="w-11 flex-shrink-0 bg-black/20 border border-white/25 rounded px-1 py-0.5 text-[11px] text-white text-right outline-none focus:border-[#90C9F0]/60 disabled:opacity-40"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 mt-1 pl-[42px]">
+                  <span className="text-white/50 text-[10px]">{lang === "fr" ? "Ta probabilité :" : "Your probability:"}</span>
+                  <input
+                    type="number" min={0} max={100} step={1}
+                    value={userRule.pct ?? ""}
+                    placeholder="—"
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      patchUserRule({ pct: raw === "" ? null : Math.max(0, Math.min(100, Math.round(Number(raw) || 0))) });
+                    }}
+                    className="w-12 bg-black/20 border border-white/25 rounded px-1 py-0.5 text-[11px] text-white text-right outline-none focus:border-[#90C9F0]/60"
+                  />
+                  <span className="text-white/50 text-[10px]">%</span>
+                </div>
+                <p className="text-white/40 text-[10px] leading-snug mt-0.5 pl-[42px]">
+                  {lang === "fr"
+                    ? "Ajoute ton propre critère : donne-lui un nom, ta probabilité pour ce pari, puis son poids."
+                    : "Add your own criterion: name it, give your probability for this bet, then its weight."}
+                </p>
+              </div>
 
               <div className="flex items-center gap-2 flex-wrap mt-1">
                 <span className={`text-[11px] font-semibold tabular-nums ${offBudget ? "text-white/70" : "text-white/50"}`}>

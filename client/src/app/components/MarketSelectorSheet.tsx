@@ -13,6 +13,7 @@ import { useUpcomingGames, type UpcomingGame } from "../pages/prediction/predict
 import { useI18n } from "../i18n";
 import type { MarketDefinition } from "../data/betMarkets";
 
+import { X, Search } from "lucide-react";
 type Category = MarketDefinition["category"];
 const ALL_CATEGORIES: Category[] = ["match", "period", "team", "player", "special"];
 
@@ -223,7 +224,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
           <button
             onClick={onClose}
             className="tap-44 w-8 h-8 rounded-full bg-[#1B2419] flex items-center justify-center text-[#bfc8cc]"
-          >✕</button>
+          ><X size={14} /></button>
         </div>
 
         {/* ── Step 1: Subject search ─────────────────────────────────────── */}
@@ -231,7 +232,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
           <div className="flex flex-col flex-1 overflow-hidden">
             <div className="px-4 pt-3 pb-2">
               <div className="bg-[#131A12] border border-white/20 rounded-2xl flex items-center gap-2 px-3 py-2.5">
-                <span className="text-[#bfc8cc]">🔍</span>
+                <Search size={15} className="text-[#bfc8cc] flex-shrink-0" />
                 <input
                   className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-[#bfc8cc]"
                   placeholder={t("mkt.search")}
@@ -239,7 +240,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
                 {searchQuery && (
-                  <button onClick={() => setSearchQuery("")} className="tap-44 text-[#bfc8cc] text-xs">✕</button>
+                  <button onClick={() => setSearchQuery("")} className="tap-44 text-[#bfc8cc] text-xs"><X size={14} /></button>
                 )}
               </div>
             </div>
@@ -264,7 +265,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                           }}
                           className="flex items-center gap-3 bg-[#131A12] border border-white/20 rounded-xl px-3 py-2.5 text-left active:bg-[#1B2419]"
                         >
-                          {subject.logo ? <img src={subject.logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" /> : <span className="text-xl flex-shrink-0">🏒</span>}
+                          {subject.logo ? <img src={subject.logo} alt="" className="w-6 h-6 object-contain flex-shrink-0" /> : <span className="w-6 h-6 flex-shrink-0" />}
                           <div className="flex-1 min-w-0">
                             <p className="text-white text-xs font-medium truncate">{subject.name}</p>
                             <p className="text-[#bfc8cc] text-[11px]">{subject.subtitle}</p>
@@ -286,7 +287,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
             {/* Subject pill */}
             <div className="px-4 pt-2 pb-2">
               <div className="flex items-center gap-2 bg-[#86d1ea]/10 border border-[#86d1ea]/30 rounded-xl px-3 py-2">
-                {selectedSubject.logo ? <img src={selectedSubject.logo} alt="" className="w-6 h-6 object-contain" /> : <span>🏒</span>}
+                {selectedSubject.logo ? <img src={selectedSubject.logo} alt="" className="w-6 h-6 object-contain" /> : null}
                 <div>
                   <p className="text-white text-xs font-medium">{selectedSubject.name}</p>
                   <p className="text-[#bfc8cc] text-[11px]">{selectedSubject.subtitle}</p>
@@ -315,7 +316,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                       : "bg-[#131A12] text-[#bfc8cc] border border-white/20"
                   }`}
                 >
-                  <span>{CATEGORY_ICONS[cat]}</span>
+                  <CategoryIcon cat={cat} size={13} />
                   <span>{CATEGORY_LABELS[cat]}</span>
                 </button>
               ))}
@@ -349,7 +350,7 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
                     }}
                     className="bg-[#131A12] border border-white/20 rounded-2xl px-4 py-3 text-left flex items-center gap-3 active:bg-[#1B2419]"
                   >
-                    <span className="text-xl">{CATEGORY_ICONS[market.category]}</span>
+                    <span className="text-[#86d1ea]"><CategoryIcon cat={market.category} size={20} /></span>
                     <div className="flex-1">
                       <p className="text-white text-xs font-medium">{market.label}</p>
                       <p className="text-[#bfc8cc] text-[11px]">{market.description}</p>
@@ -534,10 +535,16 @@ function TeamSelectionsForGame({ gameId, selected, onSelect, getTeamById, getGam
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors active:bg-white/5"
           style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
         >
-          {t.logo ? <img src={t.logo} alt={t.name} className="w-7 h-7 object-contain" /> : <span className="text-xl">🏒</span>}
+          {t.logo ? <img src={t.logo} alt={t.name} className="w-7 h-7 object-contain" /> : <span className="w-7 h-7" />}
           <span className="text-white text-sm font-medium">{t.name}</span>
         </button>
       ))}
     </>
   );
+}
+
+/** Pictogramme d'une catégorie de marché (icône, plus d'emoji depuis le 2026-10-01). */
+function CategoryIcon({ cat, size }: { cat: keyof typeof CATEGORY_ICONS; size: number }) {
+  const Icon = CATEGORY_ICONS[cat];
+  return <Icon size={size} />;
 }

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { User as UserIcon } from "lucide-react";
 /**
  * UserIdentity — la façon dont un compte s'affiche, partout.
  *
@@ -41,7 +42,7 @@ export function UserBadge({ user, size = "md" }: { user: UserIdentityData; size?
     >
       {user.avatarUrl
         ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover rounded-full" />
-        : (user.avatar ?? "👤")}
+        : (user.avatar && user.avatar !== "👤" ? user.avatar : <UserIcon size={16} className="text-white/60" />)}
     </div>
   );
 }

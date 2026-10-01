@@ -13,6 +13,7 @@ import { useBlocks } from "../../../context/BlockContext";
 import { useI18n } from "../../../i18n";
 import type { ChatRoom, ChatMessage, UserProfile, ReportReason } from "../../../types/user";
 
+import { Lock, Copy, Pin, Users, ClipboardList, LogOut, Trash2, X } from "lucide-react";
 // ─── Tag styles ───────────────────────────────────────────────────────────────
 
 const TAG_STYLE = {
@@ -22,9 +23,9 @@ const TAG_STYLE = {
 } as const;
 
 const TAG_LABEL = {
-  pick: "🎯 Pick",
-  analysis: "📊 Analysis",
-  hot: "🔴 Live",
+  pick: "Pick",
+  analysis: "Analysis",
+  hot: "Live",
 } as const;
 
 // ─── Active room chat ─────────────────────────────────────────────────────────
@@ -227,7 +228,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
       userId: currentUserId,
       username: me?.username ?? "",
       displayName: me?.displayName ?? me?.username ?? "",
-      avatar: me?.avatar ?? "👤",
+      avatar: me?.avatar ?? "",
       avatarUrl: me?.avatarUrl ?? null,
       tier: me?.tier ?? "rookie",
       text,
@@ -429,7 +430,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <p className="text-white text-sm font-bold truncate">{room.name}</p>
-            {room.isPrivate && <span className="text-[11px]">🔒</span>}
+            {room.isPrivate && <Lock size={11} className="text-white/60 flex-shrink-0" />}
             {isAdmin && (
               <span className="text-[11px] text-[#90C9F0] border border-[#90C9F0]/40 rounded-full px-1.5 py-0.5 flex-shrink-0">admin</span>
             )}
@@ -459,7 +460,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
               className="w-full flex items-center justify-between px-4 py-3 text-left border-b border-white/5 active:bg-white/5"
             >
               <span className="text-white/80 text-xs">{t("chat.joinCode")}</span>
-              <span className="text-[#90C9F0] text-xs font-bold tracking-[0.2em]">{room.joinCode} 📋</span>
+              <span className="text-[#90C9F0] text-xs font-bold tracking-[0.2em]">{room.joinCode} <Copy size={11} className="inline -mt-0.5 ml-0.5" /></span>
             </button>
           )}
           <button
@@ -467,14 +468,14 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
             className="w-full flex items-center justify-between px-4 py-3 text-left border-b border-white/5 active:bg-white/5"
           >
             <span className="text-white/80 text-xs">{room.isPinned ? t("chat.unpinRoom") : t("chat.pinRoom")}</span>
-            <span className="text-xs">📌</span>
+            <Pin size={13} className="text-white/70" />
           </button>
           <button
             onClick={() => { setShowMembers(true); setMenuOpen(false); }}
             className="w-full flex items-center justify-between px-4 py-3 text-left border-b border-white/5 active:bg-white/5"
           >
             <span className="text-white/80 text-xs">{t("chat.membersMenu")}</span>
-            <span className="text-white/40 text-xs">{room.memberCount} 👥</span>
+            <span className="text-white/40 text-xs">{room.memberCount} <Users size={12} className="inline -mt-0.5" /></span>
           </button>
           {/* R4.3f — les règles de la communauté doivent être atteignables
               DEPUIS le chat, pas seulement enfouies dans les Conditions. */}
@@ -483,14 +484,14 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
             className="w-full flex items-center justify-between px-4 py-3 text-left border-b border-white/5 active:bg-white/5"
           >
             <span className="text-white/80 text-xs">{t("chat.guidelines")}</span>
-            <span className="text-xs">📋</span>
+            <ClipboardList size={13} className="text-white/70" />
           </button>
           <button
             onClick={handleLeave}
             className="w-full flex items-center justify-between px-4 py-3 text-left border-b border-white/5 active:bg-white/5"
           >
             <span className="text-orange-400 text-xs">{t("chat.leaveRoom")}</span>
-            <span className="text-xs">🚪</span>
+            <LogOut size={13} className="text-orange-400" />
           </button>
           {isAdmin && (
             <button
@@ -498,7 +499,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
               className="w-full flex items-center justify-between px-4 py-3 text-left active:bg-white/5"
             >
               <span className="text-red-400 text-xs">{t("chat.deleteRoom")}</span>
-              <span className="text-xs">🗑️</span>
+              <Trash2 size={13} className="text-red-400" />
             </button>
           )}
         </div>
@@ -507,7 +508,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
       {errorMsg && (
         <div className="flex items-center justify-between bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2 mb-2 flex-shrink-0">
           <p className="text-red-400 text-[11px]">{errorMsg}</p>
-          <button onClick={() => setErrorMsg(null)} className="tap-44 text-red-400 text-xs">✕</button>
+          <button onClick={() => setErrorMsg(null)} className="tap-44 text-red-400 text-xs"><X size={14} /></button>
         </div>
       )}
 
@@ -557,7 +558,7 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
             <p className="text-[#90C9F0] text-[11px] font-medium">{t("chat.replyingTo")} @{replyTo.username}</p>
             <p className="text-white/50 text-[11px] truncate">{replyTo.text}</p>
           </div>
-          <button onClick={() => setReplyTo(null)} className="tap-44 text-white/50 text-xs">✕</button>
+          <button onClick={() => setReplyTo(null)} className="tap-44 text-white/50 text-xs"><X size={14} /></button>
         </div>
       )}
 

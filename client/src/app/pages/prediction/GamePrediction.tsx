@@ -47,7 +47,8 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   const { groups: apiGroups, failed: apiFailed, retry: retryApi, refresh: refreshApi, staleSince } =
     useServerGroups(() => nhlApiService.getGamePredictions(gameId, isLive), gameId, isLive ? LIVE_POLL_MS : undefined);
   const [loading, setLoading] = useState(true);
-  const [revealMode, setRevealMode] = useState<RevealMode>("rules");
+  // 2026-10-01 : ML partout ; les règles ne se voient que dans la fiche d'un pari.
+  const revealMode: RevealMode = "ml";
 
   // Prédictions ML de TOUTES les tuiles du match, en une requête — chargées à
   // la première bascule en mode ML seulement. `undefined` = pas encore là,
@@ -331,7 +332,7 @@ export function GamePrediction({ gameId }: { gameId: string }) {
 
       {/* ── Market groups ── */}
       <StatsBanner type="game" id={gameId} />
-      <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
+      <PredictionsRevealBar />
       <GameLiveCtx.Provider value={isLive}>
       <BetOddsCtx.Provider value={odds}>
         <RevealModeCtx.Provider value={revealMode}>

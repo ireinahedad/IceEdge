@@ -35,7 +35,8 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
   const { groups: apiGroups, failed: apiFailed, retry: retryApi } =
     useServerGroups(() => nhlApiService.getPlayerPredictions(playerId), playerId);
   const [loading, setLoading] = useState(true);
-  const [revealMode, setRevealMode] = useState<RevealMode>("rules");
+  // 2026-10-01 : ML partout ; les règles ne se voient que dans la fiche d'un pari.
+  const revealMode: RevealMode = "ml";
 
   // Which game these props are for. Defaults to the player's next game and is
   // switchable from the dropdown; a `?game=` param (e.g. arriving from that
@@ -287,7 +288,7 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
 
       {/* Market groups — server options, with their ML and settlement markets (`TILE`) */}
       <StatsBanner type="player" id={playerId} />
-      <PredictionsRevealBar mode={revealMode} onSelect={setRevealMode} />
+      <PredictionsRevealBar />
       <RevealModeCtx.Provider value={revealMode}>
         {apiGroups == null
           ? <ServerGroupsPending failed={apiFailed} onRetry={retryApi} />

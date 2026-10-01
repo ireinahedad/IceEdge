@@ -501,7 +501,9 @@ const LLM_CACHE_KEY = "iceedge.llmCache";
 const LLM_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 h
 
 export function llmCacheId(label: string, mlProps: MLProps | undefined, lang: string): string {
-  return [mlProps?.subjectId ?? "", mlProps?.opponentId ?? "", mlProps?.propType ?? "", mlProps?.line ?? "", label, lang].join("|");
+  // « ml » : depuis le 2026-10-01 l'analyse part du chiffre ML, plus des règles.
+  // Le préfixe écarte les analyses déjà en cache, écrites sur le chiffre des règles.
+  return ["ml", mlProps?.subjectId ?? "", mlProps?.opponentId ?? "", mlProps?.propType ?? "", mlProps?.line ?? "", label, lang].join("|");
 }
 export function loadLlmCache(id: string): string {
   try {

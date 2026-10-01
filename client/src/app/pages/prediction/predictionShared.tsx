@@ -21,13 +21,14 @@ import type { MktGroup } from "./gameMarkets";
 import { ErrorState } from "../../components/ErrorState";
 
 /**
- * Prediction source shown by every BetOption on the page. Predictions are
- * always visible; a segmented toggle at the top switches which number is shown:
- *   "rules" → the rule-based % (default).
- *   "ml"    → the ML model's %.
+ * Prediction source shown by every BetOption on the page.
+ *   "ml"    → the ML model's % — the ONLY source shown on tiles since
+ *             2026-10-01 (user request). Rules are visible only inside the
+ *             bet sheet (ML / Rules / Ask LLM cards).
+ *   "rules" → kept for type compatibility; no page selects it anymore.
  */
 export type RevealMode = "rules" | "ml";
-export const RevealModeCtx = createContext<RevealMode>("rules");
+export const RevealModeCtx = createContext<RevealMode>("ml");
 
 /**
  * `true` pendant un match EN COURS. Règles et ML partent alors du score et du
@@ -587,7 +588,6 @@ export function NotFound() {
   const { t } = useI18n();
   return (
     <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
-      <p className="text-4xl mb-4">🏒</p>
       <p className="text-white font-bold text-lg mb-2">{t("pred.notFound")}</p>
       <p className="text-[#8a9ea6] text-sm mb-6">{t("pred.notExist")}</p>
       <button onClick={() => navigate(-1)} className="px-6 py-2 rounded-xl bg-[#86d1ea]/10 border border-[#86d1ea]/30 text-[#86d1ea] text-sm">{t("pred.goBack")}</button>

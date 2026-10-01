@@ -20,12 +20,13 @@ import { FramedLabel } from "../../components/brand/FramedLabel";
 import { BetOpt, MLProps, MktGroup, MktTable, RuleFactor, buildLLMDataContext, llmCacheId, loadLlmCache, saveLlmCache, scaledRulePct, settlementFields } from "./gameMarkets";
 import { pctColor } from "../../data/pctScale";
 import { blendFactors, getFamilyWeights } from "../../services/ruleWeightsService";
-import { BetOddsCtx, GameLiveCtx, RevealMode, RevealModeCtx } from "./predictionShared";
+import { BetOddsCtx, GameLiveCtx, RevealModeCtx } from "./predictionShared";
 import { priceForBet } from "../../services/gameOdds";
 import { useOddsFormat } from "../../context/OddsFormatContext";
 import { openBet } from "../../services/bookmakers";
 import { features } from "../../platform";
 
+import { Check } from "lucide-react";
 /* ─── Identifiant de la jambe de coupon ──────────────────────────────────────
  *
  * Il vivait DANS `PredictionSheet`, donc seule la fiche ouverte savait si un
@@ -119,7 +120,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   const [asking, setAsking]       = useState(false);
   // Une erreur d'analyse s'affiche à la place du texte (préfixes posés plus
   // bas) : pas de question de suivi sur une analyse qui n'existe pas.
-  const llmFailed = llmText.startsWith("❌") || llmText.startsWith("⚙️");
+  const [llmFailed, setLlmFailed] = useState(false);
   const ruleColor = pctColor(rulePct);
   const gameLive = useContext(GameLiveCtx);
 
@@ -145,6 +146,29 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
       .catch(() => { /* keep undefined → falls back to rulePct */ });
     return () => { alive = false; };
   }, [serverPct, mlPropsKey]);
+
+  /**
+   * Probabilité ML envoyée à Ask LLM (2026-10-01, demande du user) — la même
+   * que la carte ML de la fiche : le chiffre du conteneur s'il y en a un (paquet
+   * du match, grilles joueur ; en direct, rien d'autre n'est valable), sinon
+   * `fetchMLProbability`, mis en cache, donc pas d'appel de plus.
+   * `null` = le modèle n'a pas de chiffre : le LLM le saura.
+   */
+  async function resolveMlPct(): Promise<number | null> {
+    const preset = gameLive && mlPreset === undefined ? null : mlPreset;
+    if (preset !== undefined) {
+      const p = preset?.probability;
+      return typeof p === "number" && Number.isFinite(p) ? Math.round(p) : null;
+    }
+    if (!mlProps) return null;
+    const p = await fetchMLProbability({
+      type: mlProps.type, subjectId: mlProps.subjectId, opponentId: mlProps.opponentId,
+      propType: mlProps.propType, line: mlProps.line, selection: mlProps.selection, isHome: mlProps.isHome,
+    });
+    return typeof p === "number" && Number.isFinite(p) ? Math.round(p) : null;
+  }
+  const mlPctText = (p: number | null, isFr: boolean) =>
+    p != null ? `${p}%` : (isFr ? "indisponible" : "unavailable");
 
   // The probability stored in the coupon — identical to what the stats grid shows.
   const legPct = ownServerPct ?? rulePct;
@@ -201,15 +225,14 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
     try {
       const subject = mlProps?.subjectId ?? label;
       const dataContext = await buildLLMDataContext(mlProps, isFr);
+      const mlPct = await resolveMlPct();
       const build = (history: Followup[], data: string) =>
         (isFr
           ? `Pari : "${label}"\n` +
-            `Probabilité du modèle : ${rulePct}%\n` +
-            `Raisonnement du modèle : ${ruleNote}\n` +
+            `Probabilité du modèle ML : ${mlPctText(mlPct, true)}\n` +
             (mlProps ? `Marché : ${mlProps.propType ?? "vainqueur"} · Sujet : ${subject}\n` : "")
           : `Bet: "${label}"\n` +
-            `Model probability: ${rulePct}%\n` +
-            `Model rationale: ${ruleNote}\n` +
+            `ML model probability: ${mlPctText(mlPct, false)}\n` +
             (mlProps ? `Market: ${mlProps.propType ?? "moneyline"} · Subject: ${subject}\n` : "")) +
         (data ? `\n${data}\n` : "") +
         `\n${isFr ? "Ton analyse précédente" : "Your previous analysis"} :\n${llmText}\n` +
@@ -228,8 +251,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
       setFollowups((fs) => [...fs, { q, a }]);
       setQuestion("");
     } catch (err: any) {
-      const prefix = err?.type === "no_api_key" ? "⚙️ " : "❌ ";
-      setFollowups((fs) => [...fs, { q, a: prefix + (err?.message ?? "LLM error"), failed: true }]);
+      setFollowups((fs) => [...fs, { q, a: err?.message ?? "LLM error", failed: true }]);
     } finally {
       setAsking(false);
     }
@@ -250,17 +272,18 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-1 flex-shrink-0" />
 
         {/* « + Pari » en grand, centré en haut (demande du user, 2026-09-29) :
-            c'est l'action principale de la fiche, elle passe avant le titre. */}
+            c'est l'action principale de la fiche, elle passe avant le titre.
+            Réduit le 2026-10-01 (trop gros) : reste centré et en tête. */}
         {/* Sans match connu, le pari ne pourrait jamais être réglé : pas de bouton. */}
         {(inSlip || mlProps?.gameId) && (
           <button
             onClick={handleSlip}
-            className="flex-shrink-0 self-center w-full max-w-[280px] flex items-center justify-center px-6 py-3.5 rounded-2xl text-lg font-black transition-all active:scale-95"
+            className="flex-shrink-0 self-center w-full max-w-[180px] flex items-center justify-center px-4 py-2 rounded-xl text-sm font-bold transition-all active:scale-95"
             style={inSlip
               ? { background: "#4ade8033", color: "#4ade80", border: "1.5px solid #4ade8066" }
               : { background: accent + "26", color: accent, border: `1.5px solid ${accent}66` }}
           >
-            {inSlip ? t("pred.slipShort") : t("pred.slipAddShort")}
+            {inSlip ? <span className="flex items-center gap-1.5"><Check size={14} strokeWidth={3} />{t("pred.slipShort")}</span> : t("pred.slipAddShort")}
           </button>
         )}
 
@@ -322,7 +345,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
 
         {/* ── 📐 Règles — éditeur de facteurs par pari, ou note simple ── */}
         {factors && factors.length > 0 && factorGroup ? (
-          <RuleFactorEditor factors={factors} factorGroup={factorGroup} pctScale={pctScale} label={t("pred.rules")} />
+          <RuleFactorEditor factors={factors} factorGroup={factorGroup} pctScale={pctScale} label={t("pred.rules")} betKey={`${mlProps?.gameId ?? ""}|${label}`} />
         ) : (
           <div className="bg-[#0d1519] border border-white/[0.07] rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/[0.05]">
@@ -344,7 +367,6 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
         {llmText ? (
           <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3">
-              <span className="text-sm">✨</span>
               <span className="text-purple-300 text-xs font-semibold flex-1">{t("pred.llmAnalysis")}</span>
               {llmOpen && (
                 <button
@@ -357,7 +379,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
                   }}
                   className="text-[11px] font-semibold px-2 py-1 rounded-md bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 transition-colors"
                 >
-                  {copied ? (lang === "fr" ? "Copié ✓" : "Copied ✓") : (lang === "fr" ? "Copier" : "Copy")}
+                  {copied ? (lang === "fr" ? "Copié" : "Copied") : (lang === "fr" ? "Copier" : "Copy")}
                 </button>
               )}
               <button
@@ -425,13 +447,13 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
                 // Pull the real stats the app has for this bet's subject.
                 const dataContext = await buildLLMDataContext(mlProps, isFr);
                 const dataBlock = dataContext ? `\n${dataContext}\n` : "";
+                const mlPct = await resolveMlPct();
 
                 const userPrompt = isFr
                   ? `L'application a déjà calculé une probabilité statistique pour ce pari. ` +
                     `Donne le contexte que les chiffres ne captent pas.\n\n` +
                     `Pari : "${label}"\n` +
-                    `Probabilité du modèle : ${rulePct}%\n` +
-                    `Raisonnement du modèle : ${ruleNote}\n` +
+                    `Probabilité du modèle ML : ${mlPctText(mlPct, true)}\n` +
                     (mlProps ? `Marché : ${mlProps.propType ?? "vainqueur"} · Sujet : ${subject}\n` : "") +
                     dataBlock +
                     `\nUtilise les « Données de l'application » ci-dessus comme des faits. ` +
@@ -439,8 +461,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
                   : `The app already computed a stats-based probability for this bet. ` +
                     `Add the context the numbers DON'T capture.\n\n` +
                     `Bet: "${label}"\n` +
-                    `Model probability: ${rulePct}%\n` +
-                    `Model rationale: ${ruleNote}\n` +
+                    `ML model probability: ${mlPctText(mlPct, false)}\n` +
                     (mlProps ? `Market: ${mlProps.propType ?? "moneyline"} · Subject: ${subject}\n` : "") +
                     dataBlock +
                     `\nTreat the "App data" above as facts. ` +
@@ -457,15 +478,14 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
                   locale: isFr ? "fr" : "en",
                 });
                 setLlmText(text);
+                setLlmFailed(false);
                 setLlmOpen(true);            // ouvre la réponse fraîchement générée
                 saveLlmCache(llmId, text);   // persistée 24 h — pas de 2e question identique
               } catch (err: any) {
-                const type = (err as any).type;
-                if (type === "no_api_key") {
-                  setLlmText("⚙️ " + err.message);
-                } else {
-                  setLlmText("❌ " + (err.message ?? "LLM error"));
-                }
+                // Plus de préfixe ❌ / ⚙️ (2026-10-01, pas d'emoji) : l'échec
+                // est porté par `llmFailed`, plus déduit du texte.
+                setLlmText(err?.message ?? "LLM error");
+                setLlmFailed(true);
                 setLlmOpen(true); // les erreurs ne sont pas mises en cache
               } finally {
                 setLlmLoading(false);
@@ -491,29 +511,17 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   );
 }
 
-/* ─── Reveal-all toggle bar ────────────────────── */
-export function PredictionsRevealBar({ mode, onSelect }: { mode: RevealMode; onSelect: (m: RevealMode) => void }) {
+/* ─── En-tête des marchés ───────────────────────────────────────────────────
+ *
+ * Était une bascule Règles | ML. Depuis le 2026-10-01 (demande du user), les
+ * tuiles montrent TOUJOURS le modèle ML ; le score des règles ne se voit plus
+ * que dans la fiche d'un pari (cartes ML, Règles et Ask LLM). */
+export function PredictionsRevealBar() {
   const { t } = useI18n();
-  // Two-segment toggle: Rules | ML. Predictions are always shown; this only
-  // switches which source's % every tile displays.
-  const seg = (m: RevealMode, label: string, activeColor: string) => (
-    <button
-      onClick={() => onSelect(m)}
-      className="px-3 py-1 rounded-full text-[11px] font-semibold transition-all active:scale-95"
-      style={mode === m
-        ? { background: activeColor + "22", color: activeColor, border: `1px solid ${activeColor}44` }
-        : { background: "transparent", color: "#8a9ea6", border: "1px solid transparent" }}
-    >
-      {label}
-    </button>
-  );
   return (
     <div className="flex items-center justify-between px-1">
       <span className="text-[#4a6070] text-[11px] font-semibold uppercase tracking-wider">{t("pred.markets")}</span>
-      <div className="flex items-center gap-0.5 p-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
-        {seg("rules", `📐 ${t("pred.rules")}`, "#86d1ea")}
-        {seg("ml", "🤖 ML", "#a78bfa")}
-      </div>
+      <span className="text-[11px] font-semibold" style={{ color: "#a78bfa" }}>ML</span>
     </div>
   );
 }
@@ -625,9 +633,11 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
     return () => { alive = false; };
   }, [source, mlKey, opt.mlPreset, opt.mlExternal]);
 
-  const mlMode      = source === "ml" && !!opt.mlProps;
-  const loadingMl   = mlMode && mlPct === undefined;
-  const mlMissing   = mlMode && mlPct === null;
+  // En mode ML, une tuile SANS question pour le modèle (pas de `mlProps`)
+  // n'a pas de chiffre : « — », jamais le score des règles en repli.
+  const mlMode      = source === "ml";
+  const loadingMl   = mlMode && !!opt.mlProps && mlPct === undefined;
+  const mlMissing   = mlMode && (!opt.mlProps || mlPct === null);
   const shownPct    = mlMode ? (mlPct ?? rulePct) : rulePct;
   // Tuile sans chiffre : grise, pour qu'elle ne se lise pas comme une prédiction
   // faible (un « — » coloré en rouge dirait quelque chose, et on ne sait rien).
@@ -675,7 +685,7 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
             aria-hidden
             className="absolute top-1 right-1.5 text-[#4ade80] text-[10px] font-black leading-none"
           >
-            ✓
+            <Check size={10} strokeWidth={3.5} />
           </span>
         )}
         {/* En grille, l'étiquette est portée par la ligne et la colonne — la

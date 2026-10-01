@@ -23,6 +23,7 @@ import { useI18n } from "../../i18n";
 import { FrozenName } from "../../components/brand/FrozenName";
 import type { LeaderboardEntry } from "../../types/user";
 
+import { Search, X, User as UserIcon } from "lucide-react";
 /** Longueur minimale — le serveur rend [] en dessous, autant ne pas l'appeler. */
 const MIN_QUERY = 2;
 /** Anti-rebond : une frappe rapide ne doit produire qu'un appel. */
@@ -100,7 +101,7 @@ export function PlayerSearchBar({
   return (
     <div ref={boxRef} className="relative">
       <div className="chat-tile rounded-2xl flex items-center gap-2 px-3 py-2.5">
-        <span className="text-white/40 text-sm">🔎</span>
+        <Search size={14} className="text-white/40 flex-shrink-0" />
         <input
           value={query}
           onChange={(e) => handleChange(e.target.value)}
@@ -113,7 +114,7 @@ export function PlayerSearchBar({
           <span className="w-3 h-3 rounded-full border border-[#90C9F0]/40 border-t-[#90C9F0] animate-spin flex-shrink-0" />
         )}
         {query && !loading && (
-          <button onClick={() => setQuery("")} className="tap-44 text-white/50 text-xs" aria-label={t("common.close")}>✕</button>
+          <button onClick={() => setQuery("")} className="tap-44 text-white/50 text-xs" aria-label={t("common.close")}><X size={14} /></button>
         )}
       </div>
 
@@ -141,7 +142,7 @@ export function PlayerSearchBar({
                   <img src={entry.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-[#86d1ea]/25 flex-shrink-0" />
                 ) : (
                   <span className="w-8 h-8 rounded-full bg-white/8 border border-[#86d1ea]/25 flex items-center justify-center text-sm flex-shrink-0">
-                    {entry.avatar || "👤"}
+                    {entry.avatar && entry.avatar !== "👤" ? entry.avatar : <UserIcon size={14} className="text-white/60" />}
                   </span>
                 )}
                 <span className="flex-1 min-w-0">

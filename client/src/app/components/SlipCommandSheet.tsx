@@ -41,7 +41,7 @@
 
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { Sparkles } from "lucide-react";
+import { Sparkles, X, Check } from "lucide-react";
 import {
   parseSlipCommand, validateIntent, SLIP_COMMAND_MAX_LENGTH,
   type SlipChoice, type SlipFailure,
@@ -228,7 +228,7 @@ export function SlipCommandSheet({ onClose }: { onClose: () => void }) {
             onClick={onClose}
             aria-label={t("cmd.close")}
             className="tap-44 w-8 h-8 rounded-full bg-[#1B2419] flex items-center justify-center text-[#bfc8cc]"
-          >✕</button>
+          ><X size={14} /></button>
         </div>
 
         <div className="flex flex-col gap-3 px-4 py-4 overflow-y-auto">
@@ -323,7 +323,7 @@ export function SlipCommandSheet({ onClose }: { onClose: () => void }) {
                   {r.kind === "added" ? (
                     <>
                       <span className={`flex-1 min-w-0 text-xs ${r.removed ? "text-[#bfc8cc] line-through" : "text-white"}`}>
-                        {r.removed ? "" : "✓ "}{r.label}
+                        {!r.removed && <Check size={11} strokeWidth={3} className="inline mr-1 -mt-0.5 text-[#4ade80]" />}{r.label}
                       </span>
                       {r.removed ? (
                         <span className="text-[#bfc8cc] text-[11px]">{t("cmd.undone")}</span>

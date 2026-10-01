@@ -3,7 +3,7 @@
 //
 // ⚠️ Le livre servi n'est PAS Bet365 : The Odds API ne cote ni Bet365 ni Stake
 // sur la NHL. Le serveur relaie un livre canadien (`ODDS_BOOKMAKERS`, défaut
-// Betano Ontario) et chaque événement porte son `key`/`title` — c'est ce nom-là
+// BetRivers) et chaque événement porte son `key`/`title` — c'est ce nom-là
 // qu'un écran doit afficher à côté d'un prix. Le chemin `/odds/bet365/` est
 // gardé tel quel pour ne pas casser les clients déjà déployés.
 // The Odds API key now lives server-side only — it is never shipped to the client.

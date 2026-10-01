@@ -221,7 +221,7 @@ async function runScan(): Promise<void> {
     if (recipients.length === 0) return;
 
     const payload = {
-      title: '🔥 Value bet détecté',
+      title: 'Value bet détecté',
       body: `${vb.label} · edge +${vb.edgePct}% · +${vb.evPct}% EV · cote ${vb.odds.toFixed(2)} (${vb.book}) · modèle ${vb.score}%`,
       url: '/',
     };

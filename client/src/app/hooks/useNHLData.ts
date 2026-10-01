@@ -88,7 +88,7 @@ function toUITeam(t: any): UITeam {
     id:           t.abbreviation?.toLowerCase() ?? String(t.id),
     name:         t.name,
     abbr:         t.abbreviation,
-    logo:         t.abbreviation ? nhlLogoUrl(t.abbreviation) : '🏒',
+    logo:         t.abbreviation ? nhlLogoUrl(t.abbreviation) : '',
     conf:         t.conference === 'Eastern' ? 'East' : 'West',
     record:       `${t.wins ?? 0}-${t.losses ?? 0}-${t.otLosses ?? 0}`,
     pts:          t.points ?? 0,

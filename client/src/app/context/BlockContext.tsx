@@ -121,7 +121,7 @@ export function BlockProvider({ children }: { children: ReactNode }) {
       id: u.id,
       username: u.username,
       displayName: u.displayName ?? u.username,
-      avatar: u.avatar ?? "👤",
+      avatar: u.avatar ?? "",
       avatarUrl: u.avatarUrl ?? null,
       createdAt: new Date().toISOString(),
     };

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useI18n } from "../../../i18n";
 import { REPORT_REASONS, type ReportReason, type ChatMessage } from "../../../types/user";
 
+import { Check } from "lucide-react";
 /**
  * ReportModal — PRE_IOS_PLAN.md R4.3b.
  *
@@ -61,7 +62,7 @@ export function ReportModal({
               }`}
             >
               <span>{t(`report.reason.${r}`)}</span>
-              {reason === r && <span>✓</span>}
+              {reason === r && <Check size={14} strokeWidth={3} />}
             </button>
           ))}
         </div>

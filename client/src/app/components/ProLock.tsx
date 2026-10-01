@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router";
 import { useI18n } from "../i18n";
 import { features } from "../platform";
 
+import { Lock } from "lucide-react";
 const ACCENT = "#86d1ea";
 
 /**
@@ -41,7 +42,7 @@ export function ProLock({
       {/* Lock overlay */}
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6"
         style={{ background: "rgba(10,14,12,0.6)" }}>
-        <div className="text-white text-sm font-bold mb-1">🔒 {title}</div>
+        <div className="text-white text-sm font-bold mb-1 flex items-center justify-center gap-1.5"><Lock size={13} />{title}</div>
         <div className="text-[#B7C4AD] text-xs max-w-[300px]">{description}</div>
         {/* Guideline 3.1.1 — sur un build sans chemin vers Pro, ce bouton
             pointerait vers une route qui n'existe pas (`/pro` n'est pas

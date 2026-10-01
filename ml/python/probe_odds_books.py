@@ -61,6 +61,20 @@ EXTRA_MARKETS = ",".join([
 ])
 
 
+# Props joueurs NHL (cles The Odds API). Surtout cotees par les livres US.
+PLAYER_PROPS = ",".join([
+    "player_points", "player_goals", "player_assists", "player_shots_on_goal",
+    "player_power_play_points", "player_blocked_shots", "player_total_saves",
+    "player_goal_scorer_anytime", "player_goal_scorer_first",
+])
+
+# Gros livres US (menu NHL le plus complet) + Pinnacle (reference sharp)
+# + les 3 livres canadiens. 10 livres max = 1 region au sens du cout.
+WIDE_BOOKS = ",".join([
+    "draftkings", "fanduel", "betmgm", "williamhill_us", "betrivers",
+    "fanatics", "pinnacle", "bet99_ca_on", "playnow_ca", "betano_ca_on",
+])
+
 from datetime import datetime, timedelta, timezone
 
 
@@ -91,6 +105,10 @@ def probe_event(key: str, books: str, markets: str, lead_h: float = 2.0) -> None
         print("Reponse vide (marche inconnu ? voir le message d'erreur plus haut).")
         return
     seen = set()
+    matrix = defaultdict(set)          # marche -> livres qui le cotent
+    for bk in data.get("bookmakers") or []:
+        for m in bk.get("markets") or []:
+            matrix[m["key"]].add(bk["key"])
     for bk in data.get("bookmakers") or []:
         seen.add(bk["key"])
         print(f"\n   {bk['key']}")
@@ -105,6 +123,17 @@ def probe_event(key: str, books: str, markets: str, lead_h: float = 2.0) -> None
     for b in [x.strip() for x in books.split(",") if x.strip()]:
         if b not in seen:
             print(f"\n   {b:<26} aucun marche supplementaire sur ce match")
+    # Resume pour choisir quoi garder : 1 credit par marche renvoye (par region).
+    asked = [x.strip() for x in markets.split(",") if x.strip()]
+    nb = len([x for x in books.split(",") if x.strip()])
+    regions = (nb + 9) // 10
+    print("\nRESUME marche -> nb de livres (livres)")
+    for mk in asked:
+        bks = sorted(matrix.get(mk, ()))
+        print(f"   {mk:<28} {len(bks):>2}   {', '.join(bks) if bks else '-- aucun'}")
+    print(f"\nMarches renvoyes : {len(matrix)}/{len(asked)}   "
+          f"regions facturees : {regions}   "
+          f"cout estime : {len(matrix) * regions} credits")
 
 def main() -> None:
     p = argparse.ArgumentParser()
@@ -118,7 +147,15 @@ def main() -> None:
     p.add_argument("--lead", type=float, default=2.0,
                        help="--event : heures minimum avant la mise au jeu")
     p.add_argument("--markets", default=EXTRA_MARKETS)
+    p.add_argument("--props", action="store_true",
+                   help="--event : ajoute les props joueurs NHL a --markets")
+    p.add_argument("--wide", action="store_true",
+                   help="--event : livres US + Pinnacle + 3 canadiens (remplace --books)")
     a = p.parse_args()
+    if a.wide:
+        a.books = WIDE_BOOKS
+    if a.props:
+        a.markets = a.markets + "," + PLAYER_PROPS
 
 
 

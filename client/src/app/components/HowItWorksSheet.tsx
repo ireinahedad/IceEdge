@@ -3,6 +3,7 @@ import { useI18n } from "../i18n";
 import { useAuth } from "../context/AuthContext";
 import { apiGetSubscription } from "../services/subscriptionService";
 
+import { X } from "lucide-react";
 /**
  * « Comment ça marche » : le guide de la page Stats (bouton « ? »).
  *
@@ -156,7 +157,7 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
             aria-label={fr ? "Fermer" : "Close"}
             className="tap-44 w-8 h-8 rounded-full bg-[#1B2419] flex items-center justify-center text-[#bfc8cc] flex-shrink-0"
           >
-            ✕
+            <X size={14} />
           </button>
         </div>
 

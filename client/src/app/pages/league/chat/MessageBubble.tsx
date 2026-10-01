@@ -6,6 +6,7 @@ import type { ChatMessage, SlipAttachment } from "../../../types/user";
 import { legAccent } from "../../../data/teamEmoji";
 import { outcomeKey, isNeutralOutcome } from "../../../services/slipOutcome";
 
+import { Ban, Trash2, Flag, User as UserIcon } from "lucide-react";
 const TAG_STYLE = {
   pick:     "bg-green-500/15 text-green-400 border-green-500/30",
   analysis: "bg-[#90C9F0]/15 text-[#90C9F0] border-[#90C9F0]/30",
@@ -13,9 +14,9 @@ const TAG_STYLE = {
 } as const;
 
 const TAG_LABEL = {
-  pick: "🎯 Pick",
-  analysis: "📊 Analysis",
-  hot: "🔴 Live",
+  pick: "Pick",
+  analysis: "Analysis",
+  hot: "Live",
 } as const;
 
 /** L'échelle de probabilité du produit — la même que `SlipCard` et l'image de partage. */
@@ -166,7 +167,7 @@ export function MessageBubble({
       >
         {msg.avatarUrl
           ? <img src={msg.avatarUrl} alt="" className="w-full h-full object-cover rounded-full" />
-          : msg.avatar}
+          : msg.avatar && msg.avatar !== "👤" ? msg.avatar : <UserIcon size={14} className="text-white/60" />}
       </button>
 
       <div className={`max-w-[78%] flex flex-col gap-1 ${isOwn ? "items-end" : "items-start"}`}>
@@ -215,7 +216,7 @@ export function MessageBubble({
               className="tap-44 text-white/30 hover:text-red-400 text-[11px] opacity-40 hover:opacity-100 transition-opacity self-center flex-shrink-0"
               title="Delete"
             >
-              🗑️
+              <Trash2 size={13} />
             </button>
           )}
           {canModerate && (
@@ -241,7 +242,7 @@ export function MessageBubble({
                         onClick={() => { setMenuOpen(false); onReport(msg); }}
                         className="w-full text-left px-3 py-2.5 text-[11px] text-white/80 active:bg-white/5 border-b border-white/5"
                       >
-                        🚩 {t("chat.report")}
+                        <Flag size={12} className="inline mr-1.5 -mt-0.5" />{t("chat.report")}
                       </button>
                     )}
                     {onBlock && (
@@ -249,7 +250,7 @@ export function MessageBubble({
                         onClick={() => { setMenuOpen(false); onBlock(msg); }}
                         className="w-full text-left px-3 py-2.5 text-[11px] text-red-400 active:bg-white/5"
                       >
-                        🚫 {t("chat.blockUser")}
+                        <Ban size={13} className="inline mr-1.5 -mt-0.5" />{t("chat.blockUser")}
                       </button>
                     )}
                   </div>

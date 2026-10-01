@@ -6,10 +6,11 @@
  * seuls les imports et les mots-clés `export` ont été ajoutés.
  */
 
-import { predictionApiService, isPredictionUnavailable } from "../../services/predictionApiService";
 import type { NHLGame } from "../../types/bet";
 import type { OddsEvent } from "../../services/oddsApiService";
 import { nhlLogoUrl } from "../../data/teamEmoji";
+import { fetchGameMlBundle } from "../../components/MLPredictionCard";
+import { mlBundleKey } from "../prediction/gameMarkets";
 
 
 // ─── Hockey helpers ────────────────────────────────────────────────────────────
@@ -34,8 +35,8 @@ export interface DisplayGame {
   startTimeUTC?: string | null;
   overUnder?: number;
   totalPct?: number | null;
-  // Vrais prix moneyline (décimaux) du livre relayé par le serveur — Betano
-  // Ontario, PAS Bet365 (The Odds API ne le cote pas sur la NHL). La source est
+  // Vrais prix moneyline (décimaux) du livre relayé par le serveur — BetRivers,
+  // PAS Bet365 (The Odds API ne le cote pas sur la NHL). La source est
   // dite dans les Réglages ; voir `components/BookPricePill`.
   bookHome?: number;
   bookAway?: number;
@@ -51,20 +52,11 @@ export interface DisplayGame {
   team2: { id: string; abbr: string; name: string; score?: number; logo: string; winPct: number | null };
 }
 
-/**
- * Une probabilité que le modèle n'a pas rendue vaut `null` — jamais un nombre
- * fabriqué. La carte affiche « — » et le calcul d'edge est neutralisé.
- */
-async function pctOrNull(
-  req: Parameters<typeof predictionApiService.getSinglePrediction>[0]
-): Promise<number | null> {
-  try {
-    return (await predictionApiService.getSinglePrediction(req)).probability;
-  } catch (e) {
-    if (!isPredictionUnavailable(e)) throw e;
-    console.warn("[landing] prédiction indisponible :", e.reason);
-    return null;
-  }
+/** P(victoire domicile) selon le modèle ML, ou `null` s'il ne répond pas. */
+async function mlHomeWinPct(gameId: string): Promise<number | null> {
+  const b = await fetchGameMlBundle(gameId);
+  const v = b?.byKey[mlBundleKey("moneyline", null, null, true)]?.probability;
+  return typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null;
 }
 
 export async function toDisplayGame(game: NHLGame): Promise<DisplayGame> {
@@ -72,7 +64,12 @@ export async function toDisplayGame(game: NHLGame): Promise<DisplayGame> {
   // l'accueil ne l'affiche plus depuis le 2026-09-27 (remplacé par le tableau
   // Handicap / Vainqueur, qui lit le paquet ML du match). Un appel de moins par
   // match sur `predictLimiter`.
-  const homePct = await pctOrNull({ marketType: "moneyline", gameId: game.id, teamId: game.homeTeam.abbreviation.toLowerCase() });
+  // 2026-10-01 (demande du user) : l'accueil n'affiche QUE le modèle ML. Le %
+  // du vainqueur (barre de la carte en direct, badge d'edge, section +EV) vient
+  // du paquet ML du match — le même que lit le tableau des matchs à venir, mis
+  // en cache, donc aucun appel de plus. Plus de `/predict/single` (moteur de
+  // règles) ici : les règles ne se voient que dans la fiche d'un pari.
+  const homePct = await mlHomeWinPct(game.id);
   const totalPct = null;
   return {
     id: game.id,

@@ -111,7 +111,7 @@ export function NHLPredictionsPage() {
   }, [gameOptions]);
 
   return (
-    <RevealModeCtx.Provider value="rules">
+    <RevealModeCtx.Provider value="ml">
       <div className="flex flex-col min-h-screen bg-transparent text-white max-w-[430px] md:max-w-5xl mx-auto w-full">
         {/* ── Header ── */}
         <header className="bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>

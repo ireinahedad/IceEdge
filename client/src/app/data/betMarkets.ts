@@ -1,3 +1,4 @@
+import { CalendarDays, Shield, User, Timer, Zap, type LucideIcon } from "lucide-react";
 import type { BetMarketType } from "../types/bet";
 // Lignes des six marchés plus/moins : source unique partagée avec le serveur
 // (validation du Bet builder IA). Voir l'en-tête de marketLines.ts.
@@ -475,10 +476,10 @@ export const CATEGORY_LABELS: Record<MarketDefinition["category"], string> = {
   special: "Specials",
 };
 
-export const CATEGORY_ICONS: Record<MarketDefinition["category"], string> = {
-  match:   "🏒",
-  team:    "🛡",
-  player:  "⛸",
-  period:  "⏱",
-  special: "⚡",
+export const CATEGORY_ICONS: Record<MarketDefinition["category"], LucideIcon> = {
+  match:   CalendarDays,
+  team:    Shield,
+  player:  User,
+  period:  Timer,
+  special: Zap,
 };

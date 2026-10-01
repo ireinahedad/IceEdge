@@ -125,11 +125,11 @@ describe('oddsClient — livres demandés', () => {
     delete process.env.ODDS_COLLECT_BOOKMAKERS;
   });
 
-  it('affichage : demande `betano_ca_on` par `bookmakers`, jamais par `regions`', async () => {
+  it('affichage : demande `betrivers` par `bookmakers`, jamais par `regions`', async () => {
     const { mod, calls } = await load({ latencyMs: 0 });
     await mod.fetchOddsImplied('Montreal Canadiens', 'Boston Bruins');
     const url = new URL(calls[0]);
-    expect(url.searchParams.get('bookmakers')).toBe('betano_ca_on');
+    expect(url.searchParams.get('bookmakers')).toBe('betrivers');
     expect(url.searchParams.has('regions')).toBe(false);
     expect(url.searchParams.get('markets')).toBe('h2h,spreads,totals');
   });
@@ -149,7 +149,7 @@ describe('oddsClient — livres demandés', () => {
     await mod.fetchCollectorOdds('h2h,spreads,totals');
     await mod.fetchOddsImplied('Montreal Canadiens', 'Boston Bruins');
     expect(calls.length).toBe(2);
-    expect(new URL(calls[1]).searchParams.get('bookmakers')).toBe('betano_ca_on');
+    expect(new URL(calls[1]).searchParams.get('bookmakers')).toBe('betrivers');
   });
 
   it('les variables d’environnement remplacent les défauts', async () => {
@@ -267,7 +267,7 @@ describe('fetchGameExtras — marchés de match supplémentaires', () => {
     expect(b).toEqual(a);
     const eventCalls = calls.filter((u) => u.includes('/events/ev1/odds'));
     expect(eventCalls.length).toBe(1);
-    expect(new URL(eventCalls[0]).searchParams.get('bookmakers')).toBe('betano_ca_on');
+    expect(new URL(eventCalls[0]).searchParams.get('bookmakers')).toBe('betrivers');
   });
 
   it('match à plus de 48 h ou inconnu : aucun appel facturé', async () => {

@@ -292,7 +292,7 @@ function MLPredictionCard({ result, ruleBasedPct, compact = false, hero = false,
   if (compact) {
     return (
       <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#1a1230] border border-[#a78bfa]/25">
-        <span className="text-[11px] text-[#a78bfa] font-bold">🤖 ML</span>
+        <span className="text-[11px] text-[#a78bfa] font-bold">ML</span>
         <span className="text-xs font-black" style={{ color: probColor }}>{probability}%</span>
         {model_type && <span className="text-[11px] text-[#4a4060]">{model_type.split(' ')[0]}</span>}
       </div>
@@ -315,7 +315,6 @@ function MLPredictionCard({ result, ruleBasedPct, compact = false, hero = false,
 
         {/* ── Header ── */}
         <div className="px-4 py-3 flex items-center gap-2 border-b border-[#a78bfa]/10">
-          <div className="w-8 h-8 rounded-xl bg-[#a78bfa]/15 border border-[#a78bfa]/30 flex items-center justify-center text-base">🤖</div>
           <div className="flex-1 min-w-0">
             <p className="text-white text-sm font-bold">{t("ml.title")}</p>
             {label
@@ -391,7 +390,6 @@ function MLPredictionCard({ result, ruleBasedPct, compact = false, hero = false,
   return (
     <div className="bg-[#0d0a1a] border border-[#a78bfa]/20 rounded-2xl overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[#a78bfa]/10">
-        <div className="w-7 h-7 rounded-lg bg-[#a78bfa]/15 border border-[#a78bfa]/30 flex items-center justify-center text-sm">🤖</div>
         <div className="flex-1">
           <p className="text-white text-xs font-bold">{t("ml.aiPrediction")}</p>
           {modelLine && <p className="text-[#6b5a8a] text-[11px]">{modelLine}</p>}

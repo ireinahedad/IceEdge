@@ -10,6 +10,7 @@ import {
   apiRedeemPromo, SubscriptionStatus, type BillingPeriod,
 } from "../services/subscriptionService";
 
+import { Check } from "lucide-react";
 const ACCENT        = "#86d1ea";
 const ACCENT_BG     = "rgba(134,209,234,0.12)";
 const ACCENT_BORDER = "rgba(134,209,234,0.3)";
@@ -308,7 +309,7 @@ export function ProPage() {
         {benefits.map((b, i) => (
           <div key={i} className="flex items-start gap-3 px-4 py-3"
             style={{ borderTop: `1px solid ${BORDER}` }}>
-            <span className="mt-0.5 shrink-0" style={{ color: ACCENT, fontWeight: 700 }}>✓</span>
+            <Check size={15} strokeWidth={3} className="mt-0.5 shrink-0" style={{ color: ACCENT }} />
             <div>
               <div className="text-sm font-semibold" style={{ color: "#F3F7F0" }}>{b.title}</div>
               <div className="text-xs mt-0.5" style={{ color: MUTED }}>{b.desc}</div>
