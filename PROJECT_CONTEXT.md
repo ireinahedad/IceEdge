@@ -15,7 +15,38 @@ When continuing this project:
 - Verify that what you are implementing is secure
 - At the end of each session, update PROJECT_CONTEXT.md.
 
-Last updated: 2026-10-01
+Last updated: 2026-10-01 (phase 2, partie 2)
+
+## Session 2026-10-01 (suite, locale) — Prédictions en direct, Phase 2 (partie 2)
+
+Faite sur la machine de la propriétaire (le réseau du cloud bloquait MoneyPuck et l'API
+NHL). Branche `claude/laughing-davinci-3ver59` récupérée, `master` fusionné dedans.
+⚠️ Avast intercepte le HTTPS : exporter sa racine en PEM pour Python (`REQUESTS_CA_BUNDLE`)
+et Node (`NODE_EXTRA_CA_CERTS`). Détail complet : `LIVE_PREDICTIONS_PLAN.md`.
+
+1. **Données** (ignorées par git) — `ml/python/fetch_live_goals.py` : fichiers de tirs
+   MoneyPuck → `live_goals.csv` (buts réglementaires horodatés, score avant le but) +
+   `live_games.csv`, contrôlés contre `nhl_games_v4.csv`. `ml/python/live_pregame.py` :
+   avant-match hors échantillon (modèle de score walk-forward) → `live_pregame.csv`.
+2. **Effets de score mesurés** — `ml/python/calibrate_live.py` : vraisemblance d'exposition,
+   m(écart −3…+3, tranche de temps), rétrécissement choisi par validation croisée →
+   `server/src/services/prediction/liveEffects.json` (ne pas éditer à la main ; jumeau
+   `PERIOD_DIST`). Moteur `evolveLiveScore` (DP sur le score, pas de 10 s) dans
+   `finalScore.ts`, utilisé par `finalScoreGrid` quand `LiveState.effects` est présent ;
+   `liveCalibration` passe par le même moteur (mémo par match) ; exportée pour le rejeu.
+   `LIVE_EFFECTS` (nhlPredictions.ts) active la phase 2 ; `null` = phase 1.
+3. **Paris joueur** — `boxscoreLiveInfo` ajoute `fTeam` (par abréviation) ; `PlayerPropGrid`
+   l'applique aux buts/passes/points (`GOAL_STATS`), `f` pour le reste.
+4. **Rejeu** — `server/scripts/replay-live.ts` + `computeLiveModelGroups` (calcul du paquet
+   ML en direct sans réseau). 3 903 matchs 2023-26 : log-loss −2,19 %, 23/50 cases
+   meilleures, 2 pires (totaux à la mise au jeu, biais de l'avant-match). Rapport
+   `ml/models/live/live_report.md`.
+5. **Face-à-face** — `ml/python/measure_h2h.py` : pas de gain → rien de branché.
+6. **Non fait** : avantage numérique en cours (pas mesurable sans pénalités du play-by-play),
+   cartes P1/P2 et BTTS par le moteur. Constat : λ d'avant-match ~4 % trop haut sur 2022-25.
+
+Tests : +4 moteur (`finalScore.test.ts`), +3 phase 2 (`nhlPredictions.test.ts`).
+`tsc` serveur + client, `npm run build`. Chemin réel vérifié sur COL–LAK en cours.
 
 ## Session 2026-10-01 — Prédictions en direct, Phase 2 (partie 1)
 

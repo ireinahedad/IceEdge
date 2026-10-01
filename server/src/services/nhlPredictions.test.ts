@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   buildGameMarkets, buildGameMarketsWithStatus, buildLiveModelMarkets, buildPrematchGameMarkets,
-  boxscoreLiveInfo, liveCtxFromDetail, marginDistribution,
+  boxscoreLiveInfo, liveCtxFromDetail, marginDistribution, computeLiveModelGroups,
 } from './nhlPredictions';
 
 /**
@@ -587,5 +587,33 @@ describe('boxscoreLiveInfo — ce que reçoivent les grilles joueur', () => {
   it('pas de but : pas de premier buteur ; feuille illisible : null', () => {
     expect(boxscoreLiveInfo(detail('live', 1, '15:00', 0, 0, []))!.firstScorerId).toBeNull();
     expect(boxscoreLiveInfo({ status: 'live' })).toBeNull();
+  });
+});
+
+describe('effets de score mesurés (phase 2)', () => {
+  const sides = { home: { score: 0, abbr: 'COL' }, away: { score: 0, abbr: 'LAK' } };
+  const at = (period: number, clock: string, h: number, a: number) =>
+    ({ ...detail('live', period, clock, h, a, []), home: { ...sides.home, score: h }, away: { ...sides.away, score: a } });
+
+  it('le direct lit les effets mesurés', () => {
+    expect(liveCtxFromDetail(at(1, '20:00', 0, 0))!.state.effects).toBeTruthy();
+  });
+
+  it("à la mise au jeu, victoire et prolongation redisent l'avant-match du modèle", () => {
+    const live = liveCtxFromDetail(at(1, '20:00', 0, 0))!;
+    const opt = (id: string) => computeLiveModelGroups({ preHome: 0.58, ot: 0.22, lambdaT: 6.1 }, live)
+      .flatMap(g => g.options).find(o => o.id === id)!;
+    expect(opt('mw-home').rulePct).toBe(58);
+    expect(opt('ot-yes').rulePct).toBe(22);
+  });
+
+  it("facteur d'équipe des paris joueur : 1 but d'écart à 2 min de la fin > f, nul < f", () => {
+    const lead = boxscoreLiveInfo(at(3, '02:00', 2, 1))!;
+    expect(lead.fTeam!.LAK).toBeGreaterThan(lead.f! * 1.5); // attaquant supplémentaire
+    expect(lead.fTeam!.COL).toBeGreaterThan(lead.f! * 1.5); // filet désert
+    const tie = boxscoreLiveInfo(at(3, '02:00', 2, 2))!;
+    expect(tie.fTeam!.COL).toBeLessThan(tie.f!);
+    // Prolongation et match terminé : pas de facteur (la grille garde f).
+    expect(boxscoreLiveInfo({ ...at(4, '03:00', 2, 2), periodType: 'OT' })!.fTeam).toBeUndefined();
   });
 });

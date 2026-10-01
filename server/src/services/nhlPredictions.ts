@@ -30,8 +30,9 @@ import {
 import { attachGameFactors, attachPlayerFactors, attachGoalieFactors, PuckLineSpec, PeriodSpec } from './factorModel';
 import {
   finalScoreGrid, winByAtLeastShare, exactScoreShare, totalOver, teamOver, nbAtLeast,
-  nbAtLeastLive, liveFraction, LiveState,
+  nbAtLeastLive, liveFraction, LiveState, LiveEffects, evolveLiveScore,
 } from './prediction/finalScore';
+import measuredLiveEffects from './prediction/liveEffects.json';
 import { TtlCache } from './ttlCache';
 
 // ─── Shared interfaces ────────────────────────────────────────────────────────
@@ -369,6 +370,16 @@ export interface LiveGameCtx {
 
 const ORD = ['1re', '2e', '3e'];
 
+/** Les effets de score mesurés par `ml/python/calibrate_live.py` (saisons ≤ 2022-23). */
+export const MEASURED_LIVE_EFFECTS: LiveEffects = measuredLiveEffects as LiveEffects;
+/**
+ * Effets de score servis en direct (`LiveState.effects`) ; `null` = phase 1
+ * (cadence fixe). Activés le 2026-10-01 sur le rejeu de 3 903 matchs hors
+ * échantillon (`ml/models/live/live_report.md`) : log-loss −2,2 % au total,
+ * jusqu'à −27 % sur la puck line à 2 minutes de la fin.
+ */
+const LIVE_EFFECTS: LiveEffects | null = MEASURED_LIVE_EFFECTS;
+
 /** « MM:SS » → secondes (0 si illisible). */
 function parseClock(clock: unknown): number {
   if (typeof clock !== 'string' || !clock.includes(':')) return 0;
@@ -443,7 +454,7 @@ export function liveCtxFromDetail(d: any): LiveGameCtx | null {
       ? `entracte après la ${ORD[period - 1]}`
       : `${ORD[period - 1]}, ${d.clock ?? '?'} restantes`;
   return {
-    state: { homeScore: home, awayScore: away, secondsLeftReg, inOvertime, f },
+    state: { homeScore: home, awayScore: away, secondsLeftReg, inOvertime, f, ...(LIVE_EFFECTS ? { effects: LIVE_EFFECTS } : {}) },
     period, clockSec, periodGoals, final: false,
     label: `${home}–${away}, ${when}`,
   };
@@ -462,13 +473,40 @@ export function liveCtxFromDetail(d: any): LiveGameCtx | null {
  *
  * `null` = état illisible : la grille montre « — », pas la saison.
  */
-export function boxscoreLiveInfo(detail: any): { f: number | null; label: string; firstScorerId: string | null } | null {
+export function boxscoreLiveInfo(detail: any): {
+  f: number | null; fTeam?: Record<string, number>; label: string; firstScorerId: string | null;
+} | null {
   const c = liveCtxFromDetail(detail);
   if (!c) return null;
   const periodType = String(detail?.periodType ?? '').toUpperCase();
   const f = c.final || periodType === 'SO' ? 0 : c.state.inOvertime ? null : liveFraction(c.state);
   const first = (Array.isArray(detail?.scoring) ? detail.scoring : []).find((g: any) => g?.period !== 'SO');
-  return { f, label: c.label, firstScorerId: first?.playerId ? String(first.playerId) : null };
+  const fTeam = teamGoalsFactor(c, detail);
+  return { f, ...(fTeam ? { fTeam } : {}), label: c.label, firstScorerId: first?.playerId ? String(first.playerId) : null };
+}
+
+/**
+ * Part des buts du match qui reste à marquer, PAR ÉQUIPE, avec les effets de
+ * score : buts restants attendus de l'équipe (`evolveLiveScore`) / son λ.
+ * Une équipe menée en fin de match en marque plus que f ne le dit, celle qui
+ * mène aussi (filet désert) ; à égalité, moins. Les grilles joueur l'appliquent
+ * aux buts, passes et points — les statistiques mesurées sur des BUTS — et
+ * gardent f pour les tirs, mises en échec, tirs bloqués et arrêts.
+ *
+ * Le λ du match n'est pas connu ici : on prend le λ moyen mesuré d'une équipe
+ * (`leagueLambda`), le rapport n'y est presque pas sensible. Avec m ≡ 1, on
+ * retrouve exactement f. `undefined` = pas d'effets, prolongation ou match fini.
+ */
+function teamGoalsFactor(c: LiveGameCtx, detail: any): Record<string, number> | undefined {
+  const fx = c.state.effects;
+  const lam = fx?.leagueLambda;
+  const homeAbbr = detail?.home?.abbr, awayAbbr = detail?.away?.abbr;
+  if (!fx || !(lam && lam > 0) || c.final || c.state.inOvertime || !homeAbbr || !awayAbbr) return undefined;
+  if (!(c.state.secondsLeftReg > 0)) return { [homeAbbr]: 0, [awayAbbr]: 0 };
+  const rem = evolveLiveScore(lam, lam, c.state.homeScore, c.state.awayScore, 3600 - c.state.secondsLeftReg, fx);
+  let eh = 0, ea = 0;
+  rem.forEach((row, i) => row.forEach((p, j) => { eh += p * i; ea += p * j; }));
+  return { [homeAbbr]: Math.round((eh / lam) * 1e4) / 1e4, [awayAbbr]: Math.round((ea / lam) * 1e4) / 1e4 };
 }
 
 /**
@@ -484,12 +522,23 @@ export function boxscoreLiveInfo(detail: any): { f: number | null; label: string
  * `targetTie` ; le facteur de nuls (`tieBoost`) s'en déduit. À 0–0 avec 60
  * minutes à jouer, ces tuiles disent exactement ce que disait l'avant-match.
  */
-function liveCalibration(
+export function liveCalibration(
   lambdaT: number, targetHome: number, targetTie: number, otShareHome: number,
+  effects: LiveEffects | null = null,
 ): { lambdaH: number; lambdaA: number; tieBoost: number } {
+  const key = effects ? `${lambdaT}|${targetHome}|${targetTie}|${otShareHome}` : '';
+  const hit = effects ? calibrationMemo.get(effects)?.get(key) : undefined;
+  if (hit) return hit;
   const tie = clamp(targetTie, 0.01, 0.9);
+  // Avec les effets de score, le calage passe par le MÊME moteur que le direct,
+  // depuis 0–0 et 60 minutes à jouer : à la mise au jeu, la grille redit
+  // l'avant-match.
+  const kickoff: LiveState | undefined = effects
+    ? { homeScore: 0, awayScore: 0, secondsLeftReg: 3600, inOvertime: false, effects }
+    : undefined;
+  const grid = (s: number) => finalScoreGrid(lambdaT * s, lambdaT * (1 - s), otShareHome, kickoff);
   const win = (s: number) => {
-    const g = finalScoreGrid(lambdaT * s, lambdaT * (1 - s), otShareHome);
+    const g = grid(s);
     return (g.regHome / Math.max(1e-9, 1 - g.regTie)) * (1 - tie) + tie * otShareHome;
   };
   let lo = 0.05, hi = 0.95;
@@ -498,10 +547,23 @@ function liveCalibration(
     if (win(mid) < targetHome) lo = mid; else hi = mid;
   }
   const s = (lo + hi) / 2;
-  const t = finalScoreGrid(lambdaT * s, lambdaT * (1 - s), otShareHome).regTie;
+  const t = grid(s).regTie;
   const tieBoost = t > 0 && t < 1 ? (tie * (1 - t)) / (t * (1 - tie)) : 1;
-  return { lambdaH: lambdaT * s, lambdaA: lambdaT * (1 - s), tieBoost };
+  const out = { lambdaH: lambdaT * s, lambdaA: lambdaT * (1 - s), tieBoost };
+  if (effects) {
+    let memo = calibrationMemo.get(effects);
+    if (!memo) calibrationMemo.set(effects, memo = new Map());
+    if (memo.size >= 2000) memo.clear();
+    memo.set(key, out);
+  }
+  return out;
 }
+
+/**
+ * Le calage avec effets coûte ~30 passes du moteur ; il ne dépend que de
+ * l'avant-match, pas du moment du match : on le garde par match.
+ */
+const calibrationMemo = new WeakMap<LiveEffects, Map<string, { lambdaH: number; lambdaA: number; tieBoost: number }>>();
 
 // ─── Game markets ─────────────────────────────────────────────────────────────
 
@@ -629,7 +691,8 @@ function computeGameMarkets(
   // sur la victoire et le P(prolongation) d'avant-match (`liveCalibration`).
   const liveF = live ? liveFraction(live.state) : 1;
   const cal = live
-    ? liveCalibration(anchor ? anchor.lambdaT : lambdaT, basePre, anchor ? anchor.ot : otProb(preHome), preShare)
+    ? liveCalibration(anchor ? anchor.lambdaT : lambdaT, basePre, anchor ? anchor.ot : otProb(preHome), preShare,
+                      live.state.effects ?? null)
     : null;
   const gH = cal ? cal.lambdaH : lambdaH;
   const gA = cal ? cal.lambdaA : lambdaA;
@@ -1483,6 +1546,18 @@ export async function buildPrematchGameMarkets(gameId: string): Promise<MarketGr
  */
 export async function buildLiveModelMarkets(gameId: string, model: ModelInputs): Promise<GameMarketsResult> {
   return computeGameMarketsFor(gameId, undefined, { model });
+}
+
+/**
+ * Le calcul de `buildLiveModelMarkets` SANS réseau : chiffres d'avant-match du
+ * modèle + état du match → tuiles. Pour le rejeu (`scripts/replay-live.ts`),
+ * qui note ainsi le vrai moteur. Avec `model`, la grille, la victoire et la
+ * prolongation ne lisent que le modèle et l'état du match : les équipes
+ * neutres ne changent que les tuiles hors grille, que le rejeu ne note pas.
+ */
+export function computeLiveModelGroups(model: ModelInputs, live: LiveGameCtx): MarketGroup[] {
+  return computeGameMarkets({ abbreviation: 'HOM' }, { abbreviation: 'AWY' }, 'HOM', 'AWY',
+    {}, {}, null, null, null, undefined, false, 1, live, model);
 }
 
 async function computeGameMarketsFor(

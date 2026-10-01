@@ -93,6 +93,26 @@ export interface LiveState {
    * gonfle aussi l'égalisation d'une équipe menée d'un but (gardien retiré).
    */
   tieBoost?:      number;
+  /**
+   * Effets de score MESURÉS (`liveEffects.json`, `ml/python/calibrate_live.py`).
+   * Présents : les buts restants ne sont plus deux Poisson à cadence fixe mais
+   * suivent `evolveLiveScore`, où la cadence de chaque équipe dépend de son
+   * écart au score et du moment du match. Absents : phase 1, inchangée.
+   */
+  effects?:       LiveEffects | null;
+}
+
+/**
+ * Multiplicateurs de cadence mesurés : `m[tranche][écart + 3]`, l'écart vu de
+ * l'équipe qui marque (borné à ±3), la tranche en secondes ÉCOULÉES.
+ */
+export interface LiveEffects {
+  slices:     Array<[number, number] | number[]>;
+  diffs:      number[];
+  m:          number[][];
+  periodDist: number[];
+  /** λ moyen d'une équipe sur les saisons d'entraînement (facteur d'équipe des paris joueur). */
+  leagueLambda?: number;
 }
 
 /** Part des buts restants : f explicite, sinon le temps réglementaire restant. */
@@ -105,23 +125,43 @@ export function liveFraction(live: LiveState): number {
 export function finalScoreGrid(
   lambdaH: number, lambdaA: number, otShareHome: number, live?: LiveState,
 ): FinalScoreGrid {
+  const h0 = live ? Math.max(0, Math.floor(live.homeScore)) : 0;
+  const a0 = live ? Math.max(0, Math.floor(live.awayScore)) : 0;
+  // Effets de score mesurés : buts restants par le moteur pas à pas.
+  if (live?.effects && !live.inOvertime && live.secondsLeftReg > 0) {
+    return gridFromRemaining(
+      evolveLiveScore(lambdaH, lambdaA, h0, a0, 3600 - live.secondsLeftReg, live.effects),
+      h0, a0, otShareHome, live.tieBoost);
+  }
   // Avant-match : plancher 0.05, grille depuis 0–0. En direct : les buts
   // RESTANTS, sans plancher — à f = 0 il n'en reste aucun, et `poissonPmfs(0)`
   // rend exactement [1, 0, 0…].
   const f  = live ? liveFraction(live) : 1;
-  const h0 = live ? Math.max(0, Math.floor(live.homeScore)) : 0;
-  const a0 = live ? Math.max(0, Math.floor(live.awayScore)) : 0;
   const ph = poissonPmfs(live ? Math.max(0, lambdaH) * f : Math.max(0.05, lambdaH));
   const pa = poissonPmfs(live ? Math.max(0, lambdaA) * f : Math.max(0.05, lambdaA));
+  const rem = ph.map(x => pa.map(y => x * y));
+  return gridFromRemaining(rem, h0, a0, otShareHome, live?.tieBoost);
+}
+
+/**
+ * Grille du score final à partir de la loi des buts RESTANTS en temps
+ * réglementaire (`rem[i][j]` = P(le domicile en marque encore i, le visiteur
+ * j)), décalée du score actuel. Un nul à 60 minutes donne un but de plus au
+ * vainqueur de la prolongation (`otShareHome`), après gonflement par
+ * `tieBoost`.
+ */
+function gridFromRemaining(
+  rem: number[][], h0: number, a0: number, otShareHome: number, tieBoost?: number,
+): FinalScoreGrid {
   // Carrée : les lecteurs (`gridSum`…) parcourent `size` dans les deux sens.
   const size = Math.max(h0, a0) + MAX_K + 2;
   const p: number[][] = Array.from({ length: size }, () => new Array(size).fill(0));
   const share = Math.max(0, Math.min(1, otShareHome));
-  const boost = live?.tieBoost != null && live.tieBoost > 0 ? live.tieBoost : 1;
+  const boost = tieBoost != null && tieBoost > 0 ? tieBoost : 1;
   let regHome = 0, regAway = 0, regTie = 0;
   for (let i = 0; i <= MAX_K; i++) {
     for (let j = 0; j <= MAX_K; j++) {
-      let joint = ph[i] * pa[j];
+      let joint = rem[i][j];
       if (joint < 1e-14) continue;
       const h = h0 + i, a = a0 + j;
       if (h > a) { p[h][a] += joint; regHome += joint; continue; }
@@ -139,6 +179,77 @@ export function finalScoreGrid(
   if (total > 0) for (const row of p) for (let a = 0; a < size; a++) row[a] /= total;
   const reg = regHome + regAway + regTie || 1;
   return { p, size, regHome: regHome / reg, regAway: regAway / reg, regTie: regTie / reg };
+}
+
+/** Pas du moteur, en secondes. Les bornes des tranches et des périodes en sont des multiples. */
+const STEP_SEC = 10;
+
+/**
+ * Loi des buts RESTANTS en temps réglementaire, quand la cadence de chaque
+ * équipe dépend de l'état du match : `rem[i][j]` = P(le domicile en marque
+ * encore i, le visiteur j), i, j ≤ MAX_K.
+ *
+ * Programmation dynamique sur le score, pas de 10 s, de `elapsedSec` à 3600 :
+ * à chaque pas, chaque équipe marque 0, 1 ou 2 buts (Poisson) à la cadence
+ *     λ × w(t) × m(écart vu de l'équipe, tranche de t)
+ * où w est le profil de temps de `periodDist` (même répartition que les
+ * cartes de période) et m le multiplicateur mesuré. L'écart est figé pendant
+ * le pas : deux buts en 10 s restent des événements rares, et leur masse est
+ * conservée (seuls ≥ 3 buts d'une équipe en un pas sont tronqués, ~10⁻⁶).
+ * Avec m ≡ 1, on retrouve les deux Poisson indépendantes de la phase 1.
+ */
+export function evolveLiveScore(
+  lambdaH: number, lambdaA: number, h0: number, a0: number,
+  elapsedSec: number, fx: LiveEffects,
+): number[][] {
+  const n = MAX_K + 1;
+  let cur: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
+  cur[0][0] = 1;
+  const lh = Math.max(0, lambdaH), la = Math.max(0, lambdaA);
+  const d0 = h0 - a0;
+  const sliceAt = (t: number) => {
+    for (let s = 0; s < fx.slices.length; s++) if (t >= fx.slices[s][0] && t < fx.slices[s][1]) return s;
+    return fx.slices.length - 1;
+  };
+  /** P(0, 1, 2 buts) sur le pas, renormalisée (≥ 3 tronqué). */
+  const goals3 = (r: number) => {
+    const e = Math.exp(-r);
+    const p = [e, e * r, e * r * r / 2];
+    const z = p[0] + p[1] + p[2];
+    return [p[0] / z, p[1] / z, p[2] / z];
+  };
+  let maxI = 0, maxJ = 0;   // bornes de la masse non nulle : la boucle ne parcourt qu'elles
+  let t = Math.max(0, Math.min(3600, elapsedSec));
+  while (t < 3600 - 1e-9) {
+    const next = Math.min(3600, (Math.floor(t / STEP_SEC) + 1) * STEP_SEC);
+    const per = Math.min(2, Math.floor(t / 1200));
+    const w = (fx.periodDist[per] ?? 1 / 3) * (next - t) / 1200;
+    const s = sliceAt(t);
+    // La cadence ne dépend que de l'écart borné à ±3 : 7 cas par pas.
+    const byDiff: Array<{ ph: number[]; pa: number[] }> = [];
+    for (let c = 0; c < 7; c++) {
+      byDiff.push({ ph: goals3(lh * w * (fx.m[s][c] ?? 1)), pa: goals3(la * w * (fx.m[s][6 - c] ?? 1)) });
+    }
+    const nxt: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let i = 0; i <= maxI; i++) {
+      for (let j = 0; j <= maxJ; j++) {
+        const q = cur[i][j];
+        if (q < 1e-15) continue;
+        const { ph, pa } = byDiff[Math.max(-3, Math.min(3, d0 + i - j)) + 3];
+        for (let k = 0; k < 3; k++) {
+          const row = nxt[Math.min(MAX_K, i + k)];
+          const qk = q * ph[k];
+          row[j] += qk * pa[0];
+          row[Math.min(MAX_K, j + 1)] += qk * pa[1];
+          row[Math.min(MAX_K, j + 2)] += qk * pa[2];
+        }
+      }
+    }
+    maxI = Math.min(MAX_K, maxI + 2); maxJ = Math.min(MAX_K, maxJ + 2);
+    cur = nxt;
+    t = next;
+  }
+  return cur;
 }
 
 /** Somme des cases qui vérifient `pred(h, a)`. */

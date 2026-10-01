@@ -133,8 +133,10 @@ export interface GameBoxscoreResponse {
    * Match commencé (serveur, `boxscoreLiveInfo`) : part des buts du match qui
    * reste à jouer (`f`, `null` en prolongation), et premier buteur. Absent =
    * état du match illisible — la grille affiche « — », pas la saison.
+   * `fTeam` (par abréviation d'équipe) : même part, avec les effets de score
+   * mesurés — pour les buts, passes et points seulement.
    */
-  live?: { f: number | null; label: string; firstScorerId: string | null };
+  live?: { f: number | null; fTeam?: Record<string, number>; label: string; firstScorerId: string | null };
 }
 
 // ── Single game detail (game charts page) ───────────────────────────────────
