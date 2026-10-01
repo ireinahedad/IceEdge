@@ -96,9 +96,11 @@ const FOLLOWUP_PROMPT_BUDGET = 7_500;
 interface Followup { q: string; a: string; failed?: boolean }
 
 /* ─── Prediction bottom sheet ───────────────── */
-function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, factors, factorGroup, pctScale, mlPreset, optId, onClose }: {
+function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, factors, factorGroup, pctScale, mlPreset, optId, prematch, onClose }: {
   /** Identifiant de la tuile — certaines ne se cotent qu'avec lui (voir `priceForBet`). */
   optId?: string;
+  /** Partie en cours, chiffre calculé AVANT le match (tuile pâle) : la fiche le dit. */
+  prematch?: boolean;
   label: string; rulePct: number; serverPct?: number; ruleNote: string; accent: string;
   mlProps?: MLProps; factors?: RuleFactor[]; factorGroup?: string; pctScale?: number;
   mlPreset?: BetOpt["mlPreset"]; onClose: () => void;
@@ -312,6 +314,10 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
             <span className="text-[#facc15] text-[11px] leading-none mt-0.5 flex-shrink-0">ⓘ</span>
             <p className="text-[#c9b87a] text-[11px] leading-relaxed">{t(`ml.caveat.${caveat}`)}</p>
           </div>
+        )}
+
+        {prematch && (
+          <p className="text-[#8a9ea6] text-[11px] px-1">{t("pred.prematchValue")}</p>
         )}
 
         {/* ── 📐 Règles — éditeur de facteurs par pari, ou note simple ── */}
@@ -602,20 +608,30 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
   const loadingMl   = mlMode && mlPct === undefined;
   const mlMissing   = mlMode && mlPct === null;
   const shownPct    = mlMode ? (mlPct ?? rulePct) : rulePct;
-  // Pas de chiffre honnête (match en cours illisible…) : « — », en règles comme en ML.
-  const noValue     = !!opt.unavailable && (!mlMode || mlPct == null);
   // Tuile sans chiffre : grise, pour qu'elle ne se lise pas comme une prédiction
   // faible (un « — » coloré en rouge dirait quelque chose, et on ne sait rien).
-  const shownColor  = mlMissing || noValue ? "#4a5a60" : pctColor(shownPct);
+  const shownColor  = mlMissing ? "#4a5a60" : pctColor(shownPct);
   // « <3% » plutôt qu'un plancher qui rendrait tous les petits paris égaux.
   const below       = opt.belowFloor != null && shownPct < opt.belowFloor;
   const shownText   = below ? `<${opt.belowFloor}%` : `${shownPct}%`;
 
+  // ── Match en cours : en direct ou d'avant-match ? ─────────────────────────
+  // Un chiffre RECALCULÉ sur l'état du match (`live`, posé par le serveur ou la
+  // grille joueur) s'affiche en blanc opaque. Tout le reste — chiffre calculé
+  // avant le match, prix du livre (le flux ne cote que l'avant-match) — plus
+  // pâle. Une note en haut de la page explique la différence.
+  const gameLive    = useContext(GameLiveCtx);
+  const fresh       = mlMode ? !!opt.mlPreset?.live : !!opt.live;
+  const liveStyle   = gameLive && fresh && !mlMissing;
+  const paleStyle   = gameLive && !liveStyle;
+  const pillStyle   = liveStyle
+    ? { background: "rgba(255,255,255,0.10)", color: "#ffffff", border: "1px solid rgba(255,255,255,0.45)" }
+    : { background: shownColor + "22", color: shownColor, border: `1px solid ${shownColor}55` };
+
   return (
     <>
       <button
-        // Sans chiffre, pas de fiche : elle afficherait un pourcentage.
-        onClick={() => { if (!noValue) setSheet(true); }}
+        onClick={() => setSheet(true)}
         aria-pressed={inSlip}
         aria-label={compact ? opt.label : undefined}
         title={compact ? opt.label : undefined}
@@ -625,7 +641,7 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
           // la couleur du pourcentage, un vert pâle ne se lirait pas comme un
           // état mais comme une nuance de plus.
           ? { minHeight: compact ? 0 : 64, background: "#132116", borderColor: "#4ade80", borderWidth: 2 }
-          : { minHeight: compact ? 0 : 64, background: "#131A12", borderColor: shownColor + "55" }}
+          : { minHeight: compact ? 0 : 64, background: "#131A12", borderColor: liveStyle ? "rgba(255,255,255,0.30)" : shownColor + "55" }}
       >
         {/* La coche dit CE QUE le vert veut dire. Un liseré seul se devine ;
             une couleur seule ne se voit pas non plus en vision daltonienne. */}
@@ -644,12 +660,12 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
           <span className="text-white text-[11px] font-medium text-center leading-tight">{opt.label}</span>
         )}
         <span
-          className={`${compact ? "" : "mt-2 px-3"} py-0.5 rounded-full text-xs font-bold`}
+          className={`${compact ? "" : "mt-2 px-3"} py-0.5 rounded-full text-xs font-bold ${paleStyle ? "opacity-40" : ""}`}
           data-compact={compact || undefined}
-          style={{ background: shownColor + "22", color: shownColor, border: `1px solid ${shownColor}55` }}
-          title={mlMissing ? t("ml.unavailable") : undefined}
+          style={pillStyle}
+          title={mlMissing ? t("ml.unavailable") : paleStyle ? t("pred.prematchValue") : undefined}
         >
-          {loadingMl ? "…" : mlMissing || noValue ? "—" : shownText}
+          {loadingMl ? "…" : mlMissing ? "—" : shownText}
         </span>
         {/* Le prix du livre, sous le pourcentage et visiblement à part : ce
             sont deux choses différentes — notre estimation, et une offre. Rien
@@ -657,7 +673,7 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
             qui ferait croire à une donnée manquante alors que c'est l'état
             normal de la quasi-totalité des marchés. */}
         {bookPrice != null && (
-          <span className="mt-1 text-[#4ade80] text-[10px] font-bold tabular-nums leading-none">
+          <span className={`mt-1 text-[#4ade80] text-[10px] font-bold tabular-nums leading-none ${gameLive ? "opacity-40" : ""}`}>
             {odds(bookPrice)}
           </span>
         )}
@@ -668,6 +684,7 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
           accent={accent} mlProps={opt.mlProps} factors={opt.factors} factorGroup={opt.factorGroup}
           pctScale={opt.pctScale}
           mlPreset={opt.mlPreset !== undefined ? opt.mlPreset : opt.mlExternal ? null : undefined}
+          prematch={paleStyle}
           onClose={() => setSheet(false)}
         />
       )}

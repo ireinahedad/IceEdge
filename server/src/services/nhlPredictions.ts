@@ -82,6 +82,12 @@ export interface BetOption {
    * Absente = 1.
    */
   pctScale?: number;
+  /**
+   * `true` = chiffre RECALCULÉ sur l'état du match en cours (score, temps
+   * restant). Pendant une partie, le client l'affiche en blanc opaque ; une
+   * tuile sans ce drapeau a été calculée avant le match et s'affiche plus pâle.
+   */
+  live?: boolean;
 }
 
 /**
@@ -1350,6 +1356,7 @@ function computeGameMarkets(
         delete o.factors;
         delete o.factorGroup;
         delete o.pctScale;
+        o.live = true;
         o.ruleNote = o.rulePct === 0 || o.rulePct === 100
           ? `${o.ruleNote}  ·  décidé (${live.label})`
           : `${o.ruleNote}  ·  en direct (${live.label})`;
@@ -1471,16 +1478,11 @@ export async function buildPrematchGameMarkets(gameId: string): Promise<MarketGr
 /**
  * Marchés EN DIRECT calculés à partir des chiffres du modèle ML (`model`) : même
  * grille que les règles, autre point de départ. `liveLabel` absent = le match
- * n'a pas commencé (le paquet ML garde alors ses chiffres d'avant-match).
- * Feuille de match illisible → erreur 503, jamais un chiffre d'avant-match.
+ * n'a pas commencé, ou que son état est illisible : le paquet ML garde alors
+ * ses chiffres d'avant-match (affichés plus pâles pendant la partie).
  */
 export async function buildLiveModelMarkets(gameId: string, model: ModelInputs): Promise<GameMarketsResult> {
   return computeGameMarketsFor(gameId, undefined, { model });
-}
-
-/** Match commencé mais état illisible : on n'invente rien, la route répond 503. */
-function liveUnavailable(): Error {
-  return Object.assign(new Error('Données du match indisponibles'), { status: 503 });
 }
 
 async function computeGameMarketsFor(
@@ -1542,24 +1544,17 @@ async function computeGameMarketsFor(
 
   // ── État du match ─────────────────────────────────────────────────────────
   //
-  // Match commencé et feuille illisible → 503. Pas de repli sur l'avant-match :
-  // pendant une partie, ce serait un chiffre faux présenté comme actuel. (Le
-  // client garde ses derniers vrais chiffres et le signale ; voir
-  // `GamePrediction.tsx`.)
-  //
-  // Seule exception : la feuille dit que la partie n'a PAS commencé (heure de
-  // mise au jeu passée, match retardé, ou caches décalés d'une minute). 0–0 avec
-  // 60 minutes à jouer, c'est exactement l'avant-match — servi avec le cache
-  // court d'un match en cours.
+  // Match commencé et feuille lisible → chiffres recalculés (`live: true` sur
+  // chaque tuile). Feuille illisible, ou partie pas encore lancée → chiffres
+  // d'AVANT-MATCH, sans le drapeau : le client les affiche plus pâles, sous une
+  // note qui dit qu'ils ont été calculés avant le match. Cache court dans les
+  // deux cas, pour reprendre le direct dès que la feuille revient.
   let live: LiveGameCtx | null = null;
   let status = listed;
   if (wantDetail) {
-    if (detailRes.status !== 'fulfilled' || !detailRes.value) throw liveUnavailable();
-    const d = detailRes.value;
-    live = liveCtxFromDetail(d);
-    if (live) status = live.final ? 'final' : 'live';
-    else if (d.status === 'live' || d.status === 'final') throw liveUnavailable();
-    else status = 'live';
+    const d = detailRes.status === 'fulfilled' ? detailRes.value : null;
+    live = d ? liveCtxFromDetail(d) : null;
+    status = live?.final ? 'final' : 'live';
   }
 
   const groups = computeGameMarkets(

@@ -577,7 +577,11 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pred.aiPrediction":   { en: "AI Prediction",         fr: "Prédiction IA" },
   "pred.liveModel":      { en: "Live Model",            fr: "Modèle en direct" },
   "pred.rules":          { en: "Rules",                 fr: "Règles" },
-  "pred.liveStale":      { en: "Live game data unavailable — these numbers date from {time}.", fr: "Données du match indisponibles — ces chiffres datent de {time}." },
+  "pred.liveNote":       {
+    en: "Game in progress: figures in solid white are updated in real time. Paler ones — including bookmaker odds — were calculated before the game.",
+    fr: "Partie en cours : les chiffres en blanc opaque sont mis à jour en temps réel. Les plus pâles, dont les cotes du bookmaker, ont été calculés avant le match.",
+  },
+  "pred.prematchValue":  { en: "Calculated before the game", fr: "Calculé avant le match" },
   "pred.chart":          { en: "Chart",                 fr: "Graphique" },
   // ── Charts page ──
   "chart.title":         { en: "Statistics",            fr: "Statistiques" },

@@ -189,10 +189,11 @@ async function computeBundle(gameId: string): Promise<GameMlBundle> {
 // actuel + buts restants » que les règles (`buildLiveModelMarkets`). Résultat :
 // le modèle ML conditionné par l'état du match, pas une valeur inventée.
 //
-// S'il manque un seul de ces trois chiffres, AUCUNE tuile ML n'a de valeur en
-// direct (« — ») : mieux vaut rien qu'un chiffre d'avant-match présenté comme
-// actuel. Même règle pour les questions que la grille ne sait pas recalculer
-// (blanchissage, avantage numérique… des pages équipe et joueur).
+// Les chiffres recalculés portent `live: true` (blanc opaque à l'écran). S'il
+// manque un de ces trois chiffres, ou que l'état du match est illisible, les
+// tuiles gardent leur chiffre d'AVANT-MATCH, sans le drapeau : le client les
+// affiche plus pâles. Même chose pour les questions que la grille ne sait pas
+// recalculer (blanchissage, avantage numérique… des pages équipe et joueur).
 
 const LIVE_TTL_MS = 30_000;
 const liveCache = new TtlCache<GameMlBundle>(LIVE_TTL_MS, 500, 'mlGameBundlesLive');
@@ -215,21 +216,25 @@ async function applyLive(gameId: string, pre: GameMlBundle): Promise<GameMlBundl
   const ot      = probOf(pre, mlBundleKey('game_to_ot', null, 'yes', true));
   const lambdaT = pre.lambdaHome != null && pre.lambdaAway != null ? pre.lambdaHome + pre.lambdaAway : null;
 
-  // L'état du match passe en premier : un match pas encore commencé garde ses
-  // chiffres d'avant-match, et une feuille illisible lève 503 (pas de repli).
-  // Si une entrée du modèle manque, le calcul ne sert qu'à connaître l'état du
-  // match : ses chiffres sont jetés plus bas et toutes les tuiles valent « — ».
-  const res = await buildLiveModelMarkets(gameId, {
-    preHome: preHome ?? 0.5, ot: ot ?? 0.25, lambdaT: lambdaT ?? 6,
-  });
+  // L'état du match passe en premier : partie pas lancée ou feuille illisible →
+  // chiffres d'avant-match (pâles à l'écran). Si une entrée du modèle manque,
+  // le calcul ne sert qu'à connaître l'état du match : ses chiffres sont jetés
+  // plus bas et les tuiles gardent l'avant-match.
+  let res;
+  try {
+    res = await buildLiveModelMarkets(gameId, {
+      preHome: preHome ?? 0.5, ot: ot ?? 0.25, lambdaT: lambdaT ?? 6,
+    });
+  } catch {
+    return pre;   // recalcul impossible : l'avant-match, affiché pâle
+  }
   if (!res.liveLabel) return pre;
 
-  const nulls = (m: Record<string, unknown>) => Object.fromEntries(Object.keys(m).map(k => [k, null]));
   const base: GameMlBundle = {
     ...pre,
     generatedAt: new Date().toISOString(),
-    results: nulls(pre.results) as Record<string, MLPredictionResult | null>,
-    byKey:   nulls(pre.byKey) as Record<string, MLPredictionResult | null>,
+    results: { ...pre.results },
+    byKey:   { ...pre.byKey },
     live: { label: res.liveLabel, final: res.status === 'final' },
   };
   if (preHome == null || ot == null || lambdaT == null) return base;
@@ -249,6 +254,7 @@ async function applyLive(gameId: string, pre: GameMlBundle): Promise<GameMlBundl
       ...prev,
       probability: o.rulePct,
       probability_scale: 'pct',
+      live: true,
       // L'incertitude bootstrap était celle de l'avant-match : elle ne dit plus rien.
       probability_std: null,
       uncertainty: null,

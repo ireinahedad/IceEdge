@@ -60,6 +60,19 @@ rejeu) attend l'ouverture du réseau (`STATUS.md` §3.5).
    `nhl/teamSeasons.ts` (saisons en cours et précédente, saison + séries, matchs
    joués). Son poids sera mesuré avant tout usage.
 
+5. **Affichage révisé (demande de la propriétaire, même jour)** — pas de bandeau
+   « données indisponibles » ni de « — » : pendant la partie, un chiffre
+   RECALCULÉ sur l'état du match porte `live: true` (tuiles du serveur, résultats
+   du paquet ML, cases de la grille joueur) et s'affiche en **blanc opaque** ;
+   tout le reste montre sa valeur d'**avant-match, plus pâle** (opacité 40 %) :
+   feuille illisible (le serveur sert l'avant-match au cache court, plus de 503),
+   prolongation pour les paris joueur, entrée ML manquante, questions que la
+   grille ne recalcule pas, cotes du bookmaker (flux d'avant-match), chiffres non
+   rafraîchis depuis 90 s (`staleSince`, `mlStale`, `boxStale` retirent le
+   drapeau). Note en haut de page (`pred.liveNote`) ; la fiche d'un chiffre pâle
+   dit « Calculé avant le match ». `res.locals.noStaleFallback` et
+   `BetOpt.unavailable` retirés.
+
 Tests : +17 (nhlPredictions : 503, heure de mise au jeu, ML en direct,
 `boxscoreLiveInfo` ; gameMlBundle : direct, entrée manquante, 503 ; routes :
 cache du paquet, pas de repli sur 503 ; face-à-face). Serveur 1071 tests, `tsc`

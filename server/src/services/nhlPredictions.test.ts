@@ -507,11 +507,20 @@ describe('buildGameMarkets — en direct', () => {
     expect(pctOf('wm-1')).toBe(100);
   });
 
-  it('match commencé, feuille illisible : erreur 503, JAMAIS l\'avant-match', async () => {
+  it('match commencé, feuille illisible : avant-match SANS drapeau `live`, cache court', async () => {
     DETAILS['F-nodetail'] = { status: 'final' };   // statut lu, feuille illisible
-    await expect(buildGameMarketsWithStatus('F-nodetail')).rejects.toMatchObject({ status: 503 });
+    const f = await buildGameMarketsWithStatus('F-nodetail');
+    expect(f.status).toBe('live');                 // surtout pas figé 6 h
+    expect(f.liveLabel).toBeUndefined();
+    expect(f.groups.flatMap(g => g.options).some(o => o.live)).toBe(false);
     DETAILS['L-nodetail'] = { status: 'live', period: 2 };   // pas de score
-    await expect(buildGameMarketsWithStatus('L-nodetail')).rejects.toMatchObject({ status: 503 });
+    expect((await buildGameMarketsWithStatus('L-nodetail')).groups.flatMap(g => g.options).some(o => o.live)).toBe(false);
+  });
+
+  it('en direct, chaque tuile recalculée porte `live`', async () => {
+    DETAILS['L-flag'] = detail('live', 2, '08:00', 1, 0, [[1, 0]]);
+    const { groups } = await buildGameMarketsWithStatus('L-flag');
+    expect(groups.flatMap(g => g.options).every(o => o.live === true)).toBe(true);
   });
 
   it('heure de mise au jeu passée, feuille « pas commencé » : avant-match au cache court', async () => {
