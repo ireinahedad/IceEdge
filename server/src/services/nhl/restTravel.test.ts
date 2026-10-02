@@ -62,6 +62,48 @@ describe('fetchTeamRestInfo', () => {
     expect(await fetchTeamRestInfo('TOR')).toEqual({ restDays: 1, b2b: 1, dense3in4: 2 });
   });
 
+  describe('mesuré à la DATE DU MATCH (INCOHERENCES_ML §2)', () => {
+    // Aujourd'hui = 2026-10-08. TOR a joué le 6, joue ce soir et demain.
+    const week = () => [
+      game('2026-10-04'), game('2026-10-06'),
+      game('2026-10-08', 2, 'FUT'), game('2026-10-09', 2, 'FUT'), game('2026-10-12', 2, 'FUT'),
+    ];
+
+    it('match de ce soir : 2 jours depuis le 6', async () => {
+      schedule.games = week();
+      expect(await fetchTeamRestInfo('TOR', '2026-10-08')).toEqual({ restDays: 2, b2b: 0, dense3in4: 1 });
+    });
+
+    it('match de DEMAIN : celui de ce soir compte → dos-à-dos', async () => {
+      schedule.games = week();
+      // Ancien calcul (par rapport à aujourd'hui) : 2 jours, pas de dos-à-dos.
+      expect(await fetchTeamRestInfo('TOR', '2026-10-09')).toEqual({ restDays: 1, b2b: 1, dense3in4: 2 });
+    });
+
+    it('un match à venir REPORTÉ ne compte pas', async () => {
+      schedule.games = week();
+      schedule.games[3] = { ...game('2026-10-09', 2, 'FUT'), gameScheduleState: 'PPD' };
+      expect((await fetchTeamRestInfo('TOR', '2026-10-12')).restDays).toBe(4);   // depuis le 8
+    });
+
+    it('un match passé non terminé (reporté) ne compte pas', async () => {
+      schedule.games = [game('2026-10-04'), game('2026-10-06', 2, 'FUT'), game('2026-10-09', 2, 'FUT')];
+      expect((await fetchTeamRestInfo('TOR', '2026-10-09')).restDays).toBe(5);    // depuis le 4
+    });
+
+    it('début de saison pour un match futur : aucun match avant lui → plafond', async () => {
+      schedule.games = [game('2026-10-10', 2, 'FUT'), game('2026-10-12', 2, 'FUT')];
+      expect(await fetchTeamRestInfo('TOR', '2026-10-10')).toEqual(SEASON_START_REST);
+      // Le 2e match de la saison, lui, compte le 1er (encore à jouer).
+      expect((await fetchTeamRestInfo('TOR', '2026-10-12')).restDays).toBe(2);
+    });
+
+    it('date invalide → aujourd\'hui', async () => {
+      schedule.games = week();
+      expect(await fetchTeamRestInfo('TOR', 'demain')).toEqual(await fetchTeamRestInfo('TOR'));
+    });
+  });
+
   it('long repos → plafonné à 7', async () => {
     schedule.games = [game('2026-09-20')];
     expect((await fetchTeamRestInfo('TOR')).restDays).toBe(7);

@@ -74,7 +74,9 @@ interface Candidate extends Omit<BestBet, 'mlPct' | 'score' | 'source' | 'confid
   ml:
     // `homeId`/`awayId` décrivent le MATCH (qui reçoit) ; `subjectIsHome` dit de
     // quel côté porte la question (défaut : domicile). Voir `GameFeatureOpts`.
-    | { kind: 'game'; homeId: string; awayId: string; marketType: string; line?: number; subjectIsHome?: boolean }
+    | { kind: 'game'; homeId: string; awayId: string; marketType: string; line?: number; subjectIsHome?: boolean;
+        /** Date du match (`gameDate` NHL) : repos, gardiens et absents se lisent à cette date. */
+        gameDate?: string }
     | { kind: 'player'; playerId: string; propType: string; line: number; selection: string }
     | null;
 }
@@ -131,6 +133,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
   const when   = g.startTime || g.period || '';
   const matchup = `${home} vs ${away}`;
   const line   = g.overUnder ?? 5.5;
+  const gameDate: string | undefined = g.gameDate || undefined;
 
   const [homeMl, awayMl, overPct, pl] = await Promise.all([
     predictMoneyline(homeLc, awayLc, true),
@@ -150,7 +153,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       label: `${home} to win`, selection: `${home} to win`, selectionValue: homeLc, selectionShort: `${home} ML`,
       context: ctxHome, line: null, gameId: g.id, teamId: homeLc, playerId: null, rulePct: homeMl,
       teams: { home, away },
-      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'moneyline' },
+      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, gameDate, marketType: 'moneyline' },
     },
     {
       id: `bb-${g.id}-ml-away`, subjectType: 'game', marketType: 'moneyline', marketLabel: 'Moneyline',
@@ -161,7 +164,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       // Le visiteur reste le visiteur : jusqu'au 2026-10-02 on inversait les deux
       // équipes, donc le modèle répondait « P(le visiteur gagne CHEZ LUI) » — il
       // recevait l'avantage de la glace (le bug corrigé le 2026-09-09 sur les tuiles).
-      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'moneyline', subjectIsHome: false },
+      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, gameDate, marketType: 'moneyline', subjectIsHome: false },
     },
     {
       id: `bb-${g.id}-over`, subjectType: 'game', marketType: 'total_goals', marketLabel: 'Total Goals O/U',
@@ -169,7 +172,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       label: `Over ${line}`, selection: `Over ${line}`, selectionValue: 'over', selectionShort: `O${line}`,
       context: matchup, line, gameId: g.id, teamId: null, playerId: null, rulePct: overPct,
       teams: { home, away },
-      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'total_goals_over', line },
+      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, gameDate, marketType: 'total_goals_over', line },
     },
     {
       id: `bb-${g.id}-under`, subjectType: 'game', marketType: 'total_goals', marketLabel: 'Total Goals O/U',
@@ -177,7 +180,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       label: `Under ${line}`, selection: `Under ${line}`, selectionValue: 'under', selectionShort: `U${line}`,
       context: matchup, line, gameId: g.id, teamId: null, playerId: null, rulePct: underPct,
       teams: { home, away },
-      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'total_goals_under', line },
+      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, gameDate, marketType: 'total_goals_under', line },
     },
     {
       id: `bb-${g.id}-pl-home`, subjectType: 'game', marketType: 'puck_line', marketLabel: 'Puck Line',
@@ -185,7 +188,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       label: `${home} -1.5`, selection: `${home} -1.5`, selectionValue: homeLc, selectionShort: `${home} -1.5`,
       context: ctxHome, line: -1.5, gameId: g.id, teamId: homeLc, playerId: null, rulePct: pl,
       teams: { home, away },
-      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'puck_line', line: -1.5 },
+      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, gameDate, marketType: 'puck_line', line: -1.5 },
     },
   ];
 }
@@ -237,7 +240,8 @@ async function mlScore(c: Candidate): Promise<number | null> {
   try {
     if (c.ml.kind === 'game') {
       const feats = await buildGameFeatures(c.ml.homeId, c.ml.awayId, c.ml.marketType, c.ml.line,
-                                            { subjectIsHome: c.ml.subjectIsHome !== false });
+                                            { subjectIsHome: c.ml.subjectIsHome !== false,
+                                              gameDate: c.ml.gameDate });
       const res = await mlApiClient.predictGame(feats);
       return typeof res?.probability === 'number' ? Math.round(res.probability) : null;
     } else {

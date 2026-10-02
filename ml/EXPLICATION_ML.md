@@ -607,7 +607,7 @@ Quelques marchés utilisent TOUJOURS une règle, même avec le modèle de score 
 ### 7.1 Ce que le serveur envoie — `featureEngineering.ts → buildGameFeatures`
 
 - Fiches d'équipe (win%, buts pour/contre, L10, séries, tirs, mises au jeu, PP/PK).
-- **Repos** (`nhl/restTravel.ts`) : jours depuis le dernier match terminé de saison régulière, plafonnés à 7 ; dos-à-dos si = 1 ; nombre de matchs dans les 3 jours précédents. Aucun match joué cette saison (calendrier publié) → 7 jours, comme le premier match de saison à l'entraînement ; calendrier vide ou API en panne → repli 2 jours.
+- **Repos** (`nhl/restTravel.ts`), mesuré à la **date du match** : jours depuis le match de saison régulière précédent (terminé, ou prévu entre aujourd'hui et la veille du match), plafonnés à 7 ; dos-à-dos si = 1 ; nombre de matchs dans les 3 jours précédents. Aucun match joué cette saison (calendrier publié) → 7 jours, comme le premier match de saison à l'entraînement ; calendrier vide ou API en panne → repli 2 jours.
 - Cotes en direct (The Odds API) si disponibles.
 - **Gardiens partants** (nom saisi + identifiant NHL résolu via l'effectif, `goalieIds.ts`) et **absents** saisis à la main (`/dev/saisie`, table `manual_data`).
 - **Alignement officiel** (API NHL) quand il est publié.
@@ -620,7 +620,7 @@ probabilité servie. Win%, buts/match, PP/PK… ne servent qu'aux replis.
 ### 7.2 Le paquet d'un match — `gameMlBundle.ts`
 
 1. La liste des tuiles de la page match fournit les marchés à demander (+ quelques extras pour les pages équipe/joueur).
-2. Les features sont construites **une fois**, côté domicile ; chaque marché porte son côté (`subject_is_home`).
+2. Les features sont construites **une fois**, côté domicile, à la **date du match** (repos, gardien saisi et absents de ce jour-là) ; chaque marché porte son côté (`subject_is_home`).
 3. Un appel `/predict/game/bundle` ; résultat **mis en cache 10 minutes** par match.
 4. Les tuiles « gagne en 60 min » (ml-home / ml-away) demandent `regulation_result`.
 

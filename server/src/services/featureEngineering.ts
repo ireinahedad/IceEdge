@@ -21,6 +21,14 @@ import { getTeam } from './prediction/scoreModel';
 
 /** Options d'enrichissement pour buildGameFeatures (cotes live, lineup). */
 export interface GameFeatureOpts {
+  /**
+   * Date du match, `AAAA-MM-JJ` en heure de l'Est (le `gameDate` NHL).
+   * Défaut : aujourd'hui. Le repos, le gardien partant saisi et les absents
+   * se lisent à CETTE date : pour un match de demain, lire ceux d'aujourd'hui
+   * appliquait le gardien de ce soir et un repos faux d'un jour
+   * (ml/INCOHERENCES_ML.md §2).
+   */
+  gameDate?: string;
   /** Inclure les cotes live → active le blend modèle⊕marché (défaut true).
    *  Mettre à false pour obtenir la proba PURE du modèle (détection de value). */
   includeOdds?: boolean;
@@ -210,20 +218,20 @@ export async function buildGameFeatures(
   const [summaryRes, homeRestRes, awayRestRes, oddsRes, totalsRes,
          homeTravelRes, awayTravelRes, goaliesRes, scratchesRes] = await Promise.allSettled([
     fetchTeamSummaryStats(),
-    fetchTeamRestInfo(homeAbbr),
-    fetchTeamRestInfo(awayAbbr),
+    fetchTeamRestInfo(homeAbbr, opts.gameDate),
+    fetchTeamRestInfo(awayAbbr, opts.gameDate),
     includeOdds ? fetchOddsImplied(homeName, awayName) : Promise.resolve(null),
     includeOdds ? fetchTotalsOdds(homeName, awayName)  : Promise.resolve(null),
     // Voyage : les deux équipes jouent dans l'aréna de l'équipe à domicile.
     // Désactivé par défaut — cf. `GameFeatureOpts.includeTravel`.
-    includeTravel ? fetchTeamTravel(homeAbbr, homeAbbr) : Promise.resolve(null),
-    includeTravel ? fetchTeamTravel(awayAbbr, homeAbbr) : Promise.resolve(null),
+    includeTravel ? fetchTeamTravel(homeAbbr, homeAbbr, opts.gameDate) : Promise.resolve(null),
+    includeTravel ? fetchTeamTravel(awayAbbr, homeAbbr, opts.gameDate) : Promise.resolve(null),
     // Gardiens partants et absents du soir : en base depuis la migration 034
     // (les fichiers `ml/data/*.json` n'existaient pas dans le conteneur, donc
     // ces deux features étaient TOUJOURS vides en production). La journée
     // entière est lue en un accès, pas une lecture par équipe.
-    getStartingGoalies(),
-    getLineupDay(),
+    getStartingGoalies(opts.gameDate),
+    getLineupDay(opts.gameDate),
   ]);
 
   const odds   = oddsRes.status   === 'fulfilled' ? oddsRes.value   : null;

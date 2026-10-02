@@ -84,10 +84,35 @@ export const MAX_REST_DAYS = 7;
 export const SEASON_START_REST: Readonly<TeamRestInfo> =
   Object.freeze({ restDays: MAX_REST_DAYS, b2b: 0, dense3in4: 0 });
 
-/** Jours de repos depuis le dernier match joué (via le calendrier de saison). */
-export async function fetchTeamRestInfo(abbr: string): Promise<TeamRestInfo> {
-  const upper = abbr.toUpperCase();
-  const key   = `rest:${upper}:${todayET()}`;
+const FINISHED = ['OFF', 'FINAL', 'OVER'];
+/** États de calendrier d'un match qui n'aura pas lieu à sa date (reporté, annulé). */
+const NOT_HAPPENING = ['PPD', 'CNCL', 'SUSP'];
+
+/** Date `AAAA-MM-JJ` valide, sinon `null`. */
+function isoDateOr(d: string | undefined): string | null {
+  return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+}
+
+/**
+ * Jours de repos AVANT le match du `gameDate` (heure de l'Est, défaut :
+ * aujourd'hui), via le calendrier de saison.
+ *
+ * Le repos se mesure à la DATE DU MATCH, pas à aujourd'hui (ml/INCOHERENCES_ML.md
+ * §2). Pour un match de demain, le match de ce soir compte déjà comme le
+ * précédent : c'est exactement ce que l'entraînement voit (`build_dataset.py`
+ * mesure l'écart entre deux matchs consécutifs). On retient donc :
+ *   • avant aujourd'hui : les matchs TERMINÉS (un match passé non terminé a
+ *     été reporté) ;
+ *   • d'aujourd'hui à la veille du match : les matchs PRÉVUS, sauf reportés ou
+ *     annulés.
+ */
+export async function fetchTeamRestInfo(abbr: string, gameDate?: string): Promise<TeamRestInfo> {
+  const upper  = abbr.toUpperCase();
+  const today  = todayET();
+  const target = isoDateOr(gameDate) ?? today;
+  // `today` reste dans la clé : la même date de match se recalcule chaque jour,
+  // à mesure que les matchs intermédiaires sont joués (ou reportés).
+  const key    = `rest:${upper}:${today}:${target}`;
   const cached = getCached<TeamRestInfo>(key);
   if (cached) return cached;
 
@@ -95,13 +120,14 @@ export async function fetchTeamRestInfo(abbr: string): Promise<TeamRestInfo> {
   const fallback: TeamRestInfo = { restDays: 2, b2b: 0, dense3in4: 0 };
   try {
     const games = await fetchTeamSeasonGames(upper);
-    const today = todayET();
     const played = games
-      .filter((g: any) =>
-        g.gameType === 2 &&
-        ['OFF', 'FINAL', 'OVER'].includes(g.gameState) &&
-        (g.gameDate ?? '') < today
-      )
+      .filter((g: any) => {
+        const d = String(g.gameDate ?? '');
+        if (g.gameType !== 2 || !d || d >= target) return false;
+        return d < today
+          ? FINISHED.includes(g.gameState)
+          : !NOT_HAPPENING.includes(String(g.gameScheduleState ?? 'OK'));
+      })
       .map((g: any) => g.gameDate as string)
       .sort();
 
@@ -120,7 +146,7 @@ export async function fetchTeamRestInfo(abbr: string): Promise<TeamRestInfo> {
       return info;
     }
 
-    const now      = new Date(today + 'T12:00:00');
+    const now      = new Date(target + 'T12:00:00');
     const lastDate = new Date(played[played.length - 1] + 'T12:00:00');
     const days     = Math.round((now.getTime() - lastDate.getTime()) / 86_400_000);
     // 3-en-4 : matchs joués dans les 3 jours précédents (même déf. que build_dataset).
@@ -155,10 +181,12 @@ export async function fetchTeamRestInfo(abbr: string): Promise<TeamRestInfo> {
 export async function fetchTeamTravel(
   abbr: string,
   venueAbbr: string,
+  gameDate?: string,
 ): Promise<TravelFeatures | null> {
-  const team  = abbr.toUpperCase();
-  const venue = venueAbbr.toUpperCase();
-  const key   = `travel:${team}:${venue}:${todayET()}`;
+  const team   = abbr.toUpperCase();
+  const venue  = venueAbbr.toUpperCase();
+  const target = isoDateOr(gameDate);
+  const key    = `travel:${team}:${venue}:${todayET()}:${target ?? ''}`;
   // Enveloppe volontaire : `getCached` rend `null` aussi bien pour « absent »
   // que pour « présent et valant null ». Sans elle, un négatif mis en cache
   // serait relu comme un défaut de cache et l'appel calendrier repartirait —
@@ -187,8 +215,12 @@ export async function fetchTeamTravel(
       date: g.date, venueAbbr: g.homeAbbr, isHome: g.homeAbbr === team,
     }));
 
-    // Match courant = prochain match non terminé disputé dans cet aréna.
-    let idx = games.findIndex(
+    // Match courant = celui de `gameDate` dans cet aréna quand la date est
+    // donnée ; sinon le prochain match non terminé disputé dans cet aréna.
+    let idx = target
+      ? games.findIndex((g: any) => g.homeAbbr === venue && g.date === target)
+      : -1;
+    if (idx < 0) idx = games.findIndex(
       (g: any) => g.homeAbbr === venue &&
         !['OFF', 'FINAL', 'OVER'].includes(g.state) && g.date >= today,
     );

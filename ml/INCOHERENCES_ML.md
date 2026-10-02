@@ -19,7 +19,7 @@
 | # | Gravité | Sujet | Fichiers |
 |---|---|---|---|
 | 1 | ✅ | ~~Repos = 2 jours en début de saison, l'entraînement a appris 7~~ — corrigé le 2026-10-02 | `restTravel.ts`, `build_dataset.py` |
-| 2 | 🔴 | Repos, gardiens et absents calculés pour AUJOURD'HUI, pas pour la date du match | `restTravel.ts`, `featureEngineering.ts` |
+| 2 | ✅ | ~~Repos, gardiens et absents calculés pour AUJOURD'HUI, pas pour la date du match~~ — corrigé le 2026-10-02 | `restTravel.ts`, `featureEngineering.ts` |
 | 3 | ✅ | ~~Noms de gardiens et d'absents comparés sans retirer les accents~~ — corrigé le 2026-10-02 | `ml_service.py` |
 | 4 | ✅ | ~~Value bets : edge calculé sur une probabilité arrondie à l'entier~~ — corrigé le 2026-10-02 | `ml_service.py`, `valueBets.service.ts` |
 | 5 | 🔴 | Value bets : la bande 2-6 % a été mesurée sur un autre modèle que celui servi | `valueBets.service.ts`, `backtest_walkforward.py` |
@@ -56,7 +56,18 @@
 
 ---
 
-## 🔴 2. Repos, gardiens et absents calculés pour AUJOURD'HUI, pas pour la date du match
+## ✅ 2. Repos, gardiens et absents calculés pour AUJOURD'HUI, pas pour la date du match
+
+> **Corrigé le 2026-10-02.** `buildGameFeatures` accepte `gameDate` (le
+> `gameDate` NHL, heure de l'Est) et lit à cette date le repos, le gardien
+> partant saisi et les absents. `fetchTeamRestInfo(abbr, gameDate)` compte les
+> matchs terminés avant aujourd'hui et les matchs PRÉVUS d'aujourd'hui à la
+> veille du match (hors reportés/annulés) : pour un match de demain, celui de
+> ce soir compte, donc le dos-à-dos est détecté. La date est passée par le
+> paquet ML (`gameMlBundle.ts`), les best bets et le moteur de règles
+> (`nhlPredictions.ts`, `getManualFactors`). Reste à la date du jour : la route
+> tuile par tuile `POST /api/predict/ml`, qui ne reçoit pas de date (les pages
+> match passent par le paquet).
 
 **Où**
 - `server/src/services/nhl/restTravel.ts:78` (`const today = todayET()` : le repos = jours entre **aujourd'hui** et le dernier match joué).
@@ -318,7 +329,7 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 
 ## Ordre de correction suggéré
 
-1. ~~#1, #3 et #4~~ : faits le 2026-10-02.
+1. ~~#1, #2, #3 et #4~~ : faits le 2026-10-02.
 2. **#4** (arrondi) : un champ à ajouter, protège les value bets.
 3. **#2** (date du match) : un paramètre à faire descendre dans trois fonctions.
 4. **#14** : la vérification de 2 minutes, puis décider.

@@ -151,7 +151,9 @@ async function computeBundle(gameId: string): Promise<GameMlBundle> {
   // Une seule construction de features, orientée domicile ; le côté de chaque
   // question voyage dans `subject_is_home` de chaque marché.
   const [features, homeRoster, awayRoster] = await Promise.all([
-    buildGameFeatures(home, away, 'moneyline', undefined, { subjectIsHome: true }),
+    // Date du match : repos, gardien partant et absents se lisent à CETTE date.
+    buildGameFeatures(home, away, 'moneyline', undefined,
+                      { subjectIsHome: true, gameDate: game?.gameDate || undefined }),
     // Effectifs (cache 30 min) : leurs identifiants NHL suffisent au modèle
     // joueur, qui a son propre état. Un échec ne coûte que les cadences joueur.
     fetchTeamRoster(home).catch(() => [] as any[]),
