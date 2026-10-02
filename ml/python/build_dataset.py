@@ -346,6 +346,9 @@ def build_goalie_features() -> tuple[pd.DataFrame, dict]:
             pid = g.loc[g["name"] == gname, "playerId"].iloc[-1]
             c = career.loc[pid]
             goalies.append({
+                # Identifiant NHL (MoneyPuck reprend ceux de la NHL) : le service
+                # apparie le partant du soir par identifiant avant le nom.
+                "id": int(pid),
                 "name": gname, "recent_start_share": round(float(share), 3),
                 "gsax60": round(float(c["gsax60"]), 4),
                 "svpct":  round(float(c["svpct"]), 4),

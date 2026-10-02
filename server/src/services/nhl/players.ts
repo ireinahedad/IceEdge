@@ -537,6 +537,33 @@ async function rosterListFor(upper: string): Promise<any[]> {
   return [];
 }
 
+/** Gardien de l'effectif : identifiant NHL et nom complet (orthographe NHL). */
+export interface RosterGoalie { id: number; name: string }
+
+/**
+ * Gardiens de l'effectif — UNE requête (`v1/roster`), sans les fiches de
+ * statistiques que `fetchTeamRoster` va chercher joueur par joueur. Sert à
+ * traduire le gardien partant saisi (un nom) en identifiant NHL, que le service
+ * ML apparie à l'état d'inférence (identifiants MoneyPuck = identifiants NHL).
+ * Une liste vide n'est pas mise en cache : l'effectif peut être publié plus tard.
+ */
+export async function fetchTeamGoalies(abbr: string): Promise<RosterGoalie[]> {
+  const upper = abbr.toUpperCase();
+  const cacheKey = `roster_goalies_${upper}`;
+  const cached = getCached<RosterGoalie[]>(cacheKey);
+  if (cached) return cached;
+
+  const goalies = (await rosterListFor(upper))
+    .filter((p) => (p.positionCode ?? '') === 'G')
+    .map((p) => ({
+      id:   Number(p.id),
+      name: [p.firstName?.default, p.lastName?.default].filter(Boolean).join(' '),
+    }))
+    .filter((g) => Number.isFinite(g.id) && g.id > 0 && g.name !== '');
+  if (goalies.length) setCached(cacheKey, goalies, 6 * 60 * 60_000);
+  return goalies;
+}
+
 export async function fetchTeamRoster(abbr: string): Promise<any[]> {
   const upper = abbr.toUpperCase();
   const cacheKey = `roster_${upper}`;

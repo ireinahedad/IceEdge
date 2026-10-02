@@ -15,6 +15,7 @@ import {
 import { getArena } from '../data/arenas';
 import { fetchOddsImplied, fetchTotalsOdds } from './oddsClient';
 import { getStartingGoalies } from './startingGoalies';
+import { resolveGoalieId } from './goalieIds';
 import { getLineupDay, type LineupDay } from './scratches';
 import { getTeam } from './prediction/scoreModel';
 
@@ -138,6 +139,9 @@ export interface GameFeatures {
   // ── v4 — contexte lineup (optionnel)
   home_goalie?:          string; // nom du gardien partant si connu
   away_goalie?:          string;
+  /** Identifiant NHL du partant (résolu depuis l'effectif) — apparié avant le nom. */
+  home_goalie_id?:       number;
+  away_goalie_id?:       number;
   home_stars_missing?:   number; // top joueurs absents (blessures) — legacy
   away_stars_missing?:   number;
   home_scratches?:       string[]; // absents confirmés (noms MoneyPuck)
@@ -250,6 +254,20 @@ export async function buildGameFeatures(
   const homeSum = summary[homeAbbr.toUpperCase()];
   const awaySum = summary[awayAbbr.toUpperCase()];
 
+  // Gardien partant : override explicite de l'appelant, sinon la saisie
+  // manuelle du jour (kind `starting_goalies`), sinon rien (le service Python
+  // utilise sa moyenne pondérée par usage). Le nom est traduit en identifiant
+  // NHL via l'effectif — l'appariement côté Python ne dépend alors plus de
+  // l'orthographe. Échec de résolution → pas d'identifiant, le nom sert de repli.
+  const homeGoalie = opts.homeGoalie ?? goaliesToday[homeAbbr.toUpperCase()];
+  const awayGoalie = opts.awayGoalie ?? goaliesToday[awayAbbr.toUpperCase()];
+  const [homeGoalieIdRes, awayGoalieIdRes] = await Promise.allSettled([
+    homeGoalie ? resolveGoalieId(homeAbbr, homeGoalie) : Promise.resolve(undefined),
+    awayGoalie ? resolveGoalieId(awayAbbr, awayGoalie) : Promise.resolve(undefined),
+  ]);
+  const homeGoalieId = homeGoalieIdRes.status === 'fulfilled' ? homeGoalieIdRes.value : undefined;
+  const awayGoalieId = awayGoalieIdRes.status === 'fulfilled' ? awayGoalieIdRes.value : undefined;
+
   return {
     home_win_pct:          ((home?.winPct          || 50) / 100),
     away_win_pct:          ((away?.winPct          || 50) / 100),
@@ -308,11 +326,11 @@ export async function buildGameFeatures(
     home_odds_decimal:     odds?.homeOdds,
     away_odds_decimal:     odds?.awayOdds,
     total_line_market:     totals?.line,
-    // ── v4 — gardien partant : override explicite de l'appelant, sinon le
-    //    saisie manuelle du jour (kind `starting_goalies`, exceptions), sinon
-    //    rien (le service Python utilise sa moyenne pondérée par usage).
-    home_goalie:           opts.homeGoalie ?? goaliesToday[homeAbbr.toUpperCase()],
-    away_goalie:           opts.awayGoalie ?? goaliesToday[awayAbbr.toUpperCase()],
+    // ── v4 — gardien partant (cf. résolution plus haut) : nom + identifiant NHL.
+    home_goalie:           homeGoalie,
+    away_goalie:           awayGoalie,
+    home_goalie_id:        homeGoalieId,
+    away_goalie_id:        awayGoalieId,
     home_stars_missing:    opts.homeStarsMissing,
     away_stars_missing:    opts.awayStarsMissing,
     // ── v4 — absents confirmés : override de l'appelant, sinon fichier manuel

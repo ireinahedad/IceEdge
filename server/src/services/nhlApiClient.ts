@@ -44,7 +44,9 @@ export {
   fetchPlayerById,
   searchPlayers,
   fetchTeamRoster,
+  fetchTeamGoalies,
 } from './nhl/players';
+export type { RosterGoalie } from './nhl/players';
 export {
   fetchTeamPlayerSeasons,
   fetchTeamOpponentSplits,

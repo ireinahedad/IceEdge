@@ -847,6 +847,11 @@ class GameFeatures(BaseModel):
     # ── v4 — contexte lineup (optionnel; défauts raisonnables sinon) ─────────
     home_goalie: Optional[str] = None            # nom du gardien partant si connu
     away_goalie: Optional[str] = None
+    # Identifiant NHL du partant (= identifiant MoneyPuck de l'état
+    # d'inférence). Apparié AVANT le nom : l'orthographe ne compte plus. Le nom
+    # reste le repli pour un état d'inférence sans identifiants de gardiens.
+    home_goalie_id: Optional[int] = Field(None, gt=0)
+    away_goalie_id: Optional[int] = Field(None, gt=0)
     home_stars_missing: int = Field(0, ge=0, le=5)   # legacy : nb de top-5 absents
     away_stars_missing: int = Field(0, ge=0, le=5)
     # Absents confirmés du soir (Daily Faceoff) — noms orthographe MoneyPuck.
@@ -1908,7 +1913,27 @@ def _warn_unmatched(kind: str, team: str, name: str) -> None:
           f"l'état d'inférence — vérifier l'orthographe")
 
 
-def _goalie_backup_flag(goalies: list[dict], goalie_name: str | None) -> float:
+def _find_goalie(goalies: list[dict], goalie_id: int | None,
+                 goalie_name: str | None) -> dict | None:
+    """Le gardien suivi qui part ce soir, ou None.
+
+    Par identifiant NHL d'abord — quand l'état d'inférence en porte (produit
+    depuis le 2026-10-02) —, par nom normalisé ensuite (`_name_key`).
+    """
+    if goalie_id is not None:
+        by_id = [g for g in goalies if g.get("id") is not None and int(g["id"]) == int(goalie_id)]
+        if by_id:
+            return by_id[0]
+    if goalie_name and goalie_name.strip():
+        key = _name_key(goalie_name)
+        by_name = [g for g in goalies if _name_key(g["name"]) == key]
+        if by_name:
+            return by_name[0]
+    return None
+
+
+def _goalie_backup_flag(goalies: list[dict], goalie_name: str | None,
+                        goalie_id: int | None = None) -> float:
     """1.0 relève, 0.0 titulaire, pour le partant du soir.
 
     • Partant nommé et connu : son drapeau exact.
@@ -1922,11 +1947,10 @@ def _goalie_backup_flag(goalies: list[dict], goalie_name: str | None) -> float:
     """
     if not goalies or any("share_last10" not in g for g in goalies):
         return float("nan")
-    if goalie_name and goalie_name.strip():
-        key = _name_key(goalie_name)
-        named = [g for g in goalies if _name_key(g["name"]) == key]
-        if named:
-            return float(named[0]["share_last10"] < _GOALIE_BACKUP_SHARE)
+    named = _find_goalie(goalies, goalie_id, goalie_name)
+    if named is not None:
+        return float(named["share_last10"] < _GOALIE_BACKUP_SHARE)
+    if goalie_id is not None or (goalie_name and goalie_name.strip()):
         return 1.0
     usual = max(goalies, key=lambda g: float(g["share_last10"]))
     return float(float(usual["share_last10"]) < _GOALIE_BACKUP_SHARE)
@@ -2015,6 +2039,7 @@ def _game_context(f: GameFeatures) -> dict:
                                 "home_elo", "away_elo", "home_odds_decimal",
                                 "away_odds_decimal", "total_line_market",
                                 "home_goalie", "away_goalie",
+                                "home_goalie_id", "away_goalie_id",
                                 "home_stars_missing", "away_stars_missing",
                                 "home_scratches", "away_scratches",
                                 "home_dressed_ids", "away_dressed_ids",
@@ -2052,11 +2077,11 @@ def _game_context(f: GameFeatures) -> dict:
         stars_st  = _inference_state.get("stars", {})
         lineup_st = _inference_state.get("lineups", {})
         pool_st   = _inference_state.get("skater_pool", {})
-        for side, team, goalie_name, stars_missing, scratches, is_dressed, dressed_ids in [
-            ("home", (f.home_team or "").upper(), f.home_goalie, f.home_stars_missing, f.home_scratches,
-             _dressed_matcher(f.home_dressed_ids, f.home_dressed), f.home_dressed_ids),
-            ("away", (f.away_team or "").upper(), f.away_goalie, f.away_stars_missing, f.away_scratches,
-             _dressed_matcher(f.away_dressed_ids, f.away_dressed), f.away_dressed_ids),
+        for side, team, goalie_name, goalie_id, stars_missing, scratches, is_dressed, dressed_ids in [
+            ("home", (f.home_team or "").upper(), f.home_goalie, f.home_goalie_id, f.home_stars_missing,
+             f.home_scratches, _dressed_matcher(f.home_dressed_ids, f.home_dressed), f.home_dressed_ids),
+            ("away", (f.away_team or "").upper(), f.away_goalie, f.away_goalie_id, f.away_stars_missing,
+             f.away_scratches, _dressed_matcher(f.away_dressed_ids, f.away_dressed), f.away_dressed_ids),
         ]:
             for k, v in (teams_st.get(team) or {}).items():
                 if isinstance(v, (int, float)):
@@ -2064,12 +2089,11 @@ def _game_context(f: GameFeatures) -> dict:
             goalies = goalie_st.get(team) or []
             if goalies:
                 # Gardien nommé si fourni, sinon mix pondéré par usage récent
-                key = _name_key(goalie_name) if goalie_name and goalie_name.strip() else None
-                named = [g for g in goalies if key and _name_key(g["name"]) == key]
-                if key and not named:
-                    _warn_unmatched("gardien partant", team, goalie_name)
-                if named:
-                    g0 = named[0]
+                g0 = _find_goalie(goalies, goalie_id, goalie_name)
+                if g0 is None and (goalie_id is not None or (goalie_name and goalie_name.strip())):
+                    _warn_unmatched("gardien partant", team,
+                                    goalie_name or f"id {goalie_id}")
+                if g0 is not None:
                     feat_values[f"{side}_goalie_gsax60"] = g0["gsax60"]
                     feat_values[f"{side}_goalie_svpct"]  = g0["svpct"]
                 else:
@@ -2079,7 +2103,7 @@ def _game_context(f: GameFeatures) -> dict:
                     feat_values[f"{side}_goalie_svpct"] = sum(
                         g["svpct"] * g["recent_start_share"] for g in goalies) / tot
                 feat_values[f"{side}_goalie_backup"] = _goalie_backup_flag(
-                    goalies, goalie_name)
+                    goalies, goalie_name, goalie_id)
             st = stars_st.get(team) or {}
             scratch_set = {_name_key(s) for s in (scratches or []) if s and s.strip()}
             # Avec l'alignement officiel, les absents restent ceux que le

@@ -83,10 +83,17 @@ Les value bets ne sont pas touchés (ils ne regardent que les matchs du jour), m
 > les vrais modèles : « Lukáš Dostál » + absent « Jöhn Carlson » donnait
 > relève = 1, absence ignorée, λ adverse 3,39 et victoire 45,3 % ; maintenant
 > exactement comme l'orthographe MoneyPuck (relève = 0, λ adverse 3,18,
-> victoire 47,7 %). Reste possible : un nom réellement différent (surnom,
-> changement de nom) — d'où l'avertissement ; l'appariement par identifiant
-> NHL des gardiens demanderait d'ajouter `id` aux gardiens de l'état
-> d'inférence.
+> victoire 47,7 %).
+>
+> **Complété le 2026-10-02 : appariement par identifiant NHL.** Le serveur
+> traduit le nom saisi en identifiant via l'effectif NHL (`goalieIds.ts`,
+> `fetchTeamGoalies`, une requête en cache 6 h) et envoie `home_goalie_id` /
+> `away_goalie_id` ; le service apparie l'identifiant d'abord, le nom ensuite
+> (`_find_goalie`). `build_dataset.py` écrit désormais `id` pour chaque gardien
+> de l'état d'inférence. ⚠️ L'état actuellement versionné n'a pas encore ces
+> identifiants (l'API NHL n'est pas joignable depuis l'environnement où la
+> correction a été faite) : ils apparaîtront au prochain `refresh_data.py`.
+> D'ici là, le nom normalisé sert de repli — comportement identique à avant.
 
 **Où** — `ml/python/ml_service.py`
 - l.1888 et l.2036 : gardien partant, `g["name"].lower() == goalie_name.lower()` ;
