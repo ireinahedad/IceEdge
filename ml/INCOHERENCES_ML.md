@@ -20,7 +20,7 @@
 |---|---|---|---|
 | 1 | ✅ | ~~Repos = 2 jours en début de saison, l'entraînement a appris 7~~ — corrigé le 2026-10-02 | `restTravel.ts`, `build_dataset.py` |
 | 2 | 🔴 | Repos, gardiens et absents calculés pour AUJOURD'HUI, pas pour la date du match | `restTravel.ts`, `featureEngineering.ts` |
-| 3 | 🔴 | Noms de gardiens et d'absents comparés sans retirer les accents | `ml_service.py` |
+| 3 | ✅ | ~~Noms de gardiens et d'absents comparés sans retirer les accents~~ — corrigé le 2026-10-02 | `ml_service.py` |
 | 4 | 🔴 | Value bets : edge calculé sur une probabilité arrondie à l'entier | `ml_service.py`, `valueBets.service.ts` |
 | 5 | 🔴 | Value bets : la bande 2-6 % a été mesurée sur un autre modèle que celui servi | `valueBets.service.ts`, `backtest_walkforward.py` |
 | 6 | 🔴 | Couche de correction appliquée à la victoire seulement → tuiles qui ne s'additionnent plus | `ml_service.py`, `gameMlBundle.ts` |
@@ -72,7 +72,21 @@ Les value bets ne sont pas touchés (ils ne regardent que les matchs du jour), m
 
 ---
 
-## 🔴 3. Noms de gardiens et d'absents comparés sans retirer les accents
+## ✅ 3. Noms de gardiens et d'absents comparés sans retirer les accents
+
+> **Corrigé le 2026-10-02.** Toutes les comparaisons de noms de `ml_service.py`
+> (gardien partant, drapeau de relève, absents pour `star_power`,
+> `stars_out_weight` et la projection d'alignement) passent par `_name_key` :
+> sans accents, sans points, espaces réduits, minuscules. Un gardien partant
+> nommé mais introuvable est signalé une fois dans les logs du service
+> (« introuvable dans l'état d'inférence »). Mesuré avant/après sur ANA avec
+> les vrais modèles : « Lukáš Dostál » + absent « Jöhn Carlson » donnait
+> relève = 1, absence ignorée, λ adverse 3,39 et victoire 45,3 % ; maintenant
+> exactement comme l'orthographe MoneyPuck (relève = 0, λ adverse 3,18,
+> victoire 47,7 %). Reste possible : un nom réellement différent (surnom,
+> changement de nom) — d'où l'avertissement ; l'appariement par identifiant
+> NHL des gardiens demanderait d'ajouter `id` aux gardiens de l'état
+> d'inférence.
 
 **Où** — `ml/python/ml_service.py`
 - l.1888 et l.2036 : gardien partant, `g["name"].lower() == goalie_name.lower()` ;
@@ -287,7 +301,7 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 
 ## Ordre de correction suggéré
 
-1. **#3** (accents) : petit correctif, effet immédiat. (**#1** est fait.)
+1. ~~#1 et #3~~ : faits le 2026-10-02.
 2. **#4** (arrondi) : un champ à ajouter, protège les value bets.
 3. **#2** (date du match) : un paramètre à faire descendre dans trois fonctions.
 4. **#14** : la vérification de 2 minutes, puis décider.

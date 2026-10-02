@@ -20,8 +20,10 @@
 // Stockage : kind `starting_goalies`, une ligne par DATE (heure de l'Est) :
 //   entry_key '2026-01-15'  →  { "TOR": "Joseph Woll", "MTL": "Cayden Primeau" }
 //
-// Le NOM doit correspondre à l'orthographe MoneyPuck (ex. « Joseph Woll ») car
-// le service Python matche par nom exact (insensible à la casse).
+// Le NOM est apparié par le service Python à l'orthographe MoneyPuck (ex.
+// « Joseph Woll ») sans tenir compte de la casse, des accents, des points ni
+// des espaces en trop (`_name_key`). Un nom qu'il ne reconnaît pas est traité
+// comme un gardien de RELÈVE, et signalé dans ses logs (« introuvable »).
 
 import { getEntry } from './manualData.service';
 

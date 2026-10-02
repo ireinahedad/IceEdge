@@ -520,7 +520,7 @@ Note explicite si fournie, sinon lue dans `elo_ratings.json`, sinon 1500.
 
 Pour chaque côté :
 1. **Stats d'équipe** : toutes les valeurs `…_s` / `…_l` de l'équipe.
-2. **Gardien** : si le serveur nomme le partant et qu'il fait partie des 2 gardiens suivis → ses chiffres ; sinon la moyenne des 2 pondérée par leur part de départs récente. `goalie_backup` : partant nommé et connu → son drapeau ; nommé mais inconnu → 1 (relève) ; non nommé → le drapeau du gardien le plus utilisé.
+2. **Gardien** : si le serveur nomme le partant et qu'il fait partie des 2 gardiens suivis (noms comparés sans accents, casse, points ni espaces en trop — comme pour les absents) → ses chiffres ; sinon la moyenne des 2 pondérée par leur part de départs récente. `goalie_backup` : partant nommé et connu → son drapeau ; nommé mais inconnu → 1 (relève) ; non nommé → le drapeau du gardien le plus utilisé.
 3. **Star power** : top-5 de l'état moins les absents nommés (ou, sans noms, on retire les N meilleurs) ; `stars_out_weight` = somme des poids des joueurs-clés nommés absents.
 4. **Alignement** : si l'alignement officiel (≥ 18 joueurs) est fourni → somme des 18 habillés (bassin de toute la ligue) ; sinon effectif récent moins absents ; on garde toujours les 18 plus gros temps de glace. Si moins de 12 joueurs sont reconnus → retour à l'effectif récent.
 5. **Écarts** recalculés avec les mêmes formules qu'à l'entraînement.

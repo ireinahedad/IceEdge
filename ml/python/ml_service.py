@@ -25,6 +25,7 @@ from __future__ import annotations
 import copy
 import re
 import hmac
+import unicodedata
 import json
 import math
 import os
@@ -1870,6 +1871,43 @@ def _build_score_ensemble(dist: "ScoreDistribution | None") -> "ScoreEnsemble | 
 _GOALIE_BACKUP_SHARE = 0.40
 
 
+# ── Appariement des noms (2026-10-02, ml/INCOHERENCES_ML.md §3) ──────────────
+#
+# L'état d'inférence porte les noms MoneyPuck, SANS accents (« Juraj
+# Slafkovsky »). Les noms reçus du serveur viennent eux de l'API NHL (absents
+# officiels, blessés : « Juraj Slafkovský ») ou d'une saisie à la main (gardien
+# partant). Comparés en `.lower()` seul, un absent accentué était ignoré en
+# silence, et un gardien partant accentué ou mal espacé devenait un gardien
+# INCONNU — donc de relève (`goalie_backup = 1`), 6e feature du modèle de score.
+# Toute comparaison de noms passe désormais par cette clé.
+
+def _name_key(s: str) -> str:
+    """Clé de comparaison d'un nom : sans accents, sans points, espaces
+    réduits, minuscules. « Slafkovský » (NHL) et « Slafkovsky » (MoneyPuck),
+    « T.J. Brodie » et « TJ Brodie » donnent la même clé."""
+    s = unicodedata.normalize("NFD", s or "")
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    s = s.replace(".", "").replace("\u2019", "'")
+    return " ".join(s.split()).lower()
+
+
+# Noms déjà signalés : un paquet est recalculé toutes les 10 minutes par match,
+# inutile de répéter le même avertissement à chaque fois.
+_UNMATCHED_WARNED: set[tuple[str, str, str]] = set()
+
+
+def _warn_unmatched(kind: str, team: str, name: str) -> None:
+    """Dit à voix haute qu'un nom reçu n'a été reconnu nulle part — c'est
+    presque toujours une faute de saisie, qui sinon change la prédiction sans
+    laisser de trace."""
+    k = (kind, team, _name_key(name))
+    if k in _UNMATCHED_WARNED:
+        return
+    _UNMATCHED_WARNED.add(k)
+    print(f"[ML] ⚠️  {kind} « {name} » ({team or '?'}) introuvable dans "
+          f"l'état d'inférence — vérifier l'orthographe")
+
+
 def _goalie_backup_flag(goalies: list[dict], goalie_name: str | None) -> float:
     """1.0 relève, 0.0 titulaire, pour le partant du soir.
 
@@ -1884,8 +1922,9 @@ def _goalie_backup_flag(goalies: list[dict], goalie_name: str | None) -> float:
     """
     if not goalies or any("share_last10" not in g for g in goalies):
         return float("nan")
-    if goalie_name:
-        named = [g for g in goalies if g["name"].lower() == goalie_name.lower()]
+    if goalie_name and goalie_name.strip():
+        key = _name_key(goalie_name)
+        named = [g for g in goalies if _name_key(g["name"]) == key]
         if named:
             return float(named[0]["share_last10"] < _GOALIE_BACKUP_SHARE)
         return 1.0
@@ -1896,13 +1935,6 @@ def _goalie_backup_flag(goalies: list[dict], goalie_name: str | None) -> float:
 # Sous ce nombre d'habillés reçus, la liste est jugée incomplète et ignorée
 # (18 patineurs + 2 gardiens dans un alignement officiel).
 _MIN_DRESSED = 18
-
-
-def _name_key(s: str) -> str:
-    """« Slafkovský » (NHL) et « Slafkovsky » (MoneyPuck) : la même clé."""
-    import unicodedata
-    s = unicodedata.normalize("NFD", s or "")
-    return "".join(c for c in s if unicodedata.category(c) != "Mn").strip().lower()
 
 
 def _dressed_matcher(ids: list[int] | None, names: list[str] | None):
@@ -2032,8 +2064,10 @@ def _game_context(f: GameFeatures) -> dict:
             goalies = goalie_st.get(team) or []
             if goalies:
                 # Gardien nommé si fourni, sinon mix pondéré par usage récent
-                named = [g for g in goalies if goalie_name
-                         and g["name"].lower() == goalie_name.lower()]
+                key = _name_key(goalie_name) if goalie_name and goalie_name.strip() else None
+                named = [g for g in goalies if key and _name_key(g["name"]) == key]
+                if key and not named:
+                    _warn_unmatched("gardien partant", team, goalie_name)
                 if named:
                     g0 = named[0]
                     feat_values[f"{side}_goalie_gsax60"] = g0["gsax60"]
@@ -2047,7 +2081,7 @@ def _game_context(f: GameFeatures) -> dict:
                 feat_values[f"{side}_goalie_backup"] = _goalie_backup_flag(
                     goalies, goalie_name)
             st = stars_st.get(team) or {}
-            scratch_set = {s.strip().lower() for s in (scratches or []) if s and s.strip()}
+            scratch_set = {_name_key(s) for s in (scratches or []) if s and s.strip()}
             # Avec l'alignement officiel, les absents restent ceux que le
             # serveur NOMME (saisie + blessés + absents officiels de la NHL) et
             # non « tout joueur clé non habillé » : l'état d'inférence garde les
@@ -2058,7 +2092,7 @@ def _game_context(f: GameFeatures) -> dict:
                 if scratch_set:
                     # Noms réels connus → on retire les BONS joueurs (pas "du haut")
                     present = [p["ppg"] for p in st["top5"]
-                              if p["name"].strip().lower() not in scratch_set]
+                              if _name_key(p["name"]) not in scratch_set]
                     missing = len(st["top5"]) - len(present)
                 else:
                     # Sans noms : legacy — on suppose que ce sont les meilleurs absents
@@ -2070,7 +2104,7 @@ def _game_context(f: GameFeatures) -> dict:
             keys = st.get("keys") or []
             if keys:
                 feat_values[f"{side}_stars_out_weight"] = float(
-                    sum(k["w"] for k in keys if k["name"].strip().lower() in scratch_set))
+                    sum(k["w"] for k in keys if _name_key(k["name"]) in scratch_set))
 
             # ── Projection bottom-up de l'alignement (P3) ────────────────────
             # Somme des contributions xG des patineurs effectivement disponibles.
@@ -2097,11 +2131,11 @@ def _game_context(f: GameFeatures) -> dict:
                 # vaut l'ancienne projection qu'une somme amputée de moitié.
                 if len(avail) < 12:
                     avail = ([p for p in roster
-                              if p.get("name", "").strip().lower() not in scratch_set]
+                              if _name_key(p.get("name", "")) not in scratch_set]
                              if roster else None)
             elif roster:
                 avail = [p for p in roster
-                         if p.get("name", "").strip().lower() not in scratch_set]
+                         if _name_key(p.get("name", "")) not in scratch_set]
             else:
                 avail = None
             if avail is not None:
