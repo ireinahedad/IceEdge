@@ -21,7 +21,7 @@
 | 1 | ✅ | ~~Repos = 2 jours en début de saison, l'entraînement a appris 7~~ — corrigé le 2026-10-02 | `restTravel.ts`, `build_dataset.py` |
 | 2 | 🔴 | Repos, gardiens et absents calculés pour AUJOURD'HUI, pas pour la date du match | `restTravel.ts`, `featureEngineering.ts` |
 | 3 | ✅ | ~~Noms de gardiens et d'absents comparés sans retirer les accents~~ — corrigé le 2026-10-02 | `ml_service.py` |
-| 4 | 🔴 | Value bets : edge calculé sur une probabilité arrondie à l'entier | `ml_service.py`, `valueBets.service.ts` |
+| 4 | ✅ | ~~Value bets : edge calculé sur une probabilité arrondie à l'entier~~ — corrigé le 2026-10-02 | `ml_service.py`, `valueBets.service.ts` |
 | 5 | 🔴 | Value bets : la bande 2-6 % a été mesurée sur un autre modèle que celui servi | `valueBets.service.ts`, `backtest_walkforward.py` |
 | 6 | 🔴 | Couche de correction appliquée à la victoire seulement → tuiles qui ne s'additionnent plus | `ml_service.py`, `gameMlBundle.ts` |
 | 7 | 🟠 | Absences : définies différemment à l'entraînement et au service | `build_dataset.py`, `ml_service.py` |
@@ -113,7 +113,17 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 
 ---
 
-## 🔴 4. Value bets : l'edge est calculé sur une probabilité arrondie à l'entier
+## ✅ 4. Value bets : l'edge est calculé sur une probabilité arrondie à l'entier
+
+> **Corrigé le 2026-10-02.** Le service renvoie `probability_exact` (0–1, non
+> arrondie) avec chaque réponse ; `valueBets.service.ts` l'utilise pour l'edge,
+> l'EV, la cote minimale et le journal CLV (repli sur l'entier face à un
+> service ML plus ancien). En direct, le chiffre recalculé porte
+> `probability_exact: null`. Test : un 52 % affiché à 51,6 % exact n'est plus
+> retenu à tort (edge 1,6 % < 2 %). Reste hors périmètre : les combinés
+> (`parlay.ts`, `slip.service.ts`, `ml.routes.ts`) multiplient des
+> pourcentages entiers de jambes — erreur d'arrondi d'affichage, sans effet
+> sur les value bets.
 
 **Où**
 - `ml/python/ml_service.py:2366` : `probability=round(prob * 100)` (entier) ;
@@ -308,7 +318,7 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 
 ## Ordre de correction suggéré
 
-1. ~~#1 et #3~~ : faits le 2026-10-02.
+1. ~~#1, #3 et #4~~ : faits le 2026-10-02.
 2. **#4** (arrondi) : un champ à ajouter, protège les value bets.
 3. **#2** (date du match) : un paramètre à faire descendre dans trois fonctions.
 4. **#14** : la vérification de 2 minutes, puis décider.

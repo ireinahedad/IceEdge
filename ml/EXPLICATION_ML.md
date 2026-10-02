@@ -468,7 +468,8 @@ que le domicile gagne la prolongation (§4.1.5). Code : `ScoreDistribution`
 | `highest_scoring_period` | 3 périodes supposées égales (λ_total / 3 chacune) : P(cette période > les deux autres) |
 
 **Toujours :** les probabilités sont bornées à [2 %, 98 %] (sauf le score exact,
-borné à [0, 98 %]) puis arrondies au pour-cent entier.
+borné à [0, 98 %]). La réponse porte l'entier d'affichage (`probability`) ET la
+valeur exacte en 0–1 (`probability_exact`), qui sert à tous les calculs (edge, EV).
 
 **Côté du sujet.** Toutes les formules sont écrites pour le domicile. Si la
 question porte sur le visiteur, le service **transpose** la matrice (M → Mᵀ),
@@ -649,7 +650,7 @@ Critère unique, partagé par l'accueil et l'alerte push :
 
 1. Match **du jour** (heure de l'Est), **pas commencé**.
 2. **Les deux gardiens partants saisis** à la main.
-3. Probabilité du paquet ML (`probability`), seulement si le modèle de score a répondu.
+3. Probabilité du paquet ML **non arrondie** (`probability_exact`), seulement si le modèle de score a répondu.
 4. Probabilité du marché dévigée chez le livre d'affichage (les deux prix du même livre).
 5. Règles :
    - **moneyline** : edge entre **2 % et 6 %** ;

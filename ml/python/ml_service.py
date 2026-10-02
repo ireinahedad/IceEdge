@@ -718,7 +718,13 @@ class FeatureImportance(BaseModel):
     direction: str   # "positive" | "negative"
 
 class MLResponse(BaseModel):
-    probability: int                          # 5–95, integer percent
+    probability: int                          # pour-cent entier (borné 2–98 ; 0–98 score exact)
+    # La même probabilité, NON arrondie, en 0–1. `probability` est un entier
+    # d'affichage : calculer un edge dessus ajoutait jusqu'à ±0,5 point
+    # d'erreur, sur une règle de value bet large de 2 à 6 points
+    # (ml/INCOHERENCES_ML.md §4). Tout calcul (edge, EV, cote minimale,
+    # journal CLV) doit lire ce champ. Optionnel pour les anciens clients.
+    probability_exact: Optional[float] = None
     confidence: int                           # 40–95, integer percent
     feature_importances: List[FeatureImportance]
     model_version: str
@@ -2422,6 +2428,7 @@ def _price_game_market(ctx: dict, f: GameFeatures) -> MLResponse:
 
     return MLResponse(
         probability=round(prob * 100),
+        probability_exact=round(float(prob), 6),
         confidence=confidence,
         feature_importances=fi_list[:5],
         model_version=model_version,
@@ -2612,6 +2619,7 @@ def predict_player(f: PlayerPropFeatures) -> MLResponse:
                        f"{over_under} {f.line} implied at {round(prob*100)}%.")
     return MLResponse(
         probability=round(prob * 100),
+        probability_exact=round(float(prob), 6),
         confidence=round(confidence * 100),
         feature_importances=importances[:5],
         model_version="poisson-v1.0",
@@ -2652,6 +2660,7 @@ def predict_team(f: TeamFuturesFeatures) -> MLResponse:
     prop_label = {"cup": "Stanley Cup", "conf": "Conference Final", "playoff": "Playoff berth"}.get(f.prop_type, f.prop_type)
     return MLResponse(
         probability=round(prob * 100),
+        probability_exact=round(float(prob), 6),
         confidence=confidence,
         feature_importances=importances[:5],
         model_version="rank-bayes-v1.0",

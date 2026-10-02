@@ -169,6 +169,13 @@ export function judgeSelection(
  */
 function scoreModelProb(r: MLPredictionResult | null | undefined): number | null {
   if (!r || r.live || r.probability_score_model == null) return null;
+  // La probabilité NON arrondie : l'entier `probability` porte jusqu'à ±0,5
+  // point d'erreur, sur une règle large de 2 à 6 points (INCOHERENCES_ML §4).
+  // Repli sur l'entier seulement face à un service ML qui ne l'envoie pas.
+  const exact = r.probability_exact;
+  if (typeof exact === 'number' && Number.isFinite(exact)) {
+    return exact > 0 && exact < 1 ? exact : null;
+  }
   const p = r.probability;
   return typeof p === 'number' && Number.isFinite(p) && p > 0 && p < 100 ? p / 100 : null;
 }

@@ -255,7 +255,9 @@ async function applyLive(gameId: string, pre: GameMlBundle): Promise<GameMlBundl
       probability: o.rulePct,
       probability_scale: 'pct',
       live: true,
-      // L'incertitude bootstrap était celle de l'avant-match : elle ne dit plus rien.
+      // La probabilité exacte et l'incertitude bootstrap étaient celles de
+      // l'avant-match : elles ne décrivent plus ce chiffre.
+      probability_exact: null,
       probability_std: null,
       uncertainty: null,
       explanation: `Modèle ML (avant-match : victoire domicile ${preMoney}%, λ=${lambdaT.toFixed(2)}) `
