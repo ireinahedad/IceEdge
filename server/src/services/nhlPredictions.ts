@@ -1257,35 +1257,43 @@ function computeGameMarkets(
       }],
     };
 
-    // Buts de la 1re période — dans SA carte. Mêmes tuiles qu'avant.
-    // En direct : buts déjà marqués en 1re + ceux qui restent à y marquer.
-    if (n === 1) {
-      const lP1 = live
-        ? (gH + gA) * remainingShareUntil(live.period, live.clockSec, 1)
-        : lambdaT * PERIOD_DIST[0];
-      const g1 = !live ? 0 : live.period > 1 ? live.periodGoals[0].home + live.periodGoals[0].away : h0 + a0;
-      const p1Lines = [0.5, 1.5, 2.5];
-      const p1Opts: BetOption[] = p1Lines.map(L => {
-        const over = live ? poissonAtLeast(lP1, Math.floor(L) + 1 - g1) : poissonOver(lP1, L);
-        return {
-          id: `p1-o${String(Math.round(L * 10)).padStart(2, '0')}`,
-          // `'over'` EXPLICITE : sans lui, `settlementFields` retombe sur le sujet
-          // et la jambe part avec l'abréviation de l'équipe comme sélection.
-          ml: gm('period1_total_goals', L, 'over'),
-          label: `P1 Over ${L}`,
-          rulePct: pctOf(over),
-          ruleNote: live
-            ? `${g1} but${g1 > 1 ? 's' : ''} en 1re + restants λ=${fmt(lP1)} → P(> ${L} buts en 1re)=${fmt(over*100,0)}%`
-            : `P1 λ=${fmt(lP1)} → P(> ${L} buts en 1re)=${fmt(over*100,0)}%`,
-        };
-      });
-      group.options.push(...p1Opts);
-      group.tables!.push({
-        title: '1st Period Goals',
-        columns: p1Lines.map(L => `Over ${L}`),
-        rows: [{ label: '', cells: p1Opts.map(o => o.id) }],
-      });
-    }
+    // Buts de la période — dans SA carte, pour les TROIS périodes (P1, P2, P3).
+    // Total de la SEULE période n (pas cumulé) : c'est ce que règle
+    // `periodN_total_goals` (`settlement.service.ts`). Pas de prolongation.
+    // En direct : buts déjà marqués dans la période + ceux qui restent à y
+    // marquer ; période pas encore commencée → λ de la période entière ;
+    // période terminée → plus rien à venir, le total est connu.
+    const ordFr = ['1re', '2e', '3e'][n - 1];
+    const share = live
+      ? remainingShareUntil(live.period, live.clockSec, n) - remainingShareUntil(live.period, live.clockSec, n - 1)
+      : PERIOD_DIST[n - 1];
+    const lPn = (live ? gH + gA : lambdaT) * Math.max(0, share);
+    const prevGoals = !live ? 0
+      : live.periodGoals.slice(0, n - 1).reduce((t, x) => t + x.home + x.away, 0);
+    const gN = !live || live.period < n ? 0
+      : live.period > n ? live.periodGoals[n - 1].home + live.periodGoals[n - 1].away
+      : Math.max(0, h0 + a0 - prevGoals);
+    const pLines = [0.5, 1.5, 2.5];
+    const pOpts: BetOption[] = pLines.map(L => {
+      const over = live ? poissonAtLeast(lPn, Math.floor(L) + 1 - gN) : poissonOver(lPn, L);
+      return {
+        id: `p${n}-o${String(Math.round(L * 10)).padStart(2, '0')}`,
+        // `'over'` EXPLICITE : sans lui, `settlementFields` retombe sur le sujet
+        // et la jambe part avec l'abréviation de l'équipe comme sélection.
+        ml: gm(`period${n}_total_goals`, L, 'over'),
+        label: `P${n} Over ${L}`,
+        rulePct: pctOf(over),
+        ruleNote: live
+          ? `${gN} but${gN > 1 ? 's' : ''} en ${ordFr} + restants λ=${fmt(lPn)} → P(> ${L} buts en ${ordFr})=${fmt(over*100,0)}%`
+          : `P${n} λ=${fmt(lPn)} → P(> ${L} buts en ${ordFr})=${fmt(over*100,0)}%`,
+      };
+    });
+    group.options.push(...pOpts);
+    group.tables!.push({
+      title: `${name} Period Goals`,
+      columns: pLines.map(L => `Over ${L}`),
+      rows: [{ label: '', cells: pOpts.map(o => o.id) }],
+    });
     return group;
   });
 

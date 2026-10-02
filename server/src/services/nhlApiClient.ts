@@ -23,6 +23,7 @@ export {
   fetchGamesByDate,
   fetchGamesRange,
   fetchScheduleAnchor,
+  fetchPastGames,
   fetchLiveGames,
   fetchGameById,
   fetchGameDetail,

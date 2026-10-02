@@ -58,7 +58,9 @@ export interface NHLGame {
     score?: number;
   };
   venue: string;
-  gameType: "regular" | "playoff";
+  gameType: "regular" | "playoff" | "preseason";
+  /** Fin du match (`REG` | `OT` | `SO`) — rendu par `/games/past` seulement. */
+  lastPeriodType?: string;
 }
 
 export interface NHLPlayerInfo {

@@ -365,6 +365,15 @@ export function buildGameGroups(home: string, away: string, hp: number, ou: numb
       ],
     },
     {
+      id: "p2goals", title: "2nd Period Goals", cols: 2,
+      options: [
+        { id: "p2-over", label: "Over 1.5",  rulePct: 45, mlProps: gml("period2_total_goals", 1.5, "over"),
+          ruleNote: `The 2nd period is the highest-scoring (long change) — 2+ goals in ~45% of games.` },
+        { id: "p2-under",label: "Under 1.5", rulePct: 55, mlProps: gml("period2_total_goals", 1.5, "under"),
+          ruleNote: `Under 1.5 in the 2nd period hits ~55% of the time.` },
+      ],
+    },
+    {
       id: "p3", title: "3rd Period Result", cols: 3,
       options: [
         { id: "p3-home", label: `${home} leads`, rulePct: Math.round(hp * 0.48 + 6), mlProps: gml("period3_winner"),
@@ -376,6 +385,15 @@ export function buildGameGroups(home: string, away: string, hp: number, ou: numb
           ruleNote: `Tied after regulation forces OT/SO — happens in ~20-22% of games.` },
         { id: "p3-away", label: `${away} leads`, rulePct: Math.round(ap * 0.44 + 5), mlProps: gmla("period3_winner"),
           ruleNote: `Away team ahead heading into OT or winning in regulation.` },
+      ],
+    },
+    {
+      id: "p3goals", title: "3rd Period Goals", cols: 2,
+      options: [
+        { id: "p3-over", label: "Over 1.5",  rulePct: 41, mlProps: gml("period3_total_goals", 1.5, "over"),
+          ruleNote: `~41% of NHL games see 2+ goals in the 3rd period (empty-net goals included).` },
+        { id: "p3-under",label: "Under 1.5", rulePct: 59, mlProps: gml("period3_total_goals", 1.5, "under"),
+          ruleNote: `Under 1.5 in the 3rd period hits ~59% of the time.` },
       ],
     },
     {

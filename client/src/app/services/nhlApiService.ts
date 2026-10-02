@@ -322,6 +322,31 @@ function sharedGet<T>(path: string, memoMs: number): Promise<T> {
   return promise;
 }
 
+/**
+ * Recherche « Passé » (Stats › Tous les matchs). Les critères bornent le
+ * résultat : `day` = un jour pour toute la ligue ; avec une équipe, `month`,
+ * `playoffs` ou `opp` (un adversaire).
+ */
+export type PastScope = "day" | "month" | "playoffs" | "opp";
+export interface PastGamesQuery {
+  season: string;
+  scope: PastScope;
+  date?: string;
+  team?: string;
+  month?: string;
+  opp?: string;
+  venue?: "home" | "away";
+  result?: "W" | "L";
+  decision?: "REG" | "OT" | "SO";
+}
+export interface PastGamesPage {
+  season: string;
+  games: NHLGame[];
+  /** Recherche par jour : soirée NHL la plus proche avant / après (ou null). */
+  prevDay?: string | null;
+  nextDay?: string | null;
+}
+
 export const nhlApiService = {
   getGamesByDate: (date?: string): Promise<NHLGame[]> => {
     const d = date || new Date().toISOString().split('T')[0];
@@ -331,6 +356,13 @@ export const nhlApiService = {
   // Calendrier : tous les matchs entre deux dates (YYYY-MM-DD) incluses.
   getGamesRange: (start: string, end: string): Promise<NHLGame[]> =>
     get<NHLGame[]>(`/games/range?start=${start}&end=${end}`),
+
+  /** Matchs JOUÉS selon les critères, du plus récent au plus ancien. */
+  getPastGames: (q: PastGamesQuery, signal?: AbortSignal): Promise<PastGamesPage> => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v != null && v !== "") qs.set(k, String(v));
+    return get<PastGamesPage>(`/games/past?${qs.toString()}`, signal);
+  },
 
   // Calendrier : date courante + bornes de saison selon l'API NHL.
   getScheduleAnchor: (): Promise<{ today: string; seasonStart: string; seasonEnd: string }> =>

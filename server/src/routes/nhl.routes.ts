@@ -86,6 +86,53 @@ router.get('/games/range', publicCache(TTL.MEDIUM), async (req, res) => {
   catch (err: any) { sendError(res, err); }
 });
 
+// Matchs JOUÉS d'une saison selon des critères qui, par construction, en
+// ramènent peu (voir `fetchPastGames`) : un jour pour toute la ligue, ou pour
+// une équipe un mois / ses séries / un adversaire. Avant `/games/:id`, sinon
+// « past » serait capturé comme un identifiant.
+const ABBR = /^[A-Za-z]{2,3}$/;
+const MONTH = /^\d{4}-\d{2}$/;
+router.get('/games/past', publicCache(TTL.MEDIUM), async (req, res) => {
+  const str = (k: string) => (req.query[k] == null || req.query[k] === '' ? undefined : String(req.query[k]));
+  const season = str('season') ?? '';
+  const scope = str('scope') ?? '';
+  const date = str('date');
+  const team = str('team')?.toUpperCase();
+  const month = str('month');
+  const opp = str('opp')?.toUpperCase();
+  const venue = str('venue');
+  const result = str('result')?.toUpperCase();
+  const decision = str('decision')?.toUpperCase();
+  const y = Number(season.slice(0, 4));
+  const inSeason = (iso: string) => iso >= `${y}-09-01` && iso <= (season === '20192020' ? '2020-10-15' : `${y + 1}-07-15`);
+  const bad =
+    !SEASON_ID.test(season) || Number(season.slice(4)) !== y + 1 || y < 1990 || season > currentSeason() ||
+    !['day', 'month', 'playoffs', 'opp'].includes(scope) ||
+    (team && !ABBR.test(team)) ||
+    // Sans équipe, seul le jour est permis : c'est lui qui borne le résultat.
+    (scope !== 'day' && !team) ||
+    (scope === 'day' && (!date || !ISO_DATE.test(date) || !inSeason(date))) ||
+    (scope === 'month' && (!month || !MONTH.test(month) || !inSeason(`${month}-01`))) ||
+    (scope === 'opp' && (!opp || !ABBR.test(opp) || opp === team)) ||
+    (venue && venue !== 'home' && venue !== 'away') || (venue && !team) ||
+    (result && result !== 'W' && result !== 'L') || (result && !team) ||
+    (decision && !['REG', 'OT', 'SO'].includes(decision));
+  if (bad) {
+    res.status(400).json({ error: 'Invalid past-games query' });
+    return;
+  }
+  try {
+    const page = await nhl.getPastGames({
+      season, scope: scope as any, date, team, month, opp,
+      venue: venue as any, result: result as any, decision: decision as any,
+    });
+    // Une saison terminée ne bougera plus.
+    if (season < currentSeason()) res.set('Cache-Control', publicPolicy(TTL.FINAL));
+    res.json(page);
+  }
+  catch (err: any) { sendError(res, err); }
+});
+
 // Ancre du calendrier : date courante + bornes de saison selon l'API NHL.
 router.get('/schedule/anchor', publicCache(TTL.HOUR), async (_req, res) => {
   try { res.json(await nhl.getScheduleAnchor()); }

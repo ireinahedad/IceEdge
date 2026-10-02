@@ -491,8 +491,14 @@ export function attachGameFactors(groups: any[], c: GameFactorCtx): void {
         const f = teamTotalFactors(Number(m[3]) / 10, m[1] as 'home' | 'away', c);
         setFactors(o, 'team_totals', m[2] === 'o' ? f : invExact(f));
       }
-      // Buts de la 1re période : pas de prolongation dans une période.
-      else if (id === 'p1-o05' || id === 'p1-o15' || id === 'p1-o25') setFactors(o, 'totals', totalsFactors(id === 'p1-o05' ? 0.5 : id === 'p1-o15' ? 1.5 : 2.5, { ...c, gfH: c.gfH * 0.305, gfA: c.gfA * 0.305, gaH: c.gaH * 0.305, gaA: c.gaA * 0.305, lambdaT: c.lambdaT * 0.305, lambdaH: c.lambdaH * 0.305, lambdaA: c.lambdaA * 0.305, hShotGoals: c.hShotGoals * 0.305, aShotGoals: c.aShotGoals * 0.305 }, false));
+      // Buts d'UNE période (1re / 2e / 3e) : pas de prolongation dans une
+      // période. Cadences réduites à la part de la période (`PERIOD_DIST` de
+      // `nhlPredictions.ts` : 0.305 / 0.365 / 0.330).
+      else if (/^p[123]-o(05|15|25)$/.test(id)) {
+        const k = [0.305, 0.365, 0.330][Number(id[1]) - 1];
+        const line = Number(id.slice(4)) / 10;
+        setFactors(o, 'totals', totalsFactors(line, { ...c, gfH: c.gfH * k, gfA: c.gfA * k, gaH: c.gaH * k, gaA: c.gaA * k, lambdaT: c.lambdaT * k, lambdaH: c.lambdaH * k, lambdaA: c.lambdaA * k, hShotGoals: c.hShotGoals * k, aShotGoals: c.aShotGoals * k }, false));
+      }
       // Qui mène après la 3e = qui gagne en 60 minutes ; égalité = prolongation.
       // Mêmes facteurs (et même `pctScale`) que les tuiles « in Reg » et « Goes
       // to OT » : les deux cartes affichent les mêmes chiffres par construction.

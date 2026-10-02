@@ -96,7 +96,8 @@ describe('buildGameMarkets — chaque tuile porte son marché ML', () => {
     const byId = new Map(groups.flatMap(g => g.options.map(o => [o.id, o] as const)));
     // Les quatre familles que l'appariement par identifiant ratait entièrement.
     for (const id of ['o55', 'u55', 'o65', 'u65', 'wm-1', 'wm-2', 'wm-3p',
-                      'p1-o05', 'p1-o15', 'p1-o25']) {
+                      'p1-o05', 'p1-o15', 'p1-o25', 'p2-o05', 'p2-o15', 'p2-o25',
+                      'p3-o05', 'p3-o15', 'p3-o25']) {
       expect(byId.get(id)?.ml, `tuile ${id}`).toBeDefined();
     }
   });
@@ -341,6 +342,14 @@ describe('tableaux de la page match — cohérence des règles', () => {
     // Les buts de la 1re période vivent dans la carte de la 1re période.
     const p1 = groups.find(g => g.id === 'p1')!;
     expect(p1.options.map(o => o.id)).toEqual(expect.arrayContaining(['p1-o05', 'p1-o15', 'p1-o25']));
+    // Idem pour la 2e et la 3e : chaque période a ses buts dans SA carte.
+    for (const n of [2, 3]) {
+      const g = groups.find(x => x.id === `p${n}`)!;
+      expect(g.options.map(o => o.id)).toEqual(expect.arrayContaining([`p${n}-o05`, `p${n}-o15`, `p${n}-o25`]));
+      expect(g.tables!.some(t => t.title === `${n === 2 ? '2nd' : '3rd'} Period Goals`)).toBe(true);
+    }
+    // La 2e période compte plus de buts que la 1re (PERIOD_DIST).
+    expect(pctOf('p2-o15')).toBeGreaterThan(pctOf('p1-o15'));
     expect(groups.find(g => g.id === 'p1goals')).toBeUndefined();
   });
 
@@ -451,6 +460,11 @@ describe('buildGameMarkets — en direct', () => {
     // Un seul but en 1re : Over 0.5 gagné, Over 1.5 perdu.
     expect(pctOf('p1-o05')).toBe(100);
     expect(pctOf('p1-o15')).toBe(0);
+    // 2e en cours, déjà 2 buts dedans (3–1 au total, 1–0 après la 1re) :
+    // Over 0.5 et Over 1.5 de la 2e sont acquis, Over 2.5 reste ouvert.
+    expect(pctOf('p2-o05')).toBe(100);
+    expect(pctOf('p2-o15')).toBe(100);
+    expect(pctOf('p2-o25')).toBeLessThan(100);
     // Un score déjà dépassé ne peut plus sortir.
     expect(pctOf('sc-home-1-0')).toBe(0);
     expect(pctOf('tt-home-o15')).toBe(100);

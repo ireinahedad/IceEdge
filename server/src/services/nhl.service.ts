@@ -20,6 +20,10 @@ export class NHLService {
     return nhlApi.fetchGamesRange(start, end);
   }
 
+  async getPastGames(q: Parameters<typeof nhlApi.fetchPastGames>[0]) {
+    return nhlApi.fetchPastGames(q);
+  }
+
   async getScheduleAnchor() {
     return nhlApi.fetchScheduleAnchor();
   }

@@ -343,6 +343,181 @@ export async function fetchScheduleAnchor(): Promise<{ today: string; seasonStar
   return out;
 }
 
+// --- Matchs passés (recherche « Passé » de la page Stats › Tous les matchs) --
+//
+// Ce ne sont pas les résultats qu'on coupe, ce sont les CRITÈRES qui sont
+// choisis pour qu'une recherche ramène en moyenne au plus ~25 matchs :
+//   · toute la ligue → UN jour (une soirée NHL : 16 matchs au plus) ;
+//   · une équipe    → UN mois (~12-16), ses séries (0-28, ~10 en moyenne), ou
+//                     ses rencontres contre UN adversaire (3-4 par saison).
+// Domicile/extérieur, victoire/défaite et la fin du match ne font que réduire.
+
+/** Garde-fou serveur seulement — aucun critère légitime n'en approche. */
+const PAST_SAFETY_CAP = 40;
+
+export type PastScope = 'day' | 'month' | 'playoffs' | 'opp';
+
+export interface PastGamesQuery {
+  /** Id NHL à 8 chiffres, ex. `20252026`. */
+  season:    string;
+  scope:     PastScope;
+  /** `day` : `YYYY-MM-DD`. */
+  date?:     string;
+  /** `month` / `playoffs` / `opp` : le club vu de qui on cherche. Possible aussi avec `day`. */
+  team?:     string;
+  /** `month` : `YYYY-MM`. */
+  month?:    string;
+  /** `opp` : l'adversaire. */
+  opp?:      string;
+  /** Vu de `team`. */
+  venue?:    'home' | 'away';
+  /** Vu de `team` : victoire ou défaite, toutes fins confondues. */
+  result?:   'W' | 'L';
+  /** Comment le match s'est terminé. */
+  decision?: 'REG' | 'OT' | 'SO';
+}
+
+export interface PastGamesPage {
+  season: string;
+  games:  any[];
+  /**
+   * `day` seulement : la soirée NHL la plus proche avant / après ce jour (null
+   * si aucune dans la semaine voisine). Les flèches ‹ › sautent les soirs sans
+   * match au lieu d'afficher « aucun match » un jour sur trois.
+   */
+  prevDay?: string | null;
+  nextDay?: string | null;
+}
+
+const FINAL_STATES = new Set(['OFF', 'FINAL', 'OVER']);
+
+/** Le match brut (calendrier hebdo ou calendrier de club) passe-t-il les filtres ? */
+function pastGameMatches(g: any, q: PastGamesQuery, date: string): boolean {
+  if (!FINAL_STATES.has(String(g.gameState ?? ''))) return false;
+  if (g.season != null && String(g.season) !== q.season) return false;
+  const gt = Number(g.gameType);
+  // Jour et mois : tout ce qui s'est joué (préparatoire comprise, en septembre).
+  // Séries : séries seulement. Adversaire : saison + séries.
+  if (q.scope === 'playoffs' && gt !== 3) return false;
+  if (q.scope === 'opp' && gt !== 2 && gt !== 3) return false;
+  if (gt !== 1 && gt !== 2 && gt !== 3) return false;   // matchs d'étoiles, 4 Nations…
+  if (q.scope === 'day' && date !== q.date) return false;
+  if (q.scope === 'month' && !date.startsWith(q.month ?? '')) return false;
+
+  const lpt = String(g.gameOutcome?.lastPeriodType ?? 'REG').toUpperCase();
+  if (q.decision && lpt !== q.decision) return false;
+
+  if (q.team) {
+    const home = String(g.homeTeam?.abbrev ?? '').toUpperCase();
+    const away = String(g.awayTeam?.abbrev ?? '').toUpperCase();
+    const t = q.team;
+    if (home !== t && away !== t) return false;
+    const isHome = home === t;
+    if (q.scope === 'opp' && (isHome ? away : home) !== q.opp) return false;
+    if (q.venue === 'home' && !isHome) return false;
+    if (q.venue === 'away' && isHome) return false;
+    if (q.result) {
+      const hs = Number(g.homeTeam?.score), as = Number(g.awayTeam?.score);
+      if (!Number.isFinite(hs) || !Number.isFinite(as)) return false;
+      if ((q.result === 'W') !== (isHome ? hs > as : as > hs)) return false;
+    }
+  }
+  return true;
+}
+
+function formatPastGame(g: any, date: string): any {
+  const gt = Number(g.gameType);
+  return {
+    ...formatGame(g, date),
+    gameType: gt === 3 ? 'playoff' : gt === 1 ? 'preseason' : 'regular',
+    lastPeriodType: String(g.gameOutcome?.lastPeriodType ?? 'REG').toUpperCase(),
+  };
+}
+
+/**
+ * Les journées du calendrier NHL entre deux dates incluses, chacune une fois.
+ * `fetchScheduleWeek(c)` rend une semaine qui CONTIENT `c` — pas forcément qui
+ * commence à `c` (une semaine en cache peut finir ce jour-là) : on avance donc
+ * après la dernière date reçue, comme `fetchGamesRange`, sans trou.
+ */
+async function scheduleDays(start: string, end: string): Promise<any[]> {
+  const byDate = new Map<string, any>();
+  let c = start;
+  for (let guard = 0; guard < 20 && c <= end; guard++) {
+    const week = await fetchScheduleWeek(c);
+    let maxDate = c;
+    for (const d of week) {
+      const dd = String(d.date);
+      if (dd > maxDate) maxDate = dd;
+      if (dd >= start && dd <= end && !byDate.has(dd)) byDate.set(dd, d);
+    }
+    const stepped = addDays(maxDate, 1);
+    c = stepped > c ? stepped : addDays(c, 1);
+  }
+  return [...byDate.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+}
+
+/** Plus récent d'abord ; à date égale, l'id le plus grand d'abord. */
+function byNewest(a: any, b: any): number {
+  return a.gameDate === b.gameDate ? Number(b.id) - Number(a.id) : b.gameDate.localeCompare(a.gameDate);
+}
+
+/**
+ * Matchs JOUÉS correspondant aux critères, du plus récent au plus ancien.
+ *
+ *   · `day`  : la semaine NHL qui contient ce jour (en cache), filtrée au jour.
+ *   · sinon  : UN appel au calendrier du club (`club-schedule-season`), filtré.
+ */
+export async function fetchPastGames(q: PastGamesQuery): Promise<PastGamesPage> {
+  if (USE_MOCK) {
+    const games = (MOCK_GAMES_FULL as any[])
+      .filter((g) => g.status === 'final' && (!q.team || g.homeTeam.abbreviation === q.team || g.awayTeam.abbreviation === q.team))
+      .sort(byNewest)
+      .slice(0, PAST_SAFETY_CAP);
+    return { season: q.season, games };
+  }
+
+  let rows: Array<{ g: any; date: string }> = [];
+  let prevDay: string | null = null, nextDay: string | null = null;
+  if (q.scope === 'day') {
+    const date = q.date!;
+    // Une semaine de part et d'autre du jour, pour trouver les soirées
+    // voisines. Les semaines sont en cache dix minutes.
+    const days = await scheduleDays(addDays(date, -7), addDays(date, 7));
+    const day = days.find((d: any) => String(d.date) === date);
+    rows = (day?.games ?? []).map((g: any) => ({ g, date }));
+    const played = (d: any) => (d.games ?? []).some((g: any) => String(g.season) === q.season);
+    for (const d of days) {
+      const dd = String(d.date);
+      if (!played(d)) continue;
+      if (dd < date && (!prevDay || dd > prevDay)) prevDay = dd;
+      if (dd > date && (!nextDay || dd < nextDay)) nextDay = dd;
+    }
+  } else {
+    const key = `club_sched:${q.team}:${q.season}`;
+    let raw = getCached<any[]>(key);
+    if (!raw) {
+      try {
+        const data = await fetchNHL<any>(`v1/club-schedule-season/${q.team}/${q.season}`);
+        raw = (data?.games ?? []) as any[];
+      } catch (err: any) {
+        // Club absent de cette saison (franchise relocalisée, expansion) : vide.
+        if (err?.status !== 404) throw err;
+        raw = [];
+      }
+      setCached(key, raw, q.season < currentSeason() ? 6 * 60 * 60_000 : 10 * 60_000);
+    }
+    rows = raw.map((g) => ({ g, date: String(g.gameDate ?? g.startTimeUTC?.slice(0, 10) ?? '') }));
+  }
+
+  const games = rows
+    .filter(({ g, date }) => pastGameMatches(g, q, date))
+    .map(({ g, date }) => formatPastGame(g, date))
+    .sort(byNewest)
+    .slice(0, PAST_SAFETY_CAP);
+  return q.scope === 'day' ? { season: q.season, games, prevDay, nextDay } : { season: q.season, games };
+}
+
 export async function fetchLiveGames(): Promise<any[]> {
   if (USE_MOCK) return (MOCK_GAMES_FULL as any[]).filter((g) => g.status === 'live');
   const cached = getCached<any[]>('live');
