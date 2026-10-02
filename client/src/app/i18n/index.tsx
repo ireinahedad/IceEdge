@@ -520,6 +520,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "home.chance":         { en: "chance",            fr: "de chance" },
   "home.odds":           { en: "odds {odds}",       fr: "cote {odds}" },
   "home.noBets":         { en: "No bets right now — the list covers games in the next 48 hours", fr: "Aucun pari pour le moment — la liste couvre les matchs des 48 prochaines heures" },
+  "home.prevDay":        { en: "Previous day",      fr: "Journée précédente" },
+  "home.nextDay":        { en: "Next day",          fr: "Journée suivante" },
   "home.liveNow":        { en: "Live Now",          fr: "En direct" },
   "home.live":           { en: "Live",              fr: "En direct" },
   "home.noGames":        { en: "No games scheduled", fr: "Aucun match prévu" },
@@ -534,6 +536,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "home.moreBets":       { en: "More bets",         fr: "Plus de paris" },
   "home.game":           { en: "Game",              fr: "Match" },
   "home.nhlGame":        { en: "NHL Game",          fr: "Match LNH" },
+  "pred.fairOdds":       { en: "Fair odds (ML model)", fr: "Cote juste (modèle ML)" },
   "home.oddsFairHint":   { en: "Fair odds implied by our model — not a bookmaker price.", fr: "Cote équitable déduite de notre modèle — ce n'est pas un prix de bookmaker." },
 
   // ── Best bets tiers (sélecteur exclusif) ──

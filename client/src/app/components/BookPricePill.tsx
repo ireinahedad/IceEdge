@@ -51,3 +51,30 @@ export function BookPricePill({ price, size = "sm", link = true, ticket }: {
     </button>
   );
 }
+
+/**
+ * Cote ÉQUITABLE déduite du % ML (100 / p), sans marge — affichée à la place
+ * de `BookPricePill` quand le livre ne cote pas ce pari ou que le flux ne
+ * répond pas (demande du user, 2026-10-02 : la cote du vainqueur et du
+ * handicap doit accompagner chaque prédiction). Grise et sans lien, pour ne
+ * jamais se lire comme un prix de bookmaker ; l'infobulle le dit.
+ */
+export function fairOdds(pct: number | null | undefined): number | null {
+  if (pct == null || !Number.isFinite(pct) || pct <= 0 || pct >= 100) return null;
+  return Math.round((100 / pct) * 100) / 100;
+}
+
+export function FairOddsPill({ pct, size = "sm", title }: { pct: number | null | undefined; size?: "sm" | "md"; title?: string }) {
+  const { odds } = useOddsFormat();
+  const fair = fairOdds(pct);
+  if (fair == null) return null;
+  const text = size === "md" ? "text-sm" : "text-[11px]";
+  return (
+    <span
+      title={title}
+      className="inline-flex items-center gap-1 bg-white/[0.04] border border-white/15 rounded-full px-2 py-0.5"
+    >
+      <span className={`${text} font-semibold text-[#bfc8cc] tabular-nums`}>{odds(fair)}</span>
+    </span>
+  );
+}

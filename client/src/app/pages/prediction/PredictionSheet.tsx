@@ -25,6 +25,7 @@ import { priceForBet } from "../../services/gameOdds";
 import { useOddsFormat } from "../../context/OddsFormatContext";
 import { useBookmaker, minOddsFromPct } from "../../context/BookmakerContext";
 import { features } from "../../platform";
+import { fairOdds } from "../../components/BookPricePill";
 
 import { Check } from "lucide-react";
 /* ─── Identifiant de la jambe de coupon ──────────────────────────────────────
@@ -191,6 +192,19 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   // The probability stored in the coupon — identical to what the stats grid shows.
   const legPct = ownServerPct ?? rulePct;
 
+  // Vainqueur / handicap sans prix du livre : la fiche montre la cote juste du
+  // chiffre ML (2026-10-02). Même chiffre que la carte ML (cache partagé).
+  const fairMarket = mlProps?.propType === "moneyline" || mlProps?.propType === "puck_line";
+  const [fairMlPct, setFairMlPct] = useState<number | null>(null);
+  useEffect(() => {
+    if (!fairMarket || bookPrice != null) { setFairMlPct(null); return; }
+    let alive = true;
+    resolveMlPct().then(p => { if (alive) setFairMlPct(p); }).catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fairMarket, bookPrice, mlPropsKey, mlPreset]);
+  const sheetFair = fairOdds(fairMlPct);
+
   const { addLeg, removeLeg, hasLeg } = useBet();
   const legId = betLegId(label, mlProps, rulePct);
   const inSlip = hasLeg(legId);
@@ -331,6 +345,18 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
               {odds(bookPrice)}
             </span>
           </button>
+        )}
+
+        {bookPrice == null && sheetFair != null && (
+          <div
+            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-white/15 bg-white/[0.03]"
+            title={t("home.oddsFairHint")}
+          >
+            <span className="text-[#8a9ea6] text-[11px] font-semibold uppercase tracking-wider">
+              {t("pred.fairOdds")}
+            </span>
+            <span className="ml-auto text-[#bfc8cc] text-lg font-black tabular-nums">{odds(sheetFair)}</span>
+          </div>
         )}
 
         {/* ── 🤖 ML — prédiction du modèle ── */}
@@ -681,6 +707,12 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
     ? { background: "rgba(255,255,255,0.10)", color: "#ffffff", border: "1px solid rgba(255,255,255,0.45)" }
     : { background: shownColor + "22", color: shownColor, border: `1px solid ${shownColor}55` };
 
+  // Cote juste (100 / %) sous la tuile quand le livre ne cote pas : vainqueur
+  // et handicap seulement, et seulement avec un vrai chiffre ML.
+  const ODDS_MARKETS = new Set(["moneyline", "puck_line"]);
+  const showFair = mlMode && !loadingMl && !mlMissing && !below
+    && ODDS_MARKETS.has(opt.mlProps?.propType ?? "");
+
   // Pari déjà tranché pendant le match : plus rien à afficher (après tous les
   // hooks, dont l'ordre doit rester stable d'un rendu à l'autre).
   if (gameLive && isDecidedLive(opt)) return null;
@@ -729,9 +761,18 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
             ne s'affiche quand le livre ne cote pas ce marché ; pas de tiret,
             qui ferait croire à une donnée manquante alors que c'est l'état
             normal de la quasi-totalité des marchés. */}
-        {bookPrice != null && (
+        {bookPrice != null ? (
           <span className={`mt-1 text-[#4ade80] text-[10px] font-bold tabular-nums leading-none ${gameLive ? "opacity-40" : ""}`}>
             {odds(bookPrice)}
+          </span>
+        ) : showFair && fairOdds(shownPct) != null && (
+          /* Vainqueur / handicap sans prix du livre : la cote juste du % ML,
+             en gris — jamais confondue avec un prix (demande du user, 2026-10-02). */
+          <span
+            className={`mt-1 text-[#8a9ea6] text-[10px] font-semibold tabular-nums leading-none ${paleStyle ? "opacity-40" : ""}`}
+            title={t("home.oddsFairHint")}
+          >
+            {odds(fairOdds(shownPct)!)}
           </span>
         )}
       </button>

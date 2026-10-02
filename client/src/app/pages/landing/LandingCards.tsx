@@ -16,7 +16,7 @@ import { useBet } from "../../context/BetContext";
 import type { BetLeg } from "../../types/bet";
 import { useI18n } from "../../i18n";
 import { toast } from "sonner";
-import { BookPricePill } from "../../components/BookPricePill";
+import { BookPricePill, FairOddsPill } from "../../components/BookPricePill";
 import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
 import { mlBundleKey } from "../prediction/gameMarkets";
 import { DisplayGame } from "./landingTypes";
@@ -238,6 +238,13 @@ export function LiveGameCard({ game }: { game: DisplayGame }) {
             market: t("handoff.mktWinner"), selection: t("home.evWinnerShort", { team: game.team2.abbr }),
           }} />
           {/* Moneyline is a universal betting term, kept as-is */}
+        </div>
+      ) : showPct && homePct != null && awayPct != null ? (
+        /* Pas de prix du livre : la cote juste du modèle, en gris (2026-10-02). */
+        <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
+          <FairOddsPill pct={homePct} title={t("home.oddsFairHint")} />
+          <span className="text-[11px] text-[#bfc8cc]">Moneyline</span>
+          <FairOddsPill pct={awayPct} title={t("home.oddsFairHint")} />
         </div>
       ) : null}
 
@@ -556,7 +563,11 @@ function PickCell({ game, pick, probability, team, label, short, children }: {
   );
 }
 
-export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOpenSheet: () => void }) {
+export function UpcomingGameRow({ game, onOpenSheet, showOdds = true }: {
+  game: DisplayGame; onOpenSheet: () => void;
+  /** `false` : pas de cote (match à plus de 2 jours, décision du user 2026-10-02). */
+  showOdds?: boolean;
+}) {
   const { theme } = useSport();
   const accent = theme.accent;
   const { t, lang } = useI18n();
@@ -623,7 +634,9 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
             {line > 0 ? "+1.5" : "−1.5"}
           </span>
           <MlPct value={pl} loading={mlLoading} />
-          {plPrice != null && <BookPricePill price={plPrice} link={false} />}
+          {showOdds && (plPrice != null
+            ? <BookPricePill price={plPrice} link={false} />
+            : <FairOddsPill pct={pl} title={t("home.oddsFairHint")} />)}
         </PickCell>
         {/* Vainqueur */}
         <PickCell
@@ -632,7 +645,9 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
           short={`${side.abbr} ML`}
         >
           <MlPct value={win} loading={mlLoading} />
-          {winPrice != null && <BookPricePill price={winPrice} link={false} />}
+          {showOdds && (winPrice != null
+            ? <BookPricePill price={winPrice} link={false} />
+            : <FairOddsPill pct={win} title={t("home.oddsFairHint")} />)}
         </PickCell>
       </>
     );

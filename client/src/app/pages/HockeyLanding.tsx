@@ -17,7 +17,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
-import { ChevronRight, CalendarDays, Gamepad2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays, Gamepad2 } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { ErrorState } from "../components/ErrorState";
@@ -126,6 +126,23 @@ export function HockeyLanding() {
   const [reloadKey, setReloadKey] = useState(0);
   const [upcomingLabel, setUpcomingLabel] = useState(() => t("home.tonightGames"));
 
+  /**
+   * Navigation par journée (demande du user, 2026-10-02) : deux flèches au
+   * titre des matchs à venir, jusqu'à J+7. La semaine arrive en UNE requête
+   * (`/games/range`) ; seules les journées qui ont des matchs sont des pas.
+   * Les prédictions ML ne sont calculées que pour la journée AFFICHÉE (un
+   * paquet ML par match, plafonné par `predictLimiter`), puis gardées.
+   */
+  type RawGame = Awaited<ReturnType<typeof nhlApiService.getLiveGames>>[number];
+  const [gameDays, setGameDays] = useState<{ offset: number; label: string; games: RawGame[] }[]>([]);
+  const [dayIdx, setDayIdx] = useState(0);
+  const [dayLoading, setDayLoading] = useState(false);
+  const displayCache = useRef(new Map<string, DisplayGame>());
+  const wantedDay = useRef(0);
+  /** Au-delà de J+2, pas de cote (demande du user, 2026-10-02). */
+  const dayOffset = gameDays[dayIdx]?.offset ?? 0;
+  const showOdds = dayOffset <= 2;
+
   // En-tête qui se réduit au défilement (2026-09-27). Ce n'est pas la fenêtre
   // qui défile mais le conteneur de `App.tsx` : on écoute donc TOUS les
   // défilements en phase de capture, et on ne garde que celui d'un ancêtre de
@@ -186,18 +203,20 @@ export function HockeyLanding() {
           return d !== 0 ? d : String(a.id).localeCompare(String(b.id));
         };
 
-        let scheduled: typeof live = [];
-        let label = t("home.tonightGames");
-        for (const { offset, d, dateStr } of days) {
-          scheduled = range.filter((g) =>
+        // Toutes les journées de la semaine qui ont des matchs ; la première
+        // est celle qu'on affiche d'abord (comme avant : ce soir, sinon la
+        // prochaine soirée de hockey).
+        const week = days.map(({ offset, d, dateStr }) => ({
+          offset,
+          label: offset === 0 ? t("home.tonightGames")
+            : offset === 1 ? t("home.tomorrowGames")
+            : t("home.gamesOn", { date: d.toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" }) }),
+          games: range.filter((g) =>
             String(g.gameDate ?? "").slice(0, 10) === dateStr &&
-            ["scheduled", "live", "preview"].includes(g.status)).sort(byFaceoff);
-          if (scheduled.length > 0) {
-            if (offset === 1) label = t("home.tomorrowGames");
-            else if (offset > 1) label = t("home.gamesOn", { date: d.toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" }) });
-            break;
-          }
-        }
+            ["scheduled", "live", "preview"].includes(g.status)).sort(byFaceoff),
+        })).filter((x) => x.games.length > 0);
+        const scheduled = week[0]?.games ?? [];
+        const label = week[0]?.label ?? t("home.tonightGames");
         // Un match EN DIRECT figure dans les deux listes (`scheduled` garde le
         // statut "live" exprès, pour la liste du soir). Ses deux prédictions
         // (`POST /predict/single` moneyline + total, non cacheables) partaient
@@ -212,6 +231,11 @@ export function HockeyLanding() {
           ),
         );
         if (cancelled) return;
+        displayCache.current = new Map(displayed);
+        setGameDays(week);
+        setDayIdx(0);
+        wantedDay.current = 0;
+        setDayLoading(false);
         setLiveGames(live.map((g) => displayed.get(g.id)!));
         setUpcomingGames(scheduled.map((g) => displayed.get(g.id)!));
         setUpcomingLabel(label);
@@ -228,6 +252,25 @@ export function HockeyLanding() {
     load();
     return () => { cancelled = true; };
   }, [lang, reloadKey]);
+
+  // Changer de journée : ses matchs, prédictions ML comprises (cache).
+  async function goToDay(idx: number) {
+    const target = gameDays[idx];
+    if (!target || idx === dayIdx) return;
+    wantedDay.current = idx;
+    setDayIdx(idx);
+    setUpcomingLabel(target.label);
+    const missing = target.games.filter((g) => !displayCache.current.has(g.id));
+    if (missing.length) {
+      setDayLoading(true);
+      const done = await Promise.all(missing.map(async (g) => [g.id, await toDisplayGame(g)] as const));
+      for (const [id, dg] of done) displayCache.current.set(id, dg);
+    }
+    // La journée a pu changer pendant le chargement : on ne montre que la dernière demandée.
+    if (wantedDay.current !== idx) return;
+    setUpcomingGames(target.games.map((g) => displayCache.current.get(g.id)!).filter(Boolean));
+    setDayLoading(false);
+  }
 
   function openGameSheet(gameId: string) {
     setAddSheet({ open: true, gameId });
@@ -270,9 +313,28 @@ export function HockeyLanding() {
             <section>
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-white text-sm font-bold uppercase tracking-wider">{upcomingLabel}</h2>
-                {loading && <div className="w-16 h-3 bg-white/5 rounded animate-pulse" />}
+                {loading ? <div className="w-16 h-3 bg-white/5 rounded animate-pulse" /> : gameDays.length > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => goToDay(dayIdx - 1)}
+                      disabled={dayIdx === 0}
+                      aria-label={t("home.prevDay")}
+                      className="tap-44 w-8 h-8 rounded-full border border-white/15 bg-white/[0.06] text-white flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <button
+                      onClick={() => goToDay(dayIdx + 1)}
+                      disabled={dayIdx >= gameDays.length - 1}
+                      aria-label={t("home.nextDay")}
+                      className="tap-44 w-8 h-8 rounded-full border border-white/15 bg-white/[0.06] text-white flex items-center justify-center active:scale-95 transition-transform disabled:opacity-30 disabled:active:scale-100"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                )}
               </div>
-              {loading ? (
+              {loading || dayLoading ? (
                 <div className="flex flex-col gap-2">
                   {[1, 2, 3].map((i) => <div key={i} className="h-20 icy-tile rounded-2xl animate-pulse" />)}
                 </div>
@@ -293,7 +355,7 @@ export function HockeyLanding() {
                         </h3>
                       )}
                       {items.map((g) => (
-                        <UpcomingGameRow key={g.id} game={g} onOpenSheet={() => openGameSheet(g.id)} />
+                        <UpcomingGameRow key={g.id} game={g} showOdds={showOdds} onOpenSheet={() => openGameSheet(g.id)} />
                       ))}
                     </div>
                   ))}
