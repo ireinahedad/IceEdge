@@ -240,6 +240,19 @@ recovered from Git) and checking each claim against the code and the Git log.
     `measure_returnee.py` (reports in `ml/models/`). `inference_state.json` regenerated (only additions).
   · **Stats pages**: Corsi % / Fenwick % 5v5 (teams: table, comparison, trends) and on-ice CF%/FF%
     (player pages), credited to MoneyPuck.
+- ✔ **ML refresh + moneyline correction layer** (2026-10-02, *not committed*):
+  · **`refresh_data.py`** (+ `ml/refresh-data.cmd`, weekly Windows task): NHL spine, MoneyPuck teams,
+    goalies/skaters of the CURRENT season only (season zip, fallback = per-player career files at
+    1 req/s — MoneyPuck answers 429 above), then `build_dataset.py`. Never touches `odds.csv`, no
+    retrain. Control: a rebuild on unchanged inputs reproduces `inference_state.json` and
+    `elo_ratings.json` byte for byte. Ran once: state and ELO now as of 2026-09-30 (were 2026-04-16).
+    `fetch_data_v4.LAST_SEASON` is computed instead of hard-coded 2025.
+  · **Correction layer** (`backtest_walkforward.py --correction`, criterion fixed before the run):
+    logistic on logit(p score model) + b2b, 5v5 xGF% short/long, lineup xG, star power, xG matchup,
+    ELO, fitted on past seasons only. Moneyline log-loss −0.0021 (z −3.2, 10/11 seasons) → ADOPTED;
+    gap to the closing line +0.0014 → −0.0004 (DraftKings 2024-26: +0.0025 → +0.0013). Control: the
+    slope-only variant reproduces `recal_report.json` exactly (needs xgboost 3.2.0). Served by
+    `ml_service` from `correction_layer.json`, **moneyline only** (puck line / totals unchanged).
 
 ---
 
@@ -351,6 +364,10 @@ recovered from Git) and checking each claim against the code and the Git log.
       The six `base_prob` markets are ~7 pts too low on clear favourites — do not bet on them.
 - [ ] A4 (goalie confirmation window) and A6 (team totals, OT, ±2.5) — after A1/A2.
 - [ ] Re-train monthly during the season.
+- [ ] **Weekly data refresh**: install the task once (`schtasks` line in `ml/refresh-data.cmd`), then
+      after each run commit + push `ml/models/inference_state.json` and `elo_ratings.json`.
+- [ ] Re-run `backtest_walkforward.py --correction --write-layer` after each retrain (the layer sits
+      on the score model's output; a new model needs a new layer).
 
 - [ ] **Live predictions — power play in progress** (not done, nothing invented): MoneyPuck shot files
       have no time-on-PP, so the PP multiplier cannot be measured from them. Needs penalties from the NHL

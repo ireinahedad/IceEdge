@@ -10,6 +10,7 @@ import { OddsFormatProvider } from "./context/OddsFormatContext";
 import { BlockProvider } from "./context/BlockContext";
 import { LanguageProvider } from "./i18n";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { BetHandoffHost } from "./components/BetHandoffSheet";
 
 function AppShell() {
   const { theme } = useSport();
@@ -31,6 +32,11 @@ function AppShell() {
           <RouterProvider router={router} />
         </ErrorBoundary>
       </div>
+
+      {/* « À chercher chez ton livre » : la fiche qui précède l'ouverture du
+          livre (voir components/BetHandoffSheet.tsx). Ici, sous tous les
+          providers, parce qu'elle lit le livre choisi ET le format de cote. */}
+      <BetHandoffHost />
 
       {/* Global toast notifications — success/error feedback across the app */}
       <Toaster

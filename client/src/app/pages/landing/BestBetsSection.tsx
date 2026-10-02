@@ -15,6 +15,7 @@ import { ProLock } from "../../components/ProLock";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { BookPricePill } from "../../components/BookPricePill";
+import { minOddsFromPct } from "../../context/BookmakerContext";
 
 
 // ─── Best Bets ─────────────────────────────────────────────────────────────────
@@ -138,7 +139,10 @@ function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource 
           <span className="text-[10px] font-medium ml-1">{t("home.chance")}</span>
         </div>
         {bet.bookPrice != null ? (
-          <span className="mt-0.5"><BookPricePill price={bet.bookPrice} /></span>
+          <span className="mt-0.5"><BookPricePill price={bet.bookPrice} ticket={{
+            match: bet.leg.gameInfo ?? bet.context, market: bet.leg.marketLabel, selection: bet.label,
+            minOdds: minOddsFromPct(displayPct),
+          }} /></span>
         ) : odds != null && (
           <span title={t("home.oddsFairHint")} className="text-[11px] text-[#bfc8cc] tabular-nums">
             {t("home.odds", { odds: odds.toFixed(2) })}

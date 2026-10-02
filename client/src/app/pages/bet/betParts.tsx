@@ -10,9 +10,8 @@ import { useState, useEffect, type CSSProperties, type Ref } from "react";
 import { Plus, X, Lock, ChevronRight, AlertCircle, Info, Radio } from "lucide-react";
 import type { BetLeg } from "../../types/bet";
 import type { SlipAnalysis } from "../../context/BetContext";
-import { openBet } from "../../services/bookmakers";
 import { features } from "../../platform";
-import { useBookmaker } from "../../context/BookmakerContext";
+import { useBookmaker, minOddsFromPct } from "../../context/BookmakerContext";
 import { useOddsFormat } from "../../context/OddsFormatContext";
 import { useI18n } from "../../i18n";
 import { SlipCommandLauncher } from "../../components/SlipCommandSheet";
@@ -237,9 +236,18 @@ export function LegCard({ leg, index, onRemove, bookPrice, started }: {
   started?: boolean;
 }) {
   const { t } = useI18n();
-  const { bookmaker } = useBookmaker();
+  const { bookmaker, openBetFor } = useBookmaker();
   const { odds } = useOddsFormat();
   const barColor = PROB_COLOR;
+  // Ce qu'il faut chercher chez son livre (2026-10-02) : Bet365 n'ouvre pas un
+  // pari précis. Match commencé → pas de cote minimale, notre % est d'avant-match.
+  const goBet = () => openBetFor({
+    match: leg.gameInfo ?? leg.subjectName,
+    market: leg.marketLabel,
+    selection: leg.selection,
+    minOdds: started ? null : minOddsFromPct(leg.probability),
+    shownPrice: bookPrice ?? null,
+  });
 
   return (
     <div className="icy-card rounded-2xl p-4" style={started ? { boxShadow: "inset 0 0 0 1px #facc1560" } : undefined}>
@@ -304,7 +312,7 @@ export function LegCard({ leg, index, onRemove, bookPrice, started }: {
           {features.bookmakerLinks && (
             <div className="mt-2 flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => openBet("hockey")}
+              onClick={goBet}
               // Couleurs du livre choisi (services/bookmakers.ts). Le survol passe
               // par une variable CSS : une couleur inline ne peut pas porter `:hover`.
               className="inline-flex items-center gap-1.5 bg-[var(--book-bg)] hover:bg-[var(--book-bg-hover)] text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-colors"

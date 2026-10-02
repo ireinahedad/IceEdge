@@ -227,9 +227,16 @@ export function LiveGameCard({ game }: { game: DisplayGame }) {
       {/* Ligne des vrais prix — seulement quand le livre en propose */}
       {game.bookHome && game.bookAway ? (
         <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
-          <BookPricePill price={game.bookHome} />
+          {/* Match EN DIRECT : pas de cote minimale, notre % est d'avant-match. */}
+          <BookPricePill price={game.bookHome} ticket={{
+            match: `${game.team2.abbr} @ ${game.team1.abbr}`, when: game.period ?? null,
+            market: t("handoff.mktWinner"), selection: t("home.evWinnerShort", { team: game.team1.abbr }),
+          }} />
           <span className="text-[11px] text-[#bfc8cc]">Moneyline</span>
-          <BookPricePill price={game.bookAway} />
+          <BookPricePill price={game.bookAway} ticket={{
+            match: `${game.team2.abbr} @ ${game.team1.abbr}`, when: game.period ?? null,
+            market: t("handoff.mktWinner"), selection: t("home.evWinnerShort", { team: game.team2.abbr }),
+          }} />
           {/* Moneyline is a universal betting term, kept as-is */}
         </div>
       ) : null}

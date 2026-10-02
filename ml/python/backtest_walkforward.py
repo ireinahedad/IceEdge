@@ -3574,6 +3574,164 @@ def run_recal(df, seasons, search_trials: int, use_cache: bool = True):
     return out
 
 
+
+# ── Couche de correction au-dessus du modèle, walk-forward STRICT (2026-10-02) ─
+#
+# `--market-gap` a mesuré, en « une saison laissée de côté » (donc en
+# s'entraînant aussi sur des saisons FUTURES), qu'une régression logistique
+# posée sur logit(p_modèle) + quelques features rattrapait le marché :
+# log-loss 0,66869 → 0,66620 (marché 0,66675). Ce mode refait la mesure sans
+# regarder l'avenir : pour chaque saison S, la couche est ajustée sur les
+# prédictions hors échantillon des saisons < S (au moins RECAL_MIN_SEASONS),
+# puis appliquée à S. Trois variantes :
+#   R = recalibration seule (logit p) — doit REPRODUIRE `recal_report.json`,
+#       c'est le contrôle de la manip ;
+#   C = recalibration + CORRECTION_FEATURES ;
+#   B = C sans `elo_diff` (le modèle de score lit déjà l'ELO).
+# Les features sont celles que `--market-gap` (2026-10-01) classait « piste »
+# ou mieux (|z| >= 2) ; standardisées avec les moyennes / écarts-types du
+# PASSÉ du fold, NaN → 0 (la moyenne).
+# Critère fixé AVANT le run : log-loss moneyline z <= −2 (apparié, par match)
+# ET gain sur >= 70 % des saisons — le même que `--recal`. Avec le biais de
+# sélection des features (choisies sur ces mêmes saisons par `--market-gap`),
+# un résultat juste au seuil ne suffira pas : regarder aussi l'erreur-type
+# calculée sur les moyennes de saison.
+# Même adoptée, la couche ne toucherait que la victoire (moneyline) : puck line
+# et totaux sortent de la distribution des buts, qu'elle ne modifie pas.
+
+CORRECTION_FEATURES = ["b2b_diff", "ev_xgf_pct_s_diff", "ev_xgf_pct_l_diff",
+                       "lineup_xg_diff", "star_power_diff", "xg_matchup_diff", "elo_diff"]
+CORRECTION_REPORT = f"{MODELS}/correction_report.json"
+CORRECTION_LAYER = f"{MODELS}/correction_layer.json"
+
+
+def _correction_X(frame: pd.DataFrame, cols: list) -> np.ndarray:
+    f = frame.copy()
+    if "lineup_xg_diff" in cols and "lineup_xg_diff" not in f:
+        f["lineup_xg_diff"] = f["home_lineup_xg"] - f["away_lineup_xg"]
+    return np.column_stack([f[c].astype(float).to_numpy() for c in cols])
+
+
+def run_correction(df, seasons, search_trials: int, use_cache: bool = True):
+    need = ["home_reg_score", "away_reg_score", "went_to_ot", "total_goals"]
+    atk, dfn = list(TS.ATK_COLS), list(TS.DEF_COLS)
+    base = base_score_params(search_trials)
+    P = {}
+    for s in seasons:
+        prior = df[df["season"] < s].dropna(subset=need).reset_index(drop=True)
+        cur = df[df["season"] == s].dropna(subset=need).reset_index(drop=True)
+        if len(cur) < 50 or len(prior) < 800:
+            continue
+        cut_p = int(len(prior) * 0.85)
+        params = search_params_fold(prior.iloc[:cut_p].reset_index(drop=True),
+                                    TS.stacked_features(atk, dfn), base, search_trials,
+                                    seed=42, season=s, use_cache=use_cache,
+                                    atk=atk, dfn=dfn)
+        r = _eval_v2(prior, cur, atk, dfn, params, use_gamma=False)
+        P[s] = {"p": np.asarray(r["p_ml"], float), "y": cur["home_win"].to_numpy(float),
+                "X": _correction_X(cur, CORRECTION_FEATURES),
+                "pk": cur["market_home_p_close"].to_numpy(float)
+                      if "market_home_p_close" in cur else np.full(len(cur), np.nan),
+                "src": (cur["source"].fillna("sbro").astype(str).to_numpy()
+                        if "source" in cur else np.full(len(cur), "sbro"))}
+        print(f"   {s}-{str(s + 1)[2:]:<2} {len(cur):>6} matchs predits")
+
+    ll = lambda y, p: -(y * np.log(np.clip(p, 1e-6, 1)) + (1 - y) * np.log(np.clip(1 - p, 1e-6, 1)))
+    variants = {"R": [], "C": list(range(len(CORRECTION_FEATURES))),
+                "B": [i for i, c in enumerate(CORRECTION_FEATURES) if c != "elo_diff"]}
+    ks = sorted(P)
+    D = {v: [] for v in variants}
+    S_lab, by_season, coefs = [], [], {}
+    mkt = {"raw": [], **{v: [] for v in variants}}
+    mkt_src = []
+    for i, s in enumerate(ks):
+        past = ks[:i]
+        if len(past) < RECAL_MIN_SEASONS:
+            continue
+        y_tr = np.concatenate([P[x]["y"] for x in past])
+        lp_tr = _logit(np.concatenate([P[x]["p"] for x in past]))
+        X_tr_all = np.concatenate([P[x]["X"] for x in past])
+        mu, sd = np.nanmean(X_tr_all, axis=0), np.nanstd(X_tr_all, axis=0)
+        sd[sd == 0] = 1.0
+        std = lambda X: np.nan_to_num((X - mu) / sd, nan=0.0)
+        y, p = P[s]["y"], P[s]["p"]
+        lp = _logit(p)
+        row = {"season": int(s), "n": int(len(y)), "ll_raw": round(float(ll(y, p).mean()), 5)}
+        has_mkt = np.isfinite(P[s]["pk"])
+        if has_mkt.any():
+            mkt["raw"].append(ll(y, p)[has_mkt] - ll(y, P[s]["pk"])[has_mkt])
+            mkt_src.append(P[s]["src"][has_mkt])
+        for v, idx in variants.items():
+            Xtr = np.column_stack([lp_tr] + ([std(X_tr_all)[:, idx]] if idx else []))
+            Xte = np.column_stack([lp] + ([std(P[s]["X"])[:, idx]] if idx else []))
+            b, _ = _logistic_offset(y_tr, Xtr, np.zeros(len(y_tr)))
+            p2 = 1 / (1 + np.exp(-(b[0] + Xte @ b[1:])))
+            D[v].append(ll(y, p2) - ll(y, p))
+            row[f"ll_{v}"] = round(float(ll(y, p2).mean()), 5)
+            if has_mkt.any():
+                mkt[v].append(ll(y, p2)[has_mkt] - ll(y, P[s]["pk"])[has_mkt])
+            coefs[v] = [round(float(x), 4) for x in b]      # dernier fold = le plus d'historique
+        S_lab.append(np.full(len(y), s))
+        by_season.append(row)
+        print(f"   {s}-{str(s + 1)[2:]:<2} {len(y):>6}  brut {row['ll_raw']:.5f}  "
+              + "  ".join(f"{v} {row[f'll_{v}']:.5f}" for v in variants))
+
+    S_all = np.concatenate(S_lab)
+    out = {"protocol": {
+        "fit": f"logistique sur les saisons < S (au moins {RECAL_MIN_SEASONS}), appliquee a S",
+        "features": CORRECTION_FEATURES,
+        "variants": {"R": "recalibration seule (controle : doit reproduire recal_report.json)",
+                     "C": "recalibration + features", "B": "C sans elo_diff"},
+        "adopt_if": "log-loss moneyline z <= -2 (apparie, par match) ET gain sur >= 70 % des saisons"},
+        "by_season": by_season, "variants": {}, "vs_market": {},
+        "coefficients_last_fold": {"order": ["const", "logit_p"] + CORRECTION_FEATURES, **coefs}}
+    for v in variants:
+        d = np.concatenate(D[v])
+        pr = _paired(d)
+        means = np.array([d[S_all == x].mean() for x in np.unique(S_all)])
+        better = [int(x) for x in np.unique(S_all) if d[S_all == x].mean() < 0]
+        share = len(better) / len(np.unique(S_all))
+        se_seasons = float(means.std(ddof=1) / np.sqrt(len(means)))
+        verdict = ("ADOPTER" if pr["z"] <= -2 and share >= RECENCY_SEASON_SHARE
+                   else "PIRE" if pr["z"] >= 2 else "NON TRANCHABLE")
+        out["variants"][v] = {**pr, "z_seasons": round(float(d.mean()) / se_seasons, 2),
+                              "seasons_better": better, "share_seasons_better": round(share, 3),
+                              "verdict": verdict}
+        print(f"\n   {v} - brut : {pr['delta']:+.5f} (z {pr['z']:+.2f} par match, "
+              f"{float(d.mean()) / se_seasons:+.2f} par saison), "
+              f"{len(better)}/{len(np.unique(S_all))} saisons -> {verdict}")
+    if mkt["raw"]:
+        src_all = np.concatenate(mkt_src)
+        print("\n   Ecart au marche (LL - LL marche, POSITIF = le marche fait mieux), matchs cotes :")
+        for k, parts in mkt.items():
+            d = np.concatenate(parts)
+            out["vs_market"][k] = {"tout": _paired(d),
+                                   **{src: _paired(d[src_all == src]) for src in np.unique(src_all)}}
+            print(f"   {k:<4} " + "   ".join(f"{name} {r['n']:>6} {r['delta']:>+9.5f} (z {r['z']:+.2f})"
+                                            for name, r in out["vs_market"][k].items()))
+
+    # ── La couche à servir : ajustée sur TOUTES les saisons prédites ─────────
+    # Mêmes prédictions hors échantillon que ci-dessus, aucune saison exclue :
+    # c'est l'équivalent, pour la couche, de l'entraînement final d'un modèle.
+    y_all = np.concatenate([P[x]["y"] for x in ks])
+    lp_all = _logit(np.concatenate([P[x]["p"] for x in ks]))
+    X_all = np.concatenate([P[x]["X"] for x in ks])
+    mu, sd = np.nanmean(X_all, axis=0), np.nanstd(X_all, axis=0)
+    sd[sd == 0] = 1.0
+    b, se = _logistic_offset(y_all, np.column_stack([lp_all, np.nan_to_num((X_all - mu) / sd, nan=0.0)]),
+                             np.zeros(len(y_all)))
+    out["layer"] = {"features": CORRECTION_FEATURES, "mean": [round(float(x), 6) for x in mu],
+                    "std": [round(float(x), 6) for x in sd], "intercept": round(float(b[0]), 6),
+                    "coef_logit_p": round(float(b[1]), 6),
+                    "coef": [round(float(x), 6) for x in b[2:]],
+                    "z": [round(float(x / e), 2) for x, e in zip(b[1:], se[1:])],
+                    "n_games": int(len(y_all)), "seasons": [int(x) for x in ks]}
+    print("\n   Couche finale (toutes saisons) : const %+.4f, logit p x%.4f" % (b[0], b[1]))
+    for c, x, e in zip(CORRECTION_FEATURES, b[2:], se[2:]):
+        print(f"     {c:<20} {x:+.4f}  (z {x / e:+.2f})")
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--min-season", type=int, default=2012)
@@ -3652,6 +3810,13 @@ def main():
                     help="Recalibration de la pente du moneyline, ajustee sur les "
                          "saisons passees seulement (walk-forward strict). "
                          "N'ecrit qu'un rapport")
+    ap.add_argument("--correction", action="store_true",
+                    help="Couche de correction (logit p + features de --market-gap) "
+                         "au-dessus du modele de score, walk-forward strict. "
+                         "N'ecrit qu'un rapport, sauf avec --write-layer")
+    ap.add_argument("--write-layer", action="store_true",
+                    help="Avec --correction : ecrit aussi correction_layer.json (la "
+                         "couche servie par ml_service), SEULEMENT si le verdict est ADOPTER")
     ap.add_argument("--no-param-cache", action="store_true",
                     help="Ignore le cache des hyperparamètres par fold "
                          "(fold_params_cache.json)")
@@ -3663,6 +3828,29 @@ def main():
     # A5 ne regarde que la qualité des λ — aucun prix n'intervient. Il passe donc
     # AVANT le garde sur les cotes, sinon un dataset sans cotes interdirait une
     # mesure qui n'en a pas besoin.
+    if args.correction:
+        cseasons = [s for s in sorted(df["season"].unique())
+                    if s >= args.min_season and (df["season"] < s).sum() >= 800
+                    and df.loc[df["season"] == s, "home_reg_score"].notna().sum() >= 50]
+        print(f"   Couche de correction — {len(cseasons)} saisons predites")
+        res = run_correction(df, cseasons, args.search_trials,
+                             use_cache=not args.no_param_cache)
+        if res:
+            with open(CORRECTION_REPORT, "w", encoding="utf-8") as fh:
+                json.dump(res, fh, indent=2)
+            print(f"\nOK {CORRECTION_REPORT.split('/')[-1]} -> {MODELS}/")
+            if args.write_layer:
+                if res["variants"]["C"]["verdict"] != "ADOPTER":
+                    print("   couche NON ecrite : le verdict de C n'est pas ADOPTER")
+                else:
+                    with open(CORRECTION_LAYER, "w", encoding="utf-8") as fh:
+                        json.dump({**res["layer"], "variant": "C",
+                                   "measured": {k: res["variants"]["C"][k] for k in
+                                                ("delta", "z", "z_seasons", "share_seasons_better")}},
+                                  fh, indent=2)
+                    print(f"OK {CORRECTION_LAYER.split('/')[-1]} -> {MODELS}/ (servie par ml_service)")
+        return
+
     if args.recal:
         rseasons = [s for s in sorted(df["season"].unique())
                     if s >= args.min_season and (df["season"] < s).sum() >= 800

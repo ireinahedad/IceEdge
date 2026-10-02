@@ -8,7 +8,9 @@
  *     La source est dite UNE fois, dans les Réglages (« Cotes affichées »),
  *     pas sur chaque pastille.
  *   • Le toucher ouvre le livre CHOISI dans les Réglages (Bet365 ou Stake), même
- *     si sa cote diffère : `openBet` lit ce choix au moment du clic.
+ *     si sa cote diffère : `openBet` lit ce choix au moment du clic. Avec un
+ *     `ticket`, la fiche « à chercher sur Bet365 » (match, marché, cote
+ *     minimale) passe d'abord — Bet365 n'ouvre pas un pari précis (2026-10-02).
  *   • Le prix suit le format des Réglages (`useOddsFormat`) — c'est un prix de
  *     livre, pas une probabilité du modèle (voir `services/oddsFormat.ts`).
  *
@@ -17,7 +19,7 @@
  */
 
 import { useOddsFormat } from "../context/OddsFormatContext";
-import { openBet } from "../services/bookmakers";
+import { useBookmaker, type BetTicket } from "../context/BookmakerContext";
 import { features } from "../platform";
 
 /**
@@ -25,8 +27,13 @@ import { features } from "../platform";
  * l'accueil (2026-09-28), où toute la case ajoute au coupon — décision du
  * user : là, le toucher sur la cote ajoute le pari au lieu d'ouvrir le livre.
  */
-export function BookPricePill({ price, size = "sm", link = true }: { price: number; size?: "sm" | "md"; link?: boolean }) {
+export function BookPricePill({ price, size = "sm", link = true, ticket }: {
+  price: number; size?: "sm" | "md"; link?: boolean;
+  /** Ce qu'il faut chercher chez son livre — la fiche s'ouvre avant le livre (2026-10-02). */
+  ticket?: BetTicket;
+}) {
   const { odds } = useOddsFormat();
+  const { openBetFor } = useBookmaker();
   const text = size === "md" ? "text-sm" : "text-[11px]";
   const inner = (
     <span className={`${text} font-bold text-green-400 tabular-nums`}>{odds(price)}</span>
@@ -37,7 +44,7 @@ export function BookPricePill({ price, size = "sm", link = true }: { price: numb
   return (
     <button
       type="button"
-      onClick={(e) => { e.stopPropagation(); openBet("hockey"); }}
+      onClick={(e) => { e.stopPropagation(); openBetFor(ticket ? { shownPrice: price, ...ticket } : null); }}
       className={`${cls} active:bg-green-500/20 transition-colors`}
     >
       {inner}

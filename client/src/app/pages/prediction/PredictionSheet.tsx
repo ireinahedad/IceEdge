@@ -23,7 +23,7 @@ import { blendFactors, getFamilyWeights } from "../../services/ruleWeightsServic
 import { BetOddsCtx, GameLiveCtx, RevealModeCtx } from "./predictionShared";
 import { priceForBet } from "../../services/gameOdds";
 import { useOddsFormat } from "../../context/OddsFormatContext";
-import { openBet } from "../../services/bookmakers";
+import { useBookmaker, minOddsFromPct } from "../../context/BookmakerContext";
 import { features } from "../../platform";
 
 import { Check } from "lucide-react";
@@ -167,6 +167,24 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
     });
     return typeof p === "number" && Number.isFinite(p) ? Math.round(p) : null;
   }
+  // Avant d'ouvrir le livre : la fiche « à chercher chez ton livre »
+  // (2026-10-02). Cote minimale tirée du chiffre ML (celui du coupon), repli
+  // sur le chiffre affiché ; aucune pendant un match, notre % est d'avant-match.
+  const { openBetFor } = useBookmaker();
+  async function goBet() {
+    const pct = gameLive ? null : ((await resolveMlPct().catch(() => null)) ?? legPct);
+    const team = (mlProps?.type === "player" ? mlProps.teamAbbr : mlProps?.subjectId)?.toUpperCase();
+    const opp = mlProps?.opponentId?.toUpperCase();
+    const isPlayer = mlProps?.type === "player";
+    openBetFor({
+      match: team && opp ? (mlProps?.isHome === false ? `${team} @ ${opp}` : `${opp} @ ${team}`) : label,
+      selection: isPlayer && mlProps?.playerName && !label.startsWith(mlProps.playerName)
+        ? `${mlProps.playerName} · ${label}` : label,
+      minOdds: minOddsFromPct(pct),
+      shownPrice: bookPrice ?? null,
+      shownBook: bookTitle ?? null,
+    });
+  }
   const mlPctText = (p: number | null, isFr: boolean) =>
     p != null ? `${p}%` : (isFr ? "indisponible" : "unavailable");
 
@@ -303,7 +321,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
           <button
             type="button"
             disabled={!features.bookmakerLinks}
-            onClick={() => openBet("hockey")}
+            onClick={goBet}
             className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-[#4ade80]/25 bg-[#4ade80]/[0.07] active:bg-[#4ade80]/15 transition-colors disabled:active:bg-[#4ade80]/[0.07]"
           >
             <span className="text-[#4ade80] text-[11px] font-semibold uppercase tracking-wider">

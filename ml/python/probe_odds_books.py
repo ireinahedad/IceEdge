@@ -14,6 +14,7 @@ Usage (cmd.exe) :
     set ODDS_API_KEY=ta-cle
     cd ml\\python && python probe_odds_books.py            (region ca)
     python probe_odds_books.py --regions ca --dates 2023-11-15,2024-11-15
+    python probe_odds_books.py --links       (liens directs par livre, 2 credits)
 
 Aucun fichier n'est ecrit. Sortie en ASCII seulement : la console Windows est
 en cp1252 et un emoji y fait planter print().
@@ -135,6 +136,62 @@ def probe_event(key: str, books: str, markets: str, lead_h: float = 2.0) -> None
           f"regions facturees : {regions}   "
           f"cout estime : {len(matrix) * regions} credits")
 
+
+def probe_links(key: str, books: str) -> None:
+    """Quels livres renvoient un LIEN vers le match / le marche / le coupon ?
+
+    `includeLinks=true` + `includeSids=true` sur l'endpoint de la ligue :
+    l'API ajoute, quand le livre les fournit, `link` (et `sid`) au niveau du
+    livre (page du match), du marche et de l'issue (souvent un coupon deja
+    rempli). Cout : h2h + spreads, une region (10 livres max) -> 2 credits.
+    Bet365 n'est PAS dans la liste : The Odds API ne le cote pas en NHL, il ne
+    renverrait rien (voir l'en-tete de ce fichier).
+    """
+    data = _oddsapi_get(f"/sports/{ODDS_API_SPORT}/odds",
+                        {"bookmakers": books, "markets": "h2h,spreads",
+                         "oddsFormat": "decimal",
+                         "includeLinks": "true", "includeSids": "true"}, key)
+    if data is None:
+        print("\nReponse vide : l'API a refuse la requete (HTTP 422 = parametre "
+              "includeLinks/includeSids non accepte par ce plan ?).")
+        return
+    events = data if isinstance(data, list) else []
+    now = datetime.now(timezone.utc)
+    events = [e for e in events
+              if e.get("commence_time") and _ts(e["commence_time"]) > now]
+    print(f"\nLIENS : {len(events)} matchs a venir")
+    if not events:
+        return
+    stats = defaultdict(lambda: {"ev": 0, "evlink": 0, "mklink": 0, "outlink": 0, "sid": 0})
+    sample = {}
+    for ev in events:
+        for bk in ev.get("bookmakers") or []:
+            st = stats[bk["key"]]
+            st["ev"] += 1
+            if bk.get("link"):
+                st["evlink"] += 1
+            if bk.get("sid"):
+                st["sid"] += 1
+            for m in bk.get("markets") or []:
+                if m.get("link"):
+                    st["mklink"] += 1
+                for o in m.get("outcomes") or []:
+                    if o.get("link"):
+                        st["outlink"] += 1
+                        sample.setdefault(bk["key"], (ev.get("away_team"), ev.get("home_team"),
+                                                      m.get("key"), o.get("name"), o.get("link")))
+            if bk["key"] not in sample and bk.get("link"):
+                sample[bk["key"]] = (ev.get("away_team"), ev.get("home_team"), "match", "-", bk["link"])
+    print(f"   {'livre':<18} {'matchs':>6} {'lien match':>10} {'lien marche':>11} {'lien issue':>10} {'sid':>5}")
+    for b, st in sorted(stats.items(), key=lambda x: -x[1]["outlink"]):
+        print(f"   {b:<18} {st['ev']:>6} {st['evlink']:>10} {st['mklink']:>11} {st['outlink']:>10} {st['sid']:>5}")
+    for b in [x.strip() for x in books.split(",") if x.strip()]:
+        if b not in stats:
+            print(f"   {b:<18} aucun prix sur ces matchs")
+    print("\nExemple de lien par livre (a ouvrir dans le navigateur) :")
+    for b, (away, home, mk, name, link) in sample.items():
+        print(f"   {b}: {away} @ {home} [{mk} / {name}]\n      {link}")
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--regions", default="ca")
@@ -146,6 +203,9 @@ def main() -> None:
     p.add_argument("--books", default="betano_ca_on,playnow_ca,bet99_ca_on")
     p.add_argument("--lead", type=float, default=2.0,
                        help="--event : heures minimum avant la mise au jeu")
+    p.add_argument("--links", action="store_true",
+                   help="Quels livres renvoient des liens directs (match, marche, "
+                        "coupon) ? Livres de --wide, h2h+spreads : 2 credits")
     p.add_argument("--markets", default=EXTRA_MARKETS)
     p.add_argument("--props", action="store_true",
                    help="--event : ajoute les props joueurs NHL a --markets")
@@ -163,6 +223,10 @@ def main() -> None:
     if not key:
         return
     try:
+        if a.links:
+            probe_links(key, WIDE_BOOKS)
+            print(f"\nCredits restants : {getattr(_oddsapi_get, 'remaining', '?')}")
+            return
         if a.event:
             probe_event(key, a.books, a.markets, a.lead)
             print(f"\nCredits restants : {getattr(_oddsapi_get, 'remaining', '?')}")

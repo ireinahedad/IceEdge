@@ -71,7 +71,11 @@ SESSION.headers.update({
 })
 
 FIRST_SEASON = 2008          # 2008-09 — début de la couverture MoneyPuck fiable
-LAST_SEASON  = 2025          # 2025-26 (saison en cours)
+# Saison EN COURS, calculée (août → année courante). Elle valait 2025 en dur :
+# la saison 2026-27 commencée, ses zips de gardiens et de patineurs n'étaient
+# plus demandés. En cours de saison, préférer `refresh_data.py` (incrémental).
+_now = time.gmtime()
+LAST_SEASON  = _now.tm_year if _now.tm_mon >= 8 else _now.tm_year - 1
 
 # Continuité des franchises (ELO + rolling stats suivent la franchise)
 FRANCHISE_MAP = {"ATL": "WPG", "PHX": "ARI", "ARI": "UTA", "L.A": "LAK", "S.J": "SJS",

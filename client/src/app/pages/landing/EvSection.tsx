@@ -24,7 +24,10 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Zap, Settings, Lightbulb } from "lucide-react";
 import { ErrorState } from "../../components/ErrorState";
+import { useMinOddsText } from "../../components/BetHandoffSheet";
+import { useBookmaker } from "../../context/BookmakerContext";
 import { useOddsFormat } from "../../context/OddsFormatContext";
+import { features } from "../../platform";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { useI18n } from "../../i18n";
 import { predictionApiService, type ApiValueBet } from "../../services/predictionApiService";
@@ -56,16 +59,20 @@ function lineLabel(line: number | null): string {
  * modèle contre celle du livre, marge retirée. L'écart affiché est la
  * différence des deux pourcentages ARRONDIS, pour que la ligne se relise juste.
  */
-export function EvRow({ item }: { item: EvRowItem }) {
+export function EvRow({ item, onOpen }: { item: EvRowItem; onOpen?: () => void }) {
   const { t } = useI18n();
   const { odds } = useOddsFormat();
+  const minOddsText = useMinOddsText();
   const model = Math.round(item.modelProb * 100);
   const book = Math.round(item.marketProb * 100);
-  const label = item.market === "puck_line"
-    ? `${item.team} ${lineLabel(item.line)} vs ${item.opponent}`
-    : t("home.evWinner", { team: item.team, opp: item.opponent });
+  const label = evLabel(item, t);
+  // Toucher la ligne = « à chercher chez ton livre » (2026-10-02). Sans
+  // `onOpen` (exemples floutés, iOS), la ligne n'est qu'un affichage.
+  const Tag = onOpen ? "button" : "div";
   return (
-    <div className="flex items-center gap-2.5 icy-card rounded-xl px-2.5 py-2">
+    <Tag
+      {...(onOpen ? { type: "button" as const, onClick: onOpen } : {})}
+      className="w-full text-left flex items-center gap-2.5 icy-card rounded-xl px-2.5 py-2 active:scale-[0.99] transition-transform">
       <img src={nhlLogoUrl(item.team)} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="text-white text-[11px] font-medium truncate">{label}</div>
@@ -75,7 +82,7 @@ export function EvRow({ item }: { item: EvRowItem }) {
         {/* Sa propre ligne : c'est elle qu'on lit chez SON livre, elle ne doit
             jamais être coupée par l'ellipse à 390 px. */}
         <div className="text-[#bfc8cc] text-[11px] truncate">
-          {t("home.evMinOdds", { min: odds(item.minOdds) })}
+          {minOddsText(item.minOdds)}
         </div>
       </div>
       <div className="text-right flex-shrink-0">
@@ -84,8 +91,15 @@ export function EvRow({ item }: { item: EvRowItem }) {
           {t("home.evVs", { model, book })}
         </div>
       </div>
-    </div>
+    </Tag>
   );
+}
+
+/** « MTL −1.5 vs TOR » ou « TOR gagne vs MTL ». */
+function evLabel(item: EvRowItem, t: ReturnType<typeof useI18n>["t"]): string {
+  return item.market === "puck_line"
+    ? `${item.team} ${lineLabel(item.line)} vs ${item.opponent}`
+    : t("home.evWinner", { team: item.team, opp: item.opponent });
 }
 
 /** Nombre de lignes affichées : les plus gros écarts d'abord (tri du serveur). */
@@ -93,9 +107,26 @@ const MAX_ROWS = 6;
 
 /** Section Value bets — rendue pour les abonnés Pro seulement (`HockeyLanding`). */
 export function EvSection({ accent }: { accent: string }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const navigate = useNavigate();
+  const { openBetFor } = useBookmaker();
   const [items, setItems] = useState<ApiValueBet[] | null>(null);
+
+  /** Le ticket de la fiche « à chercher chez ton livre ». */
+  const openFor = (b: ApiValueBet) => {
+    const start = b.startTimeUTC ? new Date(b.startTimeUTC) : null;
+    openBetFor({
+      match: b.isHome ? `${b.opponent} @ ${b.team}` : `${b.team} @ ${b.opponent}`,
+      when: start && !Number.isNaN(start.getTime())
+        ? start.toLocaleTimeString(lang === "fr" ? "fr-CA" : "en-US", { hour: "numeric", minute: "2-digit" })
+        : null,
+      market: t(b.market === "puck_line" ? "handoff.mktPuck" : "handoff.mktWinner"),
+      selection: b.market === "puck_line" ? `${b.team} ${lineLabel(b.line)}` : t("home.evWinnerShort", { team: b.team }),
+      minOdds: b.minOdds,
+      shownPrice: b.price,
+      shownBook: b.bookTitle,
+    });
+  };
   const [error, setError] = useState<unknown>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -151,7 +182,9 @@ export function EvSection({ accent }: { accent: string }) {
       ) : items.length === 0 ? (
         <div className="py-6 text-center text-[#bfc8cc] text-xs">{t("home.evEmpty")}</div>
       ) : (
-        <div className="flex flex-col gap-1.5">{items.map((i) => <EvRow key={i.id} item={i} />)}</div>
+        <div className="flex flex-col gap-1.5">{items.map((i) => (
+          <EvRow key={i.id} item={i} onOpen={features.bookmakerLinks ? () => openFor(i) : undefined} />
+        ))}</div>
       )}
     </section>
   );

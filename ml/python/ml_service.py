@@ -592,6 +592,66 @@ def _load_player_model() -> None:
 
 _load_player_model()
 
+
+# ── Couche de correction du moneyline (2026-10-02) ───────────────────────────
+#
+# Une régression logistique posée SUR la victoire du modèle de score :
+#     logit p' = c0 + c1·logit p + Σ coef_i · (x_i − moyenne_i) / écart-type_i
+# avec x = b2b_diff, ev_xgf_pct_s/l_diff, lineup_xg_diff, star_power_diff,
+# xg_matchup_diff, elo_diff — ce que le marché exploitait mieux que le modèle
+# (`backtest_walkforward.py --market-gap`). Mesurée en walk-forward STRICT
+# (`--correction`, ajustée sur les saisons passées seulement, 11 saisons) :
+# log-loss moneyline −0,0021 (z −3,2, meilleure sur 10 saisons sur 11), écart à
+# la cote de clôture ramené de +0,0014 à −0,0004. Critère fixé avant le run.
+# Écrite par `--correction --write-layer` seulement si le verdict est ADOPTER.
+#
+# Elle ne touche QUE la victoire (marché `moneyline`). Puck line, totaux et le
+# reste sortent de la distribution des buts, qu'elle ne modifie pas.
+# Absente ou illisible → la victoire du modèle de score, comme avant.
+_corr_layer: dict | None = None
+
+
+def _load_correction_layer() -> None:
+    global _corr_layer
+    path = os.path.join(MODELS_DIR, "correction_layer.json")
+    if not os.path.exists(path):
+        print("[ML] ℹ️  Pas de couche de correction du moneyline")
+        return
+    try:
+        with open(path, encoding="utf-8") as fh:
+            layer = json.load(fh)
+        n = len(layer["features"])
+        if not (len(layer["mean"]) == len(layer["std"]) == len(layer["coef"]) == n):
+            raise ValueError("dimensions incohérentes")
+        if not all(math.isfinite(float(x)) for x in
+                   [layer["intercept"], layer["coef_logit_p"], *layer["coef"], *layer["mean"], *layer["std"]]):
+            raise ValueError("coefficients non finis")
+        _corr_layer = layer
+        print(f"[ML] ✅ Couche de correction du moneyline — {n} features, "
+              f"logit p ×{float(layer['coef_logit_p']):.3f}")
+    except Exception as e:
+        _corr_layer = None
+        print(f"[ML] ⚠️  correction_layer.json illisible : {e} — victoire du modèle de score servie")
+
+
+def _apply_correction(p_home: float, feat_values: dict) -> float | None:
+    """P(victoire domicile) corrigée, ou None sans couche. Une feature absente
+    vaut sa moyenne (contribution nulle), comme à l'ajustement (NaN → 0)."""
+    if _corr_layer is None or p_home is None:
+        return None
+    p = min(max(float(p_home), 1e-6), 1 - 1e-6)
+    z = float(_corr_layer["intercept"]) + float(_corr_layer["coef_logit_p"]) * math.log(p / (1 - p))
+    for name, mu, sd, c in zip(_corr_layer["features"], _corr_layer["mean"],
+                               _corr_layer["std"], _corr_layer["coef"]):
+        x = feat_values.get(name)
+        if x is None or not math.isfinite(float(x)) or not sd:
+            continue
+        z += float(c) * (float(x) - float(mu)) / float(sd)
+    return 1.0 / (1.0 + math.exp(-z))
+
+
+_load_correction_layer()
+
 # Set once the model-load attempt has completed. The readiness probe gates on
 # this so the orchestrator only routes traffic after init (models loaded, or
 # fallback confirmed). Load is synchronous at import, so this is True by the
@@ -2068,7 +2128,7 @@ def _game_context(f: GameFeatures) -> dict:
         for name in ("ev_xgf_pct_s", "ev_cf_pct_s", "ev_xgf_pct_l", "ev_cf_pct_l",
                      "goalie_gsax60", "goalie_svpct",
                      "star_power", "finishing_s", "win_s", "rest_days",
-                     "b2b", "3in4"):
+                     "b2b", "3in4", "lineup_xg"):
             _d(name)
         if feat_values.get("home_xgf60_s") is not None and \
            feat_values.get("away_xga60_s") is not None:
@@ -2202,6 +2262,9 @@ def _game_context(f: GameFeatures) -> dict:
 
     return {
         "feat_values": feat_values,
+        # Victoire domicile après la couche de correction (None sans couche ou
+        # sans modèle de score) — servie pour le seul marché `moneyline`.
+        "p_home_corrected": _apply_correction(p_score_model, feat_values),
         "score_dist": score_dist, "base_prob": base_prob, "win_diff": win_diff,
         "gf_diff": gf_diff, "form_diff": form_diff,
         "lam_home": lam_home, "lam_away": lam_away,
@@ -2264,6 +2327,15 @@ def _price_game_market(ctx: dict, f: GameFeatures) -> MLResponse:
             detail={"error": "no_estimate", "market": e.market,
                     "message": "No estimate available for this market with the data provided"},
         )
+
+    # 4ter-bis. Moneyline : la couche de correction remplace la victoire du
+    #          modèle de score (cf. `_load_correction_layer`), vue du sujet.
+    p_corr = ctx.get("p_home_corrected")
+    if f.market_type == "moneyline" and p_corr is not None:
+        p_subject = p_corr if f.subject_is_home else 1.0 - p_corr
+        explanation = (f"{explanation} Corrigé (forme, fatigue, alignement, ELO) : "
+                       f"{int(prob * 100)}% → {int(p_subject * 100)}%.")
+        prob = p_subject
 
     # 4quater. Côté « non » d'un marché binaire (cf. `_BINARY_MARKETS`). Le
     #          complément est pris APRÈS `_apply_market`, donc après son clamp.
