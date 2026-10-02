@@ -65,6 +65,25 @@ async function fetchTeamSeasonGames(abbr: string): Promise<any[]> {
   return games;
 }
 
+/**
+ * Plafond des jours de repos — même valeur que `build_dataset.py::add_schedule`
+ * (`min(jours, 7)`). Au-delà, le modèle ne distingue plus rien.
+ */
+export const MAX_REST_DAYS = 7;
+
+/**
+ * Repos d'une équipe qui n'a encore joué AUCUN match cette saison.
+ *
+ * À l'entraînement, le premier match d'une saison est à des mois du dernier
+ * match de la précédente : `rest_days` y vaut le plafond, 7, et jamais autre
+ * chose. Le service recevait ici le repli générique (2 jours) — une valeur que
+ * le modèle n'a jamais vue pour un match d'ouverture, et qui pèse sur
+ * `atk_rest_days`/`def_rest_days` (modèle de score), `rest_days_diff`
+ * (classifieur) et `days_rest` (modèle joueur). Cf. ml/INCOHERENCES_ML.md §1.
+ */
+export const SEASON_START_REST: Readonly<TeamRestInfo> =
+  Object.freeze({ restDays: MAX_REST_DAYS, b2b: 0, dense3in4: 0 });
+
 /** Jours de repos depuis le dernier match joué (via le calendrier de saison). */
 export async function fetchTeamRestInfo(abbr: string): Promise<TeamRestInfo> {
   const upper = abbr.toUpperCase();
@@ -72,6 +91,7 @@ export async function fetchTeamRestInfo(abbr: string): Promise<TeamRestInfo> {
   const cached = getCached<TeamRestInfo>(key);
   if (cached) return cached;
 
+  // Repli quand on ne SAIT PAS (panne, calendrier vide) — pas le début de saison.
   const fallback: TeamRestInfo = { restDays: 2, b2b: 0, dense3in4: 0 };
   try {
     const games = await fetchTeamSeasonGames(upper);
@@ -85,11 +105,19 @@ export async function fetchTeamRestInfo(abbr: string): Promise<TeamRestInfo> {
       .map((g: any) => g.gameDate as string)
       .sort();
 
-    // Aucun match joué : c'est une RÉPONSE (début de saison), pas un échec.
-    // On la garde, sinon chaque prédiction rappelle le calendrier.
-    if (!played.length) {
+    // Calendrier vide (pas encore publié, réponse illisible) : on ne sait pas.
+    if (!games.length) {
       setCached(key, fallback, NEGATIVE_TTL_MS);
       return fallback;
+    }
+
+    // Calendrier publié mais aucun match joué : c'est le DÉBUT DE SAISON, une
+    // réponse et non un échec — repos au plafond, comme à l'entraînement. Court
+    // TTL quand même : le premier match joué doit être vu dans la journée.
+    if (!played.length) {
+      const info = { ...SEASON_START_REST };
+      setCached(key, info, NEGATIVE_TTL_MS);
+      return info;
     }
 
     const now      = new Date(today + 'T12:00:00');
@@ -101,7 +129,7 @@ export async function fetchTeamRestInfo(abbr: string): Promise<TeamRestInfo> {
       return diff >= 1 && diff <= 3;
     }).length;
     const info: TeamRestInfo = {
-      restDays: Math.min(Math.max(days, 0), 7),
+      restDays: Math.min(Math.max(days, 0), MAX_REST_DAYS),
       b2b:      days === 1 ? 1 : 0,
       dense3in4,
     };

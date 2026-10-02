@@ -18,7 +18,7 @@
 
 | # | Gravité | Sujet | Fichiers |
 |---|---|---|---|
-| 1 | 🔴 | Repos = 2 jours en début de saison, l'entraînement a appris 7 | `restTravel.ts`, `build_dataset.py` |
+| 1 | ✅ | ~~Repos = 2 jours en début de saison, l'entraînement a appris 7~~ — corrigé le 2026-10-02 | `restTravel.ts`, `build_dataset.py` |
 | 2 | 🔴 | Repos, gardiens et absents calculés pour AUJOURD'HUI, pas pour la date du match | `restTravel.ts`, `featureEngineering.ts` |
 | 3 | 🔴 | Noms de gardiens et d'absents comparés sans retirer les accents | `ml_service.py` |
 | 4 | 🔴 | Value bets : edge calculé sur une probabilité arrondie à l'entier | `ml_service.py`, `valueBets.service.ts` |
@@ -40,7 +40,9 @@
 
 ---
 
-## 🔴 1. Repos = 2 jours en début de saison, alors que l'entraînement a appris 7
+## ✅ 1. Repos = 2 jours en début de saison, alors que l'entraînement a appris 7
+
+> **Corrigé le 2026-10-02.** Calendrier publié mais aucun match de saison régulière joué → `SEASON_START_REST` = `{ restDays: 7, b2b: 0, dense3in4: 0 }` (`restTravel.ts`). Calendrier vide ou API en panne → toujours le repli de 2 jours (on ne sait pas). Verrouillé par `server/src/services/nhl/restTravel.test.ts`. Reste ouvert : renvoyer « inconnu » (NaN) plutôt que 2 en cas de panne, ce qui demande de rendre `home_rest_days` optionnel dans `GameFeatures` côté Python.
 
 **Où**
 - `server/src/services/nhl/restTravel.ts:75` (`fallback = { restDays: 2, … }`, utilisé quand aucun match n'a encore été joué cette saison) et `featureEngineering.ts:231-233`.
@@ -285,7 +287,7 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 
 ## Ordre de correction suggéré
 
-1. **#3** (accents) et **#1** (repos d'ouverture) : petits correctifs, effet immédiat, en pleine semaine d'ouverture.
+1. **#3** (accents) : petit correctif, effet immédiat. (**#1** est fait.)
 2. **#4** (arrondi) : un champ à ajouter, protège les value bets.
 3. **#2** (date du match) : un paramètre à faire descendre dans trois fonctions.
 4. **#14** : la vérification de 2 minutes, puis décider.

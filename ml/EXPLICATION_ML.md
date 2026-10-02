@@ -606,7 +606,7 @@ Quelques marchés utilisent TOUJOURS une règle, même avec le modèle de score 
 ### 7.1 Ce que le serveur envoie — `featureEngineering.ts → buildGameFeatures`
 
 - Fiches d'équipe (win%, buts pour/contre, L10, séries, tirs, mises au jeu, PP/PK).
-- **Repos** (`nhl/restTravel.ts`) : jours depuis le dernier match terminé de saison régulière, plafonnés à 7 ; dos-à-dos si = 1 ; nombre de matchs dans les 3 jours précédents. Sans match joué cette saison → repli 2 jours.
+- **Repos** (`nhl/restTravel.ts`) : jours depuis le dernier match terminé de saison régulière, plafonnés à 7 ; dos-à-dos si = 1 ; nombre de matchs dans les 3 jours précédents. Aucun match joué cette saison (calendrier publié) → 7 jours, comme le premier match de saison à l'entraînement ; calendrier vide ou API en panne → repli 2 jours.
 - Cotes en direct (The Odds API) si disponibles.
 - **Gardiens partants** et **absents** saisis à la main (`/dev/saisie`, table `manual_data`).
 - **Alignement officiel** (API NHL) quand il est publié.
