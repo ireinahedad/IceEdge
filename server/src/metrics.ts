@@ -39,7 +39,8 @@ export type UpstreamTarget =
   | 'odds'      // The Odds API — quota mensuel strict, la plus chère à gaspiller
   | 'nhl'       // api-web.nhle.com — gratuite mais rate-limitée de fait
   | 'ml'        // service Python interne — 2 workers, c'est lui qui sature en premier
-  | 'llm';      // GitHub Models / OpenAI — facturé au token
+  | 'llm'       // GitHub Models / OpenAI — facturé au token
+  | 'moneypuck'; // CSV de saison MoneyPuck (Corsi/Fenwick) — gratuit, à ne pas marteler
 
 export interface UpstreamStats {
   /** Appels réellement émis (un hit de cache n'en émet aucun). */
@@ -52,7 +53,7 @@ export interface UpstreamStats {
   maxMs:  number;
 }
 
-const TARGETS: UpstreamTarget[] = ['odds', 'nhl', 'ml', 'llm'];
+const TARGETS: UpstreamTarget[] = ['odds', 'nhl', 'ml', 'llm', 'moneypuck'];
 
 const upstream = new Map<UpstreamTarget, UpstreamStats>();
 

@@ -7,7 +7,7 @@ const CONTENT = {
     intro: "Need help? Reach out and we'll get back to you as soon as possible.",
     faqTitle: "Frequently asked questions",
     faq: [
-      { q: "How are predictions calculated?", a: "ArakIce combines statistical rules (recent form, head-to-head, home ice/court advantage) with a machine-learning model trained on historical results. Both are shown side by side so you can compare." },
+      { q: "How are predictions calculated?", a: "ArakIce combines statistical rules (recent form, head-to-head, home ice/court advantage) with a machine-learning model trained on historical results. The numbers shown everywhere come from the ML model; the rules can be checked in a bet's detail, below the ML number." },
       { q: "Is ArakIce a bookmaker?", a: "No. ArakIce does not accept bets. We link out to third-party bookmakers (e.g. bet365) where legally available." },
       { q: "How do I cancel my Pro subscription?", a: "Go to Profile → Settings → Subscription, then tap \"Cancel subscription\". Your access stays active until the end of the current billing period." },
       { q: "How do I delete my account?", a: "Go to Profile → Settings → Security, then tap \"Delete my account\". After you confirm your identity, your account and all associated data are erased immediately, and an active Pro subscription is cancelled." },
@@ -17,7 +17,7 @@ const CONTENT = {
     intro: "Besoin d'aide ? Écris-nous et nous te répondrons dans les meilleurs délais.",
     faqTitle: "Questions fréquentes",
     faq: [
-      { q: "Comment les prédictions sont-elles calculées ?", a: "ArakIce combine des règles statistiques (forme récente, confrontations directes, avantage de la glace/du court) avec un modèle d'apprentissage automatique entraîné sur des résultats historiques. Les deux sont affichés côte à côte pour comparaison." },
+      { q: "Comment les prédictions sont-elles calculées ?", a: "ArakIce combine des règles statistiques (forme récente, confrontations directes, avantage de la glace/du court) avec un modèle d'apprentissage automatique entraîné sur des résultats historiques. Les chiffres affichés partout sont ceux du modèle ML ; les règles se consultent dans le détail d'un pari, sous le chiffre ML." },
       { q: "ArakIce est-il un bookmaker ?", a: "Non. ArakIce n'accepte aucun pari. Nous redirigeons vers des bookmakers tiers (ex. bet365) là où c'est légalement disponible." },
       { q: "Comment annuler mon abonnement Pro ?", a: "Va dans Profil → Paramètres → Abonnement, puis touche « Annuler l'abonnement ». Ton accès reste actif jusqu'à la fin de la période de facturation en cours." },
       { q: "Comment supprimer mon compte ?", a: "Va dans Profil → Paramètres → Sécurité, puis touche « Supprimer mon compte ». Après la reconfirmation de ton identité, ton compte et toutes les données associées sont effacés immédiatement, et un abonnement Pro actif est annulé." },

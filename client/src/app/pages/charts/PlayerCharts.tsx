@@ -287,6 +287,9 @@ export function PlayerCharts({
                     })}
                   </tbody>
                 </table>
+                {!isGoalie && (
+                  <p className="px-4 py-2 border-t border-white/[0.06] text-[#5c6f63] text-[11px]">{t("chart.mpCredit")}</p>
+                )}
               </div>
             )}
           </div>

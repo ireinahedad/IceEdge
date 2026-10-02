@@ -66,7 +66,11 @@ export function AllPlayersCharts() {
 
   const metrics = isGoalieView
     ? [...buildGoalieMetrics(t), ...buildGoalieExtraMetrics(t)]
-    : [...buildSkaterMetrics(t), ...buildSkaterExtraMetrics(t)];
+    // Le classement de ligue est trié CÔTÉ SERVEUR par l'API NHL, qui ne
+    // connaît pas le Corsi/Fenwick sur la glace (MoneyPuck) : ces deux colonnes
+    // ne peuvent pas y être triées, elles restent sur les fiches joueur.
+    : [...buildSkaterMetrics(t), ...buildSkaterExtraMetrics(t)]
+        .filter((m) => m.key !== "onIceCorsiPct" && m.key !== "onIceFenwickPct");
   const metric = metrics.find((m) => m.key === sortKey) ?? metrics[0];
 
   // Clics de tri rapprochés : 12 clics en 0,7 s faisaient 11 requêtes menées

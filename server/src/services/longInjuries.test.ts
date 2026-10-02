@@ -15,9 +15,67 @@ vi.mock('./manualData.service', () => ({
   mapEntries: vi.fn(async (kind: string) => rows[kind] ?? {}),
 }));
 vi.mock('./startingGoalies', () => ({ easternToday: () => '2026-10-10' }));
+// Alignement officiel NHL : vide par défaut (pas publié), rempli par les tests
+// qui en ont besoin. Jamais de réseau ici.
+const official: Record<string, unknown> = {};
+vi.mock('./officialLineup', async (orig) => ({
+  ...(await orig<typeof import('./officialLineup')>()),
+  getOfficialLineupsDay: vi.fn(async () => official),
+}));
 
 beforeEach(() => {
   for (const k of Object.keys(rows)) delete rows[k];
+  for (const k of Object.keys(official)) delete official[k];
+});
+
+/** Un alignement : `dressed` habillés, `scratches` absents officiels. */
+function lineup(abbr: string, dressed: string[], scratches: string[] = [], confirmed = true) {
+  const p = (name: string, i: number) => ({ id: 8_480_000 + i, name, pos: 'C' });
+  return { gameId: 2026020100, abbr, confirmed,
+           dressed: dressed.map(p), scratches: scratches.map((n, i) => p(n, 100 + i)) };
+}
+
+describe('alignement officiel du soir (API NHL)', () => {
+  it('un blessé de longue durée HABILLÉ revient au jeu — ni absent pour l\'IA, ni pour les règles', async () => {
+    rows.long_injuries = { TOR: { players: [{ player: 'Auston Matthews', impact: 0.06, until: '2026-10-20' }] } };
+    official.TOR = lineup('TOR', ['Auston Matthews', 'William Nylander']);
+    const { getScratchesDay } = await import('./scratches');
+    expect(await getScratchesDay('2026-10-10')).toEqual({});
+    const { getManualFactors } = await import('./injuryStore');
+    expect((await getManualFactors('TOR', 'BOS')).injuries.active).toBe(false);
+  });
+
+  it('la feuille d\'un match commencé (« A. Matthews ») suffit à le reconnaître', async () => {
+    rows.long_injuries = { TOR: { players: [{ player: 'Auston Matthews', impact: 0.06 }] } };
+    official.TOR = lineup('TOR', ['A. Matthews']);
+    const { getScratchesDay } = await import('./scratches');
+    expect(await getScratchesDay('2026-10-10')).toEqual({});
+  });
+
+  it('ajoute les absents officiels, et la saisie du jour reste prioritaire', async () => {
+    rows.scratches = { '2026-10-10': { TOR: ['William Nylander'] } };
+    official.TOR = lineup('TOR', ['Auston Matthews', 'William Nylander'], ['Ryan Reaves']);
+    const { getLineupDay } = await import('./scratches');
+    const day = await getLineupDay('2026-10-10');
+    expect(day.scratches).toEqual({ TOR: ['William Nylander', 'Ryan Reaves'] });
+    // Nylander, déclaré absent à la main, est retiré des habillés envoyés au modèle.
+    expect(day.dressed.TOR.names).toEqual(['Auston Matthews']);
+    expect(day.dressed.TOR.ids).toEqual([8_480_000]);
+  });
+
+  it('absents publiés mais alignement pas définitif : absents ajoutés, rien d\'autre', async () => {
+    rows.long_injuries = { TOR: { players: [{ player: 'Auston Matthews', impact: 0.06 }] } };
+    official.TOR = lineup('TOR', ['Auston Matthews', 'William Nylander'], ['Ryan Reaves'], false);
+    const { getLineupDay } = await import('./scratches');
+    // Matthews figure dans l'EFFECTIF, pas encore dans un alignement : toujours absent.
+    expect(await getLineupDay('2026-10-10')).toEqual({ scratches: { TOR: ['Auston Matthews', 'Ryan Reaves'] }, dressed: {} });
+  });
+
+  it('sans alignement publié : rien ne change (aucun habillé transmis)', async () => {
+    rows.long_injuries = { TOR: { players: [{ player: 'Auston Matthews', impact: 0.06 }] } };
+    const { getLineupDay } = await import('./scratches');
+    expect(await getLineupDay('2026-10-10')).toEqual({ scratches: { TOR: ['Auston Matthews'] }, dressed: {} });
+  });
 });
 
 describe('getScratchesDay', () => {

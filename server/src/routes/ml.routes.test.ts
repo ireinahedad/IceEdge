@@ -74,6 +74,23 @@ vi.mock('../services/bestBets.service', () => ({ getBestBets: vi.fn(async () => 
 const getGameMlBundle = vi.fn();
 vi.mock('../services/gameMlBundle', () => ({ getGameMlBundle: (id: string) => getGameMlBundle(id) }));
 
+// Value bets (Pro) : le calcul est mocké, on teste le CÂBLAGE — compte exigé,
+// puis abonnement Pro vérifié en base par le vrai `requirePro`.
+const getCurrentValueBets = vi.fn(async () => [{ id: 'g1-moneyline-TOR' }]);
+vi.mock('../services/valueBets.service', () => ({ getCurrentValueBets: () => getCurrentValueBets() }));
+const isPro = vi.fn(async (_id: string) => false);
+vi.mock('../services/subscription.service', () => ({ isPro: (id: string) => isPro(id) }));
+/** `x-test-user` : absent = pas de session ; sinon l'identifiant de l'appelant. */
+vi.mock('../middleware/auth.middleware', async (orig) => ({
+  ...(await orig<typeof import('../middleware/auth.middleware')>()),
+  authenticate: (req: any, res: any, next: any) => {
+    const sub = req.headers['x-test-user'];
+    if (!sub) { res.status(401).json({ error: 'Unauthenticated' }); return; }
+    req.user = { sub, role: sub === 'admin' ? 'admin' : 'user' };
+    next();
+  },
+}));
+
 async function predictApp() {
   const { default: routes } = await import('./ml.routes');
   const a = express();
@@ -268,5 +285,31 @@ describe('GET /api/predict/game/:id/bundle — cache selon l\'état du match', (
     getGameMlBundle.mockRejectedValue(Object.assign(new Error('Données du match indisponibles'), { status: 503 }));
     const res = await request(await predictApp()).get('/api/predict/game/2026020001/bundle');
     expect(res.status).toBe(503);
+  });
+});
+
+describe('GET /api/predict/value-bets — réservé aux Pro', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('sans compte : 401, et aucun calcul', async () => {
+    const res = await request(await predictApp()).get('/api/predict/value-bets');
+    expect(res.status).toBe(401);
+    expect(getCurrentValueBets).not.toHaveBeenCalled();
+  });
+
+  it('compte gratuit : 402 PRO_REQUIRED, et aucun calcul', async () => {
+    isPro.mockResolvedValueOnce(false);
+    const res = await request(await predictApp()).get('/api/predict/value-bets').set('x-test-user', 'u1');
+    expect(res.status).toBe(402);
+    expect(res.body.code).toBe('PRO_REQUIRED');
+    expect(getCurrentValueBets).not.toHaveBeenCalled();
+  });
+
+  it('Pro : la liste partagée, jamais mise en cache public', async () => {
+    isPro.mockResolvedValueOnce(true);
+    const res = await request(await predictApp()).get('/api/predict/value-bets').set('x-test-user', 'u2');
+    expect(res.status).toBe(200);
+    expect(res.body.bets).toEqual([{ id: 'g1-moneyline-TOR' }]);
+    expect(res.headers['cache-control']).toBe('private, no-store');
   });
 });

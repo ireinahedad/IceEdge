@@ -4,6 +4,7 @@
  */
 
 import { currentSeason, previousSeason, fetchNHL, fetchStats, getCached, parseToiMinutes, setCached } from './core';
+import { fetchMoneyPuckSkaters, fetchMoneyPuckTeams, type MpSkaterSeason, type MpTeamSeason } from './moneypuck';
 
 /**
  * Last 6 NHL regular seasons of per-player stats for a team — powers the
@@ -113,6 +114,21 @@ export async function fetchTeamPlayerSeasons(abbr: string): Promise<any> {
 
   // Column headers = the 6 most-recent seasons present across the roster.
   const seasonList = [...seasonIds].sort((a, b) => b - a).slice(0, 6);
+
+  // CF% / FF% sur la glace à 5 c. 5 (MoneyPuck), une table par saison affichée.
+  // Une saison que MoneyPuck n'a pas laisse ces deux champs à null (« — »).
+  const mpBySeason = new Map<number, Record<string, MpSkaterSeason>>(
+    await Promise.all(seasonList.map(async (id) => [
+      id, await fetchMoneyPuckSkaters(String(id)).catch(() => ({})),
+    ] as [number, Record<string, MpSkaterSeason>])),
+  );
+  for (const p of skaters) {
+    for (const s of p.seasons) {
+      const m = mpBySeason.get(s.seasonId)?.[p.id];
+      s.onIceCorsiPct   = m?.onIceCorsiPct   ?? null;
+      s.onIceFenwickPct = m?.onIceFenwickPct ?? null;
+    }
+  }
   const recent     = seasonList[0];
   const recentVal  = (p: any, k: string) =>
     p.seasons.find((s: any) => s.seasonId === recent)?.[k] ?? -1;
@@ -354,7 +370,9 @@ export async function fetchTeamSeasonOfficial(abbr: string, season: string): Pro
   const cached   = getCached<any>(cacheKey);
   if (cached) return cached;
 
-  // Official summary for the season.
+  // Official summary for the season. Corsi/Fenwick (MoneyPuck) en parallèle :
+  // une source en panne laisse simplement ces deux lignes vides.
+  const mpPromise = fetchMoneyPuckTeams(season).catch(() => ({} as Record<string, MpTeamSeason>));
   let official: any = null;
   try {
     const cayenne = encodeURIComponent(`seasonId=${season} and gameTypeId=2`);
@@ -385,6 +403,7 @@ export async function fetchTeamSeasonOfficial(abbr: string, season: string): Pro
         faceoffPct:          played ? Math.round((row.faceoffWinPct  ?? 0) * 1000) / 10 : null,
         shotsForPerGame:     played ? +(row.shotsForPerGame     ?? 0).toFixed(2) : null,
         shotsAgainstPerGame: played ? +(row.shotsAgainstPerGame ?? 0).toFixed(2) : null,
+        ...possessionOf((await mpPromise)[upper]),
       };
     }
   } catch { /* summary unavailable → official stays null */ }
@@ -586,10 +605,13 @@ export async function fetchAllTeamsSeason(seasonArg?: string): Promise<any> {
   if (cached) return cached;
 
   const cayenne = encodeURIComponent(`seasonId=${season} and gameTypeId=2`);
-  const data = await fetchStats<any>(
-    `${STATS_BASE}/team/summary?limit=-1&cayenneExp=${cayenne}`,
-    'team summary',
-  );
+  const [data, mp] = await Promise.all([
+    fetchStats<any>(
+      `${STATS_BASE}/team/summary?limit=-1&cayenneExp=${cayenne}`,
+      'team summary',
+    ),
+    fetchMoneyPuckTeams(season).catch(() => ({} as Record<string, MpTeamSeason>)),
+  ]);
 
   const teams = (data.data ?? []).map((row: any) => {
     const gp = row.gamesPlayed || 0;
@@ -616,6 +638,7 @@ export async function fetchAllTeamsSeason(seasonArg?: string): Promise<any> {
       pointPct:   Math.round((row.pointPct       ?? 0) * 1000) / 10,
       faceoffPct: Math.round((row.faceoffWinPct  ?? 0) * 1000) / 10,
       shutouts:   row.teamShutouts ?? 0,
+      ...possessionOf(mp[TEAM_NAME_TO_ABBR[row.teamFullName ?? ''] ?? '']),
     };
   // A renamed franchise missing from the abbreviation map would have no logo
   // and no working link, so drop it rather than render a dead row.
@@ -632,6 +655,21 @@ export interface TeamSummaryStats {
   shotsForPg:      number;
   shotsAgainstPg:  number;
   faceoffPct:      number;  // 0–100
+  /**
+   * Fenwick toutes situations (tentatives non bloquées) par match, pour et
+   * contre — MoneyPuck. Absent quand MoneyPuck ne répond pas ou n'a pas encore
+   * l'équipe : le moteur de règles retombe alors sur les tirs cadrés.
+   */
+  fenwickForPg?:     number;
+  fenwickAgainstPg?: number;
+}
+
+/**
+ * Lignes « possession » des pages de stats : Corsi % et Fenwick % à 5 c. 5
+ * (0–100). `null` = pas de donnée MoneyPuck pour cette équipe.
+ */
+function possessionOf(mp: MpTeamSeason | undefined): { corsiPct5v5: number | null; fenwickPct5v5: number | null } {
+  return { corsiPct5v5: mp?.corsiPct5v5 ?? null, fenwickPct5v5: mp?.fenwickPct5v5 ?? null };
 }
 
 /** PP%, PK%, tirs/match et mises au jeu de la saison en cours, par abréviation. */
@@ -642,10 +680,13 @@ export async function fetchTeamSummaryStats(): Promise<Record<string, TeamSummar
   const cayenne = encodeURIComponent(
     `seasonId=${currentSeason()} and gameTypeId=2`
   );
-  const data = await fetchStats<any>(
-    `${STATS_BASE}/team/summary?limit=-1&cayenneExp=${cayenne}`,
-    'team/summary',
-  );
+  const [data, mp] = await Promise.all([
+    fetchStats<any>(
+      `${STATS_BASE}/team/summary?limit=-1&cayenneExp=${cayenne}`,
+      'team/summary',
+    ),
+    fetchMoneyPuckTeams().catch(() => ({} as Record<string, MpTeamSeason>)),
+  ]);
 
   const out: Record<string, TeamSummaryStats> = {};
   for (const t of data.data ?? []) {
@@ -663,6 +704,11 @@ export async function fetchTeamSummaryStats(): Promise<Record<string, TeamSummar
       shotsAgainstPg: +(t.shotsAgainstPerGame ?? 30).toFixed(2),
       faceoffPct:     Math.round((t.faceoffWinPct  ?? 0.50) * 1000) / 10,
     };
+    const m = mp[abbr];
+    if (m?.fenwickForPg != null && m.fenwickAgainstPg != null) {
+      out[abbr].fenwickForPg     = m.fenwickForPg;
+      out[abbr].fenwickAgainstPg = m.fenwickAgainstPg;
+    }
   }
 
   setCached('teamSummary', out, 10 * 60_000);

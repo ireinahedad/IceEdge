@@ -8,7 +8,7 @@
  * du viewport.
  *
  *   landingTypes.ts       DisplayGame et conversions
- *   EvSection.tsx         paris à valeur (EV), réservé aux abonnés Pro
+ *   EvSection.tsx         paris à valeur (EV), réservé aux abonnés Pro — lus au serveur
  *   BestBetsSection.tsx   Best Bets : tri, paliers de risque, cotes implicites
  *   LandingCards.tsx      en-tête de marque, pastilles de cote, cartes de match
  *
@@ -30,12 +30,12 @@ import { fetchHockeyOdds, findOddsEvent } from "../services/gameOdds";
 import "../components/home-theme.css";
 import "../components/rink-theme.css";
 import { BestBetsSection } from "./landing/BestBetsSection";
-import { EvItem, EvSection } from "./landing/EvSection";
+import { EvSection } from "./landing/EvSection";
 import { LiveGamesRow, SportSelector, UpcomingGameRow, gameIsoDay } from "./landing/LandingCards";
 import { dayHeading, groupByDay } from "../data/gameDay";
 import { TeamCarousel } from "./landing/TeamCarousel";
 import { ProUpsell } from "./landing/ProUpsell";
-import { AddSheetState, DisplayGame, calcEdge, extractSpreadOdds, toDisplayGame } from "./landing/landingTypes";
+import { AddSheetState, DisplayGame, extractSpreadOdds, toDisplayGame } from "./landing/landingTypes";
 
 
 // ─── Lazy section ───────────────────────────────────────────────────────────
@@ -148,27 +148,6 @@ export function HockeyLanding() {
     document.addEventListener("scroll", onScroll, { passive: true, capture: true });
     return () => document.removeEventListener("scroll", onScroll, { capture: true });
   }, []);
-
-  // Value bets (+EV): model probability beats the bookmaker's implied probability.
-  // Only meaningful when real bookmaker odds are present.
-  const evItems: EvItem[] = useMemo(() => {
-    const out: EvItem[] = [];
-    for (const g of [...liveGames, ...upcomingGames]) {
-        // Sans probabilité du modèle il n'y a pas d'edge à calculer : le match
-        // est simplement absent de la liste +EV.
-        const homePct = g.team1.winPct;
-        const awayPct = g.team2.winPct;
-        if (g.bookHome && homePct != null) {
-          const edge = calcEdge(homePct, g.bookHome);
-          if (edge >= 5) out.push({ id: `ev-${g.id}-h`, logo: g.team1.logo, label: `${g.team1.abbr} ML vs ${g.team2.abbr}`, context: t("home.evSpot"), pct: homePct, edge });
-        }
-        if (g.bookAway && awayPct != null) {
-          const edge = calcEdge(awayPct, g.bookAway);
-          if (edge >= 5) out.push({ id: `ev-${g.id}-a`, logo: g.team2.logo, label: `${g.team2.abbr} ML vs ${g.team1.abbr}`, context: t("home.evSpot"), pct: awayPct, edge });
-        }
-      }
-    return out.sort((a, b) => b.edge - a.edge).slice(0, 6);
-  }, [liveGames, upcomingGames, t]);
 
   // Load NHL games + model predictions
   //
@@ -403,7 +382,7 @@ export function HockeyLanding() {
                   <BestBetsSection accent={accent} isLoading={loading} locked={false} />
                 </LazySection>
                 <LazySection minHeight={180}>
-                  <EvSection isPro items={evItems} isLoading={loading} accent={accent} />
+                  <EvSection accent={accent} />
                 </LazySection>
               </>
             ) : (

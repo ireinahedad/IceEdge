@@ -173,6 +173,20 @@ export function buildSkaterExtraMetrics(t: TFn): PMetric[] {
       seriesVal: () => null,
       cumulative: false,
     },
+    // Possession quand il est sur la glace, à 5 c. 5 (MoneyPuck). Des taux de
+    // saison : ni moyenne par match, ni série, ni face-à-face.
+    ...(["onIceCorsiPct", "onIceFenwickPct"] as const).map((key): PMetric => ({
+      key,
+      label: t(key === "onIceCorsiPct" ? "chart.pl.corsiPct" : "chart.pl.fenwickPct"),
+      total: (s) => pct1(s[key]),
+      avg: () => DASH,
+      vs: () => DASH,
+      totalNum: (s) => s[key] ?? null,
+      avgNum: () => null,
+      vsNum: () => null,
+      seriesVal: () => null,
+      cumulative: false,
+    })),
   ];
 }
 
@@ -232,6 +246,8 @@ export type TMetric = {
 
 export function buildTeamMetrics(t: TFn): TMetric[] {
   const pct = (v: number) => `${v.toFixed(1)}%`;
+  // Les lignes « par match » sont des MOYENNES : le libellé le dit (2026-10-02).
+  const avg = (label: string) => `${label} ${t("chart.avgSuffix")}`;
   return [
     { key: "points",       label: t("chart.tm.points"),       fmt: (r) => int(r.points),       num: (r) => r.points },
     { key: "wins",         label: t("chart.tm.wins"),         fmt: (r) => int(r.wins),         num: (r) => r.wins },
@@ -241,13 +257,18 @@ export function buildTeamMetrics(t: TFn): TMetric[] {
     { key: "goalsFor",     label: t("chart.tm.goalsFor"),     fmt: (r) => int(r.goalsFor),     num: (r) => r.goalsFor },
     { key: "goalsAgainst", label: t("chart.tm.goalsAgainst"), fmt: (r) => int(r.goalsAgainst), num: (r) => r.goalsAgainst, lowBetter: true },
     { key: "goalDiff",     label: t("chart.tm.goalDiff"),     fmt: (r) => sign(r.goalDiff),    num: (r) => r.goalDiff },
-    { key: "gfPerGame",    label: `${t("chart.tm.goalsFor")}/G`,     fmt: (r) => num2(r.goalsForPerGame),     num: (r) => r.goalsForPerGame },
-    { key: "gaPerGame",    label: `${t("chart.tm.goalsAgainst")}/G`, fmt: (r) => num2(r.goalsAgainstPerGame), num: (r) => r.goalsAgainstPerGame, lowBetter: true },
+    { key: "gfPerGame",    label: avg(t("chart.tm.goalsFor")),     fmt: (r) => num2(r.goalsForPerGame),     num: (r) => r.goalsForPerGame },
+    { key: "gaPerGame",    label: avg(t("chart.tm.goalsAgainst")), fmt: (r) => num2(r.goalsAgainstPerGame), num: (r) => r.goalsAgainstPerGame, lowBetter: true },
     { key: "ppPct",        label: t("chart.tm.ppPct"),        fmt: (r) => pct(r.ppPct),        num: (r) => r.ppPct },
     { key: "pkPct",        label: t("chart.tm.pkPct"),        fmt: (r) => pct(r.pkPct),        num: (r) => r.pkPct },
-    { key: "shotsFor",     label: t("chart.tm.shots"),        fmt: (r) => num2(r.shotsForPerGame),     num: (r) => r.shotsForPerGame },
-    { key: "shotsAgainst", label: t("chart.tm.shotsAgainst"), fmt: (r) => num2(r.shotsAgainstPerGame), num: (r) => r.shotsAgainstPerGame, lowBetter: true },
+    { key: "shotsFor",     label: avg(t("chart.tm.shots")),   fmt: (r) => num2(r.shotsForPerGame),     num: (r) => r.shotsForPerGame },
+    { key: "shotsAgainst", label: avg(t("chart.tm.shotsAgainst")), fmt: (r) => num2(r.shotsAgainstPerGame), num: (r) => r.shotsAgainstPerGame, lowBetter: true },
     { key: "faceoffPct",   label: t("chart.tm.faceoffPct"),   fmt: (r) => pct(r.faceoffPct),   num: (r) => r.faceoffPct },
+    // Possession à 5 c. 5 (MoneyPuck). `null` quand la source n'a pas
+    // l'équipe : « — » à l'écran, et en queue de tri (−1) plutôt que NaN, qui
+    // casserait le comparateur.
+    { key: "corsiPct5v5",   label: t("chart.tm.corsiPct"),   fmt: (r) => (r.corsiPct5v5 == null ? "—" : pct(r.corsiPct5v5)),     num: (r) => r.corsiPct5v5 ?? -1 },
+    { key: "fenwickPct5v5", label: t("chart.tm.fenwickPct"), fmt: (r) => (r.fenwickPct5v5 == null ? "—" : pct(r.fenwickPct5v5)), num: (r) => r.fenwickPct5v5 ?? -1 },
     { key: "shutouts",     label: t("chart.tm.shutouts"),     fmt: (r) => int(r.shutouts),     num: (r) => r.shutouts },
   ];
 }

@@ -617,3 +617,30 @@ describe('effets de score mesurés (phase 2)', () => {
     expect(boxscoreLiveInfo({ ...at(4, '03:00', 2, 2), periodType: 'OT' })!.fTeam).toBeUndefined();
   });
 });
+
+/**
+ * Volume de tirs des règles : Fenwick toutes situations (MoneyPuck) depuis le
+ * 2026-10-02, tirs cadrés en repli. Mesuré : log-loss de la victoire −0,00030
+ * (12 saisons sur 14) pour le λ tel qu'écrit ici.
+ */
+describe('volume de tirs — Fenwick, repli sur les tirs cadrés', () => {
+  const shotPace = (groups: Awaited<ReturnType<typeof buildGameMarkets>>) =>
+    groups.flatMap(g => g.options).find(o => o.id === 'o55')!.factors!.find(f => f.id === 'shotPace')!;
+
+  it('sans MoneyPuck : tirs cadrés, libellé inchangé', async () => {
+    const groups = await buildGameMarkets('2026020951');
+    expect(shotPace(groups).label).toBe('Rythme de tirs');
+  });
+
+  it('avec le Fenwick des deux équipes : le facteur le dit, et plus de volume = plus de buts', async () => {
+    const api = await import('./nhlApiClient');
+    const ff = (f: number, a: number) => ({ ppPct: 21, pkPct: 80, shotsForPg: 30, shotsAgainstPg: 30, faceoffPct: 50,
+                                            fenwickForPg: f, fenwickAgainstPg: a });
+    vi.mocked(api.fetchTeamSummaryStats).mockResolvedValueOnce({ TOR: ff(42.7, 42.7), MTL: ff(42.7, 42.7) } as any);
+    const flat = shotPace(await buildGameMarkets('2026020952'));
+    vi.mocked(api.fetchTeamSummaryStats).mockResolvedValueOnce({ TOR: ff(50, 42.7), MTL: ff(48, 50) } as any);
+    const busy = shotPace(await buildGameMarkets('2026020953'));
+    expect(flat.label).toBe('Rythme de tirs (Fenwick)');
+    expect(busy.value).toBeGreaterThan(flat.value);
+  });
+});

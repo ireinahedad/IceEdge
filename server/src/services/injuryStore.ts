@@ -19,6 +19,7 @@
 import type { ManualFactor } from './predictionFactors';
 import { getEntry } from './manualData.service';
 import { getLongInjuries } from './longInjuries';
+import { getOfficialLineupsDay, isDressed, type TeamLineup } from './officialLineup';
 
 export interface InjuryEntry { player: string; role?: string; status?: string; impact: number }
 export interface GameInjuries {
@@ -45,17 +46,21 @@ const NEUTRAL: ManualFactor = { active: false, homeProb: 0.5, note: 'non renseig
 /** Facteurs manuels (blessures + alignement) pour un match. Tolérant aux pannes. */
 export async function getManualFactors(homeAbbr: string, awayAbbr: string): Promise<ManualFactors> {
   // `getEntry` ne lève jamais : base injoignable → null → neutre, journalisé.
-  const [saisie, long] = await Promise.all([
+  const [saisie, long, official] = await Promise.all([
     getEntry<GameInjuries>('injuries', injuryGameKey(homeAbbr, awayAbbr)),
     getLongInjuries(),
+    getOfficialLineupsDay().catch(() => ({} as Record<string, TeamLineup>)),
   ]);
   // Blessés de longue durée des deux équipes, ajoutés à la saisie du match. Un
   // joueur présent des deux côtés garde le poids saisi pour le match.
+  // Un blessé de longue durée HABILLÉ dans l'alignement officiel du soir revient
+  // au jeu : il ne pèse plus comme absent (la saisie du match, elle, prime).
   const withLong = (list: InjuryEntry[] | undefined, abbr: string): InjuryEntry[] => {
     const own  = list ?? [];
     const seen = new Set(own.map((e) => e.player.trim().toLowerCase()));
     const add  = (long[abbr.toUpperCase()] ?? [])
       .filter((p) => !seen.has(p.player.toLowerCase()))
+      .filter((p) => !isDressed(official[abbr.toUpperCase()], p.player))
       .map((p) => ({ player: p.player, impact: p.impact, status: 'long' }));
     return [...own, ...add];
   };

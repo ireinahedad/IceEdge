@@ -1,0 +1,173 @@
+{
+  "classifier": {
+    "seasons": [
+      2012,
+      2013,
+      2014,
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "base_log_loss": 0.66927,
+    "variants": {
+      "Fenwick au lieu de Corsi": {
+        "delta": -0.000295,
+        "se": 0.000356,
+        "z": -0.83,
+        "seasons_better": 7,
+        "n_seasons": 14
+      },
+      "tirs cadr\u00e9s au lieu de Corsi": {
+        "delta": -0.000544,
+        "se": 0.000484,
+        "z": -1.12,
+        "seasons_better": 9,
+        "n_seasons": 14
+      },
+      "Corsi ajust\u00e9 au score": {
+        "delta": -2.9e-05,
+        "se": 0.000372,
+        "z": -0.08,
+        "seasons_better": 7,
+        "n_seasons": 14
+      },
+      "Fenwick ajust\u00e9 au score": {
+        "delta": -0.000233,
+        "se": 0.000397,
+        "z": -0.59,
+        "seasons_better": 9,
+        "n_seasons": 14
+      },
+      "+ Fenwick (Corsi gard\u00e9)": {
+        "delta": -0.000305,
+        "se": 0.000322,
+        "z": -0.95,
+        "seasons_better": 8,
+        "n_seasons": 14
+      },
+      "+ Corsi long (hl=20)": {
+        "delta": 0.000163,
+        "se": 0.000238,
+        "z": 0.68,
+        "seasons_better": 5,
+        "n_seasons": 14
+      },
+      "+ Fenwick court et long": {
+        "delta": 0.000245,
+        "se": 0.000305,
+        "z": 0.8,
+        "seasons_better": 6,
+        "n_seasons": 14
+      }
+    }
+  },
+  "rules_glm": {
+    "reference": "tirs cadr\u00e9s (actuel)",
+    "variants": {
+      "aucun volume": {
+        "deviance": {
+          "delta": 0.004002,
+          "se": 0.003282,
+          "z": 1.22,
+          "seasons_better": 3,
+          "n_seasons": 14
+        },
+        "logloss": {
+          "delta": 0.00579,
+          "se": 0.000913,
+          "z": 6.34,
+          "seasons_better": 1,
+          "n_seasons": 14
+        }
+      },
+      "Corsi toutes sit.": {
+        "deviance": {
+          "delta": -0.003514,
+          "se": 0.00304,
+          "z": -1.16,
+          "seasons_better": 9,
+          "n_seasons": 14
+        },
+        "logloss": {
+          "delta": -0.000576,
+          "se": 0.000399,
+          "z": -1.44,
+          "seasons_better": 10,
+          "n_seasons": 14
+        }
+      },
+      "Fenwick toutes sit.": {
+        "deviance": {
+          "delta": -0.005286,
+          "se": 0.002857,
+          "z": -1.85,
+          "seasons_better": 11,
+          "n_seasons": 14
+        },
+        "logloss": {
+          "delta": -0.000962,
+          "se": 0.000271,
+          "z": -3.56,
+          "seasons_better": 12,
+          "n_seasons": 14
+        }
+      },
+      "Corsi 5c5": {
+        "deviance": {
+          "delta": -0.002505,
+          "se": 0.003041,
+          "z": -0.82,
+          "seasons_better": 3,
+          "n_seasons": 14
+        },
+        "logloss": {
+          "delta": 0.000676,
+          "se": 0.000475,
+          "z": 1.42,
+          "seasons_better": 3,
+          "n_seasons": 14
+        }
+      },
+      "Fenwick 5c5": {
+        "deviance": {
+          "delta": -0.003943,
+          "se": 0.003145,
+          "z": -1.25,
+          "seasons_better": 5,
+          "n_seasons": 14
+        },
+        "logloss": {
+          "delta": 0.000354,
+          "se": 0.000393,
+          "z": 0.9,
+          "seasons_better": 4,
+          "n_seasons": 14
+        }
+      }
+    }
+  },
+  "rules_formula": {
+    "logloss": {
+      "delta": -0.000293,
+      "se": 6.9e-05,
+      "z": -4.28,
+      "seasons_better": 12,
+      "n_seasons": 14
+    },
+    "deviance": {
+      "delta": 3e-05,
+      "se": 0.000379,
+      "z": 0.08,
+      "seasons_better": 7,
+      "n_seasons": 14
+    }
+  }
+}

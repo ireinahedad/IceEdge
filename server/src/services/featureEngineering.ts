@@ -15,7 +15,7 @@ import {
 import { getArena } from '../data/arenas';
 import { fetchOddsImplied, fetchTotalsOdds } from './oddsClient';
 import { getStartingGoalies } from './startingGoalies';
-import { getScratchesDay } from './scratches';
+import { getLineupDay, type LineupDay } from './scratches';
 import { getTeam } from './prediction/scoreModel';
 
 /** Options d'enrichissement pour buildGameFeatures (cotes live, lineup). */
@@ -142,6 +142,11 @@ export interface GameFeatures {
   away_stars_missing?:   number;
   home_scratches?:       string[]; // absents confirmés (noms MoneyPuck)
   away_scratches?:       string[];
+  /** Alignement officiel du soir (identifiants NHL + noms), quand publié. */
+  home_dressed_ids?:     number[];
+  away_dressed_ids?:     number[];
+  home_dressed?:         string[];
+  away_dressed?:         string[];
 }
 
 export interface PlayerPropFeatures {
@@ -214,7 +219,7 @@ export async function buildGameFeatures(
     // ces deux features étaient TOUJOURS vides en production). La journée
     // entière est lue en un accès, pas une lecture par équipe.
     getStartingGoalies(),
-    getScratchesDay(),
+    getLineupDay(),
   ]);
 
   const odds   = oddsRes.status   === 'fulfilled' ? oddsRes.value   : null;
@@ -236,7 +241,11 @@ export async function buildGameFeatures(
   // retirer la feature, pas casser la prédiction (c'est déjà ce que faisait le
   // `catch` du chargeur de fichier).
   const goaliesToday   = goaliesRes.status   === 'fulfilled' ? goaliesRes.value   : {};
-  const scratchesToday = scratchesRes.status === 'fulfilled' ? scratchesRes.value : {};
+  const lineupToday: LineupDay = scratchesRes.status === 'fulfilled'
+    ? scratchesRes.value : { scratches: {}, dressed: {} };
+  const scratchesToday = lineupToday.scratches;
+  const homeDressed = lineupToday.dressed[homeAbbr.toUpperCase()];
+  const awayDressed = lineupToday.dressed[awayAbbr.toUpperCase()];
 
   const homeSum = summary[homeAbbr.toUpperCase()];
   const awaySum = summary[awayAbbr.toUpperCase()];
@@ -311,6 +320,14 @@ export async function buildGameFeatures(
     //    star_power (bons joueurs retirés) et stars_out_weight (absence pondérée).
     home_scratches:        opts.homeScratches ?? scratchesToday[homeAbbr.toUpperCase()] ?? [],
     away_scratches:        opts.awayScratches ?? scratchesToday[awayAbbr.toUpperCase()] ?? [],
+    // ── Alignement OFFICIEL (API NHL, publié peu avant le match), moins les
+    //    absents saisis à la main. Connu, il remplace l'effectif récent dans la
+    //    projection du service Python — joueur de retour de blessure compris.
+    //    Un appelant qui impose ses propres absents garde l'ancien chemin.
+    ...(opts.homeScratches === undefined && homeDressed
+      ? { home_dressed_ids: homeDressed.ids, home_dressed: homeDressed.names } : {}),
+    ...(opts.awayScratches === undefined && awayDressed
+      ? { away_dressed_ids: awayDressed.ids, away_dressed: awayDressed.names } : {}),
   };
 }
 

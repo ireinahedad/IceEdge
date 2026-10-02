@@ -27,6 +27,8 @@ export interface PlayerSeasonStat {
   plusMinus?: number; shots?: number; ppPoints?: number; shootingPct?: number;
   pim?: number; powerPlayGoals?: number; shorthandedPoints?: number;
   faceoffPct?: number | null; avgToi?: number | null;
+  /** CF% / FF% de l'équipe quand il est sur la glace, 5 c. 5 (0–100, MoneyPuck). */
+  onIceCorsiPct?: number | null; onIceFenwickPct?: number | null;
   // Goalie
   wins?: number; shutouts?: number; savePct?: number | null; gaa?: number | null;
   losses?: number; otLosses?: number;
@@ -206,6 +208,8 @@ export interface TeamSeasonRow {
   shotsForPerGame: number; shotsAgainstPerGame: number;
   ppPct: number; pkPct: number; pointPct: number; faceoffPct: number;
   shutouts: number;
+  /** Corsi % / Fenwick % à 5 c. 5 (0–100, MoneyPuck) ; null = pas de donnée. */
+  corsiPct5v5?: number | null; fenwickPct5v5?: number | null;
 }
 export interface AllTeamsSeason {
   season: number;
@@ -219,6 +223,7 @@ export interface TeamOfficialStats {
   goalsForPerGame: number; goalsAgainstPerGame: number;
   ppPct: number; pkPct: number; pointPct: number; faceoffPct: number;
   shotsForPerGame: number; shotsAgainstPerGame: number;
+  corsiPct5v5?: number | null; fenwickPct5v5?: number | null;
 }
 export interface TeamVsOpponent {
   gp: number; goalsFor: number; goalsAgainst: number;

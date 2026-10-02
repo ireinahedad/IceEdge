@@ -52,8 +52,8 @@ const BY_ID: Record<string, Desc> = {
     en: "Goals allowed per game by both teams: leaky defenses push the total up.",
   },
   shotPace: {
-    fr: "Tirs par match des deux équipes convertis en buts au taux moyen de la ligue (~10 %).",
-    en: "Shots per game of both teams converted to goals at the league-average rate (~10%).",
+    fr: "Fenwick des deux équipes (tentatives de tir non bloquées, toutes situations — leur volume face à ce que l'adversaire concède), converti en buts au taux moyen de la ligue (~7 %). Repli sur les tirs au but si la donnée manque.",
+    en: "Both teams' Fenwick (unblocked shot attempts, all situations — their volume against what the opponent allows), converted to goals at the league-average rate (~7%). Falls back to shots on goal if the data is missing.",
   },
   specialTeams: {
     fr: "Efficacité en avantage numérique des deux équipes, qui ajoute ou retire des buts attendus.",
@@ -288,8 +288,8 @@ const BY_FAMILY: Record<string, Desc> = {
     en: "Player who both scores and assists: more ways to get a point.",
   },
   "team_totals:shotVolume": {
-    fr: "Tirs par match de l'équipe convertis en buts au taux moyen de la ligue.",
-    en: "Team's shots per game converted to goals at the league-average rate.",
+    fr: "Fenwick de l'équipe (tentatives de tir non bloquées, face à ce que l'adversaire concède) converti en buts au taux moyen de la ligue.",
+    en: "Team's Fenwick (unblocked shot attempts, against what the opponent allows) converted to goals at the league-average rate.",
   },
   "player_goals:shotVolume": {
     fr: "Tirs au but par match du joueur : plus il tire, plus il a de chances de marquer.",

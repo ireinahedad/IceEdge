@@ -5,7 +5,7 @@
  */
 
 import { TtlCache } from '../ttlCache';
-import { timeUpstream } from '../../metrics';
+import { timeUpstream, type UpstreamTarget } from '../../metrics';
 
 /**
  * When NHL_USE_MOCK=true, serve rich local mock data instead of the live NHL API.
@@ -162,14 +162,18 @@ function dedupe<T>(url: string, fn: () => Promise<T>): Promise<T> {
 const NHL_TIMEOUT_MS = Number(process.env.NHL_TIMEOUT_MS) || 8_000;
 
 /** `fetch` + abandon au bout de `NHL_TIMEOUT_MS`. */
-async function fetchWithTimeout(url: string): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  accept = 'application/json',
+  timeoutMs = NHL_TIMEOUT_MS,
+): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), NHL_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, {
       headers: {
         'User-Agent': 'IceEdge/1.0 (nhle-stats-client)',
-        Accept: 'application/json',
+        Accept: accept,
       },
       signal: controller.signal,
     });
@@ -178,7 +182,7 @@ async function fetchWithTimeout(url: string): Promise<Response> {
     // dépassement de délai ressemble, dans les logs, à une annulation côté
     // client — deux causes opposées.
     if (err?.name === 'AbortError') {
-      throw new Error(`NHL API timeout (${NHL_TIMEOUT_MS} ms) for ${url}`);
+      throw new Error(`NHL API timeout (${timeoutMs} ms) for ${url}`);
     }
     throw err;
   } finally {
@@ -237,6 +241,27 @@ export async function fetchStats<T>(url: string, what: string): Promise<T> {
       );
     }
     return res.json() as Promise<T>;
+  }));
+}
+
+/**
+ * Fichier TEXTE d'un autre hôte (les CSV de MoneyPuck) : même déduplication,
+ * même délai borné, compté sous son propre nom dans les métriques upstream.
+ * Le délai est le double de celui de l'API NHL (16 s par défaut) :
+ * `skaters.csv` pèse ~3,5 Mo.
+ */
+export async function fetchText(
+  url: string,
+  what: string,
+  target: UpstreamTarget,
+  timeoutMs = 2 * NHL_TIMEOUT_MS,
+): Promise<string> {
+  return dedupe(url, () => timeUpstream(target, async () => {
+    const res = await fetchWithTimeout(url, 'text/csv,text/plain,*/*', timeoutMs);
+    if (!res.ok) {
+      throw Object.assign(new Error(`${what} ${res.status}`), { status: res.status });
+    }
+    return res.text();
   }));
 }
 

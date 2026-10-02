@@ -137,6 +137,9 @@ export interface TeamCtx {
   pkPct?:          number; // 0–100
   shotsForPg?:     number;
   shotsAgainstPg?: number;
+  /** Fenwick toutes situations par match (MoneyPuck) — absent = repli sur les tirs. */
+  fenwickForPg?:     number;
+  fenwickAgainstPg?: number;
   restDays?:       number; // 0–7
   b2b?:            0 | 1;   // back-to-back
   travel?:         TravelFeatures | null; // voyage / fuseaux / altitude / road-trip
@@ -290,6 +293,18 @@ function fmt(n: number, decimals = 2): string {
 
 const LEAGUE_AVG_GPG = 3.05;   // buts/match moyens par équipe (ligue)
 const LEAGUE_AVG_SOG = 30;     // tirs/match moyens (ligue)
+// Volume de tirs en FENWICK (tentatives non bloquées, toutes situations) depuis
+// le 2026-10-02. Mesuré sur 14 saisons (régression de Poisson hors
+// échantillon, moyennes de saison à date comme ici) : contre les tirs cadrés,
+// log-loss de la victoire −0,00096 (z −3,6, 12 saisons sur 14), déviance des
+// buts −0,0053 (11/14). Le Corsi fait mieux que les tirs, moins bien que le
+// Fenwick ; les versions 5 c. 5 seules ne battent pas les tirs.
+// Constantes ligue 2025-26 (MoneyPuck) : 42,7 tentatives non bloquées par
+// équipe-match, 7,2 % converties — 42,7 × 0,072 ≈ 3,08 buts, comme
+// 30 tirs × 10,2 %.
+const LEAGUE_AVG_FF = 42.7;
+const FF_GOAL_RATE  = 0.072;
+const SOG_GOAL_RATE = 0.102;
 const OT_BASE        = 0.225;  // ~22.5% des matchs NHL vont en prolongation
 const B2B_GOAL_PEN   = 0.04;   // baisse de λ pour un back-to-back
 
@@ -614,6 +629,15 @@ function computeGameMarkets(
   const aPP = awayCtx.ppPct ?? 20, aPK = awayCtx.pkPct ?? 80;
   const hSF = homeCtx.shotsForPg ?? LEAGUE_AVG_SOG;
   const aSF = awayCtx.shotsForPg ?? LEAGUE_AVG_SOG;
+  // Volume attendu de chaque équipe dans CE match : moyenne de son Fenwick pour
+  // et du Fenwick que concède l'adversaire (la mesure a retenu les deux côtés).
+  // Les quatre valeurs ou rien : un match ne mélange pas deux mesures.
+  const ffVals = [homeCtx.fenwickForPg, homeCtx.fenwickAgainstPg, awayCtx.fenwickForPg, awayCtx.fenwickAgainstPg];
+  const useFenwick = ffVals.every((v) => v != null && v > 0);
+  const hVol = useFenwick ? (homeCtx.fenwickForPg! + awayCtx.fenwickAgainstPg!) / 2 : hSF;
+  const aVol = useFenwick ? (awayCtx.fenwickForPg! + homeCtx.fenwickAgainstPg!) / 2 : aSF;
+  const volRef = useFenwick ? LEAGUE_AVG_FF : LEAGUE_AVG_SOG;
+  const volRate = useFenwick ? FF_GOAL_RATE : SOG_GOAL_RATE;
 
   // ── Facteurs transparents (chacun estime P(victoire domicile), 0–1) ─────────
   // Qualité d'équipe : win% saison + forme L10, neutre côté glace & fatigue
@@ -652,9 +676,9 @@ function computeGameMarkets(
   let lambdaH = (gfH / LEAGUE_AVG_GPG) * (gaA / LEAGUE_AVG_GPG) * LEAGUE_AVG_GPG;
   let lambdaA = (gfA / LEAGUE_AVG_GPG) * (gaH / LEAGUE_AVG_GPG) * LEAGUE_AVG_GPG;
 
-  // Volume de tirs : signal secondaire (poids 12%).
-  lambdaH *= clamp(1 + 0.12 * (hSF / LEAGUE_AVG_SOG - 1), 0.9, 1.1);
-  lambdaA *= clamp(1 + 0.12 * (aSF / LEAGUE_AVG_SOG - 1), 0.9, 1.1);
+  // Volume de tirs (Fenwick, repli tirs cadrés) : signal secondaire (poids 12%).
+  lambdaH *= clamp(1 + 0.12 * (hVol / volRef - 1), 0.9, 1.1);
+  lambdaA *= clamp(1 + 0.12 * (aVol / volRef - 1), 0.9, 1.1);
 
   // Unités spéciales : PP maison vs PK adverse (et inversement), borné ±8%.
   lambdaH *= clamp(1 + 0.06 * ((hPP - 20) / 20 - (aPK - 80) / 20) / 2, 0.92, 1.08);
@@ -1434,7 +1458,9 @@ function computeGameMarkets(
   attachGameFactors(groups, {
     wH, wA, gfH, gaH, gfA, gaA,
     lambdaH, lambdaA, lambdaT,
-    hSF, aSF, hPP, aPP, hPK, aPK, hB2b, aB2b,
+    hShotGoals: hVol * volRate, aShotGoals: aVol * volRate,
+    shotMetric: useFenwick ? 'fenwick' : 'shots',
+    hPP, aPP, hPK, aPK, hB2b, aB2b,
     venueAlt, hAltGain: hTravel?.alt_gain, aAltGain: aTravel?.alt_gain,
     refPenaltyMult,
     homeIce: fHomeIce, fatigue: fFatigue,
@@ -1486,6 +1512,8 @@ function makeCtx(
     pkPct:          s?.pkPct ?? team.pkPct ?? 80,
     shotsForPg:     s?.shotsForPg     ?? LEAGUE_AVG_SOG,
     shotsAgainstPg: s?.shotsAgainstPg ?? LEAGUE_AVG_SOG,
+    fenwickForPg:     s?.fenwickForPg,
+    fenwickAgainstPg: s?.fenwickAgainstPg,
     restDays:       rest.restDays,
     b2b:            rest.b2b,
     travel,

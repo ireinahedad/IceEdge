@@ -4,37 +4,18 @@
 // Periodically looks for a standout value bet and pushes it to Pro users who
 // opted into value-bet notifications. Enabled via PUSH_SCAN_ENABLED=true.
 //
-// True +EV: we compare the model's win probability against the REAL bookmaker
-// payout (decimal odds from The Odds API via oddsClient). A bet is +EV when the
-// expected return per unit staked is positive:
-//     EV = modelProb × decimalOdds − 1        (> 0  ⇒ value)
-// Scope = moneyline + totals (over/under) — the two markets the odds feed prices.
-// For totals we only compute EV when the book's line matches the bet's line,
-// otherwise model prob and payout would refer to different lines. An alert
-// requires BOTH a positive edge (EV ≥ MIN_EV) AND a strong model score
-// (≥ SCORE_THRESHOLD) — the double filter keeps thin, noise-driven edges out.
+// Le CRITÈRE n'est plus ici : il vit dans `valueBets.service.ts`, partagé avec
+// la section Value Bets de l'accueil (décision du user, 2026-10-02 — l'accueil
+// et l'alerte ne doivent plus pouvoir se contredire). Ce module ne fait que
+// prendre le meilleur value bet du moment (le plus gros edge, critère dont le
+// ROI a été mesuré), éviter de le repousser, et le diffuser aux abonnés dont
+// le seuil personnel est atteint.
 
 import { pool } from '../db/connection';
-import { getBestBets } from './bestBets.service';
-import { fetchGameById } from './nhlApiClient';
-import { fetchOddsImplied, fetchTotalsOdds } from './oddsClient';
+import { getCurrentValueBets, type ValueBet } from './valueBets.service';
 import { logger } from '../logger';
 import { sendToUsers, pushEnabled } from './push.service';
 import { withJobLock, getJobState, setJobState } from './jobLock';
-
-const SCORE_THRESHOLD = 65;           // only alert on strong model picks
-// Minimum expected-value edge (fraction of stake) to qualify. 0 = any positive
-// edge; override with VALUE_BET_MIN_EV (e.g. 0.05 for +5%).
-const MIN_EV = Number(process.env.VALUE_BET_MIN_EV) || 0;
-// Edge minimum = (proba modèle − proba marché dé-viggée). Le backtest walk-forward
-// montre un ROI positif dès ~2 % et jusqu'à ~5 % ; au-delà (6 %+) l'edge devient
-// du bruit (info manquante côté modèle). Défaut 0.02 ; surcharge VALUE_BET_MIN_EDGE.
-const MIN_EDGE = Number(process.env.VALUE_BET_MIN_EDGE) || 0.02;
-// Garde-fou haut : un edge énorme = plus probablement une info manquée qu'une vraie
-// value. On ignore au-delà (0 = désactivé). Surcharge VALUE_BET_MAX_EDGE.
-const MAX_EDGE = Number(process.env.VALUE_BET_MAX_EDGE) || 0.06;
-// How many top moneyline candidates (by score) to price against real odds.
-const MAX_PRICED = 10;
 
 /**
  * Clé de la dernière alerte envoyée, en base et non en mémoire.
@@ -48,127 +29,20 @@ const MAX_PRICED = 10;
  *     « déjà envoyé » soit une mémoire commune.
  */
 const LAST_ALERT_KEY = 'valueBetScan:lastAlertKey';
-/** Un scan complet appelle getBestBets (jusqu'à 30 appels ML) puis price 10 matchs. */
+/** Un scan peut réveiller le paquet ML de chaque match éligible de la soirée. */
 const LOCK_TTL_MS = 10 * 60 * 1000;
 
-interface ValueBet {
-  key: string;
-  label: string;
-  context: string;
-  score: number;    // model win probability (%)
-  odds: number;     // real decimal odds from the book
-  book: string;     // bookmaker key (e.g. 'bet365')
-  evPct: number;    // expected-value edge, rounded to whole %
-  edgePct: number;  // proba modèle − proba marché dé-viggée, en % (le signal validé)
+/** Le meilleur value bet encore prenable (match pas commencé), ou null. */
+async function findTopValueBet(): Promise<ValueBet | null> {
+  const bets = await getCurrentValueBets();   // trié par edge décroissant
+  return bets[0] ?? null;
 }
 
-// Markets we can price against real odds. Others are excluded from the +EV scan.
-const PRICED_MARKETS = new Set(['moneyline', 'total_goals']);
-
-/**
- * Scans strong moneyline/totals picks and prices each against the real odds from
- * the bookmaker feed. Returns the single best genuine +EV bet, or null.
- */
-async function findTopValueBet(): Promise<ValueBet | null> {
-  // Pull a wide slate, then keep only strong priceable picks (double filter #1).
-  const { bets } = await getBestBets({ limit: 40, source: 'ml' });
-  const candidates = bets
-    .filter((b) => PRICED_MARKETS.has(b.marketType) && b.score >= SCORE_THRESHOLD && b.gameId)
-    .slice(0, MAX_PRICED);
-  if (candidates.length === 0) return null;
-
-  // Real odds (h2h + totals) + resolved home side, cached per game so all of a
-  // game's picks share one lookup. `null` = looked up, nothing usable available.
-  interface PricedGame {
-    h2h: Awaited<ReturnType<typeof fetchOddsImplied>>;
-    totals: Awaited<ReturnType<typeof fetchTotalsOdds>>;
-    homeAbbr: string;
-  }
-  const gameCache = new Map<string, PricedGame | null>();
-
-  async function priceGame(gameId: string): Promise<PricedGame | null> {
-    if (gameCache.has(gameId)) return gameCache.get(gameId)!;
-    const game = await fetchGameById(gameId);
-    const homeName = game.homeTeam?.name ?? game.homeTeam?.abbreviation ?? '';
-    const awayName = game.awayTeam?.name ?? game.awayTeam?.abbreviation ?? '';
-    const [h2h, totals] = await Promise.all([
-      fetchOddsImplied(homeName, awayName),
-      fetchTotalsOdds(homeName, awayName),
-    ]);
-    const priced: PricedGame | null = (h2h || totals)
-      ? { h2h, totals, homeAbbr: String(game.homeTeam?.abbreviation ?? '').toLowerCase() }
-      : null;
-    gameCache.set(gameId, priced);
-    return priced;
-  }
-
-  /** Odds décimales réelles + proba marché dé-viggée pour la sélection exacte du pari. */
-  function oddsForBet(
-    bet: (typeof candidates)[number],
-    priced: PricedGame,
-  ): { odds: number; book: string; marketProb: number } | null {
-    if (bet.marketType === 'moneyline') {
-      if (!priced.h2h) return null;
-      const isHomePick = bet.teamAbbr?.toLowerCase() === priced.homeAbbr;
-      return {
-        odds: isHomePick ? priced.h2h.homeOdds : priced.h2h.awayOdds,
-        book: priced.h2h.bookmaker,
-        marketProb: isHomePick ? priced.h2h.homeProb : 1 - priced.h2h.homeProb,
-      };
-    }
-    // total_goals: only valid when the book's line matches the bet's line.
-    if (!priced.totals || bet.line == null || priced.totals.line !== bet.line) return null;
-    const isOver = bet.selectionValue === 'over';
-    // Dé-vig de la ligne O/U pour la proba implicite du marché sur ce côté.
-    const invOver = 1 / priced.totals.overOdds;
-    const invUnder = 1 / priced.totals.underOdds;
-    const devigOver = invOver / (invOver + invUnder);
-    return {
-      odds: isOver ? priced.totals.overOdds : priced.totals.underOdds,
-      book: priced.totals.bookmaker,
-      marketProb: isOver ? devigOver : 1 - devigOver,
-    };
-  }
-
-  let best: ValueBet | null = null;
-
-  for (const bet of candidates) {
-    try {
-      const priced = await priceGame(bet.gameId!);
-      if (!priced) continue;   // no real price for this game → can't compute +EV
-
-      const priceInfo = oddsForBet(bet, priced);
-      if (!priceInfo || priceInfo.odds <= 1) continue;
-
-      const modelProb = bet.score / 100;
-      const ev   = modelProb * priceInfo.odds - 1;       // valeur espérée réelle
-      const edge = modelProb - priceInfo.marketProb;      // signal validé au backtest
-
-      // Triple filtre : score fort (déjà fait) + edge dans la bande [MIN, MAX] + EV positif.
-      // La bande d'edge évite les faux signaux (edge énorme = info manquée côté modèle).
-      if (edge < MIN_EDGE) continue;
-      if (MAX_EDGE > 0 && edge > MAX_EDGE) continue;
-      if (ev < MIN_EV) continue;
-
-      // On classe par edge (le critère dont le ROI est validé), pas par EV.
-      if (!best || edge > best.edgePct / 100) {
-        best = {
-          key: bet.id,
-          label: bet.label,
-          context: bet.context,
-          score: Math.round(bet.score),
-          odds: priceInfo.odds,
-          book: priceInfo.book,
-          evPct: Math.round(ev * 100),
-          edgePct: Math.round(edge * 100),
-        };
-      }
-    } catch (err: any) {
-      logger.warn({ err: err?.message, betId: bet.id }, '[ValueBetScan] pricing failed');
-    }
-  }
-
-  return best;
+/** Libellé court d'une sélection, pour la notification. */
+function labelOf(vb: ValueBet): string {
+  return vb.market === 'puck_line'
+    ? `${vb.team} ${vb.line ?? -1.5} vs ${vb.opponent}`
+    : `${vb.team} gagne vs ${vb.opponent}`;
 }
 
 /** A recipient plus their personal minimum-EV threshold (in whole %). */
@@ -196,33 +70,34 @@ async function runScan(): Promise<void> {
 
     // Lu à CHAQUE tour, et sous verrou : c'est ce qui rend l'anti-doublon
     // efficace entre instances et à travers les redéploiements.
-    if (vb.key === (await getJobState(LAST_ALERT_KEY))) return;   // nothing new to alert
+    if (vb.id === (await getJobState(LAST_ALERT_KEY))) return;   // nothing new to alert
 
     // Marqué AVANT l'envoi, et l'échec d'écriture annule l'envoi. Ne pas pouvoir
     // mémoriser « déjà envoyé » et pousser quand même, c'est se garantir de
     // repousser la même alerte au tour suivant : mieux vaut une alerte manquée
     // qu'une alerte en boucle chez tous les abonnés.
-    if (!(await setJobState(LAST_ALERT_KEY, vb.key))) {
-      logger.warn({ key: vb.key }, '[ValueBetScan] état non persisté — envoi annulé pour éviter un doublon');
+    if (!(await setJobState(LAST_ALERT_KEY, vb.id))) {
+      logger.warn({ key: vb.id }, '[ValueBetScan] état non persisté — envoi annulé pour éviter un doublon');
       return;
     }
 
     // Only notify users whose personal minimum-EDGE threshold is met by this bet.
     //
-    // ⚠️ Comparé à `edgePct`, PAS à `evPct` — c'était l'inverse jusqu'au 2026-09-08.
+    // ⚠️ Comparé à l'EDGE, PAS à l'EV — c'était l'inverse jusqu'au 2026-09-08.
     // L'écran Réglages intitule le champ « Edge minimum » et son aide parle d'edge,
     // mais le filtre lisait l'EV : deux quantités différentes (edge = proba modèle
     // − proba marché dé-viggée ; EV = proba modèle × cote − 1), donc un seuil réglé
     // à 3 % ne coupait pas ce que l'utilisateur croyait couper. C'est aussi l'edge,
     // et non l'EV, dont le ROI est validé au backtest walk-forward, et c'est lui que
-    // bornent MIN_EDGE / MAX_EDGE plus haut : le seuil personnel prolonge donc le
-    // plancher global au lieu de le croiser.
-    const recipients = (await optedInUsers()).filter((u) => vb.edgePct >= u.minEvPct);
+    // bornent les règles de `valueBets.service.ts` : le seuil personnel prolonge
+    // donc le plancher global au lieu de le croiser. Comparaison exacte, sans
+    // arrondi : un edge de 2,6 n'atteint pas un seuil de 3.
+    const recipients = (await optedInUsers()).filter((u) => vb.edge * 100 + 1e-9 >= u.minEvPct);
     if (recipients.length === 0) return;
 
     const payload = {
       title: 'Value bet détecté',
-      body: `${vb.label} · edge +${vb.edgePct}% · +${vb.evPct}% EV · cote ${vb.odds.toFixed(2)} (${vb.book}) · modèle ${vb.score}%`,
+      body: `${labelOf(vb)} · edge +${(vb.edge * 100).toFixed(1)} pts · cote ${vb.price.toFixed(2)} (${vb.bookTitle}) · rentable au-dessus de ${vb.minOdds.toFixed(2)} · modèle ${Math.round(vb.modelProb * 100)} %`,
       url: '/',
     };
     // Un seul appel pour tout le lot : une requête de lecture, un plafond

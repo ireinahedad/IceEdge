@@ -177,8 +177,12 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   const legId = betLegId(label, mlProps, rulePct);
   const inSlip = hasLeg(legId);
 
-  function handleSlip() {
+  async function handleSlip() {
     if (inSlip) { removeLeg(legId); return; }
+    // 2026-10-02 (demande du user) : le coupon garde le chiffre ML — celui de
+    // la tuile et de l'accueil. Les règles ne servent de repli que si le
+    // modèle n'a pas de chiffre pour ce pari (le coupon a besoin d'un nombre).
+    const mlLegPct = await resolveMlPct().catch(() => null);
     const { marketType, selectionValue } = settlementFields(mlProps);
     // Pari joueur : le coupon porte l'ÉQUIPE du joueur comme sujet, et ce qui a
     // été parié — nom compris — comme sélection. Plus jamais l'identifiant NHL.
@@ -201,7 +205,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
         : (mlProps?.subjectId ? nhlLogoUrl(mlProps.subjectId) : ""),
       selection: betText,
       selectionShort: betText.slice(0, 14),
-      probability: legPct,
+      probability: mlLegPct ?? legPct,
       line: mlProps?.line,
       addedAt: new Date().toISOString(),
       // Machine-readable fields for automatic settlement — only populated when

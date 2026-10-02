@@ -22,7 +22,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  */
 
 vi.mock('./startingGoalies', () => ({ getStartingGoalies: vi.fn(async () => ({})) }));
-vi.mock('./scratches',       () => ({ getScratchesDay:    vi.fn(async () => ({})) }));
+vi.mock('./scratches',       () => ({
+  getScratchesDay: vi.fn(async () => ({})),
+  getLineupDay:    vi.fn(async () => ({ scratches: {}, dressed: {} })),
+}));
 vi.mock('./oddsClient',      () => ({
   fetchOddsImplied: vi.fn(async () => null),
   fetchTotalsOdds:  vi.fn(async () => null),

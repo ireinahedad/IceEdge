@@ -43,7 +43,12 @@ export function intentToLegInput(intent: SlipIntent, data: SlipCommandData): Bui
     return { ...common, subject: playerSubject(player, data.getTeamById(player.teamId)), game: toUpcoming(raw, player.teamId) };
   }
   const g = toUIGame(raw);
-  return { ...common, subject: gameSubject(g, data.getTeamById(g.team1Id), data.getTeamById(g.team2Id)), game: null };
+  return {
+    ...common,
+    subject: gameSubject(g, data.getTeamById(g.team1Id), data.getTeamById(g.team2Id)),
+    game: null,
+    teams: { home: g.team1Id, away: g.team2Id },
+  };
 }
 
 /** Libellé court d'une intention non ajoutée (« Nick Suzuki · Shots O/U over 2.5 »). */

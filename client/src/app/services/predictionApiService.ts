@@ -30,6 +30,7 @@ import type {
 } from "./../types/bet";
 import { env } from "../env";
 import { fetchWithTimeout } from "./http";
+import { authedFetch } from "./authService";
 
 const BASE_URL = env.predictionApiUrl;
 
@@ -145,6 +146,39 @@ export interface ApiBestBet {
   bookTitle?:     string | null;
 }
 
+// ─── Value bets (Pro) ─────────────────────────────────────────────────────────
+
+/**
+ * Un value bet, tel que le CALCULE le serveur (`valueBets.service.ts`). Le
+ * client ne juge plus rien : l'accueil et l'alerte push lisent le même critère.
+ * Probabilités en fraction 0–1, cotes en décimal.
+ */
+export interface ApiValueBet {
+  id:           string;
+  gameId:       string;
+  gameDate:     string;
+  startTimeUTC: string | null;
+  market:       "moneyline" | "puck_line";
+  team:         string;
+  opponent:     string;
+  isHome:       boolean;
+  line:         number | null;
+  modelProb:    number;
+  marketProb:   number;
+  edge:         number;
+  ev:           number;
+  price:        number;
+  bookmaker:    string;
+  bookTitle:    string;
+  /** Seuil de rentabilité selon le modèle (1 / modelProb), en décimal. */
+  minOdds:      number;
+}
+
+export interface ValueBetsResponse {
+  bets: ApiValueBet[];
+  meta: { generatedAt: string };
+}
+
 export interface BestBetsResponse {
   bets: ApiBestBet[];
   meta: { generatedAt: string; source: string; mlAvailable: boolean; scanned: number };
@@ -211,5 +245,27 @@ export const predictionApiService = {
     req: ParlayPredictionRequest
   ): Promise<ParlayPredictionResponse> =>
     post<ParlayPredictionResponse>("/predict/parlay", req),
+
+  /**
+   * Les value bets du moment — réservé aux Pro, d'où la requête AUTHENTIFIÉE
+   * (`authedFetch`), contrairement au reste de ce service. Throws
+   * `PredictionUnavailableError` (402 = l'abonnement n'est plus actif).
+   */
+  getValueBets: async (): Promise<ValueBetsResponse> => {
+    let res: Response;
+    try {
+      res = await authedFetch("/predict/value-bets");
+    } catch (cause) {
+      throw new PredictionUnavailableError("network", `Value bets unreachable: ${String(cause)}`);
+    }
+    if (!res.ok) {
+      throw new PredictionUnavailableError("http", `Value bets error ${res.status}`, res.status);
+    }
+    try {
+      return (await res.json()) as ValueBetsResponse;
+    } catch (cause) {
+      throw new PredictionUnavailableError("bad_response", `Value bets unreadable: ${String(cause)}`, res.status);
+    }
+  },
 };
 

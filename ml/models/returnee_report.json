@@ -1,0 +1,110 @@
+{
+  "form_with_player": {
+    "missed>=3_toi>=16": {
+      "n_returns": 5602,
+      "median_missed": 6.0,
+      "alpha=1.0": {
+        "delta": 6e-06,
+        "se": 0.000496,
+        "z": 0.01,
+        "seasons_better": 5,
+        "n_seasons": 14
+      },
+      "alpha=0.5": {
+        "delta": -0.000227,
+        "se": 0.00034,
+        "z": -0.67,
+        "seasons_better": 8,
+        "n_seasons": 14
+      }
+    },
+    "missed>=5_toi>=19": {
+      "n_returns": 1812,
+      "median_missed": 10.0,
+      "alpha=1.0": {
+        "delta": -0.000214,
+        "se": 0.000322,
+        "z": -0.67,
+        "seasons_better": 10,
+        "n_seasons": 14
+      },
+      "alpha=0.5": {
+        "delta": -0.000264,
+        "se": 0.000286,
+        "z": -0.92,
+        "seasons_better": 10,
+        "n_seasons": 14
+      }
+    },
+    "missed>=8_toi>=16": {
+      "n_returns": 2544,
+      "median_missed": 13.0,
+      "alpha=1.0": {
+        "delta": -3.6e-05,
+        "se": 0.000336,
+        "z": -0.11,
+        "seasons_better": 6,
+        "n_seasons": 14
+      },
+      "alpha=0.5": {
+        "delta": 2.7e-05,
+        "se": 0.000155,
+        "z": 0.17,
+        "seasons_better": 7,
+        "n_seasons": 14
+      }
+    },
+    "missed>=10_toi>=19": {
+      "n_returns": 971,
+      "median_missed": 15.0,
+      "alpha=1.0": {
+        "delta": -8.6e-05,
+        "se": 0.000321,
+        "z": -0.27,
+        "seasons_better": 7,
+        "n_seasons": 14
+      },
+      "alpha=0.5": {
+        "delta": -0.000189,
+        "se": 0.000334,
+        "z": -0.57,
+        "seasons_better": 8,
+        "n_seasons": 14
+      }
+    }
+  },
+  "market": {
+    "missed>=3_toi>=16": {
+      "n": 2639,
+      "win_rate": 0.4983,
+      "market_p": 0.4987,
+      "gap": -0.0004,
+      "se": 0.0095,
+      "z": -0.04
+    },
+    "missed>=5_toi>=19": {
+      "n": 855,
+      "win_rate": 0.5263,
+      "market_p": 0.5168,
+      "gap": 0.0095,
+      "se": 0.0166,
+      "z": 0.57
+    },
+    "missed>=8_toi>=16": {
+      "n": 1298,
+      "win_rate": 0.4769,
+      "market_p": 0.5033,
+      "gap": -0.0264,
+      "se": 0.0136,
+      "z": -1.94
+    },
+    "missed>=10_toi>=19": {
+      "n": 496,
+      "win_rate": 0.4899,
+      "market_p": 0.5134,
+      "gap": -0.0235,
+      "se": 0.0219,
+      "z": -1.07
+    }
+  }
+}

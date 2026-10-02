@@ -19,6 +19,7 @@
  */
 
 import { predictionApiService, isPredictionUnavailable } from "./predictionApiService";
+import { mlLegProbability } from "./mlLegProbability";
 import type { MarketDefinition } from "../data/betMarkets";
 import type { UIGame, UIPlayer, UITeam } from "../hooks/useNHLData";
 import type { UpcomingGame } from "../pages/prediction/predictionShared";
@@ -73,6 +74,12 @@ export interface BuildLegInput {
    * sujet. `null` pour un pari sur un match (le match EST le sujet).
    */
   game: UpcomingGame | null;
+  /**
+   * Pari sur un MATCH : ses deux équipes (abréviations), pour poser la
+   * question au modèle ML du bon côté. Ignoré pour une équipe ou un joueur
+   * (l'affiche `game` les porte déjà).
+   */
+  teams?: { home: string; away: string } | null;
 }
 
 export interface BuildLegDeps {
@@ -153,11 +160,26 @@ export async function buildLeg(input: BuildLegInput, deps: BuildLegDeps): Promis
 
   if (deps.hasLeg(legId)) return { ok: false, reason: "duplicate" };
 
+  // 2026-10-02 (demande du user) : le chiffre ML d'abord — celui des tuiles
+  // et de l'accueil (voir `mlLegProbability.ts`). Les règles ne servent qu'au
+  // pari que le modèle ne sait pas chiffrer.
+  const mlPct = await mlLegProbability({
+    subjectType: subject.type,
+    subjectId: subject.id,
+    marketType: market.type,
+    selection: selectionValue,
+    line: lineValue,
+    gameId: subject.type === "game" ? subject.id : gameId,
+    homeAbbr: subject.type === "game" ? input.teams?.home : game?.homeAbbr,
+    awayAbbr: subject.type === "game" ? input.teams?.away : game?.awayAbbr,
+  });
+
   // La probabilité vient du service de prédiction. Sans elle, on n'ajoute
   // rien : une jambe porte sa probabilité jusqu'au règlement du coupon, donc
   // un chiffre inventé ici survivrait bien après la panne qui l'a produit.
-  let response;
-  try {
+  let response: { probability: number };
+  if (mlPct != null) response = { probability: mlPct };
+  else try {
     response = await predictionApiService.getSinglePrediction({
       marketType: market.type as BetMarketType,
       gameId:

@@ -82,6 +82,22 @@ LINEUP_HL = 20                    # demi-vie EWMA par joueur (matchs)
 LINEUP_RECENT_GAMES = 25          # fenêtre définissant l'effectif « actuel »
 LINEUP_ROSTER_MAX   = 26          # profondeur conservée (marge pour les absences)
 LINEUP_DRESSED      = 18          # patineurs habillés par match (12 att. + 6 déf.)
+# Bassin de patineurs (2026-10-02) : TOUS les patineurs vus dans la ligue sur
+# les LINEUP_POOL_DAYS derniers jours, indexés par identifiant NHL, avec les
+# cadences de leur dernier match — quelle que soit l'équipe. Il ne sert que
+# quand le serveur fournit l'alignement OFFICIEL du soir (API NHL) : le service
+# additionne alors exactement les habillés, comme l'entraînement additionne les
+# joueurs qui ont réellement joué (dont les cadences sont propres au JOUEUR, pas
+# à l'équipe). Deux trous que l'effectif récent (LINEUP_RECENT_GAMES matchs de
+# l'équipe) laissait :
+#   • le joueur de retour d'une longue blessure en était sorti — le soir de son
+#     retour, le modèle ne pouvait pas le compter ;
+#   • le joueur arrivé d'une autre équipe (échange, agent libre) n'y était pas
+#     encore — mesuré le 2026-10-01 sur SEA–CGY : par équipe, 15 habillés de
+#     CGY sur 18 seulement étaient connus.
+# Une recrue sans match NHL n'a pas de cadence : elle compte 0, exactement
+# comme à l'entraînement (cadence NaN, ignorée par la somme).
+LINEUP_POOL_DAYS    = 550
 
 # ── ELO (identique à train.py v3) ────────────────────────────────────────────
 ELO_BASE, ELO_K, ELO_HOME_ADV, ELO_SEASON_REGRESS = 1500.0, 6.0, 50.0, 0.30
@@ -347,7 +363,7 @@ def build_goalie_features() -> tuple[pd.DataFrame, dict]:
 # 2 bis. Projection bottom-up de l'alignement (P3)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def build_lineup_features() -> tuple[pd.DataFrame, dict]:
+def build_lineup_features() -> tuple[pd.DataFrame, dict, dict]:
     """Force offensive reconstruite depuis les patineurs réellement habillés.
 
     Pour chaque joueur, on calcule en pré-match (EWMA décalée, donc sans fuite) :
@@ -362,7 +378,8 @@ def build_lineup_features() -> tuple[pd.DataFrame, dict]:
     Contrôle de cohérence : la somme moyenne vaut 2.84 xG par équipe-match, contre
     2.83 buts réglementaires réellement marqués en moyenne. L'échelle est bonne.
 
-    Retourne (DataFrame (team, date, lineup_*), état d'inférence par équipe).
+    Retourne (DataFrame (team, date, lineup_*), état d'inférence par équipe,
+    bassin de patineurs par identifiant NHL).
     """
     print("👥 Projection bottom-up de l'alignement …")
     sk = pd.read_csv(f"{DATA_DIR}/mp_skater_games.csv", low_memory=False)
@@ -407,18 +424,35 @@ def build_lineup_features() -> tuple[pd.DataFrame, dict]:
         # et surestimerait la projection de 18.6 % ; par temps de glace, l'écart
         # avec l'échelle d'entraînement tombe à 2.3 %.
         roster = last.sort_values("toi_prior", ascending=False).head(LINEUP_ROSTER_MAX)
-        state[team] = [
-            {"name": r["name"],
-             "xg": round(float(r["contrib"]), 5),
-             "pts": round(float(r["pts_prior"]), 4),
-             "toi": round(float(r["toi_prior"]), 1)}
-            for _, r in roster.iterrows() if r["contrib"] == r["contrib"]
-        ]
+        state[team] = [_lineup_entry(r) for _, r in roster.iterrows()
+                       if r["contrib"] == r["contrib"]]
+    # Bassin de patineurs (cf. LINEUP_POOL_DAYS) : servi SEULEMENT avec
+    # l'alignement officiel. Chaque joueur garde les cadences de son dernier
+    # match, toutes équipes confondues — pour un blessé, celles d'avant la
+    # blessure, exactement ce que l'entraînement lui attribue le soir du retour.
+    cutoff = (pd.Timestamp(valid["date"].max()) - pd.Timedelta(days=LINEUP_POOL_DAYS)).strftime("%Y-%m-%d")
+    last = (valid[valid["date"] >= cutoff].sort_values(["date", "gameId"])
+            .groupby("playerId").tail(1))
+    pool = {str(int(r["playerId"])): _lineup_entry(r) for _, r in last.iterrows()
+            if r["contrib"] == r["contrib"]}
     sums = [sum(p["xg"] for p in v[:LINEUP_DRESSED]) for v in state.values() if v]
     print(f"   ✅ {len(out)} équipes-matchs, somme moyenne {out['lineup_xg'].mean():.3f} xG")
     print(f"   ✅ état d'inférence : {len(state)} équipes, somme top-{LINEUP_DRESSED} "
           f"moyenne {np.mean(sums):.3f} xG (doit rester proche de la valeur ci-dessus)")
-    return out, state
+    print(f"   ✅ bassin de patineurs : {len(pool)} joueurs "
+          f"(vus sur les {LINEUP_POOL_DAYS} derniers jours, toutes équipes)")
+    return out, state, pool
+
+
+def _lineup_entry(r) -> dict:
+    """Une ligne d'effectif servie. `id` = identifiant NHL (MoneyPuck reprend
+    ceux de la NHL) : c'est lui qui apparie l'alignement officiel, les noms ne
+    servant que de repli (accents, orthographes différentes)."""
+    return {"id": int(r["playerId"]),
+            "name": r["name"],
+            "xg": round(float(r["contrib"]), 5),
+            "pts": round(float(r["pts_prior"]), 4),
+            "toi": round(float(r["toi_prior"]), 1)}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -527,11 +561,12 @@ def build_star_features() -> tuple[pd.DataFrame | None, dict]:
         top5 = sorted(active.items(), key=lambda kv: -kv[1][0])[:5]
         pool = _key_pool(active)
         state[team] = {
-            "top5": [{"name": v[1], "ppg": round(v[0], 3)} for _, v in top5],
+            # `id` (identifiant NHL) : apparie l'alignement officiel du soir.
+            "top5": [{"id": int(pid), "name": v[1], "ppg": round(v[0], 3)} for pid, v in top5],
             "star_power_full": round(sum(v[0] for _, v in top5[:3]), 4),
             # Pool clé + poids pré-calculé (utilisé tel quel par ml_service.py) :
             # noms = orthographe MoneyPuck (matching des scratches par nom exact).
-            "keys": [{"name": name, "ppg": round(ppg, 3), "pos": grp,
+            "keys": [{"id": int(pid), "name": name, "ppg": round(ppg, 3), "pos": grp,
                       "w": round(_player_weight(ppg, grp, rank), 4)}
                      for pid, ppg, name, grp, rank in pool],
         }
@@ -779,7 +814,7 @@ def main():
 
     team_feats, team_state   = build_team_features()
     goalie_feats, goalie_state = build_goalie_features()
-    lineup_feats, lineup_state = build_lineup_features()
+    lineup_feats, lineup_state, skater_pool = build_lineup_features()
     star_feats, star_state   = build_star_features()
 
     df = spine.copy()
@@ -884,6 +919,7 @@ def main():
             "teams": team_state,
             "goalies": goalie_state,
             "lineups": lineup_state,
+            "skater_pool": skater_pool,
             "stars": star_state,
         }, f, indent=1)
     with open(f"{MODELS_DIR}/elo_ratings.json", "w") as f:

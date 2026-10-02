@@ -793,6 +793,15 @@ class GameFeatures(BaseModel):
     # calcule stars_out_weight (absence pondérée perf + position/trio).
     home_scratches: List[str] = Field(default_factory=list)
     away_scratches: List[str] = Field(default_factory=list)
+    # Alignement OFFICIEL du soir (API NHL, publié peu avant la mise au jeu) :
+    # les joueurs habillés, identifiants NHL et noms. Vide = inconnu, et le
+    # service retombe sur l'effectif récent moins les absents ci-dessus. Connu,
+    # il remplace les deux : la projection additionne exactement les habillés,
+    # joueur de retour de blessure compris (cf. `skater_pool`, build_dataset.py).
+    home_dressed_ids: List[int] = Field(default_factory=list, max_length=40)
+    away_dressed_ids: List[int] = Field(default_factory=list, max_length=40)
+    home_dressed: List[str] = Field(default_factory=list, max_length=40)
+    away_dressed: List[str] = Field(default_factory=list, max_length=40)
 
 # ── Player prop features ──────────────────────────────────────────────────────
 
@@ -1824,6 +1833,35 @@ def _goalie_backup_flag(goalies: list[dict], goalie_name: str | None) -> float:
     return float(float(usual["share_last10"]) < _GOALIE_BACKUP_SHARE)
 
 
+# Sous ce nombre d'habillés reçus, la liste est jugée incomplète et ignorée
+# (18 patineurs + 2 gardiens dans un alignement officiel).
+_MIN_DRESSED = 18
+
+
+def _name_key(s: str) -> str:
+    """« Slafkovský » (NHL) et « Slafkovsky » (MoneyPuck) : la même clé."""
+    import unicodedata
+    s = unicodedata.normalize("NFD", s or "")
+    return "".join(c for c in s if unicodedata.category(c) != "Mn").strip().lower()
+
+
+def _dressed_matcher(ids: list[int] | None, names: list[str] | None):
+    """Prédicat « ce joueur est-il habillé ce soir ? », ou None si l'alignement
+    officiel n'est pas connu. Apparie par identifiant NHL d'abord, par nom
+    ensuite (états d'inférence antérieurs au 2026-10-02 : pas d'`id`)."""
+    id_set = {int(i) for i in (ids or [])}
+    name_set = {_name_key(n) for n in (names or []) if n and n.strip()}
+    if max(len(id_set), len(name_set)) < _MIN_DRESSED:
+        return None
+
+    def is_dressed(p: dict) -> bool:
+        pid = p.get("id")
+        if pid is not None and id_set:
+            return int(pid) in id_set
+        return _name_key(p.get("name", "")) in name_set
+    return is_dressed
+
+
 def _game_context(f: GameFeatures) -> dict:
     """Tout ce qui ne dépend QUE du match — features, modèles, λ, P(victoire).
 
@@ -1886,7 +1924,9 @@ def _game_context(f: GameFeatures) -> dict:
                                 "away_odds_decimal", "total_line_market",
                                 "home_goalie", "away_goalie",
                                 "home_stars_missing", "away_stars_missing",
-                                "home_scratches", "away_scratches"}),
+                                "home_scratches", "away_scratches",
+                                "home_dressed_ids", "away_dressed_ids",
+                                "home_dressed", "away_dressed"}),
         "home_elo":     home_elo,
         "away_elo":     away_elo,
         "elo_diff":     home_elo - away_elo,
@@ -1919,9 +1959,12 @@ def _game_context(f: GameFeatures) -> dict:
         goalie_st = _inference_state.get("goalies", {})
         stars_st  = _inference_state.get("stars", {})
         lineup_st = _inference_state.get("lineups", {})
-        for side, team, goalie_name, stars_missing, scratches in [
-            ("home", (f.home_team or "").upper(), f.home_goalie, f.home_stars_missing, f.home_scratches),
-            ("away", (f.away_team or "").upper(), f.away_goalie, f.away_stars_missing, f.away_scratches),
+        pool_st   = _inference_state.get("skater_pool", {})
+        for side, team, goalie_name, stars_missing, scratches, is_dressed, dressed_ids in [
+            ("home", (f.home_team or "").upper(), f.home_goalie, f.home_stars_missing, f.home_scratches,
+             _dressed_matcher(f.home_dressed_ids, f.home_dressed), f.home_dressed_ids),
+            ("away", (f.away_team or "").upper(), f.away_goalie, f.away_stars_missing, f.away_scratches,
+             _dressed_matcher(f.away_dressed_ids, f.away_dressed), f.away_dressed_ids),
         ]:
             for k, v in (teams_st.get(team) or {}).items():
                 if isinstance(v, (int, float)):
@@ -1945,6 +1988,12 @@ def _game_context(f: GameFeatures) -> dict:
                     goalies, goalie_name)
             st = stars_st.get(team) or {}
             scratch_set = {s.strip().lower() for s in (scratches or []) if s and s.strip()}
+            # Avec l'alignement officiel, les absents restent ceux que le
+            # serveur NOMME (saisie + blessés + absents officiels de la NHL) et
+            # non « tout joueur clé non habillé » : l'état d'inférence garde les
+            # joueurs partis à l'intersaison (échangés, agents libres), qui ne
+            # sont pas des absents. Mesuré sur CGY le 2026-10-01 : trois partis
+            # (Coleman, Määttä, Brzustewicz) comptaient pour 1,55 d'absence.
             if st.get("top5"):
                 if scratch_set:
                     # Noms réels connus → on retire les BONS joueurs (pas "du haut")
@@ -1969,9 +2018,33 @@ def _game_context(f: GameFeatures) -> dict:
             # son temps de glace habituel — là où `stars_missing` ne comptait que
             # des têtes parmi un top-5 figé.
             roster = lineup_st.get(team) or []
-            if roster:
+            if is_dressed is not None:
+                # Alignement officiel : on additionne exactement les habillés,
+                # comme l'entraînement additionne ceux qui ont joué. Le bassin
+                # (`skater_pool`, toute la ligue, par identifiant NHL) contient
+                # le joueur de retour d'une longue blessure — avec ses cadences
+                # d'avant la blessure — et celui arrivé d'une autre équipe, que
+                # l'effectif récent (25 derniers matchs du club) ignorait.
+                # Sans identifiants (état d'inférence ancien, noms seuls) : on
+                # apparie par nom dans l'effectif du club, pas dans la ligue
+                # (deux « Sebastian Aho » y jouent).
+                if pool_st and dressed_ids:
+                    avail = [pool_st[str(i)] for i in dressed_ids if str(i) in pool_st]
+                else:
+                    avail = [p for p in roster if is_dressed(p)]
+                # Moins de 12 patineurs appariés : l'état d'inférence ne connaît
+                # pas cet effectif (identifiants manquants, état périmé). Mieux
+                # vaut l'ancienne projection qu'une somme amputée de moitié.
+                if len(avail) < 12:
+                    avail = ([p for p in roster
+                              if p.get("name", "").strip().lower() not in scratch_set]
+                             if roster else None)
+            elif roster:
                 avail = [p for p in roster
                          if p.get("name", "").strip().lower() not in scratch_set]
+            else:
+                avail = None
+            if avail is not None:
                 # Une équipe NHL habille 18 patineurs (12 attaquants, 6 défenseurs).
                 # L'effectif stocké est plus profond pour absorber les absences ;
                 # sommer tout le monde gonflerait la projection bien au-delà de

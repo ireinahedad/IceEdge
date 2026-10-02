@@ -81,14 +81,8 @@ const D = {
 };
 
 /**
- * Joueurs listés par équipe sur la carte de match : les NEUF meilleurs
- * pointeurs (points, puis buts, puis nom). Au-delà, la liste devient un mur
- * qu'on ne lit plus en trois secondes ; un 7-5 garde ainsi une seule carte.
- */
-const MAX_PLAYERS_PER_TEAM = 9;
-
-/**
- * Lignes de marqueurs par carte de match (après le plafond ci-dessus). Au-delà, le match se poursuit sur une seconde
+ * Lignes de marqueurs par carte de match. Tous les pointeurs sont listés
+ * (points, puis buts, puis nom) ; au-delà de ce nombre, le match se poursuit sur une seconde
  * carte (même en-tête, tableau continué) plutôt que de déborder. La carte a
  * une mise en page FIXE : en-tête toujours à la même hauteur, les lignes
  * s'ajoutent vers le bas. Le plafond est ce qui tient avant la zone de sécurité
@@ -460,19 +454,16 @@ function starsOf(g: Game): Star[] {
 // ===========================================================================
 
 /**
- * Découpe ÉQUILIBRÉE, et pas par paquets pleins.
+ * Découpe en remplissant la PREMIÈRE carte au maximum.
  *
- * Sept matchs découpés à six donnent 6 + 1 : une carte pleine, puis une carte
- * d'une seule ligne qui reste presque aussi longtemps à l'écran. 4 + 3 se
- * regarde. Le plafond reste un plafond — il n'est jamais dépassé, seulement
- * réparti.
+ * La première carte prend autant de lignes que le plafond permet, le reste
+ * passe sur la suivante, même si les deux cartes n'ont pas le même nombre de
+ * lignes (13 lignes à 11 → 11 + 2). Le plafond n'est jamais dépassé.
  */
 const chunk = <T>(list: T[], max: number): T[][] => {
-  const parts = Math.max(1, Math.ceil(list.length / max));
-  const size = Math.ceil(list.length / parts);
   const out: T[][] = [];
-  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
-  return out;
+  for (let i = 0; i < list.length; i += max) out.push(list.slice(i, i + max));
+  return out.length ? out : [[]];
 };
 
 function sideOf(t: Team) {
@@ -509,16 +500,16 @@ function pointersOf(g: Game): { away: Pointer[]; home: Pointer[] } {
     for (const a of x.assists ?? []) bump(side, a, 'a');
   }
   const sorted = (m: Map<string, Pointer>) => [...m.values()]
-    .sort((a, b) => b.p - a.p || b.g - a.g || lastName(a.name).localeCompare(lastName(b.name)))
-    .slice(0, MAX_PLAYERS_PER_TEAM);
+    .sort((a, b) => b.p - a.p || b.g - a.g || lastName(a.name).localeCompare(lastName(b.name)));
   return { away: sorted(bySide.away), home: sorted(bySide.home) };
 }
 
 /**
  * Les cartes d'un match : une seule le plus souvent, deux (ou plus) qui se
- * suivent quand les marqueurs dépassent MATCH_ROWS_PER_CARD. Le découpage est
- * équilibré (13 lignes → 7 + 6, pas 12 + 1) et coupe les deux colonnes au même
- * rang, pour que la seconde carte se lise comme la suite exacte de la première.
+ * suivent quand les marqueurs dépassent MATCH_ROWS_PER_CARD. La première carte
+ * est remplie au maximum, le reste va sur la suivante (13 lignes → 11 + 2), et
+ * le découpage coupe les deux colonnes au même rang, pour que la seconde carte
+ * se lise comme la suite exacte de la première.
  */
 function matchSlides(g: Game, from: number, records: Map<string, string | null>) {
   const pts = pointersOf(g);

@@ -326,6 +326,8 @@ export function TeamTrendsTable({
           { label: t("chart.tm.ppPct"),      season: pct(o.ppPct),      vs: DASH },
           { label: t("chart.tm.pkPct"),      season: pct(o.pkPct),      vs: DASH },
           { label: t("chart.tm.faceoffPct"), season: pct(o.faceoffPct), vs: DASH },
+          { label: t("chart.tm.corsiPct"),   season: pct(o.corsiPct5v5),   vs: DASH },
+          { label: t("chart.tm.fenwickPct"), season: pct(o.fenwickPct5v5), vs: DASH },
         ]
       : []),
     ...(rec
@@ -341,7 +343,8 @@ export function TeamTrendsTable({
   ];
 
   return (
-    <TableCard title={title} loading={!teamSeason} empty={rows.length === 0} noData={t("chart.noData")}>
+    <TableCard title={title} loading={!teamSeason} empty={rows.length === 0} noData={t("chart.noData")}
+      footnote={o ? t("chart.mpCredit") : undefined}>
       <thead>
         <tr className="text-[#8a9ea6]">
           <th className="text-left font-semibold px-4 py-2 sticky left-0 z-10" style={{ background: BG_CARD }}>&nbsp;</th>
@@ -472,12 +475,15 @@ function TableCard({
   empty,
   noData,
   children,
+  footnote,
 }: {
   title: string;
   loading: boolean;
   empty: boolean;
   noData: string;
   children: ReactNode;
+  /** Petite ligne sous le tableau (source d'une donnée tierce). */
+  footnote?: string;
 }) {
   return (
     <div className="rounded-2xl border border-white/20 overflow-hidden" style={{ background: BG_CARD }}>
@@ -498,6 +504,9 @@ function TableCard({
             {children}
           </table>
         </div>
+      )}
+      {footnote && !loading && !empty && (
+        <p className="px-4 py-2 border-t border-white/[0.06] text-[#5c6f63] text-[11px]">{footnote}</p>
       )}
     </div>
   );

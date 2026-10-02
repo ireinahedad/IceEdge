@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { BookPricePill } from "../../components/BookPricePill";
 import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
 import { mlBundleKey } from "../prediction/gameMarkets";
-import { DisplayGame, calcEdge } from "./landingTypes";
+import { DisplayGame } from "./landingTypes";
 import { formatRecord, useTeamRecords } from "../charts/teamSpace";
 
 
@@ -70,18 +70,6 @@ export function SportSelector({ compact = false }: { compact?: boolean }) {
   );
 }
 
-// ─── Edge badge ────────────────────────────────────────────────────────────────
-
-function EdgeBadge({ edge }: { edge: number }) {
-  const { t } = useI18n();
-  if (edge < 8) return null;
-  return (
-    <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/25 text-green-400 font-medium flex-shrink-0">
-      {t("home.edge", { edge })}
-    </span>
-  );
-}
-
 // ─── Étiquette de jour d'un match ─────────────────────────────────────────────
 
 /**
@@ -118,11 +106,19 @@ function gameDayLabel(game: DisplayGame, lang: string): string | null {
   return d.toLocaleDateString(locale, { weekday: "short", month: "short", day: "numeric" });
 }
 
-// ─── Probabilités et edge d'une carte de match ────────────────────────────────
+// ─── Probabilités d'une carte de match ────────────────────────────────────────
 
 /**
  * Ce que les deux cartes de l'accueil affichent d'un match : les deux
- * probabilités du modèle et l'écart avec le prix du book.
+ * probabilités du modèle.
+ *
+ * ── Le badge d'edge, retiré le 2026-10-02 ───────────────────────────────────
+ *
+ * Il calculait un TROISIÈME edge, à lui : marge du livre non retirée, seuil
+ * 8 points, côté domicile seulement, visible par tous et jusque sur les cartes
+ * EN DIRECT (proba d'avant-match contre cote en direct). Décision du user : la
+ * section Value bets (Pro, critère serveur `valueBets.service.ts`) est le seul
+ * endroit de l'accueil qui parle d'edge.
  *
  * ── Ce bloc portait aussi l'AJOUT RAPIDE, retiré le 2026-09-20 ──────────────
  *
@@ -147,9 +143,8 @@ function gameDayLabel(game: DisplayGame, lang: string): string | null {
  * En pré-saison le modèle sort des chiffres serrés (53 % – 47 %) sur des
  * alignements qui ne sont pas ceux de la saison : affichés à côté de chaque
  * match, ils intriguent plus qu'ils n'aident. Masqué : le pourcentage des deux
- * équipes, la barre de la carte en direct, le % du O/U et le badge d'edge (il
- * se calcule sur ce même chiffre). Le reste de l'app (page du match, meilleurs
- * paris) n'est pas touché.
+ * équipes, la barre de la carte en direct et le % du O/U. Le reste de l'app
+ * (page du match, meilleurs paris) n'est pas touché.
  *
  * ✔ Repassé à `true` le 2026-09-30 : la saison régulière 2026-27 a commencé
  *   le 29 septembre (heure de l'Est). Pour la prochaine pré-saison, remettre
@@ -158,18 +153,13 @@ function gameDayLabel(game: DisplayGame, lang: string): string | null {
  * ⚠️ Le tableau Handicap / Vainqueur des matchs à venir (2026-09-27) et sa
  * barre du vainqueur (2026-09-29) affichent le % du modèle ML À LA DEMANDE de
  * l'utilisatrice : ils ne lisent PAS ce drapeau.
- * Celui-ci ne masque plus que la barre de la carte en direct et le badge
- * d'edge.
+ * Celui-ci ne masque plus que la barre de la carte en direct.
  */
 const SHOW_MODEL_PCT_ON_HOME = true;
 
-function useGameEdge(game: DisplayGame) {
-  if (!SHOW_MODEL_PCT_ON_HOME) return { homePct: null, awayPct: null, edge: 0, showPct: false };
-  const homePct = game.team1.winPct;
-  const awayPct = game.team2.winPct;
-  // Pas de probabilité modèle → pas d'edge à afficher.
-  const edge = game.bookHome != null && homePct != null ? calcEdge(homePct, game.bookHome) : 0;
-  return { homePct, awayPct, edge, showPct: true };
+function useGamePct(game: DisplayGame) {
+  if (!SHOW_MODEL_PCT_ON_HOME) return { homePct: null, awayPct: null, showPct: false };
+  return { homePct: game.team1.winPct, awayPct: game.team2.winPct, showPct: true };
 }
 
 // ─── Hockey live game card ─────────────────────────────────────────────────────
@@ -187,7 +177,7 @@ export function LiveGameCard({ game }: { game: DisplayGame }) {
   const accent = theme.accent;
   const { t } = useI18n();
   const navigate = useNavigate();
-  const { homePct, awayPct, edge, showPct } = useGameEdge(game);
+  const { homePct, awayPct, showPct } = useGamePct(game);
   const records = useTeamRecords();
   const go = (e: React.MouseEvent, to: string) => { e.stopPropagation(); navigate(to); };
 
@@ -198,12 +188,11 @@ export function LiveGameCard({ game }: { game: DisplayGame }) {
       className="w-[280px] icy-card rounded-2xl p-4 flex-shrink-0 cursor-pointer active:scale-[0.99] transition-transform"
     >
 
-      {/* Header: live badge + edge */}
+      {/* Header: live badge */}
       <div className="flex items-center justify-between mb-3 gap-2">
         <span className="text-[11px] text-red-400 font-medium uppercase tracking-wide flex items-center gap-1 flex-shrink-0">
           <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />{game.period}
         </span>
-        <EdgeBadge edge={edge} />
       </div>
 
       {/* Teams + score */}
@@ -565,7 +554,6 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
   const accent = theme.accent;
   const { t, lang } = useI18n();
   const navigate = useNavigate();
-  const { edge } = useGameEdge(game);
   const ml = useGameMl(game.id);
   const mlLoading = ml === undefined;
   // Le jour de semaine, toujours : le titre de la journée est au-dessus, mais
@@ -691,10 +679,8 @@ export function UpcomingGameRow({ game, onOpenSheet }: { game: DisplayGame; onOp
             « Plus de paris » MASQUÉ sous 768 px (décision du user, 2026-09-28) :
             sur un téléphone, ses 60 px écrasaient la colonne des équipes et
             les abréviations (MTL, TOR) tombaient à 0 px de large. Toucher la
-            carte ouvre la page du match, qui porte tous les marchés. La colonne
-            reste là si elle a un badge d'edge à montrer. */}
-        <div className={`${edge >= 8 ? "flex" : "hidden md:flex"} flex-col items-end justify-center gap-1.5 flex-shrink-0 max-w-[60px] pt-6`}>
-          {edge >= 8 && <EdgeBadge edge={edge} />}
+            carte ouvre la page du match, qui porte tous les marchés. */}
+        <div className="hidden md:flex flex-col items-end justify-center gap-1.5 flex-shrink-0 max-w-[60px] pt-6">
           <button
             onClick={(e) => { e.stopPropagation(); onOpenSheet(); }}
             className="hidden md:block text-[11px] text-[#bfc8cc] underline underline-offset-2 text-right leading-tight"

@@ -332,6 +332,7 @@ export function ComparePlayersCharts() {
 /** Les statistiques d'équipe reprises dans le diagramme (le tableau les a toutes). */
 const TEAM_CHART_KEYS = new Set([
   "points", "wins", "goalsFor", "goalsAgainst", "gfPerGame", "gaPerGame", "ppPct", "pkPct", "shotsFor", "faceoffPct",
+  "corsiPct5v5", "fenwickPct5v5",
 ]);
 
 export function CompareTeamsCharts() {
@@ -340,7 +341,15 @@ export function CompareTeamsCharts() {
   const accent = theme.accent;
   const { a, b, set } = useSides();
   const [teams, setTeams] = useState<NHLTeamInfo[]>([]);
-  const [season, setSeason] = useState<number>(currentSeasonId);
+  const [season, setSeasonState] = useState<number>(currentSeasonId);
+  // Tant que l'utilisateur n'a pas choisi de saison, elle est « automatique » :
+  // en début de saison, la moitié des clubs n'ont pas encore joué et leur
+  // ligne est ABSENTE de la réponse NHL. Une comparaison avec l'un d'eux
+  // tombait entière en « Aucune donnée » (signalé le 2026-10-02) ; on recule
+  // alors d'une saison et on le dit.
+  const [seasonTouched, setSeasonTouched] = useState(false);
+  const [fellBackFrom, setFellBackFrom] = useState<{ season: number; team: string } | null>(null);
+  const setSeason = (s: number) => { setSeasonTouched(true); setFellBackFrom(null); setSeasonState(s); };
   const [data, setData] = useState<AllTeamsSeason | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -364,6 +373,24 @@ export function CompareTeamsCharts() {
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [season]);
+
+  // Nouveau duo → on repart de la saison en cours (si elle n'a pas été choisie).
+  useEffect(() => {
+    if (seasonTouched) return;
+    setFellBackFrom(null);
+    setSeasonState(currentSeasonId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [a, b]);
+
+  useEffect(() => {
+    if (seasonTouched || loading || !data || data.season !== season || season !== currentSeasonId) return;
+    if (!a || !b) return;
+    const has = (abbr: string) => data.teams.some((r) => r.abbr.toUpperCase() === abbr.toUpperCase());
+    const missing = !has(a) ? a : !has(b) ? b : "";
+    if (!missing) return;
+    setFellBackFrom({ season, team: missing.toUpperCase() });
+    setSeasonState(currentSeasonId - 10001);
+  }, [data, loading, season, seasonTouched, a, b]);
 
   const teamOptions = [...teams].sort((x, y) => (x.name ?? "").localeCompare(y.name ?? ""));
   const row = (abbr: string) => data?.teams.find((r) => r.abbr.toUpperCase() === abbr.toUpperCase()) ?? null;
@@ -419,31 +446,47 @@ export function CompareTeamsCharts() {
             <SeasonSelect season={season} onChange={setSeason} />
           </div>
 
+          {fellBackFrom && (
+            <p className="text-[#8a9ea6] text-xs -mt-2">
+              {t("chart.compare.fellBack", { team: nameOf(fellBackFrom.team), from: seasonLabel(fellBackFrom.season), to: seasonLabel(season) })}
+            </p>
+          )}
+
           {loading ? (
             <CardsSkeleton />
-          ) : error || !rowA || !rowB ? (
+          ) : error || (!rowA && !rowB) ? (
             <ChartMessage>{t("chart.noData")}</ChartMessage>
           ) : (
             <>
+              {/* Une seule équipe sans match cette saison : on garde le
+                  tableau (ses valeurs à « — ») plutôt que de tout masquer. */}
+              {(!rowA || !rowB) && (
+                <p className="text-[#8a9ea6] text-xs -mt-2">
+                  {t("chart.compare.noGames", { team: nameOf(!rowA ? a : b), season: seasonLabel(season) })}
+                </p>
+              )}
               <CompareTable
                 title={t("chart.teamStats")}
                 leftLabel={abbrA}
                 rightLabel={abbrB}
                 leftColor={accent}
                 rows={[
-                  { key: "gp", label: "GP", left: int(rowA.gamesPlayed), right: int(rowB.gamesPlayed) },
+                  { key: "gp", label: "GP", left: int(rowA?.gamesPlayed), right: int(rowB?.gamesPlayed) },
                   { key: "record", label: `${t("chart.tm.record")} ${t("chart.recordLegend")}`, left: rec(rowA), right: rec(rowB) },
-                  ...metrics.map((m) => ({ key: m.key, label: m.label, left: m.fmt(rowA), right: m.fmt(rowB) })),
+                  ...metrics.map((m) => ({ key: m.key, label: m.label, left: rowA ? m.fmt(rowA) : DASH, right: rowB ? m.fmt(rowB) : DASH })),
                 ]}
               />
+              <p className="text-[#5c6f63] text-[11px] -mt-2 px-1">{t("chart.mpCredit")}</p>
 
-              <CompareBars
+              {rowA && rowB && <CompareBars
                 title={t("chart.compare.chart")}
                 leftLabel={abbrA}
                 rightLabel={abbrB}
                 leftColor={accent}
                 items={metrics
                   .filter((m) => TEAM_CHART_KEYS.has(m.key))
+                  // Corsi/Fenwick absents (−1) : pas de barre plutôt qu'une barre fausse.
+                  .filter((m) => m.num(rowA) >= 0 && m.num(rowB) >= 0)
                   .map((m) => ({
                     key: m.key,
                     label: m.label,
@@ -453,7 +496,7 @@ export function CompareTeamsCharts() {
                     rightText: m.fmt(rowB),
                     lowBetter: m.lowBetter,
                   }))}
-              />
+              />}
             </>
           )}
         </>

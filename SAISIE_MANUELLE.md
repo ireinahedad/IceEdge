@@ -12,7 +12,7 @@ reste se remplit seul (voir § 5).
 | 1 | Synchro des blessés | `npm run injuries:sync` dans `server/`, sur le poste | chaque jour de match, au rappel de 11 h 55 (heure de l'Est) | 2 min |
 | 2 | Trancher ce que la synchro n'écrit pas | **/dev/saisie** → « Qui ne joue pas ce soir ? » | juste après la synchro | 2-5 min |
 | 3 | Gardiens partants (exceptions) | **/dev/saisie** → « Qui garde le but ce soir ? » | 1-2 h avant la mise au jeu | 2 min |
-| 4 | Absents de dernière minute | **/dev/saisie** → même liste d'absents | 1-2 h avant la mise au jeu | 2 min |
+| 4 | Absents de dernière minute | **automatique** dès que la NHL publie l'alignement (§ 3) ; **/dev/saisie** pour ce qu'elle ne dit pas | avant la publication, ou pour corriger | 0-2 min |
 | 5 | Alignement (`lineupAdj`) | **/dev/saisie** → « Options avancées » | rarement | — |
 | 6 | Patinoires | `ml\data\arenas.json` + `server\src\data\arenas.ts` | 1× par saison, ou changement d'aréna | 10 min |
 | 7 | Données contenu | `content\refresh-insights.cmd` | automatique (tâche Windows) + `WITH_ADVANCED` 1×/saison | — |
@@ -98,8 +98,16 @@ compte au plus tard 90 s après.
   l'usage récent, ce qui est le bon défaut. Confirme-le (annonces officielles,
   warmup) avant de parier.
 - **Absents de dernière minute** (game-time decisions, scratch au warmup) :
-  ajoute-les avec leur importance. Prends le nom dans l'autocomplétion ; un nom
-  hors effectif est signalé.
+  **automatiques depuis le 2026-10-02** dès que la NHL publie l'alignement du
+  soir (`officialLineup.ts`) — ses absents officiels rejoignent la liste, et un
+  blessé de longue durée qui figure parmi les habillés n'est plus compté absent
+  (il revient de blessure). Mesuré le 2026-10-01 : la NHL publie l'effectif
+  ~2 h avant, les absents par morceaux à partir de ~30 min avant, et
+  l'alignement définitif (20 habillés) seulement **7 à 9 min avant** la mise
+  au jeu — c'est lui qui fait revenir un blessé. Avant ça, ou pour un
+  absent qu'elle ne signale pas, ajoute-le ici avec son importance : **ta
+  saisie du jour reste prioritaire** (un joueur que tu déclares absent l'est,
+  même habillé). Le gardien partant, lui, n'est PAS dans l'alignement NHL.
 - **Blessé pour plusieurs matchs ?** Coche « Blessé longue durée » : il restera
   absent à chaque match, sans rien retaper.
 - Vider une saisie et réenregistrer la **retire** : c'est ainsi qu'on corrige
@@ -176,7 +184,8 @@ seulement (plus d'écran) :
 
 ## 5. Ce qui n'a rien à saisir
 
-Blessés listés par la source (synchro, § 2) · arbitres (§ 4) · stats d'équipes,
+Blessés listés par la source (synchro, § 2) · alignement officiel et absents du
+soir une fois publiés par la NHL (§ 3) · arbitres (§ 4) · stats d'équipes,
 de joueurs et de gardiens · calendrier · cotes (The Odds API, clé posée une fois
 dans l'env) · voyage / fuseaux / altitude / road-trips · back-to-backs · repos ·
 PP%/PK% (défauts gérés en début de saison, quand l'API renvoie 0) · règlement

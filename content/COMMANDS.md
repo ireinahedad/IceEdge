@@ -72,9 +72,10 @@ hauteur, au même endroit, et les lignes de marqueurs s'ajoutent vers le bas.
 Sous chaque logo, la fiche de la saison APRÈS le match (victoires-défaites-
 défaites en prolongation ou fusillade), recomptée depuis le calendrier du
 club, toujours en trois chiffres (zéros compris). Les joueurs s'affichent avec
-l'initiale du prénom (`C. Caufield`), **9 au maximum par équipe** : les meilleurs
-pointeurs (points, puis buts), le reste est coupé (`MAX_PLAYERS_PER_TEAM` dans
-`build-recap.ts`). Durée : 1 s + 0,35 s par ligne, 3 s au maximum. Les trois étoiles n'apparaissent que dans `<match>-short`.
+l'initiale du prénom (`C. Caufield`), **tous les pointeurs**, classés par points
+puis buts. La première carte se remplit au maximum (`MATCH_ROWS_PER_CARD` dans
+`build-recap.ts`), le reste passe sur une deuxième carte, même si les deux
+n'ont pas le même nombre de lignes. Durée : 1 s + 0,35 s par ligne, 3 s au maximum. Les trois étoiles n'apparaissent que dans `<match>-short`.
 
 **Transition** : les récaps enchaînent leurs cartes par un glissement de 0,3 s
 (`smoothleft`), sans allonger la vidéo. Les posts du jour gardent leurs coupes

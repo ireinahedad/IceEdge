@@ -37,6 +37,8 @@ import {
   buildTeamFuturesFeatures,
 } from "../services/featureEngineering";
 import { getBestBets } from "../services/bestBets.service";
+import { getCurrentValueBets } from "../services/valueBets.service";
+import { authenticate, requirePro } from "../middleware/auth.middleware";
 import { combineParlayLegs } from "../services/parlay";
 import type { ParlayLeg } from "../services/parlay";
 import { isScoreDerivable, predictGameLegCorrelation } from "../services/predictionEngine";
@@ -126,6 +128,23 @@ router.get("/best-bets", async (req: Request, res: Response) => {
     res.json(result);
   } catch (err: any) {
     sendError(res, err, { context: '[predict/best-bets]', fallbackMessage: 'Best bets failed' });
+  }
+});
+
+// GET /api/predict/value-bets — réservé aux abonnés Pro.
+//
+// Le critère vit dans `valueBets.service.ts`, le même que l'alerte push :
+// l'accueil ne calcule plus rien lui-même (décision du user, 2026-10-02). Le
+// calcul est partagé entre visiteurs (cache 5 min), donc cette route ne
+// commande aucun travail par appel — mais elle reste derrière `requirePro` :
+// ce sont des données payantes, et `authenticate` seul ne vérifie pas l'abonnement.
+router.get("/value-bets", authenticate, requirePro, async (_req: Request, res: Response) => {
+  try {
+    const bets = await getCurrentValueBets();
+    res.set("Cache-Control", "private, no-store");
+    res.json({ bets, meta: { generatedAt: new Date().toISOString() } });
+  } catch (err: any) {
+    sendError(res, err, { context: '[predict/value-bets]', fallbackMessage: 'Value bets failed' });
   }
 });
 

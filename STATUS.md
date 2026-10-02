@@ -221,6 +221,25 @@ recovered from Git) and checking each claim against the code and the Git log.
     −21 %. The 2 worse are puck-drop totals (+0.1–0.2 %, pre-game λ bias). → **Activated** (`LIVE_EFFECTS`).
   · **Head-to-head measured, not kept** (`measure_h2h.py`: moneyline log-loss +0.00006, deviance better
     on 64 % of seasons < 70 % rule). Nothing wired, ML or rules.
+- ✔ **Corsi/Fenwick, official lineup, returning players** (2026-10-02, *not committed*):
+  · **Measured first** (14 seasons, walk-forward). XGBoost moneyline already used Corsi% 5v5, not shots;
+    Fenwick / score-adjusted / shots instead: no measurable difference (|z| < 1.2) → unchanged.
+    Rules engine: shots on goal → **Fenwick all situations** (MoneyPuck `teams.csv`, team for + opponent
+    against), λ as written: win log-loss −0.00030, 12/14 seasons. Shots stay as fallback.
+  · **Returning player**: team form recomputed on games *with* him → no gain (4 thresholds); closing
+    lines do not under-price the returning team (8+ games out: −2.6 pts vs market, z −1.9). Real gap
+    fixed instead: a player out > 25 games had left the served roster, so the ML could not count him on
+    his return (same for players who changed teams: CGY had 15 of 18 dressed skaters known). New
+    league-wide `skater_pool` in `inference_state.json` (+ NHL `id`s); with the official lineup the
+    service sums exactly the dressed skaters, like training does (SEA–CGY: 18/18 known).
+  · **Official lineup** (`officialLineup.ts`), timing measured live on 2026-10-01: NHL `rosterSpots` =
+    23-man roster at T−2 h; `right-rail` scratches published piecemeal from ~T−30 min; final 20 dressed
+    only at T−9 to T−7 min. Scratches fill tonight's absents as soon as published; the final lineup goes
+    to the ML and brings a long-term injured player back (AI + rules). Manual daily input still wins.
+    Starting goalie is never published → stays manual. Measures: `measure_shot_metrics.py`,
+    `measure_returnee.py` (reports in `ml/models/`). `inference_state.json` regenerated (only additions).
+  · **Stats pages**: Corsi % / Fenwick % 5v5 (teams: table, comparison, trends) and on-ice CF%/FF%
+    (player pages), credited to MoneyPuck.
 
 ---
 

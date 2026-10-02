@@ -160,6 +160,10 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
         selection: selectedSelection,
         line: selectedLine,
         game: selectedGame,
+        // Pari sur un match : ses deux équipes, pour le chiffre ML (buildLeg).
+        teams: selectedSubject.type === "game"
+          ? (() => { const g = getGameById(selectedSubject.id); return g ? { home: g.team1Id, away: g.team2Id } : null; })()
+          : null,
       },
       { players, getTeamById, hasLeg }
     );

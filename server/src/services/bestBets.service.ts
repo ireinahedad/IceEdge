@@ -72,7 +72,9 @@ interface Candidate extends Omit<BestBet, 'mlPct' | 'score' | 'source' | 'confid
   teams?: { home: string; away: string };
   // how to build ML features for this candidate
   ml:
-    | { kind: 'game'; homeId: string; awayId: string; marketType: string; line?: number }
+    // `homeId`/`awayId` décrivent le MATCH (qui reçoit) ; `subjectIsHome` dit de
+    // quel côté porte la question (défaut : domicile). Voir `GameFeatureOpts`.
+    | { kind: 'game'; homeId: string; awayId: string; marketType: string; line?: number; subjectIsHome?: boolean }
     | { kind: 'player'; playerId: string; propType: string; line: number; selection: string }
     | null;
 }
@@ -156,7 +158,10 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       label: `${away} to win`, selection: `${away} to win`, selectionValue: awayLc, selectionShort: `${away} ML`,
       context: ctxAway, line: null, gameId: g.id, teamId: awayLc, playerId: null, rulePct: awayMl,
       teams: { home, away },
-      ml: { kind: 'game', homeId: awayLc, awayId: homeLc, marketType: 'moneyline' },
+      // Le visiteur reste le visiteur : jusqu'au 2026-10-02 on inversait les deux
+      // équipes, donc le modèle répondait « P(le visiteur gagne CHEZ LUI) » — il
+      // recevait l'avantage de la glace (le bug corrigé le 2026-09-09 sur les tuiles).
+      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'moneyline', subjectIsHome: false },
     },
     {
       id: `bb-${g.id}-over`, subjectType: 'game', marketType: 'total_goals', marketLabel: 'Total Goals O/U',
@@ -231,7 +236,8 @@ async function mlScore(c: Candidate): Promise<number | null> {
   if (!c.ml) return null;
   try {
     if (c.ml.kind === 'game') {
-      const feats = await buildGameFeatures(c.ml.homeId, c.ml.awayId, c.ml.marketType, c.ml.line);
+      const feats = await buildGameFeatures(c.ml.homeId, c.ml.awayId, c.ml.marketType, c.ml.line,
+                                            { subjectIsHome: c.ml.subjectIsHome !== false });
       const res = await mlApiClient.predictGame(feats);
       return typeof res?.probability === 'number' ? Math.round(res.probability) : null;
     } else {

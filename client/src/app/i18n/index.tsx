@@ -532,7 +532,6 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // 2026-09-20 avec l'ajout rapide des cartes de l'accueil : on ajoute une
   // sélection depuis « Plus de paris », qui montre ce qu'on choisit.
   "home.moreBets":       { en: "More bets",         fr: "Plus de paris" },
-  "home.edge":           { en: "+{edge}% edge",     fr: "+{edge}% avantage" },
   "home.game":           { en: "Game",              fr: "Match" },
   "home.nhlGame":        { en: "NHL Game",          fr: "Match LNH" },
   "home.oddsFairHint":   { en: "Fair odds implied by our model — not a bookmaker price.", fr: "Cote équitable déduite de notre modèle — ce n'est pas un prix de bookmaker." },
@@ -604,10 +603,11 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "chart.m.gaa":         { en: "GAA",                   fr: "MBA" },
   "chart.m.shutouts":    { en: "Shutouts",              fr: "Blanchissages" },
   // Charts — controls & columns
-  "chart.teamStats":     { en: "Team Stats",            fr: "Stats d'équipe" },
-  "chart.playerStats":   { en: "Player Stats",          fr: "Stats des joueurs" },
+  "chart.teamStats":     { en: "Team Averages & Stats", fr: "Moyennes et statistiques d'équipe" },
+  "chart.playerStats":   { en: "Player Averages & Stats", fr: "Moyennes et statistiques des joueurs" },
   "chart.col.total":     { en: "Total",                 fr: "Total" },
-  "chart.col.perGame":   { en: "Avg / Game",            fr: "Moy. / match" },
+  "chart.col.perGame":   { en: "Average / game",        fr: "Moyenne / match" },
+  "chart.avgSuffix":     { en: "(avg / game)",          fr: "(moy. / match)" },
   "chart.col.vsTeam":    { en: "vs {team}",             fr: "c. {team}" },
   "chart.opponent":      { en: "Opponent",              fr: "Adversaire" },
   "chart.allOpponents":  { en: "Choose team",           fr: "Choisir équipe" },
@@ -631,6 +631,13 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "chart.tm.goalDiff":   { en: "Goal Diff",             fr: "Diff. de buts" },
   "chart.tm.pointPct":   { en: "Point %",               fr: "% Points" },
   "chart.tm.faceoffPct": { en: "Faceoff %",             fr: "% Mises au jeu" },
+  // Possession à 5 c. 5 : Corsi = toutes les tentatives de tir, Fenwick = les
+  // tentatives non bloquées. Source MoneyPuck, créditée sous les tableaux.
+  "chart.tm.corsiPct":   { en: "Corsi % (5v5)",         fr: "% Corsi (5 c. 5)" },
+  "chart.tm.fenwickPct": { en: "Fenwick % (5v5)",       fr: "% Fenwick (5 c. 5)" },
+  "chart.pl.corsiPct":   { en: "On-ice CF% (5v5)",      fr: "% Corsi sur la glace (5 c. 5)" },
+  "chart.pl.fenwickPct": { en: "On-ice FF% (5v5)",      fr: "% Fenwick sur la glace (5 c. 5)" },
+  "chart.mpCredit":      { en: "Corsi & Fenwick: MoneyPuck.com", fr: "Corsi et Fenwick : MoneyPuck.com" },
   "chart.tm.record":     { en: "Record",                fr: "Fiche" },
   "chart.tm.home":       { en: "Home",                  fr: "Domicile" },
   "chart.tm.away":       { en: "Away",                  fr: "Extérieur" },
@@ -675,6 +682,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "chart.compare.mixed":     { en: "Compare a goalie with a goalie, and a skater with a skater.", fr: "Compare un gardien avec un gardien, et un patineur avec un patineur." },
   "chart.compare.noCommonSeason": { en: "These two players have no season in common.", fr: "Ces deux joueurs n'ont aucune saison en commun." },
   "chart.compare.clear":     { en: "Remove",            fr: "Retirer" },
+  "chart.compare.fellBack":  { en: "{team} hasn't played yet in {from} — showing {to}.", fr: "{team} n'a pas encore joué en {from} — affichage de la saison {to}." },
+  "chart.compare.noGames":   { en: "{team} has no games in {season}.", fr: "{team} n'a aucun match en {season}." },
   "chart.allPlayers":        { en: "All players",       fr: "Tous les joueurs" },
   "chart.pie.assistShare":   { en: "Assists share by player", fr: "Part des passes par joueur" },
   "chart.bar.decisions":     { en: "Decisions breakdown", fr: "Répartition des décisions" },
@@ -1138,9 +1147,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
 
   // ── Home: value bets (EV) + locked sections ──
   "home.evTitle":     { en: "Value Bets (EV)",  fr: "Value Bets (EV)" },
-  "home.evSpot":      { en: "Our model rates it higher than the odds", fr: "Le modèle y croit plus que la cote" },
-  "home.evEmpty":     { en: "No value bets right now — check back soon.", fr: "Aucun value bet pour l'instant — reviens bientôt." },
-  "home.evLockDesc":  { en: "The detector flags bets where our model's probability beats the bookmaker's odds (+EV). Pro only.", fr: "Le détecteur repère les paris où la probabilité de notre modèle dépasse la cote (+EV). Réservé aux Pro." },
+  "home.evEmpty":     { en: "No value bets right now. They show up once both starting goalies are confirmed, usually 1 to 2 hours before puck drop.", fr: "Aucun value bet pour l'instant. Ils apparaissent quand les deux gardiens partants sont confirmés, en général 1 à 2 h avant la mise au jeu." },
   "home.evSettings":  { en: "Alert settings", fr: "Réglages des alertes" },
   "home.bestBetsLockDesc": { en: "The day's top picks, selected and rated by the model. Upgrade to Pro to see them.", fr: "Les meilleurs paris du jour, sélectionnés et notés par le modèle. Passe à Pro pour les voir." },
 
@@ -1207,10 +1214,14 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "home.evWhat":       { en: "A bet where our model gives a better chance of winning than the bookmaker's odds suggest.", fr: "Un pari où notre modèle donne plus de chances de gagner que ce que la cote du bookmaker laisse croire." },
   "home.evWhat2":      { en: "When odds are too generous, that gap is the value.", fr: "Quand la cote est trop généreuse, cet écart, c'est la valeur." },
   "home.evWhat3":      { en: "A value bet isn't a sure win, it's a bet that pays better than it should.", fr: "Un value bet n'est pas gagné d'avance : c'est un pari mieux payé qu'il ne devrait l'être." },
+  "home.evWhat4":      { en: "We only show one once both starting goalies are confirmed, and never during the game.", fr: "On n'en affiche qu'une fois les deux gardiens partants confirmés, et jamais pendant le match." },
   "home.evExampleLabel": { en: "Example", fr: "Exemple" },
-  "home.evExample":    { en: "odds of 2.50 imply a 40% chance. If the model sees 48%, that's +8 pts of value.", fr: "une cote de 2.50 suppose 40 % de chances. Si le modèle en voit 48 %, ça fait +8 pts de valeur." },
+  "home.evExample":    { en: "once the bookmaker's margin is removed, the odds imply a 40% chance. If the model sees 44%, that's +4 pts of value.", fr: "une fois la marge du bookmaker retirée, la cote suppose 40 % de chances. Si le modèle en voit 44 %, ça fait +4 pts de valeur." },
   "home.evEdge":       { en: "+{edge} pts value", fr: "+{edge} pts de valeur" },
   "home.evVs":         { en: "Model {model}% vs book {book}%", fr: "Modèle {model} % vs livre {book} %" },
+  "home.evWinner":     { en: "{team} to win vs {opp}", fr: "{team} gagne vs {opp}" },
+  "home.evPrice":      { en: "{book}: {price}", fr: "{book} : {price}" },
+  "home.evMinOdds":    { en: "Profitable above {min}", fr: "Rentable au-dessus de {min}" },
 };
 
 type TParams = Record<string, string | number>;

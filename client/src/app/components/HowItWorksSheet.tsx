@@ -51,33 +51,14 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
   }, [user]);
 
   const intro = fr
-    ? "Chaque pari affiche sa chance de passer, en %. C'est ce chiffre qui est enregistré dans ton coupon."
-    : "Every bet shows its chance of hitting, in %. That number is the one saved in your slip.";
+    ? "Chaque pari affiche sa chance de passer selon le modèle ML, en %. C'est ce chiffre qui est enregistré dans ton coupon."
+    : "Every bet shows its chance of hitting according to the ML model, in %. That number is the one saved in your slip.";
 
   const proLine = !quota ? null : fr
     ? `Avec Pro : jusqu'à ${quota} requêtes par mois, incluses.`
     : `With Pro: up to ${quota} requests a month, included.`;
 
   const sections: Section[] = [
-    {
-      color: "#86d1ea",
-      title: fr ? "Règles" : "Rules",
-      lines: fr
-        ? [
-            "Vainqueur : la force des deux équipes (70 % fiche de la saison, 30 % 10 derniers matchs), comparée avec la formule Log5.",
-            "Ajustée par l'avantage de la glace et la fatigue : jours de repos, matchs consécutifs, voyage, fuseaux horaires, altitude.",
-            "Les cotes du marché, les blessures et l'alignement s'ajoutent quand on les a.",
-            "Totaux et paris joueurs : on estime la moyenne attendue de buts, tirs ou points, puis la loi de Poisson donne la chance de dépasser la ligne.",
-            "Tu peux changer le poids de chaque facteur.",
-          ]
-        : [
-            "Winner: both teams' strength (70% season record, 30% last 10 games), compared with the Log5 formula.",
-            "Adjusted for home ice and fatigue: rest days, back-to-backs, travel, time zones, altitude.",
-            "Market odds, injuries and lineups are added when we have them.",
-            "Totals and player bets: we estimate the expected goals, shots or points, then a Poisson distribution gives the chance of clearing the line.",
-            "You can change the weight of each factor.",
-          ],
-    },
     {
       color: "#a78bfa",
       title: "ML",
@@ -93,6 +74,25 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
             "The oldest games train and tune it; the most recent 20% are only used to test it.",
             "It looks at Elo, scoring chances created and allowed, goalies, missing key players, rest and odds, among others.",
             "Its probabilities are recalibrated: a 60% hits about 6 times out of 10.",
+          ],
+    },
+    {
+      color: "#86d1ea",
+      title: fr ? "Règles (dans le détail d'un pari)" : "Rules (inside a bet's detail)",
+      lines: fr
+        ? [
+            "Vainqueur : la force des deux équipes (70 % fiche de la saison, 30 % 10 derniers matchs), comparée avec la formule Log5.",
+            "Ajustée par l'avantage de la glace et la fatigue : jours de repos, matchs consécutifs, voyage, fuseaux horaires, altitude.",
+            "Les cotes du marché, les blessures et l'alignement s'ajoutent quand on les a.",
+            "Totaux et paris joueurs : on estime la moyenne attendue de buts, tirs ou points, puis la loi de Poisson donne la chance de dépasser la ligne.",
+            "Tu peux changer le poids de chaque facteur.",
+          ]
+        : [
+            "Winner: both teams' strength (70% season record, 30% last 10 games), compared with the Log5 formula.",
+            "Adjusted for home ice and fatigue: rest days, back-to-backs, travel, time zones, altitude.",
+            "Market odds, injuries and lineups are added when we have them.",
+            "Totals and player bets: we estimate the expected goals, shots or points, then a Poisson distribution gives the chance of clearing the line.",
+            "You can change the weight of each factor.",
           ],
     },
     {

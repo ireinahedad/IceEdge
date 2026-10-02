@@ -84,21 +84,6 @@ export async function toDisplayGame(game: NHLGame): Promise<DisplayGame> {
   };
 }
 
-// ─── Edge detection helpers ───────────────────────────────────────────────────
-
-/** Convert a bookmaker decimal odd to its implied win probability (%) */
-function impliedPct(decimal: number): number {
-  return Math.round(100 / decimal);
-}
-
-/**
- * Edge = our model's probability minus the bookmaker's implied probability.
- * Only meaningful when we have real bookmaker odds.
- */
-export function calcEdge(modelPct: number, decimal: number): number {
-  return modelPct - impliedPct(decimal);
-}
-
 export interface AddSheetState {
   open: boolean;
   /** Match d'où la feuille a été ouverte. `HockeyLanding` l'écrivait et le

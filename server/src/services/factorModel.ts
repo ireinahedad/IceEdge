@@ -112,7 +112,14 @@ export interface GameFactorCtx {
   wH: number; wA: number;
   gfH: number; gaH: number; gfA: number; gaA: number;
   lambdaH: number; lambdaA: number; lambdaT: number;
-  hSF: number; aSF: number;
+  /**
+   * Buts « attendus du volume de tirs » de chaque équipe dans CE match : son
+   * volume × la conversion moyenne de la ligue. Fenwick toutes situations
+   * depuis le 2026-10-02 (mesuré meilleur que les tirs cadrés), tirs cadrés
+   * en repli quand MoneyPuck n'a pas l'équipe — `shotMetric` dit lequel.
+   */
+  hShotGoals: number; aShotGoals: number;
+  shotMetric?: 'fenwick' | 'shots';
   hPP: number; aPP: number; hPK: number; aPK: number;
   hB2b: 0 | 1; aB2b: 0 | 1;
   venueAlt?: number; // altitude du terrain (m) — air raréfié → plus de buts
@@ -147,7 +154,8 @@ export interface PuckLineSpec { side: 'home' | 'away'; minus: boolean; rHome: nu
  */
 export interface PeriodSpec { q: number; draw: number; lambdaP: number; }
 
-const SHOOT_PCT = 0.102; // ~tirs → buts
+/** Étiquette d'un facteur de volume : dit au lecteur quelle mesure il voit. */
+const volLabel = (base: string, c: GameFactorCtx) => (c.shotMetric === 'fenwick' ? `${base} (Fenwick)` : base);
 
 // ── Familles ────────────────────────────────────────────────────────────────────
 
@@ -168,14 +176,14 @@ function totalsFactors(line: number, c: GameFactorCtx, withOt = true): Factor[] 
     : poissonOver(lam, line);
   const offense = over(c.gfH + c.gfA);
   const defense = over(c.gaH + c.gaA);
-  const shotPace = over((c.hSF + c.aSF) * SHOOT_PCT);
+  const shotPace = over(c.hShotGoals + c.aShotGoals);
   const ppAdj = c.lambdaT * (1 + 0.05 * ((c.hPP + c.aPP) / 40 - 1));
   const special = over(ppAdj);
   const fatigue = over(c.lambdaT * (1 - 0.04 * (c.hB2b + c.aB2b)));
   const factors: Factor[] = [
     { id: 'offense',      label: 'Attaque combinée',   weight: 30, value: offense },
     { id: 'defense',      label: 'Défense combinée',   weight: 30, value: defense },
-    { id: 'shotPace',     label: 'Rythme de tirs',     weight: 15, value: shotPace },
+    { id: 'shotPace',     label: volLabel('Rythme de tirs', c), weight: 15, value: shotPace },
     { id: 'specialTeams', label: 'Unités spéciales',   weight: 10, value: special },
     { id: 'fatigue',      label: 'Épuisement',         weight: 5,  value: fatigue },
   ];
@@ -259,7 +267,7 @@ function teamTotalFactors(line: number, side: 'home' | 'away', c: GameFactorCtx)
   const home = side === 'home';
   const gf   = home ? c.gfH : c.gfA;
   const gaO  = home ? c.gaA : c.gaH;
-  const sf   = home ? c.hSF : c.aSF;
+  const shotGoals = home ? c.hShotGoals : c.aShotGoals;
   const lam  = home ? c.lambdaH : c.lambdaA;
   const lamO = home ? c.lambdaA : c.lambdaH;
   const share = home ? (c.otShareHome ?? 0.5) : 1 - (c.otShareHome ?? 0.5);
@@ -267,7 +275,7 @@ function teamTotalFactors(line: number, side: 'home' | 'away', c: GameFactorCtx)
   return [
     { id: 'teamOffense', label: 'Attaque de l’équipe', weight: 35, value: over(gf) },
     { id: 'oppDefense',  label: 'Défense adverse',     weight: 30, value: over(gaO) },
-    { id: 'shotVolume',  label: 'Volume de tirs',      weight: 15, value: over(sf * SHOOT_PCT) },
+    { id: 'shotVolume',  label: volLabel('Volume de tirs', c), weight: 15, value: over(shotGoals) },
     { id: 'model',       label: 'Buts attendus',       weight: 20, value: over(lam) },
   ];
 }
@@ -484,7 +492,7 @@ export function attachGameFactors(groups: any[], c: GameFactorCtx): void {
         setFactors(o, 'team_totals', m[2] === 'o' ? f : invExact(f));
       }
       // Buts de la 1re période : pas de prolongation dans une période.
-      else if (id === 'p1-o05' || id === 'p1-o15' || id === 'p1-o25') setFactors(o, 'totals', totalsFactors(id === 'p1-o05' ? 0.5 : id === 'p1-o15' ? 1.5 : 2.5, { ...c, gfH: c.gfH * 0.305, gfA: c.gfA * 0.305, gaH: c.gaH * 0.305, gaA: c.gaA * 0.305, lambdaT: c.lambdaT * 0.305, lambdaH: c.lambdaH * 0.305, lambdaA: c.lambdaA * 0.305, hSF: c.hSF * 0.305, aSF: c.aSF * 0.305 }, false));
+      else if (id === 'p1-o05' || id === 'p1-o15' || id === 'p1-o25') setFactors(o, 'totals', totalsFactors(id === 'p1-o05' ? 0.5 : id === 'p1-o15' ? 1.5 : 2.5, { ...c, gfH: c.gfH * 0.305, gfA: c.gfA * 0.305, gaH: c.gaH * 0.305, gaA: c.gaA * 0.305, lambdaT: c.lambdaT * 0.305, lambdaH: c.lambdaH * 0.305, lambdaA: c.lambdaA * 0.305, hShotGoals: c.hShotGoals * 0.305, aShotGoals: c.aShotGoals * 0.305 }, false));
       // Qui mène après la 3e = qui gagne en 60 minutes ; égalité = prolongation.
       // Mêmes facteurs (et même `pctScale`) que les tuiles « in Reg » et « Goes
       // to OT » : les deux cartes affichent les mêmes chiffres par construction.

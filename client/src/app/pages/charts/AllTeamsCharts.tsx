@@ -178,6 +178,8 @@ export function AllTeamsCharts() {
         )}
       </div>
 
+      {!loading && <p className="text-[#5c6f63] text-[11px] -mt-2 px-1">{t("chart.mpCredit")}</p>}
+
       {/* Record breakdown for the top 10 by the current sort */}
       {loading ? (
         <BarSkeleton />

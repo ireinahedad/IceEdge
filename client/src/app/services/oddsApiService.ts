@@ -125,8 +125,10 @@ export function extractH2HOdds(
 }
 
 // `decimalToWinPct` et `fetchAvailableSports` supprimées le 2026-08-10 (0 appelant).
-// La conversion cote → probabilité vit dans `HockeyLanding` (`impliedPct`), qui
-// dévigue la paire au lieu d'inverser une seule cote — c'est la bonne version.
+// La conversion cote → probabilité (marge retirée sur la paire) et le calcul
+// d'edge vivent côté serveur, dans `valueBets.service.ts` (2026-10-02). Le
+// `impliedPct` de l'accueil, qui inversait UNE cote sans retirer la marge, a
+// été supprimé avec le badge d'edge.
 
 // ─── Prix des jambes d'un coupon ────────────────────────────────────────────
 

@@ -26,6 +26,25 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "player", label: "stats.byPlayer" },
 ];
 
+/**
+ * L'onglet ouvert (match / équipe / joueur) est gardé dans `sessionStorage`
+ * (demande du user, 2026-10-02) : en revenant sur la page — bouton Retour
+ * depuis une prédiction, barre du bas, onglet Statistiques — on retombe sur
+ * le même onglet. `sessionStorage` lève dans un onglet privé verrouillé :
+ * on retombe alors sur « Par match », sans erreur.
+ */
+const FILTER_KEY = "iceedge.stats.filter";
+function readFilter(): Filter {
+  try {
+    const v = sessionStorage.getItem(FILTER_KEY);
+    if (v === "game" || v === "team" || v === "player") return v;
+  } catch { /* stockage indisponible */ }
+  return "game";
+}
+function writeFilter(f: Filter) {
+  try { sessionStorage.setItem(FILTER_KEY, f); } catch { /* stockage indisponible */ }
+}
+
 type Subject = { id: string; type: "team" | "player" | "game"; name: string; logo: string; subtitle: string };
 interface AddSheetState { open: boolean; subject?: Subject }
 
@@ -220,7 +239,8 @@ export function StatsPage() {
   const { theme } = useSport();
   const { t, lang } = useI18n();
   const accent = theme.accent;
-  const [activeFilter, setActiveFilter] = useState<Filter>("game");
+  const [activeFilter, setActiveFilterState] = useState<Filter>(readFilter);
+  const setActiveFilter = (f: Filter) => { setActiveFilterState(f); writeFilter(f); };
   const [search, setSearch] = useState("");
   const [addSheet, setAddSheet] = useState<AddSheetState>({ open: false });
   const [howItWorks, setHowItWorks] = useState(false);
