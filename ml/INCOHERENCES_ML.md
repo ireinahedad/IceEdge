@@ -29,7 +29,7 @@
 | 9 | 🟠 | τ, p_ot et déciles ajustés sur des λ que le code lui-même juge sur-ajustés | `train_score.py` |
 | 10 | 🟠 | Classifieur : cotes d'ouverture ≠ clôture à l'entraînement, identiques au service ; commentaire « blend jamais actif » faux | `train.py`, `ml_service.py` |
 | 11 | 🟠 | « Best bets » : classement par probabilité (pas par valeur), règles et ML mélangés, autre modèle joueur | `bestBets.service.ts` |
-| 12 | 🟠 | `/predict/player` : points AN, victoires de gardien et mises en échec mal estimés | `ml_service.py`, `featureEngineering.ts` |
+| 12 | ✅ | ~~`/predict/player` : points AN, victoires de gardien et mises en échec mal estimés~~ — corrigé le 2026-10-03 | `ml_service.py`, `featureEngineering.ts` |
 | 13 | 🟠 | Premier buteur : cadence du modèle joueur ÷ buts de match des règles | `playerRates.ts` |
 | 14 | 🟠 | Modèle joueur : jointure par `gameId` alors que `build_dataset` dit que les identifiants diffèrent (**à vérifier**) | `train_player.py`, `build_dataset.py` |
 | 15 | 🟠 | ELO entre deux saisons : 30 % de régression à l'entraînement, 33 % au service | `build_dataset.py`, `ml_service.py` |
@@ -289,7 +289,16 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 
 ---
 
-## 🟠 12. `/predict/player` : points en AN, victoires de gardien et mises en échec mal estimés
+## ✅ 12. `/predict/player` : points en AN, victoires de gardien et mises en échec mal estimés
+
+> **Corrigé le 2026-10-03.** Le serveur envoie les cadences MESURÉES sur le
+> joueur, que sa fiche portait déjà : points en AN (nouveau champ
+> `pp_points_per_game`), mises en échec, tirs bloqués, victoires et
+> blanchissages du gardien (par match joué). Le service lit `wins` /
+> `shutouts` comme une probabilité oui/non (0,50 → 50 %, et non plus 39 %) ;
+> `pp_point` sans mesure → pas d'estimation (fini `buts × 0,35`). Replis de
+> ligue alignés sur les mesures : 1,2 mise en échec, 0,84 tir bloqué par
+> match. Exemple : un passeur à 0,40 point en AN par match passe de 5 % à 33 %.
 
 **Où** — `ml/python/ml_service.py:2501-2527` ; `server/src/services/featureEngineering.ts:372-380`.
 

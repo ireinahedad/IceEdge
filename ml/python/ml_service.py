@@ -913,6 +913,10 @@ class PlayerPropFeatures(BaseModel):
     assists_per_game: float = Field(0.30, ge=0)
     points_per_game: float = Field(0.55, ge=0)
     shots_per_game: float = Field(2.5, ge=0)
+    # Points en avantage numérique par match, mesurés sur le joueur. Absent →
+    # pas d'estimation pour `pp_point` (l'ancien repli `buts × 0,35` ignorait
+    # que ces points sont surtout des passes).
+    pp_points_per_game: Optional[float] = Field(None, ge=0)
     games_played: int = Field(40, ge=1)
     line: float = Field(0.5, ge=0)
     prop_type: str = Field("goals")   # "goals"|"assists"|"points"|"shots"|"pp_point"
@@ -2611,6 +2615,10 @@ def predict_game_bundle(req: GameBundleRequest) -> GameBundleResponse:
 
 # ── Player prop model ─────────────────────────────────────────────────────────
 
+# Props joueur qui sont un ÉVÉNEMENT par match (0 ou 1), pas un comptage.
+_BINARY_PLAYER_PROPS = {"wins", "shutouts"}
+
+
 @app.post("/predict/player", response_model=MLResponse, dependencies=_PROTECTED)
 def predict_player(f: PlayerPropFeatures) -> MLResponse:
     rate_map = {
@@ -2618,7 +2626,7 @@ def predict_player(f: PlayerPropFeatures) -> MLResponse:
         "assists":  f.assists_per_game,
         "points":   f.points_per_game,
         "shots":    f.shots_per_game,
-        "pp_point": f.goals_per_game * 0.35,   # rough PP-point proxy
+        "pp_point": f.pp_points_per_game,      # mesuré ; None → pas d'estimation
         # Physical / goalie props — rate injected via shots_per_game by Node.js
         "hits":     f.shots_per_game,
         "blocks":   f.shots_per_game,
@@ -2627,7 +2635,7 @@ def predict_player(f: PlayerPropFeatures) -> MLResponse:
         "wins":     f.shots_per_game,
         "shutouts": f.shots_per_game,
     }
-    if f.prop_type not in rate_map:
+    if f.prop_type not in rate_map or rate_map[f.prop_type] is None:
         # `rate_map.get(..., f.goals_per_game)` servait la cadence de BUTS sous
         # le nom du marché demandé. Un marché qu'on ne sait pas pricer n'a pas
         # de chiffre, il a une absence de chiffre.
@@ -2638,7 +2646,16 @@ def predict_player(f: PlayerPropFeatures) -> MLResponse:
         )
     rate = rate_map[f.prop_type]
 
-    raw_over = poisson_over(f.line, rate)
+    # Victoire et blanchissage d'un gardien sont des événements OUI/NON sur un
+    # match : la « cadence » reçue est une PROBABILITÉ (part de ses matchs). En
+    # Poisson, une cadence de 0,50 donnait P(≥ 1) = 1 − e^−0,5 = 39 % au lieu de
+    # 50 % (ml/INCOHERENCES_ML.md §12). Au plus 1 par match : au-delà d'une
+    # ligne de 1, « plus » est impossible.
+    binary = f.prop_type in _BINARY_PLAYER_PROPS
+    if binary:
+        raw_over = clamp(rate, 0.0, 1.0) if f.line < 1 else 0.0
+    else:
+        raw_over = poisson_over(f.line, rate)
     prob = raw_over if f.selection == "over" else 1.0 - raw_over
     prob = clamp(prob, 0.05, 0.95)
 
@@ -2660,7 +2677,12 @@ def predict_player(f: PlayerPropFeatures) -> MLResponse:
 
     over_under = f.selection.upper()
     # Ne JAMAIS attribuer au joueur une cadence qu'on n'a pas mesurée sur lui.
-    if f.rate_is_league_average:
+    if binary:
+        source = ("NHL average for goalies — no per-goalie data" if f.rate_is_league_average
+                  else "share of this goalie's games")
+        explanation = (f"Yes/no event: {f.prop_type} in {rate:.0%} of games ({source}); "
+                       f"{over_under} {f.line} implied at {round(prob*100)}%.")
+    elif f.rate_is_league_average:
         explanation = (f"Poisson model: NHL average is {rate:.2f} {f.prop_type}/game for this "
                        f"position — no per-player data available for this stat, so every player "
                        f"gets the same number; {over_under} {f.line} implied at {round(prob*100)}%.")
@@ -2672,8 +2694,8 @@ def predict_player(f: PlayerPropFeatures) -> MLResponse:
         probability_exact=round(float(prob), 6),
         confidence=round(confidence * 100),
         feature_importances=importances[:5],
-        model_version="poisson-v1.0",
-        model_type="Poisson Distribution",
+        model_version="poisson-v1.1",
+        model_type="Bernoulli (yes/no)" if binary else "Poisson Distribution",
         explanation=explanation,
     )
 

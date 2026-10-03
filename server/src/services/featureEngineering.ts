@@ -166,6 +166,8 @@ export interface PlayerPropFeatures {
   assists_per_game: number;
   points_per_game:  number;
   shots_per_game:   number;
+  /** Points en avantage numérique par match, mesurés sur le joueur (marché `pp_point`). */
+  pp_points_per_game?: number;
   games_played:     number;
   line:             number;
   prop_type:        string;  // "goals" | "assists" | "points" | "shots" | "pp_point"
@@ -379,8 +381,12 @@ export async function buildPlayerPropFeatures(
   // nommant le joueur. Un chiffre de ligue présenté comme une mesure sur lui.
   //
   // Ce qui EST par joueur l'est maintenant vraiment : `fetchPlayerById` remonte
-  // `shotsAgainst`/`goalsAgainst` (gardiens) et `penaltyMinutes` pour tout le
-  // monde. Le reste reste une moyenne de ligue, mais le dit.
+  // `shotsAgainst`/`goalsAgainst`, `wins`, `shutouts` (gardiens), et
+  // `penaltyMinutes`, `hits`, `blockedShots` (patineurs). La moyenne de ligue
+  // ne sert plus qu'en repli, quand l'amont n'a rien dit — et le dit.
+  // (Jusqu'au 2026-10-03, mises en échec, tirs bloqués, victoires et
+  // blanchissages servaient la moyenne de ligue à tout le monde alors que la
+  // fiche portait la mesure : ml/INCOHERENCES_ML.md §12.)
 
   /** Arrêts réellement effectués par CE gardien, par match. */
   const goalieSaves = (): number | null => {
@@ -390,15 +396,29 @@ export async function buildPlayerPropFeatures(
     return saves > 0 ? saves : null;
   };
 
+  /** Total de saison → cadence par match ; `null` si l'amont n'a rien dit. */
+  const perGame = (total: unknown): number | null =>
+    typeof total === 'number' && Number.isFinite(total) && total >= 0 ? total / gp : null;
+
   const perPlayer: Record<string, () => number | null> = {
-    saves: goalieSaves,
-    pim:   () => (player.penaltyMinutes != null ? player.penaltyMinutes / gp : null),
+    saves:    goalieSaves,
+    pim:      () => perGame(player.penaltyMinutes),
+    hits:     () => perGame(player.hits),
+    blocks:   () => perGame(player.blockedShots),
+    // Gardien : victoires / blanchissages par match JOUÉ (l'API ne donne pas
+    // les départs). Le service les lit comme une PROBABILITÉ (événement oui /
+    // non), pas comme une cadence de Poisson.
+    wins:     () => (player.position === 'G' ? perGame(player.wins) : null),
+    shutouts: () => (player.position === 'G' ? perGame(player.shutouts) : null),
   };
 
   /** Moyennes de ligue — aucune source par joueur dans l'API utilisée ici. */
   const LEAGUE_AVERAGES: Record<string, number> = {
-    hits:     2.1,   // skater average across positions
-    blocks:   0.5,   // average blocked shots/game
+    // Moyennes par patineur-match mesurées (ml/models/player_report.json,
+    // test 2023-26 : 1,197 et 0,837). L'ancien 2,1 mises en échec était
+    // presque le double de la réalité.
+    hits:     1.2,
+    blocks:   0.84,
     saves:   27.0,   // repli quand le gardien n'a pas encore de saison
     pim:      0.50,
     wins:     0.50,  // goalie wins ~50% of starts
@@ -414,6 +434,9 @@ export async function buildPlayerPropFeatures(
     assists_per_game: (player.assists  ?? 0) / gp,
     points_per_game:  (player.points   ?? 0) / gp,
     shots_per_game:   specialRate != null ? specialRate : (player.shots ?? 0) / gp,
+    // Points en AN mesurés : le service estimait autrefois `buts × 0,35`, alors
+    // que ces points sont surtout des PASSES (INCOHERENCES_ML §12).
+    pp_points_per_game: perGame(player.ppPoints) ?? undefined,
     games_played:     gp,
     line,
     prop_type: propType,
