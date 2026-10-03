@@ -35,7 +35,7 @@ from typing import List, Optional
 import numpy as np
 import xgboost as xgb
 from score_model import (P_OT_HOME, ScoreDistribution, ScoreEnsemble,
-                         p_ot_for, read_ot_model)
+                         lambdas_for_home_win, p_ot_for, read_ot_model)
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -652,6 +652,37 @@ def _apply_correction(p_home: float, feat_values: dict) -> float | None:
 
 
 _load_correction_layer()
+
+
+def _align_distribution(dist: "ScoreDistribution | None",
+                        p_home: float | None) -> "ScoreDistribution | None":
+    """La distribution du match, recalée pour que sa victoire domicile vaille
+    `p_home` (la victoire corrigée). None = pas de recalage possible.
+
+    POURQUOI (ml/INCOHERENCES_ML.md §6). Servie seule sur le marché
+    `moneyline`, la correction laissait tous les autres marchés sur la matrice
+    non corrigée : « gagne en 60 min » + « gagne en prolongation » ≠ « gagne »,
+    le score exact ne sommait plus à la victoire, et le direct mélangeait les
+    deux. Ici la correction devient une distribution : même total d'intensités
+    (les totaux de buts ne bougent pas), partage domicile/visiteur choisi pour
+    que P(victoire domicile) — τ et prolongation compris — égale la cible.
+    Tous les marchés se lisent ensuite sur la même matrice.
+
+    Les contributions des features (`_dmatrix`) restent celles du modèle brut :
+    la décomposition affichée explique λ avant correction.
+    """
+    if dist is None or p_home is None or not math.isfinite(float(p_home)):
+        return None
+    try:
+        lh, la = lambdas_for_home_win(dist.lam_home + dist.lam_away, float(p_home),
+                                      _p_ot_for, _score_tau)
+        aligned = ScoreDistribution(lh, la, _p_ot_for(lh, la), _score_tau)
+    except Exception as e:
+        print(f"[ML] ⚠️  recalage sur la victoire corrigée impossible : {e}")
+        return None
+    aligned._dmatrix = getattr(dist, "_dmatrix", None)
+    aligned.raw_lambdas = (dist.lam_home, dist.lam_away)
+    return aligned
 
 # Set once the model-load attempt has completed. The readiness probe gates on
 # this so the orchestrator only routes traffic after init (models loaded, or
@@ -2312,9 +2343,19 @@ def _game_context(f: GameFeatures) -> dict:
     #       champs `probability_*` de `MLResponse`). Zéro calcul en plus.
     p_clf = base_prob if _xgb_game is not None else None
     p_score_model = None
+    p_corrected = None
     if score_dist is not None:
+        # `p_score_model` = la victoire du modèle de score BRUT, avant la couche
+        # de correction (exposée telle quelle, `probability_score_model`).
         p_score_model = score_dist.p_home_win()
-        base_prob = p_score_model
+        # Couche de correction → distribution recalée (INCOHERENCES_ML §6) :
+        # tous les marchés, pas seulement le moneyline, se lisent dessus.
+        p_corrected = _apply_correction(p_score_model, feat_values)
+        aligned = _align_distribution(score_dist, p_corrected)
+        if aligned is not None:
+            score_dist = aligned
+            p_corrected = None        # déjà dans la distribution
+        base_prob = score_dist.p_home_win()
         model_type = "Modèle de score (Poisson empilé)"
         # `model_version` identifiait l'entraînement du CLASSIFIEUR
         # (`xgb-nhl-v4.0`). L'UI affiche les deux côte à côte —
@@ -2326,9 +2367,10 @@ def _game_context(f: GameFeatures) -> dict:
 
     return {
         "feat_values": feat_values,
-        # Victoire domicile après la couche de correction (None sans couche ou
-        # sans modèle de score) — servie pour le seul marché `moneyline`.
-        "p_home_corrected": _apply_correction(p_score_model, feat_values),
+        # Victoire corrigée que le recalage n'a PAS pu intégrer à la
+        # distribution (repli : servie sur le seul marché `moneyline`, comme
+        # avant). None dans le cas normal — la correction est dans `score_dist`.
+        "p_home_corrected": p_corrected,
         "score_dist": score_dist, "base_prob": base_prob, "win_diff": win_diff,
         "gf_diff": gf_diff, "form_diff": form_diff,
         "lam_home": lam_home, "lam_away": lam_away,
@@ -2392,8 +2434,16 @@ def _price_game_market(ctx: dict, f: GameFeatures) -> MLResponse:
                     "message": "No estimate available for this market with the data provided"},
         )
 
-    # 4ter-bis. Moneyline : la couche de correction remplace la victoire du
-    #          modèle de score (cf. `_load_correction_layer`), vue du sujet.
+    # 4ter-bis. Moneyline : la couche de correction est d'ordinaire déjà dans
+    #          la distribution (`_align_distribution`). On le dit ; et si le
+    #          recalage a échoué, on retombe sur l'ancien remplacement du seul
+    #          moneyline, vu du sujet.
+    raw = getattr(ctx["score_dist"], "raw_lambdas", None) if ctx["score_dist"] is not None else None
+    if f.market_type == "moneyline" and raw is not None and p_score_model is not None:
+        p_raw = p_score_model if f.subject_is_home else 1.0 - p_score_model
+        explanation = (f"{explanation} Corrigé (forme, fatigue, alignement, ELO) : "
+                       f"{int(p_raw * 100)}% → {int(prob * 100)}% ; tous les marchés "
+                       f"du match suivent (λ bruts {raw[0]:.2f}/{raw[1]:.2f}).")
     p_corr = ctx.get("p_home_corrected")
     if f.market_type == "moneyline" and p_corr is not None:
         p_subject = p_corr if f.subject_is_home else 1.0 - p_corr

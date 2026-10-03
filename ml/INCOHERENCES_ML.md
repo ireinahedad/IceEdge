@@ -23,7 +23,7 @@
 | 3 | ✅ | ~~Noms de gardiens et d'absents comparés sans retirer les accents~~ — corrigé le 2026-10-02 | `ml_service.py` |
 | 4 | ✅ | ~~Value bets : edge calculé sur une probabilité arrondie à l'entier~~ — corrigé le 2026-10-02 | `ml_service.py`, `valueBets.service.ts` |
 | 5 | 🔴 | Value bets : la bande 2-6 % a été mesurée sur un autre modèle que celui servi | `valueBets.service.ts`, `backtest_walkforward.py` |
-| 6 | 🔴 | Couche de correction appliquée à la victoire seulement → tuiles qui ne s'additionnent plus | `ml_service.py`, `gameMlBundle.ts` |
+| 6 | ✅ | ~~Couche de correction appliquée à la victoire seulement → tuiles qui ne s'additionnent plus~~ — corrigé le 2026-10-03 (voir la note puck line) | `ml_service.py`, `score_model.py` |
 | 7 | 🟠 | Absences : définies différemment à l'entraînement et au service | `build_dataset.py`, `ml_service.py` |
 | 8 | 🟠 | Le filtre « début de saison » (`MIN_GP`) ne filtre presque rien | `build_dataset.py` |
 | 9 | 🟠 | τ, p_ot et déciles ajustés sur des λ que le code lui-même juge sur-ajustés | `train_score.py` |
@@ -162,7 +162,23 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 
 ---
 
-## 🔴 6. La couche de correction ne touche que la victoire → les tuiles ne s'additionnent plus
+## ✅ 6. La couche de correction ne touche que la victoire → les tuiles ne s'additionnent plus
+
+> **Corrigé le 2026-10-03** (option 1 ci-dessous). La victoire corrigée est
+> traduite en distribution : somme des λ conservée, partage choisi pour que la
+> matrice donne exactement la victoire corrigée (`score_model.lambdas_for_home_win`,
+> `ml_service._align_distribution`). Mesuré sur 142 affiches avec les vrais
+> modèles : |60 min + prolongation − victoire| passe de 2,15 pt en moyenne
+> (max 9,7) à 0 ; la somme des scores exacts gagnants aussi. Moneyline
+> inchangé, totaux quasi inchangés (0,03 pt), victoire en 60 min −/+ 2,0 pt en
+> moyenne (max 7,9), **puck line ±1,8 pt en moyenne (max 6,4)**. Le direct
+> reçoit désormais victoire, prolongation et λ de la même matrice.
+>
+> ⚠️ **Conséquence sur les value bets puck line** : la règle A2 (edge ≥ 4 %)
+> a été pré-enregistrée et mesurée sur la puck line du modèle BRUT ; elle
+> s'applique maintenant à la puck line recalée, qui n'a pas été mesurée —
+> **choix assumé le 2026-10-03** (cohérence d'abord). À rejouer dans le
+> walk-forward (`--derived`, en y appliquant le recalage), avec le point #5.
 
 **Où** — `ml/python/ml_service.py:2333-2338` (correction appliquée seulement si `market_type == "moneyline"`) ; `server/src/services/gameMlBundle.ts` (`applyLive`).
 

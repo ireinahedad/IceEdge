@@ -260,6 +260,60 @@ def stretch_lambdas(lam_home, lam_away, gamma: float):
     return tot * r / (1.0 + r), tot / (1.0 + r)
 
 
+# ── Aligner la distribution sur une victoire donnée (2026-10-03) ─────────────
+#
+# La couche de correction du moneyline (`correction_layer.json`) produit une
+# P(victoire domicile) corrigée. Servie SEULE, elle laissait tous les autres
+# marchés sur la matrice non corrigée : « gagne en 60 min » + « gagne en
+# prolongation » ne faisaient plus « gagne », le score exact ne sommait plus à
+# la victoire affichée, et le direct mélangeait les deux (INCOHERENCES_ML §6).
+#
+# On traduit donc la correction en une distribution : même total d'intensités
+# S = λ_dom + λ_ext (les totaux de buts ne bougent pas), partage de S choisi
+# pour que P(victoire domicile) de la matrice — τ et prolongation dépendante de
+# l'affiche compris — égale la cible. Tous les marchés se lisent ensuite sur la
+# même matrice et restent cohérents entre eux par construction.
+
+LAMBDA_MIN, LAMBDA_MAX = 0.5, 8.0
+
+
+def lambdas_for_home_win(total: float, p_target: float, p_ot_fn,
+                         tau: dict[int, float] | None = None,
+                         tol: float = 1e-7, iters: int = 60) -> tuple[float, float]:
+    """(λ_dom, λ_ext) de somme `total` dont la victoire domicile vaut `p_target`.
+
+    `p_ot_fn(λ_dom, λ_ext)` rend P(le domicile gagne la prolongation) — le même
+    calcul que celui servi. P(victoire domicile) croît avec λ_dom à somme
+    fixée (la prolongation aussi, pente positive imposée par `read_ot_model`),
+    d'où une bissection. Une cible hors d'atteinte entre les bornes de λ rend la
+    borne la plus proche.
+    """
+    total = float(total)
+    lo = max(LAMBDA_MIN, total - LAMBDA_MAX)
+    hi = min(LAMBDA_MAX, total - LAMBDA_MIN)
+    if not (np.isfinite(total) and np.isfinite(p_target)) or lo >= hi:
+        raise ValueError(f"alignement impossible (total={total}, cible={p_target})")
+
+    def win(lh: float) -> float:
+        la = total - lh
+        return ScoreDistribution(lh, la, p_ot_fn(lh, la), tau).p_home_win()
+
+    if p_target <= win(lo):
+        return lo, total - lo
+    if p_target >= win(hi):
+        return hi, total - hi
+    for _ in range(iters):
+        mid = 0.5 * (lo + hi)
+        if win(mid) < p_target:
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo < tol:
+            break
+    lh = 0.5 * (lo + hi)
+    return lh, total - lh
+
+
 class ScoreDistribution:
     """Distribution complète d'un match à partir de (λ_dom, λ_ext).
 
@@ -537,6 +591,21 @@ def sanity_check() -> None:
     # 1 (bookmaker qui ferme un marché) ne doit pas empoisonner tout le vecteur.
     assert np.all(np.isfinite(logit(np.array([0.0, 1.0])))), "logit : ±inf non borné"
     print(f"  blend logistique      poids {w[0]:.3f} (1.5) · biais {w[1]:.3f} (-0.3) OK")
+
+    # ── Alignement sur une victoire cible (INCOHERENCES_ML §6) ───────────────
+    tau_align = {0: 1.36, 1: 0.73, -1: 0.71, 2: 0.92, -2: 0.91, 3: 1.43, -3: 1.39}
+    p_ot = lambda lh, la: 1.0 / (1.0 + np.exp(-(0.283 * (lh - la) - 0.064)))
+    for target in (0.35, 0.5, 0.6288, 0.75):
+        lh, la = lambdas_for_home_win(6.0, target, p_ot, tau_align)
+        d = ScoreDistribution(lh, la, p_ot(lh, la), tau_align)
+        assert abs(lh + la - 6.0) < 1e-9, "alignement : la somme des λ doit être conservée"
+        assert abs(d.p_home_win() - target) < 1e-5, f"alignement : {d.p_home_win():.5f} pour {target}"
+        reg_win = float(d.M[d._margin > 0].sum())
+        ot_win = d.p_regulation_tie() * d.p_ot_home
+        assert abs(reg_win + ot_win - d.p_home_win()) < 1e-12, "alignement : 60 min + OT ≠ victoire"
+    lo_lh, _ = lambdas_for_home_win(6.0, 0.001, p_ot, tau_align)
+    assert abs(lo_lh - LAMBDA_MIN) < 1e-12, "alignement : cible hors d'atteinte → borne"
+    print("  alignement sur une victoire cible   somme conservée, cible atteinte OK")
 
     print("✅ score_model : contrôles internes OK")
 

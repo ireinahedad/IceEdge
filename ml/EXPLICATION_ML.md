@@ -417,9 +417,19 @@ p_corrigée = σ(z)
 | `elo_diff` | +0,132 |
 
 Mesure qui a justifié son adoption : log-loss moneyline −0,0021 (z −3,2),
-meilleure sur 10 saisons sur 11. Elle **ne modifie que le marché « moneyline »**
-— tous les autres marchés sortent de la matrice des scores, non corrigée.
-Une variable absente vaut sa moyenne (contribution nulle).
+meilleure sur 10 saisons sur 11. Une variable absente vaut sa moyenne
+(contribution nulle).
+
+**Comment elle s'applique à tous les marchés** (depuis le 2026-10-03). La
+victoire corrigée est traduite en une distribution : on garde la somme
+λ_dom + λ_ext (les totaux de buts ne bougent pas) et on choisit le partage
+entre les deux équipes pour que la victoire domicile de la matrice — τ et
+prolongation compris — égale la victoire corrigée (`lambdas_for_home_win`,
+`score_model.py`, par bissection). Tous les marchés se lisent ensuite sur
+cette matrice recalée : « gagne en 60 min » + « gagne en prolongation » =
+« gagne », les scores exacts gagnants somment à la victoire. Les λ affichés
+(paquet ML, direct) sont les λ recalés ; `probability_score_model` reste la
+victoire du modèle brut, avant correction.
 
 ### 4.4 Le modèle joueur (`train_player.py`)
 
@@ -449,7 +459,7 @@ que le domicile gagne la prolongation (§4.1.5). Code : `ScoreDistribution`
 
 | Marché (`market_type`) | Formule |
 |---|---|
-| `moneyline` (victoire, prolongation incluse) | Σ M[i>j] + Σ M[i=j] × p_ot, **puis couche de correction §4.3** |
+| `moneyline` (victoire, prolongation incluse) | Σ M[i>j] + Σ M[i=j] × p_ot, sur la matrice **recalée** par la couche de correction (§4.3) |
 | `regulation_result` (gagne en 60 min) | Σ M[i>j] |
 | `game_to_ot` (va en prolongation) | Σ M[i=j] |
 | `ot_so_winner` (gagne en prolongation/fusillade) | Σ M[i=j] × p_ot |
@@ -709,7 +719,7 @@ visiteur λ_ext = **2,70** (chiffres calculés avec les vrais τ et p_ot du rapp
 2. **Matrice** sans τ : nul après 60 min 16,2 %. **Avec τ : 21,9 %**.
 3. **Victoire en 60 min** = Σ M[i>j] = 49,1 %.
 4. **Victoire (moneyline)** = 49,1 % + 21,9 % × 52,7 % = **60,7 %**.
-5. **Couche de correction** : avec toutes les autres variables à leur moyenne, z = 0,0863 + 0,4667 × logit(0,607) → **57,2 %** ; si en plus le domicile a +60 d'ELO, +0,04 de xGF% court terme, +0,3 xG d'alignement, +0,5 de star power, etc. → **62,9 %**. C'est ce chiffre qui est affiché sur « victoire ».
+5. **Couche de correction** : avec toutes les autres variables à leur moyenne, z = 0,0863 + 0,4667 × logit(0,607) → **57,2 %** ; si en plus le domicile a +60 d'ELO, +0,04 de xGF% court terme, +0,3 xG d'alignement, +0,5 de star power, etc. → **62,9 %**. Le service recale alors les λ (somme 6,00 conservée) pour que la matrice donne exactement 62,9 %, et **les étapes 3, 4, 6-9 se refont sur cette matrice recalée** — les chiffres ci-dessous sont ceux de la matrice brute, pour suivre le calcul pas à pas.
 6. **Puck line −1,5** = Σ M[écart ≥ 2] = **37,3 %**.
 7. **Plus de 5,5 buts** : total final espéré 6,23 → **56,0 %**.
 8. **Les deux équipes marquent** : **89,8 %**.
