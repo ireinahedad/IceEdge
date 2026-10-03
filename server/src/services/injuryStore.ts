@@ -44,12 +44,15 @@ function clamp(x: number, lo: number, hi: number): number { return Math.max(lo, 
 const NEUTRAL: ManualFactor = { active: false, homeProb: 0.5, note: 'non renseigné' };
 
 /** Facteurs manuels (blessures + alignement) pour un match. Tolérant aux pannes. */
-export async function getManualFactors(homeAbbr: string, awayAbbr: string): Promise<ManualFactors> {
+export async function getManualFactors(homeAbbr: string, awayAbbr: string,
+                                       gameDate?: string): Promise<ManualFactors> {
   // `getEntry` ne lève jamais : base injoignable → null → neutre, journalisé.
+  // `gameDate` (défaut : aujourd'hui) : blessés et alignement officiel lus à la
+  // date du MATCH, pas à celle du jour (ml/INCOHERENCES_ML.md §2).
   const [saisie, long, official] = await Promise.all([
     getEntry<GameInjuries>('injuries', injuryGameKey(homeAbbr, awayAbbr)),
-    getLongInjuries(),
-    getOfficialLineupsDay().catch(() => ({} as Record<string, TeamLineup>)),
+    getLongInjuries(gameDate),
+    getOfficialLineupsDay(gameDate).catch(() => ({} as Record<string, TeamLineup>)),
   ]);
   // Blessés de longue durée des deux équipes, ajoutés à la saisie du match. Un
   // joueur présent des deux côtés garde le poids saisi pour le match.

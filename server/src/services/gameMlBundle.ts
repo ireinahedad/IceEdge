@@ -151,7 +151,9 @@ async function computeBundle(gameId: string): Promise<GameMlBundle> {
   // Une seule construction de features, orientée domicile ; le côté de chaque
   // question voyage dans `subject_is_home` de chaque marché.
   const [features, homeRoster, awayRoster] = await Promise.all([
-    buildGameFeatures(home, away, 'moneyline', undefined, { subjectIsHome: true }),
+    // Date du match : repos, gardien partant et absents se lisent à CETTE date.
+    buildGameFeatures(home, away, 'moneyline', undefined,
+                      { subjectIsHome: true, gameDate: game?.gameDate || undefined }),
     // Effectifs (cache 30 min) : leurs identifiants NHL suffisent au modèle
     // joueur, qui a son propre état. Un échec ne coûte que les cadences joueur.
     fetchTeamRoster(home).catch(() => [] as any[]),
@@ -255,7 +257,9 @@ async function applyLive(gameId: string, pre: GameMlBundle): Promise<GameMlBundl
       probability: o.rulePct,
       probability_scale: 'pct',
       live: true,
-      // L'incertitude bootstrap était celle de l'avant-match : elle ne dit plus rien.
+      // La probabilité exacte et l'incertitude bootstrap étaient celles de
+      // l'avant-match : elles ne décrivent plus ce chiffre.
+      probability_exact: null,
       probability_std: null,
       uncertainty: null,
       explanation: `Modèle ML (avant-match : victoire domicile ${preMoney}%, λ=${lambdaT.toFixed(2)}) `

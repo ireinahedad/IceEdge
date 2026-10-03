@@ -1623,17 +1623,18 @@ async function computeGameMarketsFor(
   const [summaryRes, homeRestRes, awayRestRes, oddsRes,
          homeTravelRes, awayTravelRes, refFactorRes, manualRes, detailRes] = await Promise.allSettled([
     fetchTeamSummaryStats(),
-    fetchTeamRestInfo(homeAbbr),
-    fetchTeamRestInfo(awayAbbr),
+    // Repos et voyage mesurés à la DATE DU MATCH, pas à aujourd'hui.
+    fetchTeamRestInfo(homeAbbr, game.gameDate || undefined),
+    fetchTeamRestInfo(awayAbbr, game.gameDate || undefined),
     fetchOddsImplied(homeName, awayName),
-    fetchTeamTravel(homeAbbr, homeAbbr),   // les deux jouent dans l'aréna maison
-    fetchTeamTravel(awayAbbr, homeAbbr),
+    fetchTeamTravel(homeAbbr, homeAbbr, game.gameDate || undefined),   // les deux jouent dans l'aréna maison
+    fetchTeamTravel(awayAbbr, homeAbbr, game.gameDate || undefined),
     getGameRefFactor(homeAbbr, awayAbbr),  // arbitrage → volume de PP (totaux)
     // Blessures / alignement : lecture en base depuis la migration 034 (le
     // fichier n'existait pas dans le conteneur). Placée ICI et non plus après le
     // bloc : elle est asynchrone maintenant, et l'attendre en série aurait
     // ajouté un aller-retour à chaque prédiction pour rien.
-    getManualFactors(homeAbbr, awayAbbr),
+    getManualFactors(homeAbbr, awayAbbr, game.gameDate || undefined),
     // Match commencé : la feuille de match (période, horloge, entracte, buts
     // par période). Cache de 30 s partagé avec la page du match.
     wantDetail ? fetchGameDetail(gameId) : Promise.resolve(null),

@@ -291,13 +291,17 @@ describe('predictHighestScoringPeriod — remplace la constante 38', () => {
       ['P1', 'P2', 'P3', 'tie'].map(s => predictHighestScoringPeriod('ELI', 'WEA', s))
     );
     // Trois périodes à 38 % faisaient 114 % pour trois issues qui s'excluent.
-    expect(p1! + p2! + p3! + tie!).toBeCloseTo(100, 0);
+    // Quatre pourcentages ENTIERS, désormais différents : leurs arrondis ne se
+    // compensent plus — la somme exacte vaut 100, l'affichée 100 ± 1.
+    expect(Math.abs(p1! + p2! + p3! + tie! - 100)).toBeLessThanOrEqual(1);
   });
 
-  it('les trois périodes sont équivalentes sous ce modèle, et c\'est assumé', async () => {
+  it('chaque période a sa part mesurée des buts : P2 > P3 > P1 (INCOHERENCES_ML §16)', async () => {
     const p1 = await predictHighestScoringPeriod('ELI', 'WEA', 'P1');
+    const p2 = await predictHighestScoringPeriod('ELI', 'WEA', '2');
     const p3 = await predictHighestScoringPeriod('ELI', 'WEA', '3');
-    expect(p1).toBe(p3);
+    expect(p2!).toBeGreaterThan(p3!);
+    expect(p3!).toBeGreaterThan(p1!);
   });
 
   it('un match ouvert rend l\'égalité moins probable qu\'un match fermé', async () => {

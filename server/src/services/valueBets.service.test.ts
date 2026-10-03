@@ -141,6 +141,30 @@ describe('computeValueBets', () => {
     expect(ml.minOdds).toBeCloseTo(1 / 0.53, 10);
   });
 
+  it('l’edge se calcule sur la probabilité NON arrondie quand le service l’envoie', async () => {
+    seedGame();
+    Object.assign(GOALIES, { TOR: 'Joseph Woll', MTL: 'Sam Montembeault' });
+    // Affiché 52 % dans les deux cas. Exact 51,6 % → edge 1,6 % < 2 % : rejeté.
+    // L'entier seul (52 % → 2 %) l'aurait retenu.
+    BUNDLES.g1['moneyline|||h'] = { probability: 52, probability_exact: 0.516, probability_score_model: 52 };
+    expect((await computeValueBets(NOW)).some((b) => b.id === 'g1-moneyline-TOR')).toBe(false);
+
+    // Exact 52,4 % → edge 2,4 % : retenu, et edge / EV / cote minimale exacts.
+    BUNDLES.g1['moneyline|||h'] = { probability: 52, probability_exact: 0.524, probability_score_model: 52 };
+    const ml = (await computeValueBets(NOW)).find((b) => b.id === 'g1-moneyline-TOR')!;
+    expect(ml.modelProb).toBe(0.524);
+    expect(ml.edge).toBeCloseTo(0.024, 10);
+    expect(ml.ev).toBeCloseTo(0.524 * 1.91 - 1, 10);
+    expect(ml.minOdds).toBeCloseTo(1 / 0.524, 10);
+  });
+
+  it('service ML sans `probability_exact` → repli sur l’entier, comme avant', async () => {
+    seedGame();
+    Object.assign(GOALIES, { TOR: 'Joseph Woll', MTL: 'Sam Montembeault' });
+    const ml = (await computeValueBets(NOW)).find((b) => b.id === 'g1-moneyline-TOR')!;
+    expect(ml.modelProb).toBe(0.53);
+  });
+
   it('un match commencé est exclu, même avec tout le reste', async () => {
     seedGame();
     GAMES[0].startTimeUTC = EARLIER;

@@ -121,6 +121,34 @@ describe('playerRatesForGame', () => {
     expect(r.players['2'].firstGoal!).toBeGreaterThan(0);
   });
 
+  it('premier buteur : buts de match du MODÈLE DE SCORE pour tous les joueurs (INCOHERENCES_ML §13)', async () => {
+    bundle.value = {
+      lambdaHome: 3.4, lambdaAway: 2.4,
+      playerRates: { '2': { goals: 0.31 } },
+      playerDispersion: { goals: null }, playerModelAsOf: '2026-04-16',
+    };
+    const r = await playerRatesForGame('2026020001');
+    bundle.value = null;
+    const any = 1 - Math.exp(-5.8);
+    // Joueur du modèle : sa cadence ÷ λ du modèle de score.
+    expect(r.players['2'].gameGoals).toBe(5.8);
+    expect(r.players['2'].firstGoal!).toBeCloseTo((0.31 / 5.8) * any, 4);
+    // Joueur de la règle, même match : même dénominateur.
+    expect(r.players['1'].gameGoals).toBe(5.8);
+    expect(r.players['1'].firstGoal!).toBeCloseTo((r.players['1'].rates.goals! / 5.8) * any, 4);
+    expect(r.players['9'].gameGoals).toBe(5.8);
+    // Gardien : jamais de premier buteur.
+    expect(r.players['5'].firstGoal).toBeUndefined();
+  });
+
+  it('paquet sans λ : buts de match de la règle, comme avant', async () => {
+    bundle.value = { playerRates: { '2': { goals: 0.31 } }, playerDispersion: {}, playerModelAsOf: null };
+    const withModel = await playerRatesForGame('2026020001');
+    bundle.value = null;
+    const rules = await playerRatesForGame('2026020001');
+    expect(withModel.players['1'].gameGoals).toBe(rules.players['1'].gameGoals);
+  });
+
   it('service ML en panne : la règle seule, sans erreur', async () => {
     bundle.value = null;
     const r = await playerRatesForGame('2026020001');
