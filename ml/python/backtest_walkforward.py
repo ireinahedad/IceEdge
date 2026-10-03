@@ -3997,7 +3997,18 @@ def run_served(df, seasons, search_trials: int, use_cache: bool = True,
                 print(hdr)
                 _print_clv_row("", blk)
                 if model == "servi":
-                    print(f"   → {out['verdict'][market][src]}")
+                    z_clv = blk["clv_net_z"]
+                    print(f"   → {out['verdict'][market][src]}  (CLV net z "
+                          + (f"{z_clv:+.2f}" if z_clv is not None else "—")
+                          + f", ROI z {blk['z']:+.2f})")
+                    # Le verdict dit si le modèle choisit MIEUX que le hasard
+                    # (placebo), pas si les paris sont rentables : c'est le
+                    # « ROI clot. » (prix du matin jugé par la clôture) qui
+                    # le dit. Ajouté le 2026-10-03 après le premier run.
+                    roi_close = blk["roi_implied_by_close_pct"]
+                    if roi_close is not None and roi_close < 0:
+                        print(f"     ⚠️  ROI implicite de la clôture {roi_close:+.2f} % : "
+                              f"selon la clôture, ces paris PERDENT en espérance au prix du matin")
 
     # ── 4. Grille de bandes (modèle servi) — piste, pas une règle ───────────
     for market, grid in SERVED_GRID.items():

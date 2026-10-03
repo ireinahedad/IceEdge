@@ -22,7 +22,7 @@
 | 2 | ✅ | ~~Repos, gardiens et absents calculés pour AUJOURD'HUI, pas pour la date du match~~ — corrigé le 2026-10-02 | `restTravel.ts`, `featureEngineering.ts` |
 | 3 | ✅ | ~~Noms de gardiens et d'absents comparés sans retirer les accents~~ — corrigé le 2026-10-02 | `ml_service.py` |
 | 4 | ✅ | ~~Value bets : edge calculé sur une probabilité arrondie à l'entier~~ — corrigé le 2026-10-02 | `ml_service.py`, `valueBets.service.ts` |
-| 5 | 🟠 | Value bets : la bande 2-6 % a été mesurée sur un autre modèle que celui servi — **mesure prête, à lancer** (`--served`) | `valueBets.service.ts`, `backtest_walkforward.py` |
+| 5 | ✅ | ~~Value bets : la bande 2-6 % a été mesurée sur un autre modèle que celui servi~~ — **mesurée le 2026-10-03** : règle gardée, mais pas rentable selon la clôture (voir la section) | `valueBets.service.ts`, `backtest_walkforward.py` |
 | 6 | ✅ | ~~Couche de correction appliquée à la victoire seulement → tuiles qui ne s'additionnent plus~~ — corrigé le 2026-10-03 (voir la note puck line) | `ml_service.py`, `score_model.py` |
 | 7 | 🟠 | Absences : définies différemment à l'entraînement et au service | `build_dataset.py`, `ml_service.py` |
 | 8 | ✅ | ~~Le filtre « début de saison » (`MIN_GP`) ne filtre presque rien~~ — commentaire corrigé le 2026-10-03 (comportement gardé) | `build_dataset.py` |
@@ -184,6 +184,51 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 > rapport) ; pas encore lancé sur les vraies données, qui ne sont que sur le
 > poste local. Durée attendue : quelques minutes avec le cache
 > d'hyperparamètres (`fold_params_cache.json`), plus long s'il est invalidé.
+
+### Résultat du 2026-10-03 (14 saisons prédites, correction dès 2015-16)
+
+Règle en service, modèle SERVI (prix du matin) :
+
+| Marché | Source | Paris | Réussite | ROI réalisé | ROI selon la clôture | Verdict |
+|---|---|---|---|---|---|---|
+| Vainqueur | The Odds API (DraftKings) | 1 152 | 53,8 % | +0,26 % (z 0,09) | **−3,31 %** | CONFIRMÉE |
+| Vainqueur | SBRO | 3 634 | 53,0 % | +0,35 % (z 0,22) | **−1,71 %** | CONFIRMÉE |
+| Puck line −1,5 | The Odds API | 379 | 43,3 % | +8,16 % (z 1,26) | **−1,99 %** | CONFIRMÉE |
+| Puck line −1,5 | SBRO (prix unique) | 979 | 40,8 % | +9,95 % (z 2,30) | — | NON TRANCHABLE |
+
+Modèle BRUT (sans correction), même règle : vainqueur −3,93 % (API) et
+−0,51 % (SBRO), CLV net plus faible. **La correction améliore nettement les
+value bets du vainqueur.**
+
+**Lecture — et limite du critère pré-enregistré.** Le critère vérifiait que
+le CLV net bat le placebo : c'est le cas partout, nettement. Le modèle
+choisit donc des paris vers lesquels le marché BOUGE ensuite — il porte de
+l'information que l'ouverture n'a pas. Mais ce critère ne dit pas si les paris
+sont RENTABLES, et c'était un oubli : la colonne « ROI selon la clôture »
+(`p_clôture × cote_matin − 1`, la clôture étant le meilleur estimateur connu)
+est **négative partout**. Le mouvement capté (≈ +0,5 point de probabilité)
+ne couvre pas la marge du livre (≈ 4 % chez DraftKings). Les ROI réalisés
+proches de zéro ou positifs restent dans le bruit (z ≤ 1,3 sauf la puck line
+SBRO, sans clôture pour la juger). Conclusion honnête : **pas d'avantage
+rentable démontré au prix du matin chez DraftKings**.
+
+**Décision.** Règle gardée telle quelle (le verdict pré-enregistré la
+confirme, et rien ne justifie une autre bande sur ce seul run). Le
+programme imprime désormais le z du CLV net et avertit quand le ROI selon la
+clôture est négatif.
+
+**Grille (piste, choisie sur les mêmes données).** Meilleures bandes : vainqueur
+3 %–∞ (API, ROI +0,83 %) et 4 %–∞ (SBRO, ROI +7,24 %, n 3 445), puck line
+2 %–∞ (API, ROI +2,34 %). Les deux sources préfèrent une bande **sans
+plafond** : le plafond de 6 % (« au-delà, info manquée ») n'est pas soutenu
+par ces données. À confirmer sur 2026-27 avant de toucher la règle — le
+journal `value_bet_log` pourrait enregistrer aussi, sans les afficher, les
+sélections hors bande pour mesurer la piste en conditions réelles.
+
+**Ce qui pèserait le plus** : le prix. À ≈ 4 % de marge, il faut un mouvement
+de marché bien plus grand que celui mesuré ; un livre à marge plus faible (ou
+la meilleure cote disponible — c'est l'usage de la « cote minimale »
+affichée) change davantage l'espérance que le choix de la bande.
 
 
 ---
