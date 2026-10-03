@@ -652,7 +652,7 @@ Règle par défaut, pour chaque joueur et statistique :
 Si le paquet ML porte des cadences du **modèle joueur**, elles **remplacent**
 la règle pour ce joueur (sauf gardiens et recrues inconnues). Les seuils
 « 1+, 2+, 3+ » sont ensuite lus côté client avec une binomiale négative de
-paramètre k. Premier buteur : `(λ_buts du joueur / λ_buts du match) × (1 − e^(−λ_match))`.
+paramètre k. Premier buteur : `(λ_buts du joueur / λ_buts du match) × (1 − e^(−λ_match))`, où λ_match = λ_dom + λ_ext du modèle de score quand le paquet ML est disponible (sinon l'estimation des règles).
 
 ### 7.4 Les value bets — `valueBets.service.ts`
 

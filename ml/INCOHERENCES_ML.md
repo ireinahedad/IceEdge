@@ -30,7 +30,7 @@
 | 10 | 🟠 | Classifieur : cotes d'ouverture ≠ clôture à l'entraînement, identiques au service ; commentaire « blend jamais actif » faux | `train.py`, `ml_service.py` |
 | 11 | 🟠 | « Best bets » : classement par probabilité (pas par valeur), règles et ML mélangés, autre modèle joueur | `bestBets.service.ts` |
 | 12 | ✅ | ~~`/predict/player` : points AN, victoires de gardien et mises en échec mal estimés~~ — corrigé le 2026-10-03 | `ml_service.py`, `featureEngineering.ts` |
-| 13 | 🟠 | Premier buteur : cadence du modèle joueur ÷ buts de match des règles | `playerRates.ts` |
+| 13 | ✅ | ~~Premier buteur : cadence du modèle joueur ÷ buts de match des règles~~ — corrigé le 2026-10-03 | `playerRates.ts` |
 | 14 | 🟠 | Modèle joueur : jointure par `gameId` alors que `build_dataset` dit que les identifiants diffèrent (**à vérifier**) | `train_player.py`, `build_dataset.py` |
 | 15 | 🟠 | ELO entre deux saisons : 30 % de régression à l'entraînement, 33 % au service | `build_dataset.py`, `ml_service.py` |
 | 16 | 🟡 | Trois découpages différents des buts par période dans le même service | `ml_service.py` |
@@ -311,7 +311,13 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 
 ---
 
-## 🟠 13. Premier buteur : cadence du modèle joueur ÷ buts de match des règles
+## ✅ 13. Premier buteur : cadence du modèle joueur ÷ buts de match des règles
+
+> **Corrigé le 2026-10-03.** Quand le paquet ML porte λ domicile et visiteur,
+> `gameGoals` = λ_dom + λ_ext (modèle de score, recalés sur la victoire servie)
+> pour TOUS les joueurs du match, modèle joueur ou règle : leurs probabilités
+> de premier buteur sont sur la même échelle. Sans λ (service ML en panne),
+> les buts de match de la règle, comme avant.
 
 **Où** — `server/src/services/prediction/playerRates.ts:162-165` (`lamGame` = buts pour × buts contre / moyenne, depuis les fiches d'équipe) et l.218-219.
 
