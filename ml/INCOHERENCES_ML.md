@@ -28,7 +28,7 @@
 | 8 | 🟠 | Le filtre « début de saison » (`MIN_GP`) ne filtre presque rien | `build_dataset.py` |
 | 9 | 🟠 | τ, p_ot et déciles ajustés sur des λ que le code lui-même juge sur-ajustés | `train_score.py` |
 | 10 | ✅ | ~~Classifieur : cotes d'ouverture ≠ clôture à l'entraînement, identiques au service ; commentaire « blend jamais actif » faux~~ — corrigé le 2026-10-03 | `train.py`, `ml_service.py` |
-| 11 | 🟠 | « Best bets » : classement par probabilité (pas par valeur), règles et ML mélangés, autre modèle joueur | `bestBets.service.ts` |
+| 11 | ✅ | ~~« Best bets » : classement par probabilité (pas par valeur), règles et ML mélangés, autre modèle joueur~~ — corrigé le 2026-10-03 | `bestBets.service.ts` |
 | 12 | ✅ | ~~`/predict/player` : points AN, victoires de gardien et mises en échec mal estimés~~ — corrigé le 2026-10-03 | `ml_service.py`, `featureEngineering.ts` |
 | 13 | ✅ | ~~Premier buteur : cadence du modèle joueur ÷ buts de match des règles~~ — corrigé le 2026-10-03 | `playerRates.ts` |
 | 14 | 🟠 | Modèle joueur : jointure par `gameId` alors que `build_dataset` dit que les identifiants diffèrent (**à vérifier**) | `train_player.py`, `build_dataset.py` |
@@ -286,7 +286,17 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 
 ---
 
-## 🟠 11. « Best bets » : classement par probabilité, règles et ML mélangés, autre modèle joueur
+## ✅ 11. « Best bets » : classement par probabilité, règles et ML mélangés, autre modèle joueur
+
+> **Corrigé le 2026-10-03.** Tous les candidats sont chiffrés par le paquet ML
+> de leur match (celui de la page du match, en cache 10 min) : plus de
+> présélection des 30 premiers selon les règles (`mlDepth` est ignoré). Les
+> paris joueur lisent le modèle joueur du paquet (P(X ≥ k), même dispersion
+> que la page) ; un joueur inconnu du modèle n'a pas de score ML. En mode ML,
+> les paris chiffrés passent avant les autres : plus d'échelles mélangées. La
+> liste reste un classement des issues les plus PROBABLES (choix produit, avec
+> les niveaux de risque du client) ; un champ `ev` (au prix du livre, quand il
+> existe) est ajouté pour information.
 
 **Où** — `server/src/services/bestBets.service.ts:390-420`, `mlScore` l.235-252.
 

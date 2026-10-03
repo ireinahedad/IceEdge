@@ -677,10 +677,12 @@ Critère unique, partagé par l'accueil et l'alerte push :
 ### 7.5 Les « best bets » — `bestBets.service.ts`
 
 Différent des value bets : on construit des candidats (moneyline, totaux, puck
-line, quelques props joueur), on les trie par score des **règles**, on enrichit
-les 30 premiers avec le ML (`/predict/game` ou `/predict/player`), puis on trie
-par probabilité affichée. C'est un classement des issues **les plus probables**,
-pas des paris les plus rentables.
+line, quelques props joueur) et on les chiffre TOUS avec le paquet ML de leur
+match — le même que la page du match (paris joueur : cadences du modèle joueur,
+P(X ≥ k)). Un joueur inconnu du modèle n'a pas de score ML. On trie ensuite par
+probabilité : c'est un classement des issues **les plus probables**, pas des
+paris les plus rentables ; l'EV au prix du livre (`ev`) est donnée pour
+information quand un prix existe.
 
 ---
 
