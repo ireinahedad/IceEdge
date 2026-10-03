@@ -26,11 +26,13 @@ import {
 } from './predictionEngine';
 import {
   buildGameFeatures,
-  buildPlayerPropFeatures,
 } from './featureEngineering';
 import { mlApiClient } from './mlApiClient';
 import { priceForSelection } from './oddsClient';
 import { TtlCache } from './ttlCache';
+import { getGameMlBundle, mlBundleKey, type GameMlBundle } from './gameMlBundle';
+import { probAtLeast } from './prediction/playerRates';
+import { mapLimit } from './concurrency';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -65,16 +67,24 @@ export interface BestBet {
    */
   bookPrice:      number | null;
   bookTitle:      string | null;
+  /**
+   * EV du pari au prix du livre, `score/100 × bookPrice − 1` ; `null` sans prix.
+   * Pour information : la liste est triée par PROBABILITÉ (issues les plus
+   * probables), pas par valeur — les value bets sont une autre section.
+   */
+  ev:             number | null;
 }
 
-interface Candidate extends Omit<BestBet, 'mlPct' | 'score' | 'source' | 'confidence' | 'bookPrice' | 'bookTitle'> {
+interface Candidate extends Omit<BestBet, 'mlPct' | 'score' | 'source' | 'confidence' | 'bookPrice' | 'bookTitle' | 'ev'> {
   /** Domicile / extérieur, pour retrouver le prix du livre. Paris de match seulement. */
   teams?: { home: string; away: string };
   // how to build ML features for this candidate
   ml:
     // `homeId`/`awayId` décrivent le MATCH (qui reçoit) ; `subjectIsHome` dit de
     // quel côté porte la question (défaut : domicile). Voir `GameFeatureOpts`.
-    | { kind: 'game'; homeId: string; awayId: string; marketType: string; line?: number; subjectIsHome?: boolean }
+    | { kind: 'game'; homeId: string; awayId: string; marketType: string; line?: number; subjectIsHome?: boolean;
+        /** Date du match (`gameDate` NHL) : repos, gardiens et absents se lisent à cette date. */
+        gameDate?: string }
     | { kind: 'player'; playerId: string; propType: string; line: number; selection: string }
     | null;
 }
@@ -131,6 +141,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
   const when   = g.startTime || g.period || '';
   const matchup = `${home} vs ${away}`;
   const line   = g.overUnder ?? 5.5;
+  const gameDate: string | undefined = g.gameDate || undefined;
 
   const [homeMl, awayMl, overPct, pl] = await Promise.all([
     predictMoneyline(homeLc, awayLc, true),
@@ -150,7 +161,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       label: `${home} to win`, selection: `${home} to win`, selectionValue: homeLc, selectionShort: `${home} ML`,
       context: ctxHome, line: null, gameId: g.id, teamId: homeLc, playerId: null, rulePct: homeMl,
       teams: { home, away },
-      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'moneyline' },
+      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, gameDate, marketType: 'moneyline' },
     },
     {
       id: `bb-${g.id}-ml-away`, subjectType: 'game', marketType: 'moneyline', marketLabel: 'Moneyline',
@@ -161,7 +172,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       // Le visiteur reste le visiteur : jusqu'au 2026-10-02 on inversait les deux
       // équipes, donc le modèle répondait « P(le visiteur gagne CHEZ LUI) » — il
       // recevait l'avantage de la glace (le bug corrigé le 2026-09-09 sur les tuiles).
-      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'moneyline', subjectIsHome: false },
+      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, gameDate, marketType: 'moneyline', subjectIsHome: false },
     },
     {
       id: `bb-${g.id}-over`, subjectType: 'game', marketType: 'total_goals', marketLabel: 'Total Goals O/U',
@@ -169,7 +180,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       label: `Over ${line}`, selection: `Over ${line}`, selectionValue: 'over', selectionShort: `O${line}`,
       context: matchup, line, gameId: g.id, teamId: null, playerId: null, rulePct: overPct,
       teams: { home, away },
-      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'total_goals_over', line },
+      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, gameDate, marketType: 'total_goals_over', line },
     },
     {
       id: `bb-${g.id}-under`, subjectType: 'game', marketType: 'total_goals', marketLabel: 'Total Goals O/U',
@@ -177,7 +188,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       label: `Under ${line}`, selection: `Under ${line}`, selectionValue: 'under', selectionShort: `U${line}`,
       context: matchup, line, gameId: g.id, teamId: null, playerId: null, rulePct: underPct,
       teams: { home, away },
-      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'total_goals_under', line },
+      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, gameDate, marketType: 'total_goals_under', line },
     },
     {
       id: `bb-${g.id}-pl-home`, subjectType: 'game', marketType: 'puck_line', marketLabel: 'Puck Line',
@@ -185,7 +196,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       label: `${home} -1.5`, selection: `${home} -1.5`, selectionValue: homeLc, selectionShort: `${home} -1.5`,
       context: ctxHome, line: -1.5, gameId: g.id, teamId: homeLc, playerId: null, rulePct: pl,
       teams: { home, away },
-      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, marketType: 'puck_line', line: -1.5 },
+      ml: { kind: 'game', homeId: homeLc, awayId: awayLc, gameDate, marketType: 'puck_line', line: -1.5 },
     },
   ];
 }
@@ -231,22 +242,55 @@ async function buildPlayerCandidates(
 }
 
 // ─── ML enrichment ─────────────────────────────────────────────────────────────
+//
+// Chaque candidat est chiffré par le PAQUET ML de son match (`gameMlBundle.ts`),
+// celui que la page du match affiche : même probabilité ici et là-bas.
+// (ml/INCOHERENCES_ML.md §11.) Avant le 2026-10-03 :
+//   • seuls les 30 premiers candidats SELON LES RÈGLES recevaient un score ML :
+//     un pari que le ML classe haut mais que les règles classent bas n'entrait
+//     jamais dans la liste ML ;
+//   • les paris joueur passaient par `/predict/player` (Poisson sur la moyenne
+//     de saison), pas par le modèle joueur de la page du match.
+// Le paquet est en cache 10 minutes par match et partagé avec les pages de
+// match et les value bets : chiffrer tous les candidats coûte un paquet par
+// match, pas une requête par pari.
 
-async function mlScore(c: Candidate): Promise<number | null> {
-  if (!c.ml) return null;
+/** Statistique du modèle joueur derrière chaque prop des best bets. */
+const PLAYER_STAT: Record<string, string> = {
+  goals: 'goals', shots: 'shots', points: 'points', pp_point: 'ppPoints',
+};
+
+type BundleFor = (gameId: string) => Promise<GameMlBundle | null>;
+
+/** Probabilité en % (entier) d'une issue, sur le paquet ML. `null` = pas de score ML. */
+async function mlScore(c: Candidate, bundleFor: BundleFor): Promise<number | null> {
+  if (!c.ml || !c.gameId) return null;
+  const bundle = await bundleFor(c.gameId);
+  if (c.ml.kind === 'player') {
+    // Le modèle joueur, comme la page du match. Joueur inconnu du modèle
+    // (recrue) : pas de score ML — la page du match lui garde aussi la règle.
+    const stat = PLAYER_STAT[c.ml.propType];
+    const rate = stat ? bundle?.playerRates?.[c.ml.playerId]?.[stat] : undefined;
+    if (rate == null || !Number.isFinite(rate)) return null;
+    const p = probAtLeast(rate, Math.floor(c.ml.line) + 1, bundle?.playerDispersion?.[stat]);
+    return Math.round((c.ml.selection === 'under' ? 1 - p : p) * 100);
+  }
+  const r = bundle?.byKey?.[mlBundleKey(c.ml.marketType, c.ml.line ?? null, null,
+                                        c.ml.subjectIsHome !== false)];
+  if (r && typeof r.probability === 'number') {
+    const exact = r.probability_exact;
+    return Math.round(typeof exact === 'number' && Number.isFinite(exact) ? exact * 100 : r.probability);
+  }
+  // Question absente du paquet (ligne de total que la page ne cote pas) :
+  // appel dédié, mêmes features (date du match comprise).
   try {
-    if (c.ml.kind === 'game') {
-      const feats = await buildGameFeatures(c.ml.homeId, c.ml.awayId, c.ml.marketType, c.ml.line,
-                                            { subjectIsHome: c.ml.subjectIsHome !== false });
-      const res = await mlApiClient.predictGame(feats);
-      return typeof res?.probability === 'number' ? Math.round(res.probability) : null;
-    } else {
-      const feats = await buildPlayerPropFeatures(c.ml.playerId, c.ml.propType, c.ml.line, c.ml.selection);
-      const res = await mlApiClient.predictPlayer(feats);
-      return typeof res?.probability === 'number' ? Math.round(res.probability) : null;
-    }
+    const feats = await buildGameFeatures(c.ml.homeId, c.ml.awayId, c.ml.marketType, c.ml.line,
+                                          { subjectIsHome: c.ml.subjectIsHome !== false,
+                                            gameDate: c.ml.gameDate });
+    const res = await mlApiClient.predictGame(feats);
+    return typeof res?.probability === 'number' ? Math.round(res.probability) : null;
   } catch {
-    return null; // ML service down → fall back to rules
+    return null; // service ML indisponible → pas de score ML
   }
 }
 
@@ -257,7 +301,8 @@ export interface BestBetsOptions {
   source?:      'ml' | 'rules';  // preferred display score (default 'ml')
   days?:        number;   // look-ahead window in days (default 2 = tonight + tomorrow)
   maxPlayers?:  number;   // how many top players to scan (default 15)
-  mlDepth?:     number;   // how many top candidates to enrich with ML (default 30)
+  /** Ignoré depuis le 2026-10-03 : TOUS les candidats sont chiffrés par le paquet ML. */
+  mlDepth?:     number;
 }
 
 interface NormalizedOptions {
@@ -342,7 +387,8 @@ const LIMIT_MAX = 50;
  */
 export async function getBestBets(opts: BestBetsOptions = {}): Promise<BestBetsResult> {
   const o = normalizeOptions(opts);
-  const key = `${o.days}|${o.maxPlayers}|${o.source}|${o.mlDepth}`;
+  // `mlDepth` n'entre plus dans la clé : il ne change plus le calcul.
+  const key = `${o.days}|${o.maxPlayers}|${o.source}`;
 
   const complet = await bestBetsCache.wrap(key, () => computeBestBets({ ...o, limit: LIMIT_MAX }));
 
@@ -351,7 +397,7 @@ export async function getBestBets(opts: BestBetsOptions = {}): Promise<BestBetsR
 }
 
 async function computeBestBets(o: NormalizedOptions): Promise<BestBetsResult> {
-  const { limit, source, days, maxPlayers, mlDepth } = o;
+  const { limit, source, days, maxPlayers } = o;
 
   // 1. Gather subjects (only games tonight / next `days` days)
   const [games, allPlayers] = await Promise.all([
@@ -388,13 +434,21 @@ async function computeBestBets(o: NormalizedOptions): Promise<BestBetsResult> {
   ]);
   const candidates: Candidate[] = candidateGroups.flat();
 
-  // 3. Rank by rule score, enrich the strongest with ML (bounds ML calls)
-  candidates.sort((a, b) => b.rulePct - a.rulePct);
+  // 3. Score ML de TOUS les candidats, par le paquet ML de leur match (un par
+  //    match, partagé avec les pages de match). Préchargés 4 par 4 : à froid,
+  //    un paquet fait tourner tout un match côté Python.
   // Skip ML entirely when it's disabled (deferred deployment) — avoids wasted
   // calls to an absent Python service and keeps the endpoint fast on rules.
   const mlDisabled = process.env.ML_DISABLED === 'true';
-  const toEnrich = (source === 'ml' && !mlDisabled) ? candidates.slice(0, mlDepth) : [];
-  const mlResults = await Promise.all(toEnrich.map((c) => mlScore(c)));
+  const toEnrich = (source === 'ml' && !mlDisabled) ? candidates : [];
+  const bundles = new Map<string, Promise<GameMlBundle | null>>();
+  const bundleFor: BundleFor = (gameId) => {
+    if (!bundles.has(gameId)) bundles.set(gameId, getGameMlBundle(gameId).catch(() => null));
+    return bundles.get(gameId)!;
+  };
+  const gameIds = [...new Set(toEnrich.map((c) => c.gameId).filter((g): g is string => !!g))];
+  await mapLimit(gameIds, 4, (id) => bundleFor(id));
+  const mlResults = await Promise.all(toEnrich.map((c) => mlScore(c, bundleFor)));
   const mlAvailable = mlResults.some((r) => r != null);
   const mlById = new Map<string, number | null>();
   toEnrich.forEach((c, i) => mlById.set(c.id, mlResults[i]));
@@ -413,11 +467,16 @@ async function computeBestBets(o: NormalizedOptions): Promise<BestBetsResult> {
       confidence: confidenceFor(score),
       bookPrice: null,
       bookTitle: null,
+      ev: null,
     };
   });
 
-  // 5. Sort by final display score (best prediction first) and trim
-  bets.sort((a, b) => b.score - a.score);
+  // 5. Tri : issues les plus PROBABLES d'abord (pas les plus rentables — les
+  //    value bets sont une autre section). En mode ML, jamais d'échelles
+  //    mélangées : les paris chiffrés par le ML passent d'abord, triés par
+  //    leur %, puis ceux sans score ML (joueur inconnu du modèle), par la
+  //    règle. Le client, en mode IA, n'affiche de toute façon que les premiers.
+  bets.sort((a, b) => (Number(b.source === 'ml') - Number(a.source === 'ml')) || (b.score - a.score));
   const kept = bets.slice(0, limit);
 
   // 6. Vrais prix du livre d'affichage, pour les seuls paris de match gardés.
@@ -432,7 +491,10 @@ async function computeBestBets(o: NormalizedOptions): Promise<BestBetsResult> {
         homeAbbr: teams.home, awayAbbr: teams.away, marketType: b.marketType,
         selectionValue: b.selectionValue, line: b.line,
       });
-      if (p) { b.bookPrice = p.price; b.bookTitle = p.bookTitle; }
+      if (p) {
+        b.bookPrice = p.price; b.bookTitle = p.bookTitle;
+        b.ev = Math.round(((b.score / 100) * p.price - 1) * 10_000) / 10_000;
+      }
     } catch { /* sans prix */ }
   }));
 
@@ -446,3 +508,6 @@ async function computeBestBets(o: NormalizedOptions): Promise<BestBetsResult> {
     },
   };
 }
+
+/** Tests uniquement. */
+export function _clearBestBetsCache(): void { bestBetsCache.clear(); }

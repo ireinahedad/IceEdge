@@ -226,24 +226,29 @@ export async function predictHighestScoringPeriod(
     ? d.lambdaSubject + d.lambdaOpponent
     : LEAGUE_AVG_GPG * 2;
 
-  // Buts d'UNE période : un tiers de la cadence du match. La dispersion reste
-  // celle du fichier, pour que ce marché et les totaux par période partagent la
-  // même loi.
-  const pmf = goalsPmf(combined / 3);
+  // Buts de chaque période : sa part mesurée de la cadence du match
+  // (`PERIOD_SHARE`, la même que les totaux par période de ce fichier et que le
+  // service ML). Jusqu'au 2026-10-03 : un tiers chacune, alors que les totaux
+  // par période, juste en dessous, utilisaient déjà ces parts — deux lois pour
+  // la même période (ml/INCOHERENCES_ML.md §16).
+  const pmfs = PERIOD_SHARE.map((sh) => goalsPmf(combined * sh));
+  // below[i][n] = P(période i < n buts)
+  const below = pmfs.map((pmf) => {
+    const out: number[] = new Array(MAX_GOALS + 1);
+    let acc = 0;
+    for (let n = 0; n <= MAX_GOALS; n++) { out[n] = acc; acc += pmf[n]; }
+    return out;
+  });
+  // P(période i a STRICTEMENT le plus de buts) — les DEUX autres sous n.
+  const strict = (i: number): number => {
+    const [a, b] = [0, 1, 2].filter((j) => j !== i);
+    let p = 0;
+    for (let n = 0; n <= MAX_GOALS; n++) p += pmfs[i][n] * below[a][n] * below[b][n];
+    return p;
+  };
 
-  // Les trois périodes sont i.i.d. sous ce modèle : P(Pk strictement max) est la
-  // même pour les trois, et le reste est la masse d'égalité au sommet. On somme
-  // explicitement plutôt que de poser (1 − tie)/3, pour que le calcul reste
-  // juste si les cadences par période deviennent un jour distinctes.
-  let strictMax = 0;
-  for (let n = 0; n <= MAX_GOALS; n++) {
-    let below = 0;
-    for (let m = 0; m < n; m++) below += pmf[m];
-    strictMax += pmf[n] * below * below;   // les DEUX autres périodes sous n
-  }
-
-  if (want === 'tie') return pct(1 - 3 * strictMax);
-  return pct(strictMax);
+  if (want === 'tie') return pct(1 - strict(0) - strict(1) - strict(2));
+  return pct(strict({ P1: 0, P2: 1, P3: 2 }[want]));
 }
 
 /** Period winner: dampened moneyline (single period is noisier than full game). */

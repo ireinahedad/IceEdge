@@ -37,6 +37,16 @@
     -0.011428,
     0.13207
   ],
+  "z_order": [
+    "logit_p",
+    "b2b_diff",
+    "ev_xgf_pct_s_diff",
+    "ev_xgf_pct_l_diff",
+    "lineup_xg_diff",
+    "star_power_diff",
+    "xg_matchup_diff",
+    "elo_diff"
+  ],
   "z": [
     4.83,
     -5.97,

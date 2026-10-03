@@ -505,8 +505,13 @@ async function decideLeg(
     const totals = [0, 1, 2].map((i) => home[i] + away[i]);
     const max = Math.max(...totals);
     const leaders = totals.reduce<number[]>((acc, v, i) => (v === max ? [...acc, i] : acc), []);
-    if (leaders.length !== 1 || max === 0) return 'unknown'; // tie for highest, or no goals at all
     const sel = String(leg.selectionValue).toLowerCase();
+    // Égalité en tête (dont 0-0-0) : PERDU pour P1/P2/P3. C'est ce que le prix
+    // annonce — le modèle chiffre « cette période a STRICTEMENT le plus de
+    // buts », l'égalité étant une issue à part (`tie`). Rendre `unknown`
+    // laissait la jambe en attente pour toujours (INCOHERENCES_ML §16).
+    if (leaders.length !== 1) return sel === 'tie' ? 'win' : 'loss';
+    if (sel === 'tie') return 'loss';
     return sel === `p${leaders[0] + 1}` ? 'win' : 'loss';
   }
 

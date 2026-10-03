@@ -98,3 +98,30 @@ describe('buildGameFeatures — appels sortants', () => {
     expect(g).toBeDefined();
   });
 });
+
+describe('buildGameFeatures — date du match (INCOHERENCES_ML §2)', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('gardien partant et absents lus à la DATE DU MATCH, aujourd\'hui par défaut', async () => {
+    const { buildGameFeatures } = await load();
+    const goalies = (await import('./startingGoalies')).getStartingGoalies as any;
+    const lineup  = (await import('./scratches')).getLineupDay as any;
+
+    await buildGameFeatures('TOR', 'MTL', 'moneyline', undefined, { gameDate: '2099-10-09' });
+    expect(goalies).toHaveBeenLastCalledWith('2099-10-09');
+    expect(lineup).toHaveBeenLastCalledWith('2099-10-09');
+
+    await buildGameFeatures('TOR', 'MTL', 'moneyline');
+    expect(goalies).toHaveBeenLastCalledWith(undefined);   // → aujourd'hui (heure de l'Est)
+    expect(lineup).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it('le gardien saisi pour CE jour-là est envoyé', async () => {
+    const { buildGameFeatures } = await load();
+    const goalies = (await import('./startingGoalies')).getStartingGoalies as any;
+    goalies.mockImplementation(async (d?: string) =>
+      d === '2099-10-09' ? { TOR: 'Joseph Woll' } : { TOR: 'Anthony Stolarz' });
+    const f = await buildGameFeatures('TOR', 'MTL', 'moneyline', undefined, { gameDate: '2099-10-09' });
+    expect(f.home_goalie).toBe('Joseph Woll');
+  });
+});

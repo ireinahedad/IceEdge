@@ -104,6 +104,26 @@ export interface PlayerRatesResponse {
 }
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
+
+/**
+ * P(X ≥ k) pour une cadence `lam` : binomiale négative de paramètre `k_disp`
+ * (Var = μ + μ²/k), Poisson quand `k_disp` est `null`. Même formule que le
+ * client lit sur ces cadences (seuils 1+, 2+, 3+…), pour que les paris joueur
+ * chiffrés côté serveur (« best bets ») disent la même chose que la page.
+ */
+export function probAtLeast(lam: number, k: number, kDisp: number | null | undefined): number {
+  if (!(lam > 0) || k <= 0) return k <= 0 ? 1 : 0;
+  let cdf: number;
+  if (kDisp == null || !(kDisp > 0)) {
+    let t = Math.exp(-lam); cdf = t;
+    for (let i = 1; i < k; i++) { t *= lam / i; cdf += t; }
+  } else {
+    const q = lam / (kDisp + lam);
+    let t = Math.pow(kDisp / (kDisp + lam), kDisp); cdf = t;
+    for (let n = 0; n < k - 1; n++) { t *= ((n + kDisp) / (n + 1)) * q; cdf += t; }
+  }
+  return clamp(1 - cdf, 0, 1);
+}
 const round4 = (x: number) => Math.round(x * 10_000) / 10_000;
 
 function posOf(code: string | undefined): 'F' | 'D' | 'G' {
@@ -209,16 +229,30 @@ function applyPlayerModel(
   players: Record<string, PlayerRateRow>, bundle: GameMlBundle | null,
 ): Pick<PlayerRatesResponse, 'modelDispersion' | 'modelAsOf'> {
   const model = bundle?.playerRates ?? {};
+  // Buts attendus du match selon le MODÈLE DE SCORE (λ domicile + visiteur,
+  // recalés sur la victoire servie). Le premier buteur divisait jusqu'ici la
+  // cadence du modèle joueur par les buts de match de la RÈGLE (buts pour ×
+  // buts contre des fiches d'équipe) : numérateur et dénominateur venaient de
+  // deux modèles (ml/INCOHERENCES_ML.md §13). Quand le paquet les porte, ces
+  // λ servent à TOUS les joueurs du match — modèle ou règle — pour que les
+  // probabilités de premier buteur soient sur la même échelle.
+  const lh = bundle?.lambdaHome, la = bundle?.lambdaAway;
+  const modelGameGoals = lh != null && la != null && Number.isFinite(lh + la) && lh + la > 0
+    ? lh + la : null;
   for (const [id, row] of Object.entries(players)) {
     const m = model[id];
-    if (!m || row.position === 'G') { row.source = 'rules'; continue; }
-    for (const [stat, v] of Object.entries(m)) {
-      if (stat in row.rates || stat in PSEUDO_GAMES) (row.rates as Record<string, number>)[stat] = round4(v);
+    if (!m || row.position === 'G') {
+      row.source = 'rules';
+    } else {
+      for (const [stat, v] of Object.entries(m)) {
+        if (stat in row.rates || stat in PSEUDO_GAMES) (row.rates as Record<string, number>)[stat] = round4(v);
+      }
+      row.source = 'model';
     }
+    if (modelGameGoals != null && row.gameGoals != null) row.gameGoals = round4(modelGameGoals);
     if (row.gameGoals && row.rates.goals != null) {
       row.firstGoal = round4((row.rates.goals / row.gameGoals) * (1 - Math.exp(-row.gameGoals)));
     }
-    row.source = 'model';
   }
   return Object.keys(model).length
     ? { modelDispersion: bundle!.playerDispersion, modelAsOf: bundle!.playerModelAsOf }

@@ -15,13 +15,26 @@ import {
 import { getArena } from '../data/arenas';
 import { fetchOddsImplied, fetchTotalsOdds } from './oddsClient';
 import { getStartingGoalies } from './startingGoalies';
+import { resolveGoalieId } from './goalieIds';
 import { getLineupDay, type LineupDay } from './scratches';
 import { getTeam } from './prediction/scoreModel';
 
 /** Options d'enrichissement pour buildGameFeatures (cotes live, lineup). */
 export interface GameFeatureOpts {
-  /** Inclure les cotes live → active le blend modèle⊕marché (défaut true).
-   *  Mettre à false pour obtenir la proba PURE du modèle (détection de value). */
+  /**
+   * Date du match, `AAAA-MM-JJ` en heure de l'Est (le `gameDate` NHL).
+   * Défaut : aujourd'hui. Le repos, le gardien partant saisi et les absents
+   * se lisent à CETTE date : pour un match de demain, lire ceux d'aujourd'hui
+   * appliquait le gardien de ce soir et un repos faux d'un jour
+   * (ml/INCOHERENCES_ML.md §2).
+   */
+  gameDate?: string;
+  /**
+   * Inclure les cotes live (défaut true). Elles ne changent PAS la probabilité
+   * servie : celle-ci vient du modèle de score, qui ne lit aucune cote. Elles
+   * ne servent qu'au repli (classifieur ⊕ marché) quand le modèle de score ne
+   * répond pas. `probability_classifier` est calculé sans elles.
+   */
   includeOdds?: boolean;
   homeGoalie?: string;
   awayGoalie?: string;
@@ -138,6 +151,9 @@ export interface GameFeatures {
   // ── v4 — contexte lineup (optionnel)
   home_goalie?:          string; // nom du gardien partant si connu
   away_goalie?:          string;
+  /** Identifiant NHL du partant (résolu depuis l'effectif) — apparié avant le nom. */
+  home_goalie_id?:       number;
+  away_goalie_id?:       number;
   home_stars_missing?:   number; // top joueurs absents (blessures) — legacy
   away_stars_missing?:   number;
   home_scratches?:       string[]; // absents confirmés (noms MoneyPuck)
@@ -154,6 +170,8 @@ export interface PlayerPropFeatures {
   assists_per_game: number;
   points_per_game:  number;
   shots_per_game:   number;
+  /** Points en avantage numérique par match, mesurés sur le joueur (marché `pp_point`). */
+  pp_points_per_game?: number;
   games_played:     number;
   line:             number;
   prop_type:        string;  // "goals" | "assists" | "points" | "shots" | "pp_point"
@@ -206,20 +224,20 @@ export async function buildGameFeatures(
   const [summaryRes, homeRestRes, awayRestRes, oddsRes, totalsRes,
          homeTravelRes, awayTravelRes, goaliesRes, scratchesRes] = await Promise.allSettled([
     fetchTeamSummaryStats(),
-    fetchTeamRestInfo(homeAbbr),
-    fetchTeamRestInfo(awayAbbr),
+    fetchTeamRestInfo(homeAbbr, opts.gameDate),
+    fetchTeamRestInfo(awayAbbr, opts.gameDate),
     includeOdds ? fetchOddsImplied(homeName, awayName) : Promise.resolve(null),
     includeOdds ? fetchTotalsOdds(homeName, awayName)  : Promise.resolve(null),
     // Voyage : les deux équipes jouent dans l'aréna de l'équipe à domicile.
     // Désactivé par défaut — cf. `GameFeatureOpts.includeTravel`.
-    includeTravel ? fetchTeamTravel(homeAbbr, homeAbbr) : Promise.resolve(null),
-    includeTravel ? fetchTeamTravel(awayAbbr, homeAbbr) : Promise.resolve(null),
+    includeTravel ? fetchTeamTravel(homeAbbr, homeAbbr, opts.gameDate) : Promise.resolve(null),
+    includeTravel ? fetchTeamTravel(awayAbbr, homeAbbr, opts.gameDate) : Promise.resolve(null),
     // Gardiens partants et absents du soir : en base depuis la migration 034
     // (les fichiers `ml/data/*.json` n'existaient pas dans le conteneur, donc
     // ces deux features étaient TOUJOURS vides en production). La journée
     // entière est lue en un accès, pas une lecture par équipe.
-    getStartingGoalies(),
-    getLineupDay(),
+    getStartingGoalies(opts.gameDate),
+    getLineupDay(opts.gameDate),
   ]);
 
   const odds   = oddsRes.status   === 'fulfilled' ? oddsRes.value   : null;
@@ -249,6 +267,20 @@ export async function buildGameFeatures(
 
   const homeSum = summary[homeAbbr.toUpperCase()];
   const awaySum = summary[awayAbbr.toUpperCase()];
+
+  // Gardien partant : override explicite de l'appelant, sinon la saisie
+  // manuelle du jour (kind `starting_goalies`), sinon rien (le service Python
+  // utilise sa moyenne pondérée par usage). Le nom est traduit en identifiant
+  // NHL via l'effectif — l'appariement côté Python ne dépend alors plus de
+  // l'orthographe. Échec de résolution → pas d'identifiant, le nom sert de repli.
+  const homeGoalie = opts.homeGoalie ?? goaliesToday[homeAbbr.toUpperCase()];
+  const awayGoalie = opts.awayGoalie ?? goaliesToday[awayAbbr.toUpperCase()];
+  const [homeGoalieIdRes, awayGoalieIdRes] = await Promise.allSettled([
+    homeGoalie ? resolveGoalieId(homeAbbr, homeGoalie) : Promise.resolve(undefined),
+    awayGoalie ? resolveGoalieId(awayAbbr, awayGoalie) : Promise.resolve(undefined),
+  ]);
+  const homeGoalieId = homeGoalieIdRes.status === 'fulfilled' ? homeGoalieIdRes.value : undefined;
+  const awayGoalieId = awayGoalieIdRes.status === 'fulfilled' ? awayGoalieIdRes.value : undefined;
 
   return {
     home_win_pct:          ((home?.winPct          || 50) / 100),
@@ -308,11 +340,11 @@ export async function buildGameFeatures(
     home_odds_decimal:     odds?.homeOdds,
     away_odds_decimal:     odds?.awayOdds,
     total_line_market:     totals?.line,
-    // ── v4 — gardien partant : override explicite de l'appelant, sinon le
-    //    saisie manuelle du jour (kind `starting_goalies`, exceptions), sinon
-    //    rien (le service Python utilise sa moyenne pondérée par usage).
-    home_goalie:           opts.homeGoalie ?? goaliesToday[homeAbbr.toUpperCase()],
-    away_goalie:           opts.awayGoalie ?? goaliesToday[awayAbbr.toUpperCase()],
+    // ── v4 — gardien partant (cf. résolution plus haut) : nom + identifiant NHL.
+    home_goalie:           homeGoalie,
+    away_goalie:           awayGoalie,
+    home_goalie_id:        homeGoalieId,
+    away_goalie_id:        awayGoalieId,
     home_stars_missing:    opts.homeStarsMissing,
     away_stars_missing:    opts.awayStarsMissing,
     // ── v4 — absents confirmés : override de l'appelant, sinon fichier manuel
@@ -353,8 +385,12 @@ export async function buildPlayerPropFeatures(
   // nommant le joueur. Un chiffre de ligue présenté comme une mesure sur lui.
   //
   // Ce qui EST par joueur l'est maintenant vraiment : `fetchPlayerById` remonte
-  // `shotsAgainst`/`goalsAgainst` (gardiens) et `penaltyMinutes` pour tout le
-  // monde. Le reste reste une moyenne de ligue, mais le dit.
+  // `shotsAgainst`/`goalsAgainst`, `wins`, `shutouts` (gardiens), et
+  // `penaltyMinutes`, `hits`, `blockedShots` (patineurs). La moyenne de ligue
+  // ne sert plus qu'en repli, quand l'amont n'a rien dit — et le dit.
+  // (Jusqu'au 2026-10-03, mises en échec, tirs bloqués, victoires et
+  // blanchissages servaient la moyenne de ligue à tout le monde alors que la
+  // fiche portait la mesure : ml/INCOHERENCES_ML.md §12.)
 
   /** Arrêts réellement effectués par CE gardien, par match. */
   const goalieSaves = (): number | null => {
@@ -364,15 +400,29 @@ export async function buildPlayerPropFeatures(
     return saves > 0 ? saves : null;
   };
 
+  /** Total de saison → cadence par match ; `null` si l'amont n'a rien dit. */
+  const perGame = (total: unknown): number | null =>
+    typeof total === 'number' && Number.isFinite(total) && total >= 0 ? total / gp : null;
+
   const perPlayer: Record<string, () => number | null> = {
-    saves: goalieSaves,
-    pim:   () => (player.penaltyMinutes != null ? player.penaltyMinutes / gp : null),
+    saves:    goalieSaves,
+    pim:      () => perGame(player.penaltyMinutes),
+    hits:     () => perGame(player.hits),
+    blocks:   () => perGame(player.blockedShots),
+    // Gardien : victoires / blanchissages par match JOUÉ (l'API ne donne pas
+    // les départs). Le service les lit comme une PROBABILITÉ (événement oui /
+    // non), pas comme une cadence de Poisson.
+    wins:     () => (player.position === 'G' ? perGame(player.wins) : null),
+    shutouts: () => (player.position === 'G' ? perGame(player.shutouts) : null),
   };
 
   /** Moyennes de ligue — aucune source par joueur dans l'API utilisée ici. */
   const LEAGUE_AVERAGES: Record<string, number> = {
-    hits:     2.1,   // skater average across positions
-    blocks:   0.5,   // average blocked shots/game
+    // Moyennes par patineur-match mesurées (ml/models/player_report.json,
+    // test 2023-26 : 1,197 et 0,837). L'ancien 2,1 mises en échec était
+    // presque le double de la réalité.
+    hits:     1.2,
+    blocks:   0.84,
     saves:   27.0,   // repli quand le gardien n'a pas encore de saison
     pim:      0.50,
     wins:     0.50,  // goalie wins ~50% of starts
@@ -388,6 +438,9 @@ export async function buildPlayerPropFeatures(
     assists_per_game: (player.assists  ?? 0) / gp,
     points_per_game:  (player.points   ?? 0) / gp,
     shots_per_game:   specialRate != null ? specialRate : (player.shots ?? 0) / gp,
+    // Points en AN mesurés : le service estimait autrefois `buts × 0,35`, alors
+    // que ces points sont surtout des PASSES (INCOHERENCES_ML §12).
+    pp_points_per_game: perGame(player.ppPoints) ?? undefined,
     games_played:     gp,
     line,
     prop_type: propType,

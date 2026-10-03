@@ -25,6 +25,7 @@ from __future__ import annotations
 import copy
 import re
 import hmac
+import unicodedata
 import json
 import math
 import os
@@ -34,7 +35,7 @@ from typing import List, Optional
 import numpy as np
 import xgboost as xgb
 from score_model import (P_OT_HOME, ScoreDistribution, ScoreEnsemble,
-                         p_ot_for, read_ot_model)
+                         lambdas_for_home_win, p_ot_for, read_ot_model)
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -233,6 +234,19 @@ _GAME_FEAT_NAMES = [
 ]
 
 
+# Features de cote du classifieur — mises à NaN pour sa version « seule »
+# (`probability_classifier`). Même liste que `train.py:ODDS_FEATURES`.
+_ODDS_FEATURES = {"market_home_p_open", "market_home_p_close"}
+
+
+def _platt(p_raw: float) -> float:
+    """Calibration de Platt du classifieur (identité si elle manque)."""
+    if _platt_a is None or _platt_b is None:
+        return p_raw
+    p = min(max(p_raw, 1e-7), 1 - 1e-7)
+    return 1.0 / (1.0 + math.exp(-(_platt_a * math.log(p / (1 - p)) + _platt_b)))
+
+
 def _load_score_ensemble(rep: dict) -> None:
     """Charge les membres bootstrap s'ils existent (P4).
 
@@ -383,12 +397,19 @@ def _confidence_from_lambdas(dist: "ScoreDistribution | None") -> float | None:
 #
 # La pratique établie en Elo sportif est de ramener les notes vers la moyenne
 # entre deux saisons : l'effectif a changé, une partie du signal ne vaut plus.
-# 2/3 conservés est la valeur usuelle pour le hockey. Appliquée une fois par
-# saison de retard, donc composée si le fichier a deux ans.
+# Appliquée une fois par saison de retard, donc composée si le fichier a deux ans.
+#
+# LA MÊME RÉGRESSION QU'À L'ENTRAÎNEMENT. `build_dataset.add_elo` ramène chaque
+# note de 30 % vers la moyenne entre deux saisons (`ELO_SEASON_REGRESS`) ; ce
+# service en appliquait 1/3 (2/3 conservés) — le modèle aurait vu en octobre
+# des notes plus resserrées que celles de son entraînement
+# (ml/INCOHERENCES_ML.md §15). La valeur est désormais écrite par build_dataset
+# dans `elo_ratings.json` (`season_regress`) et relue ici ; ce défaut ne sert
+# qu'aux fichiers produits avant le 2026-10-03, et vaut la même chose.
 #
 # Ce n'est PAS un substitut à la régénération du fichier : c'est le garde-fou
 # qui empêche des notes périmées d'être servies comme si elles étaient fraîches.
-ELO_CARRYOVER = 2.0 / 3.0
+ELO_SEASON_REGRESS_DEFAULT = 0.30
 
 
 def _season_start_year(d: "datetime | None" = None) -> int:
@@ -462,7 +483,10 @@ def _try_load_models():
             as_of         = str(elo.get("as_of_date") or "")
             seasons_old   = _seasons_elapsed_since(as_of)
             if seasons_old > 0 and _elo_ratings:
-                keep = ELO_CARRYOVER ** seasons_old
+                regress = float(elo.get("season_regress", ELO_SEASON_REGRESS_DEFAULT))
+                if not 0.0 <= regress < 1.0:
+                    regress = ELO_SEASON_REGRESS_DEFAULT
+                keep = (1.0 - regress) ** seasons_old
                 _elo_ratings = {k: _elo_base + (v - _elo_base) * keep
                                 for k, v in _elo_ratings.items()}
                 spread = max(_elo_ratings.values()) - min(_elo_ratings.values())
@@ -652,6 +676,37 @@ def _apply_correction(p_home: float, feat_values: dict) -> float | None:
 
 _load_correction_layer()
 
+
+def _align_distribution(dist: "ScoreDistribution | None",
+                        p_home: float | None) -> "ScoreDistribution | None":
+    """La distribution du match, recalée pour que sa victoire domicile vaille
+    `p_home` (la victoire corrigée). None = pas de recalage possible.
+
+    POURQUOI (ml/INCOHERENCES_ML.md §6). Servie seule sur le marché
+    `moneyline`, la correction laissait tous les autres marchés sur la matrice
+    non corrigée : « gagne en 60 min » + « gagne en prolongation » ≠ « gagne »,
+    le score exact ne sommait plus à la victoire, et le direct mélangeait les
+    deux. Ici la correction devient une distribution : même total d'intensités
+    (les totaux de buts ne bougent pas), partage domicile/visiteur choisi pour
+    que P(victoire domicile) — τ et prolongation compris — égale la cible.
+    Tous les marchés se lisent ensuite sur la même matrice.
+
+    Les contributions des features (`_dmatrix`) restent celles du modèle brut :
+    la décomposition affichée explique λ avant correction.
+    """
+    if dist is None or p_home is None or not math.isfinite(float(p_home)):
+        return None
+    try:
+        lh, la = lambdas_for_home_win(dist.lam_home + dist.lam_away, float(p_home),
+                                      _p_ot_for, _score_tau)
+        aligned = ScoreDistribution(lh, la, _p_ot_for(lh, la), _score_tau)
+    except Exception as e:
+        print(f"[ML] ⚠️  recalage sur la victoire corrigée impossible : {e}")
+        return None
+    aligned._dmatrix = getattr(dist, "_dmatrix", None)
+    aligned.raw_lambdas = (dist.lam_home, dist.lam_away)
+    return aligned
+
 # Set once the model-load attempt has completed. The readiness probe gates on
 # this so the orchestrator only routes traffic after init (models loaded, or
 # fallback confirmed). Load is synchronous at import, so this is True by the
@@ -717,7 +772,13 @@ class FeatureImportance(BaseModel):
     direction: str   # "positive" | "negative"
 
 class MLResponse(BaseModel):
-    probability: int                          # 5–95, integer percent
+    probability: int                          # pour-cent entier (borné 2–98 ; 0–98 score exact)
+    # La même probabilité, NON arrondie, en 0–1. `probability` est un entier
+    # d'affichage : calculer un edge dessus ajoutait jusqu'à ±0,5 point
+    # d'erreur, sur une règle de value bet large de 2 à 6 points
+    # (ml/INCOHERENCES_ML.md §4). Tout calcul (edge, EV, cote minimale,
+    # journal CLV) doit lire ce champ. Optionnel pour les anciens clients.
+    probability_exact: Optional[float] = None
     confidence: int                           # 40–95, integer percent
     feature_importances: List[FeatureImportance]
     model_version: str
@@ -798,8 +859,10 @@ class GameFeatures(BaseModel):
     home_3in4:             float = Field(0.0,  ge=0, le=4)   # matchs dans les 3 jours précédents
     away_3in4:             float = Field(0.0,  ge=0, le=4)
     # ── v5 — voyage / fuseaux / altitude / road-trip (miroir de build_dataset).
-    #    Défauts neutres (0) si le backend ne les fournit pas → mêmes noms que
-    #    les colonnes d'entraînement, XGBoost gère l'absence via missing=NaN.
+    #    ⚠️ AUCUN modèle entraîné ne lit ces champs (ni le modèle de score, ni
+    #    le classifieur, ni le modèle joueur) : ils sont acceptés pour
+    #    compatibilité, sans effet sur les probabilités. Le serveur ne les
+    #    calcule plus par défaut (`includeTravel`).
     home_distance_km:   float = Field(0.0, ge=0)   # trajet depuis l'aréna précédent (km)
     away_distance_km:   float = Field(0.0, ge=0)
     home_tz_shift:      float = Field(0.0, ge=-4, le=4)  # fuseaux traversés (+ = est)
@@ -846,6 +909,11 @@ class GameFeatures(BaseModel):
     # ── v4 — contexte lineup (optionnel; défauts raisonnables sinon) ─────────
     home_goalie: Optional[str] = None            # nom du gardien partant si connu
     away_goalie: Optional[str] = None
+    # Identifiant NHL du partant (= identifiant MoneyPuck de l'état
+    # d'inférence). Apparié AVANT le nom : l'orthographe ne compte plus. Le nom
+    # reste le repli pour un état d'inférence sans identifiants de gardiens.
+    home_goalie_id: Optional[int] = Field(None, gt=0)
+    away_goalie_id: Optional[int] = Field(None, gt=0)
     home_stars_missing: int = Field(0, ge=0, le=5)   # legacy : nb de top-5 absents
     away_stars_missing: int = Field(0, ge=0, le=5)
     # Absents confirmés du soir (Daily Faceoff) — noms orthographe MoneyPuck.
@@ -870,6 +938,10 @@ class PlayerPropFeatures(BaseModel):
     assists_per_game: float = Field(0.30, ge=0)
     points_per_game: float = Field(0.55, ge=0)
     shots_per_game: float = Field(2.5, ge=0)
+    # Points en avantage numérique par match, mesurés sur le joueur. Absent →
+    # pas d'estimation pour `pp_point` (l'ancien repli `buts × 0,35` ignorait
+    # que ces points sont surtout des passes).
+    pp_points_per_game: Optional[float] = Field(None, ge=0)
     games_played: int = Field(40, ge=1)
     line: float = Field(0.5, ge=0)
     prop_type: str = Field("goals")   # "goals"|"assists"|"points"|"shots"|"pp_point"
@@ -953,11 +1025,26 @@ _BINARY_MARKETS = {
 _NEGATIVE_SELECTIONS = {"no", "non", "false", "0"}
 
 
+# Marchés « plus / moins » dont le côté voyage dans `selection` et non dans le
+# nom (contrairement à `total_goals_over` / `total_goals_under`). Le service
+# price toujours « plus » ; « moins » est son complément (lignes en .5, pas de
+# push). Sans ce traitement, la tuile « Under 2.5 » d'un total d'équipe
+# affichait le MÊME pourcentage que « Over 2.5 » — trouvé le 2026-10-03 en
+# corrigeant ml/INCOHERENCES_ML.md §16 (79 % / 79 % sur COL–SJS).
+_OVER_UNDER_MARKETS = {"team_total_goals", "total_goals",
+                       "period1_total_goals", "period2_total_goals", "period3_total_goals"}
+_UNDER_SELECTIONS = {"under", "u", "moins"}
+
+
 def _is_negative_side(f: GameFeatures) -> bool:
-    """Vrai si l'appelant demande le côté « non » d'un marché binaire."""
-    if f.market_type not in _BINARY_MARKETS:
-        return False
-    return (f.selection or "").strip().lower() in _NEGATIVE_SELECTIONS
+    """Vrai si l'appelant demande le côté « non » d'un marché binaire, ou le
+    côté « moins » d'un marché plus/moins sans côté dans son nom."""
+    sel = (f.selection or "").strip().lower()
+    if f.market_type in _BINARY_MARKETS:
+        return sel in _NEGATIVE_SELECTIONS
+    if f.market_type in _OVER_UNDER_MARKETS:
+        return sel in _UNDER_SELECTIONS
+    return False
 
 
 def _p_both_score(dist: "ScoreDistribution", line: float = 0.5) -> float:
@@ -968,16 +1055,16 @@ def _p_both_score(dist: "ScoreDistribution", line: float = 0.5) -> float:
 
         P(les deux marquent) = 1 − P(dom = 0) − P(ext = 0) + P(0–0)
 
-    Deux raisons de passer par `M` plutôt que par deux Poisson indépendantes :
+    Pourquoi passer par `M` plutôt que par deux Poisson indépendantes sur les
+    buts/match des fiches d'équipe : `M` porte les λ DU MATCH (attaque contre
+    défense, gardien, alignement…) et la correction de marge τ ajustée à
+    l'entraînement. L'ancienne heuristique donnait ~90 % à tous les matchs.
 
-    1. **La corrélation.** Les deux λ viennent du même match ; un match fermé
-       déprime les deux. Les supposer indépendantes surestime le côté « oui ».
-       `M` porte en plus la correction de marge τ ajustée à l'entraînement.
-    2. **La sur-dispersion.** Les buts par équipe-match sont plus dispersés
-       qu'une Poisson : avec λ = 3.0, Poisson donne 5 % de blanchissages là où
-       la NHL en compte ~8.5 %. Le produit de deux Poisson indépendantes fixait
-       donc le marché à ~90 % pour TOUS les matchs — le chiffre que l'UI
-       affichait quelle que soit l'affiche.
+    (Ce commentaire invoquait aussi une « sur-dispersion » — ~8,5 % de
+    blanchissages contre 5 % en Poisson. Les mesures du projet disent le
+    contraire : variance/moyenne ≈ 1 sur 40 604 matchs (`score_model.py`) et
+    4,98 % de blanchissages par équipe-match (`prediction/scoreModel.ts`).
+    Corrigé le 2026-10-03, ml/INCOHERENCES_ML.md §19.)
 
     La prolongation ne change rien : un 0–0 après 60 minutes se termine 1–0,
     donc une équipe reste blanchie de toute façon. La formule vaut pour le
@@ -1032,7 +1119,16 @@ def _skellam_lead(lam_s: float, lam_o: float) -> tuple[float, float]:
 
 # Part CUMULÉE des buts d'un match à la fin de chaque période (moyennes NHL,
 # mêmes constantes que `PERIOD_DIST` côté Node).
-_PERIOD_CUM = {1: 0.305, 2: 0.67}
+# Part des buts RÉGLEMENTAIRES marqués dans chaque période — UNE source pour
+# tous les marchés de période (ml/INCOHERENCES_ML.md §16). Ce service en
+# avait trois : 0,305 / 0,365 / 0,33 pour « qui mène », 0,317 / 0,367 / 0,317
+# (λ/3 × 0,95 / 1,10 / 0,95) pour les totaux par période, et trois tiers égaux
+# pour « période la plus prolifique ». Valeurs NHL de `PERIOD_DIST`
+# (`nhlPredictions.ts`), les mêmes côté Node : la 2e période marque le plus
+# (changement long), la 3e un peu moins (fermeture du jeu, compensée en partie
+# par les filets déserts).
+_PERIOD_SHARE = (0.305, 0.365, 0.330)
+_PERIOD_CUM = {1: _PERIOD_SHARE[0], 2: _PERIOD_SHARE[0] + _PERIOD_SHARE[1]}
 
 
 # ── Écart de victoire / période la plus prolifique ────────────────────────────
@@ -1114,25 +1210,29 @@ def _parse_period(selection: str | None) -> str | None:
     return None
 
 
-def _p_highest_period(dist: "ScoreDistribution", period: str) -> float:
-    """P(la période demandée est la plus prolifique du match).
+def _p_highest_period_total(total_lam: float, period: str) -> float:
+    """P(la période demandée a STRICTEMENT le plus de buts), ou P(égalité en
+    tête) pour `tie`, à partir des buts réglementaires attendus du match.
 
-    Les trois périodes sont supposées ÉQUIVALENTES, faute de données par
-    période. C'est délibérément conservateur : la NHL marque un peu plus au 3e
-    (fatigue, filets déserts, jeu ouvert par le score), mais inventer un
-    coefficient d'asymétrie reproduirait exactement le problème qu'on corrige.
-    Conséquence assumée : les trois périodes sortent au même prix, et l'égalité
-    est fréquente — ce qui est vrai.
+    Chaque période reçoit sa part mesurée (`_PERIOD_SHARE`) — la 2e sort donc
+    un peu plus souvent en tête. Règlement (`settlement.service.ts`) : buts
+    réglementaires seulement, égalité en tête = perdu pour P1/P2/P3.
     """
-    lam = (dist.lam_home + dist.lam_away) / 3.0
-    pmf = [poisson_pmf(n, lam) for n in range(0, 16)]
-    strict = 0.0
-    for n, pn in enumerate(pmf):
-        below = sum(pmf[:n])
-        strict += pn * below * below      # les DEUX autres périodes sous n
+    pmfs = [[poisson_pmf(n, total_lam * sh) for n in range(16)] for sh in _PERIOD_SHARE]
+    cdf_below = [[sum(pm[:n]) for n in range(16)] for pm in pmfs]   # P(X < n)
+
+    def strict(i: int) -> float:
+        a, b = [j for j in range(3) if j != i]
+        return sum(pmfs[i][n] * cdf_below[a][n] * cdf_below[b][n] for n in range(16))
+
     if period == "tie":
-        return clamp(1.0 - 3.0 * strict, 0.02, 0.98)
-    return clamp(strict, 0.02, 0.98)
+        return clamp(1.0 - sum(strict(i) for i in range(3)), 0.02, 0.98)
+    return clamp(strict({"P1": 0, "P2": 1, "P3": 2}[period]), 0.02, 0.98)
+
+
+def _p_highest_period(dist: "ScoreDistribution", period: str) -> float:
+    """P(la période demandée est la plus prolifique du match)."""
+    return _p_highest_period_total(dist.lam_home + dist.lam_away, period)
 
 
 def _has_evidence(team: str | None) -> bool:
@@ -1346,9 +1446,13 @@ def _apply_score_model(market: str, f: GameFeatures,
         # lui par construction. L'heuristique `exp(-lam_away)` qu'il remplace
         # ignorait la défense d'en face et pouvait annoncer 10 % de blanchissage
         # sur un match où BTTS disait 92 % — soit au plus 8 % possible.
-        p = float(dist.M[:, 0].sum())
+        # Réglé sur le score FINAL : un 0-0 après 60 minutes que l'adversaire
+        # gagne en prolongation ou en fusillade finit 0-1 — plus de blanchissage
+        # (ml/INCOHERENCES_ML.md §18). Seule la part gagnée par le sujet reste.
+        p = float(dist.M[:, 0].sum()) - float(dist.M[0, 0]) * (1.0 - dist.p_ot_home)
         return p, 0.88, (f"P(l'adversaire ne marque pas) = {int(p * 100)}%, "
-                         f"lu sur la matrice jointe (cohérent avec « les deux marquent »).")
+                         f"score final lu sur la matrice jointe (un 0-0 perdu en "
+                         f"prolongation n'est pas un blanchissage).")
 
     if market == "winning_margin":
         bucket = _parse_margin_bucket(f.selection, f.subject_is_home)
@@ -1363,9 +1467,18 @@ def _apply_score_model(market: str, f: GameFeatures,
         if period is None:
             return None
         p = _p_highest_period(dist, period)
-        return p, 0.60, (f"P({period} est la période la plus prolifique) = {int(p*100)}%. "
-                         f"Modèle à trois périodes équivalentes — le service n'a pas "
-                         f"de données par période.")
+        return p, 0.60, (f"P({period} est la période la plus prolifique) = {int(p*100)}% — "
+                         f"buts réglementaires λ={lh + la:.2f} répartis "
+                         f"{_PERIOD_SHARE[0]:.0%}/{_PERIOD_SHARE[1]:.0%}/{_PERIOD_SHARE[2]:.0%}.")
+
+    pt = re.match(r"^period([123])_total_goals$", market)
+    if pt:
+        n = int(pt.group(1))
+        line = f.line if f.line is not None else 1.5
+        lam_p = (lh + la) * _PERIOD_SHARE[n - 1]
+        p = poisson_over(line, lam_p)
+        return p, 0.74, (f"Buts de la période {n} : λ={lam_p:.2f} ({_PERIOD_SHARE[n - 1]:.1%} des "
+                         f"buts réglementaires du modèle de score) → OVER {line} : {int(p * 100)}%.")
 
     return None
 
@@ -1558,34 +1671,31 @@ def _apply_market(
         period = _parse_period(f.selection)
         if period is None:
             raise _NoEstimate(market)
-        lam_p = total_lam / 3.0
-        pmf = [poisson_pmf(n, lam_p) for n in range(0, 16)]
-        strict = sum(pn * sum(pmf[:n]) ** 2 for n, pn in enumerate(pmf))
-        prob = clamp(1.0 - 3.0 * strict if period == "tie" else strict, 0.02, 0.98)
+        prob = _p_highest_period_total(total_lam, period)
         conf = 0.55
-        expl = (f"P({period} la plus prolifique) = {int(prob*100)}% — trois périodes "
-                f"supposées équivalentes, faute de données par période.")
+        expl = (f"P({period} la plus prolifique) = {int(prob*100)}% — buts λ={total_lam:.2f} "
+                f"répartis selon les parts mesurées par période.")
 
     elif market == "period1_total_goals":
         p1_line = f.line if f.line is not None else 1.5
-        p1_lam = total_lam / 3.0 * 0.95
+        p1_lam = total_lam * _PERIOD_SHARE[0]
         prob = clamp(poisson_over(p1_line, p1_lam), 0.05, 0.95)
         conf = 0.74
-        expl = f"Poisson P1 λ={p1_lam:.2f} → OVER {p1_line}: {int(prob*100)}%."
+        expl = f"Poisson P1 λ={p1_lam:.2f} ({_PERIOD_SHARE[0]:.1%} des buts) → OVER {p1_line}: {int(prob*100)}%."
 
     elif market == "period2_total_goals":
         p2_line = f.line if f.line is not None else 1.5
-        p2_lam = total_lam / 3.0 * 1.10   # P2 slightly higher scoring
+        p2_lam = total_lam * _PERIOD_SHARE[1]
         prob = clamp(poisson_over(p2_line, p2_lam), 0.05, 0.95)
         conf = 0.74
-        expl = f"Poisson P2 λ={p2_lam:.2f} (+10% vs avg) → OVER {p2_line}: {int(prob*100)}%."
+        expl = f"Poisson P2 λ={p2_lam:.2f} ({_PERIOD_SHARE[1]:.1%} des buts) → OVER {p2_line}: {int(prob*100)}%."
 
     elif market == "period3_total_goals":
         p3_line = f.line if f.line is not None else 1.5
-        p3_lam = total_lam / 3.0 * 0.95
+        p3_lam = total_lam * _PERIOD_SHARE[2]
         prob = clamp(poisson_over(p3_line, p3_lam), 0.05, 0.95)
         conf = 0.72
-        expl = f"Poisson P3 λ={p3_lam:.2f} → OVER {p3_line}: {int(prob*100)}%."
+        expl = f"Poisson P3 λ={p3_lam:.2f} ({_PERIOD_SHARE[2]:.1%} des buts) → OVER {p3_line}: {int(prob*100)}%."
 
     elif market == "winning_margin":
         # Sans modèle de score il n'y a pas de loi jointe d'où tirer un seau
@@ -1870,7 +1980,64 @@ def _build_score_ensemble(dist: "ScoreDistribution | None") -> "ScoreEnsemble | 
 _GOALIE_BACKUP_SHARE = 0.40
 
 
-def _goalie_backup_flag(goalies: list[dict], goalie_name: str | None) -> float:
+# ── Appariement des noms (2026-10-02, ml/INCOHERENCES_ML.md §3) ──────────────
+#
+# L'état d'inférence porte les noms MoneyPuck, SANS accents (« Juraj
+# Slafkovsky »). Les noms reçus du serveur viennent eux de l'API NHL (absents
+# officiels, blessés : « Juraj Slafkovský ») ou d'une saisie à la main (gardien
+# partant). Comparés en `.lower()` seul, un absent accentué était ignoré en
+# silence, et un gardien partant accentué ou mal espacé devenait un gardien
+# INCONNU — donc de relève (`goalie_backup = 1`), 6e feature du modèle de score.
+# Toute comparaison de noms passe désormais par cette clé.
+
+def _name_key(s: str) -> str:
+    """Clé de comparaison d'un nom : sans accents, sans points, espaces
+    réduits, minuscules. « Slafkovský » (NHL) et « Slafkovsky » (MoneyPuck),
+    « T.J. Brodie » et « TJ Brodie » donnent la même clé."""
+    s = unicodedata.normalize("NFD", s or "")
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    s = s.replace(".", "").replace("\u2019", "'")
+    return " ".join(s.split()).lower()
+
+
+# Noms déjà signalés : un paquet est recalculé toutes les 10 minutes par match,
+# inutile de répéter le même avertissement à chaque fois.
+_UNMATCHED_WARNED: set[tuple[str, str, str]] = set()
+
+
+def _warn_unmatched(kind: str, team: str, name: str) -> None:
+    """Dit à voix haute qu'un nom reçu n'a été reconnu nulle part — c'est
+    presque toujours une faute de saisie, qui sinon change la prédiction sans
+    laisser de trace."""
+    k = (kind, team, _name_key(name))
+    if k in _UNMATCHED_WARNED:
+        return
+    _UNMATCHED_WARNED.add(k)
+    print(f"[ML] ⚠️  {kind} « {name} » ({team or '?'}) introuvable dans "
+          f"l'état d'inférence — vérifier l'orthographe")
+
+
+def _find_goalie(goalies: list[dict], goalie_id: int | None,
+                 goalie_name: str | None) -> dict | None:
+    """Le gardien suivi qui part ce soir, ou None.
+
+    Par identifiant NHL d'abord — quand l'état d'inférence en porte (produit
+    depuis le 2026-10-02) —, par nom normalisé ensuite (`_name_key`).
+    """
+    if goalie_id is not None:
+        by_id = [g for g in goalies if g.get("id") is not None and int(g["id"]) == int(goalie_id)]
+        if by_id:
+            return by_id[0]
+    if goalie_name and goalie_name.strip():
+        key = _name_key(goalie_name)
+        by_name = [g for g in goalies if _name_key(g["name"]) == key]
+        if by_name:
+            return by_name[0]
+    return None
+
+
+def _goalie_backup_flag(goalies: list[dict], goalie_name: str | None,
+                        goalie_id: int | None = None) -> float:
     """1.0 relève, 0.0 titulaire, pour le partant du soir.
 
     • Partant nommé et connu : son drapeau exact.
@@ -1884,10 +2051,10 @@ def _goalie_backup_flag(goalies: list[dict], goalie_name: str | None) -> float:
     """
     if not goalies or any("share_last10" not in g for g in goalies):
         return float("nan")
-    if goalie_name:
-        named = [g for g in goalies if g["name"].lower() == goalie_name.lower()]
-        if named:
-            return float(named[0]["share_last10"] < _GOALIE_BACKUP_SHARE)
+    named = _find_goalie(goalies, goalie_id, goalie_name)
+    if named is not None:
+        return float(named["share_last10"] < _GOALIE_BACKUP_SHARE)
+    if goalie_id is not None or (goalie_name and goalie_name.strip()):
         return 1.0
     usual = max(goalies, key=lambda g: float(g["share_last10"]))
     return float(float(usual["share_last10"]) < _GOALIE_BACKUP_SHARE)
@@ -1896,13 +2063,6 @@ def _goalie_backup_flag(goalies: list[dict], goalie_name: str | None) -> float:
 # Sous ce nombre d'habillés reçus, la liste est jugée incomplète et ignorée
 # (18 patineurs + 2 gardiens dans un alignement officiel).
 _MIN_DRESSED = 18
-
-
-def _name_key(s: str) -> str:
-    """« Slafkovský » (NHL) et « Slafkovsky » (MoneyPuck) : la même clé."""
-    import unicodedata
-    s = unicodedata.normalize("NFD", s or "")
-    return "".join(c for c in s if unicodedata.category(c) != "Mn").strip().lower()
 
 
 def _dressed_matcher(ids: list[int] | None, names: list[str] | None):
@@ -1983,6 +2143,7 @@ def _game_context(f: GameFeatures) -> dict:
                                 "home_elo", "away_elo", "home_odds_decimal",
                                 "away_odds_decimal", "total_line_market",
                                 "home_goalie", "away_goalie",
+                                "home_goalie_id", "away_goalie_id",
                                 "home_stars_missing", "away_stars_missing",
                                 "home_scratches", "away_scratches",
                                 "home_dressed_ids", "away_dressed_ids",
@@ -2020,11 +2181,11 @@ def _game_context(f: GameFeatures) -> dict:
         stars_st  = _inference_state.get("stars", {})
         lineup_st = _inference_state.get("lineups", {})
         pool_st   = _inference_state.get("skater_pool", {})
-        for side, team, goalie_name, stars_missing, scratches, is_dressed, dressed_ids in [
-            ("home", (f.home_team or "").upper(), f.home_goalie, f.home_stars_missing, f.home_scratches,
-             _dressed_matcher(f.home_dressed_ids, f.home_dressed), f.home_dressed_ids),
-            ("away", (f.away_team or "").upper(), f.away_goalie, f.away_stars_missing, f.away_scratches,
-             _dressed_matcher(f.away_dressed_ids, f.away_dressed), f.away_dressed_ids),
+        for side, team, goalie_name, goalie_id, stars_missing, scratches, is_dressed, dressed_ids in [
+            ("home", (f.home_team or "").upper(), f.home_goalie, f.home_goalie_id, f.home_stars_missing,
+             f.home_scratches, _dressed_matcher(f.home_dressed_ids, f.home_dressed), f.home_dressed_ids),
+            ("away", (f.away_team or "").upper(), f.away_goalie, f.away_goalie_id, f.away_stars_missing,
+             f.away_scratches, _dressed_matcher(f.away_dressed_ids, f.away_dressed), f.away_dressed_ids),
         ]:
             for k, v in (teams_st.get(team) or {}).items():
                 if isinstance(v, (int, float)):
@@ -2032,10 +2193,11 @@ def _game_context(f: GameFeatures) -> dict:
             goalies = goalie_st.get(team) or []
             if goalies:
                 # Gardien nommé si fourni, sinon mix pondéré par usage récent
-                named = [g for g in goalies if goalie_name
-                         and g["name"].lower() == goalie_name.lower()]
-                if named:
-                    g0 = named[0]
+                g0 = _find_goalie(goalies, goalie_id, goalie_name)
+                if g0 is None and (goalie_id is not None or (goalie_name and goalie_name.strip())):
+                    _warn_unmatched("gardien partant", team,
+                                    goalie_name or f"id {goalie_id}")
+                if g0 is not None:
                     feat_values[f"{side}_goalie_gsax60"] = g0["gsax60"]
                     feat_values[f"{side}_goalie_svpct"]  = g0["svpct"]
                 else:
@@ -2045,9 +2207,9 @@ def _game_context(f: GameFeatures) -> dict:
                     feat_values[f"{side}_goalie_svpct"] = sum(
                         g["svpct"] * g["recent_start_share"] for g in goalies) / tot
                 feat_values[f"{side}_goalie_backup"] = _goalie_backup_flag(
-                    goalies, goalie_name)
+                    goalies, goalie_name, goalie_id)
             st = stars_st.get(team) or {}
-            scratch_set = {s.strip().lower() for s in (scratches or []) if s and s.strip()}
+            scratch_set = {_name_key(s) for s in (scratches or []) if s and s.strip()}
             # Avec l'alignement officiel, les absents restent ceux que le
             # serveur NOMME (saisie + blessés + absents officiels de la NHL) et
             # non « tout joueur clé non habillé » : l'état d'inférence garde les
@@ -2058,7 +2220,7 @@ def _game_context(f: GameFeatures) -> dict:
                 if scratch_set:
                     # Noms réels connus → on retire les BONS joueurs (pas "du haut")
                     present = [p["ppg"] for p in st["top5"]
-                              if p["name"].strip().lower() not in scratch_set]
+                              if _name_key(p["name"]) not in scratch_set]
                     missing = len(st["top5"]) - len(present)
                 else:
                     # Sans noms : legacy — on suppose que ce sont les meilleurs absents
@@ -2070,7 +2232,7 @@ def _game_context(f: GameFeatures) -> dict:
             keys = st.get("keys") or []
             if keys:
                 feat_values[f"{side}_stars_out_weight"] = float(
-                    sum(k["w"] for k in keys if k["name"].strip().lower() in scratch_set))
+                    sum(k["w"] for k in keys if _name_key(k["name"]) in scratch_set))
 
             # ── Projection bottom-up de l'alignement (P3) ────────────────────
             # Somme des contributions xG des patineurs effectivement disponibles.
@@ -2097,11 +2259,11 @@ def _game_context(f: GameFeatures) -> dict:
                 # vaut l'ancienne projection qu'une somme amputée de moitié.
                 if len(avail) < 12:
                     avail = ([p for p in roster
-                              if p.get("name", "").strip().lower() not in scratch_set]
+                              if _name_key(p.get("name", "")) not in scratch_set]
                              if roster else None)
             elif roster:
                 avail = [p for p in roster
-                         if p.get("name", "").strip().lower() not in scratch_set]
+                         if _name_key(p.get("name", "")) not in scratch_set]
             else:
                 avail = None
             if avail is not None:
@@ -2163,10 +2325,16 @@ def _game_context(f: GameFeatures) -> dict:
             v = feat_values.get(n)
             return float(v) if v is not None and v == v else np.nan
         row = np.array([[_fv(n) for n in _GAME_FEAT_NAMES]], dtype=np.float32)
-        dmat = xgb.DMatrix(row, feature_names=_GAME_FEAT_NAMES, missing=np.nan)
-        raw_prob  = float(_xgb_game.predict(dmat)[0])
+        # Même ligne SANS les cotes (NaN, comme les saisons non cotées de
+        # l'entraînement) : c'est elle qu'expose `probability_classifier`.
+        pure = np.array([[np.nan if n in _ODDS_FEATURES else _fv(n)
+                          for n in _GAME_FEAT_NAMES]], dtype=np.float32)
+        pred = _xgb_game.predict(xgb.DMatrix(np.vstack([row, pure]),
+                                             feature_names=_GAME_FEAT_NAMES, missing=np.nan))
+        raw_prob, raw_pure = float(pred[0]), float(pred[1])
         base_prob = raw_prob
         eps = 1e-7
+        p_clf_pure = _platt(raw_pure)
         # Blend modèle ⊕ marché (si cotes fournies + blend entraîné) —
         # sinon calibration de Platt (rend les probabilités fiables pour l'EV)
         if _blend_w is not None and market_home_p is not None:
@@ -2232,12 +2400,12 @@ def _game_context(f: GameFeatures) -> dict:
     #           classifieur + Platt   log-loss 0.6653
     #
     #       Le plan redoutait de perdre le « blend ⊕ marché » du classifieur en
-    #       faisant ça. Ce blend n'a **jamais été actif** : `_blend_w` se lit
-    #       dans `training_report.json → game_model.baselines.market
-    #       .blend_weights`, et cette clé est absente du rapport — les cotes
-    #       SBRO s'arrêtent en 2022-23, la tranche de test n'en contient aucune,
-    #       donc `train.py` n'a jamais pu l'ajuster. `base_prob` valait le
-    #       classifieur calibré Platt, point. Il n'y avait rien à perdre.
+    #       faisant ça. Au 2026-08-25, ce blend n'avait jamais été actif (pas de
+    #       `blend_weights` dans `training_report.json`, faute de cotes dans la
+    #       tranche de test). Depuis le backfill The Odds API il l'est : il
+    #       produit `base_prob` QUAND le modèle de score ne répond pas, et
+    #       seulement là. Sa log-loss mesurée sur 2025-26 (0,6843) ne bat pas le
+    #       marché seul (0,6822).
     #
     #       Le jour où les cotes reviendront (A1 payant ou A1bis accumulé), le
     #       blend de S4 ① s'appliquera PAR-DESSUS `dist.p_home_win()` — c'est
@@ -2246,11 +2414,28 @@ def _game_context(f: GameFeatures) -> dict:
     #       Le classifieur reste calculé en 3 : on garde sa valeur avant de
     #       l'écraser, pour l'exposer à côté de celle servie (cf. les deux
     #       champs `probability_*` de `MLResponse`). Zéro calcul en plus.
-    p_clf = base_prob if _xgb_game is not None else None
+    # `probability_classifier` = le classifieur SEUL : sans cotes en entrée,
+    # calibré Platt. Jusqu'au 2026-10-03 on exposait `base_prob`, qui depuis
+    # que `training_report.json` porte des poids de blend était le mélange
+    # classifieur ⊕ marché dès que des cotes étaient fournies — la comparaison
+    # « modèle de score vs classifieur » affichée penchait donc vers le marché
+    # (ml/INCOHERENCES_ML.md §10). Le blend reste le REPLI de `base_prob` quand
+    # le modèle de score ne répond pas.
+    p_clf = p_clf_pure if _xgb_game is not None else None
     p_score_model = None
+    p_corrected = None
     if score_dist is not None:
+        # `p_score_model` = la victoire du modèle de score BRUT, avant la couche
+        # de correction (exposée telle quelle, `probability_score_model`).
         p_score_model = score_dist.p_home_win()
-        base_prob = p_score_model
+        # Couche de correction → distribution recalée (INCOHERENCES_ML §6) :
+        # tous les marchés, pas seulement le moneyline, se lisent dessus.
+        p_corrected = _apply_correction(p_score_model, feat_values)
+        aligned = _align_distribution(score_dist, p_corrected)
+        if aligned is not None:
+            score_dist = aligned
+            p_corrected = None        # déjà dans la distribution
+        base_prob = score_dist.p_home_win()
         model_type = "Modèle de score (Poisson empilé)"
         # `model_version` identifiait l'entraînement du CLASSIFIEUR
         # (`xgb-nhl-v4.0`). L'UI affiche les deux côte à côte —
@@ -2262,9 +2447,10 @@ def _game_context(f: GameFeatures) -> dict:
 
     return {
         "feat_values": feat_values,
-        # Victoire domicile après la couche de correction (None sans couche ou
-        # sans modèle de score) — servie pour le seul marché `moneyline`.
-        "p_home_corrected": _apply_correction(p_score_model, feat_values),
+        # Victoire corrigée que le recalage n'a PAS pu intégrer à la
+        # distribution (repli : servie sur le seul marché `moneyline`, comme
+        # avant). None dans le cas normal — la correction est dans `score_dist`.
+        "p_home_corrected": p_corrected,
         "score_dist": score_dist, "base_prob": base_prob, "win_diff": win_diff,
         "gf_diff": gf_diff, "form_diff": form_diff,
         "lam_home": lam_home, "lam_away": lam_away,
@@ -2328,8 +2514,16 @@ def _price_game_market(ctx: dict, f: GameFeatures) -> MLResponse:
                     "message": "No estimate available for this market with the data provided"},
         )
 
-    # 4ter-bis. Moneyline : la couche de correction remplace la victoire du
-    #          modèle de score (cf. `_load_correction_layer`), vue du sujet.
+    # 4ter-bis. Moneyline : la couche de correction est d'ordinaire déjà dans
+    #          la distribution (`_align_distribution`). On le dit ; et si le
+    #          recalage a échoué, on retombe sur l'ancien remplacement du seul
+    #          moneyline, vu du sujet.
+    raw = getattr(ctx["score_dist"], "raw_lambdas", None) if ctx["score_dist"] is not None else None
+    if f.market_type == "moneyline" and raw is not None and p_score_model is not None:
+        p_raw = p_score_model if f.subject_is_home else 1.0 - p_score_model
+        explanation = (f"{explanation} Corrigé (forme, fatigue, alignement, ELO) : "
+                       f"{int(p_raw * 100)}% → {int(prob * 100)}% ; tous les marchés "
+                       f"du match suivent (λ bruts {raw[0]:.2f}/{raw[1]:.2f}).")
     p_corr = ctx.get("p_home_corrected")
     if f.market_type == "moneyline" and p_corr is not None:
         p_subject = p_corr if f.subject_is_home else 1.0 - p_corr
@@ -2341,7 +2535,9 @@ def _price_game_market(ctx: dict, f: GameFeatures) -> MLResponse:
     #          complément est pris APRÈS `_apply_market`, donc après son clamp.
     if _is_negative_side(f):
         prob = 1.0 - prob
-        explanation = f"Côté « non » = 100 − P(oui). {explanation}"
+        explanation = (f"Côté « moins » = 100 − P(plus). {explanation}"
+                       if f.market_type in _OVER_UNDER_MARKETS
+                       else f"Côté « non » = 100 − P(oui). {explanation}")
 
     # 5. Incertitude d'estimation (P4) — σ sur le marché effectivement servi,
     #    lu sur les membres de l'ensemble vus du côté du sujet.
@@ -2364,6 +2560,7 @@ def _price_game_market(ctx: dict, f: GameFeatures) -> MLResponse:
 
     return MLResponse(
         probability=round(prob * 100),
+        probability_exact=round(float(prob), 6),
         confidence=confidence,
         feature_importances=fi_list[:5],
         model_version=model_version,
@@ -2496,6 +2693,10 @@ def predict_game_bundle(req: GameBundleRequest) -> GameBundleResponse:
 
 # ── Player prop model ─────────────────────────────────────────────────────────
 
+# Props joueur qui sont un ÉVÉNEMENT par match (0 ou 1), pas un comptage.
+_BINARY_PLAYER_PROPS = {"wins", "shutouts"}
+
+
 @app.post("/predict/player", response_model=MLResponse, dependencies=_PROTECTED)
 def predict_player(f: PlayerPropFeatures) -> MLResponse:
     rate_map = {
@@ -2503,7 +2704,7 @@ def predict_player(f: PlayerPropFeatures) -> MLResponse:
         "assists":  f.assists_per_game,
         "points":   f.points_per_game,
         "shots":    f.shots_per_game,
-        "pp_point": f.goals_per_game * 0.35,   # rough PP-point proxy
+        "pp_point": f.pp_points_per_game,      # mesuré ; None → pas d'estimation
         # Physical / goalie props — rate injected via shots_per_game by Node.js
         "hits":     f.shots_per_game,
         "blocks":   f.shots_per_game,
@@ -2512,7 +2713,7 @@ def predict_player(f: PlayerPropFeatures) -> MLResponse:
         "wins":     f.shots_per_game,
         "shutouts": f.shots_per_game,
     }
-    if f.prop_type not in rate_map:
+    if f.prop_type not in rate_map or rate_map[f.prop_type] is None:
         # `rate_map.get(..., f.goals_per_game)` servait la cadence de BUTS sous
         # le nom du marché demandé. Un marché qu'on ne sait pas pricer n'a pas
         # de chiffre, il a une absence de chiffre.
@@ -2523,7 +2724,16 @@ def predict_player(f: PlayerPropFeatures) -> MLResponse:
         )
     rate = rate_map[f.prop_type]
 
-    raw_over = poisson_over(f.line, rate)
+    # Victoire et blanchissage d'un gardien sont des événements OUI/NON sur un
+    # match : la « cadence » reçue est une PROBABILITÉ (part de ses matchs). En
+    # Poisson, une cadence de 0,50 donnait P(≥ 1) = 1 − e^−0,5 = 39 % au lieu de
+    # 50 % (ml/INCOHERENCES_ML.md §12). Au plus 1 par match : au-delà d'une
+    # ligne de 1, « plus » est impossible.
+    binary = f.prop_type in _BINARY_PLAYER_PROPS
+    if binary:
+        raw_over = clamp(rate, 0.0, 1.0) if f.line < 1 else 0.0
+    else:
+        raw_over = poisson_over(f.line, rate)
     prob = raw_over if f.selection == "over" else 1.0 - raw_over
     prob = clamp(prob, 0.05, 0.95)
 
@@ -2545,7 +2755,12 @@ def predict_player(f: PlayerPropFeatures) -> MLResponse:
 
     over_under = f.selection.upper()
     # Ne JAMAIS attribuer au joueur une cadence qu'on n'a pas mesurée sur lui.
-    if f.rate_is_league_average:
+    if binary:
+        source = ("NHL average for goalies — no per-goalie data" if f.rate_is_league_average
+                  else "share of this goalie's games")
+        explanation = (f"Yes/no event: {f.prop_type} in {rate:.0%} of games ({source}); "
+                       f"{over_under} {f.line} implied at {round(prob*100)}%.")
+    elif f.rate_is_league_average:
         explanation = (f"Poisson model: NHL average is {rate:.2f} {f.prop_type}/game for this "
                        f"position — no per-player data available for this stat, so every player "
                        f"gets the same number; {over_under} {f.line} implied at {round(prob*100)}%.")
@@ -2554,10 +2769,11 @@ def predict_player(f: PlayerPropFeatures) -> MLResponse:
                        f"{over_under} {f.line} implied at {round(prob*100)}%.")
     return MLResponse(
         probability=round(prob * 100),
+        probability_exact=round(float(prob), 6),
         confidence=round(confidence * 100),
         feature_importances=importances[:5],
-        model_version="poisson-v1.0",
-        model_type="Poisson Distribution",
+        model_version="poisson-v1.1",
+        model_type="Bernoulli (yes/no)" if binary else "Poisson Distribution",
         explanation=explanation,
     )
 
@@ -2594,6 +2810,7 @@ def predict_team(f: TeamFuturesFeatures) -> MLResponse:
     prop_label = {"cup": "Stanley Cup", "conf": "Conference Final", "playoff": "Playoff berth"}.get(f.prop_type, f.prop_type)
     return MLResponse(
         probability=round(prob * 100),
+        probability_exact=round(float(prob), 6),
         confidence=confidence,
         feature_importances=importances[:5],
         model_version="rank-bayes-v1.0",
@@ -2612,7 +2829,11 @@ def health():
             # Les totaux sont pricés depuis la distribution du modèle de score
             # (S2 a retiré totals_model.json) ; sans lui, heuristique déclarée.
             "totals": "Modèle de score (Poisson empilé)" if _xgb_score is not None else "Poisson (fallback)",
-            "player": "Poisson Distribution",
+            # Le modèle joueur entraîné sert les cadences du paquet de match ;
+            # `/predict/player` reste une loi de Poisson / oui-non sur la
+            # cadence envoyée par le serveur.
+            "player": ("XGBoost count:poisson (cadences du paquet) + Poisson (/predict/player)"
+                       if _player_models else "Poisson Distribution"),
             "team":   "Bayesian Prior",
         },
         "trained_models_loaded": {

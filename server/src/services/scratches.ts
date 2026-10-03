@@ -15,8 +15,9 @@
 // Stockage : kind `scratches`, une ligne par DATE (heure de l'Est) :
 //   entry_key '2026-01-15'  →  { "TOR": ["Auston Matthews"], "MTL": ["Kaiden Guhle"] }
 //
-// Le NOM doit correspondre à l'orthographe MoneyPuck (ex. « Auston Matthews »)
-// car le service Python matche par nom exact (insensible à la casse) contre son
+// Le NOM est apparié à l'orthographe MoneyPuck (ex. « Auston Matthews ») sans
+// tenir compte de la casse, des accents, des points ni des espaces en trop
+// (`_name_key` côté Python) : « Slafkovský » (API NHL) = « Slafkovsky ». Contre son
 // pool de joueurs clés (top-6 attaquants + top-4 défenseurs). Un nom mal
 // orthographié est ignoré en silence.
 

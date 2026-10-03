@@ -435,6 +435,20 @@ describe('tableaux de la page match — règlement', () => {
     expect((await settleOne([{ gameId: GAME_ID, marketType: 'puck_line', selectionValue: 'no',  subjectId: 'TOR', line: -2.5 }])).outcome).toBe('win');
   });
 
+  it('période la plus prolifique : égalité en tête = perdu, plus jamais « en attente »', async () => {
+    const at = (isHome: boolean, periodNumber: number) => ({ ...goal(isHome), periodNumber });
+    const leg = (sel: string) => [{ gameId: GAME_ID, marketType: 'highest_scoring_period', selectionValue: sel, subjectId: 'TOR' }];
+    // 2 buts en 1re, 2 en 2e, 1 en 3e : égalité en tête.
+    fetchGameScoringPlays.mockResolvedValue([at(true, 1), at(false, 1), at(true, 2), at(true, 2), at(false, 3)]);
+    expect((await settleOne(leg('P1'))).outcome).toBe('loss');
+    expect((await settleOne(leg('tie'))).outcome).toBe('win');
+    // 3 buts en 2e : P2 seule en tête.
+    fetchGameScoringPlays.mockResolvedValue([at(true, 2), at(false, 2), at(true, 2), at(true, 1)]);
+    expect((await settleOne(leg('P2'))).outcome).toBe('win');
+    expect((await settleOne(leg('P1'))).outcome).toBe('loss');
+    expect((await settleOne(leg('tie'))).outcome).toBe('loss');
+  });
+
   it('qui mène après la 1re : égalité tranchée, plus jamais « en attente »', async () => {
     // 1–1 après la 1re (les deux buts de `goal()` sont en 1re période).
     fetchGameScoringPlays.mockResolvedValue([goal(true), goal(false)]);

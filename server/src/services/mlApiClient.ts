@@ -64,7 +64,14 @@ export interface MLFeatureImportance {
 }
 
 export interface MLPredictionResult {
-  probability:          number;   // integer, 5–95 (en direct : 0–100, voir `probability_scale`)
+  probability:          number;   // entier d'AFFICHAGE, 2–98 (en direct : 0–100, voir `probability_scale`)
+  /**
+   * La même probabilité NON arrondie, 0–1. À utiliser pour tout CALCUL (edge,
+   * EV, cote minimale) : l'entier ci-dessus porte jusqu'à ±0,5 point d'erreur
+   * (ml/INCOHERENCES_ML.md §4). Absent d'un service ML antérieur ; `null` sur
+   * un chiffre recalculé en direct.
+   */
+  probability_exact?:   number | null;
   /**
    * `'pct'` = `probability` est TOUJOURS en points de pourcentage, même ≤ 1.
    * Posé par le paquet ML en direct (`gameMlBundle.ts`), où 0 % et 1 % sont
