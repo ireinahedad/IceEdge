@@ -386,7 +386,9 @@ constante mesurée 0,4996.)
 
 Historique : c'était le premier modèle. Aujourd'hui sa probabilité est
 **calculée à chaque requête et renvoyée dans `probability_classifier`** pour
-comparaison, mais la probabilité servie vient du modèle de score.
+comparaison — sans les cotes en entrée et calibrée Platt —, mais la probabilité
+servie vient du modèle de score. Le mélange avec le marché ne sert que de repli
+quand le modèle de score ne répond pas.
 
 - XGBoost `binary:logistic` sur la cible `home_win`.
 - **15 features** : `elo_diff`, `elo_expected`, `ev_xgf_pct_s_diff`, `ev_cf_pct_s_diff`, `ev_xgf_pct_l_diff`, `xg_matchup_diff`, `goalie_gsax60_diff`, `star_power_diff`, `stars_out_weight_diff`, `rest_days_diff`, `b2b_diff`, `finishing_s_diff`, `win_s_diff`, **`market_home_p_open`, `market_home_p_close`** (les cotes sont des features ; absentes = vide, XGBoost sait gérer).
@@ -546,8 +548,9 @@ de score n'utilise jamais les cotes.)
 
 ### 6.7 Étape 5 — classifieur (pour information)
 
-Vecteur de 15 features → XGBoost → mélange avec le marché si cotes, sinon
-Platt. Résultat gardé dans `probability_classifier`.
+Vecteur de 15 features → XGBoost. Deux sorties : avec les cotes puis mélangé au
+marché (repli si le modèle de score ne répond pas), et sans les cotes + Platt
+(`probability_classifier`, pour comparaison).
 
 ### 6.8 Étape 6 — modèle de score
 

@@ -234,6 +234,19 @@ _GAME_FEAT_NAMES = [
 ]
 
 
+# Features de cote du classifieur — mises à NaN pour sa version « seule »
+# (`probability_classifier`). Même liste que `train.py:ODDS_FEATURES`.
+_ODDS_FEATURES = {"market_home_p_open", "market_home_p_close"}
+
+
+def _platt(p_raw: float) -> float:
+    """Calibration de Platt du classifieur (identité si elle manque)."""
+    if _platt_a is None or _platt_b is None:
+        return p_raw
+    p = min(max(p_raw, 1e-7), 1 - 1e-7)
+    return 1.0 / (1.0 + math.exp(-(_platt_a * math.log(p / (1 - p)) + _platt_b)))
+
+
 def _load_score_ensemble(rep: dict) -> None:
     """Charge les membres bootstrap s'ils existent (P4).
 
@@ -2272,10 +2285,16 @@ def _game_context(f: GameFeatures) -> dict:
             v = feat_values.get(n)
             return float(v) if v is not None and v == v else np.nan
         row = np.array([[_fv(n) for n in _GAME_FEAT_NAMES]], dtype=np.float32)
-        dmat = xgb.DMatrix(row, feature_names=_GAME_FEAT_NAMES, missing=np.nan)
-        raw_prob  = float(_xgb_game.predict(dmat)[0])
+        # Même ligne SANS les cotes (NaN, comme les saisons non cotées de
+        # l'entraînement) : c'est elle qu'expose `probability_classifier`.
+        pure = np.array([[np.nan if n in _ODDS_FEATURES else _fv(n)
+                          for n in _GAME_FEAT_NAMES]], dtype=np.float32)
+        pred = _xgb_game.predict(xgb.DMatrix(np.vstack([row, pure]),
+                                             feature_names=_GAME_FEAT_NAMES, missing=np.nan))
+        raw_prob, raw_pure = float(pred[0]), float(pred[1])
         base_prob = raw_prob
         eps = 1e-7
+        p_clf_pure = _platt(raw_pure)
         # Blend modèle ⊕ marché (si cotes fournies + blend entraîné) —
         # sinon calibration de Platt (rend les probabilités fiables pour l'EV)
         if _blend_w is not None and market_home_p is not None:
@@ -2341,12 +2360,12 @@ def _game_context(f: GameFeatures) -> dict:
     #           classifieur + Platt   log-loss 0.6653
     #
     #       Le plan redoutait de perdre le « blend ⊕ marché » du classifieur en
-    #       faisant ça. Ce blend n'a **jamais été actif** : `_blend_w` se lit
-    #       dans `training_report.json → game_model.baselines.market
-    #       .blend_weights`, et cette clé est absente du rapport — les cotes
-    #       SBRO s'arrêtent en 2022-23, la tranche de test n'en contient aucune,
-    #       donc `train.py` n'a jamais pu l'ajuster. `base_prob` valait le
-    #       classifieur calibré Platt, point. Il n'y avait rien à perdre.
+    #       faisant ça. Au 2026-08-25, ce blend n'avait jamais été actif (pas de
+    #       `blend_weights` dans `training_report.json`, faute de cotes dans la
+    #       tranche de test). Depuis le backfill The Odds API il l'est : il
+    #       produit `base_prob` QUAND le modèle de score ne répond pas, et
+    #       seulement là. Sa log-loss mesurée sur 2025-26 (0,6843) ne bat pas le
+    #       marché seul (0,6822).
     #
     #       Le jour où les cotes reviendront (A1 payant ou A1bis accumulé), le
     #       blend de S4 ① s'appliquera PAR-DESSUS `dist.p_home_win()` — c'est
@@ -2355,7 +2374,14 @@ def _game_context(f: GameFeatures) -> dict:
     #       Le classifieur reste calculé en 3 : on garde sa valeur avant de
     #       l'écraser, pour l'exposer à côté de celle servie (cf. les deux
     #       champs `probability_*` de `MLResponse`). Zéro calcul en plus.
-    p_clf = base_prob if _xgb_game is not None else None
+    # `probability_classifier` = le classifieur SEUL : sans cotes en entrée,
+    # calibré Platt. Jusqu'au 2026-10-03 on exposait `base_prob`, qui depuis
+    # que `training_report.json` porte des poids de blend était le mélange
+    # classifieur ⊕ marché dès que des cotes étaient fournies — la comparaison
+    # « modèle de score vs classifieur » affichée penchait donc vers le marché
+    # (ml/INCOHERENCES_ML.md §10). Le blend reste le REPLI de `base_prob` quand
+    # le modèle de score ne répond pas.
+    p_clf = p_clf_pure if _xgb_game is not None else None
     p_score_model = None
     p_corrected = None
     if score_dist is not None:

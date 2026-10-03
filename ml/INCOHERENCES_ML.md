@@ -27,7 +27,7 @@
 | 7 | 🟠 | Absences : définies différemment à l'entraînement et au service | `build_dataset.py`, `ml_service.py` |
 | 8 | 🟠 | Le filtre « début de saison » (`MIN_GP`) ne filtre presque rien | `build_dataset.py` |
 | 9 | 🟠 | τ, p_ot et déciles ajustés sur des λ que le code lui-même juge sur-ajustés | `train_score.py` |
-| 10 | 🟠 | Classifieur : cotes d'ouverture ≠ clôture à l'entraînement, identiques au service ; commentaire « blend jamais actif » faux | `train.py`, `ml_service.py` |
+| 10 | ✅ | ~~Classifieur : cotes d'ouverture ≠ clôture à l'entraînement, identiques au service ; commentaire « blend jamais actif » faux~~ — corrigé le 2026-10-03 | `train.py`, `ml_service.py` |
 | 11 | 🟠 | « Best bets » : classement par probabilité (pas par valeur), règles et ML mélangés, autre modèle joueur | `bestBets.service.ts` |
 | 12 | ✅ | ~~`/predict/player` : points AN, victoires de gardien et mises en échec mal estimés~~ — corrigé le 2026-10-03 | `ml_service.py`, `featureEngineering.ts` |
 | 13 | ✅ | ~~Premier buteur : cadence du modèle joueur ÷ buts de match des règles~~ — corrigé le 2026-10-03 | `playerRates.ts` |
@@ -257,7 +257,17 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 
 ---
 
-## 🟠 10. Classifieur : cotes d'ouverture ≠ clôture à l'entraînement, identiques au service ; « blend jamais actif » est faux
+## ✅ 10. Classifieur : cotes d'ouverture ≠ clôture à l'entraînement, identiques au service ; « blend jamais actif » est faux
+
+> **Corrigé le 2026-10-03.** `probability_classifier` est maintenant le
+> classifieur SEUL : cotes mises à NaN (comme les saisons non cotées de
+> l'entraînement), calibré Platt — les cotes envoyées ne le changent plus
+> (vérifié : COL–SJS 75 % avec ou sans cotes). Le mélange avec le marché ne
+> sert plus qu'au repli quand le modèle de score ne répond pas. Commentaires
+> corrigés (`ml_service.py`, `featureEngineering.ts`). Le décalage ouverture /
+> clôture reste dans le classifieur lui-même, mais il ne touche plus que ce
+> repli ; le réentraîner avec une seule colonne de cote ne vaut la peine que
+> si on garde le classifieur (S4 ⑤ prévoit de le supprimer).
 
 **Où**
 - `ml/python/train.py:95` : `ODDS_FEATURES = ["market_home_p_open", "market_home_p_close"]` ;

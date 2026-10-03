@@ -29,8 +29,12 @@ export interface GameFeatureOpts {
    * (ml/INCOHERENCES_ML.md §2).
    */
   gameDate?: string;
-  /** Inclure les cotes live → active le blend modèle⊕marché (défaut true).
-   *  Mettre à false pour obtenir la proba PURE du modèle (détection de value). */
+  /**
+   * Inclure les cotes live (défaut true). Elles ne changent PAS la probabilité
+   * servie : celle-ci vient du modèle de score, qui ne lit aucune cote. Elles
+   * ne servent qu'au repli (classifieur ⊕ marché) quand le modèle de score ne
+   * répond pas. `probability_classifier` est calculé sans elles.
+   */
   includeOdds?: boolean;
   homeGoalie?: string;
   awayGoalie?: string;
