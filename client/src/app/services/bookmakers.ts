@@ -15,7 +15,7 @@ import { env } from "../env";
 import { features } from "../platform";
 
 export type Sport = "hockey";
-export type BookmakerId = "bet365" | "stake";
+export type BookmakerId = "bet365" | "stake" | "bet99";
 
 export interface Bookmaker {
   id: BookmakerId;
@@ -74,13 +74,37 @@ const STAKE: Bookmaker = {
   colors: { bg: "#1a2c38", bgHover: "#213743", fg: "#ffffff", badgeBg: "#1475e1", badgeFg: "#ffffff" },
 };
 
+/**
+ * BET99 — ajouté le 2026-10-02 (demande du user). C'est le livre dont viennent
+ * les cotes AFFICHÉES dans l'app (`ODDS_BOOKMAKERS=bet99_ca_on` côté serveur) :
+ * l'utilisateur qui le choisit retrouve chez lui exactement le prix vu ici.
+ *
+ * Page LNH relevée par le user sur le site le 2026-10-02. `1590` est
+ * l'identifiant de la ligue chez BET99 : s'il change un jour, le lien tombera
+ * sur une page vide — recopier alors l'adresse de la page LNH depuis le site.
+ * Pas de code affilié (le user n'en a pas) : `affiliateParam` ne sert pas.
+ */
+const BET99: Bookmaker = {
+  id: "bet99",
+  label: "BET99",
+  badge: "B99",
+  base: "https://bet99.com",
+  affiliateCode: undefined,
+  affiliateParam: (code) => `?btag=${code}`,
+  sectionPath: () => "/en/sports/ice_hockey/usa/nhl/1590",
+  signupPath: "/",
+  // Noir et jaune de la marque.
+  colors: { bg: "#111111", bgHover: "#222222", fg: "#ffd200", badgeBg: "#ffd200", badgeFg: "#111111" },
+};
+
 export const BOOKMAKERS: Record<BookmakerId, Bookmaker> = {
   bet365: BET365,
   stake: STAKE,
+  bet99: BET99,
 };
 
 /** Ordered list for rendering selectors */
-export const BOOKMAKER_LIST: Bookmaker[] = [BET365, STAKE];
+export const BOOKMAKER_LIST: Bookmaker[] = [BET365, STAKE, BET99];
 
 const BOOKMAKER_STORAGE_KEY = "iceedge_bookmaker";
 const DEFAULT_BOOKMAKER: BookmakerId = "bet365";

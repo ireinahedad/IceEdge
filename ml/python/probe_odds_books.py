@@ -188,6 +188,16 @@ def probe_links(key: str, books: str) -> None:
     for b in [x.strip() for x in books.split(",") if x.strip()]:
         if b not in stats:
             print(f"   {b:<18} aucun prix sur ces matchs")
+    # Livres SANS lien mais avec un identifiant (sid) : de quoi reconstruire
+    # l'adresse d'un match a la main (ex. bet99 : .../nhl/<slug>/<id>).
+    sid_only = [b for b, st in stats.items() if st["sid"] and not st["evlink"]]
+    for book in sid_only:
+        print(f"\nIdentifiants (sid) de {book} :")
+        for ev in events:
+            for bk in ev.get("bookmakers") or []:
+                if bk["key"] == book and bk.get("sid"):
+                    print(f"   {ev.get('away_team')} @ {ev.get('home_team')}"
+                          f"  ({ev.get('commence_time')})  sid={bk['sid']}")
     print("\nExemple de lien par livre (a ouvrir dans le navigateur) :")
     for b, (away, home, mk, name, link) in sample.items():
         print(f"   {b}: {away} @ {home} [{mk} / {name}]\n      {link}")
