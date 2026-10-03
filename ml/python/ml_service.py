@@ -384,12 +384,19 @@ def _confidence_from_lambdas(dist: "ScoreDistribution | None") -> float | None:
 #
 # La pratique établie en Elo sportif est de ramener les notes vers la moyenne
 # entre deux saisons : l'effectif a changé, une partie du signal ne vaut plus.
-# 2/3 conservés est la valeur usuelle pour le hockey. Appliquée une fois par
-# saison de retard, donc composée si le fichier a deux ans.
+# Appliquée une fois par saison de retard, donc composée si le fichier a deux ans.
+#
+# LA MÊME RÉGRESSION QU'À L'ENTRAÎNEMENT. `build_dataset.add_elo` ramène chaque
+# note de 30 % vers la moyenne entre deux saisons (`ELO_SEASON_REGRESS`) ; ce
+# service en appliquait 1/3 (2/3 conservés) — le modèle aurait vu en octobre
+# des notes plus resserrées que celles de son entraînement
+# (ml/INCOHERENCES_ML.md §15). La valeur est désormais écrite par build_dataset
+# dans `elo_ratings.json` (`season_regress`) et relue ici ; ce défaut ne sert
+# qu'aux fichiers produits avant le 2026-10-03, et vaut la même chose.
 #
 # Ce n'est PAS un substitut à la régénération du fichier : c'est le garde-fou
 # qui empêche des notes périmées d'être servies comme si elles étaient fraîches.
-ELO_CARRYOVER = 2.0 / 3.0
+ELO_SEASON_REGRESS_DEFAULT = 0.30
 
 
 def _season_start_year(d: "datetime | None" = None) -> int:
@@ -463,7 +470,10 @@ def _try_load_models():
             as_of         = str(elo.get("as_of_date") or "")
             seasons_old   = _seasons_elapsed_since(as_of)
             if seasons_old > 0 and _elo_ratings:
-                keep = ELO_CARRYOVER ** seasons_old
+                regress = float(elo.get("season_regress", ELO_SEASON_REGRESS_DEFAULT))
+                if not 0.0 <= regress < 1.0:
+                    regress = ELO_SEASON_REGRESS_DEFAULT
+                keep = (1.0 - regress) ** seasons_old
                 _elo_ratings = {k: _elo_base + (v - _elo_base) * keep
                                 for k, v in _elo_ratings.items()}
                 spread = max(_elo_ratings.values()) - min(_elo_ratings.values())

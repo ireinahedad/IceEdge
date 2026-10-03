@@ -32,7 +32,7 @@
 | 12 | ✅ | ~~`/predict/player` : points AN, victoires de gardien et mises en échec mal estimés~~ — corrigé le 2026-10-03 | `ml_service.py`, `featureEngineering.ts` |
 | 13 | ✅ | ~~Premier buteur : cadence du modèle joueur ÷ buts de match des règles~~ — corrigé le 2026-10-03 | `playerRates.ts` |
 | 14 | 🟠 | Modèle joueur : jointure par `gameId` alors que `build_dataset` dit que les identifiants diffèrent (**à vérifier**) | `train_player.py`, `build_dataset.py` |
-| 15 | 🟠 | ELO entre deux saisons : 30 % de régression à l'entraînement, 33 % au service | `build_dataset.py`, `ml_service.py` |
+| 15 | ✅ | ~~ELO entre deux saisons : 30 % de régression à l'entraînement, 33 % au service~~ — corrigé le 2026-10-03 | `build_dataset.py`, `ml_service.py` |
 | 16 | 🟡 | Trois découpages différents des buts par période dans le même service | `ml_service.py` |
 | 17 | 🟡 | Périodes 1-2 sans correction τ, période 3 avec | `ml_service.py` |
 | 18 | 🟡 | Blanchissage légèrement surestimé (nul 0-0 perdu en prolongation) | `ml_service.py` |
@@ -339,7 +339,12 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 
 ---
 
-## 🟠 15. ELO entre deux saisons : 30 % à l'entraînement, 33 % au service
+## ✅ 15. ELO entre deux saisons : 30 % à l'entraînement, 33 % au service
+
+> **Corrigé le 2026-10-03.** `build_dataset.py` écrit `season_regress` (0,30)
+> dans `elo_ratings.json` ; le service le relit (défaut 0,30 pour les fichiers
+> plus anciens) et garde donc 70 % de l'écart par saison de retard, comme
+> l'entraînement. Vérifié : COL 1573,4 → 1551,4 servi (70 % conservés).
 
 **Où** — `ml/python/build_dataset.py:103` (`ELO_SEASON_REGRESS = 0.30` : on garde 70 % de l'écart à 1500) ; `ml/python/ml_service.py:391` (`ELO_CARRYOVER = 2/3` : on garde 66,7 %).
 

@@ -927,6 +927,9 @@ def main():
         }, f, indent=1)
     with open(f"{MODELS_DIR}/elo_ratings.json", "w") as f:
         json.dump({"base": ELO_BASE, "home_adv": ELO_HOME_ADV,
+                   # Relu par ml_service pour vieillir des notes d'une saison
+                   # passée exactement comme l'entraînement l'a fait.
+                   "season_regress": ELO_SEASON_REGRESS,
                    "as_of_date": str(df["date"].max()),
                    "ratings": {k: round(v, 1) for k, v in sorted(final_elo.items())}},
                   f, indent=2)

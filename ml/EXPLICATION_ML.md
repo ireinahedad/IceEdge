@@ -511,7 +511,8 @@ déciles), `inference_state.json`, `elo_ratings.json`, `correction_layer.json`,
 et du modèle joueur. Chaque pièce manquante désactive seulement ce qui en dépend.
 
 **ELO vieilli :** si `elo_ratings.json` date d'une saison précédente, chaque
-note est ramenée vers 1500 en gardant 2/3 de son écart par saison de retard.
+note est ramenée vers 1500 en gardant 70 % de son écart par saison de retard —
+la même régression qu'à l'entraînement (`season_regress`, écrit dans le fichier).
 
 ### 6.2 Étape 0 — « sait-on quelque chose sur ce match ? »
 
