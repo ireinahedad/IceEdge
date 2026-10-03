@@ -470,14 +470,15 @@ que le domicile gagne la prolongation (§4.1.5). Code : `ScoreDistribution`
 | `puck_line` autre ligne (−2,5, +1,5…) | sur la grille du **score final** F : Σ F[i−j + ligne > 0] |
 | `alt_puck_line` | Σ M[i−j ≥ 3] |
 | `total_goals_over` / `_under` (ligne L) | loi du total FINAL : un nul k–k devient 2k+1 buts ; P(total > L) / P(total < L) |
-| `team_total_goals` | loi des buts FINAUX du sujet (il gagne +1 en prolongation avec p_ot) ; P(> L) |
+| `team_total_goals` | loi des buts FINAUX du sujet (il gagne +1 en prolongation avec p_ot) ; P(> L), et 1 − P(> L) pour la sélection « under » |
 | `both_teams_score` | 1 − P(dom = 0) − P(ext = 0) + P(0–0) ; pour « 2+ / 3+ » : Σ M[i>L, j>L] |
-| `clean_sheet` (l'adversaire ne marque pas) | Σ M[·][0] |
+| `clean_sheet` (l'adversaire ne marque pas) | score FINAL : Σ M[·][0] − M[0][0] × (1 − p_ot) — un 0-0 perdu en prolongation n'est pas un blanchissage |
 | `winning_margin` (par 1 / par 2 / par 3+) | écart exact dans M ; « par 1 » reçoit en plus toute la masse des nuls × (p_ot ou 1−p_ot) |
 | `correct_score` (ex. « 3-2 ») | case de la grille du score final F (les nuls k–k sont déplacés en k+1–k ou k–k+1) |
-| `period1_winner`, `period2_winner` (mène après P1/P2, buts cumulés) | deux Poisson de moyennes λ × 0,305 (après P1) ou λ × 0,67 (après P2) → P(mène), P(égalité) |
+| `period1_winner`, `period2_winner` (mène après P1/P2, buts cumulés) | deux Poisson de moyennes λ × 0,305 (après P1) ou λ × 0,67 (après P2) → P(mène), P(égalité). Pas de τ : il corrige des effets de fin de match |
+| `period{1,2,3}_total_goals` | Poisson de moyenne (λ_dom + λ_ext) × part de la période (30,5 % / 36,5 % / 33,0 %) ; P(> L) |
 | `period3_winner` | = gagne en 60 min (Σ M[i>j]) ; égalité = prolongation |
-| `highest_scoring_period` | 3 périodes supposées égales (λ_total / 3 chacune) : P(cette période > les deux autres) |
+| `highest_scoring_period` | chaque période reçoit sa part (30,5 % / 36,5 % / 33,0 %) des buts réglementaires : P(cette période > les deux autres), égalité en tête = issue `tie` |
 
 **Toujours :** les probabilités sont bornées à [2 %, 98 %] (sauf le score exact,
 borné à [0, 98 %]). La réponse porte l'entier d'affichage (`probability`) ET la
@@ -488,13 +489,14 @@ question porte sur le visiteur, le service **transpose** la matrice (M → Mᵀ)
 échange λ_dom/λ_ext et remplace p_ot par 1 − p_ot : les mêmes formules
 répondent alors pour le visiteur.
 
-**Côté « non ».** Pour un marché oui/non (BTTS, blanchissage, prolongation,
-puck line, but en AN, désavantage, marque à chaque période), le côté « non »
-vaut 100 − P(oui).
+**Côté « non » / « moins ».** Pour un marché oui/non (BTTS, blanchissage,
+prolongation, puck line, but en AN, désavantage, marque à chaque période), le
+côté « non » vaut 100 − P(oui). Pour un plus/moins dont le côté est dans la
+sélection (total d'équipe, totaux par période), « moins » vaut 100 − P(plus).
 
 **Marchés qui ne sortent PAS de la matrice** (heuristiques déclarées, §6.11) :
 `team_pp_goals`, `team_penalty_kill`, `team_score_every_period`,
-`first_team_score`, `last_team_score`, `double_chance`, `period{1,2,3}_total_goals`.
+`first_team_score`, `last_team_score`, `double_chance`.
 
 ---
 
@@ -605,7 +607,6 @@ Quelques marchés utilisent TOUJOURS une règle, même avec le modèle de score 
 | `first_team_score` | λ_sujet / (λ_sujet + λ_adv), borné [35 %, 65 %] |
 | `last_team_score` | 50 % + (p_victoire − 50 %) × 0,65 |
 | `double_chance` | p × 0,85 + P(nul) × p_ot |
-| `period{1,2,3}_total_goals` | Poisson sur λ_total/3 × 0,95 / 1,10 / 0,95 |
 
 ### 6.12 Les autres routes
 

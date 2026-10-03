@@ -859,8 +859,10 @@ class GameFeatures(BaseModel):
     home_3in4:             float = Field(0.0,  ge=0, le=4)   # matchs dans les 3 jours précédents
     away_3in4:             float = Field(0.0,  ge=0, le=4)
     # ── v5 — voyage / fuseaux / altitude / road-trip (miroir de build_dataset).
-    #    Défauts neutres (0) si le backend ne les fournit pas → mêmes noms que
-    #    les colonnes d'entraînement, XGBoost gère l'absence via missing=NaN.
+    #    ⚠️ AUCUN modèle entraîné ne lit ces champs (ni le modèle de score, ni
+    #    le classifieur, ni le modèle joueur) : ils sont acceptés pour
+    #    compatibilité, sans effet sur les probabilités. Le serveur ne les
+    #    calcule plus par défaut (`includeTravel`).
     home_distance_km:   float = Field(0.0, ge=0)   # trajet depuis l'aréna précédent (km)
     away_distance_km:   float = Field(0.0, ge=0)
     home_tz_shift:      float = Field(0.0, ge=-4, le=4)  # fuseaux traversés (+ = est)
@@ -1023,11 +1025,26 @@ _BINARY_MARKETS = {
 _NEGATIVE_SELECTIONS = {"no", "non", "false", "0"}
 
 
+# Marchés « plus / moins » dont le côté voyage dans `selection` et non dans le
+# nom (contrairement à `total_goals_over` / `total_goals_under`). Le service
+# price toujours « plus » ; « moins » est son complément (lignes en .5, pas de
+# push). Sans ce traitement, la tuile « Under 2.5 » d'un total d'équipe
+# affichait le MÊME pourcentage que « Over 2.5 » — trouvé le 2026-10-03 en
+# corrigeant ml/INCOHERENCES_ML.md §16 (79 % / 79 % sur COL–SJS).
+_OVER_UNDER_MARKETS = {"team_total_goals", "total_goals",
+                       "period1_total_goals", "period2_total_goals", "period3_total_goals"}
+_UNDER_SELECTIONS = {"under", "u", "moins"}
+
+
 def _is_negative_side(f: GameFeatures) -> bool:
-    """Vrai si l'appelant demande le côté « non » d'un marché binaire."""
-    if f.market_type not in _BINARY_MARKETS:
-        return False
-    return (f.selection or "").strip().lower() in _NEGATIVE_SELECTIONS
+    """Vrai si l'appelant demande le côté « non » d'un marché binaire, ou le
+    côté « moins » d'un marché plus/moins sans côté dans son nom."""
+    sel = (f.selection or "").strip().lower()
+    if f.market_type in _BINARY_MARKETS:
+        return sel in _NEGATIVE_SELECTIONS
+    if f.market_type in _OVER_UNDER_MARKETS:
+        return sel in _UNDER_SELECTIONS
+    return False
 
 
 def _p_both_score(dist: "ScoreDistribution", line: float = 0.5) -> float:
@@ -1038,16 +1055,16 @@ def _p_both_score(dist: "ScoreDistribution", line: float = 0.5) -> float:
 
         P(les deux marquent) = 1 − P(dom = 0) − P(ext = 0) + P(0–0)
 
-    Deux raisons de passer par `M` plutôt que par deux Poisson indépendantes :
+    Pourquoi passer par `M` plutôt que par deux Poisson indépendantes sur les
+    buts/match des fiches d'équipe : `M` porte les λ DU MATCH (attaque contre
+    défense, gardien, alignement…) et la correction de marge τ ajustée à
+    l'entraînement. L'ancienne heuristique donnait ~90 % à tous les matchs.
 
-    1. **La corrélation.** Les deux λ viennent du même match ; un match fermé
-       déprime les deux. Les supposer indépendantes surestime le côté « oui ».
-       `M` porte en plus la correction de marge τ ajustée à l'entraînement.
-    2. **La sur-dispersion.** Les buts par équipe-match sont plus dispersés
-       qu'une Poisson : avec λ = 3.0, Poisson donne 5 % de blanchissages là où
-       la NHL en compte ~8.5 %. Le produit de deux Poisson indépendantes fixait
-       donc le marché à ~90 % pour TOUS les matchs — le chiffre que l'UI
-       affichait quelle que soit l'affiche.
+    (Ce commentaire invoquait aussi une « sur-dispersion » — ~8,5 % de
+    blanchissages contre 5 % en Poisson. Les mesures du projet disent le
+    contraire : variance/moyenne ≈ 1 sur 40 604 matchs (`score_model.py`) et
+    4,98 % de blanchissages par équipe-match (`prediction/scoreModel.ts`).
+    Corrigé le 2026-10-03, ml/INCOHERENCES_ML.md §19.)
 
     La prolongation ne change rien : un 0–0 après 60 minutes se termine 1–0,
     donc une équipe reste blanchie de toute façon. La formule vaut pour le
@@ -1102,7 +1119,16 @@ def _skellam_lead(lam_s: float, lam_o: float) -> tuple[float, float]:
 
 # Part CUMULÉE des buts d'un match à la fin de chaque période (moyennes NHL,
 # mêmes constantes que `PERIOD_DIST` côté Node).
-_PERIOD_CUM = {1: 0.305, 2: 0.67}
+# Part des buts RÉGLEMENTAIRES marqués dans chaque période — UNE source pour
+# tous les marchés de période (ml/INCOHERENCES_ML.md §16). Ce service en
+# avait trois : 0,305 / 0,365 / 0,33 pour « qui mène », 0,317 / 0,367 / 0,317
+# (λ/3 × 0,95 / 1,10 / 0,95) pour les totaux par période, et trois tiers égaux
+# pour « période la plus prolifique ». Valeurs NHL de `PERIOD_DIST`
+# (`nhlPredictions.ts`), les mêmes côté Node : la 2e période marque le plus
+# (changement long), la 3e un peu moins (fermeture du jeu, compensée en partie
+# par les filets déserts).
+_PERIOD_SHARE = (0.305, 0.365, 0.330)
+_PERIOD_CUM = {1: _PERIOD_SHARE[0], 2: _PERIOD_SHARE[0] + _PERIOD_SHARE[1]}
 
 
 # ── Écart de victoire / période la plus prolifique ────────────────────────────
@@ -1184,25 +1210,29 @@ def _parse_period(selection: str | None) -> str | None:
     return None
 
 
-def _p_highest_period(dist: "ScoreDistribution", period: str) -> float:
-    """P(la période demandée est la plus prolifique du match).
+def _p_highest_period_total(total_lam: float, period: str) -> float:
+    """P(la période demandée a STRICTEMENT le plus de buts), ou P(égalité en
+    tête) pour `tie`, à partir des buts réglementaires attendus du match.
 
-    Les trois périodes sont supposées ÉQUIVALENTES, faute de données par
-    période. C'est délibérément conservateur : la NHL marque un peu plus au 3e
-    (fatigue, filets déserts, jeu ouvert par le score), mais inventer un
-    coefficient d'asymétrie reproduirait exactement le problème qu'on corrige.
-    Conséquence assumée : les trois périodes sortent au même prix, et l'égalité
-    est fréquente — ce qui est vrai.
+    Chaque période reçoit sa part mesurée (`_PERIOD_SHARE`) — la 2e sort donc
+    un peu plus souvent en tête. Règlement (`settlement.service.ts`) : buts
+    réglementaires seulement, égalité en tête = perdu pour P1/P2/P3.
     """
-    lam = (dist.lam_home + dist.lam_away) / 3.0
-    pmf = [poisson_pmf(n, lam) for n in range(0, 16)]
-    strict = 0.0
-    for n, pn in enumerate(pmf):
-        below = sum(pmf[:n])
-        strict += pn * below * below      # les DEUX autres périodes sous n
+    pmfs = [[poisson_pmf(n, total_lam * sh) for n in range(16)] for sh in _PERIOD_SHARE]
+    cdf_below = [[sum(pm[:n]) for n in range(16)] for pm in pmfs]   # P(X < n)
+
+    def strict(i: int) -> float:
+        a, b = [j for j in range(3) if j != i]
+        return sum(pmfs[i][n] * cdf_below[a][n] * cdf_below[b][n] for n in range(16))
+
     if period == "tie":
-        return clamp(1.0 - 3.0 * strict, 0.02, 0.98)
-    return clamp(strict, 0.02, 0.98)
+        return clamp(1.0 - sum(strict(i) for i in range(3)), 0.02, 0.98)
+    return clamp(strict({"P1": 0, "P2": 1, "P3": 2}[period]), 0.02, 0.98)
+
+
+def _p_highest_period(dist: "ScoreDistribution", period: str) -> float:
+    """P(la période demandée est la plus prolifique du match)."""
+    return _p_highest_period_total(dist.lam_home + dist.lam_away, period)
 
 
 def _has_evidence(team: str | None) -> bool:
@@ -1416,9 +1446,13 @@ def _apply_score_model(market: str, f: GameFeatures,
         # lui par construction. L'heuristique `exp(-lam_away)` qu'il remplace
         # ignorait la défense d'en face et pouvait annoncer 10 % de blanchissage
         # sur un match où BTTS disait 92 % — soit au plus 8 % possible.
-        p = float(dist.M[:, 0].sum())
+        # Réglé sur le score FINAL : un 0-0 après 60 minutes que l'adversaire
+        # gagne en prolongation ou en fusillade finit 0-1 — plus de blanchissage
+        # (ml/INCOHERENCES_ML.md §18). Seule la part gagnée par le sujet reste.
+        p = float(dist.M[:, 0].sum()) - float(dist.M[0, 0]) * (1.0 - dist.p_ot_home)
         return p, 0.88, (f"P(l'adversaire ne marque pas) = {int(p * 100)}%, "
-                         f"lu sur la matrice jointe (cohérent avec « les deux marquent »).")
+                         f"score final lu sur la matrice jointe (un 0-0 perdu en "
+                         f"prolongation n'est pas un blanchissage).")
 
     if market == "winning_margin":
         bucket = _parse_margin_bucket(f.selection, f.subject_is_home)
@@ -1433,9 +1467,18 @@ def _apply_score_model(market: str, f: GameFeatures,
         if period is None:
             return None
         p = _p_highest_period(dist, period)
-        return p, 0.60, (f"P({period} est la période la plus prolifique) = {int(p*100)}%. "
-                         f"Modèle à trois périodes équivalentes — le service n'a pas "
-                         f"de données par période.")
+        return p, 0.60, (f"P({period} est la période la plus prolifique) = {int(p*100)}% — "
+                         f"buts réglementaires λ={lh + la:.2f} répartis "
+                         f"{_PERIOD_SHARE[0]:.0%}/{_PERIOD_SHARE[1]:.0%}/{_PERIOD_SHARE[2]:.0%}.")
+
+    pt = re.match(r"^period([123])_total_goals$", market)
+    if pt:
+        n = int(pt.group(1))
+        line = f.line if f.line is not None else 1.5
+        lam_p = (lh + la) * _PERIOD_SHARE[n - 1]
+        p = poisson_over(line, lam_p)
+        return p, 0.74, (f"Buts de la période {n} : λ={lam_p:.2f} ({_PERIOD_SHARE[n - 1]:.1%} des "
+                         f"buts réglementaires du modèle de score) → OVER {line} : {int(p * 100)}%.")
 
     return None
 
@@ -1628,34 +1671,31 @@ def _apply_market(
         period = _parse_period(f.selection)
         if period is None:
             raise _NoEstimate(market)
-        lam_p = total_lam / 3.0
-        pmf = [poisson_pmf(n, lam_p) for n in range(0, 16)]
-        strict = sum(pn * sum(pmf[:n]) ** 2 for n, pn in enumerate(pmf))
-        prob = clamp(1.0 - 3.0 * strict if period == "tie" else strict, 0.02, 0.98)
+        prob = _p_highest_period_total(total_lam, period)
         conf = 0.55
-        expl = (f"P({period} la plus prolifique) = {int(prob*100)}% — trois périodes "
-                f"supposées équivalentes, faute de données par période.")
+        expl = (f"P({period} la plus prolifique) = {int(prob*100)}% — buts λ={total_lam:.2f} "
+                f"répartis selon les parts mesurées par période.")
 
     elif market == "period1_total_goals":
         p1_line = f.line if f.line is not None else 1.5
-        p1_lam = total_lam / 3.0 * 0.95
+        p1_lam = total_lam * _PERIOD_SHARE[0]
         prob = clamp(poisson_over(p1_line, p1_lam), 0.05, 0.95)
         conf = 0.74
-        expl = f"Poisson P1 λ={p1_lam:.2f} → OVER {p1_line}: {int(prob*100)}%."
+        expl = f"Poisson P1 λ={p1_lam:.2f} ({_PERIOD_SHARE[0]:.1%} des buts) → OVER {p1_line}: {int(prob*100)}%."
 
     elif market == "period2_total_goals":
         p2_line = f.line if f.line is not None else 1.5
-        p2_lam = total_lam / 3.0 * 1.10   # P2 slightly higher scoring
+        p2_lam = total_lam * _PERIOD_SHARE[1]
         prob = clamp(poisson_over(p2_line, p2_lam), 0.05, 0.95)
         conf = 0.74
-        expl = f"Poisson P2 λ={p2_lam:.2f} (+10% vs avg) → OVER {p2_line}: {int(prob*100)}%."
+        expl = f"Poisson P2 λ={p2_lam:.2f} ({_PERIOD_SHARE[1]:.1%} des buts) → OVER {p2_line}: {int(prob*100)}%."
 
     elif market == "period3_total_goals":
         p3_line = f.line if f.line is not None else 1.5
-        p3_lam = total_lam / 3.0 * 0.95
+        p3_lam = total_lam * _PERIOD_SHARE[2]
         prob = clamp(poisson_over(p3_line, p3_lam), 0.05, 0.95)
         conf = 0.72
-        expl = f"Poisson P3 λ={p3_lam:.2f} → OVER {p3_line}: {int(prob*100)}%."
+        expl = f"Poisson P3 λ={p3_lam:.2f} ({_PERIOD_SHARE[2]:.1%} des buts) → OVER {p3_line}: {int(prob*100)}%."
 
     elif market == "winning_margin":
         # Sans modèle de score il n'y a pas de loi jointe d'où tirer un seau
@@ -2495,7 +2535,9 @@ def _price_game_market(ctx: dict, f: GameFeatures) -> MLResponse:
     #          complément est pris APRÈS `_apply_market`, donc après son clamp.
     if _is_negative_side(f):
         prob = 1.0 - prob
-        explanation = f"Côté « non » = 100 − P(oui). {explanation}"
+        explanation = (f"Côté « moins » = 100 − P(plus). {explanation}"
+                       if f.market_type in _OVER_UNDER_MARKETS
+                       else f"Côté « non » = 100 − P(oui). {explanation}")
 
     # 5. Incertitude d'estimation (P4) — σ sur le marché effectivement servi,
     #    lu sur les membres de l'ensemble vus du côté du sujet.
@@ -2787,7 +2829,11 @@ def health():
             # Les totaux sont pricés depuis la distribution du modèle de score
             # (S2 a retiré totals_model.json) ; sans lui, heuristique déclarée.
             "totals": "Modèle de score (Poisson empilé)" if _xgb_score is not None else "Poisson (fallback)",
-            "player": "Poisson Distribution",
+            # Le modèle joueur entraîné sert les cadences du paquet de match ;
+            # `/predict/player` reste une loi de Poisson / oui-non sur la
+            # cadence envoyée par le serveur.
+            "player": ("XGBoost count:poisson (cadences du paquet) + Poisson (/predict/player)"
+                       if _player_models else "Poisson Distribution"),
             "team":   "Bayesian Prior",
         },
         "trained_models_loaded": {

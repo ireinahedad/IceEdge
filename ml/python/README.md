@@ -1,72 +1,49 @@
-# ArakIce ML Service
+# Service ML d'IceEdge
 
-Standalone FastAPI service. Node.js calls it; it replies with ML-generated probabilities.
+Service FastAPI autonome. Le backend Node l'appelle ; il répond des
+probabilités pour les paris NHL. **Explication complète de chaque calcul :
+[`../EXPLICATION_ML.md`](../EXPLICATION_ML.md)** ; points connus à corriger :
+[`../INCOHERENCES_ML.md`](../INCOHERENCES_ML.md).
 
-## Setup
+## Lancer en local
 
 ```bash
-cd server/python
+cd ml/python
 pip install -r requirements.txt
-python ml_service.py
-# → runs on http://localhost:8000
+python ml_service.py          # → http://localhost:8000 (docs : /docs hors production)
 ```
 
-## Endpoints
+Les modèles sont lus dans `ml/models/` (variable `MODELS_DIR` dans l'image
+Docker, cf. `ml/Dockerfile`).
 
-| Method | Path | Body |
+## Routes
+
+| Méthode | Chemin | Rôle |
 |---|---|---|
-| POST | `/predict/game` | `GameFeatures` |
-| POST | `/predict/player` | `PlayerPropFeatures` |
-| POST | `/predict/team` | `TeamFuturesFeatures` |
-| GET | `/health` | — |
-| GET | `/features` | — |
+| POST | `/predict/game/bundle` | Tous les marchés d'un match en une requête (+ cadences du modèle joueur) — la route utilisée par les pages de match, les value bets et les best bets |
+| POST | `/predict/game` | Un seul marché d'un match |
+| POST | `/predict/player` | Prop joueur : Poisson (ou oui/non pour victoire / blanchissage) sur la cadence envoyée par le serveur |
+| POST | `/predict/team` | Futures d'équipe (rang de conférence + ajustements) |
+| GET | `/reports` | Rapports d'entraînement et fraîcheur des artefacts |
+| GET | `/features` | Schéma des entrées |
+| GET | `/health`, `/health/ready` | Sondes (ouvertes) |
 
-Interactive docs: http://localhost:8000/docs (disabled once deployed).
+## Contrôle d'accès
 
-## Access control
+`/predict/*`, `/features` et `/reports` exigent l'en-tête `X-ML-Token` égal à
+`ML_API_TOKEN`. En local, sans `ML_API_TOKEN`, le contrôle est désactivé. En
+environnement déployé (`ENVIRONMENT=production` ou Railway), le service
+**refuse de démarrer** sans jeton — `ML_AUTH_DISABLED=true` seulement si le
+service n'a aucun domaine public. `ML_CORS_ORIGINS` (virgules) autorise des
+origines navigateur ; aucune par défaut. Voir `DEPLOYMENT.md` §3.
 
-`/predict/*` and `/features` require the `X-ML-Token` header to match
-`ML_API_TOKEN`; `/health` and `/health/ready` stay open for platform probes.
-Locally, leaving `ML_API_TOKEN` unset skips the check. In a deployed
-environment (`ENVIRONMENT=production` or Railway) the service **refuses to
-start** without a token — set `ML_AUTH_DISABLED=true` only if the service has no
-public domain at all. `ML_CORS_ORIGINS` (comma-separated) opts specific browser
-origins in; none are allowed by default, since the Node backend proxies
-everything. See `DEPLOYMENT.md` §3.
+## Mettre à jour les données et les modèles
 
 ```bash
-curl -X POST http://localhost:8000/predict/game \
-  -H "Content-Type: application/json" -H "X-ML-Token: $ML_API_TOKEN" -d '{...}'
+python refresh_data.py                        # chaque semaine : état d'inférence + ELO (mêmes modèles)
+python build_dataset.py && python train_score.py && python train.py && python train_player.py   # réentraînement
+python backtest_walkforward.py --correction --write-layer    # couche de correction (si ADOPTER)
+python backtest_walkforward.py --served       # règles des value bets sur la chaîne servie
 ```
 
-## Training a real model
-
-Replace the hand-tuned logistic coefficients in `ml_service.py` with a trained sklearn model:
-
-```python
-# In a separate train.py:
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import GradientBoostingClassifier
-import pickle, pandas as pd
-
-df = pd.read_csv("historical_nhl_games.csv")  # collect from NHL API
-X = df[FEATURE_COLS]
-y = df["home_win"]
-
-model = GradientBoostingClassifier(n_estimators=200)
-model.fit(X, y)
-
-pickle.dump(model, open("model.pkl", "wb"))
-```
-
-Then load in `ml_service.py`:
-```python
-model = pickle.load(open("model.pkl", "rb"))
-
-@app.post("/predict/game")
-def predict_game(f: GameFeatures):
-    X = [[f.home_win_pct, f.away_win_pct, ...]]
-    prob = model.predict_proba(X)[0][1]
-    importances = model.feature_importances_  # GBM
-    ...
-```
+Le détail de ce que fait chaque script est dans `../EXPLICATION_ML.md` §9 et §11.

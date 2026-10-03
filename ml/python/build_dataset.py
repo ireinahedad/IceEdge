@@ -906,10 +906,19 @@ def main():
         if h in df.columns and a in df.columns:
             df[f"{c}_diff"] = df[h].fillna(0).astype(float) - df[a].fillna(0).astype(float)
 
-    # Filtre début de saison : minimum de matchs joués
+    # Filtre « premiers matchs » : `team_gp` compte les matchs de l'équipe
+    # DEPUIS 2008, toutes saisons confondues (cf. build_team_features) — ce
+    # filtre n'écarte donc que les MIN_GP tout premiers matchs de l'historique
+    # de chaque franchise (2008, VGK 2017, SEA 2021), là où les moyennes
+    # mobiles n'existent pas encore. Il n'écarte PAS les débuts de saison, et
+    # c'est voulu : le service doit prédire les matchs d'ouverture, avec des
+    # moyennes encore portées par la saison précédente — le modèle doit en
+    # avoir vu. (Commentaire corrigé le 2026-10-03, ml/INCOHERENCES_ML.md §8 :
+    # il annonçait un « filtre début de saison ».)
     before = len(df)
     df = df[(df["home_team_gp"] >= MIN_GP) & (df["away_team_gp"] >= MIN_GP)]
-    print(f"🧹 {before - len(df)} matchs filtrés (< {MIN_GP} GP), {len(df)} restants")
+    print(f"🧹 {before - len(df)} matchs filtrés (< {MIN_GP} matchs d'historique de "
+          f"franchise), {len(df)} restants")
 
     os.makedirs(MODELS_DIR, exist_ok=True)
     df.to_csv(f"{DATA_DIR}/nhl_games_v4.csv", index=False)

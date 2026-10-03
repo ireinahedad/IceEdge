@@ -3725,6 +3725,9 @@ def run_correction(df, seasons, search_trials: int, use_cache: bool = True):
                     "std": [round(float(x), 6) for x in sd], "intercept": round(float(b[0]), 6),
                     "coef_logit_p": round(float(b[1]), 6),
                     "coef": [round(float(x), 6) for x in b[2:]],
+                    # z de chaque coefficient, dans l'ordre de `z_order` :
+                    # logit p d'abord, puis les features.
+                    "z_order": ["logit_p"] + CORRECTION_FEATURES,
                     "z": [round(float(x / e), 2) for x, e in zip(b[1:], se[1:])],
                     "n_games": int(len(y_all)), "seasons": [int(x) for x in ks]}
     print("\n   Couche finale (toutes saisons) : const %+.4f, logit p x%.4f" % (b[0], b[1]))

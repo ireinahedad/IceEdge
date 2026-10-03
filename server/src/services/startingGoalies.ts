@@ -3,9 +3,14 @@
 // ============================================================
 // Le gardien partant confirmé n'est pas exposé de façon fiable/stable par une
 // API gratuite avant le match (Daily Faceoff = Cloudflare + build-id volatil).
-// On garde donc une petite table éditable à la main : elle ne sert qu'aux
-// EXCEPTIONS (backup qui part, n°1 blessé). Sans entrée, le modèle retombe sur
-// sa moyenne de gardiens pondérée par l'usage récent (inference_state.json).
+// On garde donc une petite table éditable à la main. Elle sert À DEUX CHOSES :
+//   • le modèle — le partant saisi remplace la moyenne de gardiens pondérée par
+//     l'usage récent (inference_state.json), qu'il utilise sans entrée ;
+//   • les VALUE BETS — un match n'en a que si les DEUX partants sont saisis
+//     (`valueBets.service.ts`). Ce n'est donc pas une table d'exceptions : sans
+//     saisie quotidienne, aucun value bet.
+// (Corrigé le 2026-10-03, ml/INCOHERENCES_ML.md §19 : l'en-tête disait
+// « elle ne sert qu'aux EXCEPTIONS ».)
 //
 // ── Source : la base, plus `ml/data/starting_goalies.json` ──────────────────
 // Le chemin `cwd/../ml/data` n'existe pas dans le conteneur (le Dockerfile ne

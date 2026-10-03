@@ -25,7 +25,7 @@
 | 5 | 🟠 | Value bets : la bande 2-6 % a été mesurée sur un autre modèle que celui servi — **mesure prête, à lancer** (`--served`) | `valueBets.service.ts`, `backtest_walkforward.py` |
 | 6 | ✅ | ~~Couche de correction appliquée à la victoire seulement → tuiles qui ne s'additionnent plus~~ — corrigé le 2026-10-03 (voir la note puck line) | `ml_service.py`, `score_model.py` |
 | 7 | 🟠 | Absences : définies différemment à l'entraînement et au service | `build_dataset.py`, `ml_service.py` |
-| 8 | 🟠 | Le filtre « début de saison » (`MIN_GP`) ne filtre presque rien | `build_dataset.py` |
+| 8 | ✅ | ~~Le filtre « début de saison » (`MIN_GP`) ne filtre presque rien~~ — commentaire corrigé le 2026-10-03 (comportement gardé) | `build_dataset.py` |
 | 9 | 🟠 | τ, p_ot et déciles ajustés sur des λ que le code lui-même juge sur-ajustés | `train_score.py` |
 | 10 | ✅ | ~~Classifieur : cotes d'ouverture ≠ clôture à l'entraînement, identiques au service ; commentaire « blend jamais actif » faux~~ — corrigé le 2026-10-03 | `train.py`, `ml_service.py` |
 | 11 | ✅ | ~~« Best bets » : classement par probabilité (pas par valeur), règles et ML mélangés, autre modèle joueur~~ — corrigé le 2026-10-03 | `bestBets.service.ts` |
@@ -33,10 +33,12 @@
 | 13 | ✅ | ~~Premier buteur : cadence du modèle joueur ÷ buts de match des règles~~ — corrigé le 2026-10-03 | `playerRates.ts` |
 | 14 | 🟠 | Modèle joueur : jointure par `gameId` alors que `build_dataset` dit que les identifiants diffèrent (**à vérifier**) | `train_player.py`, `build_dataset.py` |
 | 15 | ✅ | ~~ELO entre deux saisons : 30 % de régression à l'entraînement, 33 % au service~~ — corrigé le 2026-10-03 | `build_dataset.py`, `ml_service.py` |
-| 16 | 🟡 | Trois découpages différents des buts par période dans le même service | `ml_service.py` |
-| 17 | 🟡 | Périodes 1-2 sans correction τ, période 3 avec | `ml_service.py` |
-| 18 | 🟡 | Blanchissage légèrement surestimé (nul 0-0 perdu en prolongation) | `ml_service.py` |
-| 19 | 🟡 | Commentaires/documentation faux ou périmés | divers |
+| 16 | ✅ | ~~Trois découpages différents des buts par période dans le même service~~ — corrigé le 2026-10-03 | `ml_service.py`, `marginPeriods.ts` |
+| 17 | ✅ | ~~Périodes 1-2 sans correction τ, période 3 avec~~ — pas une incohérence (justifié, 2026-10-03) | `ml_service.py` |
+| 18 | ✅ | ~~Blanchissage légèrement surestimé (nul 0-0 perdu en prolongation)~~ — corrigé le 2026-10-03 | `ml_service.py` |
+| 19 | ✅ | ~~Commentaires/documentation faux ou périmés~~ — corrigé le 2026-10-03 | divers |
+| 20 | ✅ | Trouvé en corrigeant #16 : la tuile « Moins de X » d'un total d'ÉQUIPE affichait le même % que « Plus de X » — corrigé le 2026-10-03 | `ml_service.py` |
+| 21 | ✅ | Trouvé en corrigeant #16 : « période la plus prolifique » restait en attente pour toujours sur une égalité en tête — corrigé le 2026-10-03 | `settlement.service.ts` |
 
 ---
 
@@ -233,7 +235,14 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 
 ---
 
-## 🟠 8. Le filtre « début de saison » (`MIN_GP`) ne filtre presque rien
+## ✅ 8. Le filtre « début de saison » (`MIN_GP`) ne filtre presque rien
+
+> **Corrigé le 2026-10-03 (commentaire).** Le comportement est GARDÉ : le
+> service doit prédire les matchs d'ouverture, avec des moyennes encore
+> portées par la saison précédente, donc le modèle doit en avoir vu. Le
+> commentaire et le message de `build_dataset.py` disent maintenant ce que le
+> filtre fait réellement (les 5 premiers matchs de l'historique d'une
+> franchise).
 
 **Où** — `ml/python/build_dataset.py:237` (`"team_gp": np.arange(len(g))`) et l.906-909.
 
@@ -374,7 +383,15 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 
 ---
 
-## 🟡 16. Trois découpages différents des buts par période dans le même service
+## ✅ 16. Trois découpages différents des buts par période dans le même service
+
+> **Corrigé le 2026-10-03.** Une seule constante, `_PERIOD_SHARE` = 30,5 % /
+> 36,5 % / 33,0 % (les valeurs de `PERIOD_DIST` côté Node), pour « qui mène »,
+> les totaux par période et « période la plus prolifique », côté service ET
+> côté règles (`marginPeriods.ts`, qui avait aussi des tiers égaux pour ce
+> marché). Les totaux par période se calculent maintenant sur les λ du modèle
+> de score (et non plus sur les buts/match des fiches d'équipe). Sur COL–SJS :
+> P1 20 %, P2 31 %, P3 24 %, égalité 25 % (somme 100 %).
 
 **Où** — `ml/python/ml_service.py` :
 - l.1035 `_PERIOD_CUM = {1: 0.305, 2: 0.67}` → P1 30,5 %, P2 36,5 %, P3 33 % (qui mène après P1/P2) ;
@@ -383,15 +400,34 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 
 **Correction.** Une seule constante partagée, mesurée sur `fetch_live_goals.py` (les buts horodatés existent), utilisée par les trois marchés.
 
-## 🟡 17. Périodes 1-2 sans correction τ, période 3 avec
+## ✅ 17. Périodes 1-2 sans correction τ, période 3 avec
+
+> **Pas une incohérence — rien changé (2026-10-03).** τ corrige des effets de
+> FIN de match (gardien retiré, filet désert, égalisations tardives) : ils
+> n'existent qu'en 3e période. L'appliquer à « qui mène après la 1re / la 2e »
+> serait faux ; la différence de traitement est la bonne.
 
 **Où** — `ml/python/ml_service.py:1262-1275`. P(mène / égalité après P1, P2) utilise deux Poisson indépendantes (`_skellam_lead`) ; après P3, la matrice corrigée par τ. Les trois cartes de période ne sortent donc pas du même modèle (l'égalité après P2 peut sembler incohérente avec l'égalité après P3). Effet faible.
 
-## 🟡 18. Blanchissage légèrement surestimé
+## ✅ 18. Blanchissage légèrement surestimé
+
+> **Corrigé le 2026-10-03.** Le règlement lit le score FINAL (but de
+> prolongation ou de fusillade compris) : P = Σ M[·][0] − M[0][0] × (1 − p_ot).
+> Blanchissage domicile + visiteur = 1 − « les deux marquent » (au plancher
+> d'affichage de 2 % près).
 
 **Où** — `ml/python/ml_service.py:1349` : `clean_sheet = Σ M[:, 0]` (l'adversaire à 0 après 60 min). Un 0-0 après 60 minutes que l'adversaire gagne en prolongation n'est plus un blanchissage → surestimation de P(0-0) × (1 − p_ot), environ 0,1-0,2 point. Conséquence : blanchissage domicile + blanchissage visiteur ≠ 1 − « les deux marquent ». Correction : soustraire `M[0,0] × (1 − p_ot)` (selon la règle de règlement des fusillades chez le livre).
 
-## 🟡 19. Commentaires et documentation faux ou périmés
+## ✅ 19. Commentaires et documentation faux ou périmés
+
+> **Corrigé le 2026-10-03**, ligne par ligne : commentaire de `_p_both_score`
+> réécrit ; `ml/python/README.md` réécrit ; `/health` décrit le modèle joueur
+> chargé ; `MLResponse` et `featureEngineering.ts` corrigés avec #4 et #10 ;
+> en-tête de `startingGoalies.ts` corrigé ; `correction_layer.json` porte
+> `z_order` (écrit aussi par `--correction`) ; les champs de voyage sont
+> marqués « sans effet » dans `GameFeatures`. Taux de prolongation : laissés
+> tels quels — trois échantillons différents (entraînement complet, 2022-25,
+> tranche de test), chacun daté là où il est utilisé.
 
 | Où | Problème |
 |---|---|
@@ -406,6 +442,24 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 | Voyage | Calculé dans le dataset et accepté par l'API mais utilisé par **aucun** modèle — à documenter comme tel dans `GameFeatures` ou à retirer. |
 
 ---
+
+## ✅ 20. Total d'équipe : « Moins de X » affichait le % de « Plus de X »
+
+Trouvé le 2026-10-03 en corrigeant #16, et corrigé. Les tuiles « Under » des
+totaux d'équipe envoient `selection: "under"` sur le marché `team_total_goals`,
+dont le nom ne porte pas le côté ; le service ne connaissait que le côté
+« non » des marchés oui/non et rendait donc la probabilité de « Plus ».
+Mesuré sur COL–SJS : 79 % / 79 %. `_is_negative_side` prend désormais le
+complément pour `selection = under` sur `team_total_goals`, `total_goals` et
+les totaux par période : 79 % / 21 %.
+
+## ✅ 21. « Période la plus prolifique » en attente pour toujours sur une égalité
+
+Trouvé le 2026-10-03 en corrigeant #16, et corrigé. Sur une égalité en tête
+(ou 0-0-0), `settlement.service.ts` rendait `unknown` : la jambe restait en
+attente indéfiniment. Elle est maintenant **perdue** pour P1/P2/P3 — c'est ce
+que le prix annonce (« cette période a STRICTEMENT le plus de buts »,
+l'égalité étant l'issue `tie`, gagnante dans ce cas).
 
 ## Ordre de correction suggéré
 
