@@ -22,7 +22,7 @@
 | 2 | ✅ | ~~Repos, gardiens et absents calculés pour AUJOURD'HUI, pas pour la date du match~~ — corrigé le 2026-10-02 | `restTravel.ts`, `featureEngineering.ts` |
 | 3 | ✅ | ~~Noms de gardiens et d'absents comparés sans retirer les accents~~ — corrigé le 2026-10-02 | `ml_service.py` |
 | 4 | ✅ | ~~Value bets : edge calculé sur une probabilité arrondie à l'entier~~ — corrigé le 2026-10-02 | `ml_service.py`, `valueBets.service.ts` |
-| 5 | 🔴 | Value bets : la bande 2-6 % a été mesurée sur un autre modèle que celui servi | `valueBets.service.ts`, `backtest_walkforward.py` |
+| 5 | 🟠 | Value bets : la bande 2-6 % a été mesurée sur un autre modèle que celui servi — **mesure prête, à lancer** (`--served`) | `valueBets.service.ts`, `backtest_walkforward.py` |
 | 6 | ✅ | ~~Couche de correction appliquée à la victoire seulement → tuiles qui ne s'additionnent plus~~ — corrigé le 2026-10-03 (voir la note puck line) | `ml_service.py`, `score_model.py` |
 | 7 | 🟠 | Absences : définies différemment à l'entraînement et au service | `build_dataset.py`, `ml_service.py` |
 | 8 | 🟠 | Le filtre « début de saison » (`MIN_GP`) ne filtre presque rien | `build_dataset.py` |
@@ -159,6 +159,30 @@ Alors que, dans le même fichier, `_name_key` (l.1901) retire bien les accents p
 **Pourquoi c'est un problème.** Un mélange avec le marché a des edges beaucoup plus petits et différemment répartis qu'un modèle seul : un edge de 5 % n'a pas le même sens dans les deux cas. Le plafond de 6 % (« au-delà, info manquée ») et le plancher de 2 % ne sont donc pas validés pour le modèle effectivement servi. Le rapport CLV (`backtest_clv_report.json`) est plus proche de l'usage réel (prix d'ouverture) — à vérifier quel modèle il utilise exactement.
 
 **Correction.** Rejouer le walk-forward ROI/CLV avec exactement la chaîne servie (modèle de score walk-forward → couche de correction walk-forward → edge contre le prix d'ouverture/du moment, même livre), puis refixer la bande à partir de ce résultat. Corriger le commentaire de `valueBets.service.ts`.
+
+> **Mesure préparée le 2026-10-03 : `python backtest_walkforward.py --served`**
+> (dans `ml/python`, avec les CSV de `ml/data/` et `odds_snapshots_hist.csv`).
+> Elle rejoue la chaîne servie saison par saison, sans regarder l'avenir :
+> modèle de score du fold → couche de correction walk-forward (variante C) →
+> λ recalés (#6) → edge contre le prix du MATIN (ouverture SBRO, ou premier
+> snapshot API de 15:25Z), règle en service (moneyline 2-6 %, puck line −1.5
+> ≥ 4 %, EV ≥ 0). Elle mesure ROI, CLV vers la clôture et CLV net du placebo,
+> pour le modèle servi et pour le modèle brut. Rapport :
+> `ml/models/served_value_bets_report.json`.
+>
+> **Critère fixé avant le run** (par marché et par source, modèle servi) :
+> moins de 200 paris moneyline / 100 puck line → NON TRANCHABLE ;
+> ROI z ≤ −2 ou CLV net z < 0 → REJETÉE ; CLV net z ≥ 2 → CONFIRMÉE ;
+> sinon NON TRANCHABLE. La source qui décide est The Odds API (les prix de
+> production) ; SBRO sert de contexte. La « meilleure bande » de la grille est
+> choisie sur les mêmes données : c'est une piste à confirmer sur la saison
+> 2026-27, pas une règle à adopter sur ce seul run.
+>
+> Testé sur un jeu synthétique (le mode tourne de bout en bout et écrit son
+> rapport) ; pas encore lancé sur les vraies données, qui ne sont que sur le
+> poste local. Durée attendue : quelques minutes avec le cache
+> d'hyperparamètres (`fold_params_cache.json`), plus long s'il est invalidé.
+
 
 ---
 

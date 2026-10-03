@@ -707,6 +707,7 @@ considérer comme un pari sur un petit avantage non prouvé.
 | Réentraînement (mensuel) | `python build_dataset.py && python train_score.py && python train.py && python train_player.py` | Nouveaux modèles + rapports. |
 | Couche de correction | `python backtest_walkforward.py --correction --write-layer` | Réécrit `correction_layer.json` seulement si le verdict est « ADOPTER ». |
 | Contrôles | `python backtest.py`, `python backtest_walkforward.py [--clv|--derived|--market-gap]` | Rapports dans `ml/models/*_report.json`. |
+| Règles des value bets | `python backtest_walkforward.py --served` | Rejoue la chaîne servie (modèle de score + correction + λ recalés) contre le prix du matin, avec la règle en service : ROI, CLV, placebo, verdict sur la règle et grille de bandes → `served_value_bets_report.json`. |
 
 ---
 

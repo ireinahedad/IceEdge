@@ -90,6 +90,7 @@ import xgboost as xgb
 import train as T   # réutilise select_features, fit_logistic, _logit, métriques
 import train_score as TS
 from score_model import (ScoreDistribution, ScoreEnsemble, fit_margin_correction,
+                         lambdas_for_home_win, p_ot_for, read_ot_model,
                          stretch_lambdas, uncertainty_haircut)
 
 DATA   = "../data/nhl_games_v4.csv"
@@ -3732,6 +3733,298 @@ def run_correction(df, seasons, search_trials: int, use_cache: bool = True):
     return out
 
 
+# ── Value bets : la chaîne SERVIE, mesurée telle quelle (2026-10-03) ─────────
+#
+# POURQUOI CE MODE (ml/INCOHERENCES_ML.md §5). La bande « edge ∈ [2 %, 6 %] »
+# des value bets moneyline vient du mode par défaut de ce fichier, qui évalue
+# le CLASSIFIEUR mélangé à la cote de CLÔTURE. Le service, lui, mise sur :
+#
+#   modèle de score (fold) → couche de correction (walk-forward) → λ recalés
+#   pour que la matrice donne la victoire corrigée (`lambdas_for_home_win`,
+#   comme `ml_service._align_distribution`) → edge contre le prix du MATIN,
+#   dé-viggé chez le même livre → règle : moneyline edge ∈ [2 %, 6 %],
+#   puck line jambe −1.5 edge ≥ 4 %, et EV = p × cote − 1 ≥ 0.
+#
+# Ce mode rejoue exactement cette chaîne, saison par saison, sans jamais
+# regarder l'avenir :
+#   • modèle de score, τ et prolongation : ajustés sur les saisons < S ;
+#   • couche de correction (variante C de `--correction`) : ajustée sur les
+#     prédictions hors échantillon des saisons < S (au moins RECAL_MIN_SEASONS) ;
+#   • prix « du matin » : ouverture SBRO, ou premier snapshot de la série
+#     The Odds API (15:25Z) ; CLV = clôture − ouverture, jugé contre le
+#     placebo de `_clv_placebo` (sans lui, le CLV d'une sélection sur l'edge est
+#     de la régression vers la moyenne) ;
+#   • puck line SBRO : un seul prix par match → ROI seulement, pas de CLV.
+# Le modèle BRUT (sans correction, sans recalage) passe dans le même tuyau,
+# pour voir ce que la correction change.
+#
+# CRITÈRE, FIXÉ AVANT TOUT RUN — par marché et par source de prix, sur le
+# modèle SERVI, règle en service appliquée :
+#   • effectif < SERVED_MIN_N            → NON TRANCHABLE (trop peu de paris) ;
+#   • ROI z ≤ −2  OU  CLV net z < 0      → REJETÉE ;
+#   • CLV net z ≥ 2 (et ROI z > −2)      → CONFIRMÉE ;
+#   • sinon                              → NON TRANCHABLE.
+# La source qui décide est celle des prix de production (The Odds API) ; SBRO,
+# plus long mais d'un autre livre et d'un autre horaire, sert de contexte.
+# Une grille de bandes candidates est AUSSI calculée, et la meilleure (CLV net
+# z maximal, effectif suffisant, ROI z > −1) est signalée — mais elle est
+# choisie SUR LES MÊMES DONNÉES : c'est une piste à confirmer sur la saison
+# suivante, pas une règle à adopter sur ce seul run.
+
+SERVED_REPORT = f"{MODELS}/served_value_bets_report.json"
+SERVED_ML_BAND = (0.02, 0.06)          # valueBets.service.ts (VALUE_BET_MIN/MAX_EDGE)
+SERVED_PL_MIN = A2_EDGE                # règle A2 : jambe −1.5, edge ≥ 4 %
+SERVED_MIN_N = {"moneyline": 200, "puckline": 100}
+SERVED_GRID = {
+    "moneyline": [(lo, hi) for lo in (0.01, 0.02, 0.03, 0.04, 0.05)
+                  for hi in (0.04, 0.05, 0.06, 0.08, None) if hi is None or hi > lo],
+    "puckline": [(lo, hi) for lo in (0.02, 0.03, 0.04, 0.05, 0.06) for hi in (0.08, None)
+                 if hi is None or hi > lo],
+}
+
+
+def _served_fold(train_df, test_df, atk, dfn, params) -> dict:
+    """Modèle de score d'un fold, tel que servi : λ de la saison testée, τ et
+    prolongation (constante + logistique) ajustés sur le train du fold.
+    Même procédure que `_eval_v2`, sans γ (non adopté)."""
+    feats = TS.stacked_features(atk, dfn)
+    cut = int(len(train_df) * 0.85)
+    tr, cal = train_df.iloc[:cut].reset_index(drop=True), train_df.iloc[cut:].reset_index(drop=True)
+    m = xgb.train(params, TS.dm(TS.stack(tr, atk, dfn), feats), num_boost_round=700,
+                  evals=[(TS.dm(TS.stack(cal, atk, dfn), feats), "cal")],
+                  early_stopping_rounds=40, verbose_eval=False)
+    ot = train_df[train_df["went_to_ot"] == 1]
+    p_ot_home = float((ot["home_score"] > ot["away_score"]).mean()) if len(ot) else 0.5
+    lh_tr, la_tr = TS.lambdas_for(m, feats, TS.stack(train_df.reset_index(drop=True), atk, dfn),
+                                  len(train_df))
+    tau = fit_margin_correction(
+        (train_df["home_reg_score"] - train_df["away_reg_score"]).to_numpy(),
+        TS.expected_margin_pmf(lh_tr, la_tr))
+    ot_model = TS.fit_ot_model(train_df.reset_index(drop=True), lh_tr, la_tr, p_ot_home)
+    lh, la = TS.lambdas_for(m, feats, TS.stack(test_df.reset_index(drop=True), atk, dfn),
+                            len(test_df))
+    # Les mêmes garde-fous que le service (`read_ot_model`).
+    w = read_ot_model({"p_ot_model": ot_model}) if ot_model else None
+    return {"lh": np.asarray(lh, float), "la": np.asarray(la, float), "tau": tau,
+            "p_ot_fn": lambda h, a, _w=w, _d=p_ot_home: p_ot_for(_w, h, a, _d)}
+
+
+def _served_bets(dists, cur: pd.DataFrame, s: int, snaps: dict, tag: str) -> list:
+    """Paris possibles d'une saison, au format de `run_clv` (lisible par
+    `_clv_block` et `_clv_placebo`). `dec` = prix du MATIN (ouverture)."""
+    bets = []
+
+    def ok(*xs):
+        return all(x is not None and np.isfinite(x) for x in xs)
+
+    def add(market, src, gid, legs):
+        for leg in legs:
+            leg["ev"] = leg["p"] * leg["dec"] - 1.0
+            bets.append({"market": market, "source": src, "season": s,
+                         "game_id": f"{tag}|{gid}", "push": False, **leg})
+
+    for j in range(len(cur)):
+        r, d = cur.iloc[j], dists[j]
+        margin = float(r["home_score"]) - float(r["away_score"])
+        home_won = margin > 0
+        src_row = r.get("source") if isinstance(r.get("source"), str) else "sbro"
+        p_home = d.p_home_win()
+
+        # ── SBRO : moneyline à l'ouverture, CLV vers la clôture ─────────────
+        p_o, p_c = r.get("market_home_p_open"), r.get("market_home_p_close")
+        ho, ao = r.get("home_ml_open"), r.get("away_ml_open")
+        if src_row == "sbro" and ok(p_o, p_c, ho, ao) and ho > 1 and ao > 1:
+            add("moneyline", "sbro", f"{s}|sbro|ml|{j}", [
+                {"side": side, "leg": side, "ref": side == "home", "p": p, "dec": dec,
+                 "edge": p - po, "won": bool(won), "clv": pc - po}
+                for side, p, dec, po, pc, won in [
+                    ("home", p_home, ho, p_o, p_c, home_won),
+                    ("away", 1 - p_home, ao, 1 - p_o, 1 - p_c, not home_won)]])
+
+        # ── SBRO : puck line, UN seul prix (pas de CLV) ─────────────────────
+        pl, hp, ap_ = r.get("puck_line_home"), r.get("pl_home_price"), r.get("pl_away_price")
+        if src_row == "sbro" and ok(pl, hp, ap_) and hp > 1 and ap_ > 1 and abs(abs(pl) - 1.5) < 1e-9:
+            add("puckline", "sbro", f"{s}|sbro|pl|{j}",
+                _pl_legs(d, pl, hp, ap_, None, margin))
+
+        # ── The Odds API : premier snapshot du jour → dernier avant le match ─
+        for sp in snaps.get((str(r["date"]), str(r["home_team"]), str(r["away_team"])), []):
+            src = sp["source"]
+            if "home_ml_open" in sp:
+                ho, ao = sp["home_ml_open"], sp["away_ml_open"]
+                po = _devig2(ho, ao)
+                pc = _devig2(sp["home_ml_close"], sp["away_ml_close"])
+                add("moneyline", src, f"{s}|{src}|ml|{j}", [
+                    {"side": side, "leg": side, "ref": side == "home", "p": p, "dec": dec,
+                     "edge": p - p_open, "won": bool(won), "clv": p_close - p_open}
+                    for side, p, dec, p_open, p_close, won in [
+                        ("home", p_home, ho, po, pc, home_won),
+                        ("away", 1 - p_home, ao, 1 - po, 1 - pc, not home_won)]])
+            if "pl_line_open" in sp and abs(abs(sp["pl_line_open"]) - 1.5) < 1e-9:
+                same = abs(sp["pl_line_open"] - sp["pl_line_close"]) < 1e-9
+                p_close = _devig2(sp["pl_home_close"], sp["pl_away_close"]) if same else None
+                add("puckline", src, f"{s}|{src}|pl|{j}",
+                    _pl_legs(d, sp["pl_line_open"], sp["pl_home_open"], sp["pl_away_open"],
+                             p_close, margin))
+    return bets
+
+
+def _pl_legs(d, pl: float, hp: float, ap_: float, p_close_home, margin: float) -> list:
+    """Les deux jambes d'une puck line ±1.5 ; `pl` = handicap du DOMICILE."""
+    p_home = d.p_home_cover_minus_15() if pl < 0 else d.p_home_cover_plus_15()
+    won_home = (margin >= 2) if pl < 0 else (margin >= -1)
+    p_mo = _devig2(hp, ap_)
+    legs = []
+    for side, p, dec, po, won in [("home", p_home, hp, p_mo, won_home),
+                                  ("away", 1 - p_home, ap_, 1 - p_mo, not won_home)]:
+        gives = (pl < 0) if side == "home" else (pl > 0)
+        pc = None if p_close_home is None else (p_close_home if side == "home" else 1 - p_close_home)
+        legs.append({"side": side, "leg": "-1.5" if gives else "+1.5", "ref": bool(gives),
+                     "p": p, "dec": dec, "edge": p - po, "won": bool(won),
+                     "clv": (pc - po) if pc is not None else None})
+    return legs
+
+
+def _served_select(bets: list, market: str, lo: float, hi: float | None) -> list:
+    """La règle en service : bande d'edge, EV ≥ 0, et jambe −1.5 en puck line."""
+    eps = 1e-9
+    return [b for b in bets if b["market"] == market
+            and (market != "puckline" or b["leg"] == "-1.5")
+            and b["edge"] + eps >= lo and (hi is None or b["edge"] - eps <= hi)
+            and b["ev"] + eps >= 0]
+
+
+def _served_verdict(block: dict | None, market: str) -> str:
+    """Critère fixé avant le run (cf. l'en-tête de la section)."""
+    if not block or block["n_bets"] < SERVED_MIN_N[market]:
+        return f"NON TRANCHABLE (moins de {SERVED_MIN_N[market]} paris)"
+    z_clv, z_roi = block["clv_net_z"], block["z"]
+    if (np.isfinite(z_roi) and z_roi <= -2) or (z_clv is not None and z_clv < 0):
+        return "REJETÉE"
+    if z_clv is not None and z_clv >= 2:
+        return "CONFIRMÉE"
+    return "NON TRANCHABLE"
+
+
+def run_served(df, seasons, search_trials: int, use_cache: bool = True,
+               snaps: dict | None = None, snap_stats: dict | None = None):
+    snaps = snaps or {}
+    need = ["home_reg_score", "away_reg_score", "went_to_ot", "total_goals"]
+    atk, dfn = list(TS.ATK_COLS), list(TS.DEF_COLS)
+    base = base_score_params(search_trials)
+
+    # ── 1. Modèle de score walk-forward, saison par saison ──────────────────
+    F = {}
+    for s in seasons:
+        prior = df[df["season"] < s].dropna(subset=need).reset_index(drop=True)
+        cur = df[df["season"] == s].dropna(subset=need).reset_index(drop=True)
+        if len(cur) < 50 or len(prior) < 800:
+            continue
+        cut_p = int(len(prior) * 0.85)
+        params = search_params_fold(prior.iloc[:cut_p].reset_index(drop=True),
+                                    TS.stacked_features(atk, dfn), base, search_trials,
+                                    seed=42, season=s, use_cache=use_cache, atk=atk, dfn=dfn)
+        fold = _served_fold(prior, cur, atk, dfn, params)
+        raw = [ScoreDistribution(h, a, fold["p_ot_fn"](h, a), fold["tau"])
+               for h, a in zip(fold["lh"], fold["la"])]
+        F[s] = {**fold, "cur": cur, "raw": raw,
+                "p": np.array([d.p_home_win() for d in raw]),
+                "y": cur["home_win"].to_numpy(float),
+                "X": _correction_X(cur, CORRECTION_FEATURES)}
+        print(f"   {s}-{str(s + 1)[2:]:<2} {len(cur):>6} matchs predits")
+
+    # ── 2. Correction walk-forward (variante C) + λ recalés ─────────────────
+    ks = sorted(F)
+    bets = {"brut": [], "servi": []}
+    used = []
+    for i, s in enumerate(ks):
+        past = ks[:i]
+        if len(past) < RECAL_MIN_SEASONS:
+            continue
+        y_tr = np.concatenate([F[x]["y"] for x in past])
+        lp_tr = _logit(np.concatenate([F[x]["p"] for x in past]))
+        X_tr = np.concatenate([F[x]["X"] for x in past])
+        mu, sd = np.nanmean(X_tr, axis=0), np.nanstd(X_tr, axis=0)
+        sd[sd == 0] = 1.0
+        std = lambda X: np.nan_to_num((X - mu) / sd, nan=0.0)
+        b, _ = _logistic_offset(y_tr, np.column_stack([lp_tr, std(X_tr)]), np.zeros(len(y_tr)))
+        f = F[s]
+        p_corr = 1 / (1 + np.exp(-(b[0] + np.column_stack([_logit(f["p"]), std(f["X"])]) @ b[1:])))
+        served = []
+        for h, a, pc in zip(f["lh"], f["la"], p_corr):
+            lh2, la2 = lambdas_for_home_win(h + a, float(pc), f["p_ot_fn"], f["tau"])
+            served.append(ScoreDistribution(lh2, la2, f["p_ot_fn"](lh2, la2), f["tau"]))
+        bets["brut"] += _served_bets(f["raw"], f["cur"], s, snaps, "brut")
+        bets["servi"] += _served_bets(served, f["cur"], s, snaps, "servi")
+        used.append(int(s))
+    if not used:
+        print("ERREUR : aucune saison avec assez d'historique pour la correction.")
+        return None
+
+    # ── 3. Règle en service, par modèle × marché × source ───────────────────
+    rules = {"moneyline": SERVED_ML_BAND, "puckline": (SERVED_PL_MIN, None)}
+    out = {"protocol": {
+               "chain": "modele de score (fold) -> correction C walk-forward -> lambdas "
+                        "recales -> edge contre le prix du matin, meme livre",
+               "rules": {"moneyline": {"edge_min": SERVED_ML_BAND[0], "edge_max": SERVED_ML_BAND[1],
+                                       "ev_min": 0.0},
+                         "puckline": {"leg": "-1.5", "edge_min": SERVED_PL_MIN, "ev_min": 0.0}},
+               "verdict": "n < min -> NON TRANCHABLE ; ROI z <= -2 ou CLV net z < 0 -> REJETEE ; "
+                          "CLV net z >= 2 -> CONFIRMEE ; sinon NON TRANCHABLE",
+               "deciding_source": "prix de production (The Odds API) ; SBRO = contexte",
+               "min_n": SERVED_MIN_N, "sources": SOURCE_DEFINITIONS},
+           "seasons": used, "snapshots": snap_stats, "current_rule": {}, "verdict": {},
+           "grid": {}, "best_candidate": {}}
+    hdr = (f"   {'':>6} {'paris':>7} {'hit':>7} {'ROI':>10} {'z':>6} "
+           f"{'CLV net':>9} {'ROI clot.':>10} {'ecart':>8}")
+    for model in ("brut", "servi"):
+        out["current_rule"][model] = {}
+        for market, (lo, hi) in rules.items():
+            out["current_rule"][model][market] = {}
+            for src in sorted({b["source"] for b in bets[model] if b["market"] == market}):
+                pool = [b for b in bets[model] if b["market"] == market and b["source"] == src]
+                sel = _served_select(pool, market, lo, hi)
+                if not sel:
+                    continue
+                blk = _clv_block(sel, pool, leg="-1.5" if market == "puckline" else None)
+                out["current_rule"][model][market][src] = blk
+                if model == "servi":
+                    out["verdict"].setdefault(market, {})[src] = _served_verdict(blk, market)
+                print(f"\n   [{model}] {market} [{src}] — regle en service")
+                print(hdr)
+                _print_clv_row("", blk)
+                if model == "servi":
+                    print(f"   → {out['verdict'][market][src]}")
+
+    # ── 4. Grille de bandes (modèle servi) — piste, pas une règle ───────────
+    for market, grid in SERVED_GRID.items():
+        out["grid"][market], out["best_candidate"][market] = {}, {}
+        for src in sorted({b["source"] for b in bets["servi"] if b["market"] == market}):
+            pool = [b for b in bets["servi"] if b["market"] == market and b["source"] == src]
+            rows = []
+            for lo, hi in grid:
+                sel = _served_select(pool, market, lo, hi)
+                if not sel:
+                    continue
+                blk = _clv_block(sel, pool, leg="-1.5" if market == "puckline" else None)
+                rows.append({"edge_min": lo, "edge_max": hi, **{k: blk[k] for k in (
+                    "n_bets", "hit_rate", "roi_open_pct", "roi_se_pct", "z",
+                    "clv_net", "clv_net_z")}})
+            out["grid"][market][src] = rows
+            ok_rows = [x for x in rows if x["n_bets"] >= SERVED_MIN_N[market]
+                       and np.isfinite(x["z"]) and x["z"] > -1 and x["clv_net_z"] is not None]
+            if ok_rows:
+                best = max(ok_rows, key=lambda x: x["clv_net_z"])
+                out["best_candidate"][market][src] = {
+                    **best, "selected_on_same_data": True,
+                    "note": "piste a confirmer sur une saison non vue, pas une regle"}
+                hi_txt = f"{best['edge_max']:.0%}" if best["edge_max"] is not None else "∞"
+                print(f"   grille {market} [{src}] : meilleure bande {best['edge_min']:.0%}–{hi_txt} "
+                      f"(n {best['n_bets']}, ROI {best['roi_open_pct']:+.2f} %, "
+                      f"CLV net z {best['clv_net_z']:+.2f}) — choisie sur ces memes donnees")
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--min-season", type=int, default=2012)
@@ -3817,6 +4110,10 @@ def main():
     ap.add_argument("--write-layer", action="store_true",
                     help="Avec --correction : ecrit aussi correction_layer.json (la "
                          "couche servie par ml_service), SEULEMENT si le verdict est ADOPTER")
+    ap.add_argument("--served", action="store_true",
+                    help="Value bets : la chaine SERVIE (modele de score + correction + "
+                         "lambdas recales) contre le prix du matin, regle en service, "
+                         "CLV et placebo ; verdict sur la regle + grille de bandes")
     ap.add_argument("--no-param-cache", action="store_true",
                     help="Ignore le cache des hyperparamètres par fold "
                          "(fold_params_cache.json)")
@@ -3849,6 +4146,22 @@ def main():
                                                 ("delta", "z", "z_seasons", "share_seasons_better")}},
                                   fh, indent=2)
                     print(f"OK {CORRECTION_LAYER.split('/')[-1]} -> {MODELS}/ (servie par ml_service)")
+        return
+
+    if args.served:
+        sseasons = [s for s in sorted(df["season"].unique())
+                    if s >= args.min_season and (df["season"] < s).sum() >= 800
+                    and df.loc[df["season"] == s, "home_reg_score"].notna().sum() >= 50]
+        snaps, snap_stats = load_snapshot_pairs()
+        print(f"   Value bets, chaine servie — {len(sseasons)} saisons predites, "
+              f"correction des la {RECAL_MIN_SEASONS + 1}e ; "
+              f"{snap_stats['ml_pairs']} paires moneyline API")
+        res = run_served(df, sseasons, args.search_trials,
+                         use_cache=not args.no_param_cache, snaps=snaps, snap_stats=snap_stats)
+        if res:
+            with open(SERVED_REPORT, "w", encoding="utf-8") as fh:
+                json.dump(res, fh, indent=2, default=float)
+            print(f"\nOK {SERVED_REPORT.split('/')[-1]} -> {MODELS}/")
         return
 
     if args.recal:
