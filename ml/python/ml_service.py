@@ -35,7 +35,7 @@ from typing import List, Optional
 import numpy as np
 import xgboost as xgb
 from score_model import (P_OT_HOME, ScoreDistribution, ScoreEnsemble,
-                         lambdas_for_home_win, p_ot_for, read_ot_model)
+                         lambdas_for_home_win, p_ot_for, read_level_layer, read_ot_model)
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -706,6 +706,82 @@ def _align_distribution(dist: "ScoreDistribution | None",
     aligned._dmatrix = getattr(dist, "_dmatrix", None)
     aligned.raw_lambdas = (dist.lam_home, dist.lam_away)
     return aligned
+
+
+# ── Recalage de NIVEAU des buts dans la saison (2026-10-04) ──────────────────
+#
+# Le modèle de score surestimait le nombre de buts de ~4 % depuis 2022
+# (buts réglementaires observés / λ = 0,955-0,969 en walk-forward). Mesuré par
+# `measure_level.py` (rapport `level_report.json`, règle fixée avant le run) :
+# un k par saison — rapport observés / prévus des matchs déjà joués, rétréci
+# vers 1 avec n0 = 200 matchs fictifs — fait baisser la déviance du total de
+# 0,0032 (z −3,2, 8 saisons sur 11) et ramène P(> 5,5) sur 2023-26 de 58,4 % à
+# 55,8 % pour 56,0 % observé. ADOPTÉ.
+#
+# k est calculé chaque lundi par `refresh_data.py` et lu dans
+# `level_layer.json` ; le contrat (formule, bornes, refus d'un fichier d'une
+# autre saison) est `score_model.level_k` / `read_level_layer`. Il est relu à
+# chaque match contre la saison du jour : un fichier d'avril servi en octobre
+# vaut 1.
+#
+# Il multiplie le TOTAL λ_dom + λ_ext et garde P(victoire domicile) — couche de
+# correction comprise — exactement : le moneyline servi ne bouge pas. Totaux,
+# puck line, score exact, deux équipes marquent, périodes, direct (le paquet
+# renvoie les λ recalés à Node) se lisent sur la matrice recalée. Les cadences
+# joueur (modèle séparé) ne sont pas touchées.
+_level_layer: dict | None = None
+
+
+def _load_level_layer() -> None:
+    global _level_layer
+    path = os.path.join(MODELS_DIR, "level_layer.json")
+    if not os.path.exists(path):
+        print("[ML] ℹ️  Pas de recalage de niveau (level_layer.json absent) — k = 1")
+        return
+    try:
+        with open(path, encoding="utf-8") as fh:
+            _level_layer = json.load(fh)
+        k = read_level_layer(_level_layer, _season_start_year())
+        if k != 1.0:
+            print(f"[ML] ✅ Recalage de niveau des buts — k = {k:.4f} "
+                  f"({_level_layer.get('n_games')} matchs au {_level_layer.get('as_of')})")
+        else:
+            print(f"[ML] ℹ️  Recalage de niveau inactif (k = 1 : verdict "
+                  f"{_level_layer.get('verdict')}, saison {_level_layer.get('season')}, "
+                  f"{_level_layer.get('n_games')} matchs)")
+    except Exception as e:
+        _level_layer = None
+        print(f"[ML] ⚠️  level_layer.json illisible : {e} — k = 1")
+
+
+def _level_k_now() -> float:
+    return read_level_layer(_level_layer, _season_start_year())
+
+
+def _apply_level(dist: "ScoreDistribution | None") -> "ScoreDistribution | None":
+    """La distribution recalée en niveau, ou None si rien à faire (k = 1,
+    pas de distribution, recalage impossible)."""
+    k = _level_k_now()
+    if dist is None or k == 1.0:
+        return None
+    try:
+        p_home = dist.p_home_win()
+        lh, la = lambdas_for_home_win(k * (dist.lam_home + dist.lam_away), p_home,
+                                      _p_ot_for, _score_tau)
+        out = ScoreDistribution(lh, la, _p_ot_for(lh, la), _score_tau)
+    except Exception as e:
+        print(f"[ML] ⚠️  recalage de niveau impossible : {e}")
+        return None
+    out._dmatrix = getattr(dist, "_dmatrix", None)
+    # `raw_lambdas` signale « la couche de correction est dans la matrice »
+    # (explication du moneyline) : on le propage, on ne le crée pas.
+    if hasattr(dist, "raw_lambdas"):
+        out.raw_lambdas = dist.raw_lambdas
+    out.level_k = k
+    return out
+
+
+_load_level_layer()
 
 # Set once the model-load attempt has completed. The readiness probe gates on
 # this so the orchestrator only routes traffic after init (models loaded, or
@@ -1954,11 +2030,12 @@ def _build_score_ensemble(dist: "ScoreDistribution | None") -> "ScoreEnsemble | 
         return None
     try:
         lambdas = []
+        k = float(getattr(dist, "level_k", 1.0))   # même niveau que le prix servi
         for mdl in _score_members:
             lam = mdl.predict(dmat)
             lh, la = float(lam[0]), float(lam[1])
             if 0.5 <= lh <= 8.0 and 0.5 <= la <= 8.0:
-                lambdas.append((lh, la))
+                lambdas.append((lh * k, la * k))
         if len(lambdas) < 2:
             return None
         # Les membres partagent le p_ot du point estimé : leurs λ n'en diffèrent
@@ -2435,6 +2512,10 @@ def _game_context(f: GameFeatures) -> dict:
         if aligned is not None:
             score_dist = aligned
             p_corrected = None        # déjà dans la distribution
+        # Recalage de niveau des buts : total × k, victoire inchangée.
+        leveled = _apply_level(score_dist)
+        if leveled is not None:
+            score_dist = leveled
         base_prob = score_dist.p_home_win()
         model_type = "Modèle de score (Poisson empilé)"
         # `model_version` identifiait l'entraînement du CLASSIFIEUR
@@ -2844,6 +2925,7 @@ def health():
             "ensemble_members": len(_score_members),
             "sigma_max":        _score_sigma_max,
         },
+        "goal_level_k": _level_k_now(),
         "elo_teams_loaded": len(_elo_ratings),
         "calibrated":       _platt_a is not None,
         # Seulement quand il manque vraiment un modèle : affiché en jaune sur
@@ -2907,6 +2989,7 @@ _REPORT_FILES = (
     "backtest_uncertainty_report",
     "feature_importance_game",
     "score_feature_selection",
+    "level_report",
 )
 
 # Fichiers dont on ne veut QUE la fraîcheur et la taille (trop gros à renvoyer).
@@ -2916,6 +2999,7 @@ _ARTIFACT_FILES = (
     "inference_state",
     "score_ablation_cache",
     "fold_params_cache",
+    "level_layer",
 )
 
 
@@ -2993,6 +3077,8 @@ def reports():
             "score_ensemble_members_loaded": len(_score_members),
             "score_ensemble_files_on_disk":  ensemble_members,
             "sigma_max": _score_sigma_max,
+            "goal_level_k": _level_k_now(),
+            "goal_level_layer": _level_layer,
         },
     }
 

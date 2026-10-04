@@ -52,6 +52,7 @@
  │ MODÈLES               │   • MODÈLE DE SCORE (le cœur) : prédit λ_dom et λ_ext,
  │ (ml/models/*.json)    │     les buts attendus de chaque équipe en 60 minutes.
  │                       │   • Couche de correction : ajuste la victoire (moneyline).
+ │                       │   • Recalage de niveau : total de buts × k (saison en cours).
  │                       │   • Classifieur moneyline : calculé, affiché, plus servi.
  │                       │   • Modèle joueur : buts/passes/tirs… attendus par joueur.
  └──────────┬────────────┘
@@ -122,8 +123,8 @@ Toutes dans `ml/data/` (les gros CSV ne sont pas versionnés dans git).
 | `mp_team_games.csv` | MoneyPuck `all_teams.csv` | Par équipe et par match, pour chaque situation (`all`, `5on5`, `5on4`, `4on5`) : temps de glace, buts, xG, tentatives de tir, tirs cadrés, xG « haute dangerosité ». |
 | `mp_goalie_games.csv` | MoneyPuck (zips par saison) | Par gardien et par match : temps de glace, xG subis, buts encaissés, tirs cadrés. |
 | `mp_skater_games.csv` | MoneyPuck (zips par saison) | Par patineur et par match : temps de glace, xG individuel, points, buts, tirs, position. |
-| `odds.csv` | SBRO (2007 → 2022-23, archive figée) + The Odds API / DraftKings (2023 →) | Cotes d'ouverture et de clôture moneyline, ligne et prix des totaux, puck line. **Payées, irremplaçables, jamais écrasées.** |
-| `odds_snapshots_hist.csv` | The Odds API (backfill payé 2023-2026, DraftKings) | Série horodatée des cotes (plusieurs observations par match) : ouverture du matin et clôture, pour le CLV. |
+| `odds.csv` | SBRO (2007 → 27 nov. 2022, archive figée) + The Odds API / DraftKings (2024-25 et 2025-26 faites ; 2023-24 et fin 2022-23 de nov. 2026 à févr. 2027, `REFACTOR_PLAN.md` §A1) | Cotes d'ouverture et de clôture moneyline, ligne et prix des totaux, puck line. **Payées, irremplaçables, jamais écrasées.** |
+| `odds_snapshots_hist.csv` | The Odds API (backfill payé, DraftKings, mêmes saisons que ci-dessus) | Série horodatée des cotes (plusieurs observations par match) : ouverture du matin et clôture, pour le CLV. |
 | `odds_snapshots_live.csv` | Collecte du serveur (`npm run odds:export-snapshots`) | Même format, depuis la table `odds_snapshots` : le livre de collecte (DraftKings, prolonge la série) **et les livres collectés en parallèle** (BET99 depuis le 2026-10-04), chacun avec sa `source`. |
 | `arenas.json` | Saisie | Latitude/longitude, fuseau, altitude de chaque aréna (+ déménagements datés). |
 
@@ -435,6 +436,45 @@ cette matrice recalée : « gagne en 60 min » + « gagne en prolongation » =
 (paquet ML, direct) sont les λ recalés ; `probability_score_model` reste la
 victoire du modèle brut, avant correction.
 
+### 4.3 bis Le recalage de niveau des buts (`level_layer.json`, 2026-10-04)
+
+**Le défaut corrigé.** Le modèle de score se trompe de niveau selon les
+saisons. Buts réglementaires observés / λ (walk-forward, `live_pregame.csv`) :
+1,02-1,03 sur 2017-21, **0,965 · 0,961 · 0,955 · 0,969** sur 2022-23 → 2025-26.
+Le modèle servi montre le même écart sur ces saisons hors de son entraînement.
+Conséquence : « plus de 5,5 » annoncé à 58,4 % sur 2023-26 pour 56,0 % observé.
+
+**Le recalage.** Un seul nombre k par saison, le rapport buts observés / buts
+prévus des matchs déjà joués de la saison en cours, rétréci vers 1 :
+
+```
+k = 1 + w × (Σ obs / Σ λ − 1),   w = n / (n + 200)
+```
+
+n = matchs joués de la saison ; 200 = force du rétrécissement, choisie par
+saison laissée de côté (`measure_level.py`). En début de saison k = 1, puis k
+rejoint le rapport de la saison à mesure que les matchs s'accumulent (k ≈ 0,97
+à la fin de 2025-26). Borné à [0,85 ; 1,15].
+
+**Comment il s'applique.** Le service multiplie la SOMME λ_dom + λ_ext par k
+puis rechoisit le partage pour garder la victoire domicile exacte
+(`lambdas_for_home_win`, la même bissection que la couche de correction, §4.3).
+Donc **le moneyline ne bouge pas** ; totaux, totaux d'équipe, puck line, score
+exact, BTTS, périodes et le direct (le paquet renvoie les λ recalés) se lisent
+sur la matrice recalée. Les cadences joueur (modèle séparé) ne sont pas
+touchées.
+
+**La mesure** (`level_report.json`, règle fixée avant le run, 11 saisons
+2015-16 → 2025-26, k gelé chaque lundi comme en production) : déviance du
+total 0,96566 → 0,96247 (z −3,2), meilleure sur 8 saisons sur 11, P(> 5,5)
+sur 2023-26 58,4 % → 55,8 % pour 56,0 % observé → **ADOPTÉ**.
+
+**Qui le calcule.** `refresh_data.py`, chaque lundi : le modèle de score SERVI
+chiffre les matchs déjà joués de la saison (ils sont toujours hors de son
+entraînement, cf. le découpage 80/20) et écrit `level_layer.json`. Le service
+refuse un fichier d'une autre saison, dont le k ne se recalcule pas à partir
+de ses propres comptes, ou dont la mesure n'est pas « ADOPTER » → k = 1.
+
 ### 4.4 Le modèle joueur (`train_player.py`)
 
 Un modèle XGBoost `count:poisson` **par statistique** : buts, passes, points,
@@ -514,7 +554,7 @@ fait une fois par match dans `_game_context`, puis chaque marché est lu dans
 Chargement de `game_model.json` (classifieur), `training_report.json` (liste des
 features, Platt, mélange), `score_model.json` + `score_report.json` (τ, p_ot,
 déciles), `inference_state.json`, `elo_ratings.json`, `correction_layer.json`,
-et du modèle joueur. Chaque pièce manquante désactive seulement ce qui en dépend.
+`level_layer.json` (recalage de niveau, §4.3 bis) et du modèle joueur. Chaque pièce manquante désactive seulement ce qui en dépend.
 
 **ELO vieilli :** si `elo_ratings.json` date d'une saison précédente, chaque
 note est ramenée vers 1500 en gardant 70 % de son écart par saison de retard —
@@ -560,7 +600,9 @@ marché (repli si le modèle de score ne répond pas), et sans les cotes + Platt
 
 Deux lignes (attaque domicile / attaque visiteur) → XGBoost → λ_dom, λ_ext.
 Garde-fou : si un λ sort de [0,5 ; 8], le modèle de score est ignoré pour ce
-match (retour aux heuristiques). Sinon on construit la matrice M avec τ et p_ot.
+match (retour aux heuristiques). Sinon on construit la matrice M avec τ et p_ot,
+puis on la recale : victoire sur la couche de correction (§4.3), total de buts
+sur le niveau de la saison (§4.3 bis).
 
 **Facteurs affichés** (« pourquoi ce pronostic ») : XGBoost donne la
 contribution exacte de chaque feature à log λ. Pour chaque feature :
@@ -699,6 +741,7 @@ information quand un prix existe.
 | Walk-forward moneyline (classifieur ⊕ marché, cotes de clôture) | `backtest_walkforward_report.json` | log-loss modèle 0,6689 vs marché 0,6677 ; ROI flat SBRO ≈ −0,5 à 0 % ; DraftKings 2025 +1 à +3 % sur 300-600 paris (non significatif) |
 | CLV (ouverture vs clôture, DraftKings) | `backtest_clv_report.json` | les paris à edge ≥ 2 % prennent en moyenne +0,35 point de probabilité à la clôture (t ≈ 7,9), mais ROI à l'ouverture ≈ 0 ± 2,7 % |
 | Couche de correction | `correction_report.json` | log-loss −0,0021, 10 saisons sur 11 meilleures |
+| Recalage de niveau des buts | `level_report.json` | déviance du total −0,0032 (z −3,2), 8 saisons sur 11 ; P(> 5,5) 2023-26 58,4 % → 55,8 % (observé 56,0 %) |
 | Modèle joueur, test 2023-26 | `player_report.json` | bat la règle sur les 8 statistiques |
 
 **En clair :** le modèle est bien calibré (quand il dit 60 %, c'est ~60 %) et
@@ -713,9 +756,10 @@ considérer comme un pari sur un petit avantage non prouvé.
 | Quand | Commande | Ce que ça change |
 |---|---|---|
 | Avant un backtest sur les cotes récentes | `npm run odds:export-snapshots` (dans `server/`, avec la `DATABASE_URL` de production) | Écrit `ml/data/odds_snapshots_live.csv` : la collecte live, tous livres. Le backtest la lit en plus du backfill et juge chaque livre séparément (BET99 aura sa propre ligne dans `--served` quand il aura assez de matchs). |
-| Chaque semaine (tâche planifiée Windows `ml/refresh-data.cmd`) | `python refresh_data.py` | Nouvelles données de la saison en cours → `inference_state.json`, `elo_ratings.json`. **Mêmes modèles.** Il faut ensuite committer ces 2 fichiers et pousser (le service embarque `ml/models/` dans son image). |
+| Chaque semaine (tâche planifiée Windows `ml/refresh-data.cmd`) | `python refresh_data.py` | Nouvelles données de la saison en cours → `inference_state.json`, `elo_ratings.json`, et le recalage de niveau de la saison → `level_layer.json`. **Mêmes modèles.** Il faut ensuite committer ces 3 fichiers et pousser (le service embarque `ml/models/` dans son image). |
 | Réentraînement (mensuel) | `python build_dataset.py && python train_score.py && python train.py && python train_player.py` | Nouveaux modèles + rapports. |
 | Couche de correction | `python backtest_walkforward.py --correction --write-layer` | Réécrit `correction_layer.json` seulement si le verdict est « ADOPTER ». |
+| Recalage de niveau (re-mesure) | `python live_pregame.py && python measure_level.py` | Réécrit `level_report.json` (verdict, force n0). `refresh_data.py` le lit : verdict « REJETER » → k = 1. |
 | Contrôles | `python backtest.py`, `python backtest_walkforward.py [--clv|--derived|--market-gap]` | Rapports dans `ml/models/*_report.json`. |
 | Règles des value bets | `python backtest_walkforward.py --served` | Rejoue la chaîne servie (modèle de score + correction + λ recalés) contre le prix du matin, avec la règle en service : ROI, CLV, placebo, verdict sur la règle et grille de bandes → `served_value_bets_report.json`. |
 
@@ -732,7 +776,7 @@ visiteur λ_ext = **2,70** (chiffres calculés avec les vrais τ et p_ot du rapp
 4. **Victoire (moneyline)** = 49,1 % + 21,9 % × 52,7 % = **60,7 %**.
 5. **Couche de correction** : avec toutes les autres variables à leur moyenne, z = 0,0863 + 0,4667 × logit(0,607) → **57,2 %** ; si en plus le domicile a +60 d'ELO, +0,04 de xGF% court terme, +0,3 xG d'alignement, +0,5 de star power, etc. → **62,9 %**. Le service recale alors les λ (somme 6,00 conservée) pour que la matrice donne exactement 62,9 %, et **les étapes 3, 4, 6-9 se refont sur cette matrice recalée** — les chiffres ci-dessous sont ceux de la matrice brute, pour suivre le calcul pas à pas.
 6. **Puck line −1,5** = Σ M[écart ≥ 2] = **37,3 %**.
-7. **Plus de 5,5 buts** : total final espéré 6,23 → **56,0 %**.
+7. **Plus de 5,5 buts** : total final espéré 6,23 → **56,0 %**. Avec le recalage de niveau de fin 2025-26 (k = 0,9735, §4.3 bis), la somme des λ passe de 6,00 à 5,84 (3,22 / 2,62), la victoire reste **60,7 %**, le « plus de 5,5 » descend à **53,4 %** et la puck line −1,5 à 37,0 %.
 8. **Les deux équipes marquent** : **89,8 %**.
 9. **Domicile plus de 2,5 buts** (prolongation comprise) : **68,3 %**.
 10. **Confiance** : |3,30 − 2,70| = 0,60 se situe au rang 0,73 des déciles → base 0,79 → moneyline 79/100.
@@ -757,6 +801,7 @@ visiteur λ_ext = **2,70** (chiffres calculés avec les vrais τ et p_ot du rapp
 | `backtest.py` | Backtest sur le test + `--reliability` (calibration par tranches). |
 | `backtest_walkforward.py` | Backtests saison par saison : ROI, CLV, marchés dérivés, incertitude, sélection de features, correction, écart au marché… |
 | `calibrate_live.py`, `fetch_live_goals.py`, `live_pregame.py` | Effets de score pour le direct. |
+| `measure_level.py` | Mesure du recalage de niveau des buts (§4.3 bis) → `level_report.json`. |
 | `measure_*.py`, `compare_*.py`, `probe_odds_books.py` | Études ponctuelles (face-à-face, retour de blessure, Corsi/Fenwick, sources de cotes). |
 | `content_insights*.py` | Statistiques « contenu » pour les réseaux sociaux — sans lien avec les prédictions. |
 | `fetch_data.py` | Ancienne collecte v3 (standings) — encore copiée dans l'image Docker. |
@@ -768,6 +813,7 @@ visiteur λ_ext = **2,70** (chiffres calculés avec les vrais τ et p_ot du rapp
 | `score_model.json` / `score_report.json` | Modèle de score / ses réglages (features, τ, p_ot, déciles, métriques). |
 | `game_model.json` / `training_report.json` / `feature_importance_game.json` | Classifieur / Platt, mélange, métriques. |
 | `correction_layer.json` / `correction_report.json` | Couche de correction / sa mesure. |
+| `level_layer.json` / `level_report.json` | Recalage de niveau de la saison en cours (k, comptes) / sa mesure et sa règle. |
 | `player/*.json` / `player_report.json` / `player_state.json` | Modèle joueur / rapport / état des joueurs. |
 | `inference_state.json` | État actuel des équipes, gardiens, alignements, étoiles. |
 | `elo_ratings.json` | Notes ELO actuelles. |

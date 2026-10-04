@@ -18,12 +18,13 @@
  *
  * 2026-10-04 (demande du user) : cartes étroites sur UNE rangée défilante
  * (classes et flèches de `LiveGamesRow`), sélections dans un menu déroulant
- * par carte.
+ * par carte. Puis (même jour) : sans titre ni ligne de type, sélections
+ * toujours visibles — plus de menu déroulant.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { ChevronRight, ChevronLeft, ChevronDown, Layers, Check, Plus, Lock } from "lucide-react";
+import { ChevronRight, ChevronLeft, Layers, Check, Plus, Lock } from "lucide-react";
 import { useI18n } from "../../i18n";
 import { useBet } from "../../context/BetContext";
 import { ErrorState } from "../../components/ErrorState";
@@ -37,7 +38,6 @@ import {
 } from "../../services/predictionApiService";
 import { bestBetToLeg } from "./BestBetsSection";
 
-type TFn = ReturnType<typeof useI18n>["t"];
 
 function isLocked(p: ApiBestParlay | ApiLockedParlay): p is ApiLockedParlay {
   return p.locked === true;
@@ -62,21 +62,17 @@ function LegRow({ leg, pct }: { leg: ReturnType<typeof bestBetToLeg>; pct: numbe
   );
 }
 
-function kindLabel(kind: ApiBestParlay["kind"], t: TFn) {
-  return t(kind === "moneyline" ? "parlay.kindMoneyline" : "parlay.kindMixed");
-}
-
 /** Largeur d'une carte : étroite, pour en voir près de deux à 390 px (demande du user, 2026-10-04). */
 const CARD_W = "w-44";
 
 /**
- * Un combiné, en carte étroite de la rangée. Le résumé (%, cote) est toujours
- * visible ; les sélections sont dans un menu déroulant, fermé par défaut.
+ * Un combiné, en carte étroite de la rangée : %, cote, puis ses sélections,
+ * toujours visibles (2026-10-04, demande du user : plus de titre « Combiné
+ * n° x », plus de ligne « type · n sélections », plus de menu déroulant).
  */
-function ParlayCard({ parlay, index, accent }: { parlay: ApiBestParlay; index: number; accent: string }) {
+function ParlayCard({ parlay, accent }: { parlay: ApiBestParlay; accent: string }) {
   const { t } = useI18n();
   const { addLeg, removeLeg, hasLeg } = useBet();
-  const [showLegs, setShowLegs] = useState(false);
   // Libellés retraduits au changement de langue, sans nouvelle requête.
   const legs = useMemo(() => parlay.legs.map((b) => ({ leg: bestBetToLeg(b, t), pct: b.mlPct ?? b.score })), [parlay, t]);
   const allIn = legs.every(({ leg }) => hasLeg(leg.id));
@@ -89,12 +85,7 @@ function ParlayCard({ parlay, index, accent }: { parlay: ApiBestParlay; index: n
 
   return (
     <div data-parlay-card className={`${CARD_W} flex-shrink-0 icy-card rounded-xl px-2.5 py-2`}>
-      <div className="text-white text-[12px] font-bold leading-tight">{t("parlay.name", { n: index + 1 })}</div>
-      <div className="text-[#8a9ea6] text-[10px] mt-0.5 truncate">
-        {kindLabel(parlay.kind, t)} · {t("parlay.legs", { n: parlay.legs.length })}
-      </div>
-
-      <div className="flex items-end justify-between gap-1 mt-1.5">
+      <div className="flex items-end justify-between gap-1">
         <div className="tabular-nums leading-none" style={{ color: accent }}>
           <span className="text-[17px] font-bold">{parlay.probability} %</span>
           <span className="block text-[10px] font-medium mt-0.5">{t("home.chance")}</span>
@@ -104,24 +95,12 @@ function ParlayCard({ parlay, index, accent }: { parlay: ApiBestParlay; index: n
           : <FairOddsPill pct={parlay.probability} title={t("home.oddsFairHint")} />}
       </div>
 
-      {/* Menu déroulant des sélections. */}
-      <button
-        type="button"
-        onClick={() => setShowLegs((v) => !v)}
-        aria-expanded={showLegs}
-        className="mt-2 w-full flex items-center justify-between rounded-lg bg-white/[0.04] border border-white/10 px-2 py-1 text-[10px] font-semibold text-[#bfc8cc]"
-      >
-        {showLegs ? t("parlay.hideLegs") : t("parlay.showLegs")}
-        <ChevronDown size={12} className="transition-transform" style={{ transform: showLegs ? "rotate(180deg)" : "none" }} />
-      </button>
-      {showLegs && (
-        <div className="mt-1">
-          {legs.map(({ leg, pct }) => <LegRow key={leg.id} leg={leg} pct={pct} />)}
-          {parlay.assumesIndependence && (
-            <p className="text-[#8a9ea6] text-[9px] leading-snug mt-0.5">{t("parlay.indepNote")}</p>
-          )}
-        </div>
-      )}
+      <div className="border-t border-white/5 mt-2 pt-0.5">
+        {legs.map(({ leg, pct }) => <LegRow key={leg.id} leg={leg} pct={pct} />)}
+        {parlay.assumesIndependence && (
+          <p className="text-[#8a9ea6] text-[9px] leading-snug mt-0.5">{t("parlay.indepNote")}</p>
+        )}
+      </div>
 
       <button
         type="button"
@@ -153,9 +132,6 @@ function LockedCard({ item }: { item: ApiLockedParlay }) {
     <div data-parlay-card className={`${CARD_W} flex-shrink-0 icy-card rounded-xl px-2.5 py-2`}>
       <div className="flex items-center gap-1.5 text-white text-[12px] font-bold leading-tight">
         <Lock size={11} className="text-[#f2c744]" />{t("parlay.proCard")}
-      </div>
-      <div className="text-[#8a9ea6] text-[10px] mt-0.5 truncate">
-        {kindLabel(item.kind, t)} · {t("parlay.legs", { n: item.legCount })}
       </div>
       <div className="mt-2 flex flex-col gap-1" aria-hidden style={{ filter: "blur(2px)" }}>
         {Array.from({ length: item.legCount }, (_, i) => (
@@ -281,7 +257,7 @@ export function BestParlaySection({ accent }: { accent: string }) {
             </div>
           ) : (
             <ParlayRow count={data.parlays.length}>
-              {free.map((p, i) => <ParlayCard key={p.id} parlay={p} index={i} accent={accent} />)}
+              {free.map((p) => <ParlayCard key={p.id} parlay={p} accent={accent} />)}
               {locked.map((p) => <LockedCard key={p.id} item={p} />)}
             </ParlayRow>
           )}

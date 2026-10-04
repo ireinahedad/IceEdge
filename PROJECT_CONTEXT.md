@@ -15,7 +15,29 @@ When continuing this project:
 - Verify that what you are implementing is secure
 - At the end of each session, update PROJECT_CONTEXT.md.
 
-Last updated: 2026-10-04 (Best Parlay)
+Last updated: 2026-10-04 (recalage de niveau des buts, plan de rattrapage des cotes)
+
+## Session 2026-10-04 (2) — ML : recalage de niveau des buts + rattrapage des cotes
+
+1. **Recalage de niveau** (biais trouvé le 2026-10-01 : le modèle de score annonçait ~4 % de buts
+   de trop depuis 2022). Contrat dans `score_model.py` (`level_k`, `read_level_layer`, bornes
+   [0,85 ; 1,15]) ; mesure `ml/python/measure_level.py` → `ml/models/level_report.json` (règle fixée
+   avant le run, n0 = 200 par saison laissée de côté, k gelé chaque lundi) : ADOPTÉ, déviance du total
+   −0,0032 (z −3,2), 8 saisons sur 11. `refresh_data.py` étape 5 calcule k avec le modèle servi →
+   `ml/models/level_layer.json` (commité avec les deux autres fichiers du lundi). `ml_service._apply_level`
+   multiplie λ_dom + λ_ext par k en gardant P(victoire) (`lambdas_for_home_win`) : moneyline et couche
+   de correction inchangés, pas de réentraînement ni de nouvelle couche ; l'ensemble σ suit k ;
+   `/health` et `/reports` exposent `goal_level_k`. Vérifié dans un conteneur (xgboost 3.2.0) :
+   moneyline identique au 1e-5, « plus de 5,5 » −2,4 points à k = 0,9735 ; refus d'un fichier d'une
+   autre saison / rejeté / altéré → k = 1. k servi aujourd'hui : 0,996 (8 matchs).
+2. **Rattrapage des cotes** (décision du user : ajouter la fin de 2022-23, ne jamais vider le quota
+   de 20 000 crédits partagé avec l'app). Coûts chiffrés sur les appels réellement payés des deux
+   saisons faites ; calendrier d'une plage par mois (nov. → févr.) dans `ml/REFACTOR_PLAN.md` §A1.
+   `fetch_data_v4.py --odds-api-keep` (défaut 6 000) : arrêt avant que le SOLDE DU COMPTE passe sous
+   la réserve de l'app ; l'arrêt sur solde se fait désormais avant l'appel suivant (il jetait la
+   dernière réponse payée).
+3. Docs : `STATUS.md` §1/§3.5, `ml/REFACTOR_PLAN.md` §A1, `ml/EXPLICATION_ML.md` §2, §4.3 bis, §6,
+   §8-§11, `LIVE_PREDICTIONS_PLAN.md`, `ml/refresh-data.cmd`.
 
 ## Session 2026-10-04 — Section « Best Parlay » sur l'accueil
 
@@ -56,7 +78,13 @@ de Meilleurs paris, 2 combinés gratuits, le reste Pro.
    Combinés Pro verrouillés, sans données. Révision du même jour (demande
    du user) : cartes étroites (176 px) sur UNE rangée défilante (classes et
    flèches de `LiveGamesRow`), sélections dans un menu déroulant par carte,
-   cartes Pro verrouillées dans la même rangée (bouton /pro si `features.proUpgrade`). Placée au-dessus de
+   cartes Pro verrouillées dans la même rangée (bouton /pro si `features.proUpgrade`).
+   Puis : plus de titre « Combiné n° x » ni de ligne « type · n sélections »,
+   sélections toujours visibles (menu déroulant retiré).
+7. **Accueil — « En direct » masquée sans match en direct** (même jour) : la
+   section du centre (ligne rouge, cercle, titre) n'est plus rendue quand
+   `liveGames` est vide (chargement et échec compris) ; le calendrier prend
+   alors un `pt-8`. La clé `home.noLiveGames` n'est plus utilisée. Placée au-dessus de
    Meilleurs paris (Pro) / du bloc Pro (gratuit) dans `HockeyLanding`.
    `bestBetToLeg` extrait de `BestBetsSection` à l'identique (partagé).
 6. Tests : `bestParlays.service.test.ts` (11), route (+4). Suite serveur

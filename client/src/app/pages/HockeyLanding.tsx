@@ -375,36 +375,27 @@ export function HockeyLanding() {
 
           {/* ── Centre ice: whoever is playing right now ───────────────── */}
           {/* The red line and the faceoff circle are decoration behind the
-              cards; when nothing is live the circle stays empty, with just the
-              faceoff dot in it. */}
-          <section className="relative px-4 py-12">
-            <div className="rink-line rink-line--red absolute inset-x-0 top-1/2 -translate-y-1/2" aria-hidden />
-            <div className="rink-faceoff" aria-hidden />
+              cards. 2026-10-04 (demande du user) : sans match en direct, la
+              section n'est plus affichée du tout — plus de cercle vide avec
+              « aucun match en direct ». Même chose pendant le chargement et
+              en cas d'échec : la section du haut porte déjà l'erreur et son
+              bouton « Réessayer ». */}
+          {liveGames.length > 0 && (
+            <section className="relative px-4 py-12">
+              <div className="rink-line rink-line--red absolute inset-x-0 top-1/2 -translate-y-1/2" aria-hidden />
+              <div className="rink-faceoff" aria-hidden />
 
-            <div className="relative z-10">
-              <div className="flex items-center justify-center gap-2 mb-4">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                <h2 className="text-white text-sm font-bold uppercase tracking-wider">{t("home.liveNow")}</h2>
-              </div>
-
-              {liveGames.length > 0 ? (
-                /* Flèches + glissement au doigt (2026-09-30), comme le
-                   bandeau des équipes — voir `LiveGamesRow`. */
-                <LiveGamesRow games={liveGames} />
-              ) : (
-                <div className="flex flex-col items-center gap-3 py-14">
-                  <span className="rink-faceoff-dot" />
-                  {/* Même placeholder, autre phrase : quand le chargement a
-                      échoué, « aucun match en direct » serait faux. Pas de
-                      bouton ici — celui de la section du haut recharge les
-                      deux, et deux boutons pour la même action se piétinent. */}
-                  <p className="text-[#7f97a3] text-xs">
-                    {loadError ? t("common.loadFailed") : t("home.noLiveGames")}
-                  </p>
+              <div className="relative z-10">
+                <div className="flex items-center justify-center gap-2 mb-4">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <h2 className="text-white text-sm font-bold uppercase tracking-wider">{t("home.liveNow")}</h2>
                 </div>
-              )}
-            </div>
-          </section>
+                {/* Flèches + glissement au doigt (2026-09-30), comme le
+                    bandeau des équipes — voir `LiveGamesRow`. */}
+                <LiveGamesRow games={liveGames} />
+              </div>
+            </section>
+          )}
 
           {/* Calendrier — un panneau de bande, pas une tuile givrée : c'est de
               la navigation, il ne doit pas se lire comme une carte de match de
@@ -412,7 +403,9 @@ export function HockeyLanding() {
               gouttière de la page, bouton en bleu pâle (demande du user,
               2026-09-30) ; il courait avant d'un bord à l'autre, sous les
               matchs à venir. */}
-          <div className="px-4 pb-8">
+          {/* Sans la section « en direct » au-dessus, le calendrier reprend
+              l'espace sous la ligne bleue. */}
+          <div className={`px-4 pb-8 ${liveGames.length > 0 ? "" : "pt-8"}`}>
             <LazySection minHeight={72}>
               <button
                 onClick={() => navigate("/schedule")}

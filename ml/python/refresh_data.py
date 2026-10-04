@@ -19,14 +19,20 @@ Ce que le script fait, dans l'ordre :
      saison de MoneyPuck ; s'il est inaccessible, les fichiers « carrière » de
      chaque joueur ayant joué cette saison (plus lent, prévenu) ;
   4. `build_dataset.py` → `nhl_games_v4.csv`, `inference_state.json`,
-     `elo_ratings.json`.
+     `elo_ratings.json` ;
+  5. recalage de niveau des buts (2026-10-04) : le modèle de score SERVI
+     chiffre les matchs déjà joués de la saison en cours, et le rapport buts
+     observés / buts prévus, rétréci vers 1, part dans `level_layer.json`
+     (`score_model.level_k`, mesure et règle dans `measure_level.py`). Le
+     service multiplie le total λ par ce k, sans toucher à la victoire.
 
 Ce qu'il ne fait JAMAIS : toucher `odds.csv` (irremplaçable, cf. le garde-fou de
 `fetch_data_v4._write_odds_csv`), réentraîner, committer.
 
 Ensuite, pour que le service en ligne en profite : committer
-`ml/models/inference_state.json` et `ml/models/elo_ratings.json`, puis pousser
-(le service ML embarque `ml/models/` dans son image).
+`ml/models/inference_state.json`, `ml/models/elo_ratings.json` et
+`ml/models/level_layer.json`, puis pousser (le service ML embarque
+`ml/models/` dans son image).
 
 Usage :
     cd ml/python
@@ -44,6 +50,7 @@ from datetime import datetime, timezone
 import pandas as pd
 
 import fetch_data_v4 as F
+from score_model import level_k
 
 DATA_DIR = F.DATA_DIR
 RAW_DIR = F.RAW_DIR
@@ -185,6 +192,84 @@ def refresh_players(kind: str, out: str, season: int, dry: bool) -> pd.DataFrame
     return merged
 
 
+# ── 5. Recalage de niveau des buts ───────────────────────────────────────────
+
+LEVEL_LAYER = "level_layer.json"
+LEVEL_REPORT = "level_report.json"
+
+
+def refresh_level(season: int, models_dir: str, data_path: str) -> dict:
+    """Calcule k pour la saison `season` et écrit `level_layer.json`.
+
+    Les λ viennent du modèle de score SERVI (`score_model.json`), sur les
+    lignes du dataset — les mêmes features qu'à l'entraînement. La saison en
+    cours est toujours hors de son entraînement : `train_score.split` réserve
+    les 20 % les plus récents au test, et ceux-ci couvrent plusieurs saisons.
+
+    Écrit TOUJOURS un fichier, même à k = 1 (début de saison, mesure rejetée,
+    modèle illisible) : un `level_layer.json` d'une saison précédente resté sur
+    disque serait sinon servi tel quel — le service le refuse déjà sur la
+    saison, mais mieux vaut que le fichier dise l'état réel.
+    """
+    import json
+
+    import numpy as np
+
+    out = {"season": int(season), "k": 1.0, "obs_sum": 0.0, "lam_sum": 0.0,
+           "n_games": 0, "prior_games": None, "verdict": "REJETER",
+           "as_of": None, "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
+           "note": ""}
+    try:
+        with open(os.path.join(models_dir, LEVEL_REPORT), encoding="utf-8") as fh:
+            rep = json.load(fh)
+        out["verdict"] = rep.get("verdict", "REJETER")
+        out["prior_games"] = float(rep["prior_games"])
+    except Exception as e:
+        out["note"] = f"level_report.json illisible ({e}) — lancer measure_level.py"
+    if out["verdict"] != "ADOPTER" or out["prior_games"] is None:
+        out["note"] = out["note"] or "mesure non adoptée — k = 1"
+    else:
+        try:
+            import xgboost as xgb
+            import train_score as TS
+            with open(os.path.join(models_dir, "score_report.json"), encoding="utf-8") as fh:
+                feats = list(json.load(fh)["features"])
+            if feats != TS.stacked_features():
+                raise ValueError("features de score_report.json ≠ train_score.stacked_features()")
+            model = xgb.Booster()
+            model.load_model(os.path.join(models_dir, "score_model.json"))
+            df = pd.read_csv(data_path, low_memory=False)
+            df = df[df["date"].map(lambda d: int(str(d)[:4]) if int(str(d)[5:7]) >= 8
+                                   else int(str(d)[:4]) - 1) == season]
+            df = df.dropna(subset=["home_reg_score", "away_reg_score"]).reset_index(drop=True)
+            if len(df):
+                lam_h, lam_a = TS.lambdas_for(model, feats, TS.stack(df), len(df))
+                # Même garde-fou que le service : une intensité aberrante
+                # trahit une ligne mal remplie, elle ne compte pas.
+                ok = (lam_h >= 0.5) & (lam_h <= 8.0) & (lam_a >= 0.5) & (lam_a <= 8.0)
+                obs = (df["home_reg_score"] + df["away_reg_score"]).values.astype(float)
+                out["obs_sum"] = round(float(obs[ok].sum()), 6)
+                out["lam_sum"] = round(float((lam_h + lam_a)[ok].sum()), 6)
+                out["n_games"] = int(ok.sum())
+                out["as_of"] = str(df.loc[ok, "date"].max()) if ok.any() else None
+            # Le service recalcule k à partir des comptes écrits et refuse le
+            # fichier s'ils ne concordent pas : k est donc calculé sur les
+            # comptes DÉJÀ arrondis, pour que les deux calculs tombent juste.
+            out["k"] = level_k(out["obs_sum"], out["lam_sum"], out["n_games"], out["prior_games"])
+            if out["n_games"] == 0:
+                out["note"] = "aucun match joué cette saison — k = 1"
+        except Exception as e:
+            out.update(k=1.0, obs_sum=0.0, lam_sum=0.0, n_games=0, verdict="REJETER",
+                       note=f"calcul impossible ({e}) — k = 1")
+    with open(os.path.join(models_dir, LEVEL_LAYER), "w", encoding="utf-8") as fh:
+        json.dump(out, fh, ensure_ascii=False, indent=2)
+    ratio = out["obs_sum"] / out["lam_sum"] if out["lam_sum"] else float("nan")
+    print(f"\n📏 Recalage de niveau {season}-{str(season + 1)[2:]} : k = {out['k']:.4f} "
+          f"({out['n_games']} matchs, buts/λ {ratio:.3f}, n0 {out['prior_games']})"
+          + (f" — {out['note']}" if out["note"] else ""))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true",
@@ -215,6 +300,8 @@ def main():
     import build_dataset
     build_dataset.main()
 
+    refresh_level(season, build_dataset.MODELS_DIR, f"{DATA_DIR}/nhl_games_v4.csv")   # 5
+
     import json
     with open(f"{build_dataset.MODELS_DIR}/inference_state.json", encoding="utf-8") as fh:
         st = json.load(fh)
@@ -223,8 +310,9 @@ def main():
     print(f"\n🏁 Terminé en {(time.time() - t0) / 60:.1f} min — état d'inférence au {st['as_of']}, "
           f"ELO au {elo.get('as_of_date')}, {len(st['teams'])} équipes, "
           f"{len(st.get('skater_pool', {}))} patineurs dans le bassin.")
-    print("   Pour le service en ligne : committer ml/models/inference_state.json et "
-          "ml/models/elo_ratings.json, puis pousser. Pas de réentraînement nécessaire.")
+    print("   Pour le service en ligne : committer ml/models/inference_state.json, "
+          "ml/models/elo_ratings.json et ml/models/level_layer.json, puis pousser. "
+          "Pas de réentraînement nécessaire.")
 
 
 if __name__ == "__main__":

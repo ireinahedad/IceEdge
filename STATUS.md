@@ -1,6 +1,6 @@
 # ArakIce / ICEEDGE — Project status
 
-**Single source of truth for what is done and what remains. Updated 2026-09-30 (season start).**
+**Single source of truth for what is done and what remains. Updated 2026-10-04 (ML level recalibration, odds backfill plan).**
 
 Built by reading every planning doc in the repo (plus the deleted `RESTE_A_FAIRE.md`,
 recovered from Git) and checking each claim against the code and the Git log.
@@ -253,6 +253,20 @@ recovered from Git) and checking each claim against the code and the Git log.
     gap to the closing line +0.0014 → −0.0004 (DraftKings 2024-26: +0.0025 → +0.0013). Control: the
     slope-only variant reproduces `recal_report.json` exactly (needs xgboost 3.2.0). Served by
     `ml_service` from `correction_layer.json`, **moneyline only** (puck line / totals unchanged).
+- ✔ **Goal-level recalibration** (2026-10-04, *not committed*): fixes the pre-game level drift found
+  2026-10-01 (observed regulation goals / λ = 0.955–0.969 on 2022-26, same on the served model).
+  One k per season = observed / predicted goals of the season's games played, shrunk to 1 with
+  n0 = 200 (`score_model.level_k`). Measured first (`measure_level.py` → `level_report.json`, rule fixed
+  before the run, n0 by leave-one-season-out, k frozen weekly as in production): total deviance −0.0032
+  (z −3.2), better on 8/11 seasons, P(>5.5) 2023-26 58.4 % → 55.8 % for 56.0 % observed → ADOPTED.
+  `refresh_data.py` computes k every Monday with the served model → `ml/models/level_layer.json`;
+  `ml_service` scales λ_home + λ_away by k and keeps P(home win) exact (`lambdas_for_home_win`), so the
+  **moneyline is unchanged** and totals, puck line, exact score, BTTS, periods and live ML follow. A file
+  from another season, with an inconsistent k, or a rejected measure → k = 1. Today k = 0.996 (8 games).
+- ✔ **Odds backfill (A1), plan 20K**: 2025-26 done 2026-09-27 (950 calls, ~19 000 credits), 2024-25
+  done 2026-10-01 (672 calls, ~13 440). New `--odds-api-keep` (default 6 000): the backfill stops before
+  the ACCOUNT balance would drop under the app's reserve; the balance stop no longer throws away the
+  last paid snapshot (2026-10-04).
 
 ---
 
@@ -357,15 +371,25 @@ recovered from Git) and checking each claim against the code and the Git log.
 
 ### 3.5 ML — `ml/REFACTOR_PLAN.md`
 
-- [ ] **Decision A1**: pay one month of The Odds API (~59 $) for the 2023–2026 backfill, or wait
-      for live collection (~2029 for a puck-line verdict). Commands ready in the plan.
+- [ ] **Odds backfill (A1), one range per month on the 1st, ≤ 10 000 credits each** (the key is shared
+      with the app: display proxy up to ~4 300/month + collection ~300). Commands in
+      `ml/REFACTOR_PLAN.md` §A1, all with `--odds-api-budget 10000 --odds-api-keep 6000`:
+      2026-11-01 2023-24 part A (2023-10-10 → 2024-01-14, ~9 300) · 2026-12-01 2023-24 part B
+      (2024-01-15 → 2024-04-18, ~9 000) · 2027-01-01 end of 2022-23 part A (2022-11-28 → 2023-02-12,
+      ~7 200 — SBRO stops 2022-11-27, no source has it) · 2027-02-01 part B (2023-02-13 → 2023-04-14,
+      ~6 300). Stopped by a cap → same command next month (cache = free). Then `build_dataset.py` and
+      `--clv` / `--derived` on 4 modern seasons instead of 2.
 - [ ] A2 puck-line rule stays frozen — **do not bet on it** until A1 or a season of live data.
 - [ ] S4: γ (stretch λ gap) after the 2026-27 season; then measure ⑤ and demote the classifier.
       The six `base_prob` markets are ~7 pts too low on clear favourites — do not bet on them.
 - [ ] A4 (goalie confirmation window) and A6 (team totals, OT, ±2.5) — after A1/A2.
 - [ ] Re-train monthly during the season.
 - [ ] **Weekly data refresh**: install the task once (`schtasks` line in `ml/refresh-data.cmd`), then
-      after each run commit + push `ml/models/inference_state.json` and `elo_ratings.json`.
+      after each run commit + push `ml/models/inference_state.json`, `elo_ratings.json` and
+      `level_layer.json` (goal-level k of the season).
+- [ ] Re-run `live_pregame.py && measure_level.py` once 2026-27 is over (adds a season to the level
+      measure), and re-run `server/scripts/replay-live.ts`: the 2 puck-drop totals cells should no
+      longer be worse.
 - [ ] Re-run `backtest_walkforward.py --correction --write-layer` after each retrain (the layer sits
       on the score model's output; a new model needs a new layer).
 
@@ -375,9 +399,6 @@ recovered from Git) and checking each claim against the code and the Git log.
       likelihood as `calibrate_live.py` and a replay. `situationCode` is checked (2026-09-30) and the game
       sheet already carries `situation.secondsRemaining`. Also not through the engine yet: P1/P2 cards,
       BTTS. Detail: `LIVE_PREDICTIONS_PLAN.md`.
-- [ ] **Pre-game score model level drift** (found 2026-10-01): observed regulation goals / λ = 0.96 on
-      2022-25 (λ ~4 % too high), 1.03 on 2017-21. Pre-game "over" totals run high (P(>5.5) 60 % predicted,
-      56 % observed on 2023-26). Fix on the pre-game side (in-season level recalibration), then re-measure.
 - [ ] Deploy live predictions (phase 1 + phase 2): merge `claude/laughing-davinci-3ver59`
       into `master` — Railway (Node) and Vercel redeploy from GitHub. No Python, no migration
       (`liveEffects.json` ships with the Node code). Check on the live site during a game: numbers

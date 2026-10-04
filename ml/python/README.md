@@ -40,7 +40,8 @@ origines navigateur ; aucune par défaut. Voir `DEPLOYMENT.md` §3.
 ## Mettre à jour les données et les modèles
 
 ```bash
-python refresh_data.py                        # chaque semaine : état d'inférence + ELO (mêmes modèles)
+python refresh_data.py                        # chaque semaine : état d'inférence + ELO + recalage de niveau (mêmes modèles)
+python measure_level.py                       # mesure du recalage de niveau des buts → level_report.json
 python build_dataset.py && python train_score.py && python train.py && python train_player.py   # réentraînement
 python backtest_walkforward.py --correction --write-layer    # couche de correction (si ADOPTER)
 python backtest_walkforward.py --served       # règles des value bets sur la chaîne servie

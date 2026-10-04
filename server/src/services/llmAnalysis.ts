@@ -16,6 +16,7 @@
  * Module PUR.
  */
 
+import { LANGUAGE_RULE } from './llmPrompts';
 import type { Candidate, CandidateSide, CandidateTier, Facts, FactsLocale, FactsSummary, FactTag, StatusItem } from './llmFacts';
 
 // ─── Invite système ───────────────────────────────────────────────────────────
@@ -38,7 +39,8 @@ export const EXPLAIN_BET_V2: Record<FactsLocale, string> = {
     "Si aucun facteur n'est MAJEUR, dis-le dans headline et ne garde qu'un seul moteur ; " +
     "MAJEUR = poids élevé, POUR ou CONTRE : s'il y en a un, n'écris jamais « aucun facteur majeur ». " +
     "N'écris « suit le marché » que si l'écart modèle − marché est inférieur à 4 pts. " +
-    "Plus court vaut mieux que rempli. Chiffres au format français (virgule).",
+    "Plus court vaut mieux que rempli. Chiffres au format français (virgule).\n" +
+    LANGUAGE_RULE.fr + " Les valeurs de \"key\" restent telles quelles.",
   en:
     "You write the note for an NHL bet in a predictions app. The reader compares several bets in seconds.\n" +
     "You are the NARRATOR of a model: write ONLY from the FACTS block. No outside knowledge " +
@@ -55,7 +57,8 @@ export const EXPLAIN_BET_V2: Record<FactsLocale, string> = {
     "rewording the CAVEAT.\n" +
     "If no factor is MAJOR, say so in headline and keep a single driver; MAJOR = high weight, FOR or AGAINST: if one exists, never write \"no major factor\". " +
     "Write 'follows the market' only if the model − market gap is under 4 pts. " +
-    "Shorter beats filled. Numbers in plain English format.",
+    "Shorter beats filled. Numbers in plain English format.\n" +
+    LANGUAGE_RULE.en + ' Keep "key" values as-is.',
 };
 
 // ─── Formules interdites ──────────────────────────────────────────────────────

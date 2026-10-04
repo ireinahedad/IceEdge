@@ -768,7 +768,82 @@ sont nommées et posent chacune leur valeur de `source` dans `odds.csv`.
 
 ## A — Améliorer
 
-### A1. Backfill payant The Odds API ⏸️ DÉCISION OUVERTE — rien n'est payé
+### A1. Backfill payant The Odds API 🔄 EN COURS — 2 saisons sur 4 faites, plan 20K
+
+#### État et calendrier au 2026-10-04 (remplace le dossier ci-dessous)
+
+**Décision du user (2026-09-27) :** plan 20K (20 000 crédits/mois, remis à zéro
+le 1er), backfill étalé, livre **DraftKings** (`--odds-api-book draftkings`,
+marchés `h2h,spreads` — les totaux sont clos par A3). **Décision du 2026-10-04 :**
+ajouter la fin de **2022-23**, qu'aucune source ne couvre (SBRO s'arrête au
+2022-11-27 : 342 matchs sur 1 312), et **ne jamais risquer de vider le quota** —
+la clé est partagée avec l'app.
+
+| Saison | État | Appels | Crédits |
+|---|---|---|---|
+| 2025-26 | ✅ 2026-09-27 — 1 339 matchs, 3,9 relevés/match | 950 | 19 000 |
+| 2024-25 | ✅ 2026-10-01 — 1 312 matchs, 2,9 relevés/match | 672 | 13 440 |
+| 2023-24 | ⏳ 1er nov. + 1er déc. | ~920 | ~18 400 (prudent) |
+| 2022-23 (28 nov. → 14 avr.) | ⏳ 1er janv. + 1er févr. | ~670 | ~13 500 (prudent) |
+
+**Comment le coût est chiffré** (le `--odds-api-dry-run` ne donne qu'une borne
+haute) : appels réellement payés, comptés dans le cache
+`data/raw/odds/oddsapi/` des deux saisons faites, par nombre de matchs de la
+soirée (`games_spine.csv`), en gardant pour chaque taille de soirée le PLUS
+CHER des deux taux (2025-26 coûtait davantage : plus d'heures de début
+distinctes, et 40 jours sans match pendant la pause olympique). 20 crédits
+l'appel (`h2h,spreads`, un livre). Taux moyens : 2023-24 ~16 000, fin 2022-23
+~11 700. Plages arrêtées au dernier jour de la saison régulière : les séries ne
+servent à rien (`build_dataset.py` ne joint que la saison régulière).
+
+**Ce que l'app consomme sur la même clé, chaque mois :** proxy d'affichage
+(3 crédits par rafraîchissement, TTL 30 min, jusqu'à ~4 300/mois si le trafic
+est continu), collecte live (~300/mois, livres parallèles compris), marchés
+supplémentaires si `ODDS_EXTRA_MARKETS` est posé. D'où **~10 000 crédits de
+backfill par mois au plus**, et une réserve de compte de **6 000**.
+
+**Deux plafonds durs par run :** `--odds-api-budget 10000` (ce que le run
+dépense) et `--odds-api-keep 6000` (nouveau le 2026-10-04 : le run s'arrête
+dès que le SOLDE DU COMPTE, lu dans `x-requests-remaining`, descendrait sous ce
+seuil — défaut 6 000). Arrêté par l'un ou l'autre : relancer **la même
+commande** le mois suivant, le cache rend gratuits les appels déjà payés. Au
+passage, corrigé : l'arrêt sur solde se déclenchait APRÈS un appel payé et
+jetait sa réponse ; il se déclenche maintenant avant l'appel suivant.
+
+**Les commandes, une par mois, le 1er** (depuis `ml/python`, `ODDS_API_KEY`
+posée) :
+
+```bash
+# 1er novembre 2026 — 2023-24, partie A (~670 matchs, ~9 300 crédits prudents)
+python fetch_data_v4.py --only odds --from-local --odds-api-book draftkings \
+    --odds-api-from 2023-10-10 --odds-api-to 2024-01-14 \
+    --odds-api-budget 10000 --odds-api-keep 6000
+# 1er décembre 2026 — 2023-24, partie B (~640 matchs, ~9 000)
+python fetch_data_v4.py --only odds --from-local --odds-api-book draftkings \
+    --odds-api-from 2024-01-15 --odds-api-to 2024-04-18 \
+    --odds-api-budget 10000 --odds-api-keep 6000
+# 1er janvier 2027 — 2022-23, partie A (~500 matchs, ~7 200)
+python fetch_data_v4.py --only odds --from-local --odds-api-book draftkings \
+    --odds-api-from 2022-11-28 --odds-api-to 2023-02-12 \
+    --odds-api-budget 10000 --odds-api-keep 6000
+# 1er février 2027 — 2022-23, partie B (~470 matchs, ~6 300)
+python fetch_data_v4.py --only odds --from-local --odds-api-book draftkings \
+    --odds-api-from 2023-02-13 --odds-api-to 2023-04-14 \
+    --odds-api-budget 10000 --odds-api-keep 6000
+```
+
+Après chaque run : vérifier dans le journal la ligne de crédits restants, puis
+`python build_dataset.py`. Après le dernier : `backtest_walkforward.py --clv`
+(et `--derived`) sur 2022-23 → 2025-26, **quatre** saisons modernes au lieu de
+deux — c'est ce qui permettra de trancher le CLV. ⚠️ 2022-23 aura deux sources
+dans la même saison (SBRO jusqu'au 27 nov., DraftKings ensuite) : la colonne
+`source` d'`odds.csv` permet de les séparer, et le contrôle de recouvrement
+SBRO ↔ Odds API (P7, 20 appels faits en janvier 2022) s'applique.
+
+---
+
+#### Historique : le dossier d'avant le paiement (2026-08)
+
 
 **Constat, vérifié aux sources le 2026-08-04.** L'endpoint `/v4/historical/`
 n'est **pas servi aux clés gratuites** — le plan Starter liste explicitement
@@ -1443,8 +1518,12 @@ fait                    A3 — outillage complet (mode --clv, placebo, dissectio
                         CLV réel mais qui annule tout juste la marge.
                         Le CLV puck line reste impossible sur SBRO.
 
-maintenant              DÉCISION A1 — payer 59 $ un mois, ou attendre 2029.
-                        Dossier chiffré des deux côtés dans la section A1.
+fait (2026-09/10)       DÉCISION A1 — plan 20K payé, 2025-26 et 2024-25 en
+                        cache. Recalage de niveau des buts servi (2026-10-04).
+
+maintenant → févr. 27   A1 — 2023-24 (nov., déc.) puis fin 2022-23 (janv.,
+                        févr.), une plage par mois, ≤ 10 000 crédits, réserve
+                        de compte 6 000. Ensuite --clv sur 4 saisons modernes.
 
                         A1bis — mise en service de la collecte live, à faire
                         quelle que soit la décision. Échéance : pré-saison,

@@ -26,13 +26,18 @@ Usage :
     python fetch_data_v4.py --skip-skaters # sans les patineurs (plus rapide)
     python fetch_data_v4.py --only odds    # une seule source (spine|moneypuck|odds)
 
-Backfill des cotes 2023-24 → 2025-26 (The Odds API) :
+Backfill des cotes (The Odds API, plan 20K = 20 000 crédits/mois remis à zéro
+le 1er) — calendrier et coûts dans ml/REFACTOR_PLAN.md §A1. Une plage par
+mois, le 1er, jamais plus de ~10 000 crédits : la clé est partagée avec l'app.
     export ODDS_API_KEY=...          # PowerShell : $env:ODDS_API_KEY = '...'
-    python fetch_data_v4.py --only odds --odds-api-dry-run \
-        --odds-api-from 2023-10-01 --odds-api-to 2024-06-30      # chiffre le coût
     python fetch_data_v4.py --only odds --from-local --odds-api-book draftkings \
-        --odds-api-from 2023-10-01 --odds-api-to 2024-04-30 \
-        --odds-api-budget 15000                                   # récupère
+        --odds-api-from 2023-10-10 --odds-api-to 2024-01-14 \
+        --odds-api-budget 10000 --odds-api-keep 6000             # récupère
+
+    Deux plafonds DURS : `--odds-api-budget` (ce que ce run dépense) et
+    `--odds-api-keep` (ce qui doit rester au COMPTE pour l'app, défaut 6 000).
+    Arrêté par l'un ou l'autre, relancer la MÊME commande le mois suivant : le
+    cache rend les appels déjà payés gratuits.
 
     Livre : `draftkings` (décidé le 2026-09-27, sondage probe_odds_books.py) —
     le MÊME que ODDS_COLLECT_BOOKMAKERS côté serveur, sinon le CLV compare deux
@@ -638,6 +643,17 @@ def _oddsapi_key() -> str | None:
 ODDS_API_MARKETS_DEFAULT = "h2h,spreads"
 ODDS_API_HIST_COST = 10 * 2      # recalculé par `_set_hist_cost` à chaque run
 
+# Réserve laissée au SOLDE DU COMPTE (2026-10-04). Le backfill partage la clé de
+# l'app : le proxy d'affichage (~3 crédits / 30 min de trafic, jusqu'à ~4 300
+# par mois) et la collecte live (~300 par mois) puisent dans les mêmes 20 000
+# crédits mensuels. `--odds-api-budget` plafonne ce que CE run dépense, pas ce
+# qui reste au compte : sans réserve, un backfill lancé le 20 du mois pouvait
+# vider le solde et couper les cotes de l'app jusqu'au 1er. Le run s'arrête dès
+# que le solde réel (`x-requests-remaining`) ne couvrirait plus un appel de
+# plus AU-DESSUS de cette réserve. `--odds-api-keep` la change.
+ODDS_API_KEEP_DEFAULT = 6000
+ODDS_API_KEEP = ODDS_API_KEEP_DEFAULT
+
 
 def _set_hist_cost(markets: str, regions: str, book: str | None) -> int:
     """Fixe le coût d'un appel historique pour ce run, et le rend.
@@ -663,6 +679,12 @@ class _OddsApiStop(Exception):
 
 def _oddsapi_get(path: str, params: dict, key: str) -> dict | list | None:
     """Appel authentifié. La clé n'apparaît jamais dans un message d'erreur."""
+    # Arrêt décidé sur la réponse PRÉCÉDENTE (solde sous la réserve) : levé
+    # AVANT l'appel suivant, jamais après un appel payé — sinon la réponse
+    # déjà facturée était jetée sans passer par le cache.
+    stop = getattr(_oddsapi_get, "stop_next", None)
+    if stop:
+        raise _OddsApiStop(stop)
     url = f"{ODDS_API_BASE}{path}"
     try:
         r = SESSION.get(url, params={**params, "apiKey": key}, timeout=60)
@@ -691,11 +713,14 @@ def _oddsapi_get(path: str, params: dict, key: str) -> dict | list | None:
         _oddsapi_get.remaining = remaining
         try:
             # Garde-fou côté fournisseur : si le solde réel ne couvre plus un
-            # appel, on s'arrête sans attendre le prochain refus.
-            if float(remaining) < ODDS_API_HIST_COST:
-                print(f"   ⛔ crédits restants ({remaining}) insuffisants pour "
-                      f"un appel de plus ({ODDS_API_HIST_COST}).")
-                raise _OddsApiStop("crédits fournisseur épuisés")
+            # appel AU-DESSUS de la réserve de l'app (`ODDS_API_KEEP`), on
+            # s'arrête sans attendre le prochain refus. Ce qui a été récupéré
+            # est gardé, et le cache rend la reprise gratuite.
+            if float(remaining) - ODDS_API_HIST_COST < ODDS_API_KEEP:
+                print(f"   ⛔ solde du compte {remaining} : un appel de plus "
+                      f"({ODDS_API_HIST_COST}) entamerait la réserve de l'app "
+                      f"({ODDS_API_KEEP}). Reprendre le mois prochain, même commande.")
+                _oddsapi_get.stop_next = "réserve du compte atteinte"
         except (TypeError, ValueError):
             pass
     try:
@@ -1337,7 +1362,14 @@ def main():
                         "L'arrêt conserve tout ce qui a déjà été récupéré, et "
                         "le cache évite de le repayer. Fortement recommandé : "
                         "une plage de dates large consomme sans prévenir")
+    p.add_argument("--odds-api-keep", type=int, default=ODDS_API_KEEP_DEFAULT,
+                   metavar="CREDITS",
+                   help="Crédits laissés au COMPTE pour l'app (proxy d'affichage + "
+                        f"collecte live). Défaut {ODDS_API_KEEP_DEFAULT}. Le run "
+                        "s'arrête quand le solde réel descendrait sous ce seuil")
     args = p.parse_args()
+    global ODDS_API_KEEP
+    ODDS_API_KEEP = max(0, int(args.odds_api_keep))
 
     api_range = None
     if args.odds_api_from or args.odds_api_to:

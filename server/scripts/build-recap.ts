@@ -88,7 +88,7 @@ const D = {
  * s'ajoutent vers le bas. Le plafond est ce qui tient avant la zone de sécurité
  * du bas — voir matchBlock dans render-slides.ts et _shared.css.
  */
-const MATCH_ROWS_PER_CARD = 11;
+const MATCH_ROWS_PER_CARD = 10;
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 

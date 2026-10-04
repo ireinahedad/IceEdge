@@ -154,6 +154,13 @@ observés / λ = 1,03 sur 2017-21, **0,96 sur 2022-25** (λ trop haut de ~4 %). 
 d'avant-match sont donc trop hauts ces dernières saisons. À traiter côté modèle d'avant-match
 (recalage de niveau sur la saison en cours), pas dans le direct.
 
+✅ **Traité le 2026-10-04** côté avant-match : recalage de niveau des buts (`measure_level.py`,
+`level_layer.json`, `ml/EXPLICATION_ML.md` §4.3 bis). Le total λ est multiplié par un k de saison
+(≈ 0,97 en fin de 2025-26), la victoire est inchangée. Le paquet ML renvoie les λ recalés, donc le
+direct ML en hérite sans changement côté Node. Avec la matrice servie (τ compris), P(> 5,5) sur
+2023-26 passe de 58,9 % à 56,2 % pour 56,0 % observé. À re-vérifier : les deux cases « totaux à la
+mise au jeu » du rejeu (`replay-live.ts`), qui devraient cesser d'être pires.
+
 ### Vérifié
 - Serveur : 1078 tests (dont 4 du moteur, 3 de la phase 2), `tsc` serveur et client, `npm run build`.
 - Chemin réel sur un match en cours (COL–LAK, 2026-09-30) : `fetchGameDetail` → `boxscoreLiveInfo`

@@ -41,6 +41,26 @@ export type LlmTaskType = typeof LLM_TASK_TYPES[number];
 export type LlmLocale = 'fr' | 'en';
 
 /**
+ * Consigne de langue, ajoutée à la FIN de chaque invite système (2026-10-04).
+ *
+ * Les invites étaient déjà écrites dans la langue de l'app, mais aucune ne
+ * disait EXPLICITEMENT dans quelle langue répondre. Or le message utilisateur
+ * mélange souvent les langues : question tapée en anglais dans une app en
+ * français, noms de joueurs, sigles, `propType` (`anytime_goal`…), lignes de
+ * faits préparées côté client. Le modèle suivait alors parfois la langue du
+ * message plutôt que celle de l'app. Placée en dernier, la consigne est celle
+ * que le modèle lit juste avant de répondre.
+ *
+ * ⚠️ Compte dans la borne de 2 000 caractères des invites (`llmQuota.service`).
+ */
+export const LANGUAGE_RULE: Record<LlmLocale, string> = {
+  fr: "Langue : réponds TOUJOURS en français, même si la question, des noms ou des données sont en anglais ; " +
+      "garde tels quels les noms propres et les sigles d'équipes.",
+  en: "Language: ALWAYS reply in English, even if the question, names or data are in another language; " +
+      "keep proper names and team abbreviations as-is.",
+};
+
+/**
  * Invite d'`explain_bet` (`PredictionSheet`, bouton « Analyse IA »). Le texte est celui qui
  * vivait dans `client/src/app/pages/prediction/PredictionSheet.tsx`, déplacé
  * sans être réécrit — le format de réponse attendu ne change donc pas.
@@ -166,5 +186,5 @@ export function resolveLocale(bodyLocale: unknown, acceptLanguage?: string): Llm
 
 /** L'invite système d'une tâche à invite FIXE, dans la langue demandée. */
 export function systemPromptFor(taskType: FixedPromptTask, locale: LlmLocale): string {
-  return PROMPTS[taskType][locale];
+  return `${PROMPTS[taskType][locale]}\n${LANGUAGE_RULE[locale]}`;
 }

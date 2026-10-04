@@ -230,6 +230,78 @@ def p_ot_for(w: list[float] | None, lam_home: float, lam_away: float,
     return float(1.0 / (1.0 + np.exp(-z)))
 
 
+# ── Recalage de NIVEAU des buts dans la saison (2026-10-04) ─────────────────
+#
+# Le modèle de score se trompe de niveau selon les saisons : buts réglementaires
+# observés / λ = 1,02-1,03 sur 2017-21, 0,955-0,969 sur 2022-26 (walk-forward,
+# `live_pregame.csv`). Les totaux « plus de » d'avant-match étaient donc trop
+# hauts de ~3 points ces dernières saisons. Mesure et règle d'adoption :
+# `measure_level.py` → `ml/models/level_report.json`.
+#
+# Le recalage est un seul nombre k par saison, le rapport buts observés /
+# buts prévus des matchs DÉJÀ JOUÉS de la saison en cours, rétréci vers 1 :
+#
+#     k = 1 + w·(r − 1),   r = Σ obs / Σ λ,   w = n / (n + n0)
+#
+# n0 (« matchs fictifs à k = 1 ») est choisi par saison laissée de côté dans la
+# mesure, pas au jugé. En début de saison n = 0 → k = 1 exactement : rien ne
+# bouge tant qu'aucun match n'est joué.
+#
+# Le contrat a trois utilisateurs — `measure_level.py` (mesure), `refresh_data`
+# (calcul hebdomadaire, écrit `level_layer.json`) et `ml_service` (service) —
+# d'où sa place ici : une formule recopiée finirait par diverger et la mesure
+# cesserait de décrire ce qui est servi.
+#
+# Ce que k touche, et ce qu'il ne touche pas : il multiplie le TOTAL λ_dom +
+# λ_ext ; le partage domicile/visiteur est ensuite choisi pour garder
+# P(victoire domicile) inchangée (`lambdas_for_home_win`). Le moneyline servi
+# (couche de correction comprise) ne bouge donc pas d'un millième, et tous les
+# autres marchés se lisent sur la même matrice recalée.
+LEVEL_K_MIN, LEVEL_K_MAX = 0.85, 1.15
+
+
+def level_k(obs_sum: float, lam_sum: float, n_games: int, prior_games: float) -> float:
+    """k de la saison en cours à partir de ses matchs joués (cf. ci-dessus).
+
+    Borné à [LEVEL_K_MIN, LEVEL_K_MAX] : au-delà de ±15 %, c'est un problème
+    de données (scores manquants, λ mal joints), pas une dérive de niveau.
+    """
+    try:
+        obs_sum, lam_sum = float(obs_sum), float(lam_sum)
+        n, n0 = int(n_games), float(prior_games)
+    except (TypeError, ValueError):
+        return 1.0
+    if n <= 0 or lam_sum <= 0 or not (np.isfinite(obs_sum) and np.isfinite(lam_sum)) \
+            or not np.isfinite(n0) or n0 < 0:
+        return 1.0
+    w = n / (n + n0)
+    k = 1.0 + w * (obs_sum / lam_sum - 1.0)
+    return float(min(max(k, LEVEL_K_MIN), LEVEL_K_MAX))
+
+
+def read_level_layer(layer: dict | None, season: int) -> float:
+    """k à appliquer pour la saison `season`, ou 1.0 si le fichier est douteux.
+
+    Repli silencieux sur 1.0 (= pas de recalage) quand : pas de fichier ; le
+    verdict de la mesure n'est pas ADOPTER ; le fichier porte une AUTRE saison
+    (un k d'avril appliqué en octobre recalerait la nouvelle saison sur
+    l'ancienne) ; k non fini ou hors bornes ; k ne se recalcule pas à partir
+    de ses propres comptes (fichier édité à la main ou tronqué).
+    """
+    if not isinstance(layer, dict) or layer.get("verdict") != "ADOPTER":
+        return 1.0
+    try:
+        if int(layer["season"]) != int(season):
+            return 1.0
+        k = float(layer["k"])
+        again = level_k(layer["obs_sum"], layer["lam_sum"], layer["n_games"], layer["prior_games"])
+    except (KeyError, TypeError, ValueError):
+        return 1.0
+    if not np.isfinite(k) or not (LEVEL_K_MIN <= k <= LEVEL_K_MAX) or abs(k - again) > 1e-6:
+        return 1.0
+    return k
+
+
 # ── γ : étirer l'écart entre les deux intensités (2026-09-27) ───────────────
 #
 # Le modèle de score est trop prudent dans les extrêmes (déciles de

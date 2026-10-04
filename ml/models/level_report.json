@@ -1,0 +1,146 @@
+{
+  "generated": "2026-10-04",
+  "verdict": "ADOPTER",
+  "prior_games": 200,
+  "rule": "z <= -2 (bootstrap apparié par match) ET >= 70 % des saisons ET |P(>5.5) - obs| 2023-26 pas pire ; n0 par saison laissée de côté",
+  "refresh_timing": "k gelé chaque lundi sur les matchs datés jusqu'au samedi précédent",
+  "scored_seasons": [
+    2015,
+    2025
+  ],
+  "n_games": 13351,
+  "deviance_raw": 0.965664,
+  "deviance_level": 0.962474,
+  "delta": -0.00319,
+  "z": -3.188,
+  "seasons_better": 8,
+  "seasons_total": 11,
+  "over_5_5_2023_26": {
+    "observed": 0.5596,
+    "pred_raw": 0.5843,
+    "pred_level": 0.5575
+  },
+  "n0_grid": [
+    25,
+    50,
+    100,
+    200,
+    400,
+    800,
+    1600
+  ],
+  "n0_by_held_out_season": {
+    "2015": 200,
+    "2016": 200,
+    "2017": 200,
+    "2018": 200,
+    "2019": 200,
+    "2020": 200,
+    "2021": 200,
+    "2022": 200,
+    "2023": 200,
+    "2024": 200,
+    "2025": 200
+  },
+  "seasons": [
+    {
+      "season": 2015,
+      "n": 1213,
+      "n0": 200,
+      "ratio_obs_lam": 0.9865,
+      "k_end": 0.9847,
+      "dev_raw": 0.93999,
+      "dev_level": 0.94019
+    },
+    {
+      "season": 2016,
+      "n": 1219,
+      "n0": 200,
+      "ratio_obs_lam": 0.9819,
+      "k_end": 0.9835,
+      "dev_raw": 1.00771,
+      "dev_level": 1.00828
+    },
+    {
+      "season": 2017,
+      "n": 1246,
+      "n0": 200,
+      "ratio_obs_lam": 1.0248,
+      "k_end": 1.0194,
+      "dev_raw": 1.00809,
+      "dev_level": 1.00751
+    },
+    {
+      "season": 2018,
+      "n": 1252,
+      "n0": 200,
+      "ratio_obs_lam": 1.0229,
+      "k_end": 1.0199,
+      "dev_raw": 0.98115,
+      "dev_level": 0.98033
+    },
+    {
+      "season": 2019,
+      "n": 1067,
+      "n0": 200,
+      "ratio_obs_lam": 1.0321,
+      "k_end": 1.0276,
+      "dev_raw": 0.94699,
+      "dev_level": 0.94429
+    },
+    {
+      "season": 2020,
+      "n": 856,
+      "n0": 200,
+      "ratio_obs_lam": 1.0141,
+      "k_end": 1.0101,
+      "dev_raw": 0.99173,
+      "dev_level": 0.99264
+    },
+    {
+      "season": 2021,
+      "n": 1299,
+      "n0": 200,
+      "ratio_obs_lam": 1.0322,
+      "k_end": 1.0261,
+      "dev_raw": 0.96145,
+      "dev_level": 0.95736
+    },
+    {
+      "season": 2022,
+      "n": 1296,
+      "n0": 200,
+      "ratio_obs_lam": 0.9653,
+      "k_end": 0.9703,
+      "dev_raw": 0.9089,
+      "dev_level": 0.90346
+    },
+    {
+      "season": 2023,
+      "n": 1295,
+      "n0": 200,
+      "ratio_obs_lam": 0.9609,
+      "k_end": 0.9653,
+      "dev_raw": 0.94532,
+      "dev_level": 0.93796
+    },
+    {
+      "season": 2024,
+      "n": 1303,
+      "n0": 200,
+      "ratio_obs_lam": 0.9546,
+      "k_end": 0.9595,
+      "dev_raw": 0.99405,
+      "dev_level": 0.98462
+    },
+    {
+      "season": 2025,
+      "n": 1305,
+      "n0": 200,
+      "ratio_obs_lam": 0.9686,
+      "k_end": 0.9729,
+      "dev_raw": 0.94547,
+      "dev_level": 0.94125
+    }
+  ]
+}

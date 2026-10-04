@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildGameFacts, type BetDescriptor } from './llmFacts';
+import { systemPromptFor, LANGUAGE_RULE } from './llmPrompts';
 import { EXPLAIN_BET_V2, validateAnalysis, renderAnalysisText, ungroundedNumbers, fallbackAnalysis } from './llmAnalysis';
 
 const features: any = {
@@ -22,6 +23,20 @@ describe('invites système', () => {
   it('tiennent sous la borne sur laquelle le plafond mensuel est calculé (2 000 caractères)', () => {
     expect(EXPLAIN_BET_V2.fr.length).toBeLessThan(2000);
     expect(EXPLAIN_BET_V2.en.length).toBeLessThan(2000);
+    for (const task of ['explain_bet', 'ask_followup'] as const) {
+      expect(systemPromptFor(task, 'fr').length).toBeLessThan(2000);
+      expect(systemPromptFor(task, 'en').length).toBeLessThan(2000);
+    }
+  });
+
+  it('imposent explicitement la langue de l\'app, quelle que soit la langue de la question', () => {
+    for (const locale of ['fr', 'en'] as const) {
+      expect(EXPLAIN_BET_V2[locale]).toContain(LANGUAGE_RULE[locale]);
+      expect(systemPromptFor('explain_bet', locale).endsWith(LANGUAGE_RULE[locale])).toBe(true);
+      expect(systemPromptFor('ask_followup', locale).endsWith(LANGUAGE_RULE[locale])).toBe(true);
+    }
+    expect(LANGUAGE_RULE.fr).toMatch(/en français/);
+    expect(LANGUAGE_RULE.en).toMatch(/in English/);
   });
 });
 

@@ -1194,13 +1194,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // ── Home: Best Parlay (2026-10-04) ──
   "parlay.title":          { en: "Best Parlay", fr: "Best Parlay" },
   "parlay.explain":        { en: "Parlays of 3 to 5 picks built from our AI model's most likely bets, kept coherent by team and game. Every parlay shown has at least a 25% chance.", fr: "Des combinés de 3 à 5 sélections, faits avec les paris les plus probables selon notre modèle IA et cohérents par équipe et par match. Chaque combiné affiché a au moins 25 % de chance." },
-  "parlay.name":           { en: "Parlay #{n}", fr: "Combiné n° {n}" },
-  "parlay.kindMoneyline":  { en: "Moneyline only", fr: "Vainqueurs seulement" },
-  "parlay.kindMixed":      { en: "Mixed markets", fr: "Marchés mixtes" },
-  "parlay.legs":           { en: "{n} picks", fr: "{n} sélections" },
   "parlay.addShort":       { en: "Add to slip", fr: "Au coupon" },
-  "parlay.showLegs":       { en: "See the picks", fr: "Voir les sélections" },
-  "parlay.hideLegs":       { en: "Hide the picks", fr: "Masquer les sélections" },
   "parlay.inSlip":         { en: "In my slip", fr: "Dans le coupon" },
   "parlay.indepNote":      { en: "Player picks from the same game are treated as independent: the real chance may differ slightly.", fr: "Les paris joueur d'un même match sont supposés indépendants : la vraie chance peut légèrement différer." },
   "parlay.empty":          { en: "No parlay reaches 25% right now. They need at least 3 upcoming games with strong picks.", fr: "Aucun combiné n'atteint 25 % pour l'instant. Il faut au moins 3 matchs à venir avec des paris solides." },
