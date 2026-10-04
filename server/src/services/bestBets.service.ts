@@ -73,6 +73,20 @@ export interface BestBet {
    * probables), pas par valeur — les value bets sont une autre section.
    */
   ev:             number | null;
+  /**
+   * Le match du pari : jour NHL, mise au jeu ISO, domicile / visiteur
+   * (abréviations). Ajouté le 2026-10-04 pour « Best Parlay »
+   * (`bestParlays.service.ts`), qui ne garde que des matchs pas commencés,
+   * d'une même journée, et chiffre la corrélation des jambes d'un même match.
+   */
+  game:           BestBetGame | null;
+}
+
+export interface BestBetGame {
+  date:         string | null;
+  startTimeUTC: string | null;
+  home:         string;
+  away:         string;
 }
 
 interface Candidate extends Omit<BestBet, 'mlPct' | 'score' | 'source' | 'confidence' | 'bookPrice' | 'bookTitle' | 'ev'> {
@@ -142,6 +156,10 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
   const matchup = `${home} vs ${away}`;
   const line   = g.overUnder ?? 5.5;
   const gameDate: string | undefined = g.gameDate || undefined;
+  const game: BestBetGame = {
+    date: gameDate ?? null, startTimeUTC: g.startTimeUTC ?? null,
+    home: String(home).toUpperCase(), away: String(away).toUpperCase(),
+  };
 
   const [homeMl, awayMl, overPct, pl] = await Promise.all([
     predictMoneyline(homeLc, awayLc, true),
@@ -160,7 +178,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       subjectId: g.id, subjectName: matchup, subjectLogo: '', teamAbbr: home,
       label: `${home} to win`, selection: `${home} to win`, selectionValue: homeLc, selectionShort: `${home} ML`,
       context: ctxHome, line: null, gameId: g.id, teamId: homeLc, playerId: null, rulePct: homeMl,
-      teams: { home, away },
+      teams: { home, away }, game,
       ml: { kind: 'game', homeId: homeLc, awayId: awayLc, gameDate, marketType: 'moneyline' },
     },
     {
@@ -168,7 +186,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       subjectId: g.id, subjectName: matchup, subjectLogo: '', teamAbbr: away,
       label: `${away} to win`, selection: `${away} to win`, selectionValue: awayLc, selectionShort: `${away} ML`,
       context: ctxAway, line: null, gameId: g.id, teamId: awayLc, playerId: null, rulePct: awayMl,
-      teams: { home, away },
+      teams: { home, away }, game,
       // Le visiteur reste le visiteur : jusqu'au 2026-10-02 on inversait les deux
       // équipes, donc le modèle répondait « P(le visiteur gagne CHEZ LUI) » — il
       // recevait l'avantage de la glace (le bug corrigé le 2026-09-09 sur les tuiles).
@@ -179,7 +197,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       subjectId: g.id, subjectName: matchup, subjectLogo: '', teamAbbr: null,
       label: `Over ${line}`, selection: `Over ${line}`, selectionValue: 'over', selectionShort: `O${line}`,
       context: matchup, line, gameId: g.id, teamId: null, playerId: null, rulePct: overPct,
-      teams: { home, away },
+      teams: { home, away }, game,
       ml: { kind: 'game', homeId: homeLc, awayId: awayLc, gameDate, marketType: 'total_goals_over', line },
     },
     {
@@ -187,7 +205,7 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       subjectId: g.id, subjectName: matchup, subjectLogo: '', teamAbbr: null,
       label: `Under ${line}`, selection: `Under ${line}`, selectionValue: 'under', selectionShort: `U${line}`,
       context: matchup, line, gameId: g.id, teamId: null, playerId: null, rulePct: underPct,
-      teams: { home, away },
+      teams: { home, away }, game,
       ml: { kind: 'game', homeId: homeLc, awayId: awayLc, gameDate, marketType: 'total_goals_under', line },
     },
     {
@@ -195,15 +213,18 @@ async function buildGameCandidates(g: any): Promise<Candidate[]> {
       subjectId: g.id, subjectName: matchup, subjectLogo: '', teamAbbr: home,
       label: `${home} -1.5`, selection: `${home} -1.5`, selectionValue: homeLc, selectionShort: `${home} -1.5`,
       context: ctxHome, line: -1.5, gameId: g.id, teamId: homeLc, playerId: null, rulePct: pl,
-      teams: { home, away },
+      teams: { home, away }, game,
       ml: { kind: 'game', homeId: homeLc, awayId: awayLc, gameDate, marketType: 'puck_line', line: -1.5 },
     },
   ];
 }
 
+/** Le match d'une équipe dans la fenêtre — pour les paris joueur. */
+interface TeamGame { matchup: string; when: string; gameId: string; game: BestBetGame }
+
 async function buildPlayerCandidates(
   p: any,
-  game: { matchup: string; when: string; gameId: string },
+  game: TeamGame,
 ): Promise<Candidate[]> {
   const pid  = String(p.id);
   const name = p.name ?? 'Player';
@@ -226,7 +247,7 @@ async function buildPlayerCandidates(
     id: `bb-p-${pid}-${suffix}`, subjectType: 'player', marketType, marketLabel,
     subjectId: pid, subjectName: name, subjectLogo: logo, teamAbbr: abbr,
     label, selection: label, selectionValue, selectionShort: short, context: ctx,
-    line, gameId: game.gameId, teamId: null, playerId: pid, rulePct, ml,
+    line, gameId: game.gameId, teamId: null, playerId: pid, rulePct, ml, game: game.game,
   });
 
   return [
@@ -409,15 +430,20 @@ async function computeBestBets(o: NormalizedOptions): Promise<BestBetsResult> {
   // Player props are ONLY built for players whose team appears here.
   // gameId is required so a player-prop bet placed from here can later be
   // auto-settled — without it, settlement can never look up the boxscore.
-  const teamGame = new Map<string, { matchup: string; when: string; gameId: string }>();
+  const teamGame = new Map<string, TeamGame>();
   for (const g of games) {
     const home = String(g.homeTeam?.abbreviation ?? g.homeTeam?.id ?? '').toLowerCase();
     const away = String(g.awayTeam?.abbreviation ?? g.awayTeam?.id ?? '').toLowerCase();
     if (!home || !away) continue;
     const matchup = `${home.toUpperCase()} vs ${away.toUpperCase()}`;
     const when    = g.startTime || g.period || '';
-    if (!teamGame.has(home)) teamGame.set(home, { matchup, when, gameId: String(g.id) });
-    if (!teamGame.has(away)) teamGame.set(away, { matchup, when, gameId: String(g.id) });
+    const info: TeamGame = {
+      matchup, when, gameId: String(g.id),
+      game: { date: g.gameDate || null, startTimeUTC: g.startTimeUTC ?? null,
+              home: home.toUpperCase(), away: away.toUpperCase() },
+    };
+    if (!teamGame.has(home)) teamGame.set(home, info);
+    if (!teamGame.has(away)) teamGame.set(away, info);
   }
 
   // Keep only players whose team is playing, then cap to maxPlayers.

@@ -38,10 +38,10 @@ import {
 } from "../services/featureEngineering";
 import { getBestBets } from "../services/bestBets.service";
 import { getCurrentValueBets } from "../services/valueBets.service";
-import { authenticate, requirePro } from "../middleware/auth.middleware";
-import { combineParlayLegs } from "../services/parlay";
-import type { ParlayLeg } from "../services/parlay";
-import { isScoreDerivable, predictGameLegCorrelation } from "../services/predictionEngine";
+import { authenticate, optionalAuthenticate, requirePro } from "../middleware/auth.middleware";
+import { getBestParlays, gateBestParlays } from "../services/bestParlays.service";
+import { isPro } from "../services/subscription.service";
+import { computeParlayProbability, normalizeMarket, type WireParlayLeg } from "../services/parlayProbability";
 import { logger } from "../logger";
 import { sendError } from "../httpError";
 import { validateBody } from "../middleware/validate.middleware";
@@ -148,6 +148,32 @@ router.get("/value-bets", authenticate, requirePro, async (_req: Request, res: R
   }
 });
 
+// GET /api/predict/best-parlays — « Best Parlay » de l'accueil (2026-10-04).
+//
+// Ouverte à tous, comme best-bets : les deux premiers combinés sont gratuits.
+// Les autres sont réservés aux Pro, et c'est ICI qu'on tranche — un
+// non-abonné ne reçoit pour eux qu'une coquille sans jambes ni pourcentage
+// (`gateBestParlays`). D'où `optionalAuthenticate` (un jeton présent mais
+// expiré → 401, pour que `authedFetch` le rafraîchisse au lieu de rabattre un
+// abonné sur la vue gratuite) et `isPro` lu en base, comme `requirePro`.
+//
+// Aucun travail par appel : les combinés sont construits sur le pool
+// best-bets en cache et gardés tant qu'il ne change pas.
+router.get("/best-parlays", optionalAuthenticate, async (req: Request, res: Response) => {
+  try {
+    let pro = false;
+    if (req.user) {
+      pro = req.user.role === "admin" || (await isPro(req.user.sub).catch(() => false));
+    }
+    const result = await getBestParlays();
+    // La réponse dépend de l'abonnement : jamais en cache partagé.
+    res.set("Cache-Control", "private, no-store");
+    res.json(gateBestParlays(result, pro));
+  } catch (err: any) {
+    sendError(res, err, { context: '[predict/best-parlays]', fallbackMessage: 'Best parlays failed' });
+  }
+});
+
 // --- Types ---
 
 type BetMarketType =
@@ -231,23 +257,7 @@ function isNegativeSide(market: string, selection: string | undefined): boolean 
   return NEGATIVE_SELECTIONS.has((selection ?? "").trim().toLowerCase());
 }
 
-/**
- * Normalise ML-vocabulary aliases (sent by the stats page) into the canonical
- * { marketType, selection } used by the prediction engine. This is what keeps
- * the coupon and the stats page in sync: both funnel into the same markets.
- */
-function normalizeMarket(
-  marketType: string,
-  selection: string
-): { market: string; selection: string } {
-  switch (marketType) {
-    case "total_goals_over":  return { market: "total_goals", selection: "over" };
-    case "total_goals_under": return { market: "total_goals", selection: "under" };
-    case "pp_goal":           return { market: "team_pp_goals", selection };
-    case "penalty_kill":      return { market: "team_penalty_kill", selection };
-    default:                  return { market: marketType, selection };
-  }
-}
+// `normalizeMarket` a déménagé dans `services/parlayProbability.ts` (2026-10-04).
 
 /**
  * Resolve a game-based request into concrete team/opponent/home-ice values.
@@ -568,111 +578,26 @@ router.post("/single", validateBody(singlePredictionSchema), async (req: Request
 // restent multipliées conditionnellement, et `assumesIndependence` le dit.
 router.post("/parlay", validateBody(parlayPredictionSchema), async (req: Request, res: Response) => {
   try {
-    type WireLeg = ParlayLeg & { teamId?: string; opponentId?: string; isHome?: boolean };
-    const { legs } = req.body as { legs: WireLeg[] };
+    const { legs } = req.body as { legs: WireParlayLeg[] };
 
     if (!Array.isArray(legs) || legs.length === 0) {
       return res.status(400).json({ error: "legs array required" });
     }
 
-    const naive = legs.reduce((acc, l) => acc * (l.probability / 100), 1) * 100;
-
-    // ── Étage 1 : relations logiques ─────────────────────────────────────────
-    // `teamId` est le sujet de la jambe (le `subjectId` du coupon) : sans lui,
-    // « MTL −1.5 » + « TOR +1.5 » (= « MTL −1.5, non ») ne se reconnaissaient
-    // pas comme incompatibles. Voir `ParlayLeg.subject`.
-    const logical = combineParlayLegs(legs.map((l) => ({ ...l, subject: l.teamId })));
-    if (logical.impossible) {
-      return res.json({
-        combinedProbability: Math.round(naive * 10) / 10,
-        adjustedProbability: 0,
-        impossible: true,
-        redundantLegs: logical.redundantLegs,
-        exactLegs: 0,
-        assumesIndependence: false,
-        legs: legs.map((l) => ({ marketType: l.marketType, probability: l.probability })),
-      });
-    }
-    if (!Number.isFinite(logical.probability)) {
-      return res.json({
-        combinedProbability: null, adjustedProbability: null,
-        impossible: false, redundantLegs: logical.redundantLegs,
-        exactLegs: 0, assumesIndependence: false,
-        legs: legs.map((l) => ({ marketType: l.marketType, probability: l.probability })),
-      });
-    }
-
-    // ── Étage 2 : corrélation réelle, match par match ────────────────────────
-    const byGame = new Map<string, WireLeg[]>();
-    logical.legs.forEach((l, i) => {
-      // Une jambe sans match ne peut être corrélée à rien : groupe à elle seule.
-      const key = l.gameId ? `g:${l.gameId}` : `solo:${i}`;
-      const bucket = byGame.get(key);
-      if (bucket) bucket.push(l); else byGame.set(key, [l]);
-    });
-
-    let joint = 1;
-    let exactLegs = 0;
-    let assumesIndependence = false;
-
-    for (const group of byGame.values()) {
-      const derivable = group.filter(l => isScoreDerivable(
-        normalizeMarket(l.marketType, l.selection ?? "").market));
-      const others = group.filter(l => !derivable.includes(l));
-
-      // Marchés que le score final ne décide pas : produit conditionnel.
-      for (const l of others) joint *= l.probability / 100;
-      if (others.length > 0 && group.length > 1) assumesIndependence = true;
-
-      if (derivable.length === 0) continue;
-      if (derivable.length === 1) { joint *= derivable[0].probability / 100; continue; }
-
-      // Le match est décrit par la première jambe qui porte ses deux équipes.
-      const anchor = derivable.find(l => l.teamId && l.opponentId);
-      const anchorIsHome = anchor?.isHome !== false;
-      const homeId = anchor ? (anchorIsHome ? anchor.teamId : anchor.opponentId) : undefined;
-      const awayId = anchor ? (anchorIsHome ? anchor.opponentId : anchor.teamId) : undefined;
-
-      if (!homeId || !awayId) {
-        // Sans les équipes, pas de loi jointe. On multiplie et on le DIT.
-        for (const l of derivable) joint *= l.probability / 100;
-        assumesIndependence = true;
-        continue;
-      }
-
-      const corr = await predictGameLegCorrelation(homeId, awayId, derivable.map(l => {
-        const { market, selection } = normalizeMarket(l.marketType, l.selection ?? "");
-        return { market, selection, line: l.line, subjectIsHome: l.isHome !== false };
-      }));
-
-      // Le produit des probabilités AFFICHÉES reste la base : ce sont elles que
-      // l'utilisateur voit sur les tuiles. La loi jointe ne fournit que le
-      // facteur de corrélation, sans dimension — voir
-      // `predictGameLegCorrelation` pour pourquoi on ne sert pas sa
-      // probabilité brute.
-      const shown = derivable.reduce((acc, l) => acc * (l.probability / 100), 1);
-
-      if (corr === null) {
-        // Pas de cadences exploitables : on ne fabrique pas une corrélation.
-        joint *= shown;
-        assumesIndependence = true;
-      } else {
-        joint *= shown * corr.factor;
-        exactLegs += derivable.length;
-      }
-    }
-
+    // Le calcul vit dans `parlayProbability.ts` depuis le 2026-10-04 (partagé
+    // avec « Best Parlay ») ; la réponse est inchangée.
+    const r = await computeParlayProbability(legs);
     res.json({
       /** Produit naïf des jambes — conservé pour comparaison. */
-      combinedProbability: Math.round(naive * 10) / 10,
+      combinedProbability: r.combinedProbability,
       /** Ce que le nom promet depuis toujours : corrélations comprises. */
-      adjustedProbability: Math.round(joint * 1000) / 10,
-      impossible: false,
-      redundantLegs: logical.redundantLegs,
+      adjustedProbability: r.adjustedProbability,
+      impossible: r.impossible,
+      redundantLegs: r.redundantLegs,
       /** Nb de jambes dont la corrélation a réellement été calculée. */
-      exactLegs,
+      exactLegs: r.exactLegs,
       /** `true` = au moins un groupe est retombé sur l'indépendance. */
-      assumesIndependence,
+      assumesIndependence: r.assumesIndependence,
       legs: legs.map((l) => ({ marketType: l.marketType, probability: l.probability })),
     });
   } catch (err: any) {

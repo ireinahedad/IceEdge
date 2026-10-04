@@ -89,6 +89,27 @@ vi.mock('../middleware/auth.middleware', async (orig) => ({
     req.user = { sub, role: sub === 'admin' ? 'admin' : 'user' };
     next();
   },
+  // Invité sans `x-test-user` ; sinon l'appelant, comme `authenticate`.
+  optionalAuthenticate: (req: any, _res: any, next: any) => {
+    const sub = req.headers['x-test-user'];
+    if (sub) req.user = { sub, role: sub === 'admin' ? 'admin' : 'user' };
+    next();
+  },
+}));
+
+// Best Parlay : la construction est mockée (testée dans
+// `bestParlays.service.test.ts`), le filtrage Pro est le VRAI.
+const parlay = (i: number) => ({
+  id: `bp-${i}`, kind: i % 2 ? 'mixed' : 'moneyline', legs: [{ id: `l${i}a` }, { id: `l${i}b` }, { id: `l${i}c` }],
+  probability: 30 + i, assumesIndependence: false, coherentPairs: 0, bookPrice: null,
+});
+const getBestParlays = vi.fn(async () => ({
+  parlays: [0, 1, 2, 3].map(parlay),
+  meta: { generatedAt: '2026-10-04T00:00:00.000Z', day: '2026-10-04', mlAvailable: true },
+}));
+vi.mock('../services/bestParlays.service', async (orig) => ({
+  ...(await orig<typeof import('../services/bestParlays.service')>()),
+  getBestParlays: () => getBestParlays(),
 }));
 
 async function predictApp() {
@@ -311,5 +332,42 @@ describe('GET /api/predict/value-bets — réservé aux Pro', () => {
     expect(res.status).toBe(200);
     expect(res.body.bets).toEqual([{ id: 'g1-moneyline-TOR' }]);
     expect(res.headers['cache-control']).toBe('private, no-store');
+  });
+});
+
+describe('GET /api/predict/best-parlays — 2 gratuits, le reste Pro', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('invité : les 2 premiers en entier, les autres SANS jambes ni pourcentage', async () => {
+    const res = await request(await predictApp()).get('/api/predict/best-parlays');
+    expect(res.status).toBe(200);
+    expect(res.body.parlays).toHaveLength(4);
+    expect(res.body.parlays[0].legs).toHaveLength(3);
+    expect(res.body.parlays[1].probability).toBe(31);
+    for (const p of res.body.parlays.slice(2)) {
+      expect(p).toEqual({ id: expect.stringMatching(/^locked-/), kind: expect.any(String), locked: true, legCount: 3 });
+    }
+    expect(res.body.meta).toMatchObject({ freeCount: 2, total: 4 });
+    expect(res.headers['cache-control']).toBe('private, no-store');
+    expect(isPro).not.toHaveBeenCalled();
+  });
+
+  it('compte gratuit : même coupe', async () => {
+    isPro.mockResolvedValueOnce(false);
+    const res = await request(await predictApp()).get('/api/predict/best-parlays').set('x-test-user', 'u1');
+    expect(res.body.parlays.filter((p: any) => p.locked)).toHaveLength(2);
+  });
+
+  it('Pro : tout', async () => {
+    isPro.mockResolvedValueOnce(true);
+    const res = await request(await predictApp()).get('/api/predict/best-parlays').set('x-test-user', 'u2');
+    expect(res.body.parlays.every((p: any) => !p.locked && p.legs.length === 3)).toBe(true);
+  });
+
+  it('abonnement illisible : vue gratuite, jamais la vue Pro', async () => {
+    isPro.mockRejectedValueOnce(new Error('db down'));
+    const res = await request(await predictApp()).get('/api/predict/best-parlays').set('x-test-user', 'u3');
+    expect(res.status).toBe(200);
+    expect(res.body.parlays.filter((p: any) => p.locked)).toHaveLength(2);
   });
 });
