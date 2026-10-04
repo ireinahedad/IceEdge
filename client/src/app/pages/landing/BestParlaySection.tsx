@@ -15,14 +15,19 @@
  * Gratuit / Pro : c'est le serveur qui tranche. Un non-abonné reçoit les deux
  * premiers combinés en entier et, pour les autres, une coquille sans jambes ni
  * pourcentage — d'où les cartes verrouillées, qui ne montrent que la forme.
+ *
+ * 2026-10-04 (demande du user) : cartes étroites sur UNE rangée défilante
+ * (classes et flèches de `LiveGamesRow`), sélections dans un menu déroulant
+ * par carte.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, Layers, Check, Plus, Lock } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
+import { ChevronRight, ChevronLeft, ChevronDown, Layers, Check, Plus, Lock } from "lucide-react";
 import { useI18n } from "../../i18n";
 import { useBet } from "../../context/BetContext";
 import { ErrorState } from "../../components/ErrorState";
-import { ProLock } from "../../components/ProLock";
+import { features } from "../../platform";
 import { BookPricePill, FairOddsPill } from "../../components/BookPricePill";
 import {
   predictionApiService,
@@ -38,18 +43,21 @@ function isLocked(p: ApiBestParlay | ApiLockedParlay): p is ApiLockedParlay {
   return p.locked === true;
 }
 
-/** Une jambe : logo, pari, contexte — et son % ML à droite. */
+/**
+ * Une jambe, en version étroite (carte de 176 px) : le pari sur deux lignes au
+ * plus, son contexte dessous, son % ML à droite.
+ */
 function LegRow({ leg, pct }: { leg: ReturnType<typeof bestBetToLeg>; pct: number }) {
   return (
-    <div className="flex items-center gap-2 py-1">
+    <div className="flex items-start gap-1.5 py-1">
       {leg.subjectLogo?.startsWith("http")
-        ? <img src={leg.subjectLogo} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
-        : <span className="w-5 h-5 rounded-full bg-white/5 flex-shrink-0" />}
+        ? <img src={leg.subjectLogo} alt="" className="w-4 h-4 object-contain flex-shrink-0 mt-px" />
+        : <span className="w-4 h-4 rounded-full bg-white/5 flex-shrink-0 mt-px" />}
       <div className="flex-1 min-w-0">
-        <div className="text-white text-[12px] font-semibold leading-tight truncate">{leg.selection}</div>
-        <div className="text-[#8a9ea6] text-[11px] truncate">{leg.gameInfo} · {leg.marketLabel}</div>
+        <div className="text-white text-[11px] font-semibold leading-tight line-clamp-2">{leg.selection}</div>
+        <div className="text-[#8a9ea6] text-[10px] truncate">{leg.gameInfo}</div>
       </div>
-      <span className="text-[#bfc8cc] text-[11px] font-semibold tabular-nums flex-shrink-0">{pct} %</span>
+      <span className="text-[#bfc8cc] text-[10px] font-semibold tabular-nums flex-shrink-0">{pct} %</span>
     </div>
   );
 }
@@ -58,89 +66,151 @@ function kindLabel(kind: ApiBestParlay["kind"], t: TFn) {
   return t(kind === "moneyline" ? "parlay.kindMoneyline" : "parlay.kindMixed");
 }
 
+/** Largeur d'une carte : étroite, pour en voir près de deux à 390 px (demande du user, 2026-10-04). */
+const CARD_W = "w-44";
+
+/**
+ * Un combiné, en carte étroite de la rangée. Le résumé (%, cote) est toujours
+ * visible ; les sélections sont dans un menu déroulant, fermé par défaut.
+ */
 function ParlayCard({ parlay, index, accent }: { parlay: ApiBestParlay; index: number; accent: string }) {
   const { t } = useI18n();
   const { addLeg, removeLeg, hasLeg } = useBet();
+  const [showLegs, setShowLegs] = useState(false);
   // Libellés retraduits au changement de langue, sans nouvelle requête.
   const legs = useMemo(() => parlay.legs.map((b) => ({ leg: bestBetToLeg(b, t), pct: b.mlPct ?? b.score })), [parlay, t]);
   const allIn = legs.every(({ leg }) => hasLeg(leg.id));
 
   // Les jambes partent dans le coupon avec LEUR % ML, comme depuis « Meilleurs paris ».
-  const toggle = () => {
+  const toggleSlip = () => {
     if (allIn) legs.forEach(({ leg }) => removeLeg(leg.id));
     else legs.forEach(({ leg, pct }) => { if (!hasLeg(leg.id)) addLeg({ ...leg, probability: pct }); });
   };
 
   return (
-    <div className="icy-card rounded-xl px-3 py-2.5">
-      <div className="flex items-start gap-2 mb-1">
-        <div className="flex-1 min-w-0">
-          <div className="text-white text-[13px] font-bold leading-tight">
-            {t("parlay.name", { n: index + 1 })}
-          </div>
-          <div className="text-[#8a9ea6] text-[11px] mt-0.5">
-            {kindLabel(parlay.kind, t)} · {t("parlay.legs", { n: parlay.legs.length })}
-          </div>
-        </div>
-        <div className="flex flex-col items-end flex-shrink-0 leading-tight">
-          <div className="tabular-nums" style={{ color: accent }}>
-            <span className="text-[15px] font-bold">{parlay.probability} %</span>
-            <span className="text-[10px] font-medium ml-1">{t("home.chance")}</span>
-          </div>
-          <span className="mt-0.5">
-            {parlay.bookPrice != null
-              ? <BookPricePill price={parlay.bookPrice} link={false} />
-              : <FairOddsPill pct={parlay.probability} title={t("home.oddsFairHint")} />}
-          </span>
-        </div>
+    <div data-parlay-card className={`${CARD_W} flex-shrink-0 icy-card rounded-xl px-2.5 py-2`}>
+      <div className="text-white text-[12px] font-bold leading-tight">{t("parlay.name", { n: index + 1 })}</div>
+      <div className="text-[#8a9ea6] text-[10px] mt-0.5 truncate">
+        {kindLabel(parlay.kind, t)} · {t("parlay.legs", { n: parlay.legs.length })}
       </div>
 
-      <div className="border-t border-white/5 mt-1.5 pt-0.5">
-        {legs.map(({ leg, pct }) => <LegRow key={leg.id} leg={leg} pct={pct} />)}
+      <div className="flex items-end justify-between gap-1 mt-1.5">
+        <div className="tabular-nums leading-none" style={{ color: accent }}>
+          <span className="text-[17px] font-bold">{parlay.probability} %</span>
+          <span className="block text-[10px] font-medium mt-0.5">{t("home.chance")}</span>
+        </div>
+        {parlay.bookPrice != null
+          ? <BookPricePill price={parlay.bookPrice} link={false} />
+          : <FairOddsPill pct={parlay.probability} title={t("home.oddsFairHint")} />}
       </div>
 
-      {parlay.assumesIndependence && (
-        <p className="text-[#8a9ea6] text-[10px] leading-snug mt-1">{t("parlay.indepNote")}</p>
+      {/* Menu déroulant des sélections. */}
+      <button
+        type="button"
+        onClick={() => setShowLegs((v) => !v)}
+        aria-expanded={showLegs}
+        className="mt-2 w-full flex items-center justify-between rounded-lg bg-white/[0.04] border border-white/10 px-2 py-1 text-[10px] font-semibold text-[#bfc8cc]"
+      >
+        {showLegs ? t("parlay.hideLegs") : t("parlay.showLegs")}
+        <ChevronDown size={12} className="transition-transform" style={{ transform: showLegs ? "rotate(180deg)" : "none" }} />
+      </button>
+      {showLegs && (
+        <div className="mt-1">
+          {legs.map(({ leg, pct }) => <LegRow key={leg.id} leg={leg} pct={pct} />)}
+          {parlay.assumesIndependence && (
+            <p className="text-[#8a9ea6] text-[9px] leading-snug mt-0.5">{t("parlay.indepNote")}</p>
+          )}
+        </div>
       )}
 
       <button
         type="button"
-        onClick={toggle}
-        className={`tap-44 mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg border py-1.5 text-[11px] font-semibold transition-colors ${
+        onClick={toggleSlip}
+        className={`mt-1.5 w-full flex items-center justify-center gap-1 rounded-lg border py-1 text-[10px] font-semibold transition-colors ${
           allIn
             ? "bg-green-500/15 border-green-500/30 text-green-400"
             : "bg-[#90C9F0]/10 border-[#90C9F0]/30 text-[#90C9F0] active:bg-[#90C9F0]/20"
         }`}
       >
-        {allIn ? <Check size={13} strokeWidth={3} /> : <Plus size={13} strokeWidth={3} />}
-        {allIn ? t("parlay.inSlip") : t("parlay.addAll")}
+        {allIn ? <Check size={12} strokeWidth={3} /> : <Plus size={12} strokeWidth={3} />}
+        {allIn ? t("parlay.inSlip") : t("parlay.addShort")}
       </button>
     </div>
   );
 }
 
-/** Les combinés Pro, vus par un non-abonné : la forme, floutée, sous `ProLock`. */
-function LockedParlays({ items }: { items: ApiLockedParlay[] }) {
+/**
+ * Un combiné Pro vu par un non-abonné, dans la même rangée : la forme
+ * (type, nombre de sélections) et un cadenas — aucune donnée réelle n'est
+ * arrivée ici. Bouton vers /pro seulement si le build en a un (Guideline
+ * 3.1.1, même règle que `ProLock`).
+ */
+function LockedCard({ item }: { item: ApiLockedParlay }) {
   const { t } = useI18n();
+  const navigate = useNavigate();
+  const location = useLocation();
   return (
-    <ProLock locked title={t("parlay.lockTitle", { n: items.length })} description={t("parlay.lockDesc")}>
-      <div className="flex flex-col gap-1.5">
-        {items.map((p) => (
-          <div key={p.id} className="icy-card rounded-xl px-3 py-2.5">
-            <div className="flex items-center gap-2">
-              <Lock size={12} className="text-[#8a9ea6]" />
-              <span className="text-white text-[12px] font-semibold">
-                {kindLabel(p.kind, t)} · {t("parlay.legs", { n: p.legCount })}
-              </span>
-            </div>
-            {/* Barres neutres : aucune donnée réelle n'est arrivée ici. */}
-            {Array.from({ length: p.legCount }, (_, i) => (
-              <div key={i} className="h-3 rounded bg-white/[0.06] mt-1.5" style={{ width: `${85 - i * 10}%` }} />
-            ))}
-          </div>
+    <div data-parlay-card className={`${CARD_W} flex-shrink-0 icy-card rounded-xl px-2.5 py-2`}>
+      <div className="flex items-center gap-1.5 text-white text-[12px] font-bold leading-tight">
+        <Lock size={11} className="text-[#f2c744]" />{t("parlay.proCard")}
+      </div>
+      <div className="text-[#8a9ea6] text-[10px] mt-0.5 truncate">
+        {kindLabel(item.kind, t)} · {t("parlay.legs", { n: item.legCount })}
+      </div>
+      <div className="mt-2 flex flex-col gap-1" aria-hidden style={{ filter: "blur(2px)" }}>
+        {Array.from({ length: item.legCount }, (_, i) => (
+          <div key={i} className="h-2.5 rounded bg-white/[0.07]" style={{ width: `${90 - i * 12}%` }} />
         ))}
       </div>
-    </ProLock>
+      {features.proUpgrade ? (
+        /* `state.from` : /pro ne peut pas revenir par l'historique (voir ProLock). */
+        <button
+          type="button"
+          onClick={() => navigate("/pro", { state: { from: location.pathname + location.search } })}
+          className="mt-2 w-full rounded-lg py-1 text-[10px] font-bold active:scale-[0.98] transition-transform"
+          style={{ background: "#86d1ea", color: "#0A0E0C" }}
+        >
+          {t("pro.unlock")}
+        </button>
+      ) : (
+        <p className="mt-2 text-[10px] text-[#8a9ea6] leading-snug">{t("home.proOnly")}</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * La rangée : mêmes classes et mêmes flèches que les matchs en direct
+ * (`LiveGamesRow`) — défilement au doigt, barre masquée, accroche par carte.
+ * `items-start` : ouvrir le menu d'une carte n'étire pas les autres. Flèches
+ * à hauteur du titre et repoussées dans la gouttière, pour ne couvrir aucun
+ * texte de la carte.
+ */
+function ParlayRow({ children, count }: { children: React.ReactNode; count: number }) {
+  const { t } = useI18n();
+  const viewport = useRef<HTMLDivElement>(null);
+  const go = (dir: -1 | 1) => {
+    const el = viewport.current;
+    if (!el) return;
+    const card = el.querySelector<HTMLElement>("[data-parlay-card]");
+    el.scrollBy({ left: dir * ((card?.offsetWidth ?? 176) + 12), behavior: "smooth" });
+  };
+  return (
+    <div className="live-carousel -mx-4">
+      <div ref={viewport} className="live-viewport">
+        <div className="live-track items-start">{children}</div>
+      </div>
+      {count > 2 && (
+        <>
+          <button type="button" className="jersey-arrow jersey-arrow--prev" style={{ top: 40, left: -16 }} aria-label={t("parlay.prev")} onClick={() => go(-1)}>
+            <span className="jersey-arrow-dot"><ChevronLeft size={16} /></span>
+          </button>
+          <button type="button" className="jersey-arrow jersey-arrow--next" style={{ top: 40, right: -16 }} aria-label={t("parlay.next")} onClick={() => go(1)}>
+            <span className="jersey-arrow-dot"><ChevronRight size={16} /></span>
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -202,18 +272,18 @@ export function BestParlaySection({ accent }: { accent: string }) {
               onRetry={() => { setData(null); setReloadKey((k) => k + 1); }}
             />
           ) : data == null ? (
-            <div className="flex flex-col gap-1.5">
-              {[1, 2].map((i) => <div key={i} className="h-36 icy-tile rounded-xl animate-pulse" />)}
+            <div className="flex gap-3">
+              {[1, 2].map((i) => <div key={i} className={`${CARD_W} h-32 icy-tile rounded-xl animate-pulse`} />)}
             </div>
           ) : data.parlays.length === 0 ? (
             <div className="py-6 text-center text-[#bfc8cc] text-xs">
               {data.meta.mlAvailable === false ? t("home.aiUnavailable") : t("parlay.empty")}
             </div>
           ) : (
-            <div className="flex flex-col gap-1.5">
+            <ParlayRow count={data.parlays.length}>
               {free.map((p, i) => <ParlayCard key={p.id} parlay={p} index={i} accent={accent} />)}
-              {locked.length > 0 && <LockedParlays items={locked} />}
-            </div>
+              {locked.map((p) => <LockedCard key={p.id} item={p} />)}
+            </ParlayRow>
           )}
         </>
       )}

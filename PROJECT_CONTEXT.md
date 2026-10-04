@@ -53,7 +53,10 @@ de Meilleurs paris, 2 combinés gratuits, le reste Pro.
    13 px accent, `text-sm font-medium`) + chevron de Meilleurs paris. Cartes :
    %, cote du livre (produit, si toutes cotées et matchs distincts) sinon cote
    équitable (`FairOddsPill`), jambes, « Ajouter le combiné au coupon ».
-   Combinés Pro verrouillés sous `ProLock`, sans données. Placée au-dessus de
+   Combinés Pro verrouillés, sans données. Révision du même jour (demande
+   du user) : cartes étroites (176 px) sur UNE rangée défilante (classes et
+   flèches de `LiveGamesRow`), sélections dans un menu déroulant par carte,
+   cartes Pro verrouillées dans la même rangée (bouton /pro si `features.proUpgrade`). Placée au-dessus de
    Meilleurs paris (Pro) / du bloc Pro (gratuit) dans `HockeyLanding`.
    `bestBetToLeg` extrait de `BestBetsSection` à l'identique (partagé).
 6. Tests : `bestParlays.service.test.ts` (11), route (+4). Suite serveur

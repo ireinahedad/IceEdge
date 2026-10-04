@@ -1198,12 +1198,15 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "parlay.kindMoneyline":  { en: "Moneyline only", fr: "Vainqueurs seulement" },
   "parlay.kindMixed":      { en: "Mixed markets", fr: "Marchés mixtes" },
   "parlay.legs":           { en: "{n} picks", fr: "{n} sélections" },
-  "parlay.addAll":         { en: "Add the parlay to my slip", fr: "Ajouter le combiné au coupon" },
+  "parlay.addShort":       { en: "Add to slip", fr: "Au coupon" },
+  "parlay.showLegs":       { en: "See the picks", fr: "Voir les sélections" },
+  "parlay.hideLegs":       { en: "Hide the picks", fr: "Masquer les sélections" },
   "parlay.inSlip":         { en: "In my slip", fr: "Dans le coupon" },
   "parlay.indepNote":      { en: "Player picks from the same game are treated as independent: the real chance may differ slightly.", fr: "Les paris joueur d'un même match sont supposés indépendants : la vraie chance peut légèrement différer." },
   "parlay.empty":          { en: "No parlay reaches 25% right now. They need at least 3 upcoming games with strong picks.", fr: "Aucun combiné n'atteint 25 % pour l'instant. Il faut au moins 3 matchs à venir avec des paris solides." },
-  "parlay.lockTitle":      { en: "Pro parlays ({n})", fr: "Combinés Pro ({n})" },
-  "parlay.lockDesc":       { en: "The other parlays of the day are reserved for Pro subscribers.", fr: "Les autres combinés du jour sont réservés aux abonnés Pro." },
+  "parlay.proCard":        { en: "Pro parlay", fr: "Combiné Pro" },
+  "parlay.prev":           { en: "Previous parlay", fr: "Combiné précédent" },
+  "parlay.next":           { en: "Next parlay", fr: "Combiné suivant" },
 
   // ── Home: value bets (EV) + locked sections ──
   "home.evTitle":     { en: "Value Bets (EV)",  fr: "Value Bets (EV)" },
