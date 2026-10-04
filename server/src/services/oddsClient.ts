@@ -149,6 +149,41 @@ export const ODDS_COLLECT_BOOKMAKERS =
   (process.env.ODDS_COLLECT_BOOKMAKERS ?? '').trim() || 'draftkings';
 
 /**
+ * Livres collectés EN PARALLÈLE du livre de collecte (2026-10-04, décision du
+ * user) — archivés dans `odds_snapshots` avec leur `bookmaker`, JAMAIS dans
+ * `odds_log` ni dans la série du livre de collecte.
+ *
+ * Défaut `bet99_ca_on` : un livre où le user peut parier, le plus proche de
+ * Bet365. The Odds API n'a presque aucun historique des livres canadiens ; les
+ * collecter dès maintenant est la seule façon d'avoir, dans une saison, de quoi
+ * juger les value bets à SES prix. Même appel, même coût (jusqu'à 10 livres =
+ * une région). `none` (ou une liste vide) désactive.
+ */
+export const ODDS_SHADOW_BOOKMAKERS: string[] = (() => {
+  const raw = (process.env.ODDS_SHADOW_BOOKMAKERS ?? 'bet99_ca_on').trim();
+  if (!raw || raw.toLowerCase() === 'none') return [];
+  const collect = new Set(ODDS_COLLECT_BOOKMAKERS.split(',').map((b) => b.trim()));
+  return [...new Set(raw.split(',').map((b) => b.trim()).filter((b) => b && !collect.has(b)))];
+})();
+
+/**
+ * Livres demandés par la collecte : collecte + parallèle. Au-delà de 10, The
+ * Odds API facture une région de plus — on coupe et on le dit plutôt que de
+ * doubler le coût de chaque passe en silence.
+ */
+export function collectorBookParam(): string {
+  const all = [...new Set([
+    ...ODDS_COLLECT_BOOKMAKERS.split(',').map((b) => b.trim()).filter(Boolean),
+    ...ODDS_SHADOW_BOOKMAKERS,
+  ])];
+  if (all.length > 10) {
+    logger.warn({ books: all.length }, '[oddsClient] plus de 10 livres collectés — '
+      + 'les livres parallèles au-delà du 10e sont ignorés (coût doublé sinon)');
+  }
+  return all.slice(0, 10).join(',');
+}
+
+/**
  * Cotes pour la COLLECTE, chez le livre de collecte, **sans cache**.
  *
  * `markets` : `h2h,spreads,totals` pour une passe complète (3 crédits),
@@ -170,7 +205,9 @@ export async function fetchCollectorOdds(markets: string): Promise<RawOddsEvent[
 
   const params = new URLSearchParams({
     apiKey:     ODDS_KEY,
-    bookmakers: ODDS_COLLECT_BOOKMAKERS,
+    // Livre de collecte + livres parallèles, dans le MÊME appel (même coût).
+    // Le tri entre les deux se fait dans `oddsLogger.service.ts`.
+    bookmakers: collectorBookParam(),
     markets,
     oddsFormat: 'decimal',
   });

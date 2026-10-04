@@ -16,6 +16,7 @@
     "db:migrate:slips": "ts-node src/db/migrate-slips.ts",
     "db:encrypt-keys": "ts-node src/db/encrypt-openai-keys.ts",
     "odds:export": "ts-node scripts/export-odds-log.ts",
+    "odds:export-snapshots": "ts-node scripts/export-odds-snapshots.ts",
     "notify:slips": "ts-node scripts/notify-slips-visibility.ts",
     "content:insights": "ts-node scripts/build-content-insights.ts",
     "content:mine": "ts-node scripts/mine-stories.ts",
