@@ -57,6 +57,9 @@ import { TtlCache } from '../services/ttlCache';
 import { recordUpstream } from '../metrics';
 import { logger } from '../logger';
 import { sendError } from '../httpError';
+import { parseBetDescriptor } from '../services/llmFacts';
+import { EXPLAIN_BET_V2, ANALYSIS_RESPONSE_FORMAT, validateAnalysis, renderAnalysisText } from '../services/llmAnalysis';
+import type { Facts } from '../services/llmFacts';
 import {
   consumeProRequest, refundProRequest, getUsage, MONTHLY_QUOTA, MAX_OUTPUT_TOKENS,
   consumeFreeParse, refundFreeParse, getFreeParseUsage, PROMPT_BUDGET_CHARS,
@@ -397,6 +400,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
   // `parse_bet_command` : l'invite porte le contexte du moment, construit ici
   // AVANT tout décompte de quota — un calendrier injoignable ne coûte rien.
   let parseCtx: SlipContext | null = null;
+  let analysisFacts: Facts | null = null;
   let messages: { role: string; content: string }[];
   if (isParse) {
     try {
@@ -415,10 +419,33 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
     messages = [{ role: 'system', content: p.system }, { role: 'user', content: p.user }];
   } else {
     const fixedTask = taskType === 'ask_followup' ? 'ask_followup' : 'explain_bet';
-    messages = [
-      { role: 'system', content: systemPromptFor(fixedTask, resolvedLocale) },
-      { role: 'user', content: prompt },
-    ];
+    /**
+     * ── Analyse v2 (2026-10-04) ───────────────────────────────────────────
+     * Le client décrit le PARI (`bet`) ; le serveur bâtit lui-même le bloc
+     * FAITS (valeur face au marché, facteurs classés, statut des données…) et
+     * le LLM se contente de le mettre en phrases, en JSON, validé ensuite.
+     * Sans `bet` exploitable — ancien bundle client, match illisible — on
+     * retombe sur l'ancienne invite libre : l'analyse ne doit jamais échouer
+     * pour une raison de contexte.
+     */
+    if (fixedTask === 'explain_bet') {
+      const bet = parseBetDescriptor((req.body as any).bet);
+      if (bet) {
+        // Import paresseux : le contexte tire le paquet ML et tout le client NHL,
+        // inutiles à `parse_bet_command` et aux questions de suivi.
+        const { buildBetFacts } = await import('../services/llmAnalysisContext');
+        analysisFacts = await buildBetFacts(bet, resolvedLocale);
+      }
+    }
+    messages = analysisFacts
+      ? [
+          { role: 'system', content: EXPLAIN_BET_V2[resolvedLocale] },
+          { role: 'user', content: analysisFacts.text },
+        ]
+      : [
+          { role: 'system', content: systemPromptFor(fixedTask, resolvedLocale) },
+          { role: 'user', content: prompt },
+        ];
   }
 
   // ── Decide which path to use ──────────────────────────────────────────────
@@ -645,10 +672,11 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
     // sous-estimer la dépense pire-cas, donc surestimer le plafond.
     body.max_tokens = MAX_OUTPUT_TOKENS;
     // De l'extraction pour `parse_bet_command` : aucune créativité voulue.
-    body.temperature = isParse ? 0 : 0.7;
+    body.temperature = isParse ? 0 : analysisFacts ? 0.3 : 0.7;
   }
   // `parse_bet_command` : réponse imposée par un schéma (structured outputs).
   if (isParse) body.response_format = PARSE_RESPONSE_FORMAT;
+  if (analysisFacts) body.response_format = ANALYSIS_RESPONSE_FORMAT;
 
   // Node 18+ global fetch returns a Response-like object typed loosely as `any`.
   // Bounded by a hard timeout with one retry on transient failure, so a hung
@@ -784,6 +812,17 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
 
   // `quotaNotice` n'est présent que le mois où le plafond est atteint : le
   // client affiche alors le message pendant que la réponse arrive quand même.
+  if (analysisFacts) {
+    // Réponse validée contre les faits (chiffres compris), sinon texte
+    // déterministe : `text` reste présent pour copie, cache et questions de suivi.
+    const analysis = validateAnalysis(text, analysisFacts, resolvedLocale);
+    if (analysis.source === 'fallback') {
+      logger.warn({ model: call.requestModel }, '[LLM] analyse rejetée par la validation — texte déterministe servi');
+    }
+    const payload = { text: renderAnalysisText(analysis), analysis, factsText: analysisFacts.text };
+    return res.json(quotaNotice ? { ...payload, quota: quotaNotice } : payload);
+  }
+
   return res.json(quotaNotice ? { text, quota: quotaNotice } : { text });
 }
 

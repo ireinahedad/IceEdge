@@ -45,6 +45,13 @@ export type LlmLocale = 'fr' | 'en';
  * vivait dans `client/src/app/pages/prediction/PredictionSheet.tsx`, déplacé
  * sans être réécrit — le format de réponse attendu ne change donc pas.
  */
+/**
+ * ⚠️ 2026-10-04 : ceci est l'invite LEGACY de l'« Analyse IA » (texte libre :
+ * Analyse / À vérifier / Verdict). Elle ne sert plus que de repli — ancien
+ * bundle client, ou faits du pari indisponibles. Le chemin normal est
+ * l'analyse v2 : `llmFacts.ts` (faits calculés par le code), `llmAnalysis.ts`
+ * (invite JSON `EXPLAIN_BET_V2`, validation, repli déterministe).
+ */
 const EXPLAIN_BET: Record<LlmLocale, string> = {
   fr:
     "Tu es un analyste de paris LNH pointu dont la valeur est le contexte qu'un modèle statistique manque. " +

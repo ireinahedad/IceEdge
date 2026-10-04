@@ -54,8 +54,60 @@ export interface LLMQuotaNotice {
   billedTo: 'user';
 }
 
+/**
+ * Le pari tel que le serveur en a besoin pour bâtir le bloc FAITS de
+ * l'« Analyse IA » (valeur face au marché, facteurs classés, statut des
+ * données). Miroir de `BetDescriptor` côté serveur — qui le borne et le nettoie.
+ */
+export interface BetPayload {
+  type: 'game' | 'team' | 'player';
+  label: string;
+  gameId?: string;
+  optId?: string;
+  propType?: string;
+  line?: number;
+  selection?: string;
+  isHome?: boolean;
+  subjectId?: string;
+  opponentId?: string;
+  /** Chiffre ML affiché, pour les paris que le paquet du match ne couvre pas. */
+  mlPct?: number | null;
+  /** Cote décimale du livre pour CE pari. */
+  bookOdds?: number | null;
+  /** Paris joueur / équipe : lignes de faits préparées ici. */
+  extraFacts?: string[];
+}
+
+export type AnalysisTier = 'major' | 'minor';
+export type AnalysisSide = 'for' | 'against' | 'neutral';
+export type AnalysisTag =
+  | 'models_disagree' | 'goalie_dependent' | 'above_market' | 'below_market'
+  | 'with_market' | 'long_shot' | 'high_uncertainty' | 'live';
+
+/** L'analyse structurée (`analysis` dans la réponse `explain_bet` v2). */
+export interface Analysis {
+  headline: string;
+  drivers: Array<{ key: string; tier: AnalysisTier; side: AnalysisSide; text: string }>;
+  caveat: string | null;
+  followups: string[];
+  summary: {
+    modelPct: number | null; marketPct: number | null; marketKind: 'no_vig' | 'book' | null;
+    edgePts: number | null; fairOdds: number | null; bookOdds: number | null; valuePct: number | null;
+    sigmaPts: number | null; solidity: 'stable' | 'moderate' | 'uncertain' | null;
+    expectedTotal: number | null; marketLine: number | null;
+  };
+  status: Array<{ key: 'goalies' | 'lineups' | 'odds'; state: 'confirmed' | 'pending' | 'missing'; text: string }>;
+  tags: AnalysisTag[];
+  dominant: boolean;
+  source: 'llm' | 'fallback';
+}
+
 export interface LLMAnswer {
   text: string;
+  /** Analyse v2 : présente quand le serveur a pu bâtir les faits du pari. */
+  analysis?: Analysis;
+  /** Bloc FAITS envoyé au modèle — réutilisé tel quel par les questions de suivi. */
+  factsText?: string;
   /** Non nul le mois où le plafond a été atteint : à afficher à côté de la réponse. */
   quota?: LLMQuotaNotice;
 }
@@ -146,7 +198,7 @@ async function throwLLMError(res: Response): Promise<never> {
  */
 async function askLLMDetailed(
   prompt: string,
-  opts: { taskType: LLMTaskType; locale: 'fr' | 'en'; model?: string }
+  opts: { taskType: LLMTaskType; locale: 'fr' | 'en'; model?: string; bet?: BetPayload }
 ): Promise<LLMAnswer> {
   const res = await authedFetch('/llm', {
     method: 'POST',
@@ -155,6 +207,7 @@ async function askLLMDetailed(
       prompt,
       taskType: opts.taskType,
       locale: opts.locale,
+      ...(opts.bet ? { bet: opts.bet } : {}),
       /**
        * Aucun modèle par défaut ici, et c'est volontaire.
        *
@@ -176,6 +229,14 @@ async function askLLMDetailed(
   if (!res.ok) await throwLLMError(res);
 
   return await res.json() as LLMAnswer;
+}
+
+/** « Analyse IA » d'un pari : réponse complète (analyse structurée comprise). */
+export async function askExplainBet(
+  prompt: string,
+  opts: { locale: 'fr' | 'en'; bet: BetPayload }
+): Promise<LLMAnswer> {
+  return askLLMDetailed(prompt, { taskType: 'explain_bet', locale: opts.locale, bet: opts.bet });
 }
 
 export async function askLLM(

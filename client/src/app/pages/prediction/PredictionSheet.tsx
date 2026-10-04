@@ -13,11 +13,12 @@ import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { useBet } from "../../context/BetContext";
 import type { BetLeg, PredictionCaveat } from "../../types/bet";
-import { askLLM } from "../../services/llmService";
+import { askLLM, askExplainBet, type Analysis, type BetPayload } from "../../services/llmService";
+import { AnalysisCard } from "../../components/AnalysisCard";
 import { MLSection, fetchMLProbability, mlProbabilityKey, type MLProbabilityRequest } from "../../components/MLPredictionCard";
 import { RuleFactorEditor } from "../../components/RuleFactorEditor";
 import { FramedLabel } from "../../components/brand/FramedLabel";
-import { BetOpt, MLProps, MktGroup, MktTable, RuleFactor, buildLLMDataContext, llmCacheId, loadLlmCache, saveLlmCache, scaledRulePct, settlementFields } from "./gameMarkets";
+import { BetOpt, MLProps, MktGroup, MktTable, RuleFactor, buildLLMDataContext, buildLLMExtraFacts, llmCacheId, loadLlmCache, saveLlmCache, scaledRulePct, settlementFields } from "./gameMarkets";
 import { pctColor } from "../../data/pctScale";
 import { blendFactors, getFamilyWeights } from "../../services/ruleWeightsService";
 import { BetOddsCtx, GameLiveCtx, RevealModeCtx } from "./predictionShared";
@@ -84,7 +85,7 @@ export function betLegId(label: string, mlProps: MLProps | undefined, rulePct: n
  * le pari (tâche serveur `ask_followup` : même quota et même clé que
  * l'analyse, une question = une requête). Les échanges vivent dans l'état de
  * la fiche seulement : ils disparaissent à sa fermeture, contrairement à
- * l'analyse elle-même, mise en cache 24 h.
+ * l'analyse elle-même, mise en cache 3 h.
  *
  * Chaque question renvoie le contexte ENTIER (données du pari, analyse, trois
  * derniers échanges) : le serveur ne garde aucune conversation. Le tout doit
@@ -96,6 +97,20 @@ const FOLLOWUP_HISTORY = 3;
 const FOLLOWUP_PROMPT_BUDGET = 7_500;
 
 interface Followup { q: string; a: string; failed?: boolean }
+
+/** Ce que la fiche garde d'une analyse : `saveLlmCache(id, JSON.stringify(...))`. */
+interface LlmCacheV2 { v: 2; text: string; analysis?: Analysis; factsText?: string }
+
+function decodeLlmCache(raw: string): { text: string; analysis: Analysis | null; factsText: string } {
+  if (!raw) return { text: "", analysis: null, factsText: "" };
+  try {
+    const j = JSON.parse(raw) as LlmCacheV2;
+    if (j && j.v === 2 && typeof j.text === "string") {
+      return { text: j.text, analysis: j.analysis ?? null, factsText: j.factsText ?? "" };
+    }
+  } catch { /* texte brut d'avant la v2 */ }
+  return { text: raw, analysis: null, factsText: "" };
+}
 
 /* ─── Prediction bottom sheet ───────────────── */
 function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps, factors, factorGroup, pctScale, mlPreset, optId, prematch, onClose }: {
@@ -112,7 +127,13 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
   const { table: oddsTable, bookTitle, nameByAbbr } = useContext(BetOddsCtx);
   const bookPrice = priceForBet(oddsTable, mlProps, nameByAbbr, optId);
   const llmId = llmCacheId(label, mlProps, lang);
-  const [llmText, setLlmText]     = useState(() => loadLlmCache(llmId)); // réponse en cache si déjà générée
+  // Réponse en cache si déjà générée : JSON v2 (texte + analyse structurée + faits)
+  // ou, pour une entrée écrite avant le 2026-10-04, texte brut.
+  const cached = useMemo(() => decodeLlmCache(loadLlmCache(llmId)), [llmId]);
+  const [llmText, setLlmText]     = useState(cached.text);
+  const [llmAnalysis, setLlmAnalysis] = useState<Analysis | null>(cached.analysis);
+  // Bloc FAITS envoyé au modèle : réutilisé tel quel par les questions de suivi.
+  const [llmFacts, setLlmFacts]   = useState(cached.factsText);
   const [llmOpen, setLlmOpen]     = useState(false); // repliée par défaut pour ne pas cacher les autres cartes
   const [llmLoading, setLlmLoading] = useState(false);
   const [copied, setCopied]       = useState(false);
@@ -260,7 +281,10 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
     const isFr = lang === "fr";
     try {
       const subject = mlProps?.subjectId ?? label;
-      const dataContext = await buildLLMDataContext(mlProps, isFr);
+      // Les faits de l'analyse (écart au marché, facteurs, statut des données)
+      // d'abord : c'est ce que le modèle a lu pour l'écrire. Les stats brutes ne
+      // servent qu'aux analyses d'avant la v2.
+      const dataContext = llmFacts || await buildLLMDataContext(mlProps, isFr);
       const mlPct = await resolveMlPct();
       const build = (history: Followup[], data: string) =>
         (isFr
@@ -411,7 +435,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
           </div>
         )}
 
-        {/* ── Ask LLM — section repliable, réponse mise en cache 24 h ── */}
+        {/* ── Ask LLM — section repliable, réponse mise en cache 3 h ── */}
         {llmText ? (
           <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3">
@@ -438,7 +462,9 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
               </button>
             </div>
             {llmOpen && (
-              <p className="text-[#bfc8cc] text-xs leading-relaxed whitespace-pre-line px-4 pb-4">{llmText}</p>
+              llmAnalysis && !llmFailed
+                ? <AnalysisCard analysis={llmAnalysis} onPickQuestion={(q) => setQuestion(q.slice(0, FOLLOWUP_MAX_CHARS))} />
+                : <p className="text-[#bfc8cc] text-xs leading-relaxed whitespace-pre-line px-4 pb-4">{llmText}</p>
             )}
             {/* Questions de suivi — voir FOLLOWUP_* en tête de fichier. */}
             {llmOpen && !llmFailed && (
@@ -521,14 +547,30 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
                 // quelle : sur le chemin Pro, facturé à l'opérateur, ça faisait
                 // de `/api/llm` un proxy LLM généraliste pour tout abonné. Le
                 // client ne dit plus QUE la tâche et la langue.
-                const text = await askLLM(userPrompt, {
-                  taskType: "explain_bet",
-                  locale: isFr ? "fr" : "en",
-                });
-                setLlmText(text);
+                // Le serveur bâtit le bloc FAITS d'un pari de match (marché, facteurs
+                // classés, statut des données) à partir de `bet` ; pour un pari
+                // joueur / équipe, ce sont les lignes préparées ici.
+                let ans: { text: string; analysis?: Analysis; factsText?: string };
+                if (mlProps) {
+                  const isGame = mlProps.type === "game" && !!mlProps.gameId;
+                  const bet: BetPayload = {
+                    type: mlProps.type, label,
+                    gameId: mlProps.gameId, optId, propType: mlProps.propType, line: mlProps.line,
+                    selection: mlProps.selection, isHome: mlProps.isHome,
+                    subjectId: mlProps.subjectId, opponentId: mlProps.opponentId,
+                    mlPct, bookOdds: bookPrice ?? null,
+                    extraFacts: isGame ? undefined : await buildLLMExtraFacts(mlProps, isFr),
+                  };
+                  ans = await askExplainBet(userPrompt, { locale: isFr ? "fr" : "en", bet });
+                } else {
+                  ans = { text: await askLLM(userPrompt, { taskType: "explain_bet", locale: isFr ? "fr" : "en" }) };
+                }
+                const text = ans.text;
+                setLlmAnalysis(ans.analysis ?? null);
+                setLlmFacts(ans.factsText ?? "");
                 setLlmFailed(false);
                 setLlmOpen(true);            // ouvre la réponse fraîchement générée
-                saveLlmCache(llmId, text);   // persistée 24 h — pas de 2e question identique
+                saveLlmCache(llmId, JSON.stringify({ v: 2, text, analysis: ans.analysis, factsText: ans.factsText } satisfies LlmCacheV2));   // persistée 3 h — pas de 2e question identique
               } catch (err: any) {
                 // Plus de préfixe ❌ / ⚙️ (2026-10-01, pas d'emoji) : l'échec
                 // est porté par `llmFailed`, plus déduit du texte.

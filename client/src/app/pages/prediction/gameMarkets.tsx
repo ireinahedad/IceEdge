@@ -512,16 +512,83 @@ export async function buildLLMDataContext(mlProps: MLProps | undefined, fr: bool
   }
 }
 
+/**
+ * Lignes de faits pour l'« Analyse IA » d'un pari JOUEUR ou ÉQUIPE (le serveur
+ * bâtit lui-même celles d'un pari de match). Une ligne = un fait chiffré, que
+ * le LLM peut citer ; une donnée absente n'est JAMAIS écrite (« ? » invitait le
+ * modèle à combler le trou). Vide si rien n'est disponible.
+ */
+export async function buildLLMExtraFacts(mlProps: MLProps | undefined, fr: boolean): Promise<string[]> {
+  if (!mlProps) return [];
+  const teamLine = (a: string, s: any): string | null => {
+    if (!s) return null;
+    const parts: string[] = [];
+    if (s.wins != null) parts.push(fr ? `fiche ${s.wins}-${s.losses}-${s.otLosses}` : `record ${s.wins}-${s.losses}-${s.otLosses}`);
+    if (s.last10) parts.push(fr ? `10 derniers ${s.last10}` : `last 10 ${s.last10}`);
+    if (s.goalsForPerGame != null) parts.push(fr ? `buts pour/contre ${fmtNum(s.goalsForPerGame, 2, fr)}/${fmtNum(s.goalsAgainstPerGame, 2, fr)}` : `goals for/against ${fmtNum(s.goalsForPerGame, 2, fr)}/${fmtNum(s.goalsAgainstPerGame, 2, fr)}`);
+    if (s.powerPlayPct != null) parts.push(fr ? `AN ${fmtNum(s.powerPlayPct, 1, fr)} %, DN ${fmtNum(s.penaltyKillPct, 1, fr)} %` : `PP ${fmtNum(s.powerPlayPct, 1, fr)}%, PK ${fmtNum(s.penaltyKillPct, 1, fr)}%`);
+    return parts.length ? `${a} : ${parts.join(", ")}` : null;
+  };
+  try {
+    if (mlProps.type === "player") {
+      const [info, st, oppStats] = await Promise.all([
+        nhlApiService.getPlayer(mlProps.subjectId).catch(() => null),
+        nhlApiService.getPlayerStats(mlProps.subjectId).catch(() => null),
+        mlProps.opponentId ? nhlApiService.getTeamStats(mlProps.opponentId).catch(() => null) : Promise.resolve(null),
+      ]);
+      if (!st) return [];
+      const name = info?.name ?? info?.fullName ?? mlProps.playerName ?? "";
+      const team = info?.teamAbbr ?? mlProps.teamAbbr ?? "";
+      const gp = st.gamesPlayed || 0;
+      const out: string[] = [];
+      if (info?.position === "G" || st.savePct != null) {
+        out.push(fr
+          ? `Gardien ${name} (${team}) : ${gp} MJ, % d'arrêts ${fmtNum(st.savePct, 3, fr)}, moyenne de buts alloués ${fmtNum(st.goalsAgainstAvg, 2, fr)}`
+          : `Goalie ${name} (${team}): ${gp} GP, SV% ${fmtNum(st.savePct, 3, fr)}, GAA ${fmtNum(st.goalsAgainstAvg, 2, fr)}`);
+      } else {
+        const per = (n: number) => (gp ? n / gp : 0);
+        out.push(fr
+          ? `Saison de ${name} (${team}) : ${gp} MJ, ${st.goals} B, ${st.assists} A, ${st.points} PTS (${fmtNum(per(st.points), 2, fr)} pt/match)`
+          : `${name} (${team}) season: ${gp} GP, ${st.goals} G, ${st.assists} A, ${st.points} P (${fmtNum(per(st.points), 2, fr)} P/GP)`);
+        const rate: Record<string, [number, string, string]> = {
+          goals: [per(st.goals), "but", "goal"], assists: [per(st.assists), "passe", "assist"], points: [per(st.points), "point", "point"],
+        };
+        const r = mlProps.propType ? rate[mlProps.propType] : undefined;
+        if (r && mlProps.line != null) {
+          out.push(fr
+            ? `Cadence : ${fmtNum(r[0], 2, fr)} ${r[1]}/match contre une ligne de ${fmtNum(mlProps.line, 1, fr)}`
+            : `Rate: ${fmtNum(r[0], 2, fr)} ${r[2]}/game vs a line of ${fmtNum(mlProps.line, 1, fr)}`);
+        }
+        out.push(fr
+          ? `Utilisation : ${fmtNum(st.timeOnIce, 1, fr)} min/match, tirs ${fmtNum(st.shootingPct, 1, fr)} %, ${st.plusMinus >= 0 ? "+" : ""}${st.plusMinus}`
+          : `Usage: ${fmtNum(st.timeOnIce, 1, fr)} min/game, shooting ${fmtNum(st.shootingPct, 1, fr)}%, ${st.plusMinus >= 0 ? "+" : ""}${st.plusMinus}`);
+      }
+      const opp = teamLine(mlProps.opponentId?.toUpperCase() ?? "", oppStats);
+      if (opp) out.push(fr ? `Adversaire — ${opp}` : `Opponent — ${opp}`);
+      return out.filter(l => !/NaN|undefined|\?/.test(l));
+    }
+    const abbrs = mlProps.type === "game" && mlProps.opponentId ? [mlProps.subjectId, mlProps.opponentId] : [mlProps.subjectId];
+    const lines = await Promise.all(abbrs.map(async a => teamLine(a, await nhlApiService.getTeamStats(a).catch(() => null))));
+    return lines.filter((l): l is string => !!l);
+  } catch {
+    return [];
+  }
+}
+
 /* ─── Cache des réponses LLM (localStorage) ──────────────────────────────────
    Une réponse générée est gardée 24 h par pari : rouvrir la même prédiction ne
    re-demande pas la même question au LLM. */
 const LLM_CACHE_KEY = "iceedge.llmCache";
-const LLM_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 h
+// 3 h et non plus 24 h : l'analyse parle de gardiens, d'alignements et de cotes,
+// qui bougent dans la journée. Une analyse écrite à 10 h ne doit pas survivre à
+// l'annonce du gardien de 17 h.
+const LLM_CACHE_TTL = 3 * 60 * 60 * 1000; // 3 h
 
 export function llmCacheId(label: string, mlProps: MLProps | undefined, lang: string): string {
-  // « ml » : depuis le 2026-10-01 l'analyse part du chiffre ML, plus des règles.
-  // Le préfixe écarte les analyses déjà en cache, écrites sur le chiffre des règles.
-  return ["ml", mlProps?.subjectId ?? "", mlProps?.opponentId ?? "", mlProps?.propType ?? "", mlProps?.line ?? "", label, lang].join("|");
+  // « ml2 » : depuis le 2026-10-04 l'analyse est structurée (faits calculés par
+  // le serveur, JSON). Le préfixe écarte les anciennes réponses en texte libre
+  // (« Verdict : … »). Avant : « ml » (2026-10-01, chiffre ML au lieu des règles).
+  return ["ml2", mlProps?.subjectId ?? "", mlProps?.opponentId ?? "", mlProps?.propType ?? "", mlProps?.line ?? "", label, lang].join("|");
 }
 export function loadLlmCache(id: string): string {
   try {

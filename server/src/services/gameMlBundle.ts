@@ -29,7 +29,7 @@
 
 import { TtlCache } from './ttlCache';
 import { buildPrematchGameMarkets, buildLiveModelMarkets } from './nhlPredictions';
-import { buildGameFeatures } from './featureEngineering';
+import { buildGameFeatures, type GameFeatures } from './featureEngineering';
 import { fetchGameById, fetchTeamRoster } from './nhlApiClient';
 import { mlApiClient, type MLPredictionResult } from './mlApiClient';
 
@@ -104,6 +104,12 @@ const EXTRAS: Array<{ market: string; selection?: string }> = [
 
 const BUNDLE_TTL_MS = Number(process.env.ML_BUNDLE_TTL_MS) || 10 * 60_000;
 const bundleCache = new TtlCache<GameMlBundle>(BUNDLE_TTL_MS, 500, 'mlGameBundles');
+/**
+ * Les features du MÊME instant que le paquet : l'« Analyse IA » (`llmFacts.ts`)
+ * y lit repos, gardiens, absents, cotes et statistiques des deux équipes, pour
+ * que le texte parle des entrées que le modèle a réellement vues.
+ */
+const featuresCache = new TtlCache<GameFeatures>(BUNDLE_TTL_MS, 500, 'mlGameFeatures');
 
 /**
  * Marché demandé au modèle pour une tuile.
@@ -159,6 +165,7 @@ async function computeBundle(gameId: string): Promise<GameMlBundle> {
     fetchTeamRoster(home).catch(() => [] as any[]),
     fetchTeamRoster(away).catch(() => [] as any[]),
   ]);
+  featuresCache.set(gameId, features);
   const skaters = (r: any[]) => r.filter(p => (p.position ?? 'F') !== 'G').map(p => String(p.id));
   const out = await mlApiClient.predictGameBundle({
     features, markets,
@@ -275,4 +282,22 @@ async function applyLive(gameId: string, pre: GameMlBundle): Promise<GameMlBundl
 export async function getGameMlBundle(gameId: string): Promise<GameMlBundle> {
   const pre = await bundleCache.wrap(gameId, () => computeBundle(gameId));
   return liveCache.wrap(gameId, () => applyLive(gameId, pre));
+}
+
+/**
+ * Features du match telles que le paquet les a utilisées (cache 10 min). Absentes
+ * du cache — évincées, ou paquet servi par un autre processus — elles sont
+ * reconstruites à l'identique de `computeBundle`.
+ */
+export async function getGameFeatures(gameId: string): Promise<GameFeatures> {
+  const hit = featuresCache.get(gameId);
+  if (hit) return hit;
+  const game = await fetchGameById(gameId);
+  const home = String(game?.homeTeam?.abbreviation ?? '');
+  const away = String(game?.awayTeam?.abbreviation ?? '');
+  if (!home || !away) throw Object.assign(new Error('Game not found'), { status: 404 });
+  const features = await buildGameFeatures(home, away, 'moneyline', undefined,
+                                           { subjectIsHome: true, gameDate: game?.gameDate || undefined });
+  featuresCache.set(gameId, features);
+  return features;
 }
