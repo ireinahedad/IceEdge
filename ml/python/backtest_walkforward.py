@@ -1220,6 +1220,10 @@ def _clv_placebo(bets: list, n_target: int, n_shuffles: int = 20,
 #    de clôture digne de ce nom : il est écarté du CLV et COMPTÉ, pas avalé.
 
 SNAPSHOTS = "../data/odds_snapshots_hist.csv"
+# Collecte LIVE du serveur, exportée par `npm run odds:export-snapshots`
+# (server/) : livre de collecte (prolonge la série du backfill) et livres
+# parallèles comme BET99 (`source` = `oddsapi:<livre>`, chacun jugé à part).
+SNAPSHOTS_LIVE = "../data/odds_snapshots_live.csv"
 CLOSE_MAX_LEAD_MIN = 75.0
 # Règle A2, figée le 2026-08-08 : jambe qui donne les 1.5 buts, edge >= 0.04.
 A2_EDGE = 0.04
@@ -1237,19 +1241,33 @@ def _devig2(a, b):
     return (1 / a) / (1 / a + 1 / b)
 
 
-def load_snapshot_pairs(path: str = SNAPSHOTS) -> tuple[dict, dict]:
+def load_snapshot_pairs(paths: tuple[str, ...] = (SNAPSHOTS, SNAPSHOTS_LIVE)) -> tuple[dict, dict]:
     """(index {(date, dom, ext): [paires]}, compteurs) depuis la série horodatée.
 
     Une paire = ouverture et clôture d'UN livre pour UN match, séparément pour
     le moneyline et la puck line (un snapshot peut n'avoir que le h2h).
+
+    Lit le backfill ET l'export de la collecte live s'il existe ; une même
+    observation (match, instant, livre) présente dans les deux ne compte qu'une
+    fois. Les paires restent séparées par `source` : un livre parallèle (BET99)
+    ne se mélange jamais à la série du livre de collecte.
     """
-    stats = {"file": path.split("/")[-1], "games": 0, "ml_pairs": 0,
+    if isinstance(paths, str):
+        paths = (paths,)
+    found = [p for p in paths if os.path.exists(p)]
+    stats = {"file": " + ".join(p.split("/")[-1] for p in found) or paths[0].split("/")[-1],
+             "games": 0, "ml_pairs": 0,
              "pl_pairs": 0, "single_snapshot": 0, "close_too_early": 0}
-    if not os.path.exists(path):
+    if not found:
         return {}, stats
-    s = pd.read_csv(path)
+    s = pd.concat([pd.read_csv(p) for p in found], ignore_index=True)
     if s.empty:
         return {}, stats
+    s = s.drop_duplicates(subset=["game_date", "home_team", "away_team",
+                                  "observed_at", "source"], keep="last")
+    stats["sources"] = {str(k): int(v) for k, v in
+                        s.groupby("source")[["game_date", "home_team", "away_team"]]
+                         .apply(lambda g: g.drop_duplicates().shape[0]).items()}
     s["_obs"] = pd.to_datetime(s["observed_at"], utc=True)
     s["_ct"] = pd.to_datetime(s["commence_time"], utc=True)
     # Défense : rien après la mise au jeu (le collecteur le garantit déjà).
@@ -3997,7 +4015,18 @@ def run_served(df, seasons, search_trials: int, use_cache: bool = True,
                 print(hdr)
                 _print_clv_row("", blk)
                 if model == "servi":
-                    print(f"   → {out['verdict'][market][src]}")
+                    z_clv = blk["clv_net_z"]
+                    print(f"   → {out['verdict'][market][src]}  (CLV net z "
+                          + (f"{z_clv:+.2f}" if z_clv is not None else "—")
+                          + f", ROI z {blk['z']:+.2f})")
+                    # Le verdict dit si le modèle choisit MIEUX que le hasard
+                    # (placebo), pas si les paris sont rentables : c'est le
+                    # « ROI clot. » (prix du matin jugé par la clôture) qui
+                    # le dit. Ajouté le 2026-10-03 après le premier run.
+                    roi_close = blk["roi_implied_by_close_pct"]
+                    if roi_close is not None and roi_close < 0:
+                        print(f"     ⚠️  ROI implicite de la clôture {roi_close:+.2f} % : "
+                              f"selon la clôture, ces paris PERDENT en espérance au prix du matin")
 
     # ── 4. Grille de bandes (modèle servi) — piste, pas une règle ───────────
     for market, grid in SERVED_GRID.items():

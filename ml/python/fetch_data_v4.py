@@ -1098,8 +1098,10 @@ def _write_snapshots(rows: list[dict]) -> None:
                 os.replace(SNAPSHOTS_HIST, SNAPSHOTS_HIST + ".bak")
             except OSError:
                 pass
+    # `source` dans la clé : deux livres observés à la même passe sont deux
+    # observations (collecte parallèle, 2026-10-04), pas un doublon.
     df = df.drop_duplicates(subset=["game_date", "home_team", "away_team",
-                                    "observed_at"], keep="last")
+                                    "observed_at", "source"], keep="last")
     df = df.sort_values(["game_date", "home_team", "observed_at"])
     df.to_csv(SNAPSHOTS_HIST, index=False)
     n_games = df.groupby(["game_date", "home_team", "away_team"]).ngroups
