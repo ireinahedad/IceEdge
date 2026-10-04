@@ -33,7 +33,7 @@ const ml: BetDescriptor = { type: 'game', label: 'COL', propType: 'moneyline', i
 
 describe('buildGameFacts — marchés vainqueur', () => {
   it('classe les facteurs du modèle, écarte les négligeables, et oriente pour/contre', () => {
-    const f = buildGameFacts({ bet: ml, result: result(), features: features(), lambdaHome: 3.4, lambdaAway: 2.6, locale: 'fr' });
+    const f = buildGameFacts({ bet: ml, result: result(), features: features({ home_goalie: 'A' }), lambdaHome: 3.4, lambdaAway: 2.6, locale: 'fr' });
     expect(f.family).toBe('sided');
     expect(f.candidates.map(c => c.key)).toEqual(['schedule', 'goalie', 'team_strength']);
     expect(f.candidates[0]).toMatchObject({ tier: 'major', side: 'for' });
@@ -43,7 +43,7 @@ describe('buildGameFacts — marchés vainqueur', () => {
   });
 
   it('le sujet visiteur inverse le sens des facteurs', () => {
-    const f = buildGameFacts({ bet: { ...ml, label: 'WPG', isHome: false }, result: result(), features: features(), lambdaHome: 3, lambdaAway: 3, locale: 'fr' });
+    const f = buildGameFacts({ bet: { ...ml, label: 'WPG', isHome: false }, result: result(), features: features({ home_goalie: 'A' }), lambdaHome: 3, lambdaAway: 3, locale: 'fr' });
     expect(f.candidates.find(c => c.key === 'schedule')!.side).toBe('against');
     expect(f.candidates.find(c => c.key === 'goalie')!.side).toBe('for');
   });
@@ -162,5 +162,102 @@ describe('parseBetDescriptor', () => {
     const b = parseBetDescriptor({ type: 'team', label: 'x', bookOdds: 0.5, mlPct: 140 })!;
     expect(b.bookOdds).toBeNull();
     expect(b.mlPct).toBeNull();
+  });
+});
+
+describe('buildGameFacts — sensibilité au gardien', () => {
+  const gs = { side: 'away' as const, team: 'WPG', lowPct: 55, highPct: 66, lowGoalie: 'Hellebuyck', highGoalie: 'Brossoit', swingPts: 11 };
+
+  it('chiffre la réserve et ajoute la ligne SENSIBILITÉ GARDIEN', () => {
+    const f = buildGameFacts({ bet: ml, result: result(), features: features({ home_goalie: 'A' }), lambdaHome: 3, lambdaAway: 3, locale: 'fr', goalieSensitivity: gs });
+    expect(f.caveat).toBe('Gardien de WPG non confirmé : de 55 % (Hellebuyck) à 66 % (Brossoit).');
+    expect(f.summary.goalieSwingPts).toBe(11);
+    expect(f.tags).toContain('goalie_dependent');
+    expect(f.text).toContain('SENSIBILITÉ GARDIEN (WPG) : 55 % avec Hellebuyck, 66 % avec Brossoit (écart 11 pts)');
+  });
+
+  it('un écart < 2 pts mesuré : la réserve dit que l\'effet est faible', () => {
+    const f = buildGameFacts({ bet: ml, result: result(), features: features({ home_goalie: 'A' }), lambdaHome: 3, lambdaAway: 3, locale: 'fr', goalieSensitivity: { ...gs, swingPts: 1, highPct: 56 } });
+    expect(f.caveat).toContain('effet mesuré sur ce chiffre est faible');
+  });
+
+  it('sans sensibilité, rien ne change', () => {
+    const f = buildGameFacts({ bet: ml, result: result(), features: features({ home_goalie: 'A' }), lambdaHome: 3, lambdaAway: 3, locale: 'fr' });
+    expect(f.text).not.toContain('SENSIBILITÉ');
+    expect(f.summary.goalieSwingPts).toBeUndefined();
+  });
+});
+
+describe('buildGameFacts — leçons du premier vrai match (DET–WPG, début de saison)', () => {
+  const real = (over: Record<string, unknown>, bet: Partial<BetDescriptor> = {}) =>
+    buildGameFacts({ bet: { ...ml, gameId: '2026020035', ...bet }, result: result(), features: features({ home_goalie: 'A', away_goalie: 'B', ...over }), lambdaHome: 2.8, lambdaAway: 2.89, locale: 'fr' });
+
+  it('début de saison : pas de bilans présentés comme des faits, réserve dédiée', () => {
+    const f = real({});
+    expect(f.caveat).toContain('Début de saison');
+    expect(f.candidates.find(c => c.key === 'team_strength')!.evidence).toContain('pas encore parlants');
+    expect(f.text).not.toContain('gagne 70 % à domicile');
+  });
+
+  it('en cours de saison, les stats redeviennent des preuves', () => {
+    const f = real({}, { gameId: '2026020900' });
+    expect(f.caveat).toBeNull();
+    expect(f.candidates.find(c => c.key === 'team_strength')!.evidence).toContain('% de victoires');
+  });
+
+  it('tuile « en temps réglementaire » : pas de comparaison au moneyline', () => {
+    const f = real({}, { optId: 'ml-home' });
+    expect(f.summary.marketPct).toBeNull();
+    expect(f.summary.edgePts).toBeNull();
+  });
+
+  it('puck line « domicile +1,5 » (posée comme visiteur −1,5 : non) garde le sens du domicile', () => {
+    const away = real({}, { propType: 'puck_line', line: -1.5, selection: 'no', isHome: false });
+    expect(away.candidates.find(c => c.key === 'schedule')!.side).toBe('for');   // pousse vers le domicile
+  });
+
+  it('total d\'équipe : on compare le λ de l\'équipe, pas le total du match', () => {
+    const f = real({}, { propType: 'team_total_goals', line: 0.5, selection: 'over', isHome: true, label: 'DET Over 0.5' });
+    expect(f.candidates[0].key).toBe('expected_team_goals');
+    expect(f.candidates[0].evidence).toContain('2,80 contre une ligne de 0,5');
+  });
+
+  it('prolongation : candidat « équilibre », pas de total', () => {
+    const f = real({}, { propType: 'ot_so_winner' });
+    expect(f.candidates.map(c => c.key)).toEqual(['closeness']);
+    expect(f.summary.marketLine).toBeNull();
+  });
+});
+
+describe('buildGameFacts — sensibilité quand les deux gardiens manquent', () => {
+  const gsA = { side: 'away' as const, team: 'WPG', lowPct: 50, highPct: 61, lowGoalie: 'W1', highGoalie: 'W2', swingPts: 11 };
+  const gsH = { side: 'home' as const, team: 'COL', lowPct: 58, highPct: 60, lowGoalie: 'C2', highGoalie: 'C1', swingPts: 2 };
+  it('une réserve qui chiffre les deux côtés et une ligne FAITS par côté', () => {
+    const f = buildGameFacts({ bet: ml, result: result(), features: features(), lambdaHome: 3, lambdaAway: 3, locale: 'fr', goalieSensitivities: [gsA, gsH] });
+    expect(f.caveat).toBe('Gardiens non confirmés : si WPG change, 50 % (W1) → 61 % (W2) ; si COL change, 58 % (C2) → 60 % (C1).');
+    expect(f.text).toContain('SENSIBILITÉ GARDIEN (WPG)');
+    expect(f.text).toContain('SENSIBILITÉ GARDIEN (COL)');
+    expect(f.summary.goalieSwingPts).toBe(11);
+  });
+  it('sans effet ≥ 2 pts, réserve qualitative', () => {
+    const f = buildGameFacts({ bet: ml, result: result(), features: features(), lambdaHome: 3, lambdaAway: 3, locale: 'fr', goalieSensitivities: [{ ...gsA, swingPts: 1, highPct: 51 }] });
+    expect(f.caveat).toBe('Gardiens non confirmés, mais l\'effet mesuré sur ce chiffre est faible (1 pt au plus).');
+    expect(f.text).toContain('(écart 1 pt)');
+  });
+  it('ligne alternative : la ligne principale du marché est présentée comme telle', () => {
+    const f = buildGameFacts({ bet: { ...ml, propType: 'total_goals_over', line: 2.5, label: 'Over 2.5' }, result: result(), features: features({ home_goalie: 'A', away_goalie: 'B' }), lambdaHome: 2.8, lambdaAway: 2.9, locale: 'fr' });
+    expect(f.text).toContain('Ligne principale du marché : 5,5 (ce pari est sur une autre ligne, 2,5)');
+  });
+});
+
+describe('buildGameFacts — absents officiels', () => {
+  it('nomme les absents sans les compter ni en tirer un avantage (importance inconnue)', () => {
+    const r = result({ feature_importances: [{ name: 'factor.lineup', importance: 0.4, direction: 'positive' }, { name: 'factor.schedule', importance: 0.3, direction: 'positive' }] });
+    const f = buildGameFacts({ bet: ml, result: r, features: features({ home_goalie: 'A', away_goalie: 'B', home_scratches: ['Dylan Larkin', 'Marco Kasper'], away_scratches: [] }), lambdaHome: 3, lambdaAway: 3, locale: 'fr' });
+    const c = f.candidates.find(x => x.key === 'lineup')!;
+    expect(c.side).toBe('neutral');
+    expect(c.tier).toBe('minor');
+    expect(c.evidence).toContain('COL Dylan Larkin, Marco Kasper ; WPG aucun');
+    expect(c.evidence).not.toMatch(/\d (contre|vs)/);
   });
 });

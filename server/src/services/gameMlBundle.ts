@@ -119,7 +119,7 @@ const featuresCache = new TtlCache<GameFeatures>(BUNDLE_TTL_MS, 500, 'mlGameFeat
  * le coupon) alors qu'elles posent la question « gagne en 60 minutes » — les
  * règles le font via `pctScale`. Au modèle, on pose la vraie question.
  */
-function modelMarket(optionId: string, propType: string | undefined): string {
+export function modelMarket(optionId: string, propType: string | undefined): string {
   if (optionId === 'ml-home' || optionId === 'ml-away') return 'regulation_result';
   return propType ?? 'moneyline';
 }

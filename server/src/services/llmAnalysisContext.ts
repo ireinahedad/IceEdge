@@ -12,6 +12,7 @@
 
 import { getGameMlBundle, getGameFeatures, mlBundleKey } from './gameMlBundle';
 import { buildGameFacts, buildFreeFacts, type BetDescriptor, type Facts, type FactsLocale } from './llmFacts';
+import { computeGoalieSensitivities } from './llmSensitivity';
 import { logger } from '../logger';
 
 export async function buildBetFacts(bet: BetDescriptor, locale: FactsLocale): Promise<Facts | null> {
@@ -23,8 +24,14 @@ export async function buildBetFacts(bet: BetDescriptor, locale: FactsLocale): Pr
       const result = (bet.optId ? bundle.results[bet.optId] : null)
         ?? bundle.byKey[mlBundleKey(market, bet.line, bet.selection, bet.isHome !== false)]
         ?? null;
+      const live = !!(bundle.live?.label || result?.live);
+      const goalieSensitivities = !live && result
+        ? await computeGoalieSensitivities(features, {
+            market, line: bet.line, selection: bet.selection, isHome: bet.isHome, optId: bet.optId, gameId: bet.gameId,
+          }, typeof result.probability === 'number' ? Math.round(result.probability) : null)
+        : [];
       return buildGameFacts({
-        bet, result, features,
+        bet, result, features, goalieSensitivities,
         lambdaHome: bundle.lambdaHome, lambdaAway: bundle.lambdaAway,
         liveLabel: bundle.live?.label ?? null, locale,
       });

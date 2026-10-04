@@ -1,0 +1,1187 @@
+[
+  {
+    "id": "2026020035:ml-home",
+    "bet": {
+      "type": "game",
+      "label": "Red Wings in Reg",
+      "gameId": "2026020035",
+      "optId": "ml-home",
+      "propType": "moneyline",
+      "isHome": true
+    },
+    "result": {
+      "probability": 38,
+      "probability_exact": 0.377025,
+      "confidence": 45,
+      "feature_importances": [
+        {
+          "name": "factor.home_ice",
+          "importance": 0.3817,
+          "direction": "positive"
+        },
+        {
+          "name": "factor.attack",
+          "importance": 0.1566,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.goalie",
+          "importance": 0.1433,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.lineup",
+          "importance": 0.1427,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.team_strength",
+          "importance": 0.1418,
+          "direction": "negative"
+        }
+      ],
+      "model_version": "score-nhl-v1.0",
+      "model_type": "Modèle de score (Poisson empilé)",
+      "explanation": "Victoire du domicile en 60 minutes : 37% (P(nul réglementaire) = 23%).",
+      "probability_std": null,
+      "uncertainty": null,
+      "probability_score_model": 48,
+      "probability_classifier": 43
+    },
+    "features": {
+      "home_win_pct": 0.5,
+      "away_win_pct": 0.5,
+      "home_goals_for_pg": 3,
+      "away_goals_for_pg": 3,
+      "home_goals_against_pg": 2,
+      "away_goals_against_pg": 4,
+      "home_pp_pct": 0,
+      "away_pp_pct": 33.3,
+      "home_pk_pct": 75,
+      "away_pk_pct": 100,
+      "home_last10_win_pct": 0,
+      "away_last10_win_pct": 0,
+      "home_home_win_pct": 0,
+      "away_road_win_pct": 0.5,
+      "home_streak": -1,
+      "away_streak": -1,
+      "home_shots_for_pg": 22,
+      "away_shots_for_pg": 33,
+      "home_shots_against_pg": 21,
+      "away_shots_against_pg": 30,
+      "home_faceoff_pct": 53,
+      "away_faceoff_pct": 48.3,
+      "home_rest_days": 2,
+      "away_rest_days": 2,
+      "home_b2b": 0,
+      "away_b2b": 0,
+      "home_3in4": 1,
+      "away_3in4": 1,
+      "venue_altitude_m": 183,
+      "home_team": "DET",
+      "away_team": "WPG",
+      "market_type": "moneyline",
+      "subject_is_home": true,
+      "home_odds_decimal": 1.89,
+      "away_odds_decimal": 1.93,
+      "total_line_market": 5.5,
+      "home_scratches": [
+        "Dylan Larkin",
+        "Marco Kasper",
+        "Carter Bear"
+      ],
+      "away_scratches": []
+    },
+    "lambdaHome": 2.8013,
+    "lambdaAway": 2.8856,
+    "liveLabel": null,
+    "goalieSensitivity": null
+  },
+  {
+    "id": "2026020035:ml-away",
+    "bet": {
+      "type": "game",
+      "label": "Jets in Reg",
+      "gameId": "2026020035",
+      "optId": "ml-away",
+      "propType": "moneyline",
+      "isHome": false
+    },
+    "result": {
+      "probability": 39,
+      "probability_exact": 0.389799,
+      "confidence": 45,
+      "feature_importances": [
+        {
+          "name": "factor.home_ice",
+          "importance": 0.3817,
+          "direction": "positive"
+        },
+        {
+          "name": "factor.attack",
+          "importance": 0.1566,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.goalie",
+          "importance": 0.1433,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.lineup",
+          "importance": 0.1427,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.team_strength",
+          "importance": 0.1418,
+          "direction": "negative"
+        }
+      ],
+      "model_version": "score-nhl-v1.0",
+      "model_type": "Modèle de score (Poisson empilé)",
+      "explanation": "Victoire du domicile en 60 minutes : 38% (P(nul réglementaire) = 23%).",
+      "probability_std": null,
+      "uncertainty": null,
+      "probability_score_model": 48,
+      "probability_classifier": 43
+    },
+    "features": {
+      "home_win_pct": 0.5,
+      "away_win_pct": 0.5,
+      "home_goals_for_pg": 3,
+      "away_goals_for_pg": 3,
+      "home_goals_against_pg": 2,
+      "away_goals_against_pg": 4,
+      "home_pp_pct": 0,
+      "away_pp_pct": 33.3,
+      "home_pk_pct": 75,
+      "away_pk_pct": 100,
+      "home_last10_win_pct": 0,
+      "away_last10_win_pct": 0,
+      "home_home_win_pct": 0,
+      "away_road_win_pct": 0.5,
+      "home_streak": -1,
+      "away_streak": -1,
+      "home_shots_for_pg": 22,
+      "away_shots_for_pg": 33,
+      "home_shots_against_pg": 21,
+      "away_shots_against_pg": 30,
+      "home_faceoff_pct": 53,
+      "away_faceoff_pct": 48.3,
+      "home_rest_days": 2,
+      "away_rest_days": 2,
+      "home_b2b": 0,
+      "away_b2b": 0,
+      "home_3in4": 1,
+      "away_3in4": 1,
+      "venue_altitude_m": 183,
+      "home_team": "DET",
+      "away_team": "WPG",
+      "market_type": "moneyline",
+      "subject_is_home": true,
+      "home_odds_decimal": 1.89,
+      "away_odds_decimal": 1.93,
+      "total_line_market": 5.5,
+      "home_scratches": [
+        "Dylan Larkin",
+        "Marco Kasper",
+        "Carter Bear"
+      ],
+      "away_scratches": []
+    },
+    "lambdaHome": 2.8013,
+    "lambdaAway": 2.8856,
+    "liveLabel": null,
+    "goalieSensitivity": null
+  },
+  {
+    "id": "2026020035:mw-home",
+    "bet": {
+      "type": "game",
+      "label": "Red Wings wins",
+      "gameId": "2026020035",
+      "optId": "mw-home",
+      "propType": "moneyline",
+      "isHome": true
+    },
+    "result": {
+      "probability": 49,
+      "probability_exact": 0.488495,
+      "confidence": 50,
+      "feature_importances": [
+        {
+          "name": "factor.home_ice",
+          "importance": 0.3817,
+          "direction": "positive"
+        },
+        {
+          "name": "factor.attack",
+          "importance": 0.1566,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.goalie",
+          "importance": 0.1433,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.lineup",
+          "importance": 0.1427,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.team_strength",
+          "importance": 0.1418,
+          "direction": "negative"
+        }
+      ],
+      "model_version": "score-nhl-v1.0",
+      "model_type": "Modèle de score (Poisson empilé)",
+      "explanation": "Modèle de score λ=2.80/2.89 → domicile 48% (prolongation incluse). Corrigé (forme, fatigue, alignement, ELO) : 47% → 48% ; tous les marchés du match suivent (λ bruts 2.78/2.91).",
+      "probability_std": null,
+      "uncertainty": null,
+      "probability_score_model": 48,
+      "probability_classifier": 43
+    },
+    "features": {
+      "home_win_pct": 0.5,
+      "away_win_pct": 0.5,
+      "home_goals_for_pg": 3,
+      "away_goals_for_pg": 3,
+      "home_goals_against_pg": 2,
+      "away_goals_against_pg": 4,
+      "home_pp_pct": 0,
+      "away_pp_pct": 33.3,
+      "home_pk_pct": 75,
+      "away_pk_pct": 100,
+      "home_last10_win_pct": 0,
+      "away_last10_win_pct": 0,
+      "home_home_win_pct": 0,
+      "away_road_win_pct": 0.5,
+      "home_streak": -1,
+      "away_streak": -1,
+      "home_shots_for_pg": 22,
+      "away_shots_for_pg": 33,
+      "home_shots_against_pg": 21,
+      "away_shots_against_pg": 30,
+      "home_faceoff_pct": 53,
+      "away_faceoff_pct": 48.3,
+      "home_rest_days": 2,
+      "away_rest_days": 2,
+      "home_b2b": 0,
+      "away_b2b": 0,
+      "home_3in4": 1,
+      "away_3in4": 1,
+      "venue_altitude_m": 183,
+      "home_team": "DET",
+      "away_team": "WPG",
+      "market_type": "moneyline",
+      "subject_is_home": true,
+      "home_odds_decimal": 1.89,
+      "away_odds_decimal": 1.93,
+      "total_line_market": 5.5,
+      "home_scratches": [
+        "Dylan Larkin",
+        "Marco Kasper",
+        "Carter Bear"
+      ],
+      "away_scratches": []
+    },
+    "lambdaHome": 2.8013,
+    "lambdaAway": 2.8856,
+    "liveLabel": null,
+    "goalieSensitivity": null
+  },
+  {
+    "id": "2026020035:mw-away",
+    "bet": {
+      "type": "game",
+      "label": "Jets wins",
+      "gameId": "2026020035",
+      "optId": "mw-away",
+      "propType": "moneyline",
+      "isHome": false
+    },
+    "result": {
+      "probability": 51,
+      "probability_exact": 0.511505,
+      "confidence": 50,
+      "feature_importances": [
+        {
+          "name": "factor.home_ice",
+          "importance": 0.3817,
+          "direction": "positive"
+        },
+        {
+          "name": "factor.attack",
+          "importance": 0.1566,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.goalie",
+          "importance": 0.1433,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.lineup",
+          "importance": 0.1427,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.team_strength",
+          "importance": 0.1418,
+          "direction": "negative"
+        }
+      ],
+      "model_version": "score-nhl-v1.0",
+      "model_type": "Modèle de score (Poisson empilé)",
+      "explanation": "Modèle de score λ=2.89/2.80 → domicile 51% (prolongation incluse). Corrigé (forme, fatigue, alignement, ELO) : 52% → 51% ; tous les marchés du match suivent (λ bruts 2.78/2.91).",
+      "probability_std": null,
+      "uncertainty": null,
+      "probability_score_model": 48,
+      "probability_classifier": 43
+    },
+    "features": {
+      "home_win_pct": 0.5,
+      "away_win_pct": 0.5,
+      "home_goals_for_pg": 3,
+      "away_goals_for_pg": 3,
+      "home_goals_against_pg": 2,
+      "away_goals_against_pg": 4,
+      "home_pp_pct": 0,
+      "away_pp_pct": 33.3,
+      "home_pk_pct": 75,
+      "away_pk_pct": 100,
+      "home_last10_win_pct": 0,
+      "away_last10_win_pct": 0,
+      "home_home_win_pct": 0,
+      "away_road_win_pct": 0.5,
+      "home_streak": -1,
+      "away_streak": -1,
+      "home_shots_for_pg": 22,
+      "away_shots_for_pg": 33,
+      "home_shots_against_pg": 21,
+      "away_shots_against_pg": 30,
+      "home_faceoff_pct": 53,
+      "away_faceoff_pct": 48.3,
+      "home_rest_days": 2,
+      "away_rest_days": 2,
+      "home_b2b": 0,
+      "away_b2b": 0,
+      "home_3in4": 1,
+      "away_3in4": 1,
+      "venue_altitude_m": 183,
+      "home_team": "DET",
+      "away_team": "WPG",
+      "market_type": "moneyline",
+      "subject_is_home": true,
+      "home_odds_decimal": 1.89,
+      "away_odds_decimal": 1.93,
+      "total_line_market": 5.5,
+      "home_scratches": [
+        "Dylan Larkin",
+        "Marco Kasper",
+        "Carter Bear"
+      ],
+      "away_scratches": []
+    },
+    "lambdaHome": 2.8013,
+    "lambdaAway": 2.8856,
+    "liveLabel": null,
+    "goalieSensitivity": null
+  },
+  {
+    "id": "2026020035:ml-home-ot",
+    "bet": {
+      "type": "game",
+      "label": "Red Wings in OT/SO",
+      "gameId": "2026020035",
+      "optId": "ml-home-ot",
+      "propType": "ot_so_winner",
+      "isHome": true
+    },
+    "result": {
+      "probability": 11,
+      "probability_exact": 0.11147,
+      "confidence": 40,
+      "feature_importances": [
+        {
+          "name": "factor.home_ice",
+          "importance": 0.3817,
+          "direction": "positive"
+        },
+        {
+          "name": "factor.attack",
+          "importance": 0.1566,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.goalie",
+          "importance": 0.1433,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.lineup",
+          "importance": 0.1427,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.team_strength",
+          "importance": 0.1418,
+          "direction": "negative"
+        }
+      ],
+      "model_version": "score-nhl-v1.0",
+      "model_type": "Modèle de score (Poisson empilé)",
+      "explanation": "P(nul après 60 min) 23% × P(le sujet gagne la prolongation) 48% = 11%.",
+      "probability_std": null,
+      "uncertainty": null,
+      "probability_score_model": 48,
+      "probability_classifier": 43
+    },
+    "features": {
+      "home_win_pct": 0.5,
+      "away_win_pct": 0.5,
+      "home_goals_for_pg": 3,
+      "away_goals_for_pg": 3,
+      "home_goals_against_pg": 2,
+      "away_goals_against_pg": 4,
+      "home_pp_pct": 0,
+      "away_pp_pct": 33.3,
+      "home_pk_pct": 75,
+      "away_pk_pct": 100,
+      "home_last10_win_pct": 0,
+      "away_last10_win_pct": 0,
+      "home_home_win_pct": 0,
+      "away_road_win_pct": 0.5,
+      "home_streak": -1,
+      "away_streak": -1,
+      "home_shots_for_pg": 22,
+      "away_shots_for_pg": 33,
+      "home_shots_against_pg": 21,
+      "away_shots_against_pg": 30,
+      "home_faceoff_pct": 53,
+      "away_faceoff_pct": 48.3,
+      "home_rest_days": 2,
+      "away_rest_days": 2,
+      "home_b2b": 0,
+      "away_b2b": 0,
+      "home_3in4": 1,
+      "away_3in4": 1,
+      "venue_altitude_m": 183,
+      "home_team": "DET",
+      "away_team": "WPG",
+      "market_type": "moneyline",
+      "subject_is_home": true,
+      "home_odds_decimal": 1.89,
+      "away_odds_decimal": 1.93,
+      "total_line_market": 5.5,
+      "home_scratches": [
+        "Dylan Larkin",
+        "Marco Kasper",
+        "Carter Bear"
+      ],
+      "away_scratches": []
+    },
+    "lambdaHome": 2.8013,
+    "lambdaAway": 2.8856,
+    "liveLabel": null,
+    "goalieSensitivity": null
+  },
+  {
+    "id": "2026020035:ml-away-ot",
+    "bet": {
+      "type": "game",
+      "label": "Jets in OT/SO",
+      "gameId": "2026020035",
+      "optId": "ml-away-ot",
+      "propType": "ot_so_winner",
+      "isHome": false
+    },
+    "result": {
+      "probability": 12,
+      "probability_exact": 0.121706,
+      "confidence": 40,
+      "feature_importances": [
+        {
+          "name": "factor.home_ice",
+          "importance": 0.3817,
+          "direction": "positive"
+        },
+        {
+          "name": "factor.attack",
+          "importance": 0.1566,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.goalie",
+          "importance": 0.1433,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.lineup",
+          "importance": 0.1427,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.team_strength",
+          "importance": 0.1418,
+          "direction": "negative"
+        }
+      ],
+      "model_version": "score-nhl-v1.0",
+      "model_type": "Modèle de score (Poisson empilé)",
+      "explanation": "P(nul après 60 min) 23% × P(le sujet gagne la prolongation) 52% = 12%.",
+      "probability_std": null,
+      "uncertainty": null,
+      "probability_score_model": 48,
+      "probability_classifier": 43
+    },
+    "features": {
+      "home_win_pct": 0.5,
+      "away_win_pct": 0.5,
+      "home_goals_for_pg": 3,
+      "away_goals_for_pg": 3,
+      "home_goals_against_pg": 2,
+      "away_goals_against_pg": 4,
+      "home_pp_pct": 0,
+      "away_pp_pct": 33.3,
+      "home_pk_pct": 75,
+      "away_pk_pct": 100,
+      "home_last10_win_pct": 0,
+      "away_last10_win_pct": 0,
+      "home_home_win_pct": 0,
+      "away_road_win_pct": 0.5,
+      "home_streak": -1,
+      "away_streak": -1,
+      "home_shots_for_pg": 22,
+      "away_shots_for_pg": 33,
+      "home_shots_against_pg": 21,
+      "away_shots_against_pg": 30,
+      "home_faceoff_pct": 53,
+      "away_faceoff_pct": 48.3,
+      "home_rest_days": 2,
+      "away_rest_days": 2,
+      "home_b2b": 0,
+      "away_b2b": 0,
+      "home_3in4": 1,
+      "away_3in4": 1,
+      "venue_altitude_m": 183,
+      "home_team": "DET",
+      "away_team": "WPG",
+      "market_type": "moneyline",
+      "subject_is_home": true,
+      "home_odds_decimal": 1.89,
+      "away_odds_decimal": 1.93,
+      "total_line_market": 5.5,
+      "home_scratches": [
+        "Dylan Larkin",
+        "Marco Kasper",
+        "Carter Bear"
+      ],
+      "away_scratches": []
+    },
+    "lambdaHome": 2.8013,
+    "lambdaAway": 2.8856,
+    "liveLabel": null,
+    "goalieSensitivity": null
+  },
+  {
+    "id": "2026020035:pl-home-m15",
+    "bet": {
+      "type": "game",
+      "label": "Red Wings −1.5",
+      "gameId": "2026020035",
+      "optId": "pl-home-m15",
+      "propType": "puck_line",
+      "line": -1.5,
+      "isHome": true
+    },
+    "result": {
+      "probability": 27,
+      "probability_exact": 0.265523,
+      "confidence": 46,
+      "feature_importances": [
+        {
+          "name": "factor.home_ice",
+          "importance": 0.3817,
+          "direction": "positive"
+        },
+        {
+          "name": "factor.attack",
+          "importance": 0.1566,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.goalie",
+          "importance": 0.1433,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.lineup",
+          "importance": 0.1427,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.team_strength",
+          "importance": 0.1418,
+          "direction": "negative"
+        }
+      ],
+      "model_version": "score-nhl-v1.0",
+      "model_type": "Modèle de score (Poisson empilé)",
+      "explanation": "P(domicile gagne par ≥2) = 26% — un match en prolongation se finit toujours à 1 but d'écart.",
+      "probability_std": null,
+      "uncertainty": null,
+      "probability_score_model": 48,
+      "probability_classifier": 43
+    },
+    "features": {
+      "home_win_pct": 0.5,
+      "away_win_pct": 0.5,
+      "home_goals_for_pg": 3,
+      "away_goals_for_pg": 3,
+      "home_goals_against_pg": 2,
+      "away_goals_against_pg": 4,
+      "home_pp_pct": 0,
+      "away_pp_pct": 33.3,
+      "home_pk_pct": 75,
+      "away_pk_pct": 100,
+      "home_last10_win_pct": 0,
+      "away_last10_win_pct": 0,
+      "home_home_win_pct": 0,
+      "away_road_win_pct": 0.5,
+      "home_streak": -1,
+      "away_streak": -1,
+      "home_shots_for_pg": 22,
+      "away_shots_for_pg": 33,
+      "home_shots_against_pg": 21,
+      "away_shots_against_pg": 30,
+      "home_faceoff_pct": 53,
+      "away_faceoff_pct": 48.3,
+      "home_rest_days": 2,
+      "away_rest_days": 2,
+      "home_b2b": 0,
+      "away_b2b": 0,
+      "home_3in4": 1,
+      "away_3in4": 1,
+      "venue_altitude_m": 183,
+      "home_team": "DET",
+      "away_team": "WPG",
+      "market_type": "moneyline",
+      "subject_is_home": true,
+      "home_odds_decimal": 1.89,
+      "away_odds_decimal": 1.93,
+      "total_line_market": 5.5,
+      "home_scratches": [
+        "Dylan Larkin",
+        "Marco Kasper",
+        "Carter Bear"
+      ],
+      "away_scratches": []
+    },
+    "lambdaHome": 2.8013,
+    "lambdaAway": 2.8856,
+    "liveLabel": null,
+    "goalieSensitivity": null
+  },
+  {
+    "id": "2026020035:pl-home-p15",
+    "bet": {
+      "type": "game",
+      "label": "Red Wings +1.5",
+      "gameId": "2026020035",
+      "optId": "pl-home-p15",
+      "propType": "puck_line",
+      "line": -1.5,
+      "selection": "no",
+      "isHome": false
+    },
+    "result": {
+      "probability": 72,
+      "probability_exact": 0.721369,
+      "confidence": 46,
+      "feature_importances": [
+        {
+          "name": "factor.home_ice",
+          "importance": 0.3817,
+          "direction": "positive"
+        },
+        {
+          "name": "factor.attack",
+          "importance": 0.1566,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.goalie",
+          "importance": 0.1433,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.lineup",
+          "importance": 0.1427,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.team_strength",
+          "importance": 0.1418,
+          "direction": "negative"
+        }
+      ],
+      "model_version": "score-nhl-v1.0",
+      "model_type": "Modèle de score (Poisson empilé)",
+      "explanation": "Côté « non » = 100 − P(oui). P(domicile gagne par ≥2) = 27% — un match en prolongation se finit toujours à 1 but d'écart.",
+      "probability_std": null,
+      "uncertainty": null,
+      "probability_score_model": 48,
+      "probability_classifier": 43
+    },
+    "features": {
+      "home_win_pct": 0.5,
+      "away_win_pct": 0.5,
+      "home_goals_for_pg": 3,
+      "away_goals_for_pg": 3,
+      "home_goals_against_pg": 2,
+      "away_goals_against_pg": 4,
+      "home_pp_pct": 0,
+      "away_pp_pct": 33.3,
+      "home_pk_pct": 75,
+      "away_pk_pct": 100,
+      "home_last10_win_pct": 0,
+      "away_last10_win_pct": 0,
+      "home_home_win_pct": 0,
+      "away_road_win_pct": 0.5,
+      "home_streak": -1,
+      "away_streak": -1,
+      "home_shots_for_pg": 22,
+      "away_shots_for_pg": 33,
+      "home_shots_against_pg": 21,
+      "away_shots_against_pg": 30,
+      "home_faceoff_pct": 53,
+      "away_faceoff_pct": 48.3,
+      "home_rest_days": 2,
+      "away_rest_days": 2,
+      "home_b2b": 0,
+      "away_b2b": 0,
+      "home_3in4": 1,
+      "away_3in4": 1,
+      "venue_altitude_m": 183,
+      "home_team": "DET",
+      "away_team": "WPG",
+      "market_type": "moneyline",
+      "subject_is_home": true,
+      "home_odds_decimal": 1.89,
+      "away_odds_decimal": 1.93,
+      "total_line_market": 5.5,
+      "home_scratches": [
+        "Dylan Larkin",
+        "Marco Kasper",
+        "Carter Bear"
+      ],
+      "away_scratches": []
+    },
+    "lambdaHome": 2.8013,
+    "lambdaAway": 2.8856,
+    "liveLabel": null,
+    "goalieSensitivity": null
+  },
+  {
+    "id": "2026020035:o25",
+    "bet": {
+      "type": "game",
+      "label": "Over 2.5",
+      "gameId": "2026020035",
+      "optId": "o25",
+      "propType": "total_goals_over",
+      "line": 2.5,
+      "isHome": true
+    },
+    "result": {
+      "probability": 96,
+      "probability_exact": 0.956493,
+      "confidence": 44,
+      "feature_importances": [
+        {
+          "name": "factor.home_ice",
+          "importance": 0.3817,
+          "direction": "positive"
+        },
+        {
+          "name": "factor.attack",
+          "importance": 0.1566,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.goalie",
+          "importance": 0.1433,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.lineup",
+          "importance": 0.1427,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.team_strength",
+          "importance": 0.1418,
+          "direction": "negative"
+        }
+      ],
+      "model_version": "score-nhl-v1.0",
+      "model_type": "Modèle de score (Poisson empilé)",
+      "explanation": "Distribution de score λ=2.80/2.89, total espéré 5.92 → OVER 2.5 : 95%.",
+      "probability_std": null,
+      "uncertainty": null,
+      "probability_score_model": 48,
+      "probability_classifier": 43
+    },
+    "features": {
+      "home_win_pct": 0.5,
+      "away_win_pct": 0.5,
+      "home_goals_for_pg": 3,
+      "away_goals_for_pg": 3,
+      "home_goals_against_pg": 2,
+      "away_goals_against_pg": 4,
+      "home_pp_pct": 0,
+      "away_pp_pct": 33.3,
+      "home_pk_pct": 75,
+      "away_pk_pct": 100,
+      "home_last10_win_pct": 0,
+      "away_last10_win_pct": 0,
+      "home_home_win_pct": 0,
+      "away_road_win_pct": 0.5,
+      "home_streak": -1,
+      "away_streak": -1,
+      "home_shots_for_pg": 22,
+      "away_shots_for_pg": 33,
+      "home_shots_against_pg": 21,
+      "away_shots_against_pg": 30,
+      "home_faceoff_pct": 53,
+      "away_faceoff_pct": 48.3,
+      "home_rest_days": 2,
+      "away_rest_days": 2,
+      "home_b2b": 0,
+      "away_b2b": 0,
+      "home_3in4": 1,
+      "away_3in4": 1,
+      "venue_altitude_m": 183,
+      "home_team": "DET",
+      "away_team": "WPG",
+      "market_type": "moneyline",
+      "subject_is_home": true,
+      "home_odds_decimal": 1.89,
+      "away_odds_decimal": 1.93,
+      "total_line_market": 5.5,
+      "home_scratches": [
+        "Dylan Larkin",
+        "Marco Kasper",
+        "Carter Bear"
+      ],
+      "away_scratches": []
+    },
+    "lambdaHome": 2.8013,
+    "lambdaAway": 2.8856,
+    "liveLabel": null,
+    "goalieSensitivity": null
+  },
+  {
+    "id": "2026020035:u25",
+    "bet": {
+      "type": "game",
+      "label": "Under 2.5",
+      "gameId": "2026020035",
+      "optId": "u25",
+      "propType": "total_goals_under",
+      "line": 2.5,
+      "isHome": true
+    },
+    "result": {
+      "probability": 4,
+      "probability_exact": 0.043507,
+      "confidence": 44,
+      "feature_importances": [
+        {
+          "name": "factor.home_ice",
+          "importance": 0.3817,
+          "direction": "positive"
+        },
+        {
+          "name": "factor.attack",
+          "importance": 0.1566,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.goalie",
+          "importance": 0.1433,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.lineup",
+          "importance": 0.1427,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.team_strength",
+          "importance": 0.1418,
+          "direction": "negative"
+        }
+      ],
+      "model_version": "score-nhl-v1.0",
+      "model_type": "Modèle de score (Poisson empilé)",
+      "explanation": "Distribution de score λ=2.80/2.89, total espéré 5.92 → UNDER 2.5 : 4%.",
+      "probability_std": null,
+      "uncertainty": null,
+      "probability_score_model": 48,
+      "probability_classifier": 43
+    },
+    "features": {
+      "home_win_pct": 0.5,
+      "away_win_pct": 0.5,
+      "home_goals_for_pg": 3,
+      "away_goals_for_pg": 3,
+      "home_goals_against_pg": 2,
+      "away_goals_against_pg": 4,
+      "home_pp_pct": 0,
+      "away_pp_pct": 33.3,
+      "home_pk_pct": 75,
+      "away_pk_pct": 100,
+      "home_last10_win_pct": 0,
+      "away_last10_win_pct": 0,
+      "home_home_win_pct": 0,
+      "away_road_win_pct": 0.5,
+      "home_streak": -1,
+      "away_streak": -1,
+      "home_shots_for_pg": 22,
+      "away_shots_for_pg": 33,
+      "home_shots_against_pg": 21,
+      "away_shots_against_pg": 30,
+      "home_faceoff_pct": 53,
+      "away_faceoff_pct": 48.3,
+      "home_rest_days": 2,
+      "away_rest_days": 2,
+      "home_b2b": 0,
+      "away_b2b": 0,
+      "home_3in4": 1,
+      "away_3in4": 1,
+      "venue_altitude_m": 183,
+      "home_team": "DET",
+      "away_team": "WPG",
+      "market_type": "moneyline",
+      "subject_is_home": true,
+      "home_odds_decimal": 1.89,
+      "away_odds_decimal": 1.93,
+      "total_line_market": 5.5,
+      "home_scratches": [
+        "Dylan Larkin",
+        "Marco Kasper",
+        "Carter Bear"
+      ],
+      "away_scratches": []
+    },
+    "lambdaHome": 2.8013,
+    "lambdaAway": 2.8856,
+    "liveLabel": null,
+    "goalieSensitivity": null
+  },
+  {
+    "id": "2026020035:tt-home-o05",
+    "bet": {
+      "type": "game",
+      "label": "Red Wings Over 0.5",
+      "gameId": "2026020035",
+      "optId": "tt-home-o05",
+      "propType": "team_total_goals",
+      "line": 0.5,
+      "selection": "over",
+      "isHome": true
+    },
+    "result": {
+      "probability": 94,
+      "probability_exact": 0.942211,
+      "confidence": 43,
+      "feature_importances": [
+        {
+          "name": "factor.home_ice",
+          "importance": 0.3817,
+          "direction": "positive"
+        },
+        {
+          "name": "factor.attack",
+          "importance": 0.1566,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.goalie",
+          "importance": 0.1433,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.lineup",
+          "importance": 0.1427,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.team_strength",
+          "importance": 0.1418,
+          "direction": "negative"
+        }
+      ],
+      "model_version": "score-nhl-v1.0",
+      "model_type": "Modèle de score (Poisson empilé)",
+      "explanation": "Buts du domicile (λ=2.80, but de prolongation inclus) → OVER 0.5 : 94%.",
+      "probability_std": null,
+      "uncertainty": null,
+      "probability_score_model": 48,
+      "probability_classifier": 43
+    },
+    "features": {
+      "home_win_pct": 0.5,
+      "away_win_pct": 0.5,
+      "home_goals_for_pg": 3,
+      "away_goals_for_pg": 3,
+      "home_goals_against_pg": 2,
+      "away_goals_against_pg": 4,
+      "home_pp_pct": 0,
+      "away_pp_pct": 33.3,
+      "home_pk_pct": 75,
+      "away_pk_pct": 100,
+      "home_last10_win_pct": 0,
+      "away_last10_win_pct": 0,
+      "home_home_win_pct": 0,
+      "away_road_win_pct": 0.5,
+      "home_streak": -1,
+      "away_streak": -1,
+      "home_shots_for_pg": 22,
+      "away_shots_for_pg": 33,
+      "home_shots_against_pg": 21,
+      "away_shots_against_pg": 30,
+      "home_faceoff_pct": 53,
+      "away_faceoff_pct": 48.3,
+      "home_rest_days": 2,
+      "away_rest_days": 2,
+      "home_b2b": 0,
+      "away_b2b": 0,
+      "home_3in4": 1,
+      "away_3in4": 1,
+      "venue_altitude_m": 183,
+      "home_team": "DET",
+      "away_team": "WPG",
+      "market_type": "moneyline",
+      "subject_is_home": true,
+      "home_odds_decimal": 1.89,
+      "away_odds_decimal": 1.93,
+      "total_line_market": 5.5,
+      "home_scratches": [
+        "Dylan Larkin",
+        "Marco Kasper",
+        "Carter Bear"
+      ],
+      "away_scratches": []
+    },
+    "lambdaHome": 2.8013,
+    "lambdaAway": 2.8856,
+    "liveLabel": null,
+    "goalieSensitivity": null
+  },
+  {
+    "id": "2026020035:tt-home-u05",
+    "bet": {
+      "type": "game",
+      "label": "Red Wings Under 0.5",
+      "gameId": "2026020035",
+      "optId": "tt-home-u05",
+      "propType": "team_total_goals",
+      "line": 0.5,
+      "selection": "under",
+      "isHome": true
+    },
+    "result": {
+      "probability": 6,
+      "probability_exact": 0.057789,
+      "confidence": 43,
+      "feature_importances": [
+        {
+          "name": "factor.home_ice",
+          "importance": 0.3817,
+          "direction": "positive"
+        },
+        {
+          "name": "factor.attack",
+          "importance": 0.1566,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.goalie",
+          "importance": 0.1433,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.lineup",
+          "importance": 0.1427,
+          "direction": "negative"
+        },
+        {
+          "name": "factor.team_strength",
+          "importance": 0.1418,
+          "direction": "negative"
+        }
+      ],
+      "model_version": "score-nhl-v1.0",
+      "model_type": "Modèle de score (Poisson empilé)",
+      "explanation": "Côté « moins » = 100 − P(plus). Buts du domicile (λ=2.80, but de prolongation inclus) → OVER 0.5 : 94%.",
+      "probability_std": null,
+      "uncertainty": null,
+      "probability_score_model": 48,
+      "probability_classifier": 43
+    },
+    "features": {
+      "home_win_pct": 0.5,
+      "away_win_pct": 0.5,
+      "home_goals_for_pg": 3,
+      "away_goals_for_pg": 3,
+      "home_goals_against_pg": 2,
+      "away_goals_against_pg": 4,
+      "home_pp_pct": 0,
+      "away_pp_pct": 33.3,
+      "home_pk_pct": 75,
+      "away_pk_pct": 100,
+      "home_last10_win_pct": 0,
+      "away_last10_win_pct": 0,
+      "home_home_win_pct": 0,
+      "away_road_win_pct": 0.5,
+      "home_streak": -1,
+      "away_streak": -1,
+      "home_shots_for_pg": 22,
+      "away_shots_for_pg": 33,
+      "home_shots_against_pg": 21,
+      "away_shots_against_pg": 30,
+      "home_faceoff_pct": 53,
+      "away_faceoff_pct": 48.3,
+      "home_rest_days": 2,
+      "away_rest_days": 2,
+      "home_b2b": 0,
+      "away_b2b": 0,
+      "home_3in4": 1,
+      "away_3in4": 1,
+      "venue_altitude_m": 183,
+      "home_team": "DET",
+      "away_team": "WPG",
+      "market_type": "moneyline",
+      "subject_is_home": true,
+      "home_odds_decimal": 1.89,
+      "away_odds_decimal": 1.93,
+      "total_line_market": 5.5,
+      "home_scratches": [
+        "Dylan Larkin",
+        "Marco Kasper",
+        "Carter Bear"
+      ],
+      "away_scratches": []
+    },
+    "lambdaHome": 2.8013,
+    "lambdaAway": 2.8856,
+    "liveLabel": null,
+    "goalieSensitivity": null
+  }
+]

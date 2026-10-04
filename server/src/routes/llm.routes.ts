@@ -58,7 +58,7 @@ import { recordUpstream } from '../metrics';
 import { logger } from '../logger';
 import { sendError } from '../httpError';
 import { parseBetDescriptor } from '../services/llmFacts';
-import { EXPLAIN_BET_V2, ANALYSIS_RESPONSE_FORMAT, validateAnalysis, renderAnalysisText } from '../services/llmAnalysis';
+import { EXPLAIN_BET_V2, ANALYSIS_RESPONSE_FORMAT, validateAnalysis, renderAnalysisText, ungroundedNumbers } from '../services/llmAnalysis';
 import type { Facts } from '../services/llmFacts';
 import {
   consumeProRequest, refundProRequest, getUsage, MONTHLY_QUOTA, MAX_OUTPUT_TOKENS,
@@ -816,11 +816,23 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
     // Réponse validée contre les faits (chiffres compris), sinon texte
     // déterministe : `text` reste présent pour copie, cache et questions de suivi.
     const analysis = validateAnalysis(text, analysisFacts, resolvedLocale);
+    // Déploiement : `LLM_FACTS_LOG=1` journalise entrée (bloc FAITS), sortie brute et verdict de
+    // validation, pour relire des cas réels et régler l'invite. Désactivé par défaut (volume).
+    if (process.env.LLM_FACTS_LOG === '1') {
+      logger.info({ model: call.requestModel, source: analysis.source, facts: analysisFacts.text, raw: text }, '[LLM] analyse v2');
+    }
     if (analysis.source === 'fallback') {
       logger.warn({ model: call.requestModel }, '[LLM] analyse rejetée par la validation — texte déterministe servi');
     }
     const payload = { text: renderAnalysisText(analysis), analysis, factsText: analysisFacts.text };
     return res.json(quotaNotice ? { ...payload, quota: quotaNotice } : payload);
+  }
+
+  if (taskType === 'ask_followup') {
+    // Pas de rejet (la réponse est de la prose libre) : on MESURE. Un chiffre
+    // absent de la question + du bloc FAITS qu'elle embarque est une invention.
+    const bad = ungroundedNumbers(text, prompt);
+    if (bad.length) logger.warn({ model: call.requestModel, ungrounded: bad.slice(0, 5) }, '[LLM] suivi : nombres absents des faits');
   }
 
   return res.json(quotaNotice ? { text, quota: quotaNotice } : { text });

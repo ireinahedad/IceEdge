@@ -79,6 +79,17 @@ export interface FactsSummary {
   solidity: Solidity | null;
   expectedTotal: number | null;
   marketLine: number | null;
+  /** Écart (pts) entre le meilleur et le pire gardien possible, si calculé. */
+  goalieSwingPts?: number | null;
+}
+
+/** Fourchette du chiffre du pari selon le gardien qui jouera (voir `llmSensitivity.ts`). */
+export interface GoalieSensitivity {
+  side: 'home' | 'away';
+  team: string;
+  lowPct: number; highPct: number;
+  lowGoalie: string; highGoalie: string;
+  swingPts: number;
 }
 
 export type StatusState = 'confirmed' | 'pending' | 'missing';
@@ -96,6 +107,7 @@ export interface Facts {
   tags: FactTag[];
   /** Réserve déterministe, ou null. */
   caveat: string | null;
+  sensitivity?: GoalieSensitivity[];
   /** Aucun facteur MAJEUR : le LLM doit le dire au lieu de broder. */
   dominant: boolean;
   /** Le bloc envoyé au LLM (et réutilisé par les questions de suivi). */
@@ -134,15 +146,50 @@ function overUnder(bet: BetDescriptor): 'over' | 'under' | null {
   return null;
 }
 
+// ─── Début de saison ──────────────────────────────────────────────────────────
+
+/** En dessous, les moyennes d'équipe ne disent rien (0 % à domicile après 1 match). */
+const EARLY_SEASON_GAMES = 10;
+
+/**
+ * Matchs déjà joués PAR ÉQUIPE, estimés d'après l'identifiant NHL
+ * (`AAAA02NNNN` : saison régulière, match n° NNNN sur 1 312, 32 équipes → ~NNNN/16).
+ * `null` = identifiant d'un autre format, ou saison assez avancée.
+ */
+export function earlySeasonGames(gameId: string | undefined): number | null {
+  const m = /^\d{4}02(\d{4})$/.exec(gameId ?? '');
+  if (!m) return null;
+  const n = Math.max(1, Math.round(Number(m[1]) / 16));
+  return n < EARLY_SEASON_GAMES ? n : null;
+}
+
 // ─── Candidats : marchés « vainqueur » ────────────────────────────────────────
 
 /** Part minimale pour compter, et part au-dessus de laquelle un facteur est MAJEUR. */
 const SHARE_MINOR = 0.08;
 const SHARE_MAJOR = 0.25;
 
-function sidedEvidence(key: string, f: GameFeatures, fr: boolean): string | null {
+const STAT_KEYS = new Set(['factor.team_strength', 'factor.home_ice', 'factor.attack', 'factor.opp_defense']);
+
+function sidedEvidence(key: string, f: GameFeatures, fr: boolean, share?: number, early?: number | null): string | null {
   const h = f.home_team ?? 'DOM';
   const a = f.away_team ?? 'EXT';
+  // Début de saison : les bilans et moyennes reposent sur 1 à 3 matchs. On ne
+  // les présente pas comme des faits ; on dit ce que le facteur pèse et pourquoi
+  // il est fragile.
+  const STAT_FACTORS: Record<string, [string, string]> = {
+    'factor.team_strength': ['Force d\'équipe', 'Team strength'],
+    'factor.home_ice': ['Avantage de la glace', 'Home ice'],
+    'factor.attack': ['Attaque', 'Attack'],
+    'factor.opp_defense': ['Défense', 'Defense'],
+  };
+  if (early != null && STAT_FACTORS[key]) {
+    const [nf, ne] = STAT_FACTORS[key];
+    const w = share != null ? Math.round(share * 100) : null;
+    return L(fr,
+      `${nf} : pèse ${w ?? '?'} % de l'écart du modèle, mais la saison compte ~${early} match${early > 1 ? 's' : ''} par équipe : bilans pas encore parlants`,
+      `${ne}: carries ${w ?? '?'}% of the model's gap, but the season is ~${early} game${early > 1 ? 's' : ''} per team in: records not meaningful yet`);
+  }
   switch (key) {
     case 'factor.team_strength': {
       return L(fr,
@@ -155,23 +202,30 @@ function sidedEvidence(key: string, f: GameFeatures, fr: boolean): string | null
         `Home ice: ${h} wins ${pct0(f.home_home_win_pct, fr)} at home, ${a} ${pct0(f.away_road_win_pct, fr)} on the road`);
     }
     case 'factor.goalie': {
+      // Aucun partant connu : ce n'est pas un fait, c'est un STATUT (puce et
+      // réserve) — et une puce sans chiffre n'a pas sa place parmi les moteurs.
       const hg = f.home_goalie, ag = f.away_goalie;
-      if (hg && ag) return L(fr, `Gardiens partants : ${h} ${hg}, ${a} ${ag}`, `Starting goalies: ${h} ${hg}, ${a} ${ag}`);
-      if (hg || ag) {
-        const known = hg ? `${h} ${hg}` : `${a} ${ag}`;
-        const unk = hg ? a : h;
-        return L(fr, `Gardiens : ${known} ; ${unk} non confirmé (gardien moyen supposé)`,
-                     `Goalies: ${known}; ${unk} unconfirmed (average goalie assumed)`);
-      }
-      return L(fr, 'Gardiens : aucun partant confirmé, le modèle suppose un gardien moyen',
-                   'Goalies: no confirmed starter, the model assumes an average goalie');
+      if (!hg && !ag) return null;
+      const pct = share != null ? Math.round(share * 100) : null;
+      const weight = pct != null
+        ? L(fr, ` ; ce facteur pèse ${pct} % de l'écart du modèle`, ` ; this factor carries ${pct}% of the model's gap`) : '';
+      if (hg && ag) return L(fr, `Gardiens partants : ${h} ${hg}, ${a} ${ag}${weight}`, `Starting goalies: ${h} ${hg}, ${a} ${ag}${weight}`);
+      const known = hg ? `${h} ${hg}` : `${a} ${ag}`;
+      const unk = hg ? a : h;
+      return L(fr, `Gardiens : ${known} ; ${unk} non confirmé (gardien moyen supposé)${weight}`,
+                   `Goalies: ${known}; ${unk} unconfirmed (average goalie assumed)${weight}`);
     }
     case 'factor.lineup': {
+      // L'importance des absents n'est pas connue ici (le service ML sait qui est dans le
+      // top 5, pas nous) : on les NOMME, sans compter ni comparer — « 3 contre 2 » invitait à
+      // conclure à un avantage — et `sidedCandidates` neutralise le sens de ce facteur.
       const hs = f.home_scratches ?? [], as = f.away_scratches ?? [];
       const part = (abbr: string, list: string[]) =>
-        list.length ? `${abbr} ${list.length} (${list.slice(0, 3).join(', ')})` : `${abbr} 0`;
-      return L(fr, `Absents officiels : ${part(h, hs)} ; ${part(a, as)}`,
-                   `Scratches: ${part(h, hs)}; ${part(a, as)}`);
+        list.length ? `${abbr} ${list.slice(0, 3).join(', ')}` : L(fr, `${abbr} aucun`, `${abbr} none`);
+      const w = share != null ? Math.round(share * 100) : null;
+      return L(fr,
+        `Absents officiels : ${part(h, hs)} ; ${part(a, as)} (sans indication sur leur rôle)${w != null ? ` ; ce facteur pèse ${w} % de l'écart du modèle` : ''}`,
+        `Official scratches: ${part(h, hs)}; ${part(a, as)} (role not indicated)${w != null ? `; this factor carries ${w}% of the model's gap` : ''}`);
     }
     case 'factor.schedule': {
       const b2b = (x: 0 | 1) => (x ? (fr ? ', back-to-back' : ', back-to-back') : '');
@@ -195,7 +249,7 @@ function sidedEvidence(key: string, f: GameFeatures, fr: boolean): string | null
 }
 
 function sidedCandidates(
-  result: MLPredictionResult | null, f: GameFeatures, subjectIsHome: boolean, fr: boolean,
+  result: MLPredictionResult | null, f: GameFeatures, subjectIsHome: boolean, fr: boolean, early: number | null,
 ): Candidate[] {
   const fis = result?.feature_importances ?? [];
   const out: Candidate[] = [];
@@ -205,12 +259,14 @@ function sidedCandidates(
     const side: CandidateSide = (toward === 'home') === subjectIsHome ? 'for' : 'against';
     if (fi.name.startsWith('factor.')) {
       if (fi.importance < SHARE_MINOR) continue;
-      const evidence = sidedEvidence(fi.name, f, fr);
+      const evidence = sidedEvidence(fi.name, f, fr, fi.importance, early);
       if (!evidence) continue;
       out.push({
         key: fi.name.slice('factor.'.length),
-        tier: fi.importance >= SHARE_MAJOR ? 'major' : 'minor',
-        side, share: fi.importance, evidence,
+        // Début de saison : un facteur FONDÉ SUR DES BILANS ne peut pas être « majeur » (2 matchs).
+        tier: fi.importance >= SHARE_MAJOR && !(early != null && STAT_KEYS.has(fi.name)) && fi.name !== 'factor.lineup' ? 'major' : 'minor',
+        // Absents : sens non tranché tant qu'on ne sait pas s'ils comptent.
+        side: fi.name === 'factor.lineup' ? 'neutral' : side, share: fi.importance, evidence,
       });
     } else if (out.length < 3) {
       // Repli classifieur : le nom est une colonne, la part est globale. On le
@@ -230,7 +286,7 @@ function sidedCandidates(
 const LEAGUE_GOALS_PER_TEAM = 3.05;
 
 function totalsCandidates(
-  bet: BetDescriptor, f: GameFeatures, lamH: number | null, lamA: number | null, fr: boolean,
+  bet: BetDescriptor, f: GameFeatures, lamH: number | null, lamA: number | null, fr: boolean, early: number | null,
 ): Candidate[] {
   const h = f.home_team ?? 'DOM';
   const a = f.away_team ?? 'EXT';
@@ -242,6 +298,32 @@ function totalsCandidates(
     ou === 'over' ? (dir > 0 ? 'for' : 'against')
     : ou === 'under' ? (dir < 0 ? 'for' : 'against')
     : 'neutral';
+
+  // Total d'UNE équipe : le chiffre pertinent est le λ de cette équipe, pas le total du match.
+  if (bet.propType === 'team_total_goals' && lamH != null && lamA != null && isNum(bet.line)) {
+    const mine = bet.isHome !== false ? lamH : lamA;
+    const who = bet.isHome !== false ? h : a;
+    const gap = mine - bet.line;
+    return [{
+      key: 'expected_team_goals',
+      tier: Math.abs(gap) >= 0.4 ? 'major' : 'minor',
+      side: sideFor(gap >= 0 ? 1 : -1),
+      evidence: L(fr, `Buts attendus ${who} : ${fmt(mine, 2, fr)} contre une ligne de ${fmt(bet.line, 1, fr)} : écart ${gap >= 0 ? '+' : ''}${fmt(gap, 2, fr)}`,
+                      `Expected goals ${who}: ${fmt(mine, 2, fr)} vs a line of ${fmt(bet.line, 1, fr)}: gap ${gap >= 0 ? '+' : ''}${fmt(gap, 2, fr)}`),
+    }];
+  }
+
+  // Prolongation / tirs de barrage : ce qui compte est l'ÉQUILIBRE des deux équipes, pas le total.
+  if (bet.propType === 'ot_so_winner' && lamH != null && lamA != null) {
+    const d = Math.abs(lamH - lamA);
+    return [{
+      key: 'closeness',
+      tier: d <= 0.25 || d >= 0.6 ? 'major' : 'minor',
+      side: d <= 0.25 ? 'for' : d >= 0.6 ? 'against' : 'neutral',
+      evidence: L(fr, `Écart de force : buts attendus ${h} ${fmt(lamH, 2, fr)}, ${a} ${fmt(lamA, 2, fr)} (écart ${fmt(d, 2, fr)}) ; plus l'écart est faible, plus la prolongation est probable`,
+                      `Strength gap: expected goals ${h} ${fmt(lamH, 2, fr)}, ${a} ${fmt(lamA, 2, fr)} (gap ${fmt(d, 2, fr)}); the smaller the gap, the likelier overtime`),
+    }];
+  }
 
   if (lamH != null && lamA != null) {
     const total = lamH + lamA;
@@ -263,7 +345,7 @@ function totalsCandidates(
   // Rythme : buts pour + contre des deux équipes, contre la moyenne de ligue.
   const tempo = (f.home_goals_for_pg + f.home_goals_against_pg + f.away_goals_for_pg + f.away_goals_against_pg) / 2;
   const tempoGap = tempo - 2 * LEAGUE_GOALS_PER_TEAM;
-  if (Math.abs(tempoGap) >= 0.25) {
+  if (early == null && Math.abs(tempoGap) >= 0.25) {
     out.push({
       key: 'tempo',
       tier: Math.abs(tempoGap) >= 0.6 ? 'major' : 'minor',
@@ -276,7 +358,7 @@ function totalsCandidates(
 
   // Unités spéciales : AN moyen et DN moyen contre la ligue (~21 % / ~79,5 %).
   const pp = [f.home_pp_pct, f.away_pp_pct], pk = [f.home_pk_pct, f.away_pk_pct];
-  if (pp.every(isNum) && pk.every(isNum)) {
+  if (early == null && pp.every(isNum) && pk.every(isNum)) {
     const ppAvg = ((pp[0] as number) + (pp[1] as number)) / 2;
     const pkAvg = ((pk[0] as number) + (pk[1] as number)) / 2;
     const net = (ppAvg - 21) - (pkAvg - 79.5);
@@ -302,15 +384,8 @@ function totalsCandidates(
     });
   }
 
-  // Gardiens : seulement s'ils sont connus (sinon c'est un statut, pas un fait).
-  if (f.home_goalie || f.away_goalie) {
-    out.push({
-      key: 'goalies', tier: 'minor', side: 'neutral',
-      evidence: L(fr,
-        `Gardiens : ${h} ${f.home_goalie ?? 'non confirmé'}, ${a} ${f.away_goalie ?? 'non confirmé'}`,
-        `Goalies: ${h} ${f.home_goalie ?? 'unconfirmed'}, ${a} ${f.away_goalie ?? 'unconfirmed'}`),
-    });
-  }
+  // Les gardiens ne sont PAS un candidat ici : leur nom ne se chiffre pas. Leur
+  // état vit dans `status` et dans la réserve.
 
   return out.sort((x, y) => (x.tier === y.tier ? 0 : x.tier === 'major' ? -1 : 1));
 }
@@ -350,6 +425,10 @@ export interface GameFactsInput {
   features: GameFeatures;
   lambdaHome: number | null;
   lambdaAway: number | null;
+  /** Effet chiffré d'un changement de gardien (équipe au partant non confirmé). */
+  goalieSensitivity?: GoalieSensitivity | null;
+  /** Un côté ou les deux (veille de match) ; prime sur `goalieSensitivity`. */
+  goalieSensitivities?: GoalieSensitivity[];
   /** Étiquette « live » du paquet, si le match est commencé. */
   liveLabel?: string | null;
   locale: FactsLocale;
@@ -358,8 +437,13 @@ export interface GameFactsInput {
 export function buildGameFacts(input: GameFactsInput): Facts {
   const { bet, result, features: f, locale } = input;
   const fr = locale === 'fr';
-  const subjectIsHome = bet.isHome !== false;
+  // « Domicile +1,5 » est posé au modèle comme « visiteur −1,5 : non » : le sujet
+  // de la QUESTION est le visiteur, celui du PARI est le domicile.
+  const flipped = bet.propType === 'puck_line' && bet.selection === 'no';
+  const subjectIsHome = flipped ? bet.isHome === false : bet.isHome !== false;
   const family = marketFamily(bet.propType);
+  const early = earlySeasonGames(bet.gameId);
+  const sens: GoalieSensitivity[] = input.goalieSensitivities ?? (input.goalieSensitivity ? [input.goalieSensitivity] : []);
   const live = !!(input.liveLabel || result?.live);
 
   const modelPct = isNum(result?.probability) ? Math.round(result!.probability)
@@ -368,7 +452,10 @@ export function buildGameFacts(input: GameFactsInput): Facts {
   // ── Marché ──
   let marketPct: number | null = null;
   let marketKind: FactsSummary['marketKind'] = null;
-  if (bet.propType === 'moneyline' && isNum(f.home_odds_decimal) && isNum(f.away_odds_decimal)
+  // Les tuiles « gagne en temps réglementaire » (ml-home / ml-away) posent une autre
+  // question que la cote moneyline (prolongation comprise) : les comparer fausserait l'écart.
+  const regulationTile = bet.optId === 'ml-home' || bet.optId === 'ml-away';
+  if (bet.propType === 'moneyline' && !regulationTile && isNum(f.home_odds_decimal) && isNum(f.away_odds_decimal)
       && f.home_odds_decimal > 1 && f.away_odds_decimal > 1) {
     const ph = 1 / f.home_odds_decimal, pa = 1 / f.away_odds_decimal;
     const home = (ph / (ph + pa)) * 100;
@@ -392,19 +479,23 @@ export function buildGameFacts(input: GameFactsInput): Facts {
   const summary: FactsSummary = {
     modelPct, marketPct, marketKind, edgePts, fairOdds, bookOdds, valuePct, sigmaPts, solidity,
     expectedTotal: lamH != null && lamA != null ? Math.round((lamH + lamA) * 100) / 100 : null,
-    marketLine: isNum(f.total_line_market) ? f.total_line_market : null,
+    marketLine: isNum(f.total_line_market) && /^total/.test(bet.propType ?? '') ? f.total_line_market : null,
   };
 
   // ── Candidats ──
   const candidates = family === 'sided'
-    ? sidedCandidates(result, f, subjectIsHome, fr)
-    : totalsCandidates(bet, f, lamH, lamA, fr);
+    ? sidedCandidates(result, f, subjectIsHome, fr, early)
+    : totalsCandidates(bet, f, lamH, lamA, fr, early);
   const dominant = candidates.some(c => c.tier === 'major');
 
   // ── Statut + réserve ──
   const status = live ? [] : statusOf(f, fr);
-  const goalieShare = candidates.find(c => c.key === 'goalie')?.share ?? 0;
-  const lineupShare = candidates.find(c => c.key === 'lineup')?.share ?? 0;
+  // La part vient du modèle, pas des candidats : un facteur « gardien » sans
+  // partant connu n'est pas un candidat, mais il pèse quand même.
+  const shareOf = (name: string): number =>
+    (result?.feature_importances ?? []).find(x => x.name === `factor.${name}`)?.importance ?? 0;
+  const goalieShare = shareOf('goalie');
+  const lineupShare = shareOf('lineup');
   const goaliesPending = status.find(s => s.key === 'goalies')?.state === 'pending';
   const lineupsPending = status.find(s => s.key === 'lineups')?.state === 'pending';
   const pS = result?.probability_score_model, pC = result?.probability_classifier;
@@ -415,9 +506,25 @@ export function buildGameFacts(input: GameFactsInput): Facts {
     const h = f.home_team ?? 'DOM', a = f.away_team ?? 'EXT';
     if (goaliesPending && (family === 'totals' || goalieShare >= 0.15)) {
       const who = f.home_goalie ? a : f.away_goalie ? h : null;
-      caveat = who
+      const sig = sens.filter(x => x.swingPts >= 2).sort((x, y) => y.swingPts - x.swingPts);
+      const span = (g: GoalieSensitivity) => `${g.lowPct} % (${g.lowGoalie}) → ${g.highPct} % (${g.highGoalie})`;
+      const measured = sens.length > 0 && sig.length === 0;
+      const maxSwing = Math.max(0, ...sens.map(x => x.swingPts));
+      caveat = measured
+        ? L(fr, `Gardiens non confirmés, mais l'effet mesuré sur ce chiffre est faible (${maxSwing} ${maxSwing > 1 ? 'pts' : 'pt'} au plus).`,
+                `Goalies unconfirmed, but the measured effect on this figure is small (${maxSwing} ${maxSwing > 1 ? 'pts' : 'pt'} at most).`)
+        : who && sig.length
+        ? L(fr, `Gardien de ${who} non confirmé : de ${sig[0].lowPct} % (${sig[0].lowGoalie}) à ${sig[0].highPct} % (${sig[0].highGoalie}).`,
+                `${who} goalie unconfirmed: from ${sig[0].lowPct}% (${sig[0].lowGoalie}) to ${sig[0].highPct}% (${sig[0].highGoalie}).`)
+        : !who && sig.length
+        ? L(fr, `Gardiens non confirmés : ${sig.map(g => `si ${g.team} change, ${span(g)}`).join(' ; ')}.`,
+                `Goalies unconfirmed: ${sig.map(g => `if ${g.team} changes, ${span(g).replace(/→/g, 'to')}`).join('; ')}.`)
+        : who
         ? L(fr, `Gardien de ${who} non confirmé : le chiffre suppose un gardien moyen.`, `${who} goalie unconfirmed: the figure assumes an average goalie.`)
         : L(fr, 'Gardiens partants non confirmés : le chiffre suppose des gardiens moyens.', 'Starting goalies unconfirmed: the figure assumes average goalies.');
+    } else if (early != null && family === 'sided') {
+      caveat = L(fr, `Début de saison : environ ${early} match${early > 1 ? 's' : ''} par équipe, bilans peu fiables.`,
+                     `Early season: about ${early} game${early > 1 ? 's' : ''} per team, records unreliable.`);
     } else if (disagree) {
       caveat = L(fr, `Les deux modèles divergent : score ${pS} % contre classifieur ${pC} %.`,
                      `The two models disagree: score model ${pS}% vs classifier ${pC}%.`);
@@ -432,7 +539,7 @@ export function buildGameFacts(input: GameFactsInput): Facts {
   const tags: FactTag[] = [];
   if (live) tags.push('live');
   if (disagree) tags.push('models_disagree');
-  if (!live && goaliesPending && goalieShare >= 0.2) tags.push('goalie_dependent');
+  if (!live && goaliesPending && (goalieShare >= 0.2 || Math.max(0, ...sens.map(x => x.swingPts)) >= 4)) tags.push('goalie_dependent');
   if (edgePts != null) tags.push(edgePts >= 4 ? 'above_market' : edgePts <= -4 ? 'below_market' : 'with_market');
   if (modelPct != null && modelPct < 35) tags.push('long_shot');
   if (solidity === 'uncertain') tags.push('high_uncertainty');
@@ -440,6 +547,8 @@ export function buildGameFacts(input: GameFactsInput): Facts {
   const facts: Facts = {
     family, summary, candidates, status, tags: tags.slice(0, 3), caveat, dominant, text: '',
   };
+  if (sens.length) facts.summary.goalieSwingPts = Math.max(...sens.map(x => x.swingPts));
+  facts.sensitivity = sens;
   facts.text = renderFactsText(bet, f, facts, input.liveLabel ?? null, fr);
   return facts;
 }
@@ -498,11 +607,21 @@ function renderFactsText(
                      `Model fair odds: ${fmt(s.fairOdds, 2, fr)}${s.bookOdds != null ? ` · book odds: ${fmt(s.bookOdds, 2, fr)}` : ''}`));
   }
   if (s.marketLine != null && facts.family === 'totals') {
-    lines.push(L(fr, `Ligne de total du marché : ${fmt(s.marketLine, 1, fr)}`, `Market total line: ${fmt(s.marketLine, 1, fr)}`));
+    const other = isNum(bet.line) && bet.line !== s.marketLine;
+    lines.push(other
+      ? L(fr, `Ligne principale du marché : ${fmt(s.marketLine, 1, fr)} (ce pari est sur une autre ligne, ${fmt(bet.line as number, 1, fr)})`,
+              `Main market line: ${fmt(s.marketLine, 1, fr)} (this bet is on another line, ${fmt(bet.line as number, 1, fr)})`)
+      : L(fr, `Ligne de total du marché : ${fmt(s.marketLine, 1, fr)}`, `Market total line: ${fmt(s.marketLine, 1, fr)}`));
   }
   if (facts.status.length) lines.push((fr ? 'STATUT : ' : 'STATUS: ') + facts.status.map(x => x.text).join(' · '));
   if (facts.caveat) lines.push((fr ? 'RÉSERVE (déjà affichée, ne la réécris pas) : ' : 'CAVEAT (already shown, do not rewrite): ') + facts.caveat);
 
+  for (const g of facts.sensitivity ?? []) {
+    if (g.swingPts < 1) continue;
+    lines.push(L(fr,
+      `SENSIBILITÉ GARDIEN (${g.team}) : ${g.lowPct} % avec ${g.lowGoalie}, ${g.highPct} % avec ${g.highGoalie} (écart ${g.swingPts} ${g.swingPts > 1 ? 'pts' : 'pt'})`,
+      `GOALIE SENSITIVITY (${g.team}): ${g.lowPct}% with ${g.lowGoalie}, ${g.highPct}% with ${g.highGoalie} (gap ${g.swingPts} ${g.swingPts > 1 ? 'pts' : 'pt'})`));
+  }
   lines.push('');
   if (!facts.candidates.length) {
     lines.push(L(fr, 'CANDIDATS : aucun', 'CANDIDATES: none'));

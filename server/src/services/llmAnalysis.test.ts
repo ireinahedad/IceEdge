@@ -102,3 +102,26 @@ describe('rendu et repli', () => {
     expect(a.drivers.every(d => d.text !== a.headline)).toBe(true);
   });
 });
+
+describe('validateAnalysis — « aucun facteur majeur » démenti par le code', () => {
+  it('rejette une thèse qui nie le facteur majeur alors qu\'il y en a un', () => {
+    const facts: any = {
+      family: 'sided', summary: {}, status: [], tags: [], caveat: null, dominant: true, text: 'Modèle 62 % · Calendrier : repos 2 j',
+      candidates: [{ key: 'schedule', tier: 'major', side: 'for', share: 0.5, evidence: 'Calendrier : repos 2 j' }],
+    };
+    const raw = JSON.stringify({ headline: 'Aucun facteur majeur ne tranche', drivers: [{ key: 'schedule', text: 'Repos 2 j' }], followups: [] });
+    expect(validateAnalysis(raw, facts, 'fr').source).toBe('fallback');
+    const ok = JSON.stringify({ headline: 'Le calendrier porte le pari : 2 j de repos', drivers: [{ key: 'schedule', text: 'Repos 2 j' }], followups: [] });
+    expect(validateAnalysis(ok, facts, 'fr').source).toBe('llm');
+  });
+});
+
+describe('validateAnalysis — questions de suivi inventées', () => {
+  it('écarte une question qui cite un chiffre absent des faits', () => {
+    const facts: any = { family: 'sided', summary: {}, status: [], tags: [], caveat: null, dominant: true, text: 'Modèle 62 % · Calendrier : repos 2 j',
+      candidates: [{ key: 'schedule', tier: 'major', side: 'for', share: 0.5, evidence: 'Calendrier : repos 2 j' }] };
+    const raw = JSON.stringify({ headline: 'Le calendrier porte le pari : 2 j de repos', drivers: [{ key: 'schedule', text: 'Repos 2 j' }],
+      followups: ['Le score de 2–0 change-t-il cette estimation ?', 'Et si le repos tombe à 2 j ?'] });
+    expect(validateAnalysis(raw, facts, 'fr').followups).toEqual(['Et si le repos tombe à 2 j ?']);
+  });
+});
