@@ -234,8 +234,18 @@ router.get('/data-health', async (_req: Request, res: Response) => {
                 -- Une puck line absente partout = le livre de collecte ne la
                 -- cote pas, donc des credits payes pour rien.
                 COUNT(*) FILTER (WHERE pl_home_price IS NOT NULL)::int AS with_puckline,
-                -- Plus d'une valeur = deux livres melanges dans la serie du CLV.
-                array_agg(DISTINCT bookmaker) FILTER (WHERE bookmaker IS NOT NULL) AS bookmakers
+                -- Livre de collecte + livres paralleles (BET99…) depuis la 041 :
+                -- plusieurs valeurs sont NORMALES. La serie de chaque livre se
+                -- lit separement (rows_by_book) ; ce qui serait anormal, c'est
+                -- le livre de collecte absent des passes du jour.
+                array_agg(DISTINCT bookmaker) FILTER (WHERE bookmaker IS NOT NULL) AS bookmakers,
+                (SELECT json_object_agg(b, n) FROM (
+                   SELECT COALESCE(bookmaker, '(aucun)') AS b, COUNT(*)::int AS n
+                     FROM odds_snapshots GROUP BY 1) t)                  AS rows_by_book,
+                (SELECT json_object_agg(b, n) FROM (
+                   SELECT COALESCE(bookmaker, '(aucun)') AS b, COUNT(*)::int AS n
+                     FROM odds_snapshots
+                    WHERE observed_at >= NOW() - INTERVAL '24 hours' GROUP BY 1) t) AS rows_today_by_book
            FROM odds_snapshots`,
       ).catch(() => null),
     ]);

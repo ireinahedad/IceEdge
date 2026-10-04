@@ -21,7 +21,8 @@
 // Sans clé The Odds API (ODDS_API_KEY) le job se désactive proprement.
 
 import { pool } from '../db/connection';
-import { fetchCollectorOdds, ODDS_COLLECT_BOOKMAKERS, type RawOddsEvent } from './oddsClient';
+import { fetchCollectorOdds, ODDS_COLLECT_BOOKMAKERS, ODDS_SHADOW_BOOKMAKERS,
+         type RawOddsEvent } from './oddsClient';
 import { toAbbr } from './oddsTeamNames';
 import { logger } from '../logger';
 import { withJobLock } from './jobLock';
@@ -176,14 +177,23 @@ function easternDate(iso: string): string {
 /** Ordre de préférence du livre de collecte (`ODDS_COLLECT_BOOKMAKERS`). */
 const COLLECT_BOOKS = ODDS_COLLECT_BOOKMAKERS.split(',').map((b) => b.trim()).filter(Boolean);
 
-function pickBook(ev: RawOddsEvent, market: string) {
+/**
+ * Le livre qui fournit `market` pour cet événement, choisi STRICTEMENT dans
+ * `books` (ordre de préférence), ou null.
+ *
+ * Jusqu'au 2026-10-04 la fonction retombait sur « le premier livre venu ».
+ * C'était sans effet tant que l'appel ne demandait que le livre de collecte ;
+ * depuis que la même réponse porte aussi les livres parallèles
+ * (`ODDS_SHADOW_BOOKMAKERS`), ce repli aurait versé des prix BET99 dans la
+ * série DraftKings du CLV pour chaque match que DraftKings ne cote pas.
+ */
+function pickBook(ev: RawOddsEvent, market: string, books: string[]) {
   const withMkt = ev.bookmakers.filter((b) => b.markets.some((m) => m.key === market));
-  if (!withMkt.length) return null;
-  for (const key of COLLECT_BOOKS) {
+  for (const key of books) {
     const hit = withMkt.find((b) => b.key === key);
     if (hit) return hit;
   }
-  return withMkt[0];
+  return null;
 }
 
 interface Row {
@@ -211,8 +221,8 @@ interface Row {
   bookmaker: string | null;
 }
 
-/** Convertit un événement en ligne loggable (cotes de clôture). */
-function eventToRow(ev: RawOddsEvent): Row | null {
+/** Convertit un événement en ligne loggable, prix lus chez `books` seulement. */
+function eventToRow(ev: RawOddsEvent, books: string[] = COLLECT_BOOKS): Row | null {
   const home = toAbbr(ev.home_team);
   const away = toAbbr(ev.away_team);
   if (!home || !away) return null;
@@ -222,7 +232,7 @@ function eventToRow(ev: RawOddsEvent): Row | null {
   let puckLineHome: number | null = null;
   let plHomePrice: number | null = null, plAwayPrice: number | null = null;
 
-  const h2hBook = pickBook(ev, 'h2h');
+  const h2hBook = pickBook(ev, 'h2h', books);
   const h2h = h2hBook?.markets.find((m) => m.key === 'h2h');
   if (h2h) {
     const oh = h2h.outcomes.find((o) => o.name.toLowerCase() === ev.home_team.toLowerCase());
@@ -231,7 +241,7 @@ function eventToRow(ev: RawOddsEvent): Row | null {
     awayMl = oa?.price ?? null;
   }
 
-  const totBook = pickBook(ev, 'totals');
+  const totBook = pickBook(ev, 'totals', books);
   const totals = totBook?.markets.find((m) => m.key === 'totals');
   if (totals) {
     const over  = totals.outcomes.find((o) => /over/i.test(o.name));
@@ -245,7 +255,7 @@ function eventToRow(ev: RawOddsEvent): Row | null {
   // favori, +1.5 sinon). On ne retient que la ligne standard : les lignes
   // alternatives (±2.5) sont un autre marché et les mélanger dans la même
   // colonne rendrait le règlement ambigu au moment du backtest.
-  const spBook = pickBook(ev, 'spreads');
+  const spBook = pickBook(ev, 'spreads', books);
   const spreads = spBook?.markets.find((m) => m.key === 'spreads');
   if (spreads) {
     const oh = spreads.outcomes.find((o) => o.name.toLowerCase() === ev.home_team.toLowerCase());
@@ -292,7 +302,7 @@ function eventToRow(ev: RawOddsEvent): Row | null {
  *             2026-10-01. Voir `SLOTS` pour le calendrier.
  * @returns nombre de lignes écrites ou mises à jour dans `odds_log`.
  */
-async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
+export async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
   // ── Deux garde-fous AVANT de dépenser le moindre crédit ───────────────────
   //
   // 1. La saison est-elle en cours ? L'endpoint /v4/sports est gratuit (il ne
@@ -324,8 +334,18 @@ async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
   const observedAt = new Date();
 
   const rows: Row[] = [];
+  const shadowRows: Row[] = [];
   const seen = new Set<string>();
   for (const ev of events) {
+    // Livres parallèles : une ligne par livre, pour `odds_snapshots` seulement.
+    for (const book of ODDS_SHADOW_BOOKMAKERS) {
+      const sr = eventToRow(ev, [book]);
+      if (!sr) continue;
+      const skey = `${sr.date}|${sr.home}|${sr.away}|${book}`;
+      if (seen.has(skey)) continue;
+      seen.add(skey);
+      shadowRows.push(sr);
+    }
     const r = eventToRow(ev);
     if (!r) continue;
     // The Odds API peut renvoyer deux entrées pour le même match (marchés
@@ -336,7 +356,12 @@ async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
     seen.add(key);
     rows.push(r);
   }
-  if (!rows.length) return 0;
+  if (!rows.length) {
+    // Le livre de collecte ne cote rien ce cycle : rien pour `odds_log`, mais
+    // les livres parallèles gardent leur point de série.
+    if (shadowRows.length) await insertSnapshots(shadowRows, observedAt, kind);
+    return 0;
+  }
 
   // Un seul aller-retour pour toute la journée : `unnest` déplie les tableaux
   // en lignes côté Postgres. Une boucle d'INSERT aurait fait ~15 requêtes pour
@@ -394,7 +419,7 @@ async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
     [...keyColumns(rows), ...priceColumns(rows)],
   );
 
-  await insertSnapshots(rows, observedAt, kind);
+  await insertSnapshots([...rows, ...shadowRows], observedAt, kind);
   return res.rowCount ?? 0;
 }
 
@@ -436,6 +461,39 @@ async function insertSnapshots(
   rows: Row[], observedAt: Date, kind: PassKind,
 ): Promise<void> {
   try {
+    await writeSnapshots(rows, observedAt, kind, SNAPSHOT_CONFLICT);
+  } catch (err: any) {
+    // 42P10 = aucun index unique ne correspond à l'ON CONFLICT : la migration
+    // 041 n'est pas passée. On sauve la série du livre de COLLECTE avec
+    // l'ancienne clé (un livre par passe) et on le crie : les livres parallèles
+    // sont perdus jusqu'à la migration, la série du CLV ne l'est pas.
+    if (err?.code === '42P10') {
+      logger.error('[OddsLogger] ⛔ migration 041 non appliquée — snapshots des livres '
+        + 'parallèles PERDUS ce cycle (série du livre de collecte sauvée). '
+        + 'Lancer `npm run db:migrate:all`.');
+      const primary = rows.filter((r) => r.bookmaker == null || COLLECT_BOOKS.includes(r.bookmaker));
+      try {
+        if (primary.length) await writeSnapshots(primary, observedAt, kind, LEGACY_SNAPSHOT_CONFLICT);
+      } catch (err2: any) {
+        logger.warn({ err: err2?.message, kind },
+          '[OddsLogger] snapshot non archivé — odds_log reste à jour');
+      }
+      return;
+    }
+    logger.warn({ err: err?.message, kind },
+      '[OddsLogger] snapshot non archivé — odds_log reste à jour');
+  }
+}
+
+/** Clé d'unicité d'un snapshot : match × passe × LIVRE (migration 041). */
+const SNAPSHOT_CONFLICT =
+  '(game_date, home_team, away_team, observed_at, (COALESCE(bookmaker, \'\')))';
+/** Ancienne clé (031) : un seul livre par passe. Repli si la 041 manque. */
+const LEGACY_SNAPSHOT_CONFLICT = '(game_date, home_team, away_team, observed_at)';
+
+async function writeSnapshots(
+  rows: Row[], observedAt: Date, kind: PassKind, conflict: string,
+): Promise<void> {
     await pool.query(
       `INSERT INTO odds_snapshots (game_date, home_team, away_team,
                                    observed_at, commence_time, markets,
@@ -451,7 +509,7 @@ async function insertSnapshots(
          $12::numeric[], $13::numeric[], $14::numeric[],
          $15::text[]
        )
-       ON CONFLICT (game_date, home_team, away_team, observed_at) DO NOTHING`,
+       ON CONFLICT ${conflict} DO NOTHING`,
       [
         ...keyColumns(rows),
         rows.map(() => observedAt),
@@ -461,10 +519,6 @@ async function insertSnapshots(
         rows.map((r) => r.bookmaker),
       ],
     );
-  } catch (err: any) {
-    logger.warn({ err: err?.message, kind },
-      '[OddsLogger] snapshot non archivé — odds_log reste à jour');
-  }
 }
 
 /**
@@ -495,6 +549,38 @@ export async function exportOddsLogCsv(): Promise<string> {
     'oddsapi:live',
   ].join(','));
   return [HEADER, ...lines].join('\n') + '\n';
+}
+
+/**
+ * Rend la série temporelle `odds_snapshots` au format de
+ * `ml/data/odds_snapshots_hist.csv` (`fetch_data_v4.SNAPSHOT_COLS`), que le
+ * backtest lit (`backtest_walkforward.load_snapshot_pairs`).
+ *
+ * `source` = `oddsapi:<livre>` — la même convention que le backfill
+ * (`oddsapi:draftkings`) : les lignes live du livre de collecte prolongent sa
+ * série, et chaque livre parallèle (`oddsapi:bet99_ca_on`) forme la sienne, que
+ * le backtest juge séparément. Utilisé par `npm run odds:export-snapshots`.
+ */
+export async function exportOddsSnapshotsCsv(): Promise<string> {
+  const { rows } = await pool.query(
+    `SELECT to_char(game_date, 'YYYY-MM-DD') AS game_date, home_team, away_team,
+            to_char(observed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS observed_at,
+            to_char(commence_time AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS commence_time,
+            markets, home_ml, away_ml, total, total_over, total_under,
+            puck_line_home, pl_home_price, pl_away_price, bookmaker
+       FROM odds_snapshots
+      ORDER BY game_date, home_team, observed_at, bookmaker`,
+  );
+  const num = (v: unknown) => (v == null ? '' : Number(v).toFixed(4));
+  const header = 'game_date,home_team,away_team,observed_at,commence_time,markets,'
+    + 'home_ml,away_ml,total,total_over,total_under,puck_line_home,pl_home_price,pl_away_price,source';
+  const lines = rows.map((r: any) => [
+    r.game_date, r.home_team, r.away_team, r.observed_at, r.commence_time ?? '', r.markets,
+    num(r.home_ml), num(r.away_ml), num(r.total), num(r.total_over), num(r.total_under),
+    num(r.puck_line_home), num(r.pl_home_price), num(r.pl_away_price),
+    r.bookmaker ? `oddsapi:${r.bookmaker}` : 'oddsapi:live',
+  ].join(','));
+  return [header, ...lines].join('\n') + '\n';
 }
 
 // ── Calendrier de collecte ───────────────────────────────────────────────────
@@ -601,7 +687,8 @@ export function startOddsLogger(): void {
   };
 
   logger.info({ slots: SLOTS.length, creditsPerDay: SLOTS.reduce(
-    (n, s) => n + COLLECT_COST[s.kind], 0) }, '[OddsLogger] calendrier armé');
+    (n, s) => n + COLLECT_COST[s.kind], 0),
+    collect: COLLECT_BOOKS, parallel: ODDS_SHADOW_BOOKMAKERS }, '[OddsLogger] calendrier armé');
   schedule();
 
   // Contrôle de mise en service de la 031, au démarrage, sans dépenser un
@@ -631,8 +718,18 @@ export function startOddsLogger(): void {
     .query(`SELECT to_regclass('public.odds_snapshots') AS t,
                    EXISTS (SELECT 1 FROM information_schema.columns
                             WHERE table_name = 'odds_snapshots'
-                              AND column_name = 'bookmaker') AS has_book`)
+                              AND column_name = 'bookmaker') AS has_book,
+                   to_regclass('public.uq_odds_snapshots_obs_book') AS multibook`)
     .then(({ rows }) => {
+      // 041 (2026-10-04) : sans l'index par livre, les livres parallèles sont
+      // perdus à chaque passe (la série du livre de collecte, elle, est sauvée
+      // par le repli d'`insertSnapshots`).
+      if (rows[0]?.t && rows[0]?.has_book && !rows[0]?.multibook && ODDS_SHADOW_BOOKMAKERS.length) {
+        logger.error(
+          `[OddsLogger] ⛔ migration 041 non appliquée — la collecte parallèle `
+          + `(${ODDS_SHADOW_BOOKMAKERS.join(', ')}) sera PERDUE. Lancer \`npm run db:migrate:all\`.`,
+        );
+      }
       if (rows[0]?.t && !rows[0]?.has_book) {
         logger.error(
           '[OddsLogger] ⛔ `odds_snapshots.bookmaker` INTROUVABLE — migration 038 '

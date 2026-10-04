@@ -134,13 +134,14 @@ describe('oddsClient — livres demandés', () => {
     expect(url.searchParams.get('markets')).toBe('h2h,spreads,totals');
   });
 
-  it('collecte : livre `draftkings`, marchés demandés, et AUCUN cache', async () => {
+  it('collecte : livre `draftkings` + livre parallèle `bet99_ca_on` dans le MÊME appel, et AUCUN cache', async () => {
     const { mod, calls } = await load({ latencyMs: 0 });
     await mod.fetchCollectorOdds('h2h,spreads');
     await mod.fetchCollectorOdds('h2h,spreads');
     expect(calls.length).toBe(2);   // deux créneaux = deux observations
     const url = new URL(calls[0]);
-    expect(url.searchParams.get('bookmakers')).toBe('draftkings');
+    // Collecte parallèle (2026-10-04) : même appel, même coût (≤ 10 livres = 1 région).
+    expect(url.searchParams.get('bookmakers')).toBe('draftkings,bet99_ca_on');
     expect(url.searchParams.get('markets')).toBe('h2h,spreads');
   });
 
@@ -155,13 +156,30 @@ describe('oddsClient — livres demandés', () => {
   it('les variables d’environnement remplacent les défauts', async () => {
     process.env.ODDS_BOOKMAKERS = 'playnow_ca,betano_ca_on';
     process.env.ODDS_COLLECT_BOOKMAKERS = 'fanduel';
-    const { mod, calls } = await load({ latencyMs: 0 });
-    await mod.fetchOddsImplied('Montreal Canadiens', 'Boston Bruins');
-    await mod.fetchCollectorOdds('h2h');
-    expect(new URL(calls[0]).searchParams.get('bookmakers')).toBe('playnow_ca,betano_ca_on');
-    expect(new URL(calls[1]).searchParams.get('bookmakers')).toBe('fanduel');
-    delete process.env.ODDS_BOOKMAKERS;
-    delete process.env.ODDS_COLLECT_BOOKMAKERS;
+    process.env.ODDS_SHADOW_BOOKMAKERS = 'pinnacle,fanduel';   // fanduel déjà collecté : pas en double
+    try {
+      const { mod, calls } = await load({ latencyMs: 0 });
+      await mod.fetchOddsImplied('Montreal Canadiens', 'Boston Bruins');
+      await mod.fetchCollectorOdds('h2h');
+      expect(new URL(calls[0]).searchParams.get('bookmakers')).toBe('playnow_ca,betano_ca_on');
+      expect(new URL(calls[1]).searchParams.get('bookmakers')).toBe('fanduel,pinnacle');
+    } finally {
+      delete process.env.ODDS_BOOKMAKERS;
+      delete process.env.ODDS_COLLECT_BOOKMAKERS;
+      delete process.env.ODDS_SHADOW_BOOKMAKERS;
+    }
+  });
+
+  it('collecte parallèle désactivable : ODDS_SHADOW_BOOKMAKERS=none', async () => {
+    process.env.ODDS_SHADOW_BOOKMAKERS = 'none';
+    try {
+      const { mod, calls } = await load({ latencyMs: 0 });
+      await mod.fetchCollectorOdds('h2h');
+      expect(new URL(calls[0]).searchParams.get('bookmakers')).toBe('draftkings');
+      expect(mod.ODDS_SHADOW_BOOKMAKERS).toEqual([]);
+    } finally {
+      delete process.env.ODDS_SHADOW_BOOKMAKERS;
+    }
   });
 });
 

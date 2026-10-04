@@ -123,6 +123,8 @@ Toutes dans `ml/data/` (les gros CSV ne sont pas versionnés dans git).
 | `mp_goalie_games.csv` | MoneyPuck (zips par saison) | Par gardien et par match : temps de glace, xG subis, buts encaissés, tirs cadrés. |
 | `mp_skater_games.csv` | MoneyPuck (zips par saison) | Par patineur et par match : temps de glace, xG individuel, points, buts, tirs, position. |
 | `odds.csv` | SBRO (2007 → 2022-23, archive figée) + The Odds API / DraftKings (2023 →) | Cotes d'ouverture et de clôture moneyline, ligne et prix des totaux, puck line. **Payées, irremplaçables, jamais écrasées.** |
+| `odds_snapshots_hist.csv` | The Odds API (backfill payé 2023-2026, DraftKings) | Série horodatée des cotes (plusieurs observations par match) : ouverture du matin et clôture, pour le CLV. |
+| `odds_snapshots_live.csv` | Collecte du serveur (`npm run odds:export-snapshots`) | Même format, depuis la table `odds_snapshots` : le livre de collecte (DraftKings, prolonge la série) **et les livres collectés en parallèle** (BET99 depuis le 2026-10-04), chacun avec sa `source`. |
 | `arenas.json` | Saisie | Latitude/longitude, fuseau, altitude de chaque aréna (+ déménagements datés). |
 
 **Continuité des franchises.** Les abréviations historiques sont ramenées à la
@@ -666,7 +668,7 @@ Critère unique, partagé par l'accueil et l'alerte push :
 1. Match **du jour** (heure de l'Est), **pas commencé**.
 2. **Les deux gardiens partants saisis** à la main.
 3. Probabilité du paquet ML **non arrondie** (`probability_exact`), seulement si le modèle de score a répondu.
-4. Probabilité du marché dévigée chez le livre d'affichage (les deux prix du même livre).
+4. Probabilité du marché dévigée chez le **livre d'affichage** (`ODDS_BOOKMAKERS`, défaut BetRivers ; liste par ordre de préférence, par ex. `bet99_ca_on,betrivers`), les deux prix du même livre.
 5. Règles :
    - **moneyline** : edge entre **2 % et 6 %** ;
    - **puck line −1,5** (côté qui donne les buts) : edge ≥ **4 %** ;
@@ -710,6 +712,7 @@ considérer comme un pari sur un petit avantage non prouvé.
 
 | Quand | Commande | Ce que ça change |
 |---|---|---|
+| Avant un backtest sur les cotes récentes | `npm run odds:export-snapshots` (dans `server/`, avec la `DATABASE_URL` de production) | Écrit `ml/data/odds_snapshots_live.csv` : la collecte live, tous livres. Le backtest la lit en plus du backfill et juge chaque livre séparément (BET99 aura sa propre ligne dans `--served` quand il aura assez de matchs). |
 | Chaque semaine (tâche planifiée Windows `ml/refresh-data.cmd`) | `python refresh_data.py` | Nouvelles données de la saison en cours → `inference_state.json`, `elo_ratings.json`. **Mêmes modèles.** Il faut ensuite committer ces 2 fichiers et pousser (le service embarque `ml/models/` dans son image). |
 | Réentraînement (mensuel) | `python build_dataset.py && python train_score.py && python train.py && python train_player.py` | Nouveaux modèles + rapports. |
 | Couche de correction | `python backtest_walkforward.py --correction --write-layer` | Réécrit `correction_layer.json` seulement si le verdict est « ADOPTER ». |
@@ -782,3 +785,4 @@ visiteur λ_ext = **2,70** (chiffres calculés avec les vrais τ et p_ot du rapp
 | `bestBets.service.ts` | Liste « best bets ». |
 | `nhlPredictions.ts`, `prediction/*.ts` | Moteur de RÈGLES (sans ML), utilisé en mode règles et comme grille du direct. |
 | `nhl/restTravel.ts` | Repos, dos-à-dos, voyage. |
+| `oddsClient.ts` / `oddsLogger.service.ts` | Cotes : livre d'**affichage** (`ODDS_BOOKMAKERS`, value bets), livre de **collecte** (`ODDS_COLLECT_BOOKMAKERS`, DraftKings, série du CLV et `odds_log`) et livres **parallèles** (`ODDS_SHADOW_BOOKMAKERS`, défaut `bet99_ca_on`, archivés dans `odds_snapshots` seulement ; `none` désactive). Six passes par jour, même coût avec ou sans livres parallèles (≤ 10 livres = une région). |
