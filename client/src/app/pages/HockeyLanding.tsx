@@ -10,6 +10,7 @@
  *   landingTypes.ts       DisplayGame et conversions
  *   EvSection.tsx         paris à valeur (EV), réservé aux abonnés Pro — lus au serveur
  *   BestBetsSection.tsx   Best Bets : tri, paliers de risque, cotes implicites
+ *   BestParlaySection.tsx Best Parlay : combinés du serveur, repliés, chargés à l'ouverture
  *   LandingCards.tsx      en-tête de marque, pastilles de cote, cartes de match
  *
  * `HockeyLanding` reste le seul export public : `routes.tsx` est inchangé.
@@ -30,6 +31,7 @@ import { fetchHockeyOdds, findOddsEvent } from "../services/gameOdds";
 import "../components/home-theme.css";
 import "../components/rink-theme.css";
 import { BestBetsSection } from "./landing/BestBetsSection";
+import { BestParlaySection } from "./landing/BestParlaySection";
 import { EvSection } from "./landing/EvSection";
 import { LiveGamesRow, SportSelector, UpcomingGameRow, gameIsoDay } from "./landing/LandingCards";
 import { dayHeading, groupByDay } from "../data/gameDay";
@@ -438,6 +440,15 @@ export function HockeyLanding() {
               les autres, UN seul gros bloc « Passer à Pro » qui regroupe les
               deux, au lieu de deux sections floutées l'une sous l'autre. */}
           <div className="px-4 py-4 flex flex-col gap-6">
+            {/* Best Parlay (2026-10-04) — AU-DESSUS de Meilleurs paris, pour
+                tout le monde : deux combinés gratuits, les autres Pro (le
+                serveur tranche). Repliée, et sans aucune requête tant qu'on
+                ne l'ouvre pas : pas besoin de `LazySection`. Elle porte le
+                `px-4` de `BestBetsSection` et s'aligne donc sur elle ; pour
+                un non-abonné, c'est `ProUpsell` (sans `px-4`) qui suit. */}
+            <div className={isPro ? undefined : "-mx-4"}>
+              <BestParlaySection accent={accent} />
+            </div>
             {isPro ? (
               <>
                 <LazySection minHeight={360}>

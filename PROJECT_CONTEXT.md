@@ -15,7 +15,50 @@ When continuing this project:
 - Verify that what you are implementing is secure
 - At the end of each session, update PROJECT_CONTEXT.md.
 
-Last updated: 2026-10-01 (phase 2, partie 2)
+Last updated: 2026-10-04 (Best Parlay)
+
+## Session 2026-10-04 — Section « Best Parlay » sur l'accueil
+
+Demande du user : ~6 combinés par jour, 3 à 5 jambes, 2 en moneyline seulement,
+jambes les plus probables selon le ML, cohérentes par équipe / match, combiné
+≥ 25 %, pas de doublons ; section repliée et chargée à l'ouverture, au-dessus
+de Meilleurs paris, 2 combinés gratuits, le reste Pro.
+
+1. **Serveur — `services/bestParlays.service.ts`** : construit les combinés sur
+   le pool de `getBestBets()` (mêmes réglages que l'accueil → même clé de cache
+   `2|15|ml`, aucun appel NHL/ML de plus). Jambes ML seulement (`source === 'ml'`,
+   ≥ 55 %), matchs pas commencés (mise au jeu > 5 min), une journée NHL (la
+   première avec ≥ 3 matchs jouables). Énumération élaguée (jambes triées par %,
+   coupe dès que le produit ne peut plus atteindre 25 %), ≤ 2 jambes par match,
+   ≤ 2 props joueur, ≥ 2 matchs. Cohérence (`pairRelation`) : vainqueur + joueur
+   adverse et under + prop offensive refusés ; même équipe ou over + prop
+   offensive = bonus de classement. Six places (`SLOTS`) : ML 3, mixte 3, ML 4|3,
+   mixte 4|3, mixte 4|5|3, mixte 5|4|3. Diversité : au plus la moitié des jambes
+   en commun et une jambe dans ≤ 2 combinés (passe stricte), puis passe relâchée
+   (jamais un combiné contenu dans un autre). Le seuil de 25 % porte sur le
+   chiffre FINAL. Moins de matchs → moins de combinés, aucun inventé. Cache par
+   horodatage du pool best-bets.
+2. **`services/parlayProbability.ts`** : le calcul de `POST /predict/parlay`
+   (logique + corrélation par match) sorti tel quel de la route, qui l'appelle
+   désormais (réponse inchangée). Best Parlay affiche donc le même chiffre que
+   le coupon. `normalizeMarket` y a déménagé.
+3. **Route `GET /api/predict/best-parlays`** (`optionalAuthenticate`) : invité ou
+   gratuit → 2 combinés entiers + coquilles `{ id, kind, locked, legCount }`
+   (aucune jambe ni % Pro ne quitte le serveur) ; Pro/admin → tout. `isPro` en
+   échec → vue gratuite. `Cache-Control: private, no-store`.
+4. **`BestBet.game`** (additif) : `{ date, startTimeUTC, home, away }`.
+5. **Client — `pages/landing/BestParlaySection.tsx`** : repliée à chaque visite,
+   UNE requête à la première ouverture (refermer/rouvrir ne relance rien ;
+   vérifié : 0 requête avant, 1 après). En-tête au style de Value Bets (icône
+   13 px accent, `text-sm font-medium`) + chevron de Meilleurs paris. Cartes :
+   %, cote du livre (produit, si toutes cotées et matchs distincts) sinon cote
+   équitable (`FairOddsPill`), jambes, « Ajouter le combiné au coupon ».
+   Combinés Pro verrouillés sous `ProLock`, sans données. Placée au-dessus de
+   Meilleurs paris (Pro) / du bloc Pro (gratuit) dans `HockeyLanding`.
+   `bestBetToLeg` extrait de `BestBetsSection` à l'identique (partagé).
+6. Tests : `bestParlays.service.test.ts` (11), route (+4). Suite serveur
+   1325/1325, `tsc` serveur + client, `vite build`.
+
 
 ## Session 2026-10-01 (suite, locale) — Prédictions en direct, Phase 2 (partie 2)
 

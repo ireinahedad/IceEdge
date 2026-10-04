@@ -73,3 +73,6 @@ ml/data/raw/odds/oddsapi/
 # odds.csv.backup-2026-08-23). Pas BACKUP_DR.md : le motif exige le point.
 *.bak
 *.backup-*
+
+# Rapports du banc d'essai de l'Analyse IA (server/scripts/eval-llm-analysis.ts)
+server/eval-reports/

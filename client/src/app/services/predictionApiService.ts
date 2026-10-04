@@ -144,6 +144,41 @@ export interface ApiBestBet {
    *  Optionnel : un serveur plus ancien ne l'envoie pas. */
   bookPrice?:     number | null;
   bookTitle?:     string | null;
+  /** Le match du pari (jour NHL, mise au jeu, domicile / visiteur). Optionnel : serveur plus ancien. */
+  game?:          { date: string | null; startTimeUTC: string | null; home: string; away: string } | null;
+}
+
+// ─── Best Parlay ──────────────────────────────────────────────────────────────
+
+/**
+ * Un combiné construit par le serveur (`bestParlays.service.ts`) avec les
+ * jambes de « Meilleurs paris » : mêmes objets, mêmes %. Le client ne combine
+ * rien — il affiche.
+ */
+export interface ApiBestParlay {
+  id:                  string;
+  kind:                "moneyline" | "mixed";
+  locked?:             false;
+  legs:                ApiBestBet[];
+  /** 0–100 au dixième, corrélations comprises (même calcul que le coupon). */
+  probability:         number;
+  assumesIndependence: boolean;
+  coherentPairs:       number;
+  /** Produit des prix du livre, quand toutes les jambes sont cotées et sur des matchs différents. */
+  bookPrice:           number | null;
+}
+
+/** Combiné Pro vu par un non-abonné : la forme seulement, aucun contenu. */
+export interface ApiLockedParlay {
+  id:       string;
+  kind:     "moneyline" | "mixed";
+  locked:   true;
+  legCount: number;
+}
+
+export interface BestParlaysResponse {
+  parlays: (ApiBestParlay | ApiLockedParlay)[];
+  meta: { generatedAt: string; day: string | null; mlAvailable: boolean; freeCount: number; total: number };
 }
 
 // ─── Value bets (Pro) ─────────────────────────────────────────────────────────
@@ -251,6 +286,29 @@ export const predictionApiService = {
    * (`authedFetch`), contrairement au reste de ce service. Throws
    * `PredictionUnavailableError` (402 = l'abonnement n'est plus actif).
    */
+  /**
+   * « Best Parlay » de l'accueil. Requête AUTHENTIFIÉE quand une session
+   * existe (`authedFetch` n'ajoute rien sinon) : c'est le serveur qui décide,
+   * sur l'abonnement, quels combinés sont envoyés en entier. Appelée une seule
+   * fois, à la première ouverture de la section. Throws `PredictionUnavailableError`.
+   */
+  getBestParlays: async (): Promise<BestParlaysResponse> => {
+    let res: Response;
+    try {
+      res = await authedFetch("/predict/best-parlays");
+    } catch (cause) {
+      throw new PredictionUnavailableError("network", `Best parlays unreachable: ${String(cause)}`);
+    }
+    if (!res.ok) {
+      throw new PredictionUnavailableError("http", `Best parlays error ${res.status}`, res.status);
+    }
+    try {
+      return (await res.json()) as BestParlaysResponse;
+    } catch (cause) {
+      throw new PredictionUnavailableError("bad_response", `Best parlays unreadable: ${String(cause)}`, res.status);
+    }
+  },
+
   getValueBets: async (): Promise<ValueBetsResponse> => {
     let res: Response;
     try {

@@ -87,7 +87,7 @@ function impliedOdds(pct: number): number | null {
  * inconnu. Les lignes « .5 » sont dites en entier (« au moins 3 tirs ») —
  * plus parlant que « plus de 2.5 tirs ».
  */
-function betLabel(b: ApiBestBet, t: TFn): string {
+export function betLabel(b: ApiBestBet, t: TFn): string {
   const abbr = b.teamAbbr ?? b.selectionValue.toUpperCase();
   const name = b.subjectName;
   const atLeast = (line: number | null, dflt: number) => Math.ceil(line ?? dflt);
@@ -103,10 +103,34 @@ function betLabel(b: ApiBestBet, t: TFn): string {
   }
 }
 
-function marketName(b: ApiBestBet, t: TFn): string {
+/** Exportés (2026-10-04) : « Best Parlay » nomme ses jambes exactement comme ici. */
+export function marketName(b: ApiBestBet, t: TFn): string {
   const key = `market.${b.marketType}`;
   const out = t(key);
   return out === key ? b.marketLabel : out;   // clé absente → libellé serveur
+}
+
+/**
+ * Un pari du serveur → jambe du coupon. Sorti de l'effet de `BestBetsSection`
+ * le 2026-10-04, À L'IDENTIQUE, pour que « Best Parlay » pose dans le coupon
+ * exactement les mêmes jambes que « Meilleurs paris ».
+ */
+export function bestBetToLeg(b: ApiBestBet, t: TFn): BetLeg {
+  const logo   = b.teamAbbr ? nhlLogoUrl(b.teamAbbr) : b.subjectLogo;
+  const label  = betLabel(b, t);
+  const market = marketName(b, t);
+  return {
+    // `selection` / `marketLabel` sont purement affichés (coupon,
+    // partage) : le règlement automatique lit `selectionValue`.
+    id: b.id, marketType: b.marketType, marketLabel: market,
+    subjectType: b.subjectType, subjectId: b.subjectId, subjectName: b.subjectName,
+    subjectLogo: logo, selection: label, selectionShort: b.selectionShort,
+    probability: b.score, line: b.line ?? undefined,
+    gameInfo: b.context, addedAt: new Date().toISOString(),
+    // Machine-readable fields for automatic settlement.
+    gameId: b.gameId ?? undefined,
+    selectionValue: b.selectionValue,
+  };
 }
 
 function BestBetRow({ bet, sortSource }: { bet: BestBet; sortSource: SortSource }) {
@@ -223,26 +247,13 @@ export function BestBetsSection({
         if (cancelled) return;
         setMlAvailable(meta?.mlAvailable !== false && apiBets.some((b) => b.mlPct != null));
         const mapped: BestBet[] = apiBets.map((b) => {
-          const logo   = b.teamAbbr ? nhlLogoUrl(b.teamAbbr) : b.subjectLogo;
-          const label  = betLabel(b, t);
-          const market = marketName(b, t);
+          const leg = bestBetToLeg(b, t);
           return {
-            id: b.id, label, context: b.context, logo,
+            id: b.id, label: leg.selection, context: b.context, logo: leg.subjectLogo,
             rulePct: b.rulePct, mlPct: b.mlPct,
             gameId: b.gameId ?? undefined,
             bookPrice: b.bookPrice ?? null,
-            leg: {
-              // `selection` / `marketLabel` sont purement affichés (coupon,
-              // partage) : le règlement automatique lit `selectionValue`.
-              id: b.id, marketType: b.marketType, marketLabel: market,
-              subjectType: b.subjectType, subjectId: b.subjectId, subjectName: b.subjectName,
-              subjectLogo: logo, selection: label, selectionShort: b.selectionShort,
-              probability: b.score, line: b.line ?? undefined,
-              gameInfo: b.context, addedAt: new Date().toISOString(),
-              // Machine-readable fields for automatic settlement.
-              gameId: b.gameId ?? undefined,
-              selectionValue: b.selectionValue,
-            },
+            leg,
           };
         });
         setBets(mapped);
