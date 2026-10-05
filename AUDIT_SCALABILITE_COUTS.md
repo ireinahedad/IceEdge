@@ -11,6 +11,10 @@
 
 ---
 
+> Les corrections livrées (§1 et §2 d'origine : P0-1 → P1-15, G, L, M, H, P, K, X, Y, Z)
+> ont été retirées le 2026-10-05 — `git show 0916b52:AUDIT_SCALABILITE_COUTS.md`. Restent
+> l'état, ce qui est ouvert et ce qui se déclenche sur seuil (`STATUS.md` §3.6).
+
 ## Hypothèses de charge
 
 | Paramètre | Lancement | Cible |
@@ -56,118 +60,6 @@ Le pic d'arrivée est le scénario dimensionnant : c'est lui qui casse, pas le r
 - **Tirs S1 (2026-08-03) — trois défauts trouvés, aucun n'avait été produit par la relecture de code.** `fetchNHL` sans timeout (ligne X), routes NHL rendant 500 au lieu de servir du périmé (ligne Y), et surtout **`oddsClient` en troupeau sur la seule API facturée à l'appel** (ligne Z) : 26 crédits consommés par *une* exécution de `best-bets`, soit ~225 000 par mois au lieu de ~8 600. Les trois sont corrigés. Détail des runs et de leurs angles morts en §5.
 - **La leçon méthodologique du run**, plus utile que les trois correctifs : pendant les deux premiers tirs, `odds.calls` valait 1 et le critère 3 semblait tenu — parce que l'API NHL était morte, donc aucun match à pricer, donc le chemin coûteux ne tournait pas. **Un critère vert peut simplement vouloir dire que le code concerné n'a pas été exercé.** Le troisième run, avec le mock, a produit des matchs et fait surgir le vrai coût.
 - **Ce qui a été écarté sciemment :** les TTL Tennis (ligne O) — décision produit, pas oubli. Vercel Pro et Cloudflare sont **reportés**, pas écartés. *(Redis, longtemps dans cette liste, en est sorti le 2026-09-19 : le code est livré et inerte sans `REDIS_URL`.)*
-
----
-
-# 1. Corrections livrées avant le 2026-08-02 (résumé)
-
-Ces points sont **faits**. Ils sont conservés en une ligne chacun parce que la décision qu'ils portent reste utile à relire ; le raisonnement complet est dans l'historique Git des fichiers cités.
-
-| Point | Ce qui posait problème | Ce qui a été fait |
-|---|---|---|
-| **P0-1** Proxy Odds sans cache | 2 appels upstream **par visiteur** ; le plan gratuit (~500 crédits) tenait 250 visiteurs | Cache TTL 5 min réutilisant `oddsClient`, `Cache-Control`, liste blanche de marchés, repli `getStale` quand le quota tombe, log de `x-requests-remaining` (`routes/odds.routes.ts`) |
-| **P0-2** `best-bets` : 30 appels ML par requête | Recalcul complet à chaque montage de la landing ; rupture vers 150-300 simultanés | `TtlCache.wrap` TTL 60 s, clé sur options normalisées → **une** exécution par minute quel que soit le trafic, et une seule sur un cache froid grâce à la déduplication en vol (`services/bestBets.service.ts`) |
-| **P0-3** Leaderboard N+1 | 21 requêtes, dont une par utilisateur ramenant *toutes* ses lignes de paris pour compter en JS | Agrégat Postgres unique (`fetchBetStats`), cache 60 s partagé, index `(user_id, outcome)` (migration 022) |
-| **P0-4** Avatars base64 en base | ~2 Mo par utilisateur dans Neon, répétés dans chaque payload de chat | Redimensionnement client 256×256 WebP (~27 ko), déduplication par auteur, `express.json` à 100 ko global et 600 ko sur la route avatar |
-| **P0-5** Service ML public | Inférence XGBoost illimitée pour qui connaît l'URL = facture ouverte | Réseau privé Railway (`*.railway.internal`), domaine public retiré, jeton partagé `X-ML-Token` en seconde barrière |
-| **P0-6** bcrypt**js** coût 12 | Implémentation JS pure → **bloque l'event loop** ~1-4 s par inscription ; 10 inscriptions simultanées font expirer tout le reste | `@node-rs/bcrypt` (natif, hors event loop), SHA-256 salé pour les codes courts, e-mail sorti du chemin de requête |
-| **P0-7** Neon | Endpoint direct vs `-pooler` non documenté | `DATABASE_URL` sur `-pooler` **confirmé**, documenté dans `DEPLOYMENT.md`, et **avertissement au démarrage** si l'URL ne le contient pas (`db/connection.ts`) |
-| **P1-1** Caches mémoire sans éviction | `Map` qui ne perdaient jamais une entrée, clés dérivées d'entrées utilisateur → OOM | `TtlCache` (plafond d'entrées, éviction FIFO, TTL par entrée) sur `nhlApiClient`, `tennisApiClient`, `refereeStore`, quota LLM. Sans dépendance : la classe existait déjà dans le repo |
-| **P1-2** Chat N+1 | ~100 requêtes par ouverture de salon | `LEFT JOIN LATERAL` + compte corrélé : 31 requêtes → 1 pour dix salons. Effet de bord utile : un seul SQL sert connectés et invités, les deux vues ne peuvent plus diverger |
-| **P1-3** Socket.io (points 2-3) | Broadcast de présence O(n) à chaque connexion ; CORS socket incompatible avec une liste à virgules | Politique d'origine extraite dans `cors.ts`, partagée HTTP + WebSocket ; `room_users` coalescé à 3 s par salon, l'arrivant recevant son compte en O(1). **Le point 1 (adaptateur Redis) est livré le 2026-09-19 → ligne D** |
-| **P1-4** Jobs planifiés dupliqués | Aucun verrou : N instances = N× le travail et N notifications identiques | **Bail en table** (`job_locks`, migration 023) et non `pg_try_advisory_lock` — un verrou de *session* ne survit pas au PgBouncer de Neon en mode transaction, donc il aurait fonctionné en dev et échoué en prod. `lastAlertKey` déplacé en base (`job_state`), écrit **avant** l'envoi |
-| **P1-6** LLM sans plafond | Quota par utilisateur, en mémoire, contournable par redéploiement ; aucun plafond global | Plafond **dérivé du prix** : `(prix Pro × part IA) ÷ coût pire-cas` ≈ 995 req/mois à 9,99 $. Compteur en base (migration 024), incrément et contrôle dans le même énoncé, fail-closed. Au plafond, bascule sur la clé OpenAI de l'abonné plutôt que blocage |
-| **P1-9** Aucun en-tête de cache HTTP | Données NHL quasi-statiques refaisant l'aller-retour complet à chaque navigation | `middleware/httpCache.middleware.ts` : `max-age` repris des TTL de `nhlApiClient`, en-tête posé **à l'envoi et sur 2xx seulement** (un 502 caché 30 min transformerait une coupure de 10 s en panne de 30 min), `no-store` monté au niveau des 7 routeurs authentifiés. **Reste Cloudflare → ligne 11** |
-| **P1-15** `fetchGameById` / `fetchPlayerById` | Les 2 seules fonctions NHL sans cache serveur, sur 5 routes + 2 chemins ML | Cache posé dans le client (là où les 17 autres cachent), TTL selon l'état du match. Un échec n'est jamais mémorisé |
-| **Migrations** | *(constat périmé)* | `migrate-all.ts` tient un registre `schema_migrations`, une transaction par fichier. Seule limite : `CREATE INDEX CONCURRENTLY` est incompatible avec l'exécution en transaction — à passer à la main sur une table volumineuse |
-
----
-
-# 2. Corrections livrées le 2026-08-02
-
-## G · Fan-out push non borné → **fait**
-
-- **Le problème :** `Promise.all(recipients.map(sendToUser))`, et `sendToUser` faisait lui-même un `SELECT … WHERE user_id = $1` puis un `Promise.all` sur les appareils. À 2 000 abonnés opt-in : **2 000 requêtes Postgres lancées d'un coup sur un pool de 10** et ~3 000 requêtes HTTP simultanées vers FCM/Mozilla/Apple. Les requêtes des utilisateurs passaient derrière : l'API semblait tomber à chaque scan.
-- **Ce qui a été fait :** `sendToUsers(userIds, payload)` — **une** requête de lecture (`= ANY($1::uuid[])`), un plafond d'envois simultanés à l'échelle du lot (`PUSH_CONCURRENCY`, défaut 20), et une purge **groupée** des endpoints expirés. `sendToUser` devient un appel à un seul élément.
-- **Deux détails qui font la différence :** le plafond est posé sur le **lot** et non par utilisateur — le nombre d'appareils par personne est petit, c'est le nombre de personnes qui est grand, donc borner par utilisateur n'aurait rien borné. Et la purge est groupée parce qu'un service push expire souvent un lot d'abonnements d'un coup (mise à jour de navigateur) : sans cela on remplaçait N envois concurrents par N `DELETE` concurrents.
-- **Outil :** `services/concurrency.ts` → `mapLimit`, sans dépendance (`p-limit` est ESM-only depuis la v4, incompatible avec la compilation CommonJS de ce serveur). Une largeur aberrante (0, négative, `NaN`) retombe sur le **séquentiel**, jamais sur l'illimité : une variable d'environnement mal réglée ne doit pas rouvrir le trou que la fonction ferme. 5 tests.
-
-## L · `isPro()` : une requête à chaque appel → **fait**
-
-- **Le problème :** la requête la plus fréquente de l'application (chaque appel LLM, chaque route `requirePro`), pour une donnée qui change quelques fois dans la vie d'un compte.
-- **Ce qui a été fait :** `TtlCache` de 60 s (`PRO_CACHE_TTL_MS`), invalidé par **toute** écriture sur l'abonnement — `upsert` (donc Stripe, promo, activation dev), `startTrial`, `cancel`.
-- **Le détail qui compte :** le TTL est **borné par la fin de période**. Un abonnement qui expire dans 10 s ne peut pas être mis en cache 60 s ; sans cela le cache prolongerait gratuitement un accès payant, et c'est exactement le genre de chose qu'on ne découvre jamais. Reste par instance : au scale, une révocation met au pire un TTL à se propager — d'où un TTL court plutôt que de plusieurs minutes.
-- `cancel()` invalide aussi, bien que `cancel_at_period_end` ne retire pas l'accès : un cache dont l'invalidation dépend de « est-ce que ce champ-là compte ? » finit toujours par être faux le jour où un champ s'ajoute.
-
-## M · `mlApiClient` : ni disjoncteur ni cache → **fait**
-
-- **Le problème :** timeout de 5 s, aucun retry, aucun disjoncteur. Quand le service Python ralentit, `getBestBets` maintient 30 sockets ouvertes pendant 5 s **pour chaque requête entrante**. Le repli sur les règles existait déjà, mais n'était atteint qu'*après* le timeout : le serveur passait 5 s par requête à attendre un service dont il savait déjà, depuis la requête précédente, qu'il ne répondait pas. C'est ainsi qu'une panne d'un service secondaire devient une panne de l'API principale.
-- **Ce qui a été fait :** disjoncteur (5 échecs consécutifs → fenêtre de repos de 60 s pendant laquelle les appels échouent **sans réseau ni attente**), demi-ouverture par **une seule sonde**, et cache d'inférence.
-- **Quels échecs comptent :** réseau, timeout, 5xx, 401/403/429. **Pas les 400** — un appel malformé est la faute d'un appelant ; le compter ouvrirait le circuit pour tout le monde à cause d'une seule route boguée, et le disjoncteur deviendrait lui-même la panne.
-- **Une seule sonde, pas une rafale :** sans le drapeau, les 30 appels d'un `getBestBets` partiraient tous à la seconde où la fenêtre expire et rouvriraient le circuit par la rafale même qu'il est censé empêcher.
-- **Cache lu avant le disjoncteur, délibérément :** une valeur déjà calculée reste servable pendant une panne — la refuser dégraderait le produit sans soulager le service. Un hit ne referme donc pas le circuit et ne consomme pas la sonde. Il utilise `peekFresh` et non `get` : `wrap` compte déjà l'accès, et `misses` — la métrique sur laquelle reposent les critères S1/S3 — serait sinon fausse d'un facteur deux.
-- **Le cache a un TTL court malgré un modèle déterministe** : ce sont les *features* qui bougent (blessures, gardien annoncé, cotes). On mémorise le calcul, pas le pronostic. Bénéfice principal : `wrap` déduplique les appels **en vol**, et `getBestBets` lance les siens d'un coup.
-- État exposé sur `GET /api/dev/metrics` (`mlCircuit`) : sans lui, un tir de charge pendant une panne montrerait « 0 appel ML » sans dire si c'est le cache qui a bien travaillé ou le circuit qui est ouvert — deux situations opposées. 8 tests.
-
-## H · Règlement : plafond fixe et boucle séquentielle → **fait**
-
-- **Le problème :** 100 tickets par passe (200 pour le rattrapage horaire), traitement séquentiel des jambes, caches recréés à chaque appel. À 5 000 utilisateurs, ~7 000 tickets deviennent réglables après les matchs et la file se vidait à 200/heure : **des utilisateurs auraient attendu des jours** le règlement d'un pari dont le résultat était connu.
-- **Ce qui a été fait :** boucle par lots jusqu'à épuisement, arrêtée par un **budget temps** et non par un plafond de tickets ; jambes en parallèle borné (`mapLimit`, 4) ; les quatre caches créés **une fois pour toute la passe** — régler 300 tickets portant sur 10 matchs coûte 10 récupérations, pas 300, ce qui est l'essentiel du bénéfice du « regroupement par match » sans réorganiser la boucle.
-- **Pagination par curseur `(placed_at, id)`, pas par `OFFSET` :** un ticket examiné mais non réglable (marché non auto-réglé, match pas encore final) **reste pending**. Une seconde requête `LIMIT` sans curseur renverrait exactement les mêmes lignes et la boucle tournerait sur place indéfiniment.
-- **Les budgets sont calés sous les TTL des baux** (3 min sous un bail de 5, 10 min sous un bail de 15) : c'est le budget qui arrête la passe, jamais le bail — sinon une deuxième instance reprendrait le travail pendant que la première l'exécute encore. Le chemin interactif `POST /api/slips/settle` garde un plafond bas **et** un budget de 10 s : personne ne doit tenir une connexion HTTP ouverte pendant que la file se vide.
-- `SettlementSummary.exhausted` dit si la file a été vidée ; durablement faux = elle se remplit plus vite qu'elle ne se vide (et c'est journalisé).
-- Index **partiels** (migration 025) : `(placed_at, id)` et `(user_id, placed_at, id)` `WHERE outcome = 'pending'`. Partiels parce que les tickets réglés ne sont jamais relus par ces requêtes et représentent, passé quelques semaines, la quasi-totalité de la table — l'index ne contient donc que la file d'attente et reste en cache mémoire quelle que soit la taille de l'historique.
-
-## P · Webhook Stripe : rejeux et ordre → **fait**
-
-- **Le problème :** (1) le traitement (un `subscriptions.retrieve` + un upsert) se faisait avant de répondre ; sur une base froide, le délai pouvait dépasser le timeout de Stripe, qui rejouait — et finit par désactiver un endpoint qui échoue de façon répétée. (2) Stripe **ne garantit pas l'ordre** de livraison : un `customer.subscription.updated` ancien arrivant après un plus récent écrasait l'état avec des données périmées.
-- **Ce qui a été fait :** registre `stripe_events` (migration 026) — un événement déjà traité est acquitté immédiatement, donc les redélivrances deviennent gratuites — et colonne `subscriptions.last_event_at` portant la garde d'ordonnancement.
-- **Choix assumé : le traitement reste synchrone.** « Répondre 200 puis traiter » a une contrepartie que l'audit initial ne mentionnait pas : une fois le 200 envoyé, Stripe ne réessaie plus. Un échec de traitement derrière signifie **un abonné qui a payé et ne passe jamais Pro**, à moins de reconstruire notre propre file et notre propre job de reprise. Garder le traitement dans la requête laisse le réessai de Stripe faire ce travail, et le registre suffit à rendre les rejeux gratuits.
-- **Conséquence directe : l'événement n'est enregistré qu'APRÈS un traitement réussi.** L'inscrire d'abord ferait passer un échec pour un succès, et le réessai — notre seul filet — serait ignoré.
-- **La garde vit dans le `WHERE` du `DO UPDATE`**, donc dans le même énoncé que l'écriture : aucune fenêtre entre « comparer » et « écrire ». Et `last_event_at` est **distincte de `updated_at`** : `updated_at` est l'heure de *notre* écriture, elle vaut « maintenant » aussi bien pour un webhook que pour un essai gratuit. Comparer un horodatage Stripe à `updated_at` bloquerait les écritures locales ou les laisserait passer par erreur. Seules les écritures issues de Stripe participent à l'ordonnancement ; un `NULL` ne bloque jamais rien.
-- **Une écriture rejetée par la garde relit l'état** au lieu de renvoyer la ligne vide : `toStatus(undefined)` annoncerait « free » à quelqu'un qui est Pro — le bug que la garde devait empêcher, déplacé d'un cran.
-- Purge du registre par le job de nettoyage (`STRIPE_EVENT_RETENTION_DAYS`, 30 j).
-
-## K · `oddsLogger` sur disque éphémère → **fait**
-
-- **Le problème :** le chemin par défaut `<cwd>/../ml/data/odds_live_log.csv` **n'existe pas dans le conteneur** (`WORKDIR /app`, seul `dist/` est copié). `mkdirSync` le créait à la racine, sur un système de fichiers éphémère : tout était perdu à chaque déploiement. Le job ne levait pas, donc rien ne se voyait — et son objectif (constituer un dataset que The Odds API ne vend pas rétroactivement) était inatteignable. Un mois de collecte perdu ne se rattrape pas : la cote de clôture d'un match d'hier n'existe plus.
-- **Ce qui a été fait :** table `odds_log` (migration 027), clé primaire `(game_date, home_team, away_team)` qui porte l'idempotence — la relecture intégrale du fichier à chaque exécution, dont le coût croissait avec la saison, disparaît. Un seul aller-retour par passe (`unnest`). Export vers le format de `fetch_data_v4.py` par `npm run odds:export`.
-- **Bénéfice non prévu par l'audit :** le CSV écrivait `open = close` faute de pouvoir relire ce qu'il avait écrit. En base, la première passe d'une journée pose l'ouverture et les suivantes ne mettent à jour que la clôture — la ligne gagne le **mouvement de cote**, qui est précisément le signal recherché.
-
-## X · `fetchNHL` sans timeout — **trouvé par le tir S1, corrigé**
-
-*(Constat issu du premier tir de charge, 2026-08-03. Aucune relecture de code ne l'avait produit en trois passes.)*
-
-- **Composant :** `services/nhlApiClient.ts` → `fetchNHL`, `fetchNHLSearch`.
-- **Le problème :** aucun timeout. `fetch` sans `signal` s'en remet au défaut d'undici — **300 secondes**. Ce n'est pas une hypothèse : les compteurs du tir donnent `upstream.nhl` à **avgMs 9 611, maxMs 305 043**, soit exactement ce plafond, sur 3 appels en erreur.
-- **Pourquoi c'était bien pire qu'une lenteur :** la déduplication en vol (posée le 2026-07-28, et qui est la bonne décision pour le coût) fait que **tous les appelants d'une URL partagent le sort du premier**. Un appel parti pour cinq minutes retient cinq minutes tous ceux qui demandent la même donnée. Pendant le tir, c'est cette chaîne qui a fait expirer `/api/nhl/games?date=` puis `best-bets` — qui appelle `fetchUpcomingGames`. Le rayon de souffle d'un upstream lent, c'était l'application entière.
-- **Ce qui rendait le constat invisible autrement :** `mlApiClient` avait bien son timeout de 5 s, ce qui donnait l'impression que la question était traitée. Et en usage normal l'API NHL répond en 100-600 ms — le trou ne s'ouvre que quand elle ralentit, c'est-à-dire exactement quand on ne peut pas se le permettre.
-- **✅ Corrigé (2026-08-03).** `AbortController` à 8 s (`NHL_TIMEOUT_MS`) posé dans `fetchWithTimeout`, au point d'étranglement HTTP — donc les 19 fonctions d'un coup, comme la déduplication. L'`AbortError` est reformulé en message nommant la cause : sinon un dépassement de délai ressemble dans les logs à une annulation côté client, deux causes opposées. Un dépassement n'est jamais mémorisé, ni par `dedupe` ni par le cache.
-- **3 tests** (`nhlApiClient.test.ts`), dont celui qui compte : **20 appelants dédoublonnés doivent TOUS être libérés**, pas seulement le premier — sinon le timeout ne protège qu'une requête sur N.
-- **Non traité :** les 4 `fetch` bruts vers `STATS_BASE` (classements, sommaires de saison) contournent `fetchNHL` et restent sans timeout. Ils n'étaient pas exercés par S1. À faire si un tir les met en cause.
-
-## Y · Les routes NHL rendaient 500 quand l'amont tombait — **trouvé par le tir S1, corrigé**
-
-*(Second constat du tir du 2026-08-03, révélé par une panne réelle de l'API NHL survenue pendant le run.)*
-
-- **Le problème :** `upstream.nhl` a rendu **5 appels, 5 échecs**. Le reste de la stack s'est comporté exactement comme l'audit le prédit — 5 appels sortants seulement pour 50 VUs sur 6 minutes, donc caches et déduplication ont tenu — mais `/api/nhl/games?date=` propageait un 500 à chaque requête. C'est **la totalité** des 2,94 % d'erreur du run.
-- **L'asymétrie qui saute aux yeux une fois vue :** le proxy Odds gère déjà ce cas depuis le 2026-07-28 — quand l'amont tombe, il sert `oddsCache.getStale()` plutôt qu'une page vide. Les routes NHL n'avaient jamais eu l'équivalent, alors qu'elles dépendent d'une API tierce tout autant.
-- **✅ Corrigé (2026-08-03).** `middleware/staleFallback.middleware.ts` : mémorise la dernière réponse 2xx par URL et la ressert sur 5xx, avec l'en-tête `X-Stale-Response: 1` et un `Cache-Control` court.
-- **Pourquoi au niveau de la route et non dans `nhlApiClient`.** La version « client » serait plus économe — `TtlCache.getStale` existe déjà et contient la donnée. Mais elle obligerait à modifier une à une les 19 fonctions du client, dont chacune a sa propre logique de « quand mettre en cache » (jour sans match, boxscore absent, match introuvable). Reproduire 19 fois une gestion d'erreur, c'est 19 occasions de se tromper — **et l'oubli est silencieux** : la route concernée continue simplement de rendre 500 le jour où l'amont tombe. Un point unique monté sur le routeur couvre les 20 routes et celles qu'on ajoutera. Le prix est une seconde copie de la dernière réponse par URL, plafonnée (`STALE_FALLBACK_MAX_ENTRIES`).
-- **Trois limites volontaires :** les **4xx passent** (un 404 est une réponse définitive, pas une panne — resservir du vieux serait mentir) ; seules les **2xx sont mémorisées**, donc le repli ne peut pas servir un 500 d'hier ; et l'entrée **expire** (`STALE_FALLBACK_TTL_MS`, 30 min) — mieux vaut une erreur franche qu'un calendrier de la veille présenté comme courant.
-- **Ne jamais monter ce middleware sur un routeur authentifié** : la clé est l'URL, donc deux comptes partageraient une entrée. C'est sûr sur `/api/nhl/*` précisément parce qu'aucune de ces routes ne lit l'identité de l'appelant — la même hypothèse qui autorise déjà `publicCache` sur elles.
-- **5 tests** (`staleFallback.middleware.test.ts`), sur un comportement qui n'apparaît que pendant une panne d'API tierce : sans eux, retirer le middleware laisserait toute la suite au vert.
-
-## Z · `oddsClient` : troupeau sur la seule API facturée à l'appel — **trouvé par le tir S1, corrigé**
-
-*(Troisième et plus coûteux constat du 2026-08-03. Invisible pendant les deux premiers tirs, pour une raison instructive.)*
-
-- **Le problème :** `fetchAllOdds` tenait un cache maison **sans déduplication en vol** — un `let cache` avec vérification d'expiration à la lecture, exactement le motif corrigé dans `nhlApiClient` le 2026-07-28. `getBestBets` price ses candidats en parallèle, donc N appelants lisent le cache froid avant que le premier n'écrive.
-- **Mesuré :** `upstream.odds.calls = 26` pour **une seule** exécution de `getBestBets` (`best-bets.misses = 1`), soit 13 matchs × h2h + totals. Quatre des 26 rejetés — vraisemblablement le limiteur d'en face répondant à la rafale.
-- **Pourquoi c'est le pire endroit possible pour ce bug :** l'API NHL est gratuite, le troupeau n'y coûtait que de la latence. **The Odds API est facturée à l'appel.** À 26 appels par fenêtre froide de 5 minutes, la consommation passe de ~8 600 crédits par mois à **~225 000** — soit un plan à trois chiffres mensuels au lieu du plan gratuit, pour un service rendu identique.
-- **Pourquoi les deux premiers tirs ne l'ont pas vu, et c'est la leçon du run :** l'API NHL était injoignable, donc `fetchUpcomingGames` rendait une liste vide, donc **aucun candidat à pricer**. Les compteurs affichaient `odds.calls = 1` et le critère 3 semblait tenu haut la main. C'est le passage en `NHL_USE_MOCK=true` — donc l'apparition de vrais matchs — qui a fait surgir le chemin coûteux. **Un critère vert peut simplement vouloir dire que le code concerné n'a pas tourné.**
-- **✅ Corrigé (2026-08-03).** `TtlCache.wrap` (une entrée, TTL 5 min, nommée `odds-client` dans les métriques) : une fenêtre froide coûte un appel quel que soit le nombre d'appelants simultanés. Deux affinages : un échec **lève** au lieu de renvoyer `[]` — un `[]` mémorisé 5 minutes priverait le moteur de cotes bien après le rétablissement — et l'appelant retombe sur `getStale`, car des cotes de dix minutes valent mieux qu'aucun facteur marché.
-- **4 tests** (`oddsClient.test.ts`), dont celui qui reproduit la forme exacte de la rafale de `getBestBets` : 13 matchs × 2 marchés → **1 appel**.
 
 ---
 
@@ -321,4 +213,4 @@ Laisser tourner 24 h en préproduction avec un trafic réaliste, lire les compte
 
 Sur le LLM en particulier, la protection n'est pas une surveillance mais une **identité comptable** : le nombre de requêtes qu'un abonné peut envoyer sur le compte de l'opérateur est calculé à partir de ce qu'il paie et du coût pire-cas d'une requête. La dépense IA totale est bornée par le revenu des abonnements, sans qu'aucune alerte n'ait à se déclencher — et un changement de tarif du fournisseur resserre le plafond automatiquement.
 
-**En une phrase :** le tir de charge est fait (`RAPPORT_TESTS_CHARGE_2026-09-18.md`, 14 bancs, sept défauts trouvés et corrigés), et **tout le travail de code de la marche 500 → 5 000 est terminé** — adaptateur Socket.io compris depuis le 2026-09-19. Il reste deux lignes volontairement reportées au lancement officiel (Vercel Pro, Cloudflare), la pose des alertes de budget dans les consoles, et un compteur de débit à partager le jour de la deuxième instance.
+**En une phrase :** le tir de charge est fait (rapport supprimé, `git show 0916b52:RAPPORT_TESTS_CHARGE_2026-09-18.md`, 14 bancs, sept défauts trouvés et corrigés), et **tout le travail de code de la marche 500 → 5 000 est terminé** — adaptateur Socket.io compris depuis le 2026-09-19. Il reste deux lignes volontairement reportées au lancement officiel (Vercel Pro, Cloudflare), la pose des alertes de budget dans les consoles, et un compteur de débit à partager le jour de la deuxième instance.

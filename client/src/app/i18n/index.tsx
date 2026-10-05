@@ -361,6 +361,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.cancelStarted":  { en: "A game in this bet has already started — it can no longer be cancelled.", fr: "Un match de ce pari a déjà commencé — il ne peut plus être annulé." },
   "slip.cancelFailed":   { en: "Could not cancel the bet. Try again.", fr: "Impossible d'annuler le pari. Réessayez." },
   "slip.seeActive":    { en: "See my open bets", fr: "Voir mes paris en cours" },
+  "slip.openGame":     { en: "Open the game for {bet}", fr: "Voir le match de {bet}" },
   "slip.visibilityNotice": {
     en: "Once settled, your slips are visible to Pro members — picks stay hidden until puck drop. You can hide them in Settings.",
     fr: "Une fois réglés, vos paris sont visibles aux membres Pro — les sélections restent cachées jusqu'à la mise au jeu. Vous pouvez les masquer dans Paramètres.",

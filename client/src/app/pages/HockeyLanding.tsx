@@ -17,7 +17,7 @@
  */
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useNavigationType } from "react-router";
 import { ChevronLeft, ChevronRight, CalendarDays, Gamepad2 } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
@@ -67,6 +67,40 @@ function LazySection({ children, minHeight = 200 }: { children: React.ReactNode;
       {show ? children : <div className="icy-tile rounded-2xl animate-pulse" style={{ height: minHeight }} />}
     </div>
   );
+}
+
+// ─── Navigation gardée ─────────────────────────────────────────────────────────
+/**
+ * Où en était le lecteur sur l'accueil (demande du user, 2026-10-06) : en
+ * revenant d'un match — bouton Retour, barre du bas — il retombe sur la même
+ * journée (« Matchs de demain »…) et, au Retour, à la même hauteur de page.
+ *
+ *   · la journée : sa DATE dans `sessionStorage` (pas son rang : après minuit,
+ *     « J+1 » ne désigne plus le même soir). Une date passée ou sans match est
+ *     ignorée, et l'accueil s'ouvre comme avant sur la première journée.
+ *   · le défilement : en mémoire seulement, et rendu sur un Retour (POP)
+ *     uniquement — toucher « Accueil » dans la barre du bas repart du haut.
+ *
+ * `sessionStorage` lève dans un onglet privé verrouillé : on retombe alors sur
+ * le comportement d'avant, sans erreur.
+ */
+const DAY_KEY = "iceedge.home.day";
+function readSavedDay(): string | null {
+  try { return sessionStorage.getItem(DAY_KEY); } catch { return null; }
+}
+function writeSavedDay(date: string) {
+  try { sessionStorage.setItem(DAY_KEY, date); } catch { /* stockage indisponible */ }
+}
+/** Hauteur de défilement de l'accueil au moment où on l'a quitté. */
+let savedScrollY: number | null = null;
+
+/** Le conteneur qui défile vraiment (celui d'`App.tsx`, pas la fenêtre). */
+function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  for (let n = el?.parentElement ?? null; n; n = n.parentElement) {
+    const oy = getComputedStyle(n).overflowY;
+    if ((oy === "auto" || oy === "scroll") && n.scrollHeight > n.clientHeight) return n;
+  }
+  return null;
 }
 
 // ─── Main component ────────────────────────────────────────────────────────────
@@ -136,7 +170,7 @@ export function HockeyLanding() {
    * paquet ML par match, plafonné par `predictLimiter`), puis gardées.
    */
   type RawGame = Awaited<ReturnType<typeof nhlApiService.getLiveGames>>[number];
-  const [gameDays, setGameDays] = useState<{ offset: number; label: string; games: RawGame[] }[]>([]);
+  const [gameDays, setGameDays] = useState<{ offset: number; dateStr: string; label: string; games: RawGame[] }[]>([]);
   const [dayIdx, setDayIdx] = useState(0);
   const [dayLoading, setDayLoading] = useState(false);
   const displayCache = useRef(new Map<string, DisplayGame>());
@@ -153,6 +187,11 @@ export function HockeyLanding() {
   // unique la ferait osciller.
   const headerRef = useRef<HTMLDivElement>(null);
   const [compactHeader, setCompactHeader] = useState(false);
+  // Défilement à rendre au Retour (voir « Navigation gardée » plus haut).
+  const navType = useNavigationType();
+  const pendingScroll = useRef<number | null>(navType === "POP" ? savedScrollY : null);
+  const lastScrollY = useRef(0);
+  useEffect(() => () => { savedScrollY = lastScrollY.current; }, []);
   useEffect(() => {
     const onScroll = (e: Event) => {
       const target = e.target;
@@ -161,6 +200,7 @@ export function HockeyLanding() {
       if (target === document || target === document.documentElement) y = window.scrollY || 0;
       else if (target instanceof Element && header && target.contains(header)) y = target.scrollTop;
       if (y == null) return;
+      lastScrollY.current = y;
       const top = y;
       setCompactHeader((c) => (c ? top > 8 : top > 56));
     };
@@ -210,6 +250,7 @@ export function HockeyLanding() {
         // prochaine soirée de hockey).
         const week = days.map(({ offset, d, dateStr }) => ({
           offset,
+          dateStr,
           label: offset === 0 ? t("home.tonightGames")
             : offset === 1 ? t("home.tomorrowGames")
             : t("home.gamesOn", { date: d.toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" }) }),
@@ -217,8 +258,12 @@ export function HockeyLanding() {
             String(g.gameDate ?? "").slice(0, 10) === dateStr &&
             ["scheduled", "live", "preview"].includes(g.status)).sort(byFaceoff),
         })).filter((x) => x.games.length > 0);
-        const scheduled = week[0]?.games ?? [];
-        const label = week[0]?.label ?? t("home.tonightGames");
+        // La journée que le lecteur regardait avant de quitter l'accueil, si
+        // elle est toujours dans la semaine ; sinon la première, comme avant.
+        const savedDay = readSavedDay();
+        const startIdx = Math.max(0, week.findIndex((w) => w.dateStr === savedDay));
+        const scheduled = week[startIdx]?.games ?? [];
+        const label = week[startIdx]?.label ?? t("home.tonightGames");
         // Un match EN DIRECT figure dans les deux listes (`scheduled` garde le
         // statut "live" exprès, pour la liste du soir). Ses deux prédictions
         // (`POST /predict/single` moneyline + total, non cacheables) partaient
@@ -235,8 +280,8 @@ export function HockeyLanding() {
         if (cancelled) return;
         displayCache.current = new Map(displayed);
         setGameDays(week);
-        setDayIdx(0);
-        wantedDay.current = 0;
+        setDayIdx(startIdx);
+        wantedDay.current = startIdx;
         setDayLoading(false);
         setLiveGames(live.map((g) => displayed.get(g.id)!));
         setUpcomingGames(scheduled.map((g) => displayed.get(g.id)!));
@@ -262,6 +307,7 @@ export function HockeyLanding() {
     wantedDay.current = idx;
     setDayIdx(idx);
     setUpcomingLabel(target.label);
+    writeSavedDay(target.dateStr);
     const missing = target.games.filter((g) => !displayCache.current.has(g.id));
     if (missing.length) {
       setDayLoading(true);
@@ -273,6 +319,19 @@ export function HockeyLanding() {
     setUpcomingGames(target.games.map((g) => displayCache.current.get(g.id)!).filter(Boolean));
     setDayLoading(false);
   }
+
+  // Rendre la hauteur de page une fois les matchs affichés : avant, la page
+  // n'a que des squelettes et le défilement serait borné trop haut.
+  useEffect(() => {
+    if (loading || dayLoading || pendingScroll.current == null) return;
+    const y = pendingScroll.current;
+    pendingScroll.current = null;
+    requestAnimationFrame(() => {
+      const el = scrollParent(headerRef.current);
+      if (el) el.scrollTop = y;
+      else window.scrollTo(0, y);
+    });
+  }, [loading, dayLoading]);
 
   function openGameSheet(gameId: string) {
     setAddSheet({ open: true, gameId });

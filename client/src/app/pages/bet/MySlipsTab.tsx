@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
-import { Lock, Share2, Clock, History, Trophy, AlertCircle, RefreshCw, MessageSquare, X, Check, Minus, ChevronDown } from "lucide-react";
+import { Lock, Share2, Clock, History, Trophy, AlertCircle, RefreshCw, MessageSquare, X, Check, Minus, ChevronDown, ChevronRight } from "lucide-react";
 import { profileApiService } from "../../services/userService";
 import type { ChatRoom } from "../../types/user";
 import { getMySlips, settleMySlips, cancelSlip } from "../../services/slipApiService";
@@ -268,6 +268,7 @@ const isPlayerIdLogo = (url: string) => /\/\d{5,}_light\.svg$/.test(url);
 function SlipCard({ slip, onCancel }: { slip: BetSlip; onCancel?: () => void }) {
   const { t, lang } = useI18n();
   const { odds } = useOddsFormat();
+  const navigate = useNavigate();
   const [sharing, setSharing] = useState(false);
   const [roomPicker, setRoomPicker] = useState(false);
 
@@ -345,8 +346,25 @@ function SlipCard({ slip, onCancel }: { slip: BetSlip; onCancel?: () => void }) 
       <div className="px-4 pb-3 flex flex-col gap-1.5">
         {(slip.legs as any[]).map((leg, i) => {
           const lines = legLines(leg);
+          // Toucher une sélection ouvre SON match (demande du user,
+          // 2026-10-06). `gameId` est l'identifiant NHL, le même que la route
+          // de prédiction. Les très vieux coupons sans `gameId` restent des
+          // lignes inertes plutôt qu'un lien vers une page introuvable.
+          const gameId = leg.gameId ? String(leg.gameId) : null;
+          const rowClass = "flex items-center gap-2 py-1.5 border-t border-white/[0.05] first:border-0";
+          const Row = gameId ? "button" : "div";
           return (
-          <div key={i} className="flex items-center gap-2 py-1.5 border-t border-white/[0.05] first:border-0">
+          <Row
+            key={i}
+            {...(gameId
+              ? {
+                  type: "button" as const,
+                  onClick: () => navigate(`/stats/prediction/game/${gameId}`),
+                  "aria-label": t("slip.openGame", { bet: lines.primary }),
+                  className: `${rowClass} w-full text-left rounded-lg -mx-1 px-1 active:bg-white/[0.04] transition-colors`,
+                }
+              : { className: rowClass })}
+          >
             {leg.subjectLogo?.startsWith("http") && !isPlayerIdLogo(leg.subjectLogo)
               ? <img
                   src={leg.subjectLogo}
@@ -374,7 +392,8 @@ function SlipCard({ slip, onCancel }: { slip: BetSlip; onCancel?: () => void }) 
               {leg.probability}% <span className="font-medium">{t("slip.chance")}</span>
             </span>
             <LegResultMark result={leg.result} slipPending={isPending} />
-          </div>
+            {gameId && <ChevronRight size={12} className="text-[#4a6068] flex-shrink-0" aria-hidden />}
+          </Row>
           );
         })}
       </div>

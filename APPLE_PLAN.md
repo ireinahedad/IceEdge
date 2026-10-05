@@ -184,7 +184,7 @@ The audit adds **R1–R4 and R6** as real engineering, none of which was budgete
   both the native-OAuth work (R1) and the Sign in with Apple requirement (R2) — roughly a
   week of work removed, at the cost of one login option on iOS only. The web keeps Google.
 - **R3, R4, R7 → done as web work first**, before any native dependency exists.
-  See **`PRE_IOS_PLAN.md`** for that plan (5–7 days, four separate deploys).
+  That plan is finished and deleted — read it with **`git show 0916b52:PRE_IOS_PLAN.md`** (5–7 days, four separate deploys).
 
 ### Order I would actually do it in
 

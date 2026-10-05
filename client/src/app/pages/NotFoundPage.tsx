@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useNavigate } from "react-router";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
 import { useI18n } from "../i18n";
@@ -10,6 +11,24 @@ import { useI18n } from "../i18n";
 export function NotFoundPage() {
   const navigate = useNavigate();
   const { t } = useI18n();
+
+  // Vercel réécrit toute URL inconnue vers index.html, servi en 200 avec
+  // `robots: index, follow` : sans ça, chaque lien cassé est indexable comme un
+  // doublon de l'accueil (soft 404, vu en QA C4 le 2026-10-06). Le rendu JS de
+  // Googlebot lit ce `noindex` ; on remet la valeur d'origine en quittant.
+  useEffect(() => {
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
+    const created = !meta;
+    if (!meta) { meta = document.createElement("meta"); meta.name = "robots"; document.head.appendChild(meta); }
+    const previous = meta.content;
+    meta.content = "noindex, follow";
+    const previousTitle = document.title;
+    document.title = `404 | ArakIce`;
+    return () => {
+      if (created) meta!.remove(); else meta!.content = previous;
+      document.title = previousTitle;
+    };
+  }, []);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen text-white max-w-[430px] mx-auto px-6 text-center"

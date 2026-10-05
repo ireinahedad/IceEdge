@@ -384,7 +384,7 @@ appels au lieu d'1).
 ## 7. Scénarios restants
 
 > **Dépassé (2026-09-24)** : S2 à S7 sont couverts par les bancs de `bench/` (§ 8) — voir
-> `RAPPORT_TESTS_CHARGE_2026-09-18.md`. Seul reste hors banc : S1 contre une préproduction.
+> `git show 0916b52:RAPPORT_TESTS_CHARGE_2026-09-18.md`. Seul reste hors banc : S1 contre une préproduction.
 
 S2 à S7 ne sont pas encore scriptés. Les compteurs les servent déjà tous :
 
@@ -450,7 +450,7 @@ Les sept scénarios S1-S7 sont couverts par ces bancs, multi-instance de S4
 compris : B12 démarre deux applications complètes dans deux processus. Il rend
 ✗ sans `REDIS_URL` — le comportement correct à une instance — et ✓ avec, depuis
 que l'adaptateur Redis est livré (2026-09-19 ; voir
-`RAPPORT_TESTS_CHARGE_2026-09-18.md`, addenda 3 et 5).
+`git show 0916b52:RAPPORT_TESTS_CHARGE_2026-09-18.md`, addenda 3 et 5).
 
 Détail, pièges et façon de lire : **`bench/README.md`**.
-Dernier passage complet : `RAPPORT_TESTS_CHARGE_2026-09-18.md` (racine du dépôt).
+Dernier passage complet : `git show 0916b52:RAPPORT_TESTS_CHARGE_2026-09-18.md` (rapport supprimé de la racine le 2026-10-05).

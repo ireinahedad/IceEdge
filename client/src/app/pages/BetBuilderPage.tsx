@@ -48,8 +48,20 @@ export function BetBuilderPage() {
   // Cote équivalente sous la jauge : suit le format des Réglages (voir `impliedDecimal`).
   const { odds } = useOddsFormat();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState<PageTab>(searchParams.get("tab") === "slips" ? "slips" : "build");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTabState] = useState<PageTab>(searchParams.get("tab") === "slips" ? "slips" : "build");
+  // L'onglet est recopié dans l'URL (`?tab=slips`), en REMPLAÇANT l'entrée
+  // d'historique (2026-10-06) : toucher une sélection d'un coupon ouvre son
+  // match, et le bouton Retour doit retomber sur « Mes coupons », pas sur
+  // « Construire ».
+  function setTab(next: PageTab) {
+    setTabState(next);
+    setSearchParams((p) => {
+      const q = new URLSearchParams(p);
+      if (next === "slips") q.set("tab", "slips"); else q.delete("tab");
+      return q;
+    }, { replace: true });
+  }
   // Apparence sombre / claire — réglage partagé, cf. `appearance.ts`.
   const [mode] = useState<AppearanceMode>(readMode);
   const [showSheet, setShowSheet] = useState(false);

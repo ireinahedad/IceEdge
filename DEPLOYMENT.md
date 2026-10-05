@@ -451,7 +451,7 @@ Et depuis l'extérieur, l'URL publique ne doit **pas** exister.
 3. Framework : **Vite** (détecté automatiquement)
 4. Build command : `npm run check:env && npm run build` · Output : `dist`
 
-> `check:env` (PRE_IOS_PLAN.md R7) valide les quatre URLs **avant** de
+> `check:env` (R7 du plan pré-iOS, `git show 0916b52:PRE_IOS_PLAN.md`) valide les quatre URLs **avant** de
 > construire : présence, `https://` obligatoire. C'est le seul endroit du
 > pipeline où les vraies variables existent, donc le seul endroit où cette
 > vérification a du sens. Un build qui échoue ici laisse la version précédente

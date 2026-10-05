@@ -91,6 +91,36 @@ function buildWeeks(y: number, m: number): Week[] {
   return weeks;
 }
 
+/**
+ * Où en était le lecteur dans le calendrier : le mois affiché et la semaine
+ * qu'il a CHOISIE (demande du user, 2026-10-06). Gardé dans `sessionStorage`,
+ * comme l'onglet des Statistiques : en revenant d'un match — bouton Retour,
+ * barre du bas — on retombe sur la même page du calendrier au lieu de la
+ * semaine en cours. Partagé entre la page Calendrier et l'onglet « Par match »
+ * des Statistiques, qui montrent le même `ScheduleContent`.
+ *
+ * `week` n'est posée que par un CHOIX (toucher une semaine, ou la restauration
+ * elle-même), jamais par la semaine par défaut : sinon l'ancre de l'API, qui
+ * arrive après le premier rendu, ne pourrait plus corriger le défaut.
+ *
+ * `sessionStorage` lève dans un onglet privé verrouillé : on retombe alors sur
+ * le comportement d'avant, sans erreur.
+ */
+const NAV_KEY = "iceedge.schedule.nav";
+type SavedNav = { y: number; m: number; week: string | null };
+function readNav(): SavedNav | null {
+  try {
+    const raw = sessionStorage.getItem(NAV_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    if (!Number.isInteger(v?.y) || !Number.isInteger(v?.m) || v.m < 0 || v.m > 11) return null;
+    return { y: v.y, m: v.m, week: typeof v.week === "string" && isoDate.test(v.week) ? v.week : null };
+  } catch { return null; }
+}
+function writeNav(nav: SavedNav) {
+  try { sessionStorage.setItem(NAV_KEY, JSON.stringify(nav)); } catch { /* stockage indisponible */ }
+}
+
 export function SchedulePage() {
   const navigate = useNavigate();
   const { t } = useI18n();
@@ -144,10 +174,26 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
   const { t, lang } = useI18n();
   const locale = lang === "fr" ? "fr-FR" : "en-US";
 
+  // Lu UNE fois au montage : la page reprend là où le lecteur l'avait laissée.
+  const [saved] = useState<SavedNav | null>(readNav);
   const [anchor, setAnchor] = useState<string>(() => todayIso());
-  const [bounds, setBounds] = useState<Bounds>(() => windowAround(todayIso()));
-  const [cursor, setCursor] = useState<YM>(() => defaultMonth(todayIso(), windowAround(todayIso())));
+  const [bounds, setBounds] = useState<Bounds>(() => {
+    const b = windowAround(todayIso());
+    // Un mois restauré hors de la fenêtre par défaut l'élargit (saison longue).
+    if (saved) {
+      const c = monthIndex(saved.y, saved.m);
+      if (c < monthIndex(b.first.y, b.first.m)) b.first = { y: saved.y, m: saved.m };
+      if (c > monthIndex(b.last.y, b.last.m)) b.last = { y: saved.y, m: saved.m };
+    }
+    return b;
+  });
+  const [cursor, setCursor] = useState<YM>(() =>
+    saved ? { y: saved.y, m: saved.m } : defaultMonth(todayIso(), windowAround(todayIso())));
   const [week, setWeek] = useState<Week | null>(null);
+  /** Semaine CHOISIE (restaurée ou touchée) ; `null` = semaine par défaut. */
+  const pinnedWeek = useRef<string | null>(saved?.week ?? null);
+  /** Le mois vient d'une restauration : l'ancre de l'API ne doit pas l'écraser. */
+  const restoredMonth = useRef(saved != null);
 
   const [games, setGames] = useState<NHLGame[]>([]);
   const [loading, setLoading] = useState(true);
@@ -224,7 +270,10 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
         }
         setAnchor(at);
         setBounds(b);
-        setCursor(defaultMonth(at, b));
+        // Mois restauré : on le garde (borné à la vraie saison) au lieu de
+        // revenir au mois du jour.
+        if (restoredMonth.current) setCursor((c) => clampCursor(monthIndex(c.y, c.m), b));
+        else setCursor(defaultMonth(at, b));
       })
       .catch(() => {});
     return () => {
@@ -236,9 +285,28 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
   //    défaut : celle qui contient l'ancre si le mois correspond, sinon la 1re.
   useEffect(() => {
     const ws = buildWeeks(cursor.y, cursor.m);
+    // Une semaine choisie dans CE mois l'emporte sur le défaut ; changer de
+    // mois l'oublie.
+    const pinned = pinnedWeek.current ? ws.find((w) => w.start === pinnedWeek.current) : undefined;
+    if (pinned) { setWeek(pinned); return; }
+    pinnedWeek.current = null;
     const inMonth = anchor >= ws[0].start && anchor <= ws[ws.length - 1].end;
     setWeek((inMonth && ws.find((w) => anchor >= w.start && anchor <= w.end)) || ws[0]);
   }, [cursor.y, cursor.m, anchor]);
+
+  // Mémorise le mois affiché et la semaine choisie — seulement une fois que le
+  // lecteur a navigué (ou qu'on a restauré sa navigation). Sans ça, la simple
+  // visite figerait le mois du jour, et la page resterait sur un mois périmé
+  // à la visite suivante.
+  useEffect(() => {
+    if (!restoredMonth.current && !pinnedWeek.current) return;
+    writeNav({ y: cursor.y, m: cursor.m, week: pinnedWeek.current });
+  }, [cursor.y, cursor.m, week?.start]);
+
+  const pickWeek = (w: Week) => {
+    pinnedWeek.current = w.start;
+    setWeek(w);
+  };
 
   // 3) Charge UNIQUEMENT la semaine sélectionnée.
   useEffect(() => {
@@ -272,7 +340,12 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
   const weekLabel = (start: string) =>
     new Date(`${start}T00:00:00`).toLocaleDateString(locale, { day: "numeric", month: "short" });
 
-  const stepMonth = (delta: number) => setCursor(clampCursor(curIdx + delta, bounds));
+  const stepMonth = (delta: number) => {
+    // Le lecteur a choisi un mois : l'ancre de l'API, si elle arrive après,
+    // ne doit pas le ramener au mois du jour.
+    restoredMonth.current = true;
+    setCursor(clampCursor(curIdx + delta, bounds));
+  };
 
   return (
     <div className="flex flex-col">
@@ -311,7 +384,7 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
           return (
             <button
               key={w.start}
-              onClick={() => setWeek(w)}
+              onClick={() => pickWeek(w)}
               className="flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wide transition-all"
               style={
                 active
