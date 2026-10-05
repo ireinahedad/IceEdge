@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import {
   AuthUser, AuthResult, PendingVerification,
   apiLogin, apiRegister, apiLogout, apiLogoutAll, apiVerifyEmail,
+  refreshSession,
 } from '../services/authService';
 import { tokenStore, onSessionCleared } from '../services/tokenStore';
 import { decodeJwtPayload } from '../services/jwt';
@@ -23,6 +24,26 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// ── Témoin de session ────────────────────────────────────────────────────────
+// `ice_session_hint=1`, posé par l'API sur le domaine parent à chaque émission du
+// cookie de refresh (voir `auth.routes.ts`). Il ne contient rien de rejouable.
+const SESSION_HINT = 'ice_session_hint';
+
+function hasSessionHint(): boolean {
+  try { return document.cookie.split(';').some((c) => c.trim() === `${SESSION_HINT}=1`); }
+  catch { return false; }
+}
+
+function dropSessionHint(): void {
+  try {
+    const host = location.hostname;
+    const parent = host.split('.').slice(-2).join('.');
+    // Le serveur le pose avec `Domain=<parent>` : il faut le même domaine pour l'effacer.
+    document.cookie = `${SESSION_HINT}=; Max-Age=0; path=/; domain=${parent}`;
+    document.cookie = `${SESSION_HINT}=; Max-Age=0; path=/`;
+  } catch { /* cookies bloqués */ }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user,    setUser]    = useState<AuthUser | null>(null);
   const [token,   setToken]   = useState<string | null>(null);
@@ -35,8 +56,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     (async () => {
-      const stored = await tokenStore.getAccess();
+      let stored = await tokenStore.getAccess();
       if (cancelled) return;
+
+      // Pas de jeton d'accès, mais le serveur a posé le témoin de session :
+      // localStorage a été vidé (ou purgé par Safari/ITP) alors que le cookie de
+      // refresh vit encore. On le rejoue en silence au lieu de renvoyer vers
+      // /login (QA I4, 2026-10-06). Sans témoin — visiteur anonyme — aucune
+      // requête : pas de 400 à chaque page vue. `refreshSession` passe par la
+      // coalescence R3bis.1, comme le socket.
+      if (!stored && hasSessionHint()) {
+        const ok = await refreshSession();
+        if (cancelled) return;
+        if (ok) stored = await tokenStore.getAccess();
+        else dropSessionHint();   // refusé : ne pas retenter à chaque chargement
+        if (cancelled) return;
+      }
 
       if (stored) {
         // Decode payload to get user info (no network call needed)

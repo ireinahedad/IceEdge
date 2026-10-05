@@ -40,6 +40,47 @@ function setRefreshCookie(res: Response, token: string, maxAgeSeconds: number): 
     path:     '/api/auth',
     maxAge:   maxAgeSeconds * 1000,
   });
+  setSessionHint(res, maxAgeSeconds);
+}
+
+// ── Témoin de session (lisible par le front) ─────────────────────────────────
+// Le front ne retentait un refresh au démarrage que s'il trouvait un jeton
+// d'accès dans localStorage. Stockage vidé, ou purgé par Safari (ITP, 7 jours
+// sans visite) : l'utilisateur était renvoyé vers /login alors que son cookie
+// de refresh, lui, valait encore 7 à 30 jours (QA I4, 2026-10-06).
+//
+// Le cookie httpOnly est invisible au JS — c'est tout son intérêt. Ce témoin dit
+// seulement « une session existe », sans rien qui permette de la rejouer : valeur
+// `1`, même durée que le refresh, posé sur le domaine PARENT (`arakice.com`) pour
+// que le front le lise. Posé par une réponse HTTP, il n'est pas soumis au plafond
+// de 7 jours qu'ITP applique aux cookies écrits par `document.cookie`.
+//
+// Désactivé sans `SESSION_HINT_DOMAIN` (dev local, tests) : le front retombe
+// alors sur son comportement d'avant.
+const SESSION_HINT_COOKIE = 'ice_session_hint';
+const SESSION_HINT_DOMAIN = process.env.SESSION_HINT_DOMAIN?.trim() || undefined;
+
+function setSessionHint(res: Response, maxAgeSeconds: number): void {
+  if (!SESSION_HINT_DOMAIN) return;
+  res.cookie(SESSION_HINT_COOKIE, '1', {
+    httpOnly: false,
+    secure:   IS_PROD,
+    sameSite: 'lax',
+    domain:   SESSION_HINT_DOMAIN,
+    path:     '/',
+    maxAge:   maxAgeSeconds * 1000,
+  });
+}
+
+function clearSessionHint(res: Response): void {
+  if (!SESSION_HINT_DOMAIN) return;
+  res.clearCookie(SESSION_HINT_COOKIE, {
+    httpOnly: false,
+    secure:   IS_PROD,
+    sameSite: 'lax',
+    domain:   SESSION_HINT_DOMAIN,
+    path:     '/',
+  });
 }
 
 function clearRefreshCookie(res: Response): void {
@@ -51,6 +92,7 @@ function clearRefreshCookie(res: Response): void {
     sameSite: COOKIE_SAMESITE,
     path:     '/api/auth',
   });
+  clearSessionHint(res);
 }
 
 /** Strip the refresh token (+ its TTL) from the JSON body — it travels via

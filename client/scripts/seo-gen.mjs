@@ -530,6 +530,7 @@ function h2hStats(games, a, b) {
     last: games[games.length - 1],
     firstYear: games[0].date.slice(0, 4),
     roadWin: roadWins[0] || null,
+    roadWinCount: roadWins.length,
   };
 }
 
@@ -626,7 +627,7 @@ ${h2hFigure(st, a, b)}
         <div class="stat"><div class="value">${st.homeWins} of ${st.n}</div><div class="label">won by the home team</div></div>
         <div class="stat"><div class="value">${st.over} of ${st.n}</div><div class="label">over ${COMMON_LINE}.5</div></div>
       </div>
-      <p>${esc(city(leader))} lead the recent series ${Math.max(st.aWins, st.bWins)} wins to ${Math.min(st.aWins, st.bWins)}. ${st.n >= H2H_MIN_PCT ? `Where the game is played has mattered more than who is better. ` : ``}The home team won ${st.homeWins} of the ${st.n}${pct(st.homeWins)}.${st.roadWin ? ` The only road win by either club was ${winTxt(st.roadWin)} on ${niceDate(st.roadWin.date)}.` : ""}</p>
+      <p>${esc(city(leader))} lead the recent series ${Math.max(st.aWins, st.bWins)} wins to ${Math.min(st.aWins, st.bWins)}. ${st.n >= H2H_MIN_PCT && st.homeWins / st.n >= 0.65 ? `Where the game is played has mattered more than who is better. ` : ``}The home team won ${st.homeWins} of the ${st.n}${pct(st.homeWins)}.${st.roadWinCount === 1 ? ` The only road win by either club was ${winTxt(st.roadWin)} on ${niceDate(st.roadWin.date)}.` : ""}</p>
       <p>${st.n >= H2H_MIN_PCT && st.onLine === 0 ? `Totals have split rather than clustered. ` : ``}${st.under} of the ${st.n} finished at ${COMMON_LINE - 1} goals or fewer. ${st.over} finished at ${COMMON_LINE + 1} or more. ${st.onLine === 0 ? `The number never landed on ${COMMON_LINE}.` : `${st.onLine} landed on ${COMMON_LINE}.`} The busiest was ${niceDate(st.biggest.date)}, ${winTxt(st.biggest)}, ${st.biggest.total} goals between them. ${st.ot} of the ${st.n} needed overtime. Most recent meeting: ${niceDate(st.last.date)}, ${winTxt(st.last)}.</p>
       <div class="h2h-wrap">
         <table class="h2h">

@@ -374,7 +374,9 @@ export function HockeyLanding() {
             <section>
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-white text-sm font-bold uppercase tracking-wider">{upcomingLabel}</h2>
-                {loading ? <div className="w-16 h-3 bg-white/5 rounded animate-pulse" /> : gameDays.length > 1 && (
+                {/* h-8 : même hauteur que les flèches, sinon le titre grandit de 12 px à
+                    l'arrivée des matchs et pousse la liste (CLS, PSI mobile 2026-10-06). */}
+                {loading ? <div className="h-8 flex items-center"><div className="w-16 h-3 bg-white/5 rounded animate-pulse" /></div> : gameDays.length > 1 && (
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => goToDay(dayIdx - 1)}

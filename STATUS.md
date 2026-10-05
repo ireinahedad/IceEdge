@@ -36,7 +36,7 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
 | **Cloudflare in front of the API** | 📄 Proxy and cache headers in place | Check that it actually caches what the headers allow. |
 | **Budget alerts** | ✔ Thresholds written in `MONITORING.md` | Neon (6 $) and R2 (5 $) are set. Left: Railway usage limits, LLM provider hard limit, Stripe webhook failure alert, Sentry spend cap. |
 | **Load testing** | ✔ In-process benches, all green | Real visitor latency against a pre-prod (`loadtest/s1-landing.js`) never run — there is no pre-prod. |
-| **QA** | ✔ I1, I2 (6/7), static campaigns; ✔ dynamic campaign on a local stack (2026-09-26, 90/90) | What needs the real world: devices (C2–C3), Google (I4), Railway/Neon latency (P1, P2, P5), Neon restore drill (§3.7). |
+| **QA** | ✔ I1, I2 (6/7), static campaigns; ✔ dynamic campaign on a local stack (2026-09-26, 90/90) | What needs the real world: devices (C2–C3), Google (I4), Neon restore drill (§3.7). |
 | **Client tests** | ✔ `typecheck` in CI | No test runner in `client/`. The socket block filter (`visibleMessages` in `RoomChat`) has no guard. |
 | **SEO match pages** | ✔ Generated and deployed daily | Link `/match` from the app (✔ nothing links to it), submit `sitemap-games.xml` in Search Console, translate `/matchup/`, `/props/` and hubs to French. |
 | **Content engine** | ✔ Pipeline + daily recap copying to Google Drive | ✔ Recap files committed. Install the scheduled task (§3.11). |
@@ -137,9 +137,13 @@ needs a device, a third party or production:
       `/stats/chart` once (new `react` chunk); trigger one 500 and check the Sentry event shows
       `authorization: [Filtered]` and `cookie: [Filtered]`.
 - [ ] **C2–C3** on real devices: Android Chrome, desktop browsers, PWA push (C1 iPhone Safari ✔ 2026-10-05).
-- [ ] **I4** Google OAuth end to end on the real domain. (✔ **I6** 2026-10-05 on the real NHL API, 34/34 — `loadtest/qa-dynamic/i6.ts`.)
-- [ ] **P1 / P2 / P5 against Railway + Neon** (check `DATABASE_URL` uses `-pooler` first);
-      **Lighthouse on arakice.com** — local LCP is still 3.5 s on simulated slow 4G.
+- [x] **I4** Google OAuth end to end on arakice.com ✔ 2026-10-06 (existing account). (✔ **I6** 2026-10-05 on the real NHL API, 34/34 — `loadtest/qa-dynamic/i6.ts`.)
+- [x] **P1 / P2 / P5** closed without firing at production (decision 2026-10-06): the 2026-09-18/19
+      benches + local QA of 2026-09-26 are the reference; prod light probe 82/82 OK. Still check that
+      prod `DATABASE_URL` uses the `-pooler` endpoint.
+- [ ] **P4** prod PSI mobile = 58 (CLS 0.368, fonts 1.3 s blocking): font fix + header height fix
+      uncommitted; redeploy and re-measure. ✔ **C4** 2026-10-06 (soft 404 fixed). Re-run `seo-gameday`
+      (05/10 run never got a GitHub runner). Cloudflare beacon blocked by CSP on every page.
 - [ ] Re-run `npm run moderation:dry-run` once the chat has real traffic.
 
 ### 3.8 Technical deadlines
