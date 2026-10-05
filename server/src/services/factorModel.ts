@@ -541,7 +541,7 @@ export interface PlayerFactorCtx {
   spg: number;      // tirs / match
   pppg: number;     // points en avantage numérique / match
   shotPct: number;  // % de tirs convertis (ex. 13.5), 0 si inconnu
-  hitsPg: number;   // mises en échec / match (moyenne de position à défaut)
+  hitsPg: number;   // mises en échec / match (joueur, rétréci vers la position)
   blocksPg: number; // tirs bloqués / match (moyenne de position à défaut)
   pimPg: number;    // minutes de pénalité / match (moyenne de position à défaut)
 }

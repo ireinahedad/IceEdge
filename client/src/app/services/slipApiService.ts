@@ -71,6 +71,15 @@ export async function getMySlips(limit = 50): Promise<BetSlip[]> {
   return res.json();
 }
 
+/** Annuler un pari en cours (avant le premier match seulement). */
+export async function cancelSlip(slipId: string): Promise<void> {
+  const res = await authedFetch(`/slips/${encodeURIComponent(slipId)}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw Object.assign(new Error(err.error ?? `Cancel failed (${res.status})`), { code: err.code });
+  }
+}
+
 export interface SettlementSummary {
   checked: number;
   settled: number;

@@ -11,7 +11,8 @@ import { useNavigate } from "react-router";
 import { Lock, Share2, Clock, History, Trophy, AlertCircle, RefreshCw, MessageSquare, X, Check, Minus, ChevronDown } from "lucide-react";
 import { profileApiService } from "../../services/userService";
 import type { ChatRoom } from "../../types/user";
-import { getMySlips, settleMySlips } from "../../services/slipApiService";
+import { getMySlips, settleMySlips, cancelSlip } from "../../services/slipApiService";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ErrorState } from "../../components/ErrorState";
 import type { BetSlip } from "../../services/slipApiService";
 import { shareImageBlob, ShareUnavailableError } from "../../services/shareImage";
@@ -264,7 +265,7 @@ const isPlayerIdLogo = (url: string) => /\/\d{5,}_light\.svg$/.test(url);
 
 // ─── Slip card (My Slips) ─────────────────────────────────────────────────────
 
-function SlipCard({ slip }: { slip: BetSlip }) {
+function SlipCard({ slip, onCancel }: { slip: BetSlip; onCancel?: () => void }) {
   const { t, lang } = useI18n();
   const { odds } = useOddsFormat();
   const [sharing, setSharing] = useState(false);
@@ -395,8 +396,22 @@ function SlipCard({ slip }: { slip: BetSlip }) {
       {/* Pending: results are settled automatically */}
       {isPending && (
         <div className="mx-4 mb-3 flex items-center gap-1.5 px-3 py-1.5 rounded-xl icy-tile">
-          <Clock size={11} className="text-[#8a9ea6]" />
+          <Clock size={11} className="text-[#8a9ea6] flex-shrink-0" />
           <span className="text-[#8a9ea6] text-[11px]">{t("slip.autoSettle")}</span>
+        </div>
+      )}
+
+      {/* Annuler — pari en cours seulement ; le serveur refuse une fois le
+          premier match commencé (`cancelSlip`). */}
+      {isPending && onCancel && (
+        <div className="mx-4 mb-3 flex justify-end">
+          <button
+            onClick={onCancel}
+            className="tap-44 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold text-red-400 border border-red-400/30 active:bg-red-500/10 active:scale-95 transition-all"
+          >
+            <X size={11} />
+            {t("slip.cancel")}
+          </button>
         </div>
       )}
 
@@ -462,6 +477,9 @@ export function MySlipsTab({
   // repoussaient les paris en cours hors de l'écran. Le bouton garde le
   // compte visible, pour qu'on sache ce qu'il y a derrière sans l'ouvrir.
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Pari dont l'annulation attend confirmation.
+  const [cancelTarget, setCancelTarget] = useState<BetSlip | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -505,6 +523,24 @@ export function MySlipsTab({
       setTimeout(() => setError(null), 3000);
     } finally {
       setResolving(null);
+    }
+  }
+
+  async function confirmCancel() {
+    if (!cancelTarget || cancelling) return;
+    setCancelling(true);
+    try {
+      await cancelSlip(cancelTarget.id);
+      toast.success(t("slip.cancelled"));
+      setCancelTarget(null);
+      await load();
+    } catch (err: any) {
+      toast.error(err?.code === "GAME_STARTED" ? t("slip.cancelStarted") : t("slip.cancelFailed"));
+      setCancelTarget(null);
+      // Le pari a peut-être été réglé entre-temps : montrer l'état réel.
+      await load();
+    } finally {
+      setCancelling(false);
     }
   }
 
@@ -584,7 +620,7 @@ export function MySlipsTab({
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {pending.map((s) => (
-                  <SlipCard key={s.id} slip={s} />
+                  <SlipCard key={s.id} slip={s} onCancel={() => setCancelTarget(s)} />
                 ))}
               </div>
             </div>
@@ -619,6 +655,17 @@ export function MySlipsTab({
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={cancelTarget !== null}
+        title={t("slip.cancelTitle")}
+        description={t("slip.cancelBody")}
+        confirmLabel={cancelling ? "…" : t("slip.cancelConfirm")}
+        cancelLabel={t("slip.cancelKeep")}
+        destructive
+        onConfirm={() => { void confirmCancel(); }}
+        onCancel={() => { if (!cancelling) setCancelTarget(null); }}
+      />
     </div>
   );
 }

@@ -46,8 +46,26 @@ export function factorColor(id: string): string {
 export type FamilyStore = Record<string, Record<string, number>>;
 const FAMILY_KEY = 'iceedge.factorWeights';
 
+/**
+ * Accès au stockage qui ne lève jamais (2026-10-05).
+ *
+ * `localStorage` LÈVE (et ne renvoie pas `null`) quand il est indisponible :
+ * navigation privée de Safari, quota plein, cookies bloqués, WebView sans
+ * stockage. `setItem` n'était protégé nulle part : enregistrer des poids
+ * faisait planter l'éditeur. Repli en mémoire : les poids valent pour la
+ * session, et la synchro avec le compte (plus bas) reste la vraie persistance.
+ */
+let memoryStore: string | null = null;
+function readRaw(): string | null {
+  try { return localStorage.getItem(FAMILY_KEY) ?? memoryStore; } catch { return memoryStore; }
+}
+function writeRaw(value: string): void {
+  memoryStore = value;
+  try { localStorage.setItem(FAMILY_KEY, value); } catch { /* repli mémoire */ }
+}
+
 function loadFamilyStore(): FamilyStore {
-  try { return JSON.parse(localStorage.getItem(FAMILY_KEY) || '{}'); } catch { return {}; }
+  try { return JSON.parse(readRaw() || '{}'); } catch { return {}; }
 }
 
 /** Poids courants d'une famille (overrides sauvegardés, sinon poids par défaut des facteurs). */
@@ -61,14 +79,14 @@ export function getFamilyWeights(family: string, factors: SimpleFactor[]): Recor
 export function saveFamilyWeights(family: string, weights: Record<string, number>): FamilyStore {
   const store = loadFamilyStore();
   store[family] = weights;
-  localStorage.setItem(FAMILY_KEY, JSON.stringify(store));
+  writeRaw(JSON.stringify(store));
   return store;
 }
 
 export function resetFamilyWeights(family: string): FamilyStore {
   const store = loadFamilyStore();
   delete store[family];
-  localStorage.setItem(FAMILY_KEY, JSON.stringify(store));
+  writeRaw(JSON.stringify(store));
   return store;
 }
 
@@ -135,8 +153,8 @@ export function applyServerFamilyWeights(map: unknown): boolean {
   if (!Object.keys(clean).length) return false;
 
   const next = JSON.stringify(clean);
-  if (next === localStorage.getItem(FAMILY_KEY)) return false;
-  localStorage.setItem(FAMILY_KEY, next);
+  if (next === readRaw()) return false;
+  writeRaw(next);
   return true;
 }
 

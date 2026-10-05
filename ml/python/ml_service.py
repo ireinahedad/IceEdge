@@ -2268,6 +2268,17 @@ def _game_context(f: GameFeatures) -> dict:
                 if isinstance(v, (int, float)):
                     feat_values[f"{side}_{k}"] = float(v)
             goalies = goalie_st.get(team) or []
+            scratch_set = {_name_key(s) for s in (scratches or []) if s and s.strip()}
+            # Gardien listé ABSENT (saisie, blessé de longue durée, absent
+            # officiel) : il sort du mélange par usage récent et du choix du
+            # partant probable (2026-10-05). Sans ça, un n° 1 blessé sans partant
+            # saisi restait le gardien du soir pour le modèle — l'absence ne
+            # comptait que dans les règles. Si tous sont absents, on garde la
+            # liste entière plutôt qu'un mélange vide.
+            if goalies and scratch_set:
+                healthy = [g for g in goalies if _name_key(g.get("name", "")) not in scratch_set]
+                if healthy:
+                    goalies = healthy
             if goalies:
                 # Gardien nommé si fourni, sinon mix pondéré par usage récent
                 g0 = _find_goalie(goalies, goalie_id, goalie_name)
@@ -2286,7 +2297,6 @@ def _game_context(f: GameFeatures) -> dict:
                 feat_values[f"{side}_goalie_backup"] = _goalie_backup_flag(
                     goalies, goalie_name, goalie_id)
             st = stars_st.get(team) or {}
-            scratch_set = {_name_key(s) for s in (scratches or []) if s and s.strip()}
             # Avec l'alignement officiel, les absents restent ceux que le
             # serveur NOMME (saisie + blessés + absents officiels de la NHL) et
             # non « tout joueur clé non habillé » : l'état d'inférence garde les

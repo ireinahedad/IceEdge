@@ -15,7 +15,7 @@ import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { PlayerPropGrid } from "./PlayerPropGrid";
-import { LiveGameView, MLProps, MktGroup, buildGameGroups } from "./gameMarkets";
+import { LiveGameView, MLProps, MktGroup } from "./gameMarkets";
 import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
 import { BetOddsCtx, GameLiveCtx, HeadToHead, NotFound, RevealMode, RevealModeCtx, ServerGroupsPending, StatsBanner, useGameOdds, useServerGroups } from "./predictionShared";
 
@@ -164,47 +164,18 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   // 2026-09-16). Placé AVANT les retours anticipés : c'est un hook.
   const groups: MktGroup[] = useMemo(() => {
     if (!gameView) return [];
-    const { home, away } = gameView;
-    // Sans probabilité du modèle il n'y a pas de marchés dérivés à construire :
-    // on ne garde que les groupes du moteur de règles, servis par le backend.
-    const finalPct = home.winPct == null ? null : Math.min(85, Math.max(15, home.winPct));
-    // ⚠️ `localGroups` ne sert PLUS qu'à la table de repli des `mlProps`
-    // ci-dessous : ses `rulePct` sont des constantes et des règles de pouce
-    // (over 54 %, −1.5 = victoire − 18 %…) et ne doivent jamais s'afficher.
-    // Tant que le serveur n'a pas répondu, la page montre un squelette ; s'il
-    // échoue, une erreur avec « Réessayer » (2026-09-24).
-    const localGroups = finalPct == null
-      ? []
-      : buildGameGroups(home.abbr, away.abbr, finalPct, gameView.overUnder ?? 5.5);
-    // ── Rattachement du marché ML aux tuiles du serveur ──────────────────────
+    // ── Marché ML de chaque tuile : celui que le SERVEUR annonce ─────────────
     //
-    // Le serveur ANNONCE désormais le marché de chaque tuile (`option.ml`). On le
-    // prend tel quel : c'est lui qui calcule la tuile, c'est lui qui sait ce
-    // qu'elle est.
-    //
-    // Ce bloc appariait auparavant les `mlProps` du client aux tuiles du serveur
-    // PAR IDENTIFIANT, alors que les deux fichiers n'ont jamais partagé le même
-    // vocabulaire : `ou-over` contre `o55`, `wm-h1` contre `wm-1`, `p1-over`
-    // contre `p1-o05`. 17 identifiants ne tombaient sur rien, donc Total Goals,
-    // Winning Margin, Goal Scorer et 1er Période Buts n'avaient aucune prédiction
-    // du modèle et le sélecteur ML restait sans effet dessus — en silence, parce
-    // qu'une correspondance ratée rend `undefined`, pas une erreur.
-    //
-    // La correspondance par identifiant reste en second recours, pour une tuile
-    // que le serveur n'annoncerait pas encore. Elle ne peut plus rien casser :
-    // elle ne fait qu'ajouter.
+    // Le serveur annonce le marché de chaque tuile (`option.ml`) — avant-match
+    // et en direct, imposé par `nhlPredictions.test.ts`. L'ancien repli par
+    // identifiant sur un constructeur local (`buildGameGroups`, dont les
+    // `rulePct` étaient des constantes) a été retiré le 2026-10-05 : il
+    // n'apportait plus aucune tuile.
     const mergedGroups = apiGroups
-      ? (() => {
-          const byId = new Map<string, MLProps>();
-          localGroups.forEach(g => g.options.forEach(o => { if (o.mlProps) byId.set(o.id, o.mlProps); }));
-          return apiGroups.map(g => ({
-            ...g,
-            options: g.options.map(o => ({
-              ...o,
-              mlProps: (o as { ml?: MLProps }).ml ?? byId.get(o.id),
-            })),
-          }));
-        })()
+      ? apiGroups.map(g => ({
+          ...g,
+          options: g.options.map(o => ({ ...o, mlProps: (o as { ml?: MLProps }).ml })),
+        }))
       : [];
     // Stamp the game id onto every option's mlProps — without it, a bet placed
     // from this page can never be looked up for automatic settlement.

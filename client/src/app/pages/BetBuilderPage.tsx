@@ -14,7 +14,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { Plus, Lightbulb, Trash2, Radio, CheckCircle2 } from "lucide-react";
+import { Plus, Lightbulb, Trash2, Radio, CheckCircle2, X } from "lucide-react";
 import { useBet } from "../context/BetContext";
 import { useAuth } from "../context/AuthContext";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
@@ -385,7 +385,16 @@ export function BetBuilderPage() {
       {/* Success overlay */}
       {submitResult && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center px-6 bg-black/80">
-          <div className="icy-card bet-ink-black rounded-3xl p-8 text-center max-w-[300px] w-full">
+          <div className="icy-card bet-ink-black relative rounded-3xl p-8 text-center max-w-[300px] w-full">
+            {/* X : fermer et rester sur le coupon en cours (vide après le
+                verrouillage) au lieu de basculer sur « Mes coupons ». */}
+            <button
+              onClick={() => { setSubmitResult(null); setTab("build"); }}
+              aria-label={t("common.close")}
+              className="tap-44 absolute top-3 right-3 w-8 h-8 rounded-full icy-tile flex items-center justify-center text-[#8a9ea6] active:scale-95 transition-transform"
+            >
+              <X size={14} />
+            </button>
             <div className="mb-4 flex justify-center text-[#4ade80]"><CheckCircle2 size={48} /></div>
             <p className="text-white font-bold text-lg mb-2">Slip Locked!</p>
             {submitResult.message && (

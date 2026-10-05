@@ -383,6 +383,8 @@ const LAUNCHER_CLS: Record<"pill" | "block" | "chip", string> = {
 export function SlipCommandLauncher({ variant }: { variant: "pill" | "block" | "chip" }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  // Pas prêt : le lanceur disparaît partout (Stats, coupon vide, « + Ajouter »).
+  if (!features.aiBetBuilder) return null;
   return (
     <>
       <button onClick={() => setOpen(true)} className={LAUNCHER_CLS[variant]}>

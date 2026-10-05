@@ -214,6 +214,12 @@ export class NHLService {
       hits:             p.hits ?? null,
       timeOnIce:        p.avgToi ?? null,
       faceoffWinPct:    null,
+      // Gardien (null pour un patineur) — l'en-tête de la page gardien montrait
+      // buts / passes / +/- d'un patineur (2026-10-05).
+      savePct:          p.savePct ?? null,
+      goalsAgainstAvg:  p.goalsAgainstAvg ?? null,
+      wins:             p.wins ?? null,
+      shutouts:         p.shutouts ?? null,
       lastFive:         p.lastFive,
       winImpact:        p.winImpact,
     };

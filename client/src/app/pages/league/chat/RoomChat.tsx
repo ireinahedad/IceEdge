@@ -220,7 +220,12 @@ export function RoomChat({ room, currentUserId, me, onBack, onUpdate, onLeft, on
     const sentReplyTo = replyTo;
 
     setInput("");
-    const tempId = `optimistic_${Date.now()}`;
+    // Unique même pour deux envois dans la même milliseconde (double tap) :
+    // `Date.now()` seul donnait deux bulles à la même clé React, et le retrait
+    // de l'une en cas d'échec retirait les deux. `randomUUID` exige un
+    // contexte sécurisé (https, localhost) — repli sur un suffixe aléatoire.
+    const tempId = `optimistic_${globalThis.crypto?.randomUUID?.()
+      ?? `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
 
     // Optimistic: show immediately using the user's REAL profile
     const optimistic: ChatMessage = {

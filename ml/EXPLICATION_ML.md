@@ -9,8 +9,9 @@
 > entraînés présents dans `ml/models/`). Si un chiffre ici ne correspond plus
 > au code, c'est le code qui a raison — et il faut mettre ce document à jour.
 >
-> Les incohérences repérées en écrivant ce document sont listées à part, dans
-> [`INCOHERENCES_ML.md`](./INCOHERENCES_ML.md).
+> Les incohérences repérées en écrivant ce document (21 points, toutes corrigées
+> au 2026-10-05) étaient listées dans `INCOHERENCES_ML.md`, supprimé depuis :
+> `git show ad0eba9:ml/INCOHERENCES_ML.md`.
 
 ---
 

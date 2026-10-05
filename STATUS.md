@@ -116,9 +116,55 @@ recovered from Git) and checking each claim against the code and the Git log.
   the team (trades / off-season departures removed — October absence weight halved), and τ, OT slope
   and confidence deciles are fitted on out-of-fold λ. Score model, classifier (log-loss 0.6656 →
   0.6644) and correction layer (still ADOPTER, −0.00215/game) retrained; `inference_state.json` rebuilt.
-  **To ship**: commit + push `ml/python/{build_dataset,train_score,backtest_walkforward}.py` and
+  Committed in `ad0eba9` — the ML service picks it up once pushed and redeployed: `ml/python/{build_dataset,train_score,backtest_walkforward}.py` and
   `ml/models/{score_model,score_report,game_model,training_report,feature_importance_game,correction_layer,correction_report,inference_state,elo_ratings}.json`
   (plus `level_layer.json` after the Monday refresh) — Railway redeploys the ML service.
+
+### Launch checks (2026-10-05, afternoon)
+- 📄 C1: login → prediction → payment on a real iPhone in Safari — passes.
+- 📄 `_dmarc` TXT present in Cloudflare DNS.
+- 📄 `npm run seo:gen` run with 2026-27 games; sitemap resubmitted in Search Console.
+- 📄 Best Bets UX rework checked on the live site with a Pro account.
+- 📄 R1: Google account `ireinahedad24@gmail.com` recovered (recovery email/phone under your control).
+- 📄 R9: old `Ireinahedad@icloud.com's Account` closed on Cloudflare.
+- ✔ `?access_token=` fallback removed from `AuthCallback.tsx` — the fragment is the only path
+  (`auth.routes.ts` redirects with `#access_token=`).
+
+### Cleanup (2026-10-05)
+- 📄 Tennis slips stuck "pending" set to `void` (one-shot script, run then deleted).
+- ✔ Removed, all recoverable with `git show 0916b52:<path>`: one-shot measures
+  `ml/python/measure_h2h.py`, `measure_returnee.py`, `measure_shot_metrics.py` (results recorded below
+  and in `ml/models/*_report.json`); `server/scripts/notify-slips-visibility.ts` + `npm run notify:slips`
+  + `sendSlipsVisibilityNotice` (public slips are on, no real user to notify); `loadtest/bench/smoke-auth.ts`
+  (dry run before B10/B11). Also the merged worktree `.claude/worktrees/elated-mclean-15243a` (its work is
+  on `master`), merged `claude/*` branches, and the `.claude-tmp/` scratch folder.
+
+### French register: « vous » everywhere (2026-10-05)
+- ✔ All user-facing French switched from « tu » to « vous »: ~100 strings in `i18n/index.tsx`, the
+  Terms / Privacy / Support pages, « How it works », the rule editor, server error and quota
+  messages (`llm.routes.ts`, `subscription.service.ts`); the French LLM prompts now tell the
+  model to use « vous » with the reader. Emails were already in « vous ». Left in « tu » on
+  purpose: admin pages (`/dev/saisie`, `/dev/ml`) and text addressed to the model itself.
+  **Rule: new French strings use « vous ».**
+
+### Code polish §3.10 + absent goalie (2026-10-05) — tested: server typecheck + 1 329 tests, client typecheck + build
+- ✔ Player hits / blocks / PIM use the player's own season totals, shrunk toward the position
+  average (10 phantom games) — no longer one number per position (`nhlPredictions.ts`, 2 tests).
+- ✔ Dead local tile builder removed: `buildGameGroups` (gameMarkets.tsx) and its fallback in
+  `GamePrediction.tsx`; the server announces the ML market on every tile, now also enforced
+  for LIVE tiles (new test). `TeamPrediction.tsx`: placeholder `rulePct` → 0, notes no longer
+  quote locally computed percentages, two never-shown Over/Under tiles removed.
+- ✔ Goalie page header: GP / W / GAA / SV% instead of G / A / PTS / +/- (`/players/:id/stats`
+  now returns `savePct`, `goalsAgainstAvg`, `wins`, `shutouts`).
+- ✔ Chat optimistic ids use `crypto.randomUUID()` (fallback when not in a secure context).
+- ✔ `/api/predict/markets/{game,player}/:id?` — `:id` optional (static catalogue).
+- ✔ `ruleWeightsService`: storage access never throws (Safari private mode) — in-memory fallback.
+- ✔ Pro price formatted per language (`5,99 $` / `$5.99`).
+- ✔ Absent goalie (§2): **no double count** inside one number — rules count the injury (0.12)
+  but not the starter's identity, ML uses the starter but ignored injured goalies. Fixed the
+  opposite gap: an injured goalie listed absent now leaves the ML goalie mix
+  (`ml_service.py`; TBL without Vasilevskiy, no starter entered: 65 % → 62 %, was unchanged).
+  Ships with the ML service.
 
 ### Technical deadlines + dynamic QA (2026-09-26, deployed in `d269448`)
 - ✔ **Node 24** everywhere: `server/Dockerfile` (`node:24-alpine`, both stages), CI and the SEO
@@ -300,12 +346,10 @@ recovered from Git) and checking each claim against the code and the Git log.
 | **Cloudflare in front of the API** | 📄 Proxy and cache headers in place | Check that it actually caches what the headers allow. |
 | **Budget alerts** | ✔ Thresholds written in `MONITORING.md` | Set them in each console (Railway, Neon, Odds API, LLM, Stripe, Sentry, R2). |
 | **Load testing** | ✔ In-process benches, all green | Real visitor latency against a pre-prod (`loadtest/s1-landing.js`) never run — there is no pre-prod. |
-| **QA** | ✔ I1, I2 (6/7), static campaigns; ✔ dynamic campaign on a local stack (2026-09-26, 90/90) | What needs the real world: devices (C1–C3), Google (I4), the NHL API (I6), Railway/Neon latency (P1, P2, P5), Neon restore drill (§3.7). |
+| **QA** | ✔ I1, I2 (6/7), static campaigns; ✔ dynamic campaign on a local stack (2026-09-26, 90/90) | What needs the real world: devices (C2–C3), Google (I4), the NHL API (I6), Railway/Neon latency (P1, P2, P5), Neon restore drill (§3.7). |
 | **Client tests** | ✔ `typecheck` in CI | No test runner in `client/`. The socket block filter (`visibleMessages` in `RoomChat`) has no guard. |
-| **Google auth token in URL** | ✔ Fragment + Sentry scrubbing | ✔ The `?access_token=` fallback in `AuthCallback.tsx` is still there; remove it now that the deploy window is over. |
 | **SEO match pages** | ✔ Generated and deployed daily | Link `/match` from the app (✔ nothing links to it), submit `sitemap-games.xml` in Search Console, translate `/matchup/`, `/props/` and hubs to French. |
 | **Content engine** | ✔ Pipeline + daily recap copying to Google Drive | ✔ Recap files committed. Install the scheduled task (§3.11). |
-| **Manual input — absent goalie** | ✔ Stored in DB | A goalie entered in both "Injuries" and "Tonight's lineups" may count twice. Check on a real case. |
 
 ---
 
@@ -313,16 +357,13 @@ recovered from Git) and checking each claim against the code and the Git log.
 
 ### 3.1 Before the iOS freeze / before launch — blocking
 
-- [ ] **Critical QA — C1 only left**: iOS Safari on a real iPhone (login → prediction → payment).
-      Runbook in `QA_TEST_PLAN.md`. F1 and F2 passed on production on 2026-10-05 (§1).
-- [ ] Confirm the `_dmarc` TXT exists in Cloudflare DNS (`p=none`, reports to `support.arakice@gmail.com`).
+Nothing blocking left (2026-10-05).
 
 ### 3.2 At the start of the NHL 2026-27 season (started 2026-09-29)
 
-- [ ] **SEO**: `npm run seo:gen` once games are played (stats are still 2025-26); redo the Search
-      Console export and revise `client/scripts/props-allowlist.json` (mirror every change in
-      the exclusion regex of `client/vercel.json`); click "Validate fix" on "Redirect error",
-      re-read indexing around 2026-10-16.
+- [ ] **SEO follow-up**: re-read indexing in Search Console around 2026-10-16 (click "Validate fix"
+      on "Redirect error" if still listed); revise `client/scripts/props-allowlist.json` from that
+      export (mirror every change in the exclusion regex of `client/vercel.json`).
 
 ### 3.3 At the first sale
 
@@ -407,7 +448,7 @@ needs a device, a third party or production:
       log since draining = 15 s): log in, refresh, log out on arakice.com (the rotation change); open
       `/stats/chart` once (new `react` chunk); trigger one 500 and check the Sentry event shows
       `authorization: [Filtered]` and `cookie: [Filtered]`.
-- [ ] **C1–C3** on real devices: iPhone Safari, Android Chrome, desktop browsers, PWA push.
+- [ ] **C2–C3** on real devices: Android Chrome, desktop browsers, PWA push (C1 iPhone Safari ✔ 2026-10-05).
 - [ ] **I4** Google OAuth end to end on the real domain; **I6** once the NHL API has games.
 - [ ] **P1 / P2 / P5 against Railway + Neon** (check `DATABASE_URL` uses `-pooler` first);
       **Lighthouse on arakice.com** — local LCP is still 3.5 s on simulated slow 4G.
@@ -426,9 +467,6 @@ Left, in consoles:
 
 ### 3.9 Cloudflare / accounts — all manual, in your own sessions
 
-- [ ] R1 · `ireinahedad24@gmail.com` → myaccount.google.com → Security → *Recovery email* and
-      *Recovery phone*: both must be ones you control today (not the dead iCloud / support
-      addresses). Also note the backup codes (2-Step Verification → Backup codes).
 - [ ] R6 (optional) · *Full (strict)* for `arakice.com` and `www` only. First check that Vercel's
       certificate is valid behind the proxy: Vercel → Project → Settings → Domains shows both with
       a valid certificate, and `curl -vI https://arakice.com` shows a Let's Encrypt/Vercel cert
@@ -437,28 +475,14 @@ Left, in consoles:
       **Never** for `api` (Railway).
 - [ ] R8 (optional, not before launch) · `cdn.arakice.com` for R2 — together with an `UPDATE` of
       `avatar_url`, or not at all.
-- [ ] R9 · Close the old `Ireinahedad@icloud.com's Account` on Cloudflare (irreversible). Before:
-      it must own no zone, no R2 bucket, no Workers and no billing — check each tab, then
-      delete it from the account settings (if the option is missing, Cloudflare support does it
-      on request from that account's email).
 
 ### 3.10 Low-priority code polish (post-freeze)
 
-- Player hits / blocks / penalty-minute rules on the server use **position averages**, not the
-  player's own numbers (`POSITION_DEFAULTS` in `nhlPredictions.ts`; the real values are in
-  `nhl_player_stats`). Now that the player page shows the server's numbers, wire them in.
-- `buildGameGroups` (`gameMarkets.tsx`) and the local tiles of `TeamPrediction.tsx` still carry
-  placeholder `rulePct` values in the source. They are never displayed any more (overwritten by
-  the server or dropped), but could be stripped.
-
-- Goalie page header shows skater stats (G / A / PTS / +/-, and "1 A · 0 PTS"): show GAA / SV% / W.
-
-Two routers on `/api/users` (rule written in `app.ts`) · hard-coded Pro price in `ProPage.tsx`
-(✔ now `5,99 $`, not localised) · tu/vous mix in French strings · `backdrop-filter` on the nav
-(measure on a device first) · `crypto.randomUUID()` for chat temp ids ·
-`/api/predict/markets/game/:id` ignores `:id` · `ruleWeightsService` localStorage without
-try/catch · tennis bets stuck "pending" in the DB (manual SQL) · server starts without a DB
-(readiness returns 503) · friendship/following feature (deferred after the freeze, own plan).
+Done 2026-10-05 (§1). Left:
+- Kept on purpose: two routers on `/api/users` (merge moves public URLs — after the iOS freeze,
+  see `app.ts`) · server starting without a DB (readiness 503 keeps Railway from routing to it —
+  correct) · `backdrop-filter` on the nav (measure on a device first) · friendship/following
+  feature (own plan).
 
 ### 3.11 Content engine — `content/HANDOFF.md` §8
 
@@ -503,8 +527,6 @@ Cheapest providers with bet365 (approx., converted at ~1 £ ≈ 1.35 US$, ~1 US$
       (`probability × real odds`) and show the real bet365 odds instead of the fair odds
       (`100 / pct`). Update the explanation line (`home.bbExplainMl` / `home.bbExplainRules`).
       Until then the list stays ranked by probability.
-- [ ] Check the Best Bets UX rework (2026-09-25, committed: one tier selector, max 2 bets per game,
-      Rules / AI toggle) on the live site with a Pro account.
 
 ---
 
@@ -636,3 +658,4 @@ Carried over from `RESTE_A_FAIRE.md`, `PRE_IOS_PLAN.md` and the pre-freeze audit
 | `content/*` | Content engine docs | live |
 | `AUDIT_PRE_FREEZE_IOS.md`, `PRODUCTION_READINESS_AUDIT.md` | Deleted 2026-09-24 (still in Git history); open items transferred here | removed |
 | `RESTE_A_FAIRE.md` | Deleted 2026-09-16 in `4d1cbcd`; content transferred here | replaced by this file |
+| `ml/INCOHERENCES_ML.md` | ML train/serve inconsistencies audit — all 21 points fixed, deleted 2026-10-05. ~40 code comments still cite « INCOHERENCES_ML §N »: read it with `git show ad0eba9:ml/INCOHERENCES_ML.md` | removed (in Git history) |

@@ -63,4 +63,10 @@ export const features = {
   serviceWorker:  isWeb,
   /** R17 — hide /dev/ml on iOS. */
   devRoutes:      isWeb,
+  /**
+   * « Bet builder IA » (SlipCommandSheet) — masqué partout tant qu'il n'est pas
+   * prêt (décision du user, 2026-10-05). Le remettre = passer à `true` : le
+   * lanceur, la carte des Réglages et les tiroirs reviennent d'un coup.
+   */
+  aiBetBuilder:   false,
 } as const;

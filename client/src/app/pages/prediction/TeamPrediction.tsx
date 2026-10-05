@@ -119,15 +119,15 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
   if (!data) return <NotFound />;
 
   const hp = data.winPct;
-  const ou = parseFloat(((data.goalsFor + data.goalsAgainst)).toFixed(1)) || 5.5;
 
   // ── build team-level bet groups ──────────────────────────────────────────
   //
   // ⚠️ Ces tuiles ne donnent que la FORME d'un pari (libellé, marché ML,
-  // règlement). Leurs `rulePct` locaux sont des constantes et des règles de
-  // pouce : ils sont TOUS remplacés par le chiffre du serveur plus bas
-  // (`teamGroupsF`), et une tuile sans chiffre serveur n'est pas affichée.
-  // Jamais un pourcentage calculé ici ne doit atteindre l'écran (2026-09-24).
+  // règlement). Leur `rulePct` vaut 0 : il est TOUJOURS remplacé par le
+  // chiffre du serveur plus bas (`teamGroupsF`), et une tuile sans chiffre
+  // serveur n'est pas affichée. Aucun pourcentage calculé ici — ni dans une
+  // note — ne doit atteindre l'écran (2026-09-24 ; constantes et règles de
+  // pouce retirées du source le 2026-10-05).
   const tml = (propType: string, line?: number): MLProps =>
     ({ type: "team", subjectId: data.abbr, propType, line, gameId: selectedGame?.id });
 
@@ -145,18 +145,18 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
     {
       id: "moneyline", title: "Moneyline", cols: 2,
       options: [
-        { id: "t-win",  label: `${data.abbr} wins`,            rulePct: hp,
+        { id: "t-win",  label: `${data.abbr} wins`,            rulePct: 0,
           ruleNote: `Season win rate of ${hp}% based on ${data.pts} pts, record ${data.homeRecord} home / ${data.awayRecord} away.`,
           mlProps: tml("moneyline") },
-        { id: "t-lose", label: oppAbbr ? `${oppAbbr} wins` : `${data.abbr} loses`, rulePct: 100 - hp,
-          ruleNote: `Inverse of win probability: ${100 - hp}%. Current streak: ${data.streak || "—"}.`,
+        { id: "t-lose", label: oppAbbr ? `${oppAbbr} wins` : `${data.abbr} loses`, rulePct: 0,
+          ruleNote: `${data.abbr} current streak: ${data.streak || "—"}.`,
           mlProps: oppMl },
       ],
     },
     {
       id: "match", title: "Overtime", cols: 2,
       options: [
-        { id: "t-ml-ot",label: "Match Goes to OT",             rulePct: 22,
+        { id: "t-ml-ot",label: "Match Goes to OT",             rulePct: 0,
           ruleNote: "~22-24% of NHL games go to OT/SO regardless of team strength.",
           mlProps: tml("game_to_ot") },
       ],
@@ -164,27 +164,21 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
     {
       id: "puckline", title: "Puck Line", cols: 2,
       options: [
-        { id: "t-pl-fav", label: `${data.abbr} -1.5`,          rulePct: Math.max(10, hp - 18),
-          ruleNote: "Win by 2+ goals — ~18% harder than a straight moneyline win.",
+        { id: "t-pl-fav", label: `${data.abbr} -1.5`,          rulePct: 0,
+          ruleNote: "Win by 2+ goals.",
           mlProps: tml("puck_line") },
-        { id: "t-pl-dog", label: `${data.abbr} +1.5`,          rulePct: Math.min(90, hp + 18),
-          ruleNote: "Win OR lose by 1 goal. Probability boosted ~18% vs straight moneyline.",
+        { id: "t-pl-dog", label: `${data.abbr} +1.5`,          rulePct: 0,
+          ruleNote: "Win, or lose by exactly 1 goal.",
           mlProps: tml("alt_puck_line") },
       ],
     },
     {
       id: "totals", title: "Team Goals", cols: 2,
       options: [
-        { id: "t-over",    label: `Over ${ou}`,                  rulePct: 54,
-          ruleNote: `Based on ${data.abbr}'s ${data.goalsFor.toFixed(2)} goals/game average.`,
-          mlProps: tml("total_goals_over", ou) },
-        { id: "t-under",   label: `Under ${ou}`,                 rulePct: 46,
-          ruleNote: `${data.abbr} allows ${data.goalsAgainst.toFixed(2)} goals/game. Solid defense could keep this low.`,
-          mlProps: tml("total_goals_under", ou) },
-        { id: "t-team-over", label: `${data.abbr} Over 2.5`,   rulePct: Math.min(80, Math.round(data.goalsFor * 22 + 5)),
+        { id: "t-team-over", label: `${data.abbr} Over 2.5`,   rulePct: 0,
           ruleNote: `${data.abbr} averages ${data.goalsFor.toFixed(2)} goals/game. Scoring 3+ requires above-average output.`,
           mlProps: tml("total_goals_over", 2.5) },
-        { id: "t-team-under",label: `${data.abbr} Under 2.5`,  rulePct: Math.max(20, 100 - Math.min(80, Math.round(data.goalsFor * 22 + 5))),
+        { id: "t-team-under",label: `${data.abbr} Under 2.5`,  rulePct: 0,
           ruleNote: `${data.abbr} held under 3 goals in a significant portion of games.`,
           mlProps: tml("total_goals_under", 2.5) },
       ],
@@ -192,10 +186,10 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
     {
       id: "clean", title: "Clean Sheet / Both Score", cols: 2,
       options: [
-        { id: "t-cs",   label: `${data.abbr} Shutout`,          rulePct: Math.max(8, Math.round((100 - data.pkPct) * 0.20)),
+        { id: "t-cs",   label: `${data.abbr} Shutout`,          rulePct: 0,
           ruleNote: `Shutouts happen in ~15-22% of games. ${data.abbr}'s PK at ${data.pkPct.toFixed(1)}% is a factor.`,
           mlProps: tml("clean_sheet") },
-        { id: "t-btts", label: "Both Teams Score",               rulePct: Math.min(88, Math.round(data.goalsFor * 18 + data.goalsAgainst * 12 + 25)),
+        { id: "t-btts", label: "Both Teams Score",               rulePct: 0,
           ruleNote: "Both offenses producing. Very common in NHL (~75-80% of games).",
           mlProps: tml("both_teams_score") },
       ],
@@ -203,13 +197,13 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
     {
       id: "period", title: "Period Results", cols: 3,
       options: [
-        { id: "t-p1", label: `${data.abbr} Leads P1`,           rulePct: Math.round(hp * 0.42 + 10),
-          ruleNote: `${data.abbr} leads after the 1st period in ~${Math.round(hp * 0.42 + 10)}% of games.`,
+        { id: "t-p1", label: `${data.abbr} Leads P1`,           rulePct: 0,
+          ruleNote: `${data.abbr} leads after the 1st period.`,
           mlProps: tml("period1_winner") },
-        { id: "t-p2", label: `${data.abbr} Leads P2`,           rulePct: Math.round(hp * 0.44 + 8),
+        { id: "t-p2", label: `${data.abbr} Leads P2`,           rulePct: 0,
           ruleNote: `${data.abbr} leads after P2. More predictive than P1.`,
           mlProps: tml("period2_winner") },
-        { id: "t-p3", label: `${data.abbr} Leads P3`,           rulePct: Math.round(hp * 0.48 + 6),
+        { id: "t-p3", label: `${data.abbr} Leads P3`,           rulePct: 0,
           ruleNote: `Leading after P3 strongly correlates with winning the game.`,
           mlProps: tml("period3_winner") },
       ],
@@ -217,24 +211,24 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
     {
       id: "pp", title: "Special Teams", cols: 2,
       options: [
-        { id: "t-pp-goal", label: `${data.abbr} PP Goal`,       rulePct: Math.min(75, Math.round(data.ppPct * 1.8)),
-          ruleNote: `${data.abbr}'s power play is at ${data.ppPct.toFixed(1)}%. League avg is ~20%. Scoring on the PP ~${Math.min(75, Math.round(data.ppPct * 1.8))}% of games.`,
+        { id: "t-pp-goal", label: `${data.abbr} PP Goal`,       rulePct: 0,
+          ruleNote: `${data.abbr}'s power play is at ${data.ppPct.toFixed(1)}%. League avg is ~20%.`,
           mlProps: tml("pp_goal") },
-        { id: "t-pk",      label: `${data.abbr} Kills All PKs`, rulePct: Math.min(80, Math.round(data.pkPct * 0.9)),
-          ruleNote: `${data.abbr} penalty kill at ${data.pkPct.toFixed(1)}%. Successfully killing all penalties ~${Math.min(80, Math.round(data.pkPct * 0.9))}% of games.`,
+        { id: "t-pk",      label: `${data.abbr} Kills All PKs`, rulePct: 0,
+          ruleNote: `${data.abbr} penalty kill at ${data.pkPct.toFixed(1)}%.`,
           mlProps: tml("penalty_kill") },
       ],
     },
     {
       id: "margin", title: "Winning Margin", cols: 3,
       options: [
-        { id: "t-w1", label: `${data.abbr} by 1`, rulePct: Math.round(hp * 0.18),
+        { id: "t-w1", label: `${data.abbr} by 1`, rulePct: 0,
           ruleNote: "One-goal wins are the most common margin in the NHL.",
           mlProps: tml("winning_margin") },
-        { id: "t-w2", label: `${data.abbr} by 2`, rulePct: Math.round(hp * 0.13),
+        { id: "t-w2", label: `${data.abbr} by 2`, rulePct: 0,
           ruleNote: "Two-goal victory — comfortable but not a blowout.",
           mlProps: tml("winning_margin") },
-        { id: "t-w3", label: `${data.abbr} by 3+`, rulePct: Math.round(hp * 0.09),
+        { id: "t-w3", label: `${data.abbr} by 3+`, rulePct: 0,
           ruleNote: "Blowout wins are less frequent, even for dominant teams.",
           mlProps: tml("winning_margin") },
       ],

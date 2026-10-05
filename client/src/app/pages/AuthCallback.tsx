@@ -26,16 +26,12 @@ export function AuthCallback() {
     if (ran.current) return;
     ran.current = true;
 
-    // Le fragment d'abord, la chaîne de requête ensuite.
-    //
-    // ⚠️ Ce repli n'est PAS de la politesse : client et serveur se déploient
-    // séparément, donc pendant la fenêtre de déploiement un client neuf peut
-    // recevoir une redirection de l'ANCIEN serveur, qui envoie encore
-    // `?access_token=`. Sans le repli, la connexion Google casserait le temps
-    // du déploiement. À retirer une fois le serveur déployé et stabilisé.
-    const hash   = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    const search = new URLSearchParams(window.location.search);
-    const access_token = hash.get("access_token") ?? search.get("access_token");
+    // Le fragment SEULEMENT. Le repli `?access_token=` (fenêtre de déploiement
+    // client/serveur) a été retiré le 2026-10-05 : le serveur n'envoie plus que
+    // le fragment (`auth.routes.ts`), et un jeton en query string finirait de
+    // nouveau dans les journaux, le `Referer` et Sentry.
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const access_token = hash.get("access_token");
 
     // Effacer AVANT tout le reste : à partir d'ici l'URL affichée, celle que
     // l'historique retient et celle que lira une capture d'erreur ne portent

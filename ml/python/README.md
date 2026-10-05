@@ -2,8 +2,8 @@
 
 Service FastAPI autonome. Le backend Node l'appelle ; il répond des
 probabilités pour les paris NHL. **Explication complète de chaque calcul :
-[`../EXPLICATION_ML.md`](../EXPLICATION_ML.md)** ; points connus à corriger :
-[`../INCOHERENCES_ML.md`](../INCOHERENCES_ML.md).
+[`../EXPLICATION_ML.md`](../EXPLICATION_ML.md)** . Les commentaires « INCOHERENCES_ML §N » renvoient à
+une liste close et supprimée le 2026-10-05 : `git show ad0eba9:ml/INCOHERENCES_ML.md`.
 
 ## Lancer en local
 

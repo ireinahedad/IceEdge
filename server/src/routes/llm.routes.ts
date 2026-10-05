@@ -256,10 +256,10 @@ function quotaMessage(resetsAt: string, hasOwnKey: boolean): string {
   const date = new Date(resetsAt).toLocaleDateString('fr-FR', {
     day: 'numeric', month: 'long', timeZone: 'UTC',
   });
-  const base = `Tu as atteint ton maximum de ${MONTHLY_QUOTA} requêtes IA pour ce mois-ci. Ton compteur repart le ${date}.`;
+  const base = `Vous avez atteint votre maximum de ${MONTHLY_QUOTA} requêtes IA pour ce mois-ci. Votre compteur repart le ${date}.`;
   return hasOwnKey
-    ? `${base} En attendant, tes requêtes utilisent ta propre clé OpenAI (facturée sur ton compte OpenAI).`
-    : `${base} Pour continuer dès maintenant, ajoute ta clé OpenAI dans Paramètres → IA : tes requêtes passeront alors par ton compte OpenAI.`;
+    ? `${base} En attendant, vos requêtes utilisent votre propre clé OpenAI (facturée sur votre compte OpenAI).`
+    : `${base} Pour continuer dès maintenant, ajoutez votre clé OpenAI dans Paramètres → IA : vos requêtes passeront alors par votre compte OpenAI.`;
 }
 
 // All LLM routes require a valid JWT, then a dedicated per-user rate limit.
@@ -408,7 +408,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
     } catch (err: any) {
       logger.warn({ err: err?.message }, '[LLM] contexte de la commande indisponible (calendrier LNH)');
       return res.status(503).json({
-        error: 'Le calendrier LNH est momentanément indisponible. Réessaie plus tard.',
+        error: 'Le calendrier LNH est momentanément indisponible. Réessayez plus tard.',
         code: 'schedule_unavailable',
       });
     }
@@ -502,7 +502,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
       // décrirait la configuration du serveur. Le détail part dans les logs.
       logger.error('[LLM] OPENAI_API_KEY (clé opérateur) absente — le chemin Pro est hors service');
       return res.status(503).json({
-        error: 'La fonction IA est momentanément indisponible. Réessaie plus tard.',
+        error: 'La fonction IA est momentanément indisponible. Réessayez plus tard.',
         code: 'unavailable',
       });
     }
@@ -541,7 +541,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
       // préfère une erreur franche et temporaire à une dépense non mesurée.
       return res.status(503).json({
         error: 'quota_unavailable',
-        message: 'Impossible de vérifier ton quota IA pour le moment. Réessaie dans un instant.',
+        message: 'Impossible de vérifier votre quota IA pour le moment. Réessayez dans un instant.',
       });
     } else {
       // Plafond atteint (personnel ou disjoncteur global). On tente la bascule
@@ -593,7 +593,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
         // affiche `body.error` tel quel. Y mettre « unavailable » aurait mis le
         // mot « unavailable » sous les yeux de l'utilisateur.
         return res.status(503).json({
-          error: 'La fonction IA est momentanément indisponible. Réessaie plus tard.',
+          error: 'La fonction IA est momentanément indisponible. Réessayez plus tard.',
           code: 'unavailable',
         });
       }
@@ -614,7 +614,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
       if (!token) {
         logger.error('[LLM] OPENAI_API_KEY (clé opérateur) absente — appels gratuits de la commande hors service');
         return res.status(503).json({
-          error: 'La fonction IA est momentanément indisponible. Réessaie plus tard.',
+          error: 'La fonction IA est momentanément indisponible. Réessayez plus tard.',
           code: 'unavailable',
         });
       }
@@ -628,7 +628,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
         // 'db' (fail-closed) ou 'global' (disjoncteur) : rien que l'utilisateur
         // puisse corriger, et rien à lui vendre.
         return res.status(503).json({
-          error: 'La fonction IA est momentanément indisponible. Réessaie plus tard.',
+          error: 'La fonction IA est momentanément indisponible. Réessayez plus tard.',
           code: verdict.reason === 'db' ? 'quota_unavailable' : 'unavailable',
         });
       }

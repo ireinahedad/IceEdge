@@ -25,9 +25,18 @@ const MUTED         = "#92A08A";
 // STRIPE_PRICE_PRO_YEARLY côté serveur. Les changer ici sans changer le tarif
 // là-bas ment au client au moment le plus coûteux : entre le prix affiché et
 // l'écran de paiement.
-const PRICE_MONTHLY = "5,99 $";
-const PRICE_YEARLY  = "60 $";
+const PRICE_MONTHLY = 5.99;
+const PRICE_YEARLY  = 60;
 const CURRENCY      = "CAD";
+
+/** « 5,99 $ » en français, « $5.99 » en anglais — l'écriture était figée en
+ *  français pour les deux langues (2026-10-05). */
+function formatPrice(amount: number, lang: "en" | "fr"): string {
+  return new Intl.NumberFormat(lang === "fr" ? "fr-CA" : "en-CA", {
+    style: "currency", currency: CURRENCY, currencyDisplay: "narrowSymbol",
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+  }).format(amount);
+}
 
 // Pro-exclusive benefits only. Anything also available on Free is intentionally
 // left out of this page.
@@ -100,7 +109,7 @@ function useProBackTarget(): string {
 export function ProPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const backTo = useProBackTarget();
 
   const [sub,     setSub]     = useState<SubscriptionStatus | null>(null);
@@ -274,7 +283,7 @@ export function ProPage() {
 
           <div className="flex items-end justify-center gap-1 mb-1">
             <span className="text-4xl font-bold" style={{ color: ACCENT }}>
-              {isYearly ? PRICE_YEARLY : PRICE_MONTHLY}
+              {formatPrice(isYearly ? PRICE_YEARLY : PRICE_MONTHLY, lang)}
             </span>
             <span className="text-sm mb-1" style={{ color: MUTED }}>
               {CURRENCY} {t(isYearly ? "pro.perYear" : "pro.perMonth")}
@@ -288,7 +297,7 @@ export function ProPage() {
             <div className="text-xs" style={{ color: MUTED }}>
               {isYearly
                 ? t("pro.yearlyNote")
-                : t("pro.annualNote", { price: `${PRICE_YEARLY} ${CURRENCY}` })}
+                : t("pro.annualNote", { price: `${formatPrice(PRICE_YEARLY, lang)} ${CURRENCY}` })}
             </div>
           )}
 

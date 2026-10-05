@@ -671,8 +671,10 @@ du choix de la date, et ça rend la bascule réversible en une variable.
    d'une page joueur doit produire :
    `[profile] PUBLIC_SLIPS_SINCE absente ou invalide — aucun coupon n'est visible`.
 2. **Appliquer les migrations** : `npm run db:migrate:all` (029 + 030).
-3. **Prévenir les joueurs** — `npm run notify:slips -- --date 2026-10-07`
-   (simulation), puis `--send`. Contenu minimal : ce qui devient visible, à partir
+3. **Prévenir les joueurs** — fait le 2026-09-30 : aucun vrai joueur à prévenir
+   (comptes de test seulement). Le script `notify-slips-visibility.ts` et le courriel
+   `sendSlipsVisibilityNotice` ont été retirés le 2026-10-05 ; pour les reprendre :
+   `git show 0916b52:server/scripts/notify-slips-visibility.ts`. Contenu minimal : ce qui devient visible, à partir
    de quand, que rien d'antérieur ne le sera, et où se retirer (Paramètres →
    Confidentialité). À envoyer **avant** l'étape 4.
 

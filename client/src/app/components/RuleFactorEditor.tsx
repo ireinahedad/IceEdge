@@ -126,7 +126,7 @@ export function RuleFactorEditor({
   const userFactor: SimpleFactor | null = userActive
     ? {
         id: USER_RULE_ID,
-        label: userRule.label.trim() || (lang === "fr" ? "Ta règle" : "Your rule"),
+        label: userRule.label.trim() || (lang === "fr" ? "Votre règle" : "Your rule"),
         weight: userRule.weight,
         value: Math.max(0, Math.min(1, (userRule.pct as number) / 100 / (pctScale && pctScale > 0 ? pctScale : 1))),
       }
@@ -302,7 +302,7 @@ export function RuleFactorEditor({
                     disabled={userRule.pct == null}
                     onChange={() => patchUserRule({ weight: userRule.weight > 0 ? 0 : USER_RULE_DEFAULT_WEIGHT })}
                     className="accent-[#86d1ea] flex-shrink-0"
-                    aria-label={lang === "fr" ? "Inclure ta règle" : "Include your rule"}
+                    aria-label={lang === "fr" ? "Inclure votre règle" : "Include your rule"}
                   />
                   <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0 border border-white/40" style={{ background: userActive ? USER_RULE_COLOR : "transparent" }} />
                   <input
@@ -310,7 +310,7 @@ export function RuleFactorEditor({
                     value={userRule.label}
                     maxLength={40}
                     onChange={(e) => patchUserRule({ label: e.target.value })}
-                    placeholder={lang === "fr" ? "Ta règle…" : "Your rule…"}
+                    placeholder={lang === "fr" ? "Votre règle…" : "Your rule…"}
                     className="flex-1 min-w-0 bg-black/20 border border-dashed border-white/25 rounded px-1.5 py-0.5 text-[11px] text-white outline-none placeholder:text-white/35 focus:border-[#90C9F0]/60"
                   />
                   <input
@@ -327,7 +327,7 @@ export function RuleFactorEditor({
                   />
                 </div>
                 <div className="flex items-center gap-1.5 mt-1 pl-[42px]">
-                  <span className="text-white/50 text-[10px]">{lang === "fr" ? "Ta probabilité :" : "Your probability:"}</span>
+                  <span className="text-white/50 text-[10px]">{lang === "fr" ? "Votre probabilité :" : "Your probability:"}</span>
                   <input
                     type="number" min={0} max={100} step={1}
                     value={userRule.pct ?? ""}
@@ -342,7 +342,7 @@ export function RuleFactorEditor({
                 </div>
                 <p className="text-white/40 text-[10px] leading-snug mt-0.5 pl-[42px]">
                   {lang === "fr"
-                    ? "Ajoute ton propre critère : donne-lui un nom, ta probabilité pour ce pari, puis son poids."
+                    ? "Ajoutez votre propre critère : donnez-lui un nom, votre probabilité pour ce pari, puis son poids."
                     : "Add your own criterion: name it, give your probability for this bet, then its weight."}
                 </p>
               </div>
@@ -369,8 +369,8 @@ export function RuleFactorEditor({
                 </button>
               </div>
               <p className="text-white/30 text-[11px] leading-snug">
-                Décoche un facteur pour l'exclure. Réglages propres à ce type de pari, gardés sur cet appareil
-                et rattachés à ton compte si tu es connecté.
+                Décochez un facteur pour l'exclure. Réglages propres à ce type de pari, gardés sur cet appareil
+                et rattachés à votre compte si vous êtes connecté.
               </p>
             </div>
           </div>

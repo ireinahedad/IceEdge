@@ -369,6 +369,65 @@ export async function resolveSlip(
   return { xpAwarded, newXp, newTier, tieredUp };
 }
 
+// ─── Cancel a pending slip ────────────────────────────────────────────────────
+
+/**
+ * Annuler un pari EN COURS (décision du user, 2026-10-05).
+ *
+ * ⚠️ Seulement AVANT la mise au jeu du premier match du coupon. Sans cette
+ * borne, on annulerait un pari en train de perdre (MTL mené 0-4 en 3e) pour
+ * échapper à la perte d'XP de `xpForOutcome` — le pendant exact de la règle
+ * « pas de pari en direct » de `submitSlip`.
+ *
+ * Le coupon est SUPPRIMÉ, pas marqué : un pari annulé avant tout match n'a
+ * jamais compté (aucun XP, rien à régler). Aucune table ne référence
+ * `bet_slips` ; une carte déjà envoyée dans un salon garde son instantané
+ * (migration 036).
+ *
+ * Fermé en cas de doute, à l'inverse de `submitSlip` : si l'heure du premier
+ * match est inconnue et que l'API NHL ne répond pas, on refuse — une
+ * annulation refusée se retente, une annulation abusive ne se défait pas.
+ */
+export async function cancelSlip(slipId: string, userId: string): Promise<void> {
+  const { rows } = await pool.query<{ outcome: string; legs: SlipLeg[]; locks_at: Date | null }>(
+    `SELECT outcome, legs, locks_at FROM bet_slips WHERE id = $1 AND user_id = $2`,
+    [slipId, userId],
+  );
+  const slip = rows[0];
+  if (!slip) throw Object.assign(new Error('Slip not found'), { status: 404 });
+  if (slip.outcome !== 'pending') {
+    throw Object.assign(new Error('Only pending slips can be cancelled'), { status: 409, code: 'NOT_PENDING' });
+  }
+
+  const legs = Array.isArray(slip.legs) ? slip.legs : [];
+  // Une sélection déjà décidée = un match joué : trop tard.
+  if (legs.some((l: any) => l?.result)) {
+    throw Object.assign(new Error('A game in this slip has already started'), { status: 409, code: 'GAME_STARTED' });
+  }
+
+  if (slip.locks_at && new Date(slip.locks_at).getTime() <= Date.now()) {
+    throw Object.assign(new Error('A game in this slip has already started'), { status: 409, code: 'GAME_STARTED' });
+  }
+  // Re-vérifier auprès de l'API NHL : l'heure enregistrée peut manquer, ou un
+  // match peut avoir été avancé depuis le verrouillage.
+  const { locksAt, startedGameIds } = await resolveLocksAt(legs);
+  if (startedGameIds.length || (locksAt && locksAt.getTime() <= Date.now())) {
+    throw Object.assign(new Error('A game in this slip has already started'), { status: 409, code: 'GAME_STARTED' });
+  }
+  if (!slip.locks_at && !locksAt && legs.some((l) => l.gameId)) {
+    throw Object.assign(new Error('Could not verify game start times — try again'), { status: 503, code: 'UNVERIFIED' });
+  }
+
+  // Garde `outcome = 'pending'` : le règlement a pu passer entre-temps.
+  const del = await pool.query(
+    `DELETE FROM bet_slips WHERE id = $1 AND user_id = $2 AND outcome = 'pending'`,
+    [slipId, userId],
+  );
+  if (!del.rowCount) {
+    throw Object.assign(new Error('Only pending slips can be cancelled'), { status: 409, code: 'NOT_PENDING' });
+  }
+}
+
 // ─── Get a single slip ────────────────────────────────────────────────────────
 
 export async function getSlip(slipId: string, userId: string) {

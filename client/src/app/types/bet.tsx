@@ -98,10 +98,12 @@ export interface NHLPlayerStats {
   hits: number;
   timeOnIce: number; // minutes per game
   faceoffWinPct?: number;
-  // Goalie specific
-  savePct?: number;
+  // Goalie specific (null pour un patineur)
+  savePct?: number | null;          // fraction : 0.912
   savesPerGame?: number;
-  goalsAgainstAvg?: number;
+  goalsAgainstAvg?: number | null;
+  wins?: number | null;
+  shutouts?: number | null;
 }
 
 export interface NHLStandings {

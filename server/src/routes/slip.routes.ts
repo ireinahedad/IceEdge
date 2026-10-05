@@ -97,6 +97,21 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// ─── DELETE /api/slips/:id ────────────────────────────────────────────────────
+// Annuler un pari en cours — seulement avant le premier match (voir cancelSlip).
+router.delete('/:id', async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.sub;
+    if (!userId) { res.status(401).json({ error: 'Unauthorized' }); return; }
+
+    await SlipService.cancelSlip(req.params.id, userId);
+    res.status(204).end();
+  } catch (err: any) {
+    logger.error({ err: err.message }, '[DELETE /api/slips/:id]');
+    sendError(res, err);
+  }
+});
+
 // ─── PATCH /api/slips/:id/resolve ─────────────────────────────────────────────
 // Manual resolution — ADMIN ONLY. Regular users cannot self-report results
 // (settlement is automatic via the NHL API); this stays as an admin override

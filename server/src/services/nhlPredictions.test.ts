@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   buildGameMarkets, buildGameMarketsWithStatus, buildLiveModelMarkets, buildPrematchGameMarkets,
   boxscoreLiveInfo, liveCtxFromDetail, marginDistribution, computeLiveModelGroups,
+  buildPlayerMarkets,
 } from './nhlPredictions';
+import { fetchPlayerById } from './nhlApiClient';
 
 /**
  * Ce que ce fichier prouve : CHAQUE tuile de la page match annonce le marché ML
@@ -449,6 +451,14 @@ describe('buildGameMarkets — en direct', () => {
     }
   });
 
+  it('en direct aussi, chaque tuile porte son marché ML (le client n\'a plus de repli)', async () => {
+    const { groups } = await load('L-ml', detail('live', 2, '08:00', 1, 2, [[1, 0], [0, 2]]));
+    const missing = groups
+      .flatMap(g => g.options.map(o => ({ id: o.id, ml: o.ml })))
+      .filter(o => !o.ml && !(o.id in NO_ML_BY_DESIGN));
+    expect(missing).toEqual([]);
+  });
+
   it('marchés décidés : période terminée, BTTS acquis, Over atteint', async () => {
     const { pctOf } = await load('L-decided', detail('live', 2, '12:34', 2, 1, [[1, 0], [1, 1]]));
     // 1–0 après la 1re.
@@ -656,5 +666,35 @@ describe('volume de tirs — Fenwick, repli sur les tirs cadrés', () => {
     const busy = shotPace(await buildGameMarkets('2026020953'));
     expect(flat.label).toBe('Rythme de tirs (Fenwick)');
     expect(busy.value).toBeGreaterThan(flat.value);
+  });
+});
+
+
+describe('buildPlayerMarkets — mises en échec, blocs et pénalités du JOUEUR', () => {
+  const D = (blockedShots: number | undefined, hits: number | undefined, penaltyMinutes: number) => ({
+    id: '1', name: 'Test D', position: 'D', gamesPlayed: 40,
+    goals: 4, assists: 16, points: 20, shots: 60, ppPoints: 3,
+    blockedShots, hits, penaltyMinutes,
+  });
+  const pctOf = async (player: any, id: string) => {
+    vi.mocked(fetchPlayerById).mockResolvedValueOnce(player);
+    const groups = await buildPlayerMarkets('1');
+    return groups.flatMap(g => g.options).find(o => o.id === id)!;
+  };
+
+  it('deux défenseurs aux cadences différentes n\'ont plus le même pourcentage', async () => {
+    const blocker = await pctOf(D(100, 40, 10), 'blk-o15');   // 2,5 blocs/match
+    const light   = await pctOf(D(24, 40, 10),  'blk-o15');   // 0,6 bloc/match
+    expect(blocker.rulePct).toBeGreaterThan(light.rulePct + 20);
+    expect((await pctOf(D(100, 40, 10), 'blk-o05')).ruleNote).toContain('100 blocks in 40 GP');
+  });
+
+  it('rétrécit vers la position en début de saison, retombe dessus sans donnée', async () => {
+    // 2 matchs, 10 mises en échec : 5/match brut, mais (10 + 2,2×10)/12 ≈ 2,67.
+    const early = await pctOf({ ...D(2, 10, 0), gamesPlayed: 2 }, 'hits-o25');
+    const pos   = await pctOf(D(undefined, undefined, 0), 'hits-o25');
+    expect(early.rulePct).toBeGreaterThan(pos.rulePct);
+    expect(early.rulePct).toBeLessThan(80);
+    expect((await pctOf(D(undefined, undefined, 0), 'hits-o15')).ruleNote).toContain('Position avg 2.20 hits');
   });
 });

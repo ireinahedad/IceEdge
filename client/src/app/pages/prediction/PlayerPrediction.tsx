@@ -29,6 +29,7 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
     gamesPlayed: number; goalsPerGame: number; assistsPerGame: number;
     ptsPerGame: number; ppPoints: number; shots: number; hits: number;
     blocks: number; toi: number; faceoffPct: number; penaltyMin: number;
+    savePct: number | null; gaa: number | null; wins: number | null; shutouts: number | null;
   } | null>(null);
   // Marchés du moteur de règles, calculés par le serveur — les SEULS pourcentages
   // « règles » de la page (voir `playerGroupsF`).
@@ -72,6 +73,10 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
           toi: stats.timeOnIce ?? 0,
           faceoffPct: stats.faceoffWinPct ?? 0,
           penaltyMin: stats.penaltyMinutes ?? 0,
+          savePct: stats.savePct ?? null,
+          gaa: stats.goalsAgainstAvg ?? null,
+          wins: stats.wins ?? null,
+          shutouts: stats.shutouts ?? null,
         });
         // The game itself is resolved by useUpcomingGames(data.team) above —
         // it looks 14 days ahead and feeds the dropdown, so this loader only
@@ -271,12 +276,21 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
           </div>
         </div>
         <div className="grid grid-cols-4 gap-2">
-          {[
-            { label: "G",    value: String(data.goals)   },
-            { label: "A",    value: String(data.assists)  },
-            { label: "PTS",  value: String(data.points)   },
-            { label: "+/-",  value: (data.plusMinus >= 0 ? "+" : "") + data.plusMinus },
-          ].map(s => (
+          {(data.position === "G"
+            // Gardien : ses stats à lui, pas celles d'un patineur (2026-10-05).
+            ? [
+                { label: "GP",  value: String(data.gamesPlayed) },
+                { label: "W",   value: data.wins == null ? "—" : String(data.wins) },
+                { label: "GAA", value: data.gaa == null ? "—" : data.gaa.toFixed(2) },
+                { label: "SV%", value: data.savePct == null ? "—" : data.savePct.toFixed(3).replace(/^0/, "") },
+              ]
+            : [
+                { label: "G",    value: String(data.goals)   },
+                { label: "A",    value: String(data.assists)  },
+                { label: "PTS",  value: String(data.points)   },
+                { label: "+/-",  value: (data.plusMinus >= 0 ? "+" : "") + data.plusMinus },
+              ]
+          ).map(s => (
             <div key={s.label} className="bg-[#0A0E0C] rounded-xl p-2 text-center">
               <p className="text-white text-sm font-bold">{s.value}</p>
               <p className="text-[#8a9ea6] text-[11px]">{s.label}</p>

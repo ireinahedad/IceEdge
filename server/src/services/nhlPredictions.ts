@@ -1733,6 +1733,26 @@ const POSITION_DEFAULTS: Record<string, Record<string, number>> = {
   G: { saves: 27, goalsAllowed: 3.0 },
 };
 
+/**
+ * Taux par match du JOUEUR, rétréci vers la moyenne de sa position.
+ *
+ * Avant le 2026-10-05, mises en échec, tirs bloqués et minutes de pénalité
+ * utilisaient la moyenne de position pour TOUS les joueurs : un défenseur à
+ * 2,5 blocs/match et un autre à 0,6 recevaient le même pourcentage. Les vrais
+ * totaux sont dans la fiche (`fetchPlayerById` : `hits`, `blockedShots` via le
+ * rapport `realtime`, `penaltyMinutes` via `seasonTotals`).
+ *
+ * Rétrécissement : `PRIOR_GP` matchs fictifs au taux de position. En début de
+ * saison (2 matchs joués), un joueur à 4 mises en échec ne passe pas à 2/match
+ * d'un coup ; à 40 matchs, sa propre cadence domine (80 %). `undefined` (donnée
+ * absente de l'amont) → moyenne de position, comme avant.
+ */
+const PRIOR_GP = 10;
+function playerRate(total: number | null | undefined, gp: number, prior: number): number {
+  if (total == null || !Number.isFinite(total) || total < 0) return prior;
+  return (total + prior * PRIOR_GP) / (gp + PRIOR_GP);
+}
+
 function posDefaults(pos: string): Record<string, number> {
   if (pos === 'G') return POSITION_DEFAULTS.G;
   if (pos === 'D') return POSITION_DEFAULTS.D;
@@ -1757,9 +1777,14 @@ function buildSkaterMarkets(p: any, gp: number, pos: string, def: Record<string,
   const ppg  = p.points  / gp;
   const spg  = p.shots   / gp;
   const pppg = (p.ppPoints ?? 0) / gp;
-  const hits = def.hits;
-  const blks = def.blocks;
-  const pim  = def.pim;
+  // Données réelles du joueur, rétrécies vers la position (voir `playerRate`).
+  const hits = playerRate(p.hits,           gp, def.hits);
+  const blks = playerRate(p.blockedShots,   gp, def.blocks);
+  const pim  = playerRate(p.penaltyMinutes, gp, def.pim);
+  const realNote = (total: number | null | undefined, unit: string, rate: number) =>
+    total == null
+      ? `Position avg ${fmt(rate)} ${unit}/game`
+      : `${total} ${unit} in ${gp} GP, shrunk toward position avg → ${fmt(rate)} ${unit}/game`;
 
   // ── Goal Scoring ──────────────────────────────────────────────────────────
   const goals: MarketGroup = {
@@ -1869,7 +1894,7 @@ function buildSkaterMarkets(p: any, gp: number, pos: string, def: Record<string,
         id: 'hits-o15',
         label: 'Over 1.5',
         rulePct: pct(poissonOver(hits, 1.5)),
-        ruleNote: `Position avg ${fmt(hits)} hits/game → P(>1.5)=${fmt(poissonOver(hits,1.5)*100,0)}%`,
+        ruleNote: `${realNote(p.hits, 'hits', hits)} → P(>1.5)=${fmt(poissonOver(hits,1.5)*100,0)}%`,
       },
       {
         id: 'hits-o25',
@@ -1894,7 +1919,7 @@ function buildSkaterMarkets(p: any, gp: number, pos: string, def: Record<string,
         id: 'blk-o05',
         label: 'Over 0.5',
         rulePct: pct(poissonOver(blks, 0.5)),
-        ruleNote: `${pos === 'D' ? 'D-man' : 'Forward'} avg ${fmt(blks)} blocks/game → P(≥1)=${fmt(poissonOver(blks,0.5)*100,0)}%`,
+        ruleNote: `${realNote(p.blockedShots, 'blocks', blks)} → P(≥1)=${fmt(poissonOver(blks,0.5)*100,0)}%`,
       },
       {
         id: 'blk-o15',
@@ -1932,7 +1957,7 @@ function buildSkaterMarkets(p: any, gp: number, pos: string, def: Record<string,
         id: 'pim-o05',
         label: 'Over 0.5',
         rulePct: pct(poissonOver(pim, 0.5)),
-        ruleNote: `Position avg ${fmt(pim)} PIM/game → P(≥1 PIM)=${fmt(poissonOver(pim,0.5)*100,0)}%`,
+        ruleNote: `${realNote(p.penaltyMinutes, 'PIM', pim)} → P(≥1 PIM)=${fmt(poissonOver(pim,0.5)*100,0)}%`,
       },
       {
         id: 'pim-o15',
@@ -1947,7 +1972,7 @@ function buildSkaterMarkets(p: any, gp: number, pos: string, def: Record<string,
   attachPlayerFactors(groups, {
     pos, gpg, apg, ppg, spg, pppg,
     shotPct:  p.shotPct ?? 0,
-    hitsPg:   hits,   // moyenne de position (donnée réelle absente du endpoint landing)
+    hitsPg:   hits,   // cadence du joueur rétrécie vers la position (`playerRate`)
     blocksPg: blks,
     pimPg:    pim,
   });

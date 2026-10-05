@@ -14,13 +14,13 @@ const CONTENT = {
     ],
   },
   fr: {
-    intro: "Besoin d'aide ? Écris-nous et nous te répondrons dans les meilleurs délais.",
+    intro: "Besoin d'aide ? Écrivez-nous et nous vous répondrons dans les meilleurs délais.",
     faqTitle: "Questions fréquentes",
     faq: [
       { q: "Comment les prédictions sont-elles calculées ?", a: "ArakIce combine des règles statistiques (forme récente, confrontations directes, avantage de la glace/du court) avec un modèle d'apprentissage automatique entraîné sur des résultats historiques. Les chiffres affichés partout sont ceux du modèle ML ; les règles se consultent dans le détail d'un pari, sous le chiffre ML." },
       { q: "ArakIce est-il un bookmaker ?", a: "Non. ArakIce n'accepte aucun pari. Nous redirigeons vers des bookmakers tiers (ex. bet365) là où c'est légalement disponible." },
-      { q: "Comment annuler mon abonnement Pro ?", a: "Va dans Profil → Paramètres → Abonnement, puis touche « Annuler l'abonnement ». Ton accès reste actif jusqu'à la fin de la période de facturation en cours." },
-      { q: "Comment supprimer mon compte ?", a: "Va dans Profil → Paramètres → Sécurité, puis touche « Supprimer mon compte ». Après la reconfirmation de ton identité, ton compte et toutes les données associées sont effacés immédiatement, et un abonnement Pro actif est annulé." },
+      { q: "Comment annuler mon abonnement Pro ?", a: "Allez dans Profil → Paramètres → Abonnement, puis touchez « Annuler l'abonnement ». Votre accès reste actif jusqu'à la fin de la période de facturation en cours." },
+      { q: "Comment supprimer mon compte ?", a: "Allez dans Profil → Paramètres → Sécurité, puis touchez « Supprimer mon compte ». Après la reconfirmation de votre identité, votre compte et toutes les données associées sont effacés immédiatement, et un abonnement Pro actif est annulé." },
     ],
   },
 };

@@ -51,7 +51,7 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
   }, [user]);
 
   const intro = fr
-    ? "Chaque pari affiche sa chance de passer selon le modèle ML, en %. C'est ce chiffre qui est enregistré dans ton coupon."
+    ? "Chaque pari affiche sa chance de passer selon le modèle ML, en %. C'est ce chiffre qui est enregistré dans votre coupon."
     : "Every bet shows its chance of hitting according to the ML model, in %. That number is the one saved in your slip.";
 
   const proLine = !quota ? null : fr
@@ -85,7 +85,7 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
             "Ajustée par l'avantage de la glace et la fatigue : jours de repos, matchs consécutifs, voyage, fuseaux horaires, altitude.",
             "Les cotes du marché, les blessures et l'alignement s'ajoutent quand on les a.",
             "Totaux et paris joueurs : on estime la moyenne attendue de buts, tirs ou points, puis la loi de Poisson donne la chance de dépasser la ligne.",
-            "Tu peux changer le poids de chaque facteur.",
+            "Vous pouvez changer le poids de chaque facteur.",
           ]
         : [
             "Winner: both teams' strength (70% season record, 30% last 10 games), compared with the Log5 formula.",
@@ -102,9 +102,9 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
         ? [
             "Il lit les données du pari et ajoute ce que les chiffres ne voient pas : forme, fatigue, voyage, style de jeu, motivation.",
             "Il liste ce qu'il faut vérifier avant de parier : blessures, gardien partant, alignement.",
-            "Il finit par un verdict et un niveau de confiance. Tu peux ensuite lui poser d'autres questions sur le pari.",
+            "Il finit par un verdict et un niveau de confiance. Vous pouvez ensuite lui poser d'autres questions sur le pari.",
             proLine,
-            "Sans Pro : il utilise ta propre clé OpenAI (Réglages), à tes frais. Chaque question compte pour une requête.",
+            "Sans Pro : il utilise votre propre clé OpenAI (Réglages), à vos frais. Chaque question compte pour une requête.",
           ]
         : [
             "It reads the bet's data and adds what the numbers miss: form, fatigue, travel, playing style, motivation.",
@@ -119,7 +119,7 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
   const tips = fr
     ? [
         "Bleu : probable. Mauve : serré. Rouge : peu probable.",
-        "Touche un pari pour voir le détail et l'ajouter au coupon.",
+        "Touchez un pari pour voir le détail et l'ajouter au coupon.",
         "Plusieurs paris ? Le coupon calcule la chance que tout passe.",
         "Deux paris contraires sont permis. Le total tombe alors à 0 %.",
         "Meilleurs paris, sur l'accueil : les matchs des 48 prochaines heures.",

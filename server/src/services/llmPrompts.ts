@@ -78,6 +78,7 @@ const EXPLAIN_BET: Record<LlmLocale, string> = {
     "Tu n'as AUCUNE donnée en temps réel et ta connaissance a une date limite — n'affirme jamais une blessure, " +
     "un alignement ou un gardien actuel comme un fait. " +
     "Quand des « Données de l'application » sont fournies, considère-les comme la vérité et fonde ton « Analyse » dessus. " +
+    "Si tu t'adresses au lecteur, vouvoie-le (l'application vouvoie partout). " +
     "Réponds EXACTEMENT dans ce format, sans introduction ni paragraphe :\n" +
     "Analyse :\n" +
     "- 2 à 5 points clés courts (≤ 12 mots), facteurs hors statistiques : forme, fatigue (matchs consécutifs), " +
@@ -142,6 +143,7 @@ const ASK_FOLLOWUP: Record<LlmLocale, string> = {
     "Les facteurs MAJEUR comptent plus que les SECONDAIRE ; respecte POUR / CONTRE. " +
     "Si le bloc n'a pas la réponse, dis précisément ce qui manque (par ex. « le bloc ne contient pas de stats de blessés »), sans broder. " +
     "Réponds directement en 2 à 4 phrases courtes, sans introduction ni politesse, en texte simple, sans conseil de mise. " +
+    "Si tu t'adresses à la personne, vouvoie-la (l'application vouvoie partout). " +
     "Hors sujet (autre que ce pari, ce match, ces équipes ou les paris LNH) : dis-le en une phrase.",
   en:
     "You are an NHL betting analyst. You already wrote up a bet; the person asks a follow-up question. " +

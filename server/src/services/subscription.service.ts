@@ -328,7 +328,7 @@ export async function cancelStripeForAccountDeletion(userId: string): Promise<vo
     if (err?.code === 'resource_missing') return;
     logger.error({ err: err?.message, userId, subId }, '[subscription] suppression de compte : annulation Stripe échouée');
     throw Object.assign(
-      new Error("Impossible d'annuler ton abonnement pour le moment. Ton compte n'a pas été supprimé — réessaie dans quelques minutes."),
+      new Error("Impossible d'annuler votre abonnement pour le moment. Votre compte n'a pas été supprimé — réessayez dans quelques minutes."),
       { status: 502, code: 'STRIPE_CANCEL_FAILED' },
     );
   }

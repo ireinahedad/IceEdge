@@ -457,7 +457,7 @@ export function SettingsTab({
           Le total vient du serveur (`limit`), jamais d'une constante d'ici — il
           est dérivé du prix de l'abonnement et bouge avec lui. */}
       <div className="icy-card rounded-2xl p-4 flex flex-col gap-2">
-        <p className="text-white text-xs font-medium">{t("profile.aiUsage")}</p>
+        <p className="text-white text-xs font-medium">{t(features.aiBetBuilder ? "profile.aiUsage" : "profile.aiUsageLlm")}</p>
 
         {llmUsageFailed ? (
           <p className="text-white/40 text-[11px]">{t("profile.aiUsageFailed")}</p>
@@ -494,7 +494,7 @@ export function SettingsTab({
               );
             })()}
 
-            <p className="text-white/40 text-[11px]">{t("profile.aiUsageShared")}</p>
+            {features.aiBetBuilder && <p className="text-white/40 text-[11px]">{t("profile.aiUsageShared")}</p>}
             <p className="text-white/40 text-[11px]">{t("profile.aiUsageOver")}</p>
           </>
         ) : (
@@ -504,7 +504,7 @@ export function SettingsTab({
             </p>
             {/* Bet builder IA : sur la clé perso si elle existe, sinon les essais
                 offerts du jour (compteur serveur, `freeParse`). */}
-            {llmUsage.ownKey ? (
+            {!features.aiBetBuilder ? null : llmUsage.ownKey ? (
               <p className="text-white/40 text-[11px]">{t("cmd.aiOwnKey")}</p>
             ) : llmUsage.freeParse ? (
               <p className="text-white/40 text-[11px]">

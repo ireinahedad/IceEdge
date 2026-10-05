@@ -605,13 +605,17 @@ router.post("/parlay", validateBody(parlayPredictionSchema), async (req: Request
   }
 });
 
-// GET /api/predict/markets/game/:id
-router.get("/markets/game/:id", (_req: Request, res: Response) => {
+// GET /api/predict/markets/game[/:id] — GET /api/predict/markets/player[/:id]
+//
+// Catalogue STATIQUE des types de marchés : il ne dépend ni du match ni du
+// joueur. L'`:id` était obligatoire et ignoré, ce qui laissait croire à un
+// catalogue par match (2026-10-05). Il devient optionnel — les anciennes URL
+// répondent pareil — et la forme sans identifiant est la forme honnête.
+router.get("/markets/game/:id?", (_req: Request, res: Response) => {
   res.json(GAME_MARKET_TYPES);
 });
 
-// GET /api/predict/markets/player/:id
-router.get("/markets/player/:id", (_req: Request, res: Response) => {
+router.get("/markets/player/:id?", (_req: Request, res: Response) => {
   res.json(PLAYER_MARKET_TYPES);
 });
 

@@ -193,11 +193,13 @@ des paris.
 
 ---
 
-## 6. Point ouvert : un gardien absent peut compter double
+## 6. Gardien absent : pas de double comptage (vérifié le 2026-10-05)
 
-Un gardien absent ajouté à la liste d'absents (0.12, facteur Blessures des
-règles) et son remplaçant saisi dans « Qui garde le but ce soir ? » (feature
-ML) alimentent tous deux la prédiction finale. La synchro ajoute le même cas
-tout seul : un n° 1 blessé y entre à 0.12, alors que le modèle ML voit déjà son
-remplaçant par l'usage récent. C'est une question de modèle, pas de saisie. À
-mesurer sur un cas réel avant de s'y fier.
+Les règles et le ML ne voient pas la même chose, donc rien n'est compté deux
+fois dans un même chiffre : les **règles** comptent l'absence (0.12, facteur
+Blessures) mais n'utilisent pas l'identité du partant ; le **ML** utilise le
+partant saisi (« Qui garde le but ce soir ? ») et ignorait jusqu'ici les
+gardiens de la liste d'absents. Corrigé le même jour : un gardien listé absent
+(saisie, longue durée, absent officiel) sort du mélange par usage récent du ML.
+Donc : un n° 1 blessé suffit à faire basculer le ML sur son remplaçant, même
+sans saisir le partant — le saisir reste utile quand on sait QUI part.
