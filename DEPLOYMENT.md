@@ -507,6 +507,7 @@ Ce qui doit rester aligné sur `https://arakice.com` :
 | DNS apex | A / ALIAS vers Vercel (l'apex ne peut pas être un CNAME) |
 | Railway `CORS_ORIGIN` | doit **contenir** `https://arakice.com` (liste séparée par des virgules — garder `https://www.arakice.com` le temps de la transition ne coûte rien) |
 | Railway `CLIENT_URL` | `https://arakice.com` — sert aux redirections post-OAuth et aux retours Stripe |
+| Railway `SESSION_HINT_DOMAIN` | `arakice.com` — témoin `ice_session_hint` lisible par le front : refresh silencieux quand localStorage a été vidé (QA I4, 2026-10-06). Vide = désactivé |
 | Google Cloud Console → OAuth | `https://arakice.com` dans « Authorized JavaScript origins ». `GOOGLE_REDIRECT_URI` pointe sur le **backend**, donc l'hôte du frontend ne l'affecte pas. |
 | Search Console | inspecter et soumettre les URLs **sans** `www` |
 

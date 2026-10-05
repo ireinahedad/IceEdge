@@ -1,1 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;0,900;1,300;1,400&display=swap');
+/* Merriweather est chargée dans index.html, avec Oswald et Inter (une seule requête
+   Google Fonts au lieu d'un @import chaîné derrière le CSS du bundle). Seul le 700
+   est utilisé (titres de HowItWorksSheet, LoginPage, MySlipsTab, betParts). */

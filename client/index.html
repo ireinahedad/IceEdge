@@ -49,11 +49,13 @@
     <meta name="twitter:image" content="https://arakice.com/arakice-og.png" />
     <meta name="twitter:image:alt" content="ArakIce, NHL predictions powered by ML" />
 
-    <!-- Fonts: Oswald (display/numbers) + Inter (body) -->
+    <!-- Fonts: Oswald (display/numbers) + Inter (body) + Merriweather 700 (5 titres).
+         Une seule requête : Merriweather venait d'un @import dans fonts.css, découvert
+         après le CSS du bundle — 580 ms de chaîne bloquante (PSI mobile, 2026-10-06). -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@700&display=swap"
       rel="stylesheet"
     />
 
