@@ -26,6 +26,7 @@ Usage :
     python build_dataset.py
 """
 
+import bisect
 import json
 import os
 import sys
@@ -530,6 +531,43 @@ def build_star_features() -> tuple[pd.DataFrame | None, dict]:
     sk["ppg"] = (sk.groupby("playerId")["I_F_points"]
                    .transform(lambda s: s.shift(1).ewm(halflife=15, min_periods=5).mean()))
 
+    # ── Qui appartient encore à l'équipe (INCOHERENCES_ML.md #7, 2026-10-05) ──
+    # Avant : tout joueur vu sur les 10 derniers matchs du club et absent ce
+    # soir comptait comme ABSENT — y compris un joueur échangé ou parti à
+    # l'intersaison, « absent » de son ancien club pendant 10 matchs. Le
+    # service, lui, ne compte que les absents que le serveur NOMME (blessés,
+    # écartés, saisie) : le modèle apprenait sur une variable bruitée de faux
+    # absents. Règle commune désormais : un joueur non aligné ce soir est
+    #   • ABSENT s'il rejoue ensuite pour CE club (blessure, choix d'alignement) ;
+    #   • PARTI s'il rejoue ensuite pour un AUTRE club — il sort alors de
+    #     l'effectif du club : ni absent, ni présent ;
+    #   • sans aucun match ultérieur : ABSENT tant qu'on est dans la saison de son
+    #     dernier match (blessé de fin de saison), PARTI dès que le club joue une
+    #     saison suivante sans lui (retraite, Europe, agent libre non signé) —
+    #     sauf dans la saison EN COURS des données, dont on ne connaît pas encore
+    #     la suite (le blessé du match d'ouverture n'est pas un départ).
+    # Regarder la suite des données est voulu : c'est l'information que le
+    # serveur a au moment du match (effectifs, transactions), pas un résultat.
+    # L'état d'inférence (fin de boucle) applique en plus la règle de l'autre
+    # club sur le DERNIER match du joueur ; le service ne compte de toute façon
+    # que les absents nommés.
+    sk["_season"] = sk["gameId"].astype(str).str[:4]
+    open_season = sk["_season"].max()
+    appear: dict = {}
+    for pid, g_ in sk.groupby("playerId", sort=False):
+        # déjà trié par date
+        appear[pid] = (g_["date"].tolist(), g_["team"].tolist(), g_["_season"].iloc[-1])
+
+    def still_with(pid, team, date, season) -> bool:
+        """Le joueur, non aligné ce soir, appartient-il encore à `team` ?"""
+        dates, teams, last_season = appear.get(pid, ((), (), None))
+        i = bisect.bisect_left(dates, date)
+        if i < len(dates):
+            return teams[i] == team
+        return season == last_season or season == open_season
+
+    n_gone = 0
+
     # État incrémental par équipe : {playerId: [ppg, name, idx dernier match vu, pos]}
     # → top-5 "habituel" = meilleurs ppg parmi les joueurs vus sur les
     #   10 derniers matchs d'équipe. O(n) au lieu de O(n²).
@@ -540,11 +578,18 @@ def build_star_features() -> tuple[pd.DataFrame | None, dict]:
         game_idx = 0
         for gid, gg in g.groupby("gameId", sort=False):
             date = gg["date"].iloc[0]
+            season = str(gid)[:4]
+            playing = set(gg["playerId"])
+            # Partis (échangés, intersaison, retraite) : retirés de l'effectif (#7).
+            for pid in [p for p in roster if p not in playing
+                        and game_idx - roster[p][2] <= 10
+                        and not still_with(p, team, date, season)]:
+                del roster[pid]
+                n_gone += 1
             active = {pid: v for pid, v in roster.items() if game_idx - v[2] <= 10
                       and v[0] == v[0]}                      # exclut NaN
             if active:
                 top5 = sorted(active.items(), key=lambda kv: -kv[1][0])[:5]
-                playing = set(gg["playerId"])
                 present = [kv for kv in top5 if kv[0] in playing]
                 # Absence pondérée (perf + position/trio) sur le pool top-6 F + top-4 D
                 pool = _key_pool(active)
@@ -559,8 +604,11 @@ def build_star_features() -> tuple[pd.DataFrame | None, dict]:
             for pid, ppg, name, pos in zip(gg["playerId"], gg["ppg"], gg["name"], gg["pos"]):
                 roster[pid] = [float(ppg) if ppg == ppg else np.nan, name, game_idx, pos]
             game_idx += 1
+        # État d'inférence : même règle — un joueur dont le DERNIER match est
+        # sous un autre maillot n'est plus dans l'effectif de ce club.
         active = {pid: v for pid, v in roster.items()
-                  if game_idx - v[2] <= 10 and v[0] == v[0]}
+                  if game_idx - v[2] <= 10 and v[0] == v[0]
+                  and appear.get(pid, ((), (), None))[1][-1:] == [team]}
         top5 = sorted(active.items(), key=lambda kv: -kv[1][0])[:5]
         pool = _key_pool(active)
         state[team] = {
@@ -574,7 +622,7 @@ def build_star_features() -> tuple[pd.DataFrame | None, dict]:
                      for pid, ppg, name, grp, rank in pool],
         }
     out = pd.DataFrame(rows)
-    print(f"   ✅ {len(out)} lignes star power")
+    print(f"   ✅ {len(out)} lignes star power · {n_gone} départs retirés des effectifs (échanges, intersaison, retraites)")
     return out, state
 
 
@@ -825,7 +873,8 @@ def main():
     df["total_goals"] = df["home_score"] + df["away_score"]
     df = add_score_targets(df, build_ot_flags())
 
-    # Merge des features par (équipe, gameId MoneyPuck ≠ game_id NHL) → clé (team, date)
+    # Merge des features par clé (team, date). Les gameId MoneyPuck ont le même format que les
+    # game_id NHL (vérifié 2026-10-05), mais (team, date) suffit et reste robuste.
     def merge_side(base, feats, side):
         f = feats.drop(columns=["gameId"], errors="ignore") \
                  .drop(columns=["name"], errors="ignore")

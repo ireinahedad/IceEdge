@@ -1125,6 +1125,7 @@
  "goalies": {
   "ANA": [
    {
+    "id": 8480843,
     "name": "Lukas Dostal",
     "recent_start_share": 0.667,
     "gsax60": 0.1044,
@@ -1133,6 +1134,7 @@
     "share_last10": 0.7
    },
    {
+    "id": 8478024,
     "name": "Ville Husso",
     "recent_start_share": 0.333,
     "gsax60": -0.0257,
@@ -1143,6 +1145,7 @@
   ],
   "BOS": [
    {
+    "id": 8480280,
     "name": "Jeremy Swayman",
     "recent_start_share": 0.667,
     "gsax60": 0.2902,
@@ -1151,6 +1154,7 @@
     "share_last10": 0.6
    },
    {
+    "id": 8476914,
     "name": "Joonas Korpisalo",
     "recent_start_share": 0.333,
     "gsax60": -0.1015,
@@ -1161,6 +1165,7 @@
   ],
   "BUF": [
    {
+    "id": 8480045,
     "name": "Ukko-Pekka Luukkonen",
     "recent_start_share": 0.6,
     "gsax60": 0.0749,
@@ -1169,6 +1174,7 @@
     "share_last10": 0.6
    },
    {
+    "id": 8479312,
     "name": "Alex Lyon",
     "recent_start_share": 0.2,
     "gsax60": 0.1666,
@@ -1179,6 +1185,7 @@
   ],
   "CAR": [
    {
+    "id": 8483548,
     "name": "Brandon Bussi",
     "recent_start_share": 0.533,
     "gsax60": 0.0408,
@@ -1187,6 +1194,7 @@
     "share_last10": 0.6
    },
    {
+    "id": 8475883,
     "name": "Frederik Andersen",
     "recent_start_share": 0.467,
     "gsax60": 0.1915,
@@ -1197,6 +1205,7 @@
   ],
   "CBJ": [
    {
+    "id": 8482982,
     "name": "Jet Greaves",
     "recent_start_share": 0.8,
     "gsax60": 0.3021,
@@ -1205,6 +1214,7 @@
     "share_last10": 0.8
    },
    {
+    "id": 8478007,
     "name": "Elvis Merzlikins",
     "recent_start_share": 0.2,
     "gsax60": -0.0922,
@@ -1215,6 +1225,7 @@
   ],
   "CGY": [
    {
+    "id": 8482445,
     "name": "Devin Cooley",
     "recent_start_share": 0.467,
     "gsax60": 0.1941,
@@ -1223,6 +1234,7 @@
     "share_last10": 0.4
    },
    {
+    "id": 8481692,
     "name": "Dustin Wolf",
     "recent_start_share": 0.467,
     "gsax60": 0.0684,
@@ -1233,6 +1245,7 @@
   ],
   "CHI": [
    {
+    "id": 8481519,
     "name": "Spencer Knight",
     "recent_start_share": 0.667,
     "gsax60": 0.0746,
@@ -1241,6 +1254,7 @@
     "share_last10": 0.8
    },
    {
+    "id": 8482821,
     "name": "Arvid Soderblom",
     "recent_start_share": 0.333,
     "gsax60": -0.1608,
@@ -1251,6 +1265,7 @@
   ],
   "COL": [
    {
+    "id": 8478406,
     "name": "Mackenzie Blackwood",
     "recent_start_share": 0.6,
     "gsax60": 0.0715,
@@ -1259,6 +1274,7 @@
     "share_last10": 0.6
    },
    {
+    "id": 8475809,
     "name": "Scott Wedgewood",
     "recent_start_share": 0.4,
     "gsax60": 0.1089,
@@ -1269,6 +1285,7 @@
   ],
   "DAL": [
    {
+    "id": 8479979,
     "name": "Jake Oettinger",
     "recent_start_share": 0.667,
     "gsax60": 0.1189,
@@ -1277,6 +1294,7 @@
     "share_last10": 0.7
    },
    {
+    "id": 8479193,
     "name": "Casey DeSmith",
     "recent_start_share": 0.333,
     "gsax60": 0.1612,
@@ -1287,6 +1305,7 @@
   ],
   "DET": [
    {
+    "id": 8476434,
     "name": "John Gibson",
     "recent_start_share": 0.8,
     "gsax60": 0.0674,
@@ -1295,6 +1314,7 @@
     "share_last10": 0.7
    },
    {
+    "id": 8475660,
     "name": "Cam Talbot",
     "recent_start_share": 0.2,
     "gsax60": 0.096,
@@ -1305,6 +1325,7 @@
   ],
   "EDM": [
    {
+    "id": 8478971,
     "name": "Connor Ingram",
     "recent_start_share": 0.733,
     "gsax60": 0.086,
@@ -1313,6 +1334,7 @@
     "share_last10": 0.7
    },
    {
+    "id": 8477465,
     "name": "Tristan Jarry",
     "recent_start_share": 0.267,
     "gsax60": 0.0378,
@@ -1323,6 +1345,7 @@
   ],
   "FLA": [
    {
+    "id": 8480193,
     "name": "Daniil Tarasov",
     "recent_start_share": 0.667,
     "gsax60": -0.0576,
@@ -1331,6 +1354,7 @@
     "share_last10": 0.7
    },
    {
+    "id": 8475683,
     "name": "Sergei Bobrovsky",
     "recent_start_share": 0.267,
     "gsax60": 0.1674,
@@ -1341,6 +1365,7 @@
   ],
   "LAK": [
    {
+    "id": 8475311,
     "name": "Darcy Kuemper",
     "recent_start_share": 0.533,
     "gsax60": 0.1383,
@@ -1349,6 +1374,7 @@
     "share_last10": 0.4
    },
    {
+    "id": 8476341,
     "name": "Anton Forsberg",
     "recent_start_share": 0.467,
     "gsax60": 0.1295,
@@ -1359,6 +1385,7 @@
   ],
   "MIN": [
    {
+    "id": 8479406,
     "name": "Filip Gustavsson",
     "recent_start_share": 0.533,
     "gsax60": 0.1467,
@@ -1367,6 +1394,7 @@
     "share_last10": 0.5
    },
    {
+    "id": 8482661,
     "name": "Jesper Wallstedt",
     "recent_start_share": 0.467,
     "gsax60": 0.0131,
@@ -1377,6 +1405,7 @@
   ],
   "MTL": [
    {
+    "id": 8482487,
     "name": "Jakub Dobes",
     "recent_start_share": 0.667,
     "gsax60": 0.286,
@@ -1385,6 +1414,7 @@
     "share_last10": 0.7
    },
    {
+    "id": 8484170,
     "name": "Jacob Fowler",
     "recent_start_share": 0.333,
     "gsax60": 0.1065,
@@ -1395,6 +1425,7 @@
   ],
   "NJD": [
    {
+    "id": 8474596,
     "name": "Jake Allen",
     "recent_start_share": 0.467,
     "gsax60": 0.0537,
@@ -1403,6 +1434,7 @@
     "share_last10": 0.5
    },
    {
+    "id": 8474593,
     "name": "Jacob Markstrom",
     "recent_start_share": 0.4,
     "gsax60": 0.0261,
@@ -1413,6 +1445,7 @@
   ],
   "NSH": [
    {
+    "id": 8477424,
     "name": "Juuse Saros",
     "recent_start_share": 0.533,
     "gsax60": 0.2269,
@@ -1421,6 +1454,7 @@
     "share_last10": 0.6
    },
    {
+    "id": 8481020,
     "name": "Justus Annunen",
     "recent_start_share": 0.467,
     "gsax60": 0.0778,
@@ -1431,6 +1465,7 @@
   ],
   "NYI": [
    {
+    "id": 8478009,
     "name": "Ilya Sorokin",
     "recent_start_share": 0.933,
     "gsax60": 0.3014,
@@ -1439,6 +1474,7 @@
     "share_last10": 0.9
    },
    {
+    "id": 8479496,
     "name": "David Rittich",
     "recent_start_share": 0.067,
     "gsax60": 0.0001,
@@ -1449,6 +1485,7 @@
   ],
   "NYR": [
    {
+    "id": 8478048,
     "name": "Igor Shesterkin",
     "recent_start_share": 0.667,
     "gsax60": 0.3778,
@@ -1457,6 +1494,7 @@
     "share_last10": 0.7
    },
    {
+    "id": 8482193,
     "name": "Dylan Garand",
     "recent_start_share": 0.2,
     "gsax60": 0.073,
@@ -1467,6 +1505,7 @@
   ],
   "OTT": [
    {
+    "id": 8476999,
     "name": "Linus Ullmark",
     "recent_start_share": 0.6,
     "gsax60": 0.1254,
@@ -1475,6 +1514,7 @@
     "share_last10": 0.6
    },
    {
+    "id": 8473503,
     "name": "James Reimer",
     "recent_start_share": 0.4,
     "gsax60": 0.0826,
@@ -1485,6 +1525,7 @@
   ],
   "PHI": [
    {
+    "id": 8478435,
     "name": "Dan Vladar",
     "recent_start_share": 0.667,
     "gsax60": -0.0262,
@@ -1493,6 +1534,7 @@
     "share_last10": 0.7
    },
    {
+    "id": 8481035,
     "name": "Samuel Ersson",
     "recent_start_share": 0.333,
     "gsax60": -0.1528,
@@ -1503,6 +1545,7 @@
   ],
   "PIT": [
    {
+    "id": 8479973,
     "name": "Stuart Skinner",
     "recent_start_share": 0.533,
     "gsax60": 0.1034,
@@ -1511,6 +1554,7 @@
     "share_last10": 0.5
    },
    {
+    "id": 8481668,
     "name": "Arturs Silovs",
     "recent_start_share": 0.467,
     "gsax60": -0.133,
@@ -1521,6 +1565,7 @@
   ],
   "SEA": [
    {
+    "id": 8478916,
     "name": "Joey Daccord",
     "recent_start_share": 0.4,
     "gsax60": 0.0999,
@@ -1529,6 +1574,7 @@
     "share_last10": 0.3
    },
    {
+    "id": 8475831,
     "name": "Philipp Grubauer",
     "recent_start_share": 0.333,
     "gsax60": 0.0647,
@@ -1539,6 +1585,7 @@
   ],
   "SJS": [
    {
+    "id": 8477968,
     "name": "Alex Nedeljkovic",
     "recent_start_share": 0.6,
     "gsax60": -0.0155,
@@ -1547,6 +1594,7 @@
     "share_last10": 0.5
    },
    {
+    "id": 8482137,
     "name": "Yaroslav Askarov",
     "recent_start_share": 0.4,
     "gsax60": -0.066,
@@ -1557,6 +1605,7 @@
   ],
   "STL": [
    {
+    "id": 8480981,
     "name": "Joel Hofer",
     "recent_start_share": 0.667,
     "gsax60": 0.1938,
@@ -1565,6 +1614,7 @@
     "share_last10": 0.7
    },
    {
+    "id": 8476412,
     "name": "Jordan Binnington",
     "recent_start_share": 0.333,
     "gsax60": 0.0311,
@@ -1575,6 +1625,7 @@
   ],
   "TBL": [
    {
+    "id": 8476883,
     "name": "Andrei Vasilevskiy",
     "recent_start_share": 0.733,
     "gsax60": 0.2402,
@@ -1583,6 +1634,7 @@
     "share_last10": 0.7
    },
    {
+    "id": 8477992,
     "name": "Jonas Johansson",
     "recent_start_share": 0.2,
     "gsax60": -0.2557,
@@ -1593,6 +1645,7 @@
   ],
   "TOR": [
    {
+    "id": 8479361,
     "name": "Joseph Woll",
     "recent_start_share": 0.467,
     "gsax60": 0.1707,
@@ -1601,6 +1654,7 @@
     "share_last10": 0.3
    },
    {
+    "id": 8476932,
     "name": "Anthony Stolarz",
     "recent_start_share": 0.267,
     "gsax60": 0.1929,
@@ -1611,6 +1665,7 @@
   ],
   "UTA": [
    {
+    "id": 8478872,
     "name": "Karel Vejmelka",
     "recent_start_share": 0.733,
     "gsax60": 0.091,
@@ -1619,6 +1674,7 @@
     "share_last10": 0.8
    },
    {
+    "id": 8477970,
     "name": "Vitek Vanecek",
     "recent_start_share": 0.267,
     "gsax60": -0.0597,
@@ -1629,6 +1685,7 @@
   ],
   "VAN": [
    {
+    "id": 8480947,
     "name": "Kevin Lankinen",
     "recent_start_share": 0.667,
     "gsax60": -0.1839,
@@ -1637,6 +1694,7 @@
     "share_last10": 0.5
    },
    {
+    "id": 8484268,
     "name": "Nikita Tolopilo",
     "recent_start_share": 0.333,
     "gsax60": -0.0637,
@@ -1647,6 +1705,7 @@
   ],
   "VGK": [
    {
+    "id": 8479394,
     "name": "Carter Hart",
     "recent_start_share": 0.467,
     "gsax60": 0.0568,
@@ -1655,6 +1714,7 @@
     "share_last10": 0.7
    },
    {
+    "id": 8478499,
     "name": "Adin Hill",
     "recent_start_share": 0.4,
     "gsax60": 0.0591,
@@ -1665,6 +1725,7 @@
   ],
   "WPG": [
    {
+    "id": 8476945,
     "name": "Connor Hellebuyck",
     "recent_start_share": 0.8,
     "gsax60": 0.3084,
@@ -1673,6 +1734,7 @@
     "share_last10": 0.8
    },
    {
+    "id": 8477480,
     "name": "Eric Comrie",
     "recent_start_share": 0.2,
     "gsax60": -0.0039,
@@ -1683,6 +1745,7 @@
   ],
   "WSH": [
    {
+    "id": 8480313,
     "name": "Logan Thompson",
     "recent_start_share": 0.867,
     "gsax60": 0.2706,
@@ -1691,6 +1754,7 @@
     "share_last10": 0.8
    },
    {
+    "id": 8479292,
     "name": "Charlie Lindgren",
     "recent_start_share": 0.067,
     "gsax60": 0.0517,
@@ -14655,11 +14719,6 @@
      "ppg": 1.051
     },
     {
-     "id": 8474141,
-     "name": "Patrick Kane",
-     "ppg": 0.997
-    },
-    {
      "id": 8477946,
      "name": "Dylan Larkin",
      "ppg": 0.979
@@ -14673,9 +14732,14 @@
      "id": 8482078,
      "name": "Lucas Raymond",
      "ppg": 0.797
+    },
+    {
+     "id": 8477429,
+     "name": "Andrew Copp",
+     "ppg": 0.528
     }
    ],
-   "star_power_full": 3.027,
+   "star_power_full": 2.8814,
    "keys": [
     {
      "id": 8479337,
@@ -14685,18 +14749,11 @@
      "w": 1.0514
     },
     {
-     "id": 8474141,
-     "name": "Patrick Kane",
-     "ppg": 0.997,
-     "pos": "F",
-     "w": 0.997
-    },
-    {
      "id": 8477946,
      "name": "Dylan Larkin",
      "ppg": 0.979,
      "pos": "F",
-     "w": 0.8318
+     "w": 0.9786
     },
     {
      "id": 8482078,
@@ -14710,7 +14767,7 @@
      "name": "Andrew Copp",
      "ppg": 0.528,
      "pos": "F",
-     "w": 0.3696
+     "w": 0.4488
     },
     {
      "id": 8474037,
@@ -14718,6 +14775,13 @@
      "ppg": 0.398,
      "pos": "F",
      "w": 0.2787
+    },
+    {
+     "id": 8477456,
+     "name": "J.T. Compher",
+     "ppg": 0.387,
+     "pos": "F",
+     "w": 0.2706
     },
     {
      "id": 8481542,
@@ -15583,14 +15647,14 @@
      "ppg": 1.035
     },
     {
-     "id": 8475692,
-     "name": "Mats Zuccarello",
-     "ppg": 0.921
-    },
-    {
      "id": 8477451,
      "name": "Ryan Hartman",
      "ppg": 0.786
+    },
+    {
+     "id": 8478493,
+     "name": "Joel Eriksson Ek",
+     "ppg": 0.78
     }
    ],
    "star_power_full": 3.2971,
@@ -15610,13 +15674,6 @@
      "w": 1.1258
     },
     {
-     "id": 8475692,
-     "name": "Mats Zuccarello",
-     "ppg": 0.921,
-     "pos": "F",
-     "w": 0.7829
-    },
-    {
      "id": 8477451,
      "name": "Ryan Hartman",
      "ppg": 0.786,
@@ -15628,7 +15685,7 @@
      "name": "Joel Eriksson Ek",
      "ppg": 0.78,
      "pos": "F",
-     "w": 0.5463
+     "w": 0.6634
     },
     {
      "id": 8475765,
@@ -15636,6 +15693,13 @@
      "ppg": 0.642,
      "pos": "F",
      "w": 0.4497
+    },
+    {
+     "id": 8475149,
+     "name": "Marcus Johansson",
+     "ppg": 0.561,
+     "pos": "F",
+     "w": 0.3926
     },
     {
      "id": 8480800,
@@ -15747,25 +15811,25 @@
      "w": 1.631
     },
     {
-     "id": 8481524,
-     "name": "Bowen Byram",
-     "ppg": 0.538,
-     "pos": "D",
-     "w": 0.8603
-    },
-    {
      "id": 8480807,
      "name": "Mattias Samuelsson",
      "ppg": 0.452,
      "pos": "D",
-     "w": 0.5426
+     "w": 0.7235
     },
     {
-     "id": 8479378,
-     "name": "Logan Stanley",
-     "ppg": 0.365,
+     "id": 8482671,
+     "name": "Owen Power",
+     "ppg": 0.345,
      "pos": "D",
-     "w": 0.4375
+     "w": 0.4144
+    },
+    {
+     "id": 8479982,
+     "name": "Conor Timmins",
+     "ppg": 0.225,
+     "pos": "D",
+     "w": 0.2696
     }
    ]
   },
@@ -15787,14 +15851,14 @@
      "ppg": 1.093
     },
     {
-     "id": 8478178,
-     "name": "Darren Raddysh",
-     "ppg": 0.919
-    },
-    {
      "id": 8478519,
      "name": "Anthony Cirelli",
      "ppg": 0.755
+    },
+    {
+     "id": 8478010,
+     "name": "Brayden Point",
+     "ppg": 0.73
     }
    ],
    "star_power_full": 3.917,
@@ -15842,13 +15906,6 @@
      "w": 0.3807
     },
     {
-     "id": 8478178,
-     "name": "Darren Raddysh",
-     "ppg": 0.919,
-     "pos": "D",
-     "w": 1.4707
-    },
-    {
      "id": 8474151,
      "name": "Ryan McDonagh",
      "ppg": 0.453,
@@ -15860,7 +15917,7 @@
      "name": "Charle-Edouard D'Astous",
      "ppg": 0.436,
      "pos": "D",
-     "w": 0.5231
+     "w": 0.6974
     },
     {
      "id": 8482655,
@@ -15868,16 +15925,18 @@
      "ppg": 0.327,
      "pos": "D",
      "w": 0.3928
+    },
+    {
+     "id": 8482929,
+     "name": "Emil Lilleberg",
+     "ppg": 0.257,
+     "pos": "D",
+     "w": 0.308
     }
    ]
   },
   "OTT": {
    "top5": [
-    {
-     "id": 8480801,
-     "name": "Brady Tkachuk",
-     "ppg": 1.026
-    },
     {
      "id": 8482116,
      "name": "Tim Sttzle",
@@ -15897,17 +15956,15 @@
      "id": 8481528,
      "name": "Dylan Cozens",
      "ppg": 0.669
+    },
+    {
+     "id": 8481596,
+     "name": "Shane Pinto",
+     "ppg": 0.635
     }
    ],
-   "star_power_full": 2.8902,
+   "star_power_full": 2.6993,
    "keys": [
-    {
-     "id": 8480801,
-     "name": "Brady Tkachuk",
-     "ppg": 1.026,
-     "pos": "F",
-     "w": 1.0261
-    },
     {
      "id": 8482116,
      "name": "Tim Sttzle",
@@ -15920,7 +15977,7 @@
      "name": "Drake Batherson",
      "ppg": 0.835,
      "pos": "F",
-     "w": 0.7099
+     "w": 0.8352
     },
     {
      "id": 8481528,
@@ -15934,7 +15991,7 @@
      "name": "Shane Pinto",
      "ppg": 0.635,
      "pos": "F",
-     "w": 0.4442
+     "w": 0.5394
     },
     {
      "id": 8482092,
@@ -15942,6 +15999,13 @@
      "ppg": 0.5,
      "pos": "F",
      "w": 0.3499
+    },
+    {
+     "id": 8478020,
+     "name": "Michael Amadio",
+     "ppg": 0.469,
+     "pos": "F",
+     "w": 0.3281
     },
     {
      "id": 8482105,
@@ -16134,18 +16198,18 @@
      "w": 0.4956
     },
     {
-     "id": 8476927,
-     "name": "Teddy Blueger",
-     "ppg": 0.44,
-     "pos": "F",
-     "w": 0.3077
-    },
-    {
      "id": 8481024,
      "name": "Linus Karlsson",
      "ppg": 0.425,
      "pos": "F",
      "w": 0.2974
+    },
+    {
+     "id": 8475169,
+     "name": "Evander Kane",
+     "ppg": 0.415,
+     "pos": "F",
+     "w": 0.2906
     },
     {
      "id": 8479425,
@@ -16162,18 +16226,18 @@
      "w": 0.4524
     },
     {
-     "id": 8477969,
-     "name": "Marcus Pettersson",
-     "ppg": 0.263,
-     "pos": "D",
-     "w": 0.3156
-    },
-    {
      "id": 8484240,
      "name": "Tom Willander",
      "ppg": 0.256,
      "pos": "D",
      "w": 0.3078
+    },
+    {
+     "id": 8476467,
+     "name": "Jamie Oleksiak",
+     "ppg": 0.223,
+     "pos": "D",
+     "w": 0.2679
     }
    ]
   },
@@ -16257,18 +16321,11 @@
      "w": 1.4397
     },
     {
-     "id": 8480434,
-     "name": "Sean Durzi",
-     "ppg": 0.418,
-     "pos": "D",
-     "w": 0.668
-    },
-    {
      "id": 8478507,
      "name": "John Marino",
      "ppg": 0.412,
      "pos": "D",
-     "w": 0.4949
+     "w": 0.6598
     },
     {
      "id": 8477346,
@@ -16276,6 +16333,13 @@
      "ppg": 0.347,
      "pos": "D",
      "w": 0.4164
+    },
+    {
+     "id": 8480084,
+     "name": "Nick DeSimone",
+     "ppg": 0.234,
+     "pos": "D",
+     "w": 0.2804
     }
    ]
   },
@@ -16461,25 +16525,25 @@
      "w": 1.707
     },
     {
-     "id": 8478854,
-     "name": "Ryan Shea",
-     "ppg": 0.504,
-     "pos": "D",
-     "w": 0.8061
-    },
-    {
-     "id": 8478450,
-     "name": "Parker Wotherspoon",
-     "ppg": 0.449,
-     "pos": "D",
-     "w": 0.5385
-    },
-    {
      "id": 8471724,
      "name": "Kris Letang",
      "ppg": 0.447,
      "pos": "D",
-     "w": 0.5367
+     "w": 0.7156
+    },
+    {
+     "id": 8479398,
+     "name": "Samuel Girard",
+     "ppg": 0.34,
+     "pos": "D",
+     "w": 0.4084
+    },
+    {
+     "id": 8482470,
+     "name": "Ilya Solovyov",
+     "ppg": 0.295,
+     "pos": "D",
+     "w": 0.3543
     }
    ]
   },
@@ -16535,18 +16599,11 @@
      "w": 0.6748
     },
     {
-     "id": 8475184,
-     "name": "Chris Kreider",
-     "ppg": 0.694,
-     "pos": "F",
-     "w": 0.5902
-    },
-    {
      "id": 8475798,
      "name": "Mikael Granlund",
      "ppg": 0.661,
      "pos": "F",
-     "w": 0.4625
+     "w": 0.5616
     },
     {
      "id": 8484762,
@@ -16554,6 +16611,13 @@
      "ppg": 0.657,
      "pos": "F",
      "w": 0.4598
+    },
+    {
+     "id": 8482745,
+     "name": "Mason McTavish",
+     "ppg": 0.53,
+     "pos": "F",
+     "w": 0.3713
     },
     {
      "id": 8474590,
@@ -16651,11 +16715,11 @@
      "w": 0.5624
     },
     {
-     "id": 8481711,
-     "name": "Matias Maccelli",
-     "ppg": 0.561,
+     "id": 8484158,
+     "name": "Easton Cowan",
+     "ppg": 0.534,
      "pos": "F",
-     "w": 0.3927
+     "w": 0.3739
     },
     {
      "id": 8478178,
@@ -16957,11 +17021,11 @@
      "w": 0.3621
     },
     {
-     "id": 8478458,
-     "name": "Jack Roslovic",
-     "ppg": 0.504,
+     "id": 8481617,
+     "name": "Vasily Podkolzin",
+     "ppg": 0.471,
      "pos": "F",
-     "w": 0.3531
+     "w": 0.3295
     },
     {
      "id": 8480803,
@@ -17205,11 +17269,6 @@
      "ppg": 0.961
     },
     {
-     "id": 8480893,
-     "name": "Kirill Marchenko",
-     "ppg": 0.836
-    },
-    {
      "id": 8484166,
      "name": "Adam Fantilli",
      "ppg": 0.792
@@ -17223,17 +17282,15 @@
      "id": 8475745,
      "name": "Charlie Coyle",
      "ppg": 0.662
+    },
+    {
+     "id": 8476432,
+     "name": "Boone Jenner",
+     "ppg": 0.497
     }
    ],
-   "star_power_full": 2.5887,
+   "star_power_full": 2.4986,
    "keys": [
-    {
-     "id": 8480893,
-     "name": "Kirill Marchenko",
-     "ppg": 0.836,
-     "pos": "F",
-     "w": 0.8356
-    },
     {
      "id": 8484166,
      "name": "Adam Fantilli",
@@ -17246,7 +17303,7 @@
      "name": "Mason Marchment",
      "ppg": 0.746,
      "pos": "F",
-     "w": 0.6337
+     "w": 0.7455
     },
     {
      "id": 8475745,
@@ -17260,7 +17317,7 @@
      "name": "Boone Jenner",
      "ppg": 0.497,
      "pos": "F",
-     "w": 0.3482
+     "w": 0.4228
     },
     {
      "id": 8479671,
@@ -17268,6 +17325,13 @@
      "ppg": 0.482,
      "pos": "F",
      "w": 0.3374
+    },
+    {
+     "id": 8477497,
+     "name": "Sean Monahan",
+     "ppg": 0.389,
+     "pos": "F",
+     "w": 0.272
     },
     {
      "id": 8478460,
@@ -17365,11 +17429,11 @@
      "w": 0.4021
     },
     {
-     "id": 8475287,
-     "name": "Erik Haula",
-     "ppg": 0.47,
+     "id": 8484241,
+     "name": "Matthew Wood",
+     "ppg": 0.424,
      "pos": "F",
-     "w": 0.3288
+     "w": 0.2965
     },
     {
      "id": 8474600,
@@ -17424,9 +17488,9 @@
      "ppg": 0.806
     },
     {
-     "id": 8481604,
-     "name": "Pavel Dorofeyev",
-     "ppg": 0.789
+     "id": 8478397,
+     "name": "Rasmus Andersson",
+     "ppg": 0.601
     }
    ],
    "star_power_full": 3.1266,
@@ -17460,18 +17524,18 @@
      "w": 0.6848
     },
     {
-     "id": 8481604,
-     "name": "Pavel Dorofeyev",
-     "ppg": 0.789,
-     "pos": "F",
-     "w": 0.5523
-    },
-    {
      "id": 8476448,
      "name": "William Karlsson",
      "ppg": 0.543,
      "pos": "F",
      "w": 0.3799
+    },
+    {
+     "id": 8476881,
+     "name": "Tomas Hertl",
+     "ppg": 0.525,
+     "pos": "F",
+     "w": 0.3676
     },
     {
      "id": 8478397,

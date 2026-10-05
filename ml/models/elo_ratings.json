@@ -1,6 +1,7 @@
 {
   "base": 1500.0,
   "home_adv": 50.0,
+  "season_regress": 0.3,
   "as_of_date": "2026-09-30",
   "ratings": {
     "ANA": 1473.7,

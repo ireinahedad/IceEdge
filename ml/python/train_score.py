@@ -365,6 +365,51 @@ def fit_market_blend(p_score_val, y_val, mkt_val,
 _CONF_DECILES = [i / 10 for i in range(11)]
 
 
+# ── λ hors échantillon pour les réglages post-modèle (INCOHERENCES_ML.md #9) ──
+
+OOF_FOLDS = 5
+
+
+def oof_lambdas(train_df: pd.DataFrame, feats: list[str], params: dict, n_rounds: int,
+                k: int = OOF_FOLDS, atk_cols: list[str] | None = None,
+                def_cols: list[str] | None = None):
+    """λ « out-of-fold » sur l'entraînement : chaque match est prédit par un
+    modèle qui ne l'a pas vu.
+
+    POURQUOI (2026-10-05, #9). τ, la pente de prolongation et les déciles de
+    confiance étaient ajustés sur les λ du modèle principal prédits sur SES
+    propres matchs d'entraînement — des λ que `fit_gamma` lui-même dit
+    « sur-ajustés, trop dispersés ». Or le service applique ces trois réglages
+    à des λ de matchs jamais vus. Les λ out-of-fold ont la dispersion de ceux
+    du service et gardent toute la taille de l'entraînement (14 600 matchs, au
+    lieu des 2 600 de la validation : 567 prolongations seulement, cf. le
+    garde-fou de niveau de `fit_ot_model`).
+
+    COMMENT. `k` blocs CONTIGUS dans le temps (`train_df` est trié par date) ;
+    chaque bloc est prédit par un modèle entraîné sur les k−1 autres, mêmes
+    hyperparamètres, `n_rounds` fixe (best_iteration du modèle principal) —
+    pas d'arrêt précoce, donc rien ne fuit du bloc prédit. Un modèle qui voit
+    aussi des saisons POSTÉRIEURES au bloc n'est pas un problème ici : on ne
+    mesure pas une performance, on cherche la dispersion des λ hors échantillon.
+    """
+    n = len(train_df)
+    df = train_df.reset_index(drop=True)
+    stacked = stack(df, atk_cols, def_cols)
+    lam_h, lam_a = np.full(n, np.nan), np.full(n, np.nan)
+    edges = np.linspace(0, n, k + 1).astype(int)
+    for i in range(k):
+        lo, hi = edges[i], edges[i + 1]
+        in_blk = (stacked["_row"].values >= lo) & (stacked["_row"].values < hi)
+        m = xgb.train(params, dm(stacked[~in_blk], feats), num_boost_round=n_rounds,
+                      verbose_eval=False)
+        blk = stacked[in_blk]
+        pred = m.predict(dm(blk, feats, with_label=False))
+        rows, sides = blk["_row"].values, blk["_side"].values
+        lam_h[rows[sides == "home"]] = pred[sides == "home"]
+        lam_a[rows[sides == "away"]] = pred[sides == "away"]
+    return lam_h, lam_a
+
+
 def confidence_calibration(lam_h, lam_a) -> dict | None:
     """Distribution de |λ_dom − λ_ext| — la force du signal, vue par le modèle.
 
@@ -383,7 +428,9 @@ def confidence_calibration(lam_h, lam_a) -> dict | None:
 
     Mesurée sur l'ENTRAÎNEMENT, comme τ et `p_ot_home` : ce sont les trois
     constantes du rapport que le service relit, et elles doivent venir de la
-    même tranche pour rester cohérentes entre elles.
+    même tranche pour rester cohérentes entre elles. Depuis le 2026-10-05, sur
+    les λ OUT-OF-FOLD de l'entraînement (`oof_lambdas`, #9) : le service place
+    des λ de matchs jamais vus dans ces déciles.
 
     Rend `None` si la distribution est dégénérée — `ml_service` retombe alors
     sur l'ancienne formule plutôt que sur une jauge collée à une valeur.
@@ -398,7 +445,7 @@ def confidence_calibration(lam_h, lam_a) -> dict | None:
         return None
     return {
         "signal": "abs_lambda_diff",
-        "source": "train",
+        "source": "train_oof",
         "n": int(len(d)),
         "deciles": [round(v, 5) for v in q],
     }
@@ -470,7 +517,8 @@ def fit_ot_model(train_df, lam_h, lam_a, p_ot_home) -> dict | None:
     compression de la distribution elle-même et ne se répare pas ici — cf. le
     poste γ dans `REFACTOR_PLAN.md` §S4, reporté après la saison 2026-27.
 
-    AJUSTÉ SUR L'ENTRAÎNEMENT, comme τ, `p_ot_home` et les déciles de confiance :
+    AJUSTÉ SUR L'ENTRAÎNEMENT (λ out-of-fold depuis le 2026-10-05, #9), comme τ,
+    `p_ot_home` et les déciles de confiance :
     les constantes que `ml_service` relit doivent venir de la même tranche.
     Mesuré, et c'est la raison du garde-fou de niveau : ajusté sur les 567
     prolongations de la VALIDATION, l'ordonnée à l'origine portait le niveau à
@@ -510,7 +558,7 @@ def fit_ot_model(train_df, lam_h, lam_a, p_ot_home) -> dict | None:
     if ll_model >= ll_const:
         return None
 
-    return {"signal": "lambda_diff", "source": "train", "n": n,
+    return {"signal": "lambda_diff", "source": "train_oof", "n": n,
             "w": [round(float(w[0]), 6), round(float(w[1]), 6)],
             "mean_fitted": round(float(p_fit.mean()), 5),
             "logloss_const": round(ll_const, 5),
@@ -666,12 +714,22 @@ def main():
     model = xgb.train(params, dtr, num_boost_round=700, evals=[(dva, "val")],
                       early_stopping_rounds=40, verbose_eval=False)
 
+    # ── λ hors échantillon de l'entraînement (#9) ────────────────────────────
+    # τ, la prolongation et les déciles de confiance s'ajustent sur ces λ-là,
+    # pas sur ceux du modèle principal prédits sur ses propres matchs.
+    n_rounds = int(model.best_iteration) + 1
+    lam_h_in, lam_a_in = lambdas_for(model, feats, s_tr, len(train_df))
+    lam_h_tr, lam_a_tr = oof_lambdas(train_df, feats, params, n_rounds)
+    sd = lambda h, a: float(np.nanstd(np.asarray(h) - np.asarray(a)))
+    print(f"\n🔀 λ out-of-fold ({OOF_FOLDS} blocs, {n_rounds} tours) — écart-type de "
+          f"λdom−λext : dans l'échantillon {sd(lam_h_in, lam_a_in):.4f} · "
+          f"out-of-fold {sd(lam_h_tr, lam_a_tr):.4f}")
+
     # ── Correction de marge τ, ajustée sur TRAIN uniquement ──────────────────
-    lam_h_tr, lam_a_tr = lambdas_for(model, feats, s_tr, len(train_df))
     exp_pmf = expected_margin_pmf(lam_h_tr, lam_a_tr)
     margins_tr = (train_df["home_reg_score"] - train_df["away_reg_score"]).values
     tau = fit_margin_correction(margins_tr, exp_pmf)
-    print(f"\n📐 Correction de marge τ (ajustée sur l'entraînement) :")
+    print(f"\n📐 Correction de marge τ (ajustée sur l'entraînement, λ out-of-fold) :")
     for d in sorted(tau):
         if abs(tau[d] - 1.0) > 0.02:
             print(f"     écart {d:+d} : ×{tau[d]:.3f}")

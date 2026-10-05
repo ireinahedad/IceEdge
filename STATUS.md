@@ -1,6 +1,6 @@
 # ArakIce / ICEEDGE — Project status
 
-**Single source of truth for what is done and what remains. Updated 2026-10-04 (ML level recalibration, odds backfill plan).**
+**Single source of truth for what is done and what remains. Updated 2026-10-05 (season-start checks done, live predictions shipped, prod QA F1/F2, cleanup).**
 
 Built by reading every planning doc in the repo (plus the deleted `RESTE_A_FAIRE.md`,
 recovered from Git) and checking each claim against the code and the Git log.
@@ -46,8 +46,7 @@ recovered from Git) and checking each claim against the code and the Git log.
 - ✔ Manual inputs (goalies, scratches, injuries, referees) moved to the database (migration
   034), editable from the phone (Profile → Settings → Manual input).
 - ✔ `/nhl-predictions` infinite render loop fixed (commit `ee9b880`, 2026-09-16).
-- ✔ **No more hard-coded percentages on the prediction pages** (2026-09-24, *not yet committed
-  or deployed*). `/nhl-predictions` is now a game picker over the real match view
+- ✔ **No more hard-coded percentages on the prediction pages** (2026-09-24, committed on `master`). `/nhl-predictions` is now a game picker over the real match view
   (`GamePrediction`); the match, team and player pages show only server-computed rule
   percentages — skeleton while loading, error + "Retry" if the server fails, never a local
   number. Fake "Ask LLM" answer removed. Client `typecheck` and `vite build` pass (fresh Linux
@@ -97,6 +96,29 @@ recovered from Git) and checking each claim against the code and the Git log.
   (`/api/nhl/predictions/player/8471214`).
 - ✔ Running banner shows `EMAIL_VERIFICATION_DISABLED: false` and `SOCKET_ADAPTER: redis`
   (`REDIS_URL` set — a Redis service runs in the Railway project).
+
+### Season start + production checks (2026-10-05)
+- ✔ Model % back on the home page game cards (`SHOW_MODEL_PCT_ON_HOME = true`, `LandingCards.tsx`).
+- ✔ 84-game season in `POST /api/predict/player-prop` (`REGULAR_SEASON_GAMES = 84`, only the current
+  season counts). Left on 82 on purpose: the GP-based confidence scale in `ml_service.py`.
+- ✔ ML data through 2026-04-16 (end of 2025-26); score model v2 retrained 2026-09-27 (`p_ot_model`).
+- 📄 Railway checks done: no `DORMANT`, odds logger running (`ODDS_API_KEY acceptée`, 6 slots),
+  Odds API key rotated, public slips switched on (`PUBLIC_SLIPS_SINCE`).
+- ✔ Live predictions (phase 1 + 2) merged into `master` (`claude/laughing-davinci-3ver59`) —
+  📄 checked during a real game.
+- 📄 Email verification: the code arrives at sign-up and at "forgot password" on production.
+- 📄 QA on production: F1 (full auth cycle) and F2 (Pro gating via promo code) passed.
+- ✔ Best Bets UX rework and daily-recap content files committed (working tree clean).
+- ✔ `INCOHERENCES_ML.md` #14 closed: MoneyPuck `gameId` = NHL `game_id` (100 % match from 2009 on),
+  so the player model's context features are filled at training. Only the comment in
+  `build_dataset.py` was wrong — fixed.
+- ✔ `INCOHERENCES_ML.md` #7 and #9 fixed (2026-10-05): absences now count only players still with
+  the team (trades / off-season departures removed — October absence weight halved), and τ, OT slope
+  and confidence deciles are fitted on out-of-fold λ. Score model, classifier (log-loss 0.6656 →
+  0.6644) and correction layer (still ADOPTER, −0.00215/game) retrained; `inference_state.json` rebuilt.
+  **To ship**: commit + push `ml/python/{build_dataset,train_score,backtest_walkforward}.py` and
+  `ml/models/{score_model,score_report,game_model,training_report,feature_importance_game,correction_layer,correction_report,inference_state,elo_ratings}.json`
+  (plus `level_layer.json` after the Monday refresh) — Railway redeploys the ML service.
 
 ### Technical deadlines + dynamic QA (2026-09-26, deployed in `d269448`)
 - ✔ **Node 24** everywhere: `server/Dockerfile` (`node:24-alpine`, both stages), CI and the SEO
@@ -275,7 +297,6 @@ recovered from Git) and checking each claim against the code and the Git log.
 | Item | What is done | What is missing |
 |---|---|---|
 | **Redis / multi-instance** | ✔ Socket.io adapter shipped and **active** (Redis service on Railway, `REDIS_URL` set — checked 2026-09-26) | `RedisRateLimitStore` not written; rate limiters are per process. Needed only before a 2nd instance. |
-| **Public slips (Pro)** | ✔ Code + migrations | Switch-on procedure (§3.2). |
 | **Cloudflare in front of the API** | 📄 Proxy and cache headers in place | Check that it actually caches what the headers allow. |
 | **Budget alerts** | ✔ Thresholds written in `MONITORING.md` | Set them in each console (Railway, Neon, Odds API, LLM, Stripe, Sentry, R2). |
 | **Load testing** | ✔ In-process benches, all green | Real visitor latency against a pre-prod (`loadtest/s1-landing.js`) never run — there is no pre-prod. |
@@ -283,7 +304,7 @@ recovered from Git) and checking each claim against the code and the Git log.
 | **Client tests** | ✔ `typecheck` in CI | No test runner in `client/`. The socket block filter (`visibleMessages` in `RoomChat`) has no guard. |
 | **Google auth token in URL** | ✔ Fragment + Sentry scrubbing | ✔ The `?access_token=` fallback in `AuthCallback.tsx` is still there; remove it now that the deploy window is over. |
 | **SEO match pages** | ✔ Generated and deployed daily | Link `/match` from the app (✔ nothing links to it), submit `sitemap-games.xml` in Search Console, translate `/matchup/`, `/props/` and hubs to French. |
-| **Content engine** | ✔ Pipeline + daily recap copying to Google Drive | Recap files are **uncommitted** (`daily-recap.cmd`, `install-daily-recap.ps1`, logos, edits to `COMMANDS.md`, templates, scripts). Commit them and install the scheduled task. |
+| **Content engine** | ✔ Pipeline + daily recap copying to Google Drive | ✔ Recap files committed. Install the scheduled task (§3.11). |
 | **Manual input — absent goalie** | ✔ Stored in DB | A goalie entered in both "Injuries" and "Tonight's lineups" may count twice. Check on a real case. |
 
 ---
@@ -292,49 +313,12 @@ recovered from Git) and checking each claim against the code and the Git log.
 
 ### 3.1 Before the iOS freeze / before launch — blocking
 
-- [ ] **Email verification — test it** (decided 2026-09-26): ✔ `EMAIL_VERIFICATION_DISABLED=false` is already
-      in the running banner. Left: sign up with a throwaway address and check the code arrives. Resend is live since 2026-09-26, so nothing
-      else blocks it. Accounts created while it was off were marked verified at sign-up (`auth.service.ts`),
-      so nobody gets locked out; an older unverified account gets in through "forgot password".
-      Also confirm the `_dmarc` TXT exists (`p=none`, reports to `support.arakice@gmail.com`).
-- [ ] **Critical QA**: F1 (full auth cycle), F2 (Pro gating end to end), C1 (iOS Safari:
-      login → prediction → payment on a real iPhone). Runbooks in `QA_TEST_PLAN.md`. **On production**
-      with 2–3 throwaway accounts (no staging, §6); F2 gets Pro through a promo code, not a real payment.
-      ✔ 2026-09-26: F1, F2 (webhook path), F6 and the dynamic security checks already pass on a local
-      production-mode stack (§3.7) — on production only the real-world parts remain (sign-up code,
-      promo redeem, C1).
-- [ ] **Rotate the Odds API key — 2026-09-29, when the paid plan is bought.** The key that once sat in
-      `DEPLOYMENT.md` (still in Git history) **is the live one** (confirmed 2026-09-26). Regenerate it in
-      the dashboard, paste the new one in Railway, Deploy, and check the banner line
-      `ODDS_API_KEY acceptée`. (The DB password that leaked was a local one — no rotation needed;
-      history purge was abandoned on purpose.)
+- [ ] **Critical QA — C1 only left**: iOS Safari on a real iPhone (login → prediction → payment).
+      Runbook in `QA_TEST_PLAN.md`. F1 and F2 passed on production on 2026-10-05 (§1).
+- [ ] Confirm the `_dmarc` TXT exists in Cloudflare DNS (`p=none`, reports to `support.arakice@gmail.com`).
 
 ### 3.2 At the start of the NHL 2026-27 season (started 2026-09-29)
 
-- [x] **Model % back on the home page game cards** — `SHOW_MODEL_PCT_ON_HOME = true` in
-      `LandingCards.tsx` (2026-09-30, *not yet committed or deployed*). Only the live-card bar and
-      the edge badge still read that flag.
-- [x] **84-game season** — `POST /api/predict/player-prop` (season-long props) projected pace and
-      "games remaining" on 82, and read LAST season's totals as this season's for any player
-      who had not played yet (`pickSeasonRow` falls back to the previous season): a player
-      with 82 GP last year showed "2 games remaining". Now `REGULAR_SEASON_GAMES = 84` and only
-      `statsSeason === currentSeason()` counts (`ml.routes.ts`, 2026-09-30, *not yet committed*).
-      Left on 82 on purpose: the GP-based confidence scale in `ml_service.py` (heuristic, capped).
-- [x] **ML data** — dataset, `inference_state.json` and `player_state.json` go to 2026-04-16, the
-      last day of 2025-26 (✔ `games_spine.csv` ends on game `2025021312`); score model v2 retrained
-      2026-09-27 with the per-matchup OT share (`p_ot_model`). Nothing newer exists until 2026-27
-      games are played → next step is the monthly retrain (§3.5).
-- [ ] **Turn on public slips** — decided 2026-09-30: open **today**, no real users yet (test
-      accounts only). Migrations 029/030 ✔ already on Neon (everything through 037). Left, on your
-      side: `npm run notify:slips -- --date 2026-09-30` (dry run only — if it lists only test
-      accounts, no `--send`), then Railway → Node service →
-      `PUBLIC_SLIPS_SINCE=2026-09-30T00:00:00Z` → Deploy, then the checks of `DEPLOYMENT.md` §7.
-- [ ] **`DORMANT` off** — check the Railway banner has no `DORMANT=true` (`DEPLOYMENT.md` §1):
-      with it on, bets placed since the season opener are not settled and the odds logger sleeps.
-- [ ] **Odds logger (A1bis)**: check the banner (`ODDS_API_KEY acceptée`, `slots: 6`, no
-      `DORMANT=true`), then `/dev/ml` → Data → "Série temporelle des cotes": `passes_today = 6`,
-      `with_puckline > 0`. Scheduled check-ins were set for 2026-09-22 and 2026-10-13 — read
-      their result. In October, consider `ODDS_LOG_RUN_AT_BOOT=true`.
 - [ ] **SEO**: `npm run seo:gen` once games are played (stats are still 2025-26); redo the Search
       Console export and revise `client/scripts/props-allowlist.json` (mirror every change in
       the exclusion regex of `client/vercel.json`); click "Validate fix" on "Redirect error",
@@ -384,8 +368,7 @@ recovered from Git) and checking each claim against the code and the Git log.
       The six `base_prob` markets are ~7 pts too low on clear favourites — do not bet on them.
 - [ ] A4 (goalie confirmation window) and A6 (team totals, OT, ±2.5) — after A1/A2.
 - [ ] Re-train monthly during the season.
-- [ ] **Weekly data refresh**: install the task once (`schtasks` line in `ml/refresh-data.cmd`), then
-      after each run commit + push `ml/models/inference_state.json`, `elo_ratings.json` and
+- [ ] **Weekly data refresh**: ✔ task installed (2026-10-05). After each run, commit + push `ml/models/inference_state.json`, `elo_ratings.json` and
       `level_layer.json` (goal-level k of the season).
 - [ ] Re-run `live_pregame.py && measure_level.py` once 2026-27 is over (adds a season to the level
       measure), and re-run `server/scripts/replay-live.ts`: the 2 puck-drop totals cells should no
@@ -399,11 +382,6 @@ recovered from Git) and checking each claim against the code and the Git log.
       likelihood as `calibrate_live.py` and a replay. `situationCode` is checked (2026-09-30) and the game
       sheet already carries `situation.secondsRemaining`. Also not through the engine yet: P1/P2 cards,
       BTTS. Detail: `LIVE_PREDICTIONS_PLAN.md`.
-- [ ] Deploy live predictions (phase 1 + phase 2): merge `claude/laughing-davinci-3ver59`
-      into `master` — Railway (Node) and Vercel redeploy from GitHub. No Python, no migration
-      (`liveEffects.json` ships with the Node code). Check on the live site during a game: numbers
-      move every 30 s (rules AND ML), a finished period shows 100/0, player cells drop to what is left
-      to reach, and late in P3 with a one-goal gap the puck line / totals rise (pulled goalie).
 
 ### 3.6 Scalability — only on trigger (`AUDIT_SCALABILITE_COUTS.md` §3)
 
@@ -434,8 +412,6 @@ needs a device, a third party or production:
 - [ ] **P1 / P2 / P5 against Railway + Neon** (check `DATABASE_URL` uses `-pooler` first);
       **Lighthouse on arakice.com** — local LCP is still 3.5 s on simulated slow 4G.
 - [x] **Neon restore drill** and Railway + Vercel rollbacks — 2026-09-26 (§1).
-- [ ] **UptimeRobot** probes `HEAD https://api.arakice.com/` every few minutes and gets **404** (seen in
-      the Railway log). Point the monitor at `/health/ready` (expects 200) or it reports the API down.
 - [ ] Re-run `npm run moderation:dry-run` once the chat has real traffic.
 
 ### 3.8 Technical deadlines
@@ -443,8 +419,7 @@ needs a device, a third party or production:
 ✔ Code side done on 2026-09-26 (§1): Node 24, Actions v7/v7/v3, Sentry 10, `pg` sslmode pinned.
 Left, in consoles:
 
-- [ ] **Vercel → Settings → Build and Deployment → Node.js Version: 24.x** (the client builds and
-      type-checks on 24; Vercel ignores the Dockerfile and CI).
+- [x] **Vercel → Node.js Version: 24.x** — set 2026-10-05.
 - [x] Railway: build log `FROM node:24-alpine`, `[Sentry] ✅ armé` prints — 2026-09-26.
 - [ ] `@sentry/node` 11 — later, not before its first patch releases. Its `dataCollection`
       default sends request bodies, cookies and SQL: set it explicitly when upgrading.
@@ -487,7 +462,7 @@ try/catch · tennis bets stuck "pending" in the DB (manual SQL) · server starts
 
 ### 3.11 Content engine — `content/HANDOFF.md` §8
 
-- [ ] Commit the daily-recap work and install the scheduled task (`install-daily-recap.ps1`).
+- [ ] Install the daily-recap scheduled task (`install-daily-recap.ps1`) — the files are committed.
 - [ ] Re-read TikTok/Instagram rules on betting-related content before the first post.
 - [ ] Check `#utahmammoth` against the franchise's official account.
 - [ ] Add `faceoffs_taken` to `build-content-insights.ts`.
@@ -528,9 +503,8 @@ Cheapest providers with bet365 (approx., converted at ~1 £ ≈ 1.35 US$, ~1 US$
       (`probability × real odds`) and show the real bet365 odds instead of the fair odds
       (`100 / pct`). Update the explanation line (`home.bbExplainMl` / `home.bbExplainRules`).
       Until then the list stays ranked by probability.
-- [ ] Commit the Best Bets UX rework (2026-09-25, `BestBetsSection.tsx` + i18n — *not yet
-      committed*): one exclusive tier selector, new rows, translated labels, max 2 bets per
-      game, Rules / AI toggle. Check it on the live site with a Pro account.
+- [ ] Check the Best Bets UX rework (2026-09-25, committed: one tier selector, max 2 bets per game,
+      Rules / AI toggle) on the live site with a Pro account.
 
 ---
 
@@ -552,6 +526,7 @@ Cheapest providers with bet365 (approx., converted at ~1 £ ≈ 1.35 US$, ~1 US$
 | "Cloudflare in front of Railway postponed" (audit line 11) | The proxy is in place; only cache verification remains. |
 | `loadtest/README.md` §7 "S2–S7 not scripted" | Covered by the in-process benches (`loadtest/bench/`). |
 | Supabase | Production database is Neon. |
+| UptimeRobot monitor | Removed on 2026-10-05: its probes used too much Railway compute. If a monitor comes back, point it at `/health/ready`. |
 | `/dev/ml` "run fetch_data.py then train.py" warning | Came from the ML service's `/health`; now only shown when a model is missing (2026-09-26). |
 
 ---

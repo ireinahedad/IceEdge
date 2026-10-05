@@ -1,62 +1,62 @@
 [
   {
-    "name": "elo_diff",
-    "importance": 0.1482
+    "name": "elo_expected",
+    "importance": 0.165
   },
   {
-    "name": "elo_expected",
-    "importance": 0.1399
+    "name": "elo_diff",
+    "importance": 0.1523
   },
   {
     "name": "ev_xgf_pct_l_diff",
-    "importance": 0.0807
+    "importance": 0.1176
   },
   {
     "name": "ev_cf_pct_s_diff",
-    "importance": 0.0743
+    "importance": 0.0831
   },
   {
     "name": "market_home_p_close",
-    "importance": 0.0649
-  },
-  {
-    "name": "b2b_diff",
-    "importance": 0.0615
+    "importance": 0.0677
   },
   {
     "name": "market_home_p_open",
-    "importance": 0.0566
+    "importance": 0.052
   },
   {
     "name": "ev_xgf_pct_s_diff",
-    "importance": 0.0538
+    "importance": 0.0478
+  },
+  {
+    "name": "b2b_diff",
+    "importance": 0.046
   },
   {
     "name": "goalie_gsax60_diff",
-    "importance": 0.0488
+    "importance": 0.0458
   },
   {
     "name": "star_power_diff",
-    "importance": 0.0484
+    "importance": 0.0447
   },
   {
     "name": "stars_out_weight_diff",
-    "importance": 0.0464
-  },
-  {
-    "name": "xg_matchup_diff",
-    "importance": 0.0453
+    "importance": 0.0405
   },
   {
     "name": "rest_days_diff",
-    "importance": 0.0449
+    "importance": 0.0356
   },
   {
-    "name": "win_s_diff",
-    "importance": 0.0431
+    "name": "xg_matchup_diff",
+    "importance": 0.0349
   },
   {
     "name": "finishing_s_diff",
-    "importance": 0.0429
+    "importance": 0.0336
+  },
+  {
+    "name": "win_s_diff",
+    "importance": 0.0334
   }
 ]

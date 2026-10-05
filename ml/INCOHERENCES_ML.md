@@ -24,14 +24,14 @@
 | 4 | ✅ | ~~Value bets : edge calculé sur une probabilité arrondie à l'entier~~ — corrigé le 2026-10-02 | `ml_service.py`, `valueBets.service.ts` |
 | 5 | ✅ | ~~Value bets : la bande 2-6 % a été mesurée sur un autre modèle que celui servi~~ — **mesurée le 2026-10-03** : règle gardée, mais pas rentable selon la clôture (voir la section) | `valueBets.service.ts`, `backtest_walkforward.py` |
 | 6 | ✅ | ~~Couche de correction appliquée à la victoire seulement → tuiles qui ne s'additionnent plus~~ — corrigé le 2026-10-03 (voir la note puck line) | `ml_service.py`, `score_model.py` |
-| 7 | 🟠 | Absences : définies différemment à l'entraînement et au service | `build_dataset.py`, `ml_service.py` |
+| 7 | ✅ | ~~Absences : définies différemment à l'entraînement et au service~~ — corrigé le 2026-10-05 | `build_dataset.py`, `ml_service.py` |
 | 8 | ✅ | ~~Le filtre « début de saison » (`MIN_GP`) ne filtre presque rien~~ — commentaire corrigé le 2026-10-03 (comportement gardé) | `build_dataset.py` |
-| 9 | 🟠 | τ, p_ot et déciles ajustés sur des λ que le code lui-même juge sur-ajustés | `train_score.py` |
+| 9 | ✅ | ~~τ, p_ot et déciles ajustés sur des λ que le code lui-même juge sur-ajustés~~ — corrigé le 2026-10-05 | `train_score.py` |
 | 10 | ✅ | ~~Classifieur : cotes d'ouverture ≠ clôture à l'entraînement, identiques au service ; commentaire « blend jamais actif » faux~~ — corrigé le 2026-10-03 | `train.py`, `ml_service.py` |
 | 11 | ✅ | ~~« Best bets » : classement par probabilité (pas par valeur), règles et ML mélangés, autre modèle joueur~~ — corrigé le 2026-10-03 | `bestBets.service.ts` |
 | 12 | ✅ | ~~`/predict/player` : points AN, victoires de gardien et mises en échec mal estimés~~ — corrigé le 2026-10-03 | `ml_service.py`, `featureEngineering.ts` |
 | 13 | ✅ | ~~Premier buteur : cadence du modèle joueur ÷ buts de match des règles~~ — corrigé le 2026-10-03 | `playerRates.ts` |
-| 14 | 🟠 | Modèle joueur : jointure par `gameId` alors que `build_dataset` dit que les identifiants diffèrent (**à vérifier**) | `train_player.py`, `build_dataset.py` |
+| 14 | ✅ | ~~Modèle joueur : jointure par `gameId` alors que `build_dataset` dit que les identifiants diffèrent~~ — vérifié le 2026-10-05, seul le commentaire était faux | `train_player.py`, `build_dataset.py` |
 | 15 | ✅ | ~~ELO entre deux saisons : 30 % de régression à l'entraînement, 33 % au service~~ — corrigé le 2026-10-03 | `build_dataset.py`, `ml_service.py` |
 | 16 | ✅ | ~~Trois découpages différents des buts par période dans le même service~~ — corrigé le 2026-10-03 | `ml_service.py`, `marginPeriods.ts` |
 | 17 | ✅ | ~~Périodes 1-2 sans correction τ, période 3 avec~~ — pas une incohérence (justifié, 2026-10-03) | `ml_service.py` |
@@ -266,7 +266,9 @@ affichée) change davantage l'espérance que le choix de la bande.
 
 ---
 
-## 🟠 7. Les absences sont définies différemment à l'entraînement et au service
+## ✅ 7. Les absences sont définies différemment à l'entraînement et au service
+
+> **Corrigé le 2026-10-05** (`build_star_features`, `build_dataset.py`). Un joueur non aligné est ABSENT s'il rejoue ensuite pour le même club ; PARTI (retiré de l'effectif : ni absent, ni présent) s'il rejoue ensuite pour un autre club, ou s'il ne rejoue plus du tout alors que son club a entamé une saison suivante — sauf dans la saison en cours des données, dont on ne connaît pas la suite. L'état d'inférence retire aussi le joueur dont le dernier match est sous un autre maillot. Effet : 5 333 départs retirés ; `stars_out_weight` change sur 18 % des matchs, moyenne 0,68 → 0,56, **octobre 1,08 → 0,58** (c'était surtout l'intersaison). Test contrôlé (5 graines, mêmes hyperparamètres) : neutre sur tout le test (log-loss 0,66362 → 0,66365, dans le bruit), meilleur en octobre-novembre (0,67400 → 0,67368). Modèle de score, classifieur et couche de correction réentraînés.
 
 **Où** — `ml/python/build_dataset.py:534-558` (entraînement) ; `ml/python/ml_service.py:2051-2073` (service).
 
@@ -299,7 +301,9 @@ affichée) change davantage l'espérance que le choix de la bande.
 
 ---
 
-## 🟠 9. τ, p_ot et les déciles de confiance sont ajustés sur des λ « sur-ajustés »
+## ✅ 9. τ, p_ot et les déciles de confiance sont ajustés sur des λ « sur-ajustés »
+
+> **Corrigé le 2026-10-05.** `train_score.oof_lambdas` : 5 blocs chronologiques, chaque bloc prédit par un modèle entraîné sur les 4 autres (mêmes hyperparamètres, `best_iteration` fixe). τ, `p_ot_model` et `confidence` s'ajustent sur ces λ (`source: "train_oof"`). Même procédure dans `backtest_walkforward._eval_v2` / `_served_fold`, donc dans la couche de correction. Mesuré : écart-type de λdom−λext 0,504 (dans l'échantillon) → 0,482 (out-of-fold) ; décile 9 de confiance 0,925 → 0,886 ; pente OT 0,293 → 0,307 ; métriques du test inchangées (log-loss moneyline ±0,0001). La jauge de confiance affichée monte de 1 à 5 points sur un même match.
 
 **Où** — `ml/python/train_score.py:670-699` (τ, `p_ot_home`, `fit_ot_model`, `confidence_calibration` sur `lam_h_tr, lam_a_tr`, les λ de l'**entraînement**) vs le commentaire de `fit_gamma` l.417-419 : « sur l'entraînement, les λ sont déjà sur-ajustés — trop dispersés ».
 
@@ -403,7 +407,9 @@ affichée) change davantage l'espérance que le choix de la bande.
 
 ---
 
-## 🟠 14. Modèle joueur : jointure par identifiant de match (**à vérifier**)
+## ✅ 14. Modèle joueur : jointure par identifiant de match
+
+> **Vérifié le 2026-10-05.** Les `gameId` MoneyPuck ont le format NHL : 100 % des matchs patineurs de 2009 et 2025 se retrouvent dans `nhl_games_v4.csv` (2008 : 93 %, matchs d'avant le 2008-10-19 absents du fichier — hors entraînement, qui commence en 2010). Les colonnes `tm_*`, `opp_*`, `b2b`, `rest_days` y sont remplies à 100 % dès 2010. `train_player.py` a raison ; le commentaire de `build_dataset.py` est corrigé (la jointure (équipe, date) y reste valable).
 
 **Où** — `ml/python/train_player.py:152` (`merge(ctx, left_on=["gameId", …], right_on=["game_id", …])`) vs `ml/python/build_dataset.py:825` (« gameId MoneyPuck ≠ game_id NHL » — d'où une jointure par équipe + date).
 
@@ -511,6 +517,6 @@ l'égalité étant l'issue `tie`, gagnante dans ce cas).
 1. ~~#1, #2, #3 et #4~~ : faits le 2026-10-02.
 2. **#4** (arrondi) : un champ à ajouter, protège les value bets.
 3. **#2** (date du match) : un paramètre à faire descendre dans trois fonctions.
-4. **#14** : la vérification de 2 minutes, puis décider.
+4. ~~**#14**~~ : vérifié le 2026-10-05, commentaire seul.
 5. **#5** et **#6** : demandent une mesure (walk-forward) avant de trancher.
 6. Le reste au fil de l'eau.

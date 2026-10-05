@@ -1,121 +1,121 @@
 {
   "game_model": {
     "model": "XGBoost binary:logistic (v4)",
-    "best_iteration": 222,
+    "best_iteration": 274,
     "params": {
-      "max_depth": 5,
+      "max_depth": 3,
       "learning_rate": 0.02,
-      "subsample": 0.9,
-      "colsample_bytree": 0.7,
-      "min_child_weight": 10,
-      "gamma": 0,
-      "reg_alpha": 0.1,
-      "reg_lambda": 10.0
+      "subsample": 0.8,
+      "colsample_bytree": 0.9,
+      "min_child_weight": 1,
+      "gamma": 0.1,
+      "reg_alpha": 1.0,
+      "reg_lambda": 1.0
     },
-    "n_train": 14631,
-    "n_val": 2582,
-    "n_test": 4304,
-    "accuracy": 0.5943,
-    "brier_score": 0.2367,
-    "log_loss": 0.6656,
-    "skill_score": 0.0472,
-    "val_log_loss": 0.6514,
-    "home_win_rate": 0.5459,
+    "n_train": 14637,
+    "n_val": 2583,
+    "n_test": 4305,
+    "accuracy": 0.5895,
+    "brier_score": 0.2362,
+    "log_loss": 0.6644,
+    "skill_score": 0.0494,
+    "val_log_loss": 0.6511,
+    "home_win_rate": 0.546,
     "baselines": {
-      "home_always_accuracy": 0.54,
-      "constant_log_loss": 0.69,
+      "home_always_accuracy": 0.5396,
+      "constant_log_loss": 0.6901,
       "elo_only": {
-        "accuracy": 0.5771,
-        "log_loss": 0.6702,
-        "brier": 0.2389
+        "accuracy": 0.5768,
+        "log_loss": 0.6704,
+        "brier": 0.239
       },
       "market": {
-        "n_with_odds": 1311,
-        "market_accuracy": 0.553,
-        "market_log_loss": 0.6822,
-        "market_brier": 0.2447,
-        "blend_accuracy": 0.5545,
-        "blend_log_loss": 0.6843,
-        "blend_brier": 0.2456,
+        "n_with_odds": 2628,
+        "market_accuracy": 0.5803,
+        "market_log_loss": 0.6705,
+        "market_brier": 0.239,
+        "blend_accuracy": 0.5841,
+        "blend_log_loss": 0.6722,
+        "blend_brier": 0.2398,
         "blend_weights": [
-          0.564,
-          0.6344,
-          -0.0557
+          0.5221,
+          0.6547,
+          -0.0537
         ]
       }
     },
     "calibration": {
       "method": "platt",
-      "a": 1.100919,
-      "b": -0.078121
+      "a": 1.08262,
+      "b": -0.072947
     },
     "blend": {
       "weights": [
-        0.564017,
-        0.634359,
-        -0.055664
+        0.522143,
+        0.654685,
+        -0.05371
       ]
     },
     "feature_importances": [
       {
-        "name": "elo_diff",
-        "importance": 0.1482
+        "name": "elo_expected",
+        "importance": 0.165
       },
       {
-        "name": "elo_expected",
-        "importance": 0.1399
+        "name": "elo_diff",
+        "importance": 0.1523
       },
       {
         "name": "ev_xgf_pct_l_diff",
-        "importance": 0.0807
+        "importance": 0.1176
       },
       {
         "name": "ev_cf_pct_s_diff",
-        "importance": 0.0743
+        "importance": 0.0831
       },
       {
         "name": "market_home_p_close",
-        "importance": 0.0649
-      },
-      {
-        "name": "b2b_diff",
-        "importance": 0.0615
+        "importance": 0.0677
       },
       {
         "name": "market_home_p_open",
-        "importance": 0.0566
+        "importance": 0.052
       },
       {
         "name": "ev_xgf_pct_s_diff",
-        "importance": 0.0538
+        "importance": 0.0478
+      },
+      {
+        "name": "b2b_diff",
+        "importance": 0.046
       },
       {
         "name": "goalie_gsax60_diff",
-        "importance": 0.0488
+        "importance": 0.0458
       },
       {
         "name": "star_power_diff",
-        "importance": 0.0484
+        "importance": 0.0447
       },
       {
         "name": "stars_out_weight_diff",
-        "importance": 0.0464
-      },
-      {
-        "name": "xg_matchup_diff",
-        "importance": 0.0453
+        "importance": 0.0405
       },
       {
         "name": "rest_days_diff",
-        "importance": 0.0449
+        "importance": 0.0356
       },
       {
-        "name": "win_s_diff",
-        "importance": 0.0431
+        "name": "xg_matchup_diff",
+        "importance": 0.0349
       },
       {
         "name": "finishing_s_diff",
-        "importance": 0.0429
+        "importance": 0.0336
+      },
+      {
+        "name": "win_s_diff",
+        "importance": 0.0334
       }
     ]
   },

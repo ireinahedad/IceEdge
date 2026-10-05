@@ -3386,8 +3386,9 @@ def _eval_v2(train_df, test_df, atk, dfn, params, use_gamma: bool) -> dict:
         lh_c, la_c = TS.lambdas_for(m, feats, s_cal, len(cal))
         gamma = TS.fit_gamma(lh_c, la_c, cal["home_win"].to_numpy(float), p_ot_home)
 
-    lh_tr, la_tr = TS.lambdas_for(m, feats, TS.stack(train_df.reset_index(drop=True), atk, dfn),
-                                  len(train_df))
+    # λ out-of-fold, comme `train_score` depuis le 2026-10-05 (INCOHERENCES_ML #9).
+    lh_tr, la_tr = TS.oof_lambdas(train_df, feats, params, int(m.best_iteration) + 1,
+                                  atk_cols=atk, def_cols=dfn)
     lh_tr, la_tr = stretch_lambdas(lh_tr, la_tr, gamma)
     tau = fit_margin_correction(
         (train_df["home_reg_score"] - train_df["away_reg_score"]).to_numpy(),
@@ -3806,7 +3807,8 @@ SERVED_GRID = {
 
 def _served_fold(train_df, test_df, atk, dfn, params) -> dict:
     """Modèle de score d'un fold, tel que servi : λ de la saison testée, τ et
-    prolongation (constante + logistique) ajustés sur le train du fold.
+    prolongation (constante + logistique) ajustés sur le train du fold, sur
+    des λ out-of-fold (`TS.oof_lambdas`, comme `train_score`).
     Même procédure que `_eval_v2`, sans γ (non adopté)."""
     feats = TS.stacked_features(atk, dfn)
     cut = int(len(train_df) * 0.85)
@@ -3816,8 +3818,9 @@ def _served_fold(train_df, test_df, atk, dfn, params) -> dict:
                   early_stopping_rounds=40, verbose_eval=False)
     ot = train_df[train_df["went_to_ot"] == 1]
     p_ot_home = float((ot["home_score"] > ot["away_score"]).mean()) if len(ot) else 0.5
-    lh_tr, la_tr = TS.lambdas_for(m, feats, TS.stack(train_df.reset_index(drop=True), atk, dfn),
-                                  len(train_df))
+    # λ out-of-fold, comme `train_score` depuis le 2026-10-05 (INCOHERENCES_ML #9).
+    lh_tr, la_tr = TS.oof_lambdas(train_df, feats, params, int(m.best_iteration) + 1,
+                                  atk_cols=atk, def_cols=dfn)
     tau = fit_margin_correction(
         (train_df["home_reg_score"] - train_df["away_reg_score"]).to_numpy(),
         TS.expected_margin_pmf(lh_tr, la_tr))
