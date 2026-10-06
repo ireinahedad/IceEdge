@@ -581,14 +581,20 @@ _try_load_models()
 # ne renvoie simplement pas de cadences joueur, et Node garde sa règle.
 _player_models: dict[str, "xgb.Booster"] = {}
 _player_feats: list[str] = []
+# Features PAR statistique (`player_report.json` → stats[s].features) : le
+# face-à-face joueur vs adversaire n'est gardé que pour les stats où il aide.
+_player_feats_by_stat: dict[str, list[str]] = {}
 _player_k: dict[str, float | None] = {}
 _player_state: dict = {}
+# Codes MoneyPuck / anciennes franchises → codes envoyés par Node.
+_PLAYER_FRANCHISE = {"ATL": "WPG", "PHX": "UTA", "ARI": "UTA", "L.A": "LAK", "S.J": "SJS",
+                     "N.J": "NJD", "T.B": "TBL"}
 _PLAYER_TEAM_COLS = ["gf_s", "ga_s", "xgf60_s", "xga60_s", "sog_f_s", "sog_a_s", "ev_xgf60_s",
                      "ev_xga60_s", "pp_xgf60_s", "pk_xga60_s", "goalie_svpct", "goalie_gsax60", "win_s"]
 
 
 def _load_player_model() -> None:
-    global _player_models, _player_feats, _player_k, _player_state
+    global _player_models, _player_feats, _player_k, _player_state, _player_feats_by_stat
     rep_path = os.path.join(MODELS_DIR, "player_report.json")
     st_path = os.path.join(MODELS_DIR, "player_state.json")
     if not (os.path.exists(rep_path) and os.path.exists(st_path)):
@@ -605,12 +611,20 @@ def _load_player_model() -> None:
         with open(st_path) as fh:
             state = json.load(fh)
         _player_models, _player_feats, _player_state = models, list(rep["features"]), state
+        _player_feats_by_stat = {s: list(v.get("features") or rep["features"])
+                                 for s, v in rep["stats"].items()}
         # k « infini » (≥ 1e4) = Poisson : `None` côté API.
         _player_k = {s: (None if v["k"] >= 1e4 else float(v["k"])) for s, v in rep["stats"].items()}
+        vs_stats = [s for s, fs in _player_feats_by_stat.items() if "vs_gp" in fs]
         print(f"[ML] ✅ modèle joueur : {len(models)} stats, "
-              f"{len(state.get('players', {}))} joueurs (état au {state.get('as_of')})")
+              f"{len(state.get('players', {}))} joueurs (état au {state.get('as_of')})"
+              + (f", face-à-face : {', '.join(vs_stats)}" if vs_stats else ""))
+        if vs_stats and not state.get("vs"):
+            print("[ML] ⚠️  modèle joueur avec face-à-face mais player_state.json sans « vs » — "
+                  "relance : python train_player.py --state-only")
     except Exception as e:
         _player_models, _player_feats, _player_k, _player_state = {}, [], {}, {}
+        _player_feats_by_stat = {}
         print(f"[ML] ⚠️  modèle joueur illisible : {e} — cadences joueur désactivées")
 
 
@@ -2698,13 +2712,23 @@ def _player_rates(ctx: dict, f: GameFeatures, home_ids: list[str], away_ids: lis
         return {}
     fv = ctx.get("feat_values") or {}
     players = _player_state.get("players", {})
+    # Face-à-face : { joueur: { adversaire: [vs_gp, lift goals, …] } }. Sans
+    # rencontre passée (ou sans équipe nommée) : vs_gp 0 et lifts 1, exactement
+    # ce que le modèle a vu à l'entraînement pour une première rencontre.
+    vs_all = _player_state.get("vs") or {}
+    vs_names = _player_state.get("vs_features") or []
+    vs_none = {n: (0.0 if n == "vs_gp" else 1.0) for n in vs_names}
+    teams = {"home": (f.home_team or "").upper(), "away": (f.away_team or "").upper()}
     ids, rows = [], []
     for side, other, pids in (("home", "away", home_ids), ("away", "home", away_ids)):
+        opp = _PLAYER_FRANCHISE.get(teams[other], teams[other])
         for pid in pids:
             st = players.get(str(pid))
             if not st:
                 continue
             row = dict(st["f"])
+            vs = (vs_all.get(str(pid)) or {}).get(opp) if opp else None
+            row.update(dict(zip(vs_names, vs)) if vs else vs_none)
             row["is_home"] = 1 if side == "home" else 0
             row["is_D"] = 1 if st.get("pos") == "D" else 0
             row["b2b"] = float(getattr(f, f"{side}_b2b", 0) or 0)
@@ -2713,13 +2737,19 @@ def _player_rates(ctx: dict, f: GameFeatures, home_ids: list[str], away_ids: lis
                 row[f"tm_{c}"] = fv.get(f"{side}_{c}")
                 row[f"opp_{c}"] = fv.get(f"{other}_{c}")
             ids.append(str(pid))
-            rows.append([np.nan if row.get(n) is None else float(row[n]) for n in _player_feats])
+            rows.append(row)
     if not rows:
         return {}
-    dmat = xgb.DMatrix(np.array(rows, dtype=np.float32), feature_names=_player_feats, missing=np.nan)
+    # Une matrice par liste de features (en pratique deux : avec et sans face-à-face).
+    dmats: dict[tuple, "xgb.DMatrix"] = {}
     out: dict[str, dict[str, float]] = {i: {} for i in ids}
     for stat, bst in _player_models.items():
-        for i, mu in zip(ids, bst.predict(dmat)):
+        feats = tuple(_player_feats_by_stat.get(stat) or _player_feats)
+        if feats not in dmats:
+            arr = np.array([[np.nan if r.get(n) is None else float(r[n]) for n in feats] for r in rows],
+                           dtype=np.float32)
+            dmats[feats] = xgb.DMatrix(arr, feature_names=list(feats), missing=np.nan)
+        for i, mu in zip(ids, bst.predict(dmats[feats])):
             out[i][stat] = round(float(mu), 4)
     return out
 

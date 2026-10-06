@@ -486,7 +486,12 @@ tirs, mises en échec, tirs bloqués, minutes de pénalité, points en AN.
 - Entraînement ≤ 2021-22, arrêt précoce sur 2022-23, test 2023-24 → 2025-26.
 - **Dispersion k** (binomiale négative) ajustée par statistique : ≥ 10⁴ = Poisson (buts, passes, points, points AN), 20 (tirs), 8 (mises en échec, tirs bloqués), 0,3 (pénalités).
 - Bat la règle actuelle du serveur sur les 8 statistiques (ex. buts : log-vraisemblance −0,4463 contre −0,4566).
-- **Pour le service** : `player_state.json` = les features de chaque joueur après son dernier match ; le service les combine au contexte du match à venir.
+- **Face-à-face joueur vs adversaire** (2026-10-06, `player_vs_report.json`) : sur ses 10 derniers matchs contre l'adversaire du soir, le joueur a-t-il produit plus ou moins que son niveau du moment ? `vs_lift_<stat>` = réel / attendu (chaque rencontre jugée avec sa cadence pré-match sur 30 matchs × son temps de glace), rétréci vers 1 par un pseudo-compte (`VS_PSEUDO`), plus `vs_gp` (nombre de rencontres). Contrainte monotone +1 sur les lifts : un lift plus haut ne peut que faire monter la prédiction. Essayé pour chaque stat, gardé seulement si la log-vraisemblance s'améliore en validation (2022-23) ET en test (2023-26) avec z ≥ 2.
+  - **Gardé** : mises en échec (z 4,3, les 3 saisons ; lift ≥ 1,2 → +7,8 % observé vs modèle sans face-à-face) et pénalités (z 2,5).
+  - **Rejeté (bruit)** : buts, passes, points, tirs, tirs bloqués, points en AN. Un joueur qui « marque toujours » ou « tire toujours » contre une équipe ne le refait pas plus que d'habitude (tirs : −0,3 % observé pour lift ≥ 1,2). Fenêtre de 20 rencontres testée aussi : même conclusion (seules les pénalités y passent la règle).
+  - Les features sont donc **par statistique** : `player_report.json → stats[s].features`.
+  - Face-à-face **équipe vs équipe** : déjà mesuré et rejeté pour le modèle de score (`live/h2h_report.json`, `keep: false`).
+- **Pour le service** : `player_state.json` = les features de chaque joueur après son dernier match, plus `vs` = { joueur: { adversaire: [vs_gp, lifts…] } } (ordre : `vs_features`) ; le service les combine au contexte du match à venir. Sans rencontre passée ou sans équipe nommée : `vs_gp` 0 et lifts 1, comme à l'entraînement.
 
 ---
 
@@ -815,7 +820,8 @@ visiteur λ_ext = **2,70** (chiffres calculés avec les vrais τ et p_ot du rapp
 | `game_model.json` / `training_report.json` / `feature_importance_game.json` | Classifieur / Platt, mélange, métriques. |
 | `correction_layer.json` / `correction_report.json` | Couche de correction / sa mesure. |
 | `level_layer.json` / `level_report.json` | Recalage de niveau de la saison en cours (k, comptes) / sa mesure et sa règle. |
-| `player/*.json` / `player_report.json` / `player_state.json` | Modèle joueur / rapport / état des joueurs. |
+| `player/*.json` / `player_report.json` / `player_state.json` | Modèle joueur / rapport / état des joueurs (+ face-à-face par adversaire). |
+| `player_vs_report.json` | Mesure du face-à-face joueur vs adversaire, stat par stat (verdict `keep`). |
 | `inference_state.json` | État actuel des équipes, gardiens, alignements, étoiles. |
 | `elo_ratings.json` | Notes ELO actuelles. |
 | `*_report.json`, `live/` | Rapports de mesure. |
