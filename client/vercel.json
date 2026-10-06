@@ -2,6 +2,11 @@
   "cleanUrls": true,
   "redirects": [
     {
+      "source": "/props/:slug(adin-hill|aleksander-barkov|auston-matthews|beckett-sennecke|ben-meyers|berkly-catton|carl-lindbom|collin-graf|cutter-gauthier|danila-yurov|dylan-strome|elias-pettersson-8483678|filip-chytil|filip-forsberg|filip-hronek|frank-nazar|gabe-perreault|ilya-protas|jack-mcbain|jack-quinn|jackson-lacombe|jake-neighbours|jared-mccann|jason-robertson|jiri-kulich|john-tavares|juraj-slafkovsky|justus-annunen|kent-johnson|konsta-helenius|lucas-raymond|mackie-samoskevich|macklin-celebrini|maksymilian-szuber|martin-necas|mason-mctavish|matthew-schaefer|matthew-tkachuk|matthew-wood|mattias-samuelsson|matty-beniers|mavrik-bourque|mikko-rantanen|morgan-frost|moritz-seider|noah-dobson|patrick-kane|porter-martone|sam-dickinson|sam-rinzel|thomas-harley|trevor-zegras|vince-dunn|will-smith|yaroslav-askarov|yegor-sharangovich)",
+      "destination": "/nhl-player-props",
+      "permanent": false
+    },
+    {
       "source": "/props/:slug((?!(?:will-smith|macklin-celebrini|jason-robertson|matthew-schaefer|sam-dickinson|matthew-wood|danila-yurov|mavrik-bourque|kent-johnson|jake-neighbours|martin-necas|cutter-gauthier|frank-nazar|jiri-kulich|lucas-raymond|juraj-slafkovsky|auston-matthews|ilya-protas|jack-quinn|maksymilian-szuber|gabe-perreault|john-tavares|jared-mccann|filip-chytil|berkly-catton|justus-annunen|matty-beniers|mikko-rantanen|vince-dunn|ben-meyers|carl-lindbom|porter-martone|thomas-harley|yaroslav-askarov|filip-forsberg|mattias-samuelsson|sam-rinzel|adin-hill|aleksander-barkov|jackson-lacombe|konsta-helenius|beckett-sennecke|mason-mctavish|collin-graf|dylan-strome|moritz-seider|filip-hronek|yegor-sharangovich|mackie-samoskevich|patrick-kane|noah-dobson|morgan-frost|trevor-zegras|elias-pettersson-8483678|jack-mcbain|matthew-tkachuk)$)[^/]+)",
       "destination": "/nhl-player-props",
       "permanent": true

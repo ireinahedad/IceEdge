@@ -4,7 +4,7 @@ Ce que `QA_TEST_PLAN.md` appelle F1, F2, F3, F6, S1 (IDOR 2 comptes), S2 (JWT, r
 I3 (webhook Stripe), I5 (socket.io), P3 (rate limit), P5 (pool), les deux cas de modération
 jamais vus à l'écran, et R5 (SIGTERM sous trafic) — joué contre une stack **locale** en
 `NODE_ENV=production`. Première exécution : 2026-09-26, 90/90 après correctifs (voir
-`QA_TEST_PLAN.md` § « Exécution du 2026-09-26 »).
+`git show 9b9a907:QA_TEST_PLAN.md`, § « Exécution du 2026-09-26 »).
 
 **Jamais contre la production.** Le script écrit en base, forge des JWT avec le secret de
 l'API et signe des webhooks Stripe avec son secret : il lit tout ça dans le fichier d'env de

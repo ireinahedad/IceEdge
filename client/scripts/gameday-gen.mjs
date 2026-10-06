@@ -56,7 +56,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { layout, slugify, esc, nhlLogo, getJSON, pMap, SITE, API } from "./seo-gen.mjs";
+import { layout, slugify, esc, nhlLogo, getJSON, pMap, SITE, API, fit, TITLE_MAX, DESC_MAX } from "./seo-gen.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DRY = process.argv.includes("--dry");
@@ -117,7 +117,7 @@ const L = {
   en: {
     locale: "en-CA", ogLocale: "en_CA", vs: "vs",
     hubPath: "/match", matchPath: "/match",
-    hubTitle: (d) => `NHL Games ${d} | Every Matchup, Form and Rest | ArakIce`,
+    hubTitle: (d) => `NHL Games ${d} | Matchups, Form and Rest | ArakIce`,
     hubH1: (d) => `NHL games, ${d}`,
     hubDesc: (n, d) => `All ${n} NHL games on ${d}: records, last ten, rest days, back-to-backs and the head to head history for each matchup.`,
     hubLede: "Every game on the slate, with the context that is only true today: who is rested, who is on the second night of a back to back, and how the two clubs have gone against each other.",
@@ -165,7 +165,7 @@ const L = {
   fr: {
     locale: "fr-CA", ogLocale: "fr_CA", vs: "c.",
     hubPath: "/fr/match", matchPath: "/fr/match",
-    hubTitle: (d) => `Matchs de la LNH du ${d} | Fiches, forme et repos | ArakIce`,
+    hubTitle: (d) => `Matchs de la LNH du ${d} | Fiches et forme | ArakIce`,
     hubH1: (d) => `Les matchs de la LNH du ${d}`,
     hubDesc: (n, d) => `Les ${n} matchs de la LNH du ${d} : fiches, dix derniers, jours de repos, matchs en deux soirs et l'historique de chaque confrontation.`,
     hubLede: "Tout le programme, avec ce qui n'est vrai qu'aujourd'hui : qui arrive reposé, qui dispute un deuxième match en deux soirs, et ce que donne l'historique entre les deux clubs.",
@@ -241,6 +241,14 @@ function longDate(iso, lang) {
 function shortDate(iso, lang) {
   return new Intl.DateTimeFormat(L[lang].locale, {
     timeZone: "America/Toronto", day: "numeric", month: "short", year: "numeric",
+  }).format(new Date(iso + "T12:00:00Z"));
+}
+
+// Date sans l'année, pour les titres : « Oct 5 » / « 5 oct. ». L'année est
+// déjà dans l'URL et dans le h1 ; dans le titre elle coûte 6 caractères.
+function dayMonth(iso, lang) {
+  return new Intl.DateTimeFormat(L[lang].locale, {
+    timeZone: "America/Toronto", day: "numeric", month: "short",
   }).format(new Date(iso + "T12:00:00Z"));
 }
 
@@ -584,49 +592,93 @@ function gamePage({ lang, game, a, b, series, ra, rb, final, sameDay }) {
   const isFinal = !!final;
   const state = isFinal ? T.final : ["LIVE", "CRIT"].includes(game.state) ? T.live : T.preview;
 
+  // Titres : surnoms d'équipe (« Flyers vs Lightning ») et date sans l'année,
+  // pour tenir sous TITLE_MAX ; la variante courte prend le relais quand deux
+  // longs surnoms se rencontrent (Blue Jackets c. Golden Knights).
+  const sa = shortName(a, lang), sb = shortName(b, lang);
+  const dm = dayMonth(game.date, lang);
   const title = isFinal
     ? (lang === "fr"
-        ? `${an} c. ${bn}, ${dShort} : résultat et sommaire | ArakIce`
-        : `${an} vs ${bn}, ${dShort}: final score and summary | ArakIce`)
+        ? fit(TITLE_MAX, `${sa} c. ${sb} : résultat et sommaire, ${dm} | ArakIce`, `${sa} c. ${sb} : résultat, ${dm} | ArakIce`)
+        : fit(TITLE_MAX, `${sa} vs ${sb} Final Score & Recap, ${dm} | ArakIce`, `${sa} vs ${sb} Final Score, ${dm} | ArakIce`))
     : (lang === "fr"
-        ? `${an} c. ${bn}, ${dShort} : avant-match et statistiques | ArakIce`
-        : `${an} vs ${bn}, ${dShort}: preview, form and head to head | ArakIce`);
+        ? fit(TITLE_MAX, `${sa} c. ${sb} : pronostic et avant-match, ${dm} | ArakIce`, `${sa} c. ${sb} : pronostic, ${dm} | ArakIce`)
+        : fit(TITLE_MAX, `${sa} vs ${sb} Prediction & Preview, ${dm} | ArakIce`, `${sa} vs ${sb} Prediction, ${dm} | ArakIce`));
 
   const desc = isFinal
     ? (lang === "fr"
-        ? `${an} c. ${bn} du ${dShort} : pointage final, tirs au but, sommaire des buts et les trois étoiles.`
-        : `${an} vs ${bn} on ${dShort}: final score, shots on goal, the goal summary and the three stars.`)
+        ? fit(DESC_MAX, `${an} c. ${bn} du ${dShort} : pointage final, tirs au but, sommaire des buts et les trois étoiles.`,
+                        `${sa} c. ${sb} du ${dShort} : pointage final, tirs, sommaire des buts et trois étoiles.`)
+        : fit(DESC_MAX, `${an} vs ${bn} on ${dShort}: final score, shots on goal, the goal summary and the three stars.`,
+                        `${sa} vs ${sb} on ${dShort}: final score, shots, goal summary and three stars.`))
     : (lang === "fr"
-        ? `${an} c. ${bn} le ${dShort} : fiches, dix derniers matchs, repos, historique des confrontations. Le pronostic du modèle ArakIce s'ouvre dans l'application.`
-        : `${an} vs ${bn} on ${dShort}: records, last ten, rest and travel, and the head to head history. The ArakIce model projection opens in the app.`);
+        ? fit(DESC_MAX, `${an} c. ${bn} le ${dShort} : fiches, dix derniers, repos et historique. Le pronostic d'ArakIce est dans l'application.`,
+                        `${sa} c. ${sb} le ${dShort} : fiches, dix derniers, repos et historique. Le pronostic d'ArakIce est dans l'application.`)
+        : fit(DESC_MAX, `${an} vs ${bn} on ${dShort}: records, last ten, rest and head to head. The ArakIce model projection is in the app.`,
+                        `${sa} vs ${sb} on ${dShort}: records, last ten, rest and head to head. The ArakIce projection is in the app.`));
 
   const eyebrow = [state, faceoffTime(game.startTimeUTC, lang), game.venue].filter(Boolean).join(" · ");
+
+  // Schema : la page (WebPage) parle d'un match (SportsEvent) et se range dans le
+  // site (WebSite déclaré dans index.html). Les @id relient les trois nœuds pour
+  // que Google lise une seule entité par match, pas trois blocs isolés.
+  const pageUrl = SITE + canonical;
+  const startDate = game.startTimeUTC || `${game.date}T23:00:00Z`;
+  // Un match de LNH dure ~2 h 30 ; endDate est « recommandé » par Google pour un
+  // Event. Prolongation et tirs au but compris, 3 h reste une borne honnête.
+  const endDate = new Date(Date.parse(startDate) + 3 * 3600 * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const team = (t, name) => ({
+    "@type": "SportsTeam",
+    name,
+    sport: "Ice hockey",
+    logo: nhlLogo(t.abbr),
+    memberOf: { "@type": "SportsOrganization", name: "National Hockey League" },
+  });
 
   const jsonld = {
     "@context": "https://schema.org",
     "@graph": [
       {
+        "@type": "WebPage",
+        "@id": `${pageUrl}#webpage`,
+        url: pageUrl,
+        name: title,
+        description: desc,
+        inLanguage: T.locale,
+        isPartOf: { "@type": "WebSite", "@id": `${SITE}/#website`, name: "ArakIce", url: `${SITE}/` },
+        about: { "@id": `${pageUrl}#event` },
+        breadcrumb: { "@id": `${pageUrl}#breadcrumb` },
+        primaryImageOfPage: { "@type": "ImageObject", url: `${SITE}/arakice-og.png`, width: 1200, height: 630 },
+        dateModified: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+      },
+      {
         "@type": "SportsEvent",
+        "@id": `${pageUrl}#event`,
         name: `${an} ${T.vs} ${bn}`,
-        startDate: game.startTimeUTC || `${game.date}T23:00:00Z`,
+        description: desc,
+        sport: "Ice hockey",
+        image: `${SITE}/arakice-og.png`,
+        startDate,
+        endDate,
         // `eventStatus` n'a pas de valeur « terminé » chez schema.org : la
         // mettre à EventScheduled sur un match joué serait faux, et un statut
         // inventé fait rejeter tout le bloc. On l'omet une fois le match fini.
         eventStatus: isFinal ? undefined : "https://schema.org/EventScheduled",
         eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
-        url: SITE + canonical,
+        url: pageUrl,
         inLanguage: T.locale,
         location: game.venue ? { "@type": "Place", name: game.venue } : undefined,
-        homeTeam: { "@type": "SportsTeam", name: bn, sport: "Ice hockey" },
-        awayTeam: { "@type": "SportsTeam", name: an, sport: "Ice hockey" },
+        homeTeam: team(b, bn),
+        awayTeam: team(a, an),
         organizer: { "@type": "SportsOrganization", name: "National Hockey League" },
       },
       {
         "@type": "BreadcrumbList",
+        "@id": `${pageUrl}#breadcrumb`,
         itemListElement: [
           { "@type": "ListItem", position: 1, name: T.breadcrumbHome, item: `${SITE}/` },
           { "@type": "ListItem", position: 2, name: T.breadcrumbGames, item: SITE + T.hubPath },
-          { "@type": "ListItem", position: 3, name: `${an} ${T.vs} ${bn}`, item: SITE + canonical },
+          { "@type": "ListItem", position: 3, name: `${an} ${T.vs} ${bn}`, item: pageUrl },
         ],
       },
     ],
@@ -651,7 +703,7 @@ ${statsRow(lang, a, b)}
 ${isFinal ? resultBlock(lang, a, b, final) : contextBlock(lang, a, b, ra, rb)}
 ${seriesBlock(lang, a, b, series)}
     <div class="cta-box">
-      <h3>${esc(isFinal ? T.ctaFinalH : T.ctaH)}</h3>
+      <p class="cta-title">${esc(isFinal ? T.ctaFinalH : T.ctaH)}</p>
       <p>${esc(isFinal ? T.ctaFinalP : T.ctaP(an, bn))}</p>
       <a class="btn" href="${SITE}/">${esc(T.ctaBtn)}</a>
     </div>
@@ -699,7 +751,7 @@ function hubPage({ lang, date, games }) {
 ${games.length ? `        <ul>\n${items}\n        </ul>` : `        <p>${esc(T.hubEmpty)}</p>`}
       </section>
     <div class="cta-box">
-      <h3>${esc(T.hubCtaH)}</h3>
+      <p class="cta-title">${esc(T.hubCtaH)}</p>
       <p>${esc(T.hubCtaP)}</p>
       <a class="btn" href="${SITE}/">${esc(T.ctaBtn)}</a>
     </div>

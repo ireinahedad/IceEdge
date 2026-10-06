@@ -64,11 +64,27 @@ export function fairOdds(pct: number | null | undefined): number | null {
   return Math.round((100 / pct) * 100) / 100;
 }
 
-export function FairOddsPill({ pct, size = "sm", title }: { pct: number | null | undefined; size?: "sm" | "md"; title?: string }) {
+export function FairOddsPill({ pct, size = "sm", title, reserve = false }: {
+  pct: number | null | undefined; size?: "sm" | "md"; title?: string;
+  /**
+   * Garder la place de la pastille tant qu'il n'y a pas de cote (prédiction en
+   * cours de chargement). Sans ça, les cartes de match de l'accueil passaient de
+   * 92 à 99 px à l'arrivée du paquet ML et poussaient tout ce qui suit : CLS
+   * 0,395 sur une seule carte en PSI mobile (2026-10-06).
+   */
+  reserve?: boolean;
+}) {
   const { odds } = useOddsFormat();
   const fair = fairOdds(pct);
-  if (fair == null) return null;
   const text = size === "md" ? "text-sm" : "text-[11px]";
+  if (fair == null) {
+    if (!reserve) return null;
+    return (
+      <span aria-hidden className="invisible inline-flex items-center gap-1 border border-transparent rounded-full px-2 py-0.5">
+        <span className={`${text} font-semibold tabular-nums`}>0.00</span>
+      </span>
+    );
+  }
   return (
     <span
       title={title}

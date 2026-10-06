@@ -636,7 +636,7 @@ export function UpcomingGameRow({ game, onOpenSheet, showOdds = true }: {
           <MlPct value={pl} loading={mlLoading} />
           {showOdds && (plPrice != null
             ? <BookPricePill price={plPrice} link={false} />
-            : <FairOddsPill pct={pl} title={t("home.oddsFairHint")} />)}
+            : <FairOddsPill pct={pl} title={t("home.oddsFairHint")} reserve />)}
         </PickCell>
         {/* Vainqueur */}
         <PickCell
@@ -647,7 +647,7 @@ export function UpcomingGameRow({ game, onOpenSheet, showOdds = true }: {
           <MlPct value={win} loading={mlLoading} />
           {showOdds && (winPrice != null
             ? <BookPricePill price={winPrice} link={false} />
-            : <FairOddsPill pct={win} title={t("home.oddsFairHint")} />)}
+            : <FairOddsPill pct={win} title={t("home.oddsFairHint")} reserve />)}
         </PickCell>
       </>
     );

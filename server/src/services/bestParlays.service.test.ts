@@ -107,6 +107,19 @@ describe('buildBestParlays — les règles', () => {
     }
   });
 
+  it('variété : chaque combiné apporte du neuf, aucune jambe partout', async () => {
+    const { parlays } = await buildBestParlays(SLATE, NOW);
+    const count = new Map<string, number>();
+    for (const p of parlays) for (const l of p.legs) count.set(l.id, (count.get(l.id) ?? 0) + 1);
+    for (const n of count.values()) expect(n).toBeLessThanOrEqual(2);
+    // Les combinés mélangés ne partagent qu'une jambe au plus entre eux.
+    const mixed = parlays.filter((p) => p.kind === 'mixed');
+    for (let i = 0; i < mixed.length; i++) for (let j = i + 1; j < mixed.length; j++) {
+      const a = mixed[i].legs.map((l) => l.id), b = mixed[j].legs.map((l) => l.id);
+      expect(a.filter((x) => b.includes(x)).length).toBeLessThanOrEqual(1);
+    }
+  });
+
   it('cohérence : jamais un joueur adverse avec le vainqueur, ni un under avec une prop offensive', async () => {
     const { parlays } = await buildBestParlays(SLATE, NOW);
     for (const p of parlays) {

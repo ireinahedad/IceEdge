@@ -16,7 +16,11 @@
  *     plutôt qu'un simple empilement des meilleurs paris ;
  *   • probabilité du combiné ≥ 25 %, TOUJOURS — vérifiée sur le chiffre final,
  *     corrélations comprises (`computeParlayProbability`, le calcul du coupon) ;
- *   • pas deux combinés trop semblables (`tooSimilar`).
+ *   • pas deux combinés trop semblables (`tooSimilar`) ;
+ *   • VARIÉTÉ (2026-10-06) : chaque combiné doit apporter du neuf. Une jambe
+ *     ou un match déjà utilisé fait baisser le rang d'un candidat
+ *     (`LEG_REUSE_PENALTY`, `GAME_REUSE_PENALTY`), et deux combinés partagent
+ *     au plus UNE jambe tant que la soirée le permet (`DIVERSITY_LEVELS`).
  *
  * CE QUI N'EST PAS FAIT, EXPRÈS
  *   • Aucun chiffre inventé : moins de matchs → moins de combinés. Un soir à
@@ -48,8 +52,26 @@ const MAX_PLAYER_LEGS = 2;
 const COHERENCE_BONUS = 0.08;
 /** Un match qui commence dans moins de 5 min n'est plus proposé. */
 const START_MARGIN_MS = 5 * 60_000;
-/** Une même jambe dans au plus deux combinés (passe stricte) : sinon le favori du soir est partout. */
-const MAX_LEG_USES = 2;
+/**
+ * Variété : rang d'un candidat × LEG_REUSE_PENALTY par jambe déjà vue dans un
+ * combiné retenu (× 2 si vue deux fois…), × GAME_REUSE_PENALTY par match déjà
+ * vu. Un combiné neuf à 30 % passe donc devant un 40 % qui recycle une jambe.
+ * Le seuil de 25 % reste absolu : la pénalité ne fait que réordonner.
+ */
+const LEG_REUSE_PENALTY = 0.55;
+const GAME_REUSE_PENALTY = 0.85;
+/**
+ * Niveaux d'exigence, du plus varié au plus permissif. On ne descend d'un
+ * niveau que si aucun candidat ne passe (soirée à peu de matchs).
+ *   maxShared : jambes en commun permises avec CHAQUE combiné déjà retenu
+ *               ('half' = au plus la moitié, 'subset' = jamais contenu dedans) ;
+ *   maxUses   : une jambe dans au plus N combinés.
+ */
+const DIVERSITY_LEVELS: { maxShared: 1 | 'half' | 'subset'; maxUses: number }[] = [
+  { maxShared: 1,        maxUses: 2 },
+  { maxShared: 'half',   maxUses: 2 },
+  { maxShared: 'subset', maxUses: Infinity },
+];
 /** Candidats gardés par taille pour la sélection finale. */
 const KEEP_PER_SIZE = 300;
 
@@ -159,13 +181,13 @@ function pairRelation(a: LegInfo, b: LegInfo): -1 | 0 | 1 {
   return 0;
 }
 
-/** Mêmes jambes à plus de la moitié : deux combinés « trop semblables ». */
-function tooSimilar(a: string[], b: string[], strict: boolean): boolean {
+/** Deux combinés « trop semblables » selon le niveau d'exigence (voir `DIVERSITY_LEVELS`). */
+function tooSimilar(a: string[], b: string[], maxShared: 1 | 'half' | 'subset'): boolean {
   const shared = a.filter((id) => b.includes(id)).length;
   const small = Math.min(a.length, b.length);
-  // Strict : au plus la moitié en commun. Relâché (soirée à peu de matchs) :
-  // jamais l'un contenu dans l'autre.
-  return strict ? shared > Math.floor(small / 2) : shared >= small;
+  if (maxShared === 'subset') return shared >= small;
+  if (maxShared === 'half') return shared > Math.floor(small / 2);
+  return shared > maxShared;
 }
 
 // ─── Énumération ─────────────────────────────────────────────────────────────
@@ -311,20 +333,38 @@ export async function buildBestParlays(
   };
 
   const chosen: BestParlay[] = [];
-  const uses = new Map<string, number>();
+  const uses = new Map<string, number>();       // jambe → nb de combinés retenus
+  const gameUses = new Map<string, number>();   // match → nb de combinés retenus
   // Probabilité finale en cache local : un même combiné peut être essayé à
   // plusieurs places.
   const finals = new Map<string, Awaited<ReturnType<typeof computeParlayProbability>>>();
 
-  const tryFill = async (kind: ParlayKind, sizes: number[], strict: boolean): Promise<BestParlay | null> => {
-    for (const size of sizes) {
-      for (const c of combosFor(kind, size)) {
-        const ids = c.legs.map((l) => l.bet.id);
-        const id = idOf(c.legs);
-        // Relâché, `tooSimilar` refuse encore un combiné déjà retenu.
-        if (chosen.some((p) => tooSimilar(ids, p.legs.map((l) => l.id), strict))) continue;
-        if (strict && ids.some((x) => (uses.get(x) ?? 0) >= MAX_LEG_USES)) continue;
+  /** Rang × pénalité de réutilisation : ce qui a déjà servi recule. */
+  const freshRank = (c: Combo) => {
+    let legSeen = 0;
+    for (const l of c.legs) legSeen += uses.get(l.bet.id) ?? 0;
+    let gameSeen = 0;
+    for (const g of new Set(c.legs.map((l) => l.gameId))) gameSeen += gameUses.get(g) ?? 0;
+    return c.rank * Math.pow(LEG_REUSE_PENALTY, legSeen) * Math.pow(GAME_REUSE_PENALTY, gameSeen);
+  };
 
+  const tryFill = async (
+    kind: ParlayKind, sizes: number[], level: (typeof DIVERSITY_LEVELS)[number],
+  ): Promise<BestParlay | null> => {
+    for (const size of sizes) {
+      // Filtres rapides d'abord, puis tri par rang « frais » : le premier qui
+      // passe le chiffre final est le meilleur combiné qui apporte du neuf.
+      const candidates = combosFor(kind, size)
+        .filter((c) => {
+          const ids = c.legs.map((l) => l.bet.id);
+          if (chosen.some((p) => tooSimilar(ids, p.legs.map((l) => l.id), level.maxShared))) return false;
+          return !ids.some((x) => (uses.get(x) ?? 0) >= level.maxUses);
+        })
+        .map((c) => ({ c, fresh: freshRank(c) }))
+        .sort((a, b) => b.fresh - a.fresh || idOf(a.c.legs).localeCompare(idOf(b.c.legs)));
+
+      for (const { c } of candidates) {
+        const id = idOf(c.legs);
         let r = finals.get(id);
         if (!r) {
           r = await computeParlayProbability(c.legs.map((l) => toWire(l.bet)));
@@ -351,12 +391,16 @@ export async function buildBestParlays(
   };
 
   for (const slot of SLOTS) {
-    // D'abord strict (au plus la moitié des jambes en commun), puis relâché
-    // pour les soirs à peu de matchs (jamais un combiné contenu dans un autre).
-    const p = (await tryFill(slot.kind, slot.sizes, true)) ?? (await tryFill(slot.kind, slot.sizes, false));
+    // Du plus varié au plus permissif : on ne relâche que si rien ne passe.
+    let p: BestParlay | null = null;
+    for (const level of DIVERSITY_LEVELS) {
+      p = await tryFill(slot.kind, slot.sizes, level);
+      if (p) break;
+    }
     if (!p) continue;
     chosen.push(p);
     for (const l of p.legs) uses.set(l.id, (uses.get(l.id) ?? 0) + 1);
+    for (const g of new Set(p.legs.map((l) => l.gameId!))) gameUses.set(g, (gameUses.get(g) ?? 0) + 1);
   }
 
   // Ordre des places conservé : le 1er moneyline et le 1er mélangé restent en

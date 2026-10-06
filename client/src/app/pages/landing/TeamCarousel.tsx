@@ -34,6 +34,8 @@ import type { NHLTeamInfo } from "../../types/bet";
 const SPEED_PX_S = 28;
 /** Pause du défilement automatique après un geste de la personne. */
 const RESUME_AFTER_MS = 5000;
+/** Démarrage différé du défilement automatique (chargement de l'accueil). */
+const START_DELAY_MS = 4000;
 
 function TeamTile({
   team,
@@ -147,17 +149,34 @@ export function TeamCarousel() {
       && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduced) return;
 
+    // Mesures mises en cache. La boucle lisait `scrollLeft`, `scrollWidth` et
+    // `clientWidth` à CHAQUE image : quand React venait de modifier le DOM (une
+    // réponse `/predict/.../bundle` qui remplit les cartes de match), cette
+    // lecture forçait une mise en page synchrone du document entier — 749 ms,
+    // 701 nœuds, en 4G lente / CPU ×4 (trace DevTools du 2026-10-06). Les tailles
+    // ne bougent qu'au redimensionnement : un ResizeObserver suffit.
+    let half = el.scrollWidth / 2;
+    let viewW = el.clientWidth;
+    const ro = typeof ResizeObserver === "function"
+      ? new ResizeObserver(() => { half = el.scrollWidth / 2; viewW = el.clientWidth; })
+      : null;
+    ro?.observe(el);
+    if (el.firstElementChild) ro?.observe(el.firstElementChild);
+
+    // Pas de défilement pendant le chargement de l'accueil : c'est là que les
+    // données arrivent et que chaque image de la boucle coûtait le plus cher.
+    pausedUntil.current = Math.max(pausedUntil.current, performance.now() + START_DELAY_MS);
+
     let raf = 0;
     let last = performance.now();
     pos.current = el.scrollLeft;
     const tick = (now: number) => {
       const dt = Math.min(64, now - last);
       last = now;
-      // La personne a bougé le bandeau (flèche, doigt) : on repart de là.
-      if (Math.abs(el.scrollLeft - pos.current) > 2) pos.current = el.scrollLeft;
-      const half = el.scrollWidth / 2;
+      // Aucune lecture de mise en page ici. Un défilement de la personne
+      // (flèche, doigt) est repris dans `onScroll`, qui recale `pos`.
       const idle = !hovering.current && !openRef.current && now >= pausedUntil.current;
-      if (idle && half > el.clientWidth) {
+      if (idle && half > viewW) {
         pos.current += (SPEED_PX_S * dt) / 1000;
         if (pos.current >= half) pos.current -= half;
         el.scrollLeft = pos.current;
@@ -165,7 +184,7 @@ export function TeamCarousel() {
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    return () => { cancelAnimationFrame(raf); ro?.disconnect(); };
   }, [teams.length]);
 
   // Boucle aussi pour le défilement MANUEL : au-delà de la première copie, on
@@ -173,6 +192,9 @@ export function TeamCarousel() {
   const onScroll = () => {
     const el = viewportRef.current;
     if (!el || performance.now() < animUntil.current) return;
+    // La personne a bougé le bandeau : la boucle repart de là (ce recalage
+    // était lu à chaque image dans la boucle, voir plus haut).
+    if (Math.abs(el.scrollLeft - pos.current) > 2) pos.current = el.scrollLeft;
     const half = el.scrollWidth / 2;
     if (half > 0 && el.scrollLeft >= half) {
       el.scrollLeft -= half;

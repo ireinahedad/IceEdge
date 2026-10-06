@@ -59,7 +59,7 @@ const ROUTES = [
   {
     out: "nhl-predictions.html",
     loc: "/nhl-predictions",
-    title: "NHL Predictions | Model Win Probabilities for Every Game | ArakIce",
+    title: "NHL Predictions | Model Win Probabilities, Every Game | ArakIce",
     desc: "Machine learning win probabilities, totals and puck line context for every NHL game on the slate, updated as odds move.",
     heading: "NHL Predictions",
     blurb: "Model win probabilities, totals and puck-line context for every game on the slate.",

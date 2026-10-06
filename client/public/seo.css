@@ -142,6 +142,16 @@ li { margin: 0 0 9px; }
   text-align: center;
 }
 .cta-box h3 { margin-top: 0; font-size: 24px; }
+/* Titre de l'encadré : un <p> et non un <h3>, pour ne pas sauter de niveau
+   entre le h1 et les h2 de la page. Même rendu que l'ancien h3. */
+.cta-box .cta-title {
+  font-family: 'Oswald', sans-serif;
+  font-weight: 600;
+  font-size: 24px;
+  line-height: 1.2;
+  margin: 0 0 10px;
+  color: var(--color-text);
+}
 .cta-box p { color: var(--color-text-muted); margin-bottom: 22px; }
 .btn {
   display: inline-block;

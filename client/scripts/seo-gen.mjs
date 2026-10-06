@@ -45,6 +45,20 @@ const HORIZON_WEEKS = Number(process.env.HORIZON_WEEKS || 3); // how many schedu
 const MIN_GP = Number(process.env.MIN_GP || 20);
 const CONCURRENCY = 6;
 
+// ── Longueurs de titre et de description ─────────────────────────────────────
+// Google coupe le titre vers 60-65 caractères et la description vers 155-160.
+// `fit` prend des variantes de la plus riche à la plus courte et rend la
+// première qui tient ; la dernière sert de filet et est coupée proprement si
+// même elle déborde. Exportée pour gameday-gen.mjs.
+const TITLE_MAX = 65;
+const DESC_MAX = 155;
+function fit(max, ...candidates) {
+  const list = candidates.filter(Boolean);
+  for (const c of list) if (c.length <= max) return c;
+  const last = list[list.length - 1] || "";
+  return last.slice(0, max - 1).replace(/[\s,;:|·-]+\S*$/, "") + "…";
+}
+
 const STATIC_PAGES = [
   { loc: "/", changefreq: "daily", priority: "1.0" },
   { loc: "/nhl-predictions-today", changefreq: "daily", priority: "0.9" },
@@ -345,7 +359,7 @@ ${T.nav.map((n) => `        <a href="${SITE}${n.href}">${esc(n.label)}</a>`).joi
 
 function ctaBox(heading, text, label) {
   return `    <div class="cta-box">
-      <h3>${esc(heading)}</h3>
+      <p class="cta-title">${esc(heading)}</p>
       <p>${esc(text)}</p>
       <a class="btn" href="${SITE}/">${esc(label)}</a>
     </div>`;
@@ -397,18 +411,9 @@ ${cardsHtml}
       <p>These are ${esc(p.name)}'s current regular season totals. They form the base rate the model starts from before adjusting for tonight's specific matchup, opponent quality, rest and role.</p>`
     : "";
 
-  const jsonld = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: [
-      { "@type": "Question", name: `How are ${p.name}'s prop projections made?`,
-        acceptedAnswer: { "@type": "Answer", text: `ArakIce projects ${p.name}'s output from usage, role and matchup: how many chances ${team} generates or allows, the opponent's pace, rest and recent form. It then compares the projection to the posted prop line to find value.` } },
-      { "@type": "Question", name: `Where can I see ${p.name}'s projection for tonight?`,
-        acceptedAnswer: { "@type": "Answer", text: `Open the ArakIce app. When ${p.name} is on the slate, the live projection and the edge against the current line appear there, updated as lineups and odds move.` } },
-      { "@type": "Question", name: `Are ${p.name} prop predictions guaranteed?`,
-        acceptedAnswer: { "@type": "Answer", text: `No. Props are high-variance and no projection is guaranteed. The goal is to find value against the line over a large sample, not to win any single night.` } },
-    ],
-  };
+  // FAQPage retiré : Google ne l'affiche plus que pour les sites de santé et
+  // gouvernementaux (août 2023). Le balisage n'apportait plus rien.
+  const jsonld = null;
 
   const body = `    <section class="hero">
       <p class="eyebrow">${esc(team)} · ${esc(posName)}</p>
@@ -435,8 +440,12 @@ ${ctaBox(`Track ${p.name} in the app`, `Follow ${p.name}'s projections game by g
       </section>`;
 
   return layout({
-    title: `${p.name} Prop Predictions & Projections | ArakIce`,
-    desc: `${p.name} (${team}) prop predictions: ${isGoalie ? "save and totals" : "shots, points and more"} projections and betting context from ArakIce's NHL model.`,
+    title: fit(TITLE_MAX,
+      `${p.name} Prop Predictions & Projections | ArakIce`,
+      `${p.name} Prop Predictions | ArakIce`),
+    desc: fit(DESC_MAX,
+      `${p.name} (${team}) prop predictions: ${isGoalie ? "save and totals" : "shots, points and more"} projections and betting context from ArakIce's NHL model.`,
+      `${p.name} prop predictions: ${isGoalie ? "saves and totals" : "shots, points and more"}, from ArakIce's NHL model.`),
     canonicalPath: `/props/${p.slug}`,
     jsonld,
     body,
@@ -475,9 +484,11 @@ function propsHubPage(players) {
     url: `${SITE}/nhl-player-props`,
   };
   const body = `    <section class="hero">
-      <p class="eyebrow">Search ${players.length} NHL players</p>
+      <p class="eyebrow">${players.length ? `Search ${players.length} NHL players` : "Player pages"}</p>
       <h1>NHL Player Prop Predictions</h1>
-      <p class="lede">Type any player's name to open their prop page. Shots, points and goaltender saves, each with the projection and the edge against the sportsbook line. Every active NHL player, one search away.</p>
+      <p class="lede">${players.length
+        ? "Type any player's name to open their prop page. Shots, points and goaltender saves, each with the projection and the edge against the sportsbook line."
+        : `Player pages appear once a player has ${MIN_GP} games this season, so the numbers behind them are this season's, not last year's. Until then, tonight's props are in the app.`}</p>
     </section>
     <div class="search-wrap">
       <input id="player-search" type="search" placeholder="Search a player, for example Connor McDavid" autocomplete="off" aria-label="Search NHL players" />
@@ -590,18 +601,8 @@ function matchupPage(a, b, games) {
     return `${esc(city(byAbbr[w]))} ${ws}, ${esc(city(byAbbr[l]))} ${ls}`;
   };
 
-  const jsonld = st ? {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: [
-      { "@type": "Question", name: `What is the record between ${a.name} and ${b.name}?`,
-        acceptedAnswer: { "@type": "Answer", text: `Over their last ${st.n} meetings, going back to ${st.firstYear}, ${st.aWins > st.bWins ? a.name : b.name} lead ${Math.max(st.aWins, st.bWins)} wins to ${Math.min(st.aWins, st.bWins)}. The home team won ${st.homeWins} of the ${st.n}.` } },
-      { "@type": "Question", name: `How many goals do ${a.name} and ${b.name} games usually produce?`,
-        acceptedAnswer: { "@type": "Answer", text: `Their last ${st.n} meetings averaged ${st.avg.toFixed(2)} goals. ${st.under} finished at ${COMMON_LINE - 1} goals or fewer and ${st.over} at ${COMMON_LINE + 1} or more. The highest was ${st.biggest.total} goals on ${niceDate(st.biggest.date)}.` } },
-      { "@type": "Question", name: `When did ${a.name} and ${b.name} last play?`,
-        acceptedAnswer: { "@type": "Answer", text: `${niceDate(st.last.date)}. ${winTxt(st.last).replace(/&#39;/g, "'")}.` } },
-    ],
-  } : null;
+  // FAQPage retiré (Google ne l'affiche plus pour ce type de site).
+  const jsonld = null;
 
   const table = [...st.games].reverse().map((g) =>
     `        <tr><td>${niceDate(g.date)}</td><td>${winTxt(g)}${g.ot ? " (OT)" : ""}</td><td>${esc(city(byAbbr[g.home]))}</td><td class="num">${g.total}</td></tr>`
@@ -659,8 +660,13 @@ ${ctaBox("See the projection for this game", `When ${esc(a.name)} and ${esc(b.na
       </section>`;
 
   return layout({
-    title: `${a.name} vs ${b.name} Head to Head Record and Totals | ArakIce`,
-    desc: `${a.name} against ${b.name}: the last ${st.n} meetings, ${st.avg.toFixed(2)} goals a game, ${st.homeWins} of ${st.n} won by the home team, with every result listed.`,
+    title: fit(TITLE_MAX,
+      `${a.name} vs ${b.name} Head to Head Record | ArakIce`,
+      `${city(a)} vs ${city(b)} Head to Head Record and Totals | ArakIce`,
+      `${city(a)} vs ${city(b)} Head to Head Record | ArakIce`),
+    desc: fit(DESC_MAX,
+      `${a.name} against ${b.name}: the last ${st.n} meetings, ${st.avg.toFixed(2)} goals a game, ${st.homeWins} of ${st.n} won by the home team, with every result listed.`,
+      `${city(a)} vs ${city(b)}: the last ${st.n} meetings, ${st.avg.toFixed(2)} goals a game, ${st.homeWins} of ${st.n} won by the home team, every result listed.`),
     canonicalPath: `/matchup/${a.slug}-vs-${b.slug}`,
     jsonld,
     body,
@@ -671,10 +677,12 @@ ${ctaBox("See the projection for this game", `When ${esc(a.name)} and ${esc(b.na
   });
 }
 
-function matchupHubPage(pairs) {
-  const items = pairs
-    .map((pr) => `          <li><a href="${SITE}/matchup/${pr.a.slug}-vs-${pr.b.slug}">${esc(pr.a.name)} vs ${esc(pr.b.name)}</a></li>`)
-    .join("\n");
+function matchupHubPage(pairs, others = []) {
+  const li = (pr) => `          <li><a href="${SITE}/matchup/${pr.a.slug}-vs-${pr.b.slug}">${esc(pr.a.name)} vs ${esc(pr.b.name)}</a></li>`;
+  const items = pairs.map(li).join("\n");
+  // Les pages d'affiche sont perpétuelles : une paire qui ne joue pas dans la
+  // fenêtre du calendrier garde sa page, et le hub doit continuer d'y mener.
+  const more = [...others].sort((x, y) => `${x.a.name} ${x.b.name}`.localeCompare(`${y.a.name} ${y.b.name}`)).map(li).join("\n");
   const jsonld = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
@@ -682,9 +690,9 @@ function matchupHubPage(pairs) {
     url: `${SITE}/nhl-matchups`,
   };
   const body = `    <section class="hero">
-      <p class="eyebrow">${pairs.length} upcoming matchups</p>
+      <p class="eyebrow">${pairs.length + others.length} NHL matchups</p>
       <h1>NHL Head to Head Records</h1>
-      <p class="lede">Every upcoming NHL matchup, with the record between the two clubs over the last five seasons: how the meetings have gone, how many goals they produce, and how much home ice has mattered.</p>
+      <p class="lede">NHL matchups with the record between the two clubs over the last five seasons: how the meetings have gone, how many goals they produce, and how much home ice has mattered.</p>
     </section>
 ${ctaBox("See tonight's full slate", "ArakIce projects a win probability and a total for every game on tonight's schedule.", "Open ArakIce")}
       <section class="related">
@@ -692,10 +700,10 @@ ${ctaBox("See tonight's full slate", "ArakIce projects a win probability and a t
         <ul>
 ${items}
         </ul>
-      </section>`;
+${more ? `        <h2>More head to head records</h2>\n        <ul>\n${more}\n        </ul>\n` : ""}      </section>`;
   return layout({
-    title: "NHL Head to Head Records | Every Upcoming Game | ArakIce",
-    desc: "Head to head records for every upcoming NHL game: recent meetings, goals per game and how often the home team wins.",
+    title: "NHL Head to Head Records | Every Matchup | ArakIce",
+    desc: "Head to head records for NHL matchups: recent meetings, goals per game and how often the home team wins.",
     canonicalPath: "/nhl-matchups",
     jsonld,
     body,
@@ -788,8 +796,21 @@ async function fetchPlayers(teams) {
       const l = await getJSON(`${API}/player/${p.id}/landing`);
       const sub = l.featuredStats?.regularSeason?.subSeason || {};
       p.stats = sub;
-    } catch { p.stats = {}; }
+      p.season = Number(l.featuredStats?.season || 0);
+    } catch { p.stats = {}; p.season = 0; }
   });
+
+  // « Cette saison » seulement. L'API renvoie comme saison vedette la dernière
+  // où le joueur a joué : un joueur blessé ou pas encore aligné garde donc ses
+  // chiffres de l'an dernier. La saison en cours est la plus récente vue sur
+  // l'ensemble des effectifs ; tout joueur dont la saison vedette est plus
+  // ancienne n'a pas de page tant qu'il n'a pas MIN_GP matchs cette saison.
+  const currentSeason = Math.max(0, ...players.map((p) => p.season || 0));
+  // Garde-fou : une panne d'API ressemblerait à « personne n'a assez de
+  // matchs » et effacerait toutes les pages joueur. On s'arrête plutôt.
+  if (!players.length || !currentSeason) throw new Error("effectifs ou statistiques introuvables via l'API NHL : rien n'est modifié");
+  for (const p of players) if (p.season !== currentSeason) p.stats = {};
+  console.log(`  saison en cours : ${currentSeason}`);
 
   // Slug + de-dup. Le filtrage par liste blanche est fait dans main(), pour que
   // le mode --sample (qui ne passe jamais ici) obéisse à la même règle.
@@ -827,6 +848,50 @@ function sampleData() {
   return { teams, players, pairs };
 }
 
+// ── Fichiers sur le disque ───────────────────────────────────────────────────
+async function listHtml(dir) {
+  try {
+    return (await fs.readdir(dir))
+      .filter((f) => f.endsWith(".html") && f !== "index.html")
+      .map((f) => f.slice(0, -5))
+      .sort();
+  } catch { return []; }
+}
+
+async function pruneDir(dir, keep) {
+  const removed = [];
+  for (const slug of await listHtml(dir)) {
+    if (keep.has(slug)) continue;
+    await fs.unlink(path.join(dir, `${slug}.html`));
+    removed.push(slug);
+  }
+  return removed;
+}
+
+// vercel.json porte deux redirections /props/ :
+//   · temporaire (307) : joueur de la liste blanche sans page ce passage. Il
+//     reviendra ; une 301 dirait à Google d'oublier l'URL pour de bon.
+//   · permanente (301, existante) : tout ce qui n'est pas dans la liste blanche.
+// Sans la première, l'URL tomberait sur la réécriture SPA et rendrait l'accueil
+// en 200 — une soft 404.
+const VERCEL_JSON = path.join(__dirname, "..", "vercel.json");
+async function syncPropsRedirects(allow, keep) {
+  const cfg = JSON.parse(await fs.readFile(VERCEL_JSON, "utf-8"));
+  const isTemp = (r) => r.source?.startsWith("/props/") && r.permanent === false;
+  const redirects = (cfg.redirects || []).filter((r) => !isTemp(r));
+  const parked = [...allow].filter((sl) => !keep.has(sl)).sort();
+  if (parked.length) {
+    redirects.unshift({
+      source: `/props/:slug(${parked.join("|")})`,
+      destination: "/nhl-player-props",
+      permanent: false,
+    });
+  }
+  cfg.redirects = redirects;
+  await fs.writeFile(VERCEL_JSON, JSON.stringify(cfg, null, 2) + "\n", "utf-8");
+  console.log(`  vercel.json : ${parked.length} page(s) joueur en redirection temporaire`);
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
   console.log(`ArakIce SEO generator — ${SAMPLE ? "SAMPLE (offline)" : "LIVE (NHL API)"} → ${OUT_DIR}`);
@@ -854,9 +919,9 @@ async function main() {
   const missing = [...allow].filter((sl) => !players.some((p) => p.slug === sl));
   console.log(`  ${players.length} player pages after the allowlist (${beforeAllow} candidates, allowlist of ${allow.size})`);
   if (missing.length) {
-    // Slug de la liste sans joueur correspondant : échangé, retraité, renommé.
-    // On le signale, on n'invente pas la page.
-    console.warn(`  ⚠️  ${missing.length} allowlisted slug(s) with no matching player: ${missing.join(", ")}`);
+    // Slug de la liste sans page ce passage : sous MIN_GP cette saison (cas
+    // normal en début de saison), ou échangé, retraité, renommé.
+    console.warn(`  ⚠️  ${missing.length} joueur(s) de la liste sans page (moins de ${MIN_GP} matchs cette saison, ou introuvable) : ${missing.join(", ")}`);
   }
 
   const dynamicLocs = [];
@@ -868,6 +933,15 @@ async function main() {
   }
   await writePage("nhl-player-props.html", propsHubPage(players));
   dynamicLocs.push("/nhl-player-props");
+
+  // Une page joueur qui n'a pas été réécrite ce passage n'a plus lieu d'être :
+  // ses chiffres sont ceux d'une autre saison. On la retire du disque et on
+  // redirige temporairement son URL vers le hub, pour qu'elle revienne sans
+  // perte le jour où le joueur repasse la barre.
+  const keep = new Set(players.map((p) => p.slug));
+  const removedProps = await pruneDir(path.join(OUT_DIR, "props"), keep);
+  if (removedProps.length) console.log(`  ${removedProps.length} page(s) joueur retirée(s) : pas encore ${MIN_GP} matchs cette saison`);
+  if (!SAMPLE) await syncPropsRedirects(allow, keep);
 
   // Matchup pages + hub
   console.log("Loading head to head history…");
@@ -883,7 +957,24 @@ async function main() {
     dynamicLocs.push(`/matchup/${pr.a.slug}-vs-${pr.b.slug}`);
     written.push(pr);
   }
-  await writePage("nhl-matchups.html", matchupHubPage(written));
+  // Les pages d'affiche écrites lors des passages précédents restent valides
+  // (l'historique ne périme pas) : elles restent dans le sitemap et dans le hub.
+  const writtenSlugs = new Set(written.map((pr) => `${pr.a.slug}-vs-${pr.b.slug}`));
+  const bySlug = Object.fromEntries(Object.values(teams).map((t) => [t.slug, t]));
+  const others = [];
+  for (const slug of await listHtml(path.join(OUT_DIR, "matchup"))) {
+    if (writtenSlugs.has(slug)) continue;
+    const [sa, sb] = slug.split("-vs-");
+    dynamicLocs.push(`/matchup/${slug}`);
+    if (!bySlug[sa] || !bySlug[sb]) continue;
+    const pr = { a: bySlug[sa], b: bySlug[sb] };
+    // Re-rendue avec le gabarit courant : sans ça, une page hors fenêtre
+    // garderait indéfiniment l'ancien titre, l'ancien balisage, etc.
+    const games = h2h.get([pr.a.abbr, pr.b.abbr].sort().join("|")) || [];
+    if (games.length) await writePage(`matchup/${slug}.html`, matchupPage(pr.a, pr.b, games));
+    others.push(pr);
+  }
+  await writePage("nhl-matchups.html", matchupHubPage(written, others));
   dynamicLocs.push("/nhl-matchups");
 
   await writeSitemap(dynamicLocs);
@@ -904,4 +995,4 @@ if (RUN_DIRECTLY) {
 export { layout, matchupPage, playerPage, propsHubPage, matchupHubPage, loadH2H, h2hStats, writeSitemap };
 // Réexports pour gameday-gen.mjs : il écrit des pages dans le même habillage et
 // doit donc partager exactement ces fonctions, pas des copies qui dérivent.
-export { slugify, esc, nhlLogo, getJSON, pMap, SITE, API, H2H_MIN_PCT, COMMON_LINE };
+export { slugify, esc, nhlLogo, getJSON, pMap, SITE, API, H2H_MIN_PCT, COMMON_LINE, fit, TITLE_MAX, DESC_MAX };
