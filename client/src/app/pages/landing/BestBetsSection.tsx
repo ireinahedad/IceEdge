@@ -68,17 +68,16 @@ function pctFor(b: BestBet, source: SortSource): number | null {
 const MAX_PER_GAME = 2;
 
 /**
- * 2026-10-07 (demande du user) : Best Bets = matchs de demain + ceux
- * d'aujourd'hui pas encore finis. Le serveur filtre déjà ; mais l'accueil peut
+ * 2026-10-07 (demande du user) : Best Bets = matchs d'aujourd'hui PAS ENCORE
+ * COMMENCÉS + matchs de demain. Le serveur filtre déjà ; mais l'accueil peut
  * rester ouvert des heures, donc on recharge régulièrement et on retire, entre
- * deux chargements, un match commencé depuis plus de 5 h (forcément fini).
+ * deux chargements, un pari dont le match a commencé.
  */
 const REFRESH_MS = 5 * 60_000;
-const STALE_AFTER_START_MS = 5 * 60 * 60_000;
 function isPastGame(b: BestBet, now: number): boolean {
   if (!b.startTimeUTC) return false;
   const start = Date.parse(b.startTimeUTC);
-  return Number.isFinite(start) && now - start > STALE_AFTER_START_MS;
+  return Number.isFinite(start) && start <= now;
 }
 
 function riskLabel(pct: number): { tier: RiskTier; key: string; color: string } {
@@ -235,12 +234,15 @@ export function BestBetsSection({
   // `meta.mlAvailable` du serveur : faux quand AUCUN pari n'a reçu de score IA
   // (service ML en panne ou désactivé). Sert à dire pourquoi l'onglet IA est vide.
   const [mlAvailable, setMlAvailable] = useState(true);
-  // Horloge de rafraîchissement : relance le chargement toutes les REFRESH_MS.
+  // `tick` relance le chargement toutes les REFRESH_MS ; `now` (chaque minute)
+  // retire un pari dès que son match commence, sans attendre le rechargement.
   const [tick, setTick] = useState(() => Date.now());
+  const [now, setNow]   = useState(() => Date.now());
   useEffect(() => {
     if (locked) return;
-    const id = setInterval(() => setTick(Date.now()), REFRESH_MS);
-    return () => clearInterval(id);
+    const a = setInterval(() => setTick(Date.now()), REFRESH_MS);
+    const b = setInterval(() => setNow(Date.now()), 60_000);
+    return () => { clearInterval(a); clearInterval(b); };
   }, [locked]);
   const [collapsed,  setCollapsed]  = useState<boolean>(() => {
     try { return localStorage.getItem("iceedge_bestbets_collapsed") === "1"; }
@@ -283,7 +285,7 @@ export function BestBetsSection({
         setBets(mapped);
       } catch {
         // Échec d'un rechargement : on garde la liste en place (le filtre
-        // `isPastGame` continue d'en retirer les matchs finis).
+        // `isPastGame` continue d'en retirer les matchs commencés).
       }
     })();
 
@@ -299,7 +301,7 @@ export function BestBetsSection({
 
   const sorted = useMemo(() => {
     const src = (b: BestBet) => pctFor(b, sortSource) ?? 0;
-    const scored   = bets.filter((b) => pctFor(b, sortSource) != null && !isPastGame(b, tick));
+    const scored   = bets.filter((b) => pctFor(b, sortSource) != null && !isPastGame(b, now));
     const filtered = tierFilter === "all"
       ? scored
       : scored.filter(b => riskLabel(src(b)).tier === tierFilter);
@@ -315,7 +317,7 @@ export function BestBetsSection({
       if (out.length === 15) break;
     }
     return out;
-  }, [bets, sortSource, tierFilter, tick]);
+  }, [bets, sortSource, tierFilter, now]);
 
   // Pro-only: free users see the section title but the picks are locked/blurred.
   if (locked) {

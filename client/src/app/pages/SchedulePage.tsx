@@ -521,6 +521,8 @@ function GameRow({
 }) {
   const isFinal = game.status === "final";
   const isLive = game.status === "live";
+  // 2026-10-07 : pas de « meilleur pari » sur un match commencé (en direct ou fini).
+  const showBest = !isFinal && !isLive;
   const showScore = isFinal || isLive;
   const a = game.awayTeam.score ?? 0;
   const h = game.homeTeam.score ?? 0;
@@ -601,9 +603,9 @@ function GameRow({
       </div>
 
       {/* Accroches — meilleur pari du modèle, puis tendance d'équipe */}
-      {!isFinal && (bestBet || bestLocked || insight) && (
+      {!isFinal && ((showBest && (bestBet || bestLocked)) || insight) && (
         <div className="flex flex-wrap gap-1.5">
-          {bestBet ? (
+          {showBest && bestBet ? (
             <span
               className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg max-w-full"
               style={{ background: "rgba(134,209,234,0.12)", color: ACCENT, border: "1px solid rgba(134,209,234,0.3)" }}
@@ -611,7 +613,7 @@ function GameRow({
               <span className="truncate">{bestBet.label}</span>
               <span className="font-bold tabular-nums text-white">{Math.round(bestBet.score)}%</span>
             </span>
-          ) : bestLocked ? (
+          ) : showBest && bestLocked ? (
             <button
               onClick={(e) => { e.stopPropagation(); onUpgrade(); }}
               className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg"

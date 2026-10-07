@@ -1729,6 +1729,30 @@ ABLATION_CACHE = f"{MODELS}/score_ablation_cache.json"
 SELECTION_REPORT = f"{MODELS}/score_feature_selection.json"
 CONFIRMATION_REPORT = f"{MODELS}/score_feature_confirmation.json"
 
+
+def _json_default(o):
+    """Types numpy → types Python. `df["season"].unique()` rend des int64, que
+    `json` refuse : le dump plantait EN COURS D'ÉCRITURE au premier
+    `"season": ` de `by_season`, laissant un fichier tronqué (2026-10-07)."""
+    if isinstance(o, np.integer):
+        return int(o)
+    if isinstance(o, np.floating):
+        return float(o)
+    if isinstance(o, np.bool_):
+        return bool(o)
+    if isinstance(o, np.ndarray):
+        return o.tolist()
+    raise TypeError(f"{type(o).__name__} non sérialisable")
+
+
+def _dump_json_atomic(obj, path: str) -> None:
+    """Écrit dans un fichier temporaire puis le renomme : un échec laisse
+    l'ancien rapport intact au lieu d'un JSON coupé en deux."""
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(obj, fh, indent=2, default=_json_default)
+    os.replace(tmp, path)
+
 # ── Métrique de sélection, déclarée AVANT de regarder quoi que ce soit ───────
 #
 # **Log-loss de la puck line**, sur les deux jambes du marché :
@@ -4307,7 +4331,7 @@ def main():
                 df, sel_seasons, args.search_trials,
                 use_cache=not args.no_param_cache, n_sentinels=args.sentinels)
             if res:
-                json.dump(res, open(CONFIRMATION_REPORT, "w"), indent=2)
+                _dump_json_atomic(res, CONFIRMATION_REPORT)
                 print(f"\n✅ {CONFIRMATION_REPORT.split('/')[-1]} → {MODELS}/")
             return
         res = run_score_feature_ablation(df, sel_seasons, args.search_trials,
@@ -4315,7 +4339,7 @@ def main():
                                          keep_share=args.keep_share,
                                          n_sentinels=args.sentinels)
         if res:
-            json.dump(res, open(SELECTION_REPORT, "w"), indent=2)
+            _dump_json_atomic(res, SELECTION_REPORT)
             print(f"\n✅ {SELECTION_REPORT.split('/')[-1]} → {MODELS}/")
         return
 

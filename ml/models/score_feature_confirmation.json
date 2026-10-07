@@ -28,39 +28,328 @@
     "atk_gf_s"
   ],
   "features_after": [
+    "atk_xgf60_s",
+    "atk_xgf60_l",
     "atk_ev_xgf60_s",
     "atk_ev_xgf_pct_s",
+    "atk_gf_s",
     "atk_finishing_s",
+    "atk_star_power",
     "atk_stars_out_weight",
+    "atk_pp_xgf60_s",
+    "atk_rest_days",
+    "atk_b2b",
+    "atk_lineup_xg",
     "atk_lineup_pts",
+    "atk_ev_xgf_pct_l",
+    "def_xga60_s",
+    "def_xga60_l",
     "def_ev_xga60_s",
+    "def_ga_s",
+    "def_pk_xga60_s",
     "def_goalie_gsax60",
     "def_goalie_svpct",
+    "def_b2b",
+    "def_rest_days",
+    "def_goalie_backup",
     "is_home",
     "elo_atk_minus_def"
   ],
-  "dropped": [
-    "atk_star_power",
-    "atk_xgf60_l",
-    "def_xga60_l",
-    "atk_rest_days",
-    "def_pk_xga60_s",
-    "def_xga60_s",
-    "atk_lineup_xg",
-    "def_ga_s",
-    "atk_xgf60_s",
-    "atk_pp_xgf60_s",
-    "atk_b2b",
-    "atk_gf_s"
+  "dropped": [],
+  "added": [
+    "atk_ev_xgf_pct_l",
+    "def_b2b",
+    "def_rest_days",
+    "def_goalie_backup"
   ],
-  "added": [],
   "n_sentinels": 3,
   "search_trials_per_fold": 8,
-  "mean_delta_puckline": 0.000193,
-  "median_delta_puckline": 9.7e-05,
-  "n_seasons_worse": 8,
+  "mean_delta_puckline": -0.000564,
+  "median_delta_puckline": -0.000527,
+  "stderr_delta_puckline": 0.000215,
+  "resolvable": true,
+  "sign_test_p": 0.9935,
+  "secondary_metrics_displayed_only": {
+    "deviance": {
+      "mean_delta": -0.001824,
+      "noise": 0.000371,
+      "direction": -1
+    },
+    "ll_moneyline": {
+      "mean_delta": -0.00112,
+      "noise": 0.000152,
+      "direction": -1
+    }
+  },
+  "n_seasons_worse": 3,
   "n_seasons": 14,
-  "verdict": "D\u00c9GRADE",
+  "verdict": "AM\u00c9LIORE",
   "by_season": [
     {
-      "season": 
+      "season": 2012,
+      "n_games": 720,
+      "before": {
+        "ll_puckline": 0.5724073189160538,
+        "deviance": 1.0948826169473098,
+        "ll_moneyline": 0.6705581294458316
+      },
+      "after": {
+        "ll_puckline": 0.5718335380014744,
+        "deviance": 1.0894830304938226,
+        "ll_moneyline": 0.6692515650346834
+      },
+      "delta": {
+        "ll_puckline": -0.0005737809145793804,
+        "deviance": -0.0053995864534872595,
+        "ll_moneyline": -0.0013065644111481811
+      }
+    },
+    {
+      "season": 2013,
+      "n_games": 1230,
+      "before": {
+        "ll_puckline": 0.552358353031734,
+        "deviance": 1.0186167676593176,
+        "ll_moneyline": 0.6768069547708766
+      },
+      "after": {
+        "ll_puckline": 0.5523311690489031,
+        "deviance": 1.0203032091250606,
+        "ll_moneyline": 0.6766365618974369
+      },
+      "delta": {
+        "ll_puckline": -2.7183982830858433e-05,
+        "deviance": 0.0016864414657429272,
+        "ll_moneyline": -0.00017039287343967313
+      }
+    },
+    {
+      "season": 2014,
+      "n_games": 1230,
+      "before": {
+        "ll_puckline": 0.5556507231323827,
+        "deviance": 1.050757081941279,
+        "ll_moneyline": 0.6685863935220926
+      },
+      "after": {
+        "ll_puckline": 0.5545807635946777,
+        "deviance": 1.0471536176574472,
+        "ll_moneyline": 0.6674818717564959
+      },
+      "delta": {
+        "ll_puckline": -0.0010699595377050564,
+        "deviance": -0.0036034642838318476,
+        "ll_moneyline": -0.001104521765596722
+      }
+    },
+    {
+      "season": 2015,
+      "n_games": 1230,
+      "before": {
+        "ll_puckline": 0.5727069579074591,
+        "deviance": 1.0458394270445126,
+        "ll_moneyline": 0.6802831302654698
+      },
+      "after": {
+        "ll_puckline": 0.5708651314342893,
+        "deviance": 1.0426441468365912,
+        "ll_moneyline": 0.6773422697032411
+      },
+      "delta": {
+        "ll_puckline": -0.001841826473169772,
+        "deviance": -0.0031952802079213694,
+        "ll_moneyline": -0.002940860562228753
+      }
+    },
+    {
+      "season": 2016,
+      "n_games": 1230,
+      "before": {
+        "ll_puckline": 0.5627211504143238,
+        "deviance": 1.0763792159867394,
+        "ll_moneyline": 0.668763098165349
+      },
+      "after": {
+        "ll_puckline": 0.5636726414900775,
+        "deviance": 1.0766248962747307,
+        "ll_moneyline": 0.6697953223720611
+      },
+      "delta": {
+        "ll_puckline": 0.0009514910757536521,
+        "deviance": 0.00024568028799132335,
+        "ll_moneyline": 0.001032224206712118
+      }
+    },
+    {
+      "season": 2017,
+      "n_games": 1266,
+      "before": {
+        "ll_puckline": 0.5855803872175172,
+        "deviance": 1.0979321232414256,
+        "ll_moneyline": 0.6696339034007244
+      },
+      "after": {
+        "ll_puckline": 0.5855644454172557,
+        "deviance": 1.0973581743722096,
+        "ll_moneyline": 0.6689669924983356
+      },
+      "delta": {
+        "ll_puckline": -1.5941800261431993e-05,
+        "deviance": -0.0005739488692160233,
+        "ll_moneyline": -0.0006669109023887954
+      }
+    },
+    {
+      "season": 2018,
+      "n_games": 1271,
+      "before": {
+        "ll_puckline": 0.5913857681013462,
+        "deviance": 1.118033205085014,
+        "ll_moneyline": 0.675686003506665
+      },
+      "after": {
+        "ll_puckline": 0.589579279186606,
+        "deviance": 1.1155803316534052,
+        "ll_moneyline": 0.6721299231849783
+      },
+      "delta": {
+        "ll_puckline": -0.001806488914740223,
+        "deviance": -0.0024528734316087153,
+        "ll_moneyline": -0.003556080321686639
+      }
+    },
+    {
+      "season": 2019,
+      "n_games": 1082,
+      "before": {
+        "ll_puckline": 0.5863599254885042,
+        "deviance": 1.0364394776563535,
+        "ll_moneyline": 0.6819705872524935
+      },
+      "after": {
+        "ll_puckline": 0.5866522732916221,
+        "deviance": 1.0376804579803047,
+        "ll_moneyline": 0.6808251662754098
+      },
+      "delta": {
+        "ll_puckline": 0.0002923478031178206,
+        "deviance": 0.0012409803239512573,
+        "ll_moneyline": -0.0011454209770836998
+      }
+    },
+    {
+      "season": 2020,
+      "n_games": 868,
+      "before": {
+        "ll_puckline": 0.5747602865285204,
+        "deviance": 1.1194382191283327,
+        "ll_moneyline": 0.6560602615054374
+      },
+      "after": {
+        "ll_puckline": 0.5738977329914967,
+        "deviance": 1.1183179176313436,
+        "ll_moneyline": 0.6545541398533229
+      },
+      "delta": {
+        "ll_puckline": -0.0008625535370236914,
+        "deviance": -0.0011203014969891623,
+        "ll_moneyline": -0.0015061216521145004
+      }
+    },
+    {
+      "season": 2021,
+      "n_games": 1307,
+      "before": {
+        "ll_puckline": 0.5804850635465139,
+        "deviance": 1.0797064874062297,
+        "ll_moneyline": 0.6478019818755975
+      },
+      "after": {
+        "ll_puckline": 0.5800444587864502,
+        "deviance": 1.0785590098152205,
+        "ll_moneyline": 0.647650597804129
+      },
+      "delta": {
+        "ll_puckline": -0.00044060476006368976,
+        "deviance": -0.0011474775910091939,
+        "ll_moneyline": -0.00015138407146841892
+      }
+    },
+    {
+      "season": 2022,
+      "n_games": 1312,
+      "before": {
+        "ll_puckline": 0.5817260168220546,
+        "deviance": 1.0367047869413322,
+        "ll_moneyline": 0.6624985963236486
+      },
+      "after": {
+        "ll_puckline": 0.5812448984316795,
+        "deviance": 1.0349424416328512,
+        "ll_moneyline": 0.6619169805750489
+      },
+      "delta": {
+        "ll_puckline": -0.0004811183903751237,
+        "deviance": -0.0017623453084809615,
+        "ll_moneyline": -0.0005816157485997175
+      }
+    },
+    {
+      "season": 2023,
+      "n_games": 1312,
+      "before": {
+        "ll_puckline": 0.5941429082469232,
+        "deviance": 1.099328874500803,
+        "ll_moneyline": 0.658587860319403
+      },
+      "after": {
+        "ll_puckline": 0.5942944424455814,
+        "deviance": 1.098442441426975,
+        "ll_moneyline": 0.6580388711288029
+      },
+      "delta": {
+        "ll_puckline": 0.00015153419865820972,
+        "deviance": -0.0008864330738280746,
+        "ll_moneyline": -0.000548989190600091
+      }
+    },
+    {
+      "season": 2024,
+      "n_games": 1312,
+      "before": {
+        "ll_puckline": 0.5989176810687146,
+        "deviance": 1.132394472352652,
+        "ll_moneyline": 0.6619798984613773
+      },
+      "after": {
+        "ll_puckline": 0.5975458913088216,
+        "deviance": 1.1276995460305452,
+        "ll_moneyline": 0.6605377262120179
+      },
+      "delta": {
+        "ll_puckline": -0.0013717897598929385,
+        "deviance": -0.004694926322106774,
+        "ll_moneyline": -0.0014421722493593858
+      }
+    },
+    {
+      "season": 2025,
+      "n_games": 1312,
+      "before": {
+        "ll_puckline": 0.5844972258917704,
+        "deviance": 1.0503101230999254,
+        "ll_moneyline": 0.6851582094554729
+      },
+      "after": {
+        "ll_puckline": 0.583702576266873,
+        "deviance": 1.046433994819884,
+        "ll_moneyline": 0.683569541162071
+      },
+      "delta": {
+        "ll_puckline": -0.0007946496248973922,
+        "deviance": -0.0038761282800414687,
+        "ll_moneyline": -0.0015886682934018737
+      }
+    }
+  ]
+}

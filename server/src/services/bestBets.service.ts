@@ -12,7 +12,6 @@
 
 import {
   fetchGamesByDate,
-  fetchLiveGames,
   fetchTopPlayers,
 } from './nhlApiClient';
 import {
@@ -122,49 +121,36 @@ function etDate(n: number, now = new Date()): string {
 }
 
 /**
- * Au-delà de ce délai après la mise au jeu, un match qui n'est pas signalé
- * « en direct » est terminé, quel que soit le statut (peut-être périmé) du
- * calendrier en cache. Un match NHL dure ~2 h 30, prolongation comprise.
- */
-const STALE_AFTER_START_MS = 5 * 60 * 60_000;
-
-/**
- * Matchs à proposer : en direct + aujourd'hui (pas encore finis) + les jours
- * suivants, dédoublonnés.
+ * Matchs à proposer : ceux d'aujourd'hui PAS ENCORE COMMENCÉS + ceux de demain.
  *
- * 2026-10-07 (demande du user) : les Best Bets ne portent QUE sur les matchs de
- * demain et ceux d'aujourd'hui pas encore terminés.
+ * 2026-10-07 (demande du user) : un Best Bet ne porte que sur un match qu'on
+ * peut encore parier avant la mise au jeu — ni match en direct, ni match fini.
  *  • Les dates sont celles du jour NHL (heure de l'Est), comme les `gameDate`.
  *    Elles étaient en UTC : à partir de 20 h ET, « aujourd'hui » UTC était déjà
  *    le lendemain — les matchs de fin de soirée sautaient et la fenêtre
  *    débordait sur après-demain.
- *  • Un match terminé est écarté (`final`), et aussi un match commencé depuis
- *    plus de `STALE_AFTER_START_MS` sans être en direct.
+ *  • On ne garde que le statut `scheduled` ET une mise au jeu dans le futur :
+ *    le statut du calendrier est en cache (jusqu'à 5 min), l'heure ne ment pas.
+ *  • Les matchs en direct ne sont plus récupérés du tout (`fetchLiveGames`).
  */
 async function fetchUpcomingGames(days: number): Promise<any[]> {
-  const now = new Date();
+  const now = Date.now();
   const dates: string[] = [];
-  for (let i = 0; i < days; i++) dates.push(etDate(i, now));
+  for (let i = 0; i < days; i++) dates.push(etDate(i, new Date(now)));
 
-  const results = await Promise.allSettled([
-    fetchLiveGames(),
-    ...dates.map((d) => fetchGamesByDate(d)),
-  ]);
+  const results = await Promise.allSettled(dates.map((d) => fetchGamesByDate(d)));
 
   const all: any[] = [];
   for (const r of results) if (r.status === 'fulfilled') all.push(...r.value);
 
-  // De-dup by game id (live first, so its fresh status wins), drop finished games
   const seen = new Set<string>();
   const games: any[] = [];
   for (const g of all) {
     if (seen.has(g.id)) continue;
     seen.add(g.id);
-    if (g.status === 'final') continue;
-    if (g.status !== 'live' && g.startTimeUTC) {
-      const start = Date.parse(g.startTimeUTC);
-      if (Number.isFinite(start) && now.getTime() - start > STALE_AFTER_START_MS) continue;
-    }
+    if (g.status !== 'scheduled') continue;            // en direct ou fini
+    const start = g.startTimeUTC ? Date.parse(g.startTimeUTC) : NaN;
+    if (Number.isFinite(start) && start <= now) continue; // déjà commencé
     games.push(g);
   }
   return games;
