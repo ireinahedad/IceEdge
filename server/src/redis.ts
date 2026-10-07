@@ -98,10 +98,55 @@ export function socketRedisClients(): { pub: Redis; sub: Redis } | null {
   return { pub, sub };
 }
 
+/**
+ * Délai au-delà duquel une commande Redis est abandonnée (compteurs de débit).
+ * Un limiteur est sur le chemin de CHAQUE requête : il ne doit jamais coûter
+ * plus que ce qu'il protège. 250 ms, c'est ~100× un aller-retour sur le réseau
+ * privé Railway — assez pour ne jamais tomber en régime normal, assez court
+ * pour qu'une panne Redis ne se voie pas côté utilisateur.
+ */
+const COMMAND_TIMEOUT_MS = Number(process.env.REDIS_COMMAND_TIMEOUT_MS) || 250;
+
+let commands: Redis | null = null;
+
+/**
+ * Le client des COMPTEURS (limiteurs de débit), ou `null` sans `REDIS_URL`.
+ *
+ * ── POURQUOI UN TROISIÈME CLIENT ────────────────────────────────────────────
+ *
+ * Les clients de l'adaptateur sont réglés pour ATTENDRE : `maxRetriesPerRequest:
+ * null` + file hors-ligne, donc une commande émise pendant une coupure reste en
+ * file jusqu'au retour du service. Pour une diffusion de chat, c'est le bon
+ * choix. Pour un limiteur, c'est le pire : chaque requête HTTP attendrait Redis,
+ * et une panne du CACHE figerait toute l'API.
+ *
+ * Ce client-ci fait l'inverse — pas de file hors-ligne, un seul essai, un
+ * délai court. Une commande qui ne peut pas aboutir ÉCHOUE tout de suite, et
+ * l'appelant (`rateLimitStore.ts`) retombe sur son compteur en mémoire.
+ */
+export function redisCommandClient(): Redis | null {
+  if (!REDIS_URL) return null;
+  if (!commands) {
+    commands = new Redis(REDIS_URL, {
+      lazyConnect: false,
+      enableOfflineQueue: false,
+      maxRetriesPerRequest: 1,
+      commandTimeout: COMMAND_TIMEOUT_MS,
+      retryStrategy: (essais) => Math.min(essais * 200, 5_000),
+    });
+    commands.on('error', (err: Error) => {
+      logger.warn({ err: err.message, role: 'commands' }, '[Redis] connexion en erreur — compteurs de débit en mémoire locale');
+    });
+    commands.on('ready', () => logger.info({ role: 'commands' }, '[Redis] prêt'));
+  }
+  return commands;
+}
+
 /** Ferme proprement les connexions — appelé par l'arrêt gracieux. */
 export async function closeRedis(): Promise<void> {
-  const clients = [pub, sub].filter(Boolean) as Redis[];
+  const clients = [pub, sub, commands].filter(Boolean) as Redis[];
   pub = null;
   sub = null;
+  commands = null;
   await Promise.all(clients.map((c) => c.quit().catch(() => c.disconnect())));
 }

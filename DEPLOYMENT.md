@@ -173,7 +173,8 @@ Settings → Variables → ajouter :
 | `CORS_ORIGIN` | `https://iceedge.vercel.app` |
 | `ML_SERVICE_URL` | **Réseau privé** : `http://<nom-du-service-ml>.railway.internal:8000` (étape 3 — pas de domaine public) |
 | `ML_API_TOKEN` | Secret partagé avec le service ML : `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
-| `REDIS_URL` | **À ne poser qu'à partir de la 2ᵉ instance** — étape 2 ter. Absente : adaptateur Socket.io en mémoire, ce qui est le bon choix à une instance |
+| `REDIS_URL` | **À ne poser qu'à partir de la 2ᵉ instance** — étape 2 ter. Absente : adaptateur Socket.io et compteurs de débit en mémoire, ce qui est le bon choix à une instance |
+| `REDIS_COMMAND_TIMEOUT_MS` | **Ne pas poser** (défaut 250 ms) — délai d'une commande de compteur avant repli en mémoire |
 
 ### Domaine
 Settings → Networking → **Generate Domain** → noter l'URL (ex: `iceedge-backend.railway.app`)
@@ -231,7 +232,7 @@ L'ancien objet est supprimé automatiquement lors d'un remplacement.
 
 ---
 
-## 2 ter. Redis — diffusion du chat entre instances
+## 2 ter. Redis — chat et limiteurs de débit partagés entre instances
 
 > **À sauter tant que le backend tourne à une seule instance.** Sans `REDIS_URL`,
 > le serveur utilise l'adaptateur Socket.io en mémoire : c'est le comportement
@@ -247,6 +248,11 @@ se voient que si elles ont atterri sur le même conteneur — une fois sur deux.
 « marche mal ». C'est la ligne D de `AUDIT_SCALABILITE_COUTS.md`, et le banc
 `loadtest/bench/b12-multiinstance.ts` la reproduit en local, sans rien déployer.
 
+Second effet, aussi silencieux : les **limiteurs de débit** (les huit
+`express-rate-limit` et celui du chat) comptent par process. À N instances,
+chaque quota est multiplié par N — `authLimiter` (anti-brute-force) et
+`redeemLimiter` (codes promo) compris. Avec `REDIS_URL`, ils comptent dans Redis.
+
 ### Créer le service
 
 1. Railway → **même projet et même environnement** que le backend →
@@ -260,12 +266,23 @@ se voient que si elles ont atterri sur le même conteneur — une fois sur deux.
    egress facturé, et le trafic ne quitte pas le projet. Les trois conditions
    du réseau privé (même projet, même environnement, runtime seulement)
    s'appliquent à l'identique.
+   **Ajouter `?family=0` à la fin** — valeur finale :
+   `${{Redis.REDIS_URL}}?family=0`. Le réseau privé Railway a longtemps été
+   IPv6 seulement, et `ioredis` ne cherche que l'IPv4 par défaut : sans ce
+   paramètre, la connexion échoue (`ENOTFOUND … railway.internal`) et le
+   serveur reste en mode dégradé. `family=0` accepte les deux ; ioredis le lit
+   directement dans l'URL.
 4. Redéployer le backend et vérifier la bannière de démarrage :
 
    ```
    [Server] Réglages effectifs   SOCKET_ADAPTER: "redis (diffusion partagée entre instances)"
+                                 RATE_LIMIT_STORE: "redis (compteurs partagés entre instances)"
                                  REDIS_URL: "présente"
    ```
+
+   Puis, dans les logs, `[Redis] prêt` pour les rôles `pub` et `commands`. Une
+   bannière « redis » ne prouve que la présence de la variable ; seul `prêt`
+   prouve la connexion.
 
    `mémoire (diffusion LOCALE — une seule instance supportée)` signifie que la
    variable n'est pas arrivée jusqu'au process : c'est exactement le cas qu'on
@@ -300,14 +317,14 @@ indéfiniment en espaçant, et la diffusion redevient locale en attendant : le
 chat régresse au comportement mono-instance, il ne s'arrête pas. Le sens de la
 panne est choisi — dégradé, jamais mort.
 
-### Ce que Redis ne fait PAS encore ici
+Les limiteurs de débit suivent la même règle, avec un client Redis à part
+(pas de file hors-ligne, 250 ms de délai) : sur erreur, chaque compteur bascule
+en mémoire locale — limité par instance, comme avant Redis — puis revient seul.
+Ni ouvert (ce qui désarmerait l'anti-brute-force), ni fermé (ce qui couperait
+l'API). Une ligne de log par bascule : `[rateLimit] Redis indisponible —
+compteurs en mémoire locale`, puis `Redis rétabli`.
 
-Le limiteur de débit du chat compte toujours **en mémoire de process**
-(`InMemoryRateLimitStore`), comme les limiteurs `express-rate-limit`. À N
-instances, l'autorisation réelle est donc N× celle annoncée. Ce n'est pas une
-régression introduite par cette étape — c'est le reliquat de la ligne D, à
-traiter avant de monter en instances si le débit du chat compte. Le quota LLM,
-lui, est en base depuis la migration 024 : il est déjà partagé.
+Le quota LLM est en base depuis la migration 024 : il ne dépend pas de Redis.
 
 ---
 

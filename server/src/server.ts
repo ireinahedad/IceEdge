@@ -16,6 +16,7 @@ import { verifyEncryptionKey } from './services/crypto.util';
 import { getBestBets } from './services/bestBets.service';
 import { allowedOrigins } from './cors';
 import { closeRedis, redisEnabled } from './redis';
+import { rateLimitBackend } from './middleware/rateLimitStore';
 import { USE_MOCK } from './services/nhlApiClient';
 
 const PORT = Number(process.env.PORT) || 3001;
@@ -107,6 +108,11 @@ const DORMANT = process.env.DORMANT === 'true';
         SOCKET_ADAPTER: socketAdapter === 'redis'
           ? 'redis (diffusion partagée entre instances)'
           : 'mémoire (diffusion LOCALE — une seule instance supportée)',
+        // Même raisonnement pour les limiteurs de débit : en mémoire, N
+        // instances accordent N × le quota, sans que rien ne le montre.
+        RATE_LIMIT_STORE: rateLimitBackend() === 'redis'
+          ? 'redis (compteurs partagés entre instances)'
+          : 'mémoire (compteurs PAR INSTANCE — une seule instance supportée)',
         REDIS_URL: redisEnabled ? 'présente' : 'ABSENTE',
       },
       '[Server] Réglages effectifs',

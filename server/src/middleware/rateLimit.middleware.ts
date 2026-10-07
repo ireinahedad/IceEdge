@@ -15,6 +15,7 @@ import rateLimit from 'express-rate-limit';
 import type { Request } from 'express';
 import { logger } from '../logger';
 import { verifyAccessToken } from '../services/auth.service';
+import { limiterStore } from './rateLimitStore';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -94,6 +95,8 @@ function apiLimit(): number {
  *  Keyed per account when the request carries a valid token, per IP otherwise
  *  (cf. `userOrIpKey` : le NAT mobile faisait partager un quota à des inconnus). */
 export const apiLimiter = rateLimit({
+  // Compteurs partagés entre instances quand REDIS_URL est posée (ligne D).
+  ...limiterStore('api'),
   windowMs: 60 * 1000,             // 1 minute
   limit:    apiLimit(),
   standardHeaders: 'draft-7',      // RateLimit-* headers
@@ -104,6 +107,7 @@ export const apiLimiter = rateLimit({
 
 /** Strict — login / register. Blunts credential brute-force. */
 export const authLimiter = rateLimit({
+  ...limiterStore('auth'),
   windowMs: 15 * 60 * 1000,       // 15 minutes
   limit:    isProd ? 15 : 100,    // 15 attempts / 15 min / IP in prod
   standardHeaders: 'draft-7',
@@ -120,6 +124,7 @@ export const authLimiter = rateLimit({
  *  N comptes valent N × 30 depuis une même adresse ; les salons gardent en plus
  *  leur propre limiteur par action (`chat.routes.ts`). */
 export const writeLimiter = rateLimit({
+  ...limiterStore('write'),
   windowMs: 60 * 1000,            // 1 minute
   limit:    isProd ? 30 : 500,    // 30 writes / min / compte en prod
   standardHeaders: 'draft-7',
@@ -141,6 +146,7 @@ export const writeLimiter = rateLimit({
  *  be effectively un-throttled and abusable for email-bombing a victim's inbox.
  *  This limiter counts EVERY request, keyed by IP. */
 export const passwordResetLimiter = rateLimit({
+  ...limiterStore('password-reset'),
   windowMs: 60 * 60 * 1000,       // 1 hour
   limit:    isProd ? 5 : 100,     // 5 email triggers / hour / IP in prod
   standardHeaders: 'draft-7',
@@ -153,6 +159,7 @@ export const passwordResetLimiter = rateLimit({
  *  guessing oracle for someone holding a stolen access token. 10 rather than
  *  5: a single honest attempt already uses two (start + confirm). */
 export const accountDeletionLimiter = rateLimit({
+  ...limiterStore('account-deletion'),
   windowMs: 60 * 60 * 1000,       // 1 hour
   limit:    isProd ? 10 : 100,
   standardHeaders: 'draft-7',
@@ -160,10 +167,11 @@ export const accountDeletionLimiter = rateLimit({
   message: { error: 'Too many requests. Please try again later.' },
 });
 
-/** Dedicated — LLM proxy. The Pro path bills the operator's GitHub Models
+/** Dedicated — LLM proxy. The Pro path bills the operator's OpenAI
  *  account, so it needs its own tight, per-user limit independent of the broad
  *  apiLimiter. Keyed by user id (route is authenticated) with an IP fallback. */
 export const llmLimiter = rateLimit({
+  ...limiterStore('llm'),
   windowMs: 60 * 1000,            // 1 minute
   limit:    isProd ? 10 : 60,     // 10 prompts / min / user in prod
   standardHeaders: 'draft-7',
@@ -176,6 +184,7 @@ export const llmLimiter = rateLimit({
  *  blunts brute-forcing. Keyed by user id (redeem is authenticated) with an IP
  *  fallback, so one account/IP can't grind through the code space. */
 export const redeemLimiter = rateLimit({
+  ...limiterStore('redeem'),
   windowMs: 60 * 60 * 1000,       // 1 hour
   limit:    isProd ? 10 : 100,    // 10 attempts / hour / user in prod
   standardHeaders: 'draft-7',
@@ -208,6 +217,7 @@ export const redeemLimiter = rateLimit({
  * des abonnés qui ne se connaissent pas.
  */
 export const predictLimiter = rateLimit({
+  ...limiterStore('predict'),
   windowMs: 60 * 1000,            // 1 minute
   limit:    isProd ? 60 : 600,    // 60 prédictions ML / min / compte en prod
   standardHeaders: 'draft-7',

@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { chatService } from '../services/chat.service';
 import { optionalAuthenticate } from '../middleware/auth.middleware';
-import { InMemoryRateLimitStore, RateLimitStore } from '../middleware/rateLimitStore';
+import { createChatRateLimitStore, RateLimitStore } from '../middleware/rateLimitStore';
 import { validateBody } from '../middleware/validate.middleware';
 import {
   chatCreateRoomSchema, chatJoinByCodeSchema, chatSendMessageSchema,
@@ -26,11 +26,12 @@ function uid(req: Request): string {
 // ─── Per-user rate limiting (sliding window) ─────────────────────────────────
 // Protects against message spam and join-code brute force.
 //
-// Storage is abstracted behind RateLimitStore. The default in-memory store is
-// SINGLE-INSTANCE ONLY (counters reset on restart, not shared across instances)
-// and self-prunes stale buckets. To go multi-instance / restart-persistent,
-// swap this for a Redis-backed RateLimitStore — the middleware below is unchanged.
-const rateStore: RateLimitStore = new InMemoryRateLimitStore();
+// Storage is abstracted behind RateLimitStore. With REDIS_URL the counters live
+// in Redis and are shared across instances (sliding window, Lua-atomic); without
+// it, the in-memory store — SINGLE-INSTANCE ONLY — exactly as before. If Redis
+// goes down at runtime the Redis store falls back to memory on its own
+// (cf. rateLimitStore.ts) — the middleware below is unchanged either way.
+const rateStore: RateLimitStore = createChatRateLimitStore();
 
 function rateLimit(action: string, max: number, windowMs: number) {
   return async (req: Request, res: Response, next: NextFunction) => {

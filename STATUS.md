@@ -34,7 +34,7 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
 |---|---|---|
 | **Redis / multi-instance** | ✔ Socket.io adapter shipped and **active** (Redis service on Railway, `REDIS_URL` set — checked 2026-09-26) | `RedisRateLimitStore` not written; rate limiters are per process. Needed only before a 2nd instance. |
 | **Cloudflare in front of the API** | 📄 Proxy and cache headers in place | Check that it actually caches what the headers allow. |
-| **Budget alerts** | ✔ Thresholds written in `MONITORING.md` | Neon (6 $) and R2 (5 $) are set. Left: Railway usage limits, LLM provider hard limit, Stripe webhook failure alert, Sentry spend cap. |
+| **Budget alerts** | ✔ All set (confirmed 2026-10-07) | Thresholds in `MONITORING.md`. |
 | **Load testing** | ✔ In-process benches, all green | Real visitor latency against a pre-prod (`loadtest/s1-landing.js`) never run — there is no pre-prod. |
 | **QA** | ✔ I1, I2 (7/7), static campaigns; ✔ dynamic campaign on a local stack (2026-09-26, 90/90) | What needs the real world: devices (C2–C3), Google (I4), Neon restore drill (§3.7). |
 | **Client tests** | ✔ `typecheck` in CI | No test runner in `client/`. The socket block filter (`visibleMessages` in `RoomChat`) has no guard. |
@@ -116,13 +116,13 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
 
 | # | What | Trigger |
 |---|---|---|
-| D | `RedisRateLimitStore` + set `REDIS_URL` | before a 2nd instance |
+| D | Code done (socket adapter 2026-09-19, rate-limit counters 2026-10-07) — provision Redis + set `REDIS_URL`, check `SOCKET_ADAPTER` / `RATE_LIMIT_STORE` in the boot banner | before a 2nd instance |
 | Q | 2nd Railway instance (no sticky sessions; keep `transports: ['websocket']`) | CPU > ~70 % |
 | U | ML service RAM: 2 uvicorn workers don't fit in 512 MB | before the first real peak |
 | E | Move old data-URI avatars to R2 | ~500 users with avatars |
 | I | Client request cache (TanStack Query) | Railway bill becomes visible |
 | 7 bis | Neon: scale-to-zero vs always-on — decide | off-season |
-| R, S, T, V, W | per-user API limiter, cache keys, LLM prompt cache, log sampling, Tailwind purge | see audit |
+| S, T, V, W | cache keys, LLM prompt cache, log sampling, Tailwind purge (R done 2026-08-24) | see audit |
 
 ~~Open question: `writeLimiter` per IP.~~ Settled: it is keyed per account since 2026-08-24
 (`userOrIpKey`), and since 2026-09-26 it no longer counts reads.

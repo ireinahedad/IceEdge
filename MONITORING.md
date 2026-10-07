@@ -47,6 +47,8 @@ Sentry is already wired (`server/src/instrument.ts`, activated when
 
 ## Alertes de budget (audit de scalabilité, ligne 12)
 
+> **Toutes posées** (confirmé le 2026-10-07).
+
 Les alertes ci-dessus disent que l'application est **cassée**. Celles-ci disent
 qu'elle est **chère** — un mode de défaillance beaucoup plus discret, parce que
 rien ne se dégrade : ça marche, et la facture arrive à la fin du mois.
