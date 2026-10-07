@@ -245,12 +245,12 @@ Do §2 in week 1 even if no code is written.
 
 ## 2. Phase 0 — Accounts and identity (week 1, do this first)
 
-- [ ] **0.1** Pick the Apple Account you will use *forever*. Not `arakice.support@gmail.com`
+- [x] **0.1** Pick the Apple Account you will use *forever*. Not `arakice.support@gmail.com`
       — you already lost control of that one and it cost you the Cloudflare account
       (recovered 2026-09-16, now on `ireinahedad24@gmail.com` — still not a reason to reuse it).
       Use an address on a domain **you** control, with recovery you can actually reach.
-- [ ] **0.2** Turn on two-factor auth on it. Save the recovery key somewhere real.
-- [ ] **0.3** Enroll in the Apple Developer Program ($99/yr), **Individual**.
+- [x] **0.2** Turn on two-factor auth on it. Save the recovery key somewhere real.
+- [x] **0.3** Enroll in the Apple Developer Program ($99/yr), **Individual**.
       https://developer.apple.com/programs/enroll/
 - [ ] **0.4** Once approved, apply for the **App Store Small Business Program** (15% instead of 30%).
 - [ ] **0.5** In App Store Connect: create the app record.

@@ -68,8 +68,8 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
 
 ✔ No Capacitor dependency, no `client/ios/`.
 
-- [ ] Phase 0 — Apple account on an address you control, 2FA, Developer Program (Individual),
-      Small Business Program, app record, API key.
+- [ ] Phase 0 — ✔ Developer Program account done (2026-10-07). Left: Small Business Program,
+      Bundle ID + app record, API key, app name.
 - [ ] Phase 1 — legal: public privacy URL, EULA, age rating (expect 18+), privacy manifest.
 - [ ] Phase 2 — gambling (Option A: no bookmaker links on iOS — flags already done); iOS copy
       and in-app disclaimer; decide whether the public site's betting framing is softened (R10).
@@ -373,7 +373,7 @@ Règles inchangées : **pas de staging**. On teste en production avec des compte
 s'obtient par code promo et jamais par un vrai paiement. L'authentification se teste sur
 arakice.com, pas sur un aperçu `*.vercel.app`.
 
-#### 1. P4 — Performance mobile (Lighthouse) · Haute · Polices déployées, PSI à relancer
+#### 1. P4 — Performance mobile (Lighthouse) · Haute · ✔ CLS réglé (2026-10-07)
 
 PSI mobile sur arakice.com le 2026-10-06 à 09:21, après déploiement : **59**
 (FCP 3,4 s · LCP 3,8 s · TBT 0 ms · **CLS 0,481** · SI 4,3 s). Avant : 58, LCP 4,2 s, SI 5,3 s.
@@ -395,7 +395,8 @@ Attendu : LCP < 2,5 s, CLS < 0,1.
   Merriweather 700, latin + latin-ext), `preload`, faces « Fallback » calées sur les métriques
   (écart mesuré ≤ 1 % en largeur, 0 px en hauteur), cache 1 an sur `/fonts/`. Les pages SEO
   statiques gardent Google Fonts.
-- **À faire** : relancer PSI mobile (CLS attendu < 0,1, LCP en baisse).
+- **PSI mobile après les polices (2026-10-07)** : 2,7 s FCP · 3,5 s LCP · 0 ms TBT · **CLS 0,043** ✔.
+- Reste (optionnel) : LCP 3,5 s > 2,5 s — le paragraphe « Best Parlay » est rendu en JS.
 - LCP = paragraphe « Best Parlay », 1,7 s de délai de rendu (contenu rendu en JS).
 
 #### 2. Vérifications après le lot du 2026-09-26 · Haute
