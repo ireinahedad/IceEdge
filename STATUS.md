@@ -24,7 +24,8 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
   (Postgres), Cloudflare R2 (avatars), Cloudflare DNS/proxy. 📄
 - **All the pre-iOS web work is shipped**; nothing blocks the launch or the iOS start
   (C1 on a real iPhone passed 2026-10-05).
-- **iOS has not started, and the web is NOT frozen.** Tag the freeze point when iOS starts (§3.4).
+- **The web is frozen at tag `pre-ios-freeze` (2026-10-07) and iOS has started (Phase 0).** Every web
+  change from here is a *shared* change, tested on web and in the iOS shell (§3.4).
 - **The NHL 2026-27 regular season started on 2026-09-29** (84 games per team).
 
 ---
@@ -60,9 +61,10 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
 - [ ] Verify Cloudflare caching in front of `api.arakice.com`.
 - [ ] After launch: empty `PRO_PROMO_CODES`, redeploy, check an old code returns 400.
 
-### 3.4 iOS app — `APPLE_PLAN.md` (nothing started)
+### 3.4 iOS app — `APPLE_PLAN.md` (started 2026-10-07)
 
-- [ ] When iOS starts: `git tag pre-ios-freeze && git push origin pre-ios-freeze`, then Phase 0.
+- [x] Freeze tagged `pre-ios-freeze` on 2026-10-07 (gate G1–G4 closed). §3.12 deferred past the
+      freeze: it ships as a shared change.
 
 ✔ No Capacitor dependency, no `client/ios/`.
 
@@ -371,7 +373,7 @@ Règles inchangées : **pas de staging**. On teste en production avec des compte
 s'obtient par code promo et jamais par un vrai paiement. L'authentification se teste sur
 arakice.com, pas sur un aperçu `*.vercel.app`.
 
-#### 1. P4 — Performance mobile (Lighthouse) · Haute · Échoué (correctifs à déployer)
+#### 1. P4 — Performance mobile (Lighthouse) · Haute · Polices déployées, PSI à relancer
 
 PSI mobile sur arakice.com le 2026-10-06 à 09:21, après déploiement : **59**
 (FCP 3,4 s · LCP 3,8 s · TBT 0 ms · **CLS 0,481** · SI 4,3 s). Avant : 58, LCP 4,2 s, SI 5,3 s.
@@ -387,9 +389,13 @@ Attendu : LCP < 2,5 s, CLS < 0,1.
   mise à jour du DOM par React (arrivée d'un `bundle`), cette lecture forçait une mise en page du
   document entier. Les tailles sont maintenant mises en cache (`ResizeObserver`), la boucle ne lit plus
   rien, le recalage passe par `onScroll`, et le défilement attend 4 s après le chargement.
-- **À faire** : déployer, puis relancer PSI mobile et comparer (CLS attendu < 0,1).
-- **Polices : 750 ms bloquantes** (une seule requête Google Fonts depuis le correctif). Pour les
-  supprimer : héberger Oswald, Inter et Merriweather 700 dans `public/fonts` (la CSP accepte `'self'`).
+- **Déployé le 2026-10-07** — PSI mobile ensuite : 3,5 s FCP · 4,3 s LCP · 0 ms TBT · **CLS 0,222** ·
+  5,3 s SI. CLS divisé par deux, mais reste > 0,1 : le swap Oswald grandissait chaque ligne de 6 px.
+- **Polices auto-hébergées (`60bbb89`, 2026-10-07)** : `public/fonts` (Oswald/Inter variables,
+  Merriweather 700, latin + latin-ext), `preload`, faces « Fallback » calées sur les métriques
+  (écart mesuré ≤ 1 % en largeur, 0 px en hauteur), cache 1 an sur `/fonts/`. Les pages SEO
+  statiques gardent Google Fonts.
+- **À faire** : relancer PSI mobile (CLS attendu < 0,1, LCP en baisse).
 - LCP = paragraphe « Best Parlay », 1,7 s de délai de rendu (contenu rendu en JS).
 
 #### 2. Vérifications après le lot du 2026-09-26 · Haute
@@ -452,6 +458,9 @@ Attendu : LCP < 2,5 s, CLS < 0,1.
 - [ ] Add `faceoffs_taken` to `build-content-insights.ts`.
 
 ### 3.12 Real bet365 odds + Best Bets ranking (added 2026-09-25)
+
+> **Deferred past the iOS freeze (2026-10-07).** Changes the Best Bets screen and `odds.routes.ts`:
+> ship it as a shared change, tested on web and in the iOS shell.
 
 Context: **The Odds API has no bet365 for the NHL.** Its only bet365 key is `bet365_au`
 (Australia, AFL/NRL only). So `oddsClient.ts` never finds `bet365` and `pickBookmaker` falls back

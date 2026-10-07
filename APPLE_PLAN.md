@@ -1,6 +1,6 @@
 # APPLE_PLAN.md — Shipping IceEdge / Arakice to the Apple App Store
 
-**Owner:** Ireina · **Created:** 2026-09-03 · **Status:** not started — gate still closed (2026-09-24)
+**Owner:** Ireina · **Created:** 2026-09-03 · **Status:** started — gate closed, web frozen at `pre-ios-freeze` (2026-10-07) · Phase 0 in progress
 
 > **Status 2026-09-24.** The web-side risks of §-1 are handled: R2 (no Google on iOS), R3
 > (server native token path), R4 (moderation), R5/B3 (no Stripe and no Pro on iOS v1), R6
@@ -22,11 +22,11 @@ Finish what you want to finish on arakice.com, then freeze.
 
 **Freeze checklist — tick all four before Phase 0:**
 
-- [ ] **G1** Feature work on the web app is done. `STATUS.md` has nothing left that
+- [x] **G1** Feature work on the web app is done. `STATUS.md` has nothing left that
       would change screens, routes, or the data shape the client consumes.
-- [ ] **G2** `npm run typecheck` and the CI in `.github/workflows/ci.yml` are green.
-- [ ] **G3** The production API is stable — no endpoint renames planned.
-- [ ] **G4** Tag the freeze point: `git tag pre-ios-freeze && git push --tags`.
+- [x] **G2** `npm run typecheck` and the CI in `.github/workflows/ci.yml` are green.
+- [x] **G3** The production API is stable — no endpoint renames planned.
+- [x] **G4** Tag the freeze point: `git tag pre-ios-freeze && git push --tags`.
       Everything after this is either an iOS change or a deliberate exception.
 
 After the freeze, web changes still happen — but they ship as **shared** changes tested on
