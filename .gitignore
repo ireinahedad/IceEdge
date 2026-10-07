@@ -76,3 +76,6 @@ ml/data/raw/odds/oddsapi/
 
 # Rapports du banc d'essai de l'Analyse IA (server/scripts/eval-llm-analysis.ts)
 server/eval-reports/
+
+# Fichiers mis de côté pour suppression manuelle
+_to_delete/
