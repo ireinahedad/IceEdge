@@ -211,7 +211,7 @@ export function StatsHubHeader({ active }: { active: 0 | 1 }) {
   return (
     <header className="bg-[#0A0E0C]/80 backdrop-blur-md sticky top-0 z-40" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
       <div className="px-4 pt-3 pb-2">
-        <h1 className="text-white text-lg md:text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("stats.title")}</h1>
+        <h1 className="text-white text-lg md:text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif" }}>{t("stats.title")}</h1>
       </div>
       <div
         className="puck-tabs mx-4 mb-3"
@@ -361,7 +361,7 @@ export function StatsPage() {
                   if (divs.length === 0) return null;
                   return (
                     <section key={conf} className="col-span-full flex flex-col gap-3 mb-2">
-                      <h2 className="text-white text-sm font-bold uppercase tracking-wider" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>
+                      <h2 className="text-white text-sm font-bold uppercase tracking-wider" style={{ fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif" }}>
                         {t(conferenceLabelKey(conf))}
                       </h2>
                       {divs.map(({ d, items }) => (

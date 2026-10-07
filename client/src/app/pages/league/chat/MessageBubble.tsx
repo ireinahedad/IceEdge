@@ -55,7 +55,7 @@ function SlipAttachmentCard({ slip }: { slip: SlipAttachment }) {
       <div className="flex items-center justify-between px-3 pt-2 pb-1.5">
         <span
           className="text-[11px] font-bold tracking-[0.14em] text-[#86d1ea]"
-          style={{ fontFamily: "'Oswald','Arial Narrow',sans-serif" }}
+          style={{ fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif" }}
         >
           ARAKICE
         </span>
@@ -82,7 +82,7 @@ function SlipAttachmentCard({ slip }: { slip: SlipAttachment }) {
       <div className="flex items-baseline gap-1.5 px-3 pb-1.5">
         <span
           className="text-xl font-black leading-none"
-          style={{ color, fontFamily: "'Oswald','Arial Narrow',sans-serif" }}
+          style={{ color, fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif" }}
         >
           {slip.combinedProbability != null ? `${slip.combinedProbability}%` : "—"}
         </span>

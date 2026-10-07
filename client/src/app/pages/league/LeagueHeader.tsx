@@ -39,7 +39,7 @@ export function LeagueHeader({
             <h1
               className="text-white text-xl font-bold uppercase"
               style={{
-                fontFamily: "'Oswald', 'Arial Narrow', sans-serif",
+                fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif",
                 // Les projecteurs de l'aréna accrochent le titre.
                 textShadow: "0 0 18px rgba(134,209,234,0.35)",
               }}

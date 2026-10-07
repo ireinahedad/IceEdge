@@ -98,7 +98,7 @@
 .framed-label__text {
   position: relative;
   z-index: 1;
-  font-family: "Oswald", "Arial Narrow", sans-serif;
+  font-family: "Oswald", "Oswald Fallback", "Arial Narrow", sans-serif;
   font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: 0.06em;

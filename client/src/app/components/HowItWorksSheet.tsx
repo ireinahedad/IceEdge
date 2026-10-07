@@ -149,7 +149,7 @@ export function HowItWorksSheet({ onClose }: { onClose: () => void }) {
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-1 pb-3 border-b border-white/10 flex-shrink-0">
-          <h2 className="text-white font-bold text-lg" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>
+          <h2 className="text-white font-bold text-lg" style={{ fontFamily: "'Merriweather', 'Merriweather Fallback', Georgia, serif" }}>
             {fr ? "Comment ça marche" : "How it works"}
           </h2>
           <button

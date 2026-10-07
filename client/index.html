@@ -49,15 +49,26 @@
     <meta name="twitter:image" content="https://arakice.com/arakice-og.png" />
     <meta name="twitter:image:alt" content="ArakIce, NHL predictions powered by ML" />
 
-    <!-- Fonts: Oswald (display/numbers) + Inter (body) + Merriweather 700 (5 titres).
-         Une seule requête : Merriweather venait d'un @import dans fonts.css, découvert
-         après le CSS du bundle — 580 ms de chaîne bloquante (PSI mobile, 2026-10-06). -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@700&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Fonts: Oswald (display/numbers) + Inter (body) + Merriweather 700 (5 titres),
+         hébergées dans public/fonts (latin + latin-ext ; Oswald et Inter en variable).
+         Plus de Google Fonts : la requête bloquait ~750 ms (PSI mobile, 2026-10-07) et
+         l'app iOS embarque ainsi ses polices. Les faces « Fallback » calent Arial / Times
+         sur les métriques des vraies polices : le swap ne décale plus les cartes (CLS).
+         Valeurs calculées avec fontTools (largeur moyenne + hhea), à refaire si on change
+         de police. -->
+    <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/oswald-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <style>
+      @font-face { font-family: 'Inter'; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/inter-latin-wght-normal.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+      @font-face { font-family: 'Inter'; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/inter-latin-ext-wght-normal.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+      @font-face { font-family: 'Oswald'; font-style: normal; font-weight: 200 700; font-display: swap; src: url(/fonts/oswald-latin-wght-normal.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+      @font-face { font-family: 'Oswald'; font-style: normal; font-weight: 200 700; font-display: swap; src: url(/fonts/oswald-latin-ext-wght-normal.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+      @font-face { font-family: 'Merriweather'; font-style: normal; font-weight: 700; font-display: swap; src: url(/fonts/merriweather-latin-700-normal.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+      @font-face { font-family: 'Merriweather'; font-style: normal; font-weight: 700; font-display: swap; src: url(/fonts/merriweather-latin-ext-700-normal.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+      @font-face { font-family: 'Inter Fallback'; src: local('Arial'), local('ArialMT'), local('Liberation Sans'); size-adjust: 107.02%; ascent-override: 90.52%; descent-override: 22.54%; line-gap-override: 0%; }
+      @font-face { font-family: 'Oswald Fallback'; src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('Arial'); size-adjust: 83.96%; ascent-override: 142.10%; descent-override: 34.42%; line-gap-override: 0%; }
+      @font-face { font-family: 'Merriweather Fallback'; src: local('Times New Roman Bold'), local('TimesNewRomanPS-BoldMT'), local('Liberation Serif Bold'), local('Times New Roman'); size-adjust: 113.85%; ascent-override: 86.43%; descent-override: 23.98%; line-gap-override: 0%; }
+    </style>
 
     <style>
       /* ── Design tokens ── */
@@ -83,18 +94,18 @@
         margin: 0;
         background-color: var(--color-base);
         color: var(--color-text);
-        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        font-family: 'Inter', 'Inter Fallback', system-ui, -apple-system, sans-serif;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
       }
 
       #root { height: 100%; }
       ::-webkit-scrollbar { width: 0; }
-      .font-display { font-family: 'Oswald', sans-serif; }
+      .font-display { font-family: 'Oswald', 'Oswald Fallback', sans-serif; }
 
       /* Crawlable fallback nav — only ever painted when JS is unavailable. */
       .no-js-nav { padding: 32px 20px; max-width: 760px; margin: 0 auto; }
-      .no-js-nav h1 { font-family: 'Oswald', sans-serif; font-size: 28px; margin: 0 0 8px; }
+      .no-js-nav h1 { font-family: 'Oswald', 'Oswald Fallback', sans-serif; font-size: 28px; margin: 0 0 8px; }
       .no-js-nav p { color: var(--color-text-muted); margin: 0 0 20px; }
       .no-js-nav ul { list-style: none; padding: 0; margin: 0; }
       .no-js-nav li { margin-bottom: 10px; }

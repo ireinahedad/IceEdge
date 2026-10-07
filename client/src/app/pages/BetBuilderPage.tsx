@@ -243,7 +243,7 @@ export function BetBuilderPage() {
       >
         <div className="px-4 pt-3 pb-3 flex items-center justify-between">
           <div>
-            <h1 className="text-white text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>
+            <h1 className="text-white text-xl font-bold uppercase" style={{ fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif" }}>
               Bet Slip
             </h1>
             <p className="text-[#8a9ea6] text-xs mt-0.5">

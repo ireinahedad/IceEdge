@@ -50,7 +50,7 @@ export function PredictionPage() {
           style={{ background: "rgba(10,14,12,0.92)", backdropFilter: "blur(16px)", paddingTop: "env(safe-area-inset-top, 0px)" }}>
           <div className="px-4 pt-3 pb-3 flex items-center gap-3">
             <button onClick={() => navigate(-1)} className="tap-44 text-[#3a5060] text-lg">←</button>
-            <h1 className="text-white text-base font-bold flex-1 uppercase" style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}>{t("pred.title")}</h1>
+            <h1 className="text-white text-base font-bold flex-1 uppercase" style={{ fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif" }}>{t("pred.title")}</h1>
             {/* Le raccourci vers les graphiques était ICI, en pastille serrée à
                 droite du titre. Il est descendu dans le contenu, en bannière
                 pleine largeur juste au-dessus des marchés (`StatsBanner`,

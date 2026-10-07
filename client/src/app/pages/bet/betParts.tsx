@@ -362,7 +362,7 @@ export function EmptySlip({ onBrowse }: { onBrowse: () => void }) {
         </div>
       </div>
       <div className="text-center">
-        <p className="text-white font-bold mb-1" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>
+        <p className="text-white font-bold mb-1" style={{ fontFamily: "'Merriweather', 'Merriweather Fallback', Georgia, serif" }}>
           {t("slip.empty")}
         </p>
         <p className="text-[#8a9ea6] text-xs leading-relaxed max-w-[220px]">

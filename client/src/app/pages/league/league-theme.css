@@ -387,7 +387,7 @@
    (c'est la couleur d'un afficheur d'aréna), rouge et vert réservés
    aux verdicts. */
 .scoreboard-digit {
-  font-family: "Oswald", "Arial Narrow", sans-serif;
+  font-family: "Oswald", "Oswald Fallback", "Arial Narrow", sans-serif;
   font-weight: 700;
   letter-spacing: 0.06em;
   color: #ffd257;
@@ -409,7 +409,7 @@
 }
 
 .scoreboard-label {
-  font-family: "Oswald", "Arial Narrow", sans-serif;
+  font-family: "Oswald", "Oswald Fallback", "Arial Narrow", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.22em;
   color: rgba(180, 212, 230, 0.5);
@@ -424,7 +424,7 @@
   cursor: pointer;
   padding: 11px 6px;
   border-radius: 7px;
-  font-family: "Oswald", "Arial Narrow", sans-serif;
+  font-family: "Oswald", "Oswald Fallback", "Arial Narrow", sans-serif;
   font-weight: 700;
   font-size: 12px;
   letter-spacing: 0.18em;
@@ -491,7 +491,7 @@
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  font-family: "Oswald", "Arial Narrow", sans-serif;
+  font-family: "Oswald", "Oswald Fallback", "Arial Narrow", sans-serif;
   font-weight: 700;
   font-size: 12px;
   letter-spacing: 0.24em;
@@ -510,7 +510,7 @@
 }
 
 .arena-section-count {
-  font-family: "Oswald", "Arial Narrow", sans-serif;
+  font-family: "Oswald", "Oswald Fallback", "Arial Narrow", sans-serif;
   font-weight: 700;
   font-size: 11px;
   color: rgba(134, 209, 234, 0.65);

@@ -437,7 +437,7 @@ function SlipCard({ slip, onCancel }: { slip: BetSlip; onCancel?: () => void }) 
       {/* Footer: ArakIce branding (kept in the shared image) + share button (excluded) */}
       <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/[0.06]">
         <span className="text-[11px] font-bold tracking-[0.14em]"
-          style={{ fontFamily: "'Oswald','Arial Narrow',sans-serif", color: "#86d1ea" }}>
+          style={{ fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif", color: "#86d1ea" }}>
           ARAKICE
         </span>
         <div className="flex items-center gap-1.5">
@@ -570,7 +570,7 @@ export function MySlipsTab({
           <Lock size={22} className="text-[#90C9F0]" />
         </div>
         <div>
-          <p className="text-white font-bold text-sm" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>{t("slip.signin")}</p>
+          <p className="text-white font-bold text-sm" style={{ fontFamily: "'Merriweather', 'Merriweather Fallback', Georgia, serif" }}>{t("slip.signin")}</p>
           <p className="text-[#8a9ea6] text-xs mt-1 leading-relaxed">{t("slip.signinHint")}</p>
         </div>
       </div>
@@ -614,7 +614,7 @@ export function MySlipsTab({
             <History size={22} className="text-[#4a6068]" />
           </div>
           <div>
-            <p className="text-white font-bold text-sm" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>{t("slip.noSlips")}</p>
+            <p className="text-white font-bold text-sm" style={{ fontFamily: "'Merriweather', 'Merriweather Fallback', Georgia, serif" }}>{t("slip.noSlips")}</p>
             <p className="text-[#8a9ea6] text-xs mt-1">{t("slip.noSlipsHint")}</p>
           </div>
         </div>

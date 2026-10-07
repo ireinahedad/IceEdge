@@ -233,7 +233,7 @@ export function LoginPage() {
         </button>
         <h1
           className="text-white text-2xl tracking-[0.16em] uppercase mb-1"
-          style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif", fontWeight: 600 }}
+          style={{ fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif", fontWeight: 600 }}
         >
           ArakIce
         </h1>
@@ -369,7 +369,7 @@ export function LoginPage() {
 
       {/* App presentation for non-users */}
       <div className="mt-10">
-        <p className="text-center text-white text-sm font-bold mb-1" style={{ fontFamily: "'Merriweather', Georgia, serif" }}>
+        <p className="text-center text-white text-sm font-bold mb-1" style={{ fontFamily: "'Merriweather', 'Merriweather Fallback', Georgia, serif" }}>
           {t("login.introTitle")}
         </p>
         <p className="text-center text-[#92A08A] text-xs mb-5">{t("login.introSubtitle")}</p>

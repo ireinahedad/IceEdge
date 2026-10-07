@@ -144,7 +144,7 @@ export function SchedulePage() {
           <div className="flex-1 min-w-0">
             <h1
               className="text-white text-xl font-bold uppercase leading-tight"
-              style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}
+              style={{ fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif" }}
             >
               {t("schedule.title")}
             </h1>
@@ -362,7 +362,7 @@ export function ScheduleContent({ accent = ACCENT }: { accent?: string }) {
         </button>
         <span
           className="text-white text-sm font-bold uppercase tracking-wide"
-          style={{ fontFamily: "'Oswald', 'Arial Narrow', sans-serif" }}
+          style={{ fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif" }}
         >
           {monthLabel}
         </span>

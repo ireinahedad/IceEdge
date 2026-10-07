@@ -4,5 +4,5 @@
 @import 'tw-animate-css';
 
 @utility font-serif-display {
-  font-family: 'Merriweather', Georgia, serif;
+  font-family: 'Merriweather', 'Merriweather Fallback', Georgia, serif;
 }

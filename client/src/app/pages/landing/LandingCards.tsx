@@ -58,7 +58,7 @@ export function SportSelector({ compact = false }: { compact?: boolean }) {
         <span
           className="uppercase font-bold text-white leading-none"
           style={{
-            fontFamily: "'Oswald', 'Arial Narrow', sans-serif",
+            fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif",
             fontSize: 27,
             letterSpacing: "0.2em",
           }}

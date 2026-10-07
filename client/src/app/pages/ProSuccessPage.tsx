@@ -32,7 +32,7 @@ export function ProSuccessPage() {
         ArakIce Pro
       </div>
 
-      <h1 className="text-2xl font-bold mb-3" style={{ fontFamily: "'Oswald','Arial Narrow',sans-serif" }}>
+      <h1 className="text-2xl font-bold mb-3" style={{ fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif" }}>
         {t("pro.successTitle")}
       </h1>
       <p className="text-sm mb-8" style={{ color: "#B7C4AD" }}>

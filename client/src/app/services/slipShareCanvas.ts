@@ -8,7 +8,8 @@
  * en surface :
  *
  *   1. Pour embarquer les polices, la bibliothèque lit `document.styleSheets`.
- *      Oswald et Inter viennent d'un `<link>` Google Fonts sans `crossorigin`,
+ *      Oswald et Inter venaient d’un `<link>` Google Fonts sans `crossorigin`
+ *      (auto-hébergées depuis 2026-10-07, voir `index.html`),
  *      donc `sheet.cssRules` LÈVE. L'erreur est avalée par un `catch`, mais ce
  *      catch refetch la CSS, base64 les 9 fichiers de police, et les réinjecte
  *      par `insertRule` DANS LA FEUILLE DE STYLE VIVANTE DE L'APP. Lent, et

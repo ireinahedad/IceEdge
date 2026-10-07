@@ -39,7 +39,7 @@ export function IceedgeLogo({ size = 40, wordmark = true, className = "" }: Icee
       {wordmark && (
         <span
           style={{
-            fontFamily: "'Oswald', 'Arial Narrow', sans-serif",
+            fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif",
             fontWeight: 700,
             fontSize: size * 0.4,
             letterSpacing: "0.12em",

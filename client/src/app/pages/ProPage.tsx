@@ -227,7 +227,7 @@ export function ProPage() {
           style={{ background: ACCENT_BG, color: ACCENT, border: `1px solid ${ACCENT_BORDER}` }}>
           ArakIce Pro
         </div>
-        <h1 className="text-2xl font-bold mb-2" style={{ fontFamily: "'Oswald','Arial Narrow',sans-serif" }}>
+        <h1 className="text-2xl font-bold mb-2" style={{ fontFamily: "'Oswald', 'Oswald Fallback', 'Arial Narrow', sans-serif" }}>
           {t("pro.title")}
         </h1>
         <p className="text-sm" style={{ color: "#B7C4AD" }}>{t("pro.subtitle")}</p>
