@@ -26,15 +26,16 @@ jobs:
         working-directory: client
     env:
       # Public values (they end up in the JS bundle anyway): repository *variables*.
-      VITE_NHL_API_URL:        ${{ vars.VITE_NHL_API_URL }}
-      VITE_PROFILE_API_URL:    ${{ vars.VITE_PROFILE_API_URL }}
-      VITE_PREDICTION_API_URL: ${{ vars.VITE_PREDICTION_API_URL }}
-      VITE_SOCKET_URL:         ${{ vars.VITE_SOCKET_URL }}
-      VITE_SENTRY_DSN:         ${{ vars.VITE_SENTRY_DSN }}
-      VITE_SUPPORT_EMAIL:      ${{ vars.VITE_SUPPORT_EMAIL }}
+      # A secret with the same name is accepted too, so either tab works.
+      VITE_NHL_API_URL:        ${{ vars.VITE_NHL_API_URL || secrets.VITE_NHL_API_URL }}
+      VITE_PROFILE_API_URL:    ${{ vars.VITE_PROFILE_API_URL || secrets.VITE_PROFILE_API_URL }}
+      VITE_PREDICTION_API_URL: ${{ vars.VITE_PREDICTION_API_URL || secrets.VITE_PREDICTION_API_URL }}
+      VITE_SOCKET_URL:         ${{ vars.VITE_SOCKET_URL || secrets.VITE_SOCKET_URL }}
+      VITE_SENTRY_DSN:         ${{ vars.VITE_SENTRY_DSN || secrets.VITE_SENTRY_DSN }}
+      VITE_SUPPORT_EMAIL:      ${{ vars.VITE_SUPPORT_EMAIL || secrets.VITE_SUPPORT_EMAIL }}
       # Read by the Release build settings in project.pbxproj and ExportOptions.plist.
-      APPLE_TEAM_ID:           ${{ vars.APPLE_TEAM_ID }}
-      IOS_PROFILE_NAME:        ${{ vars.IOS_PROFILE_NAME }}
+      APPLE_TEAM_ID:           ${{ vars.APPLE_TEAM_ID || secrets.APPLE_TEAM_ID }}
+      IOS_PROFILE_NAME:        ${{ vars.IOS_PROFILE_NAME || secrets.IOS_PROFILE_NAME }}
 
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +61,7 @@ jobs:
           for v in VITE_NHL_API_URL VITE_PROFILE_API_URL VITE_PREDICTION_API_URL VITE_SOCKET_URL APPLE_TEAM_ID IOS_PROFILE_NAME; do
             [ -n "${!v}" ] || missing="$missing $v"
           done
-          [ -z "$missing" ] || { echo "::error::Missing repository variables:$missing (docs/ios/CI_SETUP.md)"; exit 1; }
+          [ -z "$missing" ] || { echo "::error::Missing in Settings → Secrets and variables → Actions (Variables or Secrets tab, repository level — not an Environment):$missing"; exit 1; }
 
       - uses: actions/setup-node@v4
         with:
