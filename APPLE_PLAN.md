@@ -273,12 +273,18 @@ API key `.p8` + Issuer ID + Key ID in your password manager.
 This phase produces **documents**, not code, and it is what most solo devs skip and then
 get rejected for.
 
-- [ ] **1.1 Privacy policy** — you have `PrivacyPage.tsx`; it must be reachable at a **public
+> **2026-10-09** — every answer is prepared in **`docs/ios/APP_STORE_COMPLIANCE.md`**
+> (URLs, EULA, age rating → 18+, nutrition labels, export compliance, later policy
+> updates) and the manifest draft in `docs/ios/PrivacyInfo.xcprivacy`. Left: type the
+> answers into App Store Connect (1.4, 1.5, 1.6). New risk **R18** (NHL logos/photos,
+> 5.2.1) is in §9 of that file.
+
+- [x] **1.1 Privacy policy** — you have `PrivacyPage.tsx`; it must be reachable at a **public
       URL** (App Store Connect requires one) and must describe: account data, Stripe/Apple
       purchase data, Sentry crash data, chat messages, analytics.
-- [ ] **1.2 Terms of use (EULA)** — required for auto-renewable subscriptions. Either use
+- [x] **1.2 Terms of use (EULA)** — required for auto-renewable subscriptions. Either use
       Apple's standard EULA or link your own from `TermsPage.tsx`.
-- [ ] **1.3 Subscription disclosure text** — for auto-renewable subs, the **purchase screen
+- [ ] **1.3 Subscription disclosure text** *(deferred to Phase 5 — no IAP in v1)* — for auto-renewable subs, the **purchase screen
       inside the app** must show: title, length, price per period, what you get, and links
       to Privacy + Terms. Missing this = rejection, every time.
 - [ ] **1.4 Age rating questionnaire** — expect **the highest tier** because of gambling

@@ -4,7 +4,7 @@ import { env } from "../env";
 
 const CONTENT = {
   en: {
-    updated: "Last updated: September 25, 2026",
+    updated: "Last updated: October 9, 2026",
     sections: [
       { h: "1. Acceptance of terms", b: "By creating an account or using ArakIce, you agree to these Terms of Service. If you do not agree, please do not use the app." },
       { h: "2. What ArakIce is", b: "ArakIce provides statistical and machine-learning based NHL predictions for informational and entertainment purposes only. We are not a bookmaker and do not accept bets or process wagers. ArakIce is not affiliated with, endorsed by or sponsored by the National Hockey League (NHL) or any of its teams; NHL and team names are trademarks of their respective owners and are used only to identify the games discussed." },
@@ -20,7 +20,7 @@ const CONTENT = {
     ],
   },
   fr: {
-    updated: "Dernière mise à jour : 25 septembre 2026",
+    updated: "Dernière mise à jour : 9 octobre 2026",
     sections: [
       { h: "1. Acceptation des conditions", b: "En créant un compte ou en utilisant ArakIce, vous acceptez ces conditions d'utilisation. Si vous n'êtes pas d'accord, merci de ne pas utiliser l'application." },
       { h: "2. Ce qu'est ArakIce", b: "ArakIce fournit des prédictions de la LNH basées sur des statistiques et un modèle d'apprentissage automatique, à titre informatif et de divertissement uniquement. Nous ne sommes pas un bookmaker et n'acceptons ni ne traitons aucun pari. ArakIce n'est ni affiliée à la Ligue nationale de hockey (LNH) ou à l'une de ses équipes, ni approuvée ou commanditée par elles ; LNH et les noms d'équipes sont des marques de leurs propriétaires respectifs, utilisées seulement pour désigner les matchs dont il est question." },
@@ -32,7 +32,7 @@ const CONTENT = {
       { h: "8. Paris des autres joueurs", b: "Les membres Pro peuvent consulter les paris et les taux de réussite d'autres joueurs. Il s'agit de contenu produit par les utilisateurs, présenté à titre de constat : ArakIce ne vérifie, n'endosse, ne classe ni ne recommande aucun joueur, et aucun membre n'agit pour notre compte ni à titre de conseiller. Les taux de réussite sont calculés uniquement sur les paris réglés de la période indiquée, et les résultats passés ne garantissent jamais les résultats futurs. Suivre les sélections d'un autre joueur relève de votre seule décision, et la section 3 s'y applique intégralement." },
       { h: "9. Vos propres paris", b: "Les paris que vous déposez après la mise en service de cette fonction sont visibles aux membres Pro dès le début du premier match ; les sélections restent cachées jusque-là. Vous pouvez masquer tous vos paris à tout moment dans Paramètres → Confidentialité, sans que votre rang au classement en soit affecté. Voir la politique de confidentialité pour le détail. Déposer un pari ne constitue un conseil pour personne et ne crée aucune obligation envers les autres membres." },
       { h: "10. Modifications", b: "Nous pouvons mettre à jour ces conditions de temps à autre. Continuer à utiliser l'application après des modifications signifie que vous acceptez les nouvelles conditions." },
-      { h: "11. Contact", b: `Pour toute question sur ces conditions, écris-nous à ${env.supportEmail}.` },
+      { h: "11. Contact", b: `Pour toute question sur ces conditions, écrivez-nous à ${env.supportEmail}.` },
     ],
   },
 };

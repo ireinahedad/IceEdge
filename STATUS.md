@@ -70,7 +70,9 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
 
 - [ ] Phase 0 — ✔ Developer Program account done (2026-10-07). Left: Small Business Program,
       Bundle ID + app record, API key, app name.
-- [ ] Phase 1 — legal: public privacy URL, EULA, age rating (expect 18+), privacy manifest.
+- [ ] Phase 1 — ✔ answers prepared in `docs/ios/APP_STORE_COMPLIANCE.md` + manifest draft (2026-10-09).
+      Left: enter age rating (18+), App Privacy labels and export compliance in App Store Connect.
+      Decide R18 (NHL logos/photos on iOS, 5.2.1) before Phase 8.
 - [ ] Phase 2 — gambling (Option A: no bookmaker links on iOS — flags already done); iOS copy
       and in-app disclaimer; decide whether the public site's betting framing is softened (R10).
 - [ ] Phase 3 — Capacitor shell; native `tokenStore` (`@capacitor/preferences`) — without it
