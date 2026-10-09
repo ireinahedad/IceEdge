@@ -1,13 +1,24 @@
 # APPLE_PLAN.md — Shipping IceEdge / Arakice to the Apple App Store
 
-**Owner:** Ireina · **Created:** 2026-09-03 · **Status:** started — gate closed, web frozen at `pre-ios-freeze` (2026-10-07) · Phase 0 in progress
+**Owner:** Ireina · **Created:** 2026-09-03 · **Status:** in progress — web frozen at `pre-ios-freeze` (2026-10-07) · Phases 0–3 and 7 done in code · **first TestFlight build running (2026-10-09)**
 
-> **Status 2026-09-24.** The web-side risks of §-1 are handled: R2 (no Google on iOS), R3
-> (server native token path), R4 (moderation), R5/B3 (no Stripe and no Pro on iOS v1), R6
-> (SW/web push flagged off), R7 (env), R13 (safe areas), R17 (dev routes). Still open for
-> Phase 3: native `tokenStore`, R9 (`build:ios` without SEO pages), R10 (site framing),
-> R11/R12 (share on device), R14/R15 (`100dvh` + keyboard), R16 (CSP meta), B4 (in-app
-> account deletion — server route exists, no UI). Live checklist: **`STATUS.md` §3.4**.
+> **Status 2026-10-09** — live checklist: **`STATUS.md` §3.4**.
+>
+> | Phase | State |
+> |---|---|
+> | Gate G1–G4 | ✔ tag `pre-ios-freeze` (2026-10-07) |
+> | 0 · Accounts | ✔ Developer Program (Individual), app record, bundle ID **`com.arakice.arakice`**, API key, Small Business Program |
+> | 1 · Legal | ✔ answers in `docs/ios/APP_STORE_COMPLIANCE.md` — left: type age rating / privacy labels into App Store Connect |
+> | 2 · Gambling | ✔ `build:ios` guard, iOS copy, responsible-gambling note, bookmaker buttons off on the web too (R10) |
+> | 3 · Capacitor | ✔ code (Capacitor 8, SPM, Keychain session, CORS, CSP) — left: real-iPhone checks (3.8) |
+> | 7 · Cloud CI | ✔ workflow + certificate + profile + secrets — **first run in progress** |
+> | 4 · Native features | next, once the app runs on the iPhone |
+> | 5 · IAP | deferred: v1 ships without Pro on iOS |
+> | 6 · Deletion | ✔ built on the web (`1244bac`) — check it inside the app |
+> | 8–9 · Store, review | after Phase 4 |
+>
+> Order changed on 2026-10-09: **Phase 7 before Phase 4**, because the only way to see the app
+> on a phone is a TestFlight build, and the device checks of 3.8 must pass before adding push.
 **Target:** iOS app live on the App Store (iPhone first, iPad later)
 
 ---
@@ -146,6 +157,12 @@ this as your single biggest 5.3 exposure. This is a judgement call, not a code c
 | R15 | Full-screen `fixed inset-0` sheets vs the iOS keyboard | `ConfirmDialog`, `HowItWorksSheet`, `MarketSelectorSheet`, `AuthGateContext` | keyboard-avoidance pass on a real device |
 | R16 | No CSP at all in the native app — yours is a Vercel **header**, not a meta tag | `client/vercel.json` | add a `<meta http-equiv="Content-Security-Policy">` for the native build |
 | R17 | `/dev/ml` is only `<Protected>` client-side; any logged-in user can navigate there and get 403s | `app/routes.tsx:106` | hide the route on native / for non-admins — a reviewer poking at it looks bad |
+| R18 | NHL team logos and player photos shown without a licence (5.2.1) — *added 2026-10-09* | everywhere logos/photos render | decide before Phase 8: keep, or team-colour badges on iOS (`docs/ios/APP_STORE_COMPLIANCE.md` §9) |
+
+> **Status 2026-10-09:** R1/R2 ✔ (no Google on iOS) · R3 ✔ (Keychain session + `X-Client: native`)
+> · R4 ✔ · R5 ✔ · R6 ✔ · R7 ✔ (runtime + `build:ios` check) · R8 ✔ (`byokOpenAI` off) · R9 ✔
+> (`build:ios`) · R10 ✔ (decided) · R13 ✔ · R14 ✔ (`h-dvh`, `100dvh`) · R16 ✔ (CSP meta) · R17 ✔
+> · **open:** R11/R12 (share on device → 4.3), R15 (keyboard on device → 3.8), R18.
 
 ### ✅ Verified safe / no action
 
@@ -253,15 +270,16 @@ Do §2 in week 1 even if no code is written.
 - [x] **0.2** Turn on two-factor auth on it. Save the recovery key somewhere real.
 - [x] **0.3** Enroll in the Apple Developer Program ($99/yr), **Individual**.
       https://developer.apple.com/programs/enroll/
-- [ ] **0.4** Once approved, apply for the **App Store Small Business Program** (15% instead of 30%).
-- [ ] **0.5** In App Store Connect: create the app record.
+- [x] **0.4** Once approved, apply for the **App Store Small Business Program** (15% instead of 30%).
+- [x] **0.5** In App Store Connect: create the app record.
       - Bundle ID: `com.arakice.arakice` (register it in Certificates, Identifiers & Profiles first)
+        — ✔ registered and used by the app record (2026-10-09).
       - SKU: `arakice-ios-01`
       - Primary language: English (add French later — you already have `i18n/`)
-- [ ] **0.6** Create an **App Store Connect API key** (Users and Access → Integrations).
+- [x] **0.6** Create an **App Store Connect API key** (Users and Access → Integrations).
       Download the `.p8` **once** — it is unrecoverable. This is what lets CI upload builds
       without a Mac in front of you.
-- [ ] **0.7** Decide the public app name. `IceEdge` and `Arakice` are both free-ish; check
+- [x] **0.7** Decide the public app name. `IceEdge` and `Arakice` are both free-ish; check
       https://developer.apple.com/app-store/ for conflicts. Name is locked-ish after launch.
 
 **Exit criteria:** you can log into App Store Connect, see an empty app record, and hold an
@@ -612,21 +630,25 @@ You already have `.github/workflows/ci.yml`; add a sibling:
 runs-on: macos-15          # must provide Xcode 26 — verify the image's Xcode version
 ```
 
-- [ ] **7.1** Since **28 April 2026**, App Store Connect only accepts builds made with
+- [x] **7.1** *(the workflow fails if Xcode < 26)* Since **28 April 2026**, App Store Connect only accepts builds made with
       **Xcode 26+ / iOS 26 SDK**. Pin the runner image and run
       `xcodebuild -version` in CI to prove it. https://developer.apple.com/news/upcoming-requirements/
-- [ ] **7.2** Signing: use **fastlane match** (certs in a private repo) or
-      `apple-actions/import-codesign-certs`. Store as GitHub secrets:
-      `APP_STORE_CONNECT_KEY_ID`, `ISSUER_ID`, the base64 `.p8`, `MATCH_PASSWORD`.
+- [x] **7.2** Signing — **done differently (2026-10-09):** no fastlane match. Manual signing
+      with one Apple Distribution certificate (key + CSR generated locally, `ios-signing/`,
+      git-ignored) and one App Store profile named `ArakIce App Store`, both valid until
+      **2027-10-09** — renew before then (`docs/ios/CI_SETUP.md` §1–3). Secrets:
+      `IOS_DIST_P12_BASE64`, `IOS_DIST_P12_PASSWORD`, `IOS_PROFILE_BASE64`, `ASC_KEY_ID`,
+      `ASC_ISSUER_ID`, `ASC_KEY_P8_BASE64`; variables: four `VITE_*_URL`, `VITE_SENTRY_DSN`,
+      `VITE_SUPPORT_EMAIL`, `APPLE_TEAM_ID` (`VF76F7VMM3`), `IOS_PROFILE_NAME`.
       **Never commit a `.p8` or `.p12`.**
-- [ ] **7.3** Pipeline: `npm ci` → `npm run build` → `npx cap sync ios` →
-      `pod install` → `xcodebuild -archive` → `-exportArchive` →
-      `xcrun altool`/`fastlane pilot` upload to TestFlight.
-- [ ] **7.4** Auto-increment the build number from the run number. Apple rejects duplicates.
-- [ ] **7.5** Budget the minutes — macOS runners bill at ~10× on GitHub Actions.
+- [x] **7.3** Pipeline: `npm ci` → `typecheck` → `npm run build:ios` → `npx cap sync ios` →
+      `xcodebuild archive` → `-exportArchive` with `destination=upload` (no CocoaPods: SPM;
+      no altool/fastlane: the export uploads to TestFlight itself).
+- [x] **7.4** Auto-increment the build number from the run number. Apple rejects duplicates.
+- [x] **7.5** *(manual trigger or tag `ios-v*` only)* Budget the minutes — macOS runners bill at ~10× on GitHub Actions.
       Alternatives: **Codemagic** (Capacitor-friendly, generous free tier) or **Xcode Cloud**
       (Apple-native, included hours with the developer program). Verify current limits.
-- [ ] **7.6** You cannot run the iOS Simulator on Windows. Your only device testing is
+- [ ] **7.6** *(an iPhone is available — C1 passed on it)* You cannot run the iOS Simulator on Windows. Your only device testing is
       **TestFlight on a real iPhone** — yours or a tester's. Plan for that (§10).
 
 ---
@@ -683,17 +705,18 @@ runs-on: macos-15          # must provide Xcode 26 — verify the image's Xcode 
 
 ## 12. Timeline at a glance
 
-| Week | Focus |
-|------|-------|
-| 1 | Apple enrollment, app record, API key, legal docs |
-| 2 | Gambling decision + iOS feature flags, Capacitor init |
-| 3 | Capacitor shell working, CI pipeline green, first TestFlight build |
-| 4 | Native features (push, share, offline) |
-| 5 | Account deletion, privacy manifest, IAP products created |
-| 6 | IAP implementation + sandbox testing, store assets |
-| 7 | TestFlight external round, bug fixes |
-| 8 | Submit → expect one rejection → resubmit |
-| 9–10 | Buffer. You will use it. |
+*Revised 2026-10-09 (the original week table assumed Phase 4 before CI).*
+
+| Step | Focus | State |
+|------|-------|-------|
+| 1 | Freeze, Apple account, app record, legal answers, gambling flags | ✔ 2026-10-07 → 10-09 |
+| 2 | Capacitor shell + cloud CI + signing | ✔ code, first run 2026-10-09 |
+| 3 | First TestFlight build on the iPhone → device checks (3.8, R15, session after 15 min) | **now** |
+| 4 | Native features: APNs push, share sheet, offline, haptics, universal links (Phase 4) | next |
+| 5 | Store assets + metadata, R18 decision, age rating / privacy labels typed in (Phases 1, 8) | |
+| 6 | External TestFlight round, fixes (9.1–9.2) | |
+| 7 | Submit → expect one rejection → resubmit (9.3–9.7) | |
+| later | IAP (Phase 5), iPad, Android | |
 
 ---
 
@@ -715,9 +738,9 @@ runs-on: macos-15          # must provide Xcode 26 — verify the image's Xcode 
    from `ireinahedad24@gmail.com`. The domain is usable for the privacy policy URL, universal
    links; `support@arakice.com` forwards to that Gmail since the same day.
    Follow-ups: `STATUS.md` §3.9.
-2. Individual or company enrollment? Individual = your legal name is public on the listing.
-3. Does anyone you know have an iPhone for TestFlight? You need at least one real device.
-4. Are you willing to launch iOS without affiliate revenue? (§4 Option A assumes yes.)
+2. ~~Individual or company enrollment?~~ **Individual** — the certificate reads "Ireina Hedad"; that name is public on the listing.
+3. ~~An iPhone for TestFlight?~~ **Yes** — the one C1 was tested on.
+4. ~~Launch iOS without affiliate revenue?~~ **Yes** — and no bookmaker buttons on the web either until there is a deal (R10, 2026-10-09).
 5. Android/Play Store — same Capacitor project, later, and Google's gambling rules differ.
 
 ---

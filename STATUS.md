@@ -68,8 +68,8 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
 
 ✔ No Capacitor dependency, no `client/ios/`.
 
-- [ ] Phase 0 — ✔ Developer Program account done (2026-10-07). Left: Small Business Program,
-      Bundle ID + app record, API key, app name.
+- [x] Phase 0 — ✔ Developer Program (Individual), app record, bundle ID `com.arakice.arakice`,
+      API key, Small Business Program (2026-10-09).
 - [ ] Phase 1 — ✔ answers prepared in `docs/ios/APP_STORE_COMPLIANCE.md` + manifest draft (2026-10-09).
       Left: enter age rating (18+), App Privacy labels and export compliance in App Store Connect.
       Decide R18 (NHL logos/photos on iOS, 5.2.1) before Phase 8.
@@ -88,9 +88,10 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
 - [ ] Phase 5 — IAP (deferred: v1 ships without Pro on iOS). Decide before submitting whether
       locked Pro sections without a call-to-action are acceptable.
 - [ ] Phase 6 — in-app account deletion: ✔ built on the web (`1244bac`); check it in the iOS shell.
-- [ ] Phase 7 (moved before 4) — ✔ workflow `ios-release.yml` + `docs/ios/CI_SETUP.md` (2026-10-09).
-      Left: Apple Distribution certificate + App Store profile (CSR ready in `ios-signing/`),
-      GitHub secrets/variables, first run → TestFlight on the iPhone.
+- [ ] Phase 7 (moved before 4) — ✔ workflow `ios-release.yml`, Apple Distribution certificate +
+      `ArakIce App Store` profile (both expire **2027-10-09**), GitHub secrets + variables
+      (2026-10-09). **First run in progress** → then install via TestFlight on the iPhone.
+      Delete the four `.txt` files in `ios-signing/` once the secrets work.
 - [ ] Phases 8–9 — store assets, TestFlight external round, submission.
 
 ### 3.5 ML — prediction model
