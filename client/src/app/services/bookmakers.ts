@@ -12,7 +12,7 @@
 // Links work without a code — they're just untracked.
 
 import { env } from "../env";
-import { features } from "../platform";
+import { features, isIOS } from "../platform";
 
 export type Sport = "hockey";
 export type BookmakerId = "bet365" | "stake" | "bet99";
@@ -97,14 +97,31 @@ const BET99: Bookmaker = {
   colors: { bg: "#111111", bgHover: "#222222", fg: "#ffd200", badgeBg: "#ffd200", badgeFg: "#111111" },
 };
 
-export const BOOKMAKERS: Record<BookmakerId, Bookmaker> = {
-  bet365: BET365,
-  stake: STAKE,
-  bet99: BET99,
+/**
+ * APPLE_PLAN §4 (2.2) — dans le build iOS, aucun nom, aucune adresse, aucun code
+ * affilié de bookmaker ne doit exister dans le binaire. `isIOS` est une constante
+ * de build : Rollup élimine BET365/STAKE/BET99 du bundle iOS. Les composants
+ * gardent un objet valide (pas de `undefined` à gérer), mais vide.
+ * Vérifié par `scripts/build-ios.mjs` (il échoue si un domaine de bookmaker reste).
+ */
+const NO_BOOK: Bookmaker = {
+  id: "bet365",
+  label: "",
+  badge: "",
+  base: "",
+  affiliateCode: undefined,
+  affiliateParam: () => "",
+  sectionPath: () => "",
+  signupPath: "",
+  colors: { bg: "#131A12", bgHover: "#1B2419", fg: "#F3F7F0", badgeBg: "#283323", badgeFg: "#F3F7F0" },
 };
 
+export const BOOKMAKERS: Record<BookmakerId, Bookmaker> = isIOS
+  ? { bet365: NO_BOOK, stake: NO_BOOK, bet99: NO_BOOK }
+  : { bet365: BET365, stake: STAKE, bet99: BET99 };
+
 /** Ordered list for rendering selectors */
-export const BOOKMAKER_LIST: Bookmaker[] = [BET365, STAKE, BET99];
+export const BOOKMAKER_LIST: Bookmaker[] = isIOS ? [] : [BET365, STAKE, BET99];
 
 const BOOKMAKER_STORAGE_KEY = "iceedge_bookmaker";
 const DEFAULT_BOOKMAKER: BookmakerId = "bet365";

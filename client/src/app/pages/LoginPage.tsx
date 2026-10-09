@@ -8,6 +8,7 @@ import { AppButton } from "../components/AppButton";
 import { BottomNav } from "../components/BottomNav";
 import { useI18n } from "../i18n";
 import { features } from "../platform";
+import { ResponsibleGamblingNote } from "../components/ResponsibleGamblingNote";
 
 type Mode = "login" | "register";
 
@@ -482,10 +483,13 @@ export function LoginPage() {
       <p className="text-center text-[10px] mt-3 px-6" style={{ color: "#92A08A", opacity: 0.5 }}>
         {t("legal.notAffiliated")}
       </p>
+      <ResponsibleGamblingNote className="text-center mt-2 px-6" style={{ color: "#92A08A", opacity: 0.6 }} />
 
       {/* SEO guides — plain <a> (full navigation) so crawlers reach the static
-          prerendered marketing pages in /public, which React Router does not own. */}
-      <nav
+          prerendered marketing pages in /public, which React Router does not own.
+          Web only: those pages are not shipped in the iOS bundle (R9), and one of
+          them is the betting-software page (APPLE_PLAN §4). */}
+      {features.seoLinks && <nav
         aria-label="NHL prediction guides"
         className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-3 text-[11px]"
         style={{ color: "#92A08A", opacity: 0.55 }}
@@ -503,7 +507,7 @@ export function LoginPage() {
         <a href="/best-nhl-betting-software" className="underline underline-offset-2">Betting Software</a>
         <span>·</span>
         <a href="/about" className="underline underline-offset-2">About</a>
-      </nav>
+      </nav>}
 
       {/* Keep the app nav visible so visitors can leave the login screen and
           browse signed-out — the page already reserves space via its bottom padding. */}

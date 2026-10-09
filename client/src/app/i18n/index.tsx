@@ -11,6 +11,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { isIOS } from "../platform";
 
 export type Lang = "en" | "fr";
 const STORAGE_KEY = "iceedge_lang";
@@ -120,8 +121,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "profile.hideSlips":    { en: "Hide my slips from other players", fr: "Masquer mes paris aux autres joueurs" },
   "profile.hideSlipsHint":{ en: "Pro members can browse your settled slips. Turning this on hides all of them — your leaderboard rank is unaffected.", fr: "Les membres Pro peuvent consulter vos paris réglés. Activer ceci les masque tous — votre rang au classement n'est pas touché." },
   "profile.language":     { en: "Language",      fr: "Langue" },
-  "profile.bookmaker":    { en: "Sportsbook",    fr: "Site de paris" },
-  "profile.bookmakerHint":{ en: "Which site the “Place bet” buttons open", fr: "Le site que les boutons « Parier » ouvrent" },
+  "profile.bookmaker":    isIOS ? { en: "", fr: "" } : { en: "Sportsbook",    fr: "Site de paris" },
+  "profile.bookmakerHint":isIOS ? { en: "", fr: "" } : { en: "Which site the “Place bet” buttons open", fr: "Le site que les boutons « Parier » ouvrent" },
   "profile.oddsSource":   { en: "Odds shown in the app come from BetRivers. Tapping a price opens the site chosen above, where the odds may differ.", fr: "Les cotes affichées dans l'app viennent de BetRivers. Toucher une cote ouvre le site choisi ci-dessus, où la cote peut être différente." },
   // Format d'affichage des cotes. Les clés `.percent` / `.decimal` / `.american`
   // sont construites à partir de l'identifiant du format
@@ -410,8 +411,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "slip.browse":       { en: "Browse Markets",  fr: "Explorer les marchés" },
   "slip.signin":       { en: "Sign in to see your slips", fr: "Connectez-vous pour voir vos paris" },
   "slip.signinHint":   { en: "Your locked slips and history will appear here", fr: "Vos paris verrouillés et votre historique apparaîtront ici" },
-  "slip.placeBet365":  { en: "Place on Bet365 ↗", fr: "Parier sur Bet365 ↗" },
-  "slip.placeBet":     { en: "Place on {book} ↗", fr: "Parier sur {book} ↗" },
+  "slip.placeBet365":  isIOS ? { en: "", fr: "" } : { en: "Place on Bet365 ↗", fr: "Parier sur Bet365 ↗" },
+  "slip.placeBet":     isIOS ? { en: "", fr: "" } : { en: "Place on {book} ↗", fr: "Parier sur {book} ↗" },
   "slip.bookCombined": { en: "Book parlay odds", fr: "Cote combinée du livre" },
   "slip.xpEarned":     { en: "XP earned",       fr: "XP gagnés" },
   "slip.sharePhoto":   { en: "Share",           fr: "Partager" },
@@ -1191,7 +1192,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pro.b.llm.d":        { en: "The model's take on every game — {n} analyses a month. Past that, your own OpenAI key takes over.", fr: "L'avis du modèle sur tous les matchs — {n} analyses par mois. Au-delà, votre propre clé OpenAI prend le relais." },
   "pro.b.llm.dNoCount": { en: "The model's take on every game, within a generous monthly allowance. Past that, your own OpenAI key takes over.", fr: "L'avis du modèle sur tous les matchs, dans la limite d'un forfait mensuel confortable. Au-delà, votre propre clé OpenAI prend le relais." },
   "pro.b.markets.t":  { en: "All markets & full slate",  fr: "Tous les marchés & calendrier complet" },
-  "pro.b.markets.d":  { en: "Beyond today's games: the full schedule and every bet365 market.", fr: "Au-delà des matchs du jour : tout le calendrier et chaque marché bet365." },
+  "pro.b.markets.d":  isIOS ? { en: "Beyond today's games: the full schedule and every market.", fr: "Au-delà des matchs du jour : tout le calendrier et tous les marchés." } : { en: "Beyond today's games: the full schedule and every bet365 market.", fr: "Au-delà des matchs du jour : tout le calendrier et chaque marché bet365." },
   "pro.b.others.t":   { en: "Other players' stats & bets", fr: "Stats & bets des autres joueurs" },
   "pro.b.others.d":   { en: "Compare yourself to the leaderboard and see their picks.", fr: "Comparez-vous aux meilleurs du classement et voyez leurs paris." },
 
@@ -1236,6 +1237,10 @@ const DICT: Record<string, { en: string; fr: string }> = {
   // Une seule source pour la mention de non-affiliation dans l'app ; les pages
   // SEO statiques portent la même dans client/scripts/seo-gen.mjs.
   "legal.notAffiliated": { en: "Not affiliated with or endorsed by the NHL or its teams. NHL and team names are trademarks of their respective owners.", fr: "Non affilié à la LNH ni à ses équipes, et non approuvé par elles. LNH et les noms d'équipes sont des marques de leurs propriétaires respectifs." },
+  // APPLE_PLAN 2.5 — avertissement visible + lignes d'aide (web et iOS).
+  "legal.disclaimer":   { en: "For information and entertainment only — ArakIce takes no bets and handles no money. 18+. Help with gambling:", fr: "À titre informatif et de divertissement seulement — ArakIce ne prend aucun pari et ne manipule aucun argent. 18+. Aide pour le jeu :" },
+  "legal.helpQc":       { en: "Québec 1 800 461-0140", fr: "Québec 1 800 461-0140" },
+  "legal.helpUs":       { en: "U.S. 1-800-GAMBLER", fr: "É.-U. 1-800-GAMBLER" },
 
   // ── 404 ──
   "notFound.title": { en: "Page not found", fr: "Page introuvable" },

@@ -326,19 +326,24 @@ https://developer.apple.com/app-store/review/guidelines/#gaming-gambling-and-lot
 
 ### Work items for Option A
 
-- [ ] **2.1** Add a build-time flag `VITE_PLATFORM=ios` (Capacitor build only) and a
+> **2026-10-09** — done in code: `npm run build:ios` (`client/scripts/build-ios.mjs`) builds
+> `dist-ios/` with `VITE_TARGET=ios`, prunes the SEO pages (R9) and **fails** if a bookmaker
+> domain, affiliate parameter or « Place on / Parier sur » survives. Left: R10 (site framing)
+> and the store metadata wording, written with Phase 8.
+
+- [x] **2.1** Add a build-time flag `VITE_PLATFORM=ios` (Capacitor build only) and a
       runtime helper `isNativeIOS()` (`Capacitor.getPlatform() === 'ios'`).
-- [ ] **2.2** In `client/src/app/services/bookmakers.ts`: when native iOS, return no
+- [x] **2.2** In `client/src/app/services/bookmakers.ts`: when native iOS, return no
       bookmaker, no affiliate URL. Never ship `VITE_STAKE_AFFILIATE_CODE` into the iOS bundle
       — check the built `dist/` with `grep -r "stake" dist/` before every release.
-- [ ] **2.3** In `LandingCards.tsx` / `OddsPill` / `BetContext`: on iOS render the odds as
+- [x] **2.3** In `LandingCards.tsx` / `OddsPill` / `BetContext`: on iOS render the odds as
       **read-only reference data with no tap-through**, or hide odds entirely (safer for v1).
-- [ ] **2.4** Rewrite the iOS-facing copy: this is an **analytics and prediction** app.
+- [ ] **2.4** *(in-app copy ✔ 2026-10-09; store metadata with Phase 8)* Rewrite the iOS-facing copy: this is an **analytics and prediction** app.
       Remove "place your bet" / "Bet now" style verbs from the iOS build, the App Store
       title, subtitle, keywords, description, and screenshots. Metadata is reviewed too.
-- [ ] **2.5** Add a visible in-app disclaimer: informational/entertainment only, no wagering,
+- [x] **2.5** Add a visible in-app disclaimer: informational/entertainment only, no wagering,
       no real money, plus a responsible-gambling helpline link.
-- [ ] **2.6** Age rating: answer the gambling/contests questions honestly → expect 18+.
+- [x] **2.6** Age rating: answer the gambling/contests questions honestly → expect 18+.
 
 **Exit criteria:** `grep -rin "stake\|bet365\|place.*bet" client/dist/` on an iOS build
 returns nothing actionable.

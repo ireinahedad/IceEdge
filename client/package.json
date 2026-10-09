@@ -6,6 +6,7 @@
   "scripts": {
     "start": "vite",
     "build": "vite build && node scripts/route-shells.mjs",
+    "build:ios": "node scripts/build-ios.mjs",
     "dev": "vite",
     "seo:gen": "node scripts/seo-gen.mjs",
     "seo:sample": "node scripts/seo-gen.mjs --sample",

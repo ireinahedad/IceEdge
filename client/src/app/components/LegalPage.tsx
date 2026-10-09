@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { IceedgeLogo } from "./brand/IceedgeLogo";
 import { useI18n } from "../i18n";
+import { ResponsibleGamblingNote } from "./ResponsibleGamblingNote";
 
 /**
  * Coquille commune des pages Confidentialité, Conditions et Support :
@@ -18,7 +19,8 @@ export function LegalPage({ title, children }: { title: string; children: ReactN
         <h1 className="text-white text-base font-bold flex-1">{title}</h1>
       </div>
       {children}
-      <p className="text-[#8a9ea6] text-[10px] leading-relaxed mt-10">{t("legal.notAffiliated")}</p>
+      <ResponsibleGamblingNote className="text-[#8a9ea6] mt-10" />
+      <p className="text-[#8a9ea6] text-[10px] leading-relaxed mt-2">{t("legal.notAffiliated")}</p>
     </div>
   );
 }

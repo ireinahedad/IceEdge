@@ -61,6 +61,8 @@ export const features = {
   webPush:        isWeb,
   /** R6 — no service worker in WKWebView. */
   serviceWorker:  isWeb,
+  /** R9 / APPLE_PLAN §4 — links to the static SEO pages, which the iOS bundle does not ship. */
+  seoLinks:       isWeb,
   /** R17 — hide /dev/ml on iOS. */
   devRoutes:      isWeb,
   /**

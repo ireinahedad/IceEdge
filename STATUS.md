@@ -73,11 +73,11 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
 - [ ] Phase 1 — ✔ answers prepared in `docs/ios/APP_STORE_COMPLIANCE.md` + manifest draft (2026-10-09).
       Left: enter age rating (18+), App Privacy labels and export compliance in App Store Connect.
       Decide R18 (NHL logos/photos on iOS, 5.2.1) before Phase 8.
-- [ ] Phase 2 — gambling (Option A: no bookmaker links on iOS — flags already done); iOS copy
-      and in-app disclaimer; decide whether the public site's betting framing is softened (R10).
+- [ ] Phase 2 — ✔ 2026-10-09: `npm run build:ios` (no bookmaker in the bundle, guarded), iOS FAQ
+      copy, responsible-gambling note (web + iOS), SEO links hidden on iOS, R9 done.
+      Left: decide R10 (betting framing of arakice.com); store metadata with Phase 8.
 - [ ] Phase 3 — Capacitor shell; native `tokenStore` (`@capacitor/preferences`) — without it
-      the session dies every 15 min; CORS for `capacitor://localhost`; `build:ios` without
-      SEO pages (R9); `AppShell` → `100dvh` and keyboard handling (✔ still `h-screen`, no
+      the session dies every 15 min; CORS for `capacitor://localhost`; `build:ios` ✔; `AppShell` → `100dvh` and keyboard handling (✔ still `h-screen`, no
       `visualViewport`), tested on a real iPhone.
 - [ ] On a real notched iPhone: every page (safe areas now active), the chat input row, tap
       targets, lock the screen 5 min and come back, airplane mode, very slow network.
