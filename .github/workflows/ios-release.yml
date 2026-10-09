@@ -93,7 +93,14 @@ jobs:
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          # Diagnose before importing: an empty, truncated or wrong secret all end in the same
+          # opaque "Unable to decode the provided data" from `security`.
+          [ -n "$P12_BASE64" ] || { echo "::error::Secret IOS_DIST_P12_BASE64 is empty or missing"; exit 1; }
+          printf '%s' "$P12_BASE64" | tr -d ' \r\n\t' | base64 --decode > "$RUNNER_TEMP/dist.p12" \
+            || { echo "::error::IOS_DIST_P12_BASE64 is not valid base64 (copy the whole file content)"; exit 1; }
+          echo "p12: $(wc -c < "$RUNNER_TEMP/dist.p12") bytes, sha256 $(shasum -a 256 "$RUNNER_TEMP/dist.p12" | cut -c1-12)"
+          openssl pkcs12 -in "$RUNNER_TEMP/dist.p12" -passin env:P12_PASSWORD -noout 2>/dev/null \
+            || { echo "::error::The .p12 does not open with IOS_DIST_P12_PASSWORD (wrong password, or the secret holds another file)"; exit 1; }
           security import "$RUNNER_TEMP/dist.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
@@ -101,7 +108,7 @@ jobs:
           security find-identity -v -p codesigning "$KEYCHAIN" | grep -q "Apple Distribution" \
             || { echo "::error::No 'Apple Distribution' identity in the .p12"; exit 1; }
 
-          echo "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/app.mobileprovision"
+          printf '%s' "$PROFILE_BASE64" | tr -d ' \r\n\t' | base64 --decode > "$RUNNER_TEMP/app.mobileprovision"
           UUID=$(security cms -D -i "$RUNNER_TEMP/app.mobileprovision" | plutil -extract UUID raw -)
           NAME=$(security cms -D -i "$RUNNER_TEMP/app.mobileprovision" | plutil -extract Name raw -)
           [ "$NAME" = "$IOS_PROFILE_NAME" ] \
@@ -111,7 +118,7 @@ jobs:
           done
 
           mkdir -p "$RUNNER_TEMP/asc"
-          echo "$ASC_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8"
+          printf '%s' "$ASC_KEY_BASE64" | tr -d ' \r\n\t' | base64 --decode > "$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8"
 
       # 7.4 — build number = run number: always increasing, never a duplicate.
       - name: Archive
