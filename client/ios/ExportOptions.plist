@@ -22,7 +22,7 @@
 	<string>Apple Distribution</string>
 	<key>provisioningProfiles</key>
 	<dict>
-		<key>com.arakice.iceedge</key>
+		<key>com.arakice.arakice</key>
 		<string>__PROFILE_NAME__</string>
 	</dict>
 	<key>uploadSymbols</key>

@@ -8,7 +8,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
  * Guideline 4.2 rejection — the assets are bundled (3.1).
  */
 const config: CapacitorConfig = {
-  appId: "com.arakice.iceedge",
+  appId: "com.arakice.arakice",
   appName: "ArakIce",
   webDir: "dist-ios",
   ios: {

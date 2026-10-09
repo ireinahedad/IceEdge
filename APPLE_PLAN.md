@@ -51,7 +51,7 @@ Two failures at once: (a) Google **blocks OAuth in embedded WebViews**
 (`disallowed_useragent`), so the flow dies; (b) even if it worked, the redirect navigates
 the WKWebView to `arakice.com` and your native app is now just… the website, with no way back.
 → **Fix:** open the OAuth URL in `ASWebAuthenticationSession` (`@capacitor/browser`), have
-the server redirect to a **custom scheme** (`com.arakice.iceedge://auth/callback`), catch it
+the server redirect to a **custom scheme** (`com.arakice.arakice://auth/callback`), catch it
 with `@capacitor/app`'s `appUrlOpen` listener. Server change required: a second, native
 redirect URI. *Effort: 1–2 days.*
 
@@ -255,7 +255,7 @@ Do §2 in week 1 even if no code is written.
       https://developer.apple.com/programs/enroll/
 - [ ] **0.4** Once approved, apply for the **App Store Small Business Program** (15% instead of 30%).
 - [ ] **0.5** In App Store Connect: create the app record.
-      - Bundle ID: `com.arakice.iceedge` (register it in Certificates, Identifiers & Profiles first)
+      - Bundle ID: `com.arakice.arakice` (register it in Certificates, Identifiers & Profiles first)
       - SKU: `arakice-ios-01`
       - Primary language: English (add French later — you already have `i18n/`)
 - [ ] **0.6** Create an **App Store Connect API key** (Users and Access → Integrations).
@@ -448,14 +448,14 @@ unmaintainable by month two. Not doing it.
 ```bash
 cd client
 npm i @capacitor/core @capacitor/cli
-npx cap init "IceEdge" com.arakice.iceedge --web-dir=dist
+npx cap init "IceEdge" com.arakice.arakice --web-dir=dist
 npm i @capacitor/ios @capacitor/app @capacitor/browser @capacitor/haptics \
       @capacitor/status-bar @capacitor/splash-screen @capacitor/preferences \
       @capacitor/push-notifications @capacitor/share
 npm run build && npx cap add ios && npx cap sync ios
 ```
 
-- [x] **3.1** `capacitor.config.ts`: `appId: 'com.arakice.iceedge'`, `webDir: 'dist'`,
+- [x] **3.1** `capacitor.config.ts`: `appId: 'com.arakice.arakice'`, `webDir: 'dist'`,
       `ios: { contentInset: 'always' }`. **No `server.url`** — a config that just loads
       arakice.com remotely is the textbook 4.2 rejection. Bundle the assets.
 - [x] **3.2** Commit `client/ios/` to git (CI needs it). Add
@@ -589,6 +589,9 @@ reinstall, tap Restore, and still be Pro — and where a web-Stripe Pro account 
 ---
 
 ## 9. Phase 7 — Building without a Mac (week 3 onward, set up early)
+
+> **Bundle ID = `com.arakice.arakice`** (registered in Phase 0; the plan said `iceedge`). Changed
+> everywhere on 2026-10-09 — an App Store record's bundle ID can never change.
 
 > **2026-10-09 — workflow written, done before Phase 4.** `.github/workflows/ios-release.yml`
 > (manual trigger or tag `ios-v*`, `macos-15` + newest Xcode with a hard 26+ check,

@@ -27,7 +27,7 @@ La clé privée et la demande (CSR) ont été générées sur ton ordinateur dan
 
 1. Même portail → **Profiles** → **+**
 2. Distribution → **App Store Connect** → Continue
-3. App ID : `com.arakice.iceedge` → Continue
+3. App ID : `com.arakice.arakice` → Continue
 4. Certificat : celui créé à l'étape 1 → Continue
 5. Nom du profil : **`ArakIce App Store`** (exactement — le workflow vérifie le nom)
 6. Generate → **Download** → enregistrer dans `ios-signing/`
@@ -114,7 +114,7 @@ Coût : sur un dépôt privé, les minutes macOS comptent ×10 (2 000 min gratui
 | `Xcode NN is too old` | changer `runs-on: macos-15` en `macos-26` dans le workflow |
 | `No 'Apple Distribution' identity` | mauvais `.p12`, ou mauvais mot de passe |
 | `Profile is named …` | `IOS_PROFILE_NAME` ≠ nom du profil téléchargé |
-| `No profiles for 'com.arakice.iceedge'` / `doesn't include signing certificate` | profil créé avec un autre certificat : refaire l'étape 2 |
+| `No profiles for 'com.arakice.arakice'` / `doesn't include signing certificate` | profil créé avec un autre certificat : refaire l'étape 2 |
 | erreur d'envoi (401 / « authentication ») | `ASC_KEY_ID`, `ASC_ISSUER_ID` ou le `.p8` ne correspondent pas |
 | `bundle version must be higher` | un build avec ce numéro existe déjà : relancer (nouveau run = nouveau numéro) |
 | `✗ build:ios — …` | une URL non https (R7) ou une trace de bookmaker dans le bundle (2.2) |
