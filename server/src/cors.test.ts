@@ -36,6 +36,16 @@ describe('politique CORS partagée', () => {
     expect(isAllowedOrigin('https://evil.com')).toBe(false);
   });
 
+  // APPLE_PLAN 3.4 — l'app iOS (Capacitor) doit passer même si CORS_ORIGIN
+  // ne la mentionne pas : une variable Railway modifiée ne doit jamais la couper.
+  it('accepte l’origine de l’app iOS sans configuration', async () => {
+    const { isAllowedOrigin } = await loadCors('https://arakice.com');
+    expect(isAllowedOrigin('capacitor://localhost')).toBe(true);
+    expect(isAllowedOrigin('ionic://localhost')).toBe(true);
+    // Le schéma seul ne suffit pas : un autre hôte reste refusé.
+    expect(isAllowedOrigin('capacitor://evil.com')).toBe(false);
+  });
+
   it('accepte les previews Vercel du projet', async () => {
     const { isAllowedOrigin } = await loadCors('https://arakice.com');
     expect(isAllowedOrigin('https://ice-edge-abc123-ireina-hedad-s-projects.vercel.app')).toBe(true);

@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 import * as Sentry from "@sentry/react";
 import { env, envProblems, assertEnv } from "./app/env";
-import { features } from "./app/platform";
+import { features, isIOS } from "./app/platform";
 import App from "./app/App";
 import "./styles/index.css";
 
@@ -27,7 +27,8 @@ function redactTokens<T>(value: T): T {
 if (env.sentryDsn) {
   Sentry.init({
     dsn: env.sentryDsn,
-    environment: import.meta.env.MODE,
+    // iOS errors are tagged apart from the web ones (same DSN).
+    environment: isIOS ? `${import.meta.env.MODE}-ios` : import.meta.env.MODE,
     tracesSampleRate: 0.1,
     sendDefaultPii: false,
 
@@ -122,6 +123,9 @@ try {
   // and the user would get the white page this whole item exists to remove.
   assertEnv();
 
+  // APPLE_PLAN 3.9 — iOS shell glue (external links). Not in the web bundle.
+  // Inline literal (not `isIOS`) so Rollup drops the branch — and the chunk — from the web build.
+  if (import.meta.env.VITE_TARGET === "ios") void import("./app/native").then((m) => m.installNativeShell());
   createRoot(rootEl).render(<App />);
 
   // Register the service worker (PWA install + push notifications).

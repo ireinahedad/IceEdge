@@ -78,9 +78,10 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
       R10 decided 2026-10-09: bookmaker buttons OFF on the web too (`VITE_BOOKMAKER_LINKS`, default
       off; set `true` in Vercel to bring them back once there is an affiliate deal). Left: store
       metadata with Phase 8; consider renaming the `best-nhl-betting-software` SEO page.
-- [ ] Phase 3 — Capacitor shell; native `tokenStore` (`@capacitor/preferences`) — without it
-      the session dies every 15 min; CORS for `capacitor://localhost`; `build:ios` ✔; `AppShell` → `100dvh` and keyboard handling (✔ still `h-screen`, no
-      `visualViewport`), tested on a real iPhone.
+- [ ] Phase 3 — ✔ code done 2026-10-09: Capacitor 8 (SPM), `client/ios/`, Keychain `tokenStore`,
+      `X-Client: native` on /auth, CORS `capacitor://localhost`, external links in Safari sheet,
+      CSP meta, `h-dvh`, icon/splash. Left: first build on cloud macOS CI (Phase 7), then the
+      real-iPhone checks below. After `git pull` on Windows: `cd client && npm install`.
 - [ ] On a real notched iPhone: every page (safe areas now active), the chat input row, tap
       targets, lock the screen 5 min and come back, airplane mode, very slow network.
 - [ ] Phase 4 — native features (APNs push first, share sheet, offline, haptics, universal links).

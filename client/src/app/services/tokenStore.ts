@@ -16,9 +16,12 @@
  * Preferences is promise-based, and converting the call sites later would mean
  * touching each one twice.
  *
- * Nothing imports `platform.ts` here. There is one implementation today; the
- * seam is the exported `tokenStore`, which Phase 3 swaps.
+ * Phase 3 (2026-10-09): the native store lives below, in the iOS Keychain via
+ * `@aparajita/capacitor-secure-storage` — not `@capacitor/preferences`, which is
+ * plain UserDefaults and no place for a 30-day refresh token. `isIOS` is a build
+ * constant, so the web bundle never contains the native store (dynamic import).
  */
+
 
 export interface TokenStore {
   /** The bearer token for API calls, or null when signed out. */
@@ -89,4 +92,61 @@ const webStore: TokenStore = {
   },
 };
 
-export const tokenStore: TokenStore = webStore;
+// ── Native implementation (iOS Keychain) ─────────────────────────────────────
+// A small in-memory cache in front of the Keychain: every API call reads the
+// access token, and a Keychain round-trip through the bridge each time is
+// needless. The Keychain stays the source of truth across app restarts.
+
+const REFRESH_KEY = 'ice_refresh_native';
+
+async function secure() {
+  const { SecureStorage } = await import('@aparajita/capacitor-secure-storage');
+  return SecureStorage;
+}
+
+let cache: { access: string | null; refresh: string | null } | null = null;
+
+async function load(): Promise<{ access: string | null; refresh: string | null }> {
+  if (cache) return cache;
+  try {
+    const s = await secure();
+    const [access, refresh] = await Promise.all([s.get(ACCESS_KEY, false, false), s.get(REFRESH_KEY, false, false)]);
+    cache = {
+      access:  typeof access  === 'string' ? access  : null,
+      refresh: typeof refresh === 'string' ? refresh : null,
+    };
+  } catch {
+    cache = { access: null, refresh: null };
+  }
+  return cache;
+}
+
+const nativeStore: TokenStore = {
+  async getAccess() { return (await load()).access; },
+
+  async setTokens(access: string, refresh?: string) {
+    const cur = await load();
+    // A refresh response without a new refresh token keeps the current one.
+    cache = { access, refresh: refresh ?? cur.refresh };
+    try {
+      const s = await secure();
+      await s.set(ACCESS_KEY, access, false, false);
+      if (refresh) await s.set(REFRESH_KEY, refresh, false, false);
+    } catch { /* the in-memory session still works until the app is killed */ }
+  },
+
+  async getRefresh() { return (await load()).refresh; },
+
+  async clear() {
+    cache = { access: null, refresh: null };
+    try {
+      const s = await secure();
+      await Promise.all([s.remove(ACCESS_KEY, false), s.remove(REFRESH_KEY, false)]);
+    } catch { /* nothing left to protect if the Keychain is unreachable */ }
+    emitSessionCleared();
+  },
+};
+
+// Inline literal (not `isIOS`) so Rollup drops the native store — and its
+// Keychain plugin chunk — from the web build.
+export const tokenStore: TokenStore = import.meta.env.VITE_TARGET === 'ios' ? nativeStore : webStore;

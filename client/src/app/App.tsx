@@ -16,7 +16,7 @@ function AppShell() {
   const { theme } = useSport();
   return (
     <div
-      className="relative w-screen h-screen overflow-hidden"
+      className="relative w-screen h-dvh overflow-hidden"
       style={{ backgroundColor: theme.bg }}
     >
       {/* Simple static gradient overlay */}

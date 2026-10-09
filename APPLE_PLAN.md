@@ -434,6 +434,17 @@ unmaintainable by month two. Not doing it.
 
 ## 5. Phase 3 — Capacitor shell (week 2–3)
 
+> **2026-10-09 — done in code.** Capacitor **8.5.3**, Swift Package Manager (no CocoaPods),
+> `client/ios/` committed, `webDir: dist-ios`, iPhone only + portrait, own icon/splash,
+> `PrivacyInfo.xcprivacy` in the target, `ITSAppUsesNonExemptEncryption = NO`.
+> **Correction:** `@capacitor/preferences` is UserDefaults, *not* Keychain. The native
+> session lives in the iOS Keychain via `@aparajita/capacitor-secure-storage`
+> (`tokenStore.ts`); `/auth/*` calls send `X-Client: native` on iOS. CORS allows
+> `capacitor://localhost` in code (`cors.ts`, tested). External links open in an
+> in-app Safari sheet (`native.ts`). CSP meta injected by `build:ios` (R16).
+> Rebuild after any web change: `npm run ios:sync`. **Left:** the first real build —
+> that needs the cloud macOS CI (Phase 7), then the real-iPhone checks of 3.8.
+
 ```bash
 cd client
 npm i @capacitor/core @capacitor/cli
@@ -444,18 +455,18 @@ npm i @capacitor/ios @capacitor/app @capacitor/browser @capacitor/haptics \
 npm run build && npx cap add ios && npx cap sync ios
 ```
 
-- [ ] **3.1** `capacitor.config.ts`: `appId: 'com.arakice.iceedge'`, `webDir: 'dist'`,
+- [x] **3.1** `capacitor.config.ts`: `appId: 'com.arakice.iceedge'`, `webDir: 'dist'`,
       `ios: { contentInset: 'always' }`. **No `server.url`** — a config that just loads
       arakice.com remotely is the textbook 4.2 rejection. Bundle the assets.
-- [ ] **3.2** Commit `client/ios/` to git (CI needs it). Add
+- [x] **3.2** Commit `client/ios/` to git (CI needs it). Add
       `client/ios/App/Pods`, `client/ios/App/build`, `DerivedData` to `.gitignore`.
-- [ ] **3.3** API base URL must be an absolute `https://` production URL. No `localhost`,
+- [x] **3.3** API base URL must be an absolute `https://` production URL. No `localhost`,
       no relative-to-origin assumptions — the WebView origin is `capacitor://localhost`.
       Audit `client/src/app/services/` for every fetch.
-- [ ] **3.4** **CORS**: add `capacitor://localhost` and `ionic://localhost` to the allow-list
+- [x] **3.4** **CORS**: add `capacitor://localhost` and `ionic://localhost` to the allow-list
       in `server/src/cors.ts` (it is shared by HTTP and Socket.io via `socket.ts`, so fixing
       it there fixes both).
-- [ ] **3.5** **Auth** (`client/src/app/services/authService.ts`): access token in
+- [x] **3.5** **Auth** (`client/src/app/services/authService.ts`): access token in
       `localStorage` + `Bearer` header is fine in a WebView. The **refresh token cookie**
       (`credentials: 'include'`) is the fragile part — third-party cookies from a
       `capacitor://localhost` origin are unreliable on iOS. Plan a native path that returns
@@ -466,20 +477,20 @@ npm run build && npx cap add ios && npx cap sync ios
       Apple was not required. **That was wrong** — you already ship Google OAuth
       (`getGoogleLoginUrl()`, `LoginPage.tsx`, `AuthCallback.tsx`), so Guideline 4.8 applies.
       See risks **R1** and **R2** in §-1.
-- [ ] **3.6** **Socket.io** must connect over `wss://` to the production host.
-- [ ] **3.7** **Kill the service worker / Web Push** in the native build.
+- [x] **3.6** **Socket.io** must connect over `wss://` to the production host.
+- [x] **3.7** **Kill the service worker / Web Push** in the native build.
       `client/src/app/services/pushService.ts` registers `/sw.js` and uses the Web Push API —
       that does not work inside a WKWebView on iOS, and a stale SW will serve you old assets.
       Guard the whole thing behind `!isNative` and route native notifications through APNs
       instead (see 4.1).
-- [ ] **3.8** iOS UI pass: safe-area insets (`env(safe-area-inset-*)`) so content clears the
+- [ ] **3.8** *(code ✔ 2026-10-09 — h-dvh, Keyboard resize native, status bar; to check on a real iPhone)* iOS UI pass: safe-area insets (`env(safe-area-inset-*)`) so content clears the
       notch and home indicator; no `:hover`-only affordances; ≥44pt tap targets;
       `-webkit-overflow-scrolling`; keyboard-avoidance on the login and chat inputs;
       disable text selection / long-press callout where it feels wrong;
       status bar style set via `@capacitor/status-bar`.
-- [ ] **3.9** External links (privacy policy, helpline) open via `@capacitor/browser`
+- [x] **3.9** External links (privacy policy, helpline) open via `@capacitor/browser`
       (SFSafariViewController), never by navigating the app WebView away.
-- [ ] **3.10** Splash screen + app icon (see §8).
+- [x] **3.10** Splash screen + app icon (see §8).
 
 **Exit criteria:** CI produces an `.ipa` that launches, logs in, loads predictions, and
 survives airplane-mode toggling without a white screen.

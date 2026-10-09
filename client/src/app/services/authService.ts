@@ -18,11 +18,22 @@ import { env } from '../env';
 import { tokenStore } from './tokenStore';
 import { decodeJwtPayload } from './jwt';
 import { fetchWithTimeout, type TimedRequestInit } from './http';
+import { isIOS } from '../platform';
 
 const BASE = env.profileApiUrl;
 
 /** Marks a request as coming from the native shell (see tokenStore.ts). */
 const NATIVE_CLIENT_HEADER = { 'X-Client': 'native' } as const;
+
+/**
+ * APPLE_PLAN 3.5 — headers for the /auth calls that open a session (register,
+ * verify-email, login…). On iOS they carry `X-Client: native` so the server
+ * answers with the refresh token in the body instead of a cookie WKWebView would
+ * drop. The server ignores the header on routes that issue no tokens.
+ */
+const AUTH_JSON_HEADERS: Record<string, string> = isIOS
+  ? { 'Content-Type': 'application/json', ...NATIVE_CLIENT_HEADER }
+  : { 'Content-Type': 'application/json' };
 
 // --- Authed fetch helper ----------------------------------------------------
 
@@ -306,7 +317,7 @@ export async function apiRegister(
   const res = await fetchWithTimeout(`${BASE}/auth/register`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: AUTH_JSON_HEADERS,
     body: JSON.stringify({ email, username, password, first_name }),
   });
   if (!res.ok) {
@@ -321,7 +332,7 @@ export async function apiVerifyEmail(email: string, code: string): Promise<AuthR
   const res = await fetchWithTimeout(`${BASE}/auth/verify-email`, {
     method: 'POST',
     credentials: 'include', // receive the refresh cookie
-    headers: { 'Content-Type': 'application/json' },
+    headers: AUTH_JSON_HEADERS,
     body: JSON.stringify({ email, code }),
   });
   if (!res.ok) {
@@ -335,7 +346,7 @@ export async function apiResendVerification(email: string): Promise<void> {
   await fetchWithTimeout(`${BASE}/auth/resend-verification`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: AUTH_JSON_HEADERS,
     body: JSON.stringify({ email }),
   }).catch(() => {});
 }
@@ -344,7 +355,7 @@ export async function apiResendVerification(email: string): Promise<void> {
 export async function apiForgotPassword(email: string): Promise<void> {
   await fetchWithTimeout(`${BASE}/auth/forgot-password`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: AUTH_JSON_HEADERS,
     body: JSON.stringify({ email }),
   }).catch(() => {});
 }
@@ -353,7 +364,7 @@ export async function apiForgotPassword(email: string): Promise<void> {
 export async function apiResetPassword(email: string, code: string, newPassword: string): Promise<void> {
   const res = await fetchWithTimeout(`${BASE}/auth/reset-password`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: AUTH_JSON_HEADERS,
     body: JSON.stringify({ email, code, new_password: newPassword }),
   });
   if (!res.ok) {
@@ -366,7 +377,7 @@ export async function apiLogin(email: string, password: string, remember = false
   const res = await fetchWithTimeout(`${BASE}/auth/login`, {
     method: 'POST',
     credentials: 'include', // receive the refresh cookie
-    headers: { 'Content-Type': 'application/json' },
+    headers: AUTH_JSON_HEADERS,
     body: JSON.stringify({ email, password, remember }),
   });
   if (!res.ok) {

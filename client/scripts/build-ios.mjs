@@ -7,12 +7,14 @@
  * 2. Prunes what the native app must not ship: the static SEO pages copied from
  *    public/ (one of them is best-nhl-betting-software.html), sitemaps, robots,
  *    the service worker. No route-shells.mjs either.
+ * 0. R7 — fails before building if any VITE_*_URL is missing or not https://
+ *    (ATS would block it on the phone and the app would open on an empty screen).
  * 3. Fails if anything bookmaker-related survived in the bundle. This is the
  *    "grep before every release" of APPLE_PLAN 2.2, automated: CI cannot ship an
  *    iOS build that links to a sportsbook.
  */
-import { build } from "vite";
-import { readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { build, loadEnv } from "vite";
+import { readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,6 +22,16 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUT = join(ROOT, "dist-ios");
 
 process.env.VITE_TARGET = "ios";
+
+// ── 0. env: every API URL must be https (R7) ──────────────────────────────
+const REQUIRED_URLS = ["VITE_NHL_API_URL", "VITE_PREDICTION_API_URL", "VITE_PROFILE_API_URL", "VITE_SOCKET_URL"];
+const viteEnv = loadEnv("production", ROOT, "VITE_");
+const badEnv = REQUIRED_URLS.filter((k) => !/^https:\/\//.test(viteEnv[k] ?? ""));
+if (badEnv.length) {
+  console.error(`\n✗ build:ios — these must be set to an https:// URL (R7): ${badEnv.map((k) => `${k}=${viteEnv[k] ?? "(unset)"}`).join(", ")}\n`);
+  process.exit(1);
+}
+
 await build({ root: ROOT, build: { outDir: OUT, emptyOutDir: true } });
 
 // ── 2. prune ───────────────────────────────────────────────────────────────
@@ -48,6 +60,25 @@ for (const name of readdirSync(OUT)) {
   const p = join(OUT, name);
   if (statSync(p).isDirectory() && walk(p).length === 0) rmSync(p, { recursive: true });
 }
+
+// ── 2b. CSP (R16) ─ the web CSP is a Vercel header; the app has no server, so
+// it travels as a meta tag. Same rules minus Google (fonts are self-hosted,
+// no Google sign-in on iOS) and minus what a meta tag cannot carry.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:",
+  "img-src 'self' data: blob: https:",
+  "connect-src 'self' https: wss:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
+const indexPath = join(OUT, "index.html");
+const html = readFileSync(indexPath, "utf8");
+if (!html.includes("<meta charset")) throw new Error("build:ios — index.html has no <meta charset>, cannot place the CSP");
+writeFileSync(indexPath, html.replace(/(<meta charset[^>]*>)/i, `$1\n    <meta http-equiv="Content-Security-Policy" content="${CSP}" />`));
 
 // ── 3. guard ───────────────────────────────────────────────────────────────
 const FORBIDDEN = [

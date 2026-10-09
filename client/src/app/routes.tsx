@@ -69,7 +69,7 @@ const NotFoundPage          = lazy(() => import("./pages/NotFoundPage").then(m =
 /** Minimal fallback shown while a lazy route chunk loads. Matches the app's
  *  dark base colour so there's no white flash on mobile. */
 function PageFallback() {
-  return <div style={{ minHeight: "100vh", backgroundColor: "#0A0E0C" }} aria-busy="true" />;
+  return <div style={{ minHeight: "100dvh", backgroundColor: "#0A0E0C" }} aria-busy="true" />;
 }
 
 /** Wrap a route element in the shared Suspense boundary. */

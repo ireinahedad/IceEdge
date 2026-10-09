@@ -62,9 +62,16 @@ export const vercelPreview = new RegExp(
  * laisse passer. Les navigateurs envoient toujours Origin en cross-origin, donc
  * cette porte n'en ouvre aucune côté navigateur.
  */
+/**
+ * APPLE_PLAN 3.4 — the iOS app's WebView origin (Capacitor). In code rather than
+ * in CORS_ORIGIN so a Railway variable edit can never lock the app out. Shared
+ * with Socket.io through `socket.ts`, like the rest of this file.
+ */
+export const nativeOrigins = ['capacitor://localhost', 'ionic://localhost'];
+
 export function isAllowedOrigin(origin?: string): boolean {
   if (!origin) return true;
-  return allowedOrigins.includes(origin) || vercelPreview.test(origin);
+  return allowedOrigins.includes(origin) || nativeOrigins.includes(origin) || vercelPreview.test(origin);
 }
 
 /**
