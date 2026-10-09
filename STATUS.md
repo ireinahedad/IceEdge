@@ -88,9 +88,10 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
 - [ ] Phase 5 — IAP (deferred: v1 ships without Pro on iOS). Decide before submitting whether
       locked Pro sections without a call-to-action are acceptable.
 - [ ] Phase 6 — in-app account deletion: ✔ built on the web (`1244bac`); check it in the iOS shell.
-- [ ] Phase 7 (moved before 4) — ✔ workflow `ios-release.yml`, Apple Distribution certificate +
+- [x] Phase 7 (moved before 4) — ✔ workflow `ios-release.yml`, Apple Distribution certificate +
       `ArakIce App Store` profile (both expire **2027-10-09**), GitHub secrets + variables
-      (2026-10-09). **First run in progress** → then install via TestFlight on the iPhone.
+      (2026-10-09). ✔ **First green run — build uploaded to TestFlight (2026-10-09).** Next: install
+      on the iPhone and run the device checks below.
       Delete the four `.txt` files in `ios-signing/` once the secrets work.
 - [ ] Phases 8–9 — store assets, TestFlight external round, submission.
 

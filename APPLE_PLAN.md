@@ -1,6 +1,6 @@
 # APPLE_PLAN.md — Shipping IceEdge / Arakice to the Apple App Store
 
-**Owner:** Ireina · **Created:** 2026-09-03 · **Status:** in progress — web frozen at `pre-ios-freeze` (2026-10-07) · Phases 0–3 and 7 done in code · **first TestFlight build running (2026-10-09)**
+**Owner:** Ireina · **Created:** 2026-09-03 · **Status:** in progress — web frozen at `pre-ios-freeze` (2026-10-07) · Phases 0–3 and 7 done in code · **first build uploaded to TestFlight (2026-10-09)**
 
 > **Status 2026-10-09** — live checklist: **`STATUS.md` §3.4**.
 >
@@ -11,7 +11,7 @@
 > | 1 · Legal | ✔ answers in `docs/ios/APP_STORE_COMPLIANCE.md` — left: type age rating / privacy labels into App Store Connect |
 > | 2 · Gambling | ✔ `build:ios` guard, iOS copy, responsible-gambling note, bookmaker buttons off on the web too (R10) |
 > | 3 · Capacitor | ✔ code (Capacitor 8, SPM, Keychain session, CORS, CSP) — left: real-iPhone checks (3.8) |
-> | 7 · Cloud CI | ✔ workflow + certificate + profile + secrets — **first run in progress** |
+> | 7 · Cloud CI | ✔ **first green run, build uploaded to TestFlight (2026-10-09)** |
 > | 4 · Native features | next, once the app runs on the iPhone |
 > | 5 · IAP | deferred: v1 ships without Pro on iOS |
 > | 6 · Deletion | ✔ built on the web (`1244bac`) — check it inside the app |
@@ -711,7 +711,7 @@ runs-on: macos-15          # must provide Xcode 26 — verify the image's Xcode 
 |------|-------|-------|
 | 1 | Freeze, Apple account, app record, legal answers, gambling flags | ✔ 2026-10-07 → 10-09 |
 | 2 | Capacitor shell + cloud CI + signing | ✔ code, first run 2026-10-09 |
-| 3 | First TestFlight build on the iPhone → device checks (3.8, R15, session after 15 min) | **now** |
+| 3 | First TestFlight build on the iPhone → device checks (3.8, R15, session after 15 min) | **now** — build uploaded 2026-10-09 |
 | 4 | Native features: APNs push, share sheet, offline, haptics, universal links (Phase 4) | next |
 | 5 | Store assets + metadata, R18 decision, age rating / privacy labels typed in (Phases 1, 8) | |
 | 6 | External TestFlight round, fixes (9.1–9.2) | |
