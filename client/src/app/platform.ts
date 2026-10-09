@@ -30,6 +30,14 @@
 const TARGET: 'web' | 'ios' = import.meta.env.VITE_TARGET === 'ios' ? 'ios' : 'web';
 
 const isWeb = TARGET === 'web';
+
+/**
+ * R10 (2026-10-09) — bookmaker buttons (« Place on … », odds tap-through, sportsbook
+ * picker) are OFF on the web too until there is an affiliate deal. Turn them back on
+ * with VITE_BOOKMAKER_LINKS=true (Vercel env + redeploy). Never on iOS, whatever the
+ * variable says (APPLE_PLAN §4).
+ */
+export const bookmakerLinksOn = isWeb && import.meta.env.VITE_BOOKMAKER_LINKS === 'true';
 export const isIOS = TARGET === 'ios';
 
 /** The single place where web and iOS are allowed to differ. */
@@ -37,7 +45,7 @@ export const features = {
   /** R2 — Guideline 4.8: no third-party login on iOS, so no Sign in with Apple requirement. */
   googleLogin:    isWeb,
   /** APPLE_PLAN §4 — Guideline 5.3: no links out to a sportsbook. Odds stay, the links go. */
-  bookmakerLinks: isWeb,
+  bookmakerLinks: bookmakerLinksOn,
   /** APPLE_PLAN §7 — Guideline 3.1.1: payment on iOS must go through IAP, not Stripe. */
   stripeCheckout: isWeb,
   /**

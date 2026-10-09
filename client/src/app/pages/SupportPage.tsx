@@ -1,7 +1,7 @@
 import { LegalPage } from "../components/LegalPage";
 import { useI18n } from "../i18n";
 import { env } from "../env";
-import { isIOS } from "../platform";
+import { isIOS, bookmakerLinksOn } from "../platform";
 
 const CONTENT = {
   en: {
@@ -9,7 +9,7 @@ const CONTENT = {
     faqTitle: "Frequently asked questions",
     faq: [
       { q: "How are predictions calculated?", a: "ArakIce combines statistical rules (recent form, head-to-head, home ice/court advantage) with a machine-learning model trained on historical results. The numbers shown everywhere come from the ML model; the rules can be checked in a bet's detail, below the ML number." },
-      { q: "Is ArakIce a bookmaker?", a: isIOS
+      { q: "Is ArakIce a bookmaker?", a: isIOS || !bookmakerLinksOn
         ? "No. ArakIce is an analytics app: it does not accept bets, hold money or link to any betting operator. Predictions are for information and entertainment only."
         : "No. ArakIce does not accept bets. We link out to third-party bookmakers (e.g. bet365) where legally available." },
       { q: "How do I cancel my Pro subscription?", a: "Go to Profile → Settings → Subscription, then tap \"Cancel subscription\". Your access stays active until the end of the current billing period." },
@@ -21,7 +21,7 @@ const CONTENT = {
     faqTitle: "Questions fréquentes",
     faq: [
       { q: "Comment les prédictions sont-elles calculées ?", a: "ArakIce combine des règles statistiques (forme récente, confrontations directes, avantage de la glace/du court) avec un modèle d'apprentissage automatique entraîné sur des résultats historiques. Les chiffres affichés partout sont ceux du modèle ML ; les règles se consultent dans le détail d'un pari, sous le chiffre ML." },
-      { q: "ArakIce est-il un bookmaker ?", a: isIOS
+      { q: "ArakIce est-il un bookmaker ?", a: isIOS || !bookmakerLinksOn
         ? "Non. ArakIce est une application d'analyse : elle n'accepte aucun pari, ne détient aucun argent et ne renvoie vers aucun opérateur de paris. Les prédictions sont fournies à titre informatif et de divertissement."
         : "Non. ArakIce n'accepte aucun pari. Nous redirigeons vers des bookmakers tiers (ex. bet365) là où c'est légalement disponible." },
       { q: "Comment annuler mon abonnement Pro ?", a: "Allez dans Profil → Paramètres → Abonnement, puis touchez « Annuler l'abonnement ». Votre accès reste actif jusqu'à la fin de la période de facturation en cours." },

@@ -127,7 +127,8 @@ free iOS users a small server-side quota instead. Cleaner paywall, one less argu
 `public/*.html` marketing pages. Smaller binary, and nothing in the bundle contradicts your
 review notes.
 
-**R10 · arakice.com is your marketing URL — and reviewers open it**
+**R10 · arakice.com is your marketing URL — and reviewers open it** — *decided 2026-10-09: bookmaker
+buttons off on the web too, behind `VITE_BOOKMAKER_LINKS` (default off).*
 The site carries bookmaker links and pages literally titled "best NHL betting software".
 Removing the links from the *app* while the *listed website* is a betting funnel is a
 contradiction a reviewer can find in one click.

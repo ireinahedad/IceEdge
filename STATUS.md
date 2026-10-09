@@ -75,7 +75,9 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
       Decide R18 (NHL logos/photos on iOS, 5.2.1) before Phase 8.
 - [ ] Phase 2 — ✔ 2026-10-09: `npm run build:ios` (no bookmaker in the bundle, guarded), iOS FAQ
       copy, responsible-gambling note (web + iOS), SEO links hidden on iOS, R9 done.
-      Left: decide R10 (betting framing of arakice.com); store metadata with Phase 8.
+      R10 decided 2026-10-09: bookmaker buttons OFF on the web too (`VITE_BOOKMAKER_LINKS`, default
+      off; set `true` in Vercel to bring them back once there is an affiliate deal). Left: store
+      metadata with Phase 8; consider renaming the `best-nhl-betting-software` SEO page.
 - [ ] Phase 3 — Capacitor shell; native `tokenStore` (`@capacitor/preferences`) — without it
       the session dies every 15 min; CORS for `capacitor://localhost`; `build:ios` ✔; `AppShell` → `100dvh` and keyboard handling (✔ still `h-screen`, no
       `visualViewport`), tested on a real iPhone.
