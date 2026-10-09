@@ -590,6 +590,14 @@ reinstall, tap Restore, and still be Pro — and where a web-Stripe Pro account 
 
 ## 9. Phase 7 — Building without a Mac (week 3 onward, set up early)
 
+> **2026-10-09 — workflow written, done before Phase 4.** `.github/workflows/ios-release.yml`
+> (manual trigger or tag `ios-v*`, `macos-15` + newest Xcode with a hard 26+ check,
+> `build:ios` → `cap sync` → archive → export with `destination=upload`). **Manual signing**
+> (Apple Distribution `.p12` + App Store profile in secrets): cloud signing would need an
+> **Admin** API key plus a development certificate on the runner. The App Manager key is
+> enough for the upload. Setup steps: **`docs/ios/CI_SETUP.md`**. Key + CSR generated
+> locally in `ios-signing/` (git-ignored). Left: certificate, profile, secrets, first run.
+
 You are on Windows. You never need to touch a Mac, but every build must run on one.
 
 **Option 1 — GitHub Actions (recommended, you already have `.github/`)**

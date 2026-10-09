@@ -1,0 +1,151 @@
+# APPLE_PLAN Phase 7 — build the iOS app on a cloud Mac and upload it to TestFlight.
+#
+# Manual trigger only (Actions → "iOS → TestFlight" → Run workflow), or a tag
+# `ios-v*`. Never on every push: macOS minutes bill at 10× on private repos.
+# Setup (secrets, variables, certificate, profile): docs/ios/CI_SETUP.md.
+name: iOS → TestFlight
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['ios-v*']
+
+concurrency:
+  group: ios-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  testflight:
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: client
+    env:
+      # Public values (they end up in the JS bundle anyway): repository *variables*.
+      VITE_NHL_API_URL:        ${{ vars.VITE_NHL_API_URL }}
+      VITE_PROFILE_API_URL:    ${{ vars.VITE_PROFILE_API_URL }}
+      VITE_PREDICTION_API_URL: ${{ vars.VITE_PREDICTION_API_URL }}
+      VITE_SOCKET_URL:         ${{ vars.VITE_SOCKET_URL }}
+      VITE_SENTRY_DSN:         ${{ vars.VITE_SENTRY_DSN }}
+      VITE_SUPPORT_EMAIL:      ${{ vars.VITE_SUPPORT_EMAIL }}
+      # Read by the Release build settings in project.pbxproj and ExportOptions.plist.
+      APPLE_TEAM_ID:           ${{ vars.APPLE_TEAM_ID }}
+      IOS_PROFILE_NAME:        ${{ vars.IOS_PROFILE_NAME }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      # 7.1 — App Store Connect only accepts Xcode 26+ builds since 2026-04-28.
+      - name: Prove Xcode 26+
+        run: |
+          xcodebuild -version
+          MAJOR=$(xcodebuild -version | head -1 | awk '{print $2}' | cut -d. -f1)
+          if [ "$MAJOR" -lt 26 ]; then
+            echo "::error::Xcode $MAJOR is too old (App Store needs 26+). Change runs-on to macos-26."
+            exit 1
+          fi
+
+      - name: Check configuration
+        run: |
+          missing=""
+          for v in VITE_NHL_API_URL VITE_PROFILE_API_URL VITE_PREDICTION_API_URL VITE_SOCKET_URL APPLE_TEAM_ID IOS_PROFILE_NAME; do
+            [ -n "${!v}" ] || missing="$missing $v"
+          done
+          [ -z "$missing" ] || { echo "::error::Missing repository variables:$missing (docs/ios/CI_SETUP.md)"; exit 1; }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+
+      # Fails on a non-https API URL (R7) or any bookmaker trace in the bundle (2.2).
+      - name: Build the iOS web bundle
+        run: npm run build:ios
+
+      - name: Copy the bundle into the Xcode project
+        run: npx cap sync ios
+
+      - name: Install signing certificate, profile and API key
+        env:
+          P12_BASE64:      ${{ secrets.IOS_DIST_P12_BASE64 }}
+          P12_PASSWORD:    ${{ secrets.IOS_DIST_P12_PASSWORD }}
+          PROFILE_BASE64:  ${{ secrets.IOS_PROFILE_BASE64 }}
+          ASC_KEY_ID:      ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_BASE64:  ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/dist.p12"
+          security find-identity -v -p codesigning "$KEYCHAIN" | grep -q "Apple Distribution" \
+            || { echo "::error::No 'Apple Distribution' identity in the .p12"; exit 1; }
+
+          echo "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/app.mobileprovision"
+          UUID=$(security cms -D -i "$RUNNER_TEMP/app.mobileprovision" | plutil -extract UUID raw -)
+          NAME=$(security cms -D -i "$RUNNER_TEMP/app.mobileprovision" | plutil -extract Name raw -)
+          [ "$NAME" = "$IOS_PROFILE_NAME" ] \
+            || { echo "::error::Profile is named '$NAME' but IOS_PROFILE_NAME is '$IOS_PROFILE_NAME'"; exit 1; }
+          for d in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$d"; cp "$RUNNER_TEMP/app.mobileprovision" "$d/$UUID.mobileprovision"
+          done
+
+          mkdir -p "$RUNNER_TEMP/asc"
+          echo "$ASC_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8"
+
+      # 7.4 — build number = run number: always increasing, never a duplicate.
+      - name: Archive
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -quiet \
+            APPLE_TEAM_ID="$APPLE_TEAM_ID" \
+            IOS_PROFILE_NAME="$IOS_PROFILE_NAME" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
+
+      - name: Export and upload to TestFlight
+        env:
+          ASC_KEY_ID:    ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          sed -e "s/__TEAM_ID__/$APPLE_TEAM_ID/" -e "s/__PROFILE_NAME__/$IOS_PROFILE_NAME/" \
+            ios/ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          echo "### Build ${{ github.run_number }} uploaded — it appears in TestFlight after Apple's processing (5–30 min)." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove signing material
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -rf "$RUNNER_TEMP/asc" "$RUNNER_TEMP/app.mobileprovision"

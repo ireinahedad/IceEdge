@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  APPLE_PLAN 7.3 — used by .github/workflows/ios-release.yml.
+  Manual signing: the Apple Distribution certificate and the App Store profile
+  come from GitHub secrets (see docs/ios/CI_SETUP.md). destination=upload:
+  -exportArchive sends the build straight to App Store Connect (TestFlight)
+  with the API key; no altool / Transporter step.
+  __TEAM_ID__ and __PROFILE_NAME__ are filled in by the workflow.
+-->
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>destination</key>
+	<string>upload</string>
+	<key>teamID</key>
+	<string>__TEAM_ID__</string>
+	<key>signingStyle</key>
+	<string>manual</string>
+	<key>signingCertificate</key>
+	<string>Apple Distribution</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.arakice.iceedge</key>
+		<string>__PROFILE_NAME__</string>
+	</dict>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>

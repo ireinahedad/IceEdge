@@ -79,3 +79,9 @@ server/eval-reports/
 
 # Fichiers mis de côté pour suppression manuelle
 _to_delete/
+
+# APPLE_PLAN Phase 7 — signing material (private key, .p12, profiles). NEVER commit.
+ios-signing/
+*.p12
+*.p8
+*.mobileprovision

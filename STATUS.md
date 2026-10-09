@@ -88,7 +88,10 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
 - [ ] Phase 5 — IAP (deferred: v1 ships without Pro on iOS). Decide before submitting whether
       locked Pro sections without a call-to-action are acceptable.
 - [ ] Phase 6 — in-app account deletion: ✔ built on the web (`1244bac`); check it in the iOS shell.
-- [ ] Phases 7–9 — cloud macOS CI, store assets, TestFlight, submission.
+- [ ] Phase 7 (moved before 4) — ✔ workflow `ios-release.yml` + `docs/ios/CI_SETUP.md` (2026-10-09).
+      Left: Apple Distribution certificate + App Store profile (CSR ready in `ios-signing/`),
+      GitHub secrets/variables, first run → TestFlight on the iPhone.
+- [ ] Phases 8–9 — store assets, TestFlight external round, submission.
 
 ### 3.5 ML — prediction model
 
