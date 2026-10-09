@@ -427,6 +427,12 @@ export const profileApiService = {
   getModerationQueue: (): Promise<{ reports: ModerationQueueItem[] }> =>
     get<{ reports: ModerationQueueItem[] }>('/dev/reports'),
 
+  // ── Profit des Best Bets, admin uniquement (/dev/profit) ──────────────────
+
+  /** Best bets journalisés d'une période (jours NHL inclus). Règle au passage ceux dont le match est fini. */
+  getBestBetsProfit: (from: string, to: string): Promise<BestBetsProfitResponse> =>
+    get<BestBetsProfitResponse>(`/dev/best-bets-profit?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+
   /**
    * Trancher. `actioned` masque le message, `dismissed` retire un masquage
    * AUTOMATIQUE (jamais celui qu'un admin a posé). La décision porte sur le
@@ -438,3 +444,42 @@ export const profileApiService = {
   ): Promise<{ messageId: string; status: string; reportsUpdated: number; hidden: boolean }> =>
     post(`/dev/reports/${reportId}`, { status }),
 };
+
+// ---- /dev/profit -------------------------------------------------------------
+
+/** Une ligne de `best_bet_log` (serveur : `bestBetLog.service.ts`). */
+export interface BestBetLogRow {
+  id:           number;
+  betId:        string;
+  gameId:       string;
+  gameDate:     string;
+  startTimeUTC: string | null;
+  homeTeam:     string | null;
+  awayTeam:     string | null;
+  subjectType:  'game' | 'player';
+  subjectName:  string;
+  marketType:   string;
+  marketLabel:  string;
+  label:        string;
+  line:         number | null;
+  source:       string;
+  firstSeenAt:  string;
+  firstRank:    number;
+  firstScore:   number;
+  /** Cote décimale à la première apparition ; `null` = le livre ne cote pas ce pari. */
+  firstPrice:   number | null;
+  lastRank:     number;
+  lastScore:    number;
+  lastPrice:    number | null;
+  bestRank:     number;
+  bookTitle:    string | null;
+  outcome:      'pending' | 'win' | 'loss' | 'void';
+}
+
+export interface BestBetsProfitResponse {
+  from:   string;
+  to:     string;
+  settle: { checked: number; settled: number; error?: string };
+  rows:   BestBetLogRow[];
+  retrieved_at: string;
+}

@@ -47,6 +47,10 @@ const DevIndexPage          = features.devRoutes
   ? lazy(() => import("./pages/DevIndexPage").then(m => ({ default: m.DevIndexPage })))
   : null;
 // La saisie d'avant-match (ex-carte des Réglages), même liaison conditionnelle.
+// Profit des Best Bets (2026-10-09) — même liaison conditionnelle que ci-dessus.
+const BestBetsProfitPage    = features.devRoutes
+  ? lazy(() => import("./pages/BestBetsProfitPage").then(m => ({ default: m.BestBetsProfitPage })))
+  : null;
 const ManualEntryPage       = features.devRoutes
   ? lazy(() => import("./pages/ManualEntryPage").then(m => ({ default: m.ManualEntryPage })))
   : null;
@@ -187,12 +191,13 @@ export const router = createBrowserRouter([
           ]
         : []),
       // R17 — the ML dashboard is a developer tool, not a shippable screen.
-      ...(features.devRoutes && DevMLDashboard && ModerationQueuePage && DevIndexPage && ManualEntryPage
+      ...(features.devRoutes && DevMLDashboard && ModerationQueuePage && DevIndexPage && ManualEntryPage && BestBetsProfitPage
         ? [
             { path: "/dev",                           element: withSuspense(<Protected><DevIndexPage /></Protected>) },
             { path: "/dev/ml",                        element: withSuspense(<Protected><DevMLDashboard /></Protected>) },
             { path: "/dev/moderation",                element: withSuspense(<Protected><ModerationQueuePage /></Protected>) },
             { path: "/dev/saisie",                    element: withSuspense(<Protected><ManualEntryPage /></Protected>) },
+            { path: "/dev/profit",                    element: withSuspense(<Protected><BestBetsProfitPage /></Protected>) },
           ]
         : []),
 

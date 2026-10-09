@@ -12,6 +12,7 @@
  * POST /api/dev/metrics/reset    — Ouvre une nouvelle fenêtre de mesure
  * GET  /api/dev/reports          — File de modération du chat : signalements ouverts
  * POST /api/dev/reports/:id      — Trancher : actioned (masque) | dismissed (rétablit)
+ * GET  /api/dev/best-bets-profit — Journal des Best Bets réglés, pour /dev/profit
  */
 
 import { Router, Request, Response } from 'express';
@@ -27,6 +28,7 @@ import { chatService } from '../services/chat.service';
 import { pool } from '../db/connection';
 import { extrasBudgetState } from '../services/oddsClient';
 import { sendError } from '../httpError';
+import { getBestBetLog, settlePendingBestBets } from '../services/bestBetLog.service';
 
 const router = Router();
 
@@ -515,6 +517,39 @@ router.post('/reports/:id', async (req: Request, res: Response) => {
       Number(req.params.id), req.user!.sub, String(status),
     );
     res.json(result);
+  } catch (err: any) { sendError(res, err); }
+});
+
+// ── GET /api/dev/best-bets-profit?from=YYYY-MM-DD&to=YYYY-MM-DD ───────────────
+//
+// Les best bets journalisés (`best_bet_log`, migration 042) d'une période, jours
+// NHL inclus. Règle d'abord ceux dont le match est fini — c'est la page admin
+// qui fait avancer le règlement, pas un job de plus. Un règlement en échec
+// (API NHL muette) n'empêche pas de lire : les lignes restent « en attente ».
+//
+// Le profit est calculé côté client (mise, top N, cote des paris sans prix).
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+function etToday(offsetDays = 0): string {
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  const d = new Date(`${today}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + offsetDays);
+  return d.toISOString().slice(0, 10);
+}
+
+router.get('/best-bets-profit', async (req: Request, res: Response) => {
+  const from = typeof req.query.from === 'string' && ISO_DAY.test(req.query.from) ? req.query.from : etToday(-30);
+  const to   = typeof req.query.to   === 'string' && ISO_DAY.test(req.query.to)   ? req.query.to   : etToday(1);
+  try {
+    let settle: { checked: number; settled: number; error?: string };
+    try {
+      settle = await settlePendingBestBets();
+    } catch (err: any) {
+      settle = { checked: 0, settled: 0, error: err?.message ?? 'settlement failed' };
+    }
+    const rows = await getBestBetLog(from, to);
+    res.json({ from, to, settle, rows, retrieved_at: new Date().toISOString() });
   } catch (err: any) { sendError(res, err); }
 });
 

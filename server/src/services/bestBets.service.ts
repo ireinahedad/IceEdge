@@ -537,6 +537,17 @@ async function computeBestBets(o: NormalizedOptions): Promise<BestBetsResult> {
     } catch { /* sans prix */ }
   }));
 
+  // 7. Journal des best bets (`best_bet_log`, page /dev/profit). Seulement la
+  //    liste de l'accueil — options par défaut — pour que les rangs journalisés
+  //    soient ceux que l'utilisateur voit. Sans attendre : un journal en panne
+  //    ne retarde ni ne retire aucun pari. Import dynamique : le journal tire
+  //    le règlement (et toute sa chaîne), inutile au calcul lui-même.
+  if (days === 2 && maxPlayers === 15 && source === 'ml' && process.env.NODE_ENV !== 'test') {
+    void import('./bestBetLog.service')
+      .then((m) => m.logBestBets(kept))
+      .catch(() => { /* journal facultatif */ });
+  }
+
   return {
     bets: kept,
     meta: {

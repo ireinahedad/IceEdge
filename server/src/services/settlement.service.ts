@@ -73,7 +73,7 @@ import { parseMarginBucket } from './prediction/marginPeriods';
  * du coupon au lieu de le figer. `unknown` reste « pas encore » : match non
  * terminé, ou amont muet. Voir `settleLeg` pour le passage de l'un à l'autre.
  */
-type LegResult = 'win' | 'loss' | 'void' | 'unknown';
+export type LegResult = 'win' | 'loss' | 'void' | 'unknown';
 
 // Small per-run cache so a slip with 5 legs on the same game fetches it once
 type GameCache     = Map<string, any | null>;
@@ -954,6 +954,27 @@ const SETTLE_BUDGET_DEFAULT_MS = Number(process.env.SETTLEMENT_BUDGET_MS) || 2 *
  *  vol — au-delà de quelques unités on n'achète plus de latence, on ne fait
  *  qu'élargir les rafales vers l'API NHL. */
 const LEG_CONCURRENCY = Number(process.env.SETTLEMENT_LEG_CONCURRENCY) || 4;
+
+/**
+ * Règle des jambes ISOLÉES, hors de tout coupon — les Best Bets journalisés
+ * dans `best_bet_log` (migration 042, page /dev/profit).
+ *
+ * Exactement la règle des coupons (`settleLeg`, donc l'annulation des jambes
+ * durablement indécidables comprise) : un best bet est jugé comme le serait la
+ * même jambe posée par un utilisateur. Les caches sont partagés sur l'appel —
+ * 40 best bets sur 8 matchs coûtent 8 récupérations de match, pas 40.
+ *
+ * `leg` : `{ gameId, marketType, selectionValue, line, subjectId }`, avec
+ * `subjectId` = id du joueur pour un pari joueur, id du match sinon.
+ */
+export async function settleStandaloneLegs(legs: any[]): Promise<LegResult[]> {
+  const cache: GameCache = new Map();
+  const boxCache: BoxCache = new Map();
+  const scoringCache: ScoringCache = new Map();
+  const faceoffCache: FaceoffCache = new Map();
+  return mapLimit(legs, LEG_CONCURRENCY, (leg) =>
+    settleLeg(leg, cache, boxCache, scoringCache, faceoffCache).catch((): LegResult => 'unknown'));
+}
 
 /**
  * Settle pending slips. If `userId` is given, only that user's slips.

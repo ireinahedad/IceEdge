@@ -21,7 +21,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 
-import { FileText, Shield, BarChart3, type LucideIcon } from "lucide-react";
+import { FileText, Shield, BarChart3, DollarSign, type LucideIcon } from "lucide-react";
 /** Les écrans internes, dans l'ordre où on les ouvre le plus souvent. */
 const DEV_LINKS: { path: string; title: string; blurb: string; icon: LucideIcon }[] = [
   {
@@ -29,6 +29,12 @@ const DEV_LINKS: { path: string; title: string; blurb: string; icon: LucideIcon 
     title: "Saisie d'avant-match",
     blurb: "Gardiens partants et joueurs absents, match par match. À faire 1 à 2 h avant le match.",
     icon:  FileText,
+  },
+  {
+    path:  "/dev/profit",
+    title: "Profit des Best Bets",
+    blurb: "Profit si tu mises 20 $ (ou autre) sur chaque best bet du jour. Bilan, ROI, détail par jour.",
+    icon:  DollarSign,
   },
   {
     path:  "/dev/moderation",
