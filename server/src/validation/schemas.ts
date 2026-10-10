@@ -455,6 +455,20 @@ export const pushUnsubscribeSchema = z.object({
   endpoint: z.string().url().max(2_000),
 });
 
+// APPLE_PLAN 4.1 — jeton APNs d'un iPhone. Apple le livre en hexadécimal
+// (64 caractères aujourd'hui ; la doc prévient que la longueur peut changer,
+// d'où la borne large plutôt qu'une longueur exacte).
+const apnsToken = z.string().regex(/^[0-9a-fA-F]{32,200}$/, 'token must be hex').transform((t) => t.toLowerCase());
+
+export const apnsRegisterSchema = z.object({
+  token: apnsToken,
+  lang:  z.enum(['fr', 'en']).default('fr'),
+});
+
+export const apnsUnregisterSchema = z.object({
+  token: apnsToken,
+});
+
 // ── Abonnement ──────────────────────────────────────────────────────────────
 //
 // Le code promo est comparé à un catalogue en mémoire après `trim().toUpperCase()`,

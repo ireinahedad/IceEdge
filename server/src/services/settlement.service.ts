@@ -66,6 +66,7 @@ import { logger } from '../logger';
 import { withJobLock } from './jobLock';
 import { mapLimit } from './concurrency';
 import { parseMarginBucket } from './prediction/marginPeriods';
+import { notifySettled, type SettledSlip } from './settlementNotify';
 
 /**
  * `void` : la jambe ne sera JAMAIS décidable — marché sans règle de règlement,
@@ -1086,6 +1087,8 @@ export async function settlePendingSlips(userId?: string, opts: SettleOptions = 
   // Curseur de pagination : dernier (placed_at, id) examiné.
   let cursorAt: string | null = null;
   let cursorId: string | null = null;
+  // Coupons réglés par CETTE passe, pour la notification (APPLE_PLAN 4.1).
+  const settledNow: SettledSlip[] = [];
 
   while (summary.checked < max) {
     const limit = Math.min(batch, max - summary.checked);
@@ -1181,6 +1184,7 @@ export async function settlePendingSlips(userId?: string, opts: SettleOptions = 
       if (!upd.rowCount) continue;
 
       await applyXpDelta(slip.userId, xp);
+      settledNow.push({ userId: String(slip.userId), outcome, xp, legs: legs.length });
 
       summary.settled++;
       if (outcome === 'win') summary.wins++;
@@ -1196,6 +1200,9 @@ export async function settlePendingSlips(userId?: string, opts: SettleOptions = 
   }
 
   if (summary.checked >= max) summary.exhausted = false;
+  // Après la boucle, jamais pendant : une notification par utilisateur pour
+  // toute la passe, et l'envoi ne retient pas le règlement (fire-and-forget).
+  notifySettled(settledNow);
   if (!summary.exhausted) {
     logger.warn(summary, '[Settlement] passe interrompue (budget ou plafond) — des tickets restent en attente');
   }
