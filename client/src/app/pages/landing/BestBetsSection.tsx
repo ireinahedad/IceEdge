@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { ChevronRight, Star, Check, Plus } from "lucide-react";
+import { useFoldState } from "../../hooks/useFoldState";
 import { predictionApiService, type ApiBestBet } from "../../services/predictionApiService";
 import type { BetLeg } from "../../types/bet";
 import { useBet } from "../../context/BetContext";
@@ -244,16 +245,10 @@ export function BestBetsSection({
     const b = setInterval(() => setNow(Date.now()), 60_000);
     return () => { clearInterval(a); clearInterval(b); };
   }, [locked]);
-  const [collapsed,  setCollapsed]  = useState<boolean>(() => {
-    try { return localStorage.getItem("iceedge_bestbets_collapsed") === "1"; }
-    catch { return false; }
-  });
-  const toggleCollapsed = () => setCollapsed(c => {
-    const next = !c;
-    try { localStorage.setItem("iceedge_bestbets_collapsed", next ? "1" : "0"); }
-    catch { /* ignore */ }
-    return next;
-  });
+  // Pliée au départ, puis gardée comme l'utilisateur l'a laissée (2026-10-11).
+  // Nouvelle clé : l'ancienne (`iceedge_bestbets_collapsed`) valait « dépliée »
+  // par défaut, on repart donc de « pliée » pour tout le monde.
+  const [collapsed, toggleCollapsed] = useFoldState("home.bestBets", true);
 
   // Construit la liste : l'endpoint best-bets du serveur (tous marchés, règles +
   // ML, déjà trié). Le repli « hors-saison » sur des matchs de tennis est parti

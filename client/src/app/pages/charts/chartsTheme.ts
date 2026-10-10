@@ -25,7 +25,7 @@ export const BG_CELL = "#12180F";
 
 export type View = "skater" | "goalie";
 export type PosFilter = "all" | "forwards" | "defense";
-export type SortCol = "name" | "total" | "avg" | "vs";
+export type SortCol = "name" | "total" | "avg";
 export type SortDir = "asc" | "desc";
 export const DASH = "—";
 

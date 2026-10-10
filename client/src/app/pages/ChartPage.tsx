@@ -52,6 +52,7 @@ import { TeamSpaceIdentity, TeamSpaceNav, teamSectionPath, toTeamSection, useTea
 import { BG_HEADER, BG_PAGE } from "./charts/chartsTheme";
 import { StatsHubHeader } from "./StatsPage";
 import "../components/rink-theme.css";
+import "./charts/charts-tables.css";
 
 /* ── Section nav (Team / Game / Player) ────────────────────
  * Flat pills, deliberately plainer than the animated FramedLabel title so the
@@ -248,7 +249,7 @@ export function ChartPage() {
       </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">{content}</div>
+      <div className="chart-tables flex-1 overflow-y-auto px-4 py-4">{content}</div>
 
       <BottomNav />
     </div>

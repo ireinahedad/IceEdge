@@ -1,0 +1,41 @@
+/* ─────────────────────────────────────────────────────────────
+   Tableaux des pages Statistiques — titres de colonne compacts
+   (2026-10-11). But : sur un téléphone, voir au moins 3 colonnes
+   sans défiler horizontalement. Les titres passent à 10 px et
+   peuvent se couper sur deux lignes (« Moyenne / match »), et le
+   rembourrage horizontal des cellules est réduit.
+
+   CSS hors @layer : il l'emporte sur les utilitaires Tailwind v4
+   (px-3, whitespace-nowrap…) posés sur les <th>/<td>, sans avoir
+   à retoucher chaque tableau un par un.
+   ───────────────────────────────────────────────────────────── */
+
+.chart-tables table thead th {
+  font-size: 10px;
+  line-height: 1.15;
+  white-space: normal;
+  vertical-align: bottom;
+  padding-left: 6px;
+  padding-right: 6px;
+  letter-spacing: 0;
+}
+
+/* Le libellé des en-têtes triables (SortHead) et sa flèche suivent la
+   même taille ; le libellé se centre quand il passe sur deux lignes. */
+.chart-tables table thead th * {
+  font-size: inherit;
+}
+.chart-tables table thead th button > span:first-child {
+  text-align: inherit;
+}
+.chart-tables table thead th:not(:first-child) {
+  text-align: center;
+  hyphens: auto;
+}
+
+/* Cellules de données : un peu moins d'air à gauche et à droite.
+   La première colonne (nom, collante) garde son rembourrage. */
+.chart-tables table tbody td:not(:first-child) {
+  padding-left: 6px;
+  padding-right: 6px;
+}

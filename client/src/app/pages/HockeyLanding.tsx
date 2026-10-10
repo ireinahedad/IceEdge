@@ -35,6 +35,7 @@ import { BestParlaySection } from "./landing/BestParlaySection";
 import { EvSection } from "./landing/EvSection";
 import { LiveGamesRow, SportSelector, UpcomingGameRow, gameIsoDay } from "./landing/LandingCards";
 import { dayHeading, groupByDay } from "../data/gameDay";
+import { useFoldState } from "../hooks/useFoldState";
 import { TeamCarousel } from "./landing/TeamCarousel";
 import { ProUpsell } from "./landing/ProUpsell";
 import { AddSheetState, DisplayGame, extractSpreadOdds, toDisplayGame } from "./landing/landingTypes";
@@ -187,6 +188,9 @@ export function HockeyLanding() {
   // unique la ferait osciller.
   const headerRef = useRef<HTMLDivElement>(null);
   const [compactHeader, setCompactHeader] = useState(false);
+  // Section « matchs du jour » : dépliée au départ, puis gardée comme
+  // l'utilisateur l'a laissée (2026-10-11).
+  const [gamesCollapsed, toggleGames] = useFoldState("home.games", false);
   // Défilement à rendre au Retour (voir « Navigation gardée » plus haut).
   const navType = useNavigationType();
   const pendingScroll = useRef<number | null>(navType === "POP" ? savedScrollY : null);
@@ -372,11 +376,25 @@ export function HockeyLanding() {
 
             {/* Upcoming Games */}
             <section>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-white text-sm font-bold uppercase tracking-wider">{upcomingLabel}</h2>
+              <div className={`flex items-center justify-between ${gamesCollapsed ? "" : "mb-3"}`}>
+                {/* Repliable comme Meilleurs paris (2026-10-11), état gardé en mémoire. */}
+                <button
+                  type="button"
+                  onClick={toggleGames}
+                  aria-expanded={!gamesCollapsed}
+                  title={gamesCollapsed ? t("home.show") : t("home.hide")}
+                  className="h-8 flex items-center gap-2 select-none min-w-0"
+                >
+                  <ChevronRight
+                    size={14}
+                    className="text-[#8a9ea6] transition-transform shrink-0"
+                    style={{ transform: gamesCollapsed ? "rotate(0deg)" : "rotate(90deg)" }}
+                  />
+                  <h2 className="text-white text-sm font-bold uppercase tracking-wider truncate">{upcomingLabel}</h2>
+                </button>
                 {/* h-8 : même hauteur que les flèches, sinon le titre grandit de 12 px à
                     l'arrivée des matchs et pousse la liste (CLS, PSI mobile 2026-10-06). */}
-                {loading ? <div className="h-8 flex items-center"><div className="w-16 h-3 bg-white/5 rounded animate-pulse" /></div> : gameDays.length > 1 && (
+                {gamesCollapsed ? null : loading ? <div className="h-8 flex items-center"><div className="w-16 h-3 bg-white/5 rounded animate-pulse" /></div> : gameDays.length > 1 && (
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => goToDay(dayIdx - 1)}
@@ -397,7 +415,7 @@ export function HockeyLanding() {
                   </div>
                 )}
               </div>
-              {loading || dayLoading ? (
+              {gamesCollapsed ? null : loading || dayLoading ? (
                 <div className="flex flex-col gap-2">
                   {[1, 2, 3].map((i) => <div key={i} className="h-20 icy-tile rounded-2xl animate-pulse" />)}
                 </div>

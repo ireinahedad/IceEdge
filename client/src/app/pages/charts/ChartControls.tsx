@@ -14,41 +14,6 @@ import type { NHLTeamInfo, NHLPlayerInfo } from "../../types/bet";
 import { BG_CARD, BG_CELL, SortDir, currentSeasonId, seasonLabel, selectCls } from "./chartsTheme";
 import { DIVISIONS, divisionLabelKey, divisionOf, divisionShortKey, type Division } from "../../data/nhlDivisions";
 
-/* ── Opponent picker (lives in the vs-column header) ──────── */
-export function OpponentSelect({
-  opponent,
-  onChange,
-  teams,
-  accent,
-  placeholder,
-}: {
-  opponent: string;
-  onChange: (abbr: string) => void;
-  teams: NHLTeamInfo[];
-  accent: string;
-  placeholder: string;
-}) {
-  return (
-    <div className="flex items-center justify-center gap-1">
-      <span className="text-[#8a9ea6]">vs</span>
-      <select
-        value={opponent}
-        onChange={(e) => onChange(e.target.value)}
-        className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold border border-white/15 outline-none max-w-[7.5rem]"
-        style={{ background: BG_CELL, color: opponent ? accent : "#8a9ea6" }}
-        aria-label={placeholder}
-      >
-        <option value="">{placeholder}</option>
-        {teams.map((x) => (
-          <option key={x.abbreviation} value={x.abbreviation?.toUpperCase()}>
-            {x.abbreviation?.toUpperCase()}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
 /** Sortable column header. */
 export function SortHead({
   label,

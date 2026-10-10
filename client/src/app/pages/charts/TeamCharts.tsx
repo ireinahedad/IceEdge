@@ -12,12 +12,12 @@ import { useSport } from "../../context/SportContext";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { nhlApiService } from "../../services/nhlApiService";
-import type { TeamPlayerSeasons, PlayerSeasons, PlayerSeasonStat, TeamOpponentSplits, OpponentSplit, TeamSeasonOfficial } from "../../services/nhlApiService";
+import type { TeamPlayerSeasons, PlayerSeasons, PlayerSeasonStat, TeamOpponentSplits, TeamSeasonOfficial } from "../../services/nhlApiService";
 import type { NHLTeamInfo } from "../../types/bet";
-import { CardsSkeleton, ChartMessage, DivisionTag, OpponentSelect, SortHead, TeamSelect } from "./ChartControls";
+import { CardsSkeleton, ChartMessage, DivisionTag, SortHead, TeamSelect } from "./ChartControls";
 import { COMPARE_B_COLOR, PieBreakdowns, PlayerLineChart, TeamStatsTable, TeamTrendsTable } from "./ChartVisuals";
 import { buildGoalieMetrics, buildSkaterMetrics } from "./chartsMetrics";
-import { BG_CARD, BG_CELL, DASH, PosFilter, SortCol, SortDir, View, currentSeasonId, seasonLabel, selectCls } from "./chartsTheme";
+import { BG_CARD, BG_CELL, PosFilter, SortCol, SortDir, View, currentSeasonId, seasonLabel, selectCls } from "./chartsTheme";
 import { formatRecord, useTeamRecords } from "./teamSpace";
 
 export function TeamCharts({ teamId }: { teamId?: string }) {
@@ -33,7 +33,6 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
 
   const [view, setView] = useState<View>("skater");
   const [season, setSeason] = useState<number | null>(null);
-  const [opponent, setOpponent] = useState<string>("");
   const [metricKey, setMetricKey] = useState<string>("points");
   const [posFilter, setPosFilter] = useState<PosFilter>("all");
   const [sortCol, setSortCol] = useState<SortCol>("total");
@@ -103,11 +102,6 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
   const allPlayers: PlayerSeasons[] =
     (view === "skater" ? playerSeasons?.skaters : playerSeasons?.goalies) ?? [];
   const splitGroup = (view === "skater" ? splits?.skaters : splits?.goalies) ?? [];
-  const splitById = new Map(splitGroup.map((p) => [p.id, p.vs] as const));
-
-  const opponentTeams = teams
-    .filter((x) => x.abbreviation && x.abbreviation.toUpperCase() !== abbr)
-    .sort((a, b) => (a.abbreviation ?? "").localeCompare(b.abbreviation ?? ""));
 
   const teamOptions = [...teams].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
 
@@ -118,17 +112,15 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
     return posFilter === "defense" ? def : !def;
   });
 
-  type Row = { p: PlayerSeasons; s: PlayerSeasonStat; vsObj?: OpponentSplit };
+  type Row = { p: PlayerSeasons; s: PlayerSeasonStat };
   const rows: Row[] = filtered
     .map((p) => ({ p, s: p.seasons.find((x) => x.seasonId === season) }))
-    .filter((r): r is Row => !!r.s)
-    .map((r) => ({ ...r, vsObj: opponent ? splitById.get(r.p.id)?.[opponent] : undefined }));
+    .filter((r): r is Row => !!r.s);
 
   const sortVal = (r: Row): number | string | null => {
     if (sortCol === "name") return r.p.name;
     if (sortCol === "total") return metric.totalNum(r.s);
-    if (sortCol === "avg") return metric.avgNum(r.s);
-    return r.vsObj ? metric.vsNum(r.vsObj) : null;
+    return metric.avgNum(r.s);
   };
   rows.sort((a, b) => {
     const va = sortVal(a);
@@ -159,16 +151,6 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
     .sort((a, b) => (metric.totalNum(b.s) ?? -Infinity) - (metric.totalNum(a.s) ?? -Infinity))
     .slice(0, LINE_CAP)
     .map((r) => ({ id: r.p.id, name: r.p.name }));
-
-  const makeOppSelect = () => (
-    <OpponentSelect
-      opponent={opponent}
-      onChange={setOpponent}
-      teams={opponentTeams}
-      accent={accent}
-      placeholder={t("chart.allOpponents")}
-    />
-  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -258,8 +240,6 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
           <TeamStatsTable
             title={t("chart.teamStats")}
             teamSeason={teamSeason}
-            opponent={opponent}
-            oppSelect={makeOppSelect()}
             accent={accent}
             t={t}
           />
@@ -268,8 +248,6 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
           <TeamTrendsTable
             title={t("chart.teamTrends")}
             teamSeason={teamSeason}
-            opponent={opponent}
-            oppSelect={makeOppSelect()}
             accent={accent}
             t={t}
           />
@@ -345,11 +323,10 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
                     <th className="px-3 py-2 whitespace-nowrap">
                       <SortHead label={t("chart.col.perGame")} active={sortCol === "avg"} dir={sortDir} onClick={() => toggleSort("avg")} accent={accent} />
                     </th>
-                    <th className="px-3 py-2 whitespace-nowrap">{makeOppSelect()}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(({ p, s, vsObj }) => (
+                  {rows.map(({ p, s }) => (
                     <tr
                       key={p.id}
                       onClick={() =>
@@ -372,9 +349,6 @@ export function TeamCharts({ teamId }: { teamId?: string }) {
                       </td>
                       <td className="px-3 py-2.5 text-center tabular-nums text-white">{metric.total(s)}</td>
                       <td className="px-3 py-2.5 text-center tabular-nums text-[#c8d3cc]">{metric.avg(s)}</td>
-                      <td className="px-3 py-2.5 text-center tabular-nums" style={{ color: accent }}>
-                        {opponent ? (vsObj ? metric.vs(vsObj) : DASH) : DASH}
-                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -245,9 +245,8 @@ export function PieBreakdowns({
 type TeamTableProps = {
   title: string;
   teamSeason: TeamSeasonOfficial | null;
-  opponent: string;
-  oppSelect: ReactNode;
-  accent: string;
+  /** Gardé pour les appelants ; plus utilisé depuis le retrait de la colonne « vs ». */
+  accent?: string;
   t: (k: string, v?: Record<string, string | number>) => string;
 };
 
@@ -255,22 +254,18 @@ type TeamTableProps = {
 export function TeamStatsTable({
   title,
   teamSeason,
-  opponent,
-  oppSelect,
-  accent,
   t,
 }: TeamTableProps) {
   const o = teamSeason?.official ?? null;
-  const vo = opponent ? teamSeason?.vsOpponent[opponent] : undefined;
 
-  const rows: { label: string; total: string; avg: string; vs: string }[] = o
+  const rows: { label: string; total: string; avg: string }[] = o
     ? [
-        { label: t("chart.tm.goalsFor"),     total: int(o.goalsFor),     avg: num2(o.goalsForPerGame),     vs: vo ? num2(per(vo.goalsFor, vo.gp)) : DASH },
-        { label: t("chart.tm.goalsAgainst"), total: int(o.goalsAgainst), avg: num2(o.goalsAgainstPerGame), vs: vo ? num2(per(vo.goalsAgainst, vo.gp)) : DASH },
-        { label: t("chart.tm.goalDiff"),     total: sign(o.goalsFor - o.goalsAgainst), avg: snum2(o.goalsForPerGame - o.goalsAgainstPerGame), vs: vo ? snum2(per(vo.goalsFor - vo.goalsAgainst, vo.gp)) : DASH },
-        { label: t("chart.tm.shots"),        total: int(o.shotsForPerGame * o.gamesPlayed), avg: num2(o.shotsForPerGame), vs: DASH },
-        { label: t("chart.tm.wins"),         total: int(o.wins),         avg: num2(per(o.wins, o.gamesPlayed)), vs: vo ? num2(per(vo.wins, vo.gp)) : DASH },
-        { label: t("chart.tm.points"),       total: int(o.points),       avg: num2(per(o.points, o.gamesPlayed)), vs: DASH },
+        { label: t("chart.tm.goalsFor"),     total: int(o.goalsFor),     avg: num2(o.goalsForPerGame) },
+        { label: t("chart.tm.goalsAgainst"), total: int(o.goalsAgainst), avg: num2(o.goalsAgainstPerGame) },
+        { label: t("chart.tm.goalDiff"),     total: sign(o.goalsFor - o.goalsAgainst), avg: snum2(o.goalsForPerGame - o.goalsAgainstPerGame) },
+        { label: t("chart.tm.shots"),        total: int(o.shotsForPerGame * o.gamesPlayed), avg: num2(o.shotsForPerGame) },
+        { label: t("chart.tm.wins"),         total: int(o.wins),         avg: num2(per(o.wins, o.gamesPlayed)) },
+        { label: t("chart.tm.points"),       total: int(o.points),       avg: num2(per(o.points, o.gamesPlayed)) },
       ]
     : [];
 
@@ -281,7 +276,6 @@ export function TeamStatsTable({
           <th className="text-left font-semibold px-4 py-2 sticky left-0 z-10" style={{ background: BG_CARD }}>&nbsp;</th>
           <th className="font-semibold px-3 py-2 text-center">{t("chart.col.total")}</th>
           <th className="font-semibold px-3 py-2 text-center">{t("chart.col.perGame")}</th>
-          <th className="px-3 py-2 whitespace-nowrap">{oppSelect}</th>
         </tr>
       </thead>
       <tbody>
@@ -292,7 +286,6 @@ export function TeamStatsTable({
             </td>
             <td className="px-3 py-2.5 text-center tabular-nums text-white">{r.total}</td>
             <td className="px-3 py-2.5 text-center tabular-nums text-[#c8d3cc]">{r.avg}</td>
-            <td className="px-3 py-2.5 text-center tabular-nums" style={{ color: accent }}>{r.vs}</td>
           </tr>
         ))}
       </tbody>
@@ -301,43 +294,39 @@ export function TeamStatsTable({
 }
 
 /* ── Team trends table ─────────────────────────────────────
- * Rate & record stats that don't fit the per-game model → a 2-column
- * Season / vs-opponent layout. Easy to extend with more rows later.
+ * Rate & record stats that don't fit the per-game model → a single
+ * Season column (the vs-opponent column was removed on 2026-10-11). Easy to extend with more rows later.
  */
 export function TeamTrendsTable({
   title,
   teamSeason,
-  opponent,
-  oppSelect,
-  accent,
   t,
 }: TeamTableProps) {
   const o = teamSeason?.official ?? null;
   const rec = teamSeason?.record ?? null;
-  const vo = opponent ? teamSeason?.vsOpponent[opponent] : undefined;
   const fmtRec = (r?: { w: number; l: number; otl: number }) =>
     r ? `${r.w}-${r.l}-${r.otl}` : DASH;
   const pct = (v?: number | null) => (v == null ? DASH : `${v.toFixed(1)}%`);
 
-  const rows: { label: string; season: string; vs: string }[] = [
+  const rows: { label: string; season: string }[] = [
     ...(o
       ? [
-          { label: t("chart.tm.pointPct"),   season: pct(o.pointPct),   vs: DASH },
-          { label: t("chart.tm.ppPct"),      season: pct(o.ppPct),      vs: DASH },
-          { label: t("chart.tm.pkPct"),      season: pct(o.pkPct),      vs: DASH },
-          { label: t("chart.tm.faceoffPct"), season: pct(o.faceoffPct), vs: DASH },
-          { label: t("chart.tm.corsiPct"),   season: pct(o.corsiPct5v5),   vs: DASH },
-          { label: t("chart.tm.fenwickPct"), season: pct(o.fenwickPct5v5), vs: DASH },
+          { label: t("chart.tm.pointPct"),   season: pct(o.pointPct) },
+          { label: t("chart.tm.ppPct"),      season: pct(o.ppPct) },
+          { label: t("chart.tm.pkPct"),      season: pct(o.pkPct) },
+          { label: t("chart.tm.faceoffPct"), season: pct(o.faceoffPct) },
+          { label: t("chart.tm.corsiPct"),   season: pct(o.corsiPct5v5) },
+          { label: t("chart.tm.fenwickPct"), season: pct(o.fenwickPct5v5) },
         ]
       : []),
     ...(rec
       ? [
-          { label: t("chart.tm.record"),  season: fmtRec(rec.overall), vs: vo ? `${vo.wins}-${vo.losses}-${vo.otLosses}` : DASH },
-          { label: t("chart.tm.home"),    season: fmtRec(rec.home),    vs: DASH },
-          { label: t("chart.tm.away"),    season: fmtRec(rec.away),    vs: DASH },
-          { label: t("chart.tm.last10"),  season: fmtRec(rec.last10),  vs: DASH },
-          { label: t("chart.tm.streak"),  season: rec.streak || DASH,  vs: DASH },
-          { label: t("chart.tm.oneGoal"), season: fmtRec(rec.oneGoal), vs: DASH },
+          { label: t("chart.tm.record"),  season: fmtRec(rec.overall) },
+          { label: t("chart.tm.home"),    season: fmtRec(rec.home) },
+          { label: t("chart.tm.away"),    season: fmtRec(rec.away) },
+          { label: t("chart.tm.last10"),  season: fmtRec(rec.last10) },
+          { label: t("chart.tm.streak"),  season: rec.streak || DASH },
+          { label: t("chart.tm.oneGoal"), season: fmtRec(rec.oneGoal) },
         ]
       : []),
   ];
@@ -349,7 +338,6 @@ export function TeamTrendsTable({
         <tr className="text-[#8a9ea6]">
           <th className="text-left font-semibold px-4 py-2 sticky left-0 z-10" style={{ background: BG_CARD }}>&nbsp;</th>
           <th className="font-semibold px-3 py-2 text-center">{t("chart.col.season")}</th>
-          <th className="px-3 py-2 whitespace-nowrap">{oppSelect}</th>
         </tr>
       </thead>
       <tbody>
@@ -359,7 +347,6 @@ export function TeamTrendsTable({
               {r.label}
             </td>
             <td className="px-3 py-2.5 text-center tabular-nums text-white">{r.season}</td>
-            <td className="px-3 py-2.5 text-center tabular-nums" style={{ color: accent }}>{r.vs}</td>
           </tr>
         ))}
       </tbody>

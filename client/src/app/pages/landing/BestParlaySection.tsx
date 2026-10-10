@@ -8,7 +8,9 @@
  *
  * Repliée par défaut, et RIEN n'est demandé tant qu'elle n'a pas été ouverte :
  * la requête part à la première ouverture, une seule fois (refermer puis
- * rouvrir ne la relance pas). L'en-tête reprend celui de « Value Bets »
+ * rouvrir ne la relance pas). Depuis le 2026-10-11, plié / déplié est gardé
+ * en mémoire (`useFoldState`) : laissée ouverte, elle se rouvre — et charge —
+ * au retour sur l'accueil. L'en-tête reprend celui de « Value Bets »
  * (icône 13 px à la couleur d'accent, titre blanc `text-sm font-medium`), avec
  * le chevron de « Meilleurs paris » puisqu'elle se replie.
  *
@@ -25,6 +27,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { ChevronRight, ChevronLeft, Layers, Check, Plus, Lock } from "lucide-react";
+import { useFoldState } from "../../hooks/useFoldState";
 import { useI18n } from "../../i18n";
 import { useBet } from "../../context/BetContext";
 import { ErrorState } from "../../components/ErrorState";
@@ -192,12 +195,14 @@ function ParlayRow({ children, count }: { children: React.ReactNode; count: numb
 
 export function BestParlaySection({ accent }: { accent: string }) {
   const { t } = useI18n();
-  // Repliée à chaque visite (demande du user) : pas de mémoire en localStorage.
-  const [open, setOpen] = useState(false);
+  // Pliée au départ, puis gardée comme l'utilisateur l'a laissée (2026-10-11).
+  const [collapsed, toggleFold] = useFoldState("home.bestParlay", true);
+  const open = !collapsed;
   // Passe à vrai à la PREMIÈRE ouverture et n'y revient jamais : refermer et
   // rouvrir (même pendant le chargement) ne relance pas la requête. Seul
-  // « Réessayer » (`reloadKey`) en relance une.
-  const [requested, setRequested] = useState(false);
+  // « Réessayer » (`reloadKey`) en relance une. Déjà ouverte au montage
+  // (mémoire) : la requête part tout de suite.
+  const [requested, setRequested] = useState(open);
   const [data, setData] = useState<BestParlaysResponse | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -212,7 +217,7 @@ export function BestParlaySection({ accent }: { accent: string }) {
     return () => { cancelled = true; };
   }, [requested, reloadKey]);
 
-  const toggle = () => { setOpen((o) => !o); setRequested(true); };
+  const toggle = () => { toggleFold(); setRequested(true); };
 
   const free = useMemo(() => (data?.parlays ?? []).filter((p): p is ApiBestParlay => !isLocked(p)), [data]);
   const locked = useMemo(() => (data?.parlays ?? []).filter(isLocked), [data]);
