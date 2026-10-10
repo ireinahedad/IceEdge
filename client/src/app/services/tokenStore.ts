@@ -99,9 +99,20 @@ const webStore: TokenStore = {
 
 const REFRESH_KEY = 'ice_refresh_native';
 
-async function secure() {
-  const { SecureStorage } = await import('@aparajita/capacitor-secure-storage');
-  return SecureStorage;
+type SecureStoragePlugin = typeof import('@aparajita/capacitor-secure-storage')['SecureStorage'];
+
+/**
+ * ⚠️ Never `return SecureStorage` from an async function. A Capacitor plugin is a
+ * Proxy that answers *every* property — including `then`. Resolving a promise
+ * with it makes JS treat it as a thenable and call `SecureStorage.then()`, which
+ * rejects ("not implemented on ios") and leaves the outer promise pending
+ * forever: every token read hangs, so every API call hangs. Wrapping the plugin
+ * in a plain object keeps it out of promise resolution.
+ */
+let plugin: Promise<{ s: SecureStoragePlugin }> | null = null;
+function secure(): Promise<{ s: SecureStoragePlugin }> {
+  plugin ??= import('@aparajita/capacitor-secure-storage').then((m) => ({ s: m.SecureStorage }));
+  return plugin;
 }
 
 let cache: { access: string | null; refresh: string | null } | null = null;
@@ -109,7 +120,7 @@ let cache: { access: string | null; refresh: string | null } | null = null;
 async function load(): Promise<{ access: string | null; refresh: string | null }> {
   if (cache) return cache;
   try {
-    const s = await secure();
+    const { s } = await secure();
     const [access, refresh] = await Promise.all([s.get(ACCESS_KEY, false, false), s.get(REFRESH_KEY, false, false)]);
     cache = {
       access:  typeof access  === 'string' ? access  : null,
@@ -129,7 +140,7 @@ const nativeStore: TokenStore = {
     // A refresh response without a new refresh token keeps the current one.
     cache = { access, refresh: refresh ?? cur.refresh };
     try {
-      const s = await secure();
+      const { s } = await secure();
       await s.set(ACCESS_KEY, access, false, false);
       if (refresh) await s.set(REFRESH_KEY, refresh, false, false);
     } catch { /* the in-memory session still works until the app is killed */ }
@@ -140,7 +151,7 @@ const nativeStore: TokenStore = {
   async clear() {
     cache = { access: null, refresh: null };
     try {
-      const s = await secure();
+      const { s } = await secure();
       await Promise.all([s.remove(ACCESS_KEY, false), s.remove(REFRESH_KEY, false)]);
     } catch { /* nothing left to protect if the Keychain is unreachable */ }
     emitSessionCleared();
