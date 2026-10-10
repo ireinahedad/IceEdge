@@ -144,6 +144,9 @@ const nativeStore: TokenStore = {
       await s.set(ACCESS_KEY, access, false, false);
       if (refresh) await s.set(REFRESH_KEY, refresh, false, false);
     } catch { /* the in-memory session still works until the app is killed */ }
+    // APPLE_PLAN 4.2 — a sign-in gives the home-screen widget its token. Only
+    // when there was no session before: a 15-min refresh changes nothing for it.
+    if (!cur.access) void import('./widgetBridge').then((m) => m.syncWidget()).catch(() => {});
   },
 
   async getRefresh() { return (await load()).refresh; },

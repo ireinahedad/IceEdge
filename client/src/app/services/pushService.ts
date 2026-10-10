@@ -1,5 +1,5 @@
 /**
- * pushService.ts — Web Push subscription helper.
+ * pushService.ts — Web Push subscription helper (iOS: delegates to nativePush.ts).
  *
  * enableValueBetPush() registers the service worker, asks for notification
  * permission, subscribes via the Push API and stores the subscription server-
@@ -30,6 +30,13 @@ async function getRegistration(): Promise<ServiceWorkerRegistration> {
 
 /** Returns true on success. Throws only on unexpected errors. */
 export async function enableValueBetPush(): Promise<boolean> {
+  // iOS (APPLE_PLAN 4.1): one APNs registration serves every notification kind;
+  // the value-bet preference itself is the profile flag the caller saves.
+  // Inline literal so Rollup drops the branch — and the native chunk — from the web build.
+  if (import.meta.env.VITE_TARGET === 'ios') {
+    const m = await import('./nativePush');
+    return (await m.isNativePushOn()) || m.enableNativePush();
+  }
   if (!supported()) return false;
 
   const permission = await Notification.requestPermission();
@@ -61,6 +68,9 @@ export async function enableValueBetPush(): Promise<boolean> {
 }
 
 export async function disableValueBetPush(): Promise<void> {
+  // iOS: the device stays registered for bet results; the profile flag
+  // (`notifyValueBets: false`) is what stops value-bet alerts server-side.
+  if (import.meta.env.VITE_TARGET === 'ios') return;
   if (!supported()) return;
   const reg = await navigator.serviceWorker.getRegistration();
   const sub = await reg?.pushManager.getSubscription();

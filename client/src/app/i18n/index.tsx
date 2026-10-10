@@ -1229,6 +1229,9 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "profile.minEv":              { en: "Minimum edge",           fr: "Edge minimum" },
   "profile.minEvHint":          { en: "Only alert me when the value bet's edge is at least this %.", fr: "Ne m'alerte que si l'edge du value bet atteint au moins ce %." },
   "profile.notifyDenied":       { en: "Notifications blocked — allow them in your browser.", fr: "Notifications bloquées — autorisez-les dans votre navigateur." },
+  "profile.notifyDeniedIOS":    { en: "Notifications blocked — allow them in iPhone Settings → ArakIce.", fr: "Notifications bloquées — autorisez-les dans Réglages de l'iPhone → ArakIce." },
+  "profile.notifyBets":         { en: "My bet results",        fr: "Résultats de mes paris" },
+  "profile.notifyBetsHint":     { en: "Get notified when one of your bets is settled.", fr: "Soyez averti quand un de vos paris est réglé." },
 
   // ── Legal / support ──
   "legal.terms":   { en: "Terms",         fr: "CGU" },

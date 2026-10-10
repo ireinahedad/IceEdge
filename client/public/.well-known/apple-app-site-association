@@ -1,0 +1,20 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["VF76F7VMM3.com.arakice.arakice"],
+        "components": [
+          { "/": "/", "comment": "Accueil" },
+          { "/": "/stats", "comment": "Stats et pages de prédiction" },
+          { "/": "/stats/*" },
+          { "/": "/schedule" },
+          { "/": "/bet" },
+          { "/": "/league" },
+          { "/": "/nhl-predictions" },
+          { "/": "/player/*", "comment": "Paris d'un joueur" },
+          { "/": "/profile" }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- APPLE_PLAN 4.1 — push. "production" = TestFlight and App Store builds
+	     (the only ones CI makes). -->
+	<key>aps-environment</key>
+	<string>production</string>
+	<!-- APPLE_PLAN 4.6 — Universal Links: arakice.com/... opens the app.
+	     Served file: client/public/.well-known/apple-app-site-association. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:arakice.com</string>
+	</array>
+	<!-- APPLE_PLAN 4.2 — shared storage with the home-screen widget. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.arakice.arakice</string>
+	</array>
+</dict>
+</plist>

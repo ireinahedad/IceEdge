@@ -30,6 +30,14 @@ export async function shareImageBlob(
   filename: string,
   title = 'ArakIce',
 ): Promise<void> {
+  // APPLE_PLAN 4.3 — iOS: the native share sheet (no Web Share API in WKWebView).
+  // Inline literal so Rollup drops the branch — and the plugins — from the web build.
+  if (import.meta.env.VITE_TARGET === 'ios') {
+    const m = await import('./nativeShare');
+    await m.shareFileNative(blob, filename, title);
+    return;
+  }
+
   const file = new File([blob], filename, { type: blob.type || 'image/png' });
 
   const nav = navigator as Navigator & { canShare?: (data: unknown) => boolean };

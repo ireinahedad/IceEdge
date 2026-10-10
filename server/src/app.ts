@@ -17,6 +17,7 @@ import devRoutes           from './routes/dev.routes';
 import llmRoutes           from './routes/llm.routes';
 import subscriptionRoutes, { stripeWebhook } from './routes/subscription.routes';
 import pushRoutes          from './routes/push.routes';
+import widgetRoutes        from './routes/widget.routes';
 import { getLeaderboard }  from './services/profile.service';
 import { pool }            from './db/connection';
 import { httpLogger, logger } from './logger';
@@ -170,6 +171,9 @@ app.use('/api/subscription',  noStore, subscriptionRoutes);
 
 // Web Push (value-bet notifications)
 app.use('/api/push',          noStore, pushRoutes);
+
+// iOS home-screen widget « paris en cours » (APPLE_PLAN 4.2)
+app.use('/api/widget',        noStore, widgetRoutes);
 
 // Dev ML dashboard (admin-only). Defence in depth: even though every route is
 // gated behind authenticate + requireRole('admin'), the router is not mounted

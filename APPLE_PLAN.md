@@ -501,7 +501,7 @@ npm run build && npx cap add ios && npx cap sync ios
       that does not work inside a WKWebView on iOS, and a stale SW will serve you old assets.
       Guard the whole thing behind `!isNative` and route native notifications through APNs
       instead (see 4.1).
-- [ ] **3.8** *(code ✔ 2026-10-09 — h-dvh, Keyboard resize native, status bar; to check on a real iPhone)* iOS UI pass: safe-area insets (`env(safe-area-inset-*)`) so content clears the
+- [x] **3.8** *(code ✔ 2026-10-09; ✔ checked on a real iPhone via TestFlight 2026-10-10)* iOS UI pass: safe-area insets (`env(safe-area-inset-*)`) so content clears the
       notch and home indicator; no `:hover`-only affordances; ≥44pt tap targets;
       `-webkit-overflow-scrolling`; keyboard-avoidance on the login and chat inputs;
       disable text selection / long-press callout where it feels wrong;
@@ -520,21 +520,38 @@ survives airplane-mode toggling without a white screen.
 A wrapped website gets rejected. You need things a website **cannot** do. Pick **at least
 three**; they are also the reason someone keeps the app installed.
 
-- [ ] **4.1 Push notifications (APNs)** — "Your Best Bets are ready", game-start alerts.
+- [ ] **4.1 Push notifications (APNs)** — *(code ✔ 2026-10-10: `apns_device_tokens` (migration 043),
+      `server/src/services/apns.ts` (HTTP/2 + ES256 JWT, no dependency), `sendToUsers` reaches web +
+      iOS, « pari réglé » notification for everyone (`settlementNotify.ts`, APNs only), value bets
+      for Pro on iOS, Settings toggle « Résultats de mes paris », tap → route. Left: APNs key +
+      Push capability + regenerated profile, Railway vars `APNS_KEY_ID` / `APNS_TEAM_ID` /
+      `APNS_KEY_P8`, migration 043 on Neon, then test on the iPhone.)* Original scope:
+      "Your Best Bets are ready", game-start alerts.
       You already have the server-side notion of push in `pushService.ts`, but that is **Web
       Push and does not work on iOS native**. You need: an **APNs auth key** (`.p8`) from the
       developer portal, the Push Notifications capability on the App ID,
       `@capacitor/push-notifications` on the client, a `device_tokens` table, and an APNs
       sender on the server (reuse the existing notification triggers).
       *This is the strongest 4.2 argument you have — do it first.*
-- [ ] **4.2 Home screen widget** — today's top edge / next game. WidgetKit, written in Swift.
+- [ ] **4.2 Home screen widget** — *(code ✔ 2026-10-10, decided: the user's PENDING bets with their
+      live probability, refreshed every 15–30 min — iOS's limit; a Live Activity was offered for true
+      real time and declined. Server `GET /api/widget/live-bets` + read-only widget token (migration
+      044), `WidgetBridgePlugin.swift` → App Group `group.com.arakice.arakice`, extension
+      `ios/App/ArakIceWidget/` (SwiftUI, small/medium/large, iOS 17+), second CI profile. Left: App
+      Group + widget App ID + profile, secrets, migration 044, test.)* Original idea: today's top edge
+      / next game. WidgetKit, written in Swift.
       Highest effort, highest "this is a real app" signal. Optional for v1.
-- [ ] **4.3 Native share sheet** — your `SharePage.tsx` + `html-to-image` already generates
+- [ ] **4.3 Native share sheet** — *(code ✔ 2026-10-10: the slip card PNG — drawn on a canvas, no
+      html-to-image — goes through `@capacitor/filesystem` + `@capacitor/share`, `nativeShare.ts`.
+      Left: test on the iPhone.)* Original note: your `SharePage.tsx` + `html-to-image` already generates
       share cards; pipe them through `@capacitor/share`.
 - [ ] **4.4 Offline mode** — cache the last-fetched predictions in `@capacitor/preferences`
       and render them with a "last updated" stamp when offline.
 - [ ] **4.5 Haptics** on key interactions; **Face ID / biometric unlock** for the profile tab.
-- [ ] **4.6 Universal Links** — `arakice.com/share/...` opens the app if installed
+- [ ] **4.6 Universal Links** — *(code ✔ 2026-10-10: `client/public/.well-known/apple-app-site-association`
+      (app routes only — SEO pages stay on the web), vercel.json header + rewrite exclusion,
+      `applinks:arakice.com` entitlement, `appUrlOpen` → router (`native.ts`). Left: Associated
+      Domains on the App ID + profile, deploy the web, test.)* Original note: `arakice.com/share/...` opens the app if installed
       (needs an `apple-app-site-association` file served from your domain).
 - [ ] **4.7** Write the 4.2 defence into the review notes now, while it is fresh (see §11).
 

@@ -31,6 +31,11 @@ const config: CapacitorConfig = {
       style: "DARK",
       overlaysWebView: true,
     },
+    PushNotifications: {
+      // APPLE_PLAN 4.1 — show the banner (and play the sound) even when the
+      // app is open; by default iOS swallows foreground notifications.
+      presentationOptions: ["sound", "alert"],
+    },
     Keyboard: {
       // The WebView shrinks above the keyboard, so the h-dvh AppShell and the
       // chat input row stay visible (R14/R15). Check on a real iPhone.

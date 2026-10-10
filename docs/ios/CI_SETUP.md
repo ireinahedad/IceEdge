@@ -65,6 +65,7 @@ Pour la clé API `.p8` (PowerShell, dans le dossier où elle est rangée) :
 | `IOS_DIST_P12_BASE64` | contenu de `p12.base64.txt` |
 | `IOS_DIST_P12_PASSWORD` | contenu de `p12-password.txt` |
 | `IOS_PROFILE_BASE64` | contenu de `profile.base64.txt` |
+| `IOS_WIDGET_PROFILE_BASE64` | profil « ArakIce Widget App Store » (App ID `com.arakice.arakice.widget`) en base64 — APPLE_PLAN 4.2 |
 | `ASC_KEY_ID` | Key ID de la clé API (App Store Connect → Users and Access → Integrations) |
 | `ASC_ISSUER_ID` | Issuer ID (même page, en haut) |
 | `ASC_KEY_P8_BASE64` | le `.p8` en base64 (commande PowerShell ci-dessus) |
@@ -81,6 +82,7 @@ Pour la clé API `.p8` (PowerShell, dans le dossier où elle est rangée) :
 | `VITE_SUPPORT_EMAIL` | `support@arakice.com` |
 | `APPLE_TEAM_ID` | Team ID (developer.apple.com → Account → Membership details) |
 | `IOS_PROFILE_NAME` | `ArakIce App Store` |
+| `IOS_WIDGET_PROFILE_NAME` | `ArakIce Widget App Store` |
 
 Ensuite, tu peux supprimer `p12.base64.txt`, `profile.base64.txt` et `p12-password.txt`
 (les garder dans ton gestionnaire de mots de passe si tu veux). Garde
@@ -114,6 +116,7 @@ Coût : sur un dépôt privé, les minutes macOS comptent ×10 (2 000 min gratui
 | `Xcode NN is too old` | changer `runs-on: macos-15` en `macos-26` dans le workflow |
 | `No 'Apple Distribution' identity` | mauvais `.p12`, ou mauvais mot de passe |
 | `Profile is named …` | `IOS_PROFILE_NAME` ≠ nom du profil téléchargé |
+| `… holds the profile '…', but the build expects '…'` | le secret `IOS_*PROFILE_BASE64` ne contient pas le profil nommé par `IOS_*PROFILE_NAME` |
 | `No profiles for 'com.arakice.arakice'` / `doesn't include signing certificate` | profil créé avec un autre certificat : refaire l'étape 2 |
 | erreur d'envoi (401 / « authentication ») | `ASC_KEY_ID`, `ASC_ISSUER_ID` ou le `.p8` ne correspondent pas |
 | `bundle version must be higher` | un build avec ce numéro existe déjà : relancer (nouveau run = nouveau numéro) |

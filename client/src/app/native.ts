@@ -7,8 +7,14 @@
  * Every external http(s) link is opened in an in-app Safari sheet instead
  * (SFSafariViewController through @capacitor/browser). `tel:` and `mailto:` are
  * left alone — Capacitor hands them to the Phone / Mail apps.
+ *
+ * Notifications (APPLE_PLAN 4.1): tap → route, and the APNs token is refreshed
+ * server-side on every launch when the user has opted in (`nativePush.ts`).
  */
 import { Browser } from "@capacitor/browser";
+import { installNotificationTapHandler, syncNativePush } from "./services/nativePush";
+import { App } from "@capacitor/app";
+import { reloadWidget, syncWidget } from "./services/widgetBridge";
 
 function isExternalHttp(href: string): boolean {
   try {
@@ -25,6 +31,25 @@ export function openExternal(href: string): void {
 }
 
 export function installNativeShell(): void {
+  // APPLE_PLAN 4.1 — notifications. The tap handler goes in first so a tap that
+  // cold-launches the app is not lost; the router is imported lazily (it is
+  // already loaded by then — this only avoids an import cycle at startup).
+  const navigate = (to: string) => { void import("./routes").then((m) => m.router.navigate(to)); };
+  installNotificationTapHandler(navigate);
+  void syncNativePush();
+
+  // APPLE_PLAN 4.6 / 4.2 — an arakice.com link (Universal Link) or a tap on the
+  // home-screen widget (`arakice://app/bet?tab=slips`) opens the matching route.
+  void App.addListener("appUrlOpen", ({ url }) => {
+    const to = routeFromUrl(url);
+    if (to) navigate(to);
+  });
+
+  // APPLE_PLAN 4.2 — the widget gets its token (if signed in) and is redrawn
+  // when the user leaves the app, so a slip placed a minute ago shows up.
+  void syncWidget();
+  void App.addListener("appStateChange", ({ isActive }) => { if (!isActive) reloadWidget(); });
+
   document.addEventListener(
     "click",
     (e) => {
@@ -44,4 +69,20 @@ export function installNativeShell(): void {
     if (href && isExternalHttp(href)) { openExternal(href); return null; }
     return nativeOpen(url, target, features);
   }) as typeof window.open;
+}
+
+/**
+ * In-app route for an incoming URL, or null. Only our own links are honoured:
+ * `https://arakice.com/...` (Universal Links, see public/.well-known/) and the
+ * `arakice://` scheme the widget uses (the host is ignored: `arakice://app/bet`).
+ */
+export function routeFromUrl(raw: string): string | null {
+  let u: URL;
+  try { u = new URL(raw); } catch { return null; }
+  const ours =
+    ((u.protocol === "https:" || u.protocol === "http:") && /^(www\.)?arakice\.com$/i.test(u.hostname))
+    || u.protocol === "arakice:";
+  if (!ours) return null;
+  const path = u.pathname && u.pathname.startsWith("/") ? u.pathname : "/";
+  return `${path}${u.search}${u.hash}`;
 }

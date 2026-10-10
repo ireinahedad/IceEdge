@@ -6,7 +6,8 @@
   come from GitHub secrets (see docs/ios/CI_SETUP.md). destination=upload:
   -exportArchive sends the build straight to App Store Connect (TestFlight)
   with the API key; no altool / Transporter step.
-  __TEAM_ID__ and __PROFILE_NAME__ are filled in by the workflow.
+  __TEAM_ID__, __PROFILE_NAME__ and __WIDGET_PROFILE_NAME__ (APPLE_PLAN 4.2,
+  home-screen widget) are filled in by the workflow.
 -->
 <plist version="1.0">
 <dict>
@@ -24,6 +25,8 @@
 	<dict>
 		<key>com.arakice.arakice</key>
 		<string>__PROFILE_NAME__</string>
+		<key>com.arakice.arakice.widget</key>
+		<string>__WIDGET_PROFILE_NAME__</string>
 	</dict>
 	<key>uploadSymbols</key>
 	<true/>

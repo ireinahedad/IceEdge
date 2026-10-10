@@ -82,16 +82,25 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
       `X-Client: native` on /auth, CORS `capacitor://localhost`, external links in Safari sheet,
       CSP meta, `h-dvh`, icon/splash. Left: first build on cloud macOS CI (Phase 7), then the
       real-iPhone checks below. After `git pull` on Windows: `cd client && npm install`.
-- [ ] On a real notched iPhone: every page (safe areas now active), the chat input row, tap
+- [x] ✔ 2026-10-10 (TestFlight, all fine) On a real notched iPhone: every page (safe areas now active), the chat input row, tap
       targets, lock the screen 5 min and come back, airplane mode, very slow network.
 - [ ] Phase 4 — native features (APNs push first, share sheet, offline, haptics, universal links).
+      4.1 push: ✔ code 2026-10-10 (bet-settled for everyone + Pro value bets, iOS only for
+      bet-settled). Left: Apple key/capability/profile, Railway `APNS_*` vars, migration 043, test.
+      4.2 widget « paris en cours », 4.3 share sheet, 4.6 Universal Links: ✔ code 2026-10-10. Left:
+      App Group + widget App ID + Associated Domains + both profiles, GitHub secrets
+      `IOS_WIDGET_PROFILE_BASE64` / var `IOS_WIDGET_PROFILE_NAME`, migration 044, web deploy, test.
 - [ ] Phase 5 — IAP (deferred: v1 ships without Pro on iOS). Decide before submitting whether
       locked Pro sections without a call-to-action are acceptable.
 - [ ] Phase 6 — in-app account deletion: ✔ built on the web (`1244bac`); check it in the iOS shell.
 - [x] Phase 7 (moved before 4) — ✔ workflow `ios-release.yml`, Apple Distribution certificate +
       `ArakIce App Store` profile (both expire **2027-10-09**), GitHub secrets + variables
-      (2026-10-09). ✔ **First green run — build uploaded to TestFlight (2026-10-09).** Next: install
-      on the iPhone and run the device checks below.
+      (2026-10-09). ✔ **First green run — build uploaded to TestFlight (2026-10-09).**
+      ✔ **2026-10-10: the app runs on the iPhone (TestFlight) and loads data.** Two fixes on the way:
+      `tokenStore.ts` no longer resolves a promise with the SecureStorage plugin Proxy (it called
+      `SecureStorage.then()` → every token read hung), and `build-ios.mjs` now fails on a wrong
+      `VITE_*_URL` path or stray whitespace (wrong GitHub variables → every call 404'd).
+      Next: the device checks below.
       Delete the four `.txt` files in `ios-signing/` once the secrets work.
 - [ ] Phases 8–9 — store assets, TestFlight external round, submission.
 

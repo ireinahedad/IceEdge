@@ -31,6 +31,26 @@ if (badEnv.length) {
   console.error(`\n✗ build:ios — these must be set to an https:// URL (R7): ${badEnv.map((k) => `${k}=${viteEnv[k] ?? "(unset)"}`).join(", ")}\n`);
   process.exit(1);
 }
+// The path matters as much as the scheme: a base URL missing its /api suffix
+// still passes the https check, and every call then lands on the server's
+// catch-all 404 ({ error: "Not found" }) — the app opens but loads nothing.
+const EXPECTED_PATH = {
+  VITE_NHL_API_URL:        /\/api\/nhl\/?$/,
+  VITE_PREDICTION_API_URL: /\/api\/?$/,
+  VITE_PROFILE_API_URL:    /\/api\/?$/,
+  VITE_SOCKET_URL:         /^https:\/\/[^/]+\/?$/,
+};
+const EXAMPLE = {
+  VITE_NHL_API_URL:        "https://api.example.com/api/nhl",
+  VITE_PREDICTION_API_URL: "https://api.example.com/api",
+  VITE_PROFILE_API_URL:    "https://api.example.com/api",
+  VITE_SOCKET_URL:         "https://api.example.com",
+};
+const badPath = REQUIRED_URLS.filter((k) => !EXPECTED_PATH[k].test(viteEnv[k]));
+if (badPath.length) {
+  console.error(`\n✗ build:ios — wrong path (every call would 404):\n${badPath.map((k) => `  ${k}=${JSON.stringify(viteEnv[k])}  → expected like ${EXAMPLE[k]}`).join("\n")}\n`);
+  process.exit(1);
+}
 
 await build({ root: ROOT, build: { outDir: OUT, emptyOutDir: true } });
 

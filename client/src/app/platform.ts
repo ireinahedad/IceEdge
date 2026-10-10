@@ -67,6 +67,8 @@ export const features = {
   byokOpenAI:     isWeb,
   /** R6 — iOS uses APNs, not the Web Push API. */
   webPush:        isWeb,
+  /** APPLE_PLAN 4.1 — native notifications (APNs) on iOS. */
+  nativePush:     !isWeb,
   /** R6 — no service worker in WKWebView. */
   serviceWorker:  isWeb,
   /** R9 / APPLE_PLAN §4 — links to the static SEO pages, which the iOS bundle does not ship. */

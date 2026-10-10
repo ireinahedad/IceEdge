@@ -469,6 +469,11 @@ export const apnsUnregisterSchema = z.object({
   token: apnsToken,
 });
 
+// APPLE_PLAN 4.2 — jeton du widget (32 octets en base64url = 43 caractères).
+export const widgetTokenRevokeSchema = z.object({
+  token: z.string().regex(/^[A-Za-z0-9_-]{20,100}$/, 'invalid token'),
+});
+
 // ── Abonnement ──────────────────────────────────────────────────────────────
 //
 // Le code promo est comparé à un catalogue en mémoire après `trim().toUpperCase()`,

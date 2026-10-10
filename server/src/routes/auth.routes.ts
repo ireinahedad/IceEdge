@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { revokeAllWidgetTokens } from '../services/widgetTokens';
 import * as AuthService from '../services/auth.service';
 import { authenticate } from '../middleware/auth.middleware';
 import { passwordResetLimiter } from '../middleware/rateLimit.middleware';
@@ -269,6 +270,8 @@ router.post('/logout', authenticate, async (req: Request<{}, {}, RefreshBody>, r
 router.post('/logout-all', authenticate, async (req: Request, res: Response) => {
   try {
     await AuthService.logoutAll(req.user!.sub);
+    // APPLE_PLAN 4.2 — the iOS widgets of every device stop showing this account.
+    await revokeAllWidgetTokens(req.user!.sub);
     clearRefreshCookie(res); // also drop this device's cookie
     return res.status(204).send();
   } catch (err: any) { return sendError(res, err); }

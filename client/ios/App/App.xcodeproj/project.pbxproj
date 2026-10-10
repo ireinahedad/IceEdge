@@ -17,6 +17,10 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
 		C259593C285C480697F42F9E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 58430AF9E1AD49D69DE85120 /* PrivacyInfo.xcprivacy */; };
+		A1CE00000000000000000001 /* WidgetBridgePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CE00000000000000000011 /* WidgetBridgePlugin.swift */; };
+		A1CE00000000000000000002 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CE00000000000000000012 /* MainViewController.swift */; };
+		A1CE00000000000000000003 /* ArakIceWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CE00000000000000000013 /* ArakIceWidget.swift */; };
+		A1CE00000000000000000004 /* ArakIceWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1CE00000000000000000017 /* ArakIceWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,7 +36,38 @@
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		58430AF9E1AD49D69DE85120 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; name = "PrivacyInfo.xcprivacy"; path = "PrivacyInfo.xcprivacy"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = text.xml; explicitFileType = undefined; includeInIndex = 0; };
+		A1CE00000000000000000011 /* WidgetBridgePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetBridgePlugin.swift; sourceTree = "<group>"; };
+		A1CE00000000000000000012 /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
+		A1CE00000000000000000016 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		A1CE00000000000000000013 /* ArakIceWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArakIceWidget.swift; sourceTree = "<group>"; };
+		A1CE00000000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A1CE00000000000000000015 /* ArakIceWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ArakIceWidget.entitlements; sourceTree = "<group>"; };
+		A1CE00000000000000000017 /* ArakIceWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ArakIceWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXContainerItemProxy section */
+		A1CE00000000000000000023 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1CE00000000000000000025;
+			remoteInfo = ArakIceWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A1CE00000000000000000022 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A1CE00000000000000000004 /* ArakIceWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		504EC3011FED79650016851F /* Frameworks */ = {
@@ -40,6 +75,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1CE00000000000000000027 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -51,6 +93,7 @@
 			children = (
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
+				A1CE00000000000000000021 /* ArakIceWidget */,
 				504EC3051FED79650016851F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -59,6 +102,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				A1CE00000000000000000017 /* ArakIceWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -76,8 +120,21 @@
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
 				58430AF9E1AD49D69DE85120 /* PrivacyInfo.xcprivacy */,
+				A1CE00000000000000000016 /* App.entitlements */,
+				A1CE00000000000000000012 /* MainViewController.swift */,
+				A1CE00000000000000000011 /* WidgetBridgePlugin.swift */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		A1CE00000000000000000021 /* ArakIceWidget */ = {
+			isa = PBXGroup;
+			children = (
+				A1CE00000000000000000013 /* ArakIceWidget.swift */,
+				A1CE00000000000000000014 /* Info.plist */,
+				A1CE00000000000000000015 /* ArakIceWidget.entitlements */,
+			);
+			path = ArakIceWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -90,10 +147,12 @@
 				504EC3001FED79650016851F /* Sources */,
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
+				A1CE00000000000000000022 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A1CE00000000000000000024 /* PBXTargetDependency */,
 			);
 			name = App;
 			packageProductDependencies = (
@@ -102,6 +161,23 @@
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A1CE00000000000000000025 /* ArakIceWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1CE0000000000000000002B /* Build configuration list for PBXNativeTarget "ArakIceWidgetExtension" */;
+			buildPhases = (
+				A1CE00000000000000000026 /* Sources */,
+				A1CE00000000000000000027 /* Frameworks */,
+				A1CE00000000000000000028 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ArakIceWidgetExtension;
+			productName = ArakIceWidgetExtension;
+			productReference = A1CE00000000000000000017 /* ArakIceWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -116,6 +192,9 @@
 						CreatedOnToolsVersion = 9.2;
 						LastSwiftMigration = 1100;
 						ProvisioningStyle = Automatic;
+					};
+					A1CE00000000000000000025 = {
+						CreatedOnToolsVersion = 16.0;
 					};
 				};
 			};
@@ -136,6 +215,7 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				A1CE00000000000000000025 /* ArakIceWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -155,6 +235,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1CE00000000000000000028 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -164,10 +251,28 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
+				A1CE00000000000000000002 /* MainViewController.swift in Sources */,
+				A1CE00000000000000000001 /* WidgetBridgePlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1CE00000000000000000026 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1CE00000000000000000003 /* ArakIceWidget.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A1CE00000000000000000024 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1CE00000000000000000025 /* ArakIceWidgetExtension */;
+			targetProxy = A1CE00000000000000000023 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		504EC30B1FED79650016851F /* Main.storyboard */ = {
@@ -324,6 +429,7 @@
 		504EC3181FED79650016851F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
 				DEVELOPMENT_TEAM = "$(APPLE_TEAM_ID)";
@@ -345,6 +451,57 @@
 			};
 			name = Release;
 		};
+		A1CE00000000000000000029 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ArakIceWidget/ArakIceWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = ArakIceWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.arakice.arakice.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+			};
+			name = Debug;
+		};
+		A1CE0000000000000000002A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ArakIceWidget/ArakIceWidget.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = "$(APPLE_TEAM_ID)";
+				PROVISIONING_PROFILE_SPECIFIER = "$(IOS_WIDGET_PROFILE_NAME)";
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = ArakIceWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.arakice.arakice.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -362,6 +519,15 @@
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,
 				504EC3181FED79650016851F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1CE0000000000000000002B /* Build configuration list for PBXNativeTarget "ArakIceWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1CE00000000000000000029 /* Debug */,
+				A1CE0000000000000000002A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

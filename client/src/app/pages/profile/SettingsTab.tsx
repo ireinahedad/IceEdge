@@ -150,13 +150,44 @@ export function SettingsTab({
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [showFlags, setShowFlags] = useState(false);
 
+  // APPLE_PLAN 4.1 — iOS: « Résultats de mes paris » = this iPhone is registered
+  // for APNs. Read once on mount (permission can change in iOS Settings).
+  const [nativeOn, setNativeOn] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    // Inline literal so Rollup drops the branch — and the native chunk — from the web build.
+    if (import.meta.env.VITE_TARGET === "ios") {
+      void import("../../services/nativePush").then((m) => m.isNativePushOn()).then((on) => { if (alive) setNativeOn(on); });
+    }
+    return () => { alive = false; };
+  }, []);
+
+  const deniedKey = features.nativePush ? "profile.notifyDeniedIOS" : "profile.notifyDenied";
+  // A toast, not `saveMsg`: that line sits at the bottom of the page, far from the toggle.
+  function showDenied() { toast.error(t(deniedKey)); }
+
+  async function handleToggleNative() {
+    if (import.meta.env.VITE_TARGET === "ios") {
+      const m = await import("../../services/nativePush");
+      if (nativeOn) {
+        await m.disableNativePush();
+        setNativeOn(false);
+      } else {
+        const ok = await m.enableNativePush();
+        if (!ok) { showDenied(); return; }
+        setNativeOn(true);
+      }
+    }
+  }
+
   // Enabling requests notification permission + a push subscription; on success
   // the preference is persisted immediately.
   async function handleToggleNotify() {
     const next = !notifyValueBets;
     if (next) {
       const ok = await enableValueBetPush();
-      if (!ok) { setSaveMsg(t("profile.notifyDenied")); setTimeout(() => setSaveMsg(null), 3000); return; }
+      if (!ok) { showDenied(); return; }
+      if (features.nativePush) setNativeOn(true);
     } else {
       await disableValueBetPush();
     }
@@ -515,15 +546,27 @@ export function SettingsTab({
         )}
       </div>
 
-      {/* Notifications — value bets (Pro only) */}
-      {/* R6 — this whole card drives the Web Push API. iOS notifications go through
-          APNs and get their own card when APPLE_PLAN R6 lands. */}
+      {/* Notifications — web: value bets (Pro) through Web Push. iOS (APPLE_PLAN
+          4.1): bet results for everyone + value bets for Pro, through APNs. */}
       {/* `id="notifications"` = la cible de `focus=notifications`, le raccourci
           « Réglages des alertes » de l'accueil (voir `ProfilePage`). */}
-      {features.webPush && (
+      {(features.webPush || features.nativePush) && (
         <div id="notifications" className="icy-card rounded-2xl p-4 flex flex-col gap-3">
           <p className="text-white text-xs font-medium">{t("profile.notifications")}</p>
 
+          {features.nativePush && (
+            <div className="flex items-center gap-3 py-1">
+              <div className="flex-1">
+                <label className="text-xs text-white/70">{t("profile.notifyBets")}</label>
+                <p className="text-white/40 text-[11px] mt-0.5">{t("profile.notifyBetsHint")}</p>
+              </div>
+              <ToggleSwitch checked={nativeOn} onChange={handleToggleNative} fontSize={12} />
+            </div>
+          )}
+
+          {/* 3.1.1 — on iOS a non-Pro account must not see an upgrade path: the
+              value-bet row only exists there for accounts that are already Pro. */}
+          {(isPro || features.proUpgrade) && (
           <div className="flex items-center gap-3 py-1">
             <div className="flex-1">
               <label className={`text-xs ${isPro ? "text-white/70" : "text-white/40"}`}>{t("profile.notifyValueBets")}</label>
@@ -541,6 +584,7 @@ export function SettingsTab({
               </button>
             )}
           </div>
+          )}
 
           {isPro && notifyValueBets && (
             <div className="flex items-center gap-3 py-1 border-t border-white/5 pt-3">

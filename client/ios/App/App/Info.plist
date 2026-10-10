@@ -22,6 +22,18 @@
     <string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+      <dict>
+        <!-- APPLE_PLAN 4.2 — the home-screen widget opens the app with arakice://app/<route>. -->
+        <key>CFBundleURLName</key>
+        <string>com.arakice.arakice</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+          <string>arakice</string>
+        </array>
+      </dict>
+    </array>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>UIApplicationSceneManifest</key>

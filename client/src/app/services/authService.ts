@@ -394,6 +394,13 @@ export async function apiLogout(): Promise<void> {
   const token   = await tokenStore.getAccess();
   const refresh = await tokenStore.getRefresh(); // native only — null on web
 
+  // APPLE_PLAN 4.1 — the server forgets this iPhone while the session can still
+  // authenticate the call. Inline literal: not in the web bundle.
+  if (import.meta.env.VITE_TARGET === 'ios') {
+    await import('./nativePush').then((m) => m.forgetDeviceOnLogout()).catch(() => {});
+    await import('./widgetBridge').then((m) => m.forgetWidgetOnLogout()).catch(() => {});
+  }
+
   await fetchWithTimeout(`${BASE}/auth/logout`, {
     method: 'POST',
     credentials: refresh ? 'omit' : 'include', // web: server reads + revokes the cookie
@@ -412,6 +419,10 @@ export async function apiLogout(): Promise<void> {
 
 /** Sign out from every device by revoking all of the user's refresh tokens. */
 export async function apiLogoutAll(): Promise<void> {
+  if (import.meta.env.VITE_TARGET === 'ios') {
+    await import('./nativePush').then((m) => m.forgetDeviceOnLogout()).catch(() => {});
+    await import('./widgetBridge').then((m) => m.forgetWidgetOnLogout()).catch(() => {});
+  }
   const token = await tokenStore.getAccess();
   await fetchWithTimeout(`${BASE}/auth/logout-all`, {
     method: 'POST',
