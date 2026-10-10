@@ -101,7 +101,6 @@ def is_active_team(abbrev: str) -> bool:
 
 MIN_N_LEAGUE = 300          # matchs, pour un split au niveau ligue
 MIN_N_TEAM = 150            # matchs, pour un split propre à une équipe
-MIN_N_GOALIE_BUCKET = 40    # départs dans un bucket donné
 MIN_GOALIE_STARTS = 40      # départs au total pour qu'un gardien soit éligible
 MIN_N_GOALIE_POOLED = 500   # départs-matchs pour un split gardiens toute la ligue
 MIN_N_SKATER_POOLED = 5000  # matchs-joueurs pour un split patineurs toute la ligue

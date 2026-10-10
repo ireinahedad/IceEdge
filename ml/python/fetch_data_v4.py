@@ -564,8 +564,6 @@ def _local_html_sources():
 
 ODDS_API_BASE = "https://api.the-odds-api.com/v4"
 ODDS_API_SPORT = "icehockey_nhl"
-# Première donnée NHL disponible côté fournisseur.
-ODDS_API_FIRST_TS = "2020-06-29T19:25:00Z"
 ODDS_API_CACHE = f"{RAW_DIR}/odds/oddsapi"
 
 # The Odds API rend les noms complets. Table alignée sur `NAME_TO_ABBR` de

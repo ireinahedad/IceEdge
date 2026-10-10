@@ -1,15 +1,9 @@
-import type { UserBettingStats, UserProfile } from "./../../types/user";
+import type { UserBettingStats } from "./../../types/user";
 import { useI18n } from "../../i18n";
 
 // ─── Performance score ring ───────────────────────────────────────────────────
 
-export function ScoreRing({
-  score,
-  tier,
-}: {
-  score: number;
-  tier: UserProfile["tier"];
-}) {
+export function ScoreRing({ score }: { score: number }) {
   const pct = (score / 1000) * 100;
   const size = 120;
   const radius = (size - 16) / 2;

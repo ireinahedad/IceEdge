@@ -38,7 +38,6 @@ DATA_DIR   = "../data"
 MODELS_DIR = "../models"
 
 SHORT_HL, LONG_HL = 6, 20         # demi-vies EWMA (matchs)
-GOALIE_HL         = 8             # demi-vie EWMA gardien (départs) — legacy, cf. ci-dessous
 MIN_GP            = 5             # matchs minimum avant d'émettre une ligne
 
 # ── Gardien : régression vers la moyenne (P3) ────────────────────────────────
@@ -930,8 +929,6 @@ def main():
         print("💰 Pas de odds.csv — dataset sans cotes.")
 
     # ── Diffs clés ───────────────────────────────────────────────────────────
-    pairs = [("xgf60_s", "xga60_s"), ("ev_xgf_pct_s", None), ("goalie_gsax60", None),
-             ("star_power", None)]
     if "home_xgf60_s" in df and "away_xga60_s" in df:
         df["xg_matchup_home"] = df["home_xgf60_s"] - df["away_xga60_s"]  # attaque H vs défense A
         df["xg_matchup_away"] = df["away_xgf60_s"] - df["home_xga60_s"]

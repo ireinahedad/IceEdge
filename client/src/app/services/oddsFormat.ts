@@ -21,10 +21,7 @@
 //
 // 🔁 Exception décidée par le user le 2026-09-25 : la cote ÉQUIVALENTE écrite à
 // côté d'un pourcentage (jambes du coupon, pastille « implied odds » sous la
-// jauge du coupon) suit ce réglage — via `impliedDecimal()` de
-// `pages/bet/betParts.tsx`. Le pourcentage lui-même reste en %. `toOddsLabel`,
-// figée en américain, ne sert plus qu'aux données ENREGISTRÉES et à l'image de
-// partage.
+// jauge du coupon) suit ce réglage. Le pourcentage lui-même reste en %.
 //
 // ── Le choix est un réglage de LECTURE ─────────────────────────────────────
 // Il ne change aucun calcul, aucune donnée envoyée au serveur, aucun pari
@@ -79,9 +76,8 @@ export function setSelectedOddsFormat(format: OddsFormat): void {
 
 // ── Conversions ─────────────────────────────────────────────────────────────
 //
-// Aucune borne ici, contrairement à `toOddsLabel` qui bride les probabilités du
-// modèle entre 5 et 95 %. La différence est de nature : borner une ESTIMATION
-// évite d'afficher une précision qu'on n'a pas, alors qu'un PRIX est un fait —
+// Aucune borne ici, volontairement. Borner une ESTIMATION du modèle (entre 5 et
+// 95 %) évite d'afficher une précision qu'on n'a pas, alors qu'un PRIX est un fait —
 // une cote à 1.02 vaut vraiment -5000, et l'écrêter afficherait un prix que le
 // livre ne propose pas.
 

@@ -194,7 +194,7 @@ export function ProfileHeader({
           <p className="text-white/70 text-xs mt-1.5">@{profile.username}</p>
         </div>
 
-        <ScoreRing score={profile.performanceScore} tier={profile.tier} />
+        <ScoreRing score={profile.performanceScore} />
       </div>
 
       {/* Stats — always laid out horizontally, whatever the viewport */}

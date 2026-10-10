@@ -359,36 +359,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-species = "Hibiscus rosa-sinensis"
-
-pollinators = [
-    "Bees",
-    "Butterflies",
-    "Hummingbirds"
-]
-
-daily_flowers = 18
-days = 5
-total = 0
-
-print(f"Flower production report for {species}\n")
-
-for day in range(1, days + 1):
-    total += daily_flowers
-    print(f"Day {day}: {daily_flowers} flowers opened")
-
-print(f"\nTotal flowers: {total}")
-
-if total > 80:
-    print("Excellent flowering performance.")
-else:
-    print("Average flowering performance.")
-
-print("Flower lifespan: approximately one day.")
-print("Common uses: ornamental gardens, herbal tea and natural dyes.")
-
-

@@ -190,7 +190,7 @@ export function GameCharts({ gameId }: { gameId?: string }) {
     </div>
   );
 
-  const goalieTable = (abbr: string, lines: GameGoalieLine[]) => {
+  const goalieTable = (lines: GameGoalieLine[]) => {
     if (lines.length === 0) return null;
     return (
       <div className="overflow-x-auto border-t border-white/10">
@@ -413,11 +413,11 @@ export function GameCharts({ gameId }: { gameId?: string }) {
         <>
           <div className="flex flex-col gap-0">
             {skaterTable(data.away.name || data.away.abbr, data.away.abbr, data.players.away.skaters)}
-            {goalieTable(data.away.abbr, data.players.away.goalies)}
+            {goalieTable(data.players.away.goalies)}
           </div>
           <div className="flex flex-col gap-0">
             {skaterTable(data.home.name || data.home.abbr, data.home.abbr, data.players.home.skaters)}
-            {goalieTable(data.home.abbr, data.players.home.goalies)}
+            {goalieTable(data.players.home.goalies)}
           </div>
         </>
       )}

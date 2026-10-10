@@ -5,7 +5,7 @@
  * sans toucher une ligne de code — seuls les imports et les `export` ont été
  * ajoutés. Il ne reste ici que les onglets et l'assemblage.
  *
- *   bet/betParts.tsx    toOddsLabel, ProbabilityGauge, LegCard, EmptySlip,
+ *   bet/betParts.tsx    ProbabilityGauge, LegCard, EmptySlip,
  *                       LockSlipCTA
  *   bet/MySlipsTab.tsx  SlipCard + l'onglet historique des coupons
  *
@@ -45,7 +45,6 @@ export function BetBuilderPage() {
   const { user } = useAuth();
   const { sport } = useSport();
   const { t } = useI18n();
-  // Cote équivalente sous la jauge : suit le format des Réglages (voir `impliedDecimal`).
   const { odds } = useOddsFormat();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();

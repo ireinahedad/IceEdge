@@ -331,6 +331,3 @@ export async function getCurrentValueBets(now = Date.now()): Promise<ValueBet[]>
     return Number.isFinite(start) && start > now;
   });
 }
-
-/** Tests uniquement. */
-export function _clearValueBetsCache(): void { cache.clear(); }

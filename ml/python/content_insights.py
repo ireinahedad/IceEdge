@@ -69,9 +69,6 @@ FACTORS = [
     ("away_getaway", "getaway game (visiteur)", "bool"),
 ]
 
-# Extra target: totals (over/under), reuses same factor list
-TOTAL_FACTORS = [f for f in FACTORS]
-
 
 def bucketize(series: pd.Series, n_buckets: int = 5) -> pd.Series:
     """Quantile-bucket a numeric series; falls back to unique-value buckets

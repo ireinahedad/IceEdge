@@ -32,24 +32,6 @@ export const PROB_COLOR = "#86d1ea";
 export const ODDS_COLOR = "#4ade80"; // = text-green-400 de BookPricePill
 
 /**
- * Probabilité du modèle → cote américaine ÉQUIVALENTE, en format FIGÉ.
- *
- * Sert à remplir le champ `oddsLabel` du pari ENREGISTRÉ (voir
- * `BetBuilderPage`), relu des mois plus tard sur un autre appareil : une donnée
- * archivée doit avoir un format fixe. Elle sert aussi à l'image de partage.
- *
- * ⚠️ Pour l'AFFICHAGE dans l'app, ne plus l'utiliser : passer par
- * `impliedDecimal()` + `odds()` de `useOddsFormat`, qui suivent le format
- * choisi dans les Réglages (voir plus bas).
- */
-export function toOddsLabel(pct: number): string {
-  const p = Math.max(5, Math.min(95, pct)) / 100;
-  return p >= 0.5
-    ? `-${Math.round((p / (1 - p)) * 100)}`
-    : `+${Math.round(((1 - p) / p) * 100)}`;
-}
-
-/**
  * Prix décimal du livre → prix américain FIGÉ (« -150 », « +120 »), pour le
  * champ `oddsLabel` archivé avec le pari. Depuis le 2026-09-30 (décision du
  * user), `oddsLabel` porte le VRAI prix du livre au moment du verrouillage, et
@@ -79,23 +61,6 @@ export function bookParlayPrice(legs: { gameId?: string; bookPrice?: number | nu
     prod *= l.bookPrice;
   }
   return Math.round(prod * 100) / 100;
-}
-
-/**
- * Probabilité du modèle → cote décimale équivalente (« implied odds »), à
- * écrire avec `odds()` de `useOddsFormat` pour suivre le format des Réglages.
- *
- * 🔁 Décision du user du 2026-09-25 : la cote affichée À CÔTÉ d'un pourcentage
- * (jambes du coupon, pastille « implied odds » sous la jauge) suit le format
- * choisi — il avait choisi décimal et voyait encore « -213 ». Le POURCENTAGE du
- * modèle, lui, reste en % partout (règle du 2026-09-10, inchangée) : seule sa
- * traduction en cote change d'écriture.
- *
- * Même borne 5–95 % que `toOddsLabel`, pour que les deux disent la même cote.
- */
-export function impliedDecimal(pct: number): number {
-  const p = Math.max(5, Math.min(95, pct)) / 100;
-  return 1 / p;
 }
 
 // ─── Probability gauge ────────────────────────────────────────────────────────
@@ -143,8 +108,7 @@ export function ProbabilityGauge({ pct, size = 180 }: { pct: number; size?: numb
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         {pct > 0 ? (
           <>
-            {/* Toujours en % : c'est la probabilité du modèle, pas un prix.
-                Voir `toOddsLabel` plus haut. */}
+            {/* Toujours en % : c'est la probabilité du modèle, pas un prix. */}
             <span className="text-4xl font-bold leading-none" style={{ color }}>{displayed}<span className="text-2xl">%</span></span>
             <span className="text-[11px] mt-1 font-medium" style={{ color }}>{t("slip.chance")}</span>
             <span className="text-[11px] mt-0.5 font-medium text-[#8a9ea6]">{label}</span>

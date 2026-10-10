@@ -443,6 +443,3 @@ export function gateBestParlays(r: BestParlaysResult, isPro: boolean): BestParla
       : { id: `locked-${i}`, kind: p.kind, locked: true, legCount: p.legs.length });
   return { parlays, meta: { ...r.meta, freeCount: FREE_PARLAYS, total: r.parlays.length } };
 }
-
-/** Tests uniquement. */
-export function _clearBestParlaysCache(): void { parlaysCache.clear(); }

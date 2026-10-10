@@ -327,13 +327,6 @@ const PERIOD_DIST = [0.305, 0.365, 0.330] as const;
  */
 const GOALS_DISPERSION_K = 6.5;
 
-/** P(une équipe de cadence λ marque au moins un but), binomiale négative. */
-function pScoresAtLeastOnce(lambda: number): number {
-  const lam = Math.max(0.05, lambda);
-  const k   = GOALS_DISPERSION_K;
-  return 1 - Math.pow(k / (k + lam), k);
-}
-
 /** Estimate OT probability based on how evenly matched the teams are */
 function otProb(homeWin: number): number {
   const balance = 1 - 2 * Math.abs(homeWin - 0.5); // 0=mismatch, 1=even

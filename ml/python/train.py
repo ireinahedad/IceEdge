@@ -73,25 +73,6 @@ def apply_logistic(X: np.ndarray, w: np.ndarray) -> np.ndarray:
 
 # ── Sélection des features ───────────────────────────────────────────────────
 
-META = {"game_id", "season", "date", "home_team", "away_team", "home_score",
-        "away_score", "home_win", "total_goals",
-        # Cibles du modèle de score (P2) — jamais des features, sinon fuite
-        "went_to_ot", "home_reg_score", "away_reg_score", "reg_total_goals",
-        "home_ml_open", "away_ml_open", "home_ml_close", "away_ml_close",
-        "total_open", "total_close",
-        # Prix des marchés dérivés — JAMAIS des features.
-        # Ce n'est pas une précaution de principe. L'ancienne auto-détection
-        # retenait tout nom contenant "total_close"/"total_open", donc
-        # `total_close_over` entrait tout seul et le modèle apprenait le prix du
-        # bookmaker au lieu du jeu. Le piège est silencieux — il produit
-        # d'excellentes métriques et un ROI nul. La liste reste exhaustive :
-        # `build_dataset.py` peut ajouter des colonnes de prix, et un META
-        # incomplet redeviendrait une fuite.
-        "total_open_over", "total_open_under",
-        "total_close_over", "total_close_under",
-        "puck_line_home", "pl_home_price", "pl_away_price",
-        "market_over_p_open", "market_over_p_close", "market_pl_home_p"}
-
 ODDS_FEATURES = ["market_home_p_open", "market_home_p_close"]
 
 # ── Jeu de features CŒUR ─────────────────────────────────────────────────────
@@ -209,7 +190,7 @@ def train_game(train_df, val_df, test_df, features, trials: int):
     p_test = apply_logistic(_logit(p_test_raw).reshape(-1, 1), w_cal)
 
     # ── Blend modèle ⊕ marché (si cotes dispo) ───────────────────────────────
-    blend_w, p_blend_test, market_metrics = None, None, {}
+    blend_w, market_metrics = None, {}
     if "market_home_p_close" in val_df.columns:
         vmask = val_df["market_home_p_close"].notna().values
         tmask = test_df["market_home_p_close"].notna().values

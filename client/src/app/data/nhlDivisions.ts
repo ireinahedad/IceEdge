@@ -34,11 +34,6 @@ export function divisionOf(abbr?: string): Division | undefined {
   return abbr ? BY_ABBR.get(abbr.toUpperCase()) : undefined;
 }
 
-/** Conférence d'une division. */
-export function conferenceOf(division: Division): Conference {
-  return DIVISIONS.find((d) => d.key === division)!.conference;
-}
-
 /** Clés i18n — libellé long (en-têtes, filtres) et court (étiquette à côté d'un club). */
 export const divisionLabelKey = (d: Division) => `div.${d}`;
 export const divisionShortKey = (d: Division) => `div.${d}.short`;

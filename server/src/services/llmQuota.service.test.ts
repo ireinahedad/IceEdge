@@ -208,7 +208,7 @@ describe('promesse commerciale', () => {
 
 describe('consumeProRequest', () => {
   it('laisse passer tant qu’il reste de la place, puis refuse', async () => {
-    const { mod, fake } = await load({ ...BASE_ENV, LLM_MONTHLY_QUOTA: '3' });
+    const { mod } = await load({ ...BASE_ENV, LLM_MONTHLY_QUOTA: '3' });
 
     for (let i = 1; i <= 3; i++) {
       const v = await mod.consumeProRequest('u1');
