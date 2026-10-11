@@ -2,8 +2,9 @@ import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
 import { redeemLimiter } from '../middleware/rateLimit.middleware';
 import { validateBody } from '../middleware/validate.middleware';
-import { checkoutSchema, redeemPromoSchema } from '../validation/schemas';
+import { appleNotificationSchema, appleVerifySchema, checkoutSchema, redeemPromoSchema } from '../validation/schemas';
 import * as Subscriptions from '../services/subscription.service';
+import * as AppleIap from '../services/appleIap.service';
 import { MONTHLY_QUOTA } from '../services/llmQuota.service';
 import { logger } from '../logger';
 import { sendError } from '../httpError';
@@ -82,6 +83,33 @@ router.post('/cancel', authenticate, async (req: Request, res: Response) => {
     const status = await Subscriptions.cancel(req.user!.sub);
     return res.json(status);
   } catch (err: any) { return sendError(res, err); }
+});
+
+// POST /subscription/apple/verify — l'app iOS vient d'acheter ou de restaurer.
+// Corps : la transaction StoreKit 2 signée par Apple (+ son état de
+// renouvellement). Le serveur vérifie la signature lui-même : rien de ce que
+// l'app affirme n'est cru sans elle.
+router.post('/apple/verify', authenticate, validateBody(appleVerifySchema), async (req: Request, res: Response) => {
+  try {
+    const { transactionJws, renewalJws } = req.body as { transactionJws: string; renewalJws?: string | null };
+    const status = await AppleIap.verifyClientTransaction(req.user!.sub, transactionJws, renewalJws);
+    return res.json(status);
+  } catch (err: any) { return sendError(res, err); }
+});
+
+// POST /subscription/apple/notifications — App Store Server Notifications V2.
+// Pas d'`authenticate` : c'est Apple qui appelle, et la preuve est la
+// signature du `signedPayload`. URL à saisir dans App Store Connect → App
+// Information → App Store Server Notifications (production ET sandbox) :
+//   https://api.arakice.com/api/subscription/apple/notifications
+router.post('/apple/notifications', validateBody(appleNotificationSchema), async (req: Request, res: Response) => {
+  try {
+    await AppleIap.handleAppleNotification((req.body as { signedPayload: string }).signedPayload);
+    return res.json({ received: true });
+  } catch (err: any) {
+    logger.error({ err: err?.message }, '[apple-iap] notification error');
+    return sendError(res, err, { context: '[apple-iap] notification' });
+  }
 });
 
 // POST /api/subscription/webhook — Stripe events (signature-verified).

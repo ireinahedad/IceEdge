@@ -500,3 +500,16 @@ export const redeemPromoSchema = z.object({
 export const checkoutSchema = z
   .object({ period: z.enum(['monthly', 'yearly']).optional() })
   .optional();
+
+// `POST /subscription/apple/verify` — transaction StoreKit 2 signée par Apple
+// (APPLE_PLAN Phase 5). Un JWS Apple fait ~3-5 Ko ; 16 Ko laisse de la marge
+// sans accepter n'importe quoi.
+export const appleVerifySchema = z.object({
+  transactionJws: z.string().min(20).max(16_000),
+  renewalJws:     z.string().min(20).max(16_000).nullish(),
+});
+
+// `POST /subscription/apple/notifications` — App Store Server Notifications V2.
+export const appleNotificationSchema = z.object({
+  signedPayload: z.string().min(20).max(64_000),
+});

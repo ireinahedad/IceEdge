@@ -6,7 +6,7 @@
 
 import Stripe from 'stripe';
 import { pool } from '../db/connection';
-import { SubscriptionRow, SubscriptionStatus, BillingPlan, SubStatus } from '../types/subscription.type';
+import { SubscriptionRow, SubscriptionStatus, BillingPlan, SubStatus, SubSource } from '../types/subscription.type';
 import { logger } from '../logger';
 import { TtlCache } from './ttlCache';
 
@@ -42,6 +42,7 @@ const FREE_STATUS: SubscriptionStatus = {
   currentPeriodEnd: null,
   cancelAtPeriodEnd: false,
   trialUsed: false,
+  source: null,
 };
 
 /** True when a row represents an entitled Pro subscription right now. */
@@ -62,6 +63,7 @@ function toStatus(row: SubscriptionRow | undefined): SubscriptionStatus {
     currentPeriodEnd: row.current_period_end ? new Date(row.current_period_end).toISOString() : null,
     cancelAtPeriodEnd: row.cancel_at_period_end,
     trialUsed: row.trial_used,
+    source: row.source ?? null,
   };
 }
 
@@ -122,6 +124,11 @@ export async function isPro(userId: string): Promise<boolean> {
 
 interface UpsertOpts {
   plan: BillingPlan;
+  /** Rail à l'origine de l'écriture — voir la règle de rétrogradation dans `upsert`. */
+  source: SubSource;
+  appleOriginalTransactionId?: string | null;
+  appleProductId?: string | null;
+  appleEnvironment?: string | null;
   status?: SubStatus;
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
@@ -139,58 +146,108 @@ interface UpsertOpts {
   eventCreatedAt?: Date | null;
 }
 
-/** Inserts or updates a user's subscription. Call this from a Stripe webhook
- *  (mapping the event to these fields) or from the dev-activation path. */
+/** Inserts or updates a user's subscription. Called by the Stripe webhook, the
+ *  Apple paths (`appleIap.service`) and the local paths (promo, dev). */
 async function upsert(userId: string, opts: UpsertOpts): Promise<SubscriptionStatus> {
   const {
     plan,
+    source,
     status = 'active',
     stripeCustomerId = null,
     stripeSubscriptionId = null,
     currentPeriodEnd = null,
     cancelAtPeriodEnd = false,
     eventCreatedAt = null,
+    appleOriginalTransactionId = null,
+    appleProductId = null,
+    appleEnvironment = null,
   } = opts;
 
-  // Garde d'ordonnancement (migration 026). La condition vit dans le `WHERE` du
-  // `DO UPDATE`, donc dans le MÊME énoncé que l'écriture : il n'existe aucune
-  // fenêtre entre « comparer » et « écrire » où deux événements livrés en
-  // parallèle pourraient tous deux se croire les plus récents.
+  // Deux gardes, toutes deux dans le `WHERE` du `DO UPDATE`, donc dans le MÊME
+  // énoncé que l'écriture : aucune fenêtre entre « comparer » et « écrire » où
+  // deux événements livrés en parallèle pourraient tous deux passer.
   //
-  // Trois cas la laissent passer :
-  //   - l'écriture n'a pas d'événement (chemin local) ;
-  //   - la ligne n'en a pas encore (premier passage par Stripe) ;
-  //   - l'événement entrant est plus récent ou identique (rejeu du même).
+  // 1. Ordonnancement (migration 026). Ignorée si l'écriture n'a pas
+  //    d'événement (chemin local), si la ligne n'en a pas encore, ou si la
+  //    ligne vient d'un AUTRE rail : les horloges de Stripe et d'Apple ne se
+  //    comparent pas entre elles. Sinon, l'événement entrant doit être plus
+  //    récent (ou le même, en cas de rejeu).
+  //
+  // 2. Rails (migration 045). Une RÉTROGRADATION (`plan = 'free'`) ne
+  //    s'applique que si elle vient du rail qui donne le Pro en cours, ou si la
+  //    ligne n'est plus Pro de toute façon. Sans elle, l'expiration d'un vieil
+  //    abonnement Stripe retirerait le Pro à quelqu'un qui paie aujourd'hui
+  //    par Apple, ou un code promo encore valide. Les montées en Pro passent
+  //    toujours.
   const { rows } = await pool.query<SubscriptionRow>(
     `INSERT INTO subscriptions
-       (user_id, plan, status, stripe_customer_id, stripe_subscription_id, current_period_end, cancel_at_period_end, last_event_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+       (user_id, plan, status, stripe_customer_id, stripe_subscription_id, current_period_end, cancel_at_period_end, last_event_at,
+        source, apple_original_transaction_id, apple_product_id, apple_environment, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
      ON CONFLICT (user_id) DO UPDATE SET
-       plan                   = EXCLUDED.plan,
-       status                 = EXCLUDED.status,
-       stripe_customer_id     = COALESCE(EXCLUDED.stripe_customer_id, subscriptions.stripe_customer_id),
-       stripe_subscription_id = COALESCE(EXCLUDED.stripe_subscription_id, subscriptions.stripe_subscription_id),
-       current_period_end     = EXCLUDED.current_period_end,
-       cancel_at_period_end   = EXCLUDED.cancel_at_period_end,
-       last_event_at          = COALESCE(EXCLUDED.last_event_at, subscriptions.last_event_at),
-       updated_at             = NOW()
-     WHERE EXCLUDED.last_event_at     IS NULL
-        OR subscriptions.last_event_at IS NULL
-        OR subscriptions.last_event_at <= EXCLUDED.last_event_at
+       plan                          = EXCLUDED.plan,
+       status                        = EXCLUDED.status,
+       stripe_customer_id            = COALESCE(EXCLUDED.stripe_customer_id, subscriptions.stripe_customer_id),
+       stripe_subscription_id        = COALESCE(EXCLUDED.stripe_subscription_id, subscriptions.stripe_subscription_id),
+       current_period_end            = EXCLUDED.current_period_end,
+       cancel_at_period_end          = EXCLUDED.cancel_at_period_end,
+       last_event_at                 = COALESCE(EXCLUDED.last_event_at, subscriptions.last_event_at),
+       source                        = EXCLUDED.source,
+       apple_original_transaction_id = COALESCE(EXCLUDED.apple_original_transaction_id, subscriptions.apple_original_transaction_id),
+       apple_product_id              = COALESCE(EXCLUDED.apple_product_id, subscriptions.apple_product_id),
+       apple_environment             = COALESCE(EXCLUDED.apple_environment, subscriptions.apple_environment),
+       updated_at                    = NOW()
+     WHERE (   EXCLUDED.last_event_at     IS NULL
+            OR subscriptions.last_event_at IS NULL
+            OR subscriptions.source IS DISTINCT FROM EXCLUDED.source
+            OR subscriptions.last_event_at <= EXCLUDED.last_event_at)
+       AND (   EXCLUDED.plan = 'pro'
+            OR subscriptions.source IS NOT DISTINCT FROM EXCLUDED.source
+            OR NOT (    subscriptions.plan = 'pro'
+                    AND subscriptions.status IN ('active', 'trialing')
+                    AND (subscriptions.current_period_end IS NULL OR subscriptions.current_period_end > NOW())))
      RETURNING *`,
-    [userId, plan, status, stripeCustomerId, stripeSubscriptionId, currentPeriodEnd, cancelAtPeriodEnd, eventCreatedAt],
+    [userId, plan, status, stripeCustomerId, stripeSubscriptionId, currentPeriodEnd, cancelAtPeriodEnd, eventCreatedAt,
+     source, appleOriginalTransactionId, appleProductId, appleEnvironment],
   );
   invalidateProCache(userId);
 
-  // Aucune ligne renvoyée = la garde a rejeté une écriture périmée. Ce n'est pas
-  // une erreur, mais l'appelant attend l'état de l'abonnement : il faut le
-  // RELIRE. Renvoyer `toStatus(undefined)` ici annoncerait « free » à quelqu'un
-  // qui est Pro — le bug que la garde était censée empêcher, déplacé d'un cran.
+  // Aucune ligne renvoyée = une garde a rejeté l'écriture. Ce n'est pas une
+  // erreur, mais l'appelant attend l'état de l'abonnement : il faut le RELIRE.
+  // Renvoyer `toStatus(undefined)` ici annoncerait « free » à quelqu'un qui est
+  // Pro — le bug que les gardes étaient censées empêcher, déplacé d'un cran.
   if (!rows[0]) {
-    logger.info({ userId, eventCreatedAt }, '[subscription] écriture ignorée : événement plus ancien que l\'état courant');
+    logger.info({ userId, source, plan, eventCreatedAt }, '[subscription] écriture ignorée : événement périmé ou rétrogradation d\'un autre rail');
     return getStatus(userId);
   }
   return toStatus(rows[0]);
+}
+
+/**
+ * Écriture venant d'Apple (transaction vérifiée ou notification V2).
+ * Exposée pour `appleIap.service` ; même `upsert` que Stripe, donc mêmes gardes.
+ */
+export function upsertFromApple(userId: string, opts: {
+  plan: BillingPlan;
+  status: SubStatus;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+  eventCreatedAt: Date | null;
+  originalTransactionId: string;
+  productId: string;
+  environment: string;
+}): Promise<SubscriptionStatus> {
+  return upsert(userId, {
+    plan: opts.plan,
+    source: 'apple',
+    status: opts.status,
+    currentPeriodEnd: opts.currentPeriodEnd,
+    cancelAtPeriodEnd: opts.cancelAtPeriodEnd,
+    eventCreatedAt: opts.eventCreatedAt,
+    appleOriginalTransactionId: opts.originalTransactionId,
+    appleProductId: opts.productId,
+    appleEnvironment: opts.environment,
+  });
 }
 
 /** Starts the one-time 7-day free trial. Throws 409 if already used. */
@@ -205,10 +262,10 @@ export async function startTrial(userId: string, days = 7): Promise<Subscription
 
   const end = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
   const { rows } = await pool.query<SubscriptionRow>(
-    `INSERT INTO subscriptions (user_id, plan, status, current_period_end, trial_used, updated_at)
-     VALUES ($1, 'pro', 'trialing', $2, TRUE, NOW())
+    `INSERT INTO subscriptions (user_id, plan, status, current_period_end, trial_used, source, updated_at)
+     VALUES ($1, 'pro', 'trialing', $2, TRUE, 'local', NOW())
      ON CONFLICT (user_id) DO UPDATE SET
-       plan = 'pro', status = 'trialing',
+       plan = 'pro', status = 'trialing', source = 'local',
        current_period_end = EXCLUDED.current_period_end,
        cancel_at_period_end = FALSE,
        trial_used = TRUE, updated_at = NOW()
@@ -222,7 +279,7 @@ export async function startTrial(userId: string, days = 7): Promise<Subscription
 /** Dev / no-payment activation — grants Pro for `days` (default 30). */
 export async function activateProDev(userId: string, days = 30): Promise<SubscriptionStatus> {
   const end = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-  return upsert(userId, { plan: 'pro', status: 'active', currentPeriodEnd: end });
+  return upsert(userId, { plan: 'pro', source: 'local', status: 'active', currentPeriodEnd: end });
 }
 
 /** Valid promo codes and how many days of Pro they grant.
@@ -259,7 +316,7 @@ export async function redeemPromo(userId: string, code: string): Promise<Subscri
   if (!days) throw Object.assign(new Error('Invalid promo code'), { status: 400 });
 
   const end = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-  return upsert(userId, { plan: 'pro', status: 'active', currentPeriodEnd: end });
+  return upsert(userId, { plan: 'pro', source: 'local', status: 'active', currentPeriodEnd: end });
 }
 
 /** Marks the subscription to end at the period boundary (keeps Pro until then). */
@@ -271,6 +328,15 @@ export async function cancel(userId: string): Promise<SubscriptionStatus> {
     'SELECT * FROM subscriptions WHERE user_id = $1',
     [userId],
   );
+  // Abonnement Apple : seul l'iPhone (Réglages → Abonnements) peut l'annuler.
+  // Poser `cancel_at_period_end` ici annoncerait une annulation qui n'a pas eu
+  // lieu, et Apple continuerait de facturer.
+  if (existing[0]?.source === 'apple' && rowIsPro(existing[0])) {
+    throw Object.assign(
+      new Error("Cet abonnement a été acheté sur iPhone : annule-le dans Réglages → ton nom → Abonnements."),
+      { status: 409, code: 'APPLE_MANAGED' },
+    );
+  }
   const subId = existing[0]?.stripe_subscription_id;
   if (stripeConfigured() && subId) {
     try {
@@ -468,6 +534,7 @@ async function syncSubscription(sub: Stripe.Subscription, eventCreatedAt: Date |
 
   await upsert(userId, {
     plan: active ? 'pro' : 'free',
+    source: 'stripe',
     status,
     stripeCustomerId: customerId,
     stripeSubscriptionId: sub.id,
