@@ -15,7 +15,7 @@
 	<!-- APPLE_PLAN 4.2 — shared storage with the home-screen widget. -->
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.arakice.arakice</string>
+		<string>group.arakice.arakice.com</string>
 	</array>
 </dict>
 </plist>

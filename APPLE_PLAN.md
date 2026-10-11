@@ -536,7 +536,7 @@ three**; they are also the reason someone keeps the app installed.
 - [ ] **4.2 Home screen widget** — *(code ✔ 2026-10-10, decided: the user's PENDING bets with their
       live probability, refreshed every 15–30 min — iOS's limit; a Live Activity was offered for true
       real time and declined. Server `GET /api/widget/live-bets` + read-only widget token (migration
-      044), `WidgetBridgePlugin.swift` → App Group `group.com.arakice.arakice`, extension
+      044), `WidgetBridgePlugin.swift` → App Group `group.arakice.arakice.com`, extension
       `ios/App/ArakIceWidget/` (SwiftUI, small/medium/large, iOS 17+), second CI profile. Left: App
       Group + widget App ID + profile, secrets, migration 044, test.)* Original idea: today's top edge
       / next game. WidgetKit, written in Swift.

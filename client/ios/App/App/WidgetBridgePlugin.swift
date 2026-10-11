@@ -16,7 +16,7 @@ public class WidgetBridgePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "reload", returnType: CAPPluginReturnPromise),
     ]
 
-    static let appGroup = "group.com.arakice.arakice"
+    static let appGroup = "group.arakice.arakice.com"
     private var defaults: UserDefaults? { UserDefaults(suiteName: Self.appGroup) }
 
     @objc func setConfig(_ call: CAPPluginCall) {

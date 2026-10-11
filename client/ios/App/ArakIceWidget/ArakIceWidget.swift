@@ -11,7 +11,7 @@
 import WidgetKit
 import SwiftUI
 
-private let appGroup = "group.com.arakice.arakice"
+private let appGroup = "group.arakice.arakice.com"
 private let openURL = URL(string: "arakice://app/bet?tab=slips")!
 
 // MARK: - Modèle (miroir de WidgetPayload côté serveur)
