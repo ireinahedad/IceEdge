@@ -187,7 +187,9 @@ def run_served_pregame(df: pd.DataFrame, min_season: int, search_trials: int, us
     # 2. Correction walk-forward (variante C) + 3. niveau gelé le lundi
     ks = sorted(F)
     rows = []
+    print("\n   correction + recalage de niveau (≈ 2-5 min, bissections) :", flush=True)
     for i, s in enumerate(ks):
+        print(f"   {s}-{str(s + 1)[2:]:<2} …", flush=True)
         f = F[s]
         past = ks[:i]
         p_corr = np.full(len(f["p"]), np.nan)

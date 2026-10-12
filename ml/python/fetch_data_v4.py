@@ -1183,6 +1183,38 @@ def _write_odds_csv(df: pd.DataFrame, allow_shrink: bool = False) -> bool:
     return True
 
 
+# Marge admissible d'une paire à DEUX issues : 1/c_dom + 1/c_ext. Même borne
+# que le collecteur (`oddsLogger.service.ts`, `TWO_WAY_OVERROUND`, 2026-10-12).
+# Le log live de la saison 2026-27 contenait des paires à 0.79-0.88 (marché
+# « 60 minutes » à trois issues ou livres mélangés) : dévigées, elles donnaient
+# une probabilité fausse dans `market_home_p_*`. Ceinture et bretelles : le
+# serveur ne les écrit plus et `npm run odds:repair` nettoie la base, mais un
+# vieil export ne doit pas pouvoir les réintroduire.
+TWO_WAY_OVERROUND = (1.00, 1.12)
+_PAIRS = [("home_ml_open", "away_ml_open"), ("home_ml_close", "away_ml_close"),
+          ("total_open_over", "total_open_under"), ("total_close_over", "total_close_under"),
+          ("pl_home_price", "pl_away_price")]
+
+
+def _drop_implausible_pairs(live: pd.DataFrame) -> pd.DataFrame:
+    """Met à NaN les paires de prix du log live dont la marge est impossible."""
+    live = live.copy()
+    dropped = {}
+    for a, b in _PAIRS:
+        if a not in live.columns or b not in live.columns:
+            continue
+        o = 1 / pd.to_numeric(live[a], errors="coerce") + 1 / pd.to_numeric(live[b], errors="coerce")
+        bad = o.notna() & ~o.between(*TWO_WAY_OVERROUND)
+        if bad.any():
+            live.loc[bad, [a, b]] = float("nan")
+            dropped[a.replace("home_", "").replace("_over", "")] = int(bad.sum())
+    if dropped:
+        print("   ⚠️  log live : paires de prix impossibles écartées (marge hors "
+              f"[{TWO_WAY_OVERROUND[0]:.2f}, {TWO_WAY_OVERROUND[1]:.2f}]) — "
+              + ", ".join(f"{k} {v}" for k, v in dropped.items()))
+    return live
+
+
 def fetch_odds(from_local: bool = False, api_range: tuple | None = None,
                book: str | None = None, regions: str = "us",
                dry_run: bool = False, api_cache: bool = True,
@@ -1283,6 +1315,7 @@ def fetch_odds(from_local: bool = False, api_range: tuple | None = None,
         live["away_team"] = live["away_team"].map(norm_team)
         if "source" not in live.columns:
             live["source"] = "oddsapi:live"      # exports antérieurs à la 028
+        live = _drop_implausible_pairs(live)
         df = pd.concat([df, live], ignore_index=True)
         derived = [c for c in ("total_close_over", "pl_home_price")
                    if c in live.columns and live[c].notna().any()]

@@ -129,8 +129,8 @@ ensuite                 A2 et A3 (CLV puck line) dès que les données existent,
 après la saison 2026-27 S4 — γ, puis ⑤ (classifieur en repli, puis supprimé).
                         A4 (fenêtre gardien) avec une saison de snapshots.
 
-en parallèle (hors prod) P — découverte de patterns : P1 posée, P2 à relire, puis
-                        P3 suivi hebdo des candidats pendant 2026-27.
+en parallèle (hors prod) P — découverte de patterns : P1 et P2 posées, P3 branché
+                        (suivi hebdo des candidats pendant 2026-27), puis P4-P6.
 ```
 
 
@@ -158,15 +158,47 @@ cote de clôture quand elle existe.
       Contrôle : servi − brut, log-loss **−0.00221 (z −3.25)**, déviance du total
       **−0.00332 (z −3.31)** — reproduit `correction_report` (−0.0021, z −3.2) et
       `level_report` (−0.00319, z −3.19).
-- [ ] **P2. `discover_patterns.py`** (posé le 2026-10-12, à relire). Lancé une fois sur la base
-      servie → `ml/models/patterns_report.json` + `ml/data/patterns_conditions.csv`. À faire :
-      relire le code, relancer chez toi, décider des familles à ajouter (P5).
-- [ ] **P3. Registre `ml/models/pattern_registry.json` + suivi en avant.** 3 candidats inscrits le
-      2026-10-12 (règle fixée avant de voir les matchs futurs) :
-      `lone_b2b_vs_market` (suivi auto, verdict à n ≥ 300 matchs, z ≤ −2),
+- [ ] **P2. `discover_patterns.py` — relancer après P1 ou quand une famille est ajoutée (P5).**
+      ✔ Posé le 2026-10-12 et relancé sur le poste Windows : mêmes chiffres qu'en cloud
+      (sauf `--combos`, voir §8.1) → `ml/models/patterns_report.json` + `ml/data/patterns_conditions.csv`.
+- [ ] **P3. Suivi en avant des candidats — en cours toute la saison 2026-27.**
+      ✔ Branché le 2026-10-12 : `refresh_data.py` étape 6 (`refresh_candidates`) recalcule
+      chaque lundi la section `candidates` de `ml/models/patterns_report.json` à partir de
+      `ml/models/pattern_registry.json`. Lecture seule, une erreur n'arrête pas le refresh,
+      aucune prédiction ne change ; committer `patterns_report.json` est facultatif.
+      3 candidats inscrits le 2026-10-12 (règle fixée avant les matchs suivis) :
+      `lone_b2b_vs_market` (auto : verdict sur les **300 premiers** matchs avec cote valide après
+      l'inscription, figé ensuite — pas d'arrêt optionnel ; ≈ une saison complète),
       `shooter_goalie_pairs` et `caufield_saturday` (témoin, attendu = bruit), à refaire à la main
-      en fin de saison. Brancher `discover_patterns.py --candidates` dans `refresh_data.py`
-      (hebdo, ne change aucune prédiction) — **pas encore fait**.
+      en fin de saison avec `discover_patterns.py --players --shooter-goalie`.
+      **Le suivi n'avance que si les cotes de la saison arrivent dans `nhl_games_v4.csv`** :
+      `refresh_data` ne touche pas `odds.csv`, il faut `npm run odds:export` (server) puis
+      `python fetch_data_v4.py --only odds --from-local` avant le refresh. Au 2026-10-12 :
+      42 matchs sur 83 de 2026-27 ont une cote.
+- [ ] **⚠️ Cotes `oddsapi:live` faussées — corrigé dans le code le 2026-10-12, reste à déployer
+      et à réparer la base.** Trois défauts trouvés dans `odds_log` (donc `odds_live_log.csv`,
+      `odds.csv`, `nhl_games_v4.csv`) :
+      ① ouverture = toute première observation, jusqu'à 5 semaines avant le match, chez un livre
+      inconnu (avant la 038) ; ② 12 clôtures et 20 ouvertures sur 42 avec une marge impossible
+      (0.79-0.88 : prix « 3 issues » ou livres mélangés) ; ③ **clôtures EN DIRECT** — les passes de
+      21 h 45 / 22 h 45 ET écrasaient la clôture avec le prix du match en cours (NYI–NJD
+      2026-10-03 : 1.00 / 31.00, 25 snapshots après la mise au jeu ce soir-là). Fuite du score
+      dans la cote.
+      Correctifs : `oddsLogger.service.ts` ignore les matchs commencés (odds_log ET snapshots),
+      n'écrit `odds_log` que pour les matchs du jour, jette une paire hors marge [1.00, 1.12]
+      (`isValidTwoWay`) ; `fetch_data_v4.py` écarte aussi ces paires à l'import du log live ;
+      `npm run odds:repair` reconstruit ouverture/clôture depuis `odds_snapshots` (livre de collecte,
+      jour du match, avant la mise au jeu) — essai à blanc par défaut, `--apply` pour écrire.
+      Tests : 13 (vitest). À faire, dans l'ordre :
+      1. committer, `npm test`, déployer le serveur (le collecteur en prod garde le bug d'ici là) ;
+      2. `cd server && npm run odds:repair` → relire → `npm run odds:repair -- --apply` ;
+      3. `npm run odds:export` et `npm run odds:export-snapshots`, puis dans `ml/python` :
+         `python fetch_data_v4.py --only odds --from-local` et `python build_dataset.py`.
+      Un match sans observation valide LE JOUR du match passe à NULL (l'essai à blanc donne le
+      compte exact). D'après l'export des snapshots du 7 oct., la série a deux trous : aucune
+      passe entre le 21 sept. et le 4 oct. 01:45Z, et aucune après le 4 oct. 02:45Z jusqu'à
+      l'export — à vérifier sur `/api/dev/data-health` (collecteur arrêté ? réserve de quota ?).
+      Récupérer ces matchs demanderait l'historique payant The Odds API (outil de A1).
 - [ ] **P4. Intégration — seulement par les protocoles existants.** Victoire → variable candidate
       de `backtest_walkforward.py --correction` ; totaux → `measure_level.py` / features du score ;
       props → `train_player.py` avec la règle de `vs_lift` (validation ET test, z ≥ 2). Effet
@@ -723,7 +755,7 @@ du temps perdu ; les ignorer serait pire.
 | Faut-il mélanger la cote du marché dans la prédiction ? | **Non — décision du 2026-10-07.** Mesuré : score seul 0.67093, mélange score ⊕ marché 0.67077, marché seul **0.67047** (2 628 matchs de test). Le mélange ne bat pas le marché, et il rétrécirait par construction l'écart modèle − marché que mesurent les best bets, la règle A2 et le CLV. | `score_report.json` → `blend`. Ancien mélange du classifieur sur 2025-26 : 0.6843 contre 0.6822 pour le marché. |
 | Le CLV des TOTAUX vaut-il quelque chose ? | **Non, et c'est un artefact.** Son CLV net est **inférieur à son propre placebo** à tous les seuils (+0.0020 contre +0.0030) : entièrement de la régression vers la moyenne. La clôture les valorise à −3.2 % constant. | Même run. Le placebo est ce qui l'a révélé. |
 | Existe-t-il des patterns « calendrier / situation / équipe » que la chaîne servie ignore ? | **Non.** 3 517 conditions (facteur seul, paires, équipe × facteur, équipe × adversaire) contre la chaîne servie : 0 significative après BH, 0 répliquée ; persistance des z ≈ 0 (0.07 / 0.03 / 0.02 / −0.04). Contre le modèle BRUT, les 33 « découvertes » répliquées étaient toutes l'écart ELO et le b2b — ce que corrige déjà la couche C (contrôle positif). | `discover_patterns.py --games`, découverte 2015-19, validation 2020-25 (2026-10-12). |
-| Les COMBINAISONS de facteurs (jour × repos × voyage × gardien × forme × équipe…) apprennent-elles le résidu ? | **Non.** XGBoost sur le résidu de la chaîne servie : l'arrêt précoce garde 1 arbre, Δ log-loss +0.00000 (z 0.03), idem avec l'identité des équipes. | `--combos`, 7 423 matchs de validation. |
+| Les COMBINAISONS de facteurs (jour × repos × voyage × gardien × forme × équipe…) apprennent-elles le résidu ? | **Non.** XGBoost sur le résidu de la chaîne servie : 1 arbre et Δ log-loss +0.00000 (z 0.03) en cloud, 9 arbres et −0.00018 (z −1.81) sur le poste Windows (autre version de xgboost) — sous le seuil dans les deux cas ; idem avec l'identité des équipes. | `--combos`, 7 423 matchs de validation. |
 | « CAR perd contre certaines équipes » — équipe × adversaire ? | **Bruit.** Ex. CAR–NYR 6-26 sur 2012-19, puis 12-7 sur 2020-25. Persistance de la famille −0.04 (336 paires). Les effectifs changent ; le bon niveau est l'alignement + le gardien, pas le logo. | Pilote 2026-10-12. |
 | Effets joueur × jour / adversaire / aréna / mois ? | **Bruit.** Persistance 0.03 / 0.02 / 0.05 (aréna hors domicile) / 0.01 ; les 50 cellules les plus fortes passent de ×1.54 à ×1.006 (jour). Contrôle positif : la finition (buts − xG) persiste à 0.58. Caufield samedi : 63 buts en 103 matchs vs 0.40/match les autres jours (p 0.01), mais 6 060 tests, 0 BH ; valeur prédictive estimée **+0 %, au plus +5 %**. | `--players`, A ≤ 2019 < B. |
 | Tireur × gardien précis ? | **Faible, non tranché.** Paires ≥ 2 buts attendus par période (325) : persistance 0.15, top-50 ×1.82 → ×1.20 ; ≥ 1 : 0.05. Biais d'aréna non exclu. Candidat au registre. | `--shooter-goalie`, 1,15 M tirs 2015-25. |
@@ -754,7 +786,8 @@ du temps perdu ; les ignorer serait pire.
 ```
 fetch_data_v4.py       spine + MoneyPuck + cotes (SBRO ≤2022-11-27, Odds API ≥2020)
 refresh_data.py        mise à jour hebdo en saison (calendrier, MoneyPuck,
-                       build_dataset, inference_state, elo, level_layer) —
+                       build_dataset, inference_state, elo, level_layer,
+                       suivi des patterns candidats → patterns_report.json) —
                        lancé par ml/refresh-data.cmd, ne touche pas odds.csv
 build_dataset.py       features + cibles réglementaires/prolongation
 train_score.py         Poisson empilé équipe-match + τ + P(dom en OT)   ← le cœur

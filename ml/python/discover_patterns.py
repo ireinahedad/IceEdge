@@ -618,24 +618,55 @@ def run_shooter_goalie(first: int, split_season: int, last: int) -> dict:
 
 
 # ── 5. Candidats du registre : suivi en avant ────────────────────────────────
+#
+# Règles du suivi (fixées le 2026-10-12, avant le premier match suivi) :
+#  * seuls comptent les matchs datés à partir de `registered` ;
+#  * le verdict porte sur les `min_n` PREMIERS matchs suivis, dans l'ordre des
+#    dates, et ne bouge plus ensuite. Regarder chaque lundi et s'arrêter dès que
+#    z passe sous −2 gonflerait les faux positifs (arrêt optionnel) ;
+#  * une cote est rejetée si sa marge est impossible pour un moneyline à deux
+#    issues (1/c_dom + 1/c_ext hors [1.00, 1.12]) : c'est le signe d'un prix
+#    « 3 issues » (60 minutes) ou d'un mélange de livres. Constaté le 2026-10-12
+#    sur des lignes `oddsapi:live` d'octobre 2026 (marge 0.85-0.88).
+
+OVERROUND_OK = (1.00, 1.12)
+
 
 def lone_b2b_vs_market() -> pd.DataFrame:
-    """Équipe SEULE en back-to-back : une ligne par match, de son point de vue.
-    Ne dépend d'aucun modèle : calendrier + cote de clôture seulement, donc
-    suivable dès le premier match de la saison en cours."""
+    """Équipe SEULE en back-to-back (l'adversaire ne l'est pas) : une ligne par
+    match joué, de son point de vue. Ne dépend d'aucun modèle — calendrier +
+    cote de clôture — donc suivable dès le premier match de la saison."""
     g = pd.read_csv(f"{DATA_DIR}/nhl_games_v4.csv", low_memory=False,
-                    usecols=["season", "date", "home_win", "home_b2b", "away_b2b",
-                             "home_ml_close", "away_ml_close", "market_home_p_close"])
+                    usecols=["season", "date", "game_id", "home_win", "home_b2b", "away_b2b",
+                             "home_ml_close", "away_ml_close", "market_home_p_close", "source"])
     g["date"] = pd.to_datetime(g["date"])
-    g = g[g["home_ml_close"].notna() & g["market_home_p_close"].notna() & g["home_win"].notna()]
+    g = g[g["home_win"].notna()]
+    over = 1 / g["home_ml_close"] + 1 / g["away_ml_close"]
+    g["cote"] = np.where(g["home_ml_close"].isna() | g["market_home_p_close"].isna(), "absente",
+                         np.where(over.between(*OVERROUND_OK), "ok", "rejetee"))
     a = g[(g["home_b2b"] == 1) & (g["away_b2b"] == 0)]
     b = g[(g["away_b2b"] == 1) & (g["home_b2b"] == 0)]
-    return pd.concat([
-        pd.DataFrame({"season": a["season"], "date": a["date"], "y": a["home_win"],
-                      "p_mkt": a["market_home_p_close"], "dec_against": a["away_ml_close"]}),
-        pd.DataFrame({"season": b["season"], "date": b["date"], "y": 1 - b["home_win"],
-                      "p_mkt": 1 - b["market_home_p_close"], "dec_against": b["home_ml_close"]})],
-                     ignore_index=True)
+    d = pd.concat([
+        pd.DataFrame({"game_id": a["game_id"], "date": a["date"], "y": a["home_win"],
+                      "p_mkt": a["market_home_p_close"], "dec_against": a["away_ml_close"],
+                      "cote": a["cote"], "source": a["source"]}),
+        pd.DataFrame({"game_id": b["game_id"], "date": b["date"], "y": 1 - b["home_win"],
+                      "p_mkt": 1 - b["market_home_p_close"], "dec_against": b["home_ml_close"],
+                      "cote": b["cote"], "source": b["source"]})], ignore_index=True)
+    return d.sort_values(["date", "game_id"]).reset_index(drop=True)
+
+
+def _b2b_block(x: pd.DataFrame) -> dict:
+    if x.empty:
+        return {"n": 0}
+    pnl = np.where(x["y"] == 0, x["dec_against"] - 1, -1.0)
+    se = float(pnl.std(ddof=1) / math.sqrt(len(pnl))) if len(pnl) > 1 else np.nan
+    return {"n": int(len(x)), "du": str(x["date"].min().date()), "au": str(x["date"].max().date()),
+            "victoires": round(float(x["y"].mean()), 4),
+            "marche": round(float(x["p_mkt"].mean()), 4),
+            "z_vs_marche": round(resid_z(x["y"], x["p_mkt"]), 2),
+            "roi_contre_pct": round(float(pnl.mean()) * 100, 2),
+            "roi_se_pct": round(se * 100, 2) if np.isfinite(se) else None}
 
 
 def run_candidates() -> dict:
@@ -646,34 +677,45 @@ def run_candidates() -> dict:
         return {"note": f"{REGISTRY} absent"}
     out = {}
     for c in reg.get("candidates", []):
-        if c["id"] != "lone_b2b_vs_market":
-            out[c["id"]] = {"note": "pas de suivi automatique pour ce candidat"}
+        if not c.get("auto") or c["id"] != "lone_b2b_vs_market":
+            out[c["id"]] = {"note": "suivi manuel (voir pattern_registry.json → rule)"}
             continue
+        rule, start = c["rule"], pd.Timestamp(c["registered"])
         d = lone_b2b_vs_market()
-        res = {}
-        for label, m in (("avant_inscription", d["date"] < pd.Timestamp(c["registered"])),
-                         ("depuis_inscription", d["date"] >= pd.Timestamp(c["registered"]))):
-            x = d[m]
-            if x.empty:
-                res[label] = {"n": 0}
-                continue
-            pnl = np.where(x["y"] == 0, x["dec_against"] - 1, -1.0)
-            se = float(pnl.std(ddof=1) / math.sqrt(len(pnl))) if len(pnl) > 1 else np.nan
-            res[label] = {"n": int(len(x)), "victoires": round(float(x["y"].mean()), 4),
-                          "marche": round(float(x["p_mkt"].mean()), 4),
-                          "z_vs_marche": round(resid_z(x["y"], x["p_mkt"]), 2),
-                          "roi_contre_pct": round(float(pnl.mean()) * 100, 2),
-                          "roi_se_pct": round(se * 100, 2) if np.isfinite(se) else None}
-        fwd = res["depuis_inscription"]
-        rule = c["rule"]
-        if fwd.get("n", 0) < rule["min_n"]:
-            v = f"EN COURS ({fwd.get('n', 0)}/{rule['min_n']} matchs)"
-        elif fwd["z_vs_marche"] <= rule["z_max"]:
-            v = "CONFIRMÉ EN AVANT — à proposer au protocole --correction"
+        before, after = d[d["date"] < start], d[d["date"] >= start]
+        ok_after = after[after["cote"] == "ok"]
+        decided = ok_after.iloc[:rule["min_n"]]
+        res = {"avant_inscription": _b2b_block(before[before["cote"] == "ok"]),
+               "depuis_inscription": _b2b_block(ok_after),
+               "couverture_depuis_inscription": {
+                   "matchs_joues": int(len(after)),
+                   "avec_cote_valide": int(len(ok_after)),
+                   "cote_absente": int((after["cote"] == "absente").sum()),
+                   "cote_rejetee_marge": int((after["cote"] == "rejetee").sum())}}
+        if len(decided) < rule["min_n"]:
+            v = f"EN COURS ({len(decided)}/{rule['min_n']} matchs avec cote valide)"
         else:
-            v = "REJETÉ EN AVANT"
+            blk = _b2b_block(decided)
+            res["decision_sur_les_premiers"] = blk
+            v = ("CONFIRMÉ EN AVANT — à proposer au protocole --correction"
+                 if blk["z_vs_marche"] <= rule["z_max"] else "REJETÉ EN AVANT")
         out[c["id"]] = {**res, "verdict": v}
     return out
+
+
+def update_candidates_report(report_path: str = REPORT) -> dict:
+    """Met à jour la seule section `candidates` de patterns_report.json, sans
+    toucher aux autres. Appelé chaque lundi par refresh_data.py (étape 6)."""
+    try:
+        with open(report_path, encoding="utf-8") as fh:
+            report = json.load(fh)
+    except (FileNotFoundError, json.JSONDecodeError):
+        report = {}
+    cands = run_candidates()
+    report["candidates"] = {"as_of": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ"), **cands}
+    with open(report_path, "w", encoding="utf-8") as fh:
+        json.dump(report, fh, ensure_ascii=False, indent=1, default=float)
+    return cands
 
 
 # ── main ─────────────────────────────────────────────────────────────────────
@@ -740,8 +782,9 @@ def main():
                   f"Δ log-loss {c['combinaisons']['vs_base']['delta']:+.5f} "
                   f"(z {c['combinaisons']['vs_base']['z']})")
     if "candidates" in modes:
-        report["candidates"] = run_candidates()
-        for k, v in report["candidates"].items():
+        cands = run_candidates()
+        report["candidates"] = {"as_of": report["generated"], **cands}
+        for k, v in cands.items():
             print(f"   candidat {k} : {v.get('verdict', v.get('note'))}")
     if "players" in modes:
         report["players"] = run_players(a.discovery_end, a.focus_player or [8481540])

@@ -1,14 +1,4 @@
 {
- "generated": "2026-10-12T06:08Z",
- "rules": {
-  "fdr_q": 0.1,
-  "z_replicate": 1.645,
-  "min_n": {
-   "paire": 300,
-   "equipe_x_facteur": 80,
-   "equipe_x_adversaire": 15
-  }
- },
  "base": {
   "base": "chaîne servie walk-forward (served_pregame.csv)",
   "decouverte": [
@@ -154,7 +144,7 @@
   "candidats": []
  },
  "combos": {
-  "protocole": "entraînement 2015-2017, arrêt précoce [2018, 2019], validation 2020-2025",
+  "protocole": "entraînement 2015-2017, arrêt précoce [np.int64(2018), np.int64(2019)], validation 2020-2025",
   "n_validation": 7423,
   "n_validation_cotes": 5138,
   "base": {
@@ -168,47 +158,56 @@
    "z": -0.58
   },
   "combinaisons": {
-   "arbres_retenus": 1,
-   "log_loss": 0.65737,
+   "arbres_retenus": 9,
+   "log_loss": 0.65719,
    "vs_base": {
     "n": 7423,
-    "delta": 1e-06,
-    "se": 2.1e-05,
-    "z": 0.03
+    "delta": -0.000176,
+    "se": 9.8e-05,
+    "z": -1.81
    }
   },
   "combinaisons+identite_equipes": {
-   "arbres_retenus": 1,
-   "log_loss": 0.65738,
+   "arbres_retenus": 4,
+   "log_loss": 0.65724,
    "vs_base": {
     "n": 7423,
-    "delta": 7e-06,
-    "se": 2e-05,
-    "z": 0.35
+    "delta": -0.000128,
+    "se": 5.7e-05,
+    "z": -2.25
    }
   },
   "lecture": "Si l'arrêt précoce garde 1 arbre et que vs_base est nul, les combinaisons de ces facteurs n'apportent rien que la base ne sache déjà."
  },
  "candidates": {
+  "as_of": "2026-10-12T06:27Z",
   "lone_b2b_vs_market": {
    "avant_inscription": {
-    "n": 2778,
+    "n": 2776,
+    "du": "2014-10-09",
+    "au": "2026-10-04",
     "victoires": 0.4161,
     "marche": 0.4438,
-    "z_vs_marche": -3.0,
-    "roi_contre_pct": 1.88,
+    "z_vs_marche": -3.01,
+    "roi_contre_pct": 1.87,
     "roi_se_pct": 1.72
    },
    "depuis_inscription": {
     "n": 0
    },
-   "verdict": "EN COURS (0/300 matchs)"
+   "couverture_depuis_inscription": {
+    "matchs_joues": 0,
+    "avec_cote_valide": 0,
+    "cote_absente": 0,
+    "cote_rejetee_marge": 0
+   },
+   "verdict": "EN COURS (0/300 matchs avec cote valide)"
   },
   "shooter_goalie_pairs": {
-   "note": "pas de suivi automatique pour ce candidat"
+   "note": "suivi manuel (voir pattern_registry.json → rule)"
   },
   "caufield_saturday": {
-   "note": "pas de suivi automatique pour ce candidat"
+   "note": "suivi manuel (voir pattern_registry.json → rule)"
   }
  },
  "players": {
@@ -650,6 +649,16 @@
   "controle_positif_gardien": {
    "n": 39,
    "persistance_corr_z": 0.194
+  }
+ },
+ "generated": "2026-10-12T06:23Z",
+ "rules": {
+  "fdr_q": 0.1,
+  "z_replicate": 1.645,
+  "min_n": {
+   "paire": 300,
+   "equipe_x_facteur": 80,
+   "equipe_x_adversaire": 15
   }
  }
 }

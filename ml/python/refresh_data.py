@@ -25,6 +25,11 @@ Ce que le script fait, dans l'ordre :
      observés / buts prévus, rétréci vers 1, part dans `level_layer.json`
      (`score_model.level_k`, mesure et règle dans `measure_level.py`). Le
      service multiplie le total λ par ce k, sans toucher à la victoire.
+  6. suivi des patterns candidats (2026-10-12, STATUS.md §3.5 P3) : la section
+     `candidates` de `patterns_report.json` est recalculée à partir du registre
+     `pattern_registry.json` (`discover_patterns.update_candidates_report`).
+     Lecture seule de `nhl_games_v4.csv` : aucune prédiction ne change, et un
+     échec n'arrête pas le rafraîchissement.
 
 Ce qu'il ne fait JAMAIS : toucher `odds.csv` (irremplaçable, cf. le garde-fou de
 `fetch_data_v4._write_odds_csv`), réentraîner, committer.
@@ -270,6 +275,26 @@ def refresh_level(season: int, models_dir: str, data_path: str) -> dict:
     return out
 
 
+def refresh_candidates() -> None:
+    """Étape 6 : suivi en avant des patterns candidats (hors production).
+    N'importe quelle erreur est affichée puis ignorée : ce suivi ne doit jamais
+    empêcher le rafraîchissement des données servies."""
+    try:
+        import discover_patterns as DP
+        cands = DP.update_candidates_report()
+        print("\n🔎 Patterns candidats (pattern_registry.json) :")
+        for cid, v in cands.items():
+            line = v.get("verdict", v.get("note"))
+            cov = v.get("couverture_depuis_inscription")
+            if cov:
+                line += (f" — depuis l'inscription : {cov['matchs_joues']} matchs, "
+                         f"{cov['avec_cote_valide']} avec cote valide, {cov['cote_absente']} sans cote, "
+                         f"{cov['cote_rejetee_marge']} rejetées (marge)")
+            print(f"   {cid} : {line}")
+    except Exception as e:
+        print(f"\n⚠️  suivi des patterns candidats impossible ({e}) — rafraîchissement non affecté")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true",
@@ -302,6 +327,8 @@ def main():
 
     refresh_level(season, build_dataset.MODELS_DIR, f"{DATA_DIR}/nhl_games_v4.csv")   # 5
 
+    refresh_candidates()                                                              # 6
+
     import json
     with open(f"{build_dataset.MODELS_DIR}/inference_state.json", encoding="utf-8") as fh:
         st = json.load(fh)
@@ -312,7 +339,8 @@ def main():
           f"{len(st.get('skater_pool', {}))} patineurs dans le bassin.")
     print("   Pour le service en ligne : committer ml/models/inference_state.json, "
           "ml/models/elo_ratings.json et ml/models/level_layer.json, puis pousser. "
-          "Pas de réentraînement nécessaire.")
+          "Pas de réentraînement nécessaire. (ml/models/patterns_report.json : "
+          "suivi des candidats, facultatif, non lu par le service.)")
 
 
 if __name__ == "__main__":
