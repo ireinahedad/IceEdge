@@ -55,7 +55,7 @@ vi.mock('./nhlApiClient', () => ({
   fetchGameFaceoffWins:  vi.fn(async () => new Map()),
 }));
 
-import { settlePendingSlips, resolveSlipOutcome, legSettlementProblem } from './settlement.service';
+import { settlePendingSlips, resolveSlipOutcome, legSettlementProblem, probabilityWithoutVoided } from './settlement.service';
 
 const GAME_ID = '2026020001';
 
@@ -494,5 +494,60 @@ describe('legSettlementProblem — refus au dépôt', () => {
   it('refuse un over/under sans ligne ou sans côté', () => {
     expect(legSettlementProblem({ gameId: GAME_ID, marketType: 'total_goals', selectionValue: 'over' })).toMatch(/line/);
     expect(legSettlementProblem({ gameId: GAME_ID, marketType: 'points_ou', line: 0.5 })).toMatch(/over.under/);
+  });
+});
+
+/**
+ * Joueur qui n'a pas joué. Sa jambe ne pouvait être ni confirmée ni refusée :
+ * absent de la feuille de match, il figeait le parlay en attente. La jambe est
+ * désormais annulée dès que le match est final, et le coupon se règle sur les
+ * autres jambes.
+ */
+describe('joueur qui n\'a pas joué', () => {
+  const box = (id: string, over: Partial<Record<string, unknown>> = {}) => [id, {
+    playerId: id, goals: 0, assists: 0, points: 0, shots: 0, hits: 0,
+    blockedShots: 0, pim: 0, toi: 15, ...over,
+  }] as const;
+  const GOAL = (id: string) => ({ gameId: GAME_ID, marketType: 'anytime_goal', subjectId: id, selectionValue: 'yes', probability: 40 });
+
+  it('absent de la feuille + autres jambes gagnées → coupon gagné, jambe annulée', async () => {
+    fetchGameBoxscore.mockResolvedValue(new Map([box('8478402', { goals: 1, points: 1 })]));
+    const w = await settleOne([ML_TOR, GOAL('8478402'), GOAL('9999999')]);
+    expect(w.outcome).toBe('win');
+    expect(w.legs!.map((l) => l.result)).toEqual(['win', 'win', 'void']);
+  });
+
+  it('absent de la feuille + une autre jambe perdue → coupon perdu', async () => {
+    fetchGameBoxscore.mockResolvedValue(new Map([box('8478402')]));
+    const w = await settleOne([GOAL('8478402'), GOAL('9999999')]);
+    expect(w.outcome).toBe('loss');
+    expect(w.legs!.map((l) => l.result)).toEqual(['loss', 'void']);
+  });
+
+  it('gardien auxiliaire resté au banc (sur la feuille, 0 min) → annulé, pas perdu', async () => {
+    fetchGameBoxscore.mockResolvedValue(new Map([box('8476999', { toi: 0 })]));
+    const w = await settleOne([ML_TOR, { gameId: GAME_ID, marketType: 'goalie_win', subjectId: '8476999', selectionValue: 'yes' }]);
+    expect(w.outcome).toBe('win');
+    expect(w.legs!.map((l) => l.result)).toEqual(['win', 'void']);
+  });
+
+  it('premier buteur sur un joueur absent → annulé (était compté perdu)', async () => {
+    fetchGameBoxscore.mockResolvedValue(new Map([box('1', { goals: 4 })]));
+    const w = await settleOne([ML_TOR, { gameId: GAME_ID, marketType: 'first_goal_scorer', subjectId: '9999999', selectionValue: 'yes' }]);
+    expect(w.outcome).toBe('win');
+  });
+
+  it('feuille de match indisponible → on attend, on n\'annule pas', async () => {
+    fetchGameBoxscore.mockResolvedValue(null);
+    const w = await settleOne([ML_TOR, GOAL('9999999')]);
+    expect(w.outcome).toBeUndefined();
+  });
+
+  it('XP : la jambe annulée sort de la probabilité du coupon', () => {
+    // 50 % avec une jambe annulée à 50 % → le pari restant valait 100 %… plafonné à 99.
+    expect(probabilityWithoutVoided(50, [{ probability: 80 }, { probability: 50 }], ['win', 'void'])).toBe(99);
+    expect(probabilityWithoutVoided(20, [{ probability: 40 }, { probability: 50 }], ['win', 'void'])).toBe(40);
+    expect(probabilityWithoutVoided(20, [{ probability: 40 }], ['win'])).toBe(20);
+    expect(probabilityWithoutVoided(null, [{ probability: 40 }], ['void'])).toBeNull();
   });
 });

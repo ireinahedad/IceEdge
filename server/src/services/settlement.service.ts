@@ -8,6 +8,9 @@
  *   - any lost leg → the whole slip is a loss (parlay semantics)
  *   - all legs won → the slip is a win
  *   - unsupported markets or unfinished games → the slip stays pending
+ *   - player props on a player who did NOT play (absent from the final
+ *     boxscore, or dressed with no ice time) → the leg is voided and the
+ *     parlay settles on its other legs (see `playerParticipation`)
  *
  * XP is risk-based (see xpForOutcome in slip.service):
  *   win  → more XP the riskier the bet was
@@ -148,6 +151,64 @@ async function getFaceoffWins(
 }
 
 /**
+ * Marchés qui portent sur UN joueur (`subjectId` = id NHL du joueur).
+ *
+ * Tous passent par `playerParticipation` avant leur règle : un joueur absent de
+ * la feuille de match n'a rien fait, et ce « rien » ne doit être lu ni comme un
+ * pari gagné ni comme un pari perdu.
+ */
+const PLAYER_PROP_MARKETS = new Set<string>([
+  'anytime_goal', 'first_goal_scorer', 'last_goal_scorer', 'pp_point', 'pp_goal',
+  'goalie_win', 'goalie_shutout', 'goalie_saves_ou', 'faceoff_wins_ou',
+  'shots_ou', 'assists_ou', 'points_ou', 'blocked_shots_ou', 'hits_ou',
+  'penalty_minutes_ou', 'time_on_ice_ou',
+]);
+
+/**
+ * Le joueur a-t-il joué ce match ?
+ *
+ *   · `played` — il est sur la feuille de match et a du temps de glace (ou une
+ *                statistique, au cas où le temps de glace manquerait) ;
+ *   · `dnp`    — match FINAL, feuille lisible, et il n'y est pas (blessé,
+ *                laissé de côté) ou il y est sans avoir joué (gardien auxiliaire
+ *                resté au banc) ;
+ *   · `null`   — on ne sait pas encore : match pas fini, feuille indisponible.
+ *
+ * POURQUOI. Une jambe sur un joueur qui n'a pas joué ne pouvait être ni
+ * confirmée ni refusée : la feuille ne le contenait pas, `decideLeg` rendait
+ * `unknown`, et le parlay entier restait « en attente » jusqu'au filet des 24 h
+ * (`VOID_AFTER_MS`). Pire, certains marchés lisaient l'absence comme un échec
+ * (« premier buteur » : perdu, mises en jeu : 0 → perdu). La règle des books
+ * est l'annulation : la jambe sort du coupon, qui se règle sur les autres.
+ */
+async function playerParticipation(
+  gameId: string,
+  playerId: string,
+  gameCache: GameCache,
+  boxCache: BoxCache,
+): Promise<'played' | 'dnp' | null> {
+  const game = await getFinalGame(gameId, gameCache);
+  if (!game) return null;
+
+  if (!boxCache.has(gameId)) {
+    let box: Map<string, BoxscorePlayerStats> | null = null;
+    try { box = await fetchGameBoxscore(gameId); } catch { box = null; }
+    boxCache.set(gameId, box);
+  }
+  const box = boxCache.get(gameId);
+  if (!box) return null;
+
+  const st = box.get(String(playerId));
+  if (!st) return 'dnp';
+  // Le temps de glace seul pourrait manquer sur une feuille partielle
+  // (`parseToiMinutes` rend 0) : une statistique non nulle suffit à prouver
+  // que le joueur était sur la glace.
+  const recorded = st.goals + st.assists + st.shots + st.hits + st.blockedShots
+    + st.pim + (st.shotsAgainst ?? 0) + (st.saves ?? 0);
+  return st.toi > 0 || recorded > 0 || !!st.decision ? 'played' : 'dnp';
+}
+
+/**
  * Goals scored per team, per regulation period (index 0 = P1, 1 = P2, 2 = P3).
  * OT/SO goals are excluded — period1/2/3 markets only cover regulation.
  */
@@ -254,6 +315,15 @@ async function decideLeg(
   // écartait ces paris avant même d'atteindre leur règle. Chaque branche vérifie
   // ce dont ELLE a besoin.
   if (!leg?.gameId) return 'unknown';
+
+  // Joueur qui n'a pas joué → jambe annulée, avant toute règle de marché.
+  // `null` (match pas fini, feuille muette) → on attend : décider sans la
+  // feuille pourrait compter perdu le pari d'un joueur absent.
+  if (PLAYER_PROP_MARKETS.has(String(leg.marketType)) && leg.subjectId) {
+    const played = await playerParticipation(String(leg.gameId), String(leg.subjectId), cache, boxCache);
+    if (played == null) return 'unknown';
+    if (played === 'dnp') return 'void';
+  }
 
   if (leg.marketType === 'faceoff_wins_ou') {
     if (!leg.subjectId) return 'unknown';
@@ -1027,6 +1097,33 @@ export function resolveSlipOutcome(results: LegResult[]): 'win' | 'loss' | 'void
 }
 
 /**
+ * Probabilité du coupon une fois les jambes annulées retirées.
+ *
+ * Un parlay gagné dont une jambe a été annulée (joueur qui n'a pas joué, par
+ * exemple) n'est plus le pari d'origine : chez les books, la cote est recalculée
+ * sans cette jambe. Ici c'est la probabilité qui fixe l'XP — la laisser telle
+ * quelle paierait le joueur pour un risque qu'il n'a finalement pas couru.
+ *
+ * La jambe annulée est retirée en divisant par SA probabilité (en %, comme
+ * `combined_probability`). Une jambe sans probabilité lisible est ignorée.
+ */
+export function probabilityWithoutVoided(
+  combined: number | null,
+  legs: any[],
+  results: LegResult[],
+): number | null {
+  if (combined == null || !Number.isFinite(Number(combined))) return combined;
+  let factor = 1;
+  results.forEach((r, i) => {
+    if (r !== 'void') return;
+    const p = Number(legs[i]?.probability);
+    if (Number.isFinite(p) && p > 0 && p <= 100) factor *= p / 100;
+  });
+  if (factor === 1) return Number(combined);
+  return Math.min(99, Number(combined) / factor);
+}
+
+/**
  * Résultats de jambe d'un ticket qui RESTE en attente.
  *
  * POURQUOI. `results` n'était conservé que lorsque le ticket se réglait. Un
@@ -1145,7 +1242,8 @@ export async function settlePendingSlips(userId?: string, opts: SettleOptions = 
         // pour un marché que le serveur ne sait pas régler.
         xp = 0;
       } else if (outcome === 'win') {
-        xp = xpForOutcome('win', slip.combinedProbability);
+        // Jambes annulées retirées du risque — voir `probabilityWithoutVoided`.
+        xp = xpForOutcome('win', probabilityWithoutVoided(slip.combinedProbability, legs, results));
       } else {
         // Loss penalty scales with HOW MANY legs were lost:
         // losing 1 leg out of 4 costs a quarter of the full penalty,

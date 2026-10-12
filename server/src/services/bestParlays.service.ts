@@ -341,8 +341,9 @@ function pickDay(legs: LegInfo[]): string | null {
 export interface BuildOpts {
   /**
    * Accueil (2026-10-11, demande du user) : seulement des jambes COTÉES par le
-   * livre, une par match — chaque combiné affiché a donc une vraie cote. Les
-   * combinés avec des jambes sans cote vivent sur la page « Plus de parlays ».
+   * livre, une par match — chaque combiné affiché a donc une vraie cote.
+   * `getBestParlays` retombe sur les jambes sans cote quand ce filtre ne laisse
+   * aucun combiné (2026-10-12).
    */
   requirePrice?: boolean;
 }
@@ -658,7 +659,17 @@ export async function getBestParlays(date?: string): Promise<BestParlaysResult> 
   const day0 = normalizeDate(date);
   const pool = await getBestBets({ limit: 50, source: 'ml', date: day0 });
   return parlaysCache.wrap(`${day0 ?? ''}|${pool.meta.generatedAt}`, async () => {
-    const { parlays, day } = await buildBestParlays(pool.bets, Date.now(), day0, { requirePrice: true });
+    // Cotes d'abord (règle du 2026-10-11 : chaque combiné de l'accueil a un
+    // vrai prix). Mais le livre ne cote souvent qu'une poignée de marchés, et
+    // rien du tout pour le lendemain : le 2026-10-12, 3 jambes cotées sur 50
+    // (produit 22 %), donc AUCUN combiné, alors que les best picks sans cote en
+    // donnaient plusieurs au-dessus de 25 %. Une section vide à côté d'une liste
+    // de best picks n'a pas de sens : sans combiné coté, on combine les best
+    // picks eux-mêmes — mêmes règles (ML, ≥ 25 %, cohérence), cote affichée
+    // seulement si toutes les jambes en ont une (`comboPrice`).
+    let built = await buildBestParlays(pool.bets, Date.now(), day0, { requirePrice: true });
+    if (built.parlays.length === 0) built = await buildBestParlays(pool.bets, Date.now(), day0);
+    const { parlays, day } = built;
     return {
       parlays,
       meta: { generatedAt: new Date().toISOString(), day, mlAvailable: pool.meta.mlAvailable },

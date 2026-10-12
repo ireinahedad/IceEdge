@@ -17,8 +17,8 @@ vi.mock('./predictionEngine', async () => {
 });
 vi.mock('./bestBets.service', () => ({ getBestBets: vi.fn(), normalizeDate: (d?: string) => d }));
 
-import { buildBestParlays, buildMoreParlays, gateBestParlays, gateMoreParlays, MIN_PARLAY_PCT, MORE_MIN_PCT } from './bestParlays.service';
-import type { BestBet } from './bestBets.service';
+import { buildBestParlays, buildMoreParlays, gateBestParlays, gateMoreParlays, getBestParlays, MIN_PARLAY_PCT, MORE_MIN_PCT } from './bestParlays.service';
+import { getBestBets, type BestBet } from './bestBets.service';
 
 const NOW = Date.parse('2026-10-10T18:00:00Z');
 const LATER = '2026-10-10T23:00:00Z';
@@ -190,6 +190,22 @@ describe('buildBestParlays — accueil : cotes exigées (2026-10-11)', () => {
   it('requirePrice sans aucune cote : rien, plutôt qu\'un combiné sans prix', async () => {
     const { parlays } = await buildBestParlays(SLATE, NOW, undefined, { requirePrice: true });
     expect(parlays).toEqual([]);
+  });
+});
+
+describe('getBestParlays — repli sans cote (2026-10-12)', () => {
+  it('aucune jambe cotée : on combine quand même les best picks', async () => {
+    vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
+    try {
+      vi.mocked(getBestBets).mockResolvedValue({
+        bets: SLATE, meta: { generatedAt: 'fallback-test', source: 'ml', mlAvailable: true, scanned: SLATE.length },
+      } as any);
+      const r = await getBestParlays(DAY);
+      expect(r.parlays.length).toBeGreaterThan(0);
+      for (const p of r.parlays) expect(p.probability).toBeGreaterThanOrEqual(MIN_PARLAY_PCT);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
