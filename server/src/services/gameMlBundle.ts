@@ -32,6 +32,7 @@ import { buildPrematchGameMarkets, buildLiveModelMarkets } from './nhlPrediction
 import { buildGameFeatures, type GameFeatures } from './featureEngineering';
 import { fetchGameById, fetchTeamRoster } from './nhlApiClient';
 import { mlApiClient, type MLPredictionResult } from './mlApiClient';
+import { getGameRefFactor } from './refereeStore';
 
 export interface GameMlBundle {
   gameId:      string;
@@ -156,7 +157,7 @@ async function computeBundle(gameId: string): Promise<GameMlBundle> {
 
   // Une seule construction de features, orientée domicile ; le côté de chaque
   // question voyage dans `subject_is_home` de chaque marché.
-  const [features, homeRoster, awayRoster] = await Promise.all([
+  const [features, homeRoster, awayRoster, refAssignment] = await Promise.all([
     // Date du match : repos, gardien partant et absents se lisent à CETTE date.
     buildGameFeatures(home, away, 'moneyline', undefined,
                       { subjectIsHome: true, gameDate: game?.gameDate || undefined }),
@@ -164,12 +165,17 @@ async function computeBundle(gameId: string): Promise<GameMlBundle> {
     // joueur, qui a son propre état. Un échec ne coûte que les cadences joueur.
     fetchTeamRoster(home).catch(() => [] as any[]),
     fetchTeamRoster(away).catch(() => [] as any[]),
+    // Arbitres du soir (Scouting the Refs, ou saisie manuelle) : le modèle joueur
+    // s'en sert pour les pénalités (`player_ref_report.json`, 2026-10-12).
+    // Non annoncés ou en échec → liste vide → variables arbitre neutres.
+    getGameRefFactor(home, away, game?.gameDate || undefined).catch(() => null),
   ]);
   featuresCache.set(gameId, features);
   const skaters = (r: any[]) => r.filter(p => (p.position ?? 'F') !== 'G').map(p => String(p.id));
   const out = await mlApiClient.predictGameBundle({
     features, markets,
     players: { home: skaters(homeRoster), away: skaters(awayRoster) },
+    referees: refAssignment?.refs ?? [],
   });
 
   const byKey = out.results ?? {};

@@ -21,7 +21,6 @@ import {
 } from './nhlApiClient';
 import { TravelFeatures } from './travel';
 import { getArena } from '../data/arenas';
-import { getGameRefFactor } from './refereeStore';
 import { fetchOddsImplied } from './oddsClient';
 import { getManualFactors } from './injuryStore';
 import {
@@ -587,7 +586,6 @@ function computeGameMarkets(
   lineup: ManualFactor | null = null,      // facteur alignement manuel
   weights?: FactorWeights,                 // poids personnalisés (paramètres user)
   teamExtras = false,                      // marchés propres à la vue équipe
-  refPenaltyMult = 1,                      // volume de PP selon l'arbitrage (totaux)
   live: LiveGameCtx | null = null,         // match en cours : score actuel + temps restant
   model: ModelInputs | null = null,        // en direct : chiffres d'avant-match du MODÈLE ML
 ): MarketGroup[] {
@@ -1463,7 +1461,6 @@ function computeGameMarkets(
     shotMetric: useFenwick ? 'fenwick' : 'shots',
     hPP, aPP, hPK, aPK, hB2b, aB2b,
     venueAlt, hAltGain: hTravel?.alt_gain, aAltGain: aTravel?.alt_gain,
-    refPenaltyMult,
     homeIce: fHomeIce, fatigue: fFatigue,
     mlHome, ot,
     matchFactors: blend.lines.map(l => ({ id: l.id, label: l.label, weight: Math.round(l.weight * 100), value: l.value })),
@@ -1586,7 +1583,7 @@ export async function buildLiveModelMarkets(gameId: string, model: ModelInputs):
  */
 export function computeLiveModelGroups(model: ModelInputs, live: LiveGameCtx): MarketGroup[] {
   return computeGameMarkets({ abbreviation: 'HOM' }, { abbreviation: 'AWY' }, 'HOM', 'AWY',
-    {}, {}, null, null, null, undefined, false, 1, live, model);
+    {}, {}, null, null, null, undefined, false, live, model);
 }
 
 async function computeGameMarketsFor(
@@ -1614,7 +1611,7 @@ async function computeGameMarketsFor(
 
   // Sources enrichies, tolérantes aux pannes (fallback neutre par source).
   const [summaryRes, homeRestRes, awayRestRes, oddsRes,
-         homeTravelRes, awayTravelRes, refFactorRes, manualRes, detailRes] = await Promise.allSettled([
+         homeTravelRes, awayTravelRes, manualRes, detailRes] = await Promise.allSettled([
     fetchTeamSummaryStats(),
     // Repos et voyage mesurés à la DATE DU MATCH, pas à aujourd'hui.
     fetchTeamRestInfo(homeAbbr, game.gameDate || undefined),
@@ -1622,7 +1619,6 @@ async function computeGameMarketsFor(
     fetchOddsImplied(homeName, awayName),
     fetchTeamTravel(homeAbbr, homeAbbr, game.gameDate || undefined),   // les deux jouent dans l'aréna maison
     fetchTeamTravel(awayAbbr, homeAbbr, game.gameDate || undefined),
-    getGameRefFactor(homeAbbr, awayAbbr),  // arbitrage → volume de PP (totaux)
     // Blessures / alignement : lecture en base depuis la migration 034 (le
     // fichier n'existait pas dans le conteneur). Placée ICI et non plus après le
     // bloc : elle est asynchrone maintenant, et l'attendre en série aurait
@@ -1638,7 +1634,6 @@ async function computeGameMarketsFor(
   const odds     = oddsRes.status     === 'fulfilled' ? oddsRes.value     : null;
   const homeTravel = homeTravelRes.status === 'fulfilled' ? homeTravelRes.value : null;
   const awayTravel = awayTravelRes.status === 'fulfilled' ? awayTravelRes.value : null;
-  const refFactor  = refFactorRes.status  === 'fulfilled' ? refFactorRes.value  : null;
 
   // Facteurs manuels (blessures + alignement). `getManualFactors` ne lève pas,
   // mais `allSettled` garde le repli neutre explicite si cela changeait un jour.
@@ -1672,7 +1667,6 @@ async function computeGameMarketsFor(
     manual.lineup,
     weights,
     false,
-    refFactor?.multiplier ?? 1,
     live,
     opts.model ?? null,
   );

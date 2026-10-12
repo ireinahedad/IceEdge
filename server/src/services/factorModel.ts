@@ -124,7 +124,6 @@ export interface GameFactorCtx {
   hB2b: 0 | 1; aB2b: 0 | 1;
   venueAlt?: number; // altitude du terrain (m) — air raréfié → plus de buts
   hAltGain?: number; aAltGain?: number; // dénivelé subi (m) par chaque équipe
-  refPenaltyMult?: number; // volume de PP relatif à l'arbitrage (1.0 neutre)
   homeIce: number;   // 0-1, faveur domicile (déjà calculée)
   fatigue: number;   // 0-1, faveur domicile côté fraîcheur
   mlHome: number;    // prob victoire domicile (finale)
@@ -193,15 +192,14 @@ function totalsFactors(line: number, c: GameFactorCtx, withOt = true): Factor[] 
     const altValue = clamp(0.5 + 0.12 * Math.min(1, (c.venueAlt - 500) / 1100));
     factors.push({ id: 'altitude', label: 'Altitude', weight: 8, value: altValue });
   }
-  // Arbitrage : arbitre siffleur → plus de power-plays → total plus élevé.
-  // Volume PP ligue ≈ 6.2/match, conversion ≈ 20 % → ~1.24 but par 100 % d'écart.
-  if (c.refPenaltyMult != null && Math.abs(c.refPenaltyMult - 1) > 0.01) {
-    const goalsShift = (c.refPenaltyMult - 1) * 1.24;
-    factors.push({
-      id: 'referee', label: 'Arbitrage (PP)', weight: 8,
-      value: over(c.lambdaT + goalsShift),
-    });
-  }
+  // Pas de facteur ARBITRE (retiré le 2026-10-12, STATUS.md §3.5 P5). Il
+  // ajoutait (multiplicateur de PP − 1) × 1.24 but au total. Mesuré sur 21 596
+  // matchs 2008-2026 (`ml/python/measure_lines_refs.py`) : l'effet d'un arbitre
+  // sur les pénalités et le temps en AN est réel et stable (corr. saisons
+  // paires / impaires 0.82), mais NUL sur les buts (−0.01) ; ajouté au total
+  // servi en walk-forward, il le dégradait (déviance z +3.86, pire 10 saisons
+  // sur 12). Plus d'AN ne donne pas plus de buts au total. Ne pas le remettre
+  // sans une nouvelle mesure.
   return factors;
 }
 

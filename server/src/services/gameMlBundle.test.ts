@@ -16,6 +16,9 @@ vi.mock('./mlApiClient', () => ({ mlApiClient: { predictGameBundle: (b: unknown)
 vi.mock('./featureEngineering', () => ({ buildGameFeatures: (...a: unknown[]) => (buildGameFeatures as any)(...a) }));
 /** Statut par match : sans entrée, le match est à venir (pas de recalcul en direct). */
 const STATUS: Record<string, string> = {};
+vi.mock('./refereeStore', () => ({
+  getGameRefFactor: vi.fn(async () => ({ multiplier: 1, refs: ['Wes McCauley', 'Chris Rooney'], source: 'scrape', note: '' })),
+}));
 vi.mock('./nhlApiClient', () => ({
   fetchGameById: vi.fn(async (id: string) => ({
     homeTeam: { abbreviation: 'TOR' }, awayTeam: { abbreviation: 'MTL' },
@@ -92,6 +95,8 @@ describe('getGameMlBundle', () => {
     await getGameMlBundle('2026020333');
     expect(predictGameBundle).toHaveBeenCalledTimes(1);
     expect(predictGameBundle.mock.calls[0][0].players).toEqual({ home: ['11'], away: ['21'] });
+    // Arbitres du soir transmis au modèle joueur (pénalités, 2026-10-12).
+    expect(predictGameBundle.mock.calls[0][0].referees).toEqual(['Wes McCauley', 'Chris Rooney']);
   });
 });
 

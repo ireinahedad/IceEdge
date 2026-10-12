@@ -713,7 +713,14 @@ let timer: NodeJS.Timeout | null = null;
  * l'Est, à laquelle le calendrier NHL est écrit.
  */
 export function startOddsLogger(): void {
-  if (process.env.ODDS_LOG_ENABLED !== 'true') return;
+  if (process.env.ODDS_LOG_ENABLED !== 'true') {
+    // Ligne bruyante, pas un `return` muet (2026-10-12) : le drapeau est resté à
+    // false sur Railway du 4 au 12 oct. 2026 sans que rien ne le signale — huit
+    // jours de clôtures perdus pour toujours (l'historique The Odds API est payant).
+    logger.warn('[OddsLogger] ⚠️ ODDS_LOG_ENABLED≠true — AUCUNE cote collectée pour le ML '
+      + '(odds_log, odds_snapshots). Chaque jour de saison ainsi perdu ne se rattrape pas.');
+    return;
+  }
   if (!process.env.ODDS_API_KEY) {
     logger.warn('[OddsLogger] ODDS_API_KEY absent — logging désactivé.');
     return;
