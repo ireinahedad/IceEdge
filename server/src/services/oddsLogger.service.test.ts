@@ -18,10 +18,14 @@ vi.mock('./oddsClient', () => ({
   fetchCollectorOdds: vi.fn(async () => events.value),
 }));
 
-import { logTodaysOdds } from './oddsLogger.service';
+import { logTodaysOdds, isValidTwoWay } from './oddsLogger.service';
 
-const ev = (home: string, away: string, books: Record<string, [number, number]>) => ({
-  home_team: home, away_team: away, commence_time: '2099-10-15T23:00:00Z',
+/** Passe de 11 h ET le jour des matchs de test (mise au jeu 19 h ET). */
+const GAME_DAY_11H_ET = new Date('2099-10-15T15:00:00Z');
+
+const ev = (home: string, away: string, books: Record<string, [number, number]>,
+            commence = '2099-10-15T23:00:00Z') => ({
+  home_team: home, away_team: away, commence_time: commence,
   bookmakers: Object.entries(books).map(([key, [h, a]]) => ({
     key, markets: [
       { key: 'h2h', outcomes: [{ name: home, price: h }, { name: away, price: a }] },
@@ -34,6 +38,8 @@ const ev = (home: string, away: string, books: Record<string, [number, number]>)
 const callsTo = (needle: string) => query.mock.calls.filter(([sql]) => String(sql).includes(needle));
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(GAME_DAY_11H_ET);
   query.mockReset();
   query.mockResolvedValue({ rows: [], rowCount: 1 });
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => [{ key: 'icehockey_nhl', active: true }] })));
@@ -86,5 +92,57 @@ describe('logTodaysOdds — collecte parallèle', () => {
     expect(callsTo('INSERT INTO odds_log')).toHaveLength(0);
     const [, params] = callsTo('INSERT INTO odds_snapshots')[0];
     expect(params[params.length - 1]).toEqual(['bet99_ca_on']);
+  });
+});
+
+describe('logTodaysOdds — avant-match, jour du match, prix plausibles (2026-10-12)', () => {
+  it('un match déjà commencé ne touche ni odds_log ni odds_snapshots', async () => {
+    // Passe de 21 h 45 ET : TOR–MTL a commencé à 19 h ET, prix « en direct ».
+    vi.setSystemTime(new Date('2099-10-16T01:45:00Z'));
+    events.value = [
+      ev('Toronto Maple Leafs', 'Montreal Canadiens', { draftkings: [1.01, 23.0] }, '2099-10-15T23:00:00Z'),
+      ev('Vancouver Canucks', 'Calgary Flames', { draftkings: [1.8, 2.05] }, '2099-10-16T02:00:00Z'),
+    ];
+    await logTodaysOdds('close');
+    const [, logParams] = callsTo('INSERT INTO odds_log')[0];
+    expect(logParams[1]).toEqual(['VAN']);
+    const [, snapParams] = callsTo('INSERT INTO odds_snapshots')[0];
+    expect(snapParams[1]).toEqual(['VAN']);
+  });
+
+  it("odds_log : seulement les matchs du jour ; les jours suivants vont en snapshot", async () => {
+    events.value = [
+      ev('Toronto Maple Leafs', 'Montreal Canadiens', { draftkings: [1.8, 2.05] }),
+      ev('Boston Bruins', 'New York Rangers', { draftkings: [1.9, 1.95] }, '2099-11-20T00:00:00Z'),
+    ];
+    await logTodaysOdds('full');
+    const [, logParams] = callsTo('INSERT INTO odds_log')[0];
+    expect(logParams[1]).toEqual(['TOR']);
+    const [, snapParams] = callsTo('INSERT INTO odds_snapshots')[0];
+    expect([...snapParams[1]].sort()).toEqual(['BOS', 'TOR']);
+  });
+
+  it('aucun match du jour : rien dans odds_log, la série garde son point', async () => {
+    events.value = [ev('Boston Bruins', 'New York Rangers', { draftkings: [1.9, 1.95] }, '2099-11-20T00:00:00Z')];
+    expect(await logTodaysOdds('full')).toBe(0);
+    expect(callsTo('INSERT INTO odds_log')).toHaveLength(0);
+    expect(callsTo('INSERT INTO odds_snapshots')).toHaveLength(1);
+  });
+
+  it('une paire moneyline impossible (marge 0.87) est jetée, la puck line reste', async () => {
+    events.value = [ev('Toronto Maple Leafs', 'Montreal Canadiens', { draftkings: [2.05, 2.65] })];
+    await logTodaysOdds('full');
+    const [, params] = callsTo('INSERT INTO odds_log')[0];
+    expect(params[3]).toEqual([null]);           // home_ml
+    expect(params[4]).toEqual([null]);           // away_ml
+    expect(params[8]).toEqual([-1.5]);           // puck_line_home conservée
+  });
+
+  it('isValidTwoWay : bornes de marge', () => {
+    expect(isValidTwoWay(1.8, 2.05)).toBe(true);    // 1.043
+    expect(isValidTwoWay(2.05, 2.65)).toBe(false);  // 0.865 — trois issues
+    expect(isValidTwoWay(1.5, 1.5)).toBe(false);    // 1.333 — absurde
+    expect(isValidTwoWay(1.8, null)).toBe(false);
+    expect(isValidTwoWay(1.0, 31)).toBe(false);     // une cote de 1.00 n'est pas un prix
   });
 });

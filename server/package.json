@@ -17,6 +17,7 @@
     "db:encrypt-keys": "ts-node src/db/encrypt-openai-keys.ts",
     "odds:export": "ts-node scripts/export-odds-log.ts",
     "odds:export-snapshots": "ts-node scripts/export-odds-snapshots.ts",
+    "odds:repair": "ts-node scripts/repair-odds-log.ts",
     "content:insights": "ts-node scripts/build-content-insights.ts",
     "content:mine": "ts-node scripts/mine-stories.ts",
     "content:recap": "ts-node scripts/build-recap.ts",

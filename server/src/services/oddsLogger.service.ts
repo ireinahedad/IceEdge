@@ -221,6 +221,27 @@ interface Row {
   bookmaker: string | null;
 }
 
+/**
+ * Marge admissible d'un marché à DEUX issues (moneyline, puck line ±1.5) :
+ * 1/c_dom + 1/c_ext. Un vrai prix à deux issues tombe vers 1.03-1.07.
+ *
+ * Trouvé le 2026-10-12 (STATUS.md §3.5 P) : les observations d'août-septembre
+ * 2026, sans livre archivé, sortaient à 0.79-0.88 — un marché « 60 minutes »
+ * à trois issues dont on ne lisait que deux prix, ou deux livres mélangés.
+ * Dévigé par normalisation, ça donnait une probabilité fausse sans que rien ne
+ * le signale. On jette la paire plutôt que de la stocker.
+ */
+export const TWO_WAY_OVERROUND: readonly [number, number] = [1.0, 1.12];
+
+export function isValidTwoWay(a: number | null | undefined, b: number | null | undefined): boolean {
+  if (a == null || b == null || !(a > 1) || !(b > 1)) return false;
+  const o = 1 / a + 1 / b;
+  return o >= TWO_WAY_OVERROUND[0] && o <= TWO_WAY_OVERROUND[1];
+}
+
+/** Paires jetées par `isValidTwoWay` pendant la passe en cours (pour le log). */
+let rejectedPairs = 0;
+
 /** Convertit un événement en ligne loggable, prix lus chez `books` seulement. */
 function eventToRow(ev: RawOddsEvent, books: string[] = COLLECT_BOOKS): Row | null {
   const home = toAbbr(ev.home_team);
@@ -239,6 +260,11 @@ function eventToRow(ev: RawOddsEvent, books: string[] = COLLECT_BOOKS): Row | nu
     const oa = h2h.outcomes.find((o) => o.name.toLowerCase() === ev.away_team.toLowerCase());
     homeMl = oh?.price ?? null;
     awayMl = oa?.price ?? null;
+    if ((homeMl != null || awayMl != null) && !isValidTwoWay(homeMl, awayMl)) {
+      rejectedPairs += 1;
+      homeMl = null;
+      awayMl = null;
+    }
   }
 
   const totBook = pickBook(ev, 'totals', books);
@@ -261,9 +287,13 @@ function eventToRow(ev: RawOddsEvent, books: string[] = COLLECT_BOOKS): Row | nu
     const oh = spreads.outcomes.find((o) => o.name.toLowerCase() === ev.home_team.toLowerCase());
     const oa = spreads.outcomes.find((o) => o.name.toLowerCase() === ev.away_team.toLowerCase());
     if (typeof oh?.point === 'number' && Math.abs(Math.abs(oh.point) - 1.5) < 1e-9) {
-      puckLineHome = oh.point;
-      plHomePrice  = oh.price ?? null;
-      plAwayPrice  = oa?.price ?? null;
+      if (isValidTwoWay(oh.price, oa?.price)) {
+        puckLineHome = oh.point;
+        plHomePrice  = oh.price ?? null;
+        plAwayPrice  = oa?.price ?? null;
+      } else {
+        rejectedPairs += 1;
+      }
     }
   }
 
@@ -325,13 +355,24 @@ export async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
     return 0;
   }
 
-  const events = await fetchCollectorOdds(PASS_MARKETS[kind]);
-  if (!events.length) return 0;
+  const fetched = await fetchCollectorOdds(PASS_MARKETS[kind]);
+  if (!fetched.length) return 0;
 
   // Un seul horodatage pour toute la passe, calculé ici et non par `NOW()`
   // ligne à ligne : c'est ce qui rend « l'état du marché à 18 h 45 »
   // regroupable, au lieu d'horodatages qui diffèrent de quelques millisecondes.
   const observedAt = new Date();
+
+  // AVANT-MATCH SEULEMENT (2026-10-12). `/odds` renvoie aussi les matchs EN
+  // COURS : les passes de 21 h 45 et 22 h 45 ET tombent en plein match de 19 h,
+  // et leurs prix écrasaient la clôture — 1.00 / 31.00 pour NYI–NJD le
+  // 2026-10-03, observé deux heures après la mise au jeu. Une clôture
+  // en direct contient le score : c'est une fuite pour tout backtest et tout CLV.
+  // Les snapshots n'en gardent pas non plus : rien ne s'en sert, et un lecteur
+  // distrait les prendrait pour des prix d'avant-match.
+  const events = fetched.filter((ev) => Date.parse(ev.commence_time) > observedAt.getTime());
+  const inPlay = fetched.length - events.length;
+  rejectedPairs = 0;
 
   const rows: Row[] = [];
   const shadowRows: Row[] = [];
@@ -356,10 +397,24 @@ export async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
     seen.add(key);
     rows.push(r);
   }
-  if (!rows.length) {
-    // Le livre de collecte ne cote rien ce cycle : rien pour `odds_log`, mais
-    // les livres parallèles gardent leur point de série.
-    if (shadowRows.length) await insertSnapshots(shadowRows, observedAt, kind);
+  if (inPlay || rejectedPairs) {
+    logger.info({ kind, inPlay, rejectedPairs },
+      '[OddsLogger] matchs en cours ignorés / paires de prix impossibles jetées');
+  }
+
+  // `odds_log` : LE JOUR DU MATCH SEULEMENT (2026-10-12). L'ouverture était la
+  // toute première observation, parfois cinq semaines avant le match (et chez
+  // un livre inconnu avant la migration 038) ; et un match qu'aucune passe du
+  // jour n'avait vu gardait comme « clôture » ce prix d'août. L'ouverture utile
+  // est la passe de 11 h ET du jour (cf. `SLOTS`). La série complète, elle,
+  // reste dans `odds_snapshots`.
+  const today = easternDate(observedAt.toISOString());
+  const logRows = rows.filter((r) => r.date === today);
+
+  if (!logRows.length) {
+    // Le livre de collecte ne cote rien aujourd'hui : rien pour `odds_log`,
+    // mais la série (autres jours, livres parallèles) garde son point.
+    if (rows.length || shadowRows.length) await insertSnapshots([...rows, ...shadowRows], observedAt, kind);
     return 0;
   }
 
@@ -416,7 +471,7 @@ export async function logTodaysOdds(kind: PassKind = 'full'): Promise<number> {
        pl_home_price     = COALESCE(EXCLUDED.pl_home_price,     odds_log.pl_home_price),
        pl_away_price     = COALESCE(EXCLUDED.pl_away_price,     odds_log.pl_away_price),
        updated_at        = NOW()`,
-    [...keyColumns(rows), ...priceColumns(rows)],
+    [...keyColumns(logRows), ...priceColumns(logRows)],
   );
 
   await insertSnapshots([...rows, ...shadowRows], observedAt, kind);
