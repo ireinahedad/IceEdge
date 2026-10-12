@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { useI18n } from "../i18n";
-import { features } from "../platform";
+import { features, isIOS } from "../platform";
 import { IceedgeLogo } from "../components/brand/IceedgeLogo";
 import { AppButton } from "../components/AppButton";
 import {
@@ -11,6 +11,10 @@ import {
 } from "../services/subscriptionService";
 
 import { Check } from "lucide-react";
+
+// APPLE_PLAN Phase 5 — l'achat iOS (StoreKit). `isIOS` est une constante de
+// build : sur le web, ni le composant ni le plugin Capacitor ne sont empaquetés.
+const AppleProSection = isIOS ? lazy(() => import("../components/AppleProSection")) : null;
 const ACCENT        = "#86d1ea";
 const ACCENT_BG     = "rgba(134,209,234,0.12)";
 const ACCENT_BORDER = "rgba(134,209,234,0.3)";
@@ -201,7 +205,7 @@ export function ProPage() {
   const isYearly = yearlyAvailable && period === "yearly";
   const isPro = sub?.isPro ?? false;
   const isTrial = sub?.status === "trialing";
-  const trialAvailable = !!user && !sub?.trialUsed;
+  const trialAvailable = features.serverTrial && !!user && !sub?.trialUsed;
 
   return (
     <div className="flex flex-col min-h-screen text-white max-w-[430px] mx-auto px-5 pt-14 pb-12"
@@ -252,6 +256,37 @@ export function ProPage() {
         </div>
       )}
 
+      {AppleProSection ? (
+        <Suspense fallback={null}>
+          <AppleProSection sub={sub} onStatus={setSub}>
+            {/* Pro-exclusive benefits */}
+            <div className="rounded-2xl overflow-hidden mb-6" style={{ border: `1px solid ${BORDER}` }}>
+              <div className="px-4 py-3 text-[11px] uppercase tracking-wider"
+                style={{ background: SURFACE, color: ACCENT }}>
+                {t("pro.included")}
+              </div>
+              {benefits.map((b, i) => (
+                <div key={i} className="flex items-start gap-3 px-4 py-3"
+                  style={{ borderTop: `1px solid ${BORDER}` }}>
+                  <Check size={15} strokeWidth={3} className="mt-0.5 shrink-0" style={{ color: ACCENT }} />
+                  <div>
+                    <div className="text-sm font-semibold" style={{ color: "#F3F7F0" }}>{b.title}</div>
+                    <div className="text-xs mt-0.5" style={{ color: MUTED }}>{b.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </AppleProSection>
+          {/* Pro payé sur le web (Stripe) : résilier depuis l'iPhone reste
+              possible — résilier n'est pas un achat. */}
+          {isPro && sub?.source === "stripe" && !sub?.cancelAtPeriodEnd && (
+            <AppButton variant="ghost" onClick={handleCancel} disabled={loading} loading={loading} fullWidth>
+              {t("pro.cancel")}
+            </AppButton>
+          )}
+        </Suspense>
+      ) : (
+        <>
       {/* Price card — a price shown without a way to buy is worse than no
           price, so it travels with the checkout flag (APPLE_PLAN §7). */}
       {!isPro && features.stripeCheckout && (
@@ -336,9 +371,16 @@ export function ProPage() {
       {/* CTA */}
       {isPro ? (
         !sub?.cancelAtPeriodEnd && (
-          <AppButton variant="ghost" onClick={handleCancel} disabled={loading} loading={loading} fullWidth>
-            {t("pro.cancel")}
-          </AppButton>
+          // Acheté sur iPhone : seul Apple peut l'annuler. Le serveur refuserait
+          // (409 APPLE_MANAGED) ; mieux vaut dire où aller que d'afficher un
+          // bouton qui échoue.
+          sub?.source === "apple" ? (
+            <p className="text-xs text-center" style={{ color: MUTED }}>{t("pro.apple.managedOnIphone")}</p>
+          ) : (
+            <AppButton variant="ghost" onClick={handleCancel} disabled={loading} loading={loading} fullWidth>
+              {t("pro.cancel")}
+            </AppButton>
+          )
         )
       ) : trialAvailable ? (
         <div className="flex flex-col gap-2">
@@ -359,7 +401,7 @@ export function ProPage() {
       ) : null}
 
       {/* Promo code — activate Pro without payment */}
-      {!isPro && (
+      {!isPro && features.promoCodes && (
         <div className="mt-6">
           <div className="text-[11px] uppercase tracking-wider mb-2" style={{ color: MUTED }}>
             {t("pro.promo.label")}
@@ -389,6 +431,9 @@ export function ProPage() {
             <div className="text-red-400 text-xs mt-2">{promoError}</div>
           )}
         </div>
+      )}
+
+        </>
       )}
 
       {/* La ligne « Mode démo : le paiement Stripe n'est pas encore branché »

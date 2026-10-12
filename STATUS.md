@@ -128,8 +128,61 @@ ensuite                 A2 et A3 (CLV puck line) dès que les données existent,
 
 après la saison 2026-27 S4 — γ, puis ⑤ (classifieur en repli, puis supprimé).
                         A4 (fenêtre gardien) avec une saison de snapshots.
+
+en parallèle (hors prod) P — découverte de patterns : P1 posée, P2 à relire, puis
+                        P3 suivi hebdo des candidats pendant 2026-27.
 ```
 
+
+#### P. Découverte automatique de patterns (ouvert le 2026-10-12)
+
+**But.** Trouver des tendances qu'on n'a pas programmées (« Caufield marque-t-il plus le
+samedi ? », « CAR perd-il contre certaines équipes ? », repos, voyage, gardien adverse,
+combinaisons de facteurs…) **et** trier ce qui est réel, ce que le modèle sait déjà et le bruit.
+Rien ici ne touche la production : un pattern n'entre dans les prédictions qu'en devenant une
+variable candidate d'un protocole d'adoption existant (P4).
+
+**La question posée à chaque condition** n'est pas « le taux diffère-t-il de la moyenne ? »
+(presque tout diffère : force, domicile) mais « les résultats s'écartent-ils de ce que la
+chaîne SERVIE annonçait avant le match ? ». Méthode fixée avant les runs : découverte ≤ 2019-20,
+validation 2020-21 → 2025-26 ; z résiduel ; Benjamini-Hochberg q = 0.10 par famille ;
+réplication = même signe et |z| ≥ 1.645 en validation ; **persistance** = corrélation des z
+découverte / validation sur toute la famille ; un contrôle positif par expérience ; écart à la
+cote de clôture quand elle existe.
+
+- [ ] **P1. Base de référence = chaîne servie, sans fuite — à relancer après chaque
+      réentraînement mensuel.** ✔ Posée le 2026-10-12 :
+      `python live_pregame.py --served` → `ml/data/served_pregame.csv` (16 765 matchs, 2012-13 →
+      2026-27) : modèle de score du fold (`_served_fold`) → correction C ajustée sur les saisons
+      passées (dès 2015-16) → λ recalés → niveau k gelé le lundi (n0 de `level_report.json`).
+      Contrôle : servi − brut, log-loss **−0.00221 (z −3.25)**, déviance du total
+      **−0.00332 (z −3.31)** — reproduit `correction_report` (−0.0021, z −3.2) et
+      `level_report` (−0.00319, z −3.19).
+- [ ] **P2. `discover_patterns.py`** (posé le 2026-10-12, à relire). Lancé une fois sur la base
+      servie → `ml/models/patterns_report.json` + `ml/data/patterns_conditions.csv`. À faire :
+      relire le code, relancer chez toi, décider des familles à ajouter (P5).
+- [ ] **P3. Registre `ml/models/pattern_registry.json` + suivi en avant.** 3 candidats inscrits le
+      2026-10-12 (règle fixée avant de voir les matchs futurs) :
+      `lone_b2b_vs_market` (suivi auto, verdict à n ≥ 300 matchs, z ≤ −2),
+      `shooter_goalie_pairs` et `caufield_saturday` (témoin, attendu = bruit), à refaire à la main
+      en fin de saison. Brancher `discover_patterns.py --candidates` dans `refresh_data.py`
+      (hebdo, ne change aucune prédiction) — **pas encore fait**.
+- [ ] **P4. Intégration — seulement par les protocoles existants.** Victoire → variable candidate
+      de `backtest_walkforward.py --correction` ; totaux → `measure_level.py` / features du score ;
+      props → `train_player.py` avec la règle de `vs_lift` (validation ET test, z ≥ 2). Effet
+      propre à une équipe ou un joueur : rétréci par la variance mesurée entre périodes.
+- [ ] **P5. Nouvelles données qui ouvriraient des familles aujourd'hui intestables** :
+      historique des cotes de props joueur (sans lui, aucun pattern joueur ne se juge contre le
+      marché) ; trios / temps de glace partagé (MoneyPuck `lines`) pour les combinaisons de
+      joueurs ; entraîneurs ; arbitres (pénalités, AN) ; blessures datées ; heure de confirmation
+      du gardien partant.
+- [ ] **P6. Produit.** L'Analyse IA et les contenus peuvent citer un fait descriptif (« Caufield :
+      0.61 but/match le samedi depuis 2021 ») **avec** l'étiquette « historique, non prédictif », n et
+      l'intervalle — jamais comme raison d'un pick tant qu'il n'est pas adopté en P4.
+
+**Attention, fuite à ne pas réintroduire.** `goalie_backup` et `lineup_xg` du dataset sont
+construits avec le gardien et l'alignement RÉELS. Un pattern conditionné au gardien doit être
+jugé avec l'information connue au moment du pari (lien avec A4).
 
 #### A1. Backfill payant The Odds API — 2 saisons restantes
 
@@ -669,6 +722,11 @@ du temps perdu ; les ignorer serait pire.
 | Le niveau de buts dérive-t-il dans la saison ? | **Oui — recalage ADOPTÉ (2026-10-04).** Le modèle surestimait les buts de ~4 % depuis 2022 (observés/λ = 0.955-0.969). Un k par saison, rétréci vers 1 (n0 = 200 matchs) : déviance du total **−0.0032** (z −3.2, 8 saisons sur 11) ; P(> 5.5) 2023-26 : 58.4 % → 55.8 % pour 56.0 % observé. Ne touche que le total, pas la victoire. | `measure_level.py`, `level_report.json`. k recalculé chaque lundi par `refresh_data.py` → `level_layer.json`. |
 | Faut-il mélanger la cote du marché dans la prédiction ? | **Non — décision du 2026-10-07.** Mesuré : score seul 0.67093, mélange score ⊕ marché 0.67077, marché seul **0.67047** (2 628 matchs de test). Le mélange ne bat pas le marché, et il rétrécirait par construction l'écart modèle − marché que mesurent les best bets, la règle A2 et le CLV. | `score_report.json` → `blend`. Ancien mélange du classifieur sur 2025-26 : 0.6843 contre 0.6822 pour le marché. |
 | Le CLV des TOTAUX vaut-il quelque chose ? | **Non, et c'est un artefact.** Son CLV net est **inférieur à son propre placebo** à tous les seuils (+0.0020 contre +0.0030) : entièrement de la régression vers la moyenne. La clôture les valorise à −3.2 % constant. | Même run. Le placebo est ce qui l'a révélé. |
+| Existe-t-il des patterns « calendrier / situation / équipe » que la chaîne servie ignore ? | **Non.** 3 517 conditions (facteur seul, paires, équipe × facteur, équipe × adversaire) contre la chaîne servie : 0 significative après BH, 0 répliquée ; persistance des z ≈ 0 (0.07 / 0.03 / 0.02 / −0.04). Contre le modèle BRUT, les 33 « découvertes » répliquées étaient toutes l'écart ELO et le b2b — ce que corrige déjà la couche C (contrôle positif). | `discover_patterns.py --games`, découverte 2015-19, validation 2020-25 (2026-10-12). |
+| Les COMBINAISONS de facteurs (jour × repos × voyage × gardien × forme × équipe…) apprennent-elles le résidu ? | **Non.** XGBoost sur le résidu de la chaîne servie : l'arrêt précoce garde 1 arbre, Δ log-loss +0.00000 (z 0.03), idem avec l'identité des équipes. | `--combos`, 7 423 matchs de validation. |
+| « CAR perd contre certaines équipes » — équipe × adversaire ? | **Bruit.** Ex. CAR–NYR 6-26 sur 2012-19, puis 12-7 sur 2020-25. Persistance de la famille −0.04 (336 paires). Les effectifs changent ; le bon niveau est l'alignement + le gardien, pas le logo. | Pilote 2026-10-12. |
+| Effets joueur × jour / adversaire / aréna / mois ? | **Bruit.** Persistance 0.03 / 0.02 / 0.05 (aréna hors domicile) / 0.01 ; les 50 cellules les plus fortes passent de ×1.54 à ×1.006 (jour). Contrôle positif : la finition (buts − xG) persiste à 0.58. Caufield samedi : 63 buts en 103 matchs vs 0.40/match les autres jours (p 0.01), mais 6 060 tests, 0 BH ; valeur prédictive estimée **+0 %, au plus +5 %**. | `--players`, A ≤ 2019 < B. |
+| Tireur × gardien précis ? | **Faible, non tranché.** Paires ≥ 2 buts attendus par période (325) : persistance 0.15, top-50 ×1.82 → ×1.20 ; ≥ 1 : 0.05. Biais d'aréna non exclu. Candidat au registre. | `--shooter-goalie`, 1,15 M tirs 2015-25. |
 
 > **Sur 2022-23, à savoir avant d'interpréter A2.** Cette saison ne compte que
 > 342 matchs dans `odds.csv`, et ce n'est pas un trou de couverture de la puck
@@ -714,6 +772,9 @@ backtest_walkforward.py walk-forward, marchés dérivés, CLV, dissection,
                        --market-gap / --correction (couche de correction)
 backtest.py            ancien backtest, conservé
 live_pregame.py        λ et P avant-match rejoués sur l'historique → live_pregame.csv
+                       --served : chaîne servie (correction + niveau) → served_pregame.csv
+discover_patterns.py   découverte de patterns vs chaîne servie, BH, réplication,
+                       persistance, registre des candidats → patterns_report.json
 calibrate_live.py      calibration du modèle en direct
 fetch_live_goals.py    buts horodatés pour le direct
 content_insights*.py   insights éditoriaux (SEO / contenu), hors prédiction

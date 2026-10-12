@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { apiGetSubscription, SubscriptionStatus } from '../services/subscriptionService';
+import { isIOS } from '../platform';
 
 interface SubscriptionContextValue {
   isPro:   boolean;
@@ -33,6 +34,23 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
   // Re-check whenever the signed-in user changes.
   useEffect(() => { refresh(); }, [refresh]);
+
+  // APPLE_PLAN Phase 5 — iOS : renvoyer au serveur les achats restés en
+  // suspens (app tuée pendant l'achat, « Demander à acheter » approuvé), et
+  // écouter ceux qui arrivent pendant que l'app tourne (renouvellements).
+  // `isIOS` est une constante de build : ce bloc et l'import disparaissent du
+  // bundle web.
+  useEffect(() => {
+    if (!isIOS || !userId) return;
+    let stop: (() => void) | null = null;
+    let cancelled = false;
+    void import('../services/appleIap').then((m) => {
+      if (cancelled) return;
+      stop = m.listenForAppleTransactions(() => { void refresh(); });
+      void m.syncAppleTransactions().then((changed) => { if (changed && !cancelled) void refresh(); });
+    });
+    return () => { cancelled = true; stop?.(); };
+  }, [userId, refresh]);
 
   // Valeur mémoïsée : un objet neuf à chaque rendu du provider re-rendait tous
   // les consommateurs (dont l'accueil) sans que rien n'ait changé.

@@ -1,0 +1,655 @@
+{
+ "generated": "2026-10-12T06:08Z",
+ "rules": {
+  "fdr_q": 0.1,
+  "z_replicate": 1.645,
+  "min_n": {
+   "paire": 300,
+   "equipe_x_facteur": 80,
+   "equipe_x_adversaire": 15
+  }
+ },
+ "base": {
+  "base": "chaîne servie walk-forward (served_pregame.csv)",
+  "decouverte": [
+   2015,
+   2019
+  ],
+  "validation": [
+   2020,
+   2025
+  ],
+  "matchs_decouverte": 6079,
+  "matchs_validation": 7423
+ },
+ "games": {
+  "familles": {
+   "1_facteur": {
+    "conditions": 79,
+    "brut": {
+     "question": "contre le reste de la ligue",
+     "p<0.05_sans_correction": 55,
+     "attendu_par_hasard": 4.0,
+     "significatives_BH": 58,
+     "dont_repliquees": 49,
+     "persistance_corr_z": 0.892
+    },
+    "res": {
+     "question": "contre la prédiction d'avant-match",
+     "p<0.05_sans_correction": 8,
+     "attendu_par_hasard": 4.0,
+     "significatives_BH": 0,
+     "dont_repliquees": 0,
+     "persistance_corr_z": 0.067
+    },
+    "buts": {
+     "question": "total réglementaire contre l'attendu",
+     "p<0.05_sans_correction": 9,
+     "attendu_par_hasard": 4.0,
+     "significatives_BH": 4,
+     "dont_repliquees": 0,
+     "persistance_corr_z": 0.325
+    },
+    "verdicts": {
+     "DÉJÀ DANS LE MODÈLE": 49,
+     "BRUIT": 21,
+     "DESCRIPTIF": 9
+    }
+   },
+   "2_paire": {
+    "conditions": 2010,
+    "brut": {
+     "question": "contre le reste de la ligue",
+     "p<0.05_sans_correction": 1103,
+     "attendu_par_hasard": 100.5,
+     "significatives_BH": 1115,
+     "dont_repliquees": 863,
+     "persistance_corr_z": 0.852
+    },
+    "res": {
+     "question": "contre la prédiction d'avant-match",
+     "p<0.05_sans_correction": 145,
+     "attendu_par_hasard": 100.5,
+     "significatives_BH": 0,
+     "dont_repliquees": 0,
+     "persistance_corr_z": 0.034
+    },
+    "buts": {
+     "question": "total réglementaire contre l'attendu",
+     "p<0.05_sans_correction": 219,
+     "attendu_par_hasard": 100.5,
+     "significatives_BH": 0,
+     "dont_repliquees": 0,
+     "persistance_corr_z": 0.247
+    },
+    "verdicts": {
+     "BRUIT": 895,
+     "DÉJÀ DANS LE MODÈLE": 863,
+     "DESCRIPTIF": 252
+    }
+   },
+   "3_equipe_x_facteur": {
+    "conditions": 1092,
+    "brut": {
+     "question": "contre le reste de la ligue",
+     "p<0.05_sans_correction": 297,
+     "attendu_par_hasard": 54.6,
+     "significatives_BH": 235,
+     "dont_repliquees": 113,
+     "persistance_corr_z": 0.291
+    },
+    "res": {
+     "question": "contre la prédiction d'avant-match",
+     "p<0.05_sans_correction": 42,
+     "attendu_par_hasard": 54.6,
+     "significatives_BH": 0,
+     "dont_repliquees": 0,
+     "persistance_corr_z": 0.021
+    },
+    "buts": {
+     "question": "total réglementaire contre l'attendu",
+     "p<0.05_sans_correction": 93,
+     "attendu_par_hasard": 54.6,
+     "significatives_BH": 0,
+     "dont_repliquees": 0,
+     "persistance_corr_z": 0.022
+    },
+    "verdicts": {
+     "BRUIT": 857,
+     "DESCRIPTIF": 122,
+     "DÉJÀ DANS LE MODÈLE": 113
+    }
+   },
+   "4_equipe_x_adversaire": {
+    "conditions": 336,
+    "brut": {
+     "question": "contre le reste de la ligue",
+     "p<0.05_sans_correction": 18,
+     "attendu_par_hasard": 16.8,
+     "significatives_BH": 0,
+     "dont_repliquees": 0,
+     "persistance_corr_z": 0.029
+    },
+    "res": {
+     "question": "contre la prédiction d'avant-match",
+     "p<0.05_sans_correction": 8,
+     "attendu_par_hasard": 16.8,
+     "significatives_BH": 0,
+     "dont_repliquees": 0,
+     "persistance_corr_z": -0.043
+    },
+    "buts": {
+     "question": "total réglementaire contre l'attendu",
+     "p<0.05_sans_correction": 16,
+     "attendu_par_hasard": 16.8,
+     "significatives_BH": 0,
+     "dont_repliquees": 0,
+     "persistance_corr_z": -0.049
+    },
+    "verdicts": {
+     "BRUIT": 336
+    }
+   }
+  },
+  "candidats": []
+ },
+ "combos": {
+  "protocole": "entraînement 2015-2017, arrêt précoce [2018, 2019], validation 2020-2025",
+  "n_validation": 7423,
+  "n_validation_cotes": 5138,
+  "base": {
+   "log_loss": 0.65737
+  },
+  "marche_cloture_log_loss": 0.66025,
+  "base_vs_marche": {
+   "n": 5138,
+   "delta": -0.000661,
+   "se": 0.001148,
+   "z": -0.58
+  },
+  "combinaisons": {
+   "arbres_retenus": 1,
+   "log_loss": 0.65737,
+   "vs_base": {
+    "n": 7423,
+    "delta": 1e-06,
+    "se": 2.1e-05,
+    "z": 0.03
+   }
+  },
+  "combinaisons+identite_equipes": {
+   "arbres_retenus": 1,
+   "log_loss": 0.65738,
+   "vs_base": {
+    "n": 7423,
+    "delta": 7e-06,
+    "se": 2e-05,
+    "z": 0.35
+   }
+  },
+  "lecture": "Si l'arrêt précoce garde 1 arbre et que vs_base est nul, les combinaisons de ces facteurs n'apportent rien que la base ne sache déjà."
+ },
+ "candidates": {
+  "lone_b2b_vs_market": {
+   "avant_inscription": {
+    "n": 2778,
+    "victoires": 0.4161,
+    "marche": 0.4438,
+    "z_vs_marche": -3.0,
+    "roi_contre_pct": 1.88,
+    "roi_se_pct": 1.72
+   },
+   "depuis_inscription": {
+    "n": 0
+   },
+   "verdict": "EN COURS (0/300 matchs)"
+  },
+  "shooter_goalie_pairs": {
+   "note": "pas de suivi automatique pour ce candidat"
+  },
+  "caufield_saturday": {
+   "note": "pas de suivi automatique pour ce candidat"
+  }
+ },
+ "players": {
+  "protocole": "A = saisons ≤ 2019, B = après ; attendu = EWMA décalée du joueur (buts + xG) ; cellules avec ≥ 3 buts attendus par période",
+  "joueurs_matchs": 666583,
+  "jour": {
+   "cellules_A": 4860,
+   "p<0.05_A": 188,
+   "attendu_par_hasard": 243.0,
+   "significatives_BH_A": 0,
+   "cellules_2_periodes": 1968,
+   "persistance_corr_z": 0.031,
+   "top50_A_buts_sur_attendu": {
+    "A": 1.54,
+    "B": 1.006
+   }
+  },
+  "adversaire": {
+   "cellules_A": 6417,
+   "p<0.05_A": 300,
+   "attendu_par_hasard": 320.9,
+   "significatives_BH_A": 8,
+   "cellules_2_periodes": 1687,
+   "persistance_corr_z": 0.02,
+   "top50_A_buts_sur_attendu": {
+    "A": 2.113,
+    "B": 1.042
+   }
+  },
+  "arena_hors_domicile": {
+   "cellules_A": 1777,
+   "p<0.05_A": 75,
+   "attendu_par_hasard": 88.9,
+   "significatives_BH_A": 2,
+   "cellules_2_periodes": 204,
+   "persistance_corr_z": 0.051,
+   "top50_A_buts_sur_attendu": {
+    "A": 1.493,
+    "B": 1.005
+   }
+  },
+  "mois": {
+   "cellules_A": 4948,
+   "p<0.05_A": 218,
+   "attendu_par_hasard": 247.4,
+   "significatives_BH_A": 2,
+   "cellules_2_periodes": 1985,
+   "persistance_corr_z": 0.009,
+   "top50_A_buts_sur_attendu": {
+    "A": 1.697,
+    "B": 1.029
+   }
+  },
+  "controle_positif_finition": {
+   "joueurs": 360,
+   "persistance_corr_z": 0.579
+  },
+  "effet_jour_propre_au_joueur": {
+   "cellules": 1393,
+   "variance_vraie_estimee": 0.0,
+   "borne_haute_IC95": 0.00394
+  },
+  "joueurs_suivis": {
+   "8481540": {
+    "nom": "Cole Caufield",
+    "par_jour": [
+     {
+      "jour": "lun",
+      "matchs": 28,
+      "buts": 9,
+      "buts_par_match": 0.321,
+      "autres_jours_buts_par_match": 0.472,
+      "p_vs_autres_jours": 0.3105,
+      "lift_observe": -0.315,
+      "lift_predictif_estime": -0.0,
+      "lift_predictif_max": -0.012
+     },
+     {
+      "jour": "mar",
+      "matchs": 74,
+      "buts": 27,
+      "buts_par_match": 0.365,
+      "autres_jours_buts_par_match": 0.484,
+      "p_vs_autres_jours": 0.2112,
+      "lift_observe": -0.272,
+      "lift_predictif_estime": -0.0,
+      "lift_predictif_max": -0.022
+     },
+     {
+      "jour": "mer",
+      "matchs": 31,
+      "buts": 10,
+      "buts_par_match": 0.323,
+      "autres_jours_buts_par_match": 0.473,
+      "p_vs_autres_jours": 0.2698,
+      "lift_observe": -0.29,
+      "lift_predictif_estime": -0.0,
+      "lift_predictif_max": -0.011
+     },
+     {
+      "jour": "jeu",
+      "matchs": 82,
+      "buts": 38,
+      "buts_par_match": 0.463,
+      "autres_jours_buts_par_match": 0.459,
+      "p_vs_autres_jours": 0.9265,
+      "lift_observe": 0.04,
+      "lift_predictif_estime": 0.0,
+      "lift_predictif_max": 0.003
+     },
+     {
+      "jour": "ven",
+      "matchs": 15,
+      "buts": 9,
+      "buts_par_match": 0.6,
+      "autres_jours_buts_par_match": 0.454,
+      "p_vs_autres_jours": 0.4315,
+      "lift_observe": 0.32,
+      "lift_predictif_estime": 0.0,
+      "lift_predictif_max": 0.007
+     },
+     {
+      "jour": "sam",
+      "matchs": 103,
+      "buts": 63,
+      "buts_par_match": 0.612,
+      "autres_jours_buts_par_match": 0.4,
+      "p_vs_autres_jours": 0.0098,
+      "lift_observe": 0.515,
+      "lift_predictif_estime": 0.0,
+      "lift_predictif_max": 0.051
+     },
+     {
+      "jour": "dim",
+      "matchs": 30,
+      "buts": 11,
+      "buts_par_match": 0.367,
+      "autres_jours_buts_par_match": 0.468,
+      "p_vs_autres_jours": 0.5724,
+      "lift_observe": -0.229,
+      "lift_predictif_estime": -0.0,
+      "lift_predictif_max": -0.009
+     }
+    ],
+    "par_saison": [
+     {
+      "season": 2021,
+      "jour": "dim",
+      "matchs": 6,
+      "buts": 1.0,
+      "attendus": 1.6
+     },
+     {
+      "season": 2021,
+      "jour": "jeu",
+      "matchs": 17,
+      "buts": 6.0,
+      "attendus": 4.2
+     },
+     {
+      "season": 2021,
+      "jour": "lun",
+      "matchs": 5,
+      "buts": 1.0,
+      "attendus": 1.3
+     },
+     {
+      "season": 2021,
+      "jour": "mar",
+      "matchs": 11,
+      "buts": 3.0,
+      "attendus": 2.8
+     },
+     {
+      "season": 2021,
+      "jour": "mer",
+      "matchs": 7,
+      "buts": 2.0,
+      "attendus": 1.9
+     },
+     {
+      "season": 2021,
+      "jour": "sam",
+      "matchs": 18,
+      "buts": 7.0,
+      "attendus": 4.7
+     },
+     {
+      "season": 2021,
+      "jour": "ven",
+      "matchs": 3,
+      "buts": 3.0,
+      "attendus": 0.9
+     },
+     {
+      "season": 2022,
+      "jour": "dim",
+      "matchs": 1,
+      "buts": 1.0,
+      "attendus": 0.4
+     },
+     {
+      "season": 2022,
+      "jour": "jeu",
+      "matchs": 10,
+      "buts": 6.0,
+      "attendus": 3.9
+     },
+     {
+      "season": 2022,
+      "jour": "lun",
+      "matchs": 5,
+      "buts": 3.0,
+      "attendus": 1.9
+     },
+     {
+      "season": 2022,
+      "jour": "mar",
+      "matchs": 9,
+      "buts": 4.0,
+      "attendus": 3.6
+     },
+     {
+      "season": 2022,
+      "jour": "mer",
+      "matchs": 6,
+      "buts": 2.0,
+      "attendus": 2.3
+     },
+     {
+      "season": 2022,
+      "jour": "sam",
+      "matchs": 12,
+      "buts": 10.0,
+      "attendus": 4.7
+     },
+     {
+      "season": 2022,
+      "jour": "ven",
+      "matchs": 3,
+      "buts": 0.0,
+      "attendus": 1.2
+     },
+     {
+      "season": 2023,
+      "jour": "dim",
+      "matchs": 6,
+      "buts": 2.0,
+      "attendus": 2.1
+     },
+     {
+      "season": 2023,
+      "jour": "jeu",
+      "matchs": 21,
+      "buts": 8.0,
+      "attendus": 7.4
+     },
+     {
+      "season": 2023,
+      "jour": "lun",
+      "matchs": 6,
+      "buts": 1.0,
+      "attendus": 2.2
+     },
+     {
+      "season": 2023,
+      "jour": "mar",
+      "matchs": 16,
+      "buts": 3.0,
+      "attendus": 5.8
+     },
+     {
+      "season": 2023,
+      "jour": "mer",
+      "matchs": 7,
+      "buts": 3.0,
+      "attendus": 2.5
+     },
+     {
+      "season": 2023,
+      "jour": "sam",
+      "matchs": 24,
+      "buts": 10.0,
+      "attendus": 8.7
+     },
+     {
+      "season": 2023,
+      "jour": "ven",
+      "matchs": 2,
+      "buts": 1.0,
+      "attendus": 0.7
+     },
+     {
+      "season": 2024,
+      "jour": "dim",
+      "matchs": 8,
+      "buts": 4.0,
+      "attendus": 3.2
+     },
+     {
+      "season": 2024,
+      "jour": "jeu",
+      "matchs": 15,
+      "buts": 6.0,
+      "attendus": 6.1
+     },
+     {
+      "season": 2024,
+      "jour": "lun",
+      "matchs": 8,
+      "buts": 4.0,
+      "attendus": 3.3
+     },
+     {
+      "season": 2024,
+      "jour": "mar",
+      "matchs": 17,
+      "buts": 6.0,
+      "attendus": 6.9
+     },
+     {
+      "season": 2024,
+      "jour": "mer",
+      "matchs": 5,
+      "buts": 2.0,
+      "attendus": 2.0
+     },
+     {
+      "season": 2024,
+      "jour": "sam",
+      "matchs": 24,
+      "buts": 13.0,
+      "attendus": 9.8
+     },
+     {
+      "season": 2024,
+      "jour": "ven",
+      "matchs": 5,
+      "buts": 2.0,
+      "attendus": 2.0
+     },
+     {
+      "season": 2025,
+      "jour": "dim",
+      "matchs": 9,
+      "buts": 3.0,
+      "attendus": 4.1
+     },
+     {
+      "season": 2025,
+      "jour": "jeu",
+      "matchs": 18,
+      "buts": 12.0,
+      "attendus": 7.8
+     },
+     {
+      "season": 2025,
+      "jour": "lun",
+      "matchs": 4,
+      "buts": 0.0,
+      "attendus": 1.7
+     },
+     {
+      "season": 2025,
+      "jour": "mar",
+      "matchs": 19,
+      "buts": 11.0,
+      "attendus": 8.5
+     },
+     {
+      "season": 2025,
+      "jour": "mer",
+      "matchs": 6,
+      "buts": 1.0,
+      "attendus": 2.4
+     },
+     {
+      "season": 2025,
+      "jour": "sam",
+      "matchs": 23,
+      "buts": 21.0,
+      "attendus": 10.1
+     },
+     {
+      "season": 2025,
+      "jour": "ven",
+      "matchs": 2,
+      "buts": 3.0,
+      "attendus": 0.9
+     },
+     {
+      "season": 2026,
+      "jour": "jeu",
+      "matchs": 1,
+      "buts": 0.0,
+      "attendus": 0.5
+     },
+     {
+      "season": 2026,
+      "jour": "mar",
+      "matchs": 2,
+      "buts": 0.0,
+      "attendus": 1.0
+     },
+     {
+      "season": 2026,
+      "jour": "sam",
+      "matchs": 2,
+      "buts": 2.0,
+      "attendus": 0.9
+     }
+    ]
+   }
+  }
+ },
+ "shooter_goalie": {
+  "protocole": "tirs non bloqués hors filet désert, saison régulière, 2015-2025 ; A ≤ 2019 < B",
+  "tirs": 1150155,
+  "paires_buts_attendus>=1": {
+   "paires": 1783,
+   "persistance_corr_z": 0.054,
+   "top50_A_buts_sur_attendu": {
+    "A": 2.585,
+    "B": 1.031
+   }
+  },
+  "paires_buts_attendus>=2": {
+   "paires": 325,
+   "persistance_corr_z": 0.148,
+   "top50_A_buts_sur_attendu": {
+    "A": 1.815,
+    "B": 1.196
+   }
+  },
+  "controle_positif_tireur": {
+   "n": 151,
+   "persistance_corr_z": 0.636
+  },
+  "controle_positif_gardien": {
+   "n": 39,
+   "persistance_corr_z": 0.194
+  }
+ }
+}

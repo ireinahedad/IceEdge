@@ -24,7 +24,7 @@ import { useOddsFormat } from "../../context/OddsFormatContext";
 import { ODDS_FORMAT_SAMPLE } from "../../services/oddsFormat";
 import { useBlocks } from "../../context/BlockContext";
 import { UserRow } from "../../components/UserIdentity";
-import { features } from "../../platform";
+import { features, isIOS } from "../../platform";
 import { DotLoader, InputBox, ToggleSwitch, UserAvatar } from "./ProfileParts";
 import { DeleteAccountSheet } from "./DeleteAccountSheet";
 
@@ -754,7 +754,19 @@ export function SettingsTab({
                   ? `${t("pro.renews")} ${new Date(subStatus.currentPeriodEnd).toLocaleDateString()}`
                   : t("pro.isProBody")}
             </p>
-            {!subStatus?.cancelAtPeriodEnd && (
+            {!subStatus?.cancelAtPeriodEnd && subStatus?.source === "apple" ? (
+              // APPLE_PLAN Phase 5 — acheté sur iPhone : seul Apple l'annule.
+              isIOS ? (
+                <button
+                  onClick={() => { void import("../../services/appleIap").then((m) => m.manageAppleSubscription()).catch(() => {}).finally(() => { void refreshSub(); }); }}
+                  className="self-start mt-1 text-[11px] font-semibold border border-white/20 rounded-lg px-3 py-1.5 text-white/80"
+                >
+                  {t("pro.apple.manage")}
+                </button>
+              ) : (
+                <p className="text-white/50 text-[11px]">{t("pro.apple.managedOnIphone")}</p>
+              )
+            ) : !subStatus?.cancelAtPeriodEnd && (
               <button
                 onClick={() => setConfirmCancelSub(true)}
                 disabled={cancelingSub}

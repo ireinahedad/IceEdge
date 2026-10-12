@@ -30,6 +30,7 @@ import { ChevronRight, ChevronLeft, Layers, Check, Plus, Lock } from "lucide-rea
 import { useFoldState } from "../../hooks/useFoldState";
 import { useI18n } from "../../i18n";
 import { useBet } from "../../context/BetContext";
+import { useSubscription } from "../../context/SubscriptionContext";
 import { ErrorState } from "../../components/ErrorState";
 import { features } from "../../platform";
 import { BookPricePill, FairOddsPill } from "../../components/BookPricePill";
@@ -73,7 +74,12 @@ const CARD_W = "w-44";
  * toujours visibles (2026-10-04, demande du user : plus de titre « Combiné
  * n° x », plus de ligne « type · n sélections », plus de menu déroulant).
  */
-function ParlayCard({ parlay, accent }: { parlay: ApiBestParlay; accent: string }) {
+export function ParlayCard({ parlay, accent, width = CARD_W }: {
+  parlay: ApiBestParlay;
+  accent: string;
+  /** Classe de largeur : étroite dans la rangée, `w-full` dans la grille de « Plus de parlays ». */
+  width?: string;
+}) {
   const { t } = useI18n();
   const { addLeg, removeLeg, hasLeg } = useBet();
   // Libellés retraduits au changement de langue, sans nouvelle requête.
@@ -87,7 +93,7 @@ function ParlayCard({ parlay, accent }: { parlay: ApiBestParlay; accent: string 
   };
 
   return (
-    <div data-parlay-card className={`${CARD_W} flex-shrink-0 icy-card rounded-xl px-2.5 py-2`}>
+    <div data-parlay-card className={`${width} flex-shrink-0 icy-card rounded-xl px-2.5 py-2`}>
       <div className="flex items-end justify-between gap-1">
         <div className="tabular-nums leading-none" style={{ color: accent }}>
           <span className="text-[17px] font-bold">{parlay.probability} %</span>
@@ -127,12 +133,12 @@ function ParlayCard({ parlay, accent }: { parlay: ApiBestParlay; accent: string 
  * arrivée ici. Bouton vers /pro seulement si le build en a un (Guideline
  * 3.1.1, même règle que `ProLock`).
  */
-function LockedCard({ item }: { item: ApiLockedParlay }) {
+export function LockedCard({ item, width = CARD_W }: { item: ApiLockedParlay; width?: string }) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
   return (
-    <div data-parlay-card className={`${CARD_W} flex-shrink-0 icy-card rounded-xl px-2.5 py-2`}>
+    <div data-parlay-card className={`${width} flex-shrink-0 icy-card rounded-xl px-2.5 py-2`}>
       <div className="flex items-center gap-1.5 text-white text-[12px] font-bold leading-tight">
         <Lock size={11} className="text-[#f2c744]" />{t("parlay.proCard")}
       </div>
@@ -193,8 +199,15 @@ function ParlayRow({ children, count }: { children: React.ReactNode; count: numb
   );
 }
 
-export function BestParlaySection({ accent }: { accent: string }) {
+export function BestParlaySection({ accent, date }: {
+  accent: string;
+  /** Jour choisi sur l'accueil (AAAA-MM-JJ) — les combinés portent sur ce jour (2026-10-11). */
+  date?: string;
+}) {
   const { t } = useI18n();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { isPro } = useSubscription();
   // Pliée au départ, puis gardée comme l'utilisateur l'a laissée (2026-10-11).
   const [collapsed, toggleFold] = useFoldState("home.bestParlay", true);
   const open = !collapsed;
@@ -211,11 +224,12 @@ export function BestParlaySection({ accent }: { accent: string }) {
     if (!requested) return;
     let cancelled = false;
     setError(null);
-    predictionApiService.getBestParlays()
+    setData(null);   // changement de jour : pas les combinés de l'autre jour
+    predictionApiService.getBestParlays(date)
       .then((r) => { if (!cancelled) setData(r); })
       .catch((e) => { if (!cancelled) setError(e ?? new Error("best parlays failed")); });
     return () => { cancelled = true; };
-  }, [requested, reloadKey]);
+  }, [requested, reloadKey, date]);
 
   const toggle = () => { toggleFold(); setRequested(true); };
 
@@ -265,6 +279,26 @@ export function BestParlaySection({ accent }: { accent: string }) {
               {free.map((p) => <ParlayCard key={p.id} parlay={p} accent={accent} />)}
               {locked.map((p) => <LockedCard key={p.id} item={p} />)}
             </ParlayRow>
+          )}
+          {/* 2026-10-11 (demande du user) : l'accueil ne montre que des combinés
+              cotés ; la page montre ceux-là PLUS d'autres, 2 à 8 jambes, avec
+              des jambes sans cote. Même jour que l'accueil. */}
+          {/* Page réservée aux Pro (2026-10-11) : un non-abonné est envoyé
+              vers /pro — ou ne voit pas le bouton sur un build sans chemin
+              vers Pro (Guideline 3.1.1, même règle que `ProLock`). */}
+          {!error && data != null && (isPro || features.proUpgrade) && (
+            <button
+              type="button"
+              onClick={() => isPro
+                ? navigate(`/parlays${date ? `?date=${encodeURIComponent(date)}` : ""}`)
+                : navigate("/pro", { state: { from: location.pathname + location.search } })}
+              className="mt-2 w-full flex items-center justify-center gap-1 rounded-lg border border-white/10 py-2 text-[12px] font-semibold active:bg-white/5"
+              style={{ color: accent }}
+            >
+              {!isPro && <Lock size={12} className="text-[#f2c744]" />}
+              {t("parlay.more")}
+              <ChevronRight size={14} />
+            </button>
           )}
         </>
       )}

@@ -553,7 +553,9 @@ three**; they are also the reason someone keeps the app installed.
       `applinks:arakice.com` entitlement, `appUrlOpen` → router (`native.ts`). Left: Associated
       Domains on the App ID + profile, deploy the web, test.)* Original note: `arakice.com/share/...` opens the app if installed
       (needs an `apple-app-site-association` file served from your domain).
-- [ ] **4.7** Write the 4.2 defence into the review notes now, while it is fresh (see §11).
+- [x] **4.7** Write the 4.2 defence into the review notes now, while it is fresh (see §11).
+      *(✔ 2026-10-11: `docs/ios/APP_REVIEW_NOTES.md` — push, widget, Universal Links, share sheet,
+      UGC moderation, deletion, demo account. Supersedes the draft in 9.4.)*
 
 ---
 ## 7. Phase 5 — Payments: Apple IAP on iOS, Stripe on web (B3) — week 4–6
@@ -563,7 +565,15 @@ A user who subscribes on the web is Pro in the app, and vice versa — that is e
 allowed (Guideline 3.1.3(b), multiplatform services) **as long as the same subscription is
 also purchasable via IAP inside the app**.
 
-### Recommended architecture
+> **Status 2026-10-11 — code done, StoreKit 2 direct (no RevenueCat)**, decided with the
+> user: custom `StoreKitPlugin.swift` + dependency-free JWS verification on the server
+> (`appleJws.ts`, chain pinned to Apple Root CA - G3), same style as `apns.ts`. 7-day free
+> trial = Apple introductory offer; prices 5,99 $ / 59,99 $ CAD. Manual steps left:
+> **`docs/ios/APP_STORE_IAP_SETUP.md`** (agreement + banking, products, intro offers,
+> notifications URL, migration 045, Sandbox test). The RevenueCat text below is kept for
+> the record.
+
+### Recommended architecture (original, superseded)
 
 Use **RevenueCat** (`@revenuecat/purchases-capacitor`) rather than raw StoreKit. It handles
 receipt validation, App Store Server Notifications, renewals, refunds, grace periods and
@@ -580,30 +590,30 @@ iOS  → StoreKit/RevCat ─┘        ↑ webhooks from both
 
 ### Work items
 
-- [ ] **5.1** App Store Connect → create the subscription group + auto-renewable products,
+- [ ] **5.1** *(manual — APP_STORE_IAP_SETUP §2–3)* App Store Connect → create the subscription group + auto-renewable products,
       e.g. `pro_monthly`, `pro_yearly`. Set price tiers, localizations, review screenshot.
       Products must be in "Ready to Submit" or review will fail with "IAP not found".
-- [ ] **5.2** Fill in the paid-apps agreement + **banking and tax forms**. Apple will not
+- [ ] **5.2** *(manual — APP_STORE_IAP_SETUP §1)* Fill in the paid-apps agreement + **banking and tax forms**. Apple will not
       let IAP go live without them. This takes real-world days.
-- [ ] **5.3** Migrate the DB: add `source` (`stripe` | `apple`), `apple_original_transaction_id`,
+- [x] **5.3** *(✔ `045_apple_iap.sql`: `source`, `apple_original_transaction_id` UNIQUE, `apple_product_id`, `apple_environment`, `apple_notifications`)* Migrate the DB: add `source` (`stripe` | `apple`), `apple_original_transaction_id`,
       `platform_product_id` to the subscriptions table
       (`server/src/db/migrations/0XX_iap.sql`, alongside `011_subscriptions.sql`).
-- [ ] **5.4** New server endpoints: `POST /subscription/apple/webhook` (RevenueCat webhook or
+- [x] **5.4** *(✔ `POST /subscription/apple/verify` + `/apple/notifications` (V2), signature-verified, deduplicated, ordered; the purchase is linked by `appAccountToken` = user_id)* New server endpoints: `POST /subscription/apple/webhook` (RevenueCat webhook or
       App Store Server Notifications V2) and `POST /subscription/link` to attach a purchase
       to the logged-in user. Verify signatures. Make them idempotent.
-- [ ] **5.5** `GET /subscription/me` becomes the **single source of truth** for the client,
+- [x] **5.5** *(✔ one `subscriptions` row, both rails; a downgrade only applies from the rail that grants the current Pro)* `GET /subscription/me` becomes the **single source of truth** for the client,
       returning the union of both rails. Never gate the UI on the payment provider.
-- [ ] **5.6** `ProPage.tsx`: on native iOS render the **StoreKit paywall** (price from the
+- [x] **5.6** *(✔ `AppleProSection.tsx`; no Stripe, no web trial, no promo code on iOS)* `ProPage.tsx`: on native iOS render the **StoreKit paywall** (price from the
       store, not hardcoded), and hide the Stripe checkout button entirely.
       Outside the US storefront you may not even *link* to your web checkout — no
       "subscribe on our website" text, no pricing comparison. Assume the strict rule.
-- [ ] **5.7** Implement **Restore Purchases** — a visible button. Required, and reviewers
+- [x] **5.7** *(✔)* Implement **Restore Purchases** — a visible button. Required, and reviewers
       look for it.
-- [ ] **5.8** Purchase screen must display: subscription length, price, what Pro unlocks,
+- [x] **5.8** *(✔ `pro.apple.legal` + Terms / Apple EULA / Privacy links)* Purchase screen must display: subscription length, price, what Pro unlocks,
       auto-renew disclosure, and links to Terms + Privacy (see 1.3).
-- [ ] **5.9** Check `server/src/services/llmQuota.service.ts` and every `plan === 'pro'`
+- [x] **5.9** *(✔ nothing to change: every gate reads `isPro`, which reads the same row)* Check `server/src/services/llmQuota.service.ts` and every `plan === 'pro'`
       gate still works when the entitlement arrives from Apple.
-- [ ] **5.10** Sandbox-test: subscribe, renew (sandbox renewals are accelerated), cancel,
+- [ ] **5.10** *(checklist: APP_STORE_IAP_SETUP §7)* Sandbox-test: subscribe, renew (sandbox renewals are accelerated), cancel,
       restore on a second device, and expiry. Use a Sandbox Apple Account, not your real one.
 
 **Exit criteria:** a TestFlight build where a sandbox user can buy Pro, close the app,
@@ -699,6 +709,8 @@ runs-on: macos-15          # must provide Xcode 26 — verify the image's Xcode 
       Pro already enabled) — reviewers will not sign up, and a paywalled app with no demo
       account is an automatic "Guideline 2.1 — Information Needed".
 - [ ] **9.4** Write the **review notes**. Pre-empt every blocker:
+      *(Final text: `docs/ios/APP_REVIEW_NOTES.md`. The draft below is outdated — it lists offline,
+      haptics, biometrics and IAP, none of which are in v1.)*
       > IceEdge is a hockey **analytics and prediction** app. It does not accept wagers,
       > hold funds, process gambling transactions, or link to any gambling operator.
       > All statistics, model predictions and bet-slip tracking are informational.

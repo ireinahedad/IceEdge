@@ -155,9 +155,17 @@ export interface ApiBestBet {
  * jambes de « Meilleurs paris » : mêmes objets, mêmes %. Le client ne combine
  * rien — il affiche.
  */
+/**
+ * Forme d'un combiné : `moneyline` / `mixed` pour ceux de l'accueil, les autres
+ * pour la page « Plus de parlays » (2026-10-11).
+ */
+export type ParlayKind = "moneyline" | "mixed" | "same_game" | "same_team" | "same_market";
+
 export interface ApiBestParlay {
   id:                  string;
-  kind:                "moneyline" | "mixed";
+  kind:                ParlayKind;
+  /** « Plus de parlays » : ce que les jambes ont en commun (`TOR`, `MTL@TOR`, `shots_ou`). */
+  group?:              string | null;
   locked?:             false;
   legs:                ApiBestBet[];
   /** 0–100 au dixième, corrélations comprises (même calcul que le coupon). */
@@ -171,13 +179,24 @@ export interface ApiBestParlay {
 /** Combiné Pro vu par un non-abonné : la forme seulement, aucun contenu. */
 export interface ApiLockedParlay {
   id:       string;
-  kind:     "moneyline" | "mixed";
+  kind:     ParlayKind;
   locked:   true;
   legCount: number;
 }
 
 export interface BestParlaysResponse {
   parlays: (ApiBestParlay | ApiLockedParlay)[];
+  meta: { generatedAt: string; day: string | null; mlAvailable: boolean; freeCount: number; total: number };
+}
+
+/**
+ * Page « Plus de parlays » (2026-10-11) : en tête les combinés de l'accueil
+ * (tous cotés), puis 2 à 8 jambes — même match, même équipe, même type,
+ * mélangés — dont des jambes sans cote. Une seule journée.
+ */
+export interface MoreParlaysResponse {
+  featured: (ApiBestParlay | ApiLockedParlay)[];
+  more:     (ApiBestParlay | ApiLockedParlay)[];
   meta: { generatedAt: string; day: string | null; mlAvailable: boolean; freeCount: number; total: number };
 }
 
@@ -228,13 +247,15 @@ export const predictionApiService = {
    * data. Throws `PredictionUnavailableError`.
    */
   getBestBets: async (
-    opts: { limit?: number; source?: "ml" | "rules"; days?: number; players?: number } = {}
+    opts: { limit?: number; source?: "ml" | "rules"; days?: number; players?: number; date?: string } = {}
   ): Promise<BestBetsResponse> => {
     const qs = new URLSearchParams();
     if (opts.limit   != null) qs.set("limit",   String(opts.limit));
     if (opts.source  != null) qs.set("source",  opts.source);
     if (opts.days    != null) qs.set("days",    String(opts.days));
     if (opts.players != null) qs.set("players", String(opts.players));
+    // Jour choisi sur l'accueil (AAAA-MM-JJ) : le serveur ne garde que ses matchs.
+    if (opts.date)            qs.set("date",    opts.date);
     const q = qs.toString();
     return get<BestBetsResponse>(`/predict/best-bets${q ? `?${q}` : ""}`);
   },
@@ -292,10 +313,28 @@ export const predictionApiService = {
    * sur l'abonnement, quels combinés sont envoyés en entier. Appelée une seule
    * fois, à la première ouverture de la section. Throws `PredictionUnavailableError`.
    */
-  getBestParlays: async (): Promise<BestParlaysResponse> => {
+  /** Page « Plus de parlays » pour un jour (AAAA-MM-JJ). Throws `PredictionUnavailableError`. */
+  getMoreParlays: async (date?: string): Promise<MoreParlaysResponse> => {
     let res: Response;
     try {
-      res = await authedFetch("/predict/best-parlays");
+      res = await authedFetch(`/predict/more-parlays${date ? `?date=${encodeURIComponent(date)}` : ""}`);
+    } catch (cause) {
+      throw new PredictionUnavailableError("network", `More parlays unreachable: ${String(cause)}`);
+    }
+    if (!res.ok) {
+      throw new PredictionUnavailableError("http", `More parlays error ${res.status}`, res.status);
+    }
+    try {
+      return (await res.json()) as MoreParlaysResponse;
+    } catch (cause) {
+      throw new PredictionUnavailableError("bad_response", `More parlays unreadable: ${String(cause)}`, res.status);
+    }
+  },
+
+  getBestParlays: async (date?: string): Promise<BestParlaysResponse> => {
+    let res: Response;
+    try {
+      res = await authedFetch(`/predict/best-parlays${date ? `?date=${encodeURIComponent(date)}` : ""}`);
     } catch (cause) {
       throw new PredictionUnavailableError("network", `Best parlays unreachable: ${String(cause)}`);
     }

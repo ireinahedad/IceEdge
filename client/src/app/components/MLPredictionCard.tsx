@@ -470,6 +470,14 @@ function mlPctFromResponse(data: Record<string, unknown>): number | null {
   if (raw === null) return null;
   // Paquet ML en direct : toujours en points, où 0 et 1 % sont de vraies valeurs.
   if (data.probability_scale === "pct") return Math.round(raw);
+  // Réponse du service Python : `probability` est un entier en POINTS, mais un
+  // score exact peut valoir 1 % (ou 0 %) — lu comme une fraction, « 1 »
+  // devenait 100 % (bug 2026-10-11). La valeur exacte 0–1, quand elle est là,
+  // ne laisse aucune ambiguïté.
+  const exact = data.probability_exact;
+  if (typeof exact === "number" && Number.isFinite(exact) && exact >= 0 && exact <= 1) {
+    return Math.round(exact * 100);
+  }
   return raw > 1 ? Math.round(raw) : Math.round(raw * 100);
 }
 

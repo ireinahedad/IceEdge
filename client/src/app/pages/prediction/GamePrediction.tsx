@@ -7,7 +7,7 @@
  */
 
 import { useNavigate } from "react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { nhlApiService } from "../../services/nhlApiService";
 import { predictionApiService, isPredictionUnavailable } from "../../services/predictionApiService";
 import { useSport } from "../../context/SportContext";
@@ -44,7 +44,7 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   // En direct, une réponse de repli du serveur (vieux score) est refusée, et
   // passé 90 s sans rafraîchissement (`staleSince`) les chiffres affichés
   // perdent leur drapeau `live` : ils restent à l'écran, mais pâles.
-  const { groups: apiGroups, failed: apiFailed, retry: retryApi, refresh: refreshApi, staleSince } =
+  const { groups: apiGroups, failed: apiFailed, retry: retryApi, staleSince } =
     useServerGroups(() => nhlApiService.getGamePredictions(gameId, isLive), gameId, isLive ? LIVE_POLL_MS : undefined);
   const [loading, setLoading] = useState(true);
   // 2026-10-01 : ML partout ; les règles ne se voient que dans la fiche d'un pari.
@@ -97,20 +97,17 @@ export function GamePrediction({ gameId }: { gameId: string }) {
     return () => { alive = false; clearInterval(timer); };
   }, [isLive, gameId]);
 
-  // Match terminé SOUS NOS YEUX : les marchés passent à l'état final (tout
-  // décidé). Pas tout de suite — les prédictions sont gardées 30 s par le
-  // serveur et 30 s (+ 60 s de `stale-while-revalidate`) par le CDN, donc une
-  // requête immédiate rendrait encore l'état « en direct » et la page resterait
-  // figée dessus. Deux rechargements silencieux, au-delà de chaque cache.
-  const wasLive = useRef(false);
-  useEffect(() => { if (isLive) wasLive.current = true; }, [isLive]);
+  // Match TERMINÉ : la page prédiction n'a plus d'objet — tous les paris sont
+  // décidés. On la remplace par la page Statistiques du match (score final,
+  // feuille de match, stats d'équipe et de joueurs). `replace` : la flèche
+  // retour de la page Statistiques ramène là d'où l'on venait, pas ici (qui
+  // redirigerait aussitôt). Vaut pour un match déjà fini à l'ouverture comme
+  // pour un match qui se termine sous nos yeux — le rappel de l'en-tête
+  // ci-dessus fait passer `status` à "final".
   const isFinal = gameView?.status === "final";
   useEffect(() => {
-    if (!isFinal || !wasLive.current) return;
-    const t1 = setTimeout(refreshApi, LIVE_POLL_MS + 5_000);
-    const t2 = setTimeout(refreshApi, 100_000);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [isFinal, refreshApi]);
+    if (isFinal) navigate(`/stats/chart/game/${gameId}`, { replace: true });
+  }, [isFinal, gameId, navigate]);
 
   useEffect(() => {
     async function load() {
@@ -233,7 +230,9 @@ export function GamePrediction({ gameId }: { gameId: string }) {
     gameView ? { abbr: gameView.away.abbr, name: gameView.away.name } : undefined,
   );
 
-  if (loading) return (
+  // Match terminé : squelette le temps de la redirection (voir plus haut), au
+  // lieu d'afficher une image des marchés pendant une fraction de seconde.
+  if (loading || isFinal) return (
     <div className="flex flex-col gap-3">
       {[1,2,3,4].map(i => <div key={i} className="h-16 bg-[#131A12] rounded-2xl animate-pulse" />)}
     </div>

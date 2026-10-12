@@ -27,6 +27,7 @@ const BetBuilderPage        = lazy(() => import("./pages/BetBuilderPage").then(m
 // VITE_TARGET=ios build emits no AuthCallback-*.js; the web build still does).
 const AuthCallback          = features.googleLogin ? lazy(() => import("./pages/AuthCallback").then(m => ({ default: m.AuthCallback }))) : null;
 const NHLPredictionsPage    = lazy(() => import("./pages/NHLPredictionsPage").then(m => ({ default: m.NHLPredictionsPage })));
+const MoreParlaysPage       = lazy(() => import("./pages/MoreParlaysPage").then(m => ({ default: m.MoreParlaysPage })));
 // Les deux écrans de développement, sous la MÊME liaison conditionnelle que
 // AuthCallback ci-dessus. `lazy()` s'exécute au niveau du module : retirer une
 // route du tableau plus bas ne suffit pas, l'`import()` reste vivant et Rollup
@@ -170,6 +171,7 @@ export const router = createBrowserRouter([
       { path: "/bet",                                element: withSuspense(<BetBuilderPage />)               },
       { path: "/league",                             element: withSuspense(<LeaguePage />)                   },
       { path: "/nhl-predictions",                    element: withSuspense(<NHLPredictionsPage />)           },
+      { path: "/parlays",                            element: withSuspense(<MoreParlaysPage />)              },
       // `/share/:id` a été supprimée le 2026-09-06 : la page n'affichait qu'un
       // « les coupons partagés arrivent bientôt », rien dans l'app n'y renvoyait
       // (le partage passe par une image, ce qui reste le bon choix), et Apple

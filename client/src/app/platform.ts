@@ -51,18 +51,22 @@ export const features = {
   /**
    * Guideline 3.1.1 — does this build have ANY path to Pro at all?
    *
-   * Distinct from `stripeCheckout`, which only says *how* one pays. Today both
-   * are `isWeb`, and that looks redundant; it stops looking redundant the day
-   * IAP lands in phase 3, when `proUpgrade` turns true on iOS while
-   * `stripeCheckout` stays false. Keeping them separate now is what makes that
-   * day a one-line change instead of an audit of every Pro screen.
-   *
-   * With this false, the v1 iOS build has no Pro page, no price, and — the part
-   * 3.1.1 actually forbids — no promo field that unlocks paid content outside
-   * the App Store. Pro-only sections stay locked and simply carry no call to
-   * action: an external purchase path must not be hinted at either.
+   * Distinct from `stripeCheckout`, which only says *how* one pays. Since
+   * APPLE_PLAN Phase 5 (2026-10-11) both builds have a path: Stripe on the web,
+   * In-App Purchase on iOS (`appleIap`). Every « Passer à Pro » button, the
+   * /pro route and the ProLock call to action key off this flag.
    */
-  proUpgrade:     isWeb,
+  proUpgrade:     true,
+  /** APPLE_PLAN Phase 5 — Guideline 3.1.1: Pro on iOS is bought with StoreKit 2. */
+  appleIap:       isIOS,
+  /**
+   * 3.1.1 — on iOS, paid content may only be unlocked through In-App Purchase.
+   * The web's card-free 7-day trial and the promo-code field would both unlock
+   * Pro outside the App Store; on iOS the trial is Apple's introductory offer
+   * instead (configured on the product in App Store Connect).
+   */
+  serverTrial:    isWeb,
+  promoCodes:     isWeb,
   /** APPLE_PLAN R8 — 3.1.1 grey zone: bring-your-own OpenAI key. */
   byokOpenAI:     isWeb,
   /** R6 — iOS uses APNs, not the Web Push API. */

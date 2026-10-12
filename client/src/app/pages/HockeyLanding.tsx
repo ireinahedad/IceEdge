@@ -519,12 +519,12 @@ export function HockeyLanding() {
                 `px-4` de `BestBetsSection` et s'aligne donc sur elle ; pour
                 un non-abonné, c'est `ProUpsell` (sans `px-4`) qui suit. */}
             <div className={isPro ? undefined : "-mx-4"}>
-              <BestParlaySection accent={accent} />
+              <BestParlaySection accent={accent} date={gameDays[dayIdx]?.dateStr} />
             </div>
             {isPro ? (
               <>
                 <LazySection minHeight={360}>
-                  <BestBetsSection accent={accent} isLoading={loading} locked={false} />
+                  <BestBetsSection accent={accent} isLoading={loading} locked={false} date={gameDays[dayIdx]?.dateStr} />
                 </LazySection>
                 <LazySection minHeight={180}>
                   <EvSection accent={accent} />

@@ -1,0 +1,32 @@
+{
+ "about": "Registre des patterns CANDIDATS (STATUS.md §3.5 P). Chaque entrée est inscrite AVANT d'être jugée sur des matchs futurs : hypothèse, sens et règle fixés à la date `registered`. Un candidat n'agit sur aucune prédiction. S'il est confirmé en avant, il devient une variable candidate d'un protocole d'adoption existant (--correction, measure_level, train_player). Suivi : python discover_patterns.py --candidates.",
+ "candidates": [
+  {
+   "id": "lone_b2b_vs_market",
+   "registered": "2026-10-12",
+   "hypothesis": "Une équipe SEULE en back-to-back (l'adversaire ne l'est pas) gagne moins souvent que la probabilité de clôture dévigée ne l'annonce.",
+   "direction": "victoires < marché",
+   "origin": "pilote 2026-10-12 : 2014-19 n 1753, 42.6 % vs 44.2 % (z -1.38), ROI contre -0.6 % ; 2020-25 n 1016, 40.2 % vs 44.9 % (z -3.12), ROI contre +6.1 % ± 2.9. Repéré en regardant la validation : seules les données à partir de `registered` comptent.",
+   "rule": {"min_n": 300, "z_max": -2.0, "metric": "z de (victoires - p marché clôture) sur les matchs datés >= registered"},
+   "auto": true
+  },
+  {
+   "id": "shooter_goalie_pairs",
+   "registered": "2026-10-12",
+   "hypothesis": "Certaines paires tireur-gardien ont un effet propre (buts au-delà de xG x finition x gardien) qui persiste d'une période à l'autre.",
+   "direction": "persistance > 0",
+   "origin": "pilote 2026-10-12 : paires avec >= 2 buts attendus par période (325) : corrélation 0.15, top-50 1.82 -> 1.20 ; avec >= 1 : 0.05. Biais d'aréna non exclu.",
+   "rule": {"metric": "refaire la persistance avec les saisons 2026-27 et suivantes comme période B, en contrôlant l'aréna", "min_seasons_B": 2},
+   "auto": false
+  },
+  {
+   "id": "caufield_saturday",
+   "registered": "2026-10-12",
+   "hypothesis": "Cole Caufield (8481540) marque plus le samedi que les autres jours.",
+   "direction": "buts/match samedi > autres jours",
+   "origin": "pilote 2026-10-12 : 63 buts en 103 samedis (0.61) vs 104 en 260 (0.40), p 0.0098 ; mais 6 060 tests joueur x jour, 248 à p<0.05 (≈303 par hasard), 0 BH, persistance des effets jour 0.03. Témoin : attendu = bruit.",
+   "rule": {"metric": "buts/match samedi vs autres jours sur 2026-27, rapporté à son attendu", "expected_if_noise": "lift ≈ 0"},
+   "auto": false
+  }
+ ]
+}

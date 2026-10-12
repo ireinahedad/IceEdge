@@ -18,7 +18,7 @@ import { useI18n } from "../../i18n";
 export function DeleteAccountSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useI18n();
   const { logout } = useAuth();
-  const { isPro } = useSubscription();
+  const { isPro, status: subStatus } = useSubscription();
   const navigate = useNavigate();
   const [method, setMethod] = useState<ReauthMethod | null>(null);
   const [secret, setSecret] = useState("");
@@ -85,7 +85,13 @@ export function DeleteAccountSheet({ open, onClose }: { open: boolean; onClose: 
         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
         <p id="delete-account-title" className="text-white font-bold text-base mb-1.5">{t("account.deleteTitle")}</p>
         <p className="text-white/60 text-xs mb-2">{t("account.deleteWhat")}</p>
-        {isPro && <p className="text-white/60 text-xs mb-2">{t("account.deleteSub")}</p>}
+        {isPro && (
+          <p className="text-white/60 text-xs mb-2">
+            {/* Un abonnement Apple ne s'annule pas avec le compte (APPLE_PLAN 6.4) :
+                le serveur n'a aucun moyen de l'arrêter. */}
+            {t(subStatus?.source === "apple" ? "account.deleteSubApple" : "account.deleteSub")}
+          </p>
+        )}
 
         {method && (
           <form

@@ -324,8 +324,13 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
       onClick={onClose}
     >
       <div
-        className="bg-[#0A0E0C] rounded-t-3xl flex flex-col gap-3 max-h-[90vh] overflow-y-auto"
-        style={{ padding: "20px 16px calc(6rem + env(safe-area-inset-bottom, 0px))" }}
+        // `[&>*]:shrink-0` : dans une colonne flex à hauteur bornée, Safari iOS
+        // comprimait les cartes (ML, Règles, réponse LLM — toutes en
+        // `overflow-hidden`) au lieu de faire défiler : leur contenu débordait
+        // et tout se superposait. Aucune carte ne rétrécit plus ; la fiche défile.
+        // `dvh` plutôt que `vh` : 90vh dépasse l'écran visible sur iPhone.
+        className="bg-[#0A0E0C] rounded-t-3xl flex flex-col gap-3 max-h-[90dvh] overflow-y-auto overscroll-contain [&>*]:shrink-0"
+        style={{ padding: "20px 16px calc(6rem + env(safe-area-inset-bottom, 0px))", WebkitOverflowScrolling: "touch" }}
         onClick={e => e.stopPropagation()}
       >
         {/* Handle */}
@@ -566,6 +571,9 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
                   ans = { text: await askLLM(userPrompt, { taskType: "explain_bet", locale: isFr ? "fr" : "en" }) };
                 }
                 const text = ans.text;
+                // Sans ce `setLlmText`, la réponse n'allait QUE dans le cache :
+                // il fallait fermer et rouvrir la fiche pour la voir (2026-10-11).
+                setLlmText(text);
                 setLlmAnalysis(ans.analysis ?? null);
                 setLlmFacts(ans.factsText ?? "");
                 setLlmFailed(false);

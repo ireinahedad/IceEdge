@@ -6,7 +6,7 @@
  * « pari / contexte — % de chance / cote », libellés traduits côté client.
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { ChevronRight, Star, Check, Plus } from "lucide-react";
 import { useFoldState } from "../../hooks/useFoldState";
 import { predictionApiService, type ApiBestBet } from "../../services/predictionApiService";
@@ -218,10 +218,13 @@ export function BestBetsSection({
   accent,
   isLoading,
   locked = false,
+  date,
 }: {
   accent: string;
   isLoading: boolean;
   locked?: boolean;
+  /** Jour choisi sur l'accueil (AAAA-MM-JJ) : les paris portent sur ce jour (2026-10-11). */
+  date?: string;
 }) {
   const { t, lang } = useI18n();
   // 2026-10-01 (demande du user) : ML seulement. Plus de bascule Règles / IA
@@ -232,6 +235,7 @@ export function BestBetsSection({
   // cliquer « Sûr » masquait les paris sûrs au lieu de n'afficher qu'eux.
   const [tierFilter, setTierFilter] = useState<TierFilter>("all");
   const [bets, setBets]             = useState<BestBet[]>([]);
+  const shownDate = useRef(date);
   // `meta.mlAvailable` du serveur : faux quand AUCUN pari n'a reçu de score IA
   // (service ML en panne ou désactivé). Sert à dire pourquoi l'onglet IA est vide.
   const [mlAvailable, setMlAvailable] = useState(true);
@@ -258,12 +262,15 @@ export function BestBetsSection({
   useEffect(() => {
     if (locked) return;             // don't fetch Pro-only data for free users
     let cancelled = false;
+    // Autre jour : on vide, plutôt que laisser les paris de l'ancien jour
+    // si le chargement échoue (le `catch` garde la liste en place).
+    if (shownDate.current !== date) { shownDate.current = date; setBets([]); }
 
     (async () => {
       try {
         // Fetch a larger pool (both rule + ML scores) so the Rules/AI toggle
         // re-ranks honestly client-side; the list itself still shows the top 15.
-        const { bets: apiBets, meta } = await predictionApiService.getBestBets({ limit: 30, source: "ml" });
+        const { bets: apiBets, meta } = await predictionApiService.getBestBets({ limit: 30, source: "ml", date });
         if (cancelled) return;
         setMlAvailable(meta?.mlAvailable !== false && apiBets.some((b) => b.mlPct != null));
         const mapped: BestBet[] = apiBets.map((b) => {
@@ -292,7 +299,8 @@ export function BestBetsSection({
   // écrasait la liste. Mesuré le 2026-09-16 : 2 appels par ouverture de
   // « More bets ». best-bets est calculé côté serveur, indépendamment d'eux.
   // `t` suit `lang` : `lang` suffit à retraduire les libellés.
-  }, [lang, locked, tick]);
+  // `date` : jour choisi sur l'accueil (2026-10-11) — changer de jour recharge.
+  }, [lang, locked, tick, date]);
 
   const sorted = useMemo(() => {
     const src = (b: BestBet) => pctFor(b, sortSource) ?? 0;

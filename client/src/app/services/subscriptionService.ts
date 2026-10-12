@@ -21,6 +21,12 @@ export interface SubscriptionStatus {
   cancelAtPeriodEnd: boolean;
   trialUsed: boolean;
   /**
+   * Qui a donné le Pro actuel. `'apple'` = acheté sur iPhone : il se gère et
+   * s'annule dans les Réglages de l'iPhone, jamais ici. Optionnel : un serveur
+   * pas encore déployé ne renvoie pas le champ.
+   */
+  source?: 'stripe' | 'apple' | 'local' | null;
+  /**
    * Cadences réellement achetables, d'après les IDs de tarif configurés côté
    * serveur. Optionnel : un serveur pas encore déployé ne renvoie pas le champ,
    * et l'écran doit alors se comporter comme avant (mensuel seul).

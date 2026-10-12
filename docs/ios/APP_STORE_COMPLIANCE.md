@@ -1,8 +1,10 @@
 # App Store Connect — réponses de conformité (APPLE_PLAN Phase 1)
 
-**Créé :** 2026-10-09 · Relevé dans le code, pas estimé. Concerne le **build iOS v1** :
-pas de Google Sign-In, pas de Stripe ni d'achat Pro, pas de clé OpenAI personnelle,
-pas de liens bookmakers, pas de Web Push (`client/src/app/platform.ts`).
+**Créé :** 2026-10-09 · **Mis à jour :** 2026-10-11 (abonnement Pro par achat intégré).
+Relevé dans le code, pas estimé. Concerne le **build iOS v1** : pas de Google Sign-In,
+pas de Stripe, Pro **uniquement par achat intégré Apple** (StoreKit 2), pas d'essai web ni
+de code promo, pas de clé OpenAI personnelle, pas de liens bookmakers, pas de Web Push
+(`client/src/app/platform.ts`).
 Si une de ces options change, ce fichier change avec elle.
 
 ---
@@ -20,12 +22,21 @@ Si une de ces options change, ce fichier change avec elle.
 
 Garder la **licence standard d'Apple** (champ « License Agreement » laissé par défaut).
 Nos conditions (`/terms`) s'appliquent au service et sont liées dans la description.
-Quand l'IAP arrivera (Phase 5), le lien Terms devra aussi apparaître sur l'écran d'achat.
+L'écran d'achat iOS (`AppleProSection.tsx`) lie nos Conditions, l'EULA standard d'Apple et
+la Politique de confidentialité, sous le bouton d'abonnement.
 
 ## 3. Divulgation d'abonnement (1.3)
 
-**Sans objet pour la v1** : aucun achat dans l'app iOS (`proUpgrade: isWeb`).
-À faire en Phase 5 avec l'écran StoreKit.
+**Fait (2026-10-11)** dans `AppleProSection.tsx`, avant le bouton d'achat :
+- prix et durée venant de la boutique (`displayPrice`, jamais en dur) ;
+- ce que devient l'essai : « 7 jours gratuits, puis 5,99 $/mois » ;
+- renouvellement automatique, prélèvement sur le compte Apple, annulation au moins
+  24 h avant la fin de période, où gérer l'abonnement (texte `pro.apple.legal`) ;
+- liens Conditions, EULA Apple, Confidentialité ; bouton **Restaurer les achats**.
+
+Dans App Store Connect, ajouter aussi à la fin de la **description** de l'app une ligne :
+« Abonnement ArakIce Pro : 5,99 $/mois ou 59,99 $/an, essai gratuit de 7 jours. Conditions :
+https://arakice.com/terms — EULA : https://www.apple.com/legal/internet-services/itunes/dev/stdeula/ »
 
 ## 4. Classification d'âge (1.4) → **18+**
 
@@ -67,19 +78,26 @@ annonceurs ou courtiers, aucun SDK publicitaire).
 | User Content → Photos or Videos | photo de profil (R2) | App Functionality | Yes | No |
 | User Content → Other User Content | messages de chat, paris, bio, signalements | App Functionality | Yes | No |
 | Identifiers → User ID | identifiant et nom d'utilisateur | App Functionality | Yes | No |
+| Purchases → Purchase History | abonnement Pro acheté dans l'app : produit, dates, identifiants de transaction Apple (migration 045) | App Functionality | **Yes** | No |
+| Identifiers → Device ID | jeton APNs (`apns_device_tokens`, migration 043), envoyé au serveur pour les notifications | App Functionality | **Yes** (lié au `user_id`) | No |
 | Diagnostics → Crash Data | Sentry (`sendDefaultPii: false`, pas de `setUser`) | App Functionality | **No** | No |
 | Diagnostics → Performance Data | Sentry traces (10 %) | App Functionality | **No** | No |
 
 Non déclaré, et pourquoi :
-- **Purchases** : rien n'est acheté dans l'app iOS v1. À ajouter en Phase 5.
+- **Financial Info → Payment Info** : Apple traite le paiement ; nous ne recevons aucune
+  donnée de paiement (seulement la transaction signée).
 - **Financial Info** : la clé OpenAI personnelle est coupée sur iOS (`byokOpenAI: isWeb`).
 - **Usage Data / Location** : aucun SDK d'analytics ; l'IP n'apparaît que dans les journaux
   serveur (sécurité, anti-abus), sans profilage ni géolocalisation.
 - **Contacts, Health, Browsing History, Search History, Sensitive Info** : jamais collectés.
 
-Quand les notifications APNs arriveront (Phase 4), le jeton d'appareil n'est pas un type
-de donnée Apple à déclarer en soi, mais la politique de confidentialité doit le mentionner
-(voir §8).
+**Jeton d'appareil (mis à jour 2026-10-11).** Depuis 4.1, l'app envoie son jeton APNs au
+serveur, qui le garde lié au compte (table `apns_device_tokens`, effacée avec le compte).
+Apple ne cite pas les jetons push dans ses exemples de « Device ID », mais c'est un
+identifiant d'appareil lié à l'utilisateur : on le **déclare** (ligne ci-dessus), c'est le
+choix sans risque. La politique de confidentialité doit aussi le mentionner (voir §8, Phase 4).
+Le jeton du widget (migration 044) est créé par notre serveur, pas collecté sur l'appareil :
+rien à déclarer en plus.
 
 ## 6. Export compliance (1.5)
 
@@ -108,8 +126,8 @@ apportent bien leurs propres manifestes.
 |---|---|---|
 | Phase 3 (Capacitor) | 10. Sécurité | sur iOS, la session est gardée dans le Trousseau (Keychain), pas dans un cookie httpOnly |
 | Phase 3 | 2 et 6 | préciser que la connexion Google n'existe que sur le web |
-| Phase 4 (APNs) | 2, 6, 8 | « l'adresse que votre navigateur **ou appareil** nous donne » ; Apple Push Notification service comme fournisseur |
-| Phase 5 (IAP) | 2, 6, 9 | Apple comme fournisseur de paiement ; un abonnement Apple ne s'annule pas en supprimant le compte (6.4) |
+| ✔ 2026-10-11 — Phase 4 (APNs) | 2, 6, 8 | « l'adresse que votre navigateur **ou appareil** nous donne » ; Apple Push Notification service comme fournisseur |
+| ✔ 2026-10-11 — Phase 5 (IAP) | 2, 6, 9 | Apple comme fournisseur de paiement ; un abonnement Apple ne s'annule pas en supprimant le compte (6.4) |
 
 ## 9. Risque à trancher avant la soumission — R18 · logos et photos de la LNH
 
@@ -123,3 +141,10 @@ Options : (a) garder et répondre honnêtement « Yes », en assumant le risque 
 5.2.1 ; (b) dans le build iOS, remplacer logos et photos par des pastilles de couleur
 d'équipe et des initiales (le partage d'image le fait déjà, voir `slipShareCanvas.ts`).
 L'option (b) supprime le risque pour peu d'effort ; à décider avant la Phase 8 (captures).
+
+## 10. Sections Pro verrouillées — **réglé (2026-10-11)**
+
+Décision : l'abonnement Pro s'achète dans l'app (option (d) de la version précédente de ce
+fichier). Les cadenas `ProLock` ont de nouveau un bouton, qui mène à l'écran d'achat iOS ;
+un abonné web est Pro sur iPhone, ce que 3.1.3(b) autorise puisque le même abonnement
+s'achète aussi par achat intégré. Mise en place : `docs/ios/APP_STORE_IAP_SETUP.md`.
