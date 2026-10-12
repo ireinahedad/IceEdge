@@ -15,9 +15,9 @@ vi.mock('./predictionEngine', async () => {
     predictGameLegCorrelation: vi.fn(async () => ({ factor: corr.factor, joint: 0, independent: 0 })),
   };
 });
-vi.mock('./bestBets.service', () => ({ getBestBets: vi.fn() }));
+vi.mock('./bestBets.service', () => ({ getBestBets: vi.fn(), normalizeDate: (d?: string) => d }));
 
-import { buildBestParlays, gateBestParlays, MIN_PARLAY_PCT } from './bestParlays.service';
+import { buildBestParlays, buildMoreParlays, gateBestParlays, gateMoreParlays, MIN_PARLAY_PCT, MORE_MIN_PCT } from './bestParlays.service';
 import type { BestBet } from './bestBets.service';
 
 const NOW = Date.parse('2026-10-10T18:00:00Z');
@@ -171,5 +171,81 @@ describe('gateBestParlays — le contenu Pro ne quitte pas le serveur', () => {
     const { parlays, day } = await buildBestParlays(SLATE, NOW);
     const r = gateBestParlays({ parlays, meta: { generatedAt: 'x', day, mlAvailable: true } }, true);
     expect(r.parlays.every((p) => !p.locked)).toBe(true);
+  });
+});
+
+describe('buildBestParlays — accueil : cotes exigées (2026-10-11)', () => {
+  const priced = SLATE.map((b) => b.marketType === 'moneyline' || b.marketType === 'total_goals'
+    ? { ...b, bookPrice: 1.5 } : b);
+
+  it('requirePrice : chaque combiné a une cote, aucune jambe sans prix', async () => {
+    const { parlays } = await buildBestParlays(priced, NOW, undefined, { requirePrice: true });
+    expect(parlays.length).toBeGreaterThan(0);
+    for (const p of parlays) {
+      expect(p.bookPrice).not.toBeNull();
+      expect(p.legs.every((l) => l.bookPrice != null)).toBe(true);
+    }
+  });
+
+  it('requirePrice sans aucune cote : rien, plutôt qu\'un combiné sans prix', async () => {
+    const { parlays } = await buildBestParlays(SLATE, NOW, undefined, { requirePrice: true });
+    expect(parlays).toEqual([]);
+  });
+});
+
+describe('buildMoreParlays — « Plus de parlays »', () => {
+  it('2 à 8 jambes, une journée, seuil par taille, catégories variées', async () => {
+    const more = await buildMoreParlays(SLATE, DAY, [], NOW);
+    expect(more.length).toBeGreaterThan(5);
+    for (const p of more) {
+      expect(p.legs.length).toBeGreaterThanOrEqual(2);
+      expect(p.legs.length).toBeLessThanOrEqual(8);
+      expect(p.probability).toBeGreaterThanOrEqual(MORE_MIN_PCT[p.legs.length]);
+      expect(p.legs.every((l) => l.game?.date === DAY)).toBe(true);
+    }
+    const kinds = new Set(more.map((p) => p.kind));
+    for (const k of ['mixed', 'same_game', 'same_team', 'same_market']) expect(kinds.has(k as never)).toBe(true);
+  });
+
+  it('chaque catégorie tient sa promesse', async () => {
+    const more = await buildMoreParlays(SLATE, DAY, [], NOW);
+    for (const p of more) {
+      if (p.kind === 'same_game') expect(new Set(p.legs.map((l) => l.gameId)).size).toBe(1);
+      if (p.kind === 'same_team') expect(p.legs.every((l) => l.teamAbbr?.toUpperCase() === p.group)).toBe(true);
+      if (p.kind === 'same_market') expect(new Set(p.legs.map((l) => l.marketType)).size).toBe(1);
+      if (p.kind === 'mixed') expect(new Set(p.legs.map((l) => l.marketType)).size).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('jamais de contradiction, même dans un même match', async () => {
+    const more = await buildMoreParlays(SLATE, DAY, [], NOW);
+    for (const p of more) {
+      const ids = p.legs.map((l) => l.id);
+      expect(ids.includes('g3-ml') && ids.includes('g3-astar')).toBe(false);
+      expect(ids.includes('g2-under') && ids.includes('g2-star')).toBe(false);
+    }
+  });
+
+  it('jamais deux fois le même combiné, même dans deux catégories', async () => {
+    const more = await buildMoreParlays(SLATE, DAY, [], NOW);
+    const keys = more.map((p) => p.legs.map((l) => l.id).sort().join('+'));
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('ne répète pas les combinés de l\'accueil', async () => {
+    const { parlays } = await buildBestParlays(SLATE, NOW);
+    const more = await buildMoreParlays(SLATE, DAY, parlays, NOW);
+    for (const m of more) for (const p of parlays) {
+      const a = m.legs.map((l) => l.id), b = p.legs.map((l) => l.id);
+      expect(a.filter((x) => b.includes(x)).length).toBeLessThan(Math.min(a.length, b.length));
+    }
+  });
+
+  it('gate : un non-abonné ne reçoit aucune jambe des extras', async () => {
+    const { parlays, day } = await buildBestParlays(SLATE, NOW);
+    const more = await buildMoreParlays(SLATE, DAY, parlays, NOW);
+    const r = gateMoreParlays({ featured: parlays, more, meta: { generatedAt: 'x', day, mlAvailable: true } }, false);
+    expect(r.featured.slice(0, 2).every((p) => !p.locked)).toBe(true);
+    for (const p of r.more) expect(Object.keys(p).sort()).toEqual(['id', 'kind', 'legCount', 'locked']);
   });
 });

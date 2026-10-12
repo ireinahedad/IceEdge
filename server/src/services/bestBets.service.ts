@@ -133,10 +133,12 @@ function etDate(n: number, now = new Date()): string {
  *    le statut du calendrier est en cache (jusqu'à 5 min), l'heure ne ment pas.
  *  • Les matchs en direct ne sont plus récupérés du tout (`fetchLiveGames`).
  */
-async function fetchUpcomingGames(days: number): Promise<any[]> {
+async function fetchUpcomingGames(days: number, onlyDate?: string): Promise<any[]> {
   const now = Date.now();
   const dates: string[] = [];
-  for (let i = 0; i < days; i++) dates.push(etDate(i, new Date(now)));
+  // Jour choisi sur l'accueil (2026-10-11) : ses seuls matchs, toujours à venir.
+  if (onlyDate) dates.push(onlyDate);
+  else for (let i = 0; i < days; i++) dates.push(etDate(i, new Date(now)));
 
   const results = await Promise.allSettled(dates.map((d) => fetchGamesByDate(d)));
 
@@ -337,6 +339,11 @@ export interface BestBetsOptions {
   maxPlayers?:  number;   // how many top players to scan (default 15)
   /** Ignoré depuis le 2026-10-03 : TOUS les candidats sont chiffrés par le paquet ML. */
   mlDepth?:     number;
+  /**
+   * Jour NHL (AAAA-MM-JJ) choisi sur l'accueil : seuls ses matchs comptent, et
+   * `days` est ignoré. Hors de la fenêtre admise (voir `normalizeDate`) → ignoré.
+   */
+  date?:        string;
 }
 
 interface NormalizedOptions {
@@ -345,6 +352,7 @@ interface NormalizedOptions {
   days:       number;
   maxPlayers: number;
   mlDepth:    number;
+  date?:      string;
 }
 
 export interface BestBetsResult {
@@ -365,7 +373,21 @@ function normalizeOptions(opts: BestBetsOptions): NormalizedOptions {
     days:       num(opts.days,        2, 1,  7),
     maxPlayers: num(opts.maxPlayers, 15, 0, 40),
     mlDepth:    num(opts.mlDepth,    30, 0, 60),
+    date:       normalizeDate(opts.date),
   };
+}
+
+/**
+ * Date admise : de la veille à J+8 (jour de l'Est). Comme `days`, elle entre
+ * dans la clé de cache — la fenêtre garde l'espace des clés fini (10 dates).
+ * La veille et J+8 couvrent l'écart entre le jour UTC de l'accueil et le jour
+ * NHL de l'Est.
+ */
+export function normalizeDate(raw: unknown, now = new Date()): string | undefined {
+  const d = typeof raw === 'string' ? raw.trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return undefined;
+  for (let n = -1; n <= 8; n++) if (etDate(n, now) === d) return d;
+  return undefined;
 }
 
 /**
@@ -422,7 +444,7 @@ const LIMIT_MAX = 50;
 export async function getBestBets(opts: BestBetsOptions = {}): Promise<BestBetsResult> {
   const o = normalizeOptions(opts);
   // `mlDepth` n'entre plus dans la clé : il ne change plus le calcul.
-  const key = `${o.days}|${o.maxPlayers}|${o.source}`;
+  const key = `${o.date ?? o.days}|${o.maxPlayers}|${o.source}`;
 
   const complet = await bestBetsCache.wrap(key, () => computeBestBets({ ...o, limit: LIMIT_MAX }));
 
@@ -431,11 +453,11 @@ export async function getBestBets(opts: BestBetsOptions = {}): Promise<BestBetsR
 }
 
 async function computeBestBets(o: NormalizedOptions): Promise<BestBetsResult> {
-  const { limit, source, days, maxPlayers } = o;
+  const { limit, source, days, maxPlayers, date } = o;
 
   // 1. Gather subjects (only games tonight / next `days` days)
   const [games, allPlayers] = await Promise.all([
-    fetchUpcomingGames(days).catch(() => []),
+    fetchUpcomingGames(days, date).catch(() => []),
     maxPlayers > 0 ? fetchTopPlayers().catch(() => []) : Promise.resolve([]),
   ]);
 
@@ -542,7 +564,10 @@ async function computeBestBets(o: NormalizedOptions): Promise<BestBetsResult> {
   //    soient ceux que l'utilisateur voit. Sans attendre : un journal en panne
   //    ne retarde ni ne retire aucun pari. Import dynamique : le journal tire
   //    le règlement (et toute sa chaîne), inutile au calcul lui-même.
-  if (days === 2 && maxPlayers === 15 && source === 'ml' && process.env.NODE_ENV !== 'test') {
+  //    Depuis le 2026-10-11, l'accueil demande le JOUR choisi : on journalise
+  //    celui d'aujourd'hui (le défaut sans date reste journalisé aussi).
+  const logged = date ? date === etDate(0) : days === 2;
+  if (logged && maxPlayers === 15 && source === 'ml' && process.env.NODE_ENV !== 'test') {
     void import('./bestBetLog.service')
       .then((m) => m.logBestBets(kept))
       .catch(() => { /* journal facultatif */ });

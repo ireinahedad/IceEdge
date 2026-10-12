@@ -69,7 +69,7 @@ const features = {
   buildTeamFuturesFeatures: vi.fn(async () => ({})),
 };
 vi.mock('../services/featureEngineering', () => features);
-vi.mock('../services/bestBets.service', () => ({ getBestBets: vi.fn(async () => ({ bets: [], meta: {} })) }));
+vi.mock('../services/bestBets.service', () => ({ getBestBets: vi.fn(async () => ({ bets: [], meta: {} })), normalizeDate: (d?: string) => d }));
 
 const getGameMlBundle = vi.fn();
 vi.mock('../services/gameMlBundle', () => ({ getGameMlBundle: (id: string) => getGameMlBundle(id) }));

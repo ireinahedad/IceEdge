@@ -39,7 +39,7 @@ import {
 import { getBestBets } from "../services/bestBets.service";
 import { getCurrentValueBets } from "../services/valueBets.service";
 import { authenticate, optionalAuthenticate, requirePro } from "../middleware/auth.middleware";
-import { getBestParlays, gateBestParlays } from "../services/bestParlays.service";
+import { getBestParlays, gateBestParlays, getMoreParlays, gateMoreParlays } from "../services/bestParlays.service";
 import { isPro } from "../services/subscription.service";
 import { computeParlayProbability, normalizeMarket, type WireParlayLeg } from "../services/parlayProbability";
 import { logger } from "../logger";
@@ -120,6 +120,8 @@ router.get("/best-bets", async (req: Request, res: Response) => {
       limit:      req.query.limit   ? parseInt(String(req.query.limit), 10)   : undefined,
       days:       req.query.days    !== undefined ? plusProche(BEST_BETS_DAYS,    req.query.days,    2)  : undefined,
       maxPlayers: req.query.players !== undefined ? plusProche(BEST_BETS_PLAYERS, req.query.players, 15) : undefined,
+      // Jour choisi sur l'accueil ; borné par `normalizeDate` (sinon ignoré).
+      date:       typeof req.query.date === "string" ? req.query.date : undefined,
       source,
     });
     // Même TTL que le cache serveur : navigateur et CDN absorbent les
@@ -165,12 +167,28 @@ router.get("/best-parlays", optionalAuthenticate, async (req: Request, res: Resp
     if (req.user) {
       pro = req.user.role === "admin" || (await isPro(req.user.sub).catch(() => false));
     }
-    const result = await getBestParlays();
+    const result = await getBestParlays(typeof req.query.date === "string" ? req.query.date : undefined);
     // La réponse dépend de l'abonnement : jamais en cache partagé.
     res.set("Cache-Control", "private, no-store");
     res.json(gateBestParlays(result, pro));
   } catch (err: any) {
     sendError(res, err, { context: '[predict/best-parlays]', fallbackMessage: 'Best parlays failed' });
+  }
+});
+
+// GET /api/predict/more-parlays?date=AAAA-MM-JJ — page « Plus de parlays »
+// (2026-10-11). En tête, les combinés de l'accueil (cotés) ; puis 2 à 8 jambes,
+// même match / même équipe / même type / mélangés, cotes non requises.
+// Réservée aux Pro (demande du user, 2026-10-11) : `requirePro` refuse les
+// autres AVANT tout calcul, comme value-bets. `gateMoreParlays(…, true)` :
+// un appelant qui passe ici est Pro.
+router.get("/more-parlays", authenticate, requirePro, async (req: Request, res: Response) => {
+  try {
+    const result = await getMoreParlays(typeof req.query.date === "string" ? req.query.date : undefined);
+    res.set("Cache-Control", "private, no-store");
+    res.json(gateMoreParlays(result, true));
+  } catch (err: any) {
+    sendError(res, err, { context: '[predict/more-parlays]', fallbackMessage: 'More parlays failed' });
   }
 });
 
