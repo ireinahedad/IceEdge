@@ -631,6 +631,60 @@ def _load_player_model() -> None:
 _load_player_model()
 
 
+# ── Effets ARBITRE (2026-10-12) ───────────────────────────────────────────────
+#
+# Table `ref_effects.json` (écrite par train_player.py et refresh_data.py, via
+# referee_effects.py) : tendance de chaque arbitre à siffler (pénalités,
+# minutes à 5 c. 4). Les variables `ref_pen` / `ref_pp` d'un match = somme des
+# effets de ses deux arbitres. Lue seulement par les stats joueur dont la liste
+# de features les contient (pénalités, cf. player_ref_report.json). Arbitres
+# inconnus, non annoncés ou table absente → 0, la valeur neutre — celle que
+# l'entraînement donne à un arbitre sans historique.
+_ref_table: dict = {}
+
+
+def _norm_ref_name(name) -> str:
+    """Miroir de `normalizeRefName` (refereeStore.ts) et de referee_effects.norm_ref_name."""
+    import unicodedata
+    s = unicodedata.normalize("NFD", str(name or ""))
+    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
+    s = re.sub(r"[^a-z\s]", "", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _load_ref_table() -> None:
+    global _ref_table
+    path = os.path.join(MODELS_DIR, "ref_effects.json")
+    uses = sorted(s for s, fs in _player_feats_by_stat.items() if "ref_pen" in fs or "ref_pp" in fs)
+    if not os.path.exists(path):
+        if uses:
+            print(f"[ML] ⚠️  modèle joueur avec arbitres ({', '.join(uses)}) mais ref_effects.json absent — "
+                  "variables arbitre à 0 (neutre). Relance : python train_player.py --state-only")
+        return
+    try:
+        with open(path, encoding="utf-8") as fh:
+            _ref_table = json.load(fh)
+        print(f"[ML] ✅ effets arbitre : {len(_ref_table.get('refs', {}))} arbitres (au {_ref_table.get('as_of')})"
+              + (f", utilisés par : {', '.join(uses)}" if uses else ", inutilisés par le modèle joueur"))
+    except Exception as e:
+        _ref_table = {}
+        print(f"[ML] ⚠️  ref_effects.json illisible : {e} — variables arbitre à 0")
+
+
+def _ref_features(referees: Optional[List[str]]) -> dict[str, float]:
+    refs = (_ref_table.get("refs") or {}) if _ref_table else {}
+    out = {"ref_pen": 0.0, "ref_pp": 0.0}
+    for r in referees or []:
+        e = refs.get(_norm_ref_name(r))
+        if e:
+            out["ref_pen"] += float(e.get("pen", 0.0))
+            out["ref_pp"] += float(e.get("pp", 0.0))
+    return out
+
+
+_load_ref_table()
+
+
 # ── Couche de correction du moneyline (2026-10-02) ───────────────────────────
 #
 # Une régression logistique posée SUR la victoire du modèle de score :
@@ -2697,7 +2751,8 @@ def predict_game(f: GameFeatures) -> MLResponse:
 # Ici : un contexte, N lectures. Un marché qu'on ne sait pas pricer rend `null`
 # pour SA case, sans faire échouer le paquet.
 
-def _player_rates(ctx: dict, f: GameFeatures, home_ids: list[str], away_ids: list[str]) -> dict:
+def _player_rates(ctx: dict, f: GameFeatures, home_ids: list[str], away_ids: list[str],
+                  referees: Optional[List[str]] = None) -> dict:
     """Cadence par match de chaque joueur des deux alignements, pour CE match.
 
     L'état du joueur (rôle, talent, coéquipiers) vient de `player_state.json` ;
@@ -2719,6 +2774,7 @@ def _player_rates(ctx: dict, f: GameFeatures, home_ids: list[str], away_ids: lis
     vs_names = _player_state.get("vs_features") or []
     vs_none = {n: (0.0 if n == "vs_gp" else 1.0) for n in vs_names}
     teams = {"home": (f.home_team or "").upper(), "away": (f.away_team or "").upper()}
+    ref_vals = _ref_features(referees)
     ids, rows = [], []
     for side, other, pids in (("home", "away", home_ids), ("away", "home", away_ids)):
         opp = _PLAYER_FRANCHISE.get(teams[other], teams[other])
@@ -2733,6 +2789,7 @@ def _player_rates(ctx: dict, f: GameFeatures, home_ids: list[str], away_ids: lis
             row["is_D"] = 1 if st.get("pos") == "D" else 0
             row["b2b"] = float(getattr(f, f"{side}_b2b", 0) or 0)
             row["days_rest"] = float(getattr(f, f"{side}_rest_days", 2) or 2)
+            row.update(ref_vals)
             for c in _PLAYER_TEAM_COLS:
                 row[f"tm_{c}"] = fv.get(f"{side}_{c}")
                 row[f"opp_{c}"] = fv.get(f"{other}_{c}")
@@ -2773,6 +2830,9 @@ class GameBundleRequest(BaseModel):
     # Identifiants NHL des deux effectifs : le paquet renvoie alors aussi les
     # cadences du modèle joueur, dans la MÊME réponse.
     players: Optional[BundlePlayers] = None
+    # Arbitres du match (noms, tels que Node les a — Scouting the Refs ou saisie
+    # manuelle). Absents = variables arbitre à 0, neutre.
+    referees: Optional[List[str]] = Field(None, max_length=4)
 
 
 class GameBundleResponse(BaseModel):
@@ -2802,7 +2862,7 @@ def predict_game_bundle(req: GameBundleRequest) -> GameBundleResponse:
     dist = ctx["score_dist"]
     rates = {}
     if req.players is not None:
-        rates = _player_rates(ctx, req.features, req.players.home, req.players.away)
+        rates = _player_rates(ctx, req.features, req.players.home, req.players.away, req.referees)
     return GameBundleResponse(
         results=results,
         lambda_home=None if dist is None else round(dist.lam_home, 4),

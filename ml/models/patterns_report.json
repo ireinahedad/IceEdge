@@ -180,16 +180,16 @@
   "lecture": "Si l'arrêt précoce garde 1 arbre et que vs_base est nul, les combinaisons de ces facteurs n'apportent rien que la base ne sache déjà."
  },
  "candidates": {
-  "as_of": "2026-10-12T06:27Z",
+  "as_of": "2026-10-12T07:01Z",
   "lone_b2b_vs_market": {
    "avant_inscription": {
-    "n": 2776,
+    "n": 2769,
     "du": "2014-10-09",
-    "au": "2026-10-04",
-    "victoires": 0.4161,
-    "marche": 0.4438,
-    "z_vs_marche": -3.01,
-    "roi_contre_pct": 1.87,
+    "au": "2026-04-16",
+    "victoires": 0.4168,
+    "marche": 0.4443,
+    "z_vs_marche": -2.98,
+    "roi_contre_pct": 1.86,
     "roi_se_pct": 1.72
    },
    "depuis_inscription": {
@@ -651,7 +651,7 @@
    "persistance_corr_z": 0.194
   }
  },
- "generated": "2026-10-12T06:23Z",
+ "generated": "2026-10-12T06:52Z",
  "rules": {
   "fdr_q": 0.1,
   "z_replicate": 1.645,

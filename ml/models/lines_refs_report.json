@@ -1,0 +1,209 @@
+{
+ "generated": "2026-10-12T08:01Z",
+ "lines": {
+  "protocole": "5c5, combinaisons ≥ 100 min ensemble, membres ≥ 200 min sans elles ; synergie = xGF% ensemble − moyenne des xGF% sans",
+  "saisons": [
+   2008,
+   2025
+  ],
+  "paire": {
+   "combinaisons_saisons": 4756,
+   "corr_attendu_vs_reel": {
+    "corr": 0.376,
+    "n": 4756
+   },
+   "ecart_type_synergie": 0.0625,
+   "persistance_synergie": {
+    "corr": 0.12,
+    "n": 1210,
+    "ic95": [
+     0.064,
+     0.175
+    ]
+   },
+   "persistance_xgf_pct_brut": {
+    "corr": 0.297,
+    "n": 1210,
+    "ic95": [
+     0.245,
+     0.348
+    ]
+   },
+   "top10pct_synergie_s": {
+    "n": 121,
+    "synergie_moy_s": 0.1096,
+    "synergie_moy_s+1": 0.0185
+   }
+  },
+  "trio": {
+   "combinaisons_saisons": 3317,
+   "corr_attendu_vs_reel": {
+    "corr": 0.422,
+    "n": 3317
+   },
+   "ecart_type_synergie": 0.0664,
+   "persistance_synergie": {
+    "corr": 0.021,
+    "n": 477,
+    "ic95": [
+     -0.069,
+     0.111
+    ]
+   },
+   "persistance_xgf_pct_brut": {
+    "corr": 0.317,
+    "n": 477,
+    "ic95": [
+     0.234,
+     0.396
+    ]
+   },
+   "top10pct_synergie_s": {
+    "n": 47,
+    "synergie_moy_s": 0.1319,
+    "synergie_moy_s+1": 0.023
+   }
+  },
+  "controle_positif_joueur": {
+   "corr": 0.381,
+   "n": 6526,
+   "ic95": [
+    0.36,
+    0.402
+   ]
+  }
+ },
+ "refs": {
+  "matchs": 21596,
+  "saisons": [
+   2008,
+   2026
+  ],
+  "arbitres": 83,
+  "persistance_pairs_vs_impairs": {
+   "penalties": {
+    "corr": 0.817,
+    "n": 55,
+    "ic95": [
+     0.704,
+     0.89
+    ],
+    "ecart_type_par_match": 3.651,
+    "ecart_type_effets_arbitre": 0.42
+   },
+   "pp_min": {
+    "corr": 0.813,
+    "n": 55,
+    "ic95": [
+     0.698,
+     0.887
+    ],
+    "ecart_type_par_match": 3.856,
+    "ecart_type_effets_arbitre": 0.49
+   },
+   "goals": {
+    "corr": -0.01,
+    "n": 55,
+    "ic95": [
+     -0.275,
+     0.256
+    ],
+    "ecart_type_par_match": 2.32,
+    "ecart_type_effets_arbitre": 0.094
+   },
+   "goals_resid": {
+    "corr": 0.029,
+    "n": 49,
+    "ic95": [
+     -0.254,
+     0.308
+    ],
+    "ecart_type_par_match": 2.287,
+    "ecart_type_effets_arbitre": 0.094
+   }
+  },
+  "walk_forward_total": {
+   "n": 13581,
+   "delta_deviance": 0.00432,
+   "se": 0.001118,
+   "z": 3.86,
+   "saisons_meilleures": "2/12",
+   "verdict": "PIRE",
+   "regle": "z <= -2 (apparié par match) ET >= 70 % des saisons",
+   "par_saison": [
+    {
+     "saison": 2015,
+     "n": 1230,
+     "k": 1.0,
+     "delta_deviance": 0.010909
+    },
+    {
+     "saison": 2016,
+     "n": 1230,
+     "k": 1.0,
+     "delta_deviance": 0.005986
+    },
+    {
+     "saison": 2017,
+     "n": 1266,
+     "k": 1.0,
+     "delta_deviance": 0.003644
+    },
+    {
+     "saison": 2018,
+     "n": 1271,
+     "k": 1.0,
+     "delta_deviance": 0.000139
+    },
+    {
+     "saison": 2019,
+     "n": 1082,
+     "k": 1.0,
+     "delta_deviance": 0.007516
+    },
+    {
+     "saison": 2020,
+     "n": 868,
+     "k": 1.0,
+     "delta_deviance": 0.000929
+    },
+    {
+     "saison": 2021,
+     "n": 1305,
+     "k": 1.0,
+     "delta_deviance": 0.003517
+    },
+    {
+     "saison": 2022,
+     "n": 1311,
+     "k": 1.0,
+     "delta_deviance": 0.004987
+    },
+    {
+     "saison": 2023,
+     "n": 1312,
+     "k": 1.0,
+     "delta_deviance": 0.006883
+    },
+    {
+     "saison": 2024,
+     "n": 1312,
+     "k": 1.0,
+     "delta_deviance": -0.001586
+    },
+    {
+     "saison": 2025,
+     "n": 1311,
+     "k": 1.0,
+     "delta_deviance": 0.004697
+    },
+    {
+     "saison": 2026,
+     "n": 83,
+     "k": 1.0,
+     "delta_deviance": -0.000902
+    }
+   ]
+  }
+ }
+}

@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState, useContext } from "react";
 import { predictionApiService } from "../../services/predictionApiService";
 import { requestFromMLProps } from "../../services/predictionRequest";
 import { useI18n } from "../../i18n";
+import { ruleNote as localizeRuleNote } from "../../i18n/serverText";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { useBet } from "../../context/BetContext";
 import type { BetLeg, PredictionCaveat } from "../../types/bet";
@@ -435,7 +436,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
                 <div className="h-2 rounded-full transition-all duration-700"
                   style={{ width: `${rulePct}%`, backgroundColor: ruleColor }} />
               </div>
-              <p className="text-[#8a9ea6] text-[11px] leading-relaxed">{ruleNote}</p>
+              <p className="text-[#8a9ea6] text-[11px] leading-relaxed">{localizeRuleNote(ruleNote, lang)}</p>
             </div>
           </div>
         )}
@@ -456,14 +457,14 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
                   }}
                   className="text-[11px] font-semibold px-2 py-1 rounded-md bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 transition-colors"
                 >
-                  {copied ? (lang === "fr" ? "Copié" : "Copied") : (lang === "fr" ? "Copier" : "Copy")}
+                  {copied ? t("pred.copied") : t("pred.copy")}
                 </button>
               )}
               <button
                 onClick={() => setLlmOpen((v) => !v)}
                 className="text-[11px] text-purple-300 font-semibold px-2.5 py-1 rounded-lg border border-purple-400/30 hover:bg-purple-500/15"
               >
-                {llmOpen ? "▲" : (lang === "fr" ? "Voir" : "View") + " ▼"}
+                {llmOpen ? "▲" : t("pred.view") + " ▼"}
               </button>
             </div>
             {llmOpen && (

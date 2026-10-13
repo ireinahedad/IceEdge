@@ -175,42 +175,88 @@ cote de clôture quand elle existe.
       `refresh_data` ne touche pas `odds.csv`, il faut `npm run odds:export` (server) puis
       `python fetch_data_v4.py --only odds --from-local` avant le refresh. Au 2026-10-12 :
       42 matchs sur 83 de 2026-27 ont une cote.
-- [ ] **⚠️ Cotes `oddsapi:live` faussées — corrigé dans le code le 2026-10-12, reste à déployer
-      et à réparer la base.** Trois défauts trouvés dans `odds_log` (donc `odds_live_log.csv`,
-      `odds.csv`, `nhl_games_v4.csv`) :
-      ① ouverture = toute première observation, jusqu'à 5 semaines avant le match, chez un livre
-      inconnu (avant la 038) ; ② 12 clôtures et 20 ouvertures sur 42 avec une marge impossible
-      (0.79-0.88 : prix « 3 issues » ou livres mélangés) ; ③ **clôtures EN DIRECT** — les passes de
-      21 h 45 / 22 h 45 ET écrasaient la clôture avec le prix du match en cours (NYI–NJD
-      2026-10-03 : 1.00 / 31.00, 25 snapshots après la mise au jeu ce soir-là). Fuite du score
-      dans la cote.
-      Correctifs : `oddsLogger.service.ts` ignore les matchs commencés (odds_log ET snapshots),
-      n'écrit `odds_log` que pour les matchs du jour, jette une paire hors marge [1.00, 1.12]
-      (`isValidTwoWay`) ; `fetch_data_v4.py` écarte aussi ces paires à l'import du log live ;
-      `npm run odds:repair` reconstruit ouverture/clôture depuis `odds_snapshots` (livre de collecte,
-      jour du match, avant la mise au jeu) — essai à blanc par défaut, `--apply` pour écrire.
-      Tests : 13 (vitest). À faire, dans l'ordre :
-      1. committer, `npm test`, déployer le serveur (le collecteur en prod garde le bug d'ici là) ;
-      2. `cd server && npm run odds:repair` → relire → `npm run odds:repair -- --apply` ;
-      3. `npm run odds:export` et `npm run odds:export-snapshots`, puis dans `ml/python` :
-         `python fetch_data_v4.py --only odds --from-local` et `python build_dataset.py`.
-      Un match sans observation valide LE JOUR du match passe à NULL (l'essai à blanc donne le
-      compte exact). D'après l'export des snapshots du 7 oct., la série a deux trous : aucune
-      passe entre le 21 sept. et le 4 oct. 01:45Z, et aucune après le 4 oct. 02:45Z jusqu'à
-      l'export — à vérifier sur `/api/dev/data-health` (collecteur arrêté ? réserve de quota ?).
-      Récupérer ces matchs demanderait l'historique payant The Odds API (outil de A1).
-- [ ] **P4. Intégration — seulement par les protocoles existants.** Victoire → variable candidate
+- [ ] **⛔ Collecteur de cotes à l'arrêt depuis le 2026-10-04 02:45Z (constaté le 2026-10-12).**
+      Les correctifs du 2026-10-12 (matchs en cours ignorés, `odds_log` le jour du match seulement,
+      paires hors marge [1.00, 1.12] jetées, `npm run odds:repair`, filtre à l'import dans
+      `fetch_data_v4.py`) sont déployés et la base réparée. La réparation a révélé le vrai problème :
+      `odds_snapshots` ne contient que DEUX passes DraftKings (2026-10-04 01:45Z et 02:45Z) ; toutes
+      les « clôtures » des matchs du 4 au 10 oct. venaient de ces deux passes, donc d'un prix vieux
+      de 1 à 6 jours. Avant : rien entre le 21 sept. 02:45Z et le 4 oct. Après réparation, 2 matchs
+      sur 83 de 2026-27 ont une cote. Bloque : suivi du candidat b2b (P3), CLV (A3), puck line (A2).
+      **Cause : `ODDS_LOG_ENABLED=false` sur Railway** (crédits OK : 14 695 / 20 000 utilisés).
+      À faire : poser `ODDS_LOG_ENABLED=true` sur Railway (redéploie), vérifier dans les logs
+      `[OddsLogger] calendrier armé`, puis le lendemain une passe dans `odds_snapshots`.
+      Garde-fous ajoutés : `startOddsLogger` crie au démarrage si le drapeau n'est pas à true ;
+      `refresh_data.py` affiche chaque lundi la couverture des cotes de la saison (⚠️ sous 80 %).
+      Les jours perdus (21 sept. → 3 oct., 4 → 12 oct.) ne se rattrapent qu'avec l'historique
+      payant The Odds API (facturé par marché et par horodatage, un appel couvre tous les matchs
+      de l'instant — outil et barème de A1 ; à décider avec A1).
+- [ ] **Rattrapage des cotes manquées (29 sept. → 11 oct. 2026), à lancer à la main.** Estimation
+      `--odds-api-dry-run` : ≤ 1 040 crédits (13 jours × ~4 appels × 20). Solde au 2026-10-12 :
+      5 305 → réserve abaissée à 3 000 pour ce run (proxy + collecte jusqu'au 1er nov.). Depuis
+      `ml/python`, avec `ODDS_API_KEY` posée :
+      `python fetch_data_v4.py --only odds --from-local --odds-api-book draftkings --odds-api-from 2026-09-29 --odds-api-to 2026-10-11 --odds-api-budget 1200 --odds-api-keep 3000`
+      puis `python build_dataset.py`. `fetch_data_v4` n'écrase plus une ligne backfill par une ligne
+      du log live vide (matchs vidés par `odds:repair`).
+- [ ] **P4. Intégration — seulement par les protocoles existants.**
+      ✔ Mesuré le 2026-10-12 (`measure_b2b_value.py` → `b2b_value_report.json`) : sur l'équipe SEULE
+      en b2b, la chaîne servie est calibrée en 2015-19 mais trop haute en 2020-26 (43.3 % annoncé,
+      40.5 % réel, z −2.24) — moins que le marché (44.9 %, z −3.12). Value bets servis : SUR elle
+      234 paris, ROI −9.4 % ± 7.1 ; CONTRE elle 517, +7.9 % ± 4.0 ; autres 2 909, +1.5 % ± 1.9.
+      Terme b2b de plus en walk-forward : **NON TRANCHABLE** (Δ −0.000002, z −0.02, 5/9 saisons).
+      → aucun changement de modèle ; si `lone_b2b_vs_market` se confirme en avant, proposer la
+      règle « ne jamais recommander l'équipe seule en b2b » (registre, `if_confirmed`). Victoire → variable candidate
       de `backtest_walkforward.py --correction` ; totaux → `measure_level.py` / features du score ;
       props → `train_player.py` avec la règle de `vs_lift` (validation ET test, z ≥ 2). Effet
       propre à une équipe ou un joueur : rétréci par la variance mesurée entre périodes.
-- [ ] **P5. Nouvelles données qui ouvriraient des familles aujourd'hui intestables** :
-      historique des cotes de props joueur (sans lui, aucun pattern joueur ne se juge contre le
-      marché) ; trios / temps de glace partagé (MoneyPuck `lines`) pour les combinaisons de
-      joueurs ; entraîneurs ; arbitres (pénalités, AN) ; blessures datées ; heure de confirmation
-      du gardien partant.
-- [ ] **P6. Produit.** L'Analyse IA et les contenus peuvent citer un fait descriptif (« Caufield :
-      0.61 but/match le samedi depuis 2021 ») **avec** l'étiquette « historique, non prédictif », n et
-      l'intervalle — jamais comme raison d'un pick tant qu'il n'est pas adopté en P4.
+- [ ] **P5. Nouvelles données — trios/paires et arbitres collectés et mesurés le 2026-10-12.**
+      `fetch_officials_lines.py` (gratuit, reprenable) → `ml/data/officials.csv` (21 698 matchs
+      2008 → 2026-27, arbitres + juges de lignes, API NHL `right-rail`) et
+      `ml/data/raw/lines/{lines,skaters}_{saison}.csv` (MoneyPuck, 5c5). Mesures :
+      `measure_lines_refs.py` → `ml/models/lines_refs_report.json`.
+      **Trios** : synergie (xGF% ensemble − xGF% des membres sans le trio) ne persiste pas d'une
+      saison à l'autre : corr 0.02 [−0.07 ; 0.11], n 477 ; top 10 % +13.2 pts → +2.3. Le modèle
+      « somme des joueurs » (`lineup_xg`) suffit. **Paires de défense** : faible persistance,
+      0.12 [0.06 ; 0.18], n 1 210 ; top 10 % +11.0 → +1.9 pt — complémentarité ou simple usage
+      (adversaires, mises en jeu), non séparé ; trop petit pour un match → pas d'intégration.
+      Contrôle positif (talent du joueur sans la combinaison) : 0.38.
+      **Arbitres** (83, dont 55 avec ≥ 100 matchs saisons paires ET impaires) : effet très réel et
+      stable sur les **pénalités** (corr pairs/impairs 0.82 [0.70 ; 0.89], ±0.42 pénalité/match par
+      arbitre) et le **temps en AN** (0.81, ±0.49 min) — mais **aucun sur les buts** (−0.01 ; résidu
+      vs total servi 0.03). Walk-forward « effet arbitre ajouté au total servi » : **PIRE**
+      (déviance +0.0043, z +3.86, meilleur 2 saisons sur 12).
+      ✔ Décidé et fait le 2026-10-12 : facteur « Arbitrage (PP) » RETIRÉ des totaux
+      (`factorModel.ts`, plus d'appel `getGameRefFactor` dans `nhlPredictions.ts` — une requête
+      Scouting the Refs de moins par prédiction ; `refereeStore.ts` et `/api/manual/referees`
+      restent, plus rien ne les lit pour les totaux ; l'entrée `referee` de
+      `client/.../factorDescriptions.ts` est devenue morte). Ne pas le remettre sans nouvelle mesure.
+      **Props joueur** (`measure_ref_props.py` → `ref_props_report.json`, 2026-10-12) :
+      variables pré-match `ref_pen` / `ref_pp` (effet rétréci des 2 arbitres, matchs PRÉCÉDENTS
+      seulement) ajoutées au modèle joueur servi, protocole et règle du face-à-face. Contrôle
+      match (test 2023-26) : quintile d'arbitres haut 7.30 pénalités/match contre 6.42 en bas.
+      **PIM : GARDÉ par la règle** (z 2.55, val ET test > 0, 3 saisons de test sur 3 ; quintile
+      haut obs/servi 1.039 → prédiction ×1.072, bas 0.931 → ×0.959). **Points en AN : NON** (z 1.74,
+      2 saisons sur 3) → candidat `ref_pp_points` au registre, à remesurer avec 2026-27.
+      Reproduction exacte du servi (log-vraisemblance −0.76652 / −0.25301 = `player_report.json`).
+      **Intégration PIM — codée le 2026-10-12, à activer** : `referee_effects.py` (variables +
+      table), `train_player.py` (essaie `ref_*` pour pim et ppPoints avec la règle →
+      `player_ref_report.json` ; écrit `ref_effects.json` avec l'état), `refresh_data.py` étape 6
+      (arbitres des nouveaux matchs + table, chaque lundi), `ml_service.py` (`referees` dans
+      `/predict/game/bundle` → `ref_pen`/`ref_pp`, 0 si inconnus ou table absente),
+      `gameMlBundle.ts` (envoie les arbitres de `getGameRefFactor`). Validé en cloud : réentraînement
+      complet identique au servi pour les 7 autres stats ; pim gardé (z 2.46, log-vrais. −0.76652 →
+      −0.76636), ppPoints non (z 1.68). Reste : `python train_player.py` sur le poste, committer
+      `ml/models/player/*.json`, `player_report.json`, `player_state.json`, `player_ref_report.json`,
+      `ref_effects.json` + le code, `npm test`, déployer ML puis serveur.
+      Reste possible : historique des cotes de props joueur (payant, à chiffrer) ; trios par match
+      (feuilles de présence `shiftcharts`, ~270 Ko/match) seulement si une piste le justifie.
+- [ ] **P6. Produit — déjà tenu par l'Analyse IA v2, à garder tel quel.** Vérifié le 2026-10-12 :
+      `EXPLAIN_BET_V2` (`llmAnalysis.ts`) n'écrit qu'à partir du bloc FAITS calculé par le code et
+      interdit toute connaissance extérieure (« historique » compris) ; aucun pattern n'y entre.
+      Règle : un fait descriptif ajouté un jour aux FAITS porte l'étiquette « historique, non
+      prédictif », n et l'intervalle. ✔ 2026-10-12 : l'invite LEGACY `EXPLAIN_BET` (repli,
+      `llmPrompts.ts`, FR + EN) interdit désormais les tendances face-à-face, jour, aréna, mois et
+      joueur-contre-équipe.
 
 **Attention, fuite à ne pas réintroduire.** `goalie_backup` et `lineup_xg` du dataset sont
 construits avec le gardien et l'alignement RÉELS. Un pattern conditionné au gardien doit être
@@ -808,6 +854,10 @@ live_pregame.py        λ et P avant-match rejoués sur l'historique → live_pr
                        --served : chaîne servie (correction + niveau) → served_pregame.csv
 discover_patterns.py   découverte de patterns vs chaîne servie, BH, réplication,
                        persistance, registre des candidats → patterns_report.json
+measure_b2b_value.py   back-to-back : calibration servie, value bets, terme walk-forward
+fetch_officials_lines.py  arbitres (API NHL) + trios/paires (MoneyPuck), gratuit
+measure_lines_refs.py  synergie trios/paires, effets arbitre → lines_refs_report.json
+measure_ref_props.py   arbitres × props joueur (pim, ppPoints) → ref_props_report.json
 calibrate_live.py      calibration du modèle en direct
 fetch_live_goals.py    buts horodatés pour le direct
 content_insights*.py   insights éditoriaux (SEO / contenu), hors prédiction

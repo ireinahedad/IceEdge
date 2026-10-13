@@ -34,6 +34,13 @@ Tout est PRÉ-MATCH (fenêtres décalées d'un match) :
                 validation ET en test (z ≥ 2) → `player_vs_report.json`.
                 Mesure 2026-10-06 : gardé pour mises en échec et pénalités ;
                 bruit pour buts, passes, points, tirs, tirs bloqués, points AN.
+  · arbitres  — `ref_pen` / `ref_pp` (referee_effects.py) : tendance des deux
+                arbitres du match à siffler (pénalités, minutes à 5 c. 4),
+                calculée sur leurs matchs PRÉCÉDENTS. Essayés pour REF_TRY_STATS
+                avec la même règle que le face-à-face → `player_ref_report.json`.
+                Mesure 2026-10-12 (`measure_ref_props.py`) : gardé pour les
+                pénalités (z 2.55), pas pour les points AN (z 1.74). Table
+                d'inférence : `ref_effects.json` (0 = arbitre inconnu, neutre).
 
 ── Validation ───────────────────────────────────────────────────────────────
 Entraînement ≤ 2021-22, arrêt précoce sur 2022-23, test 2023-24 → 2025-26. La
@@ -47,6 +54,8 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 from scipy.special import gammaln
+
+import referee_effects as RE
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(HERE, "..", "data")
@@ -82,6 +91,9 @@ FRANCHISE = {"ATL": "WPG", "PHX": "UTA", "ARI": "UTA", "L.A": "LAK", "S.J": "SJS
              "N.J": "NJD", "T.B": "TBL"}
 VS_PSEUDO = dict(goals=4, assists=5, points=6, shots=20, hits=15, blocks=10, pim=10, ppPoints=3)
 VS_FEATS = ["vs_gp"] + [f"vs_lift_{s}" for s in STATS]
+# Arbitres (2026-10-12) : seulement les stats où un effet est plausible — la
+# mesure a porté sur ces deux-là ; l'essayer partout multiplierait les tests.
+REF_TRY_STATS = ("pim", "ppPoints")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -301,6 +313,8 @@ def main():
     ap.add_argument("--state-only", action="store_true")
     ap.add_argument("--no-vs", action="store_true",
                     help="N'essaie pas les face-à-face (modèle sans vs_* pour toutes les stats)")
+    ap.add_argument("--no-refs", action="store_true",
+                    help="N'essaie pas les variables arbitre (ref_pen / ref_pp)")
     args = ap.parse_args()
     t0 = time.time()
     print("⛸️  lecture des patineurs MoneyPuck …")
@@ -318,6 +332,9 @@ def main():
               open(os.path.join(MODELS_DIR, "player_state.json"), "w"))
     print(f"   état : {len(state)} joueurs, {sum(len(v) for v in vs_state.values())} "
           f"paires joueur-adversaire → player_state.json")
+    # Table d'inférence des arbitres : toujours réécrite avec l'état, pour qu'un
+    # modèle entraîné AVEC ref_* ne parte jamais sans elle.
+    RE.write_table(DATA_DIR, MODELS_DIR)
     if args.state_only:
         return
 
@@ -333,6 +350,13 @@ def main():
                   on=["playerId", "season"], how="left")
     games = pd.read_csv(os.path.join(DATA_DIR, "nhl_games_v4.csv"), low_memory=False)
     df = game_context(df, games)
+    ref_games = RE.load_ref_games(DATA_DIR)
+    if ref_games is not None:
+        df = df.merge(RE.pregame_features(ref_games), left_on="gameId", right_on="game_id",
+                      how="left", suffixes=("", "_ref"))
+    for c in RE.REF_FEATS:
+        if c not in df:
+            df[c] = np.nan
     df = df[df.season >= 2010]
     BASE = feature_names()
     WITH_VS = BASE + VS_FEATS
@@ -358,7 +382,8 @@ def main():
         mu_te = bst.predict(xgb.DMatrix(te[feats], feature_names=feats), iteration_range=it)
         return bst[: it[1]], it[1], k, mu_va, mu_te
 
-    report, vs_report = {}, {}
+    report, vs_report, ref_report = {}, {}, {}
+    try_refs = ref_games is not None and not args.no_refs
     yrs = te.season.values
     has_vs = (te.vs_gp >= 3).values
     for s in STATS:
@@ -397,6 +422,25 @@ def main():
             print(f"   {s:9s} face-à-face : {vs_report[s]}", flush=True)
             if keep:
                 chosen = (b1, r1, k1, mte1, WITH_VS)
+        if try_refs and s in REF_TRY_STATS:
+            # Arbitres : mêmes features que le modèle retenu ci-dessus, + ref_*.
+            # Même règle que le face-à-face, posée avant le run (2026-10-12).
+            cur_feats = chosen[4]
+            mva_c = chosen[0].predict(xgb.DMatrix(va[cur_feats], feature_names=cur_feats))
+            ref_feats = cur_feats + RE.REF_FEATS
+            p_ref = params_vs if cur_feats is WITH_VS else params
+            b2, r2, k2, mva2, mte2 = fit(ref_feats, p_ref, y)
+            d_va = nb_ll(yv, mva2, k2) - nb_ll(yv, mva_c, chosen[2])
+            d_te = nb_ll(yt, mte2, k2) - nb_ll(yt, chosen[3], chosen[2])
+            z = float(d_te.mean() / (d_te.std(ddof=1) / np.sqrt(len(d_te))))
+            keep = bool(d_va.mean() > 0 and d_te.mean() > 0 and z >= 2)
+            ref_report[s] = {"keep": keep, "z_test": round(z, 2),
+                             "dll_val": round(float(d_va.mean()), 6), "dll_test": round(float(d_te.mean()), 6),
+                             "dll_test_by_season": {int(ss): round(float(d_te[yrs == ss].mean()), 6)
+                                                    for ss in np.unique(yrs)}}
+            print(f"   {s:9s} arbitres : {ref_report[s]}", flush=True)
+            if keep:
+                chosen = (b2, r2, k2, mte2, ref_feats)
         bst, rounds, k, mu, feats = chosen
         base = baseline(te, s)
         kb = fit_k(yv, baseline(va, s))
@@ -410,12 +454,14 @@ def main():
         }
         bst.save_model(os.path.join(out_dir, f"{s}.json"))
         print(f"   {s:9s} {({k_: v for k_, v in report[s].items() if k_ != 'features'})}  "
-              f"vs={'oui' if feats is WITH_VS else 'non'} ({time.time()-t0:.0f}s)", flush=True)
+              f"vs={'oui' if 'vs_gp' in feats else 'non'} "
+              f"arbitres={'oui' if 'ref_pen' in feats else 'non'} ({time.time()-t0:.0f}s)", flush=True)
 
-    used_vs = any(r["features"] is WITH_VS for r in report.values())
+    union = BASE + [f for f in VS_FEATS + RE.REF_FEATS
+                    if any(f in r["features"] for r in report.values())]
     json.dump({"trained_at": time.strftime("%Y-%m-%d"),
                # Union des features — chaque stat a sa propre liste dans stats[s].features.
-               "features": WITH_VS if used_vs else BASE,
+               "features": union,
                "split": {"train": "<=2021", "val": 2022, "test": ">=2023"},
                "stats": report}, open(os.path.join(MODELS_DIR, "player_report.json"), "w"), indent=1)
     if vs_report:
@@ -424,6 +470,12 @@ def main():
                    "rule": "garder si Δ log-vraisemblance > 0 en validation ET en test, avec z ≥ 2 en test",
                    "stats": vs_report},
                   open(os.path.join(MODELS_DIR, "player_vs_report.json"), "w"), indent=1)
+    if ref_report:
+        json.dump({"trained_at": time.strftime("%Y-%m-%d"), "features": RE.REF_FEATS,
+                   "shrink": RE.REF_SHRINK, "league_window": RE.LEAGUE_WINDOW,
+                   "rule": "garder si Δ log-vraisemblance > 0 en validation ET en test, avec z ≥ 2 en test",
+                   "stats": ref_report},
+                  open(os.path.join(MODELS_DIR, "player_ref_report.json"), "w"), indent=1)
     print("✅ modèle joueur écrit")
 
 

@@ -7,8 +7,14 @@
    "hypothesis": "Une équipe SEULE en back-to-back (l'adversaire ne l'est pas) gagne moins souvent que la probabilité de clôture dévigée ne l'annonce.",
    "direction": "victoires < marché",
    "origin": "pilote 2026-10-12 : 2014-19 n 1753, 42.6 % vs 44.2 % (z -1.38), ROI contre -0.6 % ; 2020-25 n 1016, 40.2 % vs 44.9 % (z -3.12), ROI contre +6.1 % ± 2.9. Repéré en regardant la validation : seules les données à partir de `registered` comptent.",
-   "rule": {"min_n": 300, "z_max": -2.0, "metric": "z de (victoires - p marché clôture) sur les matchs datés >= registered"},
-   "auto": true
+   "rule": {
+    "min_n": 300,
+    "z_max": -2.0,
+    "metric": "z de (victoires - p marché clôture) sur les matchs datés >= registered"
+   },
+   "auto": true,
+   "value_bet_angle": "measure_b2b_value.py (2026-10-12, données 2015-2026, règle servie edge [2 %, 6 %] vs ouverture, EV >= 0) : paris SUR l'équipe seule en b2b 234, ROI -9.4 % ± 7.1 ; paris CONTRE elle 517, ROI +7.9 % ± 4.0 ; autres 2 909, +1.5 % ± 1.9. Chaîne servie sur l'équipe en b2b : 2015-19 calibrée (43.2 % servi / 43.3 % réel), 2020-26 trop haute (43.3 % / 40.5 %, z -2.24) ; marché encore plus haut (44.9 %, z -3.12). Terme b2b de plus en walk-forward : NON TRANCHABLE (Δ -0.000002, z -0.02). Sous-groupes choisis sur ces données : rien à adopter, même hypothèse que ce candidat.",
+   "if_confirmed": "pas de changement de modèle (le walk-forward ne le soutient pas) : proposer une règle de value bets « ne jamais recommander l'équipe seule en b2b », jugée elle aussi en avant sur les paris servis (served_value_bets_report)."
   },
   {
    "id": "shooter_goalie_pairs",
@@ -16,7 +22,10 @@
    "hypothesis": "Certaines paires tireur-gardien ont un effet propre (buts au-delà de xG x finition x gardien) qui persiste d'une période à l'autre.",
    "direction": "persistance > 0",
    "origin": "pilote 2026-10-12 : paires avec >= 2 buts attendus par période (325) : corrélation 0.15, top-50 1.82 -> 1.20 ; avec >= 1 : 0.05. Biais d'aréna non exclu.",
-   "rule": {"metric": "refaire la persistance avec les saisons 2026-27 et suivantes comme période B, en contrôlant l'aréna", "min_seasons_B": 2},
+   "rule": {
+    "metric": "refaire la persistance avec les saisons 2026-27 et suivantes comme période B, en contrôlant l'aréna",
+    "min_seasons_B": 2
+   },
    "auto": false
   },
   {
@@ -25,7 +34,22 @@
    "hypothesis": "Cole Caufield (8481540) marque plus le samedi que les autres jours.",
    "direction": "buts/match samedi > autres jours",
    "origin": "pilote 2026-10-12 : 63 buts en 103 samedis (0.61) vs 104 en 260 (0.40), p 0.0098 ; mais 6 060 tests joueur x jour, 248 à p<0.05 (≈303 par hasard), 0 BH, persistance des effets jour 0.03. Témoin : attendu = bruit.",
-   "rule": {"metric": "buts/match samedi vs autres jours sur 2026-27, rapporté à son attendu", "expected_if_noise": "lift ≈ 0"},
+   "rule": {
+    "metric": "buts/match samedi vs autres jours sur 2026-27, rapporté à son attendu",
+    "expected_if_noise": "lift ≈ 0"
+   },
+   "auto": false
+  },
+  {
+   "id": "ref_pp_points",
+   "registered": "2026-10-12",
+   "hypothesis": "Les arbitres qui sifflent plus (temps en AN) augmentent les points en avantage numérique des joueurs, au-delà du modèle joueur servi.",
+   "direction": "ppPoints observés > prédits quand ref_pp/ref_pen est haut",
+   "origin": "measure_ref_props.py 2026-10-12 : z test 1.74 (règle : 2), Δ val > 0, 2 saisons de test sur 3 ; quintile arbitres haut obs/servi 1.136, bas 1.008.",
+   "rule": {
+    "metric": "refaire measure_ref_props.py avec 2026-27 en test (train ≤ 2022-23, val 2023-24 … ou fenêtre glissée d'un an)",
+    "keep_if": "Δ log-vraisemblance > 0 en validation ET en test, z ≥ 2"
+   },
    "auto": false
   }
  ]

@@ -24,6 +24,7 @@
  */
 import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
+import { mlExplanation } from "../i18n/serverText";
 import { FramedLabel } from "./brand/FramedLabel";
 import { env } from "../env";
 import { fetchWithTimeout } from "../services/http";
@@ -734,7 +735,7 @@ type MLState =
   | { status: "unavailable" };
 
 export function MLSection({ type, subjectId, opponentId, propType, line, selection, isHome, ruleBasedPct, label, simple, hero, preset }: MLSectionProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [state, setState] = useState<MLState>(() =>
     preset === undefined ? { status: "loading" }
     : preset === null    ? { status: "unavailable" }
@@ -773,9 +774,17 @@ export function MLSection({ type, subjectId, opponentId, propType, line, selecti
   if (state.status === "loading")     return <MLSkeleton />;
   if (state.status === "unavailable") return <MLUnavailable t={t} />;
 
+  // L'explication et le type de modèle arrivent rédigés en français (service
+  // ML, paquet du match) : traduits ici pour l'app anglaise (`serverText.ts`).
+  const shown: MLPredictionResult = lang === "fr" ? state.result : {
+    ...state.result,
+    explanation: mlExplanation(state.result.explanation, lang),
+    model_type: state.result.model_type ? mlExplanation(state.result.model_type, lang) : state.result.model_type,
+  };
+
   return (
     <MLPredictionCard
-      result={state.result}
+      result={shown}
       ruleBasedPct={ruleBasedPct}
       label={label}
       simple={simple}

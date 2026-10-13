@@ -1,5 +1,5 @@
 {
- "trained_at": "2026-10-06",
+ "trained_at": "2026-10-12",
  "features": [
   "toi_avg_5",
   "toi_avg_10",
@@ -70,7 +70,9 @@
   "vs_lift_hits",
   "vs_lift_blocks",
   "vs_lift_pim",
-  "vs_lift_ppPoints"
+  "vs_lift_ppPoints",
+  "ref_pen",
+  "ref_pp"
  ],
  "split": {
   "train": "<=2021",
@@ -81,7 +83,7 @@
   "goals": {
    "k": 100000.0,
    "k_rules": 40,
-   "rounds": 279,
+   "rounds": 241,
    "features": [
     "toi_avg_5",
     "toi_avg_10",
@@ -143,19 +145,28 @@
     "opp_pk_xga60_s",
     "opp_goalie_svpct",
     "opp_goalie_gsax60",
-    "opp_win_s"
+    "opp_win_s",
+    "vs_gp",
+    "vs_lift_goals",
+    "vs_lift_assists",
+    "vs_lift_points",
+    "vs_lift_shots",
+    "vs_lift_hits",
+    "vs_lift_blocks",
+    "vs_lift_pim",
+    "vs_lift_ppPoints"
    ],
-   "loglik_model": -0.4463,
+   "loglik_model": -0.44623,
    "loglik_rules": -0.4566,
-   "brier_ge1_model": 0.11877,
+   "brier_ge1_model": 0.11875,
    "brier_ge1_rules": 0.12099,
    "mean_obs": 0.1699,
-   "mean_model": 0.169
+   "mean_model": 0.1684
   },
   "assists": {
    "k": 100000.0,
    "k_rules": 20,
-   "rounds": 199,
+   "rounds": 204,
    "features": [
     "toi_avg_5",
     "toi_avg_10",
@@ -219,17 +230,17 @@
     "opp_goalie_gsax60",
     "opp_win_s"
    ],
-   "loglik_model": -0.63569,
+   "loglik_model": -0.63575,
    "loglik_rules": -0.64859,
-   "brier_ge1_model": 0.1682,
+   "brier_ge1_model": 0.16822,
    "brier_ge1_rules": 0.172,
    "mean_obs": 0.2863,
-   "mean_model": 0.2851
+   "mean_model": 0.2849
   },
   "points": {
    "k": 100000.0,
    "k_rules": 40,
-   "rounds": 215,
+   "rounds": 191,
    "features": [
     "toi_avg_5",
     "toi_avg_10",
@@ -293,17 +304,17 @@
     "opp_goalie_gsax60",
     "opp_win_s"
    ],
-   "loglik_model": -0.82912,
+   "loglik_model": -0.82915,
    "loglik_rules": -0.84428,
-   "brier_ge1_model": 0.20162,
+   "brier_ge1_model": 0.20165,
    "brier_ge1_rules": 0.20655,
    "mean_obs": 0.4562,
-   "mean_model": 0.4512
+   "mean_model": 0.4514
   },
   "shots": {
    "k": 20,
    "k_rules": 12,
-   "rounds": 538,
+   "rounds": 410,
    "features": [
     "toi_avg_5",
     "toi_avg_10",
@@ -367,17 +378,17 @@
     "opp_goalie_gsax60",
     "opp_win_s"
    ],
-   "loglik_model": -1.55287,
+   "loglik_model": -1.55298,
    "loglik_rules": -1.56729,
    "brier_ge1_model": 0.17492,
    "brier_ge1_rules": 0.17721,
    "mean_obs": 1.6004,
-   "mean_model": 1.6191
+   "mean_model": 1.6186
   },
   "hits": {
    "k": 8,
    "k_rules": 6,
-   "rounds": 388,
+   "rounds": 398,
    "features": [
     "toi_avg_5",
     "toi_avg_10",
@@ -450,17 +461,17 @@
     "vs_lift_pim",
     "vs_lift_ppPoints"
    ],
-   "loglik_model": -1.34264,
+   "loglik_model": -1.34278,
    "loglik_rules": -1.35574,
-   "brier_ge1_model": 0.19879,
+   "brier_ge1_model": 0.19887,
    "brier_ge1_rules": 0.20196,
    "mean_obs": 1.1969,
-   "mean_model": 1.218
+   "mean_model": 1.2209
   },
   "blocks": {
    "k": 8,
    "k_rules": 8,
-   "rounds": 280,
+   "rounds": 291,
    "features": [
     "toi_avg_5",
     "toi_avg_10",
@@ -524,17 +535,17 @@
     "opp_goalie_gsax60",
     "opp_win_s"
    ],
-   "loglik_model": -1.1409,
+   "loglik_model": -1.14086,
    "loglik_rules": -1.15126,
    "brier_ge1_model": 0.216,
    "brier_ge1_rules": 0.21878,
    "mean_obs": 0.8366,
-   "mean_model": 0.8092
+   "mean_model": 0.8077
   },
   "pim": {
    "k": 0.3,
    "k_rules": 0.3,
-   "rounds": 279,
+   "rounds": 327,
    "features": [
     "toi_avg_5",
     "toi_avg_10",
@@ -605,19 +616,21 @@
     "vs_lift_hits",
     "vs_lift_blocks",
     "vs_lift_pim",
-    "vs_lift_ppPoints"
+    "vs_lift_ppPoints",
+    "ref_pen",
+    "ref_pp"
    ],
-   "loglik_model": -0.76652,
+   "loglik_model": -0.76633,
    "loglik_rules": -0.77636,
    "brier_ge1_model": 0.13941,
    "brier_ge1_rules": 0.14114,
    "mean_obs": 0.4258,
-   "mean_model": 0.427
+   "mean_model": 0.4292
   },
   "ppPoints": {
    "k": 100000.0,
    "k_rules": 100000.0,
-   "rounds": 295,
+   "rounds": 312,
    "features": [
     "toi_avg_5",
     "toi_avg_10",
@@ -681,12 +694,12 @@
     "opp_goalie_gsax60",
     "opp_win_s"
    ],
-   "loglik_model": -0.25301,
+   "loglik_model": -0.25304,
    "loglik_rules": -0.26791,
    "brier_ge1_model": 0.06624,
    "brier_ge1_rules": 0.0678,
    "mean_obs": 0.0892,
-   "mean_model": 0.0852
+   "mean_model": 0.0844
   }
  }
 }

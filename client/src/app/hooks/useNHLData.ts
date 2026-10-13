@@ -202,10 +202,11 @@ async function fetchGamesWithFallback(): Promise<{ games: UIGame[]; label: strin
   const twoDays       = [...todayGames, ...tomorrowGames].sort(byFaceoff);
 
   if (twoDays.length > 0) {
+    // Jeton, pas texte : la page le traduit (`gamesLabelText`, StatsPage).
     const label =
-      todayGames.length > 0 && tomorrowGames.length > 0 ? "Aujourd'hui et demain"
-      : todayGames.length > 0                           ? "Aujourd'hui"
-      :                                                   "Demain";
+      todayGames.length > 0 && tomorrowGames.length > 0 ? "@todayTomorrow"
+      : todayGames.length > 0                           ? "@today"
+      :                                                   "@tomorrow";
     return { games: twoDays.map(toUIGame), label };
   }
 
@@ -214,16 +215,11 @@ async function fetchGamesWithFallback(): Promise<{ games: UIGame[]; label: strin
     const day   = shiftDate(today, n);
     const games = byDay.get(day) ?? [];
     if (games.length === 0) continue;
-    const [y, m, d] = day.split('-').map(Number);
-    return {
-      games: [...games].sort(byFaceoff).map(toUIGame),
-      label: new Date(y, m - 1, d).toLocaleDateString('fr-CA', {
-        weekday: 'short', month: 'short', day: 'numeric',
-      }),
-    };
+    // La date brute (AAAA-MM-JJ) : formatée dans la langue de l'app par la page.
+    return { games: [...games].sort(byFaceoff).map(toUIGame), label: day };
   }
 
-  return { games: [], label: "Aucun match" };
+  return { games: [], label: "@none" };
 }
 
 interface SharedData {
@@ -289,7 +285,10 @@ interface NHLData {
   teams:       UITeam[];
   games:       UIGame[];
   players:     UIPlayer[];
-  /** Human-readable label: "Aujourd'hui" | "Demain" | "Cette semaine" */
+  /**
+   * Jeton du jour affiché : "@today" | "@tomorrow" | "@todayTomorrow" | "@none",
+   * ou une date AAAA-MM-JJ. À passer par `gamesLabelText` pour l'afficher.
+   */
   gamesLabel:  string;
   loading:     boolean;
   error:       string | null;
@@ -310,7 +309,7 @@ export function useNHLData(): NHLData {
   const [initial] = useState(freshShared);
   const [teams,      setTeams]      = useState<UITeam[]>(initial?.teams ?? []);
   const [games,      setGames]      = useState<UIGame[]>(initial?.games ?? []);
-  const [gamesLabel, setGamesLabel] = useState<string>(initial?.gamesLabel ?? "Aujourd'hui");
+  const [gamesLabel, setGamesLabel] = useState<string>(initial?.gamesLabel ?? "@today");
   const [players,    setPlayers]    = useState<UIPlayer[]>(initial?.players ?? []);
   const [loading,    setLoading]    = useState(!initial);
   const [error,      setError]      = useState<string | null>(null);
@@ -357,4 +356,19 @@ export function useNHLData(): NHLData {
   const reload = useCallback(() => setReloadKey(k => k + 1), []);
 
   return { teams, games, players, gamesLabel, loading, error, reload, getTeamById, getGameById, getPlayerById };
+}
+
+/** Texte affichable d'un `gamesLabel`, dans la langue de l'app. */
+export function gamesLabelText(label: string, t: (k: string) => string, lang: "en" | "fr"): string {
+  switch (label) {
+    case "@today":         return t("stats.day.today");
+    case "@tomorrow":      return t("stats.day.tomorrow");
+    case "@todayTomorrow": return t("stats.day.todayTomorrow");
+    case "@none":          return t("stats.day.none");
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(label);
+  if (!m) return label;
+  return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(lang === "fr" ? "fr-CA" : "en-US", {
+    weekday: "short", month: "short", day: "numeric",
+  });
 }

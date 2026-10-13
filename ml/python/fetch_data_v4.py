@@ -1316,6 +1316,17 @@ def fetch_odds(from_local: bool = False, api_range: tuple | None = None,
         if "source" not in live.columns:
             live["source"] = "oddsapi:live"      # exports antérieurs à la 028
         live = _drop_implausible_pairs(live)
+        # Une ligne du log live SANS aucun prix (moneyline et puck line vides —
+        # cas des matchs que `npm run odds:repair` a vidés faute d'observation
+        # valide le jour du match) ne doit pas écraser, au dédoublonnage
+        # `keep="last"` plus bas, la ligne du backfill historique du même match.
+        has_price = live["home_ml_close"].notna()
+        if "pl_home_price" in live.columns:
+            has_price |= live["pl_home_price"].notna()
+        if (~has_price).any():
+            print(f"   ℹ️  log live : {int((~has_price).sum())} matchs sans aucun prix ignorés "
+                  "(le backfill ou une autre source les couvre s'ils existent)")
+        live = live[has_price]
         df = pd.concat([df, live], ignore_index=True)
         derived = [c for c in ("total_close_over", "pl_home_price")
                    if c in live.columns and live[c].notna().any()]

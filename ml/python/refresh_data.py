@@ -25,7 +25,12 @@ Ce que le script fait, dans l'ordre :
      observés / buts prévus, rétréci vers 1, part dans `level_layer.json`
      (`score_model.level_k`, mesure et règle dans `measure_level.py`). Le
      service multiplie le total λ par ce k, sans toucher à la victoire.
-  6. suivi des patterns candidats (2026-10-12, STATUS.md §3.5 P3) : la section
+  6. arbitres (2026-10-12) : ceux des nouveaux matchs (API NHL,
+     `fetch_officials_lines.fetch_officials`, reprenable) puis la table
+     `ref_effects.json` (referee_effects.py) que le modèle joueur lit pour les
+     pénalités. Un échec n'arrête pas le rafraîchissement : la table restée en
+     place sert, et sans elle le service met les variables arbitre à 0.
+  7. suivi des patterns candidats (2026-10-12, STATUS.md §3.5 P3) : la section
      `candidates` de `patterns_report.json` est recalculée à partir du registre
      `pattern_registry.json` (`discover_patterns.update_candidates_report`).
      Lecture seule de `nhl_games_v4.csv` : aucune prédiction ne change, et un
@@ -35,8 +40,8 @@ Ce qu'il ne fait JAMAIS : toucher `odds.csv` (irremplaçable, cf. le garde-fou d
 `fetch_data_v4._write_odds_csv`), réentraîner, committer.
 
 Ensuite, pour que le service en ligne en profite : committer
-`ml/models/inference_state.json`, `ml/models/elo_ratings.json` et
-`ml/models/level_layer.json`, puis pousser (le service ML embarque
+`ml/models/inference_state.json`, `ml/models/elo_ratings.json`,
+`ml/models/level_layer.json` et `ml/models/ref_effects.json`, puis pousser (le service ML embarque
 `ml/models/` dans son image).
 
 Usage :
@@ -275,10 +280,39 @@ def refresh_level(season: int, models_dir: str, data_path: str) -> dict:
     return out
 
 
+def refresh_referees(models_dir: str) -> None:
+    """Étape 6 : arbitres des nouveaux matchs, puis table des effets arbitre."""
+    try:
+        import fetch_officials_lines as FO
+        import referee_effects as RE
+        print("\n🦓 Arbitres …")
+        FO.fetch_officials(workers=6, max_seconds=900)
+        RE.write_table(DATA_DIR, models_dir)
+    except Exception as e:
+        print(f"\n⚠️  arbitres non rafraîchis ({e}) — ref_effects.json inchangé")
+
+
 def refresh_candidates() -> None:
     """Étape 6 : suivi en avant des patterns candidats (hors production).
     N'importe quelle erreur est affichée puis ignorée : ce suivi ne doit jamais
     empêcher le rafraîchissement des données servies."""
+    try:
+        # Couverture des cotes de la saison : un collecteur arrêté se voit ici
+        # chaque lundi (constaté le 2026-10-12 : ODDS_LOG_ENABLED=false sur
+        # Railway depuis 8 jours, rien ne l'avait signalé).
+        g = pd.read_csv(f"{DATA_DIR}/nhl_games_v4.csv", low_memory=False,
+                        usecols=["season", "date", "home_score", "market_home_p_close"])
+        cur = g[(g["season"] == g["season"].max()) & g["home_score"].notna()]
+        if len(cur):
+            n_ok = int(cur["market_home_p_close"].notna().sum())
+            last = cur.loc[cur["market_home_p_close"].notna(), "date"].max()
+            warn = "⚠️ " if n_ok < 0.8 * len(cur) else ""
+            print(f"\n{warn}💰 Cotes de la saison : {n_ok}/{len(cur)} matchs joués ont une clôture "
+                  f"(dernière : {last if isinstance(last, str) else '—'})"
+                  + (" — collecteur arrêté ? (ODDS_LOG_ENABLED sur Railway, puis "
+                     "npm run odds:export + fetch_data_v4 --only odds --from-local)" if warn else ""))
+    except Exception as e:
+        print(f"\n⚠️  couverture des cotes non mesurée ({e})")
     try:
         import discover_patterns as DP
         cands = DP.update_candidates_report()
@@ -327,7 +361,8 @@ def main():
 
     refresh_level(season, build_dataset.MODELS_DIR, f"{DATA_DIR}/nhl_games_v4.csv")   # 5
 
-    refresh_candidates()                                                              # 6
+    refresh_referees(build_dataset.MODELS_DIR)                                        # 6
+    refresh_candidates()                                                              # 7
 
     import json
     with open(f"{build_dataset.MODELS_DIR}/inference_state.json", encoding="utf-8") as fh:
@@ -338,7 +373,7 @@ def main():
           f"ELO au {elo.get('as_of_date')}, {len(st['teams'])} équipes, "
           f"{len(st.get('skater_pool', {}))} patineurs dans le bassin.")
     print("   Pour le service en ligne : committer ml/models/inference_state.json, "
-          "ml/models/elo_ratings.json et ml/models/level_layer.json, puis pousser. "
+          "ml/models/elo_ratings.json, ml/models/level_layer.json et ml/models/ref_effects.json, puis pousser. "
           "Pas de réentraînement nécessaire. (ml/models/patterns_report.json : "
           "suivi des candidats, facultatif, non lu par le service.)")
 

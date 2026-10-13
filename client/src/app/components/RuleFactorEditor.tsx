@@ -31,6 +31,7 @@ import {
 import { scaledRulePct } from "../pages/prediction/gameMarkets";
 import { factorDescription } from "../data/factorDescriptions";
 import { useI18n } from "../i18n";
+import { factorLabel } from "../i18n/serverText";
 
 /* ─── Règle personnelle, par pari ─────────────────────────────────────────── */
 interface UserRule { label: string; pct: number | null; weight: number }
@@ -84,7 +85,7 @@ export function RuleFactorEditor({
   /** Identifiant stable du pari — clé de la règle personnelle (« Ta règle »). */
   betKey?: string;
 }) {
-  const { lang } = useI18n();
+  const { t, lang } = useI18n();
   const [open, setOpen] = useState(false);
   const [weights, setWeights] = useState<Record<string, number>>(() => getFamilyWeights(factorGroup, factors));
   const [userRule, setUserRule] = useState<UserRule>(() => loadUserRule(betKey));
@@ -114,8 +115,8 @@ export function RuleFactorEditor({
   // Défile la section à l'écran quand on l'ouvre.
   useEffect(() => {
     if (open) {
-      const t = setTimeout(() => sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 60);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 60);
+      return () => clearTimeout(timer);
     }
   }, [open]);
 
@@ -126,7 +127,7 @@ export function RuleFactorEditor({
   const userFactor: SimpleFactor | null = userActive
     ? {
         id: USER_RULE_ID,
-        label: userRule.label.trim() || (lang === "fr" ? "Votre règle" : "Your rule"),
+        label: userRule.label.trim() || t("rules.yourRule"),
         weight: userRule.weight,
         value: Math.max(0, Math.min(1, (userRule.pct as number) / 100 / (pctScale && pctScale > 0 ? pctScale : 1))),
       }
@@ -145,7 +146,7 @@ export function RuleFactorEditor({
   const blendedColor = pctColor(blended);
 
   const slices = allFactors.map((f) => ({
-    label: f.label,
+    label: f.id === USER_RULE_ID ? f.label : factorLabel(f.label, lang),
     value: (weights[f.id] ?? f.weight) * f.value,
     color: f.id === USER_RULE_ID ? USER_RULE_COLOR : factorColor(f.id),
     sub: f.id === USER_RULE_ID ? `${userRule.pct}%` : `${Math.round(f.value * 100)}%`,
@@ -212,14 +213,14 @@ export function RuleFactorEditor({
    */
   function syncToAccount(store: ReturnType<typeof saveFamilyWeights>) {
     pushFamilyWeights(store).catch(() => {
-      toast.warning("Enregistré sur cet appareil ; la synchro du compte a échoué.");
+      toast.warning(t("rules.syncFailed"));
     });
   }
   function handleSave() {
     const store = saveFamilyWeights(factorGroup, weights);
     storeUserRule(betKey, userRule);
     touchedRef.current = false;
-    toast.success("Pondération enregistrée pour ce type de pari.");
+    toast.success(t("rules.saved"));
     syncToAccount(store);
   }
   function handleReset() {
@@ -230,7 +231,7 @@ export function RuleFactorEditor({
     setUserRule(EMPTY_RULE);
     storeUserRule(betKey, null);
     touchedRef.current = false;
-    toast.success("Pondération réinitialisée.");
+    toast.success(t("rules.resetDone"));
     syncToAccount(store);
   }
 
@@ -243,7 +244,7 @@ export function RuleFactorEditor({
           onClick={() => setOpen((v) => !v)}
           className="text-[11px] text-[#90C9F0] font-semibold px-2.5 py-1 rounded-lg border border-[#90C9F0]/30 hover:bg-[#90C9F0]/10 flex-shrink-0"
         >
-          Pondération {open ? "▲" : "▼"}
+          {t("rules.weighting")} {open ? "▲" : "▼"}
         </button>
         <span className="text-xl font-black flex-shrink-0" style={{ color: blendedColor }}>{blended}%</span>
       </div>
@@ -257,9 +258,9 @@ export function RuleFactorEditor({
           <div ref={sectionRef} className="mt-3 scroll-mt-4">
             {/* ── 1) Voir la pondération : pie de décomposition ── */}
             <div>
-              <FactorPie reverse size={104} thickness={16} slices={slices} centerLabel={`${blended}%`} centerSub="Règle" />
+              <FactorPie reverse size={104} thickness={16} slices={slices} centerLabel={`${blended}%`} centerSub={t("rules.rule")} />
               <p className="text-white/30 text-[11px] mt-2 leading-snug">
-                Part de chaque facteur dans le calcul (poids × valeur) ; « · % » = probabilité estimée par ce facteur.
+                {t("rules.pieHint")}
               </p>
             </div>
 
@@ -274,7 +275,7 @@ export function RuleFactorEditor({
                   <div className="flex items-center gap-2">
                     <input type="checkbox" checked={on} onChange={() => toggleFactor(f)} className="accent-[#86d1ea] flex-shrink-0" />
                     <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: factorColor(f.id) }} />
-                    <span className="text-white/80 text-[11px] flex-1 truncate">{f.label}</span>
+                    <span className="text-white/80 text-[11px] flex-1 truncate">{factorLabel(f.label, lang)}</span>
                     <input
                       type="range" min={0} max={100} step={1} value={w}
                       onChange={(e) => setW(f.id, Number(e.target.value))}
@@ -302,7 +303,7 @@ export function RuleFactorEditor({
                     disabled={userRule.pct == null}
                     onChange={() => patchUserRule({ weight: userRule.weight > 0 ? 0 : USER_RULE_DEFAULT_WEIGHT })}
                     className="accent-[#86d1ea] flex-shrink-0"
-                    aria-label={lang === "fr" ? "Inclure votre règle" : "Include your rule"}
+                    aria-label={t("rules.includeYours")}
                   />
                   <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0 border border-white/40" style={{ background: userActive ? USER_RULE_COLOR : "transparent" }} />
                   <input
@@ -310,7 +311,7 @@ export function RuleFactorEditor({
                     value={userRule.label}
                     maxLength={40}
                     onChange={(e) => patchUserRule({ label: e.target.value })}
-                    placeholder={lang === "fr" ? "Votre règle…" : "Your rule…"}
+                    placeholder={t("rules.yourRulePlaceholder")}
                     className="flex-1 min-w-0 bg-black/20 border border-dashed border-white/25 rounded px-1.5 py-0.5 text-[11px] text-white outline-none placeholder:text-white/35 focus:border-[#90C9F0]/60"
                   />
                   <input
@@ -327,7 +328,7 @@ export function RuleFactorEditor({
                   />
                 </div>
                 <div className="flex items-center gap-1.5 mt-1 pl-[42px]">
-                  <span className="text-white/50 text-[10px]">{lang === "fr" ? "Votre probabilité :" : "Your probability:"}</span>
+                  <span className="text-white/50 text-[10px]">{t("rules.yourProb")}</span>
                   <input
                     type="number" min={0} max={100} step={1}
                     value={userRule.pct ?? ""}
@@ -341,17 +342,15 @@ export function RuleFactorEditor({
                   <span className="text-white/50 text-[10px]">%</span>
                 </div>
                 <p className="text-white/40 text-[10px] leading-snug mt-0.5 pl-[42px]">
-                  {lang === "fr"
-                    ? "Ajoutez votre propre critère : donnez-lui un nom, votre probabilité pour ce pari, puis son poids."
-                    : "Add your own criterion: name it, give your probability for this bet, then its weight."}
+                  {t("rules.yourRuleHint")}
                 </p>
               </div>
 
               <div className="flex items-center gap-2 flex-wrap mt-1">
                 <span className={`text-[11px] font-semibold tabular-nums ${offBudget ? "text-white/70" : "text-white/50"}`}>
                   {offBudget
-                    ? `Total : ${Math.round(total)} → ramené à 100`
-                    : `Total : ${Math.round(total)} / 100`}
+                    ? t("rules.totalScaled", { n: Math.round(total) })
+                    : t("rules.total", { n: Math.round(total) })}
                 </span>
                 <span className="flex-1" />
                 <button
@@ -359,18 +358,17 @@ export function RuleFactorEditor({
                   className="px-3 py-1.5 rounded-lg text-[11px] font-bold"
                   style={{ background: "#86d1ea", color: "#0A0E0C" }}
                 >
-                  Enregistrer
+                  {t("rules.save")}
                 </button>
                 <button
                   onClick={handleReset}
                   className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white/70 border border-white/20 hover:text-white"
                 >
-                  Réinitialiser
+                  {t("rules.reset")}
                 </button>
               </div>
               <p className="text-white/30 text-[11px] leading-snug">
-                Décochez un facteur pour l'exclure. Réglages propres à ce type de pari, gardés sur cet appareil
-                et rattachés à votre compte si vous êtes connecté.
+                {t("rules.footer")}
               </p>
             </div>
           </div>

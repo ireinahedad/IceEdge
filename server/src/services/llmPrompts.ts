@@ -86,9 +86,8 @@ const EXPLAIN_BET: Record<LlmLocale, string> = {
     "N'inclus QUE des points appuyés par les données ou tes connaissances; si une information est inconnue " +
     "ou non fournie, OMETS le point — n'écris JAMAIS « inconnu », « non précisé », « N/D » ni « non spécifié ». " +
     "Mieux vaut 2 bons points que 5 avec du remplissage. " +
-    "N'invoque JAMAIS une tendance historique de face-à-face, de jour de la semaine, d'aréna, de mois " +
-    "ni de joueur contre une équipe précise (« X perd souvent contre Y », « X marque le samedi ») : " +
-    "mesurées sur l'historique de l'application, elles ne prédisent rien.\n" +
+    "N'invoque JAMAIS de tendance face-à-face, jour, aréna, mois ou joueur-contre-équipe " +
+    "(« X perd contre Y », « X marque le samedi ») : mesurées, elles ne prédisent rien.\n" +
     "\n" +
     "À vérifier :\n" +
     "- REGROUPE ICI UNIQUEMENT les éléments externes en temps réel que l'application n'a pas : " +
@@ -111,8 +110,8 @@ const EXPLAIN_BET: Record<LlmLocale, string> = {
     "Include ONLY points backed by the data or your knowledge; if something is unknown or not provided, " +
     "OMIT that point — never write 'unknown', 'not specified', 'unclear' or 'N/A'. " +
     "Two solid points beat five with filler. " +
-    "NEVER invoke a historical head-to-head, day-of-week, arena, month or player-vs-team trend " +
-    "('X often loses to Y', 'X scores on Saturdays'): measured on the app's history, they predict nothing.\n" +
+    "NEVER invoke a head-to-head, weekday, arena, month or player-vs-team trend " +
+    "('X loses to Y', 'X scores on Saturdays'): measured, they predict nothing.\n" +
     "\n" +
     "To verify:\n" +
     "- GROUP HERE ONLY external live items the app does NOT have: " +

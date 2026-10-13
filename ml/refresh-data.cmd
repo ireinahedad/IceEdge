@@ -10,7 +10,7 @@ REM buts (ml\models\level_layer.json). Ne touche JAMAIS ml\data\odds.csv, ne
 REM reentraine rien, ne committe rien.
 REM
 REM Apres le run, pour que le service en ligne en profite :
-REM   git add ml/models/inference_state.json ml/models/elo_ratings.json ml/models/level_layer.json
+REM   git add ml/models/inference_state.json ml/models/elo_ratings.json ml/models/level_layer.json ml/models/ref_effects.json
 REM   git commit -m "Donnees ML au <date>" ^&^& git push
 REM (le service ML embarque ml/models dans son image : Railway redeploie.)
 REM

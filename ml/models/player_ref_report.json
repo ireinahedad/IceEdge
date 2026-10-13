@@ -1,0 +1,34 @@
+{
+ "trained_at": "2026-10-12",
+ "features": [
+  "ref_pen",
+  "ref_pp"
+ ],
+ "shrink": 40,
+ "league_window": 1000,
+ "rule": "garder si \u0394 log-vraisemblance > 0 en validation ET en test, avec z \u2265 2 en test",
+ "stats": {
+  "pim": {
+   "keep": true,
+   "z_test": 2.42,
+   "dll_val": 0.000131,
+   "dll_test": 0.000155,
+   "dll_test_by_season": {
+    "2023": 0.000164,
+    "2024": 0.00026,
+    "2025": 4.2e-05
+   }
+  },
+  "ppPoints": {
+   "keep": false,
+   "z_test": 1.78,
+   "dll_val": 0.000261,
+   "dll_test": 0.000135,
+   "dll_test_by_season": {
+    "2023": 0.000141,
+    "2024": 1.4e-05,
+    "2025": 0.000251
+   }
+  }
+ }
+}

@@ -1,0 +1,73 @@
+{
+ "protocole": "train ≤ 2021-22, val 2022-23, test 2023-26 ; features du modèle servi (+ REF_FEATS)",
+ "regle": "garder si Δ log-vraisemblance > 0 en validation ET en test, z ≥ 2 en test",
+ "ref_feats": [
+  "ref_pen",
+  "ref_pp"
+ ],
+ "shrink": 40,
+ "couverture": {
+  "train": 1.0,
+  "val": 0.999,
+  "test": 1.0
+ },
+ "controle_match": {
+  "n_matchs_test": 3935,
+  "corr_ref_pen_vs_penalites_du_match": 0.091,
+  "penalites_quintile_haut": 7.3,
+  "penalites_quintile_bas": 6.422
+ },
+ "stats": {
+  "pim": {
+   "keep": true,
+   "z_test": 2.55,
+   "dll_val": 6.7e-05,
+   "dll_test": 0.00017,
+   "dll_test_by_season": {
+    "2023": 0.000222,
+    "2024": 0.000163,
+    "2025": 0.000126
+   },
+   "loglik_servi": -0.76652,
+   "loglik_avec_arbitre": -0.76635,
+   "obs_sur_servi_quintile_arbitre_haut": 1.0388,
+   "obs_sur_servi_quintile_arbitre_bas": 0.9311,
+   "pred_ratio_quintile_haut": 1.0719,
+   "pred_ratio_quintile_bas": 0.9594,
+   "arbres": [
+    279,
+    364
+   ],
+   "k": [
+    0.3,
+    0.3
+   ]
+  },
+  "ppPoints": {
+   "keep": false,
+   "z_test": 1.74,
+   "dll_val": 0.000289,
+   "dll_test": 0.000126,
+   "dll_test_by_season": {
+    "2023": 7.7e-05,
+    "2024": -0.000117,
+    "2025": 0.000418
+   },
+   "loglik_servi": -0.25301,
+   "loglik_avec_arbitre": -0.25288,
+   "obs_sur_servi_quintile_arbitre_haut": 1.1355,
+   "obs_sur_servi_quintile_arbitre_bas": 1.0078,
+   "pred_ratio_quintile_haut": 1.0651,
+   "pred_ratio_quintile_bas": 0.9641,
+   "arbres": [
+    295,
+    309
+   ],
+   "k": [
+    100000.0,
+    100000.0
+   ]
+  }
+ },
+ "generated": "2026-10-12"
+}

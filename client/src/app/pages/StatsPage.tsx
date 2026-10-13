@@ -1,7 +1,7 @@
 import { Search, HelpCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { useNHLData, UITeam, UIGame } from "../hooks/useNHLData";
+import { useNHLData, gamesLabelText, UITeam, UIGame } from "../hooks/useNHLData";
 import { BottomNav } from "../components/BottomNav";
 import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { HowItWorksSheet } from "../components/HowItWorksSheet";
@@ -337,7 +337,7 @@ export function StatsPage() {
             {activeFilter === "game" && (
               <span className="flex items-center gap-2">
                 <span>{t("stats.matches", { n: filteredGames.length })}</span>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#1B2419] text-[#bfc8cc]">{gamesLabel}</span>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#1B2419] text-[#bfc8cc]">{gamesLabelText(gamesLabel, t, lang)}</span>
               </span>
             )}
             {activeFilter === "player" && t("stats.players")}

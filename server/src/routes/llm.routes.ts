@@ -66,7 +66,7 @@ import {
   type QuotaVerdict,
 } from '../services/llmQuota.service';
 import {
-  LLM_TASK_TYPES, isLlmTaskType, resolveLocale, systemPromptFor,
+  LLM_TASK_TYPES, isLlmTaskType, resolveLocale, systemPromptFor, type LlmLocale,
 } from '../services/llmPrompts';
 import { SLIP_COMMAND_MAX_LENGTH, type SlipContext } from '../services/slipCommand';
 import {
@@ -252,10 +252,16 @@ async function personalOpenAiKey(userId: string): Promise<string | null> {
 }
 
 /** Message affiché à l'abonné qui vient d'atteindre son maximum du mois. */
-function quotaMessage(resetsAt: string, hasOwnKey: boolean): string {
-  const date = new Date(resetsAt).toLocaleDateString('fr-FR', {
+function quotaMessage(resetsAt: string, hasOwnKey: boolean, locale: LlmLocale = 'fr'): string {
+  const date = new Date(resetsAt).toLocaleDateString(locale === 'fr' ? 'fr-FR' : 'en-US', {
     day: 'numeric', month: 'long', timeZone: 'UTC',
   });
+  if (locale === 'en') {
+    const base = `You have reached your limit of ${MONTHLY_QUOTA} AI requests for this month. Your counter resets on ${date}.`;
+    return hasOwnKey
+      ? `${base} In the meantime, your requests use your own OpenAI key (billed to your OpenAI account).`
+      : `${base} To keep going now, add your OpenAI key in Settings → AI: your requests will then go through your OpenAI account.`;
+  }
   const base = `Vous avez atteint votre maximum de ${MONTHLY_QUOTA} requêtes IA pour ce mois-ci. Votre compteur repart le ${date}.`;
   return hasOwnKey
     ? `${base} En attendant, vos requêtes utilisent votre propre clé OpenAI (facturée sur votre compte OpenAI).`
@@ -395,6 +401,9 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
     return res.status(413).json({ error: `prompt too long (max ${SLIP_COMMAND_MAX_LENGTH} characters)` });
   }
   const resolvedLocale = resolveLocale(locale, req.headers['accept-language']);
+  // Messages d'erreur montrés tels quels par le client (fiche d'un pari, Bet
+  // builder) : dans la langue de l'app, pas toujours en français (2026-10-12).
+  const L = (fr: string, en: string) => (resolvedLocale === 'fr' ? fr : en);
 
   // Build the shared message array once.
   // `parse_bet_command` : l'invite porte le contexte du moment, construit ici
@@ -408,7 +417,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
     } catch (err: any) {
       logger.warn({ err: err?.message }, '[LLM] contexte de la commande indisponible (calendrier LNH)');
       return res.status(503).json({
-        error: 'Le calendrier LNH est momentanément indisponible. Réessayez plus tard.',
+        error: L('Le calendrier LNH est momentanément indisponible. Réessayez plus tard.', 'The NHL schedule is temporarily unavailable. Try again later.'),
         code: 'schedule_unavailable',
       });
     }
@@ -502,7 +511,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
       // décrirait la configuration du serveur. Le détail part dans les logs.
       logger.error('[LLM] OPENAI_API_KEY (clé opérateur) absente — le chemin Pro est hors service');
       return res.status(503).json({
-        error: 'La fonction IA est momentanément indisponible. Réessayez plus tard.',
+        error: L('La fonction IA est momentanément indisponible. Réessayez plus tard.', 'The AI feature is temporarily unavailable. Try again later.'),
         code: 'unavailable',
       });
     }
@@ -541,7 +550,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
       // préfère une erreur franche et temporaire à une dépense non mesurée.
       return res.status(503).json({
         error: 'quota_unavailable',
-        message: 'Impossible de vérifier votre quota IA pour le moment. Réessayez dans un instant.',
+        message: L('Impossible de vérifier votre quota IA pour le moment. Réessayez dans un instant.', 'Your AI quota can’t be checked right now. Try again in a moment.'),
       });
     } else {
       // Plafond atteint (personnel ou disjoncteur global). On tente la bascule
@@ -550,7 +559,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
       try { ownKey = await personalOpenAiKey(userId); }
       catch (err: any) { logger.warn({ err: err?.message, userId }, '[LLM] lecture de la clé perso échouée'); }
 
-      const message = quotaMessage(verdict.resetsAt, Boolean(ownKey));
+      const message = quotaMessage(verdict.resetsAt, Boolean(ownKey), resolvedLocale);
 
       if (!ownKey) {
         return res.status(429).json({
@@ -570,7 +579,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
     // FREE → user's own OpenAI key. Quota journalier en mémoire : ne protège
     // pas un budget (l'utilisateur paie ses tokens) mais nos ressources.
     if (!underDailyQuota(userId)) {
-      return res.status(429).json({ error: 'Daily AI request limit reached. Try again tomorrow.' });
+      return res.status(429).json({ error: L('Limite quotidienne de requêtes IA atteinte. Réessayez demain.', 'Daily AI request limit reached. Try again tomorrow.') });
     }
 
     let userKey: string | null;
@@ -593,7 +602,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
         // affiche `body.error` tel quel. Y mettre « unavailable » aurait mis le
         // mot « unavailable » sous les yeux de l'utilisateur.
         return res.status(503).json({
-          error: 'La fonction IA est momentanément indisponible. Réessayez plus tard.',
+          error: L('La fonction IA est momentanément indisponible. Réessayez plus tard.', 'The AI feature is temporarily unavailable. Try again later.'),
           code: 'unavailable',
         });
       }
@@ -605,7 +614,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
     } else if (!isParse) {
       return res.status(422).json({
         error: 'no_api_key',
-        message: 'Add your OpenAI API key in Settings → AI Settings, or upgrade to Pro to use the built-in model.',
+        message: L('Ajoutez votre clé API OpenAI dans Paramètres → IA, ou passez à Pro pour utiliser le modèle intégré.', 'Add your OpenAI API key in Settings → AI Settings, or upgrade to Pro to use the built-in model.'),
       });
     } else {
       // `parse_bet_command` sans clé perso : la clé de l'OPÉRATEUR, dans la
@@ -614,7 +623,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
       if (!token) {
         logger.error('[LLM] OPENAI_API_KEY (clé opérateur) absente — appels gratuits de la commande hors service');
         return res.status(503).json({
-          error: 'La fonction IA est momentanément indisponible. Réessayez plus tard.',
+          error: L('La fonction IA est momentanément indisponible. Réessayez plus tard.', 'The AI feature is temporarily unavailable. Try again later.'),
           code: 'unavailable',
         });
       }
@@ -628,7 +637,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
         // 'db' (fail-closed) ou 'global' (disjoncteur) : rien que l'utilisateur
         // puisse corriger, et rien à lui vendre.
         return res.status(503).json({
-          error: 'La fonction IA est momentanément indisponible. Réessayez plus tard.',
+          error: L('La fonction IA est momentanément indisponible. Réessayez plus tard.', 'The AI feature is temporarily unavailable. Try again later.'),
           code: verdict.reason === 'db' ? 'quota_unavailable' : 'unavailable',
         });
       }
@@ -708,7 +717,9 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
       '[LLM] fournisseur injoignable',
     );
     return res.status(timedOut ? 504 : 502).json({
-      error: timedOut ? 'The model provider timed out' : 'Failed to reach the model provider',
+      error: timedOut
+        ? L('Le fournisseur de modèle a mis trop de temps à répondre.', 'The model provider timed out.')
+        : L('Impossible de joindre le fournisseur de modèle.', 'Failed to reach the model provider.'),
     });
   }
 
@@ -748,7 +759,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
     const clientMessage =
       call.billedTo === 'user' && upstreamMessage
         ? upstreamMessage
-        : 'Le fournisseur de modèle a refusé la requête.';
+        : L('Le fournisseur de modèle a refusé la requête.', 'The model provider refused the request.');
 
     /**
      * ⚠️ **502 même quand l'amont répond 401.** Jusqu'au 2026-09-08 ce 401 était
@@ -790,7 +801,7 @@ async function handleLlmRequest(req: Request, res: Response): Promise<unknown> {
       '[LLM] réponse amont illisible (200 mais pas du JSON)',
     );
     return res.status(502).json({
-      error: 'Le fournisseur de modèle a renvoyé une réponse illisible.',
+      error: L('Le fournisseur de modèle a renvoyé une réponse illisible.', 'The model provider returned an unreadable response.'),
       code: 'provider_error',
     });
   }

@@ -1,0 +1,433 @@
+{
+ "as_of": "2026-10-10",
+ "features": [
+  "ref_pen",
+  "ref_pp"
+ ],
+ "games": 21691,
+ "generated": "2026-10-12T09:23Z",
+ "league_window": 1000,
+ "refs": {
+  "alex lepkowski": {
+   "n": 25,
+   "pen": -0.15605,
+   "pp": -0.46357
+  },
+  "beau halkidis": {
+   "n": 186,
+   "pen": 0.1394,
+   "pp": 0.29881
+  },
+  "ben betker": {
+   "n": 1,
+   "pen": -0.048,
+   "pp": -0.1046
+  },
+  "bill mccreary": {
+   "n": 199,
+   "pen": -1.06259,
+   "pp": -0.91634
+  },
+  "brad meier": {
+   "n": 938,
+   "pen": 0.01491,
+   "pp": 0.1485
+  },
+  "brad watson": {
+   "n": 767,
+   "pen": -0.0576,
+   "pp": -0.05709
+  },
+  "brandon blandina": {
+   "n": 377,
+   "pen": -0.01407,
+   "pp": -0.1427
+  },
+  "brandon schrader": {
+   "n": 333,
+   "pen": 0.06433,
+   "pp": 0.16866
+  },
+  "brian pochmara": {
+   "n": 1209,
+   "pen": 0.05177,
+   "pp": -0.07378
+  },
+  "cameron voss": {
+   "n": 3,
+   "pen": -0.10977,
+   "pp": -0.12249
+  },
+  "carter sandlak": {
+   "n": 260,
+   "pen": -0.59812,
+   "pp": -0.57725
+  },
+  "chris ciamaga": {
+   "n": 50,
+   "pen": 0.26381,
+   "pp": 0.22667
+  },
+  "chris lee": {
+   "n": 1181,
+   "pen": -0.32819,
+   "pp": -0.37551
+  },
+  "chris rooney": {
+   "n": 1154,
+   "pen": 0.26599,
+   "pp": 0.51833
+  },
+  "chris schlenker": {
+   "n": 550,
+   "pen": 0.35406,
+   "pp": 0.50434
+  },
+  "cody beach": {
+   "n": 217,
+   "pen": 0.68453,
+   "pp": 0.83313
+  },
+  "conor odonnell": {
+   "n": 80,
+   "pen": -0.49383,
+   "pp": -0.37039
+  },
+  "corey syvret": {
+   "n": 451,
+   "pen": -0.30586,
+   "pp": -0.22542
+  },
+  "dan marouelli": {
+   "n": 127,
+   "pen": -0.61696,
+   "pp": -1.35597
+  },
+  "dan ohalloran": {
+   "n": 837,
+   "pen": -0.30091,
+   "pp": -0.22688
+  },
+  "dan orourke": {
+   "n": 1172,
+   "pen": 0.0638,
+   "pp": 0.1635
+  },
+  "darcy burchell": {
+   "n": 34,
+   "pen": -0.06019,
+   "pp": 0.23559
+  },
+  "dave jackson": {
+   "n": 562,
+   "pen": 0.23473,
+   "pp": 0.12816
+  },
+  "dave lewis": {
+   "n": 68,
+   "pen": 0.06261,
+   "pp": -0.04398
+  },
+  "david banfield": {
+   "n": 74,
+   "pen": 0.62859,
+   "pp": 0.45629
+  },
+  "dean morton": {
+   "n": 924,
+   "pen": -0.16002,
+   "pp": -0.31493
+  },
+  "dennis larue": {
+   "n": 420,
+   "pen": -1.02106,
+   "pp": -1.10644
+  },
+  "don koharski": {
+   "n": 52,
+   "pen": -0.64409,
+   "pp": -0.34643
+  },
+  "don vanmassenhoven": {
+   "n": 374,
+   "pen": -0.24696,
+   "pp": -0.59968
+  },
+  "eric furlatt": {
+   "n": 1212,
+   "pen": 0.27032,
+   "pp": 0.45022
+  },
+  "evgeny romasko": {
+   "n": 67,
+   "pen": 0.45737,
+   "pp": 0.85768
+  },
+  "francis charron": {
+   "n": 887,
+   "pen": 0.01127,
+   "pp": 0.39958
+  },
+  "francois stlaurent": {
+   "n": 1103,
+   "pen": -0.06817,
+   "pp": -0.04727
+  },
+  "frederick lecuyer": {
+   "n": 1172,
+   "pen": -0.00218,
+   "pp": 0.15411
+  },
+  "furman south": {
+   "n": 492,
+   "pen": -0.21482,
+   "pp": -0.36546
+  },
+  "garrett rank": {
+   "n": 754,
+   "pen": 0.30572,
+   "pp": 0.43615
+  },
+  "ghislain hebert": {
+   "n": 1005,
+   "pen": 0.24047,
+   "pp": 0.14866
+  },
+  "gord dwyer": {
+   "n": 1208,
+   "pen": 0.12269,
+   "pp": 0.43138
+  },
+  "graedy hamilton": {
+   "n": 58,
+   "pen": -0.03758,
+   "pp": 0.13956
+  },
+  "graham skilliter": {
+   "n": 891,
+   "pen": -0.14408,
+   "pp": -0.39317
+  },
+  "greg kimmerly": {
+   "n": 530,
+   "pen": -0.96508,
+   "pp": -0.77263
+  },
+  "ian croft": {
+   "n": 1,
+   "pen": 0.11168,
+   "pp": 0.01148
+  },
+  "ian walsh": {
+   "n": 957,
+   "pen": -0.35313,
+   "pp": -0.38569
+  },
+  "jake brenk": {
+   "n": 668,
+   "pen": 0.47538,
+   "pp": 0.44202
+  },
+  "jean hebert": {
+   "n": 892,
+   "pen": 0.30398,
+   "pp": 0.04978
+  },
+  "jon mcisaac": {
+   "n": 707,
+   "pen": 0.14612,
+   "pp": 0.14227
+  },
+  "jordan samuels thomas": {
+   "n": 4,
+   "pen": 0.02561,
+   "pp": 0.05672
+  },
+  "jordan samuelsthomas": {
+   "n": 161,
+   "pen": 0.37786,
+   "pp": 0.30016
+  },
+  "justin kea": {
+   "n": 223,
+   "pen": -0.10431,
+   "pp": 0.01483
+  },
+  "justin st pierre": {
+   "n": 1011,
+   "pen": -0.3404,
+   "pp": -0.00155
+  },
+  "kelly sutherland": {
+   "n": 1223,
+   "pen": -0.26928,
+   "pp": -0.37165
+  },
+  "kendrick nicholson": {
+   "n": 745,
+   "pen": 0.05621,
+   "pp": 0.0005
+  },
+  "kerry fraser": {
+   "n": 135,
+   "pen": -0.58982,
+   "pp": -0.80752
+  },
+  "kevin pollock": {
+   "n": 1081,
+   "pen": -0.39519,
+   "pp": -0.43995
+  },
+  "kyle rehman": {
+   "n": 1159,
+   "pen": 0.11858,
+   "pp": 0.08559
+  },
+  "liam maaskant": {
+   "n": 31,
+   "pen": 0.07242,
+   "pp": -0.46225
+  },
+  "marc joannette": {
+   "n": 997,
+   "pen": -0.7259,
+   "pp": -0.72024
+  },
+  "marcus vinnerborg": {
+   "n": 40,
+   "pen": -0.27511,
+   "pp": -0.3363
+  },
+  "mark lemelin": {
+   "n": 58,
+   "pen": 0.68132,
+   "pp": 0.83228
+  },
+  "michael markovic": {
+   "n": 399,
+   "pen": 0.69034,
+   "pp": 0.92295
+  },
+  "mike hasenfratz": {
+   "n": 226,
+   "pen": -0.24606,
+   "pp": -0.16336
+  },
+  "mike leggo": {
+   "n": 616,
+   "pen": -0.90371,
+   "pp": -1.0661
+  },
+  "mike sullivan": {
+   "n": 62,
+   "pen": 0.05697,
+   "pp": 0.17278
+  },
+  "mitch dunning": {
+   "n": 360,
+   "pen": -0.14787,
+   "pp": -0.34385
+  },
+  "morgan macphee": {
+   "n": 101,
+   "pen": -0.47439,
+   "pp": -0.36572
+  },
+  "nan": {
+   "n": 4,
+   "pen": -0.03309,
+   "pp": -0.02153
+  },
+  "paul devorski": {
+   "n": 468,
+   "pen": -0.77249,
+   "pp": -1.1219
+  },
+  "peter macdougall": {
+   "n": 520,
+   "pen": 0.09009,
+   "pp": 0.09062
+  },
+  "pierre lambert": {
+   "n": 587,
+   "pen": 0.09591,
+   "pp": -0.00223
+  },
+  "reid anderson": {
+   "n": 127,
+   "pen": 0.45425,
+   "pp": 0.46763
+  },
+  "riley brace": {
+   "n": 35,
+   "pen": 0.5902,
+   "pp": 0.61304
+  },
+  "rob martell": {
+   "n": 505,
+   "pen": -0.57308,
+   "pp": -0.66581
+  },
+  "rob shick": {
+   "n": 38,
+   "pen": -0.78943,
+   "pp": -0.87606
+  },
+  "stephane auger": {
+   "n": 270,
+   "pen": 0.40968,
+   "pp": 0.23939
+  },
+  "stephen hiff": {
+   "n": 71,
+   "pen": 0.01994,
+   "pp": 0.35945
+  },
+  "stephen walkom": {
+   "n": 272,
+   "pen": -1.19431,
+   "pp": -1.13494
+  },
+  "steve kozari": {
+   "n": 1107,
+   "pen": 0.4558,
+   "pp": 0.50506
+  },
+  "thomas john luxmore": {
+   "n": 808,
+   "pen": -0.18856,
+   "pp": -0.09219
+  },
+  "tim peel": {
+   "n": 834,
+   "pen": -0.33781,
+   "pp": -0.28968
+  },
+  "tom chmielewski": {
+   "n": 705,
+   "pen": 0.0204,
+   "pp": 0.152
+  },
+  "tom kowal": {
+   "n": 685,
+   "pen": -0.49655,
+   "pp": -0.72404
+  },
+  "trent knorr": {
+   "n": 2,
+   "pen": 0.07886,
+   "pp": 0.19181
+  },
+  "trevor hanson": {
+   "n": 816,
+   "pen": 0.2994,
+   "pp": 0.08388
+  },
+  "wes mccauley": {
+   "n": 1267,
+   "pen": -0.62661,
+   "pp": -0.92418
+  }
+ },
+ "shrink": 40
+}

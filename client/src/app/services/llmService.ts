@@ -167,7 +167,7 @@ async function throwLLMError(res: Response): Promise<never> {
   if (res.status === 429 && body.error === 'monthly_quota_reached') {
     const err: LLMError = {
       type: 'monthly_quota',
-      message: body.message ?? 'Vous avez atteint votre maximum de requêtes IA pour ce mois-ci.',
+      message: body.message ?? 'You have reached your AI request limit for this month. / Vous avez atteint votre maximum de requêtes IA pour ce mois-ci.',
       limit: body.limit,
       resetsAt: body.resetsAt,
     };

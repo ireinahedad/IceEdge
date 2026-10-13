@@ -1,0 +1,160 @@
+{
+ "calibration": {
+  "adversaire seul en b2b": {
+   "n": 2952,
+   "victoires": 0.581,
+   "servi": 0.5677,
+   "z_servi": 1.5,
+   "n_cotes": 2471,
+   "victoires_cotes": 0.5799,
+   "marche_cloture": 0.5538,
+   "servi_cotes": 0.567,
+   "z_marche": 2.67
+  },
+  "autre": {
+   "n": 21266,
+   "victoires": 0.5,
+   "servi": 0.5,
+   "z_servi": -0.0,
+   "n_cotes": 17490,
+   "victoires_cotes": 0.5,
+   "marche_cloture": 0.5,
+   "servi_cotes": 0.5,
+   "z_marche": 0.0
+  },
+  "équipe seule en b2b": {
+   "n": 2952,
+   "victoires": 0.419,
+   "servi": 0.4323,
+   "z_servi": -1.5,
+   "n_cotes": 2471,
+   "victoires_cotes": 0.4201,
+   "marche_cloture": 0.4462,
+   "servi_cotes": 0.433,
+   "z_marche": -2.67
+  }
+ },
+ "equipe_b2b_par_periode": {
+  "2015-2019": {
+   "n": 1457,
+   "victoires": 0.4331,
+   "servi": 0.4318,
+   "z_servi": 0.1,
+   "n_cotes": 1455,
+   "marche": 0.4444,
+   "z_marche": -0.89
+  },
+  "2020-2026": {
+   "n": 1495,
+   "victoires": 0.4054,
+   "servi": 0.4329,
+   "z_servi": -2.24,
+   "n_cotes": 1016,
+   "marche": 0.4489,
+   "z_marche": -3.12
+  }
+ },
+ "value_bets_regle_servie": {
+  "adversaire seul en b2b": {
+   "paris": 517,
+   "part": 0.141,
+   "reussite": 0.6074,
+   "p_servi_moy": 0.5783,
+   "roi_pct": 7.9,
+   "roi_se_pct": 4.02,
+   "clv_moy": 0.017,
+   "clv_t": 15.93
+  },
+  "autre": {
+   "paris": 2909,
+   "part": 0.795,
+   "reussite": 0.5328,
+   "p_servi_moy": 0.5411,
+   "roi_pct": 1.54,
+   "roi_se_pct": 1.85,
+   "clv_moy": 0.0091,
+   "clv_t": 20.4
+  },
+  "équipe seule en b2b": {
+   "paris": 234,
+   "part": 0.064,
+   "reussite": 0.4316,
+   "p_servi_moy": 0.4941,
+   "roi_pct": -9.41,
+   "roi_se_pct": 7.09,
+   "clv_moy": 0.0076,
+   "clv_t": 4.73
+  }
+ },
+ "value_bets_total": 3660,
+ "part_univers": {
+  "autre": 0.779,
+  "adversaire seul en b2b": 0.111,
+  "équipe seule en b2b": 0.111
+ },
+ "walk_forward_terme_b2b": {
+  "n": 9859,
+  "delta": -2e-06,
+  "se": 0.000158,
+  "z": -0.02,
+  "saisons_meilleures": "5/9",
+  "verdict": "NON TRANCHABLE",
+  "par_saison": [
+   {
+    "saison": 2018,
+    "n": 1271,
+    "delta": 0.000401,
+    "coef_b2b": 0.0012
+   },
+   {
+    "saison": 2019,
+    "n": 1082,
+    "delta": -0.000142,
+    "coef_b2b": -0.025
+   },
+   {
+    "saison": 2020,
+    "n": 868,
+    "delta": 0.000963,
+    "coef_b2b": -0.0077
+   },
+   {
+    "saison": 2021,
+    "n": 1307,
+    "delta": 0.000179,
+    "coef_b2b": -0.0222
+   },
+   {
+    "saison": 2022,
+    "n": 1312,
+    "delta": -0.000171,
+    "coef_b2b": -0.0556
+   },
+   {
+    "saison": 2023,
+    "n": 1312,
+    "delta": -8.2e-05,
+    "coef_b2b": -0.0703
+   },
+   {
+    "saison": 2024,
+    "n": 1312,
+    "delta": -0.000361,
+    "coef_b2b": -0.0673
+   },
+   {
+    "saison": 2025,
+    "n": 1312,
+    "delta": -0.000595,
+    "coef_b2b": -0.0832
+   },
+   {
+    "saison": 2026,
+    "n": 83,
+    "delta": 0.001641,
+    "coef_b2b": -0.079
+   }
+  ]
+ },
+ "generated": "2026-10-12T07:07Z"
+}
