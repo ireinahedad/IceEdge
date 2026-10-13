@@ -29,7 +29,7 @@ import {
 import { attachGameFactors, attachPlayerFactors, attachGoalieFactors, PuckLineSpec, PeriodSpec } from './factorModel';
 import {
   finalScoreGrid, winByAtLeastShare, exactScoreShare, totalOver, teamOver, nbAtLeast,
-  nbAtLeastLive, liveFraction, LiveState, LiveEffects, evolveLiveScore,
+  nbAtLeastLive, liveFraction, LiveState, LiveEffects, evolveLiveScore, powerPlayFromSituation,
 } from './prediction/finalScore';
 import measuredLiveEffects from './prediction/liveEffects.json';
 import { TtlCache } from './ttlCache';
@@ -460,8 +460,19 @@ export function liveCtxFromDetail(d: any): LiveGameCtx | null {
     : d.inIntermission
       ? `entracte après la ${ORD[period - 1]}`
       : `${ORD[period - 1]}, ${d.clock ?? '?'} restantes`;
+  // Avantage numérique EN COURS (`situation` de la feuille de match) : seulement
+  // avec les effets mesurés (`liveEffects.json` → `pp`), en temps réglementaire,
+  // borné au temps réglementaire restant. Une pénalité court à travers l'entracte.
+  const pp = LIVE_EFFECTS?.pp && !inOvertime
+    ? powerPlayFromSituation(d.situation?.code, d.situation?.secondsRemaining)
+    : null;
+  if (pp) pp.secondsLeft = Math.min(pp.secondsLeft, secondsLeftReg);
   return {
-    state: { homeScore: home, awayScore: away, secondsLeftReg, inOvertime, f, ...(LIVE_EFFECTS ? { effects: LIVE_EFFECTS } : {}) },
+    state: {
+      homeScore: home, awayScore: away, secondsLeftReg, inOvertime, f,
+      ...(LIVE_EFFECTS ? { effects: LIVE_EFFECTS } : {}),
+      ...(pp && pp.secondsLeft > 0 ? { pp } : {}),
+    },
     period, clockSec, periodGoals, final: false,
     label: `${home}–${away}, ${when}`,
   };
@@ -510,7 +521,7 @@ function teamGoalsFactor(c: LiveGameCtx, detail: any): Record<string, number> | 
   const homeAbbr = detail?.home?.abbr, awayAbbr = detail?.away?.abbr;
   if (!fx || !(lam && lam > 0) || c.final || c.state.inOvertime || !homeAbbr || !awayAbbr) return undefined;
   if (!(c.state.secondsLeftReg > 0)) return { [homeAbbr]: 0, [awayAbbr]: 0 };
-  const rem = evolveLiveScore(lam, lam, c.state.homeScore, c.state.awayScore, 3600 - c.state.secondsLeftReg, fx);
+  const rem = evolveLiveScore(lam, lam, c.state.homeScore, c.state.awayScore, 3600 - c.state.secondsLeftReg, fx, c.state.pp);
   let eh = 0, ea = 0;
   rem.forEach((row, i) => row.forEach((p, j) => { eh += p * i; ea += p * j; }));
   return { [homeAbbr]: Math.round((eh / lam) * 1e4) / 1e4, [awayAbbr]: Math.round((ea / lam) * 1e4) / 1e4 };

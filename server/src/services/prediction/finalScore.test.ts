@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   finalScoreGrid, gridSum, liveFraction, nbAtLeast, nbAtLeastLive, evolveLiveScore, LiveEffects,
+  powerPlayFromSituation, ppCategory,
 } from './finalScore';
 import measured from './liveEffects.json';
 
@@ -142,5 +143,77 @@ describe('evolveLiveScore — effets de score mesurés', () => {
     const a = finalScoreGrid(3.0, 3.0, 0.55, live);
     const b = finalScoreGrid(3.0, 3.0, 0.55, { ...live, effects: FX });
     expect(b.p[3][2]).toBeCloseTo(a.p[3][2], 12);
+  });
+});
+
+describe('avantage numérique en cours — facteurs mesurés (calibrate_live_pp.py)', () => {
+  // Facteurs mesurés le 2026-10-13 (ml/models/live/calibrate_live_pp_report.json). NON servis :
+  // le rejeu ne montre aucun gain (pénalités de compensation), `liveEffects.json` n'a pas de clé pp.
+  const FX: LiveEffects = { ...(measured as LiveEffects),
+    pp: { g: {"EV": 0.9367, "EVS": 0.8844, "PP1": 2.1853, "PP2": 5.1049, "SH1": 0.3534, "SH2": 0.1003} } };
+
+  it("liveEffects.json servi n'a PAS de clé pp (rejeu sans gain, 2026-10-13)", () => {
+    expect((measured as LiveEffects).pp).toBeUndefined();
+  });
+  const sum = (r: number[][]) => r.reduce((t, row) => t + row.reduce((a, b) => a + b, 0), 0);
+  const mean = (r: number[][], side: 'h' | 'a') =>
+    r.reduce((t, row, i) => t + row.reduce((a, p, j) => a + p * (side === 'h' ? i : j), 0), 0);
+
+  it('facteurs mesurés : avantage > moyenne > désavantage', () => {
+    const g = FX.pp!.g;
+    expect(g.PP1).toBeGreaterThan(1.5);
+    expect(g.SH1).toBeLessThan(0.6);
+    expect(g.PP2).toBeGreaterThan(g.PP1);
+  });
+
+  it('situationCode → situation (gardien retiré non compté, 5 c. 5 = rien)', () => {
+    expect(powerPlayFromSituation('1451', 90)).toEqual({ homeSkaters: 5, awaySkaters: 4, secondsLeft: 90, endsOnGoal: true });
+    expect(powerPlayFromSituation('1541', 300)).toEqual({ homeSkaters: 4, awaySkaters: 5, secondsLeft: 300, endsOnGoal: false });
+    expect(powerPlayFromSituation('1441', 60)?.endsOnGoal).toBe(false);
+    expect(powerPlayFromSituation('1551', 0)).toBeNull();
+    expect(powerPlayFromSituation('1551', 100)).toBeNull();
+    expect(powerPlayFromSituation('0651', 100)).toBeNull();   // 6 c. 5, gardien visiteur retiré
+    expect(powerPlayFromSituation('1560', 100)).toBeNull();
+    expect(powerPlayFromSituation('1451', Number.NaN)).toBeNull();
+    expect(powerPlayFromSituation(651, 100)).toBeNull();      // code numérique sans le 0 de tête
+    expect(powerPlayFromSituation('1451', 900)?.secondsLeft).toBe(300);
+    expect(ppCategory(5, 3)).toBe('PP2');
+    expect(ppCategory(3, 5)).toBe('SH2');
+  });
+
+  it("sans situation, ou facteurs à 1 : exactement le moteur d'avant", () => {
+    const base = evolveLiveScore(3.1, 2.8, 1, 1, 1500, FX);
+    expect(evolveLiveScore(3.1, 2.8, 1, 1, 1500, FX, null)).toEqual(base);
+    const ones: LiveEffects = { ...FX, pp: { g: { EV: 1, EVS: 1, PP1: 1, PP2: 1, SH1: 1, SH2: 1 } } };
+    // 120 s : la fin de la pénalité tombe sur un pas du moteur, rien n'est redécoupé.
+    const pp = { homeSkaters: 5, awaySkaters: 4, secondsLeft: 120, endsOnGoal: true };
+    const r = evolveLiveScore(3.1, 2.8, 1, 1, 1500, ones, pp);
+    for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) expect(r[i][j]).toBeCloseTo(base[i][j], 12);
+  });
+
+  it('domicile à 5 c. 4 : plus de buts pour lui, moins pour le visiteur, masse conservée', () => {
+    const base = evolveLiveScore(3.1, 2.8, 0, 0, 1500, FX);
+    const pp = evolveLiveScore(3.1, 2.8, 0, 0, 1500, FX, { homeSkaters: 5, awaySkaters: 4, secondsLeft: 120, endsOnGoal: true });
+    expect(sum(pp)).toBeCloseTo(1, 9);
+    expect(mean(pp, 'h')).toBeGreaterThan(mean(base, 'h') + 0.05);
+    expect(mean(pp, 'a')).toBeLessThan(mean(base, 'a'));
+  });
+
+  it("mineure : un but de l'équipe en avantage y met fin (moins de 2e but qu'une majeure)", () => {
+    const sit = { homeSkaters: 5, awaySkaters: 4, secondsLeft: 120 };
+    const minor = evolveLiveScore(3.1, 2.8, 0, 0, 1500, FX, { ...sit, endsOnGoal: true });
+    const major = evolveLiveScore(3.1, 2.8, 0, 0, 1500, FX, { ...sit, endsOnGoal: false });
+    const twoPlus = (r: number[][]) => r.slice(2).reduce((t, row) => t + row.reduce((a, b) => a + b, 0), 0);
+    expect(twoPlus(minor)).toBeLessThan(twoPlus(major));
+    // P(au moins un but) identique : la pénalité court tant qu'il n'y en a pas.
+    const onePlus = (r: number[][]) => 1 - r[0].reduce((a, b) => a + b, 0);
+    expect(onePlus(minor)).toBeCloseTo(onePlus(major), 9);
+  });
+
+  it('la grille du score final lit `live.pp`', () => {
+    const live = { homeScore: 1, awayScore: 1, secondsLeftReg: 600, inOvertime: false, effects: FX };
+    const a = finalScoreGrid(3.0, 3.0, 0.5, live);
+    const b = finalScoreGrid(3.0, 3.0, 0.5, { ...live, pp: { homeSkaters: 5, awaySkaters: 4, secondsLeft: 120, endsOnGoal: true } });
+    expect(b.regHome).toBeGreaterThan(a.regHome + 0.03);
   });
 });

@@ -100,6 +100,63 @@ export interface LiveState {
    * écart au score et du moment du match. Absents : phase 1, inchangée.
    */
   effects?:       LiveEffects | null;
+  /**
+   * Situation numérique EN COURS (avantage numérique, 4 c. 4) et temps qu'il lui
+   * reste. Lue seulement avec `effects.pp` (facteurs mesurés par
+   * `ml/python/calibrate_live_pp.py`) ; absente ou nulle : cadence moyenne.
+   */
+  pp?:            LivePowerPlay | null;
+}
+
+/**
+ * Situation numérique en cours, telle que la donne la feuille de match
+ * (`situation.situationCode` + `secondsRemaining`). Attaquant supplémentaire
+ * (gardien retiré) déjà retiré du compte : 6 c. 5 n'est pas un avantage.
+ */
+export interface LivePowerPlay {
+  homeSkaters: number;
+  awaySkaters: number;
+  /** Secondes de jeu pendant lesquelles la situation tient encore. */
+  secondsLeft: number;
+  /**
+   * Pénalité mineure : un but de l'équipe en avantage y met fin. Le moteur
+   * suit alors la situation case par case (l'équipe en avantage n'a pas
+   * encore marqué ⇔ la pénalité court toujours).
+   */
+  endsOnGoal:  boolean;
+}
+
+/** Catégorie de situation vue d'une équipe : clés de `LiveEffects.pp.g`. */
+export function ppCategory(own: number, opp: number): 'EV' | 'EVS' | 'PP1' | 'PP2' | 'SH1' | 'SH2' {
+  const d = own - opp;
+  if (d === 0) return own >= 5 ? 'EV' : 'EVS';
+  if (d === 1) return 'PP1';
+  if (d >= 2) return 'PP2';
+  if (d === -1) return 'SH1';
+  return 'SH2';
+}
+
+/**
+ * `situationCode` NHL (« 1451 » = gardien visiteur, 4 patineurs visiteur,
+ * 5 patineurs domicile, gardien domicile) + secondes restantes → situation à
+ * passer au moteur. `null` à 5 c. 5 (rien de connu au-delà de la moyenne),
+ * code illisible, gardien retiré sans pénalité, ou temps inconnu.
+ */
+export function powerPlayFromSituation(code: unknown, secondsRemaining: unknown): LivePowerPlay | null {
+  const c = String(code ?? '').padStart(4, '0');
+  const secs = Number(secondsRemaining);
+  if (!/^\d{4}$/.test(c) || !Number.isFinite(secs) || secs <= 0) return null;
+  const [ag, as, hs, hg] = c.split('').map(Number);
+  const homeSkaters = hs - (hg === 0 ? 1 : 0);
+  const awaySkaters = as - (ag === 0 ? 1 : 0);
+  if (homeSkaters < 3 || awaySkaters < 3 || homeSkaters > 6 || awaySkaters > 6) return null;
+  if (homeSkaters === awaySkaters && homeSkaters >= 5) return null;
+  return {
+    homeSkaters, awaySkaters,
+    // Une situation ne dure jamais plus qu'une majeure : borne contre un chiffre aberrant.
+    secondsLeft: Math.min(300, secs),
+    endsOnGoal: homeSkaters !== awaySkaters && secs <= 120,
+  };
 }
 
 /**
@@ -113,6 +170,12 @@ export interface LiveEffects {
   periodDist: number[];
   /** λ moyen d'une équipe sur les saisons d'entraînement (facteur d'équipe des paris joueur). */
   leagueLambda?: number;
+  /**
+   * Facteur de cadence selon la situation numérique EN COURS (`calibrate_live_pp.py`),
+   * vu de l'équipe : EV, EVS (4 c. 4), PP1/PP2, SH1/SH2. Moyenne pondérée par le
+   * temps = 1 : sans situation connue, la cadence reste λ × w × m.
+   */
+  pp?: { g: Record<string, number>; trainSeasons?: number[] };
 }
 
 /** Part des buts restants : f explicite, sinon le temps réglementaire restant. */
@@ -130,7 +193,7 @@ export function finalScoreGrid(
   // Effets de score mesurés : buts restants par le moteur pas à pas.
   if (live?.effects && !live.inOvertime && live.secondsLeftReg > 0) {
     return gridFromRemaining(
-      evolveLiveScore(lambdaH, lambdaA, h0, a0, 3600 - live.secondsLeftReg, live.effects),
+      evolveLiveScore(lambdaH, lambdaA, h0, a0, 3600 - live.secondsLeftReg, live.effects, live.pp),
       h0, a0, otShareHome, live.tieBoost);
   }
   // Avant-match : plancher 0.05, grille depuis 0–0. En direct : les buts
@@ -197,10 +260,16 @@ const STEP_SEC = 10;
  * le pas : deux buts en 10 s restent des événements rares, et leur masse est
  * conservée (seuls ≥ 3 buts d'une équipe en un pas sont tronqués, ~10⁻⁶).
  * Avec m ≡ 1, on retrouve les deux Poisson indépendantes de la phase 1.
+ *
+ * Situation numérique en cours (`pp`, avec `fx.pp`) : pendant ses
+ * `secondsLeft` secondes, chaque cadence est aussi multipliée par g(situation
+ * vue de l'équipe). Mineure (`endsOnGoal`) : dans les cases où l'équipe en
+ * avantage a déjà marqué depuis l'instant présent, la pénalité est finie et
+ * g repasse à 1.
  */
 export function evolveLiveScore(
   lambdaH: number, lambdaA: number, h0: number, a0: number,
-  elapsedSec: number, fx: LiveEffects,
+  elapsedSec: number, fx: LiveEffects, pp?: LivePowerPlay | null,
 ): number[][] {
   const n = MAX_K + 1;
   let cur: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
@@ -220,22 +289,38 @@ export function evolveLiveScore(
   };
   let maxI = 0, maxJ = 0;   // bornes de la masse non nulle : la boucle ne parcourt qu'elles
   let t = Math.max(0, Math.min(3600, elapsedSec));
+  // Situation en cours : facteurs mesurés et instant (écoulé) où elle prend fin.
+  const g = fx.pp?.g;
+  const ppOn = !!(pp && g && pp.secondsLeft > 0);
+  const ppEnd = ppOn ? Math.min(3600, t + pp!.secondsLeft) : t;
+  const gH = ppOn ? g![ppCategory(pp!.homeSkaters, pp!.awaySkaters)] ?? 1 : 1;
+  const gA = ppOn ? g![ppCategory(pp!.awaySkaters, pp!.homeSkaters)] ?? 1 : 1;
+  // Mineure : finie dès que l'équipe en avantage marque (i > 0 domicile, j > 0 visiteur).
+  const ppHome = ppOn && pp!.endsOnGoal && pp!.homeSkaters > pp!.awaySkaters;
+  const ppAway = ppOn && pp!.endsOnGoal && pp!.awaySkaters > pp!.homeSkaters;
   while (t < 3600 - 1e-9) {
-    const next = Math.min(3600, (Math.floor(t / STEP_SEC) + 1) * STEP_SEC);
+    let next = Math.min(3600, (Math.floor(t / STEP_SEC) + 1) * STEP_SEC);
+    const inPp = t < ppEnd - 1e-9;
+    if (inPp) next = Math.min(next, ppEnd);
     const per = Math.min(2, Math.floor(t / 1200));
     const w = (fx.periodDist[per] ?? 1 / 3) * (next - t) / 1200;
     const s = sliceAt(t);
-    // La cadence ne dépend que de l'écart borné à ±3 : 7 cas par pas.
+    // La cadence ne dépend que de l'écart borné à ±3 : 7 cas par pas, ×2 pendant
+    // une situation (pénalité en cours / déjà finie par un but).
     const byDiff: Array<{ ph: number[]; pa: number[] }> = [];
+    const byDiffOn: Array<{ ph: number[]; pa: number[] }> = [];
     for (let c = 0; c < 7; c++) {
-      byDiff.push({ ph: goals3(lh * w * (fx.m[s][c] ?? 1)), pa: goals3(la * w * (fx.m[s][6 - c] ?? 1)) });
+      const mh = fx.m[s][c] ?? 1, ma = fx.m[s][6 - c] ?? 1;
+      byDiff.push({ ph: goals3(lh * w * mh), pa: goals3(la * w * ma) });
+      if (inPp) byDiffOn.push({ ph: goals3(lh * w * mh * gH), pa: goals3(la * w * ma * gA) });
     }
     const nxt: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
     for (let i = 0; i <= maxI; i++) {
       for (let j = 0; j <= maxJ; j++) {
         const q = cur[i][j];
         if (q < 1e-15) continue;
-        const { ph, pa } = byDiff[Math.max(-3, Math.min(3, d0 + i - j)) + 3];
+        const on = inPp && !(ppHome && i > 0) && !(ppAway && j > 0);
+        const { ph, pa } = (on ? byDiffOn : byDiff)[Math.max(-3, Math.min(3, d0 + i - j)) + 3];
         for (let k = 0; k < 3; k++) {
           const row = nxt[Math.min(MAX_K, i + k)];
           const qk = q * ph[k];
