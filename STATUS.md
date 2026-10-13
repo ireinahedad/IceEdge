@@ -238,16 +238,18 @@ cote de clôture quand elle existe.
       haut obs/servi 1.039 → prédiction ×1.072, bas 0.931 → ×0.959). **Points en AN : NON** (z 1.74,
       2 saisons sur 3) → candidat `ref_pp_points` au registre, à remesurer avec 2026-27.
       Reproduction exacte du servi (log-vraisemblance −0.76652 / −0.25301 = `player_report.json`).
-      **Intégration PIM — codée le 2026-10-12, à activer** : `referee_effects.py` (variables +
+      **Intégration PIM — codée le 2026-10-12, entraînée et committée le 2026-10-13 (`cb24b66`)** : `referee_effects.py` (variables +
       table), `train_player.py` (essaie `ref_*` pour pim et ppPoints avec la règle →
       `player_ref_report.json` ; écrit `ref_effects.json` avec l'état), `refresh_data.py` étape 6
       (arbitres des nouveaux matchs + table, chaque lundi), `ml_service.py` (`referees` dans
       `/predict/game/bundle` → `ref_pen`/`ref_pp`, 0 si inconnus ou table absente),
       `gameMlBundle.ts` (envoie les arbitres de `getGameRefFactor`). Validé en cloud : réentraînement
       complet identique au servi pour les 7 autres stats ; pim gardé (z 2.46, log-vrais. −0.76652 →
-      −0.76636), ppPoints non (z 1.68). Reste : `python train_player.py` sur le poste, committer
-      `ml/models/player/*.json`, `player_report.json`, `player_state.json`, `player_ref_report.json`,
-      `ref_effects.json` + le code, `npm test`, déployer ML puis serveur.
+      −0.76636), ppPoints non (z 1.68). ✔ Poste (2026-10-12) : pim gardé z 2.42 (3 saisons de test
+      sur 3), ppPoints non z 1.78 ; table 84 arbitres au 2026-10-10. ✔ `npm test` serveur 2026-10-13 :
+      1 397 tests verts, `tsc` propre. Ordre de déploiement indifférent (`referees` est optionnel
+      côté ML, pydantic ignore les champs en trop). **Reste : `git push`, puis dans les logs Railway
+      du service ML : `[ML] ✅ effets arbitre : 84 arbitres (au 2026-10-10), utilisés par : pim`.**
       Reste possible : historique des cotes de props joueur (payant, à chiffrer) ; trios par match
       (feuilles de présence `shiftcharts`, ~270 Ko/match) seulement si une piste le justifie.
 - [ ] **P6. Produit — déjà tenu par l'Analyse IA v2, à garder tel quel.** Vérifié le 2026-10-12 :

@@ -28,8 +28,10 @@ import { useOddsFormat } from "../../context/OddsFormatContext";
 import { useBookmaker, minOddsFromPct } from "../../context/BookmakerContext";
 import { features } from "../../platform";
 import { fairOdds } from "../../components/BookPricePill";
+import { useFoldAll, useSectionFold } from "./foldAll";
+import { useRegisterTopBets } from "./topBetsRegistry";
 
-import { Check } from "lucide-react";
+import { Check, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 /* ─── Identifiant de la jambe de coupon ──────────────────────────────────────
  *
  * Il vivait DANS `PredictionSheet`, donc seule la fiche ouverte savait si un
@@ -617,10 +619,23 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
  * que dans la fiche d'un pari (cartes ML, Règles et Ask LLM). */
 export function PredictionsRevealBar() {
   const { t } = useI18n();
+  // « Tout plier / Tout déplier » (2026-10-13) : un ordre pour toutes les
+  // sections de la page — voir `foldAll.tsx`.
+  const { allCollapsed, foldAll } = useFoldAll();
   return (
-    <div className="flex items-center justify-between px-1">
+    <div className="flex items-center justify-between gap-3 px-1">
       <span className="text-[#4a6070] text-[11px] font-semibold uppercase tracking-wider">{t("pred.markets")}</span>
-      <span className="text-[11px] font-semibold" style={{ color: "#a78bfa" }}>ML</span>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => foldAll(!allCollapsed)}
+          className="flex items-center gap-1 text-[11px] font-semibold text-[#8a9ea6] hover:text-white transition-colors py-1"
+        >
+          {allCollapsed ? <ChevronsUpDown size={13} /> : <ChevronsDownUp size={13} />}
+          {allCollapsed ? t("pred.unfoldAll") : t("pred.foldAll")}
+        </button>
+        <span className="text-[11px] font-semibold" style={{ color: "#a78bfa" }}>ML</span>
+      </div>
     </div>
   );
 }
@@ -843,7 +858,11 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
 
 /* ─── MarketGroup ───────────────────────────── */
 export function MarketGroup({ group, accent }: { group: MktGroup; accent: string }) {
-  const [open, setOpen] = useState(true);
+  // Pliage mémorisé et soumis au « tout plier » de la page (2026-10-13).
+  const [collapsed, toggle] = useSectionFold(`grp.${group.id}`);
+  const open = !collapsed;
+  // Ses paris comptent pour le « Top 90% + », même groupe plié.
+  useRegisterTopBets(`grp:${group.id}`, group.options);
   const gameLive = useContext(GameLiveCtx);
   // Pendant le match, les paris tranchés disparaissent ; un groupe qui n'a
   // plus que ça disparaît avec eux plutôt que de rester en titre vide.
@@ -855,7 +874,8 @@ export function MarketGroup({ group, accent }: { group: MktGroup; accent: string
   return (
     <div className="bg-[#0A0E0C] border border-white/[0.07] rounded-2xl overflow-hidden">
       <button
-        onClick={() => setOpen(v => !v)}
+        onClick={toggle}
+        aria-expanded={open}
         className="w-full flex items-center justify-between px-4 py-3"
         style={{ borderBottom: open ? "1px solid rgba(255,255,255,0.06)" : "none" }}
       >

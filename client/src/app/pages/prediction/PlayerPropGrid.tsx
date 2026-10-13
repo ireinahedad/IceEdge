@@ -32,7 +32,9 @@ import { nhlLogoUrl } from "../../data/teamEmoji";
 import { BetOption } from "./PredictionSheet";
 import type { BetOpt, MLProps } from "./gameMarkets";
 
-import { Check } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
+import { useSectionFold } from "./foldAll";
+import { useRegisterTopBets } from "./topBetsRegistry";
 /** Les statistiques qu'on peut miser en grille. */
 export type PropMetric = "goals" | "assists" | "points" | "shots" | "hits" | "blocks" | "saves";
 
@@ -309,7 +311,6 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
 
   const [sideKey, setSideKey] = useState(sides[0]?.key ?? "");
   const [rosters, setRosters] = useState<Record<string, RosterRow[]>>({});
-  const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [box, setBox] = useState<GameBoxscoreResponse | null>(null);
   /** Feuille de match non rafraîchie depuis 90 s pendant la partie. */
@@ -318,16 +319,24 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
   const side = sides.find(s => s.key === sideKey) ?? sides[0];
   const abbr = side?.abbr ?? "";
 
+  // Pliage de la grille, mémorisé et soumis au « tout plier » (2026-10-13).
+  const [collapsed, toggleFold] = useSectionFold(`grid.${metric}`);
+
+  // Effectifs des DEUX clubs d'un match, pas seulement de l'onglet affiché :
+  // le « Top 90% + » de la page compte les joueurs des deux équipes.
+  const sidesKey = sides.map(s => s.abbr).join(",");
   useEffect(() => {
-    if (!abbr || rosters[abbr]) return;
     let alive = true;
-    setLoading(true);
-    nhlApiService.getTeamRoster(abbr.toUpperCase())
-      .then((r: any[]) => { if (alive) setRosters(prev => ({ ...prev, [abbr]: r as RosterRow[] })); })
-      .catch(() => { if (alive) setRosters(prev => ({ ...prev, [abbr]: [] })); })
-      .finally(() => { if (alive) setLoading(false); });
+    for (const a of sides.map(s => s.abbr)) {
+      if (!a || rosters[a]) continue;
+      nhlApiService.getTeamRoster(a.toUpperCase())
+        .then((r: any[]) => { if (alive) setRosters(prev => ({ ...prev, [a]: r as RosterRow[] })); })
+        .catch(() => { if (alive) setRosters(prev => ({ ...prev, [a]: [] })); });
+    }
     return () => { alive = false; };
-  }, [abbr]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sidesKey]);
+  const loading = !!abbr && !rosters[abbr];
 
   // Changer de club referme le dépliage : on regarde une autre formation, pas
   // la suite de la précédente.
@@ -440,7 +449,7 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
    *
    * `null` = pas de filtre (grille de patineurs, ou pas de match choisi).
    */
-  const goalieFilter = useMemo((): { ids: Set<string>; source: "played" | "confirmed" | "probable" } | null => {
+  const goalieFilterFor = (abbr: string): { ids: Set<string>; source: "played" | "confirmed" | "probable" } | null => {
     if (!spec.goalies || !gameId) return null;
     const goalies = (rosters[abbr] ?? []).filter(p => (p.position ?? "") === "G");
     if (goalies.length === 0) return null;
@@ -462,11 +471,17 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
 
     const busiest = goalies.reduce((a, b) => ((b.gamesPlayed ?? 0) > (a.gamesPlayed ?? 0) ? b : a));
     return { ids: new Set([busiest.id]), source: "probable" };
-  }, [spec.goalies, gameId, rosters, abbr, box, starterNames]);
+  };
+  const goalieFilter = goalieFilterFor(abbr);
 
-  const rows: GridRow[] = useMemo(() => {
+  // Lignes de CHAQUE club (voir le chargement des effectifs) ; la grille
+  // affiche celles de l'onglet choisi.
+  const rowsBySide: Record<string, GridRow[]> = useMemo(() => {
+    const out: Record<string, GridRow[]> = {};
+    for (const { abbr } of sides) {
+    const goalieFilter = goalieFilterFor(abbr);
     const roster = rosters[abbr] ?? [];
-    return roster
+    out[abbr] = roster
       // Les deux populations s'excluent : un gardien n'a ni but ni passe, un
       // patineur n'a pas d'arrêt. Mélanger les deux dans une grille ne
       // remplirait jamais qu'une moitié des lignes, quel que soit le tri.
@@ -667,6 +682,8 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
         };
       })
       .sort((a, b) => b.total - a.total);
+    }
+    return out;
     // `lang` et non `t` : le contexte i18n recrée `t` à chaque rendu du
     // fournisseur. Le mettre en dépendance recalculerait toute la grille — et
     // donc chaque objet `mlProps` — à chaque rendu de la page, ce qui est
@@ -674,7 +691,16 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
     // de marché (31 appels de prédiction par bascule, 429 dès le premier
     // aller-retour). `lang` est la seule chose dont dépendent les libellés.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rosters, abbr, metric, gameId, lang, spec, inGame, liveInfo, box, boxStale, goalieFilter, rates]);
+  }, [rosters, sidesKey, metric, gameId, lang, spec, inGame, liveInfo, box, boxStale, starterNames, rates]);
+  const rows = rowsBySide[abbr] ?? [];
+
+  // Tous les paris de la grille (deux clubs, tous les joueurs) comptent pour
+  // le « Top 90% + » de la page — grille pliée ou non.
+  const allOpts = useMemo(
+    () => Object.values(rowsBySide).flatMap(rs => rs.flatMap(r => r.opts)),
+    [rowsBySide],
+  );
+  useRegisterTopBets(`grid:${metric}`, allOpts);
 
   // Tirs bloqués non câblés pour cette équipe (amont muet, ou saison à zéro
   // match) : la grille entière vaudrait « 3 % » sur chaque case, ce qui n'est
@@ -693,7 +719,12 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
 
   return (
     <div className="bg-[#131A12] border border-white/20 rounded-2xl overflow-hidden">
-      <div className="px-4 pt-3 pb-2 flex items-center gap-2">
+      <button
+        type="button"
+        onClick={toggleFold}
+        aria-expanded={!collapsed}
+        className={`w-full text-left px-4 pt-3 ${collapsed ? "pb-3" : "pb-2"} flex items-center gap-2`}
+      >
         <span className="text-white text-sm font-medium">{t(spec.titleKey)}</span>
         {/* La SAISON de ces chiffres. En avant-saison ce n'est pas l'année en
             cours mais la dernière complète : « 32 buts » sans date, sur une
@@ -717,7 +748,14 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
             ? t(goalieFilter.source === "probable" ? "prop.starterProbable" : "prop.starterConfirmed")
             : expanded ? t("prop.allPlayers") : t("prop.top5")}
         </span>
-      </div>
+        <ChevronDown
+          aria-hidden
+          size={14}
+          className={`text-[#3a5060] flex-shrink-0 transition-transform ${collapsed ? "" : "rotate-180"}`}
+        />
+      </button>
+
+      {!collapsed && <>
 
       {/* Sélecteur de club — seulement sur une page de match */}
       {sides.length > 1 && (
@@ -834,6 +872,7 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
           )}
         </>
       )}
+      </>}
     </div>
   );
 }

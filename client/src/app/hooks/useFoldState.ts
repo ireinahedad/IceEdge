@@ -27,8 +27,11 @@ function write(key: string, collapsed: boolean) {
   try { localStorage.setItem(PREFIX + key, collapsed ? "1" : "0"); } catch { /* stockage indisponible */ }
 }
 
-/** Renvoie `[collapsed, toggle]`. */
-export function useFoldState(key: string, defaultCollapsed: boolean): [boolean, () => void] {
+/**
+ * Renvoie `[collapsed, toggle, set]`. `set` sert au « tout plier / tout
+ * déplier » de la page Prédiction (`prediction/foldAll.tsx`).
+ */
+export function useFoldState(key: string, defaultCollapsed: boolean): [boolean, () => void, (collapsed: boolean) => void] {
   const [collapsed, setCollapsed] = useState<boolean>(() => read(key, defaultCollapsed));
   const toggle = useCallback(() => {
     setCollapsed((c) => {
@@ -37,5 +40,9 @@ export function useFoldState(key: string, defaultCollapsed: boolean): [boolean, 
       return next;
     });
   }, [key]);
-  return [collapsed, toggle];
+  const set = useCallback((next: boolean) => {
+    write(key, next);
+    setCollapsed(next);
+  }, [key]);
+  return [collapsed, toggle, set];
 }

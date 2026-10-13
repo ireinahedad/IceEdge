@@ -15,6 +15,7 @@ import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { PlayerPropGrid } from "./PlayerPropGrid";
+import { TopBetsSection } from "./topBets";
 import { LiveGameView, MLProps, MktGroup } from "./gameMarkets";
 import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
 import { BetOddsCtx, GameLiveCtx, HeadToHead, NotFound, RevealMode, RevealModeCtx, ServerGroupsPending, StatsBanner, useGameOdds, useServerGroups } from "./predictionShared";
@@ -306,6 +307,8 @@ export function GamePrediction({ gameId }: { gameId: string }) {
       <GameLiveCtx.Provider value={isLive}>
       <BetOddsCtx.Provider value={odds}>
         <RevealModeCtx.Provider value={revealMode}>
+          {/* Les paris de la page à 90 % ML ou plus (2026-10-13). */}
+          <TopBetsSection accent={accent} />
           {apiGroups == null
             ? <ServerGroupsPending failed={apiFailed} onRetry={retryApi} />
             : groups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}

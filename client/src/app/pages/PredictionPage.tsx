@@ -25,6 +25,8 @@ import { GamePrediction } from "./prediction/GamePrediction";
 import { PlayerPrediction } from "./prediction/PlayerPrediction";
 import { TeamPrediction } from "./prediction/TeamPrediction";
 import { NotFound, RevealModeCtx } from "./prediction/predictionShared";
+import { FoldAllProvider } from "./prediction/foldAll";
+import { TopBetsProvider } from "./prediction/topBetsRegistry";
 
 
 export function PredictionPage() {
@@ -63,7 +65,13 @@ export function PredictionPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
-          {renderContent()}
+          {/* Registre du « Top 90% + » et ordre « tout plier » : propres à
+              CETTE page — la clé les remet à zéro d'un sujet à l'autre. */}
+          <FoldAllProvider key={`${type}:${id}`}>
+            <TopBetsProvider>
+              {renderContent()}
+            </TopBetsProvider>
+          </FoldAllProvider>
         </div>
 
         <BottomNav />

@@ -15,6 +15,7 @@ import { BELOW_FLOOR, dispersionFor, presetResult, rateLabels, ratePct } from ".
 import { useSport } from "../../context/SportContext";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
+import { TopBetsSection } from "./topBets";
 import { BetOpt, MktGroup, RuleFactor, mlBundleKey } from "./gameMarkets";
 import { GameSelector, LoadingSkeleton, NotFound, RevealMode, RevealModeCtx, ServerGroupsPending, StatsBanner, useSelectedGame, useServerGroups, useUpcomingGames } from "./predictionShared";
 
@@ -304,6 +305,8 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
       <StatsBanner type="player" id={playerId} />
       <PredictionsRevealBar />
       <RevealModeCtx.Provider value={revealMode}>
+        {/* Les paris de la page à 90 % ML ou plus (2026-10-13). */}
+        <TopBetsSection accent={accent} />
         {apiGroups == null
           ? <ServerGroupsPending failed={apiFailed} onRetry={retryApi} />
           : playerGroupsG.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}

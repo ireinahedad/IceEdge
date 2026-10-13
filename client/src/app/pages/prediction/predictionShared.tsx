@@ -19,6 +19,7 @@ import type { NHLGame } from "../../types/bet";
 import type { HeadToHeadSeasonGame } from "../../services/nhlApiService";
 import type { MktGroup } from "./gameMarkets";
 import { ErrorState } from "../../components/ErrorState";
+import { useSectionFold } from "./foldAll";
 
 /**
  * Prediction source shown by every BetOption on the page.
@@ -186,6 +187,8 @@ export function HeadToHead({ home, away }: {
 }) {
   const { t, lang } = useI18n();
   const locale = lang === "fr" ? "fr-CA" : "en-US";
+  // Section pliable, soumise au « tout plier » de la page (2026-10-13).
+  const [collapsed, toggleFold] = useSectionFold("h2h");
   /** Les 5 rencontres les plus récentes de la saison en cours ; `null` = en cours de chargement. */
   const [meetings, setMeetings] = useState<H2HMeeting[] | "error" | null>(null);
   const curReq = useRef(0);
@@ -261,10 +264,22 @@ export function HeadToHead({ home, away }: {
 
   return (
     <div className="bg-[#131A12] border border-white/20 rounded-2xl p-4">
-      <div className="flex items-baseline justify-between mb-3">
+      <button
+        type="button"
+        onClick={toggleFold}
+        aria-expanded={!collapsed}
+        className={`w-full flex items-center justify-between gap-2 ${collapsed ? "" : "mb-3"}`}
+      >
         <p className="text-white text-sm font-medium">{t("pred.h2hTitle")}</p>
-        <span className="text-[#8a9ea6] text-[11px]">{t("pred.h2hThisSeason")}</span>
-      </div>
+        <span className="flex items-center gap-2">
+          <span className="text-[#8a9ea6] text-[11px]">{t("pred.h2hThisSeason")}</span>
+          <ChevronDown
+            aria-hidden
+            className={`w-4 h-4 text-[#3a5060] transition-transform ${collapsed ? "" : "rotate-180"}`}
+          />
+        </span>
+      </button>
+      {collapsed ? null : <>
       {meetings === null ? (
         <H2HSkeleton rows={3} />
       ) : meetings === "error" ? (
@@ -337,6 +352,7 @@ export function HeadToHead({ home, away }: {
           </div>
         )}
       </div>
+      </>}
     </div>
   );
 }
