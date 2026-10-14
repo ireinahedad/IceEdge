@@ -15,7 +15,7 @@ import { useSport } from "../../context/SportContext";
 import { useBet } from "../../context/BetContext";
 import type { BetLeg } from "../../types/bet";
 import { useI18n } from "../../i18n";
-import { toast } from "sonner";
+import { toast } from "../../toast";
 import { BookPricePill, FairOddsPill } from "../../components/BookPricePill";
 import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
 import { mlBundleKey } from "../prediction/gameMarkets";

@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { toast } from "sonner";
+import { toast } from "../toast";
 import { useAuth } from "../context/AuthContext";
 import { profileApiService } from "../services/userService";
 import type { ModerationQueueItem } from "../types/user";

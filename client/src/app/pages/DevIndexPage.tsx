@@ -21,7 +21,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 
-import { FileText, Shield, BarChart3, DollarSign, type LucideIcon } from "lucide-react";
+import { FileText, Shield, BarChart3, DollarSign, ScanText, type LucideIcon } from "lucide-react";
 /** Les écrans internes, dans l'ordre où on les ouvre le plus souvent. */
 const DEV_LINKS: { path: string; title: string; blurb: string; icon: LucideIcon }[] = [
   {
@@ -35,6 +35,12 @@ const DEV_LINKS: { path: string; title: string; blurb: string; icon: LucideIcon 
     title: "Profit des Best Bets",
     blurb: "Profit si tu mises 20 $ (ou autre) sur chaque best bet du jour. Bilan, ROI, détail par jour.",
     icon:  DollarSign,
+  },
+  {
+    path:  "/dev/ocr",
+    title: "Labo OCR",
+    blurb: "Lire des captures de tickets sur l'appareil (Tesseract ici, Vision dans l'app iOS de test) et exporter le JSON des fixtures.",
+    icon:  ScanText,
   },
   {
     path:  "/dev/moderation",

@@ -46,17 +46,30 @@ export default function AppleProSection({
   const { t, lang } = useI18n();
 
   const [products, setProducts] = useState<Products | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
+  /**
+   * Échec du chargement des produits, en deux cas distincts :
+   *  • "empty" — StoreKit a répondu, mais sans aucun de nos produits. Ce n'est PAS le réseau :
+   *    contrat « Paid Apps » pas encore actif, produits en « Missing Metadata », ID différent
+   *    ou produits trop récents (docs/ios/APP_STORE_IAP_SETUP.md §1–3).
+   *  • "error" — StoreKit a levé une erreur (réseau, boutique injoignable…) ; `loadErrorDetail`
+   *    garde le message d'Apple pour le diagnostic.
+   */
+  const [loadFailed, setLoadFailed] = useState<null | "empty" | "error">(null);
+  const [loadErrorDetail, setLoadErrorDetail] = useState<string | null>(null);
   const [period, setPeriod] = useState<BillingPeriod>("monthly");
   const [busy, setBusy] = useState<"buy" | "restore" | "manage" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    setLoadFailed(false);
+    setLoadFailed(null);
+    setLoadErrorDetail(null);
     loadAppleProducts()
-      .then((p) => { setProducts(p); if (!p.monthly && p.yearly) setPeriod("yearly"); if (!p.monthly && !p.yearly) setLoadFailed(true); })
-      .catch(() => setLoadFailed(true));
+      .then((p) => { setProducts(p); if (!p.monthly && p.yearly) setPeriod("yearly"); if (!p.monthly && !p.yearly) setLoadFailed("empty"); })
+      .catch((err: unknown) => {
+        setLoadErrorDetail(err instanceof Error ? err.message : typeof err === "string" ? err : null);
+        setLoadFailed("error");
+      });
   }, []);
   useEffect(load, [load]);
 
@@ -149,7 +162,12 @@ export default function AppleProSection({
       <div className="rounded-2xl p-5 mb-6 text-center" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
         {loadFailed ? (
           <div className="flex flex-col items-center gap-3">
-            <p className="text-xs" style={{ color: MUTED }}>{t("pro.apple.unavailable")}</p>
+            <p className="text-xs" style={{ color: MUTED }}>
+              {t(loadFailed === "empty" ? "pro.apple.notAvailable" : "pro.apple.unavailable")}
+            </p>
+            {loadFailed === "error" && loadErrorDetail && (
+              <p className="text-[11px] break-words" style={{ color: MUTED, opacity: 0.7 }}>{loadErrorDetail}</p>
+            )}
             <AppButton variant="secondary" onClick={load}>{t("pro.apple.retry")}</AppButton>
           </div>
         ) : !products ? (

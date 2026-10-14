@@ -16,6 +16,7 @@ import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { PlayerPropGrid } from "./PlayerPropGrid";
 import { TopBetsSection } from "./topBets";
+import { BetTabs } from "./betTabs";
 import { LiveGameView, MLProps, MktGroup } from "./gameMarkets";
 import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
 import { BetOddsCtx, GameLiveCtx, HeadToHead, NotFound, RevealMode, RevealModeCtx, ServerGroupsPending, StatsBanner, useGameOdds, useServerGroups } from "./predictionShared";
@@ -309,62 +310,71 @@ export function GamePrediction({ gameId }: { gameId: string }) {
         <RevealModeCtx.Provider value={revealMode}>
           {/* Les paris de la page à 90 % ML ou plus (2026-10-13). */}
           <TopBetsSection accent={accent} />
-          {apiGroups == null
-            ? <ServerGroupsPending failed={apiFailed} onRetry={retryApi} />
-            : groups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
-
-          {/* ── Paris joueur, en grille ────────────────────────────────────
-              Ils remplacent le tableau de statistiques qui fermait la page.
-              Celui-ci ne montrait que des nombres à lire : pour miser sur les
-              buts d'un joueur il fallait toucher sa ligne, ouvrir sa page,
-              y retrouver le bon groupe — et la comparaison entre joueurs, qui
-              est la raison de regarder un effectif, se perdait en chemin.
-              Ici chaque case est le pari. */}
-          <PlayerPropGrid
-            metric="goals"
-            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
-            gameId={gameId}
+          {/* Paris en deux onglets (2026-10-14) : joueurs d'abord, puis
+              équipes / match. Le Top 90% + reste au-dessus : il couvre les deux. */}
+          <BetTabs
+            scope="game"
             accent={accent}
-          />
-          {/* Passes — de retour sur la page d'un match, colonnes 1+ → 4+. */}
-          <PlayerPropGrid
-            metric="assists"
-            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
-            gameId={gameId}
-            accent={accent}
-          />
-          <PlayerPropGrid
-            metric="points"
-            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
-            gameId={gameId}
-            accent={accent}
-          />
-          <PlayerPropGrid
-            metric="shots"
-            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
-            gameId={gameId}
-            accent={accent}
-          />
-          <PlayerPropGrid
-            metric="blocks"
-            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
-            gameId={gameId}
-            accent={accent}
-          />
-          <PlayerPropGrid
-            metric="hits"
-            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
-            gameId={gameId}
-            accent={accent}
-          />
-          {/* Arrêts — SEULEMENT le gardien qui joue ce match (feuille de
-              match, sinon partant saisi, sinon le plus utilisé), avec trois
-              colonnes calées sur sa moyenne. */}
-          <PlayerPropGrid
-            metric="saves"
-            sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
-            gameId={gameId}
-            accent={accent}
+            players={<>
+              {/* ── Paris joueur, en grille ────────────────────────────────────
+                  Ils remplacent le tableau de statistiques qui fermait la page.
+                  Celui-ci ne montrait que des nombres à lire : pour miser sur les
+                  buts d'un joueur il fallait toucher sa ligne, ouvrir sa page,
+                  y retrouver le bon groupe — et la comparaison entre joueurs, qui
+                  est la raison de regarder un effectif, se perdait en chemin.
+                  Ici chaque case est le pari. */}
+              <PlayerPropGrid
+                metric="goals"
+                sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
+                gameId={gameId}
+                accent={accent}
+              />
+              {/* Passes — de retour sur la page d'un match, colonnes 1+ → 4+. */}
+              <PlayerPropGrid
+                metric="assists"
+                sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
+                gameId={gameId}
+                accent={accent}
+              />
+              <PlayerPropGrid
+                metric="points"
+                sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
+                gameId={gameId}
+                accent={accent}
+              />
+              <PlayerPropGrid
+                metric="shots"
+                sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
+                gameId={gameId}
+                accent={accent}
+              />
+              <PlayerPropGrid
+                metric="blocks"
+                sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
+                gameId={gameId}
+                accent={accent}
+              />
+              <PlayerPropGrid
+                metric="hits"
+                sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
+                gameId={gameId}
+                accent={accent}
+              />
+              {/* Arrêts — SEULEMENT le gardien qui joue ce match (feuille de
+                  match, sinon partant saisi, sinon le plus utilisé), avec trois
+                  colonnes calées sur sa moyenne. */}
+              <PlayerPropGrid
+                metric="saves"
+                sides={[{ key: "home", abbr: home.abbr, name: home.name }, { key: "away", abbr: away.abbr, name: away.name }]}
+                gameId={gameId}
+                accent={accent}
+              />
+            </>}
+            markets={<>
+              {apiGroups == null
+                ? <ServerGroupsPending failed={apiFailed} onRetry={retryApi} />
+                : groups.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
+            </>}
           />
         </RevealModeCtx.Provider>
       </BetOddsCtx.Provider>

@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { toast } from "sonner";
+import { toast } from "../../toast";
 import { LIGHT_MODE_ENABLED, type AppearanceMode } from "../../appearance";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useAuth } from "../../context/AuthContext";
@@ -29,7 +29,7 @@ import { DotLoader, InputBox, ToggleSwitch, UserAvatar } from "./ProfileParts";
 import { DeleteAccountSheet } from "./DeleteAccountSheet";
 
 
-import { Globe, Moon, Sun, Target, Hash, Lock, FileText } from "lucide-react";
+import { Globe, Moon, Sun, Target, Hash, Lock, FileText, ScanText } from "lucide-react";
 // ── Settings Tab ──────────────────────────────────────────────────────────────
 
 export function SettingsTab({
@@ -711,6 +711,22 @@ export function SettingsTab({
           <FileText size={20} className="text-white/70" aria-hidden />
           <span className="flex-1 min-w-0">
             <span className="block text-white text-xs font-medium">Saisie d'avant-match</span>
+            <span className="block text-[#86d1ea] text-[11px] font-bold uppercase tracking-wider mt-0.5">admin</span>
+          </span>
+          <span className="text-[#bfc8cc] text-lg" aria-hidden>→</span>
+        </button>
+      )}
+
+      {/* SCAN_TICKET_PLAN S1 — Labo OCR : sur iOS, seul chemin vers /dev/ocr
+          (pas de barre d'adresse). Admin + build de test uniquement. */}
+      {features.ocrLab && user?.role === "admin" && (
+        <button
+          onClick={() => navigate("/dev/ocr")}
+          className="icy-card rounded-2xl p-4 flex items-center gap-3 text-left active:scale-[0.99] transition-transform"
+        >
+          <ScanText size={20} className="text-white/70" aria-hidden />
+          <span className="flex-1 min-w-0">
+            <span className="block text-white text-xs font-medium">Labo OCR</span>
             <span className="block text-[#86d1ea] text-[11px] font-bold uppercase tracking-wider mt-0.5">admin</span>
           </span>
           <span className="text-[#bfc8cc] text-lg" aria-hidden>→</span>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { toast } from "sonner";
+import { toast } from "../../../toast";
 import { MessageBubble } from "./MessageBubble";
 import { MembersModal } from "./MembersModal";
 import { ReportModal } from "./ReportModal";

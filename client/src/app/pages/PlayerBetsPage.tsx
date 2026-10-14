@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useParams, useNavigate } from "react-router";
-import { toast } from "sonner";
+import { toast } from "../toast";
 import { BottomNav } from "../components/BottomNav";
 import { ProLock } from "../components/ProLock";
 import { ConfirmDialog } from "../components/ConfirmDialog";

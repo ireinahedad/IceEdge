@@ -8,11 +8,19 @@ import { features } from "./platform";
 // LoginPage stays eager — it's the entry point for unauthenticated visitors, so
 // lazy-loading it would just add a round-trip before first paint.
 import { LoginPage } from "./pages/LoginPage";
+// HockeyLanding aussi, pour la même raison : c'est `/`, la page d'entrée de presque
+// tous les visiteurs, et son paragraphe d'introduction est l'élément LCP. En lazy, ses
+// chunks ne partaient qu'après l'exécution du bundle principal. QA P4, mesuré le
+// 2026-10-13 (Lighthouse mobile simulé, build local servi en gzip, 3 passes) :
+// LCP 3,67 → 2,86 s, FCP 2,50 → 2,19 s, score 0,84 → 0,93 ; bundle principal
+// +43 ko gzip, /schedule et /stats/chart inchangés au bruit près. Le
+// `modulepreload` des chunks de l'accueil a été essayé et écarté : LCP inchangé,
+// FCP +0,4 s (les préchargements disputent la bande passante au bundle principal).
+import { HockeyLanding } from "./pages/HockeyLanding";
 
 // M1 — every other page is code-split via React.lazy so its JS (and any heavy
 // libs it pulls in — recharts, on ChartPage) only downloads when the route is
 // visited. Pages use named exports, hence the `.then` re-map to `default`.
-const HockeyLanding         = lazy(() => import("./pages/HockeyLanding").then(m => ({ default: m.HockeyLanding })));
 const LeaguePage            = lazy(() => import("./pages/league/LeaguePage").then(m => ({ default: m.LeaguePage })));
 const ProfilePage           = lazy(() => import("./pages/profile/ProfilePage").then(m => ({ default: m.ProfilePage })));
 const StatsPage             = lazy(() => import("./pages/StatsPage").then(m => ({ default: m.StatsPage })));
@@ -54,6 +62,11 @@ const BestBetsProfitPage    = features.devRoutes
   : null;
 const ManualEntryPage       = features.devRoutes
   ? lazy(() => import("./pages/ManualEntryPage").then(m => ({ default: m.ManualEntryPage })))
+  : null;
+// SCAN_TICKET_PLAN S1 — Labo OCR. Sa propre condition (features.ocrLab) : il
+// existe aussi dans un build iOS de TEST, contrairement aux autres écrans /dev.
+const OcrLabPage            = features.ocrLab
+  ? lazy(() => import("./pages/OcrLabPage").then(m => ({ default: m.OcrLabPage })))
   : null;
 // Guideline 3.1.1 — le build iOS v1 n'a aucun chemin vers Pro. MÊME liaison
 // conditionnelle que AuthCallback : retirer les deux routes plus bas ne
@@ -201,6 +214,10 @@ export const router = createBrowserRouter([
             { path: "/dev/saisie",                    element: withSuspense(<Protected><ManualEntryPage /></Protected>) },
             { path: "/dev/profit",                    element: withSuspense(<Protected><BestBetsProfitPage /></Protected>) },
           ]
+        : []),
+
+      ...(features.ocrLab && OcrLabPage
+        ? [{ path: "/dev/ocr",                       element: withSuspense(<Protected><OcrLabPage /></Protected>) }]
         : []),
 
       // Catch-all — any unmatched URL lands on a friendly 404 instead of the

@@ -1,4 +1,4 @@
-import * as Sentry from "@sentry/react";
+import { captureException } from "../sentry";
 import { useI18n } from "../i18n";
 import { env } from "../env";
 
@@ -36,7 +36,7 @@ export function isChunkError(error: unknown): boolean {
  */
 export function reportError(error: unknown, componentStack?: string): string | undefined {
   if (!env.sentryDsn || isChunkError(error)) return undefined;
-  return Sentry.captureException(error, componentStack ? { contexts: { react: { componentStack } } } : undefined);
+  return captureException(error, componentStack ? { react: { componentStack } } : undefined);
 }
 
 export function ErrorScreen({ error, eventId }: { error: unknown; eventId?: string }) {

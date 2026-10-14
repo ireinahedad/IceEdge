@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { toast } from "sonner";
+import { toast } from "../toast";
 import { UserBadge, UserTag, type UserIdentityData } from "./UserIdentity";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useBlocks } from "../context/BlockContext";

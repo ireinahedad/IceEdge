@@ -125,3 +125,6 @@ if (hits.length) {
   process.exit(1);
 }
 console.log(`\n✓ build:ios — dist-ios/ ready (${pruned} web-only files pruned, no bookmaker content).`);
+if (viteEnv.VITE_OCR_LAB === "true" || process.env.VITE_OCR_LAB === "true") {
+  console.warn("\n⚠️  build:ios — VITE_OCR_LAB=true : Labo OCR (/dev/ocr) inclus. Build de TEST uniquement, ne pas soumettre à l'App Store.\n");
+}

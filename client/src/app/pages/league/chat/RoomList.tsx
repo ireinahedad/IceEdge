@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "../../../toast";
 import { profileApiService } from "../../../services/userService";
 import { useAuthGate } from "../../../context/AuthGateContext";
 import { useI18n } from "../../../i18n";

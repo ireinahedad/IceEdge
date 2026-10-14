@@ -27,7 +27,7 @@ import { applyServerFamilyWeights } from "./../../services/ruleWeightsService";
 import type { UserProfile, UserBettingStats } from "./../../types/user";
 import { useI18n } from "../../i18n";
 import { readMode, writeMode, type AppearanceMode } from "../../appearance";
-import { toast } from "sonner";
+import { toast } from "../../toast";
 import "./profile-settings.css";
 import { OverviewTab, ProfileHeader, Skeleton, Tab } from "./ProfileParts";
 import { SettingsTab } from "./SettingsTab";

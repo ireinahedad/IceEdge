@@ -14,7 +14,7 @@
  * question donnée. Gardée sur cet appareil seulement (localStorage).
  */
 import { useState, useRef, useEffect } from "react";
-import { toast } from "sonner";
+import { toast } from "../toast";
 import { FactorPie } from "./FactorPie";
 import { pctColor } from "../data/pctScale";
 import { FramedLabel } from "./brand/FramedLabel";

@@ -47,7 +47,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { toast } from "sonner";
+import { toast } from "../toast";
 import { useAuth } from "../context/AuthContext";
 import { nhlApiService } from "../services/nhlApiService";
 import {

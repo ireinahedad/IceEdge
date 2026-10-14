@@ -15,6 +15,7 @@ import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { PlayerPropGrid } from "./PlayerPropGrid";
 import { TopBetsSection } from "./topBets";
+import { BetTabs } from "./betTabs";
 import { BetOpt, MLProps, MktGroup, RuleFactor, mlBundleKey } from "./gameMarkets";
 import { fetchGameMlBundle, type GameMlBundle, type MLPredictionResult } from "../../components/MLPredictionCard";
 import { BetOddsCtx, GameSelector, LoadingSkeleton, NotFound, RevealMode, RevealModeCtx, ServerGroupsPending, StatsBanner, useGameOdds, useSelectedGame, useServerGroups, useUpcomingGames } from "./predictionShared";
@@ -458,20 +459,29 @@ export function TeamPrediction({ teamId }: { teamId: string }) {
         <RevealModeCtx.Provider value={revealMode}>
           {/* Les paris de la page à 90 % ML ou plus (2026-10-13). */}
           <TopBetsSection accent={accent} />
-          {apiGroups == null
-            ? <ServerGroupsPending failed={apiFailed} onRetry={retryApi} />
-            : groupsWithMl.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
-
-          {/* Paris joueur du club, en grille — le match sélectionné les suit,
-              pour qu'ils se règlent sur cette affiche. */}
-          <PlayerPropGrid metric="goals"   sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
-          <PlayerPropGrid metric="points"  sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
-          <PlayerPropGrid metric="shots"   sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
-          <PlayerPropGrid metric="assists" sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
-          <PlayerPropGrid metric="blocks"  sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
-          <PlayerPropGrid metric="hits"    sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
-          {/* Gardiens — seule grille où ils apparaissent. */}
-          <PlayerPropGrid metric="saves"   sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
+          {/* Paris en deux onglets (2026-10-14) : joueurs d'abord, puis
+              équipe / match. Le Top 90% + reste au-dessus : il couvre les deux. */}
+          <BetTabs
+            scope="team"
+            accent={accent}
+            players={<>
+              {/* Paris joueur du club, en grille — le match sélectionné les suit,
+                  pour qu'ils se règlent sur cette affiche. */}
+              <PlayerPropGrid metric="goals"   sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
+              <PlayerPropGrid metric="points"  sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
+              <PlayerPropGrid metric="shots"   sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
+              <PlayerPropGrid metric="assists" sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
+              <PlayerPropGrid metric="blocks"  sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
+              <PlayerPropGrid metric="hits"    sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
+              {/* Gardiens — seule grille où ils apparaissent. */}
+              <PlayerPropGrid metric="saves"   sides={[{ key: "team", abbr: data.abbr, name: data.name }]} gameId={selectedGame?.id} accent={accent} />
+            </>}
+            markets={<>
+              {apiGroups == null
+                ? <ServerGroupsPending failed={apiFailed} onRetry={retryApi} />
+                : groupsWithMl.map(g => <MarketGroup key={g.id} group={g} accent={accent} />)}
+            </>}
+          />
         </RevealModeCtx.Provider>
       </BetOddsCtx.Provider>
 

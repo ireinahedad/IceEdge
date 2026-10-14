@@ -19,6 +19,7 @@
 		C259593C285C480697F42F9E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 58430AF9E1AD49D69DE85120 /* PrivacyInfo.xcprivacy */; };
 		A1CE00000000000000000001 /* WidgetBridgePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CE00000000000000000011 /* WidgetBridgePlugin.swift */; };
 		A1CE000000000000000000A1 /* StoreKitPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CE000000000000000000A2 /* StoreKitPlugin.swift */; };
+		A1CE000000000000000000B1 /* VisionOcrPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CE000000000000000000B2 /* VisionOcrPlugin.swift */; };
 		A1CE00000000000000000002 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CE00000000000000000012 /* MainViewController.swift */; };
 		A1CE00000000000000000003 /* ArakIceWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CE00000000000000000013 /* ArakIceWidget.swift */; };
 		A1CE00000000000000000004 /* ArakIceWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1CE00000000000000000017 /* ArakIceWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -39,6 +40,7 @@
 		58430AF9E1AD49D69DE85120 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; name = "PrivacyInfo.xcprivacy"; path = "PrivacyInfo.xcprivacy"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = text.xml; explicitFileType = undefined; includeInIndex = 0; };
 		A1CE00000000000000000011 /* WidgetBridgePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetBridgePlugin.swift; sourceTree = "<group>"; };
 		A1CE000000000000000000A2 /* StoreKitPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitPlugin.swift; sourceTree = "<group>"; };
+		A1CE000000000000000000B2 /* VisionOcrPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionOcrPlugin.swift; sourceTree = "<group>"; };
 		A1CE00000000000000000012 /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		A1CE00000000000000000016 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		A1CE00000000000000000013 /* ArakIceWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArakIceWidget.swift; sourceTree = "<group>"; };
@@ -126,6 +128,7 @@
 				A1CE00000000000000000012 /* MainViewController.swift */,
 				A1CE00000000000000000011 /* WidgetBridgePlugin.swift */,
 				A1CE000000000000000000A2 /* StoreKitPlugin.swift */,
+				A1CE000000000000000000B2 /* VisionOcrPlugin.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -257,6 +260,7 @@
 				A1CE00000000000000000002 /* MainViewController.swift in Sources */,
 				A1CE00000000000000000001 /* WidgetBridgePlugin.swift in Sources */,
 				A1CE000000000000000000A1 /* StoreKitPlugin.swift in Sources */,
+				A1CE000000000000000000B1 /* VisionOcrPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

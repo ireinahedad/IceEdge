@@ -22,7 +22,7 @@ import { PROB_COLOR, bookParlayPrice } from "./betParts";
 import { useOddsFormat } from "../../context/OddsFormatContext";
 import { useI18n } from "../../i18n";
 import { outcomeKey } from "../../services/slipOutcome";
-import { toast } from "sonner";
+import { toast } from "../../toast";
 
 
 // ─── Textes de l'image de partage ─────────────────────────────────────────────

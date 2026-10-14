@@ -26,7 +26,7 @@ import { isRequestTimeout } from "../services/http";
 import { useSport } from "../context/SportContext";
 import { useI18n } from "../i18n";
 import { readMode, type AppearanceMode } from "../appearance";
-import { toast } from "sonner";
+import { toast } from "../toast";
 import "./bet-theme.css";
 import { MySlipsTab } from "./bet/MySlipsTab";
 import "../components/rink-theme.css";

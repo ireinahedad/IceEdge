@@ -85,4 +85,13 @@ export const features = {
    * lanceur, la carte des Réglages et les tiroirs reviennent d'un coup.
    */
   aiBetBuilder:   false,
+  /**
+   * SCAN_TICKET_PLAN S1 — « Labo OCR » (/dev/ocr), admin uniquement. Toujours sur
+   * le web ; sur iOS seulement dans un build de TEST (VITE_OCR_LAB=true, case
+   * « ocr_lab » du workflow TestFlight) pour mesurer Apple Vision sur l'iPhone.
+   * Un build iOS qui l'a ne doit pas partir en review (écran caché, 2.3.1).
+   * Deuxième lecture directe de import.meta.env ici, pour la même raison que
+   * VITE_TARGET : la constante doit se replier pour que le chunk disparaisse.
+   */
+  ocrLab:         isWeb || import.meta.env.VITE_OCR_LAB === 'true',
 } as const;

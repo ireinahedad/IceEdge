@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "../../../toast";
 import { profileApiService } from "../../../services/userService";
 import { useI18n } from "../../../i18n";
 import { AppButton } from "../../../components/AppButton";
