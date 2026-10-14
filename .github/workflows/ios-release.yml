@@ -7,6 +7,11 @@ name: iOS → TestFlight
 
 on:
   workflow_dispatch:
+    inputs:
+      ocr_lab:
+        description: "Build de TEST avec le Labo OCR (/dev/ocr, admin). Ne PAS soumettre ce build à l'App Store."
+        type: boolean
+        default: false
   push:
     tags: ['ios-v*']
 
@@ -38,6 +43,8 @@ jobs:
       IOS_PROFILE_NAME:        ${{ vars.IOS_PROFILE_NAME || secrets.IOS_PROFILE_NAME }}
       # APPLE_PLAN 4.2 — the home-screen widget is a second target with its own profile.
       IOS_WIDGET_PROFILE_NAME: ${{ vars.IOS_WIDGET_PROFILE_NAME || secrets.IOS_WIDGET_PROFILE_NAME }}
+      # SCAN_TICKET_PLAN S1 — Labo OCR, seulement si la case est cochée (jamais sur un tag).
+      VITE_OCR_LAB:            ${{ inputs.ocr_lab && 'true' || '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -166,7 +173,9 @@ jobs:
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
           echo "### Build ${{ github.run_number }} uploaded — it appears in TestFlight after Apple's processing (5–30 min)." >> "$GITHUB_STEP_SUMMARY"
-
+          if [ "$VITE_OCR_LAB" = "true" ]; then
+            echo "### ⚠️ Build de TEST : Labo OCR inclus. Ne pas le soumettre à l'App Store (relancer sans la case)." >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Remove signing material
         if: always()
         run: |

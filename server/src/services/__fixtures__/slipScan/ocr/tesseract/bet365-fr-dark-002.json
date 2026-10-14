@@ -1,0 +1,30 @@
+{
+ "engine": "tesseract", "width": 1179, "height": 2556, "ms": 4539,
+ "lines": [
+  {"text":"18:11 n 4 all © (21 }","confidence":0.48,"box":{"x":129,"y":65,"w":951,"h":51}},
+  {"text":"Mes Paris 102,068 (5) | QO","confidence":0.66,"box":{"x":29,"y":225,"w":1110,"h":57}},
+  {"text":"(en cours | En direct Terminé","confidence":0.8,"box":{"x":28,"y":352,"w":617,"h":88}},
+  {"text":"25,00 $ Pari personnalisé Suivre","confidence":0.9,"box":{"x":84,"y":538,"w":1011,"h":43}},
+  {"text":"oleae share","confidence":0.31,"box":{"x":135,"y":658,"w":669,"h":74}},
+  {"text":"O PARI PERSONNALISE 1.68","confidence":0.91,"box":{"x":93,"y":790,"w":498,"h":33}},
+  {"text":"o Nathan MacKinnon: 1+ Points","confidence":0.95,"box":{"x":93,"y":873,"w":606,"h":33}},
+  {"text":"Points","confidence":0.95,"box":{"x":150,"y":927,"w":93,"h":25}},
+  {"text":"o Martin Necas: 1+ Shots on Goal","confidence":0.93,"box":{"x":93,"y":1023,"w":642,"h":33}},
+  {"text":"Shots on Goal","confidence":0.96,"box":{"x":149,"y":1077,"w":214,"h":25}},
+  {"text":"o Nathan MacKinnon: 2+ Shots on Goal","confidence":0.93,"box":{"x":93,"y":1173,"w":754,"h":33}},
+  {"text":"Shots on Goal","confidence":0.96,"box":{"x":149,"y":1227,"w":214,"h":25}},
+  {"text":"o Jason Robertson: 1+ Shots on Goal","confidence":0.94,"box":{"x":93,"y":1324,"w":711,"h":32}},
+  {"text":"Shots on Goal","confidence":0.96,"box":{"x":149,"y":1377,"w":214,"h":25}},
+  {"text":"o Nazem Kadri: 1+ Shots on Goal","confidence":0.9,"box":{"x":93,"y":1473,"w":631,"h":33}},
+  {"text":"Shots on Goal","confidence":0.96,"box":{"x":149,"y":1526,"w":214,"h":25}},
+  {"text":"o COL Avalanche Total: Over 1.5 Goals","confidence":0.94,"box":{"x":93,"y":1624,"w":736,"h":32}},
+  {"text":"Team Total","confidence":0.95,"box":{"x":148,"y":1676,"w":166,"h":25}},
+  {"text":"= DAL Stars Mer. 14 oct","confidence":0.95,"box":{"x":116,"y":1795,"w":653,"h":26}},
+  {"text":"a COL Avalanche 17-37","confidence":0.75,"box":{"x":111,"y":1842,"w":562,"h":27}},
+  {"text":"Mise Gains potentiels","confidence":0.93,"box":{"x":84,"y":2004,"w":1012,"h":33}},
+  {"text":"25,00 $ 42,24 $","confidence":0.69,"box":{"x":84,"y":2054,"w":924,"h":49}},
+  {"text":"Effectuer un Cash Out 25,00 $ &,","confidence":0.85,"box":{"x":251,"y":2158,"w":849,"h":91}},
+  {"text":"nn QQ © ©@° =","confidence":0.32,"box":{"x":80,"y":2328,"w":810,"h":78}},
+  {"text":"102,05 $ Sports En Direct Paris Casino","confidence":0.94,"box":{"x":53,"y":2421,"w":1054,"h":34}}
+ ]
+}

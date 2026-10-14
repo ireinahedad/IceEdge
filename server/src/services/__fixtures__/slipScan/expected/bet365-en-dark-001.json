@@ -1,0 +1,151 @@
+{
+  "book": "bet365",
+  "lang": "en",
+  "theme": "dark",
+  "oddsFormat": "decimal",
+  "gameDate": "2026-10-13",
+  "groups": [
+    {
+      "kind": "sgp",
+      "odds": "1.80",
+      "game": {
+        "away": "TOR",
+        "home": "UTA"
+      },
+      "legs": [
+        {
+          "ticketText": [
+            "Money Line - UTA Mammoth",
+            "Money Line"
+          ],
+          "state": "ok",
+          "intent": {
+            "subjectType": "team",
+            "team": "UTA",
+            "marketType": "moneyline",
+            "selection": "UTA"
+          }
+        },
+        {
+          "ticketText": [
+            "UTA Mammoth Total: Over 2.5 Goals",
+            "Team Total"
+          ],
+          "state": "ok",
+          "intent": {
+            "subjectType": "team",
+            "team": "UTA",
+            "marketType": "team_total_goals",
+            "selection": "over",
+            "line": 2.5
+          }
+        }
+      ]
+    },
+    {
+      "kind": "sgp",
+      "odds": "1.52",
+      "game": {
+        "away": "VAN",
+        "home": "NYI"
+      },
+      "legs": [
+        {
+          "ticketText": [
+            "Money Line - NY Islanders",
+            "Money Line"
+          ],
+          "state": "ok",
+          "intent": {
+            "subjectType": "team",
+            "team": "NYI",
+            "marketType": "moneyline",
+            "selection": "NYI"
+          }
+        },
+        {
+          "ticketText": [
+            "Matthew Schaefer: 1+ Shots on Goal",
+            "Shots on Goal"
+          ],
+          "state": "unsupported_line",
+          "intent": {
+            "subjectType": "player",
+            "player": "Matthew Schaefer",
+            "marketType": "shots_ou",
+            "selection": "over",
+            "line": 0.5
+          }
+        },
+        {
+          "ticketText": [
+            "Bo Horvat: 1+ Shots on Goal",
+            "Shots on Goal"
+          ],
+          "state": "unsupported_line",
+          "intent": {
+            "subjectType": "player",
+            "player": "Bo Horvat",
+            "marketType": "shots_ou",
+            "selection": "over",
+            "line": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "kind": "sgp",
+      "odds": "1.74",
+      "game": null,
+      "legs": [
+        {
+          "ticketText": [
+            "Money Line - CAR Hurricanes",
+            "Money Line"
+          ],
+          "state": "ok",
+          "intent": {
+            "subjectType": "team",
+            "team": "CAR",
+            "marketType": "moneyline",
+            "selection": "CAR"
+          }
+        },
+        {
+          "ticketText": [
+            "Sebastian Antero Aho: 1+ Shots on Goal",
+            "Shots on Goal"
+          ],
+          "state": "unsupported_line",
+          "intent": {
+            "subjectType": "player",
+            "player": "Sebastian Aho",
+            "marketType": "shots_ou",
+            "selection": "over",
+            "line": 0.5
+          }
+        },
+        {
+          "ticketText": [
+            "Andrei Svechnikov: 1+ Shots on Goal"
+          ],
+          "state": "unsupported_line",
+          "intent": {
+            "subjectType": "player",
+            "player": "Andrei Svechnikov",
+            "marketType": "shots_ou",
+            "selection": "over",
+            "line": 0.5
+          }
+        }
+      ]
+    }
+  ],
+  "totalOdds": null,
+  "personal": [
+    "$20.00",
+    "$0.97",
+    "06:55"
+  ],
+  "notes": "bet365 en anglais, thème sombre, PNG d'iPhone 1179×2556 (user, 2026-10-14). « Same Game Parlay + » = parlay de 3 SGP, chacun avec SA cote ; pas de cote totale. Ce qu'elle apprend : (1) « Money Line - {équipe} » = moneyline ; « {équipe} Total: Over 2.5 Goals » + sous-titre « Team Total » = team_total_goals ; (2) « 1+ Shots on Goal » = plus de 0.5 tirs : HORS de MARKET_LINES.shots_ou (1.5+) → unsupported_line (D4) — 5 jambes sur 8 ici, à peser pour S8 ; (3) « Sebastian Antero Aho » = l'attaquant de CAR (il existe un autre Sebastian Aho, défenseur des Islanders) : le match du ticket départage ; (4) la 3e carte de match est COUPÉE en bas de l'écran → game null, le parseur doit déduire CAR du calendrier ; (5) bruit : « EARLY PAYOUT », « Track », « Reuse Selections », « Share », barre d'onglets (« $0.97 » = solde), barre d'état ; (6) la mise est sur la même ligne que le titre (« $20.00 Same Game Parlay + »)."
+}

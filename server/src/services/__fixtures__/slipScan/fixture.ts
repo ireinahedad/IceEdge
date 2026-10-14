@@ -40,7 +40,10 @@ export interface ExpectedLeg {
   /** Lignes du ticket qui décrivent la jambe, TELLES QU'AFFICHÉES (sert à mesurer l'OCR). */
   ticketText: string[];
   state: ExpectedState;
-  /** Absent si `state` ≠ `ok`. */
+  /**
+   * Obligatoire si `ok`. Pour `unsupported_line`, facultatif : ce que la jambe
+   * SERAIT si la ligne était couverte (sert à S8, élargir les lignes).
+   */
   intent?: ExpectedIntent;
 }
 
@@ -52,7 +55,12 @@ export interface ExpectedGroup {
   kind: 'single' | 'sgp';
   /** Cote telle qu'affichée (« 1.83 », « -110 », « 10/11 »), ou null si absente. */
   odds: string | null;
-  game: { away: string; home: string };
+  /**
+   * null = le match n'est PAS sur la capture (carte coupée en bas d'écran) : le
+   * parseur doit le déduire du calendrier (l'équipe ou le joueur ne joue qu'un
+   * match ce jour-là), ou rendre `no_game`.
+   */
+  game: { away: string; home: string } | null;
   legs: ExpectedLeg[];
 }
 
@@ -61,8 +69,12 @@ export interface SlipScanExpected {
   lang: 'fr' | 'en';
   theme: 'dark' | 'light';
   oddsFormat: 'american' | 'decimal' | 'fractional';
-  /** Date NHL des matchs (YYYY-MM-DD) — pour reconstruire le contexte de test. */
-  gameDate: string;
+  /**
+   * Date NHL des matchs (YYYY-MM-DD) — pour reconstruire le contexte de test.
+   * null si la capture ne la donne pas (« Today ») : le test prend alors la date
+   * du contexte.
+   */
+  gameDate: string | null;
   groups: ExpectedGroup[];
   /** Cote totale affichée, ou null si le ticket ne l'affiche pas. */
   totalOdds: string | null;
@@ -112,7 +124,7 @@ export function validateExpected(e: SlipScanExpected): string[] {
   if (!['fr', 'en'].includes(e.lang)) errs.push(`lang: ${e.lang}`);
   if (!['dark', 'light'].includes(e.theme)) errs.push(`theme: ${e.theme}`);
   if (!['american', 'decimal', 'fractional'].includes(e.oddsFormat)) errs.push(`oddsFormat: ${e.oddsFormat}`);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(e.gameDate)) errs.push(`gameDate: ${e.gameDate}`);
+  if (e.gameDate !== null && !/^\d{4}-\d{2}-\d{2}$/.test(e.gameDate)) errs.push(`gameDate: ${e.gameDate}`);
   if (e.totalOdds !== null && !ODDS_RE.test(e.totalOdds)) errs.push(`totalOdds: ${e.totalOdds}`);
   if (!Array.isArray(e.personal)) errs.push('personal: must be an array');
   if (!Array.isArray(e.groups) || !e.groups.length) errs.push('groups: at least one');
@@ -120,7 +132,7 @@ export function validateExpected(e: SlipScanExpected): string[] {
     const at = `groups[${gi}]`;
     if (g.kind !== 'single' && g.kind !== 'sgp') errs.push(`${at}.kind: ${g.kind}`);
     if (g.odds !== null && !ODDS_RE.test(g.odds)) errs.push(`${at}.odds: ${g.odds}`);
-    if (!ABBR_RE.test(g.game?.away ?? '') || !ABBR_RE.test(g.game?.home ?? '')) errs.push(`${at}.game: abréviations NHL`);
+    if (g.game !== null && (!ABBR_RE.test(g.game?.away ?? '') || !ABBR_RE.test(g.game?.home ?? ''))) errs.push(`${at}.game: abréviations NHL`);
     if (!g.legs?.length) errs.push(`${at}.legs: at least one`);
     if (g.kind === 'single' && g.legs?.length !== 1) errs.push(`${at}: single = une jambe`);
     (g.legs ?? []).forEach((l, li) => {
@@ -131,10 +143,13 @@ export function validateExpected(e: SlipScanExpected): string[] {
         if (!i) { errs.push(`${lat}.intent: required when ok`); return; }
         if (!MARKETS.has(i.marketType)) errs.push(`${lat}.marketType: ${i.marketType}`);
         if (i.subjectType === 'team' && !ABBR_RE.test(i.team ?? '')) errs.push(`${lat}.team`);
-        if (i.subjectType === 'team' && i.team !== g.game.away && i.team !== g.game.home) errs.push(`${lat}.team: pas dans le match`);
+        if (i.subjectType === 'team' && g.game && i.team !== g.game.away && i.team !== g.game.home) errs.push(`${lat}.team: pas dans le match`);
         if (i.subjectType === 'player' && !i.player) errs.push(`${lat}.player`);
         if (!i.selection) errs.push(`${lat}.selection`);
-      } else if (l.state !== 'unsupported_market' && l.state !== 'unsupported_line') {
+      } else if (l.state === 'unsupported_line' || l.state === 'unsupported_market') {
+        // L'intention reste utile (S8 : élargir les lignes) mais n'est pas obligatoire.
+        if (l.intent && !MARKETS.has(l.intent.marketType)) errs.push(`${lat}.marketType: ${l.intent.marketType}`);
+      } else {
         errs.push(`${lat}.state: ${l.state}`);
       }
     });

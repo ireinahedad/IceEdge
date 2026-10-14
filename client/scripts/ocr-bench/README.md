@@ -11,7 +11,7 @@ Mesure les deux moteurs sur les fixtures `server/src/services/__fixtures__/slipS
 cd client
 npm run ocr:bench                     # Tesseract → ocr/tesseract/*.json + note de tous les moteurs
 npm run ocr:bench -- --dump           # affiche aussi les lignes lues
-npm run ocr:bench -- --psm 3          # autre segmentation (défaut 11 = SPARSE_TEXT)
+npm run ocr:bench -- --psm 11         # autre segmentation (défaut 3 = AUTO)
 npm run ocr:bench -- --raw            # sans prétraitement : ce qu'apporte ocrCore.preprocessRgba
 npm run ocr:bench -- --score-only     # note les JSON existants (ex. après vision-ocr.swift)
 ```

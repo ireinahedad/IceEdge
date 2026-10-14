@@ -5,7 +5,7 @@
  *                                           écrit ocr/tesseract/<nom>.json, puis note
  *                                           TOUS les moteurs présents (vision compris)
  *   npm run ocr:bench -- --score-only       note seulement les JSON existants
- *   npm run ocr:bench -- --psm 3            compare un autre mode (défaut : 11, comme le navigateur)
+ *   npm run ocr:bench -- --psm 11           compare un autre mode (défaut : 3 = AUTO, comme le navigateur)
  *   npm run ocr:bench -- --raw              sans prétraitement (mesure ce qu'il apporte)
  *   npm run ocr:bench -- --no-write         ne touche pas aux fixtures
  *   npm run ocr:bench -- bet365-fr-dark-001 une seule fixture
@@ -36,7 +36,7 @@ const flag = (f) => args.includes(f);
 const opt = (f) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined; };
 const only = args.filter((a, i) => !a.startsWith("--") && !(i > 0 && args[i - 1] === "--psm"));
 /** Même valeur que tesseractOcr.ts. */
-const DEFAULT_PSM = PSM.SPARSE_TEXT;
+const DEFAULT_PSM = PSM.AUTO;
 const psm = opt("--psm") ?? DEFAULT_PSM;
 const raw = flag("--raw");
 const write = !flag("--no-write") && !raw && psm === DEFAULT_PSM;
@@ -114,7 +114,7 @@ function findOdds(odds, lines) {
 function score(expected, res) {
   const wantLines = expected.groups.flatMap((g) => g.legs.flatMap((l) => l.ticketText));
   const found = wantLines.map((w) => ({ w, r: find(w, res.lines) }));
-  const odds = expected.groups.map((g) => g.odds).filter(Boolean);
+  const odds = [...new Set([...expected.groups.map((g) => g.odds), expected.totalOdds].filter(Boolean))];
   const oddsOk = odds.filter((o) => findOdds(o, res.lines));
   const personal = expected.personal.filter((p) => find(p, res.lines));
   return {

@@ -1,0 +1,16 @@
+{
+ "engine": "tesseract", "width": 1024, "height": 806, "ms": 1493,
+ "lines": [
+  {"text":"6 Hunter Skoczylas Fri 9:49 AM","confidence":0.89,"box":{"x":21,"y":19,"w":413,"h":44}},
+  {"text":"3 Picks","confidence":0.96,"box":{"x":212,"y":131,"w":84,"h":21}},
+  {"text":"BUF Sabres @ FLA Panthers | Today, 7:10 PM","confidence":0.95,"box":{"x":125,"y":199,"w":411,"h":19}},
+  {"text":"(OO 3+ | Tage Thompson Shots on Goal","confidence":0.86,"box":{"x":133,"y":244,"w":394,"h":27}},
+  {"text":"MIN Wild @ UTA Mammoth | Today, 9:10 PM","confidence":0.95,"box":{"x":125,"y":315,"w":394,"h":19}},
+  {"text":"(QO 3+ | Dylan Guenther Shots on Goal","confidence":0.88,"box":{"x":133,"y":359,"w":391,"h":28}},
+  {"text":"WPG Jets @ ANA Ducks | Today, 10:10 PM","confidence":0.93,"box":{"x":124,"y":430,"w":384,"h":18}},
+  {"text":"(QO 3+ 1 Cutter Gauthier Shots on Goal","confidence":0.88,"box":{"x":133,"y":474,"w":388,"h":28}},
+  {"text":"F 2 1 ¢ 2 People Placed This Bet","confidence":0.71,"box":{"x":362,"y":577,"w":373,"h":26}},
+  {"text":"+195","confidence":0.96,"box":{"x":532,"y":668,"w":51,"h":18}},
+  {"text":"Odds are subject to change","confidence":0.96,"box":{"x":426,"y":700,"w":233,"h":19}}
+ ]
+}

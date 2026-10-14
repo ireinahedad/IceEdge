@@ -1,0 +1,32 @@
+{
+ "engine": "tesseract", "width": 1179, "height": 2556, "ms": 5729,
+ "lines": [
+  {"text":"06:55 4 all ¥ EB","confidence":0.35,"box":{"x":117,"y":67,"w":962,"h":41}},
+  {"text":"$20.00 Same Game Parlay + Track","confidence":0.96,"box":{"x":85,"y":256,"w":1011,"h":43}},
+  {"text":"7) Reuse Selections (M Share","confidence":0.74,"box":{"x":153,"y":390,"w":775,"h":45}},
+  {"text":"© SAME GAME PARLAY 1.80","confidence":0.88,"box":{"x":93,"y":508,"w":578,"h":33}},
+  {"text":"Money Line - UTA Mammoth EARLY PAYOUT","confidence":0.95,"box":{"x":150,"y":591,"w":931,"h":37}},
+  {"text":"Money Line","confidence":0.94,"box":{"x":150,"y":644,"w":175,"h":31}},
+  {"text":"UTA Mammoth Total: Over 2.5 Goals","confidence":0.96,"box":{"x":150,"y":742,"w":679,"h":30}},
+  {"text":"Team Total","confidence":0.96,"box":{"x":148,"y":795,"w":166,"h":25}},
+  {"text":"& TOR Maple Leafs Tue Oct 13","confidence":0.8,"box":{"x":154,"y":912,"w":607,"h":32}},
+  {"text":"* UTA Mammoth 6:07 PM","confidence":0.89,"box":{"x":118,"y":960,"w":602,"h":27}},
+  {"text":"© SAME GAME PARLAY 1.52","confidence":0.92,"box":{"x":93,"y":1113,"w":577,"h":34}},
+  {"text":"o Money Line - NY Islanders EARLY PAYOUT","confidence":0.94,"box":{"x":93,"y":1197,"w":988,"h":38}},
+  {"text":"Money Line","confidence":0.95,"box":{"x":150,"y":1250,"w":175,"h":31}},
+  {"text":"o Matthew Schaefer: 1+ Shots on Goal","confidence":0.92,"box":{"x":93,"y":1348,"w":737,"h":32}},
+  {"text":"Shots on Goal","confidence":0.96,"box":{"x":149,"y":1400,"w":214,"h":25}},
+  {"text":"o Bo Horvat: 1+ Shots on Goal","confidence":0.93,"box":{"x":93,"y":1498,"w":579,"h":32}},
+  {"text":"Shots on Goal","confidence":0.96,"box":{"x":149,"y":1550,"w":214,"h":25}},
+  {"text":"- VAN Canucks Tue Oct 13","confidence":0.91,"box":{"x":130,"y":1668,"w":632,"h":27}},
+  {"text":"® NY Islanders 4:52 PM","confidence":0.89,"box":{"x":117,"y":1716,"w":605,"h":26}},
+  {"text":"® SAME GAME PARLAY 1.74","confidence":0.86,"box":{"x":93,"y":1869,"w":574,"h":33}},
+  {"text":"o Money Line - CAR Hurricanes EARLY PAYOUT |","confidence":0.94,"box":{"x":93,"y":1950,"w":1004,"h":57}},
+  {"text":"Money Line","confidence":0.96,"box":{"x":150,"y":2006,"w":175,"h":31}},
+  {"text":"o Sebastian Antero Aho: 1+ Shots on Goal","confidence":0.92,"box":{"x":93,"y":2103,"w":802,"h":33}},
+  {"text":"Shots on Goal +)","confidence":0.9,"box":{"x":149,"y":2155,"w":946,"h":85}},
+  {"text":"o Andrei Svechnikov: 1+ Shots on Goal","confidence":0.92,"box":{"x":93,"y":2253,"w":742,"h":33}},
+  {"text":"A Q (© ©@° @F","confidence":0.39,"box":{"x":80,"y":2328,"w":811,"h":78}},
+  {"text":"$0.97 All Sports Live My Bets Casino","confidence":0.96,"box":{"x":76,"y":2423,"w":1031,"h":29}}
+ ]
+}

@@ -35,12 +35,12 @@ function getWorker(): Promise<Worker> {
       cacheMethod: 'write',
     });
     await w.setParameters({
-      // SPARSE_TEXT : chaque texte isolé devient sa propre ligne, comme avec
-      // Vision (« MTL Canadiens » et « Mer. 14 oct » séparés) — la segmentation
-      // par boîtes de slipScan.ts est donc la même sur les deux moteurs. Mesuré
-      // sur la 1re fixture : mêmes lignes de jambes qu'AUTO, colonnes mieux
-      // séparées. À recontrôler au banc (scripts/ocr-bench) avec plus de captures.
-      tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+      // AUTO. Mesuré au banc (scripts/ocr-bench, 5 captures, 2026-10-14) : AUTO
+      // et SINGLE_BLOCK lisent 100 % des cotes ; SPARSE_TEXT n'en lit que 90 %
+      // (« −122 » → « =122 » sur les cases de cote DraftKings). Une cote fausse
+      // = une jambe fausse, donc AUTO, même s'il colle parfois deux colonnes
+      // sur une ligne (« MTL Canadiens  Mer. 14 oct ») — slipScan les sépare.
+      tessedit_pageseg_mode: PSM.AUTO,
       preserve_interword_spaces: '1',
       user_defined_dpi: '300',
     });

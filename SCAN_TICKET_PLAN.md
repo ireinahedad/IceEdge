@@ -18,7 +18,7 @@ Prochaine étape : captures du user (S0, EN + FR), build TestFlight avec `ocr_la
   build iOS), CSP web : **`'wasm-unsafe-eval'` ajouté à `script-src`** (vérifié :
   sans lui le wasm est refusé). Banc `npm run ocr:bench` + `vision-ocr.swift` (Mac).
   Tesseract sur la 1re capture : 100 % des lignes de jambes, cotes exactes, ~3,5 s
-  (Node) / ~1,7-2,5 s (Chromium). Segmentation `SPARSE_TEXT` (sépare les colonnes
+  (Node) / ~1,7-2,5 s (Chromium). Segmentation `SPARSE_TEXT` (corrigé le jour même → `AUTO`, voir plus bas) (sépare les colonnes
   comme Vision).
 - **2026-10-14 — D5, D6** : anglais + français dès la v1 (§ 3.1, § 3.4, § 7) ;
   « Labo OCR » (`pages/OcrLabPage.tsx`, `/dev/ocr`) pour mesurer Vision sur l'iPhone :
@@ -28,7 +28,27 @@ Prochaine étape : captures du user (S0, EN + FR), build TestFlight avec `ocr_la
 Le joueur importe une **capture d'écran** de son ticket (v1 : bet365 et DraftKings).
 ICEEDGE reconnaît chaque jambe, affiche la probabilité du modèle, la proba implicite
 de la cote, l'edge, et la probabilité du coupon entier (corrélation incluse).
-
+- **2026-10-14 — 4 nouvelles fixtures** (5 au total) : `bet365-en-dark-001`,
+  `bet365-fr-dark-002`, `draftkings-en-dark-001`, `draftkings-en-dark-002`. Banc
+  Tesseract : 100 % des lignes de jambes, **100 % des cotes**, ~3,7 s. Segmentation
+  repassée de `SPARSE_TEXT` à **`AUTO`** : `SPARSE_TEXT` lisait `−122` « =122 » et
+  ratait `−125` dans les cases de cote DraftKings (90 % des cotes). Leçons pour S2 :
+  - **Un ticket bet365 en français garde des libellés de marché en anglais**
+    (« 1+ Shots on Goal », « Team Total ») → table EN+FR **fusionnée**, pas choisie
+    par langue (D5 renforcé).
+  - **« 1+ Shots on Goal » = plus de 0.5 tirs : hors `MARKET_LINES.shots_ou`** (1.5+).
+    8 jambes sur 22 des fixtures tombent en `unsupported_line` (D4) — c'est le prop
+    le plus courant ; S8 (élargir les lignes) remonte en priorité.
+  - DraftKings met le match **au-dessus** (carte de partage) ou **en dessous, sur deux
+    lignes** (onglet Social) : pas de position fixe → l'ancre du match se cherche des
+    deux côtés.
+  - Carte de match **coupée** en bas d'écran → `game: null`, déduire du calendrier.
+  - « Sebastian Antero Aho » (CAR) ≠ Sebastian Aho (NYI) : le match départage.
+  - « −130 » avec un signe moins Unicode ; « 3+ | Nom Shots on Goal » (seuil avant le nom).
+  - ⚠️ L'onglet DraftKings affiche « SPORTSBOOK » : ce mot est interdit dans le bundle
+    iOS (garde de `build-ios.mjs`), la liste de bruit de `slipScan.ts` ne doit pas
+    l'écrire en clair.
+- **2026-10-14 — D7** : pas d'API à la place des captures (voir § 9).
 ---
 
 ## 0. Principes (décisions du user, 2026-10-14)
@@ -301,6 +321,14 @@ Formulation : analyse uniquement, aucune incitation à miser (review Apple,
   français sans les accents (« PERSONNALISE »), sans conséquence puisque le parseur
   les retire (`normalizeName`), et `fra` doublerait le téléchargement. À revoir si
   le banc montre des mots français mal lus.
+- **D7 — Pas d'API de lecture des paris** (2026-10-14). bet365 et DraftKings n'ont
+  pas d'API publique pour lire les paris d'un joueur. Les agrégateurs (SharpSports,
+  etc.) existent mais demandent de **connecter le compte du bookmaker** dans ICEEDGE
+  (accès aux paris, souvent au solde), sont payants et sur contrat, et ramènent dans
+  l'app iOS ce que l'APPLE_PLAN § 4 en a retiré (lien avec les bookmakers). Les liens
+  de partage obligeraient à aller lire les pages du bookmaker (CGU, et l'image ne
+  resterait plus sur le téléphone). On garde la capture + OCR local ; l'API
+  d'agrégateur reste une piste V2 pour le **web**, si un partenariat se présente.
 - **D6 — Banc Vision : écran « Labo OCR » dans un build TestFlight** (user, 2026-10-14).
   `/dev/ocr`, admin uniquement, lien dans les Réglages. Sur iOS il n'existe que si le
   workflow « iOS → TestFlight » est lancé avec la case `ocr_lab` (VITE_OCR_LAB=true) ;

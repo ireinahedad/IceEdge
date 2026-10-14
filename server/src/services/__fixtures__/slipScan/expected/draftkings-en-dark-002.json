@@ -1,0 +1,81 @@
+{
+  "book": "draftkings",
+  "lang": "en",
+  "theme": "dark",
+  "oddsFormat": "american",
+  "gameDate": null,
+  "groups": [
+    {
+      "kind": "single",
+      "odds": "-130",
+      "game": {
+        "away": "NJD",
+        "home": "DET"
+      },
+      "legs": [
+        {
+          "ticketText": [
+            "OVER 6.5",
+            "Total FT (Incl OT)"
+          ],
+          "state": "ok",
+          "intent": {
+            "subjectType": "game",
+            "marketType": "total_goals",
+            "selection": "over",
+            "line": 6.5
+          }
+        }
+      ]
+    },
+    {
+      "kind": "single",
+      "odds": "-122",
+      "game": {
+        "away": "EDM",
+        "home": "CAR"
+      },
+      "legs": [
+        {
+          "ticketText": [
+            "OVER 6.5",
+            "Total FT (Incl OT)"
+          ],
+          "state": "ok",
+          "intent": {
+            "subjectType": "game",
+            "marketType": "total_goals",
+            "selection": "over",
+            "line": 6.5
+          }
+        }
+      ]
+    },
+    {
+      "kind": "single",
+      "odds": "-125",
+      "game": {
+        "away": "VAN",
+        "home": "COL"
+      },
+      "legs": [
+        {
+          "ticketText": [
+            "OVER 6.5",
+            "Total FT (Incl OT)"
+          ],
+          "state": "ok",
+          "intent": {
+            "subjectType": "game",
+            "marketType": "total_goals",
+            "selection": "over",
+            "line": 6.5
+          }
+        }
+      ]
+    }
+  ],
+  "totalOdds": "+479",
+  "personal": [],
+  "notes": "DraftKings, onglet Social / « DK NETWORK » (parlay partagé, pas un ticket personnel), capture 1200×1899. Ce qu'elle apprend : (1) « OVER 6.5 » + « Total FT (Incl OT) » = total_goals ; (2) le match est SOUS la jambe et coupé sur deux lignes (« NJ Devils @ DET Red » / « Wings ») — la segmentation doit recoller ; (3) cotes américaines alignées à droite avec un signe moins Unicode (« −130 ») ; (4) l'en-tête « PARLAY (3 PICK) » / « Over 6.5, Over 6.5, Over 6.5 » / « +479 » résume les jambes : ne PAS en faire des jambes ; (5) « NJ » = NJD, « Red Wings » / « Hurricanes » : noms d'équipe partiels ; (6) bruit : onglets « SPORTSBOOK / QUICK PARLAY / SOCIAL… », « MORE BETS », « VIEW PICKS », « SHOW CHAT ONLY ». ⚠️ Le mot « SPORTSBOOK » est interdit dans le bundle iOS (garde de build-ios.mjs) : la liste de bruit de slipScan.ts ne doit pas le contenir en clair."
+}

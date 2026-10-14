@@ -1,0 +1,33 @@
+{
+ "engine": "tesseract", "width": 1200, "height": 1899, "ms": 3504,
+ "lines": [
+  {"text":"SPORTSBOOK QUICK PARLAY SOCIAL POOLS FLASH BET REIGN","confidence":0.75,"box":{"x":18,"y":26,"w":1182,"h":32}},
+  {"text":"an’","confidence":0.52,"box":{"x":317,"y":168,"w":38,"h":12}},
+  {"text":"(A) HOME Ak BETTING GRoUPs [IT 20 MY FRIENDS","confidence":0.67,"box":{"x":46,"y":170,"w":1130,"h":52}},
+  {"text":"< DK NETWORK 200k 20, gl, {o3","confidence":0.4,"box":{"x":49,"y":333,"w":1103,"h":63}},
+  {"text":"SHOW CHAT ONLY SHOW BETS ONLY INVITE A FRIEND","confidence":0.96,"box":{"x":80,"y":453,"w":1040,"h":23}},
+  {"text":"DKN PICKS ~s","confidence":0.58,"box":{"x":513,"y":564,"w":173,"h":27}},
+  {"text":"PARLAY (3 PICK)","confidence":0.93,"box":{"x":187,"y":620,"w":188,"h":31}},
+  {"text":"+479","confidence":0.96,"box":{"x":897,"y":660,"w":68,"h":22}},
+  {"text":"Over 6.5, Over 6.5, Over 6.5","confidence":0.96,"box":{"x":187,"y":680,"w":425,"h":29}},
+  {"text":"VIEW PICKS ~","confidence":0.82,"box":{"x":219,"y":779,"w":173,"h":25}},
+  {"text":"-130","confidence":0.48,"box":{"x":868,"y":994,"w":68,"h":22}},
+  {"text":"Total FT (Incl OT)","confidence":0.95,"box":{"x":280,"y":1018,"w":257,"h":31}},
+  {"text":"NJ Devils @ DET Red","confidence":0.94,"box":{"x":334,"y":1074,"w":308,"h":33}},
+  {"text":"2","confidence":0.37,"box":{"x":720,"y":1103,"w":24,"h":27}},
+  {"text":"MORE BETS »","confidence":0.81,"box":{"x":789,"y":1095,"w":215,"h":44}},
+  {"text":"TODAY, 7:08 PM","confidence":0.96,"box":{"x":280,"y":1190,"w":228,"h":26}},
+  {"text":"-122","confidence":0.87,"box":{"x":868,"y":1324,"w":69,"h":23}},
+  {"text":"Total FT (Incl OT)","confidence":0.95,"box":{"x":280,"y":1349,"w":257,"h":31}},
+  {"text":"EDM Oilers @ CAR","confidence":0.93,"box":{"x":334,"y":1405,"w":280,"h":29}},
+  {"text":"= : ® MOREBETS »","confidence":0.54,"box":{"x":281,"y":1426,"w":723,"h":44}},
+  {"text":"Hurricanes","confidence":0.96,"box":{"x":334,"y":1463,"w":167,"h":25}},
+  {"text":"TODAY, 7:08 PM","confidence":0.96,"box":{"x":280,"y":1521,"w":228,"h":26}},
+  {"text":"-125","confidence":0.89,"box":{"x":868,"y":1655,"w":68,"h":22}},
+  {"text":"Total FT (Incl OT)","confidence":0.95,"box":{"x":280,"y":1680,"w":257,"h":31}},
+  {"text":"\" VAN Canucks @ COL","confidence":0.75,"box":{"x":283,"y":1736,"w":366,"h":51}},
+  {"text":"«& MOREBETS »","confidence":0.58,"box":{"x":719,"y":1757,"w":285,"h":44}},
+  {"text":"Avalanche","confidence":0.95,"box":{"x":331,"y":1792,"w":158,"h":26}},
+  {"text":"TODAY, 10:08 PM","confidence":0.96,"box":{"x":281,"y":1852,"w":245,"h":26}}
+ ]
+}

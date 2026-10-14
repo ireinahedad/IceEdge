@@ -1,0 +1,112 @@
+{
+  "book": "bet365",
+  "lang": "fr",
+  "theme": "dark",
+  "oddsFormat": "decimal",
+  "gameDate": "2026-10-14",
+  "groups": [
+    {
+      "kind": "sgp",
+      "odds": "1.68",
+      "game": {
+        "away": "DAL",
+        "home": "COL"
+      },
+      "legs": [
+        {
+          "ticketText": [
+            "Nathan MacKinnon: 1+ Points",
+            "Points"
+          ],
+          "state": "ok",
+          "intent": {
+            "subjectType": "player",
+            "player": "Nathan MacKinnon",
+            "marketType": "points_ou",
+            "selection": "over",
+            "line": 0.5
+          }
+        },
+        {
+          "ticketText": [
+            "Martin Necas: 1+ Shots on Goal",
+            "Shots on Goal"
+          ],
+          "state": "unsupported_line",
+          "intent": {
+            "subjectType": "player",
+            "player": "Martin Necas",
+            "marketType": "shots_ou",
+            "selection": "over",
+            "line": 0.5
+          }
+        },
+        {
+          "ticketText": [
+            "Nathan MacKinnon: 2+ Shots on Goal",
+            "Shots on Goal"
+          ],
+          "state": "ok",
+          "intent": {
+            "subjectType": "player",
+            "player": "Nathan MacKinnon",
+            "marketType": "shots_ou",
+            "selection": "over",
+            "line": 1.5
+          }
+        },
+        {
+          "ticketText": [
+            "Jason Robertson: 1+ Shots on Goal",
+            "Shots on Goal"
+          ],
+          "state": "unsupported_line",
+          "intent": {
+            "subjectType": "player",
+            "player": "Jason Robertson",
+            "marketType": "shots_ou",
+            "selection": "over",
+            "line": 0.5
+          }
+        },
+        {
+          "ticketText": [
+            "Nazem Kadri: 1+ Shots on Goal",
+            "Shots on Goal"
+          ],
+          "state": "unsupported_line",
+          "intent": {
+            "subjectType": "player",
+            "player": "Nazem Kadri",
+            "marketType": "shots_ou",
+            "selection": "over",
+            "line": 0.5
+          }
+        },
+        {
+          "ticketText": [
+            "COL Avalanche Total: Over 1.5 Goals",
+            "Team Total"
+          ],
+          "state": "ok",
+          "intent": {
+            "subjectType": "team",
+            "team": "COL",
+            "marketType": "team_total_goals",
+            "selection": "over",
+            "line": 1.5
+          }
+        }
+      ]
+    }
+  ],
+  "totalOdds": "1.68",
+  "personal": [
+    "102,05 $",
+    "25,00 $",
+    "42,24 $",
+    "Effectuer un Cash Out 25,00 $",
+    "18:11"
+  ],
+  "notes": "bet365 en français, PNG d'iPhone (user, 2026-10-14). Interface en français MAIS libellés de marchés en ANGLAIS (« 1+ Shots on Goal », « Team Total », « Over 1.5 Goals ») : la table de vocabulaire doit être fusionnée EN+FR, pas choisie selon la langue du ticket. Un seul groupe → sa cote (1.68) est aussi la cote totale. Même joueur deux fois (MacKinnon points + tirs) : pas un doublon. 3 jambes « 1+ Shots » → unsupported_line (D4). Bruit : « Mes Paris », onglets « En cours / En direct / Terminé », « Suivre », solde « 102,05 $ » en haut ET en bas."
+}

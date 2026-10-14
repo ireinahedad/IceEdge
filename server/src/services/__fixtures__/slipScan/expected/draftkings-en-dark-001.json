@@ -1,0 +1,84 @@
+{
+  "book": "draftkings",
+  "lang": "en",
+  "theme": "dark",
+  "oddsFormat": "american",
+  "gameDate": null,
+  "groups": [
+    {
+      "kind": "single",
+      "odds": null,
+      "game": {
+        "away": "BUF",
+        "home": "FLA"
+      },
+      "legs": [
+        {
+          "ticketText": [
+            "3+ | Tage Thompson Shots on Goal"
+          ],
+          "state": "ok",
+          "intent": {
+            "subjectType": "player",
+            "player": "Tage Thompson",
+            "marketType": "shots_ou",
+            "selection": "over",
+            "line": 2.5
+          }
+        }
+      ]
+    },
+    {
+      "kind": "single",
+      "odds": null,
+      "game": {
+        "away": "MIN",
+        "home": "UTA"
+      },
+      "legs": [
+        {
+          "ticketText": [
+            "3+ | Dylan Guenther Shots on Goal"
+          ],
+          "state": "ok",
+          "intent": {
+            "subjectType": "player",
+            "player": "Dylan Guenther",
+            "marketType": "shots_ou",
+            "selection": "over",
+            "line": 2.5
+          }
+        }
+      ]
+    },
+    {
+      "kind": "single",
+      "odds": null,
+      "game": {
+        "away": "WPG",
+        "home": "ANA"
+      },
+      "legs": [
+        {
+          "ticketText": [
+            "3+ | Cutter Gauthier Shots on Goal"
+          ],
+          "state": "ok",
+          "intent": {
+            "subjectType": "player",
+            "player": "Cutter Gauthier",
+            "marketType": "shots_ou",
+            "selection": "over",
+            "line": 2.5
+          }
+        }
+      ]
+    }
+  ],
+  "totalOdds": "+195",
+  "personal": [
+    "Hunter Skoczylas",
+    "2 People Placed This Bet"
+  ],
+  "notes": "Carte de partage DraftKings (« Parlay 3 Picks », publiée par un tiers — son nom est dans `personal`), capture 1024×806 sur fond noir, pas un ticket de l'app. Format différent : le seuil AVANT le nom (« 3+ | Tage Thompson Shots on Goal »), séparé par une barre verticale que l'OCR peut lire « I » ou « l » ; ligne de match AU-DESSUS des jambes (« BUF Sabres @ FLA Panthers | Today, 7:10 PM »), donc ordre inverse de bet365 ; « @ » = away @ home ; aucune cote par jambe, seulement la cote totale « +195 » ; « Today » → pas de date sur la capture. Bruit : « Open », « Odds are subject to change »."
+}
