@@ -41,7 +41,7 @@ Copier ce bloc sous « Incidents », du plus récent au plus ancien.
 - Évaluation du risque de préjudice sérieux : (sensibilité, conséquences, probabilité → oui / non, et pourquoi)
 - Avis à la CAI : (date, ou « non requis » et pourquoi)
 - Avis aux personnes concernées : (date et moyen, ou « non requis »)
-- Mesures prises pour réduire le risque : (rotation de secrets — voir SECRET_ROTATION.md —, correctif, révocation des sessions…)
+- Mesures prises pour réduire le risque : (rotation de secrets — voir STATUS.md §6 —, correctif, révocation des sessions…)
 ```
 
 ---

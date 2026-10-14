@@ -224,7 +224,7 @@ ICEEDGE/
 
 `postgresql://postgres:<DB_PASSWORD>@localhost:5432/IceedgeDB`
 
-> ⚠️ Never commit real credentials to this file. Use a local `server/.env` (git-ignored). See `SECRET_ROTATION.md`.
+> ⚠️ Never commit real credentials to this file. Use a local `server/.env` (git-ignored). If a secret leaks: `STATUS.md` §6.
 
 ## Tables
 

@@ -1,0 +1,31 @@
+{
+ "engine": "tesseract", "width": 1098, "height": 1575, "ms": 3666,
+ "lines": [
+  {"text":"mar. 13 oct. 23:24","confidence":0.95,"box":{"x":49,"y":84,"w":323,"h":28}},
+  {"text":"bet365","confidence":0.87,"box":{"x":825,"y":72,"w":228,"h":51}},
+  {"text":"Réutiliser les","confidence":0.89,"box":{"x":237,"y":183,"w":211,"h":27}},
+  {"text":"[94","confidence":0.35,"box":{"x":136,"y":198,"w":24,"h":26}},
+  {"text":"(Mh Share","confidence":0.47,"box":{"x":711,"y":197,"w":147,"h":42}},
+  {"text":"sélections","confidence":0.9,"box":{"x":258,"y":225,"w":167,"h":27}},
+  {"text":"O PARI PERSONNALISE 1.83","confidence":0.93,"box":{"x":98,"y":305,"w":458,"h":31}},
+  {"text":"Nicholas Suzuki - 1+ points","confidence":0.94,"box":{"x":150,"y":382,"w":466,"h":35}},
+  {"text":"Points","confidence":0.96,"box":{"x":150,"y":431,"w":86,"h":24}},
+  {"text":"Plus de 5.5 buts","confidence":0.96,"box":{"x":150,"y":521,"w":274,"h":28}},
+  {"text":"Total de points","confidence":0.96,"box":{"x":148,"y":569,"w":210,"h":28}},
+  {"text":"@ MTL Canadiens","confidence":0.88,"box":{"x":114,"y":678,"w":273,"h":25}},
+  {"text":"Mer. 14 oct","confidence":0.95,"box":{"x":552,"y":678,"w":162,"h":23}},
+  {"text":"~ WAS Capitals","confidence":0.74,"box":{"x":115,"y":722,"w":243,"h":30}},
+  {"text":"16:37","confidence":0.96,"box":{"x":551,"y":722,"w":78,"h":23}},
+  {"text":"O Martin Necas: 1+ Points 1.36","confidence":0.89,"box":{"x":98,"y":863,"w":596,"h":32}},
+  {"text":"Points","confidence":0.96,"box":{"x":150,"y":923,"w":85,"h":23}},
+  {"text":"< DAL Stars","confidence":0.83,"box":{"x":119,"y":1022,"w":184,"h":24}},
+  {"text":"Mer. 14 oct","confidence":0.94,"box":{"x":552,"y":1021,"w":162,"h":22}},
+  {"text":"<a COL Avalanche","confidence":0.75,"box":{"x":116,"y":1065,"w":266,"h":24}},
+  {"text":"17:37","confidence":0.96,"box":{"x":551,"y":1065,"w":75,"h":23}},
+  {"text":"Mise","confidence":0.96,"box":{"x":90,"y":1228,"w":68,"h":24}},
+  {"text":"Gains potentiels","confidence":0.91,"box":{"x":763,"y":1228,"w":247,"h":30}},
+  {"text":"12,00 $","confidence":0.92,"box":{"x":89,"y":1274,"w":158,"h":46}},
+  {"text":"30,00 %","confidence":0.68,"box":{"x":763,"y":1274,"w":165,"h":46}},
+  {"text":"Effectuer un Cash Out 12,00 $","confidence":0.93,"box":{"x":241,"y":1407,"w":604,"h":42}}
+ ]
+}

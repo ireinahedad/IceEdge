@@ -27,14 +27,8 @@ la Politique de confidentialité, sous le bouton d'abonnement.
 
 ## 3. Divulgation d'abonnement (1.3)
 
-**Fait (2026-10-11)** dans `AppleProSection.tsx`, avant le bouton d'achat :
-- prix et durée venant de la boutique (`displayPrice`, jamais en dur) ;
-- ce que devient l'essai : « 7 jours gratuits, puis 5,99 $/mois » ;
-- renouvellement automatique, prélèvement sur le compte Apple, annulation au moins
-  24 h avant la fin de période, où gérer l'abonnement (texte `pro.apple.legal`) ;
-- liens Conditions, EULA Apple, Confidentialité ; bouton **Restaurer les achats**.
-
-Dans App Store Connect, ajouter aussi à la fin de la **description** de l'app une ligne :
+L'écran d'achat iOS (`AppleProSection.tsx`) affiche déjà tout ce qu'Apple exige. Reste, dans App
+Store Connect : ajouter à la fin de la **description** de l'app une ligne :
 « Abonnement ArakIce Pro : 5,99 $/mois ou 59,99 $/an, essai gratuit de 7 jours. Conditions :
 https://arakice.com/terms — EULA : https://www.apple.com/legal/internet-services/itunes/dev/stdeula/ »
 
@@ -114,20 +108,16 @@ Avec cette clé, App Store Connect ne pose plus la question à chaque build.
 
 ## 7. Privacy manifest (1.6)
 
-Brouillon : `docs/ios/PrivacyInfo.xcprivacy`. À copier en Phase 3 dans
-`client/ios/App/App/PrivacyInfo.xcprivacy`, l'ajouter à la cible App dans Xcode
-(ou via le projet généré par Capacitor), puis vérifier dans le rapport de confidentialité
-de l'archive (Xcode → Organizer → Generate Privacy Report) que les plugins Capacitor
+`client/ios/App/App/PrivacyInfo.xcprivacy` est dans la cible App. Avant la soumission : Xcode →
+Organizer → Generate Privacy Report sur l'archive, pour vérifier que les plugins Capacitor
 apportent bien leurs propres manifestes.
 
-## 8. Mises à jour de la politique à faire plus tard
+## 8. Mises à jour de la politique encore à faire (suivi : `STATUS.md` §3.4)
 
 | Quand | Section de `/privacy` | Changement |
 |---|---|---|
-| Phase 3 (Capacitor) | 10. Sécurité | sur iOS, la session est gardée dans le Trousseau (Keychain), pas dans un cookie httpOnly |
-| Phase 3 | 2 et 6 | préciser que la connexion Google n'existe que sur le web |
-| ✔ 2026-10-11 — Phase 4 (APNs) | 2, 6, 8 | « l'adresse que votre navigateur **ou appareil** nous donne » ; Apple Push Notification service comme fournisseur |
-| ✔ 2026-10-11 — Phase 5 (IAP) | 2, 6, 9 | Apple comme fournisseur de paiement ; un abonnement Apple ne s'annule pas en supprimant le compte (6.4) |
+| Avant la soumission | 10. Sécurité | sur iOS, la session est gardée dans le Trousseau (Keychain), pas dans un cookie httpOnly |
+| Avant la soumission | 2 et 6 | préciser que la connexion Google n'existe que sur le web |
 
 ## 9. Risque à trancher avant la soumission — R18 · logos et photos de la LNH
 
@@ -142,9 +132,3 @@ Options : (a) garder et répondre honnêtement « Yes », en assumant le risque 
 d'équipe et des initiales (le partage d'image le fait déjà, voir `slipShareCanvas.ts`).
 L'option (b) supprime le risque pour peu d'effort ; à décider avant la Phase 8 (captures).
 
-## 10. Sections Pro verrouillées — **réglé (2026-10-11)**
-
-Décision : l'abonnement Pro s'achète dans l'app (option (d) de la version précédente de ce
-fichier). Les cadenas `ProLock` ont de nouveau un bouton, qui mène à l'écran d'achat iOS ;
-un abonné web est Pro sur iPhone, ce que 3.1.3(b) autorise puisque le même abonnement
-s'achète aussi par achat intégré. Mise en place : `docs/ios/APP_STORE_IAP_SETUP.md`.

@@ -1,14 +1,18 @@
 # App Store Connect — fiche produit (APPLE_PLAN 8.4, 8.6, 8.7)
 
-**Créé :** 2026-10-11 · Concerne le **build iOS v1** (pas d'achat Pro, pas de liens bookmakers,
-voir `APP_STORE_COMPLIANCE.md`). Longueurs vérifiées par script, pas estimées.
+**Créé :** 2026-10-11 · **Mis à jour :** 2026-10-14 (abonnement Pro par achat intégré Apple).
+Concerne le **build iOS v1** : Pro acheté dans l'app (StoreKit 2), pas de liens bookmakers, voir
+`APP_STORE_COMPLIANCE.md`. Longueurs à revérifier par script après chaque modification.
 
 Règles suivies (APPLE_PLAN 2.4 / 8.4) :
 - Vocabulaire **analyse / prédiction**, jamais « parier », « cote », « sportsbook », « bet ».
 - **Pas de « NHL » ni de noms d'équipes** dans le nom, le sous-titre ou les mots-clés (5.2.1 :
   marques sans licence). Dans la description, seulement dans la mention « non affilié ».
-- **Pas de Pro dans la fiche** : en v1, rien ne s'achète sur iOS, et une fiche ne peut pas
-  renvoyer vers l'abonnement web (3.1.1 / 3.1.3). On ne décrit que ce qu'un compte gratuit voit.
+- **Pro décrit comme achat intégré seulement** : prix, durée, essai, renouvellement automatique et
+  liens Conditions + EULA à la fin de la description (exigé pour un abonnement, voir
+  `APP_STORE_COMPLIANCE.md` §3). Jamais de renvoi vers l'abonnement web ni de comparaison de prix
+  (3.1.1 / 3.1.3). Les fonctions Pro sont nommées comme telles, pour qu'un compte gratuit ne
+  cherche pas ce qu'il n'a pas.
 - Mots-clés : ne pas répéter un mot déjà dans le nom ou le sous-titre (Apple les indexe déjà),
   virgules sans espaces, singulier suffit.
 - Sur la boutique **Canada**, Apple indexe ensemble les mots-clés en-CA et fr-CA : les deux
@@ -75,6 +79,11 @@ PLAY WITH YOUR FRIENDS
 • Join leagues, compare records on the leaderboard and talk hockey in real-time chat rooms
 • Report messages and block users at any time
 
+ARAKICE PRO
+• Every market for every game, the day's top picks and value alerts
+• AI analysis that explains a pick in plain language
+• Monthly or yearly subscription with a 7-day free trial, bought in the app
+
 MADE FOR IPHONE
 • Home-screen widget with your picks in progress
 • Share any pick as a clean image card
@@ -85,7 +94,10 @@ ArakIce is an analytics and entertainment app. It does not accept wagers, hold m
 
 ArakIce is an independent app and is not affiliated with or endorsed by the National Hockey League or any team.
 
+ArakIce Pro: $5.99/month or $59.99/year (CAD; price shown in the app in your local currency), 7-day free trial for new subscribers. Payment is charged to your Apple Account. The subscription renews automatically unless cancelled at least 24 hours before the end of the current period; manage or cancel it in your Apple Account settings.
+
 Terms of Use: https://arakice.com/terms
+Apple Standard EULA: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
 Privacy Policy: https://arakice.com/privacy
 ```
 
@@ -136,6 +148,11 @@ JOUE AVEC TES AMIS
 • Rejoins des ligues, compare ton bilan au classement et parle hockey dans des salons de discussion en temps réel
 • Signale un message ou bloque un utilisateur à tout moment
 
+ARAKICE PRO
+• Tous les marchés de chaque match, les meilleures sélections du jour et les alertes de valeur
+• L'analyse IA qui explique une sélection en mots simples
+• Abonnement mensuel ou annuel avec 7 jours d'essai gratuit, acheté dans l'application
+
 PENSÉE POUR L'IPHONE
 • Widget d'écran d'accueil avec tes sélections en cours
 • Partage n'importe quelle sélection en image
@@ -146,7 +163,10 @@ ArakIce est une application d'analyse et de divertissement. Elle n'accepte aucun
 
 ArakIce est une application indépendante, non affiliée à la Ligue nationale de hockey ni à aucune équipe, et non approuvée par celles-ci.
 
+ArakIce Pro : 5,99 $/mois ou 59,99 $/an (CAD ; le prix affiché dans l'application est dans ta devise), 7 jours d'essai gratuit pour un premier abonnement. Le paiement est porté à ton compte Apple. L'abonnement se renouvelle automatiquement, sauf annulation au moins 24 heures avant la fin de la période en cours ; gère-le ou annule-le dans les réglages de ton compte Apple.
+
 Conditions d'utilisation : https://arakice.com/terms
+CLUF standard d'Apple : https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
 Politique de confidentialité : https://arakice.com/privacy
 ```
 
@@ -157,9 +177,12 @@ Politique de confidentialité : https://arakice.com/privacy
 - [ ] **Widget, notifications, partage** : n'apparaissent dans la description que s'ils sont dans
       le build soumis (4.2 / 4.6 pas encore testés sur l'iPhone — STATUS Phase 4). Sinon, retirer
       la ligne : décrire une fonction absente = rejet 2.3.1.
-- [ ] **Projections joueurs, totaux de buts, périodes** : vérifier qu'un compte gratuit iOS les voit
-      (« Tous les marchés » est Pro). Retirer ce qui est Pro.
-- [ ] **Analyse IA** : volontairement absente de la description, parce que le gratuit a un
-      disjoncteur global (`llmQuota.service.ts`). L'ajouter seulement si elle reste fiable en gratuit.
+- [ ] **Gratuit vs Pro** : vérifier que ce qui est décrit hors de la section PRO (projections
+      joueurs, totaux de buts, périodes) est bien visible par un compte gratuit iOS ; sinon le
+      déplacer dans la section PRO.
+- [ ] **Prix** : à garder identiques à ceux d'App Store Connect (5,99 $ / 59,99 $ CAD). Si un prix
+      change là-bas, il change ici.
+- [ ] **Achats intégrés** : dans la version soumise, section « In-App Purchases and Subscriptions »,
+      cocher les deux abonnements — sinon ils ne sont pas revus avec l'app.
 - [ ] **Tutoiement** (fr) : choisi pour coller à l'app (« Dis-nous ce qui ne va pas »).
 - [ ] Le nom « ArakIce: Hockey Predictions » doit être libre sur l'App Store.

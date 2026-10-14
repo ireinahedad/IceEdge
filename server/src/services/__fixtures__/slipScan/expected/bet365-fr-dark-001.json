@@ -1,0 +1,41 @@
+{
+  "book": "bet365",
+  "lang": "fr",
+  "theme": "dark",
+  "oddsFormat": "decimal",
+  "gameDate": "2026-10-14",
+  "groups": [
+    {
+      "kind": "sgp",
+      "odds": "1.83",
+      "game": { "away": "MTL", "home": "WSH" },
+      "legs": [
+        {
+          "ticketText": ["Nicholas Suzuki - 1+ points", "Points"],
+          "state": "ok",
+          "intent": { "subjectType": "player", "player": "Nick Suzuki", "marketType": "points_ou", "selection": "over", "line": 0.5 }
+        },
+        {
+          "ticketText": ["Plus de 5.5 buts", "Total de points"],
+          "state": "ok",
+          "intent": { "subjectType": "game", "marketType": "total_goals", "selection": "over", "line": 5.5 }
+        }
+      ]
+    },
+    {
+      "kind": "single",
+      "odds": "1.36",
+      "game": { "away": "DAL", "home": "COL" },
+      "legs": [
+        {
+          "ticketText": ["Martin Necas: 1+ Points", "Points"],
+          "state": "ok",
+          "intent": { "subjectType": "player", "player": "Martin Necas", "marketType": "points_ou", "selection": "over", "line": 0.5 }
+        }
+      ]
+    }
+  ],
+  "totalOdds": null,
+  "personal": ["12,00 $", "30,00 $", "Effectuer un Cash Out 12,00 $", "mar. 13 oct. 23:24"],
+  "notes": "Premier ticket réel (user, 2026-10-14). bet365 en français, thème sombre. Ce qu'il apprend au parseur : (1) « PARI PERSONNALISÉ » = SGP, sa cote (1.83) couvre les DEUX jambes du groupe, pas une seule ; (2) la carte du match (« MTL Canadiens / WAS Capitals ») vient APRÈS les jambes, pas avant ; (3) bet365 écrit WAS pour Washington (NHL : WSH) ; (4) « 1+ points » = plus de 0.5 points, « Plus de 5.5 buts » = total du match, même si le sous-titre dit « Total de points » ; (5) le ticket utilise « Nicholas » là où NHL.com dit « Nick » Suzuki ; (6) aucune cote totale affichée (2.49 = 1.83 × 1.36 ; les gains/mise donnent 2.50, arrondi) ; (7) l'heure « 16:37 / 17:37 » sous la date n'est pas l'heure du match (19 h 30 ET) : ne pas s'en servir pour choisir le match."
+}

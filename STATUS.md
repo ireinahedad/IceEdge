@@ -4,6 +4,8 @@
 
 Finished work is not kept here: it lives in the Git history. The last version that listed
 everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916b52:STATUS.md`.
+Finished items removed in the 2026-10-14 cleanup (STATUS, APPLE_PLAN, runbooks, docs/ios):
+`git show 1b03631:<path>`.
 
 | Mark | Meaning |
 |---|---|
@@ -24,8 +26,10 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
   (Postgres), Cloudflare R2 (avatars), Cloudflare DNS/proxy. 📄
 - **All the pre-iOS web work is shipped**; nothing blocks the launch or the iOS start
   (C1 on a real iPhone passed 2026-10-05).
-- **The web is frozen at tag `pre-ios-freeze` (2026-10-07) and iOS has started (Phase 0).** Every web
-  change from here is a *shared* change, tested on web and in the iOS shell (§3.4).
+- **iOS is ON HOLD (decided 2026-10-14): the web is commercialized first.** Apple refused to review
+  the app: « Simulated Gambling » is not accepted from an Individual account (§3.4). The web freeze
+  is lifted — web changes no longer need an iOS test; keep `npm run build:ios` green.
+  The `pre-ios-freeze` tag stays as a marker.
 - **The NHL 2026-27 regular season started on 2026-09-29** (84 games per team).
 
 ---
@@ -34,11 +38,9 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
 
 | Item | What is done | What is missing |
 |---|---|---|
-| **Redis / multi-instance** | ✔ Socket.io adapter shipped and **active** (Redis service on Railway, `REDIS_URL` set — checked 2026-09-26) | ✔ `RedisRateLimitStore` written 2026-10-07; it switches on by itself when `REDIS_URL` is set (no variable to add) — only left: commit and deploy it. Needed only before a 2nd instance. |
 | **Cloudflare in front of the API** | 📄 Proxy and cache headers in place | Check that it actually caches what the headers allow. |
-| **Budget alerts** | ✔ All set (confirmed 2026-10-07) | Thresholds in `MONITORING.md`. |
 | **Load testing** | ✔ In-process benches, all green | Real visitor latency against a pre-prod (`loadtest/s1-landing.js`) never run — there is no pre-prod. |
-| **QA** | ✔ I1, I2 (7/7), static campaigns; ✔ dynamic campaign on a local stack (2026-09-26, 90/90) | What needs the real world: devices (C2–C3), Google (I4), Neon restore drill (§3.7). |
+| **QA** | ✔ I1, I2 (7/7), static campaigns; ✔ dynamic campaign on a local stack (2026-09-26, 90/90) | What needs the real world: devices (C2–C3), public slips checks (§3.7). |
 | **Client tests** | ✔ `typecheck` in CI | No test runner in `client/`. The socket block filter (`visibleMessages` in `RoomChat`) has no guard. |
 | **SEO match pages** | ✔ Generated and deployed daily | Link `/match` from the app (✔ nothing links to it), submit `sitemap-games.xml` in Search Console, translate `/matchup/`, `/props/` and hubs to French. |
 | **Content engine** | ✔ Pipeline + daily recap copying to Google Drive | ✔ Recap files committed. Install the scheduled task (§3.11). |
@@ -61,47 +63,33 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
 - [ ] Verify Cloudflare caching in front of `api.arakice.com`.
 - [ ] After launch: empty `PRO_PROMO_CODES`, redeploy, check an old code returns 400.
 
-### 3.4 iOS app — `APPLE_PLAN.md` (started 2026-10-07)
+### 3.4 iOS app — `APPLE_PLAN.md` · ⏸ ON HOLD since 2026-10-14
 
-- [x] Freeze tagged `pre-ios-freeze` on 2026-10-07 (gate G1–G4 closed). §3.12 deferred past the
-      freeze: it ships as a shared change.
+**Why.** First submission (2026-10-14) stopped by Apple before review: the age rating declares
+« Simulated Gambling » (bet slips, odds, XP that grows with risk) and the account is Individual.
+To resume, either (A) enrol as an Organization — legal entity (e.g. federal incorporation),
+D-U-N-S, `@arakice.com` email, then ask Developer Support to convert the account (no app transfer),
+or (B) remove simulated gambling from the iOS build (no odds, XP for accuracy not risk, « picks »
+wording) and honestly answer « Simulated Gambling: None ». Do NOT just change the rating answer.
 
-✔ No Capacitor dependency, no `client/ios/`.
 
-- [x] Phase 0 — ✔ Developer Program (Individual), app record, bundle ID `com.arakice.arakice`,
-      API key, Small Business Program (2026-10-09).
-- [ ] Phase 1 — ✔ answers prepared in `docs/ios/APP_STORE_COMPLIANCE.md` + manifest draft (2026-10-09).
-      Left: enter age rating (18+), App Privacy labels and export compliance in App Store Connect.
+Phases 0, 2 (code), 3, 6 and 7 are done; the app runs on the iPhone through TestFlight.
+
+- [ ] Phase 1 — answers ready in `docs/ios/APP_STORE_COMPLIANCE.md`. Left: enter age rating (18+),
+      App Privacy labels and export compliance in App Store Connect. Update `/privacy` for iOS
+      (Keychain session, Google sign-in web-only — `APP_STORE_COMPLIANCE.md` §8).
       Decide R18 (NHL logos/photos on iOS, 5.2.1) before Phase 8.
-- [ ] Phase 2 — ✔ 2026-10-09: `npm run build:ios` (no bookmaker in the bundle, guarded), iOS FAQ
-      copy, responsible-gambling note (web + iOS), SEO links hidden on iOS, R9 done.
-      R10 decided 2026-10-09: bookmaker buttons OFF on the web too (`VITE_BOOKMAKER_LINKS`, default
-      off; set `true` in Vercel to bring them back once there is an affiliate deal). Left: store
-      metadata with Phase 8; consider renaming the `best-nhl-betting-software` SEO page.
-- [ ] Phase 3 — ✔ code done 2026-10-09: Capacitor 8 (SPM), `client/ios/`, Keychain `tokenStore`,
-      `X-Client: native` on /auth, CORS `capacitor://localhost`, external links in Safari sheet,
-      CSP meta, `h-dvh`, icon/splash. Left: first build on cloud macOS CI (Phase 7), then the
-      real-iPhone checks below. After `git pull` on Windows: `cd client && npm install`.
-- [x] ✔ 2026-10-10 (TestFlight, all fine) On a real notched iPhone: every page (safe areas now active), the chat input row, tap
-      targets, lock the screen 5 min and come back, airplane mode, very slow network.
-- [ ] Phase 4 — native features (APNs push first, share sheet, offline, haptics, universal links).
-      4.1 push: ✔ code 2026-10-10 (bet-settled for everyone + Pro value bets, iOS only for
-      bet-settled). Left: Apple key/capability/profile, Railway `APNS_*` vars, migration 043, test.
-      4.2 widget « paris en cours », 4.3 share sheet, 4.6 Universal Links: ✔ code 2026-10-10. Left:
-      App Group + widget App ID + Associated Domains + both profiles, GitHub secrets
-      `IOS_WIDGET_PROFILE_BASE64` / var `IOS_WIDGET_PROFILE_NAME`, migration 044, web deploy, test.
-- [ ] Phase 5 — IAP (deferred: v1 ships without Pro on iOS). Decide before submitting whether
-      locked Pro sections without a call-to-action are acceptable.
-- [ ] Phase 6 — in-app account deletion: ✔ built on the web (`1244bac`); check it in the iOS shell.
-- [x] Phase 7 (moved before 4) — ✔ workflow `ios-release.yml`, Apple Distribution certificate +
-      `ArakIce App Store` profile (both expire **2027-10-09**), GitHub secrets + variables
-      (2026-10-09). ✔ **First green run — build uploaded to TestFlight (2026-10-09).**
-      ✔ **2026-10-10: the app runs on the iPhone (TestFlight) and loads data.** Two fixes on the way:
-      `tokenStore.ts` no longer resolves a promise with the SecureStorage plugin Proxy (it called
-      `SecureStorage.then()` → every token read hung), and `build-ios.mjs` now fails on a wrong
-      `VITE_*_URL` path or stray whitespace (wrong GitHub variables → every call 404'd).
-      Next: the device checks below.
-      Delete the four `.txt` files in `ios-signing/` once the secrets work.
+- [ ] Phase 2 — left: store metadata with Phase 8; consider renaming the
+      `best-nhl-betting-software` SEO page.
+- [ ] Phase 4 — native features. Code done for 4.1 push (bet-settled for everyone, Pro value bets),
+      4.2 widget « paris en cours », 4.3 share sheet, 4.6 Universal Links. Left:
+      - 4.1: Apple key/capability/profile, Railway `APNS_*` vars, migration 043, test.
+      - 4.2 / 4.6: App Group + widget App ID + Associated Domains + both profiles, GitHub secret
+        `IOS_WIDGET_PROFILE_BASE64` / var `IOS_WIDGET_PROFILE_NAME`, migration 044, web deploy, test.
+      - 4.3: test on the iPhone. 4.4 offline and 4.5 haptics: optional, not started.
+- [ ] Phase 5 — IAP: code done 2026-10-11 (StoreKit 2, no RevenueCat). Left: the manual steps of
+      `docs/ios/APP_STORE_IAP_SETUP.md` §2–7 (products, intro offers, notification URL, migration
+      045, Sandbox test) and the real IAP review screenshot.
 - [ ] Phases 8–9 — store assets, TestFlight external round, submission.
 
 ### 3.5 ML — prediction model
@@ -109,7 +97,7 @@ everything done (§1 « DONE », §4 « No longer relevant ») is `git show 0916
 Order, dates and commands first; the detail of each item follows. Measured conclusions not to
 re-test and the ML code map are in §8.
 
-- [ ] **Weekly data refresh**: ✔ task installed (2026-10-05). After each run, commit + push
+- [ ] **Weekly data refresh** (scheduled task, Mondays): after each run, commit + push
       `ml/models/inference_state.json`, `elo_ratings.json` and `level_layer.json`.
 - [ ] Re-train monthly during the season, then re-run
       `backtest_walkforward.py --correction --write-layer` (the correction layer sits on the score
@@ -129,18 +117,17 @@ ensuite                 A2 et A3 (CLV puck line) dès que les données existent,
 après la saison 2026-27 S4 — γ, puis ⑤ (classifieur en repli, puis supprimé).
                         A4 (fenêtre gardien) avec une saison de snapshots.
 
-en parallèle (hors prod) P — découverte de patterns : P1 et P2 posées, P3 branché
-                        (suivi hebdo des candidats pendant 2026-27), puis P4-P6.
+en parallèle (hors prod) P — découverte de patterns : P3 (suivi hebdo des
+                        candidats pendant 2026-27), P1-P2 après chaque réentraînement.
 ```
 
 
-#### P. Découverte automatique de patterns (ouvert le 2026-10-12)
+#### P. Découverte automatique de patterns
 
-**But.** Trouver des tendances qu'on n'a pas programmées (« Caufield marque-t-il plus le
-samedi ? », « CAR perd-il contre certaines équipes ? », repos, voyage, gardien adverse,
+**But.** Trouver des tendances qu'on n'a pas programmées (repos, voyage, gardien adverse,
 combinaisons de facteurs…) **et** trier ce qui est réel, ce que le modèle sait déjà et le bruit.
 Rien ici ne touche la production : un pattern n'entre dans les prédictions qu'en devenant une
-variable candidate d'un protocole d'adoption existant (P4).
+variable candidate d'un protocole d'adoption existant (P4). Résultats déjà mesurés : §8.1.
 
 **La question posée à chaque condition** n'est pas « le taux diffère-t-il de la moyenne ? »
 (presque tout diffère : force, domicile) mais « les résultats s'écartent-ils de ce que la
@@ -150,115 +137,32 @@ réplication = même signe et |z| ≥ 1.645 en validation ; **persistance** = co
 découverte / validation sur toute la famille ; un contrôle positif par expérience ; écart à la
 cote de clôture quand elle existe.
 
-- [ ] **P1. Base de référence = chaîne servie, sans fuite — à relancer après chaque
-      réentraînement mensuel.** ✔ Posée le 2026-10-12 :
-      `python live_pregame.py --served` → `ml/data/served_pregame.csv` (16 765 matchs, 2012-13 →
-      2026-27) : modèle de score du fold (`_served_fold`) → correction C ajustée sur les saisons
-      passées (dès 2015-16) → λ recalés → niveau k gelé le lundi (n0 de `level_report.json`).
-      Contrôle : servi − brut, log-loss **−0.00221 (z −3.25)**, déviance du total
-      **−0.00332 (z −3.31)** — reproduit `correction_report` (−0.0021, z −3.2) et
-      `level_report` (−0.00319, z −3.19).
-- [ ] **P2. `discover_patterns.py` — relancer après P1 ou quand une famille est ajoutée (P5).**
-      ✔ Posé le 2026-10-12 et relancé sur le poste Windows : mêmes chiffres qu'en cloud
-      (sauf `--combos`, voir §8.1) → `ml/models/patterns_report.json` + `ml/data/patterns_conditions.csv`.
-- [ ] **P3. Suivi en avant des candidats — en cours toute la saison 2026-27.**
-      ✔ Branché le 2026-10-12 : `refresh_data.py` étape 6 (`refresh_candidates`) recalcule
-      chaque lundi la section `candidates` de `ml/models/patterns_report.json` à partir de
-      `ml/models/pattern_registry.json`. Lecture seule, une erreur n'arrête pas le refresh,
-      aucune prédiction ne change ; committer `patterns_report.json` est facultatif.
-      3 candidats inscrits le 2026-10-12 (règle fixée avant les matchs suivis) :
-      `lone_b2b_vs_market` (auto : verdict sur les **300 premiers** matchs avec cote valide après
-      l'inscription, figé ensuite — pas d'arrêt optionnel ; ≈ une saison complète),
+- [ ] **P1. Base de référence = chaîne servie — à relancer après chaque réentraînement mensuel.**
+      `python live_pregame.py --served` → `ml/data/served_pregame.csv`. Contrôle attendu : servi −
+      brut, log-loss ≈ −0.0022 (z ≈ −3.2), déviance du total ≈ −0.0033 (reproduit
+      `correction_report` et `level_report`).
+- [ ] **P2. `discover_patterns.py` — relancer après P1 ou quand une famille est ajoutée.**
+      → `ml/models/patterns_report.json` + `ml/data/patterns_conditions.csv`.
+- [ ] **P3. Suivi en avant des candidats — toute la saison 2026-27.** `refresh_data.py` étape 6
+      recalcule chaque lundi la section `candidates` de `patterns_report.json` à partir de
+      `ml/models/pattern_registry.json` (lecture seule ; committer le rapport est facultatif).
+      Candidats (règle fixée avant les matchs suivis) : `lone_b2b_vs_market` (verdict auto sur les
+      **300 premiers** matchs avec cote valide après l'inscription, figé ensuite — pas d'arrêt
+      optionnel ; ≈ une saison) ; `ref_pp_points` (à remesurer avec 2026-27) ;
       `shooter_goalie_pairs` et `caufield_saturday` (témoin, attendu = bruit), à refaire à la main
       en fin de saison avec `discover_patterns.py --players --shooter-goalie`.
       **Le suivi n'avance que si les cotes de la saison arrivent dans `nhl_games_v4.csv`** :
       `refresh_data` ne touche pas `odds.csv`, il faut `npm run odds:export` (server) puis
-      `python fetch_data_v4.py --only odds --from-local` avant le refresh. Au 2026-10-12 :
-      42 matchs sur 83 de 2026-27 ont une cote.
-- [ ] **⛔ Collecteur de cotes à l'arrêt depuis le 2026-10-04 02:45Z (constaté le 2026-10-12).**
-      Les correctifs du 2026-10-12 (matchs en cours ignorés, `odds_log` le jour du match seulement,
-      paires hors marge [1.00, 1.12] jetées, `npm run odds:repair`, filtre à l'import dans
-      `fetch_data_v4.py`) sont déployés et la base réparée. La réparation a révélé le vrai problème :
-      `odds_snapshots` ne contient que DEUX passes DraftKings (2026-10-04 01:45Z et 02:45Z) ; toutes
-      les « clôtures » des matchs du 4 au 10 oct. venaient de ces deux passes, donc d'un prix vieux
-      de 1 à 6 jours. Avant : rien entre le 21 sept. 02:45Z et le 4 oct. Après réparation, 2 matchs
-      sur 83 de 2026-27 ont une cote. Bloque : suivi du candidat b2b (P3), CLV (A3), puck line (A2).
-      **Cause : `ODDS_LOG_ENABLED=false` sur Railway** (crédits OK : 14 695 / 20 000 utilisés).
-      À faire : poser `ODDS_LOG_ENABLED=true` sur Railway (redéploie), vérifier dans les logs
-      `[OddsLogger] calendrier armé`, puis le lendemain une passe dans `odds_snapshots`.
-      Garde-fous ajoutés : `startOddsLogger` crie au démarrage si le drapeau n'est pas à true ;
-      `refresh_data.py` affiche chaque lundi la couverture des cotes de la saison (⚠️ sous 80 %).
-      Les jours perdus (21 sept. → 3 oct., 4 → 12 oct.) ne se rattrapent qu'avec l'historique
-      payant The Odds API (facturé par marché et par horodatage, un appel couvre tous les matchs
-      de l'instant — outil et barème de A1 ; à décider avec A1).
-- [ ] **Rattrapage des cotes manquées (29 sept. → 11 oct. 2026), à lancer à la main.** Estimation
-      `--odds-api-dry-run` : ≤ 1 040 crédits (13 jours × ~4 appels × 20). Solde au 2026-10-12 :
-      5 305 → réserve abaissée à 3 000 pour ce run (proxy + collecte jusqu'au 1er nov.). Depuis
-      `ml/python`, avec `ODDS_API_KEY` posée :
-      `python fetch_data_v4.py --only odds --from-local --odds-api-book draftkings --odds-api-from 2026-09-29 --odds-api-to 2026-10-11 --odds-api-budget 1200 --odds-api-keep 3000`
-      puis `python build_dataset.py`. `fetch_data_v4` n'écrase plus une ligne backfill par une ligne
-      du log live vide (matchs vidés par `odds:repair`).
-- [ ] **P4. Intégration — seulement par les protocoles existants.**
-      ✔ Mesuré le 2026-10-12 (`measure_b2b_value.py` → `b2b_value_report.json`) : sur l'équipe SEULE
-      en b2b, la chaîne servie est calibrée en 2015-19 mais trop haute en 2020-26 (43.3 % annoncé,
-      40.5 % réel, z −2.24) — moins que le marché (44.9 %, z −3.12). Value bets servis : SUR elle
-      234 paris, ROI −9.4 % ± 7.1 ; CONTRE elle 517, +7.9 % ± 4.0 ; autres 2 909, +1.5 % ± 1.9.
-      Terme b2b de plus en walk-forward : **NON TRANCHABLE** (Δ −0.000002, z −0.02, 5/9 saisons).
-      → aucun changement de modèle ; si `lone_b2b_vs_market` se confirme en avant, proposer la
-      règle « ne jamais recommander l'équipe seule en b2b » (registre, `if_confirmed`). Victoire → variable candidate
-      de `backtest_walkforward.py --correction` ; totaux → `measure_level.py` / features du score ;
+      `python fetch_data_v4.py --only odds --from-local` avant le refresh.
+- [ ] **P4. Intégration — seulement par les protocoles existants.** Si `lone_b2b_vs_market` se
+      confirme en avant, proposer la règle « ne jamais recommander l'équipe seule en b2b »
+      (registre, `if_confirmed`). Victoire → variable candidate de
+      `backtest_walkforward.py --correction` ; totaux → `measure_level.py` / features du score ;
       props → `train_player.py` avec la règle de `vs_lift` (validation ET test, z ≥ 2). Effet
       propre à une équipe ou un joueur : rétréci par la variance mesurée entre périodes.
-- [ ] **P5. Nouvelles données — trios/paires et arbitres collectés et mesurés le 2026-10-12.**
-      `fetch_officials_lines.py` (gratuit, reprenable) → `ml/data/officials.csv` (21 698 matchs
-      2008 → 2026-27, arbitres + juges de lignes, API NHL `right-rail`) et
-      `ml/data/raw/lines/{lines,skaters}_{saison}.csv` (MoneyPuck, 5c5). Mesures :
-      `measure_lines_refs.py` → `ml/models/lines_refs_report.json`.
-      **Trios** : synergie (xGF% ensemble − xGF% des membres sans le trio) ne persiste pas d'une
-      saison à l'autre : corr 0.02 [−0.07 ; 0.11], n 477 ; top 10 % +13.2 pts → +2.3. Le modèle
-      « somme des joueurs » (`lineup_xg`) suffit. **Paires de défense** : faible persistance,
-      0.12 [0.06 ; 0.18], n 1 210 ; top 10 % +11.0 → +1.9 pt — complémentarité ou simple usage
-      (adversaires, mises en jeu), non séparé ; trop petit pour un match → pas d'intégration.
-      Contrôle positif (talent du joueur sans la combinaison) : 0.38.
-      **Arbitres** (83, dont 55 avec ≥ 100 matchs saisons paires ET impaires) : effet très réel et
-      stable sur les **pénalités** (corr pairs/impairs 0.82 [0.70 ; 0.89], ±0.42 pénalité/match par
-      arbitre) et le **temps en AN** (0.81, ±0.49 min) — mais **aucun sur les buts** (−0.01 ; résidu
-      vs total servi 0.03). Walk-forward « effet arbitre ajouté au total servi » : **PIRE**
-      (déviance +0.0043, z +3.86, meilleur 2 saisons sur 12).
-      ✔ Décidé et fait le 2026-10-12 : facteur « Arbitrage (PP) » RETIRÉ des totaux
-      (`factorModel.ts`, plus d'appel `getGameRefFactor` dans `nhlPredictions.ts` — une requête
-      Scouting the Refs de moins par prédiction ; `refereeStore.ts` et `/api/manual/referees`
-      restent, plus rien ne les lit pour les totaux ; l'entrée `referee` de
-      `client/.../factorDescriptions.ts` est devenue morte). Ne pas le remettre sans nouvelle mesure.
-      **Props joueur** (`measure_ref_props.py` → `ref_props_report.json`, 2026-10-12) :
-      variables pré-match `ref_pen` / `ref_pp` (effet rétréci des 2 arbitres, matchs PRÉCÉDENTS
-      seulement) ajoutées au modèle joueur servi, protocole et règle du face-à-face. Contrôle
-      match (test 2023-26) : quintile d'arbitres haut 7.30 pénalités/match contre 6.42 en bas.
-      **PIM : GARDÉ par la règle** (z 2.55, val ET test > 0, 3 saisons de test sur 3 ; quintile
-      haut obs/servi 1.039 → prédiction ×1.072, bas 0.931 → ×0.959). **Points en AN : NON** (z 1.74,
-      2 saisons sur 3) → candidat `ref_pp_points` au registre, à remesurer avec 2026-27.
-      Reproduction exacte du servi (log-vraisemblance −0.76652 / −0.25301 = `player_report.json`).
-      **Intégration PIM — codée le 2026-10-12, entraînée et committée le 2026-10-13 (`cb24b66`)** : `referee_effects.py` (variables +
-      table), `train_player.py` (essaie `ref_*` pour pim et ppPoints avec la règle →
-      `player_ref_report.json` ; écrit `ref_effects.json` avec l'état), `refresh_data.py` étape 6
-      (arbitres des nouveaux matchs + table, chaque lundi), `ml_service.py` (`referees` dans
-      `/predict/game/bundle` → `ref_pen`/`ref_pp`, 0 si inconnus ou table absente),
-      `gameMlBundle.ts` (envoie les arbitres de `getGameRefFactor`). Validé en cloud : réentraînement
-      complet identique au servi pour les 7 autres stats ; pim gardé (z 2.46, log-vrais. −0.76652 →
-      −0.76636), ppPoints non (z 1.68). ✔ Poste (2026-10-12) : pim gardé z 2.42 (3 saisons de test
-      sur 3), ppPoints non z 1.78 ; table 84 arbitres au 2026-10-10. ✔ `npm test` serveur 2026-10-13 :
-      1 397 tests verts, `tsc` propre. Ordre de déploiement indifférent (`referees` est optionnel
-      côté ML, pydantic ignore les champs en trop). **Reste : `git push`, puis dans les logs Railway
-      du service ML : `[ML] ✅ effets arbitre : 84 arbitres (au 2026-10-10), utilisés par : pim`.**
-      Reste possible : historique des cotes de props joueur (payant, à chiffrer) ; trios par match
-      (feuilles de présence `shiftcharts`, ~270 Ko/match) seulement si une piste le justifie.
-- [ ] **P6. Produit — déjà tenu par l'Analyse IA v2, à garder tel quel.** Vérifié le 2026-10-12 :
-      `EXPLAIN_BET_V2` (`llmAnalysis.ts`) n'écrit qu'à partir du bloc FAITS calculé par le code et
-      interdit toute connaissance extérieure (« historique » compris) ; aucun pattern n'y entre.
-      Règle : un fait descriptif ajouté un jour aux FAITS porte l'étiquette « historique, non
-      prédictif », n et l'intervalle. ✔ 2026-10-12 : l'invite LEGACY `EXPLAIN_BET` (repli,
-      `llmPrompts.ts`, FR + EN) interdit désormais les tendances face-à-face, jour, aréna, mois et
-      joueur-contre-équipe.
+- [ ] **P5. Pistes de données encore possibles** : historique des cotes de props joueur (payant, à
+      chiffrer) ; trios par match (feuilles de présence `shiftcharts`, ~270 Ko/match) seulement si
+      une piste le justifie.
 
 **Attention, fuite à ne pas réintroduire.** `goalie_backup` et `lineup_xg` du dataset sont
 construits avec le gardien et l'alignement RÉELS. Un pattern conditionné au gardien doit être
@@ -319,8 +223,9 @@ seul le CLV le peut.
       pas de CLV possible sur l'historique.
 - [ ] Relancer `--clv` avec le modèle **corrigé** (correction + niveau) : le
       +4.30 % à l'ouverture a été mesuré avec le modèle d'août.
-- [ ] Surveiller la collecte live : export du 2026-10-07, 42 matchs, puck line
-      sur 27 (trous du 30 sept. au 3 oct., complet depuis le 4). Réexporter
+- [ ] Surveiller la collecte live : arrêtée du 21 sept. au 12 oct. 15:00Z (drapeau à false,
+      repassé à true et constaté le 2026-10-13) ; clôtures 29 sept. → 11 oct. rattrapées par
+      l'historique payant, SANS ouvertures — le CLV 2026-27 part des matchs du 12 oct. Réexporter
       avant chaque run : `npm run odds:export` et `npm run odds:export-snapshots`
       (dans `server`), puis `python fetch_data_v4.py --only odds --from-local`.
 
@@ -434,27 +339,13 @@ la puck line, aujourd'hui saine.
 Règle tenue depuis le début : **rien n'est activé sans gain mesuré au rejeu**, et aucune
 constante qui n'a pas été mesurée sur de vrais matchs.
 
-##### 1. Avantage numérique en cours — pas fait
-
-Les fichiers de tirs MoneyPuck ne donnent pas le temps passé en avantage (il n'y a que les
-tirs), donc le multiplicateur ne peut pas en être mesuré. Il faut :
-
-1. Les pénalités du play-by-play NHL (`v1/gamecenter/{id}/play-by-play`, ~1 300 matchs par
-   saison) pour reconstruire les intervalles 5 c. 4, 5 c. 3, 4 c. 4.
-2. La même vraisemblance d'exposition que `calibrate_live.py` (cadence = λ × w(t) × m(…)),
-   avec un facteur par situation.
-3. Un rejeu (`server/scripts/replay-live.ts`) : n'activer que si la log-loss baisse.
-
-Déjà en place côté Node : `situationCode` est vérifié (`1451` = domicile à 5 contre 4) et la
-feuille de match porte `situation.secondsRemaining`.
-
-##### 2. Pas encore passés par le moteur à effets de score
+##### 1. Pas encore passés par le moteur à effets de score
 
 Cartes P1/P2 (Skellam) et « les deux marquent » (binomiale négative) restent sur le calcul de
 la phase 1. Les effets pèsent surtout en fin de 3e, où ces cartes sont déjà décidées : faible
 priorité.
 
-##### 3. À re-vérifier après la saison 2026-27
+##### 2. À re-vérifier après la saison 2026-27
 
 Le rejeu montrait 2 cases pires sur 50 : totaux > 5,5 et > 6,5 **à la mise au jeu**, à cause du
 niveau d'avant-match trop haut. Le recalage de niveau (`measure_level.py`, 2026-10-04) devrait
@@ -486,7 +377,7 @@ déduplication, bornes), **pas la capacité réelle de Railway et Neon**.
 | Vercel | 🟢 | 🟢 | Plan Pro (ligne 9) |
 | Service ML | 🟢 | 🟠 | RAM (ligne U) |
 | Neon | 🟢 | 🟠 | Scale-to-zero ou permanent (ligne 7 bis) |
-| Railway / Node | 🟢 | 🟠 | 2ᵉ instance (lignes D, Q) |
+| Railway / Node | 🟢 | 🟠 | 2ᵉ instance (ligne Q) |
 | CDN | 🟢 | 🟢 | Cloudflare (ligne 11) |
 | Tout le reste | 🟢 | 🟢 | — |
 
@@ -495,8 +386,7 @@ déduplication, bornes), **pas la capacité réelle de Railway et Neon**.
 | # | Action | Déclencheur | Effort | Coût |
 |---|---|---|---|---|
 | ☐ U | Vérifier la RAM du service ML dans Railway : 2 workers uvicorn (~300-500 Mo chacun) ne tiennent pas dans 512 Mo | **avant le premier pic réel** | 15 min | variable |
-| ☐ D | Redis provisionné et `REDIS_URL` posé (§2). Reste : commiter et déployer le compteur de rate-limit Redis (code du 2026-10-07). Il s'active seul avec `REDIS_URL` ; `RATE_LIMIT_STORE` n'est qu'un affichage de la bannière, aucune variable à définir | avant la 2ᵉ instance | 5 min | 0 € |
-| ☐ Q | 2ᵉ instance Railway — sans sticky sessions, client en `transports: ['websocket']` ; prérequis : D | CPU > ~70 % en régime | 4 h | +5-20 €/mois |
+| ☐ Q | 2ᵉ instance Railway — sans sticky sessions, client en `transports: ['websocket']` ; Redis (chat + rate-limit) déjà actif | CPU > ~70 % en régime | 4 h | +5-20 €/mois |
 | ☐ E | Migrer les avatars data-URI historiques vers R2 (le code est en place) | ~500 utilisateurs avec avatar | 2 h | 0 € |
 | ☐ I | TanStack Query côté client — aucune déduplication, l'accueil relance ~7 appels | facture Railway visible | 2 j | 0 € |
 | ☐ 7 bis | Décider : scale-to-zero Neon (readiness sans DB, probes espacées) ou compute permanent assumé | hors-saison NHL | 2 h | −10 à −50 €/mois |
@@ -504,9 +394,6 @@ déduplication, bornes), **pas la capacité réelle de Railway et Neon**.
 | ☐ T | Cache des prompts LLM identiques (TTL 1 h) — baisse le coût réel, pas la garantie du plafond | usage LLM significatif | 4 h | 0 € |
 | ☐ V | Échantillonner les logs 2xx | première facture de logs | 1 h | 0 € |
 | ☐ W | Purge Tailwind (CSS à 124 ko) | — | 2 h | 0 € |
-
-Settled: `writeLimiter` is keyed per account since 2026-08-24 (`userOrIpKey`) and no longer
-counts reads since 2026-09-26.
 
 #### Not verified
 
@@ -517,44 +404,33 @@ counts reads since 2026-09-26.
 
 ### 3.7 QA still to run
 
-Done: static campaigns, I1, I2 (7/7), dynamic QA on a local stack (2026-09-26), F1/F2/F6, C1,
-I4, I6, C4. P1/P2/P5 closed without firing at production (decision 2026-10-06). Detail of those
-campaigns: `git show 9b9a907:QA_TEST_PLAN.md`.
-
 Règles inchangées : **pas de staging**. On teste en production avec des comptes jetables, le Pro
 s'obtient par code promo et jamais par un vrai paiement. L'authentification se teste sur
 arakice.com, pas sur un aperçu `*.vercel.app`.
 
-#### 1. P4 — Performance mobile (Lighthouse) · Haute · ✔ CLS réglé (2026-10-07)
+#### 1. P4 — Performance mobile (Lighthouse) · Haute · LCP en cours
 
-PSI mobile sur arakice.com le 2026-10-06 à 09:21, après déploiement : **59**
-(FCP 3,4 s · LCP 3,8 s · TBT 0 ms · **CLS 0,481** · SI 4,3 s). Avant : 58, LCP 4,2 s, SI 5,3 s.
-Attendu : LCP < 2,5 s, CLS < 0,1.
+CLS réglé (0,043 le 2026-10-07). Attendu : LCP < 2,5 s. Dernier PSI mobile en prod (2026-10-07) :
+FCP 2,7 s · LCP 3,5 s.
 
-- **CLS : cause trouvée et corrigée (non déployé)**. Chaque carte de match mesurait 92 px pendant le
-  chargement, puis 99 px quand les pastilles de cote (`FairOddsPill`, 22 px) apparaissaient avec
-  `/api/predict/game/…/bundle` ; chaque carte poussait les suivantes de 7 px de plus. `FairOddsPill`
-  accepte maintenant `reserve`, qui garde la place pendant le chargement (utilisé par `LandingCards`).
-  Vérifié en prod en simulant le correctif : 99 px avant et après.
-- **Forced reflow de 749 ms (701 nœuds) : corrigé (non déployé)**. Le défilement automatique de
-  `TeamCarousel` lisait `scrollLeft`, `scrollWidth` et `clientWidth` à chaque image ; après chaque
-  mise à jour du DOM par React (arrivée d'un `bundle`), cette lecture forçait une mise en page du
-  document entier. Les tailles sont maintenant mises en cache (`ResizeObserver`), la boucle ne lit plus
-  rien, le recalage passe par `onScroll`, et le défilement attend 4 s après le chargement.
-- **Déployé le 2026-10-07** — PSI mobile ensuite : 3,5 s FCP · 4,3 s LCP · 0 ms TBT · **CLS 0,222** ·
-  5,3 s SI. CLS divisé par deux, mais reste > 0,1 : le swap Oswald grandissait chaque ligne de 6 px.
-- **Polices auto-hébergées (`60bbb89`, 2026-10-07)** : `public/fonts` (Oswald/Inter variables,
-  Merriweather 700, latin + latin-ext), `preload`, faces « Fallback » calées sur les métriques
-  (écart mesuré ≤ 1 % en largeur, 0 px en hauteur), cache 1 an sur `/fonts/`. Les pages SEO
-  statiques gardent Google Fonts.
-- **PSI mobile après les polices (2026-10-07)** : 2,7 s FCP · 3,5 s LCP · 0 ms TBT · **CLS 0,043** ✔.
-- Reste (optionnel) : LCP 3,5 s > 2,5 s — le paragraphe « Best Parlay » est rendu en JS.
-- LCP = paragraphe « Best Parlay », 1,7 s de délai de rendu (contenu rendu en JS).
+Prêt mais **non déployé** (2026-10-13) : `HockeyLanding` importé directement (`routes.tsx`, l'élément
+LCP est le paragraphe d'introduction de l'accueil) ; Sentry et sonner chargés après coup
+(`sentryImpl.ts`, `ToasterHost.tsx`), bundle principal 161 → 128 ko gzip. Build local : LCP ≈ 2,7 s.
+Écartés : `modulepreload` des chunks de l'accueil (FCP +0,4 s) ; dictionnaire i18n par langue
+(un aller-retour de plus avant le premier rendu pour un francophone).
+
+- [ ] Après déploiement : PSI mobile sur arakice.com pour confirmer (attendu LCP ≈ 2,7-3 s). Vérifier
+      aussi qu'une erreur volontaire (console : `setTimeout(() => { throw new Error("test") })`)
+      arrive dans Sentry avec ses en-têtes filtrés. Ce qui reste : react-router (~90 ko min.) et le
+      dictionnaire i18n, qui servent au premier rendu.
 
 #### 2. Vérifications après le lot du 2026-09-26 · Haute
 
-- [ ] Provoquer une 500 et vérifier que l'événement Sentry affiche `authorization: [Filtered]` et
-      `cookie: [Filtered]`.
+- [ ] Vérifier sur un VRAI événement Sentry du serveur que les en-têtes affichent
+      `authorization: [Filtered]` et `cookie: [Filtered]`. Le code est en place et testé
+      (`scrubEvent`, `instrument.ts` ; `instrument.test.ts` ✔ 2026-10-13). Aucune route ne provoque
+      de 500 en prod : ouvrir dans Sentry n'importe quel événement Node récent (une vraie erreur
+      suffit) → onglet Request → Headers.
 
 #### 3. Appareils réels · Moyenne
 
@@ -565,23 +441,31 @@ Attendu : LCP < 2,5 s, CLS < 0,1.
 
 #### 4. SEO — restes de C4 · Moyenne
 
-- [ ] **Commiter les 53 pages `/matchup/*` hors sitemap corrigées le 2026-10-06** (phrase « only
-      road win » fausse). Les 137 pages du sitemap sont déjà justes en prod. `seo:gen` ne repasse pas
-      sur les paires sorties de l'horizon de 3 semaines.
-- [ ] Titres trop longs, tronqués par Google au-delà d'environ 60 caractères : `/matchup/*`
-      (70–85 c, `seo-gen.mjs`) et pages `/fr/match/*` (jusqu'à 96 c, `gameday-gen.mjs`).
-- [ ] Descriptions de 176 à 191 caractères sur `/nhl-predictions-today`, `/best-nhl-picks-today`,
-      `/nhl-ai-predictions` et `/best-nhl-betting-software` (à garder sous 160).
 - [ ] Le script Cloudflare `static.cloudflareinsights.com/beacon.min.js` est bloqué par la CSP sur
-      chaque page (une erreur console partout, Best Practices 92). Couper Web Analytics dans
-      Cloudflare, ou ajouter le domaine à `script-src` et `connect-src`.
+      chaque page (une erreur console partout, Best Practices 92). **Décidé le 2026-10-13 : couper
+      Web Analytics dans Cloudflare** (Analytics & Logs → Web Analytics → arakice.com), la CSP de
+      `client/vercel.json` reste stricte. Puis vérifier : plus d'erreur console sur arakice.com.
 
 #### 5. Après une vraie fréquentation du chat
 
 `npm run moderation:dry-run` (serveur) : relire ce que le filtre aurait refusé.
 
+#### 6. Coupons publics — vérifications après l'activation du 2026-09-30
+
+`PUBLIC_SLIPS_SINCE` est posée ; ces contrôles n'ont jamais été faits. Requêtes `curl` et règles :
+`DEPLOYMENT.md` §7.
+
+- [ ] Un coupon dont le match n'a pas commencé revient avec `legs: null` et `locked: true`.
+- [ ] Aucun coupon antérieur à `PUBLIC_SLIPS_SINCE` n'apparaît pour un tiers.
+- [ ] Le propriétaire voit tout son historique, verrous compris.
+- [ ] Le taux de réussite de l'en-tête est cohérent avec la liste affichée (coupons visibles,
+      pas `user_bets`).
+- [ ] Sous 10 paris tranchés, aucun pourcentage n'est affiché.
+
 ### 3.8 Technical deadlines
 
+- [ ] **Before 2027-10-09**: renew the Apple Distribution certificate and the `ArakIce App Store`
+      profile (both expire that day), then the GitHub secrets — `docs/ios/CI_SETUP.md` §1–3.
 - [ ] `@sentry/node` 11 — later, not before its first patch releases. Its `dataCollection`
       default sends request bodies, cookies and SQL: set it explicitly when upgrading.
 
@@ -598,6 +482,8 @@ Attendu : LCP < 2,5 s, CLS < 0,1.
 
 ### 3.10 Low-priority code polish (post-freeze)
 
+- Dead code: the `referee` entry of `client/.../factorDescriptions.ts` (the « Arbitrage (PP) »
+  totals factor was removed on 2026-10-12; `refereeStore` still feeds the PIM props).
 - Kept on purpose: two routers on `/api/users` (merge moves public URLs — after the iOS freeze,
   see `app.ts`) · server starting without a DB (readiness 503 keeps Railway from routing to it —
   correct) · `backdrop-filter` on the nav (measure on a device first) · friendship/following
@@ -612,8 +498,7 @@ Attendu : LCP < 2,5 s, CLS < 0,1.
 
 ### 3.12 Real bet365 odds + Best Bets ranking (added 2026-09-25)
 
-> **Deferred past the iOS freeze (2026-10-07).** Changes the Best Bets screen and `odds.routes.ts`:
-> ship it as a shared change, tested on web and in the iOS shell.
+> Was deferred past the iOS freeze; with iOS on hold (2026-10-14) it can ship on the web now.
 
 Context: **The Odds API has no bet365 for the NHL.** Its only bet365 key is `bet365_au`
 (Australia, AFL/NRL only). So `oddsClient.ts` never finds `bet365` and `pickBookmaker` falls back
@@ -695,6 +580,11 @@ Carried over from `RESTE_A_FAIRE.md`, `PRE_IOS_PLAN.md` (deleted — `git show 0
 - No staging (decided 2026-09-26): QA on production uses throwaway accounts, and Pro is granted by
   promo code, never by a real payment. Delete the throwaway accounts afterwards (Settings → delete).
 - Test auth on the real domain, not on a `*.vercel.app` preview (third-party cookie there).
+- Bookmaker buttons are OFF on the web too (R10, 2026-10-09): `VITE_BOOKMAKER_LINKS`, default off.
+  Set it to `true` in Vercel only once there is an affiliate deal — never in the iOS build.
+- A leaked secret: rotate it at its provider, then update Railway / Vercel / GitHub. Never
+  change `ENCRYPTION_KEY` without decrypting with the old key and re-encrypting (stored OpenAI
+  keys). gitleaks runs in CI. Git history purge: abandoned on purpose (would break cited SHAs).
 - The support Gmail is `support.arakice@gmail.com`; the dead one was `arakice.support@gmail.com`. Do not "fix" one into the other.
 
 **Code**
@@ -706,6 +596,10 @@ Carried over from `RESTE_A_FAIRE.md`, `PRE_IOS_PLAN.md` (deleted — `git show 0
 - Live game markets carry NO `factors` / `pctScale`: the client would otherwise recompute every
   tile from pre-game factors and user weights, erasing the score. A new game market must handle
   the `live` branch of `computeGameMarkets` (value from the live grid, 0/100 when decided).
+- AI analysis (`EXPLAIN_BET_V2`, `llmAnalysis.ts`) writes only from the FAITS block computed by the
+  code; no pattern enters it. A descriptive fact ever added to FAITS carries the label
+  « historique, non prédictif », its n and its interval. The legacy `EXPLAIN_BET` prompt forbids
+  head-to-head, weekday, arena, month and player-vs-team trends.
 - Live predictions are informational only: never let them touch settlement, `locks_at` or the
   started-game refusal in `slip.service.ts`.
 - Live display rule (owner, 2026-10-01): a number recalculated on the game state = `live: true` =
@@ -751,8 +645,9 @@ Carried over from `RESTE_A_FAIRE.md`, `PRE_IOS_PLAN.md` (deleted — `git show 0
 |---|---|
 | `STATUS.md` | This file — what remains |
 | `PROJECT_CONTEXT.md` | Architecture, conventions, API, setup |
-| `DEPLOYMENT.md`, `MONITORING.md`, `BACKUP_DR.md`, `SECRET_ROTATION.md`, `SAISIE_MANUELLE.md` | Runbooks |
-| `APPLE_PLAN.md` | iOS roadmap (not started) |
+| `DEPLOYMENT.md`, `MONITORING.md`, `BACKUP_DR.md`, `SAISIE_MANUELLE.md` | Runbooks |
+| `APPLE_PLAN.md` | iOS roadmap — what remains of it (live checklist: §3.4) |
+| `docs/ios/*` | App Store Connect answers, listing, IAP setup, CI signing, review notes |
 | `ml/EXPLICATION_ML.md` | How every ML number is computed |
 | §8 of this file | ML measured conclusions + ML code map (was `ml/REFACTOR_PLAN.md`) |
 | `loadtest/*`, `loadtest/qa-dynamic/` | Load-test and dynamic QA procedures |
@@ -770,6 +665,7 @@ them with `git show <commit>:<path>`:
 | Full versions of the trimmed plans, `STATUS.md` §1 « DONE » | `git show 0916b52:<path>` |
 | `ml/REFACTOR_PLAN.md`, `QA_TEST_PLAN.md`, `LIVE_PREDICTIONS_PLAN.md`, `AUDIT_SCALABILITE_COUTS.md` (merged into §3.5–3.7 and §8 on 2026-10-07) | `git log -p -- <path>` (code comments still cite them) |
 | `AUDIT_PRE_FREEZE_IOS.md`, `PRODUCTION_READINESS_AUDIT.md` | deleted 2026-09-24 |
+| `SECRET_ROTATION.md` (rule kept in §6), finished parts of `APPLE_PLAN.md` and the runbooks | `git show 1b03631:<path>` (deleted / trimmed 2026-10-14) |
 | `RESTE_A_FAIRE.md` | `git show 4d1cbcd~1:RESTE_A_FAIRE.md` |
 
 ---
@@ -807,6 +703,11 @@ du temps perdu ; les ignorer serait pire.
 | « CAR perd contre certaines équipes » — équipe × adversaire ? | **Bruit.** Ex. CAR–NYR 6-26 sur 2012-19, puis 12-7 sur 2020-25. Persistance de la famille −0.04 (336 paires). Les effectifs changent ; le bon niveau est l'alignement + le gardien, pas le logo. | Pilote 2026-10-12. |
 | Effets joueur × jour / adversaire / aréna / mois ? | **Bruit.** Persistance 0.03 / 0.02 / 0.05 (aréna hors domicile) / 0.01 ; les 50 cellules les plus fortes passent de ×1.54 à ×1.006 (jour). Contrôle positif : la finition (buts − xG) persiste à 0.58. Caufield samedi : 63 buts en 103 matchs vs 0.40/match les autres jours (p 0.01), mais 6 060 tests, 0 BH ; valeur prédictive estimée **+0 %, au plus +5 %**. | `--players`, A ≤ 2019 < B. |
 | Tireur × gardien précis ? | **Faible, non tranché.** Paires ≥ 2 buts attendus par période (325) : persistance 0.15, top-50 ×1.82 → ×1.20 ; ≥ 1 : 0.05. Biais d'aréna non exclu. Candidat au registre. | `--shooter-goalie`, 1,15 M tirs 2015-25. |
+| L'équipe SEULE en back-to-back est-elle mal pricée ? | **Un peu, non exploitable en l'état.** La chaîne servie est calibrée en 2015-19 mais trop haute en 2020-26 (43.3 % annoncé, 40.5 % réel, z −2.24) — moins que le marché (44.9 %, z −3.12). Value bets servis SUR elle : ROI −9.4 % ± 7.1 (234) ; CONTRE elle +7.9 % ± 4.0 (517). Terme b2b ajouté en walk-forward : **non tranchable** (z −0.02). Aucun changement de modèle → candidat `lone_b2b_vs_market` (P3). | `measure_b2b_value.py`, `b2b_value_report.json` (2026-10-12). |
+| La synergie des trios / paires de défense persiste-t-elle ? | **Non** pour les trios (corr d'une saison à l'autre 0.02, n 477 ; top 10 % +13.2 → +2.3 pts) : la « somme des joueurs » (`lineup_xg`) suffit. **Faible** pour les paires (0.12, n 1 210) — trop petit pour un match, pas d'intégration. Contrôle positif : 0.38. | `fetch_officials_lines.py` + `measure_lines_refs.py` → `lines_refs_report.json` (2026-10-12). |
+| Les arbitres changent-ils les buts ? | **Non.** Effet réel et stable sur les **pénalités** (corr pairs/impairs 0.82) et le temps en AN (0.81), **aucun sur les buts** (−0.01). Effet arbitre ajouté au total servi : **PIRE** (déviance +0.0043, z +3.86). → facteur « Arbitrage (PP) » RETIRÉ des totaux le 2026-10-12 ; ne pas le remettre sans nouvelle mesure. | Même run, 83 arbitres. |
+| Les arbitres aident-ils les props joueur ? | **PIM : oui — ADOPTÉ** (z 2.55, val ET test, 3 saisons de test sur 3 ; quintile haut ×1.072, bas ×0.959), servi depuis le 2026-10-13. **Points en AN : non** (z 1.74, 2/3) → candidat `ref_pp_points`. Variables `ref_pen` / `ref_pp` sur les matchs PRÉCÉDENTS seulement. | `measure_ref_props.py`, `train_player.py` → `player_ref_report.json`, `ref_effects.json`. |
+| L'avantage numérique en cours améliore-t-il le direct ? | **Non — NON activé (2026-10-13).** Facteurs mesurés stables (5 c. 4 ×2.19, 4 c. 5 ×0.35) mais rejeu 3 890 matchs 2023-26 : log-loss +0.07 %, pire au début du 1er avantage. Cause : pénalités de compensation (62.8 % des pénalités suivantes pour l'équipe en avantage). Clé `pp` retirée de `liveEffects.json`, code inerte. Ne pas activer tel quel ni « seulement en fin de match » ; piste : modéliser les pénalités FUTURES. | `fetch_live_pbp.py`, `calibrate_live_pp.py`, `replay-live-pp.ts`, `live_pp_report.md`. |
 
 > **Sur 2022-23, à savoir avant d'interpréter A2.** Cette saison ne compte que
 > 342 matchs dans `odds.csv`, et ce n'est pas un trou de couverture de la puck

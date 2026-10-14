@@ -68,6 +68,9 @@ server/.purge-backups/
 # Snapshots The Odds API (backfill payant, 2026-09-27) : ~40 Mo par saison,
 # PAYÉS et irremplaçables sans repayer — à sauvegarder hors Git, pas à supprimer.
 ml/data/raw/odds/oddsapi/
+# Play-by-play compacté (fetch_live_pbp.py) et parts du rejeu (replay-live-pp.ts) : régénérables
+ml/data/raw/pbp/
+ml/models/live/pp_replay_parts/
 
 # Sauvegardes automatiques (ex. odds.csv.bak posé par fetch_data_v4.py,
 # odds.csv.backup-2026-08-23). Pas BACKUP_DR.md : le motif exige le point.
@@ -85,3 +88,7 @@ ios-signing/
 *.p12
 *.p8
 *.mobileprovision
+
+# SCAN_TICKET_PLAN — Tesseract (copié depuis node_modules par client/scripts/ocr-assets.mjs) et captures de fixtures (privées)
+client/public/ocr/
+server/src/services/__fixtures__/slipScan/images/

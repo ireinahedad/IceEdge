@@ -381,31 +381,11 @@ appels au lieu d'1).
 
 ---
 
-## 7. Scénarios restants
+## 7. Scénarios S2 à S7
 
-> **Dépassé (2026-09-24)** : S2 à S7 sont couverts par les bancs de `bench/` (§ 8) — voir
-> `git show 0916b52:RAPPORT_TESTS_CHARGE_2026-09-18.md`. Seul reste hors banc : S1 contre une préproduction.
-
-S2 à S7 ne sont pas encore scriptés. Les compteurs les servent déjà tous :
-
-- **S2** (vague de connexions) → `eventLoop.p99Ms` pendant le tir.
-- **S3** (cache froid) → redémarrer le service, 300 requêtes concurrentes sur
-  `best-bets`, vérifier `misses === 1`. Ne pas utiliser `/metrics/reset` : il
-  remet les compteurs à zéro mais **laisse les caches chauds**, ce qui donnerait
-  un faux « 0 exécution ».
-- **S5** (endurance) → échantillonner `memory.rssMb` pendant 2 à 4 h ; il doit
-  atteindre un plateau.
-- **S6** (soirée de matchs) → insérer N tickets pending sur une poignée de
-  matchs, les marquer finaux, déclencher une passe. **Le résultat se lit
-  directement dans le résumé renvoyé par `settlePendingSlips`** : `exhausted`
-  dit si la file a été vidée, `checked`/`settled` donnent le débit. Depuis le lot
-  du 2026-08-02, ce n'est plus le plafond de 200 tickets qui arrête la passe mais
-  `SETTLEMENT_BUDGET_MS` — le test mesure donc un vrai débit et non une constante.
-  Ce qu'il faut surveiller en même temps : `upstream.nhl.calls`, qui doit suivre
-  le nombre de MATCHS distincts et non le nombre de tickets (les caches de passe
-  sont partagés).
-- **S7** (budget) → `upstream.*.calls` sur 24 h, extrapolé à 30 jours et comparé
-  aux quotas des plans.
+Couverts par les bancs de `bench/` (§ 8) depuis le 2026-09-24 — rapport :
+`git show 0916b52:RAPPORT_TESTS_CHARGE_2026-09-18.md`. Seul reste hors banc : S1 contre une
+préproduction (il n'y en a pas).
 
 ---
 

@@ -4,7 +4,7 @@
 # 1. VRAI SECRET : clé API Resend (re_…) commitée dans server/.env.example le
 #    2026-07-05, retirée le 2026-07-06 (1ee8961) mais toujours dans l'historique.
 #    N'ajouter cette ligne qu'APRÈS avoir révoqué la clé sur resend.com/api-keys
-#    et mis la nouvelle dans Railway (RESEND_API_KEY) — voir SECRET_ROTATION.md.
+#    et mis la nouvelle dans Railway (RESEND_API_KEY) — voir STATUS.md §6.
 9e00a2181c531ae2a6f98fda97c3acef68641aa9:server/.env.example:generic-api-key:38
 #
 # 2. Faux positif : `?token=abc123def456` dans un badge CircleCI du README NestJS

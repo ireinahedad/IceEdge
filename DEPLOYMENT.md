@@ -2,13 +2,6 @@
 
 Architecture : **Vercel** (frontend) + **Railway** (Node.js + Python) + **Neon** (PostgreSQL) + **Cloudflare R2** (avatars)
 
-> **Note.** Ce guide a longtemps décrit Supabase. La base de production est
-> **Neon** (§1 ci-dessous) : c'est son *scale-to-zero* qui rend le job de
-> règlement événementiel rentable — la base s'endort hors des heures de match.
-> Un seul hébergeur Postgres est nécessaire ; si un projet Supabase traîne
-> encore, le supprimer **après** avoir vérifié que le `DATABASE_URL` de Railway
-> pointe bien sur Neon.
-
 ---
 
 ## 1. Neon — Base de données
@@ -56,11 +49,7 @@ temps d'attente d'acquisition d'une connexion à l'appui.
 
 ### Budget compute — le scale-to-zero protège désormais la facture, plus la disponibilité
 
-> ⚠️ **Réécrit le 2026-08-30.** Ce paragraphe raisonnait sur le **plan gratuit**
-> de Neon. Le projet est en réalité sur **Launch** (« Free limits are removed »,
-> relevé dans la console le 2026-08-29), et le sens du risque **s'inverse**.
-
-| | Plan gratuit (ce que disait ce §) | **Launch — la réalité** |
+| | Plan gratuit | **Launch — le plan du projet** |
 |---|---|---|
 | Compute | 100 CU-h/mois inclus | **aucune allocation incluse — 0,106 $/CU-heure** |
 | Stockage | 0,5 Go inclus | **aucune allocation incluse — 0,35 $/Go-mois** |
@@ -85,10 +74,6 @@ la stack qui ne peut pas se couper toute seule. Voir `MONITORING.md`.
 événementiel décrit ci-dessous (~61 CU-h/mois) vaut **≈ 6,5 $/mois** — 6 $
 correspondent à ~57 CU-h. À relever d'un cran dès que la saison aura donné une
 consommation réelle, sinon l'alerte devient du bruit qu'on apprend à ignorer.
-
-**Le 0,55 CU-h relevé depuis le 1er août ne vaut plus rien** : il a été mesuré
-avec `DORMANT=true`, donc sans un seul job de fond. `DORMANT=false` depuis le
-2026-08-29.
 
 **Le stockage n'est plus gratuit non plus** — 0,35 $/Go-mois dès le premier
 octet. Les data-URI d'avatars restées en base (ligne E de l'audit) sont
@@ -140,8 +125,8 @@ Ce que ça implique :
 - **Ne pas oublier de repasser à `false`** avant le premier match de la saison.
 
 ### Rétention / PITR
-Dashboard → **Settings → History retention** : porter la fenêtre à **≥ 7 jours**
-(voir `BACKUP_DR.md`). C'est ce qui permet de restaurer à un instant précis.
+Dashboard → **Settings → Postgres → History window** : **1 jour** (décidé le 2026-09-26 ;
+7 jours max sur Launch). C'est ce qui permet de restaurer à un instant précis — voir `BACKUP_DR.md`.
 
 ---
 
@@ -581,7 +566,7 @@ curl -X POST https://[TON-BACKEND].railway.app/api/predict/ml \
 ### Checklist finale
 - [ ] Neon : schéma + migrations appliqués (`npm run db:migrate:all`), connexion vérifiée
 - [ ] `DATABASE_URL` pointe sur l'endpoint **pooled** (`-pooler` dans le nom d'hôte) — vérifier l'absence d'avertissement au démarrage
-- [ ] Neon : rétention d'historique ≥ 7 jours
+- [ ] Neon : fenêtre d'historique à 1 jour (voir `BACKUP_DR.md`)
 - [ ] Neon : après quelques heures sans trafic, le dashboard montre le compute **suspendu** (sinon un job réveille la base trop souvent — voir « Budget compute »)
 - [ ] Monitoring : sondes `/health/ready` à **5 min**, pas 1 min (`MONITORING.md`)
 - [ ] Cloudflare R2 : les 5 variables `R2_*` définies, un changement d'avatar renvoie bien une URL et non une data-URI
@@ -603,8 +588,8 @@ curl -X POST https://[TON-BACKEND].railway.app/api/predict/ml \
 
 ## 7. Mise en service des coupons publics (page joueur)
 
-Fonctionnalité livrée le 2026-08-09 et **inerte tant que `PUBLIC_SLIPS_SINCE`
-n'est pas renseignée**. Cette section est la procédure d'allumage.
+**Active depuis le 2026-09-30** (`PUBLIC_SLIPS_SINCE=2026-09-30T00:00:00Z` sur le service Node).
+Les vérifications après allumage restent à faire : `STATUS.md` §3.7.
 
 ### Ce que ça fait
 
@@ -671,50 +656,17 @@ antérieurs à la persistance par jambe s'affichent `—`.
 (`BetBuilderPage`) est ce qui rend le consentement éclairé — pas les CGU, que
 personne n'ouvre.
 
-### Deux verrous, à ouvrir dans cet ordre
+### Deux verrous
 
-| Verrou | Effet fermé | Comment on l'ouvre |
-|---|---|---|
-| `show_slips` (colonne) | Le joueur n'apparaît pas | Migration **030** — passe le défaut à TRUE |
-| `PUBLIC_SLIPS_SINCE` (env) | **Aucun** coupon visible à un tiers, quel que soit `show_slips` | Variable d'environnement sur Railway |
+| Verrou | Effet fermé |
+|---|---|
+| `show_slips` (colonne, défaut TRUE depuis la migration 030) | Le joueur n'apparaît pas |
+| `PUBLIC_SLIPS_SINCE` (env Railway) | **Aucun** coupon visible à un tiers, quel que soit `show_slips` |
 
-La migration 030 peut être appliquée **des semaines avant** l'allumage : sans la
-variable, elle n'expose rien. C'est voulu — ça décorrèle le déploiement du schéma
-du choix de la date, et ça rend la bascule réversible en une variable.
-
-### Procédure
-
-1. **Vérifier que le code est déployé** (client + serveur) et que
-   `PUBLIC_SLIPS_SINCE` est absente. Au démarrage du serveur, la première lecture
-   d'une page joueur doit produire :
-   `[profile] PUBLIC_SLIPS_SINCE absente ou invalide — aucun coupon n'est visible`.
-2. **Appliquer les migrations** : `npm run db:migrate:all` (029 + 030).
-3. **Prévenir les joueurs** — fait le 2026-09-30 : aucun vrai joueur à prévenir
-   (comptes de test seulement). Le script `notify-slips-visibility.ts` et le courriel
-   `sendSlipsVisibilityNotice` ont été retirés le 2026-10-05 ; pour les reprendre :
-   `git show 0916b52:server/scripts/notify-slips-visibility.ts`. Contenu minimal : ce qui devient visible, à partir
-   de quand, que rien d'antérieur ne le sera, et où se retirer (Paramètres →
-   Confidentialité). À envoyer **avant** l'étape 4.
-
-   > **Décidé le 2026-08-09 : pas de bandeau in-app.** L'avis passe uniquement par
-   > le courriel. Conséquence assumée — les comptes qui ne lisent pas leurs
-   > courriels découvriront le changement en ouvrant les Paramètres. La divulgation
-   > au moment de la soumission du coupon (`BetBuilderPage`) reste le filet : elle
-   > est vue par tous ceux qui déposent un coupon, donc par tous ceux qui sont
-   > concernés.
-4. **Poser la variable** sur Railway (service Node), au format ISO 8601 :
-   `PUBLIC_SLIPS_SINCE=2026-09-30T00:00:00Z`
-   Viser le **début de saison NHL** : allumer en septembre donnerait des pages
-   vides pendant trois semaines.
-
-   > **Décidé le 2026-09-30** : la saison 2026-27 a commencé le 29 septembre
-   > (pas début octobre comme prévu) et il n'y a **pas encore de vrais
-   > utilisateurs** — seulement des comptes de test. Date d'ouverture : le
-   > **2026-09-30**, sans préavis d'une semaine. L'étape 3 se limite à la
-   > simulation : si elle ne liste que des comptes de test, **pas de `--send`**.
-   > Dès qu'il y aura de vrais comptes, toute nouvelle date suit la procédure
-   > complète (courriel d'abord, variable ensuite).
-5. **Redéployer** le service Node (Railway relance sur changement de variable).
+**Changer la date** une fois qu'il y a de vrais comptes : prévenir les joueurs par courriel
+**avant** de poser la nouvelle valeur (ce qui devient visible, à partir de quand, que rien
+d'antérieur ne le sera, et où se retirer : Paramètres → Confidentialité). Pas de bandeau in-app
+(décidé le 2026-08-09). Le script d'envoi a été retiré : `git show 0916b52:server/scripts/notify-slips-visibility.ts`.
 
 ### Vérifications après allumage
 
@@ -731,14 +683,7 @@ curl -H "Authorization: Bearer $FREE_TOKEN" \
 # → 403 SLIPS_HIDDEN (code distinct : l'abonnement n'est pas en cause)
 ```
 
-À contrôler à l'œil, une fois :
-
-- [ ] Un coupon dont le match n'a pas commencé revient avec `legs: null` et `locked: true`
-- [ ] Aucun coupon antérieur à `PUBLIC_SLIPS_SINCE` n'apparaît pour un tiers
-- [ ] Le propriétaire voit bien tout son historique, verrous compris
-- [ ] Le taux de réussite de l'en-tête est cohérent avec la liste affichée
-      (calculé sur les coupons visibles, pas sur `user_bets`)
-- [ ] Sous 10 paris tranchés, aucun pourcentage n'est affiché
+Les contrôles à l'œil sont dans `STATUS.md` §3.7.
 
 ### Retour arrière
 

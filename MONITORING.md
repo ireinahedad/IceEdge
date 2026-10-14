@@ -22,6 +22,9 @@ The Python ML service exposes `GET /health`.
 
 ## Uptime monitoring (UptimeRobot or Better Stack)
 
+> **No monitor is active since 2026-10-05**: UptimeRobot was removed because its probes used too
+> much Railway compute. If one comes back, follow this section.
+
 Create HTTP(S) monitors, **5 min interval** (not 1 min — see the note on Neon
 below):
 
@@ -79,7 +82,7 @@ reste le temps de comprendre d'où vient la consommation.
    agit tout seul. Pour un projet à une personne, c'est la différence entre une
    mauvaise surprise et une facture qui ne peut pas arriver.
 
-Contexte chiffré et raisonnement complet : `AUDIT_SCALABILITE_COUTS.md`.
+Contexte chiffré et raisonnement complet : `git show 8ec98f0:AUDIT_SCALABILITE_COUTS.md`.
 
 ## Notes
 

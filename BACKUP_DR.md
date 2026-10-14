@@ -8,27 +8,19 @@ Scope: the PostgreSQL database is the only stateful, irreplaceable component. Ev
 |---|---|---|
 | **RPO** (max data loss) | ≤ 5 min | Point-in-time recovery, not just nightly dumps |
 | **RTO** (max downtime) | ≤ 1 hour | Time to restore service after a disaster |
-| Backup retention | **1 day** PITR on Neon (decided 2026-09-26; 7 days max on Launch, ~0.005 $/month at today's size) | A problem noticed more than 24 h later cannot be undone from Neon — the weekly off-provider dump (§2) is the only fallback |
+| Backup retention | **1 day** PITR on Neon (decided 2026-09-26; 7 days max on Launch, ~0.005 $/month at today's size) | A problem noticed more than 24 h later cannot be undone — there is no off-provider dump (§2) |
 
-## 1. Enable managed backups (do this now)
+## 1. Managed backups
 
-Production runs on **Neon** (see `DEPLOYMENT.md` §1) — confirm it's ON:
+Production runs on **Neon** (see `DEPLOYMENT.md` §1): point-in-time restore inside the history
+window (1 day), production branch protected. How to check and rehearse it: §5.1.
 
-- **Neon (production):** Settings → History retention gives PITR by default; set the window to **≥ 7 days**. Branching also lets you restore into a throwaway branch and inspect before promoting.
-- **Railway** (if you ever fall back to its Postgres plugin): daily snapshots only; enable/verify retention. No PITR.
+## 2. No off-provider dump — decided 2026-10-14
 
-> Whatever the host, confirm in the dashboard that at least one successful backup exists **today**. An unverified backup is not a backup.
-
-## 2. Add an independent off-provider dump (defense in depth)
-
-Managed backups protect against data corruption but not account loss or provider outage. Take a weekly logical dump to separate storage (e.g. S3/R2):
-
-```bash
-pg_dump "$DATABASE_URL" --format=custom --no-owner --file=iceedge-$(date +%F).dump
-# upload iceedge-YYYY-MM-DD.dump to object storage with lifecycle expiry
-```
-
-Automate it (a scheduled job / GitHub Action with the connection string as a secret). Keep 4 weeks.
+A weekly `pg_dump` to separate storage was planned and never automated; it is **abandoned**.
+Accepted risk: losing the Neon account or the provider means losing the data. If it is ever
+reopened: `pg_dump "$DATABASE_URL" --format=custom --no-owner`, weekly, 4 weeks kept, restore with
+§3.B.
 
 ## 3. Restore procedure
 
@@ -38,7 +30,7 @@ Automate it (a scheduled job / GitHub Action with the connection string as a sec
 3. Update `DATABASE_URL` on the server to point at the restored instance; redeploy.
 4. Run smoke checks (below), then cut traffic over.
 
-**B. From a logical dump (provider loss):**
+**B. From a logical dump (only if §2 is ever reopened):**
 ```bash
 # Provision a fresh Postgres, then:
 pg_restore --no-owner --clean --if-exists --dbname="$NEW_DATABASE_URL" iceedge-YYYY-MM-DD.dump
@@ -62,7 +54,7 @@ cd server && npm run db:migrate:all   # schema.sql + all migrations (idempotent)
 
 ## 5. Rehearse (before you rely on it)
 
-Do a **restore drill** once before launch and quarterly after: restore the latest backup into a scratch database, run the smoke checks, and time it against the RTO. A backup you have never restored is a hope, not a plan.
+Do a **restore drill** quarterly (first one passed 2026-09-26, §5.3): restore the latest backup into a scratch database, run the smoke checks, and time it against the RTO. A backup you have never restored is a hope, not a plan.
 
 ### 5.1 Neon drill — step by step (Launch plan)
 
@@ -119,5 +111,5 @@ the same connection string and saves the pre-restore state as a backup branch, s
 ## 6. Related risks tracked in the audit
 
 - `ENCRYPTION_KEY` loss = permanent loss of stored OpenAI keys (users just re-enter them; not catastrophic, but note it).
-- Migration ledger: done — `migrate-all.ts` records applied files in `schema_migrations`, so re-running `db:migrate:all` after a restore only applies what is missing.
+- Migration ledger: `migrate-all.ts` records applied files in `schema_migrations`, so re-running `db:migrate:all` after a restore only applies what is missing.
 - Restore drill and rollbacks (Neon, Railway, Vercel) first run 2026-09-26 (§5.3). Repeat quarterly.

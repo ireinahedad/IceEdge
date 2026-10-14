@@ -1,8 +1,8 @@
 # Abonnement Pro sur iOS — mise en place (APPLE_PLAN Phase 5)
 
 **Créé :** 2026-10-11. Le code est fait (StoreKit 2 direct, sans RevenueCat). Ce qui reste
-se fait à la main, dans cet ordre. Sans les étapes 1 à 3, l'écran /pro sur iPhone affiche
-« Les abonnements ne peuvent pas être chargés » et la review échoue.
+se fait à la main, dans cet ordre. Sans les étapes 2 et 3, l'écran /pro sur iPhone affiche
+« Les abonnements ne sont pas encore disponibles sur l'App Store » (StoreKit répond, mais sans produit — ce n'est pas le réseau ; le message « Vérifiez votre connexion » est réservé aux vraies erreurs, avec le détail d'Apple dessous) et la review échoue.
 
 ## Ce que fait le code
 
@@ -18,17 +18,7 @@ se fait à la main, dans cet ordre. Sans les étapes 1 à 3, l'écran /pro sur i
 Un abonné web est Pro sur iPhone et inversement. Sur iOS : pas d'essai web sans carte, pas de
 code promo, pas de Stripe (Guideline 3.1.1).
 
-## DONE. 1. Contrats, banque, fiscalité (bloquant, plusieurs jours)
-
-App Store Connect → **Business** (anciennement « Agreements, Tax, and Banking ») :
-- accepter le **Paid Apps Agreement** ;
-- ajouter le compte bancaire ;
-- remplir les formulaires fiscaux (W-8BEN pour une personne hors États-Unis, et le formulaire canadien si demandé).
-
-Tant que le contrat n'est pas « Active », les produits ne se chargent pas, même en Sandbox.
-
-Ensuite, s'inscrire au **App Store Small Business Program** (commission de 15 % au lieu de 30 %) :
-developer.apple.com/app-store/small-business-program.
+## 1. Contrats, banque, fiscalité, Small Business Program — faits
 
 ## 2. Groupe d'abonnement et produits
 

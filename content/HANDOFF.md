@@ -581,11 +581,6 @@ du jour suivrait avec, et ses boutons de copie fonctionnent aussi sur mobile.
 
 ## 8. Points ouverts
 
-- **Transfert vers le téléphone.** La page du jour existe (étape 7), mais elle
-  s'ouvre sur l'ordinateur : reste à décider comment les mp4 arrivent sur le
-  téléphone. Un dossier Dropbox ou Drive synchronisé sur `content/output/` est le
-  moins pénible — et rendrait `index.html` consultable depuis le téléphone, ses
-  boutons de copie compris.
 - **`#utahmammoth` à vérifier** sur le compte officiel de la franchise. Un
   hashtag d'équipe périmé signale un compte qui ne suit pas la ligue.
 - **Règles des plateformes sur le contenu lié aux paris** — à relire avant le
@@ -593,8 +588,8 @@ du jour suivrait avec, et ses boutons de copie fonctionnent aussi sur mobile.
   autant connaître la ligne.
 - **`faceoffs_taken`** à ajouter dans `build-content-insights.ts` pour remplacer
   le filtre par position.
-- **Facteurs non testés sur les totaux** — gardiens partants, rythme de jeu,
-  arbitres.
+- **Facteurs non testés sur les totaux** — gardiens partants, rythme de jeu
+  (les arbitres ont été mesurés : aucun effet sur les buts, `STATUS.md` §8.1).
 
 ### Écartés volontairement
 
