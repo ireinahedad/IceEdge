@@ -779,6 +779,24 @@ async function decideLeg(
       return (sel === 'yes') === (ppAgainst === 0) ? 'win' : 'loss';
     }
 
+    /**
+     * Double chance sur 60 minutes (2026-10-15). `no_draw` : l'une des deux
+     * gagne en 60 minutes. Sinon l'équipe choisie gagne en 60 minutes OU le
+     * match est à égalité après 60 (prolongation) — l'issue de la prolongation
+     * ne compte pas.
+     */
+    case 'double_chance': {
+      const noDraw = String(leg.selectionValue ?? '').trim().toLowerCase() === 'no_draw';
+      const pick = noDraw ? null : pickTeam(leg, game);
+      if (!noDraw && !pick) return 'void';
+      const past = await wentPastRegulation(game, String(leg.gameId), cache, scoringCache);
+      if (past == null) return 'unknown';
+      if (noDraw) return past ? 'loss' : 'win';
+      if (past) return 'win';
+      if (hs === as) return 'void';
+      return pick!.sel === (hs > as ? homeId : awayId) ? 'win' : 'loss';
+    }
+
     /** Vainqueur après 60 minutes. Le miroir exact de `ot_so_winner`. */
     case 'regulation_result': {
       const pick = pickTeam(leg, game);

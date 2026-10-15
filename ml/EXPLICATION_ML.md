@@ -559,6 +559,23 @@ tirs, mises en échec, tirs bloqués, minutes de pénalité, points en AN.
 
 ---
 
+- **Recalage de niveau dans la saison** (2026-10-15, `explore_players/level.py` → `player_level_report.json`) : entraîné ≤ 2021-22, le modèle suit mal les dérives de ligue. Par statistique, k de la saison en cours = Σ observé / Σ prévu sur les matchs déjà joués, rétréci vers 1 (`level_k`, n0 choisi en validation). Règle posée avant le run (mieux en validation 2022-23 ET en test 2023-26, z ≥ 2) : **adopté** pour tirs bloqués (z 6,5), mises en échec (z 5,0) et points (z 2,2) ; pas pour buts, passes, tirs (z 1,7), pénalités, points en AN. `train_player.refresh_player_level` écrit `player_level_layer.json` ; `ml_service` multiplie les cadences servies par k (fichier d'une autre saison → k = 1).
+- **État rafraîchi chaque semaine** (2026-10-15) : `refresh_data.py` garde le zip COMPLET des patineurs de la saison en cours (`data/raw/skaters_<saison>_current.zip`) et relance `train_player.refresh_state()` (état + recalage). Avant, l'état restait figé à la fin de la saison précédente (16 avril 2026) : aucun match de la saison en cours n'entrait dans les features du modèle joueur.
+
+### 4.5 Le modèle de tirs (`train_shots.py`, 2026-10-15)
+
+Deuxième quantité d'équipe à côté des buts : **λ_tirs**, les tirs cadrés
+attendus de chaque équipe sur le match entier (prolongation comprise).
+
+- **Forme** : XGBoost `count:poisson` sur les lignes équipe-match, comme le modèle de score. Côté attaque : tirs pour, xG, possession (`ev_cf_pct`), AN, buts, forme, repos, xG de l'alignement. Côté défense : tirs contre, xG contre, possession, PK, forme, repos, gardien. Plus domicile et écart d'ELO. Même découpage que `train_score.split`.
+- **Recalage de niveau** : les tirs baissent depuis 2022-23 (31,3 → 26,9 par équipe-match). λ_tirs est donc recalé dans la saison, exactement comme les buts (`level_k`, 200 matchs fictifs). Le fichier `shots_level_layer.json` est rafraîchi par `refresh_data.py` (étape 5ter).
+- **À quoi il sert : les arrêts du gardien.** μ_arrêts = λ_tirs(adversaire) × % d'arrêts du gardien (état d'inférence) × 0,970. Ce coefficient, ajusté sur la validation, couvre le partant qui ne finit pas le match. La dispersion est une binomiale négative avec k = 50. Le paquet renvoie μ pour chaque gardien suivi des deux équipes, au cas où il partirait.
+- **Mesure** (règle posée avant le run, test de mars 2023 à octobre 2026) :
+  - Tirs d'équipe contre la règle « tirs pour × tirs contre / ligue » : Δ log-vraisemblance +0,036, z 9,3.
+  - Arrêts contre la règle de `playerRates.ts` : Δ +0,061, z 11,8. Pour « plus de 24,5 arrêts », la règle prévoyait 43 %, le modèle 54 %, et on observe 53 % (de même 29 / 37 / 37 % à 27,5 et 22 / 26 / 27 % à 29,5).
+  - Tirs d'un patineur tirés de λ_tirs (part du joueur) : **rejeté** (z −5,1, `explore_shots/`). Le modèle joueur reste leur source.
+- Mises en échec et tirs bloqués ne sont pas dérivés de λ_tirs : aucune mesure ne l'a justifié.
+
 ## 5. Des deux λ à chaque marché de paris
 
 Tout part de la matrice M (14 × 14, de 0 à 13 buts par équipe) :
@@ -771,7 +788,9 @@ Règle par défaut, pour chaque joueur et statistique :
 ```
 
 Si le paquet ML porte des cadences du **modèle joueur**, elles **remplacent**
-la règle pour ce joueur (sauf gardiens et recrues inconnues). Les seuils
+la règle pour ce joueur (sauf recrues inconnues). Les **arrêts d'un gardien**
+viennent du **modèle de tirs** (§4.5) quand le paquet en porte pour lui
+(`goalieSaves`, k `savesDispersion`) ; sinon la règle. Les seuils
 « 1+, 2+, 3+ » sont ensuite lus côté client avec une binomiale négative de
 paramètre k. Premier buteur : `(λ_buts du joueur / λ_buts du match) × (1 − e^(−λ_match))`, où λ_match = λ_dom + λ_ext du modèle de score quand le paquet ML est disponible (sinon l'estimation des règles).
 
@@ -801,6 +820,11 @@ probabilité : c'est un classement des issues **les plus probables**, pas des
 paris les plus rentables ; l'EV au prix du livre (`ev`) est donnée pour
 information quand un prix existe.
 
+
+### 7.5 bis Premier but, dernier but, marque à chaque période, double chance (2026-10-15)
+
+- **Premier but, dernier but, marque à chaque période** : joués par le moteur de match (`game_dynamics.team_events`, états augmentés de qui a marqué en premier / en dernier et de qui a marqué dans chaque période ; but de prolongation compté dans 64,9 % des prolongations, fusillade exclue comme au règlement). Mesuré contre les formules qu'ils remplacent (`explore_score/s8_marches_equipe.py`) : jamais moins bons, gain sous le seuil (z 0,2 / 1,9 / 1,7) — servis pour la cohérence avec le reste de la grille ; formules en repli sans `game_dynamics.json`.
+- **Double chance (60 minutes)** : nouveau marché `double_chance`. Sélection = une équipe (« elle gagne en 60 OU égalité après 60 ») ou `no_draw` (« l'une des deux gagne en 60 »). Service ML : lu sur la grille (1X = 1 − « l'adversaire gagne en 60 », 12 = 1 − P(nul à 60')). Page match : groupe « Double Chance » recombiné depuis les tuiles finales de Match Betting. Coupon : trois options dans le sélecteur. Règlement : sur le score après 60 minutes. Non branché dans les corrélations du coupon (multiplié, signalé).
 
 ### 7.6 Le coupon d'un même match — `parlayProbability.ts`, `prediction/gameParlay.ts`
 
@@ -845,7 +869,7 @@ considérer comme un pari sur un petit avantage non prouvé.
 | Avant un backtest sur les cotes récentes | `npm run odds:export-snapshots` (dans `server/`, avec la `DATABASE_URL` de production) | Écrit `ml/data/odds_snapshots_live.csv` : la collecte live, tous livres. Le backtest la lit en plus du backfill et juge chaque livre séparément (BET99 aura sa propre ligne dans `--served` quand il aura assez de matchs). |
 | Chaque semaine (tâche planifiée Windows `ml/refresh-data.cmd`) | `python refresh_data.py` | Nouvelles données de la saison en cours → `inference_state.json`, `elo_ratings.json`, le recalage de niveau de la saison → `level_layer.json`, et le moteur de match → `game_dynamics.json`. **Mêmes modèles.** Il faut ensuite committer ces 4 fichiers et pousser (le service embarque `ml/models/` dans son image). |
 | Moteur de match seul | `python game_dynamics.py` (`--check` pour contrôler le fichier en place) | Réécrit `game_dynamics.json` : τ glissant + table c sur les 3 dernières saisons complètes. Aussi lancé à la fin de `train_score.py`. |
-| Réentraînement (mensuel) | `python build_dataset.py && python train_score.py && python train.py && python train_player.py` | Nouveaux modèles + rapports. |
+| Réentraînement (mensuel) | `python build_dataset.py && python train_score.py && python train.py && python train_player.py && python train_shots.py` | Nouveaux modèles + rapports. |
 | Couche de correction | `python backtest_walkforward.py --correction --write-layer` | Réécrit `correction_layer.json` seulement si le verdict est « ADOPTER ». |
 | Recalage de niveau (re-mesure) | `python live_pregame.py && python measure_level.py` | Réécrit `level_report.json` (verdict, force n0). `refresh_data.py` le lit : verdict « REJETER » → k = 1. |
 | Contrôles | `python backtest.py`, `python backtest_walkforward.py [--clv|--derived|--market-gap]` | Rapports dans `ml/models/*_report.json`. |
@@ -889,6 +913,7 @@ période plus de 1,5 buts 63,8 % au lieu de 58,9 % avec la part fixe).
 | `game_dynamics.py` | **Moteur de match** (§4.1.4 bis) : ajustement de τ glissant et de la table c → `game_dynamics.json` ; matrice du match et marchés de période (partagé ajustement / service). |
 | `train.py` | Classifieur moneyline (informatif). |
 | `train_player.py` | Modèle joueur (8 statistiques). |
+| `train_shots.py` | Modèle de tirs d'équipe → arrêts du gardien ; recalage hebdomadaire des tirs (`refresh_shots_level`). |
 | `ml_service.py` | Service FastAPI (toutes les routes de prédiction). |
 | `backtest.py` | Backtest sur le test + `--reliability` (calibration par tranches). |
 | `backtest_walkforward.py` | Backtests saison par saison : ROI, CLV, marchés dérivés, incertitude, sélection de features, correction, écart au marché… |
@@ -908,6 +933,7 @@ période plus de 1,5 buts 63,8 % au lieu de 58,9 % avec la part fixe).
 | `correction_layer.json` / `correction_report.json` | Couche de correction / sa mesure. |
 | `level_layer.json` / `level_report.json` | Recalage de niveau de la saison en cours (k, comptes) / sa mesure et sa règle. |
 | `player/*.json` / `player_report.json` / `player_state.json` | Modèle joueur / rapport / état des joueurs (+ face-à-face par adversaire). |
+| `shots_model.json` / `shots_report.json` / `shots_level_layer.json` | Modèle de tirs / rapport (mesures, k, coefficient du partant) / recalage des tirs de la saison. |
 | `player_vs_report.json` | Mesure du face-à-face joueur vs adversaire, stat par stat (verdict `keep`). |
 | `inference_state.json` | État actuel des équipes, gardiens, alignements, étoiles. |
 | `elo_ratings.json` | Notes ELO actuelles. |

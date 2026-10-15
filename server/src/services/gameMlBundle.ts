@@ -57,6 +57,17 @@ export interface GameMlBundle {
   playerDispersion: Record<string, number | null>;
   playerModelAsOf:  string | null;
   /**
+   * Modèle de TIRS (`train_shots.py`, piste 3, 2026-10-15) : tirs cadrés
+   * attendus de chaque équipe, et arrêts attendus de chaque gardien suivi
+   * { idNHL: μ } s'il part ce soir — λ_tirs(adversaire) × son % d'arrêts × 0,97.
+   * Vides si le modèle de tirs n'est pas déployé : `playerRates.ts` garde
+   * alors la règle pour les arrêts.
+   */
+  lambdaShotsHome?: number | null;
+  lambdaShotsAway?: number | null;
+  goalieSaves?:     Record<string, number>;
+  savesDispersion?: number | null;
+  /**
    * Match commencé : les chiffres des tuiles sont ceux du modèle ML conditionnés
    * par le score et le temps restant (voir `applyLive`). Absent = avant-match.
    */
@@ -192,6 +203,10 @@ async function computeBundle(gameId: string): Promise<GameMlBundle> {
     playerRates:      out.player_rates ?? {},
     playerDispersion: out.player_dispersion ?? {},
     playerModelAsOf:  out.player_model_as_of ?? null,
+    lambdaShotsHome:  out.lambda_shots_home ?? null,
+    lambdaShotsAway:  out.lambda_shots_away ?? null,
+    goalieSaves:      out.goalie_saves ?? {},
+    savesDispersion:  out.saves_dispersion ?? null,
   };
 }
 

@@ -113,6 +113,13 @@ function buildSelectionLabel(
       short: `${selStr[0]}${lineStr} ${market.shortLabel}`,
     };
   }
+  if (market.type === "double_chance") {
+    // « EDM or draw » / « No draw » : la sélection seule ne dit pas l'issue.
+    const teamData = selection === "no_draw" ? undefined : getTeamById(selection);
+    return teamData
+      ? { full: `${teamData.name} or draw — ${market.label}`, short: `${teamData.abbr}/X ${market.shortLabel}` }
+      : { full: `No draw — ${market.label}`, short: `No draw ${market.shortLabel}` };
+  }
   if (market.requiresSelection) {
     const teamData = getTeamById(selection);
     return {

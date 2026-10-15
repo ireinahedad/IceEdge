@@ -62,6 +62,17 @@ export const MARKET_DEFINITIONS: MarketDefinition[] = [
     requiresSelection: true,
   },
   {
+    // Sur 60 minutes, comme les livres. Sélection = une équipe (« elle gagne
+    // en 60 OU nul après 60 ») ou `no_draw` (« l'une des deux gagne en 60 »).
+    type: "double_chance",
+    label: "Double Chance (60 min)",
+    shortLabel: "Dbl Chance",
+    category: "match",
+    description: "Two of the three regulation outcomes: a team or a draw, or no draw",
+    requiresLine: false,
+    requiresSelection: true,
+  },
+  {
     type: "game_to_ot",
     label: "Game to Go to OT/SO",
     shortLabel: "OT/SO",

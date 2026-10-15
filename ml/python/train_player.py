@@ -2,7 +2,7 @@
 train_player.py — modèle JOUEUR : cadence par match de 8 statistiques de patineur.
 
     python train_player.py                 # construit, entraîne, écrit l'état
-    python train_player.py --state-only    # ne refait que player_state.json
+    python train_player.py --state-only    # ne refait que player_state.json (+ recalage de niveau)
 
 Entrées (déjà présentes pour le reste du pipeline) :
     ../data/raw/skaters_*.zip   MoneyPuck, patineur par match, TOUTES situations
@@ -110,6 +110,10 @@ def load_skaters(raw_dir: str) -> pd.DataFrame:
                     frames.append(ch[ch["situation"].isin(["all", "5on4", "5on5"])])
         print(f"   {os.path.basename(zp)} lu", flush=True)
     raw = pd.concat(frames, ignore_index=True)
+    # La saison EN COURS arrive par `refresh_data.py` (skaters_<saison>_current.zip) ;
+    # si un zip complet de la même saison est ajouté plus tard, ses lignes
+    # doublent les siennes : on n'en garde qu'une.
+    raw = raw.drop_duplicates(subset=["playerId", "gameId", "situation"], keep="last")
     return raw[raw.position != "G"]
 
 
@@ -308,6 +312,96 @@ def build_state(pg: pd.DataFrame, since_season: int) -> dict:
     return state
 
 
+# ── Recalage de NIVEAU dans la saison (2026-10-15) ───────────────────────────
+#
+# Entraîné ≤ 2021-22, le modèle suit mal les dérives de ligue (les tirs, les
+# mises en échec baissent ; les tirs bloqués montent). Par statistique, k de la
+# saison en cours = Σ observé / Σ prévu sur ses matchs DÉJÀ joués, rétréci
+# vers 1 (`score_model.level_k`, n0 par stat). Mesure et règle :
+# `explore_players/level.py` → `player_level_report.json` (validation 2022-23,
+# test 2023-26) : ADOPTÉ pour tirs bloqués (z 6,5), mises en échec (z 5,0) et
+# points (z 2,2) ; pas pour buts, passes, tirs (z 1,7), pénalités, points AN.
+# Écrit `player_level_layer.json`, lu par ml_service (`_player_rates`).
+PLAYER_LEVEL_REPORT = "player_level_report.json"
+PLAYER_LEVEL_LAYER = "player_level_layer.json"
+
+
+def refresh_player_level(pg: pd.DataFrame, pre: pd.DataFrame, season: int) -> dict:
+    """k de chaque statistique adoptée pour la saison `season` → player_level_layer.json.
+
+    Les cadences sont celles du modèle SERVI, avec les mêmes features d'avant-
+    match qu'à l'entraînement (fenêtres décalées, face-à-face, arbitres).
+    Écrit TOUJOURS un fichier : k = 1 (stat absente) quand la mesure n'est pas
+    adoptée, le modèle illisible ou la saison vide.
+    """
+    from datetime import datetime, timezone
+    from score_model import level_k
+    out = {"season": int(season), "as_of": None, "n_games": 0, "stats": {}, "note": "",
+           "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")}
+    try:
+        with open(os.path.join(MODELS_DIR, PLAYER_LEVEL_REPORT), encoding="utf-8") as fh:
+            lrep = json.load(fh)
+        adopted = {s: float(v["n0"]) for s, v in lrep["stats"].items() if v.get("adopt")}
+        with open(os.path.join(MODELS_DIR, "player_report.json"), encoding="utf-8") as fh:
+            prep = json.load(fh)
+        cur = (pg.season == season).values
+        if adopted and cur.any():
+            df = pd.concat([pg[cur], pre[cur], vs_features(pg, pre, shift=1)[cur]], axis=1)
+            df = game_context(df, pd.read_csv(os.path.join(DATA_DIR, "nhl_games_v4.csv"), low_memory=False))
+            ref_games = RE.load_ref_games(DATA_DIR)
+            if ref_games is not None:
+                df = df.merge(RE.pregame_features(ref_games), left_on="gameId", right_on="game_id",
+                              how="left", suffixes=("", "_ref"))
+            for c in RE.REF_FEATS:
+                if c not in df:
+                    df[c] = np.nan
+            n = int(df.gameId.nunique())
+            out["n_games"], out["as_of"] = n, df.date.max().strftime("%Y-%m-%d")
+            for s, n0 in adopted.items():
+                feats = prep["stats"][s]["features"]
+                b = xgb.Booster()
+                b.load_model(os.path.join(MODELS_DIR, "player", f"{s}.json"))
+                mu = b.predict(xgb.DMatrix(df[feats], feature_names=feats))
+                obs_sum, lam_sum = round(float(df[f"y_{s}"].sum()), 6), round(float(mu.sum()), 6)
+                out["stats"][s] = {"obs_sum": obs_sum, "lam_sum": lam_sum, "prior_games": n0,
+                                   "k": level_k(obs_sum, lam_sum, n, n0)}
+        else:
+            out["note"] = "aucune stat adoptée ou aucun match cette saison — k = 1"
+    except Exception as e:
+        out.update(n_games=0, stats={}, note=f"calcul impossible ({e}) — k = 1")
+    with open(os.path.join(MODELS_DIR, PLAYER_LEVEL_LAYER), "w", encoding="utf-8") as fh:
+        json.dump(out, fh, ensure_ascii=False, indent=2)
+    ks = ", ".join(f"{s} {v['k']:.3f}" for s, v in out["stats"].items()) or "k = 1"
+    print(f"   recalage du modèle joueur {season}-{str(season + 1)[2:]} : {ks} "
+          f"({out['n_games']} matchs)" + (f" — {out['note']}" if out["note"] else ""))
+    return out
+
+
+def refresh_state() -> None:
+    """État d'inférence + recalage de niveau, sans réentraîner (refresh_data.py, chaque lundi)."""
+    t0 = time.time()
+    print("⛸️  lecture des patineurs MoneyPuck …")
+    pg = per_game(load_skaters(os.path.join(DATA_DIR, "raw")))
+    print(f"   {len(pg)} patineur-matchs ({time.time()-t0:.0f}s)")
+    pre = rolling_features(pg, shift=1)
+    write_state(pg, pre)
+    refresh_player_level(pg, pre, int(pg.season.max()))
+
+
+def write_state(pg: pd.DataFrame, pre: pd.DataFrame) -> None:
+    last_season = int(pg.season.max())
+    state = build_state(pg, since_season=last_season - 1)
+    vs_state = build_vs_state(pg, pre, since_season=last_season - 1)
+    json.dump({"as_of": pg.date.max().strftime("%Y-%m-%d"), "players": state,
+               "vs_features": VS_FEATS, "vs": vs_state},
+              open(os.path.join(MODELS_DIR, "player_state.json"), "w"))
+    print(f"   état : {len(state)} joueurs, {sum(len(v) for v in vs_state.values())} "
+          f"paires joueur-adversaire → player_state.json")
+    # Table d'inférence des arbitres : toujours réécrite avec l'état, pour qu'un
+    # modèle entraîné AVEC ref_* ne parte jamais sans elle.
+    RE.write_table(DATA_DIR, MODELS_DIR)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--state-only", action="store_true")
@@ -324,18 +418,9 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
 
     pre = rolling_features(pg, shift=1)
-    last_season = int(pg.season.max())
-    state = build_state(pg, since_season=last_season - 1)
-    vs_state = build_vs_state(pg, pre, since_season=last_season - 1)
-    json.dump({"as_of": pg.date.max().strftime("%Y-%m-%d"), "players": state,
-               "vs_features": VS_FEATS, "vs": vs_state},
-              open(os.path.join(MODELS_DIR, "player_state.json"), "w"))
-    print(f"   état : {len(state)} joueurs, {sum(len(v) for v in vs_state.values())} "
-          f"paires joueur-adversaire → player_state.json")
-    # Table d'inférence des arbitres : toujours réécrite avec l'état, pour qu'un
-    # modèle entraîné AVEC ref_* ne parte jamais sans elle.
-    RE.write_table(DATA_DIR, MODELS_DIR)
+    write_state(pg, pre)
     if args.state_only:
+        refresh_player_level(pg, pre, int(pg.season.max()))
         return
 
     df = pd.concat([pg, pre, vs_features(pg, pre, shift=1)], axis=1)
@@ -477,6 +562,8 @@ def main():
                    "stats": ref_report},
                   open(os.path.join(MODELS_DIR, "player_ref_report.json"), "w"), indent=1)
     print("✅ modèle joueur écrit")
+    # Les cadences ont changé : le recalage se refait sur le NOUVEAU modèle.
+    refresh_player_level(pg, pre, int(pg.season.max()))
 
 
 if __name__ == "__main__":

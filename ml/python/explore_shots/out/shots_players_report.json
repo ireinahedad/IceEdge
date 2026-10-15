@@ -1,0 +1,27 @@
+{
+ "generated": "2026-10-15",
+ "k_player": 20,
+ "k_team": 120,
+ "rule": "B remplace A si \u0394 > 0 en validation ET en test, z \u2265 2 en test",
+ "val": {
+  "n": 92814,
+  "dll_B": -0.001074,
+  "z_B": -3.92,
+  "dll_C": 0.000107,
+  "z_C": 0.52,
+  "mean_obs": 1.7431,
+  "mean_A": 1.7407,
+  "mean_B": 1.7473
+ },
+ "test": {
+  "n": 151729,
+  "dll_B": -0.001038,
+  "z_B": -5.06,
+  "dll_C": 0.000601,
+  "z_C": 3.96,
+  "mean_obs": 1.6076,
+  "mean_A": 1.6254,
+  "mean_B": 1.6202
+ },
+ "adopt_B": false
+}

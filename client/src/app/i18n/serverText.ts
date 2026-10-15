@@ -103,6 +103,10 @@ export function factorLabel(label: string, lang: Lang): string {
 // Ordre = du plus long au plus court : une phrase entière avant ses morceaux.
 const NOTE_RULES: Array<[RegExp, string]> = [
   // Moneyline / Match Betting
+  // Double chance (nhlPredictions.ts → syncDoubleChance)
+  [/Pas d'égalité à 60 min :/g, "No tie at 60 min:"],
+  [/ \+ égalité à 60 min /g, " + tie at 60 min "],
+  [/ en 60 min\)/g, " in 60 min)"],
   [/Égalité après 60 min \(score actuel \+ buts restants\)/g, "Tied after 60 min (current score + remaining goals)"],
   [/Victoire \(prolongation et fusillade comprises\)/g, "Win (incl. OT and shootout)"],
   [/Victoire en temps réglementaire/g, "Regulation win"],
@@ -208,6 +212,9 @@ const ML_RULES: Array<[RegExp, string]> = [
   [/ → plus de ([\d.]+) à (\d+) %\./g, " → over $1 at $2%."],
   [/ → moins de ([\d.]+) à (\d+) %\./g, " → under $1 at $2%."],
   [/^Modèle joueur \(XGBoost\)$/g, "Player model (XGBoost)"],
+  [/Modèle de tirs XGBoost \(tirs cadrés attendus de l'adversaire × % d'arrêts du gardien\) : /g,
+    "XGBoost shots model (opponent's expected shots on goal × goalie save %): "],
+  [/^Modèle de tirs \(XGBoost\)$/g, "Shots model (XGBoost)"],
   // Corrections / côté inverse (enveloppent l'explication de base)
   [/Corrigé \(forme, fatigue, alignement, ELO\) : /g, "Adjusted (form, fatigue, lineup, ELO): "],
   [/ ; tous les marchés du match suivent \(λ bruts /g, "; all of this game's markets follow (raw λ "],

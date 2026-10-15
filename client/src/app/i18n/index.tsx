@@ -960,6 +960,11 @@ const DICT: Record<string, { en: string; fr: string }> = {
   },
   "prop.mlModel":        { en: "Adjusted rate", fr: "Cadence ajustée" },
   "prop.playerModel":    { en: "Player model", fr: "Modèle joueur" },
+  "prop.shotsModel":     { en: "Shots model", fr: "Modèle de tirs" },
+  "prop.shotsModelNote": {
+    en: "Opponent's expected shots on goal × this goalie's save % (shots model, adjusted for games he doesn't finish): {rate} saves/game, k={k} → P({label}) = {pct}%.",
+    fr: "Tirs cadrés attendus de l'adversaire × % d'arrêts de ce gardien (modèle de tirs, corrigé des matchs qu'il ne finit pas) : {rate} arrêts/match, k={k} → P({label}) = {pct} %.",
+  },
   "prop.playerModelNote": {
     en: "Player model (ice time, power-play time, linemates' xG, per-60 production, opponent): {rate}/game, k={k} → P({label}) = {pct}%.",
     fr: "Modèle joueur (temps de glace, temps en avantage numérique, xG des coéquipiers, production par 60 min, adversaire) : {rate}/match, k={k} → P({label}) = {pct} %.",
@@ -1037,6 +1042,8 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "cmd.aiProUsed":     { en: "Monthly AI allowance, shared with LLM Analysis: {used} of {limit}", fr: "Quota IA du mois, partagé avec l'Analyse LLM : {used} sur {limit}" },
   "cmd.aiOwnKey":      { en: "The AI bet builder uses your OpenAI key.", fr: "Le Bet builder IA utilise votre clé OpenAI." },
   "mkt.draw60":        { en: "Draw after 60 min", fr: "Nul après 60 min" },
+  "mkt.orDraw":        { en: "{team} or draw (60 min)", fr: "{team} ou nul (60 min)" },
+  "mkt.noDraw":        { en: "{a} or {b} — no draw (60 min)", fr: "{a} ou {b} — pas de nul (60 min)" },
   "mkt.addedSlip":     { en: "Added to Slip!", fr: "Ajouté au pari !" },
   "mkt.adding":        { en: "Adding…",          fr: "Ajout…" },
   "mkt.addToSlip":     { en: "Add to Prediction Slip", fr: "Ajouter au pari de prédiction" },

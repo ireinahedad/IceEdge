@@ -124,6 +124,7 @@ export type BetMarketType =
   | "puck_line"
   | "total_goals"
   | "regulation_result"
+  | "double_chance"          // 60 minutes : équipe ou nul / pas de nul
   | "game_to_ot"
   | "both_teams_score"
   | "winning_margin"

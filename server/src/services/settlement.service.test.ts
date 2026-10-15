@@ -360,6 +360,31 @@ describe('un pari reste décidable quelle que soit la page qui l\'a posé', () =
     expect(w.outcome).toBe('win');   // MTL 2 + 2,5 = 4,5 > 4
   });
 
+  it('double chance « équipe ou nul » : gagnée par une prolongation, quel qu\'en soit le vainqueur', async () => {
+    fetchGameById.mockResolvedValue(finalGame(3, 2, 4));       // TOR gagne en prolongation
+    const w = await settleOne([
+      { gameId: GAME_ID, marketType: 'double_chance', selectionValue: 'mtl', subjectId: 'mtl' },
+    ]);
+    expect(w.outcome).toBe('win');
+  });
+
+  it('double chance « équipe ou nul » : réglée sur le vainqueur en 60 minutes sinon', async () => {
+    fetchGameById.mockResolvedValue(finalGame(4, 2));
+    const win = await settleOne([{ gameId: GAME_ID, marketType: 'double_chance', selectionValue: 'tor', subjectId: 'tor' }]);
+    expect(win.outcome).toBe('win');
+    const loss = await settleOne([{ gameId: GAME_ID, marketType: 'double_chance', selectionValue: 'mtl', subjectId: 'mtl' }]);
+    expect(loss.outcome).toBe('loss');
+  });
+
+  it('double chance « pas de nul » : perdue si prolongation, gagnée sinon', async () => {
+    fetchGameById.mockResolvedValue(finalGame(3, 2, 4));
+    const ot = await settleOne([{ gameId: GAME_ID, marketType: 'double_chance', selectionValue: 'no_draw', subjectId: 'tor' }]);
+    expect(ot.outcome).toBe('loss');
+    fetchGameById.mockResolvedValue(finalGame(1, 4));
+    const reg = await settleOne([{ gameId: GAME_ID, marketType: 'double_chance', selectionValue: 'no_draw', subjectId: 'tor' }]);
+    expect(reg.outcome).toBe('win');
+  });
+
   it('résultat en 60 minutes : perdu si le match va en prolongation', async () => {
     fetchGameById.mockResolvedValue(finalGame(3, 2, 4));
     const w = await settleOne([

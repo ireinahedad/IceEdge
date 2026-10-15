@@ -203,7 +203,7 @@ type BetMarketType =
   | "alt_puck_line" | "ot_winner" | "ot_so_winner"
   | "first_team_score" | "last_team_score" | "team_total_goals"
   | "team_pp_goals" | "team_penalty_kill" | "clean_sheet"
-  | "highest_scoring_period"
+  | "highest_scoring_period" | "double_chance"
   // ML-vocab aliases sent by the stats page (mapped to canonical markets)
   | "total_goals_over" | "total_goals_under" | "pp_goal" | "penalty_kill"
   | "anytime_goal" | "first_goal_scorer" | "shots_ou" | "assists_ou"
@@ -235,7 +235,7 @@ const GAME_MARKET_TYPES: BetMarketType[] = [
   "moneyline", "puck_line", "total_goals", "regulation_result",
   "period1_winner", "period2_winner", "period3_winner",
   "game_to_ot", "ot_so_winner", "both_teams_score", "winning_margin",
-  "first_team_score", "team_total_goals", "highest_scoring_period",
+  "first_team_score", "team_total_goals", "highest_scoring_period", "double_chance",
 ];
 
 const PLAYER_MARKET_TYPES: BetMarketType[] = [
@@ -443,6 +443,19 @@ async function computeProbability(body: PredictionRequest): Promise<ProbabilityR
   if (market === "regulation_result") {
     if (!teamId) return unknown;
     return plain(await predictRegulationResult(teamId, opponentId, isHome));
+  }
+  /**
+   * Double chance sur 60 minutes (2026-10-15). Sélection = une équipe (« elle
+   * gagne en 60 OU égalité après 60 ») ou `no_draw` (« l'une des deux gagne en
+   * 60 »). Recombinée depuis les deux marchés voisins, donc cohérente avec eux :
+   * équipe = P(gagne en 60) + P(prolongation) ; pas de nul = 100 − P(prolongation).
+   */
+  if (market === "double_chance") {
+    if (!teamId) return unknown;
+    const toOt = await predictGameToOvertime(teamId, opponentId, isHome);
+    if ((body.selection ?? "").trim().toLowerCase() === "no_draw") return plain(Math.max(3, Math.min(97, 100 - toOt)));
+    const reg = await predictRegulationResult(teamId, opponentId, isHome);
+    return plain(Math.max(3, Math.min(97, reg + toOt)));
   }
   if (market === "total_goals" || market === "team_total_goals") {
     return plain(await predictTotalGoals(line, selection, teamId, opponentId));

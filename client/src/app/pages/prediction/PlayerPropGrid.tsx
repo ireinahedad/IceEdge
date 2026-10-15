@@ -525,7 +525,7 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
           : rates === null ? null
           : (playerRates?.rates?.[spec.rateStat] ?? null);
         const disp = rates ? dispersionFor(rates, playerRates?.source, spec.rateStat) : null;
-        const labels = rateLabels(playerRates?.source);
+        const labels = rateLabels(playerRates?.source, spec.rateStat);
         const preset = (pctValue: number, note: string): MLPredictionResult => ({
           probability: pctValue,
           confidence: null,

@@ -1,0 +1,12 @@
+{
+  "season": 2026,
+  "k": 0.9861310133387254,
+  "obs_sum": 4465.0,
+  "lam_sum": 4686.62207,
+  "n_games": 83,
+  "prior_games": 200.0,
+  "verdict": "ADOPTER",
+  "as_of": "2026-10-10",
+  "generated": "2026-10-15T06:12Z",
+  "note": ""
+}

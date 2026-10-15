@@ -275,6 +275,13 @@ export interface GameBundleResult {
   player_rates?:       Record<string, Record<string, number>>;
   player_dispersion?:  Record<string, number | null>;
   player_model_as_of?: string | null;
+  /** Modèle de tirs (piste 3) : tirs cadrés attendus de chaque équipe. */
+  lambda_shots_home?:  number | null;
+  lambda_shots_away?:  number | null;
+  /** Arrêts attendus de chaque gardien suivi { idNHL: μ }, s'il part ce soir. */
+  goalie_saves?:       Record<string, number>;
+  /** k de la binomiale négative des arrêts. */
+  saves_dispersion?:   number | null;
 }
 
 export const mlApiClient = {

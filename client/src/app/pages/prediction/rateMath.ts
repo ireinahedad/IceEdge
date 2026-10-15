@@ -53,8 +53,13 @@ export function dispersionFor(resp: PlayerRatesResponse, source: "model" | "rule
   return resp.dispersion?.[stat] ?? null;
 }
 
-/** Clés i18n du libellé et de la note, selon la source de la cadence. */
-export function rateLabels(source: "model" | "rules" | undefined): { model: string; note: string } {
+/**
+ * Clés i18n du libellé et de la note, selon la source de la cadence. Les arrêts
+ * d'un gardien « modèle » viennent du modèle de TIRS (piste 3), pas du modèle
+ * joueur : leur note ne parle pas de temps de glace.
+ */
+export function rateLabels(source: "model" | "rules" | undefined, stat?: RateStat): { model: string; note: string } {
+  if (source === "model" && stat === "saves") return { model: "prop.shotsModel", note: "prop.shotsModelNote" };
   return source === "model"
     ? { model: "prop.playerModel", note: "prop.playerModelNote" }
     : { model: "prop.mlModel", note: "prop.mlNote" };

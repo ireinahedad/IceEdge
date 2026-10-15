@@ -48,7 +48,8 @@ Ce qu'il ne fait JAMAIS : toucher `odds.csv` (irremplaçable, cf. le garde-fou d
 
 Ensuite, pour que le service en ligne en profite : committer
 `ml/models/inference_state.json`, `ml/models/elo_ratings.json`,
-`ml/models/level_layer.json`, `ml/models/game_dynamics.json` et `ml/models/ref_effects.json`, puis pousser (le service ML embarque
+`ml/models/level_layer.json`, `ml/models/game_dynamics.json`, `ml/models/shots_level_layer.json`,
+`ml/models/player_state.json`, `ml/models/player_level_layer.json` et `ml/models/ref_effects.json`, puis pousser (le service ML embarque
 `ml/models/` dans son image).
 
 Usage :
@@ -111,6 +112,17 @@ def _season_zip(kind: str, season: int) -> pd.DataFrame | None:
     if r is None or r.status_code != 200 or not r.content.startswith(b"PK"):
         return None
     keep = F.SKATER_KEEP if kind == "skaters" else None
+    if kind == "skaters":
+        # Le zip COMPLET de la saison en cours, pour le modèle joueur
+        # (`train_player.load_skaters` lit data/raw/skaters*.zip) : sans lui,
+        # son état restait figé à la fin de la saison précédente, et aucun
+        # match de la saison en cours n'entrait dans ses features.
+        try:
+            os.makedirs(f"{DATA_DIR}/raw", exist_ok=True)
+            with open(f"{DATA_DIR}/raw/skaters_{season}_current.zip", "wb") as fh:
+                fh.write(r.content)
+        except OSError as e:
+            print(f"   ⚠️  zip patineurs non sauvegardé ({e}) — l'état du modèle joueur ne bougera pas")
     return F._read_zip_csvs(r.content, keep=keep)
 
 
@@ -287,6 +299,37 @@ def refresh_level(season: int, models_dir: str, data_path: str) -> dict:
     return out
 
 
+def refresh_shots_level(season: int, models_dir: str) -> None:
+    """Étape 5ter : recalage de niveau des TIRS (piste 3) → `shots_level_layer.json`.
+
+    Même principe que les buts (étape 5) : tirs observés / λ_tirs des matchs
+    déjà joués, rétréci vers 1. Les tirs baissent depuis 2022-23 ; sans ce
+    recalage, les arrêts attendus des gardiens seraient trop hauts.
+    """
+    try:
+        import train_shots
+        train_shots.refresh_shots_level(season, models_dir, f"{DATA_DIR}/nhl_games_v4.csv",
+                                        f"{DATA_DIR}/mp_team_games.csv")
+    except Exception as e:
+        print(f"\n⚠️  recalage des tirs non rafraîchi ({e}) — shots_level_layer.json inchangé")
+
+
+def refresh_player_state() -> None:
+    """Étape 5quater : état du modèle joueur + son recalage de niveau.
+
+    `player_state.json` (features de chaque joueur après son dernier match) et
+    `player_level_layer.json` (k de la saison par statistique adoptée,
+    `train_player.refresh_player_level`). Lit les zips patineurs, dont celui de
+    la saison en cours sauvé à l'étape 3 ; ≈ 2 min. Un échec laisse les deux
+    fichiers tels quels.
+    """
+    try:
+        import train_player
+        train_player.refresh_state()
+    except Exception as e:
+        print(f"\n⚠️  état du modèle joueur non rafraîchi ({e}) — player_state.json inchangé")
+
+
 def refresh_game_dynamics(season: int, models_dir: str) -> None:
     """Étape 5bis : τ glissant + intensités par période → `game_dynamics.json`."""
     try:
@@ -379,6 +422,8 @@ def main():
 
     refresh_level(season, build_dataset.MODELS_DIR, f"{DATA_DIR}/nhl_games_v4.csv")   # 5
     refresh_game_dynamics(season, build_dataset.MODELS_DIR)                           # 5bis
+    refresh_shots_level(season, build_dataset.MODELS_DIR)                             # 5ter
+    refresh_player_state()                                                            # 5quater
 
     refresh_referees(build_dataset.MODELS_DIR)                                        # 6
     refresh_candidates()                                                              # 7
@@ -392,8 +437,9 @@ def main():
           f"ELO au {elo.get('as_of_date')}, {len(st['teams'])} équipes, "
           f"{len(st.get('skater_pool', {}))} patineurs dans le bassin.")
     print("   Pour le service en ligne : committer ml/models/inference_state.json, "
-          "ml/models/elo_ratings.json, ml/models/level_layer.json, ml/models/game_dynamics.json et "
-          "ml/models/ref_effects.json, puis pousser. "
+          "ml/models/elo_ratings.json, ml/models/level_layer.json, ml/models/game_dynamics.json, "
+          "ml/models/shots_level_layer.json, ml/models/player_state.json, "
+          "ml/models/player_level_layer.json et ml/models/ref_effects.json, puis pousser. "
           "Pas de réentraînement nécessaire. (ml/models/patterns_report.json : "
           "suivi des candidats, facultatif, non lu par le service.)")
 

@@ -408,6 +408,112 @@ def period_dynamics(lam_a: float, lam_b: float, c: np.ndarray) -> dict:
     return out
 
 
+def team_events(lam_a: float, lam_b: float, c: np.ndarray) -> dict:
+    """Trois marchés d'équipe joués par le moteur, vus de l'équipe A (piste 4).
+
+    Mêmes intensités que `regulation_matrix` / `period_dynamics` (avance de
+    l'équipe × tranche de temps, filet désert compris), sur des états
+    augmentés de ce que le marché demande de suivre :
+
+      first : qui a marqué le PREMIER but du temps réglementaire.
+              {"A", "B", "none"} — "none" = 0-0 après 60 minutes.
+      last  : qui a marqué le DERNIER but du temps réglementaire, et si le
+              match est à égalité après 60 minutes (une prolongation suit) :
+              {"A", "B"} hors égalité, {"A_tie", "B_tie", "none_tie"} à
+              égalité (none_tie = 0-0).
+      every : P(l'équipe marque dans CHACUNE des trois périodes), {"A", "B"}.
+              La 3e dépend du score à 40' : le moteur le joue, la règle
+              (1 − e^(−λ/3))³ supposait trois périodes égales et indépendantes.
+
+    La prolongation et la fusillade se combinent ensuite selon le marché : seul
+    un but en prolongation compte, pas la fusillade.
+
+    Mesuré (2026-10-15, `explore_score/s8_marches_equipe.py`, 5 199 matchs
+    2022-26, table c ajustée avant les saisons mesurées) contre les formules
+    qu'elle remplace : gain de log-perte en test +0,00000 (premier but, z 0,2),
+    +0,00015 (dernier but, z 1,9), +0,00004 (chaque période, z 1,7) — jamais
+    moins bon, sous le seuil de signification. SERVI quand même par
+    `ml_service._apply_score_model`, pour que ces trois marchés sortent du même
+    moteur que les autres (décision du 2026-10-15) ; les formules restent le
+    repli sans `game_dynamics.json`.
+    """
+    L = len(_LEADS)
+    bshape = (L,)
+
+    def run(S, jump, period_end=None):
+        for period, (t0, t1) in enumerate(((0, 1200), (1200, 2400), (2400, 3600)), start=1):
+            for b in range(N_BUCKETS):
+                lo, hi = max(EDGES[b], t0), min(EDGES[b + 1], t1)
+                if hi <= lo:
+                    continue
+                ca, cb = _lead_rates(c, b)
+                shp = bshape + (1,) * (S.ndim - 1)
+                ra = (float(lam_a) / 3600.0 * ca).reshape(shp) * np.ones_like(S)
+                rb = (float(lam_b) / 3600.0 * cb).reshape(shp) * np.ones_like(S)
+                S = _evolve(S, ra, rb, hi - lo, jump)
+            if period_end is not None and period < 3:
+                S = period_end(S)
+        return S / S.sum()
+
+    def lead_shift(x, team):
+        y = np.zeros_like(x)
+        if team == "a":
+            y[1:] = x[:-1]
+            y[-1] += x[-1]
+        else:
+            y[:-1] = x[1:]
+            y[0] += x[0]
+        return y
+
+    # ── Premier et dernier but : état (avance, premier ∈ {0, A, B}, dernier ∈ {0, A, B}) ──
+    S = np.zeros((L, 3, 3))
+    S[_LMAX, 0, 0] = 1.0
+
+    def jump_fl(x, team):
+        k = 1 if team == "a" else 2
+        y = np.zeros_like(x)
+        # premier : fixé au premier but, inchangé ensuite ; dernier : toujours ce but.
+        tot_last = x.sum(axis=2)                 # (avance, premier)
+        y[:, 0, k] += 0.0
+        y[:, k, k] += tot_last[:, 0]             # aucun but avant → ce but est le premier
+        y[:, 1, k] += tot_last[:, 1]
+        y[:, 2, k] += tot_last[:, 2]
+        return lead_shift(y, team)
+
+    S = run(S, jump_fl)
+    tie = S[_LMAX]                               # avance 0 après 60'
+    non = S.sum(axis=0) - tie
+    first = {"A": float(S[:, 1, :].sum()), "B": float(S[:, 2, :].sum()), "none": float(S[:, 0, :].sum())}
+    last = {"A": float(non[:, 1].sum()), "B": float(non[:, 2].sum()),
+            "A_tie": float(tie[:, 1].sum()), "B_tie": float(tie[:, 2].sum()), "none_tie": float(tie[:, 0].sum())}
+
+    # ── Marque à chaque période : état (avance, A, B), chacun ∈ {0 raté, 1 en vie, 2 a marqué} ──
+    E = np.zeros((L, 3, 3))
+    E[_LMAX, 1, 1] = 1.0
+
+    def jump_ev(x, team):
+        y = x.copy()
+        if team == "a":
+            y[:, 2, :] += y[:, 1, :]
+            y[:, 1, :] = 0.0
+        else:
+            y[:, :, 2] += y[:, :, 1]
+            y[:, :, 1] = 0.0
+        return lead_shift(y, team)
+
+    def new_period(x):
+        y = np.zeros_like(x)
+        # en vie sans but dans la période → raté ; a marqué → en vie pour la suivante
+        for i, ni in ((0, 0), (1, 0), (2, 1)):
+            for j, nj in ((0, 0), (1, 0), (2, 1)):
+                y[:, ni, nj] += x[:, i, j]
+        return y
+
+    E = run(E, jump_ev, new_period)
+    every = {"A": float(E[:, 2, :].sum()), "B": float(E[:, :, 2].sum())}
+    return {"first": first, "last": last, "every": every}
+
+
 _N = MAX_GOALS + 1
 _MARG = np.arange(_N)[:, None] - np.arange(_N)[None, :]
 _LC_H = np.clip(_MARG, -LEAD_CLIP, LEAD_CLIP) + LEAD_CLIP

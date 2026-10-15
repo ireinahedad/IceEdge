@@ -234,7 +234,7 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
     const rate = stat ? row.rates[stat] : undefined;
     if (!stat || rate == null || m.line == null) return null;
     const disp = dispersionFor(rates, row.source, stat);
-    const labels = rateLabels(row.source);
+    const labels = rateLabels(row.source, stat);
     const side = (m.settleSelection ?? "over") === "under" ? "under" : "over";
     const pv = ratePct(rate, m.line, disp, side);
     return presetResult(pv, t(labels.model), t(labels.note, {

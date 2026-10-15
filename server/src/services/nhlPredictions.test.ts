@@ -287,6 +287,18 @@ describe('tableaux de la page match — cohérence des règles', () => {
     expect(byId.get('pl-away-p25')!.ml).toMatchObject({ propType: 'puck_line', line: -2.5, subjectId: 'TOR', selection: 'no' });
   });
 
+  it('double chance : recombinée depuis Match Betting, 1X + X2 + 12 = 200', async () => {
+    const { pctOf, byId } = await load();
+    expect(pctOf('dc-home')).toBe(100 - pctOf('ml-away'));
+    expect(pctOf('dc-away')).toBe(100 - pctOf('ml-home'));
+    expect(pctOf('dc-nodraw')).toBe(pctOf('ml-home') + pctOf('ml-away'));
+    expect(pctOf('dc-home') + pctOf('dc-away') + pctOf('dc-nodraw')).toBe(200);
+    // Sélection = l'abréviation (règlement) ; « pas de nul » = no_draw.
+    expect(byId.get('dc-home')!.ml).toMatchObject({ propType: 'double_chance', selection: 'TOR', isHome: true });
+    expect(byId.get('dc-away')!.ml).toMatchObject({ propType: 'double_chance', isHome: false });
+    expect(byId.get('dc-nodraw')!.ml).toMatchObject({ propType: 'double_chance', selection: 'no_draw' });
+  });
+
   it('les deux marquent 1+/2+/3+ : Yes + No = 100, Yes décroît', async () => {
     const { pctOf, byId } = await load();
     let prev = 101;

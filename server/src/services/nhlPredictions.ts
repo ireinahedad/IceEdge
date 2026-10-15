@@ -904,6 +904,56 @@ function computeGameMarkets(
     ],
   };
 
+  // ── 1bis. Double chance — sur 60 minutes (2026-10-15) ─────────────────────
+  //
+  // Le marché « 1X / X2 / 12 » des livres : deux des trois issues du temps
+  // réglementaire. « EDM or Draw » = Edmonton gagne en 60 minutes OU égalité
+  // après 60 ; « EDM or CGY » = l'une des deux gagne en 60 (pas d'égalité).
+  // Se règle sur le score à 60 minutes (`settlement.service.ts`).
+  //
+  // Les chiffres sont ceux de Match Betting, recombinés : « EDM or Draw » =
+  // 100 % − « CGY in Reg ». Recalés APRÈS les facteurs (`syncDoubleChance`),
+  // pour rester exactement cohérents avec les tuiles affichées.
+  //
+  // Sélection = l'abréviation de l'équipe (comme `regulation_result`), ou
+  // `no_draw` ; c'est elle que le règlement lit.
+  const doubleChance: MarketGroup = {
+    id: 'doublechance', title: 'Double Chance', cols: 3,
+    options: [
+      {
+        id: 'dc-home', ml: gm('double_chance', undefined, hAb),
+        label: `${homeName} or Draw`, rulePct: pctOf(homeReg + ot),
+        ruleNote: '',
+      },
+      {
+        id: 'dc-nodraw', ml: gm('double_chance', undefined, 'no_draw'),
+        label: `${homeName} or ${awayName}`, rulePct: pctOf(homeReg + awayReg),
+        ruleNote: '',
+      },
+      {
+        id: 'dc-away', ml: gma('double_chance', undefined, aAb),
+        label: `${awayName} or Draw`, rulePct: pctOf(awayReg + ot),
+        ruleNote: '',
+      },
+    ],
+  };
+  /** Double chance recombinée depuis les tuiles FINALES de Match Betting. */
+  const syncDoubleChance = () => {
+    const byId = Object.fromEntries(matchBetting.options.map(o => [o.id, o.rulePct]));
+    const hReg = byId['ml-home'] ?? 0, aReg = byId['ml-away'] ?? 0;
+    const tie = (byId['ml-home-ot'] ?? 0) + (byId['ml-away-ot'] ?? 0);
+    const lo = live ? 0 : 3, hi = live ? 100 : 97;
+    const b = (x: number) => Math.max(lo, Math.min(hi, Math.round(x)));
+    const [dcH, dcN, dcA] = doubleChance.options;
+    dcH.rulePct = b(100 - aReg);
+    dcA.rulePct = b(100 - hReg);
+    dcN.rulePct = b(hReg + aReg);
+    dcH.ruleNote = `${homeName} : victoire en temps réglementaire ${hReg}% + égalité à 60 min ${tie}% = ${dcH.rulePct}% (100% − ${awayName} en 60 min)`;
+    dcA.ruleNote = `${awayName} : victoire en temps réglementaire ${aReg}% + égalité à 60 min ${tie}% = ${dcA.rulePct}% (100% − ${homeName} en 60 min)`;
+    dcN.ruleNote = `Pas d'égalité à 60 min : ${homeName} ${hReg}% + ${awayName} ${aReg}% = ${dcN.rulePct}%`;
+    if (live) for (const o of doubleChance.options) o.ruleNote += `  ·  en direct (${live.label})`;
+  };
+
   // (La loi du score final, `grid`, est construite plus haut.)
 
   /** Tuiles posées dans les tableaux, indexées pour leurs facteurs. */
@@ -1403,6 +1453,7 @@ function computeGameMarkets(
   const groups: MarketGroup[] = [
     moneyline,
     matchBetting,
+    doubleChance,
     puckLine,
     totals,
     teamTotals,
@@ -1461,6 +1512,7 @@ function computeGameMarkets(
     }
     const [mwH, mwA] = moneyline.options;
     mwA.rulePct = 100 - mwH.rulePct;
+    syncDoubleChance();
     return groups;
   }
 
@@ -1489,6 +1541,7 @@ function computeGameMarkets(
     const [mwH, mwA] = moneyline.options;
     mwA.rulePct = 100 - mwH.rulePct;
   }
+  syncDoubleChance();
 
   return groups;
 }

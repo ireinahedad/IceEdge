@@ -1,0 +1,150 @@
+{
+ "trained_at": "2026-10-15",
+ "features": [
+  "atk_sog_f_s",
+  "atk_sog_f_l",
+  "atk_xgf60_s",
+  "atk_xgf60_l",
+  "atk_ev_cf_pct_s",
+  "atk_ev_cf_pct_l",
+  "atk_ev_xgf_pct_s",
+  "atk_pp_xgf60_s",
+  "atk_gf_s",
+  "atk_win_s",
+  "atk_rest_days",
+  "atk_b2b",
+  "atk_lineup_xg",
+  "def_sog_a_s",
+  "def_sog_a_l",
+  "def_xga60_s",
+  "def_xga60_l",
+  "def_ev_cf_pct_s",
+  "def_ev_cf_pct_l",
+  "def_pk_xga60_s",
+  "def_win_s",
+  "def_rest_days",
+  "def_b2b",
+  "def_goalie_svpct",
+  "is_home",
+  "elo_atk_minus_def"
+ ],
+ "rounds": 385,
+ "params": {
+  "objective": "count:poisson",
+  "eval_metric": "poisson-nloglik",
+  "eta": 0.03,
+  "max_depth": 4,
+  "min_child_weight": 10,
+  "subsample": 0.8,
+  "colsample_bytree": 0.8,
+  "reg_lambda": 3.0,
+  "max_delta_step": 0.7,
+  "seed": 7,
+  "nthread": 2
+ },
+ "split": {
+  "val": [
+   "2021-04-10",
+   "2023-03-09"
+  ],
+  "test": [
+   "2023-03-09",
+   "2026-10-10"
+  ]
+ },
+ "rule": "adopter si Δ log-vraisemblance BN (modèle − règle) > 0 en validation ET en test, z ≥ 2 en test",
+ "team_shots": {
+  "k_A": 80,
+  "k_B": 120,
+  "n_val": 5160,
+  "n_test": 8598,
+  "dll_val": 0.037152,
+  "z_val": 7.58,
+  "dll_test": 0.035702,
+  "z_test": 9.34,
+  "mean_obs_test": 28.894,
+  "mean_A_test": 28.947,
+  "mean_B_test": 29.136,
+  "mae_A_test": 5.0734,
+  "mae_B_test": 4.8911,
+  "adopt": true
+ },
+ "level": {
+  "prior_games": 200.0,
+  "dll_val": 0.000713,
+  "dll_test": 0.004652,
+  "z_test": 5.57,
+  "verdict": "ADOPTER"
+ },
+ "team_shots_by_season_test": {
+  "2022": {
+   "obs": 30.73,
+   "model": 30.96,
+   "rule": 30.74
+  },
+  "2023": {
+   "obs": 30.29,
+   "model": 30.49,
+   "rule": 30.42
+  },
+  "2024": {
+   "obs": 28.28,
+   "model": 28.47,
+   "rule": 28.21
+  },
+  "2025": {
+   "obs": 27.84,
+   "model": 28.13,
+   "rule": 27.93
+  },
+  "2026": {
+   "obs": 26.9,
+   "model": 28.04,
+   "rule": 27.21
+  }
+ },
+ "saves_scale": 0.9704,
+ "goalie_saves": {
+  "k_A": 25,
+  "k_B": 50,
+  "n_val": 5160,
+  "n_test": 8597,
+  "dll_val": 0.061217,
+  "z_val": 10.28,
+  "dll_test": 0.060844,
+  "z_test": 11.75,
+  "mean_obs_test": 25.392,
+  "mean_A_test": 23.931,
+  "mean_B_test": 25.625,
+  "mae_A_test": 5.4592,
+  "mae_B_test": 5.1892,
+  "adopt": true,
+  "full_game_share_test": 0.795
+ },
+ "goalie_saves_lines_test": {
+  "24.5": {
+   "obs": 0.5333,
+   "p_rule": 0.433,
+   "p_model": 0.5429,
+   "brier_rule": 0.24856,
+   "brier_model": 0.23024
+  },
+  "27.5": {
+   "obs": 0.368,
+   "p_rule": 0.2915,
+   "p_model": 0.3655,
+   "brier_rule": 0.22721,
+   "brier_model": 0.21373
+  },
+  "29.5": {
+   "obs": 0.2723,
+   "p_rule": 0.2152,
+   "p_model": 0.264,
+   "brier_rule": 0.19118,
+   "brier_model": 0.18219
+  }
+ },
+ "k_team": 120,
+ "k_saves": 50,
+ "verdict": "ADOPTER"
+}

@@ -37,6 +37,8 @@ import { probAtLeast } from './playerRates';
 export const MODEL_STAT: Record<string, string> = {
   goals: 'goals', assists: 'assists', points: 'points', shots: 'shots',
   hits: 'hits', blocks: 'blocks', pim: 'pim', pp_point: 'ppPoints',
+  // Gardien : arrêts du modèle de tirs (paquet → `goalieSaves`).
+  saves: 'saves',
 };
 
 /** Fenêtre de recherche du prochain match — celle du sélecteur de la page joueur. */
@@ -87,8 +89,11 @@ export async function predictPlayerFromModel(q: PlayerModelQuery): Promise<MLPre
   if (!stat || !(q.line >= 0)) return null;
 
   const player = await fetchPlayerById(q.playerId).catch(() => null);
-  // Le modèle ne couvre pas les gardiens (arrêts, victoires, blanchissages).
-  if (!player || String(player.position ?? '').toUpperCase() === 'G') return null;
+  if (!player) return null;
+  const isGoalie = String(player.position ?? '').toUpperCase() === 'G';
+  // Gardien : seuls les ARRÊTS ont un modèle (tirs, piste 3). Victoires et
+  // blanchissages restent au repli. Patineur : pas d'arrêts.
+  if (isGoalie !== (stat === 'saves')) return null;
   const team = String(player.teamAbbr ?? '').toUpperCase();
 
   const gameId = q.gameId
@@ -99,10 +104,12 @@ export async function predictPlayerFromModel(q: PlayerModelQuery): Promise<MLPre
   // Match commencé : la cadence du paquet est d'avant-match ; le chiffre en
   // direct (déjà fait + reste à jouer) est celui des grilles, pas celui-ci.
   if (!bundle || bundle.live) return null;
-  const rate = bundle.playerRates?.[String(q.playerId)]?.[stat];
+  const rate = isGoalie
+    ? bundle.goalieSaves?.[String(q.playerId)]
+    : bundle.playerRates?.[String(q.playerId)]?.[stat];
   if (rate == null || !Number.isFinite(rate)) return null;
 
-  const k = bundle.playerDispersion?.[stat] ?? null;
+  const k = (isGoalie ? bundle.savesDispersion : bundle.playerDispersion?.[stat]) ?? null;
   const over = probAtLeast(rate, Math.floor(q.line) + 1, k);
   const under = q.selection === 'under';
   const p = Math.min(MAX_P, under ? 1 - over : over);
@@ -126,10 +133,13 @@ export async function predictPlayerFromModel(q: PlayerModelQuery): Promise<MLPre
       { name: 'Sample size (GP)', importance: Math.round(gp / 82 * 1000) / 1000, direction: 'positive' },
     ],
     model_version: `player-xgb${bundle.playerModelAsOf ? `@${bundle.playerModelAsOf}` : ''}`,
-    model_type:    'Modèle joueur (XGBoost)',
+    model_type:    isGoalie ? 'Modèle de tirs (XGBoost)' : 'Modèle joueur (XGBoost)',
     explanation:
-      `Modèle joueur XGBoost (temps de glace, avantage numérique, xG des coéquipiers, ` +
-      `production par 60 min, adversaire) : ${fmt(rate)} par match pour ce match ; ` +
+      (isGoalie
+        ? `Modèle de tirs XGBoost (tirs cadrés attendus de l'adversaire × % d'arrêts du gardien) : `
+        : `Modèle joueur XGBoost (temps de glace, avantage numérique, xG des coéquipiers, ` +
+          `production par 60 min, adversaire) : `) +
+      `${fmt(rate)} par match pour ce match ; ` +
       `${k == null ? 'loi de Poisson' : `binomiale négative k=${k}`} → ` +
       `${under ? 'moins de' : 'plus de'} ${q.line} à ${pct} %.`,
   };

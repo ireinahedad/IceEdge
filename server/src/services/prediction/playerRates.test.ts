@@ -149,6 +149,29 @@ describe('playerRatesForGame', () => {
     expect(withModel.players['1'].gameGoals).toBe(rules.players['1'].gameGoals);
   });
 
+  it('gardien : arrêts du MODÈLE DE TIRS quand le paquet en porte (piste 3)', async () => {
+    bundle.value = {
+      playerRates: {}, playerDispersion: {}, playerModelAsOf: '2026-04-16',
+      goalieSaves: { '5': 26.3 }, savesDispersion: 50,
+    };
+    const r = await playerRatesForGame('2026020001');
+    bundle.value = null;
+    expect(r.players['5'].source).toBe('model');
+    expect(r.players['5'].rates.saves).toBe(26.3);
+    expect(r.modelDispersion).toEqual({ saves: 50 });
+    // Les patineurs, eux, restent à la règle (aucune cadence du modèle joueur).
+    expect(r.players['1'].source).toBe('rules');
+  });
+
+  it('gardien absent du modèle de tirs : la règle, et pas de k « modèle »', async () => {
+    bundle.value = { playerRates: {}, playerDispersion: {}, playerModelAsOf: null,
+                     goalieSaves: { '999': 25 }, savesDispersion: 50 };
+    const r = await playerRatesForGame('2026020001');
+    bundle.value = null;
+    expect(r.players['5'].source).toBe('rules');
+    expect(r.modelDispersion).toBeUndefined();
+  });
+
   it('service ML en panne : la règle seule, sans erreur', async () => {
     bundle.value = null;
     const r = await playerRatesForGame('2026020001');

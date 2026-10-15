@@ -129,6 +129,13 @@ export function MarketSelectorSheet({ onClose, preselectedSubject }: Props) {
       const t1 = getTeamById(game.team1Id);
       const t2 = getTeamById(game.team2Id);
       if (!t1 || !t2) return [];
+      if (market.type === "double_chance") {
+        return [
+          { label: t("mkt.orDraw", { team: t1.abbr }), value: t1.id },
+          { label: t("mkt.orDraw", { team: t2.abbr }), value: t2.id },
+          { label: t("mkt.noDraw", { a: t1.abbr, b: t2.abbr }), value: "no_draw" },
+        ];
+      }
       return [
         { label: `${t1.name} (${t1.abbr})`, value: t1.id },
         { label: `${t2.name} (${t2.abbr})`, value: t2.id },

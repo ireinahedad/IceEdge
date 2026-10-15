@@ -34,9 +34,9 @@ from typing import List, Optional
 
 import numpy as np
 import xgboost as xgb
-from game_dynamics import MatchDynamics, read_game_dynamics
-from score_model import (P_OT_HOME, ScoreDistribution, ScoreEnsemble,
-                         lambdas_for_home_win, p_ot_for, read_level_layer, read_ot_model)
+from game_dynamics import MatchDynamics, read_game_dynamics, team_events
+from score_model import (LEVEL_K_MAX, LEVEL_K_MIN, P_OT_HOME, ScoreDistribution, ScoreEnsemble,
+                         level_k, lambdas_for_home_win, p_ot_for, read_level_layer, read_ot_model)
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -650,6 +650,46 @@ def _load_player_model() -> None:
 _load_player_model()
 
 
+# ── Recalage de NIVEAU du modèle joueur (2026-10-15) ─────────────────────────
+#
+# k par statistique pour la saison en cours (`player_level_layer.json`, écrit
+# par `train_player.refresh_player_level` chaque lundi), × la cadence servie.
+# Seules les statistiques adoptées y figurent (tirs bloqués, mises en échec,
+# points : `player_level_report.json`). Refusé — k = 1 partout — si le fichier
+# porte une autre saison, ou si un k ne se recalcule pas à partir de ses comptes.
+_player_level: dict[str, float] = {}
+
+
+def _load_player_level() -> None:
+    global _player_level
+    path = os.path.join(MODELS_DIR, "player_level_layer.json")
+    if not os.path.exists(path):
+        print("[ML] ℹ️  Pas de recalage du modèle joueur (player_level_layer.json absent) — k = 1")
+        return
+    try:
+        with open(path, encoding="utf-8") as fh:
+            d = json.load(fh)
+        if int(d.get("season", -1)) != _season_start_year():
+            print(f"[ML] ℹ️  Recalage du modèle joueur d'une autre saison ({d.get('season')}) — k = 1")
+            return
+        ks = {}
+        for stat, v in (d.get("stats") or {}).items():
+            k = float(v["k"])
+            again = level_k(v["obs_sum"], v["lam_sum"], int(d["n_games"]), float(v["prior_games"]))
+            if np.isfinite(k) and abs(k - again) < 1e-6 and LEVEL_K_MIN <= k <= LEVEL_K_MAX:
+                ks[stat] = k
+        _player_level = ks
+        if ks:
+            print("[ML] ✅ Recalage du modèle joueur — " + ", ".join(f"{s} ×{k:.3f}" for s, k in ks.items())
+                  + f" ({d.get('n_games')} matchs au {d.get('as_of')})")
+    except Exception as e:
+        _player_level = {}
+        print(f"[ML] ⚠️  player_level_layer.json illisible : {e} — k = 1")
+
+
+_load_player_level()
+
+
 # ── Effets ARBITRE (2026-10-12) ───────────────────────────────────────────────
 #
 # Table `ref_effects.json` (écrite par train_player.py et refresh_data.py, via
@@ -943,6 +983,114 @@ def _apply_level(dist: "ScoreDistribution | None") -> "ScoreDistribution | None"
 
 
 _load_level_layer()
+
+
+# ── Modèle de TIRS d'équipe (train_shots.py — piste 3, 2026-10-15) ──────────
+#
+# λ_tirs par équipe, sur les mêmes features d'avant-match que le reste (lignes
+# équipe-match orientées attaque/défense), recalé dans la saison comme les
+# buts (`shots_level_layer.json`, même format que `level_layer.json`). Il ne
+# sert qu'aux ARRÊTS du gardien : μ = λ_tirs(adversaire) × % d'arrêts du
+# gardien × `saves_scale` (le partant ne finit pas toujours le match). Mesuré
+# contre la règle de playerRates.ts : log-vraisemblance z 11,8 en test, et
+# « plus de 24,5 arrêts » 54 % prévus pour 53 % observés (la règle : 43 %).
+# Absent → le paquet ne renvoie pas d'arrêts et Node garde sa règle.
+_shots_model: "xgb.Booster | None" = None
+_shots_feats: list[str] = []
+_shots_info: dict = {}
+_shots_level: dict | None = None
+SHOTS_SV_DEFAULT = 0.905
+
+
+def _load_shots_model() -> None:
+    global _shots_model, _shots_feats, _shots_info, _shots_level
+    mp = os.path.join(MODELS_DIR, "shots_model.json")
+    rp = os.path.join(MODELS_DIR, "shots_report.json")
+    if not (os.path.exists(mp) and os.path.exists(rp)):
+        print("[ML] ℹ️  Pas de modèle de tirs — lance : python train_shots.py (arrêts : règle de Node)")
+        return
+    try:
+        with open(rp, encoding="utf-8") as fh:
+            rep = json.load(fh)
+        if rep.get("verdict") != "ADOPTER":
+            raise ValueError(f"verdict {rep.get('verdict')}")
+        b = xgb.Booster()
+        b.load_model(mp)
+        _shots_model, _shots_feats = b, list(rep["features"])
+        _shots_info = {"saves_scale": float(rep["saves_scale"]), "k_saves": float(rep["k_saves"]),
+                       "k_team": float(rep["k_team"]), "trained_at": rep.get("trained_at")}
+    except Exception as e:
+        _shots_model, _shots_feats, _shots_info = None, [], {}
+        print(f"[ML] ⚠️  modèle de tirs illisible : {e} — arrêts : règle de Node")
+        return
+    lp = os.path.join(MODELS_DIR, "shots_level_layer.json")
+    if os.path.exists(lp):
+        try:
+            with open(lp, encoding="utf-8") as fh:
+                _shots_level = json.load(fh)
+        except Exception as e:
+            _shots_level = None
+            print(f"[ML] ⚠️  shots_level_layer.json illisible : {e} — k = 1")
+    k = read_level_layer(_shots_level, _season_start_year())
+    print(f"[ML] ✅ modèle de tirs ({_shots_info.get('trained_at')}) — arrêts du gardien, "
+          f"recalage des tirs k = {k:.4f}")
+
+
+def _shots_for(feat_values: dict) -> dict | None:
+    """λ_tirs domicile / visiteur (recalés en niveau), ou None."""
+    if _shots_model is None or not _shots_feats:
+        return None
+
+    def num(v):
+        return float(v) if isinstance(v, (int, float)) and v == v else np.nan
+
+    rows = []
+    for atk, dfn, is_home in (("home", "away", 1.0), ("away", "home", 0.0)):
+        row = []
+        for name in _shots_feats:
+            if name == "is_home":
+                row.append(is_home)
+            elif name == "elo_atk_minus_def":
+                row.append(num(feat_values.get(f"{atk}_elo")) - num(feat_values.get(f"{dfn}_elo")))
+            elif name.startswith("atk_"):
+                row.append(num(feat_values.get(f"{atk}_{name[4:]}")))
+            elif name.startswith("def_"):
+                row.append(num(feat_values.get(f"{dfn}_{name[4:]}")))
+            else:
+                row.append(num(feat_values.get(name)))
+        rows.append(row)
+    try:
+        pred = _shots_model.predict(xgb.DMatrix(np.array(rows, dtype=np.float32),
+                                                feature_names=_shots_feats, missing=np.nan))
+    except Exception as e:
+        print(f"[ML] ⚠️  modèle de tirs : {e}")
+        return None
+    k = read_level_layer(_shots_level, _season_start_year())
+    lh, la = float(pred[0]) * k, float(pred[1]) * k
+    # Même garde-fou que les buts : une intensité aberrante trahit une ligne
+    # mal remplie — pas de chiffre plutôt qu'un faux.
+    if not (10.0 <= lh <= 60.0 and 10.0 <= la <= 60.0):
+        return None
+    return {"home": lh, "away": la, "level_k": k}
+
+
+def _goalie_saves(shots: dict | None, goalies_by_side: dict) -> dict[str, float]:
+    """Arrêts attendus de CHAQUE gardien suivi des deux équipes, s'il part ce soir."""
+    if not shots or not _shots_info:
+        return {}
+    c = _shots_info["saves_scale"]
+    out: dict[str, float] = {}
+    for side, other in (("home", "away"), ("away", "home")):
+        for g in goalies_by_side.get(side) or []:
+            if g.get("id") is None:
+                continue
+            sv = g.get("svpct")
+            sv = float(sv) if isinstance(sv, (int, float)) and 0.8 < sv < 1.0 else SHOTS_SV_DEFAULT
+            out[str(int(g["id"]))] = round(shots[other] * sv * c, 4)
+    return out
+
+
+_load_shots_model()
 
 # Set once the model-load attempt has completed. The readiness probe gates on
 # this so the orchestrator only routes traffic after init (models loaded, or
@@ -1759,7 +1907,79 @@ def _apply_score_model(market: str, f: GameFeatures,
         return p, 0.74, (f"Buts de la période {n} : λ={lam_p:.2f} ({_PERIOD_SHARE[n - 1]:.1%} des "
                          f"buts réglementaires du modèle de score) → OVER {line} : {int(p * 100)}%.")
 
+    # ── Double chance (2026-10-15) — sur 60 minutes, comme les livres ───────
+    # Sélection = l'abréviation d'une équipe (« le sujet gagne en 60 minutes
+    # OU nul après 60 ») ou `no_draw` (« l'une des deux gagne en 60 »). Lu sur
+    # la grille, donc cohérent avec Match Betting par construction :
+    # 1X + X2 + 12 = 2, et 1X = 1 − « l'adversaire gagne en 60 ».
+    if market == "double_chance":
+        p_tie = dist.p_regulation_tie()
+        if (f.selection or "").strip().lower() == "no_draw":
+            p = 1.0 - p_tie
+            return p, 0.88, (f"L'une des deux équipes gagne en 60 minutes : 100% − P(nul à 60') "
+                             f"{p_tie:.0%} = {int(p * 100)}%.")
+        p_reg = float(dist.M[dist._margin > 0].sum())
+        p = p_reg + p_tie
+        return p, 0.88, (f"Le sujet gagne en 60 minutes ({p_reg:.0%}) ou nul après 60 minutes "
+                         f"({p_tie:.0%}) = {int(p * 100)}%.")
+
+    # ── Premier but, dernier but, marque à chaque période (piste 4) ──────────
+    # Joués par le moteur de match (`game_dynamics.team_events`), filet désert
+    # et poussée de l'équipe menée compris ; après 60 minutes, seul un BUT en
+    # prolongation compte (64,9 % des prolongations), pas la fusillade — comme
+    # le règlement du serveur. Premier / dernier but : sachant qu'il y a au
+    # moins un but (sinon le pari n'est pas réglé). Mesuré contre les formules
+    # (explore_score/s8_marches_equipe.py, 5 199 matchs 2022-26) : jamais moins
+    # bon, gain sous le seuil de signification (z 0,2 / 1,9 / 1,7) — servi pour
+    # la cohérence avec les autres marchés de la grille (décision du 2026-10-15).
+    if market in ("first_team_score", "last_team_score", "team_score_every_period"):
+        ev = _team_events(dist)
+        if ev is None:
+            return None
+        po = dist.p_ot_home
+        if market == "first_team_score":
+            fr = ev["first"]
+            pa = fr["A"] + fr["none"] * OT_GOAL_SHARE * po
+            pb = fr["B"] + fr["none"] * OT_GOAL_SHARE * (1.0 - po)
+            p = pa / (pa + pb)
+            return p, 0.78, (f"Course au premier but jouée par le moteur (λ={lh:.2f}/{la:.2f}) : "
+                             f"{int(p * 100)}% que le sujet ouvre le score.")
+        if market == "last_team_score":
+            l_ = ev["last"]
+            tie = l_["A_tie"] + l_["B_tie"] + l_["none_tie"]
+            pa = l_["A"] + tie * OT_GOAL_SHARE * po + l_["A_tie"] * (1.0 - OT_GOAL_SHARE)
+            pb = l_["B"] + tie * OT_GOAL_SHARE * (1.0 - po) + l_["B_tie"] * (1.0 - OT_GOAL_SHARE)
+            p = pa / (pa + pb)
+            return p, 0.74, (f"Dernier but joué par le moteur (filet désert compris, but de "
+                             f"prolongation compté, fusillade non) : {int(p * 100)}%.")
+        p = ev["every"]["A"]
+        return p, 0.75, (f"Marque en P1, P2 et P3 : {int(p * 100)}% — match joué par tranches "
+                         f"(la 3e dépend du score à 40'), λ={lh:.2f}.")
+
     return None
+
+
+# Part des prolongations tranchées par un BUT (sinon fusillade, qui ne compte
+# pour aucun but) — 1 849 prolongations 2015-16 → 2021-22 (piste 2).
+OT_GOAL_SHARE = 0.649
+_TEAM_EVENTS_CACHE: dict = {}
+
+
+def _team_events(dist: "ScoreDistribution") -> "dict | None":
+    """`team_events` du moteur pour la distribution (vue du sujet), ou None."""
+    if _match_dynamics is None:
+        return None
+    key = (round(float(dist.lam_home), 6), round(float(dist.lam_away), 6))
+    hit = _TEAM_EVENTS_CACHE.get(key)
+    if hit is None:
+        if len(_TEAM_EVENTS_CACHE) > 512:
+            _TEAM_EVENTS_CACHE.clear()
+        try:
+            hit = _TEAM_EVENTS_CACHE[key] = team_events(dist.lam_home, dist.lam_away, _match_dynamics.c)
+        except Exception as e:
+            print(f"[ML] ⚠️  team_events : {e}")
+            return None
+    return hit
 
 
 def _score_market_fn(market: str, f: GameFeatures):
@@ -1983,13 +2203,19 @@ def _apply_market(
         raise _NoEstimate(market)
 
     elif market == "double_chance":
-        # Home wins in reg OR goes to OT and home wins OT
+        # Repli sans modèle de score. Double chance sur 60 minutes : « le sujet
+        # gagne en 60 OU nul à 60 » = P(victoire) + P(OT) × P(perd la
+        # prolongation) ; « pas de nul » = 1 − P(OT). L'ancienne formule
+        # (« gagne en 60 OU gagne en prolongation ») était la victoire tout court.
         ot_rate = clamp(0.20 + max(0.0, 0.25 - abs(win_diff)) * 0.88, 0.08, 0.40)
-        ot_home = (_p_ot_for(lam_home, lam_away) if f.subject_is_home
-                   else 1.0 - _p_ot_for(lam_away, lam_home))
-        prob = clamp(base_prob * 0.85 + ot_rate * ot_home, 0.35, 0.92)
-        conf = 0.88
-        expl = f"Double chance (gagne reg + OT): {int(prob*100)}%."
+        if (f.selection or "").strip().lower() == "no_draw":
+            prob = 1.0 - ot_rate
+        else:
+            ot_home = (_p_ot_for(lam_home, lam_away) if f.subject_is_home
+                       else 1.0 - _p_ot_for(lam_away, lam_home))
+            prob = base_prob + ot_rate * (1.0 - ot_home)
+        conf = 0.80
+        expl = f"Double chance sur 60 minutes : {int(prob*100)}%."
 
     elif market == "team_pp_goals":
         # PP% est un taux PAR OCCASION. Sur ~3,1 occasions :
@@ -2455,6 +2681,8 @@ def _game_context(f: GameFeatures) -> dict:
     # ── v4 : features MoneyPuck/gardien/stars depuis inference_state.json ────
     # Les features inconnues restent NaN — XGBoost (missing=NaN) gère nativement.
     market_home_p: float | None = None
+    # Gardiens suivis (sains) de chaque équipe — pour les arrêts du modèle de tirs.
+    goalies_by_side: dict[str, list] = {}
     if _inference_state:
         teams_st  = _inference_state.get("teams", {})
         goalie_st = _inference_state.get("goalies", {})
@@ -2482,6 +2710,7 @@ def _game_context(f: GameFeatures) -> dict:
                 healthy = [g for g in goalies if _name_key(g.get("name", "")) not in scratch_set]
                 if healthy:
                     goalies = healthy
+            goalies_by_side[side] = goalies
             if goalies:
                 # Gardien nommé si fourni, sinon mix pondéré par usage récent
                 g0 = _find_goalie(goalies, goalie_id, goalie_name)
@@ -2739,8 +2968,13 @@ def _game_context(f: GameFeatures) -> dict:
         # ni client.
         model_version = "score-nhl-v1.0"
 
+    # Tirs attendus (piste 3) et arrêts de chaque gardien s'il part.
+    shots = _shots_for(feat_values)
+    goalie_saves = _goalie_saves(shots, goalies_by_side)
+
     return {
         "feat_values": feat_values,
+        "shots": shots, "goalie_saves": goalie_saves,
         # Victoire corrigée que le recalage n'a PAS pu intégrer à la
         # distribution (repli : servie sur le seul marché `moneyline`, comme
         # avant). None dans le cas normal — la correction est dans `score_dist`.
@@ -2941,8 +3175,9 @@ def _player_rates(ctx: dict, f: GameFeatures, home_ids: list[str], away_ids: lis
             arr = np.array([[np.nan if r.get(n) is None else float(r[n]) for n in feats] for r in rows],
                            dtype=np.float32)
             dmats[feats] = xgb.DMatrix(arr, feature_names=list(feats), missing=np.nan)
+        k_lvl = _player_level.get(stat, 1.0)       # recalage de niveau de la saison
         for i, mu in zip(ids, bst.predict(dmats[feats])):
-            out[i][stat] = round(float(mu), 4)
+            out[i][stat] = round(float(mu) * k_lvl, 4)
     return out
 
 
@@ -2979,6 +3214,14 @@ class GameBundleResponse(BaseModel):
     # k de la binomiale négative par stat ; `null` = Poisson.
     player_dispersion: dict[str, Optional[float]] = Field(default_factory=dict)
     player_model_as_of: Optional[str] = None
+    # Modèle de tirs (piste 3) : tirs cadrés attendus de chaque équipe, et
+    # arrêts attendus de chaque gardien suivi { idNHL: μ } s'il part ce soir.
+    # Vides sans modèle de tirs — Node garde alors sa règle.
+    lambda_shots_home: Optional[float] = None
+    lambda_shots_away: Optional[float] = None
+    goalie_saves: dict[str, float] = Field(default_factory=dict)
+    # k de la binomiale négative des arrêts.
+    saves_dispersion: Optional[float] = None
 
 
 @app.post("/predict/game/bundle", response_model=GameBundleResponse, dependencies=_PROTECTED)
@@ -3005,6 +3248,10 @@ def predict_game_bundle(req: GameBundleRequest) -> GameBundleResponse:
         player_rates=rates,
         player_dispersion=dict(_player_k) if rates else {},
         player_model_as_of=_player_state.get("as_of") if rates else None,
+        lambda_shots_home=None if not ctx.get("shots") else round(ctx["shots"]["home"], 4),
+        lambda_shots_away=None if not ctx.get("shots") else round(ctx["shots"]["away"], 4),
+        goalie_saves=ctx.get("goalie_saves") or {},
+        saves_dispersion=_shots_info.get("k_saves") if ctx.get("goalie_saves") else None,
     )
 
 # ── Player prop model ─────────────────────────────────────────────────────────
@@ -3162,6 +3409,10 @@ def health():
             "sigma_max":        _score_sigma_max,
         },
         "goal_level_k": _level_k_now(),
+        # Modèle de tirs (piste 3) : sert les arrêts du gardien.
+        "shots_model": _shots_model is not None,
+        "player_level_k": dict(_player_level),
+        "shots_level_k": read_level_layer(_shots_level, _season_start_year()) if _shots_model is not None else None,
         "match_shape": (_game_dynamics_info or {}).get("match_shape", "Poisson × τ de score_report.json"),
         "elo_teams_loaded": len(_elo_ratings),
         "calibrated":       _platt_a is not None,

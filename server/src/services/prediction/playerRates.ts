@@ -221,9 +221,16 @@ function rowsFor(roster: any[], team: TeamCtx, opp: TeamCtx | null): Record<stri
  * JOUEUR quand le paquet ML du match en porte (`gameMlBundle.ts`).
  *
  * Aucun appel de plus : le paquet est celui que la page match charge déjà, mis
- * en cache 10 min par match. Les arrêts restent à la règle (le modèle ne couvre
- * pas les gardiens), et un joueur inconnu du modèle — une recrue — aussi.
- * Le premier buteur suit la cadence de buts du modèle.
+ * en cache 10 min par match. Un joueur inconnu du modèle — une recrue — garde
+ * la règle. Le premier buteur suit la cadence de buts du modèle.
+ *
+ * GARDIENS (piste 3, 2026-10-15). Leurs arrêts viennent du modèle de TIRS du
+ * paquet (`goalieSaves` : tirs cadrés attendus de l'adversaire × % d'arrêts du
+ * gardien × 0,97 pour les matchs qu'il ne finit pas), avec sa dispersion
+ * (`savesDispersion`). Mesuré contre la règle ci-dessus (train_shots.py, test
+ * 2023-26) : log-vraisemblance z 11,8 ; « plus de 24,5 arrêts » 54 % prévus
+ * pour 53 % observés, quand la règle disait 43 %. Gardien absent de l'état du
+ * modèle, ou modèle de tirs non déployé : la règle.
  */
 function applyPlayerModel(
   players: Record<string, PlayerRateRow>, bundle: GameMlBundle | null,
@@ -236,12 +243,21 @@ function applyPlayerModel(
   // deux modèles (ml/INCOHERENCES_ML.md §13). Quand le paquet les porte, ces
   // λ servent à TOUS les joueurs du match — modèle ou règle — pour que les
   // probabilités de premier buteur soient sur la même échelle.
+  const saves = bundle?.goalieSaves ?? {};
   const lh = bundle?.lambdaHome, la = bundle?.lambdaAway;
   const modelGameGoals = lh != null && la != null && Number.isFinite(lh + la) && lh + la > 0
     ? lh + la : null;
   for (const [id, row] of Object.entries(players)) {
     const m = model[id];
-    if (!m || row.position === 'G') {
+    if (row.position === 'G') {
+      const sv = saves[id];
+      if (typeof sv === 'number' && Number.isFinite(sv) && sv > 0) {
+        row.rates.saves = round4(sv);
+        row.source = 'model';
+      } else {
+        row.source = 'rules';
+      }
+    } else if (!m) {
       row.source = 'rules';
     } else {
       for (const [stat, v] of Object.entries(m)) {
@@ -254,9 +270,15 @@ function applyPlayerModel(
       row.firstGoal = round4((row.rates.goals / row.gameGoals) * (1 - Math.exp(-row.gameGoals)));
     }
   }
-  return Object.keys(model).length
-    ? { modelDispersion: bundle!.playerDispersion, modelAsOf: bundle!.playerModelAsOf }
-    : {};
+  const goalieModel = Object.values(players).some(r => r.position === 'G' && r.source === 'model');
+  if (!Object.keys(model).length && !goalieModel) return {};
+  return {
+    modelDispersion: {
+      ...(bundle!.playerDispersion ?? {}),
+      ...(goalieModel ? { saves: bundle!.savesDispersion ?? null } : {}),
+    },
+    modelAsOf: bundle!.playerModelAsOf,
+  };
 }
 
 /** Paquet ML du match, ou `null` s'il est indisponible (service ML en panne…). */

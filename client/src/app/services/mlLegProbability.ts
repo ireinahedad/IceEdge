@@ -82,6 +82,12 @@ function gameAsks(q: MlLegQuery, subjectIsHome: boolean): { asks: GameAsk[]; inv
     case "regulation_result":
       return sel === "draw" ? one("game_to_ot", null, "yes", true) : one("regulation_result", null, null, teamSide);
     case "puck_line":         return one("puck_line", -1.5, null, teamSide);
+    // Double chance (60 min) : mêmes clés que les tuiles « EDM or Draw » /
+    // « EDM or CGY » de la page match (sélection = abréviation ou `no_draw`).
+    case "double_chance":
+      return sel === "no_draw"
+        ? one("double_chance", null, "no_draw", true)
+        : one("double_chance", null, teamSide ? home : (q.awayAbbr ?? "").toLowerCase(), teamSide);
     case "alt_puck_line": {
       if (L == null) return null;
       const side = sel === "away" ? false : true;

@@ -214,7 +214,28 @@ fin de match (une équipe qui mène ralentit).
    Poisson × τ (sur laquelle elle a été ajustée), puis la matrice du moteur
    est recalée dessus. La victoire « brute » du moteur est ~1 point plus basse
    que celle de Poisson × τ, uniformément, à log-loss égale (z −0,7).
-4. **Ne pas poursuivre** : Frank, COM-Poisson, simulation xG avant-match,
+4. **Moteur pour premier but, dernier but, marque à chaque période — MESURÉ,
+   NON ADOPTÉ** (piste 4, `s8_marches_equipe.py`). `game_dynamics.team_events`
+   joue ces trois marchés exactement (état augmenté : premier / dernier
+   buteur, but dans chaque période ; prolongation par but q = 0,649, fusillade
+   exclue comme au règlement). Contre les formules de `ml_service._apply_market`,
+   sur 5 199 matchs 2022-23 → 2025-26 (λ hors échantillon recalés, table c
+   ajustée sur 2019-2021, règle posée avant le run : mieux en validation ET en
+   test, z ≥ 2 en test) :
+
+   | marché | log-perte règle → moteur (test) | z test | z validation |
+   |---|---|---|---|
+   | premier but | 0,68918 → 0,68918 | +0,2 | −0,7 |
+   | dernier but | 0,68060 → 0,68045 | +1,9 | +0,6 |
+   | marque à chaque période | 0,56643 → 0,56639 | +1,7 | +2,0 |
+
+   Aucun ne passe : les formules étaient déjà de bonnes approximations (le
+   premier but est presque une course entre deux Poisson à 0-0 ; la 3e période
+   compte peu dans « marque à chaque période »). Jamais moins bon pour autant :
+   **servi quand même** (décision du 2026-10-15), pour que ces trois marchés
+   sortent du même moteur que les autres ; les formules restent le repli.
+   La « double chance » a été ajoutée le même jour (grille, 60 minutes).
+5. **Ne pas poursuivre** : Frank, COM-Poisson, simulation xG avant-match,
    bayésien comme modèle de λ. Le biais de niveau du test (+4 %) est bien
    celui que corrige `level_layer.json` en service (k = 0,976 au 2026-10-10).
 
@@ -230,6 +251,7 @@ python s4_bayes.py A ; python s4_bayes.py B ; python s4_eval.py   # piste 3, pip
 python s5_robustesse.py           # contrôle de niveau + τ glissant
 python s6_walkforward_match.py    # étape 3 : moteur vs τ glissant, walk-forward 2013-2025
 python s7_marches_periode.py      # étape 2 : marchés de période avec le code servi (≈ 7 min)
+python s8_marches_equipe.py      # piste 4 : premier / dernier but, chaque période (≈ 1 min)
 ```
 
 Sorties intermédiaires dans `explore_score/out/` (ignoré par git).

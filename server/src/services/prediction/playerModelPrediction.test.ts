@@ -75,6 +75,18 @@ describe('predictPlayerFromModel', () => {
     expect(r?.probability).toBe(97);
   });
 
+  it('gardien : arrêts du modèle de tirs (paquet → goalieSaves), k des arrêts', async () => {
+    player.value = { ...player.value, position: 'G' };
+    bundle.value = { ...bundle.value, goalieSaves: { '1': 26 }, savesDispersion: 50 };
+    const r = await predictPlayerFromModel(q({ gameId: '2026020030', propType: 'saves', line: 24.5 }));
+    expect(r?.probability).toBe(Math.round(probAtLeast(26, 25, 50) * 100));
+    expect(r?.model_type).toBe('Modèle de tirs (XGBoost)');
+    // Un gardien n'a pas de « buts » ; un patineur pas d'« arrêts ».
+    expect(await predictPlayerFromModel(q({ gameId: '2026020030', propType: 'goals' }))).toBeNull();
+    player.value = { ...player.value, position: 'C' };
+    expect(await predictPlayerFromModel(q({ gameId: '2026020030', propType: 'saves', line: 24.5 }))).toBeNull();
+  });
+
   it('rend null quand le modèle n\'a rien → repli sur /predict/player', async () => {
     // Stat non couverte (gardien), joueur inconnu du modèle, paquet en panne, match en cours.
     expect(await predictPlayerFromModel(q({ propType: 'saves' }))).toBeNull();
