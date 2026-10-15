@@ -502,6 +502,11 @@ export type MLProbabilityRequest = {
   // équipe à domicile au service Python : les deux tuiles moneyline d'un même
   // match recevaient chacune l'avantage de la glace et totalisaient 109–112 %.
   type: "game" | "player" | "team"; subjectId: string; opponentId?: string; propType?: string; line?: number; selection?: string; isHome?: boolean;
+  /**
+   * Pari JOUEUR : le match visé. Le serveur y lit la cadence du modèle joueur
+   * (paquet ML du match) ; sans lui, il prend le prochain match du joueur.
+   */
+  gameId?: string;
 };
 
 /**
@@ -513,7 +518,7 @@ export type MLProbabilityRequest = {
 export function mlProbabilityKey(req: MLProbabilityRequest): string {
   return JSON.stringify([
     req.type, req.subjectId, req.opponentId ?? null, req.propType ?? null,
-    req.line ?? null, req.selection ?? null, req.isHome ?? null,
+    req.line ?? null, req.selection ?? null, req.isHome ?? null, req.gameId ?? null,
   ]);
 }
 
@@ -642,6 +647,8 @@ interface MLSectionProps {
   selection?:   string;
   /** Le sujet reçoit-il ? Décide de quel côté le service applique la glace. */
   isHome?:      boolean;
+  /** Pari joueur : le match visé (modèle joueur du paquet ML de ce match). */
+  gameId?:      string;
   ruleBasedPct?: number;
   label?:       string;
   simple?:      boolean;
@@ -734,7 +741,7 @@ type MLState =
   | { status: "ready";       result: MLPredictionResult }
   | { status: "unavailable" };
 
-export function MLSection({ type, subjectId, opponentId, propType, line, selection, isHome, ruleBasedPct, label, simple, hero, preset }: MLSectionProps) {
+export function MLSection({ type, subjectId, opponentId, propType, line, selection, isHome, gameId, ruleBasedPct, label, simple, hero, preset }: MLSectionProps) {
   const { t, lang } = useI18n();
   const [state, setState] = useState<MLState>(() =>
     preset === undefined ? { status: "loading" }
@@ -757,7 +764,8 @@ export function MLSection({ type, subjectId, opponentId, propType, line, selecti
     fetchWithTimeout(`${ML_BASE}/ml`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, subjectId, opponentId, propType, line, selection, isHome }),
+      body: JSON.stringify({ type, subjectId, opponentId, propType, line, selection, isHome,
+                             ...(type === "player" && gameId ? { gameId } : {}) }),
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
@@ -769,7 +777,7 @@ export function MLSection({ type, subjectId, opponentId, propType, line, selecti
       })
       .catch(() => { if (alive) setState({ status: "unavailable" }); });
     return () => { alive = false; };
-  }, [type, subjectId, opponentId, propType, line, selection, isHome, preset]);
+  }, [type, subjectId, opponentId, propType, line, selection, isHome, gameId, preset]);
 
   if (state.status === "loading")     return <MLSkeleton />;
   if (state.status === "unavailable") return <MLUnavailable t={t} />;

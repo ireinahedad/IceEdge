@@ -799,4 +799,54 @@ describe('predictGameLegCorrelation — la corrélation est calculée, pas suppo
   it('sans cadences exploitables : null, pas un facteur inventé', async () => {
     expect(await predictGameLegCorrelation('INCONNU', 'AUTRE', [L('moneyline')])).toBeNull();
   });
+
+  // ── Jambe joueur (piste 2) ───────────────────────────────────────────────
+  // « X marque » pèse chaque case par 1 − (1 − s)^n, n = buts comptables de
+  // son équipe. Mesuré : P(marque ET son équipe gagne) ≈ 1,3 × le produit.
+  const scorer = (isHome: boolean) => ({ isHome, rate: 0.45 });
+
+  it('« X marque » + « son équipe gagne » se renforcent — facteur > 1', async () => {
+    const r = await predictGameLegCorrelation('HOM', 'AWY', [L('moneyline')], scorer(true));
+    expect(r!.factor).toBeGreaterThan(1.1);
+    expect(r!.factor).toBeLessThan(1.6);
+  });
+
+  it('« X marque » + « l\'adversaire gagne » se gênent — facteur < 1', async () => {
+    const mine = await predictGameLegCorrelation('HOM', 'AWY',
+      [L('moneyline', { subjectIsHome: false })], scorer(true));
+    const theirs = await predictGameLegCorrelation('HOM', 'AWY',
+      [L('moneyline', { subjectIsHome: false })], scorer(false));
+    expect(mine!.factor).toBeLessThan(1);
+    // Le même pari sur le visiteur, avec un buteur du visiteur : renforcé.
+    expect(theirs!.factor).toBeGreaterThan(1);
+  });
+
+  it('« X marque » + « plus de 5,5 buts » se renforcent', async () => {
+    const r = await predictGameLegCorrelation('HOM', 'AWY', [L('total_goals_over', { line: 5.5 })], scorer(true));
+    expect(r!.factor).toBeGreaterThan(1);
+  });
+
+  it('jambe joueur seule : facteur 1, et ses cases ne déplacent pas les jambes d\'équipe', async () => {
+    const alone = await predictGameLegCorrelation('HOM', 'AWY', [], scorer(true));
+    expect(alone!.factor).toBeCloseTo(1, 9);
+    // Le but de prolongation éclaté en « but » / « fusillade » ne change rien
+    // aux jambes d'équipe : même P(victoire) avec ou sans joueur.
+    const team = await predictExactGameParlay('HOM', 'AWY', [L('moneyline')]);
+    const withPlayer = await predictGameLegCorrelation('HOM', 'AWY', [L('moneyline')], scorer(true));
+    expect(withPlayer!.independent / alone!.joint).toBeCloseTo(team!, 9);
+  });
+
+  it('la part du joueur compte : un gros buteur dépend moins du nombre de buts de son équipe', async () => {
+    // Petite part s : P(marque | n) ≈ s·n, proportionnelle aux buts de l'équipe.
+    // Grosse part : P sature vite (dès 2-3 buts il a presque sûrement marqué),
+    // donc moins liée au résultat — facteur plus proche de 1, mais toujours > 1.
+    const small = await predictGameLegCorrelation('HOM', 'AWY', [L('moneyline')], { isHome: true, rate: 0.05 });
+    const big = await predictGameLegCorrelation('HOM', 'AWY', [L('moneyline')], { isHome: true, rate: 1.2 });
+    expect(big!.factor).toBeGreaterThan(1);
+    expect(small!.factor).toBeGreaterThan(big!.factor);
+  });
+
+  it('cadence nulle : null plutôt qu\'une part inventée', async () => {
+    expect(await predictGameLegCorrelation('HOM', 'AWY', [L('moneyline')], { isHome: true, rate: 0 })).toBeNull();
+  });
 });

@@ -199,6 +199,15 @@ export function ruleNote(text: string, lang: Lang): string {
  * règles — et même consigne : garder aligné avec ces gabarits.
  */
 const ML_RULES: Array<[RegExp, string]> = [
+  // Modèle joueur, pari à l'unité (server/src/services/prediction/playerModelPrediction.ts)
+  [/Modèle joueur XGBoost \(temps de glace, avantage numérique, xG des coéquipiers, production par 60 min, adversaire\) : /g,
+    "XGBoost player model (ice time, power play, linemates' xG, per-60 production, opponent): "],
+  [/ par match pour ce match ; /g, "/game for this game; "],
+  [/binomiale négative k=/g, "negative binomial k="],
+  [/loi de Poisson → /g, "Poisson → "],
+  [/ → plus de ([\d.]+) à (\d+) %\./g, " → over $1 at $2%."],
+  [/ → moins de ([\d.]+) à (\d+) %\./g, " → under $1 at $2%."],
+  [/^Modèle joueur \(XGBoost\)$/g, "Player model (XGBoost)"],
   // Corrections / côté inverse (enveloppent l'explication de base)
   [/Corrigé \(forme, fatigue, alignement, ELO\) : /g, "Adjusted (form, fatigue, lineup, ELO): "],
   [/ ; tous les marchés du match suivent \(λ bruts /g, "; all of this game's markets follow (raw λ "],

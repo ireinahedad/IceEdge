@@ -1,0 +1,176 @@
+{
+ "generated": "2026-10-15",
+ "q_ot_goal": 0.649,
+ "rule": "B remplace A pour une stat si \u0394 log-vraisemblance (B \u2212 A) > 0 en validation 2022-23 ET en test \u2265 2023-24, avec z \u2265 2 en test",
+ "n_rows": {
+  "val": 47206,
+  "test": 141657
+ },
+ "calibration_team": {
+  "sum_mu_goals": 3.0726,
+  "E_N_grid": 3.1006,
+  "observed": 3.079
+ },
+ "stats": {
+  "goals": {
+   "val": {
+    "loglik_A": -0.45355,
+    "loglik_B": -0.453498,
+    "loglik_C": -0.4535,
+    "dll_B": 5.2e-05,
+    "z_B": 0.34,
+    "dll_C": 5e-05,
+    "z_C": 0.32,
+    "brier_ge1_A": 0.121174,
+    "brier_ge1_B": 0.121149,
+    "brier_ge2_A": 0.016655,
+    "brier_ge2_B": 0.016653,
+    "mean_obs": 0.1747,
+    "mean_A": 0.1778,
+    "mean_B": 0.1756,
+    "obs_ge2": 0.01746,
+    "pA_ge2": 0.01908,
+    "pB_ge2": 0.01869
+   },
+   "test": {
+    "loglik_A": -0.446232,
+    "loglik_B": -0.44619,
+    "loglik_C": -0.446194,
+    "dll_B": 4.1e-05,
+    "z_B": 0.5,
+    "dll_C": 3.8e-05,
+    "z_C": 0.46,
+    "brier_ge1_A": 0.118746,
+    "brier_ge1_B": 0.118724,
+    "brier_ge2_A": 0.016404,
+    "brier_ge2_B": 0.016413,
+    "mean_obs": 0.1699,
+    "mean_A": 0.1684,
+    "mean_B": 0.1712,
+    "obs_ge2": 0.01709,
+    "pA_ge2": 0.01729,
+    "pB_ge2": 0.01786
+   },
+   "test_by_season": {
+    "2023": 6.9e-05,
+    "2024": 0.000143,
+    "2025": -8.8e-05
+   },
+   "adopt_B": false
+  },
+  "assists": {
+   "val": {
+    "loglik_A": -0.64644,
+    "loglik_B": -0.646773,
+    "loglik_C": -0.646786,
+    "dll_B": -0.000333,
+    "z_B": -1.63,
+    "dll_C": -0.000346,
+    "z_C": -1.7,
+    "brier_ge1_A": 0.170207,
+    "brier_ge1_B": 0.170283,
+    "brier_ge2_A": 0.039895,
+    "brier_ge2_B": 0.039939,
+    "mean_obs": 0.2943,
+    "mean_A": 0.2993,
+    "mean_B": 0.2961,
+    "obs_ge2": 0.04364,
+    "pA_ge2": 0.04347,
+    "pB_ge2": 0.04287
+   },
+   "test": {
+    "loglik_A": -0.635746,
+    "loglik_B": -0.635868,
+    "loglik_C": -0.635872,
+    "dll_B": -0.000121,
+    "z_B": -1.12,
+    "dll_C": -0.000126,
+    "z_C": -1.17,
+    "brier_ge1_A": 0.168224,
+    "brier_ge1_B": 0.168254,
+    "brier_ge2_A": 0.037436,
+    "brier_ge2_B": 0.037457,
+    "mean_obs": 0.2863,
+    "mean_A": 0.2849,
+    "mean_B": 0.2899,
+    "obs_ge2": 0.04092,
+    "pA_ge2": 0.03982,
+    "pB_ge2": 0.04123
+   },
+   "test_by_season": {
+    "2023": -7.1e-05,
+    "2024": 0.0001,
+    "2025": -0.000392
+   },
+   "adopt_B": false
+  },
+  "points": {
+   "val": {
+    "loglik_A": -0.840291,
+    "loglik_B": -0.840579,
+    "loglik_C": -0.840614,
+    "dll_B": -0.000288,
+    "z_B": -1.13,
+    "dll_C": -0.000324,
+    "z_C": -1.27,
+    "brier_ge1_A": 0.202911,
+    "brier_ge1_B": 0.203017,
+    "brier_ge2_A": 0.07689,
+    "brier_ge2_B": 0.076961,
+    "mean_obs": 0.469,
+    "mean_A": 0.4752,
+    "mean_B": 0.4699,
+    "obs_ge2": 0.09306,
+    "pA_ge2": 0.09297,
+    "pB_ge2": 0.09184
+   },
+   "test": {
+    "loglik_A": -0.829151,
+    "loglik_B": -0.82921,
+    "loglik_C": -0.829248,
+    "dll_B": -5.9e-05,
+    "z_B": -0.43,
+    "dll_C": -9.7e-05,
+    "z_C": -0.72,
+    "brier_ge1_A": 0.201646,
+    "brier_ge1_B": 0.201649,
+    "brier_ge2_A": 0.073734,
+    "brier_ge2_B": 0.073742,
+    "mean_obs": 0.4562,
+    "mean_A": 0.4514,
+    "mean_B": 0.4592,
+    "obs_ge2": 0.08829,
+    "pA_ge2": 0.08574,
+    "pB_ge2": 0.08857
+   },
+   "test_by_season": {
+    "2023": -8e-06,
+    "2024": 0.000287,
+    "2025": -0.000457
+   },
+   "adopt_B": false
+  }
+ },
+ "joint_score_and_win": {
+  "val": {
+   "loglik_indep_A": -1.053784,
+   "loglik_grid_B": -1.045111,
+   "dll_grid_vs_indep_A": 0.008673,
+   "z": 13.89,
+   "dll_corr_only": 0.008619,
+   "z_corr_only": 14.0,
+   "lift_observed": 1.3135,
+   "lift_grid": 1.2837
+  },
+  "test": {
+   "loglik_indep_A": -1.055053,
+   "loglik_grid_B": -1.045494,
+   "dll_grid_vs_indep_A": 0.009559,
+   "z": 26.29,
+   "dll_corr_only": 0.009505,
+   "z_corr_only": 26.66,
+   "lift_observed": 1.3269,
+   "lift_grid": 1.2944
+  }
+ }
+}

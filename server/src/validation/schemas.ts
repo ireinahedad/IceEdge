@@ -363,6 +363,9 @@ export const predictMlSchema = z.object({
   // recevaient chacune l'avantage de la glace et totalisaient 109–112 %.
   // Optionnel, défaut `true`, pour que les corps déjà en circulation passent.
   isHome:     z.boolean().optional(),
+  // Pari JOUEUR : le match visé. Sans lui, le serveur prend le prochain match
+  // de l'équipe du joueur (contre `opponentId` s'il est donné).
+  gameId:     z.string().regex(/^\d{6,12}$/, 'invalid gameId').optional(),
 });
 
 

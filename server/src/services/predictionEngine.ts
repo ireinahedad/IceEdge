@@ -64,7 +64,9 @@ export {
   predictGameLegCorrelation,
   predictExactGameParlay,
 } from './prediction/gameParlay';
+export { OT_GOAL_SHARE } from './prediction/gameParlay';
 export type {
   GameParlayLeg,
   GameParlayCorrelation,
+  GamePlayerLeg,
 } from './prediction/gameParlay';

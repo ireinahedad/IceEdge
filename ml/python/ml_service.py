@@ -3145,10 +3145,11 @@ def health():
             # Les totaux sont pricés depuis la distribution du modèle de score
             # (S2 a retiré totals_model.json) ; sans lui, heuristique déclarée.
             "totals": "Modèle de score (Poisson empilé)" if _xgb_score is not None else "Poisson (fallback)",
-            # Le modèle joueur entraîné sert les cadences du paquet de match ;
-            # `/predict/player` reste une loi de Poisson / oui-non sur la
-            # cadence envoyée par le serveur.
-            "player": ("XGBoost count:poisson (cadences du paquet) + Poisson (/predict/player)"
+            # Le modèle joueur entraîné sert les cadences du paquet de match —
+            # y compris, côté Node, les paris joueur demandés à l'unité
+            # (playerModelPrediction.ts). `/predict/player` n'est plus qu'un
+            # REPLI : loi de Poisson / oui-non sur la cadence envoyée.
+            "player": ("XGBoost count:poisson (cadences du paquet) + Poisson (/predict/player, repli)"
                        if _player_models else "Poisson Distribution"),
             "team":   "Bayesian Prior",
         },

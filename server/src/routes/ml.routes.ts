@@ -29,6 +29,7 @@ import {
 } from "../services/predictionEngine";
 import { mlApiClient } from "../services/mlApiClient";
 import { getGameMlBundle } from "../services/gameMlBundle";
+import { predictPlayerFromModel } from "../services/prediction/playerModelPrediction";
 import { fetchGameById } from "../services/nhlApiClient";
 import { currentSeason } from "../services/nhl/core";
 import {
@@ -777,7 +778,7 @@ router.post("/futures", validateBody(predictFuturesSchema), async (req: Request,
 
 router.post('/ml', predictLimiter, validateBody(predictMlSchema), async (req: Request, res: Response) => {
   try {
-    const { type, subjectId, opponentId, propType, line, selection, isHome } = req.body as {
+    const { type, subjectId, opponentId, propType, line, selection, isHome, gameId } = req.body as {
       type:        'game' | 'player' | 'team';
       subjectId:   string;
       opponentId?: string;
@@ -785,6 +786,7 @@ router.post('/ml', predictLimiter, validateBody(predictMlSchema), async (req: Re
       line?:       number;
       selection?:  string;
       isHome?:     boolean;
+      gameId?:     string;
     };
 
     if (!type || !subjectId) {
@@ -817,13 +819,27 @@ router.post('/ml', predictLimiter, validateBody(predictMlSchema), async (req: Re
       );
       result = await mlApiClient.predictGame(features);
     } else if (type === 'player') {
-      const features = await buildPlayerPropFeatures(
-        subjectId,
-        propType ?? 'goals',
-        line    ?? 0.5,
-        selection ?? 'over'
-      );
-      result = await mlApiClient.predictPlayer(features);
+      // Le MODÈLE JOUEUR d'abord (cadence du paquet ML du match, binomiale
+      // négative) : le même chiffre que les grilles de la page du match. La
+      // Poisson de saison de `/predict/player` ne sert plus qu'en repli —
+      // gardien, recrue inconnue du modèle, aucun match à venir, match en
+      // cours. Voir `prediction/playerModelPrediction.ts`.
+      result = await predictPlayerFromModel({
+        playerId:  subjectId,
+        propType:  propType ?? 'goals',
+        line:      line ?? 0.5,
+        selection: selection ?? 'over',
+        gameId, opponentId, isHome,
+      }).catch(() => null);
+      if (!result) {
+        const features = await buildPlayerPropFeatures(
+          subjectId,
+          propType ?? 'goals',
+          line    ?? 0.5,
+          selection ?? 'over'
+        );
+        result = await mlApiClient.predictPlayer(features);
+      }
     } else if (type === 'team') {
       const features = await buildTeamFuturesFeatures(subjectId, propType ?? 'moneyline');
       result = await mlApiClient.predictTeam(features);

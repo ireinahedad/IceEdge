@@ -179,45 +179,111 @@ export interface GameParlayCorrelation {
   independent: number;
 }
 
+// ── Jambe JOUEUR dans la loi jointe (piste 2, 2026-10-15) ────────────────────
+//
+// « X marque » n'est pas décidé par le score final, mais il en DÉPEND : sachant
+// que son équipe a marqué n buts, X en a inscrit au moins un avec la
+// probabilité 1 − (1 − s)^n, où s est sa part des buts de l'équipe. Une jambe
+// joueur entre donc dans la loi jointe comme un POIDS par case, pas comme un
+// indicateur — et sa corrélation avec « son équipe gagne », « plus de 5,5 »,
+// « −1,5 »… sort de la grille, comme pour les jambes d'équipe.
+//
+// Mesuré avant d'être branché (ml/python/explore_players/joint.py, règle posée
+// avant le run, 189 000 joueur-matchs hors échantillon 2022-23 → 2025-26) :
+// contre le produit (ce que faisait le coupon), log-perte sur les 4 issues
+// meilleure en validation ET en test pour « marque + gagne » (z 27 en test),
+// « 1+ point + gagne » (z 39), « marque + plus de 5,5 » (z 22), « marque +
+// gagne par 2 » (z 26), « marque + l'adversaire gagne » (z 28) — avec cette
+// même grille Poisson et cette même part μ / E[N]. Observé : P(marque ET
+// gagne) = 1,33 × le produit ; la grille dit 1,28.
+//
+// Ce qui n'est PAS branché, faute de gain mesuré : deux joueurs du même match
+// (deux coéquipiers qui marquent : lift observé 1,02, rien à gagner), et les
+// seuils au-delà de 1 (2+ buts, 2+ points), jamais mesurés. Une seule jambe
+// joueur par match entre donc dans la grille ; les autres restent au produit.
+
+/**
+ * Part des prolongations tranchées par un BUT (le reste : fusillade). Un but de
+ * fusillade compte au score final mais à aucun joueur. Mesuré sur 1 849
+ * prolongations 2015-16 → 2021-22 (3 c. 3) : 64,9 %.
+ */
+export const OT_GOAL_SHARE = 0.649;
+
+/** La jambe joueur posée sur la grille : son côté, et sa cadence pour ce match. */
+export interface GamePlayerLeg {
+  /** Le joueur est-il dans l'équipe à domicile ? */
+  isHome: boolean;
+  /**
+   * Cadence par match de l'événement (buts pour « marque », points pour
+   * « 1+ point »). La jambe passe si le joueur en a au moins un.
+   */
+  rate: number;
+}
+
 export async function predictGameLegCorrelation(
   homeId: string,
   awayId: string,
-  legs: GameParlayLeg[]
+  legs: GameParlayLeg[],
+  player?: GamePlayerLeg,
 ): Promise<GameParlayCorrelation | null> {
-  if (legs.length === 0) return { factor: 1, joint: 1, independent: 1 };
+  if (legs.length === 0 && !player) return { factor: 1, joint: 1, independent: 1 };
 
   const d = await scoreDistribution(homeId, awayId);
   if (!d) return null;
 
   const pHomeOT = pWinsOvertime(d, true);
+  const q = OT_GOAL_SHARE;
+
+  // Issues finales, avec les buts COMPTABLES de l'équipe du joueur (sans le but
+  // de fusillade). Un nul réglementaire k-k se termine par un but de plus pour
+  // un camp : en prolongation (q, compté pour ses joueurs) ou en fusillade.
+  const outcomes: Array<{ o: FinalOutcome; own: number; w: number }> = [];
+  for (let h = 0; h <= MAX_GOALS; h++) {
+    for (let a = 0; a <= MAX_GOALS; a++) {
+      const cell = d.M[h][a];
+      if (cell <= 0) continue;
+      const own = player?.isHome === false ? a : h;
+      if (h !== a) {
+        outcomes.push({ o: { home: h, away: a, ot: false }, own, w: cell });
+      } else {
+        const homeWin = { home: h + 1, away: a, ot: true };
+        const awayWin = { home: h, away: a + 1, ot: true };
+        const mineWins = player?.isHome !== false;   // sans joueur : sans effet
+        outcomes.push({ o: homeWin, own: own + (mineWins ? 1 : 0), w: cell * pHomeOT * q });
+        outcomes.push({ o: homeWin, own, w: cell * pHomeOT * (1 - q) });
+        outcomes.push({ o: awayWin, own: own + (mineWins ? 0 : 1), w: cell * (1 - pHomeOT) * q });
+        outcomes.push({ o: awayWin, own, w: cell * (1 - pHomeOT) * (1 - q) });
+      }
+    }
+  }
+
+  // Part du joueur : sa cadence rapportée aux buts comptables attendus de son
+  // équipe sur CETTE grille (même échelle que les cases qu'on va lire).
+  let share = 0;
+  if (player) {
+    const expected = outcomes.reduce((acc, x) => acc + x.w * x.own, 0);
+    if (!(player.rate > 0) || !(expected > 0)) return null;
+    share = Math.min(0.99, player.rate / expected);
+  }
+
   let joint = 0;
   const marginals = new Array(legs.length).fill(0);
+  let playerMarginal = 0;
 
-  /** Ajoute une issue finale et son poids aux compteurs. */
-  const tally = (o: FinalOutcome, w: number) => {
-    if (w <= 0) return;
+  for (const { o, own, w } of outcomes) {
+    if (w <= 0) continue;
     let all = true;
     for (let i = 0; i < legs.length; i++) {
       if (legWins(legs[i], o)) marginals[i] += w;
       else all = false;
     }
-    if (all) joint += w;
-  };
-
-  for (let h = 0; h <= MAX_GOALS; h++) {
-    for (let a = 0; a <= MAX_GOALS; a++) {
-      const cell = d.M[h][a];
-      if (cell <= 0) continue;
-      if (h !== a) {
-        tally({ home: h, away: a, ot: false }, cell);
-      } else {
-        tally({ home: h + 1, away: a, ot: true }, cell * pHomeOT);
-        tally({ home: h, away: a + 1, ot: true }, cell * (1 - pHomeOT));
-      }
-    }
+    // Sans joueur, le poids de la jambe joueur vaut 1 : rien ne change.
+    const px = player ? 1 - Math.pow(1 - share, own) : 1;
+    playerMarginal += w * px;
+    if (all) joint += w * px;
   }
 
-  const independent = marginals.reduce((acc, m) => acc * m, 1);
+  const independent = marginals.reduce((acc, m) => acc * m, 1) * (player ? playerMarginal : 1);
   // Une marge nulle rendrait le facteur infini : dans ce cas la loi jointe dit
   // que la jambe ne peut pas passer, et le produit vaut déjà 0.
   const factor = independent > 0 ? joint / independent : 0;

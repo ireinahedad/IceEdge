@@ -189,6 +189,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
     const p = await fetchMLProbability({
       type: mlProps.type, subjectId: mlProps.subjectId, opponentId: mlProps.opponentId,
       propType: mlProps.propType, line: mlProps.line, selection: mlProps.selection, isHome: mlProps.isHome,
+      ...(mlProps.type === "player" && mlProps.gameId ? { gameId: mlProps.gameId } : {}),
     });
     return typeof p === "number" && Number.isFinite(p) ? Math.round(p) : null;
   }
@@ -401,6 +402,7 @@ function PredictionSheet({ label, rulePct, serverPct, ruleNote, accent, mlProps,
             line={mlProps.line}
             selection={mlProps.selection}
             isHome={mlProps.isHome}
+            gameId={mlProps.type === "player" ? mlProps.gameId : undefined}
             ruleBasedPct={rulePct}
             label={label}
             simple
@@ -730,7 +732,8 @@ export function BetOption({ opt, accent, compact = false }: { opt: BetOpt; accen
   // les tuiles qui demandent la même chose (mesuré le 2026-09-16 : 31 appels
   // par bascule sur une page de match, 429 dès le premier aller-retour).
   const mlReq: MLProbabilityRequest | null = opt.mlProps
-    ? { type: opt.mlProps.type, subjectId: opt.mlProps.subjectId, opponentId: opt.mlProps.opponentId, propType: opt.mlProps.propType, line: opt.mlProps.line, selection: opt.mlProps.selection, isHome: opt.mlProps.isHome }
+    ? { type: opt.mlProps.type, subjectId: opt.mlProps.subjectId, opponentId: opt.mlProps.opponentId, propType: opt.mlProps.propType, line: opt.mlProps.line, selection: opt.mlProps.selection, isHome: opt.mlProps.isHome,
+        ...(opt.mlProps.type === "player" && opt.mlProps.gameId ? { gameId: opt.mlProps.gameId } : {}) }
     : null;
   const mlKey = mlReq ? mlProbabilityKey(mlReq) : null;
   useEffect(() => {

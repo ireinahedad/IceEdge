@@ -1,0 +1,397 @@
+{
+  "date": "2026-10-15",
+  "protocole": {
+    "walk_forward": "saisons 2012-2025 (2026 en cours exclue), modele de score entraine sur les saisons < S, memes hyperparametres par fold que la reference (cache), tau et prolongation ajustes sur le passe",
+    "regle": "log-loss moneyline OU puck line z <= -2 (apparie par match) ET gain sur >= 70 % des saisons, l autre marche z < +2",
+    "chaine_servie": "couche de correction C walk-forward (>= 3 saisons passees), 2015-2025",
+    "environnement": "XGBoost 3.x, Linux : niveaux legerement differents des rapports Windows, comparaisons appariees"
+  },
+  "features": {
+    "xg_flurry": {
+      "ml": {
+        "n": 16682,
+        "delta": -3e-05,
+        "se": 0.000195,
+        "z": -0.15,
+        "seasons_better": "6/14",
+        "verdict": "NON TRANCHABLE"
+      },
+      "pl": {
+        "n": 16682,
+        "delta": -9.3e-05,
+        "se": 0.000145,
+        "z": -0.64,
+        "seasons_better": "7/14",
+        "verdict": "NON TRANCHABLE"
+      },
+      "dev": {
+        "n": 16682,
+        "delta": -0.000206,
+        "se": 0.000317,
+        "z": -0.65,
+        "seasons_better": "6/14",
+        "verdict": "NON TRANCHABLE"
+      },
+      "ml_servi": {
+        "n": 13502,
+        "delta": 6.1e-05,
+        "se": 0.000122,
+        "z": 0.5,
+        "seasons_better": "4/11",
+        "verdict": "NON TRANCHABLE"
+      }
+    },
+    "xg_fsv": {
+      "ml": {
+        "n": 16682,
+        "delta": 0.000392,
+        "se": 0.000234,
+        "z": 1.68,
+        "seasons_better": "4/14",
+        "verdict": "NON TRANCHABLE"
+      },
+      "pl": {
+        "n": 16682,
+        "delta": 0.000176,
+        "se": 0.000178,
+        "z": 0.99,
+        "seasons_better": "5/14",
+        "verdict": "NON TRANCHABLE"
+      },
+      "dev": {
+        "n": 16682,
+        "delta": 7.2e-05,
+        "se": 0.000397,
+        "z": 0.18,
+        "seasons_better": "6/14",
+        "verdict": "NON TRANCHABLE"
+      },
+      "ml_servi": {
+        "n": 13502,
+        "delta": 0.000294,
+        "se": 0.000157,
+        "z": 1.86,
+        "seasons_better": "4/11",
+        "verdict": "NON TRANCHABLE"
+      }
+    },
+    "elo_ac": {
+      "ml": {
+        "n": 16682,
+        "delta": 0.00012,
+        "se": 0.00014,
+        "z": 0.86,
+        "seasons_better": "5/14",
+        "verdict": "NON TRANCHABLE"
+      },
+      "pl": {
+        "n": 16682,
+        "delta": -4e-06,
+        "se": 0.000105,
+        "z": -0.03,
+        "seasons_better": "5/14",
+        "verdict": "NON TRANCHABLE"
+      },
+      "dev": {
+        "n": 16682,
+        "delta": 4.2e-05,
+        "se": 0.000227,
+        "z": 0.18,
+        "seasons_better": "6/14",
+        "verdict": "NON TRANCHABLE"
+      },
+      "ml_servi": {
+        "n": 13502,
+        "delta": 0.000103,
+        "se": 8.6e-05,
+        "z": 1.2,
+        "seasons_better": "2/11",
+        "verdict": "NON TRANCHABLE"
+      }
+    }
+  },
+  "devigage_calibration": {
+    "market": {
+      "tout": {
+        "n": 12444,
+        "ll_prop": 0.66675,
+        "marge_moy": 0.0333,
+        "shin": {
+          "n": 12444,
+          "delta": -3.8e-05,
+          "se": 7e-05,
+          "z": -0.54,
+          "ll": 0.66671,
+          "seasons_better": "6/11"
+        },
+        "power": {
+          "n": 12444,
+          "delta": -3.3e-05,
+          "se": 0.000107,
+          "z": -0.31,
+          "ll": 0.66672,
+          "seasons_better": "6/11"
+        }
+      },
+      "oddsapi:draftkings": {
+        "n": 2621,
+        "ll_prop": 0.67037,
+        "marge_moy": 0.0429,
+        "shin": {
+          "n": 2621,
+          "delta": 0.000121,
+          "se": 0.000196,
+          "z": 0.61,
+          "ll": 0.67049,
+          "seasons_better": "1/2"
+        },
+        "power": {
+          "n": 2621,
+          "delta": 0.00022,
+          "se": 0.0003,
+          "z": 0.73,
+          "ll": 0.67059,
+          "seasons_better": "1/2"
+        }
+      },
+      "sbro": {
+        "n": 9823,
+        "ll_prop": 0.66578,
+        "marge_moy": 0.0307,
+        "shin": {
+          "n": 9823,
+          "delta": -8.1e-05,
+          "se": 7.2e-05,
+          "z": -1.12,
+          "ll": 0.6657,
+          "seasons_better": "5/9"
+        },
+        "power": {
+          "n": 9823,
+          "delta": -0.0001,
+          "se": 0.000109,
+          "z": -0.92,
+          "ll": 0.66568,
+          "seasons_better": "5/9"
+        }
+      }
+    },
+    "flb": [
+      {
+        "classe": "0.50-0.55",
+        "n": 3881,
+        "p_prop": 0.5245,
+        "p_shin": 0.5254,
+        "observe": 0.5308
+      },
+      {
+        "classe": "0.55-0.60",
+        "n": 3769,
+        "p_prop": 0.5732,
+        "p_shin": 0.5756,
+        "observe": 0.5742
+      },
+      {
+        "classe": "0.60-0.65",
+        "n": 2706,
+        "p_prop": 0.6223,
+        "p_shin": 0.6261,
+        "observe": 0.6308
+      },
+      {
+        "classe": "0.65-0.70",
+        "n": 1330,
+        "p_prop": 0.6714,
+        "p_shin": 0.677,
+        "observe": 0.6744
+      },
+      {
+        "classe": "0.70-0.80",
+        "n": 736,
+        "p_prop": 0.7318,
+        "p_shin": 0.7398,
+        "observe": 0.7486
+      }
+    ],
+    "calibration": {
+      "Cbeta_vs_C": {
+        "n": 13502,
+        "delta": 0.000338,
+        "se": 0.000229,
+        "z": 1.48,
+        "seasons_better": "4/11",
+        "verdict": "NON TRANCHABLE"
+      },
+      "iso_vs_C": {
+        "n": 9776,
+        "delta": 0.005737,
+        "se": 0.001839,
+        "z": 3.12,
+        "seasons_better": "1/8",
+        "verdict": "PIRE"
+      }
+    },
+    "reliab_C": [
+      [
+        "0.2-0.3",
+        270,
+        0.268,
+        0.3
+      ],
+      [
+        "0.3-0.4",
+        1387,
+        0.36,
+        0.365
+      ],
+      [
+        "0.4-0.5",
+        3321,
+        0.454,
+        0.456
+      ],
+      [
+        "0.5-0.6",
+        4109,
+        0.55,
+        0.554
+      ],
+      [
+        "0.6-0.7",
+        3135,
+        0.646,
+        0.629
+      ],
+      [
+        "0.7-0.8",
+        1156,
+        0.737,
+        0.729
+      ],
+      [
+        "0.8-0.9",
+        117,
+        0.824,
+        0.855
+      ]
+    ],
+    "reliab_Cbeta": [
+      [
+        "0.2-0.3",
+        382,
+        0.263,
+        0.312
+      ],
+      [
+        "0.3-0.4",
+        1408,
+        0.358,
+        0.371
+      ],
+      [
+        "0.4-0.5",
+        3033,
+        0.454,
+        0.457
+      ],
+      [
+        "0.5-0.6",
+        4055,
+        0.551,
+        0.55
+      ],
+      [
+        "0.6-0.7",
+        3508,
+        0.646,
+        0.632
+      ],
+      [
+        "0.7-0.8",
+        1028,
+        0.734,
+        0.741
+      ],
+      [
+        "0.8-0.9",
+        55,
+        0.815,
+        0.855
+      ]
+    ]
+  },
+  "decorrelation": {
+    "0.0": {
+      "logloss": 0.664,
+      "n_bets": 5803,
+      "tout": {
+        "n": 5803,
+        "clv_moy_pts": 1.563,
+        "clv_t": 37.73,
+        "roi_pct": 4.46,
+        "roi_t": 3.34
+      },
+      "sbro": {
+        "n": 5803,
+        "clv_moy_pts": 1.563,
+        "clv_t": 37.73,
+        "roi_pct": 4.46,
+        "roi_t": 3.34
+      }
+    },
+    "0.25": {
+      "logloss": 0.66407,
+      "n_bets": 5912,
+      "tout": {
+        "n": 5912,
+        "clv_moy_pts": 1.534,
+        "clv_t": 37.45,
+        "roi_pct": 4.41,
+        "roi_t": 3.36
+      },
+      "sbro": {
+        "n": 5912,
+        "clv_moy_pts": 1.534,
+        "clv_t": 37.45,
+        "roi_pct": 4.41,
+        "roi_t": 3.36
+      }
+    },
+    "0.5": {
+      "logloss": 0.66422,
+      "n_bets": 6075,
+      "tout": {
+        "n": 6075,
+        "clv_moy_pts": 1.507,
+        "clv_t": 37.51,
+        "roi_pct": 3.94,
+        "roi_t": 3.06
+      },
+      "sbro": {
+        "n": 6075,
+        "clv_moy_pts": 1.507,
+        "clv_t": 37.51,
+        "roi_pct": 3.94,
+        "roi_t": 3.06
+      }
+    },
+    "1.0": {
+      "logloss": 0.66494,
+      "n_bets": 6417,
+      "tout": {
+        "n": 6417,
+        "clv_moy_pts": 1.452,
+        "clv_t": 37.39,
+        "roi_pct": 3.91,
+        "roi_t": 3.15
+      },
+      "sbro": {
+        "n": 6417,
+        "clv_moy_pts": 1.452,
+        "clv_t": 37.39,
+        "roi_pct": 3.91,
+        "roi_t": 3.15
+      }
+    }
+  }
+}

@@ -1,0 +1,147 @@
+{
+ "generated": "2026-10-15",
+ "q_ot_goal": 0.649,
+ "grid": "engine",
+ "share": "sum",
+ "rule": "facteur de la grille adopt\u00e9 pour un couple si \u0394 log-perte 4 issues (facteur \u2212 produit) > 0 en validation ET en test, z \u2265 2 en test",
+ "pairs": {
+  "score_win": {
+   "val": {
+    "n": 47206,
+    "dll": 0.00839,
+    "z": 13.55,
+    "lift_observed": 1.3135,
+    "lift_factor": 1.2853,
+    "p_both_observed": 0.1019,
+    "p_both_factor": 0.103,
+    "p_both_product": 0.0801
+   },
+   "test": {
+    "n": 141657,
+    "dll": 0.009351,
+    "z": 26.3,
+    "lift_observed": 1.3269,
+    "lift_factor": 1.2958,
+    "p_both_observed": 0.1,
+    "p_both_factor": 0.0984,
+    "p_both_product": 0.0759
+   },
+   "adopt": true
+  },
+  "point_win": {
+   "val": {
+    "n": 47206,
+    "dll": 0.01869,
+    "z": 19.65,
+    "lift_observed": 1.2658,
+    "lift_factor": 1.2481,
+    "p_both_observed": 0.2231,
+    "p_both_factor": 0.2264,
+    "p_both_product": 0.1814
+   },
+   "test": {
+    "n": 141657,
+    "dll": 0.019933,
+    "z": 36.77,
+    "lift_observed": 1.272,
+    "lift_factor": 1.2578,
+    "p_both_observed": 0.2194,
+    "p_both_factor": 0.2186,
+    "p_both_product": 0.1738
+   },
+   "adopt": true
+  },
+  "score_over55": {
+   "val": {
+    "n": 47206,
+    "dll": 0.006864,
+    "z": 12.27,
+    "lift_observed": 1.2163,
+    "lift_factor": 1.2276,
+    "p_both_observed": 0.1127,
+    "p_both_factor": 0.1129,
+    "p_both_product": 0.092
+   },
+   "test": {
+    "n": 141657,
+    "dll": 0.007152,
+    "z": 22.06,
+    "lift_observed": 1.2404,
+    "lift_factor": 1.2447,
+    "p_both_observed": 0.1049,
+    "p_both_factor": 0.1045,
+    "p_both_product": 0.0839
+   },
+   "adopt": true
+  },
+  "score_pl15": {
+   "val": {
+    "n": 47206,
+    "dll": 0.007888,
+    "z": 12.9,
+    "lift_observed": 1.4827,
+    "lift_factor": 1.4254,
+    "p_both_observed": 0.0684,
+    "p_both_factor": 0.0707,
+    "p_both_product": 0.0496
+   },
+   "test": {
+    "n": 141657,
+    "dll": 0.00865,
+    "z": 24.34,
+    "lift_observed": 1.498,
+    "lift_factor": 1.4466,
+    "p_both_observed": 0.0679,
+    "p_both_factor": 0.0667,
+    "p_both_product": 0.0461
+   },
+   "adopt": true
+  },
+  "score_oppwin": {
+   "val": {
+    "n": 47206,
+    "dll": 0.00839,
+    "z": 13.55,
+    "lift_observed": 0.6864,
+    "lift_factor": 0.7003,
+    "p_both_observed": 0.0532,
+    "p_both_factor": 0.0534,
+    "p_both_product": 0.0763
+   },
+   "test": {
+    "n": 141657,
+    "dll": 0.009351,
+    "z": 26.3,
+    "lift_observed": 0.673,
+    "lift_factor": 0.6934,
+    "p_both_observed": 0.0507,
+    "p_both_factor": 0.0508,
+    "p_both_product": 0.0733
+   },
+   "adopt": true
+  },
+  "two_mates": {
+   "val": {
+    "n": 2624,
+    "dll": 0.000204,
+    "z": 2.39,
+    "lift_observed": 1.0633,
+    "lift_factor": 1.0059,
+    "p_both_observed": 0.1227,
+    "p_both_factor": 0.1172,
+    "p_both_product": 0.1165
+   },
+   "test": {
+    "n": 7871,
+    "dll": 6e-06,
+    "z": 0.14,
+    "lift_observed": 1.0197,
+    "lift_factor": 1.0065,
+    "p_both_observed": 0.1104,
+    "p_both_factor": 0.1076,
+    "p_both_product": 0.1069
+   },
+   "adopt": false
+  }
+ }
+}

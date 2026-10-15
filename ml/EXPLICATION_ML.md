@@ -553,6 +553,9 @@ tirs, mises en échec, tirs bloqués, minutes de pénalité, points en AN.
   - Face-à-face **équipe vs équipe** : déjà mesuré et rejeté pour le modèle de score (`live/h2h_report.json`, `keep: false`).
 - **Arbitres** (2026-10-12, `referee_effects.py`, `player_ref_report.json`) : `ref_pen` / `ref_pp` = somme, pour les 2 arbitres du match, de leur écart moyen (rétréci, `/ (n + 40)`) aux pénalités / minutes à 5 c. 4 de la ligue, sur leurs matchs PRÉCÉDENTS. Essayé pour pénalités et points en AN avec la règle du face-à-face : **gardé pour les pénalités** (z 2.46), pas pour les points en AN (z 1.68). En service, Node envoie les noms des arbitres du soir (`refereeStore`, Scouting the Refs) ; la table `ref_effects.json` (rafraîchie chaque lundi) donne leurs effets ; inconnus → 0. Les arbitres n'ont AUCUN effet mesurable sur les buts : ils ne touchent ni le modèle de score ni les totaux.
 - **Pour le service** : `player_state.json` = les features de chaque joueur après son dernier match, plus `vs` = { joueur: { adversaire: [vs_gp, lifts…] } } (ordre : `vs_features`) ; le service les combine au contexte du match à venir. Sans rencontre passée ou sans équipe nommée : `vs_gp` 0 et lifts 1, comme à l'entraînement.
+- **Répartir la grille entre les joueurs (« top-down », 2026-10-15, `explore_players/`)** : chaque but de l'équipe revient au joueur avec sa part s = μ_buts / Σ_équipe μ_buts, sur la loi des buts comptables du moteur (but de prolongation compris, fusillade non). Mesuré sur 189 000 joueur-matchs hors échantillon (2022-23 → 2025-26), avec une règle posée avant le run :
+  - **Marginales — non adopté** : aucun gain sur les buts (Δ log-vraisemblance +0,00004, z 0,5), légère perte sur les passes et les points. Les chiffres affichés restent ceux du modèle joueur.
+  - **Combinés d'un même match — adopté** : la grille bat le produit des probabilités pour « X marque + son équipe gagne » (z 26 en test ; observé 1,33 × le produit, la grille dit 1,30), « 1+ point + gagne » (z 37), « marque + plus de 5,5 » (z 22), « marque + gagne par 2 » (z 24), « marque + l'adversaire gagne » (z 26). Deux coéquipiers qui marquent : rien à gagner (lift observé 1,02), ils restent au produit. Branché dans le coupon (§7.6).
 
 ---
 
@@ -723,7 +726,7 @@ Quelques marchés utilisent TOUJOURS une règle, même avec le modèle de score 
 
 ### 6.12 Les autres routes
 
-- **`/predict/player`** : PAS le modèle joueur entraîné. Une simple Poisson sur la moyenne de saison envoyée par le serveur (`P(X > ligne)`), bornée [5 %, 95 %]. Points en AN ≈ buts/match × 0,35 ; mises en échec, tirs bloqués, arrêts, victoires… passent par le champ `shots_per_game`.
+- **`/predict/player`** : PAS le modèle joueur entraîné. Une simple Poisson sur la moyenne de saison envoyée par le serveur (`P(X > ligne)`), bornée [5 %, 95 %] ; mises en échec, tirs bloqués, arrêts, victoires… passent par le champ `shots_per_game`. **Depuis le 2026-10-15, ce n'est plus qu'un repli** : un pari joueur demandé à l'unité (`POST /api/predict/ml`, type `player`) est d'abord chiffré par le serveur Node sur la cadence du modèle joueur du paquet du match (`server/src/services/prediction/playerModelPrediction.ts` : match fourni ou prochain match du joueur, binomiale négative avec le k du modèle, plafond 97 comme les grilles). La Poisson ne sert plus que pour les gardiens, les recrues absentes de l'état, un joueur sans match dans les 14 jours, un match en cours ou un service ML en panne.
 - **`/predict/team`** (Coupe, finale de conférence, séries) : probabilité a priori selon le rang de conférence (table fixe) + petits ajustements selon win%, différentiel de buts, PP/PK.
 - **`/predict/game`** : un seul marché (même calcul que le paquet).
 - **Cadences joueur dans le paquet** : si le serveur envoie les identifiants des joueurs, le paquet renvoie aussi, pour chacun, la cadence par match des 8 statistiques du modèle joueur (§4.4), avec son k.
@@ -798,6 +801,21 @@ probabilité : c'est un classement des issues **les plus probables**, pas des
 paris les plus rentables ; l'EV au prix du livre (`ev`) est donnée pour
 information quand un prix existe.
 
+
+### 7.6 Le coupon d'un même match — `parlayProbability.ts`, `prediction/gameParlay.ts`
+
+Les jambes lisibles sur le score final (vainqueur, totaux, handicap…) sont
+combinées sur la loi jointe des scores : le facteur P(toutes) / ∏ P(chacune),
+lu sur la grille, multiplie le produit des chiffres affichés. Depuis le
+2026-10-15, **une** jambe joueur par match y entre aussi — « marque » (ligne 0,5)
+ou « 1+ point » : sachant que son équipe a marqué n buts comptables, elle passe
+avec 1 − (1 − s)^n, où s = cadence / buts comptables attendus de son équipe
+(cadence tirée du chiffre affiché, μ = −ln(1 − p)). Les prolongations sont
+tranchées par un but dans 64,9 % des cas (sinon fusillade, qui ne compte pour
+aucun joueur). Le résultat ne dépasse jamais la jambe la moins probable. Les
+autres props joueur (2+ buts, tirs…) et une seconde jambe joueur du même match
+restent au produit, et `assumesIndependence` le signale. Mesure : §4.4,
+`explore_players/README.md`.
 ---
 
 ## 8. Comment on sait si le modèle est bon (évaluation)
