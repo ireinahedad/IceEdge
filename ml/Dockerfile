@@ -31,7 +31,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # score_model.py est INDISPENSABLE : ml_service.py fait `from score_model import
 # …` au niveau module. Sans lui l'image ne démarre pas du tout — ImportError
 # avant même le premier log de chargement des modèles.
-COPY python/ml_service.py python/score_model.py python/fetch_data.py python/train.py ./
+# game_dynamics.py : importé par ml_service (moteur du match et des périodes,
+# lecture de models/game_dynamics.json) — même règle que score_model.py.
+COPY python/ml_service.py python/score_model.py python/game_dynamics.py python/fetch_data.py python/train.py ./
 
 # Copier les modèles entraînés. Ils vivent dans ml/models (frère de python/),
 # donc ce COPY n'existe que parce que le contexte est ml/ — cf. la note en tête.

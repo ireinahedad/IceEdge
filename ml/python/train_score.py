@@ -41,6 +41,9 @@ Usage :
     python build_dataset.py     # d'abord — crée les cibles réglementaires
     python train_score.py [--trials 30]
     python train_score.py --ensemble 20    # diagnostic σ, hors ligne
+
+Ré-ajuste aussi `game_dynamics.json` à la fin (τ glissant + moteur par
+période, cf. game_dynamics.py) : il dépend des λ du modèle qu'on vient d'écrire.
 """
 
 import argparse
@@ -924,6 +927,19 @@ def main():
     for f in fi[:10]:
         print(f"   {f['name']:<26} {f['importance']:.4f}  {'█' * int(f['importance'] * 120)}")
     print(f"\n✅ score_model.json + score_report.json → {out_dir}/")
+
+    # ── Dynamique du match (2026-10-15) ─────────────────────────────────────
+    # τ glissant et intensités par période sont relatifs aux λ du modèle :
+    # un nouveau modèle les rend caducs. On les ré-ajuste tout de suite plutôt
+    # que d'attendre le rafraîchissement du lundi. Le `tau_margin` ci-dessus
+    # (2008-2021) reste écrit : c'est le repli du service sans game_dynamics.json.
+    try:
+        import game_dynamics as GD
+        data_dir = os.path.dirname(os.path.abspath(args.data))
+        gd = GD.fit(args.data, os.path.join(data_dir, "live_goals.csv"), out_dir)
+        print(f"   → {GD.write(gd, out_dir)}")
+    except Exception as e:
+        print(f"\n⚠️  game_dynamics.json non ré-ajusté ({e}) — lancer python game_dynamics.py")
     if ens_meta:
         print(f"   Ensemble : {ens_meta['n_members']} membres, "
               f"σ_max {ens_meta['sigma_max']:.5f}")

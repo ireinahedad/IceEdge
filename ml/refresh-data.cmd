@@ -6,11 +6,12 @@ REM Lance ml\python\refresh_data.py : calendrier NHL + MoneyPuck (saison en
 REM cours seulement, ajoutee a l'historique deja sur disque), puis
 REM build_dataset.py. Regenere ml\models\inference_state.json et
 REM ml\models\elo_ratings.json, puis calcule le recalage de niveau des
-REM buts (ml\models\level_layer.json). Ne touche JAMAIS ml\data\odds.csv, ne
+REM buts (ml\models\level_layer.json) et le moteur de match
+REM (ml\models\game_dynamics.json). Ne touche JAMAIS ml\data\odds.csv, ne
 REM reentraine rien, ne committe rien.
 REM
 REM Apres le run, pour que le service en ligne en profite :
-REM   git add ml/models/inference_state.json ml/models/elo_ratings.json ml/models/level_layer.json ml/models/ref_effects.json
+REM   git add ml/models/inference_state.json ml/models/elo_ratings.json ml/models/level_layer.json ml/models/game_dynamics.json ml/models/ref_effects.json
 REM   git commit -m "Donnees ML au <date>" ^&^& git push
 REM (le service ML embarque ml/models dans son image : Railway redeploie.)
 REM

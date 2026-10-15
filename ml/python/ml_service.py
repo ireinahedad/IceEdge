@@ -34,6 +34,7 @@ from typing import List, Optional
 
 import numpy as np
 import xgboost as xgb
+from game_dynamics import MatchDynamics, read_game_dynamics
 from score_model import (P_OT_HOME, ScoreDistribution, ScoreEnsemble,
                          lambdas_for_home_win, p_ot_for, read_level_layer, read_ot_model)
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
@@ -190,7 +191,24 @@ _LINEUP_DRESSED = 18
 
 _xgb_score: xgb.Booster | None = None
 _SCORE_FEAT_NAMES: list[str] = []
-_score_tau: dict[int, float] | None = None
+# Forme de la matrice du match entier, passée telle quelle à ScoreDistribution :
+#   - `MatchDynamics` (game_dynamics.json, 2026-10-15) : le moteur par période,
+#     filet désert compris, rend directement la matrice — c'est le défaut ;
+#   - sinon un dict τ(écart) : le τ glissant du même fichier, à défaut celui de
+#     score_report.json (2008-2021, périmé — cf. game_dynamics.py).
+# Variable d'environnement SCORE_SHAPE pour revenir en arrière sans redéployer
+# de modèle : `dynamics` (défaut), `tau_window`, `tau_train`.
+_score_shape: "dict[int, float] | MatchDynamics | None" = None
+# Le moteur par période, pour les marchés de période. None → anciennes parts
+# fixes (30,5 / 36,5 / 33 %). Indépendant de SCORE_SHAPE : la mesure des
+# marchés de période ne dépend pas de la forme du match entier.
+_match_dynamics: "MatchDynamics | None" = None
+_game_dynamics_info: dict | None = None
+# τ de score_report.json, gardé à part : c'est sur Poisson × CE τ que la couche
+# de correction du moneyline a été ajustée (`backtest_walkforward --correction`,
+# τ de chaque fold). Son entrée doit rester calculée ainsi, quelle que soit la
+# forme servie — cf. `_p_home_layer_input`.
+_score_tau_report: dict[int, float] | None = None
 _score_p_ot: float = P_OT_HOME
 # Remplaçant du scalaire ci-dessus : [pente, ordonnée] d'une logistique sur
 # (λ_dom − λ_ext). None → on sert le scalaire, comportement d'avant.
@@ -512,7 +530,7 @@ def _try_load_models():
     # ── Modèle de score (P2) ────────────────────────────────────────────────
     # Chargé indépendamment des autres : s'il manque, le service garde les
     # heuristiques historiques et continue de répondre normalement.
-    global _xgb_score, _SCORE_FEAT_NAMES, _score_tau, _score_p_ot
+    global _xgb_score, _SCORE_FEAT_NAMES, _score_shape, _score_p_ot, _score_tau_report
     global _score_conf_deciles, _score_p_ot_model
     score_path  = os.path.join(MODELS_DIR, "score_model.json")
     score_rep   = os.path.join(MODELS_DIR, "score_report.json")
@@ -521,8 +539,9 @@ def _try_load_models():
             with open(score_rep) as fh:
                 rep = json.load(fh)
             _SCORE_FEAT_NAMES = list(rep.get("features") or [])
-            _score_tau = {int(k): float(v)
+            _score_shape = {int(k): float(v)
                           for k, v in (rep.get("tau_margin") or {}).items()}
+            _score_tau_report = dict(_score_shape)
             _score_p_ot = float(rep.get("p_ot_home", P_OT_HOME))
             _score_conf_deciles = _read_confidence_deciles(rep)
             _score_p_ot_model = read_ot_model(rep)
@@ -532,7 +551,7 @@ def _try_load_models():
             b.load_model(score_path)
             _xgb_score = b
             print(f"[ML] ✅ score_model.json chargé — {len(_SCORE_FEAT_NAMES)} features, "
-                  f"τ sur {len(_score_tau)} écarts, P(dom en OT)={_score_p_ot:.4f}")
+                  f"τ sur {len(_score_shape)} écarts, P(dom en OT)={_score_p_ot:.4f}")
             # Dit à voix haute si la jauge de confiance est calibrée (S4 ③) ou
             # si elle reste sur l'ancienne heuristique : sans cette ligne, les
             # deux cas se ressemblent exactement au démarrage.
@@ -556,7 +575,7 @@ def _try_load_models():
                       "ancienne heuristique (relance train_score.py pour l'obtenir)")
             _load_score_ensemble(rep)
         except Exception as e:
-            _xgb_score, _SCORE_FEAT_NAMES, _score_tau = None, [], None
+            _xgb_score, _SCORE_FEAT_NAMES, _score_shape = None, [], None
             _score_conf_deciles = None
             print(f"[ML] ⚠️  score_model.json : {e} — heuristiques conservées")
     else:
@@ -726,6 +745,26 @@ def _load_correction_layer() -> None:
         print(f"[ML] ⚠️  correction_layer.json illisible : {e} — victoire du modèle de score servie")
 
 
+def _p_home_layer_input(dist: "ScoreDistribution") -> float:
+    """Victoire domicile du modèle de score BRUT, telle que la couche de
+    correction l'a vue à l'ajustement : Poisson × τ de score_report.json.
+
+    POURQUOI (2026-10-15). La matrice servie vient désormais du moteur de
+    `game_dynamics` ; sa victoire domicile est ~1 point plus basse que celle de
+    Poisson × τ, uniformément (test 2023-26 : −0,0098 en moyenne, log-loss
+    identique, z −0,7). La couche ayant été ajustée sur l'autre, lui donner la
+    nouvelle aurait décalé le moneyline servi d'environ −0,5 point sans aucune
+    mesure derrière. On garde donc son entrée d'origine : le moneyline servi est
+    exactement celui d'avant, et le moteur ne fait que répartir cette victoire
+    entre les scores (`_align_distribution`). À refaire si la couche est un jour
+    ré-ajustée sur la matrice du moteur.
+    """
+    if _score_tau_report is None or _score_shape is _score_tau_report:
+        return dist.p_home_win()
+    return ScoreDistribution(dist.lam_home, dist.lam_away, dist.p_ot_home,
+                             _score_tau_report).p_home_win()
+
+
 def _apply_correction(p_home: float, feat_values: dict) -> float | None:
     """P(victoire domicile) corrigée, ou None sans couche. Une feature absente
     vaut sa moyenne (contribution nulle), comme à l'ajustement (NaN → 0)."""
@@ -766,8 +805,8 @@ def _align_distribution(dist: "ScoreDistribution | None",
         return None
     try:
         lh, la = lambdas_for_home_win(dist.lam_home + dist.lam_away, float(p_home),
-                                      _p_ot_for, _score_tau)
-        aligned = ScoreDistribution(lh, la, _p_ot_for(lh, la), _score_tau)
+                                      _p_ot_for, _score_shape)
+        aligned = ScoreDistribution(lh, la, _p_ot_for(lh, la), _score_shape)
     except Exception as e:
         print(f"[ML] ⚠️  recalage sur la victoire corrigée impossible : {e}")
         return None
@@ -798,6 +837,60 @@ def _align_distribution(dist: "ScoreDistribution | None",
 # renvoie les λ recalés à Node) se lisent sur la matrice recalée. Les cadences
 # joueur (modèle séparé) ne sont pas touchées.
 _level_layer: dict | None = None
+
+
+def _load_game_dynamics() -> None:
+    """Lit `game_dynamics.json` (τ glissant + moteur par période) et choisit la
+    forme du match entier. Appelé juste après le chargement du modèle de score,
+    dont il remplace le τ. Un fichier absent ou refusé laisse le τ du rapport."""
+    global _score_shape, _match_dynamics, _game_dynamics_info
+    path = os.path.join(MODELS_DIR, "game_dynamics.json")
+    if not os.path.exists(path):
+        print("[ML] ℹ️  Pas de game_dynamics.json — τ de score_report.json (2008-2021), "
+              "périodes à parts fixes. Lance : python game_dynamics.py")
+        return
+    try:
+        with open(path, encoding="utf-8") as fh:
+            gd = json.load(fh)
+        tau_w, cells = read_game_dynamics(gd)
+    except Exception as e:
+        print(f"[ML] ⚠️  game_dynamics.json illisible : {e} — τ de score_report.json")
+        return
+    win = gd.get("window_seasons") or []
+    # τ et c sont relatifs aux λ du modèle sur lequel ils ont été ajustés.
+    # Un score_model.json plus récent que le fichier = réglages à refaire
+    # (`python game_dynamics.py`). On sert quand même : l'écart est faible
+    # tant que le modèle n'a pas changé d'échelle, et le lundi rattrape.
+    try:
+        import hashlib
+        with open(os.path.join(MODELS_DIR, "score_model.json"), "rb") as fh:
+            if gd.get("score_model_md5") not in (None, hashlib.md5(fh.read()).hexdigest()):
+                print("[ML] ⚠️  game_dynamics.json a été ajusté sur un AUTRE score_model.json — "
+                      "relancer python game_dynamics.py")
+    except OSError:
+        pass
+    _match_dynamics = MatchDynamics(cells, win) if cells is not None else None
+    mode = (os.environ.get("SCORE_SHAPE") or "dynamics").strip().lower()
+    if mode == "dynamics" and _match_dynamics is not None:
+        _score_shape = _match_dynamics
+        shape = "moteur par période (filet désert compris)"
+    elif mode in ("dynamics", "tau_window") and tau_w is not None:
+        _score_shape = tau_w
+        shape = "Poisson × τ glissant"
+    else:
+        shape = "Poisson × τ de score_report.json"
+    _game_dynamics_info = {"window_seasons": win, "generated": gd.get("generated"),
+                           "match_shape": shape, "score_shape_env": mode,
+                           "period_engine": _match_dynamics is not None,
+                           "tau_window_ok": tau_w is not None}
+    w = f"{win[0]}-{win[-1]}" if win else "?"
+    print(f"[ML] ✅ game_dynamics.json (fenêtre {w}) — match entier : {shape} ; "
+          f"marchés de période : {'moteur' if _match_dynamics is not None else 'parts fixes'}")
+
+
+# Après `_try_load_models()` : il remplace le τ que celui-ci vient de lire.
+if _xgb_score is not None:
+    _load_game_dynamics()
 
 
 def _load_level_layer() -> None:
@@ -835,8 +928,8 @@ def _apply_level(dist: "ScoreDistribution | None") -> "ScoreDistribution | None"
     try:
         p_home = dist.p_home_win()
         lh, la = lambdas_for_home_win(k * (dist.lam_home + dist.lam_away), p_home,
-                                      _p_ot_for, _score_tau)
-        out = ScoreDistribution(lh, la, _p_ot_for(lh, la), _score_tau)
+                                      _p_ot_for, _score_shape)
+        out = ScoreDistribution(lh, la, _p_ot_for(lh, la), _score_shape)
     except Exception as e:
         print(f"[ML] ⚠️  recalage de niveau impossible : {e}")
         return None
@@ -1376,7 +1469,32 @@ def _p_highest_period_total(total_lam: float, period: str) -> float:
 
 def _p_highest_period(dist: "ScoreDistribution", period: str) -> float:
     """P(la période demandée est la plus prolifique du match)."""
+    pv = _periods_view(dist)
+    if pv is not None:
+        return clamp(pv["highest"][period], 0.02, 0.98)
     return _p_highest_period_total(dist.lam_home + dist.lam_away, period)
+
+
+# ── Marchés de période par le moteur dynamique (2026-10-15) ───────────────────
+#
+# Les parts fixes ci-dessus supposent que chaque période est une Poisson
+# indépendante de ce qui précède. Or la 3e dépend du score à 40' (filet désert,
+# poussée de l'équipe menée) : P3 > 1,5 sortait à 58,6 % pour 65,0 % observé.
+# `game_dynamics.period_dynamics` joue le match par tranches, avance comprise.
+# Mesuré sur 4 201 matchs du test 2023-26, niveau recalé (`explore_score/
+# s7_marches_periode.py`) : période la plus prolifique z −5,1, P3 > 0,5 / 1,5 /
+# 2,5 z −4,7 / −5,5 / −4,0, P2 > 2,5 z −4,2, rien de dégradé (vainqueurs
+# P1/P2 |z| < 1). Les parts fixes restent le repli sans game_dynamics.json.
+
+def _periods_view(dist: "ScoreDistribution") -> "dict | None":
+    """Vue par période du moteur, orientée comme `dist` (sujet), ou None."""
+    if _match_dynamics is None:
+        return None
+    try:
+        return _match_dynamics.periods(dist.lam_home, dist.lam_away)
+    except Exception as e:
+        print(f"[ML] ⚠️  moteur de période indisponible : {e} — parts fixes")
+        return None
 
 
 def _has_evidence(team: str | None) -> bool:
@@ -1507,16 +1625,21 @@ def _apply_score_model(market: str, f: GameFeatures,
     if pm:
         n = int(pm.group(1))
         is_draw = (f.selection or "").strip().lower() in ("draw", "tie")
+        pv = _periods_view(dist) if n < 3 else None
         if n == 3:
             p_draw = dist.p_regulation_tie()
             p_lead = float(dist.M[dist._margin > 0].sum())
+        elif pv is not None:
+            lead, L = pv["lead_after"][n], pv["lead_values"]
+            p_lead, p_draw = float(lead[L > 0].sum()), float(lead[L == 0].sum())
         else:
             frac = _PERIOD_CUM[n]
             p_lead, p_draw = _skellam_lead(lh * frac, la * frac)
         p = p_draw if is_draw else p_lead
         what = "égalité" if is_draw else "le sujet mène"
+        how = (" (match joué par tranches, avance comprise)" if pv is not None else "")
         return p, 0.74, (f"Après la période {n} ({what}) : {int(p * 100)}% — buts "
-                         f"cumulés, λ du modèle de score ({lh:.2f}/{la:.2f}).")
+                         f"cumulés, λ du modèle de score ({lh:.2f}/{la:.2f}){how}.")
 
     if market == "moneyline":
         p = dist.p_home_win()
@@ -1611,6 +1734,10 @@ def _apply_score_model(market: str, f: GameFeatures,
         if period is None:
             return None
         p = _p_highest_period(dist, period)
+        if _periods_view(dist) is not None:
+            return p, 0.60, (f"P({period} est la période la plus prolifique) = {int(p*100)}% — "
+                             f"buts réglementaires λ={lh + la:.2f}, match joué par tranches "
+                             f"(la 3e dépend du score à 40', filet désert compris).")
         return p, 0.60, (f"P({period} est la période la plus prolifique) = {int(p*100)}% — "
                          f"buts réglementaires λ={lh + la:.2f} répartis "
                          f"{_PERIOD_SHARE[0]:.0%}/{_PERIOD_SHARE[1]:.0%}/{_PERIOD_SHARE[2]:.0%}.")
@@ -1619,6 +1746,14 @@ def _apply_score_model(market: str, f: GameFeatures,
     if pt:
         n = int(pt.group(1))
         line = f.line if f.line is not None else 1.5
+        pv = _periods_view(dist)
+        if pv is not None:
+            g = pv["goals"][n]
+            k = np.arange(len(g))
+            p = float(g[k > line].sum())
+            return p, 0.74, (f"Buts de la période {n} : {float((g * k).sum()):.2f} attendus, "
+                             f"match joué par tranches (avance et filet désert compris) "
+                             f"→ OVER {line} : {int(p * 100)}%.")
         lam_p = (lh + la) * _PERIOD_SHARE[n - 1]
         p = poisson_over(line, lam_p)
         return p, 0.74, (f"Buts de la période {n} : λ={lam_p:.2f} ({_PERIOD_SHARE[n - 1]:.1%} des "
@@ -1955,7 +2090,7 @@ def _build_score_distribution(feat_values: dict, home_elo: float,
         # Mieux vaut retomber sur l'heuristique que servir un prix absurde.
         if not (0.5 <= lam_h <= 8.0 and 0.5 <= lam_a <= 8.0):
             return None
-        dist = ScoreDistribution(lam_h, lam_a, _p_ot_for(lam_h, lam_a), _score_tau)
+        dist = ScoreDistribution(lam_h, lam_a, _p_ot_for(lam_h, lam_a), _score_shape)
         dist._dmatrix = dmat          # réutilisé par l'ensemble, cf. ci-dessous
         return dist
     except Exception as e:
@@ -2109,7 +2244,7 @@ def _build_score_ensemble(dist: "ScoreDistribution | None") -> "ScoreEnsemble | 
         # Les membres partagent le p_ot du point estimé : leurs λ n'en diffèrent
         # que d'un bruit d'échantillonnage, et σ mesure la dispersion des λ, pas
         # celle de la prolongation.
-        return ScoreEnsemble(lambdas, dist.p_ot_home, _score_tau, point=dist)
+        return ScoreEnsemble(lambdas, dist.p_ot_home, _score_shape, point=dist)
     except Exception as e:
         print(f"[ML] ⚠️  ensemble indisponible pour ce match : {e}")
         return None
@@ -2582,7 +2717,7 @@ def _game_context(f: GameFeatures) -> dict:
     if score_dist is not None:
         # `p_score_model` = la victoire du modèle de score BRUT, avant la couche
         # de correction (exposée telle quelle, `probability_score_model`).
-        p_score_model = score_dist.p_home_win()
+        p_score_model = _p_home_layer_input(score_dist)
         # Couche de correction → distribution recalée (INCOHERENCES_ML §6) :
         # tous les marchés, pas seulement le moneyline, se lisent dessus.
         p_corrected = _apply_correction(p_score_model, feat_values)
@@ -3026,6 +3161,7 @@ def health():
             "sigma_max":        _score_sigma_max,
         },
         "goal_level_k": _level_k_now(),
+        "match_shape": (_game_dynamics_info or {}).get("match_shape", "Poisson × τ de score_report.json"),
         "elo_teams_loaded": len(_elo_ratings),
         "calibrated":       _platt_a is not None,
         # Seulement quand il manque vraiment un modèle : affiché en jaune sur
@@ -3100,6 +3236,7 @@ _ARTIFACT_FILES = (
     "score_ablation_cache",
     "fold_params_cache",
     "level_layer",
+    "game_dynamics",
 )
 
 
@@ -3179,6 +3316,7 @@ def reports():
             "sigma_max": _score_sigma_max,
             "goal_level_k": _level_k_now(),
             "goal_level_layer": _level_layer,
+            "game_dynamics": _game_dynamics_info,
         },
     }
 

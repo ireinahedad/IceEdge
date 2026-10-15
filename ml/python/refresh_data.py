@@ -25,6 +25,13 @@ Ce que le script fait, dans l'ordre :
      observés / buts prévus, rétréci vers 1, part dans `level_layer.json`
      (`score_model.level_k`, mesure et règle dans `measure_level.py`). Le
      service multiplie le total λ par ce k, sans toucher à la victoire.
+  5bis. dynamique du match (2026-10-15) : `game_dynamics.py` ré-ajuste τ et les
+     intensités par période (avance × tranche, filet désert compris) sur les 3
+     dernières saisons complètes, avec les λ du modèle servi →
+     `game_dynamics.json`. La fenêtre ne bouge qu'une fois par an ; le refaire
+     chaque lundi garantit qu'un nouveau `score_model.json` ne reste jamais
+     servi avec des réglages ajustés sur l'ancien. Un échec n'arrête pas le
+     rafraîchissement : le fichier resté en place sert.
   6. arbitres (2026-10-12) : ceux des nouveaux matchs (API NHL,
      `fetch_officials_lines.fetch_officials`, reprenable) puis la table
      `ref_effects.json` (referee_effects.py) que le modèle joueur lit pour les
@@ -41,7 +48,7 @@ Ce qu'il ne fait JAMAIS : toucher `odds.csv` (irremplaçable, cf. le garde-fou d
 
 Ensuite, pour que le service en ligne en profite : committer
 `ml/models/inference_state.json`, `ml/models/elo_ratings.json`,
-`ml/models/level_layer.json` et `ml/models/ref_effects.json`, puis pousser (le service ML embarque
+`ml/models/level_layer.json`, `ml/models/game_dynamics.json` et `ml/models/ref_effects.json`, puis pousser (le service ML embarque
 `ml/models/` dans son image).
 
 Usage :
@@ -280,6 +287,17 @@ def refresh_level(season: int, models_dir: str, data_path: str) -> dict:
     return out
 
 
+def refresh_game_dynamics(season: int, models_dir: str) -> None:
+    """Étape 5bis : τ glissant + intensités par période → `game_dynamics.json`."""
+    try:
+        import game_dynamics as GD
+        out = GD.fit(f"{DATA_DIR}/nhl_games_v4.csv", f"{DATA_DIR}/live_goals.csv",
+                     models_dir, current_season=season)
+        GD.write(out, models_dir)
+    except Exception as e:
+        print(f"\n⚠️  dynamique du match non rafraîchie ({e}) — game_dynamics.json inchangé")
+
+
 def refresh_referees(models_dir: str) -> None:
     """Étape 6 : arbitres des nouveaux matchs, puis table des effets arbitre."""
     try:
@@ -360,6 +378,7 @@ def main():
     build_dataset.main()
 
     refresh_level(season, build_dataset.MODELS_DIR, f"{DATA_DIR}/nhl_games_v4.csv")   # 5
+    refresh_game_dynamics(season, build_dataset.MODELS_DIR)                           # 5bis
 
     refresh_referees(build_dataset.MODELS_DIR)                                        # 6
     refresh_candidates()                                                              # 7
@@ -373,7 +392,8 @@ def main():
           f"ELO au {elo.get('as_of_date')}, {len(st['teams'])} équipes, "
           f"{len(st.get('skater_pool', {}))} patineurs dans le bassin.")
     print("   Pour le service en ligne : committer ml/models/inference_state.json, "
-          "ml/models/elo_ratings.json, ml/models/level_layer.json et ml/models/ref_effects.json, puis pousser. "
+          "ml/models/elo_ratings.json, ml/models/level_layer.json, ml/models/game_dynamics.json et "
+          "ml/models/ref_effects.json, puis pousser. "
           "Pas de réentraînement nécessaire. (ml/models/patterns_report.json : "
           "suivi des candidats, facultatif, non lu par le service.)")
 

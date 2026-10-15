@@ -370,19 +370,34 @@ def lambdas_for_home_win(total: float, p_target: float, p_ot_fn,
         la = total - lh
         return ScoreDistribution(lh, la, p_ot_fn(lh, la), tau).p_home_win()
 
-    if p_target <= win(lo):
+    f_lo, f_hi = win(lo) - p_target, win(hi) - p_target
+    if f_lo >= 0.0:
         return lo, total - lo
-    if p_target >= win(hi):
+    if f_hi <= 0.0:
         return hi, total - hi
-    for _ in range(iters):
-        mid = 0.5 * (lo + hi)
-        if win(mid) < p_target:
-            lo = mid
-        else:
-            hi = mid
-        if hi - lo < tol:
-            break
+    # Fausse position « Illinois » plutôt que bissection (2026-10-15) : même
+    # encadrement garanti par la monotonie, mais ~8 évaluations au lieu de ~26.
+    # Ça comptait peu tant que la matrice était un produit de deux Poisson ;
+    # avec le moteur de `game_dynamics` chaque évaluation joue un match.
+    side = 0
     lh = 0.5 * (lo + hi)
+    for _ in range(iters):
+        lh = (lo * f_hi - hi * f_lo) / (f_hi - f_lo)
+        if not (lo < lh < hi):
+            lh = 0.5 * (lo + hi)
+        f = win(lh) - p_target
+        if abs(f) < 1e-12 or hi - lo < tol:
+            break
+        if f < 0.0:
+            lo, f_lo = lh, f
+            if side == -1:
+                f_hi *= 0.5
+            side = -1
+        else:
+            hi, f_hi = lh, f
+            if side == 1:
+                f_lo *= 0.5
+            side = 1
     return lh, total - lh
 
 
@@ -395,12 +410,20 @@ class ScoreDistribution:
 
     def __init__(self, lam_home: float, lam_away: float,
                  p_ot_home: float = P_OT_HOME,
-                 tau: dict[int, float] | None = None):
+                 tau: "dict[int, float] | MatchDynamics | None" = None):
         self.lam_home = float(lam_home)
         self.lam_away = float(lam_away)
         self.p_ot_home = float(p_ot_home)
         self.tau = tau
-        self.M = apply_margin_correction(joint_matrix(lam_home, lam_away), tau)
+        # `tau` est soit un dict τ(écart) — Poisson indépendant corrigé —, soit
+        # le moteur de match de `game_dynamics.MatchDynamics` (2026-10-15), qui
+        # rend directement la matrice réglementaire. Même interface pour tous
+        # les appelants (alignement, niveau, ensemble) : ils passent ce qu'on
+        # leur a donné sans savoir lequel des deux c'est.
+        if tau is not None and hasattr(tau, "regulation_matrix"):
+            self.M = tau.regulation_matrix(self.lam_home, self.lam_away)
+        else:
+            self.M = apply_margin_correction(joint_matrix(lam_home, lam_away), tau)
         n = self.M.shape[0]
         idx = np.arange(n)
         self._margin = idx[:, None] - idx[None, :]     # i - j

@@ -98,7 +98,8 @@ Order, dates and commands first; the detail of each item follows. Measured concl
 re-test and the ML code map are in §8.
 
 - [ ] **Weekly data refresh** (scheduled task, Mondays): after each run, commit + push
-      `ml/models/inference_state.json`, `elo_ratings.json` and `level_layer.json`.
+      `ml/models/inference_state.json`, `elo_ratings.json`, `level_layer.json` and
+      `game_dynamics.json`.
 - [ ] Re-train monthly during the season, then re-run
       `backtest_walkforward.py --correction --write-layer` (the correction layer sits on the score
       model's output; a new model needs a new layer).
@@ -687,6 +688,8 @@ du temps perdu ; les ignorer serait pire.
 | Le total de buts est-il prédictible ? | **Quasi pas.** MAE 1.86 contre 1.90 pour une constante. | Le gain de P2 n'était pas la précision mais la *calibration* des marchés dérivés. |
 | Faut-il un Poisson bivarié ? | **Non.** Dispersion 1.013/0.991, corrélation dom↔ext **−0.048** — le bivarié standard ne modélise que du positif. | Mesuré sur 21 517 matchs. |
 | La correction de marge τ est-elle nécessaire ? | **Oui.** Le Poisson brut sous-estime les nuls de 6 points ; τ ramène à 0.2 point. | Signature du filet désert : excès sur 0 et ±3, déficit sur ±1 et ±2. |
+| Le τ de 2008-2021 tient-il encore ? Faut-il un modèle de fin de match ? | **Non, et oui — moteur de match ADOPTÉ (2026-10-15).** Gardiens sortis plus tôt : écarts ±1 23.2 % → 17.9 %, filet désert 3.8 % → 6.0 % des buts. Moteur par période (intensité × c(avance, minute), 3 saisons glissantes) contre Poisson × τ glissant : score exact z **−4.0** (11/13 saisons), marchés principaux |z| < 1 ; marchés de période z −4 à −5.5 contre les parts fixes. Le moneyline servi est inchangé (entrée de la couche C gardée sur Poisson × τ). | `game_dynamics.py`, `explore_score/s6`, `s7`, walk-forward 2013-25, critère fixé avant. `ml/EXPLORATION_SCORE.md`. |
+| Copule (Frank), Conway-Maxwell-Poisson, bayésien hiérarchique att/déf, simulation tir par tir xG ? | **Non, aucune.** Frank : θ −0.13, rien sur τ. COM : ν 1.02/1.08, rien sur τ. Bayésien pur : moneyline z +4.8 ; en offset, ≈ recalage de niveau, résidus d'équipe ~0.01 ; σ a posteriori non actionnable. Sim. xG avant-match : sur-dispersion (D ≈ 1.12) alors que les buts sont sous-dispersés sachant λ → z +5.5. | `ml/EXPLORATION_SCORE.md`, test 2023-26 (2026-10-15). |
 | σ (ensemble bootstrap) dit-elle où le modèle se trompe ? | **Non** en général. Elle dit où l'edge *sélectionné* est gonflé (malédiction du vainqueur, p ≈ 0.04). Non actionnable : l'edge corrigé est négatif partout. | 20 membres, σ_max calibré hors échantillon. |
 | La forme d'un gardien est-elle prévisible ? | **Non.** r = +0.038 d'un match au suivant. Mais le *talent* est réel : 0.165 but/match entre Q1 et Q4, à xG subi plat. | 45 222 départs. |
 | Les totaux sont-ils jouables ? | **Non.** ROI −2.75 % sur 8 833 paris à prix réels. (Le modèle récupère ~1.7 pt sur une marge de 4.4 % : du signal, pas assez.) | 9 saisons, prix de clôture SBRO. |
@@ -740,6 +743,8 @@ refresh_data.py        mise à jour hebdo en saison (calendrier, MoneyPuck,
                        lancé par ml/refresh-data.cmd, ne touche pas odds.csv
 build_dataset.py       features + cibles réglementaires/prolongation
 train_score.py         Poisson empilé équipe-match + τ + P(dom en OT)   ← le cœur
+game_dynamics.py       moteur de match (c × avance × minute, τ glissant) →
+                       game_dynamics.json ; matrice servie + marchés de période
 score_model.py         distribution → tous les marchés dérivables ; level_k,
                        lambdas_for_home_win (recalage sur la victoire corrigée)
 measure_level.py       mesure du recalage de niveau des buts → level_report.json

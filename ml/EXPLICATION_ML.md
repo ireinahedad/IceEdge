@@ -97,7 +97,8 @@ chiffres sont automatiquement cohérents entre eux.
 | **λ (lambda)** | Nombre moyen de buts attendus. λ_dom = buts attendus du domicile en 60 min. |
 | **Loi de Poisson** | Loi qui donne P(0 but), P(1 but), P(2 buts)… quand on connaît la moyenne λ. Ex. λ=3 → P(0)=5 %, P(3)=22 %. |
 | **Matrice jointe M** | Tableau M[i][j] = probabilité que le domicile marque i buts et le visiteur j buts en 60 min. Tous les paris se lisent dedans. |
-| **τ (tau)** | Correction de la matrice selon l'écart de score (voir §4.1.4) : corrige le fait que Poisson sous-estime les nuls et les écarts de 3 (filet désert). |
+| **τ (tau)** | Correction de la matrice selon l'écart de score (voir §4.1.4) : corrige le fait que Poisson sous-estime les nuls et les écarts de 3 (filet désert). Depuis le 2026-10-15, repli seulement : la matrice vient du moteur de match. |
+| **Moteur de match / c** | Le match joué par tranches de temps (§4.1.4 bis) : chaque équipe marque à λ/3600 par seconde × c(son avance, la minute). `c` est mesuré sur les buts horodatés ; le filet désert y est explicite. Donne la matrice M et tous les marchés de période. |
 | **XGBoost** | Algorithme d'apprentissage qui empile des centaines de petits arbres de décision. `count:poisson` = il apprend à prédire un λ ; `binary:logistic` = il apprend une probabilité oui/non. |
 | **Logit / sigmoïde** | logit(p) = ln(p/(1−p)) transforme une probabilité en nombre de −∞ à +∞ ; la sigmoïde σ(z) = 1/(1+e^−z) fait l'inverse. |
 | **Régression logistique** | p = σ(a·x + b) : la formule la plus simple pour combiner des variables en probabilité. |
@@ -367,6 +368,65 @@ Valeurs actuelles (`score_report.json → tau_margin`) :
 Effet mesuré sur le test : nuls après 60 min prédits 15,8 % sans τ → **21,5 %**
 avec τ (observé 22,1 %) ; domicile −1,5 : 31,2 % → **33,2 %** (observé 33,2 %).
 
+**Ce τ est périmé (mesuré le 2026-10-15).** Il est ajusté sur 2008-2021, or les
+gardiens sortent plus tôt et plus souvent : écarts de ±1 après 60 min 23,2 %
+(2010-14) → 17,9 % (2023-25), écarts de ±3 19,8 % → 23,6 %, buts en filet désert
+3,8 % → 6,0 %. Il reste écrit dans `score_report.json` comme dernier repli ; le
+service sert le moteur ci-dessous (ou, à défaut, un τ ré-ajusté sur les 3
+dernières saisons, `game_dynamics.json → tau_margin`).
+
+#### 4.1.4 bis Le moteur de match (`game_dynamics.py`, 2026-10-15)
+
+Plutôt que de corriger après coup deux Poisson indépendantes, on **joue le
+match**. Chaque équipe marque, à chaque seconde, avec une intensité
+
+```
+r(t) = λ_équipe / 3600 × c(avance de l'équipe, tranche de temps)
+```
+
+- **Tranches** : P1, P2, P3 0-10', P3 10-15', puis minute par minute de 55' à 60'.
+- **Avance** de l'équipe bornée à ±3.
+- **c** = buts observés dans la case ÷ (secondes passées dans la case × λ/3600),
+  sur `live_goals.csv` (buts horodatés), 3 dernières saisons complètes, avec les
+  λ du modèle servi. Rendu **relatif** (il ne change pas le nombre total de buts
+  attendus — le niveau reste l'affaire de λ et du recalage §4.3 bis).
+
+Le filet désert y est explicite (fenêtre 2023-2025) :
+
+| avance de l'équipe | 57-58' | 58-59' | 59-60' |
+|---|---|---|---|
+| −1 (gardien sorti) | ×0,95 | ×1,66 | **×2,60** |
+| 0 | ×0,70 | ×0,67 | ×0,67 |
+| +1 (vise le filet vide) | ×1,31 | ×4,26 | **×7,69** |
+| +2 | ×4,37 | ×5,73 | ×6,55 |
+
+La loi du score est calculée **exactement** (chaîne de Markov à temps continu,
+uniformisation) : ≈ 1 ms par matrice. Deux usages :
+
+1. **La matrice M du match entier** (§5). Walk-forward 2013-2025, critère fixé
+   avant le run, contre Poisson × τ ré-ajusté sur les mêmes 3 saisons : score
+   exact −0,0032 de log-loss (z −4,0, 11 saisons sur 13), moneyline, puck line,
+   nul après 60', plus de 5,5 / 6,5 tous |z| < 1. Adopté.
+2. **Les marchés de période** (§5), sur l'état (avance, buts P1, buts P2, buts
+   P3). L'ancienne règle (Poisson de part fixe 30,5 / 36,5 / 33 %) ignorait
+   que la 3e période dépend du score à 40'. Test 2023-26 (4 201 matchs, niveau
+   recalé) : période la plus prolifique z −5,1 ; P3 plus de 0,5 / 1,5 / 2,5
+   z −4,7 / −5,5 / −4,0 ; P2 plus de 2,5 z −4,2 ; mène après P1 / P2 neutre.
+
+**Le moneyline servi ne change pas.** La couche de correction (§4.3) a été
+ajustée sur la victoire de Poisson × τ ; le service lui donne toujours cette
+entrée-là (`_p_home_layer_input`), puis recale la matrice du moteur sur la
+victoire corrigée. Le moteur ne fait que répartir cette victoire entre les
+scores. (Sa propre victoire domicile est ~1 point plus basse, uniformément, à
+log-loss égale.)
+
+`game_dynamics.json` est réécrit par `refresh_data.py` (chaque lundi) et à la
+fin de `train_score.py`. Retour arrière sans redéployer de modèle : variable
+d'environnement `SCORE_SHAPE=tau_window` (Poisson × τ glissant) ou `tau_train`
+(Poisson × τ 2008-2021). Exploration complète et pistes écartées (copule de
+Frank, Conway-Maxwell-Poisson, bayésien hiérarchique, simulation tir par tir) :
+`ml/EXPLORATION_SCORE.md`.
+
 #### 4.1.5 Qui gagne la prolongation ?
 
 Si c'est nul après 60 minutes, le vainqueur de la prolongation/fusillade reçoit
@@ -501,7 +561,8 @@ tirs, mises en échec, tirs bloqués, minutes de pénalité, points en AN.
 Tout part de la matrice M (14 × 14, de 0 à 13 buts par équipe) :
 
 ```
-M[i][j] = Poisson(i ; λ_dom) × Poisson(j ; λ_ext) × τ(i − j)   puis normalisée à 1
+M[i][j] = P(le moteur de match finit à i–j après 60 min | λ_dom, λ_ext, c)      (§4.1.4 bis)
+repli :  Poisson(i ; λ_dom) × Poisson(j ; λ_ext) × τ(i − j), normalisée à 1      (§4.1.4)
 ```
 
 Notations : « nul » = case où i = j (égalité après 60 min) ; `p_ot` = probabilité
@@ -524,10 +585,10 @@ que le domicile gagne la prolongation (§4.1.5). Code : `ScoreDistribution`
 | `clean_sheet` (l'adversaire ne marque pas) | score FINAL : Σ M[·][0] − M[0][0] × (1 − p_ot) — un 0-0 perdu en prolongation n'est pas un blanchissage |
 | `winning_margin` (par 1 / par 2 / par 3+) | écart exact dans M ; « par 1 » reçoit en plus toute la masse des nuls × (p_ot ou 1−p_ot) |
 | `correct_score` (ex. « 3-2 ») | case de la grille du score final F (les nuls k–k sont déplacés en k+1–k ou k–k+1) |
-| `period1_winner`, `period2_winner` (mène après P1/P2, buts cumulés) | deux Poisson de moyennes λ × 0,305 (après P1) ou λ × 0,67 (après P2) → P(mène), P(égalité). Pas de τ : il corrige des effets de fin de match |
-| `period{1,2,3}_total_goals` | Poisson de moyenne (λ_dom + λ_ext) × part de la période (30,5 % / 36,5 % / 33,0 %) ; P(> L) |
+| `period1_winner`, `period2_winner` (mène après P1/P2, buts cumulés) | moteur de match : loi de l'avance à 20' / 40' → P(mène), P(égalité). Repli sans `game_dynamics.json` : deux Poisson de moyennes λ × 0,305 ou λ × 0,67 |
+| `period{1,2,3}_total_goals` | moteur de match : loi des buts DANS la période (la 3e dépend du score à 40') ; P(> L). Repli : Poisson de moyenne (λ_dom + λ_ext) × 30,5 % / 36,5 % / 33,0 % |
 | `period3_winner` | = gagne en 60 min (Σ M[i>j]) ; égalité = prolongation |
-| `highest_scoring_period` | chaque période reçoit sa part (30,5 % / 36,5 % / 33,0 %) des buts réglementaires : P(cette période > les deux autres), égalité en tête = issue `tie` |
+| `highest_scoring_period` | moteur de match : loi jointe (buts P1, P2, P3) → P(cette période a strictement le plus de buts), égalité en tête = issue `tie`. Repli : parts fixes 30,5 / 36,5 / 33,0 % |
 
 **Toujours :** les probabilités sont bornées à [2 %, 98 %] (sauf le score exact,
 borné à [0, 98 %]). La réponse porte l'entier d'affichage (`probability`) ET la
@@ -560,7 +621,8 @@ fait une fois par match dans `_game_context`, puis chaque marché est lu dans
 
 Chargement de `game_model.json` (classifieur), `training_report.json` (liste des
 features, Platt, mélange), `score_model.json` + `score_report.json` (τ, p_ot,
-déciles), `inference_state.json`, `elo_ratings.json`, `correction_layer.json`,
+déciles), `game_dynamics.json` (moteur de match, §4.1.4 bis — remplace le τ du
+rapport), `inference_state.json`, `elo_ratings.json`, `correction_layer.json`,
 `level_layer.json` (recalage de niveau, §4.3 bis) et du modèle joueur. Chaque pièce manquante désactive seulement ce qui en dépend.
 
 **ELO vieilli :** si `elo_ratings.json` date d'une saison précédente, chaque
@@ -607,8 +669,8 @@ marché (repli si le modèle de score ne répond pas), et sans les cotes + Platt
 
 Deux lignes (attaque domicile / attaque visiteur) → XGBoost → λ_dom, λ_ext.
 Garde-fou : si un λ sort de [0,5 ; 8], le modèle de score est ignoré pour ce
-match (retour aux heuristiques). Sinon on construit la matrice M avec τ et p_ot,
-puis on la recale : victoire sur la couche de correction (§4.3), total de buts
+match (retour aux heuristiques). Sinon on construit la matrice M (moteur de
+match, §4.1.4 bis) et p_ot, puis on la recale : victoire sur la couche de correction (§4.3), total de buts
 sur le niveau de la saison (§4.3 bis).
 
 **Facteurs affichés** (« pourquoi ce pronostic ») : XGBoost donne la
@@ -763,7 +825,8 @@ considérer comme un pari sur un petit avantage non prouvé.
 | Quand | Commande | Ce que ça change |
 |---|---|---|
 | Avant un backtest sur les cotes récentes | `npm run odds:export-snapshots` (dans `server/`, avec la `DATABASE_URL` de production) | Écrit `ml/data/odds_snapshots_live.csv` : la collecte live, tous livres. Le backtest la lit en plus du backfill et juge chaque livre séparément (BET99 aura sa propre ligne dans `--served` quand il aura assez de matchs). |
-| Chaque semaine (tâche planifiée Windows `ml/refresh-data.cmd`) | `python refresh_data.py` | Nouvelles données de la saison en cours → `inference_state.json`, `elo_ratings.json`, et le recalage de niveau de la saison → `level_layer.json`. **Mêmes modèles.** Il faut ensuite committer ces 3 fichiers et pousser (le service embarque `ml/models/` dans son image). |
+| Chaque semaine (tâche planifiée Windows `ml/refresh-data.cmd`) | `python refresh_data.py` | Nouvelles données de la saison en cours → `inference_state.json`, `elo_ratings.json`, le recalage de niveau de la saison → `level_layer.json`, et le moteur de match → `game_dynamics.json`. **Mêmes modèles.** Il faut ensuite committer ces 4 fichiers et pousser (le service embarque `ml/models/` dans son image). |
+| Moteur de match seul | `python game_dynamics.py` (`--check` pour contrôler le fichier en place) | Réécrit `game_dynamics.json` : τ glissant + table c sur les 3 dernières saisons complètes. Aussi lancé à la fin de `train_score.py`. |
 | Réentraînement (mensuel) | `python build_dataset.py && python train_score.py && python train.py && python train_player.py` | Nouveaux modèles + rapports. |
 | Couche de correction | `python backtest_walkforward.py --correction --write-layer` | Réécrit `correction_layer.json` seulement si le verdict est « ADOPTER ». |
 | Recalage de niveau (re-mesure) | `python live_pregame.py && python measure_level.py` | Réécrit `level_report.json` (verdict, force n0). `refresh_data.py` le lit : verdict « REJETER » → k = 1. |
@@ -775,7 +838,10 @@ considérer comme un pari sur un petit avantage non prouvé.
 ## 10. Exemple complet chiffré
 
 Match fictif : le domicile a λ_dom = **3,30** buts attendus en 60 min, le
-visiteur λ_ext = **2,70** (chiffres calculés avec les vrais τ et p_ot du rapport).
+visiteur λ_ext = **2,70** (chiffres calculés avec les vrais τ et p_ot du rapport —
+la matrice Poisson × τ servie jusqu'au 2026-10-15. Avec le moteur de match :
+nul après 60 min 21,9 %, puck line −1,5 38,5 %, plus de 5,5 buts 55,8 % ; 3e
+période plus de 1,5 buts 63,8 % au lieu de 58,9 % avec la part fixe).
 
 1. **Prolongation** : p_ot = σ(0,2834 × 0,60 − 0,0640) = **52,7 %**.
 2. **Matrice** sans τ : nul après 60 min 16,2 %. **Avec τ : 21,9 %**.
@@ -802,6 +868,7 @@ visiteur λ_ext = **2,70** (chiffres calculés avec les vrais τ et p_ot du rapp
 | `build_dataset.py` | Features pré-match, cibles, ELO, état d'inférence. |
 | `train_score.py` | **Modèle de score** + τ + p_ot + déciles de confiance. |
 | `score_model.py` | Mathématiques de la matrice des scores (partagé entraînement / service). |
+| `game_dynamics.py` | **Moteur de match** (§4.1.4 bis) : ajustement de τ glissant et de la table c → `game_dynamics.json` ; matrice du match et marchés de période (partagé ajustement / service). |
 | `train.py` | Classifieur moneyline (informatif). |
 | `train_player.py` | Modèle joueur (8 statistiques). |
 | `ml_service.py` | Service FastAPI (toutes les routes de prédiction). |
@@ -818,6 +885,7 @@ visiteur λ_ext = **2,70** (chiffres calculés avec les vrais τ et p_ot du rapp
 | Fichier | Contenu |
 |---|---|
 | `score_model.json` / `score_report.json` | Modèle de score / ses réglages (features, τ, p_ot, déciles, métriques). |
+| `game_dynamics.json` | Moteur de match : table c (avance × tranche), τ glissant, fenêtre de saisons, diagnostics. |
 | `game_model.json` / `training_report.json` / `feature_importance_game.json` | Classifieur / Platt, mélange, métriques. |
 | `correction_layer.json` / `correction_report.json` | Couche de correction / sa mesure. |
 | `level_layer.json` / `level_report.json` | Recalage de niveau de la saison en cours (k, comptes) / sa mesure et sa règle. |
