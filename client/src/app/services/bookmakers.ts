@@ -15,7 +15,7 @@ import { env } from "../env";
 import { features, isIOS } from "../platform";
 
 export type Sport = "hockey";
-export type BookmakerId = "bet365" | "stake" | "bet99";
+export type BookmakerId = "draftkings" | "bet365" | "stake";
 
 export interface Bookmaker {
   id: BookmakerId;
@@ -75,32 +75,30 @@ const STAKE: Bookmaker = {
 };
 
 /**
- * BET99 — ajouté le 2026-10-02 (demande du user). C'est le livre dont viennent
- * les cotes AFFICHÉES dans l'app (`ODDS_BOOKMAKERS=bet99_ca_on` côté serveur) :
- * l'utilisateur qui le choisit retrouve chez lui exactement le prix vu ici.
- *
- * Page LNH relevée par le user sur le site le 2026-10-02. `1590` est
- * l'identifiant de la ligue chez BET99 : s'il change un jour, le lien tombera
- * sur une page vide — recopier alors l'adresse de la page LNH depuis le site.
- * Pas de code affilié (le user n'en a pas) : `affiliateParam` ne sert pas.
+ * DRAFTKINGS — ajouté le 2026-10-17 (décision du user) : c'est le livre dont
+ * viennent TOUTES les cotes de l'app (`ODDS_BOOKMAKERS=draftkings`, le même que
+ * la collecte du ML), donc le livre par défaut — l'utilisateur y retrouve
+ * exactement le prix vu ici. BET99 retiré le même jour : un choix « bet99 »
+ * resté en localStorage n'est plus un `BookmakerId` valide → DraftKings.
+ * Page NHL : `/leagues/hockey/nhl` (pas de lien par match stable).
  */
-const BET99: Bookmaker = {
-  id: "bet99",
-  label: "BET99",
-  badge: "B99",
-  base: "https://bet99.com",
+const DRAFTKINGS: Bookmaker = {
+  id: "draftkings",
+  label: "DraftKings",
+  badge: "DK",
+  base: "https://sportsbook.draftkings.com",
   affiliateCode: undefined,
-  affiliateParam: (code) => `?btag=${code}`,
-  sectionPath: () => "/en/sports/ice_hockey/usa/nhl/1590",
+  affiliateParam: (code) => `?wpcid=${code}`,
+  sectionPath: () => "/leagues/hockey/nhl",
   signupPath: "/",
-  // Noir et jaune de la marque.
-  colors: { bg: "#111111", bgHover: "#222222", fg: "#ffd200", badgeBg: "#ffd200", badgeFg: "#111111" },
+  // Noir et vert de la marque.
+  colors: { bg: "#111111", bgHover: "#1f1f1f", fg: "#ffffff", badgeBg: "#53d337", badgeFg: "#111111" },
 };
 
 /**
  * APPLE_PLAN §4 (2.2) — dans le build iOS, aucun nom, aucune adresse, aucun code
  * affilié de bookmaker ne doit exister dans le binaire. `isIOS` est une constante
- * de build : Rollup élimine BET365/STAKE/BET99 du bundle iOS. Les composants
+ * de build : Rollup élimine DRAFTKINGS/BET365/STAKE du bundle iOS. Les composants
  * gardent un objet valide (pas de `undefined` à gérer), mais vide.
  * Vérifié par `scripts/build-ios.mjs` (il échoue si un domaine de bookmaker reste).
  */
@@ -117,14 +115,14 @@ const NO_BOOK: Bookmaker = {
 };
 
 export const BOOKMAKERS: Record<BookmakerId, Bookmaker> = isIOS
-  ? { bet365: NO_BOOK, stake: NO_BOOK, bet99: NO_BOOK }
-  : { bet365: BET365, stake: STAKE, bet99: BET99 };
+  ? { draftkings: NO_BOOK, bet365: NO_BOOK, stake: NO_BOOK }
+  : { draftkings: DRAFTKINGS, bet365: BET365, stake: STAKE };
 
 /** Ordered list for rendering selectors */
-export const BOOKMAKER_LIST: Bookmaker[] = isIOS ? [] : [BET365, STAKE, BET99];
+export const BOOKMAKER_LIST: Bookmaker[] = isIOS ? [] : [DRAFTKINGS, BET365, STAKE];
 
 const BOOKMAKER_STORAGE_KEY = "iceedge_bookmaker";
-const DEFAULT_BOOKMAKER: BookmakerId = "bet365";
+const DEFAULT_BOOKMAKER: BookmakerId = "draftkings";
 
 function isBookmakerId(v: unknown): v is BookmakerId {
   return typeof v === "string" && v in BOOKMAKERS;

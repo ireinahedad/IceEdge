@@ -117,6 +117,12 @@ export interface PlayerRatesResponse {
   players: Record<string, {
     /** `model` = modèle joueur (temps de glace, AN, coéquipiers, adversaire) ; `rules` = règle. */
     source?: "model" | "rules";
+    /** k propre à ce joueur (dispersion par profil) — prime sur `modelDispersion`. */
+    modelK?: Partial<Record<RateStat, number | null>>;
+    /** Pénalités en nombre : [P(PIM ≥ 1), …, P(PIM ≥ 15)] — prime sur la binomiale négative. */
+    pimLadder?: number[];
+    /** Loi composée des pénalités pour le direct : nombre ~ BN(mu·f, k·f), durées `dur` de probabilités `mix`. */
+    pimParams?: { mu: number; k: number | null; dur: number[]; mix: number[] };
     team: string; position: "F" | "D" | "G"; gp: number;
     rates: Partial<Record<RateStat, number>>;
     /** P(ouvre le score), 0–1. */

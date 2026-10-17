@@ -32,7 +32,7 @@ interface BestBet {
   mlPct: number | null;
   leg: BetLeg;
   gameId?: string;
-  /** Vrai prix BetRivers, quand le livre cote ce pari (voir serveur). */
+  /** Vrai prix DraftKings, quand le livre cote ce pari (voir serveur). */
   bookPrice: number | null;
   /** Mise au jeu (ISO UTC) — sert à retirer les matchs finis sans recharger. */
   startTimeUTC: string | null;

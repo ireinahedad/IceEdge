@@ -140,7 +140,7 @@ export interface ApiBestBet {
   score:          number;
   source:         "ml" | "rules";
   confidence:     "very_high" | "high" | "medium" | "low" | "very_low";
-  /** Vrai prix du livre d'affichage (BetRivers), `null` si non coté.
+  /** Vrai prix du livre d'affichage (DraftKings), `null` si non coté.
    *  Optionnel : un serveur plus ancien ne l'envoie pas. */
   bookPrice?:     number | null;
   bookTitle?:     string | null;

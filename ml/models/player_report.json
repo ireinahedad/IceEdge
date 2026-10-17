@@ -72,7 +72,16 @@
   "vs_lift_pim",
   "vs_lift_ppPoints",
   "ref_pen",
-  "ref_pp"
+  "ref_pp",
+  "toi_last1",
+  "toi_pp_last1",
+  "toi_pp_avg_3",
+  "att_p60_10",
+  "att_p60_30",
+  "att_p60_career",
+  "oia_p60_20",
+  "opp_att_f20",
+  "tm_att_a20"
  ],
  "split": {
   "train": "<=2021",
@@ -166,7 +175,7 @@
   "assists": {
    "k": 100000.0,
    "k_rules": 20,
-   "rounds": 204,
+   "rounds": 355,
    "features": [
     "toi_avg_5",
     "toi_avg_10",
@@ -228,19 +237,24 @@
     "opp_pk_xga60_s",
     "opp_goalie_svpct",
     "opp_goalie_gsax60",
-    "opp_win_s"
+    "opp_win_s",
+    "toi_last1",
+    "toi_pp_last1",
+    "toi_pp_avg_3"
    ],
    "loglik_model": -0.63575,
    "loglik_rules": -0.64859,
    "brier_ge1_model": 0.16822,
    "brier_ge1_rules": 0.172,
    "mean_obs": 0.2863,
-   "mean_model": 0.2849
+   "mean_model": 0.2849,
+   "trained_through": 2025,
+   "policy": "recent"
   },
   "points": {
    "k": 100000.0,
    "k_rules": 40,
-   "rounds": 191,
+   "rounds": 384,
    "features": [
     "toi_avg_5",
     "toi_avg_10",
@@ -302,19 +316,24 @@
     "opp_pk_xga60_s",
     "opp_goalie_svpct",
     "opp_goalie_gsax60",
-    "opp_win_s"
+    "opp_win_s",
+    "toi_last1",
+    "toi_pp_last1",
+    "toi_pp_avg_3"
    ],
    "loglik_model": -0.82915,
    "loglik_rules": -0.84428,
    "brier_ge1_model": 0.20165,
    "brier_ge1_rules": 0.20655,
    "mean_obs": 0.4562,
-   "mean_model": 0.4514
+   "mean_model": 0.4514,
+   "trained_through": 2025,
+   "policy": "recent"
   },
   "shots": {
    "k": 20,
    "k_rules": 12,
-   "rounds": 410,
+   "rounds": 622,
    "features": [
     "toi_avg_5",
     "toi_avg_10",
@@ -376,19 +395,27 @@
     "opp_pk_xga60_s",
     "opp_goalie_svpct",
     "opp_goalie_gsax60",
-    "opp_win_s"
+    "opp_win_s",
+    "toi_last1",
+    "toi_pp_last1",
+    "toi_pp_avg_3",
+    "att_p60_10",
+    "att_p60_30",
+    "att_p60_career"
    ],
    "loglik_model": -1.55298,
    "loglik_rules": -1.56729,
    "brier_ge1_model": 0.17492,
    "brier_ge1_rules": 0.17721,
    "mean_obs": 1.6004,
-   "mean_model": 1.6186
+   "mean_model": 1.6186,
+   "trained_through": 2025,
+   "policy": "recent"
   },
   "hits": {
    "k": 8,
    "k_rules": 6,
-   "rounds": 398,
+   "rounds": 811,
    "features": [
     "toi_avg_5",
     "toi_avg_10",
@@ -466,12 +493,25 @@
    "brier_ge1_model": 0.19887,
    "brier_ge1_rules": 0.20196,
    "mean_obs": 1.1969,
-   "mean_model": 1.2209
+   "mean_model": 1.2209,
+   "trained_through": 2025,
+   "policy": "recent",
+   "k_tiers": {
+    "cuts": [
+     0.7788,
+     1.3881
+    ],
+    "k": [
+     3,
+     4,
+     10
+    ]
+   }
   },
   "blocks": {
-   "k": 8,
+   "k": 12,
    "k_rules": 8,
-   "rounds": 291,
+   "rounds": 469,
    "features": [
     "toi_avg_5",
     "toi_avg_10",
@@ -533,14 +573,22 @@
     "opp_pk_xga60_s",
     "opp_goalie_svpct",
     "opp_goalie_gsax60",
-    "opp_win_s"
+    "opp_win_s",
+    "toi_last1",
+    "toi_pp_last1",
+    "toi_pp_avg_3",
+    "oia_p60_20",
+    "opp_att_f20",
+    "tm_att_a20"
    ],
    "loglik_model": -1.14086,
    "loglik_rules": -1.15126,
    "brier_ge1_model": 0.216,
    "brier_ge1_rules": 0.21878,
    "mean_obs": 0.8366,
-   "mean_model": 0.8077
+   "mean_model": 0.8077,
+   "trained_through": 2025,
+   "policy": "recent"
   },
   "pim": {
    "k": 0.3,
@@ -630,7 +678,7 @@
   "ppPoints": {
    "k": 100000.0,
    "k_rules": 100000.0,
-   "rounds": 312,
+   "rounds": 259,
    "features": [
     "toi_avg_5",
     "toi_avg_10",
@@ -692,14 +740,130 @@
     "opp_pk_xga60_s",
     "opp_goalie_svpct",
     "opp_goalie_gsax60",
-    "opp_win_s"
+    "opp_win_s",
+    "toi_last1",
+    "toi_pp_last1",
+    "toi_pp_avg_3"
    ],
    "loglik_model": -0.25304,
    "loglik_rules": -0.26791,
    "brier_ge1_model": 0.06624,
    "brier_ge1_rules": 0.0678,
    "mean_obs": 0.0892,
-   "mean_model": 0.0844
+   "mean_model": 0.0844,
+   "trained_through": 2025,
+   "policy": "recent"
+  }
+ },
+ "recent": {
+  "trained_at": "2026-10-16",
+  "stats": [
+   "assists",
+   "points",
+   "shots",
+   "hits",
+   "blocks",
+   "ppPoints"
+  ],
+  "train": "2010-2025",
+  "early_stop_on": 2025,
+  "note": "les m\u00e9triques de test des stats \u00ab recent \u00bb datent du mod\u00e8le fig\u00e9 (\u2264 2021-22) ; la mesure de la politique est dans player_retrain_report.json"
+ },
+ "penalty_count": {
+  "features": [
+   "toi_avg_5",
+   "toi_avg_10",
+   "toi_avg_30",
+   "toi_pp_avg_10",
+   "mates_xg60_20",
+   "ixg60_20",
+   "gp_career",
+   "days_rest",
+   "is_home",
+   "is_D",
+   "b2b",
+   "goals_p60_10",
+   "goals_p60_30",
+   "goals_p60_career",
+   "assists_p60_10",
+   "assists_p60_30",
+   "assists_p60_career",
+   "points_p60_10",
+   "points_p60_30",
+   "points_p60_career",
+   "shots_p60_10",
+   "shots_p60_30",
+   "shots_p60_career",
+   "hits_p60_10",
+   "hits_p60_30",
+   "hits_p60_career",
+   "blocks_p60_10",
+   "blocks_p60_30",
+   "blocks_p60_career",
+   "pim_p60_10",
+   "pim_p60_30",
+   "pim_p60_career",
+   "ppPoints_p60_10",
+   "ppPoints_p60_30",
+   "ppPoints_p60_career",
+   "tm_gf_s",
+   "tm_ga_s",
+   "tm_xgf60_s",
+   "tm_xga60_s",
+   "tm_sog_f_s",
+   "tm_sog_a_s",
+   "tm_ev_xgf60_s",
+   "tm_ev_xga60_s",
+   "tm_pp_xgf60_s",
+   "tm_pk_xga60_s",
+   "tm_goalie_svpct",
+   "tm_goalie_gsax60",
+   "tm_win_s",
+   "opp_gf_s",
+   "opp_ga_s",
+   "opp_xgf60_s",
+   "opp_xga60_s",
+   "opp_sog_f_s",
+   "opp_sog_a_s",
+   "opp_ev_xgf60_s",
+   "opp_ev_xga60_s",
+   "opp_pp_xgf60_s",
+   "opp_pk_xga60_s",
+   "opp_goalie_svpct",
+   "opp_goalie_gsax60",
+   "opp_win_s",
+   "vs_gp",
+   "vs_lift_goals",
+   "vs_lift_assists",
+   "vs_lift_points",
+   "vs_lift_shots",
+   "vs_lift_hits",
+   "vs_lift_blocks",
+   "vs_lift_pim",
+   "vs_lift_ppPoints",
+   "ref_pen",
+   "ref_pp"
+  ],
+  "k": 40,
+  "rounds": 367,
+  "durations": [
+   2,
+   4,
+   5,
+   10
+  ],
+  "mix_league": [
+   0.91514,
+   0.01014,
+   0.07417,
+   0.00055
+  ],
+  "pseudo": 20.0,
+  "nmax": 8,
+  "trained_at": "2026-10-16",
+  "split": {
+   "train": "<=2021",
+   "val": 2022
   }
  }
 }

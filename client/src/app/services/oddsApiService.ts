@@ -1,10 +1,10 @@
 // services/oddsApiService.ts
 // Fetches live bookmaker odds via the backend proxy (/api/odds/*).
 //
-// ⚠️ Le livre servi n'est PAS Bet365 : The Odds API ne cote ni Bet365 ni Stake
-// sur la NHL. Le serveur relaie un livre canadien (`ODDS_BOOKMAKERS`, défaut
-// BetRivers) et chaque événement porte son `key`/`title` — c'est ce nom-là
-// qu'un écran doit afficher à côté d'un prix. Le chemin `/odds/bet365/` est
+// Le livre servi est DraftKings depuis le 2026-10-17 (`ODDS_BOOKMAKERS`, même
+// livre que la collecte du ML). The Odds API ne cote ni Bet365 ni Stake sur la
+// NHL. Chaque événement porte son `key`/`title` — c'est ce nom-là qu'un écran
+// doit afficher à côté d'un prix. Le chemin `/odds/bet365/` est
 // gardé tel quel pour ne pas casser les clients déjà déployés.
 // The Odds API key now lives server-side only — it is never shipped to the client.
 // Falls back to empty array when the backend/upstream is unavailable.

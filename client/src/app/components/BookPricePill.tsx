@@ -3,8 +3,9 @@
  *
  * Règles du user (2026-09-27), à ne pas défaire :
  *
- *   • Les prix affichés viennent de BetRivers, le livre de The Odds API le plus
- *     proche de Bet365 (2026-10-02) — Bet365 et Stake n'y sont pas cotés.
+ *   • Les prix affichés viennent de DraftKings (2026-10-17), le livre de la
+ *     collecte du ML — un seul livre partout. Avant : BetRivers / BET99.
+ *     The Odds API ne cote ni Bet365 ni Stake sur la NHL.
  *     La source est dite UNE fois, dans les Réglages (« Cotes affichées »),
  *     pas sur chaque pastille.
  *   • Le toucher ouvre le livre CHOISI dans les Réglages (Bet365 ou Stake), même

@@ -64,7 +64,7 @@ export function BetBuilderPage() {
   // Apparence sombre / claire — réglage partagé, cf. `appearance.ts`.
   const [mode] = useState<AppearanceMode>(readMode);
   const [showSheet, setShowSheet] = useState(false);
-  // Vrais prix BetRivers des jambes, par id — voir `POST /api/odds/legs`.
+  // Vrais prix DraftKings des jambes, par id — voir `POST /api/odds/legs`.
   const [legPrices, setLegPrices] = useState<Record<string, { price: number; bookTitle: string }>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   // `message` vient du serveur ; il était jeté à la réception puis lu au rendu,

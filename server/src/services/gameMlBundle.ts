@@ -31,7 +31,7 @@ import { TtlCache } from './ttlCache';
 import { buildPrematchGameMarkets, buildLiveModelMarkets } from './nhlPredictions';
 import { buildGameFeatures, type GameFeatures } from './featureEngineering';
 import { fetchGameById, fetchTeamRoster } from './nhlApiClient';
-import { mlApiClient, type MLPredictionResult } from './mlApiClient';
+import { mlApiClient, type MLPredictionResult, type PimParams } from './mlApiClient';
 import { getGameRefFactor } from './refereeStore';
 
 export interface GameMlBundle {
@@ -55,6 +55,26 @@ export interface GameMlBundle {
   playerRates:      Record<string, Record<string, number>>;
   /** k de la binomiale négative par stat du modèle joueur ; `null` = Poisson. */
   playerDispersion: Record<string, number | null>;
+  /**
+   * Dispersion par PROFIL (2026-10-16, `explore_players/dispersion.py`) : pour
+   * ces stats, k dépend de la cadence prévue du joueur — `k[i]` pour une
+   * cadence sous `cuts[i]`, le dernier au-delà. Prime sur `playerDispersion`.
+   * Mises en échec seulement : petits frappeurs plus dispersés (k 3), gros
+   * frappeurs plus réguliers (k 10).
+   */
+  playerDispersionTiers: Record<string, { cuts: number[]; k: Array<number | null> }>;
+  /**
+   * Pénalités en NOMBRE (2026-10-16, `explore_players/penalties.py`) : pour
+   * chaque joueur du modèle, P(PIM ≥ m) pour m = 1…15 — nombre de pénalités
+   * × loi des durées (2, 4, 5, 10). Prime sur la binomiale négative en minutes.
+   */
+  playerPimLadder: Record<string, number[]>;
+  /**
+   * Paramètres de cette loi composée, pour le DIRECT (2026-10-17) : la grille
+   * la recalcule sur la part restante du match, nombre de pénalités ~
+   * BN(mu·f, k·f) et mêmes durées.
+   */
+  playerPimParams: Record<string, PimParams>;
   playerModelAsOf:  string | null;
   /**
    * Modèle de TIRS (`train_shots.py`, piste 3, 2026-10-15) : tirs cadrés
@@ -202,6 +222,9 @@ async function computeBundle(gameId: string): Promise<GameMlBundle> {
     byKey,
     playerRates:      out.player_rates ?? {},
     playerDispersion: out.player_dispersion ?? {},
+    playerDispersionTiers: out.player_dispersion_tiers ?? {},
+    playerPimLadder:  out.player_pim_ladder ?? {},
+    playerPimParams:  out.player_pim_params ?? {},
     playerModelAsOf:  out.player_model_as_of ?? null,
     lambdaShotsHome:  out.lambda_shots_home ?? null,
     lambdaShotsAway:  out.lambda_shots_away ?? null,
@@ -322,3 +345,4 @@ export async function getGameFeatures(gameId: string): Promise<GameFeatures> {
   featuresCache.set(gameId, features);
   return features;
 }
+

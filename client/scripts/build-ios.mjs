@@ -102,7 +102,7 @@ writeFileSync(indexPath, html.replace(/(<meta charset[^>]*>)/i, `$1\n    <meta h
 
 // ── 3. guard ───────────────────────────────────────────────────────────────
 const FORBIDDEN = [
-  /stake\.com/i, /bet365\.com/i, /bet99\.com/i,
+  /stake\.com/i, /bet365\.com/i, /bet99\.com/i, /draftkings\.com/i,
   /[?&](affiliate|btag|c)=\$\{/,
   /Place on /, /Parier sur /, /sportsbook/i, /Site de paris/,
   /best-nhl-betting-software/i,

@@ -1,0 +1,73 @@
+{
+ "generated": "2026-10-16",
+ "features": {
+  "shots": [
+   "att_p60_10",
+   "att_p60_30",
+   "att_p60_career"
+  ],
+  "blocks": [
+   "oia_p60_20",
+   "opp_att_f20",
+   "tm_att_a20"
+  ]
+ },
+ "team_window": 20,
+ "rule": "la variante remplace le modèle servi si Δ > 0, z ≥ 2 et Δ > 0 dans ≥ 2 saisons sur 3",
+ "stats": {
+  "shots": {
+   "dll": 0.0008,
+   "z": 4.09,
+   "by_season": {
+    "2023": 0.000363,
+    "2024": 0.000946,
+    "2025": 0.001092
+   },
+   "pass": true,
+   "mean": {
+    "2023": {
+     "obs": 1.6831,
+     "served": 1.6954,
+     "variant": 1.7435
+    },
+    "2024": {
+     "obs": 1.5712,
+     "served": 1.5742,
+     "variant": 1.6175
+    },
+    "2025": {
+     "obs": 1.5469,
+     "served": 1.537,
+     "variant": 1.5522
+    }
+   }
+  },
+  "blocks": {
+   "dll": 0.000824,
+   "z": 6.09,
+   "by_season": {
+    "2023": 0.001433,
+    "2024": 0.000532,
+    "2025": 0.000506
+   },
+   "pass": true,
+   "mean": {
+    "2023": {
+     "obs": 0.8746,
+     "served": 0.8249,
+     "variant": 0.8633
+    },
+    "2024": {
+     "obs": 0.847,
+     "served": 0.8343,
+     "variant": 0.8663
+    },
+    "2025": {
+     "obs": 0.7883,
+     "served": 0.8245,
+     "variant": 0.8268
+    }
+   }
+  }
+ }
+}

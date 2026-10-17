@@ -42,9 +42,9 @@ export type EvRowItem = Pick<ApiValueBet,
 // promettait ce que le critère rejette comme du bruit.
 export const EV_SAMPLE: EvRowItem[] = [
   { id: "ev-s1", market: "moneyline", team: "TOR", opponent: "MTL", line: null,
-    modelProb: 0.55, marketProb: 0.52, price: 1.85, bookTitle: "BetRivers", minOdds: 1 / 0.55 },
+    modelProb: 0.55, marketProb: 0.52, price: 1.85, bookTitle: "DraftKings", minOdds: 1 / 0.55 },
   { id: "ev-s2", market: "puck_line", team: "EDM", opponent: "CGY", line: -1.5,
-    modelProb: 0.42, marketProb: 0.37, price: 2.55, bookTitle: "BetRivers", minOdds: 1 / 0.42 },
+    modelProb: 0.42, marketProb: 0.37, price: 2.55, bookTitle: "DraftKings", minOdds: 1 / 0.42 },
 ];
 
 /** « −1.5 » avec un vrai signe moins, comme le reste de l'app. */

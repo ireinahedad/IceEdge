@@ -604,6 +604,13 @@ _player_feats: list[str] = []
 # face-à-face joueur vs adversaire n'est gardé que pour les stats où il aide.
 _player_feats_by_stat: dict[str, list[str]] = {}
 _player_k: dict[str, float | None] = {}
+# Dispersion par profil : { stat: {"cuts": [c1, c2], "k": [k_bas, k_moyen, k_haut]} }.
+_player_k_tiers: dict[str, dict] = {}
+# Pénalités en NOMBRE (train_player.train_penalty_count, 2026-10-16) : booster
+# du nombre de pénalités + loi des durées. Absent → minutes en binomiale négative.
+_pen_model = None
+_pen_cfg: dict = {}
+PIM_LADDER = 15          # P(PIM ≥ 1), …, P(PIM ≥ 15)
 _player_state: dict = {}
 # Codes MoneyPuck / anciennes franchises → codes envoyés par Node.
 _PLAYER_FRANCHISE = {"ATL": "WPG", "PHX": "UTA", "ARI": "UTA", "L.A": "LAK", "S.J": "SJS",
@@ -613,7 +620,7 @@ _PLAYER_TEAM_COLS = ["gf_s", "ga_s", "xgf60_s", "xga60_s", "sog_f_s", "sog_a_s",
 
 
 def _load_player_model() -> None:
-    global _player_models, _player_feats, _player_k, _player_state, _player_feats_by_stat
+    global _player_models, _player_feats, _player_k, _player_state, _player_feats_by_stat, _player_k_tiers
     rep_path = os.path.join(MODELS_DIR, "player_report.json")
     st_path = os.path.join(MODELS_DIR, "player_state.json")
     if not (os.path.exists(rep_path) and os.path.exists(st_path)):
@@ -634,12 +641,34 @@ def _load_player_model() -> None:
                                  for s, v in rep["stats"].items()}
         # k « infini » (≥ 1e4) = Poisson : `None` côté API.
         _player_k = {s: (None if v["k"] >= 1e4 else float(v["k"])) for s, v in rep["stats"].items()}
+        _player_k_tiers = {s: v["k_tiers"] for s, v in rep["stats"].items() if v.get("k_tiers")}
+        global _pen_model, _pen_cfg
+        pen_path = os.path.join(MODELS_DIR, "player", "pen_count.json")
+        if rep.get("penalty_count") and os.path.exists(pen_path):
+            _pen_model = xgb.Booster()
+            _pen_model.load_model(pen_path)
+            _pen_cfg = rep["penalty_count"]
+            print(f"[ML] ✅ pénalités en nombre : k {_pen_cfg['k']}, durées {_pen_cfg['durations']}")
+        else:
+            _pen_model, _pen_cfg = None, {}
         vs_stats = [s for s, fs in _player_feats_by_stat.items() if "vs_gp" in fs]
         print(f"[ML] ✅ modèle joueur : {len(models)} stats, "
               f"{len(state.get('players', {}))} joueurs (état au {state.get('as_of')})"
               + (f", face-à-face : {', '.join(vs_stats)}" if vs_stats else ""))
         if vs_stats and not state.get("vs"):
             print("[ML] ⚠️  modèle joueur avec face-à-face mais player_state.json sans « vs » — "
+                  "relance : python train_player.py --state-only")
+        # Déploiement récent (toi_last1, toi_pp_last1, toi_pp_avg_3) : un état
+        # écrit avant 2026-10-15 ne les a pas — le modèle les verrait manquants.
+        need = {f for fs in _player_feats_by_stat.values() for f in fs
+                if f in ("toi_last1", "toi_pp_last1", "toi_pp_avg_3",
+                         "att_p60_10", "att_p60_30", "att_p60_career", "oia_p60_20")}
+        sample = next(iter(state.get("players", {}).values()), {}).get("f", {})
+        if need and not need <= set(sample):
+            print("[ML] ⚠️  modèle joueur avec déploiement récent mais player_state.json sans "
+                  f"{', '.join(sorted(need - set(sample)))} — relance : python train_player.py --state-only")
+        if any("tm_att_a20" in fs for fs in _player_feats_by_stat.values()) and not state.get("teams"):
+            print("[ML] ⚠️  modèle joueur avec tentatives d'équipe mais player_state.json sans « teams » — "
                   "relance : python train_player.py --state-only")
     except Exception as e:
         _player_models, _player_feats, _player_k, _player_state = {}, [], {}, {}
@@ -3120,6 +3149,48 @@ def predict_game(f: GameFeatures) -> MLResponse:
 # Ici : un contexte, N lectures. Un marché qu'on ne sait pas pricer rend `null`
 # pour SA case, sans faire échouer le paquet.
 
+def _pim_ladders(rows: list[dict], ids: list[str]) -> dict[str, list[float]]:
+    """P(PIM ≥ m), m = 1…PIM_LADDER, par joueur : N ~ BN(μ_N, k_N) pénalités,
+    chacune d'une durée {2, 4, 5, 10} — loi de la ligue, avec la part de
+    « non mineures » propre au joueur (ses pénalités en carrière, rétrécie)."""
+    if _pen_model is None or not rows:
+        return {}
+    from scipy.stats import nbinom, poisson
+    feats = list(_pen_cfg["features"])
+    arr = np.array([[np.nan if r.get(n) is None else float(r[n]) for n in feats] for r in rows], dtype=np.float32)
+    mu = np.clip(_pen_model.predict(xgb.DMatrix(arr, feature_names=feats, missing=np.nan)), 1e-6, None)
+    dur = np.array(_pen_cfg["durations"], dtype=int)
+    mixL = np.array(_pen_cfg["mix_league"], dtype=float)
+    rel = mixL[1:] / mixL[1:].sum()
+    k, nmax, ps = float(_pen_cfg["k"]), int(_pen_cfg.get("nmax", 8)), float(_pen_cfg.get("pseudo", 20.0))
+    pmax = int(dur.max()) * nmax
+    n_ax = np.arange(nmax + 1)
+    out: dict[str, list[float]] = {}
+    for pid, r, m in zip(ids, rows, mu):
+        pen, big = float(r.get("pen_career") or 0.0), float(r.get("bigpen_career") or 0.0)
+        share = (big + ps * mixL[1:].sum()) / (pen + ps)
+        one = np.zeros(pmax + 1)
+        one[dur] = np.concatenate([[1 - share], share * rel])
+        pn = poisson.pmf(n_ax, m) if k >= 1e4 else nbinom.pmf(n_ax, k, k / (k + m))
+        pn[-1] += max(0.0, 1 - pn.sum())
+        conv = np.zeros(pmax + 1); conv[0] = 1.0
+        pim = pn[0] * conv
+        for n in range(1, nmax + 1):
+            conv = np.convolve(conv, one)[:pmax + 1]
+            pim = pim + pn[n] * conv
+        tail = pim[::-1].cumsum()[::-1]                     # tail[j] = P(PIM ≥ j)
+        out[pid] = [round(float(tail[j]), 5) if j <= pmax else 0.0 for j in range(1, PIM_LADDER + 1)]
+        out[pid].append(round(float((pim * np.arange(pmax + 1)).sum()), 4))   # moyenne en dernier
+        # Paramètres de la loi composée, pour le DIRECT (le client la recalcule
+        # sur la part restante du match : N ~ BN(μ_N·f, k_N·f), mêmes durées).
+        _PIM_PARAMS[pid] = {"mu": round(float(m), 5), "k": None if k >= 1e4 else k,
+                            "dur": dur.tolist(), "mix": [round(float(x), 5) for x in one[dur]]}
+    return out
+
+
+_PIM_PARAMS: dict[str, dict] = {}
+
+
 def _player_rates(ctx: dict, f: GameFeatures, home_ids: list[str], away_ids: list[str],
                   referees: Optional[List[str]] = None) -> dict:
     """Cadence par match de chaque joueur des deux alignements, pour CE match.
@@ -3144,9 +3215,15 @@ def _player_rates(ctx: dict, f: GameFeatures, home_ids: list[str], away_ids: lis
     vs_none = {n: (0.0 if n == "vs_gp" else 1.0) for n in vs_names}
     teams = {"home": (f.home_team or "").upper(), "away": (f.away_team or "").upper()}
     ref_vals = _ref_features(referees)
+    # Tentatives d'équipe (20 derniers matchs) : ce que concède l'équipe du
+    # joueur, ce que tente l'adversaire — pour les tirs bloqués. Inconnu → NaN.
+    team_att = _player_state.get("teams") or {}
     ids, rows = [], []
     for side, other, pids in (("home", "away", home_ids), ("away", "home", away_ids)):
         opp = _PLAYER_FRANCHISE.get(teams[other], teams[other])
+        own = _PLAYER_FRANCHISE.get(teams[side], teams[side])
+        att_vals = {"tm_att_a20": (team_att.get(own) or {}).get("att_a20"),
+                    "opp_att_f20": (team_att.get(opp) or {}).get("att_f20")}
         for pid in pids:
             st = players.get(str(pid))
             if not st:
@@ -3159,6 +3236,7 @@ def _player_rates(ctx: dict, f: GameFeatures, home_ids: list[str], away_ids: lis
             row["b2b"] = float(getattr(f, f"{side}_b2b", 0) or 0)
             row["days_rest"] = float(getattr(f, f"{side}_rest_days", 2) or 2)
             row.update(ref_vals)
+            row.update(att_vals)
             for c in _PLAYER_TEAM_COLS:
                 row[f"tm_{c}"] = fv.get(f"{side}_{c}")
                 row[f"opp_{c}"] = fv.get(f"{other}_{c}")
@@ -3178,6 +3256,15 @@ def _player_rates(ctx: dict, f: GameFeatures, home_ids: list[str], away_ids: lis
         k_lvl = _player_level.get(stat, 1.0)       # recalage de niveau de la saison
         for i, mu in zip(ids, bst.predict(dmats[feats])):
             out[i][stat] = round(float(mu) * k_lvl, 4)
+    _PIM_PARAMS.clear()
+    # Pénalités en nombre : l'échelle P(PIM ≥ m) remplace la loi en minutes, et
+    # la cadence affichée devient sa moyenne. Rangée sous une clé privée,
+    # sortie du dict par le paquet (`player_pim_ladder`).
+    for i, lad in _pim_ladders(rows, ids).items():
+        out[i]["pim"] = lad[-1]
+        out[i]["_pim_ladder"] = lad[:-1]
+        if i in _PIM_PARAMS:
+            out[i]["_pim_params"] = _PIM_PARAMS[i]
     return out
 
 
@@ -3213,6 +3300,17 @@ class GameBundleResponse(BaseModel):
     player_rates: dict[str, dict[str, float]] = Field(default_factory=dict)
     # k de la binomiale négative par stat ; `null` = Poisson.
     player_dispersion: dict[str, Optional[float]] = Field(default_factory=dict)
+    # Dispersion par profil (2026-10-16) : k selon la cadence prévue du joueur,
+    # { stat: {cuts: [c1, c2], k: [k1, k2, k3]} } — k1 si cadence < c1, etc.
+    # Prime sur player_dispersion pour ces stats.
+    player_dispersion_tiers: dict[str, dict] = Field(default_factory=dict)
+    # Pénalités en nombre (2026-10-16) : { joueur: [P(PIM ≥ 1), …, P(PIM ≥ 15)] }.
+    # Prime sur la binomiale négative pour la stat pim.
+    player_pim_ladder: dict[str, list[float]] = Field(default_factory=dict)
+    # … et ses paramètres pour le direct : { joueur: {mu, k, dur, mix} } —
+    # nombre de pénalités ~ BN(mu, k) (k null = Poisson), durées `dur` de
+    # probabilités `mix`. Sur la part restante f du match : BN(mu·f, k·f).
+    player_pim_params: dict[str, dict] = Field(default_factory=dict)
     player_model_as_of: Optional[str] = None
     # Modèle de tirs (piste 3) : tirs cadrés attendus de chaque équipe, et
     # arrêts attendus de chaque gardien suivi { idNHL: μ } s'il part ce soir.
@@ -3238,15 +3336,20 @@ def predict_game_bundle(req: GameBundleRequest) -> GameBundleResponse:
         except HTTPException:
             results[m.id] = None
     dist = ctx["score_dist"]
-    rates = {}
+    rates, pim_ladder, pim_params = {}, {}, {}
     if req.players is not None:
         rates = _player_rates(ctx, req.features, req.players.home, req.players.away, req.referees)
+        pim_ladder = {i: r.pop("_pim_ladder") for i, r in rates.items() if "_pim_ladder" in r}
+        pim_params = {i: r.pop("_pim_params") for i, r in rates.items() if "_pim_params" in r}
     return GameBundleResponse(
         results=results,
         lambda_home=None if dist is None else round(dist.lam_home, 4),
         lambda_away=None if dist is None else round(dist.lam_away, 4),
         player_rates=rates,
         player_dispersion=dict(_player_k) if rates else {},
+        player_dispersion_tiers=dict(_player_k_tiers) if rates else {},
+        player_pim_ladder=pim_ladder if rates else {},
+        player_pim_params=pim_params if rates else {},
         player_model_as_of=_player_state.get("as_of") if rates else None,
         lambda_shots_home=None if not ctx.get("shots") else round(ctx["shots"]["home"], 4),
         lambda_shots_away=None if not ctx.get("shots") else round(ctx["shots"]["away"], 4),

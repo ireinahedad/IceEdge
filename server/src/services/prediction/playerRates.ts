@@ -34,6 +34,7 @@
 
 import { fetchGameById, fetchPlayerById, fetchTeamByAbbr, fetchTeamRoster, fetchTeamSummaryStats } from '../nhlApiClient';
 import { getGameMlBundle, type GameMlBundle } from '../gameMlBundle';
+import { playerModelK } from './playerDispersion';
 
 export type RateStat = 'goals' | 'assists' | 'points' | 'shots' | 'hits' | 'blocks' | 'saves' | 'pim' | 'ppPoints';
 
@@ -87,6 +88,19 @@ export interface PlayerRateRow {
   gp:       number;
   /** Cadence ajustée par match, par statistique pertinente pour le poste. */
   rates:    Partial<Record<RateStat, number>>;
+  /**
+   * k PROPRE à ce joueur (dispersion par profil, 2026-10-16) : prime sur
+   * `modelDispersion` pour ces stats. Mises en échec seulement aujourd'hui.
+   */
+  modelK?:  Partial<Record<RateStat, number | null>>;
+  /**
+   * Pénalités en nombre (2026-10-16) : [P(PIM ≥ 1), …, P(PIM ≥ 15)]. Quand il
+   * est là, les seuils de pénalités se lisent dessus, pas sur la binomiale
+   * négative en minutes.
+   */
+  pimLadder?: number[];
+  /** Paramètres de la loi composée des pénalités, pour le direct (grille). */
+  pimParams?: { mu: number; k: number | null; dur: number[]; mix: number[] };
   /** P(ouvre le score), 0–1. */
   firstGoal?: number;
   /** Buts attendus dans le match (les deux équipes) — base du premier buteur. */
@@ -262,6 +276,14 @@ function applyPlayerModel(
     } else {
       for (const [stat, v] of Object.entries(m)) {
         if (stat in row.rates || stat in PSEUDO_GAMES) (row.rates as Record<string, number>)[stat] = round4(v);
+      }
+      const lad = bundle?.playerPimLadder?.[id];
+      if (Array.isArray(lad) && lad.length) row.pimLadder = lad;
+      const pp = bundle?.playerPimParams?.[id];
+      if (pp && Number.isFinite(pp.mu)) row.pimParams = pp;
+      for (const stat of Object.keys(bundle?.playerDispersionTiers ?? {})) {
+        const r = (row.rates as Record<string, number | undefined>)[stat];
+        if (r != null && Number.isFinite(r)) (row.modelK ??= {})[stat as RateStat] = playerModelK(bundle!, stat, r);
       }
       row.source = 'model';
     }

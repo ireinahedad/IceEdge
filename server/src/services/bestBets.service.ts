@@ -30,6 +30,7 @@ import { mlApiClient } from './mlApiClient';
 import { priceForSelection } from './oddsClient';
 import { TtlCache } from './ttlCache';
 import { getGameMlBundle, mlBundleKey, type GameMlBundle } from './gameMlBundle';
+import { ladderAtLeast, playerModelK } from './prediction/playerDispersion';
 import { probAtLeast } from './prediction/playerRates';
 import { mapLimit } from './concurrency';
 
@@ -308,7 +309,10 @@ async function mlScore(c: Candidate, bundleFor: BundleFor): Promise<number | nul
     const stat = PLAYER_STAT[c.ml.propType];
     const rate = stat ? bundle?.playerRates?.[c.ml.playerId]?.[stat] : undefined;
     if (rate == null || !Number.isFinite(rate)) return null;
-    const p = probAtLeast(rate, Math.floor(c.ml.line) + 1, bundle?.playerDispersion?.[stat]);
+    const ladder = stat === 'pim' ? bundle?.playerPimLadder?.[c.ml.playerId] : undefined;
+    const p = ladder?.length
+      ? ladderAtLeast(ladder, Math.floor(c.ml.line) + 1)
+      : probAtLeast(rate, Math.floor(c.ml.line) + 1, bundle ? playerModelK(bundle, stat, rate) : null);
     return Math.round((c.ml.selection === 'under' ? 1 - p : p) * 100);
   }
   const r = bundle?.byKey?.[mlBundleKey(c.ml.marketType, c.ml.line ?? null, null,

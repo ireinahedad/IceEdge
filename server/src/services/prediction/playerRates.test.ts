@@ -117,8 +117,38 @@ describe('playerRatesForGame', () => {
     expect(r.players['5'].source).toBe('rules');
     expect(r.players['5'].rates.goals).toBeUndefined();
     expect(r.modelDispersion).toEqual({ goals: null, shots: 20 });
+    expect(r.players['2'].modelK).toBeUndefined();       // pas de dispersion par profil dans ce paquet
     // Premier buteur recalculé sur la cadence du modèle.
     expect(r.players['2'].firstGoal!).toBeGreaterThan(0);
+  });
+
+  it('dispersion par profil : k propre au joueur selon sa cadence de mises en échec', async () => {
+    bundle.value = {
+      playerRates: { '2': { goals: 0.31, hits: 2.1 } },
+      playerDispersion: { goals: null, hits: 8 },
+      playerDispersionTiers: { hits: { cuts: [0.78, 1.39], k: [3, 4, 10] } },
+      playerModelAsOf: '2026-04-16',
+    };
+    const r = await playerRatesForGame('2026020001');
+    bundle.value = null;
+    expect(r.players['2'].modelK).toEqual({ hits: 10 });
+    expect(r.players['2'].pimLadder).toBeUndefined();     // pas d'échelle de pénalités dans ce paquet
+  });
+
+  it('pénalités en nombre : l\'échelle P(PIM ≥ m) du paquet suit le joueur du modèle', async () => {
+    bundle.value = {
+      playerRates: { '2': { goals: 0.31, pim: 0.44 } },
+      playerDispersion: { goals: null, pim: 0.3 },
+      playerPimLadder: { '2': [0.19, 0.19, 0.03] },
+      playerPimParams: { '2': { mu: 0.21, k: 40, dur: [2, 4, 5, 10], mix: [0.95, 0.01, 0.04, 0] } },
+      playerModelAsOf: '2026-04-16',
+    };
+    const r = await playerRatesForGame('2026020001');
+    bundle.value = null;
+    expect(r.players['2'].pimLadder).toEqual([0.19, 0.19, 0.03]);
+    expect(r.players['2'].pimParams).toEqual({ mu: 0.21, k: 40, dur: [2, 4, 5, 10], mix: [0.95, 0.01, 0.04, 0] });
+    expect(r.players['1'].pimLadder).toBeUndefined();
+    expect(r.players['1'].modelK).toBeUndefined();        // joueur de la règle
   });
 
   it('premier buteur : buts de match du MODÈLE DE SCORE pour tous les joueurs (INCOHERENCES_ML §13)', async () => {

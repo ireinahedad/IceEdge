@@ -1,0 +1,286 @@
+{
+ "generated": "2026-10-15",
+ "n0_grid": [
+  50,
+  100,
+  200,
+  400,
+  800,
+  1600
+ ],
+ "rule": "n0 choisi en validation ; adopté si Δ log-vraisemblance > 0 en validation ET en test, z ≥ 2 en test",
+ "stats": {
+  "goals": {
+   "n0": 400,
+   "dll_val": 9.5e-06,
+   "z_val": 0.33,
+   "dll_test": 1.12e-05,
+   "z_test": 0.87,
+   "by_season": {
+    "2022": {
+     "obs": 0.1747,
+     "model": 0.1778,
+     "leveled": 0.1753,
+     "dll": 9.5e-06
+    },
+    "2023": {
+     "obs": 0.1712,
+     "model": 0.1735,
+     "leveled": 0.171,
+     "dll": -5e-07
+    },
+    "2024": {
+     "obs": 0.1672,
+     "model": 0.1651,
+     "leveled": 0.1653,
+     "dll": -1.1e-06
+    },
+    "2025": {
+     "obs": 0.1712,
+     "model": 0.1666,
+     "leveled": 0.1683,
+     "dll": 3.51e-05
+    }
+   },
+   "adopt": false
+  },
+  "assists": {
+   "n0": 800,
+   "dll_val": 1.04e-05,
+   "z_val": 0.53,
+   "dll_test": 8.7e-06,
+   "z_test": 0.71,
+   "by_season": {
+    "2022": {
+     "obs": 0.2943,
+     "model": 0.2993,
+     "leveled": 0.2971,
+     "dll": 1.04e-05
+    },
+    "2023": {
+     "obs": 0.2883,
+     "model": 0.2934,
+     "leveled": 0.29,
+     "dll": 1.06e-05
+    },
+    "2024": {
+     "obs": 0.2814,
+     "model": 0.278,
+     "leveled": 0.2782,
+     "dll": -3.4e-06
+    },
+    "2025": {
+     "obs": 0.2891,
+     "model": 0.2833,
+     "leveled": 0.2852,
+     "dll": 1.88e-05
+    }
+   },
+   "adopt": false
+  },
+  "points": {
+   "n0": 1600,
+   "dll_val": 4.5e-06,
+   "z_val": 0.29,
+   "dll_test": 2.2e-05,
+   "z_test": 2.25,
+   "by_season": {
+    "2022": {
+     "obs": 0.469,
+     "model": 0.4752,
+     "leveled": 0.4731,
+     "dll": 4.5e-06
+    },
+    "2023": {
+     "obs": 0.4596,
+     "model": 0.4647,
+     "leveled": 0.4621,
+     "dll": -1.4e-06
+    },
+    "2024": {
+     "obs": 0.4486,
+     "model": 0.4406,
+     "leveled": 0.4415,
+     "dll": 1.79e-05
+    },
+    "2025": {
+     "obs": 0.4604,
+     "model": 0.4488,
+     "leveled": 0.4514,
+     "dll": 4.95e-05
+    }
+   },
+   "adopt": true
+  },
+  "shots": {
+   "n0": 200,
+   "dll_val": 3.79e-05,
+   "z_val": 0.65,
+   "dll_test": 6.63e-05,
+   "z_test": 1.67,
+   "by_season": {
+    "2022": {
+     "obs": 1.7368,
+     "model": 1.7522,
+     "leveled": 1.7354,
+     "dll": 3.79e-05
+    },
+    "2023": {
+     "obs": 1.6831,
+     "model": 1.7046,
+     "leveled": 1.6845,
+     "dll": 0.0001009
+    },
+    "2024": {
+     "obs": 1.5712,
+     "model": 1.5916,
+     "leveled": 1.567,
+     "dll": 8.09e-05
+    },
+    "2025": {
+     "obs": 1.5469,
+     "model": 1.5596,
+     "leveled": 1.5499,
+     "dll": 1.71e-05
+    }
+   },
+   "adopt": false
+  },
+  "hits": {
+   "n0": 50,
+   "dll_val": 0.0008245,
+   "z_val": 8.54,
+   "dll_test": 0.0004109,
+   "z_test": 4.98,
+   "by_season": {
+    "2022": {
+     "obs": 1.2513,
+     "model": 1.3043,
+     "leveled": 1.2848,
+     "dll": 0.0008245
+    },
+    "2023": {
+     "obs": 1.2625,
+     "model": 1.2505,
+     "leveled": 1.2391,
+     "dll": -4.23e-05
+    },
+    "2024": {
+     "obs": 1.192,
+     "model": 1.2285,
+     "leveled": 1.1865,
+     "dll": 0.0004754
+    },
+    "2025": {
+     "obs": 1.1361,
+     "model": 1.1837,
+     "leveled": 1.1526,
+     "dll": 0.0007998
+    }
+   },
+   "adopt": true
+  },
+  "blocks": {
+   "n0": 50,
+   "dll_val": 0.0002239,
+   "z_val": 1.55,
+   "dll_test": 0.0007311,
+   "z_test": 6.47,
+   "by_season": {
+    "2022": {
+     "obs": 0.818,
+     "model": 0.7953,
+     "leveled": 0.8252,
+     "dll": 0.0002239
+    },
+    "2023": {
+     "obs": 0.8746,
+     "model": 0.8173,
+     "leveled": 0.8766,
+     "dll": 0.0016362
+    },
+    "2024": {
+     "obs": 0.847,
+     "model": 0.8143,
+     "leveled": 0.8515,
+     "dll": 0.0005838
+    },
+    "2025": {
+     "obs": 0.7883,
+     "model": 0.7914,
+     "leveled": 0.8041,
+     "dll": -2.67e-05
+    }
+   },
+   "adopt": true
+  },
+  "pim": {
+   "n0": 1600,
+   "dll_val": 5.8e-06,
+   "z_val": 0.18,
+   "dll_test": 2.16e-05,
+   "z_test": 1.76,
+   "by_season": {
+    "2022": {
+     "obs": 0.45,
+     "model": 0.4386,
+     "leveled": 0.4457,
+     "dll": 5.8e-06
+    },
+    "2023": {
+     "obs": 0.4427,
+     "model": 0.4391,
+     "leveled": 0.4449,
+     "dll": -2.39e-05
+    },
+    "2024": {
+     "obs": 0.4057,
+     "model": 0.4265,
+     "leveled": 0.4232,
+     "dll": 8.78e-05
+    },
+    "2025": {
+     "obs": 0.4291,
+     "model": 0.422,
+     "leveled": 0.4246,
+     "dll": 8e-07
+    }
+   },
+   "adopt": false
+  },
+  "ppPoints": {
+   "n0": 1600,
+   "dll_val": -1.26e-05,
+   "z_val": -0.5,
+   "dll_test": 4.58e-05,
+   "z_test": 3.49,
+   "by_season": {
+    "2022": {
+     "obs": 0.0952,
+     "model": 0.0934,
+     "leveled": 0.0949,
+     "dll": -1.26e-05
+    },
+    "2023": {
+     "obs": 0.0937,
+     "model": 0.0905,
+     "leveled": 0.0912,
+     "dll": 4.6e-06
+    },
+    "2024": {
+     "obs": 0.0849,
+     "model": 0.0801,
+     "leveled": 0.0809,
+     "dll": 4.43e-05
+    },
+    "2025": {
+     "obs": 0.0891,
+     "model": 0.0827,
+     "leveled": 0.0847,
+     "dll": 8.86e-05
+    }
+   },
+   "adopt": false
+  }
+ }
+}

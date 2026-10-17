@@ -123,7 +123,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "profile.language":     { en: "Language",      fr: "Langue" },
   "profile.bookmaker":    isIOS ? { en: "", fr: "" } : { en: "Sportsbook",    fr: "Site de paris" },
   "profile.bookmakerHint":isIOS ? { en: "", fr: "" } : { en: "Which site the “Place bet” buttons open", fr: "Le site que les boutons « Parier » ouvrent" },
-  "profile.oddsSource":   { en: "Odds shown in the app come from BetRivers. Tapping a price opens the site chosen above, where the odds may differ.", fr: "Les cotes affichées dans l'app viennent de BetRivers. Toucher une cote ouvre le site choisi ci-dessus, où la cote peut être différente." },
+  "profile.oddsSource":   { en: "Odds shown in the app come from DraftKings. If you pick another site above, its odds may differ.", fr: "Les cotes affichées dans l'app viennent de DraftKings. Si vous choisissez un autre site ci-dessus, sa cote peut être différente." },
   // Format d'affichage des cotes. Les clés `.percent` / `.decimal` / `.american`
   // sont construites à partir de l'identifiant du format
   // (`profile.oddsFormat.${f}`) : renommer un identifiant dans

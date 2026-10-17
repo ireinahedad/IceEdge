@@ -194,7 +194,7 @@ export function SlipNotices({ analysis }: { analysis: SlipAnalysis }) {
 
 export function LegCard({ leg, index, onRemove, bookPrice, started }: {
   leg: BetLeg; index: number; onRemove: () => void;
-  /** Vrai prix BetRivers de cette jambe, si le livre la cote. */
+  /** Vrai prix DraftKings de cette jambe, si le livre la cote. */
   bookPrice?: number;
   /** Le match de cette jambe a commencé : le serveur refusera le coupon. */
   started?: boolean;
@@ -254,7 +254,7 @@ export function LegCard({ leg, index, onRemove, bookPrice, started }: {
             <span className="text-xs font-bold flex-shrink-0" style={{ color: PROB_COLOR }}>
               {leg.probability}% <span className="text-[11px] font-medium">{t("slip.chance")}</span>
             </span>
-            {/* Cote = VRAI prix du livre (BetRivers), plus la cote tirée
+            {/* Cote = VRAI prix du livre (DraftKings), plus la cote tirée
                 du modèle (décision du user, 2026-09-30). Pas de prix → on le
                 dit, sans inventer de chiffre. */}
             {bookPrice != null ? (

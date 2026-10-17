@@ -64,15 +64,16 @@ const TTL = ((): number => {
  * `bookmakers: []`, et la collecte prenait « le premier livre venu » — une
  * source qui pouvait changer d'un jour à l'autre, ce que le CLV ne tolère pas.
  *
- * Décision du user (2026-10-02) : défaut `betrivers`, le livre le plus proche
- * de Bet365 (où le user parie) à la comparaison `ml/python/compare_bet365.py`
- * sur NJD–PHI. Avant : `betano_ca_on` (2026-09-27), seul livre canadien à
- * coter 33/33 matchs en moneyline et puck line. Le livre est envoyé en paramètre
+ * Décision du user (2026-10-17) : défaut `draftkings` — le MÊME livre que la
+ * collecte du ML, donc un seul livre partout (affichage, value bets, CLV). Bet365
+ * via Odds-API.io a été écarté (abonnement en plus). Avant : `betrivers`
+ * (2026-10-02), BET99 Ontario en production, `betano_ca_on` (2026-09-27).
+ * Le livre est envoyé en paramètre
  * `bookmakers`, jamais `regions` (même coût : jusqu'à 10 livres = 1 région).
  * Une liste est acceptée, dans l'ordre de préférence. `ODDS_REGIONS` n'est
  * plus lu depuis le 2026-09-27.
  */
-export const ODDS_BOOKMAKERS = (process.env.ODDS_BOOKMAKERS ?? '').trim() || 'betrivers';
+export const ODDS_BOOKMAKERS = (process.env.ODDS_BOOKMAKERS ?? '').trim() || 'draftkings';
 const PREFERRED_BOOKS = ODDS_BOOKMAKERS.split(',').map((b) => b.trim()).filter(Boolean);
 
 /** Paramètre de sélection des livres, commun à tous les appels. */
@@ -106,7 +107,7 @@ interface OddsEvent {
   commence_time: string;
   bookmakers: Array<{
     key: string;
-    /** Nom lisible du livre (« BetRivers »), fourni par The Odds API. */
+    /** Nom lisible du livre (« DraftKings »), fourni par The Odds API. */
     title?: string;
     markets: Array<{ key: string; outcomes: OddsOutcome[] }>;
   }>;
@@ -153,14 +154,13 @@ export const ODDS_COLLECT_BOOKMAKERS =
  * user) — archivés dans `odds_snapshots` avec leur `bookmaker`, JAMAIS dans
  * `odds_log` ni dans la série du livre de collecte.
  *
- * Défaut `bet99_ca_on` : un livre où le user peut parier, le plus proche de
- * Bet365. The Odds API n'a presque aucun historique des livres canadiens ; les
- * collecter dès maintenant est la seule façon d'avoir, dans une saison, de quoi
- * juger les value bets à SES prix. Même appel, même coût (jusqu'à 10 livres =
- * une région). `none` (ou une liste vide) désactive.
+ * Défaut `none` depuis le 2026-10-17 : BET99 est retiré et l'app affiche
+ * DraftKings, déjà le livre de collecte — sa série EST celle des value bets.
+ * Un livre peut encore être ajouté à la main (même appel, même coût, jusqu'à
+ * 10 livres = une région). `none` (ou une liste vide) désactive.
  */
 export const ODDS_SHADOW_BOOKMAKERS: string[] = (() => {
-  const raw = (process.env.ODDS_SHADOW_BOOKMAKERS ?? 'bet99_ca_on').trim();
+  const raw = (process.env.ODDS_SHADOW_BOOKMAKERS ?? 'none').trim();
   if (!raw || raw.toLowerCase() === 'none') return [];
   const collect = new Set(ODDS_COLLECT_BOOKMAKERS.split(',').map((b) => b.trim()));
   return [...new Set(raw.split(',').map((b) => b.trim()).filter((b) => b && !collect.has(b)))];
@@ -460,7 +460,7 @@ export async function fetchTotalsOdds(
 export interface BookPrice {
   price: number;        // cote décimale
   bookmaker: string;    // clé The Odds API (`betano_ca_on`)
-  bookTitle: string;    // nom lisible (« BetRivers »)
+  bookTitle: string;    // nom lisible (« DraftKings »)
 }
 
 export interface SelectionQuery {

@@ -1,0 +1,88 @@
+{
+ "generated": "2026-10-15",
+ "recency": [
+  "toi_last1",
+  "toi_pp_last1",
+  "toi_pp_avg_3"
+ ],
+ "rule": "BR remplace le modèle servi si Δ > 0, z ≥ 2 et Δ > 0 dans ≥ 2 saisons sur 3",
+ "stats": {
+  "points": {
+   "dll": 0.000288,
+   "z": 3.21,
+   "by_season": {
+    "2023": 0.000296,
+    "2024": 0.000422,
+    "2025": 0.000144
+   },
+   "pass": true,
+   "policy": "récent"
+  },
+  "shots": {
+   "dll": 0.000503,
+   "z": 4.48,
+   "by_season": {
+    "2023": 0.000473,
+    "2024": 0.000532,
+    "2025": 0.000502
+   },
+   "pass": true,
+   "policy": "récent"
+  },
+  "hits": {
+   "dll": -0.000166,
+   "z": -2.44,
+   "by_season": {
+    "2023": 7.2e-05,
+    "2024": 4e-06,
+    "2025": -0.000574
+   },
+   "pass": false,
+   "policy": "récent"
+  },
+  "blocks": {
+   "dll": 0.000375,
+   "z": 4.16,
+   "by_season": {
+    "2023": 0.000613,
+    "2024": 0.000206,
+    "2025": 0.000305
+   },
+   "pass": true,
+   "policy": "récent"
+  },
+  "ppPoints": {
+   "dll": 0.000837,
+   "z": 7.31,
+   "by_season": {
+    "2023": 0.000506,
+    "2024": 0.000809,
+    "2025": 0.001197
+   },
+   "pass": true,
+   "policy": "récent"
+  },
+  "assists": {
+   "dll": 0.000174,
+   "z": 2.36,
+   "by_season": {
+    "2023": 0.000156,
+    "2024": 0.00029,
+    "2025": 7.6e-05
+   },
+   "pass": true,
+   "policy": "récent"
+  },
+  "goals": {
+   "dll": 6.2e-05,
+   "z": 0.98,
+   "by_season": {
+    "2023": 4.2e-05,
+    "2024": 9.1e-05,
+    "2025": 5.2e-05
+   },
+   "pass": false,
+   "policy": "figé"
+  }
+ }
+}

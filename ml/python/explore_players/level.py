@@ -1,7 +1,10 @@
 """
 level.py — recalage de NIVEAU du modèle joueur dans la saison.
 
-    python explore_players/level.py     # écrit ../models/player_level_report.json
+    python explore_players/level.py     # écrit ../models/player_level_report_frozen.json
+
+Première mesure, sur le modèle FIGÉ. Remplacée pour le service par
+level_wf.py (modèle réentraîné), qui écrit player_level_report.json.
 
 Le modèle joueur (train_player.py, entraîné ≤ 2021-22) suit mal les dérives de
 ligue : les tirs baissent depuis 2022-23, et il prévoit 1,63 tir par
@@ -108,10 +111,10 @@ def main():
         print(f"   {s:9s} n0={n0:5d}  val Δ {r['dll_val']:+.6f} (z {zv:+.1f})  test Δ {r['dll_test']:+.6f} "
               f"(z {zt:+.1f})  → {'ADOPTER' if r['adopt'] else 'non'}   "
               + "  ".join(f"{se}: {v['obs']:.3f}/{v['model']:.3f}" for se, v in r["by_season"].items()), flush=True)
-    # Lu par train_player.refresh_player_level (n0 et verdict de chaque stat).
-    with open(os.path.join(MODELS, "player_level_report.json"), "w", encoding="utf-8") as fh:
+    # Historique : le service lit player_level_report.json, écrit par level_wf.py.
+    with open(os.path.join(MODELS, "player_level_report_frozen.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=1, ensure_ascii=False)
-    print(f"✅ models/player_level_report.json ({time.time()-t0:.0f}s)")
+    print(f"✅ models/player_level_report_frozen.json ({time.time()-t0:.0f}s)")
 
 
 if __name__ == "__main__":

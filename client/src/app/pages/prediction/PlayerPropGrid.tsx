@@ -26,7 +26,7 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { nhlApiService, type BoxscoreLine, type GameBoxscoreResponse, type PlayerRatesResponse, type RateStat } from "../../services/nhlApiService";
 import type { MLPredictionResult } from "../../components/MLPredictionCard";
 import { RevealModeCtx } from "./predictionShared";
-import { BELOW_FLOOR, dispersionFor, nbAtLeast, rateLabels } from "./rateMath";
+import { BELOW_FLOOR, dispersionFor, modelAtLeast, nbAtLeast, pimCompoundAtLeast, rateLabels } from "./rateMath";
 import { useI18n } from "../../i18n";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { BetOption } from "./PredictionSheet";
@@ -194,6 +194,13 @@ function poissonAtLeast(lambda: number, k: number): number {
   // (`belowFloor`). Remonter tout le monde à 3 rendait égaux des paris qui ne
   // le sont pas — et le coupon enregistrait ce 3 comme une vraie probabilité.
   return Math.min(92, Math.max(1, Math.round((1 - cdf) * 100)));
+}
+
+/** Même règle que `livePct`, sur la loi composée des pénalités (part restante f). */
+function livePimPct(p: { mu: number; k: number | null; dur: number[]; mix: number[] }, need: number, f: number): number {
+  if (need <= 0) return 100;
+  if (!(p.mu * f > 0)) return 0;
+  return Math.max(1, Math.min(99, Math.round(pimCompoundAtLeast(p, need, f) * 100)));
 }
 
 /**
@@ -524,7 +531,8 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
         const mlRate = rates === undefined ? undefined
           : rates === null ? null
           : (playerRates?.rates?.[spec.rateStat] ?? null);
-        const disp = rates ? dispersionFor(rates, playerRates?.source, spec.rateStat) : null;
+        const disp = rates ? dispersionFor(rates, playerRates?.source, spec.rateStat, playerRates?.modelK) : null;
+        const pimLive = spec.rateStat === "pim" && playerRates?.source === "model" ? playerRates?.pimParams : undefined;
         const labels = rateLabels(playerRates?.source, spec.rateStat);
         const preset = (pctValue: number, note: string): MLPredictionResult => ({
           probability: pctValue,
@@ -553,6 +561,9 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
             : f == null ? null
             // Même loi que l'avant-match, sur la part restante : la dispersion
             // d'une binomiale négative s'additionne avec le temps (× f).
+            // Pénalités en nombre (2026-10-17) : la loi composée sur la part
+            // restante (nombre de pénalités × durées), comme l'avant-match.
+            : pimLive ? livePimPct(pimLive, k - done, f)
             : livePct(mlRate * f, k - done, disp == null ? null : disp * f);
           const mlProps: MLProps = {
             type: "player", subjectId: p.id, propType: spec.propType, line,
@@ -597,7 +608,9 @@ export function PlayerPropGrid({ metric, sides, gameId, accent }: {
                     ...(boxStale ? {} : { live: true }),
                   }
               : (() => {
-                  const pv = Math.min(97, Math.round(nbAtLeast(mlRate, k, disp) * 100));
+                  // Pénalités en nombre : échelle P(PIM ≥ k) du serveur (avant-match).
+                  const ladder = spec.rateStat === "pim" && playerRates?.source === "model" ? playerRates?.pimLadder : undefined;
+                  const pv = Math.min(97, Math.round(modelAtLeast(mlRate, k, disp, ladder) * 100));
                   return preset(pv, t(labels.note, {
                     rate: mlRate.toFixed(2), gp: String(playerRates?.gp ?? 0),
                     k: disp == null ? "∞" : String(disp), label: `${k}+`, pct: String(pv),

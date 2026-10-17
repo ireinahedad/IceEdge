@@ -53,6 +53,35 @@ describe('predictPlayerFromModel', () => {
     expect(r?.model_version).toBe('player-xgb@2026-10-14');
   });
 
+  it('dispersion par profil : le k suit la cadence prévue du joueur', async () => {
+    bundle.value = {
+      playerRates: { '1': { hits: 0.5 }, '2': { hits: 2.0 } },
+      playerDispersion: { hits: 8 },
+      playerDispersionTiers: { hits: { cuts: [0.78, 1.39], k: [3, 4, 10] } },
+      playerModelAsOf: '2026-10-14',
+    };
+    const low = await predictPlayerFromModel(q({ gameId: '2026020099', propType: 'hits', line: 1.5 }));
+    expect(low?.probability_exact).toBeCloseTo(probAtLeast(0.5, 2, 3), 5);
+    player.value = { ...player.value, id: '2' };
+    const high = await predictPlayerFromModel(q({ playerId: '2', gameId: '2026020099', propType: 'hits', line: 1.5 }));
+    expect(high?.probability_exact).toBeCloseTo(probAtLeast(2.0, 2, 10), 5);
+  });
+
+  it('pénalités en nombre : lit l\'échelle P(PIM ≥ m) du paquet, pas la binomiale négative', async () => {
+    bundle.value = {
+      playerRates: { '1': { pim: 0.44 } },
+      playerDispersion: { pim: 0.3 },
+      playerPimLadder: { '1': [0.186, 0.186, 0.027, 0.027, 0.01] },
+      playerModelAsOf: '2026-10-14',
+    };
+    const over05 = await predictPlayerFromModel(q({ gameId: '2026020099', propType: 'pim', line: 0.5 }));
+    expect(over05?.probability_exact).toBeCloseTo(0.186, 5);
+    const over25 = await predictPlayerFromModel(q({ gameId: '2026020099', propType: 'pim', line: 2.5 }));
+    expect(over25?.probability_exact).toBeCloseTo(0.027, 5);
+    const under25 = await predictPlayerFromModel(q({ gameId: '2026020099', propType: 'pim', line: 2.5, selection: 'under' }));
+    expect(under25?.probability_exact).toBeCloseTo(0.97, 5);       // 1 − 0,027, plafonné à 97 %
+  });
+
   it('sans gameId : prochain match NON terminé de l\'équipe du joueur', async () => {
     await predictPlayerFromModel(q());
     expect(bundle.asked).toEqual(['2026020030']);

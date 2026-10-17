@@ -36,7 +36,7 @@ const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_KEY  = process.env.ODDS_API_KEY;
 
 // Livre et région : définis UNE fois, dans `services/oddsClient.ts`
-// (`ODDS_BOOKMAKERS`, défaut `betrivers`). L'ancienne paire écrite ici,
+// (`ODDS_BOOKMAKERS`, défaut `draftkings`). L'ancienne paire écrite ici,
 // `bet365`/`eu`, ne désignait aucun livre chez The Odds API — d'où zéro cote
 // affichée, jamais. Voir le commentaire de `ODDS_BOOKMAKERS`.
 

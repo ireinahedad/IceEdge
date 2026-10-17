@@ -125,32 +125,31 @@ describe('oddsClient — livres demandés', () => {
     delete process.env.ODDS_COLLECT_BOOKMAKERS;
   });
 
-  it('affichage : demande `betrivers` par `bookmakers`, jamais par `regions`', async () => {
+  it('affichage : demande `draftkings` par `bookmakers`, jamais par `regions`', async () => {
     const { mod, calls } = await load({ latencyMs: 0 });
     await mod.fetchOddsImplied('Montreal Canadiens', 'Boston Bruins');
     const url = new URL(calls[0]);
-    expect(url.searchParams.get('bookmakers')).toBe('betrivers');
+    expect(url.searchParams.get('bookmakers')).toBe('draftkings');
     expect(url.searchParams.has('regions')).toBe(false);
     expect(url.searchParams.get('markets')).toBe('h2h,spreads,totals');
   });
 
-  it('collecte : livre `draftkings` + livre parallèle `bet99_ca_on` dans le MÊME appel, et AUCUN cache', async () => {
+  it('collecte : livre `draftkings` seul par défaut (BET99 retiré le 2026-10-17), et AUCUN cache', async () => {
     const { mod, calls } = await load({ latencyMs: 0 });
     await mod.fetchCollectorOdds('h2h,spreads');
     await mod.fetchCollectorOdds('h2h,spreads');
     expect(calls.length).toBe(2);   // deux créneaux = deux observations
     const url = new URL(calls[0]);
-    // Collecte parallèle (2026-10-04) : même appel, même coût (≤ 10 livres = 1 région).
-    expect(url.searchParams.get('bookmakers')).toBe('draftkings,bet99_ca_on');
+    expect(url.searchParams.get('bookmakers')).toBe('draftkings');
     expect(url.searchParams.get('markets')).toBe('h2h,spreads');
   });
 
-  it('la collecte ne pollue pas le cache d’affichage (autre livre)', async () => {
+  it('la collecte ne pollue pas le cache d’affichage (appels séparés)', async () => {
     const { mod, calls } = await load({ latencyMs: 0 });
     await mod.fetchCollectorOdds('h2h,spreads,totals');
     await mod.fetchOddsImplied('Montreal Canadiens', 'Boston Bruins');
     expect(calls.length).toBe(2);
-    expect(new URL(calls[1]).searchParams.get('bookmakers')).toBe('betrivers');
+    expect(new URL(calls[1]).searchParams.get('bookmakers')).toBe('draftkings');
   });
 
   it('les variables d’environnement remplacent les défauts', async () => {
@@ -285,7 +284,7 @@ describe('fetchGameExtras — marchés de match supplémentaires', () => {
     expect(b).toEqual(a);
     const eventCalls = calls.filter((u) => u.includes('/events/ev1/odds'));
     expect(eventCalls.length).toBe(1);
-    expect(new URL(eventCalls[0]).searchParams.get('bookmakers')).toBe('betrivers');
+    expect(new URL(eventCalls[0]).searchParams.get('bookmakers')).toBe('draftkings');
   });
 
   it('match à plus de 48 h ou inconnu : aucun appel facturé', async () => {

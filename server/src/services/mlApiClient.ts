@@ -267,6 +267,9 @@ async function mlPost<T>(path: string, body: unknown): Promise<T> {
   }
 }
 
+/** Loi composée des pénalités d'un joueur (pénalités en nombre, 2026-10-16). */
+export interface PimParams { mu: number; k: number | null; dur: number[]; mix: number[] }
+
 /** Réponse de `/predict/game/bundle` : `null` = marché que le modèle ne price pas. */
 export interface GameBundleResult {
   results:      Record<string, MLPredictionResult | null>;
@@ -274,6 +277,12 @@ export interface GameBundleResult {
   lambda_away?: number | null;
   player_rates?:       Record<string, Record<string, number>>;
   player_dispersion?:  Record<string, number | null>;
+  /** Dispersion par profil : k selon la cadence prévue (`cuts` croissants, `k` un de plus). */
+  player_dispersion_tiers?: Record<string, { cuts: number[]; k: Array<number | null> }>;
+  /** Pénalités en nombre : { joueur: [P(PIM ≥ 1), …, P(PIM ≥ 15)] }. */
+  player_pim_ladder?: Record<string, number[]>;
+  /** … et ses paramètres pour le direct : nombre de pénalités ~ BN(mu, k), durées `dur` de probabilités `mix`. */
+  player_pim_params?: Record<string, PimParams>;
   player_model_as_of?: string | null;
   /** Modèle de tirs (piste 3) : tirs cadrés attendus de chaque équipe. */
   lambda_shots_home?:  number | null;

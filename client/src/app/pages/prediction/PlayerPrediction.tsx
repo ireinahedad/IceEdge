@@ -233,10 +233,10 @@ export function PlayerPrediction({ playerId }: { playerId: string }) {
     const stat: RateStat | undefined = settle === "pp_point" ? "ppPoints" : STAT[m.propType ?? ""];
     const rate = stat ? row.rates[stat] : undefined;
     if (!stat || rate == null || m.line == null) return null;
-    const disp = dispersionFor(rates, row.source, stat);
+    const disp = dispersionFor(rates, row.source, stat, row.modelK);
     const labels = rateLabels(row.source, stat);
     const side = (m.settleSelection ?? "over") === "under" ? "under" : "over";
-    const pv = ratePct(rate, m.line, disp, side);
+    const pv = ratePct(rate, m.line, disp, side, row.source === "model" && stat === "pim" ? row.pimLadder : undefined);
     return presetResult(pv, t(labels.model), t(labels.note, {
       rate: rate.toFixed(2), gp: String(row.gp), k: disp == null ? "∞" : String(disp),
       label: `${side === "under" ? "<" : ">"} ${m.line}`, pct: String(pv),

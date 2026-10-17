@@ -1,0 +1,248 @@
+{
+ "generated": "2026-10-15",
+ "features": [
+  "toi_last1",
+  "toi_pp_last1",
+  "toi_pp_avg_3",
+  "played_last5",
+  "team_absent_toi",
+  "team_absent_pp_toi"
+ ],
+ "team_window": 5,
+ "regular_min": 2,
+ "rule": "B (features + alignement) remplace A si Δ log-vraisemblance > 0 en validation ET en test, z ≥ 2 en test",
+ "stats": {
+  "goals": {
+   "k_A": 100000.0,
+   "k_B": 100000.0,
+   "rounds_A": 219,
+   "rounds_B": 231,
+   "dll_val": 0.000204,
+   "z_val": 1.99,
+   "dll_test": 0.000113,
+   "z_test": 1.9,
+   "dll_test_by_season": {
+    "2023": 7.1e-05,
+    "2024": 0.00022,
+    "2025": 4.9e-05
+   },
+   "gain_share": {
+    "toi_last1": 0.0196,
+    "toi_pp_last1": 0.0049,
+    "toi_pp_avg_3": 0.0169,
+    "played_last5": 0.0003,
+    "team_absent_toi": 0.0011,
+    "team_absent_pp_toi": 0.001
+   },
+   "absent15": {
+    "n": 105788,
+    "obs_over_A": 1.0093,
+    "B_over_A": 1.0004
+   },
+   "adopt": false
+  },
+  "assists": {
+   "k_A": 100000.0,
+   "k_B": 100000.0,
+   "rounds_A": 199,
+   "rounds_B": 190,
+   "dll_val": 0.000403,
+   "z_val": 3.18,
+   "dll_test": 0.000118,
+   "z_test": 1.69,
+   "dll_test_by_season": {
+    "2023": 0.000259,
+    "2024": 9.7e-05,
+    "2025": -3e-06
+   },
+   "gain_share": {
+    "toi_last1": 0.0274,
+    "toi_pp_last1": 0.0075,
+    "toi_pp_avg_3": 0.1401,
+    "played_last5": 0.0001,
+    "team_absent_toi": 0.0019,
+    "team_absent_pp_toi": 0.0007
+   },
+   "absent15": {
+    "n": 105788,
+    "obs_over_A": 1.0049,
+    "B_over_A": 0.9981
+   },
+   "adopt": false
+  },
+  "points": {
+   "k_A": 100000.0,
+   "k_B": 100000.0,
+   "rounds_A": 215,
+   "rounds_B": 195,
+   "dll_val": 0.000493,
+   "z_val": 3.24,
+   "dll_test": 0.000203,
+   "z_test": 2.3,
+   "dll_test_by_season": {
+    "2023": 0.000423,
+    "2024": 0.000111,
+    "2025": 7.4e-05
+   },
+   "gain_share": {
+    "toi_last1": 0.0237,
+    "toi_pp_last1": 0.012,
+    "toi_pp_avg_3": 0.149,
+    "played_last5": 0.0002,
+    "team_absent_toi": 0.0013,
+    "team_absent_pp_toi": 0.0007
+   },
+   "absent15": {
+    "n": 105788,
+    "obs_over_A": 1.0121,
+    "B_over_A": 1.0019
+   },
+   "adopt": true
+  },
+  "shots": {
+   "k_A": 20,
+   "k_B": 20,
+   "rounds_A": 538,
+   "rounds_B": 668,
+   "dll_val": 0.000731,
+   "z_val": 3.28,
+   "dll_test": 0.000879,
+   "z_test": 7.19,
+   "dll_test_by_season": {
+    "2023": 0.000742,
+    "2024": 0.000952,
+    "2025": 0.000944
+   },
+   "gain_share": {
+    "toi_last1": 0.0302,
+    "toi_pp_last1": 0.0144,
+    "toi_pp_avg_3": 0.1468,
+    "played_last5": 0.0004,
+    "team_absent_toi": 0.0013,
+    "team_absent_pp_toi": 0.0016
+   },
+   "absent15": {
+    "n": 105788,
+    "obs_over_A": 0.9898,
+    "B_over_A": 0.9996
+   },
+   "adopt": true
+  },
+  "hits": {
+   "k_A": 8,
+   "k_B": 8,
+   "rounds_A": 388,
+   "rounds_B": 505,
+   "dll_val": 0.000717,
+   "z_val": 3.79,
+   "dll_test": 0.000563,
+   "z_test": 5.38,
+   "dll_test_by_season": {
+    "2023": 0.001036,
+    "2024": 0.00018,
+    "2025": 0.000475
+   },
+   "gain_share": {
+    "toi_last1": 0.0057,
+    "toi_pp_last1": 0.0004,
+    "toi_pp_avg_3": 0.0003,
+    "played_last5": 0.0014,
+    "team_absent_toi": 0.0015,
+    "team_absent_pp_toi": 0.0007
+   },
+   "absent15": {
+    "n": 105788,
+    "obs_over_A": 0.9865,
+    "B_over_A": 1.0034
+   },
+   "adopt": true
+  },
+  "blocks": {
+   "k_A": 8,
+   "k_B": 8,
+   "rounds_A": 280,
+   "rounds_B": 282,
+   "dll_val": 0.000277,
+   "z_val": 1.99,
+   "dll_test": 0.000366,
+   "z_test": 4.51,
+   "dll_test_by_season": {
+    "2023": 0.000186,
+    "2024": 0.00058,
+    "2025": 0.000331
+   },
+   "gain_share": {
+    "toi_last1": 0.0179,
+    "toi_pp_last1": 0.0003,
+    "toi_pp_avg_3": 0.0009,
+    "played_last5": 0.0001,
+    "team_absent_toi": 0.0008,
+    "team_absent_pp_toi": 0.0005
+   },
+   "absent15": {
+    "n": 105788,
+    "obs_over_A": 1.0338,
+    "B_over_A": 1.0008
+   },
+   "adopt": true
+  },
+  "pim": {
+   "k_A": 0.3,
+   "k_B": 0.3,
+   "rounds_A": 367,
+   "rounds_B": 277,
+   "dll_val": -2.3e-05,
+   "z_val": -0.22,
+   "dll_test": 7.5e-05,
+   "z_test": 1.28,
+   "dll_test_by_season": {
+    "2023": 0.000244,
+    "2024": -8.6e-05,
+    "2025": 6.6e-05
+   },
+   "gain_share": {
+    "toi_last1": 0.0124,
+    "toi_pp_last1": 0.0013,
+    "toi_pp_avg_3": 0.0025,
+    "played_last5": 0.0046,
+    "team_absent_toi": 0.0058,
+    "team_absent_pp_toi": 0.0021
+   },
+   "absent15": {
+    "n": 105788,
+    "obs_over_A": 0.9809,
+    "B_over_A": 0.9965
+   },
+   "adopt": false
+  },
+  "ppPoints": {
+   "k_A": 100000.0,
+   "k_B": 100000.0,
+   "rounds_A": 295,
+   "rounds_B": 318,
+   "dll_val": 0.001102,
+   "z_val": 5.36,
+   "dll_test": 0.000871,
+   "z_test": 7.34,
+   "dll_test_by_season": {
+    "2023": 0.000653,
+    "2024": 0.000775,
+    "2025": 0.001185
+   },
+   "gain_share": {
+    "toi_last1": 0.0062,
+    "toi_pp_last1": 0.0422,
+    "toi_pp_avg_3": 0.2845,
+    "played_last5": 0.0013,
+    "team_absent_toi": 0.0039,
+    "team_absent_pp_toi": 0.0042
+   },
+   "absent15": {
+    "n": 105788,
+    "obs_over_A": 1.054,
+    "B_over_A": 0.9941
+   },
+   "adopt": true
+  }
+ }
+}

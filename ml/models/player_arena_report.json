@@ -1,0 +1,77 @@
+{
+ "generated": "2026-10-15",
+ "window": 120,
+ "pseudo": 20.0,
+ "rule": "B (features + facteur d'aréna) remplace A si Δ log-vraisemblance > 0 en validation ET en test, z ≥ 2 en test",
+ "stats": {
+  "hits": {
+   "feature": "arena_hits",
+   "k_A": 8,
+   "k_B": 8,
+   "rounds_A": 388,
+   "rounds_B": 306,
+   "loglik_A_test": -1.342637,
+   "loglik_B_test": -1.344537,
+   "dll_val": 0.005894,
+   "z_val": 9.37,
+   "dll_test": -0.001901,
+   "z_test": -6.61,
+   "dll_test_by_season": {
+    "2023": 0.0008,
+    "2024": -0.004558,
+    "2025": -0.001944
+   },
+   "ratio_B_over_A_when_arena_ge_1.15": 1.1595,
+   "ratio_B_over_A_when_arena_le_0.85": 0.8463,
+   "obs_over_A_when_arena_ge_1.15": 1.0461,
+   "obs_over_A_when_arena_le_0.85": 0.9771,
+   "adopt": false
+  },
+  "blocks": {
+   "feature": "arena_blocks",
+   "k_A": 8,
+   "k_B": 8,
+   "rounds_A": 280,
+   "rounds_B": 271,
+   "loglik_A_test": -1.140902,
+   "loglik_B_test": -1.141503,
+   "dll_val": -0.001136,
+   "z_val": -3.98,
+   "dll_test": -0.000601,
+   "z_test": -5.29,
+   "dll_test_by_season": {
+    "2023": -0.00149,
+    "2024": -0.000448,
+    "2025": 0.000135
+   },
+   "ratio_B_over_A_when_arena_ge_1.15": 1.0942,
+   "ratio_B_over_A_when_arena_le_0.85": null,
+   "obs_over_A_when_arena_ge_1.15": 1.1202,
+   "obs_over_A_when_arena_le_0.85": null,
+   "adopt": false
+  },
+  "shots": {
+   "feature": "arena_sog",
+   "k_A": 20,
+   "k_B": 20,
+   "rounds_A": 538,
+   "rounds_B": 556,
+   "loglik_A_test": -1.552871,
+   "loglik_B_test": -1.552961,
+   "dll_val": 0.0,
+   "z_val": 0.0,
+   "dll_test": -8.9e-05,
+   "z_test": -0.95,
+   "dll_test_by_season": {
+    "2023": -0.00016,
+    "2024": 0.000178,
+    "2025": -0.000286
+   },
+   "ratio_B_over_A_when_arena_ge_1.15": null,
+   "ratio_B_over_A_when_arena_le_0.85": null,
+   "obs_over_A_when_arena_ge_1.15": null,
+   "obs_over_A_when_arena_le_0.85": null,
+   "adopt": false
+  }
+ }
+}

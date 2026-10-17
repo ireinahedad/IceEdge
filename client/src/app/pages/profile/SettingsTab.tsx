@@ -329,7 +329,7 @@ export function SettingsTab({
       )}
 
       {/* Format d'écriture des cotes de bookmaker.
-          ⚠️ Ne concerne QUE les prix venant d'un livre (BetRivers). Les
+          ⚠️ Ne concerne QUE les prix venant d'un livre (DraftKings). Les
           probabilités du modèle restent en % partout — voir le commentaire de
           `services/oddsFormat.ts`. L'aide sous la carte le dit à l'utilisateur,
           sinon « j'ai choisi américain et je vois encore des % » se lit comme

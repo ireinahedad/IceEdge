@@ -30,6 +30,7 @@
 
 import { fetchGamesRange, fetchPlayerById } from '../nhlApiClient';
 import { getGameMlBundle } from '../gameMlBundle';
+import { ladderAtLeast, playerModelK } from './playerDispersion';
 import type { MLPredictionResult } from '../mlApiClient';
 import { probAtLeast } from './playerRates';
 
@@ -109,8 +110,12 @@ export async function predictPlayerFromModel(q: PlayerModelQuery): Promise<MLPre
     : bundle.playerRates?.[String(q.playerId)]?.[stat];
   if (rate == null || !Number.isFinite(rate)) return null;
 
-  const k = (isGoalie ? bundle.savesDispersion : bundle.playerDispersion?.[stat]) ?? null;
-  const over = probAtLeast(rate, Math.floor(q.line) + 1, k);
+  const k = (isGoalie ? bundle.savesDispersion : playerModelK(bundle, stat, rate)) ?? null;
+  // Pénalités en nombre : l'échelle P(PIM ≥ m) du paquet, quand elle existe.
+  const ladder = !isGoalie && stat === 'pim' ? bundle.playerPimLadder?.[String(q.playerId)] : undefined;
+  const over = ladder?.length
+    ? ladderAtLeast(ladder, Math.floor(q.line) + 1)
+    : probAtLeast(rate, Math.floor(q.line) + 1, k);
   const under = q.selection === 'under';
   const p = Math.min(MAX_P, under ? 1 - over : over);
   const pct = Math.round(p * 100);

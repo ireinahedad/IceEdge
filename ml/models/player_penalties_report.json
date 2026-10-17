@@ -1,0 +1,119 @@
+{
+ "generated": "2026-10-16",
+ "durations": [
+  2,
+  4,
+  5,
+  10
+ ],
+ "mix_league": [
+  0.9151,
+  0.0101,
+  0.0742,
+  0.0005
+ ],
+ "k_N": 40,
+ "rounds_N": 367,
+ "pseudo_player_mix": 20.0,
+ "rule": "A remplace le servi si Δ log-vraisemblance (minutes) > 0, z ≥ 2, Δ > 0 dans ≥ 2 saisons sur 3 ; B remplace A par la même règle",
+ "A_vs_served": {
+  "dll": 0.20876,
+  "z": 216.57,
+  "by_season": {
+   "2023": 0.212425,
+   "2024": 0.202045,
+   "2025": 0.211813
+  },
+  "pass": true
+ },
+ "B_vs_A": {
+  "dll": 0.006361,
+  "z": 25.31,
+  "by_season": {
+   "2023": 0.006981,
+   "2024": 0.00616,
+   "2025": 0.005942
+  },
+  "pass": true
+ },
+ "kept": "B",
+ "calibration_test": {
+  "over 0.5 / 1.5 (≥ 2 min)": {
+   "obs": 0.168,
+   "served": 0.0956,
+   "A": 0.173,
+   "brier_served": 0.14176,
+   "brier_A": 0.13615,
+   "B": 0.173,
+   "brier_B": 0.13615
+  },
+  "over 2.5 (≥ 3 min)": {
+   "obs": 0.0301,
+   "served": 0.0474,
+   "A": 0.0317,
+   "brier_served": 0.02879,
+   "brier_A": 0.02863,
+   "B": 0.0312,
+   "brier_B": 0.02846
+  },
+  "over 4.5 (≥ 5 min)": {
+   "obs": 0.0151,
+   "served": 0.0145,
+   "A": 0.0159,
+   "brier_served": 0.01444,
+   "brier_A": 0.01465
+  }
+ },
+ "deciles_ge2": [
+  {
+   "pred": 0.0905,
+   "obs": 0.0877,
+   "served": 0.0401
+  },
+  {
+   "pred": 0.1106,
+   "obs": 0.107,
+   "served": 0.0523
+  },
+  {
+   "pred": 0.1246,
+   "obs": 0.1185,
+   "served": 0.0612
+  },
+  {
+   "pred": 0.1389,
+   "obs": 0.1347,
+   "served": 0.0706
+  },
+  {
+   "pred": 0.1545,
+   "obs": 0.1461,
+   "served": 0.0817
+  },
+  {
+   "pred": 0.1715,
+   "obs": 0.1648,
+   "served": 0.0933
+  },
+  {
+   "pred": 0.1902,
+   "obs": 0.1856,
+   "served": 0.106
+  },
+  {
+   "pred": 0.2124,
+   "obs": 0.214,
+   "served": 0.1218
+  },
+  {
+   "pred": 0.2408,
+   "obs": 0.2337,
+   "served": 0.1437
+  },
+  {
+   "pred": 0.2959,
+   "obs": 0.2882,
+   "served": 0.1848
+  }
+ ]
+}

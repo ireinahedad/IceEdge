@@ -35,7 +35,7 @@ export interface DisplayGame {
   startTimeUTC?: string | null;
   overUnder?: number;
   totalPct?: number | null;
-  // Vrais prix moneyline (décimaux) du livre relayé par le serveur — BetRivers,
+  // Vrais prix moneyline (décimaux) du livre relayé par le serveur — DraftKings,
   // PAS Bet365 (The Odds API ne le cote pas sur la NHL). La source est
   // dite dans les Réglages ; voir `components/BookPricePill`.
   bookHome?: number;
