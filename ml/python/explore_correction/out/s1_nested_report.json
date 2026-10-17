@@ -1,0 +1,810 @@
+{
+  "protocol": [
+    "POURQUOI. Les 7 variables de la couche servie (C) ont été choisies par\n`--market-gap` (2026-10-01) en regardant TOUTES les saisons, puis jugées en\nwalk-forward sur ces mêmes saisons : le −0,0021 (z −3,2) est donc en partie\noptimiste. Ici, pour chaque saison S, la sélection est refaite sur les saisons\n< S uniquement, avec le critère de `--market-gap` (variable par variable, logit p\nen covariable, |z| ≥ 2), parmi les mêmes 23 candidates. Puis la couche est\najustée sur ces seules variables et appliquée à S.",
+    "  N  = sélection sur tous les matchs passés ;\n  NM = sélection sur les matchs passés AVEC cote de clôture (comme --market-gap) ;\n  N3 = N avec un seuil plus dur, |z| ≥ 3.",
+    "RÈGLE FIXÉE AVANT LE RUN. La couche est « confirmée » si N bat le modèle brut à\nz ≤ −2 (apparié, par match) ET sur ≥ 70 % des saisons. Sinon, son gain mesuré\nvenait (au moins en partie) de la sélection, et on le dit dans le doc. On\ncompare aussi N à C : si N est nettement moins bon que C, l'écart mesure\nl'optimisme de la sélection."
+  ],
+  "variants": {
+    "C": {
+      "vs_raw": {
+        "label": "C vs brut",
+        "n": 13502,
+        "delta": -0.002188,
+        "se": 0.000683,
+        "z": -3.2,
+        "z_seasons": -2.99,
+        "seasons_better": 10,
+        "n_seasons": 11,
+        "share": 0.909,
+        "by_season": {
+          "2015": -0.00091,
+          "2016": 0.00121,
+          "2017": -0.00199,
+          "2018": -0.00108,
+          "2019": -0.00095,
+          "2020": -0.00455,
+          "2021": -0.00699,
+          "2022": -0.0052,
+          "2023": -0.00254,
+          "2024": -0.00125,
+          "2025": -8e-05
+        }
+      },
+      "verdict_vs_raw": "ADOPTER",
+      "vs_C": {
+        "label": "C vs C",
+        "n": 13502,
+        "delta": 0.0,
+        "se": 0.0,
+        "z": null,
+        "z_seasons": NaN,
+        "seasons_better": 0,
+        "n_seasons": 11,
+        "share": 0.0,
+        "by_season": {
+          "2015": 0.0,
+          "2016": 0.0,
+          "2017": 0.0,
+          "2018": 0.0,
+          "2019": 0.0,
+          "2020": 0.0,
+          "2021": 0.0,
+          "2022": 0.0,
+          "2023": 0.0,
+          "2024": 0.0,
+          "2025": 0.0
+        }
+      },
+      "vs_market": {
+        "n": 11214,
+        "delta": -0.000387,
+        "se": 0.000798,
+        "z": -0.48
+      },
+      "reliability": {
+        "ece": 0.0093,
+        "bins": [
+          {
+            "bin": "0.0-0.3",
+            "n": 261,
+            "pred": 0.2654,
+            "obs": 0.3103,
+            "z": 1.64
+          },
+          {
+            "bin": "0.3-0.4",
+            "n": 1378,
+            "pred": 0.3594,
+            "obs": 0.3694,
+            "z": 0.77
+          },
+          {
+            "bin": "0.4-0.5",
+            "n": 3336,
+            "pred": 0.4538,
+            "obs": 0.4523,
+            "z": -0.17
+          },
+          {
+            "bin": "0.5-0.6",
+            "n": 4116,
+            "pred": 0.55,
+            "obs": 0.5552,
+            "z": 0.66
+          },
+          {
+            "bin": "0.6-0.7",
+            "n": 3130,
+            "pred": 0.6459,
+            "obs": 0.6272,
+            "z": -2.19
+          },
+          {
+            "bin": "0.7-0.8",
+            "n": 1155,
+            "pred": 0.737,
+            "obs": 0.7273,
+            "z": -0.75
+          },
+          {
+            "bin": "0.8-1.0",
+            "n": 126,
+            "pred": 0.8239,
+            "obs": 0.8571,
+            "z": 0.98
+          }
+        ]
+      }
+    },
+    "N": {
+      "vs_raw": {
+        "label": "N vs brut",
+        "n": 13502,
+        "delta": -0.001708,
+        "se": 0.000656,
+        "z": -2.6,
+        "z_seasons": -3.26,
+        "seasons_better": 10,
+        "n_seasons": 11,
+        "share": 0.909,
+        "by_season": {
+          "2015": 0.00053,
+          "2016": -0.00044,
+          "2017": -0.00113,
+          "2018": -0.00053,
+          "2019": -0.00108,
+          "2020": -0.00362,
+          "2021": -0.00475,
+          "2022": -0.00411,
+          "2023": -0.0025,
+          "2024": -0.00105,
+          "2025": -0.00039
+        }
+      },
+      "verdict_vs_raw": "ADOPTER",
+      "vs_C": {
+        "label": "N vs C",
+        "n": 13502,
+        "delta": 0.00048,
+        "se": 0.000272,
+        "z": 1.76,
+        "z_seasons": 1.55,
+        "seasons_better": 3,
+        "n_seasons": 11,
+        "share": 0.273,
+        "by_season": {
+          "2015": 0.00144,
+          "2016": -0.00165,
+          "2017": 0.00087,
+          "2018": 0.00056,
+          "2019": -0.00013,
+          "2020": 0.00092,
+          "2021": 0.00224,
+          "2022": 0.00109,
+          "2023": 4e-05,
+          "2024": 0.0002,
+          "2025": -0.00031
+        }
+      },
+      "vs_market": {
+        "n": 11214,
+        "delta": 0.000112,
+        "se": 0.000841,
+        "z": 0.13
+      },
+      "reliability": {
+        "ece": 0.0116,
+        "bins": [
+          {
+            "bin": "0.0-0.3",
+            "n": 254,
+            "pred": 0.2658,
+            "obs": 0.3189,
+            "z": 1.91
+          },
+          {
+            "bin": "0.3-0.4",
+            "n": 1394,
+            "pred": 0.3599,
+            "obs": 0.3723,
+            "z": 0.96
+          },
+          {
+            "bin": "0.4-0.5",
+            "n": 3375,
+            "pred": 0.4537,
+            "obs": 0.4507,
+            "z": -0.36
+          },
+          {
+            "bin": "0.5-0.6",
+            "n": 4050,
+            "pred": 0.5498,
+            "obs": 0.5578,
+            "z": 1.02
+          },
+          {
+            "bin": "0.6-0.7",
+            "n": 3130,
+            "pred": 0.6458,
+            "obs": 0.6236,
+            "z": -2.6
+          },
+          {
+            "bin": "0.7-0.8",
+            "n": 1175,
+            "pred": 0.7374,
+            "obs": 0.7294,
+            "z": -0.63
+          },
+          {
+            "bin": "0.8-1.0",
+            "n": 124,
+            "pred": 0.8252,
+            "obs": 0.8548,
+            "z": 0.87
+          }
+        ]
+      }
+    },
+    "NM": {
+      "vs_raw": {
+        "label": "NM vs brut",
+        "n": 13502,
+        "delta": -0.001696,
+        "se": 0.000626,
+        "z": -2.71,
+        "z_seasons": -2.52,
+        "seasons_better": 9,
+        "n_seasons": 11,
+        "share": 0.818,
+        "by_season": {
+          "2015": -0.00015,
+          "2016": 0.00046,
+          "2017": 0.00023,
+          "2018": -0.00081,
+          "2019": -0.00051,
+          "2020": -0.00362,
+          "2021": -0.00671,
+          "2022": -0.00411,
+          "2023": -0.00218,
+          "2024": -0.00099,
+          "2025": -0.00039
+        }
+      },
+      "verdict_vs_raw": "ADOPTER",
+      "vs_C": {
+        "label": "NM vs C",
+        "n": 13502,
+        "delta": 0.000492,
+        "se": 0.00034,
+        "z": 1.45,
+        "z_seasons": 2.11,
+        "seasons_better": 2,
+        "n_seasons": 11,
+        "share": 0.182,
+        "by_season": {
+          "2015": 0.00076,
+          "2016": -0.00075,
+          "2017": 0.00222,
+          "2018": 0.00027,
+          "2019": 0.00044,
+          "2020": 0.00092,
+          "2021": 0.00028,
+          "2022": 0.00109,
+          "2023": 0.00036,
+          "2024": 0.00025,
+          "2025": -0.00031
+        }
+      },
+      "vs_market": {
+        "n": 11214,
+        "delta": 8.8e-05,
+        "se": 0.00088,
+        "z": 0.1
+      },
+      "reliability": {
+        "ece": 0.0095,
+        "bins": [
+          {
+            "bin": "0.0-0.3",
+            "n": 252,
+            "pred": 0.2649,
+            "obs": 0.3095,
+            "z": 1.61
+          },
+          {
+            "bin": "0.3-0.4",
+            "n": 1376,
+            "pred": 0.3598,
+            "obs": 0.3706,
+            "z": 0.84
+          },
+          {
+            "bin": "0.4-0.5",
+            "n": 3435,
+            "pred": 0.4542,
+            "obs": 0.4533,
+            "z": -0.11
+          },
+          {
+            "bin": "0.5-0.6",
+            "n": 4064,
+            "pred": 0.5502,
+            "obs": 0.5571,
+            "z": 0.89
+          },
+          {
+            "bin": "0.6-0.7",
+            "n": 3071,
+            "pred": 0.6456,
+            "obs": 0.6232,
+            "z": -2.59
+          },
+          {
+            "bin": "0.7-0.8",
+            "n": 1175,
+            "pred": 0.7374,
+            "obs": 0.7362,
+            "z": -0.1
+          },
+          {
+            "bin": "0.8-1.0",
+            "n": 129,
+            "pred": 0.8252,
+            "obs": 0.8295,
+            "z": 0.13
+          }
+        ]
+      }
+    },
+    "N3": {
+      "vs_raw": {
+        "label": "N3 vs brut",
+        "n": 13502,
+        "delta": -0.00126,
+        "se": 0.000588,
+        "z": -2.14,
+        "z_seasons": -3.29,
+        "seasons_better": 9,
+        "n_seasons": 11,
+        "share": 0.818,
+        "by_season": {
+          "2015": -0.00015,
+          "2016": 8e-05,
+          "2017": 0.00032,
+          "2018": -0.00053,
+          "2019": -0.00136,
+          "2020": -0.00266,
+          "2021": -0.00324,
+          "2022": -0.00264,
+          "2023": -0.0025,
+          "2024": -0.00105,
+          "2025": -0.00039
+        }
+      },
+      "verdict_vs_raw": "ADOPTER",
+      "vs_C": {
+        "label": "N3 vs C",
+        "n": 13502,
+        "delta": 0.000928,
+        "se": 0.000368,
+        "z": 2.52,
+        "z_seasons": 2.05,
+        "seasons_better": 3,
+        "n_seasons": 11,
+        "share": 0.273,
+        "by_season": {
+          "2015": 0.00076,
+          "2016": -0.00113,
+          "2017": 0.00231,
+          "2018": 0.00055,
+          "2019": -0.00041,
+          "2020": 0.00189,
+          "2021": 0.00375,
+          "2022": 0.00256,
+          "2023": 4e-05,
+          "2024": 0.0002,
+          "2025": -0.00031
+        }
+      },
+      "vs_market": {
+        "n": 11214,
+        "delta": 0.00047,
+        "se": 0.000887,
+        "z": 0.53
+      },
+      "reliability": {
+        "ece": 0.011,
+        "bins": [
+          {
+            "bin": "0.0-0.3",
+            "n": 229,
+            "pred": 0.267,
+            "obs": 0.3188,
+            "z": 1.77
+          },
+          {
+            "bin": "0.3-0.4",
+            "n": 1362,
+            "pred": 0.3608,
+            "obs": 0.3686,
+            "z": 0.6
+          },
+          {
+            "bin": "0.4-0.5",
+            "n": 3417,
+            "pred": 0.4539,
+            "obs": 0.4495,
+            "z": -0.51
+          },
+          {
+            "bin": "0.5-0.6",
+            "n": 4132,
+            "pred": 0.5497,
+            "obs": 0.5595,
+            "z": 1.28
+          },
+          {
+            "bin": "0.6-0.7",
+            "n": 3091,
+            "pred": 0.6456,
+            "obs": 0.625,
+            "z": -2.39
+          },
+          {
+            "bin": "0.7-0.8",
+            "n": 1156,
+            "pred": 0.7365,
+            "obs": 0.731,
+            "z": -0.43
+          },
+          {
+            "bin": "0.8-1.0",
+            "n": 115,
+            "pred": 0.8213,
+            "obs": 0.8261,
+            "z": 0.13
+          }
+        ]
+      }
+    }
+  },
+  "chosen": {
+    "C": {
+      "2015": [
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "lineup_xg_diff",
+        "star_power_diff",
+        "xg_matchup_diff",
+        "elo_diff"
+      ],
+      "2016": [
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "lineup_xg_diff",
+        "star_power_diff",
+        "xg_matchup_diff",
+        "elo_diff"
+      ],
+      "2017": [
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "lineup_xg_diff",
+        "star_power_diff",
+        "xg_matchup_diff",
+        "elo_diff"
+      ],
+      "2018": [
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "lineup_xg_diff",
+        "star_power_diff",
+        "xg_matchup_diff",
+        "elo_diff"
+      ],
+      "2019": [
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "lineup_xg_diff",
+        "star_power_diff",
+        "xg_matchup_diff",
+        "elo_diff"
+      ],
+      "2020": [
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "lineup_xg_diff",
+        "star_power_diff",
+        "xg_matchup_diff",
+        "elo_diff"
+      ],
+      "2021": [
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "lineup_xg_diff",
+        "star_power_diff",
+        "xg_matchup_diff",
+        "elo_diff"
+      ],
+      "2022": [
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "lineup_xg_diff",
+        "star_power_diff",
+        "xg_matchup_diff",
+        "elo_diff"
+      ],
+      "2023": [
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "lineup_xg_diff",
+        "star_power_diff",
+        "xg_matchup_diff",
+        "elo_diff"
+      ],
+      "2024": [
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "lineup_xg_diff",
+        "star_power_diff",
+        "xg_matchup_diff",
+        "elo_diff"
+      ],
+      "2025": [
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "lineup_xg_diff",
+        "star_power_diff",
+        "xg_matchup_diff",
+        "elo_diff"
+      ]
+    },
+    "N": {
+      "2015": [
+        "elo_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "finishing_s_diff"
+      ],
+      "2016": [
+        "elo_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2017": [
+        "elo_diff",
+        "star_power_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2018": [
+        "elo_diff",
+        "star_power_diff",
+        "lineup_xg_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2019": [
+        "elo_diff",
+        "star_power_diff",
+        "lineup_xg_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2020": [
+        "elo_diff",
+        "star_power_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2021": [
+        "elo_diff",
+        "star_power_diff",
+        "lineup_xg_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2022": [
+        "elo_diff",
+        "star_power_diff",
+        "lineup_xg_diff",
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "xg_matchup_diff",
+        "discipline_diff"
+      ],
+      "2023": [
+        "elo_diff",
+        "star_power_diff",
+        "lineup_xg_diff",
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2024": [
+        "elo_diff",
+        "star_power_diff",
+        "lineup_xg_diff",
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2025": [
+        "elo_diff",
+        "star_power_diff",
+        "lineup_xg_diff",
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ]
+    },
+    "NM": {
+      "2015": [],
+      "2016": [
+        "b2b_diff"
+      ],
+      "2017": [
+        "star_power_diff"
+      ],
+      "2018": [
+        "elo_diff",
+        "star_power_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2019": [
+        "elo_diff",
+        "lineup_xg_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2020": [
+        "elo_diff",
+        "star_power_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2021": [
+        "elo_diff",
+        "star_power_diff",
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2022": [
+        "elo_diff",
+        "star_power_diff",
+        "lineup_xg_diff",
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "xg_matchup_diff",
+        "discipline_diff"
+      ],
+      "2023": [
+        "elo_diff",
+        "star_power_diff",
+        "lineup_xg_diff",
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "xg_matchup_diff",
+        "discipline_diff"
+      ],
+      "2024": [
+        "elo_diff",
+        "star_power_diff",
+        "lineup_xg_diff",
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff",
+        "xg_matchup_diff",
+        "discipline_diff"
+      ],
+      "2025": [
+        "elo_diff",
+        "star_power_diff",
+        "lineup_xg_diff",
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ]
+    },
+    "N3": {
+      "2015": [],
+      "2016": [
+        "ev_xgf_pct_s_diff"
+      ],
+      "2017": [
+        "ev_xgf_pct_s_diff"
+      ],
+      "2018": [
+        "elo_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2019": [
+        "elo_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2020": [
+        "elo_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2021": [
+        "elo_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2022": [
+        "elo_diff",
+        "star_power_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2023": [
+        "elo_diff",
+        "star_power_diff",
+        "lineup_xg_diff",
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2024": [
+        "elo_diff",
+        "star_power_diff",
+        "lineup_xg_diff",
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ],
+      "2025": [
+        "elo_diff",
+        "star_power_diff",
+        "lineup_xg_diff",
+        "b2b_diff",
+        "ev_xgf_pct_s_diff",
+        "ev_xgf_pct_l_diff"
+      ]
+    }
+  },
+  "raw_vs_market": {
+    "n": 11214,
+    "delta": 0.001353,
+    "se": 0.000913,
+    "z": 1.48
+  },
+  "raw_reliability": {
+    "ece": 0.0111,
+    "bins": [
+      {
+        "bin": "0.3-0.4",
+        "n": 783,
+        "pred": 0.3704,
+        "obs": 0.3436,
+        "z": -1.56
+      },
+      {
+        "bin": "0.4-0.5",
+        "n": 3703,
+        "pred": 0.457,
+        "obs": 0.4334,
+        "z": -2.88
+      },
+      {
+        "bin": "0.5-0.6",
+        "n": 4899,
+        "pred": 0.5499,
+        "obs": 0.5517,
+        "z": 0.26
+      },
+      {
+        "bin": "0.6-0.7",
+        "n": 3327,
+        "pred": 0.6434,
+        "obs": 0.6399,
+        "z": -0.42
+      },
+      {
+        "bin": "0.7-0.8",
+        "n": 747,
+        "pred": 0.7298,
+        "obs": 0.7577,
+        "z": 1.72
+      }
+    ]
+  }
+}

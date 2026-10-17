@@ -3643,8 +3643,16 @@ def run_recal(df, seasons, search_trials: int, use_cache: bool = True):
 # Même adoptée, la couche ne toucherait que la victoire (moneyline) : puck line
 # et totaux sortent de la distribution des buts, qu'elle ne modifie pas.
 
-CORRECTION_FEATURES = ["b2b_diff", "ev_xgf_pct_s_diff", "ev_xgf_pct_l_diff",
-                       "lineup_xg_diff", "star_power_diff", "xg_matchup_diff", "elo_diff"]
+# 2026-10-17 (`explore_correction/s3_variants.py`) : 7 → 5 variables. Retirées :
+# `xg_matchup_diff` et `ev_xgf_pct_l_diff` — non significatives dans la couche
+# (z −0,5 et 0,7), coefficients instables d'un fold à l'autre (changement de
+# signe), et la couche SANS elles fait mieux hors échantillon : −0,00035 de
+# log-loss contre la couche à 7 (z −2,15, 8 saisons sur 11). Règle de
+# parcimonie fixée avant le run. Les 7 d'origine : `CORRECTION_FEATURES_V1`.
+CORRECTION_FEATURES_V1 = ["b2b_diff", "ev_xgf_pct_s_diff", "ev_xgf_pct_l_diff",
+                          "lineup_xg_diff", "star_power_diff", "xg_matchup_diff", "elo_diff"]
+CORRECTION_FEATURES = ["b2b_diff", "ev_xgf_pct_s_diff", "lineup_xg_diff",
+                       "star_power_diff", "elo_diff"]
 CORRECTION_REPORT = f"{MODELS}/correction_report.json"
 CORRECTION_LAYER = f"{MODELS}/correction_layer.json"
 

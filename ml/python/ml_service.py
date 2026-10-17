@@ -777,12 +777,15 @@ _load_ref_table()
 #
 # Une régression logistique posée SUR la victoire du modèle de score :
 #     logit p' = c0 + c1·logit p + Σ coef_i · (x_i − moyenne_i) / écart-type_i
-# avec x = b2b_diff, ev_xgf_pct_s/l_diff, lineup_xg_diff, star_power_diff,
-# xg_matchup_diff, elo_diff — ce que le marché exploitait mieux que le modèle
-# (`backtest_walkforward.py --market-gap`). Mesurée en walk-forward STRICT
-# (`--correction`, ajustée sur les saisons passées seulement, 11 saisons) :
-# log-loss moneyline −0,0021 (z −3,2, meilleure sur 10 saisons sur 11), écart à
-# la cote de clôture ramené de +0,0014 à −0,0004. Critère fixé avant le run.
+# avec x = b2b_diff, ev_xgf_pct_s_diff, lineup_xg_diff, star_power_diff,
+# elo_diff — ce que le marché exploitait mieux que le modèle
+# (`backtest_walkforward.py --market-gap`). La liste vient du fichier
+# (`features`), ce code n'en suppose aucune. Mesurée en walk-forward STRICT
+# (`--correction`, ajustée sur les saisons passées seulement) : log-loss
+# moneyline −0,0026 (z −3,9, meilleure sur 12 saisons sur 12), écart à la cote
+# de clôture ramené de +0,0013 à −0,0008. Critère fixé avant le run.
+# 2026-10-17 : 7 → 5 variables (`ml/python/explore_correction/`) ; l'ancienne
+# couche est gardée dans `correction_layer_v1_7var.json`.
 # Écrite par `--correction --write-layer` seulement si le verdict est ADOPTER.
 #
 # Elle ne touche QUE la victoire (marché `moneyline`). Puck line, totaux et le

@@ -1,0 +1,84 @@
+{
+  "features": [
+    "b2b_diff",
+    "ev_xgf_pct_s_diff",
+    "ev_xgf_pct_l_diff",
+    "lineup_xg_diff",
+    "star_power_diff",
+    "xg_matchup_diff",
+    "elo_diff"
+  ],
+  "mean": [
+    -0.115634,
+    -0.000987,
+    -0.000495,
+    -0.000232,
+    -0.006338,
+    -0.001789,
+    -0.062349
+  ],
+  "std": [
+    0.459089,
+    0.058536,
+    0.046259,
+    0.452084,
+    0.739417,
+    0.564529,
+    68.85727
+  ],
+  "intercept": 0.076647,
+  "coef_logit_p": 0.497132,
+  "coef": [
+    -0.097605,
+    0.083696,
+    0.032281,
+    0.063371,
+    0.043407,
+    -0.010388,
+    0.126095
+  ],
+  "z_order": [
+    "logit_p",
+    "b2b_diff",
+    "ev_xgf_pct_s_diff",
+    "ev_xgf_pct_l_diff",
+    "lineup_xg_diff",
+    "star_power_diff",
+    "xg_matchup_diff",
+    "elo_diff"
+  ],
+  "z": [
+    5.22,
+    -5.86,
+    2.14,
+    0.72,
+    2.29,
+    2.03,
+    -0.54,
+    3.98
+  ],
+  "n_games": 16682,
+  "seasons": [
+    2012,
+    2013,
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "variant": "C",
+  "measured": {
+    "delta": -0.002149,
+    "z": -3.18,
+    "z_seasons": -3.1,
+    "share_seasons_better": 0.818
+  }
+}

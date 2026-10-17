@@ -436,6 +436,9 @@ un but. Probabilité que le domicile la gagne, ajustée sur 3 427 prolongations 
 p_ot_dom = σ(0,2834 × (λ_dom − λ_ext) − 0,0640)
 ```
 
+Ces 3 427 prolongations sont les matchs de la tranche d'entraînement
+(octobre 2008 → avril 2021) restés à égalité après 60 minutes.
+
 Pour deux équipes égales ≈ 48 % ; si le domicile a 1 but d'avance en λ ≈ 55 %.
 (Garde-fous : pente > 0 et niveau moyen entre 35 et 65 %, sinon on utilise la
 constante mesurée 0,4996.)
@@ -463,30 +466,119 @@ quand le modèle de score ne répond pas.
 
 ### 4.3 La couche de correction du moneyline (`correction_layer.json`)
 
-Une régression logistique posée **par-dessus** la victoire du modèle de score,
-ajustée en walk-forward strict par `backtest_walkforward.py --correction` :
+Une régression logistique posée **par-dessus** la victoire du modèle de score.
+Elle prend la probabilité de victoire domicile du modèle (`p_score`) et la
+corrige avec cinq écarts domicile − extérieur que le marché exploitait mieux que
+le modèle. Ajustée en walk-forward strict par
+`backtest_walkforward.py --correction --write-layer` (première version
+2026-10-02 à 7 variables, version servie 2026-10-17 à 5 variables, §4.3.5) :
 
 ```
-z = 0,0863 + 0,4667 × logit(p_score)
+z = 0,0819 + 0,4702 × logit(p_score)
     + Σ coef_k × (x_k − moyenne_k) / écart-type_k
 p_corrigée = σ(z)
 ```
 
-| variable x_k | coef (par écart-type) |
-|---|---|
-| `b2b_diff` | −0,099 |
-| `ev_xgf_pct_s_diff` | +0,086 |
-| `ev_xgf_pct_l_diff` | +0,033 |
-| `lineup_xg_diff` | +0,065 |
-| `star_power_diff` | +0,046 |
-| `xg_matchup_diff` | −0,011 |
-| `elo_diff` | +0,132 |
+#### 4.3.1 Les coefficients
 
-Mesure qui a justifié son adoption : log-loss moneyline −0,0021 (z −3,2),
-meilleure sur 10 saisons sur 11. Une variable absente vaut sa moyenne
-(contribution nulle).
+Valeurs de `correction_layer.json`, ajustées sur 16 765 matchs (saisons 2012 →
+2026-27, prédictions hors échantillon du modèle de score). Les variables sont
+standardisées : chaque coefficient est l'effet **d'un écart-type**, en logit.
+Près de 50 %, 0,1 de logit ≈ 2,5 points de probabilité.
 
-**Comment elle s'applique à tous les marchés** (depuis le 2026-10-03). La
+| x_k (domicile − extérieur) | moyenne | écart-type | coef | z | ≈ effet d'un écart-type |
+|---|---|---|---|---|---|
+| `logit(p_score)` | — | — | 0,4702 | 5,09 | — |
+| `b2b_diff` | −0,116 | 0,459 | −0,0991 | −5,98 | −2,5 pts |
+| `ev_xgf_pct_s_diff` | −0,001 | 0,0586 | +0,1138 | 5,19 | +2,8 pts |
+| `lineup_xg_diff` | −0,0005 | 0,452 | +0,0616 | 2,62 | +1,5 pt |
+| `star_power_diff` | −0,007 | 0,740 | +0,0431 | 2,07 | +1,1 pt |
+| `elo_diff` | −0,05 | 68,8 | +0,1409 | 4,77 | +3,5 pts |
+
+Les cinq sont significatives (|z| ≥ 2). En unités concrètes :
+
+- **Dos-à-dos** : le domicile joue la veille, l'extérieur est reposé
+  (`b2b_diff` passe de 0 à 1) → −0,22 de logit, ≈ −5 points. C'est le signal le
+  plus net (z −6,0), alors que le modèle de score lit déjà `b2b` des deux
+  côtés : il le sous-pondère.
+- **ELO** : 100 points d'écart → +0,20 de logit, ≈ +5 points.
+- **Possession xG à 5 c. 5, court terme** : 5 points de part d'xG d'écart → ≈ +2,4 points.
+- **Alignement projeté** : 0,5 xG d'écart → ≈ +1,7 point.
+- **Ordonnée 0,0819** : à `p_score` = 50 % et variables à leur moyenne, la
+  couche rend 52,0 %. C'est un léger avantage domicile que le modèle sous-estimait.
+- **Le 0,47 sur logit(p_score)** ne veut pas dire que le modèle est « deux fois
+  trop confiant ». ELO, xG et alignement sont corrélés à `p_score` et reprennent
+  une partie de son poids. Seule (variante R ci-dessous), la recalibration donne
+  une pente de 1,20 : le modèle est plutôt trop **prudent**.
+
+Au service (`ml_service._apply_correction`), une variable absente vaut sa
+moyenne (contribution nulle), comme à l'ajustement. La liste des variables est
+lue dans le fichier : le code n'en suppose aucune. Fichier absent ou illisible →
+victoire du modèle brut.
+
+#### 4.3.2 Comment elle a été mesurée
+
+Pour chaque saison S de 2015 à 2026-27, la couche est ajustée sur les
+prédictions hors échantillon des saisons < S **seulement** (au moins 3), puis
+appliquée à S. Critère fixé avant le run : log-loss moneyline z ≤ −2 (apparié,
+par match) ET gain sur ≥ 70 % des saisons (`correction_report.json`, 12 saisons,
+dont les 83 premiers matchs de 2026-27).
+
+| variante | contenu | Δ log-loss | z | saisons meilleures | verdict |
+|---|---|---|---|---|---|
+| R | recalibration seule (logit p) | −0,0002 | −0,6 | 7 / 12 | non tranchable |
+| **C** | **R + les 5 variables** | **−0,0026** | **−3,9** | **12 / 12** | **adoptée, servie** |
+| B | C sans `elo_diff` | −0,0020 | −3,4 | 10 / 12 | adoptable, moins bonne que C |
+
+Contre la cote de clôture (11 297 matchs avec cote) : le modèle brut avait
++0,0013 de log-loss de plus que le marché (z 1,4) ; avec la couche, −0,0008
+(z −1,0). La couche fait jeu égal avec le marché, légèrement mieux sans que ce
+soit significatif.
+
+Le biais de sélection (les variables ont été choisies par `--market-gap` en
+regardant toutes les saisons) a été mesuré le 2026-10-17 : refaire le choix à
+l'intérieur de chaque fold garde l'essentiel du gain (§4.3.5, piste 1).
+
+#### 4.3.3 Pourquoi une couche par-dessus plutôt que réentraîner le modèle
+
+1. **Le modèle de score n'apprend pas la victoire.** C'est un XGBoost Poisson
+   qui prédit les buts d'une équipe (une ligne par équipe-match, colonnes
+   attaque / défense). Sa perte, la déviance de Poisson, est dominée par le
+   **niveau** des λ. La victoire dépend de l'**écart** entre les deux λ. Mesuré
+   à l'élagage des features (commentaire de `train_score.py`) : retirer 12 colonnes dégradait la déviance
+   (+0,0009) et améliorait le moneyline (−0,0005). Ce qui aide les buts et ce
+   qui aide la victoire ne coïncident pas. Une logistique qui optimise
+   directement la log-loss moneyline vise la bonne cible.
+2. **Le réentraînement a été essayé d'abord, et il ne suffit pas.**
+   `--market-gap` avait isolé ce que le marché voyait mieux. La v2 du modèle de
+   score (2026-09-27) a intégré ce qui s'y prêtait (fatigue de l'équipe qui
+   défend, gardien de relève, possession long terme) et a été adoptée. Mais
+   après la v2, le modèle restait trop prudent (pente 1,28 ± 0,06). L'étirement
+   cohérent des λ (γ) a échoué hors échantillon, et la recalibration seule (R)
+   n'est pas tranchable. Seules les variables en écart, posées sur la sortie,
+   passent le critère.
+3. **Le signal est dans les écarts.** Les lignes empilées voient « attaque de
+   A » et « défense de B » séparément. `b2b`, `star_power`, `lineup_xg` et
+   `ev_xgf_pct` y sont déjà, mais le modèle doit reconstituer l'écart à partir
+   de deux lignes distinctes. La couche les reçoit directement en domicile −
+   extérieur. `b2b_diff` en est l'exemple : présent dans le modèle, il ressort
+   quand même à z −6,0.
+4. **Coût et lisibilité.** Sept nombres, ajustés en quelques secondes, chacun
+   lisible et testable. Réentraîner, c'est une recherche d'hyperparamètres par
+   fold sur 14 saisons, puis τ, prolongation, déciles et recalage à refaire.
+5. **Réversible et isolée.** Supprimer le fichier rend le modèle brut.
+   `probability_score_model` reste servi à côté pour comparer.
+
+Le prix à payer : la couche ne connaît que la victoire, il faut donc recaler la
+distribution des buts pour que les autres marchés restent cohérents (§4.3.4).
+Et elle a été ajustée sur la victoire Poisson × τ. Depuis le moteur de match
+(2026-10-15), le service lui donne encore cette victoire-là, et non celle du
+moteur (≈ 1 point plus basse) (`_p_home_layer_input`). Elle est à ré-ajuster si
+la matrice d'entrée change.
+
+#### 4.3.4 Comment elle s'applique à tous les marchés
+
+Depuis le 2026-10-03. La
 victoire corrigée est traduite en une distribution : on garde la somme
 λ_dom + λ_ext (les totaux de buts ne bougent pas) et on choisit le partage
 entre les deux équipes pour que la victoire domicile de la matrice — τ et
@@ -496,6 +588,53 @@ cette matrice recalée : « gagne en 60 min » + « gagne en prolongation » =
 « gagne », les scores exacts gagnants somment à la victoire. Les λ affichés
 (paquet ML, direct) sont les λ recalés ; `probability_score_model` reste la
 victoire du modèle brut, avant correction.
+
+#### 4.3.5 Pistes testées pour l'améliorer (2026-10-17)
+
+Huit pistes, toutes avec le même protocole walk-forward et une règle de
+décision fixée avant le run (en-tête de chaque script). Banc d'essai et
+rapports : `ml/python/explore_correction/` (README). Δ = log-loss moneyline
+(négatif = mieux), apparié par match, 11 saisons 2015-2025.
+
+| Piste | Ce qui a été testé | Résultat | Verdict |
+|---|---|---|---|
+| 1. Sélection imbriquée | Refaire le choix des variables sur les saisons < S seulement (critère de `--market-gap`, parmi les mêmes 23 candidates) | −0,0017 contre le brut (z −2,6, 10 / 11 saisons), contre −0,0022 pour la couche à 7 | **Gain confirmé.** Environ un quart du gain mesuré venait de la sélection. |
+| 2. Queue des gros favoris | logit·\|logit\|, logit³, pentes à part au-delà de 65 % et de 70 % | Toutes moins bonnes que la couche linéaire (jusqu'à +0,0016, z +2,2) | **Rejeté.** La couche corrige déjà la queue (voir plus bas). |
+| 3. Élagage | Retirer `xg_matchup_diff` et `ev_xgf_pct_l_diff` | −0,00035 contre la couche à 7 (z −2,15, 8 / 11 saisons) | **Adopté** : c'est la couche servie. |
+| 3 bis. Sans ELO (B) | Retirer `elo_diff` (déjà lu par le modèle de score) | +0,0004 contre la couche à 7 (z +1,3, 3 / 11) | **Rejeté.** |
+| 4. Fatigue | Distance, fuseaux horaires (calculés, §3.6), 3e match en 4 soirs, jours de repos, dos-à-dos × gardien de relève | Entre −0,00003 et +0,0001, aucun \|z\| ≥ 2,5 | **Rejeté.** Le dos-à-dos suffit. |
+| 5. Période de la saison | ELO et xG pondérés par le début de saison (exp(−matchs joués / 15)) | +0,0001 (z +0,9) | **Rejeté.** |
+| 6. Dérive dans le temps | Saisons récentes pondérées (demi-vie 3 ou 5 ans), fenêtre de 6 saisons | Entre +0,00003 et +0,0003 | **Rejeté.** Les coefficients sont stables d'un fold à l'autre. |
+| 7. Entrée du moteur de match | Couche ajustée sur la victoire du moteur au lieu de Poisson × τ | +0,00005 (z +1,3, 3 / 11) | **Rejeté** : on garde `_p_home_layer_input`. |
+
+Pour les pistes 4 à 6, le seuil était z ≤ −2,5 (environ 8 essais). Pour
+l'élagage, une règle de parcimonie : la version plus simple remplace l'autre si
+elle ne perd pas à z ≥ +1 et bat toujours le brut au critère d'origine.
+
+Ce qu'on en retient :
+
+- **La queue était déjà réglée.** `--market-gap` avait vu le modèle brut
+  sous-estimer les gros favoris. Sur les 692 matchs où le marché donne ≥ 70 % au
+  favori, celui-ci gagne 74,1 % ; le brut dit 69,2 %, le marché 73,4 %, la
+  couche 73,9 %. L'ELO et la possession xG dans la couche font ce travail ; un
+  terme non linéaire en plus sur-corrige.
+- **Pourquoi retirer deux variables améliore.** Leurs coefficients étaient
+  instables : `xg_matchup_diff` passe de −0,11 (fold 2015) à environ 0 ;
+  `ev_xgf_pct_l_diff` change de signe (−0,07 → +0,07). La sélection imbriquée
+  les écartait d'ailleurs le plus souvent. Les 5 restantes gardent le même signe
+  et à peu près la même taille dans tous les folds.
+- **Le dos-à-dos ne dérive pas.** Son effet au-delà du modèle est négatif dans
+  11 saisons sur 14, sans tendance nette, d'où l'échec de la pondération des
+  saisons récentes.
+- **Le moteur de match.** Sa victoire brute est 0,95 point plus basse que
+  Poisson × τ, avec une log-loss identique (z +0,9). Ré-ajustée dessus, la couche
+  perd un tout petit peu, régulièrement (8 saisons sur 11). Le contournement
+  actuel reste donc le bon choix.
+
+Retour arrière : recopier `models/correction_layer_v1_7var.json` sur
+`correction_layer.json` et relancer le service. Pour réécrire la couche à 7
+variables : `CORRECTION_FEATURES = CORRECTION_FEATURES_V1` dans
+`backtest_walkforward.py`.
 
 ### 4.3 bis Le recalage de niveau des buts (`level_layer.json`, 2026-10-04)
 
@@ -859,7 +998,7 @@ restent au produit, et `assumesIndependence` le signale. Mesure : §4.4,
 | Walk-forward moneyline (classifieur ⊕ marché, cotes de clôture) | `backtest_walkforward_report.json` | log-loss modèle 0,6689 vs marché 0,6677 ; ROI flat SBRO ≈ −0,5 à 0 % ; DraftKings 2025 +1 à +3 % sur 300-600 paris (non significatif) |
 | CLV (ouverture vs clôture, DraftKings) | `backtest_clv_report.json` | les paris à edge ≥ 2 % prennent en moyenne +0,35 point de probabilité à la clôture (t ≈ 7,9), mais ROI à l'ouverture ≈ 0 ± 2,7 % |
 | Modèle joueur, chaque été | `python train_player.py --recent` | Réentraîne passes, points, tirs, mises en échec, tirs bloqués et points en AN jusqu'à la saison qui vient de finir (buts et pénalités ne bougent pas), puis le recalage. Committer `models/player/` et `player_report.json`. |
-| Couche de correction | `correction_report.json` | log-loss −0,0021, 10 saisons sur 11 meilleures |
+| Couche de correction | `correction_report.json` | log-loss −0,0026 (z −3,9), 12 saisons sur 12 meilleures ; jeu égal avec la clôture |
 | Recalage de niveau des buts | `level_report.json` | déviance du total −0,0032 (z −3,2), 8 saisons sur 11 ; P(> 5,5) 2023-26 58,4 % → 55,8 % (observé 56,0 %) |
 | Modèle joueur, test 2023-26 | `player_report.json` | bat la règle sur les 8 statistiques |
 
@@ -897,13 +1036,13 @@ période plus de 1,5 buts 63,8 % au lieu de 58,9 % avec la part fixe).
 2. **Matrice** sans τ : nul après 60 min 16,2 %. **Avec τ : 21,9 %**.
 3. **Victoire en 60 min** = Σ M[i>j] = 49,1 %.
 4. **Victoire (moneyline)** = 49,1 % + 21,9 % × 52,7 % = **60,7 %**.
-5. **Couche de correction** : avec toutes les autres variables à leur moyenne, z = 0,0863 + 0,4667 × logit(0,607) → **57,2 %** ; si en plus le domicile a +60 d'ELO, +0,04 de xGF% court terme, +0,3 xG d'alignement, +0,5 de star power, etc. → **62,9 %**. Le service recale alors les λ (somme 6,00 conservée) pour que la matrice donne exactement 62,9 %, et **les étapes 3, 4, 6-9 se refont sur cette matrice recalée** — les chiffres ci-dessous sont ceux de la matrice brute, pour suivre le calcul pas à pas.
+5. **Couche de correction** : avec toutes les autres variables à leur moyenne, z = 0,0819 + 0,4702 × logit(0,607) → **57,1 %** ; si en plus le domicile a +60 d'ELO, +0,04 de xGF% court terme, +0,3 xG d'alignement et +0,5 de star power → **63,6 %**. Le service recale alors les λ (somme 6,00 conservée) pour que la matrice donne exactement 63,6 %, et **les étapes 3, 4, 6-9 se refont sur cette matrice recalée** — les chiffres ci-dessous sont ceux de la matrice brute, pour suivre le calcul pas à pas.
 6. **Puck line −1,5** = Σ M[écart ≥ 2] = **37,3 %**.
 7. **Plus de 5,5 buts** : total final espéré 6,23 → **56,0 %**. Avec le recalage de niveau de fin 2025-26 (k = 0,9735, §4.3 bis), la somme des λ passe de 6,00 à 5,84 (3,22 / 2,62), la victoire reste **60,7 %**, le « plus de 5,5 » descend à **53,4 %** et la puck line −1,5 à 37,0 %.
 8. **Les deux équipes marquent** : **89,8 %**.
 9. **Domicile plus de 2,5 buts** (prolongation comprise) : **68,3 %**.
 10. **Confiance** : |3,30 − 2,70| = 0,60 se situe au rang 0,73 des déciles → base 0,79 → moneyline 79/100.
-11. **Value bet ?** Si un livre propose le domicile à 1,75 et le visiteur à 2,15 : marché dévigé = (1/1,75)/(1/1,75 + 1/2,15) = 55,1 %. Edge = 62,9 − 55,1 = 7,8 % → **au-dessus du plafond de 6 % → rejeté** (trop beau pour être vrai : plus probablement une info que le modèle n'a pas). Avec 1,85 / 2,02 : marché 52,2 %, edge 10,7 %… rejeté aussi. À 1,65 / 2,30 : marché 58,2 %, edge 4,7 %, EV = 0,629 × 1,65 − 1 = +3,8 % → **value bet**, cote minimale 1/0,629 = 1,59.
+11. **Value bet ?** Si un livre propose le domicile à 1,75 et le visiteur à 2,15 : marché dévigé = (1/1,75)/(1/1,75 + 1/2,15) = 55,1 %. Edge = 63,6 − 55,1 = 8,5 % → **au-dessus du plafond de 6 % → rejeté** (trop beau pour être vrai : plus probablement une info que le modèle n'a pas). Avec 1,85 / 2,02 : marché 52,2 %, edge 11,4 %… rejeté aussi. À 1,65 / 2,30 : marché 58,2 %, edge 5,4 %, EV = 0,636 × 1,65 − 1 = +5,0 % → **value bet**, cote minimale 1/0,636 = 1,57.
 
 ---
 

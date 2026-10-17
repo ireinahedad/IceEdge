@@ -1,0 +1,366 @@
+{
+  "protocol": {
+    "fit": "logistique sur les saisons < S (au moins 3), appliquee a S",
+    "features": [
+      "b2b_diff",
+      "ev_xgf_pct_s_diff",
+      "ev_xgf_pct_l_diff",
+      "lineup_xg_diff",
+      "star_power_diff",
+      "xg_matchup_diff",
+      "elo_diff"
+    ],
+    "variants": {
+      "R": "recalibration seule (controle : doit reproduire recal_report.json)",
+      "C": "recalibration + features",
+      "B": "C sans elo_diff"
+    },
+    "adopt_if": "log-loss moneyline z <= -2 (apparie, par match) ET gain sur >= 70 % des saisons"
+  },
+  "by_season": [
+    {
+      "season": 2015,
+      "n": 1230,
+      "ll_raw": 0.67792,
+      "ll_R": 0.67811,
+      "ll_C": 0.67615,
+      "ll_B": 0.67586
+    },
+    {
+      "season": 2016,
+      "n": 1230,
+      "ll_raw": 0.6689,
+      "ll_R": 0.66849,
+      "ll_C": 0.66898,
+      "ll_B": 0.66951
+    },
+    {
+      "season": 2017,
+      "n": 1266,
+      "ll_raw": 0.66826,
+      "ll_R": 0.66858,
+      "ll_C": 0.66691,
+      "ll_B": 0.66794
+    },
+    {
+      "season": 2018,
+      "n": 1271,
+      "ll_raw": 0.67204,
+      "ll_R": 0.67194,
+      "ll_C": 0.67111,
+      "ll_B": 0.67126
+    },
+    {
+      "season": 2019,
+      "n": 1082,
+      "ll_raw": 0.68071,
+      "ll_R": 0.68169,
+      "ll_C": 0.68,
+      "ll_B": 0.68044
+    },
+    {
+      "season": 2020,
+      "n": 868,
+      "ll_raw": 0.65493,
+      "ll_R": 0.65285,
+      "ll_C": 0.65024,
+      "ll_B": 0.65046
+    },
+    {
+      "season": 2021,
+      "n": 1307,
+      "ll_raw": 0.64342,
+      "ll_R": 0.63987,
+      "ll_C": 0.6372,
+      "ll_B": 0.63736
+    },
+    {
+      "season": 2022,
+      "n": 1312,
+      "ll_raw": 0.66143,
+      "ll_R": 0.66119,
+      "ll_C": 0.65551,
+      "ll_B": 0.65751
+    },
+    {
+      "season": 2023,
+      "n": 1312,
+      "ll_raw": 0.65613,
+      "ll_R": 0.65626,
+      "ll_C": 0.65515,
+      "ll_B": 0.65603
+    },
+    {
+      "season": 2024,
+      "n": 1312,
+      "ll_raw": 0.65952,
+      "ll_R": 0.65969,
+      "ll_C": 0.65798,
+      "ll_B": 0.65761
+    },
+    {
+      "season": 2025,
+      "n": 1312,
+      "ll_raw": 0.684,
+      "ll_R": 0.686,
+      "ll_C": 0.68402,
+      "ll_B": 0.68326
+    }
+  ],
+  "variants": {
+    "R": {
+      "n": 13502,
+      "delta": -0.000197,
+      "se": 0.000369,
+      "z": -0.53,
+      "z_seasons": -0.44,
+      "seasons_better": [
+        2016,
+        2018,
+        2020,
+        2021,
+        2022
+      ],
+      "share_seasons_better": 0.455,
+      "verdict": "NON TRANCHABLE"
+    },
+    "C": {
+      "n": 13502,
+      "delta": -0.002149,
+      "se": 0.000676,
+      "z": -3.18,
+      "z_seasons": -3.1,
+      "seasons_better": [
+        2015,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024
+      ],
+      "share_seasons_better": 0.818,
+      "verdict": "ADOPTER"
+    },
+    "B": {
+      "n": 13502,
+      "delta": -0.001781,
+      "se": 0.000623,
+      "z": -2.86,
+      "z_seasons": -2.78,
+      "seasons_better": [
+        2015,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "share_seasons_better": 0.909,
+      "verdict": "ADOPTER"
+    }
+  },
+  "vs_market": {
+    "raw": {
+      "tout": {
+        "n": 11214,
+        "delta": 0.001375,
+        "se": 0.00091,
+        "z": 1.51
+      },
+      "oddsapi:draftkings": {
+        "n": 2621,
+        "delta": 0.001536,
+        "se": 0.001787,
+        "z": 0.86
+      },
+      "sbro": {
+        "n": 8593,
+        "delta": 0.001326,
+        "se": 0.001055,
+        "z": 1.26
+      }
+    },
+    "R": {
+      "tout": {
+        "n": 11214,
+        "delta": 0.001279,
+        "se": 0.001001,
+        "z": 1.28
+      },
+      "oddsapi:draftkings": {
+        "n": 2621,
+        "delta": 0.002624,
+        "se": 0.001937,
+        "z": 1.35
+      },
+      "sbro": {
+        "n": 8593,
+        "delta": 0.000868,
+        "se": 0.001165,
+        "z": 0.75
+      }
+    },
+    "C": {
+      "tout": {
+        "n": 11214,
+        "delta": -0.000419,
+        "se": 0.000802,
+        "z": -0.52
+      },
+      "oddsapi:draftkings": {
+        "n": 2621,
+        "delta": 0.000775,
+        "se": 0.001586,
+        "z": 0.49
+      },
+      "sbro": {
+        "n": 8593,
+        "delta": -0.000783,
+        "se": 0.000928,
+        "z": -0.84
+      }
+    },
+    "B": {
+      "tout": {
+        "n": 11214,
+        "delta": -0.000286,
+        "se": 0.000918,
+        "z": -0.31
+      },
+      "oddsapi:draftkings": {
+        "n": 2621,
+        "delta": 0.0002,
+        "se": 0.001723,
+        "z": 0.12
+      },
+      "sbro": {
+        "n": 8593,
+        "delta": -0.000435,
+        "se": 0.001076,
+        "z": -0.4
+      }
+    }
+  },
+  "coefficients_last_fold": {
+    "order": [
+      "const",
+      "logit_p",
+      "b2b_diff",
+      "ev_xgf_pct_s_diff",
+      "ev_xgf_pct_l_diff",
+      "lineup_xg_diff",
+      "star_power_diff",
+      "xg_matchup_diff",
+      "elo_diff"
+    ],
+    "R": [
+      -0.0581,
+      1.199
+    ],
+    "C": [
+      0.078,
+      0.5209,
+      -0.0972,
+      0.0826,
+      0.0223,
+      0.0639,
+      0.0492,
+      -0.019,
+      0.1389
+    ],
+    "B": [
+      0.0276,
+      0.7729,
+      -0.0854,
+      0.0322,
+      0.0929,
+      0.0431,
+      0.0738,
+      -0.015
+    ]
+  },
+  "layer": {
+    "features": [
+      "b2b_diff",
+      "ev_xgf_pct_s_diff",
+      "ev_xgf_pct_l_diff",
+      "lineup_xg_diff",
+      "star_power_diff",
+      "xg_matchup_diff",
+      "elo_diff"
+    ],
+    "mean": [
+      -0.115634,
+      -0.000987,
+      -0.000495,
+      -0.000232,
+      -0.006338,
+      -0.001789,
+      -0.062349
+    ],
+    "std": [
+      0.459089,
+      0.058536,
+      0.046259,
+      0.452084,
+      0.739417,
+      0.564529,
+      68.85727
+    ],
+    "intercept": 0.076647,
+    "coef_logit_p": 0.497132,
+    "coef": [
+      -0.097605,
+      0.083696,
+      0.032281,
+      0.063371,
+      0.043407,
+      -0.010388,
+      0.126095
+    ],
+    "z_order": [
+      "logit_p",
+      "b2b_diff",
+      "ev_xgf_pct_s_diff",
+      "ev_xgf_pct_l_diff",
+      "lineup_xg_diff",
+      "star_power_diff",
+      "xg_matchup_diff",
+      "elo_diff"
+    ],
+    "z": [
+      5.22,
+      -5.86,
+      2.14,
+      0.72,
+      2.29,
+      2.03,
+      -0.54,
+      3.98
+    ],
+    "n_games": 16682,
+    "seasons": [
+      2012,
+      2013,
+      2014,
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ]
+  }
+}
