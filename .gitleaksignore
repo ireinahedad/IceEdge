@@ -10,3 +10,10 @@
 # 2. Faux positif : `?token=abc123def456` dans un badge CircleCI du README NestJS
 #    généré (server/README.md, 2026-05-26). Ce n'est pas un secret.
 cc30409e8f996fd5218fcbff0f5806a36de08ce3:server/README.md:generic-api-key:5
+#
+# 3. Faux positif : clé privée EC de TEST générée avec openssl pour appleJws.test.ts
+#    (server/src/services/__fixtures__/appleTestChain.ts, 2026-10-11). Aucune valeur réelle.
+1403728fc9e6d90d5426d32300f965a626dc0666:server/src/services/__fixtures__/appleTestChain.ts:private-key:9
+#
+# 4. Faux positif : ce fichier lui-même cite `?token=abc123def456` (point 2 ci-dessus).
+0c97b0b2934efaca43207f6ee91a21a45de9584b:.gitleaksignore:generic-api-key:10

@@ -95,3 +95,22 @@ server/src/services/__fixtures__/slipScan/images/
 
 # Cache des simulations de ml/python/live_effects_bias.py (régénérable).
 ml/data/live_bias_sim/
+
+# Archives de transfert temporaires (srv.tgz committé par erreur le 2026-10-19, déplacé dans _to_delete/)
+.tmp_transfer/
+
+# ── Notes internes : gardées en local, jamais publiées (dépôt public) ─────────
+# Infra, comptes, runbooks, plans de travail. Retirées de l'index le 2026-10-19
+# (`git rm --cached`) ; elles restent sur le disque et les références marchent.
+/STATUS.md
+/DEPLOYMENT.md
+/MONITORING.md
+/BACKUP_DR.md
+/PROJECT_CONTEXT.md
+/APPLE_PLAN.md
+/SCAN_TICKET_PLAN.md
+/SAISIE_MANUELLE.md
+docs/REGISTRE_INCIDENTS.md
+
+# Pages SBRO aspirées (lues par fetch_data_v4.py) : pas à redistribuer publiquement.
+ml/data/raw/odds/*.html
