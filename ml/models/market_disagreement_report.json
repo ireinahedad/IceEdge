@@ -1,0 +1,366 @@
+{
+  "n_games": 11214,
+  "overall": {
+    "n": 11214,
+    "delta": -0.00074,
+    "se": 0.0008,
+    "z": -0.92
+  },
+  "n_suspect_close": 31,
+  "overall_without_suspect": {
+    "n": 11183,
+    "delta": -0.00069,
+    "se": 0.0008,
+    "z": -0.86
+  },
+  "ll_model": 0.66621,
+  "ll_market": 0.66695,
+  "by_season": [
+    {
+      "n": 1230,
+      "delta": -0.00212,
+      "se": 0.0027,
+      "z": -0.79,
+      "season": 2015,
+      "label": "2015-16",
+      "source": "sbro"
+    },
+    {
+      "n": 1230,
+      "delta": -0.00054,
+      "se": 0.00245,
+      "z": -0.22,
+      "season": 2016,
+      "label": "2016-17",
+      "source": "sbro"
+    },
+    {
+      "n": 1265,
+      "delta": -0.00012,
+      "se": 0.0026,
+      "z": -0.04,
+      "season": 2017,
+      "label": "2017-18",
+      "source": "sbro"
+    },
+    {
+      "n": 1271,
+      "delta": -0.00164,
+      "se": 0.00218,
+      "z": -0.75,
+      "season": 2018,
+      "label": "2018-19",
+      "source": "sbro"
+    },
+    {
+      "n": 1080,
+      "delta": 0.00118,
+      "se": 0.00239,
+      "z": 0.49,
+      "season": 2019,
+      "label": "2019-20",
+      "source": "sbro"
+    },
+    {
+      "n": 868,
+      "delta": -0.00335,
+      "se": 0.00291,
+      "z": -1.15,
+      "season": 2020,
+      "label": "2020-21",
+      "source": "sbro"
+    },
+    {
+      "n": 1307,
+      "delta": -0.00487,
+      "se": 0.00222,
+      "z": -2.2,
+      "season": 2021,
+      "label": "2021-22",
+      "source": "sbro"
+    },
+    {
+      "n": 342,
+      "delta": 0.00967,
+      "se": 0.00519,
+      "z": 1.86,
+      "season": 2022,
+      "label": "2022-23",
+      "source": "sbro"
+    },
+    {
+      "n": 1310,
+      "delta": -0.00012,
+      "se": 0.0022,
+      "z": -0.06,
+      "season": 2024,
+      "label": "2024-25",
+      "source": "oddsapi:draftkings"
+    },
+    {
+      "n": 1311,
+      "delta": 0.0016,
+      "se": 0.00236,
+      "z": 0.68,
+      "season": 2025,
+      "label": "2025-26",
+      "source": "oddsapi:draftkings"
+    }
+  ],
+  "buckets": [
+    {
+      "bucket": [
+        0.0,
+        0.02
+      ],
+      "n": 4155,
+      "share": 0.371,
+      "p_model": 0.5122,
+      "p_market": 0.5025,
+      "observed": 0.5061,
+      "observed_se": 0.0078,
+      "share_model_on_underdog": 0.485,
+      "paired_ll_model_minus_market": {
+        "n": 4155,
+        "delta": 0.00033,
+        "se": 0.00036,
+        "z": 0.92
+      },
+      "n_suspect_close": 7,
+      "without_suspect": {
+        "n": 4148,
+        "p_model": 0.5123,
+        "p_market": 0.5026,
+        "observed": 0.5063,
+        "observed_se": 0.0078,
+        "paired_ll_model_minus_market": {
+          "n": 4148,
+          "delta": 0.00033,
+          "se": 0.00036,
+          "z": 0.92
+        }
+      },
+      "closer": "marché"
+    },
+    {
+      "bucket": [
+        0.02,
+        0.05
+      ],
+      "n": 4526,
+      "share": 0.404,
+      "p_model": 0.5459,
+      "p_market": 0.5127,
+      "observed": 0.5325,
+      "observed_se": 0.0074,
+      "share_model_on_underdog": 0.456,
+      "paired_ll_model_minus_market": {
+        "n": 4526,
+        "delta": -0.00078,
+        "se": 0.00104,
+        "z": -0.75
+      },
+      "n_suspect_close": 12,
+      "without_suspect": {
+        "n": 4514,
+        "p_model": 0.5461,
+        "p_market": 0.5129,
+        "observed": 0.5328,
+        "observed_se": 0.0074,
+        "paired_ll_model_minus_market": {
+          "n": 4514,
+          "delta": -0.0008,
+          "se": 0.00105,
+          "z": -0.76
+        }
+      },
+      "closer": "modèle"
+    },
+    {
+      "bucket": [
+        0.05,
+        0.1
+      ],
+      "n": 2360,
+      "share": 0.21,
+      "p_model": 0.5859,
+      "p_market": 0.519,
+      "observed": 0.5513,
+      "observed_se": 0.0102,
+      "share_model_on_underdog": 0.425,
+      "paired_ll_model_minus_market": {
+        "n": 2360,
+        "delta": 0.0001,
+        "se": 0.0029,
+        "z": 0.03
+      },
+      "n_suspect_close": 5,
+      "without_suspect": {
+        "n": 2355,
+        "p_model": 0.5859,
+        "p_market": 0.5189,
+        "observed": 0.5512,
+        "observed_se": 0.0102,
+        "paired_ll_model_minus_market": {
+          "n": 2355,
+          "delta": 6e-05,
+          "se": 0.0029,
+          "z": 0.02
+        }
+      },
+      "closer": "marché"
+    },
+    {
+      "bucket": [
+        0.1,
+        1.01
+      ],
+      "n": 173,
+      "share": 0.015,
+      "p_model": 0.6155,
+      "p_market": 0.4975,
+      "observed": 0.6243,
+      "observed_se": 0.0368,
+      "share_model_on_underdog": 0.497,
+      "paired_ll_model_minus_market": {
+        "n": 173,
+        "delta": -0.03655,
+        "se": 0.01777,
+        "z": -2.06
+      },
+      "n_suspect_close": 7,
+      "without_suspect": {
+        "n": 166,
+        "p_model": 0.6182,
+        "p_market": 0.5024,
+        "observed": 0.6265,
+        "observed_se": 0.0375,
+        "paired_ll_model_minus_market": {
+          "n": 166,
+          "delta": -0.0337,
+          "se": 0.01768,
+          "z": -1.91
+        }
+      },
+      "closer": "modèle"
+    }
+  ],
+  "modele_sur_outsider": {
+    "n": 1090,
+    "p_model": 0.4918,
+    "p_market": 0.4205,
+    "observed": 0.4606,
+    "observed_se": 0.0151,
+    "paired_ll_model_minus_market": {
+      "n": 1090,
+      "delta": -0.00211,
+      "se": 0.00455,
+      "z": -0.46
+    }
+  },
+  "modele_sur_favori": {
+    "n": 1443,
+    "p_model": 0.6606,
+    "p_market": 0.5908,
+    "observed": 0.6286,
+    "observed_se": 0.0127,
+    "paired_ll_model_minus_market": {
+      "n": 1443,
+      "delta": -0.00263,
+      "se": 0.00391,
+      "z": -0.67
+    }
+  },
+  "largest": [
+    {
+      "date": "2016-02-04",
+      "match": "WSH vs NYI",
+      "p_model_home": 0.58,
+      "p_market_home": 0.321,
+      "home_win": 1,
+      "p_open_home": 0.588,
+      "suspect_close": true
+    },
+    {
+      "date": "2016-04-09",
+      "match": "PHI vs PIT",
+      "p_model_home": 0.431,
+      "p_market_home": 0.643,
+      "home_win": 1,
+      "p_open_home": 0.532,
+      "suspect_close": false
+    },
+    {
+      "date": "2018-02-13",
+      "match": "PIT vs OTT",
+      "p_model_home": 0.737,
+      "p_market_home": 0.537,
+      "home_win": 1,
+      "p_open_home": 0.696,
+      "suspect_close": true
+    },
+    {
+      "date": "2016-02-04",
+      "match": "VAN vs CBJ",
+      "p_model_home": 0.525,
+      "p_market_home": 0.331,
+      "home_win": 0,
+      "p_open_home": 0.588,
+      "suspect_close": true
+    },
+    {
+      "date": "2021-10-16",
+      "match": "PIT vs CHI",
+      "p_model_home": 0.729,
+      "p_market_home": 0.554,
+      "home_win": 1,
+      "p_open_home": 0.63,
+      "suspect_close": false
+    },
+    {
+      "date": "2022-03-26",
+      "match": "SJS vs ANA",
+      "p_model_home": 0.546,
+      "p_market_home": 0.72,
+      "home_win": 1,
+      "p_open_home": 0.58,
+      "suspect_close": false
+    },
+    {
+      "date": "2016-12-20",
+      "match": "CBJ vs LAK",
+      "p_model_home": 0.647,
+      "p_market_home": 0.478,
+      "home_win": 1,
+      "p_open_home": 0.588,
+      "suspect_close": false
+    },
+    {
+      "date": "2015-10-13",
+      "match": "DAL vs EDM",
+      "p_model_home": 0.789,
+      "p_market_home": 0.626,
+      "home_win": 1,
+      "p_open_home": 0.604,
+      "suspect_close": false
+    },
+    {
+      "date": "2016-03-30",
+      "match": "PHI vs WSH",
+      "p_model_home": 0.37,
+      "p_market_home": 0.53,
+      "home_win": 1,
+      "p_open_home": 0.478,
+      "suspect_close": false
+    },
+    {
+      "date": "2019-03-13",
+      "match": "TOR vs CHI",
+      "p_model_home": 0.528,
+      "p_market_home": 0.686,
+      "home_win": 0,
+      "p_open_home": 0.674,
+      "suspect_close": false
+    }
+  ]
+}

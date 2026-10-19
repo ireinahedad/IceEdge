@@ -92,3 +92,6 @@ ios-signing/
 # SCAN_TICKET_PLAN — Tesseract (copié depuis node_modules par client/scripts/ocr-assets.mjs) et captures de fixtures (privées)
 client/public/ocr/
 server/src/services/__fixtures__/slipScan/images/
+
+# Cache des simulations de ml/python/live_effects_bias.py (régénérable).
+ml/data/live_bias_sim/

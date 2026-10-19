@@ -27,8 +27,9 @@
 7. [Ce que fait le serveur Node avec ces chiffres](#7-ce-que-fait-le-serveur-node-avec-ces-chiffres)
 8. [Comment on sait si le modèle est bon (évaluation)](#8-comment-on-sait-si-le-modèle-est-bon-évaluation)
 9. [Mise à jour : rafraîchir et réentraîner](#9-mise-à-jour--rafraîchir-et-réentraîner)
-10. [Exemple complet chiffré](#10-exemple-complet-chiffré)
-11. [Carte des fichiers](#11-carte-des-fichiers)
+10. [Le mode direct : prédire pendant le match](#10-le-mode-direct--prédire-pendant-le-match)
+11. [Exemple complet chiffré](#11-exemple-complet-chiffré)
+12. [Carte des fichiers](#12-carte-des-fichiers)
 
 ---
 
@@ -922,7 +923,7 @@ probabilité servie. Win%, buts/match, PP/PK… ne servent qu'aux replis.
 serveur prend 3 chiffres du paquet — victoire domicile, P(prolongation), λ total
 — et les injecte dans la grille « score actuel + buts restants » des règles
 (`buildLiveModelMarkets`), avec des effets de score mesurés
-(`calibrate_live.py` → `liveEffects.json`).
+(`calibrate_live.py` → `liveEffects.json`). Détail complet : §10.
 
 ### 7.3 Les cadences joueur — `prediction/playerRates.ts`
 
@@ -1024,7 +1025,806 @@ considérer comme un pari sur un petit avantage non prouvé.
 
 ---
 
-## 10. Exemple complet chiffré
+## 10. Le mode direct : prédire pendant le match
+
+Pendant un match, chaque tuile de la page (victoire, puck line, totaux, buts
+d'une équipe, props joueur…) est recalculée **toutes les 30 secondes** à partir
+de l'état réel du match : score, période, horloge. Le modèle de score ne
+tourne pas une seconde fois : on garde son avant-match et on **joue le reste du
+match** avec un moteur dont les cadences de buts ont été **mesurées** sur
+12 586 matchs. Cette section décrit ce moteur, la mesure de ses paramètres et
+le rejeu qui a décidé de sa mise en service.
+
+### 10.1 Le principe en une phrase
+
+```
+score final = score actuel + buts qui restent à marquer
+buts restants : chaque équipe marque à la cadence  λ × w(t) × m(écart, moment)
+```
+
+- **λ** : buts attendus de l'équipe sur 60 minutes, **figé à l'avant-match**
+  (paquet ML, λ recalés par la couche de correction et le recalage de niveau).
+- **w(t)** : part des buts d'un match marqués à la seconde t. Elle suit
+  `PERIOD_DIST` = 30,5 % / 36,5 % / 33 % des buts en 1re / 2e / 3e période,
+  répartis uniformément dans la période (w = 0,305 / 1200 par seconde en 1re…).
+- **m(écart, moment)** : le multiplicateur **mesuré** (§10.3). Il dit de
+  combien une équipe marque plus ou moins que sa cadence normale selon qu'elle
+  mène, est à égalité ou est menée, et à quel moment du match.
+
+Avec m ≡ 1, on retrouve deux lois de Poisson indépendantes sur le temps
+restant (« phase 1 », la version d'avant le 2026-10-01). Les effets de score
+(« phase 2 ») sont servis depuis le 2026-10-01.
+
+### 10.2 Le chemin d'un recalcul (`gameMlBundle.applyLive`, cache 30 s)
+
+```
+ Page match, page équipe, page joueur          (autant de spectateurs qu'on veut)
+        │
+        ▼
+ getGameMlBundle(gameId)
+   ├─ bundleCache (10 min) ── computeBundle ──► service ML /predict/game/bundle
+   │                                            avant-match : λ_dom, λ_ext, victoire, P(prolongation)
+   │
+   └─ liveCache (30 s, UNE exécution par match) ── applyLive
+          │
+          ├─ fetchGameById ─────────── statut + heure de mise au jeu
+          │     pas commencé ───────────────────────► avant-match tel quel
+          ▼
+     buildLiveModelMarkets
+          ├─ fetchGameDetail ───────── API NHL : landing + boxscore
+          │                            (cache 30 s ; 6 h une fois le match terminé)
+          ├─ liveCtxFromDetail ─────── score, période, horloge, entracte, prolongation
+          ├─ liveCalibration ───────── λ_dom, λ_ext, tieBoost      ≈ 120 ms, une fois par match
+          ├─ evolveLiveScore ───────── loi des buts restants        0,04 à 5 ms
+          └─ grille du score final ─── toutes les tuiles (même lecture qu'avant le match, §5)
+          │
+          ▼
+ tuiles `live: true` + libellé de l'état utilisé (« 3–2, 3e, 01:00 restantes »)
+```
+
+1. **Le match a-t-il commencé ?** Sinon, le paquet d'avant-match est renvoyé
+   tel quel.
+2. **Trois chiffres de l'avant-match** sont lus dans le paquet ML : victoire du
+   domicile (`moneyline`), probabilité de prolongation (`game_to_ot`) et
+   λ total = λ_dom + λ_ext.
+3. **Calage à la mise au jeu** (`nhlPredictions.liveCalibration`). Le moteur,
+   lancé à 0–0 avec 60 minutes à jouer, doit redire exactement l'avant-match.
+   On garde λ total et on cherche par **bissection** (30 itérations) le partage
+   domicile / visiteur s qui rend la victoire d'avant-match ; un facteur de nuls
+   `tieBoost` = [tie × (1 − t)] / [t × (1 − tie)] ramène ensuite la masse des
+   égalités à 60 minutes (t, celle du moteur) au P(prolongation) du modèle
+   (tie). Ce calage ne dépend que de l'avant-match : il est mémorisé par match.
+4. **État du match** (`liveCtxFromDetail`) : score, secondes de temps
+   réglementaire restantes, prolongation en cours ou non.
+5. **Le moteur** (`prediction/finalScore.evolveLiveScore`) calcule la loi
+   jointe des buts restants (§10.4).
+6. **La grille du score final** = score actuel + buts restants ; une égalité à
+   60 minutes donne un but de plus au vainqueur de la prolongation (`p_ot_dom`,
+   §4.1.5). Toutes les tuiles se lisent sur cette grille, exactement comme
+   avant le match (§5) : elles restent **cohérentes entre elles** à chaque
+   instant.
+7. Chaque tuile recalculée porte `live: true` et l'explication
+   « Modèle ML (avant-match : victoire domicile X %, λ = Y) + état du match ».
+   La probabilité exacte et l'incertitude d'avant-match sont effacées : elles
+   ne décrivent plus le chiffre affiché.
+
+Si une entrée manque (paquet incomplet, feuille de match illisible), les tuiles
+gardent l'avant-match, affiché pâle.
+
+**Ce que coûte un recalcul.** Mesure du code de production
+(`computeLiveModelGroups`, le chemin du rejeu §10.6, sans réseau), médiane de
+40 appels, Node 22, Ryzen 7 7730U (machine virtuelle, 2 cœurs) :
+
+| Moment du match | Moteur seul (`evolveLiveScore`) | Recalcul complet (grille + toutes les tuiles) |
+|---|---:|---:|
+| Mise au jeu (60 min à jouer) | 4,8 ms | 5,9 ms |
+| Fin de la 1re | 3,0 ms | 4,0 ms |
+| Fin de la 2e | 1,0 ms | 1,9 ms |
+| 5 min restantes | 0,21 ms | 0,9 ms |
+| 1 min restante | 0,04 ms | 0,6 ms |
+| **Calage** (`liveCalibration`, 30 passes du moteur) | — | **≈ 120 ms, une seule fois par match** |
+
+- Le moteur coûte en proportion du **temps qui reste** (un pas par tranche de
+  10 secondes) : il est le plus cher à la mise au jeu et presque gratuit en fin
+  de match, précisément là où les chiffres bougent le plus.
+- Le calage ne dépend que de l'avant-match ; il est mémorisé (jusqu'à
+  2 000 matchs). Le premier recalcul d'un match prend donc ≈ 150 ms, les
+  suivants quelques millisecondes.
+
+Reproduire : `npx ts-node --transpile-only scripts/bench-live-engine.ts` (dans
+`server/`, sans réseau ni base) ; les temps varient de ±15 % d'un lancement à
+l'autre.
+
+**Ce que coûte un soir chargé.** `liveCache` est un `TtlCache` avec
+**dédoublonnage des appels en vol** : 1 ou 10 000 spectateurs sur la même page
+déclenchent **au plus un recalcul par match toutes les 30 secondes**. Le service
+ML n'est pas appelé pendant le match, sauf à l'expiration du paquet
+d'avant-match (toutes les 10 minutes) ; ses entrées sont figées à la date du
+match (gardien saisi, absents, repos) et les cotes ne changent pas la
+probabilité servie (§7.1), donc λ ne bouge pas tant qu'aucune saisie manuelle ne
+change.
+
+Mesure : banc **B15** (`loadtest/bench/b15-direct.ts`), le vrai serveur avec
+l'API NHL et le service ML remplacés par des bouchons qui comptent les appels
+(latences simulées : NHL 120 ms, ML 300 ms). 16 matchs en cours, V spectateurs
+qui rafraîchissent chacun une page de match toutes les secondes pendant 90 s,
+après un échauffement qui a calculé l'avant-match et le premier direct de chaque
+match :
+
+| Spectateurs | Requêtes/s | p50 | p95 | Recalculs par match et par minute | Appels NHL par match et par minute | Appels ML |
+|---:|---:|---:|---:|---:|---:|---:|
+| 20 | 20 | 3 ms | 9 ms | 1,4 | 4,2 | 0 |
+| 200 | 197 | 10 ms | 53 ms | **2,0** | **6,0** | 0 |
+| 1 000 | 572 | 200 ms | 891 ms | **2,0** | **6,0** | 0 |
+
+- **Le coût en amont ne suit pas l'audience.** Recalculs et appels NHL plafonnent
+  à exactement un recalcul par match toutes les 30 s, de 200 à 1 000
+  spectateurs (à 20, certains matchs ne sont pas regardés à chaque fenêtre).
+- **Trois appels NHL par recalcul**, pas deux : la page `landing` est lue deux
+  fois, par `fetchGameById` (statut) et par `fetchGameDetail` (feuille de
+  match), qui ont chacun leur cache pour la même URL. L'un des deux est
+  redondant.
+- **À 1 000 spectateurs, la latence monte** (p95 891 ms, boucle d'événements p99
+  262 ms), mais ce n'est pas le moteur : 48 recalculs en 90 s. C'est la
+  réponse : chaque paquet pèse ≈ 109 Ko de JSON, re-sérialisé à chaque requête
+  (≈ 62 Mo/s à 572 requêtes/s), sur 2 cœurs partagés avec le client du banc.
+  L'en-tête `Cache-Control: public, max-age=30` permet à un CDN d'absorber ce
+  trafic ; côté serveur, sérialiser le paquet une fois par recalcul supprimerait
+  l'essentiel du coût.
+
+**Fraîcheur.** Deux caches de 30 s s'empilent (feuille de match, puis paquet en
+direct) : un chiffre affiché a en moyenne **30 s de retard** sur l'API NHL, et
+**jusqu'à ~60 s**, elle-même quelques secondes derrière la glace. Le libellé de
+chaque tuile indique l'état exact utilisé (score, période, horloge), de sorte que
+l'utilisateur sait toujours à quel instant le chiffre correspond.
+
+Ce que coûte ce retard, mesuré par un rejeu dédié
+(`server/scripts/replay-live-staleness.ts`, 3 903 matchs 2023-26, vrai moteur) :
+à l'instant t, on note contre l'issue réelle la prédiction faite avec l'état du
+match à t − s, sur les 10 questions du rejeu §10.6. Hausse de la log-loss par
+rapport à un chiffre frais (retard en secondes de jeu) :
+
+| Moment | 10 s | 20 s | 30 s | 45 s | 60 s |
+|---|---:|---:|---:|---:|---:|
+| Reste du match (10e, 30e, 50e minute) | +0,3 % | +0,6 % | +0,8 % | +1,3 % | +1,6 % |
+| 55e-58e minute | +1,6 % | +3,3 % | +5,2 % | +7,5 % | +9,1 % |
+| **2 dernières minutes** | **+7,0 %** | **+13,3 %** | **+19,3 %** | **+27,1 %** | **+34,0 %** |
+
+Tous les écarts sont significatifs (erreur type appariée par instant). En
+milieu de match, le retard ne coûte presque rien. Dans les deux dernières
+minutes, un chiffre en retard de 30 s perd **19 %** de log-loss, autant que ce
+que les effets de score font gagner au même moment (−17 % à −28 %, §10.6). Le
+retard réel en secondes de JEU est plus court que le retard en secondes réelles
+(l'horloge s'arrête souvent en fin de match), donc ces chiffres sont un plafond.
+
+**Recommandation (non appliquée).** Dans les 5 dernières minutes de la 3e
+période, ramener les trois caches (`fetchGameById`, `fetchGameDetail`,
+`liveCache`) à 10 s : retard moyen 10 s au lieu de 30 s, soit ≈ +7 % au lieu de
+≈ +19 % de log-loss dans les deux dernières minutes. Le coût reste borné : 6
+recalculs et 18 appels NHL par match et par minute pendant ces quelques minutes,
+toujours indépendants de l'audience.
+
+**Cas limites.**
+
+| Situation | Ce que voit le code | Ce qui est affiché |
+|---|---|---|
+| Entracte | `inIntermission` → horloge ramenée à 0 : la période est terminée | Chiffres de début de la période suivante ; libellé « entracte après la 2e » |
+| Prolongation ou fusillade en cours | Type de période OT / SO, ou période > 3 → plus de temps réglementaire | Le vainqueur est tiré à `p_ot_dom` (§4.1.5) ; totaux et handicaps partent du score actuel + 1 but pour le vainqueur |
+| Match suspendu (`SUSP`) ou reporté (`PPD`) | Statut ni `live` ni `final` → `liveCtxFromDetail` rend `null` | L'avant-match |
+| API NHL en panne, feuille illisible | Exception ou contexte `null` | L'avant-match, affiché pâle |
+| Entrée du modèle manquante | Victoire, P(prolongation) ou λ absent du paquet | L'état du match, avec les tuiles d'avant-match |
+| But annulé après révision vidéo | Rien n'est mémorisé d'un recalcul à l'autre : l'état est relu de zéro | Corrigé au plus ~60 s après la correction dans l'API NHL |
+| Match terminé | Statut `final` ; terminé en prolongation ou fusillade, la grille part du nul à 60 min avec le vrai vainqueur (si les buts par période recollent) | Issues certaines (0 / 100 %) ; libellé « score final 4–3 (OT) » ; feuille en cache 6 h |
+| Horloge en retard sur la glace | Retard de l'API NHL + caches | Jusqu'à ~60 s, visible dans le libellé |
+
+<!-- À DÉVELOPPER
+  - Appliquer le cache de 10 s en fin de match (recommandation ci-dessus), puis rejouer B15.
+  - Sérialiser le paquet une fois par recalcul ; lire la page `landing` une seule fois par recalcul.
+-->
+
+### 10.3 La calibration des effets de score (`calibrate_live.py`)
+
+**Ce qu'on cherche.** Un match de hockey ne se joue pas à cadence constante.
+Une équipe menée en fin de match pousse puis **retire son gardien** ; l'équipe
+qui mène se replie mais marque dans le **filet désert** ; à égalité en fin de
+3e, les deux équipes ferment le jeu. On mesure un multiplicateur m pour chaque
+case **écart au score** (vu de l'équipe, borné à −3…+3) × **tranche de temps**,
+de plus en plus fines en fin de match, là où le gardien sort :
+
+| Tranche (temps écoulé) | 0-20' | 20-40' | 40-50' | 50-55' | 55-57' | 57-58' | 58-59' | 59-60' |
+|---|---|---|---|---|---|---|---|---|
+
+soit 8 × 7 = **56 multiplicateurs**.
+
+**Les données.**
+
+| Élément | Source | Volume |
+|---|---|---|
+| Buts horodatés (temps réglementaire) | Fichiers de tirs MoneyPuck → `fetch_live_goals.py` → `live_goals.csv` | Chaque match est contrôlé : ses buts doivent recoller au score réglementaire officiel, sinon il est **écarté** (jamais corrigé). |
+| λ d'avant-match de chaque match | `live_pregame.py` → `live_pregame.csv` | **Hors échantillon** : pour la saison S, modèle de score entraîné sur les saisons < S seulement (walk-forward). Aucun match n'est chiffré par un modèle qui l'a vu. |
+| Entraînement | 2012-13 → 2022-23 | **12 586 matchs, 70 280 buts** |
+| Test (jamais vu par la calibration) | 2023-24 → 2025-26 | **3 903 matchs, 23 261 buts** |
+
+**Le contrôle des données.** Un match n'est gardé que si ses buts MoneyPuck
+recollent exactement au score réglementaire officiel (`nhl_games_v4.csv`), avec
+les bonnes équipes et une séquence de scores sans trou :
+
+| Saison | Matchs MoneyPuck | Gardés | Écartés : buts manquants | Absents de la référence |
+|---|---:|---:|---:|---:|
+| 2012-13 | 720 | 712 | 8 | 0 |
+| 2013-14 | 1 230 | 1 210 | 20 | 0 |
+| 2014-15 | 1 230 | 1 216 | 14 | 0 |
+| 2015-16 | 1 230 | 1 213 | 17 | 0 |
+| 2016-17 | 1 230 | 1 219 | 11 | 0 |
+| 2017-18 | 1 271 | 1 246 | 20 | 5 |
+| 2018-19 | 1 271 | 1 252 | 19 | 0 |
+| 2019-20 | 1 082 | 1 067 | 15 | 0 |
+| 2020-21 | 868 | 856 | 12 | 0 |
+| 2021-22 | 1 311 | 1 299 | 7 | 5 |
+| 2022-23 | 1 312 | 1 296 | 16 | 0 |
+| 2023-24 | 1 312 | 1 295 | 17 | 0 |
+| 2024-25 | 1 312 | 1 303 | 9 | 0 |
+| 2025-26 | 1 312 | 1 305 | 7 | 0 |
+| **Total** | **16 691** | **16 489** | **192 (1,15 %)** | **10** |
+
+Les 192 matchs écartés ont tous la même cause : **il manque au moins un but**
+dans le fichier MoneyPuck. Aucun match n'a de but en trop, d'équipes inversées
+ou de séquence de score incohérente. Tous les matchs gardés ont un λ
+d'avant-match (aucune perte à la jointure). L'exclusion retire de préférence
+des matchs à buts ; à 1,15 % des matchs, son effet sur les multiplicateurs est
+négligeable. Les saisons courtes (2012-13, 2019-20, 2020-21) sont celles du
+lock-out et de la COVID.
+
+**La méthode : maximum de vraisemblance d'exposition.** Le temps réglementaire
+de chaque match est découpé aux buts et aux bornes des tranches. Sur chaque
+morceau [t₀, t₁), l'état (écart, tranche) est constant ; chaque équipe y
+accumule une **exposition**
+
+```
+E = λ_équipe × ∫ w(t) dt        (buts qu'elle « aurait dû » marquer à cadence normale)
+```
+
+dans la case de son état, et y marque 0 ou 1 but (O). La vraisemblance d'un
+processus de comptage dont la cadence dépend de l'histoire passée vaut
+Π cadence(tᵢ) × exp(−∫ cadence) ; son maximum, case par case, a une forme
+fermée :
+
+```
+m(case) = buts observés / exposition = O / E
+```
+
+L'intérêt : le gardien retiré est capté **sans être modélisé**. Ses buts, pour
+et contre, tombent d'eux-mêmes dans les cases « −1 / +1, dernières minutes ».
+
+**Le rétrécissement des cases rares.** Une case comme « mène de 3 entre 59' et
+60' » ne contient qu'une centaine de buts. On rétrécit vers 1 :
+
+```
+m = (O + a) / (E + a)
+```
+
+La force **a n'est pas fixée à la main** : elle est choisie par **validation
+croisée saison par saison** (chaque saison d'entraînement est retirée à tour de
+rôle, m est estimé sur les autres, puis noté par la log-vraisemblance de Poisson
+de la saison retirée), sur la grille {0, 2, 5, 10, 20, 40, 80, 160}.
+
+| a | 0 | **2** | 5 | 10 | 20 | 40 | 80 | 160 |
+|---|---|---|---|---|---|---|---|---|
+| Log-vraisemblance CV | 315 283,32 | **315 283,39** | 315 282,25 | 315 277,38 | 315 258,78 | 315 198,23 | 315 036,62 | 314 701,21 |
+
+Choix : **a = 2**. Sans aucun effet (m ≡ 1), la log-vraisemblance vaut
+311 981,63 : les effets de score rapportent **+3 301,8** points de
+log-vraisemblance en validation croisée. Avec plus de 70 000 buts, les données
+parlent d'elles-mêmes ; un rétrécissement fort (a ≥ 40) écrase les vrais effets
+de fin de match et dégrade le score.
+
+![Gain de validation croisée selon la force de rétrécissement a](figures/live_cv_shrink.png)
+
+La courbe, sur une grille plus fine (`live_calibration_checks.py`), montre un
+**plateau** : de a = 0 à a = 3, le gain varie de moins de 0,3 point. Le choix
+précis de a dans cette zone n'a donc aucune importance pratique ; ce qui compte
+est de **ne pas** rétrécir fort. Même à a = 1 000, où chaque case est tirée
+vers 1 par l'équivalent de 1 000 buts fictifs, il reste +1 214 points : les
+effets de fin de match sont trop massifs pour être effacés.
+
+**Hors échantillon.** m est figé sur 2012-2022, puis noté sur les trois saisons
+de test :
+
+| Saison de test | Buts | Gain de log-vraisemblance (m mesuré contre m ≡ 1) |
+|---|---:|---:|
+| 2023-24 | 7 789 | **+343,0** |
+| 2024-25 | 7 647 | **+458,1** |
+| 2025-26 | 7 825 | **+450,7** |
+
+Le gain se maintient sur chacune des trois saisons, sans réajustement.
+
+**L'incertitude de chaque multiplicateur.** Intervalle de confiance à 95 % par
+**bootstrap par match** (2 000 tirages de 12 586 matchs avec remise : les buts
+d'un même match ne sont pas indépendants, on tire donc les matchs entiers), λ
+d'avant-match tenus fixes. Une case marquée * a un intervalle qui exclut 1.
+
+| Tranche | −3 | −2 | −1 | 0 | +1 | +2 | +3 |
+|---|---|---|---|---|---|---|---|
+| 0-20' | 1,03 [0,89-1,21] | 1,03 [0,97-1,11] | 1,00 [0,97-1,03] | 0,96 [0,94-0,98]* | 0,96 [0,93-0,99]* | 0,91 [0,84-0,98]* | 0,88 [0,75-1,01] |
+| 20-40' | 0,99 [0,94-1,05] | 1,04 [1,00-1,08] | 1,01 [0,99-1,04] | 0,96 [0,93-0,98]* | 0,94 [0,91-0,96]* | 0,92 [0,88-0,95]* | 0,90 [0,86-0,95]* |
+| 40-50' | 1,01 [0,95-1,08] | 1,01 [0,95-1,06] | 0,99 [0,95-1,04] | 0,93 [0,90-0,97]* | 0,90 [0,86-0,94]* | 0,93 [0,87-0,98]* | 0,88 [0,83-0,94]* |
+| 50-55' | 0,97 [0,89-1,04] | 1,05 [0,98-1,14] | 1,01 [0,95-1,07] | 0,87 [0,82-0,92]* | 0,80 [0,74-0,85]* | 0,85 [0,78-0,92]* | 0,95 [0,88-1,03] |
+| 55-57' | 0,96 [0,84-1,08] | 1,02 [0,90-1,15] | 0,95 [0,86-1,05] | 0,77 [0,69-0,85]* | 0,73 [0,65-0,81]* | 1,21 [1,08-1,35]* | 1,09 [0,98-1,21] |
+| 57-58' | 1,01 [0,85-1,17] | 1,44 [1,22-1,67]* | 1,06 [0,91-1,21] | 0,73 [0,63-0,84]* | 0,93 [0,80-1,06] | 2,94 [2,65-3,24]* | 1,01 [0,86-1,16] |
+| 58-59' | 1,05 [0,90-1,21] | 1,95 [1,69-2,21]* | 1,41 [1,24-1,60]* | 0,76 [0,66-0,87]* | 3,23 [2,97-3,49]* | 4,98 [4,58-5,38]* | 1,08 [0,93-1,24] |
+| 59-60' | 0,83 [0,70-0,96]* | 2,03 [1,78-2,29]* | 2,61 [2,35-2,87]* | 0,64 [0,55-0,74]* | 7,35 [6,93-7,78]* | 6,43 [5,97-6,89]* | 0,77 [0,66-0,89]* |
+
+**32 cases sur 56** s'écartent significativement de 1. Parmi les 24 autres,
+15 sont du côté de l'équipe **menée avant la 57e minute** : tant que le gardien
+n'est pas sorti, être mené ne change pas la cadence de façon mesurable. La
+plupart des 9 restantes sont des écarts de 3 buts (matchs pliés, peu de buts
+dans la case). Les grands effets de fin de match sont, eux, mesurés avec
+précision : ×7,35 [6,93-7,78] dans le filet désert, ×2,61 [2,35-2,87] pour
+l'équipe menée d'un but. Le rétrécissement (a = 2) ne protège donc que
+quelques cases de coin, et la table servie n'est pas du bruit.
+
+**La stabilité dans le temps.** Les mêmes cases, estimées saison par saison :
+
+| Case | 2012-13 | 2015-16 | 2018-19 | 2021-22 | Étendue 2012-2022 | Test 2023 / 2024 / 2025 | Servi |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Mène de 1, 59-60' | 6,71 | 6,62 | 7,55 | 7,70 | 5,27 – 7,70 | 5,99 / 7,71 / 6,54 | 7,35 |
+| Menée de 1, 59-60' | 1,68 | 2,15 | 2,52 | 2,89 | 1,68 – 2,89 | 2,22 / 2,53 / 2,30 | 2,61 |
+| Égalité, 59-60' | 0,79 | 0,62 | 0,62 | 0,83 | 0,59 – 0,83 | 0,63 / 0,76 / 0,65 | 0,64 |
+| Mène de 2, 58-59' | 3,33 | 4,77 | 5,31 | 5,18 | 3,33 – 5,31 | 4,60 / 4,66 / 5,57 | 4,98 |
+
+Deux constats :
+
+- **Les saisons varient plus que l'intervalle bootstrap.** « Menée de 1 »
+  s'étend de 1,68 à 2,89 d'une saison à l'autre, quand l'intervalle de la table
+  poolée n'est que [2,35-2,87]. Le bootstrap mesure le bruit d'échantillonnage,
+  pas les changements de jeu d'une saison à l'autre : l'incertitude réelle d'une
+  saison à venir est plus large que celle affichée.
+- **Une dérive est visible** sur « mène de 2, 58-59' » : de ×3,3-3,9 en 2012-15 à
+  ×4,1-5,6 depuis 2015. Les entraîneurs retirent leur gardien **de plus en plus
+  tôt** quand ils sont menés de deux buts, ce qui donne plus de buts dans le
+  filet désert dès la 58e minute. La table servie (×4,98) moyenne cette
+  évolution ; c'est un argument pour recalibrer régulièrement sur une fenêtre
+  récente plutôt que de garder 2012 dans l'entraînement.
+
+**L'incertitude d'une saison à l'autre (bootstrap à deux niveaux).** Le
+bootstrap par match tient les saisons pour acquises. Or chaque saison a son
+style de jeu et ses λ, produits par un modèle d'avant-match différent
+(walk-forward : un modèle par saison). On tire donc d'abord 11 saisons avec
+remise, puis les matchs dans chaque saison tirée (1 000 tirages) :
+
+- les intervalles s'élargissent d'un facteur **1,42** en médiane (de 1,11 à
+  2,26 selon la case) ;
+- **28 cases sur 56** restent significativement différentes de 1, au lieu de
+  32. Les quatre qui basculent sont de petits effets : mène de 1 ou de 2 en
+  1re période (×0,96, ×0,91), mène de 2 à 55-57' (×1,21), menée de 3 dans la
+  dernière minute (×0,83) ;
+- les effets qui comptent tiennent : ×7,35 [6,68-8,01] dans le filet désert,
+  ×2,61 [2,26-2,98] pour l'équipe menée d'un but, ×4,98 [4,42-5,57] en menant de
+  deux à 58-59'.
+
+**Faut-il privilégier les saisons récentes ?** La dérive vue plus haut le
+suggère. Pour chaque saison de test S, plusieurs tables sont ajustées sur les
+saisons < S seulement, puis notées sur les buts de S
+(`live_window_compare.py`). Écart de log-vraisemblance avec la table servie
+(positif = meilleure), avec le z de l'écart apparié par match :
+
+| Table, ajustée sur les saisons < S | 2023-24 | 2024-25 | 2025-26 | Total | z |
+|---|---:|---:|---:|---:|---:|
+| Servie, 2012-2022 figée (référence) | 0 | 0 | 0 | 0 | — |
+| Croissante, 2012 → S−1 | 0,0 | +3,6 | +6,6 | +10,2 | 5,6 |
+| Glissante, 3 dernières saisons | −5,3 | +9,9 | +14,6 | +19,2 | 1,9 |
+| Glissante, 5 dernières saisons | −0,4 | +8,6 | +11,2 | +19,4 | 2,6 |
+| Glissante, 7 dernières saisons | +1,6 | +8,2 | +13,5 | +23,3 | 4,1 |
+| **Pondérée, demi-vie 3 saisons** | **+2,6** | **+10,6** | **+14,6** | **+27,8** | **4,8** |
+| Pondérée, demi-vie 5 saisons | +2,3 | +8,8 | +12,9 | +24,1 | 5,6 |
+
+La pondération récente gagne sur les trois saisons, et les fenêtres courtes
+perdent en 2023-24 (trop peu de buts dans les cases rares). Mais le gain est
+petit : la table servie rapporte déjà +1 252 points contre m ≡ 1 sur ces
+saisons, la meilleure variante y ajoute 2,2 %. La table récente montre bien la
+dérive (mène de 1 à 58-59' : ×3,75 contre ×3,23 ; mène de 2 à 57-58' : ×3,55
+contre ×2,94).
+
+Au rejeu des marchés (`server/scripts/replay-live-window.ts`, même protocole
+que §10.6, table servie contre table « demi-vie 3 saisons » de chaque saison) :
+log-loss cumulée **77 080,9 → 77 046,0 (−0,05 %)**, 5 cases significativement
+meilleures, **aucune pire**, sur 50.
+
+Décision : **la table servie reste en place** ; le gain ne justifie pas un
+changement isolé. À la prochaine recalibration, pondérer les saisons par une
+demi-vie de 3 saisons (jamais pire au rejeu) plutôt que de les compter à égalité.
+
+Reproduire : `python live_calibration_checks.py` → `models/live/calibrate_live_checks.json`
+et `figures/live_cv_shrink.png` ; `python live_window_compare.py` →
+`models/live/live_window_report.json` et `live_effects_recent.json`, puis
+`npx ts-node --transpile-only scripts/replay-live-window.ts 2023 2024 2025` →
+`models/live/live_window_replay.md`.
+
+### 10.4 Les multiplicateurs mesurés (`liveEffects.json`)
+
+Lignes : tranche de temps écoulé. Colonnes : écart au score **vu de l'équipe
+qui marque** (−1 = menée d'un but, +1 = mène d'un but). Dernière colonne : buts
+d'entraînement tombés dans la tranche.
+
+| Tranche | −3 | −2 | −1 | 0 | +1 | +2 | +3 | Buts |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0-20' (1re) | 1,03 | 1,03 | 1,00 | 0,96 | 0,96 | 0,91 | 0,88 | 20 691 |
+| 20-40' (2e) | 0,99 | 1,04 | 1,01 | 0,96 | 0,94 | 0,92 | 0,90 | 24 727 |
+| 40-50' | 1,01 | 1,01 | 0,99 | 0,93 | 0,90 | 0,93 | 0,88 | 10 946 |
+| 50-55' | 0,97 | 1,06 | 1,01 | 0,87 | 0,80 | 0,85 | 0,95 | 5 306 |
+| 55-57' | 0,96 | 1,02 | 0,95 | 0,77 | 0,73 | 1,21 | 1,09 | 2 151 |
+| 57-58' | 1,01 | 1,44 | 1,06 | 0,73 | 0,93 | **2,94** | 1,01 | 1 379 |
+| 58-59' | 1,05 | **1,95** | **1,41** | 0,76 | **3,23** | **4,98** | 1,08 | 2 161 |
+| 59-60' | 0,83 | **2,03** | **2,61** | 0,64 | **7,35** | **6,43** | 0,77 | 2 919 |
+
+![Carte de chaleur de la table m](figures/live_m_heatmap.png)
+
+La même table en couleur (échelle logarithmique : bleu = l'équipe marque moins
+que sa cadence normale, rouge = plus ; * = intervalle à 95 % qui exclut 1,
+§10.3). Les 50 premières minutes forment un bloc presque blanc ; toute
+l'information est dans le coin inférieur droit (filet désert) et dans la colonne
+centrale (égalité, fin de match).
+
+**Ce que la table raconte :**
+
+- **Pendant 50 minutes, le score compte peu** : tous les m sont entre 0,88 et
+  1,06. L'équipe qui mène ralentit légèrement (×0,90 à ×0,96), l'équipe menée
+  ne s'emballe pas.
+- **À égalité en fin de match, on ferme le jeu** : ×0,87 à 50-55', ×0,64 dans
+  la dernière minute. Aucune équipe ne veut perdre le point de la prolongation.
+- **Gardien retiré** : menée d'un but, une équipe marque ×1,41 à 58-59' et
+  **×2,61** dans la dernière minute ; menée de deux, le retrait commence plus
+  tôt (×1,44 dès 57-58').
+- **Filet désert** : l'équipe qui mène d'un but marque **×7,35** dans la
+  dernière minute, celle qui mène de deux ×2,94 → ×4,98 → ×6,43 de 57' à 60'.
+- **Match plié** (écart de 3) : retour vers 1, voire en dessous (×0,77-0,83
+  dans la dernière minute) — on ne retire plus le gardien.
+
+**Contrôle de cohérence.** Le moteur de match d'avant-match (§4.1.4 bis)
+mesure la même chose avec une autre fenêtre (3 dernières saisons, λ du modèle
+servi). Les deux mesures, indépendantes, concordent dans la dernière minute :
+×2,60 contre ×2,61 menée d'un but, ×7,69 contre ×7,35 en menant d'un but.
+
+**Comparaison avec les études publiées.**
+
+- *Hockey Graphs* (« The State of Goalie Pulling in the NHL », 2020) mesure
+  qu'une équipe à 6 contre 5, gardien retiré, marque **≈ 6,5 buts par
+  60 minutes**. Rapporté à la cadence moyenne d'une équipe dans nos données
+  (2,78 buts par 60 min, `leagueLambda`), cela fait **×2,3**. Notre case
+  « menée d'un but, 59-60' » vaut ×2,61, et elle mélange les secondes avec et
+  sans gardien : l'ordre de grandeur concorde. La même étude trouve qu'une
+  équipe menée d'un but qui retire son gardien égalise dans **≈ 15 %** des
+  matchs. Notre exemple ci-dessous donne 12,1 % pour la seule dernière minute,
+  et le retrait commence souvent plus tôt (×1,41 dès 58-59').
+- *Asness & Brown* (« Pulling the Goalie: Hockey and Investment
+  Implications », résumé par la Chicago Booth Review) concluent que retirer le
+  gardien **multiplie environ par quatre** les chances de l'adversaire de
+  marquer et **ne fait guère que doubler** celles de l'équipe qui le retire.
+  Notre table montre la même asymétrie : ×7,35 pour l'équipe qui mène contre
+  ×2,61 pour l'équipe menée dans la dernière minute.
+- *Hockey Graphs* note aussi que les entraîneurs retirent leur gardien
+  **≈ 30 secondes plus tôt** qu'il y a sept saisons quand ils sont menés d'un
+  but. C'est cohérent avec la dérive mesurée au §10.3, qui apparaît chez nous
+  surtout à deux buts d'écart.
+
+Nos multiplicateurs sont donc en accord avec ce qui est publié, sans avoir été
+ajustés sur ces études.
+
+**Exemple.** Deux équipes à λ = 3,0, l'une mène 3–2 à une minute de la fin.
+À cadence normale, chacune attend 3,0 × 0,33 / 20 = 0,0495 but dans la
+dernière minute, soit 4,8 % de marquer. Avec les effets mesurés : l'équipe
+menée attend 0,0495 × 2,61 = 0,129 but (**12,1 %** d'égaliser), l'équipe qui
+mène 0,0495 × 7,35 = 0,364 but (**30,5 %** de marquer dans le filet désert).
+Le « plus de 5,5 » (au moins un but de plus, d'un côté ou de l'autre) passe
+ainsi de 9,4 % à cadence fixe à **38,9 %** — et c'est exactement sur ce type de
+marché que le direct gagne le plus (§10.6).
+
+**Biais connu : mesuré, et petit.** Une équipe plus forte que son λ
+d'avant-match mène plus souvent ; mesurée avec ce λ, elle gonfle un peu m(mène)
+et dégonfle m(menée). Le corriger avec un λ « mis à jour » par les buts déjà
+marqués ne marche pas : ces buts mélangent la force réelle et les effets de
+score qu'on cherche justement à mesurer. On le chiffre donc par **simulation**,
+là où la vérité est connue (`live_effects_bias.py`) :
+
+1. les 12 586 matchs d'entraînement sont rejoués 4 fois chacun, avec leurs
+   vrais λ d'avant-match, la table servie comme **vraie** table m et le même
+   pas de 10 s que le moteur ;
+2. chaque équipe reçoit une **force cachée** u (loi gamma de moyenne 1,
+   d'écart type σ) : sa vraie cadence est λ × u, mais l'estimateur ne voit que
+   λ ;
+3. m est ré-estimé exactement comme dans `calibrate_live.py`, et comparé à
+   l'estimation sans force cachée (σ = 0). Trois graines par valeur de σ.
+
+**L'estimateur est juste.** Sans force cachée, il retrouve la table d'entrée à
+0,4 % près en médiane et 1,4 % au pire, sur les cases de plus de 1 000 buts.
+
+**Le biais, selon la force cachée :**
+
+| Case | σ = 0,15 | σ = 0,30 |
+|---|---:|---:|
+| Mène de 1, 59-60' | ×1,002 | ×0,995 |
+| Menée de 1, 59-60' | ×0,966 | ×0,953 |
+| Égalité, 59-60' | ×1,013 | ×0,936 |
+| Mène de 2, 58-59' | ×1,018 | ×1,064 |
+| Menée de 1, 58-59' | ×0,948 | ×0,953 |
+| Mène de 1, 1re | ×1,006 | ×1,047 |
+| Menée de 1, 1re | ×0,992 | ×0,965 |
+| **Moyenne pondérée, équipe qui mène (+1, +2)** | **×1,010** | **×1,044** |
+| **Moyenne pondérée, équipe menée (−1, −2)** | **×0,987** | **×0,945** |
+
+Le sens est bien celui attendu (mène gonflé, menée dégonflé). Avec une force
+cachée d'écart type 15 %, le biais reste autour de **±1 %**. Il faut supposer
+30 % pour atteindre ±5 %.
+
+**Quelle force cachée est plausible ?** La dispersion des buts réglementaires
+autour de λ, (E[(G − μ)²] − E[μ]) / E[μ²], vaut **−0,018** sur les vrais
+matchs, contre −0,004 en simulation sans force cachée, +0,016 avec σ = 0,15 et
++0,078 avec σ = 0,30. Les vrais matchs sont donc **moins** dispersés que même
+la simulation sans force cachée : aucune force cachée n'est détectable. Le
+hockey est connu pour avoir des buts légèrement sous-dispersés, ce qui peut
+masquer une petite hétérogénéité, mais σ = 0,30 est clairement exclu. Le biais
+réel de la table servie est donc de l'ordre de **1 % ou moins**, bien
+en dessous de l'incertitude statistique des cases (§10.3) et de leur variation
+d'une saison à l'autre. Aucune correction n'est nécessaire.
+
+**D'où vient la sous-dispersion ?** (`live_dispersion.py`). Rapport
+Var(G − μ) / E[μ] des buts d'une équipe autour de son λ (1 = Poisson), observé
+et simulé sans force cachée avec la table servie :
+
+| Période | Observé | Simulé (table m) |
+|---|---:|---:|
+| 1re période | 0,958 | 0,982 |
+| 2e période | 0,952 | 0,977 |
+| 3e, 40-57' | 0,970 | 0,993 |
+| 3e, 57-60' | 0,939 | 1,036 |
+| 60 min, par équipe | 0,950 | 0,989 |
+| 60 min, total des deux équipes | 0,919 | 0,986 |
+
+| Situation du but | Part des buts | Rapport | Corrélation domicile / visiteur |
+|---|---:|---:|---:|
+| Égalité numérique (EV) | 69,8 % | 0,965 | +0,02 |
+| Avantage numérique (PP) | 22,7 % | **0,916** | +0,08 |
+| Infériorité numérique (SH) | 2,5 % | 1,005 | +0,01 |
+| Filet désert (EN) | 5,0 % | 0,986 | **−0,14** |
+
+1. **Ce n'est pas une erreur de λ.** Toute erreur sur λ, de niveau ou de
+   partage entre les équipes, AJOUTE de la variance et pousse le rapport
+   au-dessus de 1. Le déficit vient du déroulement du match lui-même.
+2. **Il est présent toute la partie**, ≈ 2,5 points sous la simulation dans
+   chaque période : ce n'est pas un effet de score. C'est l'**avantage
+   numérique**, la catégorie la plus sous-dispersée (0,916) : une pénalité
+   mineure s'arrête au premier but, et les pénalités s'alternent (62,8 % de
+   pénalités de compensation, §10.7). Les buts en avantage sont donc plus
+   réguliers qu'une Poisson. La corrélation positive entre les deux équipes
+   (+0,08) est la trace de cette alternance.
+3. **En fin de match, la table exagère les buts répétés.** Simulée, la table
+   prédit une sur-dispersion dans les trois dernières minutes (1,036) : l'équipe
+   qui mène peut y marquer plusieurs fois dans le filet désert à ×7. En réalité
+   (0,939), un but dans le filet désert met le plus souvent fin à la poussée,
+   et une seule équipe marque dans cette situation (corrélation −0,14).
+4. Les buts à égalité numérique restent un peu sous-dispersés (0,965) : le
+   reste n'est pas expliqué (effets de score plus fins que la table).
+
+Conséquences. La table m n'est pas biaisée par cette sous-dispersion : son
+estimateur (buts / exposition) ne suppose pas de variance Poisson, et le
+bootstrap par match (§10.3) non plus. Le moteur, lui, tire des buts Poisson : il
+surestime légèrement la variance des buts restants, donc élargit un peu les
+queues (plus de 6,5 buts, −1,5), surtout dans les trois dernières minutes ; le
+rejeu (§10.6) montre que le gain des effets de score reste net malgré cela.
+Enfin, le test de force cachée ci-dessus est prudent : même les buts à égalité
+numérique seuls (0,965) ne montrent aucune sur-dispersion.
+
+**Niveau contre forme.** m est relatif : sur l'entraînement, buts observés /
+exposition = 70 280 / 70 033 (1,0035). Le niveau absolu des buts reste
+l'affaire de λ et du recalage de niveau (§4.3 bis) ; m ne fait que répartir les
+buts selon l'état du match.
+
+<!-- À DÉVELOPPER
+  - Mesurer au rejeu l'effet de la sous-dispersion sur les queues en fin de match (plus de 6,5, −1,5) ; piste : modéliser l'avantage numérique qui s'arrête au premier but (lien avec §10.7).
+-->
+
+### 10.5 Le moteur exact (`evolveLiveScore`)
+
+Plutôt que de simuler des milliers de fins de match, le moteur calcule la loi
+**exacte** des buts restants par programmation dynamique sur le score :
+
+- **Pas de 10 secondes**, de l'instant présent jusqu'à 60:00 ; les bornes des
+  tranches et des périodes en sont des multiples.
+- À chaque pas, chaque équipe marque 0, 1 ou 2 buts (Poisson de moyenne
+  λ × w × m sur le pas, renormalisée) ; seuls 3 buts d'une même équipe en
+  10 secondes sont tronqués (~10⁻⁶).
+- L'écart est figé pendant le pas ; m ne dépend que de l'écart borné à ±3,
+  donc seulement 7 couples de lois sont calculés par pas.
+- Sortie : `rem[i][j]` = P(le domicile marque encore i buts, le visiteur j).
+
+Le moteur sert aussi aux **props joueur en direct** (`boxscoreLiveInfo` →
+`teamGoalsFactor`) : la part restante de la production offensive d'une équipe
+n'est plus le temps restant mais ses **buts restants attendus / λ**, calculés
+par le même moteur avec λ moyen de la ligue (`leagueLambda` = 2,7822 buts par
+équipe). Une équipe menée en fin de match a plus de chances que son joueur
+marque qu'une équipe à égalité. Ce facteur s'applique aux buts, passes et
+points ; les tirs, mises en échec, tirs bloqués et arrêts gardent la part de
+temps restante. Les seuils « 1+, 2+… » se lisent ensuite avec la binomiale
+négative sur la part restante (`nbAtLeastLive` : moyenne λ·f, dispersion k·f,
+qui redonne exactement la loi d'avant-match à f = 1).
+
+**Pourquoi un calcul exact plutôt qu'une simulation ?** Comparaison du moteur
+et d'une simulation Monte-Carlo des mêmes fins de match (mêmes cadences, même
+pas de 10 s), match à λ 3,2 / 2,9, sur quatre probabilités : domicile mène à
+60 min, nul à 60 min, plus de 5,5 buts, domicile −1,5. L'erreur est l'écart
+maximal au calcul exact, en moyenne sur 5 graines.
+
+| Moment | Moteur exact | Monte-Carlo 1 000 matchs | 10 000 matchs | 100 000 matchs |
+|---|---:|---:|---:|---:|
+| Mise au jeu | **3,5 ms**, erreur 0 | 31 ms, ±2,05 pt | 292 ms, ±0,55 pt | 3 486 ms, ±0,17 pt |
+| 5 min restantes | **0,26 ms**, erreur 0 | 2,6 ms, ±1,52 pt | 30 ms, ±0,78 pt | 285 ms, ±0,25 pt |
+
+Pour descendre sous le quart de point, la simulation coûte **1 000 fois** le
+temps du moteur à la mise au jeu, et ses chiffres changeraient à chaque
+recalcul (un bruit visible sur des tuiles rafraîchies toutes les 30 s). Le
+moteur donne le chiffre exact, identique d'un appel à l'autre, et cohérent
+entre toutes les tuiles.
+
+**L'effet du pas.** Le moteur fige l'écart au score pendant chaque pas. Une
+version du moteur avec un pas réglable (identique au code servi à 10 s, écart
+maximal 0) est comparée à une référence au pas de 1 s, sur les cinq moments du
+rejeu et les quatre probabilités ci-dessus :
+
+| Pas | Écart maximal à la référence 1 s | Où | Temps total des 5 moments |
+|---|---:|---|---:|
+| 5 s | 0,13 pt | Nul à 60 min, 1 min restante | 15,1 ms |
+| **10 s (servi)** | **0,30 pt** | Nul à 60 min, 1 min restante | **6,8 ms** |
+| 30 s | 0,92 pt | Nul à 60 min, 1 min restante | 3,2 ms |
+| 60 s | 1,75 pt | Nul à 60 min, 1 min restante | 1,1 ms |
+| 1 s (référence) | — | — | 67,6 ms |
+
+L'erreur se concentre là où les multiplicateurs sont les plus forts (dernière
+minute, où un but change immédiatement la cadence des deux équipes). À 10 s,
+elle reste sous le tiers de point, en dessous de l'arrondi affiché sur les
+tuiles, pour un temps 10 fois plus court que la référence. Passer à 5 s
+diviserait l'erreur par deux pour un coût doublé, sans effet visible.
+
+Reproduire : `scripts/bench-live-engine.ts` (le même banc d'essai qu'au §10.2).
+
+### 10.6 La validation : rejeu de 3 903 matchs (`live_report.md`)
+
+La décision de mise en service ne repose pas sur la vraisemblance des buts mais
+sur ce que voit l'utilisateur : **les probabilités des marchés**. Le script
+`server/scripts/replay-live.ts` rejoue chaque match des trois saisons de test
+avec le **code de production** (`liveCtxFromDetail` + `computeLiveModelGroups`),
+à partir des λ d'avant-match hors échantillon, à cinq instants : mise au jeu,
+fin de la 1re, fin de la 2e, 5 minutes et 2 minutes restantes. Chaque instant
+pose 10 questions (moneyline, victoire en 60 min de chaque équipe,
+prolongation, totaux 5,5 et 6,5, puck line −1,5 de chaque équipe, buts de chaque
+équipe > 2,5), soit **50 cases**. Phase 1 (cadence fixe) et phase 2 (effets
+mesurés) sont comparées par match, avec une erreur type **appariée** (±1,96 e.t.).
+
+**Synthèse :** log-loss cumulée **78 806,0 → 77 080,9 (−2,19 %)** ;
+**23 cases significativement meilleures, 2 pires**, sur 50.
+
+Là où le gain se concentre (toutes saisons de test, log-loss) :
+
+| Instant | Question | Phase 1 | Phase 2 | Variation |
+|---|---|---:|---:|---:|
+| 2 min restantes | Visiteur −1,5 | 0,2133 | 0,1528 | **−28,4 %** |
+| 2 min restantes | Domicile −1,5 | 0,2266 | 0,1646 | **−27,4 %** |
+| 2 min restantes | Total > 5,5 | 0,1816 | 0,1439 | **−20,8 %** |
+| 2 min restantes | Total > 6,5 | 0,1577 | 0,1300 | −17,6 % |
+| 2 min restantes | Buts domicile > 2,5 | 0,1816 | 0,1576 | −13,2 % |
+| 5 min restantes | Visiteur −1,5 | 0,2431 | 0,2076 | −14,6 % |
+| 5 min restantes | Domicile −1,5 | 0,2562 | 0,2226 | −13,1 % |
+| 5 min restantes | Total > 6,5 | 0,2344 | 0,2085 | −11,0 % |
+| Fin de la 2e | Visiteur −1,5 | 0,3709 | 0,3576 | −3,6 % |
+| Fin de la 2e | Domicile −1,5 | 0,3839 | 0,3751 | −2,3 % |
+
+**Lecture :**
+
+- Les gains suivent exactement la table m : ils explosent dans les cinq
+  dernières minutes, sur les marchés qui dépendent d'**un but de plus** (puck
+  line, totaux, buts d'une équipe), c'est-à-dire ceux que le filet désert
+  décide.
+- La **puck line −1,5** gagne dès la fin de la 1re (−0,0056 et −0,0081 de
+  log-loss, significatifs) : l'équipe qui mène de 1 en fin de match a plus de
+  chances de finir à +2 que ne le dit une cadence fixe.
+- Le **moneyline** ne bouge presque pas (0,2358 → 0,2353 à 2 minutes, non
+  significatif). C'est attendu : le gardien retiré augmente à la fois
+  l'égalisation et le but dans le filet désert, deux effets qui se compensent
+  en grande partie sur le vainqueur.
+- À la mise au jeu, moneyline, victoire en 60 min et prolongation sont
+  **identiques** dans les deux phases : c'est le calage (§10.2, étape 3).
+- **Les deux cases pires** sont les totaux 5,5 et 6,5 à la mise au jeu
+  (+0,0009 et +0,0016 de log-loss) : un coût minime, à comparer à −0,021 et
+  −0,026 cinq minutes avant la fin.
+- **Stabilité** : le même profil se retrouve sur chacune des trois saisons
+  (2023-24, 2024-25, 2025-26), détaillées dans le rapport.
+
+Décision : **effets de score activés le 2026-10-01** (`LIVE_EFFECTS` dans
+`nhlPredictions.ts` ; `null` revient à la phase 1 sans redéployer de modèle).
+
+<!-- À DÉVELOPPER
+  - Courbes de fiabilité en direct (prédit vs observé par tranche de probabilité), pas seulement la log-loss.
+  - Rejouer à plus d'instants (chaque minute de la 3e) pour voir où le gain apparaît vraiment.
+  - Comparer aux cotes EN DIRECT des livres (in-play) : le vrai test de valeur du mode direct, absent du rejeu.
+  - Journaliser les prédictions live servies en production et les noter sur les matchs réels (suivi continu, pas seulement le rejeu historique).
+-->
+
+### 10.7 Piste mesurée et écartée : l'avantage numérique en cours
+
+Le même cadre a servi à tester une troisième couche : un facteur g selon la
+**situation numérique en cours** (`calibrate_live_pp.py`, buts 2018-2022 avec
+le nombre de patineurs, `situationCode` de la feuille de match en direct).
+
+| Situation (vue de l'équipe) | 5 c. 5 | 4 c. 4 / 3 c. 3 | 5 c. 4 | 5 c. 3 | 4 c. 5 | 3 c. 5 |
+|---|---:|---:|---:|---:|---:|---:|
+| Facteur g (moyenne pondérée par le temps = 1) | 0,937 | 0,884 | **2,185** | 5,105 | **0,353** | 0,100 |
+| Part du temps de jeu | 80,7 % | 1,5 % | 8,7 % | 0,2 % | 8,7 % | 0,2 % |
+
+Les facteurs sont stables d'une saison à l'autre (5 c. 4 entre ×2,09 et ×2,25
+sur 2018-2022) et améliorent nettement la vraisemblance des **buts** sur le test
+(+682, +686, +707 points en 2023-24, 2024-25, 2025-26). Pourtant, le rejeu des
+**marchés** (`replay-live-pp.ts`, 3 890 matchs, `live_pp_report.md`) ne montre
+aucun gain : log-loss **+0,07 %** (Δ +23,2 ± 47,8), et significativement **pire
+au début du premier avantage** (+35,5 ± 32,0). La cause identifiée : les
+**pénalités de compensation** — 62,8 % des pénalités suivantes sont pour
+l'équipe en avantage. Le facteur g voit l'avantage en cours mais ignore la
+pénalité qui risque de le rééquilibrer, et surestime donc l'équipe en avantage.
+
+Décision : **non activé** (2026-10-13). La clé `pp` est absente de
+`liveEffects.json` et le code correspondant reste inerte. La piste à suivre
+n'est pas d'activer g « seulement en fin de match », mais de modéliser les
+pénalités **futures**.
+
+<!-- À DÉVELOPPER
+  - Modéliser les pénalités FUTURES (fréquence, compensation) avant de retenter le facteur g.
+  - Tester g seulement sur les avantages de 5 minutes (majeures), où il n'y a pas de fin au premier but.
+-->
+
+### 10.8 Limites assumées
+
+- **Le modèle reste d'avant-match** : rien de ce qui se passe sur la glace en
+  dehors du score et de l'horloge (tirs, xG, changement de gardien, blessure en
+  cours de match) ne modifie λ.
+- **Une seule table m pour toutes les équipes** : une équipe qui défend
+  particulièrement bien une avance n'a pas sa propre table.
+- **Saison régulière** uniquement : les séries éliminatoires (prolongation sans
+  fusillade, jeu plus fermé) ne sont pas calibrées.
+- En prolongation, le vainqueur est tiré directement à `p_ot_dom` ; le moteur
+  ne tourne qu'en temps réglementaire.
+
+<!-- À DÉVELOPPER
+  - Mettre à jour λ en cours de match avec l'information live (tirs, xG, changement de gardien) : quel gain par rapport au λ figé ?
+  - Tables m par équipe ou par style (modèle hiérarchique rétréci vers la table de ligue).
+  - Calibrer les séries éliminatoires séparément (prolongation sans fusillade, jeu plus fermé).
+-->
+
+### 10.9 Reproduire la mesure
+
+| Étape | Commande | Sortie |
+|---|---|---|
+| Buts horodatés | `python fetch_live_goals.py` (dans `ml/python/`) | `data/live_goals.csv`, `data/live_games.csv` |
+| Avant-match hors échantillon | `python live_pregame.py` | `data/live_pregame.csv` |
+| Calibration | `python calibrate_live.py` (`--last-train 2022` par défaut) | `server/src/services/prediction/liveEffects.json` (servi) + `models/live/calibrate_live_report.json` (CV, test, comptes O et E par case) |
+| Rejeu | `npx ts-node --transpile-only scripts/replay-live.ts 2023 2024 2025` (dans `server/`) | `models/live/live_report.md` / `.json` |
+| Contrôles de la calibration | `python live_calibration_checks.py` | `models/live/calibrate_live_checks.json`, `figures/live_cv_shrink.png`, `figures/live_m_heatmap.png` |
+| Biais de la calibration | `python live_effects_bias.py` (~10 min, reprend où il s'est arrêté) | `models/live/live_effects_bias.json` |
+| Coût et exactitude du moteur | `npx ts-node --transpile-only scripts/bench-live-engine.ts` (dans `server/`) | Sortie console |
+| Coût d'une soirée en direct (B15) | `node ../loadtest/bench/run.js b15-direct` (dans `server/`, ~6 min) | Sortie console |
+| Coût du retard d'affichage | `npx ts-node --transpile-only scripts/replay-live-staleness.ts 2023 2024 2025` (dans `server/`, ~20 min) | `models/live/live_staleness_report.json` |
+| Table récente contre table servie | `python live_window_compare.py`, puis `scripts/replay-live-window.ts 2023 2024 2025` | `models/live/live_window_report.json`, `live_window_replay.md` |
+| Sous-dispersion des buts | `python live_dispersion.py` | `models/live/live_dispersion_report.json` |
+| Avantage numérique (mesure) | `python fetch_live_pbp.py && python calibrate_live_pp.py`, puis `scripts/replay-live-pp.ts` | `models/live/calibrate_live_pp_report.json`, `live_pp_report.md` |
+
+`liveEffects.json` ne s'édite jamais à la main : toute nouvelle calibration doit
+repasser par le rejeu avant d'être committée.
+
+---
+
+<!-- À DÉVELOPPER
+  - Lien avec l'application : capture d'écran d'une page match en direct avec les tuiles qui évoluent.
+  - Fréquence de recalibration recommandée (chaque été ? après un changement de règles ?) et procédure de comparaison avec la table en service.
+-->
+
+## 11. Exemple complet chiffré
 
 Match fictif : le domicile a λ_dom = **3,30** buts attendus en 60 min, le
 visiteur λ_ext = **2,70** (chiffres calculés avec les vrais τ et p_ot du rapport —
@@ -1046,7 +1846,7 @@ période plus de 1,5 buts 63,8 % au lieu de 58,9 % avec la part fixe).
 
 ---
 
-## 11. Carte des fichiers
+## 12. Carte des fichiers
 
 ### Python (`ml/python/`)
 
@@ -1065,7 +1865,12 @@ période plus de 1,5 buts 63,8 % au lieu de 58,9 % avec la part fixe).
 | `ml_service.py` | Service FastAPI (toutes les routes de prédiction). |
 | `backtest.py` | Backtest sur le test + `--reliability` (calibration par tranches). |
 | `backtest_walkforward.py` | Backtests saison par saison : ROI, CLV, marchés dérivés, incertitude, sélection de features, correction, écart au marché… |
-| `calibrate_live.py`, `fetch_live_goals.py`, `live_pregame.py` | Effets de score pour le direct. |
+| `calibrate_live.py`, `fetch_live_goals.py`, `live_pregame.py` | Effets de score pour le direct (§10) → `liveEffects.json`. |
+| `live_calibration_checks.py` | Contrôles de la calibration du direct (§10.3-10.4) : courbe de validation croisée, intervalles de confiance bootstrap (par match et à deux niveaux), stabilité par saison, carte de chaleur. |
+| `live_effects_bias.py` | Taille du biais « l'équipe forte mène plus souvent » par simulation (§10.4) → `models/live/live_effects_bias.json`. |
+| `live_window_compare.py` | Table des effets de score pondérée vers les saisons récentes contre table servie (§10.3). |
+| `live_dispersion.py` | Sous-dispersion des buts par période et par situation numérique (§10.4). |
+| `calibrate_live_pp.py`, `fetch_live_pbp.py` | Facteurs d'avantage numérique en cours (§10.7, mesurés, non servis). |
 | `measure_level.py` | Mesure du recalage de niveau des buts (§4.3 bis) → `level_report.json`. |
 | `measure_*.py`, `compare_*.py`, `probe_odds_books.py` | Études ponctuelles (face-à-face, retour de blessure, Corsi/Fenwick, sources de cotes). |
 | `content_insights*.py` | Statistiques « contenu » pour les réseaux sociaux — sans lien avec les prédictions. |
@@ -1087,7 +1892,8 @@ période plus de 1,5 buts 63,8 % au lieu de 58,9 % avec la part fixe).
 | `player_vs_report.json` | Mesure du face-à-face joueur vs adversaire, stat par stat (verdict `keep`). |
 | `inference_state.json` | État actuel des équipes, gardiens, alignements, étoiles. |
 | `elo_ratings.json` | Notes ELO actuelles. |
-| `*_report.json`, `live/` | Rapports de mesure. |
+| `*_report.json` | Rapports de mesure. |
+| `live/` | Mode direct (§10) : calibration des effets de score (`calibrate_live_report.json`), rejeux (`live_report.md`, `live_pp_report.md`), avantage numérique. |
 
 ### Serveur (`server/src/services/`)
 

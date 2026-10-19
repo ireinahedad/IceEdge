@@ -1,6 +1,6 @@
 # Bancs instrumentés — ce que k6 ne peut pas voir
 
-Quatorze bancs qui répondent chacun à **une** question de coût, sur le **vrai code**
+Quinze bancs qui répondent chacun à **une** question de coût, sur le **vrai code**
 du serveur, sans base, sans réseau et sans quota consommé.
 
 Ils ne remplacent pas `loadtest/s1-landing.js` : k6 mesure ce que voit le
@@ -18,7 +18,7 @@ l'extérieur — et c'est ce qui décide de la facture.
 Depuis `server/` (c'est là que sont les dépendances) :
 
 ```bash
-node ../loadtest/bench/run.js all        # les quatorze, ~12 min
+node ../loadtest/bench/run.js all        # les quinze, ~17 min
 node ../loadtest/bench/run.js smoke      # vérification à blanc, ~5 s
 node ../loadtest/bench/run.js b3-dedup   # un banc précis
 ```
@@ -53,6 +53,8 @@ deux exécutions).
 | `BENCH_ENDURANCE_SECONDS` | 180 (120 via `all`) | durée de B13 |
 | `BENCH_SLIP_LEVELS` | `200,1000` | nombre de tickets en attente, pour B14 |
 | `BENCH_GAMES_FINAL` | 10 | matchs sur lesquels portent les tickets de B14 |
+| `BENCH_VIEWER_LEVELS` | `20,200,1000` | paliers de spectateurs de B15 |
+| `BENCH_LIVE_GAMES` | 16 | matchs en cours de B15 |
 | `REDIS_URL` | absente | **lue par le serveur, pas par le banc** : posée, elle fait basculer B12 sur l'adaptateur Redis — voir plus bas |
 
 ---
@@ -71,6 +73,7 @@ deux exécutions).
 | **B10** | Chemins authentifiés — N+1 sur les listings, coût d'une ouverture de salon, cache `isPro` | SQL constant ; `isPro` ~0 lecture |
 | **B11** | Socket.io : arrivée simultanée dans un salon (S4) — amplification et coût Neon | fan-out linéaire ; ~0 requête par arrivée |
 | **B14** | Soirée de règlement (S6) — la file se vide-t-elle, et à quel coût ? | `exhausted` vrai ; appels NHL = nb de matchs |
+| **B15** | Soirée en direct — le coût du direct suit-il le nombre de spectateurs ? (`ml/EXPLICATION_ML.md` §10.2) | ≤ 2 recalculs par match et par minute, appels NHL et ML indépendants de V |
 | **B13** | Endurance / fuite mémoire (S5) — le RSS atteint-il un plateau ? | plateau, dans le bruit du relevé |
 | **B12** | Deux instances : un message traverse-t-il ? (ligne D) | sans `REDIS_URL` : **non** · avec : **oui** |
 | **B7** | **Les six premiers savent-ils échouer ?** | oui |

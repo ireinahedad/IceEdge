@@ -1,0 +1,158 @@
+{
+  "generatedAt": "2026-10-19",
+  "games": 3903,
+  "stale": [
+    0,
+    10,
+    20,
+    30,
+    45,
+    60
+  ],
+  "windows": {
+    "mid": {
+      "label": "Reste du match (10e, 30e, 50e minute)",
+      "n": 11709,
+      "rows": [
+        {
+          "stale": 0,
+          "logLoss": 0.45968,
+          "delta": 0,
+          "se": 0,
+          "deltaPct": 0
+        },
+        {
+          "stale": 10,
+          "logLoss": 0.46103,
+          "delta": 0.00135,
+          "se": 0.00025,
+          "deltaPct": 0.29
+        },
+        {
+          "stale": 20,
+          "logLoss": 0.46223,
+          "delta": 0.00255,
+          "se": 0.00035,
+          "deltaPct": 0.56
+        },
+        {
+          "stale": 30,
+          "logLoss": 0.46333,
+          "delta": 0.00365,
+          "se": 0.00042,
+          "deltaPct": 0.79
+        },
+        {
+          "stale": 45,
+          "logLoss": 0.46548,
+          "delta": 0.0058,
+          "se": 0.00054,
+          "deltaPct": 1.26
+        },
+        {
+          "stale": 60,
+          "logLoss": 0.46704,
+          "delta": 0.00736,
+          "se": 0.00062,
+          "deltaPct": 1.6
+        }
+      ]
+    },
+    "last5": {
+      "label": "58e-55e minute (5 à 2 min restantes)",
+      "n": 11709,
+      "rows": [
+        {
+          "stale": 0,
+          "logLoss": 0.20798,
+          "delta": 0,
+          "se": 0,
+          "deltaPct": 0
+        },
+        {
+          "stale": 10,
+          "logLoss": 0.21135,
+          "delta": 0.00337,
+          "se": 0.00044,
+          "deltaPct": 1.62
+        },
+        {
+          "stale": 20,
+          "logLoss": 0.21474,
+          "delta": 0.00676,
+          "se": 0.00059,
+          "deltaPct": 3.25
+        },
+        {
+          "stale": 30,
+          "logLoss": 0.21872,
+          "delta": 0.01075,
+          "se": 0.00073,
+          "deltaPct": 5.17
+        },
+        {
+          "stale": 45,
+          "logLoss": 0.22359,
+          "delta": 0.01561,
+          "se": 0.00089,
+          "deltaPct": 7.5
+        },
+        {
+          "stale": 60,
+          "logLoss": 0.22684,
+          "delta": 0.01887,
+          "se": 0.00099,
+          "deltaPct": 9.07
+        }
+      ]
+    },
+    "last2": {
+      "label": "2 dernières minutes",
+      "n": 23418,
+      "rows": [
+        {
+          "stale": 0,
+          "logLoss": 0.1227,
+          "delta": 0,
+          "se": 0,
+          "deltaPct": 0
+        },
+        {
+          "stale": 10,
+          "logLoss": 0.13134,
+          "delta": 0.00863,
+          "se": 0.00049,
+          "deltaPct": 7.04
+        },
+        {
+          "stale": 20,
+          "logLoss": 0.13906,
+          "delta": 0.01636,
+          "se": 0.00065,
+          "deltaPct": 13.33
+        },
+        {
+          "stale": 30,
+          "logLoss": 0.14633,
+          "delta": 0.02362,
+          "se": 0.00077,
+          "deltaPct": 19.25
+        },
+        {
+          "stale": 45,
+          "logLoss": 0.1559,
+          "delta": 0.03319,
+          "se": 0.00089,
+          "deltaPct": 27.05
+        },
+        {
+          "stale": 60,
+          "logLoss": 0.16444,
+          "delta": 0.04174,
+          "se": 0.00098,
+          "deltaPct": 34.02
+        }
+      ]
+    }
+  }
+}

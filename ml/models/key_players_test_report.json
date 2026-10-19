@@ -1,0 +1,210 @@
+{
+  "criterion": {
+    "fixed": "2026-10-18, avant le run",
+    "primary": "log-loss moneyline de la chaîne servie (score → couche C walk-forward), B − A, apparié par match",
+    "retirer_if": "z <= -2.64 ET B meilleur sur >= 70% des saisons ET puck line z < +2",
+    "pire_if": "z >= +2 sur la moneyline servie OU sur la puck line",
+    "else": "NON TRANCHABLE -> garder (statu quo)",
+    "threshold_reason": "Bonferroni 6 familles (famille choisie par l'ablation sur les mêmes saisons)",
+    "power_note": "se ≈ 0,00025 ; si effet vrai −0,00028, P(z <= −2,64) ≈ 6 % ; effet détectable à 80 % ≈ 0,0009"
+  },
+  "seasons_served": [
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "seasons_raw": [
+    2012,
+    2013,
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "baseline_served_ml": 0.663768,
+  "B_vs_A_served_moneyline": {
+    "n": 13502,
+    "delta": -0.000175,
+    "se": 0.000152,
+    "z": -1.15,
+    "seasons_better": [
+      2015,
+      2017,
+      2019,
+      2020,
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "share_better": 0.727
+  },
+  "C_vs_A_served_moneyline_displayed_only": {
+    "n": 13502,
+    "delta": -1e-05,
+    "se": 0.000247,
+    "z": -0.04,
+    "seasons_better": [
+      2015,
+      2017,
+      2018,
+      2022,
+      2023,
+      2025
+    ],
+    "share_better": 0.545
+  },
+  "B_vs_A_raw_score_model": {
+    "ml": {
+      "n": 16682,
+      "delta": -0.000279,
+      "se": 0.000253,
+      "z": -1.1,
+      "seasons_better": [
+        2012,
+        2013,
+        2015,
+        2017,
+        2019,
+        2020,
+        2022,
+        2023,
+        2025
+      ],
+      "share_better": 0.643
+    },
+    "pl": {
+      "n": 16682,
+      "delta": -0.000275,
+      "se": 0.000188,
+      "z": -1.46,
+      "seasons_better": [
+        2012,
+        2013,
+        2015,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2025
+      ],
+      "share_better": 0.786
+    },
+    "dev": {
+      "n": 16682,
+      "delta": -0.000362,
+      "se": 0.000413,
+      "z": -0.88,
+      "seasons_better": [
+        2012,
+        2015,
+        2017,
+        2018,
+        2020,
+        2021,
+        2022,
+        2025
+      ],
+      "share_better": 0.571
+    }
+  },
+  "by_season": [
+    {
+      "season": 2015,
+      "n": 1230,
+      "ll_served_A": 0.67525,
+      "ll_served_B": 0.67459,
+      "ll_served_C": 0.67496
+    },
+    {
+      "season": 2016,
+      "n": 1230,
+      "ll_served_A": 0.66667,
+      "ll_served_B": 0.66747,
+      "ll_served_C": 0.66777
+    },
+    {
+      "season": 2017,
+      "n": 1266,
+      "ll_served_A": 0.66709,
+      "ll_served_B": 0.6665,
+      "ll_served_C": 0.66657
+    },
+    {
+      "season": 2018,
+      "n": 1271,
+      "ll_served_A": 0.67092,
+      "ll_served_B": 0.67126,
+      "ll_served_C": 0.67087
+    },
+    {
+      "season": 2019,
+      "n": 1082,
+      "ll_served_A": 0.68035,
+      "ll_served_B": 0.67967,
+      "ll_served_C": 0.68036
+    },
+    {
+      "season": 2020,
+      "n": 868,
+      "ll_served_A": 0.65017,
+      "ll_served_B": 0.64933,
+      "ll_served_C": 0.65031
+    },
+    {
+      "season": 2021,
+      "n": 1307,
+      "ll_served_A": 0.63737,
+      "ll_served_B": 0.63746,
+      "ll_served_C": 0.63856
+    },
+    {
+      "season": 2022,
+      "n": 1312,
+      "ll_served_A": 0.65557,
+      "ll_served_B": 0.65551,
+      "ll_served_C": 0.65481
+    },
+    {
+      "season": 2023,
+      "n": 1312,
+      "ll_served_A": 0.65556,
+      "ll_served_B": 0.65508,
+      "ll_served_C": 0.65493
+    },
+    {
+      "season": 2024,
+      "n": 1312,
+      "ll_served_A": 0.65819,
+      "ll_served_B": 0.65819,
+      "ll_served_C": 0.65847
+    },
+    {
+      "season": 2025,
+      "n": 1312,
+      "ll_served_A": 0.68375,
+      "ll_served_B": 0.68363,
+      "ll_served_C": 0.68327
+    }
+  ],
+  "verdict": "NON TRANCHABLE (on garde)"
+}

@@ -175,6 +175,42 @@ export function benchGameTeams(i: number): [string, string] {
 let gamesFinal = false;
 export function setGamesFinal(v: boolean): void { gamesFinal = v; }
 
+/**
+ * Matchs EN DIRECT (B15). Chaque match `i` de la soirée de banc est servi en
+ * cours : période, horloge qui tourne avec l'horloge murale, score fixe. C'est
+ * ce qu'il faut pour que `gameMlBundle.applyLive` fasse son vrai travail
+ * (feuille de match, état, calage, moteur) à chaque expiration de cache.
+ */
+let gamesLive = false;
+let liveSince = Date.now();
+export function setGamesLive(v: boolean): void { gamesLive = v; liveSince = Date.now(); }
+
+function liveState(idx: number) {
+  const period = 1 + (idx % 3);
+  const elapsed = Math.floor((Date.now() - liveSince) / 1000);
+  const left = 1199 - ((idx * 97 + elapsed) % 1199);
+  const mmss = `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`;
+  const home = idx % 4, away = (idx + 1) % 3;
+  const goals = [...Array(home).fill({ isHome: true }), ...Array(away).fill({ isHome: false })];
+  return {
+    period, mmss, home, away,
+    scoring: goals.length ? [{ periodDescriptor: { number: 1, periodType: 'REG' }, goals }] : [],
+  };
+}
+
+/** Réponse de `/predict/game/bundle` : un chiffre par marché demandé, et les λ. */
+function mlBundle(body: string) {
+  let markets: Array<{ id: string; market_type?: string }> = [];
+  try { markets = JSON.parse(body)?.markets ?? []; } catch { /* corps illisible : paquet vide */ }
+  const results: Record<string, unknown> = {};
+  for (const m of markets) {
+    results[m.id] = m.market_type === 'game_to_ot'
+      ? { ...mlPrediction(m.id), probability: 23 }
+      : mlPrediction(m.id);
+  }
+  return { results, lambda_home: 3.1, lambda_away: 2.8 };
+}
+
 /** Score final servi par le bouchon : le domicile gagne 4-2. */
 export const BENCH_FINAL_SCORE = { home: 4, away: 2 };
 
@@ -421,8 +457,9 @@ function groupOf(url: string): Group {
   return 'autre';
 }
 
-function bodyFor(url: string): unknown {
+function bodyFor(url: string, body = ''): unknown {
   // — Service ML —
+  if (url.includes('/predict/game/bundle')) return mlBundle(body);
   if (url.includes('/predict/game'))   return mlPrediction(url + 'g');
   if (url.includes('/predict/player')) return mlPrediction(url + 'p');
   if (url.includes('/predict/team'))   return mlPrediction(url + 't');
@@ -485,6 +522,23 @@ function bodyFor(url: string): unknown {
       : [(gamesForDate(todayIso())[0]?.homeTeam?.abbrev ?? 'BOS').toLowerCase(),
          (gamesForDate(todayIso())[0]?.awayTeam?.abbrev ?? 'NYR').toLowerCase()];
     const fini = gamesFinal && deSoiree;
+    if (gamesLive && deSoiree && !fini) {
+      const L = liveState(idx);
+      return {
+        id,
+        gameState: 'LIVE',
+        gameDate: todayIso(),
+        startTimeUTC: new Date(liveSince - 3_600_000).toISOString(),
+        periodDescriptor: { number: L.period, periodType: 'REG' },
+        clock: { timeRemaining: L.mmss, inIntermission: false },
+        regPeriods: 3,
+        homeTeam: { abbrev: dom.toUpperCase(), commonName: { default: FULL_NAME[dom.toUpperCase()] ?? dom.toUpperCase() }, score: L.home },
+        awayTeam: { abbrev: vis.toUpperCase(), commonName: { default: FULL_NAME[vis.toUpperCase()] ?? vis.toUpperCase() }, score: L.away },
+        playerByGameStats: { homeTeam: { forwards: [], defense: [], goalies: [] }, awayTeam: { forwards: [], defense: [], goalies: [] } },
+        summary: { scoring: L.scoring },
+        plays: [],
+      };
+    }
     return {
       id,
       gameState: fini ? 'OFF' : 'FUT',
@@ -549,7 +603,7 @@ export function install(): void {
     const headers = group === 'odds'
       ? { 'x-requests-remaining': '480', 'x-requests-used': '20' }
       : {};
-    return jsonResponse(bodyFor(url), headers);
+    return jsonResponse(bodyFor(url, body), headers);
   };
 }
 

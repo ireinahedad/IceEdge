@@ -180,25 +180,25 @@
   "lecture": "Si l'arrêt précoce garde 1 arbre et que vs_base est nul, les combinaisons de ces facteurs n'apportent rien que la base ne sache déjà."
  },
  "candidates": {
-  "as_of": "2026-10-12T07:01Z",
+  "as_of": "2026-10-19T01:23Z",
   "lone_b2b_vs_market": {
    "avant_inscription": {
-    "n": 2769,
+    "n": 2787,
     "du": "2014-10-09",
-    "au": "2026-04-16",
-    "victoires": 0.4168,
-    "marche": 0.4443,
-    "z_vs_marche": -2.98,
-    "roi_contre_pct": 1.86,
-    "roi_se_pct": 1.72
+    "au": "2026-10-11",
+    "victoires": 0.4166,
+    "marche": 0.4442,
+    "z_vs_marche": -3.0,
+    "roi_contre_pct": 1.84,
+    "roi_se_pct": 1.71
    },
    "depuis_inscription": {
     "n": 0
    },
    "couverture_depuis_inscription": {
-    "matchs_joues": 0,
+    "matchs_joues": 8,
     "avec_cote_valide": 0,
-    "cote_absente": 0,
+    "cote_absente": 8,
     "cote_rejetee_marge": 0
    },
    "verdict": "EN COURS (0/300 matchs avec cote valide)"
@@ -207,6 +207,9 @@
    "note": "suivi manuel (voir pattern_registry.json → rule)"
   },
   "caufield_saturday": {
+   "note": "suivi manuel (voir pattern_registry.json → rule)"
+  },
+  "ref_pp_points": {
    "note": "suivi manuel (voir pattern_registry.json → rule)"
   }
  },

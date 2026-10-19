@@ -1,0 +1,56 @@
+{
+  "generatedAt": "2026-10-19",
+  "games": 12586,
+  "trainSeasons": [
+    2012,
+    2022
+  ],
+  "by_period": {
+    "1re période": {
+      "observed": 0.9575,
+      "simulated_no_hidden_strength": 0.9822
+    },
+    "2e période": {
+      "observed": 0.9516,
+      "simulated_no_hidden_strength": 0.9768
+    },
+    "3e, 40-57'": {
+      "observed": 0.9702,
+      "simulated_no_hidden_strength": 0.9934
+    },
+    "3e, 57-60'": {
+      "observed": 0.9393,
+      "simulated_no_hidden_strength": 1.0357
+    },
+    "60 min, par équipe": {
+      "observed": 0.9497,
+      "simulated_no_hidden_strength": 0.9894
+    },
+    "60 min, total du match": {
+      "observed": 0.9193,
+      "simulated_no_hidden_strength": 0.9856
+    }
+  },
+  "by_strength": {
+    "EV": {
+      "share": 0.698,
+      "ratio": 0.965,
+      "corr_home_away": 0.0217
+    },
+    "PP": {
+      "share": 0.227,
+      "ratio": 0.9157,
+      "corr_home_away": 0.083
+    },
+    "SH": {
+      "share": 0.025,
+      "ratio": 1.0053,
+      "corr_home_away": 0.0116
+    },
+    "EN": {
+      "share": 0.05,
+      "ratio": 0.9862,
+      "corr_home_away": -0.1379
+    }
+  }
+}

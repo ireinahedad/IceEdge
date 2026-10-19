@@ -773,7 +773,7 @@ def _ref_features(referees: Optional[List[str]]) -> dict[str, float]:
 _load_ref_table()
 
 
-# ── Couche de correction du moneyline (2026-10-02) ───────────────────────────
+# ── Couche de correction du moneyline (2026-10-02, 5 variables le 2026-10-17) ─
 #
 # Une régression logistique posée SUR la victoire du modèle de score :
 #     logit p' = c0 + c1·logit p + Σ coef_i · (x_i − moyenne_i) / écart-type_i
@@ -788,8 +788,15 @@ _load_ref_table()
 # couche est gardée dans `correction_layer_v1_7var.json`.
 # Écrite par `--correction --write-layer` seulement si le verdict est ADOPTER.
 #
-# Elle ne touche QUE la victoire (marché `moneyline`). Puck line, totaux et le
-# reste sortent de la distribution des buts, qu'elle ne modifie pas.
+# Elle corrige la victoire, puis `_align_distribution` (depuis le 2026-10-03)
+# en fait une distribution : le partage des λ entre les deux équipes est recalé
+# pour que la matrice donne cette victoire, à total λ_dom + λ_ext inchangé. Tous
+# les marchés (puck line, score exact, 60 min…) se lisent donc sur la matrice
+# corrigée ; seuls les totaux de buts n'en dépendent pas.
+# Testé le 2026-10-17 et rejeté (explore_correction/README.md) : terme non
+# linéaire pour la queue des favoris (la couche linéaire la corrige déjà),
+# voyage / 3 en 4 soirs / repos, pondération du début de saison, pondération
+# des saisons récentes, couche ajustée sur la victoire du moteur.
 # Absente ou illisible → la victoire du modèle de score, comme avant.
 _corr_layer: dict | None = None
 
@@ -828,8 +835,10 @@ def _p_home_layer_input(dist: "ScoreDistribution") -> float:
     nouvelle aurait décalé le moneyline servi d'environ −0,5 point sans aucune
     mesure derrière. On garde donc son entrée d'origine : le moneyline servi est
     exactement celui d'avant, et le moteur ne fait que répartir cette victoire
-    entre les scores (`_align_distribution`). À refaire si la couche est un jour
-    ré-ajustée sur la matrice du moteur.
+    entre les scores (`_align_distribution`). Ré-ajuster la couche sur la victoire
+    du moteur a été mesuré le 2026-10-17 (`explore_correction/s4_engine.py`) :
+    légèrement moins bon (+0,00005 de log-loss, z +1,3, 8 saisons sur 11), donc
+    ce chemin reste. À revoir si le moteur change.
     """
     if _score_tau_report is None or _score_shape is _score_tau_report:
         return dist.p_home_win()

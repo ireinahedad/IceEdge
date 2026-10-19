@@ -1,0 +1,70 @@
+{
+  "generatedAt": "2026-10-19",
+  "test": [
+    2023,
+    2024,
+    2025
+  ],
+  "shrink": 2,
+  "served_gain_vs_flat": {
+    "2023": 343.0,
+    "2024": 458.1,
+    "2025": 450.7
+  },
+  "variants": {
+    "croissante": {
+      "delta_vs_served": {
+        "2023": -0.0,
+        "2024": 3.6,
+        "2025": 6.6
+      },
+      "delta_total": 10.2,
+      "z": 5.64
+    },
+    "glissante 3 ans": {
+      "delta_vs_served": {
+        "2023": -5.3,
+        "2024": 9.9,
+        "2025": 14.6
+      },
+      "delta_total": 19.2,
+      "z": 1.87
+    },
+    "glissante 5 ans": {
+      "delta_vs_served": {
+        "2023": -0.4,
+        "2024": 8.6,
+        "2025": 11.2
+      },
+      "delta_total": 19.4,
+      "z": 2.57
+    },
+    "glissante 7 ans": {
+      "delta_vs_served": {
+        "2023": 1.6,
+        "2024": 8.2,
+        "2025": 13.5
+      },
+      "delta_total": 23.3,
+      "z": 4.07
+    },
+    "demi-vie 3 ans": {
+      "delta_vs_served": {
+        "2023": 2.6,
+        "2024": 10.6,
+        "2025": 14.6
+      },
+      "delta_total": 27.8,
+      "z": 4.78
+    },
+    "demi-vie 5 ans": {
+      "delta_vs_served": {
+        "2023": 2.3,
+        "2024": 8.8,
+        "2025": 12.9
+      },
+      "delta_total": 24.1,
+      "z": 5.6
+    }
+  }
+}

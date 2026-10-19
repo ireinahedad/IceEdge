@@ -27,6 +27,7 @@ import { runB10, printB10 } from './b10-authentifie';
 import { runB11, printB11 } from './b11-socket';
 import { runB13, printB13 } from './b13-endurance';
 import { runB14, printB14 } from './b14-reglement';
+import { runB15, printB15 } from './b15-direct';
 import { runChild, runChildOutput } from './spawn';
 
 export async function main() {
@@ -61,6 +62,7 @@ export async function main() {
   const b11 = runB11(); printB11(b11); resultats.b11_socket = b11;
 
   const b14 = runB14(); printB14(b14); resultats.b14_reglement = b14;
+  const b15 = runB15(); printB15(b15); resultats.b15_direct = b15;
 
   console.log('\n(B13 — endurance, en cours…)');
   const b13 = runB13(); printB13(b13); resultats.b13_endurance = b13;
