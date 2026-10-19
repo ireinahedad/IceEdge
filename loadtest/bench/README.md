@@ -73,7 +73,7 @@ deux exécutions).
 | **B10** | Chemins authentifiés — N+1 sur les listings, coût d'une ouverture de salon, cache `isPro` | SQL constant ; `isPro` ~0 lecture |
 | **B11** | Socket.io : arrivée simultanée dans un salon (S4) — amplification et coût Neon | fan-out linéaire ; ~0 requête par arrivée |
 | **B14** | Soirée de règlement (S6) — la file se vide-t-elle, et à quel coût ? | `exhausted` vrai ; appels NHL = nb de matchs |
-| **B15** | Soirée en direct — le coût du direct suit-il le nombre de spectateurs ? (`ml/EXPLICATION_ML.md` §10.2) | ≤ 2 recalculs par match et par minute, appels NHL et ML indépendants de V |
+| **B15** | Soirée en direct — le coût du direct suit-il le nombre de spectateurs ? (`ml/EXPLICATION_ML.md` §10.2) | ≤ 2 recalculs par match et par minute en cours de match, ≤ 6 en fin de match ; 2 appels NHL par recalcul ; rien qui suive V |
 | **B13** | Endurance / fuite mémoire (S5) — le RSS atteint-il un plateau ? | plateau, dans le bruit du relevé |
 | **B12** | Deux instances : un message traverse-t-il ? (ligne D) | sans `REDIS_URL` : **non** · avec : **oui** |
 | **B7** | **Les six premiers savent-ils échouer ?** | oui |

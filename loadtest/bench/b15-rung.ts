@@ -59,6 +59,23 @@ export async function main() {
     liveExecutions: live.misses, liveDedup: live.dedup, liveHits: live.hits,
     preExecutions: pre.misses,
     liveExecPerGamePerMin: perGameMin(live.misses),
+    // Recalculs par match, lus sur les appels `boxscore` (un par recalcul),
+    // séparés selon le rythme attendu : 30 s en cours de match, 10 s en fin.
+    ...(() => {
+      const per = new Map<string, number>();
+      for (const c of upstream.calls) {
+        const m = c.url.match(/gamecenter\/(\d+)\/boxscore/);
+        if (m) per.set(m[1], (per.get(m[1]) ?? 0) + 1);
+      }
+      const rate = (end: boolean) => {
+        const sel = ids.filter((id, i) => upstream.benchLiveEndgame(i) === end);
+        const n = sel.reduce((a, id) => a + (per.get(id) ?? 0), 0);
+        return sel.length ? +(n / sel.length / (seconds / 60)).toFixed(2) : 0;
+      };
+      return { recalcPerMinMid: rate(false), recalcPerMinEndgame: rate(true),
+               endgameGames: ids.filter((_, i) => upstream.benchLiveEndgame(i)).length };
+    })(),
+    nhlPerRecalc: live.misses ? +((c['nhl-web'] + c['nhl-stats']) / live.misses).toFixed(2) : 0,
     nhl: c['nhl-web'] + c['nhl-stats'], ml: c.ml, odds: c.odds,
     nhlPerGamePerMin: perGameMin(c['nhl-web'] + c['nhl-stats']),
     eventLoopP99: (snap.eventLoop as any)?.p99Ms ?? null,

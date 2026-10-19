@@ -97,7 +97,7 @@ def run_one(fx, g, sigma, seed):
     if os.path.exists(path):
         z = np.load(path)
         return z["m"], float(z["disp"])
-    m, disp = simulate(np.array(fx["m"]), g["lam_home"].values, g["lam_away"].values,
+    m, disp = simulate(C.single_table(), g["lam_home"].values, g["lam_away"].values,
                        sigma, seed, fx["shrink"])
     np.savez(path, m=m, disp=disp)
     print(f"   σ {sigma:.2f} graine {seed} : dispersion {disp:+.4f}", flush=True)
@@ -114,7 +114,7 @@ def main():
         run_one(fx, g, args.sigma, args.seed if args.seed is not None else SEEDS[0])
         return
 
-    M = np.array(fx["m"])
+    M = C.single_table()
     O = np.array(json.load(open(C.REPORT, encoding="utf-8"))["observed"])
     obs_disp = dispersion(np.r_[g["home_reg_score"].values, g["away_reg_score"].values],
                           np.r_[g["lam_home"].values, g["lam_away"].values])

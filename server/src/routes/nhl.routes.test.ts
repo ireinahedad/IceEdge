@@ -92,6 +92,15 @@ describe('en-têtes de cache des routes NHL', () => {
     expect(live.headers['cache-control']).toBe(LIVE);
   });
 
+  it('fin de match : en-tête du rythme de 10 s (match et détail)', async () => {
+    mockService.getGameDetail.mockResolvedValue({ id: '9', status: 'live', refreshMs: 10_000 });
+    const d = await request(await nhlApp()).get('/api/nhl/games/9/detail');
+    expect(d.headers['cache-control']).toBe('public, max-age=0, s-maxage=10');
+    mockService.getGame.mockResolvedValue({ id: '9', status: 'live', refreshMs: 10_000 });
+    const g = await request(await nhlApp()).get('/api/nhl/games/9');
+    expect(g.headers['cache-control']).toBe('public, max-age=0, s-maxage=10');
+  });
+
   it('donne au classement le TTL de fetchTeams (5 min)', async () => {
     mockService.getStandings.mockResolvedValue([]);
 
@@ -139,6 +148,12 @@ describe('cache des prédictions d’un match', () => {
     const res = await request(await nhlApp()).get('/api/nhl/predictions/game/2026020001');
     expect(res.headers['cache-control']).toBe(LIVE);
     expect(res.body).toEqual(groups);   // toujours un tableau pour le client
+  });
+
+  it('fin de match : le navigateur revalide, un CDN garde 10 s', async () => {
+    mockPredictions.buildGameMarketsWithStatus.mockResolvedValue({ groups, status: 'live', refreshMs: 10_000 });
+    const res = await request(await nhlApp()).get('/api/nhl/predictions/game/2026020001');
+    expect(res.headers['cache-control']).toBe('public, max-age=0, s-maxage=10');
   });
 
   it('match terminé : 6 h', async () => {

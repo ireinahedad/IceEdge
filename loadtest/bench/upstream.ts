@@ -186,9 +186,12 @@ let liveSince = Date.now();
 export function setGamesLive(v: boolean): void { gamesLive = v; liveSince = Date.now(); }
 
 function liveState(idx: number) {
+  // Horloge FIGÉE par match, pour que le banc sache quels matchs sont en fin de
+  // match (rythme de 10 s, `liveRefresh.ts`) : un match sur six est en 3e
+  // période à 2 minutes de la fin ; les autres en 1re, 2e ou début de 3e.
   const period = 1 + (idx % 3);
-  const elapsed = Math.floor((Date.now() - liveSince) / 1000);
-  const left = 1199 - ((idx * 97 + elapsed) % 1199);
+  const endgame = idx % 6 === 5;
+  const left = endgame ? 120 : 600 + ((idx * 97) % 500);
   const mmss = `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`;
   const home = idx % 4, away = (idx + 1) % 3;
   const goals = [...Array(home).fill({ isHome: true }), ...Array(away).fill({ isHome: false })];
@@ -197,6 +200,9 @@ function liveState(idx: number) {
     scoring: goals.length ? [{ periodDescriptor: { number: 1, periodType: 'REG' }, goals }] : [],
   };
 }
+
+/** Le match `i` de la soirée en direct est-il en fin de match ? (même règle que `liveState`) */
+export function benchLiveEndgame(i: number): boolean { return i % 6 === 5; }
 
 /** Réponse de `/predict/game/bundle` : un chiffre par marché demandé, et les λ. */
 function mlBundle(body: string) {

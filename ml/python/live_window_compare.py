@@ -55,7 +55,7 @@ def main():
         return (O[se == S] * np.log(m) - m * E[se == S]).sum((1, 2))
 
     first, last = fx["trainSeasons"]
-    served = np.array(fx["m"])
+    served = C.single_table()
     variants = {
         "croissante": lambda S: {s: 1 for s in range(first, S)},
         **{f"glissante {k} ans": (lambda k: lambda S: {s: 1 for s in range(S - k, S)})(k) for k in (3, 5, 7)},

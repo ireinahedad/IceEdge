@@ -919,7 +919,7 @@ probabilité servie. Win%, buts/match, PP/PK… ne servent qu'aux replis.
 3. Un appel `/predict/game/bundle` ; résultat **mis en cache 10 minutes** par match.
 4. Les tuiles « gagne en 60 min » (ml-home / ml-away) demandent `regulation_result`.
 
-**En direct** (`applyLive`, cache 30 s) : le modèle reste d'avant-match. Le
+**En direct** (`applyLive`, cache 30 s, 10 s en fin de match) : le modèle reste d'avant-match. Le
 serveur prend 3 chiffres du paquet — victoire domicile, P(prolongation), λ total
 — et les injecte dans la grille « score actuel + buts restants » des règles
 (`buildLiveModelMarkets`), avec des effets de score mesurés
@@ -1049,138 +1049,58 @@ buts restants : chaque équipe marque à la cadence  λ × w(t) × m(écart, mom
   répartis uniformément dans la période (w = 0,305 / 1200 par seconde en 1re…).
 - **m(écart, moment)** : le multiplicateur **mesuré** (§10.3). Il dit de
   combien une équipe marque plus ou moins que sa cadence normale selon qu'elle
-  mène, est à égalité ou est menée, et à quel moment du match.
+  mène, est à égalité ou est menée, et à quel moment du match. Dans les deux
+  dernières minutes, il dépend aussi de ce qu'un but a déjà été marqué depuis
+  58:00 ou non (deux tables, §10.4).
 
 Avec m ≡ 1, on retrouve deux lois de Poisson indépendantes sur le temps
 restant (« phase 1 », la version d'avant le 2026-10-01). Les effets de score
 (« phase 2 ») sont servis depuis le 2026-10-01.
 
-### 10.2 Le chemin d'un recalcul (`gameMlBundle.applyLive`, cache 30 s)
+### 10.2 Le chemin d'un recalcul
 
 ```
- Page match, page équipe, page joueur          (autant de spectateurs qu'on veut)
+ avant-match (paquet ML, gardé 10 min) : victoire domicile, P(prolongation), λ_dom + λ_ext
         │
-        ▼
- getGameMlBundle(gameId)
-   ├─ bundleCache (10 min) ── computeBundle ──► service ML /predict/game/bundle
-   │                                            avant-match : λ_dom, λ_ext, victoire, P(prolongation)
-   │
-   └─ liveCache (30 s, UNE exécution par match) ── applyLive
-          │
-          ├─ fetchGameById ─────────── statut + heure de mise au jeu
-          │     pas commencé ───────────────────────► avant-match tel quel
-          ▼
-     buildLiveModelMarkets
-          ├─ fetchGameDetail ───────── API NHL : landing + boxscore
-          │                            (cache 30 s ; 6 h une fois le match terminé)
-          ├─ liveCtxFromDetail ─────── score, période, horloge, entracte, prolongation
-          ├─ liveCalibration ───────── λ_dom, λ_ext, tieBoost      ≈ 120 ms, une fois par match
-          ├─ evolveLiveScore ───────── loi des buts restants        0,04 à 5 ms
-          └─ grille du score final ─── toutes les tuiles (même lecture qu'avant le match, §5)
-          │
-          ▼
- tuiles `live: true` + libellé de l'état utilisé (« 3–2, 3e, 01:00 restantes »)
+        ▼  à chaque recalcul en direct (30 s ; 10 s en fin de match)
+ état du match (feuille NHL) : score, période, horloge, entracte, prolongation,
+                               un but déjà marqué depuis 58:00 ou non
+        │
+        ├─ calage à la mise au jeu ─── λ_dom, λ_ext, facteur de nuls  (une fois par match)
+        ├─ moteur ──────────────────── loi des buts restants (§10.4, §10.5)
+        └─ grille du score final ───── toutes les tuiles (même lecture qu'avant le match, §5)
 ```
 
 1. **Le match a-t-il commencé ?** Sinon, le paquet d'avant-match est renvoyé
    tel quel.
 2. **Trois chiffres de l'avant-match** sont lus dans le paquet ML : victoire du
-   domicile (`moneyline`), probabilité de prolongation (`game_to_ot`) et
-   λ total = λ_dom + λ_ext.
-3. **Calage à la mise au jeu** (`nhlPredictions.liveCalibration`). Le moteur,
-   lancé à 0–0 avec 60 minutes à jouer, doit redire exactement l'avant-match.
-   On garde λ total et on cherche par **bissection** (30 itérations) le partage
-   domicile / visiteur s qui rend la victoire d'avant-match ; un facteur de nuls
-   `tieBoost` = [tie × (1 − t)] / [t × (1 − tie)] ramène ensuite la masse des
-   égalités à 60 minutes (t, celle du moteur) au P(prolongation) du modèle
-   (tie). Ce calage ne dépend que de l'avant-match : il est mémorisé par match.
-4. **État du match** (`liveCtxFromDetail`) : score, secondes de temps
-   réglementaire restantes, prolongation en cours ou non.
-5. **Le moteur** (`prediction/finalScore.evolveLiveScore`) calcule la loi
-   jointe des buts restants (§10.4).
+   domicile, probabilité de prolongation et λ total = λ_dom + λ_ext.
+3. **Calage à la mise au jeu.** Le moteur, lancé à 0–0 avec 60 minutes à jouer,
+   doit redire exactement l'avant-match. On garde λ total et on cherche par
+   **bissection** le partage domicile / visiteur qui rend la victoire
+   d'avant-match ; un facteur de nuls = [tie × (1 − t)] / [t × (1 − tie)] ramène
+   ensuite la masse des égalités à 60 minutes (t, celle du moteur) au
+   P(prolongation) du modèle (tie). Ce calage ne dépend que de l'avant-match :
+   il est fait une fois par match.
+4. **État du match** : score, temps réglementaire restant, prolongation en
+   cours ou non, et si un but a déjà été marqué depuis 58:00 (§10.4).
+5. **Le moteur** calcule la loi jointe des buts restants (§10.4, §10.5).
 6. **La grille du score final** = score actuel + buts restants ; une égalité à
-   60 minutes donne un but de plus au vainqueur de la prolongation (`p_ot_dom`,
-   §4.1.5). Toutes les tuiles se lisent sur cette grille, exactement comme
-   avant le match (§5) : elles restent **cohérentes entre elles** à chaque
-   instant.
-7. Chaque tuile recalculée porte `live: true` et l'explication
-   « Modèle ML (avant-match : victoire domicile X %, λ = Y) + état du match ».
-   La probabilité exacte et l'incertitude d'avant-match sont effacées : elles
-   ne décrivent plus le chiffre affiché.
+   60 minutes donne un but de plus au vainqueur de la prolongation (§4.1.5).
+   Toutes les tuiles se lisent sur cette grille, exactement comme avant le
+   match (§5) : elles restent **cohérentes entre elles** à chaque instant.
+7. Chaque tuile recalculée est marquée « en direct », avec l'état utilisé
+   (« 3–2, 3e, 01:00 restantes »). La probabilité exacte et l'incertitude
+   d'avant-match sont effacées : elles ne décrivent plus le chiffre affiché.
 
 Si une entrée manque (paquet incomplet, feuille de match illisible), les tuiles
-gardent l'avant-match, affiché pâle.
+gardent l'avant-match, affiché pâle. Un recalcul coûte quelques millisecondes
+(§10.5) et le calage ≈ 120 ms une fois par match ; le service ML n'est pas
+appelé pendant le match, et le nombre de recalculs ne dépend pas du nombre de
+spectateurs (un par match et par fenêtre de rafraîchissement).
 
-**Ce que coûte un recalcul.** Mesure du code de production
-(`computeLiveModelGroups`, le chemin du rejeu §10.6, sans réseau), médiane de
-40 appels, Node 22, Ryzen 7 7730U (machine virtuelle, 2 cœurs) :
-
-| Moment du match | Moteur seul (`evolveLiveScore`) | Recalcul complet (grille + toutes les tuiles) |
-|---|---:|---:|
-| Mise au jeu (60 min à jouer) | 4,8 ms | 5,9 ms |
-| Fin de la 1re | 3,0 ms | 4,0 ms |
-| Fin de la 2e | 1,0 ms | 1,9 ms |
-| 5 min restantes | 0,21 ms | 0,9 ms |
-| 1 min restante | 0,04 ms | 0,6 ms |
-| **Calage** (`liveCalibration`, 30 passes du moteur) | — | **≈ 120 ms, une seule fois par match** |
-
-- Le moteur coûte en proportion du **temps qui reste** (un pas par tranche de
-  10 secondes) : il est le plus cher à la mise au jeu et presque gratuit en fin
-  de match, précisément là où les chiffres bougent le plus.
-- Le calage ne dépend que de l'avant-match ; il est mémorisé (jusqu'à
-  2 000 matchs). Le premier recalcul d'un match prend donc ≈ 150 ms, les
-  suivants quelques millisecondes.
-
-Reproduire : `npx ts-node --transpile-only scripts/bench-live-engine.ts` (dans
-`server/`, sans réseau ni base) ; les temps varient de ±15 % d'un lancement à
-l'autre.
-
-**Ce que coûte un soir chargé.** `liveCache` est un `TtlCache` avec
-**dédoublonnage des appels en vol** : 1 ou 10 000 spectateurs sur la même page
-déclenchent **au plus un recalcul par match toutes les 30 secondes**. Le service
-ML n'est pas appelé pendant le match, sauf à l'expiration du paquet
-d'avant-match (toutes les 10 minutes) ; ses entrées sont figées à la date du
-match (gardien saisi, absents, repos) et les cotes ne changent pas la
-probabilité servie (§7.1), donc λ ne bouge pas tant qu'aucune saisie manuelle ne
-change.
-
-Mesure : banc **B15** (`loadtest/bench/b15-direct.ts`), le vrai serveur avec
-l'API NHL et le service ML remplacés par des bouchons qui comptent les appels
-(latences simulées : NHL 120 ms, ML 300 ms). 16 matchs en cours, V spectateurs
-qui rafraîchissent chacun une page de match toutes les secondes pendant 90 s,
-après un échauffement qui a calculé l'avant-match et le premier direct de chaque
-match :
-
-| Spectateurs | Requêtes/s | p50 | p95 | Recalculs par match et par minute | Appels NHL par match et par minute | Appels ML |
-|---:|---:|---:|---:|---:|---:|---:|
-| 20 | 20 | 3 ms | 9 ms | 1,4 | 4,2 | 0 |
-| 200 | 197 | 10 ms | 53 ms | **2,0** | **6,0** | 0 |
-| 1 000 | 572 | 200 ms | 891 ms | **2,0** | **6,0** | 0 |
-
-- **Le coût en amont ne suit pas l'audience.** Recalculs et appels NHL plafonnent
-  à exactement un recalcul par match toutes les 30 s, de 200 à 1 000
-  spectateurs (à 20, certains matchs ne sont pas regardés à chaque fenêtre).
-- **Trois appels NHL par recalcul**, pas deux : la page `landing` est lue deux
-  fois, par `fetchGameById` (statut) et par `fetchGameDetail` (feuille de
-  match), qui ont chacun leur cache pour la même URL. L'un des deux est
-  redondant.
-- **À 1 000 spectateurs, la latence monte** (p95 891 ms, boucle d'événements p99
-  262 ms), mais ce n'est pas le moteur : 48 recalculs en 90 s. C'est la
-  réponse : chaque paquet pèse ≈ 109 Ko de JSON, re-sérialisé à chaque requête
-  (≈ 62 Mo/s à 572 requêtes/s), sur 2 cœurs partagés avec le client du banc.
-  L'en-tête `Cache-Control: public, max-age=30` permet à un CDN d'absorber ce
-  trafic ; côté serveur, sérialiser le paquet une fois par recalcul supprimerait
-  l'essentiel du coût.
-
-**Fraîcheur.** Deux caches de 30 s s'empilent (feuille de match, puis paquet en
-direct) : un chiffre affiché a en moyenne **30 s de retard** sur l'API NHL, et
-**jusqu'à ~60 s**, elle-même quelques secondes derrière la glace. Le libellé de
-chaque tuile indique l'état exact utilisé (score, période, horloge), de sorte que
-l'utilisateur sait toujours à quel instant le chiffre correspond.
-
-Ce que coûte ce retard, mesuré par un rejeu dédié
-(`server/scripts/replay-live-staleness.ts`, 3 903 matchs 2023-26, vrai moteur) :
-à l'instant t, on note contre l'issue réelle la prédiction faite avec l'état du
+**Fraîcheur : ce que coûte un chiffre en retard.** Un rejeu dédié (3 903 matchs
+2023-26, vrai moteur) note, à l'instant t, la prédiction faite avec l'état du
 match à t − s, sur les 10 questions du rejeu §10.6. Hausse de la log-loss par
 rapport à un chiffre frais (retard en secondes de jeu) :
 
@@ -1190,36 +1110,41 @@ rapport à un chiffre frais (retard en secondes de jeu) :
 | 55e-58e minute | +1,6 % | +3,3 % | +5,2 % | +7,5 % | +9,1 % |
 | **2 dernières minutes** | **+7,0 %** | **+13,3 %** | **+19,3 %** | **+27,1 %** | **+34,0 %** |
 
-Tous les écarts sont significatifs (erreur type appariée par instant). En
-milieu de match, le retard ne coûte presque rien. Dans les deux dernières
-minutes, un chiffre en retard de 30 s perd **19 %** de log-loss, autant que ce
-que les effets de score font gagner au même moment (−17 % à −28 %, §10.6). Le
-retard réel en secondes de JEU est plus court que le retard en secondes réelles
-(l'horloge s'arrête souvent en fin de match), donc ces chiffres sont un plafond.
+Tous les écarts sont significatifs. En milieu de match, le retard ne coûte
+presque rien. Dans les deux dernières minutes, un chiffre en retard de 30 s
+perd **19 %** de log-loss, autant que ce que les effets de score font gagner au
+même moment (−17 % à −28 %, §10.6). Le retard en secondes de jeu est plus court
+que le retard en secondes réelles (l'horloge s'arrête souvent en fin de match) :
+ces chiffres sont un plafond.
 
-**Recommandation (non appliquée).** Dans les 5 dernières minutes de la 3e
-période, ramener les trois caches (`fetchGameById`, `fetchGameDetail`,
-`liveCache`) à 10 s : retard moyen 10 s au lieu de 30 s, soit ≈ +7 % au lieu de
-≈ +19 % de log-loss dans les deux dernières minutes. Le coût reste borné : 6
-recalculs et 18 appels NHL par match et par minute pendant ces quelques minutes,
-toujours indépendants de l'audience.
+**Décision.** Rafraîchissement toutes les 30 s pendant le match, et toutes les
+**10 s en fin de match** (3e période à 5 minutes ou moins de la fin, et
+prolongation), pour toute la page : tuiles du modèle, score et horloge, mode
+règles. Retard attendu en fin de match : ≈ 15 s en moyenne, 30 s au plus,
+contre jusqu'à environ 2 minutes auparavant — soit de l'ordre de +10 % de
+log-loss au lieu de +19 % ou davantage dans les deux dernières minutes.
 
 **Cas limites.**
 
-| Situation | Ce que voit le code | Ce qui est affiché |
-|---|---|---|
-| Entracte | `inIntermission` → horloge ramenée à 0 : la période est terminée | Chiffres de début de la période suivante ; libellé « entracte après la 2e » |
-| Prolongation ou fusillade en cours | Type de période OT / SO, ou période > 3 → plus de temps réglementaire | Le vainqueur est tiré à `p_ot_dom` (§4.1.5) ; totaux et handicaps partent du score actuel + 1 but pour le vainqueur |
-| Match suspendu (`SUSP`) ou reporté (`PPD`) | Statut ni `live` ni `final` → `liveCtxFromDetail` rend `null` | L'avant-match |
-| API NHL en panne, feuille illisible | Exception ou contexte `null` | L'avant-match, affiché pâle |
-| Entrée du modèle manquante | Victoire, P(prolongation) ou λ absent du paquet | L'état du match, avec les tuiles d'avant-match |
-| But annulé après révision vidéo | Rien n'est mémorisé d'un recalcul à l'autre : l'état est relu de zéro | Corrigé au plus ~60 s après la correction dans l'API NHL |
-| Match terminé | Statut `final` ; terminé en prolongation ou fusillade, la grille part du nul à 60 min avec le vrai vainqueur (si les buts par période recollent) | Issues certaines (0 / 100 %) ; libellé « score final 4–3 (OT) » ; feuille en cache 6 h |
-| Horloge en retard sur la glace | Retard de l'API NHL + caches | Jusqu'à ~60 s, visible dans le libellé |
+| Situation | Ce qui est affiché |
+|---|---|
+| Entracte | Chiffres de début de la période suivante ; « entracte après la 2e » |
+| Prolongation ou fusillade en cours | Vainqueur tiré à `p_ot_dom` (§4.1.5) ; totaux et handicaps à partir du score actuel + 1 but pour le vainqueur |
+| Match suspendu ou reporté | L'avant-match |
+| Feuille de match illisible | L'avant-match, affiché pâle |
+| Chiffre d'avant-match manquant | L'état du match, avec les tuiles d'avant-match |
+| But annulé après révision vidéo | Corrigé au prochain recalcul (rien n'est mémorisé d'un recalcul à l'autre) |
+| Match terminé | Issues certaines (0 / 100 %) ; « score final 4–3 (OT) » |
 
-<!-- À DÉVELOPPER
-  - Appliquer le cache de 10 s en fin de match (recommandation ci-dessus), puis rejouer B15.
-  - Sérialiser le paquet une fois par recalcul ; lire la page `landing` une seule fois par recalcul.
+**Retard réel en production.** Le retard attendu ci-dessus est un calcul. Pour
+le mesurer sur de vrais matchs, la production comparée à l'API NHL est relevée
+toutes les 2 s pendant une soirée : âge du score et de l'horloge affichés,
+délai d'affichage de chaque but, en cours de match et en fin de match.
+
+<!-- À FINIR
+  - Mesure prévue pendant les matchs du 2026-10-19 (heure de l'Est) : ANA@NYR, COL@PHI, SJS@TOR, PIT@UTA.
+    Reporter ici le tableau obtenu (ml/models/live/live_lag_<date>.md) : âge de l'état servi (médiane, p90),
+    délai des buts, en cours de match et en fin de match, et le comparer au retard attendu (≈ 15 s en fin de match).
 -->
 
 ### 10.3 La calibration des effets de score (`calibrate_live.py`)
@@ -1444,7 +1369,10 @@ et `figures/live_cv_shrink.png` ; `python live_window_compare.py` →
 
 Lignes : tranche de temps écoulé. Colonnes : écart au score **vu de l'équipe
 qui marque** (−1 = menée d'un but, +1 = mène d'un but). Dernière colonne : buts
-d'entraînement tombés dans la tranche.
+d'entraînement tombés dans la tranche. C'est la **table unique**, la mesure de
+référence de toute cette section (`m_single` dans `calibrate_live_report.json`) ;
+depuis le 2026-10-19, les deux dernières minutes sont servies en deux tables
+(« Correction : deux tables en fin de match », plus bas).
 
 | Tranche | −3 | −2 | −1 | 0 | +1 | +2 | +3 | Buts |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -1608,11 +1536,108 @@ et simulé sans force cachée avec la table servie :
 Conséquences. La table m n'est pas biaisée par cette sous-dispersion : son
 estimateur (buts / exposition) ne suppose pas de variance Poisson, et le
 bootstrap par match (§10.3) non plus. Le moteur, lui, tire des buts Poisson : il
-surestime légèrement la variance des buts restants, donc élargit un peu les
-queues (plus de 6,5 buts, −1,5), surtout dans les trois dernières minutes ; le
-rejeu (§10.6) montre que le gain des effets de score reste net malgré cela.
-Enfin, le test de force cachée ci-dessus est prudent : même les buts à égalité
-numérique seuls (0,965) ne montrent aucune sur-dispersion.
+surestime la variance des buts restants (mesure ci-dessous). Enfin, le test de
+force cachée ci-dessus est prudent : même les buts à égalité numérique seuls
+(0,965) ne montrent aucune sur-dispersion.
+
+**L'effet sur les extrêmes, mesuré au rejeu** (`server/scripts/replay-live-tails.ts`,
+3 903 matchs 2023-26). À six moments, la loi des buts réglementaires RESTANTS
+donnée par le moteur (calé comme en production) est comparée à ce qui s'est
+passé. Le rapport de variance vaut Σ(N − E[N])² / Σ Var[N] : 1 si le moteur a
+la bonne dispersion, < 1 s'il la surestime.
+
+| Moment | Buts restants, prédit / observé | Rapport de variance | P(0 but) prédit / observé | P(≥ 2 buts) prédit / observé | P(≥ 3 buts) prédit / observé |
+|---|---:|---:|---:|---:|---:|
+| Fin de la 2e | 2,19 / 2,14 | 0,89 | 11,0 / 10,5 % | 64,5 / 64,9 % | 37,5 / 36,4 % |
+| 10 min restantes | 1,22 / 1,23 | 0,87 | 29,2 / 25,8 % ⚠ | 34,5 / 34,6 % | 12,4 / 11,2 % ⚠ |
+| 5 min restantes | 0,76 / 0,79 | 0,85 | 46,6 / 41,1 % ⚠ | 17,4 / 16,8 % | 4,0 / 3,1 % ⚠ |
+| 3 min restantes | 0,56 / 0,58 | 0,80 | 57,3 / 52,4 % ⚠ | 11,0 / 9,3 % ⚠ | 2,0 / 1,0 % ⚠ |
+| 2 min restantes | 0,43 / 0,44 | 0,79 | 65,5 / 61,9 % ⚠ | 7,6 / 5,5 % ⚠ | 1,1 / 0,4 % ⚠ |
+| 1 min restante | 0,24 / 0,24 | 0,81 | 79,0 / 77,4 % ⚠ | 3,0 / 1,3 % ⚠ | 0,3 / 0,0 % ⚠ |
+
+⚠ = écart significatif (|z| > 2, variance Σ p(1 − p)).
+
+- **La moyenne est juste, la forme ne l'est pas.** Le moteur prédit le bon
+  nombre de buts restants, mais trop de « aucun but » ET trop de « deux buts
+  ou plus » : la réalité concentre la masse sur **exactement un but**. Sa
+  variance est surestimée de 11 % en fin de 2e, et de **20 %** dans les trois
+  dernières minutes.
+- **Les longs coups de fin de match sont surpayés.** À 2 minutes de la fin,
+  « au moins deux buts de plus » vaut 7,6 % pour le moteur et 5,5 % en réalité
+  (×1,4) ; à 1 minute, 3,0 % contre 1,3 % (×2,3). Ce sont exactement les paris
+  qui en ont besoin : une équipe menée d'un but qui gagne en temps
+  réglementaire, un « plus de » qui manque de deux buts, un −1,5 à égalité.
+- **Les tuiles moyennes, elles, restent calées** (prédit moyen contre observé
+  sur toutes les situations, plus de 5,5, plus de 6,5, −1,5, buts d'une équipe,
+  prolongation : écarts de 0 à 1,4 point). Les erreurs ne sont visibles que
+  conditionnellement, dans les situations qui demandent deux buts ; on en voit
+  la trace sur « plus de 6,5 » à une minute de la fin (45,4 % prédit, 44,8 %
+  observé, z −2,4). L'autre écart persistant (« visiteur −1,5 » sous-estimé d'environ 1 point, z ≈ 2,5)
+  existe dès la fin de la 2e période : il vient de l'avant-match, pas de la
+  dispersion.
+
+**Correction : deux tables en fin de match** (`calibrate_live.py`, servie
+depuis le 2026-10-19). D'où vient l'excès de « deux buts ou plus » ? En coupant
+les buts de fin de match selon qu'un but a déjà été marqué depuis le début de la
+fin de match ou non, la cadence n'est pas la même : **après un premier but, le
+jeu ralentit** dans presque toutes les cases. Un but dans le filet désert met
+fin à la poussée de l'équipe menée ; une égalisation renvoie à la prudence de
+l'égalité. Une seule table mélange ces deux régimes : elle sous-estime le
+premier but et surestime le second.
+
+La table est donc mesurée deux fois à partir du début de la fin de match :
+`m` (aucun but marqué depuis ce début) et `mAfterGoal` (au moins un).
+`mAfterGoal` est rétréci vers `m`, pas vers 1. Le début (55:00, 57:00 ou 58:00)
+et la force du rétrécissement b sont choisis ensemble par validation croisée
+saison par saison. Résultat : **58:00, b = 5** (+141,9 points de
+log-vraisemblance en CV contre une seule table ; 55:00 donnait +120,8). Le zéro
+est exclu de la grille de b : sans rétrécissement, une case « après un but »
+sans but observé vaudrait 0, une cadence nulle servie telle quelle. Sur les
+saisons de test, les deux tables gagnent sur les buts chaque saison (+8,1,
++21,8 et +14,8 points).
+
+| Tranche | Table | −3 | −2 | −1 | 0 | +1 | +2 | +3 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 58-59' | `m` (pas encore de but depuis 58:00) | 1,13 | 2,13 | 1,46 | 0,75 | 3,28 | 5,41 | 1,17 |
+| 58-59' | `mAfterGoal` (un but depuis 58:00) | 0,57 | 1,06 | 0,77 | 0,83 | 2,66 | 2,88 | 0,47 |
+| 59-60' | `m` | 0,96 | 2,60 | 2,77 | 0,67 | 7,57 | 8,36 | 0,86 |
+| 59-60' | `mAfterGoal` | 0,56 | 1,48 | 1,88 | 0,49 | 6,42 | 4,48 | 0,56 |
+
+Après un premier but depuis 58:00, l'équipe menée d'un but marque presque deux
+fois moins vite à 58-59' (×0,77 contre ×1,46), celle qui mène de deux aussi
+(×2,88 contre ×5,41) : la partie est souvent jouée.
+
+Le moteur suit les deux régimes exactement : sa grille est tenue en deux
+couches (aucun but depuis 58:00 / au moins un), et l'état de départ vient du
+résumé des buts de la feuille de match. Le coût reste
+négligeable (les deux couches ne coexistent que dans les deux dernières
+minutes).
+
+Effet sur la forme des buts restants (même rejeu que ci-dessus,
+`live_tails_report_endgame.json`) :
+
+| Moment | Rapport de variance, avant → après | P(0 but), avant → après (observé) | P(≥ 2 buts), avant → après (observé) |
+|---|---:|---:|---:|
+| Fin de la 2e | 0,89 → 0,91 | 11,0 → 10,6 % (10,5 %) | 64,5 → 64,9 % (64,9 %) |
+| 10 min restantes | 0,87 → 0,90 | 29,2 → 28,2 % (25,8 %) | 34,5 → 34,7 % (34,6 %) |
+| 5 min restantes | 0,85 → 0,91 | 46,6 → 45,0 % (41,1 %) | 17,4 → 16,9 % (16,8 %) |
+| 3 min restantes | 0,80 → 0,87 | 57,3 → 55,4 % (52,4 %) | 11,0 → 10,1 % (9,3 %) |
+| 2 min restantes | 0,79 → **0,89** | 65,5 → 63,4 % (61,9 %) | 7,6 → **6,3 %** (5,5 %) |
+| 1 min restante | 0,81 → 0,83 | 79,0 → 76,8 % (77,4 %) | 3,0 → 2,7 % (1,3 %) |
+
+La surestimation de la variance passe de 20 % à 11 % à deux minutes de la fin, et
+« deux buts ou plus » se rapproche du réel. La correction n'est que partielle :
+dans la toute dernière minute, le second but reste surpayé (2,7 % contre 1,3 %),
+et « aucun but » reste un peu trop probable avant 58:00, que les deux tables ne
+touchent pas.
+
+Au rejeu des marchés : sur les cinq moments de §10.6, log-loss 77 080,9 →
+77 048,6 (−0,04 %), 9 cases meilleures, 2 pires (« plus de 6,5 » à la mise au
+jeu, +0,0002 ; « domicile en 60 min » à 5 minutes, +0,0004). Sur cinq moments de
+fin de match (5, 3, 2 et 1 min, 30 s), log-loss **−0,22 %**, **16 cases
+meilleures**, 1 pire, sur 50 : surtout les totaux et les buts d'une équipe, ce
+que la forme des buts restants décide (`live_endgame_replay.md`,
+`live_endgame_replay_late.md`). Décision : **servi**.
 
 **Niveau contre forme.** m est relatif : sur l'entraînement, buts observés /
 exposition = 70 280 / 70 033 (1,0035). Le niveau absolu des buts reste
@@ -1620,7 +1645,8 @@ l'affaire de λ et du recalage de niveau (§4.3 bis) ; m ne fait que répartir l
 buts selon l'état du match.
 
 <!-- À DÉVELOPPER
-  - Mesurer au rejeu l'effet de la sous-dispersion sur les queues en fin de match (plus de 6,5, −1,5) ; piste : modéliser l'avantage numérique qui s'arrête au premier but (lien avec §10.7).
+  - Finir la correction de la dernière minute (second but encore surpayé, 2,7 % contre 1,3 %) : cadence qui dépend du temps écoulé DEPUIS le dernier but, ou retour du gardien après un but dans le filet désert.
+  - Corriger « aucun but » encore trop probable entre 50 et 58 minutes (avantage numérique qui s'arrête au premier but, lien avec §10.7).
 -->
 
 ### 10.5 Le moteur exact (`evolveLiveScore`)
@@ -1667,8 +1693,9 @@ entre toutes les tuiles.
 
 **L'effet du pas.** Le moteur fige l'écart au score pendant chaque pas. Une
 version du moteur avec un pas réglable (identique au code servi à 10 s, écart
-maximal 0) est comparée à une référence au pas de 1 s, sur les cinq moments du
-rejeu et les quatre probabilités ci-dessus :
+maximal 0, sur la table unique — la couche « après un but » de la fin de match,
+§10.4, n'y change pas la question du pas) est comparée à une référence au pas de
+1 s, sur les cinq moments du rejeu et les quatre probabilités ci-dessus :
 
 | Pas | Écart maximal à la référence 1 s | Où | Temps total des 5 moments |
 |---|---:|---|---:|
@@ -1684,7 +1711,7 @@ elle reste sous le tiers de point, en dessous de l'arrondi affiché sur les
 tuiles, pour un temps 10 fois plus court que la référence. Passer à 5 s
 diviserait l'erreur par deux pour un coût doublé, sans effet visible.
 
-Reproduire : `scripts/bench-live-engine.ts` (le même banc d'essai qu'au §10.2).
+Reproduire : `scripts/bench-live-engine.ts` (dans `server/`).
 
 ### 10.6 La validation : rejeu de 3 903 matchs (`live_report.md`)
 
@@ -1808,8 +1835,10 @@ pénalités **futures**.
 | Contrôles de la calibration | `python live_calibration_checks.py` | `models/live/calibrate_live_checks.json`, `figures/live_cv_shrink.png`, `figures/live_m_heatmap.png` |
 | Biais de la calibration | `python live_effects_bias.py` (~10 min, reprend où il s'est arrêté) | `models/live/live_effects_bias.json` |
 | Coût et exactitude du moteur | `npx ts-node --transpile-only scripts/bench-live-engine.ts` (dans `server/`) | Sortie console |
-| Coût d'une soirée en direct (B15) | `node ../loadtest/bench/run.js b15-direct` (dans `server/`, ~6 min) | Sortie console |
 | Coût du retard d'affichage | `npx ts-node --transpile-only scripts/replay-live-staleness.ts 2023 2024 2025` (dans `server/`, ~20 min) | `models/live/live_staleness_report.json` |
+| Forme des buts restants (extrêmes) | `npx ts-node --transpile-only scripts/replay-live-tails.ts 2023 2024 2025` (dans `server/`, ~1 h ; `OUT=` pour un autre nom) | `models/live/live_tails_report.json` (une table), `live_tails_report_endgame.json` (deux tables) |
+| Une table contre deux tables de fin de match | `LIVE_A=ancien.json LIVE_B=nouveau.json OUT=live_endgame_replay npx ts-node --transpile-only scripts/replay-live-window.ts 2023 2024 2025` (`MOMENTS=late` pour la fin de match) | `models/live/live_endgame_replay.md`, `live_endgame_replay_late.md` |
+| Retard réel en production | `server/scripts/measure-live-lag.cmd` (Windows, pendant des matchs) | `models/live/live_lag_<date>.md` / `.json` |
 | Table récente contre table servie | `python live_window_compare.py`, puis `scripts/replay-live-window.ts 2023 2024 2025` | `models/live/live_window_report.json`, `live_window_replay.md` |
 | Sous-dispersion des buts | `python live_dispersion.py` | `models/live/live_dispersion_report.json` |
 | Avantage numérique (mesure) | `python fetch_live_pbp.py && python calibrate_live_pp.py`, puis `scripts/replay-live-pp.ts` | `models/live/calibrate_live_pp_report.json`, `live_pp_report.md` |
@@ -1902,6 +1931,7 @@ période plus de 1,5 buts 63,8 % au lieu de 58,9 % avec la part fixe).
 | `featureEngineering.ts` | Construit la requête envoyée au service ML. |
 | `mlApiClient.ts` | Client HTTP (jeton, cache 5 min, disjoncteur après 5 échecs). |
 | `gameMlBundle.ts` | Paquet de toutes les tuiles d'un match + direct. |
+| `nhl/liveRefresh.ts` | Rythme du direct : 30 s, 10 s en fin de match (§10.2). |
 | `prediction/playerRates.ts` | Cadences joueur (règle ou modèle joueur). |
 | `valueBets.service.ts` / `valueBetScan.service.ts` | Value bets et alertes push. |
 | `bestBets.service.ts` | Liste « best bets ». |

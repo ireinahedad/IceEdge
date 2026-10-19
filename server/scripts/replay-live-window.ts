@@ -1,10 +1,18 @@
 /**
- * VARIANTE de replay-live.ts (`ml/EXPLICATION_ML.md` §10.3) : P1 = table servie,
- * P2 = table récente de la saison (demi-vie 3 saisons, hors échantillon), lue
- * dans `ml/models/live/live_effects_recent.json` (`ml/python/live_window_compare.py`
+ * VARIANTE de replay-live.ts : deux tables d'effets de score, mêmes matchs.
+ *
+ * Par défaut (`ml/EXPLICATION_ML.md` §10.3) : P1 = table servie, P2 = table
+ * récente de la saison (demi-vie 3 saisons, hors échantillon), lue dans
+ * `ml/models/live/live_effects_recent.json` (`ml/python/live_window_compare.py`
  * d'abord). Le reste est le rejeu de replay-live.ts, décrit ci-dessous.
  *
  *   npx ts-node --transpile-only scripts/replay-live-window.ts 2023 2024 2025
+ *
+ * Comparaison libre : LIVE_A et LIVE_B = deux fichiers d'effets (au format de
+ * `liveEffects.json`, ou `{ tables: { saison: effets } }`), OUT = nom du rapport
+ * dans ml/models/live/ (§10.4 : une table contre deux tables de fin de match).
+ *
+ *   LIVE_A=ancien.json LIVE_B=nouveau.json OUT=live_endgame_replay npx ts-node … 2023 2024 2025
  *
  * Pour chaque match des saisons de test et chaque moment (mise au jeu, fin de
  * la 1re, fin de la 2e, 5 min et 2 min restantes), l'état du match est
@@ -34,7 +42,17 @@ const ML = path.resolve(__dirname, '..', '..', 'ml');
 const OUT_DIR = path.join(ML, 'models', 'live');
 // Tables « récentes » (demi-vie 3 saisons), une par saison de test, ajustées sur
 // les saisons ANTÉRIEURES seulement : `ml/python/live_window_compare.py`.
-const VARIANT: Record<string, any> = JSON.parse(fs.readFileSync(path.join(OUT_DIR, 'live_effects_recent.json'), 'utf8')).tables;
+function effectsFile(file: string | undefined, dflt: () => any): (season: number) => any {
+  if (!file) return dflt();
+  const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  return raw.tables ? (s: number) => raw.tables[String(s)] : () => raw;
+}
+const TABLE_A = effectsFile(process.env.LIVE_A, () => () => MEASURED_LIVE_EFFECTS);
+const TABLE_B = effectsFile(process.env.LIVE_B, () => {
+  const t = JSON.parse(fs.readFileSync(path.join(OUT_DIR, 'live_effects_recent.json'), 'utf8')).tables;
+  return (s: number) => t[String(s)];
+});
+const OUT_NAME = process.env.OUT ?? 'live_window_replay';
 
 // ── Données ──────────────────────────────────────────────────────────────────
 
@@ -83,13 +101,22 @@ function loadGames(seasons: Set<number>): Game[] {
 
 // ── Moments et feuille de match simulée ──────────────────────────────────────
 
-const MOMENTS: Array<{ id: string; label: string; elapsed: number }> = [
+const BASE_MOMENTS: Array<{ id: string; label: string; elapsed: number }> = [
   { id: 'puck',  label: 'mise au jeu',      elapsed: 0 },
   { id: 'endP1', label: 'fin de la 1re',    elapsed: 1200 },
   { id: 'endP2', label: 'fin de la 2e',     elapsed: 2400 },
   { id: 'left5', label: '5 min restantes',  elapsed: 3300 },
   { id: 'left2', label: '2 min restantes',  elapsed: 3480 },
 ];
+/** MOMENTS=late : la fin de match seulement, plus finement (§10.4). */
+const LATE_MOMENTS: Array<{ id: string; label: string; elapsed: number }> = [
+  { id: 'left5',  label: '5 min restantes',  elapsed: 3300 },
+  { id: 'left3',  label: '3 min restantes',  elapsed: 3420 },
+  { id: 'left2',  label: '2 min restantes',  elapsed: 3480 },
+  { id: 'left1',  label: '1 min restante',   elapsed: 3540 },
+  { id: 'left30', label: '30 s restantes',   elapsed: 3570 },
+];
+const MOMENTS = process.env.MOMENTS === 'late' ? LATE_MOMENTS : BASE_MOMENTS;
 
 /** La feuille de match (`fetchGameDetail`) telle qu'elle serait à `elapsed` secondes. */
 function detailAt(g: Game, elapsed: number): any {
@@ -112,6 +139,12 @@ function detailAt(g: Game, elapsed: number): any {
     home: { score: done.filter(x => x.home).length },
     away: { score: done.filter(x => !x.home).length },
     periods,
+    // Résumé des buts (période, temps écoulé dans la période) : le moteur y lit
+    // si un but a déjà été marqué depuis le début de la fin de match (`hasGoalSince`, §10.4).
+    scoring: done.map(x => {
+      const t = x.time - (x.period - 1) * 1200;
+      return { period: String(x.period), time: `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}` };
+    }),
   };
 }
 
@@ -170,8 +203,8 @@ function main(): void {
     const model = { preHome: g.preHome, ot: g.ot, lambdaT: g.lambdaT };
     for (const mo of MOMENTS) {
       const live = liveCtxFromDetail(detailAt(g, mo.elapsed)) as LiveGameCtx;
-      const p1 = pctById(computeLiveModelGroups(model, { ...live, state: { ...live.state, effects: MEASURED_LIVE_EFFECTS } }));
-      const p2 = pctById(computeLiveModelGroups(model, { ...live, state: { ...live.state, effects: VARIANT[String(g.season)] } }));
+      const p1 = pctById(computeLiveModelGroups(model, { ...live, state: { ...live.state, effects: TABLE_A(g.season) } }));
+      const p2 = pctById(computeLiveModelGroups(model, { ...live, state: { ...live.state, effects: TABLE_B(g.season) } }));
       for (const q of QUESTIONS) {
         const a = p1.get(q.id), b = p2.get(q.id);
         if (a == null || b == null) continue;
@@ -193,7 +226,7 @@ function main(): void {
   // ── Rapport ────────────────────────────────────────────────────────────────
   const rows: any[] = [];
   const lines: string[] = [];
-  lines.push('# Rejeu — table servie (2012-2022) contre table récente (demi-vie 3 saisons)');
+  lines.push(`# ${process.env.TITLE ?? 'Rejeu — table servie (2012-2022) contre table récente (demi-vie 3 saisons)'}`);
   lines.push('');
   lines.push(`Généré le ${new Date().toISOString().slice(0, 10)} par \`server/scripts/replay-live-window.ts\`. `
     + `${games.length} matchs de saison régulière, saisons de test ${[...testSeasons].map(s => `${s}-${String(s + 1).slice(2)}`).join(', ')}. `
@@ -201,8 +234,8 @@ function main(): void {
   lines.push('');
   lines.push('Point de départ : chiffres d\'avant-match hors échantillon du modèle de score (walk-forward). '
     + 'Moteur : `liveCtxFromDetail` + `computeLiveModelGroups` (paquet ML en direct). '
-    + 'P1 = table servie (`liveEffects.json`, 2012-2022) ; P2 = table récente de la saison (demi-vie 3 saisons, saisons antérieures seulement). '
-    + 'Δ = P2 − P1 (négatif = table récente meilleure), ± 1,96 erreur type appariée par match.');
+    + (process.env.LABELS ?? 'P1 = table servie (`liveEffects.json`, 2012-2022) ; P2 = table récente de la saison (demi-vie 3 saisons, saisons antérieures seulement). ')
+    + `Δ = P2 − P1 (négatif = ${process.env.NAME_B ?? 'table récente'} meilleure)`+', ± 1,96 erreur type appariée par match.');
   lines.push('');
   for (const scope of ['all' as const, ...[...testSeasons].sort()]) {
     lines.push(`## ${scope === 'all' ? 'Toutes saisons de test' : `Saison ${scope}-${String(scope + 1).slice(2)}`}`);
@@ -232,18 +265,18 @@ function main(): void {
   const tot1 = all.reduce((a, r) => a + r.logloss1 * r.n, 0), tot2 = all.reduce((a, r) => a + r.logloss2 * r.n, 0);
   const better = all.filter(r => r.dLogloss < 0 && Math.abs(r.dLogloss) > 1.96 * r.dLoglossSe).length;
   const worse = all.filter(r => r.dLogloss > 0 && Math.abs(r.dLogloss) > 1.96 * r.dLoglossSe).length;
-  lines.splice(6, 0, `**Synthèse** : log-loss cumulée table servie ${tot1.toFixed(1)}, table récente ${tot2.toFixed(1)} `
+  lines.splice(6, 0, `**Synthèse** : log-loss cumulée ${process.env.NAME_A ?? 'table servie'} ${tot1.toFixed(1)}, ${process.env.NAME_B ?? 'table récente'} ${tot2.toFixed(1)} `
     + `(${tot2 < tot1 ? '−' : '+'}${Math.abs(100 * (tot2 - tot1) / tot1).toFixed(2)} %). `
     + `Cases (question × moment) significativement meilleures : ${better}, pires : ${worse}, sur ${all.length}.`, '');
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  fs.writeFileSync(path.join(OUT_DIR, 'live_window_replay.md'), lines.join('\n') + '\n');
-  fs.writeFileSync(path.join(OUT_DIR, 'live_window_replay.json'), JSON.stringify({
+  fs.writeFileSync(path.join(OUT_DIR, `${OUT_NAME}.md`), lines.join('\n') + '\n');
+  fs.writeFileSync(path.join(OUT_DIR, `${OUT_NAME}.json`), JSON.stringify({
     generatedAt: new Date().toISOString(), seasons: [...testSeasons], games: games.length,
     effectsTrainSeasons: train.trainSeasons, rows,
   }, null, 2));
   console.log(lines.slice(0, 8).join('\n'));
-  console.log(`✅ ${path.relative(process.cwd(), path.join(OUT_DIR, 'live_window_replay.md'))}`);
+  console.log(`✅ ${path.relative(process.cwd(), path.join(OUT_DIR, `${OUT_NAME}.md`))}`);
   process.exit(0);
 }
 

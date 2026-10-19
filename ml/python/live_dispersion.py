@@ -82,7 +82,7 @@ def main():
     for gid, t, hs in zip(goals["game_id"], goals["time"], goals["home_scored"]):
         cnt[gi[gid], 0 if hs else 1, part_of(t)] += 1
     obs = by_part(cnt, LH, LA)
-    sims = [simulate(np.array(fx["m"]), LH, LA, sd) for sd in (11, 12, 13)]
+    sims = [simulate(C.single_table(), LH, LA, sd) for sd in (11, 12, 13)]
     periods = {k: {"observed": round(obs[k], 4), "simulated_no_hidden_strength": round(float(np.mean([s[k] for s in sims])), 4)}
                for k in obs}
 

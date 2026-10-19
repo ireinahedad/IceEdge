@@ -5,6 +5,7 @@
 
 import { MOCK_TEAMS_FULL, MOCK_GAMES_FULL } from '../../data/mockNhl';
 import { TEAM_META, USE_MOCK, currentSeason, fetchNHL, getCached, parseToiMinutes, setCached } from './core';
+import { liveRefreshMs } from './liveRefresh';
 
 // --- Teams / Standings ----------------------------------------------------
 
@@ -151,6 +152,12 @@ function formatGame(g: any, date?: string): any {
     status:      parseGameState(g.gameState ?? ''),
     period:      g.periodDescriptor?.number ?? null,
     clock:       g.clock?.timeRemaining ?? null,
+    // En direct : rythme de rafraîchissement de ce match (30 s, 10 s en fin de
+    // match, `liveRefresh.ts`) — le client rappelle l'en-tête à ce rythme.
+    ...(parseGameState(g.gameState ?? '') === 'live'
+      ? { refreshMs: liveRefreshMs(g.periodDescriptor?.number, g.clock?.timeRemaining,
+                                   g.periodDescriptor?.periodType, !!g.clock?.inIntermission) }
+      : {}),
     venue:       g.venue?.default ?? '',
     gameType:    g.gameType === 3 ? 'playoff' : 'regular',
     overUnder:   null,
@@ -564,24 +571,39 @@ export async function fetchGameById(gameId: string): Promise<any> {
     throw Object.assign(new Error('Game not found'), { status: 404 });
   }
 
-  const key    = `game:${gameId}`;
-  const cached = getCached<any>(key);
-  if (cached) return cached;
-
-  let game: any;
+  let data: any;
   try {
-    const data = await fetchNHL<any>(`v1/gamecenter/${gameId}/landing`);
-    game = formatGame(data);
+    data = await fetchLanding(gameId);
   } catch {
     throw Object.assign(new Error('Game not found'), { status: 404 });
   }
+  return formatGame(data);
+}
 
-  setCached(
-    key,
-    game,
-    game.status === 'final' ? 6 * 60 * 60_000 : game.status === 'live' ? 30_000 : 5 * 60_000,
-  );
-  return game;
+/**
+ * Page `landing` brute d'un match, en cache PARTAGÉ entre `fetchGameById`
+ * (statut, en-tête) et `fetchGameDetail` (feuille de match). Avant, chacun
+ * avait son cache pour la même URL : un recalcul du direct la lisait deux fois
+ * (banc B15, `ml/EXPLICATION_ML.md` §10.2).
+ *
+ * Durée : 6 h une fois terminé ; en direct, le rythme du direct (30 s, 10 s en
+ * fin de match, `liveRefresh.ts`) ; sinon 5 min. Un échec n'est jamais mémorisé.
+ */
+export async function fetchLanding(gameId: string): Promise<any> {
+  const key = `landing:${gameId}`;
+  const cached = getCached<any>(key);
+  if (cached) return cached;
+  const raw = await fetchNHL<any>(`v1/gamecenter/${gameId}/landing`);
+  // Instant de la lecture à l'API NHL : l'âge de tout chiffre en direct qui en
+  // découle (`live.asOf` du paquet ML) se mesure à partir de lui.
+  const data = raw && typeof raw === 'object' ? { ...raw, _fetchedAt: Date.now() } : raw;
+  const state = parseGameState(data?.gameState ?? '');
+  setCached(key, data, state === 'final' ? 6 * 60 * 60_000
+    : state === 'live'
+      ? liveRefreshMs(data?.periodDescriptor?.number, data?.clock?.timeRemaining,
+                      data?.periodDescriptor?.periodType, !!data?.clock?.inIntermission)
+      : 5 * 60_000);
+  return data;
 }
 
 /**
@@ -599,7 +621,7 @@ export async function fetchGameDetail(gameId: string): Promise<any> {
   if (cached) return cached;
 
   const [landingRes, boxRes] = await Promise.allSettled([
-    fetchNHL<any>(`v1/gamecenter/${gameId}/landing`),
+    fetchLanding(gameId),
     fetchNHL<any>(`v1/gamecenter/${gameId}/boxscore`),
   ]);
   if (landingRes.status === 'rejected') {
@@ -763,6 +785,12 @@ export async function fetchGameDetail(gameId: string): Promise<any> {
       ? { code: String(L.situation.situationCode ?? ''), secondsRemaining: Number(L.situation.secondsRemaining ?? NaN) }
       : null,
     lastPeriodType: L.gameOutcome?.lastPeriodType ?? null,
+    // Instant où la page `landing` a été lue à l'API NHL (âge de l'état servi).
+    ...(L._fetchedAt ? { asOf: new Date(L._fetchedAt).toISOString() } : {}),
+    ...(state === 'live'
+      ? { refreshMs: liveRefreshMs(L.periodDescriptor?.number, L.clock?.timeRemaining,
+                                   L.periodDescriptor?.periodType, !!L.clock?.inIntermission) }
+      : {}),
     home,
     away,
     periods,
@@ -774,7 +802,9 @@ export async function fetchGameDetail(gameId: string): Promise<any> {
     players: B ? { home: homePlayers, away: awayPlayers } : null,
   };
 
-  // Finished games never change; live ones need to stay fresh.
-  setCached(cacheKey, out, isFinal ? 6 * 60 * 60_000 : 30_000);
+  // Finished games never change; live ones need to stay fresh (10 s en fin de
+  // match, `liveRefresh.ts`).
+  setCached(cacheKey, out, isFinal ? 6 * 60 * 60_000
+    : liveRefreshMs(out.period, out.clock, out.periodType, out.inIntermission));
   return out;
 }

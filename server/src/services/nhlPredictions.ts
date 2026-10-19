@@ -31,6 +31,7 @@ import {
   finalScoreGrid, winByAtLeastShare, exactScoreShare, totalOver, teamOver, nbAtLeast,
   nbAtLeastLive, liveFraction, LiveState, LiveEffects, evolveLiveScore, powerPlayFromSituation,
 } from './prediction/finalScore';
+import { LIVE_REFRESH_MS, liveRefreshMs } from './nhl/liveRefresh';
 import measuredLiveEffects from './prediction/liveEffects.json';
 import { TtlCache } from './ttlCache';
 
@@ -415,6 +416,21 @@ function remainingShareUntil(period: number, clockSec: number, n: number): numbe
  * ni les buts par période. `gameEvents.ts` non plus : ses buts sont gardés 6 h,
  * écrits pour les matchs terminés.
  */
+/**
+ * Un but du temps réglementaire a-t-il été marqué à `sinceSec` secondes
+ * écoulées ou après ? Lu sur le résumé des buts de la feuille de match
+ * (`scoring` : période « 1 »…« 3 », temps ÉCOULÉ dans la période « MM:SS »).
+ */
+export function hasGoalSince(scoring: unknown, sinceSec: number): boolean {
+  if (!Array.isArray(scoring)) return false;
+  return scoring.some((g: any) => {
+    const p = Number(g?.period);
+    if (!Number.isInteger(p) || p < 1 || p > 3) return false;
+    const t = parseClock(g?.time);
+    return (p - 1) * 1200 + t >= sinceSec;
+  });
+}
+
 export function liveCtxFromDetail(d: any): LiveGameCtx | null {
   const status = d?.status;
   if (status !== 'live' && status !== 'final') return null;
@@ -467,11 +483,17 @@ export function liveCtxFromDetail(d: any): LiveGameCtx | null {
     ? powerPlayFromSituation(d.situation?.code, d.situation?.secondsRemaining)
     : null;
   if (pp) pp.secondsLeft = Math.min(pp.secondsLeft, secondsLeftReg);
+  // Un but déjà marqué depuis le début de la fin de match (`endgameStart`) ? Le moteur
+  // lit alors la table « après un but » (`mAfterGoal`, §10.4).
+  const goalSinceEndgame = !inOvertime && LIVE_EFFECTS?.mAfterGoal && LIVE_EFFECTS.endgameStart != null
+    ? hasGoalSince(d.scoring, LIVE_EFFECTS.endgameStart)
+    : false;
   return {
     state: {
       homeScore: home, awayScore: away, secondsLeftReg, inOvertime, f,
       ...(LIVE_EFFECTS ? { effects: LIVE_EFFECTS } : {}),
       ...(pp && pp.secondsLeft > 0 ? { pp } : {}),
+      ...(goalSinceEndgame ? { goalSinceEndgame: true } : {}),
     },
     period, clockSec, periodGoals, final: false,
     label: `${home}–${away}, ${when}`,
@@ -521,7 +543,8 @@ function teamGoalsFactor(c: LiveGameCtx, detail: any): Record<string, number> | 
   const homeAbbr = detail?.home?.abbr, awayAbbr = detail?.away?.abbr;
   if (!fx || !(lam && lam > 0) || c.final || c.state.inOvertime || !homeAbbr || !awayAbbr) return undefined;
   if (!(c.state.secondsLeftReg > 0)) return { [homeAbbr]: 0, [awayAbbr]: 0 };
-  const rem = evolveLiveScore(lam, lam, c.state.homeScore, c.state.awayScore, 3600 - c.state.secondsLeftReg, fx, c.state.pp);
+  const rem = evolveLiveScore(lam, lam, c.state.homeScore, c.state.awayScore, 3600 - c.state.secondsLeftReg, fx, c.state.pp,
+                              c.state.goalSinceEndgame);
   let eh = 0, ea = 0;
   rem.forEach((row, i) => row.forEach((p, j) => { eh += p * i; ea += p * j; }));
   return { [homeAbbr]: Math.round((eh / lam) * 1e4) / 1e4, [awayAbbr]: Math.round((ea / lam) * 1e4) / 1e4 };
@@ -1600,6 +1623,13 @@ export interface GameMarketsResult {
   status: string;
   /** Match commencé : « 2–1, 2e, 12:34 restantes ». */
   liveLabel?: string;
+  /**
+   * Match en cours : durée de validité de ces chiffres, 30 s, ou 10 s en fin
+   * de match (`nhl/liveRefresh.ts`). Absent hors direct.
+   */
+  refreshMs?: number;
+  /** Match en cours : instant de la lecture de l'état du match à l'API NHL (ISO). */
+  asOf?: string;
 }
 
 /**
@@ -1612,7 +1642,8 @@ const gameMarketsCache = new TtlCache<GameMarketsResult>(30_000, 500, 'gamePredi
 
 export async function buildGameMarketsWithStatus(gameId: string, weights?: FactorWeights): Promise<GameMarketsResult> {
   const key = `${gameId}|${weights ? JSON.stringify(weights) : ''}`;
-  return gameMarketsCache.wrap(key, () => computeGameMarketsFor(gameId, weights));
+  return gameMarketsCache.wrap(key, () => computeGameMarketsFor(gameId, weights),
+    r => (r.status === 'live' && r.refreshMs ? r.refreshMs : LIVE_REFRESH_MS));
 }
 
 export async function buildGameMarkets(gameId: string, weights?: FactorWeights): Promise<MarketGroup[]> {
@@ -1734,7 +1765,12 @@ async function computeGameMarketsFor(
     live,
     opts.model ?? null,
   );
-  return { groups, status, ...(live ? { liveLabel: live.label } : {}) };
+  const refreshMs = live && !live.final
+    ? liveRefreshMs(live.period, live.clockSec, live.state.inOvertime ? 'OT' : 'REG')
+    : undefined;
+  const asOf = live && wantDetail && detailRes.status === 'fulfilled' ? detailRes.value?.asOf : undefined;
+  return { groups, status, ...(live ? { liveLabel: live.label } : {}), ...(refreshMs ? { refreshMs } : {}),
+           ...(asOf ? { asOf } : {}) };
 }
 
 // ─── Public: team predictions (vs league-average opponent) ────────────────────

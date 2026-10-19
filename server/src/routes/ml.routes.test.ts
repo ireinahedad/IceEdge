@@ -72,7 +72,11 @@ vi.mock('../services/featureEngineering', () => features);
 vi.mock('../services/bestBets.service', () => ({ getBestBets: vi.fn(async () => ({ bets: [], meta: {} })), normalizeDate: (d?: string) => d }));
 
 const getGameMlBundle = vi.fn();
-vi.mock('../services/gameMlBundle', () => ({ getGameMlBundle: (id: string) => getGameMlBundle(id) }));
+vi.mock('../services/gameMlBundle', () => ({
+  getGameMlBundle: (id: string) => getGameMlBundle(id),
+  // Même contrat que le vrai (testé dans gameMlBundle.test.ts) : corps + ETag.
+  serializeBundle: (b: unknown) => { const body = JSON.stringify(b); return { body, etag: `"${body.length}"` }; },
+}));
 
 // Value bets (Pro) : le calcul est mocké, on teste le CÂBLAGE — compte exigé,
 // puis abonnement Pro vérifié en base par le vrai `requirePro`.
@@ -279,7 +283,9 @@ describe('/api/predict/single — pas de chiffre inventé, et les réserves sont
 });
 
 // Paquet ML d'un match : en direct, ses chiffres suivent le score (recalcul
-// toutes les 30 s côté serveur) ; une fois le match terminé, ils sont figés.
+// toutes les 30 s côté serveur, 10 s en fin de match) ; le navigateur revalide
+// à chaque rappel (ETag → 304), un CDN garde le rythme du serveur. Une fois le
+// match terminé, ils sont figés.
 describe('GET /api/predict/game/:id/bundle — cache selon l\'état du match', () => {
   beforeEach(() => { vi.clearAllMocks(); });
   const bundle = { gameId: '2026020001', results: {}, byKey: {} };
@@ -293,7 +299,26 @@ describe('GET /api/predict/game/:id/bundle — cache selon l\'état du match', (
   it('en direct : 30 s', async () => {
     getGameMlBundle.mockResolvedValue({ ...bundle, live: { label: '1–0', final: false } });
     const res = await request(await predictApp()).get('/api/predict/game/2026020001/bundle');
-    expect(res.headers['cache-control']).toBe('public, max-age=30, stale-while-revalidate=30');
+    expect(res.headers['cache-control']).toBe('public, max-age=0, s-maxage=30');
+  });
+
+  it('fin de match : 10 s, le rythme du direct', async () => {
+    getGameMlBundle.mockResolvedValue({ ...bundle, live: { label: '2–1, 3e, 01:40 restantes', final: false, refreshMs: 10_000 } });
+    const res = await request(await predictApp()).get('/api/predict/game/2026020001/bundle');
+    expect(res.headers['cache-control']).toBe('public, max-age=0, s-maxage=10');
+  });
+
+  it('corps JSON + ETag ; 304 quand le client a déjà cette version', async () => {
+    getGameMlBundle.mockResolvedValue(bundle);
+    const app = await predictApp();
+    const first = await request(app).get('/api/predict/game/2026020001/bundle');
+    expect(first.status).toBe(200);
+    expect(first.headers['content-type']).toMatch(/application\/json/);
+    expect(first.body).toEqual(bundle);
+    const etag = first.headers['etag'];
+    expect(etag).toBeTruthy();
+    const again = await request(app).get('/api/predict/game/2026020001/bundle').set('If-None-Match', etag);
+    expect(again.status).toBe(304);
   });
 
   it('terminé : 6 h', async () => {

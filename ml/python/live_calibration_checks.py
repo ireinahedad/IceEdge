@@ -99,7 +99,7 @@ def main():
     tr = season <= last
     Ot, Et = O[tr], E[tr]
     m = C.shrunk(Ot.sum(0), Et.sum(0), shrink)
-    assert np.allclose(np.round(m, 4), np.array(fx["m"])), "m ne recolle pas à liveEffects.json"
+    assert np.allclose(np.round(m, 4), C.single_table()), "m ne recolle pas à la table unique (calibrate_live_report.json)"
 
     # 1. Courbe CV.
     train = [s for s in sorted(set(season)) if s <= last]
@@ -187,7 +187,7 @@ def main():
     os.makedirs(os.path.dirname(FIG), exist_ok=True)
     fig.savefig(FIG)
     plt.close(fig)
-    heatmap(np.array(fx["m"]), sig, plt)
+    heatmap(C.single_table(), sig, plt)
     print(f"✅ {os.path.relpath(REPORT)}  ·  figures {os.path.relpath(FIG)}, {os.path.relpath(HEATMAP)}")
 
 

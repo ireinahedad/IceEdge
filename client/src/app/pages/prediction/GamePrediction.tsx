@@ -21,7 +21,11 @@ import { LiveGameView, MLProps, MktGroup } from "./gameMarkets";
 import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
 import { BetOddsCtx, GameLiveCtx, HeadToHead, NotFound, RevealMode, RevealModeCtx, ServerGroupsPending, StatsBanner, useGameOdds, useServerGroups } from "./predictionShared";
 
-/** Rythme des rappels pendant un match : celui de la feuille de match côté serveur. */
+/**
+ * Rythme des rappels pendant un match : celui de la feuille de match côté
+ * serveur. En fin de match, le paquet ML annonce un rythme plus rapide (10 s,
+ * `live.refreshMs`) : un chiffre en retard y coûte cher (`ml/EXPLICATION_ML.md` §10.2).
+ */
 const LIVE_POLL_MS = 30_000;
 /** Paquet ML en direct non rafraîchi depuis ce délai : ses chiffres s'affichent pâles. */
 const ML_STALE_MS = 90_000;
@@ -36,6 +40,9 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   // defaulting to the club's next one.
   const openTeam = (abbr: string) => navigate(`/stats/prediction/team/${abbr.toLowerCase()}?game=${gameId}`);
   const [gameView, setGameView] = useState<LiveGameView | null>(null);
+  // Rythme annoncé par le serveur pour CE match (`refreshMs` de l'en-tête :
+  // 30 s, 10 s en fin de match — `server/src/services/nhl/liveRefresh.ts`).
+  const [headerRefreshMs, setHeaderRefreshMs] = useState<number | undefined>(undefined);
   // Match EN COURS selon le statut reçu. (`!!gameView.period` servait avant de
   // test, mais `period` est aussi renseignée pour un match terminé.)
   const isLive = gameView?.status === "live";
@@ -47,7 +54,8 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   // passé 90 s sans rafraîchissement (`staleSince`) les chiffres affichés
   // perdent leur drapeau `live` : ils restent à l'écran, mais pâles.
   const { groups: apiGroups, failed: apiFailed, retry: retryApi, staleSince } =
-    useServerGroups(() => nhlApiService.getGamePredictions(gameId, isLive), gameId, isLive ? LIVE_POLL_MS : undefined);
+    useServerGroups(() => nhlApiService.getGamePredictions(gameId, isLive), gameId,
+                    isLive ? (headerRefreshMs ?? LIVE_POLL_MS) : undefined);
   const [loading, setLoading] = useState(true);
   // 2026-10-01 : ML partout ; les règles ne se voient que dans la fiche d'un pari.
   const revealMode: RevealMode = "ml";
@@ -62,6 +70,11 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   // sont plus « en direct » (`mlStale`) et s'affichent pâles.
   const [mlBundle, setMlBundle] = useState<GameMlBundle | null | undefined>(undefined);
   const [mlStale, setMlStale] = useState(false);
+  // Le plus rapide des deux rythmes annoncés (paquet ML, en-tête du match).
+  const pollMs = Math.min(
+    mlBundle?.live && !mlBundle.live.final && mlBundle.live.refreshMs ? mlBundle.live.refreshMs : LIVE_POLL_MS,
+    headerRefreshMs ?? LIVE_POLL_MS,
+  );
   useEffect(() => {
     if (revealMode !== "ml") return;
     let alive = true;
@@ -73,9 +86,9 @@ export function GamePrediction({ gameId }: { gameId: string }) {
       else if (Date.now() - lastOk >= ML_STALE_MS) setMlStale(true);
     });
     load();
-    const timer = isLive ? setInterval(load, LIVE_POLL_MS) : undefined;
+    const timer = isLive ? setInterval(load, pollMs) : undefined;
     return () => { alive = false; if (timer) clearInterval(timer); };
-  }, [revealMode, gameId, isLive]);
+  }, [revealMode, gameId, isLive, pollMs]);
 
   // En-tête (score, période, horloge) rafraîchi au même rythme que les marchés
   // tant que le match est en cours. Au coup de sifflet final, plus aucun rappel
@@ -87,6 +100,7 @@ export function GamePrediction({ gameId }: { gameId: string }) {
       try {
         const g = await nhlApiService.getGame(gameId);
         if (!alive) return;
+        setHeaderRefreshMs(g.status === "live" ? g.refreshMs : undefined);
         setGameView(v => v && {
           ...v,
           status: g.status,
@@ -95,9 +109,9 @@ export function GamePrediction({ gameId }: { gameId: string }) {
           away: { ...v.away, score: g.awayTeam.score },
         });
       } catch { /* en-tête inchangé ; nouvel essai au prochain tick */ }
-    }, LIVE_POLL_MS);
+    }, pollMs);
     return () => { alive = false; clearInterval(timer); };
-  }, [isLive, gameId]);
+  }, [isLive, gameId, pollMs]);
 
   // Match TERMINÉ : la page prédiction n'a plus d'objet — tous les paris sont
   // décidés. On la remplace par la page Statistiques du match (score final,
@@ -132,6 +146,7 @@ export function GamePrediction({ gameId }: { gameId: string }) {
               return null;
             }),
         ]);
+        setHeaderRefreshMs(nhlGame.status === "live" ? nhlGame.refreshMs : undefined);
         setGameView({
           id: gameId,
           home: {

@@ -108,6 +108,16 @@ function atSendTime(policy: (req: Request) => string): RequestHandler {
  * À n'utiliser que sur des routes dont la réponse est IDENTIQUE pour tous les
  * appelants. Les méthodes autres que GET/HEAD ne sont jamais cachées.
  */
+/**
+ * Match en FIN de match (`services/nhl/liveRefresh.ts`) : le navigateur revalide
+ * à chaque rappel (max-age=0 — sinon son cache et `stale-while-revalidate`
+ * ajoutent un ou deux rappels de retard là où un but change tout), un CDN garde
+ * la réponse au rythme du serveur (`s-maxage`).
+ */
+export function liveEndgamePolicy(refreshSec: number): string {
+  return `public, max-age=0, s-maxage=${refreshSec}`;
+}
+
 export function publicCache(maxAgeSec: number, swrSec = maxAgeSec * 2): RequestHandler {
   const policy = publicPolicy(maxAgeSec, swrSec);
   return atSendTime((req) =>

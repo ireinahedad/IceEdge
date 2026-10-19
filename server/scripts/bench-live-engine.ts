@@ -12,7 +12,10 @@
  */
 /* eslint-disable @typescript-eslint/no-var-requires */
 const Fs = require('../src/services/prediction/finalScore');
-const FX = require('../src/services/prediction/liveEffects.json');
+// Copie à UNE table (sans `mAfterGoal`) : la copie du moteur à pas réglable
+// ci-dessous ne porte pas la couche « après un but » de la fin de match ; les
+// deux moteurs comparés lisent donc la même table.
+const FX = { ...require('../src/services/prediction/liveEffects.json'), mAfterGoal: undefined, endgameStart: undefined };
 const MAX_K = 14;
 // Port of evolveLiveScore (no power play) with a step parameter.
 function engine(lh: number, la: number, h0: number, a0: number, elapsed: number, fx: any, STEP: number): number[][] {

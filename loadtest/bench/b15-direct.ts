@@ -3,11 +3,12 @@
  *
  * LA QUESTION : un soir de 16 matchs en cours, le coût du direct suit-il le
  * nombre de spectateurs ? Attendu : non. `liveCache` déduplique en vol, donc au
- * plus UN recalcul par match toutes les 30 s, et les appels à l'API NHL et au
- * service ML restent ceux d'un seul spectateur.
+ * plus UN recalcul par match par fenêtre — 30 s en cours de match, 10 s en fin
+ * de match (`liveRefresh.ts`) — et les appels à l'API NHL et au service ML
+ * restent ceux d'un seul spectateur.
  *
- * Critères : exécutions du paquet en direct ≤ 2 par match et par minute
- * (une par fenêtre de 30 s) ; appels NHL et ML
+ * Critères : ≤ 2 recalculs par match et par minute en cours de match, ≤ 6 en
+ * fin de match ; 2 appels NHL par recalcul (landing + boxscore) ; appels NHL et ML
  * identiques d'un palier de spectateurs à l'autre ; p95 stable.
  */
 
@@ -21,13 +22,13 @@ export function runB15(): any[] {
 
 export function printB15(rows: any[]): void {
   console.log('\n═══ B15 · Soirée en direct — 16 matchs, V spectateurs, rafraîchissement ~1 s ═══\n');
-  console.log('    V │ req/s │ p50 ms │ p95 ms │  max │ err │ recalculs direct │ /match/min │ dédoublonnés │ appels NHL │ appels ML │ Odds');
+  console.log('    V │ req/s │ p50 ms │ p95 ms │  max │ err │ recalculs/min (cours) │ (fin) │ NHL/recalcul │ appels ML │ Ko/réponse');
   for (const r of rows) {
-    console.log(`${String(r.viewers).padStart(5)} │ ${String(r.rps).padStart(5)} │ ${String(r.p50).padStart(6)} │ ${String(r.p95).padStart(6)} │ ${String(r.max).padStart(4)} │ ${String(r.errors).padStart(3)} │ ${String(r.liveExecutions).padStart(16)} │ ${String(r.liveExecPerGamePerMin).padStart(10)} │ ${String(r.liveDedup).padStart(12)} │ ${String(r.nhl).padStart(10)} │ ${String(r.ml).padStart(9)} │ ${String(r.odds).padStart(4)}`);
+    console.log(`${String(r.viewers).padStart(5)} │ ${String(r.rps).padStart(5)} │ ${String(r.p50).padStart(6)} │ ${String(r.p95).padStart(6)} │ ${String(r.max).padStart(4)} │ ${String(r.errors).padStart(3)} │ ${String(r.recalcPerMinMid).padStart(21)} │ ${String(r.recalcPerMinEndgame).padStart(5)} │ ${String(r.nhlPerRecalc).padStart(12)} │ ${String(r.ml).padStart(9)} │ ${String(r.avgKb).padStart(10)}`);
   }
-  const ok = rows.every(r => r.liveExecPerGamePerMin <= 2.2);
-  console.log(ok ? '\n  ✓ au plus un recalcul par match toutes les 30 s, quel que soit V'
-                 : '\n  ✗ le nombre de recalculs suit le nombre de spectateurs');
+  const ok = rows.every(r => r.recalcPerMinMid <= 2.2 && r.recalcPerMinEndgame <= 6.6 && r.nhlPerRecalc <= 2.05);
+  console.log(ok ? '\n  ✓ un recalcul par match et par fenêtre (30 s, 10 s en fin de match), 2 appels NHL par recalcul, quel que soit V'
+                 : '\n  ✗ recalculs ou appels NHL au-delà du rythme attendu');
 }
 
 export function main(): void {

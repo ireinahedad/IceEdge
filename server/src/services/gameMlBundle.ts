@@ -27,6 +27,7 @@
  * soit le trafic — au lieu de ~95 par visiteur qui bascule en mode ML.
  */
 
+import { createHash } from 'crypto';
 import { TtlCache } from './ttlCache';
 import { buildPrematchGameMarkets, buildLiveModelMarkets } from './nhlPredictions';
 import { buildGameFeatures, type GameFeatures } from './featureEngineering';
@@ -91,7 +92,17 @@ export interface GameMlBundle {
    * Match commencé : les chiffres des tuiles sont ceux du modèle ML conditionnés
    * par le score et le temps restant (voir `applyLive`). Absent = avant-match.
    */
-  live?: { label: string; final: boolean };
+  live?: {
+    label: string; final: boolean;
+    /** Durée de validité de ces chiffres : 30 s, 10 s en fin de match (`nhl/liveRefresh.ts`). */
+    refreshMs?: number;
+    /**
+     * Instant où l'état du match (score, horloge) a été lu à l'API NHL (ISO).
+     * `Date.now() − asOf` = âge des chiffres affichés, côté serveur — ce que
+     * mesure `server/scripts/measure-live-lag.ts` en production.
+     */
+    asOf?: string;
+  };
 }
 
 /**
@@ -288,7 +299,9 @@ async function applyLive(gameId: string, pre: GameMlBundle): Promise<GameMlBundl
     generatedAt: new Date().toISOString(),
     results: { ...pre.results },
     byKey:   { ...pre.byKey },
-    live: { label: res.liveLabel, final: res.status === 'final' },
+    live: { label: res.liveLabel, final: res.status === 'final',
+            ...(res.refreshMs ? { refreshMs: res.refreshMs } : {}),
+            ...(res.asOf ? { asOf: res.asOf } : {}) },
   };
   if (preHome == null || ot == null || lambdaT == null) return base;
 
@@ -325,7 +338,30 @@ async function applyLive(gameId: string, pre: GameMlBundle): Promise<GameMlBundl
 
 export async function getGameMlBundle(gameId: string): Promise<GameMlBundle> {
   const pre = await bundleCache.wrap(gameId, () => computeBundle(gameId));
-  return liveCache.wrap(gameId, () => applyLive(gameId, pre));
+  // En direct, le paquet vit le rythme du match : 30 s, 10 s en fin de match.
+  return liveCache.wrap(gameId, () => applyLive(gameId, pre),
+    b => (b.live && !b.live.final && b.live.refreshMs ? b.live.refreshMs : LIVE_TTL_MS));
+}
+
+/**
+ * Corps JSON d'un paquet, sérialisé UNE fois par paquet (donc une fois par
+ * recalcul en direct) et non à chaque requête : ≈ 110 Ko de JSON, re-sérialisés
+ * à chaque visiteur, étaient le vrai coût d'une soirée chargée (banc B15,
+ * `ml/EXPLICATION_ML.md` §10.2). L'ETag, calculé une fois aussi, laisse le
+ * client et un CDN répondre 304 sans renvoyer le corps.
+ *
+ * Indexé par l'OBJET paquet (WeakMap) : le cache rend le même objet tant qu'il
+ * est frais, et l'entrée disparaît avec lui.
+ */
+const serialized = new WeakMap<GameMlBundle, { body: string; etag: string }>();
+export function serializeBundle(b: GameMlBundle): { body: string; etag: string } {
+  let hit = serialized.get(b);
+  if (!hit) {
+    const body = JSON.stringify(b);
+    hit = { body, etag: `"${createHash('sha1').update(body).digest('base64url')}"` };
+    serialized.set(b, hit);
+  }
+  return hit;
 }
 
 /**

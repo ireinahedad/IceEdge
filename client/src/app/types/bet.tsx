@@ -45,6 +45,11 @@ export interface NHLGame {
   status: "scheduled" | "live" | "final";
   period?: number;
   clock?: string;
+  /**
+   * Match en cours : rythme de rafraîchissement annoncé par le serveur (ms) —
+   * 30 000, ou 10 000 en fin de match (`server/src/services/nhl/liveRefresh.ts`).
+   */
+  refreshMs?: number;
   homeTeam: {
     id: number;
     abbreviation: string;

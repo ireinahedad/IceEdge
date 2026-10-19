@@ -106,6 +106,11 @@ export interface LiveState {
    * `ml/python/calibrate_live_pp.py`) ; absente ou nulle : cadence moyenne.
    */
   pp?:            LivePowerPlay | null;
+  /**
+   * Un but a-t-il déjà été marqué depuis `effects.endgameStart` (58:00 aujourd'hui) ? Lu
+   * seulement avec `effects.mAfterGoal`. Absent : non.
+   */
+  goalSinceEndgame?: boolean;
 }
 
 /**
@@ -176,6 +181,15 @@ export interface LiveEffects {
    * temps = 1 : sans situation connue, la cadence reste λ × w × m.
    */
   pp?: { g: Record<string, number>; trainSeasons?: number[] };
+  /**
+   * Fin de match (`calibrate_live.py`, `ml/EXPLICATION_ML.md` §10.4). À partir de
+   * `endgameStart` secondes écoulées (début de la fin de match, choisi par
+   * validation croisée : 58:00 aujourd'hui), une fois qu'un but a été marqué
+   * depuis cet instant, la cadence lit `mAfterGoal` au lieu de `m` : après un
+   * premier but, le jeu ne repart pas au même rythme. Absents : une seule table.
+   */
+  endgameStart?: number;
+  mAfterGoal?:   number[][];
 }
 
 /** Part des buts restants : f explicite, sinon le temps réglementaire restant. */
@@ -193,7 +207,8 @@ export function finalScoreGrid(
   // Effets de score mesurés : buts restants par le moteur pas à pas.
   if (live?.effects && !live.inOvertime && live.secondsLeftReg > 0) {
     return gridFromRemaining(
-      evolveLiveScore(lambdaH, lambdaA, h0, a0, 3600 - live.secondsLeftReg, live.effects, live.pp),
+      evolveLiveScore(lambdaH, lambdaA, h0, a0, 3600 - live.secondsLeftReg, live.effects, live.pp,
+                      live.goalSinceEndgame),
       h0, a0, otShareHome, live.tieBoost);
   }
   // Avant-match : plancher 0.05, grille depuis 0–0. En direct : les buts
@@ -266,14 +281,28 @@ const STEP_SEC = 10;
  * vue de l'équipe). Mineure (`endsOnGoal`) : dans les cases où l'équipe en
  * avantage a déjà marqué depuis l'instant présent, la pénalité est finie et
  * g repasse à 1.
+ *
+ * Fin de match (`fx.mAfterGoal`) : la grille est tenue en deux couches, selon
+ * qu'un but a déjà été marqué depuis `fx.endgameStart` (58:00 aujourd'hui) ou non
+ * (`goalSinceEndgame` pour l'état de départ). La couche « après un but » lit
+ * `mAfterGoal` : c'est ce qui donne aux buts restants leur vraie forme — plus
+ * souvent exactement un but, moins souvent zéro ou deux et plus (§10.4).
  */
 export function evolveLiveScore(
   lambdaH: number, lambdaA: number, h0: number, a0: number,
   elapsedSec: number, fx: LiveEffects, pp?: LivePowerPlay | null,
+  goalSinceEndgame = false,
 ): number[][] {
   const n = MAX_K + 1;
-  let cur: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
-  cur[0][0] = 1;
+  const grid = () => Array.from({ length: n }, () => new Array(n).fill(0));
+  // Deux couches de la même grille : 0 = aucun but marqué depuis `endgameStart`,
+  // 1 = au moins un. Sans `mAfterGoal`, la couche 1 reste vide et le calcul est
+  // exactement celui d'une seule table.
+  const after = fx.mAfterGoal && fx.endgameStart != null ? fx.mAfterGoal : null;
+  const start = after ? fx.endgameStart! : Infinity;
+  let cur0 = grid(), cur1 = grid();
+  const t0 = Math.max(0, Math.min(3600, elapsedSec));
+  if (after && goalSinceEndgame && t0 >= start) cur1[0][0] = 1; else cur0[0][0] = 1;
   const lh = Math.max(0, lambdaH), la = Math.max(0, lambdaA);
   const d0 = h0 - a0;
   const sliceAt = (t: number) => {
@@ -288,7 +317,7 @@ export function evolveLiveScore(
     return [p[0] / z, p[1] / z, p[2] / z];
   };
   let maxI = 0, maxJ = 0;   // bornes de la masse non nulle : la boucle ne parcourt qu'elles
-  let t = Math.max(0, Math.min(3600, elapsedSec));
+  let t = t0;
   // Situation en cours : facteurs mesurés et instant (écoulé) où elle prend fin.
   const g = fx.pp?.g;
   const ppOn = !!(pp && g && pp.secondsLeft > 0);
@@ -298,6 +327,17 @@ export function evolveLiveScore(
   // Mineure : finie dès que l'équipe en avantage marque (i > 0 domicile, j > 0 visiteur).
   const ppHome = ppOn && pp!.endsOnGoal && pp!.homeSkaters > pp!.awaySkaters;
   const ppAway = ppOn && pp!.endsOnGoal && pp!.awaySkaters > pp!.homeSkaters;
+  type Law = { ph: number[]; pa: number[] };
+  /** Lois du pas pour une table : 7 écarts possibles, ×2 pendant une situation. */
+  const laws = (tab: number[][], s: number, w: number, inPp: boolean) => {
+    const off: Law[] = [], on: Law[] = [];
+    for (let c = 0; c < 7; c++) {
+      const mh = tab[s][c] ?? 1, ma = tab[s][6 - c] ?? 1;
+      off.push({ ph: goals3(lh * w * mh), pa: goals3(la * w * ma) });
+      if (inPp) on.push({ ph: goals3(lh * w * mh * gH), pa: goals3(la * w * ma * gA) });
+    }
+    return { off, on };
+  };
   while (t < 3600 - 1e-9) {
     let next = Math.min(3600, (Math.floor(t / STEP_SEC) + 1) * STEP_SEC);
     const inPp = t < ppEnd - 1e-9;
@@ -305,36 +345,40 @@ export function evolveLiveScore(
     const per = Math.min(2, Math.floor(t / 1200));
     const w = (fx.periodDist[per] ?? 1 / 3) * (next - t) / 1200;
     const s = sliceAt(t);
-    // La cadence ne dépend que de l'écart borné à ±3 : 7 cas par pas, ×2 pendant
-    // une situation (pénalité en cours / déjà finie par un but).
-    const byDiff: Array<{ ph: number[]; pa: number[] }> = [];
-    const byDiffOn: Array<{ ph: number[]; pa: number[] }> = [];
-    for (let c = 0; c < 7; c++) {
-      const mh = fx.m[s][c] ?? 1, ma = fx.m[s][6 - c] ?? 1;
-      byDiff.push({ ph: goals3(lh * w * mh), pa: goals3(la * w * ma) });
-      if (inPp) byDiffOn.push({ ph: goals3(lh * w * mh * gH), pa: goals3(la * w * ma * gA) });
-    }
-    const nxt: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
-    for (let i = 0; i <= maxI; i++) {
-      for (let j = 0; j <= maxJ; j++) {
-        const q = cur[i][j];
-        if (q < 1e-15) continue;
-        const on = inPp && !(ppHome && i > 0) && !(ppAway && j > 0);
-        const { ph, pa } = (on ? byDiffOn : byDiff)[Math.max(-3, Math.min(3, d0 + i - j)) + 3];
-        for (let k = 0; k < 3; k++) {
-          const row = nxt[Math.min(MAX_K, i + k)];
-          const qk = q * ph[k];
-          row[j] += qk * pa[0];
-          row[Math.min(MAX_K, j + 1)] += qk * pa[1];
-          row[Math.min(MAX_K, j + 2)] += qk * pa[2];
+    // `endgameStart` est une borne de tranche, multiple du pas : un pas est
+    // entièrement avant ou entièrement après.
+    const late = t >= start - 1e-9;
+    const L0 = laws(fx.m, s, w, inPp);
+    const L1 = late ? laws(after!, s, w, inPp) : null;
+    const nxt0 = grid(), nxt1 = grid();
+    const spread = (src: number[][], L: { off: Law[]; on: Law[] }, toAfter: boolean) => {
+      for (let i = 0; i <= maxI; i++) {
+        for (let j = 0; j <= maxJ; j++) {
+          const q = src[i][j];
+          if (q < 1e-15) continue;
+          const on = inPp && !(ppHome && i > 0) && !(ppAway && j > 0);
+          const { ph, pa } = (on ? L.on : L.off)[Math.max(-3, Math.min(3, d0 + i - j)) + 3];
+          for (let k = 0; k < 3; k++) {
+            const ii = Math.min(MAX_K, i + k);
+            const qk = q * ph[k];
+            for (let l = 0; l < 3; l++) {
+              const jj = Math.min(MAX_K, j + l);
+              // Un but dans un pas de la fin de match fait passer à la couche 1.
+              const dest = toAfter || (late && k + l > 0) ? nxt1 : nxt0;
+              dest[ii][jj] += qk * pa[l];
+            }
+          }
         }
       }
-    }
+    };
+    spread(cur0, L0, false);
+    if (L1) spread(cur1, L1, true);
     maxI = Math.min(MAX_K, maxI + 2); maxJ = Math.min(MAX_K, maxJ + 2);
-    cur = nxt;
+    cur0 = nxt0; cur1 = nxt1;
     t = next;
   }
-  return cur;
+  if (!after) return cur0;
+  return cur0.map((row, i) => row.map((v, j) => v + cur1[i][j]));
 }
 
 /** Somme des cases qui vérifient `pred(h, a)`. */

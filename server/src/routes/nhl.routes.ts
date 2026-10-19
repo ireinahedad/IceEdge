@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { NHLService } from '../services/nhl.service';
 import { buildGameMarketsWithStatus, buildTeamMarkets, buildPlayerMarkets } from '../services/nhlPredictions';
 import { FactorWeights } from '../services/predictionFactors';
-import { publicCache, privateCache, publicPolicy, TTL } from '../middleware/httpCache.middleware';
+import { publicCache, privateCache, publicPolicy, liveEndgamePolicy, TTL } from '../middleware/httpCache.middleware';
+import { ENDGAME_REFRESH_MS } from '../services/nhl/liveRefresh';
 import { staleFallback } from '../middleware/staleFallback.middleware';
 import { sendError } from '../httpError';
 import { getStartingGoalies } from '../services/startingGoalies';
@@ -50,6 +51,10 @@ function cacheByGameStatus(res: any, payload: any): void {
     ? (payload.every((g: any) => g?.status === 'final') && payload.length > 0 ? 'final' : 'mixed')
     : payload?.status;
   if (status === 'final') res.set('Cache-Control', publicPolicy(TTL.FINAL));
+  // Un match en fin de match (`refreshMs` = 10 s) : en-tête du rythme rapide.
+  if (status === 'live' && payload?.refreshMs === ENDGAME_REFRESH_MS) {
+    res.set('Cache-Control', liveEndgamePolicy(ENDGAME_REFRESH_MS / 1000));
+  }
 }
 
 // Games
@@ -376,8 +381,10 @@ function parseWeights(q: any): FactorWeights | undefined {
 // `res.json`, donc prioritaire sur le middleware. La réponse reste un tableau.
 router.get('/predictions/game/:gameId', publicCache(TTL.SHORT), async (req, res) => {
   try {
-    const { groups, status } = await buildGameMarketsWithStatus(req.params.gameId, parseWeights(req.query));
-    if (status === 'live')  res.set('Cache-Control', publicPolicy(TTL.LIVE));
+    const { groups, status, refreshMs } = await buildGameMarketsWithStatus(req.params.gameId, parseWeights(req.query));
+    if (status === 'live')  res.set('Cache-Control', refreshMs === ENDGAME_REFRESH_MS
+      ? liveEndgamePolicy(ENDGAME_REFRESH_MS / 1000)   // fin de match : rythme de 10 s
+      : publicPolicy(TTL.LIVE));
     if (status === 'final') res.set('Cache-Control', publicPolicy(TTL.FINAL));
     res.json(groups);
   }

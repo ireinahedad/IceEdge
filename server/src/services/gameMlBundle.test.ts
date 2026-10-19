@@ -51,7 +51,7 @@ vi.mock('./nhlPredictions', () => ({
   buildLiveModelMarkets: (id: string, m: unknown) => buildLiveModelMarkets(id, m),
 }));
 
-import { getGameMlBundle, mlBundleKey } from './gameMlBundle';
+import { getGameMlBundle, mlBundleKey, serializeBundle } from './gameMlBundle';
 
 describe('getGameMlBundle', () => {
   beforeEach(() => { predictGameBundle.mockClear(); buildGameFeatures.mockClear(); });
@@ -136,5 +136,52 @@ describe('getGameMlBundle — en direct', () => {
     const b = await getGameMlBundle('2026020666');
     expect(b.live).toBeUndefined();
     expect(b.results['ml-home']).toMatchObject({ probability: 42 });
+  });
+});
+
+describe('getGameMlBundle — rythme du direct (§10.2)', () => {
+  beforeEach(() => { buildLiveModelMarkets.mockClear(); vi.useRealTimers(); });
+
+  it('fin de match : le paquet ne vit que 10 s', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    STATUS['2026020777'] = 'live';
+    buildLiveModelMarkets.mockImplementation(async () => ({
+      status: 'live', liveLabel: '2–1, 3e, 01:40 restantes', refreshMs: 10_000,
+      groups: TILES().map(g => ({ ...g, options: g.options.map((o: any) => ({ ...o, rulePct: 50 })) })),
+    }));
+    const b = await getGameMlBundle('2026020777');
+    expect(b.live).toEqual({ label: '2–1, 3e, 01:40 restantes', final: false, refreshMs: 10_000 });
+    vi.setSystemTime(Date.now() + 11_000);
+    await getGameMlBundle('2026020777');
+    expect(buildLiveModelMarkets).toHaveBeenCalledTimes(2);
+  });
+
+  it('milieu de match : toujours 30 s', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    STATUS['2026020888'] = 'live';
+    buildLiveModelMarkets.mockImplementation(async () => ({
+      status: 'live', liveLabel: '1–0, 2e, 10:00 restantes', refreshMs: 30_000,
+      groups: TILES().map(g => ({ ...g, options: g.options.map((o: any) => ({ ...o, rulePct: 50 })) })),
+    }));
+    await getGameMlBundle('2026020888');
+    vi.setSystemTime(Date.now() + 11_000);
+    await getGameMlBundle('2026020888');
+    expect(buildLiveModelMarkets).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(Date.now() + 20_000);
+    await getGameMlBundle('2026020888');
+    expect(buildLiveModelMarkets).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('serializeBundle', () => {
+  it('sérialise une fois par paquet : même corps, même ETag', async () => {
+    const b = await getGameMlBundle('2026020999');
+    const a1 = serializeBundle(b);
+    const a2 = serializeBundle(b);
+    expect(a2).toBe(a1);
+    expect(JSON.parse(a1.body)).toEqual(JSON.parse(JSON.stringify(b)));
+    expect(a1.etag).toMatch(/^"[A-Za-z0-9_-]+"$/);
+    // Un autre paquet (autre contenu) : autre ETag.
+    expect(serializeBundle({ ...b, gameId: 'x' }).etag).not.toBe(a1.etag);
   });
 });

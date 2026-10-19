@@ -91,6 +91,12 @@ function detailAt(g: Game, elapsed: number): any {
     home: { score: done.filter(x => x.home).length },
     away: { score: done.filter(x => !x.home).length },
     periods,
+    // Résumé des buts (période, temps écoulé dans la période) : le moteur y lit
+    // si un but a déjà été marqué depuis le début de la fin de match (`hasGoalSince`, §10.4).
+    scoring: done.map(x => {
+      const t = x.time - (x.period - 1) * 1200;
+      return { period: String(x.period), time: `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}` };
+    }),
   };
 }
 

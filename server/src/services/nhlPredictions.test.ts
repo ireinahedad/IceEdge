@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   buildGameMarkets, buildGameMarketsWithStatus, buildLiveModelMarkets, buildPrematchGameMarkets,
-  boxscoreLiveInfo, liveCtxFromDetail, marginDistribution, computeLiveModelGroups,
+  boxscoreLiveInfo, liveCtxFromDetail, marginDistribution, computeLiveModelGroups, hasGoalSince,
   buildPlayerMarkets,
 } from './nhlPredictions';
 import { fetchPlayerById } from './nhlApiClient';
@@ -708,5 +708,24 @@ describe('buildPlayerMarkets — mises en échec, blocs et pénalités du JOUEUR
     expect(early.rulePct).toBeGreaterThan(pos.rulePct);
     expect(early.rulePct).toBeLessThan(80);
     expect((await pctOf(D(undefined, undefined, 0), 'hits-o15')).ruleNote).toContain('Position avg 2.20 hits');
+  });
+});
+
+describe('fin de match — un but déjà marqué depuis son début ? (§10.4)', () => {
+  it('lu sur le résumé des buts : 3e période, 15:00 écoulées ou plus', () => {
+    expect(hasGoalSince([{ period: '3', time: '15:00' }], 3300)).toBe(true);
+    expect(hasGoalSince([{ period: '3', time: '14:59' }], 3300)).toBe(false);
+    expect(hasGoalSince([{ period: '2', time: '19:59' }, { period: '1', time: '18:00' }], 3300)).toBe(false);
+    expect(hasGoalSince([{ period: 'OT', time: '01:00' }], 3300)).toBe(false);
+    expect(hasGoalSince(undefined, 3300)).toBe(false);
+  });
+
+  it('porté par l\'état du match en direct', () => {
+    const base = { status: 'live', period: 3, periodType: 'REG', clock: '02:00', inIntermission: false,
+                   home: { score: 3 }, away: { score: 2 }, periods: [] };
+    const late = liveCtxFromDetail({ ...base, scoring: [{ period: '3', time: '18:30' }] });
+    const early = liveCtxFromDetail({ ...base, scoring: [{ period: '3', time: '10:00' }] });  // bien avant
+    expect(late?.state.goalSinceEndgame).toBe(true);
+    expect(early?.state.goalSinceEndgame).toBeUndefined();
   });
 });

@@ -28,7 +28,7 @@ import {
   buildRealFactors,
 } from "../services/predictionEngine";
 import { mlApiClient } from "../services/mlApiClient";
-import { getGameMlBundle } from "../services/gameMlBundle";
+import { getGameMlBundle, serializeBundle } from "../services/gameMlBundle";
 import { predictPlayerFromModel } from "../services/prediction/playerModelPrediction";
 import { fetchGameById } from "../services/nhlApiClient";
 import { currentSeason } from "../services/nhl/core";
@@ -886,14 +886,23 @@ router.get('/game/:gameId/bundle', predictLimiter, async (req: Request, res: Res
   if (!/^\d{6,12}$/.test(gameId)) return res.status(400).json({ error: 'invalid gameId' });
   try {
     const bundle = await getGameMlBundle(gameId);
-    // En direct, les chiffres suivent le score (recalculés toutes les 30 s) ;
-    // une fois le match terminé, ils ne bougeront plus.
+    // En direct, les chiffres suivent le score (recalculés toutes les 30 s, 10 s
+    // en fin de match — `nhl/liveRefresh.ts`). Le NAVIGATEUR revalide à chaque
+    // rappel (max-age=0 : sinon son cache, et surtout `stale-while-revalidate`,
+    // ajoutaient un ou deux rappels de retard) ; l'ETag rend ce contrôle
+    // presque gratuit (304). Un CDN garde la réponse au rythme du serveur.
+    // Une fois le match terminé, les chiffres ne bougeront plus.
+    const liveSec = Math.round((bundle.live?.refreshMs ?? 30_000) / 1000);
     res.set('Cache-Control', bundle.live?.final
       ? 'public, max-age=21600, stale-while-revalidate=43200'
       : bundle.live
-        ? 'public, max-age=30, stale-while-revalidate=30'
+        ? `public, max-age=0, s-maxage=${liveSec}`
         : 'public, max-age=120, stale-while-revalidate=600');
-    res.json(bundle);
+    // Corps sérialisé une fois par paquet (pas par requête), ETag compris :
+    // Express répond 304 tout seul quand le client a déjà cette version.
+    const { body, etag } = serializeBundle(bundle);
+    res.set('ETag', etag);
+    res.type('application/json').send(body);
   } catch (err: any) {
     if (err?.status === 404) return res.status(404).json({ error: 'Game not found' });
     // Service ML en panne, disjoncteur ouvert, ou match sans aucune donnée

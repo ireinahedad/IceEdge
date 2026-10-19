@@ -217,3 +217,49 @@ describe('avantage numérique en cours — facteurs mesurés (calibrate_live_pp.
     expect(b.regHome).toBeGreaterThan(a.regHome + 0.03);
   });
 });
+
+describe('evolveLiveScore — fin de match : table « après un but » (§10.4)', () => {
+  const FX = measured as unknown as LiveEffects;
+  const total = (g: number[][]) => g.reduce((a, r) => a + r.reduce((b, v) => b + v, 0), 0);
+  const pN = (g: number[][], n: number) => g.reduce((a, r, i) => a + r.reduce((b, v, j) => b + (i + j === n ? v : 0), 0), 0);
+
+  it('la table servie porte bien les deux tables', () => {
+    expect([3300, 3420, 3480]).toContain(FX.endgameStart);
+    expect(FX.mAfterGoal?.length).toBe(FX.m.length);
+  });
+
+  it('mAfterGoal = m : exactement le calcul d\'une seule table', () => {
+    const same = { ...FX, mAfterGoal: FX.m };
+    const single = { ...FX, mAfterGoal: undefined, endgameStart: undefined };
+    const a = evolveLiveScore(3.1, 2.8, 2, 1, 3400, same);
+    const b = evolveLiveScore(3.1, 2.8, 2, 1, 3400, single);
+    a.forEach((r, i) => r.forEach((v, j) => expect(v).toBeCloseTo(b[i][j], 12)));
+  });
+
+  it('la masse est conservée, depuis la mise au jeu comme en fin de match', () => {
+    for (const el of [0, 2400, 3300, 3480, 3590]) {
+      expect(total(evolveLiveScore(3.1, 2.8, 1, 1, el, FX))).toBeCloseTo(1, 9);
+      expect(total(evolveLiveScore(3.1, 2.8, 1, 1, el, FX, null, true))).toBeCloseTo(1, 9);
+    }
+  });
+
+  it('après un premier but, un second est moins probable qu\'avec une seule table', () => {
+    const single = { ...FX, mAfterGoal: undefined, endgameStart: undefined };
+    const two = evolveLiveScore(3.1, 2.8, 3, 2, 3480, FX);
+    const one = evolveLiveScore(3.1, 2.8, 3, 2, 3480, single);
+    const ge2 = (g: number[][]) => 1 - pN(g, 0) - pN(g, 1);
+    expect(ge2(two)).toBeLessThan(ge2(one));
+  });
+
+  it('un but déjà marqué depuis le début de la fin de match ralentit la suite', () => {
+    const before = evolveLiveScore(3.1, 2.8, 3, 2, 3500, FX, null, false);
+    const after = evolveLiveScore(3.1, 2.8, 3, 2, 3500, FX, null, true);
+    expect(1 - pN(after, 0)).toBeLessThan(1 - pN(before, 0));
+  });
+
+  it('avant le début de la fin de match, l\'indicateur n\'a aucun effet sur l\'état de départ', () => {
+    const a = evolveLiveScore(3.1, 2.8, 1, 0, 2400, FX, null, false);
+    const b = evolveLiveScore(3.1, 2.8, 1, 0, 2400, FX, null, true);
+    a.forEach((r, i) => r.forEach((v, j) => expect(v).toBeCloseTo(b[i][j], 12)));
+  });
+});

@@ -152,8 +152,11 @@ export class TtlCache<T> implements CacheStatsSource {
    *
    * Si `fn` rejette, rien n'est mis en cache et l'erreur est propagée à tous
    * les appelants en attente (l'appelant décide de retomber sur `getStale`).
+   *
+   * `ttlMs` peut dépendre de la valeur calculée (fonction) : un match en direct
+   * se garde 30 s, mais 10 s en fin de match, ce qu'on ne sait qu'après calcul.
    */
-  async wrap(key: string, fn: () => Promise<T>, ttlMs?: number): Promise<T> {
+  async wrap(key: string, fn: () => Promise<T>, ttlMs?: number | ((value: T) => number)): Promise<T> {
     // `peekFresh` et non `get` : les trois issues sont comptées explicitement ici,
     // sinon un rattachement à un appel en vol serait compté comme une exécution
     // — l'inverse exact de ce que le test S3 cherche à prouver.
@@ -167,7 +170,7 @@ export class TtlCache<T> implements CacheStatsSource {
 
     const p = (async () => {
       const value = await fn();
-      this.set(key, value, ttlMs);
+      this.set(key, value, typeof ttlMs === 'function' ? ttlMs(value) : ttlMs);
       return value;
     })().finally(() => {
       this.inflight.delete(key);
