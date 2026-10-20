@@ -7,7 +7,7 @@
 #    et mis la nouvelle dans Railway (RESEND_API_KEY) — voir STATUS.md §6.
 9e00a2181c531ae2a6f98fda97c3acef68641aa9:server/.env.example:generic-api-key:38
 #
-# 2. Faux positif : `?token=abc123def456` dans un badge CircleCI du README NestJS
+# 2. Faux positif : le jeton factice d'un badge CircleCI du README NestJS
 #    généré (server/README.md, 2026-05-26). Ce n'est pas un secret.
 cc30409e8f996fd5218fcbff0f5806a36de08ce3:server/README.md:generic-api-key:5
 #
@@ -15,5 +15,7 @@ cc30409e8f996fd5218fcbff0f5806a36de08ce3:server/README.md:generic-api-key:5
 #    (server/src/services/__fixtures__/appleTestChain.ts, 2026-10-11). Aucune valeur réelle.
 1403728fc9e6d90d5426d32300f965a626dc0666:server/src/services/__fixtures__/appleTestChain.ts:private-key:9
 #
-# 4. Faux positif : ce fichier lui-même cite `?token=abc123def456` (point 2 ci-dessus).
+# 4. Faux positif : ce fichier lui-même citait le jeton factice du badge (point 2).
+#    Ne JAMAIS recopier ce jeton dans un commentaire : gitleaks le redétecte à chaque fois.
 0c97b0b2934efaca43207f6ee91a21a45de9584b:.gitleaksignore:generic-api-key:10
+b82a54e6843d453e13324fae457547cc6ecc0f5f:.gitleaksignore:generic-api-key:18
