@@ -1,0 +1,28 @@
+# ArakIce
+
+> ArakIce (arakice.com) is an NHL predictions and betting analytics app. Its machine learning model, arakiceML, produces win probabilities, projected totals and player prop projections (shots, points, goaltender saves) for every NHL game, then compares them to sportsbook odds (DraftKings) to show where the market may be mispriced. It is an analytics tool, not a tipster service: every pick shows the factors behind it, and no profit is promised. Available in English and French.
+
+Key facts:
+- Covers every NHL regular-season and playoff game: moneyline, puck line, totals, period markets and player props.
+- Model inputs: expected goals and shot quality, rest and back-to-backs, travel and time zones, injuries, starting goaltender, referee penalty tendencies.
+- Judged on out-of-sample calibration (do 60% calls happen ~60% of the time), not win streaks. Out-of-sample test, 4,304 games (Feb 26, 2023 to Apr 16, 2026): 59.5% of winners picked (home-team baseline 54.0%), average calibration gap 2.1 percentage points.
+- Free tier plus a Pro subscription (including value-bet alerts).
+- Built independently by Ireina Hedad, a software engineer specialized in AI (Polytechnique Montréal).
+- Not affiliated with the NHL or any sportsbook. For adults of legal gambling age only.
+
+## Main pages
+
+- [NHL Predictions Today](https://arakice.com/nhl-predictions-today): tonight's games with model win probabilities and totals
+- [Best NHL Picks Today](https://arakice.com/best-nhl-picks-today): the strongest edges of the night
+- [NHL Player Props](https://arakice.com/nhl-player-props): shots, points and saves projections
+- [NHL AI Predictions](https://arakice.com/nhl-ai-predictions): how the arakiceML model works
+- [NHL Prediction Accuracy](https://arakice.com/nhl-prediction-accuracy): out-of-sample results — 59.5% of winners on 4,304 games (Feb 2023 to Apr 2026), calibration within 2.1 points
+- [Best NHL Betting Software](https://arakice.com/best-nhl-betting-software): how ArakIce compares to other NHL betting tools
+- [NHL Matchups](https://arakice.com/nhl-matchups): head-to-head history for every pair of teams
+- [About ArakIce](https://arakice.com/about): who we are, methodology, responsible gambling
+
+## Optional
+
+- [Schedule](https://arakice.com/schedule)
+- [Team stats](https://arakice.com/stats)
+- [Sitemap](https://arakice.com/sitemap.xml)

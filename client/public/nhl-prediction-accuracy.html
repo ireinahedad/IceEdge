@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NHL Prediction Accuracy: Tested on 4,304 Games | ArakIce</title>
+  <meta name="description" content="ArakIce's NHL model picked the winner in 59.5% of 4,304 out-of-sample games (2023-2026), with probabilities within 2.1 points of reality on average." />
+  <link rel="canonical" href="https://arakice.com/nhl-prediction-accuracy" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="ArakIce" />
+  <meta property="og:title" content="NHL Prediction Accuracy | ArakIce" />
+  <meta property="og:description" content="ArakIce's NHL model picked the winner in 59.5% of 4,304 out-of-sample games (2023-2026), with probabilities within 2.1 points of reality on average." />
+  <meta property="og:url" content="https://arakice.com/nhl-prediction-accuracy" />
+  <meta property="og:image" content="https://arakice.com/arakice-og.png" />
+  <meta property="og:image:secure_url" content="https://arakice.com/arakice-og.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="ArakIce, NHL predictions powered by ML" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="NHL Prediction Accuracy | ArakIce" />
+  <meta name="twitter:description" content="59.5% winners on 4,304 out-of-sample NHL games, calibration within 2.1 points." />
+  <meta name="twitter:image" content="https://arakice.com/arakice-og.png" />
+  <meta name="twitter:image:alt" content="ArakIce, NHL predictions powered by ML" />
+
+  <link rel="icon" type="image/png" sizes="96x96" href="/arakice-icon-96.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/arakice-icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="/arakice-icon-512.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/arakice-icon-180.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/seo.css" />
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"Dataset","name":"ArakIce NHL prediction accuracy and calibration","description":"Out-of-sample evaluation of the arakiceML NHL game model on 4,304 NHL games played between February 26, 2023 and April 16, 2026: winner accuracy and probability calibration.","url":"https://arakice.com/nhl-prediction-accuracy","creator":{"@type":"Organization","name":"ArakIce","url":"https://arakice.com/"},"temporalCoverage":"2023-02-26/2026-04-16","dateModified":"2026-09-27","variableMeasured":["Winner accuracy","Calibration error","Log loss","Brier score"]}
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="https://arakice.com/" aria-label="ArakIce home">
+        <img class="brand-logo" src="/arakice-logo-80.png" alt="ArakIce" width="40" height="40" />
+        <span class="brand-word">ArakIce</span>
+      </a>
+      <a class="nav-cta" href="https://arakice.com/">Open the app</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Out-of-sample results, published in full</p>
+      <h1>NHL Prediction Accuracy</h1>
+      <p class="lede">How often is ArakIce right? On 4,304 NHL games it had never seen during training, played between February 26, 2023 and April 16, 2026, the arakiceML model picked the winner 59.5% of the time, and its win probabilities landed within 2.1 percentage points of what actually happened, on average.</p>
+    </section>
+
+    <div class="stats-row">
+      <div class="stat"><div class="value">59.5%</div><div class="label">Winners picked correctly</div></div>
+      <div class="stat"><div class="value">4,304</div><div class="label">Out-of-sample games</div></div>
+      <div class="stat"><div class="value">2.1 pts</div><div class="label">Average calibration gap</div></div>
+      <div class="stat"><div class="value">54.0%</div><div class="label">Home team baseline</div></div>
+    </div>
+
+    <h2>The short answer</h2>
+    <p><strong>ArakIce picked the winner of 59.5% of NHL games</strong> in an out-of-sample test covering 4,304 games from February 2023 to April 2026 (2,559 correct). For comparison, always picking the home team would have been right 54.0% of the time over the same games. These figures come from games the model was never trained on, which is the only honest way to measure a prediction model.</p>
+    <p>A hit rate near 60% is what a sound NHL model looks like. Hockey is one of the most random major sports: one bounce or one hot goaltender decides many games, and no model can honestly claim to pick 70% or 80% of winners over a full season. Treat any service that advertises numbers like that with suspicion.</p>
+
+    <h2>Calibration: can you trust the percentage?</h2>
+    <p>Picking winners is only half the job. For a bettor, what matters is whether the probability itself is right: when ArakIce says a team has a 55% chance, that team should win about 55% of the time. This is called <strong>calibration</strong>, and it is what lets you compare the model's number with a sportsbook's price.</p>
+    <p>Across the 4,304 test games, the average gap between ArakIce's predicted probability and the observed win rate was <strong>2.1 percentage points</strong> (expected calibration error 0.021). Here is the full breakdown, grouped by the probability the model gave the home team:</p>
+
+    <div class="h2h-wrap">
+      <table class="h2h">
+        <caption>ArakIce home win probability vs. actual result, 4,304 out-of-sample NHL games (Feb 26, 2023 to Apr 16, 2026)</caption>
+        <thead><tr><th>Model said</th><th class="num">Games</th><th class="num">Average prediction</th><th class="num">Home team actually won</th></tr></thead>
+        <tbody>
+          <tr><td>20–30%</td><td class="num">12</td><td class="num">28.1%</td><td class="num">16.7%</td></tr>
+          <tr><td>30–40%</td><td class="num">285</td><td class="num">37.2%</td><td class="num">33.3%</td></tr>
+          <tr><td>40–50%</td><td class="num">1,250</td><td class="num">45.5%</td><td class="num">44.7%</td></tr>
+          <tr><td>50–60%</td><td class="num">1,277</td><td class="num">55.1%</td><td class="num">54.2%</td></tr>
+          <tr><td>60–70%</td><td class="num">1,140</td><td class="num">64.6%</td><td class="num">61.6%</td></tr>
+          <tr><td>70–80%</td><td class="num">333</td><td class="num">73.0%</td><td class="num">80.2%</td></tr>
+          <tr><td>80–90%</td><td class="num">7</td><td class="num">81.1%</td><td class="num">100.0%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Read it row by row. When the model gave the home team between 40% and 60%, which covers most games, it was off by less than one point. We also publish where it is weaker: in the 60–70% range it was slightly overconfident (64.6% predicted, 61.6% observed), and in the 70–80% range it was underconfident (73.0% predicted, 80.2% observed), meaning its strongest favourites won even more often than it said. The 20–30% and 80–90% rows contain too few games to draw conclusions.</p>
+
+    <div class="cta-box">
+      <p class="cta-title">See tonight's probabilities</p>
+      <p>The same model, applied to every NHL game on tonight's slate, with the factors behind each number.</p>
+      <a class="btn" href="https://arakice.com/">Open ArakIce</a>
+    </div>
+
+    <h2>Other measures</h2>
+    <p>For readers who want the standard scoring rules: on the same games, the model's log loss was 0.664 and its Brier score was 0.236. Lower is better for both; a model that always predicted 50% would score 0.693 and 0.250.</p>
+
+    <h2>How the test was run</h2>
+    <p>The model was trained on earlier NHL seasons, then asked to predict every game from February 26, 2023 onward without ever seeing their results. Each prediction uses only information available before the game. The probabilities graded here come from the model alone; they are not blended with sportsbook odds, so the accuracy reflects what the model learned, not what the market already knew.</p>
+    <p>The model behind these numbers predicts each team's goals from expected goals, shot quality, rest, back-to-backs, travel, injuries, the starting goaltender and team strength ratings, and derives the win probability from the projected score. The full method is explained on <a href="https://arakice.com/nhl-ai-predictions">NHL AI Predictions</a>.</p>
+    <p><em>Data as of September 27, 2026. Live results from the 2026–27 season will be added to this page as games are played.</em></p>
+
+    <h2>Frequently asked questions</h2>
+    <div class="faq">
+      <details>
+        <summary>How accurate is ArakIce?</summary>
+        <p>ArakIce picked the winner in 59.5% of 4,304 NHL games in an out-of-sample test (February 2023 to April 2026), against 54.0% for always picking the home team. Its win probabilities were within 2.1 percentage points of the observed results on average.</p>
+      </details>
+      <details>
+        <summary>What is a good accuracy for NHL predictions?</summary>
+        <p>Around 58% to 62% of winners over a full season is the realistic range for a strong NHL model. Hockey has a lot of randomness, so claims of 70% or more over a full season are not credible.</p>
+      </details>
+      <details>
+        <summary>Does a high accuracy mean the bets are profitable?</summary>
+        <p>No. Favourites win more often but pay less. A bet is only worth placing when the model's probability is higher than the probability implied by the odds. That is why ArakIce focuses on calibrated probabilities and shows the gap with the sportsbook price, rather than just picking winners.</p>
+      </details>
+      <details>
+        <summary>Are these results cherry-picked?</summary>
+        <p>No. Every game in the test period is included, the model never saw those games during training, and the weak spots in calibration are published alongside the strong ones.</p>
+      </details>
+    </div>
+
+    <section class="related">
+      <h2>Explore more</h2>
+      <ul>
+        <li><a href="https://arakice.com/nhl-predictions-today">NHL Predictions Today, tonight's slate</a></li>
+        <li><a href="https://arakice.com/best-nhl-picks-today">Best NHL Picks Today, the biggest edges</a></li>
+        <li><a href="https://arakice.com/">Open the ArakIce app</a></li>
+      </ul>
+    </section>
+
+    <div class="disclaimer">
+      <p>ArakIce provides statistical analysis and predictions for informational and entertainment purposes only. Nothing here is financial advice or a guarantee of results. Betting involves risk and you should never wager more than you can afford to lose. Must be of legal gambling age in your jurisdiction. If gambling stops being fun, help is available. In the US, call or text 1-800-GAMBLER.</p>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <nav>
+        <a href="https://arakice.com/nhl-predictions-today">NHL Predictions</a>
+        <a href="https://arakice.com/nhl-ai-predictions">AI Predictions</a>
+        <a href="https://arakice.com/best-nhl-picks-today">Best Picks</a>
+      </nav>
+      <span>&copy; ArakIce. Statistical edge for smarter sports bets. Not affiliated with or endorsed by the NHL or its teams. NHL and team names are trademarks of their respective owners.</span>
+    </div>
+  </footer>
+</body>
+</html>

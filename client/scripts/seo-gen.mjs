@@ -64,6 +64,7 @@ const STATIC_PAGES = [
   { loc: "/nhl-predictions-today", changefreq: "daily", priority: "0.9" },
   { loc: "/best-nhl-picks-today", changefreq: "daily", priority: "0.9" },
   { loc: "/nhl-ai-predictions", changefreq: "weekly", priority: "0.8" },
+  { loc: "/nhl-prediction-accuracy", changefreq: "monthly", priority: "0.8" },
   { loc: "/best-nhl-betting-software", changefreq: "monthly", priority: "0.7" },
   { loc: "/about", changefreq: "monthly", priority: "0.5" },
 

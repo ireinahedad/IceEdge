@@ -1,0 +1,100 @@
+{
+  "generatedAt": "2026-10-20T07:49:10.892Z",
+  "base": "https://api.arakice.com",
+  "intervalMs": 2000,
+  "minutes": 330,
+  "games": 2,
+  "samples": 2369,
+  "goalsSeen": 6,
+  "goalsNeverShown": 0,
+  "duringGame": {
+    "samples": 2183,
+    "ageSource": {
+      "mean": 182.2,
+      "p50": 42.7,
+      "p90": 707.3,
+      "max": 1145.3
+    },
+    "ageDeclared": {
+      "mean": 13.9,
+      "p50": 13.5,
+      "p90": 26.4
+    },
+    "clientPollSec": 30,
+    "displayedMeanEstimate": 197.2,
+    "goals": {
+      "n": 6,
+      "mean": 12.6,
+      "p50": 17,
+      "p90": 31.1,
+      "max": 31.1
+    }
+  },
+  "endgame": {
+    "samples": 186,
+    "ageSource": {
+      "mean": 16,
+      "p50": 14.5,
+      "p90": 28.6,
+      "max": 46.6
+    },
+    "ageDeclared": {
+      "mean": 4.1,
+      "p50": 3.5,
+      "p90": 9.1
+    },
+    "clientPollSec": 10,
+    "displayedMeanEstimate": 21,
+    "goals": {
+      "n": 0,
+      "mean": null,
+      "p50": null,
+      "p90": null,
+      "max": null
+    }
+  },
+  "goals": [
+    {
+      "game": "2026020140",
+      "score": "2–2",
+      "seenAtSource": 1792463018746,
+      "lag": 6.503,
+      "endgame": false
+    },
+    {
+      "game": "2026020140",
+      "score": "3–2",
+      "seenAtSource": 1792463874116,
+      "lag": 2.268,
+      "endgame": false
+    },
+    {
+      "game": "2026020140",
+      "score": "4–2",
+      "seenAtSource": 1792463920531,
+      "lag": 16.983,
+      "endgame": false
+    },
+    {
+      "game": "2026020140",
+      "score": "5–2",
+      "seenAtSource": 1792465918226,
+      "lag": 17.426,
+      "endgame": false
+    },
+    {
+      "game": "2026020140",
+      "score": "5–3",
+      "seenAtSource": 1792466120441,
+      "lag": 1.555,
+      "endgame": false
+    },
+    {
+      "game": "2026020140",
+      "score": "5–4",
+      "seenAtSource": 1792467300023,
+      "lag": 31.147,
+      "endgame": false
+    }
+  ]
+}

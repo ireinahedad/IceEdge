@@ -2753,11 +2753,22 @@ def _game_context(f: GameFeatures) -> dict:
                     goalies = healthy
             goalies_by_side[side] = goalies
             if goalies:
-                # Gardien nommé si fourni, sinon mix pondéré par usage récent
+                # Gardien nommé si fourni. Sans saisie : le gardien HABITUEL
+                # (plus grande part des 10 derniers départs, parmi les non
+                # absents) — décision du user, 2026-10-20 : « si je ne confirme
+                # pas, c'est celui de d'habitude ». Remplace le mélange pondéré
+                # par l'usage, qui n'était le gardien de personne, et rend les
+                # stats cohérentes avec `_goalie_backup_flag`, qui prenait déjà
+                # ce même partant probable. Un nom fourni mais introuvable reste
+                # traité en relève (drapeau) avec le mélange (stats).
+                named_given = goalie_id is not None or bool(goalie_name and goalie_name.strip())
                 g0 = _find_goalie(goalies, goalie_id, goalie_name)
-                if g0 is None and (goalie_id is not None or (goalie_name and goalie_name.strip())):
+                if g0 is None and named_given:
                     _warn_unmatched("gardien partant", team,
                                     goalie_name or f"id {goalie_id}")
+                if g0 is None and not named_given:
+                    g0 = max(goalies, key=lambda g: float(
+                        g.get("share_last10", g.get("recent_start_share", 0.0)) or 0.0))
                 if g0 is not None:
                     feat_values[f"{side}_goalie_gsax60"] = g0["gsax60"]
                     feat_values[f"{side}_goalie_svpct"]  = g0["svpct"]

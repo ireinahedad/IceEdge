@@ -1141,10 +1141,48 @@ le mesurer sur de vrais matchs, la production comparée à l'API NHL est relevé
 toutes les 2 s pendant une soirée : âge du score et de l'horloge affichés,
 délai d'affichage de chaque but, en cours de match et en fin de match.
 
-<!-- À FINIR
-  - Mesure prévue pendant les matchs du 2026-10-19 (heure de l'Est) : ANA@NYR, COL@PHI, SJS@TOR, PIT@UTA.
-    Reporter ici le tableau obtenu (ml/models/live/live_lag_<date>.md) : âge de l'état servi (médiane, p90),
-    délai des buts, en cours de match et en fin de match, et le comparer au retard attendu (≈ 15 s en fin de match).
+Première mesure, le 2026-10-19 au soir (heure de l'Est ; `live_lag_2026-10-20.md`) :
+2 matchs relevés (surtout PIT@UTA, et la fin de SJS@TOR), 2 369 relevés, 6 buts.
+Les chiffres sont en secondes réelles, côté serveur ; le retard affiché y ajoute
+le rappel du client (la moitié de 30 s, ou de 10 s en fin de match, en moyenne).
+
+| Moment | Relevés | Âge déclaré par le serveur (`asOf`), médiane / p90 | Âge de l'état servi, médiane / p90 | Délai des buts, médiane / max | Retard affiché moyen estimé |
+|---|---:|---:|---:|---:|---:|
+| En cours de match | 2 183 | 13,5 / 26,4 s | *non interprétable (voir ci-dessous)* | **17 / 31 s** (6 buts, tous affichés) | ≈ 30 s |
+| Fin de match (3e ≤ 5 min, prolongation) | 186 | **3,5 / 9,1 s** | **14,5 / 28,6 s** | — (aucun but) | **≤ 21 s** |
+
+- **Le serveur suit la feuille de match comme prévu.** Son propre âge déclaré
+  vaut 13,5 s en médiane en cours de match, ce qu'on attend d'un recalcul
+  toutes les 30 s (15 s en moyenne). En fin de match, il tombe à 3,5 s : le
+  passage à 10 s fonctionne.
+- **Les buts arrivent vite.** Les 6 buts vus à la source ont été servis en
+  17 s en médiane, 31 s au plus, ce qu'autorise un cycle de 30 s. Aucun but
+  n'est resté invisible.
+- **En fin de match, le retard affiché est au plus ≈ 21 s** : 16 s de chaîne
+  serveur et cache en moyenne, plus 5 s de rappel du client. Le calcul
+  annonçait ≈ 15 s en moyenne et 30 s au plus ; le p90 mesuré (28,6 s, plus
+  le rappel du client) reste dans cet ordre de grandeur. D'après le rejeu
+  « Fraîcheur » ci-dessus, cela coûte de l'ordre de **+10 à +13 %** de log-loss
+  dans les deux dernières minutes, contre +34 % pour un chiffre en retard d'une
+  minute.
+- **L'écart entre l'âge déclaré (3,5 s) et l'âge servi (14,5 s)** vient de ce
+  qui se trouve après le serveur : le cache HTTP et le CDN, et le fait que la
+  source mesurée (`score/now`) n'est pas la page que lit le serveur
+  (`landing`). C'est la prochaine marge à gagner, si elle en vaut la peine.
+
+**Limite de cette première mesure.** L'« âge de l'état servi » était mesuré
+depuis le premier instant où la source avait montré cet état. Quand l'horloge
+est arrêtée, et surtout pendant un entracte (≈ 18 min), cet âge grandit alors
+que la production est à jour : d'où une médiane de 42,7 s et un maximum de
+1 145 s en cours de match, qui ne disent rien du retard. En fin de match,
+l'horloge s'arrête aussi souvent : 14,5 s est un **plafond**. Le script
+mesure maintenant le retard depuis le moment où la source montre un état **plus
+récent** que celui servi (0 si elle n'a pas bougé). Il écrit aussi un rapport
+partiel toutes les 10 minutes, et s'arrête 20 minutes après le dernier match.
+Deux matchs et 186 relevés de fin de match restent un petit échantillon.
+
+<!-- À DÉVELOPPER
+  - Refaire la mesure sur une soirée chargée avec le script corrigé (retard depuis un état plus récent) : retard en cours de match et en fin de match, avec des buts en fin de match.
 -->
 
 ### 10.3 La calibration des effets de score (`calibrate_live.py`)
