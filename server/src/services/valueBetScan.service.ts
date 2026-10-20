@@ -48,13 +48,22 @@ function labelOf(vb: ValueBet): string {
 /** A recipient plus their personal minimum-EV threshold (in whole %). */
 interface OptedInUser { userId: string; minEvPct: number; }
 
-/** Users who are Pro AND opted into value-bet notifications AND have a device. */
+/**
+ * Users who are Pro AND opted into value-bet notifications AND have a device.
+ *
+ * « Un appareil » = un abonnement Web Push OU un jeton APNs (app iOS). Jusqu'au
+ * 2026-10-20 seule `push_subscriptions` était lue : un abonné Pro qui n'avait
+ * que l'app iPhone n'était jamais sélectionné, alors que `sendToUsers` sait
+ * pourtant livrer sur APNs.
+ */
 async function optedInUsers(): Promise<OptedInUser[]> {
   const { rows } = await pool.query(
-    `SELECT DISTINCT ps.user_id, up.value_bet_min_ev_pct
-       FROM push_subscriptions ps
-       JOIN user_profiles up ON up.user_id = ps.user_id
-       JOIN subscriptions  s ON s.user_id  = ps.user_id
+    `SELECT DISTINCT d.user_id, up.value_bet_min_ev_pct
+       FROM (SELECT user_id FROM push_subscriptions
+             UNION
+             SELECT user_id FROM apns_device_tokens) d
+       JOIN user_profiles up ON up.user_id = d.user_id
+       JOIN subscriptions  s ON s.user_id  = d.user_id
       WHERE up.notify_value_bets = TRUE
         AND s.plan = 'pro'
         AND s.status IN ('active','trialing')

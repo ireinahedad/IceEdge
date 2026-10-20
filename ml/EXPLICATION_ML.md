@@ -1768,9 +1768,88 @@ Là où le gain se concentre (toutes saisons de test, log-loss) :
 Décision : **effets de score activés le 2026-10-01** (`LIVE_EFFECTS` dans
 `nhlPredictions.ts` ; `null` revient à la phase 1 sans redéployer de modèle).
 
+**Minute par minute, et la fiabilité des chiffres affichés**
+(`server/scripts/replay-live-reliability.ts`, 2026-10-20, table servie avec les
+deux tables de fin de match du §10.4). Le rejeu ci-dessus ne regarde que cinq
+instants et une seule note, la log-loss. Il laisse deux questions : **à partir
+de quand** les effets de score comptent-ils, et les probabilités affichées
+sont-elles **fiables** (quand une tuile dit 30 %, l'issue arrive-t-elle 30 % du
+temps) ? Même protocole et mêmes 10 questions, mais à **23 instants** : mise au
+jeu, fins de 1re et de 2e, chaque minute de la 3e et 30 s avant la fin, soit
+≈ 900 000 prédictions par moteur.
+
+![Gain de log-loss de la table servie, instant par instant](figures/live_gain_by_minute.png)
+
+| Temps écoulé | 0' | 20' | 40' | 45' | 50' | 55' | 57' | 58' | 59' | 59'30 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Log-loss, table servie contre cadence fixe | −0,1 % | −0,2 % | −0,8 % | −1,3 % | −2,4 % | −6,3 % | −10,3 % | −13,1 % | **−13,5 %** | −11,6 % |
+
+- **Le gain est significatif à chacun des 23 instants**, mise au jeu comprise
+  (−0,0075 ± 0,0035 par match sur les 10 questions).
+- **Il ne commence pas quand le gardien sort.** Il grandit sans saut dès le
+  début de la 3e (−1,0 % à 41', −2,4 % à 50') : c'est la prudence à égalité et
+  le repli de l'équipe qui mène (×0,87 à ×0,93 entre 40 et 55 minutes, §10.4).
+  Le gardien retiré accélère ensuite la courbe à partir de 55'.
+- **Le maximum est à 1 ou 2 minutes de la fin** (−13 %). À 30 s, il retombe un
+  peu (−11,6 %) : beaucoup de matchs sont joués, et les deux moteurs y disent la
+  même chose.
+
+**La fiabilité.** Pour chaque prédiction, on range la probabilité affichée par
+tranche de 10 points et on compare, dans chaque tranche, la moyenne prédite à
+la fréquence observée. L'erreur type de chaque tranche est groupée **par
+match** : un match fournit jusqu'à 230 prédictions corrélées (10 questions ×
+23 instants). L'ECE résume la courbe : c'est l'écart moyen entre prédit et
+observé, pondéré par le nombre de prédictions de chaque tranche (0 = parfait).
+
+![Courbes de fiabilité, cadence fixe contre table servie](figures/live_reliability.png)
+
+| ECE (cadence fixe → table servie) | Avant la 3e | 3e, 19 à 6 min restantes | 5 dernières minutes |
+|---|---:|---:|---:|
+| **Toutes questions** | 0,94 → **0,76 %** | 1,92 → **0,60 %** | 1,99 → **0,67 %** |
+| Vainqueur (moneyline, 60 min, prolongation) | 0,33 → 0,38 % | 0,87 → 0,62 % | 0,44 → 0,60 % |
+| Totaux 5,5 et 6,5 | 1,24 → 2,67 % ⚠ | 3,11 → 0,75 % | 3,46 → 0,68 % |
+| Puck line −1,5 | 4,68 → 0,88 % | 4,90 → 1,21 % | 4,16 → 1,24 % |
+| Buts d'une équipe > 2,5 | 0,88 → 1,46 % ⚠ | 1,70 → 0,43 % | 2,30 → 0,50 % |
+
+- **La cadence fixe sous-estime systématiquement « un but de plus ».** Dans les
+  cinq dernières minutes, ce qu'elle annonce à 34 % arrive **57 %** du temps
+  (13,5 % → 27,2 % sur les totaux, 14,0 % → 42,1 % sur la puck line). Avec la
+  table servie, la même tranche donne 35 % annoncé pour 38 % observé.
+- **La puck line −1,5 était mal calée dès la mise au jeu** : la cadence fixe
+  annonçait 33,9 % pour 40,8 % observé avant même la 3e période ; la table
+  servie donne 34,3 % pour 34,7 %. Même calée sur le vainqueur et la
+  prolongation d'avant-match (§10.2, étape 3), la cadence fixe ignore le filet
+  désert, qui transforme une victoire d'un but en victoire de deux.
+- **Le vainqueur est fiable avec les deux moteurs** (ECE ≤ 0,9 %), ce qui
+  rejoint le moneyline inchangé du rejeu ci-dessus : égalisation et filet
+  désert se compensent.
+
+**Deux défauts restants de la table servie**, visibles sur la courbe :
+
+1. **Avant la 3e, les totaux et les buts d'une équipe sont annoncés trop
+   haut** d'environ 3 points au milieu de l'échelle (« plus de » annoncé à
+   45,3 % pour 41,8 % observé, 54,4 % pour 51,1 %), alors que la cadence fixe y
+   était presque juste (ECE 1,24 % → 2,67 %). Ce sont les deux cases pires du
+   rejeu à la mise au jeu. La cause reste à établir (voir le commentaire
+   ci-dessous) ; l'effet sur la log-loss est faible, car le gain des autres
+   marchés le couvre dès la mise au jeu.
+2. **Dans les cinq dernières minutes, les longs coups sont surpayés** : la
+   tranche 0-10 % annonce 2,0 % pour 1,4 % observé (z −7,7), et 1,4 % pour
+   0,8 % sur la puck line. C'est le second but de fin de match encore trop
+   probable, déjà mesuré au §10.4 (2,7 % annoncé contre 1,3 % observé à une
+   minute de la fin) : deux mesures indépendantes qui pointent le même défaut.
+
+À lire avec prudence : en fin de match, la tranche 90-100 % est remplie
+d'issues déjà acquises (un total déjà dépassé, 100 % prédit et 100 % observé).
+Elles pèsent dans l'ECE sans rien dire du moteur, et rendent l'ECE de fin de
+match flatteur ; c'est la courbe tranche par tranche qui compte.
+
+Décision : **rien ne change en production**. Le rejeu confirme la mise en
+service des effets de score à chaque instant, et les deux défauts restants
+rejoignent la liste des pistes.
+
 <!-- À DÉVELOPPER
-  - Courbes de fiabilité en direct (prédit vs observé par tranche de probabilité), pas seulement la log-loss.
-  - Rejouer à plus d'instants (chaque minute de la 3e) pour voir où le gain apparaît vraiment.
+  - Expliquer puis corriger les totaux et buts d'une équipe annoncés ~3 points trop haut avant la 3e avec la table servie (ECE 2,67 % contre 1,24 % à cadence fixe) : comparer l'espérance de buts du moteur à la mise au jeu avec et sans effets, et la variance (lien avec la sous-dispersion, §10.4).
   - Comparer aux cotes EN DIRECT des livres (in-play) : le vrai test de valeur du mode direct, absent du rejeu.
   - Journaliser les prédictions live servies en production et les noter sur les matchs réels (suivi continu, pas seulement le rejeu historique).
 -->
@@ -1839,6 +1918,7 @@ pénalités **futures**.
 | Forme des buts restants (extrêmes) | `npx ts-node --transpile-only scripts/replay-live-tails.ts 2023 2024 2025` (dans `server/`, ~1 h ; `OUT=` pour un autre nom) | `models/live/live_tails_report.json` (une table), `live_tails_report_endgame.json` (deux tables) |
 | Une table contre deux tables de fin de match | `LIVE_A=ancien.json LIVE_B=nouveau.json OUT=live_endgame_replay npx ts-node --transpile-only scripts/replay-live-window.ts 2023 2024 2025` (`MOMENTS=late` pour la fin de match) | `models/live/live_endgame_replay.md`, `live_endgame_replay_late.md` |
 | Retard réel en production | `server/scripts/measure-live-lag.cmd` (Windows, pendant des matchs) | `models/live/live_lag_<date>.md` / `.json` |
+| Gain minute par minute et fiabilité | `npx ts-node --transpile-only scripts/replay-live-reliability.ts 2023 2024 2025` (dans `server/`, ~25 min ; sur une machine lente, par tranches : `PART_OFFSET=0 PART_LIMIT=300 PART_OUT=parts/p0.json`, puis `MERGE=parts`), puis `python live_reliability_figures.py` | `models/live/live_reliability.md` / `.json`, `figures/live_reliability.png`, `figures/live_gain_by_minute.png` |
 | Table récente contre table servie | `python live_window_compare.py`, puis `scripts/replay-live-window.ts 2023 2024 2025` | `models/live/live_window_report.json`, `live_window_replay.md` |
 | Sous-dispersion des buts | `python live_dispersion.py` | `models/live/live_dispersion_report.json` |
 | Avantage numérique (mesure) | `python fetch_live_pbp.py && python calibrate_live_pp.py`, puis `scripts/replay-live-pp.ts` | `models/live/calibrate_live_pp_report.json`, `live_pp_report.md` |

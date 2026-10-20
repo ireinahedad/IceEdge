@@ -89,13 +89,20 @@ async function main(): Promise<void> {
   const goals: GoalLag[] = [];
   console.log(`Mesure du retard : ${BASE}, ${MINUTES} min, relevé toutes les ${INTERVAL} ms`);
 
+  // Rapport écrit toutes les 10 min (rien n'est perdu si la mesure est coupée),
+  // et arrêt 20 min après le dernier match en cours (`--idle`, minutes).
+  const IDLE_MS = Number(arg('idle', '20')) * 60_000;
+  let lastLive = 0, lastWrite = Date.now();
   while (Date.now() < until) {
     const tick = Date.now();
+    if (lastLive && tick - lastLive > IDLE_MS) { console.log('Plus de match en cours : fin de la mesure.'); break; }
+    if (samples.length && tick - lastWrite > 10 * 60_000) { writeReport(false); lastWrite = tick; }
     let live: any[] = [];
     try {
       const d = await getJson(NHL);
       live = (d.games ?? []).filter((g: any) => g.gameState === 'LIVE' || g.gameState === 'CRIT');
     } catch (e) { console.warn(String(e)); }
+    if (live.length) lastLive = tick;
 
     await Promise.all(live.map(async (g) => {
       const id = String(g.id);
@@ -147,6 +154,9 @@ async function main(): Promise<void> {
     else if (wait > 0) await new Promise(r => setTimeout(r, wait));
   }
 
+  writeReport(true);
+
+  function writeReport(final: boolean): void {
   const part = (end: boolean) => {
     const ss = samples.filter(s => s.endgame === end);
     const age = ss.filter(s => s.age != null).map(s => s.age!);
@@ -172,7 +182,7 @@ async function main(): Promise<void> {
     duringGame: part(false), endgame: part(true),
   };
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  const stamp = new Date().toISOString().slice(0, 10);
+  const stamp = new Date(until - MINUTES * 60_000).toISOString().slice(0, 10);
   fs.writeFileSync(path.join(OUT_DIR, `live_lag_${stamp}.json`), JSON.stringify({ ...report, goals }, null, 2));
   const row = (lab: string, p: any) =>
     `| ${lab} | ${p.samples} | ${p.ageSource.p50 ?? '—'} / ${p.ageSource.p90 ?? '—'} / ${p.ageSource.max ?? '—'} s | ${p.ageDeclared.p50 ?? '—'} s | ${p.clientPollSec} s | ${p.displayedMeanEstimate ?? '—'} s | ${p.goals.n} : ${p.goals.p50 ?? '—'} / ${p.goals.p90 ?? '—'} s |`;
@@ -184,8 +194,9 @@ async function main(): Promise<void> {
     row('En cours de match', report.duringGame),
     row('Fin de match (3e ≤ 5 min, prolongation)', report.endgame), '',
   ].join('\n');
-  fs.writeFileSync(path.join(OUT_DIR, `live_lag_${stamp}.md`), md + '\n');
-  console.log(md);
+  fs.writeFileSync(path.join(OUT_DIR, `live_lag_${stamp}.md`), md + (final ? '' : '\n_Mesure en cours : rapport partiel._\n') + '\n');
+  if (final) console.log(md);
+  }
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
