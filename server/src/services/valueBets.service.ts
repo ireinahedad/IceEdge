@@ -18,10 +18,12 @@
 //  1. Match de la journée (heure de l'Est), PAS ENCORE COMMENCÉ. Une proba
 //     d'avant-match contre une cote en direct fabrique des écarts énormes, et
 //     l'app ne prend pas de paris en direct (décision du 2026-09-28).
-//  2. LES DEUX GARDIENS PARTANTS SAISIS dans /dev/saisie pour la journée
-//     (`starting_goalies`). Décision du user : pas de gardien confirmé, pas de
-//     value bet. Un gros edge est le plus souvent une information que le modèle
-//     n'a pas — le gardien d'abord.
+//  2. Gardiens : PLUS EXIGÉS (décision du user, 2026-10-20, qui remplace celle
+//     « pas de gardien confirmé, pas de value bet »). Sans saisie dans
+//     /dev/saisie, le service ML prend le gardien HABITUEL de chaque équipe
+//     (plus grande part des 10 derniers départs). Risque assumé : un soir où
+//     le n° 2 part (souvent le 2e d'un back-to-back), l'edge peut être faux.
+//     Une saisie, quand elle existe, reste prioritaire.
 //  3. Probabilité du MODÈLE DE SCORE (`probability_score_model` présent), lue
 //     dans le paquet ML du match (`getGameMlBundle`), qui traite correctement
 //     le côté visiteur (`subject_is_home`). Pas de modèle → pas de value bet ;
@@ -58,7 +60,7 @@ import { logger } from '../logger';
 import { fetchGamesByDate } from './nhlApiClient';
 import { priceForSelection, type BookPrice } from './oddsClient';
 import { getGameMlBundle, mlBundleKey } from './gameMlBundle';
-import { getStartingGoalies, easternToday } from './startingGoalies';
+import { easternToday } from './startingGoalies';
 import type { MLPredictionResult } from './mlApiClient';
 import { TtlCache } from './ttlCache';
 
@@ -263,13 +265,10 @@ async function valueBetsForGame(game: any): Promise<ValueBet[]> {
  * `now` et `date` ne servent qu'aux tests.
  */
 export async function computeValueBets(now = Date.now(), date = easternToday()): Promise<ValueBet[]> {
-  const [games, goalies] = await Promise.all([fetchGamesByDate(date), getStartingGoalies(date)]);
-  const confirmed = (abbr: unknown) => {
-    const name = goalies[String(abbr ?? '').toUpperCase()];
-    return typeof name === 'string' && name.trim() !== '';
-  };
-  const eligible = games.filter((g: any) =>
-    notStarted(g, now) && confirmed(g.homeTeam?.abbreviation) && confirmed(g.awayTeam?.abbreviation));
+  // Les gardiens saisis ne filtrent plus rien (critère 2) : le paquet ML les lit
+  // lui-même et, à défaut, suppose le gardien habituel.
+  const games = await fetchGamesByDate(date);
+  const eligible = games.filter((g: any) => notStarted(g, now));
 
   const perGame = await Promise.all(eligible.map((g: any) => valueBetsForGame(g).catch((err: any) => {
     logger.warn({ err: err?.message, gameId: g?.id }, '[valueBets] match ignoré');

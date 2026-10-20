@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 /**
  * Le critère des value bets — UN seul, partagé par l'accueil et l'alerte push
  * (décision du user, 2026-10-02). Ces tests verrouillent ce que le user a
- * tranché : gardiens saisis, match pas commencé, modèle de score obligatoire,
+ * tranché : match pas commencé, modèle de score obligatoire,
  * marge retirée, bande 2–6 % au vainqueur, règle A2 (−1.5, ≥ 4 %) à la puck line.
  */
 
@@ -122,10 +122,10 @@ describe('computeValueBets', () => {
     };
   }
 
-  it('sans les DEUX gardiens saisis, aucun value bet', async () => {
+  it('sans gardiens saisis, les value bets sont calculés quand même (gardien habituel)', async () => {
     seedGame();
-    GOALIES.TOR = 'Joseph Woll';
-    expect(await computeValueBets(NOW)).toEqual([]);
+    const bets = await computeValueBets(NOW);
+    expect(bets.map((b) => b.id)).toEqual(['g1-puck_line-MTL', 'g1-moneyline-TOR']);
   });
 
   it('retient le vainqueur et la jambe −1.5, triés par edge, avec la cote minimale', async () => {

@@ -212,8 +212,8 @@ function sidedEvidence(key: string, f: GameFeatures, fr: boolean, share?: number
       if (hg && ag) return L(fr, `Gardiens partants : ${h} ${hg}, ${a} ${ag}${weight}`, `Starting goalies: ${h} ${hg}, ${a} ${ag}${weight}`);
       const known = hg ? `${h} ${hg}` : `${a} ${ag}`;
       const unk = hg ? a : h;
-      return L(fr, `Gardiens : ${known} ; ${unk} non confirmé (gardien moyen supposé)${weight}`,
-                   `Goalies: ${known}; ${unk} unconfirmed (average goalie assumed)${weight}`);
+      return L(fr, `Gardiens : ${known} ; ${unk} non confirmé (gardien habituel supposé)${weight}`,
+                   `Goalies: ${known}; ${unk} unconfirmed (usual starter assumed)${weight}`);
     }
     case 'factor.lineup': {
       // L'importance des absents n'est pas connue ici (le service ML sait qui est dans le
@@ -520,8 +520,8 @@ export function buildGameFacts(input: GameFactsInput): Facts {
         ? L(fr, `Gardiens non confirmés : ${sig.map(g => `si ${g.team} change, ${span(g)}`).join(' ; ')}.`,
                 `Goalies unconfirmed: ${sig.map(g => `if ${g.team} changes, ${span(g).replace(/→/g, 'to')}`).join('; ')}.`)
         : who
-        ? L(fr, `Gardien de ${who} non confirmé : le chiffre suppose un gardien moyen.`, `${who} goalie unconfirmed: the figure assumes an average goalie.`)
-        : L(fr, 'Gardiens partants non confirmés : le chiffre suppose des gardiens moyens.', 'Starting goalies unconfirmed: the figure assumes average goalies.');
+        ? L(fr, `Gardien de ${who} non confirmé : le chiffre suppose le gardien habituel.`, `${who} goalie unconfirmed: the figure assumes the usual starter.`)
+        : L(fr, 'Gardiens partants non confirmés : le chiffre suppose les gardiens habituels.', 'Starting goalies unconfirmed: the figure assumes the usual starters.');
     } else if (early != null && family === 'sided') {
       caveat = L(fr, `Début de saison : environ ${early} match${early > 1 ? 's' : ''} par équipe, bilans peu fiables.`,
                      `Early season: about ${early} game${early > 1 ? 's' : ''} per team, records unreliable.`);

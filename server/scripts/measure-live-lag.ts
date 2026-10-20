@@ -12,10 +12,10 @@
  *     exactement ce que rappelle la page de match (navigateur, CDN compris).
  *
  * Trois mesures, en secondes réelles :
- *   1. Âge de l'état servi — à chaque relevé, depuis quand l'API NHL montrait
- *      déjà le score et l'horloge que la production affiche (premier instant où
- *      la source a atteint ce score et ce temps écoulé). Mesure l'ensemble
- *      de la chaîne serveur + CDN.
+ *   1. Retard de l'état servi — à chaque relevé, depuis quand l'API NHL montre
+ *      un état plus récent (score ou horloge) que celui affiché par la
+ *      production ; 0 si la source n'a pas bougé. Mesure l'ensemble de la
+ *      chaîne serveur + CDN, sans compter horloge arrêtée ni entracte.
  *   2. Âge déclaré — `now − live.asOf` quand la production le publie (lecture
  *      de la page `landing` par le serveur) : la même chose, vue du serveur.
  *   3. Buts — pour chaque but vu à la source, délai jusqu'au premier relevé où
@@ -130,9 +130,14 @@ async function main(): Promise<void> {
         let age: number | null = null;
         if (st) {
           const pe = st.ot ? null : elapsedOf(st.period, st.left);
-          // Premier instant où la source montrait ce score et au moins ce temps écoulé.
-          const first = hist.find(h => h.home === st.home && h.away === st.away && (pe == null || h.elapsed >= pe));
-          if (first) age = (now - first.at) / 1000;
+          // Retard = depuis quand la source montre un état PLUS RÉCENT que celui servi
+          // (score plus avancé, ou horloge plus avancée) ; 0 si la source n'a pas bougé.
+          // Mesuré ainsi, une horloge arrêtée ou un entracte ne comptent pas comme
+          // du retard (la 1re version, « depuis quand la source montrait cet état »,
+          // comptait l'entracte entier : ml/models/live/live_lag_2026-10-20.md).
+          const newer = hist.find(h => h.home + h.away > st.home + st.away
+            || (h.home === st.home && h.away === st.away && pe != null && h.elapsed > pe));
+          age = newer ? (now - newer.at) / 1000 : 0;
           // Buts en attente : la production les montre-t-elle enfin ?
           for (const gl of goals) {
             if (gl.game !== id || gl.lag != null) continue;

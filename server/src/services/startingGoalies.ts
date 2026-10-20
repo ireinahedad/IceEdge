@@ -4,11 +4,11 @@
 // Le gardien partant confirmé n'est pas exposé de façon fiable/stable par une
 // API gratuite avant le match (Daily Faceoff = Cloudflare + build-id volatil).
 // On garde donc une petite table éditable à la main. Elle sert À DEUX CHOSES :
-//   • le modèle — le partant saisi remplace la moyenne de gardiens pondérée par
-//     l'usage récent (inference_state.json), qu'il utilise sans entrée ;
-//   • les VALUE BETS — un match n'en a que si les DEUX partants sont saisis
-//     (`valueBets.service.ts`). Ce n'est donc pas une table d'exceptions : sans
-//     saisie quotidienne, aucun value bet.
+//   • le modèle — le partant saisi remplace le gardien HABITUEL (plus grande
+//     part des 10 derniers départs, inference_state.json), pris sans entrée ;
+//   • c'est donc une table d'EXCEPTIONS depuis le 2026-10-20 : on ne saisit que
+//     quand le n° 2 part. Les value bets n'exigent plus de saisie
+//     (`valueBets.service.ts`, critère 2).
 // (Corrigé le 2026-10-03, ml/INCOHERENCES_ML.md §19 : l'en-tête disait
 // « elle ne sert qu'aux EXCEPTIONS ».)
 //
