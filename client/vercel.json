@@ -2,7 +2,7 @@
   "cleanUrls": true,
   "redirects": [
     {
-      "source": "/props/:slug(adin-hill|aleksander-barkov|auston-matthews|beckett-sennecke|ben-meyers|berkly-catton|carl-lindbom|collin-graf|cutter-gauthier|danila-yurov|dylan-strome|elias-pettersson-8483678|filip-chytil|filip-forsberg|filip-hronek|frank-nazar|gabe-perreault|ilya-protas|jack-mcbain|jack-quinn|jackson-lacombe|jake-neighbours|jared-mccann|jason-robertson|jiri-kulich|john-tavares|juraj-slafkovsky|justus-annunen|kent-johnson|konsta-helenius|lucas-raymond|mackie-samoskevich|macklin-celebrini|maksymilian-szuber|martin-necas|mason-mctavish|matthew-schaefer|matthew-tkachuk|matthew-wood|mattias-samuelsson|matty-beniers|mavrik-bourque|mikko-rantanen|morgan-frost|moritz-seider|noah-dobson|patrick-kane|porter-martone|sam-dickinson|sam-rinzel|thomas-harley|trevor-zegras|vince-dunn|will-smith|yaroslav-askarov|yegor-sharangovich)",
+      "source": "/props/:slug(adin-hill|aleksander-barkov|carl-lindbom|elias-pettersson-8483678|filip-chytil|justus-annunen|maksymilian-szuber|mavrik-bourque)",
       "destination": "/nhl-player-props",
       "permanent": false
     },

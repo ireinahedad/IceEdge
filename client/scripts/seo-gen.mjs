@@ -43,6 +43,11 @@ const HORIZON_WEEKS = Number(process.env.HORIZON_WEEKS || 3); // how many schedu
 // which is what Google's scaled-content-abuse policy targets — and hundreds of
 // those drag down the pages that DO deserve to rank.
 const MIN_GP = Number(process.env.MIN_GP || 20);
+// Seuil réduit pour les joueurs de la liste blanche (2026-10-21). Leurs pages
+// ont déjà prouvé qu'elles attirent des impressions ; avec MIN_GP seul, aucun
+// n'a de page avant ~décembre (saison commencée le 2026-09-29) et les 56 restent
+// garés derrière la redirection temporaire tout l'automne.
+const MIN_GP_ALLOWLIST = Number(process.env.MIN_GP_ALLOWLIST || 5);
 const CONCURRENCY = 6;
 
 // ── Longueurs de titre et de description ─────────────────────────────────────
@@ -774,7 +779,7 @@ async function fetchMatchupPairs(teams) {
   return pairs;
 }
 
-async function fetchPlayers(teams) {
+async function fetchPlayers(teams, allow = new Set()) {
   const abbrs = Object.keys(teams);
   const rosters = await pMap(abbrs, async (abbr) => {
     try {
@@ -819,8 +824,10 @@ async function fetchPlayers(teams) {
   const out = [];
   for (const p of players) {
     const gp = Number(p.stats?.gamesPlayed || 0);
-    if (gp < MIN_GP) continue;
-    let slug = slugify(p.name);
+    const base = slugify(p.name);
+    const listed = allow.has(base) || allow.has(`${base}-${p.id}`);
+    if (gp < (listed ? MIN_GP_ALLOWLIST : MIN_GP)) continue;
+    let slug = base;
     if (usedSlugs.has(slug)) slug = `${slug}-${p.id}`;
     usedSlugs.add(slug);
     p.slug = slug;
@@ -910,7 +917,7 @@ async function main() {
     pairs = await fetchMatchupPairs(teams);
     console.log(`  ${pairs.length} upcoming pairs`);
     console.log("Fetching rosters + player stats…");
-    players = await fetchPlayers(teams);
+    players = await fetchPlayers(teams, allow);
     console.log(`  ${players.length} players before the allowlist`);
   }
 
