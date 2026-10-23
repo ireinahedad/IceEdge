@@ -63,6 +63,7 @@ import {
   type InjuryPlayer,
   type GoalieDay,
   type ScratchDay,
+  addNewsLink,
 } from "../services/manualDataService";
 import type { NHLGame, NHLPlayerInfo } from "../types/bet";
 import { nhlLogoUrl } from "../data/teamEmoji";
@@ -440,6 +441,8 @@ export function ManualEntryPage() {
 
       <LongInjuriesCard long={long} date={date} onRecovered={(abbr, p) => void handleRecovered(abbr, p)} />
 
+      <NewsLinkCard teams={games ? [...new Set(games.flatMap((g) => [g.awayTeam.abbreviation, g.homeTeam.abbreviation]))].sort() : []} />
+
       {/* ── 2. Les matchs ── */}
       {loadError && (
         <div role="alert" className="rounded-2xl p-4 mb-4 bg-red-500/10 border border-red-500/30">
@@ -584,6 +587,80 @@ function LongInjuriesCard({
             </button>
           </div>
         )))}
+      </div>
+    </section>
+  );
+}
+
+// ─── Fil de nouvelles : coller un lien (F1) ───────────────────────────────────
+// Une nouvelle vue sur X ou sur Discord qu'aucune source Bluesky ne couvre. Le
+// lien apparaît sur la page du match dans les 2 min (cache du serveur).
+
+const NEWS_FLAGS = [
+  { key: "lineup", label: "Absent / retour" },
+  { key: "goalie", label: "Gardien" },
+  { key: "transaction", label: "Transaction" },
+] as const;
+
+function NewsLinkCard({ teams }: { teams: string[] }) {
+  const [url, setUrl] = useState("");
+  const [team, setTeam] = useState("");
+  const [excerpt, setExcerpt] = useState("");
+  const [flags, setFlags] = useState<Array<"goalie" | "lineup" | "transaction">>([]);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (!url.trim() || !team) return;
+    setBusy(true);
+    try {
+      await addNewsLink({ url: url.trim(), teams: [team], excerpt: excerpt.trim(), flags });
+      toast.success("Lien ajouté au fil");
+      setUrl(""); setExcerpt(""); setFlags([]);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Échec de l'ajout");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="icy-card rounded-2xl p-4 mb-4">
+      <p className="text-white text-[14px] font-bold">Ajouter une nouvelle au fil</p>
+      <p className="text-white/50 text-[12px] mt-0.5 mb-3 leading-relaxed">
+        Colle le lien d'une publication (x.com, bsky.app, nhl.com). Elle s'affiche
+        sur la page du match. Pense aussi à saisir l'absent ou le gardien plus bas :
+        le fil n'alimente pas le modèle.
+      </p>
+      <div className="flex flex-col gap-2">
+        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://x.com/…/status/…" className={FIELD} aria-label="Lien" />
+        <select value={team} onChange={(e) => setTeam(e.target.value)} className={FIELD} aria-label="Équipe">
+          <option value="">Équipe…</option>
+          {teams.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <input value={excerpt} onChange={(e) => setExcerpt(e.target.value)} maxLength={200} placeholder="Résumé court (optionnel) — ex. Marner absent ce soir" className={FIELD} aria-label="Résumé" />
+        <div className="flex flex-wrap gap-2">
+          {NEWS_FLAGS.map((f) => {
+            const on = flags.includes(f.key);
+            return (
+              <button
+                key={f.key}
+                onClick={() => setFlags(on ? flags.filter((x) => x !== f.key) : [...flags, f.key])}
+                className="tap-44 px-3 py-1.5 rounded-full text-[12px] font-semibold"
+                style={on ? { background: ACCENT, color: "#0A0E0C" } : { background: "rgba(255,255,255,0.08)", color: "#d6e2e6" }}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+        <button
+          onClick={() => void submit()}
+          disabled={busy || !url.trim() || !team}
+          className="tap-44 mt-1 px-4 py-2 rounded-xl text-[13px] font-bold disabled:opacity-40"
+          style={{ background: ACCENT, color: "#0A0E0C" }}
+        >
+          {busy ? "Ajout…" : "Ajouter"}
+        </button>
       </div>
     </section>
   );

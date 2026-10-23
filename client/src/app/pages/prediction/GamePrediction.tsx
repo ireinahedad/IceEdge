@@ -12,6 +12,7 @@ import { nhlApiService } from "../../services/nhlApiService";
 import { predictionApiService, isPredictionUnavailable } from "../../services/predictionApiService";
 import { useSport } from "../../context/SportContext";
 import { useI18n } from "../../i18n";
+import { MatchNews } from "./MatchNews";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { PlayerPropGrid } from "./PlayerPropGrid";
@@ -316,6 +317,9 @@ export function GamePrediction({ gameId }: { gameId: string }) {
         home={{ abbr: home.abbr, logo: home.logo }}
         away={{ abbr: away.abbr, logo: away.logo }}
       />
+
+      {/* Dernières nouvelles des deux équipes (absents, gardiens) — F1. */}
+      <MatchNews home={home.abbr} away={away.abbr} accent={accent} />
 
       {/* ── Market groups ── */}
       <StatsBanner type="game" id={gameId} />

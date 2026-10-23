@@ -132,3 +132,17 @@ export function saveLongInjuries(abbr: string, players: LongInjury[]): Promise<{
     body: JSON.stringify({ players }),
   });
 }
+
+// ── Fil de nouvelles : lien collé à la main (NEWS_CONSENSUS_PLAN.md, F1) ──────
+
+export interface ManualNewsInput {
+  url: string;
+  teams: string[];
+  excerpt: string;
+  flags: Array<'goalie' | 'lineup' | 'transaction'>;
+}
+
+/** Ajoute un lien (X, Bluesky, nhl.com) au fil des équipes données. */
+export function addNewsLink(input: ManualNewsInput): Promise<{ id: number }> {
+  return call<{ id: number }>('/news', { method: 'POST', body: JSON.stringify(input) });
+}

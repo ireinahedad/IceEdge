@@ -926,6 +926,10 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pred.playersTable":   { en: "Players",               fr: "Joueurs" },
   "pred.seasonStats":    { en: "Season stats",          fr: "Stats de la saison" },
   "pred.viewRoster":     { en: "View full roster stats →", fr: "Voir les stats de l'effectif →" },
+  "news.title":         { en: "Latest news",           fr: "Dernières nouvelles" },
+  "news.flag.goalie":   { en: "Goalie",                fr: "Gardien" },
+  "news.flag.lineup":   { en: "Lineup",                fr: "Alignement" },
+  "news.sourceNote":    { en: "Links to the original posts by teams and reporters.", fr: "Liens vers les publications d'origine des équipes et journalistes." },
   "pred.bookOdds":       { en: "Book odds",             fr: "Cote du livre" },
 
   // ── Grilles de paris joueur (buts / passes / tirs bloqués) ──────────────
