@@ -358,3 +358,24 @@ posts, le barème se recalibre sur des chiffres réels.
 | `aucun match TERMINÉ le ...` | récap lancé trop tôt, ou mauvaise date | attendre la fin des matchs, ou `--date=` |
 | `aucune sortie pour <date>` au rendu | oubli du suffixe | `--date=<date>-recap` |
 | `ERROR: The parameter is incorrect` | `:` dans un nom de tâche planifiée | renommer sans `\ / : * ? " < > \|` |
+
+---
+
+## Les combinés du jour (MARKETING_PLAN.md)
+
+Tournera seul sur GitHub Actions (phase D). À la main, pour rattraper ou vérifier :
+
+```bat
+cd C:\Users\irein\dev\ICEEDGE\server
+
+npm run content:parlays -- --mode=pick                   :: combinés de ce soir (déjà gelés)
+npm run content:render  -- --date=<date>-parlays-pick
+npm run content:video   -- --date=<date>-parlays-pick
+
+npm run content:parlays -- --mode=result                 :: résultat d'hier (une fois réglé)
+npm run content:render  -- --date=<date>-parlays-result
+npm run content:video   -- --date=<date>-parlays-result
+```
+
+Sans réseau, pour régler le design : `--fixture=..\content\fixtures\parlays-pick-sample.json`
+(ou `parlays-result-sample.json`) et `--date=2026-10-22`. Code de sortie 3 = pas encore prêt.

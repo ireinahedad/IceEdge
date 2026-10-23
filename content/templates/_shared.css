@@ -348,3 +348,122 @@ body::before {
 
 /* Le plan de récap n'a pas toujours une ligne de commentaire sous son bloc. */
 .recap + .sub:empty { display: none; }
+
+/* --- Combinés du jour (parlay_pick / parlay_result) -------------------------
+   MARKETING_PLAN Phase C. Blocs générés par render-slides.ts (parlayBlock).
+   Même surface utile que les récaps : 888 px de large, ~1345 px de haut entre
+   les zones de sécurité. Un combiné a 3 à 5 jambes ; la carte est dimensionnée
+   pour 5 sans dépasser. Les icônes ✓ / ✗ sont du CSS, pas des émojis : le
+   Chromium du runner GitHub n'a pas de police d'émojis.
+   --------------------------------------------------------------------------- */
+
+.slide.pl { justify-content: center; gap: 36px; padding-bottom: 70px; }
+.pl-legal {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  text-align: center; font-size: 26px; font-weight: 600; letter-spacing: 1px;
+  color: var(--muted); opacity: 0.85;
+}
+
+/* Ouverture */
+.pl-kicker { font-size: 34px; font-weight: 800; letter-spacing: 6px; color: var(--alert); text-transform: uppercase; }
+.pl-title { font-size: 116px; font-weight: 900; line-height: 1.0; letter-spacing: -3px; color: #fff; text-wrap: balance; }
+.pl-date { font-size: 48px; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
+.pl-line { font-size: 44px; font-weight: 600; color: var(--text); }
+.pl-record {
+  align-self: flex-start;
+  font-size: 40px; font-weight: 800; color: #fff; letter-spacing: 1px;
+  background: var(--surface); border: 2px solid rgba(144, 201, 240, 0.18);
+  border-left: 12px solid var(--positive); border-radius: 20px; padding: 20px 30px;
+}
+.pl-intro { display: flex; flex-direction: column; gap: 28px; }
+
+/* Carte d'un combiné */
+.pl-card { display: flex; flex-direction: column; gap: 22px; }
+.pl-head { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; }
+.pl-head b { font-size: 76px; font-weight: 900; color: #fff; letter-spacing: -1px; }
+.pl-head span { font-size: 30px; font-weight: 800; letter-spacing: 4px; color: var(--accent); text-transform: uppercase; }
+.pl-legs { display: flex; flex-direction: column; gap: 18px; }
+.pl-leg {
+  display: flex; align-items: center; gap: 24px;
+  background: var(--surface); border: 2px solid rgba(144, 201, 240, 0.12);
+  border-left: 12px solid var(--c, var(--accent));
+  border-radius: 26px; padding: 24px 28px; min-height: 172px;
+}
+.pl-logo { width: 110px; height: 110px; flex: none; display: flex; align-items: center; justify-content: center; }
+.pl-logo .tlogo { width: 110px; height: 110px; }
+.pl-logo.pair { position: relative; }
+.pl-logo.pair .tlogo { position: absolute; width: 76px; height: 76px; }
+.pl-logo.pair .tlogo:first-child { top: 0; left: 0; }
+.pl-logo.pair .tlogo:last-child { bottom: 0; right: 0; }
+.pl-logo b { font-size: 34px; font-weight: 900; color: #fff; }
+.pl-what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pl-what b {
+  font-size: 48px; font-weight: 800; color: #fff; line-height: 1.12; letter-spacing: -0.5px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.pl-what span { font-size: 30px; font-weight: 600; color: var(--muted); letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-pct { flex: none; font-size: 60px; font-weight: 900; color: var(--accent); min-width: 120px; text-align: right; }
+
+/* 5 jambes : rangées resserrées, sinon la mention légale descend sous 1575 px. */
+.pl-card.n5 { gap: 16px; }
+.pl-card.n5 .pl-legs { gap: 12px; }
+.pl-card.n5 .pl-leg { min-height: 150px; padding: 16px 26px; }
+.pl-card.n5 .pl-what b { font-size: 44px; }
+.pl-card.n5 .pl-foot { padding: 20px 32px; }
+.pl-card.n5 .pl-foot b { font-size: 88px; }
+
+/* Probabilité du combiné, en pied de carte */
+.pl-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  border-radius: 26px; padding: 28px 34px;
+  background: linear-gradient(90deg, rgba(144, 201, 240, 0.16), rgba(144, 201, 240, 0.04));
+  border: 2px solid rgba(144, 201, 240, 0.25);
+}
+.pl-foot span { font-size: 34px; font-weight: 700; letter-spacing: 3px; color: var(--text); text-transform: uppercase; }
+.pl-foot b { font-size: 100px; font-weight: 900; color: #fff; letter-spacing: -2px; line-height: 1; }
+
+/* Résultat : bandeau et icônes */
+.pl-status {
+  font-size: 54px; font-weight: 900; letter-spacing: 6px; padding: 6px 26px; border-radius: 16px;
+  color: #0A0E0C; background: var(--muted);
+}
+.pl-status.won  { background: var(--positive); }
+.pl-status.lost { background: var(--negative); }
+.pl-mark {
+  flex: none; width: 84px; height: 84px; border-radius: 50%; position: relative;
+  background: rgba(138, 158, 166, 0.25);
+}
+.pl-mark.win  { background: var(--positive); }
+.pl-mark.loss { background: var(--negative); }
+/* ✓ : un L tourné ; ✗ : deux barres croisées ; annulé / inconnu : un trait. */
+.pl-mark.win::after {
+  content: ''; position: absolute; left: 28px; top: 14px; width: 22px; height: 42px;
+  border: solid #0A0E0C; border-width: 0 9px 9px 0; transform: rotate(45deg);
+}
+.pl-mark.loss::before, .pl-mark.loss::after {
+  content: ''; position: absolute; left: 38px; top: 18px; width: 9px; height: 48px;
+  background: #0A0E0C; border-radius: 4px; transform: rotate(45deg);
+}
+.pl-mark.loss::after { transform: rotate(-45deg); }
+.pl-mark.void::after, .pl-mark.unknown::after {
+  content: ''; position: absolute; left: 22px; top: 38px; width: 40px; height: 9px;
+  background: var(--text); border-radius: 4px;
+}
+.pl-leg.loss { opacity: 0.92; }
+.pl-leg.void .pl-what b, .pl-leg.unknown .pl-what b { color: var(--muted); }
+.pl-card.lost .pl-foot { border-color: rgba(248, 113, 113, 0.35); }
+.pl-card.won  .pl-foot { border-color: rgba(74, 222, 128, 0.45); }
+
+/* Bilan cumulé */
+.pl-rec { display: flex; flex-direction: column; gap: 26px; }
+.pl-rec .big { color: var(--accent); }
+.pl-rec .big.positive { color: var(--positive); }
+.pl-rec .pl-wl { font-size: 96px; font-weight: 900; color: #fff; letter-spacing: -2px; line-height: 1; }
+.pl-rec .pl-since { font-size: 44px; font-weight: 700; color: var(--accent); }
+.pl-rec .pl-note { font-size: 38px; font-weight: 600; color: var(--muted); line-height: 1.25; }
+
+/* Carte de fin */
+.pl-cta { align-items: center; text-align: center; display: flex; flex-direction: column; gap: 48px; }
+.pl-cta img { width: 260px; height: auto; }
+.pl-cta .pl-cta-line { font-size: 64px; font-weight: 800; color: #fff; line-height: 1.15; text-wrap: balance; }
+.pl-cta .domain { font-size: 52px; font-weight: 700; letter-spacing: 3px; color: var(--accent); }
