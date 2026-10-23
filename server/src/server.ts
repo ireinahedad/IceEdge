@@ -10,6 +10,7 @@ import { startSettlementJob } from './services/settlement.service';
 import { startValueBetScan } from './services/valueBetScan.service';
 import { startCleanupJob } from './services/cleanup.service';
 import { startOddsLogger, verifyOddsApiKey } from './services/oddsLogger.service';
+import { startNewsSync } from './services/newsSync.service';
 import { ODDS_BOOKMAKERS, ODDS_COLLECT_BOOKMAKERS } from './services/oddsClient';
 import { verifyAvatarStorage } from './services/avatarStorage';
 import { verifyEncryptionKey } from './services/crypto.util';
@@ -54,6 +55,9 @@ const DORMANT = process.env.DORMANT === 'true';
       // Journalise les cotes NHL du jour pour le réentraînement ML
       // (tables `odds_log` et `odds_snapshots` — plus de CSV depuis la 027)
       startOddsLogger();
+      // Fil de nouvelles Bluesky (opt-in NEWS_SYNC_ENABLED=true) : 1 h, 15 min
+      // dans la fenêtre des matchs — NEWS_CONSENSUS_PLAN.md, F1.
+      startNewsSync();
     }
   } catch (err: any) {
     logger.warn(`[Server] PostgreSQL unavailable - DB features disabled. (${err.message})`);

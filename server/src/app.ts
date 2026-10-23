@@ -8,6 +8,7 @@ import authRoutes          from './routes/auth.routes';
 import userRoutes          from './routes/user.routes';
 import profileRoutes       from './routes/profile.routes';
 import nhlRoutes           from './routes/nhl.routes';
+import newsRoutes          from './routes/news.routes';
 import oddsRoutes          from './routes/odds.routes';
 import manualRoutes        from './routes/manual.routes';
 import mlRoutes            from './routes/ml.routes';
@@ -128,6 +129,8 @@ app.use('/api/users',         noStore, userRoutes);
 // Les en-têtes de cache sont posés par route dans nhl.routes.ts, alignés sur
 // les TTL serveur de nhlApiClient.
 app.use('/api/nhl',           nhlRoutes);
+// Fil de nouvelles par match (F1) — public, lecture seule.
+app.use('/api/news',          newsRoutes);
 
 // Leaderboard — public, identique pour tous, caché 60 s côté service.
 // Le même Cache-Control côté HTTP laisse navigateur et CDN absorber le reste.

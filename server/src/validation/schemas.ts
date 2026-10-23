@@ -516,3 +516,11 @@ export const appleVerifySchema = z.object({
 export const appleNotificationSchema = z.object({
   signedPayload: z.string().min(20).max(64_000),
 });
+
+// ── Fil de nouvelles : lien collé par un admin (NEWS_CONSENSUS_PLAN.md, F1) ──
+export const manualNewsSchema = z.object({
+  url:     z.string().trim().url().max(500),
+  teams:   z.array(z.string().trim().toUpperCase().regex(/^[A-Z]{2,4}$/)).min(1).max(2),
+  excerpt: z.string().trim().max(500).default(''),
+  flags:   z.array(z.enum(['goalie', 'lineup', 'transaction'])).max(3).default([]),
+});

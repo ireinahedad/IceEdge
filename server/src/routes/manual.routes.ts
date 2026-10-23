@@ -28,8 +28,10 @@ import { authenticate, requireRole } from '../middleware/auth.middleware';
 import { validateBody } from '../middleware/validate.middleware';
 import {
   injuriesEntrySchema, lineupsEntrySchema, refereesTableSchema, refAssignmentSchema,
-  longInjuriesSchema,
+  longInjuriesSchema, manualNewsSchema,
 } from '../validation/schemas';
+import { addManualNews, deleteNews, listNews } from '../services/newsSync.service';
+import { normalizeManualUrl, authorFromManualUrl } from '../services/newsFeed';
 import * as Manual from '../services/manualData.service';
 import { fetchGamesByDate } from '../services/nhlApiClient';
 import { normalizeRefName } from '../services/refereeStore';
@@ -388,6 +390,38 @@ router.delete('/ref-assignments/:key', async (req: Request, res: Response) => {
   if (!key) return;
   const existed = await Manual.deleteEntry('ref_assignment', key);
   return res.json({ ok: true, key, existed });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Fil de nouvelles — lien collé à la main (NEWS_CONSENSUS_PLAN.md, F1)
+// ═════════════════════════════════════════════════════════════════════════════
+// Le cas d'usage : une nouvelle vue sur X ou sur Discord, qu'aucune source
+// Bluesky ne couvre. Un humain lit et colle le lien : rien n'est lu par robot.
+
+router.get('/news', async (req: Request, res: Response) => {
+  const teams = String(req.query.teams ?? '').split(',').map((t) => t.trim().toUpperCase()).filter(Boolean);
+  if (teams.length === 0) { res.status(400).json({ error: 'teams requis (ex. VGK,STL)' }); return; }
+  res.json({ items: await listNews(teams, 72, 50) });
+});
+
+router.post('/news', validateBody(manualNewsSchema), async (req: Request, res: Response) => {
+  const url = normalizeManualUrl(req.body.url);
+  if (!url) {
+    res.status(400).json({ error: 'lien refusé — https://x.com, bsky.app ou nhl.com seulement' });
+    return;
+  }
+  const id = await addManualNews({
+    url, teams: req.body.teams, author: authorFromManualUrl(url),
+    excerpt: req.body.excerpt, flags: req.body.flags, userId: actor(req),
+  });
+  if (id === null) { res.status(409).json({ error: 'ce lien est déjà dans le fil' }); return; }
+  res.status(201).json({ id });
+});
+
+router.delete('/news/:id', async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ error: 'id invalide' }); return; }
+  res.status((await deleteNews(id)) ? 204 : 404).end();
 });
 
 export default router;

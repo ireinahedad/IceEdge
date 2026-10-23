@@ -91,8 +91,13 @@ async function main() {
   // 1. Gel (pick seulement).
   if (mode === 'pick' && !dryRun) {
     const fr = await api('/content/parlays/freeze', { method: 'POST', secret: true, body: JSON.stringify({ date }) });
+    if (!fr.parlays.length) {
+      // Rien n'est écrit dans ce cas : soit pas de match, soit tous déjà commencés
+      // (le serveur ne propose jamais un combiné sur un match commencé).
+      summary(`- Aucun combiné pour le ${date} (pas de match, ou tous déjà commencés) : rien gelé, rien publié.`);
+      return;
+    }
     summary(fr.created ? `- Gel : ${fr.parlays.length} combiné(s) gelé(s)` : `- Gel : déjà fait (${fr.parlays.length} combiné(s))`);
-    if (!fr.parlays.length) { summary('- Aucun combiné ce soir : rien à publier.'); return; }
   }
 
   const before = (await api(`/content/parlays?date=${date}`)).parlays as any[];
