@@ -1630,6 +1630,11 @@ export interface GameMarketsResult {
   refreshMs?: number;
   /** Match en cours : instant de la lecture de l'état du match à l'API NHL (ISO). */
   asOf?: string;
+  /**
+   * Mise au jeu (ms epoch), quand l'amont la donne. Sert seulement à borner le
+   * cache d'avant-match : il ne doit jamais déborder sur le début du match.
+   */
+  startMs?: number;
 }
 
 /**
@@ -1640,10 +1645,33 @@ export interface GameMarketsResult {
  */
 const gameMarketsCache = new TtlCache<GameMarketsResult>(30_000, 500, 'gamePredictions');
 
+/**
+ * Avant-match : 5 min (PERF_PLAN.md, P0.4). Le TTL valait 30 s pour TOUT match,
+ * y compris à venir : chaque visiteur arrivé plus de 30 s après le précédent
+ * relançait le calcul complet (~0,65 s mesuré en prod le 2026-10-23), alors que
+ * rien n'y bouge d'une minute à l'autre — la route l'annonce déjà 5 min au
+ * navigateur (`publicCache(TTL.SHORT)`). Borné par la mise au jeu : un match qui
+ * commence repasse au rythme du direct au plus tard 30 s après. Une saisie
+ * manuelle (gardien, alignement, blessures) vide ce cache : voir
+ * `clearGameMarketsCache` et `routes/manual.routes.ts`.
+ */
+const PREMATCH_TTL_MS = 5 * 60_000;
+
+function gameMarketsTtl(r: GameMarketsResult): number {
+  if (r.status === 'live') return r.refreshMs ?? LIVE_REFRESH_MS;
+  if (r.status !== 'scheduled') return LIVE_REFRESH_MS;   // terminé, ou état inconnu : inchangé
+  const untilStart = r.startMs != null ? r.startMs - Date.now() : PREMATCH_TTL_MS;
+  return Math.max(LIVE_REFRESH_MS, Math.min(PREMATCH_TTL_MS, untilStart));
+}
+
 export async function buildGameMarketsWithStatus(gameId: string, weights?: FactorWeights): Promise<GameMarketsResult> {
   const key = `${gameId}|${weights ? JSON.stringify(weights) : ''}`;
-  return gameMarketsCache.wrap(key, () => computeGameMarketsFor(gameId, weights),
-    r => (r.status === 'live' && r.refreshMs ? r.refreshMs : LIVE_REFRESH_MS));
+  return gameMarketsCache.wrap(key, () => computeGameMarketsFor(gameId, weights), gameMarketsTtl);
+}
+
+/** Une donnée d'entrée a changé (saisie manuelle) : les marchés seront recalculés. */
+export function clearGameMarketsCache(): void {
+  gameMarketsCache.clear();
 }
 
 export async function buildGameMarkets(gameId: string, weights?: FactorWeights): Promise<MarketGroup[]> {
@@ -1770,7 +1798,7 @@ async function computeGameMarketsFor(
     : undefined;
   const asOf = live && wantDetail && detailRes.status === 'fulfilled' ? detailRes.value?.asOf : undefined;
   return { groups, status, ...(live ? { liveLabel: live.label } : {}), ...(refreshMs ? { refreshMs } : {}),
-           ...(asOf ? { asOf } : {}) };
+           ...(asOf ? { asOf } : {}), ...(Number.isFinite(startMs) ? { startMs } : {}) };
 }
 
 // ─── Public: team predictions (vs league-average opponent) ────────────────────

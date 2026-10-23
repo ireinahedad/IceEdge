@@ -33,6 +33,7 @@ import {
 import { addManualNews, deleteNews, listNews } from '../services/newsSync.service';
 import { normalizeManualUrl, authorFromManualUrl } from '../services/newsFeed';
 import * as Manual from '../services/manualData.service';
+import { clearGameMarketsCache } from '../services/nhlPredictions';
 import { fetchGamesByDate } from '../services/nhlApiClient';
 import { normalizeRefName } from '../services/refereeStore';
 import type { GameInjuries } from '../services/injuryStore';
@@ -44,6 +45,16 @@ const router = Router();
 
 // Lecture ET écriture réservées aux admins — voir l'en-tête.
 router.use(authenticate, requireRole('admin'));
+
+// Une écriture réussie (gardien, alignement, blessures, arbitres…) change les
+// entrées des marchés d'un match, gardés jusqu'à 5 min avant la mise au jeu
+// (PERF_PLAN.md, P0.4) : on les vide pour que la saisie se voie tout de suite.
+router.use((req: Request, res: Response, next) => {
+  if (req.method !== 'GET') {
+    res.on('finish', () => { if (res.statusCode < 400) clearGameMarketsCache(); });
+  }
+  next();
+});
 
 // ── Validation des clés d'URL ────────────────────────────────────────────────
 // Les corps passent par zod ; les clés d'URL, elles, entrent dans une clé
