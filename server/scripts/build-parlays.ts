@@ -9,6 +9,7 @@
  *   npm run content:parlays -- --mode=result               résultat de la veille
  *   npm run content:parlays -- --mode=pick --date=2026-10-23
  *   npm run content:parlays -- --mode=result --allow-pending   sortir même si une jambe traîne
+ *   npm run content:parlays -- --mode=pick --live-preview      rien de gelé : aperçu des combinés actuels, sans gel
  *   npm run content:parlays -- --mode=pick --fixture=..\content\fixtures\parlays-2026-10-22.json
  *                                                          données inventées, aucun appel réseau
  *
@@ -85,6 +86,21 @@ async function load(mode: ParlayMode, date: string): Promise<{ parlays: LoggedPa
 
   const { parlays } = await getJson(`${API}/content/parlays?date=${date}`);
   const record: ParlayRecord = await getJson(`${API}/content/parlays/record`);
+
+  // `--live-preview` (essai à blanc) : rien de gelé ce jour-là → les 2 combinés
+  // gratuits que l'accueil affiche EN CE MOMENT, sans les geler. Le lot est
+  // marqué « aperçu » et n'entre jamais au bilan.
+  if (mode === 'pick' && !parlays.length && flag('live-preview')) {
+    const live = await getJson(`${API}/predict/best-parlays?date=${date}`);
+    const free = (live.parlays ?? []).filter((p: any) => !p.locked).slice(0, 2);
+    const preview: LoggedParlay[] = free.map((p: any, i: number) => ({
+      date, rank: i + 1, parlayId: p.id, kind: p.kind, legs: p.legs, probability: p.probability,
+      bookPrice: p.bookPrice ?? null, firstStartUTC: null, frozenAt: new Date().toISOString(),
+      status: 'pending', legResults: null, settledAt: null, youtubePickId: null, youtubeResultId: null,
+      tiktokPickSentAt: null, tiktokResultSentAt: null,
+    }));
+    return { parlays: preview, record, source: 'build-parlays (aperçu en direct, NON gelé)' };
+  }
   return { parlays, record, source: 'build-parlays' };
 }
 
@@ -99,7 +115,8 @@ async function main() {
   console.log(`\nbuild-parlays — ${mode === 'pick' ? 'combinés' : 'résultats'} du ${date}\n`);
 
   const { parlays, record, source } = await load(mode, date);
-  if (source !== 'build-parlays') console.log(`  ⚠ DONNÉES INVENTÉES — ne pas publier ce lot.\n`);
+  if (source.includes('fixture')) console.log(`  ⚠ DONNÉES INVENTÉES — ne pas publier ce lot.\n`);
+  else if (source.includes('aperçu')) console.log(`  ⚠ APERÇU : combinés actuels du site, NON gelés — ne pas publier ce lot.\n`);
 
   if (parlays.length === 0) throw new NotReady(`aucun combiné gelé pour ${date} (le gel n'a pas encore eu lieu ?)`);
   if (mode === 'result') {

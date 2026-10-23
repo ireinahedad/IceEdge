@@ -106,9 +106,10 @@ async function main() {
   const ytDone: string | null = before[0]?.[ytKey] ?? null;
   const tkDone = Boolean(before.length && before.every((p) => p[tkKey]));
   if (!dryRun && ytDone && tkDone) { summary('- Déjà publié : rien à faire.'); return; }
+  if (dryRun && mode === 'pick' && !before.length) summary('- Rien de gelé : aperçu des combinés affichés en ce moment sur le site (non gelés, hors bilan).');
 
   // 2. Vidéo.
-  const built = await npm('content:parlays', [`--mode=${mode}`, `--date=${date}`]);
+  const built = await npm('content:parlays', [`--mode=${mode}`, `--date=${date}`, ...(dryRun ? ['--live-preview'] : [])]);
   if (built === NOT_READY) { summary('- Pas encore prêt (rien de gelé, ou combinés pas encore réglés) : prochain passage.'); return; }
   if (built !== 0) throw new Error(`content:parlays a échoué (code ${built})`);
   const key = `${date}-parlays-${mode}`;
