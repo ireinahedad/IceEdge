@@ -223,6 +223,29 @@ function until(iso: string, now: Date): string {
 
 const money = (x: number): string => `${x.toFixed(2)} $`;
 
+/**
+ * Couverture par livre : nombre de matchs où le livre a au moins une cote.
+ * Un livre à 0 coûte une place dans les 10 « gratuits » sans rien apporter.
+ */
+function bookCoverage(events: ArbEvent[], books: string[]): string {
+  const count = new Map<string, number>(books.map((b) => [b, 0]));
+  const titles = new Map<string, string>();
+  for (const ev of events) {
+    const seen = new Set<string>();
+    for (const bk of ev.bookmakers ?? []) {
+      if (!count.has(bk.key) || seen.has(bk.key)) continue;
+      if (!(bk.markets ?? []).some((m) => (m.outcomes ?? []).length)) continue;
+      seen.add(bk.key);
+      count.set(bk.key, (count.get(bk.key) ?? 0) + 1);
+      if (bk.title) titles.set(bk.key, bk.title);
+    }
+  }
+  const present = [...count].filter(([, n]) => n > 0).map(([b, n]) => `${titles.get(b) ?? b} ${n}`);
+  const absent = [...count].filter(([, n]) => n === 0).map(([b]) => b);
+  return `   Livres (matchs cotés) : ${present.join(' · ') || 'aucun'}` +
+    (absent.length ? `\n   Sans cotes NHL : ${absent.join(', ')}` : '');
+}
+
 function marketLabel(o: ArbOpportunity): string {
   return [o.market, o.subject, o.line !== undefined && !o.market.includes('spread') ? o.line : undefined]
     .filter((x) => x !== undefined && x !== '').join(' ');
@@ -293,6 +316,7 @@ async function scanOnce(args: Args): Promise<void> {
     : `${spentThisScan} crédit(s) utilisé(s), solde ${remaining ?? '?'}`;
   console.log(`\n── Scan ${now.toISOString().slice(0, 16).replace('T', ' ')} UTC · ${stats.events} matchs · ` +
     `${stats.groupsCompared} marchés comparés · ${credits}`);
+  console.log(bookCoverage(events, args.books));
   if (stats.quotesSkippedStale) console.log(`   (${stats.quotesSkippedStale} cote(s) trop vieille(s) ignorée(s))`);
 
   if (!opportunities.length) {

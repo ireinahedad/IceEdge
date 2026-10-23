@@ -342,6 +342,16 @@ async function applyLive(gameId: string, pre: GameMlBundle): Promise<GameMlBundl
   return base;
 }
 
+/**
+ * Calcule le paquet d'AVANT-MATCH d'un match s'il n'est pas frais, et ATTEND le
+ * calcul (pas de stale-while-revalidate ici). Pour le préchauffage de fond
+ * (`mlWarmup.service.ts`, PERF_PLAN.md P1.5), qui appelle un match à la fois :
+ * `wrapSwr` lancerait ses recalculs en fond tous en même temps.
+ */
+export async function warmGameMlBundle(gameId: string): Promise<void> {
+  await bundleCache.wrap(gameId, () => computeBundle(gameId));
+}
+
 export async function getGameMlBundle(gameId: string): Promise<GameMlBundle> {
   const pre = await bundleCache.wrapSwr(gameId, () => computeBundle(gameId), BUNDLE_STALE_MS);
   // En direct, le paquet vit le rythme du match : 30 s, 10 s en fin de match.
