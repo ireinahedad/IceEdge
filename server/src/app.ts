@@ -2,6 +2,7 @@ import express from 'express';
 import * as Sentry from '@sentry/node';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import cookieParser from 'cookie-parser';
 
 import authRoutes          from './routes/auth.routes';
@@ -36,6 +37,15 @@ const app = express();
 if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
 
 app.use(helmet());
+// Compression gzip/brotli des réponses (PERF_PLAN.md, P1.4). Express n'en
+// faisait aucune : le paquet ML d'un match (~171 ko de JSON), `/nhl/players`,
+// les marchés d'un match (~58 ko) voyageaient tels quels jusqu'au navigateur.
+// Le JSON se compresse à ~10-20 % de sa taille. Sous 1 ko, le gain ne paie pas
+// l'en-tête. Si un proxy en amont compresse déjà, il voit `Content-Encoding`
+// et ne recompresse pas. Aucune route ne diffuse en flux (pas de SSE) : la mise
+// en tampon de `compression` ne retarde rien. L'ETag reste celui du corps non
+// compressé, donc les 304 du paquet ML continuent de marcher.
+app.use(compression({ threshold: 1024 }));
 // Structured per-request logging + request ids (before routes so every handler
 // gets req.log and the x-request-id header is set on the response).
 app.use(httpLogger);

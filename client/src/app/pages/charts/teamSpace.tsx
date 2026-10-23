@@ -95,6 +95,15 @@ function loadTeamRecords(): Promise<Map<string, TeamSeasonRow>> {
   return recordsPromise;
 }
 
+/**
+ * Lance le chargement des fiches SANS attendre (PERF_PLAN.md, P1.3). L'accueil
+ * l'appelle en même temps que le calendrier : sinon la requête ne partait qu'au
+ * montage des cartes de match, c'est-à-dire une vague réseau plus tard.
+ */
+export function prefetchTeamRecords(): void {
+  loadTeamRecords().catch(() => { /* les cartes retenteront à leur montage */ });
+}
+
 /** Les fiches de la saison en cours par abréviation ; `null` le temps du chargement ou en cas d'échec. */
 export function useTeamRecords(): Map<string, TeamSeasonRow> | null {
   const [records, setRecords] = useState<Map<string, TeamSeasonRow> | null>(null);

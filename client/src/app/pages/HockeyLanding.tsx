@@ -37,6 +37,7 @@ import { LiveGamesRow, SportSelector, UpcomingGameRow, gameIsoDay } from "./land
 import { dayHeading, groupByDay } from "../data/gameDay";
 import { useFoldState } from "../hooks/useFoldState";
 import { TeamCarousel } from "./landing/TeamCarousel";
+import { prefetchTeamRecords } from "./charts/teamSpace";
 import { ProUpsell } from "./landing/ProUpsell";
 import { AddSheetState, DisplayGame, extractSpreadOdds, toDisplayGame, toDisplayGameBase } from "./landing/landingTypes";
 
@@ -258,6 +259,8 @@ export function HockeyLanding() {
           d.setDate(d.getDate() + offset);
           return { offset, d, dateStr: d.toISOString().split("T")[0] };
         });
+        // Fiches V-D-DP des cartes : en parallèle du calendrier (PERF_PLAN.md P1.3).
+        prefetchTeamRecords();
         const [live, range] = await Promise.all([
           nhlApiService.getLiveGames(),
           nhlApiService.getGamesRange(days[0].dateStr, days[days.length - 1].dateStr),
