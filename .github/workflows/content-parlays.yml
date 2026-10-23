@@ -1,0 +1,136 @@
+name: Contenu — combinés du jour
+
+# MARKETING_PLAN.md, phase D. Deux vidéos par jour :
+#   • « pick »   — les 2 combinés gratuits, gelés ~2 h avant le 1er match,
+#                  publiés en Short YouTube + courriel « à publier sur TikTok » ;
+#   • « result » — le lendemain, ✓/✗ par jambe et bilan cumulé.
+#
+# Chaque passage commence par `parlays-due.mjs` (aucune dépendance, quelques
+# secondes) : `npm ci`, Chromium et ffmpeg ne s'installent que si c'est l'heure.
+# 46 passages « non » par jour coûtent donc ~15 s chacun.
+#
+# Heures (UTC ; Bali = UTC+8) :
+#   • pick   — toutes les 30 min de 15:00 à 01:00. 1er match à 19:00 ET ⇒ gel
+#              vers 21:00-21:30 UTC. Un match à 12:30 ET (16:30 UTC) est gelé dès
+#              15:00. GitHub peut retarder un cron d'une heure : la fenêtre
+#              commence 2 h avant, donc le gel reste avant le premier match.
+#   • result — 13:15 UTC, puis 15:15 et 17:15 en rattrapage (un match tardif ou
+#              une jambe pas encore réglée ⇒ « pas encore prêt », le suivant reprend).
+#
+# MODE ESSAI : tant que la variable de dépôt PARLAYS_YOUTUBE_PRIVACY n'est pas
+# « public », les Shorts partent en « unlisted » et le courriel porte [ESSAI].
+# Passer en public : Settings → Secrets and variables → Actions → Variables.
+
+on:
+  schedule:
+    - cron: "*/30 15-23 * * *"
+    - cron: "0,30 0 * * *"
+    - cron: "0 1 * * *"
+    - cron: "15 13,15,17 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "pick (combinés du soir) ou result (résultat de la veille)"
+        type: choice
+        options: [pick, result]
+        default: pick
+      date:
+        description: "Jour NHL YYYY-MM-DD (vide = aujourd'hui pour pick, hier pour result)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Essai à blanc : produire la vidéo sans geler, envoyer ni poser de drapeau"
+        type: boolean
+        default: false
+
+# Jamais deux runs en même temps : le gel et les drapeaux sont idempotents, mais
+# deux envois YouTube simultanés ne le seraient pas.
+concurrency:
+  group: content-parlays
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  parlays:
+    name: Combinés — ${{ github.event.inputs.mode || (github.event.schedule == '15 13,15,17 * * *' && 'result' || 'pick') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: server
+    env:
+      MODE: ${{ github.event.inputs.mode || (github.event.schedule == '15 13,15,17 * * *' && 'result' || 'pick') }}
+      CONTENT_API_URL: https://api.arakice.com/api
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      # Un lancement manuel saute la vérification : on veut le run, même hors fenêtre.
+      # Les champs saisis passent par l'environnement, jamais interpolés dans le script.
+      - name: Est-ce l'heure ?
+        id: due
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_DATE: ${{ github.event.inputs.date }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            DATE_ARG=""
+            if [ -n "$INPUT_DATE" ]; then
+              echo "$INPUT_DATE" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || { echo "date invalide : $INPUT_DATE"; exit 1; }
+              DATE_ARG="--date=$INPUT_DATE"
+            fi
+            node scripts/parlays-due.mjs --mode="$MODE" $DATE_ARG || true
+            echo "due=true" >> "$GITHUB_OUTPUT"
+          else
+            node scripts/parlays-due.mjs --mode="$MODE"
+          fi
+
+      - name: Installer les dépendances
+        if: steps.due.outputs.due == 'true'
+        run: npm ci --no-audit --no-fund
+
+      # Le shell sans interface suffit au rendu ; --with-deps installe les
+      # bibliothèques système. ffmpeg vient de ffmpeg-static (postinstall de npm ci).
+      - name: Installer Chromium
+        if: steps.due.outputs.due == 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Geler, produire et publier
+        if: steps.due.outputs.due == 'true'
+        env:
+          CONTENT_CRON_SECRET:   ${{ secrets.CONTENT_CRON_SECRET }}
+          YOUTUBE_CLIENT_ID:     ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          RESEND_API_KEY:        ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM:           ${{ secrets.RESEND_FROM }}
+          NOTIFY_EMAIL:          ${{ secrets.NOTIFY_EMAIL }}
+          R2_ACCOUNT_ID:         ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID:      ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY:  ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET:             ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_URL:         ${{ secrets.R2_PUBLIC_URL }}
+          PARLAYS_YOUTUBE_PRIVACY: ${{ vars.PARLAYS_YOUTUBE_PRIVACY || 'unlisted' }}
+          DUE_DATE: ${{ steps.due.outputs.date }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          ARGS="--mode=$MODE"
+          [ -n "$DUE_DATE" ] && ARGS="$ARGS --date=$DUE_DATE"
+          [ "$DRY_RUN" = "true" ] && ARGS="$ARGS --dry-run"
+          npx ts-node scripts/parlays-daily.ts $ARGS
+
+      # La vidéo reste téléchargeable 7 jours depuis la page du run — utile pour
+      # un essai à blanc, ou si le courriel n'est pas arrivé.
+      - name: Garder la vidéo
+        if: steps.due.outputs.due == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parlays-${{ env.MODE }}-${{ steps.due.outputs.date }}
+          path: content/output/*-parlays-*/*/video.mp4
+          if-no-files-found: ignore
+          retention-days: 7
