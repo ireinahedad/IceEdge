@@ -334,16 +334,33 @@ défense », et `is_home` capte l'avantage de la glace.
 
 + `is_home`, `elo_atk_minus_def`.
 
-Les plus importantes (gain XGBoost) : `elo_atk_minus_def` 8,9 %, `is_home` 8,9 %,
-`def_xga60_l` 6,3 %, `atk_lineup_pts` 5,8 %, `atk_lineup_xg` 5,7 %,
-`def_goalie_backup` 5,5 %.
+Les plus importantes (gain XGBoost) : `elo_atk_minus_def` 8,9 %, `is_home` 8,5 %,
+`def_goalie_backup` 5,5 %, `def_xga60_l` 5,3 %, `atk_lineup_pts` 5,0 %,
+`atk_lineup_xg` 4,8 %.
+
+![Importance des 26 features du modèle de score, regroupées par famille](figures/score_features.png)
+
+*La figure :* la part du gain XGBoost de chaque feature (`score_report.json →
+feature_importances`), rangée dans les sept familles que l'application affiche
+sous « pourquoi ce pronostic » (même règle `_factor_of` qu'au §6.8). Aucune
+feature ne décide seule : la prédiction vient de l'addition de l'attaque, de la
+défense adverse, de l'alignement et du gardien d'en face.
 
 #### 4.1.3 Entraînement
 
-- Matchs triés par date, découpage **chronologique** : les 20 % les plus récents = **test** (4 304 matchs, du 2023-02-26 au 2026-04-16) ; des 80 % restants, les 15 % les plus récents = **validation** (2 582 matchs) ; le reste = **entraînement** (14 631 matchs, 2008 → 2021).
+- Matchs triés par date, découpage **chronologique** : les 20 % les plus récents = **test** (4 305 matchs, du 2023-02-27 au 2026-09-30) ; des 80 % restants, les 15 % les plus récents = **validation** (2 583 matchs) ; le reste = **entraînement** (14 637 matchs, 2008 → 2021).
 - XGBoost `count:poisson` : la sortie est directement un λ (buts attendus).
-- 30 essais aléatoires d'hyperparamètres, gardé celui qui minimise la *déviance de Poisson* sur la validation ; arrêt précoce sur la validation (meilleure itération : 459 arbres).
-- Paramètres retenus : profondeur 4, taux d'apprentissage 0,02, sous-échantillonnage 0,7, colonnes 0,6, `min_child_weight` 20, `reg_lambda` 10.
+- 30 essais aléatoires d'hyperparamètres, gardé celui qui minimise la *déviance de Poisson* sur la validation ; arrêt précoce sur la validation (meilleure itération : 236 arbres).
+- Paramètres retenus : profondeur 5, taux d'apprentissage 0,03, sous-échantillonnage 0,7, colonnes 0,8, `min_child_weight` 20, `reg_lambda` 1.
+
+![Découpage chronologique entraînement / validation / test, saison par saison](figures/score_split.png)
+
+*La figure :* chaque barre est une saison, colorée selon la tranche où ses
+matchs sont tombés (`train_score.split`, effectifs de `score_report.json`). Les
+coupures tombent au milieu d'une saison, jamais dans le désordre : tout le test
+est postérieur à tout l'entraînement. On y voit aussi les saisons courtes
+(lock-out 2012-13, COVID 2019-20 et 2020-21). En gris, les matchs joués depuis
+l'entraînement : le modèle servi ne les a jamais vus.
 
 #### 4.1.4 La correction de marge τ (filets déserts)
 
@@ -352,6 +369,16 @@ Mesuré : trop peu de matchs nuls après 60 min, trop d'écarts de 1, pas assez
 d'écarts de 3. La raison est mécanique : une équipe menée d'un but retire son
 gardien → soit elle égalise (écart 1 → 0), soit elle encaisse dans le filet
 vide (écart 1 → 2, écart 2 → 3).
+
+![Écarts de score après 60 minutes : observé, deux Poisson indépendantes, moteur de match](figures/score_margins.png)
+
+*La figure :* sur les trois dernières saisons complètes, avec les λ du modèle
+de score hors échantillon (`live_pregame.csv`), deux Poisson indépendantes
+prévoient beaucoup trop d'écarts de 1 et trop peu de nuls et d'écarts de 3.
+C'est exactement ce que τ, puis le moteur de match (§4.1.4 bis, en bleu),
+corrigent. Le moteur est ajusté sur ces mêmes saisons : la figure montre la
+forme qu'il reproduit ; son test hors échantillon est le walk-forward du
+§4.1.4 bis.
 
 On corrige chaque case de la matrice par un multiplicateur qui dépend de l'écart :
 
@@ -364,10 +391,10 @@ Valeurs actuelles (`score_report.json → tau_margin`) :
 
 | écart (dom − ext) | 0 | ±1 | ±2 | ±3 | ±4 | ±5 | ±6 |
 |---|---|---|---|---|---|---|---|
-| τ | **1,363** | 0,73 / 0,71 | 0,92 / 0,91 | **1,43 / 1,39** | 1,02 / 0,93 | 0,85 / 0,75 | 0,83 / 0,65 |
+| τ | **1,360** | 0,73 / 0,70 | 0,92 / 0,91 | **1,44 / 1,39** | 1,03 / 0,92 | 0,86 / 0,75 | 0,85 / 0,65 |
 
-Effet mesuré sur le test : nuls après 60 min prédits 15,8 % sans τ → **21,5 %**
-avec τ (observé 22,1 %) ; domicile −1,5 : 31,2 % → **33,2 %** (observé 33,2 %).
+Effet mesuré sur le test : nuls après 60 min prédits 15,8 % sans τ → **21,4 %**
+avec τ (observé 22,1 %) ; domicile −1,5 : 31,3 % → **33,5 %** (observé 33,2 %).
 
 **Ce τ est périmé (mesuré le 2026-10-15).** Il est ajusté sur 2008-2021, or les
 gardiens sortent plus tôt et plus souvent : écarts de ±1 après 60 min 23,2 %
@@ -401,6 +428,15 @@ Le filet désert y est explicite (fenêtre 2023-2025) :
 | +1 (vise le filet vide) | ×1,31 | ×4,26 | **×7,69** |
 | +2 | ×4,37 | ×5,73 | ×6,55 |
 
+![Multiplicateur c de la cadence de buts selon l'avance et la tranche de temps](figures/engine_c.png)
+
+*La figure :* la table c entière (`game_dynamics.json`) pour les avances de −2
+à +2, sur une échelle logarithmique. Pendant 55 minutes, toutes les courbes
+restent près de ×1 : le score change peu la façon de jouer. Tout se passe dans
+les dernières minutes : l'équipe qui mène vise le filet vide, celle qui est
+menée d'un but joue à six et marque plus souvent, et à égalité les deux
+équipes ferment le jeu en attendant la prolongation.
+
 La loi du score est calculée **exactement** (chaîne de Markov à temps continu,
 uniformisation) : ≈ 1 ms par matrice. Deux usages :
 
@@ -431,23 +467,23 @@ Frank, Conway-Maxwell-Poisson, bayésien hiérarchique, simulation tir par tir) 
 #### 4.1.5 Qui gagne la prolongation ?
 
 Si c'est nul après 60 minutes, le vainqueur de la prolongation/fusillade reçoit
-un but. Probabilité que le domicile la gagne, ajustée sur 3 427 prolongations :
+un but. Probabilité que le domicile la gagne, ajustée sur 3 429 prolongations :
 
 ```
-p_ot_dom = σ(0,2834 × (λ_dom − λ_ext) − 0,0640)
+p_ot_dom = σ(0,2948 × (λ_dom − λ_ext) − 0,0639)
 ```
 
-Ces 3 427 prolongations sont les matchs de la tranche d'entraînement
+Ces 3 429 prolongations sont les matchs de la tranche d'entraînement
 (octobre 2008 → avril 2021) restés à égalité après 60 minutes.
 
-Pour deux équipes égales ≈ 48 % ; si le domicile a 1 but d'avance en λ ≈ 55 %.
+Pour deux équipes égales ≈ 48 % ; si le domicile a 1 but d'avance en λ ≈ 56 %.
 (Garde-fous : pente > 0 et niveau moyen entre 35 et 65 %, sinon on utilise la
-constante mesurée 0,4996.)
+constante mesurée 0,4999, `score_report.json → p_ot_home`.)
 
 #### 4.1.6 Les autres réglages écrits dans `score_report.json`
 
 - **`confidence.deciles`** : la distribution de |λ_dom − λ_ext| sur l'entraînement (sert à la jauge de confiance, §6.10).
-- **`blend`** : un mélange « modèle de score ⊕ marché » est ajusté et mesuré, **mais le service ne l'applique pas** (sur le test : modèle seul 0,6847, marché seul 0,6822, mélange 0,6842).
+- **`blend`** : un mélange « modèle de score ⊕ marché » est ajusté et mesuré, **mais le service ne l'applique pas** (sur les 2 628 matchs cotés du test : modèle seul 0,6714, marché seul 0,6705, mélange 0,6707).
 - **`ensemble`** : vide. L'ensemble bootstrap (20 modèles pour mesurer l'incertitude σ) est désactivé par défaut (`--ensemble 0`) — la mesure a conclu que σ n'était pas exploitable.
 
 ### 4.2 Le classifieur moneyline (`train.py`) — encore calculé, plus servi
@@ -461,9 +497,9 @@ quand le modèle de score ne répond pas.
 - XGBoost `binary:logistic` sur la cible `home_win`.
 - **15 features** : `elo_diff`, `elo_expected`, `ev_xgf_pct_s_diff`, `ev_cf_pct_s_diff`, `ev_xgf_pct_l_diff`, `xg_matchup_diff`, `goalie_gsax60_diff`, `star_power_diff`, `stars_out_weight_diff`, `rest_days_diff`, `b2b_diff`, `finishing_s_diff`, `win_s_diff`, **`market_home_p_open`, `market_home_p_close`** (les cotes sont des features ; absentes = vide, XGBoost sait gérer).
 - Même découpage 80/20 et validation 15 %, 40 essais d'hyperparamètres.
-- **Calibration Platt** sur la validation : `p = σ(1,1009 × logit(p_brut) − 0,0781)`.
-- **Mélange avec le marché** (si des cotes sont fournies) : `p = σ(0,564 × logit(p_brut) + 0,634 × logit(p_marché) − 0,0557)`.
-- Résultats test : log-loss 0,6656 (ELO seul 0,6702 ; constante 0,69), précision 59,4 %.
+- **Calibration Platt** sur la validation : `p = σ(1,0826 × logit(p_brut) − 0,0729)`.
+- **Mélange avec le marché** (si des cotes sont fournies) : `p = σ(0,522 × logit(p_brut) + 0,655 × logit(p_marché) − 0,0537)`.
+- Résultats test : log-loss 0,6644 (ELO seul 0,6704 ; constante 0,6901), précision 59,0 %.
 
 ### 4.3 La couche de correction du moneyline (`correction_layer.json`)
 
@@ -530,6 +566,16 @@ dont les 83 premiers matchs de 2026-27).
 | R | recalibration seule (logit p) | −0,0002 | −0,6 | 7 / 12 | non tranchable |
 | **C** | **R + les 5 variables** | **−0,0026** | **−3,9** | **12 / 12** | **adoptée, servie** |
 | B | C sans `elo_diff` | −0,0020 | −3,4 | 10 / 12 | adoptable, moins bonne que C |
+
+![Gain de log-loss de la couche de correction, saison par saison, en walk-forward](figures/correction_seasons.png)
+
+*La figure :* chaque paire de barres est une saison jugée par une couche
+ajustée seulement sur les saisons d'avant (`correction_report.json →
+by_season`). Sous zéro, la couche fait mieux que le modèle brut. La
+recalibration seule (gris) gagne à peu près une saison sur deux, au hasard ; avec les
+cinq variables (bleu), le gain est du bon côté chaque saison, ce qui compte
+plus que sa taille moyenne. La dernière barre ne porte que sur le début de la
+saison en cours (effectif sous l'étiquette).
 
 Contre la cote de clôture (11 297 matchs avec cote) : le modèle brut avait
 +0,0013 de log-loss de plus que le marché (z 1,4) ; avec la couche, −0,0008
@@ -641,9 +687,17 @@ variables : `CORRECTION_FEATURES = CORRECTION_FEATURES_V1` dans
 
 **Le défaut corrigé.** Le modèle de score se trompe de niveau selon les
 saisons. Buts réglementaires observés / λ (walk-forward, `live_pregame.csv`) :
-1,02-1,03 sur 2017-21, **0,965 · 0,961 · 0,955 · 0,969** sur 2022-23 → 2025-26.
+1,01-1,03 sur 2017-21, **0,965 · 0,961 · 0,955 · 0,969** sur 2022-23 → 2025-26.
 Le modèle servi montre le même écart sur ces saisons hors de son entraînement.
 Conséquence : « plus de 5,5 » annoncé à 58,4 % sur 2023-26 pour 56,0 % observé.
+
+![Buts observés divisés par les λ prévus, et k servi, saison par saison](figures/level_seasons.png)
+
+*La figure :* en orange, le rapport buts observés / λ prévus de chaque saison,
+mesuré hors échantillon (`level_report.json`) ; en bleu, le k que le service
+aurait appliqué en fin de saison, rétréci vers 1 ; le losange vide, le k servi
+aujourd'hui (`level_layer.json`). La rupture de 2022-23 se voit d'un coup
+d'œil : depuis, le modèle prévoit un peu trop de buts, et k les ramène.
 
 **Le recalage.** Un seul nombre k par saison, le rapport buts observés / buts
 prévus des matchs déjà joués de la saison en cours, rétréci vers 1 :
@@ -684,8 +738,17 @@ tirs, mises en échec, tirs bloqués, minutes de pénalité, points en AN.
 - **Features joueur (pré-match)** : temps de glace moyen sur 5/10/30 matchs, temps en AN sur 10 matchs, xG des coéquipiers sur la glace à 5c5 (20 matchs), xG individuel par 60 (20 matchs), nombre de matchs en carrière, production par 60 minutes sur 10, 30 matchs et carrière pour les 8 statistiques.
 - **Contexte du match** : 13 statistiques de son équipe (`tm_…`) et de l'adversaire (`opp_…`) issues de `nhl_games_v4.csv` (buts, xG, tirs, AN/PK, gardien, forme), domicile, repos, dos-à-dos, défenseur ou non.
 - Entraînement ≤ 2021-22, arrêt précoce sur 2022-23, test 2023-24 → 2025-26.
-- **Dispersion k** (binomiale négative) ajustée par statistique : ≥ 10⁴ = Poisson (buts, passes, points, points AN), 20 (tirs), 8 (mises en échec, tirs bloqués), 0,3 (pénalités).
-- Bat la règle actuelle du serveur sur les 8 statistiques (ex. buts : log-vraisemblance −0,4463 contre −0,4566).
+- **Dispersion k** (binomiale négative) ajustée par statistique : ≥ 10⁴ = Poisson (buts, passes, points, points AN), 20 (tirs), 8 (mises en échec), 12 (tirs bloqués), 0,3 (pénalités).
+- Bat la règle actuelle du serveur sur les 8 statistiques (ex. buts : log-vraisemblance −0,4462 contre −0,4566).
+
+![Gain du modèle joueur sur la règle du serveur, par statistique](figures/player_gain.png)
+
+*La figure :* le gain de log-vraisemblance moyenne par joueur-match sur le test
+(`player_report.json`), en pourcentage de la règle de `playerRates.ts` ; les
+valeurs exactes sont à droite de chaque barre. Les pourcentages semblent
+petits parce qu'un joueur dans un match est très aléatoire, mais ils sont
+positifs pour les huit statistiques, sur l'ensemble des joueur-matchs du test.
+
 - **Face-à-face joueur vs adversaire** (2026-10-06, `player_vs_report.json`) : sur ses 10 derniers matchs contre l'adversaire du soir, le joueur a-t-il produit plus ou moins que son niveau du moment ? `vs_lift_<stat>` = réel / attendu (chaque rencontre jugée avec sa cadence pré-match sur 30 matchs × son temps de glace), rétréci vers 1 par un pseudo-compte (`VS_PSEUDO`), plus `vs_gp` (nombre de rencontres). Contrainte monotone +1 sur les lifts : un lift plus haut ne peut que faire monter la prédiction. Essayé pour chaque stat, gardé seulement si la log-vraisemblance s'améliore en validation (2022-23) ET en test (2023-26) avec z ≥ 2.
   - **Gardé** : mises en échec (z 4,3, les 3 saisons ; lift ≥ 1,2 → +7,8 % observé vs modèle sans face-à-face) et pénalités (z 2,5).
   - **Rejeté (bruit)** : buts, passes, points, tirs, tirs bloqués, points en AN. Un joueur qui « marque toujours » ou « tire toujours » contre une équipe ne le refait pas plus que d'habitude (tirs : −0,3 % observé pour lift ≥ 1,2). Fenêtre de 20 rencontres testée aussi : même conclusion (seules les pénalités y passent la règle).
@@ -736,6 +799,15 @@ Notations : « nul » = case où i = j (égalité après 60 min) ; `p_ot` = prob
 que le domicile gagne la prolongation (§4.1.5). Code : `ScoreDistribution`
 (`score_model.py`) et `_apply_score_model` (`ml_service.py`).
 
+![Une matrice M et quatre marchés lus dedans](figures/score_matrix.png)
+
+*La figure :* le match fictif du §11 (λ_dom 3,30, λ_ext 2,70), joué par le
+moteur de match. Chaque case est la probabilité d'un score après 60 minutes ;
+chaque marché est la somme des cases encadrées en orange. La victoire, le nul,
+la puck line et le total viennent donc de la même grille et ne peuvent pas se
+contredire. Le moneyline ajoute ensuite à « gagne en 60 min » la part des nuls
+gagnés en prolongation (Σ M[i=j] × p_ot).
+
 | Marché (`market_type`) | Formule |
 |---|---|
 | `moneyline` (victoire, prolongation incluse) | Σ M[i>j] + Σ M[i=j] × p_ot, sur la matrice **recalée** par la couche de correction (§4.3) |
@@ -783,6 +855,30 @@ Fichier : `ml/python/ml_service.py`. Point d'entrée principal :
 `POST /predict/game/bundle` (un match, ~95 marchés d'un coup). Le travail est
 fait une fois par match dans `_game_context`, puis chaque marché est lu dans
 `_price_game_market`.
+
+```mermaid
+flowchart TD
+    R["Requête du serveur Node<br/>équipes, repos, gardiens, absents, alignement, cotes"] --> E0{"Étape 0 : au moins une<br/>des deux équipes est connue ?"}
+    E0 -- non --> X["422 no_estimate<br/>(pas de chiffre inventé)"]
+    E0 -- oui --> E1["Étapes 1 à 3 : valeurs manquantes, ELO,<br/>features depuis inference_state.json"]
+    E1 --> CL["Étapes 4 et 5 : cotes et classifieur<br/>(pour comparaison seulement)"]
+    E1 --> SM["Étape 6 : modèle de score<br/>deux lignes → λ_dom, λ_ext"]
+    SM --> G{"λ dans [0,5 ; 8] ?"}
+    G -- non --> H["Replis heuristiques (§6.11)"]
+    G -- oui --> MM["Moteur de match (§4.1.4 bis)<br/>matrice M + p_ot"]
+    MM --> CO["Couche de correction (§4.3)<br/>→ victoire domicile corrigée"]
+    CO --> LV["Recalage de niveau (§4.3 bis)<br/>somme des λ × k"]
+    LV --> AL["λ recalés par bissection,<br/>matrice recalculée"]
+    AL --> P["Étape 7 : chaque marché = une somme de cases (§5)<br/>bornes, côté « non »"]
+    H --> P
+    P --> OUT["Réponse : probabilités de tous les marchés<br/>+ cadences du modèle joueur"]
+    CL -.-> OUT
+```
+
+*Le schéma :* le chemin d'une requête, étape par étape ; les numéros renvoient
+aux sous-sections ci-dessous. Tout le travail coûteux est fait une fois par
+match, avant la boîte « Étape 7 » : ensuite, chaque marché n'est qu'une
+lecture de la même matrice.
 
 ### 6.1 Au démarrage
 
@@ -993,15 +1089,26 @@ restent au produit, et `assumesIndependence` le signale. Mesure : §4.4,
 
 | Mesure | Fichier | Chiffre clé |
 |---|---|---|
-| Modèle de score, test 2023-02 → 2026-04 | `score_report.json` | log-loss moneyline 0,6628 ; nuls prédits 21,5 % / observés 22,1 % ; −1,5 prédit 33,2 % / observé 33,2 % ; erreur moyenne sur le total 1,87 but (constante : 1,90) |
-| Classifieur, même test | `training_report.json` | log-loss 0,6656 ; ELO seul 0,6702 |
-| Contre le marché, saison 2025-26 (1 311 matchs cotés) | `training_report.json`, `score_report.json` | marché 0,6822 ; modèle de score 0,6847 ; classifieur ⊕ marché 0,6843 → **le marché reste légèrement meilleur** |
-| Walk-forward moneyline (classifieur ⊕ marché, cotes de clôture) | `backtest_walkforward_report.json` | log-loss modèle 0,6689 vs marché 0,6677 ; ROI flat SBRO ≈ −0,5 à 0 % ; DraftKings 2025 +1 à +3 % sur 300-600 paris (non significatif) |
+| Modèle de score, test 2023-02 → 2026-09 (4 305 matchs) | `score_report.json` | log-loss moneyline 0,6632 ; nuls prédits 21,4 % / observés 22,1 % ; −1,5 prédit 33,5 % / observé 33,2 % ; erreur moyenne sur le total 1,88 but (constante : 1,90) |
+| Classifieur, même test | `training_report.json` | log-loss 0,6644 ; ELO seul 0,6704 |
+| Contre le marché, même test (2 628 matchs cotés) | `training_report.json`, `score_report.json` | marché 0,6705 ; modèle de score 0,6714 ; classifieur ⊕ marché 0,6722 → **le marché reste légèrement meilleur** |
+| Walk-forward moneyline (classifieur ⊕ marché, cotes de clôture) | `backtest_walkforward_report.json` | log-loss modèle 0,6689 vs marché 0,6677 ; ROI flat SBRO ≈ −1,5 à 0 % ; DraftKings 2025 +1 à +3 % sur 300-600 paris (non significatif) |
 | CLV (ouverture vs clôture, DraftKings) | `backtest_clv_report.json` | les paris à edge ≥ 2 % prennent en moyenne +0,35 point de probabilité à la clôture (t ≈ 7,9), mais ROI à l'ouverture ≈ 0 ± 2,7 % |
 | Modèle joueur, chaque été | `python train_player.py --recent` | Réentraîne passes, points, tirs, mises en échec, tirs bloqués et points en AN jusqu'à la saison qui vient de finir (buts et pénalités ne bougent pas), puis le recalage. Committer `models/player/` et `player_report.json`. |
 | Couche de correction | `correction_report.json` | log-loss −0,0026 (z −3,9), 12 saisons sur 12 meilleures ; jeu égal avec la clôture |
 | Recalage de niveau des buts | `level_report.json` | déviance du total −0,0032 (z −3,2), 8 saisons sur 11 ; P(> 5,5) 2023-26 58,4 % → 55,8 % (observé 56,0 %) |
 | Modèle joueur, test 2023-26 | `player_report.json` | bat la règle sur les 8 statistiques |
+
+![Fiabilité du moneyline avant-match en walk-forward : modèle brut contre chaîne servie](figures/pregame_reliability.png)
+
+*La figure :* chaque saison est chiffrée par des modèles et des couches ajustés
+sur les saisons d'avant seulement (`served_pregame.csv`), puis les matchs sont
+rangés en déciles de probabilité. Sur la diagonale, « 60 % » veut dire « gagne
+6 fois sur 10 ». Le modèle brut reste dans une fourchette trop étroite (il est
+trop prudent) ; la chaîne servie, avec la couche de correction et le recalage,
+écarte ses probabilités et colle mieux à la diagonale (ECE plus bas). Les
+barres d'erreur rappellent qu'un décile, c'est environ 1 300 matchs : un écart
+de 2 points y reste du bruit.
 
 **En clair :** le modèle est bien calibré (quand il dit 60 %, c'est ~60 %) et
 nettement meilleur que des règles simples, mais **il ne bat pas encore la cote
@@ -1022,6 +1129,7 @@ considérer comme un pari sur un petit avantage non prouvé.
 | Recalage de niveau (re-mesure) | `python live_pregame.py && python measure_level.py` | Réécrit `level_report.json` (verdict, force n0). `refresh_data.py` le lit : verdict « REJETER » → k = 1. |
 | Contrôles | `python backtest.py`, `python backtest_walkforward.py [--clv|--derived|--market-gap]` | Rapports dans `ml/models/*_report.json`. |
 | Règles des value bets | `python backtest_walkforward.py --served` | Rejoue la chaîne servie (modèle de score + correction + λ recalés) contre le prix du matin, avec la règle en service : ROI, CLV, placebo, verdict sur la règle et grille de bandes → `served_value_bets_report.json`. |
+| Figures de ce document | `python doc_figures.py` (lancé aussi par `ml/refresh-data.cmd` après un refresh réussi) | Réécrit les 9 figures des §4 à §8 dans `ml/figures/` à partir des rapports et des CSV ci-dessus. Une figure dont la source manque est sautée, les autres sont écrites. `python doc_figures.py marges matrice` pour n'en refaire que quelques-unes. |
 
 ---
 
@@ -1979,17 +2087,17 @@ la matrice Poisson × τ servie jusqu'au 2026-10-15. Avec le moteur de match :
 nul après 60 min 21,9 %, puck line −1,5 38,5 %, plus de 5,5 buts 55,8 % ; 3e
 période plus de 1,5 buts 63,8 % au lieu de 58,9 % avec la part fixe).
 
-1. **Prolongation** : p_ot = σ(0,2834 × 0,60 − 0,0640) = **52,7 %**.
+1. **Prolongation** : p_ot = σ(0,2948 × 0,60 − 0,0639) = **52,8 %**.
 2. **Matrice** sans τ : nul après 60 min 16,2 %. **Avec τ : 21,9 %**.
-3. **Victoire en 60 min** = Σ M[i>j] = 49,1 %.
-4. **Victoire (moneyline)** = 49,1 % + 21,9 % × 52,7 % = **60,7 %**.
-5. **Couche de correction** : avec toutes les autres variables à leur moyenne, z = 0,0819 + 0,4702 × logit(0,607) → **57,1 %** ; si en plus le domicile a +60 d'ELO, +0,04 de xGF% court terme, +0,3 xG d'alignement et +0,5 de star power → **63,6 %**. Le service recale alors les λ (somme 6,00 conservée) pour que la matrice donne exactement 63,6 %, et **les étapes 3, 4, 6-9 se refont sur cette matrice recalée** — les chiffres ci-dessous sont ceux de la matrice brute, pour suivre le calcul pas à pas.
-6. **Puck line −1,5** = Σ M[écart ≥ 2] = **37,3 %**.
-7. **Plus de 5,5 buts** : total final espéré 6,23 → **56,0 %**. Avec le recalage de niveau de fin 2025-26 (k = 0,9735, §4.3 bis), la somme des λ passe de 6,00 à 5,84 (3,22 / 2,62), la victoire reste **60,7 %**, le « plus de 5,5 » descend à **53,4 %** et la puck line −1,5 à 37,0 %.
+3. **Victoire en 60 min** = Σ M[i>j] = 49,3 %.
+4. **Victoire (moneyline)** = 49,3 % + 21,9 % × 52,8 % = **60,9 %**.
+5. **Couche de correction** : avec toutes les autres variables à leur moyenne, z = 0,0819 + 0,4702 × logit(0,609) → **57,2 %** ; si en plus le domicile a +60 d'ELO, +0,04 de xGF% court terme, +0,3 xG d'alignement et +0,5 de star power → **63,7 %**. Le service recale alors les λ (somme 6,00 conservée) pour que la matrice donne exactement 63,7 %, et **les étapes 3, 4, 6-9 se refont sur cette matrice recalée** — les chiffres ci-dessous sont ceux de la matrice brute, pour suivre le calcul pas à pas.
+6. **Puck line −1,5** = Σ M[écart ≥ 2] = **37,5 %**.
+7. **Plus de 5,5 buts** : total final espéré 6,23 → **56,0 %**. Avec le recalage de niveau de fin 2025-26 (k = 0,9729, `level_report.json`, §4.3 bis), la somme des λ passe de 6,00 à 5,84 (3,22 / 2,62), la victoire reste **60,9 %**, le « plus de 5,5 » descend à **53,4 %** et la puck line −1,5 à 37,2 %.
 8. **Les deux équipes marquent** : **89,8 %**.
-9. **Domicile plus de 2,5 buts** (prolongation comprise) : **68,3 %**.
-10. **Confiance** : |3,30 − 2,70| = 0,60 se situe au rang 0,73 des déciles → base 0,79 → moneyline 79/100.
-11. **Value bet ?** Si un livre propose le domicile à 1,75 et le visiteur à 2,15 : marché dévigé = (1/1,75)/(1/1,75 + 1/2,15) = 55,1 %. Edge = 63,6 − 55,1 = 8,5 % → **au-dessus du plafond de 6 % → rejeté** (trop beau pour être vrai : plus probablement une info que le modèle n'a pas). Avec 1,85 / 2,02 : marché 52,2 %, edge 11,4 %… rejeté aussi. À 1,65 / 2,30 : marché 58,2 %, edge 5,4 %, EV = 0,636 × 1,65 − 1 = +5,0 % → **value bet**, cote minimale 1/0,636 = 1,57.
+9. **Domicile plus de 2,5 buts** (prolongation comprise) : **68,4 %**.
+10. **Confiance** : |3,30 − 2,70| = 0,60 se situe au rang 0,75 des déciles → base 0,80 → moneyline 80/100.
+11. **Value bet ?** Si un livre propose le domicile à 1,75 et le visiteur à 2,15 : marché dévigé = (1/1,75)/(1/1,75 + 1/2,15) = 55,1 %. Edge = 63,7 − 55,1 = 8,6 % → **au-dessus du plafond de 6 % → rejeté** (trop beau pour être vrai : plus probablement une info que le modèle n'a pas). Avec 1,85 / 2,02 : marché 52,2 %, edge 11,5 %… rejeté aussi. À 1,65 / 2,30 : marché 58,2 %, edge 5,5 %, EV = 0,637 × 1,65 − 1 = +5,0 % → **value bet**, cote minimale 1/0,637 = 1,57.
 
 ---
 
@@ -2019,6 +2127,7 @@ période plus de 1,5 buts 63,8 % au lieu de 58,9 % avec la part fixe).
 | `live_dispersion.py` | Sous-dispersion des buts par période et par situation numérique (§10.4). |
 | `calibrate_live_pp.py`, `fetch_live_pbp.py` | Facteurs d'avantage numérique en cours (§10.7, mesurés, non servis). |
 | `measure_level.py` | Mesure du recalage de niveau des buts (§4.3 bis) → `level_report.json`. |
+| `doc_figures.py` | Figures des §4 à §8 de ce document → `ml/figures/` (importance, découpage, écarts, moteur, correction, niveau, joueur, matrice, fiabilité). |
 | `measure_*.py`, `compare_*.py`, `probe_odds_books.py` | Études ponctuelles (face-à-face, retour de blessure, Corsi/Fenwick, sources de cotes). |
 | `content_insights*.py` | Statistiques « contenu » pour les réseaux sociaux — sans lien avec les prédictions. |
 | `fetch_data.py` | Ancienne collecte v3 (standings) — encore copiée dans l'image Docker. |

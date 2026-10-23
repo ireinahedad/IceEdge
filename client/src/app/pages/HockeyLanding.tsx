@@ -38,7 +38,7 @@ import { dayHeading, groupByDay } from "../data/gameDay";
 import { useFoldState } from "../hooks/useFoldState";
 import { TeamCarousel } from "./landing/TeamCarousel";
 import { ProUpsell } from "./landing/ProUpsell";
-import { AddSheetState, DisplayGame, extractSpreadOdds, toDisplayGame } from "./landing/landingTypes";
+import { AddSheetState, DisplayGame, extractSpreadOdds, toDisplayGame, toDisplayGameBase } from "./landing/landingTypes";
 
 
 // ─── Lazy section ───────────────────────────────────────────────────────────
@@ -169,13 +169,40 @@ export function HockeyLanding() {
    * (`/games/range`) ; seules les journées qui ont des matchs sont des pas.
    * Les prédictions ML ne sont calculées que pour la journée AFFICHÉE (un
    * paquet ML par match, plafonné par `predictLimiter`), puis gardées.
+   *
+   * PERF_PLAN.md, P0.3 (2026-10-23) : les matchs s'affichent DÈS que le
+   * calendrier répond ; le % ML de chaque carte arrive ensuite, match par
+   * match (`fillMl`). Avant, la liste attendait le paquet ML de tous les
+   * matchs — ~0,8 s de plus mesurés en prod, davantage un soir chargé ou à
+   * cache froid. Les lignes à venir lisent de toute façon leur propre paquet
+   * (`useGameMl`) ; ce remplissage sert la carte en direct (barre du vainqueur).
    */
   type RawGame = Awaited<ReturnType<typeof nhlApiService.getLiveGames>>[number];
   const [gameDays, setGameDays] = useState<{ offset: number; dateStr: string; label: string; games: RawGame[] }[]>([]);
   const [dayIdx, setDayIdx] = useState(0);
-  const [dayLoading, setDayLoading] = useState(false);
   const displayCache = useRef(new Map<string, DisplayGame>());
-  const wantedDay = useRef(0);
+  /** Génération du chargement : un remplissage ML d'un chargement abandonné (langue, réessai) ne touche plus rien. */
+  const loadGen = useRef(0);
+
+  /**
+   * Complète les cartes déjà affichées avec le % ML, au fil des réponses (un
+   * paquet ML par match, promesse partagée avec `useGameMl` : aucun appel de
+   * plus). Une carte absente des listes affichées n'est que mise en cache.
+   */
+  function fillMl(games: RawGame[], gen: number) {
+    for (const g of games) {
+      toDisplayGame(g)
+        .then((dg) => {
+          if (loadGen.current !== gen) return;
+          displayCache.current.set(g.id, dg);
+          const swap = (list: DisplayGame[]) =>
+            list.some((x) => x.id === g.id) ? list.map((x) => (x.id === g.id ? dg : x)) : list;
+          setLiveGames(swap);
+          setUpcomingGames(swap);
+        })
+        .catch(() => { /* la carte garde « … » ; le paquet est retenté à la prochaine visite */ });
+    }
+  }
   /** Au-delà de J+2, pas de cote (demande du user, 2026-10-02). */
   const dayOffset = gameDays[dayIdx]?.offset ?? 0;
   const showOdds = dayOffset <= 2;
@@ -276,20 +303,16 @@ export function HockeyLanding() {
         // résultat dans chaque liste — l'affichage ne change pas.
         const unique = new Map<string, (typeof live)[number]>();
         for (const g of [...live, ...scheduled]) if (!unique.has(g.id)) unique.set(g.id, g);
-        const displayed = new Map(
-          await Promise.all(
-            [...unique.values()].map(async (g) => [g.id, await toDisplayGame(g)] as const),
-          ),
-        );
-        if (cancelled) return;
+        // Cartes SANS % ML d'abord (affichées tout de suite), puis `fillMl`.
+        const displayed = new Map([...unique.values()].map((g) => [g.id, toDisplayGameBase(g)] as const));
+        const gen = ++loadGen.current;
         displayCache.current = new Map(displayed);
         setGameDays(week);
         setDayIdx(startIdx);
-        wantedDay.current = startIdx;
-        setDayLoading(false);
         setLiveGames(live.map((g) => displayed.get(g.id)!));
         setUpcomingGames(scheduled.map((g) => displayed.get(g.id)!));
         setUpcomingLabel(label);
+        fillMl([...unique.values()], gen);
       } catch (err) {
         if (cancelled) return;
         console.error("[HockeyLanding] Failed to load games:", err);
@@ -301,33 +324,27 @@ export function HockeyLanding() {
       }
     }
     load();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; loadGen.current++; };
   }, [lang, reloadKey]);
 
-  // Changer de journée : ses matchs, prédictions ML comprises (cache).
-  async function goToDay(idx: number) {
+  // Changer de journée : ses matchs tout de suite, leur % ML au fil des
+  // réponses (cache : une journée déjà vue est complète d'emblée).
+  function goToDay(idx: number) {
     const target = gameDays[idx];
     if (!target || idx === dayIdx) return;
-    wantedDay.current = idx;
     setDayIdx(idx);
     setUpcomingLabel(target.label);
     writeSavedDay(target.dateStr);
     const missing = target.games.filter((g) => !displayCache.current.has(g.id));
-    if (missing.length) {
-      setDayLoading(true);
-      const done = await Promise.all(missing.map(async (g) => [g.id, await toDisplayGame(g)] as const));
-      for (const [id, dg] of done) displayCache.current.set(id, dg);
-    }
-    // La journée a pu changer pendant le chargement : on ne montre que la dernière demandée.
-    if (wantedDay.current !== idx) return;
+    for (const g of missing) displayCache.current.set(g.id, toDisplayGameBase(g));
     setUpcomingGames(target.games.map((g) => displayCache.current.get(g.id)!).filter(Boolean));
-    setDayLoading(false);
+    if (missing.length) fillMl(missing, loadGen.current);
   }
 
   // Rendre la hauteur de page une fois les matchs affichés : avant, la page
   // n'a que des squelettes et le défilement serait borné trop haut.
   useEffect(() => {
-    if (loading || dayLoading || pendingScroll.current == null) return;
+    if (loading || pendingScroll.current == null) return;
     const y = pendingScroll.current;
     pendingScroll.current = null;
     requestAnimationFrame(() => {
@@ -335,7 +352,7 @@ export function HockeyLanding() {
       if (el) el.scrollTop = y;
       else window.scrollTo(0, y);
     });
-  }, [loading, dayLoading]);
+  }, [loading]);
 
   function openGameSheet(gameId: string) {
     setAddSheet({ open: true, gameId });
@@ -415,7 +432,7 @@ export function HockeyLanding() {
                   </div>
                 )}
               </div>
-              {gamesCollapsed ? null : loading || dayLoading ? (
+              {gamesCollapsed ? null : loading ? (
                 <div className="flex flex-col gap-2">
                   {[1, 2, 3].map((i) => <div key={i} className="h-20 icy-tile rounded-2xl animate-pulse" />)}
                 </div>

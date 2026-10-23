@@ -270,10 +270,20 @@ export interface TeamSeasonOfficial {
   record: TeamRecord | null;
 }
 
+/**
+ * En-têtes des GET. Seulement `Accept` : c'est un en-tête « simple » au sens
+ * CORS. `Content-Type: application/json` — qu'un GET sans corps n'a aucune
+ * raison d'envoyer — rendait chaque requête « non simple » : le navigateur
+ * envoyait d'abord un OPTIONS (preflight) vers api.arakice.com, soit un
+ * aller-retour de plus par appel. Mesuré en prod le 2026-10-23 : 756 ms avec,
+ * 387 ms sans (PERF_PLAN.md, P0.1).
+ */
+const GET_HEADERS = { Accept: 'application/json' } as const;
+
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   if (!BASE_URL) throw new Error('VITE_NHL_API_URL is not configured');
   const res = await fetchWithTimeout(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: GET_HEADERS,
     signal,
   });
   if (!res.ok) {
@@ -292,7 +302,7 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
 async function getFresh<T>(path: string): Promise<T> {
   if (!BASE_URL) throw new Error('VITE_NHL_API_URL is not configured');
   const res = await fetchWithTimeout(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: GET_HEADERS,
   });
   if (!res.ok) {
     const msg = await res.text().catch(() => res.statusText);

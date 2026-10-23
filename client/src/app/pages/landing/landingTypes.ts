@@ -48,8 +48,10 @@ export interface DisplayGame {
   bookSpread?: { home?: { point: number; price: number }; away?: { point: number; price: number } };
   // `null` = le modèle n'a pas répondu. Jamais un nombre de repli : voir
   // l'entête de `predictionApiService.ts`.
-  team1: { id: string; abbr: string; name: string; score?: number; logo: string; winPct: number | null };
-  team2: { id: string; abbr: string; name: string; score?: number; logo: string; winPct: number | null };
+  // `undefined` = pas encore arrivé : la carte est affichée AVANT le paquet ML
+  // du match (PERF_PLAN.md, P0.3) et l'écran montre « … », pas « — ».
+  team1: { id: string; abbr: string; name: string; score?: number; logo: string; winPct: number | null | undefined };
+  team2: { id: string; abbr: string; name: string; score?: number; logo: string; winPct: number | null | undefined };
 }
 
 /** P(victoire domicile) selon le modèle ML, ou `null` s'il ne répond pas. */
@@ -69,7 +71,17 @@ export async function toDisplayGame(game: NHLGame): Promise<DisplayGame> {
   // du paquet ML du match — le même que lit le tableau des matchs à venir, mis
   // en cache, donc aucun appel de plus. Plus de `/predict/single` (moteur de
   // règles) ici : les règles ne se voient que dans la fiche d'un pari.
-  const homePct = await mlHomeWinPct(game.id);
+  return toDisplayGameBase(game, await mlHomeWinPct(game.id));
+}
+
+/**
+ * La carte d'un match, avec la probabilité ML si on l'a déjà (`homePct`), ou
+ * sans (`undefined` = en cours). Synchrone : l'accueil affiche ses matchs dès
+ * que le calendrier répond, puis `toDisplayGame` complète chaque carte quand
+ * son paquet ML arrive (PERF_PLAN.md, P0.3). Avant, la liste entière attendait
+ * le paquet ML de TOUS les matchs.
+ */
+export function toDisplayGameBase(game: NHLGame, homePct?: number | null): DisplayGame {
   const totalPct = null;
   return {
     id: game.id,
@@ -80,7 +92,7 @@ export async function toDisplayGame(game: NHLGame): Promise<DisplayGame> {
     overUnder: 5.5,
     totalPct,
     team1: { id: game.homeTeam.abbreviation.toLowerCase(), abbr: game.homeTeam.abbreviation, name: game.homeTeam.name, score: game.homeTeam.score, logo: nhlLogoUrl(game.homeTeam.abbreviation), winPct: homePct },
-    team2: { id: game.awayTeam.abbreviation.toLowerCase(), abbr: game.awayTeam.abbreviation, name: game.awayTeam.name, score: game.awayTeam.score, logo: nhlLogoUrl(game.awayTeam.abbreviation), winPct: homePct == null ? null : 100 - homePct },
+    team2: { id: game.awayTeam.abbreviation.toLowerCase(), abbr: game.awayTeam.abbreviation, name: game.awayTeam.name, score: game.awayTeam.score, logo: nhlLogoUrl(game.awayTeam.abbreviation), winPct: homePct == null ? homePct : 100 - homePct },
   };
 }
 

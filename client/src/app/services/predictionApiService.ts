@@ -78,7 +78,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     res = await fetchWithTimeout(`${BASE_URL}${path}`, {
       ...init,
       headers: {
-        "Content-Type": "application/json",
+        // `Content-Type` seulement quand il y a un corps (POST). Sur un GET, il
+        // rendait la requête « non simple » au sens CORS : un preflight OPTIONS,
+        // donc un aller-retour de plus, à chaque appel (PERF_PLAN.md, P0.1).
+        ...(init?.body != null ? { "Content-Type": "application/json" } : {}),
         Accept: "application/json",
         ...(init?.headers ?? {}),
       },

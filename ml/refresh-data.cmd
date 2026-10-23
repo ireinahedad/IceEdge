@@ -14,6 +14,7 @@ REM Apres le run, pour que le service en ligne en profite :
 REM   git add ml/models/inference_state.json ml/models/elo_ratings.json ml/models/level_layer.json ml/models/game_dynamics.json ml/models/ref_effects.json
 REM   git commit -m "Donnees ML au <date>" ^&^& git push
 REM (le service ML embarque ml/models dans son image : Railway redeploie.)
+REM Les figures du document (ml/figures/*.png) peuvent partir dans le meme commit.
 REM
 REM Installation dans le Planificateur de taches (une fois, sans admin) —
 REM chaque lundi a 9 h, heure du poste :
@@ -38,5 +39,9 @@ set PYTHONUTF8=1
 cd /d "%~dp0python"
 python refresh_data.py > "%~dp0data\refresh-data.log" 2>&1
 set RC=%ERRORLEVEL%
+REM Figures de ml\EXPLICATION_ML.md (paragraphes 4 a 8), relues dans les
+REM fichiers que le run vient d'ecrire. Sans effet sur les modeles ; un echec
+REM ici (matplotlib absent...) ne change pas le code de sortie.
+if %RC%==0 python doc_figures.py >> "%~dp0data\refresh-data.log" 2>&1
 type "%~dp0data\refresh-data.log"
 exit /b %RC%

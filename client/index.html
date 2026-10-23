@@ -56,6 +56,14 @@
          sur les métriques des vraies polices : le swap ne décale plus les cartes (CLS).
          Valeurs calculées avec fontTools (largeur moyenne + hhea), à refaire si on change
          de police. -->
+    <!-- API (PERF_PLAN.md, P0.2) : ouvrir la connexion vers l'API (DNS + TCP + TLS)
+         PENDANT le téléchargement du JS. Sans ça, elle ne démarrait qu'une fois le
+         bundle exécuté et l'accueil monté (~0,9 s plus tard, mesuré le 2026-10-23).
+         `crossorigin` : les GET publics partent sans cookies, donc sur la connexion
+         « anonyme » — c'est elle qu'il faut ouvrir. %VITE_SOCKET_URL% est l'origine
+         de l'API (vérifiée par check-env au build), remplacée par Vite. -->
+    <link rel="preconnect" href="%VITE_SOCKET_URL%" crossorigin />
+    <link rel="dns-prefetch" href="%VITE_SOCKET_URL%" />
     <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/oswald-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <style>

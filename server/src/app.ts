@@ -50,7 +50,12 @@ app.use(httpLogger);
 // `X-Stale-Response` exposé : le client est sur un AUTRE domaine (Vercel), et
 // le navigateur cache tout en-tête non listé. Sans lui, une réponse de repli
 // (`staleFallback`) — un vieux score pendant un match — passerait pour fraîche.
-app.use(cors({ origin: corsOriginCallback, credentials: true, exposedHeaders: ['X-Stale-Response'] }));
+// `maxAge` : sans `Access-Control-Max-Age`, le navigateur ne garde un preflight
+// que 5 s et refait un OPTIONS — un aller-retour complet — avant presque chaque
+// requête « non simple » (POST JSON, en-tête Authorization). 24 h demandées ;
+// chaque navigateur applique son propre plafond (Chrome 2 h, Firefox 24 h).
+// PERF_PLAN.md, P0.1.
+app.use(cors({ origin: corsOriginCallback, credentials: true, exposedHeaders: ['X-Stale-Response'], maxAge: 86400 }));
 app.use(cookieParser());
 
 // Stripe webhook — MUST receive the raw body to verify the signature, so it is

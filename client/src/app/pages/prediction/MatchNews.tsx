@@ -2,10 +2,16 @@
  * MatchNews.tsx — dernières nouvelles des deux équipes, sur la page d'un match.
  * NEWS_CONSENSUS_PLAN.md, F1. Rien n'est affiché tant qu'il n'y a aucune nouvelle :
  * une carte vide n'apprend rien à l'utilisateur.
+ *
+ * Pliable (demande du user, 2026-10-23), REPLIÉE par défaut comme le Top 90 % :
+ * l'en-tête montre déjà le nombre de nouvelles et d'alertes gardien / alignement,
+ * de quoi savoir s'il vaut la peine d'ouvrir. Soumise au « Tout plier » de la page.
  */
 
 import { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { useI18n } from "../../i18n";
+import { useSectionFold } from "./foldAll";
 import { fetchMatchNews, type NewsItem } from "../../services/newsService";
 
 function ago(iso: string, lang: string): string {
@@ -18,6 +24,7 @@ function ago(iso: string, lang: string): string {
 export function MatchNews({ home, away, accent }: { home: string; away: string; accent: string }) {
   const { t, lang } = useI18n();
   const [items, setItems] = useState<NewsItem[] | null>(null);
+  const [collapsed, toggleFold] = useSectionFold("news", true);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -27,10 +34,34 @@ export function MatchNews({ home, away, accent }: { home: string; away: string; 
 
   if (!items || items.length === 0) return null;
 
+  const shown = items.slice(0, 6);
+  const alerts = shown.filter((n) => n.flags.includes("goalie") || n.flags.includes("lineup")).length;
+
   return (
-    <div className="bg-[#111a1f] border border-white/20 rounded-2xl p-4 flex flex-col gap-3">
-      <p className="text-white text-sm font-bold">{t("news.title")}</p>
-      {items.slice(0, 6).map((n) => (
+    <div className="bg-[#111a1f] border border-white/20 rounded-2xl p-4">
+      <button
+        type="button"
+        onClick={toggleFold}
+        aria-expanded={!collapsed}
+        className={`w-full flex items-center justify-between gap-2 ${collapsed ? "" : "mb-3"}`}
+      >
+        <p className="text-white text-sm font-bold">{t("news.title")}</p>
+        <span className="flex items-center gap-2">
+          {alerts > 0 && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">
+              {t("news.alerts", { n: alerts })}
+            </span>
+          )}
+          <span className="text-[#8a9ea6] text-[11px]">{shown.length}</span>
+          <ChevronDown
+            aria-hidden
+            className={`w-4 h-4 text-[#3a5060] transition-transform ${collapsed ? "" : "rotate-180"}`}
+          />
+        </span>
+      </button>
+      {collapsed ? null : (
+      <div className="flex flex-col gap-3">
+      {shown.map((n) => (
         <a
           key={n.id}
           href={n.url}
@@ -52,6 +83,8 @@ export function MatchNews({ home, away, accent }: { home: string; away: string; 
         </a>
       ))}
       <p className="text-[#4a6070] text-[10px]">{t("news.sourceNote")}</p>
+      </div>
+      )}
     </div>
   );
 }

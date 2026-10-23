@@ -157,6 +157,11 @@ function gameDayLabel(game: DisplayGame, lang: string): string | null {
  */
 const SHOW_MODEL_PCT_ON_HOME = true;
 
+/** « 54% », « … » tant que le paquet ML n'est pas arrivé, « — » s'il est indisponible. */
+function pctLabel(pct: number | null | undefined): string {
+  return pct != null ? `${pct}%` : pct === undefined ? "…" : "—";
+}
+
 function useGamePct(game: DisplayGame) {
   if (!SHOW_MODEL_PCT_ON_HOME) return { homePct: null, awayPct: null, showPct: false };
   return { homePct: game.team1.winPct, awayPct: game.team2.winPct, showPct: true };
@@ -216,12 +221,12 @@ export function LiveGameCard({ game }: { game: DisplayGame }) {
 
       {/* Model probability bar */}
       {showPct && <div className="flex items-center gap-2 mb-2">
-        <span className="text-[11px] font-bold w-7 flex-shrink-0" style={{ color: accent }}>{homePct != null ? `${homePct}%` : "—"}</span>
+        <span className="text-[11px] font-bold w-7 flex-shrink-0" style={{ color: accent }}>{pctLabel(homePct)}</span>
         <div className="flex-1 bg-[#0A0E0C] rounded-full h-1 overflow-hidden flex">
           <div className="h-full rounded-l-full transition-all duration-500" style={{ width: `${homePct ?? 0}%`, backgroundColor: accent }} />
           <div className="h-full bg-[#1B2419] flex-1" />
         </div>
-        <span className="text-[#bfc8cc] text-[11px] font-bold w-7 text-right flex-shrink-0">{awayPct != null ? `${awayPct}%` : "—"}</span>
+        <span className="text-[#bfc8cc] text-[11px] font-bold w-7 text-right flex-shrink-0">{pctLabel(awayPct)}</span>
       </div>}
 
       {/* Ligne des vrais prix — seulement quand le livre en propose */}

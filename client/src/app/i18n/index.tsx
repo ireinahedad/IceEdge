@@ -929,6 +929,7 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "news.title":         { en: "Latest news",           fr: "Dernières nouvelles" },
   "news.flag.goalie":   { en: "Goalie",                fr: "Gardien" },
   "news.flag.lineup":   { en: "Lineup",                fr: "Alignement" },
+  "news.alerts":        { en: "{n} lineup/goalie",     fr: "{n} alignement/gardien" },
   "news.sourceNote":    { en: "Links to the original posts by teams and reporters.", fr: "Liens vers les publications d'origine des équipes et journalistes." },
   "pred.bookOdds":       { en: "Book odds",             fr: "Cote du livre" },
 
