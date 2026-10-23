@@ -62,6 +62,8 @@ vi.mock('../services/mlApiClient', () => ({ mlApiClient }));
 const fetchGameById  = vi.fn(async () => ({ homeTeam: { abbreviation: 'TOR' }, awayTeam: { abbreviation: 'MTL' } }));
 const fetchPlayerById = vi.fn(async () => ({ name: 'X', gamesPlayed: 50, goals: 30, points: 80, assists: 50 }));
 vi.mock('../services/nhlApiClient', () => ({ fetchGameById, fetchPlayerById }));
+const buildGameMarketsWithStatus = vi.fn();
+vi.mock('../services/nhlPredictions', () => ({ buildGameMarketsWithStatus: (id: string) => buildGameMarketsWithStatus(id) }));
 
 const features = {
   buildGameFeatures:        vi.fn(async () => ({})),
@@ -452,5 +454,48 @@ describe('GET /api/predict/summary', () => {
       expect(res.status).toBe(400);
     }
     expect(getGameMlBundle).not.toHaveBeenCalled();
+  });
+});
+
+// PERF_PLAN.md P2.3 — l'état en direct d'un match en UNE réponse.
+describe('GET /api/predict/game/:id/live', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  const bundle = {
+    gameId: '2026020001', results: { 'ml-home': { probability: 60 } }, byKey: { 'moneyline|||h': { probability: 60 } },
+    playerRates: { '8478402': { goals: 0.4 } }, live: { label: '1–0', final: false, refreshMs: 30_000 },
+  };
+
+  it('rend en-tête, marchés et paquet allégé, jamais en cache', async () => {
+    fetchGameById.mockResolvedValueOnce({ id: '2026020001', status: 'live', homeTeam: { abbreviation: 'TOR' }, awayTeam: { abbreviation: 'MTL' } } as any);
+    buildGameMarketsWithStatus.mockResolvedValueOnce({ groups: [{ id: 'g' }], status: 'live', refreshMs: 30_000 });
+    getGameMlBundle.mockResolvedValueOnce(bundle);
+    const res = await request(await predictApp()).get('/api/predict/game/2026020001/live');
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.body.game.status).toBe('live');
+    expect(res.body.markets).toEqual({ groups: [{ id: 'g' }], status: 'live', refreshMs: 30_000 });
+    expect(res.body.bundle).toEqual({ results: bundle.results, byKey: bundle.byKey, live: bundle.live });
+    expect(res.body.bundle.playerRates).toBeUndefined();
+  });
+
+  it('un morceau en panne vaut null, les autres répondent', async () => {
+    fetchGameById.mockResolvedValueOnce({ id: '2026020001', status: 'live' } as any);
+    buildGameMarketsWithStatus.mockRejectedValueOnce(new Error('NHL down'));
+    getGameMlBundle.mockRejectedValueOnce(new Error('ML down'));
+    const res = await request(await predictApp()).get('/api/predict/game/2026020001/live');
+    expect(res.status).toBe(200);
+    expect(res.body.markets).toBeNull();
+    expect(res.body.bundle).toBeNull();
+  });
+
+  it('tout en panne : 503 ; identifiant invalide : 400 sans appel', async () => {
+    fetchGameById.mockRejectedValueOnce(new Error('x'));
+    buildGameMarketsWithStatus.mockRejectedValueOnce(new Error('x'));
+    getGameMlBundle.mockRejectedValueOnce(new Error('x'));
+    const app = await predictApp();
+    expect((await request(app).get('/api/predict/game/2026020001/live')).status).toBe(503);
+    vi.clearAllMocks();
+    expect((await request(app).get('/api/predict/game/abc/live')).status).toBe(400);
+    expect(buildGameMarketsWithStatus).not.toHaveBeenCalled();
   });
 });

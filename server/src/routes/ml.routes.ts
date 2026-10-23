@@ -32,6 +32,7 @@ import { getGameMlBundle, serializeBundle, mlBundleKey, type GameMlBundle } from
 import { mapLimit } from "../services/concurrency";
 import { predictPlayerFromModel } from "../services/prediction/playerModelPrediction";
 import { fetchGameById } from "../services/nhlApiClient";
+import { buildGameMarketsWithStatus } from "../services/nhlPredictions";
 import { currentSeason } from "../services/nhl/core";
 import {
   buildGameFeatures,
@@ -929,6 +930,42 @@ router.get('/summary', predictLimiter, async (req: Request, res: Response) => {
     ? `public, max-age=0, s-maxage=${Math.round(Math.min(...liveRefresh) / 1000)}`
     : 'public, max-age=120, stale-while-revalidate=600');
   res.json({ games });
+});
+
+// GET /api/predict/game/:gameId/live
+//
+// PERF_PLAN.md P2.3 (2026-10-24). Pendant un match en cours, la page du match
+// rappelait TROIS routes à chaque tick (10-30 s) : l'en-tête (`/nhl/games/:id`),
+// les marchés des règles (`/nhl/predictions/game/:id`) et le paquet ML
+// (`/predict/game/:id/bundle`). Ici, les trois en UNE réponse, lues dans les
+// mêmes caches serveur : un aller-retour par tick au lieu de trois, et trois
+// morceaux qui datent du même instant.
+//
+// Chaque morceau vaut `null` s'il est indisponible : le client garde alors ses
+// derniers chiffres pour ce morceau seulement (comme avec trois appels).
+// Le paquet ML est allégé : la page ne lit que `results`, `byKey` et `live`
+// (pas les taux par joueur, ~95 % du poids du paquet complet).
+router.get('/game/:gameId/live', predictLimiter, async (req: Request, res: Response) => {
+  const { gameId } = req.params;
+  if (!/^\d{6,12}$/.test(gameId)) return res.status(400).json({ error: 'invalid gameId' });
+  const [game, markets, bundle] = await Promise.allSettled([
+    fetchGameById(gameId),
+    buildGameMarketsWithStatus(gameId),
+    getGameMlBundle(gameId),
+  ]);
+  const val = <T,>(r: PromiseSettledResult<T>): T | null => (r.status === 'fulfilled' ? r.value : null);
+  const g = val(game), m = val(markets), b = val(bundle);
+  if (!g && !m && !b) return res.status(503).json({ error: 'live state unavailable' });
+  for (const [name, r] of [['game', game], ['markets', markets], ['bundle', bundle]] as const) {
+    if (r.status === 'rejected') logger.warn({ err: (r.reason as any)?.message, gameId }, `[predict/live] ${name} indisponible`);
+  }
+  // Toujours redemandé : c'est un état en direct, au rythme annoncé par `refreshMs`.
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    game: g,
+    markets: m ? { groups: m.groups, status: m.status, ...(m.refreshMs ? { refreshMs: m.refreshMs } : {}) } : null,
+    bundle: b ? { results: b.results, byKey: b.byKey, ...(b.live ? { live: b.live } : {}) } : null,
+  });
 });
 
 // GET /api/predict/game/:gameId/bundle

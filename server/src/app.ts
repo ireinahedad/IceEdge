@@ -10,6 +10,7 @@ import userRoutes          from './routes/user.routes';
 import profileRoutes       from './routes/profile.routes';
 import nhlRoutes           from './routes/nhl.routes';
 import newsRoutes          from './routes/news.routes';
+import pickemRoutes        from './routes/pickem.routes';
 import oddsRoutes          from './routes/odds.routes';
 import manualRoutes        from './routes/manual.routes';
 import mlRoutes            from './routes/ml.routes';
@@ -146,6 +147,9 @@ app.use('/api/users',         noStore, userRoutes);
 app.use('/api/nhl',           nhlRoutes);
 // Fil de nouvelles par match (F1) — public, lecture seule.
 app.use('/api/news',          newsRoutes);
+// Pick'em ICEEDGE (F3) — GET public, POST connecté. `noStore` : la réponse porte
+// le vote de la personne connectée. `writeLimiter` laisse passer les GET.
+app.use('/api/pickem',        writeLimiter, noStore, pickemRoutes);
 
 // Leaderboard — public, identique pour tous, caché 60 s côté service.
 // Le même Cache-Control côté HTTP laisse navigateur et CDN absorber le reste.
