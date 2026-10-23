@@ -29,7 +29,7 @@
  * COUPES FRANCHES pour les posts du jour : le rythme sec convient au format
  * court et se cale sur la musique ajoutée à l'envoi.
  *
- * TRANSITION pour les récaps (`<date>-recap`) : un glissement court entre les
+ * TRANSITION pour les récaps (`<date>-recap`) et les combinés (`<date>-parlays-*`) : un glissement court entre les
  * cartes, qui enchaînent des matchs à la même mise en page — sans lui, une
  * carte chasse l'autre et l'œil croit à un saut d'image. La transition MORD sur
  * le plan suivant au lieu d'allonger la vidéo : chaque segment (sauf le
@@ -620,7 +620,7 @@ async function main() {
   const transArg = arg('transition');
   const transition = transArg === 'none'
     ? null
-    : transArg ?? (dateKey.endsWith('-recap') ? TRANSITION_DEFAULT : null);
+    : transArg ?? (dateKey.endsWith('-recap') || /-parlays-(pick|result)$/.test(dateKey) ? TRANSITION_DEFAULT : null);
 
   let music: string | null = null;
   const musicArg = arg('music');

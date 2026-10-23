@@ -22,6 +22,7 @@
     "content:insights": "ts-node scripts/build-content-insights.ts",
     "content:mine": "ts-node scripts/mine-stories.ts",
     "content:recap": "ts-node scripts/build-recap.ts",
+    "content:parlays": "ts-node scripts/build-parlays.ts",
     "content:check": "ts-node scripts/check-posts.ts",
     "content:log": "ts-node scripts/log-post.ts",
     "eval:llm": "ts-node scripts/eval-llm-analysis.ts",

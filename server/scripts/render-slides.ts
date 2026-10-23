@@ -460,6 +460,101 @@ async function starsBlock(stars: any[]): Promise<string> {
   return `<div class="star-rows">${rows.join('')}</div>`;
 }
 
+// ===========================================================================
+// Combinés du jour — parlay_pick / parlay_result (MARKETING_PLAN Phase C)
+// ===========================================================================
+//
+// Plans écrits par build-parlays.ts. Un champ `kind` dit quel bloc dessiner :
+// 'intro' | 'card' | 'record' | 'cta'. Les chiffres arrivent DÉJÀ formatés
+// (« 68% », « 12-9 ») : rien n'est recalculé ici.
+
+const PARLAY_TEMPLATES = ['parlay_pick', 'parlay_result'];
+
+async function parlayLegRow(l: any, withMark: boolean): Promise<string> {
+  let logo = '';
+  if (l.logo) {
+    logo = `<div class="pl-logo">${logoImg(await teamLogo(l.logo)) || `<b>${esc(l.logo)}</b>`}</div>`;
+  } else if (Array.isArray(l.logos) && l.logos.length === 2) {
+    const [a, b] = [await teamLogo(l.logos[0]), await teamLogo(l.logos[1])];
+    logo = a && b ? `<div class="pl-logo pair">${logoImg(a)}${logoImg(b)}</div>` : `<div class="pl-logo"><b>O/U</b></div>`;
+  } else {
+    logo = '<div class="pl-logo"></div>';
+  }
+  const color = l.logo ? matchColor(l.logo) : PALETTE.accent;
+  const right = withMark
+    ? `<div class="pl-mark ${esc(l.result ?? 'unknown')}"></div>`
+    : `<div class="pl-pct">${esc(l.pct)}</div>`;
+  return `<div class="pl-leg ${withMark ? esc(l.result ?? 'unknown') : ''}" style="--c:${color}">`
+    + logo
+    + `<div class="pl-what"><b>${esc(l.label)}</b><span>${esc(l.context)}</span></div>`
+    + right + `</div>`;
+}
+
+async function parlayBlock(slide: any, logoUri: string): Promise<string> {
+  const result = slide.template === 'parlay_result';
+  switch (slide.kind) {
+    case 'intro': {
+      const i = slide.intro ?? {};
+      return `<div class="pl-intro">`
+        + `<div class="pl-kicker">${esc(i.weekday)}</div>`
+        + `<div class="pl-title">${esc(i.title)}</div>`
+        + `<div class="pl-date">${esc(i.date)}</div>`
+        + `<div class="pl-line">${esc(i.line)}</div>`
+        + (i.record ? `<div class="pl-record">${esc(i.record)}</div>` : '')
+        + `</div>`;
+    }
+    case 'card': {
+      const p = slide.parlay ?? {};
+      const status = String(p.status ?? '').toLowerCase();
+      const rows: string[] = [];
+      for (const l of p.legs ?? []) rows.push(await parlayLegRow(l, result));
+      const head = result
+        ? `<div class="pl-head"><b>${esc(p.title)}</b><div class="pl-status ${esc(status)}">${esc(p.status)}</div></div>`
+        : `<div class="pl-head"><b>${esc(p.title)}</b><span>${esc(p.kind)}</span></div>`;
+      // `n5` : un combiné à 5 jambes se resserre pour laisser la mention légale hors
+      // de la zone basse de TikTok.
+      return `<div class="pl-card n${rows.length} ${result ? esc(status) : ''}">`
+        + head
+        + `<div class="pl-legs">${rows.join('')}</div>`
+        + `<div class="pl-foot"><span>${result ? 'Model gave it' : 'Model probability'}</span><b>${esc(p.probability)}</b></div>`
+        + `</div>`;
+    }
+    case 'record': {
+      const r = slide.record ?? {};
+      return `<div class="pl-rec">`
+        + `<div class="pl-kicker">Running record</div>`
+        // Vert seulement à 50 % ou plus : un bilan perdant affiché en vert serait de l'enjolivure.
+        + `<div class="big${parseFloat(String(r.pct)) >= 50 ? ' positive' : ''}">${esc(r.pct)}</div>`
+        + `<div class="pl-wl">${esc(r.line)}</div>`
+        + `<div class="pl-since">${esc(r.since)}</div>`
+        + `<div class="pl-note">${esc(r.note)}</div>`
+        + `</div>`;
+    }
+    case 'cta':
+      return `<div class="pl-cta">`
+        + (logoUri ? `<img src="${logoUri}" alt="Arakice">` : '')
+        + `<div class="pl-cta-line">${result ? "Tonight's parlays are up" : 'Every leg, explained'}</div>`
+        + `<div class="domain">arakice.com</div>`
+        + `</div>`;
+    default:
+      return '';
+  }
+}
+
+/**
+ * Inter, embarquée pour les gabarits de combinés. Ils sont rendus sur le runner
+ * GitHub (Linux), où ni Inter ni Segoe UI n'existent : sans elle, la police de
+ * repli change la largeur des libellés et les coupures de ligne. Les autres
+ * gabarits gardent leur rendu actuel (rendus sous Windows).
+ */
+async function interFontFace(): Promise<string> {
+  try {
+    const woff = await fs.readFile(path.join(REPO_ROOT, 'client', 'public', 'fonts', 'inter-latin-wght-normal.woff2'));
+    return `@font-face{font-family:Inter;font-style:normal;font-weight:100 900;font-display:block;`
+      + `src:url(data:font/woff2;base64,${woff.toString('base64')}) format('woff2');}`;
+  } catch { return ''; }
+}
+
 /** Aiguillage : un plan de récap, son bloc. */
 async function buildRecapBlock(slide: any): Promise<string> {
   // Le titre coiffe le bloc au lieu de le suivre. « Three stars » lu après les
@@ -639,13 +734,14 @@ async function main() {
   const templates: Record<string, string> = {};
   for (const name of [
     'hook_card', 'stat_card', 'chart_card', 'cta_card', 'compare_card',
-    ...RECAP_TEMPLATES,
+    ...RECAP_TEMPLATES, ...PARLAY_TEMPLATES,
   ]) {
     const raw = await fs.readFile(path.join(TEMPLATE_DIR, `${name}.html`), 'utf8');
     // La feuille est inlinée plutôt que liée : on rend avec setContent, sans
     // URL de base, donc aucun chemin relatif ne serait résolu.
+    const font = PARLAY_TEMPLATES.includes(name) ? await interFontFace() : '';
     templates[name] = raw
-      .replace(/<link rel="stylesheet" href="_shared\.css">/, `<style>${css}</style>`)
+      .replace(/<link rel="stylesheet" href="_shared\.css">/, () => `<style>${font}${css}</style>`)
       .replace(/<script src="_anim\.js"><\/script>/, `<script>${animJs}</script>`);
   }
 
@@ -696,7 +792,9 @@ async function main() {
 
       // Le bloc central des cartes de récap : même statut que `chart_svg`, du
       // HTML dessiné en code parce que son nombre de lignes dépend de la soirée.
-      const block = RECAP_TEMPLATES.includes(slide.template) ? await buildRecapBlock(slide) : '';
+      const block = RECAP_TEMPLATES.includes(slide.template) ? await buildRecapBlock(slide)
+        : PARLAY_TEMPLATES.includes(slide.template) ? await parlayBlock(slide, logoUri)
+        : '';
 
       const html = fill(template, {
         subject,
