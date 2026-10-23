@@ -9,8 +9,7 @@
 import type { NHLGame } from "../../types/bet";
 import type { OddsEvent } from "../../services/oddsApiService";
 import { nhlLogoUrl } from "../../data/teamEmoji";
-import { fetchGameMlBundle } from "../../components/MLPredictionCard";
-import { mlBundleKey } from "../prediction/gameMarkets";
+import { fetchGameMlSummary } from "../../services/mlSummary";
 
 
 // ─── Hockey helpers ────────────────────────────────────────────────────────────
@@ -56,8 +55,8 @@ export interface DisplayGame {
 
 /** P(victoire domicile) selon le modèle ML, ou `null` s'il ne répond pas. */
 async function mlHomeWinPct(gameId: string): Promise<number | null> {
-  const b = await fetchGameMlBundle(gameId);
-  const v = b?.byKey[mlBundleKey("moneyline", null, null, true)]?.probability;
+  // Résumé par lots (PERF_PLAN.md P1.1), même promesse que `useGameMl`.
+  const v = (await fetchGameMlSummary(gameId))?.homeWin;
   return typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null;
 }
 

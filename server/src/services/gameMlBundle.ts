@@ -146,6 +146,12 @@ const EXTRAS: Array<{ market: string; selection?: string }> = [
 ];
 
 const BUNDLE_TTL_MS = Number(process.env.ML_BUNDLE_TTL_MS) || 10 * 60_000;
+/**
+ * Paquet d'AVANT-MATCH expiré depuis moins de 2 h : servi tout de suite, recalculé
+ * en fond (`wrapSwr`, PERF_PLAN.md P1.2). Le direct n'est pas concerné : il
+ * passe par `liveCache` (30 s / 10 s), qui reste un `wrap` strict.
+ */
+const BUNDLE_STALE_MS = Number(process.env.ML_BUNDLE_STALE_MS) || 2 * 60 * 60_000;
 const bundleCache = new TtlCache<GameMlBundle>(BUNDLE_TTL_MS, 500, 'mlGameBundles');
 /**
  * Les features du MÊME instant que le paquet : l'« Analyse IA » (`llmFacts.ts`)
@@ -337,7 +343,7 @@ async function applyLive(gameId: string, pre: GameMlBundle): Promise<GameMlBundl
 }
 
 export async function getGameMlBundle(gameId: string): Promise<GameMlBundle> {
-  const pre = await bundleCache.wrap(gameId, () => computeBundle(gameId));
+  const pre = await bundleCache.wrapSwr(gameId, () => computeBundle(gameId), BUNDLE_STALE_MS);
   // En direct, le paquet vit le rythme du match : 30 s, 10 s en fin de match.
   return liveCache.wrap(gameId, () => applyLive(gameId, pre),
     b => (b.live && !b.live.final && b.live.refreshMs ? b.live.refreshMs : LIVE_TTL_MS));

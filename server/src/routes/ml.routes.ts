@@ -28,7 +28,8 @@ import {
   buildRealFactors,
 } from "../services/predictionEngine";
 import { mlApiClient } from "../services/mlApiClient";
-import { getGameMlBundle, serializeBundle } from "../services/gameMlBundle";
+import { getGameMlBundle, serializeBundle, mlBundleKey, type GameMlBundle } from "../services/gameMlBundle";
+import { mapLimit } from "../services/concurrency";
 import { predictPlayerFromModel } from "../services/prediction/playerModelPrediction";
 import { fetchGameById } from "../services/nhlApiClient";
 import { currentSeason } from "../services/nhl/core";
@@ -872,6 +873,62 @@ router.post('/ml', predictLimiter, validateBody(predictMlSchema), async (req: Re
     logger.warn({ err: err.message }, '[predict/ml] ML service unavailable');
     res.status(503).json({ error: 'ML service unavailable' });
   }
+});
+
+// GET /api/predict/summary?ids=2026020168,2026020169,…
+//
+// PERF_PLAN.md P1.1 (2026-10-23). Les trois chiffres que montrent l'accueil et
+// le calendrier pour chaque match — victoire domicile, handicap −1.5 de chaque
+// côté — pour plusieurs matchs en UNE requête. Ils lisaient le paquet complet de
+// chaque match (~171 ko : taux de tous les joueurs, échelles de pénalités…) :
+// un soir à 14 matchs, ~2,4 Mo de JSON et 14 requêtes sous `predictLimiter`.
+// Ici : ~100 octets par match, lus dans les MÊMES paquets (cache serveur, direct
+// compris) — aucun calcul nouveau. La page du match garde le paquet complet.
+//
+// Un match dont le paquet est indisponible vaut `null` (le client affiche « — ») ;
+// la route ne rend 503 que si AUCUN ne répond.
+const SUMMARY_MAX_IDS = 20;
+const GAME_ID_RE = /^\d{6,12}$/;
+type GameMlSummary = {
+  homeWin: number | null; homeMinus: number | null; awayMinus: number | null;
+  live?: { final: boolean; refreshMs?: number };
+};
+function summarize(b: GameMlBundle): GameMlSummary {
+  const p = (k: string) => {
+    const v = b.byKey[k]?.probability;
+    return typeof v === 'number' && Number.isFinite(v) ? v : null;
+  };
+  return {
+    homeWin:   p(mlBundleKey('moneyline', null, null, true)),
+    homeMinus: p(mlBundleKey('puck_line', -1.5, null, true)),
+    awayMinus: p(mlBundleKey('puck_line', -1.5, null, false)),
+    ...(b.live ? { live: { final: b.live.final, ...(b.live.refreshMs ? { refreshMs: b.live.refreshMs } : {}) } } : {}),
+  };
+}
+router.get('/summary', predictLimiter, async (req: Request, res: Response) => {
+  const ids = [...new Set(String(req.query.ids ?? '').split(',').map(s => s.trim()).filter(Boolean))];
+  if (ids.length === 0 || ids.length > SUMMARY_MAX_IDS || !ids.every(id => GAME_ID_RE.test(id))) {
+    return res.status(400).json({ error: `ids: 1 à ${SUMMARY_MAX_IDS} identifiants de match, séparés par des virgules` });
+  }
+  // 4 calculs simultanés au plus, comme best-bets : un cache froid ne doit pas
+  // envoyer 20 paquets d'un coup au service Python.
+  const out = await mapLimit(ids, 4, async (id) => {
+    try { return [id, summarize(await getGameMlBundle(id))] as const; }
+    catch (err: any) {
+      logger.warn({ err: err?.message, gameId: id }, '[predict/summary] paquet indisponible');
+      return [id, null] as const;
+    }
+  });
+  const games: Record<string, GameMlSummary | null> = Object.fromEntries(out);
+  const values = Object.values(games);
+  if (values.every(v => v === null)) return res.status(503).json({ error: 'ML service unavailable' });
+  // Un match en cours : le navigateur revalide à chaque rappel (comme le paquet).
+  // Sinon 2 min, le rythme du paquet d'avant-match.
+  const liveRefresh = values.filter(v => v?.live && !v.live.final).map(v => v!.live!.refreshMs ?? 30_000);
+  res.set('Cache-Control', liveRefresh.length
+    ? `public, max-age=0, s-maxage=${Math.round(Math.min(...liveRefresh) / 1000)}`
+    : 'public, max-age=120, stale-while-revalidate=600');
+  res.json({ games });
 });
 
 // GET /api/predict/game/:gameId/bundle

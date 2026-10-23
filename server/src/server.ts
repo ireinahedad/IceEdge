@@ -14,7 +14,8 @@ import { startNewsSync } from './services/newsSync.service';
 import { ODDS_BOOKMAKERS, ODDS_COLLECT_BOOKMAKERS } from './services/oddsClient';
 import { verifyAvatarStorage } from './services/avatarStorage';
 import { verifyEncryptionKey } from './services/crypto.util';
-import { getBestBets } from './services/bestBets.service';
+import { getBestBets, etDate } from './services/bestBets.service';
+import { getBestParlays } from './services/bestParlays.service';
 import { allowedOrigins } from './cors';
 import { closeRedis, redisEnabled } from './redis';
 import { rateLimitBackend } from './middleware/rateLimitStore';
@@ -161,9 +162,27 @@ const DORMANT = process.env.DORMANT === 'true';
       // retarder l'écoute ni pouvoir empêcher le démarrage. Un échec est sans
       // conséquence — le premier visiteur paiera le cache froid, c'est-à-dire
       // exactement le comportement sans réchauffage.
-      void getBestBets({ limit: 30, source: 'ml' })
-        .then((r) => logger.info({ bets: r.bets.length, scanned: r.meta.scanned }, '[Server] best-bets réchauffé'))
-        .catch((err: any) => logger.warn({ err: err?.message }, '[Server] réchauffage best-bets échoué (sans conséquence)'));
+      //
+      // PERF_PLAN.md P1.2 : on réchauffe AUSSI les clés que l'accueil demande
+      // vraiment. `BestBetsSection` et `getBestParlays` passent `date=` (jour UTC
+      // du lecteur, le plus souvent aujourd'hui ou demain) : la clé sans date,
+      // seule réchauffée jusqu'ici, ne servait qu'au calendrier. Séquentiel, pas
+      // en parallèle : les paquets ML d'un jour sont partagés avec le suivant.
+      void (async () => {
+        const utc = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+        const dates = [...new Set([etDate(0), etDate(1), utc(0), utc(1)])];
+        try {
+          const r = await getBestBets({ limit: 30, source: 'ml' });
+          logger.info({ bets: r.bets.length, scanned: r.meta.scanned }, '[Server] best-bets réchauffé');
+          for (const date of dates) {
+            await getBestBets({ limit: 30, source: 'ml', date });
+            await getBestParlays(date);
+          }
+          logger.info({ dates }, '[Server] best-bets + best-parlays réchauffés pour l\'accueil');
+        } catch (err: any) {
+          logger.warn({ err: err?.message }, '[Server] réchauffage best-bets échoué (sans conséquence)');
+        }
+      })();
     }
   });
 

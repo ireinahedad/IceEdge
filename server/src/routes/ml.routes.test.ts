@@ -74,6 +74,7 @@ vi.mock('../services/bestBets.service', () => ({ getBestBets: vi.fn(async () => 
 const getGameMlBundle = vi.fn();
 vi.mock('../services/gameMlBundle', () => ({
   getGameMlBundle: (id: string) => getGameMlBundle(id),
+  mlBundleKey: (m: string, l: number | null, s: string | null, h: boolean) => `${m}|${l ?? ''}|${s ?? ''}|${h ? 'h' : 'a'}`,
   // Même contrat que le vrai (testé dans gameMlBundle.test.ts) : corps + ETag.
   serializeBundle: (b: unknown) => { const body = JSON.stringify(b); return { body, etag: `"${body.length}"` }; },
 }));
@@ -394,5 +395,62 @@ describe('GET /api/predict/best-parlays — 2 gratuits, le reste Pro', () => {
     const res = await request(await predictApp()).get('/api/predict/best-parlays').set('x-test-user', 'u3');
     expect(res.status).toBe(200);
     expect(res.body.parlays.filter((p: any) => p.locked)).toHaveLength(2);
+  });
+});
+
+// PERF_PLAN.md P1.1 — les trois chiffres de l'accueil, plusieurs matchs par requête.
+describe('GET /api/predict/summary', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  const withMl = (id: string, extra: object = {}) => ({
+    gameId: id, results: {},
+    byKey: {
+      'moneyline|||h': { probability: 57.4 },
+      'puck_line|-1.5||h': { probability: 31 },
+      'puck_line|-1.5||a': { probability: 22 },
+    },
+    ...extra,
+  });
+
+  it('rend les trois chiffres par match, sans le reste du paquet', async () => {
+    getGameMlBundle.mockImplementation(async (id: string) => withMl(id));
+    const res = await request(await predictApp()).get('/api/predict/summary?ids=2026020001,2026020002');
+    expect(res.status).toBe(200);
+    expect(res.body.games['2026020001']).toEqual({ homeWin: 57.4, homeMinus: 31, awayMinus: 22 });
+    expect(Object.keys(res.body.games)).toEqual(['2026020001', '2026020002']);
+    expect(res.headers['cache-control']).toBe('public, max-age=120, stale-while-revalidate=600');
+  });
+
+  it('un match indisponible vaut null, les autres répondent', async () => {
+    getGameMlBundle.mockImplementation(async (id: string) => {
+      if (id === '2026020002') throw new Error('ML down');
+      return withMl(id);
+    });
+    const res = await request(await predictApp()).get('/api/predict/summary?ids=2026020001,2026020002');
+    expect(res.status).toBe(200);
+    expect(res.body.games['2026020002']).toBeNull();
+  });
+
+  it('aucun ne répond : 503', async () => {
+    getGameMlBundle.mockRejectedValue(new Error('ML down'));
+    const res = await request(await predictApp()).get('/api/predict/summary?ids=2026020001');
+    expect(res.status).toBe(503);
+  });
+
+  it('en direct : revalidé à chaque rappel, au rythme le plus rapide', async () => {
+    getGameMlBundle.mockImplementation(async (id: string) =>
+      withMl(id, { live: { label: 'x', final: false, refreshMs: id === '2026020001' ? 10_000 : 30_000 } }));
+    const res = await request(await predictApp()).get('/api/predict/summary?ids=2026020001,2026020002');
+    expect(res.body.games['2026020001'].live).toEqual({ final: false, refreshMs: 10_000 });
+    expect(res.headers['cache-control']).toBe('public, max-age=0, s-maxage=10');
+  });
+
+  it('refuse avant tout calcul : vide, trop d\'ids, id invalide', async () => {
+    const app = await predictApp();
+    const many = Array.from({ length: 21 }, (_, i) => String(2026020001 + i)).join(',');
+    for (const q of ['', '?ids=', `?ids=${many}`, '?ids=2026020001,abc']) {
+      const res = await request(app).get('/api/predict/summary' + q);
+      expect(res.status).toBe(400);
+    }
+    expect(getGameMlBundle).not.toHaveBeenCalled();
   });
 });

@@ -17,8 +17,7 @@ import type { BetLeg } from "../../types/bet";
 import { useI18n } from "../../i18n";
 import { toast } from "../../toast";
 import { BookPricePill, FairOddsPill } from "../../components/BookPricePill";
-import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
-import { mlBundleKey } from "../prediction/gameMarkets";
+import { fetchGameMlSummary, type GameMlSummary } from "../../services/mlSummary";
 import { DisplayGame } from "./landingTypes";
 import { formatRecord, useTeamRecords } from "../charts/teamSpace";
 
@@ -315,9 +314,9 @@ export function LiveGamesRow({ games }: { games: DisplayGame[] }) {
 
 /**
  * Chiffres du MODÈLE ML d'un match pour le tableau de la ligne : vainqueur et
- * handicap ±1.5, lus dans le paquet ML du match (`GET /predict/game/:id/bundle`
- * — une requête par match, gardée 10 min côté serveur et 5 min côté client,
- * et la même que rouvre la page du match).
+ * handicap ±1.5, lus dans le RÉSUMÉ ML (`GET /predict/summary?ids=…`, par lots
+ * — tiré par le serveur du paquet ML du match, celui que rouvre la page du
+ * match ; 5 min côté client, 25 s en direct). PERF_PLAN.md P1.1.
  *
  * Chaque paire totalise 100 % PAR CONSTRUCTION : on lit un seul côté et on
  * prend le complément (pas de push sur une demi-ligne, pas de nul au
@@ -335,25 +334,20 @@ interface HomeMl {
   awayMinus: number | null;
 }
 export function useGameMl(gameId: string, enabled = true): HomeMl | null | undefined {
-  const [bundle, setBundle] = useState<GameMlBundle | null | undefined>(undefined);
+  // PERF_PLAN.md P1.1 : le RÉSUMÉ du match (3 chiffres, par lots), plus le
+  // paquet complet (~171 ko par match). Voir `services/mlSummary.ts`.
+  const [summary, setSummary] = useState<GameMlSummary | null | undefined>(undefined);
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
-    setBundle(undefined);
-    fetchGameMlBundle(gameId).then((b) => { if (alive) setBundle(b); });
+    setSummary(undefined);
+    fetchGameMlSummary(gameId).then((s) => { if (alive) setSummary(s); });
     return () => { alive = false; };
   }, [gameId, enabled]);
-  if (bundle === undefined) return undefined;
-  if (bundle === null) return null;
-  const p = (k: string) => {
-    const v = bundle.byKey[k]?.probability;
-    return typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null;
-  };
-  return {
-    homeWin: p(mlBundleKey("moneyline", null, null, true)),
-    homeMinus: p(mlBundleKey("puck_line", -1.5, null, true)),
-    awayMinus: p(mlBundleKey("puck_line", -1.5, null, false)),
-  };
+  if (summary === undefined) return undefined;
+  if (summary === null) return null;
+  const r = (v: number | null) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null);
+  return { homeWin: r(summary.homeWin), homeMinus: r(summary.homeMinus), awayMinus: r(summary.awayMinus) };
 }
 
 /** Un % du modèle ML (violet, comme partout où l'app montre le ML). */

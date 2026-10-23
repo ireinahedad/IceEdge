@@ -99,3 +99,44 @@ describe('TtlCache', () => {
     expect(n).toBe(2); // recalculé : le TTL court a bien primé sur les 10 s
   });
 });
+
+// PERF_PLAN.md P1.2 — personne n'attend un recalcul tant que l'ancienne valeur
+// est dans sa fenêtre de péremption tolérée.
+describe('TtlCache.wrapSwr', () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it('sert la valeur périmée tout de suite et recalcule une seule fois en fond', async () => {
+    const cache = new TtlCache<number>(20);
+    let n = 0;
+    const slow = async () => { await sleep(40); return ++n; };
+
+    expect(await cache.wrapSwr('k', slow, 1_000)).toBe(1);   // froid : on attend
+    await sleep(30);                                          // expiré, dans la fenêtre
+
+    const t0 = Date.now();
+    const vals = await Promise.all([1, 2, 3].map(() => cache.wrapSwr('k', slow, 1_000)));
+    expect(Date.now() - t0).toBeLessThan(30);                 // personne n'a attendu
+    expect(vals).toEqual([1, 1, 1]);                          // l'ancienne valeur
+
+    await sleep(60);                                          // le recalcul de fond a fini
+    expect(n).toBe(2);                                        // UN seul recalcul
+    expect(await cache.wrapSwr('k', slow, 1_000)).toBe(2);    // frais
+  });
+
+  it('au-delà de la fenêtre, attend le calcul comme wrap()', async () => {
+    const cache = new TtlCache<number>(10);
+    let n = 0;
+    await cache.wrapSwr('k', async () => ++n, 10);
+    await sleep(40);                                          // expiré ET hors fenêtre
+    expect(await cache.wrapSwr('k', async () => ++n, 10)).toBe(2);
+  });
+
+  it('un échec du recalcul de fond garde l’ancienne valeur', async () => {
+    const cache = new TtlCache<number>(10);
+    await cache.wrapSwr('k', async () => 7, 1_000);
+    await sleep(20);
+    expect(await cache.wrapSwr('k', async () => { throw new Error('ML down'); }, 1_000)).toBe(7);
+    await sleep(10);
+    expect(await cache.wrapSwr('k', async () => { throw new Error('ML down'); }, 1_000)).toBe(7);
+  });
+});

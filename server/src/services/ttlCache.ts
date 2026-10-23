@@ -179,4 +179,47 @@ export class TtlCache<T> implements CacheStatsSource {
     this.inflight.set(key, p);
     return p;
   }
+
+  /**
+   * `wrap` + « stale-while-revalidate » (PERF_PLAN.md, P1.2).
+   *
+   * Entrée fraîche → servie. Entrée EXPIRÉE depuis moins de `staleMs` → servie
+   * TOUT DE SUITE, et UN recalcul part en arrière-plan (dédoublonné avec les
+   * autres appels en vol) ; la réponse suivante sera fraîche. Rien, ou trop
+   * vieux → comme `wrap` : on attend le calcul.
+   *
+   * Pourquoi : avec peu de trafic, presque chaque visite tombait après le TTL
+   * et payait le calcul complet (best-bets : 4,9 s mesurés en prod le
+   * 2026-10-23, contre 0,4 s en cache). Ce mode ne recalcule PAS plus souvent
+   * que `wrap` — au plus une fois par expiration, déclenché par un visiteur —
+   * il change seulement QUI attend : personne.
+   *
+   * Un échec du recalcul de fond est avalé (et compté comme exécution) :
+   * l'ancienne valeur reste servie jusqu'au bout de `staleMs`, puis on retombe
+   * sur `wrap`, qui propage l'erreur à l'appelant.
+   *
+   * ⚠️ Pour des données dont un léger retard est sans conséquence (avant-match).
+   * Jamais pour le direct.
+   */
+  async wrapSwr(
+    key: string,
+    fn: () => Promise<T>,
+    staleMs: number,
+    ttlMs?: number | ((value: T) => number),
+  ): Promise<T> {
+    const e = this.store.get(key);
+    const now = Date.now();
+    if (e && e.expiresAt > now) { this.hits += 1; return e.value; }
+    if (e && e.expiresAt + staleMs > now) {
+      this.hits += 1;
+      if (!this.inflight.has(key)) {
+        // `wrap` voit l'entrée périmée comme absente : il lance le calcul,
+        // l'enregistre en vol (les appels concurrents s'y rattachent) et
+        // remplace l'entrée à la fin.
+        this.wrap(key, fn, ttlMs).catch(() => { /* l'ancienne valeur reste servie */ });
+      }
+      return e.value;
+    }
+    return this.wrap(key, fn, ttlMs);
+  }
 }

@@ -114,7 +114,7 @@ function confidenceFor(pct: number): BestBet['confidence'] {
 }
 
 /** `'YYYY-MM-DD'` du jour NHL (heure de l'Est), décalé de `n` jours. */
-function etDate(n: number, now = new Date()): string {
+export function etDate(n: number, now = new Date()): string {
   const today = now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
   const d = new Date(`${today}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
@@ -408,6 +408,13 @@ export function normalizeDate(raw: unknown, now = new Date()): string | undefine
  */
 const BEST_BETS_TTL = 60_000;
 const bestBetsCache = new TtlCache<BestBetsResult>(BEST_BETS_TTL, 50, 'best-bets');
+/**
+ * Passé le TTL, une liste de moins de 30 min est servie tout de suite pendant
+ * qu'un recalcul part en fond (`wrapSwr`, PERF_PLAN.md P1.2) : un calcul à
+ * froid faisait attendre 4,9 s. Les paris dont le match a commencé sont de
+ * toute façon retirés à l'affichage (`isPastGame`, BestBetsSection).
+ */
+const BEST_BETS_STALE_MS = Number(process.env.BEST_BETS_STALE_MS) || 30 * 60_000;
 
 /** Plafond de `limit` (cf. `normalizeOptions`) : c'est à cette profondeur que
  *  l'on calcule et met en cache, une fois pour toutes les valeurs demandées. */
@@ -450,7 +457,7 @@ export async function getBestBets(opts: BestBetsOptions = {}): Promise<BestBetsR
   // `mlDepth` n'entre plus dans la clé : il ne change plus le calcul.
   const key = `${o.date ?? o.days}|${o.maxPlayers}|${o.source}`;
 
-  const complet = await bestBetsCache.wrap(key, () => computeBestBets({ ...o, limit: LIMIT_MAX }));
+  const complet = await bestBetsCache.wrapSwr(key, () => computeBestBets({ ...o, limit: LIMIT_MAX }), BEST_BETS_STALE_MS);
 
   if (complet.bets.length <= o.limit) return complet;
   return { bets: complet.bets.slice(0, o.limit), meta: complet.meta };
