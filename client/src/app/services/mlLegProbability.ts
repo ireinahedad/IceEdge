@@ -18,7 +18,7 @@
  * `null` = le modèle n'a pas de chiffre pour ce pari. `buildLeg` retombe alors
  * sur les règles (le coupon a besoin d'un nombre) — même règle que la fiche.
  */
-import { fetchGameMlBundle, fetchMLProbability } from "../components/MLPredictionCard";
+import { fetchGameMlBundle, fetchMLProbability } from "./mlApi";
 import { mlBundleKey } from "../pages/prediction/gameMarkets";
 import { dispersionFor, ratePct } from "../pages/prediction/rateMath";
 import { nhlApiService, type RateStat } from "./nhlApiService";

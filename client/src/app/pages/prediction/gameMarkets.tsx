@@ -8,7 +8,7 @@
 
 import { nhlApiService } from "../../services/nhlApiService";
 import { normalizeMarket } from "../../services/predictionRequest";
-import type { MLPredictionResult } from "../../components/MLPredictionCard";
+import type { MLPredictionResult } from "../../services/mlApi";
 
 
 /* ─── Game Prediction ──────────────── */

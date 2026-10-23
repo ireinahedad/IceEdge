@@ -11,7 +11,7 @@ export type NewsFlag = 'goalie' | 'lineup' | 'transaction';
 
 export interface NewsItem {
   id: number;
-  source: 'bluesky' | 'manual';
+  source: 'bluesky' | 'manual' | 'nhl_roster';
   teams: string[];
   author: string;
   url: string;

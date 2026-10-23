@@ -16,11 +16,10 @@
  * `HockeyLanding` reste le seul export public : `routes.tsx` est inchangé.
  */
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { useNavigate, useNavigationType } from "react-router";
 import { ChevronLeft, ChevronRight, CalendarDays, Gamepad2 } from "lucide-react";
 import { BottomNav } from "../components/BottomNav";
-import { MarketSelectorSheet } from "../components/MarketSelectorSheet";
 import { ErrorState } from "../components/ErrorState";
 import { nhlApiService } from "../services/nhlApiService";
 import { useSport } from "../context/SportContext";
@@ -37,10 +36,15 @@ import { LiveGamesRow, SportSelector, UpcomingGameRow, gameIsoDay } from "./land
 import { dayHeading, groupByDay } from "../data/gameDay";
 import { useFoldState } from "../hooks/useFoldState";
 import { TeamCarousel } from "./landing/TeamCarousel";
-import { prefetchTeamRecords } from "./charts/teamSpace";
 import { ProUpsell } from "./landing/ProUpsell";
 import { AddSheetState, DisplayGame, extractSpreadOdds, toDisplayGame, toDisplayGameBase } from "./landing/landingTypes";
 
+
+// La feuille « ajouter un pari » ne s'ouvre qu'au toucher d'un match : son code
+// (et betMarkets, predictionShared, useNHLData…) sort du bundle principal et ne
+// se télécharge qu'à la première ouverture (PERF_PLAN.md, P2.1).
+const MarketSelectorSheet = lazy(() =>
+  import("../components/MarketSelectorSheet").then((m) => ({ default: m.MarketSelectorSheet })));
 
 // ─── Lazy section ───────────────────────────────────────────────────────────
 // Defers a section's rendering (and any data-fetching it does on mount) until it
@@ -259,8 +263,6 @@ export function HockeyLanding() {
           d.setDate(d.getDate() + offset);
           return { offset, d, dateStr: d.toISOString().split("T")[0] };
         });
-        // Fiches V-D-DP des cartes : en parallèle du calendrier (PERF_PLAN.md P1.3).
-        prefetchTeamRecords();
         const [live, range] = await Promise.all([
           nhlApiService.getLiveGames(),
           nhlApiService.getGamesRange(days[0].dateStr, days[days.length - 1].dateStr),
@@ -573,6 +575,7 @@ export function HockeyLanding() {
 
       {/* Market selector sheet */}
       {addSheet.open && (
+        <Suspense fallback={null}>
         <MarketSelectorSheet
           onClose={() => setAddSheet({ open: false })}
           preselectedSubject={
@@ -587,6 +590,7 @@ export function HockeyLanding() {
               : undefined
           }
         />
+        </Suspense>
       )}
 
       <BottomNav />

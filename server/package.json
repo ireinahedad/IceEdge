@@ -34,7 +34,8 @@
     "settle:stuck": "ts-node scripts/settle-stuck-slips.ts",
     "purge:stale": "ts-node scripts/purge-stale-slips.ts",
     "injuries:sync": "ts-node scripts/sync-injuries.ts",
-    "news:check": "ts-node scripts/check-news-sources.ts"
+    "news:check": "ts-node scripts/check-news-sources.ts",
+    "arb:scan": "ts-node scripts/arb-scan.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.665.0",

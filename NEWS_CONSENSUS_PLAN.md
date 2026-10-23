@@ -80,7 +80,20 @@ Le fil vaut ce que valent ses sources. Deviner des handles a échoué 9 fois sur
 - Coût : nul en production (script local). Plus de sources = plus d'appels
   Bluesky par tour, pas plus d'écritures Neon.
 
-### Étape 3 — F4, transactions par comparaison d'effectifs (1 session)
+### Étape 3 — F4, transactions par comparaison d'effectifs (1 session) — ✅ codé 2026-10-23
+
+Livré dans le code (pas encore en production) : `newsRoster.ts` (pur : lecture,
+comparaison, extraits, échéance), `newsRoster.service.ts` (appels + 1 transaction),
+appel en fin de `runNewsSync`, migration 048. Choix faits en route :
+- Un joueur retiré de A et ajouté à B le même jour = UNE nouvelle « moved » (A et B).
+- 1er jour : base enregistrée, aucune nouvelle. Plus de 8 mouvements dans une équipe
+  (bascule de saison, réponse anormale) : rebase sans nouvelle.
+- Équipe illisible : pas comparée, sa veille reste. Écriture refusée (048 absente) :
+  tout est annulé, les écarts reviennent le lendemain — rien de perdu.
+- Extraits en anglais comme le reste du fil (« Roster move: … leaves TOR for VGK. »),
+  auteur « NHL.com », lien `https://www.nhl.com/player/<id>`. Pas d'alerte admin.
+
+Plan d'origine :
 
 Remplace le canal #league-transactions sans PuckPedia.
 

@@ -116,3 +116,6 @@ docs/REGISTRE_INCIDENTS.md
 
 # Pages SBRO aspirées (lues par fetch_data_v4.py) : pas à redistribuer publiquement.
 ml/data/raw/odds/*.html
+
+# Journal local du scanner d'arbitrages (scripts/arb-scan.ts)
+server/arb-log.jsonl

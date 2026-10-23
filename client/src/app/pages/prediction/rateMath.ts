@@ -6,7 +6,7 @@
  * `/predictions/player-rates/...` et doivent en tirer le même chiffre pour le
  * même pari.
  */
-import type { MLPredictionResult } from "../../components/MLPredictionCard";
+import type { MLPredictionResult } from "../../services/mlApi";
 import type { PlayerRatesResponse, RateStat } from "../../services/nhlApiService";
 
 /**

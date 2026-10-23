@@ -11,6 +11,8 @@
  * • Un tour sans publication nouvelle ne fait que le verrou + 1 INSERT vide.
  * • La lecture publique (`listNews`) passe par un cache mémoire de 2 min.
  * • Opt-in : `NEWS_SYNC_ENABLED=true`, et rien en mode DORMANT (server.ts).
+ * • F4 (transactions par effectifs) : 1er tour après midi ET seulement,
+ *   voir `newsRoster.service.ts` (32 appels LNH, 1 transaction par jour).
  *
  * Le calendrier est un `setTimeout` réarmé à chaque tour, et non un
  * `setInterval` : la cadence change selon l'heure.
@@ -24,6 +26,7 @@ import { TtlCache } from './ttlCache';
 import { fetchGamesByDate } from './nhlApiClient';
 import { sendToUsers, pushEnabled } from './push.service';
 import { NEWS_SOURCES, type NewsSource } from '../data/newsSources';
+import { runRosterDiffIfDue, type RosterRunResult } from './newsRoster.service';
 import {
   parseAuthorFeed, teamsForPost, flagsOf, excerptOf, nextDelayMs, inGameWindow,
   type FeedPost, type NewsFlag,
@@ -166,7 +169,7 @@ async function notifyAdmins(rows: NewRow[]): Promise<void> {
 
 // ── Un tour ────────────────────────────────────────────────────────────────
 
-export async function runNewsSync(): Promise<{ read: number; inserted: number; alerted: number; nextMs: number }> {
+export async function runNewsSync(): Promise<{ read: number; inserted: number; alerted: number; roster: RosterRunResult; nextMs: number }> {
   const { teams: playing, startsUtc, startByTeam } = await todaysGames();
   const now = Date.now();
   const windowOpen = inGameWindow(now, startsUtc);
@@ -198,9 +201,11 @@ export async function runNewsSync(): Promise<{ read: number; inserted: number; a
   const toAlert = inserted.filter((r) => alertWorthy(r, startByTeam, Date.now()));
   await notifyAdmins(toAlert).catch((err: any) => logger.warn({ err: err?.message }, '[NewsSync] alerte admin échouée'));
   await purgeOnceADay().catch((err: any) => logger.warn({ err: err?.message }, '[NewsSync] purge échouée'));
-  if (inserted.length > 0) cache.clear();
+  // F4 : n'alerte pas (drapeau `transaction` seul) et ne lève jamais.
+  const roster = await runRosterDiffIfDue(Date.now());
+  if (inserted.length > 0 || (roster.inserted ?? 0) > 0) cache.clear();
 
-  return { read: sources.length, inserted: inserted.length, alerted: toAlert.length, nextMs: nextDelayMs(Date.now(), startsUtc) };
+  return { read: sources.length, inserted: inserted.length, alerted: toAlert.length, roster, nextMs: nextDelayMs(Date.now(), startsUtc) };
 }
 
 // ── Calendrier ─────────────────────────────────────────────────────────────
@@ -238,7 +243,7 @@ export function startNewsSync(): void {
 
 export interface NewsItem {
   id: number;
-  source: 'bluesky' | 'manual';
+  source: 'bluesky' | 'manual' | 'nhl_roster';
   teams: string[];
   author: string;
   url: string;
