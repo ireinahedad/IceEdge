@@ -17,7 +17,7 @@
 
 import type { Analysis } from '../llmAnalysis';
 import { ungroundedNumbers, restatesProbability, contradictsMarket, GENERIC_PHRASES } from '../llmAnalysis';
-import type { Facts } from '../llmFacts';
+import { groundingText, type Facts } from '../llmFacts';
 
 export { GENERIC_PHRASES };
 
@@ -41,7 +41,7 @@ export function scoreAnalysis(a: Analysis, facts: Facts, limits: Limits = LLM_LI
   const failures: string[] = [];
   const body = [a.headline, ...a.drivers.map(d => d.text)].join(' ');
 
-  const bad = ungroundedNumbers(body, facts.text);
+  const bad = ungroundedNumbers(body, groundingText(facts));
   if (bad.length) failures.push(`chiffres hors faits : ${bad.join(', ')}`);
 
   const generic = GENERIC_PHRASES.filter(re => re.test(body)).map(re => re.source);

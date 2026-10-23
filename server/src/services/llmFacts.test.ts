@@ -261,3 +261,54 @@ describe('buildGameFacts — absents officiels', () => {
     expect(c.evidence).not.toMatch(/\d (contre|vs)/);
   });
 });
+
+describe('buildGameFacts — nouvelles (étape 4 : contexte, pas modèle)', () => {
+  const NOW = Date.parse('2026-10-23T22:30:00Z');
+  const news = (over: Record<string, unknown> = {}): any => ({
+    team: 'WPG', author: 'Winnipeg Jets', postedAt: '2026-10-23T21:50:00Z',
+    excerpt: 'Connor Hellebuyck will start in goal tonight, #37 back after 2 games.', flags: ['goalie'], ...over,
+  });
+  const base = { bet: ml, result: result(), features: features({ home_goalie: 'A', away_goalie: 'B' }), lambdaHome: 3, lambdaAway: 3, locale: 'fr' as const, now: NOW };
+
+  it('aucune nouvelle → bloc absent, texte inchangé', () => {
+    const a = buildGameFacts(base);
+    const b = buildGameFacts({ ...base, news: [] });
+    expect(b.text).toBe(a.text);
+    expect(b.groundText).toBeUndefined();
+    expect(b.text).not.toContain('NOUVELLES');
+  });
+
+  it('ajoute un bloc cité, sans toucher le chiffre, les candidats ni la réserve', () => {
+    const a = buildGameFacts(base);
+    const b = buildGameFacts({ ...base, news: [news()] });
+    expect(b.summary).toEqual(a.summary);
+    expect(b.candidates).toEqual(a.candidates);
+    expect(b.caveat).toBe(a.caveat);
+    expect(b.groundText).toBe(a.text);
+    expect(b.newsCount).toBe(1);
+    expect(b.text).toContain('NOUVELLES (publications citées, NON intégrées au chiffre du modèle');
+    expect(b.text).toContain('- WPG · gardien · Winnipeg Jets, il y a 40 min : « Connor Hellebuyck will start in goal tonight, #37 back after 2 games. »');
+  });
+
+  it('au plus 3 nouvelles, texte de tiers nettoyé', () => {
+    const many = Array.from({ length: 6 }, (_, i) => news({ excerpt: `post ${i} «x» "y"\u0007z`, flags: ['lineup'] }));
+    const f = buildGameFacts({ ...base, locale: 'en', news: many });
+    expect(f.newsCount).toBe(3);
+    expect(f.text).toContain('NEWS (quoted posts, NOT built into the model figure');
+    expect(f.text).toContain("- WPG · lineup · Winnipeg Jets, 40 min ago : « post 0 'x' 'y' z »");
+    expect(f.text).not.toContain('post 3');
+  });
+
+  it('match en cours : aucune nouvelle', () => {
+    const f = buildGameFacts({ ...base, liveLabel: '2e période, 1–0', news: [news()] });
+    expect(f.text).not.toContain('NOUVELLES');
+  });
+
+  it('pire cas (3 nouvelles au maximum) : le bloc reste sous le plafond de l’invite utilisateur', () => {
+    const long = news({ author: 'A'.repeat(200), excerpt: 'x'.repeat(500) });
+    const a = buildGameFacts(base);
+    const f = buildGameFacts({ ...base, news: [long, long, long, long] });
+    expect(f.text.length - a.text.length).toBeLessThan(1_100); // en-tête + 3 × (auteur ≤ 60, extrait ≤ 200)
+    expect(f.text.length).toBeLessThan(8_000); // LLM_MAX_PROMPT_CHARS par défaut (llmQuota.service)
+  });
+});

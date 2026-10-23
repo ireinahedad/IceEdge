@@ -140,3 +140,26 @@ describe('validateAnalysis — questions de suivi inventées', () => {
     expect(validateAnalysis(raw, facts, 'fr').followups).toEqual(['Et si le repos tombe à 2 j ?']);
   });
 });
+
+describe('nouvelles : leurs chiffres ne valent pas ancrage', () => {
+  const withNews = () => buildGameFacts({
+    bet: over, features, lambdaHome: 3.4, lambdaAway: 2.63, locale: 'fr', now: Date.parse('2026-10-23T22:30:00Z'),
+    result: { probability: 62, confidence: 70, model_version: 'v', model_type: 't', explanation: '', feature_importances: [] } as any,
+    news: [{ team: 'WPG', author: 'Jets', postedAt: '2026-10-23T22:00:00Z', excerpt: 'Scheifele out until game 49', flags: ['lineup'] }],
+  });
+
+  it('« 49 » est dans l’invite mais pas dans les chiffres autorisés', () => {
+    const f = withNews();
+    expect(f.text).toContain('until game 49');
+    expect(ungroundedNumbers('absent 49 matchs', f.text)).toEqual([]);
+    expect(ungroundedNumbers('absent 49 matchs', f.groundText!)).toEqual([49]);
+  });
+
+  it('même réponse : acceptée sans le chiffre de la nouvelle, refusée avec', () => {
+    const f = withNews();
+    const c = f.candidates[0];
+    const ok = (headline: string) => JSON.stringify({ headline, drivers: [{ key: c.key, text: c.evidence }], followups: [] });
+    expect(validateAnalysis(ok(`Scheifele absent ; ${c.evidence}`), f, 'fr').source).toBe('llm');
+    expect(validateAnalysis(ok(`Scheifele absent 49 matchs ; ${c.evidence}`), f, 'fr').source).toBe('fallback');
+  });
+});

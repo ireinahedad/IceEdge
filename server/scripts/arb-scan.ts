@@ -7,6 +7,14 @@
  *   npm run arb:scan -- --extras             → + marchés par match : 3-way, alternatifs, périodes, totaux d'équipe
  *   npm run arb:scan -- --props              → + props joueurs (points, buts, tirs, arrêts…)
  *   npm run arb:scan -- --bankroll 500 --round 5 --min 1 --books draftkings,fanduel,pinnacle
+ *   npm run arb:scan -- --replay latest      → ré-analyse le dernier scan sauvegardé, 0 crédit
+ *   npm run arb:scan -- --replay arb-snapshots/2026-10-24T23-05-00-000Z.json --min 0 --near 10
+ *   npm run arb:scan -- --near 10            → affiche aussi les 10 marchés les plus proches d'un arbitrage
+ *
+ * SAUVEGARDE. Chaque scan réel est enregistré dans `server/arb-snapshots/` (même
+ * format que les données démo, ignoré par git, les `ARB_SNAPSHOT_KEEP` derniers
+ * gardés — défaut 500). `--replay` les ré-analyse avec d'autres filtres sans
+ * dépenser un crédit. `--no-save` pour ne pas sauvegarder.
  *
  * Toute la logique de détection est dans `src/services/arb/arbScanner.ts` (pure,
  * testée). Ce script ne fait que : récupérer les cotes, protéger le quota,
@@ -30,12 +38,15 @@
  *   ARB_EXTRAS_TTL_MIN   cache des marchés par match, en minutes (défaut 60)
  *   ARB_DISCORD_WEBHOOK  webhook Discord : alerte à chaque NOUVEL arbitrage (facultatif)
  *   ARB_LOG_FILE         journal JSONL (défaut server/arb-log.jsonl, ignoré par git)
+ *   ARB_SNAPSHOT_DIR     dossier des scans sauvegardés (défaut server/arb-snapshots)
+ *   ARB_SNAPSHOT_KEEP    nombre de scans gardés (défaut 500)
  */
 
 import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
-import { findArbs, ArbEvent, ArbOpportunity, ArbBookmaker } from '../src/services/arb/arbScanner';
+import { findArbs, ArbEvent, ArbOpportunity, ArbBookmaker, NearMarket } from '../src/services/arb/arbScanner';
+import { fmtAmerican } from '../src/services/arb/arbCalc';
 
 const ODDS_BASE = 'https://api.the-odds-api.com/v4';
 const API_KEY = (process.env.ARB_ODDS_API_KEY || process.env.ODDS_API_KEY || '').trim();
@@ -67,11 +78,20 @@ const EXTRAS_TTL_MS = readNum('ARB_EXTRAS_TTL_MIN', 60) * 60_000;
 const DISCORD_WEBHOOK = (process.env.ARB_DISCORD_WEBHOOK || '').trim();
 const LOG_FILE = path.resolve(process.env.ARB_LOG_FILE || path.resolve(__dirname, '..', 'arb-log.jsonl'));
 const FIXTURE = path.resolve(__dirname, '..', 'src', 'services', 'arb', '__fixtures__', 'arb-sample.json');
+const SNAP_DIR = path.resolve(process.env.ARB_SNAPSHOT_DIR || path.resolve(__dirname, '..', 'arb-snapshots'));
+const SNAP_KEEP = Math.max(1, Math.round(readNum('ARB_SNAPSHOT_KEEP', 500)));
 
 // ─── Arguments ───────────────────────────────────────────────────────────────
 
 interface Args {
   demo: boolean;
+  /** Fichier à ré-analyser (démo = données fictives), ou null pour un scan réel. */
+  replay: string | null;
+  save: boolean;
+  /** Marchés « presque arbitrage » affichés. */
+  near: number;
+  /** Les afficher même quand il y a des arbitrages (`--near` explicite). */
+  nearAlways: boolean;
   watch: number;       // secondes entre deux scans ; 0 = un seul scan
   extras: boolean;
   props: boolean;
@@ -86,7 +106,8 @@ interface Args {
 
 function parseArgs(argv: string[]): Args {
   const a: Args = {
-    demo: false, watch: 0, extras: false, props: false, bankroll: 1000, round: 1, min: 0.5,
+    demo: false, replay: null, save: true, near: 3, nearAlways: false,
+    watch: 0, extras: false, props: false, bankroll: 1000, round: 1, min: 0.5,
     books: (process.env.ARB_BOOKS || '').split(',').map((s) => s.trim()).filter(Boolean),
     sport: 'icehockey_nhl', horizonH: 12, log: true,
   };
@@ -100,7 +121,10 @@ function parseArgs(argv: string[]): Args {
   for (let i = 0; i < argv.length; i++) {
     const f = argv[i];
     switch (f) {
-      case '--demo': a.demo = true; break;
+      case '--demo': a.demo = true; a.replay = FIXTURE; break;
+      case '--replay': a.replay = resolveReplay(String(argv[++i] || '')); break;
+      case '--no-save': a.save = false; break;
+      case '--near': a.near = Math.round(num(f, argv[++i])); a.nearAlways = true; break;
       case '--watch': a.watch = num(f, argv[++i]); break;
       case '--extras': a.extras = true; break;
       case '--props': a.props = true; break;
@@ -119,8 +143,57 @@ function parseArgs(argv: string[]): Args {
     }
   }
   if (a.watch > 0 && a.watch < 30) throw new Error('--watch : 30 s minimum (quota)');
+  if (a.watch > 0 && a.replay) throw new Error('--watch ne marche qu\'avec un scan réel (pas --demo ni --replay)');
   if (a.books.length < 2) throw new Error('Il faut au moins 2 livres pour comparer');
   return a;
+}
+
+// ─── Sauvegarde / relecture des scans ────────────────────────────────────────
+
+interface Snapshot { now: string; events: ArbEvent[] }
+
+function listSnapshots(): string[] {
+  try {
+    return fs.readdirSync(SNAP_DIR).filter((f) => f.endsWith('.json')).sort();
+  } catch {
+    return [];
+  }
+}
+
+/** `latest` → dernier scan sauvegardé ; sinon un chemin de fichier. */
+function resolveReplay(arg: string): string {
+  if (!arg) throw new Error('--replay attend un fichier ou « latest »');
+  if (arg === 'latest') {
+    const all = listSnapshots();
+    if (!all.length) throw new Error(`Aucun scan sauvegardé dans ${SNAP_DIR} — lance d'abord un scan réel.`);
+    return path.join(SNAP_DIR, all[all.length - 1]);
+  }
+  const p = path.resolve(arg);
+  if (!fs.existsSync(p)) throw new Error(`Fichier introuvable : ${p}`);
+  return p;
+}
+
+function loadSnapshot(file: string): { now: Date; events: ArbEvent[] } {
+  const snap = JSON.parse(fs.readFileSync(file, 'utf8')) as Snapshot;
+  if (!Array.isArray(snap.events)) throw new Error(`Format inattendu : ${file}`);
+  const now = new Date(snap.now);
+  return { now: Number.isFinite(now.getTime()) ? now : new Date(), events: snap.events };
+}
+
+/** Sauvegarde les cotes brutes du scan (format identique aux données démo), puis élague. */
+function saveSnapshot(now: Date, events: ArbEvent[]): void {
+  try {
+    fs.mkdirSync(SNAP_DIR, { recursive: true });
+    const name = `${now.toISOString().replace(/[:.]/g, '-')}.json`;
+    const snap: Snapshot = { now: now.toISOString(), events };
+    fs.writeFileSync(path.join(SNAP_DIR, name), JSON.stringify(snap));
+    const all = listSnapshots();
+    for (const f of all.slice(0, Math.max(0, all.length - SNAP_KEEP))) {
+      fs.unlinkSync(path.join(SNAP_DIR, f));
+    }
+  } catch (err) {
+    console.error(`  ✗ Sauvegarde du scan : ${(err as Error).message}`);
+  }
 }
 
 // ─── Appels The Odds API, avec garde-fou de quota ────────────────────────────
@@ -255,13 +328,26 @@ function printOpp(o: ArbOpportunity, i: number, now: Date): void {
   const flag = o.suspect ? ' [SUSPECT]' : '';
   console.log(`\n[${i + 1}] +${o.profitPct.toFixed(2)} %${flag}  ${o.match}  —  ${marketLabel(o)}  —  ${until(o.commenceTime, now)}`);
   for (const l of o.legs) {
-    console.log(`    ${l.side.padEnd(30)} @ ${l.price.toFixed(2).padStart(5)}  ${l.bookmakerTitle.padEnd(14)} → miser ${l.stakeRounded} $`);
+    const price = `${l.price.toFixed(2)} (${fmtAmerican(l.price)})`;
+    console.log(`    ${l.side.padEnd(30)} @ ${price.padEnd(13)} ${l.bookmakerTitle.padEnd(14)} → miser ${l.stakeRounded} $`);
   }
   const totalRounded = o.legs.reduce((s, l) => s + l.stakeRounded, 0);
   console.log(`    Profit garanti : ${money(o.guaranteedProfit)} sur ${o.bankroll} $` +
     (o.guaranteedProfitRounded !== o.guaranteedProfit
       ? ` (mises arrondies : ${money(o.guaranteedProfitRounded)} sur ${totalRounded} $)` : ''));
   for (const w of o.warnings) console.log(`    ! ${w}`);
+}
+
+function printNear(list: NearMarket[]): void {
+  if (!list.length) return;
+  console.log(`\n   Marchés les plus proches d'un arbitrage :`);
+  for (const n of list) {
+    const gap = n.impliedSum >= 1
+      ? `à ${n.gapPct.toFixed(2)} % d'un arbitrage`
+      : `arbitrage +${((1 / n.impliedSum - 1) * 100).toFixed(2)} % (sous le seuil)`;
+    console.log(`   · Σ ${n.impliedSum.toFixed(4)}  ${gap}  —  ${n.label}`);
+    console.log(`       ${n.legs.map((l) => `${l.side} @ ${l.price.toFixed(2)} ${l.bookmakerTitle}`).join('  |  ')}`);
+  }
 }
 
 function discordText(o: ArbOpportunity, now: Date): string {
@@ -299,33 +385,33 @@ async function scanOnce(args: Args): Promise<void> {
   let events: ArbEvent[];
   let now = new Date();
 
-  if (args.demo) {
-    const fx = JSON.parse(fs.readFileSync(FIXTURE, 'utf8')) as { now: string; events: ArbEvent[] };
-    events = fx.events;
-    now = new Date(fx.now);
+  if (args.replay) {
+    const snap = loadSnapshot(args.replay);
+    events = snap.events;
+    now = snap.now;
   } else {
     events = await fetchEvents(args);
+    if (args.save && events.length) saveSnapshot(now, events);
   }
 
   const { opportunities, stats } = findArbs(events, {
     now, bankroll: args.bankroll, roundTo: args.round, minProfitPct: args.min,
-    books: args.books,
+    books: args.books, nearCount: args.near,
   });
 
   const credits = args.demo ? 'démo, 0 crédit'
+    : args.replay ? `relecture de ${path.basename(args.replay)}, 0 crédit`
     : `${spentThisScan} crédit(s) utilisé(s), solde ${remaining ?? '?'}`;
   console.log(`\n── Scan ${now.toISOString().slice(0, 16).replace('T', ' ')} UTC · ${stats.events} matchs · ` +
     `${stats.groupsCompared} marchés comparés · ${credits}`);
   console.log(bookCoverage(events, args.books));
   if (stats.quotesSkippedStale) console.log(`   (${stats.quotesSkippedStale} cote(s) trop vieille(s) ignorée(s))`);
 
-  if (!opportunities.length) {
-    console.log(`   Aucun arbitrage ≥ ${args.min} %.` +
-      (stats.closest ? ` Le plus proche : ${stats.closest.label} (Σ = ${stats.closest.impliedSum})` : ''));
-  }
+  if (!opportunities.length) console.log(`   Aucun arbitrage ≥ ${args.min} %.`);
   opportunities.forEach((o, i) => printOpp(o, i, now));
+  if (!opportunities.length || args.nearAlways) printNear(stats.nearest);
 
-  if (args.demo) return;
+  if (args.replay) return;
 
   const fresh = opportunities.filter((o) => !alreadyAlerted.has(o.id));
   fresh.forEach((o) => alreadyAlerted.add(o.id));
@@ -339,7 +425,7 @@ async function scanOnce(args: Args): Promise<void> {
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
-  if (!args.demo) {
+  if (!args.replay) {
     if (!API_KEY) throw new Error('Aucune clé : pose ARB_ODDS_API_KEY (ou ODDS_API_KEY) dans server/.env, ou lance --demo');
     if (args.books.length > 10) {
       console.warn(`! ${args.books.length} livres = ${Math.ceil(args.books.length / 10)} régions facturées : chaque appel coûte plus cher.`);
@@ -353,7 +439,7 @@ async function main(): Promise<void> {
   console.log('et que les deux livres règlent le marché pareil (prolongation, tirs de barrage, joueur absent).');
 
   await scanOnce(args);
-  if (args.watch > 0 && !args.demo) {
+  if (args.watch > 0 && !args.replay) {
     console.log(`\nSurveillance toutes les ${args.watch} s — Ctrl+C pour arrêter.`);
     // eslint-disable-next-line no-constant-condition
     while (true) {

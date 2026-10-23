@@ -107,6 +107,23 @@ describe('findArbs sur les données démo', () => {
     expect(r.opportunities.some((o) => o.market === 'totals' && o.eventId === 'evt-tor-bos')).toBe(false);
   });
 
+  it('nearest : marchés non signalés, du plus proche au moins proche', () => {
+    expect(stats.nearest.length).toBeGreaterThan(0);
+    expect(stats.nearest.length).toBeLessThanOrEqual(5);
+    // Le h2h Montréal–Edmonton (+0.19 %, sous le seuil) est le plus proche.
+    expect(stats.nearest[0].label).toContain('Montréal Canadiens · h2h');
+    expect(stats.nearest[0].gapPct).toBeLessThan(0);
+    // Puis le spread −1.5 Toronto–Boston (Σ ≈ 1.0006).
+    expect(stats.nearest[1].label).toContain('spreads');
+    expect(stats.nearest[1].impliedSum).toBeCloseTo(1.0006, 4);
+    for (let i = 1; i < stats.nearest.length; i++) {
+      expect(stats.nearest[i].impliedSum).toBeGreaterThanOrEqual(stats.nearest[i - 1].impliedSum);
+    }
+    // Aucun arbitrage signalé ne figure dans la liste.
+    expect(stats.nearest.some((n) => n.label.includes('Seattle'))).toBe(false);
+    expect(findArbs(fixture.events, { now: NOW, nearCount: 1 }).stats.nearest).toHaveLength(1);
+  });
+
   it('le spread −1.5 / +1.5 est comparé (proche mais pas arbitrage)', () => {
     expect(find('spreads', 'evt-tor-bos')).toBeUndefined();
     const r = findArbs(fixture.events, { now: NOW, minProfitPct: -5 });

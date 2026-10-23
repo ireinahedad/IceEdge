@@ -129,6 +129,17 @@ export interface ScanOptions {
   books?: string[];
   /** Marchés autorisés (clés). Vide = tous. */
   markets?: string[];
+  /** Nombre de marchés « presque arbitrage » à renvoyer dans `stats.nearest`. Défaut 5. */
+  nearCount?: number;
+}
+
+/** Marché comparé qui n'est PAS un arbitrage signalé, avec son écart. */
+export interface NearMarket {
+  label: string;
+  impliedSum: number;
+  /** Écart à l'arbitrage, en % : (Σ − 1) × 100. Négatif = arbitrage sous le seuil. */
+  gapPct: number;
+  legs: Array<{ side: string; bookmakerTitle: string; price: number }>;
 }
 
 export interface ScanStats {
@@ -140,6 +151,8 @@ export interface ScanStats {
   groupsCompared: number;
   /** Le marché le plus proche d'un arbitrage, même s'il n'en est pas un. */
   closest?: { label: string; impliedSum: number };
+  /** Les `nearCount` marchés non signalés les plus proches d'un arbitrage, du plus proche au moins proche. */
+  nearest: NearMarket[];
 }
 
 export interface ScanResult {
@@ -283,11 +296,13 @@ export function findArbs(events: ArbEvent[], opts: ScanOptions = {}): ScanResult
   const books = new Set((opts.books ?? []).map(norm).filter(Boolean));
   const markets = new Set((opts.markets ?? []).map(norm).filter(Boolean));
 
+  const nearCount = opts.nearCount ?? 5;
   const stats: ScanStats = {
     events: events.length, eventsSkippedTime: 0, quotesSkippedStale: 0,
-    quotesSkippedQuarterLine: 0, groupsCompared: 0,
+    quotesSkippedQuarterLine: 0, groupsCompared: 0, nearest: [],
   };
   const opportunities: ArbOpportunity[] = [];
+  const near: NearMarket[] = [];
 
   for (const ev of events) {
     const start = Date.parse(ev.commence_time);
@@ -349,7 +364,13 @@ export function findArbs(events: ArbEvent[], opts: ScanOptions = {}): ScanResult
       }
 
       const pct = profitPct(prices);
-      if (pct < minProfitPct || sum >= 1) continue;
+      if (pct < minProfitPct || sum >= 1) {
+        near.push({
+          label, impliedSum: round4(sum), gapPct: round2((sum - 1) * 100),
+          legs: quotes.map((q) => ({ side: q.side, bookmakerTitle: q.bookmakerTitle, price: q.price })),
+        });
+        continue;
+      }
 
       const stakes = arbStakes(prices, bankroll);
       const rounded = bestRoundedStakes(stakes, prices, roundTo);
@@ -400,6 +421,7 @@ export function findArbs(events: ArbEvent[], opts: ScanOptions = {}): ScanResult
   }
 
   opportunities.sort((a, b) => b.profitPct - a.profitPct);
+  stats.nearest = near.sort((a, b) => a.impliedSum - b.impliedSum).slice(0, nearCount);
   return { opportunities, stats };
 }
 

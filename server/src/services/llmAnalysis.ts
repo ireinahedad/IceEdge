@@ -17,7 +17,7 @@
  */
 
 import { LANGUAGE_RULE } from './llmPrompts';
-import type { Candidate, CandidateSide, CandidateTier, Facts, FactsLocale, FactsSummary, FactTag, StatusItem } from './llmFacts';
+import { groundingText, type Candidate, type CandidateSide, type CandidateTier, type Facts, type FactsLocale, type FactsSummary, type FactTag, type StatusItem } from './llmFacts';
 
 // ─── Invite système ───────────────────────────────────────────────────────────
 
@@ -40,6 +40,7 @@ export const EXPLAIN_BET_V2: Record<FactsLocale, string> = {
     "MAJEUR = poids élevé, POUR ou CONTRE : s'il y en a un, n'écris jamais « aucun facteur majeur ». " +
     "N'écris « suit le marché » que si l'écart modèle − marché est inférieur à 4 pts. " +
     "Plus court vaut mieux que rempli. Chiffres au format français (virgule).\n" +
+    "NOUVELLES : publications citées, hors du chiffre. Un absent ou un gardien annoncé : signale-le dans headline ou followups, sans en reprendre de chiffre.\n" +
     LANGUAGE_RULE.fr + " Les valeurs de \"key\" restent telles quelles.",
   en:
     "You write the note for an NHL bet in a predictions app. The reader compares several bets in seconds.\n" +
@@ -58,6 +59,7 @@ export const EXPLAIN_BET_V2: Record<FactsLocale, string> = {
     "If no factor is MAJOR, say so in headline and keep a single driver; MAJOR = high weight, FOR or AGAINST: if one exists, never write \"no major factor\". " +
     "Write 'follows the market' only if the model − market gap is under 4 pts. " +
     "Shorter beats filled. Numbers in plain English format.\n" +
+    "NEWS: quoted posts, outside the figure. An announced absence or starting goalie: flag it in headline or followups, reusing none of its numbers.\n" +
     LANGUAGE_RULE.en + ' Keep "key" values as-is.',
 };
 
@@ -175,7 +177,7 @@ export function validateAnalysis(raw: string, facts: Facts, locale: FactsLocale)
     const body = [headline, ...kept.map(k => k.text)].join(' ');
     const ok = headline.length > 0
       && (kept.length > 0 || facts.candidates.length === 0)
-      && ungroundedNumbers(body, facts.text).length === 0
+      && ungroundedNumbers(body, groundingText(facts)).length === 0
       && !GENERIC_PHRASES.some(re => re.test(body))
       && !restatesProbability(headline, facts.summary.modelPct)
       && !contradictsMarket(headline, facts.summary.edgePts)
@@ -184,7 +186,7 @@ export function validateAnalysis(raw: string, facts: Facts, locale: FactsLocale)
       const followups = (Array.isArray(j.followups) ? j.followups : [])
         .filter((q: unknown): q is string => typeof q === 'string' && q.trim().length > 3
           // Une question qui cite un chiffre absent des faits (« le score de 2–0 ? » avant le match) est inventée.
-          && ungroundedNumbers(q, facts.text).length === 0)
+          && ungroundedNumbers(q, groundingText(facts)).length === 0)
         .map((q: string) => clip(q.trim(), 90)).slice(0, 2);
       return {
         headline,
