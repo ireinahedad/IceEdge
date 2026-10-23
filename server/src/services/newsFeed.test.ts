@@ -121,10 +121,17 @@ describe('sources lues et alertes', () => {
   it('hors fenêtre : toutes', () => {
     expect(sourcesFor(all, false, new Set())).toHaveLength(3);
   });
-  it('alerte : absent/gardien ET équipe qui joue aujourd’hui', () => {
-    const playing = new Set(['VGK']);
-    expect(alertWorthy({ team_abbrs: ['VGK'], flags: ['lineup'] }, playing)).toBe(true);
-    expect(alertWorthy({ team_abbrs: ['VGK'], flags: ['transaction'] }, playing)).toBe(false);
-    expect(alertWorthy({ team_abbrs: ['TOR'], flags: ['goalie'] }, playing)).toBe(false);
+  it('alerte : absent/gardien, récent, et match PAS ENCORE commencé', () => {
+    const now = T('2026-10-23T21:00:00Z');
+    const starts = new Map([['VGK', T('2026-10-24T00:00:00Z')], ['TOR', T('2026-10-23T20:00:00Z')]]);
+    const fresh = '2026-10-23T20:30:00Z';
+    expect(alertWorthy({ team_abbrs: ['VGK'], flags: ['lineup'], posted_at: fresh }, starts, now)).toBe(true);
+    expect(alertWorthy({ team_abbrs: ['VGK'], flags: ['transaction'], posted_at: fresh }, starts, now)).toBe(false);
+    // TOR a déjà commencé : trop tard pour saisir quoi que ce soit.
+    expect(alertWorthy({ team_abbrs: ['TOR'], flags: ['goalie'], posted_at: fresh }, starts, now)).toBe(false);
+    // Équipe qui ne joue pas aujourd'hui.
+    expect(alertWorthy({ team_abbrs: ['BOS'], flags: ['goalie'], posted_at: fresh }, starts, now)).toBe(false);
+    // Publication de plus de 3 h : historique du 1er tour, pas une nouvelle.
+    expect(alertWorthy({ team_abbrs: ['VGK'], flags: ['lineup'], posted_at: '2026-10-23T17:00:00Z' }, starts, now)).toBe(false);
   });
 });

@@ -55,26 +55,36 @@ export async function fetchAuthorFeed(handle: string): Promise<FeedPost[]> {
   }
 }
 
-interface TodayGames { teams: Set<string>; startsUtc: number[]; }
+interface TodayGames {
+  teams: Set<string>;
+  startsUtc: number[];
+  /** Équipe → heure de mise au jeu (ms UTC). Sert à n'alerter que AVANT le match. */
+  startByTeam: Map<string, number>;
+}
 
 async function todaysGames(): Promise<TodayGames> {
   try {
     const games = await fetchGamesByDate(todayET());
     const teams = new Set<string>();
     const startsUtc: number[] = [];
+    const startByTeam = new Map<string, number>();
     for (const g of games) {
       const home = g.homeTeam?.abbreviation;
       const away = g.awayTeam?.abbreviation;
       if (home) teams.add(String(home));
       if (away) teams.add(String(away));
       const t = Date.parse(g.startTimeUTC ?? '');
-      if (Number.isFinite(t)) startsUtc.push(t);
+      if (Number.isFinite(t)) {
+        startsUtc.push(t);
+        if (home) startByTeam.set(String(home), t);
+        if (away) startByTeam.set(String(away), t);
+      }
     }
-    return { teams, startsUtc };
+    return { teams, startsUtc, startByTeam };
   } catch (err: any) {
     // Sans calendrier : cadence d'une heure, toutes les sources. Pas d'arrêt.
     logger.warn({ err: err?.message }, '[NewsSync] calendrier LNH indisponible');
-    return { teams: new Set(), startsUtc: [] };
+    return { teams: new Set(), startsUtc: [], startByTeam: new Map() };
   }
 }
 
@@ -86,7 +96,7 @@ export function sourcesFor(all: NewsSource[], windowOpen: boolean, playing: Set<
 
 // ── Écriture ───────────────────────────────────────────────────────────────
 
-interface NewRow { id: number; team_abbrs: string[]; flags: NewsFlag[]; author: string; excerpt: string; url: string; }
+interface NewRow { id: number; team_abbrs: string[]; flags: NewsFlag[]; author: string; excerpt: string; url: string; posted_at: Date; }
 
 async function insertPosts(rows: Array<{ post: FeedPost; teams: string[]; flags: NewsFlag[] }>): Promise<NewRow[]> {
   if (rows.length === 0) return [];
@@ -103,7 +113,7 @@ async function insertPosts(rows: Array<{ post: FeedPost; teams: string[]; flags:
     `INSERT INTO news_items (source, external_id, team_abbrs, author, url, excerpt, flags, posted_at)
      VALUES ${values.join(', ')}
      ON CONFLICT (source, external_id) DO NOTHING
-     RETURNING id, team_abbrs, flags, author, excerpt, url`,
+     RETURNING id, team_abbrs, flags, author, excerpt, url, posted_at`,
     params,
   );
   return inserted;
@@ -119,10 +129,26 @@ async function purgeOnceADay(): Promise<void> {
 
 // ── Alerte admin ───────────────────────────────────────────────────────────
 
-/** Ne mérite une alerte que ce qui touche un match d'AUJOURD'HUI et l'alignement. */
-export function alertWorthy(row: { team_abbrs: string[]; flags: string[] }, playing: Set<string>): boolean {
+/** Au-delà, la publication est de l'historique (1er tour, redémarrage), pas une nouvelle. */
+export const ALERT_MAX_AGE_MS = 3 * 60 * 60_000;
+
+/**
+ * Ne mérite une alerte que ce qui touche l'alignement ou le gardien d'une équipe
+ * dont le match d'aujourd'hui N'A PAS ENCORE COMMENCÉ, et qui est récent.
+ *
+ * Corrigé le 2026-10-23 après le 1er tour en production : 14 alertes pour des
+ * publications des 36 dernières heures sur des matchs déjà commencés ou finis —
+ * l'admin ne peut plus rien saisir pour ceux-là.
+ */
+export function alertWorthy(
+  row: { team_abbrs: string[]; flags: string[]; posted_at: Date | string },
+  startByTeam: Map<string, number>,
+  now: number,
+): boolean {
   const relevant = row.flags.includes('goalie') || row.flags.includes('lineup');
-  return relevant && row.team_abbrs.some((t) => playing.has(t));
+  if (!relevant) return false;
+  if (now - new Date(row.posted_at).getTime() > ALERT_MAX_AGE_MS) return false;
+  return row.team_abbrs.some((t) => (startByTeam.get(t) ?? -Infinity) > now);
 }
 
 async function notifyAdmins(rows: NewRow[]): Promise<void> {
@@ -141,7 +167,7 @@ async function notifyAdmins(rows: NewRow[]): Promise<void> {
 // ── Un tour ────────────────────────────────────────────────────────────────
 
 export async function runNewsSync(): Promise<{ read: number; inserted: number; alerted: number; nextMs: number }> {
-  const { teams: playing, startsUtc } = await todaysGames();
+  const { teams: playing, startsUtc, startByTeam } = await todaysGames();
   const now = Date.now();
   const windowOpen = inGameWindow(now, startsUtc);
   const sources = sourcesFor(NEWS_SOURCES, windowOpen, playing);
@@ -169,7 +195,7 @@ export async function runNewsSync(): Promise<{ read: number; inserted: number; a
   }
 
   const inserted = await insertPosts(rows);
-  const toAlert = inserted.filter((r) => alertWorthy(r, playing));
+  const toAlert = inserted.filter((r) => alertWorthy(r, startByTeam, Date.now()));
   await notifyAdmins(toAlert).catch((err: any) => logger.warn({ err: err?.message }, '[NewsSync] alerte admin échouée'));
   await purgeOnceADay().catch((err: any) => logger.warn({ err: err?.message }, '[NewsSync] purge échouée'));
   if (inserted.length > 0) cache.clear();
