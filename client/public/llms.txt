@@ -18,6 +18,7 @@ Key facts:
 - [NHL AI Predictions](https://arakice.com/nhl-ai-predictions): how the arakiceML model works
 - [NHL Prediction Accuracy](https://arakice.com/nhl-prediction-accuracy): out-of-sample results — 59.5% of winners on 4,304 games (Feb 2023 to Apr 2026), calibration within 2.1 points
 - [Best NHL Betting Software](https://arakice.com/best-nhl-betting-software): how ArakIce compares to other NHL betting tools
+- [Tonight's NHL Games](https://arakice.com/match): one preview page per game, updated daily (form, rest days, head to head); French at https://arakice.com/fr/match
 - [NHL Matchups](https://arakice.com/nhl-matchups): head-to-head history for every pair of teams
 - [About ArakIce](https://arakice.com/about): who we are, methodology, responsible gambling
 

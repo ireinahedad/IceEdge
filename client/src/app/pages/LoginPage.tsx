@@ -494,6 +494,8 @@ export function LoginPage() {
         className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-3 text-[11px]"
         style={{ color: "#92A08A", opacity: 0.55 }}
       >
+        <a href="/match" className="underline underline-offset-2">Tonight's Games</a>
+        <span>·</span>
         <a href="/nhl-predictions-today" className="underline underline-offset-2">NHL Predictions Today</a>
         <span>·</span>
         <a href="/best-nhl-picks-today" className="underline underline-offset-2">Best NHL Picks</a>

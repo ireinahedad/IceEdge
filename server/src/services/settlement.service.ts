@@ -1593,6 +1593,15 @@ export function startSettlementJob(): void {
     } catch (err: any) {
       logger.warn({ err: err.message }, '[Settlement] fallback failed');
     }
+    // Combinés publiés en vidéo (`parlay_log`, migration 046). Import dynamique :
+    // parlayLog.service importe ce module. Une table absente (migration pas encore
+    // passée) ne doit pas faire échouer la passe des coupons.
+    try {
+      const { settlePendingParlays } = await import('./parlayLog.service');
+      await settlePendingParlays();
+    } catch (err: any) {
+      logger.warn({ err: err.message }, '[Settlement] parlay_log non réglé');
+    }
   };
 
   // Catch-up pass shortly after boot (games may have finished while the server

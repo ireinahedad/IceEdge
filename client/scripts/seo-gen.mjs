@@ -257,6 +257,7 @@ const CHROME = {
     // Mention de non-affiliation : noms d'équipes et de ligue cités, logos jamais.
     notAffiliated: "Not affiliated with or endorsed by the NHL or its teams. NHL and team names are trademarks of their respective owners.",
     nav: [
+      { href: "/match", label: "Tonight's Games" },
       { href: "/nhl-predictions-today", label: "NHL Predictions" },
       { href: "/nhl-player-props", label: "Player Props" },
       { href: "/nhl-matchups", label: "Matchups" },

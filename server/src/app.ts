@@ -18,6 +18,7 @@ import llmRoutes           from './routes/llm.routes';
 import subscriptionRoutes, { stripeWebhook } from './routes/subscription.routes';
 import pushRoutes          from './routes/push.routes';
 import widgetRoutes        from './routes/widget.routes';
+import contentRoutes       from './routes/content.routes';
 import { getLeaderboard }  from './services/profile.service';
 import { pool }            from './db/connection';
 import { httpLogger, logger } from './logger';
@@ -174,6 +175,10 @@ app.use('/api/push',          noStore, pushRoutes);
 
 // iOS home-screen widget « paris en cours » (APPLE_PLAN 4.2)
 app.use('/api/widget',        noStore, widgetRoutes);
+
+// Combinés publiés en vidéo (MARKETING_PLAN Phase B) : gel, règlement, bilan.
+// Écritures réservées à GitHub Actions (`X-Cron-Secret`).
+app.use('/api/content',       noStore, contentRoutes);
 
 // Dev ML dashboard (admin-only). Defence in depth: even though every route is
 // gated behind authenticate + requireRole('admin'), the router is not mounted
