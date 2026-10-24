@@ -17,6 +17,7 @@ const answer = async () => { if (fail) throw fail; return { ok: true }; };
 vi.mock('../services/pickem.service', () => ({
   getPickem: async (...a: unknown[]) => { calls.push(['get', ...a]); return answer(); },
   castPickem: async (...a: unknown[]) => { calls.push(['cast', ...a]); return answer(); },
+  getPickemDay: async (...a: unknown[]) => { calls.push(['day', ...a]); return answer(); },
 }));
 
 async function app() {
@@ -34,6 +35,13 @@ describe('pickem.routes', () => {
     const r = await request(await app()).get('/api/pickem/2026020123');
     expect(r.status).toBe(200);
     expect(calls).toEqual([['get', '2026020123', 'u1']]);
+  });
+
+  it('GET /today : jour entier, pas pris pour un identifiant de match', async () => {
+    await request(await app()).get('/api/pickem/today').expect(200);
+    signedIn = false;
+    await request(await app()).get('/api/pickem/today').expect(200);
+    expect(calls).toEqual([['day', 'u1'], ['day', undefined]]);
   });
 
   it('GET anonyme', async () => {

@@ -1,6 +1,7 @@
 /**
  * pickem.routes.ts — pick'em ICEEDGE (NEWS_CONSENSUS_PLAN.md, F3, session A).
  *
+ *   GET  /api/pickem/today     public : tous les matchs du jour (+ mes votes si connecté)
  *   GET  /api/pickem/:gameId   public : totaux (+ mon vote si connecté)
  *   POST /api/pickem/:gameId   connecté : { team: 'VGK' } — vote ou change de vote
  *
@@ -12,7 +13,7 @@
 import { Router, type Request, type Response } from 'express';
 import { authenticate, optionalAuthenticate } from '../middleware/auth.middleware';
 import { sendError } from '../httpError';
-import { getPickem, castPickem } from '../services/pickem.service';
+import { getPickem, castPickem, getPickemDay } from '../services/pickem.service';
 import { GAME_ID_RE, TEAM_RE } from '../services/pickem';
 
 const router = Router();
@@ -22,6 +23,15 @@ function gameIdOf(req: Request, res: Response): string | null {
   if (!GAME_ID_RE.test(id)) { res.status(400).json({ error: 'gameId invalide' }); return null; }
   return id;
 }
+
+// Avant `/:gameId`, qui refuserait « today » (400).
+router.get('/today', optionalAuthenticate, async (req: Request, res: Response) => {
+  try {
+    res.json(await getPickemDay(req.user?.sub));
+  } catch (err) {
+    sendError(res, err);
+  }
+});
 
 router.get('/:gameId', optionalAuthenticate, async (req: Request, res: Response) => {
   const gameId = gameIdOf(req, res);

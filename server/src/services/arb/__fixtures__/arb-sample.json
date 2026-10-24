@@ -30,7 +30,12 @@
               { "name": "Under", "description": "Auston Matthews", "price": 1.95, "point": 3.5 } ] },
             { "key": "alternate_totals", "outcomes": [
               { "name": "Over", "price": 2.40, "point": 6.25 },
-              { "name": "Under", "price": 1.70, "point": 6.25 } ] }
+              { "name": "Under", "price": 1.70, "point": 6.25 },
+              { "name": "Over", "price": 1.75, "point": 5.5 },
+              { "name": "Under", "price": 2.05, "point": 5.5 } ] },
+            { "key": "alternate_spreads", "outcomes": [
+              { "name": "Toronto Maple Leafs", "price": 3.20, "point": -2.5 },
+              { "name": "Boston Bruins", "price": 1.36, "point": 2.5 } ] }
           ]
         },
         {

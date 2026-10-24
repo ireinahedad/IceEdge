@@ -10,6 +10,17 @@
  *   npm run arb:scan -- --replay latest      → ré-analyse le dernier scan sauvegardé, 0 crédit
  *   npm run arb:scan -- --replay arb-snapshots/2026-10-24T23-05-00-000Z.json --min 0 --near 10
  *   npm run arb:scan -- --near 10            → affiche aussi les 10 marchés les plus proches d'un arbitrage
+ *   npm run arb:scan -- --replay latest --middles   → + middles (Over 5.5 / Under 6.5…), 0 crédit
+ *   npm run arb:scan -- --middles --model market    → middles avec la loi du marché seulement (hors ligne)
+ *
+ * MIDDLES (`src/services/arb/arbMiddles.ts`). Deux paris opposés à des lignes
+ * différentes, gagnants tous les deux si le score tombe dans la fenêtre. PAS
+ * sans risque (sauf mention « SANS RISQUE + bonus ») : signalés quand
+ * l'espérance est positive selon arakiceML (`--model arakice`, défaut : les
+ * probabilités publiées par l'app, `GET {ARB_ICEEDGE_API}/predictions/game/:id`)
+ * ou, à défaut, selon la loi du marché (λ ajusté sur le consensus des livres).
+ * L'appel à l'API ArakIce ne coûte aucun crédit au scanner ; côté serveur il
+ * peut rafraîchir le cache des cotes de l'app comme une visite normale.
  *
  * SAUVEGARDE. Chaque scan réel est enregistré dans `server/arb-snapshots/` (même
  * format que les données démo, ignoré par git, les `ARB_SNAPSHOT_KEEP` derniers
@@ -40,6 +51,7 @@
  *   ARB_LOG_FILE         journal JSONL (défaut server/arb-log.jsonl, ignoré par git)
  *   ARB_SNAPSHOT_DIR     dossier des scans sauvegardés (défaut server/arb-snapshots)
  *   ARB_SNAPSHOT_KEEP    nombre de scans gardés (défaut 500)
+ *   ARB_ICEEDGE_API      API NHL d'ArakIce pour les middles (défaut https://api.arakice.com/api/nhl)
  */
 
 import 'dotenv/config';
@@ -47,6 +59,8 @@ import fs from 'fs';
 import path from 'path';
 import { findArbs, ArbEvent, ArbOpportunity, ArbBookmaker, NearMarket } from '../src/services/arb/arbScanner';
 import { fmtAmerican } from '../src/services/arb/arbCalc';
+import { findMiddles, iceedgeDists, Dists, MiddleOpportunity } from '../src/services/arb/arbMiddles';
+import { toAbbr } from '../src/services/oddsTeamNames';
 
 const ODDS_BASE = 'https://api.the-odds-api.com/v4';
 const API_KEY = (process.env.ARB_ODDS_API_KEY || process.env.ODDS_API_KEY || '').trim();
@@ -80,6 +94,7 @@ const LOG_FILE = path.resolve(process.env.ARB_LOG_FILE || path.resolve(__dirname
 const FIXTURE = path.resolve(__dirname, '..', 'src', 'services', 'arb', '__fixtures__', 'arb-sample.json');
 const SNAP_DIR = path.resolve(process.env.ARB_SNAPSHOT_DIR || path.resolve(__dirname, '..', 'arb-snapshots'));
 const SNAP_KEEP = Math.max(1, Math.round(readNum('ARB_SNAPSHOT_KEEP', 500)));
+const ICEEDGE_API = (process.env.ARB_ICEEDGE_API || 'https://api.arakice.com/api/nhl').replace(/\/+$/, '');
 
 // ─── Arguments ───────────────────────────────────────────────────────────────
 
@@ -92,6 +107,9 @@ interface Args {
   near: number;
   /** Les afficher même quand il y a des arbitrages (`--near` explicite). */
   nearAlways: boolean;
+  middles: boolean;
+  /** Probabilités des middles : modèle ArakIce (repli marché) ou marché seul. */
+  model: 'arakice' | 'market';
   watch: number;       // secondes entre deux scans ; 0 = un seul scan
   extras: boolean;
   props: boolean;
@@ -106,7 +124,7 @@ interface Args {
 
 function parseArgs(argv: string[]): Args {
   const a: Args = {
-    demo: false, replay: null, save: true, near: 3, nearAlways: false,
+    demo: false, replay: null, save: true, near: 3, nearAlways: false, middles: false, model: 'arakice',
     watch: 0, extras: false, props: false, bankroll: 1000, round: 1, min: 0.5,
     books: (process.env.ARB_BOOKS || '').split(',').map((s) => s.trim()).filter(Boolean),
     sport: 'icehockey_nhl', horizonH: 12, log: true,
@@ -125,6 +143,14 @@ function parseArgs(argv: string[]): Args {
       case '--replay': a.replay = resolveReplay(String(argv[++i] || '')); break;
       case '--no-save': a.save = false; break;
       case '--near': a.near = Math.round(num(f, argv[++i])); a.nearAlways = true; break;
+      case '--middles': a.middles = true; break;
+      case '--model': {
+        const m = String(argv[++i] || '');
+        if (m !== 'arakice' && m !== 'market') throw new Error('--model attend « arakice » ou « market »');
+        a.model = m;
+        a.middles = true;
+        break;
+      }
       case '--watch': a.watch = num(f, argv[++i]); break;
       case '--extras': a.extras = true; break;
       case '--props': a.props = true; break;
@@ -194,6 +220,55 @@ function saveSnapshot(now: Date, events: ArbEvent[]): void {
   } catch (err) {
     console.error(`  ✗ Sauvegarde du scan : ${(err as Error).message}`);
   }
+}
+
+// ─── Probabilités arakiceML pour les middles (API publique de l'app) ─────────
+
+async function getJson<T>(url: string, timeoutMs = 15_000): Promise<T | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+interface IceGame {
+  id: string;
+  startTimeUTC?: string | null;
+  homeTeam?: { abbreviation?: string };
+  awayTeam?: { abbreviation?: string };
+}
+
+/**
+ * Lois arakiceML des matchs À VENIR : `/games/range` pour retrouver l'id NHL
+ * (abréviations + heure), puis `/predictions/game/:id`. Un match déjà commencé
+ * est laissé au marché : les probabilités de l'app y deviennent « en direct ».
+ */
+async function fetchModelDists(events: ArbEvent[]): Promise<{ map: Map<string, Dists>; asked: number; reached: boolean }> {
+  const map = new Map<string, Dists>();
+  const nowMs = Date.now();
+  const upcoming = events.filter((e) => e.id && Date.parse(e.commence_time) > nowMs + 5 * 60_000);
+  if (!upcoming.length) return { map, asked: 0, reached: true };
+
+  const day = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+  const times = upcoming.map((e) => Date.parse(e.commence_time));
+  const start = day(Math.min(...times) - 86_400_000);
+  const end = day(Math.max(...times));
+  const games = await getJson<IceGame[]>(`${ICEEDGE_API}/games/range?start=${start}&end=${end}`);
+  if (!Array.isArray(games)) return { map, asked: upcoming.length, reached: false };
+
+  for (const e of upcoming) {
+    const h = toAbbr(e.home_team), a = toAbbr(e.away_team);
+    const t = Date.parse(e.commence_time);
+    const g = games.find((x) => x.homeTeam?.abbreviation === h && x.awayTeam?.abbreviation === a
+      && (!x.startTimeUTC || Math.abs(Date.parse(x.startTimeUTC) - t) < 6 * 3_600_000));
+    if (!g) continue;
+    const d = iceedgeDists(await getJson<unknown>(`${ICEEDGE_API}/predictions/game/${encodeURIComponent(g.id)}`));
+    if (d) map.set(e.id as string, d);
+  }
+  return { map, asked: upcoming.length, reached: true };
 }
 
 // ─── Appels The Odds API, avec garde-fou de quota ────────────────────────────
@@ -350,6 +425,33 @@ function printNear(list: NearMarket[]): void {
   }
 }
 
+const signed = (x: number): string => `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(2)} $`;
+
+function printMiddles(list: MiddleOpportunity[], now: Date, info: string): void {
+  console.log(`\n── Middles · probabilités : ${info}`);
+  if (!list.length) {
+    console.log('   Aucun middle à espérance positive.');
+    return;
+  }
+  list.forEach((m, i) => {
+    const tag = m.riskFree ? 'SANS RISQUE + bonus' : `EV +${m.evPct.toFixed(2)} %`;
+    const kind = m.kind === 'totals' ? 'total' : 'handicap';
+    console.log(`\n[M${i + 1}] ${tag}  ${m.match}  —  ${kind}, fenêtre : ${m.window}  —  ${until(m.commenceTime, now)}`);
+    for (const l of m.legs) {
+      const price = `${l.price.toFixed(2)} (${fmtAmerican(l.price)})`;
+      console.log(`    ${l.side.padEnd(30)} @ ${price.padEnd(13)} ${l.bookmakerTitle.padEnd(14)} → miser ${l.stakeRounded} $`);
+    }
+    const probs = [
+      `${(m.pMiddle * 100).toFixed(1)} % ${m.source}`,
+      m.pMiddleMarket !== undefined ? `${(m.pMiddleMarket * 100).toFixed(1)} % marché` : '',
+      `seuil ${(m.breakeven * 100).toFixed(1)} %`,
+    ].filter(Boolean).join(' · ');
+    console.log(`    P(fenêtre) : ${probs}`);
+    console.log(`    Dans la fenêtre : jusqu'à ${signed(m.bestCase)} · sinon, au pire : ${signed(m.worstCase)} · espérance : ${signed(m.ev)} sur ${m.totalStaked} $`);
+    for (const w of m.warnings) console.log(`    ! ${w}`);
+  });
+}
+
 function discordText(o: ArbOpportunity, now: Date): string {
   const lines = [
     `**+${o.profitPct.toFixed(2)} %**${o.suspect ? ' ⚠️ SUSPECT' : ''} ${o.match} — ${marketLabel(o)} (${until(o.commenceTime, now)})`,
@@ -411,7 +513,45 @@ async function scanOnce(args: Args): Promise<void> {
   opportunities.forEach((o, i) => printOpp(o, i, now));
   if (!opportunities.length || args.nearAlways) printNear(stats.nearest);
 
+  let middles: MiddleOpportunity[] = [];
+  if (args.middles) {
+    let model: Map<string, Dists> | undefined;
+    let info = args.demo ? 'loi du marché (démo)' : 'loi du marché';
+    if (args.model === 'arakice' && !args.demo) {
+      const r = await fetchModelDists(events);
+      model = r.map;
+      info = !r.reached ? `API ArakIce injoignable (${ICEEDGE_API}) → loi du marché`
+        : r.asked === 0 ? 'loi du marché (aucun match à venir pour arakiceML)'
+        : `arakiceML pour ${r.map.size}/${r.asked} match(s), loi du marché sinon`;
+    }
+    middles = findMiddles(events, {
+      now, bankroll: args.bankroll, roundTo: args.round, books: args.books, model,
+    });
+    printMiddles(middles, now, info);
+  }
+
   if (args.replay) return;
+
+  // Middles sans risque (Σ < 1) : ce sont des arbitrages — journalisés et alertés comme tels.
+  const freeMiddles = middles.filter((m) => m.riskFree && !alreadyAlerted.has(m.id));
+  freeMiddles.forEach((m) => alreadyAlerted.add(m.id));
+  if (args.log && freeMiddles.length) {
+    const at = new Date().toISOString();
+    fs.appendFileSync(LOG_FILE, freeMiddles.map((m) => JSON.stringify({ at, type: 'middle', ...m })).join('\n') + '\n');
+  }
+  if (DISCORD_WEBHOOK) {
+    for (const m of freeMiddles.slice(0, 3)) {
+      const text = [
+        `**SANS RISQUE + bonus** ${m.match} — fenêtre ${m.window} (${until(m.commenceTime, now)})`,
+        ...m.legs.map((l) => `• ${l.side} @ ${l.price.toFixed(2)} — ${l.bookmakerTitle} → ${l.stakeRounded} $`),
+        `Au pire ${signed(m.worstCase)}, si ${m.window} ${signed(m.bestCase)}`,
+      ].join('\n');
+      await fetch(DISCORD_WEBHOOK, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: text.slice(0, 1900) }), signal: AbortSignal.timeout(5_000),
+      }).catch((err: Error) => console.error(`  ✗ Discord : ${err.message}`));
+    }
+  }
 
   const fresh = opportunities.filter((o) => !alreadyAlerted.has(o.id));
   fresh.forEach((o) => alreadyAlerted.add(o.id));

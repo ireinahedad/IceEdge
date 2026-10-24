@@ -123,6 +123,12 @@ const DORMANT = process.env.DORMANT === 'true';
           ? 'redis (compteurs partagés entre instances)'
           : 'mémoire (compteurs PAR INSTANCE — une seule instance supportée)',
         REDIS_URL: redisEnabled ? 'présente' : 'ABSENTE',
+        // Les deux préchauffages (PERF_PLAN.md P1.2, P1.5). La valeur BRUTE entre
+        // crochets : seul « true » exact les active — « True », « "true" » ou un
+        // espace en trop les laissent éteints sans rien dire.
+        DORMANT: DORMANT,
+        BEST_BETS_WARMUP: `${process.env.BEST_BETS_WARMUP === 'true' ? 'actif' : 'éteint'} [${process.env.BEST_BETS_WARMUP ?? 'non posée'}]`,
+        ML_BUNDLE_WARMUP: `${process.env.ML_BUNDLE_WARMUP === 'true' ? 'actif' : 'éteint'} [${process.env.ML_BUNDLE_WARMUP ?? 'non posée'}]`,
       },
       '[Server] Réglages effectifs',
     );

@@ -57,8 +57,14 @@ export async function warmUpcomingBundles(
 }
 
 export function startMlBundleWarmup(): void {
-  if (process.env.ML_BUNDLE_WARMUP !== 'true') return;
+  if (process.env.ML_BUNDLE_WARMUP !== 'true') {
+    // Dit pourquoi il ne tourne pas : sans cette ligne, un job éteint et un job
+    // jamais atteint (base injoignable au démarrage, `DORMANT`) se ressemblaient.
+    logger.info({ ML_BUNDLE_WARMUP: process.env.ML_BUNDLE_WARMUP ?? null }, '[MlWarmup] éteint (ML_BUNDLE_WARMUP ≠ "true")');
+    return;
+  }
   const minutes = Number(process.env.ML_BUNDLE_WARMUP_INTERVAL_MIN) || 90;
+  logger.info({ intervalMin: minutes, firstRunInSec: 120 }, '[MlWarmup] démarré');
   const tick = () => {
     warmUpcomingBundles()
       .then((r) => { if (r) logger.info(r, '[MlWarmup] paquets ML à venir réchauffés'); })

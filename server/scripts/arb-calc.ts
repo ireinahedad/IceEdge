@@ -80,7 +80,8 @@ function main(): void {
   });
   console.log(worst >= 0
     ? `\nProfit garanti : ${money(worst)} sur ${total} $ misés`
-    : `\nCouvrir toutes les issues coûterait ${money(-worst)} quoi qu'il arrive : ne mise pas.`);
+    : `\nPas d'arbitrage : si un seul pari gagne, tu perds ${money(-worst)} — ne mise pas,\n` +
+      'sauf pour un middle (lignes différentes) : c\'est alors son coût hors fenêtre.');
 }
 
 try {
