@@ -3,6 +3,9 @@ import { startSentry, captureException, captureMessage } from "./app/sentry";
 import { envProblems, assertEnv } from "./app/env";
 import { features } from "./app/platform";
 import App from "./app/App";
+import { primeGet, gamesRangePath } from "./app/services/nhlApiService";
+import { fetchHockeyOdds } from "./app/services/gameOdds";
+import { homeWeek } from "./app/data/gameDay";
 import "./styles/index.css";
 
 // Sentry : chargé après le premier rendu (QA P4, LCP) — voir app/sentry.ts.
@@ -81,6 +84,20 @@ try {
   // APPLE_PLAN 3.9 — iOS shell glue (external links). Not in the web bundle.
   // Inline literal (not `isIOS`) so Rollup drops the branch — and the chunk — from the web build.
   if (import.meta.env.VITE_TARGET === "ios") void import("./app/native").then((m) => m.installNativeShell());
+
+  // PERF_PLAN.md P2.4 — sur l'accueil, les quatre appels dont il a besoin
+  // partent AVANT le premier rendu React, au lieu d'attendre que les providers,
+  // le routeur et la page soient montés. Les composants reprennent ces requêtes
+  // (`primeGet`, cache de `fetchHockeyOdds`) : aucune requête de plus. Après
+  // `assertEnv()` : une configuration invalide ne lance rien.
+  if (window.location.pathname === "/") {
+    const week = homeWeek();
+    primeGet("/games/live");
+    primeGet(gamesRangePath(week[0].dateStr, week[week.length - 1].dateStr));
+    primeGet("/teams");
+    void fetchHockeyOdds();
+  }
+
   createRoot(rootEl).render(<App />);
 
   // Register the service worker (PWA install + push notifications).

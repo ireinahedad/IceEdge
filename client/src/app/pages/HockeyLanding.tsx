@@ -33,7 +33,7 @@ import { BestBetsSection } from "./landing/BestBetsSection";
 import { BestParlaySection } from "./landing/BestParlaySection";
 import { EvSection } from "./landing/EvSection";
 import { LiveGamesRow, SportSelector, UpcomingGameRow, gameIsoDay } from "./landing/LandingCards";
-import { dayHeading, groupByDay } from "../data/gameDay";
+import { dayHeading, groupByDay, homeWeek } from "../data/gameDay";
 import { useFoldState } from "../hooks/useFoldState";
 import { TeamCarousel } from "./landing/TeamCarousel";
 import { ProUpsell } from "./landing/ProUpsell";
@@ -258,11 +258,7 @@ export function HockeyLanding() {
     async function load() {
       try {
         const locale = lang === "fr" ? "fr-CA" : "en-US";
-        const days = Array.from({ length: 8 }, (_, offset) => {
-          const d = new Date();
-          d.setDate(d.getDate() + offset);
-          return { offset, d, dateStr: d.toISOString().split("T")[0] };
-        });
+        const days = homeWeek();
         const [live, range] = await Promise.all([
           nhlApiService.getLiveGames(),
           nhlApiService.getGamesRange(days[0].dateStr, days[days.length - 1].dateStr),

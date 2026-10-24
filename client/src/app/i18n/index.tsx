@@ -946,6 +946,17 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pickem.day.final":       { en: "Final",                fr: "Final" },
   "pickem.day.publicRight": { en: "The crowd was right",  fr: "Le public avait raison" },
   "pickem.day.publicWrong": { en: "The crowd was wrong",  fr: "Le public s'est trompé" },
+  "pickem.board.title":     { en: "Weekly leaderboard",   fr: "Classement de la semaine" },
+  "pickem.board.thisWeek":  { en: "This week",            fr: "Cette semaine" },
+  "pickem.board.lastWeek":  { en: "Last week",            fr: "Semaine dernière" },
+  "pickem.board.model":     { en: "Model",                fr: "Modèle" },
+  "pickem.board.crowd":     { en: "Crowd",                fr: "Public" },
+  "pickem.board.you":       { en: "You",                  fr: "Vous" },
+  "pickem.board.sameGames": { en: "Model and crowd on the same games as the users' picks.", fr: "Modèle et public sur les mêmes matchs que les votes des utilisateurs." },
+  "pickem.board.empty":     { en: "No one ranked yet: {min} settled picks needed this week.", fr: "Personne de classé : il faut {min} picks réglés dans la semaine." },
+  "pickem.board.myRank":    { en: "You are {ord} of {n}.", fr: "Vous êtes {ord} sur {n}." },
+  "pickem.board.notRanked": { en: "{n}/{min} settled picks: not ranked yet.", fr: "{n}/{min} picks réglés : pas encore classé." },
+  "pickem.error.load":      { en: "The leaderboard could not be loaded.", fr: "Le classement n'a pas pu être chargé." },
   "pred.bookOdds":       { en: "Book odds",             fr: "Cote du livre" },
 
   // ── Grilles de paris joueur (buts / passes / tirs bloqués) ──────────────

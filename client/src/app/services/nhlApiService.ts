@@ -280,7 +280,34 @@ export interface TeamSeasonOfficial {
  */
 const GET_HEADERS = { Accept: 'application/json' } as const;
 
-async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+/**
+ * Préchargement (PERF_PLAN.md, P2.4). `primeGet` lance un GET AVANT que la page
+ * qui en a besoin soit montée — `main.tsx` le fait pour l'accueil, avant même le
+ * premier rendu React. Le premier `get` du même chemin reprend cette requête au
+ * lieu d'en lancer une seconde. Une seule reprise, et seulement dans les
+ * `PRIME_TTL_MS` : passé ce délai, ou pour un second lecteur, on redemande (et
+ * le cache HTTP du navigateur répond s'il le peut).
+ */
+const PRIME_TTL_MS = 15_000;
+const primed = new Map<string, { at: number; promise: Promise<unknown> }>();
+
+export function primeGet(path: string): void {
+  if (primed.has(path)) return;
+  const promise = rawGet<unknown>(path);
+  promise.catch(() => { /* le lecteur verra l'erreur ; ici, rien */ });
+  primed.set(path, { at: Date.now(), promise });
+}
+
+function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const hit = primed.get(path);
+  if (hit) {
+    primed.delete(path);
+    if (!signal && Date.now() - hit.at < PRIME_TTL_MS) return hit.promise as Promise<T>;
+  }
+  return rawGet<T>(path, signal);
+}
+
+async function rawGet<T>(path: string, signal?: AbortSignal): Promise<T> {
   if (!BASE_URL) throw new Error('VITE_NHL_API_URL is not configured');
   const res = await fetchWithTimeout(`${BASE_URL}${path}`, {
     headers: GET_HEADERS,
@@ -363,6 +390,9 @@ export interface PastGamesPage {
   nextDay?: string | null;
 }
 
+/** Chemin de `getGamesRange` — exporté pour que le préchargement demande la même URL. */
+export const gamesRangePath = (start: string, end: string) => `/games/range?start=${start}&end=${end}`;
+
 export const nhlApiService = {
   getGamesByDate: (date?: string): Promise<NHLGame[]> => {
     const d = date || new Date().toISOString().split('T')[0];
@@ -371,7 +401,7 @@ export const nhlApiService = {
 
   // Calendrier : tous les matchs entre deux dates (YYYY-MM-DD) incluses.
   getGamesRange: (start: string, end: string): Promise<NHLGame[]> =>
-    get<NHLGame[]>(`/games/range?start=${start}&end=${end}`),
+    get<NHLGame[]>(gamesRangePath(start, end)),
 
   /** Matchs JOUÉS selon les critères, du plus récent au plus ancien. */
   getPastGames: (q: PastGamesQuery, signal?: AbortSignal): Promise<PastGamesPage> => {

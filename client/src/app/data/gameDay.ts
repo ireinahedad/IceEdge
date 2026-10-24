@@ -16,6 +16,21 @@
 
 export type Lang = "en" | "fr" | string;
 
+/**
+ * La semaine de l'accueil : aujourd'hui et les 7 jours suivants, en dates
+ * `YYYY-MM-DD` (même calcul que l'accueil a toujours fait). Partagée entre
+ * `HockeyLanding` et le préchargement de `main.tsx` (PERF_PLAN.md, P2.4) : les
+ * deux doivent demander EXACTEMENT la même URL `/games/range`, sinon le
+ * préchargement serait perdu.
+ */
+export function homeWeek(now = new Date()): { offset: number; d: Date; dateStr: string }[] {
+  return Array.from({ length: 8 }, (_, offset) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + offset);
+    return { offset, d, dateStr: d.toISOString().split("T")[0] };
+  });
+}
+
 const locale = (lang: Lang) => (lang === "fr" ? "fr-CA" : "en-US");
 
 /** `YYYY-MM-DD…` → Date locale à midi ; `null` si illisible. */

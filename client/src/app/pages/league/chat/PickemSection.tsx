@@ -24,6 +24,7 @@ import {
   fetchPickemDay, castPickem, PickemError,
   type PickemDay, type PickemDayGame,
 } from "../../../services/pickemService";
+import { PickemLeaderboard } from "./PickemLeaderboard";
 
 const OPEN_KEY = "iceedge_pickem_open";
 
@@ -109,6 +110,7 @@ export function PickemSection() {
           <div className="grid grid-cols-2 gap-2">
             {day.games.map((g) => <GameDonut key={g.gameId} game={g} onChange={update} />)}
           </div>
+          <PickemLeaderboard />
           <p className="text-white/40 text-[10px] px-1">{t("pickem.note")}</p>
         </>
       )}
