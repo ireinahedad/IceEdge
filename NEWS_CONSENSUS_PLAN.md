@@ -30,7 +30,7 @@ absents officiels vers T−30 min (`officialLineup.ts`), saisies manuelles
 
 ---
 
-## Décisions prises (2026-10-23)
+## Décisions prises (2026-10-23, complétées le 2026-10-24)
 
 | Sujet | Décision |
 |---|---|
@@ -39,6 +39,9 @@ absents officiels vers T−30 min (`officialLineup.ts`), saisies manuelles
 | Cadence du fil | 1 h ; 15 min d'une heure avant le 1er match jusqu'à la dernière mise au jeu. |
 | Kalshi / Polymarket (F2) | **Pas affiché dans l'app.** Mis de côté ; usage interne seulement si on le reprend un jour. |
 | Section nouvelles | Pliable, repliée par défaut, en-tête avec compteur et badge alignement/gardien. |
+| Votes dans le chat (2026-10-24) | Section « Votes du jour » dépliable dans Communauté › Chat, compacte : un anneau par match, deux par rangée. |
+| Modèle dans le classement (2026-10-24) | Son choix est FIGÉ avant la mise au jeu (migration 050), jamais recalculé après coup. |
+| Annonce du gagnant (2026-10-24) | **Aucune annonce dans un salon.** Le classement de la semaine vit dans la section du chat. |
 
 ## Livré le 2026-10-23 — F1, fil de nouvelles
 
@@ -150,15 +153,45 @@ Session A — vote et affichage — ✅ codé 2026-10-24
 - Page de match : 2 boutons + barre « X % des utilisateurs ICEEDGE », nombre réel
   de votants. Sous 10 votes : « Pas encore assez de votes », pas de pourcentage.
 
-Session B — résultats et classement
+Session B — résultats et classement — ✅ codé 2026-10-24
+- Règlement : `settlePendingPickems` dans la passe de rattrapage horaire de
+  `settlement.service.ts` (comme `parlay_log`), matchs commencés depuis > 2 h 30,
+  `correct IS NULL` seulement.
+- Modèle « sur les mêmes matchs » : aucune table ne gardait son choix d'avant-match
+  (page de précision statique ; recalculer après coup = un modèle qui connaît les
+  alignements). Migration 050 `pickem_model` : `snapshotModelPicks` le FIGE dans
+  l'heure qui précède chaque match VOTÉ, aux tours de NewsSync (marché `moneyline`
+  du paquet ML = même question que le pick'em). ⚠️ Sans `NEWS_SYNC_ENABLED=true`,
+  pas de capture : le modèle s'affiche « — ».
+- `GET /api/pickem/leaderboard?week=current|previous` (cache 5 min) : classés à
+  10 picks réglés, égalités au même rang, ma ligne même non classée, modèle ET
+  choix majoritaire du public sur les mêmes matchs (prépare F5).
+- UI : bloc « Classement de la semaine » replié sous les anneaux du chat.
+- Annonce du lundi dans un salon : codée puis RETIRÉE le 2026-10-24 (décision du
+  user, pas besoin). Plus de `PICKEM_ANNOUNCE_ROOM_ID`.
+
+Plan d'origine :
 - Règlement : à la fin du match, `correct` = vrai/faux, dans le job de règlement
   existant (`settlement.service.ts`), pas un job de plus.
 - Classement hebdo (lundi → dimanche, heure de l'Est) : `GET /api/pickem/leaderboard`,
   minimum 10 picks dans la semaine pour être classé. Le taux du modèle ICEEDGE sur
   les mêmes matchs affiché à côté.
-- Annonce du gagnant le lundi dans le chat de la ligue publique (déjà en place).
+- ~~Annonce du gagnant le lundi dans le chat de la ligue publique.~~ Abandonnée (2026-10-24).
 
-Session C — rétention (optionnel)
+Session C — rétention — ✅ codé 2026-10-24
+- `remindPickemLock` (`pickem.service.ts`), appelé à chaque tour de NewsSync : une
+  fois par jour, au tour qui ouvre la fenêtre des matchs (1re mise au jeu − 1 h,
+  toléré jusqu'à − 30 min). Hors fenêtre : aucune requête en base.
+- Destinataires : ont voté au moins une fois dans les 30 derniers jours, ont un
+  iPhone enregistré (canal APNs seul, comme « pari réglé » — l'abonnement Web Push
+  a été pris pour les value bets), et n'ont voté pour AUCUN match du jour.
+- Texte bilingue, vouvoiement : « VGK @ STL ouvre la soirée (7 matchs). Faites vos
+  choix avant la mise au jeu. » Lien : `/league`.
+- Jour marqué dans `job_state` (`pickem-reminder-day`) AVANT l'envoi : un rappel
+  manqué plutôt qu'un rappel en double. ⚠️ Comme la capture du modèle, dépend de
+  `NEWS_SYNC_ENABLED=true`.
+
+Plan d'origine :
 - Notification « Picks verrouillés dans 1 h » aux utilisateurs qui ont voté au moins
   une fois et activé les notifications.
 
@@ -168,6 +201,10 @@ Session C — rétention (optionnel)
   public quand il dépasse 80 % ».
 - Sur `nhl-prediction-accuracy.html` (déjà là). Sert aussi `MARKETING_PLAN.md`.
 - À ne lancer qu'avec assez de votes : sous ~300 picks réglés, les écarts sont du bruit.
+- Pick'em lancé le 2026-10-24 : pas avant la mi-novembre. Le classement calcule déjà
+  le modèle et le choix majoritaire du public sur les mêmes matchs (session B) ; il
+  restera la série par semaine et le seuil « public > 80 % ».
+- Pour savoir quand : `SELECT COUNT(*) FROM pickem_votes WHERE correct IS NOT NULL;`
 
 ### Mis de côté
 

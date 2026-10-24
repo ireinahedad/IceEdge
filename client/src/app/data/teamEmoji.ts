@@ -32,14 +32,6 @@ export function teamColors(abbr: string): { primary: string; secondary: string }
   return TEAM_COLORS[abbr?.toUpperCase()] ?? { primary: "#1B2A33", secondary: "#0D1519" };
 }
 
-/**
- * Local jersey artwork for a team: `client/public/jerseys/<ABBR>.png`.
- * These files are supplied by us, not by the NHL API. Callers must handle a
- * missing file (`onError`) — the carousel falls back to `nhlLogoUrl`.
- */
-export function jerseyUrl(abbr: string): string {
-  return `/jerseys/${abbr.toUpperCase()}.png`;
-}
 
 // ─── Couleur d'identité d'une jambe de coupon ─────────────────────────────────
 //

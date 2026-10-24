@@ -17,16 +17,19 @@
  * La liste est rendue deux fois : quand la position dépasse la première copie,
  * on recule d'une copie (`half`) — le contenu est identique, le saut invisible.
  *
- * Les visuels de maillots vivent dans `client/public/jerseys/<ABBR>.png` et ne
- * viennent PAS de l'API NHL. Tant qu'un fichier manque, `onError` bascule sur
- * l'abréviation : la page reste correcte sans aucun asset.
+ * Chaque tuile montre le LOGO du club (`nhlLogoUrl`, CDN de la LNH, le même
+ * que partout dans l'app) sur ses couleurs. Les maillots (`/jerseys/<ABBR>.png`)
+ * ont été retirés le 2026-10-24 (demande de l'utilisatrice) : les fichiers
+ * n'existaient pas, et chaque tuile téléchargeait `index.html` à leur place
+ * (~600 ko par visite de l'accueil, PERF_PLAN.md P2.6). Un logo qui ne charge
+ * pas bascule encore sur l'abréviation (`onError`).
  */
 
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { nhlApiService } from "../../services/nhlApiService";
-import { jerseyUrl, teamColors } from "../../data/teamEmoji";
+import { nhlLogoUrl, teamColors } from "../../data/teamEmoji";
 import { useI18n } from "../../i18n";
 import type { NHLTeamInfo } from "../../types/bet";
 
@@ -63,15 +66,15 @@ function TeamTile({
       onClick={onToggle}
     >
       {fallback ? (
-        /* Pas de logo NHL en repli : l'abréviation, en gros, sur les couleurs du club. */
+        /* Logo introuvable : l'abréviation, en gros, sur les couleurs du club. */
         <span className="jersey-fallback">{abbr}</span>
       ) : (
         <img
-          src={jerseyUrl(abbr)}
+          src={nhlLogoUrl(abbr)}
           alt={team.name ?? abbr}
           loading="lazy"
           draggable={false}
-          className="jersey-img"
+          className="jersey-img jersey-img--logo"
           onError={() => setFallback(true)}
         />
       )}

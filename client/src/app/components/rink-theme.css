@@ -437,6 +437,15 @@
   transition: filter 0.22s ease, transform 0.22s ease;
 }
 
+/* Logo du club (2026-10-24, à la place des maillots) : centré, avec de l'air
+   autour et la place de l'abréviation en bas de tuile. */
+.jersey-img--logo {
+  object-position: center;
+  padding: 14% 14% 24%;
+  box-sizing: border-box;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+}
+
 /* Fallback while the jersey artwork is missing: the abbreviation, big, on the
    team's colours. Sized off --jersey-w (inherited from the viewport) so it
    scales with the tile without a container query. */
