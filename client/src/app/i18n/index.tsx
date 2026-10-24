@@ -940,17 +940,12 @@ const DICT: Record<string, { en: string; fr: string }> = {
   "pickem.notEnough":   { en: "Not enough votes yet ({n}/{min}).", fr: "Pas encore assez de votes ({n}/{min})." },
   "pickem.error":       { en: "Your pick could not be saved. Try again.", fr: "Votre choix n'a pas pu être enregistré. Réessayez." },
   "pickem.day.title":       { en: "Today's picks",        fr: "Votes du jour" },
-  "pickem.day.totalVotes":  { en: "votes",                fr: "votes" },
-  "pickem.day.open":        { en: "open games",           fr: "matchs ouverts" },
-  "pickem.day.mine":        { en: "your picks",           fr: "vos choix" },
-  "pickem.day.consensus":   { en: "Today's consensus",    fr: "Consensus du jour" },
-  "pickem.day.noConsensus": { en: "The consensus shows once a game has {min} votes.", fr: "Le consensus s'affiche dès {min} votes sur un match." },
+  "pickem.day.summary":     { en: "{n} votes · your picks {mine}/{games}", fr: "{n} votes · vos choix {mine}/{games}" },
   "pickem.day.votes":       { en: "{n}/{min} votes",      fr: "{n}/{min} votes" },
   "pickem.day.live":        { en: "Live",                 fr: "En cours" },
   "pickem.day.final":       { en: "Final",                fr: "Final" },
   "pickem.day.publicRight": { en: "The crowd was right",  fr: "Le public avait raison" },
   "pickem.day.publicWrong": { en: "The crowd was wrong",  fr: "Le public s'est trompé" },
-  "pickem.day.tapToVote":   { en: "Tap a team to make your pick", fr: "Touchez une équipe pour voter" },
   "pred.bookOdds":       { en: "Book odds",             fr: "Cote du livre" },
 
   // ── Grilles de paris joueur (buts / passes / tirs bloqués) ──────────────

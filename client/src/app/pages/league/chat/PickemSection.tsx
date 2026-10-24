@@ -3,19 +3,18 @@
  * NEWS_CONSENSUS_PLAN.md, F3 : le remplaçant de #pickems, avec les vrais
  * utilisateurs ICEEDGE.
  *
- * Une section dépliable (état retenu par appareil), posée dans la liste des
- * salons. Dépliée : un tableau d'aréna avec les totaux du jour et le graphique
- * « Consensus du jour » (matchs classés par force du consensus), puis une
- * barre « tir à la corde » par match, aux couleurs des deux équipes. Toucher un
- * logo = voter ; le serveur décide de la fermeture (mise au jeu), l'écran suit.
+ * Une section dépliable et COMPACTE (demande du user, 2026-10-24) : une ligne de
+ * résumé, puis un anneau par match, deux par rangée. L'anneau partage le cercle
+ * entre les deux équipes, à leurs couleurs ; les logos dessous servent de
+ * boutons de vote. Le serveur décide de la fermeture (mise au jeu), l'écran suit.
  *
  * UN appel (`GET /api/pickem/today`) pour tous les matchs. Échec ou soirée sans
- * match : la section n'apparaît pas. Sous 10 votes, pas de pourcentage —
- * seulement la jauge « 3/10 votes ». Graphiques en CSS : pas de recharts ici,
- * le chat ne doit pas télécharger le paquet des graphiques.
+ * match : la section n'apparaît pas. Sous 10 votes, pas de pourcentage : l'anneau
+ * devient une jauge « 6/10 ». Graphiques en SVG : pas de recharts ici, le chat ne
+ * doit pas télécharger le paquet des graphiques.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useI18n } from "../../../i18n";
 import { useAuth } from "../../../context/AuthContext";
@@ -87,6 +86,9 @@ export function PickemSection() {
   const update = (g: PickemDayGame) =>
     setDay((d) => d && { ...d, games: d.games.map((x) => (x.gameId === g.gameId ? g : x)) });
 
+  const total = day.games.reduce((n, g) => n + g.total, 0);
+  const mine = day.games.filter((g) => g.myVote).length;
+
   return (
     <div className="flex flex-col gap-2">
       <button type="button" onClick={toggle} aria-expanded={open}
@@ -94,13 +96,18 @@ export function PickemSection() {
         <span className="arena-section-title">
           {t("pickem.day.title")} <span className="arena-section-count">({day.games.length})</span>
         </span>
-        <span className={`text-white/40 text-xs transition-transform ${open ? "rotate-0" : "-rotate-90"}`}>▾</span>
+        <span className="flex items-center gap-2">
+          {/* Le résumé reste visible replié : de quoi savoir s'il vaut la peine d'ouvrir. */}
+          <span className="text-[10px] text-white/50">
+            {t("pickem.day.summary", { n: total, mine, games: day.games.length })}
+          </span>
+          <span className={`text-white/40 text-xs transition-transform ${open ? "rotate-0" : "-rotate-90"}`}>▾</span>
+        </span>
       </button>
       {open && (
         <>
-          <DayBoard games={day.games} />
-          <div className="flex flex-col gap-2">
-            {day.games.map((g) => <GameRow key={g.gameId} game={g} onChange={update} />)}
+          <div className="grid grid-cols-2 gap-2">
+            {day.games.map((g) => <GameDonut key={g.gameId} game={g} onChange={update} />)}
           </div>
           <p className="text-white/40 text-[10px] px-1">{t("pickem.note")}</p>
         </>
@@ -109,82 +116,66 @@ export function PickemSection() {
   );
 }
 
-// ─── Tableau du jour : totaux + graphique du consensus ────────────────────────
+// ─── L'anneau ─────────────────────────────────────────────────────────────────
 
-function DayBoard({ games }: { games: PickemDayGame[] }) {
+/** r = 100/2π : la circonférence vaut 100, un pourcentage = une longueur de trait. */
+const R = 15.9155;
+const GAP = 1.2;
+
+function Ring({ g, colors, shown }: { g: PickemDayGame; colors: { away: string; home: string }; shown: boolean }) {
   const { t } = useI18n();
-  const total = games.reduce((n, g) => n + g.total, 0);
-  const openGames = games.filter((g) => !g.locked).length;
-  const mine = games.filter((g) => g.myVote).length;
-  const minVotes = games[0]?.minVotes ?? 10;
+  const common = { cx: 18, cy: 18, r: R, fill: "none", strokeWidth: 3.6 } as const;
 
-  // Plus fort consensus d'abord ; seuls les matchs qui ont assez de votes.
-  const ranked = useMemo(() => games
-    .filter((g) => g.enough && g.home.pct != null && g.away.pct != null)
-    .map((g) => {
-      const fav = g.home.pct! >= g.away.pct! ? g.home : g.away;
-      const other = fav === g.home ? g.away : g.home;
-      return { g, fav, other, pct: fav.pct! };
-    })
-    .sort((a, b) => b.pct - a.pct), [games]);
+  if (!g.enough || g.away.pct == null || g.home.pct == null) {
+    // Jauge : combien de votes avant d'afficher une répartition.
+    const filled = shown ? Math.min(100, (g.total / g.minVotes) * 100) : 0;
+    return (
+      <svg viewBox="0 0 36 36" className="w-[72px] h-[72px] -rotate-90" role="img"
+           aria-label={t("pickem.day.votes", { n: g.total, min: g.minVotes })}>
+        <circle {...common} stroke="rgba(255,255,255,0.08)" strokeDasharray="2 1.2" />
+        <circle {...common} stroke="rgba(134,209,234,0.55)" strokeLinecap="round"
+                strokeDasharray={`${filled} ${100 - filled}`}
+                className="motion-safe:transition-[stroke-dasharray] motion-safe:duration-700" />
+        <text x="18" y="18" transform="rotate(90 18 18)" textAnchor="middle" dominantBaseline="central"
+              className="fill-white/70 text-[7px] font-bold">{g.total}/{g.minVotes}</text>
+      </svg>
+    );
+  }
 
+  // Visiteur depuis midi dans le sens horaire, domicile ensuite ; un petit jour entre les deux.
+  const away = shown ? g.away.pct : 50;
+  const home = 100 - away;
+  const fav = g.home.pct >= g.away.pct ? g.home : g.away;
+  const favColor = fav === g.home ? colors.home : colors.away;
   return (
-    <div className="arena-scoreboard">
-      <div className="arena-scoreboard-screen px-3 py-3 flex flex-col gap-3">
-        <div className="grid grid-cols-3 text-center">
-          <Stat value={total} label={t("pickem.day.totalVotes")} />
-          <Stat value={openGames} label={t("pickem.day.open")} cool />
-          <Stat value={`${mine}/${games.length}`} label={t("pickem.day.mine")} cool />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <p className="scoreboard-label text-[9px]">{t("pickem.day.consensus")}</p>
-          {ranked.length === 0 ? (
-            <p className="text-[#8aa4b4] text-[11px]">{t("pickem.day.noConsensus", { min: minVotes })}</p>
-          ) : ranked.map(({ g, fav, other, pct }) => {
-            const color = sideColors(g.away.team, g.home.team)[fav === g.home ? "home" : "away"];
-            return (
-              <div key={g.gameId} className="grid grid-cols-[6rem_1fr_2.5rem] items-center gap-2"
-                   aria-label={`${fav.team} ${pct} % contre ${other.team}`}>
-                <span className="flex items-center gap-1 min-w-0">
-                  <img src={nhlLogoUrl(fav.team)} alt="" className="w-4 h-4 object-contain" loading="lazy" />
-                  <span className="text-[11px] font-bold text-white">{fav.team}</span>
-                  <span className="text-[9px] text-white/40 whitespace-nowrap">/ {other.team}</span>
-                </span>
-                {/* Part du favori sur 100 %, repère au 50/50 : plus la barre dépasse le repère, plus le public est d'accord. */}
-                <span className="relative h-2.5 rounded-full bg-white/[0.07] overflow-hidden">
-                  <span className="absolute inset-y-0 left-0 rounded-full motion-safe:transition-[width] motion-safe:duration-700"
-                        style={{ width: `${pct}%`, background: color, boxShadow: `0 0 10px ${color}88` }} />
-                  <span className="absolute inset-y-0 left-1/2 w-px bg-white/50" />
-                </span>
-                <span className="scoreboard-digit text-[13px] text-right">{pct}%</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+    <svg viewBox="0 0 36 36" className="w-[72px] h-[72px] -rotate-90" role="img"
+         aria-label={`${g.away.team} ${g.away.pct} % · ${g.home.team} ${g.home.pct} %`}>
+      <circle {...common} stroke={colors.away}
+              strokeDasharray={`${Math.max(0, away - GAP)} ${100 - Math.max(0, away - GAP)}`}
+              className="motion-safe:transition-[stroke-dasharray] motion-safe:duration-700" />
+      <circle {...common} stroke={colors.home}
+              strokeDasharray={`${Math.max(0, home - GAP)} ${100 - Math.max(0, home - GAP)}`}
+              strokeDashoffset={-away}
+              className="motion-safe:transition-[stroke-dasharray,stroke-dashoffset] motion-safe:duration-700" />
+      <g transform="rotate(90 18 18)">
+        <text x="18" y="16.6" textAnchor="middle" dominantBaseline="central"
+              style={{ fill: favColor }} className="text-[8.5px] font-bold">{fav.pct}%</text>
+        <text x="18" y="23" textAnchor="middle" dominantBaseline="central"
+              className="fill-white/55 text-[4.6px] font-bold">{fav.team}</text>
+      </g>
+    </svg>
   );
 }
 
-function Stat({ value, label, cool }: { value: number | string; label: string; cool?: boolean }) {
-  return (
-    <div className="flex flex-col items-center gap-0.5">
-      <span className={`scoreboard-digit ${cool ? "scoreboard-digit--cool" : ""} text-[22px] leading-none`}>{value}</span>
-      <span className="scoreboard-label text-[8px]">{label}</span>
-    </div>
-  );
-}
+// ─── Une carte : anneau + vote ────────────────────────────────────────────────
 
-// ─── Un match : tir à la corde + vote ─────────────────────────────────────────
-
-function GameRow({ game: g, onChange }: { game: PickemDayGame; onChange: (g: PickemDayGame) => void }) {
+function GameDonut({ game: g, onChange }: { game: PickemDayGame; onChange: (g: PickemDayGame) => void }) {
   const { t, lang } = useI18n();
   const { requireAuth } = useAuthGate();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Les barres partent du milieu puis glissent à leur place.
+  // L'anneau part du 50/50 puis tourne à sa place.
   const [shown, setShown] = useState(false);
   useEffect(() => { const id = requestAnimationFrame(() => setShown(true)); return () => cancelAnimationFrame(id); }, []);
 
@@ -192,7 +183,6 @@ function GameRow({ game: g, onChange }: { game: PickemDayGame; onChange: (g: Pic
   const status = g.status.toLowerCase();
   const live = status === "live";
   const final = status === "final";
-  const awayPct = g.enough ? g.away.pct ?? 50 : 50;
   const crowdPick = g.enough && g.home.pct != null && g.away.pct != null && g.home.pct !== g.away.pct
     ? (g.home.pct > g.away.pct ? g.home.team : g.away.team) : null;
 
@@ -225,69 +215,43 @@ function GameRow({ game: g, onChange }: { game: PickemDayGame; onChange: (g: Pic
     return (
       <button type="button" onClick={() => vote(s.team)} disabled={g.locked || busy} aria-pressed={mine}
         aria-label={`${s.team}${mine ? ` — ${t("pickem.yourPick")}` : ""}`}
-        className={`relative flex flex-col items-center gap-0.5 w-14 flex-shrink-0 rounded-xl py-1.5 border transition active:scale-95 disabled:active:scale-100 ${
-          mine ? "bg-white/10" : "border-transparent"} ${g.locked && !mine ? "opacity-60" : ""}`}
-        style={mine ? { borderColor: colors[side], boxShadow: `0 0 12px ${colors[side]}55` } : undefined}>
-        <img src={nhlLogoUrl(s.team)} alt="" className="w-8 h-8 object-contain" loading="lazy" />
-        <span className={`text-[11px] font-bold ${won ? "text-[#ffd257]" : "text-white"}`}>{s.team}</span>
-        {mine && <span className="text-[9px] font-semibold" style={{ color: colors[side] }}>{t("pickem.yourPick")}</span>}
+        className={`flex items-center justify-center gap-1 flex-1 min-w-0 rounded-lg py-1 border transition active:scale-95 disabled:active:scale-100 ${
+          mine ? "bg-white/10" : "border-white/10"} ${g.locked && !mine ? "opacity-55" : ""}`}
+        style={mine ? { borderColor: colors[side], boxShadow: `0 0 8px ${colors[side]}55` } : undefined}>
+        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: colors[side] }} />
+        <img src={nhlLogoUrl(s.team)} alt="" className="w-4 h-4 object-contain" loading="lazy" />
+        <span className={`text-[10px] font-bold ${won ? "text-[#ffd257]" : "text-white"}`}>{s.team}</span>
       </button>
     );
   };
 
   return (
-    <div className="chat-tile rounded-2xl px-3 py-2.5 flex flex-col gap-1.5">
-      <div className="flex items-center justify-between gap-2 text-[11px]">
+    <div className="chat-tile rounded-2xl p-2 flex flex-col items-center gap-1.5 min-w-0">
+      <div className="w-full flex items-center justify-between gap-1 text-[10px]">
         <button type="button" onClick={() => navigate(`/stats/prediction/game/${g.gameId}`)}
           className="text-white/80 font-semibold truncate active:opacity-70">
           {g.away.team} @ {g.home.team}
         </button>
-        <span className="flex items-center gap-2 flex-shrink-0">
-          <span className={live ? "text-red-400 font-bold" : "text-white/50"}>{when}</span>
-          <span className="text-white/40">{t("pickem.voters", { n: g.total })}</span>
-        </span>
+        <span className={`flex-shrink-0 ${live ? "text-red-400 font-bold" : "text-white/45"}`}>{when}</span>
       </div>
 
-      <div className="flex items-center gap-2">
+      <Ring g={g} colors={colors} shown={shown} />
+
+      <div className="w-full flex gap-1">
         <TeamButton side="away" />
-        <div className="flex-1 flex flex-col gap-1 min-w-0">
-          {g.enough ? (
-            <>
-              <div className="relative flex h-3 rounded-full overflow-hidden bg-white/10" role="img"
-                   aria-label={`${g.away.team} ${g.away.pct} % · ${g.home.team} ${g.home.pct} %`}>
-                <span className="h-full motion-safe:transition-[width] motion-safe:duration-700"
-                      style={{ width: `${shown ? awayPct : 50}%`, background: colors.away }} />
-                <span className="h-full flex-1" style={{ background: colors.home }} />
-                {/* Repère du 50/50 */}
-                <span className="absolute inset-y-0 left-1/2 w-px bg-black/60" />
-              </div>
-              <div className="flex justify-between text-[12px] font-bold">
-                <span style={{ color: colors.away }}>{g.away.pct} %</span>
-                <span style={{ color: colors.home }}>{g.home.pct} %</span>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* Pas encore de pourcentage : la jauge montre combien de votes manquent. */}
-              <div className="h-3 rounded-full overflow-hidden bg-[repeating-linear-gradient(135deg,rgba(255,255,255,0.06)_0_6px,rgba(255,255,255,0.02)_6px_12px)]"
-                   role="img" aria-label={t("pickem.day.votes", { n: g.total, min: g.minVotes })}>
-                <span className="block h-full bg-[#86d1ea]/40 motion-safe:transition-[width] motion-safe:duration-700"
-                      style={{ width: `${shown ? Math.min(100, (g.total / g.minVotes) * 100) : 0}%` }} />
-              </div>
-              <p className="text-center text-[10px] text-white/50">{t("pickem.day.votes", { n: g.total, min: g.minVotes })}</p>
-            </>
-          )}
-        </div>
         <TeamButton side="home" />
       </div>
 
-      {final && g.winner && crowdPick && (
-        <p className={`text-[10px] font-semibold text-center ${crowdPick === g.winner ? "text-emerald-300" : "text-amber-300"}`}>
-          {crowdPick === g.winner ? t("pickem.day.publicRight") : t("pickem.day.publicWrong")}
-        </p>
-      )}
-      {!g.locked && !g.myVote && <p className="text-[10px] text-white/35 text-center">{t("pickem.day.tapToVote")}</p>}
-      {error && <p className="text-amber-300 text-[11px] text-center">{error}</p>}
+      <p className={`text-[9px] text-center leading-tight ${
+        error ? "text-amber-300"
+        : final && g.winner && crowdPick ? (crowdPick === g.winner ? "text-emerald-300 font-semibold" : "text-amber-300 font-semibold")
+        : "text-white/40"}`}>
+        {error
+          ?? (final && g.winner && crowdPick
+            ? (crowdPick === g.winner ? t("pickem.day.publicRight") : t("pickem.day.publicWrong"))
+            : g.myVote ? t("pickem.yourPick") + " · " + g.myVote
+            : t("pickem.voters", { n: g.total }))}
+      </p>
     </div>
   );
 }

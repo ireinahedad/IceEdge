@@ -137,9 +137,9 @@ Session A — vote et affichage — ✅ codé 2026-10-24
   répartition, le vote ouvre l'invite de connexion.
 - Ajout du 2026-10-24 (demande du user) : section dépliable « Votes du jour » dans
   Communauté › Chat (`PickemSection.tsx`, au-dessus des salons, état retenu par
-  appareil). Tableau d'aréna (votes, matchs ouverts, vos choix), graphique
-  « Consensus du jour » (part du favori, repère 50/50), une barre par match aux
-  couleurs des clubs, vote d'un toucher, « le public avait raison / s'est trompé »
+  appareil). Version compacte (même jour) : résumé dans l'en-tête, un anneau par
+  match, deux par rangée, aux couleurs des clubs (jauge « 6/10 » sous 10 votes),
+  vote d'un toucher sur les deux boutons d'équipe, « le public avait raison / s'est trompé »
   une fois le match fini. UN appel : `GET /api/pickem/today` (calendrier en cache +
   1 SELECT groupé, cache 1 min). Graphiques en CSS : le chat ne charge pas recharts.
 - Migration 049 `pickem_votes` (user_id, game_id, team_abbr, created_at ;
