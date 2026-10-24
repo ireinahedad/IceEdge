@@ -15,6 +15,8 @@
  *   voir `newsRoster.service.ts` (32 appels LNH, 1 transaction par jour).
  * • Pick'em (session B) : fige le choix du modèle des matchs VOTÉS qui commencent
  *   dans l'heure (`snapshotModelPicks`) — 1 SELECT par tour, rien sans vote.
+ * • Pick'em (session C) : rappel « votes fermés dans 1 h », une fois par jour, au
+ *   tour qui ouvre la fenêtre des matchs (`remindPickemLock`).
  *
  * Le calendrier est un `setTimeout` réarmé à chaque tour, et non un
  * `setInterval` : la cadence change selon l'heure.
@@ -29,7 +31,7 @@ import { fetchGamesByDate } from './nhlApiClient';
 import { sendToUsers, pushEnabled } from './push.service';
 import { NEWS_SOURCES, type NewsSource } from '../data/newsSources';
 import { runRosterDiffIfDue, type RosterRunResult } from './newsRoster.service';
-import { snapshotModelPicks } from './pickem.service';
+import { snapshotModelPicks, remindPickemLock } from './pickem.service';
 import {
   parseAuthorFeed, teamsForPost, flagsOf, excerptOf, nextDelayMs, inGameWindow,
   type FeedPost, type NewsFlag,
@@ -172,7 +174,7 @@ async function notifyAdmins(rows: NewRow[]): Promise<void> {
 
 // ── Un tour ────────────────────────────────────────────────────────────────
 
-export async function runNewsSync(): Promise<{ read: number; inserted: number; alerted: number; roster: RosterRunResult; modelPicks: number; nextMs: number }> {
+export async function runNewsSync(): Promise<{ read: number; inserted: number; alerted: number; roster: RosterRunResult; modelPicks: number; reminded: number; nextMs: number }> {
   const { teams: playing, startsUtc, startByTeam } = await todaysGames();
   const now = Date.now();
   const windowOpen = inGameWindow(now, startsUtc);
@@ -208,9 +210,10 @@ export async function runNewsSync(): Promise<{ read: number; inserted: number; a
   const roster = await runRosterDiffIfDue(Date.now());
   // Ne lève jamais (voir pickem.service).
   const modelPicks = await snapshotModelPicks(Date.now());
+  const reminded = await remindPickemLock(Date.now());
   if (inserted.length > 0 || (roster.inserted ?? 0) > 0) cache.clear();
 
-  return { read: sources.length, inserted: inserted.length, alerted: toAlert.length, roster, modelPicks, nextMs: nextDelayMs(Date.now(), startsUtc) };
+  return { read: sources.length, inserted: inserted.length, alerted: toAlert.length, roster, modelPicks, reminded, nextMs: nextDelayMs(Date.now(), startsUtc) };
 }
 
 // ── Calendrier ─────────────────────────────────────────────────────────────

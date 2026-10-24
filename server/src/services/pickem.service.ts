@@ -28,9 +28,10 @@ import { fetchGameById, fetchGamesByDate } from './nhlApiClient';
 import { logger } from '../logger';
 import { mapLimit } from './concurrency';
 import { getJobState, setJobState } from './jobLock';
+import { sendToUsers } from './push.service';
 import {
   pickemLocked, pickemState, GAME_ID_RE, PICKEM_MIN_WEEK_PICKS,
-  weekBoundsET, modelPick, rankWeek, announceDue, announceText,
+  weekBoundsET, modelPick, rankWeek, reminderDue, reminderPayload,
   type PickemGame, type PickemState, type RankedRow, type WeekRow,
 } from './pickem';
 
@@ -370,38 +371,57 @@ export async function getPickemLeaderboard(offset: 0 | -1, userId?: string, now 
   };
 }
 
-// ── Session B : annonce du lundi dans le chat ──────────────────────────────
+// ── Session C : rappel « votes fermés dans 1 h » ──────────────────────────────
 
-const ANNOUNCED_KEY = 'pickem-announced-week';
+const REMINDER_KEY = 'pickem-reminder-day';
 
 /**
- * Le lundi (ET) à partir de 10 h, poste le gagnant de la semaine écoulée dans
- * le salon `PICKEM_ANNOUNCE_ROOM_ID`. Sans cette variable : rien (les salons
- * appartiennent aux utilisateurs, aucun n'est « celui de la ligue » par défaut).
- * Une fois par semaine : la semaine annoncée est mémorisée dans `job_state`
- * AVANT le message — mieux vaut une annonce manquée qu'une annonce en double.
- * Appelé par la passe de rattrapage du règlement, juste après le règlement.
+ * Une fois par jour, une heure avant le PREMIER match de la soirée, rappelle de
+ * voter à ceux qui ont voté au moins une fois dans les 30 derniers jours, qui
+ * ont activé les notifications sur iPhone, et qui n'ont encore voté pour aucun
+ * match du jour. Appelé à chaque tour de NewsSync ; hors de la fenêtre, ne lit
+ * que le calendrier (en cache), sans toucher la base.
+ *
+ * Canal APNs seulement, comme « pari réglé » : l'abonnement Web Push a été pris
+ * pour les alertes value bets. Le jour est marqué AVANT l'envoi : mieux vaut un
+ * rappel manqué qu'un rappel en double. Ne lève jamais. Rend le nombre de
+ * destinataires (0 si rien n'est parti).
  */
-export async function announceWeeklyWinner(now = Date.now()): Promise<boolean> {
-  const roomId = process.env.PICKEM_ANNOUNCE_ROOM_ID?.trim();
-  if (!roomId) return false;
-  const last = await getJobState(ANNOUNCED_KEY);
-  const { due, week } = announceDue(now, last);
-  if (!due) return false;
-  if (!(await setJobState(ANNOUNCED_KEY, week.monday))) return false;
+export async function remindPickemLock(now = Date.now()): Promise<number> {
+  try {
+    const raw = await fetchGamesByDate(new Date(now).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }));
+    const upcoming = raw
+      .map((g: any) => ({
+        id: String(g?.id ?? ''),
+        home: String(g?.homeTeam?.abbreviation ?? ''), away: String(g?.awayTeam?.abbreviation ?? ''),
+        startMs: g?.startTimeUTC ? Date.parse(g.startTimeUTC) : NaN,
+      }))
+      .filter((g) => GAME_ID_RE.test(g.id) && Number.isFinite(g.startMs))
+      .sort((a, b) => a.startMs - b.startMs);
+    if (upcoming.length === 0) return 0;
+    const first = upcoming[0];
 
-  leaderboardCache.clear(); // la semaine vient peut-être d'être réglée dans la même passe
-  const data = await weekData(week.start, week.end);
-  const text = announceText(week, rankWeek(data.rows), data.model);
-  if (!text) {
-    logger.info({ week: week.monday }, '[Pickem] personne de classé — pas d\'annonce');
-    return false;
+    // Garde horaire d'abord (gratuite), la mémoire partagée ensuite.
+    if (!reminderDue(now, first.startMs, null).due) return 0;
+    const { due, day } = reminderDue(now, first.startMs, await getJobState(REMINDER_KEY));
+    if (!due) return 0;
+    if (!(await setJobState(REMINDER_KEY, day))) return 0;
+
+    const { rows } = await pool.query(
+      `SELECT DISTINCT v.user_id AS "userId"
+         FROM pickem_votes v
+        WHERE v.created_at > $1
+          AND EXISTS (SELECT 1 FROM apns_device_tokens t WHERE t.user_id = v.user_id)
+          AND NOT EXISTS (SELECT 1 FROM pickem_votes w WHERE w.user_id = v.user_id AND w.game_id = ANY($2::text[]))`,
+      [new Date(now - 30 * 24 * 3600_000).toISOString(), upcoming.map((g) => g.id)],
+    );
+    const userIds = rows.map((r: any) => String(r.userId));
+    if (userIds.length === 0) return 0;
+    const res = await sendToUsers(userIds, reminderPayload(first, upcoming.length), { channels: ['apns'] });
+    logger.info({ day, users: userIds.length, ...res }, '[Pickem] rappel envoyé');
+    return userIds.length;
+  } catch (err: any) {
+    logger.warn({ err: err?.message }, '[Pickem] rappel échoué');
+    return 0;
   }
-  const { rowCount } = await pool.query(
-    `INSERT INTO chat_messages (id, room_id, user_id, username, display_name, avatar, text)
-     SELECT $1, id, NULL, 'ICEEDGE', 'ICEEDGE', '🏆', $2 FROM chat_rooms WHERE id = $3`,
-    [`msg_${now}_pickem`, text, roomId],
-  );
-  if (!rowCount) logger.warn({ roomId }, '[Pickem] salon d\'annonce introuvable');
-  return (rowCount ?? 0) > 0;
 }

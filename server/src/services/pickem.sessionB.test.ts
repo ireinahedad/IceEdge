@@ -4,8 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * Session B. Ce qui compte :
  *   • règlement seulement sur un match FINAL, idempotent (`correct IS NULL`) ;
  *   • choix du modèle figé AVANT la mise au jeu, jamais après ;
- *   • classement : votes réglés de la semaine ET, modèle sur les mêmes matchs ;
- *   • annonce : inerte sans salon, une fois par semaine, marquée avant d'écrire.
+ *   • classement : votes réglés de la semaine ET, modèle sur les mêmes matchs.
  */
 
 const queries: Array<{ sql: string; params: unknown[] }> = [];
@@ -15,9 +14,14 @@ vi.mock('../db/connection', () => ({
 }));
 
 let games: Record<string, any> = {};
+let schedule: any[] = [];
+const pushed: Array<{ userIds: string[]; payload: any; opts: any }> = [];
+vi.mock('./push.service', () => ({
+  sendToUsers: async (userIds: string[], payload: any, opts: any) => { pushed.push({ userIds, payload, opts }); return { sent: userIds.length, failed: 0, expired: 0 }; },
+}));
 vi.mock('./nhlApiClient', () => ({
   fetchGameById: async (id: string) => { const g = games[id]; if (!g) throw new Error('down'); return g; },
-  fetchGamesByDate: async () => [],
+  fetchGamesByDate: async () => schedule,
 }));
 
 let state: Record<string, string> = {};
@@ -49,10 +53,11 @@ beforeEach(() => {
   queries.length = 0;
   handler = () => ({ rows: [], rowCount: 0 });
   games = {};
+  schedule = [];
+  pushed.length = 0;
   state = {};
   stateWriteOk = true;
   bundle = { live: null, byKey: { 'moneyline|true': { probability: 38.4 } } };
-  delete process.env.PICKEM_ANNOUNCE_ROOM_ID;
 });
 
 describe('settlePendingPickems', () => {
@@ -145,39 +150,51 @@ describe('getPickemLeaderboard', () => {
   });
 });
 
-describe('announceWeeklyWinner', () => {
-  const MON = Date.parse('2026-10-26T15:00:00Z'); // lundi 11 h ET
+describe('remindPickemLock (session C)', () => {
+  const FIRST = Date.parse('2026-10-24T23:00:00Z');
+  const sched = (id: string, startMs: number) => ({
+    id, startTimeUTC: new Date(startMs).toISOString(), status: 'scheduled',
+    homeTeam: { abbreviation: 'STL' }, awayTeam: { abbreviation: 'VGK' },
+  });
   beforeEach(() => {
-    handler = (sql) => sql.includes('FROM pickem_model') ? { rows: [{ games: 23, wins: 14 }] }
-      : sql.includes('WITH t AS') ? { rows: [{ games: 0, wins: 0 }] }
-      : sql.includes('INSERT INTO chat_messages') ? { rowCount: 1 }
-      : { rows: [{ userId: 'u1', username: 'ireina', displayName: null, avatar: null, avatarUrl: null, picks: 18, wins: 14 }] };
+    schedule = [sched('2026020301', FIRST + 3600_000), sched('2026020300', FIRST)];
+    handler = (sql) => sql.includes('apns_device_tokens') ? { rows: [{ userId: 'u1' }, { userId: 'u2' }] } : { rows: [] };
   });
 
-  it('sans PICKEM_ANNOUNCE_ROOM_ID : rien', async () => {
-    const { announceWeeklyWinner } = await load();
-    expect(await announceWeeklyWinner(MON)).toBe(false);
+  it('1 h avant le 1er match : iPhone seulement, jour marqué, une seule fois', async () => {
+    const { remindPickemLock } = await load();
+    expect(await remindPickemLock(FIRST - 60 * 60_000)).toBe(2);
+    expect(state['pickem-reminder-day']).toBe('2026-10-24');
+    expect(pushed).toHaveLength(1);
+    expect(pushed[0].userIds).toEqual(['u1', 'u2']);
+    expect(pushed[0].opts).toEqual({ channels: ['apns'] });
+    expect(pushed[0].payload.fr.body).toContain('VGK @ STL ouvre la soirée (2 matchs)');
+    // Les matchs du jour sont exclus pour ceux qui ont déjà voté.
+    const q = queries.find((x) => x.sql.includes('apns_device_tokens'))!;
+    expect(q.params[1]).toEqual(['2026020300', '2026020301']);
+    expect(await remindPickemLock(FIRST - 45 * 60_000)).toBe(0);
+    expect(pushed).toHaveLength(1);
+  });
+
+  it('hors fenêtre : aucune requête en base', async () => {
+    const { remindPickemLock } = await load();
+    expect(await remindPickemLock(FIRST - 3 * 3600_000)).toBe(0);
     expect(queries).toEqual([]);
+    expect(pushed).toEqual([]);
   });
 
-  it('lundi : message dans le salon, semaine marquée ; 2e passe : rien', async () => {
-    process.env.PICKEM_ANNOUNCE_ROOM_ID = 'room_ligue';
-    const { announceWeeklyWinner } = await load();
-    expect(await announceWeeklyWinner(MON)).toBe(true);
-    expect(state['pickem-announced-week']).toBe('2026-10-19');
-    const msg = queries.find((q) => q.sql.includes('INSERT INTO chat_messages'))!;
-    expect(msg.params[2]).toBe('room_ligue');
-    expect(String(msg.params[1])).toContain('@ireina — 14/18 (78 %)');
-    queries.length = 0;
-    expect(await announceWeeklyWinner(MON + 3600_000)).toBe(false);
-    expect(queries.some((q) => q.sql.includes('chat_messages'))).toBe(false);
-  });
-
-  it('mémoire impossible à écrire : pas de message (pas de doublon possible)', async () => {
-    process.env.PICKEM_ANNOUNCE_ROOM_ID = 'room_ligue';
+  it('mémoire impossible à écrire : rien n’est envoyé (pas de doublon possible)', async () => {
     stateWriteOk = false;
-    const { announceWeeklyWinner } = await load();
-    expect(await announceWeeklyWinner(MON)).toBe(false);
-    expect(queries.some((q) => q.sql.includes('chat_messages'))).toBe(false);
+    const { remindPickemLock } = await load();
+    expect(await remindPickemLock(FIRST - 60 * 60_000)).toBe(0);
+    expect(pushed).toEqual([]);
+  });
+
+  it('personne à prévenir : marqué quand même, aucun envoi', async () => {
+    handler = () => ({ rows: [] });
+    const { remindPickemLock } = await load();
+    expect(await remindPickemLock(FIRST - 60 * 60_000)).toBe(0);
+    expect(state['pickem-reminder-day']).toBe('2026-10-24');
+    expect(pushed).toEqual([]);
   });
 });

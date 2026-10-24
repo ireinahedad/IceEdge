@@ -54,7 +54,7 @@ describe('formats', () => {
 
 // ── Session B ────────────────────────────────────────────────────────────────
 import {
-  weekBoundsET, etMidnightUtc, modelPick, rankWeek, announceDue, announceText, PICKEM_MIN_WEEK_PICKS,
+  weekBoundsET, etMidnightUtc, modelPick, rankWeek, PICKEM_MIN_WEEK_PICKS,
 } from './pickem';
 
 describe('semaine lundi → dimanche (heure de l’Est)', () => {
@@ -100,24 +100,24 @@ describe('classement de la semaine', () => {
   });
 });
 
-describe('annonce du lundi', () => {
-  it('lundi 10 h ET, une fois par semaine', () => {
-    const mon9 = T('2026-10-26T13:00:00Z'), mon10 = T('2026-10-26T14:00:00Z'), tue = T('2026-10-27T15:00:00Z');
-    expect(announceDue(mon9, null).due).toBe(false);
-    expect(announceDue(mon10, null)).toMatchObject({ due: true, week: { monday: '2026-10-19' } });
-    expect(announceDue(mon10, '2026-10-19').due).toBe(false);
-    expect(announceDue(tue, null).due).toBe(false);
+// ── Session C ────────────────────────────────────────────────────────────────
+import { reminderDue, reminderPayload } from './pickem';
+
+describe('rappel « votes fermés dans 1 h »', () => {
+  const first = T('2026-10-24T23:00:00Z'); // 19 h ET
+  it('au tour qui ouvre la fenêtre (−1 h), toléré jusqu’à −30 min, une fois par jour', () => {
+    expect(reminderDue(first - 70 * 60_000, first, null).due).toBe(false);
+    expect(reminderDue(first - 60 * 60_000, first, null)).toEqual({ due: true, day: '2026-10-24' });
+    expect(reminderDue(first - 45 * 60_000, first, null).due).toBe(true);
+    expect(reminderDue(first - 30 * 60_000, first, null).due).toBe(false);
+    expect(reminderDue(first - 60 * 60_000, first, '2026-10-24').due).toBe(false);
+    expect(reminderDue(first - 60 * 60_000, null, null).due).toBe(false);
   });
-  it('texte bilingue, gagnants à égalité, modèle sur les mêmes matchs', () => {
-    const week = weekBoundsET(T('2026-10-24T15:00:00Z'));
-    const ranked = rankWeek([
-      { userId: '1', username: 'mari', displayName: null, avatar: null, avatarUrl: null, wins: 14, picks: 18 },
-      { userId: '2', username: 'ireina', displayName: null, avatar: null, avatarUrl: null, wins: 14, picks: 18 },
-    ]);
-    const txt = announceText(week, ranked, { games: 23, wins: 14 })!;
-    expect(txt).toContain('@ireina, @mari — 14/18 (78 %)');
-    expect(txt).toContain('Le modèle ICEEDGE : 14/23 (61 %) sur les mêmes matchs.');
-    expect(txt).toContain('ICEEDGE model: 14/23 (61%) on the same games.');
-    expect(announceText(week, [], { games: 0, wins: 0 })).toBeNull();
+  it('texte bilingue, vouvoiement, lien vers le chat', () => {
+    const p = reminderPayload({ away: 'VGK', home: 'STL' }, 7);
+    expect(p.fr.body).toBe('VGK @ STL ouvre la soirée (7 matchs). Faites vos choix avant la mise au jeu.');
+    expect(p.en.title).toBe("Pick'em: picks lock in 1 h");
+    expect(reminderPayload({ away: 'VGK', home: 'STL' }, 1).fr.body).toBe('VGK @ STL commence dans 1 h. Faites votre choix avant la mise au jeu.');
+    expect(p.fr.url).toBe('/league');
   });
 });

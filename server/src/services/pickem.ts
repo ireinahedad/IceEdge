@@ -147,28 +147,41 @@ export function rankWeek(rows: WeekRow[], minPicks = PICKEM_MIN_WEEK_PICKS): Ran
   return out;
 }
 
-/** Annonce du lundi est-elle due ? Lundi (ET), à partir de 10 h, une fois par semaine. */
-export function announceDue(now: number, lastAnnouncedMonday: string | null): { due: boolean; week: WeekBounds } {
-  const week = weekBoundsET(now, -1);
-  const isMonday = new Date(`${etDay(now)}T12:00:00Z`).getUTCDay() === 1;
-  return { due: isMonday && etHour(now) >= 10 && lastAnnouncedMonday !== week.monday, week };
+// ── Session C : rappel « votes fermés dans 1 h » ──────────────────────────────
+
+/**
+ * Le rappel part au tour de NewsSync qui ouvre la fenêtre des matchs (1re mise
+ * au jeu − 1 h). Les tours sont aux 15 min : on accepte [−65 min, −30 min) pour
+ * ne pas le rater sur un tour un peu décalé, et jamais plus d'une fois par jour.
+ */
+export const REMINDER_FROM_MS = 65 * 60_000;
+export const REMINDER_UNTIL_MS = 30 * 60_000;
+
+export function reminderDue(now: number, firstStartMs: number | null, lastDay: string | null): { due: boolean; day: string } {
+  const day = etDay(now);
+  if (firstStartMs == null || !Number.isFinite(firstStartMs) || lastDay === day) return { due: false, day };
+  const until = firstStartMs - now;
+  return { due: until <= REMINDER_FROM_MS && until > REMINDER_UNTIL_MS, day };
 }
 
-const shortDate = (day: string, fr: boolean) =>
-  new Date(`${day}T12:00:00Z`).toLocaleDateString(fr ? 'fr-CA' : 'en-US', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-
-/** Texte du message (bilingue : les salons mêlent les deux langues). `null` = personne de classé. */
-export function announceText(
-  week: WeekBounds, ranked: RankedRow[], model: { games: number; wins: number },
-): string | null {
-  const top = ranked.filter((r) => r.rank === 1).slice(0, 3);
-  if (top.length === 0) return null;
-  const who = top.map((r) => `@${r.username}`).join(', ');
-  const score = `${top[0].wins}/${top[0].picks} (${top[0].pct} %)`;
-  const mPct = model.games > 0 ? Math.round((model.wins / model.games) * 100) : null;
-  const fr = `🏆 Pick'em de la semaine du ${shortDate(week.monday, true)} au ${shortDate(week.sunday, true)} : ${who} — ${score}.`
-    + (mPct != null ? ` Le modèle ICEEDGE : ${model.wins}/${model.games} (${mPct} %) sur les mêmes matchs.` : '');
-  const en = `🏆 Pick'em of the week (${shortDate(week.monday, false)}–${shortDate(week.sunday, false)}): ${who} — ${score}.`
-    + (mPct != null ? ` ICEEDGE model: ${model.wins}/${model.games} (${mPct}%) on the same games.` : '');
-  return `${fr}\n${en}`;
+/** Texte du rappel, dans les deux langues (vouvoiement en français). */
+export function reminderPayload(first: { away: string; home: string }, games: number): {
+  fr: { title: string; body: string; url: string }; en: { title: string; body: string; url: string };
+} {
+  const m = `${first.away} @ ${first.home}`;
+  const more = games > 1;
+  return {
+    fr: {
+      title: "Pick'em : votes fermés dans 1 h",
+      body: more ? `${m} ouvre la soirée (${games} matchs). Faites vos choix avant la mise au jeu.`
+                 : `${m} commence dans 1 h. Faites votre choix avant la mise au jeu.`,
+      url: '/league',
+    },
+    en: {
+      title: "Pick'em: picks lock in 1 h",
+      body: more ? `${m} opens the night (${games} games). Make your picks before puck drop.`
+                 : `${m} starts in 1 h. Make your pick before puck drop.`,
+      url: '/league',
+    },
+  };
 }
