@@ -4,6 +4,29 @@ import { ErrorScreen, reportError } from "./components/ErrorScreen";
 import { useAuth } from "./context/AuthContext";
 import { AuthGateProvider } from "./context/AuthGateContext";
 import { features } from "./platform";
+import { primeGet, gamePredictionsPath } from "./services/nhlApiService";
+import { fetchGameMlBundle } from "./services/mlApi";
+
+/**
+ * PERF_PLAN.md P2.7 (2026-10-24) — page d'un match : ses trois appels de base
+ * (en-tête, marchés, paquet ML) partent dès la NAVIGATION, en parallèle du
+ * téléchargement des chunks de la page (`PredictionPage`, `GamePrediction`…),
+ * au lieu d'attendre qu'ils soient chargés et montés (~1 s mesuré en prod).
+ * Le loader ne fait qu'amorcer et rend tout de suite : la navigation n'attend
+ * rien. Les composants reprennent ces requêtes (`primeGet`, cache de
+ * `fetchGameMlBundle`) — aucune requête de plus, sauf pour un match en direct,
+ * dont la page lit `/predict/game/:id/live` à la place des marchés (un appel
+ * en cache serveur perdu, une fois).
+ */
+function primeMatchPage({ params }: { params: { type?: string; id?: string } }): null {
+  const id = params.id ?? "";
+  if (params.type === "game" && /^\d{6,12}$/.test(id)) {
+    primeGet(`/games/${id}`);
+    primeGet(gamePredictionsPath(id));
+    void fetchGameMlBundle(id);
+  }
+  return null;
+}
 
 // LoginPage stays eager — it's the entry point for unauthenticated visitors, so
 // lazy-loading it would just add a round-trip before first paint.
@@ -169,7 +192,10 @@ export const router = createBrowserRouter([
       { path: "/",                                   element: withSuspense(<HockeyLanding />)                },
       { path: "/stats",                              element: withSuspense(<StatsPage />)                    },
       { path: "/schedule",                           element: withSuspense(<SchedulePage />)                 },
-      { path: "/stats/prediction/:type/:id",         element: withSuspense(<PredictionPage />)               },
+      { path: "/stats/prediction/:type/:id",         element: withSuspense(<PredictionPage />), loader: primeMatchPage,
+        // Pas de nouvel amorçage quand seuls les paramètres d'URL changent (onglet,
+        // marché ouvert) : la page ne relit rien, l'appel serait perdu.
+        shouldRevalidate: ({ currentParams, nextParams }) => currentParams.id !== nextParams.id || currentParams.type !== nextParams.type },
       // La section Statistiques, sur trois routes qui mènent toutes à ChartPage :
       //   /stats/chart                     son accueil — les trois entrées
       //   /stats/chart/:type/:id?          les vues ligue et les fiches

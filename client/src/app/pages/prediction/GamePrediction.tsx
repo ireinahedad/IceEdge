@@ -323,7 +323,7 @@ export function GamePrediction({ gameId }: { gameId: string }) {
       {/* Dernières nouvelles des deux équipes (absents, gardiens) — F1. */}
       <MatchNews home={home.abbr} away={away.abbr} accent={accent} />
 
-      {/* Pick'em des utilisateurs ICEEDGE — F3, session A. */}
+      {/* Pick'em des utilisateurs — F3, session A. */}
       <MatchPickem gameId={gameId} home={home.abbr} away={away.abbr} accent={accent} />
 
       {/* ── Market groups ── */}

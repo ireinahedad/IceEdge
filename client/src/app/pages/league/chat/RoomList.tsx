@@ -242,7 +242,7 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
         <p className="text-white/40 text-[11px] text-center">{codeError}</p>
       )}
 
-      {/* Votes du jour (pick'em ICEEDGE, F3) — dépliable, au-dessus des salons. */}
+      {/* Votes du jour (pick'em, F3) — dépliable, au-dessus des salons. */}
       <PickemSection />
 
       {/* Salons privés — vus à travers un chambranle éclairé : on regarde DANS

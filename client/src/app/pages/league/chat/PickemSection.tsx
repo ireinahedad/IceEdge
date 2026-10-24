@@ -1,7 +1,7 @@
 /**
  * PickemSection.tsx — « Votes du jour » dans Communauté › Chat.
  * NEWS_CONSENSUS_PLAN.md, F3 : le remplaçant de #pickems, avec les vrais
- * utilisateurs ICEEDGE.
+ * utilisateurs.
  *
  * Une section dépliable et COMPACTE (demande du user, 2026-10-24) : une ligne de
  * résumé, puis un anneau par match, deux par rangée. L'anneau partage le cercle
@@ -19,7 +19,8 @@ import { useNavigate } from "react-router";
 import { useI18n } from "../../../i18n";
 import { useAuth } from "../../../context/AuthContext";
 import { useAuthGate } from "../../../context/AuthGateContext";
-import { nhlLogoUrl, teamColors } from "../../../data/teamEmoji";
+import { nhlLogoUrl } from "../../../data/teamEmoji";
+import { sideColors } from "../../../data/teamContrast";
 import {
   fetchPickemDay, castPickem, PickemError,
   type PickemDay, type PickemDayGame,
@@ -27,38 +28,6 @@ import {
 import { PickemLeaderboard } from "./PickemLeaderboard";
 
 const OPEN_KEY = "iceedge_pickem_open";
-
-// ─── Couleurs : lisibles sur le fond sombre, et distinctes entre elles ────────
-
-function rgb(hex: string): [number, number, number] {
-  const h = hex.replace("#", "");
-  const n = parseInt(h.length === 3 ? h.split("").map((c) => c + c).join("") : h, 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-function luminance(hex: string): number {
-  const [r, g, b] = rgb(hex).map((v) => {
-    const s = v / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-function distance(a: string, b: string): number {
-  const [x, y] = [rgb(a), rgb(b)];
-  return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
-}
-/** La couleur du club la plus lisible sur la glace sombre ; bleu glace si les deux sont trop foncées. */
-function readable(abbr: string): string {
-  const { primary, secondary } = teamColors(abbr);
-  if (luminance(primary) >= 0.07) return primary;
-  if (luminance(secondary) >= 0.07) return secondary;
-  return "#86d1ea";
-}
-/** Paire visiteur / domicile : si elles se confondent, le domicile passe en blanc. */
-export function sideColors(away: string, home: string): { away: string; home: string } {
-  const a = readable(away);
-  const h = readable(home);
-  return { away: a, home: distance(a, h) < 90 ? "#dfe9ef" : h };
-}
 
 // ─── État ─────────────────────────────────────────────────────────────────────
 
@@ -132,7 +101,7 @@ function Ring({ g, colors, shown }: { g: PickemDayGame; colors: { away: string; 
     // Jauge : combien de votes avant d'afficher une répartition.
     const filled = shown ? Math.min(100, (g.total / g.minVotes) * 100) : 0;
     return (
-      <svg viewBox="0 0 36 36" className="w-[72px] h-[72px] -rotate-90" role="img"
+      <svg viewBox="0 0 36 36" className="w-[52px] h-[52px] flex-shrink-0 -rotate-90" role="img"
            aria-label={t("pickem.day.votes", { n: g.total, min: g.minVotes })}>
         <circle {...common} stroke="rgba(255,255,255,0.08)" strokeDasharray="2 1.2" />
         <circle {...common} stroke="rgba(134,209,234,0.55)" strokeLinecap="round"
@@ -150,7 +119,7 @@ function Ring({ g, colors, shown }: { g: PickemDayGame; colors: { away: string; 
   const fav = g.home.pct >= g.away.pct ? g.home : g.away;
   const favColor = fav === g.home ? colors.home : colors.away;
   return (
-    <svg viewBox="0 0 36 36" className="w-[72px] h-[72px] -rotate-90" role="img"
+    <svg viewBox="0 0 36 36" className="w-[52px] h-[52px] flex-shrink-0 -rotate-90" role="img"
          aria-label={`${g.away.team} ${g.away.pct} % · ${g.home.team} ${g.home.pct} %`}>
       <circle {...common} stroke={colors.away}
               strokeDasharray={`${Math.max(0, away - GAP)} ${100 - Math.max(0, away - GAP)}`}
@@ -210,49 +179,67 @@ function GameDonut({ game: g, onChange }: { game: PickemDayGame; onChange: (g: P
     }
   }
 
+  // Vote ouvert : deux boutons. Vote fermé : une légende, rien à toucher.
   const TeamButton = ({ side }: { side: "away" | "home" }) => {
     const s = g[side];
     const mine = g.myVote === s.team;
-    const won = final && g.winner === s.team;
     return (
-      <button type="button" onClick={() => vote(s.team)} disabled={g.locked || busy} aria-pressed={mine}
+      <button type="button" onClick={() => vote(s.team)} disabled={busy} aria-pressed={mine}
         aria-label={`${s.team}${mine ? ` — ${t("pickem.yourPick")}` : ""}`}
-        className={`flex items-center justify-center gap-1 flex-1 min-w-0 rounded-lg py-1 border transition active:scale-95 disabled:active:scale-100 ${
-          mine ? "bg-white/10" : "border-white/10"} ${g.locked && !mine ? "opacity-55" : ""}`}
-        style={mine ? { borderColor: colors[side], boxShadow: `0 0 8px ${colors[side]}55` } : undefined}>
+        className={`w-full flex items-center gap-1 rounded-md px-1.5 py-0.5 border transition active:scale-95 disabled:active:scale-100 ${
+          mine ? "bg-white/10" : "border-white/10"}`}
+        style={mine ? { borderColor: colors[side], boxShadow: `0 0 6px ${colors[side]}55` } : undefined}>
         <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: colors[side] }} />
-        <img src={nhlLogoUrl(s.team)} alt="" className="w-4 h-4 object-contain" loading="lazy" />
-        <span className={`text-[10px] font-bold ${won ? "text-[#ffd257]" : "text-white"}`}>{s.team}</span>
+        <img src={nhlLogoUrl(s.team)} alt="" className="w-3.5 h-3.5 object-contain" loading="lazy" />
+        <span className="text-[10px] font-bold text-white">{s.team}</span>
+        {g.enough && s.pct != null && <span className="ml-auto text-[9px] text-white/50">{s.pct}%</span>}
       </button>
     );
   };
 
+  const TeamLegend = ({ side }: { side: "away" | "home" }) => {
+    const s = g[side];
+    const mine = g.myVote === s.team;
+    const won = final && g.winner === s.team;
+    return (
+      <div className="w-full flex items-center gap-1 px-1.5 py-0.5">
+        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: colors[side] }} />
+        <span className={`text-[10px] font-bold ${won ? "text-[#ffd257]" : "text-white/80"}`}>{s.team}</span>
+        {mine && <span className="text-[9px]" style={{ color: colors[side] }} aria-label={t("pickem.yourPick")}>✓</span>}
+        <span className="ml-auto text-[9px] text-white/50">{g.enough && s.pct != null ? `${s.pct}%` : ""}</span>
+      </div>
+    );
+  };
+
+  const footer = error
+    ?? (final && g.winner && crowdPick
+      ? (crowdPick === g.winner ? t("pickem.day.publicRight") : t("pickem.day.publicWrong"))
+      : t("pickem.voters", { n: g.total }));
+
   return (
-    <div className="chat-tile rounded-2xl p-2 flex flex-col items-center gap-1.5 min-w-0">
-      <div className="w-full flex items-center justify-between gap-1 text-[10px]">
+    <div className="chat-tile rounded-xl px-2 py-1.5 flex flex-col gap-1 min-w-0">
+      <div className="w-full flex items-center justify-between gap-1 text-[9px]">
         <button type="button" onClick={() => navigate(`/stats/prediction/game/${g.gameId}`)}
-          className="text-white/80 font-semibold truncate active:opacity-70">
-          {g.away.team} @ {g.home.team}
+          className="text-[10px] leading-tight text-white/60 font-medium tracking-wide truncate active:opacity-70">
+          {g.away.team} <span className="text-white/30">–</span> {g.home.team}
         </button>
         <span className={`flex-shrink-0 ${live ? "text-red-400 font-bold" : "text-white/45"}`}>{when}</span>
       </div>
 
-      <Ring g={g} colors={colors} shown={shown} />
-
-      <div className="w-full flex gap-1">
-        <TeamButton side="away" />
-        <TeamButton side="home" />
+      <div className="flex items-center gap-1.5">
+        <Ring g={g} colors={colors} shown={shown} />
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
+          {g.locked
+            ? <><TeamLegend side="away" /><TeamLegend side="home" /></>
+            : <><TeamButton side="away" /><TeamButton side="home" /></>}
+        </div>
       </div>
 
-      <p className={`text-[9px] text-center leading-tight ${
+      <p className={`text-[9px] leading-tight truncate ${
         error ? "text-amber-300"
         : final && g.winner && crowdPick ? (crowdPick === g.winner ? "text-emerald-300 font-semibold" : "text-amber-300 font-semibold")
         : "text-white/40"}`}>
-        {error
-          ?? (final && g.winner && crowdPick
-            ? (crowdPick === g.winner ? t("pickem.day.publicRight") : t("pickem.day.publicWrong"))
-            : g.myVote ? t("pickem.yourPick") + " · " + g.myVote
-            : t("pickem.voters", { n: g.total }))}
+        {footer}
       </p>
     </div>
   );

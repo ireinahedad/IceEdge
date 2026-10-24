@@ -1,5 +1,5 @@
 /**
- * pickemService.ts — pick'em ICEEDGE (NEWS_CONSENSUS_PLAN.md, F3, session A).
+ * pickemService.ts — pick'em (NEWS_CONSENSUS_PLAN.md, F3, session A).
  *
  *   GET  /api/pickem/today    public : tous les matchs du jour (section du chat)
  *   GET  /api/pickem/leaderboard?week=current|previous  public : classement hebdo

@@ -70,7 +70,20 @@ Rien à coder. Avant d'empiler autre chose sur le fil, vérifier qu'il dit vrai.
       corrigent `teamsInText` (`newsFeed.ts`).
 - [ ] Supprimer `_to_delete/server-src-tests.tgz` et `_to_delete/client-src-tests.tgz`.
 
-### Étape 2 — Couverture : sources pour les 23 équipes sans compte dédié (1 session)
+### Étape 2 — Couverture : sources pour les 23 équipes sans compte dédié (1 session) — ✅ script codé 2026-10-24
+
+Livré : `npm run news:discover` (`scripts/discover-news-sources.ts`, logique pure
+dans `src/services/newsDiscover.ts`, 11 tests). Par équipe : 4 recherches de
+profils (« <surnom> beat writer », « <surnom> reporter », « <ville> hockey »,
+« <surnom> »), pré-tri sur le profil, puis le contrôle de `news:check` sur 7 jours
+(≥ 3 publications, cite l'équipe ≥ 2 fois — 1 si le profil la nomme —, pas une
+autre équipe comme sujet principal). Sortie : les 3 meilleurs par équipe + lignes
+prêtes à coller. `npm run news:discover -- VGK STL` pour quelques équipes.
+⚠️ Bluesky est bloqué depuis le cloud ET depuis l'environnement Claude de ton
+PC : le script se lance dans ton terminal Windows (comme `news:check`).
+Reste à faire (toi) : lancer, relire chaque compte, coller, `npm run news:check`.
+
+Plan d'origine :
 
 Le fil vaut ce que valent ses sources. Deviner des handles a échoué 9 fois sur 12.
 

@@ -292,6 +292,10 @@ const PRIME_TTL_MS = 15_000;
 const primed = new Map<string, { at: number; promise: Promise<unknown> }>();
 
 export function primeGet(path: string): void {
+  // Préchargements jamais repris (page quittée, match en direct qui lit une
+  // autre route) : on les oublie passé le délai, la Map ne grossit pas.
+  const now = Date.now();
+  for (const [k, e] of primed) if (now - e.at >= PRIME_TTL_MS) primed.delete(k);
   if (primed.has(path)) return;
   const promise = rawGet<unknown>(path);
   promise.catch(() => { /* le lecteur verra l'erreur ; ici, rien */ });
@@ -392,6 +396,8 @@ export interface PastGamesPage {
 
 /** Chemin de `getGamesRange` — exporté pour que le préchargement demande la même URL. */
 export const gamesRangePath = (start: string, end: string) => `/games/range?start=${start}&end=${end}`;
+/** Chemin des marchés d'un match (`getGamePredictions`) — même raison. */
+export const gamePredictionsPath = (gameId: string) => `/predictions/game/${gameId}${weightsQuery()}`;
 
 export const nhlApiService = {
   getGamesByDate: (date?: string): Promise<NHLGame[]> => {
@@ -518,7 +524,7 @@ export const nhlApiService = {
   // ── Predictions (rule-based market groups from backend) ──────────────────
   /** `live` : match en cours — une réponse de repli est refusée (voir `getFresh`). */
   getGamePredictions:   (gameId: string, live = false) =>
-    (live ? getFresh : get)<any[]>(`/predictions/game/${gameId}${weightsQuery()}`),
+    (live ? getFresh : get)<any[]>(gamePredictionsPath(gameId)),
   getTeamPredictions:   (teamAbbr: string) => get<any[]>(`/predictions/team/${teamAbbr}`),
   getPlayerPredictions: (playerId: string) => get<any[]>(`/predictions/player/${playerId}`),
 };

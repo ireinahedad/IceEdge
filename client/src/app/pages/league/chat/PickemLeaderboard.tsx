@@ -4,7 +4,7 @@
  *
  * Replié par défaut (la section doit rester compacte) et chargé seulement à
  * l'ouverture. Semaine lundi → dimanche (heure de l'Est), 10 picks réglés
- * minimum pour être classé. Trois repères côte à côte : le modèle ICEEDGE et
+ * minimum pour être classé. Trois repères côte à côte : le modèle et
  * le choix majoritaire du public sur les MÊMES matchs, et votre propre taux.
  */
 
