@@ -7,19 +7,20 @@
  */
 
 import { useNavigate } from "react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { nhlApiService } from "../../services/nhlApiService";
-import { predictionApiService, isPredictionUnavailable } from "../../services/predictionApiService";
 import { useSport } from "../../context/SportContext";
 import { useI18n } from "../../i18n";
 import { MatchNews } from "./MatchNews";
+import { MatchPickem } from "./MatchPickem";
 import { nhlLogoUrl } from "../../data/teamEmoji";
 import { MarketGroup, PredictionsRevealBar } from "./PredictionSheet";
 import { PlayerPropGrid } from "./PlayerPropGrid";
 import { TopBetsSection } from "./topBets";
 import { BetTabs } from "./betTabs";
-import { LiveGameView, MLProps, MktGroup } from "./gameMarkets";
-import { fetchGameMlBundle, type GameMlBundle } from "../../components/MLPredictionCard";
+import { LiveGameView, MLProps, MktGroup, mlBundleKey } from "./gameMarkets";
+import { fetchGameMlBundle, fetchGameLive, type GameMlBundle } from "../../services/mlApi";
+import type { NHLGame } from "../../types/bet";
 import { BetOddsCtx, GameLiveCtx, HeadToHead, NotFound, RevealMode, RevealModeCtx, ServerGroupsPending, StatsBanner, useGameOdds, useServerGroups } from "./predictionShared";
 
 /**
@@ -54,65 +55,65 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   // En direct, une réponse de repli du serveur (vieux score) est refusée, et
   // passé 90 s sans rafraîchissement (`staleSince`) les chiffres affichés
   // perdent leur drapeau `live` : ils restent à l'écran, mais pâles.
-  const { groups: apiGroups, failed: apiFailed, retry: retryApi, staleSince } =
-    useServerGroups(() => nhlApiService.getGamePredictions(gameId, isLive), gameId,
-                    isLive ? (headerRefreshMs ?? LIVE_POLL_MS) : undefined);
-  const [loading, setLoading] = useState(true);
-  // 2026-10-01 : ML partout ; les règles ne se voient que dans la fiche d'un pari.
-  const revealMode: RevealMode = "ml";
-
-  // Prédictions ML de TOUTES les tuiles du match, en une requête — chargées à
-  // la première bascule en mode ML seulement. `undefined` = pas encore là,
-  // `null` = indisponible. Voir `fetchGameMlBundle`.
   //
-  // Pendant un match, le serveur les recalcule à partir du score et du temps
-  // restant (`gameMlBundle.ts`) : on les redemande au rythme des règles. Un
-  // échec garde les derniers chiffres ; au-delà de 90 s sans succès, ils ne
-  // sont plus « en direct » (`mlStale`) et s'affichent pâles.
+  // PERF_PLAN.md P2.3 (2026-10-24) : EN DIRECT, ce rappel est le SEUL de la page.
+  // Il passe par `GET /predict/game/:id/live`, qui rend aussi l'en-tête (score,
+  // période, rythme) et le paquet ML — avant, trois minuteries rappelaient trois
+  // routes à chaque tick. Avant-match, rien ne change : un seul chargement.
   const [mlBundle, setMlBundle] = useState<GameMlBundle | null | undefined>(undefined);
   const [mlStale, setMlStale] = useState(false);
+  const mlLastOk = useRef(Date.now());
   // Le plus rapide des deux rythmes annoncés (paquet ML, en-tête du match).
   const pollMs = Math.min(
     mlBundle?.live && !mlBundle.live.final && mlBundle.live.refreshMs ? mlBundle.live.refreshMs : LIVE_POLL_MS,
     headerRefreshMs ?? LIVE_POLL_MS,
   );
+  /** Un tick du direct : applique en-tête et paquet ML, rend les marchés (ou lève). */
+  const loadLive = async (): Promise<MktGroup[]> => {
+    const s = await fetchGameLive<NHLGame, MktGroup>(gameId);
+    const g = s.game;
+    if (g) {
+      setHeaderRefreshMs(g.status === "live" ? g.refreshMs : undefined);
+      setGameView(v => v && {
+        ...v,
+        status: g.status,
+        period: g.period ? g.period + "P • " + g.clock : undefined,
+        home: { ...v.home, score: g.homeTeam.score },
+        away: { ...v.away, score: g.awayTeam.score },
+      });
+    }
+    // Un échec du paquet garde les derniers chiffres ; au-delà de 90 s, pâles.
+    if (s.bundle) { mlLastOk.current = Date.now(); setMlBundle(s.bundle); setMlStale(false); }
+    else if (Date.now() - mlLastOk.current >= ML_STALE_MS) setMlStale(true);
+    // Marchés absents : `useServerGroups` garde les derniers et le signale (`staleSince`).
+    if (!s.markets) throw new Error("live markets unavailable");
+    return s.markets.groups;
+  };
+  const { groups: apiGroups, failed: apiFailed, retry: retryApi, staleSince } =
+    useServerGroups(() => (isLive ? loadLive() : nhlApiService.getGamePredictions(gameId, false)), gameId,
+                    isLive ? pollMs : undefined);
+  const [loading, setLoading] = useState(true);
+  // 2026-10-01 : ML partout ; les règles ne se voient que dans la fiche d'un pari.
+  const revealMode: RevealMode = "ml";
+
+  // Prédictions ML de TOUTES les tuiles du match, en une requête. `undefined` =
+  // pas encore là, `null` = indisponible. Voir `fetchGameMlBundle`. Pendant un
+  // match, la suite arrive par `loadLive` (même paquet, recalculé par le serveur
+  // à partir du score et du temps restant).
   useEffect(() => {
     if (revealMode !== "ml") return;
     let alive = true;
-    let lastOk = Date.now();
-    const load = () => fetchGameMlBundle(gameId).then(b => {
+    fetchGameMlBundle(gameId).then(b => {
       if (!alive) return;
-      if (b) { lastOk = Date.now(); setMlBundle(b); setMlStale(false); }
-      else if (!isLive) setMlBundle(null);
-      else if (Date.now() - lastOk >= ML_STALE_MS) setMlStale(true);
+      if (b) { mlLastOk.current = Date.now(); setMlBundle(b); setMlStale(false); }
+      else setMlBundle(prev => (prev === undefined ? null : prev));
     });
-    load();
-    const timer = isLive ? setInterval(load, pollMs) : undefined;
-    return () => { alive = false; if (timer) clearInterval(timer); };
-  }, [revealMode, gameId, isLive, pollMs]);
+    return () => { alive = false; };
+  }, [revealMode, gameId]);
 
-  // En-tête (score, période, horloge) rafraîchi au même rythme que les marchés
-  // tant que le match est en cours. Au coup de sifflet final, plus aucun rappel
-  // (voir juste après pour le dernier état).
-  useEffect(() => {
-    if (!isLive) return;
-    let alive = true;
-    const timer = setInterval(async () => {
-      try {
-        const g = await nhlApiService.getGame(gameId);
-        if (!alive) return;
-        setHeaderRefreshMs(g.status === "live" ? g.refreshMs : undefined);
-        setGameView(v => v && {
-          ...v,
-          status: g.status,
-          period: g.period ? g.period + "P • " + g.clock : undefined,
-          home: { ...v.home, score: g.homeTeam.score },
-          away: { ...v.away, score: g.awayTeam.score },
-        });
-      } catch { /* en-tête inchangé ; nouvel essai au prochain tick */ }
-    }, pollMs);
-    return () => { alive = false; clearInterval(timer); };
-  }, [isLive, gameId, pollMs]);
+  // L'en-tête (score, période, horloge) du direct est rafraîchi par `loadLive`,
+  // au rythme des marchés ; au coup de sifflet final, `status` passe à "final"
+  // et la redirection ci-dessous prend le relais.
 
   // Match TERMINÉ : la page prédiction n'a plus d'objet — tous les paris sont
   // décidés. On la remplace par la page Statistiques du match (score final,
@@ -133,32 +134,25 @@ export function GamePrediction({ gameId }: { gameId: string }) {
       // n'expose plus que des tableaux vides depuis le passage au backend, donc
       // `getGameById` rendait toujours `undefined`. Le code était mort et
       // portait deux erreurs de type que rien ne pouvait déclencher.
+      // Plus de `POST /predict/single` (moteur de RÈGLES) ici — décision du
+      // 2026-10-24, « ML partout » (PERF_PLAN.md P2.2) : le bandeau
+      // « prédiction indisponible » lit la victoire ML du paquet du match, déjà
+      // chargé pour les tuiles. Un appel non cacheable de moins par page.
       try {
-        // La probabilité du modèle peut manquer ; dans ce cas elle vaut `null`
-        // et la page masque les marchés qui en dérivent. Aucun nombre de repli.
-        const [nhlGame, homePct] = await Promise.all([
-          nhlApiService.getGame(gameId),
-          predictionApiService
-            .getSinglePrediction({ marketType: "moneyline", gameId, teamId: "" })
-            .then(r => r.probability as number | null)
-            .catch((e: unknown) => {
-              if (!isPredictionUnavailable(e)) throw e;
-              console.warn("[GamePrediction] prédiction indisponible :", e.reason);
-              return null;
-            }),
-        ]);
+        const nhlGame = await nhlApiService.getGame(gameId);
+        if (!alive) return;
         setHeaderRefreshMs(nhlGame.status === "live" ? nhlGame.refreshMs : undefined);
         setGameView({
           id: gameId,
           home: {
             abbr: nhlGame.homeTeam.abbreviation, name: nhlGame.homeTeam.name,
             logo: nhlLogoUrl(nhlGame.homeTeam.abbreviation),
-            score: nhlGame.homeTeam.score, winPct: homePct,
+            score: nhlGame.homeTeam.score, winPct: undefined,
           },
           away: {
             abbr: nhlGame.awayTeam.abbreviation, name: nhlGame.awayTeam.name,
             logo: nhlLogoUrl(nhlGame.awayTeam.abbreviation),
-            score: nhlGame.awayTeam.score, winPct: homePct == null ? null : 100 - homePct,
+            score: nhlGame.awayTeam.score, winPct: undefined,
           },
           period: nhlGame.period ? nhlGame.period + "P • " + nhlGame.clock : undefined,
           time: nhlGame.startTime,
@@ -168,9 +162,11 @@ export function GamePrediction({ gameId }: { gameId: string }) {
       } catch (e) {
         console.error("GamePrediction fetch error", e);
       }
-      setLoading(false);
+      if (alive) setLoading(false);
     }
+    let alive = true;
     load();
+    return () => { alive = false; };
   }, [gameId]);
 
   // ⚠️ Mémoïsé : `groups` porte les `mlProps` de chaque tuile. Recalculé à
@@ -258,7 +254,13 @@ export function GamePrediction({ gameId }: { gameId: string }) {
   if (!gameView) return <NotFound />;
 
   const { home, away } = gameView;
-  const finalPct = home.winPct == null ? null : Math.min(85, Math.max(15, home.winPct));
+  // Victoire domicile selon le modèle ML (paquet du match). `undefined` = paquet
+  // encore en route : pas de bandeau tant qu'on ne sait pas.
+  const mlHomeWin = mlBundle === undefined ? undefined
+    : mlBundle === null ? null
+    : (mlBundle.byKey[mlBundleKey("moneyline", null, null, true)]?.probability ?? null);
+  const finalPct = mlHomeWin === undefined ? undefined
+    : mlHomeWin == null ? null : Math.min(85, Math.max(15, mlHomeWin));
 
   return (
     <div className="flex flex-col gap-3">
@@ -269,7 +271,7 @@ export function GamePrediction({ gameId }: { gameId: string }) {
           <p className="text-[#c0cdd4] text-[11px] leading-relaxed">{t("pred.liveNote")}</p>
         </div>
       )}
-      {finalPct == null && (
+      {finalPct === null && (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
           <p className="text-amber-300 text-[11px] font-semibold">{t("pred.unavailable")}</p>
           <p className="text-amber-200/70 text-[11px] mt-0.5">{t("pred.unavailableHint")}</p>
@@ -320,6 +322,9 @@ export function GamePrediction({ gameId }: { gameId: string }) {
 
       {/* Dernières nouvelles des deux équipes (absents, gardiens) — F1. */}
       <MatchNews home={home.abbr} away={away.abbr} accent={accent} />
+
+      {/* Pick'em des utilisateurs ICEEDGE — F3, session A. */}
+      <MatchPickem gameId={gameId} home={home.abbr} away={away.abbr} accent={accent} />
 
       {/* ── Market groups ── */}
       <StatsBanner type="game" id={gameId} />

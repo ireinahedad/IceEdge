@@ -5,6 +5,7 @@ import { useAuthGate } from "../../../context/AuthGateContext";
 import { useI18n } from "../../../i18n";
 import { AppButton } from "../../../components/AppButton";
 import type { ChatRoom } from "../../../types/user";
+import { PickemSection } from "./PickemSection";
 
 import { Lock, Pin, Search } from "lucide-react";
 // ─── Room list ────────────────────────────────────────────────────────────────
@@ -240,6 +241,9 @@ export function RoomList({ rooms, onSelect, onCreateNew, onPinToggle, onJoined }
       {codeError && looksLikeCode && (
         <p className="text-white/40 text-[11px] text-center">{codeError}</p>
       )}
+
+      {/* Votes du jour (pick'em ICEEDGE, F3) — dépliable, au-dessus des salons. */}
+      <PickemSection />
 
       {/* Salons privés — vus à travers un chambranle éclairé : on regarde DANS
           la pièce, sans qu'un seul mot n'ait à la nommer. Les noms de salon

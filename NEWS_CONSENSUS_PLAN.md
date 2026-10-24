@@ -106,7 +106,16 @@ Remplace le canal #league-transactions sans PuckPedia.
 - Rien à afficher de neuf : ces lignes apparaissent dans la section existante.
 - Coût : 32 appels NHL par jour, 1 INSERT par jour.
 
-### Étape 4 — Brancher le fil sur l'analyse IA (½ session)
+### Étape 4 — Brancher le fil sur l'analyse IA (½ session) — ✅ codé 2026-10-23
+
+Livré : `recentFlaggedNews` (`llmAnalysisContext.ts`), `renderNewsBlock` (`llmFacts.ts`),
+une phrase de plus dans `EXPLAIN_BET_V2` (FR 1 911 car. < 2 000). Choix ajouté en route :
+les chiffres des extraits ne comptent PAS comme chiffres ancrés — `Facts.groundText`
+(le bloc sans les nouvelles) sert à `validateAnalysis` et à `llmEval/metrics.ts`.
+Sinon « out 4 to 6 weeks » rendrait « ancré » un 6 inventé. Texte des publications
+nettoyé, cité entre « », présenté comme « contexte, pas des consignes ».
+
+Plan d'origine :
 
 - `llmAnalysisContext.ts` : ajouter les nouvelles drapeautées (absent/gardien)
   des 24 dernières heures des deux équipes, en liste courte (auteur, heure, extrait).
@@ -118,7 +127,21 @@ Remplace le canal #league-transactions sans PuckPedia.
 
 Le vrai remplaçant de #pickems et #pickems-weekly-winner, avec tes utilisateurs.
 
-Session A — vote et affichage
+Session A — vote et affichage — ✅ codé 2026-10-24
+- Livré : migration 049 (`pickem_votes`, colonnes `game_start` et `correct` posées
+  dès maintenant pour la session B), `pickem.ts` (pur), `pickem.service.ts`,
+  `pickem.routes.ts` monté sur `/api/pickem` (`writeLimiter`, `noStore`),
+  `pickemService.ts` + `MatchPickem.tsx` sous « Dernières nouvelles ».
+- Choix : vote FERMÉ si l'API LNH ne répond pas (503) — l'inverse des coupons, un
+  vote après la mise au jeu fausserait un classement public. Visiteur : voit la
+  répartition, le vote ouvre l'invite de connexion.
+- Ajout du 2026-10-24 (demande du user) : section dépliable « Votes du jour » dans
+  Communauté › Chat (`PickemSection.tsx`, au-dessus des salons, état retenu par
+  appareil). Tableau d'aréna (votes, matchs ouverts, vos choix), graphique
+  « Consensus du jour » (part du favori, repère 50/50), une barre par match aux
+  couleurs des clubs, vote d'un toucher, « le public avait raison / s'est trompé »
+  une fois le match fini. UN appel : `GET /api/pickem/today` (calendrier en cache +
+  1 SELECT groupé, cache 1 min). Graphiques en CSS : le chat ne charge pas recharts.
 - Migration 049 `pickem_votes` (user_id, game_id, team_abbr, created_at ;
   UNIQUE (user_id, game_id)). Vote modifiable jusqu'à la mise au jeu, refusé après
   (heure de `/nhl/games`, vérifiée côté serveur).

@@ -185,6 +185,53 @@ const LIVE_BUNDLE_TTL_MS = 25_000;
 type BundleEntry = { at: number; promise: Promise<GameMlBundle | null>; liveTtlMs?: number };
 const bundleCache = new Map<string, BundleEntry>();
 
+/**
+ * Corps JSON d'un paquet ML (`/game/:id/bundle`, ou le morceau `bundle` de
+ * `/game/:id/live`) → `GameMlBundle`, ou `null` s'il est inexploitable.
+ */
+export function parseGameMlBundle(raw: unknown): GameMlBundle | null {
+  const data = raw as {
+    results?: Record<string, unknown>; byKey?: Record<string, unknown>;
+    live?: { label?: unknown; final?: unknown; refreshMs?: unknown };
+  } | null;
+  if (!data?.results || typeof data.results !== "object") return null;
+  const norm = (m: Record<string, unknown> | undefined) => {
+    const out: Record<string, MLPredictionResult | null> = {};
+    for (const [id, v] of Object.entries(m ?? {})) {
+      out[id] = v && typeof v === "object" ? normalizeMLResponse(v as Record<string, unknown>) : null;
+    }
+    return out;
+  };
+  const refreshMs = typeof data.live?.refreshMs === "number" && data.live.refreshMs > 0
+    ? data.live.refreshMs : undefined;
+  const live = data.live && typeof data.live.label === "string"
+    ? { label: data.live.label, final: data.live.final === true, ...(refreshMs ? { refreshMs } : {}) }
+    : undefined;
+  return { byId: norm(data.results), byKey: norm(data.byKey), ...(live ? { live } : {}) };
+}
+
+/**
+ * État EN DIRECT d'un match en une requête (PERF_PLAN.md P2.3) : en-tête,
+ * marchés des règles, paquet ML allégé. Chaque morceau vaut `null` s'il est
+ * indisponible côté serveur. Lève sur un échec HTTP/réseau (l'appelant garde
+ * alors tous ses derniers chiffres).
+ */
+export interface GameLiveState<G = unknown, M = unknown> {
+  game: G | null;
+  markets: { groups: M[]; status: string; refreshMs?: number } | null;
+  bundle: GameMlBundle | null;
+}
+export async function fetchGameLive<G = unknown, M = unknown>(gameId: string): Promise<GameLiveState<G, M>> {
+  const r = await fetchWithTimeout(`${ML_BASE}/game/${encodeURIComponent(gameId)}/live`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`live state ${r.status}`);
+  const body = await r.json() as { game?: G | null; markets?: GameLiveState<G, M>["markets"]; bundle?: unknown };
+  return {
+    game: body.game ?? null,
+    markets: body.markets && Array.isArray(body.markets.groups) ? body.markets : null,
+    bundle: body.bundle ? parseGameMlBundle(body.bundle) : null,
+  };
+}
+
 export function fetchGameMlBundle(gameId: string): Promise<GameMlBundle | null> {
   const hit = bundleCache.get(gameId);
   const ttl = hit?.liveTtlMs ?? BUNDLE_TTL_MS;
@@ -195,24 +242,7 @@ export function fetchGameMlBundle(gameId: string): Promise<GameMlBundle | null> 
       try {
         const r = await fetchWithTimeout(`${ML_BASE}/game/${encodeURIComponent(gameId)}/bundle`);
         if (!r.ok) return null;
-        const data = await r.json() as {
-          results?: Record<string, unknown>; byKey?: Record<string, unknown>;
-          live?: { label?: unknown; final?: unknown; refreshMs?: unknown };
-        };
-        if (!data?.results || typeof data.results !== "object") return null;
-        const norm = (m: Record<string, unknown> | undefined) => {
-          const out: Record<string, MLPredictionResult | null> = {};
-          for (const [id, v] of Object.entries(m ?? {})) {
-            out[id] = v && typeof v === "object" ? normalizeMLResponse(v as Record<string, unknown>) : null;
-          }
-          return out;
-        };
-        const refreshMs = typeof data.live?.refreshMs === "number" && data.live.refreshMs > 0
-          ? data.live.refreshMs : undefined;
-        const live = data.live && typeof data.live.label === "string"
-          ? { label: data.live.label, final: data.live.final === true, ...(refreshMs ? { refreshMs } : {}) }
-          : undefined;
-        return { byId: norm(data.results), byKey: norm(data.byKey), ...(live ? { live } : {}) };
+        return parseGameMlBundle(await r.json());
       } catch {
         return null;
       }

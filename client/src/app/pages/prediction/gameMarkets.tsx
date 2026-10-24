@@ -17,9 +17,10 @@ import type { MLPredictionResult } from "../../services/mlApi";
 export interface LiveGameView {
   id: string;
   // `null` = probabilité du modèle indisponible ; la page masque les marchés
-  // dérivés du modèle au lieu d'en inventer un.
-  home: { abbr: string; name: string; logo: string; score?: number; winPct: number | null };
-  away: { abbr: string; name: string; logo: string; score?: number; winPct: number | null };
+  // dérivés du modèle au lieu d'en inventer un. `undefined` = pas encore arrivée :
+  // l'en-tête s'affiche sans l'attendre (PERF_PLAN.md, P2.2).
+  home: { abbr: string; name: string; logo: string; score?: number; winPct: number | null | undefined };
+  away: { abbr: string; name: string; logo: string; score?: number; winPct: number | null | undefined };
   period?: string; time?: string; overUnder: number;
   /** `scheduled` | `live` | `final` — c'est lui qui dit si le match est en cours, pas `period`. */
   status?: string;

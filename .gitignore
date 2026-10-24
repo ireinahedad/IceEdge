@@ -119,3 +119,4 @@ ml/data/raw/odds/*.html
 
 # Journal local du scanner d'arbitrages (scripts/arb-scan.ts)
 server/arb-log.jsonl
+server/arb-snapshots/
