@@ -13,7 +13,7 @@
  */
 
 import 'dotenv/config';
-import { NEWS_SOURCES } from '../src/data/newsSources';
+import { NEWS_SOURCES, REJECTED_HANDLES } from '../src/data/newsSources';
 import { fetchAuthorFeed } from '../src/services/newsSync.service';
 import {
   teamsToSearch, searchQueries, parseActors, profileMatches, checkCandidate, bestCandidates, sourceLine,
@@ -35,7 +35,8 @@ async function search(q: string): Promise<Actor[]> {
 
 (async () => {
   const teams = teamsToSearch(NEWS_SOURCES, process.argv.slice(2));
-  const known = new Set(NEWS_SOURCES.map((s) => s.handle.toLowerCase()));
+  // Déjà dans la liste, ou refusés au tri (`REJECTED_HANDLES`) : jamais reproposés.
+  const known = new Set([...NEWS_SOURCES.map((s) => s.handle), ...REJECTED_HANDLES].map((h) => h.toLowerCase()));
   console.log(`Recherche pour ${teams.length} équipe(s) : ${teams.join(', ')}\n`);
   const lines: string[] = [];
 

@@ -16,6 +16,7 @@ import type { Request } from 'express';
 import { logger } from '../logger';
 import { verifyAccessToken } from '../services/auth.service';
 import { limiterStore } from './rateLimitStore';
+import { clientIp } from './clientIp';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -56,7 +57,7 @@ export function userOrIpKey(req: Request): string {
       // identifiant non prouvé.
     }
   }
-  return `ip:${req.ip ?? 'unknown'}`;
+  return `ip:${clientIp(req) ?? 'unknown'}`;
 }
 
 /**
@@ -176,7 +177,7 @@ export const llmLimiter = rateLimit({
   limit:    isProd ? 10 : 60,     // 10 prompts / min / user in prod
   standardHeaders: 'draft-7',
   legacyHeaders:   false,
-  keyGenerator: (req) => (req as any).user?.sub || req.ip,
+  keyGenerator: (req) => (req as any).user?.sub || clientIp(req),
   message: { error: 'Too many AI requests, please slow down.' },
 });
 
@@ -189,7 +190,7 @@ export const redeemLimiter = rateLimit({
   limit:    isProd ? 10 : 100,    // 10 attempts / hour / user in prod
   standardHeaders: 'draft-7',
   legacyHeaders:   false,
-  keyGenerator: (req) => (req as any).user?.sub || req.ip,
+  keyGenerator: (req) => (req as any).user?.sub || clientIp(req),
   message: { error: 'Too many promo attempts. Try again later.' },
 });
 

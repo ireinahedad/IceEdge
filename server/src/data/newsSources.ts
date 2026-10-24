@@ -10,6 +10,11 @@
  * Relancer le script après chaque ajout. Équipes avec une source dédiée :
  * CHI, BUF, MIN, PHI, MTL, VAN, TOR, EDM, CGY. Les 23 autres reposent sur les
  * sources de ligue (Daily Faceoff surtout).
+ *
+ * ── 2026-10-24 ──────────────────────────────────────────────────────────────
+ * +9 comptes trouvés par `npm run news:discover` : ANA, BOS, CAR, COL, NYI, NYR,
+ * VGK, WPG couverts. Restent sans source dédiée (15) : CBJ, DAL, DET, FLA, LAK,
+ * NSH, NJD, OTT, PIT, SJS, SEA, STL, TBL, UTA, WSH.
  */
 
 export interface NewsSource {
@@ -44,6 +49,38 @@ export const NEWS_SOURCES: NewsSource[] = [
   { handle: 'dfotoronto.bsky.social',       team: 'TOR', label: 'Daily Faceoff Toronto' },
   { handle: 'dfoedmonton.bsky.social',      team: 'EDM', label: 'Daily Faceoff Edmonton' },
   { handle: 'dfocalgary.bsky.social',       team: 'CGY', label: 'Daily Faceoff Calgary' },
+  // Trouvés par `npm run news:discover`, triés à la main le 2026-10-24 —
+  // journalistes attitrés et médias d'équipe seulement. À confirmer par news:check.
+  { handle: 'zachcavsports.bsky.social',    team: 'ANA', label: 'Zach Cavanagh' },
+  { handle: 'ty-anderson.bsky.social',      team: 'BOS', label: 'Ty Anderson' },
+  { handle: 'adamlichtenstein.bsky.social', team: 'CAR', label: 'Adam Lichtenstein' },
+  { handle: 'evanrawal.bsky.social',        team: 'COL', label: 'Evan Rawal' },
+  { handle: 'dnvr-avalanche.bsky.social',   team: 'COL', label: 'DNVR Avalanche' },
+  { handle: 'stefenrosner.bsky.social',     team: 'NYI', label: 'Stefen Rosner' },
+  { handle: 'mollieewalkerr.bsky.social',   team: 'NYR', label: 'Mollie Walker' },
+  { handle: 'dannywebster21.bsky.social',   team: 'VGK', label: 'Danny Webster' },
+  { handle: 'wiebesworld.bsky.social',      team: 'WPG', label: 'Ken Wiebe' },
   // Handles devinés et inexistants (400), ne pas réessayer : dfomontreal,
   // dfoottawa, dfowinnipeg, dfoseattle, dfomtl, dfohabs, dfosens, dfojets, dfokraken.
+];
+
+/**
+ * Comptes proposés par `npm run news:discover` et REFUSÉS au tri (2026-10-24) :
+ * le script ne les propose plus. Fans, histoire, balados d'opinion, parodies,
+ * autre sport, politique — rien qui annonce un absent ou un gardien.
+ */
+export const REJECTED_HANDLES: string[] = [
+  'bruinsbruinsbruins.bsky.social',    // BOS — compte de fan
+  'lockedonavalanche.bsky.social',     // COL — balado d'opinion
+  'dallasstarshistory.bsky.social',    // DAL — histoire du club
+  'topher2.bsky.social',               // DET — compte personnel
+  'detroithockey.net',                 // DET — site de fans
+  'mikekayefootball.bsky.social',      // FLA — Carolina Panthers (NFL), pas Florida
+  'notnjdevils.bsky.social',           // NJD — parodie
+  'hockeynightny.bsky.social',         // NYI — agrégateur
+  'jk4pghpa.bsky.social',              // PIT — compte de fan
+  'usrepkathycastor.bsky.social',      // TBL — députée de Tampa
+  'vegashockeygirls.bsky.social',      // VGK — compte de fan
+  'antwanstaley.bsky.social',          // WPG — n'est plus attitré aux Jets
+  'winnipeghockeytalk.bsky.social',    // WPG — blogue de fans
 ];

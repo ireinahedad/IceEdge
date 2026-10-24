@@ -81,7 +81,14 @@ autre équipe comme sujet principal). Sortie : les 3 meilleurs par équipe + lig
 prêtes à coller. `npm run news:discover -- VGK STL` pour quelques équipes.
 ⚠️ Bluesky est bloqué depuis le cloud ET depuis l'environnement Claude de ton
 PC : le script se lance dans ton terminal Windows (comme `news:check`).
-Reste à faire (toi) : lancer, relire chaque compte, coller, `npm run news:check`.
+1er passage (2026-10-24) : 22 propositions, 9 retenues (ANA, BOS, CAR, COL ×2, NYI,
+NYR, VGK, WPG), 13 refusées et listées dans `REJECTED_HANDLES` (fans, histoire,
+parodie, une députée de Tampa, un journaliste des Carolina Panthers de la NFL) —
+le script ne les repropose plus, et son pré-tri exige maintenant un profil qui
+parle de hockey (la ville seule ne suffit plus, autre sport écarté).
+Restent sans source dédiée (15) : CBJ, DAL, DET, FLA, LAK, NSH, NJD, OTT, PIT,
+SJS, SEA, STL, TBL, UTA, WSH — elles reposent sur les sources de ligue.
+Reste à faire (toi) : `npm run news:check` pour confirmer les 9 ajouts.
 
 Plan d'origine :
 

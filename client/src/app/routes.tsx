@@ -4,7 +4,7 @@ import { ErrorScreen, reportError } from "./components/ErrorScreen";
 import { useAuth } from "./context/AuthContext";
 import { AuthGateProvider } from "./context/AuthGateContext";
 import { features } from "./platform";
-import { primeGet, gamePredictionsPath } from "./services/nhlApiService";
+import { primeGet, gamePredictionsPath, primeMatchContext } from "./services/nhlApiService";
 import { fetchGameMlBundle } from "./services/mlApi";
 
 /**
@@ -24,6 +24,9 @@ function primeMatchPage({ params }: { params: { type?: string; id?: string } }):
     primeGet(`/games/${id}`);
     primeGet(gamePredictionsPath(id));
     void fetchGameMlBundle(id);
+    // Le reste de la page (effectifs, face-à-face, gardiens…), en une requête
+    // et sans attendre l'en-tête — PERF_PLAN.md P2.8.
+    primeMatchContext(id);
   }
   return null;
 }

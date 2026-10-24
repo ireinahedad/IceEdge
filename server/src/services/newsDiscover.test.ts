@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   TEAM_NAMES, teamsToSearch, searchQueries, parseActors, profileMatches, checkCandidate, bestCandidates, sourceLine,
 } from './newsDiscover';
-import { NEWS_SOURCES } from '../data/newsSources';
+import { NEWS_SOURCES, REJECTED_HANDLES } from '../data/newsSources';
 
 const NOW = Date.parse('2026-10-24T12:00:00Z');
 const post = (text: string, daysAgo = 1) => ({ text, postedAt: new Date(NOW - daysAgo * 24 * 3600_000) });
@@ -11,11 +11,14 @@ describe('équipes à chercher', () => {
   it('les 32 équipes ont ville et surnom', () => {
     expect(Object.keys(TEAM_NAMES)).toHaveLength(32);
   });
-  it('par défaut : les équipes sans source dédiée (23 au 2026-10-23)', () => {
+  it('par défaut : les équipes sans source dédiée (15 au 2026-10-24)', () => {
     const t = teamsToSearch(NEWS_SOURCES);
-    expect(t).toHaveLength(23);
-    for (const covered of ['CHI', 'BUF', 'MIN', 'PHI', 'MTL', 'VAN', 'TOR', 'EDM', 'CGY']) expect(t).not.toContain(covered);
-    expect(t).toContain('VGK');
+    expect(t).toEqual(['CBJ', 'DAL', 'DET', 'FLA', 'LAK', 'NJD', 'NSH', 'OTT', 'PIT', 'SEA', 'SJS', 'STL', 'TBL', 'UTA', 'WSH']);
+  });
+  it('liste des sources : pas de doublon, aucun compte refusé dedans', () => {
+    const handles = NEWS_SOURCES.map((x) => x.handle.toLowerCase());
+    expect(new Set(handles).size).toBe(handles.length);
+    for (const r of REJECTED_HANDLES) expect(handles).not.toContain(r.toLowerCase());
   });
   it('en argument : seulement les équipes valides, sans doublon', () => {
     expect(teamsToSearch(NEWS_SOURCES, ['vgk', 'STL', 'XYZ', 'VGK'])).toEqual(['VGK', 'STL']);
@@ -33,10 +36,21 @@ describe('profils', () => {
     ] })).toEqual([{ handle: 'jesse.bsky.social', displayName: 'Jesse Granger', description: 'Golden Knights for The Athletic' }]);
     expect(parseActors(null)).toEqual([]);
   });
-  it('pré-tri : le profil parle de l’équipe, de la ville ou de hockey', () => {
+  it('pré-tri : le profil doit parler de hockey ou de l’équipe ; la ville seule ne suffit pas', () => {
     expect(profileMatches({ handle: 'a', description: 'Covering the Golden Knights' }, 'VGK')).toBe(true);
-    expect(profileMatches({ handle: 'b', displayName: 'Vegas Eats', description: 'Best tacos in town' }, 'VGK')).toBe(true);
+    expect(profileMatches({ handle: 'd', description: 'Vegas hockey writer' }, 'VGK')).toBe(true);
+    expect(profileMatches({ handle: 'b', displayName: 'Vegas Eats', description: 'Best tacos in town' }, 'VGK')).toBe(false);
     expect(profileMatches({ handle: 'c', description: 'Knitting and cats' }, 'VGK')).toBe(false);
+  });
+  it('faux positifs du 1er passage (2026-10-24) : écartés', () => {
+    // Députée de Tampa Bay : la ville, pas le hockey.
+    expect(profileMatches({ handle: 'usrepkathycastor.bsky.social', displayName: 'U.S. Rep. Kathy Castor', description: 'Proudly representing Tampa Bay in Congress' }, 'TBL')).toBe(false);
+    // Carolina Panthers (NFL) : « Panthers » oui, mais football.
+    expect(profileMatches({ handle: 'mikekayefootball.bsky.social', displayName: 'Mike Kaye - Panthers beat writer', description: 'Charlotte Observer' }, 'FLA')).toBe(false);
+    // Parodie.
+    expect(profileMatches({ handle: 'notnjdevils.bsky.social', displayName: 'New Jersey Devils', description: 'Parody account' }, 'NJD')).toBe(false);
+    // Football ET hockey : gardé (un journaliste multisport qui couvre l'équipe).
+    expect(profileMatches({ handle: 'x', description: 'Panthers hockey and Dolphins football' }, 'FLA')).toBe(true);
   });
 });
 

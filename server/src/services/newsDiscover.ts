@@ -62,12 +62,28 @@ export function parseActors(json: unknown): Actor[] {
     }));
 }
 
-/** Le profil parle-t-il de l'équipe, de sa ville ou de hockey ? (pré-tri avant de lire le fil) */
+const OTHER_SPORT = /\b(football|nfl|nba|basketball|mlb|baseball|soccer|mls|wnba|college football)\b/i;
+const NOT_NEWS = /\b(parody|parodie|fan account|not affiliated|unofficial)\b/i;
+/** Dans un handle les mots sont collés (« mikekayefootball ») : recherche sans bornes, mots longs seulement. */
+const OTHER_SPORT_HANDLE = /(football|basketball|baseball|soccer)/i;
+
+/**
+ * Pré-tri avant de lire le fil : le profil doit parler de HOCKEY (le mot, la
+ * LNH, ou le surnom de l'équipe). La ville seule ne suffit plus — corrigé le
+ * 2026-10-24 après une députée de Tampa Bay et un journaliste des Carolina
+ * Panthers (NFL) proposés pour TBL et FLA. Un profil (ou un handle) qui parle
+ * d'un autre sport sans parler de hockey, ou qui se dit parodie, est écarté.
+ */
 export function profileMatches(a: Actor, team: string): boolean {
-  const { city, nick } = TEAM_NAMES[team];
-  const text = `${a.displayName ?? ''} ${a.description ?? ''}`.toLowerCase();
-  return [nick.toLowerCase(), city.toLowerCase(), 'hockey', 'nhl'].some((w) => text.includes(w))
-    || teamsInText(`${a.displayName ?? ''} ${a.description ?? ''}`).includes(team);
+  const { nick } = TEAM_NAMES[team];
+  const raw = `${a.handle} ${a.displayName ?? ''} ${a.description ?? ''}`;
+  const text = raw.toLowerCase();
+  const hockey = /\b(hockey|nhl|lnh)\b/i.test(raw);
+  // Le SURNOM seulement : `teamsInText` reconnaît aussi les villes (« Vegas » → VGK).
+  const team_ = text.includes(nick.toLowerCase());
+  if (NOT_NEWS.test(raw)) return false;
+  if ((OTHER_SPORT.test(text.replace(/[._-]/g, ' ')) || OTHER_SPORT_HANDLE.test(a.handle)) && !hockey) return false;
+  return hockey || team_;
 }
 
 export interface CandidateCheck {

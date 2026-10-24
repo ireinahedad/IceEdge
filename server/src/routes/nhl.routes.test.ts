@@ -24,7 +24,15 @@ const mockService = {
   getStandings:    vi.fn(),
   searchPlayers:   vi.fn(),
   getHeadToHeadSeason: vi.fn(),
+  getTeamRoster:   vi.fn(),
+  getGameBoxscore: vi.fn(),
 };
+const mockGoalies = vi.hoisted(() => ({ getStartingGoalies: vi.fn() }));
+vi.mock('../services/startingGoalies', () => mockGoalies);
+const mockRates = vi.hoisted(() => ({
+  playerRatesForGame: vi.fn(), playerRatesForPlayer: vi.fn(), playerRatesForTeam: vi.fn(),
+}));
+vi.mock('../services/prediction/playerRates', () => mockRates);
 
 vi.mock('../services/nhl.service', () => ({
   NHLService: class { constructor() { return mockService as any; } },
@@ -220,5 +228,49 @@ describe('face-à-face sur une saison', () => {
     expect((await request(a).get('/api/nhl/teams/TOR/head-to-head/MTL/2025')).status).toBe(400);
     expect((await request(a).get('/api/nhl/teams/TOR/head-to-head/MTL/next')).status).toBe(400);
     expect(mockService.getHeadToHeadSeason).not.toHaveBeenCalled();
+  });
+});
+
+// PERF_PLAN.md P2.8 — le contexte d'un match, rangé par chemin.
+describe('GET /api/nhl/games/:id/context', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('rend chaque morceau sous le chemin exact que la page demanderait', async () => {
+    mockService.getGame.mockResolvedValue({ id: '2026020180', gameDate: '2026-10-25', homeTeam: { abbreviation: 'CHI' }, awayTeam: { abbreviation: 'FLA' } });
+    mockGoalies.getStartingGoalies.mockResolvedValue({ CHI: 'Spencer Knight' });
+    mockRates.playerRatesForGame.mockResolvedValue({ players: {} });
+    mockService.getGameBoxscore.mockResolvedValue({ state: 'scheduled', players: {} });
+    mockService.getTeamRoster.mockImplementation(async (a: string) => [{ id: a }]);
+    mockService.getHeadToHeadSeason.mockResolvedValue({ season: '20262027', games: [] });
+
+    const res = await request(await nhlApp()).get('/api/nhl/games/2026020180/context');
+    expect(res.status).toBe(200);
+    expect(res.body.paths).toEqual({
+      '/games/2026020180/starting-goalies': { CHI: 'Spencer Knight', FLA: null },
+      '/predictions/player-rates/game/2026020180': { players: {} },
+      '/games/2026020180/boxscore': { state: 'scheduled', players: {} },
+      '/teams/CHI/roster': [{ id: 'CHI' }],
+      '/teams/FLA/roster': [{ id: 'FLA' }],
+      '/teams/CHI/head-to-head/FLA/current': { season: '20262027', games: [] },
+    });
+  });
+
+  it('un morceau en échec vaut null, les autres répondent', async () => {
+    mockService.getGame.mockResolvedValue({ id: '2026020180', homeTeam: { abbreviation: 'CHI' }, awayTeam: { abbreviation: 'FLA' } });
+    mockGoalies.getStartingGoalies.mockResolvedValue({});
+    mockRates.playerRatesForGame.mockRejectedValue(new Error('ML down'));
+    mockService.getGameBoxscore.mockResolvedValue({ state: 'unknown', players: {} });
+    mockService.getTeamRoster.mockResolvedValue([]);
+    mockService.getHeadToHeadSeason.mockResolvedValue({ games: [] });
+    const res = await request(await nhlApp()).get('/api/nhl/games/2026020180/context');
+    expect(res.status).toBe(200);
+    expect(res.body.paths['/predictions/player-rates/game/2026020180']).toBeNull();
+    expect(res.body.paths['/teams/CHI/roster']).toEqual([]);
+  });
+
+  it('identifiant invalide : 400 sans appel', async () => {
+    const res = await request(await nhlApp()).get('/api/nhl/games/abc/context');
+    expect(res.status).toBe(400);
+    expect(mockService.getGame).not.toHaveBeenCalled();
   });
 });

@@ -185,18 +185,64 @@ router.get('/games/:id/boxscore', publicCache(TTL.LIVE), async (req, res) => {
 //
 // Avant `/games/:id`, sinon « starting-goalies » serait capturé comme un
 // identifiant.
+const CONTEXT_ABBR = /^[A-Za-z]{2,3}$/;
+
+async function startingGoaliesFor(game: any): Promise<Record<string, string | null>> {
+  const home = String(game?.homeTeam?.abbreviation ?? '').toUpperCase();
+  const away = String(game?.awayTeam?.abbreviation ?? '').toUpperCase();
+  const day  = await getStartingGoalies(game?.gameDate || undefined);
+  const out: Record<string, string | null> = {};
+  if (home) out[home] = day[home] ?? null;
+  if (away) out[away] = day[away] ?? null;
+  return out;
+}
+
 router.get('/games/:id/starting-goalies', publicCache(TTL.SHORT), async (req, res) => {
-  try {
-    const game = await nhl.getGame(req.params.id);
-    const home = String(game?.homeTeam?.abbreviation ?? '').toUpperCase();
-    const away = String(game?.awayTeam?.abbreviation ?? '').toUpperCase();
-    const day  = await getStartingGoalies(game?.gameDate || undefined);
-    const out: Record<string, string | null> = {};
-    if (home) out[home] = day[home] ?? null;
-    if (away) out[away] = day[away] ?? null;
-    res.json(out);
-  }
+  try { res.json(await startingGoaliesFor(await nhl.getGame(req.params.id))); }
   catch (err: any) { sendError(res, err); }
+});
+
+// Le « contexte » de la page d'un match en UNE requête (PERF_PLAN.md P2.8,
+// 2026-10-24). Cette page lançait une 2e vague d'appels (effectifs des deux
+// clubs, face-à-face de la saison, gardiens partants, cadences des joueurs,
+// feuille de match) seulement après avoir reçu l'en-tête du match, parce que
+// leurs URL contiennent les abréviations des équipes : un aller-retour réseau
+// de plus avant de pouvoir les lancer. Le serveur, lui, connaît les équipes à
+// partir du seul identifiant : le client peut donc demander ce contexte dès la
+// navigation, en parallèle de l'en-tête.
+//
+// La réponse est rangée PAR CHEMIN, exactement les chemins que la page
+// demanderait, chacun avec le corps que sa propre route rendrait (mêmes
+// fonctions de service) : le client les dépose dans son cache de
+// préchargement et les sections de la page ne changent pas. Un morceau en
+// échec vaut `null` : la section le redemande alors par sa route habituelle.
+router.get('/games/:id/context', publicCache(TTL.LIVE), async (req, res) => {
+  const id = String(req.params.id);
+  if (!/^\d{6,12}$/.test(id)) return res.status(400).json({ error: 'invalid gameId' });
+  let game: any;
+  try { game = await nhl.getGame(id); }
+  catch (err: any) { return sendError(res, err); }
+  const home = String(game?.homeTeam?.abbreviation ?? '').toUpperCase();
+  const away = String(game?.awayTeam?.abbreviation ?? '').toUpperCase();
+  const parts: Array<[string, () => Promise<unknown>]> = [
+    [`/games/${id}/starting-goalies`,          () => startingGoaliesFor(game)],
+    [`/predictions/player-rates/game/${id}`,   () => playerRatesForGame(id)],
+    [`/games/${id}/boxscore`,                  () => nhl.getGameBoxscore(id)],
+  ];
+  if (CONTEXT_ABBR.test(home) && CONTEXT_ABBR.test(away)) {
+    parts.push(
+      [`/teams/${home}/roster`,                     () => nhl.getTeamRoster(home)],
+      [`/teams/${away}/roster`,                     () => nhl.getTeamRoster(away)],
+      [`/teams/${home}/head-to-head/${away}/current`, () => nhl.getHeadToHeadSeason(home, away, currentSeason())],
+    );
+  }
+  const settled = await Promise.allSettled(parts.map(([, f]) => f()));
+  const paths: Record<string, unknown> = {};
+  parts.forEach(([path], i) => {
+    const r = settled[i];
+    paths[path] = r.status === 'fulfilled' ? r.value : null;
+  });
+  res.json({ gameId: id, home, away, paths });
 });
 
 // Contrairement aux autres, `fetchGameById` n'a AUCUN cache serveur : chaque

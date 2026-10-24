@@ -9,6 +9,7 @@ import {
 } from '../validation/schemas';
 import { io } from '../socket';
 import { sendError } from '../httpError';
+import { clientIp } from '../middleware/clientIp';
 
 const router = Router();
 
@@ -36,7 +37,7 @@ const rateStore: RateLimitStore = createChatRateLimitStore();
 function rateLimit(action: string, max: number, windowMs: number) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const key = `${action}:${(req as any).user?.sub ?? req.ip}`;
+      const key = `${action}:${(req as any).user?.sub ?? clientIp(req)}`;
       const allowed = await rateStore.tryConsume(key, max, windowMs);
       if (!allowed) {
         return res.status(429).json({ error: 'Too many requests — slow down' });

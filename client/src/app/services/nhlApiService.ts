@@ -302,6 +302,46 @@ export function primeGet(path: string): void {
   primed.set(path, { at: Date.now(), promise });
 }
 
+/**
+ * Contexte d'un match (PERF_PLAN.md P2.8) : `GET /games/:id/context` rend, rangés
+ * par chemin, les corps que la page du match demanderait ensuite (effectifs,
+ * face-à-face, gardiens partants, cadences des joueurs, feuille de match). Lancé
+ * dès la navigation, il évite l'aller-retour qui séparait l'en-tête de ces appels.
+ *
+ *   · chemins connus sans les équipes (gardiens, cadences, feuille de match) :
+ *     préchargés tout de suite, sur une promesse tirée du contexte ;
+ *   · chemins qui portent les abréviations (effectifs, face-à-face) : préchargés
+ *     dès que l'en-tête préchargé (`/games/:id`, voir `routes.tsx`) les révèle.
+ *     Ce rappel est inscrit AVANT ceux de la page, donc il passe avant elle : la
+ *     page trouve ces chemins déjà préchargés au moment de les demander (testé :
+ *     sinon le contexte, parti en même temps que l'en-tête, arrive au même
+ *     instant que le rendu et la course est perdue).
+ * Un morceau absent (`null`) ou un contexte en échec : l'appel habituel.
+ * À appeler APRÈS `primeGet('/games/:id')`.
+ */
+export function primeMatchContext(gameId: string): void {
+  const ctx = rawGet<{ paths?: Record<string, unknown> }>(`/games/${encodeURIComponent(gameId)}/context`);
+  ctx.catch(() => { /* chaque chemin retombe sur sa route */ });
+  const fromCtx = (path: string) => {
+    if (primed.has(path)) return;
+    const promise = ctx.then((c) => c?.paths?.[path] ?? rawGet(path), () => rawGet(path));
+    promise.catch(() => {});
+    primed.set(path, { at: Date.now(), promise });
+  };
+  fromCtx(`/games/${gameId}/starting-goalies`);
+  fromCtx(`/predictions/player-rates/game/${encodeURIComponent(gameId)}`);
+  fromCtx(`/games/${gameId}/boxscore`);
+  const header = primed.get(`/games/${gameId}`)?.promise as Promise<NHLGame> | undefined;
+  header?.then((g) => {
+    const home = String(g?.homeTeam?.abbreviation ?? '').toUpperCase();
+    const away = String(g?.awayTeam?.abbreviation ?? '').toUpperCase();
+    if (!/^[A-Z]{2,3}$/.test(home) || !/^[A-Z]{2,3}$/.test(away)) return;
+    fromCtx(`/teams/${home}/roster`);
+    fromCtx(`/teams/${away}/roster`);
+    fromCtx(`/teams/${encodeURIComponent(home)}/head-to-head/${encodeURIComponent(away)}/current`);
+  }, () => {});
+}
+
 function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   const hit = primed.get(path);
   if (hit) {

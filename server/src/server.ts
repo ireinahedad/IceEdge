@@ -129,6 +129,9 @@ const DORMANT = process.env.DORMANT === 'true';
         DORMANT: DORMANT,
         BEST_BETS_WARMUP: `${process.env.BEST_BETS_WARMUP === 'true' ? 'actif' : 'éteint'} [${process.env.BEST_BETS_WARMUP ?? 'non posée'}]`,
         ML_BUNDLE_WARMUP: `${process.env.ML_BUNDLE_WARMUP === 'true' ? 'actif' : 'éteint'} [${process.env.ML_BUNDLE_WARMUP ?? 'non posée'}]`,
+        // Clé des limiteurs derrière Cloudflare (middleware/clientIp.ts). À « true »
+        // SEULEMENT avec Cloudflare devant ET le domaine *.up.railway.app fermé.
+        TRUST_CF_CONNECTING_IP: process.env.TRUST_CF_CONNECTING_IP === 'true' ? 'oui (CF-Connecting-IP)' : 'non (req.ip)',
       },
       '[Server] Réglages effectifs',
     );
