@@ -1602,6 +1602,17 @@ export function startSettlementJob(): void {
     } catch (err: any) {
       logger.warn({ err: err.message }, '[Settlement] parlay_log non réglé');
     }
+    // Pick'em (NEWS_CONSENSUS_PLAN.md, F3 session B) : votes + choix du modèle,
+    // puis l'annonce du lundi (inerte sans PICKEM_ANNOUNCE_ROOM_ID). Même règle :
+    // une table absente ne doit pas faire échouer la passe des coupons.
+    try {
+      const { settlePendingPickems, announceWeeklyWinner } = await import('./pickem.service');
+      const r = await settlePendingPickems();
+      if (r.games > 0) logger.info(r, '[Settlement] pick\'em réglé');
+      await announceWeeklyWinner();
+    } catch (err: any) {
+      logger.warn({ err: err.message }, '[Settlement] pick\'em non réglé');
+    }
   };
 
   // Catch-up pass shortly after boot (games may have finished while the server

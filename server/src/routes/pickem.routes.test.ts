@@ -18,6 +18,7 @@ vi.mock('../services/pickem.service', () => ({
   getPickem: async (...a: unknown[]) => { calls.push(['get', ...a]); return answer(); },
   castPickem: async (...a: unknown[]) => { calls.push(['cast', ...a]); return answer(); },
   getPickemDay: async (...a: unknown[]) => { calls.push(['day', ...a]); return answer(); },
+  getPickemLeaderboard: async (...a: unknown[]) => { calls.push(['board', ...a]); return answer(); },
 }));
 
 async function app() {
@@ -42,6 +43,14 @@ describe('pickem.routes', () => {
     signedIn = false;
     await request(await app()).get('/api/pickem/today').expect(200);
     expect(calls).toEqual([['day', 'u1'], ['day', undefined]]);
+  });
+
+  it('GET /leaderboard : semaine en cours par défaut, précédente sur demande, autre valeur refusée', async () => {
+    const a = await app();
+    await request(a).get('/api/pickem/leaderboard').expect(200);
+    await request(a).get('/api/pickem/leaderboard?week=previous').expect(200);
+    await request(a).get('/api/pickem/leaderboard?week=2026-10-19').expect(400);
+    expect(calls).toEqual([['board', 0, 'u1'], ['board', -1, 'u1']]);
   });
 
   it('GET anonyme', async () => {

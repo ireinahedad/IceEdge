@@ -13,6 +13,8 @@
  * • Opt-in : `NEWS_SYNC_ENABLED=true`, et rien en mode DORMANT (server.ts).
  * • F4 (transactions par effectifs) : 1er tour après midi ET seulement,
  *   voir `newsRoster.service.ts` (32 appels LNH, 1 transaction par jour).
+ * • Pick'em (session B) : fige le choix du modèle des matchs VOTÉS qui commencent
+ *   dans l'heure (`snapshotModelPicks`) — 1 SELECT par tour, rien sans vote.
  *
  * Le calendrier est un `setTimeout` réarmé à chaque tour, et non un
  * `setInterval` : la cadence change selon l'heure.
@@ -27,6 +29,7 @@ import { fetchGamesByDate } from './nhlApiClient';
 import { sendToUsers, pushEnabled } from './push.service';
 import { NEWS_SOURCES, type NewsSource } from '../data/newsSources';
 import { runRosterDiffIfDue, type RosterRunResult } from './newsRoster.service';
+import { snapshotModelPicks } from './pickem.service';
 import {
   parseAuthorFeed, teamsForPost, flagsOf, excerptOf, nextDelayMs, inGameWindow,
   type FeedPost, type NewsFlag,
@@ -169,7 +172,7 @@ async function notifyAdmins(rows: NewRow[]): Promise<void> {
 
 // ── Un tour ────────────────────────────────────────────────────────────────
 
-export async function runNewsSync(): Promise<{ read: number; inserted: number; alerted: number; roster: RosterRunResult; nextMs: number }> {
+export async function runNewsSync(): Promise<{ read: number; inserted: number; alerted: number; roster: RosterRunResult; modelPicks: number; nextMs: number }> {
   const { teams: playing, startsUtc, startByTeam } = await todaysGames();
   const now = Date.now();
   const windowOpen = inGameWindow(now, startsUtc);
@@ -203,9 +206,11 @@ export async function runNewsSync(): Promise<{ read: number; inserted: number; a
   await purgeOnceADay().catch((err: any) => logger.warn({ err: err?.message }, '[NewsSync] purge échouée'));
   // F4 : n'alerte pas (drapeau `transaction` seul) et ne lève jamais.
   const roster = await runRosterDiffIfDue(Date.now());
+  // Ne lève jamais (voir pickem.service).
+  const modelPicks = await snapshotModelPicks(Date.now());
   if (inserted.length > 0 || (roster.inserted ?? 0) > 0) cache.clear();
 
-  return { read: sources.length, inserted: inserted.length, alerted: toAlert.length, roster, nextMs: nextDelayMs(Date.now(), startsUtc) };
+  return { read: sources.length, inserted: inserted.length, alerted: toAlert.length, roster, modelPicks, nextMs: nextDelayMs(Date.now(), startsUtc) };
 }
 
 // ── Calendrier ─────────────────────────────────────────────────────────────

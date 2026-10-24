@@ -25,7 +25,14 @@
 import { pool } from '../db/connection';
 import { TtlCache } from './ttlCache';
 import { fetchGameById, fetchGamesByDate } from './nhlApiClient';
-import { pickemLocked, pickemState, GAME_ID_RE, type PickemGame, type PickemState } from './pickem';
+import { logger } from '../logger';
+import { mapLimit } from './concurrency';
+import { getJobState, setJobState } from './jobLock';
+import {
+  pickemLocked, pickemState, GAME_ID_RE, PICKEM_MIN_WEEK_PICKS,
+  weekBoundsET, modelPick, rankWeek, announceDue, announceText,
+  type PickemGame, type PickemState, type RankedRow, type WeekRow,
+} from './pickem';
 
 const tallyCache = new TtlCache<Record<string, number>>(60_000, 500, 'pickem');
 /** Totaux de tous les matchs d'un jour : clé = liste des matchs. */
@@ -173,4 +180,228 @@ export async function getPickemDay(userId?: string): Promise<PickemDay> {
 }
 
 /** Pour les tests. */
-export function clearPickemCache(): void { tallyCache.clear(); dayCache.clear(); }
+export function clearPickemCache(): void { tallyCache.clear(); dayCache.clear(); leaderboardCache.clear(); }
+
+
+// ── Session B : choix du modèle figé avant le match ────────────────────────
+
+/** Fenêtre de capture : la dernière heure (et quart) avant la mise au jeu. */
+const MODEL_WINDOW_MS = 75 * 60_000;
+
+/**
+ * Fige le choix du modèle pour les matchs votés qui commencent dans l'heure.
+ * Appelé à chaque tour de NewsSync (15 min dans la fenêtre des matchs) : le
+ * dernier tour avant la mise au jeu gagne. Rend le nombre de matchs figés.
+ * Ne lève jamais : un modèle indisponible = pas de ligne, le classement
+ * affiche alors le modèle sur moins de matchs.
+ */
+export async function snapshotModelPicks(now = Date.now()): Promise<number> {
+  try {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT game_id FROM pickem_votes WHERE game_start > $1 AND game_start <= $2`,
+      [new Date(now).toISOString(), new Date(now + MODEL_WINDOW_MS).toISOString()],
+    );
+    if (rows.length === 0) return 0;
+    // Import paresseux : le paquet ML tire tout le client NHL et le service Python.
+    const { getGameMlBundle, mlBundleKey } = await import('./gameMlBundle');
+    const done = await mapLimit(rows.map((r: any) => String(r.game_id)), 2, async (gameId) => {
+      try {
+        const game = await loadPickemGame(gameId);
+        if (pickemLocked(game, Date.now())) return false;           // trop tard : on garde la dernière capture
+        const bundle = await getGameMlBundle(gameId);
+        if (bundle.live) return false;
+        const p = bundle.byKey[mlBundleKey('moneyline', null, null, true)]?.probability;
+        if (typeof p !== 'number' || !Number.isFinite(p)) return false;
+        const homePct = Math.min(100, Math.max(0, p));
+        await pool.query(
+          `INSERT INTO pickem_model (game_id, home_team, away_team, game_start, home_pct, pick, recorded_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())
+           ON CONFLICT (game_id) DO UPDATE
+             SET home_pct = EXCLUDED.home_pct, pick = EXCLUDED.pick, game_start = EXCLUDED.game_start, recorded_at = NOW()
+           WHERE pickem_model.correct IS NULL`,
+          [gameId, game.home, game.away, new Date(game.startMs).toISOString(), homePct.toFixed(2), modelPick(homePct, game.home, game.away)],
+        );
+        return true;
+      } catch (err: any) {
+        logger.warn({ err: err?.message, gameId }, '[Pickem] choix du modèle non figé');
+        return false;
+      }
+    });
+    return done.filter(Boolean).length;
+  } catch (err: any) {
+    logger.warn({ err: err?.message }, '[Pickem] capture du modèle échouée');
+    return 0;
+  }
+}
+
+// ── Session B : règlement ───────────────────────────────────────────────────
+
+/** Un match n'est pas réglable avant ~2 h 30 après la mise au jeu prévue. */
+const SETTLE_AFTER_MS = 2.5 * 60 * 60_000;
+const SETTLE_BATCH = 60;
+
+/**
+ * Règle les votes (et le choix du modèle) des matchs finis. Appelé par la passe
+ * de rattrapage horaire de `settlement.service.ts` — pas un job de plus.
+ * Idempotent : ne touche que `correct IS NULL`. Un match pas encore final (ou
+ * reporté) est simplement repris à la passe suivante.
+ */
+export async function settlePendingPickems(now = Date.now()): Promise<{ games: number; votes: number }> {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT game_id FROM pickem_votes
+      WHERE correct IS NULL AND game_start < $1
+      LIMIT ${SETTLE_BATCH}`,
+    [new Date(now - SETTLE_AFTER_MS).toISOString()],
+  );
+  let games = 0, votes = 0;
+  for (const r of rows) {
+    const gameId = String(r.game_id);
+    let g: any;
+    try { g = await fetchGameById(gameId); } catch { continue; }
+    const hs = g?.homeTeam?.score, as = g?.awayTeam?.score;
+    if (g?.status !== 'final' || typeof hs !== 'number' || typeof as !== 'number' || hs === as) continue;
+    const winner = String(hs > as ? g.homeTeam.abbreviation : g.awayTeam.abbreviation).toUpperCase();
+    const res = await pool.query(
+      `UPDATE pickem_votes SET correct = (team_abbr = $2) WHERE game_id = $1 AND correct IS NULL`,
+      [gameId, winner],
+    );
+    await pool.query(
+      `UPDATE pickem_model SET correct = (pick = $2) WHERE game_id = $1 AND correct IS NULL`,
+      [gameId, winner],
+    );
+    games++;
+    votes += res.rowCount ?? 0;
+  }
+  if (games > 0) leaderboardCache.clear();
+  return { games, votes };
+}
+
+// ── Session B : classement de la semaine ───────────────────────────────────
+
+export interface PickemLeaderboard {
+  /** Lundi et dimanche (heure de l'Est), AAAA-MM-JJ. */
+  weekStart: string;
+  weekEnd: string;
+  minPicks: number;
+  /** Les 20 premiers classés. */
+  ranked: RankedRow[];
+  /** Nombre total de classés (au-delà des 20 affichés). */
+  rankedCount: number;
+  /** La personne connectée, classée ou non (null si anonyme ou sans pick réglé). */
+  me: { rank: number | null; picks: number; wins: number; pct: number | null } | null;
+  /** Le modèle sur les mêmes matchs (ceux qui ont au moins un vote réglé). */
+  model: { games: number; wins: number; pct: number | null };
+  /** Le public : son choix majoritaire par match (égalité = non compté). */
+  crowd: { games: number; wins: number; pct: number | null };
+}
+
+interface WeekData { rows: WeekRow[]; model: { games: number; wins: number }; crowd: { games: number; wins: number } }
+
+const leaderboardCache = new TtlCache<WeekData>(5 * 60_000, 10, 'pickem-week');
+
+async function weekData(start: number, end: number): Promise<WeekData> {
+  return leaderboardCache.wrap(`${start}`, async () => {
+    const range = [new Date(start).toISOString(), new Date(end).toISOString()];
+    const [users, model, crowd] = await Promise.all([
+      pool.query(
+        `SELECT v.user_id AS "userId", u.username,
+                up.display_name AS "displayName", up.avatar,
+                COALESCE(up.avatar_url, u.avatar_url) AS "avatarUrl",
+                COUNT(*)::int AS picks, COUNT(*) FILTER (WHERE v.correct)::int AS wins
+           FROM pickem_votes v
+           JOIN users u ON u.id = v.user_id
+           LEFT JOIN user_profiles up ON up.user_id = v.user_id
+          WHERE v.game_start >= $1 AND v.game_start < $2 AND v.correct IS NOT NULL
+          GROUP BY v.user_id, u.username, up.display_name, up.avatar, up.avatar_url, u.avatar_url`,
+        range,
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS games, COUNT(*) FILTER (WHERE m.correct)::int AS wins
+           FROM pickem_model m
+          WHERE m.correct IS NOT NULL
+            AND m.game_id IN (SELECT DISTINCT game_id FROM pickem_votes
+                               WHERE game_start >= $1 AND game_start < $2 AND correct IS NOT NULL)`,
+        range,
+      ),
+      pool.query(
+        `WITH t AS (
+           SELECT game_id, COUNT(*) FILTER (WHERE correct) AS right_n, COUNT(*) FILTER (WHERE NOT correct) AS wrong_n
+             FROM pickem_votes
+            WHERE game_start >= $1 AND game_start < $2 AND correct IS NOT NULL
+            GROUP BY game_id)
+         SELECT COUNT(*) FILTER (WHERE right_n <> wrong_n)::int AS games,
+                COUNT(*) FILTER (WHERE right_n > wrong_n)::int AS wins
+           FROM t`,
+        range,
+      ),
+    ]);
+    return {
+      rows: users.rows.map((r: any) => ({
+        userId: String(r.userId), username: r.username, displayName: r.displayName ?? null,
+        avatar: r.avatar ?? null, avatarUrl: r.avatarUrl ?? null, picks: Number(r.picks), wins: Number(r.wins),
+      })),
+      model: { games: Number(model.rows[0]?.games ?? 0), wins: Number(model.rows[0]?.wins ?? 0) },
+      crowd: { games: Number(crowd.rows[0]?.games ?? 0), wins: Number(crowd.rows[0]?.wins ?? 0) },
+    };
+  });
+}
+
+const rate = (s: { games: number; wins: number }) => ({ ...s, pct: s.games > 0 ? Math.round((s.wins / s.games) * 100) : null });
+
+/** Classement de la semaine en cours (`offset` 0) ou de la précédente (−1). Cache 5 min. */
+export async function getPickemLeaderboard(offset: 0 | -1, userId?: string, now = Date.now()): Promise<PickemLeaderboard> {
+  const week = weekBoundsET(now, offset);
+  const data = await weekData(week.start, week.end);
+  const ranked = rankWeek(data.rows);
+  const mineRow = userId ? data.rows.find((r) => r.userId === userId) : undefined;
+  const mineRank = userId ? ranked.find((r) => r.userId === userId) : undefined;
+  return {
+    weekStart: week.monday,
+    weekEnd: week.sunday,
+    minPicks: PICKEM_MIN_WEEK_PICKS,
+    ranked: ranked.slice(0, 20),
+    rankedCount: ranked.length,
+    me: mineRow ? {
+      rank: mineRank?.rank ?? null, picks: mineRow.picks, wins: mineRow.wins,
+      pct: mineRow.picks > 0 ? Math.round((mineRow.wins / mineRow.picks) * 100) : null,
+    } : null,
+    model: rate(data.model),
+    crowd: rate(data.crowd),
+  };
+}
+
+// ── Session B : annonce du lundi dans le chat ──────────────────────────────
+
+const ANNOUNCED_KEY = 'pickem-announced-week';
+
+/**
+ * Le lundi (ET) à partir de 10 h, poste le gagnant de la semaine écoulée dans
+ * le salon `PICKEM_ANNOUNCE_ROOM_ID`. Sans cette variable : rien (les salons
+ * appartiennent aux utilisateurs, aucun n'est « celui de la ligue » par défaut).
+ * Une fois par semaine : la semaine annoncée est mémorisée dans `job_state`
+ * AVANT le message — mieux vaut une annonce manquée qu'une annonce en double.
+ * Appelé par la passe de rattrapage du règlement, juste après le règlement.
+ */
+export async function announceWeeklyWinner(now = Date.now()): Promise<boolean> {
+  const roomId = process.env.PICKEM_ANNOUNCE_ROOM_ID?.trim();
+  if (!roomId) return false;
+  const last = await getJobState(ANNOUNCED_KEY);
+  const { due, week } = announceDue(now, last);
+  if (!due) return false;
+  if (!(await setJobState(ANNOUNCED_KEY, week.monday))) return false;
+
+  leaderboardCache.clear(); // la semaine vient peut-être d'être réglée dans la même passe
+  const data = await weekData(week.start, week.end);
+  const text = announceText(week, rankWeek(data.rows), data.model);
+  if (!text) {
+    logger.info({ week: week.monday }, '[Pickem] personne de classé — pas d\'annonce');
+    return false;
+  }
+  const { rowCount } = await pool.query(
+    `INSERT INTO chat_messages (id, room_id, user_id, username, display_name, avatar, text)
+     SELECT $1, id, NULL, 'ICEEDGE', 'ICEEDGE', '🏆', $2 FROM chat_rooms WHERE id = $3`,
+    [`msg_${now}_pickem`, text, roomId],
+  );
+  if (!rowCount) logger.warn({ roomId }, '[Pickem] salon d\'annonce introuvable');
+  return (rowCount ?? 0) > 0;
+}

@@ -78,3 +78,97 @@ export function pickemState(
 
 export const GAME_ID_RE = /^\d{6,12}$/;
 export const TEAM_RE = /^[A-Z]{2,4}$/;
+
+// ── Session B : semaine, classement, choix du modèle, annonce ────────────────
+
+/** Minimum de picks RÉGLÉS dans la semaine pour être classé. */
+export const PICKEM_MIN_WEEK_PICKS = 10;
+
+const etDay = (ms: number) => new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+const etHour = (ms: number) =>
+  Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hourCycle: 'h23' }).format(new Date(ms)));
+function addDays(day: string, n: number): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Minuit à New York ce jour-là, en ms UTC (04:00 UTC l'été, 05:00 l'hiver). */
+export function etMidnightUtc(day: string): number {
+  const [y, m, d] = day.split('-').map(Number);
+  for (const off of [4, 5]) {
+    const t = Date.UTC(y, m - 1, d, off);
+    if (etDay(t) === day && etHour(t) === 0) return t;
+  }
+  return Date.UTC(y, m - 1, d, 5);
+}
+
+export interface WeekBounds { start: number; end: number; monday: string; sunday: string }
+
+/**
+ * Semaine lundi → dimanche, heure de l'Est (`offset` : 0 = en cours, −1 = la
+ * précédente). Un vote compte dans la semaine de la mise au jeu PRÉVUE.
+ */
+export function weekBoundsET(now: number, offset = 0): WeekBounds {
+  const today = etDay(now);
+  const dow = new Date(`${today}T12:00:00Z`).getUTCDay(); // 0 = dimanche
+  const monday = addDays(today, -((dow + 6) % 7) + 7 * offset);
+  const nextMonday = addDays(monday, 7);
+  return { start: etMidnightUtc(monday), end: etMidnightUtc(nextMonday), monday, sunday: addDays(monday, 6) };
+}
+
+/** Le choix du modèle à partir de sa probabilité de victoire du DOMICILE (0–100). Égalité → domicile. */
+export function modelPick(homePct: number, home: string, away: string): string {
+  return homePct >= 50 ? home : away;
+}
+
+export interface WeekRow {
+  userId: string; username: string; displayName: string | null;
+  avatar: string | null; avatarUrl: string | null;
+  picks: number; wins: number;
+}
+export interface RankedRow extends WeekRow { rank: number; pct: number }
+
+/**
+ * Classés : au moins `minPicks` picks réglés. Tri : taux exact, puis victoires,
+ * puis picks, puis nom (stable). Même taux, mêmes victoires et mêmes picks =
+ * même rang.
+ */
+export function rankWeek(rows: WeekRow[], minPicks = PICKEM_MIN_WEEK_PICKS): RankedRow[] {
+  const eligible = rows.filter((r) => r.picks >= minPicks && r.picks > 0)
+    .sort((a, b) => (b.wins / b.picks - a.wins / a.picks) || (b.wins - a.wins) || (b.picks - a.picks)
+      || a.username.localeCompare(b.username));
+  const out: RankedRow[] = [];
+  eligible.forEach((r, i) => {
+    const prev = out[i - 1];
+    const tied = prev && prev.wins === r.wins && prev.picks === r.picks;
+    out.push({ ...r, rank: tied ? prev.rank : i + 1, pct: Math.round((r.wins / r.picks) * 100) });
+  });
+  return out;
+}
+
+/** Annonce du lundi est-elle due ? Lundi (ET), à partir de 10 h, une fois par semaine. */
+export function announceDue(now: number, lastAnnouncedMonday: string | null): { due: boolean; week: WeekBounds } {
+  const week = weekBoundsET(now, -1);
+  const isMonday = new Date(`${etDay(now)}T12:00:00Z`).getUTCDay() === 1;
+  return { due: isMonday && etHour(now) >= 10 && lastAnnouncedMonday !== week.monday, week };
+}
+
+const shortDate = (day: string, fr: boolean) =>
+  new Date(`${day}T12:00:00Z`).toLocaleDateString(fr ? 'fr-CA' : 'en-US', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+
+/** Texte du message (bilingue : les salons mêlent les deux langues). `null` = personne de classé. */
+export function announceText(
+  week: WeekBounds, ranked: RankedRow[], model: { games: number; wins: number },
+): string | null {
+  const top = ranked.filter((r) => r.rank === 1).slice(0, 3);
+  if (top.length === 0) return null;
+  const who = top.map((r) => `@${r.username}`).join(', ');
+  const score = `${top[0].wins}/${top[0].picks} (${top[0].pct} %)`;
+  const mPct = model.games > 0 ? Math.round((model.wins / model.games) * 100) : null;
+  const fr = `🏆 Pick'em de la semaine du ${shortDate(week.monday, true)} au ${shortDate(week.sunday, true)} : ${who} — ${score}.`
+    + (mPct != null ? ` Le modèle ICEEDGE : ${model.wins}/${model.games} (${mPct} %) sur les mêmes matchs.` : '');
+  const en = `🏆 Pick'em of the week (${shortDate(week.monday, false)}–${shortDate(week.sunday, false)}): ${who} — ${score}.`
+    + (mPct != null ? ` ICEEDGE model: ${model.wins}/${model.games} (${mPct}%) on the same games.` : '');
+  return `${fr}\n${en}`;
+}
