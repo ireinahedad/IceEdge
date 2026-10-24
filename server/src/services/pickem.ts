@@ -1,5 +1,5 @@
 /**
- * pickem.ts — la partie PURE du pick'em ICEEDGE (NEWS_CONSENSUS_PLAN.md, F3,
+ * pickem.ts — la partie PURE du pick'em (NEWS_CONSENSUS_PLAN.md, F3,
  * étape 5 session A) : quand le vote se ferme, et ce que la page affiche.
  * `pickem.service.ts` fait les appels.
  */

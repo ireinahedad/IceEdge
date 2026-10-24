@@ -1,5 +1,5 @@
 /**
- * pickem.service.ts — votes du pick'em ICEEDGE (NEWS_CONSENSUS_PLAN.md, F3,
+ * pickem.service.ts — votes du pick'em (NEWS_CONSENSUS_PLAN.md, F3,
  * étape 5 session A). Logique pure dans `pickem.ts`.
  *
  * ── Coût (Neon facturé au compute) ──────────────────────────────────────────

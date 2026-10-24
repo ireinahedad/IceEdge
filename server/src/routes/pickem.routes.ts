@@ -1,5 +1,5 @@
 /**
- * pickem.routes.ts — pick'em ICEEDGE (NEWS_CONSENSUS_PLAN.md, F3, session A).
+ * pickem.routes.ts — pick'em (NEWS_CONSENSUS_PLAN.md, F3, session A).
  *
  *   GET  /api/pickem/today     public : tous les matchs du jour (+ mes votes si connecté)
  *   GET  /api/pickem/leaderboard?week=current|previous   public : classement (+ ma ligne)
