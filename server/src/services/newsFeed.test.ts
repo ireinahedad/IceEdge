@@ -135,3 +135,53 @@ describe('sources lues et alertes', () => {
     expect(alertWorthy({ team_abbrs: ['VGK'], flags: ['lineup'], posted_at: '2026-10-23T17:00:00Z' }, starts, now)).toBe(false);
   });
 });
+
+// ── Étape 1 (2026-10-24) : erreurs relevées sur le fil réel de production ──
+import { isRetro } from './newsFeed';
+
+describe('fil réel du 2026-10-24 — absents repérés', () => {
+  it.each([
+    'Golden Knights’ Mitch Marner to miss game vs. Blues for birth of child',
+    'Oilers place Devon Levi on injured reserve',
+    'Capitals’ Vincent Desharnais out 4-6 weeks after emergency appendectomy',
+    'Penguins’ Bryan Rust out at least six weeks with lower-body injury',
+    'Sharks’ Igor Chernyshov leaves game with injury',
+    'Jiri Kulich just left Sabres practice after taking a puck to the face.',
+    'Wild’s Jared Spurgeon returns after four-game absence',
+    'Senators could be in trouble if Linus Ullmark is out long-term.',
+  ])('lineup : %s', (text) => {
+    expect(flagsOf(text)).toContain('lineup');
+  });
+
+  it.each([
+    'Instant Reaction: Flames special teams tame the Wild in Blake Coleman’s return to Calgary',
+    'He missed the net twice in the third',
+    'Great atmosphere at the arena',
+  ])('pas un absent : %s', (text) => {
+    expect(flagsOf(text)).not.toContain('lineup');
+  });
+
+  it('les retours au jeu restent repérés', () => {
+    expect(flagsOf('Bourque will return to the lineup tonight')).toContain('lineup');
+    expect(flagsOf('Mavrik Bourque will return to the Predators lineup tonight')).toContain('lineup');
+  });
+});
+
+describe('fil réel du 2026-10-24 — équipes', () => {
+  it('source d’équipe : une VILLE citée ne rattache pas un autre club', () => {
+    expect(teamsForPost('VAN', 'Canada now thrashing England. Amazing stuff in Ottawa')).toEqual(['VAN']);
+    expect(teamsForPost('VAN', 'Detroit hands Vancouver their 9th loss in a row.')).toEqual(['VAN']);
+    // Un club NOMMÉ compte toujours (échange, adversaire).
+    expect(teamsForPost('VAN', 'Where the Canucks got dominated again in loss to Red Wings')).toEqual(['VAN', 'DET']);
+  });
+  it('source de ligue : les villes comptent, sauf « Boston University »', () => {
+    expect(teamsForPost(null, 'Detroit hands Vancouver their 9th loss in a row.')).toEqual(['DET', 'VAN']);
+    expect(teamsInText('Aiden Celebrini has been off to a fantastic start at Boston University.')).toEqual([]);
+    expect(teamsInText('Boston beats Toronto')).toEqual(['BOS', 'TOR']);
+  });
+  it('rétro écarté', () => {
+    expect(isRetro('Flashback Friday: Flames defeat Red Wings in six during 2004 playoff run')).toBe(true);
+    expect(isRetro('Throwback to the 2011 Cup run #tbt')).toBe(true);
+    expect(isRetro('Oilers place Devon Levi on injured reserve')).toBe(false);
+  });
+});

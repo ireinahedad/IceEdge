@@ -65,9 +65,17 @@ Rien à coder. Avant d'empiler autre chose sur le fil, vérifier qu'il dit vrai.
 - [ ] Dans les logs Railway : passage à `nextMin: 15` une heure avant le 1er match,
       retour à `60` après la dernière mise au jeu.
 - [ ] Une alerte admin reçue AVANT un match (et aucune pour un match commencé).
-- [ ] Sur 3-4 pages de match : la section s'affiche, les liens ouvrent le bon post,
+- [x] Sur 3-4 pages de match : la section s'affiche, les liens ouvrent le bon post,
       aucune nouvelle collée à la mauvaise équipe. Noter les erreurs : elles
       corrigent `teamsInText` (`newsFeed.ts`).
+      → Fait le 2026-10-24 sur les 12 matchs du jour (`/api/news` de production).
+        Corrigé : absents manqués (« to miss game », « place … on injured reserve »,
+        « out 4-6 weeks », « leaves game », « left … practice », « returns after »),
+        faux « alignement » (« return to Calgary »), villes qui collaient un autre
+        club chez les sources d'équipe (« in Ottawa », « Boston University »),
+        rétro écarté (« Flashback Friday »), carte du match : ≤ 2 nouvelles par
+        auteur (TOR–EDM n'affichait que de la promo DFO Edmonton). Les lignes déjà
+        en base gardent leurs anciens drapeaux jusqu'à la purge (36 h d'affichage).
 - [ ] Supprimer `_to_delete/server-src-tests.tgz` et `_to_delete/client-src-tests.tgz`.
 
 ### Étape 2 — Couverture : sources pour les 23 équipes sans compte dédié (1 session) — ✅ script codé 2026-10-24

@@ -126,12 +126,31 @@ const NAME_RE = new RegExp(
 );
 const ABBR_RE = /(?:^|[^A-Za-z#])#?([A-Z]{3})(?![A-Za-z])/g;
 
-/** Équipes citées dans un texte, sans doublon, dans l'ordre d'apparition. */
-export function teamsInText(text: string): string[] {
+/** Les clés de `NICKNAMES` qui sont des VILLES (le reste : surnoms d'équipe). */
+const CITY_KEYS = new Set([
+  'anaheim', 'boston', 'buffalo', 'calgary', 'carolina', 'chicago', 'colorado', 'columbus', 'dallas',
+  'detroit', 'edmonton', 'florida', 'minnesota', 'montreal', 'montréal', 'nashville', 'ottawa',
+  'philadelphia', 'pittsburgh', 'san jose', 'seattle', 'st. louis', 'st louis', 'tampa bay', 'toronto',
+  'vancouver', 'vegas', 'washington', 'winnipeg', 'utah',
+]);
+/** « Boston University », « Minnesota State » : une ville suivie de ces mots n'est pas l'équipe. */
+const NOT_THE_TEAM_AFTER = /^\s+(University|College|State|Univ\.?)\b/;
+
+/**
+ * Équipes citées dans un texte, sans doublon, dans l'ordre d'apparition.
+ * `cities: false` : seuls les surnoms, noms complets et abréviations comptent
+ * (voir `teamsForPost`).
+ */
+export function teamsInText(text: string, opts: { cities?: boolean } = {}): string[] {
+  const cities = opts.cities !== false;
   const found: string[] = [];
   const add = (a: string | undefined) => { if (a && !found.includes(a)) found.push(a); };
   for (const m of text.matchAll(NAME_RE)) {
     const k = m[1].toLowerCase();
+    if (CITY_KEYS.has(k)) {
+      if (!cities) continue;
+      if (NOT_THE_TEAM_AFTER.test(text.slice((m.index ?? 0) + m[0].length))) continue;
+    }
     add(NAME_TO_ABBR[k] ?? NICKNAMES[k]);
   }
   for (const m of text.matchAll(ABBR_RE)) if (ABBRS.has(m[1])) add(m[1]);
@@ -144,7 +163,10 @@ export type NewsFlag = 'goalie' | 'lineup' | 'transaction';
 
 const FLAG_RES: Record<NewsFlag, RegExp> = {
   goalie: /\b(starts? in (goal|net)|in goal (tonight|vs|against)|will start (in goal|tonight)|gets the (start|nod)|starting goalie|starter tonight|between the pipes)\b/i,
-  lineup: /\b(will not play|won'?t play|ruled out|is out|out (tonight|for|indefinitely)|scratch(ed)?|day[- ]to[- ]day|week[- ]to[- ]week|game[- ]time decision|(placed|put) on (the )?(ltir|ir|injured reserve)|returns? (to|tonight)|will return|back in the lineup|activated|unavailable|lower[- ]body|upper[- ]body)\b/i,
+  // Revu le 2026-10-24 sur le fil réel (étape 1) : « to miss game », « place on
+  // injured reserve », « out 4-6 weeks », « leaves game », « returns after » étaient
+  // manqués ; « return to Calgary » (retour dans une ancienne ville) était un faux positif.
+  lineup: /\b(will not play|won'?t play|ruled out|is out|out (tonight|for|indefinitely|long[- ]term|at least|\d+(-\d+)? (days?|weeks?|months?))|(to |will )?miss(es|ed)? (tonight|(the )?game|\d+ (games?|weeks?)|time|the rest)|scratch(ed)?|day[- ]to[- ]day|week[- ]to[- ]week|game[- ]time decision|(on|to) (the )?(ltir|injured reserve)|placed on (the )?ir|leaves? (the )?game|left (the |[\w'’]+ )?(game|practice)|returns? (to (the )?([\w'’]+ )?lineup|tonight|from injury|after)|will return|back in the lineup|activated|unavailable|lower[- ]body|upper[- ]body)\b/i,
   transaction: /\b(trade[ds]?|acquire[ds]?|signs?|signed|(placed )?on waivers|claimed|recall(ed|s)?|assigned|loaned|agreed to terms|extension)\b/i,
 };
 
@@ -161,9 +183,14 @@ export function excerptOf(text: string, max = 200): string {
 /**
  * Équipes à rattacher : celle de la source si elle en a une (plus les autres
  * citées, pour un échange), sinon celles trouvées dans le texte.
+ *
+ * Pour une source d'ÉQUIPE, les autres clubs ne comptent que s'ils sont nommés
+ * (surnom, nom complet, abréviation), pas par une ville : un journaliste de
+ * Vancouver qui écrit « Amazing stuff in Ottawa » (un match de soccer) ne parle
+ * pas des Senators. Corrigé le 2026-10-24 (étape 1).
  */
 export function teamsForPost(sourceTeam: string | null, text: string): string[] {
-  const cited = teamsInText(text);
+  const cited = teamsInText(text, { cities: sourceTeam === null });
   if (!sourceTeam) return cited;
   return [sourceTeam, ...cited.filter((t) => t !== sourceTeam)];
 }
@@ -184,4 +211,12 @@ export function normalizeManualUrl(raw: string): string | null {
 export function authorFromManualUrl(url: string): string {
   const m = /^https:\/\/(?:x\.com|bsky\.app\/profile)\/([^/]+)/.exec(url);
   return m ? `@${m[1]}` : new URL(url).hostname;
+}
+
+/**
+ * Publication rétro (« Flashback Friday », « on this day »…) : de l'histoire,
+ * pas une nouvelle d'avant-match. Écartée par le fil (étape 1, 2026-10-24).
+ */
+export function isRetro(text: string): boolean {
+  return /\b(flashback|throwback|on this day|years ago today)\b|#tbt\b/i.test(text);
 }

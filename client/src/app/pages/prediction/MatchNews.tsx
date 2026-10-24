@@ -21,6 +21,27 @@ function ago(iso: string, lang: string): string {
   return lang === "fr" ? `il y a ${h} h` : `${h}h ago`;
 }
 
+/**
+ * Les 6 nouvelles affichées : les plus récentes, mais au plus 2 par auteur et
+ * sans doublon exact. Sur le fil réel du 2026-10-24, les 6 cases de TOR–EDM
+ * étaient toutes à Daily Faceoff Edmonton, surtout de la promo (étape 1).
+ */
+export function pickShown(items: NewsItem[], max = 6, perAuthor = 2): NewsItem[] {
+  const out: NewsItem[] = [];
+  const byAuthor = new Map<string, number>();
+  const seen = new Set<string>();
+  for (const n of items) {
+    const k = n.excerpt.trim().toLowerCase();
+    const c = byAuthor.get(n.author) ?? 0;
+    if (seen.has(k) || c >= perAuthor) continue;
+    seen.add(k);
+    byAuthor.set(n.author, c + 1);
+    out.push(n);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 export function MatchNews({ home, away, accent }: { home: string; away: string; accent: string }) {
   const { t, lang } = useI18n();
   const [items, setItems] = useState<NewsItem[] | null>(null);
@@ -34,7 +55,7 @@ export function MatchNews({ home, away, accent }: { home: string; away: string; 
 
   if (!items || items.length === 0) return null;
 
-  const shown = items.slice(0, 6);
+  const shown = pickShown(items);
   const alerts = shown.filter((n) => n.flags.includes("goalie") || n.flags.includes("lineup")).length;
 
   return (

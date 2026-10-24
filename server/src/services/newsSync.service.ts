@@ -33,7 +33,7 @@ import { NEWS_SOURCES, type NewsSource } from '../data/newsSources';
 import { runRosterDiffIfDue, type RosterRunResult } from './newsRoster.service';
 import { snapshotModelPicks, remindPickemLock } from './pickem.service';
 import {
-  parseAuthorFeed, teamsForPost, flagsOf, excerptOf, nextDelayMs, inGameWindow,
+  parseAuthorFeed, teamsForPost, flagsOf, excerptOf, nextDelayMs, inGameWindow, isRetro,
   type FeedPost, type NewsFlag,
 } from './newsFeed';
 
@@ -195,6 +195,7 @@ export async function runNewsSync(): Promise<{ read: number; inserted: number; a
     for (const post of posts) {
       if (now - post.postedAt.getTime() > MAX_AGE_MS || seen.has(post.externalId)) continue;
       seen.add(post.externalId);
+      if (isRetro(post.text)) continue;
       const teams = teamsForPost(src.team, post.text);
       // Une source de ligue qui ne cite aucune équipe : rien à rattacher à un match.
       if (teams.length === 0) continue;
