@@ -1,36 +1,54 @@
 import { describe, it, expect } from 'vitest';
 import {
   nextDelayMs, inGameWindow, parseAuthorFeed, teamsInText, teamsForPost, flagsOf,
-  excerptOf, normalizeManualUrl, authorFromManualUrl, HOUR_MS, QUARTER_MS,
+  excerptOf, normalizeManualUrl, authorFromManualUrl, HOUR_MS, QUARTER_MS, IDLE_MS,
 } from './newsFeed';
-import { sourcesFor, alertWorthy } from './newsSync.service';
+import { alertWorthy } from './newsSync.service';
 
 const T = (iso: string) => Date.parse(iso);
 // Soirée type : 1re mise au jeu 23:00 UTC (19:00 ET), dernière 02:00 UTC.
 const starts = [T('2026-10-23T23:00:00Z'), T('2026-10-24T00:00:00Z'), T('2026-10-24T02:00:00Z')];
 
-describe('cadence (1 h, 15 min dès 1 h avant le 1er match)', () => {
-  it('sans match : toutes les heures', () => {
-    expect(nextDelayMs(T('2026-10-23T12:00:00Z'), [])).toBe(HOUR_MS);
+describe('cadence (2026-10-25) : 1 h de −12 h à −1 h, 15 min jusqu’à la dernière mise au jeu, 6 h sinon', () => {
+  // starts : 1re mise au jeu 23:00 UTC → fenêtre ouverte à 11:00 UTC, 15 min dès 22:00 ; dernière 02:00 UTC.
+  it('sans match : toutes les 6 h', () => {
+    expect(nextDelayMs(T('2026-10-23T12:00:00Z'), [])).toBe(IDLE_MS);
   });
-  it('loin avant la fenêtre : 1 h', () => {
-    expect(nextDelayMs(T('2026-10-23T15:00:00Z'), starts)).toBe(HOUR_MS);
+  it('loin avant la fenêtre : 6 h', () => {
+    expect(nextDelayMs(T('2026-10-23T02:00:00Z'), starts)).toBe(IDLE_MS);
   });
-  it('moins d’une heure avant l’ouverture : on tombe pile à 22:00 UTC', () => {
-    const now = T('2026-10-23T21:20:00Z');
-    expect(now + nextDelayMs(now, starts)).toBe(T('2026-10-23T22:00:00Z'));
+  it('moins de 6 h avant l’ouverture : on tombe pile à 11:00 UTC', () => {
+    const now = T('2026-10-23T08:20:00Z');
+    expect(now + nextDelayMs(now, starts)).toBe(T('2026-10-23T11:00:00Z'));
   });
-  it('dans la fenêtre : 15 min', () => {
+  it('de −12 h à −1 h : heures pile, même après un tour en retard', () => {
+    expect(nextDelayMs(T('2026-10-23T11:00:00Z'), starts)).toBe(HOUR_MS);
+    const late = T('2026-10-23T14:07:00Z');
+    expect(late + nextDelayMs(late, starts)).toBe(T('2026-10-23T15:00:00Z'));
+    expect(inGameWindow(T('2026-10-23T11:30:00Z'), starts)).toBe(true);
+    expect(inGameWindow(T('2026-10-23T10:59:00Z'), starts)).toBe(false);
+  });
+  it('dès 1 h avant le 1er match et jusqu’à la dernière mise au jeu : 15 min', () => {
     expect(nextDelayMs(T('2026-10-23T22:00:00Z'), starts)).toBe(QUARTER_MS);
-    expect(nextDelayMs(T('2026-10-24T01:59:00Z'), starts)).toBe(QUARTER_MS);
-    expect(inGameWindow(T('2026-10-23T22:30:00Z'), starts)).toBe(true);
+    const late = T('2026-10-23T23:21:00Z');
+    expect(late + nextDelayMs(late, starts)).toBe(T('2026-10-23T23:30:00Z'));
+    expect(nextDelayMs(T('2026-10-24T01:45:00Z'), starts)).toBe(QUARTER_MS);
   });
-  it('après la dernière mise au jeu : retour à 1 h', () => {
-    expect(nextDelayMs(T('2026-10-24T02:00:00Z'), starts)).toBe(HOUR_MS);
+  it('une soirée complète : tour à −1 h (rappel de vote), un tour dans la dernière heure de chaque match, 27 tours', () => {
+    let t = T('2026-10-23T11:00:00Z');
+    const ticks: number[] = [];
+    while (t < T('2026-10-24T02:00:00Z')) { ticks.push(t); t += nextDelayMs(t, starts); }
+    expect(ticks).toContain(T('2026-10-23T22:00:00Z'));
+    for (const s of starts) expect(ticks.some((x) => x < s && s - x <= HOUR_MS)).toBe(true);
+    expect(ticks.filter((x) => x < T('2026-10-23T22:00:00Z'))).toHaveLength(11);
+    expect(ticks).toHaveLength(27);
+  });
+  it('après la dernière mise au jeu : 6 h', () => {
+    expect(nextDelayMs(T('2026-10-24T02:00:00Z'), starts)).toBe(IDLE_MS);
     expect(inGameWindow(T('2026-10-24T03:00:00Z'), starts)).toBe(false);
   });
   it('jamais moins d’une minute', () => {
-    expect(nextDelayMs(T('2026-10-23T21:59:50Z'), starts)).toBe(60_000);
+    expect(nextDelayMs(T('2026-10-23T10:59:50Z'), starts)).toBe(60_000);
   });
 });
 
@@ -109,18 +127,7 @@ describe('extrait et liens collés', () => {
   });
 });
 
-describe('sources lues et alertes', () => {
-  const all = [
-    { handle: 'league', team: null, label: '' },
-    { handle: 'vgk', team: 'VGK', label: '' },
-    { handle: 'tor', team: 'TOR', label: '' },
-  ];
-  it('dans la fenêtre : ligue + équipes qui jouent seulement', () => {
-    expect(sourcesFor(all, true, new Set(['VGK', 'STL'])).map((s) => s.handle)).toEqual(['league', 'vgk']);
-  });
-  it('hors fenêtre : toutes', () => {
-    expect(sourcesFor(all, false, new Set())).toHaveLength(3);
-  });
+describe('alertes', () => {
   it('alerte : absent/gardien, récent, et match PAS ENCORE commencé', () => {
     const now = T('2026-10-23T21:00:00Z');
     const starts = new Map([['VGK', T('2026-10-24T00:00:00Z')], ['TOR', T('2026-10-23T20:00:00Z')]]);

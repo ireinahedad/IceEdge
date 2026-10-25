@@ -151,7 +151,7 @@ export function rankWeek(rows: WeekRow[], minPicks = PICKEM_MIN_WEEK_PICKS): Ran
 
 /**
  * Le rappel part au tour de NewsSync qui ouvre la fenêtre des matchs (1re mise
- * au jeu − 1 h). Les tours sont aux 15 min : on accepte [−65 min, −30 min) pour
+ * au jeu − 1 h). Les tours suivants sont aux 15 min : on accepte [−65 min, −30 min) pour
  * ne pas le rater sur un tour un peu décalé, et jamais plus d'une fois par jour.
  */
 export const REMINDER_FROM_MS = 65 * 60_000;

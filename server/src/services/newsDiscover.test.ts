@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   TEAM_NAMES, teamsToSearch, searchQueries, parseActors, profileMatches, checkCandidate, bestCandidates, sourceLine,
+  LOCAL_OUTLETS, TEAM_HASHTAGS, hashtagAuthors, profileExcluded,
 } from './newsDiscover';
 import { NEWS_SOURCES, REJECTED_HANDLES } from '../data/newsSources';
 
@@ -23,8 +24,53 @@ describe('équipes à chercher', () => {
   it('en argument : seulement les équipes valides, sans doublon', () => {
     expect(teamsToSearch(NEWS_SOURCES, ['vgk', 'STL', 'XYZ', 'VGK'])).toEqual(['VGK', 'STL']);
   });
-  it('recherches composées avec la ville et le surnom', () => {
-    expect(searchQueries('VGK')).toEqual(['Golden Knights beat writer', 'Golden Knights reporter', 'Vegas hockey', 'Golden Knights']);
+  it('recherches composées avec la ville et le surnom (celles du 1er passage d’abord)', () => {
+    expect(searchQueries('VGK')).toEqual([
+      'Golden Knights beat writer', 'Golden Knights reporter', 'Vegas hockey', 'Golden Knights',
+      'Vegas Golden Knights', 'Golden Knights insider',
+    ]);
+  });
+  it('2e passage : médias locaux ajoutés, sans doublon', () => {
+    const q = searchQueries('TBL');
+    expect(q.slice(0, 4)).toEqual(['Lightning beat writer', 'Lightning reporter', 'Tampa Bay hockey', 'Lightning']);
+    expect(q).toContain('Tampa Bay Times Lightning');
+    expect(q).toContain('Tampa Bay Times hockey');
+    expect(new Set(q).size).toBe(q.length);
+  });
+  it('les 15 équipes sans source ont des médias locaux et des mots-clics', () => {
+    for (const t of ['CBJ', 'DAL', 'DET', 'FLA', 'LAK', 'NJD', 'NSH', 'OTT', 'PIT', 'SEA', 'SJS', 'STL', 'TBL', 'UTA', 'WSH']) {
+      expect(LOCAL_OUTLETS[t]?.length, t).toBeGreaterThan(0);
+      expect(TEAM_HASHTAGS[t]?.length, t).toBeGreaterThan(0);
+      for (const h of TEAM_HASHTAGS[t]) expect(h, t).toMatch(/^#\w+$/);
+    }
+    for (const t of [...Object.keys(LOCAL_OUTLETS), ...Object.keys(TEAM_HASHTAGS)]) expect(TEAM_NAMES[t], t).toBeDefined();
+  });
+});
+
+describe('auteurs des mots-clics (searchPosts)', () => {
+  const p = (handle: string, uri: string, displayName?: string) => ({ uri, author: { handle, displayName } });
+
+  it('compte les publications distinctes par auteur, une seule publication = écarté', () => {
+    const r1 = { posts: [p('beat.bsky.social', 'at://1', 'Beat'), p('beat.bsky.social', 'at://2'), p('fan.bsky.social', 'at://3'), p('Beat.bsky.social', 'at://4')] };
+    expect(hashtagAuthors([r1])).toEqual([{ handle: 'beat.bsky.social', displayName: 'Beat', posts: 3 }]);
+  });
+  it('plusieurs mots-clics : totaux additionnés, une publication avec les deux comptée une fois', () => {
+    const r1 = { posts: [p('a.bsky.social', 'at://1'), p('b.bsky.social', 'at://5'), p('b.bsky.social', 'at://6')] };
+    const r2 = { posts: [p('a.bsky.social', 'at://1'), p('a.bsky.social', 'at://2'), p('a.bsky.social', 'at://3')] };
+    expect(hashtagAuthors([r1, r2]).map((x) => [x.handle, x.posts])).toEqual([['a.bsky.social', 3], ['b.bsky.social', 2]]);
+  });
+  it('réponses malformées ou refusées : ignorées', () => {
+    expect(hashtagAuthors([null, { posts: 'x' }, { posts: [{ uri: 'at://1' }, p('handle.invalid', 'at://2'), { author: { handle: 'x' } }] }])).toEqual([]);
+  });
+  it('profileExcluded : parodie et autre sport sans hockey ; une bio vide passe', () => {
+    expect(profileExcluded({ handle: 'pens.bsky.social' })).toBe(false);
+    expect(profileExcluded({ handle: 'x', description: 'Parody account' })).toBe(true);
+    expect(profileExcluded({ handle: 'steelersfootball.bsky.social' })).toBe(true);
+    expect(profileExcluded({ handle: 'x', description: 'Steelers, Pirates and Penguins hockey' })).toBe(false);
+  });
+  it('parseActors lit aussi la réponse de getProfiles', () => {
+    expect(parseActors({ profiles: [{ handle: 'a.bsky.social', description: 'Penguins beat' }] }))
+      .toEqual([{ handle: 'a.bsky.social', displayName: undefined, description: 'Penguins beat' }]);
   });
 });
 

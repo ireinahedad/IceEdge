@@ -6,8 +6,9 @@
  * quand une nouvelle parle d'un absent ou d'un gardien pour un match du jour.
  *
  * ── Coût (Neon facturé au compute) ──────────────────────────────────────────
- * • Cadence : 1 h, et 15 min seulement dans la fenêtre des matchs (`newsFeed.ts`).
- * • Dans la fenêtre, seules les sources des équipes qui jouent (+ ligue) sont lues.
+ * • Cadence (2026-10-25) : 1 h de 12 h à 1 h avant le 1er match, 15 min de là
+ *   jusqu'à la dernière mise au jeu, 6 h sinon (`newsFeed.ts`). Toutes les sources à chaque tour : Bluesky
+ *   ne coûte rien, c'est le nombre de TOURS qui coûte du compute Neon.
  * • Un tour sans publication nouvelle ne fait que le verrou + 1 INSERT vide.
  * • La lecture publique (`listNews`) passe par un cache mémoire de 2 min.
  * • Opt-in : `NEWS_SYNC_ENABLED=true`, et rien en mode DORMANT (server.ts).
@@ -29,11 +30,11 @@ import { mapLimit } from './concurrency';
 import { TtlCache } from './ttlCache';
 import { fetchGamesByDate } from './nhlApiClient';
 import { sendToUsers, pushEnabled } from './push.service';
-import { NEWS_SOURCES, type NewsSource } from '../data/newsSources';
+import { NEWS_SOURCES } from '../data/newsSources';
 import { runRosterDiffIfDue, type RosterRunResult } from './newsRoster.service';
 import { snapshotModelPicks, remindPickemLock } from './pickem.service';
 import {
-  parseAuthorFeed, teamsForPost, flagsOf, excerptOf, nextDelayMs, inGameWindow, isRetro,
+  parseAuthorFeed, teamsForPost, flagsOf, excerptOf, nextDelayMs, isRetro,
   type FeedPost, type NewsFlag,
 } from './newsFeed';
 
@@ -94,12 +95,6 @@ async function todaysGames(): Promise<TodayGames> {
     logger.warn({ err: err?.message }, '[NewsSync] calendrier LNH indisponible');
     return { teams: new Set(), startsUtc: [], startByTeam: new Map() };
   }
-}
-
-/** Dans la fenêtre des matchs : sources de ligue + équipes qui jouent. Sinon : toutes. */
-export function sourcesFor(all: NewsSource[], windowOpen: boolean, playing: Set<string>): NewsSource[] {
-  if (!windowOpen) return all;
-  return all.filter((s) => s.team === null || playing.has(s.team));
 }
 
 // ── Écriture ───────────────────────────────────────────────────────────────
@@ -175,10 +170,9 @@ async function notifyAdmins(rows: NewRow[]): Promise<void> {
 // ── Un tour ────────────────────────────────────────────────────────────────
 
 export async function runNewsSync(): Promise<{ read: number; inserted: number; alerted: number; roster: RosterRunResult; modelPicks: number; reminded: number; nextMs: number }> {
-  const { teams: playing, startsUtc, startByTeam } = await todaysGames();
+  const { startsUtc, startByTeam } = await todaysGames();
   const now = Date.now();
-  const windowOpen = inGameWindow(now, startsUtc);
-  const sources = sourcesFor(NEWS_SOURCES, windowOpen, playing);
+  const sources = NEWS_SOURCES;
 
   const perSource = await mapLimit(sources, CONCURRENCY, async (src) => {
     try {
@@ -245,7 +239,7 @@ export function startNewsSync(): void {
   if (timer) return;
   timer = setTimeout(() => void tick(), 20_000);
   timer.unref();
-  logger.info({ sources: NEWS_SOURCES.length }, '[NewsSync] démarré (1 h, 15 min dans la fenêtre des matchs)');
+  logger.info({ sources: NEWS_SOURCES.length }, '[NewsSync] démarré (1 h de −12 h à −1 h, 15 min jusqu\'à la dernière mise au jeu, 6 h sinon)');
 }
 
 // ── Lecture publique ───────────────────────────────────────────────────────

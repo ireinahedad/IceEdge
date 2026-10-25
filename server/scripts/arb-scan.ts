@@ -42,7 +42,8 @@
  * Variables (server/.env) :
  *   ARB_ODDS_API_KEY     clé dédiée au scanner (recommandé) ; à défaut ODDS_API_KEY,
  *                        celle de l'app — le plancher ci-dessous protège alors son quota
- *   ARB_MIN_REMAINING    le scanner n'appelle plus l'API sous ce solde (défaut 3000)
+ *   ARB_MIN_REMAINING    le scanner n'appelle plus l'API sous ce solde
+ *                        (défaut : 50 avec la clé dédiée, 3000 avec celle de l'app)
  *   ARB_BOOKS            livres comparés, séparés par des virgules (défaut : 10 livres US + CA)
  *   ARB_EXTRA_MARKETS    marchés de --extras (défaut ci-dessous)
  *   ARB_PROP_MARKETS     marchés de --props (défaut ci-dessous)
@@ -87,7 +88,13 @@ function readNum(name: string, fallback: number): number {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
-const MIN_REMAINING = readNum('ARB_MIN_REMAINING', 3000);
+/**
+ * Plancher de crédits. Le défaut dépend de la clé (2026-10-25) : la clé DÉDIÉE
+ * (500 crédits gratuits) peut descendre presque à zéro — un plancher de 3000 la
+ * bloquerait entièrement ; la clé de l'APP, elle, doit garder de quoi servir les
+ * visiteurs jusqu'à la remise à zéro mensuelle.
+ */
+const MIN_REMAINING = readNum('ARB_MIN_REMAINING', KEY_IS_SHARED ? 3000 : 50);
 const EXTRAS_TTL_MS = readNum('ARB_EXTRAS_TTL_MIN', 60) * 60_000;
 const DISCORD_WEBHOOK = (process.env.ARB_DISCORD_WEBHOOK || '').trim();
 const LOG_FILE = path.resolve(process.env.ARB_LOG_FILE || path.resolve(__dirname, '..', 'arb-log.jsonl'));
@@ -110,6 +117,8 @@ interface Args {
   middles: boolean;
   /** Probabilités des middles : modèle ArakIce (repli marché) ou marché seul. */
   model: 'arakice' | 'market';
+  /** Avantage minimal d'un middle au-dessus du seuil, en points. */
+  edge: number;
   watch: number;       // secondes entre deux scans ; 0 = un seul scan
   extras: boolean;
   props: boolean;
@@ -124,7 +133,7 @@ interface Args {
 
 function parseArgs(argv: string[]): Args {
   const a: Args = {
-    demo: false, replay: null, save: true, near: 3, nearAlways: false, middles: false, model: 'arakice',
+    demo: false, replay: null, save: true, near: 3, nearAlways: false, middles: false, model: 'arakice', edge: 2.5,
     watch: 0, extras: false, props: false, bankroll: 1000, round: 1, min: 0.5,
     books: (process.env.ARB_BOOKS || '').split(',').map((s) => s.trim()).filter(Boolean),
     sport: 'icehockey_nhl', horizonH: 12, log: true,
@@ -144,6 +153,7 @@ function parseArgs(argv: string[]): Args {
       case '--no-save': a.save = false; break;
       case '--near': a.near = Math.round(num(f, argv[++i])); a.nearAlways = true; break;
       case '--middles': a.middles = true; break;
+      case '--edge': a.edge = num(f, argv[++i]); a.middles = true; break;
       case '--model': {
         const m = String(argv[++i] || '');
         if (m !== 'arakice' && m !== 'market') throw new Error('--model attend « arakice » ou « market »');
@@ -430,7 +440,7 @@ const signed = (x: number): string => `${x >= 0 ? '+' : '−'}${Math.abs(x).toFi
 function printMiddles(list: MiddleOpportunity[], now: Date, info: string): void {
   console.log(`\n── Middles · probabilités : ${info}`);
   if (!list.length) {
-    console.log('   Aucun middle à espérance positive.');
+    console.log('   Aucun middle assez avantageux.');
     return;
   }
   list.forEach((m, i) => {
@@ -445,9 +455,12 @@ function printMiddles(list: MiddleOpportunity[], now: Date, info: string): void 
       `${(m.pMiddle * 100).toFixed(1)} % ${m.source}`,
       m.pMiddleMarket !== undefined ? `${(m.pMiddleMarket * 100).toFixed(1)} % marché` : '',
       `seuil ${(m.breakeven * 100).toFixed(1)} %`,
+      m.riskFree ? '' : `avantage ${m.edgePts >= 0 ? '+' : ''}${m.edgePts.toFixed(1)} pts`,
     ].filter(Boolean).join(' · ');
     console.log(`    P(fenêtre) : ${probs}`);
-    console.log(`    Dans la fenêtre : jusqu'à ${signed(m.bestCase)} · sinon, au pire : ${signed(m.worstCase)} · espérance : ${signed(m.ev)} sur ${m.totalStaked} $`);
+    console.log(`    Dans la fenêtre : jusqu'à ${signed(m.bestCase)} · sinon, au pire : ${signed(m.worstCase)}`);
+    console.log(`    Espérance : ${signed(m.ev)} sur ${m.totalStaked} $ selon ${m.source}` +
+      (m.evMarket !== undefined ? ` · ${signed(m.evMarket)} selon le marché` : ''));
     for (const w of m.warnings) console.log(`    ! ${w}`);
   });
 }
@@ -525,9 +538,9 @@ async function scanOnce(args: Args): Promise<void> {
         : `arakiceML pour ${r.map.size}/${r.asked} match(s), loi du marché sinon`;
     }
     middles = findMiddles(events, {
-      now, bankroll: args.bankroll, roundTo: args.round, books: args.books, model,
+      now, bankroll: args.bankroll, roundTo: args.round, books: args.books, model, minEdgePts: args.edge,
     });
-    printMiddles(middles, now, info);
+    printMiddles(middles, now, `${info} · avantage minimal ${args.edge} pts au-dessus du seuil`);
   }
 
   if (args.replay) return;

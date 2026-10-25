@@ -5,23 +5,39 @@
  * lecture d'une réponse Bluesky, la détection des équipes et des mots-clés.
  * `newsSync.service.ts` ne fait que les appels.
  *
- * ── Cadence (décision du user, 2026-10-23) ──────────────────────────────────
- * Toutes les heures. Toutes les 15 min à partir d'une heure avant le PREMIER
- * match du jour, jusqu'à la DERNIÈRE mise au jeu. Au-delà, retour à l'heure :
- * une nouvelle publiée pendant un match ne change plus rien au pari.
+ * ── Cadence (décision du user, 2026-10-25 — remplace celle du 2026-10-23) ───
+ * Pour réduire le compute Neon sans rater les absents de dernière minute :
+ *   • de 12 h à 1 h avant le PREMIER match : un tour par HEURE ;
+ *   • de 1 h avant le premier match à la DERNIÈRE mise au jeu : toutes les 15 min
+ *     (« Marner absent », publié 32 min avant VGK@STL) ;
+ *   • le reste du temps, et les jours sans match : toutes les 6 h (calendrier,
+ *     purge et effectifs du jour).
+ * Avant : 1 h toute la journée + 15 min dès 1 h avant (~40 tours un soir de
+ * matchs) ; maintenant ~27.
+ *
+ * Les tours sont CALÉS sur la 1re mise au jeu (− 12 h, − 11 h, … − 1 h, puis
+ * tous les quarts d'heure) même si un tour a pris du retard : le rappel de vote
+ * part au tour de − 1 h, et chaque match a un tour dans sa dernière heure pour
+ * figer le choix du modèle.
  */
 
 import { NAME_TO_ABBR } from './oddsTeamNames';
 
-export const HOUR_MS    = 60 * 60_000;
-export const QUARTER_MS = 15 * 60_000;
-const MIN_DELAY_MS      = 60_000;
+export const HOUR_MS        = 60 * 60_000;
+export const QUARTER_MS     = 15 * 60_000;
+/** Ouverture de la fenêtre : 12 h avant la 1re mise au jeu. */
+export const WINDOW_LEAD_MS = 12 * HOUR_MS;
+/** Passage aux 15 min : 1 h avant la 1re mise au jeu. */
+export const QUARTER_LEAD_MS = HOUR_MS;
+/** Hors fenêtre (et les jours sans match) : un tour toutes les 6 h. */
+export const IDLE_MS        = 6 * HOUR_MS;
+const MIN_DELAY_MS          = 60_000;
 
-/** Fenêtre « soirée de match » : [1re mise au jeu − 1 h, dernière mise au jeu]. */
+/** Fenêtre « jour de match » : [1re mise au jeu − 12 h, dernière mise au jeu]. */
 export function gameWindow(startsUtc: number[]): { from: number; to: number } | null {
   const valid = startsUtc.filter((t) => Number.isFinite(t));
   if (valid.length === 0) return null;
-  return { from: Math.min(...valid) - HOUR_MS, to: Math.max(...valid) };
+  return { from: Math.min(...valid) - WINDOW_LEAD_MS, to: Math.max(...valid) };
 }
 
 export function inGameWindow(now: number, startsUtc: number[]): boolean {
@@ -29,18 +45,29 @@ export function inGameWindow(now: number, startsUtc: number[]): boolean {
   return !!w && now >= w.from && now < w.to;
 }
 
+/** Prochain point d'une grille `origin + k·step` strictement après `now`. */
+const nextOnGrid = (now: number, origin: number, step: number) =>
+  origin + (Math.floor((now - origin) / step) + 1) * step;
+
 /**
  * Délai avant le prochain tour.
- *   • dans la fenêtre → 15 min ;
- *   • avant la fenêtre → 1 h, ou moins pour tomber pile à son ouverture ;
- *   • sinon → 1 h.
+ *   • de 12 h à 1 h avant le 1er match → prochaine heure pile de la grille ;
+ *   • de 1 h avant le 1er match à la dernière mise au jeu → prochain quart d'heure ;
+ *   • avant la fenêtre → 6 h, ou moins pour tomber pile à son ouverture ;
+ *   • après la dernière mise au jeu, ou sans match → 6 h.
  */
 export function nextDelayMs(now: number, startsUtc: number[]): number {
   const w = gameWindow(startsUtc);
-  if (!w) return HOUR_MS;
-  if (now >= w.from && now < w.to) return QUARTER_MS;
-  if (now < w.from) return Math.max(MIN_DELAY_MS, Math.min(HOUR_MS, w.from - now));
-  return HOUR_MS;
+  if (!w) return IDLE_MS;
+  if (now >= w.from && now < w.to) {
+    const quarterFrom = w.from + WINDOW_LEAD_MS - QUARTER_LEAD_MS; // 1re mise au jeu − 1 h
+    const next = now < quarterFrom
+      ? Math.min(nextOnGrid(now, w.from, HOUR_MS), quarterFrom)
+      : nextOnGrid(now, quarterFrom, QUARTER_MS);
+    return Math.max(MIN_DELAY_MS, next - now);
+  }
+  if (now < w.from) return Math.max(MIN_DELAY_MS, Math.min(IDLE_MS, w.from - now));
+  return IDLE_MS;
 }
 
 // ── Lecture d'une réponse Bluesky ──────────────────────────────────────────

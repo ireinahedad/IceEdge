@@ -5,7 +5,9 @@
  * But : trouver 1 à 3 comptes Bluesky par équipe qui n'a pas de source dédiée,
  * au lieu de deviner des handles (9 échecs sur 12 le 2026-10-23). Le script
  * cherche des profils (`app.bsky.actor.searchActors`, public, sans clé), puis
- * passe chaque candidat au même contrôle que `news:check`. Rien n'est écrit :
+ * passe chaque candidat au même contrôle que `news:check`. 2e passage
+ * (2026-10-25) : recherches par média local et auteurs des mots-clics
+ * d'équipe (`searchPosts`, avec connexion si Bluesky l'exige). Rien n'est écrit :
  * la sortie est une liste à relire, et c'est le user qui valide chaque ajout.
  */
 
@@ -41,17 +43,64 @@ export function teamsToSearch(sources: NewsSource[], asked: string[] = []): stri
   return all.filter((t) => !covered.has(t)).sort();
 }
 
-/** Les recherches de profils pour une équipe. */
+/**
+ * 2e passage (2026-10-25) — les 15 équipes restées sans source après le 1er.
+ * Les journalistes attitrés se présentent souvent par leur MÉDIA (« Hockey
+ * writer, Tampa Bay Times ») plutôt que par « beat writer » : on cherche donc
+ * aussi « <média> <surnom> » et « <média> hockey ». Médias locaux qui couvrent
+ * l'équipe au quotidien ; une équipe absente d'ici garde les recherches de base.
+ */
+export const LOCAL_OUTLETS: Record<string, string[]> = {
+  CBJ: ['Columbus Dispatch', 'The Athletic Columbus'],
+  DAL: ['Dallas Morning News', 'Dallas Hockey Now'],
+  DET: ['Detroit Free Press', 'Detroit News', 'Detroit Hockey Now'],
+  FLA: ['Florida Hockey Now', 'Miami Herald', 'Sun Sentinel'],
+  LAK: ['LA Kings Insider', 'LA Times', 'LA Hockey Now'],
+  NSH: ['Tennessean', 'Nashville Hockey Now'],
+  NJD: ['NJ.com', 'The Record', 'New Jersey Hockey Now'],
+  OTT: ['Ottawa Citizen', 'Ottawa Sun', 'Ottawa Hockey Now'],
+  PIT: ['Pittsburgh Hockey Now', 'Post-Gazette', 'TribLive'],
+  SJS: ['San Jose Hockey Now', 'Mercury News'],
+  SEA: ['Seattle Times', 'Seattle Hockey Now'],
+  STL: ['Post-Dispatch', 'St. Louis Hockey Now'],
+  TBL: ['Tampa Bay Times', 'Tampa Bay Hockey Now'],
+  UTA: ['Salt Lake Tribune', 'Deseret News', 'KSL Sports'],
+  WSH: ['Washington Post', 'Monumental Sports', 'Washington Hockey Now'],
+};
+
+/**
+ * Mots-clics d'équipe, pour `app.bsky.feed.searchPosts` : ceux qui publient
+ * sous le mot-clic de l'équipe toute la semaine sont des candidats que la
+ * recherche de profils ne voit pas (bio vide ou sans le mot « hockey »).
+ * Beaucoup de fans aussi : le contrôle du fil et ta relecture font le tri.
+ */
+export const TEAM_HASHTAGS: Record<string, string[]> = {
+  CBJ: ['#CBJ', '#GoJackets'],     DAL: ['#TexasHockey', '#GoStars'],
+  DET: ['#LGRW'],                  FLA: ['#TimeToHunt', '#FlaPanthers'],
+  LAK: ['#GoKingsGo'],             NSH: ['#Smashville'],
+  NJD: ['#NJDevils'],              OTT: ['#GoSensGo'],
+  PIT: ['#LetsGoPens'],            SJS: ['#TheFinsAreUp', '#SJSharks'],
+  SEA: ['#SeaKraken'],             STL: ['#stlblues'],
+  TBL: ['#GoBolts'],               UTA: ['#UtahMammoth', '#TusksUp'],
+  WSH: ['#ALLCAPS'],
+};
+
+/** Les recherches de profils pour une équipe (celles du 1er passage d'abord). */
 export function searchQueries(team: string): string[] {
   const { city, nick } = TEAM_NAMES[team];
-  return [`${nick} beat writer`, `${nick} reporter`, `${city} hockey`, nick];
+  const qs = [`${nick} beat writer`, `${nick} reporter`, `${city} hockey`, nick, `${city} ${nick}`, `${nick} insider`];
+  for (const o of LOCAL_OUTLETS[team] ?? []) qs.push(`${o} ${nick}`, `${o} hockey`);
+  return [...new Set(qs)];
 }
 
 export interface Actor { handle: string; displayName?: string; description?: string }
 
-/** `app.bsky.actor.searchActors` → profils. Entrée malformée ignorée. */
+/**
+ * `app.bsky.actor.searchActors` (`actors`) ou `app.bsky.actor.getProfiles`
+ * (`profiles`) → profils. Entrée malformée ignorée.
+ */
 export function parseActors(json: unknown): Actor[] {
-  const list = (json as any)?.actors;
+  const list = (json as any)?.actors ?? (json as any)?.profiles;
   if (!Array.isArray(list)) return [];
   return list
     .filter((a: any) => typeof a?.handle === 'string' && a.handle !== 'handle.invalid')
@@ -77,13 +126,57 @@ const OTHER_SPORT_HANDLE = /(football|basketball|baseball|soccer)/i;
 export function profileMatches(a: Actor, team: string): boolean {
   const { nick } = TEAM_NAMES[team];
   const raw = `${a.handle} ${a.displayName ?? ''} ${a.description ?? ''}`;
-  const text = raw.toLowerCase();
   const hockey = /\b(hockey|nhl|lnh)\b/i.test(raw);
   // Le SURNOM seulement : `teamsInText` reconnaît aussi les villes (« Vegas » → VGK).
-  const team_ = text.includes(nick.toLowerCase());
-  if (NOT_NEWS.test(raw)) return false;
-  if ((OTHER_SPORT.test(text.replace(/[._-]/g, ' ')) || OTHER_SPORT_HANDLE.test(a.handle)) && !hockey) return false;
-  return hockey || team_;
+  const team_ = raw.toLowerCase().includes(nick.toLowerCase());
+  return !profileExcluded(a) && (hockey || team_);
+}
+
+/**
+ * Écarté d'office : parodie / compte non officiel, ou autre sport sans un mot
+ * de hockey. Seul filtre appliqué aux auteurs trouvés par mot-clic — publier
+ * sous #LetsGoPens dit déjà « hockey », même avec une bio vide.
+ */
+export function profileExcluded(a: Actor): boolean {
+  const raw = `${a.handle} ${a.displayName ?? ''} ${a.description ?? ''}`;
+  const hockey = /\b(hockey|nhl|lnh)\b/i.test(raw);
+  if (NOT_NEWS.test(raw)) return true;
+  return (OTHER_SPORT.test(raw.toLowerCase().replace(/[._-]/g, ' ')) || OTHER_SPORT_HANDLE.test(a.handle)) && !hockey;
+}
+
+export interface HashtagAuthor { handle: string; displayName?: string; posts: number }
+
+/**
+ * Réponses `app.bsky.feed.searchPosts` (une par mot-clic de l'équipe) →
+ * auteurs, du plus actif au moins actif, avec au moins `minPosts` publications
+ * distinctes (un seul message sous le mot-clic = un passant). Une publication
+ * qui porte deux mots-clics de l'équipe ne compte qu'une fois (même URI).
+ */
+export function hashtagAuthors(responses: unknown[], minPosts = 2): HashtagAuthor[] {
+  const seenPosts = new Set<string>();
+  const by = new Map<string, HashtagAuthor>();
+  for (const json of responses) {
+    const posts = (json as any)?.posts;
+    if (!Array.isArray(posts)) continue;
+    for (const p of posts) {
+      const handle: unknown = p?.author?.handle;
+      const uri: unknown = p?.uri;
+      if (typeof handle !== 'string' || handle === 'handle.invalid' || typeof uri !== 'string') continue;
+      if (seenPosts.has(uri)) continue;
+      seenPosts.add(uri);
+      const key = handle.toLowerCase();
+      const cur = by.get(key) ?? {
+        handle,
+        displayName: typeof p.author.displayName === 'string' ? p.author.displayName : undefined,
+        posts: 0,
+      };
+      cur.posts++;
+      by.set(key, cur);
+    }
+  }
+  return [...by.values()]
+    .filter((a) => a.posts >= minPosts)
+    .sort((a, b) => b.posts - a.posts || a.handle.localeCompare(b.handle));
 }
 
 export interface CandidateCheck {

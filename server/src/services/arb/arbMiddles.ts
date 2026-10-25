@@ -294,6 +294,10 @@ export interface MiddleOpportunity {
   pMiddleMarket?: number;
   /** P(fenêtre) minimale pour une espérance positive (= Σ − 1 avec deux demi-lignes). */
   breakeven: number;
+  /** Avantage : (P(fenêtre) − seuil), en points de pourcentage. */
+  edgePts: number;
+  /** Espérance selon le marché, quand `source` est le modèle. */
+  evMarket?: number;
   totalStaked: number;
   /** Espérance, mises arrondies. */
   ev: number;
@@ -319,6 +323,16 @@ export interface MiddleOptions {
   maxWindow?: number;
   /** Espérance minimale en % de la mise pour signaler. Défaut 0. */
   minEvPct?: number;
+  /**
+   * Avantage minimal, en points : P(fenêtre) doit dépasser le seuil d'au moins
+   * autant. Défaut 2.5 — arakiceML publie des pourcentages ENTIERS et la
+   * fenêtre est une différence de deux d'entre eux (±1 point d'arrondi) ; il
+   * faut une marge au-delà de ce bruit, et de l'incertitude du modèle sur un
+   * score exact. Ne s'applique pas aux middles sans risque.
+   */
+  minEdgePts?: number;
+  /** Écart modèle / marché (rapport des P(fenêtre)) au-delà duquel on avertit. Défaut 1.3. */
+  divergenceWarn?: number;
   /** Lois du modèle par id d'événement ; sinon loi du marché. */
   model?: Map<string, Dists>;
   /** Nombre max de résultats. Défaut 10. */
@@ -391,6 +405,8 @@ export function findMiddles(events: ArbEvent[], opts: MiddleOptions = {}): Middl
   const books = new Set((opts.books ?? []).map(norm).filter(Boolean));
   const maxWindow = opts.maxWindow ?? 2;
   const minEvPct = opts.minEvPct ?? 0;
+  const minEdgePts = opts.minEdgePts ?? 2.5;
+  const divergenceWarn = opts.divergenceWarn ?? 1.3;
   const out: MiddleOpportunity[] = [];
 
   for (const ev of events) {
@@ -463,13 +479,15 @@ export function findMiddles(events: ArbEvent[], opts: MiddleOptions = {}): Middl
       const totalStaked = stakes.reduce((a, b) => a + b, 0);
       const evPct = (res.ev / totalStaked) * 100;
       const riskFree = res.worst >= 0;
-      if (!riskFree && evPct < minEvPct) continue;
+      const edgePts = (res.pWindow - res.breakeven) * 100;
+      if (!riskFree && (evPct < minEvPct || edgePts < minEdgePts)) continue;
 
       let pMiddleMarket: number | undefined;
+      let evMarket: number | undefined;
       if (primary !== market()) {
         const mb = pick(market());
         const mr = mb ? evaluate(legsEval, stakes, mb) : null;
-        if (mr) pMiddleMarket = mr.pWindow;
+        if (mr) { pMiddleMarket = mr.pWindow; evMarket = r2(mr.ev); }
       }
 
       // Valeurs du score dans la fenêtre, avec les paris remboursés (lignes entières).
@@ -488,9 +506,25 @@ export function findMiddles(events: ArbEvent[], opts: MiddleOptions = {}): Middl
       if (!riskFree) {
         warnings.push(`Pas sans risque : hors fenêtre (${((1 - res.pWindow) * 100).toFixed(0)} % des cas selon ${primary.source}), tu perds jusqu'à ${(-res.worst).toFixed(2)} $.`);
       }
-      if (pMiddleMarket !== undefined && pMiddleMarket > 0
-          && (res.pWindow / pMiddleMarket > 1.6 || res.pWindow / pMiddleMarket < 1 / 1.6)) {
-        warnings.push('Le modèle et le marché divergent beaucoup sur cette fenêtre : prudence.');
+      const ratio = pMiddleMarket ? res.pWindow / pMiddleMarket : 1;
+      const diverge = pMiddleMarket !== undefined && pMiddleMarket > 0
+        && (ratio > divergenceWarn || ratio < 1 / divergenceWarn);
+      const marketNegative = evMarket !== undefined && evMarket < 0;
+      if (diverge || marketNegative) {
+        const parts: string[] = [];
+        if (diverge) {
+          parts.push(`modèle et marché en désaccord (${(res.pWindow * 100).toFixed(1)} % contre ${(pMiddleMarket! * 100).toFixed(1)} %)`);
+        }
+        if (marketNegative) parts.push(`selon le marché, l'espérance est négative (${evMarket!.toFixed(2)} $)`);
+        const text = `${parts.join(' ; ')} : l'avantage repose entièrement sur ${primary.source}.`;
+        warnings.push(text.charAt(0).toUpperCase() + text.slice(1));
+      }
+      for (const l of c.legs) {
+        if (l.q.price < 1.15) {
+          const other = c.legs.find((x) => x !== l)!;
+          warnings.push(`Jambe quasi certaine (${l.side} @ ${l.q.price.toFixed(2)}) : c'est surtout un pari simple sur ${other.side}, `
+            + 'avec une grosse mise immobilisée pour un petit gain.');
+        }
       }
       if (new Set(c.legs.map((l) => l.q.bookmaker)).size === 1) {
         warnings.push('Les deux paris chez le même livre.');
@@ -514,6 +548,8 @@ export function findMiddles(events: ArbEvent[], opts: MiddleOptions = {}): Middl
         pMiddle: res.pWindow,
         pMiddleMarket,
         breakeven: res.breakeven,
+        edgePts: r2(edgePts),
+        evMarket,
         totalStaked: r2(totalStaked),
         ev: r2(res.ev),
         evPct: r2(evPct),

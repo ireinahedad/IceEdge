@@ -77,7 +77,7 @@ describe('findMiddles — cas construits', () => {
     const [m] = findMiddles([ev([
       { key: 'a', title: 'A', markets: [{ key: 'totals', outcomes: [{ name: 'Over', price: 1.8, point: 5.5 }] }] },
       { key: 'b', title: 'B', markets: [{ key: 'totals', outcomes: [{ name: 'Under', price: 1.95, point: 6 }] }] },
-    ])], { now: NOW, model, maxQuoteAgeSec: 0, minEvPct: -100 });
+    ])], { now: NOW, model, maxQuoteAgeSec: 0, minEvPct: -100, minEdgePts: -100 });
     expect(m.windowValues).toEqual([6]);
     expect(m.window).toBe('6 buts (Under 6 remboursé)');
     expect(m.pMiddle).toBeCloseTo(1 / 6, 10);
@@ -88,6 +88,48 @@ describe('findMiddles — cas construits', () => {
     const L = (m.ev - m.pMiddle * m.bestCase) / (1 - m.pMiddle);
     expect(m.breakeven).toBeCloseTo(-L / (m.bestCase - L), 6);
     expect(m.breakeven).toBeGreaterThan(0);
+  });
+
+  it('filtre durci : le faux positif du 2026-10-25 (SEA −1.5 @ 4.60 + MIN +3.5 @ 1.03) est écarté', () => {
+    // Reproduit M1 du scan réel : arakiceML 20 % contre un seuil de 18.8 % (+1.2 pt,
+    // dans le bruit d'arrondi), le marché nettement en dessous.
+    const sea: ArbEvent = {
+      id: 'e-sea', commence_time: '2026-10-24T23:00:00Z',
+      home_team: 'Seattle Kraken', away_team: 'Minnesota Wild',
+      bookmakers: [
+        { key: 'fanduel', title: 'FanDuel', markets: [{ key: 'spreads', outcomes: [
+          { name: 'Seattle Kraken', price: 4.6, point: -1.5 }] }] },
+        { key: 'draftkings', title: 'DraftKings', markets: [{ key: 'alternate_spreads', outcomes: [
+          { name: 'Minnesota Wild', price: 1.03, point: 3.5 }] }] },
+        { key: 'pinnacle', title: 'Pinnacle', markets: [
+          { key: 'h2h', outcomes: [{ name: 'Seattle Kraken', price: 2.2 }, { name: 'Minnesota Wild', price: 1.72 }] },
+          { key: 'totals', outcomes: [{ name: 'Over', price: 1.95, point: 6.5 }, { name: 'Under', price: 1.95, point: 6.5 }] }] },
+      ],
+    };
+    const margin: Bucket[] = [
+      { lo: 4, hi: 99, p: 0.05 }, { lo: 3, hi: 3, p: 0.08 }, { lo: 2, hi: 2, p: 0.12 }, { lo: 1, hi: 1, p: 0.13 },
+      { lo: -1, hi: -1, p: 0.20 }, { lo: -2, hi: -2, p: 0.18 }, { lo: -3, hi: -3, p: 0.12 }, { lo: -99, hi: -4, p: 0.12 },
+    ];
+    const model = new Map([['e-sea', { margin, source: 'arakiceML' }]]);
+    expect(findMiddles([sea], { now: NOW, model, maxQuoteAgeSec: 0 })).toHaveLength(0);
+
+    // Avec un seuil d'avantage abaissé, il réapparaît, AVEC les avertissements.
+    const [m] = findMiddles([sea], { now: NOW, model, maxQuoteAgeSec: 0, minEdgePts: 1 });
+    expect(m.window).toBe('Seattle Kraken gagne par 2 ou Seattle Kraken gagne par 3');
+    expect(m.breakeven).toBeCloseTo(0.188, 2);
+    expect(m.edgePts).toBeGreaterThan(1);
+    expect(m.edgePts).toBeLessThan(2.5);
+    expect(m.evMarket).toBeLessThan(0);
+    expect(m.warnings.some((w) => w.startsWith('Selon le marché, l\'espérance est négative')
+      && w.includes('repose entièrement sur arakiceML'))).toBe(true);
+    expect(m.warnings.some((w) => w.includes('quasi certaine'))).toBe(true);
+  });
+
+  it('désaccord > 30 % entre modèle et marché → avertissement explicite', () => {
+    const model = new Map<string, Dists>([['evt-tor-bos', { total: uniformTotals, source: 'arakiceML' }]]);
+    // Uniforme : P(6) = 16.7 % ; marché ≈ 10.9 % → rapport ≈ 1.5.
+    const m = findMiddles(fixture.events, { now: NOW, model }).find((x) => x.kind === 'totals')!;
+    expect(m.warnings.some((w) => w.startsWith('Modèle et marché en désaccord'))).toBe(true);
   });
 
   it('seau ambigu (loi trop grossière pour la ligne) → ignoré', () => {

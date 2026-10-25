@@ -191,7 +191,7 @@ const MODEL_WINDOW_MS = 75 * 60_000;
 
 /**
  * Fige le choix du modèle pour les matchs votés qui commencent dans l'heure.
- * Appelé à chaque tour de NewsSync (15 min dans la fenêtre des matchs) : le
+ * Appelé à chaque tour de NewsSync (15 min dans la dernière heure, calé sur la 1re mise au jeu) : le
  * dernier tour avant la mise au jeu gagne. Rend le nombre de matchs figés.
  * Ne lève jamais : un modèle indisponible = pas de ligne, le classement
  * affiche alors le modèle sur moins de matchs.
