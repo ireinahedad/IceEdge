@@ -11,6 +11,8 @@
  * Refait sobre le 2026-10-24 (demande du user : « trop intense ») : pas d'aplat
  * de couleur, boutons au contour fin avec le logo, barre fine aux couleurs des
  * deux clubs (les mêmes que dans le chat). Vote fermé : plus de boutons.
+ *
+ * 2026-10-25 : vote fermé avec moins de `minVotes` votes → bloc masqué.
  */
 
 import { useEffect, useState } from "react";
@@ -41,6 +43,8 @@ export function MatchPickem({ gameId, home, away }: Props) {
   }, [gameId, user?.id]);
 
   if (!state) return null;
+  // Vote fermé sous le minimum de votes : rien à montrer, le bloc disparaît.
+  if (state.locked && !state.enough) return null;
 
   const vote = async (team: string) => {
     if (!requireAuth("gate.pickem")) return;

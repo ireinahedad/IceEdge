@@ -15,6 +15,13 @@
  * +9 comptes trouvés par `npm run news:discover` : ANA, BOS, CAR, COL, NYI, NYR,
  * VGK, WPG couverts. Restent sans source dédiée (15) : CBJ, DAL, DET, FLA, LAK,
  * NSH, NJD, OTT, PIT, SJS, SEA, STL, TBL, UTA, WSH.
+ *
+ * ── 2026-10-26 ──────────────────────────────────────────────────────────────
+ * 2e passage (médias locaux + mots-clics) : +3 comptes (DAL, STL, WSH), 20
+ * refusés. Pas encore tranchés (ni ajoutés ni refusés, donc reproposés) :
+ * alexisb82 (TBL), calbluechel (SEA), mike-fink et alexcthw (NJD), 101espn.com
+ * (STL). Restent sans source dédiée (12) : CBJ, DET, FLA, LAK, NSH, NJD, OTT,
+ * PIT, SJS, SEA, TBL, UTA.
  */
 
 export interface NewsSource {
@@ -60,6 +67,11 @@ export const NEWS_SOURCES: NewsSource[] = [
   { handle: 'mollieewalkerr.bsky.social',   team: 'NYR', label: 'Mollie Walker' },
   { handle: 'dannywebster21.bsky.social',   team: 'VGK', label: 'Danny Webster' },
   { handle: 'wiebesworld.bsky.social',      team: 'WPG', label: 'Ken Wiebe' },
+  // 2e passage de `npm run news:discover`, triés le 2026-10-26 — journalistes
+  // attitrés seulement. À confirmer par news:check.
+  { handle: 'jeremyrutherford.bsky.social', team: 'STL', label: 'Jeremy Rutherford' },
+  { handle: 'vogscaps.bsky.social',         team: 'WSH', label: 'Mike Vogel' },
+  { handle: 'owennewkirk.bsky.social',      team: 'DAL', label: 'Owen Newkirk' },
   // Handles devinés et inexistants (400), ne pas réessayer : dfomontreal,
   // dfoottawa, dfowinnipeg, dfoseattle, dfomtl, dfohabs, dfosens, dfojets, dfokraken.
 ];
@@ -83,4 +95,25 @@ export const REJECTED_HANDLES: string[] = [
   'vegashockeygirls.bsky.social',      // VGK — compte de fan
   'antwanstaley.bsky.social',          // WPG — n'est plus attitré aux Jets
   'winnipeghockeytalk.bsky.social',    // WPG — blogue de fans
+  // 2e passage (2026-10-26) — mots-clics surtout : fans, balados, bots, stats multi-équipes.
+  'whalerjacket.bsky.social',          // CBJ — fan
+  'gpwcbj.bsky.social',                // CBJ — fan
+  'fiverumbeach.bsky.social',          // CBJ — fan
+  'canucksgamebot.bsky.social',        // DET — bot, et des Canucks
+  'hockeyalpha.bsky.social',           // DET — compte de stats général
+  'hockeytownwpod.bsky.social',        // DET — balado
+  'pucksleuth.bsky.social',            // LAK/PIT/UTA/WSH — plusieurs équipes, stats
+  'hockeyalchemy.bsky.social',         // LAK/UTA — plusieurs équipes, stats
+  'centralkingsbr.bsky.social',        // LAK — fan
+  'thenvpshow.bsky.social',            // NJD — émission d'opinion
+  'nhlgoals.bsky.social',              // OTT/UTA — buts de toute la ligue
+  'hockeyfannibal.bsky.social',        // OTT — fan
+  'senstennial.bsky.social',           // OTT — blogue de fans
+  'davyjoneslr.bsky.social',           // SEA — blogue d'opinion
+  'circlingseasports.bsky.social',     // SEA — multisport, opinion
+  'sjsharks-news.bsky.social',         // SJS — agrégateur
+  'gosharks.bsky.social',              // SJS — site de fans
+  'tealtown-usa.bsky.social',          // SJS — balado
+  'jts65.bsky.social',                 // STL — fan
+  'glb.dogfishcr.us',                  // WSH — site de fans
 ];

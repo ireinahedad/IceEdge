@@ -2,11 +2,22 @@
 
 Créé le 2026-10-23. Statut : **A0 fait, A1 commencé** (premier scan réel OK), **outils 0 crédit faits**
 (sauvegarde/relecture des scans, marchés presque-arbitrage, calculatrice `arb:calc`), **A5 middles fait**.
-Prochaine étape : **clé dédiée** (`ARB_ODDS_API_KEY`) — la clé partagée est presque au plancher —
-puis relancer A1 pour lire la ligne « Livres (matchs cotés) » et fixer `ARB_BOOKS`.
+Clé dédiée en place (2026-10-25, solde 475). Prochaine étape : fixer `ARB_BOOKS` sur les livres
+où tu auras un compte, puis un scan `--extras --middles` par jour de match (≈ 25 crédits).
 **Les commandes à lancer, dans l'ordre : § 2.**
 
 ### Journal
+- **2026-10-25 — Clé dédiée + 1er scan `--extras --middles`, filtre durci** : `ARB_ODDS_API_KEY`
+  ajoutée à `server/.env` (ligne 123) ; scan de 01:39 UTC : **25 crédits** (pas 80 : seuls les
+  marchés renvoyés sont facturés, 7 matchs dans les 12 h), solde **475**, 15 matchs, 109 marchés,
+  aucun arbitrage (le plus proche Σ = 1.0061, MIN @ SEA spreads). 2 middles signalés sur MIN @ SEA
+  (SEA −1.5 @ 4.60 FanDuel + MIN +3.5 @ 1.03 / +2.5 @ 1.12 DraftKings), EV ≈ +1 % selon arakiceML
+  mais **faux positifs** : avantage 1.0–1.2 pt (bruit d'arrondi), marché à 13.3 % / 8.5 % sous les
+  seuils, jambe à 1.03 → **non joués**. Filtre durci : `--edge` (2.5 pts par défaut), espérance
+  selon le marché affichée, avertissements « marché négatif / désaccord > 30 % » et « jambe quasi
+  certaine ». Test de non-régression qui reproduit ce cas (43 tests). Plancher de crédits : le
+  user l'avait baissé à 300 dans `arb-scan.ts` (3000 bloquait la clé dédiée) ; fusionné en un
+  défaut selon la clé — 50 avec la clé dédiée, 3000 avec celle de l'app.
 - **2026-10-24 — 1er scan `--middles`** (00:07 UTC, 3 crédits, solde **3030** → plus que ~10 scans
   avant le plancher) : 14 matchs, 68 marchés comparés, 10 livres actifs (BET99 : 2 matchs
   seulement), arakiceML joint pour 14/14. Aucun arbitrage (le plus proche Σ = 1.0054, ANA @ PHI
@@ -115,6 +126,7 @@ npx vitest run src/services/arb                                   # tests du sca
 | `--no-log` | ne pas écrire `arb-log.jsonl` | journal actif |
 | `--middles` | ajoute la section Middles (§ 3.1) | désactivé |
 | `--model` | probabilités des middles : `arakice` (modèle de l'app, repli marché) ou `market` | `arakice` |
+| `--edge` | avantage minimal d'un middle au-dessus de son seuil, en points de % (§ 3.1) | 2.5 |
 | `--extras` / `--props` | marchés par match (alternatifs, périodes, 3-way…) / props joueurs — coûteux, § 5 | désactivés |
 | `--help` | aide complète | — |
 
@@ -190,6 +202,20 @@ le marché** est exactement l'avantage que le modèle peut apporter.
     ! Pas sans risque : hors fenêtre (89 % des cas selon marché), tu perds 67.00 $.
 ```
 
+**Filtre (durci le 2026-10-25)** — un middle n'est affiché que si :
+- son espérance est positive selon la source utilisée, **et**
+- `P(fenêtre) − seuil ≥ 2.5 points` (`--edge` pour changer). arakiceML publie des % **entiers** et
+  la fenêtre est la différence de deux d'entre eux : ±1 point d'arrondi, plus l'incertitude du
+  modèle sur un score exact. Un avantage de 1 point est du bruit.
+
+Il est affiché avec un avertissement quand :
+- le marché donne une espérance **négative**, ou que modèle et marché divergent de **plus de 30 %**
+  → « l'avantage repose entièrement sur arakiceML » ;
+- une jambe est **quasi certaine** (cote < 1.15) : c'est alors surtout un pari simple sur l'autre
+  jambe, avec une grosse mise immobilisée pour un petit gain.
+
+L'espérance selon le marché est toujours affichée à côté de celle du modèle.
+
 ⚠️ **Ce n'est PAS sans risque** (sauf mention **SANS RISQUE + bonus**, quand Σ < 1 : c'est alors
 un arbitrage entre deux lignes différentes, que le scanner d'arbitrages ne voit pas). Une
 espérance positive ne paie qu'**en moyenne, sur beaucoup de middles** : on perd ~7 % souvent et
@@ -204,7 +230,9 @@ on gagne gros rarement. Il faut aussi que les probabilités soient justes — c'
 - une cote de plus de 15 min est ignorée, de même que les matchs commencés ou qui commencent dans moins de 5 min ;
 - au-delà de 8 % de profit, l'opportunité est marquée **SUSPECT** (erreur de cote probable, risque d'annulation) ;
 - avertissements : même livre des deux côtés, ligne entière (remboursement possible), prop joueur (joueur absent), moneyline de période à 2 issues (règle d'égalité), arrondi qui efface le profit ;
-- **plancher de crédits** `ARB_MIN_REMAINING` (3000) : sous ce solde, le scanner n'appelle plus l'API.
+- **plancher de crédits** `ARB_MIN_REMAINING` : sous ce solde, le scanner n'appelle plus l'API.
+  Défaut **50 avec la clé dédiée** (`ARB_ODDS_API_KEY`), **3000 avec la clé de l'app** (repli
+  quand la clé dédiée est vide) — pour ne jamais vider le budget des visiteurs.
 
 **À vérifier par toi, à chaque pari :**
 - la cote **dans l'appli du livre** (l'API a du retard) ;
@@ -255,7 +283,7 @@ scanner → `ARB_ODDS_API_KEY` (gratuit, 500 crédits, pour A1 ; payant pour A2)
 
 ## 7. Décisions à prendre
 
-1. **Clé** : 2e compte The Odds API dédié (recommandé) ou clé partagée avec plancher ?
+1. ~~**Clé** : 2e compte dédié ou clé partagée ?~~ → clé dédiée, en place le 2026-10-25.
 2. **Livres** : lesquels, selon où tu seras physiquement pour parier ?
 3. **Bankroll et pas d'arrondi** par défaut (ex. `--bankroll 500 --round 5`).
 4. **Alertes** : webhook Discord, ou plus tard push via l'app (A6) ?

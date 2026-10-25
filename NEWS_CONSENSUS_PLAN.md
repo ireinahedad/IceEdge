@@ -36,7 +36,7 @@ absents officiels vers T−30 min (`officialLineup.ts`), saisies manuelles
 |---|---|
 | Discord | Aucune lecture par programme, aucune demande aux admins de Hockey Chat. |
 | Votes Hockey Chat | Pas recopiés, pas de faux comptes. Le consensus affiché sera celui des VRAIS utilisateurs ICEEDGE (F3). |
-| Cadence du fil | 1 h ; 15 min d'une heure avant le 1er match jusqu'à la dernière mise au jeu. |
+| Cadence du fil | ~~1 h ; 15 min d'une heure avant le 1er match.~~ **Depuis le 2026-10-25 :** 1 h de 12 h à 1 h avant le 1er match, 15 min de là jusqu'à la dernière mise au jeu (absents de dernière minute), 6 h sinon. ~27 tours un soir de matchs au lieu de ~40. |
 | Kalshi / Polymarket (F2) | **Pas affiché dans l'app.** Mis de côté ; usage interne seulement si on le reprend un jour. |
 | Section nouvelles | Pliable, repliée par défaut, en-tête avec compteur et badge alignement/gardien. |
 | Votes dans le chat (2026-10-24) | Section « Votes du jour » dépliable dans Communauté › Chat, compacte : un anneau par match, deux par rangée. |
@@ -62,8 +62,13 @@ Les 23 autres dépendent des sources de ligue (Daily Faceoff surtout).
 
 Rien à coder. Avant d'empiler autre chose sur le fil, vérifier qu'il dit vrai.
 
-- [ ] Dans les logs Railway : passage à `nextMin: 15` une heure avant le 1er match,
+- [x] Dans les logs Railway : passage à `nextMin: 15` une heure avant le 1er match,
       retour à `60` après la dernière mise au jeu.
+      → 2026-10-24 au soir : tours aux 15 min vus dans les logs, rien d'étrange.
+      → 2026-10-25 : cadence REMPLACÉE (décision du user, compute) — 1 h de 12 h à
+        1 h avant le 1er match, 15 min jusqu'à la dernière mise au jeu, 6 h sinon.
+        À vérifier une fois déployé : `nextMin: 60` dans la journée, `15` dès 1 h
+        avant le 1er match, puis ≈ 360 après la dernière mise au jeu.
 - [ ] Une alerte admin reçue AVANT un match (et aucune pour un match commencé).
 - [x] Sur 3-4 pages de match : la section s'affiche, les liens ouvrent le bon post,
       aucune nouvelle collée à la mauvaise équipe. Noter les erreurs : elles
@@ -76,7 +81,8 @@ Rien à coder. Avant d'empiler autre chose sur le fil, vérifier qu'il dit vrai.
         rétro écarté (« Flashback Friday »), carte du match : ≤ 2 nouvelles par
         auteur (TOR–EDM n'affichait que de la promo DFO Edmonton). Les lignes déjà
         en base gardent leurs anciens drapeaux jusqu'à la purge (36 h d'affichage).
-- [ ] Supprimer `_to_delete/server-src-tests.tgz` et `_to_delete/client-src-tests.tgz`.
+- [x] Supprimer `_to_delete/server-src-tests.tgz` et `_to_delete/client-src-tests.tgz`.
+      → Dossier `_to_delete/` entier supprimé le 2026-10-24.
 
 ### Étape 2 — Couverture : sources pour les 23 équipes sans compte dédié (1 session) — ✅ script codé 2026-10-24
 
@@ -97,6 +103,24 @@ parle de hockey (la ville seule ne suffit plus, autre sport écarté).
 Restent sans source dédiée (15) : CBJ, DAL, DET, FLA, LAK, NSH, NJD, OTT, PIT,
 SJS, SEA, STL, TBL, UTA, WSH — elles reposent sur les sources de ligue.
 Reste à faire (toi) : `npm run news:check` pour confirmer les 9 ajouts.
+
+2e passage codé le 2026-10-25 (même commande, même sortie à relire) :
+- recherches de profils élargies : « <ville> <surnom> », « <surnom> insider », et les
+  médias locaux de chaque équipe (`LOCAL_OUTLETS` : Tampa Bay Times, Post-Gazette,
+  Ottawa Citizen, … — « <média> <surnom> » et « <média> hockey ») ;
+- auteurs des mots-clés d'équipe sur 7 jours (`TEAM_HASHTAGS` : #LetsGoPens, #GoBolts,
+  #LGRW…) via `searchPosts`, ≥ 2 publications, bio lue (`getProfiles`), parodies et
+  autres sports écartés. Bluesky exige souvent une connexion pour `searchPosts` :
+  `BSKY_HANDLE` + `BSKY_APP_PASSWORD` (mot de passe d'application) dans `server/.env`.
+  Sans eux, cette partie est sautée avec un message ; les profils tournent quand même.
+- La sortie affiche l'origine de chaque candidat (profil / N× mot-clé) et la bio des
+  retenus. Les mots-clés ramènent beaucoup de fans : refusés → `REJECTED_HANDLES`.
+
+2e passage lancé et trié le 2026-10-26 : +3 sources (Jeremy Rutherford STL, Mike Vogel
+WSH, Owen Newkirk DAL), 20 refusés. Pas encore tranchés : alexisb82 (TBL), calbluechel
+(SEA), mike-fink et alexcthw (NJD), 101espn.com (STL). Restent sans source dédiée (12) :
+CBJ, DET, FLA, LAK, NSH, NJD, OTT, PIT, SJS, SEA, TBL, UTA.
+
 
 Plan d'origine :
 
