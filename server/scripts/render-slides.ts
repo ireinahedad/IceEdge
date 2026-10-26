@@ -7,6 +7,11 @@
  *   npm run content:render
  *   npm run content:render -- --date=2026-08-01
  *   npm run content:render -- --date=2026-08-01 --only=suzuki
+ *   npm run content:render -- --date=2026-10-27-parlays-pick --scale=2
+ *
+ * `--scale=2` (2026-10-26, vidéos de combinés) : même mise en page, PNG en
+ * 2160×3840. Texte et logos SVG nets ; YouTube encode mieux une vidéo 4K, et la
+ * version TikTok est réduite en 1080×1920 depuis ce rendu (sur-échantillonnage).
  *
  * Prérequis, une seule fois :
  *   npm i -D playwright && npx playwright install chromium
@@ -501,6 +506,7 @@ async function parlayBlock(slide: any, logoUri: string): Promise<string> {
         + `<div class="pl-date">${esc(i.date)}</div>`
         + `<div class="pl-line">${esc(i.line)}</div>`
         + (i.record ? `<div class="pl-record">${esc(i.record)}</div>` : '')
+        + (i.last ? `<div class="pl-record">${esc(i.last)}</div>` : '')
         + `</div>`;
     }
     case 'card': {
@@ -712,6 +718,8 @@ async function main() {
     }
   }
   const only = arg('only');
+  const scale = Number(arg('scale') ?? '1');
+  if (!Number.isFinite(scale) || scale < 1 || scale > 3) throw new Error(`--scale invalide : ${arg('scale')} (1 à 3)`);
   const dir = path.join(OUTPUT_ROOT, dateKey);
   const posts = JSON.parse(await fs.readFile(path.join(dir, 'posts.json'), 'utf8'));
 
@@ -758,7 +766,7 @@ async function main() {
   const browser = preview ? null : await chromium.launch();
   const page = browser ? await browser.newPage({
     viewport: { width: WIDTH, height: HEIGHT },
-    deviceScaleFactor: 1,
+    deviceScaleFactor: scale,
   }) : null;
   const previewCards: Array<{ title: string; html: string }> = [];
   // Manifeste par post : dit à l'étape 6 quels plans sont des images fixes et
@@ -864,7 +872,7 @@ async function main() {
     if (!preview) {
       await fs.writeFile(
         path.join(slideDir, 'manifest.json'),
-        JSON.stringify({ candidate_id: post.candidate_id, width: WIDTH, height: HEIGHT, slides: manifest }, null, 2),
+        JSON.stringify({ candidate_id: post.candidate_id, width: Math.round(WIDTH * scale), height: Math.round(HEIGHT * scale), slides: manifest }, null, 2),
         'utf8',
       );
     }

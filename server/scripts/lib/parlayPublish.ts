@@ -42,7 +42,11 @@ async function youtubeAccessToken(): Promise<string> {
   return body.access_token;
 }
 
-export interface YoutubeMeta { title: string; description: string; tags: string[]; privacy: Privacy }
+export interface YoutubeMeta {
+  title: string; description: string; tags: string[]; privacy: Privacy;
+  /** ISO : envoi en « private » programmé, YouTube le rend public à cette heure. */
+  publishAt?: string | null;
+}
 
 /** Envoie le mp4, renvoie l'id de la vidéo. */
 export async function uploadYoutube(file: string, meta: YoutubeMeta): Promise<string> {
@@ -67,7 +71,9 @@ export async function uploadYoutube(file: string, meta: YoutubeMeta): Promise<st
           defaultLanguage: 'en',
           defaultAudioLanguage: 'en',
         },
-        status: { privacyStatus: meta.privacy, selfDeclaredMadeForKids: false, embeddable: true },
+        status: meta.publishAt
+          ? { privacyStatus: 'private', publishAt: meta.publishAt, selfDeclaredMadeForKids: false, embeddable: true }
+          : { privacyStatus: meta.privacy, selfDeclaredMadeForKids: false, embeddable: true },
       }),
     },
   );
@@ -115,6 +121,8 @@ export interface TiktokMail {
   caption: string;          // légende + hashtags, prête à coller
   youtubeUrl: string | null;
   trial: boolean;
+  /** Ligne d'information sous la légende (heure de sortie YouTube…). */
+  note?: string;
 }
 
 export async function sendTiktokMail(m: TiktokMail): Promise<void> {
@@ -124,6 +132,7 @@ export async function sendTiktokMail(m: TiktokMail): Promise<void> {
     <p style="margin:0 0 18px"><a href="${escHtml(m.videoUrl)}" style="display:inline-block;background:#90C9F0;color:#0A0E0C;font-weight:700;padding:14px 22px;border-radius:12px;text-decoration:none">Télécharger la vidéo</a></p>
     <p style="margin:0 0 8px;color:#8A9EA6">Légende à coller :</p>
     <pre style="white-space:pre-wrap;font:15px/1.45 -apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#131A12;padding:14px;border-radius:10px;margin:0 0 18px;color:#F3F7F0">${escHtml(m.caption)}</pre>
+    ${m.note ? `<p style="margin:0 0 12px;color:#F3F7F0">${escHtml(m.note)}</p>` : ''}
     ${m.youtubeUrl ? `<p style="margin:0;color:#8A9EA6">YouTube : <a href="${escHtml(m.youtubeUrl)}" style="color:#90C9F0">${escHtml(m.youtubeUrl)}</a></p>` : ''}
     ${m.trial ? '<p style="margin:18px 0 0;color:#FACC15">Mode essai : la vidéo YouTube est « non répertoriée ». Ne pas publier sur TikTok avant la fin de l’essai.</p>' : ''}
   </div>`;
@@ -135,7 +144,7 @@ export async function sendTiktokMail(m: TiktokMail): Promise<void> {
       to: need('NOTIFY_EMAIL'),
       subject: m.subject,
       html,
-      text: `${m.videoUrl}\n\n${m.caption}${m.youtubeUrl ? `\n\nYouTube : ${m.youtubeUrl}` : ''}`,
+      text: `${m.videoUrl}\n\n${m.caption}${m.note ? `\n\n${m.note}` : ''}${m.youtubeUrl ? `\n\nYouTube : ${m.youtubeUrl}` : ''}`,
     }),
   });
   if (!res.ok) throw new Error(`Resend : HTTP ${res.status} ${await res.text().catch(() => '')}`);

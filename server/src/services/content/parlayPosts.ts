@@ -73,6 +73,39 @@ export function recordLine(r: ParlayRecord | null): string | null {
   return `${r.won}-${r.lost} (${Math.round(r.winPct)}%)${since}`;
 }
 
+/**
+ * « Last night: 1 of 2 hit », ou null si la veille n'a rien eu de gelé ou si un
+ * combiné n'est pas encore réglé. Depuis le 2026-10-26, la vidéo « résultat »
+ * n'est plus publiée : c'est cette ligne, sur la vidéo du jour, qui garde le
+ * bilan public honnête (pertes comprises). Un combiné annulé (void) ne compte
+ * ni comme gagné ni comme joué.
+ */
+export function lastNightLine(yesterday: LoggedParlay[] | null | undefined): string | null {
+  if (!yesterday || yesterday.length === 0) return null;
+  if (yesterday.some((p) => p.status === 'pending')) return null;
+  const decided = yesterday.filter((p) => p.status === 'won' || p.status === 'lost');
+  if (decided.length === 0) return null;
+  const won = decided.filter((p) => p.status === 'won').length;
+  return `Last night: ${won} of ${decided.length} hit`;
+}
+
+/** Le Short « pick » sort 2 h avant le 1er match… */
+export const YOUTUBE_LEAD_MS = 2 * 3_600_000;
+/** …si cette heure est encore à au moins 15 min ; sinon il sort tout de suite. */
+export const YOUTUBE_MIN_DELAY_MS = 15 * 60_000;
+
+/**
+ * Heure de sortie programmée du Short (ISO), ou null = publier tout de suite.
+ * Gel à 14 h à Bali depuis le 2026-10-26 (2 h du matin à New York) : sans
+ * programmation, le Short sortirait en pleine nuit nord-américaine.
+ */
+export function youtubePublishAt(firstStarts: Array<string | null | undefined>, now: number): string | null {
+  const times = firstStarts.map((s) => Date.parse(s ?? '')).filter(Number.isFinite);
+  if (!times.length) return null;
+  const at = Math.min(...times) - YOUTUBE_LEAD_MS;
+  return at - now >= YOUTUBE_MIN_DELAY_MS ? new Date(at).toISOString() : null;
+}
+
 /** Ce qu'une jambe montre à l'écran — rien d'autre que ce que l'API a gelé. */
 export interface SlideLeg {
   label:   string;          // « BOS to win », « Connor McDavid over 2.5 shots »
@@ -125,10 +158,12 @@ function cardSeconds(legs: number): number {
 
 export function buildParlayPost(
   mode: ParlayMode, date: string, parlays: LoggedParlay[], record: ParlayRecord | null,
+  yesterday: LoggedParlay[] | null = null,
 ): ParlayPost {
   if (parlays.length === 0) throw new Error(`aucun combiné gelé pour ${date}`);
   const day = dayParts(date);
   const rec = recordLine(record);
+  const last = mode === 'pick' ? lastNightLine(yesterday) : null;
   const slides: any[] = [];
   let n = 1;
 
@@ -139,6 +174,7 @@ export function buildParlayPost(
         title: "Tonight's NHL parlays", weekday: day.weekday, date: day.long,
         line: `${parlays.length} parlay${parlays.length > 1 ? 's' : ''} · arakiceML model`,
         record: rec ? `Record ${rec}` : null,
+        last,
       },
     });
   } else {
@@ -182,7 +218,7 @@ export function buildParlayPost(
 
   slides.push({ n: n++, template: mode === 'pick' ? 'parlay_pick' : 'parlay_result', kind: 'cta', duration: D.cta, text: '' });
 
-  const caps = captions(mode, date, parlays, rec);
+  const caps = captions(mode, date, parlays, rec, last);
   return {
     candidate_id: `${date}-parlays-${mode}`,
     variant: 'short',
@@ -214,10 +250,10 @@ function parlayLines(mode: ParlayMode, parlays: LoggedParlay[]): string[] {
   });
 }
 
-function captions(mode: ParlayMode, date: string, parlays: LoggedParlay[], rec: string | null) {
+function captions(mode: ParlayMode, date: string, parlays: LoggedParlay[], rec: string | null, last: string | null = null) {
   const day = dayParts(date);
   const lines = parlayLines(mode, parlays);
-  const recordTxt = rec ? `Record: ${rec}.` : '';
+  const recordTxt = [last ? `${last}.` : '', rec ? `Record: ${rec}.` : ''].filter(Boolean).join(' ');
   const tags = HASHTAGS.join(' ');
 
   if (mode === 'pick') {

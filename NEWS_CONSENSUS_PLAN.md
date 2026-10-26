@@ -69,7 +69,8 @@ Rien à coder. Avant d'empiler autre chose sur le fil, vérifier qu'il dit vrai.
         1 h avant le 1er match, 15 min jusqu'à la dernière mise au jeu, 6 h sinon.
         À vérifier une fois déployé : `nextMin: 60` dans la journée, `15` dès 1 h
         avant le 1er match, puis ≈ 360 après la dernière mise au jeu.
-- [ ] Une alerte admin reçue AVANT un match (et aucune pour un match commencé).
+- [x] Une alerte admin reçue AVANT un match (et aucune pour un match commencé).
+      → Vérifié le 2026-10-26, avec la nouvelle cadence dans les logs (60 / 15 / ≈ 360).
 - [x] Sur 3-4 pages de match : la section s'affiche, les liens ouvrent le bon post,
       aucune nouvelle collée à la mauvaise équipe. Noter les erreurs : elles
       corrigent `teamsInText` (`newsFeed.ts`).
@@ -102,7 +103,7 @@ le script ne les repropose plus, et son pré-tri exige maintenant un profil qui
 parle de hockey (la ville seule ne suffit plus, autre sport écarté).
 Restent sans source dédiée (15) : CBJ, DAL, DET, FLA, LAK, NSH, NJD, OTT, PIT,
 SJS, SEA, STL, TBL, UTA, WSH — elles reposent sur les sources de ligue.
-Reste à faire (toi) : `npm run news:check` pour confirmer les 9 ajouts.
+~~Reste à faire (toi) : `npm run news:check` pour confirmer les 9 ajouts.~~ Fait, vert.
 
 2e passage codé le 2026-10-25 (même commande, même sortie à relire) :
 - recherches de profils élargies : « <ville> <surnom> », « <surnom> insider », et les
@@ -120,6 +121,13 @@ Reste à faire (toi) : `npm run news:check` pour confirmer les 9 ajouts.
 WSH, Owen Newkirk DAL), 20 refusés. Pas encore tranchés : alexisb82 (TBL), calbluechel
 (SEA), mike-fink et alexcthw (NJD), 101espn.com (STL). Restent sans source dédiée (12) :
 CBJ, DET, FLA, LAK, NSH, NJD, OTT, PIT, SJS, SEA, TBL, UTA.
+Filtre automatique ajouté le 2026-10-26 (`notAReporter`, `multiTeamHandles`, verdict
+« plusieurs équipes ») : bots, balados, fans, blogues, stats multi-équipes écartés
+d'office au prochain passage.
+`news:check` vert le 2026-10-26 après l'ajout des 3 sources du 2e passage.
+Puis tranchés par le user : mike-fink et alexcthw gardés (NJD), alexisb82, calbluechel et
+101espn.com refusés. Restent sans source dédiée (11) : CBJ, DET, FLA, LAK, NSH, OTT, PIT,
+SJS, SEA, TBL, UTA.
 
 
 Plan d'origine :
@@ -257,6 +265,19 @@ Plan d'origine :
   le modèle et le choix majoritaire du public sur les mêmes matchs (session B) ; il
   restera la série par semaine et le seuil « public > 80 % ».
 - Pour savoir quand : `SELECT COUNT(*) FROM pickem_votes WHERE correct IS NOT NULL;`
+- ✅ Codé le 2026-10-26, masqué sous le seuil. Serveur : `publicVsModel` (`pickem.ts`,
+  pur, 5 tests dans `pickem.f5.test.ts`), `getPublicVsModel` (1 SELECT groupé, cache
+  30 min, vidé au règlement), `GET /api/pickem/public-vs-model` (public). Page :
+  décision du user = section ÉCRITE dans le HTML (Google et IA la voient), pas chargée
+  en JS. `client/scripts/accuracy-live-gen.mjs` remplit le bloc
+  `<!-- F5:START/END -->` de `nhl-prediction-accuracy.html`, lancé chaque matin par
+  `seo-gameday.yml` (commite la page). Colonnes : modèle (choix figé, 050), majorité
+  des utilisateurs (égalité exclue), utilisateurs ≥ 80 % d'accord (≥ 10 votes).
+  Sous 300 picks réglés : bloc vide, page inchangée. API muette : page inchangée,
+  run vert. ⚠️ Si Cloudflare bloque GitHub Actions, le log dit « F5 : API illisible ».
+  Tests et typecheck verts, commité (`3ddf9a0`) et déployé le 2026-10-26.
+  `/api/pickem/public-vs-model` répond `ready: false` (vérifié le 2026-10-26), migrations
+  048–050 appliquées sur Neon. Reste : la page le 1er matin après le seuil.
 
 ### Mis de côté
 

@@ -17,9 +17,11 @@
  * ET l'une des deux :
  *   • les combinés sont déjà gelés (un run précédent a échoué en route : on
  *     reprend, sans attendre) ;
- *   • on est dans la fenêtre [1re mise au jeu − 2 h, dernière mise au jeu − 5 min].
- *     Avec un cron aux 30 min et jusqu'à 1 h de retard chez GitHub, le gel
- *     tombe entre −2 h et −1 h : toujours avant le premier match.
+ *   • on est dans la fenêtre [06:00 UTC du jour NHL, dernière mise au jeu − 5 min].
+ *     06:00 UTC = 14 h à Bali toute l'année (décision du 2026-10-26 : recevoir
+ *     le courriel TikTok à 14 h), soit 2 h / 1 h du matin à New York. Le Short
+ *     YouTube est envoyé à ce moment-là mais PROGRAMMÉ pour sortir 2 h avant le
+ *     1er match (`parlays-daily.ts`). Avant le 2026-10-26 : 1er match − 2 h.
  * RÈGLE « result » — due si des combinés existent pour la veille et que la
  * vidéo résultat n'est pas entièrement publiée. Le règlement lui-même est
  * vérifié plus loin (build-parlays sort avec le code 3 si ce n'est pas prêt).
@@ -31,8 +33,14 @@ import { pathToFileURL } from 'node:url';
 const API = (process.env.CONTENT_API_URL ?? 'https://api.arakice.com/api').replace(/\/+$/, '');
 const NHL = 'https://api-web.nhle.com/v1';
 
-export const FREEZE_LEAD_MS = 2 * 3_600_000;
+/** Heure UTC du gel (06:00 UTC = 14 h à Bali, sans heure d'été là-bas). */
+export const FREEZE_UTC_HOUR = 6;
 export const LAST_CALL_MS = 5 * 60_000;
+
+/** Ouverture du gel pour un jour NHL : `date` à 06:00 UTC. */
+export function freezeOpensAt(date) {
+  return Date.parse(`${date}T${String(FREEZE_UTC_HOUR).padStart(2, '0')}:00:00Z`);
+}
 
 /** Jour NHL (heure de l'Est) de `now`, décalé de `n` jours. */
 export function etDay(now = new Date(), n = 0) {
@@ -52,10 +60,10 @@ export function fullyPosted(parlays, mode) {
 
 /**
  * Décision pure, testée dans `src/services/content/parlaysDue.test.ts`.
- * `starts` : mises au jeu (ISO) des matchs du jour ; `parlays` : ce que
- * `/api/content/parlays?date=` renvoie.
+ * `date` : le jour NHL ; `starts` : mises au jeu (ISO) des matchs du jour ;
+ * `parlays` : ce que `/api/content/parlays?date=` renvoie.
  */
-export function decide({ mode, now, starts, parlays }) {
+export function decide({ mode, now, date, starts, parlays }) {
   if (fullyPosted(parlays, mode)) return { due: false, reason: 'déjà publié' };
   if (mode === 'result') {
     return parlays.length ? { due: true, reason: 'combinés à régler / publier' } : { due: false, reason: 'aucun combiné gelé ce jour-là' };
@@ -64,7 +72,7 @@ export function decide({ mode, now, starts, parlays }) {
   const times = starts.map((s) => Date.parse(s)).filter(Number.isFinite).sort((a, b) => a - b);
   if (!times.length) return { due: false, reason: 'aucun match ce jour-là' };
   const t = now.getTime();
-  const open = times[0] - FREEZE_LEAD_MS;
+  const open = freezeOpensAt(date ?? etDay(now));
   const close = times[times.length - 1] - LAST_CALL_MS;
   if (t < open) return { due: false, reason: `trop tôt (gel à partir de ${new Date(open).toISOString()})` };
   if (t > close) return { due: false, reason: 'tous les matchs ont commencé' };
@@ -93,7 +101,7 @@ async function main() {
 
   const { parlays } = await getJson(`${API}/content/parlays?date=${date}`);
   const starts = mode === 'pick' && !parlays.length ? await startsFor(date) : [];
-  const { due, reason } = decide({ mode, now, starts, parlays });
+  const { due, reason } = decide({ mode, now, date, starts, parlays });
 
   console.log(`${mode} ${date} → ${due ? 'OUI' : 'non'} (${reason})`);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `due=${due}\ndate=${date}\n`);

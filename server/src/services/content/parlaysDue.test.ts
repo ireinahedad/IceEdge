@@ -12,17 +12,26 @@ const starts = ['2026-10-23T23:00:00Z', '2026-10-24T02:00:00Z'];   // 19:00 ET e
 const at = (iso: string) => new Date(iso);
 
 describe('parlays-due — pick', () => {
-  it('trop tôt avant 1er match − 2 h ; oui dans la fenêtre ; non une fois tout commencé', async () => {
+  it('gel à partir de 06:00 UTC du jour NHL (14 h à Bali) ; non une fois tout commencé', async () => {
     const { decide } = await load();
-    expect(decide({ mode: 'pick', now: at('2026-10-23T20:30:00Z'), starts, parlays: [] }).due).toBe(false);
-    expect(decide({ mode: 'pick', now: at('2026-10-23T21:00:00Z'), starts, parlays: [] }).due).toBe(true);
-    expect(decide({ mode: 'pick', now: at('2026-10-24T01:30:00Z'), starts, parlays: [] }).due).toBe(true);
-    expect(decide({ mode: 'pick', now: at('2026-10-24T02:00:00Z'), starts, parlays: [] }).due).toBe(false);
+    const date = '2026-10-23';
+    expect(decide({ mode: 'pick', now: at('2026-10-23T05:59:00Z'), date, starts, parlays: [] }).due).toBe(false);
+    expect(decide({ mode: 'pick', now: at('2026-10-23T06:00:00Z'), date, starts, parlays: [] }).due).toBe(true);
+    expect(decide({ mode: 'pick', now: at('2026-10-23T21:00:00Z'), date, starts, parlays: [] }).due).toBe(true);
+    expect(decide({ mode: 'pick', now: at('2026-10-24T01:30:00Z'), date, starts, parlays: [] }).due).toBe(true);
+    expect(decide({ mode: 'pick', now: at('2026-10-24T02:00:00Z'), date, starts, parlays: [] }).due).toBe(false);
+  });
+
+  it('06:00 UTC reste 14 h à Bali en heure normale de l’Est (après le 1er nov.)', async () => {
+    const { freezeOpensAt } = await load();
+    const t = freezeOpensAt('2026-11-10');
+    expect(new Date(t).toLocaleString('en-GB', { timeZone: 'Asia/Makassar', hour: '2-digit', minute: '2-digit' })).toBe('14:00');
+    expect(new Date(t).toLocaleString('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })).toBe('2026-11-10');
   });
 
   it('aucun match → non', async () => {
     const { decide } = await load();
-    expect(decide({ mode: 'pick', now: at('2026-10-23T21:00:00Z'), starts: [], parlays: [] }))
+    expect(decide({ mode: 'pick', now: at('2026-10-23T21:00:00Z'), date: '2026-10-23', starts: [], parlays: [] }))
       .toMatchObject({ due: false, reason: 'aucun match ce jour-là' });
   });
 

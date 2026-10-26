@@ -65,17 +65,29 @@ async function getJson(url: string, init?: RequestInit): Promise<any> {
   return res.json();
 }
 
-interface Fixture { date: string; parlays: LoggedParlay[]; record: ParlayRecord | null }
+interface Fixture { date: string; parlays: LoggedParlay[]; record: ParlayRecord | null; yesterday?: LoggedParlay[] }
 
-async function load(mode: ParlayMode, date: string): Promise<{ parlays: LoggedParlay[]; record: ParlayRecord | null; source: string }> {
+interface Loaded { parlays: LoggedParlay[]; record: ParlayRecord | null; yesterday: LoggedParlay[]; source: string }
+
+/** Le jour d'avant `date` (AAAA-MM-JJ). */
+function dayBefore(date: string): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+async function load(mode: ParlayMode, date: string): Promise<Loaded> {
   const fixtureArg = arg('fixture');
   if (fixtureArg) {
     const fx: Fixture = JSON.parse(await fs.readFile(path.resolve(fixtureArg), 'utf8'));
-    return { parlays: fx.parlays, record: fx.record, source: `build-parlays (fixture ${fixtureArg})` };
+    return { parlays: fx.parlays, record: fx.record, yesterday: fx.yesterday ?? [], source: `build-parlays (fixture ${fixtureArg})` };
   }
 
+  // Une passe de règlement d'abord, dans les deux modes : en « pick » (14 h à
+  // Bali, 2 h du matin à New York), c'est ce qui permet d'afficher « Last
+  // night: 1 of 2 hit » sans attendre la passe horaire du serveur.
   const secret = process.env.CONTENT_CRON_SECRET;
-  if (mode === 'result' && secret) {
+  if (secret) {
     try {
       const s = await getJson(`${API}/content/parlays/settle`, { method: 'POST', headers: { 'X-Cron-Secret': secret } });
       console.log(`  règlement : ${s.settled} réglé(s) sur ${s.checked}`);
@@ -86,6 +98,9 @@ async function load(mode: ParlayMode, date: string): Promise<{ parlays: LoggedPa
 
   const { parlays } = await getJson(`${API}/content/parlays?date=${date}`);
   const record: ParlayRecord = await getJson(`${API}/content/parlays/record`);
+  const yesterday: LoggedParlay[] = mode === 'pick'
+    ? ((await getJson(`${API}/content/parlays?date=${dayBefore(date)}`)).parlays ?? [])
+    : [];
 
   // `--live-preview` (essai à blanc) : rien de gelé ce jour-là → les 2 combinés
   // gratuits que l'accueil affiche EN CE MOMENT, sans les geler. Le lot est
@@ -99,9 +114,9 @@ async function load(mode: ParlayMode, date: string): Promise<{ parlays: LoggedPa
       status: 'pending', legResults: null, settledAt: null, youtubePickId: null, youtubeResultId: null,
       tiktokPickSentAt: null, tiktokResultSentAt: null,
     }));
-    return { parlays: preview, record, source: 'build-parlays (aperçu en direct, NON gelé)' };
+    return { parlays: preview, record, yesterday, source: 'build-parlays (aperçu en direct, NON gelé)' };
   }
-  return { parlays, record, source: 'build-parlays' };
+  return { parlays, record, yesterday, source: 'build-parlays' };
 }
 
 async function main() {
@@ -114,7 +129,7 @@ async function main() {
   const dir = path.join(OUTPUT_ROOT, outKey);
   console.log(`\nbuild-parlays — ${mode === 'pick' ? 'combinés' : 'résultats'} du ${date}\n`);
 
-  const { parlays, record, source } = await load(mode, date);
+  const { parlays, record, yesterday, source } = await load(mode, date);
   if (source.includes('fixture')) console.log(`  ⚠ DONNÉES INVENTÉES — ne pas publier ce lot.\n`);
   else if (source.includes('aperçu')) console.log(`  ⚠ APERÇU : combinés actuels du site, NON gelés — ne pas publier ce lot.\n`);
 
@@ -126,7 +141,7 @@ async function main() {
     }
   }
 
-  const post = buildParlayPost(mode, date, parlays, record);
+  const post = buildParlayPost(mode, date, parlays, record, yesterday);
   const problems = parlayComplianceProblems(post);
   if (problems.length) {
     throw new Error(`post refusé :\n    ${problems.join('\n    ')}\n  Corriger parlayPosts.ts avant de publier.`);

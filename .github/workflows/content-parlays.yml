@@ -1,21 +1,20 @@
 name: Contenu — combinés du jour
 
-# MARKETING_PLAN.md, phase D. Deux vidéos par jour :
-#   • « pick »   — les 2 combinés gratuits, gelés ~2 h avant le 1er match,
-#                  publiés en Short YouTube + courriel « à publier sur TikTok » ;
-#   • « result » — le lendemain, ✓/✗ par jambe et bilan cumulé.
+# MARKETING_PLAN.md, phase D. UNE vidéo par jour depuis le 2026-10-26 :
+#   • « pick » — les 2 combinés gratuits, gelés à 06:00 UTC (14 h à Bali),
+#                Short YouTube programmé pour sortir 2 h avant le 1er match,
+#                courriel « à publier sur TikTok » à 14 h. Le résultat de la
+#                veille est une ligne de cette vidéo (« Last night: 1 of 2 hit »).
+#   • « result » — plus planifié ; reste lançable à la main (workflow_dispatch).
 #
 # Chaque passage commence par `parlays-due.mjs` (aucune dépendance, quelques
 # secondes) : `npm ci`, Chromium et ffmpeg ne s'installent que si c'est l'heure.
 # 46 passages « non » par jour coûtent donc ~15 s chacun.
 #
-# Heures (UTC ; Bali = UTC+8) :
-#   • pick   — toutes les 30 min de 15:00 à 01:00. 1er match à 19:00 ET ⇒ gel
-#              vers 21:00-21:30 UTC. Un match à 12:30 ET (16:30 UTC) est gelé dès
-#              15:00. GitHub peut retarder un cron d'une heure : la fenêtre
-#              commence 2 h avant, donc le gel reste avant le premier match.
-#   • result — 13:15 UTC, puis 15:15 et 17:15 en rattrapage (un match tardif ou
-#              une jambe pas encore réglée ⇒ « pas encore prêt », le suivant reprend).
+# Heures (UTC ; Bali = UTC+8, sans heure d'été) :
+#   • pick — 1er passage à 06:00 UTC = 14 h à Bali (GitHub peut le retarder
+#            jusqu'à ~1 h). Les passages suivants, toutes les 30 min jusqu'à
+#            01:00, ne servent que de rattrapage si le premier a échoué.
 #
 # MODE ESSAI : tant que la variable de dépôt PARLAYS_YOUTUBE_PRIVACY n'est pas
 # « public », les Shorts partent en « unlisted » et le courriel porte [ESSAI].
@@ -23,10 +22,9 @@ name: Contenu — combinés du jour
 
 on:
   schedule:
-    - cron: "*/30 15-23 * * *"
+    - cron: "0,30 6-23 * * *"
     - cron: "0,30 0 * * *"
     - cron: "0 1 * * *"
-    - cron: "15 13,15,17 * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -54,14 +52,14 @@ permissions:
 
 jobs:
   parlays:
-    name: Combinés — ${{ github.event.inputs.mode || (github.event.schedule == '15 13,15,17 * * *' && 'result' || 'pick') }}
+    name: Combinés — ${{ github.event.inputs.mode || 'pick' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
       run:
         working-directory: server
     env:
-      MODE: ${{ github.event.inputs.mode || (github.event.schedule == '15 13,15,17 * * *' && 'result' || 'pick') }}
+      MODE: ${{ github.event.inputs.mode || 'pick' }}
       CONTENT_API_URL: https://api.arakice.com/api
     steps:
       - uses: actions/checkout@v7
@@ -131,6 +129,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: parlays-${{ env.MODE }}-${{ steps.due.outputs.date }}
-          path: content/output/*-parlays-*/*/video.mp4
+          path: content/output/*-parlays-*/*/*.mp4
           if-no-files-found: ignore
           retention-days: 7

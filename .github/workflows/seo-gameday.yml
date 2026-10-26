@@ -54,6 +54,12 @@ jobs:
           MATCH_DAYS_AHEAD: "2"
         run: node scripts/gameday-gen.mjs
 
+      # F5 (NEWS_CONSENSUS_PLAN.md) : section « model vs. users » de la page de
+      # précision. Vide tant qu'il y a moins de 300 picks réglés. Ne fait jamais
+      # échouer le run : API muette = page inchangée.
+      - name: Page de précision — modèle vs utilisateurs
+        run: node scripts/accuracy-live-gen.mjs
+
       - name: Commiter s'il y a du changement
         run: |
           cd "$GITHUB_WORKSPACE"
@@ -61,7 +67,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Chemins explicites : un `git add -A` embarquerait tout ce qui traîne
           # dans le runner, ce que le dépôt a déjà payé une fois.
-          git add client/public/match client/public/fr/match client/public/sitemap-games.xml
+          git add client/public/match client/public/fr/match client/public/sitemap-games.xml client/public/nhl-prediction-accuracy.html
           if git diff --cached --quiet; then
             echo "Rien à publier (hors saison, ou aucun match dans la fenêtre)."
             exit 0

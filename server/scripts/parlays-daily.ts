@@ -9,9 +9,16 @@
  *
  *   1. (pick) GEL — POST /api/content/parlays/freeze. Irréversible : c'est ce
  *      qui entre au bilan. Jamais fait en --dry-run.
- *   2. VIDÉO — content:parlays → content:render → content:video, inchangés.
+ *   2. VIDÉO — content:parlays → content:render (--scale=2, PNG 2160×3840) →
+ *      content:video, puis deux versions (2026-10-26) :
+ *        • youtube.mp4 — la 4K, avec la musique `content/assets/music/parlays.mp3`
+ *          (ou PARLAYS_MUSIC) si le fichier existe, muette sinon ;
+ *        • tiktok.mp4  — réduite en 1080×1920 (lanczos), MUETTE : le son tendance
+ *          s'ajoute dans l'app TikTok, qui favorise ses sons natifs.
  *   3. YOUTUBE — Short, `PARLAYS_YOUTUBE_PRIVACY` (défaut « unlisted » : mode
- *      essai), puis drapeau `youtube_<mode>` posé AUSSITÔT.
+ *      essai), puis drapeau `youtube_<mode>` posé AUSSITÔT. En « public », le
+ *      Short « pick » est envoyé en privé et PROGRAMMÉ (`publishAt`) pour sortir
+ *      2 h avant le 1er match ; le gel ayant lieu à 06:00 UTC (14 h à Bali).
  *   4. TIKTOK — mp4 sur R2 + courriel à NOTIFY_EMAIL, puis drapeau `tiktok_<mode>`.
  *
  * IDEMPOTENT. Chaque envoi est précédé d'une lecture des drapeaux et suivi de
@@ -27,12 +34,17 @@ import { promises as fs, appendFileSync } from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import type { ParlayPost } from '../src/services/content/parlayPosts';
+import { youtubePublishAt } from '../src/services/content/parlayPosts';
 import { uploadYoutube, uploadR2, sendTiktokMail, type Privacy } from './lib/parlayPublish';
 
 const SERVER_DIR = path.resolve(__dirname, '..');
 const OUTPUT_ROOT = path.resolve(SERVER_DIR, '..', 'content', 'output');
 const API = (process.env.CONTENT_API_URL ?? 'https://api.arakice.com/api').replace(/\/+$/, '');
 const NOT_READY = 3;
+const MUSIC = process.env.PARLAYS_MUSIC?.trim()
+  || path.resolve(SERVER_DIR, '..', 'content', 'assets', 'music', 'parlays.mp3');
+/** Rendu des combinés en 2160×3840 : voir `render-slides.ts --scale`. */
+const RENDER_SCALE = '2';
 
 function arg(name: string): string | null {
   const found = process.argv.slice(2).find((a) => a.startsWith(`--${name}=`));
@@ -64,6 +76,57 @@ async function api(pathname: string, init: RequestInit & { secret?: boolean } = 
   if (!res.ok) throw new Error(`${init.method ?? 'GET'} ${pathname} → HTTP ${res.status} ${text.slice(0, 300)}`);
   return text ? JSON.parse(text) : null;
 }
+
+/** ffmpeg : celui de `ffmpeg-static` (installé par npm ci), sinon celui du PATH. */
+function ffmpegBin(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const p = require('ffmpeg-static');
+    if (typeof p === 'string' && p) return p;
+  } catch { /* PATH */ }
+  return 'ffmpeg';
+}
+
+function run(bin: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, args, { stdio: ['ignore', 'ignore', 'inherit'] });
+    child.on('error', reject);
+    child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`${path.basename(bin)} a échoué (code ${code})`))));
+  });
+}
+
+async function exists(p: string): Promise<boolean> {
+  try { await fs.access(p); return true; } catch { return false; }
+}
+
+/**
+ * Les deux versions publiées, à partir de la vidéo 4K muette de content:video.
+ * `seconds` = durée du post (somme des plans) : la musique est coupée net à la
+ * fin de la vidéo, avec un fondu d'entrée de 0,3 s et de sortie de 1 s.
+ */
+async function variants(mp4: string, seconds: number): Promise<{ youtube: string; tiktok: string; music: boolean }> {
+  const ff = ffmpegBin();
+  const dir = path.dirname(mp4);
+  const youtube = path.join(dir, 'youtube.mp4');
+  const tiktok = path.join(dir, 'tiktok.mp4');
+  const music = await exists(MUSIC);
+  if (music) {
+    const out = Math.max(0, seconds - 1).toFixed(2);
+    await run(ff, ['-y', '-loglevel', 'error', '-i', mp4, '-stream_loop', '-1', '-i', MUSIC,
+      '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+      '-af', `afade=t=in:d=0.3,afade=t=out:st=${out}:d=1`, '-t', seconds.toFixed(2),
+      '-movflags', '+faststart', youtube]);
+  } else {
+    await fs.copyFile(mp4, youtube);
+  }
+  await run(ff, ['-y', '-loglevel', 'error', '-i', mp4, '-map', '0:v:0', '-an',
+    '-vf', 'scale=1080:1920:flags=lanczos,format=yuv420p,setsar=1',
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-r', '30', '-movflags', '+faststart', tiktok]);
+  return { youtube, tiktok, music };
+}
+
+/** « 21:00 » à Bali, pour le courriel. */
+const baliTime = (iso: string) => new Date(iso).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar' });
 
 /** Lance un script npm du serveur ; renvoie son code de sortie. */
 function npm(script: string, args: string[]): Promise<number> {
@@ -113,7 +176,7 @@ async function main() {
   if (built === NOT_READY) { summary('- Pas encore prêt (rien de gelé, ou combinés pas encore réglés) : prochain passage.'); return; }
   if (built !== 0) throw new Error(`content:parlays a échoué (code ${built})`);
   const key = `${date}-parlays-${mode}`;
-  for (const [script, extra] of [['content:render', []], ['content:video', []]] as const) {
+  for (const [script, extra] of [['content:render', [`--scale=${RENDER_SCALE}`]], ['content:video', []]] as const) {
     const code = await npm(script, [`--date=${key}`, ...extra]);
     if (code !== 0) throw new Error(`${script} a échoué (code ${code})`);
   }
@@ -121,15 +184,22 @@ async function main() {
   const post: ParlayPost = JSON.parse(await fs.readFile(path.join(dir, 'posts.json'), 'utf8')).posts[0];
   const mp4 = path.join(dir, post.candidate_id, 'video.mp4');
   await fs.access(mp4);
-  summary(`- Vidéo : \`${path.relative(path.resolve(SERVER_DIR, '..'), mp4)}\``);
+  const seconds = post.slides.reduce((a: number, s: any) => a + Number(s.duration ?? 0), 0);
+  const v = await variants(mp4, seconds);
+  summary(`- Vidéo : \`${path.relative(path.resolve(SERVER_DIR, '..'), mp4)}\` (2160×3840) · YouTube ${v.music ? 'avec musique' : 'MUETTE (pas de content/assets/music/parlays.mp3)'} · TikTok 1080×1920 muette`);
 
   if (dryRun) { summary('- Essai à blanc : rien envoyé, aucun drapeau posé.'); return; }
 
   // 3. YouTube.
   let youtubeId = ytDone;
+  // Programmé seulement en public : `publishAt` exige un envoi « private »,
+  // et le mode essai doit rester « unlisted » pour être regardable tout de suite.
+  const publishAt = mode === 'pick' && privacy === 'public'
+    ? youtubePublishAt(before.map((p) => p.firstStartUTC), Date.now())
+    : null;
   if (!youtubeId) {
-    youtubeId = await uploadYoutube(mp4, {
-      title: post.youtube_title, description: post.youtube_description, tags: post.hashtags, privacy,
+    youtubeId = await uploadYoutube(v.youtube, {
+      title: post.youtube_title, description: post.youtube_description, tags: post.hashtags, privacy, publishAt,
     });
     try {
       await api(`/content/parlays/${date}/posted`, {
@@ -139,7 +209,7 @@ async function main() {
       throw new Error(`vidéo YouTube ${youtubeId} envoyée MAIS drapeau non posé (${e.message}). `
         + `Le poser à la main avant de relancer, sinon elle sera envoyée deux fois.`);
     }
-    summary(`- YouTube (${privacy}) : https://youtube.com/shorts/${youtubeId}`);
+    summary(`- YouTube (${publishAt ? `programmé ${publishAt}` : privacy}) : https://youtube.com/shorts/${youtubeId}`);
   } else {
     summary(`- YouTube : déjà envoyé (${youtubeId})`);
   }
@@ -147,13 +217,16 @@ async function main() {
 
   // 4. TikTok : mp4 sur R2 + courriel.
   if (!tkDone) {
-    const videoUrl = await uploadR2(mp4, `parlays/${key}.mp4`);
+    const videoUrl = await uploadR2(v.tiktok, `parlays/${key}.mp4`);
     await sendTiktokMail({
       subject: `${trial ? '[ESSAI] ' : ''}TikTok · ${mode === 'pick' ? "Tonight's parlays" : 'Parlay results'} · ${date}`,
       videoUrl,
       caption: `${post.caption_tiktok}\n\n${post.hashtags.join(' ')}`,
       youtubeUrl,
       trial,
+      note: publishAt
+        ? `Le Short YouTube sort à ${baliTime(publishAt)} (heure de Bali), 2 h avant le 1er match. Tu peux programmer TikTok à la même heure dans l'app. Vidéo muette : ajoute un son TikTok.`
+        : 'Vidéo muette : ajoute un son TikTok.',
     });
     await api(`/content/parlays/${date}/posted`, { method: 'POST', secret: true, body: JSON.stringify({ kind: `tiktok_${mode}` }) });
     summary(`- TikTok : courriel envoyé (vidéo : ${videoUrl})`);

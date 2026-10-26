@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildParlayPost, parlayComplianceProblems, recordLine, etTime, pct, DISCLAIMER,
+  lastNightLine, youtubePublishAt,
 } from './parlayPosts';
 
 /** Les deux vidéos des combinés : plans, légendes, garde-fous (MARKETING_PLAN Phase C). */
@@ -119,5 +120,37 @@ describe('parlayComplianceProblems', () => {
 describe('aucun combiné', () => {
   it('lève : on ne publie pas une vidéo vide', () => {
     expect(() => buildParlayPost('pick', '2026-10-22', [], record)).toThrow();
+  });
+});
+
+describe('vidéo du jour seule (2026-10-26) : « Last night » et Short programmé', () => {
+  it('lastNightLine : rien sans veille ou si un combiné n’est pas réglé ; void non compté', () => {
+    expect(lastNightLine(null)).toBeNull();
+    expect(lastNightLine([])).toBeNull();
+    expect(lastNightLine([parlay(1, { status: 'won' }), parlay(2, { status: 'pending' })])).toBeNull();
+    expect(lastNightLine([parlay(1, { status: 'won' }), parlay(2, { status: 'lost' })])).toBe('Last night: 1 of 2 hit');
+    expect(lastNightLine([parlay(1, { status: 'lost' }), parlay(2, { status: 'void' })])).toBe('Last night: 0 of 1 hit');
+    expect(lastNightLine([parlay(1, { status: 'void' })])).toBeNull();
+  });
+
+  it('la ligne passe sur l’ouverture et dans les légendes ; jamais en mode résultat', () => {
+    const y = [parlay(1, { status: 'won' }), parlay(2, { status: 'lost' })];
+    const post = buildParlayPost('pick', '2026-10-22', [parlay(1)], record, y);
+    expect(post.slides[0].intro.last).toBe('Last night: 1 of 2 hit');
+    expect(post.caption_tiktok).toContain('Last night: 1 of 2 hit. Record: 4-3 (57%) since Oct 14.');
+    expect(post.youtube_description).toContain('Last night: 1 of 2 hit.');
+    expect(parlayComplianceProblems(post)).toEqual([]);
+    expect(buildParlayPost('pick', '2026-10-22', [parlay(1)], record).slides[0].intro.last).toBeNull();
+    const res = buildParlayPost('result', '2026-10-22', [parlay(1, { status: 'won', legResults: ['win', 'win'] })], record, y);
+    expect(res.slides[0].intro.last).toBeUndefined();
+  });
+
+  it('youtubePublishAt : 1er match − 2 h, sinon tout de suite', () => {
+    const now = Date.parse('2026-10-27T06:05:00Z');   // 14 h 05 à Bali
+    expect(youtubePublishAt(['2026-10-27T23:00:00Z', '2026-10-27T23:30:00Z'], now)).toBe('2026-10-27T21:00:00.000Z');
+    expect(youtubePublishAt(['2026-10-27T23:30:00Z', null, '2026-10-27T23:00:00Z'], now)).toBe('2026-10-27T21:00:00.000Z');
+    expect(youtubePublishAt([null], now)).toBeNull();
+    // Rattrapage tardif : moins de 15 min avant l'heure prévue → tout de suite.
+    expect(youtubePublishAt(['2026-10-27T23:00:00Z'], Date.parse('2026-10-27T20:50:00Z'))).toBeNull();
   });
 });
