@@ -12,9 +12,9 @@ describe('équipes à chercher', () => {
   it('les 32 équipes ont ville et surnom', () => {
     expect(Object.keys(TEAM_NAMES)).toHaveLength(32);
   });
-  it('par défaut : les équipes sans source dédiée (12 au 2026-10-26)', () => {
+  it('par défaut : les équipes sans source dédiée (11 au 2026-10-26)', () => {
     const t = teamsToSearch(NEWS_SOURCES);
-    expect(t).toEqual(['CBJ', 'DET', 'FLA', 'LAK', 'NJD', 'NSH', 'OTT', 'PIT', 'SEA', 'SJS', 'TBL', 'UTA']);
+    expect(t).toEqual(['CBJ', 'DET', 'FLA', 'LAK', 'NSH', 'OTT', 'PIT', 'SEA', 'SJS', 'TBL', 'UTA']);
   });
   it('liste des sources : pas de doublon, aucun compte refusé dedans', () => {
     const handles = NEWS_SOURCES.map((x) => x.handle.toLowerCase());

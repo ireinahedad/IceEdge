@@ -18,10 +18,9 @@
  *
  * ── 2026-10-26 ──────────────────────────────────────────────────────────────
  * 2e passage (médias locaux + mots-clics) : +3 comptes (DAL, STL, WSH), 20
- * refusés. Pas encore tranchés (ni ajoutés ni refusés, donc reproposés) :
- * alexisb82 (TBL), calbluechel (SEA), mike-fink et alexcthw (NJD), 101espn.com
- * (STL). Restent sans source dédiée (12) : CBJ, DET, FLA, LAK, NSH, NJD, OTT,
- * PIT, SJS, SEA, TBL, UTA.
+ * refusés. Puis tranchés par le user : mike-fink et alexcthw (NJD) gardés ;
+ * alexisb82, calbluechel, 101espn.com refusés. Restent sans source dédiée
+ * (11) : CBJ, DET, FLA, LAK, NSH, OTT, PIT, SJS, SEA, TBL, UTA.
  */
 
 export interface NewsSource {
@@ -72,6 +71,9 @@ export const NEWS_SOURCES: NewsSource[] = [
   { handle: 'jeremyrutherford.bsky.social', team: 'STL', label: 'Jeremy Rutherford' },
   { handle: 'vogscaps.bsky.social',         team: 'WSH', label: 'Mike Vogel' },
   { handle: 'owennewkirk.bsky.social',      team: 'DAL', label: 'Owen Newkirk' },
+  // Tranchés par le user le 2026-10-26 (étaient « pas encore tranchés »).
+  { handle: 'mike-fink.bsky.social',        team: 'NJD', label: 'Mike Fink' },
+  { handle: 'alexcthw.bsky.social',         team: 'NJD', label: 'Alex Chauvancy' },
   // Handles devinés et inexistants (400), ne pas réessayer : dfomontreal,
   // dfoottawa, dfowinnipeg, dfoseattle, dfomtl, dfohabs, dfosens, dfojets, dfokraken.
 ];
@@ -116,4 +118,7 @@ export const REJECTED_HANDLES: string[] = [
   'tealtown-usa.bsky.social',          // SJS — balado
   'jts65.bsky.social',                 // STL — fan
   'glb.dogfishcr.us',                  // WSH — site de fans
+  'alexisb82.bsky.social',             // TBL — refusé par le user (2026-10-26)
+  'calbluechel.bsky.social',           // SEA — refusé par le user (2026-10-26)
+  '101espn.com',                       // STL — radio multisport, refusé par le user (2026-10-26)
 ];
