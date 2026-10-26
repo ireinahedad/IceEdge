@@ -19,6 +19,11 @@
  *      de passe). Sans ces variables, l'étape 2 est tentée sans connexion et
  *      sautée si Bluesky refuse ; l'étape 1 tourne quand même.
  *
+ * Écartés d'office depuis le 2026-10-26 : bots, balados, fans, blogues, comptes
+ * de stats (`notAReporter`, sauf bio de journaliste), comptes proposés pour
+ * plusieurs équipes au même passage (`multiTeamHandles`) et comptes qui citent
+ * 5 équipes ou plus sans que la leur domine (verdict « plusieurs équipes »).
+ *
  * Lecture seule : n'écrit rien en base ni dans le code. La sortie liste, par
  * équipe, les meilleurs candidats et des lignes prêtes à coller dans
  * `src/data/newsSources.ts`. Relire chaque compte avant de l'ajouter (les
@@ -30,7 +35,7 @@ import 'dotenv/config';
 import { NEWS_SOURCES, REJECTED_HANDLES } from '../src/data/newsSources';
 import { fetchAuthorFeed } from '../src/services/newsSync.service';
 import {
-  teamsToSearch, searchQueries, parseActors, profileMatches, profileExcluded, hashtagAuthors,
+  teamsToSearch, searchQueries, parseActors, profileMatches, profileExcluded, hashtagAuthors, multiTeamHandles,
   checkCandidate, bestCandidates, sourceLine, TEAM_HASHTAGS,
   type Actor, type CandidateCheck,
 } from '../src/services/newsDiscover';
@@ -98,8 +103,10 @@ async function login(): Promise<string | undefined> {
   console.log(`Recherche pour ${teams.length} équipe(s) : ${teams.join(', ')}`);
   console.log(`Mots-clics : ${token ? 'connecté' : 'sans connexion (BSKY_HANDLE / BSKY_APP_PASSWORD absents)'}\n`);
   const lines: string[] = [];
+  const gathered = new Map<string, { seen: number; shortlist: Actor[]; origin: Map<string, string> }>();
 
   for (const team of teams) {
+    process.stdout.write(`  recherche ${team}…\r`);
     // 1. Profils candidats, dédoublonnés, déjà connus écartés, pré-triés sur le profil.
     const seen = new Map<string, Actor>();
     for (const q of searchQueries(team)) {
@@ -159,7 +166,20 @@ async function login(): Promise<string | undefined> {
       }
     }
 
-    // 3. Le même contrôle que news:check sur chaque candidat.
+    gathered.set(team, { seen: seen.size, shortlist, origin });
+  }
+
+  // 3. Un même compte proposé pour plusieurs équipes = compte de toute la ligue : écarté partout.
+  const multi = multiTeamHandles(Object.fromEntries(
+    [...gathered].map(([t, g]) => [t, g.shortlist.map((a) => a.handle)]),
+  ));
+  if (multi.size > 0) console.log(`Écartés (proposés pour plusieurs équipes) : ${[...multi].join(', ')}\n`);
+
+  for (const team of teams) {
+    const { seen: seenCount, origin } = gathered.get(team)!;
+    const shortlist = gathered.get(team)!.shortlist.filter((a) => !multi.has(a.handle.toLowerCase()));
+
+    // 4. Le même contrôle que news:check sur chaque candidat.
     const checks: CandidateCheck[] = [];
     const bios = new Map<string, string>(shortlist.map((a) => [a.handle.toLowerCase(), oneLine(a.description)]));
     for (const a of shortlist) {
@@ -170,7 +190,7 @@ async function login(): Promise<string | undefined> {
     }
 
     const best = bestCandidates(checks);
-    console.log(`── ${team} — ${seen.size} profils, ${shortlist.length} lus, ${best.length} retenu(s)`);
+    console.log(`── ${team} — ${seenCount} profils, ${shortlist.length} lus, ${best.length} retenu(s)`);
     for (const c of checks.sort((x, y) => y.score - x.score).slice(0, 8)) {
       const top = c.top ? `${c.top[0]} ×${c.top[1]}` : '—';
       const from = origin.get(c.handle.toLowerCase()) ?? '';

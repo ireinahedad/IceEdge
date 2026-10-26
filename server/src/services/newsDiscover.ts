@@ -141,7 +141,46 @@ export function profileExcluded(a: Actor): boolean {
   const raw = `${a.handle} ${a.displayName ?? ''} ${a.description ?? ''}`;
   const hockey = /\b(hockey|nhl|lnh)\b/i.test(raw);
   if (NOT_NEWS.test(raw)) return true;
+  if (notAReporter(a)) return true;
   return (OTHER_SPORT.test(raw.toLowerCase().replace(/[._-]/g, ' ')) || OTHER_SPORT_HANDLE.test(a.handle)) && !hockey;
+}
+
+/** Ce que dit la bio d'un journaliste, d'un diffuseur ou d'un média d'équipe. */
+const REPORTER = /\b(reporter|writer|beat|journalist|correspondent|insider|columnist|broadcaster|play-by-play|editor|covers?|covering|staff)\b/i;
+/** Ce que dit la bio d'un bot, d'un balado, d'un fan, d'un blogue ou d'un compte de stats. */
+const NOT_REPORTER = /\b(bot|podcast|pod|fan|fans|fanatic|die-?hard|lifelong|blog|blogger|fansite|highlights|goals|stats)\b/i;
+
+/**
+ * Bot, balado, fan, blogue ou compte de stats — sauf si la bio dit AUSSI
+ * « reporter / writer / beat / covers… » (beaucoup de journalistes animent un
+ * balado). Ajouté le 2026-10-26 : 20 des 23 candidats du 2e passage étaient de
+ * ce genre (« Canucks Game Bot », « NHL Goals », « Hockeytown West Podcast »…).
+ * Sur le handle, où les mots sont collés : seulement un 1er segment qui finit
+ * par « bot » / « pod » ou qui contient « podcast » (« fan » collé attraperait
+ * des noms comme Stefan).
+ */
+export function notAReporter(a: Actor): boolean {
+  const text = `${a.displayName ?? ''} ${a.description ?? ''}`;
+  if (REPORTER.test(text)) return false;
+  const seg = a.handle.toLowerCase().split('.')[0];
+  return NOT_REPORTER.test(text) || /(bot|pod)$/.test(seg) || seg.includes('podcast');
+}
+
+/**
+ * Handles sortis dans la liste de plusieurs équipes au même passage : un
+ * compte de stats ou de buts de toute la ligue (pucksleuth ×4, nhlgoals ×2 le
+ * 2026-10-26), jamais le journaliste attitré d'un club. Écartés partout.
+ */
+export function multiTeamHandles(shortlists: Record<string, string[]>): Set<string> {
+  const teamsOf = new Map<string, Set<string>>();
+  for (const [team, handles] of Object.entries(shortlists)) {
+    for (const h of handles) {
+      const key = h.toLowerCase();
+      if (!teamsOf.has(key)) teamsOf.set(key, new Set());
+      teamsOf.get(key)!.add(team);
+    }
+  }
+  return new Set([...teamsOf].filter(([, t]) => t.size >= 2).map(([h]) => h));
 }
 
 export interface HashtagAuthor { handle: string; displayName?: string; posts: number }
@@ -192,7 +231,7 @@ export interface CandidateCheck {
   /** L'équipe la plus citée par le compte, et combien de fois. */
   top: [string, number] | null;
   profileMatch: boolean;
-  verdict: 'ok' | 'inactif' | 'autre équipe' | 'cite peu l\'équipe';
+  verdict: 'ok' | 'inactif' | 'autre équipe' | 'plusieurs équipes' | 'cite peu l\'équipe';
   score: number;
 }
 
@@ -207,19 +246,24 @@ export function checkCandidate(
 ): CandidateCheck {
   const recent = posts.filter((p) => now - p.postedAt.getTime() < 7 * 24 * 3600_000);
   const counts = new Map<string, number>();
-  let teamPosts = 0, flagged = 0;
+  let teamPosts = 0, flagged = 0, anyTeamPosts = 0;
   for (const p of recent) {
     const cited = teamsInText(p.text);
     for (const t of cited) counts.set(t, (counts.get(t) ?? 0) + 1);
+    if (cited.length > 0) anyTeamPosts++;
     if (cited.includes(team)) teamPosts++;
     if (flagsOf(p.text).some((f) => f === 'goalie' || f === 'lineup')) flagged++;
   }
   const top = [...counts.entries()].sort((x, y) => y[1] - x[1])[0] ?? null;
   const profileMatch = profileMatches(a, team);
   const wrongTeam = top !== null && top[0] !== team && top[1] >= 3 && (counts.get(team) ?? 0) * 2 < top[1];
+  // Compte de toute la ligue : ≥ 5 équipes citées en 7 jours, et l'équipe dans
+  // moins de 40 % des publications qui citent une équipe (2026-10-26).
+  const spread = counts.size >= 5 && teamPosts * 10 < anyTeamPosts * 4;
   const verdict: CandidateCheck['verdict'] =
     recent.length < 3 ? 'inactif'
     : wrongTeam ? 'autre équipe'
+    : spread ? 'plusieurs équipes'
     : teamPosts >= 2 || (profileMatch && teamPosts >= 1) ? 'ok'
     : 'cite peu l\'équipe';
   const score = Math.round((teamPosts * 2 + flagged * 3 + Math.min(recent.length, 20) * 0.2 + (profileMatch ? 2 : 0)) * 10) / 10;

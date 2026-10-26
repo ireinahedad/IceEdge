@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   TEAM_NAMES, teamsToSearch, searchQueries, parseActors, profileMatches, checkCandidate, bestCandidates, sourceLine,
-  LOCAL_OUTLETS, TEAM_HASHTAGS, hashtagAuthors, profileExcluded,
+  LOCAL_OUTLETS, TEAM_HASHTAGS, hashtagAuthors, profileExcluded, notAReporter, multiTeamHandles,
 } from './newsDiscover';
 import { NEWS_SOURCES, REJECTED_HANDLES } from '../data/newsSources';
 
@@ -134,5 +134,48 @@ describe('contrôle d’un candidat (mêmes règles que news:check)', () => {
     expect(bestCandidates([mk('a', 3), mk('b', 9), mk('c', 5), mk('d', 7), mk('e', 99, 'inactif')]).map((c) => c.handle)).toEqual(['b', 'd', 'c']);
     expect(sourceLine({ handle: 'jg.bsky.social', label: "Jesse O'Granger", team: 'VGK' } as any))
       .toBe("  { handle: 'jg.bsky.social', team: 'VGK', label: 'Jesse O\\'Granger' },");
+  });
+});
+
+describe('filtre automatique (2026-10-26)', () => {
+  it('bots, balados, fans, blogues, comptes de buts : écartés', () => {
+    expect(notAReporter({ handle: 'canucksgamebot.bsky.social', displayName: 'Canucks Game Bot' })).toBe(true);
+    expect(notAReporter({ handle: 'hockeytownwpod.bsky.social', displayName: 'Hockeytown West Podcast' })).toBe(true);
+    expect(notAReporter({ handle: 'nhlgoals.bsky.social', displayName: 'NHL Goals' })).toBe(true);
+    expect(notAReporter({ handle: 'x.bsky.social', description: 'Lifelong Blues fan, Texas' })).toBe(true);
+    expect(notAReporter({ handle: 'senstennial.bsky.social', description: 'A Senators blog since 2017' })).toBe(true);
+    expect(notAReporter({ handle: 'someonebot.bsky.social' })).toBe(true);
+  });
+  it('journaliste qui anime aussi un balado : gardé ; nom contenant « fan » : gardé', () => {
+    expect(notAReporter({ handle: 'jr.bsky.social', description: 'Blues beat writer for The Athletic. Co-host of a podcast.' })).toBe(false);
+    expect(notAReporter({ handle: 'stefanmatteau.bsky.social', displayName: 'Stefan M' })).toBe(false);
+    expect(notAReporter({ handle: 'vogscaps.bsky.social', displayName: 'Mike Vogel' })).toBe(false);
+  });
+  it('profileExcluded et profileMatches appliquent le filtre', () => {
+    expect(profileExcluded({ handle: 'tealtown-usa.bsky.social', displayName: 'Teal Town USA, a San Jose Sharks podcast' })).toBe(true);
+    expect(profileMatches({ handle: 'x', description: 'Die-hard Penguins fan' }, 'PIT')).toBe(false);
+  });
+  it('multiTeamHandles : un handle dans la liste de 2 équipes ou plus, casse ignorée', () => {
+    const m = multiTeamHandles({
+      LAK: ['pucksleuth.bsky.social', 'a.bsky.social'],
+      PIT: ['PuckSleuth.bsky.social'],
+      UTA: ['nhlgoals.bsky.social', 'b.bsky.social'],
+      OTT: ['nhlgoals.bsky.social'],
+    });
+    expect([...m].sort()).toEqual(['nhlgoals.bsky.social', 'pucksleuth.bsky.social']);
+  });
+  it('compte qui cite 5 équipes ou plus sans que la sienne domine : « plusieurs équipes »', () => {
+    const c = checkCandidate({ handle: 'stats.bsky.social', description: 'hockey' }, 'VGK', [
+      post('Oilers win'), post('Bruins lose'), post('Maple Leafs lines'), post('Canucks trade'),
+      post('Flames goal'), post('Golden Knights win'), post('Sabres call-up'), post('Jets shutout'),
+    ], NOW);
+    expect(c.verdict).toBe('plusieurs équipes');
+  });
+  it('journaliste attitré qui cite les adversaires : reste ok', () => {
+    const c = checkCandidate({ handle: 'beat', description: 'Golden Knights beat writer' }, 'VGK', [
+      post('Golden Knights vs Oilers tonight'), post('Golden Knights lines vs Bruins'), post('Golden Knights beat Flames'),
+      post('Golden Knights: Hill starts vs Canucks'), post('Golden Knights host Jets'), post('Golden Knights recall a forward'),
+    ], NOW);
+    expect(c.verdict).toBe('ok');
   });
 });

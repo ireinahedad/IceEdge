@@ -31,8 +31,8 @@ import { getJobState, setJobState } from './jobLock';
 import { sendToUsers } from './push.service';
 import {
   pickemLocked, pickemState, GAME_ID_RE, PICKEM_MIN_WEEK_PICKS,
-  weekBoundsET, modelPick, rankWeek, reminderDue, reminderPayload,
-  type PickemGame, type PickemState, type RankedRow, type WeekRow,
+  weekBoundsET, modelPick, rankWeek, reminderDue, reminderPayload, publicVsModel,
+  type PickemGame, type PickemState, type RankedRow, type WeekRow, type PublicVsModel,
 } from './pickem';
 
 const tallyCache = new TtlCache<Record<string, number>>(60_000, 500, 'pickem');
@@ -181,7 +181,7 @@ export async function getPickemDay(userId?: string): Promise<PickemDay> {
 }
 
 /** Pour les tests. */
-export function clearPickemCache(): void { tallyCache.clear(); dayCache.clear(); leaderboardCache.clear(); }
+export function clearPickemCache(): void { tallyCache.clear(); dayCache.clear(); leaderboardCache.clear(); publicVsModelCache.clear(); }
 
 
 // ── Session B : choix du modèle figé avant le match ────────────────────────
@@ -273,7 +273,7 @@ export async function settlePendingPickems(now = Date.now()): Promise<{ games: n
     games++;
     votes += res.rowCount ?? 0;
   }
-  if (games > 0) leaderboardCache.clear();
+  if (games > 0) { leaderboardCache.clear(); publicVsModelCache.clear(); }
   return { games, votes };
 }
 
@@ -369,6 +369,38 @@ export async function getPickemLeaderboard(offset: 0 | -1, userId?: string, now 
     model: rate(data.model),
     crowd: rate(data.crowd),
   };
+}
+
+// ── F5 : « Public vs modèle » ──────────────────────────────────────────────
+
+/**
+ * Lu une fois par jour par le workflow SEO (`client/scripts/accuracy-live-gen.mjs`)
+ * pour écrire la section de `nhl-prediction-accuracy.html`. 1 SELECT groupé
+ * par match voté et réglé (quelques milliers de lignes par saison), cache
+ * 30 min, vidé quand le règlement règle un match.
+ */
+const publicVsModelCache = new TtlCache<PublicVsModel>(30 * 60_000, 1, 'pickem-f5');
+
+export async function getPublicVsModel(): Promise<PublicVsModel> {
+  return publicVsModelCache.wrap('all', async () => {
+    const { rows } = await pool.query(
+      `SELECT v.game_id,
+              MIN(v.game_start) AS game_start,
+              COUNT(*) FILTER (WHERE v.correct)::int     AS right_n,
+              COUNT(*) FILTER (WHERE NOT v.correct)::int AS wrong_n,
+              m.correct                                  AS model_correct
+         FROM pickem_votes v
+         LEFT JOIN pickem_model m ON m.game_id = v.game_id
+        WHERE v.correct IS NOT NULL
+        GROUP BY v.game_id, m.correct`,
+    );
+    return publicVsModel(rows.map((r: any) => ({
+      gameStart: new Date(r.game_start).getTime(),
+      rightN: Number(r.right_n),
+      wrongN: Number(r.wrong_n),
+      modelCorrect: r.model_correct === null || r.model_correct === undefined ? null : Boolean(r.model_correct),
+    })));
+  });
 }
 
 // ── Session C : rappel « votes fermés dans 1 h » ──────────────────────────────

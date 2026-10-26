@@ -185,3 +185,92 @@ export function reminderPayload(first: { away: string; home: string }, games: nu
     },
   };
 }
+
+// ── F5 : « Public vs modèle » (NEWS_CONSENSUS_PLAN.md, étape 6) ──────────────
+
+/** Sous ce nombre de picks réglés, les écarts entre public et modèle sont du bruit : rien n'est publié. */
+export const PUBLIC_VS_MODEL_MIN_SETTLED = 300;
+/** « Public très sûr de lui » : au moins 80 % des votes du même côté… */
+export const STRONG_CROWD_SHARE = 0.8;
+/** …et au moins autant de votes que pour afficher un pourcentage sur la page du match. */
+export const STRONG_CROWD_MIN_VOTES = PICKEM_MIN_VOTES;
+
+/** Un match voté et réglé : ce que le public et le modèle avaient choisi. */
+export interface SettledPickemGame {
+  gameStart: number;
+  /** Votes qui avaient raison / tort. */
+  rightN: number;
+  wrongN: number;
+  /** Choix FIGÉ du modèle (migration 050) ; null s'il n'a pas été capturé. */
+  modelCorrect: boolean | null;
+}
+
+export interface Rate { games: number; wins: number; pct: number | null }
+export interface PublicVsModelWeek {
+  weekStart: string; weekEnd: string;
+  /** Matchs votés et réglés dans la semaine. */
+  games: number;
+  /** Le modèle, sur ceux de ces matchs où son choix a été figé. */
+  model: Rate;
+  /** Le choix majoritaire du public (égalité = non compté). */
+  crowd: Rate;
+  /** Le public quand ≥ 80 % des votes (≥ 10 votes) étaient du même côté. */
+  strongCrowd: Rate;
+}
+export interface PublicVsModel {
+  /** Assez de picks réglés pour publier (`PUBLIC_VS_MODEL_MIN_SETTLED`). */
+  ready: boolean;
+  settledPicks: number;
+  minSettled: number;
+  /** Du lundi le plus ancien au plus récent. */
+  weeks: PublicVsModelWeek[];
+  total: Omit<PublicVsModelWeek, 'weekStart' | 'weekEnd'> & { since: string | null; until: string | null };
+}
+
+const toRate = (games: number, wins: number): Rate => ({ games, wins, pct: games > 0 ? Math.round((wins / games) * 1000) / 10 : null });
+
+function tallyGames(games: SettledPickemGame[]) {
+  const model = [0, 0], crowd = [0, 0], strong = [0, 0];
+  for (const g of games) {
+    if (g.modelCorrect !== null) { model[0]++; if (g.modelCorrect) model[1]++; }
+    if (g.rightN !== g.wrongN) {
+      crowd[0]++; if (g.rightN > g.wrongN) crowd[1]++;
+      const votes = g.rightN + g.wrongN;
+      if (votes >= STRONG_CROWD_MIN_VOTES && Math.max(g.rightN, g.wrongN) >= STRONG_CROWD_SHARE * votes) {
+        strong[0]++; if (g.rightN > g.wrongN) strong[1]++;
+      }
+    }
+  }
+  return {
+    games: games.length,
+    model: toRate(model[0], model[1]),
+    crowd: toRate(crowd[0], crowd[1]),
+    strongCrowd: toRate(strong[0], strong[1]),
+  };
+}
+
+/**
+ * Série par semaine (lundi → dimanche, heure de l'Est, semaine de la mise au
+ * jeu PRÉVUE, comme le classement). Taux à une décimale : cette série est
+ * publiée sur la page de précision, où les autres chiffres en ont une.
+ */
+export function publicVsModel(games: SettledPickemGame[]): PublicVsModel {
+  const byWeek = new Map<string, { b: WeekBounds; list: SettledPickemGame[] }>();
+  for (const g of games) {
+    const b = weekBoundsET(g.gameStart, 0);
+    const cur = byWeek.get(b.monday) ?? { b, list: [] };
+    cur.list.push(g);
+    byWeek.set(b.monday, cur);
+  }
+  const weeks = [...byWeek.values()]
+    .sort((x, y) => x.b.monday.localeCompare(y.b.monday))
+    .map(({ b, list }) => ({ weekStart: b.monday, weekEnd: b.sunday, ...tallyGames(list) }));
+  const settledPicks = games.reduce((n, g) => n + g.rightN + g.wrongN, 0);
+  return {
+    ready: settledPicks >= PUBLIC_VS_MODEL_MIN_SETTLED,
+    settledPicks,
+    minSettled: PUBLIC_VS_MODEL_MIN_SETTLED,
+    weeks,
+    total: { ...tallyGames(games), since: weeks[0]?.weekStart ?? null, until: weeks[weeks.length - 1]?.weekEnd ?? null },
+  };
+}

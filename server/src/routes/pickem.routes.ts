@@ -3,6 +3,7 @@
  *
  *   GET  /api/pickem/today     public : tous les matchs du jour (+ mes votes si connecté)
  *   GET  /api/pickem/leaderboard?week=current|previous   public : classement (+ ma ligne)
+ *   GET  /api/pickem/public-vs-model   public : série par semaine modèle / public (F5)
  *   GET  /api/pickem/:gameId   public : totaux (+ mon vote si connecté)
  *   POST /api/pickem/:gameId   connecté : { team: 'VGK' } — vote ou change de vote
  *
@@ -14,7 +15,7 @@
 import { Router, type Request, type Response } from 'express';
 import { authenticate, optionalAuthenticate } from '../middleware/auth.middleware';
 import { sendError } from '../httpError';
-import { getPickem, castPickem, getPickemDay, getPickemLeaderboard } from '../services/pickem.service';
+import { getPickem, castPickem, getPickemDay, getPickemLeaderboard, getPublicVsModel } from '../services/pickem.service';
 import { GAME_ID_RE, TEAM_RE } from '../services/pickem';
 
 const router = Router();
@@ -31,6 +32,15 @@ router.get('/leaderboard', optionalAuthenticate, async (req: Request, res: Respo
   if (week !== 'current' && week !== 'previous') { res.status(400).json({ error: 'week : current | previous' }); return; }
   try {
     res.json(await getPickemLeaderboard(week === 'previous' ? -1 : 0, req.user?.sub));
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+// F5 : aucune donnée personnelle, lu par le workflow SEO du matin.
+router.get('/public-vs-model', async (_req: Request, res: Response) => {
+  try {
+    res.json(await getPublicVsModel());
   } catch (err) {
     sendError(res, err);
   }
