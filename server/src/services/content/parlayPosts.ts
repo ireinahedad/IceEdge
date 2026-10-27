@@ -146,6 +146,10 @@ export interface ParlayPost {
   hashtags:            string[];
   youtube_title:       string;
   youtube_description: string;
+  /** Commentaire Reddit (fil quotidien NHL) : texte brut, AUCUN lien (règles des subreddits). */
+  text_reddit:         string;
+  /** Post X : jambes + lien UTM vers arakice.com. */
+  text_x:              string;
   numbers_used:        string[];
 }
 
@@ -234,7 +238,7 @@ export function buildParlayPost(
 
 const HASHTAGS = ['#NHL', '#hockey', '#NHLPicks', '#Parlay'];
 
-function utm(source: 'youtube' | 'tiktok', date: string): string {
+function utm(source: 'youtube' | 'tiktok' | 'x', date: string): string {
   return `${SITE}/match/${date}?utm_source=${source}&utm_medium=social&utm_campaign=parlays`;
 }
 
@@ -248,6 +252,33 @@ function parlayLines(mode: ParlayMode, parlays: LoggedParlay[]): string[] {
       : `Parlay ${p.rank} (${pct(p.probability)})`;
     return `${head}: ${legs.join(' · ')}`;
   });
+}
+
+/** Une jambe pour Reddit : match entre parenthèses (« Over 5.5 » seul ne dit rien) + % du modèle. */
+function textLeg(l: BestBet, mode: ParlayMode, result?: keyof typeof ICON): string {
+  const g = l.game;
+  const where = g ? ` (${g.away} @ ${g.home})` : '';
+  const icon = mode === 'result' ? `${ICON[result ?? 'unknown']} ` : '';
+  return `- ${icon}${l.label}${where} — ${pct(l.score)}`;
+}
+
+const METHOD = 'How the % are made: an XGBoost model predicts each team\'s expected goals, which gives a full '
+  + 'score distribution; every market is read from that one distribution. Trained on every NHL regular-season '
+  + 'game since 2008. These are probabilities, nothing more.';
+
+function redditText(mode: ParlayMode, date: string, parlays: LoggedParlay[], recordTxt: string): string {
+  const day = dayParts(date);
+  const blocks = parlays.map((p) => [
+    mode === 'result' ? `**Parlay ${p.rank} — ${STATUS_LABEL[p.status]}**` : `**Parlay ${p.rank} — model ${pct(p.probability)}**`,
+    ...p.legs.map((l, i) => textLeg(l, mode, p.legResults?.[i])),
+  ].join('\n'));
+  const head = mode === 'pick'
+    ? `arakiceML (NHL score model), ${day.weekday} ${day.short}: the model's ${parlays.length} highest-probability parlays tonight.`
+    : `arakiceML (NHL score model), results for ${day.weekday} ${day.short}.`;
+  return [head, ...blocks,
+    [recordTxt, 'Every posted parlay stays on the record, losses included.'].filter(Boolean).join(' '),
+    ...(mode === 'pick' ? [METHOD] : []),
+    DISCLAIMER].join('\n\n');
 }
 
 function captions(mode: ParlayMode, date: string, parlays: LoggedParlay[], rec: string | null, last: string | null = null) {
@@ -265,6 +296,8 @@ function captions(mode: ParlayMode, date: string, parlays: LoggedParlay[], rec: 
         .filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n').trim(),
       caption_tiktok: [lead, recordTxt, 'Full breakdown at arakice.com', DISCLAIMER].filter(Boolean).join(' '),
       caption_instagram: [lead, '', ...lines, '', 'Full breakdown at arakice.com', DISCLAIMER].join('\n'),
+      text_reddit: redditText(mode, date, parlays, recordTxt),
+      text_x: [lead, lines.join('\n'), recordTxt, utm('x', date), '#NHL #NHLPicks', DISCLAIMER].filter(Boolean).join('\n\n'),
       hashtags: HASHTAGS,
     };
   }
@@ -277,6 +310,8 @@ function captions(mode: ParlayMode, date: string, parlays: LoggedParlay[], rec: 
       .filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n').trim(),
     caption_tiktok: [lead, recordTxt, "Tonight's parlays at arakice.com", DISCLAIMER].filter(Boolean).join(' '),
     caption_instagram: [lead, '', ...lines, '', recordTxt, "Tonight's parlays at arakice.com", DISCLAIMER].join('\n'),
+    text_reddit: redditText(mode, date, parlays, recordTxt),
+    text_x: [lead, lines.join('\n'), recordTxt, utm('x', date), '#NHL #NHLPicks', DISCLAIMER].filter(Boolean).join('\n\n'),
     hashtags: HASHTAGS,
   };
 }
@@ -299,6 +334,8 @@ export function parlayComplianceProblems(post: ParlayPost): string[] {
     caption_instagram: post.caption_instagram,
     youtube_title: post.youtube_title,
     youtube_description: post.youtube_description,
+    text_reddit: post.text_reddit,
+    text_x: post.text_x,
     slides: JSON.stringify(post.slides),
   };
   for (const [where, text] of Object.entries(texts)) {
@@ -308,11 +345,13 @@ export function parlayComplianceProblems(post: ParlayPost): string[] {
       if (re.test(low)) problems.push(`${where} : « ${w} »`);
     }
   }
-  for (const k of ['caption_tiktok', 'caption_instagram', 'youtube_description'] as const) {
+  for (const k of ['caption_tiktok', 'caption_instagram', 'youtube_description', 'text_reddit', 'text_x'] as const) {
     if (!post[k].includes(DISCLAIMER)) problems.push(`${k} : mention 18+ absente`);
   }
   if (post.youtube_title.length > 100) problems.push('youtube_title : plus de 100 caractères');
   if (post.youtube_description.length > 5000) problems.push('youtube_description : plus de 5 000 caractères');
   if (/https?:\/\/(?!arakice\.com)/i.test(post.youtube_description)) problems.push('youtube_description : lien hors arakice.com');
+  if (/https?:\/\/(?!arakice\.com)/i.test(post.text_x)) problems.push('text_x : lien hors arakice.com');
+  if (/https?:\/\/|arakice\.com/i.test(post.text_reddit)) problems.push('text_reddit : lien interdit (règles Reddit)');
   return problems;
 }

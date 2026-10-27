@@ -224,6 +224,10 @@ async function main() {
       caption: `${post.caption_tiktok}\n\n${post.hashtags.join(' ')}`,
       youtubeUrl,
       trial,
+      extras: [
+        { label: 'Reddit — commentaire dans le fil quotidien NHL (aucun lien : ils sont interdits)', text: post.text_reddit },
+        { label: 'X', text: post.text_x },
+      ],
       note: publishAt
         ? `Le Short YouTube sort à ${baliTime(publishAt)} (heure de Bali), 2 h avant le 1er match. Tu peux programmer TikTok à la même heure dans l'app. Vidéo muette : ajoute un son TikTok.`
         : 'Vidéo muette : ajoute un son TikTok.',

@@ -123,6 +123,8 @@ export interface TiktokMail {
   trial: boolean;
   /** Ligne d'information sous la légende (heure de sortie YouTube…). */
   note?: string;
+  /** Autres textes prêts à coller (Reddit, X…), affichés sous la légende TikTok. */
+  extras?: Array<{ label: string; text: string }>;
 }
 
 export async function sendTiktokMail(m: TiktokMail): Promise<void> {
@@ -133,6 +135,8 @@ export async function sendTiktokMail(m: TiktokMail): Promise<void> {
     <p style="margin:0 0 8px;color:#8A9EA6">Légende à coller :</p>
     <pre style="white-space:pre-wrap;font:15px/1.45 -apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#131A12;padding:14px;border-radius:10px;margin:0 0 18px;color:#F3F7F0">${escHtml(m.caption)}</pre>
     ${m.note ? `<p style="margin:0 0 12px;color:#F3F7F0">${escHtml(m.note)}</p>` : ''}
+    ${(m.extras ?? []).map((x) => `<p style="margin:18px 0 8px;color:#8A9EA6">${escHtml(x.label)} :</p>
+    <pre style="white-space:pre-wrap;font:15px/1.45 -apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#131A12;padding:14px;border-radius:10px;margin:0 0 18px;color:#F3F7F0">${escHtml(x.text)}</pre>`).join('')}
     ${m.youtubeUrl ? `<p style="margin:0;color:#8A9EA6">YouTube : <a href="${escHtml(m.youtubeUrl)}" style="color:#90C9F0">${escHtml(m.youtubeUrl)}</a></p>` : ''}
     ${m.trial ? '<p style="margin:18px 0 0;color:#FACC15">Mode essai : la vidéo YouTube est « non répertoriée ». Ne pas publier sur TikTok avant la fin de l’essai.</p>' : ''}
   </div>`;
@@ -144,7 +148,7 @@ export async function sendTiktokMail(m: TiktokMail): Promise<void> {
       to: need('NOTIFY_EMAIL'),
       subject: m.subject,
       html,
-      text: `${m.videoUrl}\n\n${m.caption}${m.note ? `\n\n${m.note}` : ''}${m.youtubeUrl ? `\n\nYouTube : ${m.youtubeUrl}` : ''}`,
+      text: `${m.videoUrl}\n\n${m.caption}${m.note ? `\n\n${m.note}` : ''}${(m.extras ?? []).map((x) => `\n\n── ${x.label} ──\n${x.text}`).join('')}${m.youtubeUrl ? `\n\nYouTube : ${m.youtubeUrl}` : ''}`,
     }),
   });
   if (!res.ok) throw new Error(`Resend : HTTP ${res.status} ${await res.text().catch(() => '')}`);

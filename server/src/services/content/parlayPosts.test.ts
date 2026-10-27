@@ -154,3 +154,28 @@ describe('vidéo du jour seule (2026-10-26) : « Last night » et Short programm
     expect(youtubePublishAt(['2026-10-27T23:00:00Z'], Date.parse('2026-10-27T20:50:00Z'))).toBeNull();
   });
 });
+
+describe('textes Reddit / X (MARKETING_PLAN Phase G)', () => {
+  const post = buildParlayPost('pick', '2026-10-22', [parlay(1), parlay(2)], record, [parlay(1, { status: 'won' }), parlay(2, { status: 'lost' })]);
+  it('Reddit : jambes avec match et %, bilan, mention 18+, aucun lien', () => {
+    expect(post.text_reddit).toContain('**Parlay 1 — model 30%**');
+    expect(post.text_reddit).toContain('- Over 5.5 (NYR @ BOS) — 58%');
+    expect(post.text_reddit).toContain('Record: 4-3 (57%) since Oct 14.');
+    expect(post.text_reddit).toContain(DISCLAIMER);
+    expect(post.text_reddit).not.toMatch(/https?:|arakice\.com/);
+    expect(parlayComplianceProblems(post)).toEqual([]);
+  });
+  it('X : lien UTM x', () => {
+    expect(post.text_x).toContain('utm_source=x');
+    expect(post.text_x).toContain(DISCLAIMER);
+  });
+  it('Reddit : un lien bloque la publication', () => {
+    expect(parlayComplianceProblems({ ...post, text_reddit: `${post.text_reddit} arakice.com` }))
+      .toContain('text_reddit : lien interdit (règles Reddit)');
+  });
+  it('résultat : ✅/❌ par jambe', () => {
+    const r = buildParlayPost('result', '2026-10-22', [parlay(1, { status: 'lost', legResults: ['win', 'loss'] })], record);
+    expect(r.text_reddit).toContain('**Parlay 1 — LOST**');
+    expect(r.text_reddit).toContain('- ❌ Over 5.5 (NYR @ BOS) — 58%');
+  });
+});
