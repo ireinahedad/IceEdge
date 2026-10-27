@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
@@ -16,9 +16,32 @@ function figmaAssetResolver() {
   }
 }
 
+// Preconnect vers l'API (index.html, PERF_PLAN P0.2). Vite remplace
+// %VITE_SOCKET_URL% seulement si la variable existe. Sans elle (CI GitHub, qui
+// n'a pas de .env), le littéral restait dans le HTML : un preconnect vers une
+// URL relative bidon, et route-shells refusait le build. Variable absente →
+// on retire ces deux indices, qui ne sont qu'une optimisation.
+function apiPreconnect(): Plugin {
+  let socketUrl: string | undefined
+  return {
+    name: 'api-preconnect',
+    configResolved(config) {
+      socketUrl = config.env.VITE_SOCKET_URL
+    },
+    transformIndexHtml: {
+      order: 'pre',
+      handler(html) {
+        if (socketUrl) return html
+        return html.replace(/^[ \t]*<link rel="(?:preconnect|dns-prefetch)" href="%VITE_SOCKET_URL%"[^>]*>\r?\n/gm, '')
+      },
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
     figmaAssetResolver(),
+    apiPreconnect(),
     // The React and Tailwind plugins are both required for Make, even if
     // Tailwind is not being actively used – do not remove them
     react(),
