@@ -21,6 +21,7 @@ import llmRoutes           from './routes/llm.routes';
 import subscriptionRoutes, { stripeWebhook } from './routes/subscription.routes';
 import pushRoutes          from './routes/push.routes';
 import widgetRoutes        from './routes/widget.routes';
+import scanRoutes          from './routes/scan.routes';
 import contentRoutes       from './routes/content.routes';
 import { getLeaderboard }  from './services/profile.service';
 import { pool }            from './db/connection';
@@ -197,6 +198,8 @@ app.use('/api/push',          noStore, pushRoutes);
 
 // iOS home-screen widget « paris en cours » (APPLE_PLAN 4.2)
 app.use('/api/widget',        noStore, widgetRoutes);
+// « Scanner un ticket » (SCAN_TICKET_PLAN S3) : compteur des scans gratuits (3/jour), rien d'autre.
+app.use('/api/scan',          writeLimiter, noStore, scanRoutes);
 
 // Combinés publiés en vidéo (MARKETING_PLAN Phase B) : gel, règlement, bilan.
 // Écritures réservées à GitHub Actions (`X-Cron-Secret`).

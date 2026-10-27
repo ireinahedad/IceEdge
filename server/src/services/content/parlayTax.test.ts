@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   americanToDecimal, decimalToAmerican, formatAmerican, parseAmerican,
-  parlayTax, taxHeadline, gradeReply, gradeComplianceProblems,
+  parlayTax, taxHeadline, gradeReply, gradeComplianceProblems, DISCLAIMER_FR,
 } from './parlayTax';
 import { DISCLAIMER } from './parlayPosts';
 
@@ -80,5 +80,24 @@ describe('réponse sous le post', () => {
   it('signale bookmaker, promesse et lien', () => {
     const p = gradeComplianceProblems(['Lock of the night on DraftKings https://x.co']);
     expect(p.length).toBe(3);
+  });
+});
+
+describe('version française', () => {
+  it('titre et réponse en français, ≤ 280 caractères, mention 18+ française', () => {
+    const t = parlayTax(10.5, 600);
+    expect(taxHeadline(t, 'fr')).toBe('Taxe de 27\u00a0% sur le combiné');
+    expect(taxHeadline(parlayTax(20, 500), 'fr')).toBe('Paie 20\u00a0% de plus que le juste prix');
+    const r = gradeReply({ tax: t, weakestLeg: 'Plus de 6.5 buts', lang: 'fr' });
+    expect(r.length).toBeLessThanOrEqual(280);
+    expect(r).toContain('Cote juste +852 contre +600 payé');
+    expect(r).toContain('10,5\u00a0%');
+    expect(r).toContain('Maillon faible : Plus de 6.5 buts.');
+    expect(r).toContain(DISCLAIMER_FR);
+    expect(gradeComplianceProblems([r])).toEqual([]);
+  });
+  it('bloque les promesses en français', () => {
+    expect(gradeComplianceProblems(['Pari garanti ce soir']).length).toBe(1);
+    expect(gradeComplianceProblems(['Garantie sur facture']).length).toBe(1);
   });
 });

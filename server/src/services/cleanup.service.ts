@@ -44,7 +44,7 @@ const MANUAL_DATED_RETENTION_DAYS = Number(process.env.MANUAL_DATED_RETENTION_DA
  */
 const LLM_FREE_DAILY_RETENTION_DAYS = Number(process.env.LLM_FREE_DAILY_RETENTION_DAYS) || 7;
 
-async function runCleanup(): Promise<{ tokens: number; codes: number; stripeEvents: number; manualDated: number; llmFreeDaily: number }> {
+async function runCleanup(): Promise<{ tokens: number; codes: number; stripeEvents: number; manualDated: number; llmFreeDaily: number; slipScanDaily: number }> {
   const tokensRes = await pool.query(
     `DELETE FROM refresh_tokens
       WHERE expires_at < NOW()
@@ -72,6 +72,8 @@ async function runCleanup(): Promise<{ tokens: number; codes: number; stripeEven
   // comparaison de chaînes, comme pour les saisies datées.
   const freeCutoff = new Date(Date.now() - LLM_FREE_DAILY_RETENTION_DAYS * DAY_MS).toISOString().slice(0, 10);
   const freeRes = await pool.query(`DELETE FROM llm_free_daily WHERE day < $1`, [freeCutoff]);
+  // Compteurs de scans de ticket gratuits (migration 051), même rétention.
+  const scanRes = await pool.query(`DELETE FROM slip_scan_daily WHERE day < $1`, [freeCutoff]);
 
   // Relevé de couverture : voir `coverage()`. Il ne nettoie rien — il est ici
   // parce que c'est le seul rendez-vous quotidien du serveur, et parce qu'une
@@ -92,7 +94,7 @@ async function runCleanup(): Promise<{ tokens: number; codes: number; stripeEven
 
   const tokens = tokensRes.rowCount ?? 0;
   const codes  = codesRes.rowCount ?? 0;
-  return { tokens, codes, stripeEvents: stripeRes.rowCount ?? 0, manualDated, llmFreeDaily: freeRes.rowCount ?? 0 };
+  return { tokens, codes, stripeEvents: stripeRes.rowCount ?? 0, manualDated, llmFreeDaily: freeRes.rowCount ?? 0, slipScanDaily: scanRes.rowCount ?? 0 };
 }
 
 /** Schedules the cleanup: once ~1 min after boot, then every 24h. Returns the

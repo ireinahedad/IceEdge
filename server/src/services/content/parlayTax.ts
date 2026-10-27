@@ -87,10 +87,29 @@ export function parlayTax(modelPct: number, paidAmerican: number): ParlayTax {
   };
 }
 
+export type GradeLang = 'en' | 'fr';
+
+/** Mention légale française, pendant de DISCLAIMER (parlayPosts.ts). */
+export const DISCLAIMER_FR = '18+ (21+ É.-U.). Pas un conseil de pari. Jouez de façon responsable.';
+
+export const disclaimerFor = (lang: GradeLang) => (lang === 'fr' ? DISCLAIMER_FR : DISCLAIMER);
+
+/** 10.5 → « 10,5 » en français (virgule décimale). */
+export const num = (n: number, lang: GradeLang) => (lang === 'fr' ? String(n).replace('.', ',') : String(n));
+
+/** « 27 % » en français (espace insécable avant %), « 27% » en anglais. */
+export const pctText = (n: number, lang: GradeLang) => (lang === 'fr' ? `${num(n, lang)}\u00a0%` : `${n}%`);
+
 /** Phrase-titre de la carte et de la réponse. */
-export function taxHeadline(t: ParlayTax): string {
-  if (t.verdict === 'tax') return `${Math.round(t.taxPct)}% parlay tax`;
-  if (t.verdict === 'value') return `Pays ${Math.round(-t.taxPct)}% over fair`;
+export function taxHeadline(t: ParlayTax, lang: GradeLang = 'en'): string {
+  const tax = Math.round(t.taxPct);
+  if (lang === 'fr') {
+    if (t.verdict === 'tax') return `Taxe de ${pctText(tax, lang)} sur le combiné`;
+    if (t.verdict === 'value') return `Paie ${pctText(-tax, lang)} de plus que le juste prix`;
+    return 'Prix à peu près juste';
+  }
+  if (t.verdict === 'tax') return `${tax}% parlay tax`;
+  if (t.verdict === 'value') return `Pays ${-tax}% over fair`;
   return 'Priced about fair';
 }
 
@@ -98,6 +117,7 @@ export interface ReplyInput {
   tax: ParlayTax;
   /** Libellé de la jambe la plus faible (probabilité du modèle la plus basse), optionnel. */
   weakestLeg?: string;
+  lang?: GradeLang;
 }
 
 /**
@@ -105,21 +125,30 @@ export interface ReplyInput {
  * (les liens coûtent cher sur l'API X et sont interdits sur Reddit), mention 18+.
  * La jambe faible saute d'abord si le texte dépasse.
  */
-export function gradeReply({ tax, weakestLeg }: ReplyInput): string {
-  const head = `Fair odds ${formatAmerican(tax.fairAmerican)} vs ${formatAmerican(tax.paidAmerican)} paid: ${taxHeadline(tax).toLowerCase()}.`;
-  const model = `arakiceML gives it ${tax.modelPct}% to hit (correlations included); the price implies ${tax.bookImpliedPct}%.`;
-  const weak = weakestLeg ? ` Weakest leg: ${weakestLeg}.` : '';
-  const full = `${head} ${model}${weak} ${DISCLAIMER}`;
-  return full.length <= 280 ? full : `${head} ${model} ${DISCLAIMER}`;
+export function gradeReply({ tax, weakestLeg, lang = 'en' }: ReplyInput): string {
+  const fair = formatAmerican(tax.fairAmerican), paid = formatAmerican(tax.paidAmerican);
+  const head = lang === 'fr'
+    ? `Cote juste ${fair} contre ${paid} payé : ${taxHeadline(tax, lang).toLowerCase()}.`
+    : `Fair odds ${fair} vs ${paid} paid: ${taxHeadline(tax, lang).toLowerCase()}.`;
+  const model = lang === 'fr'
+    ? `arakiceML lui donne ${pctText(tax.modelPct, lang)} de chances (corrélations comprises) ; le prix implique ${pctText(tax.bookImpliedPct, lang)}.`
+    : `arakiceML gives it ${tax.modelPct}% to hit (correlations included); the price implies ${tax.bookImpliedPct}%.`;
+  const weak = weakestLeg ? (lang === 'fr' ? ` Maillon faible : ${weakestLeg}.` : ` Weakest leg: ${weakestLeg}.`) : '';
+  const legal = disclaimerFor(lang);
+  const full = `${head} ${model}${weak} ${legal}`;
+  return full.length <= 280 ? full : `${head} ${model} ${legal}`;
 }
+
+/** Promesses interdites en français (les listes anglaises viennent de parlayPosts.ts). */
+export const PROMISES_FR = ['garanti', 'garantie', 'garantis', 'argent facile', 'sans risque', 'coup sûr', 'pari sûr'];
 
 /** Garde-fous du contenu (mêmes listes que les vidéos) : liste vide = publiable. */
 export function gradeComplianceProblems(texts: string[]): string[] {
   const problems: string[] = [];
   for (const text of texts) {
     const low = text.toLowerCase();
-    for (const w of [...PROMISES, ...BOOKS]) {
-      const re = new RegExp(`(^|[^a-z0-9])${w.replace(/[.*+?^${}()|[\]\\']/g, '\\$&')}([^a-z0-9]|$)`);
+    for (const w of [...PROMISES, ...PROMISES_FR, ...BOOKS]) {
+      const re = new RegExp(`(^|[^a-z0-9à-ÿ])${w.replace(/[.*+?^${}()|[\]\\']/g, '\\$&')}([^a-z0-9à-ÿ]|$)`);
       if (re.test(low)) problems.push(`« ${w} » dans : ${text.slice(0, 60)}`);
     }
     if (/https?:\/\//i.test(text)) problems.push(`lien dans : ${text.slice(0, 60)}`);
