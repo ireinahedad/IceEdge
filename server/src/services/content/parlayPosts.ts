@@ -319,9 +319,9 @@ function captions(mode: ParlayMode, date: string, parlays: LoggedParlay[], rec: 
 // ─── Garde-fous ──────────────────────────────────────────────────────────────
 
 /** Promesses de gain : interdites partout (et trompeuses). */
-const PROMISES = ['guaranteed', 'guarantee', 'lock', 'locks', 'sure thing', 'free money', "can't lose", 'risk-free', 'risk free'];
+export const PROMISES = ['guaranteed', 'guarantee', 'lock', 'locks', 'sure thing', 'free money', "can't lose", 'risk-free', 'risk free'];
 /** Aucun bookmaker nommé : pas d'accord d'affiliation (MARKETING_PLAN §2). */
-const BOOKS = ['draftkings', 'fanduel', 'bet365', 'betmgm', 'betrivers', 'caesars', 'bet99', 'pointsbet', 'espn bet', 'fanatics'];
+export const BOOKS = ['draftkings', 'fanduel', 'bet365', 'betmgm', 'betrivers', 'caesars', 'bet99', 'pointsbet', 'espn bet', 'fanatics'];
 
 /**
  * Problèmes bloquants d'un post : liste vide = publiable. Le texte des jambes

@@ -37,7 +37,8 @@
     "news:check": "ts-node scripts/check-news-sources.ts",
     "news:discover": "ts-node scripts/discover-news-sources.ts",
     "arb:scan": "ts-node scripts/arb-scan.ts",
-    "arb:calc": "ts-node scripts/arb-calc.ts"
+    "arb:calc": "ts-node scripts/arb-calc.ts",
+    "grade:card": "ts-node scripts/grade-card.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.665.0",
