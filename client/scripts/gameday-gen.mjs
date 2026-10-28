@@ -726,12 +726,17 @@ ${others ? `        <h3>${esc(T.other)}</h3>\n        <ul>\n${others}\n        <
   });
 }
 
-function hubPage({ lang, date, games }) {
+// `dated` : la variante datée `/match/<AAAA-MM-JJ>` — l'adresse que les posts
+// sociaux (server/src/services/content/parlayPosts.ts) partagent. Sans elle,
+// le lien d'un post tombait sur la 404 de l'app. Contrairement au hub du jour,
+// elle ne change jamais de programme : le lien d'hier reste juste demain.
+function hubPage({ lang, date, games, dated = false }) {
   const T = L[lang];
   const dLong = longDate(date, lang);
   const dShort = shortDate(date, lang);
-  const canonical = T.hubPath;
-  const alternates = { en: L.en.hubPath, "fr-ca": L.fr.hubPath, "x-default": L.en.hubPath };
+  const sfx = dated ? `/${date}` : "";
+  const canonical = T.hubPath + sfx;
+  const alternates = { en: L.en.hubPath + sfx, "fr-ca": L.fr.hubPath + sfx, "x-default": L.en.hubPath + sfx };
   const items = games.map((g) =>
     `          <li><a href="${SITE}${pagePath(lang, g.date, g.slug)}">${esc(g.awayName)} ${esc(T.vs)} ${esc(g.homeName)}</a>${g.time ? ` — ${esc(g.time)}` : ""}</li>`).join("\n");
   const jsonld = {
@@ -757,7 +762,7 @@ ${games.length ? `        <ul>\n${items}\n        </ul>` : `        <p>${esc(T.h
     </div>
       <section class="related">
         <ul>
-          <li><a href="${SITE}${lang === "fr" ? L.en.hubPath : L.fr.hubPath}" hreflang="${lang === "fr" ? "en" : "fr-CA"}">${esc(T.relFr)}</a></li>
+          <li><a href="${SITE}${(lang === "fr" ? L.en.hubPath : L.fr.hubPath) + sfx}" hreflang="${lang === "fr" ? "en" : "fr-CA"}">${esc(T.relFr)}</a></li>
           <li><a href="${SITE}/nhl-matchups">${esc(lang === "fr" ? "Toutes les confrontations" : "All NHL matchup pages")}</a></li>
           <li><a href="${SITE}/">${esc(T.relApp)}</a></li>
         </ul>
@@ -885,6 +890,20 @@ async function main() {
         : path.join("match", g.date, `${gameSlug(a, b)}.html`);
       await write(path.join(OUT_DIR, rel), html);
       written++;
+    }
+  }
+
+  // Hubs datés : un par journée de la fenêtre, à `/match/<date>`.
+  for (const [date, day] of byDate) {
+    for (const lang of ["en", "fr"]) {
+      const list = day.map((x) => ({
+        ...x,
+        homeName: lang === "fr" ? x.homeNameFr : x.homeName,
+        awayName: lang === "fr" ? x.awayNameFr : x.awayName,
+        time: faceoffTime(x.startTimeUTC, lang),
+      }));
+      const rel = lang === "fr" ? path.join("fr", "match", date, "index.html") : path.join("match", date, "index.html");
+      await write(path.join(OUT_DIR, rel), hubPage({ lang, date, games: list, dated: true }));
     }
   }
 

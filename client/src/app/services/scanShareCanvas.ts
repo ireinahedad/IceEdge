@@ -180,15 +180,24 @@ export async function renderScanShareCard(c: ScanShareCard): Promise<Blob> {
 
   // La taxe en gros
   const tone = c.tone === 'tax' ? INK.negative : c.tone === 'value' ? INK.positive : INK.accent;
+  // Une ligne si elle tient à 72 px ou plus ; sinon DEUX lignes à 64 px — jamais tronqué.
   let size = 92;
   ctx.font = `800 ${size}px ${INTER}`;
-  while (size > 56 && ctx.measureText(c.headline).width > R - L) { size -= 4; ctx.font = `800 ${size}px ${INTER}`; }
+  while (size > 72 && ctx.measureText(c.headline).width > R - L) { size -= 4; ctx.font = `800 ${size}px ${INTER}`; }
   ctx.fillStyle = tone;
-  ctx.fillText(fit(ctx, c.headline, R - L), L, 1062);
+  let detailTop = 1118;
+  if (ctx.measureText(c.headline).width <= R - L) {
+    ctx.fillText(c.headline, L, 1062);
+  } else {
+    ctx.font = `800 64px ${INTER}`;
+    const lines = wrap(ctx, c.headline, R - L, 2);
+    if (lines.length === 1) ctx.fillText(lines[0], L, 1062);
+    else { lines.forEach((line, i) => ctx.fillText(line, L, 1034 + i * 68)); detailTop = 1156; }
+  }
 
-  ctx.font = `400 30px ${INTER}`;
+  ctx.font = `400 ${detailTop > 1118 ? 28 : 30}px ${INTER}`;
   ctx.fillStyle = INK.text;
-  wrap(ctx, c.detail, R - L, 2).forEach((line, i) => ctx.fillText(line, L, 1118 + i * 40));
+  wrap(ctx, c.detail, R - L, 2).forEach((line, i) => ctx.fillText(line, L, detailTop + i * 36));
 
   // Pied
   ctx.strokeStyle = INK.line;

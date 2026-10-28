@@ -143,6 +143,11 @@ type Row =
   | { key: string; kind: "added"; legId: string; label: string; removed: boolean }
   | { key: string; kind: "duplicate" | "unavailable" | "missing"; label: string };
 
+/** Props joueur affichés en « N+ » (comme sur les tickets) : clé i18n du mot du marché. */
+const PROP_LABEL: Partial<Record<string, string>> = {
+  shots_ou: "scan.prop.shots", points_ou: "scan.prop.points", assists_ou: "scan.prop.assists", goalie_saves_ou: "scan.prop.saves",
+};
+
 const STATE_STYLE: Record<ScanLegState, string> = {
   ok: "text-[#4ade80] border-[#4ade80]/30 bg-[#4ade80]/10",
   ambiguous: "text-amber-300 border-amber-300/30 bg-amber-300/10",
@@ -265,7 +270,14 @@ export function ScanSlipSheet({ onClose }: { onClose: () => void }) {
 
   const labelOf = (v: LegView): string => {
     const input = v.intent ? intentToLegInput(v.intent, data) : null;
-    return input ? describeInput(input) : v.leg.text[0] ?? "";
+    if (!input) return v.leg.text[0] ?? "";
+    // Props joueur « plus de X.5 » : affichés comme sur le ticket, « 2+ tirs au but » (même pari que plus de 1.5).
+    const prop = PROP_LABEL[v.intent!.marketType];
+    const line = v.intent!.line;
+    if (prop && v.intent!.selection === "over" && line != null && Number.isInteger(line + 0.5)) {
+      return `${input.subject.name} · ${line + 0.5}+ ${t(prop)}`;
+    }
+    return describeInput(input);
   };
 
   /** Une ambiguïté levée par un choix : même intention, sujet choisi, revalidée. */
@@ -370,8 +382,8 @@ export function ScanSlipSheet({ onClose }: { onClose: () => void }) {
     views.forEach((v, i) => {
       const leg = analysis.built.get(v.key);
       if (leg) {
-        if (hasLeg(leg.id)) out.push({ key: `${stamp}-${i}`, kind: "duplicate", label: `${leg.selection}` });
-        else { addLeg(leg); out.push({ key: `${stamp}-${i}`, kind: "added", legId: leg.id, label: `${leg.selection} · ${leg.gameInfo ?? ""}`, removed: false }); }
+        if (hasLeg(leg.id)) out.push({ key: `${stamp}-${i}`, kind: "duplicate", label: labelOf(v) });
+        else { addLeg(leg); out.push({ key: `${stamp}-${i}`, kind: "added", legId: leg.id, label: `${labelOf(v)} · ${leg.gameInfo ?? ""}`, removed: false }); }
       } else if (analysis.failed.has(v.key)) {
         out.push({ key: `${stamp}-${i}`, kind: analysis.failed.get(v.key)!, label: labelOf(v) });
       }

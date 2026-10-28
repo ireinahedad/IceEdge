@@ -45,13 +45,13 @@ describe('parlayTax', () => {
     expect(t.taxPct).toBe(26.5);
     expect(t.bookImpliedPct).toBe(14.3);
     expect(t.verdict).toBe('tax');
-    expect(taxHeadline(t)).toBe('27% parlay tax');
+    expect(taxHeadline(t)).toBe('Paid 27% below fair');
   });
   it('un prix au-dessus du juste prix = valeur, taxe négative', () => {
     const t = parlayTax(20, 500); // juste +400, payé +500
     expect(t.taxPct).toBe(-20);
     expect(t.verdict).toBe('value');
-    expect(taxHeadline(t)).toBe('Pays 20% over fair');
+    expect(taxHeadline(t)).toBe('Paid 20% above fair');
   });
   it('±1 point = au juste prix (sous la précision du modèle)', () => {
     expect(parlayTax(50, 100).verdict).toBe('fair');
@@ -86,11 +86,11 @@ describe('réponse sous le post', () => {
 describe('version française', () => {
   it('titre et réponse en français, ≤ 280 caractères, mention 18+ française', () => {
     const t = parlayTax(10.5, 600);
-    expect(taxHeadline(t, 'fr')).toBe('Taxe de 27\u00a0% sur le combiné');
-    expect(taxHeadline(parlayTax(20, 500), 'fr')).toBe('Paie 20\u00a0% de plus que le juste prix');
+    expect(taxHeadline(t, 'fr')).toBe('Payé 27\u00a0% sous le juste prix');
+    expect(taxHeadline(parlayTax(20, 500), 'fr')).toBe('Payé 20\u00a0% au-dessus du juste prix');
     const r = gradeReply({ tax: t, weakestLeg: 'Plus de 6.5 buts', lang: 'fr' });
     expect(r.length).toBeLessThanOrEqual(280);
-    expect(r).toContain('Cote juste +852 contre +600 payé');
+    expect(r).toContain('+600 au lieu de +852');
     expect(r).toContain('10,5\u00a0%');
     expect(r).toContain('Maillon faible : Plus de 6.5 buts.');
     expect(r).toContain(DISCLAIMER_FR);

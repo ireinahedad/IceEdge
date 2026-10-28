@@ -104,12 +104,12 @@ export const pctText = (n: number, lang: GradeLang) => (lang === 'fr' ? `${num(n
 export function taxHeadline(t: ParlayTax, lang: GradeLang = 'en'): string {
   const tax = Math.round(t.taxPct);
   if (lang === 'fr') {
-    if (t.verdict === 'tax') return `Taxe de ${pctText(tax, lang)} sur le combiné`;
-    if (t.verdict === 'value') return `Paie ${pctText(-tax, lang)} de plus que le juste prix`;
+    if (t.verdict === 'tax') return `Payé ${pctText(tax, lang)} sous le juste prix`;
+    if (t.verdict === 'value') return `Payé ${pctText(-tax, lang)} au-dessus du juste prix`;
     return 'Prix à peu près juste';
   }
-  if (t.verdict === 'tax') return `${tax}% parlay tax`;
-  if (t.verdict === 'value') return `Pays ${-tax}% over fair`;
+  if (t.verdict === 'tax') return `Paid ${tax}% below fair`;
+  if (t.verdict === 'value') return `Paid ${-tax}% above fair`;
   return 'Priced about fair';
 }
 
@@ -128,8 +128,8 @@ export interface ReplyInput {
 export function gradeReply({ tax, weakestLeg, lang = 'en' }: ReplyInput): string {
   const fair = formatAmerican(tax.fairAmerican), paid = formatAmerican(tax.paidAmerican);
   const head = lang === 'fr'
-    ? `Cote juste ${fair} contre ${paid} payé : ${taxHeadline(tax, lang).toLowerCase()}.`
-    : `Fair odds ${fair} vs ${paid} paid: ${taxHeadline(tax, lang).toLowerCase()}.`;
+    ? `${taxHeadline(tax, lang)} : ${paid} au lieu de ${fair}.`
+    : `${taxHeadline(tax, lang)}: ${paid} instead of ${fair}.`;
   const model = lang === 'fr'
     ? `arakiceML lui donne ${pctText(tax.modelPct, lang)} de chances (corrélations comprises) ; le prix implique ${pctText(tax.bookImpliedPct, lang)}.`
     : `arakiceML gives it ${tax.modelPct}% to hit (correlations included); the price implies ${tax.bookImpliedPct}%.`;
